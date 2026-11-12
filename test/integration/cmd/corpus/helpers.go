@@ -109,8 +109,6 @@ func normalizeWhitespace(s string) string {
 // sense (UnicodeData.txt, `<vertical>` decompositions, which NFKC applies),
 // except U+FE34, which PDF.js substitutes for U+FE4F where Unicode decomposes
 // it to U+005F. The table is the inverse of getVerticalPresentationForm.
-//
-//nolint:gochecknoglobals // static lookup table mirroring PDF.js
 var verticalForms = map[rune]rune{
 	0xFE10: 0xFF0C, // FULLWIDTH COMMA
 	0xFE11: 0x3001, // IDEOGRAPHIC COMMA

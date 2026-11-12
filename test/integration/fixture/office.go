@@ -90,8 +90,6 @@ type OfficeOptions struct {
 
 // OfficeOptionNames are the keys of an Office options file, the JSON names
 // of [OfficeOptions].
-//
-//nolint:gochecknoglobals // static list of the schema's keys
 var OfficeOptionNames = []string{"password", "landscape", "nativePages", "nativeBookmarks", "paperWidth", "paperHeight", "singlePage", "exportHiddenSlides", "exportNotesPages", "exportFormFields"}
 
 // OfficeLithoOptionNames are the keys of an Office options file that are
@@ -99,8 +97,6 @@ var OfficeOptionNames = []string{"password", "landscape", "nativePages", "native
 // receives them. A source that sets one is judged against the reference of
 // the fixture its reference_of names, a document that is in itself what the
 // option makes of this one.
-//
-//nolint:gochecknoglobals // static list of the schema's keys
 var OfficeLithoOptionNames = []string{"trackedChanges", "sheets", "sheetNumbers", "hiddenSheets", "recalculation", "csvSeparators", "csvTypeDetection", "handouts", "date"}
 
 // ReferenceOfName is the key of an Office options file that borrows another
@@ -118,8 +114,6 @@ const ReferenceOfName = "reference_of"
 // converts from a format litho does not read yet, named by its extension,
 // which [Office.Conversion] refuses with [ErrUnsupportedFormat]: its cell
 // scores a convert error until litho reads it.
-//
-//nolint:gochecknoglobals // static extension table
 var officeFormats = map[string]Format{
 	".docx": FormatDOCX,
 	".dotx": FormatDOCX,
@@ -255,8 +249,6 @@ func (o OfficeOptions) validate() error {
 }
 
 // trackedChangesViews maps the trackedChanges values to litho's views.
-//
-//nolint:gochecknoglobals // static table
 var trackedChangesViews = map[string]pdf.TrackedChanges{
 	"":         pdf.TrackedChangesAccepted,
 	"accepted": pdf.TrackedChangesAccepted,
@@ -265,8 +257,6 @@ var trackedChangesViews = map[string]pdf.TrackedChanges{
 }
 
 // recalculationModes maps the recalculation values to litho's modes.
-//
-//nolint:gochecknoglobals // static table
 var recalculationModes = map[string]pdf.Recalculation{
 	"":         pdf.RecalculateAsNeeded,
 	"asNeeded": pdf.RecalculateAsNeeded,
@@ -287,8 +277,6 @@ const (
 
 // ReferencePaper is the paper of [ReferencePaperWidth] by
 // [ReferencePaperHeight].
-//
-//nolint:gochecknoglobals // a value of two constants
 var ReferencePaper = pdf.Paper{Width: ReferencePaperWidth, Height: ReferencePaperHeight}
 
 // Conversion returns the conversion of src, the source's document, at the

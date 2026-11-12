@@ -64,7 +64,7 @@ func rewriteXPath2(expr string) string {
 	return out
 }
 
-//nolint:gochecknoglobals // immutable cast tables shared across calls.
+// Immutable cast tables shared across calls.
 var (
 	numericCasts = []string{
 		"decimal", "integer", "double", "float", "long", "int",
@@ -1623,8 +1623,6 @@ const (
 // 5.4.7 fn:upper-case applies, is made of ASCII letters only.
 // TestUpperCaseToASCIIMatchesUnicode regenerates it from
 // golang.org/x/text/cases over every code point.
-//
-//nolint:gochecknoglobals // immutable case-mapping table shared across calls.
 var upperCaseToASCII = []struct{ from, to string }{
 	{"ß", "SS"},  // LATIN SMALL LETTER SHARP S
 	{"ı", "I"},   // LATIN SMALL LETTER DOTLESS I

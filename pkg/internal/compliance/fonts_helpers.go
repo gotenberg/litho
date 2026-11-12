@@ -19,8 +19,6 @@ import (
 // standard14Fonts is the set of PDF standard 14 font base names.
 // PDF/A does NOT exempt these from embedding, but they are used
 // for certain structural checks.
-//
-//nolint:gochecknoglobals // constant lookup table.
 var standard14Fonts = map[string]bool{
 	"Times-Roman":           true,
 	"Times-Bold":            true,
@@ -199,8 +197,6 @@ func isType3Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 // validFontSubtypes lists the font /Subtype values permitted by the PDF/A font
 // conformance clauses (ISO 19005-1 §6.3.2 t2, ISO 19005-2/3 §6.2.11.2 t2,
 // ISO 19005-4 §6.2.10.2 t2).
-//
-//nolint:gochecknoglobals // static lookup table.
 var validFontSubtypes = map[string]bool{
 	"Type1": true, "MMType1": true, "TrueType": true, "Type3": true,
 	"Type0": true, "CIDFontType0": true, "CIDFontType2": true,
@@ -210,8 +206,6 @@ var validFontSubtypes = map[string]bool{
 // simple font, which is what veraPDF's PDSimpleFont covers. Type0 is composite
 // and the CIDFontType values name a descendant, so none of them belong here,
 // and a subtype outside the table is not a font type at all.
-//
-//nolint:gochecknoglobals // static lookup table.
 var simpleFontSubtypes = map[string]bool{
 	"Type1": true, "MMType1": true, "TrueType": true, "Type3": true,
 }

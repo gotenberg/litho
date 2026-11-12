@@ -146,7 +146,7 @@ func NumGlyphs(data []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if len(maxpData) < 6 { //nolint:mnd // maxp numGlyphs is at offset 4..6.
+	if len(maxpData) < 6 { // maxp numGlyphs is at offset 4..6.
 		return 0, fmt.Errorf("%w: maxp table too short", ErrInvalidFont)
 	}
 	return int(binary.BigEndian.Uint16(maxpData[4:6])), nil
@@ -408,7 +408,7 @@ func parseCmap(ctx context.Context, data []byte) (map[uint16]rune, error) {
 // cmap format, commonly found in platform 1 (Macintosh) subtables.
 func parseCmapFormat0(data []byte) (map[uint16]rune, error) {
 	// Format 0: uint16 format, uint16 length, uint16 language, uint8[256] glyphIdArray
-	if len(data) < 262 { //nolint:mnd // 6 byte header + 256 GID bytes
+	if len(data) < 262 { // 6 byte header + 256 GID bytes
 		return nil, fmt.Errorf("%w: format 0 data too short", ErrInvalidFont)
 	}
 
@@ -430,7 +430,7 @@ func parseCmapFormat0(data []byte) (map[uint16]rune, error) {
 func parseCmapFormat6(data []byte) (map[uint16]rune, error) {
 	// Format 6: uint16 format, uint16 length, uint16 language,
 	//           uint16 firstCode, uint16 entryCount, uint16[] glyphIdArray
-	if len(data) < 10 { //nolint:mnd // minimum header size
+	if len(data) < 10 { // minimum header size
 		return nil, fmt.Errorf("%w: format 6 header too short", ErrInvalidFont)
 	}
 

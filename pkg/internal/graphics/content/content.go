@@ -46,8 +46,8 @@ type ByteRange struct {
 // inline images as [inlineImages] says. data is what the parser reads.
 func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data []byte, ranges *[]ByteRange, placer *violationPlacer) ([]Operation, error) {
 	stops := o.readsAsVeraPDF()
-	ops := make([]Operation, 0, 256)        //nolint:mnd // reasonable initial capacity for typical pages
-	operands := make([]ast.PdfObject, 0, 8) //nolint:mnd // most operators have ≤6 operands
+	ops := make([]Operation, 0, 256)        // reasonable initial capacity for typical pages
+	operands := make([]ast.PdfObject, 0, 8) // most operators have ≤6 operands
 	tokenCount := 0
 	var prevEnd int64
 	// images reads the data of inline images, made on the first one the
@@ -672,7 +672,7 @@ func ParseStreamData(ctx context.Context, data []byte, opts ...Option) ([]Operat
 func ParseStreamDataWithOffsets(ctx context.Context, data []byte, opts ...Option) ([]Operation, []ByteRange, error) {
 	o := optionsOf(ctx, opts)
 	p := newParser(data, o).WithOffsetTracking()
-	ranges := make([]ByteRange, 0, 256) //nolint:mnd // matches the operations capacity hint
+	ranges := make([]ByteRange, 0, 256) // matches the operations capacity hint
 	ops, err := parseOperations(ctx, p, o, data, &ranges, nil)
 	if err != nil || gaveUp(p, o) {
 		// On error parseOperations returns ops=nil but ranges may hold the

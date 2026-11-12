@@ -34,7 +34,7 @@ type convertOneResult struct {
 
 // convertSentinels are the errors a conversion may end with, by the name a
 // robustness expectation gives them, in the order they are matched.
-var convertSentinels = []struct { //nolint:gochecknoglobals // static table
+var convertSentinels = []struct {
 	name string
 	err  error
 }{

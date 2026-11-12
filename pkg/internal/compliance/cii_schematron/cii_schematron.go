@@ -160,7 +160,7 @@ func LoadXRechnung(ctx context.Context) (*schematron.Schema, error) {
 	return xrechnungSchema, xrechnungFault
 }
 
-//nolint:gochecknoglobals // memoised load results, not sentinel errors.
+// Memoised load results, not sentinel errors.
 var (
 	facturxProfileOnce sync.Map // bundle root path -> *sync.Once
 	facturxProfileMu   sync.Mutex

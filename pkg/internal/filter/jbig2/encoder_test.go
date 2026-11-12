@@ -26,7 +26,7 @@ type encState struct {
 	switchMPS bool
 }
 
-//nolint:gochecknoglobals // test-only transcription of ITU-T T.88 Table E.1
+// Test-only transcription of ITU-T T.88 Table E.1.
 var encTable = [47]encState{
 	{0x5601, 1, 1, true},
 	{0x3401, 2, 6, false},
@@ -199,8 +199,6 @@ func (e *mqEncoder) flush() []byte {
 
 // encTemplates lists every fixed pixel of each template as an (x, y) offset,
 // ITU-T T.88 Figures 3 to 6, and encNominalAT the AT pixels of Table 5.
-//
-//nolint:gochecknoglobals // test-only transcription of ITU-T T.88 Figures 3 to 6
 var encTemplates = [4][][2]int{
 	{{-1, -2}, {0, -2}, {1, -2}, {-2, -1}, {-1, -1}, {0, -1}, {1, -1}, {2, -1}, {-4, 0}, {-3, 0}, {-2, 0}, {-1, 0}},
 	{{-1, -2}, {0, -2}, {1, -2}, {2, -2}, {-2, -1}, {-1, -1}, {0, -1}, {1, -1}, {2, -1}, {-3, 0}, {-2, 0}, {-1, 0}},
@@ -208,7 +206,7 @@ var encTemplates = [4][][2]int{
 	{{-3, -1}, {-2, -1}, {-1, -1}, {0, -1}, {1, -1}, {-4, 0}, {-3, 0}, {-2, 0}, {-1, 0}},
 }
 
-//nolint:gochecknoglobals // test-only transcription of ITU-T T.88 Table 5
+// Test-only transcription of ITU-T T.88 Table 5.
 var encNominalAT = [4][][2]int{
 	{{3, -1}, {-3, -1}, {2, -2}, {-2, -2}},
 	{{3, -1}},
@@ -218,8 +216,6 @@ var encNominalAT = [4][][2]int{
 
 // encSLTP holds the pixel values of Figures 8 to 11 in encTemplates order,
 // followed by the AT pixels in encNominalAT order.
-//
-//nolint:gochecknoglobals // test-only transcription of ITU-T T.88 Figures 8 to 11
 var encSLTP = [4][]uint32{
 	{0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1},
 	{0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0},
@@ -375,8 +371,6 @@ type encInt struct {
 
 // encIntRanges transcribes Table A.1 by magnitude: values from lo upward are
 // coded with prefix, then n bits of the magnitude minus lo.
-//
-//nolint:gochecknoglobals // test-only transcription of ITU-T T.88 Table A.1
 var encIntRanges = []struct {
 	lo     int64
 	prefix []uint32
@@ -451,8 +445,6 @@ func (ea *encIAID) encode(e *mqEncoder, id int) {
 // encRefineTemplates transcribes ITU-T T.88 Figures 12 and 13 again: the
 // refined bitmap's pixels, then the reference's, as (x, y) offsets, with the
 // AT pixels RA1 and RA2 of template 0 listed last in each group.
-//
-//nolint:gochecknoglobals // test-only transcription of ITU-T T.88 Figures 12 and 13
 var encRefineTemplates = [2]struct{ refined, reference [][2]int }{
 	{
 		refined:   [][2]int{{0, -1}, {1, -1}, {-1, 0}},

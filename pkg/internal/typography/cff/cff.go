@@ -724,11 +724,11 @@ func ReadUnitsPerEm(data []byte) uint16 {
 	hdrSize := max(int(data[2]), 4)
 	nameEnd, err := skipINDEX(data, hdrSize)
 	if err != nil {
-		return 1000 //nolint:mnd // The default CFF FontMatrix is 0.001, i.e. 1000 units per em (CFF spec, Tech Note #5176, Table 9).
+		return 1000 // The default CFF FontMatrix is 0.001, i.e. 1000 units per em (CFF spec, Tech Note #5176, Table 9).
 	}
 	_, topDictEntries, err := parseINDEX(data, nameEnd)
 	if err != nil || len(topDictEntries) == 0 {
-		return 1000 //nolint:mnd // Default FontMatrix 0.001 => 1000 upm (CFF spec, Table 9).
+		return 1000 // Default FontMatrix 0.001 => 1000 upm (CFF spec, Table 9).
 	}
 
 	scale := parseFontMatrixScale(topDictEntries[0])
@@ -745,13 +745,13 @@ func ReadUnitsPerEm(data []byte) uint16 {
 		}
 	}
 	if scale <= 0 {
-		return 1000 //nolint:mnd // default CFF FontMatrix
+		return 1000 // default CFF FontMatrix
 	}
 	// +0.5 rounds to nearest; scale is positive here, and a FontMatrix small
 	// enough to overflow uint16 is rejected by the upm == 0 check below.
-	upm := uint16(1.0/scale + 0.5) //nolint:gosec,mnd // Bounded: scale > 0 was checked above, and 0 is rejected below.
+	upm := uint16(1.0/scale + 0.5) //nolint:gosec // Bounded: scale > 0 was checked above, and 0 is rejected below.
 	if upm == 0 {
-		return 1000 //nolint:mnd // Default FontMatrix 0.001 => 1000 upm (CFF spec, Table 9).
+		return 1000 // Default FontMatrix 0.001 => 1000 upm (CFF spec, Table 9).
 	}
 	return upm
 }
@@ -786,21 +786,21 @@ func parseRealNumber(data []byte, pos int) (float64, int) {
 				goto done
 			}
 			switch {
-			case nibble <= 9: //nolint:mnd // CFF spec Table 5: nibbles 0-9 are the decimal digits.
+			case nibble <= 9: // CFF spec Table 5: nibbles 0-9 are the decimal digits.
 				buf[n] = '0' + nibble
 				n++
-			case nibble == 0x0A: //nolint:mnd // CFF spec Table 5: nibble 0xA is the decimal point.
+			case nibble == 0x0A: // CFF spec Table 5: nibble 0xA is the decimal point.
 				buf[n] = '.'
 				n++
-			case nibble == 0x0B: //nolint:mnd // CFF spec Table 5: nibble 0xB is E.
+			case nibble == 0x0B: // CFF spec Table 5: nibble 0xB is E.
 				buf[n] = 'E'
 				n++
-			case nibble == 0x0C: //nolint:mnd // CFF spec Table 5: nibble 0xC is E-minus.
+			case nibble == 0x0C: // CFF spec Table 5: nibble 0xC is E-minus.
 				buf[n] = 'E'
 				n++
 				buf[n] = '-'
 				n++
-			case nibble == 0x0E: //nolint:mnd // CFF spec Table 5: nibble 0xE is the minus sign.
+			case nibble == 0x0E: // CFF spec Table 5: nibble 0xE is the minus sign.
 				buf[n] = '-'
 				n++
 			}
@@ -1391,7 +1391,7 @@ func charstringWidth(cs []byte, localSubrs, globalSubrs [][]byte) (*float64, boo
 		global: globalSubrs,
 		lbias:  subrBias(len(localSubrs)),
 		gbias:  subrBias(len(globalSubrs)),
-		stack:  make([]float64, 0, 48), //nolint:mnd // typical charstring stack depth
+		stack:  make([]float64, 0, 48), // typical charstring stack depth
 	}
 	s.scan(cs, 0)
 	return s.width, s.settled

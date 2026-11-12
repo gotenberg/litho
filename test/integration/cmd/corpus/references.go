@@ -204,7 +204,7 @@ func startGotenberg(ctx context.Context, image string) (*gotenberg, error) {
 	g.url = "http://" + first
 	deadline := time.Now().Add(gotenbergStartTimeout)
 	for {
-		resp, err := g.client.Get(g.url + "/health") //nolint:noctx // bounded by the deadline below
+		resp, err := g.client.Get(g.url + "/health") // bounded by the deadline below
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
@@ -336,7 +336,7 @@ func readOptionFields(path string) (map[string]json.RawMessage, error) {
 // preferred, since litho honoured @page size before the option existed. The
 // margins are the route's (0.39 inch), left unset. Mirrors the defaults of
 // [fixture.Options].
-var chromiumDefaults = [][2]string{ //nolint:gochecknoglobals // static table
+var chromiumDefaults = [][2]string{
 	{"paperWidth", "210mm"},
 	{"paperHeight", "297mm"},
 	{"emulatedMediaType", "print"},
@@ -345,7 +345,7 @@ var chromiumDefaults = [][2]string{ //nolint:gochecknoglobals // static table
 }
 
 // chromiumOptional are the fields posted only when options.json sets them.
-var chromiumOptional = []string{ //nolint:gochecknoglobals // static table
+var chromiumOptional = []string{
 	"marginTop", "marginRight", "marginBottom", "marginLeft", "landscape", "scale",
 	"singlePage", "nativePages", "nativeBookmarks", "emulatedMediaFeatures",
 }

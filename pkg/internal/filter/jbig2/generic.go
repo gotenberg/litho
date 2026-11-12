@@ -73,8 +73,6 @@ type templateRun struct{ dy, x0, x1 int }
 // genericTemplates lists the fixed pixels of each generic region template,
 // ITU-T T.88 Figures 3 to 6, top row first. The adaptive pixels are not part
 // of these runs; their nominal positions are in Table 5.
-//
-//nolint:gochecknoglobals // static spec table, ITU-T T.88 Figures 3 to 6
 var genericTemplates = [4][]templateRun{
 	{{-2, -1, 1}, {-1, -2, 2}, {0, -4, -1}}, // Figure 3: 12 fixed pixels, A1-A4
 	{{-2, -1, 2}, {-1, -2, 2}, {0, -3, -1}}, // Figure 4: 12 fixed pixels, A1
@@ -86,8 +84,6 @@ var genericTemplates = [4][]templateRun{
 // decode SLTP (Figures 8 to 11): the fixed pixels row by row, left to right,
 // followed by A1 to A4. The AT pixels take these values wherever they have
 // been moved (6.2.5.7 step 3 b, NOTE).
-//
-//nolint:gochecknoglobals // static spec table, ITU-T T.88 Figures 8 to 11
 var sltpPixels = [4]struct{ fixed, at []uint32 }{
 	{fixed: []uint32{0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 0, 1}, at: []uint32{0, 0, 1, 1}}, // Figure 8
 	{fixed: []uint32{0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1}, at: []uint32{0}},          // Figure 9

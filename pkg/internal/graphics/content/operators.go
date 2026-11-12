@@ -5,8 +5,6 @@ import "github.com/gotenberg/litho/pkg/internal/core/lexer"
 // annexAOperators is the content stream operator set of ISO 32000-1, Annex A,
 // Table A.1: its 73 operators, listed alphabetically with the two quote
 // operators last.
-//
-//nolint:gochecknoglobals // constant lookup table
 var annexAOperators = [...]string{
 	"b", "B", "b*", "B*", "BDC", "BI", "BMC", "BT", "BX",
 	"c", "cm", "CS", "cs",
@@ -32,8 +30,6 @@ var annexAOperators = [...]string{
 }
 
 // operatorSet indexes [annexAOperators] for [IsOperator].
-//
-//nolint:gochecknoglobals // constant lookup table, built once from annexAOperators
 var operatorSet = func() map[string]struct{} {
 	set := make(map[string]struct{}, len(annexAOperators))
 	for _, op := range annexAOperators {
@@ -69,6 +65,4 @@ func IsUndefined(op string) bool {
 // table of PDF.js, EvaluatorPreprocessor.opMap (src/core/evaluator.js), whose
 // entries are the same operators and the same three keywords, and
 // [lexer.NewCommandSet] derives the partial commands that table lists by hand.
-//
-//nolint:gochecknoglobals // constant lookup table, built once from annexAOperators
 var gluedOperators = lexer.NewCommandSet(append(annexAOperators[:], "true", "false", "null")...)

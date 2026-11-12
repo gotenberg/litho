@@ -17,8 +17,6 @@ import (
 // that spec table): for these subtypes ISO 14289-2 §8.9.2.3 requires the
 // annotation stay enclosed in an Annot structure element, so the §8.9.2.2 repair
 // must not remove it from the structure.
-//
-//nolint:gochecknoglobals // static spec table, mirrors compliance.markupAnnotationSubtypes
 var markupAnnotSubtypes = map[ast.PdfName]bool{
 	"Text": true, "FreeText": true, "Line": true, "Square": true,
 	"Circle": true, "Polygon": true, "PolyLine": true, "Highlight": true,

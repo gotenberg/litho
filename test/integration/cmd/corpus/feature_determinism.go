@@ -359,8 +359,6 @@ func (f *determinismFeature) Compare(fixtureID string, output []byte) Verdict {
 // lithoHomeProfiles maps the suffix of a litho fixture's file name to its home
 // profile directory, the profile the litho/pdf corpus README's Fixtures table
 // lists it under.
-//
-//nolint:gochecknoglobals // static suffix table
 var lithoHomeProfiles = map[string]string{
 	"1b":  "PDF_A-1b",
 	"2a":  "PDF_A-2a",

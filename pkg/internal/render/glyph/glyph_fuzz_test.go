@@ -37,7 +37,7 @@ func FuzzGlyph(f *testing.F) {
 		var dict ast.PdfDict
 		if composite {
 			dict = cidTrueType(nil, ast.NewStream(ast.PdfDict{}, program))
-			cid := dict["DescendantFonts"].(ast.PdfArray)[0].(ast.PdfDict) //nolint:forcetypeassert // built just above.
+			cid := dict["DescendantFonts"].(ast.PdfArray)[0].(ast.PdfDict) // built just above.
 			cid["FontDescriptor"] = descriptor(4, fileKey, program, ast.PdfDict{})
 		} else {
 			dict = simpleFont("TrueType", descriptor(32, fileKey, program, ast.PdfDict{}), ast.PdfName("WinAnsiEncoding"), 500)

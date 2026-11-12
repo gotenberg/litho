@@ -28,8 +28,6 @@ import (
 
 // resvgAreas are the area directories under crates/resvg/tests/tests/ and
 // the most tests each keeps.
-//
-//nolint:gochecknoglobals // static table
 var resvgAreas = map[string]int{
 	"structure/svg": 16, "structure/g": 4, "structure/defs": 4, "structure/use": 10, "structure/symbol": 8,
 	"structure/switch": 6, "structure/systemLanguage": 3, "structure/style": 10, "structure/style-attribute": 4,
@@ -46,8 +44,6 @@ var resvgAreas = map[string]int{
 
 // resvgReject are the constructs a test may not use, each with the reason it
 // is rejected.
-//
-//nolint:gochecknoglobals // static table
 var resvgReject = []struct {
 	re  *regexp.Regexp
 	why string
@@ -86,8 +82,6 @@ var resvgUndefined = regexp.MustCompile(`<title>[^<]*\(UB\)`)
 
 // resvgExtras are the files the tests read beside their own: the fonts the
 // text tests draw with, their licences, and resvg's licence.
-//
-//nolint:gochecknoglobals // static list
 var resvgExtras = []string{
 	"crates/resvg/tests/fonts/Amiri-LICENSE-OFL.txt", "crates/resvg/tests/fonts/Amiri-Regular.ttf",
 	"crates/resvg/tests/fonts/Noto-LICENSE-OFL.txt", "crates/resvg/tests/fonts/NotoMono-Regular.ttf",
@@ -216,8 +210,6 @@ func writeHashList(checkout, dir string, paths []string) error {
 }
 
 // wptDirs are the WPT directories walked for reftests.
-//
-//nolint:gochecknoglobals // static list
 var wptDirs = []string{
 	"css/CSS2/box-display", "css/CSS2/normal-flow", "css/CSS2/floats", "css/CSS2/floats-clear",
 	"css/CSS2/margin-padding-clear", "css/CSS2/borders", "css/CSS2/text", "css/CSS2/lists", "css/CSS2/visuren",
@@ -230,8 +222,6 @@ var wptDirs = []string{
 // wptAreaCap bounds the tests one area contributes, an area being a CSS2
 // chapter directory or a whole CSS module, so the large ones do not crowd out
 // the others; every CSS2 chapter takes the "css/CSS2" cap.
-//
-//nolint:gochecknoglobals // static table
 var wptAreaCap = map[string]int{
 	"css/CSS2": 24, "css/css-backgrounds": 80, "css/css-text": 120, "css/css-lists": 40, "css/css-page": 40,
 	"css/css-break": 40, "css/css-flexbox": 200, "css/css-align": 20, "css/css-grid": 200, "css/css-multicol": 80,
@@ -249,8 +239,6 @@ func compileAll(flags string, patterns ...string) []*regexp.Regexp {
 // wptForbidden keeps a test out: scripts, SVG, MathML, form controls,
 // embedded documents and media, @font-face, data: and javascript: URLs, a
 // reftest-wait class, vertical writing and event handlers.
-//
-//nolint:gochecknoglobals // static table
 var wptForbidden = compileAll("(?i)",
 	`<script\b`, `<svg\b`, `<math\b`, `<iframe\b`, `<object\b`, `<embed\b`, `<canvas\b`, `<video\b`, `<audio\b`,
 	`<input\b`, `<button\b`, `<select\b`, `<textarea\b`, `<frameset\b`, `@font-face`, `\bdata:`, `\bjavascript:`,
@@ -259,8 +247,6 @@ var wptForbidden = compileAll("(?i)",
 // wptFlexForbidden are what the flexbox and alignment areas leave out on top
 // of wptForbidden: features the converter does not lay out in a flex
 // container.
-//
-//nolint:gochecknoglobals // static table
 var wptFlexForbidden = compileAll("(?i)",
 	`display\s*:\s*(inline-)?grid`, `\bgrid-`, `\bcolumns?(-count|-width)?\s*:`, `\b(min|max|fit)-content\b`,
 	`\baspect-ratio\b`, `visibility\s*:\s*collapse`, `display\s*:\s*contents`, `\bcontain(-intrinsic-[a-z-]+)?\s*:`,
@@ -271,8 +257,6 @@ var wptFlexForbidden = compileAll("(?i)",
 // mode, overflow, text decoration and sizing areas to what those areas add.
 // A writing mode other than horizontal-tb is checked by
 // wptOtherWritingMode, which needs a lookahead the regexp package lacks.
-//
-//nolint:gochecknoglobals // static table
 var wptLayoutForbidden = compileAll("(?i)",
 	`\bsubgrid\b`, `\bmasonry\b`, `\baspect-ratio\b`, `display\s*:\s*contents`, `\bcontain(-intrinsic-[a-z-]+)?\s*:`,
 	`\bsticky\b`, `\bzoom\s*:`, `text-orientation`, `text-combine-upright`, `\banchor`, `<details\b`, `<fieldset\b`,
@@ -299,7 +283,6 @@ type wptAreaRules struct {
 	required    *regexp.Regexp
 }
 
-//nolint:gochecknoglobals // static table
 var wptAreas = map[string]wptAreaRules{
 	"css/css-flexbox":       {forbidden: wptFlexForbidden},
 	"css/css-align":         {forbidden: wptFlexForbidden, required: regexp.MustCompile(`(?i)display\s*:\s*(inline-)?flex\b`)},
@@ -313,8 +296,6 @@ var wptAreas = map[string]wptAreaRules{
 
 // wptSkipDirs hold no reftest of their own, tests of another kind, or
 // reftests of layout modes outside the converter's scope.
-//
-//nolint:gochecknoglobals // static table
 var wptSkipDirs = []string{
 	"support", "reference", "resources", "crashtests", "tentative", "animations", "parsing", "inheritance",
 	"flexbox", "grid", "table", "multicol", "writing-mode", "subgrid", "masonry", "grid-lanes", "test-plan",
@@ -322,7 +303,6 @@ var wptSkipDirs = []string{
 	"aspect-ratio", "animation",
 }
 
-//nolint:gochecknoglobals // static tables
 var (
 	wptBadFlags = []string{"interact", "userstyle", "dom", "font", "svg", "animated", "nonHTML", "speech", "scroll"}
 	wptVoid     = []string{"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}

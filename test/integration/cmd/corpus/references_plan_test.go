@@ -279,8 +279,6 @@ func readReferenceManifest(t *testing.T, m *Manifest) referenceManifest {
 
 // The sources of each engine's stub corpus: one with a reference, one that
 // borrows it and one that sets litho's own options without a reference.
-//
-//nolint:gochecknoglobals // static test table
 var lithoOnlySources = map[string]map[string]map[string]string{
 	engineChromium: {
 		"page":        {"index.html": "<p>x</p>"},
@@ -307,7 +305,7 @@ var lithoOnlySources = map[string]map[string]map[string]string{
 // records the source setting litho's own options as having none, removing
 // a reference built for it before, and that a build of that source alone
 // starts no converter.
-func TestBuildReferences_RecordsLithoOnlySourcesWithoutAnEngine(t *testing.T) { //nolint:paralleltest // t.Chdir
+func TestBuildReferences_RecordsLithoOnlySourcesWithoutAnEngine(t *testing.T) {
 	for _, engine := range []string{engineChromium, engineLibreOffice, engineMicrosoft} {
 		t.Run(engine, func(t *testing.T) {
 			dir := t.TempDir()
@@ -353,7 +351,7 @@ func TestBuildReferences_RecordsLithoOnlySourcesWithoutAnEngine(t *testing.T) { 
 // each engine and without a Microsoft sign-in or a pinned image, that
 // prepare records a new source setting litho's own options without asking
 // any converter, and finds the references up to date once it has.
-func TestPrepareReferences_RecordsLithoOnlySourcesWithoutAnEngine(t *testing.T) { //nolint:paralleltest // t.Chdir, t.Setenv
+func TestPrepareReferences_RecordsLithoOnlySourcesWithoutAnEngine(t *testing.T) {
 	t.Setenv(msGraphTokenEnv, "")
 	t.Setenv(msGraphClientIDEnv, "")
 	for _, engine := range []string{engineChromium, engineLibreOffice, engineMicrosoft} {

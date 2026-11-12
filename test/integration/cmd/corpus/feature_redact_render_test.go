@@ -57,8 +57,6 @@ func redactImagePDF(body, entries, samples string) []byte {
 
 // redactKinds holds one page per kind of content redaction removes, the
 // content inside the p1-quarter region and nothing outside it.
-//
-//nolint:gochecknoglobals // static test table
 var redactKinds = []struct {
 	name string
 	body string

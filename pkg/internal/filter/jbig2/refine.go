@@ -26,8 +26,6 @@ type refineParams struct {
 // T.88 Figures 12 and 13, as (x, y) offsets: first those of the bitmap being
 // decoded, then those of the reference. The adaptive pixels RA1 and RA2 of
 // template 0 are not listed.
-//
-//nolint:gochecknoglobals // static spec table, ITU-T T.88 Figures 12 and 13
 var refineTemplates = [2]struct{ refined, reference [][2]int }{
 	{ // Figure 12: 3 + RA1 refined pixels, 8 + RA2 reference pixels
 		refined:   [][2]int{{0, -1}, {1, -1}, {-1, 0}},

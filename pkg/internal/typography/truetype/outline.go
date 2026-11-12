@@ -96,14 +96,14 @@ func ParseFont(data []byte) (*Font, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(head) < 54 { //nolint:mnd // indexToLocFormat ends the 54-byte head table.
+	if len(head) < 54 { // indexToLocFormat ends the 54-byte head table.
 		return nil, fmt.Errorf("%w: head table too short", ErrInvalidFont)
 	}
 	maxp, err := table("maxp")
 	if err != nil {
 		return nil, err
 	}
-	if len(maxp) < 6 { //nolint:mnd // maxp numGlyphs is at offset 4..6.
+	if len(maxp) < 6 { // maxp numGlyphs is at offset 4..6.
 		return nil, fmt.Errorf("%w: maxp table too short", ErrInvalidFont)
 	}
 	f := &Font{

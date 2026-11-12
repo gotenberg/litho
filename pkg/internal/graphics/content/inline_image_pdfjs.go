@@ -613,8 +613,6 @@ type pdfjsArgs struct {
 // (src/core/evaluator.js), whose operators are those of ISO 32000-1, Annex A,
 // Table A.1. Its partial commands, such as BM and fa, and true, false and null
 // are no operator here, as they are none there.
-//
-//nolint:gochecknoglobals // constant lookup table
 var pdfjsOperands = map[string]pdfjsArgs{
 	"w": {n: 1}, "J": {n: 1}, "j": {n: 1}, "M": {n: 1}, "d": {n: 2}, "ri": {n: 1}, "i": {n: 1}, "gs": {n: 1},
 	"q": {}, "Q": {}, "cm": {n: 6},

@@ -16,7 +16,7 @@ import (
 
 // testCorpusRoot is the committed corpus directory, from this package's
 // directory, where go test runs.
-var testCorpusRoot = filepath.Join("..", "..", "corpus") //nolint:gochecknoglobals // a constant path
+var testCorpusRoot = filepath.Join("..", "..", "corpus")
 
 // buildPaperCorpus writes the paper documents of a build corpus into a
 // temporary directory and returns it.

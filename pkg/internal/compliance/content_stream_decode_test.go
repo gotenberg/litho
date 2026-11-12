@@ -20,8 +20,6 @@ const decodeProbe = "BT /F1 12 Tf 10 10 Td (A) Tj ET 1 0 0 rg 0 0 5 5 re f zzfoo
 // decodeProbeRules lists, by profile, the clauses the probe fails and how
 // often veraPDF 1.30 fails them for one reading of it: the embedding rule, the
 // device colour rules and the undefined-operator rule.
-//
-//nolint:gochecknoglobals // test table.
 var decodeProbeRules = map[models.PDFAProfile]map[string]int{
 	models.PDFA1b: {"6.3.4": 1, "6.2.3.3": 3, "6.2.10": 1},
 	models.PDFA2b: {"6.2.11.4.1": 1, "6.2.4.3": 3, "6.2.2": 1},

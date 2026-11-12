@@ -4,7 +4,7 @@ package shape
 
 // presetTable holds the preset geometries of ECMA-376 Part 1, Annex D
 // (presetShapeDefinitions.xml), by their 20.1.10.56 ST_ShapeType name.
-var presetTable = map[string]*Custom{ //nolint:gochecknoglobals // a read-only spec table, ECMA-376 Part 1, Annex D.
+var presetTable = map[string]*Custom{
 	"accentBorderCallout1": {
 		Adjust: []Guide{
 			gd("adj1", OpVal, lit(18750)),

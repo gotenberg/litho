@@ -50,7 +50,7 @@ func normaliseEexec(data []byte) []byte {
 	}
 	// ASCII-hex. Two hex digits per output byte.
 	var buf bytes.Buffer
-	buf.Grow(len(data) / 2) //nolint:mnd // approximate final size, exact is 2 hex chars per byte
+	buf.Grow(len(data) / 2) // approximate final size, exact is 2 hex chars per byte
 	var nib byte
 	haveNib := false
 	for j := i; j < len(data); j++ {

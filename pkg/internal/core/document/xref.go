@@ -513,7 +513,7 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) []error 
 	// Read enough bytes to cover the header: "NNNNNNNNN GGGGG obj\n" ≈ 25 bytes.
 	var buf [40]byte
 	n, _ := d.r.ReadAt(buf[:], offset)
-	if n < 5 { //nolint:mnd // need at least "N G obj"
+	if n < 5 { // need at least "N G obj"
 		return nil
 	}
 	data := buf[:n]
@@ -643,7 +643,7 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) []error {
 	}
 	buf := make([]byte, scanLimit)
 	n, _ := d.r.ReadAt(buf, offset)
-	if n < len("endobj")+4 { //nolint:mnd // too short to hold "endobj" plus its EOL marker
+	if n < len("endobj")+4 { // too short to hold "endobj" plus its EOL marker
 		return nil
 	}
 	data := buf[:n]
@@ -663,7 +663,7 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) []error {
 	// object, not a neighbour; embedded string occurrences earlier in
 	// the body are skipped over.
 	endobjIdx := -1
-	for i := len(data) - 6; i >= 0; i-- { //nolint:mnd // 6 = len("endobj"), the keyword matched just below.
+	for i := len(data) - 6; i >= 0; i-- { // 6 = len("endobj"), the keyword matched just below.
 		if string(data[i:i+6]) == "endobj" {
 			endobjIdx = i
 			break
@@ -683,7 +683,7 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) []error {
 	}
 
 	// Check that endobj is followed by EOL (LF or CR) or EOF.
-	afterIdx := endobjIdx + 6 //nolint:mnd // 6 = len("endobj"): step past the keyword just matched.
+	afterIdx := endobjIdx + 6 // 6 = len("endobj"): step past the keyword just matched.
 	if afterIdx < len(data) {
 		afterByte := data[afterIdx]
 		if afterByte != '\n' && afterByte != '\r' {
@@ -783,7 +783,7 @@ func (d *Document) ValidateXRefTableFormat(offset int64) []error {
 	const maxRead = 65536
 	buf := make([]byte, maxRead)
 	n, _ := d.r.ReadAt(buf, offset)
-	if n < 5 { //nolint:mnd // "xref" + at least 1 byte
+	if n < 5 { // "xref" + at least 1 byte
 		return nil
 	}
 	buf = buf[:n]
@@ -907,7 +907,7 @@ func (d *Document) ValidateXRefTableFormat(offset int64) []error {
 		// Skip past the entries (each is 20 bytes).
 		// Validate individual entries would be ideal but keeping it simple.
 		// the subsection header format check catches the most common violations.
-		entryBytes := count * 20 //nolint:mnd // 20 bytes per xref entry
+		entryBytes := count * 20 // 20 bytes per xref entry
 		if pos+entryBytes > len(buf) {
 			break // Not enough data to skip all entries.
 		}

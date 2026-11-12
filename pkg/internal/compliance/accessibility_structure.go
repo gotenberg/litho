@@ -13,8 +13,6 @@ import (
 
 // standardNamespaceURIs lists the namespace URIs that are "standard" per
 // ISO 32000-2:2020, 14.8.6.
-//
-//nolint:gochecknoglobals // static lookup table
 var standardNamespaceURIs = map[string]bool{
 	pdf1NamespaceURI:   true,
 	pdf2NamespaceURI:   true,

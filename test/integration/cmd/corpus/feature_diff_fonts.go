@@ -95,8 +95,6 @@ func stripSubsetTag(name string) string {
 // fixture.FontFamilies), as a PostScript name's family part reads once
 // folded (see [foldFace]): any face of them is drawn as the reference draws
 // it.
-//
-//nolint:gochecknoglobals // static family table
 var fixtureFontFamilies = []string{
 	"dejavusans", "dejavusanscondensed", "dejavusansmono", "dejavuserif", "dejavuserifcondensed",
 	"liberationsans", "liberationsansnarrow", "liberationserif", "liberationmono",
@@ -108,8 +106,6 @@ var fixtureFontFamilies = []string{
 // fourStyles are the styles a metric-compatible stand-in covers: regular,
 // bold, italic and bold italic, as a PostScript name's style part reads
 // once folded.
-//
-//nolint:gochecknoglobals // static style table
 var fourStyles = []string{"", "bold", "italic", "bolditalic", "oblique", "boldoblique"}
 
 // standIns maps the faces the fixture fonts have a metric-compatible stand-in
@@ -118,8 +114,6 @@ var fourStyles = []string{"", "bold", "italic", "bolditalic", "oblique", "boldob
 // family's metrics), Liberation Sans, Serif and Mono for Arial, Times New
 // Roman and Courier New, and for Helvetica, Times and Courier, the standard
 // 14 fonts whose metrics those three share.
-//
-//nolint:gochecknoglobals // static stand-in table
 var standIns = map[string][]string{
 	"calibri":       fourStyles,
 	"cambria":       fourStyles,
@@ -134,8 +128,6 @@ var standIns = map[string][]string{
 // symbolFaces are the symbol fonts the converters recode into OpenSymbol,
 // as LibreOffice does (the families pkg/internal/symbolfont's tables name):
 // a glyph of theirs is drawn from OpenSymbol, a fixture font.
-//
-//nolint:gochecknoglobals // static family table
 var symbolFaces = []string{
 	"dingbats", "itczapfdingbats", "monotypesorts", "mtextra", "standardsymbols", "standardsymbolsl",
 	"starbats", "starmath", "symbol", "webdings", "wingdings", "wingdings2", "wingdings3", "zapfdingbats",

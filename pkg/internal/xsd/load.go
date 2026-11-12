@@ -1782,8 +1782,6 @@ func (d *schemaDoc) qname(raw string) (QName, error) {
 // [qnameScope] falls back to this table for a prefix no element binds,
 // so a schema document that omits the conventional ram, qdt or udt
 // declarations still resolves its CII references.
-//
-//nolint:gochecknoglobals // immutable lookup table.
 var wellKnownPrefixes = map[string]string{
 	"xs":   XSNamespace,
 	"xsd":  XSNamespace,

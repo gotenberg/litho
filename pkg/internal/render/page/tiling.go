@@ -266,7 +266,7 @@ func (r *renderer) tilingSource(s *scope, tp *tilingPattern, resources ast.PdfDi
 	v := p.ApplyVector(geom.Point{Y: tp.yStep})
 	if !numeric.Positive(math.Abs(u.X*v.Y-u.Y*v.X)) || !finitePoint(u) || !finitePoint(v) {
 		// A singular pattern matrix squeezes the cells to nothing.
-		return nil, nil //nolint:nilnil // nothing to paint is no error
+		return nil, nil // nothing to paint is no error
 	}
 	area := int64(cov.Width) * int64(cov.Height)
 	cacheCap := r.budget / tileCacheShare
@@ -294,7 +294,7 @@ func (r *renderer) tilingSource(s *scope, tp *tilingPattern, resources ast.PdfDi
 	if nu*nv < float64(area) && nu*nv <= float64(cacheCap) && r.cellCount(tp, p, cov) > directCellLimit {
 		inv, ok := p.Invert()
 		if !ok {
-			return nil, nil //nolint:nilnil // a matrix that does not invert paints nothing
+			return nil, nil // a matrix that does not invert paints nothing
 		}
 		toTile := geom.Matrix{nu / tp.xStep, 0, 0, nv / tp.yStep, 0, 0}
 		tile, release, err := r.tile(s, tp, resources, toTile, int(nu), int(nv))

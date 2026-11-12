@@ -20,8 +20,6 @@ const (
 
 // signaturePermsKeys are the catalog /Perms entries whose value is a signature
 // dictionary (ISO 32000-1, 12.8.4, Table 258), in the order they are read.
-//
-//nolint:gochecknoglobals // static spec table
 var signaturePermsKeys = []ast.PdfName{"DocMDP", "UR3"}
 
 // SignedSignature names one signature of a document.

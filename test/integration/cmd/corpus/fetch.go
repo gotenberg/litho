@@ -75,8 +75,6 @@ type FetchMap struct {
 
 // githubRaw is the host the github fetches read files from; a test points
 // it at a local server.
-//
-//nolint:gochecknoglobals // overridden by tests only
 var githubRaw = "https://raw.githubusercontent.com/"
 
 // fetchJobs is the default number of files downloaded at once, across every

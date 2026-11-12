@@ -15,8 +15,6 @@ package compliance
 //
 // Generated from the Adobe Glyph List; every entry was cross-checked against
 // veraPDF's own AdobeGlyphList (1.30.2) and fontTools, which agree on all 192.
-//
-//nolint:gochecknoglobals // static lookup table.
 var aglPUAGlyphNames = map[string]bool{
 	"AEsmall": true, "Aacutesmall": true, "Acircumflexsmall": true,
 	"Acute": true, "Acutesmall": true, "Adieresissmall": true,

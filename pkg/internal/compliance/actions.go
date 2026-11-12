@@ -15,8 +15,6 @@ import (
 // Modelling this as a whitelist, not a blacklist, is required to flag types
 // the spec never enumerated as forbidden but that are still not in the allowed
 // set.
-//
-//nolint:gochecknoglobals // package-level lookup table mirroring PDFA-1B.xml.
 var allowedActionsPart1 = map[ast.PdfName]bool{
 	"GoTo":       true,
 	"GoToR":      true,
@@ -28,8 +26,6 @@ var allowedActionsPart1 = map[ast.PdfName]bool{
 
 // allowedActionsPart23 is the §6.5.1 t1 whitelist for PDF/A-2 and PDF/A-3: the
 // part-1 set plus GoToE (embedded-document go-to).
-//
-//nolint:gochecknoglobals // package-level lookup table mirroring PDFA-2B.xml.
 var allowedActionsPart23 = map[ast.PdfName]bool{
 	"GoTo":       true,
 	"GoToR":      true,
@@ -43,8 +39,6 @@ var allowedActionsPart23 = map[ast.PdfName]bool{
 // allowedActionsPart4 is the §6.6.1 t1 whitelist for PDF/A-4 and PDF/A-4f: the
 // part-2/3 set plus JavaScript, RichMediaExecute, and GoToDp (ISO 19005-4
 // relaxes the JavaScript prohibition).
-//
-//nolint:gochecknoglobals // package-level lookup table mirroring PDFA-4.xml.
 var allowedActionsPart4 = map[ast.PdfName]bool{
 	"GoTo":             true,
 	"GoToR":            true,
@@ -60,8 +54,6 @@ var allowedActionsPart4 = map[ast.PdfName]bool{
 
 // allowedActionsPart4e extends the PDF/A-4 set for PDF/A-4e with SetOCGState
 // and GoTo3DView (3D/interactive content is permitted in the -e conformance).
-//
-//nolint:gochecknoglobals // package-level lookup table mirroring PDFA-4E.xml.
 var allowedActionsPart4e = map[ast.PdfName]bool{
 	"GoTo":             true,
 	"GoToR":            true,
@@ -116,8 +108,6 @@ func IsForbiddenActionType(actionType ast.PdfName, profile string) bool {
 // AllowedNamedActions lists the named actions permitted by §6.6.1. It is
 // exported so the remediation fixer strips exactly the named actions the
 // validator flags, leaving no room for the two sets to diverge.
-//
-//nolint:gochecknoglobals // package-level lookup table.
 var AllowedNamedActions = map[ast.PdfName]bool{
 	"NextPage":  true,
 	"PrevPage":  true,
@@ -127,8 +117,6 @@ var AllowedNamedActions = map[ast.PdfName]bool{
 
 // allowedAAKeys lists the keys permitted in /AA dicts on catalogs, pages and
 // non-widget annotations (§6.6.3, part 4).
-//
-//nolint:gochecknoglobals // package-level lookup table.
 var allowedAAKeys = map[ast.PdfName]bool{
 	"E":  true,
 	"X":  true,
@@ -332,8 +320,6 @@ func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.P
 // PDFormFieldActions, PDCatalogAdditionalActions), so an action filed under
 // another owner's trigger, such as a keystroke /K on an annotation, is never
 // judged.
-//
-//nolint:gochecknoglobals // package-level lookup tables.
 var (
 	annotAATriggers   = []ast.PdfName{"E", "X", "D", "U", "Fo", "Bl", "PO", "PC", "PV", "PI"}
 	pageAATriggers    = []ast.PdfName{"O", "C"}

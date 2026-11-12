@@ -255,7 +255,7 @@ type linePattern struct {
 //     of dnDiag and upDiag, which this table draws as lines 1.4 pixels wide
 //     every 8; drawn so, every line swatch's mean grey lies within 11 of
 //     the reference's on 255 but diagCross's, 18 lighter.
-var linePatterns = map[string]linePattern{ //nolint:gochecknoglobals // a read-only spec table, ECMA-376 Part 1, 20.1.10.51.
+var linePatterns = map[string]linePattern{ // a read-only spec table, ECMA-376 Part 1, 20.1.10.51.
 	"horz": {horz: true, pitch: 8, weight: 1}, "vert": {vert: true, pitch: 8, weight: 1},
 	"ltHorz": {horz: true, pitch: 4, weight: 1}, "ltVert": {vert: true, pitch: 4, weight: 1},
 	"dkHorz": {horz: true, pitch: 4, weight: 2}, "dkVert": {vert: true, pitch: 4, weight: 2},
@@ -281,7 +281,7 @@ var linePatterns = map[string]linePattern{ //nolint:gochecknoglobals // a read-o
 //     pct10 0.07, pct20 0.13, pct25 0.25, pct30 0.38, pct40 0.47, pct50
 //     0.50, pct60 0.63, pct70 0.75, pct75 0.88, pct80 0.94, pct90 0.97, and
 //     the shares this table gives the others to within 0.01.
-var patternCoverage = map[string]float64{ //nolint:gochecknoglobals // a read-only table of Office's preset tiles, ECMA-376 Part 1, 20.1.10.51.
+var patternCoverage = map[string]float64{ // a read-only table of Office's preset tiles, ECMA-376 Part 1, 20.1.10.51.
 	"pct5": 0.04, "pct10": 0.07, "pct20": 0.13, "pct25": 0.25, "pct30": 0.38, "pct40": 0.47,
 	"pct50": 0.50, "pct60": 0.63, "pct70": 0.75, "pct75": 0.88, "pct80": 0.94, "pct90": 0.97,
 	"smCheck": 0.5, "lgCheck": 0.5, "dotGrid": 0.13, "smConfetti": 0.13, "lgConfetti": 0.375,

@@ -9,8 +9,6 @@ import (
 // intRanges transcribes the magnitude ranges of ITU-T T.88 Figure A.1 and
 // Table A.1, in prefix order: how many bits follow the prefix, and the
 // smallest magnitude the range codes.
-//
-//nolint:gochecknoglobals // static spec table, ITU-T T.88 Figure A.1
 var intRanges = [...]struct {
 	bits   int
 	offset int64

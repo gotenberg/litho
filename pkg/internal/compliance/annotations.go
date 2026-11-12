@@ -94,8 +94,6 @@ func judgedPageAnnotations(ctx context.Context, doc *document.Document, page *pa
 // included here) is still permitted while a PDF 1.4 type omitted from it
 // (Sound, Movie, Screen) is not. Redact is allowed for parts 2/3 even though it
 // postdates ISO 32000-1 Table 169.
-//
-//nolint:gochecknoglobals // static spec table mirroring ISO 19005-2/3 §6.3.1.
 var annotWhitelistPart23 = map[ast.PdfName]bool{
 	"Text": true, "Link": true, "FreeText": true, "Line": true,
 	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
@@ -107,8 +105,6 @@ var annotWhitelistPart23 = map[ast.PdfName]bool{
 
 // annotWhitelistPart4 lists the annotation subtypes ISO 19005-4 §6.3.1 permits:
 // the part-2/3 set with FileAttachment dropped and Projection added.
-//
-//nolint:gochecknoglobals // static spec table mirroring ISO 19005-4 §6.3.1.
 var annotWhitelistPart4 = map[ast.PdfName]bool{
 	"Text": true, "Link": true, "FreeText": true, "Line": true,
 	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
@@ -121,8 +117,6 @@ var annotWhitelistPart4 = map[ast.PdfName]bool{
 // annotWhitelistPart4e lists the annotation subtypes ISO 19005-4 §6.3.1 permits
 // for conformance level E: the [annotWhitelistPart4] set plus 3D and RichMedia
 // (level E permits 3D and interactive content).
-//
-//nolint:gochecknoglobals // static spec table mirroring ISO 19005-4 §6.3.1.
 var annotWhitelistPart4e = map[ast.PdfName]bool{
 	"Text": true, "Link": true, "FreeText": true, "Line": true,
 	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
@@ -134,8 +128,6 @@ var annotWhitelistPart4e = map[ast.PdfName]bool{
 
 // annotWhitelistPart4f lists the annotation subtypes ISO 19005-4 §6.3.1 permits
 // for conformance level F: the [annotWhitelistPart4] set plus FileAttachment.
-//
-//nolint:gochecknoglobals // static spec table mirroring ISO 19005-4 §6.3.1.
 var annotWhitelistPart4f = map[ast.PdfName]bool{
 	"Text": true, "Link": true, "FreeText": true, "Line": true,
 	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
@@ -227,8 +219,6 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 
 // pdfa1AnnotWhitelist lists the PDF 1.4 annotation types ISO 19005-1 §6.5.2
 // permits.
-//
-//nolint:gochecknoglobals // static spec table.
 var pdfa1AnnotWhitelist = map[ast.PdfName]bool{
 	"Text": true, "Link": true, "FreeText": true, "Line": true,
 	"Square": true, "Circle": true, "Highlight": true, "Underline": true,

@@ -471,8 +471,6 @@ const maxHalftoneNesting = 8
 // CMYK device, whose transfer functions the graphics state supplies (ISO
 // 32000-1, 10.5.5.2, Table 130). Under any other name but Default one is
 // required.
-//
-//nolint:gochecknoglobals // immutable lookup set.
 var halftoneCMYKColorants = map[ast.PdfName]bool{"Cyan": true, "Magenta": true, "Yellow": true, "Black": true}
 
 // halftoneJudge judges one halftone and the components a type 5 halftone
@@ -729,11 +727,11 @@ func javaStringHash(s string) uint32 {
 // javaHashSpread folds the high half of a Java hash code into the low half,
 // as java.util.HashMap.hash does before masking it to a bucket.
 func javaHashSpread(h uint32) uint32 {
-	return h ^ (h >> 16) //nolint:mnd // the fold is by half of 32 bits.
+	return h ^ (h >> 16) // the fold is by half of 32 bits.
 }
 
 // validRenderingIntents lists the four standard PDF rendering intents.
-var validRenderingIntents = map[string]bool{ //nolint:gochecknoglobals // constant lookup table.
+var validRenderingIntents = map[string]bool{
 	"RelativeColorimetric": true,
 	"AbsoluteColorimetric": true,
 	"Perceptual":           true,

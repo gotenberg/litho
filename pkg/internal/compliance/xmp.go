@@ -22,8 +22,6 @@ import (
 
 // knownXMPNamespaces lists the predefined XMP namespace URIs that do not
 // require a PDF/A extension schema declaration.
-//
-//nolint:gochecknoglobals // static lookup table
 var knownXMPNamespaces = map[string]bool{
 	// Predefined PDF/A property schemas (ISO 19005, based on XMP Specification).
 	"http://purl.org/dc/elements/1.1/":    true, // dc (Dublin Core)
@@ -87,8 +85,6 @@ var knownXMPNamespaces = map[string]bool{
 // that are NOT in this map are considered "unknown" for PDF/A-1 and require an
 // extension schema declaration. Only namespaces whose property set differs from
 // the full registry need entries here.
-//
-//nolint:gochecknoglobals // static lookup table
 var xmpPart1Properties = map[string]map[string]bool{
 	// XMP Basic (xmp:): 2004 spec defined all except Rating and Label
 	// (Rating was introduced in the 2012 XMP spec).
@@ -125,8 +121,6 @@ var xmpPart1Properties = map[string]map[string]bool{
 
 // xmpPart1TypeOverrides lists properties whose type in the 2004 XMP Specification
 // (referenced by PDF/A-1) differs from the type in the current full registry.
-//
-//nolint:gochecknoglobals // static lookup table
 var xmpPart1TypeOverrides = map[string]map[string]xmpPropType{
 	// photoshop:SupplementalCategories was Text in 2004, changed to Bag Text later.
 	"http://ns.adobe.com/photoshop/1.0/": {
@@ -2064,8 +2058,6 @@ const (
 
 // xmpExpectedPrefix maps extension schema namespace URIs to the expected
 // XML prefix name per the PDF/A extension schema specification.
-//
-//nolint:gochecknoglobals // static lookup table
 var xmpExpectedPrefix = map[string]string{
 	xmpPdfaSchemaPrefix:   "pdfaSchema",
 	xmpPdfaPropertyPrefix: "pdfaProperty",
@@ -2086,8 +2078,6 @@ type xmpExtensionLevel struct {
 // [xmpExpectedPrefix] instead made the report depend on Go's map iteration
 // order. The field lists mirror the per-field tests of ISO 19005-1 §6.7.8 and
 // ISO 19005-2/3 §6.6.2.3.3.
-//
-//nolint:gochecknoglobals // static lookup table
 var xmpExtensionLevels = []xmpExtensionLevel{
 	{xmpPdfaSchemaPrefix, []string{"schema", "namespaceURI", "prefix", "property", "valueType"}, xmpExtSchemaRule},
 	{xmpPdfaPropertyPrefix, []string{"name", "valueType", "category", "description"}, xmpExtPropertyRule},
@@ -3057,8 +3047,6 @@ func xmpExtFieldSeqRule(part int) []Violation {
 // [xmpExtensionLevels] cannot silently lack a rule: pdfaSchema:valueType and
 // pdfaType:field both did, so litho reported four violations where veraPDF
 // reported five on a packet misprefixing every field.
-//
-//nolint:gochecknoglobals // static spec table
 var (
 	xmpExtSchemaFieldRules = map[string][3]Rule{
 		"schema":       {Rule_19005_1_6_7_8_t03, Rule_19005_2_6_6_2_3_3_t02, Rule_19005_3_6_6_2_3_3_t02},
@@ -3210,8 +3198,6 @@ const (
 // xmpContainerElementType maps container properties to the expected value type
 // of their items. For example, exif:ISOSpeedRatings is a Seq of Integer, so
 // each rdf:li item must be a valid integer string.
-//
-//nolint:gochecknoglobals // static lookup table.
 var xmpContainerElementType = map[string]map[string]xmpPropType{
 	"http://ns.adobe.com/exif/1.0/": {
 		"ISOSpeedRatings":         xmpPropInteger, // Seq Integer
@@ -3528,8 +3514,6 @@ func xmpPropertyTypeRule(part int, ns, prop, detail string) []Violation {
 //     xmpMM:DerivedFrom and stEvt:changed inside xmpMM:History, and veraPDF
 //     reports both under §6.6.2.3.1 t2.
 //   - All corpora: no file exercises the remaining types.
-//
-//nolint:gochecknoglobals // static lookup table mirroring the XMP Specification.
 var xmpStructTypeFields = map[string]map[string]bool{
 	// ResourceEvent (stEvt), XMP 2005. "changed" is a later addition.
 	"http://ns.adobe.com/xap/1.0/sType/ResourceEvent#": {
@@ -3924,16 +3908,12 @@ const (
 
 // xmpValueTypeArrayPrefixes are the array wrappers veraPDF resolves before
 // looking a type up, so "Bag Text" resolves through "text".
-//
-//nolint:gochecknoglobals // static lookup table.
 var xmpValueTypeArrayPrefixes = []string{"alt ", "bag ", "seq "}
 
 // xmpPredefinedValueTypes1 is the value-type vocabulary ISO 19005-1 files are
 // judged against. Taken from veraPDF 1.30.2's
 // ValidatorsContainerCreator.getPredefinedContainerForPDFA_1, whose registry
 // this mirrors key for key.
-//
-//nolint:gochecknoglobals // static lookup table.
 var xmpPredefinedValueTypes1 = map[string]bool{
 	"agentname": true, "boolean": true, "cfapattern": true, "date": true,
 	"devicesettings": true, "dimensions": true, "flash": true, "gpscoordinate": true,
@@ -3947,8 +3927,6 @@ var xmpPredefinedValueTypes1 = map[string]bool{
 // types ISO 19005-2 and -3 add, from veraPDF's
 // getPredefinedContainerForPDFA_2_3. The split is real: Colorant and Timecode
 // are undefined under part 1 and predefined under parts 2 and 3.
-//
-//nolint:gochecknoglobals // static lookup table.
 var xmpPredefinedValueTypes23 = map[string]bool{
 	"beatsplicestretch": true, "colorant": true, "font": true, "marker": true,
 	"media": true, "projectlink": true, "resamplestretch": true, "time": true,

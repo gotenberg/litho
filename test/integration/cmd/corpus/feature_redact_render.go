@@ -235,8 +235,6 @@ type redactScenario struct {
 //     centred on the text run nearest the page's vertical centre (the centre
 //     itself on a page with no text), which splits runs at their glyphs.
 //   - p2-quarter: the centred quarter of page 2, when there is one.
-//
-//nolint:gochecknoglobals // static scenario table
 var redactScenarios = []redactScenario{
 	{name: "p1-whole", page: 1, rect: func(_ [4]float64, _ []models.TextElement) ([4]float64, bool) {
 		return [4]float64{-mutationRedactReach, -mutationRedactReach, mutationRedactReach, mutationRedactReach}, true

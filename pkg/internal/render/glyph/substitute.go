@@ -148,8 +148,6 @@ func substituteRequests(req Request) []Request {
 // renderers draw a CJK font the file does not embed with the same face. A
 // drawing choice, not spec-mandated: the /CIDSystemInfo of ISO 32000-1,
 // 9.7.3 names the character collection, not a font to draw it with.
-//
-//nolint:gochecknoglobals // static lookup table
 var cjkStandIns = map[string][]string{
 	"Adobe-Japan1": {"NotoSansJP-Regular", "NotoSansCJKjp-Regular", "SourceHanSansJP-Regular", "SourceHanSans-Regular"},
 	"Adobe-Japan2": {"NotoSansJP-Regular", "NotoSansCJKjp-Regular", "SourceHanSansJP-Regular", "SourceHanSans-Regular"},

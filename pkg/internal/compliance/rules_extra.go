@@ -9,7 +9,6 @@ package compliance
 // [Rule_19005_2_6_2_2_t03]: wiring them up would report violations the
 // standard permits.
 
-//nolint:gochecknoglobals // package-level rule definitions are the core design.
 var (
 	// Hybrid-invoice rules covering the PDF/A-3 carrier requirements
 	// shared by Factur-X 1.0+ and every ZUGFeRD generation. Each rule

@@ -146,8 +146,6 @@ func (w *walker) walk(ctx context.Context, ops []content.Operation, resources as
 
 // deviceOperators maps the operators that select a device family and set
 // the colour at once to that family (ISO 32000-1, 8.6.8, Table 74).
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1 Table 74
 var deviceOperators = map[string]string{
 	"g": graphics.FamilyDeviceGray, "G": graphics.FamilyDeviceGray,
 	"rg": graphics.FamilyDeviceRGB, "RG": graphics.FamilyDeviceRGB,
@@ -491,8 +489,6 @@ func (w *walker) appearance(ctx context.Context, obj ast.PdfObject, resources as
 // inlineSpaces maps the colour space names an inline image may give /CS,
 // abbreviated as ISO 32000-1, 8.9.7, Table 94 allows or in full, to the full
 // family names.
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1 Table 94
 var inlineSpaces = map[ast.PdfName]ast.PdfName{
 	"G": graphics.FamilyDeviceGray, graphics.FamilyDeviceGray: graphics.FamilyDeviceGray,
 	"RGB": graphics.FamilyDeviceRGB, graphics.FamilyDeviceRGB: graphics.FamilyDeviceRGB,

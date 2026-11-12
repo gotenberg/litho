@@ -64,8 +64,6 @@ type paperSize struct {
 //     postcard) and 70 (A6) on Letter, turned as the sheet asks.
 //   - probe, xlsx: paper-grid at code 34 came back from Excel as 9 pages
 //     of 612 by 792 points; litho lays it on 12 pages of 176 by 250 mm.
-//
-//nolint:gochecknoglobals // static table
 var paperSizes = []paperSize{
 	{key: "a3", w: 297, h: 420, code: 8, css: "A3"},
 	{key: "a4", w: 210, h: 297, code: 9, css: "A4"},
@@ -109,8 +107,6 @@ func paperSpan(defaultPaper string) []string { return []string{"a5", defaultPape
 
 // orientations are the two ways a paper is turned, as fixture names spell
 // them.
-//
-//nolint:gochecknoglobals // static list
 var orientations = []string{"portrait", "landscape"}
 
 // marginSet is a set of page margins the margin documents are laid out
@@ -138,8 +134,6 @@ type marginSet struct {
 //   - libreoffice/xlsx sc/tdf145054: a sheet with left="0" prints its first
 //     column's text 1.29 points from the paper's edge in Excel's reference,
 //     so Excel keeps a zero margin.
-//
-//nolint:gochecknoglobals // static table
 var marginSets = []marginSet{
 	{key: "none"},
 	{key: "narrow", top: 0.5, right: 0.5, bottom: 0.5, left: 0.5, header: 0.25, footer: 0.25},
@@ -486,8 +480,6 @@ func xlsxPaperDocs() []paperDoc {
 
 // jisB5 is the paper Excel prints paperSize code 13 on: JIS B5, 182 by 257
 // mm (see [paperSizes]).
-//
-//nolint:gochecknoglobals // static value
 var jisB5 = paperSize{key: "b5", w: 182, h: 257, code: 13}
 
 // sheetPaper returns the paper a workbook's sheet prints p on: JIS B5 for
@@ -534,8 +526,6 @@ const emuPerMM = 36000
 // take their paper's sides, landscape, as PowerPoint's A4 preset does (297
 // by 210 mm); the Hagaki card is the 100 by 148 mm Japanese postcard,
 // portrait.
-//
-//nolint:gochecknoglobals // static table
 var slideSizes = []slideSize{
 	{"screen4x3", "screen4x3", 9144000, 6858000},
 	{"letter", "letter", 279.4 * emuPerMM, 215.9 * emuPerMM},
@@ -953,8 +943,6 @@ type odpSize struct {
 // 16:9, 16:10, Widescreen and the On-screen Show ones), its paper formats
 // in landscape (A3, A4, A5, B5 (ISO), Letter, Legal, Tabloid), the 36 by 24
 // mm Dia Slide, and the Japanese Postcard and A4 portrait.
-//
-//nolint:gochecknoglobals // static table
 var odpSizes = []odpSize{
 	{"screen-4x3", 28, 21},
 	{"screen-16x9", 28, 15.75},
@@ -1008,14 +996,10 @@ func odpPaperDocs() []paperDoc {
 
 // cssPageSizes are the page-size keywords of CSS Paged Media Level 3, 7.2.1
 // (Table 1), as an @page size names them.
-//
-//nolint:gochecknoglobals // static list
 var cssPageSizes = []string{"A5", "A4", "A3", "B5", "B4", "JIS-B5", "JIS-B4", "letter", "legal", "ledger"}
 
 // cssLengthSizes are two @page sizes in lengths: a narrow page in inches
 // and a wide one in centimetres (CSS Paged Media Level 3, 7.2.1).
-//
-//nolint:gochecknoglobals // static table
 var cssLengthSizes = []struct{ key, size string }{
 	{"lengths-narrow", "6in 9in"},
 	{"lengths-wide", "25cm 15cm"},

@@ -213,7 +213,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 	for opIdx, op := range ops {
 		// Check for context cancellation every 100 operators to respect
 		// deadlines without adding per-operator overhead.
-		if opIdx%100 == 0 && opIdx > 0 { //nolint:mnd // amortized cancellation check
+		if opIdx%100 == 0 && opIdx > 0 { // amortized cancellation check
 			if err := ctx.Err(); err != nil {
 				return err
 			}
@@ -838,7 +838,7 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 
 	// Pre-allocate with a capacity estimate: roughly 1 text element per 3 operators.
 	estimatedCap := max(len(ops)/3,
-		//nolint:mnd // minimum capacity to avoid early reallocations
+		// Minimum capacity to avoid early reallocations.
 		64)
 	elements := make([]models.TextElement, 0, estimatedCap)
 	var origins []int

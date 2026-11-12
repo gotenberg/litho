@@ -63,7 +63,7 @@ var (
 	zugferd1p0Fault error
 )
 
-//nolint:gochecknoglobals // memoised load results, not sentinel errors.
+// Memoised load results, not sentinel errors.
 var (
 	facturxProfileOnce sync.Map // root path -> *sync.Once
 	facturxProfileMu   sync.Mutex

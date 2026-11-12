@@ -162,7 +162,7 @@ const (
 
 // drawingMLBuiltins maps the built-in names of ECMA-376 Part 1, 20.1.9.11
 // to their values.
-var drawingMLBuiltins = map[string]Builtin{ //nolint:gochecknoglobals // a read-only spec table, ECMA-376 Part 1, 20.1.9.11.
+var drawingMLBuiltins = map[string]Builtin{ // a read-only spec table, ECMA-376 Part 1, 20.1.9.11.
 	"l": BuiltinL, "t": BuiltinT, "r": BuiltinR, "b": BuiltinB, "w": BuiltinW, "h": BuiltinH,
 	"hc": BuiltinHC, "vc": BuiltinVC, "ss": BuiltinSS, "ls": BuiltinLS,
 	"cd2": BuiltinCD2, "cd4": BuiltinCD4, "cd8": BuiltinCD8,
@@ -183,7 +183,7 @@ func DrawingMLBuiltin(s string) (Builtin, bool) {
 
 // drawingMLOps maps the formula operator names of ECMA-376 Part 1,
 // 20.1.9.11 to their operators and operand counts.
-var drawingMLOps = map[string]struct { //nolint:gochecknoglobals // a read-only spec table, ECMA-376 Part 1, 20.1.9.11.
+var drawingMLOps = map[string]struct { // a read-only spec table, ECMA-376 Part 1, 20.1.9.11.
 	op Op
 	n  int
 }{

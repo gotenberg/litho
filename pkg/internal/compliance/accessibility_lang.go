@@ -17,8 +17,6 @@ import (
 // profiles require: RFC 3066 / BCP 47 (alphanumeric subtags) for PDF/A-2/3/4 and
 // PDF/UA, and the stricter alpha-only subtags ISO 19005-1 §6.8.4 t1 demands for
 // PDF/A-1.
-//
-//nolint:gochecknoglobals // compiled-once regex tables.
 var (
 	langTagAlphaNum  = regexp.MustCompile(`^[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*$`)
 	langTagAlphaOnly = regexp.MustCompile(`^[a-zA-Z]{1,8}(-[a-zA-Z]{1,8})*$`)
@@ -27,8 +25,6 @@ var (
 // spanLangSubjects pairs each /Span marked-content property whose text needs a
 // determinable natural language with the test that reports it. Mirrors the three
 // ISO 14289-1 §7.2 SEMarkedContent rules, which differ only in the property key.
-//
-//nolint:gochecknoglobals // static spec table (ISO 14289-1 §7.2 t30/t31/t32).
 var spanLangSubjects = []struct {
 	key  ast.PdfName
 	rule Rule

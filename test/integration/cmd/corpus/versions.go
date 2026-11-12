@@ -36,16 +36,13 @@ const pdfsStage = "pdfs"
 // learn one version would be waste.
 const veraPDFHeaderBytes = 4096
 
-//nolint:gochecknoglobals // static syntax of versions.env keys
 var pinKeyPattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 
 // pinValuePattern keeps a value safe to pass as a build argument, to source
 // from sh inside the image, and to print on a command line without quoting.
-//
-//nolint:gochecknoglobals // static syntax of versions.env values
 var pinValuePattern = regexp.MustCompile(`^[A-Za-z0-9._+:@,/-]+$`)
 
-//nolint:gochecknoglobals // static header pattern of a veraPDF JSON report
+// Static header pattern of a veraPDF JSON report.
 var veraPDFCorePattern = regexp.MustCompile(`"id"\s*:\s*"core"\s*,\s*"version"\s*:\s*"([^"]+)"`)
 
 // digestPins pairs each image digest pin with the pins that name the image it
@@ -54,8 +51,6 @@ var veraPDFCorePattern = regexp.MustCompile(`"id"\s*:\s*"core"\s*,\s*"version"\s
 // install the old build under the new name. An override of any named pin
 // without the digest therefore drops the digest, and the image is pulled by
 // tag.
-//
-//nolint:gochecknoglobals // static pairing table
 var digestPins = map[string][]string{
 	"VERAPDF_IMAGE_DIGEST": {"VERAPDF_VERSION"},
 	"NODE_IMAGE_DIGEST":    {"NODE_VERSION", "NODE_DEBIAN_RELEASE"},
@@ -70,8 +65,6 @@ var digestPins = map[string][]string{
 // are not build arguments. POPPLER_VERSION is not one of them although
 // `corpus tools` compares the host's pdfsig against it: the image builds the
 // same release for the render goldens.
-//
-//nolint:gochecknoglobals // static key set
 var localToolPins = map[string]bool{
 	"QPDF_VERSION":      true,
 	"FONTTOOLS_VERSION": true,
@@ -156,8 +149,6 @@ var localToolPins = map[string]bool{
 //   - pdfcpu: the bookmarks, merges and merge-empty goldens the arm64 pdfcpu
 //     0.12.1 makes match the x86_64 ones on all 51, 39 and 38 files, header
 //     timestamps and temp-file names aside.
-//
-//nolint:gochecknoglobals // static dependency table
 var stagePins = map[string][]string{
 	"goldens/text":               {"PDFJS_REVISION", "NODE_VERSION"},
 	"goldens/metadata":           {"PDFJS_REVISION", "NODE_VERSION"},
@@ -178,8 +169,6 @@ var stagePins = map[string][]string{
 // are the weasyprint fixtures and the html corpora's Chromium references. The
 // wpt corpus's files come from the WPT commit `corpus fetch` records, and the
 // resvg corpus's from the resvg commit it records.
-//
-//nolint:gochecknoglobals // static dependency table
 var sourcePins = map[string][]string{
 	"pdfjs":       {"PDFJS_REVISION"},
 	"verapdf":     {"VERAPDF_CORPUS_REVISION"},

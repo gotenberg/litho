@@ -17,8 +17,6 @@ import (
 // LZWDecode (and its inline abbreviation LZW) and Crypt; the abbreviated
 // filter names are those of ISO 32000-1 Table 92 (and the full names of
 // Table 6). Parts 2 to 4 use the positive [allowedInlineImageFilters] set.
-//
-//nolint:gochecknoglobals // package-level lookup table.
 var forbiddenInlineImageFilters = map[string]bool{
 	"LZW":       true,
 	"LZWDecode": true,
@@ -45,8 +43,6 @@ var forbiddenInlineImageFilters = map[string]bool{
 //     form XObject JPXDecode inline images fail ISO 19005-2/3, 6.1.10 t1 and
 //     ISO 19005-4, 6.1.9 t1 five times on veraPDF 1.30.2, at every PDF/A level
 //     of those parts, and ISO 19005-1, 6.1.10 t2 never.
-//
-//nolint:gochecknoglobals // package-level lookup table.
 var allowedInlineImageFilters = map[string]bool{
 	"AHx": true, "ASCIIHexDecode": true,
 	"A85": true, "ASCII85Decode": true,
@@ -315,8 +311,6 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 // abbreviations ISO 32000-1, 8.9.7, Table 94 gives those filters for inline
 // images, the image codecs (CCITTFaxDecode, JBIG2Decode, DCTDecode,
 // JPXDecode), BrotliDecode and every other name are none of them.
-//
-//nolint:gochecknoglobals // package-level lookup table.
 var contentFilters = map[ast.PdfName]bool{
 	"ASCIIHexDecode":  true,
 	"ASCII85Decode":   true,

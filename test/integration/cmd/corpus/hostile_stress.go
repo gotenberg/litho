@@ -127,7 +127,7 @@ func stressFixtures(m *Manifest) ([]Fixture, error) {
 }
 
 // stressWords are the words the text probes are made of.
-var stressWords = []string{"lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit", "sed", "do", "eiusmod", "tempor", "incididunt", "labore", "magna", "aliqua"} //nolint:gochecknoglobals // static table
+var stressWords = []string{"lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit", "sed", "do", "eiusmod", "tempor", "incididunt", "labore", "magna", "aliqua"}
 
 // stressParagraph returns a paragraph of eighty words drawn from r.
 func stressParagraph(r *rand.Rand) string {

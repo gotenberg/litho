@@ -860,8 +860,6 @@ func (w *colorLinkWalk) judgeRef(ctx context.Context, ref csRef, s *linkStream, 
 // base that is null does as well, and so does an inline image naming no
 // colour space its resources define; an image XObject or a shading naming
 // one fails nothing.
-//
-//nolint:gochecknoglobals // immutable value.
 var unknownSpace = csRef{family: "DeviceGray"}
 
 // cmykLink is the identity veraPDF judges an indirect four-component ICCBased

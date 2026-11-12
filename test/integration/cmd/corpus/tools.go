@@ -22,10 +22,8 @@ import (
 // silent for a minute is wedged.
 const localToolTimeout = time.Minute
 
-//nolint:gochecknoglobals // static pattern
 var dottedVersionPattern = regexp.MustCompile(`\d+(?:\.\d+)+`)
 
-//nolint:gochecknoglobals // static pattern
 var javaVersionPattern = regexp.MustCompile(`version "([^"]+)"`)
 
 // localTool is one tool the host runs, probed against its pin.

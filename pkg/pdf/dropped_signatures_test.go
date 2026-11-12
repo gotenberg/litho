@@ -81,8 +81,6 @@ func certifiedPDF() []byte {
 
 // certifiedDropped is what a write of [certifiedPDF] that leaves every
 // signature out reports.
-//
-//nolint:gochecknoglobals // static expectation
 var certifiedDropped = []DroppedSignature{
 	{Field: "author", Perms: "DocMDP"},
 	{Field: "form1.witness"},

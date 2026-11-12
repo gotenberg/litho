@@ -431,7 +431,7 @@ func decodeCIDSetBits(data []byte) map[uint16]bool {
 	for i, b := range data {
 		for bit := 7; bit >= 0; bit-- {
 			if b&(1<<uint(bit)) != 0 {
-				bits[uint16(i*8+(7-bit))] = true //nolint:gosec,mnd // CID bit-index; a conformant CIDSet covers the 16-bit CID space, 8 bits/byte MSB-first.
+				bits[uint16(i*8+(7-bit))] = true //nolint:gosec // CID bit-index; a conformant CIDSet covers the 16-bit CID space, 8 bits/byte MSB-first.
 			}
 		}
 	}

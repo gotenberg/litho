@@ -20,7 +20,6 @@ type Rule struct {
 	Description string
 }
 
-//nolint:gochecknoglobals // package-level rule definitions are the core design.
 var (
 	Rule_14289_1_5_t01 = Rule{
 		Specification: "ISO_14289_1",

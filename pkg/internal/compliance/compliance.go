@@ -177,8 +177,6 @@ const (
 // and the lenient-profile Factur-X tolerances surfaced under strict
 // validation. Everything else, including all PDF/A and PDF/UA rules, is
 // fatal under the binary conformance model.
-//
-//nolint:gochecknoglobals // immutable lookup set.
 var warningRules = map[Rule]bool{
 	Rule_cii_sch_Warning:               true,
 	Rule_invoice_AFRelationshipNonSpec: true,

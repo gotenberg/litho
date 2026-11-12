@@ -1268,8 +1268,6 @@ func differencesNameIsItsCode(name string, code byte) bool {
 // defaultFontMatrix is the matrix of a font whose glyph space is 1000 units
 // to the text space unit (ISO 32000-1, 9.2.4), the /FontMatrix every font
 // type but Type 3 has.
-//
-//nolint:gochecknoglobals // constant matrix, arrays cannot be const
 var defaultFontMatrix = [6]float64{0.001, 0, 0, 0.001, 0, 0}
 
 // type3HeightScale returns the factor PDF.js scales the height of the text
@@ -1676,7 +1674,7 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 	// OpenType), the head table may report a different value (e.g., 2048) but
 	// CFF charstring widths are always in the CFF coordinate system.
 	if isCFFFont(fontData) {
-		font.UnitsPerEm = 1000 //nolint:mnd // CFF standard
+		font.UnitsPerEm = 1000 // CFF standard
 	} else {
 		font.UnitsPerEm = ReadUnitsPerEm(fontData)
 	}
@@ -1948,25 +1946,25 @@ func readOS2AvgWidth(data []byte) uint16 {
 // ReadUnitsPerEm extracts unitsPerEm from the TrueType/OpenType head table.
 func ReadUnitsPerEm(data []byte) uint16 {
 	if len(data) < 4 {
-		return 1000 //nolint:mnd // safe default
+		return 1000 // safe default
 	}
 	// Bare CFF font: use CFF FontMatrix instead of TrueType head table.
 	if data[0] == 1 && data[1] == 0 {
 		if upm := cff.ReadUnitsPerEm(data); upm > 0 {
 			return upm
 		}
-		return 1000 //nolint:mnd // A CFF with an unreadable FontMatrix falls back to its 1000-upm default (CFF spec, Tech Note #5176, Table 9).
+		return 1000 // A CFF with an unreadable FontMatrix falls back to its 1000-upm default (CFF spec, Tech Note #5176, Table 9).
 	}
 	records, err := truetype.ParseTableDirectory(data)
 	if err != nil {
-		return 1000 //nolint:mnd // safe default
+		return 1000 // safe default
 	}
 	headData, err := truetype.TableData(data, records, "head")
-	if err != nil || len(headData) < 20 { //nolint:mnd // unitsPerEm occupies head bytes 18:20 (OpenType spec, head), so a shorter table cannot hold it.
-		return 1000 //nolint:mnd // The conventional default when head is unusable; 1000 upm matches the CFF default and most Type 1 derived fonts.
+	if err != nil || len(headData) < 20 { // unitsPerEm occupies head bytes 18:20 (OpenType spec, head), so a shorter table cannot hold it.
+		return 1000 // The conventional default when head is unusable; 1000 upm matches the CFF default and most Type 1 derived fonts.
 	}
 	// unitsPerEm is at offset 18 in the head table.
-	return binary.BigEndian.Uint16(headData[18:20]) //nolint:mnd // unitsPerEm is a uint16 at head offset 18 (OpenType spec, head).
+	return binary.BigEndian.Uint16(headData[18:20]) // unitsPerEm is a uint16 at head offset 18 (OpenType spec, head).
 }
 
 // type1EncodingRe matches "dup <code> /<name> put" lines in Type1 font programs.
@@ -2090,7 +2088,7 @@ func ExtractType1EncodingNames(fontData []byte) map[byte]string {
 	result := make(map[byte]string)
 	for _, match := range type1EncodingRe.FindAllSubmatch(encSection, -1) {
 		code, err := strconv.Atoi(string(match[1]))
-		if err != nil || code < 0 || code > 255 { //nolint:mnd // A simple font addresses one byte of character codes, 0-255 (ISO 32000-1, 9.6.6.2).
+		if err != nil || code < 0 || code > 255 { // A simple font addresses one byte of character codes, 0-255 (ISO 32000-1, 9.6.6.2).
 			continue
 		}
 		glyphName := string(match[2])
@@ -4070,8 +4068,6 @@ func type3PathBounds(ops []content.Operation) *[4]float64 {
 
 // pathOperandCounts is how many numbers each path construction operator
 // takes (ISO 32000-1, 8.5.2.1, Table 59).
-//
-//nolint:gochecknoglobals // static lookup table mirroring ISO 32000-1 Table 59
 var pathOperandCounts = map[string]int{"m": 2, "l": 2, "re": 4, "c": 6, "v": 4, "y": 4}
 
 // pathOperands returns the operands of op, a path construction operator,

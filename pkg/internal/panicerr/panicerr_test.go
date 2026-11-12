@@ -33,7 +33,7 @@ func TestLog_LogsAWorkerPanicOnce(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
 	err := fmt.Errorf("decoding: %w", &Error{Where: "worker", Value: "boom", Stack: []byte("the stack")})
 	for range 3 {
-		if got := Log(logger, err); got != err { //nolint:errorlint // Log must return the very error it was given.
+		if got := Log(logger, err); got != err { // Log must return the very error it was given.
 			t.Fatalf("Log returned %v, want the error unchanged", got)
 		}
 	}
@@ -47,10 +47,10 @@ func TestLog_LogsAWorkerPanicOnce(t *testing.T) {
 
 	buf.Reset()
 	plain := errors.New("plain")
-	if Log(logger, plain) != plain || Log(logger, nil) != nil || buf.Len() != 0 { //nolint:errorlint // Log must return the very error it was given.
+	if Log(logger, plain) != plain || Log(logger, nil) != nil || buf.Len() != 0 { // Log must return the very error it was given.
 		t.Errorf("an error carrying no panic was logged or changed:\n%s", buf.String())
 	}
-	if Log(nil, err) != err { //nolint:errorlint // Log must return the very error it was given.
+	if Log(nil, err) != err { // Log must return the very error it was given.
 		t.Error("a nil logger changed the error")
 	}
 }

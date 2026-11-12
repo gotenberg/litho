@@ -250,7 +250,7 @@ func (p *provisioner) diffGoldens(ctx context.Context, pdfs string) error {
 
 // officeFormats are the formats of the Office corpora, named by the last
 // element of the corpus name.
-var officeFormats = map[string]bool{ //nolint:gochecknoglobals // static table
+var officeFormats = map[string]bool{
 	"docx": true, "odt": true, "xlsx": true, "ods": true, "csv": true,
 	"pptx": true, "odp": true, "doc": true, "xls": true, "ppt": true,
 }

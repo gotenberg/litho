@@ -141,7 +141,7 @@ func recolorDocument(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 
 // deviceFamilies maps the data colour space signatures of package recolor to
 // the device family names a [ColorReport] uses.
-var deviceFamilies = map[string]string{ //nolint:gochecknoglobals // static lookup table, ICC.1:2010 Table 19 to ISO 32000-1 8.6.4
+var deviceFamilies = map[string]string{ // static lookup table, ICC.1:2010 Table 19 to ISO 32000-1 8.6.4
 	recolor.SpaceGray: graphics.FamilyDeviceGray,
 	recolor.SpaceRGB:  graphics.FamilyDeviceRGB,
 	recolor.SpaceCMYK: graphics.FamilyDeviceCMYK,

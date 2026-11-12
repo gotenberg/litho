@@ -469,7 +469,7 @@ func doCTMs(ctx context.Context, ops []content.Operation, ctm [6]float64, resour
 	m.Current().CTM = ctm
 	out := make(map[int][6]float64)
 	for i, op := range ops {
-		if i%100 == 0 && ctx.Err() != nil { //nolint:mnd // amortized cancellation check, as the text extraction checks
+		if i%100 == 0 && ctx.Err() != nil { // amortized cancellation check, as the text extraction checks
 			return out
 		}
 		if op.Operator == "Do" {

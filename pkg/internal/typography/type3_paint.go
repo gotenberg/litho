@@ -374,7 +374,7 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 	for i, op := range ops {
 		// A cancelled walk bounds nothing it has not seen, so the glyph
 		// paints anywhere.
-		if i%100 == 0 && i > 0 && ctx.Err() != nil { //nolint:mnd // amortized cancellation check
+		if i%100 == 0 && i > 0 && ctx.Err() != nil { // amortized cancellation check
 			return painted, true, pen
 		}
 		switch op.Operator {

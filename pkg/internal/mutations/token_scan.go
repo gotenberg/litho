@@ -451,7 +451,7 @@ func isBinarySlot(dict ast.PdfDict, key ast.PdfName) bool {
 // isICCBasedArray reports whether arr is an ICCBased colour space, whose second
 // element is the profile stream (ISO 32000-1, 8.6.5.5).
 func isICCBasedArray(arr ast.PdfArray) bool {
-	if len(arr) != 2 { //nolint:mnd // ISO 32000-1, 8.6.5.5: [/ICCBased stream] has exactly two elements
+	if len(arr) != 2 { // ISO 32000-1, 8.6.5.5: [/ICCBased stream] has exactly two elements
 		return false
 	}
 	name, _ := arr[0].(ast.PdfName)
@@ -493,7 +493,7 @@ func (w *scanWalk) visit(ctx context.Context, ref ast.PdfIndirectRef) {
 		w.setAside = append(w.setAside, ref)
 		return
 	}
-	if len(w.visited)%100 == 0 { //nolint:mnd // amortized cancellation check, one per 100 objects as the compliance sweep does
+	if len(w.visited)%100 == 0 { // amortized cancellation check, one per 100 objects as the compliance sweep does
 		if err := ctx.Err(); err != nil {
 			w.err = err
 			return

@@ -193,8 +193,6 @@ func (s viewerBoxShape) pdf() []byte {
 // and pdf.js or poppler part, beside the controls, each with the size the
 // pinned pdf.js shows the page at, which poppler 26.09.0 shows too but where
 // a comment names its own.
-//
-//nolint:gochecknoglobals // test table shared by the read and the rewrite tests.
 var viewerBoxShapes = []viewerBoxShape{
 	{name: "a media box of five entries", page: "/MediaBox [0 0 600 800 7]", want: [2]float64{612, 792}},
 	{name: "a media box of three entries", page: "/MediaBox [10 10 300]", want: [2]float64{612, 792}},

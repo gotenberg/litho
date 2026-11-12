@@ -177,8 +177,6 @@ func fixtureFontsRoot() string {
 // installs, the faces every converter oracle draws text with
 // (fixture.FontFamilies). The fonts root also holds the test fonts (Ahem, the
 // WeasyPrint test font), which only the oracles written for them read.
-//
-//nolint:gochecknoglobals // static list of directory prefixes
 var fixtureFamilyPrefixes = fixture.FontFamilies
 
 // errFontsMissing reports a font directory a converter feature needs and

@@ -73,7 +73,7 @@ func SymbolCharCodeToGID(ctx context.Context, data []byte) (map[uint16]uint16, e
 	// and its segments cannot be trusted to list every code the font maps. A
 	// caller would read a code missing from such a partial map as a missing
 	// glyph.
-	if len(sub) >= 4 { //nolint:mnd // format and length fields
+	if len(sub) >= 4 { // format and length fields
 		if format := binary.BigEndian.Uint16(sub[0:2]); format == 4 || format == 6 {
 			if declared := int(binary.BigEndian.Uint16(sub[2:4])); declared > len(sub) {
 				return nil, fmt.Errorf("%w: cmap subtable declares %d bytes, %d remain", ErrInvalidFont, declared, len(sub))
@@ -86,7 +86,7 @@ func SymbolCharCodeToGID(ctx context.Context, data []byte) (map[uint16]uint16, e
 		return nil, err
 	}
 
-	out := make(map[uint16]uint16, 256) //nolint:mnd // single-byte code space
+	out := make(map[uint16]uint16, 256) // single-byte code space
 	for code := range uint32(256) {
 		for _, high := range symbolCodeRanges {
 			if gid, ok := codeToGID[high+code]; ok && gid != 0 {
@@ -119,7 +119,7 @@ func cmapSubtableCodeToGID(ctx context.Context, sub []byte) (map[uint32]uint16, 
 
 	switch format {
 	case 0:
-		if len(sub) < 262 { //nolint:mnd // 6-byte header + 256 GID bytes
+		if len(sub) < 262 { // 6-byte header + 256 GID bytes
 			return nil, fmt.Errorf("%w: format 0 data too short", ErrInvalidFont)
 		}
 		for code := range 256 {
@@ -129,7 +129,7 @@ func cmapSubtableCodeToGID(ctx context.Context, sub []byte) (map[uint32]uint16, 
 		}
 
 	case 6:
-		if len(sub) < 10 { //nolint:mnd // minimum header size
+		if len(sub) < 10 { // minimum header size
 			return nil, fmt.Errorf("%w: format 6 header too short", ErrInvalidFont)
 		}
 		firstCode := int(binary.BigEndian.Uint16(sub[6:8]))
@@ -158,16 +158,16 @@ func cmapSubtableCodeToGID(ctx context.Context, sub []byte) (map[uint32]uint16, 
 // It mirrors [parseCmapFormat4]'s segment arithmetic but stores the native
 // code → GID direction.
 func format4CodeToGID(ctx context.Context, data []byte, out map[uint32]uint16) error {
-	if len(data) < 14 { //nolint:mnd // fixed header size
+	if len(data) < 14 { // fixed header size
 		return fmt.Errorf("%w: format 4 header too short", ErrInvalidFont)
 	}
 	segCount := int(binary.BigEndian.Uint16(data[6:8])) / 2
-	headerLen := 14 + segCount*8 + 2 //nolint:mnd // arrays + reservedPad
+	headerLen := 14 + segCount*8 + 2 // arrays + reservedPad
 	if len(data) < headerLen {
 		return fmt.Errorf("%w: format 4 data truncated", ErrInvalidFont)
 	}
 	endCountOff := 14
-	startCountOff := endCountOff + segCount*2 + 2 //nolint:mnd // +2 reservedPad
+	startCountOff := endCountOff + segCount*2 + 2 // +2 reservedPad
 	idDeltaOff := startCountOff + segCount*2
 	idRangeOffsetOff := idDeltaOff + segCount*2
 

@@ -120,7 +120,7 @@ func pyUnescape(s string) string {
 }
 
 // pyOps are the operators, longest first.
-var pyOps = []string{ //nolint:gochecknoglobals // static table
+var pyOps = []string{
 	"**=", "//=", ">>=", "<<=", "...", "->", ":=",
 	"+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "@=",
 	"==", "!=", "<=", ">=", "**", "//", "<<", ">>",
@@ -573,7 +573,7 @@ func pyStringBindings(stmts []pyStmt) map[string]string {
 }
 
 // pyCompound are the keywords opening a compound statement.
-var pyCompound = map[string]bool{ //nolint:gochecknoglobals // static set
+var pyCompound = map[string]bool{
 	"if": true, "elif": true, "else": true, "for": true, "while": true, "with": true,
 	"try": true, "except": true, "finally": true, "def": true, "class": true, "async": true,
 }

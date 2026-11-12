@@ -240,8 +240,6 @@ type edgeCase struct{ composite, view float64 }
 // dpi and 138.9 at 100, so the last 0.71 and 0.64 point stayed paper, past
 // the centre of a 72-dpi pixel; 416.7 at 300 left 0.16 point, which pixels
 // at 600 dpi show.
-//
-//nolint:gochecknoglobals // static test table
 var edgeCases = []edgeCase{{95, 72}, {100, 72}, {DefaultDPI, 600}}
 
 // TestFlattenCoversThePageEdgeAtAnyResolution composites a page whose side

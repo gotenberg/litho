@@ -265,8 +265,6 @@ func decodeStrict(data []byte, names []string, v any) error {
 }
 
 // OptionNames are the keys of an options file, the JSON names of [Options].
-//
-//nolint:gochecknoglobals // static list of the schema's keys
 var OptionNames = []string{
 	"paperWidth", "paperHeight", "marginTop", "marginRight", "marginBottom", "marginLeft",
 	"landscape", "scale", "singlePage", "nativePages", "preferCssPageSize", "printBackground",
@@ -275,8 +273,6 @@ var OptionNames = []string{
 
 // LithoOptionNames are the keys of an options file that are litho's own
 // options: the route has no such field and never receives them.
-//
-//nolint:gochecknoglobals // static list of the schema's keys
 var LithoOptionNames = []string{"userStylesheets", "markdownTemplate"}
 
 // validate checks the values against the ranges the Chromium route accepts.
@@ -475,6 +471,4 @@ func Conversion(format Format, src io.Reader, template string, opts ...pdf.HTMLO
 // and fixture builder draws text with. The fonts directory also holds test
 // fonts (Ahem, the WeasyPrint test font, resvg's Noto faces), which only the
 // oracles written for them read.
-//
-//nolint:gochecknoglobals // static list of directory prefixes
 var FontFamilies = []string{"dejavu-", "liberation-", "noto-cjk-sans-", "noto-sans-thai-", "noto-sans-devanagari-", "carlito-", "caladea-", "noto-core-", "opensymbol-"}

@@ -271,7 +271,7 @@ func (f *robustnessFeature) Compare(fixtureID string, output []byte) Verdict {
 
 // stressSources are the text and HTML documents a stress fixture's
 // directory may hold, by file name, with their format.
-var stressSources = []struct { //nolint:gochecknoglobals // static table
+var stressSources = []struct {
 	file   string
 	format fixture.Format
 }{

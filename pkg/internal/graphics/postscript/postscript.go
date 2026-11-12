@@ -156,8 +156,6 @@ func parseTokens(s string, depth int) ([]token, string, error) {
 //   - pdfjs colorspace_atan.pdf: its tint transform compares the atan angle
 //     back to its input, and half the image came out wrong while atan
 //     answered from -180 to 180.
-//
-//nolint:gocyclo // Type 4 PS requires handling many operators in one switch.
 func execOp(op string, stack *[]float64, _ []token) error {
 	switch op {
 	// Arithmetic operators.

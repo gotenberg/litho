@@ -219,7 +219,7 @@ func TestRenderPageCMYKDeterministic(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	a, b := imgs[0].(*image.CMYK), imgs[1].(*image.CMYK) //nolint:forcetypeassert // checked by the errors above.
+	a, b := imgs[0].(*image.CMYK), imgs[1].(*image.CMYK) // checked by the errors above.
 	if string(a.Pix) != string(b.Pix) {
 		t.Error("two CMYK renders of one page differ")
 	}

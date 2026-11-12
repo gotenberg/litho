@@ -152,8 +152,6 @@ func tagsContent(profileDir string) bool {
 // on the encryption dictionary. Every mutation writes a new revision or a new
 // file, and the Writer decrypts its output unless told to encrypt, so any of
 // them may pass a rule of these the input failed. None may fail a new one.
-//
-//nolint:gochecknoglobals // static rule table
 var fileStructureRules = map[string][]ruleMatch{
 	familyA1:  {"6.1."},
 	familyA2:  {"6.1."},
@@ -166,8 +164,6 @@ var fileStructureRules = map[string][]ruleMatch{
 // ISO 14289-1, 7.21.4.1 and ISO 14289-2, 8.4.5.5.1. A text stamp's default
 // font is a standard font litho does not embed, which [pdf.Writer.StampText]
 // documents.
-//
-//nolint:gochecknoglobals // static rule table
 var fontEmbeddingRules = map[string][]ruleMatch{
 	familyA1:  {"6.3.4-t01"},
 	familyA2:  {"6.2.11.4.1-t01"},
@@ -179,8 +175,6 @@ var fontEmbeddingRules = map[string][]ruleMatch{
 // deviceRGBRules forbid DeviceRGB without an RGB output intent or a
 // DefaultRGB: ISO 19005-1, 6.2.3.3 and ISO 19005-2 and -4, 6.2.4.3. A text
 // stamp paints its fill colour in DeviceRGB.
-//
-//nolint:gochecknoglobals // static rule table
 var deviceRGBRules = map[string][]ruleMatch{
 	familyA1: {"6.2.3.3-t01"},
 	familyA2: {"6.2.4.3-t02"},
@@ -191,8 +185,6 @@ var deviceRGBRules = map[string][]ruleMatch{
 // an explicitly associated /Resources dictionary, ISO 19005-2 and -4, 6.2.2
 // test 2. A stamp and a page copy write /Resources on the page, so a page
 // that inherited its resources passes afterwards.
-//
-//nolint:gochecknoglobals // static rule table
 var explicitResourcesRules = map[string][]ruleMatch{
 	familyA2: {"6.2.2-t02"},
 	familyA4: {"6.2.2-t02"},
@@ -210,8 +202,6 @@ var explicitResourcesRules = map[string][]ruleMatch{
 //   - litho/pdf noresources_4: a stamp, a page move and an encryption each write
 //     /Resources on every page, and 6.2.2 test 3, which five of its content
 //     streams fail, passes at PDF/A-4.
-//
-//nolint:gochecknoglobals // static rule table
 var pageResourcesRules = map[string][]ruleMatch{
 	familyA4: {"6.2.2-t03"},
 }
@@ -224,8 +214,6 @@ var pageResourcesRules = map[string][]ruleMatch{
 //
 //   - litho/pdf imagereach_2b: veraPDF also fails 7.2 test 34 on the stamped
 //     output and not on the input, so the rule reaches the artifact's text.
-//
-//nolint:gochecknoglobals // static rule table
 var textLanguageRules = map[string][]ruleMatch{
 	familyUA1: {"7.2-t34"},
 }
@@ -233,8 +221,6 @@ var textLanguageRules = map[string][]ruleMatch{
 // structTreeRules require a structure tree rooted in the catalog's
 // /StructTreeRoot: ISO 19005-2, 6.7.3.3, ISO 14289-1, 7.1 test 11 and
 // ISO 14289-2, 8.2.1. [pdf.Writer.AutoTag] wires one.
-//
-//nolint:gochecknoglobals // static rule table
 var structTreeRules = map[string][]string{
 	familyA2:  {"6.7.3.3-t01"},
 	familyUA1: {"7.1-t11"},
@@ -245,8 +231,6 @@ var structTreeRules = map[string][]string{
 // ISO 14289-1 and -2, 6.2. AutoTag wires it with the structure tree, but it is
 // a no-op on a document that already has one, so an input with a tree and no
 // /MarkInfo keeps failing.
-//
-//nolint:gochecknoglobals // static rule table
 var markInfoRules = map[string][]string{
 	familyA2:  {"6.7.2.2-t01"},
 	familyUA1: {"6.2-t01"},
@@ -259,8 +243,6 @@ var markInfoRules = map[string][]string{
 // the document declares none, which it documents as the caller's to set. It
 // writes a PDF 1.7 structure tree, which ISO 14289-2, 8.2.5.2 test 2 rejects
 // for want of a Document element in the PDF 2.0 namespace.
-//
-//nolint:gochecknoglobals // static rule table
 var autoTagReachRules = map[string][]ruleMatch{
 	familyUA1: {"7.2-t22"},
 	familyUA2: {"8.2.5.2-t02"},
@@ -268,8 +250,6 @@ var autoTagReachRules = map[string][]ruleMatch{
 
 // encryptionRules forbid the Encrypt key in the trailer, 6.1.3 test 2 in each
 // part of ISO 19005. An encrypted PDF/A output has to fail it.
-//
-//nolint:gochecknoglobals // static rule table
 var encryptionRules = map[string][]string{
 	familyA1: {"6.1.3-t02"},
 	familyA2: {"6.1.3-t02"},
@@ -282,8 +262,6 @@ var encryptionRules = map[string][]string{
 // test 8, and ISO 14289-2, 5 and 8.11.1. [pdf.Writer.Redact] clears the
 // metadata by design, because /Info and the XMP packet are where copies of
 // the removed text survive.
-//
-//nolint:gochecknoglobals // static rule table
 var metadataRules = map[string][]ruleMatch{
 	familyA1:  {"6.7."},
 	familyA2:  {"6.6."},

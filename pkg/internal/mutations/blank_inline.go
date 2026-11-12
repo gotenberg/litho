@@ -37,8 +37,6 @@ const maxIndexedHival = 255
 // of 8.9.5, Table 89 it stands for. /L and /Length are the data length ISO
 // 32000-2, 8.9.7, Table 91 adds. /Intent is no abbreviation: Table 89 gives
 // an image the entry, and an inline image carries it unabbreviated.
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1 Table 93
 var inlineImageKeys = map[ast.PdfName]ast.PdfName{
 	"BPC": "BitsPerComponent", "BitsPerComponent": "BitsPerComponent",
 	"CS": "ColorSpace", "ColorSpace": "ColorSpace",
@@ -56,8 +54,6 @@ var inlineImageKeys = map[ast.PdfName]ast.PdfName{
 // inlineFilters maps the filter names an inline image may spell, abbreviated
 // as ISO 32000-1, 8.9.7, Table 94 allows or in full (7.4, Table 6), to the
 // full name the decoder reads.
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1 Table 94
 var inlineFilters = map[ast.PdfName]ast.PdfName{
 	"AHx": "ASCIIHexDecode", "ASCIIHexDecode": "ASCIIHexDecode",
 	"A85": "ASCII85Decode", "ASCII85Decode": "ASCII85Decode",
@@ -71,8 +67,6 @@ var inlineFilters = map[ast.PdfName]ast.PdfName{
 // inlineDeviceSpaces maps the device colour space names an inline image may
 // give /CS, abbreviated as ISO 32000-1, 8.9.7, Table 94 allows or in full, to
 // the full names, and the full names to their component counts.
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1 Table 94
 var (
 	inlineDeviceSpaces = map[ast.PdfName]ast.PdfName{
 		"G": "DeviceGray", "DeviceGray": "DeviceGray",

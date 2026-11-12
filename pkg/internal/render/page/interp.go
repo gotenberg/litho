@@ -24,7 +24,7 @@ import (
 
 // renderer carries one render.
 type renderer struct {
-	ctx  context.Context //nolint:containedctx // one render's context, never kept past Render
+	ctx  context.Context // one render's context, never kept past Render
 	doc  *document.Document
 	page *document.Page
 	// width and height are the device raster's size: the page's, or a

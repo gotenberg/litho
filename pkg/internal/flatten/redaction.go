@@ -371,7 +371,7 @@ func paintOut(samples []byte, px image.Rectangle, comps int, m geom.Matrix, boxe
 		return
 	}
 	paper := make([]byte, comps)
-	if comps != 4 { //nolint:mnd // four components are CMYK, whose paper is no ink
+	if comps != 4 { // four components are CMYK, whose paper is no ink
 		for k := range paper {
 			paper[k] = 255
 		}

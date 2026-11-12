@@ -217,8 +217,6 @@ func tintTransformEqual(ctx context.Context, doc *document.Document, a, b ast.Pd
 // separately in [deviceNAllowedColorants]. veraPDF's PDDeviceN model exempts
 // this exact four-name set, so the additive names Red, Green and Blue are spot
 // colours here and do require a /Colorants entry.
-//
-//nolint:gochecknoglobals // immutable lookup set.
 var deviceNProcessColorants = map[string]bool{
 	"Cyan":    true,
 	"Magenta": true,

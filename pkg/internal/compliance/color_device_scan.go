@@ -151,9 +151,9 @@ func inheritedCSFor(states map[string]inheritedCS, name string) inheritedCS {
 // veraPDF for every mode.
 func textModePaints(mode int) (fill, stroke bool) {
 	switch mode {
-	case 1, 5: //nolint:mnd // Table 106 stroke-only modes.
+	case 1, 5: // Table 106 stroke-only modes.
 		return false, true
-	case 2, 6: //nolint:mnd // Table 106 fill-and-stroke modes.
+	case 2, 6: // Table 106 fill-and-stroke modes.
 		return true, true
 	case textRenderInvisible, textRenderClip:
 		return false, false

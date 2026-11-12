@@ -711,8 +711,6 @@ func notdefUnicodeViolation(ctx context.Context, doc *document.Document, fontDic
 // symbolEncodingNames lists all glyph names from the Symbol font encoding
 // (PDF Reference Appendix D, Table D.5). Used for the ToUnicode exemption
 // that accepts Type 1 fonts whose names are from the Symbol font character set.
-//
-//nolint:gochecknoglobals // constant lookup table.
 var symbolEncodingNames = map[string]bool{
 	"space": true, "exclam": true, "universal": true, "numbersign": true,
 	"existential": true, "percent": true, "ampersand": true, "suchthat": true,

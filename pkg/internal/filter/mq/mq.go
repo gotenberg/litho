@@ -13,8 +13,6 @@ type state struct {
 // qeTable mirrors ITU-T T.88, Table E.1 (Qe values and probability estimation
 // process), row for row. Every NMPS and NLPS entry is itself an index into this
 // table, so a [Context] can never reach an index outside it.
-//
-//nolint:gochecknoglobals // static spec table, ITU-T T.88 Table E.1
 var qeTable = [47]state{
 	{0x5601, 1, 1, true},
 	{0x3401, 2, 6, false},

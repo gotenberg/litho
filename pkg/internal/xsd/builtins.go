@@ -15,8 +15,6 @@ import (
 // The types themselves stay opaque [BuiltinType] markers:
 // [validateLexical] checks a value against each one's lexical space,
 // and [ValidateValue] applies the facets a restriction adds.
-//
-//nolint:gochecknoglobals // immutable type registry.
 var builtinNames = []string{
 	"string",
 	"normalizedString",
@@ -66,8 +64,6 @@ var builtinNames = []string{
 // per XML Schema Part 2, 3.3.5 (NMTOKENS), 3.3.10 (IDREFS) and 3.3.12
 // (ENTITIES). Each also fixes minLength 1: an empty list is not one of its
 // values.
-//
-//nolint:gochecknoglobals // immutable type registry.
 var builtinLists = map[string]string{
 	"NMTOKENS": "NMTOKEN",
 	"IDREFS":   "IDREF",

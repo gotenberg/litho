@@ -15,8 +15,6 @@ import (
 // processColorants maps the process colorant names of a CMYK device to their
 // components (ISO 32000-1, 8.6.6.4: a Separation or DeviceN colorant may name
 // a process colorant).
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1, 8.6.6.4
 var processColorants = map[ast.PdfName]uint8{"Cyan": 1, "Magenta": 2, "Yellow": 4, "Black": 8}
 
 // allProcess has a bit for each CMYK component.

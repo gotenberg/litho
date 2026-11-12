@@ -16,7 +16,6 @@ type iso32005Entry struct {
 	Rule   Rule
 }
 
-//nolint:gochecknoglobals // generated spec table
 var iso32005Entries = []iso32005Entry{
 	{Kind: "kidZeroUnlessGrouping", Parent: "Annot", Child: "Aside", Rule: Rule{Specification: "ISO_32005", Clause: "Table 5. Annot-Aside", TestNumber: 1, Object: "SEAnnot", Description: "<Annot>, when used as a non-grouping element, shall not contain <Aside>"}},
 	{Kind: "kidZeroUnlessGrouping", Parent: "Annot", Child: "BlockQuote", Rule: Rule{Specification: "ISO_32005", Clause: "Table 5. Annot-BlockQuote", TestNumber: 1, Object: "SEAnnot", Description: "<Annot>, when used as a non-grouping element, shall not contain <BlockQuote>"}},

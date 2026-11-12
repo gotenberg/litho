@@ -173,8 +173,6 @@ const (
 // [ConformanceCIDBase] by CMap name. Only a name litho resolves is stored, so
 // each cache is bounded by the bundled set however many names documents
 // invent.
-//
-//nolint:gochecknoglobals // process-wide caches of immutable parsed CMaps.
 var predefinedBaseCache, conformanceBaseCache sync.Map
 
 // PredefinedCIDBase returns the complete code-to-CID mapping of the predefined
@@ -347,7 +345,7 @@ func parseBCMapCIDProgram(data []byte) (*bcmapCIDProgram, error) {
 	// Position 1 skips the header byte (type<<1 | wmode), whose low bit is
 	// the CMap's /WMode, as PDF.js's BinaryCMapReader reads it.
 	s := &bcmapStream{data: data, pos: 1}
-	prog := &bcmapCIDProgram{charToCID: make(map[int64]int, 8192), wmode: int(data[0] & 1)} //nolint:mnd // typical CMap size
+	prog := &bcmapCIDProgram{charToCID: make(map[int64]int, 8192), wmode: int(data[0] & 1)} // typical CMap size
 	for s.pos < len(s.data) {
 		tag, tagErr := s.readByte()
 		if tagErr != nil {

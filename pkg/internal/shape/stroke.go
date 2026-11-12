@@ -66,7 +66,7 @@ type Line struct {
 // presetDashes are the dash and gap lengths of the preset dashes of
 // ECMA-376 Part 1, 20.1.10.48 ST_PresetLineDashVal, in line widths, as
 // LibreOffice reads them (oox lineproperties.cxx, lclConvertPresetDash).
-var presetDashes = map[string][]float64{ //nolint:gochecknoglobals // a read-only spec table, ECMA-376 Part 1, 20.1.10.48.
+var presetDashes = map[string][]float64{ // a read-only spec table, ECMA-376 Part 1, 20.1.10.48.
 	"dot": {1, 3}, "dash": {4, 3}, "dashDot": {4, 3, 1, 3},
 	"lgDash": {8, 3}, "lgDashDot": {8, 3, 1, 3}, "lgDashDotDot": {8, 3, 1, 3, 1, 3},
 	"sysDot": {1, 1}, "sysDash": {3, 1}, "sysDashDot": {3, 1, 1, 1}, "sysDashDotDot": {3, 1, 1, 1, 1, 1},
@@ -278,7 +278,7 @@ func shortenEnd(ops []typeset.PathOp, d float64) {
 // space, the tip at (50, 0) and the base at y 100 (oox lineproperties.cxx,
 // lclPushMarkerProperties); the open arrow's depends on the line width
 // and is built by openArrow.
-var arrowPolygons = map[ArrowKind][][2]float64{ //nolint:gochecknoglobals // a read-only table of LibreOffice's marker outlines.
+var arrowPolygons = map[ArrowKind][][2]float64{ // a read-only table of LibreOffice's marker outlines.
 	ArrowTriangle: {{50, 0}, {100, 100}, {0, 100}},
 	ArrowStealth:  {{50, 0}, {100, 100}, {50, 60}, {0, 100}},
 	ArrowDiamond:  {{50, 0}, {100, 50}, {50, 100}, {0, 50}},
@@ -360,6 +360,6 @@ func arrowhead(a Arrowhead, w, base float64, tip, dir typeset.Point, c typeset.C
 //     5.64 and 3.35 pt from their tips, under stealth arrows 3.23 and
 //     1.76 pt, and 2.61 and 1.33 pt short of the centres of diamonds and
 //     ovals of the same sizes.
-var arrowDock = map[ArrowKind]float64{ //nolint:gochecknoglobals // a read-only table of LibreOffice's marker docking.
+var arrowDock = map[ArrowKind]float64{ // a read-only table of LibreOffice's marker docking.
 	ArrowTriangle: 1, ArrowOpen: 1, ArrowStealth: 0.6, ArrowDiamond: 0.5, ArrowOval: 0.5,
 }

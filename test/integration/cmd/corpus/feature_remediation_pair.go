@@ -82,8 +82,6 @@ func (*remediationPairFeature) HasGolden(fixtureID string) bool {
 // to. PDF/UA-1 pairs with PDF/A-1 to PDF/A-3, and PDF/UA-2 with PDF/A-4 (see
 // [pdf.ErrIncompatibleProfiles]); a PDF/UA fixture pairs with the PDF/A part
 // most documents target.
-//
-//nolint:gochecknoglobals // static pairing table
 var lithoPairs = map[string][2]string{
 	"PDF_A-1b": {"PDF_A-1b", "PDF_UA-1"},
 	"PDF_A-2a": {"PDF_A-2a", "PDF_UA-1"},

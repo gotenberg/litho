@@ -39,7 +39,7 @@ const maxWeasyPrintTreeBytes = 64 << 20
 // the test UA stylesheet declares, the others the same glyphs in other
 // formats. A fixture naming one does not copy it: the font goes to the
 // fixture fonts.
-var weasyPrintFontFiles = map[string]bool{"weasyprint.otf": true, "weasyprint.otb": true, "weasyprint.woff": true} //nolint:gochecknoglobals // static set
+var weasyPrintFontFiles = map[string]bool{"weasyprint.otf": true, "weasyprint.otb": true, "weasyprint.woff": true}
 
 // selectWeasyPrint writes the weasyprint corpus's fixtures from the
 // WeasyPrint release versions.env pins (WEASYPRINT_VERSION), downloaded and

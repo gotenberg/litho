@@ -16,8 +16,6 @@ type cidSystemInfoEntry struct {
 // (PDF/A-4). A few CMaps changed character collection across generations (for
 // example UniKS-UTF16-H: Adobe-Korea1-2 in older specs, Adobe-KR-9 in newer),
 // so both Ordering and Supplement are indexed rather than derived from the name.
-//
-//nolint:gochecknoglobals // static spec table (Adobe registered CMaps / veraPDF CharacterCollections)
 var predefinedCMapCIDSystemInfo = map[string][]cidSystemInfoEntry{
 	"83pv-RKSJ-H":      {{"Japan1", 1}, {"Japan1", 1}, {"Japan1", 7}},
 	"90ms-RKSJ-H":      {{"Japan1", 2}, {"Japan1", 2}, {"Japan1", 7}},

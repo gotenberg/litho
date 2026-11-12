@@ -20,16 +20,12 @@ const (
 
 // xpathOperators are the keywords the JDK's XPath lexer counts toward
 // [xpathOpLimit] when a space ends them (Token.OPERATORS).
-//
-//nolint:gochecknoglobals // static lookup table.
 var xpathOperators = map[string]bool{
 	"or": true, "and": true, "div": true, "mod": true, "quo": true,
 	"..": true, "::": true, "attribute": true, "child": true,
 }
 
 // xpathAxes are the XPath 1.0 axis names (Keywords.getAxisName).
-//
-//nolint:gochecknoglobals // static lookup table.
 var xpathAxes = map[string]bool{
 	"ancestor": true, "ancestor-or-self": true, "attribute": true, "child": true,
 	"descendant": true, "descendant-or-self": true, "following": true,
@@ -39,8 +35,6 @@ var xpathAxes = map[string]bool{
 
 // xpathNodeTypes are the node type tests written with parentheses
 // (Keywords.getNodeType), "*" among them.
-//
-//nolint:gochecknoglobals // static lookup table.
 var xpathNodeTypes = map[string]bool{
 	"comment": true, "text": true, "processing-instruction": true, "node": true, "*": true,
 }
@@ -50,8 +44,6 @@ var xpathNodeTypes = map[string]bool{
 // function class): minimum and maximum, a negative maximum for none. key is
 // in the table with no implementation, so a call to it never compiles, which
 // a minimum above its maximum states.
-//
-//nolint:gochecknoglobals // static lookup table.
 var xpathFuncArity = map[string][2]int{
 	"current": {0, 0}, "last": {0, 0}, "position": {0, 0}, "true": {0, 0}, "false": {0, 0}, "here": {0, 0},
 	"count": {1, 1}, "id": {1, 1}, "not": {1, 1}, "boolean": {1, 1}, "floor": {1, 1}, "ceiling": {1, 1},
@@ -68,8 +60,6 @@ var xpathFuncArity = map[string][2]int{
 // the parser has refused an exponent: decimal digits with at most one point,
 // or a hexadecimal significand with its binary exponent, either with an
 // optional float or double suffix.
-//
-//nolint:gochecknoglobals // compiled-once pattern.
 var xpathNumber = regexp.MustCompile(`^(?:(?:[0-9]+\.?[0-9]*|\.[0-9]+)|0[xX](?:[0-9a-fA-F]+\.?[0-9a-fA-F]*|\.[0-9a-fA-F]+)[pP][+-]?[0-9]+)[fFdD]?$`)
 
 // xpathCompiles reports whether expr compiles as an XPath 1.0 expression the

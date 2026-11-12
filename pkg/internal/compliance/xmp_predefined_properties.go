@@ -25,8 +25,6 @@ import "maps"
 // xmpPredefinedCommon lists the properties predefined identically by both
 // the 2004 and 2005 XMP Specifications, so they are valid in every PDF/A
 // part's catalog without an extension schema.
-//
-//nolint:gochecknoglobals // static spec table
 var xmpPredefinedCommon = map[string]map[string]string{
 	// PDF/A Identification (pdfaid:).
 	"http://www.aiim.org/pdfa/ns/id/": {
@@ -267,8 +265,6 @@ var xmpPredefinedCommon = map[string]map[string]string{
 //   - verapdf: nine files carrying xmpDM properties passed ISO 19005-1
 //     §6.7.9 t2 (isPredefinedInXMP2004) before the 2005-only schemas were
 //     listed here with no properties.
-//
-//nolint:gochecknoglobals // static spec table
 var xmpPredefined2004Extra = map[string]map[string]string{
 	"http://www.aiim.org/pdfa/ns/id/": {
 		"conformance": "text",
@@ -303,8 +299,6 @@ var xmpPredefined2004Extra = map[string]map[string]string{
 // edition dropped it, so under parts 2 and 3 it is no longer predefined
 // and needs an extension schema declaration, whereas part 1 (the 2004
 // edition, [xmpPredefined2004Extra]) still predefines it.
-//
-//nolint:gochecknoglobals // static spec table
 var xmpPredefined2005Extra = map[string]map[string]string{
 	"http://www.aiim.org/pdfa/ns/id/": {
 		"conformance": "text",
@@ -445,14 +439,10 @@ var xmpPredefined2005Extra = map[string]map[string]string{
 
 // xmpPredefinedXMP2004 is the merged XMP 2004 catalog (PDF/A-1, ISO
 // 19005-1 §6.7.9).
-//
-//nolint:gochecknoglobals // static spec table, merged once at init
 var xmpPredefinedXMP2004 = xmpMergePredefined(xmpPredefinedCommon, xmpPredefined2004Extra)
 
 // xmpPredefinedXMP2005 is the merged XMP 2005 catalog (PDF/A-2 and
 // PDF/A-3, ISO 19005-2/3 §6.6.2.3.1).
-//
-//nolint:gochecknoglobals // static spec table, merged once at init
 var xmpPredefinedXMP2005 = xmpMergePredefined(xmpPredefinedCommon, xmpPredefined2005Extra)
 
 // xmpMergePredefined returns a deep copy of base overlaid with extra,

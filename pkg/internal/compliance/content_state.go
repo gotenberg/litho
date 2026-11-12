@@ -14,8 +14,6 @@ import (
 // operatorResourceCategory maps content stream operators to the Resources
 // sub-dictionary key they reference. Only operators with a named resource
 // operand (first operand is a PdfName) are listed.
-//
-//nolint:gochecknoglobals // static lookup table
 var operatorResourceCategory = map[string]ast.PdfName{
 	"Tf":  "Font",
 	"cs":  "ColorSpace",

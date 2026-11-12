@@ -443,7 +443,7 @@ func kositReportFile(dir string) (string, error) {
 }
 
 // veraPDFFlavours maps a profile directory to veraPDF's --flavour.
-var veraPDFFlavours = map[string]string{ //nolint:gochecknoglobals // static table
+var veraPDFFlavours = map[string]string{
 	"PDF_A-1a": "1a", "PDF_A-1b": "1b",
 	"PDF_A-2a": "2a", "PDF_A-2b": "2b", "PDF_A-2u": "2u",
 	"PDF_A-3a": "3a", "PDF_A-3b": "3b", "PDF_A-3u": "3u",

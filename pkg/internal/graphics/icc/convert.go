@@ -22,8 +22,6 @@ const v2Version = 0x02400000
 // 16-bit input, so it always qualifies: a curve then differs from its
 // parametric form only by the rounding of each entry to 16 bits, the
 // precision of every curveType.
-//
-//nolint:gochecknoglobals // static table.
 var curveSampleCounts = []int{1024, 4096, 1 << 16}
 
 // curveTolerance is the largest difference ToV2 admits between a parametric
@@ -37,8 +35,6 @@ const curveTolerance = 1.0 / 65535
 // profileSequenceDescType ('pseq') is left out: the version 4 type nests
 // multiLocalizedUnicodeType descriptions where the version 2 one nests
 // textDescriptionType, so the same signature carries another layout.
-//
-//nolint:gochecknoglobals // static spec table.
 var v2TagTypes = map[string]bool{
 	"chrm": true, "crdi": true, "curv": true, "data": true, "devs": true,
 	"dtim": true, "mft1": true, "mft2": true, "meas": true, "ncl2": true,
@@ -51,8 +47,6 @@ var v2TagTypes = map[string]bool{
 // textDescriptionType, which version 4 types as multiLocalizedUnicodeType
 // (ICC.1:2010, 9.2): profileDescription, deviceMfgDesc, deviceModelDesc and
 // viewingCondDesc. copyright is a textType in version 2 (6.4.13).
-//
-//nolint:gochecknoglobals // static spec table.
 var v2DescriptionTags = map[string]bool{"desc": true, "dmnd": true, "dmdd": true, "vued": true}
 
 // ToV2 re-encodes a version 4 profile as a version 2.4 profile with the same

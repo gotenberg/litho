@@ -72,8 +72,6 @@ func (c markingFormCase) objects() []string {
 
 // markingFormCases are the documents of [TestContentMarking_Forms], each
 // measured against veraPDF 1.30.2 at PDF/UA-1 and PDF/UA-2.
-//
-//nolint:gochecknoglobals // immutable test table.
 var markingFormCases = []markingFormCase{
 	// A form paints what its content paints, in the marked-content state
 	// around the Do, and nothing when its content paints nothing.

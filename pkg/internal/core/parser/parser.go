@@ -1276,7 +1276,7 @@ func tryFastStreamLength(reader *ioat.Reader, dict ast.PdfDict, streamStart int6
 	}
 	// Verify "endstream" actually follows. Tolerate an optional leading
 	// \r\n or lone \n.
-	verify := make([]byte, len("endstream")+2) //nolint:mnd // endstream + optional \r\n
+	verify := make([]byte, len("endstream")+2) // endstream + optional \r\n
 	n, _ := reader.Read(verify)                //nolint:errcheck // partial read is fine; we only care about the prefix
 	verifyStr := string(verify[:n])
 	for len(verifyStr) > 0 && (verifyStr[0] == '\r' || verifyStr[0] == '\n') {

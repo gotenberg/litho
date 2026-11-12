@@ -79,8 +79,6 @@ func detectScript(text string) scriptKind {
 
 // Language-specific heading patterns. These match the START of a line and
 // indicate the line is likely a heading regardless of font size.
-//
-//nolint:gochecknoglobals // immutable lookup tables
 var (
 	// CJK chapter markers: 第一章, 第十二節, 第3部 etc.
 	reCJKChapter = regexp.MustCompile(`^第[一二三四五六七八九十百千万0-9０-９]+[章節部編集卷]`)

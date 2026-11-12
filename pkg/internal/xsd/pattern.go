@@ -437,8 +437,6 @@ const wildcardEscape goClassEscape = `[^\n\r]`
 //     XML 1.0 classes were frozen on Unicode 2.0.
 //
 // Each upper-case escape is the complement of its lower-case one.
-//
-//nolint:gochecknoglobals // immutable spec table.
 var multiCharEscapes = func() map[rune]goClassEscape {
 	letter := slices.Concat(xmlBaseChar, xmlIdeographic)
 	nameStart := slices.Concat(letter, runeSet{{'_', '_'}, {':', ':'}}).normalize()
@@ -462,8 +460,6 @@ var multiCharEscapes = func() map[rune]goClassEscape {
 // block name X of the Appendix F.1.1 table xsdBlocks mirrors. The ranges
 // are the table's even where Unicode has since moved a block end, as it did
 // for CJKUnifiedIdeographsExtensionA.
-//
-//nolint:gochecknoglobals // immutable spec table.
 var blockEscapes = func() map[string][2]goClassEscape {
 	out := make(map[string][2]goClassEscape, len(xsdBlocks))
 	for name, set := range xsdBlocks {
@@ -481,8 +477,6 @@ var blockEscapes = func() map[string][2]goClassEscape {
 // the complement holds that set whatever Go's own C and Cn tables contain.
 // The sets follow the Unicode version Go ships, which F.1.1 encourages over
 // the one current in 2004.
-//
-//nolint:gochecknoglobals // immutable spec table.
 var categoryEscapes = func() map[string][2]goClassEscape {
 	out := make(map[string][2]goClassEscape)
 	for _, name := range []string{

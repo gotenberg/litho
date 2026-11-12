@@ -149,8 +149,6 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 // reads (N == 1 && GRAY) || (N == 3 && (RGB or Lab)) || (N == 4 && CMYK).
 // Signatures are exactly four bytes, so "RGB " and "Lab " carry a trailing
 // space.
-//
-//nolint:gochecknoglobals // static spec table.
 var iccColorSpaceComponents = map[string]int{
 	"GRAY": 1,
 	"RGB ": 3, //nolint:gocritic // ICC colour space signatures are exactly 4 bytes.

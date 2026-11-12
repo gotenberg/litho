@@ -180,7 +180,7 @@ func (r *renderer) compilePattern(obj ast.PdfObject) (*shade.Pattern, error) {
 	}
 	switch kind {
 	case patternTypeTiling:
-		return nil, nil //nolint:nilnil // nil marks a tiling pattern, which the caller paints
+		return nil, nil // nil marks a tiling pattern, which the caller paints
 	case patternTypeShading:
 	default:
 		return nil, fmt.Errorf("/PatternType %d is neither 1 nor 2", kind)

@@ -30,7 +30,6 @@ type hybridInvoiceName struct {
 	relationship ast.PdfName
 }
 
-//nolint:gochecknoglobals // static spec table
 var hybridInvoiceNames = []hybridInvoiceName{
 	{"factur-x.xml", ""},
 	{"xrechnung.xml", ""},

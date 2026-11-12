@@ -17,8 +17,6 @@ type numberingMatch struct {
 }
 
 // Pre-compiled regexes for the numbering tiers.
-//
-//nolint:gochecknoglobals // immutable lookup tables
 var (
 	// Decimal: "1", "1.2", "1.2.3", followed by whitespace and word chars.
 	// Requires the next token to be alphabetic to avoid matching "1.5 kg".
@@ -93,8 +91,6 @@ func parseNumbering(title string) *numberingMatch {
 
 // reTOCLine matches the ellipsis leaders and trailing page number that end a
 // Table of Contents entry.
-//
-//nolint:gochecknoglobals // immutable lookup
 var reTOCLine = regexp.MustCompile(`[.·•\s]{4,}\d+\s*$`)
 
 // looksLikeTOCEntry returns true if a line looks like a Table of Contents

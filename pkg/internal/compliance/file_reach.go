@@ -477,8 +477,6 @@ func (w *structValueWalk) element(ctx context.Context, site propertyListSite, ra
 // pageBoxes lists the page boundaries of ISO 32000-1, 14.11.2, which veraPDF
 // reads as CosBBoxes, and whether a page inherits the box from the page tree
 // (ISO 32000-1, Table 30).
-//
-//nolint:gochecknoglobals // static lookup table.
 var pageBoxes = []struct {
 	key       ast.PdfName
 	inherited bool
@@ -958,8 +956,6 @@ func inlineIntentLimit(dict ast.PdfObject, where, profile string) []Violation {
 // builds a font of its model for (PDFontFactory.getPDFont): the font types of
 // ISO 32000-1, Table 110, but the CIDFonts, which only a Type0 font's
 // /DescendantFonts names.
-//
-//nolint:gochecknoglobals // static lookup table.
 var pdFontSubtypes = map[string]bool{
 	"Type1": true, "MMType1": true, "TrueType": true, "Type3": true, "Type0": true,
 }

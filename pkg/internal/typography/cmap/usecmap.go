@@ -132,8 +132,6 @@ type predefinedUnicode struct {
 // predefinedUnicodeCache caches [PredefinedUnicode] by CMap name. Only a name
 // litho bundles is stored, so the cache is bounded by the bundled set however
 // many names documents invent.
-//
-//nolint:gochecknoglobals // process-wide cache of immutable parsed CMaps.
 var predefinedUnicodeCache sync.Map
 
 // PredefinedUnicode returns the code-to-Unicode mappings of the predefined CMap
@@ -176,8 +174,6 @@ func PredefinedUnicode(name string) (chars, all map[string]string) {
 
 // bcmapUnicodeCache caches [bcmapUnicode] by CMap name. Only a name litho
 // bundles is stored, so the cache is bounded by the bundled set.
-//
-//nolint:gochecknoglobals // process-wide cache of immutable parsed CMaps.
 var bcmapUnicodeCache sync.Map
 
 // BuiltInUnicode returns every code-to-Unicode mapping of the predefined CMap

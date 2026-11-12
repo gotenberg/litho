@@ -257,7 +257,6 @@ func (v hybridInvoiceVariant) atLevel(level models.FacturXLevel) hybridInvoiceVa
 	return v
 }
 
-//nolint:gochecknoglobals // immutable variant descriptors.
 var (
 	variantFacturX = hybridInvoiceVariant{
 		label: "Factur-X 1.0+/ZUGFeRD 2.1+",

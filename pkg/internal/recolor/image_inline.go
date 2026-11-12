@@ -17,8 +17,6 @@ import (
 // image dictionary hold, abbreviated or in full, to the image dictionary key
 // of 8.9.5, Table 89 it stands for. /L and /Length are the data length ISO
 // 32000-2, 8.9.7, Table 91 adds.
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1 Table 93
 var inlineKeys = map[ast.PdfName]ast.PdfName{
 	"BPC": "BitsPerComponent", "BitsPerComponent": "BitsPerComponent",
 	"CS": "ColorSpace", "ColorSpace": "ColorSpace",
@@ -36,8 +34,6 @@ var inlineKeys = map[ast.PdfName]ast.PdfName{
 // inlineAbbreviations are the abbreviations an inline image is written
 // with, Table 93 read the other way, in the order they are written so the
 // same image writes the same bytes.
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1 Table 93
 var inlineAbbreviations = []struct{ full, short ast.PdfName }{
 	{"ImageMask", "IM"},
 	{"Width", "W"},
@@ -53,8 +49,6 @@ var inlineAbbreviations = []struct{ full, short ast.PdfName }{
 
 // inlineNames maps the abbreviated filter and colour space names an inline
 // image may use (ISO 32000-1, 8.9.7, Table 94) to the full names.
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1 Table 94
 var inlineNames = map[ast.PdfName]ast.PdfName{
 	"AHx": "ASCIIHexDecode", "A85": "ASCII85Decode", "LZW": "LZWDecode",
 	"Fl": "FlateDecode", "RL": "RunLengthDecode", "CCF": "CCITTFaxDecode",

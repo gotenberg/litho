@@ -95,8 +95,6 @@ func (c *completeWildcard) allows(ns string) bool {
 
 // urTypeWildcard is the {attribute wildcard} of xs:anyType, per XML Schema
 // Part 1, 3.4.7: any namespace, lax processing.
-//
-//nolint:gochecknoglobals // immutable component of the ur-type.
 var urTypeWildcard = &AttributeWildcard{Namespace: "##any", ProcessContents: "lax"}
 
 // attributeWildcard derives the {attribute wildcard} of ct along its

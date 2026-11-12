@@ -109,8 +109,6 @@ func pdfuaProfile(p models.PDFUAProfile, flavour string) outputProfile {
 // is the plain conversion's version too: asking for it by name is a target
 // of its own, so the default is held to its header and to the oracles as
 // every other version is, and must match the plain conversion.
-//
-//nolint:gochecknoglobals // static target table
 var outputTargets = []outputTarget{
 	{ID: "v1.4", Version: "1.4", Header: "1.4"},
 	{ID: "v1.5", Version: "1.5", Header: "1.5"},

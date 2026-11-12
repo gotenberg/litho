@@ -81,7 +81,7 @@ func iccVersionExceedsCeiling(version, part int) bool {
 // validICCDeviceClasses are the allowed device classes for OutputIntent
 // profiles. Per ISO 19005-2/3 §6.2.2 the destination profile must be a
 // device class from ICC.1 (printer "prtr" or monitor "mntr").
-var validICCDeviceClasses = map[string]bool{ //nolint:gochecknoglobals // constant set.
+var validICCDeviceClasses = map[string]bool{
 	"prtr": true,
 	"mntr": true,
 }
@@ -92,14 +92,14 @@ var validICCDeviceClasses = map[string]bool{ //nolint:gochecknoglobals // consta
 // profiles over RGB, CMYK, GRAY or Lab data (ISO 19005-1, 6.2.3.2; ISO 19005-2,
 // 6.2.4.2). They mirror veraPDF's ICCInputProfile test in every part, measured
 // on abstract, device link, named colour and XYZ profiles.
-var validICCInputDeviceClasses = map[string]bool{ //nolint:gochecknoglobals // constant set.
+var validICCInputDeviceClasses = map[string]bool{
 	"prtr": true,
 	"mntr": true,
 	"scnr": true,
 	"spac": true,
 }
 
-var validICCInputColorSpaces = map[string]bool{ //nolint:gochecknoglobals // constant set.
+var validICCInputColorSpaces = map[string]bool{
 	"GRAY": true,
 	"RGB ": true, //nolint:gocritic // ICC colour space signatures are exactly 4 bytes; trailing space is correct.
 	"CMYK": true,
@@ -125,7 +125,7 @@ func iccInputHeaderProblem(hdr iccProfileHeader, part int) string {
 // profiles: the ICC.1 data colour space signatures permitted by
 // ISO 19005-2/3 §6.2.2.
 // Note: ICC colour space signatures are exactly 4 bytes; "RGB " has a trailing space.
-var validICCColorSpaces = map[string]bool{ //nolint:gochecknoglobals // constant set.
+var validICCColorSpaces = map[string]bool{
 	"GRAY": true,
 	"RGB ": true, //nolint:gocritic // ICC colour space signatures are exactly 4 bytes; trailing space is correct.
 	"CMYK": true,
@@ -353,8 +353,6 @@ func pdfObjectEqualAt(ctx context.Context, doc *document.Document, a, b ast.PdfO
 // when it compares two streams (COSStream.equals, veraPDF 1.30.2): the ones
 // that say how the data is encoded and how long it is, ISO 32000-1, 7.3.8.2,
 // Table 5.
-//
-//nolint:gochecknoglobals // immutable lookup set.
 var streamCompareSkippedKeys = map[ast.PdfName]bool{"Filter": true, "DecodeParms": true, "Length": true}
 
 // streamEqualAt compares two streams as veraPDF does (COSStream.equals,

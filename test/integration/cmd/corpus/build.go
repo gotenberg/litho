@@ -23,7 +23,7 @@ import (
 
 // buildFormats are the formats a build corpus may be in (see
 // [InputSpec.Build]): the last element of its name.
-var buildFormats = map[string]bool{"docx": true, "xlsx": true, "pptx": true} //nolint:gochecknoglobals // static table
+var buildFormats = map[string]bool{"docx": true, "xlsx": true, "pptx": true}
 
 // contentTypesPart is the part an OPC package names its content types in
 // (ECMA-376 Part 2, 10.1.2.2), zipped first as Office writes it.
@@ -31,7 +31,7 @@ const contentTypesPart = "[Content_Types].xml"
 
 // zipEpoch is the modification time every built entry carries, so a rebuild
 // writes the same bytes: the earliest a zip DOS time holds.
-var zipEpoch = time.Date(1980, time.January, 1, 0, 0, 0, 0, time.UTC) //nolint:gochecknoglobals // a constant time
+var zipEpoch = time.Date(1980, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 // runBuild builds the inputs the selected corpora generate from git.
 func runBuild(ctx context.Context, args []string) int {
@@ -70,7 +70,7 @@ func build(ctx context.Context, ms []*Manifest) error {
 // pdfBuilders build the committed PDFs of the corpora whose fixtures are
 // generated from sources in git, by corpus name. The PDFs stay committed:
 // unit tests read them.
-var pdfBuilders = map[string]func(ctx context.Context, m *Manifest) error{ //nolint:gochecknoglobals // static table
+var pdfBuilders = map[string]func(ctx context.Context, m *Manifest) error{
 	"litho/pdf":  buildLithoPDF,
 	"litho/text": buildLithoText,
 }

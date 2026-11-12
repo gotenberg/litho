@@ -68,8 +68,6 @@ func cmapCIDRule(profile string) Rule {
 // predefinedCMapPrefixes lists the predefined CMap name prefixes from
 // ISO 32000-1 Table 118. A CMap name starting with one of these (followed
 // by -H, -V, or -Supplement) is predefined and doesn't need embedding.
-//
-//nolint:gochecknoglobals // static lookup table
 var predefinedCMapPrefixes = []string{
 	"Adobe-GB1", "Adobe-CNS1", "Adobe-Japan1", "Adobe-Korea1",
 	"Adobe-Japan2", "Identity-H", "Identity-V",
@@ -102,8 +100,6 @@ func cmapNameIsUnicodeTransformFormat(name string) bool {
 //
 //   - pdfjs issue18466.pdf (UniGB-UTF16-H), mixedfonts.pdf (UniJIS-UTF16-H):
 //     the cases of a Table 116 name the corpora carry.
-//
-//nolint:gochecknoglobals // static lookup table mirroring Table 116.
 var table116CMapNames = map[string]bool{
 	"83pv-RKSJ-H":      true,
 	"90ms-RKSJ-H":      true,

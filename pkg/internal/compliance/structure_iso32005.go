@@ -26,8 +26,6 @@ var iso32005HnRe = regexp.MustCompile(`^H[1-9][0-9]*$`)
 // plus Art, which ISO 32000-1 Table 333 defines as grouping and role maps carry
 // into PDF 2.0 documents. See [iso32005IsGrouping] for the types whose grouping
 // role depends on what they contain rather than on their name.
-//
-//nolint:gochecknoglobals // static spec table
 var iso32005GroupingTypes = map[string]bool{
 	"Part": true, "Sect": true, "Div": true, "Aside": true,
 	"NonStruct": true, "Art": true, "Index": true,
@@ -38,13 +36,10 @@ var iso32005GroupingTypes = map[string]bool{
 // structure types ISO 32000-2:2020, 14.8.4 permits at more than one level, so
 // whether they group depends on their content. [iso32005IsGrouping] admits both
 // sets to its content-dependent test; a type in neither is never grouping.
-//
-//nolint:gochecknoglobals // static spec table
 var iso32005BlockOrGroupingTypes = map[string]bool{
 	"BlockQuote": true, "Caption": true, "Title": true,
 }
 
-//nolint:gochecknoglobals // static spec table
 var iso32005BlockOrGroupingOrInlineTypes = map[string]bool{
 	"Annot": true, "Artifact": true, "BibEntry": true, "Code": true,
 	"FENote": true, "Figure": true, "Form": true, "Link": true,
@@ -55,8 +50,6 @@ var iso32005BlockOrGroupingOrInlineTypes = map[string]bool{
 // defines as inline-level. An inline kid keeps its parent out of the grouping
 // role: an element mixing inline children is being used as content, not as a
 // container.
-//
-//nolint:gochecknoglobals // static spec table
 var iso32005InlineTypes = map[string]bool{
 	"Em": true, "RB": true, "RP": true, "RT": true, "Ruby": true,
 	"Span": true, "Strong": true, "Sub": true, "Warichu": true,
@@ -110,8 +103,6 @@ func iso32005IsGrouping(key string, hasContent bool, kidKeys []string) bool {
 // Private is deliberately absent: Table 5 constrains it no more than the other
 // three, but its contents are private to one producer, so they are not
 // reattributed to the enclosing element.
-//
-//nolint:gochecknoglobals // static spec table
 var iso32005PassThroughTypes = map[string]bool{
 	"NonStruct": true, "Div": true, "Part": true,
 }
@@ -125,7 +116,7 @@ var iso32005PassThroughTypes = map[string]bool{
 // cannot manufacture a violation.
 const maxISO32005PassThroughDepth = 32
 
-//nolint:gochecknoglobals // lazily built indexes over the generated table
+// Lazily built indexes over the generated table.
 var (
 	iso32005Once             sync.Once
 	iso32005ForbiddenParents map[string]map[string]Rule
@@ -553,8 +544,6 @@ func validateISO32005Root(ctx context.Context, state *walkState, structTreeRoot 
 // reaches for a list or a section, and none of them is a pass-through type
 // (Table 5 looks through Div, Part and NonStruct, which would re-attribute the
 // child to the original parent and repair nothing).
-//
-//nolint:gochecknoglobals // static preference order
 var iso32005Interposers = []string{"P", "Sect", "L", "Art", "Figure", "Table"}
 
 // ISO32005Interposer returns a structure type that may legally sit between

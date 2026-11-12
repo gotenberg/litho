@@ -18,8 +18,6 @@ import (
 // mimeTypePattern matches a "type/subtype" MIME string. ISO 19005-3 §6.8
 // requires an embedded file's /Subtype to be a valid MIME media type, so the
 // pattern enforces the "type/subtype" shape with the RFC 2045 token charset.
-//
-//nolint:gochecknoglobals // compiled-once pattern shared by the MIME check.
 var mimeTypePattern = regexp.MustCompile(`^[-\w+.]+/[-\w+.]+$`)
 
 // IsValidMIMEType reports whether s is the media type ISO 19005-3, 6.8 t1 and
@@ -32,8 +30,6 @@ func IsValidMIMEType(s string) bool {
 
 // validAFRelationships lists the valid values for /AFRelationship (ISO 32000-2,
 // 7.11.3).
-//
-//nolint:gochecknoglobals // package-level lookup table.
 var validAFRelationships = map[ast.PdfName]bool{
 	"Source":           true,
 	"Data":             true,

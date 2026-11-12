@@ -107,7 +107,7 @@ func (c *zipCache) read(ctx context.Context, u, entry string) ([]byte, error) {
 // rangeReaderAt reads a remote file through HTTP range requests, a block at
 // a time, keeping the last blocks read. Safe for concurrent use.
 type rangeReaderAt struct {
-	ctx    context.Context //nolint:containedctx // zip.Reader's ReaderAt takes no context; the fetch's bounds every read
+	ctx    context.Context // zip.Reader's ReaderAt takes no context; the fetch's bounds every read
 	client *http.Client
 	url    string
 	size   int64

@@ -17,14 +17,10 @@ import (
 // JPXDecode to image XObjects alone. ISO 19005-2/3, 6.1.10 and ISO 19005-4,
 // 6.1.9 forbid them in an inline image, and [moveInlineImage] repairs one by
 // moving it to an image XObject rather than by decoding it.
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1 Table 6
 var inlineXObjectCodecs = []ast.PdfName{"JPXDecode", "JBIG2Decode"}
 
 // inlineFilterFullNames maps the filter abbreviations of ISO 32000-1, 8.9.7,
 // Table 94 to the names an image XObject spells them with (7.4, Table 6).
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1 Table 94
 var inlineFilterFullNames = map[ast.PdfName]ast.PdfName{
 	"AHx": "ASCIIHexDecode",
 	"A85": "ASCII85Decode",
@@ -38,8 +34,6 @@ var inlineFilterFullNames = map[ast.PdfName]ast.PdfName{
 // inlineKeyFullNames maps the inline image dictionary keys of ISO 32000-1,
 // 8.9.7, Table 93 to the image dictionary keys they abbreviate (8.9.5, Table
 // 89). /F and /DP are left out: [moveInlineImage] writes the filters itself.
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1 Table 93
 var inlineKeyFullNames = map[ast.PdfName]ast.PdfName{
 	"BPC": "BitsPerComponent",
 	"CS":  "ColorSpace",
@@ -53,8 +47,6 @@ var inlineKeyFullNames = map[ast.PdfName]ast.PdfName{
 // inlineDeviceSpaces maps the device colour space names an inline image may
 // give /CS, abbreviated as ISO 32000-1, 8.9.7, Table 94 allows or in full, to
 // the full names an image dictionary gives them.
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1 Table 94
 var inlineDeviceSpaces = map[ast.PdfName]ast.PdfName{
 	"G": "DeviceGray", "DeviceGray": "DeviceGray",
 	"RGB": "DeviceRGB", "DeviceRGB": "DeviceRGB",

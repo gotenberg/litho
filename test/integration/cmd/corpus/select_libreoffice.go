@@ -22,8 +22,6 @@ type loDir struct {
 }
 
 // libreOfficeDirs lists, per corpus, the directories read in order.
-//
-//nolint:gochecknoglobals // static table
 var libreOfficeDirs = map[string][]loDir{
 	"docx": {{"sw/qa/extras/ooxmlexport/data", 250, nil}, {"sw/qa/extras/ooxmlimport/data", 60, nil}, {"sw/qa/extras/layout/data", 40, nil}},
 	"odt": {
@@ -44,8 +42,6 @@ var libreOfficeDirs = map[string][]loDir{
 }
 
 // libreOfficeExtensions are the extensions each corpus reads.
-//
-//nolint:gochecknoglobals // static table
 var libreOfficeExtensions = map[string][]string{
 	"docx": {".docx"}, "odt": {".odt", ".fodt"}, "xlsx": {".xlsx"}, "ods": {".ods", ".fods"},
 	"csv": {".csv"}, "pptx": {".pptx"}, "odp": {".odp", ".fodp"},
@@ -54,14 +50,10 @@ var libreOfficeExtensions = map[string][]string{
 // libreOfficeMixedDirs are the module test data directories that hold
 // documents of several formats beside the format directories under them;
 // their fixture IDs take "<module>-data", so an ID never names two files.
-//
-//nolint:gochecknoglobals // static table
 var libreOfficeMixedDirs = []string{"sd/qa/unit/data"}
 
 // libreOfficeLeftOut are the documents the route refuses or whose reference
 // the diff feature cannot score.
-//
-//nolint:gochecknoglobals // static table
 var libreOfficeLeftOut = []string{
 	// Malformed on purpose: the route answers 400, "LibreOffice could not
 	// read the document".

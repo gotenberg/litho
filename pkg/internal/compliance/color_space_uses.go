@@ -137,8 +137,6 @@ type csLinkHooks struct {
 // colourOperators are the operators that select, set or paint with a colour
 // space, which a stream whose colour operators are off ignores (ISO 32000-1,
 // 9.6.5, Table 113, and 8.7.3.3; see [walkColorSpaceLinksWith]).
-//
-//nolint:gochecknoglobals // immutable lookup set.
 var colourOperators = map[string]bool{
 	"cs": true, "CS": true, "sc": true, "SC": true, "scn": true, "SCN": true,
 	"g": true, "G": true, "rg": true, "RG": true, "k": true, "K": true,
@@ -163,8 +161,6 @@ func paintedSpaces(operator string) (fill, stroke bool) {
 
 // deviceFamilyOperators maps g, rg and k, and G, RG and K, to the device
 // family each selects (ISO 32000-1, 8.6.8, Table 74).
-//
-//nolint:gochecknoglobals // immutable lookup table.
 var deviceFamilyOperators = map[string]string{
 	"g": "DeviceGray", "rg": "DeviceRGB", "k": "DeviceCMYK",
 	"G": "DeviceGray", "RG": "DeviceRGB", "K": "DeviceCMYK",

@@ -80,8 +80,6 @@ func checkArtifactTagging(ctx context.Context, _ *document.Document, _ ast.PdfDi
 // does not classify it as a markup annotation, and veraPDF's markup model
 // (PDMarkupAnnot) omits it, so §8.9.2.3 t1 (markup-in-Annot nesting) does not
 // apply to a Projection annotation.
-//
-//nolint:gochecknoglobals // static spec table.
 var markupAnnotationSubtypes = map[ast.PdfName]bool{
 	"Text": true, "FreeText": true, "Line": true, "Square": true,
 	"Circle": true, "Polygon": true, "PolyLine": true, "Highlight": true,

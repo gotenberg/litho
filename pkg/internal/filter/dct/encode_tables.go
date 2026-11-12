@@ -7,8 +7,6 @@ package dct
 
 // lumaQuant and chromaQuant are the quantization tables of T.81, Annex K.1,
 // Tables K.1 (luminance) and K.2 (chrominance), in row-major order.
-//
-//nolint:gochecknoglobals // static spec table, ITU-T T.81 Tables K.1 and K.2
 var (
 	lumaQuant = [64]int{
 		16, 11, 10, 16, 24, 40, 51, 61,
@@ -44,7 +42,7 @@ type huffSpec struct {
 // differences of luminance and chrominance, and Tables K.5 and K.6 for their
 // AC coefficients.
 //
-//nolint:gochecknoglobals,dupl // static spec tables, ITU-T T.81 Tables K.3 to K.6; the two AC tables are distinct data of one shape.
+//nolint:dupl // static spec tables, ITU-T T.81 Tables K.3 to K.6; the two AC tables are distinct data of one shape.
 var (
 	stdLumaDC = huffSpec{
 		counts: [16]byte{0, 1, 5, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0},

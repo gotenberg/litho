@@ -16,8 +16,6 @@ import (
 // namespace http://iso.org/pdf/ssn: the standard structure types of
 // ISO 32000-1:2008, 14.8.4 (Table 333 onward), which ISO 32000-2:2020, 14.8.6
 // designates as that namespace.
-//
-//nolint:gochecknoglobals // static spec table
 var standardStructTypesPDF17 = map[ast.PdfName]bool{
 	"Document": true, "Part": true, "Art": true, "Sect": true, "Div": true,
 	"BlockQuote": true, "Caption": true, "TOC": true, "TOCI": true, "Index": true,
@@ -41,8 +39,6 @@ var standardStructTypesPDF17 = map[ast.PdfName]bool{
 // FENote. Numbered headings are unbounded in this namespace
 // (ISO 32000-2:2020, 14.8.4.6.2), so [iso32005HnRe] matches them instead of the
 // table enumerating H1 to H6.
-//
-//nolint:gochecknoglobals // static spec table
 var standardStructTypesPDF20 = map[ast.PdfName]bool{
 	"Document": true, "DocumentFragment": true, "Part": true, "Sect": true,
 	"Div": true, "Aside": true, "NonStruct": true, "Title": true, "Sub": true,
@@ -61,15 +57,11 @@ var standardStructTypesPDF20 = map[ast.PdfName]bool{
 // ask. A caller that knows the namespace an element declares must use
 // [isStandardStructTypeInNS] instead: the union accepts a type in a namespace
 // that does not define it.
-//
-//nolint:gochecknoglobals // derived from the two spec tables above
 var standardStructTypes = unionStructTypes(standardStructTypesPDF17, standardStructTypesPDF20)
 
 // standardStructTypesPDF2Only lists types added in ISO 32000-2 that are NOT
 // standard structure types in ISO 32000-1. For PDF/UA-1 and PDF/A-1/2/3,
 // these are non-standard and CAN be legitimately remapped.
-//
-//nolint:gochecknoglobals // derived from the two spec tables above
 var standardStructTypesPDF2Only = differenceStructTypes(standardStructTypesPDF20, standardStructTypesPDF17)
 
 // unionStructTypes returns the names present in either table.
@@ -140,8 +132,6 @@ func isStandardStructTypeInNS(name ast.PdfName, nsURI string) bool {
 //   - litho/pdf structkinds_ua2: veraPDF 1.30.2 reports 6.8.3.4/1 at PDF/A-1a for
 //     each of the 19 Ruby, RB, RT, RP, Warichu, WT and WP elements beside the
 //     two math ones, and nothing for them from PDF/A-2a.
-//
-//nolint:gochecknoglobals // constant set.
 var standardStructTypesPDF15Plus = map[ast.PdfName]bool{
 	"Annot":   true,
 	"THead":   true,

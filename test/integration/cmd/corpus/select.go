@@ -27,8 +27,6 @@ import (
 type selector func(ctx context.Context, checkout, format, dir string, pins map[string]string) error
 
 // selectors maps a corpus source to the selector of its corpora.
-//
-//nolint:gochecknoglobals // static dispatch table
 var selectors = map[string]selector{
 	"libreoffice": selectLibreOffice,
 	"poi":         selectPOI,
@@ -261,8 +259,6 @@ func licenceFiles(checkout string, paths ...string) ([]selected, error) {
 
 // officeExtensions are the extensions the poi and openxmlsdk corpora read
 // per format: a template converts as its document does.
-//
-//nolint:gochecknoglobals // static table
 var officeExtensions = map[string][]string{
 	"docx": {".docx", ".dotx"}, "xlsx": {".xlsx", ".xltx"}, "pptx": {".pptx", ".potx"},
 	"doc": {".doc"}, "xls": {".xls"}, "ppt": {".ppt"},
@@ -283,8 +279,6 @@ const (
 // poiRefused and openXMLSDKRefused are the documents Gotenberg's LibreOffice
 // route refuses ("could not read the document", HTTP 400), which have no
 // reference to score litho against, by path under the test data directory.
-//
-//nolint:gochecknoglobals // static lists
 var (
 	poiRefused = []string{
 		"document/ExternalEntityInText.docx",

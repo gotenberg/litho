@@ -1211,7 +1211,7 @@ func pageTextBlocks(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	}
 
 	for i, op := range ops {
-		if i%100 == 0 { //nolint:mnd // per-~100-operator ctx checkpoint, per CONTRIBUTING
+		if i%100 == 0 { // per-~100-operator ctx checkpoint, per CONTRIBUTING
 			if err := ctx.Err(); err != nil {
 				return nil, nil, data, err
 			}

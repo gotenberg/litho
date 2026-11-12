@@ -16,7 +16,7 @@ import (
 )
 
 // Not parallel: it sets the token's environment variable.
-func TestMSGraphCall_AnExpiredStaticTokenStopsTheRun(t *testing.T) { //nolint:paralleltest // t.Setenv
+func TestMSGraphCall_AnExpiredStaticTokenStopsTheRun(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer tok" {
 			t.Errorf("Authorization = %q", r.Header.Get("Authorization"))
@@ -135,7 +135,7 @@ func (s stubGraph) RoundTrip(r *http.Request) (*http.Response, error) {
 
 // Not parallel: it changes the working directory, where the corpus and
 // its testdata are found.
-func TestBuildReferences_AnExpiredSignInFailsTheRun(t *testing.T) { //nolint:paralleltest // t.Chdir
+func TestBuildReferences_AnExpiredSignInFailsTheRun(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error":{"code":"InvalidAuthenticationToken"}}`)) //nolint:errcheck // the test reads the status

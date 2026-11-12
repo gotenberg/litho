@@ -10,8 +10,6 @@ import (
 
 // resourceNameUses holds, per resource category, a content stream using one
 // name of it: /Fm0, /F0, /GS0, /CS0, /P0, /Sh0 and /MC0.
-//
-//nolint:gochecknoglobals // test fixture table.
 var resourceNameUses = map[string]string{
 	"XObject":    "/Fm0 Do",
 	"Font":       "BT /F0 12 Tf 10 10 Td (a) Tj ET",

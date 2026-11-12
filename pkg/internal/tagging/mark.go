@@ -55,7 +55,7 @@ func injectMarks(content []byte, spans []markSpan) ([]byte, error) {
 	}
 
 	// Pre-size: original bytes plus a bounded wrapper per span.
-	out := make([]byte, 0, len(content)+len(sorted)*48) //nolint:mnd // wrapper is ~30-40 bytes; 48 is a safe estimate
+	out := make([]byte, 0, len(content)+len(sorted)*48) // wrapper is ~30-40 bytes; 48 is a safe estimate
 	cursor := 0
 	for _, s := range sorted {
 		out = append(out, content[cursor:s.start]...)

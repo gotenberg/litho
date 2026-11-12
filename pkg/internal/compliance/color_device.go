@@ -114,8 +114,6 @@ func formTooDeep(doc *document.Document, depth int) bool {
 // reported, with the rule each breaks and the colour space an output intent
 // must name to cover it (ISO 19005-1, 6.2.3.3; ISO 19005-2, 6.2.4.3), where
 // "" means any.
-//
-//nolint:gochecknoglobals // immutable lookup table.
 var deviceFamilies = []struct {
 	name, defaultName, intent string
 	rule                      func(part int) Rule

@@ -458,7 +458,7 @@ func transparencyGroup1(ctx context.Context, doc *document.Document, groupObj as
 }
 
 // standardBlendModes lists all blend modes defined in ISO 32000-1:2008.
-var standardBlendModes = map[string]bool{ //nolint:gochecknoglobals // constant lookup table.
+var standardBlendModes = map[string]bool{
 	"Normal":     true,
 	"Compatible": true,
 	"Multiply":   true,

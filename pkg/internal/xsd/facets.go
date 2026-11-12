@@ -475,8 +475,6 @@ func applyFacet(value string, f Facet, base *BuiltinType) *FacetViolation {
 // translation and compile cost per value. The cache keys on the raw
 // pattern source, never the compiled regex pointer, and holds a nil
 // *regexp.Regexp for a pattern that does not translate or compile.
-//
-//nolint:gochecknoglobals // process-wide compile cache.
 var patternCache sync.Map // map[string]*regexp.Regexp
 
 // validatePatterns applies the patterns of one derivation step, the

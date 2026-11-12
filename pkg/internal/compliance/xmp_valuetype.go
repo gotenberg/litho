@@ -344,8 +344,6 @@ const (
 // XMPConstants. A field whose values the XMP Specification closes to a choice
 // (Thumbnail format, Flash Return and Mode) is read as its base type: veraPDF
 // validates PDF/A with isClosedChoiceCheck false (GFPDMetadata.getXMPPackage).
-//
-//nolint:gochecknoglobals // static lookup table.
 var xmpPredefinedStructTypes1 = map[string]xmpExtType{
 	"dimensions": {NS: xmpStDimNS, fields: map[string]string{"w": "real", "h": "real", "unit": "text"}},
 	"thumbnail": {NS: xmpImgNS, fields: map[string]string{
@@ -376,8 +374,6 @@ var xmpPredefinedStructTypes1 = map[string]xmpExtType{
 // parts 2 and 3 (ValidatorsContainerCreator.createValidatorsContainerPredefinedForPDFA_2_3),
 // read as [xmpPredefinedStructTypes1] reads its own. Marker's startTime and
 // duration are of type any, which every value matches.
-//
-//nolint:gochecknoglobals // static lookup table.
 var xmpPredefinedStructTypes23 = map[string]xmpExtType{
 	"colorant": {NS: xmpGNS, fields: map[string]string{
 		"swatchName": "text", "mode": "text", "type": "text", "cyan": "real", "magenta": "real", "yellow": "real",
@@ -526,8 +522,6 @@ func XMPBasicValueType(typ string) bool {
 // xmpBasicValueTypes are the types every veraPDF validators container
 // registers at construction (ValidatorsContainer's constructor): Date, Lang
 // Alt, URI, URL, XPath and the SimpleTypeValidator.SimpleTypeEnum types.
-//
-//nolint:gochecknoglobals // static lookup table.
 var xmpBasicValueTypes = map[string]bool{
 	"date": true, "lang alt": true, "uri": true, "url": true, "xpath": true,
 	"boolean": true, "integer": true, "real": true, "mimetype": true, "propername": true,
@@ -536,8 +530,6 @@ var xmpBasicValueTypes = map[string]bool{
 
 // xmpChoiceAnywhere is the choice qualifier veraPDF's getSimplifiedType
 // removes with String.replaceAll, so wherever it appears.
-//
-//nolint:gochecknoglobals // compiled-once pattern.
 var xmpChoiceAnywhere = regexp.MustCompile(`(open |closed )?(choice |choice$)(of )?`)
 
 // xmpValidatorKey mirrors veraPDF's ValidatorsContainer.getSimplifiedType:
@@ -568,8 +560,6 @@ func xmpValidatorBuiltin(part int, key string) bool {
 // xmpSimpleTypePatterns are the patterns veraPDF's SimpleTypeValidator and
 // ValidatorsContainerCreator register for the simple types that constrain
 // their text. The other simple types accept any text.
-//
-//nolint:gochecknoglobals // compiled-once patterns.
 var xmpSimpleTypePatterns = map[string]*regexp.Regexp{
 	"boolean":  regexp.MustCompile(`^(True|False)$`),
 	"integer":  regexp.MustCompile(`^[+-]?\d+$`),
@@ -586,7 +576,6 @@ func xmpGPSCoordinatePattern(part int) *regexp.Regexp {
 	return xmpGPSCoordinate23
 }
 
-//nolint:gochecknoglobals // compiled-once patterns.
 var (
 	xmpGPSCoordinate1  = regexp.MustCompile(`^\d{2},\d{2}[,.]\d{2}[NSEW]$`)
 	xmpGPSCoordinate23 = regexp.MustCompile(`^\d{1,3},\d{1,2}(,\d{1,2}|\.\d+)[NSEW]$`)

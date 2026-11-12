@@ -31,8 +31,6 @@ const (
 //
 // Sources: XMP Specification Parts 1-3 (ISO 16684), EXIF/XMP mapping,
 // Adobe Camera Raw schema, ISO 19005 (PDF/A identification).
-//
-//nolint:gochecknoglobals // static lookup table.
 var xmpPropertyRegistry = map[string]map[string]xmpPropType{
 	// Known schema namespaces with no predefined properties: pdfx (custom
 	// Document Info keys) and adhocwf (Acrobat workflow) are recognized

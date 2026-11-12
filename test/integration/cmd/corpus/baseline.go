@@ -56,8 +56,6 @@ const baselineCurrentVersion = 1
 // costMetrics lists metrics where lower is better, inverting the
 // regression comparison. Everything else (chars_match, fully_fixed,
 // verapdf_fixed, ...) is good-when-higher.
-//
-//nolint:gochecknoglobals // static direction table for the comparator
 var costMetrics = map[string]bool{
 	"false_negative":    true,
 	"false_positive":    true,
@@ -166,8 +164,6 @@ var costMetrics = map[string]bool{
 // uncomparedMetrics lists raw inventory totals that shift with any
 // detection-coverage change and carry no pass/fail meaning of their
 // own; they stay in the baseline for context but are not gated.
-//
-//nolint:gochecknoglobals // static skip table for the comparator
 var uncomparedMetrics = map[string]bool{
 	"litho_pre":     true,
 	"litho_post":    true,

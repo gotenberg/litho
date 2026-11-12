@@ -28,8 +28,6 @@ const targetsSource = `<!doctype html><html lang="en"><head><meta charset="utf-8
 
 // targetsTestTargets are the targets the tests convert to: a version, a
 // PDF/A profile the source meets and a PDF/UA profile it does not.
-//
-//nolint:gochecknoglobals // static test table
 var targetsTestTargets = targetsByID("v1.4", "a2b", "ua1")
 
 // targetsByID returns the targets of [outputTargets] with the given IDs, in

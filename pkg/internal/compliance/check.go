@@ -90,7 +90,6 @@ func (p *pageCtx) parsedOps(ctx context.Context) []content.Operation {
 // document. It returns all violations found (empty slice = pass).
 type checkGroup func(ctx context.Context, vctx *validationCtx) []Violation
 
-//nolint:gochecknoglobals // package-level rule tables are the core design.
 var pdfaCheckGroups map[models.PDFAProfile][]checkGroup
 
 // pdfuaCheckGroups maps each PDF/UA profile to its check groups.
@@ -101,11 +100,9 @@ var pdfaCheckGroups map[models.PDFAProfile][]checkGroup
 // [checkUA2VersionGroup] is ISO 14289-2, 6.1, which constrains the version the
 // header and the catalog /Version state together. veraPDF states the second
 // from 1.30.3 (PDF_UA/PDFUA-2.xml 6.1 t1).
-//
-//nolint:gochecknoglobals // package-level rule tables are the core design.
 var pdfuaCheckGroups map[models.PDFUAProfile][]checkGroup
 
-func init() { //nolint:gochecknoinits // breaks initialization cycle.
+func init() { // breaks initialization cycle.
 	allPDFA := []checkGroup{
 		checkFileStructureGroup,
 		checkColorGroup,

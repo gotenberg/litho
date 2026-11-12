@@ -335,8 +335,6 @@ func (f *mutationFeature) signInto(ctx context.Context, data []byte, name string
 
 // lockActions are the actions ISO 32000-1, Table 233 defines for a signature
 // field lock dictionary.
-//
-//nolint:gochecknoglobals // static spec table
 var lockActions = []string{"All", "Include", "Exclude"}
 
 // fieldLock is a signature field's /Lock as qpdf reads it.
@@ -389,14 +387,10 @@ const (
 // seedEntries are the seed value dictionary entries [judgeSeed] judges. A
 // dictionary with another entry, a certificate or MDP requirement among them,
 // is one the gate does not judge a refusal of.
-//
-//nolint:gochecknoglobals // static spec table
 var seedEntries = []string{"/Type", "/Ff", "/Filter", "/SubFilter", "/V", "/Reasons", "/DigestMethod"}
 
 // signerSubFilters are the subfilters litho's signer writes: ISO 32000-1,
 // 12.8.3.3 and ISO 32000-2, 12.8.3.4.
-//
-//nolint:gochecknoglobals // static spec table
 var signerSubFilters = []string{"adbe.pkcs7.detached", "ETSI.CAdES.detached"}
 
 // maxSeedParserVersion is the seed value dictionary version whose entries

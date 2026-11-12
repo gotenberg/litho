@@ -168,8 +168,6 @@ func fixLZW(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 // conforming file to. It mirrors compliance's standardFilters, which is the
 // authority for the verdict; this copy supplies only the canonical SPELLING to
 // repair towards, so the two must stay in sync.
-//
-//nolint:gochecknoglobals // static spec table, mirrors compliance.standardFilters
 var canonicalStreamFilters = []ast.PdfName{
 	"ASCIIHexDecode",
 	"ASCII85Decode",

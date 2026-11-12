@@ -198,8 +198,6 @@ func (s stdTable) build() []huffLine {
 
 // standardTables transcribes the standard Huffman tables of ITU-T T.88, B.5,
 // Tables B.1 to B.15, indexed from 1.
-//
-//nolint:gochecknoglobals // static spec table, ITU-T T.88 Tables B.1 to B.15
 var standardTables = [16]stdTable{
 	1: {lines: [][3]int64{{0, 1, 4}, {16, 2, 8}, {272, 3, 16}}, upperLen: 3},
 	2: {lines: [][3]int64{{0, 1, 0}, {1, 2, 0}, {2, 3, 0}, {3, 4, 3}, {11, 5, 6}}, upperLen: 6, oobL: 6},

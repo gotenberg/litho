@@ -27,8 +27,6 @@ const maxDestSweepDepth = 2 * maxActionChainDepth
 // destinationViews lists the names that follow the target of an explicit
 // destination (ISO 32000-1, 12.3.2.2, Table 151). An array whose second entry
 // is one of them is a destination, which no /K, /Ref or /ParentTree array is.
-//
-//nolint:gochecknoglobals // static spec table.
 var destinationViews = map[ast.PdfName]bool{
 	"XYZ": true, "Fit": true, "FitH": true, "FitV": true,
 	"FitR": true, "FitB": true, "FitBH": true, "FitBV": true,

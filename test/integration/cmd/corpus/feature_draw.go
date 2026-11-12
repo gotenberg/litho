@@ -30,8 +30,6 @@ const drawDPI = 96
 // The neighbourhood is 0 and no pixel may differ: the grids are a few pixels
 // across, and a pixel out of place is the defect the tests are written to
 // catch.
-//
-//nolint:gochecknoglobals // a fixed rule, read only
 var drawPixelRule = pixelRule{Tolerance: renderChannelTolerance}
 
 // drawFontsTarget is the make target that fetches the fonts the draw feature

@@ -144,7 +144,7 @@ func splitShowReplacement(
 			return refuse("splits a code where the font's encoding does not")
 		case !g.Emitted:
 			return refuse("shows a code no glyph was read for")
-		case g.RenderingMode >= 4 && g.RenderingMode <= 7: //nolint:mnd // ISO 32000-1, 9.3.6, Table 106: modes 4 to 7 add to the clipping path
+		case g.RenderingMode >= 4 && g.RenderingMode <= 7: // ISO 32000-1, 9.3.6, Table 106: modes 4 to 7 add to the clipping path
 			return refuse("adds its glyphs to the clipping path (text rendering mode %d)", g.RenderingMode)
 		}
 		emitted++

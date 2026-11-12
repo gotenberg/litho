@@ -31,8 +31,6 @@ type pixelRule struct {
 // channel tolerance 64, neighbourhood 1, at most 1% of the pixels differing.
 // See renderChannelTolerance, renderNeighbourhood and
 // renderMaxDiffPerMillion for why each value.
-//
-//nolint:gochecknoglobals // a fixed rule, read only
 var renderPixelRule = pixelRule{
 	Tolerance:         renderChannelTolerance,
 	Neighbourhood:     renderNeighbourhood,

@@ -47,8 +47,6 @@ func matchInlineImageFilter(v compliance.Violation) bool {
 // abbreviations of ISO 32000-1, 8.9.7, Table 94 and the full names of 7.4,
 // Table 6, to the name the decoder reads it as. A name outside it, Brotli
 // among them, is one the repair cannot prove it decodes.
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1 Table 6 and Table 94
 var inlineFilterNames = []ast.PdfName{
 	"AHx", "ASCIIHexDecode",
 	"A85", "ASCII85Decode",
@@ -65,8 +63,6 @@ var inlineFilterNames = []ast.PdfName{
 // image samples rather than the bytes another filter reads: decoding one hands
 // on pixels that no general-purpose filter can stand in for, so no filter
 // before the last one the repair decodes may be one of them.
-//
-//nolint:gochecknoglobals // static spec table, ISO 32000-1 Table 6
 var inlineCodecFilters = []ast.PdfName{
 	"CCF", "CCITTFaxDecode",
 	"DCT", "DCTDecode",
@@ -77,8 +73,6 @@ var inlineCodecFilters = []ast.PdfName{
 // forbids: LZWDecode, in either spelling. It mirrors compliance's
 // forbiddenInlineImageFilters, the authority for the verdict, as Crypt does,
 // which no decode of an inline image can stand for.
-//
-//nolint:gochecknoglobals // static spec table, mirrors compliance.forbiddenInlineImageFilters
 var inlinePart1Forbidden = []ast.PdfName{"LZW", "LZWDecode", "Crypt"}
 
 // inlineAllowed lists the inline image filters ISO 19005-2/3, 6.1.10 and ISO
@@ -87,8 +81,6 @@ var inlinePart1Forbidden = []ast.PdfName{"LZW", "LZWDecode", "Crypt"}
 // JPXDecode and JBIG2Decode are no inline image's ([inlineXObjectCodecs]). It
 // mirrors compliance's allowedInlineImageFilters, the authority for the
 // verdict, so the two must stay in sync.
-//
-//nolint:gochecknoglobals // static spec table, mirrors compliance.allowedInlineImageFilters
 var inlineAllowed = []ast.PdfName{
 	"AHx", "ASCIIHexDecode",
 	"A85", "ASCII85Decode",

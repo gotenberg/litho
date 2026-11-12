@@ -23,17 +23,17 @@ const version = 0x02400000
 
 // creationDate is the header's date and time (ICC.1:2001-04, 6.1.4 and
 // 5.3.1): a constant, so every run writes the same bytes.
-var creationDate = [6]uint16{2026, 10, 19, 0, 0, 0} //nolint:gochecknoglobals // build-time constant.
+var creationDate = [6]uint16{2026, 10, 19, 0, 0, 0}
 
 // pcsIlluminant is the D50 illuminant every profile header names
 // (ICC.1:2001-04, 6.1.13).
-var pcsIlluminant = [3]float64{0.9642, 1, 0.8249} //nolint:gochecknoglobals // spec constant.
+var pcsIlluminant = [3]float64{0.9642, 1, 0.8249}
 
 // sRGBWhite is the sRGB reference white, D65 at chromaticity x 0.3127,
 // y 0.3290 (IEC 61966-2-1, 3.2), as XYZ with Y = 1. A version 2 display
 // profile records the display's white in its media white point
 // (ICC.1:2001-04, 6.4.25).
-var sRGBWhite = [3]float64{0.3127 / 0.3290, 1, (1 - 0.3127 - 0.3290) / 0.3290} //nolint:gochecknoglobals // spec constant.
+var sRGBWhite = [3]float64{0.3127 / 0.3290, 1, (1 - 0.3127 - 0.3290) / 0.3290}
 
 // curveEntries is the sample count of the tone curve, the count litho's
 // built-in sRGB profile uses for each of its three.

@@ -907,7 +907,7 @@ func checkShownCodes(glyphs map[int][]graphics.GlyphAdvance, removed map[int]boo
 	for _, origin := range slices.Sorted(maps.Keys(glyphs)) {
 		for _, g := range glyphs[origin] {
 			switch {
-			case removed[origin] && g.RenderingMode >= 4 && g.RenderingMode <= 7: //nolint:mnd // ISO 32000-1, 9.3.6, Table 106: modes 4 to 7 add to the clipping path
+			case removed[origin] && g.RenderingMode >= 4 && g.RenderingMode <= 7: // ISO 32000-1, 9.3.6, Table 106: modes 4 to 7 add to the clipping path
 				return fmt.Errorf("%w: operation %d, text rendering mode %d", ErrRegionCoversClippingText, origin, g.RenderingMode)
 			case !removed[origin] && !g.Emitted && g.Bytes > 0:
 				return fmt.Errorf("%w: operation %d", ErrTextNotPlaceable, origin)

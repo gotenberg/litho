@@ -133,8 +133,6 @@ type pageRenderer func(ctx context.Context, r *pdf.Reader, page int, dpi float64
 // lithoRenderPage is the render feature's hook into litho: [pdf.Reader.RenderPage]
 // over white, the background pdftoppm draws. Set to nil, every fixture
 // scores as skipped.
-//
-//nolint:gochecknoglobals // the one switch the renderer integration flips
 var lithoRenderPage pageRenderer = func(ctx context.Context, r *pdf.Reader, page int, dpi float64, opts ...pdf.RenderOption) (image.Image, error) {
 	return r.RenderPage(ctx, page, append([]pdf.RenderOption{pdf.WithRenderDPI(dpi)}, opts...)...)
 }

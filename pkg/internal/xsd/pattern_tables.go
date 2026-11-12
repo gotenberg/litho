@@ -10,8 +10,6 @@ package xsd
 
 // xmlBaseChar mirrors XML 1.0 (Second Edition), Appendix B, production [85]
 // BaseChar.
-//
-//nolint:gochecknoglobals // immutable spec table.
 var xmlBaseChar = runeSet{
 	{0x0041, 0x005A},
 	{0x0061, 0x007A},
@@ -219,8 +217,6 @@ var xmlBaseChar = runeSet{
 
 // xmlIdeographic mirrors XML 1.0 (Second Edition), Appendix B, production [86]
 // Ideographic.
-//
-//nolint:gochecknoglobals // immutable spec table.
 var xmlIdeographic = runeSet{
 	{0x4E00, 0x9FA5},
 	{0x3007, 0x3007},
@@ -229,8 +225,6 @@ var xmlIdeographic = runeSet{
 
 // xmlCombiningChar mirrors XML 1.0 (Second Edition), Appendix B, production [87]
 // CombiningChar.
-//
-//nolint:gochecknoglobals // immutable spec table.
 var xmlCombiningChar = runeSet{
 	{0x0300, 0x0345},
 	{0x0360, 0x0361},
@@ -331,8 +325,6 @@ var xmlCombiningChar = runeSet{
 
 // xmlDigit mirrors XML 1.0 (Second Edition), Appendix B, production [88]
 // Digit.
-//
-//nolint:gochecknoglobals // immutable spec table.
 var xmlDigit = runeSet{
 	{0x0030, 0x0039},
 	{0x0660, 0x0669},
@@ -353,8 +345,6 @@ var xmlDigit = runeSet{
 
 // xmlExtender mirrors XML 1.0 (Second Edition), Appendix B, production [89]
 // Extender.
-//
-//nolint:gochecknoglobals // immutable spec table.
 var xmlExtender = runeSet{
 	{0x00B7, 0x00B7},
 	{0x02D0, 0x02D0},
@@ -374,8 +364,6 @@ var xmlExtender = runeSet{
 // white space stripped out, with its code points. Specials is listed
 // twice, so it holds two ranges. The table leaves out the surrogate blocks,
 // whose characters no XML document holds.
-//
-//nolint:gochecknoglobals // immutable spec table.
 var xsdBlocks = map[string]runeSet{
 	"BasicLatin":                         {{0x0000, 0x007F}},
 	"Latin-1Supplement":                  {{0x0080, 0x00FF}},

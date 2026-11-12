@@ -130,8 +130,6 @@ type pageText struct {
 
 // hiddenText reads every text category, the ones a mutation must preserve
 // whether or not a viewer paints them.
-//
-//nolint:gochecknoglobals // static option list
 var hiddenText = []pdf.ExtractTextOption{pdf.WithHiddenText()}
 
 // readPageTexts reads pages 1 to n. A page litho needs OCR for reads as
@@ -389,8 +387,6 @@ const mutationRedactReach = 1e6
 //   - litho/pdf: planted in AutoTag, a defect that reports every untagged page
 //     as marked counts 73 promise_broken PDFs, and one that builds the tree
 //     without wiring it into the catalog counts 59.
-//
-//nolint:gochecknoglobals // static feature table
 var mutationSpecs = []mutationSpec{
 	{
 		name:             "stamp",

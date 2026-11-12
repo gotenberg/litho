@@ -168,7 +168,7 @@ func withDoctype(parts map[string][]byte, format, doctype string) error {
 // strictNamespaces maps the Transitional namespaces and relationship types
 // to their Strict ones (ISO/IEC 29500-1, Annex A; 29500-4 keeps the
 // Transitional ones).
-var strictNamespaces = strings.NewReplacer( //nolint:gochecknoglobals // static table
+var strictNamespaces = strings.NewReplacer(
 	"http://schemas.openxmlformats.org/wordprocessingml/2006/main", "http://purl.oclc.org/ooxml/wordprocessingml/main",
 	"http://schemas.openxmlformats.org/spreadsheetml/2006/main", "http://purl.oclc.org/ooxml/spreadsheetml/main",
 	"http://schemas.openxmlformats.org/presentationml/2006/main", "http://purl.oclc.org/ooxml/presentationml/main",

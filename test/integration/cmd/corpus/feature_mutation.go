@@ -153,8 +153,6 @@ func mutationFeatureFactories() []FeatureFactory {
 }
 
 // sharedSigner is the one [corpusSigner] of a run, made on first use.
-//
-//nolint:gochecknoglobals // process-wide lazily built signing key
 var sharedSigner = sync.OnceValues(newCorpusSigner)
 
 // Name returns "mutate-" and the spec's name.
@@ -173,8 +171,6 @@ func (f *mutationFeature) HasGolden(_ string) bool { return true }
 
 // qpdfNotice makes the missing-qpdf notice print once per run rather than
 // once per feature.
-//
-//nolint:gochecknoglobals // process-wide print-once guard
 var qpdfNotice sync.Once
 
 // Prepare records each PDF's anchor, the first of its fixtures in list order,

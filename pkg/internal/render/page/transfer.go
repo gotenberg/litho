@@ -91,7 +91,7 @@ func compileTransfer(ctx context.Context, doc *document.Document, obj ast.PdfObj
 	switch v := resolved.(type) {
 	case ast.PdfName:
 		if v == "Identity" || v == "Default" {
-			return nil, nil //nolint:nilnil // nil is the identity transfer, which applies nothing
+			return nil, nil // nil is the identity transfer, which applies nothing
 		}
 		return nil, fmt.Errorf("%w: /%s", errTransfer, v)
 	case ast.PdfArray:
@@ -115,7 +115,7 @@ func compileTransfer(ctx context.Context, doc *document.Document, obj ast.PdfObj
 		}
 	}
 	if identity {
-		return nil, nil //nolint:nilnil // nil is the identity transfer, which applies nothing
+		return nil, nil // nil is the identity transfer, which applies nothing
 	}
 	return t, nil
 }
