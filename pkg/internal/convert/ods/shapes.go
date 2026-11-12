@@ -182,6 +182,7 @@ func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art sh
 		d.From = sheet.Anchor{Row: at.Row, Column: at.Column, DX: lb.x - ts.colLeft(at.Column), DY: lb.y - ts.rowY}
 		d.To = &sheet.Anchor{Row: end.row, Column: end.col, DX: max(ex, 0), DY: max(ey, 0)}
 		d.Width, d.Height = lb.w, lb.h
+		d.Painted = &typeset.Rect{X: b.X - lb.x, Y: b.Y - lb.y, Width: b.Width, Height: b.Height}
 		pic.Width, pic.Height = lb.w, lb.h
 		pic.Vector = func(ctx context.Context, rect typeset.Rect) []typeset.Fragment {
 			m := mul(translation(rect.X, rect.Y), mul(lb.lin, typeset.Matrix{A: rect.Width / lb.w, D: rect.Height / lb.h}))

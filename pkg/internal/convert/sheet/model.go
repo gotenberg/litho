@@ -728,6 +728,11 @@ type Drawing struct {
 	// reads a workbook's anchors (ECMA-376 Part 1, 20.5.2.19 colOff and
 	// rowOff).
 	Unbounded bool
+	// Painted, when not nil, is the box the drawing paints, from the
+	// point From places, where it differs from the box From and To place:
+	// a shape its anchors size unturned and its transform turns. The
+	// print range reaches the painted box, not the anchors'.
+	Painted *typeset.Rect
 }
 
 // Anchor is a cell with an offset from its top-left corner.

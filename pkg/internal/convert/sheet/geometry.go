@@ -93,8 +93,10 @@ func clampSide(v float64) float64 {
 	return min(v, maxSide)
 }
 
-// drawingCells returns the cells a drawing's box covers, false for an
-// empty box. Under Excel's rules the box covers the cell its bottom-right
+// drawingCells returns the cells a drawing's box covers, its painted box
+// when it has one (Drawing.Painted), as Calc extends the print range to a
+// drawing's bounding box (ScDrawLayer::GetPrintArea); false for an empty
+// box. Under Excel's rules the box covers the cell its bottom-right
 // corner touches too, at that cell's top or left edge: Excel extends a
 // sheet's print range to a drawing's end cell even when the drawing stops
 // at its edge.
@@ -104,6 +106,10 @@ func clampSide(v float64) float64 {
 //   - litho/xlsx: charts_bar_column, fitted to one landscape page, with
 //     charts ending at the left edge of column T and the top of row 45,
 //     prints at 66%, the zoom that fits columns A to T: A to S fit at 70%.
+//   - libreoffice/ods: sc/tdf119191_FitToCellSize.ods, a chevron anchored
+//     from D5 to F14 and turned so it paints within columns B to D,
+//     prints columns A to E on one A4 page: column F, which its anchors
+//     reach, would take a second.
 func (g *grid) drawingCells(d *Drawing) (Range, bool) {
 	rc := g.drawingRect(d)
 	if rc.Width <= 0 && rc.Height <= 0 {
@@ -111,6 +117,12 @@ func (g *grid) drawingCells(d *Drawing) (Range, bool) {
 	}
 	var limit int
 	switch {
+	case d.Painted != nil && !d.Absolute && numeric.Finite(d.Painted.X) && numeric.Finite(d.Painted.Y):
+		x, y := g.anchorPoint(d.From, d.Unbounded)
+		p := d.Painted
+		dx, dy := min(max(p.X, -maxSide), maxSide), min(max(p.Y, -maxSide), maxSide)
+		rc = typeset.Rect{X: max(x+dx, 0), Y: max(y+dy, 0), Width: clampSide(p.Width), Height: clampSide(p.Height)}
+		limit = min(max(d.From.Row, 0)+maxDrawingRows, maxRows-1)
 	case d.Absolute:
 		// A bottom edge past the sheet, infinite or not a number looks
 		// down to the last row: converting it to int would overflow.

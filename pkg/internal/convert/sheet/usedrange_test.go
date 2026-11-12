@@ -91,3 +91,30 @@ func TestConvert_NoValues(t *testing.T) {
 		t.Error("the borders of the cell are not drawn")
 	}
 }
+
+// TestUsedRange_PaintedDrawing extends the print range to the box a
+// drawing paints when it has one, not to the cell its To anchor names.
+func TestUsedRange_PaintedDrawing(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		painted *typeset.Rect
+		want    int
+	}{
+		{"anchors", nil, 5},
+		{"painted", &typeset.Rect{X: -10, Y: 0, Width: 70, Height: 20}, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sh := &Sheet{Name: "S", DefaultColumnWidth: 50, Rows: []Row{{Index: 0, Cells: []Cell{numCell(0, 1, nil)}}}}
+			sh.Drawings = []Drawing{{
+				From: Anchor{Row: 1, Column: 0, DX: 5}, To: &Anchor{Row: 4, Column: 5, DX: 5},
+				Unbounded: true, Shape: true, Painted: tc.painted,
+			}}
+			g := newGrid(newDoc(sh), sh)
+			g.overflowBudget = maxOverflowCells
+			u, ok := g.usedRange(false)
+			if !ok || u.LastColumn != tc.want {
+				t.Errorf("used range %+v, want last column %d", u, tc.want)
+			}
+		})
+	}
+}
