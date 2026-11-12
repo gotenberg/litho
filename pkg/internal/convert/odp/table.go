@@ -56,9 +56,11 @@ func (r *reader) table(t *odf.Element, box compose.Rect, pc *pageCtx) *slides.Ta
 						}
 					}
 				}
+				// A row of no cells still takes a cell of the grid, which
+				// the columns pad it to.
 				for range min(repeatCount(k, "number-rows-repeated"), max(budget, 0)/max(len(cells), 1)) {
 					rows = append(rows, tableRow{height: h, cells: cells})
-					budget -= len(cells)
+					budget -= max(len(cells), 1)
 				}
 			case k.Is(odf.NSTable, "table-columns"), k.Is(odf.NSTable, "table-header-columns"), k.Is(odf.NSTable, "table-column-group"),
 				k.Is(odf.NSTable, "table-rows"), k.Is(odf.NSTable, "table-header-rows"), k.Is(odf.NSTable, "table-row-group"):
@@ -67,15 +69,21 @@ func (r *reader) table(t *odf.Element, box compose.Rect, pc *pageCtx) *slides.Ta
 		}
 	}
 	walk(t, 0)
+	n := len(cols)
+	for _, row := range rows {
+		n = max(n, len(row.cells))
+	}
+	// Every row is padded to the widest: the grid, not the cells read,
+	// holds the cap.
+	if n > 0 && len(rows) > maxTableCells/n {
+		rows = rows[:maxTableCells/n]
+		budget = 0
+	}
 	if budget <= 0 {
 		r.warn("table-cells", fmt.Sprintf("table cells past %d are not read", maxTableCells))
 	}
 	if len(rows) == 0 {
 		return nil
-	}
-	n := len(cols)
-	for _, row := range rows {
-		n = max(n, len(row.cells))
 	}
 	for len(cols) < n {
 		cols = append(cols, 0)
