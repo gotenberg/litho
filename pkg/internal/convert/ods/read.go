@@ -499,7 +499,16 @@ func (r *reader) rowsOf(ts *tableState, el *odf.Element, hidden, header bool, de
 // row reads one table:table-row (ODF 1.3, Part 3, 9.1.3) and its
 // repetitions: a row holding cells is listed for every repetition, up to
 // the cell cap; a row without cells only when its height, hidden flag or
-// break is its own.
+// break is its own. A row whose style sets no style:row-height takes
+// Calc's standard height.
+//
+// # Corpus evidence
+//
+//   - probe, ods: through gotenberg/gotenberg:9.4.1, rows without a style
+//     before, between and after rows of 30 mm print 12.78 points apart, the
+//     standard height, three empty repeated ones included.
+//   - litho/ods: cjk-cells prints its unstyled first row at the standard
+//     height above three rows of 45 mm.
 func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 	n := repeat(el, "number-rows-repeated", maxRows-ts.row)
 	styleName := el.A(odf.NSTable, "style-name")
@@ -518,6 +527,10 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 		}
 		tmpl.Height = h
 		ts.lastRowHeight = h
+	} else {
+		// A row whose style sets no height, or that names no style, is
+		// Calc's standard height, whatever the rows before it are.
+		tmpl.Height, ts.lastRowHeight = defaultRowHeight, defaultRowHeight
 	}
 	tmpl.CustomHeight = !optimal && tmpl.Height > 0
 	brk := props.Get("fo:break-before") == "page"

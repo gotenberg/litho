@@ -648,3 +648,28 @@ func TestRead_ChartPastACapStops(t *testing.T) {
 		t.Errorf("a chart that does not parse: warnings %+v, want chart-malformed", w)
 	}
 }
+
+// TestUnstyledRowHeight checks that a row whose style sets no height
+// takes Calc's standard height, not the height of the rows around it.
+//
+// # Corpus evidence
+//
+//   - probe, ods: through gotenberg/gotenberg:9.4.1, rows without a style
+//     before and after rows of 30 mm print 12.78 points apart.
+func TestUnstyledRowHeight(t *testing.T) {
+	cell := `<table:table-cell office:value-type="string"><text:p>x</text:p></table:table-cell>`
+	f := flat{
+		auto: `<style:style style:name="ro" style:family="table-row"><style:table-row-properties style:row-height="30mm" style:use-optimal-row-height="false"/></style:style>`,
+		body: table("S", `<table:table-row>`+cell+`</table:table-row><table:table-row table:style-name="ro">`+cell+`</table:table-row><table:table-row>`+cell+`</table:table-row>`),
+	}
+	doc, _ := read(t, f.bytes())
+	rows := doc.Sheets[0].Rows
+	if len(rows) != 3 {
+		t.Fatalf("rows = %d, want 3", len(rows))
+	}
+	for i, want := range []float64{defaultRowHeight, calcTwips(30 * 72 / 25.4), defaultRowHeight} {
+		if rows[i].Height != want {
+			t.Errorf("row %d height = %v, want %v", i, rows[i].Height, want)
+		}
+	}
+}
