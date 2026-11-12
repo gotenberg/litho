@@ -228,6 +228,11 @@ func definition(g *Geometry) *Custom {
 // path fill and stroke). A nil g, an empty Preset and a preset the table
 // lacks are the rectangle r; a custom geometry with no path draws nothing.
 // Arcs are turned into cubic Béziers of at most a quarter turn each.
+//
+// Paths takes no context: its work is bounded by the caps of a geometry,
+// [MaxGuides] guides each evaluated once, [MaxPaths] paths and
+// [MaxCommands] commands of at most four Béziers each, and is linear in
+// g's adjustments.
 func Paths(g *Geometry, r typeset.Rect) []Path {
 	def := definition(g)
 	if def == nil {

@@ -65,6 +65,10 @@ type Paint struct {
 // would draw its zero-width fill as a hairline. The gradient's scaled and
 // rotWithShape flags (20.1.8.33 gradFill) and a
 // picture's source rectangle and tile alignment are not modelled.
+//
+// Fill takes no context: it reads ops in passes linear in their length,
+// and makes at most [maxPictureTiles] tiles or [maxPatternLines] pattern
+// lines.
 func Fill(ops []typeset.PathOp, box typeset.Rect, p Paint) []typeset.Fragment {
 	if !hasArea(ops) {
 		return nil

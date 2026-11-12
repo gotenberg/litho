@@ -131,6 +131,9 @@ func arrowFactor(s ArrowSize, open bool) float64 {
 // their tip at the line's end, the diamond and the oval their centre, and
 // the line stops just short of the arrowhead's base, notch or centre. A closed subpath has no
 // arrowheads. A zero width strokes nothing.
+//
+// Stroke takes no context: it copies ops and reads them in passes linear in
+// their length, and makes at most two arrowheads.
 func Stroke(ops []typeset.PathOp, l Line) []typeset.Fragment {
 	if len(ops) == 0 || !numeric.PositiveFinite(l.Width) {
 		return nil

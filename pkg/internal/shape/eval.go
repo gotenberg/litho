@@ -85,13 +85,18 @@ func newEvaluator(def *Custom, g *Geometry, r typeset.Rect) *evaluator {
 	b[BuiltinSSD16], b[BuiltinSSD32] = ss/16, ss/32
 	b[BuiltinLogWidth], b[BuiltinLogHeight] = r.Width*hundredthMMPerPoint, r.Height*hundredthMMPerPoint
 	b[BuiltinHasFill], b[BuiltinHasStroke] = 1, 1
-	for i := range nAdj {
-		if g == nil {
-			break
-		}
+	if g != nil && len(g.Adjust) > 0 {
+		// The last adjustment of a name wins. A map keeps the match
+		// linear: g.Adjust has no cap of its own.
+		adjust := make(map[string]float64, min(len(g.Adjust), MaxGuides))
 		for _, a := range g.Adjust {
-			if a.Name != "" && a.Name == def.Adjust[i].Name && numeric.Finite(a.Value) {
-				ev.vals[i], ev.state[i] = a.Value, guideDone
+			if a.Name != "" && numeric.Finite(a.Value) {
+				adjust[a.Name] = a.Value
+			}
+		}
+		for i := range nAdj {
+			if v, ok := adjust[def.Adjust[i].Name]; ok {
+				ev.vals[i], ev.state[i] = v, guideDone
 			}
 		}
 	}
