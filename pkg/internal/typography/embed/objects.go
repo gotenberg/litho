@@ -55,6 +55,11 @@ func (f *Font) scaler() (float64, func(int16) ast.PdfInt) {
 // outlines, FontFile3 for CFF (ISO 32000-1, 9.8.2, Table 126).
 func (f *Font) writeDescriptor(alloc *writer.ObjAllocator, name, fileKey string, fileRef ast.PdfIndirectRef) ast.PdfIndirectRef {
 	_, scale := f.scaler()
+	// CapHeight and StemV are required of a font descriptor (ISO 32000-1,
+	// 9.8.2, Table 122), and the tables Load reads record neither: the
+	// ascent stands for the cap height and 80 for a regular stem. Such
+	// metrics serve a reader that substitutes a font it lacks (9.8.1); the
+	// embedded program draws its own glyphs.
 	return alloc.Alloc(ast.PdfDict{
 		"Type":               ast.PdfName("FontDescriptor"),
 		"FontName":           ast.PdfName(name),
