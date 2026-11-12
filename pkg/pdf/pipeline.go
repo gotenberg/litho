@@ -169,14 +169,14 @@ func WithEditLabel(label string) ApplyOption {
 }
 
 // Validate runs build-time structural checks without executing the
-// pipeline. It catches empty pipelines, missing [Pipeline.Open], empty
-// page lists, empty merge sources, a [Pipeline.Compose] with no
-// placements or after another stage, a [Conversion] given to two stages,
-// and the pipelines a [Pipeline.MergePipelines] cannot run, with what each
-// one's own validation finds. Cross-stage compatibility (Sign
-// combined with encryption, a stage after a remediation)
-// depends on what the Apply closures call, and is enforced at execution time:
-// it does not appear here.
+// pipeline. It catches empty pipelines, a stage before the one that seeds
+// the pipeline, empty page lists, empty merge sources, a [Pipeline.Compose]
+// with no placements or after another stage, a nil [Conversion] or one
+// given to two stages, and the pipelines a [Pipeline.MergePipelines] cannot
+// run, with what each one's own validation finds. Cross-stage compatibility
+// (Sign combined with encryption, a stage after a remediation) depends on
+// what the Apply closures call, and is enforced at execution time: it does
+// not appear here.
 func (p *Pipeline) Validate() error {
 	return errors.Join(p.buildValidationErrors(map[*Conversion]bool{})...)
 }
