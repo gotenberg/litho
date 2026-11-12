@@ -453,6 +453,7 @@ func anonStyle(parent *css.Style) *css.Style {
 	st.TabStops = parent.TabStops
 	st.MinLineHeight = parent.MinLineHeight
 	st.LineRule = parent.LineRule
+	st.WriterLines = parent.WriterLines
 	st.TextScale = parent.TextScale
 	st.Direction = parent.Direction
 	st.ListStyleType = parent.ListStyleType

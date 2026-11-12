@@ -239,14 +239,27 @@ func (b *builder) lineRatio(t textState) float64 {
 // percentage multiplies the line's natural height, the room added below
 // the glyphs; a length makes every line that tall, the baseline at four
 // fifths; at least is a minimum over single spacing, the room above the
-// glyphs; a leading adds its room below each line and above the first.
+// glyphs; a leading adds its room below each line and above the first. A
+// paragraph that sets no line height is single spaced, 100%: Writer sizes
+// it as it sizes a proportional spacing, not by CSS's normal line height,
+// which splits the font's line gap above and below the glyphs and makes
+// the paragraph's font a strut of every line. Every rule sizes the
+// natural height of a line as Writer does (see [css.Office.WriterLines]).
 //
 // # Corpus evidence
 //
 //   - probe, odt: two lines of 12pt Liberation Serif with a 0.5 cm
 //     style:line-spacing take 2 x 28 pt plus 14.2 pt.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, paragraphs setting
+//     no line height and paragraphs at fo:line-height 100% print their
+//     lines at the same baselines, a line of 8 point text in a 24 point
+//     paragraph and a line holding a picture alone included.
 func (b *builder) lineRule(st *css.Style, p paraState, t textState) {
-	switch p.line { //nolint:exhaustive // lineNormal keeps the initial line-height
+	st.WriterLines = true
+	switch p.line {
+	case lineNormal:
+		st.LineRule = css.LineRuleMultiple
+		st.LineHeight = css.Dimension{Kind: css.Number, Value: 1}
 	case lineProportional:
 		st.LineRule = css.LineRuleMultiple
 		st.LineHeight = css.Dimension{Kind: css.Number, Value: p.lineVal}

@@ -105,14 +105,26 @@ func (s *inlineState) officeLine(l *lineBox) {
 // the strut counts only on an empty line and, from mode 15, on a line of
 // pictures alone, as Word measures a line; before mode 15 such a line is
 // its pictures' height, which a proportional spacing does not scale.
+// Under css.Office.WriterLines the strut counts on an empty line alone,
+// and in text on a line of pictures alone (see [writerStrut]).
 func (s *inlineState) naturalExtent(l *lineBox) (above, below, text float64) {
-	m := s.e.faceMetrics(s.root.st)
+	st := s.root.st
+	m := s.e.faceMetrics(st)
 	above, below = m.Ascent+max(m.LineGap, 0), m.Descent
 	textAbove, textBelow := above, below
-	if mode := s.root.st.WordRules; mode > 0 {
-		runs, atomics := lineContent(l)
-		if runs || atomics && mode < wordPictureStrut {
+	runs, atomics := lineContent(l)
+	switch {
+	case st.WordRules > 0:
+		if runs || atomics && st.WordRules < wordPictureStrut {
 			above, below = 0, 0
+			textAbove, textBelow = 0, 0
+		}
+	case st.WriterLines:
+		strut, textStrut := writerStrut(runs, atomics)
+		if !strut {
+			above, below = 0, 0
+		}
+		if !textStrut {
 			textAbove, textBelow = 0, 0
 		}
 	}
@@ -131,6 +143,46 @@ func (s *inlineState) naturalExtent(l *lineBox) (above, below, text float64) {
 		below = max(below, it.descent+shift)
 	}
 	return above, below, textAbove + textBelow
+}
+
+// writerStrut reports whether the font of a block container under
+// css.Office.WriterLines counts in the natural height of a line holding
+// glyph runs (runs) and atomic inlines (atomics), as Writer sizes a
+// paragraph's line: on an empty line alone. textStrut reports whether it
+// counts in the height of the line's text, which a proportional spacing
+// scales: on a line holding no glyph run, so a line of pictures alone
+// takes the room of a line of the container's font.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, .fodt paragraphs
+//     setting no line height, in Liberation Serif, DejaVu Sans and
+//     Carlito at 8, 12 and 24 points: lines 9.2, 13.8 and 27.6 points
+//     apart in Liberation Serif, 9.3, 14 and 27.95 in DejaVu Sans, 9.75,
+//     14.65 and 29.3 in Carlito, the first baseline 7.5, 11.2 and 22.4
+//     points below the top margin in Liberation Serif, its ascent and its
+//     whole line gap, 0.5 points lower than half the gap would put it at
+//     24 points.
+//   - probe, odt: a Liberation Serif 24 point paragraph whose text is all
+//     8 points spaces its lines 9.2 points apart, as an 8 point paragraph
+//     does, the 24 point font adding nothing; the same at fo:line-height
+//     100%, and 115% adds 15% of 9.2 points.
+//   - probe, odt: a 12 point line holding a 24 point run puts the
+//     baseline 22.4 points below the line's top and the next line 5.2
+//     points below it, the 24 point run's ascent and descent; a
+//     DejaVu Sans or Carlito run in a Liberation Serif line takes the
+//     tallest ascent and the deepest descent of the two faces.
+//   - probe, odt: a picture 0.2 cm tall alone in a Liberation Serif
+//     12 point paragraph makes its line 5.7 points tall, at fo:line-height
+//     100% too, where the font's line is 13.8; at 115% the line takes
+//     2.07 points more below the picture, 15% of the font's line. A 2 cm
+//     picture alone ends its line at its bottom, followed by a space it
+//     takes the font's 2.6 point descent more.
+//   - probe, odt: an empty paragraph, the paragraphs of a table's cells,
+//     of a list's items and of a header are 13.8 points tall in
+//     Liberation Serif 12 points; a superscript at 58% grows no line.
+func writerStrut(runs, atomics bool) (strut, textStrut bool) {
+	return !runs && !atomics, !runs
 }
 
 // picturesDescent returns the extent below the baseline of a line l

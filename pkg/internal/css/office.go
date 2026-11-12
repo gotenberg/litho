@@ -103,7 +103,9 @@ const (
 	// multiple of their natural height (WordprocessingML lineRule auto, ODF
 	// fo:line-height as a percentage). The natural height is the tallest
 	// ascent plus line gap over the line's glyph runs and atomic inlines
-	// above the shared baseline, plus the deepest descent below it. At 1
+	// above the shared baseline, plus the deepest descent below it, the
+	// container's font counting as one more glyph run unless
+	// [Office.WriterLines] or [Style.WordRules] says otherwise. At 1
 	// and above the baseline keeps its natural place and the room added
 	// goes below the glyphs, LineHeight less 1 times the natural height of
 	// the glyph runs alone: an atomic inline taller than the text, an
@@ -230,6 +232,16 @@ type Office struct {
 	// and is clipped at their bottom when they all are exact. It applies
 	// to a table row whose Height is in points alone.
 	ExactHeight bool
+	// WriterLines sizes the line boxes of a block container under
+	// [LineRuleMultiple] as Writer sizes the lines of a paragraph, where
+	// the container's font is otherwise a strut every line is at least as
+	// tall as: a line holding a glyph run, a space included, takes its
+	// natural height from its glyph runs and atomic inlines alone; a line
+	// of atomic inlines alone is as tall as they are, the container's font
+	// sizing only the room a proportional spacing above 1 adds below them;
+	// an empty line is a line of the container's font. It applies to a
+	// block container whose [Style.WordRules] is 0.
+	WriterLines bool
 }
 
 // MinBorderStroke is the least width, in points, at which a border of

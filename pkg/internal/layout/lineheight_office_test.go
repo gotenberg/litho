@@ -199,3 +199,52 @@ func TestWordRules_LineHeight(t *testing.T) {
 		}
 	})
 }
+
+// TestWriterLines_LineHeight sizes a line from its glyph runs and atomic
+// inlines under css.Office.WriterLines, as Writer sizes a paragraph's
+// line: the container's font counts on an empty line alone, and in the
+// room a proportional spacing adds below a line of pictures alone.
+func TestWriterLines_LineHeight(t *testing.T) {
+	multiple := func(f float64) func(*css.Style) {
+		return func(s *css.Style) {
+			s.LineRule = css.LineRuleMultiple
+			s.LineHeight = css.Dimension{Kind: css.Number, Value: f}
+		}
+	}
+	small := inlineSty(func(s *css.Style) { s.FontSize = px(10) })
+	img := func() *Node {
+		return &Node{Kind: Replaced, Style: inlineSty(), Picture: pic(color.NRGBA{R: 255, A: 255}, 10, 10)}
+	}
+	tests := []struct {
+		name      string
+		f         float64
+		kids      []*Node
+		baselines [2]float64
+	}{
+		{"runs smaller than the font", 1, []*Node{el(small, txt(small, "ab")), nil, el(small, txt(small, "cd"))}, [2]float64{8, 18}},
+		{"multiple", 1.5, []*Node{el(small, txt(small, "ab")), nil, el(small, txt(small, "cd"))}, [2]float64{8, 23}},
+		{"empty line", 1, []*Node{nil, el(small, txt(small, "a"))}, [2]float64{28, 28}},
+		// A 10px picture alone on a line over a 20px font: the picture's
+		// height at 100%; at 150% the room of the font's 20px line, 10px,
+		// below it.
+		{"picture", 1, []*Node{el(small, txt(small, "a")), nil, img(), nil, el(small, txt(small, "b"))}, [2]float64{8, 28}},
+		{"picture 150%", 1.5, []*Node{el(small, txt(small, "a")), nil, img(), nil, el(small, txt(small, "b"))}, [2]float64{8, 43}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := sty(multiple(tt.f), func(s *css.Style) { s.FontSize = px(20); s.WriterLines = true })
+			kids := make([]*Node, len(tt.kids))
+			for i, k := range tt.kids {
+				kids[i] = k
+				if k == nil {
+					kids[i] = br(st)
+				}
+			}
+			res := run(t, doc(el(st, kids...)), page(100, 200))
+			_, pos := lineTexts(res, 1)
+			if len(pos) == 0 || !near(pos[0][1], tt.baselines[0]) || !near(pos[len(pos)-1][1], tt.baselines[1]) {
+				t.Errorf("baselines %v, want first %v and last %v", pos, tt.baselines[0], tt.baselines[1])
+			}
+		})
+	}
+}

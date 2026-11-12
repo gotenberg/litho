@@ -53,6 +53,7 @@ func TestLineRule_Fields(t *testing.T) {
 		min  float64
 		pad  float64
 	}{
+		{paraState{line: lineNormal}, css.LineRuleMultiple, css.Dimension{Kind: css.Number, Value: 1}, 0, 0},
 		{paraState{line: lineProportional, lineVal: 1.5}, css.LineRuleMultiple, css.Dimension{Kind: css.Number, Value: 1.5}, 0, 0},
 		{paraState{line: lineFixed, lineVal: 20}, css.LineRuleExact, css.Pts(20), 0, 0},
 		{paraState{line: lineAtLeast, lineVal: 20}, css.LineRuleMultiple, css.Dimension{Kind: css.Number, Value: 1}, 20, 0},
@@ -61,10 +62,52 @@ func TestLineRule_Fields(t *testing.T) {
 	for _, tc := range cases {
 		st := baseStyle()
 		b.lineRule(st, tc.p, ts)
-		if st.LineRule != tc.rule || !near(st.LineHeight.Value, tc.lh.Value, 1e-9) || st.LineHeight.Kind != tc.lh.Kind ||
+		if st.LineRule != tc.rule || !st.WriterLines || !near(st.LineHeight.Value, tc.lh.Value, 1e-9) || st.LineHeight.Kind != tc.lh.Kind ||
 			st.MinLineHeight != tc.min || !near(st.Padding[css.Top].Value, tc.pad, 1e-9) {
 			t.Errorf("%+v: rule %v, line height %+v, min %v, padding %+v", tc.p, st.LineRule, st.LineHeight, st.MinLineHeight, st.Padding[css.Top])
 		}
+	}
+}
+
+// TestConvert_SingleSpacing lays paragraphs that set no line height out
+// and checks their baselines against LibreOffice's print of the same
+// paragraphs: a line takes its height from its own text, not from its
+// paragraph's font, and a picture alone on a line makes the line as tall
+// as the picture.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, Liberation Serif 24
+//     point paragraphs, the middle two of 8 point text, print their
+//     baselines at 79.101, 91.801, 101.001 and 125.101 points; 12 point
+//     paragraphs around one holding a picture 0.2 cm tall alone at 67.901
+//     and 87.401 points.
+func TestConvert_SingleSpacing(t *testing.T) {
+	auto := `<style:style style:name="P24" style:family="paragraph"><style:text-properties fo:font-size="24pt"/></style:style>` +
+		`<style:style style:name="T8" style:family="text"><style:text-properties fo:font-size="8pt"/></style:style>`
+	cases := []struct {
+		name, body string
+		want       []float64
+	}{
+		{"small text", `<text:p text:style-name="P24">Hxg line</text:p>` +
+			strings.Repeat(`<text:p text:style-name="P24"><text:span text:style-name="T8">Hxg line</text:span></text:p>`, 2) +
+			`<text:p text:style-name="P24">Hxg line</text:p>`, []float64{79.101, 91.801, 101.001, 125.101}},
+		{"picture alone", `<text:p>Hxg line</text:p><text:p><draw:frame text:anchor-type="as-char" svg:width="0.2cm" svg:height="0.2cm"><draw:image xlink:href="Pictures/a.png"/></draw:frame></text:p><text:p>Hxg line</text:p>`,
+			[]float64{67.901, 87.401}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := convertDoc(t, doc{contentAuto: auto, body: tc.body, pictures: map[string][]byte{"Pictures/a.png": tinyPNG(t)}}.pack(t), office.Options{})
+			ls := lines(res.Pages[0])
+			if len(ls) != len(tc.want) {
+				t.Fatalf("lines = %+v", ls)
+			}
+			for i, l := range ls {
+				if !near(l.y, tc.want[i], 0.1) {
+					t.Errorf("line %d baseline %.3f, want %.3f", i+1, l.y, tc.want[i])
+				}
+			}
+		})
 	}
 }
 
