@@ -8,6 +8,7 @@ import (
 	"golang.org/x/image/vector"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // Path is a path to cover: its construction steps in path units, filled
@@ -53,7 +54,7 @@ func Draw(m *image.Alpha, paths []Path, tr compose.Matrix) {
 		z.DrawOp = draw.Over
 		if p.Width > 0 {
 			w := p.Width * math.Sqrt(math.Abs(tr.A*tr.D-tr.B*tr.C))
-			if math.IsNaN(w) || w <= 0 || math.IsInf(w, 0) {
+			if !numeric.PositiveFinite(w) {
 				continue
 			}
 			stroke(z, polylines(p.Ops, tr), w/2)

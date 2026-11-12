@@ -2,9 +2,9 @@ package raster
 
 import (
 	"image"
-	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // Tint returns an image of m's size in the one colour c, its alpha m's
@@ -64,7 +64,7 @@ func Mask(img *image.NRGBA, m *image.Alpha) {
 
 // unit clamps v to [0, 1], NaN to 0.
 func unit(v float64) float64 {
-	if math.IsNaN(v) || v <= 0 {
+	if !numeric.Positive(v) {
 		return 0
 	}
 	return min(v, 1)

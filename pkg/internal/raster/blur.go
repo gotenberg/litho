@@ -3,6 +3,8 @@ package raster
 import (
 	"image"
 	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // Kernel is a symmetric convolution kernel: an odd number of weights
@@ -23,7 +25,7 @@ const MaxKernelRadius = 1024
 // below a pixel's fraction returns the identity, one above
 // [MaxKernelRadius] is clipped to it.
 func Tent(r float64) Kernel {
-	if math.IsNaN(r) || r <= 0 {
+	if !numeric.Positive(r) {
 		return Kernel{1}
 	}
 	r = min(r, MaxKernelRadius)
