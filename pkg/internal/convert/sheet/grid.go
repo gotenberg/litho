@@ -75,10 +75,10 @@ func newPlainGrid(doc *Document, sh *Sheet) *grid {
 		sh: sh, doc: doc, defW: sh.DefaultColumnWidth, defH: sh.DefaultRowHeight,
 		rows: map[int]*Row{}, heights: map[int]float64{}, overflows: map[[2]int]int{}, merges: map[[2]int]Range{}, covered: map[[2]int][2]int{},
 	}
-	if !(g.defW > 0 && g.defW <= maxSide) {
+	if !positive(g.defW) || g.defW > maxSide {
 		g.defW = defaultColumnWidth
 	}
-	if !(g.defH > 0 && g.defH <= maxSide) {
+	if !positive(g.defH) || g.defH > maxSide {
 		g.defH = defaultRowHeight
 	}
 	for i := range sh.Rows {

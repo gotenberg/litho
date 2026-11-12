@@ -153,7 +153,7 @@ func (bs *borders) paths() []compose.Fragment {
 // draws a cell frame.
 func linePaths(b Border, x1, y1, x2, y2 float64, extend bool) []compose.Fragment {
 	w := b.Width
-	if !(w > 0) {
+	if !positive(w) {
 		w = hairline
 	}
 	w = min(w, maxBorderWidth)
@@ -194,7 +194,7 @@ func linePaths(b Border, x1, y1, x2, y2 float64, extend bool) []compose.Fragment
 	}
 	if b.Line == LineDouble {
 		gap := b.Gap
-		if !(gap > 0) {
+		if !positive(gap) {
 			gap = w / 3
 		}
 		gap = min(gap, w)

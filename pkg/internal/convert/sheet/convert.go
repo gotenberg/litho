@@ -308,7 +308,7 @@ func indexOf(pages []*pagePlan, p *pagePlan) int {
 // (office.Options.Paper).
 func (b *builder) paper(sh *Sheet) (float64, float64) {
 	w, h := sh.Page.Width, sh.Page.Height
-	if !(w > 0) || !(h > 0) {
+	if !positive(w) || !positive(h) {
 		w, h = b.opts.DefaultPage(letterWidth, letterHeight)
 	}
 	w, h = b.opts.Paper(w, h)

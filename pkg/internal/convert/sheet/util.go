@@ -12,6 +12,14 @@ func strconvFloat(v float64) string {
 	return strconv.FormatFloat(v, 'f', 4, 64)
 }
 
+// positive reports v > 0: false for zero, a negative number and NaN, so
+// that a length the reader leaves unset or not a number takes its
+// default.
+func positive(v float64) bool { return v > 0 }
+
+// ordered reports a <= b: false when either is NaN.
+func ordered(a, b float64) bool { return a <= b }
+
 // colorOf returns c as a composition colour.
 func colorOf(c css.Color) compose.Color {
 	return compose.Color{R: c.R, G: c.G, B: c.B, A: c.A}

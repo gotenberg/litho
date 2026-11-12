@@ -54,10 +54,10 @@ func resolveFont(f, def Font) font {
 	if len(out.families) == 0 {
 		out.families = []string{defaultFamily}
 	}
-	if !(out.size > 0) {
+	if !positive(out.size) {
 		out.size = def.Size
 	}
-	if !(out.size > 0) {
+	if !positive(out.size) {
 		out.size = defaultFontSize
 	}
 	out.size = min(out.size, maxFontSize)

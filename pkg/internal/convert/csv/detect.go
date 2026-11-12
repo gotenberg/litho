@@ -172,6 +172,8 @@ func detectNumber(s string) (detected, bool) {
 		v = -v
 	}
 	if v == 0 {
+		// "-0" reads as 0: assigning the constant drops the sign of a
+		// negative zero.
 		v = 0
 	}
 	if k == kPercent {

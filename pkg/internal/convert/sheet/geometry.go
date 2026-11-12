@@ -86,7 +86,7 @@ func (g *grid) drawingRect(d *Drawing) compose.Rect {
 // clampSide returns v within [0, maxSide], 0 for a value that is not a
 // number.
 func clampSide(v float64) float64 {
-	if !(v > 0) {
+	if !positive(v) {
 		return 0
 	}
 	return min(v, maxSide)

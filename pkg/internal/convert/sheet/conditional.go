@@ -763,7 +763,7 @@ func (g *grid) dataBar(r, c int, cell *Cell) (zero, length float64, col css.Colo
 	}
 	rule := res.bar
 	th, ok := thresholds(rule.Values, 2, res.barF.statistics(g))
-	if !ok || !(th[1] >= th[0]) {
+	if !ok || !ordered(th[0], th[1]) {
 		return 0, 0, css.Color{}, false, false
 	}
 	lo, hi := th[0], th[1]
