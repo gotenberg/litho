@@ -144,11 +144,11 @@ func TestConvert_TrackedChangesViews(t *testing.T) {
 	}
 }
 
-// markedRuns returns the text runs of the marked view of body, with the
-// colour and decoration of each.
-func markedRuns(t *testing.T, regions, body string) map[string]*css.Style {
+// markedTree returns the layout tree of the marked view of body, the
+// automatic styles contentAuto in force.
+func markedTree(t *testing.T, regions, body, contentAuto string) *layout.Node {
 	t.Helper()
-	b := newTestBuilder(t, doc{body: `<text:tracked-changes>` + regions + `</text:tracked-changes>` + body})
+	b := newTestBuilder(t, doc{contentAuto: contentAuto, body: `<text:tracked-changes>` + regions + `</text:tracked-changes>` + body})
 	el := odfBody(b)
 	marks, err := resolveChanges(context.Background(), el, office.ChangesMarked, b.rowTracked, b.warn)
 	if err != nil {
@@ -156,6 +156,14 @@ func markedRuns(t *testing.T, regions, body string) map[string]*css.Style {
 	}
 	b.changeMarks = marks
 	root, _ := b.document(el)
+	return root
+}
+
+// markedRuns returns the text runs of the marked view of body, with the
+// colour and decoration of each.
+func markedRuns(t *testing.T, regions, body string) map[string]*css.Style {
+	t.Helper()
+	root := markedTree(t, regions, body, "")
 	out := map[string]*css.Style{}
 	walkNodes(root, func(n *layout.Node) {
 		if n.Kind == layout.Text {
@@ -190,9 +198,86 @@ func TestConvert_TrackedChangesMarks(t *testing.T) {
 			t.Errorf("%q: decoration %v in %v, text %v; want %v in %v", tc.text, st.TextDecoration, st.TextDecorationColor, st.Color, tc.deco, tc.color)
 		}
 	}
-	for _, s := range []string{"plain", "formatted"} {
-		if st := got[s]; st == nil || st.TextDecoration != 0 {
-			t.Errorf("%q is marked: %+v", s, st)
+	if st := got["plain"]; st == nil || st.TextDecoration != 0 || st.FontWeight != 400 {
+		t.Errorf("plain is marked: %+v", st)
+	}
+	if st := got["formatted"]; st == nil || st.TextDecoration != 0 || st.FontWeight != 700 || st.Color != office.RGB(office.AuthorColor(0)) {
+		t.Errorf("formatted: decoration %v, weight %d, colour %v; want none, bold, the first author's", st.TextDecoration, st.FontWeight, st.Color)
+	}
+}
+
+// TestConvert_TrackedChangesBars marks for a change bar every run a
+// change spans and an empty node at each change mark, and nothing in
+// the other views.
+func TestConvert_TrackedChangesBars(t *testing.T) {
+	regions := region("i", "insertion", "Ada", "") + region("d", "deletion", "Ada", `<text:p>gone</text:p>`) +
+		region("f", "format-change", "Ada", "")
+	body := `<text:p>plain <text:change-start text:change-id="i"/>added<text:change-end text:change-id="i"/>` +
+		` <text:change text:change-id="d"/> <text:change-start text:change-id="f"/>formatted<text:change-end text:change-id="f"/></text:p>` +
+		`<text:p>split<text:change-start text:change-id="i"/></text:p><text:p><text:change-end text:change-id="i"/>after</text:p>`
+	var bars []string
+	walkNodes(markedTree(t, regions, body, ""), func(n *layout.Node) {
+		if !n.ChangeBar {
+			return
+		}
+		s := ""
+		walkNodes(n, func(k *layout.Node) { s += k.Text })
+		bars = append(bars, "["+s+"]")
+	})
+	if got, want := strings.Join(bars, ""), "[][added][][][gone][][][formatted][][][]"; got != want {
+		t.Errorf("marked for a bar %s, want %s", got, want)
+	}
+	b := newTestBuilder(t, doc{body: `<text:tracked-changes>` + regions + `</text:tracked-changes>` + body})
+	el := odfBody(b)
+	if _, err := resolveChanges(context.Background(), el, office.ChangesAccepted, b.rowTracked, b.warn); err != nil {
+		t.Fatal(err)
+	}
+	root, _ := b.document(el)
+	walkNodes(root, func(n *layout.Node) {
+		if n.ChangeBar {
+			t.Errorf("the accepted view marks %+v for a bar", n)
+		}
+	})
+}
+
+// TestConvert_TrackedChangesRowFill draws a tracked row an insertion or a
+// deletion covers, and every row of a table a change holds, on the
+// marked view's ground, over its cells' own.
+func TestConvert_TrackedChangesRowFill(t *testing.T) {
+	cell := func(s string) string {
+		return `<table:table-cell table:style-name="C1"><text:p>` + s + `</text:p></table:table-cell>`
+	}
+	span := func(id string) string {
+		return `<text:change-start text:change-id="` + id + `"/>x<text:change-end text:change-id="` + id + `"/>`
+	}
+	regions := region("i1", "insertion", "Ada", "") + region("i2", "insertion", "Grace", "") +
+		region("d1", "deletion", "Ada", "") + region("u", "insertion", "Ada", "") + region("t", "insertion", "Ada", "")
+	auto := trackedRowStyle + `<style:style style:name="C1" style:family="table-cell"><style:table-cell-properties fo:background-color="#ffff00"/></style:style>`
+	body := `<table:table><table:table-column table:number-columns-repeated="2"/>` +
+		`<table:table-row>` + cell("kept") + cell("kept") + `</table:table-row>` +
+		`<table:table-row table:style-name="R1">` + cell(span("i1")) + cell(span("i2")) + `</table:table-row>` +
+		`<table:table-row table:style-name="R1">` + cell(span("d1")) + cell(span("d1")) + `</table:table-row>` +
+		`<table:table-row>` + cell(span("u")) + cell(span("u")) + `</table:table-row></table:table>` +
+		`<text:p>before<text:change-start text:change-id="t"/></text:p>` +
+		`<table:table><table:table-column/><table:table-row>` + cell("in") + `</table:table-row></table:table>` +
+		`<text:p><text:change-end text:change-id="t"/>after</text:p>`
+	yellow := css.Color{R: 1, G: 1, A: 1}
+	ins, del := office.RGB(office.RowInsertedFill), office.RGB(office.RowDeletedFill)
+	want := []struct{ row, cell css.Color }{
+		{css.Transparent, yellow}, {ins, css.Transparent}, {del, css.Transparent}, {css.Transparent, yellow}, {ins, css.Transparent},
+	}
+	var rows []*layout.Node
+	walkNodes(markedTree(t, regions, body, auto), func(n *layout.Node) {
+		if n.Role == "TR" {
+			rows = append(rows, n)
+		}
+	})
+	if len(rows) != len(want) {
+		t.Fatalf("%d rows, want %d", len(rows), len(want))
+	}
+	for i, r := range rows {
+		if r.Style.BackgroundColor != want[i].row || r.Children[0].Style.BackgroundColor != want[i].cell {
+			t.Errorf("row %d: ground %v, cell %v; want %v, %v", i, r.Style.BackgroundColor, r.Children[0].Style.BackgroundColor, want[i].row, want[i].cell)
 		}
 	}
 }
@@ -235,6 +320,36 @@ func TestResolveChanges_KeepsTheSpaceASplitPutsFirst(t *testing.T) {
 		}
 		if got := strings.Join(kinds, ","); !strings.Contains(got, "s,text:second") {
 			t.Errorf("view %d: second paragraph %s, want a text:s before %q", view, got, "second")
+		}
+	}
+}
+
+// TestConvert_TrackedChangesMoves draws a deletion and an insertion of
+// one author and the same text as moved text, doubly in green.
+func TestConvert_TrackedChangesMoves(t *testing.T) {
+	regions := region("d", "deletion", "Ada", `<text:p>abc<text:s/>de</text:p>`) + region("i", "insertion", "Ada", "") +
+		region("x", "deletion", "Grace", `<text:p>other words</text:p>`) + region("y", "insertion", "Ada", "")
+	body := `<text:p>from <text:change text:change-id="d"/>|<text:change text:change-id="x"/>|</text:p>` +
+		`<text:p>to <text:change-start text:change-id="i"/> abc de<text:change-end text:change-id="i"/>|` +
+		`<text:change-start text:change-id="y"/>other words<text:change-end text:change-id="y"/></text:p>`
+	got := markedRuns(t, regions, body)
+	green := office.RGB(office.MovedColor)
+	for _, tc := range []struct {
+		text  string
+		deco  css.TextDecoration
+		style css.DecorationStyle
+		color css.Color
+	}{
+		{"abc", css.LineThrough, css.DecorationDouble, green},
+		{"abc de", css.Underline, css.DecorationDouble, green},
+		{"other words", css.Underline, css.DecorationSolid, office.RGB(office.AuthorColor(0))},
+	} {
+		st := got[tc.text]
+		if st == nil {
+			t.Fatalf("no run %q in %v", tc.text, got)
+		}
+		if st.TextDecoration != tc.deco || st.TextDecorationStyle != tc.style || st.Color != tc.color {
+			t.Errorf("%q: decoration %v (%v) in %v; want %v (%v) in %v", tc.text, st.TextDecoration, st.TextDecorationStyle, st.Color, tc.deco, tc.style, tc.color)
 		}
 	}
 }

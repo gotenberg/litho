@@ -2,6 +2,7 @@ package docx
 
 import (
 	"encoding/xml"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -122,6 +123,9 @@ type revisions struct {
 	// the last line of the first and the first line of the second draw a
 	// change bar.
 	markEnd, markStart map[*ooxml.Element]bool
+	// moved holds the w:ins and w:del elements of the marked view that
+	// pair as moved text ([revisions.findMoves]).
+	moved map[*ooxml.Element]bool
 	// added counts the elements the view made, which the caller charges
 	// to the conversion's memory budget as parsed ones.
 	added int64
@@ -165,6 +169,9 @@ func (r *revisions) resolve(el *ooxml.Element, depth int) {
 		// Properties hold revision marks, not revised content.
 		return
 	}
+	if depth == 0 && r.view == office.ChangesMarked {
+		r.findMoves(el)
+	}
 	var kids []*ooxml.Element
 	changed := false
 	markChanged := false
@@ -183,7 +190,7 @@ func (r *revisions) resolve(el *ooxml.Element, depth int) {
 			r.resolve(k, depth+1)
 			if r.view == office.ChangesMarked {
 				kind := office.MarkInsert
-				if k.Local == "moveTo" {
+				if k.Local == "moveTo" || r.moved[k] {
 					kind = office.MarkMoveTo
 				}
 				r.mark(k, attrOr(k, "author"), kind, depth+1)
@@ -198,7 +205,7 @@ func (r *revisions) resolve(el *ooxml.Element, depth int) {
 			undelete(k, depth+1)
 			if r.view == office.ChangesMarked {
 				kind := office.MarkDelete
-				if k.Local == "moveFrom" {
+				if k.Local == "moveFrom" || r.moved[k] {
 					kind = office.MarkMoveFrom
 				}
 				r.mark(k, attrOr(k, "author"), kind, depth+1)
@@ -455,4 +462,92 @@ func (r *revisions) bound(p *ooxml.Element, ps *css.Style, sink *inlineSink, sta
 		return
 	}
 	sink.add(&layout.Node{Kind: layout.Element, Style: inlineStyle(ps), ChangeBar: true})
+}
+
+// maxMoveText bounds the characters of a revision's text the marked view
+// compares to find moved text: 4,096. Anti-DoS guard, not spec-mandated:
+// the texts are copied to be compared, and a moved sentence or paragraph
+// is far shorter; a longer revision is drawn as an insertion or a
+// deletion.
+const maxMoveText = 4096
+
+// findMoves records in r.moved the w:ins and w:del (17.13.5.18,
+// 17.13.5.14) under root whose texts pair as moved text
+// ([office.MoveKey]), as w:moveTo and w:moveFrom are.
+//
+// # Corpus evidence
+//
+//   - probe, docx: LibreOffice 26.8 draws a w:del and a w:ins of one
+//     author holding the same sentence, dated two days apart, in green,
+//     double struck through and double underlined.
+func (r *revisions) findMoves(root *ooxml.Element) {
+	type pair struct{ del, ins []*ooxml.Element }
+	keys := map[string]*pair{}
+	var walk func(el *ooxml.Element, depth int)
+	walk = func(el *ooxml.Element, depth int) {
+		if depth > ooxml.MaxDepth {
+			return
+		}
+		for _, k := range el.Children {
+			del := k.Is(w, "del")
+			if !del && !k.Is(w, "ins") {
+				walk(k, depth+1)
+				continue
+			}
+			var b strings.Builder
+			if !revisionText(k, &b, depth+1) || b.Len() > maxMoveText {
+				continue
+			}
+			key, ok := office.MoveKey(attrOr(k, "author"), b.String())
+			if !ok {
+				continue
+			}
+			p := keys[key]
+			if p == nil {
+				p = &pair{}
+				keys[key] = p
+			}
+			if del {
+				p.del = append(p.del, k)
+			} else {
+				p.ins = append(p.ins, k)
+			}
+		}
+	}
+	walk(root, 0)
+	for _, p := range keys {
+		if len(p.del) > 0 && len(p.ins) > 0 {
+			for _, k := range slices.Concat(p.del, p.ins) {
+				r.moved[k] = true
+			}
+		}
+	}
+}
+
+// revisionText writes to b the text of the runs under el, w:t and
+// w:delText (17.3.3.31, 17.3.3.7), w:tab as a tab, until b holds more
+// than [maxMoveText] bytes. It reports false for a revision holding a
+// paragraph, which pairs with nothing.
+func revisionText(el *ooxml.Element, b *strings.Builder, depth int) bool {
+	if depth > ooxml.MaxDepth {
+		return false
+	}
+	for _, k := range el.Children {
+		if b.Len() > maxMoveText {
+			return true
+		}
+		switch {
+		case k.Is(w, "t"), k.Is(w, "delText"):
+			b.WriteString(k.Text)
+		case k.Is(w, "tab"):
+			b.WriteByte('\t')
+		case k.Is(w, "p"):
+			return false
+		default:
+			if !revisionText(k, b, depth+1) {
+				return false
+			}
+		}
+	}
+	return true
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 )
 
 func TestRevisions_JoinedParagraphs(t *testing.T) {
@@ -125,5 +126,99 @@ func TestRevisions_Marks(t *testing.T) {
 	}
 	if st := runWith(t, b.root, "plain").Style; st.TextDecoration != 0 {
 		t.Errorf("plain run decorated: %v", st.TextDecoration)
+	}
+}
+
+// TestRevisions_MarkKinds draws a move doubly in green, explicit or found
+// by its text, and an attribute change bold in its author's colour.
+func TestRevisions_MarkKinds(t *testing.T) {
+	t.Parallel()
+	r := func(text string) string { return `<w:r><w:t xml:space="preserve">` + text + `</w:t></w:r>` }
+	body := `<w:p>` + r("plain ") +
+		`<w:moveFrom w:id="1" w:author="Ada"><w:r><w:delText>gone away</w:delText></w:r></w:moveFrom>` +
+		`<w:moveTo w:id="2" w:author="Ada">` + r("came back") + `</w:moveTo>` +
+		`<w:del w:id="3" w:author="Ada"><w:r><w:delText>paired words</w:delText></w:r></w:del>` +
+		`<w:ins w:id="4" w:author="Ada">` + r(" paired words ") + `</w:ins>` +
+		`<w:del w:id="5" w:author="Grace"><w:r><w:delText>lonely words</w:delText></w:r></w:del>` +
+		`<w:ins w:id="6" w:author="Ada">` + r("lonely words") + `</w:ins>` +
+		`<w:r><w:rPr><w:i/><w:rPrChange w:id="7" w:author="Grace"><w:rPr/></w:rPrChange></w:rPr><w:t>restyled</w:t></w:r></w:p>` +
+		`<w:p><w:pPr><w:jc w:val="center"/><w:pPrChange w:id="8" w:author="Ada"><w:pPr/></w:pPrChange></w:pPr>` + r("centred") + `</w:p>`
+	b := buildWith(t, body, nil, office.Options{TrackedChanges: office.ChangesMarked})
+	green := office.RGB(office.MovedColor)
+	ada, grace := office.RGB(office.AuthorColor(0)), office.RGB(office.AuthorColor(1))
+	for _, tc := range []struct {
+		text   string
+		deco   css.TextDecoration
+		style  css.DecorationStyle
+		color  css.Color
+		weight int
+	}{
+		{"plain", 0, css.DecorationSolid, css.Color{A: 1}, 400},
+		{"gone away", css.LineThrough, css.DecorationDouble, green, 400},
+		{"came back", css.Underline, css.DecorationDouble, green, 400},
+		{"paired words", css.LineThrough, css.DecorationDouble, green, 400},
+		{" paired words ", css.Underline, css.DecorationDouble, green, 400},
+		{"lonely words", css.LineThrough, css.DecorationSolid, grace, 400},
+		{"restyled", 0, css.DecorationSolid, grace, 700},
+		{"centred", 0, css.DecorationSolid, ada, 700},
+	} {
+		st := runWith(t, b.root, tc.text).Style
+		if st.TextDecoration != tc.deco || tc.deco != 0 && st.TextDecorationStyle != tc.style || st.Color != tc.color || st.FontWeight != tc.weight {
+			t.Errorf("%q: decoration %v (style %v), colour %v, weight %d; want %v (%v) in %v, %d",
+				tc.text, st.TextDecoration, st.TextDecorationStyle, st.Color, st.FontWeight, tc.deco, tc.style, tc.color, tc.weight)
+		}
+	}
+	if st := runWith(t, b.root, "restyled").Style; st.FontStyle != css.FontItalic {
+		t.Errorf("restyled: the new italic is lost")
+	}
+}
+
+// TestRevisions_Bars marks for a change bar the runs a revision marked
+// and an empty node at the end of a paragraph whose mark is inserted and
+// at the start of the next one, in the marked view only.
+func TestRevisions_Bars(t *testing.T) {
+	t.Parallel()
+	r := func(text string) string { return `<w:r><w:t xml:space="preserve">` + text + `</w:t></w:r>` }
+	body := `<w:p>` + r("plain ") + `<w:ins w:id="1" w:author="Ada">` + r("added") + `</w:ins></w:p>` +
+		`<w:p><w:pPr><w:rPr><w:ins w:id="2" w:author="Ada"/></w:rPr></w:pPr>` + r("split") + `</w:p>` +
+		`<w:p>` + r("after") + `</w:p><w:p>` + r("last") + `</w:p>`
+	bars := func(opts office.Options) string {
+		var s []string
+		for _, n := range find(buildWith(t, body, nil, opts).root, func(x *layout.Node) bool { return x.ChangeBar }) {
+			s = append(s, "["+textOf(n)+"]")
+		}
+		return strings.Join(s, "")
+	}
+	if got, want := bars(office.Options{TrackedChanges: office.ChangesMarked}), "[added][][]"; got != want {
+		t.Errorf("marked for a bar %s, want %s", got, want)
+	}
+	for _, v := range []office.TrackedChanges{office.ChangesAccepted, office.ChangesRejected} {
+		if got := bars(office.Options{TrackedChanges: v}); got != "" {
+			t.Errorf("view %d marks %s for a bar", v, got)
+		}
+	}
+}
+
+// TestRevisions_RowGround shades the cells of an inserted row and of a
+// deleted one in the marked view, over their own shading.
+func TestRevisions_RowGround(t *testing.T) {
+	t.Parallel()
+	tc := func(s string) string {
+		return `<w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="FFFF00"/></w:tcPr><w:p><w:r><w:t>` + s + `</w:t></w:r></w:p></w:tc>`
+	}
+	body := `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>` +
+		`<w:tr>` + tc("kept") + `</w:tr>` +
+		`<w:tr><w:trPr><w:ins w:id="1" w:author="Ada"/></w:trPr>` + tc("ins") + `</w:tr>` +
+		`<w:tr><w:trPr><w:del w:id="2" w:author="Ada"/></w:trPr>` + tc("del") + `</w:tr></w:tbl><w:p/>`
+	b := buildWith(t, body, nil, office.Options{TrackedChanges: office.ChangesMarked})
+	want := []css.Color{{R: 1, G: 1, A: 1}, office.RGB(office.RowInsertedFill), office.RGB(office.RowDeletedFill)}
+	cells := role(b.root, "TD")
+	if len(cells) != len(want) {
+		t.Fatalf("%d cells, want %d", len(cells), len(want))
+	}
+	for i, c := range cells {
+		if c.Style.BackgroundColor != want[i] {
+			t.Errorf("cell %q: ground %v, want %v", textOf(c), c.Style.BackgroundColor, want[i])
+		}
 	}
 }

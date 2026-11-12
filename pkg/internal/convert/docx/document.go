@@ -140,7 +140,7 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 		ctx: ctx, pkg: pkg, main: main, fonts: fonts, opts: opts,
 		warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, lineFactors: map[string][3]float64{}, vmlTypes: map[string]int{},
 		settings:  settings{defaultTab: 36},
-		revisions: &revisions{view: opts.TrackedChanges, authors: map[string]int{}, marked: map[*ooxml.Element]bool{}, markEnd: map[*ooxml.Element]bool{}, markStart: map[*ooxml.Element]bool{}},
+		revisions: &revisions{view: opts.TrackedChanges, authors: map[string]int{}, marked: map[*ooxml.Element]bool{}, markEnd: map[*ooxml.Element]bool{}, markStart: map[*ooxml.Element]bool{}, moved: map[*ooxml.Element]bool{}},
 	}
 	if d.root, err = d.part(main); err != nil {
 		return nil, fmt.Errorf("reading the DOCX main part: %w", err)

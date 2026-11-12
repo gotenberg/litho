@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -660,6 +661,7 @@ func rowCovered(row *odf.Element, of func(id string) bool) bool {
 func (c *changes) marks() map[string]changeMark {
 	out := map[string]changeMark{}
 	authors := map[string]int{}
+	moved := c.moves()
 	for _, m := range c.order {
 		id := m.A(odf.NSText, "change-id")
 		ch := c.regions[id]
@@ -675,6 +677,12 @@ func (c *changes) marks() map[string]changeMark {
 		case changeFormat:
 			kind = office.MarkAttribute
 		case changeInsertion:
+		}
+		if moved[id] {
+			kind = office.MarkMoveTo
+			if ch.kind == changeDeletion {
+				kind = office.MarkMoveFrom
+			}
 		}
 		out[id] = changeMark{color: office.RGB(office.MarkColor(kind, n)), kind: kind}
 	}
@@ -752,4 +760,141 @@ func (b *builder) rowFill(row *odf.Element) (css.Color, bool) {
 	case office.MarkAttribute, office.MarkMoveTo, office.MarkMoveFrom:
 	}
 	return css.Color{}, false
+}
+
+// maxMoveText bounds the characters of a change's text the marked view
+// compares to find moved text: 4,096. Anti-DoS guard, not spec-mandated:
+// the texts are copied to be compared, and a moved sentence or paragraph
+// is far shorter; a longer change is drawn as an insertion or a deletion.
+const maxMoveText = 4096
+
+// moves returns the ids of the deletions and insertions the marked view
+// draws as moved text: a deletion of one paragraph's text and an
+// insertion inside one paragraph whose texts pair ([office.MoveKey]).
+func (c *changes) moves() map[string]bool {
+	texts := map[string]*strings.Builder{}
+	var open []string
+	broken := map[string]bool{}
+	var walk func(el *odf.Element, depth int)
+	walk = func(el *odf.Element, depth int) {
+		if depth > odf.MaxDepth || el.Is(odf.NSText, "tracked-changes") {
+			return
+		}
+		if isPara(el) {
+			// An insertion crossing a paragraph break pairs with nothing.
+			for _, id := range open {
+				broken[id] = true
+			}
+		}
+		for _, k := range el.Children {
+			switch {
+			case k.IsText():
+				for _, id := range open {
+					if b := texts[id]; b.Len() <= maxMoveText {
+						b.WriteString(k.Text)
+					}
+				}
+			case k.Is(odf.NSText, "change-start"):
+				id := k.A(odf.NSText, "change-id")
+				if r := c.regions[id]; r != nil && r.kind == changeInsertion && texts[id] == nil {
+					texts[id] = &strings.Builder{}
+					open = append(open, id)
+				}
+			case k.Is(odf.NSText, "change-end"):
+				id := k.A(odf.NSText, "change-id")
+				open = slices.DeleteFunc(open, func(s string) bool { return s == id })
+			case k.Is(odf.NSText, "s"):
+				for _, id := range open {
+					if b := texts[id]; b.Len() <= maxMoveText {
+						b.WriteString(strings.Repeat(" ", spaces(k)))
+					}
+				}
+			default:
+				walk(k, depth+1)
+			}
+		}
+		if isPara(el) {
+			for _, id := range open {
+				broken[id] = true
+			}
+		}
+	}
+	walk(c.body, 0)
+	type pair struct{ del, ins []string }
+	keys := map[string]*pair{}
+	add := func(id, author, text string, del bool) {
+		if len(text) > maxMoveText {
+			return
+		}
+		k, ok := office.MoveKey(author, text)
+		if !ok {
+			return
+		}
+		p := keys[k]
+		if p == nil {
+			p = &pair{}
+			keys[k] = p
+		}
+		if del {
+			p.del = append(p.del, id)
+		} else {
+			p.ins = append(p.ins, id)
+		}
+	}
+	for id, b := range texts {
+		if !broken[id] {
+			add(id, c.regions[id].author, b.String(), false)
+		}
+	}
+	for id, r := range c.regions {
+		if r.kind == changeDeletion && len(r.content) == 1 && isPara(r.content[0]) {
+			add(id, r.author, flatText(r.content[0], 0), true)
+		}
+	}
+	out := map[string]bool{}
+	for _, p := range keys {
+		if len(p.del) > 0 && len(p.ins) > 0 {
+			for _, id := range slices.Concat(p.del, p.ins) {
+				out[id] = true
+			}
+		}
+	}
+	return out
+}
+
+// flatText returns the characters of el, a text:s standing for its
+// spaces, at most a few past [maxMoveText].
+func flatText(el *odf.Element, depth int) string {
+	var b strings.Builder
+	var walk func(el *odf.Element, depth int)
+	walk = func(el *odf.Element, depth int) {
+		if depth > odf.MaxDepth {
+			return
+		}
+		for _, k := range el.Children {
+			if b.Len() > maxMoveText {
+				return
+			}
+			switch {
+			case k.IsText():
+				b.WriteString(k.Text)
+			case k.Is(odf.NSText, "s"):
+				b.WriteString(strings.Repeat(" ", spaces(k)))
+			default:
+				walk(k, depth+1)
+			}
+		}
+	}
+	walk(el, depth)
+	return b.String()
+}
+
+// spaces returns the spaces a text:s stands for (ODF 1.3, Part 3, 6.1.3):
+// its text:c, 1 when absent, at most [maxMoveText].
+func spaces(el *odf.Element) int {
+	n, err := strconv.Atoi(el.A(odf.NSText, "c"))
+	if err != nil || n < 1 {
+		return 1
+	}
+	return min(n, maxMoveText)
 }

@@ -2,6 +2,8 @@ package office
 
 import (
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
@@ -96,4 +98,31 @@ func RGB(c uint32) css.Color {
 // Hex returns c, 0xRRGGBB, as six upper-case hexadecimal digits.
 func Hex(c uint32) string {
 	return fmt.Sprintf("%06X", c&0xFFFFFF)
+}
+
+// minMoveRunes is the fewest characters, white space trimmed, the text of
+// a deletion and an insertion share for the marked view to draw them as a
+// move ([MoveKey]).
+const minMoveRunes = 6
+
+// MoveKey returns the key under which the marked view pairs a deletion of
+// text by author with an insertion of the same key: a deletion and an
+// insertion of equal keys are drawn as the origin and the destination of
+// moved text ([MarkMoveFrom], [MarkMoveTo]). ok is false for text too
+// short to pair: fewer than [minMoveRunes] characters once trimmed, or no
+// inner space.
+//
+// # Corpus evidence
+//
+//   - probe, odt: LibreOffice 26.8 draws as moved a deletion and an
+//     insertion of the same author whose texts are equal once trimmed
+//     ("abc de", "  Padded words  "), whatever their dates; not one word
+//     of thirteen letters, not "ab cd", not two authors, not two texts
+//     differing in case.
+func MoveKey(author, text string) (string, bool) {
+	t := strings.TrimSpace(text)
+	if utf8.RuneCountInString(t) < minMoveRunes || !strings.ContainsAny(t, " \t") {
+		return "", false
+	}
+	return author + "\x00" + t, true
 }
