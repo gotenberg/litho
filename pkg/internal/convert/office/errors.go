@@ -19,6 +19,4 @@ var (
 	// does not give, or one encrypted with a scheme the converter does not
 	// read.
 	ErrEncrypted = errors.New("office: encrypted document")
-	// ErrNotImplemented reports a converter that is not written yet.
-	ErrNotImplemented = errors.New("office: converter not implemented")
 )
