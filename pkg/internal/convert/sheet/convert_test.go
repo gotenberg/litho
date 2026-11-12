@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -98,5 +100,33 @@ func TestConvert_BlankBookFails(t *testing.T) {
 	_, err := Convert(ctx, doc, pinnedFonts(t), office.Options{Sink: cancelSink{cancel}})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+}
+
+// TestConvert_BlankBookPaper prints the page of a book without a printed
+// cell on the default paper, its sheet's header where the sheet's own
+// paper puts it, and keeps the sheet's paper under Excel's rules.
+func TestConvert_BlankBookPaper(t *testing.T) {
+	for _, excel := range []bool{false, true} {
+		sh := &Sheet{Name: "Empty", Page: PageSetup{Width: 612, Height: 792, Scale: 100, HeaderTop: 20}}
+		sh.Page.Margin[css.Top] = 50
+		sh.HeaderFooter.Odd.Header[0] = []Span{{Text: "H"}}
+		doc := newDoc(sh)
+		doc.ExcelRules = excel
+		out := convert(t, doc, office.Options{})
+		if len(out.Pages) != 1 {
+			t.Fatalf("excel %v: %d pages, want 1", excel, len(out.Pages))
+		}
+		pg := out.Pages[0]
+		w, h := FallbackWidth, FallbackHeight
+		if excel {
+			w, h = 612, 792
+		}
+		if math.Abs(pg.Width-w) > 1e-9 || math.Abs(pg.Height-h) > 1e-9 {
+			t.Errorf("excel %v: page %vx%v, want %vx%v", excel, pg.Width, pg.Height, w, h)
+		}
+		if y := find(t, pg, "H").y; math.Abs(h-y-30) > 3 {
+			t.Errorf("excel %v: header baseline %.2f below the top, want about 30", excel, h-y)
+		}
 	}
 }

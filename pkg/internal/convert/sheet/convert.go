@@ -222,7 +222,8 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	if len(pages) == 0 {
 		// A book that prints no cell prints the first page of its first
 		// sheet, the cells its styles paint, with the sheet's header and
-		// footer and its outline entry, as LibreOffice does.
+		// footer and its outline entry, as LibreOffice does (see
+		// blankBookPaper).
 		w, h := b.opts.Paper(b.opts.DefaultPage(FallbackWidth, FallbackHeight))
 		pg := &typeset.Page{Width: w, Height: h}
 		if len(plans) > 0 {
@@ -240,6 +241,9 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 				return nil, err
 			}
 			pg = r
+			if !doc.ExcelRules {
+				blankBookPaper(pg, w, h)
+			}
 			tbl := tableOf(st)
 			if tbl != nil {
 				out.Structure.Kids = append(out.Structure.Kids, st.Kids...)
@@ -265,6 +269,24 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	}
 	out.Warnings = b.warnings
 	return out, nil
+}
+
+// blankBookPaper sets the size of the page pg a book that prints no cell
+// prints to w by h, the conversion's default paper, its content left where
+// the sheet's own paper put it from the top left corner: Calc lays that
+// page out on the sheet's page style and prints it on the default paper.
+// Excel prints no page for such a book, so a workbook read from XLSX
+// keeps its sheet's paper.
+//
+// # Corpus evidence
+//
+//   - libreoffice/ods: sc/tdf121716_EvenHeaderFooter.ods, two sheets
+//     without a cell, the first on a Letter page style, prints one A4
+//     page with the Letter page's header and footer.
+//   - probe, ods: the same book with a 15 by 20 cm page style prints one
+//     A4 page, its footer 2 cm above the bottom of the 20 cm page.
+func blankBookPaper(pg *typeset.Page, w, h float64) {
+	pg.Width, pg.Height = w, h
 }
 
 // handOver gives the page pg, laid out, to the sink of the options, and
