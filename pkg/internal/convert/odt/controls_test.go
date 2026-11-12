@@ -90,16 +90,37 @@ func TestConvertFormControlsAsFields(t *testing.T) {
 	}
 }
 
-// TestConvertFormControlsOff keeps the controls the empty boxes they are
-// without the option, with no field.
+// TestConvertFormControlsOff prints what each control shows without the
+// option, as LibreOffice prints it without its form fields, and writes no
+// field; with the option, the page and its fields draw the same runs in
+// the same places.
 func TestConvertFormControlsOff(t *testing.T) {
 	t.Parallel()
-	d := convertDoc(t, controlsDoc(t), office.Options{})
-	if n := len(d.Pages[0].Fields); n != 0 {
+	off := convertDoc(t, controlsDoc(t), office.Options{})
+	if n := len(off.Pages[0].Fields); n != 0 {
 		t.Errorf("%d fields without the option", n)
 	}
-	if len(runs(d.Pages[0])) != 0 {
-		t.Error("a control draws text without the option")
+	printed := map[string]run{}
+	for _, r := range runs(off.Pages[0]) {
+		printed[r.text] = r
+	}
+	for _, s := range []string{"Ada", "OneTwo", "Banana", "France", "Rome", "03/15/24", "Go"} {
+		if _, ok := printed[s]; !ok {
+			t.Errorf("%q is not printed: %v", s, printed)
+		}
+	}
+	if r := printed["France"]; r.size != dropFontSize {
+		t.Errorf("the drop-down list box prints at %v points", r.size)
+	}
+	on := convertDoc(t, controlsDoc(t), office.Options{FormFields: true})
+	pg := &compose.Page{Content: on.Pages[0].Content}
+	for _, f := range on.Pages[0].Fields {
+		pg.Content = append(pg.Content, f.Appearance...)
+	}
+	for _, r := range runs(pg) {
+		if p, ok := printed[r.text]; !ok || !near(p.x, r.x, 0.01) || !near(p.y, r.y, 0.01) || p.size != r.size {
+			t.Errorf("with the option, %q at %+v, without it at %+v", r.text, r, p)
+		}
 	}
 }
 

@@ -81,4 +81,23 @@ func TestConvertContentControlsOff(t *testing.T) {
 	if text := pageText(d.Pages[0]); !strings.Contains(text, "ACME") || !strings.Contains(text, "Jane") {
 		t.Errorf("page text = %q", text)
 	}
+	// The legacy check box prints as its square and diagonals.
+	var box *compose.Path
+	var walk func([]compose.Fragment)
+	walk = func(frags []compose.Fragment) {
+		for _, f := range frags {
+			switch v := f.(type) {
+			case *compose.Path:
+				if len(v.Ops) == 9 {
+					box = v
+				}
+			case *compose.Group:
+				walk(v.Content)
+			}
+		}
+	}
+	walk(d.Pages[0].Content)
+	if box == nil || box.Stroke == nil || box.Stroke.Width != 0.1 {
+		t.Errorf("the checked legacy check box draws %+v", box)
+	}
 }

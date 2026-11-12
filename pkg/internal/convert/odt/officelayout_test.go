@@ -214,9 +214,9 @@ func TestConvert_PinnedFrames(t *testing.T) {
 }
 
 // TestConvert_FormControls checks the frames Writer draws around form
-// controls whatever their fo:border: a thin black line around a text
-// field, a point-wide one around a check box (the pinned image prints
-// form.odt so).
+// controls whatever their fo:border: a 0.2 point black line around a text
+// field, none around a check box, whose mark draws its own square (see
+// controlFontSize and markScale).
 func TestConvert_FormControls(t *testing.T) {
 	auto := `<style:style style:name="gr1" style:family="graphic"><style:graphic-properties fo:border="solid"/></style:style>` +
 		`<style:style style:name="gr2" style:family="graphic"><style:graphic-properties fo:border="groove"/></style:style>`
@@ -229,13 +229,13 @@ func TestConvert_FormControls(t *testing.T) {
 	walkNodes(root, func(n *layout.Node) {
 		if n.Role == "Form" {
 			widths = append(widths, n.Style.Border[css.Top].Width)
-			if n.Style.Border[css.Top].Color != (css.Color{A: 1}) || n.Style.Border[css.Top].Style != css.Solid {
+			if n.Style.Border[css.Top].Width > 0 && (n.Style.Border[css.Top].Color != (css.Color{A: 1}) || n.Style.Border[css.Top].Style != css.Solid) {
 				t.Errorf("border = %+v", n.Style.Border[css.Top])
 			}
 		}
 	})
-	if len(widths) != 2 || widths[0] != 0.5 || widths[1] != 1 {
-		t.Errorf("control border widths = %v, want [0.5 1]", widths)
+	if len(widths) != 2 || widths[0] != 0.2 || widths[1] != 0 {
+		t.Errorf("control border widths = %v, want [0.2 0]", widths)
 	}
 }
 

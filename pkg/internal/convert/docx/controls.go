@@ -313,56 +313,96 @@ func legacyField(instr string, ff *ooxml.Element) (compose.Field, bool) {
 	return f, true
 }
 
-// legacyResult starts the result of the legacy form field fl when it
-// becomes a field: a text input or a drop-down collects its result as the
-// content of a control, which [document.endLegacy] closes; a check box,
-// which has no result, adds a box of its own size (17.16.7 size, else the
-// text's) that shows a cross when checked. It reports whether the field
-// is a form field.
+// legacyResult starts the result of the legacy form field fl. A check
+// box, which has no result, prints as a box whatever the options say, as
+// LibreOffice prints one (see [legacyBox]), and becomes a field when the
+// conversion writes them; a text input or a drop-down that becomes a field
+// collects its result as the content of a control, which
+// [document.endLegacy] closes. It reports whether it handled the result.
 func (d *document) legacyResult(fl *field, st *css.Style, sink *inlineSink) bool {
-	if fl.ff == nil || !d.fieldsOn() {
+	if fl.ff == nil {
 		return false
 	}
 	f, ok := legacyField(fl.instr.String(), fl.ff)
 	if !ok {
 		return false
 	}
+	on := d.fieldsOn()
 	ctl := &formfield.Control{ID: formfield.NodeID(len(d.form.controls)), Field: f}
 	if f.Kind != compose.FieldCheckBox {
-		f.Value = ""
+		if !on {
+			return false
+		}
 		fl.control = ctl
 		d.form.open++
 		sink.openLink("")
 		return true
 	}
-	size := st.FontSize
-	if v, err := strconv.Atoi(attrOr(fl.ff.Child(w, "checkBox").Child(w, "size"), "val")); err == nil && v > 0 && v <= 3276 {
-		size = float64(v) / 2
+	n := legacyBox(st, f.Checked)
+	if on {
+		ctl.Box = true
+		ctl.Other = func(_ []compose.Fragment, r compose.Rect, _ *compose.Measurer) []compose.Fragment {
+			return boxMark(r, !f.Checked)
+		}
+		n.ID = ctl.ID
+		d.form.controls = append(d.form.controls, ctl)
 	}
+	sink.add(n)
+	return true
+}
+
+// legacyBox returns the box a legacy check box (17.16.5.18 FORMCHECKBOX)
+// prints in the run style st: a square as wide as the text's size, drawn
+// with a hairline, its bottom 0.155 of the size below the baseline, and
+// both its diagonals when checked. Its size (17.16.7) is ignored, as
+// LibreOffice ignores it.
+//
+// # Corpus evidence
+//
+//   - litho/docx form-fields-legacy, converted by LibreOffice on
+//     gotenberg/gotenberg:9.4.1 with exportFormFields false: each check
+//     box in 11 point text prints as a 10.95 point square of 0.1 point
+//     lines, its bottom 1.7 points below the baseline, the checked ones
+//     with both diagonals; the 14 point one (w:size 28) prints the same.
+func legacyBox(st *css.Style, checked bool) *layout.Node {
+	size := st.FontSize
 	box := *st
 	box.Display = css.InlineBlock
 	box.BoxSizing = css.BorderBox
 	box.Width, box.Height = css.Pts(size), css.Pts(size)
-	bd := css.Border{Width: 0.5, Style: css.Solid, Color: css.Color{A: 1}}
-	box.Border = [4]css.Border{bd, bd, bd, bd}
-	cross := func(_ context.Context, r compose.Rect) []compose.Fragment { return crossMark(r) }
-	var kid *layout.Node
-	if f.Checked {
-		ks := *st
-		ks.Display = css.Block
-		ks.Width, ks.Height = css.Pts(size-1), css.Pts(size-1)
-		kid = &layout.Node{Kind: layout.Replaced, Style: &ks, Picture: &layout.Picture{Width: size - 1, Height: size - 1, Vector: cross}}
-	} else {
-		kid = &layout.Node{Kind: layout.Text, Style: st, Text: " "}
-		ctl.Other = func(_ []compose.Fragment, r compose.Rect, _ *compose.Measurer) []compose.Fragment {
-			return crossMark(r)
-		}
+	box.Border = [4]css.Border{}
+	box.Margin[css.Bottom] = css.Pts(-0.155 * size)
+	ks := *st
+	ks.Display = css.Block
+	ks.Width, ks.Height = css.Pts(size), css.Pts(size)
+	kid := &layout.Node{Kind: layout.Replaced, Style: &ks, Picture: &layout.Picture{
+		Width: size, Height: size,
+		Vector: func(_ context.Context, r compose.Rect) []compose.Fragment { return boxMark(r, checked) },
+	}}
+	return &layout.Node{Kind: layout.Element, Style: &box, Role: "Form", Children: []*layout.Node{kid}}
+}
+
+// boxMark draws a legacy check box in r: its square, and both diagonals
+// when checked.
+func boxMark(r compose.Rect, checked bool) []compose.Fragment {
+	const line = 0.1
+	stroke := &compose.Stroke{Color: compose.Black, Width: line}
+	ops := []compose.PathOp{
+		{Kind: compose.MoveTo, P: [3]compose.Point{{X: r.X, Y: r.Y}}},
+		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y}}},
+		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
+		{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X, Y: r.Y + r.Height}}},
+		{Kind: compose.ClosePath},
 	}
-	ctl.Box = true
-	ctl.Field = f
-	sink.add(&layout.Node{Kind: layout.Element, Style: &box, Role: "Form", ID: ctl.ID, Children: []*layout.Node{kid}})
-	d.form.controls = append(d.form.controls, ctl)
-	return true
+	if checked {
+		ops = append(ops,
+			compose.PathOp{Kind: compose.MoveTo, P: [3]compose.Point{{X: r.X, Y: r.Y}}},
+			compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y + r.Height}}},
+			compose.PathOp{Kind: compose.MoveTo, P: [3]compose.Point{{X: r.X + r.Width, Y: r.Y}}},
+			compose.PathOp{Kind: compose.LineTo, P: [3]compose.Point{{X: r.X, Y: r.Y + r.Height}}},
+		)
+	}
+	return []compose.Fragment{&compose.Path{Ops: ops, Stroke: stroke}}
 }
 
 // endLegacy closes the control the result of the legacy form field fl
@@ -379,19 +419,6 @@ func (d *document) endLegacy(fl *field, sink *inlineSink) {
 		ctl.Field.Value = strings.TrimRight(b.String(), " ")
 	}
 	d.closeControl(sink, ctl)
-}
-
-// crossMark returns a cross in the rectangle r, a check box's on state.
-func crossMark(r compose.Rect) []compose.Fragment {
-	inset := min(r.Width, r.Height) * 0.2
-	x0, y0 := r.X+inset, r.Y+inset
-	x1, y1 := r.X+r.Width-inset, r.Y+r.Height-inset
-	return []compose.Fragment{&compose.Path{Ops: []compose.PathOp{
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0, Y: y0}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x1, Y: y1}}},
-		{Kind: compose.MoveTo, P: [3]compose.Point{{X: x1, Y: y0}}},
-		{Kind: compose.LineTo, P: [3]compose.Point{{X: x0, Y: y1}}},
-	}, Stroke: &compose.Stroke{Color: compose.Black, Width: max(0.5, min(r.Width, r.Height)*0.08)}}}
 }
 
 // attachControls makes the controls of d into the form fields of the

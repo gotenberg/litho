@@ -13,28 +13,64 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
-// controlFontSize is the size of the text a form control shows when the
-// document writes its fields: the size of the default appearance
-// LibreOffice gives every text and list field it exports, in points.
+// The faces, sizes and places LibreOffice prints a form control's content
+// in, as it prints a document without its form fields (exportFormFields
+// false) and as the appearance of each field litho writes draws it: a
+// text, combo box or list box line in Liberation Sans at 8 points, a
+// drop-down list box's line in DejaVu Sans at 12 points, each [controlPad]
+// from the frame's left edge, one line centred on the frame's height, a
+// list box's items [listPitch] apart from its top.
 //
 // # Corpus evidence
 //
+//   - probe, odt: on gotenberg/gotenberg:9.4.1 with exportFormFields
+//     false, a 141.7 by 17.1 point text field prints its value in
+//     Liberation Sans 8 points 2.1 points right of its frame, its baseline
+//     5.8 points above the frame's bottom, the face's ascent and descent
+//     centred; a text area prints its value on one line, its line breaks
+//     left out, centred alike; a combo box, a date and a formatted field
+//     print alike; a drop-down list box prints its selected item in DejaVu
+//     Sans 12 points, 4.4 points above the bottom of a 17.1 point frame; a
+//     list box prints its items in Liberation Sans 8 points, the first
+//     baseline 7.3 points below its top and the next 9.3 points apart,
+//     each selected item white on a black bar; the frames are 0.2 point
+//     black lines.
 //   - libreoffice/odt odfimport__dateFormFormats.odt: twelve date fields,
-//     each /DA (0 0 0 rg /He 8 Tf).
-//   - probe, odt: on gotenberg/gotenberg:9.4.1, a text field, a text area,
-//     a list box, a drop-down list box, a combo box and a date field of a
-//     document that sets no font on its controls export with /DA at 8
-//     points, Helvetica for a text field and DejaVu Sans for a list.
-const controlFontSize = 8
+//     each /DA (0 0 0 rg /He 8 Tf) when LibreOffice writes its fields.
+const (
+	controlFontSize = 8
+	dropFontSize    = 12
+	controlPad      = 2.1
+	listPitch       = 9.3
+	controlFrame    = 0.2
+)
 
-// controlFamily is the face a form control's text is set in: Liberation
-// Sans, Helvetica's metric clone, Helvetica being the face of the default
-// appearance LibreOffice writes for a text field (see [controlFontSize]).
-const controlFamily = "Liberation Sans"
+// The faces of [controlFontSize] and [dropFontSize], and the ascent plus
+// descent of each, as fractions of the em (hhea of Liberation Sans 2.1.5:
+// 0.905 and 0.212; of DejaVu Sans 2.37: 0.928 and 0.236).
+const (
+	controlFamily = "Liberation Sans"
+	dropFamily    = "DejaVu Sans"
+	controlLine   = 1.117
+	dropLine      = 1.164
+)
 
-// controlPad is the room between a control's border and its text, in
-// points.
-const controlPad = 2
+// markScale is the side of the square, or the diameter of the circle, a
+// check box or a radio button prints at the top-left corner of its frame,
+// as a fraction of the frame's shorter side.
+//
+// # Corpus evidence
+//
+//   - probe, odt: on gotenberg/gotenberg:9.4.1 with exportFormFields
+//     false, a 0.4 cm (11.3 point) check box prints a black square of 8.5
+//     points with a 0.6 point border at its frame's top-left corner, a
+//     cross 1.5 points inside it when checked, 0.6 point thick; a radio
+//     button prints a ring of 8.4 points, 0.6 point thick, and a dot of 6
+//     points when selected; the control's form:label is drawn under an
+//     empty clip, so nothing of it shows. A push button prints a grey (#c0c0c0) box
+//     with its label centred. A control in a page header, and one whose
+//     form:printable is false, print nothing.
+const markScale = 0.75
 
 // controlElem returns the office:forms element a draw:control draws (ODF
 // 1.3, Part 3, 10.3.13 draw:control and 13.5), the element whose form:id
@@ -64,14 +100,85 @@ func (b *builder) controlElem(c *odf.Element) *odf.Element {
 	return nil
 }
 
-// fieldControl builds n, the box of the draw:control c of geometry g, as a
-// form field when the conversion writes fields (office.Options
-// FormFields): the box shows the control's value, and the control joins
-// b.controls, which [formfield.Attach] makes into fields once laid out.
-// A control in a header or a footer, a push button, a control that does
-// not print (form:printable false) and a kind ODF 1.3, Part 3, 13.5 lists
-// that holds no value stay the empty box n is. It reports whether it made
-// n a field.
+// formControl builds the box of the draw:control c of geometry g (ODF 1.3,
+// Part 3, 10.3.13): the frame, in its size, and what the control shows,
+// as LibreOffice prints it (see [controlFontSize] and [markScale]). A
+// control in a
+// header or a footer, or one that does not print (form:printable false),
+// keeps its room and prints nothing. When the conversion writes fields
+// (office.Options FormFields), a control of the kinds [controlField]
+// lists joins b.controls, which [formfield.Attach] makes into fields once
+// laid out, its box the node of the Role Form that holds what it shows.
+func (b *builder) formControl(c *odf.Element, g frameGeom) *layout.Node {
+	st := b.frameBox(g)
+	st.Display = css.InlineBlock
+	for i := range st.Padding {
+		st.Padding[i] = css.Pts(0)
+	}
+	st.Border = [4]css.Border{}
+	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Form"})
+	el := b.controlElem(c)
+	if el == nil {
+		b.warn("form-control", "a form control whose element the forms do not hold prints as its empty frame")
+		frame(st)
+		return n
+	}
+	if b.hf != nil || el.A(odf.NSForm, "printable") == "false" {
+		return n
+	}
+	f, ok := controlField(el, len(b.controls))
+	var other func([]compose.Fragment, compose.Rect, *compose.Measurer) []compose.Fragment
+	switch el.Name.Local {
+	case "text", "formatted-text", "date", "time", "number", "combobox":
+		frame(st)
+		n.Children = b.controlLine(controlText(el), g, controlFamily, controlFontSize, controlLine)
+	case "textarea":
+		frame(st)
+		n.Children = b.controlLine(strings.ReplaceAll(controlText(el), "\n", ""), g, controlFamily, controlFontSize, controlLine)
+	case "listbox":
+		frame(st)
+		if el.A(odf.NSForm, "dropdown") == "true" {
+			n.Children = b.controlLine(f.Value, g, dropFamily, dropFontSize, dropLine)
+			break
+		}
+		n.Children = b.listRows(el)
+	case "checkbox", "radio":
+		mark := markVector(f.Kind)
+		on, off := mark(true), mark(false)
+		if !f.Checked {
+			on, off = off, on
+		}
+		n.Children = []*layout.Node{b.node(&layout.Node{Kind: layout.Replaced, Style: markStyle(g), Picture: &layout.Picture{
+			Width: max(g.w, 1), Height: max(g.h, 1),
+			Vector: func(_ context.Context, r compose.Rect) []compose.Fragment { return on(r) },
+		}})}
+		other = func(_ []compose.Fragment, r compose.Rect, _ *compose.Measurer) []compose.Fragment { return off(r) }
+	case "button":
+		st.BackgroundColor = css.Color{R: 0.753, G: 0.753, B: 0.753, A: 1}
+		n.Children = b.controlLine(el.A(odf.NSForm, "label"), g, controlFamily, controlFontSize, controlLine)
+		n.Children[0].Style.TextAlign = css.AlignCenter
+	default:
+		frame(st)
+		b.warn("form-control", "a form control of a kind litho does not draw prints as its empty frame")
+	}
+	if ok && b.formFields {
+		ctl := &formfield.Control{ID: formfield.NodeID(len(b.controls)), Box: true, Field: f, Other: other}
+		n.ID = ctl.ID
+		b.controls = append(b.controls, ctl)
+	}
+	return n
+}
+
+// frame gives st the frame LibreOffice prints around a text or list
+// control: a black line of [controlFrame] points.
+func frame(st *css.Style) {
+	bd := css.Border{Width: controlFrame, Style: css.Solid, Color: css.Color{A: 1}}
+	st.Border = [4]css.Border{bd, bd, bd, bd}
+}
+
+// controlField returns the field the form control el becomes, the n-th
+// control made a field, false for a kind no field takes: a push button, a
+// hidden, image, grid, file, password or fixed-text control.
 //
 // # Corpus evidence
 //
@@ -88,14 +195,7 @@ func (b *builder) controlElem(c *odf.Element) *odf.Element {
 //     control in a page header is neither printed nor exported. The /TU
 //     of every field is its name, form:title set or not. The widget of a
 //     control sits about 2 points inside its frame.
-func (b *builder) fieldControl(c *odf.Element, g frameGeom, n *layout.Node) bool {
-	if !b.formFields || b.hf != nil {
-		return false
-	}
-	el := b.controlElem(c)
-	if el == nil || el.A(odf.NSForm, "printable") == "false" {
-		return false
-	}
+func controlField(el *odf.Element, n int) (compose.Field, bool) {
 	f := compose.Field{
 		Name:        el.A(odf.NSForm, "name"),
 		Description: el.A(odf.NSForm, "title"),
@@ -103,35 +203,29 @@ func (b *builder) fieldControl(c *odf.Element, g frameGeom, n *layout.Node) bool
 		ReadOnly:    el.A(odf.NSForm, "readonly") == "true" || el.A(odf.NSForm, "disabled") == "true",
 		Required:    el.A(odf.NSForm, "input-required") == "true",
 	}
-	ctl := &formfield.Control{ID: formfield.NodeID(len(b.controls)), Box: true}
-	var kids []*layout.Node
 	switch el.Name.Local {
 	case "text", "textarea", "formatted-text", "date", "time", "number":
 		f.Kind = compose.FieldText
 		f.Value = controlText(el)
 		f.Multiline = el.Name.Local == "textarea"
-		if v, err := strconv.Atoi(el.A(odf.NSForm, "max-length")); err == nil && v > 0 {
+		if v, err := strconv.Atoi(el.A(odf.NSForm, "max-length")); err == nil && v > 0 && v <= compose.MaxFieldText {
 			// form:max-length is a non-negative integer (ODF 1.3, Part 3,
 			// 19.243); a count past what a field holds is no limit.
-			if v <= compose.MaxFieldText {
-				f.MaxLen = v
-			}
+			f.MaxLen = v
 		}
-		kids = b.controlLines(f.Value, g, f.Multiline)
 	case "combobox":
 		f.Kind, f.Editable = compose.FieldCombo, true
 		f.Value = controlText(el)
 		for _, it := range el.All(odf.NSForm, "item") {
 			f.Options = append(f.Options, it.A(odf.NSForm, "label"))
 		}
-		kids = b.controlLines(f.Value, g, false)
 	case "listbox":
 		f.Kind = compose.FieldList
 		if el.A(odf.NSForm, "dropdown") == "true" {
 			f.Kind = compose.FieldCombo
+			f.FontSize = dropFontSize
 		}
 		f.MultiSelect = f.Kind == compose.FieldList && el.A(odf.NSForm, "multiple") == "true"
-		var shown []string
 		for i, o := range el.All(odf.NSForm, "option") {
 			label := o.A(odf.NSForm, "label")
 			f.Options = append(f.Options, label)
@@ -145,34 +239,15 @@ func (b *builder) fieldControl(c *odf.Element, g frameGeom, n *layout.Node) bool
 		if !f.MultiSelect {
 			f.Selected = nil
 		}
-		shown = []string{f.Value}
-		if f.Kind == compose.FieldList {
-			shown = f.Options
-		}
-		kids = b.controlLines(strings.Join(shown, "\n"), g, len(shown) > 1)
-	case "checkbox", "radio":
-		f.Kind = compose.FieldCheckBox
-		if el.Name.Local == "radio" {
-			f.Kind = compose.FieldRadio
-			f.OnState = radioState(el, len(b.controls))
-			f.Checked = selectedOption(el)
-		} else {
-			f.Checked = checkedBox(el)
-		}
-		mark := markVector(f.Kind)
-		if f.Checked {
-			kids = []*layout.Node{b.node(&layout.Node{Kind: layout.Replaced, Style: markStyle(g), Picture: &layout.Picture{Width: max(g.w, 1), Height: max(g.h, 1), Vector: func(_ context.Context, r compose.Rect) []compose.Fragment { return mark(r) }}})}
-		} else {
-			kids = b.controlLines("", g, false)
-			ctl.Other = func(_ []compose.Fragment, r compose.Rect, _ *compose.Measurer) []compose.Fragment { return mark(r) }
-		}
+	case "checkbox":
+		f.Kind, f.Checked = compose.FieldCheckBox, checkedBox(el)
+	case "radio":
+		f.Kind, f.Checked = compose.FieldRadio, selectedOption(el)
+		f.OnState = radioState(el, n)
 	default:
-		return false
+		return f, false
 	}
-	ctl.Field = f
-	n.ID, n.Children = ctl.ID, kids
-	b.controls = append(b.controls, ctl)
-	return true
+	return f, true
 }
 
 // controlText returns the value a text-like control shows: its
@@ -232,36 +307,65 @@ func radioState(el *odf.Element, n int) string {
 	return "Choice_" + strconv.Itoa(n+1)
 }
 
-// controlLines returns the text a control of geometry g shows, s set in
-// [controlFamily] at [controlFontSize], [controlPad] from the border, a
-// single line centred on the box's height unless multi. An empty s shows
-// a no-break space, which draws nothing and gives the control content of
-// its own, so the Form element of its node holds what the field takes.
-func (b *builder) controlLines(s string, g frameGeom, multi bool) []*layout.Node {
+// controlLine returns the text a control of geometry g shows on one
+// line: s set in family at size, [controlPad] from the frame's left edge,
+// the face's ascent and descent, line of the em, centred on the frame's
+// height. An empty s shows a no-break space, which draws nothing and gives
+// the control content of its own, so the Form element of its node holds
+// what a field takes.
+func (b *builder) controlLine(s string, g frameGeom, family string, size, line float64) []*layout.Node {
 	if s == "" {
-		s = " "
+		s = "\u00a0"
 	}
-	t := textState{size: controlFontSize, weight: 400, family: [3]string{controlFamily, controlFamily, controlFamily}}
+	t := textState{size: size, weight: 400, family: [3]string{family, family, family}}
 	st := baseStyle()
 	applyText(st, t, false)
 	st.Display = css.Block
+	st.WhiteSpace = css.Pre
+	st.LineHeight = css.Pts(size * line)
 	st.Padding[css.Left] = css.Pts(controlPad)
 	st.Padding[css.Right] = css.Pts(controlPad)
-	if multi {
-		st.Padding[css.Top] = css.Pts(controlPad)
-	} else {
-		// One line of the face is about 1.15 times the size (Liberation
-		// Sans: hhea ascent 0.905 and descent 0.212 of the em).
-		st.Padding[css.Top] = css.Pts(max(0, (g.h-controlFontSize*1.15)/2))
-		st.WhiteSpace = css.Pre
-	}
+	st.Padding[css.Top] = css.Pts(max(0, (g.h-size*line)/2))
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st})
 	n.Children = []*layout.Node{b.run(s, t)}
 	return []*layout.Node{n}
 }
 
-// markStyle returns the style of the mark a checked control of geometry g
-// shows: a block that fills the box.
+// listRows returns the items of the list box el, one a row of
+// [listPitch], each selected one white on black.
+func (b *builder) listRows(el *odf.Element) []*layout.Node {
+	opts := el.All(odf.NSForm, "option")
+	rows := make([]*layout.Node, 0, len(opts))
+	for _, o := range opts {
+		label := o.A(odf.NSForm, "label")
+		if label == "" {
+			label = "\u00a0"
+		}
+		t := textState{size: controlFontSize, weight: 400, family: [3]string{controlFamily, controlFamily, controlFamily}}
+		if selectedOption(o) {
+			t.color = &css.Color{R: 1, G: 1, B: 1, A: 1}
+		}
+		st := baseStyle()
+		applyText(st, t, false)
+		st.Display = css.Block
+		st.WhiteSpace = css.Pre
+		st.LineHeight = css.Pts(listPitch)
+		st.Padding[css.Left] = css.Pts(controlPad)
+		if selectedOption(o) {
+			st.BackgroundColor = css.Color{A: 1}
+		}
+		row := b.node(&layout.Node{Kind: layout.Element, Style: st})
+		row.Children = []*layout.Node{b.run(label, t)}
+		rows = append(rows, row)
+	}
+	if len(rows) == 0 {
+		return b.controlLine("", frameGeom{}, controlFamily, controlFontSize, controlLine)
+	}
+	return rows
+}
+
+// markStyle returns the style of the drawing of a check box or a radio
+// button of geometry g: a block that fills its frame.
 func markStyle(g frameGeom) *css.Style {
 	st := baseStyle()
 	st.Display = css.Block
@@ -269,23 +373,54 @@ func markStyle(g frameGeom) *css.Style {
 	return st
 }
 
-// markVector returns the drawing of the on state of a check box, a cross,
-// or of a radio button, a dot, in a rectangle.
-func markVector(kind compose.FieldKind) func(r compose.Rect) []compose.Fragment {
-	return func(r compose.Rect) []compose.Fragment {
-		inset := min(r.Width, r.Height) * 0.25
-		x0, y0 := r.X+inset, r.Y+inset
-		x1, y1 := r.X+r.Width-inset, r.Y+r.Height-inset
-		if kind == compose.FieldRadio {
-			return []compose.Fragment{&compose.Path{Ops: ellipse(x0, y0, x1, y1), Fill: &compose.Fill{Color: compose.Black}}}
+// markVector returns, for a check box or a radio button, the drawing of
+// its on state (on) or its off state in a rectangle, the control's frame:
+// a square with a cross, or a ring with a dot, of [markScale] of the
+// frame's shorter side at its top-left corner.
+func markVector(kind compose.FieldKind) func(on bool) func(r compose.Rect) []compose.Fragment {
+	const line = 0.6
+	return func(on bool) func(r compose.Rect) []compose.Fragment {
+		return func(r compose.Rect) []compose.Fragment {
+			s := min(r.Width, r.Height) * markScale
+			x0, y0 := r.X, r.Y
+			black, white := compose.Black, compose.Color{R: 1, G: 1, B: 1, A: 1}
+			if kind == compose.FieldRadio {
+				out := []compose.Fragment{
+					&compose.Path{Ops: ellipse(x0, y0, x0+s, y0+s), Fill: &compose.Fill{Color: black}},
+					&compose.Path{Ops: ellipse(x0+line, y0+line, x0+s-line, y0+s-line), Fill: &compose.Fill{Color: white}},
+				}
+				if on {
+					d := s * 0.15
+					out = append(out, &compose.Path{Ops: ellipse(x0+d, y0+d, x0+s-d, y0+s-d), Fill: &compose.Fill{Color: black}})
+				}
+				return out
+			}
+			out := []compose.Fragment{
+				&compose.Path{Ops: box(x0, y0, s, s), Fill: &compose.Fill{Color: black}},
+				&compose.Path{Ops: box(x0+line, y0+line, s-2*line, s-2*line), Fill: &compose.Fill{Color: white}},
+			}
+			if on {
+				in := 1.5
+				out = append(out, &compose.Path{Ops: []compose.PathOp{
+					{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0 + in, Y: y0 + in}}},
+					{Kind: compose.LineTo, P: [3]compose.Point{{X: x0 + s - in, Y: y0 + s - in}}},
+					{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0 + s - in, Y: y0 + in}}},
+					{Kind: compose.LineTo, P: [3]compose.Point{{X: x0 + in, Y: y0 + s - in}}},
+				}, Stroke: &compose.Stroke{Color: black, Width: line}})
+			}
+			return out
 		}
-		w := max(0.75, min(r.Width, r.Height)*0.1)
-		return []compose.Fragment{&compose.Path{Ops: []compose.PathOp{
-			{Kind: compose.MoveTo, P: [3]compose.Point{{X: x0, Y: y0}}},
-			{Kind: compose.LineTo, P: [3]compose.Point{{X: x1, Y: y1}}},
-			{Kind: compose.MoveTo, P: [3]compose.Point{{X: x1, Y: y0}}},
-			{Kind: compose.LineTo, P: [3]compose.Point{{X: x0, Y: y1}}},
-		}, Stroke: &compose.Stroke{Color: compose.Black, Width: w}}}
+	}
+}
+
+// box returns the path of the rectangle at (x, y) of size w by h.
+func box(x, y, w, h float64) []compose.PathOp {
+	return []compose.PathOp{
+		{Kind: compose.MoveTo, P: [3]compose.Point{{X: x, Y: y}}},
+		{Kind: compose.LineTo, P: [3]compose.Point{{X: x + w, Y: y}}},
+		{Kind: compose.LineTo, P: [3]compose.Point{{X: x + w, Y: y + h}}},
+		{Kind: compose.LineTo, P: [3]compose.Point{{X: x, Y: y + h}}},
+		{Kind: compose.ClosePath},
 	}
 }
 

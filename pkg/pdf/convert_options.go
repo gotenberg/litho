@@ -734,21 +734,25 @@ func WithTrackedChanges(view TrackedChanges) WordProcessingOption {
 // shows and a screen reader speaks, is the alias, the help text or the
 // form:title, else the name.
 //
-// The page looks as it does with the option off: what a control shows
-// moves from the page into its field's appearance, which every viewer
-// draws and prints, the control's frame staying on the page, so a viewer
-// that does not fill forms shows the same page. Two controls litho does
-// not print without the option print with it: an ODT control shows its
-// value in its field, in Liberation Sans at 8 points, and a legacy check
-// box prints as a box, crossed when checked.
+// With or without the option, every control prints what it shows, as
+// LibreOffice prints a document without its form fields: the text of a
+// content control or a legacy field, a legacy check box as a square,
+// crossed when checked; an ODT control's value in its frame, a check
+// box's square and cross, a radio button's ring and dot, a list box's
+// items with the selected ones white on black. With the option the page
+// looks the same: what a control shows moves from the page into its
+// field's appearance, which every viewer draws and prints, in the same
+// place, the frame and a list's highlight staying on the page, so a
+// viewer that does not fill forms shows the same page.
 //
 // A control a field does not take prints as it shows: a DOCX content
 // control around paragraphs or table rows, a picture, building block,
 // citation, equation or repeating section control, a control inside
-// another; an ODT push button, a hidden, image or grid control, one that
-// does not print; any control in a header or a footer, and one whose
-// content breaks across two pages, which [ConvertReport.Warnings]
-// reports.
+// another; an ODT push button, as a grey box with its label, a hidden,
+// image, grid, file or password control, as its empty frame; any control
+// in a header or a footer, and one whose content breaks across two
+// pages, which [ConvertReport.Warnings] reports. An ODT control in a
+// header or a footer, or one that does not print, prints nothing.
 //
 // Each field costs a widget annotation and an appearance stream, two for
 // a check box or a radio button, about a kilobyte. The appearances draw
@@ -766,8 +770,10 @@ func WithTrackedChanges(view TrackedChanges) WordProcessingOption {
 // Not supported: push buttons, signature fields, actions, scripts and
 // calculations (a legacy field's macros, a date field's format), a
 // field's border and background, which stay on the page, a list box's
-// highlighting of its selection, and export values: the items of a list
-// are written by the text they show.
+// highlight, which does not follow a selection a reader changes, an ODT
+// check box's or radio button's form:label, which LibreOffice draws under
+// an empty clip, and export values: the items of a list are written by
+// the text they show.
 func WithFormFields(fields bool) WordProcessingOption {
 	return wordProcessingOption(func(c *convertConfig) { c.formFields = fields })
 }

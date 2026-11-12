@@ -38,6 +38,10 @@ func gotenbergDocument(t *testing.T, name string) []byte {
 //   - gotenberg/odt: memo.odt, memo.fodt, form.odt and form.fodt print on one page
 //     with these lines (gotenberg/gotenberg:9.0.0, read with litho's text
 //     extraction, the header and footer included).
+//   - gotenberg/odt: form.fodt prints "Country: France" with
+//     exportFormFields false (gotenberg/gotenberg:9.4.1), the selected
+//     item of its drop-down list box, which a conversion without form
+//     fields prints too.
 func TestParity_GotenbergDocuments(t *testing.T) {
 	memo := []string{
 		"Northwind internal", "Purpose", "1",
@@ -45,7 +49,7 @@ func TestParity_GotenbergDocuments(t *testing.T) {
 		"Decisions", "Budget", "Budget approved for Q1.", "Hiring", "Two engineers will be hired.",
 		"R1C1R1C2R1C3", "R2C1R2C2R2C3", "R3C1R3C2R3C3", "MEMO-END-MARKER", "1FOOTNOTE-MARKER text.", "Page 1",
 	}
-	form := []string{"FORM-DOC-MARKER", "Full name:", "Agree:  I agree", "Country:", "Comments:"}
+	form := []string{"FORM-DOC-MARKER", "Full name:", "Agree:  I agree", "Country: France", "Comments:"}
 	for _, tc := range []struct {
 		name  string
 		pages int

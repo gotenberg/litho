@@ -543,35 +543,6 @@ func hasText(kids []*layout.Node) bool {
 	return false
 }
 
-// controlKind returns the local name of the form control a draw:control
-// draws (ODF 1.3, Part 3, 10.3.13 draw:control and 13.5): the
-// office:forms element whose form:id or xml:id is its draw:control; ""
-// when none is.
-func (b *builder) controlKind(c *odf.Element) string {
-	id := c.A(odf.NSDraw, "control")
-	if id == "" {
-		return ""
-	}
-	forms := odf.Section(b.pkg.Content, "body").Child(odf.NSOffice, "text").Child(odf.NSOffice, "forms")
-	stack := []*odf.Element{forms}
-	for steps := 0; len(stack) > 0 && steps < odf.MaxElements; steps++ {
-		cur := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		if cur == nil {
-			continue
-		}
-		if cur.Name.Space == odf.NSForm && (cur.A(odf.NSForm, "id") == id || cur.A(odf.NSXML, "id") == id) {
-			return cur.Name.Local
-		}
-		for _, k := range cur.Children {
-			if !k.IsText() {
-				stack = append(stack, k)
-			}
-		}
-	}
-	return ""
-}
-
 // floatCount returns the floating frames among kids.
 func (b *builder) floatCount(kids []*layout.Node) int {
 	n := 0
@@ -670,7 +641,7 @@ func frameMargins(p odf.Props) [4]float64 {
 
 // drawing builds the box of one drawing element (ODF 1.3, Part 3, 10):
 // a frame with its picture, text box or object replacement, a form
-// control as its bordered box, or a shape; nil for one it does not draw.
+// control as LibreOffice prints it, or a shape; nil for one it does not draw.
 func (b *builder) drawing(c *odf.Element, depth int) *layout.Node {
 	if depth > odf.MaxDepth {
 		return nil
@@ -680,25 +651,7 @@ func (b *builder) drawing(c *odf.Element, depth int) *layout.Node {
 	case c.Is(odf.NSDraw, "frame"):
 		return undescribed(b.frame(c, g, depth), g)
 	case c.Is(odf.NSDraw, "control"):
-		st := b.frameBox(g)
-		st.Display = css.InlineBlock
-		// A control draws its own frame whatever fo:border says: Writer
-		// prints a text field, a list box or a text area with a thin
-		// black border and a check box as a square of a point's border
-		// (measured on the pinned image: 0.5 pt and 1 pt).
-		bd := css.Border{Width: 0.5, Style: css.Solid, Color: css.Color{A: 1}}
-		if b.controlKind(c) == "checkbox" {
-			bd.Width = 1
-		}
-		st.Border = [4]css.Border{bd, bd, bd, bd}
-		for i := range st.Padding {
-			st.Padding[i] = css.Pts(0)
-		}
-		n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "Form"})
-		if !b.fieldControl(c, g, n) {
-			b.warn("form-control", "form controls are drawn as their empty boxes")
-		}
-		return n
+		return b.formControl(c, g)
 	case c.Is(odf.NSDraw, "g"):
 		st := baseStyle()
 		st.Display = css.InlineBlock
