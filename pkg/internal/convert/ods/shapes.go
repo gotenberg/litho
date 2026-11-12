@@ -723,11 +723,15 @@ func measureValue(pt float64) string {
 // spacedText writes the text of el to sb, a text:s as its text:c spaces
 // (ODF 1.3, Part 3, 6.1.3), a tab or line break as a space, and a
 // dimension line's value field (7.6.5 text:measure kind value) as value.
+// It stops once sb holds more than [maxFieldText] bytes.
 func spacedText(el *odf.Element, sb *strings.Builder, value string, depth int) {
-	if depth > maxTextDepth || sb.Len() > maxFieldText {
+	if depth > maxTextDepth {
 		return
 	}
 	for _, c := range el.Children {
+		if sb.Len() > maxFieldText {
+			return
+		}
 		switch {
 		case c.IsText():
 			sb.WriteString(c.Text)

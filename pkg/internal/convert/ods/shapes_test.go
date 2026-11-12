@@ -185,3 +185,17 @@ func TestRead_ShapeGroupDepth(t *testing.T) {
 		t.Errorf("no group-depth warning in %+v", w)
 	}
 }
+
+// TestSpacedText_Cap locks the bound on a shape's text: a paragraph of
+// many wide text:s stops one write past [maxFieldText].
+func TestSpacedText_Cap(t *testing.T) {
+	root, err := odf.ParseXML(context.Background(), []byte(`<text:p `+nsDecl+`>`+strings.Repeat(`<text:s text:c="1024"/>`, 1000)+`</text:p>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sb strings.Builder
+	spacedText(root, &sb, "", 0)
+	if n := sb.Len(); n <= maxFieldText || n > 2*maxFieldText {
+		t.Errorf("%d bytes of text, want past %d by one write at most", n, maxFieldText)
+	}
+}
