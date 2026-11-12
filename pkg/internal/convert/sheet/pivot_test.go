@@ -290,3 +290,24 @@ func TestApplyPivots_ExcelRules(t *testing.T) {
 		t.Errorf("the book changed, warnings %v", b.warnings)
 	}
 }
+
+// TestPivot_WideSparseSourceBounded checks that a source range of 1,024
+// columns whose one value sits on row 4,000 is read into at most
+// maxPivotSourceCells values: the records times the fields are bounded
+// together, not each by its own cap.
+func TestPivot_WideSparseSourceBounded(t *testing.T) {
+	sh := &Sheet{Name: "S", Rows: []Row{
+		{Index: 0, Cells: []Cell{textCell(0, "k", nil)}},
+		{Index: 4000, Cells: []Cell{numCell(0, 1, nil)}},
+	}}
+	doc := newDoc(sh)
+	p := &Pivot{Source: Range{LastRow: 4000, LastColumn: maxPivotFields - 1}, Rows: []PivotField{{Field: 0}}}
+	b := newBuilder(context.Background(), doc, nil, office.Options{})
+	src, ok := b.readPivotSource(p)
+	if !ok {
+		t.Fatal("the source is not read")
+	}
+	if n := len(src.recs) * len(src.names); n > maxPivotSourceCells {
+		t.Errorf("%d records of %d fields: %d values", len(src.recs), len(src.names), n)
+	}
+}

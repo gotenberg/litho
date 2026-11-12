@@ -20,6 +20,13 @@ const maxPivotRecords = 1 << 18
 // real source a few dozen.
 const maxPivotFields = 1024
 
+// maxPivotSourceCells caps the values a pivot table's source is read
+// into, records times fields, empty cells included. Anti-DoS guard, not
+// spec-mandated: maxPivotRecords and maxPivotFields bound each alone, and
+// a wide range with one value far down would otherwise copy a quarter of
+// a billion values; twice [MaxCells] covers any source a workbook fills.
+const maxPivotSourceCells = 2 * MaxCells
+
 // pivotSource is a pivot table's source range read: the fields' names
 // and number formats, and the records.
 type pivotSource struct {
@@ -136,7 +143,8 @@ func (b *builder) readPivotSource(p *Pivot) (*pivotSource, bool) {
 		// A source without a record makes no cache, and no output.
 		return nil, false
 	}
-	nr := min(last-rg.FirstRow, maxPivotRecords)
+	limit := min(maxPivotRecords, maxPivotSourceCells/nf)
+	nr := min(last-rg.FirstRow, limit)
 	tail := rg.LastRow > last
 	src := &pivotSource{names: make([]string, nf), formats: make([]string, nf), col: newCollator()}
 	// The labels are made unique, case ignored, after the data layout
@@ -188,7 +196,7 @@ func (b *builder) readPivotSource(p *Pivot) (*pivotSource, bool) {
 		}
 		src.recs = append(src.recs, rec)
 	}
-	if tail && nr < maxPivotRecords {
+	if tail && nr < limit {
 		src.recs = append(src.recs, make([]Value, nf))
 	}
 	src.index()
