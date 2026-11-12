@@ -201,6 +201,7 @@ func initShorthands() {
 		"mask-border":       {longhands: ids(pMaskBorderSource, 5), expand: expandBorderImage(pMaskBorderSource)},
 		"page-break-before": legacyBreak(pBreakBefore),
 		"page-break-after":  legacyBreak(pBreakAfter),
+		"all":               {longhands: allLonghands(), expand: expandAll},
 	}
 	maps.Copy(shorthands, flexShorthands())
 	maps.Copy(shorthands, gridShorthands())
@@ -211,6 +212,26 @@ func initShorthands() {
 	// word-break is a shorthand for its legacy break-word value: the name
 	// resolves through the shorthand alone.
 	delete(longhandByName, "word-break")
+}
+
+// allLonghands returns the longhands the all shorthand resets: every
+// property but direction and unicode-bidi (CSS Cascade 5, 3.2). Custom
+// properties are not longhands and keep their values.
+func allLonghands() []propID {
+	out := make([]propID, 0, numProps)
+	for id := range propID(numProps) {
+		if id != pDirection && id != pUnicodeBidi {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// expandAll expands a value of all that is not a CSS-wide keyword, which
+// the declaration's expansion handles before: all accepts only those
+// (CSS Cascade 5, 3.2), so any other value is invalid.
+func expandAll([]token, *declCtx) ([]entry, bool) {
+	return nil, false
 }
 
 // legacyBreak maps page-break-before and page-break-after onto
