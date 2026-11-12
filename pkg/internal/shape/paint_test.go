@@ -184,8 +184,9 @@ func TestSplitOpen(t *testing.T) {
 }
 
 // TestFill_FarFromOrigin fills a box so far from the origin that adding a
-// tile or a pattern's pitch to its coordinates no longer moves them: the
-// tiles and the lines stop at their caps instead of looping for ever.
+// tile or a pattern's pitch to its coordinates leaves them unchanged: the
+// tiles and the lines stop where a step does not move, instead of looping
+// for ever.
 func TestFill_FarFromOrigin(t *testing.T) {
 	box := compose.Rect{X: 1e18, Y: 1e18, Width: 1000, Height: 1000}
 	ink, paper := compose.Color{A: 1}, compose.Color{R: 1, G: 1, B: 1, A: 1}
