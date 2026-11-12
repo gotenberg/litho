@@ -466,7 +466,7 @@ func placeGrid(ctx context.Context, b *box, items []*box, rep [2]int) (*gridPlac
 		}
 		span := q.pos[cross].span
 		at := q.it.start[flow]
-		c := 0
+		var c int
 		key := [3]int{at, q.it.end[flow], span}
 		switch {
 		case stop():

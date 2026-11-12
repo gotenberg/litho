@@ -166,8 +166,7 @@ func needsBidi(text []rune, base Direction) bool {
 			continue
 		}
 		p, _ := bidi.LookupRune(c)
-		switch p.Class() {
-		case bidi.R, bidi.AL, bidi.AN:
+		if cl := p.Class(); cl == bidi.R || cl == bidi.AL || cl == bidi.AN {
 			return true
 		}
 	}
