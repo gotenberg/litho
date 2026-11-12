@@ -38,7 +38,7 @@ type Document struct {
 	// size: the notes size of a PresentationML presentation, which its
 	// handout master's placeholders span (ECMA-376 Part 1, 19.2.1.22
 	// notesSz and 19.3.1.24 handoutMaster); the page layout of an
-	// OpenDocument handout master (ODF 1.3 Part 3, 16.8
+	// OpenDocument handout master (ODF 1.3 Part 3, 10.2.1
 	// style:handout-master).
 	HandoutWidth, HandoutHeight float64
 	// HandoutMargins are the handout page's margins in points, indexed by

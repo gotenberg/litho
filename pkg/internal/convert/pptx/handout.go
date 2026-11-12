@@ -23,8 +23,8 @@ import (
 //   - litho/pptx: handout-master's placeholders span 0 to 6,858,000 by 0
 //     to 9,144,000 EMU, its notesSz; no part of the fixtures places the
 //     slides of a handout page. Where PowerPoint puts them is not
-//     measured: a Microsoft reference needs the lead's sign-in, and Office
-//     for the web prints no handout.
+//     measured: the slides take the layout measured on Impress (see
+//     slides' handoutAreas).
 func (r *reader) handoutMaster(root *ooxml.Element, doc *slides.Document) error {
 	id := root.Child(nsP, "handoutMasterIdLst").Child(nsP, "handoutMasterId")
 	if id == nil {

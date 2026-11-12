@@ -7,12 +7,12 @@ import (
 )
 
 // handoutMaster reads the document's handout master into doc (ODF 1.3,
-// Part 3, 16.8 style:handout-master): the size and margins of the page
-// layout it names, the background of its drawing-page style, and its
-// shapes: the header, footer, date-time and page-number frames as its
+// Part 3, 10.2.1 style:handout-master): the size and margins of the page
+// layout it names (16.5), the background of its drawing-page style, and
+// its shapes: the header, footer, date-time and page-number frames as its
 // drawing-page style's display flags show them, with the declarations its
 // presentation:use-header-name, use-footer-name and use-date-time-name
-// name, and its shapes of no class. Its draw:page-thumbnail elements are
+// name (19.428 to 19.430), and its shapes of no class. Its draw:page-thumbnail elements are
 // left out: they place the slides of the count the file was saved with,
 // and the builder lays out the count the caller asks for, as Impress does
 // when its print dialog names one. A document without a handout master
@@ -25,7 +25,10 @@ import (
 //     layout AL0T26, the page layout of the notes master and the display
 //     flags header, footer and date-time true, page-number false. Given a
 //     page layout of four, it keeps the thumbnails the file holds rather
-//     than lay out four.
+//     than lay out four. It keeps the display flags of a handout master
+//     it reads and drops its presentation:use-header-name and the other
+//     two, so whether Impress prints those declarations on a handout is
+//     not measured.
 func (r *reader) handoutMaster(doc *slides.Document) {
 	hm := odf.Section(r.pkg.Styles, "master-styles").Child(odf.NSStyle, "handout-master")
 	if hm == nil {

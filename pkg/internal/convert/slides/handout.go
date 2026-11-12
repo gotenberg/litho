@@ -10,13 +10,13 @@ import (
 // handoutGap is the room between two slides of a handout page, and
 // between the slides and the margins, the header band and the footer
 // band: 1 cm, as Impress lays a handout page out
-// (SdPage::CalculateHandoutAreas, nGapW and nGapH).
+// (SdPage::CalculateHandoutAreas).
 const handoutGap = 72 / 2.54
 
 // handoutBand is the share of the handout page's height, less its top and
 // left margins, that the header band above the slides and the footer band
 // below them each take: 5%, as Impress computes it
-// (SdPage::CalculateHandoutAreas, nHeaderFooterHeight).
+// (SdPage::CalculateHandoutAreas).
 const handoutBand = 0.05
 
 // validHandouts reports whether per is a count of slides a handout page
@@ -78,10 +78,13 @@ func handoutGrid(per int, landscape bool) (cols, rows int, cells []int) {
 //     and 11 cm, y 3.742, 12.318 and 20.894 cm, and its header and footer
 //     frames 1.484 cm tall: the six-a-page rectangles this function
 //     returns, to the hundredth of a millimetre.
-//   - The other counts and orientations are not measured: the pinned
-//     LibreOffice prints no handout from the command line, its print
-//     content option being the print dialog's alone, and neither its
-//     export filter nor its document and user settings reach it.
+//   - probe, odp: the other counts and orientations are not measured.
+//     The pinned LibreOffice prints no handout without its print dialog:
+//     a print to file, a Basic macro's print call, the document settings
+//     IsPrintHandout and SlidesPerHandout, the user settings
+//     Print/Content/Handout and Print/Other/PagesPerHandout and a handout
+//     view all print the slides, and its PDF export has no handout
+//     option.
 func handoutAreas(w, h float64, m [4]float64, sw, sh float64, per int) []compose.Rect {
 	cols, rows, cells := handoutGrid(per, w > h)
 	band := (h - m[css.Top] - m[css.Left]) * handoutBand
@@ -128,9 +131,10 @@ func (b *builder) handoutSize() (float64, float64) {
 //
 // # Corpus evidence
 //
-//   - The frame is the one the pinned LibreOffice draws round the slide
-//     of a notes page (see [builder.notesPage]): a handout page's slides
-//     are the same kind of page object. Not measured on a handout page.
+//   - gotenberg/pptx: deck-notes' notes pages frame their slide in a
+//     C0C0C0 line 0.1 point wide (see [builder.notesPage]); a handout
+//     page's slides are the same kind of page object, whose frame on a
+//     handout page is not measured.
 func (b *builder) handoutPage(n int, group []*Slide, numberOf func(*Slide) int) (*compose.Page, []*compose.StructElem) {
 	hw, hh := b.handoutSize()
 	pw, ph := b.pageSize(hw, hh)
