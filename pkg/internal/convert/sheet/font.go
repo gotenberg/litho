@@ -193,9 +193,31 @@ type measurer struct {
 	ctx   context.Context
 	fonts *text.Fonts
 	lang  string
-	cache map[string]float64
+	// cache holds the width and the line height of each text measured, by
+	// its font's key.
+	cache map[measureKey]float64
 	// lineCache holds the line height of each font.
 	lineCache map[string]float64
+	// keys holds the key of each font measured ([font.key]), so a cell
+	// does not write its font's key again.
+	keys map[fontID]string
+}
+
+// measureKey is a text and the key of its font.
+type measureKey struct {
+	font, text string
+}
+
+// fontID tells fonts apart by what [font.key] reads, a font's families by
+// the list's first element and length: two lists of one backing array and
+// length are one list. Fonts apart here may share a key.
+type fontID struct {
+	families *string
+	n        int
+	size     float64
+	bold     bool
+	italic   bool
+	script   bool
 }
 
 // maxMeasureCache caps the cached widths. Anti-DoS guard, not
@@ -203,7 +225,23 @@ type measurer struct {
 const maxMeasureCache = 1 << 16
 
 func newMeasurer(ctx context.Context, fonts *text.Fonts, lang string) *measurer {
-	return &measurer{ctx: ctx, fonts: fonts, lang: lang, cache: map[string]float64{}, lineCache: map[string]float64{}}
+	return &measurer{ctx: ctx, fonts: fonts, lang: lang, cache: map[measureKey]float64{}, lineCache: map[string]float64{}, keys: map[fontID]string{}}
+}
+
+// key returns f.key(), written once for each font.
+func (m *measurer) key(f font) string {
+	id := fontID{n: len(f.families), size: f.size, bold: f.bold, italic: f.italic, script: f.script != Baseline}
+	if len(f.families) > 0 {
+		id.families = &f.families[0]
+	}
+	if k, ok := m.keys[id]; ok {
+		return k
+	}
+	k := f.key()
+	if len(m.keys) < maxMeasureCache {
+		m.keys[id] = k
+	}
+	return k
 }
 
 // key returns the cache key of f.
@@ -229,7 +267,7 @@ func (m *measurer) width(f font, s string) float64 {
 	if s == "" {
 		return 0
 	}
-	k := f.key() + "\x00" + s
+	k := measureKey{font: m.key(f), text: s}
 	if w, ok := m.cache[k]; ok {
 		return w
 	}
@@ -275,7 +313,7 @@ func (m *measurer) textLineHeight(f font, s string) float64 {
 	if ascii {
 		return h
 	}
-	k := f.key() + "\x00h\x00" + s
+	k := measureKey{font: m.key(f), text: "h\x00" + s}
 	if v, ok := m.cache[k]; ok {
 		return v
 	}
@@ -294,7 +332,7 @@ func (m *measurer) textLineHeight(f font, s string) float64 {
 // lineHeight returns the height of a line of f: its face's ascent plus
 // descent, as Calc sizes a cell's text line.
 func (m *measurer) lineHeight(f font) float64 {
-	k := f.key()
+	k := m.key(f)
 	if h, ok := m.lineCache[k]; ok {
 		return h
 	}
