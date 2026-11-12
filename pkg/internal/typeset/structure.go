@@ -222,6 +222,19 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 	for i := 1; i < len(starts); i++ {
 		starts[i] = starts[i-1] + len(st.pageParents[i-1])
 	}
+	// The elements and the parent tree are written with their numbers in
+	// the file, each reference made once: a tree of a cell a page element
+	// is too large to copy as [docWriter.final] renumbers the rest.
+	refs := newFinalRefs(w, st.size)
+	elem := func(e *StructElem) ast.PdfObject {
+		i, ok := st.index(e)
+		if !ok {
+			// No element outside the tree reaches the file; the reference
+			// a placeholder of zero would get stands for it all the same.
+			return refs.of(0)
+		}
+		return refs.elem(i)
+	}
 	for i, e := range st.order {
 		if i%ctxCheckInterval == 0 {
 			if err := ctx.Err(); err != nil {
@@ -230,15 +243,15 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		}
 		dict := ast.PdfDict{
 			"Type": ast.PdfName("StructElem"),
-			"S":    ast.PdfName(e.Role),
+			"S":    refs.name(e.Role),
 		}
 		var p *StructElem
 		hasParent := st.parents[i] >= 0
 		if hasParent {
 			p = st.order[st.parents[i]]
-			dict["P"] = st.refs[p]
+			dict["P"] = refs.elem(st.parents[i])
 		} else {
-			dict["P"] = structRootRef
+			dict["P"] = refs.of(structRootRef.ObjectNum)
 		}
 		role := e.Role
 		if v == Version20 {
@@ -251,8 +264,8 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 				written[e.Role] = true
 			} else if r := replaced20(e.Role, parentRole); r != "" {
 				role = r
-				dict["S"] = ast.PdfName(r)
-				dict["NS"] = nsRef
+				dict["S"] = refs.name(r)
+				dict["NS"] = refs.of(nsRef.ObjectNum)
 			} else {
 				written[e.Role] = true
 			}
@@ -267,28 +280,28 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 		kids := make(ast.PdfArray, 0, len(items)+len(e.Kids))
 		if len(items) > 0 {
 			pg := items[0].page
-			dict["Pg"] = pageRef(pg)
+			dict["Pg"] = refs.page(pg)
 			for _, it := range items {
 				switch {
 				case it.annot.ObjectNum != 0:
 					kids = append(kids, ast.PdfDict{
 						"Type": ast.PdfName("OBJR"),
-						"Obj":  it.annot,
-						"Pg":   pageRef(it.page),
+						"Obj":  refs.of(it.annot.ObjectNum),
+						"Pg":   refs.page(it.page),
 					})
 				case it.page == pg:
 					kids = append(kids, ast.PdfInt(it.mcid))
 				default:
 					kids = append(kids, ast.PdfDict{
 						"Type": ast.PdfName("MCR"),
-						"Pg":   pageRef(it.page),
+						"Pg":   refs.page(it.page),
 						"MCID": ast.PdfInt(it.mcid),
 					})
 				}
 			}
 		}
 		for _, k := range e.Kids {
-			kids = append(kids, st.refs[k])
+			kids = append(kids, elem(k))
 		}
 		if len(kids) > 0 {
 			dict["K"] = kids
@@ -310,15 +323,15 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 			// 8.2.5.8).
 			var to ast.PdfArray
 			for _, t := range st.refers[e] {
-				if r, ok := st.refs[t]; ok {
-					to = append(to, r)
+				if i, ok := st.index(t); ok {
+					to = append(to, refs.elem(i))
 				}
 			}
 			if len(to) > 0 {
 				dict["Ref"] = to
 			}
 		}
-		w.reserved[st.refs[e].ObjectNum] = dict
+		w.numbered[w.finalNumber(elemRef(i).ObjectNum)] = dict
 	}
 
 	// The parent tree is a number tree (7.9.7) keyed by /StructParents and
@@ -326,16 +339,20 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 	// MCIDs, an annotation's its element (14.7.4.4).
 	nums := make(ast.PdfArray, 0, 2*(len(st.pageParents)+len(st.annotParents)))
 	for i, parents := range st.pageParents {
-		refs := make(ast.PdfArray, len(parents))
+		page := make(ast.PdfArray, len(parents))
 		for k, e := range parents {
-			refs[k] = st.refs[e]
+			page[k] = elem(e)
 		}
-		nums = append(nums, ast.PdfInt(i), refs)
+		nums = append(nums, ast.PdfInt(i), page)
 	}
 	for i, e := range st.annotParents {
-		nums = append(nums, ast.PdfInt(len(st.pageParents)+i), st.refs[e])
+		nums = append(nums, ast.PdfInt(len(st.pageParents)+i), elem(e))
 	}
-	parentTree := w.alloc.Alloc(ast.PdfDict{"Nums": nums})
+	// The parent tree takes the next object number, as the object it is
+	// queued as would.
+	parentTree := ast.PdfIndirectRef{ObjectNum: w.alloc.NextObjNum()}
+	w.alloc.Reserve(parentTree.ObjectNum)
+	w.numbered[w.finalNumber(parentTree.ObjectNum)] = ast.PdfDict{"Nums": nums}
 	root := ast.PdfDict{
 		"Type":              ast.PdfName("StructTreeRoot"),
 		"K":                 st.refs[st.order[0]],
@@ -353,6 +370,56 @@ func (st *structState) write(ctx context.Context, w *docWriter, v Version) error
 	w.reserved[structRootRef.ObjectNum] = root
 	st.release()
 	return nil
+}
+
+// finalRefs makes the references of a tree written with the numbers of
+// the file ([docWriter.finalNumber]), each once: an element's for its
+// parent's /K, its kids' /P and the parent tree, a page's for every
+// element on it, a role's name for every element of the role.
+type finalRefs struct {
+	w     *docWriter
+	elems []ast.PdfObject
+	pages []ast.PdfObject
+	names map[string]ast.PdfObject
+}
+
+func newFinalRefs(w *docWriter, elems int) *finalRefs {
+	return &finalRefs{w: w, elems: make([]ast.PdfObject, elems), pages: make([]ast.PdfObject, len(w.heights)), names: map[string]ast.PdfObject{}}
+}
+
+// of returns the reference of the object at the placeholder or
+// provisional number num.
+func (r *finalRefs) of(num int) ast.PdfObject {
+	return ast.PdfIndirectRef{ObjectNum: r.w.finalNumber(num)}
+}
+
+// elem returns the reference of the element at index i in preorder.
+func (r *finalRefs) elem(i int) ast.PdfObject {
+	if r.elems[i] == nil {
+		r.elems[i] = r.of(elemRef(i).ObjectNum)
+	}
+	return r.elems[i]
+}
+
+// page returns the reference of the page at index i.
+func (r *finalRefs) page(i int) ast.PdfObject {
+	if i < 0 || i >= len(r.pages) {
+		return r.of(pageRef(i).ObjectNum)
+	}
+	if r.pages[i] == nil {
+		r.pages[i] = r.of(pageRef(i).ObjectNum)
+	}
+	return r.pages[i]
+}
+
+// name returns the name n.
+func (r *finalRefs) name(n string) ast.PdfObject {
+	o, ok := r.names[n]
+	if !ok {
+		o = ast.PdfName(n)
+		r.names[n] = o
+	}
+	return o
 }
 
 // release lets go of what the pages recorded and of the numbering once

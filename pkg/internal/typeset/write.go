@@ -177,6 +177,10 @@ type docWriter struct {
 
 	// reserved holds the objects at placeholder numbers.
 	reserved map[int]ast.PdfObject
+	// numbered holds the objects written with their numbers in the file
+	// ([docWriter.finalNumber]), which [docWriter.final] keeps as they
+	// are: the structure elements, too many to copy.
+	numbered map[int]ast.PdfObject
 	// heights holds the height of every page written, in order: its
 	// length is the page count, and a destination reads its page's height.
 	heights []float64
@@ -257,6 +261,7 @@ func newDocWriter(ctx context.Context, opts Options, version Version, tagged boo
 		logger:   logger,
 		mem:      limits.BudgetFrom(ctx),
 		reserved: make(map[int]ast.PdfObject),
+		numbered: make(map[int]ast.PdfObject),
 		fonts:    make(map[string]*fontEntry),
 		images:   make(map[*ImageSource]ast.PdfIndirectRef),
 		shadings: make(map[string]shadingRefs),
@@ -414,25 +419,7 @@ func (w *docWriter) finish(ctx context.Context, tail *Document, producer string,
 // only the references they hold change. ctx's error stops it every
 // [finalCheck] objects.
 func (w *docWriter) final(ctx context.Context, trailer ast.PdfDict) (*writer.ObjAllocator, ast.PdfDict, error) {
-	n := len(w.heights)
-	reservedCount := 1 + n
-	if w.st != nil {
-		reservedCount += 1 + w.st.size
-	}
-	number := func(num int) int {
-		switch {
-		case num > 0:
-			return num + reservedCount
-		case num == pagesRef.ObjectNum:
-			return 1
-		case num == structRootRef.ObjectNum:
-			return n + 2
-		}
-		if k := -num - 3; k%2 == 0 {
-			return 2 + k/2
-		}
-		return n + 3 + (-num-4)/2
-	}
+	number := w.finalNumber
 	// Each object leaves the writer's maps as its renumbered copy is made,
 	// so the two sets are never held whole together.
 	out := writer.NewObjAllocator(0)
@@ -448,8 +435,41 @@ func (w *docWriter) final(ctx context.Context, trailer ast.PdfDict) (*writer.Obj
 			delete(objs, num)
 		}
 	}
+	// The objects of numbered hold their numbers in the file already.
+	for num, obj := range w.numbered {
+		if done++; done%finalCheck == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, err
+			}
+		}
+		out.AllocAt(num, obj)
+		delete(w.numbered, num)
+	}
 	t, _ := relink(trailer, number).(ast.PdfDict) // relink returns a dictionary for a dictionary
 	return out, t, nil
+}
+
+// finalNumber returns the number in the file of the object at num, a
+// placeholder or a provisional number (see [docWriter]). It holds once
+// every page is written and the structure tree numbered.
+func (w *docWriter) finalNumber(num int) int {
+	n := len(w.heights)
+	reservedCount := 1 + n
+	if w.st != nil {
+		reservedCount += 1 + w.st.size
+	}
+	switch {
+	case num > 0:
+		return num + reservedCount
+	case num == pagesRef.ObjectNum:
+		return 1
+	case num == structRootRef.ObjectNum:
+		return n + 2
+	}
+	if k := -num - 3; k%2 == 0 {
+		return 2 + k/2
+	}
+	return n + 3 + (-num-4)/2
 }
 
 // finalCheck is how many objects [docWriter.final] renumbers between two
