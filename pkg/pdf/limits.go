@@ -61,8 +61,9 @@ type Limits struct {
 	// stamping and redaction refuse a page with more, as they refuse a damaged
 	// one, and a call that fails on it returns [ErrPageContentTooLarge]. The
 	// redaction scan reads no more than that from any one stream. A quarter
-	// and not the whole, because the operators parsed from a page hold about
-	// five times its bytes. The decoded object streams the
+	// and not the whole, because the operators parsed from a page hold
+	// several times its bytes: about three and a half on a very large page,
+	// up to ten on a page of short operators. The decoded object streams the
 	// [Reader] keeps cached may take the whole of it, and the decoded font
 	// programs and the colour transforms built from ICC profiles it keeps
 	// cached a quarter each, 64 MiB by default: when one would take more, its

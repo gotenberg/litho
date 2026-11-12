@@ -435,9 +435,10 @@ const pageContentShare = 4
 // a heavy page reads it whole, and one that lowers the budget bounds pages too.
 // It is a quarter of the budget, not the whole of it, because a page is held
 // twice over, as bytes and then as the operators parsed from them, which retain
-// about five times the bytes. A page at a quarter of the budget holds about one
-// and a half stream budgets once parsed, where a page as large as the budget
-// would hold over six.
+// several times the bytes: about three and a half on the largest page
+// measured, up to ten on a page of short operators. A page at a quarter of the
+// budget holds between one and three stream budgets once parsed, where a page
+// as large as the budget would hold over four.
 //
 // # Corpus evidence
 //
@@ -445,8 +446,11 @@ const pageContentShare = 4
 //     pdfjs issue21089.pdf, at 27.51 MB of decoded content in a 12.11 MB file,
 //     so the default leaves better than twice its size.
 //   - pdfjs issue21089.pdf: page 1 decodes to 28,846,545 bytes across 55
-//     streams and parses into 608,043 operators that retain 152 MB, 5.3 bytes
-//     per content byte.
+//     streams and parses into 608,043 operators that retain 3.4 bytes per
+//     content byte.
+//   - govdocs/pdf: eight pages of text retain 7.3 bytes per content byte;
+//     pdfjs pdf.pdf: eight pages about 10; a single text stream of 540 KB
+//     5.5.
 //   - pdfjs issue21089.pdf: page 1 comes within 16% of a 32 MB bound.
 func (l Limits) MaxPageContentBytes() int64 {
 	return max(l.WithDefaults().MaxStreamBytes/pageContentShare, 1)
@@ -541,9 +545,9 @@ const formCacheShare = 4
 // forms caches them too, and one that lowers it shrinks the cache. It is a
 // quarter of the budget, as the font-program and colour-transform caches are,
 // so the document's caches together stay within a small multiple of one
-// budget. A parsed operator retains about five times the content bytes it was
-// read from (see [Limits.MaxPageContentBytes]), so the default holds about 12
-// MiB of form content.
+// budget. Parsed operators retain between three and ten times the content
+// bytes they were read from (see [Limits.MaxPageContentBytes]), so the default
+// holds between 6 and 18 MiB of form content.
 //
 // # Corpus evidence
 //
