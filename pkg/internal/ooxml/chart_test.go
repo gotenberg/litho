@@ -95,6 +95,29 @@ func TestChartFromElement_Kinds(t *testing.T) {
 				t.Errorf("group = %+v", g)
 			}
 		}},
+		{"doughnut hole without val", `<c:doughnutChart><c:varyColors val="1"/>` + two + `<c:holeSize/></c:doughnutChart>`, func(t *testing.T, g *chart.Group) {
+			// CT_HoleSize's val defaults to 10% (21.2.2.82, 21.2.3.18).
+			if g.HoleSize != 10 {
+				t.Errorf("hole %v, want 10", g.HoleSize)
+			}
+		}},
+		{"doughnut without hole", `<c:doughnutChart><c:varyColors val="1"/>` + two + `</c:doughnutChart>`, func(t *testing.T, g *chart.Group) {
+			if g.HoleSize != 50 {
+				t.Errorf("hole %v, want 50", g.HoleSize)
+			}
+		}},
+		{"percent forms", `<c:barChart><c:barDir val="col"/>` + two + `<c:gapWidth val="80%"/><c:overlap val="-20%"/>` + ids + `</c:barChart>` + axes, func(t *testing.T, g *chart.Group) {
+			// ST_GapAmount and ST_Overlap take a percent form (21.2.3.16,
+			// 21.2.3.31).
+			if g.GapWidth != 80 || g.Overlap != -20 {
+				t.Errorf("gap %v overlap %v, want 80 and -20", g.GapWidth, g.Overlap)
+			}
+		}},
+		{"val-less gap, overlap and bubble scale", `<c:bubbleChart>` + two + `<c:gapWidth/><c:overlap/><c:bubbleScale/>` + ids + `</c:bubbleChart>` + axes, func(t *testing.T, g *chart.Group) {
+			if g.GapWidth != 150 || g.Overlap != 0 || g.BubbleScale != 100 {
+				t.Errorf("group = %+v", g)
+			}
+		}},
 		{"bar of pie", `<c:ofPieChart><c:ofPieType val="bar"/>` + ser(0, "A", "", "1") + `</c:ofPieChart>`, func(t *testing.T, g *chart.Group) {
 			if g.Kind != chart.Pie {
 				t.Errorf("group = %+v", g)
@@ -155,6 +178,25 @@ func TestChartFromElement_Axes(t *testing.T) {
 	}
 	if val.Title == nil || val.Title.Text != "Amount" || val.Title.Style.Size != 12 || val.Title.Style.Bold || val.Title.Style.Rotation != 90 {
 		t.Errorf("axis title = %+v", val.Title)
+	}
+}
+
+// TestChartFromElement_TickMarkDefaults locks the tick marks of an axis:
+// cross for a tick mark element without val, CT_TickMark's default
+// (ECMA-376 Part 1, 21.2.2.101, 21.2.2.110), and the reader's own when
+// the element is absent.
+func TestChartFromElement_TickMarkDefaults(t *testing.T) {
+	ax := `<c:catAx><c:axId val="1"/><c:scaling/><c:axPos val="b"/><c:minorTickMark/><c:crossAx val="2"/></c:catAx>` +
+		`<c:valAx><c:axId val="2"/><c:scaling/><c:axPos val="l"/><c:majorTickMark/><c:crossAx val="1"/></c:valAx>`
+	c := readChart(t, chartXML("", "", `<c:barChart><c:barDir val="col"/>`+ser(0, "A", "", "1")+`<c:axId val="1"/><c:axId val="2"/></c:barChart>`+ax), false)
+	if len(c.Axes) != 2 {
+		t.Fatalf("got %d axes", len(c.Axes))
+	}
+	if cat := c.Axes[0]; cat.MinorTicks != chart.TickCross || cat.MajorTicks != chart.TickCross {
+		t.Errorf("category axis ticks %v %v, want cross and cross", cat.MajorTicks, cat.MinorTicks)
+	}
+	if val := c.Axes[1]; val.MajorTicks != chart.TickCross || val.MinorTicks != chart.TickNone {
+		t.Errorf("value axis ticks %v %v, want cross and none", val.MajorTicks, val.MinorTicks)
 	}
 }
 

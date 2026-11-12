@@ -29,6 +29,10 @@ func (p *chartReader) group(e *Element) *chart.Group {
 	case "doughnutChart":
 		g.Kind = chart.Doughnut
 		g.VaryColors = true
+		// A doughnut without a holeSize element: the schema gives no
+		// value (21.2.2.50), Office requires the element ([MS-OI29500]
+		// 2.1.1458), and no reference shows one; the hole is half the
+		// diameter.
 		g.HoleSize = 50
 	case "scatterChart":
 		g.Kind = chart.Scatter
@@ -57,19 +61,19 @@ func (p *chartReader) group(e *Element) *chart.Group {
 		g.Grouping = chart.PercentStacked
 	}
 	g.VaryColors = boolVal(e, "varyColors", g.VaryColors && !p.mso2007)
-	if v := floatVal(e, "gapWidth"); !math.IsNaN(v) {
+	if v := percentVal(e, "gapWidth", 150); !math.IsNaN(v) {
 		g.GapWidth = v
 	}
-	if v := floatVal(e, "overlap"); !math.IsNaN(v) {
+	if v := percentVal(e, "overlap", 0); !math.IsNaN(v) {
 		g.Overlap = v
 	}
-	if v := floatVal(e, "holeSize"); !math.IsNaN(v) {
+	if v := percentVal(e, "holeSize", 10); !math.IsNaN(v) {
 		g.HoleSize = v
 	}
 	if v := floatVal(e, "firstSliceAng"); !math.IsNaN(v) {
 		g.FirstSliceAngle = v
 	}
-	if v := floatVal(e, "bubbleScale"); !math.IsNaN(v) {
+	if v := percentVal(e, "bubbleScale", 100); !math.IsNaN(v) {
 		g.BubbleScale = v
 	}
 	var ids []string

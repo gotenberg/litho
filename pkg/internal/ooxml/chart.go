@@ -247,6 +247,24 @@ func floatVal(e *Element, local string) float64 {
 	return parseFloat(childVal(e, local))
 }
 
+// percentVal reads a chart group's numeric child c:local whose val the
+// schema types as a number or a percentage (ECMA-376 Part 1, 21.2.3.16
+// ST_GapAmount, 21.2.3.31 ST_Overlap, 21.2.3.18 ST_HoleSize, 21.2.3.5
+// ST_BubbleScale: a union of a percent form, "150%", and an integer
+// form): NaN when the element is absent or its val invalid, def, the
+// schema's default for val, when the element has no val.
+func percentVal(e *Element, local string, def float64) float64 {
+	c := e.Child(NSChart, local)
+	if c == nil {
+		return math.NaN()
+	}
+	v, ok := c.Attr("val")
+	if !ok {
+		return def
+	}
+	return parseFloat(strings.TrimSuffix(strings.TrimSpace(v), "%"))
+}
+
 // parseFloat parses a finite number, NaN otherwise.
 func parseFloat(s string) float64 {
 	v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
@@ -920,8 +938,8 @@ func (p *chartReader) axis(e *Element, kind chart.AxisKind) *chart.Axis {
 	case "none":
 		a.Labels = chart.LabelNone
 	}
-	a.MajorTicks = tickMark(childVal(e, "majorTickMark"), chart.TickCross)
-	a.MinorTicks = tickMark(childVal(e, "minorTickMark"), chart.TickNone)
+	a.MajorTicks = tickMarkOf(e, "majorTickMark", chart.TickCross)
+	a.MinorTicks = tickMarkOf(e, "minorTickMark", chart.TickNone)
 	if g := e.Child(NSChart, "majorGridlines"); g != nil {
 		a.MajorGrid = p.lineOf(g.Child(NSChart, "spPr"), p.autoLine())
 	}
@@ -974,6 +992,18 @@ func (p *chartReader) lineOf(spPr *Element, def *chart.Stroke) *chart.Stroke {
 		return nil
 	}
 	return s
+}
+
+// tickMarkOf reads the tick mark child c:local of an axis: def when the
+// element is absent, cross when it has no val, the schema's default for
+// CT_TickMark's val (ECMA-376 Part 1, 21.2.2.101 majorTickMark, 21.2.2.110
+// minorTickMark).
+func tickMarkOf(e *Element, local string, def chart.TickMark) chart.TickMark {
+	c := e.Child(NSChart, local)
+	if c == nil {
+		return def
+	}
+	return tickMark(attrOr(c, "val"), chart.TickCross)
 }
 
 // tickMark reads an ST_TickMark (ECMA-376 Part 1, 21.2.3.48), def when
