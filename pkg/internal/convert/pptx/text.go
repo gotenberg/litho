@@ -26,6 +26,18 @@ const (
 	maxTextSize = 4000.0
 	// maxLevel is the deepest list level, lvl 8 (21.1.2.2.7 ST_TextIndentLevelType).
 	maxLevel = 8
+	// maxColumns is the most text columns, numCol 16 (ECMA-376 Part 1,
+	// ST_TextColumnCount).
+	maxColumns = 16
+	// maxSpacingPoints is the largest spcPts, 1584 points (ECMA-376 Part 1,
+	// ST_TextSpacingPoint).
+	maxSpacingPoints = 1584
+	// maxSpacingPercent is the largest spcPct as a fraction, 132
+	// (ECMA-376 Part 1, ST_TextSpacingPercent, 13,200,000).
+	maxSpacingPercent = 132
+	// maxStartAt is the largest buAutoNum startAt, 32767 (ECMA-376 Part 1,
+	// ST_TextBulletStartAtNum).
+	maxStartAt = 32767
 )
 
 // chain is a list of property elements looked up in order, the first
@@ -256,7 +268,7 @@ func bodyProps(bc chain) *slides.TextBody {
 	}
 	if v, ok := bc.attr("numCol"); ok {
 		if n, ok := ooxml.Int(v); ok {
-			b.Columns = max(1, min(n, 16))
+			b.Columns = max(1, min(n, maxColumns))
 		}
 	}
 	if v, ok := bc.attr("spcCol"); ok {
@@ -464,13 +476,13 @@ func spacing(e *ooxml.Element) (pct, pts float64) {
 	}
 	if p := e.Child(ooxml.NSA, "spcPts"); p != nil {
 		n, _ := ooxml.Int(attr(p, "val"))
-		return 0, max(0, min(float64(n)/100, 1584))
+		return 0, max(0, min(float64(n)/100, maxSpacingPoints))
 	}
 	return 0, 0
 }
 
 // percentAny parses a percentage that may pass 100% ("150000" or "150%")
-// as a fraction, at most 132 (13,200,000, ST_TextSpacingPercent's top).
+// as a fraction, at most [maxSpacingPercent].
 func percentAny(v string) float64 {
 	v = strings.TrimSpace(v)
 	if s, ok := strings.CutSuffix(v, "%"); ok {
@@ -478,10 +490,10 @@ func percentAny(v string) float64 {
 		if err != nil || math.IsNaN(f) {
 			return 0
 		}
-		return max(0, min(132, f/100))
+		return max(0, min(maxSpacingPercent, f/100))
 	}
 	n, _ := ooxml.Int(v)
-	return max(0, min(132, float64(n)/100000))
+	return max(0, min(maxSpacingPercent, float64(n)/100000))
 }
 
 // fieldOf maps a field type (21.1.2.3.6 fld type) to the model's field:
@@ -705,7 +717,7 @@ func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
 		// (slides.Bullet.StartAt 0).
 		b.Kind, b.Format = slides.BulletNumber, attr(kind, "type")
 		if n, ok := intAttr(kind, "startAt"); ok && n >= 1 {
-			b.StartAt = min(n, 32767)
+			b.StartAt = min(n, maxStartAt)
 		}
 		if b.Format == "" {
 			b.Format = "arabicPeriod"

@@ -223,10 +223,20 @@ func stroke(z *vector.Rasterizer, lines []polyline, hw float64) {
 	}
 }
 
+// minDiscSides and maxDiscSides bound the sides of a disc's polygon: 8
+// keep a dot round; 256 keep every side within a pixel and a half up to
+// a radius of 61 pixels and bound the work of a larger disc. Anti-DoS
+// guard, not spec-mandated.
+const (
+	minDiscSides = 8
+	maxDiscSides = 256
+)
+
 // discPoints returns a polygon approximating a disc of radius r about
-// the origin, its sides at most a pixel and a half long.
+// the origin, its sides at most a pixel and a half long, within
+// [minDiscSides] and [maxDiscSides].
 func discPoints(r float64) []pt {
-	n := int(min(max(math.Ceil(2*math.Pi*r/1.5), 8), 256))
+	n := int(min(max(math.Ceil(2*math.Pi*r/1.5), minDiscSides), maxDiscSides))
 	out := make([]pt, n)
 	for i := range out {
 		s, c := math.Sincos(2 * math.Pi * float64(i) / float64(n))

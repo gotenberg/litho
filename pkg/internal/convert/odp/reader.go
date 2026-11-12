@@ -132,13 +132,17 @@ func (r *reader) warnOnce(key, code, msg string) {
 	r.warnings = append(r.warnings, compose.Warning{Code: code, Message: msg})
 }
 
-// tick checks ctx every 1,024 steps, and reports whether reading goes on.
+// tickSteps is how many reading steps pass between two checks of ctx.
+const tickSteps = 1024
+
+// tick checks ctx every [tickSteps] steps, and reports whether reading
+// goes on.
 func (r *reader) tick() bool {
 	if r.err != nil {
 		return false
 	}
 	r.steps++
-	if r.steps%1024 == 0 {
+	if r.steps%tickSteps == 0 {
 		if err := r.ctx.Err(); err != nil {
 			r.err = err
 			return false

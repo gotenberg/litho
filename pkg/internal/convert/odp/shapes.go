@@ -528,6 +528,11 @@ func (r *reader) outline(el *odf.Element) *shape.Geometry {
 	return &shape.Geometry{Custom: c}
 }
 
+// maxViewBox bounds a coordinate of an svg:viewBox read. Anti-DoS guard,
+// not spec-mandated: a coordinate space of 10^12 units keeps the
+// geometry's arithmetic finite, and no drawing needs more.
+const maxViewBox = 1e12
+
 // viewBoxOf returns a shape's svg:viewBox (ODF 1.3, Part 3, 19.574), the
 // coordinate space of its svg:d or draw:points. A missing one, or one of
 // zero width or height, is the empty rectangle, which the geometry engine
@@ -540,7 +545,7 @@ func viewBoxOf(el *odf.Element) compose.Rect {
 	var v [4]float64
 	for i, x := range f {
 		n, err := strconv.ParseFloat(x, 64)
-		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) || math.Abs(n) > 1e12 {
+		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) || math.Abs(n) > maxViewBox {
 			return compose.Rect{}
 		}
 		v[i] = n

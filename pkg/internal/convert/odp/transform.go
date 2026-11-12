@@ -74,6 +74,11 @@ func (m matrix) place(w, h float64) placement {
 // and a translation at most.
 const maxTransformOps = 16
 
+// maxTransformValue bounds a number of a draw:transform read. Anti-DoS
+// guard, not spec-mandated: a billion keeps the composed transform finite,
+// far past any angle, scale or length a page shows.
+const maxTransformValue = 1e9
+
 // parseTransform parses a draw:transform (ODF 1.3, Part 3, 19.228): a
 // list of rotate, scale, translate, skewX, skewY and matrix operations,
 // applied in the order they are listed, as Impress applies them. A
@@ -113,7 +118,7 @@ func parseTransform(s string) (matrix, bool, bool) {
 				}
 			}
 			v, err := strconv.ParseFloat(args[i], 64)
-			if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > 1e9 {
+			if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || math.Abs(v) > maxTransformValue {
 				return 0, false
 			}
 			return v, true
