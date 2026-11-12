@@ -179,7 +179,9 @@
 // for: TabStops lays tabs out on Office stops (alignment, leaders, bar
 // stops and the line breaks around them), LineRule and MinLineHeight
 // space lines as Writer does, the room a proportional spacing adds below
-// a page's last line hanging past the page cut, JustifyShrink lets
+// a page's last line hanging past the page cut, WriterLines sizes a line
+// from its own text and pictures, not its paragraph's font, as Writer
+// does, JustifyShrink lets
 // justified lines shrink their spaces, WordRules sizes lines and keeps
 // widows as Word does, TextScale scales glyphs horizontally,
 // PageAnchor anchors a frame to the page box, of the page AnchorPage names
