@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
@@ -111,8 +112,31 @@ func TestRead_ColumnsRows(t *testing.T) {
 	if got := sh.Page.RowBreaks; len(got) != 1 || got[0] != 4 {
 		t.Errorf("row breaks = %v", got)
 	}
-	if !near(sh.DefaultRowHeight, 12.816) || !near(sh.DefaultColumnWidth, 72) {
+	if !near(sh.DefaultRowHeight, 12.8) || !near(sh.DefaultColumnWidth, 72) {
 		t.Errorf("defaults = %v, %v", sh.DefaultRowHeight, sh.DefaultColumnWidth)
+	}
+}
+
+// TestCalcTwips checks the twips Calc holds a row height or column width
+// read from a file in, measured in its PDFs: the length rounded to 1/100
+// mm, then to twips.
+func TestCalcTwips(t *testing.T) {
+	tests := []struct {
+		length string
+		twips  float64
+	}{
+		{"0.208in", 299}, {"0.2in", 288}, {"0.5cm", 283}, {"5.3mm", 300},
+		{"5.307mm", 301}, {"5.303mm", 300}, {"15.3pt", 306}, {"15.33pt", 307},
+		{"0.6cm", 340}, {"0.3333in", 480}, {"0.889in", 1280}, {"0.667in", 960},
+	}
+	for _, tt := range tests {
+		v, ok := odf.Length(tt.length)
+		if !ok {
+			t.Fatalf("odf.Length(%q) failed", tt.length)
+		}
+		if got := calcTwips(v); math.Abs(got*20-tt.twips) > 1e-9 {
+			t.Errorf("calcTwips(%s) = %v twips, want %v", tt.length, got*20, tt.twips)
+		}
 	}
 }
 

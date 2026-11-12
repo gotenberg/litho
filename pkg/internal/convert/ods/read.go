@@ -406,7 +406,7 @@ func (r *reader) column(ts *tableState, el *odf.Element, hidden, header bool) {
 	props := r.styles.Resolve(odf.ScopeContent, odf.FamilyColumn, el.A(odf.NSTable, "style-name"), odf.ColumnProps)
 	width := 0.0
 	if w, ok := odf.Length(props.Get("style:column-width")); ok && w > 0 {
-		width = w
+		width = calcTwips(w)
 	}
 	hidden = hidden || el.A(odf.NSTable, "visibility") == "collapse" || el.A(odf.NSTable, "visibility") == "filter"
 	col := sheet.Column{
@@ -508,6 +508,7 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 		Style:  r.cellStyle(el.A(odf.NSTable, "default-cell-style-name")),
 	}
 	if h, ok := odf.Length(props.Get("style:row-height")); ok && h > 0 {
+		h = calcTwips(h)
 		tmpl.Height = h
 		ts.lastRowHeight = h
 	}
@@ -600,6 +601,30 @@ func hasValue(cells []sheet.Cell) bool {
 		}
 	}
 	return false
+}
+
+// calcTwips returns a row height or column width of v points as Calc
+// reads it from a file: the length in 1/100 mm, rounded, the unit of the
+// Height and Width properties the ODF import sets (xmloff's measure
+// converter), then in twips, rounded (ScTableRowsObj and
+// ScTableColumnsObj::setPropertyValue, o3tl::toTwips from mm100,
+// sc/source/ui/unoobj/docuno.cxx), as Calc holds both. The value
+// returned is that count of twips in points.
+//
+// # Corpus evidence
+//
+//   - probe, ods: rows of 0.208in (528.32 hundredths), 0.5cm, 5.3mm,
+//     15.3pt, 15.33pt, 0.6cm and 0.3333in, converted by Gotenberg 9.4.1,
+//     print as rows of 299, 283, 300, 306, 307, 340 and 480 twips: 0.208in
+//     rounded straight to twips would be 300. A row of 5.307mm (530.7
+//     hundredths) prints as 301 twips and one of 5.303mm as 300: the
+//     hundredths round before the twips do. Columns follow the same rule.
+//   - probe, ods: rows of 0.2468in (17.77 points, 355 twips) print 41 a
+//     page on an A4 body of 728.5 points, which 17.77-point rows would
+//     fill with 40.
+func calcTwips(v float64) float64 {
+	hmm := math.Round(v * 2540 / 72)
+	return math.Round(hmm*72/127) / 20
 }
 
 // rowHeightSlack is the difference under which a row's height is the
