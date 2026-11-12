@@ -294,12 +294,15 @@ func footerKind(p placeholder) bool {
 //
 // # Corpus evidence
 //
-//   - litho/pdf: a slide's slide number placeholder prints the slide's number
+//   - litho/pptx: a slide's slide number placeholder prints the slide's number
 //     at the slide's own place when its layout holds one, and nothing when
 //     only the master does, whatever the master's p:hf says; a placeholder
 //     no layer places prints nothing.
 //   - libreoffice/pptx: sd/tdf104015's empty title placeholder prints its red fill and
 //     blue outline.
+//   - libreoffice/pptx: sd/tdf127964's rectangle filled with the background
+//     prints white over the white slide, not its style's accent1;
+//     sd/tdf105150's hides the red frame under it.
 func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	chain := inherited(c.layer, el)
 	p, isPh := phOf(el)
@@ -322,10 +325,8 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	fc := &fillCtx{sc: c.sc, part: c.part, group: c.group}
 	s.Fill = r.shapeFill(fc, chain, style)
 	if boolAttr(el, "useBgFill", false) && c.bg != nil {
-		// pptx: sd/tdf127964's rectangle filled with the background
-		// prints white over the white slide, not its style's accent1;
-		// sd/tdf105150's hides the red frame under it: a slide without a
-		// background is white.
+		// A shape filled with the background of a slide without one is
+		// white, as the slide prints.
 		s.Fill = *c.bg
 		if s.Fill.Kind == slides.FillNone {
 			s.Fill = slides.Fill{Kind: slides.FillSolid, Color: css.Color{R: 1, G: 1, B: 1, A: 1}}

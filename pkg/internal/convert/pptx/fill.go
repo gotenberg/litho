@@ -19,9 +19,12 @@ type fillCtx struct {
 }
 
 // withPh returns fc with phClr standing for c, opaque: Impress takes a
-// style reference's colour for phClr without its alpha (pptx:
-// sd/smartart-center-cycle's ellipses, whose colour definition gives
-// accent1 at half alpha, print accent1 solid).
+// style reference's colour for phClr without its alpha.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/smartart-center-cycle's ellipses, whose colour
+//     definition gives accent1 at half alpha, print accent1 solid.
 func (fc *fillCtx) withPh(c css.Color) *fillCtx {
 	if c.A > 0 {
 		c.A = 1
@@ -191,7 +194,12 @@ func firstColor(f slides.Fill) (css.Color, bool) {
 // styleFill returns the fill a style matrix reference names (20.1.4.2.10
 // fillRef, 19.3.1.3 bgRef): idx 0 none, 1 to 999 the theme's fill styles,
 // 1001 and up its background fill styles, phClr standing for the
-// reference's colour.
+// reference's colour. A picture of the theme's styles is the theme part's.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/tdf123684's master background, the theme's third
+//     background style, is a blipFill of the theme's own image.
 func (r *reader) styleFill(fc *fillCtx, ref *ooxml.Element) slides.Fill {
 	idx, ok := intAttr(ref, "idx")
 	if !ok || idx == 0 {
@@ -209,9 +217,7 @@ func (r *reader) styleFill(fc *fillCtx, ref *ooxml.Element) slides.Fill {
 		}
 		return slides.Fill{}
 	}
-	// A picture of the theme's styles is the theme part's (pptx:
-	// sd/tdf123684's master background, the theme's third background
-	// style, a blipFill of the theme's own image).
+	// The theme part's relationships name a picture of its styles.
 	tfc := fc.withPh(ph)
 	if fc.sc.theme.part != "" {
 		tfc.part = fc.sc.theme.part

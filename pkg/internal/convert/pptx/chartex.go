@@ -10,10 +10,12 @@ import (
 // chartExChoices are the namespaces of the mc:Choice of an Office 2016
 // chart the reader takes over its Fallback picture (ECMA-376 Part 3,
 // 10.2): the cx1 and cx2 namespaces PowerPoint's mc:AlternateContent
-// requires, as Impress draws the chart, not the picture (chart2/funnel-pp1
-// prints its funnel's title, legend and axis).
+// requires, as Impress draws the chart, not the picture.
 //
-//nolint:gochecknoglobals // static list of namespaces
+// # Corpus evidence
+//
+//   - libreoffice/pptx: chart2/funnel-pp1 prints its funnel's title, legend
+//     and axis.
 var chartExChoices = []string{
 	"http://schemas.microsoft.com/office/drawing/2015/9/8/chartex",
 	"http://schemas.microsoft.com/office/drawing/2015/10/21/chartex",

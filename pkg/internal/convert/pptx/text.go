@@ -173,24 +173,30 @@ func fontRefLevel(ref *ooxml.Element) *ooxml.Element {
 // placeholder p (the master's other style for a shape that is no
 // placeholder). ref is the shape style's font reference. nil for a shape
 // without a text body.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/tdf120028's body placeholder of an index its
+//     layout lacks prints in the master body style's Arial.
+//   - libreoffice/pptx: sd-data/n759180's placeholder of the index
+//     4294967295 takes the master's other style.
+//   - libreoffice/pptx: sd/bullet-indent's <p:ph/> prints its bullets at
+//     margin 0.
 func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *ooxml.Element) *slides.TextBody {
 	tb := kid(sc[0], "txBody")
 	if tb == nil {
 		return nil
 	}
 	// A placeholder takes its master's text style for its type even when
-	// its layout lacks it (libreoffice/pptx: sd/tdf120028's body placeholder of an
-	// index its layout lacks prints in the master body style's Arial);
-	// one of the index 4294967295, which Impress looks up nowhere, takes
-	// the other style (sd-data/n759180).
+	// its layout lacks it; one of the index 4294967295, which Impress looks
+	// up nowhere, takes the other style.
 	own, isPh := phOf(sc[0])
 	isPh = isPh && !own.skip
 	master := c.layer.styleFor(p, isPh)
 	if isPh && own.typ == "obj" && !own.hasIdx {
 		// An object placeholder without an index takes no list style of
 		// its layout's or master's placeholder and no master body style:
-		// the presentation's default text style (libreoffice/pptx: sd/bullet-indent's
-		// <p:ph/> prints its bullets at margin 0).
+		// the presentation's default text style.
 		sc, master = sc[:1], nil
 	}
 	ts := &textStyles{extra: fontRefLevel(ref), master: master, def: r.defaultText, sc: c.sc, part: c.part, owners: map[*ooxml.Element]string{}}
@@ -222,6 +228,11 @@ func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *
 // bodyProps reads the body properties along a chain of bodyPr elements
 // (21.1.2.1.1): insets, anchor, wrap, columns, vertical text, direction
 // and autofit.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/n862510_4 prints its spAutoFit boxes at their
+//     saved height.
 func bodyProps(bc chain) *slides.TextBody {
 	b := &slides.TextBody{Insets: [4]float64{defaultInsetTB, defaultInsetLR, defaultInsetTB, defaultInsetLR}, Wrap: true}
 	for side, name := range [4]string{"tIns", "rIns", "bIns", "lIns"} {
@@ -278,8 +289,7 @@ func bodyProps(bc chain) *slides.TextBody {
 		b.SpacingReduction = percent(attr(fit, "lnSpcReduction"))
 	case fit.Local == "spAutoFit":
 		// Impress keeps the box the file saved for a shape that fits its
-		// text (libreoffice/pptx: sd/n862510_4 prints its spAutoFit boxes at their
-		// saved height): the text runs past the box as it would without.
+		// text: the text runs past the box as it would without.
 		b.Autofit = slides.AutofitNone
 	}
 	return b
@@ -326,6 +336,12 @@ func (r *reader) paragraphs(tb *ooxml.Element, ts *textStyles) []slides.Paragrap
 
 // paragraph reads one a:p (21.1.2.2.6) with its properties resolved along
 // its level's chain.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/tdf102261_testParaTabStopDefaultDistance's
+//     paragraphs of defTabSz 457200 and 1828800 print their tabbed digits
+//     every 36 and 144 points.
 func (r *reader) paragraph(p *ooxml.Element, ts *textStyles) slides.Paragraph {
 	ppr := p.Child(ooxml.NSA, "pPr")
 	lvl, _ := intAttr(ppr, "lvl")
@@ -377,10 +393,6 @@ func (r *reader) paragraph(p *ooxml.Element, ts *textStyles) slides.Paragraph {
 	// The interval of the default stops past the last explicit one,
 	// from the paragraph, its list levels, the master's text style or the
 	// presentation's default text style (21.1.2.2.7 pPr defTabSz).
-	//
-	// pptx: sd/tdf102261_testParaTabStopDefaultDistance's paragraphs of
-	// defTabSz 457200 and 1828800 print their tabbed digits every 36 and
-	// 144 points.
 	if v, ok := pc.attr("defTabSz"); ok {
 		if d, ok := ooxml.EMU(v); ok && d >= 1 {
 			out.DefaultTab = min(d, maxTabInterval)
@@ -554,6 +566,10 @@ func hasText(runs []slides.Run) bool {
 // runStyle resolves a run's properties along c (21.1.2.3.9 rPr): faces
 // with theme fonts resolved, size, weight, slant, underline, strike,
 // spacing, capitals, baseline, colour and language.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/tdf118776's text of noFill prints nothing.
 func (r *reader) runStyle(c chain, sc scope) slides.RunStyle {
 	s := slides.RunStyle{Size: defaultTextSize}
 	seen := map[string]bool{}
@@ -626,8 +642,7 @@ func (r *reader) runStyle(c chain, sc scope) slides.RunStyle {
 			}
 		case "noFill":
 			// Text of no fill paints nothing: a transparent colour, which
-			// the zero colour, black, is not (libreoffice/pptx: sd/tdf118776's text
-			// of noFill prints nothing).
+			// the zero colour, black, is not.
 			s.Color = css.Color{R: 1, G: 1, B: 1}
 		}
 	} else if col, ok := sc.resolver(nil)("tx1"); ok {
@@ -665,6 +680,12 @@ func (r *reader) linkStyle(s *slides.RunStyle, h *ooxml.Element, sc scope) {
 // bullet resolves a paragraph's bullet along its chain (21.1.2.4): the
 // first of buNone, buChar, buAutoNum and buBlip sets the kind; the font,
 // colour and size come each from the first element that sets them.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/bnc862510_5's buChar "••" prints one bullet.
+//   - libreoffice/pptx: sd/n862510_2's diagram bullet, of no face, prints
+//     in OpenSymbol.
 func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
 	kind, holder := pc.firstWith("buNone", "buChar", "buAutoNum", "buBlip")
 	if kind == nil || kind.Local == "buNone" {
@@ -674,7 +695,7 @@ func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
 	switch kind.Local {
 	case "buChar":
 		// Impress draws a bullet of one character: the first of a longer
-		// buChar char (libreoffice/pptx: sd/bnc862510_5's "••" prints one bullet).
+		// buChar char.
 		b.Kind, b.Char = slides.BulletChar, firstRune(attr(kind, "char"))
 		if b.Char == "" {
 			return nil
@@ -700,8 +721,7 @@ func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
 	}
 	if f := pc.first("buFont", "buFontTx"); f == nil && b.Kind == slides.BulletChar {
 		// A bullet character no level gives a face draws in Impress's
-		// default bullet face (libreoffice/pptx: sd/n862510_2's diagram bullet prints
-		// in OpenSymbol).
+		// default bullet face.
 		b.Families = []string{symbolFace}
 	} else if f != nil && f.Local == "buFont" {
 		if name := ts.sc.theme.font(attr(f, "typeface")); name != "" {
