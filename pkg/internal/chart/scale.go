@@ -9,6 +9,16 @@ import (
 // costs a label and a gridline.
 const maxTicks = 500
 
+// maxMinorTicks caps the minor ticks of an axis. Anti-DoS guard, not
+// spec-mandated: five minor ticks per major one at the major cap.
+const maxMinorTicks = maxTicks * 5
+
+// maxMinorSteps caps the additions that walk the minor ticks. Anti-DoS
+// guard, not spec-mandated: a rounded addition that moves a tick moves it
+// by at least half a step, so a walk over at most maxMinorTicks steps
+// ends within twice as many; the cap allows four times.
+const maxMinorSteps = 4 * maxMinorTicks
+
 // maxAutoTicks is the most major intervals the automatic scale chooses,
 // LibreOffice's for a value axis.
 const maxAutoTicks = 10
@@ -310,16 +320,24 @@ func (s scale) minorTicks() []float64 {
 	if !(step > 0) {
 		step = s.major / 5
 	}
-	if (s.max-s.min)/step > maxTicks*5 {
+	if (s.max-s.min)/step > maxMinorTicks {
 		return nil
 	}
 	var out []float64
-	start := ceilAt(s.min, step, 0)
-	for v := start; v <= s.max+1e-9*step; v += step {
+	// The ticks accumulate the step, which rounds differently from
+	// start + i*step. A step under half the spacing of the floats near v
+	// leaves v where it is, and the walk stops there.
+	v := ceilAt(s.min, step, 0)
+	for i := 0; i < maxMinorSteps && v <= s.max+1e-9*step; i++ {
 		r := math.Abs(math.Remainder(v, s.major))
 		if r > 1e-9*s.major {
 			out = append(out, v)
 		}
+		next := v + step
+		if next == v {
+			break
+		}
+		v = next
 	}
 	return out
 }

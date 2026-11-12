@@ -2,7 +2,9 @@ package chart
 
 import (
 	"math"
+	"slices"
 	"testing"
+	"time"
 )
 
 func TestAutoScale_LibreOfficeRanges(t *testing.T) {
@@ -76,5 +78,37 @@ func TestSplineSlopes_LinearDataStaysStraight(t *testing.T) {
 		if math.Abs(v-2) > 1e-9 {
 			t.Fatalf("slope %d = %v, want 2", i, v)
 		}
+	}
+}
+
+func TestScale_MinorTicksStopWhenTheStepVanishes(t *testing.T) {
+	// 8 is under half the spacing of the floats near 1e20 (16384), so
+	// adding the step leaves the tick where it is.
+	s := scale{min: 1e20, max: 1e20 + 16384, major: 16384, minor: 8}
+	done := make(chan int, 1)
+	go func() { done <- len(s.minorTicks()) }()
+	select {
+	case n := <-done:
+		if n > maxMinorTicks {
+			t.Errorf("got %d minor ticks, want at most %d", n, maxMinorTicks)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("minorTicks does not return")
+	}
+}
+
+func TestScale_MinorTicksAccumulateTheStep(t *testing.T) {
+	// Ten additions of 0.1 sum to 0.9999999999999999, not 1: the ticks
+	// keep the accumulated values.
+	s := scale{min: 0, max: 2, major: 2, minor: 0.1}
+	got := s.minorTicks()
+	want := []float64{}
+	for v := 0.0; v <= 2+1e-10; v += 0.1 {
+		if math.Abs(math.Remainder(v, 2)) > 2e-9 {
+			want = append(want, v)
+		}
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
