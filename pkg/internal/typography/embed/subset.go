@@ -109,6 +109,7 @@ func (s *Subset) hasDiffering(gid uint16) bool {
 func subsetTag(keep []uint16) string {
 	h := fnv.New32a()
 	for _, gid := range keep {
+		// A hash.Hash's Write never returns an error.
 		_, _ = h.Write(binary.BigEndian.AppendUint16(nil, gid))
 	}
 	v := h.Sum32()

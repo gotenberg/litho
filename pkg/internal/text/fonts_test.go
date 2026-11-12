@@ -134,7 +134,7 @@ func TestNewFonts_Collection(t *testing.T) {
 	if truetype.IsCollection(cf.Program) || !truetype.IsSfnt(cf.Program) || cf.Key != face.Key() {
 		t.Errorf("Compose returns a collection or a wrong key %s", cf.Key)
 	}
-	if again, _ := face.Compose(); again != cf {
+	if again, _ := face.Compose(); again != cf { // the first call succeeded on the same file
 		t.Error("Compose returns a new value on the second call")
 	}
 	widths, err := truetype.GlyphWidths(context.Background(), cf.Program)

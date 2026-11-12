@@ -67,6 +67,7 @@ func testOpenTypeCFF(t *testing.T) []byte {
 	sort.Strings(tags)
 	var out, body bytes.Buffer
 	out.WriteString("OTTO")
+	// binary.Write into a bytes.Buffer of fixed-size values cannot fail.
 	_ = binary.Write(&out, binary.BigEndian, uint16(len(tags))) //nolint:gosec // a handful of tables
 	_ = binary.Write(&out, binary.BigEndian, [3]uint16{0, 0, 0})
 	offset := 12 + 16*len(tags)
