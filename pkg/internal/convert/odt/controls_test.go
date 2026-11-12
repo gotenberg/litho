@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
@@ -57,7 +58,7 @@ func TestConvertFormControlsAsFields(t *testing.T) {
 		if f.Parent == nil || f.Parent.Role != "Form" {
 			t.Errorf("field %q hangs from %v, want a Form element", f.Name, f.Parent)
 		}
-		if !(f.Rect.Width > 0) || !(f.Rect.Height > 0) {
+		if !numeric.Positive(f.Rect.Width) || !numeric.Positive(f.Rect.Height) {
 			t.Errorf("field %q has rectangle %v", f.Name, f.Rect)
 		}
 	}

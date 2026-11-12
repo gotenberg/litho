@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
@@ -208,7 +209,7 @@ scan:
 		}
 	}
 	v, err := strconv.ParseFloat(sc.s[start:i], 64)
-	if err != nil || !finite(v) {
+	if err != nil || !numeric.Finite(v) {
 		return 0, false
 	}
 	sc.pos = i
@@ -437,7 +438,7 @@ func arcCubics(x0, y0, rx, ry, rotDeg float64, large, sweep bool, x, y float64) 
 	} else if sweep && dt < 0 {
 		dt += 2 * math.Pi
 	}
-	if !finite(dt) || !finite(ccx) || !finite(ccy) {
+	if !numeric.Finite(dt) || !numeric.Finite(ccx) || !numeric.Finite(ccy) {
 		return []shape.Cmd{cmdOf(shape.CmdLine, x, y)}
 	}
 	n := int(math.Ceil(math.Abs(dt)/(math.Pi/2) - 1e-9))

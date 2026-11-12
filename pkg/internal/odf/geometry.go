@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 )
 
@@ -109,7 +110,7 @@ func parseEnhanced(el *Element, path string) *shape.Custom {
 		ok := true
 		for i, s := range f {
 			n, err := strconv.ParseFloat(s, 64)
-			ok = ok && err == nil && finite(n)
+			ok = ok && err == nil && numeric.Finite(n)
 			v[i] = n
 		}
 		if ok && v[2] >= 0 && v[3] >= 0 {
@@ -126,7 +127,7 @@ func parseEnhanced(el *Element, path string) *shape.Custom {
 				break
 			}
 			v, err := strconv.ParseFloat(s, 64)
-			if err != nil || !finite(v) {
+			if err != nil || !numeric.Finite(v) {
 				v = 0
 			}
 			c.Adjust = append(c.Adjust, shape.Guide{Name: "$" + strconv.Itoa(i), Op: shape.OpVal, Args: [3]shape.Arg{{Value: v}}})
@@ -171,7 +172,7 @@ func parseEnhanced(el *Element, path string) *shape.Custom {
 		for i := 0; i+1 < len(sizes) && i/2 < len(c.Paths); i += 2 {
 			w, errW := strconv.ParseFloat(sizes[i], 64)
 			h, errH := strconv.ParseFloat(sizes[i+1], 64)
-			if errW == nil && errH == nil && w > 0 && h > 0 && finite(w) && finite(h) {
+			if errW == nil && errH == nil && w > 0 && h > 0 && numeric.Finite(w) && numeric.Finite(h) {
 				c.Paths[i/2].W, c.Paths[i/2].H = w, h
 			}
 		}
@@ -181,9 +182,6 @@ func parseEnhanced(el *Element, path string) *shape.Custom {
 	}
 	return c
 }
-
-// finite reports whether v is neither NaN nor infinite.
-func finite(v float64) bool { return v-v == 0 }
 
 // maxUnresolvedNames caps the unresolved names a geometry records for its
 // warning. Anti-DoS guard, not spec-mandated: a handful say what is wrong.
@@ -225,7 +223,7 @@ var identifiers = map[string]shape.Builtin{ //nolint:gochecknoglobals // a read-
 // number, an equation reference ?name, a modifier reference $n or an
 // identifier (19.145).
 func (e *enhanced) param(tok string) shape.Arg {
-	if v, err := strconv.ParseFloat(tok, 64); err == nil && finite(v) {
+	if v, err := strconv.ParseFloat(tok, 64); err == nil && numeric.Finite(v) {
 		return shape.Arg{Value: v}
 	}
 	if name, ok := strings.CutPrefix(tok, "?"); ok {

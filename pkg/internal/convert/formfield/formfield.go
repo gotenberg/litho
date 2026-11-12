@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // Control is one form control of a source document.
@@ -132,7 +133,7 @@ func attach(res *layout.Result, c *Control, byPage map[int][]*formElem, m *compo
 	var rect compose.Rect
 	if c.Box && hasBox {
 		rect = box
-	} else if rect, ok = m.Bounds(taken); !ok || !(rect.Width > 0) || !(rect.Height > 0) {
+	} else if rect, ok = m.Bounds(taken); !ok || !numeric.Positive(rect.Width) || !numeric.Positive(rect.Height) {
 		pg.Content = append(pg.Content, taken...)
 		return false
 	}
