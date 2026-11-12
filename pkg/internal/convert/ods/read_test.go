@@ -656,20 +656,28 @@ func TestRead_ChartPastACapStops(t *testing.T) {
 //
 //   - probe, ods: through gotenberg/gotenberg:9.4.1, rows without a style
 //     before and after rows of 30 mm print 12.78 points apart.
+//   - libreoffice/ods: sc/tdf121040.ods prints its rows, whose style says
+//     style:use-optimal-row-height false and sets no height, as tall as
+//     their content.
 func TestUnstyledRowHeight(t *testing.T) {
 	cell := `<table:table-cell office:value-type="string"><text:p>x</text:p></table:table-cell>`
 	f := flat{
-		auto: `<style:style style:name="ro" style:family="table-row"><style:table-row-properties style:row-height="30mm" style:use-optimal-row-height="false"/></style:style>`,
-		body: table("S", `<table:table-row>`+cell+`</table:table-row><table:table-row table:style-name="ro">`+cell+`</table:table-row><table:table-row>`+cell+`</table:table-row>`),
+		auto: `<style:style style:name="ro" style:family="table-row"><style:table-row-properties style:row-height="30mm" style:use-optimal-row-height="false"/></style:style>` +
+			`<style:style style:name="rn" style:family="table-row"><style:table-row-properties style:use-optimal-row-height="false"/></style:style>`,
+		body: table("S", `<table:table-row>`+cell+`</table:table-row><table:table-row table:style-name="ro">`+cell+`</table:table-row>`+
+			`<table:table-row>`+cell+`</table:table-row><table:table-row table:style-name="rn">`+cell+`</table:table-row>`),
 	}
 	doc, _ := read(t, f.bytes())
 	rows := doc.Sheets[0].Rows
-	if len(rows) != 3 {
-		t.Fatalf("rows = %d, want 3", len(rows))
+	if len(rows) != 4 {
+		t.Fatalf("rows = %d, want 4", len(rows))
 	}
-	for i, want := range []float64{defaultRowHeight, calcTwips(30 * 72 / 25.4), defaultRowHeight} {
-		if rows[i].Height != want {
-			t.Errorf("row %d height = %v, want %v", i, rows[i].Height, want)
+	for i, want := range []struct {
+		h      float64
+		custom bool
+	}{{defaultRowHeight, false}, {calcTwips(30 * 72 / 25.4), true}, {defaultRowHeight, false}, {defaultRowHeight, false}} {
+		if rows[i].Height != want.h || rows[i].CustomHeight != want.custom {
+			t.Errorf("row %d height = %v custom %v, want %v custom %v", i, rows[i].Height, rows[i].CustomHeight, want.h, want.custom)
 		}
 	}
 }

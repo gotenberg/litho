@@ -509,6 +509,9 @@ func (r *reader) rowsOf(ts *tableState, el *odf.Element, hidden, header bool, de
 //     standard height, three empty repeated ones included.
 //   - litho/ods: cjk-cells prints its unstyled first row at the standard
 //     height above three rows of 45 mm.
+//   - libreoffice/ods: sc/tdf121040.ods prints its rows, whose style says
+//     style:use-optimal-row-height false and sets no height, as tall as
+//     their content.
 func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 	n := repeat(el, "number-rows-repeated", maxRows-ts.row)
 	styleName := el.A(odf.NSTable, "style-name")
@@ -527,12 +530,13 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 		}
 		tmpl.Height = h
 		ts.lastRowHeight = h
+		tmpl.CustomHeight = !optimal
 	} else {
 		// A row whose style sets no height, or that names no style, is
-		// Calc's standard height, whatever the rows before it are.
+		// Calc's standard height, whatever the rows before it are, and
+		// grows to its content: without a height, there is none to keep.
 		tmpl.Height, ts.lastRowHeight = defaultRowHeight, defaultRowHeight
 	}
-	tmpl.CustomHeight = !optimal && tmpl.Height > 0
 	brk := props.Get("fo:break-before") == "page"
 	if header {
 		ts.headerRows = extend(ts.headerRows, ts.row, ts.row+n-1, true)
