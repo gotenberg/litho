@@ -142,6 +142,7 @@ func (d *document) assemble(res *layout.Result) (*compose.Document, error) {
 		lang = d.lang()
 	}
 	padTableRows(res.Structure)
+	d.attachControls(res)
 	doc := &compose.Document{
 		Metadata:  compose.Metadata{Title: cp.Title, Author: cp.Creator, Subject: subject, Keywords: cp.Keywords, Lang: lang},
 		Structure: res.Structure,

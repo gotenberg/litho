@@ -108,6 +108,8 @@ type document struct {
 	marginAnchors []pendingAnchor
 	// background is the page background of every page, nil for none.
 	background *css.Style
+	// form gathers the form controls made fields.
+	form formState
 	// root is the main part's root, read before the parts it relates to
 	// so that the marked view numbers the authors of its revisions
 	// first.

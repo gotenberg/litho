@@ -888,7 +888,7 @@ func (d *document) inlines(s *story, rp resolvedPara, ps *css.Style, lineMult fl
 		case e.Is(w, "fldSimple"):
 			d.simpleField(s, rp, ps, lineMult, e, sink, depth)
 		case e.Is(w, "sdt"):
-			d.inlines(s, rp, ps, lineMult, e.Child(w, "sdtContent"), sink, depth+1)
+			d.inlineControl(s, rp, ps, lineMult, e, sink, depth)
 		case e.Is(w, "ins"), e.Is(w, "moveTo"), e.Is(w, "smartTag"), e.Is(w, "customXml"), e.Is(w, "dir"), e.Is(w, "bdo"):
 			// Insertions print as the final text, as LibreOffice prints a
 			// document with its changes shown (17.13.5).

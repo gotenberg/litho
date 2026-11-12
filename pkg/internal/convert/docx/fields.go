@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/convert/formfield"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -27,6 +28,11 @@ type field struct {
 	// locked is the begin character's w:fldLock: the result stays as
 	// stored (17.16.18).
 	locked bool
+	// ff is the begin character's w:ffData, a legacy form field's
+	// (17.16.17), and control the field it becomes while its result is
+	// read ([document.legacyResult]).
+	ff      *ooxml.Element
+	control *formfield.Control
 }
 
 // inTOC reports a run inside the result of an open TOC field (17.16.5.68).
@@ -76,7 +82,7 @@ func (d *document) fieldChar(s *story, c *ooxml.Element, st *css.Style, sink *in
 		if len(s.open) >= maxOpenFields {
 			return
 		}
-		s.open = append(s.open, &field{locked: fieldLocked(c)})
+		s.open = append(s.open, &field{locked: fieldLocked(c), ff: c.Child(w, "ffData")})
 	case "separate":
 		if f := s.top(); f != nil && !f.result {
 			d.startResult(s, f, st, sink)
@@ -92,6 +98,9 @@ func (d *document) fieldChar(s *story, c *ooxml.Element, st *css.Style, sink *in
 		if f.link {
 			sink.closeLink()
 		}
+		if f.control != nil {
+			d.endLegacy(f, sink)
+		}
 		s.open = s.open[:len(s.open)-1]
 	}
 }
@@ -103,6 +112,9 @@ func (d *document) startResult(s *story, f *field, st *css.Style, sink *inlineSi
 	instr := f.instr.String()
 	if hiddenField(instr) {
 		f.computed = true
+		return
+	}
+	if d.legacyResult(f, st, sink) {
 		return
 	}
 	if v, ok := d.computeField(s, instr, f.locked); ok {
