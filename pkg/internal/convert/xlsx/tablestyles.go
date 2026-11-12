@@ -1,8 +1,6 @@
 package xlsx
 
 import (
-	"context"
-
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -129,7 +127,7 @@ func (r *reader) tableStyleNamed(name string) *tableStyle {
 	if !ok {
 		return nil
 	}
-	root, err := ooxml.Parse(context.Background(), []byte(`<s xmlns="`+nsMain+`">`+xml+`</s>`), nil)
+	root, err := ooxml.Parse(r.ctx, []byte(`<s xmlns="`+nsMain+`">`+xml+`</s>`), nil)
 	if err != nil {
 		return nil
 	}
@@ -329,16 +327,31 @@ const (
 // first and last columns, a column stripe) down it, one header cell, or
 // the whole table.
 func (ts *tableStyle) region(d *dxf) int {
-	for name, reg := range map[string]int{
-		"headerRow": regionRow, "totalRow": regionRow, "firstRowStripe": regionRow, "secondRowStripe": regionRow,
-		"firstColumn": regionColumn, "lastColumn": regionColumn, "firstColumnStripe": regionColumn, "secondColumnStripe": regionColumn,
-		"firstHeaderCell": regionCell, "lastHeaderCell": regionCell,
-	} {
-		if ts.elements[name] == d {
-			return reg
+	for _, e := range elementRegions {
+		if ts.elements[e.name] == d {
+			return e.region
 		}
 	}
 	return regionTable
+}
+
+// elementRegions are the regions of the table style elements that cover
+// less than the whole table. Each element holds its own format, so at
+// most one of them matches a format.
+var elementRegions = [...]struct {
+	name   string
+	region int
+}{
+	{"headerRow", regionRow},
+	{"totalRow", regionRow},
+	{"firstRowStripe", regionRow},
+	{"secondRowStripe", regionRow},
+	{"firstColumn", regionColumn},
+	{"lastColumn", regionColumn},
+	{"firstColumnStripe", regionColumn},
+	{"secondColumnStripe", regionColumn},
+	{"firstHeaderCell", regionCell},
+	{"lastHeaderCell", regionCell},
 }
 
 // cellRef returns the cell at row and col, added with its row when the
