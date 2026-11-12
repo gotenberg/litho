@@ -36,8 +36,10 @@
 //   - Frames: pictures (PNG, JPEG, GIF, BMP, TIFF, SVG) as characters,
 //     floating beside the text or standing above it, cropped and mirrored;
 //     text boxes; the replacement pictures of objects; rectangles,
-//     ellipses, lines, polygons and paths, and the rectangle and ellipse
-//     custom shapes, with the text they hold.
+//     ellipses, lines, polygons and paths, and the custom shapes whose
+//     geometry the shape engine knows, with the text they hold.
+//   - Form controls as LibreOffice prints them, or as interactive form
+//     fields when office.Options.FormFields asks.
 //   - Notes: footnotes at the bottom of their page under the page
 //     layout's separator, endnotes on a page after the text, each
 //     citation and its note's number linked both ways.
@@ -64,9 +66,9 @@
 //
 // # What is not
 //
-// WMF, EMF and SVM pictures, form controls' content, the tables of
-// drawing shapes, other custom shape geometries, ruby annotations, line
-// numbering, drop caps and comments are not drawn, each with a warning
-// where the document holds one. The marked view draws no mark in a
+// WMF, EMF and SVM pictures, the tables of drawing shapes, other custom
+// shape geometries, ruby annotations, line numbering, drop caps and
+// comments are not drawn, each with a warning where the document holds
+// one. The marked view draws no mark in a
 // header or a footer, and no change bar beside the lines of a frame.
 package odt
