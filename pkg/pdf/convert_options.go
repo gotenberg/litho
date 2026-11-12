@@ -572,10 +572,14 @@ func WithMediaType(media string) HTMLOption {
 // WithMediaFeatures sets the discrete media features the @media rules of an
 // HTML or Markdown source evaluate against, by lowercase name, such as
 // "prefers-color-scheme": "dark" (Media Queries 5, 2.4). A feature absent
-// keeps its default: light, no-preference, none, what a printer reports. A
-// name that is not lowercase fails the conversion with
-// [ErrInvalidConvertOptions]. The map is read when the conversion runs and
-// must not change until then.
+// keeps its default, what a browser reports when it prints: a light colour
+// scheme, no preference for motion, contrast or transparency, no hover, no
+// pointer, no scripting, no forced colours, the sRGB gamut, a standard
+// dynamic range, the browser display mode. Three follow [WithMediaType]:
+// overflow-block is paged, overflow-inline and update are none for print,
+// and scroll, scroll and fast for screen. A name that is not lowercase
+// fails the conversion with [ErrInvalidConvertOptions]. The map is read
+// when the conversion runs and must not change until then.
 func WithMediaFeatures(features map[string]string) HTMLOption {
 	return htmlOption(func(c *convertConfig) { c.mediaFeatures = features })
 }

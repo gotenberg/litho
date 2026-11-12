@@ -139,8 +139,8 @@ type Options struct {
 	HTTPClient *http.Client
 	// MediaFeatures are the discrete media features the @media rules
 	// evaluate against, by lowercase name, such as "prefers-color-scheme":
-	// "dark" (Media Queries 5, 2.4). A feature absent keeps its default:
-	// light, no-preference, none.
+	// "dark" (Media Queries 5, 2.4). A feature absent keeps the default
+	// css.Media gives it for the media type.
 	MediaFeatures map[string]string
 	// MarginTop, MarginRight, MarginBottom and MarginLeft are the page
 	// margins in points, zero for none. Each is zero or more, and they leave
