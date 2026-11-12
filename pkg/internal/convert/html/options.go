@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -214,8 +215,8 @@ func (o Options) withDefaults() (Options, error) {
 		name  string
 		value float64
 	}{{"page width", o.PageWidth}, {"page height", o.PageHeight}} {
-		// The negated range also refuses NaN.
-		if !(v.value > 0 && v.value <= maxPageSide) {
+		// A NaN is not positive, and is refused with what is not.
+		if !numeric.Positive(v.value) || v.value > maxPageSide {
 			return o, fmt.Errorf("%w: %s %v is not in (0, %v]", typeset.ErrInvalidOptions, v.name, v.value, maxPageSide)
 		}
 	}
@@ -241,8 +242,7 @@ func (o Options) withDefaults() (Options, error) {
 	if o.Media != MediaPrint && o.Media != MediaScreen {
 		return o, fmt.Errorf("%w: media type %q is neither %q nor %q", typeset.ErrInvalidOptions, o.Media, MediaPrint, MediaScreen)
 	}
-	// The negated range also refuses NaN.
-	if !(o.Scale >= MinScale && o.Scale <= MaxScale) {
+	if !numeric.Finite(o.Scale) || o.Scale < MinScale || o.Scale > MaxScale {
 		return o, fmt.Errorf("%w: scale %v is not in [%v, %v]", typeset.ErrInvalidOptions, o.Scale, MinScale, MaxScale)
 	}
 	if o.BaseURL != "" {

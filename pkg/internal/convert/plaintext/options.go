@@ -2,10 +2,10 @@ package plaintext
 
 import (
 	"fmt"
-	"math"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -138,8 +138,8 @@ func (o Options) withDefaults() (Options, error) {
 		{"font size", o.FontSize, maxFontSize},
 		{"line height", o.LineHeight, maxLineHeight},
 	} {
-		// The negated range also refuses NaN.
-		if !(v.value > 0 && v.value <= v.max) {
+		// A NaN is not positive, and is refused with what is not.
+		if !numeric.Positive(v.value) || v.value > v.max {
 			return o, fmt.Errorf("%w: %s %v is not in (0, %v]", typeset.ErrInvalidOptions, v.name, v.value, v.max)
 		}
 	}
@@ -152,8 +152,7 @@ func (o Options) withDefaults() (Options, error) {
 		{"bottom margin", o.MarginBottom},
 		{"left margin", o.MarginLeft},
 	} {
-		// The negated range also refuses NaN.
-		if !(v.value >= 0 && v.value < math.Inf(1)) {
+		if !numeric.Finite(v.value) || v.value < 0 {
 			return o, fmt.Errorf("%w: %s %v is not a finite number of points, zero or more", typeset.ErrInvalidOptions, v.name, v.value)
 		}
 	}
