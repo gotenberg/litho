@@ -165,3 +165,23 @@ func TestSpacedText(t *testing.T) {
 		t.Errorf("text %q", sb.String())
 	}
 }
+
+// TestRead_ShapeGroupDepth locks the bound on draw:g nesting: a shape
+// inside [maxShapeGroupDepth] groups is drawn, one inside a group more is
+// left out with a warning.
+func TestRead_ShapeGroupDepth(t *testing.T) {
+	nested := func(groups int, name string) string {
+		return strings.Repeat(`<draw:g>`, groups) +
+			`<draw:rect draw:name="` + name + `" svg:x="0in" svg:y="0in" svg:width="1in" svg:height="1in"/>` +
+			strings.Repeat(`</draw:g>`, groups)
+	}
+	body := `<table:table table:name="S"><table:shapes>` + nested(maxShapeGroupDepth, "kept") + nested(maxShapeGroupDepth+1, "deep") + `</table:shapes></table:table>`
+	doc, w := read(t, flat{body: body}.bytes())
+	ds := doc.Sheets[0].Drawings
+	if len(ds) != 1 || ds[0].Name != "kept" {
+		t.Errorf("drawings %+v, want the shape kept alone", ds)
+	}
+	if !hasWarning(w, "group-depth") {
+		t.Errorf("no group-depth warning in %+v", w)
+	}
+}

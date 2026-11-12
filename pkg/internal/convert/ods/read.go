@@ -279,7 +279,7 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 	for _, c := range el.All(odf.NSTable, "shapes") {
 		for _, s := range c.Children {
 			if !s.IsText() {
-				r.drawing(ts, s, nil)
+				r.drawing(ts, s, nil, 0)
 			}
 		}
 	}
@@ -498,7 +498,7 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 	}
 	ts.rowHidden = tmpl.Hidden
 	for _, f := range frames {
-		r.drawing(ts, f.el, &f.at)
+		r.drawing(ts, f.el, &f.at, 0)
 	}
 	ts.rowHidden = false
 	if len(cells) == 0 {

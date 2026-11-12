@@ -24,6 +24,11 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/svg"
 )
 
+// maxShapeGroupDepth bounds the nesting of draw:g shape groups read at
+// [limits.MaxSourceGroupDepth], which says why: [reader.drawing] walks
+// them recursively.
+const maxShapeGroupDepth = limits.MaxSourceGroupDepth
+
 // picResult is one decoded picture, nil when it is not drawn.
 type picResult struct {
 	pic *layout.Picture
@@ -36,14 +41,20 @@ type picResult struct {
 // to its cell, its svg:x and svg:y being from the cell's corner as Calc
 // reads them, and its table:end-cell-address, end-x and end-y anchor its
 // bottom-right corner; a picture under a draw:transform is drawn turned
-// and skewed as the transform asks.
-func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor) {
+// and skewed as the transform asks. depth is the number of draw:g groups
+// around el; the content of a group nested past [maxShapeGroupDepth] is
+// left out, with a warning.
+func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor, depth int) {
 	if !el.Is(odf.NSDraw, "frame") {
 		switch {
 		case el.Is(odf.NSDraw, "g"):
+			if depth >= maxShapeGroupDepth {
+				r.warn("group-depth", fmt.Sprintf("shape groups nested past %d levels are not drawn", maxShapeGroupDepth))
+				return
+			}
 			for _, c := range el.Children {
 				if !c.IsText() {
-					r.drawing(ts, c, at)
+					r.drawing(ts, c, at, depth+1)
 				}
 			}
 		case el.Is(odf.NSDraw, "control"):
