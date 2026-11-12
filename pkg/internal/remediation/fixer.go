@@ -471,18 +471,45 @@ func contextContains(v compliance.Violation, sub string) bool {
 
 // containsLower reports whether strings.ToLower(s) contains
 // strings.ToLower(sub). [classify] asks it of every violation for every
-// fixer, so it folds ASCII text in place rather than building two lowered
-// copies a call; text holding any other byte takes the lowered copies.
+// fixer, so it folds ASCII text as it reads it rather than building two
+// lowered copies a call. A window of ASCII bytes lowers to the same bytes in
+// s as alone, so a match read before the first other byte stands; from that
+// byte on, the lowered copies decide, since a character outside ASCII can
+// lower to an ASCII one (U+212A KELVIN SIGN to k).
 func containsLower(s, sub string) bool {
-	if !isASCII(s) || !isASCII(sub) {
+	if !isASCII(sub) {
 		return strings.Contains(strings.ToLower(s), strings.ToLower(sub))
 	}
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if strings.EqualFold(s[i:i+len(sub)], sub) {
+	if sub == "" {
+		return true
+	}
+	first := lowerASCII(sub[0])
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= utf8.RuneSelf {
+			return strings.Contains(strings.ToLower(s), strings.ToLower(sub))
+		}
+		if lowerASCII(c) != first || i+len(sub) > len(s) {
+			continue
+		}
+		j := 1
+		for j < len(sub) && lowerASCII(s[i+j]) == lowerASCII(sub[j]) {
+			j++
+		}
+		if j == len(sub) {
 			return true
 		}
 	}
 	return false
+}
+
+// lowerASCII returns the lower case of the ASCII letter c, and any other
+// byte as it is.
+func lowerASCII(c byte) byte {
+	if 'A' <= c && c <= 'Z' {
+		return c + 'a' - 'A'
+	}
+	return c
 }
 
 // isASCII reports whether s holds ASCII bytes alone.
