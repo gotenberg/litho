@@ -80,10 +80,11 @@ const maxTransformOps = 16
 // far past any angle, scale or length a page shows.
 const maxTransformValue = 1e9
 
-// parseTransform parses a draw:transform (ODF 1.3, Part 3, 19.228): a
+// parseTransform parses a draw:transform (ODF 1.4, Part 3, 19.228): a
 // list of rotate, scale, translate, skewX, skewY and matrix operations,
 // applied in the order they are listed, as Impress applies them. A
-// rotate angle is in radians, counterclockwise on the page; translate
+// rotate or skew angle is in radians, as ODF 1.4 states (ODF 1.3 said
+// degrees), counterclockwise on the page; translate
 // and the matrix's translation are ODF lengths. It returns the composed
 // transform, whether it skews, and whether it parsed. A positive skew
 // angle leans a shape's top to the right of its bottom on the page.

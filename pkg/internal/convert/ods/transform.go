@@ -38,10 +38,11 @@ const maxTransformOps = 16
 // under a million points.
 const maxTransformNumber = 1e9
 
-// parseTransform parses a draw:transform (ODF 1.3, Part 3, 19.228): a list
+// parseTransform parses a draw:transform (ODF 1.4, Part 3, 19.228): a list
 // of rotate, scale, translate, skewX, skewY and matrix operations, applied
 // in the order they are listed, as Calc applies them. A rotate angle is
-// in radians, counterclockwise on the page; translate and the matrix's
+// in radians, counterclockwise on the page, as ODF 1.4 states and Calc
+// writes and reads it; ODF 1.3 said degrees. translate and the matrix's
 // translation are ODF lengths. It returns the composed transform and
 // whether it parsed.
 //
