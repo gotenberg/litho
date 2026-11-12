@@ -341,10 +341,6 @@ ul {
 :is(dir, menu, ol, ul) :is(dir, menu, ol, ul) :is(dir, menu, ul) {
   list-style-type: square;
 }
-summary {
-  display: list-item;
-  list-style-position: inside;
-}
 
 /* 15.3.8 Tables */
 table {
@@ -472,12 +468,15 @@ hr[noshade] {
   border-style: solid;
 }
 
-/* 15.3.12 The fieldset and legend elements */
+/* 15.3.12 The fieldset and legend elements. The border colour is
+ * ThreeDFace, a system colour whose value the user agent chooses (CSS
+ * Color 4, 6.2), as Chromium resolves it. */
 fieldset {
   margin-inline: 2px;
-  border: groove 2px #c0c0c0;
+  border: groove 2px rgb(239, 239, 239);
   padding-block: 0.35em 0.625em;
   padding-inline: 0.75em;
+  min-inline-size: min-content;
 }
 legend {
   padding-inline: 2px;
@@ -486,6 +485,25 @@ legend {
 /* 15.4.1 Embedded content */
 iframe {
   border: 2px inset;
+}
+
+/* 15.5.5 The details and summary elements: a summary outside details is
+ * a block. */
+details > summary:first-of-type {
+  display: list-item;
+  counter-increment: list-item 0;
+  list-style: disclosure-closed inside;
+}
+details[open] > summary:first-of-type {
+  list-style-type: disclosure-open;
+}
+
+/* 15.5.13 The marquee element, a block: the Standard's inline-block
+ * without a width shrinks it to its content, where Chromium fills the
+ * line with it. */
+marquee {
+  text-align: initial;
+  overflow: hidden !important;
 }
 
 /* CSS GCPM 3, Appendix B: the footnote call is a superscript number, the
