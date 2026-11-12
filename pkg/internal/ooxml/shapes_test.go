@@ -100,3 +100,22 @@ func TestVMLPreset(t *testing.T) {
 		t.Error("the thick arrow has a preset")
 	}
 }
+
+// TestParseShapeStyle_HSLAndLinearRGB checks the hslClr and scrgbClr
+// colour choices of a shape's fill (ECMA-376 Part 1, 20.1.2.3.13 and
+// 20.1.2.3.30).
+//
+// # Corpus evidence
+//
+//   - litho/docx shapes-fills-lines: Word fills the hslClr hue 120, sat
+//     100%, lum 50% rounded rectangle pure green.
+func TestParseShapeStyle_HSLAndLinearRGB(t *testing.T) {
+	hsl := ParseShapeStyle(spPrOf(t, `<a:solidFill><a:hslClr hue="7200000" sat="100000" lum="50000"/></a:solidFill>`), nil, nil)
+	if hsl.Fill == nil || hsl.Fill.R != 0 || hsl.Fill.G != 1 || hsl.Fill.B != 0 {
+		t.Errorf("hslClr fill %+v, want green", hsl.Fill)
+	}
+	lin := ParseShapeStyle(spPrOf(t, `<a:solidFill><a:scrgbClr r="100000" g="0" b="0"><a:lumMod val="50000"/></a:scrgbClr></a:solidFill>`), nil, nil)
+	if lin.Fill == nil || math.Abs(lin.Fill.R-0.5) > 1e-9 || lin.Fill.G != 0 {
+		t.Errorf("scrgbClr fill %+v, want red at half its lightness", lin.Fill)
+	}
+}
