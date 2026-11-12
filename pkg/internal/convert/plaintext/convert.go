@@ -343,7 +343,8 @@ func (l *layouter) handOver(ctx context.Context) error {
 	p := l.page
 	l.page = nil
 	if err := l.opts.Sink.Page(ctx, p); err != nil {
-		return fmt.Errorf("writing page %d: %w", l.pages, err)
+		// The stream names the page it refuses.
+		return err
 	}
 	l.mem.Release(typeset.CountGlyphs(p) * limits.GlyphCost)
 	return nil

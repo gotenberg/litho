@@ -179,7 +179,8 @@ func (d *document) assemble(res *layout.Result) (*typeset.Document, error) {
 		// The page leaves the layout's result once handed over: the sink
 		// writes it and keeps none of its fragments.
 		if err := sink.Page(d.ctx, pg); err != nil {
-			return nil, fmt.Errorf("writing page %d: %w", k+1, err)
+			// The stream names the page it refuses.
+			return nil, err
 		}
 		res.Pages[k] = nil
 	}

@@ -297,7 +297,8 @@ func (b *builder) handOver(out *typeset.Document, pg *typeset.Page) error {
 		return nil
 	}
 	if err := sink.Page(b.ctx, pg); err != nil {
-		return fmt.Errorf("writing a page: %w", err)
+		// The stream names the page it refuses.
+		return err
 	}
 	limits.BudgetFrom(b.ctx).Release(typeset.CountGlyphs(pg) * limits.GlyphCost)
 	return nil

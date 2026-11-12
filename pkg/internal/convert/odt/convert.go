@@ -354,7 +354,8 @@ func (b *builder) assemble(res *layout.Result, opts office.Options, lang string)
 		// The page leaves the layout's result once handed over: the sink
 		// writes it and keeps none of its fragments.
 		if err := sink.Page(b.ctx, pg); err != nil {
-			return nil, fmt.Errorf("writing page %d: %w", k+1, err)
+			// The stream names the page it refuses.
+			return nil, err
 		}
 		res.Pages[k] = nil
 	}
