@@ -554,7 +554,8 @@ func sortedKeys(m map[int]bool) []int {
 // range keeps the cells the file saved, with a warning. doc is not
 // changed. Under Excel's rules every pivot table keeps the cells the file
 // saved: Excel prints a pivot table's saved output and does not refresh
-// it as it opens a workbook.
+// it as it opens a workbook. ctx's error, checked per pivot table and
+// every [pivotRecordsPerCheck] records, stops it.
 //
 // # Corpus evidence
 //
@@ -563,16 +564,16 @@ func sortedKeys(m map[int]bool) []int {
 //     the text their sheets save (text F1 0.89 to 1). The pivot table
 //     style Excel paints over them is not drawn, which costs the layout
 //     of sc/PivotTable_CachedDefinitionAndDataInSync.xlsx and four more.
-func (b *builder) applyPivots(doc *Document) *Document {
+func (b *builder) applyPivots(doc *Document) (*Document, error) {
 	if doc.ExcelRules {
-		return doc
+		return doc, nil
 	}
 	any := false
 	for _, sh := range doc.Sheets {
 		any = any || (sh != nil && len(sh.Pivots) > 0)
 	}
 	if !any {
-		return doc
+		return doc, nil
 	}
 	out := *doc
 	out.Sheets = append([]*Sheet(nil), doc.Sheets...)
@@ -585,6 +586,9 @@ func (b *builder) applyPivots(doc *Document) *Document {
 		for k := range sh.Pivots {
 			p := &sh.Pivots[k]
 			o, ok := b.pivotOutput(p)
+			if err := b.ctx.Err(); err != nil {
+				return nil, err
+			}
 			if !ok {
 				b.warn(CodePivot, fmt.Sprintf("pivot table %s: its output is printed as the file saved it", quote(p.Name)))
 				continue
@@ -603,7 +607,7 @@ func (b *builder) applyPivots(doc *Document) *Document {
 			out.Sheets[i] = withCells(sh, cells, cleared, b.pivotCellStyle(nil))
 		}
 	}
-	return &out
+	return &out, nil
 }
 
 // pivotCellStyle returns the style of an output cell: the document's

@@ -35,7 +35,7 @@ func TestConditional_IconSet(t *testing.T) {
 				Kind: RuleIconSet, Icons: "3Arrows", Values: []Value{num(1), num(2), num(4)},
 				IconsAbove: tc.above, IconsReversed: tc.reversed, IconsCustom: tc.custom,
 			}}}}
-			g := newGrid(newDoc(sh), sh)
+			g := newGrid(t.Context(), newDoc(sh), sh)
 			for i := range cells {
 				got, _ := g.iconAt(i, 0, g.cell(i, 0))
 				if (got == nil) != (tc.want[i] == nil) || (got != nil && fragmentsOf(got) != fragmentsOf(tc.want[i])) {

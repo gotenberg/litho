@@ -34,7 +34,7 @@ func TestUsedRange_Overflow(t *testing.T) {
 				cells = append(cells, numCell(4, 2, nil))
 			}
 			sh := &Sheet{Name: "S", Rows: []Row{{Index: 0, Cells: cells}}}
-			g := newGrid(newDoc(sh), sh)
+			g := newGrid(t.Context(), newDoc(sh), sh)
 			g.need = func(r, c int, cell *Cell) float64 {
 				if cell.Value.Kind == Text {
 					return 300

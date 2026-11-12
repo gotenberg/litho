@@ -148,9 +148,14 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		return nil, fmt.Errorf("laying the spreadsheet out: %w", text.ErrNoFonts)
 	}
 	b := newBuilder(ctx, doc, fonts, opts)
-	doc = b.applyFormulas(doc)
+	doc, err := b.applyFormulas(doc)
+	if err != nil {
+		return nil, err
+	}
 	b.doc = doc
-	doc = b.applyPivots(doc)
+	if doc, err = b.applyPivots(doc); err != nil {
+		return nil, err
+	}
 	b.doc = doc
 	limit := opts.MaxPages
 	if limit <= 0 {
@@ -171,7 +176,10 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		sp := b.planSheet(i, sh)
+		sp, err := b.planSheet(i, sh)
+		if err != nil {
+			return nil, err
+		}
 		plans = append(plans, sp)
 		starts = append(starts, len(pages))
 		pages = append(pages, sp.pages...)
@@ -338,11 +346,14 @@ func (b *builder) paper(sh *Sheet) (float64, float64) {
 	return min(w, office.MaxPageSide), min(h, office.MaxPageSide)
 }
 
-// planSheet returns how the sheet sh prints.
-func (b *builder) planSheet(i int, sh *Sheet) *sheetPlan {
-	g := newGrid(b.doc, sh)
+// planSheet returns how the sheet sh prints. The builder's context stops
+// it.
+func (b *builder) planSheet(i int, sh *Sheet) (*sheetPlan, error) {
+	g := newGrid(b.ctx, b.doc, sh)
 	g.need, g.overflowBudget = b.textNeed(g), maxOverflowCells
-	b.optimalHeights(g)
+	if err := b.optimalHeights(g); err != nil {
+		return nil, err
+	}
 	sp := &sheetPlan{g: g, idx: i, zoom: 1, single: b.opts.SinglePageSheets}
 	sp.width, sp.height = b.paper(sh)
 	for k, m := range sh.Page.Margin {
@@ -364,7 +375,9 @@ func (b *builder) planSheet(i int, sh *Sheet) *sheetPlan {
 	if sh.RightToLeft {
 		b.warnOnce(CodeRightToLeft, "a right-to-left sheet is laid out left to right")
 	}
-	sp.plan()
+	if err := sp.plan(b.ctx); err != nil {
+		return nil, err
+	}
 	if len(sp.pages) >= maxSheetPages {
 		b.warn(CodeTooManyPages, fmt.Sprintf("sheet %s has more than %d pages; the rest are left out", quote(sh.Name), maxSheetPages))
 	}
@@ -377,7 +390,7 @@ func (b *builder) planSheet(i int, sh *Sheet) *sheetPlan {
 		sp.height = math.Min(h, office.MaxPageSide)
 		sp.pages = sp.pages[:1]
 	}
-	return sp
+	return sp, nil
 }
 
 // renderPage draws the page p, first reporting the first page of its

@@ -68,7 +68,7 @@ func TestApplyFormulas(t *testing.T) {
 	tests[16].want = num(3)
 	doc := formulaDoc(formulas...)
 	b := newBuilder(context.Background(), doc, nil, office.Options{})
-	out := b.applyFormulas(doc)
+	out := b.formulasOf(t, doc)
 	row := out.Sheets[0].Rows[3]
 	for i, tt := range tests {
 		c := row.Cells[i]
@@ -93,7 +93,7 @@ func TestApplyFormulas(t *testing.T) {
 
 func TestApplyFormulas_Cycle(t *testing.T) {
 	doc := formulaDoc("B6+1", "A6+1")
-	out := newBuilder(context.Background(), doc, nil, office.Options{}).applyFormulas(doc)
+	out := newBuilder(context.Background(), doc, nil, office.Options{}).formulasOf(t, doc)
 	for _, c := range out.Sheets[0].Rows[3].Cells {
 		if c.Value.Kind == Number && c.Value.Number > 10 {
 			t.Errorf("a cycle computed %+v", c.Value)
@@ -107,7 +107,7 @@ func FuzzFormula(f *testing.F) {
 	}
 	doc := formulaDoc()
 	f.Fuzz(func(t *testing.T, s string) {
-		e := newFormulaEval(doc)
+		e := newFormulaEval(t.Context(), doc)
 		e.evalAt(s, 0, 5, 1, 0, 0)
 	})
 }

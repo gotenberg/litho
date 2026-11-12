@@ -168,3 +168,41 @@ func near(a, b, tol float64) bool {
 }
 
 var _ = css.Top
+
+// formulasOf is [builder.applyFormulas] that fails t on an error.
+func (b *builder) formulasOf(t testing.TB, doc *Document) *Document {
+	t.Helper()
+	out, err := b.applyFormulas(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// pivotsOf is [builder.applyPivots] that fails t on an error.
+func (b *builder) pivotsOf(t testing.TB, doc *Document) *Document {
+	t.Helper()
+	out, err := b.applyPivots(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// planOf is [builder.planSheet] that fails t on an error.
+func (b *builder) planOf(t testing.TB, i int, sh *Sheet) *sheetPlan {
+	t.Helper()
+	sp, err := b.planSheet(i, sh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sp
+}
+
+// heightsOf is [builder.optimalHeights] that fails t on an error.
+func (b *builder) heightsOf(t testing.TB, g *grid) {
+	t.Helper()
+	if err := b.optimalHeights(g); err != nil {
+		t.Fatal(err)
+	}
+}

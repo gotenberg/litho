@@ -80,8 +80,8 @@ func TestConvert_RowHeight(t *testing.T) {
 	}}
 	doc := newDoc(sh)
 	b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
-	g := newGrid(doc, sh)
-	b.optimalHeights(g)
+	g := newGrid(t.Context(), doc, sh)
+	b.heightsOf(t, g)
 	if h := g.rowHeight(0); !near(h, 35, 0.05) {
 		t.Errorf("wrapped row %v points, want 35", h)
 	}

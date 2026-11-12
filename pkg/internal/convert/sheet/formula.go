@@ -1,6 +1,7 @@
 package sheet
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sort"
@@ -68,6 +69,9 @@ const (
 
 // formulaEval evaluates the formulas of a document's cells.
 type formulaEval struct {
+	// ctx is the conversion's context: an evaluator does not outlive the
+	// conversion it serves.
+	ctx   context.Context
 	doc   *Document
 	grids []*grid
 	// state tells the cells being evaluated from those done; done holds
@@ -76,14 +80,19 @@ type formulaEval struct {
 	done  map[[3]int]fval
 	ok    map[[3]int]bool
 	reads int
+	// steps counts the rows and cells the ranges visit, read or not, for
+	// the checks of ctx; err is ctx's error once a check met it, after
+	// which every range reads empty.
+	steps int
+	err   error
 	// unsupported records the functions met that are not evaluated.
 	unsupported map[string]bool
 }
 
 // newFormulaEval returns an evaluator over doc, which the formulas of its
 // cells and of its conditional formats read.
-func newFormulaEval(doc *Document) *formulaEval {
-	e := &formulaEval{doc: doc, grids: make([]*grid, len(doc.Sheets)), state: map[[3]int]evalState{}, done: map[[3]int]fval{}, ok: map[[3]int]bool{}, unsupported: map[string]bool{}}
+func newFormulaEval(ctx context.Context, doc *Document) *formulaEval {
+	e := &formulaEval{ctx: ctx, doc: doc, grids: make([]*grid, len(doc.Sheets)), state: map[[3]int]evalState{}, done: map[[3]int]fval{}, ok: map[[3]int]bool{}, unsupported: map[string]bool{}}
 	for i, sh := range doc.Sheets {
 		if sh != nil {
 			e.grids[i] = newPlainGrid(doc, sh)
@@ -726,7 +735,8 @@ func (p *fparser) call(fn string) (fval, bool) {
 }
 
 // eachCell calls fn with the value of each cell of rg holding something,
-// row by row, until fn returns false or the read cap is reached.
+// row by row, until fn returns false or the read cap is reached. Once
+// ctx is done it reads nothing and records ctx's error in e.err.
 func (e *formulaEval) eachCell(rg *frange, depth int, fn func(fval) bool) {
 	if rg.sheet < 0 || rg.sheet >= len(e.grids) || e.grids[rg.sheet] == nil {
 		fn(fval{v: Value{Kind: Error, Text: errRef}})
@@ -734,10 +744,16 @@ func (e *formulaEval) eachCell(rg *frange, depth int, fn func(fval) bool) {
 	}
 	g := e.grids[rg.sheet]
 	for _, r := range g.rowOrder {
+		if !e.live() {
+			return
+		}
 		if r < rg.rg.FirstRow || r > rg.rg.LastRow {
 			continue
 		}
 		for _, c := range g.rows[r].Cells {
+			if !e.live() {
+				return
+			}
 			if c.Column < rg.rg.FirstColumn || c.Column > rg.rg.LastColumn {
 				continue
 			}
@@ -749,6 +765,22 @@ func (e *formulaEval) eachCell(rg *frange, depth int, fn func(fval) bool) {
 			}
 		}
 	}
+}
+
+// formulaStepsPerCheck is how many rows and cells the ranges of the
+// formulas visit between two checks of the context.
+const formulaStepsPerCheck = 4096
+
+// live counts one step of a range's walk and reports whether the
+// evaluation goes on: false once a check of ctx found it done.
+func (e *formulaEval) live() bool {
+	if e.err != nil {
+		return false
+	}
+	if e.steps++; e.steps%formulaStepsPerCheck == 0 {
+		e.err = e.ctx.Err()
+	}
+	return e.err == nil
 }
 
 // scalar returns the value of v, a range's first cell standing for it as
@@ -912,7 +944,8 @@ const percentFormat = "0.00%"
 // evaluator does not compute keep their stored value, with a warning
 // naming the functions it left out. A result in a General cell takes the
 // format a percent literal or its first reference gives it. doc is not
-// changed.
+// changed. ctx's error, checked every [formulaStepsPerCheck] formula
+// cells and range steps, stops it.
 //
 // # Corpus evidence
 //
@@ -922,7 +955,7 @@ const percentFormat = "0.00%"
 //     over 2, 3, 4, and a cached =A1+2 saved as 5 prints 5.
 //   - probe, ods: in LibreOffice 26.8.2.2, a cell =[.A1]+2 saved as 5
 //     prints 4, whatever program wrote the file.
-func (b *builder) applyFormulas(doc *Document) *Document {
+func (b *builder) applyFormulas(doc *Document) (*Document, error) {
 	any := false
 	for _, sh := range doc.Sheets {
 		if sh == nil {
@@ -935,9 +968,9 @@ func (b *builder) applyFormulas(doc *Document) *Document {
 		}
 	}
 	if !any {
-		return doc
+		return doc, nil
 	}
-	e := newFormulaEval(doc)
+	e := newFormulaEval(b.ctx, doc)
 	out := *doc
 	out.Sheets = append([]*Sheet(nil), doc.Sheets...)
 	left := 0
@@ -952,6 +985,9 @@ func (b *builder) applyFormulas(doc *Document) *Document {
 				c := &row.Cells[ci]
 				if c.Formula == "" {
 					continue
+				}
+				if !e.live() {
+					return nil, e.err
 				}
 				res := e.cellValue(s, row.Index, c.Column, 0)
 				if !e.ok[[3]int{s, row.Index, c.Column}] {
@@ -999,7 +1035,10 @@ func (b *builder) applyFormulas(doc *Document) *Document {
 		}
 		b.warn(CodeFormula, msg)
 	}
-	return &out
+	if e.err != nil {
+		return nil, e.err
+	}
+	return &out, nil
 }
 
 // scalarFunction computes the functions of scalar arguments the

@@ -38,13 +38,19 @@ const maxMeasuredCells = 1 << 16
 // of its text, as Calc's optimal row height: the tallest cell's lines plus
 // its top and bottom padding. A cell merged down several rows does not
 // count. A book laid out by Excel's rules grows a row alone when it has no
-// height of its own, and to fit its lines alone ([excelHeight]).
-func (b *builder) optimalHeights(g *grid) {
+// height of its own, and to fit its lines alone ([excelHeight]). ctx's
+// error, checked every [rowsPerCheck] rows, stops it.
+func (b *builder) optimalHeights(g *grid) error {
 	pb := &pageBuilder{builder: b, g: g}
 	excel := b.doc.ExcelRules
 	defLine := b.m.lineHeight(resolveFont(Font{}, b.doc.Default.Font))
 	budget := maxMeasuredCells
-	for _, ri := range g.rowOrder {
+	for k, ri := range g.rowOrder {
+		if k%rowsPerCheck == 0 {
+			if err := b.ctx.Err(); err != nil {
+				return err
+			}
+		}
 		row := g.rows[ri]
 		if row.CustomHeight || row.Hidden || (excel && row.Height > 0) {
 			continue
@@ -116,7 +122,12 @@ func (b *builder) optimalHeights(g *grid) {
 			g.heights[ri] = min(need, maxSide)
 		}
 	}
+	return nil
 }
+
+// rowsPerCheck is how many rows the row heights and the page plan go
+// through between two checks of the context.
+const rowsPerCheck = 4096
 
 // excelHeight returns the height Excel gives a row without a height of
 // its own whose wrapped text takes a count of lines of lineH points: a line of

@@ -36,7 +36,7 @@ func pivotSheet(p Pivot) *Sheet {
 func pivotCells(t *testing.T, doc *Document) map[[2]int]Cell {
 	t.Helper()
 	b := newBuilder(context.Background(), doc, nil, office.Options{})
-	out := b.applyPivots(doc)
+	out := b.pivotsOf(t, doc)
 	cells := map[[2]int]Cell{}
 	for _, r := range out.Sheets[0].Rows {
 		for _, c := range r.Cells {
@@ -271,7 +271,7 @@ func TestApplyPivots_SourceNotASheet(t *testing.T) {
 	p := Pivot{Name: "P", Column: 5, SourceSheet: 3, Source: Range{LastRow: 4, LastColumn: 2}, Data: []PivotData{{Field: 2}}}
 	doc := newDoc(pivotSheet(p))
 	b := newBuilder(context.Background(), doc, nil, office.Options{})
-	if out := b.applyPivots(doc); out.Sheets[0] != doc.Sheets[0] {
+	if out := b.pivotsOf(t, doc); out.Sheets[0] != doc.Sheets[0] {
 		t.Errorf("the sheet changed")
 	}
 	if len(b.warnings) != 1 || b.warnings[0].Code != CodePivot {
@@ -286,7 +286,7 @@ func TestApplyPivots_ExcelRules(t *testing.T) {
 	doc := newDoc(pivotSheet(p))
 	doc.ExcelRules = true
 	b := newBuilder(context.Background(), doc, nil, office.Options{})
-	if out := b.applyPivots(doc); out != doc || len(b.warnings) != 0 {
+	if out := b.pivotsOf(t, doc); out != doc || len(b.warnings) != 0 {
 		t.Errorf("the book changed, warnings %v", b.warnings)
 	}
 }

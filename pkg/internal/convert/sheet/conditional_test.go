@@ -67,7 +67,7 @@ func TestConditional_Rules(t *testing.T) {
 			rule := tc.rule
 			rule.Style = fill
 			sh.Conditional = []Conditional{{Ranges: []Range{{LastRow: 9}}, Rules: []Rule{rule}}}
-			g := newGrid(newDoc(sh), sh)
+			g := newGrid(t.Context(), newDoc(sh), sh)
 			for i, want := range tc.want {
 				got := g.style(i, 0, g.cell(i, 0)).Fill.Color == green
 				if got != want {
@@ -120,7 +120,7 @@ func TestConditional_Order(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sh := column(numCell(0, 5, own))
 			sh.Conditional = []Conditional{{Ranges: []Range{{}}, Rules: tc.rules}}
-			g := newGrid(newDoc(sh), sh)
+			g := newGrid(t.Context(), newDoc(sh), sh)
 			if s := g.style(0, 0, g.cell(0, 0)); !tc.check(s) {
 				t.Errorf("style %+v", *s)
 			}
@@ -157,7 +157,7 @@ func TestConditional_ColorScale(t *testing.T) {
 			cells = append(cells, textCell(0, "text", nil))
 			sh := column(cells...)
 			sh.Conditional = []Conditional{{Ranges: []Range{{LastRow: 9}}, Rules: []Rule{tc.rule}}}
-			g := newGrid(newDoc(sh), sh)
+			g := newGrid(t.Context(), newDoc(sh), sh)
 			for i, want := range tc.want {
 				got := g.style(i, 0, g.cell(i, 0)).Fill.Color
 				if !sameColor(got, want) {
@@ -207,7 +207,7 @@ func TestConditional_DataBar(t *testing.T) {
 			sh.Conditional = []Conditional{{Ranges: []Range{{LastRow: 9}}, Rules: []Rule{{
 				Kind: RuleDataBar, Values: tc.values, Bar: blue, BarAxis: tc.axis, BarMinLength: tc.minL, BarMaxLength: tc.maxL,
 			}}}}
-			g := newGrid(newDoc(sh), sh)
+			g := newGrid(t.Context(), newDoc(sh), sh)
 			for i := range tc.cells {
 				zero, length, col, _, ok := g.dataBar(i, 0, g.cell(i, 0))
 				if tc.length[i] == 0 {
@@ -318,7 +318,7 @@ func TestConditional_FormulaThreshold(t *testing.T) {
 	sh.Conditional = []Conditional{{Ranges: []Range{{FirstRow: 1, LastRow: 2}}, Rules: []Rule{{
 		Kind: RuleDataBar, Values: []Value{num(0), str("=3*$A$1+2")}, Bar: blue, BarAxis: BarAxisAuto, BarMaxLength: 1,
 	}}}}
-	g := newGrid(newDoc(sh), sh)
+	g := newGrid(t.Context(), newDoc(sh), sh)
 	if _, length, _, _, ok := g.dataBar(1, 0, g.cell(1, 0)); !ok || !near(length, 0.6, 1e-9) {
 		t.Errorf("length %v (%v), want 3 of 5", length, ok)
 	}

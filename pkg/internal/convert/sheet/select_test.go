@@ -141,7 +141,7 @@ func TestApplyFormulas_Outside(t *testing.T) {
 	}
 	doc := newDoc(&Sheet{Name: "S", Rows: []Row{{Index: 0, Cells: cells}}})
 	b := newBuilder(context.Background(), doc, nil, office.Options{})
-	got := b.applyFormulas(doc).Sheets[0].Rows[0].Cells
+	got := b.formulasOf(t, doc).Sheets[0].Rows[0].Cells
 	for i, want := range []float64{2, 11, 12, 13, 14, 15, 16, 15} {
 		if got[i].Value.Number != want {
 			t.Errorf("cell %d (%q) = %v, want %v", i, got[i].Formula, got[i].Value, want)

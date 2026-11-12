@@ -14,6 +14,10 @@ import (
 // printed summary is made from.
 const maxPivotRecords = 1 << 18
 
+// pivotRecordsPerCheck is how many source records a pivot table reads or
+// sums between two checks of the context.
+const pivotRecordsPerCheck = 4096
+
 // maxPivotFields caps the columns of a pivot table's source. Anti-DoS
 // guard, not spec-mandated: Excel's pivot cache holds 16,384 fields, a
 // real source a few dozen.
@@ -123,7 +127,7 @@ func (b *builder) readPivotSource(p *Pivot) (*pivotSource, bool) {
 		return nil, false
 	}
 	nf := min(rg.LastColumn-rg.FirstColumn+1, maxPivotFields)
-	g := newGrid(b.doc, b.doc.Sheets[p.SourceSheet])
+	g := newGrid(b.ctx, b.doc, b.doc.Sheets[p.SourceSheet])
 	// The data area ends at the last row holding a value in the range
 	// (ScDocument::ShrinkToDataArea).
 	last := rg.FirstRow
@@ -170,6 +174,11 @@ func (b *builder) readPivotSource(p *Pivot) (*pivotSource, bool) {
 		src.names[f] = label
 	}
 	for i := range nr {
+		// A context found done stops the read: [builder.applyPivots]
+		// returns its error and drops the output.
+		if i%pivotRecordsPerCheck == 0 && b.ctx.Err() != nil {
+			return nil, false
+		}
 		r := rg.FirstRow + 1 + i
 		rec := make([]Value, nf)
 		for f := range nf {

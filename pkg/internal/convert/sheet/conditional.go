@@ -1,6 +1,7 @@
 package sheet
 
 import (
+	"context"
 	"math"
 	"sort"
 	"strconv"
@@ -110,7 +111,9 @@ type conditions struct {
 	rules  []condRule
 	styles map[condStyleKey]*Style
 	// doc and sheet place the sheet in its book, eval computes the
-	// rules' formulas, made on first use.
+	// rules' formulas, made on first use under ctx, the conversion's
+	// context: the conditions do not outlive the conversion.
+	ctx   context.Context
 	doc   *Document
 	sheet int
 	eval  *formulaEval
@@ -119,11 +122,11 @@ type conditions struct {
 // newConditions indexes the conditional formats of sh, the rules sorted
 // in the order Calc evaluates them: by priority where the file gives one,
 // else in file order.
-func newConditions(doc *Document, sh *Sheet) *conditions {
+func newConditions(ctx context.Context, doc *Document, sh *Sheet) *conditions {
 	if len(sh.Conditional) == 0 {
 		return nil
 	}
-	cs := &conditions{styles: map[condStyleKey]*Style{}, doc: doc, sheet: -1}
+	cs := &conditions{styles: map[condStyleKey]*Style{}, ctx: ctx, doc: doc, sheet: -1}
 	for i, s := range doc.Sheets {
 		if s == sh {
 			cs.sheet = i
@@ -233,7 +236,7 @@ func (cs *conditions) formula(f string, ci, r, c int) (fval, bool) {
 		return fval{}, false
 	}
 	if cs.eval == nil {
-		cs.eval = newFormulaEval(cs.doc)
+		cs.eval = newFormulaEval(cs.ctx, cs.doc)
 	}
 	return cs.eval.evalAt(f, cs.sheet, r, c, r-rgs[0].FirstRow, c-rgs[0].FirstColumn)
 }

@@ -52,7 +52,7 @@ func TestUsedRange_FormattedColumns(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			sh := &Sheet{Name: "S", Rows: []Row{{Index: 0, Cells: tc.cells()}}}
-			g := newGrid(newDoc(sh), sh)
+			g := newGrid(t.Context(), newDoc(sh), sh)
 			g.overflowBudget = maxOverflowCells
 			u, ok := g.usedRange(false)
 			if !ok || u.LastColumn != tc.want {
@@ -109,7 +109,7 @@ func TestUsedRange_PaintedDrawing(t *testing.T) {
 				From: Anchor{Row: 1, Column: 0, DX: 5}, To: &Anchor{Row: 4, Column: 5, DX: 5},
 				Unbounded: true, Shape: true, Painted: tc.painted,
 			}}
-			g := newGrid(newDoc(sh), sh)
+			g := newGrid(t.Context(), newDoc(sh), sh)
 			g.overflowBudget = maxOverflowCells
 			u, ok := g.usedRange(false)
 			if !ok || u.LastColumn != tc.want {

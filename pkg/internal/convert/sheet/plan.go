@@ -1,6 +1,7 @@
 package sheet
 
 import (
+	"context"
 	"math"
 	"sort"
 )
@@ -122,8 +123,9 @@ func (sp *sheetPlan) docArea(zoom int) (float64, float64) {
 // theirs from every band after them, manual breaks unless the sheet fits
 // that direction to pages, and the bands of rows without content left out.
 // It returns the column bands and, per row band kept, which column bands
-// hold content.
-func (sp *sheetPlan) layoutPages(a Range, zoom int) ([]band, []band, [][]bool) {
+// hold content. ctx's error, checked every [rowsPerCheck] rows or
+// columns, stops it.
+func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band, []band, [][]bool, error) {
 	g := sp.g
 	ps := &g.sh.Page
 	pageW, pageH := sp.docArea(zoom)
@@ -149,6 +151,11 @@ func (sp *sheetPlan) layoutPages(a Range, zoom int) ([]band, []band, [][]bool) {
 	size := 0.0
 	colFound := false
 	for c := a.FirstColumn; c <= a.LastColumn; c++ {
+		if (c-a.FirstColumn)%rowsPerCheck == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, nil, err
+			}
+		}
 		start := false
 		w := g.colWidth(c)
 		if (size+w > pageW+epsilon && !sp.single) || colBreak[c] {
@@ -198,6 +205,11 @@ func (sp *sheetPlan) layoutPages(a Range, zoom int) ([]band, []band, [][]bool) {
 	size = 0
 	rowFound := false
 	for r := a.FirstRow; r <= a.LastRow; r++ {
+		if (r-a.FirstRow)%rowsPerCheck == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, nil, err
+			}
+		}
 		start := false
 		h := g.rowHeight(r)
 		if (size+h > pageH+epsilon && !sp.single) || rowBreak[r] {
@@ -246,6 +258,11 @@ func (sp *sheetPlan) layoutPages(a Range, zoom int) ([]band, []band, [][]bool) {
 		}
 	}
 	for r := a.FirstRow; r <= a.LastRow; r++ {
+		if (r-a.FirstRow)%rowsPerCheck == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, nil, err
+			}
+		}
 		if r > a.FirstRow && vis && rstarts[r] {
 			flush(r - 1)
 			from = r
@@ -258,7 +275,7 @@ func (sp *sheetPlan) layoutPages(a Range, zoom int) ([]band, []band, [][]bool) {
 	if vis {
 		flush(a.LastRow)
 	}
-	return cols, rows, hidden
+	return cols, rows, hidden, nil
 }
 
 // epsilon absorbs the rounding of sums of lengths in points.
@@ -300,17 +317,18 @@ func (g *grid) empty(a Range) bool {
 // across and down it asks for, found as Calc finds it
 // (ScPrintFunc::CalcZoom): a bisection over whole percents, then for a
 // sheet fitted to a width alone 2% less when that saves a page down.
-func (sp *sheetPlan) zoomFor(a Range) int {
+// ctx's error stops it.
+func (sp *sheetPlan) zoomFor(ctx context.Context, a Range) (int, error) {
 	ps := &sp.g.sh.Page
 	if sp.single {
-		return 100
+		return 100, nil
 	}
 	if ps.Scale > 0 {
-		return min(max(ps.Scale, minZoom), maxZoom)
+		return min(max(ps.Scale, minZoom), maxZoom), nil
 	}
 	nW, nH := max(ps.FitWidth, 0), max(ps.FitHeight, 0)
 	if nW == 0 && nH == 0 {
-		return 100
+		return 100, nil
 	}
 	nW = max(nW, len(ps.ColumnBreaks)+1)
 	nH = max(nH, len(ps.RowBreaks)+1)
@@ -320,14 +338,21 @@ func (sp *sheetPlan) zoomFor(a Range) int {
 	if ps.FitHeight == 0 {
 		nH = 0
 	}
+	var err error
 	fits := func(z int) (bool, int) {
-		cols, rows, _ := sp.layoutPages(a, z)
+		cols, rows, _, lerr := sp.layoutPages(ctx, a, z)
+		if lerr != nil {
+			err = lerr
+		}
 		return (nW == 0 || len(cols) <= nW) && (nH == 0 || len(rows) <= nH), len(rows)
 	}
 	zoom := 100
 	lastFit, lastNonFit := 0, 0
 	for zoom > minZoom {
 		ok, _ := fits(zoom)
+		if err != nil {
+			return 0, err
+		}
 		if ok {
 			if zoom == 100 {
 				break
@@ -357,12 +382,12 @@ func (sp *sheetPlan) zoomFor(a Range) int {
 			}
 		}
 	}
-	return zoom
+	return zoom, err
 }
 
 // plan fills the pages of the sheet: per print range, its zoom, then its
-// pages in the sheet's page order.
-func (sp *sheetPlan) plan() {
+// pages in the sheet's page order. ctx's error stops it.
+func (sp *sheetPlan) plan(ctx context.Context) error {
 	g := sp.g
 	ps := &g.sh.Page
 	var areas []Range
@@ -377,10 +402,16 @@ func (sp *sheetPlan) plan() {
 		areas = []Range{u}
 	}
 	for _, a := range areas {
-		zoom := sp.zoomFor(a)
+		zoom, err := sp.zoomFor(ctx, a)
+		if err != nil {
+			return err
+		}
 		sp.zoom = float64(zoom) / 100
 		sp.firstRows = nil
-		cols, rows, hidden := sp.layoutPages(a, zoom)
+		cols, rows, hidden, err := sp.layoutPages(ctx, a, zoom)
+		if err != nil {
+			return err
+		}
 		if sp.first == nil && sp.firstRows != nil && len(cols) > 0 {
 			sp.first = &pagePlan{sp: sp, area: a, rows: *sp.firstRows, cols: cols[0]}
 		}
@@ -426,6 +457,7 @@ func (sp *sheetPlan) plan() {
 			}
 		}
 	}
+	return nil
 }
 
 // maxSheetPages caps the pages of one sheet. Anti-DoS guard, not

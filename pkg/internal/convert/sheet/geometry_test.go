@@ -11,7 +11,7 @@ import (
 func TestDrawingCells_FarAbsolute(t *testing.T) {
 	for _, y := range []float64{1e30, math.Inf(1), math.NaN()} {
 		sh := &Sheet{Drawings: []Drawing{{Absolute: true, X: 10, Y: y, Width: 20, Height: 20}}}
-		g := newGrid(newDoc(sh), sh)
+		g := newGrid(t.Context(), newDoc(sh), sh)
 		r, ok := g.drawingCells(&sh.Drawings[0])
 		if ok && (r.FirstRow < 0 || r.LastRow >= maxRows || r.LastRow < r.FirstRow) {
 			t.Errorf("y %v: cells %+v", y, r)

@@ -648,7 +648,12 @@ func (pr *pivotRun) results(rows, cols *pivotAxis) []*pivotAgg {
 		return nil
 	}
 	aggs := make([]*pivotAgg, nr*nc)
-	for _, r := range pr.recs {
+	for i, r := range pr.recs {
+		// A context found done stops the sums: [builder.applyPivots]
+		// returns its error and drops the output.
+		if i%pivotRecordsPerCheck == 0 && pr.b.ctx.Err() != nil {
+			return aggs
+		}
 		var re, ce []int
 		for _, k := range pr.recordKeys(rows, r) {
 			re = append(re, rows.byKey[k]...)

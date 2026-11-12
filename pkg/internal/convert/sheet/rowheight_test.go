@@ -20,8 +20,8 @@ func TestOptimalHeights_FallbackFaces(t *testing.T) {
 	}}
 	doc := newDoc(sh)
 	b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
-	g := newGrid(doc, sh)
-	b.optimalHeights(g)
+	g := newGrid(t.Context(), doc, sh)
+	b.heightsOf(t, g)
 	if h := g.rowHeight(0); !near(h, 12.78, 1e-9) {
 		t.Errorf("Latin row %v, want 12.78", h)
 	}
@@ -44,8 +44,8 @@ func TestOptimalHeights_ExcelRules(t *testing.T) {
 	doc := newDoc(sh)
 	doc.ExcelRules = true
 	b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
-	g := newGrid(doc, sh)
-	b.optimalHeights(g)
+	g := newGrid(t.Context(), doc, sh)
+	b.heightsOf(t, g)
 	if h := g.rowHeight(0); !near(h, 14.52, 1e-9) {
 		t.Errorf("row of 30 point text %v, want the default 14.52", h)
 	}
@@ -57,8 +57,8 @@ func TestOptimalHeights_ExcelRules(t *testing.T) {
 	}
 	doc.ExcelRules = false
 	b = newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
-	g = newGrid(doc, sh)
-	b.optimalHeights(g)
+	g = newGrid(t.Context(), doc, sh)
+	b.heightsOf(t, g)
 	if h := g.rowHeight(0); h <= 30 {
 		t.Errorf("row of 30 point text %v by Calc's rules, want it grown", h)
 	}

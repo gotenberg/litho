@@ -1,6 +1,7 @@
 package sheet
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sort"
@@ -63,10 +64,11 @@ type grid struct {
 	overflows map[[2]int]int
 }
 
-// newGrid indexes the sheet sh of doc, with its conditional formats.
-func newGrid(doc *Document, sh *Sheet) *grid {
+// newGrid indexes the sheet sh of doc, with its conditional formats,
+// whose formulas evaluate under ctx.
+func newGrid(ctx context.Context, doc *Document, sh *Sheet) *grid {
 	g := newPlainGrid(doc, sh)
-	g.cond = newConditions(doc, sh)
+	g.cond = newConditions(ctx, doc, sh)
 	return g
 }
 

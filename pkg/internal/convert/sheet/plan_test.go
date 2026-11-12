@@ -56,7 +56,7 @@ func TestPlan_FitToPages(t *testing.T) {
 			ps.Scale, ps.FitWidth, ps.FitHeight = 0, tt.fitW, tt.fitH
 			doc := newDoc(grid150(ps))
 			b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
-			sp := b.planSheet(0, doc.Sheets[0])
+			sp := b.planOf(t, 0, doc.Sheets[0])
 			if !near(sp.zoom, tt.zoom, 1e-9) || len(sp.pages) != tt.pages {
 				t.Errorf("zoom %v on %d pages, want %v on %d", sp.zoom, len(sp.pages), tt.zoom, tt.pages)
 			}
@@ -129,7 +129,7 @@ func TestPlan_Pages(t *testing.T) {
 			tt.edit(sh)
 			doc := newDoc(sh)
 			b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
-			sp := b.planSheet(0, sh)
+			sp := b.planOf(t, 0, sh)
 			var got []want
 			for _, p := range sp.pages {
 				got = append(got, want{rows: [2]int{p.rows.first, p.rows.last}, cols: [2]int{p.cols.first, p.cols.last}, rep: p.repRows != nil})
@@ -279,7 +279,7 @@ func TestDrawingCells_ExcelEndCell(t *testing.T) {
 		sh := &Sheet{Name: "S", Drawings: []Drawing{{From: Anchor{}, To: &Anchor{Row: 2, Column: 3}}}}
 		doc := newDoc(sh)
 		doc.ExcelRules = tc.excel
-		r, ok := newGrid(doc, sh).drawingCells(&sh.Drawings[0])
+		r, ok := newGrid(t.Context(), doc, sh).drawingCells(&sh.Drawings[0])
 		if !ok || r.LastRow != tc.lastR || r.LastColumn != tc.lastC {
 			t.Errorf("Excel's rules %v: cells %+v, want to row %d and column %d", tc.excel, r, tc.lastR, tc.lastC)
 		}
