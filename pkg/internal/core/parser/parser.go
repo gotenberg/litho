@@ -108,6 +108,15 @@ type Parser struct {
 	// inlineKeys holds the keys the last [Parser.ParseInlineImageHeader]
 	// kept, in the order the stream writes them.
 	inlineKeys []ast.PdfName
+
+	// scratch holds the bytes of the literal string being unescaped. The
+	// string object takes a copy, so one buffer serves every string the
+	// parser reads.
+	scratch []byte
+
+	// boxed remembers the number and name objects
+	// [Parser.WithBoxedOperands] hands out again, or is nil.
+	boxed *boxedOperands
 }
 
 // NewParser creates a new Parser that reads PDF objects from the given lexer.
@@ -518,11 +527,19 @@ func (p *Parser) parseObject(ctx context.Context) (ast.PdfObject, error) {
 			return nil, fmt.Errorf("unexpected keyword %q: %w", t0.Value, errUnexpectedKeyword)
 		}
 	case lexer.TokenName:
-		if len(t0.Value) > 0 && t0.Value[0] == '/' {
-			return ast.PdfName(t0.Value[1:]), nil
+		slot := p.boxedSlot(t0.Value)
+		if obj, ok := p.rememberedObject(slot, t0.Value); ok {
+			return obj, nil
 		}
-		return ast.PdfName(t0.Value), nil
+		if len(t0.Value) > 0 && t0.Value[0] == '/' {
+			return p.remember(slot, t0.Value, ast.PdfName(t0.Value[1:])), nil
+		}
+		return p.remember(slot, t0.Value, ast.PdfName(t0.Value)), nil
 	case lexer.TokenNumber:
+		slot := p.boxedSlot(t0.Value)
+		if obj, ok := p.rememberedObject(slot, t0.Value); ok {
+			return obj, nil
+		}
 		if strings.ContainsRune(t0.Value, '.') {
 			f, err := strconv.ParseFloat(t0.Value, 64)
 			if err != nil {
@@ -536,10 +553,13 @@ func (p *Parser) parseObject(ctx context.Context) (ast.PdfObject, error) {
 			// exponent integers ("1e2") are left to the lexer's tokenizer
 			// leniency and remain a parse error below, matching prior
 			// behaviour, to avoid shifting text extraction.
-			if p.checkFormat && strings.ContainsAny(t0.Value, "eE") {
-				p.recordNumberExponent()
+			if strings.ContainsAny(t0.Value, "eE") {
+				if p.checkFormat {
+					p.recordNumberExponent()
+				}
+				return ast.PdfReal(f), nil
 			}
-			return ast.PdfReal(f), nil
+			return p.remember(slot, t0.Value, ast.PdfReal(f)), nil
 		}
 		i, err := strconv.ParseInt(t0.Value, 10, 64)
 		if err != nil {
@@ -566,7 +586,7 @@ func (p *Parser) parseObject(ctx context.Context) (ast.PdfObject, error) {
 			}
 			return nil, err
 		}
-		return ast.PdfInt(i), nil
+		return p.remember(slot, t0.Value, ast.PdfInt(i)), nil
 	case lexer.TokenString:
 		return p.parseString(t0.Value)
 	case lexer.TokenHexString:
@@ -1563,25 +1583,29 @@ func (p *Parser) parseString(val string) (ast.PdfString, error) {
 	if len(val) >= 2 && val[0] == '(' && val[len(val)-1] == ')' {
 		val = val[1 : len(val)-1]
 	}
+	if p.decryptFn == nil && strings.IndexByte(val, '\\') < 0 && strings.IndexByte(val, '\r') < 0 {
+		// Nothing to unescape or normalise: the string is the token's text.
+		return ast.PdfString(val), nil
+	}
 
-	var buf strings.Builder
+	buf := p.scratch[:0]
 	for i := 0; i < len(val); i++ {
 		switch {
 		case val[i] == '\\' && i+1 < len(val):
 			i++
 			switch val[i] {
 			case 'n':
-				buf.WriteByte('\n')
+				buf = append(buf, '\n')
 			case 'r':
-				buf.WriteByte('\r')
+				buf = append(buf, '\r')
 			case 't':
-				buf.WriteByte('\t')
+				buf = append(buf, '\t')
 			case 'b':
-				buf.WriteByte('\b')
+				buf = append(buf, '\b')
 			case 'f':
-				buf.WriteByte('\f')
+				buf = append(buf, '\f')
 			case '(', ')', '\\':
-				buf.WriteByte(val[i])
+				buf = append(buf, val[i])
 			case '\r':
 				// Per ISO 32000-2 §7.3.4.2, a reverse solidus followed by an
 				// end-of-line marker (CR, LF, or CR LF) is ignored: the
@@ -1593,43 +1617,48 @@ func (p *Parser) parseString(val string) (ast.PdfString, error) {
 			case '\n':
 				// Same line-continuation rule for a lone LF after backslash.
 			default:
-				if val[i] >= '0' && val[i] <= '7' {
-					octal := string(val[i])
-					if i+1 < len(val) && val[i+1] >= '0' && val[i+1] <= '7' {
-						octal += string(val[i+1])
-						i++
-						if i+1 < len(val) && val[i+1] >= '0' && val[i+1] <= '7' {
-							octal += string(val[i+1])
-							i++
+				if isOctalDigit(val[i]) {
+					// One to three octal digits (ISO 32000-1, 7.3.4.2, Table
+					// 3); a code past 255 keeps its low 8 bits.
+					code := int(val[i] - '0')
+					for range 2 {
+						if i+1 >= len(val) || !isOctalDigit(val[i+1]) {
+							break
 						}
+						i++
+						code = code<<3 | int(val[i]-'0')
 					}
-					parsed, _ := strconv.ParseInt(octal, 8, 32)
-					buf.WriteByte(byte(parsed & 0xFF)) //nolint:gosec // masked to 8 bits on the line itself
+					buf = append(buf, byte(code&0xFF)) //nolint:gosec // masked to 8 bits on the line itself
 				} else {
-					buf.WriteByte(val[i])
+					buf = append(buf, val[i])
 				}
 			}
 		case val[i] == '\r':
 			// Literal end-of-line markers (CR, LF, CR LF) inside a string
 			// are normalised to a single LF per ISO 32000-2 §7.3.4.2.
-			buf.WriteByte('\n')
+			buf = append(buf, '\n')
 			if i+1 < len(val) && val[i+1] == '\n' {
 				i++
 			}
 		default:
-			buf.WriteByte(val[i])
+			buf = append(buf, val[i])
 		}
 	}
+	p.scratch = buf
 
-	b := []byte(buf.String())
 	if p.decryptFn != nil {
-		dec, err := p.decryptFn(b)
+		dec, err := p.decryptFn(append([]byte{}, buf...))
 		if err != nil {
 			return "", fmt.Errorf("decrypting literal string: %w", err)
 		}
-		b = dec
+		return ast.PdfString(dec), nil
 	}
-	return ast.PdfString(string(b)), nil
+	return ast.PdfString(buf), nil
+}
+
+// isOctalDigit reports whether c is a digit of an octal escape.
+func isOctalDigit(c byte) bool {
+	return c >= '0' && c <= '7'
 }
 
 // ParseInlineImageHeader reads an inline image's dictionary key/value pairs
