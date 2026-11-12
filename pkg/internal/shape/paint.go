@@ -209,12 +209,23 @@ func pictureTiles(box compose.Rect, p Paint) []compose.Fragment {
 		for y := box.Y; y < box.Y+box.Height; y += th {
 			for x := box.X; x < box.X+box.Width; x += tw {
 				out = append(out, &compose.Image{Rect: compose.Rect{X: x, Y: y, Width: tw, Height: th}, Source: p.Picture})
+				if !moves(x, tw) {
+					break
+				}
+			}
+			if !moves(y, th) {
+				break
 			}
 		}
 		return out
 	}
 	return []compose.Fragment{&compose.Image{Rect: box, Source: p.Picture}}
 }
+
+// moves reports whether adding step to the coordinate v changes it. Far
+// enough from the origin a small step rounds back to v, and a loop that
+// steps across a box there would never end.
+func moves(v, step float64) bool { return v+step != v }
 
 // patternPixel is the size of one pixel of a preset pattern's 8 by 8
 // tile: Office draws the tile at 96 pixels to the inch.
@@ -339,11 +350,17 @@ func patternLines(box compose.Rect, lp linePattern) []compose.PathOp {
 	if lp.horz {
 		for y := y0 + step/2; y < y1; y += step {
 			line(x0, y, x1, y)
+			if !moves(y, step) {
+				break
+			}
 		}
 	}
 	if lp.vert {
 		for x := x0 + step/2; x < x1; x += step {
 			line(x, y0, x, y1)
+			if !moves(x, step) {
+				break
+			}
 		}
 	}
 	// Diagonals at 45 degrees, a pitch apart along each axis.

@@ -4,6 +4,7 @@ import (
 	"math"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 )
@@ -179,5 +180,30 @@ func TestSplitOpen(t *testing.T) {
 	got := splitOpen(Path{Ops: ops, Fill: true, Stroke: true})
 	if len(got) != 2 || len(got[0].Ops) != 5 || got[0].Stroke || got[1].Fill || len(got[1].Ops) != 7 {
 		t.Errorf("%+v", got)
+	}
+}
+
+// TestFill_FarFromOrigin fills a box so far from the origin that adding a
+// tile or a pattern's pitch to its coordinates no longer moves them: the
+// tiles and the lines stop at their caps instead of looping for ever.
+func TestFill_FarFromOrigin(t *testing.T) {
+	box := compose.Rect{X: 1e18, Y: 1e18, Width: 1000, Height: 1000}
+	ink, paper := compose.Color{A: 1}, compose.Color{R: 1, G: 1, B: 1, A: 1}
+	paints := map[string]Paint{
+		"tiled picture": {Kind: PaintPicture, Picture: &compose.ImageSource{}, TileWidth: 20, TileHeight: 20},
+		"horz":          {Kind: PaintPattern, Pattern: "horz", Color: ink, Background: paper},
+		"diagCross":     {Kind: PaintPattern, Pattern: "diagCross", Color: ink, Background: paper},
+	}
+	for name, p := range paints {
+		done := make(chan []compose.Fragment, 1)
+		go func() { done <- Fill(RectOps(box), box, p) }()
+		select {
+		case f := <-done:
+			if len(f) == 0 {
+				t.Errorf("%s: nothing painted", name)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatalf("%s: Fill did not return", name)
+		}
 	}
 }
