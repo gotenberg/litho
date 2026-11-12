@@ -176,7 +176,7 @@ func assemble(flavor uint32, tables []table) ([]byte, error) {
 	binary.BigEndian.PutUint32(out[0:], flavor)
 	binary.BigEndian.PutUint16(out[4:], uint16(n))                 //nolint:gosec // n is at most maxTables
 	binary.BigEndian.PutUint16(out[6:], uint16(searchRange))       //nolint:gosec // at most 16 times maxTables
-	binary.BigEndian.PutUint16(out[8:], uint16(entrySelector))     //nolint:gosec // at most log2 of maxTables
+	binary.BigEndian.PutUint16(out[8:], uint16(entrySelector))     // at most log2 of maxTables
 	binary.BigEndian.PutUint16(out[10:], uint16(16*n-searchRange)) //nolint:gosec // at most 16 times maxTables
 	off := sfntSize(n, 0)
 	headOff := int64(-1)
@@ -280,7 +280,7 @@ func inflate(src []byte, n int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer zr.Close() //nolint:errcheck // reading from memory: Close reports nothing a read did not
+	defer zr.Close() // reading from memory: Close reports nothing a read did not
 	return readExactly(zr, n)
 }
 

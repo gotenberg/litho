@@ -82,7 +82,7 @@ func subsetTTF(raw []byte, keepGIDs map[uint16]bool) ([]byte, error) {
 	glyfLen := uint32(len(glyfData)) //nolint:gosec // glyf table size fits in uint32 by spec
 	for gid := range numGlyphs {
 		newOffsets[gid] = uint32(len(newGlyf)) //nolint:gosec // bounded by glyfLen above
-		if !keep[uint16(gid)] {                //nolint:gosec // numGlyphs fits in uint16 per spec
+		if !keep[uint16(gid)] {                // numGlyphs fits in uint16 per spec
 			continue
 		}
 		glyphStart := offsets[gid]
@@ -432,8 +432,8 @@ func sfntSearchParams(numTables int) (searchRange, entrySelector, rangeShift uin
 
 	// pow <= numTables <= maxSearchableTables, so pow*16 and numTables*16 both
 	// fit in uint16; shift is at most log2(maxSearchableTables).
-	searchRange = uint16(pow * 16)                  //nolint:gosec // pow <= maxSearchableTables, so pow*16 <= 65520
-	entrySelector = uint16(shift)                   //nolint:gosec // shift <= log2(maxSearchableTables) = 12
-	rangeShift = uint16(numTables*16) - searchRange //nolint:gosec // numTables <= maxSearchableTables, so the product <= 65520
+	searchRange = uint16(pow * 16)                  // pow <= maxSearchableTables, so pow*16 <= 65520
+	entrySelector = uint16(shift)                   // shift <= log2(maxSearchableTables) = 12
+	rangeShift = uint16(numTables*16) - searchRange // numTables <= maxSearchableTables, so the product <= 65520
 	return
 }

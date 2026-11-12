@@ -191,7 +191,7 @@ func (s *Subset) Write(ctx context.Context, alloc *writer.ObjAllocator, logger *
 	widths := make(map[uint16]uint16, len(s.entries))
 	toUnicode := make(map[uint16]string, len(s.entries))
 	for i, e := range s.entries {
-		cid := uint16(i + 1) //nolint:gosec // at most math.MaxUint16 entries, bounded by Subset.Code
+		cid := uint16(i + 1) // at most math.MaxUint16 entries, bounded by Subset.Code
 		cidToGID[cid] = remap[e.gid]
 		if w, ok := f.widths[e.gid]; ok {
 			widths[cid] = w

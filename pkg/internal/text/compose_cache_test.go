@@ -20,7 +20,7 @@ func TestFace_ComposeEvictsPastTheByteCap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again, _ := regular.Compose(); again != first { //nolint:errcheck // the first call succeeded on the same file
+	if again, _ := regular.Compose(); again != first { // the first call succeeded on the same file
 		t.Error("a cached program is read again")
 	}
 	if _, err := heavy.Compose(); err != nil {

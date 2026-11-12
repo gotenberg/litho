@@ -370,7 +370,7 @@ func (f *Fonts) indexFile(path string, budget *int64) {
 		f.logger.Debug("font files: skipping a file", slog.String("path", path), slog.Any("error", err))
 		return
 	}
-	defer file.Close() //nolint:errcheck // read-only file: Close reports nothing a read did not
+	defer file.Close() // read-only file: Close reports nothing a read did not
 	if size > maxFontCollectionBytes {
 		f.logger.Debug("font files: skipping a file past the size bound", slog.String("path", path), slog.Int("max", maxFontCollectionBytes))
 		return
@@ -578,7 +578,7 @@ func (fc *Face) readProgram() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close() //nolint:errcheck // read-only file: Close reports nothing a read did not
+	defer file.Close() // read-only file: Close reports nothing a read did not
 	if fc.src.collection {
 		if size > maxFontCollectionBytes {
 			return nil, fmt.Errorf("collection of %d bytes past the %d-byte bound", size, maxFontCollectionBytes)

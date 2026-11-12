@@ -111,7 +111,7 @@ func (fc *Face) parseFont() (*font.Font, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close() //nolint:errcheck // read-only file: Close reports nothing a read did not
+	defer file.Close() // read-only file: Close reports nothing a read did not
 	if size > maxFontCollectionBytes || (!fc.src.collection && size > maxFontFileBytes) {
 		return nil, fmt.Errorf("file of %d bytes past the size bound", size)
 	}

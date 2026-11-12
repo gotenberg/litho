@@ -535,7 +535,7 @@ func TestSubsetTTF_RefusesOverlapPastTheProgram(t *testing.T) {
 	every := func(n, step int) map[uint16]bool {
 		keep := make(map[uint16]bool, n)
 		for g := 0; g < n; g += step {
-			keep[uint16(g)] = true //nolint:gosec // a test count under 65536
+			keep[uint16(g)] = true
 		}
 		return keep
 	}

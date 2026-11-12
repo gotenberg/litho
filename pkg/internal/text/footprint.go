@@ -83,13 +83,13 @@ type openFunc func(path string) (sfntFile, int64, error)
 
 // openOSFile opens a font file of the file system.
 func openOSFile(path string) (sfntFile, int64, error) {
-	file, err := os.Open(path) //nolint:gosec // reading the font files the caller's directories hold is the purpose of the index
+	file, err := os.Open(path) // reading the font files the caller's directories hold is the purpose of the index
 	if err != nil {
 		return nil, 0, err
 	}
 	info, err := file.Stat()
 	if err != nil {
-		file.Close() //nolint:errcheck,gosec // read-only file: Close reports nothing a read did not
+		file.Close() // read-only file: Close reports nothing a read did not
 		return nil, 0, err
 	}
 	return file, info.Size(), nil
@@ -353,7 +353,7 @@ func readFootprint(ld *ot.Loader, records []truetype.TableRecord) (*Face, error)
 	if err != nil {
 		return nil, err
 	}
-	names, _, _ := tables.ParseName(rawName) //nolint:errcheck // a face without a readable name table matches no family by name and stays a fallback candidate
+	names, _, _ := tables.ParseName(rawName) // a face without a readable name table matches no family by name and stays a fallback candidate
 	fc := &Face{
 		upem:     float64(headTable.Upem()),
 		coverage: coverage,

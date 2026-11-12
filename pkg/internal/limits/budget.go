@@ -56,7 +56,7 @@ func WithBudget(ctx context.Context, l Limits) (context.Context, *Budget, func()
 
 // BudgetFrom returns the Budget ctx carries, nil when it carries none.
 func BudgetFrom(ctx context.Context) *Budget {
-	b, _ := ctx.Value(budgetKey{}).(*Budget) //nolint:errcheck // a type assertion, nil when absent
+	b, _ := ctx.Value(budgetKey{}).(*Budget) // a type assertion, nil when absent
 	return b
 }
 
