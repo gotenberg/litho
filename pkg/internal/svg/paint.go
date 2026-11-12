@@ -168,6 +168,11 @@ func (r *renderer) resolveGradient(id string) (*gradient, bool) {
 	return g, true
 }
 
+// focalInside is the fraction of the end circle's radius that a focal
+// point outside the circle moves to: just inside it, where the cone the
+// two circles make is still a full disc.
+const focalInside = 0.999
+
 // shading returns the shading of the gradient paint p for a shape styled
 // st whose bounding box is box (SVG 1.1, 13.2). It reports ok false when
 // the reference names no gradient, with the fallback to use instead; ok
@@ -259,10 +264,8 @@ func (r *renderer) shading(p paint, st *style, box bbox) (*compose.Shading, *pai
 		return solid()
 	}
 	// SVG 1.1, 13.2.3: a focal point outside the end circle moves onto it.
-	// It stays just inside, where the cone the two circles make is still
-	// a full disc.
-	if d := math.Hypot(fx-cx, fy-cy); d > rad*0.999 {
-		k := rad * 0.999 / d
+	if d := math.Hypot(fx-cx, fy-cy); d > rad*focalInside {
+		k := rad * focalInside / d
 		fx, fy = cx+(fx-cx)*k, cy+(fy-cy)*k
 	}
 	if fx == cx && fy == cy && fr == rad {
