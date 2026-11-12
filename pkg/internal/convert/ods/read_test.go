@@ -288,8 +288,11 @@ func TestRead_Pages(t *testing.T) {
 	if !near(pg.Width, 29.7*cm) || !near(pg.Height, 21*cm) {
 		t.Errorf("size = %v x %v", pg.Width, pg.Height)
 	}
-	if !near(pg.Margin[css.Top], 3*cm) || !near(pg.Margin[css.Bottom], 2.5*cm) || !near(pg.Margin[css.Left], 3*cm) || !near(pg.Margin[css.Right], cm) ||
-		!near(pg.HeaderTop, cm) || !near(pg.FooterBottom, cm) || !near(hf.HeaderMinHeight, 1.5*cm) || !near(hf.FooterMinHeight, 1.2*cm) {
+	// Calc holds each length in whole twips: 1 cm is 567, 2 cm 1,134,
+	// 3 cm 1,701, 1.5 cm 850, 0.5 cm 283 and 0.3 cm 170.
+	tw := func(n float64) float64 { return n / 20 }
+	if !near(pg.Margin[css.Top], tw(567+1134)) || !near(pg.Margin[css.Bottom], tw(567+850)) || !near(pg.Margin[css.Left], tw(1701)) || !near(pg.Margin[css.Right], tw(567)) ||
+		!near(pg.HeaderTop, tw(567)) || !near(pg.FooterBottom, tw(567)) || !near(hf.HeaderMinHeight, tw(1134-283)) || !near(hf.FooterMinHeight, tw(850-170)) {
 		t.Errorf("margins = %+v %v %v, hf %v %v", pg.Margin, pg.HeaderTop, pg.FooterBottom, hf.HeaderMinHeight, hf.FooterMinHeight)
 	}
 	if !pg.GridLines || !pg.Headings || !doc.Sheets[0].HideZeros || pg.Order != sheet.OverThenDown || pg.FirstPageNumber != 5 || pg.Scale != 80 || !pg.CenterHorizontally || !pg.CenterVertically {

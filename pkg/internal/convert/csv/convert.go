@@ -70,10 +70,12 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 //     its baseline 9.7 points below 56.69 points from the top; the rows
 //     are 12.78 points apart.
 const (
-	margin = 2 * 72 / 2.54
-	// footerHeight is the footer's 0.75 cm with its 0.25 cm spacing.
-	footerHeight  = 0.75 * 72 / 2.54
-	footerSpacing = 0.25 * 72 / 2.54
+	// margin is Calc's 2 cm, 1,134 twips.
+	margin = 1134.0 / 20
+	// footerHeight is the footer's 0.75 cm with its 0.25 cm spacing, 425
+	// and 142 twips.
+	footerHeight  = 425.0 / 20
+	footerSpacing = 142.0 / 20
 	// rowHeight is Calc's standard row height for Liberation Sans 10, 256
 	// twips.
 	rowHeight = 12.8

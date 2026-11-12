@@ -26,12 +26,13 @@ import (
 //     the min-height includes the spacing; the header's text is centred
 //     in the 1.5 cm left above the spacing, as the footer's alike.
 const (
-	// defaultMargin is the 2 cm of every side.
-	defaultMargin = 2 * 72 / 2.54
+	// defaultMargin is the 2 cm of every side, 1,134 twips.
+	defaultMargin = 1134.0 / 20
 	// defaultHFHeight is the 0.75 cm a header or footer takes with its
-	// spacing, defaultHFSpacing the 0.25 cm spacing to the cells.
-	defaultHFHeight  = 0.75 * 72 / 2.54
-	defaultHFSpacing = 0.25 * 72 / 2.54
+	// spacing, 425 twips, defaultHFSpacing the 0.25 cm spacing to the
+	// cells, 142 twips.
+	defaultHFHeight  = 425.0 / 20
+	defaultHFSpacing = 142.0 / 20
 )
 
 // pageResult is a master page read into the model.
@@ -117,10 +118,10 @@ func (r *reader) readPage(mp *odf.MasterPage) pageResult {
 	for i, side := range sideNames {
 		pg.Margin[i] = defaultMargin
 		if hasAll && all >= 0 {
-			pg.Margin[i] = all
+			pg.Margin[i] = calcTwips(all)
 		}
 		if m, ok := odf.Length(pp.Get("fo:margin-" + side)); ok && m >= 0 {
-			pg.Margin[i] = m
+			pg.Margin[i] = calcTwips(m)
 		}
 	}
 	pg.HeaderTop, pg.FooterBottom = pg.Margin[css.Top], pg.Margin[css.Bottom]
@@ -210,7 +211,8 @@ type hfGeometry struct {
 // header-footer-properties are p (ODF 1.3, Part 3, 17.5): fo:min-height
 // is a least height the content grows past, svg:height a fixed one, each
 // including the spacing (spacing, fo:margin-bottom of a header,
-// fo:margin-top of a footer), as Calc reads them. A style without either
+// fo:margin-top of a footer), as Calc reads them, in whole twips
+// ([calcTwips]). A style without either
 // takes Calc's default, 0.75 cm with 0.25 cm spacing, which grows.
 //
 // # Corpus evidence
@@ -234,6 +236,7 @@ func hfHeight(p odf.Props, spacing string) hfGeometry {
 	if !ok || sp < 0 {
 		sp = 0
 	}
+	h, sp = calcTwips(h), calcTwips(sp)
 	return hfGeometry{room: h, spacing: min(sp, h), dynamic: dynamic}
 }
 
