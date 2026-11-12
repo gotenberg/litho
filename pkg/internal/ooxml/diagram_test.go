@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 const dgmNS = `xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"`
@@ -193,5 +194,39 @@ func TestDiagramStyleAndColors(t *testing.T) {
 		if k.StyleColor.Line != nil {
 			t.Errorf("kid %d line colour %v, want the style's own", i, k.StyleColor.Line)
 		}
+	}
+}
+
+// TestDiagramTextRotationOfAHugeStartAngle lays out a cycle whose start
+// angle is near the largest integer: the kids' rotation, clamped to 2^53
+// sixty-thousandths of a degree, turns their text in constant time, as a
+// rotation of 179 degrees does.
+func TestDiagramTextRotationOfAHugeStartAngle(t *testing.T) {
+	texts := make([]string, 200)
+	for i := range texts {
+		texts[i] = fmt.Sprint(i)
+	}
+	layout := `<dgm:alg type="cycle"><dgm:param type="stAng" val="9000000000000000000"/><dgm:param type="rotPath" val="alongPath"/></dgm:alg><dgm:shape/>` +
+		nodeList("ellipse", "")
+	d := ParseDiagram(mustParse(t, diagramData(texts...)), mustParse(t, diagramLayout(layout)), nil, nil)
+	done := make(chan *DiagramShape, 1)
+	go func() { done <- d.LayOut(1200, 1200) }()
+	select {
+	case root := <-done:
+		n := 0
+		for _, k := range root.Kids {
+			if k.Name != "node" {
+				continue
+			}
+			n++
+			if k.Rot != 1<<53 || k.TextRot != -180 {
+				t.Errorf("node rotation %d, text rotation %d; want %d and -180", k.Rot, k.TextRot, int64(1<<53))
+			}
+		}
+		if n != len(texts) {
+			t.Errorf("%d nodes, want %d", n, len(texts))
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the layout did not finish in 5 s")
 	}
 }

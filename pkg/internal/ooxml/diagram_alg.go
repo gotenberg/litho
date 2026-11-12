@@ -867,12 +867,11 @@ func (e *engine) textAlg(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrai
 	}
 	s.FontSize = fontSize
 	s.Autofit = !e.customText(s)
-	rot := s.Rot
-	for rot < 0 {
+	// The rotation of a cycle's kid grows with its stAng, which a
+	// document sets: the turn is reduced by a remainder, not by steps.
+	rot := s.Rot % (360 * perDegree)
+	if rot < 0 {
 		rot += 360 * perDegree
-	}
-	for rot > 360*perDegree {
-		rot -= 360 * perDegree
 	}
 	switch param(a, "autoTxRot", "upr") {
 	case "upr":
