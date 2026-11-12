@@ -91,10 +91,13 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 		return s
 	}
 	if sz := e.Child(w, "pgSz"); sz != nil {
-		if v, ok := ooxml.Twips(attrOr(sz, "w")); ok && v > 0 {
+		// A side past the longest a PDF page may have (ISO 32000-1,
+		// Annex C.2) keeps the default, as a side of zero does: the page
+		// prints rather than the conversion failing.
+		if v, ok := ooxml.Twips(attrOr(sz, "w")); ok && v > 0 && v <= office.MaxPageSide {
 			s.width = v
 		}
-		if v, ok := ooxml.Twips(attrOr(sz, "h")); ok && v > 0 {
+		if v, ok := ooxml.Twips(attrOr(sz, "h")); ok && v > 0 && v <= office.MaxPageSide {
 			s.height = v
 		}
 		if attrOr(sz, "orient") == "landscape" && s.width < s.height {
