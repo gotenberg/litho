@@ -31,6 +31,8 @@ const nodeCheckEvery = 4096
 
 // builder turns the body of a text document into a layout tree.
 type builder struct {
+	// ctx is the context of the Convert call the builder serves: a
+	// builder does not outlive it.
 	ctx    context.Context
 	pkg    *odf.Package
 	styles *odf.Styles

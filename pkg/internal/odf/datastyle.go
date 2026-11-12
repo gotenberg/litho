@@ -6,7 +6,8 @@ import (
 	"strings"
 )
 
-// The data style elements of ODF 1.3, Part 3, 16.29.
+// dataStyleKinds are the local names of the data style elements of ODF
+// 1.3, Part 3, 16.29.
 var dataStyleKinds = map[string]bool{
 	"number-style": true, "percentage-style": true, "currency-style": true,
 	"date-style": true, "time-style": true, "boolean-style": true, "text-style": true,

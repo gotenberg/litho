@@ -123,6 +123,8 @@ func PropsOf(el *Element) Props { return Props{}.merge(el) }
 
 // Style is one style:style of a family (ODF 1.3, Part 3, 16.2).
 type Style struct {
+	// Name is style:name, DisplayName style:display-name and Family
+	// style:family.
 	Name, DisplayName, Family string
 	// Parent is style:parent-style-name, Next style:next-style-name,
 	// ListStyle style:list-style-name, MasterPage style:master-page-name
@@ -140,6 +142,7 @@ type Style struct {
 
 // FontFace is one style:font-face declaration (ODF 1.3, Part 3, 16.23).
 type FontFace struct {
+	// Name is style:name, the name text properties give.
 	Name string
 	// Family is the first family of svg:font-family, unquoted; the
 	// declaration's name when it has none.
@@ -157,7 +160,8 @@ type FontFace struct {
 type ListLevel struct {
 	// Kind is "number", "bullet", "image" or "outline".
 	Kind string
-	El   *Element
+	// El is the level's element.
+	El *Element
 	// Props merges the style:list-level-properties and its
 	// style:list-level-label-alignment child's attributes.
 	Props Props
@@ -171,6 +175,7 @@ const MaxListLevels = 10
 
 // ListStyle is a text:list-style or the text:outline-style.
 type ListStyle struct {
+	// Name is style:name.
 	Name string
 	// Levels is indexed by level less one; a level the style leaves out
 	// is nil.
@@ -182,8 +187,12 @@ type ListStyle struct {
 // PageLayout is a style:page-layout (ODF 1.3, Part 3, 16.5): the page's
 // properties and its header's and footer's.
 type PageLayout struct {
-	Name           string
-	Page           Props
+	// Name is style:name.
+	Name string
+	// Page is the style:page-layout-properties.
+	Page Props
+	// Header and Footer are the style:header-footer-properties of
+	// style:header-style and style:footer-style.
 	Header, Footer Props
 	// PageUsage is style:page-usage: all, left, right or mirrored.
 	PageUsage string
@@ -191,6 +200,9 @@ type PageLayout struct {
 
 // MasterPage is a style:master-page (ODF 1.3, Part 3, 16.9).
 type MasterPage struct {
+	// Name is style:name, DisplayName style:display-name, PageLayout
+	// style:page-layout-name and Next style:next-style-name, the master
+	// page of the page after.
 	Name, DisplayName, PageLayout, Next string
 	// Header, HeaderLeft, HeaderFirst and their Footer counterparts are
 	// style:header, style:header-left, style:header-first and the footer
@@ -205,12 +217,14 @@ type MasterPage struct {
 // layouts, master pages and notes configurations. It is read-only once
 // built and safe for concurrent reads.
 type Styles struct {
-	Fonts       map[string]FontFace
-	defaults    map[string]*Element
-	common      map[string]*Style
-	auto        [2]map[string]*Style
-	lists       map[string]*ListStyle
-	autoLists   [2]map[string]*ListStyle
+	// Fonts are the style:font-face declarations, by style:name.
+	Fonts     map[string]FontFace
+	defaults  map[string]*Element
+	common    map[string]*Style
+	auto      [2]map[string]*Style
+	lists     map[string]*ListStyle
+	autoLists [2]map[string]*ListStyle
+	// PageLayouts are the style:page-layout elements, by style:name.
 	PageLayouts map[string]*PageLayout
 	// Masters are the master pages in document order; Master looks one up.
 	Masters []*MasterPage

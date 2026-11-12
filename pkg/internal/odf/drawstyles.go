@@ -15,12 +15,17 @@ import (
 // name wins. A DrawStyles is read-only once built and safe for concurrent
 // reads.
 type DrawStyles struct {
-	Gradients  map[string]*Gradient
-	Opacities  map[string]*Gradient
-	Hatches    map[string]*Hatch
+	// Gradients are the draw:gradient elements and Opacities the
+	// draw:opacity ones, by draw:name.
+	Gradients, Opacities map[string]*Gradient
+	// Hatches are the draw:hatch elements, by draw:name.
+	Hatches map[string]*Hatch
+	// FillImages are the draw:fill-image elements, by draw:name.
 	FillImages map[string]*Element
-	Markers    map[string]*Marker
-	Dashes     map[string]*StrokeDash
+	// Markers are the draw:marker elements, by draw:name.
+	Markers map[string]*Marker
+	// Dashes are the draw:stroke-dash elements, by draw:name.
+	Dashes map[string]*StrokeDash
 
 	legacy bool
 }
@@ -57,8 +62,10 @@ type Gradient struct {
 
 // GradientStop is one loext:gradient-stop of a multi-colour gradient.
 type GradientStop struct {
+	// Offset is svg:offset, from 0 to 1 along the gradient.
 	Offset float64
-	Color  Color
+	// Color is loext:color-value.
+	Color Color
 }
 
 // Hatch is a draw:hatch (ODF 1.3, Part 3, 16.42.5).

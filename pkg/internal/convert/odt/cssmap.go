@@ -168,7 +168,7 @@ func applyText(st *css.Style, t textState, inline bool) {
 	}
 }
 
-// lang returns the BCP 47 tag of t's language and country, "" for none.
+// langTag returns the BCP 47 tag of t's language and country, "" for none.
 func (t textState) langTag() string {
 	if t.lang == "" || t.lang == "zxx" || t.lang == "none" {
 		return ""
