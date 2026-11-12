@@ -46,8 +46,8 @@ type ByteRange struct {
 // inline images as [inlineImages] says. data is what the parser reads.
 func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data []byte, ranges *[]ByteRange, placer *violationPlacer) ([]Operation, error) {
 	stops := o.readsAsVeraPDF()
-	ops := make([]Operation, 0, 256)        // reasonable initial capacity for typical pages
-	operands := make([]ast.PdfObject, 0, 8) // most operators have ≤6 operands
+	ops := newOperationList(len(data))
+	operands := newOperandStore(len(data))
 	tokenCount := 0
 	var prevEnd int64
 	// images reads the data of inline images, made on the first one the
@@ -75,7 +75,7 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 		tokenCount++
 		if tokenCount%500 == 0 {
 			if err := ctx.Err(); err != nil {
-				return ops, err
+				return ops.finish(), err
 			}
 		}
 
@@ -95,6 +95,7 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 					return nil, fmt.Errorf("failed to consume BI: %w", err)
 				}
 				placer.dropOperands()
+				operands.drop()
 				if images == nil {
 					images = newStreamImages(data, o)
 				}
@@ -117,9 +118,8 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 				if o.inlineData {
 					biOperands = append(biOperands, ast.PdfString(inlineImageData(data, idEnd, intconv.Clamp(p.Position()))))
 				}
-				ops = append(ops, Operation{Operator: "BI", Operands: biOperands})
-				placer.place("BI", ops[len(ops)-1].Operands)
-				operands = nil
+				op := ops.add(Operation{Operator: "BI", Operands: biOperands})
+				placer.place("BI", op.Operands)
 				// The image data is consumed off-token, and the token buffer is
 				// empty before raw bytes are read, so the reader position is
 				// where reading resumes, just past the end of the data the
@@ -131,9 +131,8 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 			// veraPDF reads an ID no BI begins as it reads the ID of an inline
 			// image: the data after it is no operator (see [inlineImages]).
 			if tok.Value == "ID" && stops {
-				ops = append(ops, Operation{Operator: tok.Value, Operands: operands})
-				placer.place(tok.Value, operands)
-				operands = nil
+				op := ops.add(Operation{Operator: tok.Value, Operands: operands.take()})
+				placer.place(tok.Value, op.Operands)
 				if _, err := p.Consume(); err != nil {
 					return nil, fmt.Errorf("failed to consume operator token: %w", err)
 				}
@@ -152,12 +151,8 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 			}
 
 			opEnd := p.PeekEnd(0) // end offset of the operator token, before consuming it
-			ops = append(ops, Operation{
-				Operator: tok.Value,
-				Operands: operands,
-			})
-			placer.place(tok.Value, operands)
-			operands = nil
+			op := ops.add(Operation{Operator: tok.Value, Operands: operands.take()})
+			placer.place(tok.Value, op.Operands)
 			if _, err := p.Consume(); err != nil {
 				return nil, fmt.Errorf("failed to consume operator token: %w", err)
 			}
@@ -177,15 +172,16 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 				placer.take(noOperand)
 				continue
 			}
-			placer.take(len(operands))
-			operands = append(operands, obj)
+			placer.take(operands.pending())
+			operands.add(obj)
 		}
 	}
 
 	if gaveUp(p, o) {
 		return nil, nil
 	}
-	return ops, nil
+	operands.drop()
+	return ops.finish(), nil
 }
 
 // newStreamImages returns the reader of the inline images of data for a parse
@@ -672,7 +668,7 @@ func ParseStreamData(ctx context.Context, data []byte, opts ...Option) ([]Operat
 func ParseStreamDataWithOffsets(ctx context.Context, data []byte, opts ...Option) ([]Operation, []ByteRange, error) {
 	o := optionsOf(ctx, opts)
 	p := newParser(data, o).WithOffsetTracking()
-	ranges := make([]ByteRange, 0, 256) // matches the operations capacity hint
+	ranges := make([]ByteRange, 0, reservedOperations(len(data)))
 	ops, err := parseOperations(ctx, p, o, data, &ranges, nil)
 	if err != nil || gaveUp(p, o) {
 		// On error parseOperations returns ops=nil but ranges may hold the
