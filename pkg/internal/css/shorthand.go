@@ -22,6 +22,12 @@ func ids(first propID, n int) []propID {
 	return out
 }
 
+// sideValues maps the count of values of a 1-to-4 value box shorthand,
+// less one, to the value each of top, right, bottom and left takes (CSS
+// Box 4, 3.1): one value sets the four sides; two set top and bottom, then
+// right and left; three set top, then right and left, then bottom.
+var sideValues = [4][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}
+
 // boxShorthand expands a 1-to-4 value box shorthand onto the longhands of
 // top, right, bottom and left (CSS Box 4, 3.1).
 func boxShorthand(longhands [4]propID) shorthandDef {
@@ -39,7 +45,7 @@ func boxShorthand(longhands [4]propID) shorthandDef {
 				}
 				vals[i] = pv
 			}
-			pick := [4][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}[len(v)-1]
+			pick := sideValues[len(v)-1]
 			out := make([]entry, 4)
 			for i := range out {
 				out[i] = entry{id: longhands[i], v: vals[pick[i]]}
@@ -247,7 +253,7 @@ func expandRadius(v []token, _ *declCtx) ([]entry, bool) {
 			}
 			vals[i] = x
 		}
-		pick := [4][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}[len(l)-1]
+		pick := sideValues[len(l)-1]
 		for i := range out {
 			out[i] = vals[pick[i]]
 		}

@@ -65,7 +65,7 @@ type quadSpec [4]dimSpec
 // expand4 returns the one to four values of vals spread over the four
 // sides.
 func expand4[T any](vals []T) [4]T {
-	pick := [4][4]int{{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 1, 2, 1}, {0, 1, 2, 3}}[len(vals)-1]
+	pick := sideValues[len(vals)-1]
 	var out [4]T
 	for i := range out {
 		out[i] = vals[pick[i]]
