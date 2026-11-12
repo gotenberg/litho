@@ -29,83 +29,112 @@ func validHandouts(per int) bool {
 	return false
 }
 
+// handoutNoteLines is the count of lines ruled for notes beside each slide
+// of a three-a-page handout.
+const handoutNoteLines = 7
+
 // handoutGrid returns the grid of a handout page of per slides, landscape
 // or not, as Impress lays it out: its columns and rows, and the cells,
 // numbered row by row from 0, that hold the slides in show order, row by
 // row. Three slides a page take the first column of a portrait page's two
 // by three grid, or the first row of a landscape page's three by two
-// grid, the other cells left for notes.
-func handoutGrid(per int, landscape bool) (cols, rows int, cells []int) {
+// grid; ruled lists, for each of them, the cell ruled for its notes, the
+// one to its right on a portrait page and the one below it on a landscape
+// page. It is nil for any other count.
+func handoutGrid(per int, landscape bool) (cols, rows int, cells, ruled []int) {
 	switch per {
 	case 1:
-		return 1, 1, []int{0}
+		return 1, 1, []int{0}, nil
 	case 2:
 		if landscape {
-			return 2, 1, []int{0, 1}
+			return 2, 1, []int{0, 1}, nil
 		}
-		return 1, 2, []int{0, 1}
+		return 1, 2, []int{0, 1}, nil
 	case 3:
 		if landscape {
-			return 3, 2, []int{0, 1, 2}
+			return 3, 2, []int{0, 1, 2}, []int{3, 4, 5}
 		}
-		return 2, 3, []int{0, 2, 4}
+		return 2, 3, []int{0, 2, 4}, []int{1, 3, 5}
 	case 4:
-		return 2, 2, []int{0, 1, 2, 3}
+		return 2, 2, []int{0, 1, 2, 3}, nil
 	case 6:
 		if landscape {
-			return 3, 2, []int{0, 1, 2, 3, 4, 5}
+			return 3, 2, []int{0, 1, 2, 3, 4, 5}, nil
 		}
-		return 2, 3, []int{0, 1, 2, 3, 4, 5}
+		return 2, 3, []int{0, 1, 2, 3, 4, 5}, nil
 	}
-	return 3, 3, []int{0, 1, 2, 3, 4, 5, 6, 7, 8}
+	return 3, 3, []int{0, 1, 2, 3, 4, 5, 6, 7, 8}, nil
 }
 
 // handoutAreas returns the rectangles the slides of a handout page take,
 // in show order, on a page w by h with the margins m (indexed by css.Top
-// and the others), for slides sw by sh, per slides a page. The page less
-// its margins, a header band and a footer band of [handoutBand] each, and
-// a [handoutGap] all round is cut into the grid of [handoutGrid] with a
-// gap between its cells; every slide takes the size of the largest slide
-// that fits a cell, its aspect ratio kept, centred in its cell
-// (SdPage::CalculateHandoutAreas). A page too small for the grid gets
-// empty rectangles.
+// and the others), for slides sw by sh, per slides a page, and, three a
+// page, the rectangle ruled for the notes of each. The page less its
+// margins, a header band and a footer band of [handoutBand] each, and a
+// [handoutGap] all round is cut into the grid of [handoutGrid] with a gap
+// between its cells; every slide takes the size of the largest slide that
+// fits a cell, its aspect ratio kept, centred in its cell, and a ruled
+// rectangle the same place in its own cell (SdPage::CalculateHandoutAreas).
+// A page too small for the grid gets empty rectangles.
 //
 // # Corpus evidence
 //
-//   - probe, odp: the pinned LibreOffice writes the handout master it
-//     creates for a deck of 28 by 15.75 cm slides on an A4 portrait page
-//     without margins with six slide thumbnails 8.999 by 5.061 cm at x 1
-//     and 11 cm, y 3.742, 12.318 and 20.894 cm, and its header and footer
-//     frames 1.484 cm tall: the six-a-page rectangles this function
-//     returns, to the hundredth of a millimetre.
-//   - probe, odp: the other counts and orientations are not measured.
-//     The pinned LibreOffice prints no handout without its print dialog:
-//     a print to file, a Basic macro's print call, the document settings
-//     IsPrintHandout and SlidesPerHandout, the user settings
-//     Print/Content/Handout and Print/Other/PagesPerHandout and a handout
-//     view all print the slides, and its PDF export has no handout
-//     option.
-func handoutAreas(w, h float64, m [4]float64, sw, sh float64, per int) []compose.Rect {
-	cols, rows, cells := handoutGrid(per, w > h)
+//   - probe, odp: the pinned LibreOffice stores the slide rectangles of a
+//     handout layout in the handout master once a macro sets the master's
+//     Layout property. For each of the six counts on eight pages (A4
+//     portrait and landscape and Letter with 28 by 15.75 cm slides, A4
+//     portrait and landscape with 25.4 by 19.05 cm slides, A4 portrait
+//     with 19.05 by 25.4 cm slides, and A4 portrait and landscape with
+//     four different margins), the 48 sets of rectangles are the ones
+//     this function returns to 0.03 mm, LibreOffice rounding to 0.01 mm.
+//     Three a page, the master holds the three slides alone.
+//   - probe, odp: the pinned LibreOffice prints no handout without its
+//     print dialog: a print to file, a Basic macro's print call, the
+//     document settings IsPrintHandout and SlidesPerHandout, the user
+//     settings Print/Content/Handout and Print/Other/PagesPerHandout and
+//     a handout view all print the slides, and its PDF export has no
+//     handout option. The order of the slides on a printed page, row by
+//     row, and the ruled rectangles are those of its print path
+//     (InitHandoutTemplate in sd's DocumentRenderer), not measured.
+func handoutAreas(w, h float64, m [4]float64, sw, sh float64, per int) (slides, ruled []compose.Rect) {
+	cols, rows, cells, ruledCells := handoutGrid(per, w > h)
 	band := (h - m[css.Top] - m[css.Left]) * handoutBand
 	top, bottom := m[css.Top]+band, m[css.Bottom]+band
 	aw := w - 2*handoutGap - m[css.Left] - m[css.Right]
 	ah := h - 2*handoutGap - top - bottom
 	partW := (aw - float64(cols-1)*handoutGap) / float64(cols)
 	partH := (ah - float64(rows-1)*handoutGap) / float64(rows)
-	out := make([]compose.Rect, len(cells))
+	slides, ruled = make([]compose.Rect, len(cells)), make([]compose.Rect, len(ruledCells))
 	if !(partW > 0) || !(partH > 0) || !(sw > 0) || !(sh > 0) {
-		return out
+		return slides, ruled
 	}
 	k := min(partW/sw, partH/sh)
 	tw, th := sw*k, sh*k
 	x0 := handoutGap + m[css.Left] + (partW-tw)/2
 	y0 := handoutGap + top + (partH-th)/2
-	for i, c := range cells {
+	at := func(c int) compose.Rect {
 		col, row := c%cols, c/cols
-		out[i] = compose.Rect{X: x0 + float64(col)*(partW+handoutGap), Y: y0 + float64(row)*(partH+handoutGap), Width: tw, Height: th}
+		return compose.Rect{X: x0 + float64(col)*(partW+handoutGap), Y: y0 + float64(row)*(partH+handoutGap), Width: tw, Height: th}
 	}
-	return out
+	for i, c := range cells {
+		slides[i] = at(c)
+	}
+	for i, c := range ruledCells {
+		ruled[i] = at(c)
+	}
+	return slides, ruled
+}
+
+// noteLines returns the lines ruled across r for notes, as one path:
+// [handoutNoteLines] of them the width of r, a seventh of its height
+// apart, the last along its bottom edge.
+func noteLines(r compose.Rect) []compose.PathOp {
+	var ops []compose.PathOp
+	for i := 1; i <= handoutNoteLines; i++ {
+		y := r.Y + r.Height*float64(i)/handoutNoteLines
+		ops = append(ops, lineOps(r.X, y, r.X+r.Width, y)...)
+	}
+	return ops
 }
 
 // handoutSize returns the handout page size: the one the file gives, else
@@ -122,7 +151,8 @@ func (b *builder) handoutSize() (float64, float64) {
 // handoutPage draws the handout page numbered n holding the slides group,
 // numberOf giving each slide's number: the handout master's background,
 // each slide scaled into its rectangle of [handoutAreas] inside the
-// hairline frame a notes page draws round its slide, then the handout
+// hairline frame a notes page draws round its slide, three a page the
+// lines ruled for its notes ([noteLines]) beside it, then the handout
 // master's shapes, its page number field showing n. It returns the page
 // with the structure element of each slide, in order. The page is the
 // handout page size; on the paper of the options, or turned by them, the
@@ -135,11 +165,17 @@ func (b *builder) handoutSize() (float64, float64) {
 //     C0C0C0 line 0.1 point wide (see [builder.notesPage]); a handout
 //     page's slides are the same kind of page object, whose frame on a
 //     handout page is not measured.
+//   - probe, odp: the lines ruled for notes are black and solid in the
+//     pinned LibreOffice's print path (InitHandoutTemplate in sd's
+//     DocumentRenderer), only beside the slides a page holds, and take no
+//     width of their own. Their printed width is not measured: they are
+//     drawn the width of the frame, where a line of no width would be the
+//     thinnest a device draws, which ISO 32000-1, 8.4.3.2 advises against.
 func (b *builder) handoutPage(n int, group []*Slide, numberOf func(*Slide) int) (*compose.Page, []*compose.StructElem) {
 	hw, hh := b.handoutSize()
 	pw, ph := b.pageSize(hw, hh)
 	sw, sh := b.slideSize()
-	areas := handoutAreas(hw, hh, b.doc.HandoutMargins, sw, sh, b.opts.Handouts)
+	areas, ruled := handoutAreas(hw, hh, b.doc.HandoutMargins, sw, sh, b.opts.Handouts)
 	whole := compose.Rect{Width: hw, Height: hh}
 	content := b.fill(&b.doc.HandoutBackground, whole, rectOps(whole), shape.FillNorm)
 	var links []compose.Link
@@ -164,6 +200,9 @@ func (b *builder) handoutPage(n int, group []*Slide, numberOf func(*Slide) int) 
 			links = append(links, l)
 		}
 		content = append(content, &compose.Path{Ops: rectOps(r), Stroke: &compose.Stroke{Color: gray, Width: notesFrameWidth}})
+		if i < len(ruled) {
+			content = append(content, &compose.Path{Ops: noteLines(ruled[i]), Stroke: &compose.Stroke{Color: compose.Color{A: 1}, Width: notesFrameWidth}})
+		}
 	}
 	// The handout master's shapes repeat on every handout page: pagination
 	// artifacts (ISO 32000-1, 14.8.2.2.2), their links left out with their
