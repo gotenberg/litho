@@ -448,13 +448,26 @@ func WithPipelineTempDir(dir string) WriteOption {
 }
 
 // The bounds of [WithPipelineConcurrency].
+//
+// # Corpus evidence
+//
+//   - probe, html: eight conversions of a 1 MB document of 344 pages,
+//     merged on ten cores, take 25.9 s and peak at 716 MiB resident one
+//     at a time, 17.9 s and 1.0 GiB two at a time, 11.6 s and 2.0 GiB
+//     four at a time, 12.8 s and 3.8 GiB eight at a time.
+//   - litho/stress: four conversions of docx-2000pages and four of
+//     pptx-500slides, merged, take 5.4 s and 430 MiB one at a time, 3.2 s
+//     and 478 MiB two at a time, 2.4 s and 831 MiB four at a time, 2.3 s
+//     and 1.5 GiB eight at a time.
 const (
 	// defaultPipelineConcurrency caps the pipelines a
 	// [Pipeline.MergePipelines] stage runs at once when the caller names no
 	// number. Memory guard, not spec-mandated: each pipeline may spend its
 	// own limits, a conversion up to twice [Limits.MaxConvertMemoryBytes],
-	// so a host of many cores must not start as many as it has.
-	defaultPipelineConcurrency = 8
+	// so a host of many cores must not start as many as it has. Past four
+	// at once the measured time no longer falls and the memory keeps
+	// growing.
+	defaultPipelineConcurrency = 4
 	// maxPipelineConcurrency is the most a caller may ask for. Anti-DoS
 	// guard, not spec-mandated: past it the intermediate files and the
 	// memory of the pipelines running at once outgrow any gain.
@@ -464,7 +477,7 @@ const (
 // WithPipelineConcurrency sets how many of the pipelines of a
 // [Pipeline.MergePipelines] stage run at once: n in [1, 64], 1 running them
 // in turn. Without it the number is the CPUs the process may use, at most
-// 8. Any other n makes [Pipeline.WriteTo] fail with
+// 4. Any other n makes [Pipeline.WriteTo] fail with
 // [ErrInvalidPipelineConcurrency] before a stage runs.
 //
 // More pipelines at once finish sooner and hold more: each spends memory
