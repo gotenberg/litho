@@ -733,7 +733,7 @@ func (b *builder) changeBound(c *odf.Element) *layout.Node {
 	return b.node(&layout.Node{Kind: layout.Element, Style: baseStyle(), ChangeBar: true})
 }
 
-// rowFill returns the ground the marked view draws the table row row on:
+// rowFill returns the ground the marked view draws the table row on:
 // an inserted row's or a deleted one's, a row of a table an insertion or
 // a deletion holds included, and whether it draws one. The ground covers
 // the row's cells, over their own background ([office.RowInsertedFill]).

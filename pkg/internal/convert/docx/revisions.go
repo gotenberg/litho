@@ -399,7 +399,7 @@ func (r *revisions) markAttributes(p, pChange *ooxml.Element, depth int) {
 // cell's own ([office.RowInsertedFill]).
 func (r *revisions) rowGround(tr *ooxml.Element) {
 	t := tr.Child(w, "trPr")
-	fill := uint32(0)
+	var fill uint32
 	switch {
 	case t.Child(w, "ins") != nil:
 		fill = office.RowInsertedFill
@@ -423,13 +423,14 @@ func (r *revisions) rowGround(tr *ooxml.Element) {
 			tc.Children = append([]*ooxml.Element{tcPr}, tc.Children...)
 			r.added++
 		}
-		kids := tcPr.Children[:0:0]
+		kids := make([]*ooxml.Element, 0, len(tcPr.Children)+1)
 		for _, c := range tcPr.Children {
 			if !c.Is(w, "shd") {
 				kids = append(kids, c)
 			}
 		}
-		tcPr.Children = append(kids, shd)
+		kids = append(kids, shd)
+		tcPr.Children = kids
 		r.added++
 	}
 }
