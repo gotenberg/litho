@@ -176,6 +176,10 @@ func Parse(ctx context.Context, data []byte, understood []string) (*Element, err
 	return parse(ctx, office.NewTokenReader(bytes.NewReader(data), int64(len(data))+1), understood, &n)
 }
 
+// elementsPerCharge is how many elements the parser reads between two
+// charges of the memory budget and checks of the context.
+const elementsPerCharge = 4096
+
 // errDocType reports a document type declaration, which no OOXML part
 // carries and which could name external entities.
 var errDocType = errors.New("a document type declaration")
@@ -210,8 +214,8 @@ func parse(ctx context.Context, in *office.TokenReader, understood []string, cou
 			if *count > MaxElements {
 				return nil, fmt.Errorf("%w: more than %d XML elements", office.ErrInputTooLarge, MaxElements)
 			}
-			if *count%4096 == 0 {
-				if err := mem.ChargeUnits(4096, limits.XMLElementCost, "XML trees"); err != nil {
+			if *count%elementsPerCharge == 0 {
+				if err := mem.ChargeUnits(elementsPerCharge, limits.XMLElementCost, "XML trees"); err != nil {
 					return nil, err
 				}
 				if err := ctx.Err(); err != nil {

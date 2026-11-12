@@ -356,7 +356,7 @@ func txData(tx *Element) string {
 // paragraph each line, "" when it holds none.
 func paragraphsText(body *Element) string {
 	var lines []string
-	any := false
+	seen := false
 	for _, para := range body.Kids() {
 		if !para.Is(NSA, "p") {
 			continue
@@ -366,7 +366,7 @@ func paragraphsText(body *Element) string {
 			switch {
 			case r.Is(NSA, "r"), r.Is(NSA, "fld"):
 				t := textOf(r.Child(NSA, "t"))
-				any = any || t != ""
+				seen = seen || t != ""
 				b.WriteString(t)
 			case r.Is(NSA, "br"):
 				b.WriteString("\n")
@@ -374,7 +374,7 @@ func paragraphsText(body *Element) string {
 		}
 		lines = append(lines, b.String())
 	}
-	if !any {
+	if !seen {
 		return ""
 	}
 	return strings.Join(lines, "\n")

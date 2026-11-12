@@ -92,7 +92,7 @@ func (p *chartReader) group(e *Element) *chart.Group {
 		}
 	}
 	g.Labels = p.labels(e.Child(NSChart, "dLbls"), chart.Labels{})
-	if ln := e.Child(NSChart, "hiLowLines"); ln != nil {
+	if e.Child(NSChart, "hiLowLines") != nil {
 		p.warn(CodeChartUnsupported, "a chart's high-low lines are not drawn")
 	}
 	scatterLines := true
@@ -130,6 +130,10 @@ func (p *chartReader) group(e *Element) *chart.Group {
 // maxTrendlines caps the trendlines of one series. Anti-DoS guard, not
 // spec-mandated: Office offers a few a series.
 const maxTrendlines = 16
+
+// maxErrorBars caps the error bars of one series. Anti-DoS guard, not
+// spec-mandated: a series has at most one set in each direction.
+const maxErrorBars = 16
 
 // trendline reads a c:trendline (ECMA-376 Part 1, 21.2.2.211), false for
 // an unknown type. Its equation and R² label are not drawn.
@@ -316,7 +320,7 @@ func (p *chartReader) series(e *Element, g *chart.Group, scatterLines, lineMarke
 		}
 	}
 	for _, eb := range e.Kids() {
-		if eb.Is(NSChart, "errBars") && len(s.ErrorBars) < maxTrendlines {
+		if eb.Is(NSChart, "errBars") && len(s.ErrorBars) < maxErrorBars {
 			if b, ok := p.errorBars(eb, g); ok {
 				s.ErrorBars = append(s.ErrorBars, b)
 			}

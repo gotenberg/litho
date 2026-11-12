@@ -1083,11 +1083,17 @@ func shift1904(d *chart.Data) {
 func isDateCode(code string) bool {
 	for i := 0; i < len(code); i++ {
 		switch c := code[i]; c {
-		case '"':
-			for i++; i < len(code) && code[i] != '"'; i++ {
+		case '"', '[':
+			// A quoted text or a bracketed section runs to its closing
+			// character, or to the end of the code.
+			end := byte('"')
+			if c == '[' {
+				end = ']'
 			}
-		case '[':
-			for i++; i < len(code) && code[i] != ']'; i++ {
+			if j := strings.IndexByte(code[i+1:], end); j >= 0 {
+				i += j + 1
+			} else {
+				i = len(code)
 			}
 		case '\\', '_', '*':
 			i++
