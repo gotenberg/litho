@@ -7,8 +7,8 @@ import (
 )
 
 // TakeContent removes from p the text runs, images and paths whose parent
-// is elem or an element under it, and returns them in paint order, in page
-// coordinates: a fragment taken from inside a group comes back inside a
+// is elem or an element under it, and returns copies of them without a
+// parent, in paint order, in page coordinates: a fragment taken from inside a group comes back inside a
 // copy of the group, its transform, clip and opacity kept. The groups of p
 // it takes from are replaced by copies, so a group the model shares is not
 // changed. A converter calls it to move what a form control shows from the
@@ -67,12 +67,35 @@ func take(content []Fragment, under map[*StructElem]bool, depth int) (kept, take
 			continue
 		}
 		if parent != nil && under[parent] {
-			taken = append(taken, f)
+			taken = append(taken, unparented(f))
 			continue
 		}
 		kept = append(kept, f)
 	}
 	return kept, taken
+}
+
+// unparented returns a copy of f, a text run, an image or a path, with no
+// parent: an appearance stream carries no marked content (see
+// [docWriter.appearance]), and the copy keeps no element a pruned tree may
+// drop.
+func unparented(f Fragment) Fragment {
+	switch v := f.(type) {
+	case *Text:
+		c := *v
+		c.Parent = nil
+		return &c
+	case *Image:
+		c := *v
+		c.Parent = nil
+		return &c
+	case *Path:
+		c := *v
+		c.Parent = nil
+		return &c
+	case *Group:
+	}
+	return f
 }
 
 // Measurer measures fragments with the metrics of their faces, loading each

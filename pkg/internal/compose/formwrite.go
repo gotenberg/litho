@@ -191,6 +191,9 @@ func (w *docWriter) widget(ctx context.Context, page int, height float64, f *Fie
 		// description; the name stands in for a missing one.
 		description = name
 	}
+	// ISO 14289-2, 8.10.2.3: a widget whose Form element holds no Lbl
+	// carries /Contents (ISO 32000-1, Table 164), its description again.
+	dict["Contents"] = textString(description)
 	w.hashBytes([]byte(name))
 	w.hashBytes([]byte(f.Value))
 	switch f.Kind {

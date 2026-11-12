@@ -129,7 +129,9 @@ holds every page until the end.
   appearance, for the text a reader types; `/NeedAppearances` is never
   set. A name taken by another field takes a suffix, `_2` and on, as
   LibreOffice names a second control of one name. A tagged document hangs
-  each widget from its Form element through `/StructParent`.
+  each widget from its Form element through `/StructParent`; every widget
+  carries its description as `/TU` and `/Contents`, which PDF/UA-2 asks of
+  a widget without a Lbl.
 - A document with `Structure` writes a StructTreeRoot, marked content with
   MCIDs, a ParentTree and `/MarkInfo << /Marked true >>`. Content with no
   parent is wrapped in `/Artifact BMC ... EMC`. Table cells carry their

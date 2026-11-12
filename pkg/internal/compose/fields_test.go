@@ -189,7 +189,6 @@ func TestWriteFieldsDeterministic(t *testing.T) {
 
 func TestWriteFieldsRemediate(t *testing.T) {
 	t.Parallel()
-	out := write(t, formDoc(t))
 	for _, c := range []struct {
 		name  string
 		fix   func(context.Context, *pdf.Writer) (*pdf.RemediationReport, error)
@@ -201,8 +200,20 @@ func TestWriteFieldsRemediate(t *testing.T) {
 		{"PDF/UA-1", func(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
 			return w.RemediatePDFUA(ctx, models.PDFUA1)
 		}, func(ctx context.Context, r *pdf.Reader) ([]error, error) { return r.ValidatePDFUA(ctx, models.PDFUA1) }},
+		{"PDF/UA-2", func(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+			return w.RemediatePDFUA(ctx, models.PDFUA2)
+		}, func(ctx context.Context, r *pdf.Reader) ([]error, error) { return r.ValidatePDFUA(ctx, models.PDFUA2) }},
 	} {
-		report, fixed := remediate(t, out, c.fix)
+		version := compose.Version17
+		if c.name == "PDF/UA-2" {
+			// PDF/UA-2 builds on PDF 2.0 (ISO 14289-2, 5).
+			version = compose.Version20
+		}
+		var buf bytes.Buffer
+		if err := compose.Write(context.Background(), formDoc(t), &buf, compose.Options{Version: version}); err != nil {
+			t.Fatalf("Write: %v", err)
+		}
+		report, fixed := remediate(t, buf.Bytes(), c.fix)
 		for _, f := range report.Fixed {
 			t.Logf("%s fixed: %s", c.name, f)
 		}
@@ -254,10 +265,10 @@ func TestTakeContentAndBounds(t *testing.T) {
 	group := &compose.Group{Transform: compose.Matrix{A: 1, D: 1, E: 100}, Content: []compose.Fragment{box, other}}
 	page := letter(value, group)
 	taken := compose.TakeContent(page, form)
-	if len(taken) != 2 || taken[0] != value {
+	if v, ok := taken[0].(*compose.Text); len(taken) != 2 || !ok || v.Parent != nil || v.Origin != value.Origin {
 		t.Fatalf("taken = %+v", taken)
 	}
-	if g, ok := taken[1].(*compose.Group); !ok || len(g.Content) != 1 || g.Content[0] != box || g.Transform.E != 100 {
+	if g, ok := taken[1].(*compose.Group); !ok || len(g.Content) != 1 || g.Content[0].(*compose.Path).Parent != nil || g.Transform.E != 100 {
 		t.Errorf("the path came back as %+v", taken[1])
 	}
 	if len(page.Content) != 1 || len(group.Content) != 2 {
