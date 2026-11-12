@@ -129,3 +129,71 @@ func TestLineRule_InlinePicture(t *testing.T) {
 		})
 	}
 }
+
+// TestWordRules_LineHeight sizes a line from its runs under
+// css.Style.WordRules, as Word sizes a WordprocessingML line: the
+// container's font counts only on an empty line and, from mode 15, on a
+// line of pictures alone, and the line's height rounds to a twentieth of
+// a point.
+//
+// # Corpus evidence
+//
+//   - litho/docx paper-*: Word spaces table rows of Arial 10 point text in
+//     paragraphs whose mark is Calibri 11 points 12 points apart, the Arial
+//     line and the border, not the Calibri line; Times New Roman 12 point
+//     lines over a Calibri 11 point mark at 259/240 14.885 points apart,
+//     not the 15.27 the mark's descent would make.
+func TestWordRules_LineHeight(t *testing.T) {
+	multiple := func(f float64) func(*css.Style) {
+		return func(s *css.Style) {
+			s.LineRule = css.LineRuleMultiple
+			s.LineHeight = css.Dimension{Kind: css.Number, Value: f}
+		}
+	}
+	small := inlineSty(func(s *css.Style) { s.FontSize = px(10) })
+	img := func() *Node {
+		return &Node{Kind: Replaced, Style: inlineSty(), Picture: pic(color.NRGBA{R: 255, A: 255}, 10, 10)}
+	}
+	tests := []struct {
+		name      string
+		mods      []func(*css.Style)
+		kids      []*Node
+		baselines [2]float64
+	}{
+		{"single", nil, []*Node{el(small, txt(small, "ab")), nil, el(small, txt(small, "cd"))}, [2]float64{8, 18}},
+		{"multiple", []func(*css.Style){multiple(1.5)}, []*Node{el(small, txt(small, "ab")), nil, el(small, txt(small, "cd"))}, [2]float64{8, 23}},
+		{"empty line", nil, []*Node{nil, el(small, txt(small, "a"))}, [2]float64{28, 28}},
+		// A 10px picture alone on a line over a 20px mark: from mode 15
+		// the mark's line, 30px at 150%, the picture's bottom at its
+		// descent; before, the picture alone.
+		{"picture", []func(*css.Style){multiple(1.5)}, []*Node{el(small, txt(small, "a")), nil, img(), nil, el(small, txt(small, "b"))}, [2]float64{8, 53}},
+		{"picture before 15", []func(*css.Style){multiple(1.5), func(s *css.Style) { s.WordRules = 14 }}, []*Node{el(small, txt(small, "a")), nil, img(), nil, el(small, txt(small, "b"))}, [2]float64{8, 33}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := sty(append([]func(*css.Style){func(s *css.Style) { s.FontSize = px(20); s.WordRules = 15 }}, tt.mods...)...)
+			kids := make([]*Node, len(tt.kids))
+			for i, k := range tt.kids {
+				kids[i] = k
+				if k == nil {
+					kids[i] = br(st)
+				}
+			}
+			res := run(t, doc(el(st, kids...)), page(100, 200))
+			_, pos := lineTexts(res, 1)
+			last := pos[len(pos)-1][1]
+			if len(pos) == 0 || !near(pos[0][1], tt.baselines[0]) || !near(last, tt.baselines[1]) {
+				t.Errorf("baselines %v, want first %v and last %v", pos, tt.baselines[0], tt.baselines[1])
+			}
+		})
+	}
+	t.Run("twips", func(t *testing.T) {
+		// A 10.03px line is 7.5225pt, which rounds to 7.5pt.
+		st := sty(func(s *css.Style) { s.FontSize = px(10.03); s.WordRules = 15 })
+		res := run(t, doc(el(st, txt(st, "ab"), br(st), txt(st, "cd"))), page(100, 200))
+		_, pos := lineTexts(res, 1)
+		if len(pos) != 2 || !near(pos[1][1]-pos[0][1], 10) {
+			t.Errorf("baselines %v, want 10px apart", pos)
+		}
+	})
+}

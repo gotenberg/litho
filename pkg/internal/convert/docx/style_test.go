@@ -293,6 +293,35 @@ func TestJustifyShrink(t *testing.T) {
 	}
 }
 
+// TestWordRules lays every paragraph of a document out by Word's rules
+// of its compatibility mode, Word 2007's when it names none.
+func TestWordRules(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		compat string
+		want   int
+	}{
+		{"word 2013", "15", 15},
+		{"word 2010", "14", 14},
+		{"none", "", 12},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			extra := map[string]string{}
+			if tt.compat != "" {
+				extra["word/settings.xml"] = `<w:settings ` + nsDecl + `><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="` + tt.compat + `"/></w:compat></w:settings>`
+			}
+			b := build(t, `<w:p><w:r><w:t>a b</w:t></w:r></w:p>`, extra)
+			ps := role(b.root, "P")
+			if len(ps) != 1 || ps[0].Style.WordRules != tt.want {
+				t.Fatalf("paragraphs %d, rules %v, want %v", len(ps), ps[0].Style.WordRules, tt.want)
+			}
+		})
+	}
+}
+
 // TestDefaultParagraphStyle takes the last of the paragraph styles marked
 // default (17.7.4.17), as LibreOffice does.
 func TestDefaultParagraphStyle(t *testing.T) {

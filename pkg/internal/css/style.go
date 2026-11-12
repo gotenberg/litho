@@ -1063,10 +1063,25 @@ type Style struct {
 	// takes one more word on a line when it fits once the separators the
 	// line holds, and the one before it, are that much narrower and two
 	// thirds of the word and its separator fit before them, and
-	// justification shrinks them to fit, as Word lays out WordprocessingML of Word 2013's compatibility
-	// mode and later (MS-DOCX, 2.3.4 compatibilityMode 15). A line holding
-	// a tab does not shrink. No CSS property sets it.
+	// justification shrinks them to fit, as Word lays out
+	// WordprocessingML of Word 2013's compatibility mode and later
+	// (MS-DOCX, 2.3.4 compatibilityMode 15). A line holding a tab does not
+	// shrink. No CSS property sets it.
 	JustifyShrink float64
+	// WordRules lays a block container out by Word's rules where they
+	// differ from Writer's and CSS's, as Word lays out WordprocessingML of
+	// that compatibility mode (MS-DOCX, 2.3.4 compatibilityMode), 0 for
+	// none. Under an Office line rule, single spacing included, a line's
+	// height comes from the glyph runs it holds and rounds to a twentieth
+	// of a point; the container's own font, its paragraph mark's, counts
+	// only on an empty line and, from mode 15, on a line of pictures
+	// alone, whose bottoms then sit at its descent, where an earlier mode
+	// sizes such a line by its pictures. A paragraph that cannot leave
+	// Orphans lines before a page break and Widows after it moves whole to
+	// the next page. At 0 the container's font is a strut every line is at
+	// least as tall as, and a paragraph too short to honour both keeps its
+	// orphans, as Chromium lays out. No CSS property sets it.
+	WordRules int
 	// TextScale scales the glyphs of the text horizontally, 1 for the
 	// natural width, 0 for 1 (WordprocessingML w, ODF style:text-scale). No
 	// CSS property sets it; the engine writes it as compose.Text.HScale.

@@ -178,7 +178,8 @@
 // stops and the line breaks around them), LineRule and MinLineHeight
 // space lines as Writer does, the room a proportional spacing adds below
 // a page's last line hanging past the page cut, JustifyShrink lets
-// justified lines shrink their spaces, TextScale scales glyphs horizontally,
+// justified lines shrink their spaces, WordRules sizes lines and keeps
+// widows as Word does, TextScale scales glyphs horizontally,
 // PageAnchor anchors a frame to the page box, of the page AnchorPage names
 // or of its anchor's, PageClamp keeps a frame or a float positioned from
 // its paragraph inside its page box, and DecorationCloneAll

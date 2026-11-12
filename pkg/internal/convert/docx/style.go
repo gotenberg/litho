@@ -29,6 +29,9 @@ func (d *document) blockStyle() *css.Style {
 	st.FontSize = defaultFontSize
 	st.TabSize = css.Pts(d.settings.defaultTab)
 	st.OverflowWrap = css.BreakWord
+	// Word sizes a line from its runs and keeps a paragraph's widows and
+	// orphans its own way.
+	st.WordRules = max(d.settings.compat, earliestCompat)
 	if d.settings.compat >= 15 {
 		// Word shrinks the spaces of justified lines in Word 2013's
 		// compatibility mode and later.
@@ -36,6 +39,10 @@ func (d *document) blockStyle() *css.Style {
 	}
 	return st
 }
+
+// earliestCompat is the compatibility mode of a document that names none:
+// Word 2007's, the earliest MS-DOCX, 2.3.4 compatibilityMode defines.
+const earliestCompat = 12
 
 // justifyShrink is the share of a space Word lets a justified line of a
 // Word 2013 document shrink to take one more word (MS-DOCX, 2.3.4
