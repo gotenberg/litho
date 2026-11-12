@@ -130,6 +130,26 @@ func TestDiffCompare_LeavesMissingFontsUnscored(t *testing.T) {
 	}
 }
 
+// TestDiffCompare_RelaysThePDFHash checks that the hash of litho's PDF
+// reaches the verdict of a scored fixture and of an unscored one, so two
+// runs can be compared for the bytes they wrote.
+func TestDiffCompare_RelaysThePDFHash(t *testing.T) {
+	f := newDiffFeature()
+	scores := `"scores":{"pages":1,"text_f1":1,"link_recall":1,"layout":1,"strict":1,"outline_recall":1}`
+	for _, out := range []string{
+		`{"outcome":"pass",` + scores + `,"pdf_sha256":"ab12"}`,
+		`{"outcome":"fail",` + scores + `,"pdf_sha256":"ab12"}`,
+		`{"outcome":"pass",` + scores + `,"reference_fonts_missing":["Aptos"],"pdf_sha256":"ab12"}`,
+	} {
+		if v := f.Compare("doc", []byte(out)); v.PDFSHA256 != "ab12" {
+			t.Errorf("verdict of %s carries the hash %q", out, v.PDFSHA256)
+		}
+	}
+	if v := f.Compare("doc", []byte(`{"outcome":"error",`+scores+`}`)); v.PDFSHA256 != "" {
+		t.Errorf("a fixture that wrote no PDF carries the hash %q", v.PDFSHA256)
+	}
+}
+
 // skippingFeature skips every fixture with one metric, counting skipped
 // metrics when counts is set.
 type skippingFeature struct{ countingFeature }

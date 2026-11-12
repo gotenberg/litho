@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -473,6 +475,8 @@ type diffOutput struct {
 	// MissingFonts are the faces the reference draws that no fixture font
 	// stands in for: the fixture is left unscored.
 	MissingFonts []string `json:"reference_fonts_missing,omitempty"`
+	// PDFSHA256 is the SHA-256 of litho's PDF, in hexadecimal.
+	PDFSHA256 string `json:"pdf_sha256,omitempty"`
 }
 
 // diffPageResult is the comparison of one page.
@@ -536,6 +540,8 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 		}
 	})
 	out.ReferenceOf, out.MissingFonts = borrowed, g.missingFonts
+	sum := sha256.Sum256(data)
+	out.PDFSHA256 = hex.EncodeToString(sum[:])
 	return json.Marshal(out)
 }
 
@@ -931,7 +937,8 @@ func (f *diffFeature) Compare(fixtureID string, output []byte) Verdict {
 		}
 		return Verdict{
 			FixtureID: fixtureID, Skipped: true, Outcome: got.Outcome, Reason: reason, Scores: got.Scores,
-			Metrics: map[string]int{metricReferenceFontsMissing: 1},
+			Metrics:   map[string]int{metricReferenceFontsMissing: 1},
+			PDFSHA256: got.PDFSHA256,
 		}
 	}
 	v := Verdict{
@@ -940,6 +947,7 @@ func (f *diffFeature) Compare(fixtureID string, output []byte) Verdict {
 		Reason:    got.Reason,
 		Scores:    got.Scores,
 		Metrics:   map[string]int{metricConvertError: 0, metricPagesEqual: 0, metricReferenceFontsMissing: 0},
+		PDFSHA256: got.PDFSHA256,
 	}
 	s := got.Scores
 	v.Score = (s[scorePages] + s[scoreText] + s[scoreLinks] + s[scoreLayout]) / 4

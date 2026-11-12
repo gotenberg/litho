@@ -69,6 +69,11 @@ type Verdict struct {
 	// Scores carries the named scores, each in [0, 1], a feature records
 	// per fixture in the baseline (see [ScoreFeature]).
 	Scores map[string]float64 `json:"scores,omitempty"`
+	// PDFSHA256 is the SHA-256, in hexadecimal, of the PDF litho wrote
+	// for the fixture, set by a feature that converts a source: two runs
+	// that give a fixture one hash wrote the same bytes. The baseline
+	// does not record it.
+	PDFSHA256 string `json:"pdf_sha256,omitempty"`
 }
 
 // The outcomes a converter oracle gives a fixture: it passed, it failed the

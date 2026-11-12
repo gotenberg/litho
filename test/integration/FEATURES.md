@@ -146,7 +146,7 @@ The cell compares two runs in one process, so a process-wide cache whose content
 
 Four corpora score litho's HTML converter (`pdf.FromHTML`) rather than litho's reading of a PDF. Their fixtures are source documents, listed by the manifest's `inputs` (see the [manifest schema](README.md#manifest-schema)), and each cell converts them live, so it measures the converter of the tree it runs in. A conversion error never fails a run: it is the fixture's outcome, counted in `convert_error` (a cost metric).
 
-Each of the four writes, for a failing fixture, a PNG into the report directory (`--report-dir`, by default `test/integration/testdata/reports/<corpus>/<feature>/`): litho's drawing, the reference and a heatmap of the reference faded to grey with each differing pixel in red, side by side.
+Each of the four writes, for a failing fixture, a PNG into the report directory (`--report-dir`, by default `test/integration/testdata/reports/<corpus>/<feature>/`): litho's drawing, the reference and a heatmap of the reference faded to grey with each differing pixel in red, side by side. With `--format=json`, the `diff` cell also gives each fixture the SHA-256 of the PDF litho wrote (`pdf_sha256`), which the baseline does not record: a change that must move no output is checked by comparing the hashes of two runs.
 
 The baseline records more for these cells than counts (see [Regression baseline](README.md#regression-baseline)): `reftest`, `draw` and `svgdraw` record each fixture's outcome, so a test that passed and now does not is a regression even when another one started passing, and `diff` records each fixture's six scores with a tolerance of 0.02.
 
