@@ -230,3 +230,37 @@ func TestDiagramTextRotationOfAHugeStartAngle(t *testing.T) {
 		t.Fatal("the layout did not finish in 5 s")
 	}
 }
+
+// TestParseDiagramCapsTheAtoms reads a layout definition whose constraint
+// list, rule list and choose each hold more entries than maxDiagramAtoms:
+// the atoms read stop at the cap.
+func TestParseDiagramCapsTheAtoms(t *testing.T) {
+	var constr, rules, branches strings.Builder
+	for range maxDiagramAtoms + 10 {
+		constr.WriteString(`<dgm:constr type="w" forName="node" refType="w" fact="0.5"/>`)
+		rules.WriteString(`<dgm:rule forName="node"/>`)
+		branches.WriteString(`<dgm:if func="cnt" op="gt" val="2"/>`)
+	}
+	for name, body := range map[string]string{
+		"constraints": `<dgm:constrLst>` + constr.String() + `</dgm:constrLst>`,
+		"rules":       `<dgm:ruleLst>` + rules.String() + `</dgm:ruleLst>`,
+		"branches":    `<dgm:choose>` + branches.String() + `</dgm:choose>`,
+	} {
+		d := ParseDiagram(nil, mustParse(t, diagramLayout(body)), nil, nil)
+		if n := countAtoms(d.Layout, 0); n > maxDiagramAtoms+1 {
+			t.Errorf("%s: %d atoms, want at most %d", name, n, maxDiagramAtoms+1)
+		}
+	}
+}
+
+// countAtoms counts a and the atoms under it.
+func countAtoms(a *DiagramAtom, depth int) int {
+	if a == nil || depth > maxDiagramDepth+1 {
+		return 0
+	}
+	n := 1
+	for _, k := range a.Kids {
+		n += countAtoms(k, depth+1)
+	}
+	return n
+}

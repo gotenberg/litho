@@ -320,7 +320,12 @@ func (d *Diagram) parseAtom(el *Element, parent, node *DiagramAtom, n *int, dept
 	if depth >= maxDiagramDepth {
 		return a
 	}
+	// add keeps k while the layout definition holds fewer atoms than
+	// [maxDiagramAtoms]: a list of constraints or of branches counts each.
 	add := func(k *DiagramAtom) {
+		if *n >= maxDiagramAtoms {
+			return
+		}
 		*n++
 		a.Kids = append(a.Kids, k)
 	}
@@ -364,7 +369,7 @@ func (d *Diagram) parseAtom(el *Element, parent, node *DiagramAtom, n *int, dept
 		case "choose":
 			c := &DiagramAtom{Kind: AtomChoose, Name: attrOr(k, "name"), Parent: a, Node: a.Node}
 			for _, b := range k.Kids() {
-				if b.Is(NSDgm, "if") || b.Is(NSDgm, "else") {
+				if (b.Is(NSDgm, "if") || b.Is(NSDgm, "else")) && *n < maxDiagramAtoms {
 					*n++
 					c.Kids = append(c.Kids, d.parseAtom(b, c, a.Node, n, depth+1))
 				}
