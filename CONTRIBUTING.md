@@ -83,7 +83,7 @@ test/integration/    -> Corpus matrix scoring litho against veraPDF, PDF.js and 
 
 ### Context
 
-Every public method that does I/O, loops, or recursion takes `context.Context` first. Never store `ctx` in a struct field. Trivial accessors of cached scalars (page count, PDF version) omit it.
+Every public method that does I/O, loops, or recursion takes `context.Context` first. Never keep a `ctx` in a value that outlives the call it came with. A struct built for one call (a builder, a walker, a renderer) may hold that call's `ctx`: the field's comment says the struct does not outlive the call. Trivial accessors of cached scalars (page count, PDF version) omit it.
 
 Check `ctx.Err()` at natural checkpoints: per ~100 content-stream operators, per page-tree node, per xref entry, per filter buffer. Never in the lexer's per-token loop.
 
