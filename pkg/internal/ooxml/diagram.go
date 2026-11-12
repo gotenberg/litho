@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // The namespaces of a SmartArt diagram: its data, layout, style and
@@ -347,9 +349,7 @@ func (d *Diagram) parseAtom(el *Element, parent, node *DiagramAtom, n *int, dept
 			} else {
 				s.Group = true
 			}
-			if v, ok := k.Attr("rot"); ok {
-				s.Rot, _ = strconv.ParseFloat(strings.TrimSpace(v), 64)
-			}
+			s.Rot = parseDouble(attrOr(k, "rot"), 0)
 			s.ZOrderOff, _ = Int(attrOr(k, "zOrderOff"))
 			add(s)
 		case "alg":
@@ -422,10 +422,11 @@ func parseIterator(el *Element) IteratorAttr {
 	return it
 }
 
-// parseDouble parses a double, def when it does not parse.
+// parseDouble parses a double, def when it does not parse or is not
+// finite: the layout's lengths and angles are finite.
 func parseDouble(v string, def float64) float64 {
 	f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
-	if err != nil {
+	if err != nil || !numeric.Finite(f) {
 		return def
 	}
 	return f

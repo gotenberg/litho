@@ -264,3 +264,30 @@ func countAtoms(a *DiagramAtom, depth int) int {
 	}
 	return n
 }
+
+// TestParseDiagramReadsNoNonFiniteNumber reads a shape rotation, an
+// aspect ratio and a constraint factor that parse as NaN or an infinity:
+// each takes its default.
+func TestParseDiagramReadsNoNonFiniteNumber(t *testing.T) {
+	for _, v := range []string{"NaN", "Inf", "-Inf", "1e400"} {
+		body := `<dgm:alg type="lin"><dgm:param type="ar" val="` + v + `"/></dgm:alg><dgm:shape type="rect" rot="` + v + `"/>` +
+			`<dgm:constrLst><dgm:constr type="w" forName="node" refType="w" fact="` + v + `" val="` + v + `"/></dgm:constrLst>`
+		d := ParseDiagram(nil, mustParse(t, diagramLayout(body)), nil, nil)
+		for _, a := range d.Layout.Kids {
+			switch a.Kind {
+			case AtomAlg:
+				if a.Ratio != 0 {
+					t.Errorf("%s: ratio %v, want 0", v, a.Ratio)
+				}
+			case AtomShape:
+				if a.Rot != 0 {
+					t.Errorf("%s: rotation %v, want 0", v, a.Rot)
+				}
+			case AtomConstraint:
+				if a.Constraint.Factor != 1 || a.Constraint.Value != 0 {
+					t.Errorf("%s: factor %v and value %v, want 1 and 0", v, a.Constraint.Factor, a.Constraint.Value)
+				}
+			}
+		}
+	}
+}
