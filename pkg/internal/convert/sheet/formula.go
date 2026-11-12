@@ -118,6 +118,8 @@ func (e *formulaEval) cellValue(s, r, c, depth int) fval {
 			}
 			e.done[k] = e.stored(g, r, c, cell)
 			return e.done[k]
+		case evaluating:
+			// A circular reference keeps its stored value.
 		}
 	}
 	return e.stored(g, r, c, cell)
