@@ -2,7 +2,6 @@ package compose
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -538,9 +537,6 @@ func (s *Stream) Abort() {
 		s.w.logger.Debug("compose: removing the spool file failed", slog.Any("error", err))
 	}
 }
-
-// errStreamDone is the error of a [Stream] used after it ended.
-var errStreamDone = errors.New("the stream is closed")
 
 // CountGlyphs returns the glyphs of the text runs of p, its groups'
 // included.

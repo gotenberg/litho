@@ -71,3 +71,6 @@ var (
 	// that is not one of the [Version] values.
 	ErrInvalidVersion = errors.New("invalid PDF version")
 )
+
+// errStreamDone is the error of a [Stream] used after it ended.
+var errStreamDone = errors.New("the stream is closed")
