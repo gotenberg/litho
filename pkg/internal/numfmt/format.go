@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
@@ -193,9 +194,6 @@ func (f *Format) pick(v float64) int {
 	if c := check(v, f.sections[0].op, f.sections[0].limit); c != 0 || n == 1 {
 		return 0
 	}
-	if n < 2 {
-		return 0
-	}
 	if c := check(v, f.sections[1].op, f.sections[1].limit); c != 0 || n == 2 {
 		return 1
 	}
@@ -279,8 +277,7 @@ func (f *Format) Apply(v Value) Result {
 		if s == nil {
 			return Result{Text: v.Text}
 		}
-		r := s.text(v.Text)
-		return r
+		return s.text(v.Text)
 	case Error:
 		return Result{Text: v.Text}
 	case Bool:
@@ -340,9 +337,8 @@ func (r *Result) setFill(tk token, at int) {
 	if r.Fill != 0 {
 		return
 	}
-	for _, c := range tk.text {
+	if c, size := utf8.DecodeRuneInString(tk.text); size > 0 {
 		r.Fill, r.FillAt = c, at
-		break
 	}
 }
 

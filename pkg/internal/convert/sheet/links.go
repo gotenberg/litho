@@ -67,8 +67,8 @@ func sheetIndex(doc *Document, name string) int {
 // book into links to the page that prints their cell, or the first page
 // of their sheet, as LibreOffice exports a link into the book; a link to a
 // sheet or a name that prints no page is dropped. pages are the planned
-// pages, at[k] the 1-based page pages[k] is, tables[i] the Table element
-// of page i+1, which the link names as its structure destination (ISO
+// pages, pages[k] printing as page k+1, tables[i] the Table element of
+// page i+1, which the link names as its structure destination (ISO
 // 14289-2, 8.8).
 //
 // A page's links are resolved once the page is laid out, before it is
@@ -83,7 +83,6 @@ func sheetIndex(doc *Document, name string) int {
 type sheetLinker struct {
 	doc    *Document
 	pages  []*pagePlan
-	at     []int
 	tables []*compose.StructElem
 	// waiting holds, by 1-based page, the destinations to that page made
 	// before it was laid out.
@@ -110,7 +109,7 @@ func (sl *sheetLinker) resolve(pg *compose.Page) {
 			links = append(links, l)
 			continue
 		}
-		if page := targetPage(sl.doc, target, sl.pages, sl.at); page > 0 {
+		if page := targetPage(sl.doc, target, sl.pages); page > 0 {
 			d := &compose.Dest{Page: page}
 			if page <= len(sl.tables) {
 				d.Elem = sl.tables[page-1]
@@ -126,21 +125,21 @@ func (sl *sheetLinker) resolve(pg *compose.Page) {
 
 // targetPage returns the 1-based page that prints the link target in the
 // book target, 0 for none.
-func targetPage(doc *Document, target string, pages []*pagePlan, at []int) int {
+func targetPage(doc *Document, target string, pages []*pagePlan) int {
 	si, r, c, cell, ok := sheetTarget(doc, target)
 	if !ok {
 		return 0
 	}
 	first := 0
 	for k, p := range pages {
-		if p.sp.idx != si || k >= len(at) || at[k] == 0 {
+		if p.sp.idx != si {
 			continue
 		}
 		if first == 0 {
-			first = at[k]
+			first = k + 1
 		}
 		if cell && r >= p.rows.first && r <= p.rows.last && c >= p.cols.first && c <= p.cols.last {
-			return at[k]
+			return k + 1
 		}
 	}
 	return first

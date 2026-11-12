@@ -147,6 +147,8 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	}
 	var plans []*sheetPlan
 	var pages []*pagePlan
+	// starts holds the index in pages of each plan's first page.
+	var starts []int
 	printed, err := printedSheets(doc, opts)
 	if err != nil {
 		return nil, err
@@ -160,6 +162,7 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		}
 		sp := b.planSheet(i, sh)
 		plans = append(plans, sp)
+		starts = append(starts, len(pages))
 		pages = append(pages, sp.pages...)
 		if len(pages) > limit {
 			return nil, fmt.Errorf("%w: more than %d pages", office.ErrTooManyPages, limit)
@@ -182,16 +185,10 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		Structure: &compose.StructElem{Role: "Document", Lang: b.lang},
 	}
 	out.Metadata.Lang = b.lang
-	// Every planned page is laid out and kept, in order: page k is the
-	// (k+1)th.
-	at := make([]int, len(pages))
-	for k := range at {
-		at[k] = k + 1
-	}
 	if opts.Sink != nil {
 		opts.Sink.Expect(max(len(pages), 1))
 	}
-	links := &sheetLinker{doc: doc, pages: pages, at: at, waiting: map[int][]*compose.Dest{}}
+	links := &sheetLinker{doc: doc, pages: pages, waiting: map[int][]*compose.Dest{}}
 	for k, p := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -242,14 +239,14 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 		}
 	}
 	if !opts.OmitOutline {
-		for _, sp := range plans {
-			for _, p := range sp.pages {
-				idx := indexOf(pages, p)
-				if idx >= 0 && at[idx] > 0 {
-					out.Outline = append(out.Outline, compose.Outline{Title: sp.g.sh.Name, Dest: compose.Dest{Page: at[idx], Elem: tables[at[idx]-1]}})
-					break
-				}
+		// Every planned page is laid out and kept, in order: pages[k] is
+		// page k+1.
+		for i, sp := range plans {
+			if len(sp.pages) == 0 {
+				continue
 			}
+			k := starts[i]
+			out.Outline = append(out.Outline, compose.Outline{Title: sp.g.sh.Name, Dest: compose.Dest{Page: k + 1, Elem: tables[k]}})
 		}
 	}
 	out.Warnings = b.warnings
@@ -291,16 +288,6 @@ func tableOf(st *compose.StructElem) *compose.StructElem {
 		}
 	}
 	return nil
-}
-
-// indexOf returns the index of p in pages, -1 when absent.
-func indexOf(pages []*pagePlan, p *pagePlan) int {
-	for i, q := range pages {
-		if q == p {
-			return i
-		}
-	}
-	return -1
 }
 
 // paper returns the page size of a sheet: its own, or the options'
