@@ -114,8 +114,54 @@ type overdrawCell struct {
 	x, y int64
 }
 
-// dropOverdrawn returns the indices, in order, of the elements left once the
-// glyphs that draw an earlier glyph again over itself are dropped: the same
+// overdrawIndex holds, for each [overdrawCell], the glyphs indexed in it in
+// the order they were added, at most [maxOverdrawCell] of them: the cell
+// keeps its first and last glyph, and next links each glyph to the one added
+// after it in its cell, -1 for the last.
+type overdrawIndex struct {
+	cells map[overdrawCell]overdrawCellList
+	next  []int
+}
+
+// overdrawCellList is the first and last glyph of one cell of an
+// [overdrawIndex], and how many it holds.
+type overdrawCellList struct {
+	first, last, count int
+}
+
+// newOverdrawIndex returns an empty [overdrawIndex] of n glyphs, sized for
+// the most cells n glyphs fill, one a glyph.
+func newOverdrawIndex(n int) *overdrawIndex {
+	return &overdrawIndex{cells: make(map[overdrawCell]overdrawCellList, n), next: make([]int, n)}
+}
+
+// first returns the first glyph indexed in c, -1 when none is.
+func (x *overdrawIndex) first(c overdrawCell) int {
+	if l, ok := x.cells[c]; ok {
+		return l.first
+	}
+	return -1
+}
+
+// add indexes the glyph j in c, unless c holds [maxOverdrawCell] glyphs.
+func (x *overdrawIndex) add(c overdrawCell, j int) {
+	x.next[j] = -1
+	l, ok := x.cells[c]
+	if !ok {
+		x.cells[c] = overdrawCellList{first: j, last: j, count: 1}
+		return
+	}
+	if l.count >= maxOverdrawCell {
+		return
+	}
+	x.next[l.last] = j
+	l.last = j
+	l.count++
+	x.cells[c] = l
+}
+
+// dropOverdrawn returns elements, and fonts parallel to them when not nil,
+// without the glyphs that draw an earlier glyph again over itself: the same
 // character at the same size, along a direction turned so little that its
 // box's far end moves under [overdrawMaxOffset] ems ([overdrawMaxTurn]), under
 // [overdrawMaxOffset] ems away on each axis ([overdraws]), the earlier glyph
@@ -225,7 +271,7 @@ func overdrawCopies(ctx context.Context, elements []models.TextElement) (dropped
 	for j := range original {
 		original[j] = -1
 	}
-	seen := make(map[overdrawCell][]int)
+	seen := newOverdrawIndex(len(elements))
 	found := false
 	for j := range elements {
 		if j%1000 == 0 {
@@ -242,7 +288,7 @@ func overdrawCopies(ctx context.Context, elements []models.TextElement) (dropped
 			for dy := int64(-1); dy <= 1; dy++ {
 				c := key
 				c.x, c.y = c.x+dx, c.y+dy
-				for _, i := range seen[c] {
+				for i := seen.first(c); i >= 0; i = seen.next[i] {
 					if overdraws(elements, piece, i, j) && copiedInContext(elements, piece, i, j) {
 						original[j] = i
 						found = true
@@ -251,9 +297,7 @@ func overdrawCopies(ctx context.Context, elements []models.TextElement) (dropped
 				}
 			}
 		}
-		if len(seen[key]) < maxOverdrawCell {
-			seen[key] = append(seen[key], j)
-		}
+		seen.add(key, j)
 	}
 	if !found {
 		return nil, nil, nil
@@ -267,7 +311,7 @@ func overdrawCopies(ctx context.Context, elements []models.TextElement) (dropped
 			for dy := int64(-1); dy <= 1; dy++ {
 				c := key
 				c.x, c.y = c.x+dx, c.y+dy
-				for _, i := range seen[c] {
+				for i := seen.first(c); i >= 0; i = seen.next[i] {
 					if i < k && from[piece[i]] && overdraws(elements, piece, i, k) {
 						return i
 					}
