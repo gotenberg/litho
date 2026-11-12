@@ -243,6 +243,57 @@ type runState struct {
 	scale                 float64
 	latin, asian, complex string
 	lang, country         string
+	// scripts are the size, weight, posture and language of Asian and
+	// complex text, which a style sets apart from the Western text's.
+	scripts [2]scriptText
+}
+
+// scriptText is the text properties a style gives Asian or complex text
+// apart from Western text: the -asian and -complex counterparts of
+// fo:font-size, fo:font-weight, fo:font-style, fo:language and fo:country
+// (ODF 1.3, Part 3, 20.270 to 20.281). A size of 0 is Impress's default,
+// [defaultFontSize] for every script.
+//
+// # Corpus evidence
+//
+//   - probe, odp: through gotenberg/gotenberg:9.4.1, a text box without a
+//     default style prints "abc 漢字 عربي" at 18 points, and at 20, 18 and
+//     18 points under a paragraph style setting fo:font-size 20pt alone.
+type scriptText struct {
+	size          float64
+	bold, italic  bool
+	lang, country string
+}
+
+// applyScriptText lays the Asian or complex text properties of p, the
+// attributes of suffix -asian or -complex, over s.
+func applyScriptText(s *scriptText, p odf.Props, suffix string) {
+	if v := p.Get("style:font-size" + suffix); v != "" {
+		if l, ok := odf.Length(v); ok && l > 0 {
+			s.size = l
+		} else if f, ok := odf.Percent(v); ok && f > 0 {
+			if s.size == 0 {
+				s.size = defaultFontSize
+			}
+			s.size *= f
+		}
+	}
+	switch w := p.Get("style:font-weight" + suffix); w {
+	case "":
+	case "bold", "bolder", "600", "700", "800", "900":
+		s.bold = true
+	default:
+		s.bold = false
+	}
+	switch p.Get("style:font-style" + suffix) {
+	case "italic", "oblique":
+		s.italic = true
+	case "normal":
+		s.italic = false
+	}
+	if v, ok := p.Lookup("style:language" + suffix); ok {
+		s.lang, s.country = v, p.Get("style:country"+suffix)
+	}
 }
 
 // fontFamily returns the family a style:font-name names through the
@@ -344,6 +395,8 @@ func (r *reader) applyText(rs *runState, p odf.Props) {
 	if v, ok := p.Lookup("fo:language"); ok {
 		rs.lang, rs.country = v, p.Get("fo:country")
 	}
+	applyScriptText(&rs.scripts[0], p, "-asian")
+	applyScriptText(&rs.scripts[1], p, "-complex")
 	if v := p.Get("fo:text-shadow"); v != "" && v != "none" {
 		r.warn("text-shadow", warn.ContentUnsupported, warn.Approximated, "text shadows are not drawn")
 	}
@@ -425,6 +478,28 @@ func (rs runState) final(bg css.Color) slides.RunStyle {
 	return st
 }
 
+// finalScript returns the run style of text of the script sc rs resolves
+// to against bg: the script's face listed first, its size, weight,
+// posture and language (ODF 1.3, Part 3, 20.270 to 20.281).
+func (rs runState) finalScript(bg css.Color, sc odf.Script) slides.RunStyle {
+	if sc == odf.Western {
+		return rs.final(bg)
+	}
+	s := rs.scripts[sc-1]
+	lead := rs.asian
+	if sc == odf.Complex {
+		lead = rs.complex
+	}
+	rs.style.Size = s.size
+	rs.style.Bold, rs.style.Italic = s.bold, s.italic
+	rs.lang, rs.country = s.lang, s.country
+	st := rs.final(bg)
+	if lead != "" {
+		st.Families = append([]string{lead}, slices.DeleteFunc(st.Families, func(f string) bool { return f == lead })...)
+	}
+	return st
+}
+
 // isDark reports a colour Impress draws automatic text on in white:
 // tools' Color::IsDark, its WCAG 2.1 relative luminance scaled to 255 at
 // most 87, but for the default shape fill, 0x729fcf, dark when its
@@ -482,11 +557,54 @@ func (r *reader) paragraph(p *odf.Element, tc *textCtx, lc listCtx) slides.Parag
 	w := newRunWriter(r)
 	r.inline(p, tc, rs, "", w, 0)
 	w.trim()
-	out.Runs = w.runs
+	out.Runs = r.splitScripts(w.runs, w.scripts, ps.rtl)
 	for i := range out.Runs {
 		out.Runs[i].Href, out.Runs[i].Jump = r.linkTarget(out.Runs[i].Href)
 	}
 	out.Style = rs.final(tc.bg)
+	return out
+}
+
+// splitScripts cuts the runs of a paragraph, scripts holding each one's
+// style as Asian and as complex text, at each change of script, rtl when
+// the paragraph runs right to left: each part takes its script's style
+// (ODF 1.3, Part 3, 20.270 to 20.281; [odf.Scripts]). A field or a break
+// keeps its style; its text counts as the context of the others.
+//
+// # Corpus evidence
+//
+//   - probe, odp: through gotenberg/gotenberg:9.4.1, text boxes of mixed
+//     Latin, Han, Arabic and Hebrew paragraphs print each character in
+//     the size of the script a Writer paragraph gives it, in
+//     left-to-right and right-to-left paragraphs alike.
+func (r *reader) splitScripts(runs []slides.Run, scripts [][2]slides.RunStyle, rtl bool) []slides.Run {
+	texts := make([]string, len(runs))
+	for i, run := range runs {
+		texts[i] = run.Text
+	}
+	parts, err := odf.SplitScripts(r.ctx, texts, rtl)
+	if err != nil {
+		r.stop(err)
+		return runs
+	}
+	if parts == nil {
+		return runs
+	}
+	out := make([]slides.Run, 0, len(runs))
+	for i, run := range runs {
+		if run.Field != slides.FieldNone || run.Break || len(parts[i]) == 0 {
+			out = append(out, run)
+			continue
+		}
+		for _, p := range parts[i] {
+			part := run
+			part.Text = p.Text
+			if p.Script != odf.Western {
+				part.Style = scripts[i][p.Script-1]
+			}
+			out = append(out, part)
+		}
+	}
 	return out
 }
 
@@ -510,6 +628,10 @@ func (r *reader) linkTarget(href string) (string, int) {
 type runWriter struct {
 	r    *reader
 	runs []slides.Run
+	// scripts holds, for each run, its style as Asian and as complex
+	// text; cur is the pair the runs written now take.
+	scripts [][2]slides.RunStyle
+	cur     [2]slides.RunStyle
 	// space reports that the last character written is white space, so
 	// collapsible white space after it writes nothing; collapsed reports
 	// that it is a collapsed space, which the paragraph's end trims.
@@ -529,7 +651,8 @@ func (w *runWriter) add(run slides.Run) {
 	}
 	if n := len(w.runs); n > 0 && run.Field == slides.FieldNone && !run.Break {
 		last := &w.runs[n-1]
-		if last.Field == slides.FieldNone && !last.Break && last.Href == run.Href && sameStyle(last.Style, run.Style) {
+		if last.Field == slides.FieldNone && !last.Break && last.Href == run.Href && sameStyle(last.Style, run.Style) &&
+			sameStyle(w.scripts[n-1][0], w.cur[0]) && sameStyle(w.scripts[n-1][1], w.cur[1]) {
 			last.Text += run.Text
 			return
 		}
@@ -540,6 +663,7 @@ func (w *runWriter) add(run slides.Run) {
 		return
 	}
 	w.runs = append(w.runs, run)
+	w.scripts = append(w.scripts, w.cur)
 }
 
 // text writes character data, collapsing its white space.
@@ -592,6 +716,7 @@ func (w *runWriter) trim() {
 			r.Text = t
 			if t == "" {
 				w.runs = append(w.runs[:i], w.runs[i+1:]...)
+				w.scripts = append(w.scripts[:i], w.scripts[i+1:]...)
 			}
 			return
 		}
@@ -620,6 +745,9 @@ func (r *reader) inline(el *odf.Element, tc *textCtx, rs runState, href string, 
 		return
 	}
 	st := rs.final(tc.bg)
+	outer := w.cur
+	w.cur = [2]slides.RunStyle{rs.finalScript(tc.bg, odf.Asian), rs.finalScript(tc.bg, odf.Complex)}
+	defer func() { w.cur = outer }()
 	for _, k := range el.Children {
 		if k.IsText() {
 			w.text(k.Text, st, href)

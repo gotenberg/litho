@@ -87,6 +87,9 @@ type builder struct {
 	// tocs are the tables of contents, regenerated once the layout
 	// placed the headings.
 	tocs []*toc
+	// scriptRuns records the runs of the paragraph being built, which
+	// [builder.splitScripts] cuts by script; nil outside a paragraph.
+	scriptRuns *[]scriptRun
 	// meta records the paragraph blocks' spacing properties.
 	meta map[*layout.Node]paraMeta
 	// listPath maps each block a list built to the lists it sits in,
@@ -391,7 +394,7 @@ func (b *builder) paraStyleName(el *odf.Element) string {
 
 // paraText returns the text properties of the paragraph style name.
 func (b *builder) paraText(name string) textState {
-	t := textState{size: defaultFontSize, weight: 400}
+	t := newTextState()
 	for _, l := range b.styles.Layers(b.scope, odf.FamilyParagraph, name, odf.TextProps) {
 		t = b.foldText(t, l)
 	}
@@ -442,7 +445,12 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	b.meta[n] = paraMeta{style: b.commonStyle(name), contextual: p.contextual, join: p.joinBorder}
 	ws := &wsState{space: true}
 	var kids []*layout.Node
+	outer := b.scriptRuns
+	var runs []scriptRun
+	b.scriptRuns = &runs
 	b.inline(el, t, &kids, ws, ctx.depth)
+	b.scriptRuns = outer
+	kids = b.splitScripts(kids, runs, strings.HasPrefix(p.writing, "rl"))
 	if !hasText(kids) && b.floatCount(kids) > 1 {
 		b.pinFloats(kids, p)
 	}
@@ -581,6 +589,16 @@ func (b *builder) run(s string, t textState) *layout.Node {
 	if changed {
 		markText(&t, b.changeMarks[b.openChanges[len(b.openChanges)-1]])
 	}
+	n := b.runNode(s, t, changed)
+	if b.scriptRuns != nil {
+		*b.scriptRuns = append(*b.scriptRuns, scriptRun{node: n, text: s, t: t, changed: changed})
+	}
+	return n
+}
+
+// runNode returns the inline node of the text s in the text properties t,
+// marked as changed text when changed.
+func (b *builder) runNode(s string, t textState, changed bool) *layout.Node {
 	st := baseStyle()
 	applyText(st, t, true)
 	if t.auto != 0 {
@@ -599,6 +617,90 @@ func (b *builder) run(s string, t textState) *layout.Node {
 	}
 	n.Children = []*layout.Node{b.node(tn)}
 	return n
+}
+
+// scriptRun is a run [builder.run] made in the paragraph being built: its
+// node, its text and its text properties.
+type scriptRun struct {
+	node    *layout.Node
+	text    string
+	t       textState
+	changed bool
+}
+
+// splitScripts cuts the runs of a paragraph, made in runs and laid in
+// kids, at each change of script, rtl when the paragraph runs right to
+// left: each part draws in the text properties of its script (ODF 1.3,
+// Part 3, 20.270 to 20.281; [odf.Scripts]). The script of a character
+// depends on the paragraph's text around it, across runs.
+func (b *builder) splitScripts(kids []*layout.Node, runs []scriptRun, rtl bool) []*layout.Node {
+	if !rtl && !slices.ContainsFunc(runs, func(r scriptRun) bool { return odf.MayMixScripts([]string{r.text}, false) }) {
+		return kids
+	}
+	byNode := make(map[*layout.Node]int, len(runs))
+	for i, r := range runs {
+		byNode[r.node] = i
+	}
+	var order []int
+	var find func(nodes []*layout.Node, depth int)
+	find = func(nodes []*layout.Node, depth int) {
+		for _, n := range nodes {
+			if i, ok := byNode[n]; ok {
+				order = append(order, i)
+			} else if depth < odf.MaxDepth {
+				find(n.Children, depth+1)
+			}
+		}
+	}
+	find(kids, 0)
+	texts := make([]string, len(order))
+	for k, i := range order {
+		texts[k] = runs[i].text
+	}
+	parts, err := odf.SplitScripts(b.ctx, texts, rtl)
+	if err != nil {
+		b.stop(err)
+		return kids
+	}
+	if parts == nil {
+		return kids
+	}
+	split := make(map[*layout.Node][]*layout.Node, len(order))
+	for k, i := range order {
+		r := runs[i]
+		if len(parts[k]) == 1 && parts[k][0].Script == odf.Western {
+			continue
+		}
+		nodes := make([]*layout.Node, 0, len(parts[k]))
+		for _, p := range parts[k] {
+			nodes = append(nodes, b.runNode(p.Text, r.t.forScript(p.Script), r.changed))
+		}
+		split[r.node] = nodes
+	}
+	var rewrite func(nodes []*layout.Node, depth int) []*layout.Node
+	rewrite = func(nodes []*layout.Node, depth int) []*layout.Node {
+		var out []*layout.Node
+		for i, n := range nodes {
+			if repl, ok := split[n]; ok {
+				if out == nil {
+					out = append(make([]*layout.Node, 0, len(nodes)+len(repl)), nodes[:i]...)
+				}
+				out = append(out, repl...)
+				continue
+			}
+			if depth < odf.MaxDepth && len(n.Children) > 0 {
+				n.Children = rewrite(n.Children, depth+1)
+			}
+			if out != nil {
+				out = append(out, n)
+			}
+		}
+		if out == nil {
+			return nodes
+		}
+		return out
+	}
+	return rewrite(kids, 0)
 }
 
 // inline appends the inline content of el's children, in the text

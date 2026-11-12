@@ -28,9 +28,13 @@ type textState struct {
 	// generic the western family's style:font-family-generic.
 	family  [3]string
 	generic string
-	size    float64
-	weight  int
-	italic  bool
+	// lead is the family listed before the others: the family of the
+	// script a part of a run is drawn in ([textState.forScript]), "" for
+	// Western text.
+	lead   string
+	size   float64
+	weight int
+	italic bool
 	// color is nil for the automatic colour, black on white paper.
 	color      *css.Color
 	background css.Color
@@ -57,6 +61,73 @@ type textState struct {
 	hidden  bool
 	lang    string
 	country string
+	// scripts are the size, weight, posture and language of Asian and
+	// complex text, which a style sets apart from the Western text's.
+	scripts [2]scriptText
+}
+
+// scriptText is the text properties an OpenDocument style gives Asian or
+// complex text apart from Western text: the -asian and -complex
+// counterparts of fo:font-size, fo:font-weight, fo:font-style,
+// fo:language and fo:country (ODF 1.3, Part 3, 20.270 to 20.281).
+type scriptText struct {
+	size    float64
+	weight  int
+	italic  bool
+	lang    string
+	country string
+}
+
+// Writer's font sizes for Asian and complex text when no style sets one:
+// 10.5pt and 12pt, as fo:font-size sets the Western size alone.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a document without a
+//     default style prints "abc 漢字 عربي" at 12, 10.5 and 12 points, and
+//     at 20, 10.5 and 12 points under a style setting fo:font-size 20pt
+//     alone; style:font-size-asian 200% and style:font-size-complex 150%
+//     print 21 and 18 points.
+const (
+	defaultAsianSize   = 10.5
+	defaultComplexSize = 12
+)
+
+// newTextState returns the text properties no style has set: Writer's
+// default sizes and the normal weight.
+func newTextState() textState {
+	return textState{
+		size: defaultFontSize, weight: 400,
+		scripts: [2]scriptText{{size: defaultAsianSize, weight: 400}, {size: defaultComplexSize, weight: 400}},
+	}
+}
+
+// forScript returns t as text of the script sc draws: its size, weight,
+// posture and language, its family listed first. The parts of a run
+// split by script each take theirs (ODF 1.3, Part 3, 20.270 to 20.281).
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a paragraph whose
+//     style sets fo:font-weight bold and fo:font-style italic alone
+//     prints its Han and Arabic text in Noto Sans CJK JP Regular and
+//     DejaVu Sans; style:font-weight-asian and -complex bold print Noto
+//     Sans CJK JP Bold and DejaVu Sans Bold.
+func (t textState) forScript(sc odf.Script) textState {
+	if sc == odf.Western {
+		return t
+	}
+	s := t.scripts[sc-1]
+	if s.size > 0 {
+		t.size = s.size
+	}
+	if s.weight > 0 {
+		t.weight = s.weight
+	}
+	t.italic = s.italic
+	t.lang, t.country = s.lang, s.country
+	t.lead = t.family[sc]
+	return t
 }
 
 // defaultFontSize is the font size when no style sets one: LibreOffice's
@@ -112,6 +183,9 @@ func (b *builder) foldText(t textState, layer odf.Props) textState {
 	}
 	if v, ok := layer.Lookup("fo:font-style"); ok {
 		t.italic = v == "italic" || v == "oblique"
+	}
+	for i, suffix := range [2]string{"-asian", "-complex"} {
+		t.scripts[i] = foldScriptText(t.scripts[i], layer, suffix)
 	}
 	if v, ok := layer.Lookup("fo:color"); ok {
 		if c, ok := odf.ParseColor(v); ok {
@@ -177,6 +251,32 @@ func (b *builder) foldText(t textState, layer odf.Props) textState {
 		t.country = v
 	}
 	return t
+}
+
+// foldScriptText returns s with the Asian or complex text properties of
+// layer, the attributes of suffix -asian or -complex, laid over it: a
+// size in percent is relative to the size below it.
+func foldScriptText(s scriptText, layer odf.Props, suffix string) scriptText {
+	if v, ok := layer.Lookup("style:font-size" + suffix); ok {
+		if pt, ok := odf.Length(v); ok && pt > 0 {
+			s.size = pt
+		} else if pc, ok := odf.Percent(v); ok && pc > 0 {
+			s.size *= pc
+		}
+	}
+	if v, ok := layer.Lookup("style:font-weight" + suffix); ok {
+		s.weight = fontWeight(v, s.weight)
+	}
+	if v, ok := layer.Lookup("style:font-style" + suffix); ok {
+		s.italic = v == "italic" || v == "oblique"
+	}
+	if v, ok := layer.Lookup("style:language" + suffix); ok {
+		s.lang = v
+	}
+	if v, ok := layer.Lookup("style:country" + suffix); ok {
+		s.country = v
+	}
+	return s
 }
 
 // fontFamilyKey returns the fo:font-family attribute key of a script

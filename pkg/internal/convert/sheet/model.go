@@ -384,6 +384,24 @@ type Font struct {
 	Color css.Color
 	// Script raises or lowers the text as a superscript or subscript.
 	Script Script
+	// Asian and Complex are the face, size, weight and posture of Asian
+	// and complex text, which an OpenDocument style sets apart from the
+	// Western text's (ODF 1.3, Part 3, 20.270 to 20.281). The reader of
+	// such a style cuts a cell's text by script into runs, each in its
+	// script's font; the model draws a run in its Font alone. A workbook's
+	// fonts leave them zero.
+	Asian, Complex ScriptFont
+}
+
+// ScriptFont is the font of Asian or complex text in an OpenDocument
+// style.
+type ScriptFont struct {
+	// Family is the script's typeface, "" for the Western one.
+	Family string
+	// Size is the font size in points.
+	Size float64
+	// Bold and Italic select the face.
+	Bold, Italic bool
 }
 
 // Underline is an underline kind (ECMA-376 Part 1, 18.18.86 ST_UnderlineValues).

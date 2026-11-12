@@ -1,6 +1,7 @@
 package ods
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +50,9 @@ func (r *reader) cell(el *odf.Element) (sheet.Cell, bool) {
 	}
 	if c.Value.Kind != sheet.Text && c.Value.Kind != sheet.Empty {
 		c.Runs = nil
+	}
+	if c.Value.Kind == sheet.Text && c.Value.Text == tc.text {
+		c.Runs = r.scriptRuns(tc, c.Style, c.Runs)
 	}
 	// Calc recalculates an OpenDocument spreadsheet as it loads it,
 	// whatever program wrote it: every formula is kept for the builder
@@ -275,7 +279,82 @@ func sameFont(a, b *sheet.Font) bool {
 		return a == b
 	}
 	return a.Size == b.Size && a.Bold == b.Bold && a.Italic == b.Italic && a.Underline == b.Underline &&
-		a.Strike == b.Strike && a.Color == b.Color && a.Script == b.Script && strings.Join(a.Families, ",") == strings.Join(b.Families, ",")
+		a.Strike == b.Strike && a.Color == b.Color && a.Script == b.Script && strings.Join(a.Families, ",") == strings.Join(b.Families, ",") &&
+		a.Asian == b.Asian && a.Complex == b.Complex
+}
+
+// scriptRuns returns the runs of a text cell cut at each change of script
+// ([odf.Scripts]), each part in the font of its script: the cell's text
+// tc, its style st and the runs it keeps, nil for its text in its own
+// font. A cell runs left to right whatever its sheet's direction. A cell
+// of Western text alone keeps runs.
+//
+// # Corpus evidence
+//
+//   - probe, ods: through gotenberg/gotenberg:9.4.1, cells of mixed
+//     Latin, Han, Arabic and Hebrew text print each character in the
+//     size of the script a Writer paragraph gives it, on a left-to-right
+//     sheet and on a right-to-left one alike.
+func (r *reader) scriptRuns(tc cellText, st *sheet.Style, runs []sheet.Run) []sheet.Run {
+	base := r.doc.Default.Font
+	if st != nil {
+		base = st.Font
+	}
+	src := runs
+	if len(src) == 0 {
+		src = []sheet.Run{{Text: tc.text}}
+	}
+	texts := make([]string, len(src))
+	for i, run := range src {
+		texts[i] = run.Text
+	}
+	parts, err := odf.SplitScripts(r.ctx, texts, false)
+	if err != nil {
+		r.stop(err)
+		return runs
+	}
+	if parts == nil {
+		return runs
+	}
+	var out []sheet.Run
+	for i, run := range src {
+		f := base
+		if run.Font != nil {
+			f = *run.Font
+		}
+		for _, p := range parts[i] {
+			if len(out) >= maxCellRuns {
+				out[len(out)-1].Text += p.Text
+				continue
+			}
+			pf := scriptFont(f, p.Script)
+			out = append(out, sheet.Run{Text: p.Text, Font: &pf})
+		}
+	}
+	return out
+}
+
+// scriptFont returns f as the font of text of the script sc: the face,
+// size, weight and posture its style gives the script, its face listed
+// first.
+func scriptFont(f sheet.Font, sc odf.Script) sheet.Font {
+	var s sheet.ScriptFont
+	switch sc {
+	case odf.Asian:
+		s = f.Asian
+	case odf.Complex:
+		s = f.Complex
+	case odf.Western:
+		return f
+	}
+	if s.Family != "" {
+		f.Families = append([]string{s.Family}, slices.DeleteFunc(slices.Clone(f.Families), func(n string) bool { return n == s.Family })...)
+	}
+	if s.Size > 0 {
+		f.Size = s.Size
+	}
+	f.Bold, f.Italic = s.Bold, s.Italic
+	return f
 }
 
 // inline reads the inline content of a paragraph or span in font f.

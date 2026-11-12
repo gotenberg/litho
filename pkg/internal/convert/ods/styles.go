@@ -66,7 +66,7 @@ func (r *reader) resolve(scope odf.Scope, name string) sheet.Style {
 	var st sheet.Style
 	cp := r.styles.Resolve(scope, odf.FamilyCell, name, odf.CellProps)
 	pp := r.styles.Resolve(scope, odf.FamilyCell, name, odf.ParagraphProps)
-	st.Font = r.foldFont(sheet.Font{Size: defaultFontSize}, r.styles.Layers(scope, odf.FamilyCell, name, odf.TextProps))
+	st.Font = r.foldFont(newFont(), r.styles.Layers(scope, odf.FamilyCell, name, odf.TextProps))
 	if c, ok := color(cp.Get("fo:background-color")); ok {
 		st.Fill.Color = c
 	}
@@ -215,6 +215,8 @@ func (r *reader) foldFont(f sheet.Font, layers []odf.Props) sheet.Font {
 		if v, ok := l.Lookup("fo:font-style"); ok {
 			f.Italic = v == "italic" || v == "oblique"
 		}
+		f.Asian = foldScriptFont(f.Asian, l, "-asian")
+		f.Complex = foldScriptFont(f.Complex, l, "-complex")
 		if v, ok := l.Lookup("style:text-underline-style"); ok {
 			f.Underline = sheet.NoUnderline
 			if v != "none" && v != "" {
@@ -247,11 +249,50 @@ func (r *reader) foldFont(f sheet.Font, layers []odf.Props) sheet.Font {
 			f.Script = script(v)
 		}
 	}
+	f.Asian.Family, f.Complex.Family = fam[1], fam[2]
 	f.Families = nil
 	for _, n := range fam {
 		if n != "" && !slices.Contains(f.Families, n) {
 			f.Families = append(f.Families, n)
 		}
+	}
+	return f
+}
+
+// newFont returns the font no style has set: Calc's default size for
+// every script.
+//
+// # Corpus evidence
+//
+//   - probe, ods: through gotenberg/gotenberg:9.4.1, a cell without a
+//     style prints "abc 漢字 عربي" at 10 points, and at 20, 10 and 10
+//     points under a cell style setting fo:font-size 20pt alone.
+func newFont() sheet.Font {
+	return sheet.Font{
+		Size:    defaultFontSize,
+		Asian:   sheet.ScriptFont{Size: defaultFontSize},
+		Complex: sheet.ScriptFont{Size: defaultFontSize},
+	}
+}
+
+// foldScriptFont lays the Asian or complex text properties of layer l,
+// the attributes of suffix -asian or -complex, over f (ODF 1.3, Part 3,
+// 20.270 to 20.281): a size in points or percent, the weight, the
+// posture.
+func foldScriptFont(f sheet.ScriptFont, l odf.Props, suffix string) sheet.ScriptFont {
+	if v, ok := l.Lookup("style:font-size" + suffix); ok {
+		if pt, ok := odf.Length(v); ok && pt > 0 {
+			f.Size = pt
+		} else if pc, ok := odf.Percent(v); ok && pc > 0 {
+			f.Size *= pc
+		}
+	}
+	if v, ok := l.Lookup("style:font-weight" + suffix); ok {
+		n, err := strconv.Atoi(v)
+		f.Bold = v == "bold" || err == nil && n >= boldWeight
+	}
+	if v, ok := l.Lookup("style:font-style" + suffix); ok {
+		f.Italic = v == "italic" || v == "oblique"
 	}
 	return f
 }
