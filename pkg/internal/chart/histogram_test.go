@@ -73,7 +73,7 @@ func TestRender_HistogramBars(t *testing.T) {
 }
 
 func TestRender_UnsupportedKind(t *testing.T) {
-	nan := func() []*Axis { return plainAxes() }
+	nan := plainAxes
 	white := compose.Color{R: 1, G: 1, B: 1, A: 1}
 	c := &Chart{
 		Axes: nan(),

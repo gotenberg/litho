@@ -14,7 +14,7 @@ import (
 var (
 	ahemOnce  sync.Once
 	ahemFonts *text.Fonts
-	ahemErr   error
+	errAhem   error
 )
 
 // ahem returns an index holding the Ahem font alone, whose glyphs are full
@@ -22,10 +22,10 @@ var (
 func ahem(t testing.TB) *text.Fonts {
 	t.Helper()
 	ahemOnce.Do(func() {
-		ahemFonts, ahemErr = text.NewFonts(context.Background(), nil, []string{filepath.Join("..", "layout", "testdata")})
+		ahemFonts, errAhem = text.NewFonts(context.Background(), nil, []string{filepath.Join("..", "layout", "testdata")})
 	})
-	if ahemErr != nil {
-		t.Fatalf("indexing Ahem: %v", ahemErr)
+	if errAhem != nil {
+		t.Fatalf("indexing Ahem: %v", errAhem)
 	}
 	return ahemFonts
 }
@@ -67,6 +67,7 @@ func bounds(p *compose.Path) compose.Rect {
 	for _, op := range p.Ops {
 		n := 1
 		switch op.Kind {
+		case compose.MoveTo, compose.LineTo:
 		case compose.CurveTo:
 			n = 3
 		case compose.ClosePath:
