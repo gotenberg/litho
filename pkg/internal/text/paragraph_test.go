@@ -222,3 +222,42 @@ func TestShape_Scale(t *testing.T) {
 		}
 	}
 }
+
+func TestLine_GlyphRunsTakeNoSpareCapacity(t *testing.T) {
+	f := newTestFonts(t, sansFamily()...)
+	p := shape(t, f, []ParagraphRun{{Text: strings.Repeat("AB C\x01", 40), Style: style()}}, ParagraphOptions{})
+	l := p.Line(3, p.Len(), true)
+	if len(l.Spans) == 0 {
+		t.Fatal("no span")
+	}
+	for _, sp := range l.Spans {
+		if sp.Text == nil || len(sp.Text.Glyphs) == 0 || cap(sp.Text.Glyphs) != len(sp.Text.Glyphs) {
+			t.Fatalf("span %+v: a run holds every glyph it draws and no spare room", sp)
+		}
+	}
+	if got, want := spanText(l), strings.Repeat("AB C", 40)[3:]; got != want {
+		t.Errorf("drew %q, want %q", got, want)
+	}
+}
+
+func TestClusterText_MatchesItsCharacters(t *testing.T) {
+	for _, tc := range []struct {
+		in   []rune
+		want string
+	}{
+		{[]rune{'A'}, "A"},
+		{[]rune{' '}, " "},
+		{[]rune{0x7e}, "~"},
+		{[]rune{0x7f}, ""},
+		{[]rune{'\n'}, ""},
+		{[]rune{'é'}, "é"},
+		{[]rune{'e', 0x301}, "e\u0301"},
+		{[]rune{'f', 'i'}, "fi"},
+		{[]rune{'A', 0x01}, "A"},
+		{nil, ""},
+	} {
+		if got := clusterText(tc.in); got != tc.want {
+			t.Errorf("clusterText(%q) = %q, want %q", string(tc.in), got, tc.want)
+		}
+	}
+}

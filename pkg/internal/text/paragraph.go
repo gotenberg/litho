@@ -648,12 +648,22 @@ func (p *Paragraph) LineTrimmed(start, end, trim int) ParagraphLine {
 
 // glyphRun fills sp.Text with the glyphs of it whose cluster lies in
 // [start, end), the ones from hangFrom on drawing no advance, and returns
-// their advance.
+// their advance. The run's glyph slice is allocated at its length: the
+// run lives as long as the page that draws it.
 func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int) float64 {
 	t := &typeset.Text{Face: it.face, Size: it.style.Size, Color: it.style.Color, Origin: typeset.Point{X: sp.X}, Stroke: it.stroke, Skew: it.skew}
 	hs := it.style.scale()
 	if hs != 1 {
 		t.HScale = hs
+	}
+	drawn := 0
+	for _, g := range it.glyphs {
+		if g.cluster >= start && g.cluster < end && !p.control(g.cluster) {
+			drawn++
+		}
+	}
+	if drawn > 0 {
+		t.Glyphs = make([]typeset.Glyph, 0, drawn)
 	}
 	pen := 0.0
 	cluster := -1
@@ -665,7 +675,7 @@ func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int)
 		if g.cluster >= hangFrom {
 			adv = 0
 		}
-		if c := p.text[min(g.cluster, len(p.text)-1)]; unicode.IsControl(c) {
+		if p.control(g.cluster) {
 			pen += adv
 			continue
 		}
@@ -689,9 +699,29 @@ func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int)
 	return pen
 }
 
+// control reports whether the glyph of the cluster at i stands for a
+// control character, which draws nothing.
+func (p *Paragraph) control(i int) bool {
+	return unicode.IsControl(p.text[min(i, len(p.text)-1)])
+}
+
+// asciiText holds every ASCII character once, so that the text of a
+// one-character ASCII cluster is a slice of it rather than a string of
+// its own: a page holds one such string for each glyph it draws.
+var asciiText = func() string {
+	b := make([]byte, utf8.RuneSelf)
+	for i := range b {
+		b[i] = byte(i)
+	}
+	return string(b)
+}()
+
 // clusterText returns the characters of a cluster without its control
 // characters, which draw nothing.
 func clusterText(rs []rune) string {
+	if len(rs) == 1 && rs[0] >= 0 && rs[0] < utf8.RuneSelf && !unicode.IsControl(rs[0]) {
+		return asciiText[rs[0] : rs[0]+1]
+	}
 	b := make([]rune, 0, len(rs))
 	for _, r := range rs {
 		if !unicode.IsControl(r) {
