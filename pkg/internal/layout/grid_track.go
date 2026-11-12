@@ -62,7 +62,7 @@ func (t *gtrack) intrinsicMax() bool {
 // maxContentMax reports a max-content maximum: max-content, auto, or a
 // fit-content() track below its argument.
 func (t *gtrack) maxContentMax() bool {
-	return t.max.Kind == css.TrackMaxContent || t.max.Kind == css.TrackAuto && !t.fit || t.fit
+	return t.fit || t.max.Kind == css.TrackMaxContent || t.max.Kind == css.TrackAuto
 }
 
 // newTrack returns the track of size s in an axis of definite size ref
@@ -289,7 +289,7 @@ func (z *gridSizer) distribute(group []*gitem, affected func(*gtrack) bool, size
 	for _, t := range z.tracks {
 		t.planned = 0
 	}
-	any := false
+	grew := false
 	wasInf := make([]bool, len(z.tracks))
 	for i, t := range z.tracks {
 		wasInf[i] = math.IsInf(t.limit, 1)
@@ -394,9 +394,9 @@ func (z *gridSizer) distribute(group []*gitem, affected func(*gtrack) bool, size
 		for i, t := range aff {
 			t.planned = max(t.planned, inc[i])
 		}
-		any = true
+		grew = true
 	}
-	if !any {
+	if !grew {
 		return
 	}
 	for i, t := range z.tracks {

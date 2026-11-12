@@ -932,30 +932,29 @@ func distribute(a css.BoxAlign, free float64, n int, startIsStart, row, mainRev 
 	if n <= 0 {
 		return 0, 0
 	}
-	end := func() float64 { return free }
 	kw := a.Keyword()
 	if a.Safe() && free < 0 {
 		kw = css.BoxStart
 	}
 	switch kw { //nolint:exhaustive // the other values align at flex-start
 	case css.BoxFlexEnd:
-		return end(), 0
+		return free, 0
 	case css.BoxCenter:
 		return free / 2, 0
 	case css.BoxStart:
 		if !startIsStart {
-			return end(), 0
+			return free, 0
 		}
 	case css.BoxEnd:
 		if startIsStart {
-			return end(), 0
+			return free, 0
 		}
 	case css.BoxLeft, css.BoxRight:
 		if row && (kw == css.BoxLeft) == mainRev {
-			return end(), 0
+			return free, 0
 		}
 		if !row && !startIsStart {
-			return end(), 0
+			return free, 0
 		}
 	case css.BoxSpaceBetween:
 		if free > 0 && n > 1 {
@@ -1025,7 +1024,6 @@ func alignCross(ln *flexLine, ax flexAxes) {
 			case it.cAuto[0] && it.cAuto[1]:
 				it.cm[0] += free / 2
 				it.cm[1] += free / 2
-				it.cpos = 0
 			case it.cAuto[0]:
 				it.cm[0] += free
 			default:

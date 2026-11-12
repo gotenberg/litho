@@ -147,7 +147,7 @@ const maxNotePasses = 4
 
 // minColumnWidth is the used column-width of a column-width of 0: a CSS
 // pixel.
-const minColumnWidth = 0.75
+const minColumnWidth = css.Pt
 
 // columnLayout returns the used column count and width of a container
 // whose content box is u wide, with a gap of g (CSS Multicol 1, 3.4).
@@ -963,11 +963,11 @@ func columnTracks(tracks []css.ColumnTrack, u float64) (xs, ws, gaps []float64) 
 }
 
 // shiftOf returns how far column i of s moves its slice of the column
-// flow of the container b: to its row and its place in the row.
-func (d *mcolData) shiftOf(b *box, s *colSet, i int) (float64, float64) {
+// flow: to its row and its place in the row.
+func (d *mcolData) shiftOf(s *colSet, i int) (float64, float64) {
 	f := s.frags[min(max(i, 0), len(s.frags)-1)]
 	r := s.rows[min(f.row, len(s.rows)-1)]
-	return d.columnX(f.col), (b.y + r.top) - (b.y + f.vtop)
+	return d.columnX(f.col), r.top - f.vtop
 }
 
 // fragOf returns the column of s the column flow position y of the
@@ -1015,7 +1015,7 @@ func toFlow(d *box, x, y float64) (float64, float64) {
 		if s == nil || len(s.frags) == 0 {
 			continue
 		}
-		dx, dy := a.mc.shiftOf(a, s, s.fragOf(a, y))
+		dx, dy := a.mc.shiftOf(s, s.fragOf(a, y))
 		x, y = x+dx, y+dy
 		d = a
 	}

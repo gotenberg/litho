@@ -704,10 +704,10 @@ func (l *gridLayout) place(top float64, colPos, rowPos []float64) float64 {
 	byRow := make([][]*gitem, nRows)
 	endRow := make([][]*gitem, nRows)
 	for _, it := range p.items {
-		r := min(max(it.start[rowAxis], 0), max(nRows-1, 0))
 		if nRows == 0 {
 			break
 		}
+		r := min(max(it.start[rowAxis], 0), nRows-1)
 		byRow[r] = append(byRow[r], it)
 		er := min(max(it.end[rowAxis]-1, 0), nRows-1)
 		endRow[er] = append(endRow[er], it)

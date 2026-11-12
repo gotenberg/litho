@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"maps"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
@@ -134,9 +135,9 @@ func (e *engine) cutColumns(g *ditem, b *box, s *colSet, oy float64) []*ditem {
 	}
 	per, pass := e.cutItem(g, b, s, oy, 0)
 	var out []*ditem
-	for _, i := range slices.Sorted(pieceKeys(per)) {
+	for _, i := range slices.Sorted(maps.Keys(per)) {
 		items := per[i]
-		dx, dy := b.mc.shiftOf(b, s, i)
+		dx, dy := b.mc.shiftOf(s, i)
 		var m *compose.Matrix
 		if dx != 0 || dy != 0 {
 			m = &compose.Matrix{A: 1, D: 1, E: dx, F: dy}
@@ -176,17 +177,6 @@ func (s *colSet) band(b *box, i int) (float64, float64) {
 	return b.y + f.vtop, b.y + f.vtop + f.h
 }
 
-// pieceKeys returns the keys of m, for sorting.
-func pieceKeys(m map[int][]piece) func(func(int) bool) {
-	return func(yield func(int) bool) {
-		for k := range m {
-			if !yield(k) {
-				return
-			}
-		}
-	}
-}
-
 // cutItem returns the items of the group it per column of s, groups
 // rebuilt in each column they reach, and the fixed groups, which follow
 // no column. The extents of the items move to their column's place; oy is
@@ -204,7 +194,7 @@ func (e *engine) cutItem(it *ditem, b *box, s *colSet, oy float64, depth int) (m
 			// A monolithic box's group moves whole to the column its top
 			// is in.
 			i := s.fragOf(b, k.y0-oy+eps)
-			_, dy := b.mc.shiftOf(b, s, i)
+			_, dy := b.mc.shiftOf(s, i)
 			out[i] = append(out[i], piece{it: moveItem(k, dy, 0)})
 			continue
 		}
@@ -214,7 +204,7 @@ func (e *engine) cutItem(it *ditem, b *box, s *colSet, oy float64, depth int) (m
 			}
 			sub, sp := e.cutItem(k, b, s, oy, depth+1)
 			pass = append(pass, sp...)
-			for _, i := range slices.Sorted(pieceKeys(sub)) {
+			for _, i := range slices.Sorted(maps.Keys(sub)) {
 				cp := *k
 				cp.kids, cp.page = nil, 0
 				clip := false
@@ -230,7 +220,7 @@ func (e *engine) cutItem(it *ditem, b *box, s *colSet, oy float64, depth int) (m
 			// A glyph run's extent reaches above and below its line box
 			// by its ascent and descent: its middle is on its line.
 			i := s.fragOf(b, (k.y0+max(k.y1, k.y0))/2-oy)
-			_, dy := b.mc.shiftOf(b, s, i)
+			_, dy := b.mc.shiftOf(s, i)
 			leaf := *k
 			leaf.y0, leaf.y1, leaf.page = k.y0+dy, k.y1+dy, pageMono
 			out[i] = append(out[i], piece{it: &leaf})
@@ -246,7 +236,7 @@ func (e *engine) cutItem(it *ditem, b *box, s *colSet, oy float64, depth int) (m
 			if i == last {
 				bottom = farEdge
 			}
-			_, dy := b.mc.shiftOf(b, s, i)
+			_, dy := b.mc.shiftOf(s, i)
 			leaf := *k
 			if i1 > i0 {
 				leaf.frag = cloneFragment(k.frag)
@@ -282,7 +272,7 @@ func cutLinks(links []pendingLink, b *box, s *colSet, oy float64) []pendingLink 
 			if y1 <= y0 {
 				continue
 			}
-			dx, dy := b.mc.shiftOf(b, s, i)
+			dx, dy := b.mc.shiftOf(s, i)
 			out = append(out, pendingLink{lk: l.lk, rect: compose.Rect{X: r.X + dx, Y: y0 + dy, Width: r.Width, Height: y1 - y0}})
 		}
 	}

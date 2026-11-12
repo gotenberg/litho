@@ -183,7 +183,7 @@ func (p *painter) blurred(shape []compose.PathOp, area compose.Rect, blur float6
 	if px := bounds.Width * bounds.Height * k * k; px > maxShadowPixels {
 		k *= math.Sqrt(maxShadowPixels / px)
 	}
-	w, h := int(math.Ceil(bounds.Width*k)), int(math.Ceil(bounds.Height*k)) // fit int: at most maxShadowPixels
+	w, h := int(math.Ceil(bounds.Width*k)), int(math.Ceil(bounds.Height*k)) // fits int: at most maxShadowPixels
 	if w <= 0 || h <= 0 || w*h > 2*maxShadowPixels {
 		return nil
 	}

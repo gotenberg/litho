@@ -232,11 +232,11 @@ func (l lineSet) nth(name string, n, from int) int {
 		return max(l.last(), from) + n - k
 	}
 	k := 0
-	for _, l := range slices.Backward(ls) {
-		if l < from {
+	for _, i := range slices.Backward(ls) {
+		if i < from {
 			k++
 			if k == -n {
-				return l
+				return i
 			}
 		}
 	}
