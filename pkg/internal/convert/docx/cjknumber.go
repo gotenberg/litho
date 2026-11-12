@@ -125,12 +125,12 @@ func koreanNative(n int) string {
 	if n >= 100 {
 		return koreanCounting.count(n)
 	}
-	ones := [10]string{"", "하나", "둘", "셋", "넷", "다섯", "여섯", "일곱", "여덟", "아홉"}
-	tens := [10]string{"", "열", "스물", "서른", "마흔", "쉰", "예순", "일흔", "여든", "아흔"}
+	nativeOnes := [10]string{"", "하나", "둘", "셋", "넷", "다섯", "여섯", "일곱", "여덟", "아홉"}
+	nativeTens := [10]string{"", "열", "스물", "서른", "마흔", "쉰", "예순", "일흔", "여든", "아흔"}
 	if n <= 0 {
 		return ""
 	}
-	return tens[n/10] + ones[n%10]
+	return nativeTens[n/10] + nativeOnes[n%10]
 }
 
 // cjkFormat writes n in the East Asian ST_NumberFormat format (ECMA-376

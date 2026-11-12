@@ -214,7 +214,7 @@ func otherSymbol(cb *ooxml.Element, checked bool) func([]compose.Fragment, compo
 	r := def
 	if v, ok := cb.Child(ooxml.NSW14, state).AttrNS(ooxml.NSW14, "val"); ok {
 		if n, err := strconv.ParseUint(v, 16, 16); err == nil && n > 0 {
-			r = rune(n)
+			r = rune(n) // fits rune: at most 16 bits, parsed above
 		}
 	}
 	return func(shown []compose.Fragment, _ compose.Rect, m *compose.Measurer) []compose.Fragment {
@@ -424,7 +424,7 @@ func (d *document) endLegacy(fl *field, sink *inlineSink) {
 // attachControls makes the controls of d into the form fields of the
 // pages of res, warning of those that stay printed without a field.
 func (d *document) attachControls(res *layout.Result) {
-	if missed := formfield.Attach(res, d.form.controls); missed > 0 && len(d.form.controls) > 0 {
+	if missed := formfield.Attach(res, d.form.controls); missed > 0 {
 		d.warn("form-field", "a form control that spans pages or shows nothing is printed without its field")
 	}
 }

@@ -3,6 +3,7 @@ package docx
 import (
 	"fmt"
 	"maps"
+	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -260,7 +261,7 @@ func (s *section) applyOptions(opts office.Options) {
 	if s.margin[css.Left]+s.margin[css.Right]+s.gutter > s.width-minPageArea {
 		s.margin[css.Left], s.margin[css.Right], s.gutter = 0, 0, 0
 	}
-	if abs(s.margin[css.Top])+abs(s.margin[css.Bottom]) > s.height-minPageArea {
+	if math.Abs(s.margin[css.Top])+math.Abs(s.margin[css.Bottom]) > s.height-minPageArea {
 		s.margin[css.Top], s.margin[css.Bottom] = 0, 0
 	}
 }
@@ -313,7 +314,7 @@ func (d *document) pageFrame(b *ooxml.Element, s *section) *layout.PageFrame {
 		if fromPage {
 			f.Inset[i] = space[i]
 		} else {
-			f.Inset[i] = max(0, abs(s.margin[i])-space[i]-st.Border[i].Width)
+			f.Inset[i] = max(0, math.Abs(s.margin[i])-space[i]-st.Border[i].Width)
 		}
 	}
 	if f.Inset[css.Left]+f.Inset[css.Right] >= s.width-1 || f.Inset[css.Top]+f.Inset[css.Bottom] >= s.height-1 {

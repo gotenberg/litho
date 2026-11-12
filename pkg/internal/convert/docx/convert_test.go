@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -126,7 +127,7 @@ func TestConvert_PageOptions(t *testing.T) {
 	} {
 		doc := convertBytes(t, docx(t, body, nil), tc.opts)
 		pg := doc.Pages[0]
-		if abs(pg.Width-tc.w) > 0.1 || abs(pg.Height-tc.h) > 0.1 {
+		if math.Abs(pg.Width-tc.w) > 0.1 || math.Abs(pg.Height-tc.h) > 0.1 {
 			t.Errorf("%s: page %v x %v, want %v x %v", tc.name, pg.Width, pg.Height, tc.w, tc.h)
 		}
 	}

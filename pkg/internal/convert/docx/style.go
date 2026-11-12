@@ -133,7 +133,7 @@ func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
 		switch {
 		case strings.HasPrefix(u.style, "double"):
 			st.TextDecorationStyle = css.DecorationDouble
-		case strings.HasPrefix(u.style, "dotted") || strings.HasPrefix(u.style, "dottedHeavy"):
+		case strings.HasPrefix(u.style, "dotted"):
 			st.TextDecorationStyle = css.DecorationDotted
 		case strings.Contains(strings.ToLower(u.style), "dash"):
 			st.TextDecorationStyle = css.DecorationDashed

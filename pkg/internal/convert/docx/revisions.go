@@ -253,24 +253,24 @@ func (r *revisions) paragraphMark(p *ooxml.Element) bool {
 	if rpr == nil {
 		return false
 	}
-	var deleted, any bool
+	var deleted, revised bool
 	kids := rpr.Children[:0:0]
 	for _, c := range rpr.Children {
 		if c.Space == w {
 			switch c.Local {
 			case "del", "moveFrom":
-				any = true
+				revised = true
 				deleted = deleted || r.view == office.ChangesAccepted
 				continue
 			case "ins", "moveTo":
-				any = true
+				revised = true
 				deleted = deleted || r.view == office.ChangesRejected
 				continue
 			}
 		}
 		kids = append(kids, c)
 	}
-	if !any {
+	if !revised {
 		return false
 	}
 	if deleted {

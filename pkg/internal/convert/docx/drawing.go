@@ -477,8 +477,8 @@ func (d *document) textBox(s *story, content *ooxml.Element, w, h float64, ss oo
 	}
 	n := &layout.Node{Kind: layout.Element, Style: bs, Children: kids}
 	if len(kids) > 0 {
-		n.Role = "Figure"
-		if n.Alt = alt; alt == "" {
+		n.Role, n.Alt = "Figure", alt
+		if alt == "" {
 			n.Alt = office.ShownText(kids)
 		}
 	}

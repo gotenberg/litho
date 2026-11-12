@@ -725,10 +725,9 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 			if ci == 0 && row.props.gridBefore > 0 {
 				cst.Border[css.Left] = css.Border{}
 			}
-			ts := s
 			d.nested++
 			d.inCell++
-			bs := d.blocks(ts, cc, c.xml, depth+1)
+			bs := d.blocks(s, cc, c.xml, depth+1)
 			if n := len(bs); n >= 2 && endsWithTableMark(c.xml) && bs[n-2].node.Role == "Table" && bs[n-1].node.Role == "P" && bs[n-1].node.ID == "" {
 				bs = bs[:n-1]
 			}
@@ -973,10 +972,7 @@ func (d *document) cellStyle(cp cellProps, tableMar map[string]float64, tb map[s
 	// border takes from the margin. A spaced cell's margin starts inside
 	// its whole border.
 	for _, side := range []css.Side{css.Left, css.Right} {
-		if at.spaced {
-			break
-		}
-		if b := st.Border[side]; b.Style != css.BorderNone && b.Width > 0 && st.Padding[side].Kind == css.Points {
+		if b := st.Border[side]; !at.spaced && b.Style != css.BorderNone && b.Width > 0 && st.Padding[side].Kind == css.Points {
 			st.Padding[side] = css.Pts(max(0, st.Padding[side].Value-b.Width/2))
 		}
 	}

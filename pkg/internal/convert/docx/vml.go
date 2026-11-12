@@ -1,6 +1,7 @@
 package docx
 
 import (
+	"math"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -71,7 +72,7 @@ func vmlSize(k *ooxml.Element, vs ooxml.VMLStyle, unit float64) (float64, float6
 	if k.Local == "line" {
 		x0, y0 := vmlPoint(attrOr(k, "from"))
 		x1, y1 := vmlPoint(attrOr(k, "to"))
-		w, h = abs(x1-x0), abs(y1-y0)
+		w, h = math.Abs(x1-x0), math.Abs(y1-y0)
 	}
 	return max(0, w), max(0, h)
 }
@@ -393,8 +394,8 @@ func (d *document) vmlGroup(s *story, g *ooxml.Element, st *css.Style, w, h floa
 // see it: its shape's alt attribute, else its v:imagedata's o:title, in
 // the Office namespace (ECMA-376 Part 4, 19.1.2, the VML elements), ""
 // for neither.
-func vmlAlt(shape, img *ooxml.Element) string {
-	if alt := strings.TrimSpace(attrOr(shape, "alt")); alt != "" {
+func vmlAlt(sp, img *ooxml.Element) string {
+	if alt := strings.TrimSpace(attrOr(sp, "alt")); alt != "" {
 		return alt
 	}
 	title, _ := img.AttrNS(ooxml.NSO, "title")

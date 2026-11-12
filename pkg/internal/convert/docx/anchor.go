@@ -1,6 +1,7 @@
 package docx
 
 import (
+	"math"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -316,7 +317,7 @@ func hArea(s *section, rel string) (float64, float64) {
 // vArea returns the top edge and the height of the area a vertical
 // position is relative to (20.4.3.5) on a page of section s.
 func vArea(s *section, rel string) (float64, float64) {
-	top, bottom := abs(s.margin[css.Top]), abs(s.margin[css.Bottom])
+	top, bottom := math.Abs(s.margin[css.Top]), math.Abs(s.margin[css.Bottom])
 	switch rel {
 	case "page":
 		return 0, s.height

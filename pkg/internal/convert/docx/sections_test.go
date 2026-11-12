@@ -30,11 +30,11 @@ func TestSections_PageBoxes(t *testing.T) {
 	}
 	pg := b.d.newPages(b.secs)
 	box := pg.box(layout.PageInfo{Name: b.secs[0].name})
-	if abs(box.Width-595.3) > 0.1 || box.Margin != [4]float64{72, 36, 72, 54} {
+	if math.Abs(box.Width-595.3) > 0.1 || box.Margin != [4]float64{72, 36, 72, 54} {
 		t.Errorf("first box %+v", box)
 	}
 	// The separator is two inches of a 505.3-point text area.
-	if r := box.FootnoteRule; r == nil || abs(r.Width-144/505.3) > 1e-3 || r.Thickness != 0.75 || r.Line != css.Solid || r.Align != css.AlignLeft || r.Color.A != 1 || r.SpaceAbove != 8.1 || r.SpaceBelow != 4.95 {
+	if r := box.FootnoteRule; r == nil || math.Abs(r.Width-144/505.3) > 1e-3 || r.Thickness != 0.75 || r.Line != css.Solid || r.Align != css.AlignLeft || r.Color.A != 1 || r.SpaceAbove != 8.1 || r.SpaceBelow != 4.95 {
 		t.Errorf("footnote rule %+v", box.FootnoteRule)
 	}
 	if land := pg.box(layout.PageInfo{Name: b.secs[2].name}); land.Width < land.Height {
@@ -383,7 +383,7 @@ func TestHeaders_PageAnchoredDrawing(t *testing.T) {
 			case *compose.Text:
 				if glyphText(v) == "WM" {
 					found = true
-					if x, y := v.Origin.X+dx, v.Origin.Y+dy; abs(x-100) > 1 || y < 500 || y > 530 {
+					if x, y := v.Origin.X+dx, v.Origin.Y+dy; math.Abs(x-100) > 1 || y < 500 || y > 530 {
 						t.Errorf("the header's drawing draws at %.1f, %.1f, want near 100, 500 to 530", x, y)
 					}
 				}

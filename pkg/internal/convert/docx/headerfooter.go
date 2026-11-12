@@ -1,6 +1,8 @@
 package docx
 
 import (
+	"math"
+
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -124,7 +126,7 @@ func (p *pages) box(info layout.PageInfo) layout.PageBox {
 		s = p.secs[0]
 	}
 	m := s.margin
-	top, bottom := abs(m[css.Top]), abs(m[css.Bottom])
+	top, bottom := math.Abs(m[css.Top]), math.Abs(m[css.Bottom])
 	hh, fh := 0.0, 0.0
 	for _, h := range s.headerH {
 		hh = max(hh, h)

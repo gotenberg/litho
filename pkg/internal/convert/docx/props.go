@@ -2,6 +2,7 @@ package docx
 
 import (
 	"maps"
+	"math"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -526,7 +527,7 @@ func (p paraProps) merge(o *paraProps) paraProps {
 		for _, t := range p.tabs {
 			cleared := false
 			for _, n := range o.tabs {
-				if n.clear && abs(n.stop.Pos-t.stop.Pos) < 0.5 {
+				if n.clear && math.Abs(n.stop.Pos-t.stop.Pos) < 0.5 {
 					cleared = true
 				}
 			}
@@ -553,14 +554,6 @@ func (p paraProps) merge(o *paraProps) paraProps {
 		p.mark = &m
 	}
 	return p
-}
-
-// abs returns the absolute value of v.
-func abs(v float64) float64 {
-	if v < 0 {
-		return -v
-	}
-	return v
 }
 
 // parseParaProps reads a w:pPr element; nil yields an empty set.

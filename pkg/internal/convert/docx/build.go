@@ -481,7 +481,7 @@ func (d *document) paraStyle(pp paraProps, mark runProps) (*css.Style, float64) 
 			st.MinLineHeight = max(0, *pp.line*ooxml.TwipPt)
 		default:
 			// 240ths of a line (17.18.48, ST_LineSpacingRule auto).
-			if m := *pp.line / 240; m > 0 && abs(m-1) > 0.001 {
+			if m := *pp.line / 240; m > 0 && math.Abs(m-1) > 0.001 {
 				lineMult = min(m, 10)
 				rule = css.LineRuleMultiple
 			}
@@ -1045,9 +1045,9 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 		case c.Is(w, "sym"):
 			buf.WriteString(symbol(c))
 		case c.Is(w, "noBreakHyphen"):
-			buf.WriteRune('‑')
+			buf.WriteRune('\u2011')
 		case c.Is(w, "softHyphen"):
-			buf.WriteRune('­')
+			buf.WriteRune('\u00ad')
 		case c.Is(w, "footnoteReference"), c.Is(w, "endnoteReference"):
 			emit()
 			d.noteCall(s, c, st, sink)
