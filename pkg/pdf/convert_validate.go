@@ -3,7 +3,6 @@ package pdf
 import (
 	"fmt"
 	"maps"
-	"math"
 	"net/url"
 	"slices"
 	"strings"
@@ -95,8 +94,7 @@ func (o *convertConfig) validateMargins() error {
 		name  string
 		value float64
 	}{{"top", o.marginTop}, {"right", o.marginRight}, {"bottom", o.marginBottom}, {"left", o.marginLeft}} {
-		// The negated range also refuses NaN.
-		if !(m.value >= 0 && m.value < math.Inf(1)) {
+		if !finite(m.value) || m.value < 0 {
 			return fmt.Errorf("%w: %s margin %v is not a finite number of points, zero or more", ErrInvalidConvertOptions, m.name, m.value)
 		}
 	}
@@ -112,10 +110,10 @@ func (o *convertConfig) validateMargins() error {
 
 // validateText reports a text option out of range.
 func (o *convertConfig) validateText() error {
-	if o.fontSizeSet && !(o.fontSize > 0 && o.fontSize <= maxConvertFontSize) {
+	if o.fontSizeSet && !positiveUpTo(o.fontSize, maxConvertFontSize) {
 		return fmt.Errorf("%w: font size %v is not in (0, %d]", ErrInvalidConvertOptions, o.fontSize, maxConvertFontSize)
 	}
-	if o.lineHeightSet && !(o.lineHeight > 0 && o.lineHeight <= maxConvertLineHeight) {
+	if o.lineHeightSet && !positiveUpTo(o.lineHeight, maxConvertLineHeight) {
 		return fmt.Errorf("%w: line height %v is not in (0, %d]", ErrInvalidConvertOptions, o.lineHeight, maxConvertLineHeight)
 	}
 	if o.tabWidthSet && (o.tabWidth < 1 || o.tabWidth > maxConvertTabWidth) {
@@ -124,13 +122,23 @@ func (o *convertConfig) validateText() error {
 	return nil
 }
 
+// positiveUpTo reports whether v lies in (0, upper]; NaN does not.
+func positiveUpTo(v, upper float64) bool {
+	return v > 0 && v <= upper
+}
+
+// within reports whether v lies in [lo, hi]; NaN does not.
+func within(v, lo, hi float64) bool {
+	return v >= lo && v <= hi
+}
+
 // validateHTML reports an HTML or Markdown option out of range, or a single
 // page asked with a page selection.
 func (o *convertConfig) validateHTML() error {
 	if o.media != "" && o.media != htmlconv.MediaPrint && o.media != htmlconv.MediaScreen {
 		return fmt.Errorf("%w: media type %q is neither %q nor %q", ErrInvalidConvertOptions, o.media, htmlconv.MediaPrint, htmlconv.MediaScreen)
 	}
-	if o.scaleSet && !(o.scale >= htmlconv.MinScale && o.scale <= htmlconv.MaxScale) {
+	if o.scaleSet && !within(o.scale, htmlconv.MinScale, htmlconv.MaxScale) {
 		return fmt.Errorf("%w: scale %v is not in [%v, %v]", ErrInvalidConvertOptions, o.scale, htmlconv.MinScale, htmlconv.MaxScale)
 	}
 	if o.baseURL != "" {
