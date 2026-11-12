@@ -7,7 +7,7 @@ import (
 
 // TestDrawingCells_FarAbsolute checks that a drawing placed past the
 // sheet's last row, or at an infinite or undefined position, covers cells
-// inside the sheet: its bottom edge no longer overflows the row index.
+// inside the sheet: its bottom edge stays within the row index.
 func TestDrawingCells_FarAbsolute(t *testing.T) {
 	for _, y := range []float64{1e30, math.Inf(1), math.NaN()} {
 		sh := &Sheet{Drawings: []Drawing{{Absolute: true, X: 10, Y: y, Width: 20, Height: 20}}}
