@@ -46,6 +46,15 @@ const (
 // the objects of the operands it repeats ([lexer.Lexer.WithInterning],
 // [parser.Parser.WithBoxedOperands]). Their tables take about 12 KiB, which a
 // shorter stream does not repeat enough operands to pay back.
+//
+// # Corpus evidence
+//
+//   - govdocs/pdf thread_100_100171.pdf, thread_400_400760.pdf, pdfjs pdf.pdf,
+//     issue18801.pdf: the text of every page, the CMYK conversion of the
+//     second and the flattening of the last allocate within 1% of the same
+//     objects and 2% of the same bytes whether streams from 0, 256, 1,024 or
+//     4,096 bytes share their operands, save the flattening, which 256 bytes
+//     saves 2.7% of its objects for 4 MiB more allocated.
 const minInterningBytes = 4096
 
 // operationList collects the operations of one parse.
