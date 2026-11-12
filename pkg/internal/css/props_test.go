@@ -334,7 +334,7 @@ func TestFontUnits_ResolveExAndCh(t *testing.T) {
 // else, so an invalid value leaves the earlier declaration in force.
 func TestDisplay_RejectsStrayKeywords(t *testing.T) {
 	t.Parallel()
-	for _, v := range []string{"flex foo", "flow table", "inline flex block", "foo grid", "inline block", "block block"} {
+	for _, v := range []string{"flex foo", "flow table", "inline flex block", "foo grid", "inline block", "flow flow-root"} {
 		if s := styleOf(t, "display: inline-table; display: "+v); s.Display != InlineTable {
 			t.Errorf("display: %s computes to %v, want it rejected", v, s.Display)
 		}
