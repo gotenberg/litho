@@ -1,6 +1,8 @@
 package formfield
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -44,7 +46,7 @@ func TestAttach(t *testing.T) {
 		{ID: NodeID(1), Box: true, Field: typeset.Field{Kind: typeset.FieldText, Name: "spans pages"}},
 		{ID: NodeID(2), Box: true, Field: typeset.Field{Kind: typeset.FieldText, Name: "never laid out"}},
 	}
-	if missed, err := Attach(res, controls); err != nil || missed != 2 {
+	if missed, err := Attach(t.Context(), res, controls); err != nil || missed != 2 {
 		t.Errorf("Attach missed %d controls (%v), want 2", missed, err)
 	}
 	if len(page1.Fields) != 1 {
@@ -94,5 +96,28 @@ func TestClip(t *testing.T) {
 	}
 	if got := Clip("a\xffb"); got != "a�b" {
 		t.Errorf("Clip(invalid) = %q", got)
+	}
+}
+
+// TestAttach_StopsOnCancel checks that a cancelled context stops the walks
+// over the structure tree and the pages before they visit them whole.
+func TestAttach_StopsOnCancel(t *testing.T) {
+	t.Parallel()
+	const n = 200_000
+	root := &typeset.StructElem{Role: "Document"}
+	page := &typeset.Page{Width: 200, Height: 200}
+	for range n {
+		e := &typeset.StructElem{Role: "Form"}
+		root.Kids = append(root.Kids, e)
+		page.Content = append(page.Content, mark(e, 10, 10))
+	}
+	res := &layout.Result{Pages: []*typeset.Page{page}, Structure: root}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := Attach(ctx, res, []*Control{{ID: NodeID(0)}}); !errors.Is(err, context.Canceled) {
+		t.Errorf("Attach on a cancelled context = %v, want context.Canceled", err)
+	}
+	if err := locate(ctx, res.Pages, []*formElem{{elem: root.Kids[0], page: -1}}, nil); !errors.Is(err, context.Canceled) {
+		t.Errorf("locate on a cancelled context = %v, want context.Canceled", err)
 	}
 }

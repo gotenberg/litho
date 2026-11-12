@@ -1,6 +1,7 @@
 package formfield
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
@@ -108,6 +109,10 @@ type formElem struct {
 // placed rather than spend unbounded time.
 const maxWalk = 50_000_000
 
+// walkCheck is how many fragments or elements a walk visits between two
+// checks of the context.
+const walkCheck = 4096
+
 // The room [attach] searches for the first fragment of a control that
 // flows with the text, in points from its node's anchor: the first glyph
 // starts where the inline box does, within flowSlack, its baseline below
@@ -125,13 +130,19 @@ const (
 // content spans pages, or that shows nothing it can measure, stays printed
 // as it is, with no field; the count of those is returned. It fails with
 // an error wrapping typeset.ErrInvalidFont when a face the controls show
-// does not load, which the PDF backend refuses too.
-func Attach(res *layout.Result, controls []*Control) (int, error) {
+// does not load, which the PDF backend refuses too, and with ctx's error
+// once ctx ends, the fields attached so far left in place.
+func Attach(ctx context.Context, res *layout.Result, controls []*Control) (int, error) {
 	if len(controls) == 0 || res == nil || res.Structure == nil {
 		return len(controls), nil
 	}
-	forms, owner := formElems(res.Structure)
-	locate(res.Pages, forms, owner)
+	forms, owner, err := formElems(ctx, res.Structure)
+	if err != nil {
+		return 0, err
+	}
+	if err := locate(ctx, res.Pages, forms, owner); err != nil {
+		return 0, err
+	}
 	byPage := map[int][]*formElem{}
 	for _, f := range forms {
 		if f.page >= 0 {
@@ -141,6 +152,10 @@ func Attach(res *layout.Result, controls []*Control) (int, error) {
 	m := typeset.NewMeasurer()
 	missed := 0
 	for _, c := range controls {
+		// Each control takes its content off a whole page.
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
 		if !attach(res, c, byPage, m) {
 			missed++
 		}
@@ -212,8 +227,9 @@ func attach(res *layout.Result, c *Control, byPage map[int][]*formElem, m *types
 }
 
 // formElems returns the Form elements of the tree under root in preorder,
-// and the Form element each element under one belongs to.
-func formElems(root *typeset.StructElem) ([]*formElem, map[*typeset.StructElem]*formElem) {
+// and the Form element each element under one belongs to. ctx's error
+// stops it.
+func formElems(ctx context.Context, root *typeset.StructElem) ([]*formElem, map[*typeset.StructElem]*formElem, error) {
 	var forms []*formElem
 	owner := map[*typeset.StructElem]*formElem{}
 	type item struct {
@@ -222,6 +238,11 @@ func formElems(root *typeset.StructElem) ([]*formElem, map[*typeset.StructElem]*
 	}
 	stack := []item{{e: root}}
 	for steps := 0; len(stack) > 0 && steps < maxWalk; steps++ {
+		if steps%walkCheck == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, err
+			}
+		}
 		it := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		if it.e == nil {
@@ -239,26 +260,29 @@ func formElems(root *typeset.StructElem) ([]*formElem, map[*typeset.StructElem]*
 			stack = append(stack, item{e: it.e.Kids[i], form: form})
 		}
 	}
-	return forms, owner
+	return forms, owner, nil
 }
 
 // locate records, for each Form element, the page and origin of its first
-// fragment and the pages its content lands on.
-func locate(pages []*typeset.Page, forms []*formElem, owner map[*typeset.StructElem]*formElem) {
+// fragment and the pages its content lands on. ctx's error stops it.
+func locate(ctx context.Context, pages []*typeset.Page, forms []*formElem, owner map[*typeset.StructElem]*formElem) error {
 	if len(forms) == 0 {
-		return
+		return nil
 	}
 	steps := 0
 	for i, pg := range pages {
 		if pg == nil {
 			continue
 		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		seen := map[*formElem]bool{}
 		var walk func(frags []typeset.Fragment, t typeset.Matrix, depth int)
 		walk = func(frags []typeset.Fragment, t typeset.Matrix, depth int) {
 			for _, fr := range frags {
 				steps++
-				if steps > maxWalk {
+				if steps > maxWalk || steps%walkCheck == 0 && ctx.Err() != nil {
 					return
 				}
 				var parent *typeset.StructElem
@@ -305,6 +329,7 @@ func locate(pages []*typeset.Page, forms []*formElem, owner map[*typeset.StructE
 		}
 		walk(pg.Content, typeset.Identity, 0)
 	}
+	return ctx.Err()
 }
 
 // then returns the transform that applies a, then b.

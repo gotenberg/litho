@@ -492,7 +492,7 @@ func ellipse(x0, y0, x1, y1 float64) []typeset.PathOp {
 // of res, warning of those that stay printed without a field. It fails as
 // formfield.Attach does.
 func (b *builder) attachControls(res *layout.Result) error {
-	missed, err := formfield.Attach(res, b.controls)
+	missed, err := formfield.Attach(b.ctx, res, b.controls)
 	if err != nil {
 		return err
 	}

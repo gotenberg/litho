@@ -436,7 +436,7 @@ func (d *document) endLegacy(fl *field, sink *inlineSink) {
 // pages of res, warning of those that stay printed without a field. It
 // fails as formfield.Attach does.
 func (d *document) attachControls(res *layout.Result) error {
-	missed, err := formfield.Attach(res, d.form.controls)
+	missed, err := formfield.Attach(d.ctx, res, d.form.controls)
 	if err != nil {
 		return err
 	}
