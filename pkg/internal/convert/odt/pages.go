@@ -511,9 +511,13 @@ func (b *builder) footnoteArea(pp odf.Props) *css.Style {
 }
 
 // The separator Writer draws when a page layout names none
-// (SwPageFootnoteInfo's defaults; measured on the pinned image: a 0.5 pt
-// black rule a quarter of the area wide on the left, 57 twips of room on
-// each side).
+// (SwPageFootnoteInfo's defaults): a 0.5 pt black rule a quarter of the
+// area wide on the left, 57 twips of room on each side.
+//
+// # Corpus evidence
+//
+//   - probe, odt: LibreOffice on the pinned image draws a page layout
+//     without a style:footnote-sep so.
 const (
 	defaultSepWidth     = 0.25
 	defaultSepThickness = 0.5

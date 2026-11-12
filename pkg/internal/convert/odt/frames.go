@@ -362,6 +362,15 @@ func (b *builder) blockFrame(c *odf.Element, ctx blockCtx) []*layout.Node {
 // place positions an anchored frame n: run-through and page-anchored
 // frames are positioned boxes at their offsets, the others float to the
 // side style:wrap leaves them, or stand in the flow when no text wraps.
+// Writer numbers a first page of left usage 2, a left page being even, so
+// a frame anchored to page n of such a document lands on the n-1th page
+// printed.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: layout/stable-at-page-anchored-fly-position.odt
+//     anchors frames to the pages of a document whose first page is a
+//     left one.
 func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 	st := *n.Style
 	n.Style = &st
@@ -381,9 +390,6 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 			st.PageAnchor = true
 			st.AnchorPage = g.page
 			if g.page > 1 && b.firstPageLeft() {
-				// Writer numbers a first page of left usage 2, a left
-				// page being even: page n is the n-1th printed
-				// (stable-at-page-anchored-fly-position).
 				st.AnchorPage = g.page - 1
 			}
 			applyFrameWrap(&st, g.wrap, frameMargins(g.props))

@@ -67,10 +67,13 @@ func TestConvert_Lists(t *testing.T) {
 	}
 }
 
+// TestConvert_ListLabelPlacement places the bullet at margin-left plus
+// text-indent, 1.27 - 0.635 cm from the page area, a space after it.
+//
+// # Corpus evidence
+//
+//   - probe, odt: LibreOffice prints the bullet 18pt past the margin.
 func TestConvert_ListLabelPlacement(t *testing.T) {
-	// The bullet sits at margin-left plus text-indent, 1.27 - 0.635 cm
-	// from the page area, and a space follows it (LibreOffice measured:
-	// 18pt past the margin).
 	d := doc{styles: listStyles, body: `<text:list text:style-name="LB"><text:list-item><text:p>Bullet</text:p></text:list-item></text:list>`}
 	ls := lines(convertDoc(t, d.pack(t), office.Options{}).Pages[0])
 	margin := 2 * 72 / 2.54
@@ -79,12 +82,16 @@ func TestConvert_ListLabelPlacement(t *testing.T) {
 	}
 }
 
+// TestConvert_ListLabelWiderThanItsGap starts a label wider than the
+// room before the list tab stop at the first line's start, margin-left
+// plus text-indent, and the text at the next default tab stop counted
+// from the indent.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/listformat.odt prints its label 18pt and
+//     its text 71.5pt past the margin.
 func TestConvert_ListLabelWiderThanItsGap(t *testing.T) {
-	// A label wider than the room before the list tab stop starts at the
-	// first line's start, margin-left plus text-indent, and the text at
-	// the next default tab stop counted from the indent (LibreOffice
-	// measured, odfexport/listformat.odt: label 18pt and text 71.5pt past
-	// the margin).
 	style := `<text:list-style style:name="LW"><text:list-level-style-number text:level="1" style:num-prefix="&gt;&gt;" style:num-suffix="&lt;&lt;" style:num-format="1"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="0.5in" fo:text-indent="-0.25in" fo:margin-left="0.5in"/></style:list-level-properties></text:list-level-style-number></text:list-style>`
 	d := doc{styles: style, body: `<text:list text:style-name="LW"><text:list-item><text:p>Item</text:p></text:list-item></text:list>`}
 	rs := runs(convertDoc(t, d.pack(t), office.Options{}).Pages[0])
@@ -241,6 +248,16 @@ func TestConvert_Notes(t *testing.T) {
 	}
 }
 
+// TestConvert_Spacing adds the margins of two paragraphs, drops them
+// between paragraphs of contextual spacing, joins equal borders, and
+// starts a page after a forced break with the next paragraph's top
+// margin alone, as the first page starts with the first's.
+//
+// # Corpus evidence
+//
+//   - probe, odt: LibreOffice puts 13.8 pt of line plus 0.75 cm of
+//     margins between two paragraphs of 0.25 cm and 0.5 cm margins, and
+//     1 cm, not 2, above the paragraph after a forced break.
 func TestConvert_Spacing(t *testing.T) {
 	auto := `<style:style style:name="M" style:family="paragraph"><style:paragraph-properties fo:margin-top="0.5cm" fo:margin-bottom="0.25cm"/></style:style>` +
 		`<style:style style:name="K" style:family="paragraph"><style:paragraph-properties fo:margin-top="0.5cm" fo:margin-bottom="0.25cm" style:contextual-spacing="true"/></style:style>` +
@@ -251,13 +268,9 @@ func TestConvert_Spacing(t *testing.T) {
 		name, body string
 		gap        float64
 	}{
-		// LibreOffice measured: 13.8 of line plus 0.75 cm of margins.
 		{"margins add up", `<text:p text:style-name="M">a</text:p><text:p text:style-name="M">b</text:p>`, 13.8 + 0.75*cm},
 		{"contextual spacing", `<text:p text:style-name="K">a</text:p><text:p text:style-name="K">b</text:p>`, 13.8},
 		{"joined borders", `<text:p text:style-name="B">a</text:p><text:p text:style-name="B">b</text:p>`, 13.8},
-		// After a forced break the new page starts with the next
-		// paragraph's top margin alone, as the first page starts with the
-		// first's (LibreOffice: 1 cm, not 2).
 		{"forced break", `<text:p text:style-name="M">a</text:p><text:p text:style-name="F">b</text:p>`, 0},
 	}
 	for _, tc := range cases {
@@ -278,6 +291,13 @@ func TestConvert_Spacing(t *testing.T) {
 	}
 }
 
+// TestConvert_Frames lays out an inline picture and one that floats,
+// the next paragraph's first line starting right of the floating one.
+//
+// # Corpus evidence
+//
+//   - probe, odt: LibreOffice starts the wrapped line 3 cm past the
+//     margin.
 func TestConvert_Frames(t *testing.T) {
 	auto := `<style:style style:name="fr1" style:family="graphic"><style:graphic-properties style:wrap="right" style:horizontal-pos="left" style:horizontal-rel="paragraph"/></style:style>`
 	long := strings.Repeat("words and more words ", 20)
@@ -308,7 +328,7 @@ func TestConvert_Frames(t *testing.T) {
 	ls := lines(res.Pages[0])
 	margin := 2 * cm
 	// The second paragraph's first line starts right of the floating
-	// picture (LibreOffice measured: 3 cm past the margin).
+	// picture.
 	if len(ls) < 3 || !near(ls[1].x, margin+3*cm, 0.5) {
 		t.Errorf("wrapped line = %+v", ls[1])
 	}
@@ -342,9 +362,14 @@ func TestConvert_TableOfContentsRegenerated(t *testing.T) {
 	}
 }
 
+// TestConvert_TextAlignStartEndAreAbsolute prints start at the left and
+// end at the right in either writing mode, as Writer does.
+//
+// # Corpus evidence
+//
+//   - probe, odt: LibreOffice prints start at 56.7pt and end at the right
+//     margin in both writing modes.
 func TestConvert_TextAlignStartEndAreAbsolute(t *testing.T) {
-	// Writer prints start at the left and end at the right in either
-	// writing mode (LibreOffice measured: 56.7pt and the right margin).
 	margin := 2 * 72 / 2.54
 	for _, tc := range []struct {
 		align, mode string
@@ -368,11 +393,15 @@ func TestConvert_TextAlignStartEndAreAbsolute(t *testing.T) {
 	}
 }
 
+// TestConvert_FrameCentredOnParagraph puts a frame anchored to its
+// paragraph and centred on it in the middle of the content area, whether
+// text runs through it or wraps beside it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/relh-page.odt prints its centred frame so.
+//   - libreoffice/odt: odfimport/fdo90130-1.odt prints its centred frame so.
 func TestConvert_FrameCentredOnParagraph(t *testing.T) {
-	// A frame anchored to its paragraph and centred on it sits in the
-	// middle of the content area, whether text runs through it or wraps
-	// beside it (LibreOffice measured, odfexport/relh-page.odt and
-	// odfimport/fdo90130-1.odt).
 	margin := 2 * 72 / 2.54
 	width := 21*72/2.54 - 2*margin
 	for _, wrap := range []string{"run-through", "parallel"} {
@@ -388,9 +417,13 @@ func TestConvert_FrameCentredOnParagraph(t *testing.T) {
 	}
 }
 
+// TestConvert_FirstPageFooterInLibreOfficeNamespace prints LibreOffice's
+// own loext:footer-first on the first page, the footer on the others.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfimport/fdo79269.odt prints so.
 func TestConvert_FirstPageFooterInLibreOfficeNamespace(t *testing.T) {
-	// LibreOffice's own loext:footer-first prints on the first page, the
-	// footer on the others (LibreOffice measured, odfimport/fdo79269.odt).
 	pl := `<style:page-layout style:name="pm1"><style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" fo:margin-top="2cm" fo:margin-bottom="2cm" fo:margin-left="2cm" fo:margin-right="2cm"/><style:footer-style><style:header-footer-properties fo:min-height="1cm"/></style:footer-style></style:page-layout>`
 	masters := `<style:master-page style:name="Standard" style:page-layout-name="pm1"><style:footer><text:p>SECOND</text:p></style:footer><loext:footer-first><text:p>FIRST</text:p></loext:footer-first></style:master-page>`
 	auto := `<style:style style:name="PB" style:family="paragraph"><style:paragraph-properties fo:break-before="page"/></style:style>`
@@ -405,10 +438,13 @@ func TestConvert_FirstPageFooterInLibreOfficeNamespace(t *testing.T) {
 	}
 }
 
+// TestConvert_ListHeaderHeadingTakesNoNumber prints a list header
+// heading without a number, the next heading of its level taking 1.1.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfexport/tdf107696.odt prints so.
 func TestConvert_ListHeaderHeadingTakesNoNumber(t *testing.T) {
-	// LibreOffice measured (odfexport/tdf107696.odt): the list header
-	// heading prints without a number and the next heading of its level
-	// takes 1.1.
 	outline := `<text:outline-style style:name="Outline"><text:outline-level-style text:level="1" style:num-format="1"/><text:outline-level-style text:level="2" style:num-format="1" text:display-levels="2"/></text:outline-style>`
 	body := `<text:h text:outline-level="1">One</text:h><text:h text:outline-level="2" text:is-list-header="true">Header</text:h><text:h text:outline-level="2">Two</text:h>`
 	got := pageText(convertDoc(t, doc{styles: outline, body: body}.pack(t), office.Options{}).Pages[0])
@@ -417,9 +453,14 @@ func TestConvert_ListHeaderHeadingTakesNoNumber(t *testing.T) {
 	}
 }
 
+// TestConvert_ListHeadingOutlineTitle bookmarks a heading in a numbered
+// list with its label first.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfimport/empty-svg-family-name.odt exports its
+//     bookmarks so.
 func TestConvert_ListHeadingOutlineTitle(t *testing.T) {
-	// LibreOffice measured (odfimport/empty-svg-family-name.odt): a
-	// heading in a numbered list is bookmarked with its label first.
 	body := `<text:list text:style-name="LN"><text:list-item><text:h text:outline-level="1">Head</text:h></text:list-item></text:list>`
 	res := convertDoc(t, doc{styles: listStyles, body: body}.pack(t), office.Options{})
 	if len(res.Outline) != 1 || res.Outline[0].Title != "1. Head" {

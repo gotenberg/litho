@@ -321,8 +321,13 @@ func ParseAngle(s string, legacy bool) (float64, bool) {
 // angles are tenths of a degree: one of ODF 1.0 or 1.1 (office:version
 // below 1.2), or of ODF 1.2 written by OpenOffice.org, Apache OpenOffice
 // or LibreOffice before 7.0, which wrote them so (LibreOffice's
-// tdf#89475 detection in xmloff's gradient import). ODF 1.2 and later
-// read them as degrees.
+// tdf#89475 detection in xmloff's gradient import), a development build
+// naming itself LibreOfficeDev. ODF 1.2 and later read them as degrees.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odp: sd/tdf127379.odp, written by LibreOfficeDev/6.4,
+//     prints its gradients of draw:angle 300 turned 30 degrees.
 func LegacyAngles(p *Package) bool {
 	root := p.Content
 	if root == nil {
@@ -340,9 +345,6 @@ func LegacyAngles(p *Package) bool {
 	case strings.HasPrefix(gen, "OpenOffice"), strings.HasPrefix(gen, "Apache_OpenOffice"), strings.HasPrefix(gen, "StarOffice"):
 		return true
 	case strings.HasPrefix(gen, "LibreOffice/"), strings.HasPrefix(gen, "LibreOfficeDev/"):
-		// A development build names itself LibreOfficeDev (odp:
-		// sd/tdf127379's LibreOfficeDev/6.4 gradients of draw:angle 300
-		// print turned 30 degrees).
 		_, ver, _ := strings.Cut(gen, "/")
 		major, _, _ := strings.Cut(ver, ".")
 		n, err := strconv.Atoi(major)

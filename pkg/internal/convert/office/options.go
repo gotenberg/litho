@@ -172,10 +172,11 @@ func (o Options) DefaultPage(w, h float64) (float64, float64) {
 //
 // # Corpus evidence
 //
-//   - probe, docx and odt: Letter asked of a landscape Letter section
-//     prints portrait Letter in LibreOffice, and A5 asked of a document of
-//     a portrait, a landscape and an A5 section prints three portrait A5
+//   - probe, docx: Letter asked of a landscape Letter section prints
+//     portrait Letter in LibreOffice, and A5 asked of a document of a
+//     portrait, a landscape and an A5 section prints three portrait A5
 //     sections.
+//   - probe, odt: the same documents print the same pages.
 func (o Options) Paper(w, h float64) (float64, float64) {
 	if o.PageWidth > 0 && o.PageHeight > 0 {
 		w, h = o.PageWidth, o.PageHeight

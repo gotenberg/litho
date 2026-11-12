@@ -35,7 +35,7 @@ import (
 //     baseline 7.3 points below its top and the next 9.3 points apart,
 //     each selected item white on a black bar; the frames are 0.2 point
 //     black lines.
-//   - libreoffice/odt odfimport__dateFormFormats.odt: twelve date fields,
+//   - libreoffice/odt: odfimport/dateFormFormats.odt: twelve date fields,
 //     each /DA (0 0 0 rg /He 8 Tf) when LibreOffice writes its fields.
 const (
 	controlFontSize = 8

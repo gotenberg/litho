@@ -11,16 +11,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
-// This file shows the values of table cells as Writer does: a cell with
-// an office:value-type whose cell style names a data style and whose
-// paragraphs hold no text shows its value in that format, and a string
-// cell its office:string-value, in place of its paragraphs' text.
-//
-// # Corpus evidence
-//
-//   - libreoffice/odt: odfimport/fdo60842.odt prints its date, currency and string
-//     cells by their values ("18/02/2012", "500 000,00", "USD") where the
-//     string cell's paragraph says "This text should not appear".
+// This file shows the values of table cells as Writer does
+// ([builder.cellValueText]).
 
 // maxStyleChain bounds the parent styles followed for a cell's data
 // style. Anti-DoS guard, not spec-mandated.
@@ -47,15 +39,26 @@ func (b *builder) cellDataStyle(name string) string {
 }
 
 // cellValueText returns the text Writer shows for the table cell c in
-// place of its paragraphs' text, false when it shows the paragraphs.
+// place of its paragraphs' text, false when it shows the paragraphs: a
+// cell with an office:value-type whose cell style names a data style and
+// whose paragraphs hold no text shows its value in that format, and a
+// string cell its office:string-value. A cell whose paragraphs hold text
+// shows it, whatever its value.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfimport/fdo60842.odt prints its date, currency
+//     and string cells by their values ("18/02/2012", "500 000,00",
+//     "USD") where the string cell's paragraph says "This text should not
+//     appear".
+//   - libreoffice/odt: odfexport/tdf131025_noZerosInTable.odt prints
+//     "Banana" in a cell of value 0.
 func (b *builder) cellValueText(c *odf.Element) (string, bool) {
 	vt := c.A(odf.NSOffice, "value-type")
 	if vt == "string" {
 		return c.Lookup(odf.NSOffice, "string-value")
 	}
 	if strings.TrimSpace(c.TextContent()) != "" {
-		// A cell whose paragraphs hold text shows it, whatever its value
-		// (tdf131025_noZerosInTable: value 0 beside "Banana").
 		return "", false
 	}
 	var v numfmt.Value

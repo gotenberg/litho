@@ -178,7 +178,15 @@ func configBool(settings *odf.Element, name string, def bool) bool {
 // document builds the root of the layout tree from office:text: the body's
 // blocks grouped by the master page they lie on, each group a named page
 // with its page layout's columns, then the endnotes. It returns the root
-// and the first page's box.
+// and the first page's box. The drawings before the first block of the
+// flow wait for it: a frame is no flow content, and the first paragraph
+// or table names the first page's master page, the page the frames are
+// placed on.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: layout/tdf122607.odt holds a page-anchored frame
+//     before a paragraph of the First Page master.
 func (b *builder) document(body *odf.Element) (*layout.Node, layout.PageBox) {
 	rootStyle := baseStyle()
 	rootStyle.Display = css.Block
@@ -203,11 +211,7 @@ func (b *builder) document(body *odf.Element) (*layout.Node, layout.PageBox) {
 		group = &layout.Node{Kind: layout.Element, Style: st}
 		root.Children = append(root.Children, group)
 	}
-	// frames holds the drawings before the first block of the flow: a
-	// frame is no flow content, the first paragraph or table names the
-	// first page's master page (tdf122607: a page-anchored frame before
-	// a paragraph of the First Page master), and the frames are placed
-	// on that page.
+	// frames holds the drawings before the first block of the flow.
 	var frames []*odf.Element
 	flush := func() {
 		for _, f := range frames {

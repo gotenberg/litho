@@ -567,7 +567,7 @@ func keepLeadingSpace(p *odf.Element) {
 //
 // # Corpus evidence
 //
-//   - libreoffice/odt layout/changed_table_rows: LibreOffice prints a
+//   - libreoffice/odt: layout/changed_table_rows.fodt: LibreOffice prints a
 //     table without the row whose three cells are deleted, the row's
 //     style setting loext:text-changes-only false, and keeps the row
 //     whose cells are inserted.

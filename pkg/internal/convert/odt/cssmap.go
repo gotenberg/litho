@@ -66,9 +66,10 @@ func (t textState) families() []string {
 //
 // # Corpus evidence
 //
-//   - libreoffice/odt: layout/abi11870-2.odt (Linux Libertine G, no generic) prints
-//     in Noto Sans; the docx reader's fallbacks (fdo73550, Segoe UI
-//     roman, in Noto Serif).
+//   - libreoffice/odt: layout/abi11870-2.odt (Linux Libertine G, no
+//     generic) prints in Noto Sans.
+//   - libreoffice/docx: ooxmlexport/fdo73550.docx (Segoe UI, roman)
+//     prints in Noto Serif.
 func notoFallback(generic string) string {
 	switch generic {
 	case "roman":
@@ -238,6 +239,11 @@ func (b *builder) lineRatio(t textState) float64 {
 // the glyphs; a length makes every line that tall, the baseline at four
 // fifths; at least is a minimum over single spacing, the room above the
 // glyphs; a leading adds its room below each line and above the first.
+//
+// # Corpus evidence
+//
+//   - probe, odt: two lines of 12pt Liberation Serif with a 0.5 cm
+//     style:line-spacing take 2 x 28 pt plus 14.2 pt.
 func (b *builder) lineRule(st *css.Style, p paraState, t textState) {
 	switch p.line { //nolint:exhaustive // lineNormal keeps the initial line-height
 	case lineProportional:
@@ -252,9 +258,7 @@ func (b *builder) lineRule(st *css.Style, p paraState, t textState) {
 		st.MinLineHeight = p.lineVal
 	case lineSpacing:
 		// Writer adds the leading below the glyphs of each line, and once
-		// more above the paragraph's first line (measured: two lines of
-		// 12pt Liberation Serif with a 0.5 cm leading take 2 x 28 pt plus
-		// 14.2 pt).
+		// more above the paragraph's first line.
 		lead := max(p.lineVal, 0)
 		st.LineRule = css.LineRuleMultiple
 		st.LineHeight = css.Dimension{Kind: css.Number, Value: 1 + lead/math.Max(b.lineRatio(t)*t.size, 1)}
@@ -269,9 +273,11 @@ func (b *builder) lineRule(st *css.Style, p paraState, t textState) {
 //
 // # Corpus evidence
 //
-//   - libreoffice/odt: odfexport/tdf131812.odt, and a probe of every value in lr-tb
-//     and rl-tb paragraphs: start and left print at the left margin, end
-//     and right at the right one, in both writing modes.
+//   - libreoffice/odt: odfexport/tdf131812.odt: start and left print at
+//     the left margin, end and right at the right one.
+//   - probe, odt: every value in lr-tb and rl-tb paragraphs: start and
+//     left print at the left margin, end and right at the right one, in
+//     both writing modes.
 var textAligns = map[string]css.TextAlign{
 	"start": css.AlignLeft, "end": css.AlignRight, "left": css.AlignLeft,
 	"right": css.AlignRight, "center": css.AlignCenter, "justify": css.AlignJustify,
