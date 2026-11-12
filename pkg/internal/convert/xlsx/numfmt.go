@@ -18,8 +18,9 @@ import "strings"
 //     05/18/1903 13:36 for 22, 0 as 00-Jan-00 for 15, 00:00 for 20 and
 //     01/00/1900 00:00 for 22, ¤1,235 for 5 and 6, ¤1,234.57 for 7 and 8,
 //     and the sign ¤ in 42 and 44; dates_1900 prints 03/15/2023 for 14.
-//   - poi/xlsx: 55927.xlsx prints 01/13/2012 for 14;
-//     libreoffice/xlsx: sc/tdf129985.xlsx alike.
+//   - poi/xlsx: 55927.xlsx prints 01/13/2012 for 14.
+//   - libreoffice/xlsx: sc/tdf129985.xlsx prints its format 14 date as
+//     MM/DD/YYYY.
 var builtinFormats = map[int]string{
 	0:  "General",
 	1:  "0",

@@ -23,9 +23,9 @@ const maxHeaderRunes = 4096
 //
 // # Corpus evidence
 //
-//   - LibreOffice 26.8.2.2: a sheet with differentFirst, an odd header
-//     and footer and a first header alone prints its first page with the
-//     first header and no footer.
+//   - probe, xlsx: a sheet with differentFirst, an odd header and footer
+//     and a first header alone prints, in LibreOffice 26.8.2.2, its first
+//     page with the first header and no footer.
 func (r *reader) headerFooter(e *ooxml.Element) sheet.HeaderFooter {
 	base := r.normal().Font
 	margins := func(header, footer string) sheet.Margins {

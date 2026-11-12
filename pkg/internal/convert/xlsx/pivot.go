@@ -530,7 +530,13 @@ const cacheDateFormat = "MM/DD/YY"
 // cacheSheet writes the records of pp's cache to a hidden sheet,
 // "DPCache_" and the source sheet's name, its first row the cache fields'
 // names (18.10.1.68 pivotCacheRecords: each r a record, an x an index
-// into the field's shared items), and returns its index and range.
+// into the field's shared items), and returns its index and range. An
+// error item restores as an empty cell.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/tdf122471.xlsx, whose cache restores an
+//     external source, prints its #N/A item as a column "(empty)".
 func (r *reader) cacheSheet(doc *sheet.Document, pp *pendingPivot) (int, sheet.Range, bool) {
 	c := pp.cache
 	if c.dummy >= 0 {
@@ -572,12 +578,6 @@ func (r *reader) cacheSheet(doc *sheet.Document, pp *pendingPivot) (int, sheet.R
 			}
 			if v.Kind == sheet.Empty || v.Kind == sheet.Error {
 				// An error item restores as an empty cell.
-				//
-				// # Corpus evidence
-				//
-				//   - libreoffice/xlsx: sc/tdf122471.xlsx, whose cache restores an
-				//     external source, prints its #N/A item as a column
-				//     "(empty)".
 				continue
 			}
 			cell := sheet.Cell{Column: i, Value: v}

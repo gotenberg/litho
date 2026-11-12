@@ -588,10 +588,11 @@ func breaks(e *ooxml.Element, limit int) []int {
 //
 // # Corpus evidence
 //
-//   - LibreOffice 26.8.2.2: sc/tdf107586.xlsx's chartsheet, a 731.7 by
-//     477.9 point chart given a series, prints on one Letter page at 69%,
-//     505.99 points wide from the 0.7-inch margin; without a series, as
-//     the file holds it, the page is blank.
+//   - probe, xlsx: sc/tdf107586.xlsx's chartsheet, a 731.7 by 477.9 point
+//     chart, given a series prints in LibreOffice 26.8.2.2 on one Letter
+//     page at 69%, 505.99 points wide from the 0.7-inch margin.
+//   - libreoffice/xlsx: sc/tdf107586.xlsx, whose chart holds no series,
+//     prints a blank page.
 func (r *reader) chartsheet(name string, sh *sheet.Sheet) error {
 	root, err := r.pkg.ParseXML(r.ctx, name, understood)
 	if err != nil {

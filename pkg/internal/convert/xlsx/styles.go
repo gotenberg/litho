@@ -49,8 +49,8 @@ var cellPadding = [4]float64{cellInsetTop * printerPixel, cellInsetRight * print
 //
 // # Corpus evidence
 //
-//   - LibreOffice 26.8.2.2: a sheet of bottom borders in every style
-//     strokes thin 0.75, medium 1.75, thick 2.5 and hair 0.1 points;
+//   - probe, xlsx: a sheet of bottom borders in every style, printed by
+//     LibreOffice 26.8.2.2, strokes thin 0.75, medium 1.75, thick 2.5 and hair 0.1 points;
 //     double as two 0.5-point lines 1.247 points apart, 1.75 points in all;
 //     dashed, dotted, dashDot and dashDotDot at 0.737 points (26 hundredths
 //     of a millimetre); mediumDashed, mediumDashDot, mediumDashDotDot and
@@ -287,8 +287,8 @@ func (r *reader) resolve(x xf) *sheet.Style {
 //
 // # Corpus evidence
 //
-//   - LibreOffice 26.8.2.2: a workbook without a styles part prints its
-//     cells in Liberation Sans 10 points.
+//   - probe, xlsx: a workbook without a styles part prints, in
+//     LibreOffice 26.8.2.2, its cells in Liberation Sans 10 points.
 func (r *reader) fontAt(i int) sheet.Font {
 	fonts := r.styles.fonts
 	switch {

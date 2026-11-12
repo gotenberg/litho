@@ -66,9 +66,9 @@ func hmmPt(v float64) float64 { return v * 72 / 2540 }
 //
 // # Corpus evidence
 //
-//   - LibreOffice 26.8.2.2: a sheet without pageMargins prints its first
-//     column's text at x 54.82 (0.748 inch and the cell's one-point
-//     padding).
+//   - probe, xlsx: a sheet without pageMargins prints, in LibreOffice
+//     26.8.2.2, its first column's text at x 54.82 (0.748 inch and the
+//     cell's one-point padding).
 const (
 	defaultMarginLR = 0.748
 	defaultMarginTB = 0.984
