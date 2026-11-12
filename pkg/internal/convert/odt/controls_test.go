@@ -2,8 +2,11 @@ package odt
 
 import (
 	"context"
+	"encoding/xml"
 	"slices"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/compose"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -121,6 +124,37 @@ func TestConvertFormControlsOff(t *testing.T) {
 		if p, ok := printed[r.text]; !ok || !near(p.x, r.x, 0.01) || !near(p.y, r.y, 0.01) || p.size != r.size {
 			t.Errorf("with the option, %q at %+v, without it at %+v", r.text, r, p)
 		}
+	}
+}
+
+// TestControlElem_ManyControlsLinear finds the form element of each of
+// many controls in time linear in the forms: one walk of the forms per
+// control spends the controls times the forms, minutes for these.
+func TestControlElem_ManyControlsLinear(t *testing.T) {
+	t.Parallel()
+	const n = 40_000
+	form := &odf.Element{Name: xmlName(odf.NSForm, "form")}
+	for i := range n {
+		form.Children = append(form.Children, &odf.Element{
+			Name: xmlName(odf.NSForm, "text"),
+			Attr: []xml.Attr{xmlAttr(odf.NSForm, "id", "c"+strconv.Itoa(i))},
+		})
+	}
+	forms := &odf.Element{Name: xmlName(odf.NSOffice, "forms"), Children: []*odf.Element{form}}
+	textEl := &odf.Element{Name: xmlName(odf.NSOffice, "text"), Children: []*odf.Element{forms}}
+	body := &odf.Element{Name: xmlName(odf.NSOffice, "body"), Children: []*odf.Element{textEl}}
+	root := &odf.Element{Name: xmlName(odf.NSOffice, "document-content"), Children: []*odf.Element{body}}
+	b := &builder{pkg: &odf.Package{Content: root}}
+	start := time.Now()
+	for i := range n {
+		id := "c" + strconv.Itoa(i)
+		ctl := &odf.Element{Name: xmlName(odf.NSDraw, "control"), Attr: []xml.Attr{xmlAttr(odf.NSDraw, "control", id)}}
+		if el := b.controlElem(ctl); el != form.Children[i] {
+			t.Fatalf("control %s found %v", id, el)
+		}
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Errorf("finding %d controls took %v", n, d)
 	}
 }
 

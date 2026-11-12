@@ -80,16 +80,31 @@ func (b *builder) controlElem(c *odf.Element) *odf.Element {
 	if id == "" {
 		return nil
 	}
-	forms := odf.Section(b.pkg.Content, "body").Child(odf.NSOffice, "text").Child(odf.NSOffice, "forms")
+	if b.formIDs == nil {
+		b.formIDs = formIndex(odf.Section(b.pkg.Content, "body").Child(odf.NSOffice, "text").Child(odf.NSOffice, "forms"))
+	}
+	return b.formIDs[id]
+}
+
+// formIndex maps each form:id and xml:id of the form elements under
+// forms to the first element that carries it, in the order a depth-first
+// walk from the last child meets them. One walk serves every control: a
+// walk per control would cost the controls times the forms.
+func formIndex(forms *odf.Element) map[string]*odf.Element {
+	out := map[string]*odf.Element{}
 	stack := []*odf.Element{forms}
-	for steps := 0; len(stack) > 0 && steps < odf.MaxElements; steps++ {
+	for len(stack) > 0 {
 		cur := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		if cur == nil {
 			continue
 		}
-		if cur.Name.Space == odf.NSForm && (cur.A(odf.NSForm, "id") == id || cur.A(odf.NSXML, "id") == id) {
-			return cur
+		if cur.Name.Space == odf.NSForm {
+			for _, id := range []string{cur.A(odf.NSForm, "id"), cur.A(odf.NSXML, "id")} {
+				if _, seen := out[id]; id != "" && !seen {
+					out[id] = cur
+				}
+			}
 		}
 		for _, k := range cur.Children {
 			if !k.IsText() {
@@ -97,7 +112,7 @@ func (b *builder) controlElem(c *odf.Element) *odf.Element {
 			}
 		}
 	}
-	return nil
+	return out
 }
 
 // formControl builds the box of the draw:control c of geometry g (ODF 1.3,

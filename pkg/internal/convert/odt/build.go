@@ -89,6 +89,9 @@ type builder struct {
 	// controls made fields ([builder.fieldControl]).
 	formFields bool
 	controls   []*formfield.Control
+	// formIDs indexes the form elements by id for [builder.controlElem],
+	// built on first use.
+	formIDs map[string]*odf.Element
 }
 
 // hfFields is the page a header or footer is built for.
