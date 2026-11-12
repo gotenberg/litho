@@ -532,6 +532,11 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 	tail := *doc
 	tail.Pages = nil
 	if err := stream.Close(ctx, &tail, dst); err != nil {
+		if errors.Is(err, ErrInvalidConvertOptions) {
+			// A page range the laid-out document has no pages for is refused
+			// as the stream closes: an option error, not a failed write.
+			return nil, fmt.Errorf("converting %s: %w", name, err)
+		}
 		return nil, fmt.Errorf("converting %s: writing the PDF: %w", name, err)
 	}
 
