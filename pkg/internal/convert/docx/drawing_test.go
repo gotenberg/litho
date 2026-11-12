@@ -337,3 +337,23 @@ func TestTextBox_AnchorInGroup(t *testing.T) {
 		t.Errorf("text area justify %v height %v, want centred and 52.8 points", area.Style.JustifyContent, area.Style.Height)
 	}
 }
+
+// TestCanvas checks a drawing canvas: its background and outline as a
+// rectangle of its size, then its shapes at their offsets.
+func TestCanvas(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="2540000" cy="1270000"/><wp:docPr id="1" name="c"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas">` +
+		`<wpc:wpc xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"><wpc:bg><a:solidFill><a:srgbClr val="F2F2F2"/></a:solidFill></wpc:bg><wpc:whole><a:ln w="9525"><a:solidFill><a:srgbClr val="808080"/></a:solidFill></a:ln></wpc:whole>` +
+		`<wps:wsp><wps:spPr><a:xfrm><a:off x="127000" y="254000"/><a:ext cx="1270000" cy="635000"/></a:xfrm><a:prstGeom prst="ellipse"/><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></wps:spPr><wps:bodyPr/></wps:wsp>` +
+		`</wpc:wpc></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	pics := find(build(t, body, nil).root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+	if len(pics) != 2 {
+		t.Fatalf("%d replaced boxes, want the canvas and its shape", len(pics))
+	}
+	if bg := pics[0]; bg.Style.Width != css.Pts(200) || bg.Style.Left != css.Pts(0) {
+		t.Errorf("background %v wide at %v", bg.Style.Width, bg.Style.Left)
+	}
+	if sh := pics[1]; sh.Style.Position != css.Absolute || sh.Style.Left != css.Pts(10) || sh.Style.Top != css.Pts(20) {
+		t.Errorf("shape at %v, %v", sh.Style.Left, sh.Style.Top)
+	}
+}

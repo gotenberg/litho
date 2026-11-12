@@ -136,6 +136,10 @@ func (d *document) graphic(s *story, data *ooxml.Element, st *css.Style, w, h fl
 		if g := data.Child(ooxml.NSWPG, "wgp"); g != nil {
 			return d.group(s, g, st, w, h, depth)
 		}
+	case uriCanvas:
+		if c := data.Child(nsWPC, "wpc"); c != nil {
+			return d.canvas(s, c, st, w, h, depth)
+		}
 	case uriChart:
 		if n := d.chart(s, data.Child(ooxml.NSChart, "chart"), st, w, h, alt, false); n != nil {
 			return n
