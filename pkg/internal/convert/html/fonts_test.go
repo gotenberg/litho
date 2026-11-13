@@ -274,3 +274,59 @@ func TestDescriptorOf_Styles(t *testing.T) {
 		t.Errorf("descriptor %+v", d)
 	}
 }
+
+// varFontTTF is a variable TrueType font of five axes, wght, wdth, slnt,
+// opsz and TEST, made for the instancer's tests.
+const varFontTTF = "../../typography/varfont/testdata/varfont.ttf"
+
+// TestFontFace_VariableFont pins that a variable @font-face draws, and
+// embeds, the instance its text asks for: one per weight, the rule's
+// variations and the property's applied, the -variations format and the
+// variations technology read, and the output the same bytes twice.
+func TestFontFace_VariableFont(t *testing.T) {
+	t.Parallel()
+	res := fstest.MapFS{"var.ttf": {Data: readTestFile(t, varFontTTF)}}
+	src := `<style>
+@font-face { font-family: Var; src: url(var.ttf) format("truetype-variations") tech(variations); }
+@font-face { font-family: VarRule; src: url(var.ttf); font-weight: 100 900; font-variation-settings: "wght" 800; }
+p { font: 12px Var; margin: 0 }
+</style>
+<p style="font-weight: 400">AB AAAA</p>
+<p style="font-weight: 900">AB BBBB</p>
+<p style="font-weight: 900">AB ABAB</p>
+<p style="font-variation-settings: 'wght' 900">AB BABA</p>
+<p style="font-family: VarRule">AB AABB</p>`
+	var outs [2][]byte
+	for i := range outs {
+		doc, err := Convert(context.Background(), strings.NewReader(src), testFonts(t), Options{Resources: res})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, w := range doc.Warnings {
+			if w.Code == warn.CSSUnsupported || w.Code == warn.FontNotLoaded || w.Code == warn.ContentUnsupported {
+				t.Errorf("warning: %s", w.Message)
+			}
+		}
+		regular, bold := faceOfText(t, doc, "AAAA").Face, faceOfText(t, doc, "BBBB").Face
+		if strings.Contains(regular.Key, "@") || !strings.Contains(bold.Key, "@") {
+			t.Errorf("weight 400 drew with %q, 900 with %q: want the face and an instance", regular.Key, bold.Key)
+		}
+		if again := faceOfText(t, doc, "ABAB").Face; again.Key != bold.Key {
+			t.Errorf("two runs at weight 900 drew with %q and %q", bold.Key, again.Key)
+		}
+		if v := faceOfText(t, doc, "BABA").Face; !bytes.Equal(v.Program, bold.Program) {
+			t.Error(`font-variation-settings: "wght" 900 drew another instance than font-weight: 900`)
+		}
+		if r := faceOfText(t, doc, "AABB"); r.Stroke != 0 || !strings.Contains(r.Face.Key, "@") {
+			t.Errorf("the rule's variations drew with %q, stroke %v", r.Face.Key, r.Stroke)
+		}
+		var buf bytes.Buffer
+		if err := typeset.Write(context.Background(), doc, &buf, typeset.Options{}); err != nil {
+			t.Fatal(err)
+		}
+		outs[i] = buf.Bytes()
+	}
+	if !bytes.Equal(outs[0], outs[1]) {
+		t.Error("two conversions differ")
+	}
+}
