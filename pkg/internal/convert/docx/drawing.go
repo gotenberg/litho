@@ -126,7 +126,11 @@ func (d *document) graphic(s *story, data *ooxml.Element, st *css.Style, w, h fl
 	switch attrOr(data, "uri") {
 	case uriPicture:
 		if pic := data.Child(ooxml.NSPic, "pic"); pic != nil {
-			return d.picture(s, ooxml.ParsePicture(pic), st, w, h, alt)
+			n := d.picture(s, ooxml.ParsePicture(pic), st, w, h, alt)
+			if n != nil {
+				n.Picture = d.withEffects(n.Picture, d.effectList(pic.Child(ooxml.NSPic, "spPr"), nil))
+			}
+			return n
 		}
 	case uriShape:
 		if sp := data.Child(ooxml.NSWPS, "wsp"); sp != nil {
@@ -282,8 +286,16 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 	}
 	spPr := sp.Child(ooxml.NSWPS, "spPr")
 	ss := ooxml.ParseShapeStyle(spPr, sp.Child(ooxml.NSWPS, "style"), d.theme)
+	fx := d.effectList(spPr, sp.Child(ooxml.NSWPS, "style"))
 	if ref := ooxml.ParsePicture(sp); ref.Embed != "" && spPr.Child(ooxml.NSA, "blipFill") != nil && pictureShape(spPr, ss) {
-		return d.picture(s, ref, st, w, h, "")
+		n := d.picture(s, ref, st, w, h, "")
+		if n != nil {
+			n.Picture = d.withEffects(n.Picture, fx)
+		}
+		return n
+	}
+	if fx != nil && (sp.Child(ooxml.NSWPS, "txbx") != nil || sp.Child(ooxml.NSWPS, "linkedTxbx") != nil) {
+		d.warn(warn.ContentUnsupported, warn.Omitted, "the effects of a text box are not drawn")
 	}
 	d.resolveBlip(s, &ss)
 	if tb := sp.Child(ooxml.NSWPS, "txbx"); tb != nil {
@@ -312,6 +324,7 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 	g := ooxml.ParseGeometry(spPr)
 	d.checkGeometry(g)
 	n := vectorShape(st, g, ss, w, h)
+	n.Picture = d.withEffects(n.Picture, fx)
 	if xfrm := spPr.Child(ooxml.NSA, "xfrm"); xfrm != nil {
 		rot, fh, fv := ooxml.Transform2D(xfrm)
 		setTransform(n.Style, rot, fh, fv)

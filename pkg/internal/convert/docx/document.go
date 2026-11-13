@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -75,7 +76,10 @@ type document struct {
 	linePitch float64
 
 	warnings []typeset.Warning
-	warned   map[string]bool
+	// effectPixels counts the pixels of the drawings' effects, against
+	// effect.MaxPagePixels.
+	effectPixels effect.Page
+	warned       map[string]bool
 	// err is the first error that ends the conversion met where a
 	// construct is otherwise left out with a warning ([document.stop]).
 	err      error
