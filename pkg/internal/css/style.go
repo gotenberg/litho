@@ -998,6 +998,9 @@ type Style struct {
 	// last lines to a metric of their text (CSS Inline 3, 5).
 	TextBoxTrim TextBoxTrim
 	TextBoxEdge TextBoxEdge
+	// ObjectViewBox is the part of a replaced element's picture that
+	// stands for the whole (CSS Images 5, 4.1), an inset, nil for none.
+	ObjectViewBox *Shape
 	// Clip clips an absolutely positioned element and its content (CSS
 	// 2.2, 11.1.2).
 	Clip ClipRect

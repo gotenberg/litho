@@ -57,6 +57,9 @@ type Picture struct {
 	// it unset the ratio is Width over Height. A raster picture leaves all
 	// three unset.
 	NoNaturalWidth, NoNaturalHeight, NoRatio bool
+	// view, when set, is the part of the picture an object-view-box makes
+	// its whole: Width and Height are then the part's size.
+	view *viewBox
 }
 
 // MaxVectorDepth is the deepest group nesting a [Picture.Vector] may

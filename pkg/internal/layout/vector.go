@@ -25,6 +25,18 @@ const maxVectorNodes = 200_000
 // vector picture's fragments for a vector one, nil when the vector draws
 // nothing.
 func (e *engine) pictureFrag(pic *Picture, r typeset.Rect, parent *typeset.StructElem) typeset.Fragment {
+	if v := pic.view; v != nil {
+		// The whole picture is scaled as its view box is into r, and
+		// clipped to r (CSS Images 5, 4.1).
+		kx, ky := r.Width/pic.Width, r.Height/pic.Height
+		whole := *pic
+		whole.view, whole.Width, whole.Height = nil, v.w, v.h
+		f := e.pictureFrag(&whole, typeset.Rect{X: r.X - v.x*kx, Y: r.Y - v.y*ky, Width: v.w * kx, Height: v.h * ky}, parent)
+		if f == nil {
+			return nil
+		}
+		return &typeset.Group{Opacity: 1, Transform: typeset.Identity, Clip: &typeset.Path{Ops: rectOps(r), Fill: &typeset.Fill{}}, Content: []typeset.Fragment{f}}
+	}
 	if pic.Vector == nil {
 		return &typeset.Image{Rect: r, Source: pic.Source, Parent: parent}
 	}

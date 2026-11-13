@@ -258,6 +258,7 @@ const (
 	pBaselineSource
 	pTextBoxTrim
 	pTextBoxEdge
+	pObjectViewBox
 	numProps
 )
 
@@ -1046,6 +1047,7 @@ func init() {
 		props[id] = def
 	}
 	props[pClipPath] = clipPathProp()
+	props[pObjectViewBox] = objectViewBoxProp()
 	for id, def := range textBoxProps() {
 		props[id] = def
 	}

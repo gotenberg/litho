@@ -263,7 +263,7 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		b.float = st.Float
 		b.inline = b.float == css.FloatNone && isInlineLevel(st.Display)
 		if validPicture(n.Picture) {
-			b.picture = n.Picture
+			b.picture = viewBoxPicture(n.Picture, st.ObjectViewBox)
 		}
 		return []*box{b}
 	case Element:

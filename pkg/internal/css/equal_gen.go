@@ -54,6 +54,9 @@ func equalStyle(a, b *Style) bool {
 	if !equalTextBoxEdge(&a.TextBoxEdge, &b.TextBoxEdge) {
 		return false
 	}
+	if a.ObjectViewBox != b.ObjectViewBox {
+		return false
+	}
 	if !equalClipRect(&a.Clip, &b.Clip) {
 		return false
 	}
@@ -730,6 +733,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.BaselineSource))
 	h = mix(h, uint64(x.TextBoxTrim))
 	h = hashTextBoxEdge(h, &x.TextBoxEdge)
+	h = mixBool(h, x.ObjectViewBox != nil)
 	h = hashClipRect(h, &x.Clip)
 	h = hashMask(h, &x.Mask)
 	h = hashZIndex(h, &x.ZIndex)
