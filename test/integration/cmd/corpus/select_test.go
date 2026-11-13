@@ -302,50 +302,60 @@ func TestWPTCandidateReasons(t *testing.T) {
 		}
 	}
 	const match = `<link rel="match" href="a-ref.html">`
-	write("css/x/a-ref.html", `<p>reference</p>`)
-	write("css/x/chained-ref.html", `<link rel="match" href="a-ref.html">`)
-	write("css/x/fonts/f.woff", "font")
-	write("css/x/plain.html", `<p>no reference</p>`)
-	write("css/x/script.html", match+`<script>x()</script>`)
-	write("css/x/chained.html", `<link rel="match" href="chained-ref.html">`)
-	write("css/x/up.html", match+`<img src="../y.png">`)
-	write("css/x/face.html", match+`<style>@font-face { font-family: F; src: url(fonts/f.woff) }</style>`)
-	write("css/x/face-gone.html", match+`<style>@font-face { font-family: F; src: url(fonts/g.woff) }</style>`)
-	write("css/x/flat.html", match+`<div style="transform: rotate(10deg)">`)
-	write("css/x/deep.html", match+`<div style="transform: rotateY(10deg)">`)
-	write("css/x/tall.html", match+`<div style="writing-mode: vertical-rl">`)
+	write("css/css-box/a-ref.html", `<p>reference</p>`)
+	write("css/css-box/chained-ref.html", `<link rel="match" href="a-ref.html">`)
+	write("css/css-box/fonts/f.woff", "font")
+	write("css/css-box/plain.html", `<p>no reference</p>`)
+	write("css/css-box/script.html", match+`<script>x()</script>`)
+	write("css/css-box/chained.html", `<link rel="match" href="chained-ref.html">`)
+	write("css/css-box/up.html", match+`<img src="../y.png">`)
+	write("css/css-box/face.html", match+`<style>@font-face { font-family: F; src: url(fonts/f.woff) }</style>`)
+	write("css/css-box/face-gone.html", match+`<style>@font-face { font-family: F; src: url(fonts/g.woff) }</style>`)
+	write("css/css-box/flat.html", match+`<div style="transform: rotate(10deg)">`)
+	write("css/css-box/deep.html", match+`<div style="transform: rotateY(10deg)">`)
+	write("css/css-box/tall.html", match+`<div style="writing-mode: vertical-rl">`)
 	const xhtMatch = `<link rel="match" href="b-ref.xht"/>`
-	write("css/x/b-ref.xht", `<style><![CDATA[ p { color: green } ]]></style><p>reference</p>`)
-	write("css/x/sheet.xht", xhtMatch+`<style type="text/css"><![CDATA[ p > a { color: green } ]]></style>`)
-	write("css/x/plain.xht", `<link rel="match" href="a-ref.html"/><p>no section</p>`)
-	write("css/x/body-section.xht", xhtMatch+`<p><![CDATA[ a < b ]]></p>`)
-	write("css/x/empty-div.xht", xhtMatch+`<div/>`)
-	write("css/x/c-ref.xht", `<div/>`)
-	write("css/x/empty-div-ref.xht", `<link rel="match" href="c-ref.xht"/>`)
+	write("css/css-box/b-ref.xht", `<style><![CDATA[ p { color: green } ]]></style><p>reference</p>`)
+	write("css/css-box/sheet.xht", xhtMatch+`<style type="text/css"><![CDATA[ p > a { color: green } ]]></style>`)
+	write("css/css-box/plain.xht", `<link rel="match" href="a-ref.html"/><p>no section</p>`)
+	write("css/css-box/body-section.xht", xhtMatch+`<p><![CDATA[ a < b ]]></p>`)
+	write("css/css-box/empty-div.xht", xhtMatch+`<div/>`)
+	write("css/css-box/c-ref.xht", `<div/>`)
+	write("css/css-box/empty-div-ref.xht", `<link rel="match" href="c-ref.xht"/>`)
+	// A reference is read from the directories walked and the shared
+	// reference directories, nowhere else, whether the file is there or not.
+	write("css/reference/shared-ref.html", `<p>reference</p>`)
+	write("css/elsewhere/far-ref.html", `<p>reference</p>`)
+	write("css/css-box/shared.html", `<link rel="match" href="/css/reference/shared-ref.html">`)
+	write("css/css-box/far.html", `<link rel="match" href="/css/elsewhere/far-ref.html">`)
+	write("css/css-box/gone.html", `<link rel="match" href="/css/elsewhere/gone-ref.html">`)
 	transforms := wptAreas["css/css-transforms"]
 	for _, c := range []struct {
 		rel   string
 		rules wptAreaRules
 		want  string
 	}{
-		{"css/x/plain.html", wptAreaRules{}, wptNotReftest},
-		{"css/x/script.html", wptFontFaceRules, `<script\b`},
-		{"css/x/chained.html", wptAreaRules{}, "chained reference"},
-		{"css/x/up.html", wptAreaRules{}, "resource outside the test's directory"},
-		{"css/x/face.html", wptAreaRules{}, "@font-face"},
-		{"css/x/face.html", wptFontFaceRules, ""},
-		{"css/x/face-gone.html", wptFontFaceRules, "missing resource"},
-		{"css/x/flat.html", transforms, ""},
-		{"css/x/deep.html", transforms, wptTransform3D.String()},
-		{"css/x/deep.html", wptProbes[1].rules, ""},
-		{"css/x/flat.html", wptProbes[1].rules, "lacks " + wptTransform3D.String()[len("(?i)"):]},
-		{"css/x/tall.html", wptAreas["css/css-writing-modes"], "vertical-(rl|lr)"},
-		{"css/x/tall.html", wptProbes[0].rules, ""},
-		{"css/x/sheet.xht", wptAreaRules{}, ""},
-		{"css/x/plain.xht", wptAreaRules{}, ""},
-		{"css/x/body-section.xht", wptAreaRules{}, "XHTML with a CDATA section outside a style element"},
-		{"css/x/empty-div.xht", wptAreaRules{}, "XHTML that does not parse as HTML"},
-		{"css/x/empty-div-ref.xht", wptAreaRules{}, "reference: XHTML that does not parse as HTML"},
+		{"css/css-box/plain.html", wptAreaRules{}, wptNotReftest},
+		{"css/css-box/script.html", wptFontFaceRules, `<script\b`},
+		{"css/css-box/chained.html", wptAreaRules{}, "chained reference"},
+		{"css/css-box/up.html", wptAreaRules{}, "resource outside the test's directory"},
+		{"css/css-box/face.html", wptAreaRules{}, "@font-face"},
+		{"css/css-box/face.html", wptFontFaceRules, ""},
+		{"css/css-box/face-gone.html", wptFontFaceRules, "missing resource"},
+		{"css/css-box/flat.html", transforms, ""},
+		{"css/css-box/deep.html", transforms, wptTransform3D.String()},
+		{"css/css-box/deep.html", wptProbes[1].rules, ""},
+		{"css/css-box/flat.html", wptProbes[1].rules, "lacks " + wptTransform3D.String()[len("(?i)"):]},
+		{"css/css-box/tall.html", wptAreas["css/css-writing-modes"], "vertical-(rl|lr)"},
+		{"css/css-box/tall.html", wptProbes[0].rules, ""},
+		{"css/css-box/sheet.xht", wptAreaRules{}, ""},
+		{"css/css-box/plain.xht", wptAreaRules{}, ""},
+		{"css/css-box/body-section.xht", wptAreaRules{}, "XHTML with a CDATA section outside a style element"},
+		{"css/css-box/empty-div.xht", wptAreaRules{}, "XHTML that does not parse as HTML"},
+		{"css/css-box/empty-div-ref.xht", wptAreaRules{}, "reference: XHTML that does not parse as HTML"},
+		{"css/css-box/shared.html", wptAreaRules{}, ""},
+		{"css/css-box/far.html", wptAreaRules{}, "reference outside the directories read"},
+		{"css/css-box/gone.html", wptAreaRules{}, "reference outside the directories read"},
 	} {
 		e, why, err := wptCandidate(root, c.rel, c.rules)
 		if err != nil {
@@ -359,7 +369,7 @@ func TestWPTCandidateReasons(t *testing.T) {
 		}
 		// A test is grouped with the stripped ones when its file or a
 		// reference had markers.
-		if wantCDATA := c.rel == "css/x/sheet.xht"; why == "" && e.cdata != wantCDATA {
+		if wantCDATA := c.rel == "css/css-box/sheet.xht"; why == "" && e.cdata != wantCDATA {
 			t.Errorf("%s: cdata %v, want %v", c.rel, e.cdata, wantCDATA)
 		}
 	}

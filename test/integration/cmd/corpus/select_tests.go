@@ -792,6 +792,18 @@ type wptEntry struct {
 // directory, the area's own rules met, the areas capped by the SHA-256 of
 // the test's path.
 func selectWPT(_ context.Context, checkout, _, dir string, _ map[string]string) error {
+	// A walked directory the checkout lacks fails its walk below; a shared
+	// reference directory it lacks would only drop the tests that link into
+	// it, silently.
+	for _, d := range wptRefDirs {
+		info, err := os.Stat(filepath.Join(checkout, filepath.FromSlash(d)))
+		if err != nil {
+			return fmt.Errorf("reading the checkout's %s: %w", d, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("the checkout's %s is not a directory", d)
+		}
+	}
 	var tests []wptEntry
 	rejected := map[string]int{}
 	for _, top := range wptDirs {
@@ -958,6 +970,25 @@ func walkWPT(checkout, top string, fn func(rel string) error) error {
 	return nil
 }
 
+// wptRefDirs are the directories that hold references the tests of several
+// directories share.
+var wptRefDirs = []string{"css/reference", "css/CSS2/reference"}
+
+// wptReads reports whether rel lies in a directory the selection reads: one
+// it walks or one of wptRefDirs. A reference anywhere else keeps its test
+// out by this rule, whether the checkout holds the file or not, so that the
+// tests selected do not depend on what else was checked out.
+func wptReads(rel string) bool {
+	for _, dirs := range [][]string{wptDirs, wptRefDirs} {
+		for _, d := range dirs {
+			if strings.HasPrefix(rel, d+"/") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // wptCandidate checks one test and its references under rules. It returns
 // the entry, or the reason the test is kept out.
 func wptCandidate(root, rel string, rules wptAreaRules) (wptEntry, string, error) {
@@ -986,6 +1017,9 @@ func wptCandidate(root, rel string, rules wptAreaRules) (wptEntry, string, error
 			ref := path.Clean(path.Join(path.Dir(rel), href))
 			if strings.HasPrefix(href, "/") {
 				ref = strings.TrimLeft(href, "/")
+			}
+			if !wptReads(ref) {
+				return wptEntry{}, "reference outside the directories read", nil
 			}
 			rs, rres, err := checkWPTFile(root, ref, rules)
 			if err != nil {
