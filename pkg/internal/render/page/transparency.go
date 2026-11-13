@@ -410,14 +410,21 @@ func (r *renderer) groupAttrs(dict ast.PdfDict) (blend.Attributes, ast.PdfObject
 // non-knockout group composited with Normal, opaque and with no soft mask
 // does when it is non-isolated, as ISO 32000-1, 11.4.5 makes its elements
 // composite with the parent's stack anyway, or when its content blends with
-// Normal only: Normal source over is associative, so the group of such
-// elements over transparency, composited over the parent, is the elements
-// composited over the parent one by one.
+// Normal only in the parent's colour space: Normal source over is
+// associative, so the group of such elements over transparency, composited
+// over the parent, is the elements composited over the parent one by one.
+// An isolated group whose blending space, attrs.Space
+// ([renderer.formSpace]), is not the parent's does not: its elements
+// composite with each other in that space (11.3.4, 11.6.6, Table 147), and
+// only the result is converted to the parent's.
 func (r *renderer) elide(attrs blend.Attributes, fx effects, ref ast.PdfIndirectRef, resources ast.PdfDict) bool {
 	if fx.blends() || fx.opacity != surface.Opaque || attrs.Knockout {
 		return false
 	}
-	return !attrs.Isolated || r.normalOnly(ref, resources)
+	if !attrs.Isolated {
+		return true
+	}
+	return r.normalOnly(ref, resources) && attrs.Space.Same(r.top().group.Space())
 }
 
 // normalOnly reports whether the content of form ref, against resources,

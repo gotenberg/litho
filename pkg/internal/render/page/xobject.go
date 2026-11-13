@@ -226,10 +226,13 @@ func (r *renderer) formXObject(s *scope, ref ast.PdfIndirectRef, stream ast.PdfS
 
 	r.chain = append(r.chain, ref.ObjectNum)
 	defer func() { r.chain = r.chain[:len(r.chain)-1] }()
-	if !isGroup || r.elide(attrs, atDo, ref, resources) {
+	if !isGroup {
 		return r.run(ops, resources, formToDevice, s.depth+1)
 	}
 	attrs.Space = r.formSpace(attrs, cs, ref, resources)
+	if r.elide(attrs, atDo, ref, resources) {
+		return r.run(ops, resources, formToDevice, s.depth+1)
+	}
 	return r.group(ops, resources, formToDevice, s.depth+1, bp, attrs, atDo)
 }
 

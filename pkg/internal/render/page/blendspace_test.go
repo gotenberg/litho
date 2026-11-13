@@ -182,6 +182,36 @@ func TestNormalGroupKeepsParentSpace(t *testing.T) {
 	expect(t, grouped, 0, map[[2]int]rgb{{50, 50}: at(t, plain, 50, 50)})
 }
 
+// TestOpaqueGroupBlendsInItsOwnSpace checks ISO 32000-1, 11.6.6 and
+// 11.3.4 for an isolated group composited opaque, with Normal and no soft
+// mask, whose content is translucent: its content blends in the space its
+// /CS names, so red at alpha 0.5 in a DeviceGray group composites as grey
+// over the white page, where blending in the parent's space draws pink
+// (255 128 128), as pdftoppm 26.11.0 does (255 127 127): it blends every
+// group in its device RGB. A group whose /CS names RGB, the parent's
+// space, draws as its content does without a group.
+func TestOpaqueGroupBlendsInItsOwnSpace(t *testing.T) {
+	t.Parallel()
+	group := func(cs string) fixture {
+		return fixture{
+			page:    "/Resources << /XObject << /G 5 0 R >> >>",
+			content: "/G Do",
+			objs: []string{stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency /I true /CS "+cs+" >> "+
+				"/Resources << /ExtGState << /A << /ca 0.5 >> >> >>", "/A gs 1 0 0 rg 0 0 100 100 re f")},
+		}
+	}
+	// Red is grey 0.3 in DeviceGray (10.3.2), at alpha 0.5 over the
+	// group's transparent backdrop; the group over white gives 0.65.
+	grey, _ := draw(t, group("/DeviceGray"))
+	expect(t, grey, 1, map[[2]int]rgb{{50, 50}: {166, 166, 166}})
+	rgbGroup, _ := draw(t, group("/DeviceRGB"))
+	plain, _ := draw(t, fixture{
+		page:    "/Resources << /ExtGState << /A << /ca 0.5 >> >> >>",
+		content: "/A gs 1 0 0 rg 0 0 100 100 re f",
+	})
+	expect(t, rgbGroup, 0, map[[2]int]rgb{{50, 50}: at(t, plain, 50, 50)})
+}
+
 // TestCMYKPageGroupKeepsImageInk checks ISO 32000-1, 11.3.4 for an image: a
 // DeviceCMYK image painted into a DeviceCMYK page group composites its own
 // inks, as a DeviceCMYK fill of the same colour does, and a DeviceGray image
