@@ -47,6 +47,8 @@ func TestGradient_Parses(t *testing.T) {
 		{"background-image: conic-gradient(at left in oklch longer hue, red, blue)", &Gradient{Kind: ConicGradient, Center: [2]Dimension{pct(0), pct(0.5)}, Stops: []GradientStop{stop(red, auto), stop(blue, auto)}}},
 		{"background-image: linear-gradient(in hsl to right, red, blue)", &Gradient{Angle: 90, Stops: []GradientStop{stop(red, auto), stop(blue, auto)}}},
 		{"background-image: radial-gradient(circle in srgb-linear, red, blue)", &Gradient{Kind: RadialGradient, Angle: 180, Circle: true, Center: center, Stops: []GradientStop{stop(red, auto), stop(blue, auto)}}},
+		// CSS Images 4, 2.5: image(<color>) is a solid-colour image.
+		{"background-image: image(blue)", &Gradient{Angle: 180, Stops: []GradientStop{stop(blue, auto), stop(blue, auto)}}},
 		{"background-image: image-set(linear-gradient(red, red) 2x, linear-gradient(blue, blue) 1x)", &Gradient{Angle: 180, Stops: []GradientStop{stop(blue, auto), stop(blue, auto)}}},
 	} {
 		s := styleOf(t, tc.decl)

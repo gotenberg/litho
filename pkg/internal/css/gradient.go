@@ -80,9 +80,31 @@ func bgImageValue(t token, c *declCtx, prop string) (imageSpec, bool) {
 			}
 			return imageSpec{grad: g}, true
 		}
+		if g, ok := colorImage(t); ok {
+			return imageSpec{grad: g}, true
+		}
 	}
 	u, ok := imageValue(t, c, prop)
 	return imageSpec{url: u}, ok
+}
+
+// colorImage parses image(<color>) (CSS Images 4, 2.5): a solid-colour
+// image with no natural dimensions, which paints as a gradient whose two
+// stops are that colour. image() naming a source is not painted: it falls
+// to [imageValue], which warns.
+func colorImage(t token) (*gradientSpec, bool) {
+	if !eqFold(t.value, "image") {
+		return nil, false
+	}
+	c, ok := single(significant(t.children))
+	if !ok {
+		return nil, false
+	}
+	if _, ok := parseColor(c); !ok {
+		return nil, false
+	}
+	stops := []token{c, {typ: tComma}, c}
+	return parseGradient(stops, LinearGradient, false)
 }
 
 // parseGradient parses the arguments of a linear, radial or conic
