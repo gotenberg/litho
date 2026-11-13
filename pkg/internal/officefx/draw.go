@@ -54,39 +54,16 @@ type Source struct {
 	Content []typeset.Fragment
 	// Color fills the silhouette a reflection shows when Content is nil.
 	Color typeset.Color
-	// Text marks the glyphs of a run of text, whose glow and shadow Word
-	// draws with tighter falloffs than a shape's: see [textGlowGrow].
+	// Text marks the glyphs of a run of text, whose effects Word scales
+	// by its font size, Size ([wordRun]).
 	Text bool
+	// Size is the font size of a run of text, in points.
+	Size float64
 	// Glyphs is the run of text, placed on the page in its colour, that
 	// PowerPoint's rules draw a run's effects from ([glyphEffects]); nil
 	// for a shape or a picture.
 	Glyphs *typeset.Text
 }
-
-// The falloffs of a run's glow and shadow, as fractions of the radius:
-// the glow grows by textGlowGrow of its radius and blurs by a Gaussian
-// of textGlowSigma of it, the shadow blurs by a Gaussian of
-// textShadowSigma of its blur radius, where a shape's glow grows by half
-// and blurs by a sixth and its shadow blurs by a third.
-//
-// # Corpus evidence
-//
-//   - litho/docx run-w14-effects: Word's 8 point glow of 24 point bold
-//     glyphs fits an edge 1.37 points out of the glyph, a Gaussian of 0.64
-//     points (rms 0.18 levels); its 4 point shadow fits a Gaussian of 0.79
-//     points (rms 0.25 levels).
-//   - libreoffice/docx ooxmlexport/TextEffects_Glow_Shadow_Reflection: a 5
-//     point glow of 11 point glyphs fits an edge 0.45 point out, a
-//     Gaussian of about 0.25; an 18 point one an edge 2.35 points out, a
-//     Gaussian of 0.83. The three glows' least squares give r/7.5 and
-//     r/19.4, within 0.3 point of each. A 15 point shadow of 11 point
-//     glyphs blurs by about 1 point, which no fraction of the radius that
-//     fits the 4 point one gives: the shadow follows the 24 point sample.
-const (
-	textGlowGrow    = 1 / 7.5
-	textGlowSigma   = 1 / 19.5
-	textShadowSigma = 1 / 5.0
-)
 
 // Under returns the bitmaps of fx drawn under src, in paint order: the
 // reflection, then the outer shadow, then the glow. Each is an
@@ -95,8 +72,8 @@ const (
 // out, which the notes say, once the others are drawn. The error is the
 // engine's: the budget's refusal, ctx's end; it returns no bitmap with
 // one. A run of text on PowerPoint's rules ([css.OfficePowerPoint]) is
-// drawn from src.Glyphs ([glyphEffects]), any other source from its
-// paths.
+// drawn from src.Glyphs ([glyphEffects]), a run of Word's text by
+// [wordRun], any other source from its paths.
 //
 // # Corpus evidence
 //
@@ -113,6 +90,9 @@ func Under(ctx context.Context, src *Source, fx *css.OfficeEffects, pixels *effe
 	}
 	if len(src.Paths) == 0 {
 		return nil, Notes{}, nil
+	}
+	if src.Text && fx.Rules == css.OfficeWord {
+		return wordRun(ctx, src, fx, pixels)
 	}
 	var out []typeset.Fragment
 	var notes Notes
@@ -157,9 +137,6 @@ func shadow(ctx context.Context, src *Source, sh *css.OfficeShadow, pixels *effe
 	}
 	m := shadowMatrix(sh, src.Bounds)
 	sigma := radius(sh.Blur) / 3
-	if src.Text {
-		sigma = float64(radius(sh.Blur) * textShadowSigma)
-	}
 	cov, notes, err := cover(ctx, src.Paths, pathBounds(src.Paths), m, sigma, 3*sigma, pixels)
 	if err != nil || cov == nil {
 		return nil, notes, err
@@ -173,16 +150,12 @@ func shadow(ctx context.Context, src *Source, sh *css.OfficeShadow, pixels *effe
 }
 
 // glow draws a glow: the silhouette made opaque, grown and blurred by
-// rules ([Rules.GlowMask]), in its colour; a run of Word's text by its
-// tighter falloffs ([textGlowGrow]).
+// rules ([Rules.GlowMask]), in its colour.
 func glow(ctx context.Context, src *Source, g *css.OfficeGlow, rules *Rules, pixels *effect.Page) (typeset.Fragment, Notes, error) {
 	col, ok := opaqueEnough(g.Color)
 	r := radius(g.Radius)
 	if !ok || r <= 0 {
 		return nil, Notes{}, nil
-	}
-	if src.Text {
-		return textGlow(ctx, src, col, r, pixels)
 	}
 	sigma, morph := rules.GlowSize(r)
 	gr, notes, ok := take(Grow(pathBounds(src.Paths), r), sigma, morph, pixels)
@@ -207,31 +180,6 @@ func glow(ctx context.Context, src *Source, g *css.OfficeGlow, rules *Rules, pix
 	return f, notes, err
 }
 
-// textGlow draws the glow of radius r of the glyph outlines of a run of
-// Word's text: the outlines made opaque from any coverage, grown by
-// textGlowGrow of the radius and blurred by a Gaussian of textGlowSigma
-// of it, in col.
-func textGlow(ctx context.Context, src *Source, col typeset.Color, r float64, pixels *effect.Page) (typeset.Fragment, Notes, error) {
-	sigma, grow := float64(r*textGlowSigma), float64(r*textGlowGrow)
-	cov, notes, err := cover(ctx, src.Paths, pathBounds(src.Paths), typeset.Identity, sigma, grow+3*sigma, pixels)
-	if err != nil || cov == nil {
-		return nil, notes, err
-	}
-	defer cov.Release()
-	if err := effect.Threshold(cov, 1); err != nil {
-		return nil, Notes{}, err
-	}
-	px := pixelsOf(grow, cov.Grid.Scale)
-	if err := effect.Dilate(ctx, cov, px, px); err != nil {
-		return nil, Notes{}, err
-	}
-	if err := blur(ctx, cov, sigma); err != nil {
-		return nil, Notes{}, err
-	}
-	f, err := tinted(ctx, cov, col)
-	return f, notes, err
-}
-
 // reflection draws a reflection: the content mapped by the reflection's
 // scale, skew and offset, over the mapped bounds alone, blurred by a Gaussian of a third of its blur
 // radius, its opacity running linearly along its fade direction from the
@@ -239,11 +187,18 @@ func textGlow(ctx context.Context, src *Source, col typeset.Color, r float64, pi
 // position, positions taken along the extent of the mapped bounds.
 func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixels *effect.Page) (typeset.Fragment, Notes, error) {
 	m := reflectionMatrix(r, src.Bounds)
+	b := mapRect(src.Bounds, m)
+	return reflect(ctx, src, r, m, b, b, pixels)
+}
+
+// reflect draws the reflection r of src mapped by m over area, its fade
+// running along fade, the mapped bounds, as [reflection] says.
+func reflect(ctx context.Context, src *Source, r *css.OfficeReflection, m typeset.Matrix, area, fade typeset.Rect, pixels *effect.Page) (typeset.Fragment, Notes, error) {
 	sigma := radius(r.Blur) / 3
 	var s *effect.Surface
 	var notes Notes
 	if src.Content != nil {
-		res, grid, n := planArea(mapRect(src.Bounds, m), sigma, 3*sigma, pixels)
+		res, grid, n := planArea(area, sigma, 3*sigma, pixels)
 		notes = n
 		if res.W == 0 {
 			return nil, notes, nil
@@ -257,7 +212,7 @@ func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixel
 		if !(src.Color.A > 0) {
 			return nil, Notes{}, nil
 		}
-		cov, n, err := cover(ctx, src.Paths, src.Bounds, m, sigma, 3*sigma, pixels)
+		cov, n, err := coverArea(ctx, src.Paths, area, m, sigma, 3*sigma, pixels)
 		notes = n
 		if err != nil || cov == nil {
 			return nil, notes, err
@@ -274,7 +229,7 @@ func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixel
 	}
 	// The fade runs along the extent of the mapped bounds in the fade
 	// direction, through their centre.
-	b := mapRect(src.Bounds, m)
+	b := fade
 	dy, dx := sincosDeg(r.FadeDir)
 	cx, cy := b.X+b.Width/2, b.Y+b.Height/2
 	half := (math.Abs(float64(dx*b.Width)) + math.Abs(float64(dy*b.Height))) / 2
@@ -298,8 +253,12 @@ func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixel
 // when they cover nothing or the page's pixels refuse it, which the notes
 // say.
 func cover(ctx context.Context, paths []effect.Path, area typeset.Rect, m typeset.Matrix, sigma, pad float64, pixels *effect.Page) (*effect.Surface, Notes, error) {
-	b := mapRect(area, m)
-	res, grid, notes := planArea(b, sigma, pad, pixels)
+	return coverArea(ctx, paths, mapRect(area, m), m, sigma, pad, pixels)
+}
+
+// coverArea is [cover] over area, in page points already.
+func coverArea(ctx context.Context, paths []effect.Path, area typeset.Rect, m typeset.Matrix, sigma, pad float64, pixels *effect.Page) (*effect.Surface, Notes, error) {
+	res, grid, notes := planArea(area, sigma, pad, pixels)
 	if res.W == 0 {
 		return nil, notes, nil
 	}
@@ -368,11 +327,6 @@ func radius(r float64) float64 {
 		return 0
 	}
 	return min(r, MaxRadius)
-}
-
-// pixelsOf returns v points at k pixels a point, rounded to whole pixels.
-func pixelsOf(v, k float64) int {
-	return int(math.Round(min(float64(v*k), effect.MaxKernelRadius))) // fits int: at most MaxKernelRadius
 }
 
 // unit returns v within [0, 1], 0 for NaN.

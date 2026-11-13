@@ -21,18 +21,10 @@ const maxEffectGlyphs = 4096
 // textEffects paints the Office text effects of item it of line l under
 // its glyphs (css.Office.TextEffects): the bitmaps package officefx draws
 // by the rules the effects name, artifacts, the glyphs staying text above
-// them. Word's rules draw them from the run's glyph outlines, the run's
-// box for the shadow's and the reflection's alignment its em, the font
-// size, ending at the baseline, so a reflection starts at the baseline
-// and fades over the font size; PowerPoint's from the glyphs as they
-// paint.
-//
-// # Corpus evidence
-//
-//   - litho/docx run-w14-effects: Word's reflections of 24 point Calibri
-//     runs start 0.6 point above the baseline (their blur's margin), the
-//     mirrored descenders cut off, and fade to their end opacity over
-//     10.9 points at w14:endPos 45.5%: 45.5% of the 24 point em.
+// them. Word's rules draw them from the run's glyph outlines at lengths
+// scaled by the font size, the run's box for the shadow's and the
+// reflection's alignment its em ending at the baseline; PowerPoint's from
+// the glyphs as they paint.
 func (p *painter) textEffects(it *lineItem, l *lineBox, page int) {
 	fx := it.box.st.TextEffects
 	t := it.text
@@ -40,7 +32,7 @@ func (p *painter) textEffects(it *lineItem, l *lineBox, page int) {
 		return
 	}
 	y := l.y + it.baseline
-	src := &officefx.Source{Color: t.Color, Text: true}
+	src := &officefx.Source{Color: t.Color, Text: true, Size: t.Size}
 	if officefx.FromGlyphs(fx) {
 		glyphs := *t
 		glyphs.Origin = typeset.Point{X: l.x + t.Origin.X + p.dx, Y: l.y + t.Origin.Y + p.dy}

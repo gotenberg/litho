@@ -33,7 +33,9 @@
 //
 // A run of text takes the outer shadow, the glow and the reflection.
 // PowerPoint draws them from its glyphs as they paint, by its rules for a
-// shape's; Word from their outlines, with tighter falloffs ([Source.Text]).
+// shape's; Word from their outlines, by its rules for a shape's at
+// lengths scaled by the run's font size, the shadow cast by the glyphs
+// over their glow and the reflection mirroring all three ([Source.Text]).
 // An effect list names its program (css.OfficeEffects.Rules).
 //
 // Each bitmap is drawn at the resolution [effect.Plan] chooses for its

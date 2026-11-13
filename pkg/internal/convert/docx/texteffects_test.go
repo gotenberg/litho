@@ -5,6 +5,7 @@ import (
 	"image"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -96,7 +97,18 @@ func reverse(pos, a []float64) ([]float64, []float64) {
 // fx.
 func runDoc(t *testing.T, fx string) *typeset.Document {
 	t.Helper()
-	body := `<w:p><w:r><w:rPr><w:rFonts w:ascii="Test Sans" w:hAnsi="Test Sans"/><w:sz w:val="48"/>` + fx + `</w:rPr><w:t>X</w:t></w:r></w:p>`
+	return runDocAt(t, fx, 48)
+}
+
+// runDocAt returns a document of one run "X" of halfPoints half-points
+// with the w14 effects fx, then a plain paragraph "Y", every line single
+// spaced.
+func runDocAt(t *testing.T, fx string, halfPoints int) *typeset.Document {
+	t.Helper()
+	ppr := `<w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>`
+	font := `<w:rFonts w:ascii="Test Sans" w:hAnsi="Test Sans"/>`
+	body := `<w:p>` + ppr + `<w:r><w:rPr>` + font + `<w:sz w:val="` + strconv.Itoa(halfPoints) + `"/>` + fx + `</w:rPr><w:t>X</w:t></w:r></w:p>` +
+		`<w:p>` + ppr + `<w:r><w:rPr>` + font + `<w:sz w:val="24"/></w:rPr><w:t>Y</w:t></w:r></w:p>`
 	body = strings.Replace(body, "<w:rPr>", `<w:rPr xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">`, 1)
 	return convertBytes(t, docx(t, body, nil), office.Options{})
 }
@@ -134,28 +146,34 @@ func glyphTop(t *testing.T, doc *typeset.Document) (x, top float64) {
 	return tx.Origin.X + tx.Glyphs[0].X + tx.Size/4, tx.Origin.Y - tx.Size/2
 }
 
-// TestRunEffectsFollowWord converts one run with one w14 effect and fits
-// the edge of the effect's soft mask above the glyph against the edges
-// fitted on Word's text effects, within the spread of Word's samples.
+// TestRunEffectsFollowWord converts one run with one w14 effect at three
+// sizes and fits the edge of the effect's soft mask above the glyph
+// against the edges fitted on Word's text effects at those sizes, within
+// a pixel of Word's 288 pixels an inch.
 //
 // # Corpus evidence
 //
-//   - litho/docx run-w14-effects: Word's 8 point glow of 24 point glyphs
-//     has its half 1.37 points out of the glyph and a Gaussian of 0.64
-//     points; its 4 point shadow a Gaussian of 0.79 points.
-//   - libreoffice/docx ooxmlexport/TextEffects_Glow_Shadow_Reflection:
-//     the 5 and 18 point glows of 11 point glyphs have their halves 0.45
-//     and 2.35 points out, Gaussians of 0.25 and 0.83 points.
+//   - probe, docx: Word's 8 point glow of Calibri at 12, 24 and 48 points
+//     fits the glyphs grown 1.00, 1.75 and 2.75 points and blurred by a
+//     Gaussian of 0.48, 0.64 and 1.04 points; its shadow blurred 8 points
+//     a Gaussian of 0.80, 1.25 and 2.05.
 func TestRunEffectsFollowWord(t *testing.T) {
+	glow := `<w14:glow w14:rad="101600"><w14:srgbClr w14:val="ED7D31"><w14:alpha w14:val="60000"/></w14:srgbClr></w14:glow>`
+	shadow := `<w14:shadow w14:blurRad="101600" w14:dist="0" w14:dir="0" w14:algn="ctr"><w14:srgbClr w14:val="000000"><w14:alpha w14:val="60000"/></w14:srgbClr></w14:shadow>`
 	for _, tc := range []struct {
 		name, fx   string
+		halfPoints int
 		out, sigma float64
 	}{
-		{"glow", `<w14:glow w14:rad="101600"><w14:srgbClr w14:val="ED7D31"><w14:alpha w14:val="60000"/></w14:srgbClr></w14:glow>`, 1.37, 0.64},
-		{"shadow", `<w14:shadow w14:blurRad="50800" w14:dist="0" w14:dir="0" w14:algn="ctr"><w14:srgbClr w14:val="000000"><w14:alpha w14:val="60000"/></w14:srgbClr></w14:shadow>`, 0, 0.79},
+		{"glow 12", glow, 24, 1.00, 0.48},
+		{"glow 24", glow, 48, 1.75, 0.64},
+		{"glow 48", glow, 96, 2.75, 1.04},
+		{"shadow 12", shadow, 24, 0, 0.80},
+		{"shadow 24", shadow, 48, 0, 1.25},
+		{"shadow 48", shadow, 96, 0, 2.05},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			doc := runDoc(t, tc.fx)
+			doc := runDocAt(t, tc.fx, tc.halfPoints)
 			imgs := effectImages(doc)
 			if len(imgs) != 1 {
 				t.Fatalf("%d images, want 1", len(imgs))
@@ -181,13 +199,13 @@ func TestRunEffectsFollowWord(t *testing.T) {
 
 // TestRunReflectionStartsAtBaseline checks that a run's reflection hangs
 // from its baseline and fades to nothing at its end position of the
-// font's height.
+// run's box.
 //
 // # Corpus evidence
 //
 //   - litho/docx run-w14-effects: Word's reflection of a 24 point run
 //     starts 0.6 point above the baseline at the start opacity and fades
-//     to its end over 45.5% of the font's 24 points.
+//     to its end 10.3 points below it at an end position of 45.5%.
 func TestRunReflectionStartsAtBaseline(t *testing.T) {
 	doc := runDoc(t, `<w14:reflection w14:blurRad="6350" w14:stA="55000" w14:stPos="0" w14:endA="300" w14:endPos="45500" w14:dist="0" w14:dir="5400000" w14:fadeDir="5400000" w14:sx="100000" w14:sy="-100000" w14:kx="0" w14:ky="0" w14:algn="bl"/>`)
 	imgs := effectImages(doc)
