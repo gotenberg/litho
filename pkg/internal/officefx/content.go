@@ -2,9 +2,9 @@ package officefx
 
 import (
 	"context"
-	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -136,7 +136,7 @@ func Inner(ctx context.Context, src *Source, fx *css.OfficeEffects, pixels *effe
 	}
 	dx, dy := offset(sh.Dist, sh.Dir)
 	blurRad := radius(sh.Blur)
-	margin := float64(math.Hypot(dx, dy)) + blurRad
+	margin := float64(detmath.Hypot(dx, dy)) + blurRad
 	g, notes, ok := take(Grow(pathBounds(paths), margin), blurRad/3, 0, pixels)
 	if !ok {
 		return nil, notes, nil

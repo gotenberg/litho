@@ -63,7 +63,7 @@ func (g Grid) Whole(v float64) int {
 // Pixels returns the transform from page points to the grid's pixels.
 func (g Grid) Pixels() typeset.Matrix {
 	sx, sy := float64(g.W)/g.Box.Width, float64(g.H)/g.Box.Height
-	return typeset.Matrix{A: sx, D: sy, E: -g.Box.X * sx, F: -g.Box.Y * sy}
+	return typeset.Matrix{A: sx, D: sy, E: float64(-g.Box.X * sx), F: float64(-g.Box.Y * sy)}
 }
 
 // Place returns where the grid's surfaces sit on the page.

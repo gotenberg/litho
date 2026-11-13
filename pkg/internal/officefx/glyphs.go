@@ -90,7 +90,7 @@ func take(box typeset.Rect, sigma, morph float64, pixels *effect.Page) (Grid, No
 func glyphMatrix(b typeset.Rect, align css.RectAlign, sx, sy, kx, ky, dist, dir float64) typeset.Matrix {
 	sx, sy = factor(sx), factor(sy)
 	tx, ty := tanDeg(kx), tanDeg(ky)
-	cx, cy := b.X+b.Width/2, b.Y+b.Height/2
+	cx, cy := b.X+float64(b.Width/2), b.Y+float64(b.Height/2)
 	dx, dy := offset(dist, dir)
 	// Scaling about the alignment point is scaling about the centre and
 	// moving by the alignment point's offset from the centre times 1 less
@@ -123,7 +123,7 @@ func inkBounds(ctx context.Context, t *typeset.Text) (typeset.Rect, bool, error)
 	}
 	// The run's advance box, grown by two sizes every way: no glyph of a
 	// face reaches that far past its origin.
-	box := typeset.Rect{X: t.Origin.X + x0*hs - 2*size, Y: t.Origin.Y - 3*size, Width: (x1-x0)*hs + 4*size, Height: 5 * size}
+	box := typeset.Rect{X: t.Origin.X + float64(x0*hs) - 2*size, Y: t.Origin.Y - float64(3*size), Width: float64((x1-x0)*hs) + float64(4*size), Height: 5 * size}
 	if !usable(box) || math.Ceil(box.Width*inkScale)*math.Ceil(box.Height*inkScale) > effect.MaxPixels {
 		return typeset.Rect{}, false, nil
 	}

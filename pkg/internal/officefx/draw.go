@@ -231,7 +231,7 @@ func reflect(ctx context.Context, src *Source, r *css.OfficeReflection, m typese
 	// direction, through their centre.
 	b := fade
 	dy, dx := sincosDeg(r.FadeDir)
-	cx, cy := b.X+b.Width/2, b.Y+b.Height/2
+	cx, cy := b.X+float64(b.Width/2), b.Y+float64(b.Height/2)
 	half := (math.Abs(float64(dx*b.Width)) + math.Abs(float64(dy*b.Height))) / 2
 	k := s.Grid.Scale
 	px := func(x, gx float64) float64 { return float64((x - gx) * k) }

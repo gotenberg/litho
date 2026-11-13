@@ -266,7 +266,7 @@ func skewScale(b typeset.Rect, align css.RectAlign, sx, sy, kx, ky float64) type
 // end positions of the copy's extent that way.
 func FadeLine(r typeset.Rect, rf *css.OfficeReflection) (x0, y0, x1, y1 float64) {
 	sin, cos := sincosDeg(rf.FadeDir)
-	cx, cy := r.X+r.Width/2, r.Y+r.Height/2
+	cx, cy := r.X+float64(r.Width/2), r.Y+float64(r.Height/2)
 	// The copy's extent along the direction, from its centre.
 	half := (float64(abs(cos)*r.Width) + float64(abs(sin)*r.Height)) / 2
 	at := func(pos float64) (float64, float64) {

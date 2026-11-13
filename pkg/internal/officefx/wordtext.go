@@ -306,7 +306,7 @@ func wordReflection(ctx context.Context, src *Source, rf *css.OfficeReflection, 
 	if h := float64(wordRunBox * src.Size); numeric.PositiveFinite(h) {
 		b.Y, b.Height = base-h, h
 	}
-	b.Height += shift / 2
+	b.Height += float64(shift / 2)
 	// The mirror about the grown box's bottom moves the copy the shift
 	// down; the rest of the distance along the direction moves it as it
 	// moves a shape's.
