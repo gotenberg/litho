@@ -149,7 +149,7 @@ func to8(v float32) uint8 {
 	case v >= 1:
 		return 255
 	}
-	return uint8(v*255 + 0.5)
+	return uint8(float32(v*255) + 0.5)
 }
 
 // groupSpace returns the blending colour space a transparency group's /CS

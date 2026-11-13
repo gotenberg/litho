@@ -113,7 +113,7 @@ func boxGeometry(pg *document.Page, b Box, dpi float64, whole bool) (Geometry, e
 		unit = 1
 	}
 	s := dpi / pointsPerInch * unit
-	w, h := (x1-x0)*s, (y1-y0)*s
+	w, h := float64((x1-x0)*s), float64((y1-y0)*s)
 	if math.IsNaN(w) || math.IsNaN(h) || math.IsInf(w, 0) || math.IsInf(h, 0) || w > math.MaxInt32 || h > math.MaxInt32 {
 		return Geometry{}, fmt.Errorf("%w: page of %v x %v pixels", ErrTooLarge, w, h)
 	}

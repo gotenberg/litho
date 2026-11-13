@@ -434,7 +434,7 @@ func (f *Font) placeholderGlyph(code Code, g *Glyph) {
 	if f.kind == kindSimple && name == "" && code.WordSpace() {
 		return
 	}
-	width := g.Advance * 1000
+	width := float64(g.Advance * 1000)
 	if width <= 0 {
 		return
 	}
@@ -442,7 +442,7 @@ func (f *Font) placeholderGlyph(code Code, g *Glyph) {
 	if hi <= lo {
 		lo, hi = placeholderDescent, placeholderAscent
 	}
-	frame := min(placeholderFrame, width/4, (hi-lo)/4)
+	frame := min(placeholderFrame, float64(width/4), float64((hi-lo)/4))
 	var p geom.Path
 	rect(&p, 0, lo, width, hi, false)
 	rect(&p, frame, lo+frame, width-frame, hi-frame, true)

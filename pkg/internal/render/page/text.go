@@ -230,9 +230,9 @@ func (r *renderer) showString(s *scope, font *glyph.Font, size float64, data []b
 		}
 		var tx, ty float64
 		if font.WMode() == 1 {
-			ty = g.W1*size + spacing
+			ty = float64(g.W1*size) + spacing
 		} else {
-			tx = (g.Advance*size + spacing) * th
+			tx = (float64(g.Advance*size) + spacing) * th
 		}
 		ts.Tm = [6]float64(geom.Matrix{1, 0, 0, 1, tx, ty}.Mul(geom.Matrix(ts.Tm)))
 	}

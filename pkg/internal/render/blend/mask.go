@@ -51,13 +51,13 @@ func (t transfer) apply(v float32) float32 {
 	if t.table == nil {
 		return v
 	}
-	pos := v * transferSteps
+	pos := float32(v * transferSteps)
 	i := int(pos)
 	if i >= transferSteps {
 		return t.table[transferSteps]
 	}
 	frac := pos - float32(i)
-	return t.table[i] + (t.table[i+1]-t.table[i])*frac
+	return t.table[i] + float32((t.table[i+1]-t.table[i])*frac)
 }
 
 // Mask is a soft mask over the device (ISO 32000-1, 11.6.5.2): its values
@@ -136,9 +136,9 @@ func (m *Mask) coarseAt(x, y int) float32 {
 	x1, y1 := min(x0+1, w-1), min(y0+1, h-1)
 	x0, y0 = max(x0, 0), max(y0, 0)
 	a := m.values.A
-	top := a[y0*w+x0] + (a[y0*w+x1]-a[y0*w+x0])*tx
-	bottom := a[y1*w+x0] + (a[y1*w+x1]-a[y1*w+x0])*tx
-	return top + (bottom-top)*ty
+	top := a[y0*w+x0] + float32((a[y0*w+x1]-a[y0*w+x0])*tx)
+	bottom := a[y1*w+x0] + float32((a[y1*w+x1]-a[y1*w+x0])*tx)
+	return top + float32((bottom-top)*ty)
 }
 
 // Pixels returns how many pixels the mask holds values for.
@@ -187,7 +187,7 @@ func LuminosityMask(ctx context.Context, g *Group, bc Components, tr *function.F
 		// complemented form of a subtractive space too.
 		var mixed Components
 		for k := range g.n {
-			mixed[k] = (1-a)*b[k] + a*c[k]
+			mixed[k] = float32((1-a)*b[k]) + float32(a*c[k])
 		}
 		return t.apply(g.space.luminosity(mixed))
 	})

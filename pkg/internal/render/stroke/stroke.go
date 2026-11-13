@@ -175,9 +175,9 @@ func Outline(path geom.Path, s Style, ctm geom.Matrix, tolerance float64) (geom.
 // lengthens a vector: its largest singular value. A user-space error e
 // becomes at most e times this in device space.
 func maxStretch(m geom.Matrix) float64 {
-	s := m[0]*m[0] + m[1]*m[1] + m[2]*m[2] + m[3]*m[3]
+	s := float64(m[0]*m[0]) + float64(m[1]*m[1]) + float64(m[2]*m[2]) + float64(m[3]*m[3])
 	det := m.Det()
-	disc := s*s - 4*det*det
+	disc := float64(s*s) - float64(4*det*det)
 	if disc < 0 {
 		disc = 0
 	}

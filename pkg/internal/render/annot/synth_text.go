@@ -96,10 +96,10 @@ func luminance(c []float64) float64 {
 	case 1:
 		return c[0]
 	case 3:
-		return 0.2126*c[0] + 0.7152*c[1] + 0.0722*c[2]
+		return float64(0.2126*c[0]) + float64(0.7152*c[1]) + float64(0.0722*c[2])
 	case 4:
 		k := 1 - c[3]
-		return 0.2126*(1-c[0])*k + 0.7152*(1-c[1])*k + 0.0722*(1-c[2])*k
+		return float64(0.2126*(1-c[0])*k) + float64(0.7152*(1-c[1])*k) + float64(0.0722*(1-c[2])*k)
 	}
 	return 1
 }
@@ -140,7 +140,7 @@ func (ic icon) dot(x, y, r float64) {
 // roundRect adds the rectangle from (x0, y0) to (x1, y1) with corners rounded
 // to radius r.
 func (ic icon) roundRect(p *geom.Path, x0, y0, x1, y1, r float64) {
-	k := r * (1 - bezierCircle)
+	k := float64(r * (1 - bezierCircle))
 	p.MoveTo(ic.at(x0+r, y0))
 	p.LineTo(ic.at(x1-r, y0))
 	p.CubicTo(ic.at(x1-k, y0), ic.at(x1, y0+k), ic.at(x1, y0+r))
@@ -229,7 +229,7 @@ func noRotateBox(box geom.Rect, pivot geom.Point, rotate int) geom.Rect {
 	sin, cos = math.Round(sin), math.Round(cos)
 	turn := func(p geom.Point) geom.Point {
 		dx, dy := p.X-pivot.X, p.Y-pivot.Y
-		return geom.Point{X: pivot.X + dx*cos - dy*sin, Y: pivot.Y + dx*sin + dy*cos}
+		return geom.Point{X: pivot.X + float64(dx*cos) - float64(dy*sin), Y: pivot.Y + float64(dx*sin) + float64(dy*cos)}
 	}
 	a, b := turn(box.Min), turn(box.Max)
 	return geom.Rect{

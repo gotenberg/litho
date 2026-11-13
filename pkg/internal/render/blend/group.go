@@ -421,7 +421,7 @@ func (g *Group) paint(x, y int, mode Mode, cs Components, fs, as float32, keep u
 	if !g.attrs.Knockout {
 		agb = agPrev
 	}
-	ag := (1-fs)*agPrev + (fs-as)*agb + as
+	ag := float32((1-fs)*agPrev) + float32((fs-as)*agb) + as
 	var a0 float32
 	if g.initial != nil {
 		a0 = g.initial[s*i+n]
@@ -448,8 +448,8 @@ func (g *Group) paint(x, y int, mode Mode, cs Components, fs, as float32, keep u
 	// Ct = (fs - as)·αb·Cb + as·((1 - αb)·Cs + αb·B(Cb, Cs)), and
 	// αi·Ci = (1 - fs)·αi-1·Ci-1 + Ct, both premultiplied.
 	for k := range n {
-		ct := (fs-as)*b[k] + as*((1-ab)*cs[k]+ab*blended[k])
-		p[k] = (1-fs)*p[k] + ct
+		ct := float32((fs-as)*b[k]) + float32(as*(float32((1-ab)*cs[k])+float32(ab*blended[k])))
+		p[k] = float32((1-fs)*p[k]) + ct
 	}
 	if g.spots != nil {
 		g.paintSpots(i, mode, spot, fs, as, ab, keep)
@@ -491,8 +491,8 @@ func (g *Group) paintSpots(i int, mode Mode, spot Components, fs, as, ab float32
 		case mode != Normal && mode.Separable():
 			blended = 1 - mode.channel(1-bs/ab, 1-spot[j])
 		}
-		ct := (fs-as)*bs + as*((1-ab)*spot[j]+ab*blended)
-		q[j] = (1-fs)*q[j] + ct
+		ct := float32((fs-as)*bs) + float32(as*(float32((1-ab)*spot[j])+float32(ab*blended)))
+		q[j] = float32((1-fs)*q[j]) + ct
 	}
 }
 
@@ -520,7 +520,7 @@ func (g *Group) paintRGB(x, y int, mode Mode, cs [3]float32, fs, as float32) {
 	if !g.attrs.Knockout {
 		agb = agPrev
 	}
-	ag := (1-fs)*agPrev + (fs-as)*agb + as
+	ag := float32((1-fs)*agPrev) + float32((fs-as)*agb) + as
 	var a0 float32
 	if g.initial != nil {
 		a0 = g.initial[4*i+3]
@@ -532,8 +532,8 @@ func (g *Group) paintRGB(x, y int, mode Mode, cs [3]float32, fs, as float32) {
 		blended = mode.Blend(cb, cs)
 	}
 	for k := range 3 {
-		ct := (fs-as)*b[k] + as*((1-b[3])*cs[k]+b[3]*blended[k])
-		p[k] = (1-fs)*p[k] + ct
+		ct := float32((fs-as)*b[k]) + float32(as*(float32((1-b[3])*cs[k])+float32(b[3]*blended[k])))
+		p[k] = float32((1-fs)*p[k]) + ct
 	}
 	p[3] = union(a0, ag)
 	if g.shape != nil {
@@ -577,7 +577,7 @@ func (g *Group) result(i int) (c Components, f, a float32) {
 			k := a0/a - a0
 			for j := range n {
 				c0 := g.initial[s*i+j] / a0
-				c[j] = clamp01(c[j] + (c[j]-c0)*k)
+				c[j] = clamp01(c[j] + float32((c[j]-c0)*k))
 			}
 		}
 	}
@@ -660,7 +660,7 @@ func (p Params) Source(x, y int, shape, alpha float32) (fs, as float32) {
 	return shape, alpha * k
 }
 
-func union(b, s float32) float32 { return b + s - b*s }
+func union(b, s float32) float32 { return b + s - float32(b*s) }
 
 func clamp01(v float32) float32 { return min(max(v, 0), 1) }
 
@@ -685,8 +685,8 @@ func (g *Group) Underlay(bg Components, a float32) {
 			continue
 		}
 		for k := range n {
-			p[k] += c[k] * a * keep
+			p[k] += float32(c[k] * a * keep)
 		}
-		p[n] += a * keep
+		p[n] += float32(a * keep)
 	}
 }

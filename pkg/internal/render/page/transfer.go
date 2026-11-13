@@ -46,7 +46,7 @@ func level(v float32) int {
 	case v >= 1:
 		return transferLevels - 1
 	}
-	return int(v*(transferLevels-1) + 0.5)
+	return int(float32(v*(transferLevels-1)) + 0.5)
 }
 
 // currentTransfer returns the transfer tables of the current graphics state,
@@ -223,9 +223,9 @@ func (r *renderer) transferImage(img image.Image) (image.Image, error) {
 			cr, cg, cb, _ := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
 			tr, tg, tb := t.apply(float32(cr)/0xffff, float32(cg)/0xffff, float32(cb)/0xffff)
 			i := y*out.Stride + 4*x
-			out.Pix[i] = uint8(tr*255 + 0.5)   //nolint:gosec // tr is in [0, 1], so the product fits a byte
-			out.Pix[i+1] = uint8(tg*255 + 0.5) //nolint:gosec // tg is in [0, 1], so the product fits a byte
-			out.Pix[i+2] = uint8(tb*255 + 0.5) //nolint:gosec // tb is in [0, 1], so the product fits a byte
+			out.Pix[i] = uint8(float32(tr*255) + 0.5)   //nolint:gosec // tr is in [0, 1], so the product fits a byte
+			out.Pix[i+1] = uint8(float32(tg*255) + 0.5) //nolint:gosec // tg is in [0, 1], so the product fits a byte
+			out.Pix[i+2] = uint8(float32(tb*255) + 0.5) //nolint:gosec // tb is in [0, 1], so the product fits a byte
 			out.Pix[i+3] = 0xff
 		}
 	}

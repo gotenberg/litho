@@ -264,7 +264,7 @@ func (r *renderer) tilingSource(s *scope, tp *tilingPattern, resources ast.PdfDi
 	p := tp.matrix.Mul(s.base)
 	u := p.ApplyVector(geom.Point{X: tp.xStep})
 	v := p.ApplyVector(geom.Point{Y: tp.yStep})
-	if !numeric.Positive(math.Abs(u.X*v.Y-u.Y*v.X)) || !finitePoint(u) || !finitePoint(v) {
+	if !numeric.Positive(math.Abs(float64(u.X*v.Y)-float64(u.Y*v.X))) || !finitePoint(u) || !finitePoint(v) {
 		// A singular pattern matrix squeezes the cells to nothing.
 		return nil, nil // nothing to paint is no error
 	}
@@ -532,10 +532,10 @@ func composite(v view, cov *raster.Coverage, a float32, src *patternSource, unco
 			}
 			i := 4 * ((dy-v.y)*dst.Width + dx - v.x)
 			keep := 1 - min(1, pa*k)
-			dst.Pix[i] = pr*k + dst.Pix[i]*keep
-			dst.Pix[i+1] = pg*k + dst.Pix[i+1]*keep
-			dst.Pix[i+2] = pb*k + dst.Pix[i+2]*keep
-			dst.Pix[i+3] = pa*k + dst.Pix[i+3]*keep
+			dst.Pix[i] = float32(pr*k) + float32(dst.Pix[i]*keep)
+			dst.Pix[i+1] = float32(pg*k) + float32(dst.Pix[i+1]*keep)
+			dst.Pix[i+2] = float32(pb*k) + float32(dst.Pix[i+2]*keep)
+			dst.Pix[i+3] = float32(pa*k) + float32(dst.Pix[i+3]*keep)
 		}
 	}
 }
@@ -569,7 +569,7 @@ func sampleWrapped(t *surface.Canvas, p geom.Point) (r, g, b, a float32) {
 	}{{ix, iy, (1 - wx) * (1 - wy)}, {ix1, iy, wx * (1 - wy)}, {ix, iy1, (1 - wx) * wy}, {ix1, iy1, wx * wy}} {
 		i := 4 * (tap.y*t.Width + tap.x)
 		for c := range 4 {
-			out[c] += t.Pix[i+c] * tap.w
+			out[c] += float32(t.Pix[i+c] * tap.w)
 		}
 	}
 	return out[0], out[1], out[2], out[3]

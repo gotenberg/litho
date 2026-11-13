@@ -148,8 +148,8 @@ func (f *flattener) cubic(pl *Polyline, p0, p1, p2, p3 geom.Point) error {
 	// Halved differences keep control points near the float64 limit from
 	// overflowing to infinity.
 	dd := max(
-		math.Hypot(p0.X/2-p1.X+p2.X/2, p0.Y/2-p1.Y+p2.Y/2),
-		math.Hypot(p1.X/2-p2.X+p3.X/2, p1.Y/2-p2.Y+p3.Y/2),
+		math.Hypot(float64(p0.X/2)-p1.X+float64(p2.X/2), float64(p0.Y/2)-p1.Y+float64(p2.Y/2)),
+		math.Hypot(float64(p1.X/2)-p2.X+float64(p3.X/2), float64(p1.Y/2)-p2.Y+float64(p3.Y/2)),
 	)
 	n := 1
 	if est := math.Ceil(math.Sqrt(1.5 * dd / f.tol)); est >= maxCurveSegments || math.IsNaN(est) {
@@ -172,8 +172,8 @@ func bezier(p0, p1, p2, p3 geom.Point, t float64) geom.Point {
 	u := 1 - t
 	b0, b1, b2, b3 := u*u*u, 3*u*u*t, 3*u*t*t, t*t*t
 	return geom.Point{
-		X: b0*p0.X + b1*p1.X + b2*p2.X + b3*p3.X,
-		Y: b0*p0.Y + b1*p1.Y + b2*p2.Y + b3*p3.Y,
+		X: float64(b0*p0.X) + float64(b1*p1.X) + float64(b2*p2.X) + float64(b3*p3.X),
+		Y: float64(b0*p0.Y) + float64(b1*p1.Y) + float64(b2*p2.Y) + float64(b3*p3.Y),
 	}
 }
 

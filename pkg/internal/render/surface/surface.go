@@ -70,10 +70,10 @@ func (c *Canvas) BlendOver(x, y int, r, g, b, a float32) {
 	a = min(a, 1)
 	i := 4 * (y*c.Width + x)
 	keep := 1 - a
-	c.Pix[i] = r*a + c.Pix[i]*keep
-	c.Pix[i+1] = g*a + c.Pix[i+1]*keep
-	c.Pix[i+2] = b*a + c.Pix[i+2]*keep
-	c.Pix[i+3] = a + c.Pix[i+3]*keep
+	c.Pix[i] = float32(r*a) + float32(c.Pix[i]*keep)
+	c.Pix[i+1] = float32(g*a) + float32(c.Pix[i+1]*keep)
+	c.Pix[i+2] = float32(b*a) + float32(c.Pix[i+2]*keep)
+	c.Pix[i+3] = a + float32(c.Pix[i+3]*keep)
 }
 
 // Image returns the canvas as a non-premultiplied 8-bit image, each channel
@@ -100,7 +100,7 @@ func to8(v float32) uint8 {
 	case v >= 1:
 		return 255
 	}
-	return uint8(v*255 + 0.5)
+	return uint8(float32(v*255) + 0.5)
 }
 
 // Mask is an alpha raster, rows top to bottom, values in [0, 1]: the

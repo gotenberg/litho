@@ -342,8 +342,8 @@ func coonsInterior(pt *patch) {
 	q := func(terms ...term) geom.Point {
 		var out geom.Point
 		for _, t := range terms {
-			out.X += t.w * pt.p[4*t.i+t.j].X
-			out.Y += t.w * pt.p[4*t.i+t.j].Y
+			out.X += float64(t.w * pt.p[4*t.i+t.j].X)
+			out.Y += float64(t.w * pt.p[4*t.i+t.j].Y)
 		}
 		return geom.Point{X: out.X / 9, Y: out.Y / 9}
 	}

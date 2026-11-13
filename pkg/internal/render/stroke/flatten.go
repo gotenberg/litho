@@ -199,8 +199,8 @@ func addCubic(pc *piece, c1, c2, end geom.Point, n int) {
 		u := 1 - t
 		a, b, c, d := u*u*u, 3*u*u*t, 3*u*t*t, t*t*t
 		pc.add(geom.Point{
-			X: a*p0.X + b*c1.X + c*c2.X + d*end.X,
-			Y: a*p0.Y + b*c1.Y + c*c2.Y + d*end.Y,
+			X: float64(a*p0.X) + float64(b*c1.X) + float64(c*c2.X) + float64(d*end.X),
+			Y: float64(a*p0.Y) + float64(b*c1.Y) + float64(c*c2.Y) + float64(d*end.Y),
 		}, true)
 	}
 	pc.add(end, false)

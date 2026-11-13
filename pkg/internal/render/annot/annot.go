@@ -518,7 +518,7 @@ func algorithm81(bbox geom.Rect, formMatrix geom.Matrix, rect geom.Rect) geom.Ma
 	}
 	sx := (rect.Max.X - rect.Min.X) / w
 	sy := (rect.Max.Y - rect.Min.Y) / h
-	return geom.Matrix{sx, 0, 0, sy, rect.Min.X - box.Min.X*sx, rect.Min.Y - box.Min.Y*sy}
+	return geom.Matrix{sx, 0, 0, sy, rect.Min.X - float64(box.Min.X*sx), rect.Min.Y - float64(box.Min.Y*sy)}
 }
 
 // Placement returns the matrix A of ISO 32000-1, 12.5.5, Algorithm 8.1 that

@@ -15,30 +15,30 @@ var Identity = Matrix{1, 0, 0, 1, 0, 0}
 
 // Apply maps p through m.
 func (m Matrix) Apply(p Point) Point {
-	return Point{X: m[0]*p.X + m[2]*p.Y + m[4], Y: m[1]*p.X + m[3]*p.Y + m[5]}
+	return Point{X: float64(m[0]*p.X) + float64(m[2]*p.Y) + m[4], Y: float64(m[1]*p.X) + float64(m[3]*p.Y) + m[5]}
 }
 
 // ApplyVector maps the direction v through m, ignoring the translation.
 func (m Matrix) ApplyVector(v Point) Point {
-	return Point{X: m[0]*v.X + m[2]*v.Y, Y: m[1]*v.X + m[3]*v.Y}
+	return Point{X: float64(m[0]*v.X) + float64(m[2]*v.Y), Y: float64(m[1]*v.X) + float64(m[3]*v.Y)}
 }
 
 // Mul returns the transform that applies m, then n. In the content stream,
 // "m cm" with current matrix n leaves m.Mul(n) in force (ISO 32000-1, 8.4.4).
 func (m Matrix) Mul(n Matrix) Matrix {
 	return Matrix{
-		m[0]*n[0] + m[1]*n[2],
-		m[0]*n[1] + m[1]*n[3],
-		m[2]*n[0] + m[3]*n[2],
-		m[2]*n[1] + m[3]*n[3],
-		m[4]*n[0] + m[5]*n[2] + n[4],
-		m[4]*n[1] + m[5]*n[3] + n[5],
+		float64(m[0]*n[0]) + float64(m[1]*n[2]),
+		float64(m[0]*n[1]) + float64(m[1]*n[3]),
+		float64(m[2]*n[0]) + float64(m[3]*n[2]),
+		float64(m[2]*n[1]) + float64(m[3]*n[3]),
+		float64(m[4]*n[0]) + float64(m[5]*n[2]) + n[4],
+		float64(m[4]*n[1]) + float64(m[5]*n[3]) + n[5],
 	}
 }
 
 // Det returns the determinant of the linear part of m.
 func (m Matrix) Det() float64 {
-	return m[0]*m[3] - m[1]*m[2]
+	return float64(m[0]*m[3]) - float64(m[1]*m[2])
 }
 
 // Invert returns the inverse of m, and false when m is singular or holds a
@@ -53,8 +53,8 @@ func (m Matrix) Invert() (Matrix, bool) {
 		-m[1] / det,
 		-m[2] / det,
 		m[0] / det,
-		(m[2]*m[5] - m[3]*m[4]) / det,
-		(m[1]*m[4] - m[0]*m[5]) / det,
+		(float64(m[2]*m[5]) - float64(m[3]*m[4])) / det,
+		(float64(m[1]*m[4]) - float64(m[0]*m[5])) / det,
 	}
 	for _, v := range inv {
 		if math.IsNaN(v) || math.IsInf(v, 0) {

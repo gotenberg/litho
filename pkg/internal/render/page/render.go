@@ -527,10 +527,10 @@ func underlay(c *surface.Canvas, bg [4]float32) {
 			continue
 		}
 		keep := 1 - c.Pix[i+3]
-		c.Pix[i] += r * keep
-		c.Pix[i+1] += g * keep
-		c.Pix[i+2] += b * keep
-		c.Pix[i+3] += a * keep
+		c.Pix[i] += float32(r * keep)
+		c.Pix[i+1] += float32(g * keep)
+		c.Pix[i+2] += float32(b * keep)
+		c.Pix[i+3] += float32(a * keep)
 	}
 }
 

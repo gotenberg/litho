@@ -309,7 +309,7 @@ func clipEdge(edges []edge, a, b geom.Point, view geom.Rect) []edge {
 		}
 		if next.Y > prev.Y {
 			e := edge{x0: prev.X, y0: prev.Y, x1: next.X, y1: next.Y, dir: dir}
-			if mid := prev.X/2 + next.X/2; mid <= view.Min.X {
+			if mid := float64(prev.X/2) + float64(next.X/2); mid <= view.Min.X {
 				e.x0, e.x1 = view.Min.X, view.Min.X
 			} else if mid >= view.Max.X {
 				e.x0, e.x1 = view.Max.X, view.Max.X
@@ -325,11 +325,11 @@ func clipEdge(edges []edge, a, b geom.Point, view geom.Rect) []edge {
 
 // param returns t with lerp(a, b, t) = v, for a ≠ b.
 func param(a, b, v float64) float64 {
-	return min(max((v/2-a/2)/(b/2-a/2), 0), 1)
+	return min(max((float64(v/2)-float64(a/2))/(float64(b/2)-float64(a/2)), 0), 1)
 }
 
 func lerp(a, b, t float64) float64 {
-	return a*(1-t) + b*t
+	return float64(a*(1-t)) + float64(b*t)
 }
 
 // scan converts the edges, all inside the raster, into coverage.
@@ -402,7 +402,7 @@ func scanRow(acc, diff []float64, active []edge, cuts []float64, cross []crossin
 		if h <= 0 {
 			continue
 		}
-		ym := b0/2 + b1/2
+		ym := float64(b0/2) + float64(b1/2)
 		cross = cross[:0]
 		for _, e := range active {
 			if e.y0 <= ym && ym < e.y1 {
@@ -427,7 +427,7 @@ func scanRow(acc, diff []float64, active []edge, cuts []float64, cross []crossin
 // maxRowVertexCuts of them, sorted and deduplicated.
 func rowCuts(cuts []float64, active []edge, top, bot float64) []float64 {
 	for k := range subBands + 1 {
-		cuts = append(cuts, top+float64(k)/subBands)
+		cuts = append(cuts, top+float64(float64(k)/subBands))
 	}
 	extra := 0
 	for _, e := range active {
@@ -464,14 +464,14 @@ func addSpan(acc, diff []float64, xa, xb, h float64) {
 	}
 	ia, ib := int(xa), int(xb)
 	if ia == ib {
-		acc[ia] += h * (xb - xa)
+		acc[ia] += float64(h * (xb - xa))
 		return
 	}
-	acc[ia] += h * (float64(ia+1) - xa)
+	acc[ia] += float64(h * (float64(ia+1) - xa))
 	diff[ia+1] += h
 	diff[ib] -= h
 	if ib < len(acc) {
-		acc[ib] += h * (xb - float64(ib))
+		acc[ib] += float64(h * (xb - float64(ib)))
 	}
 }
 

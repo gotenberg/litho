@@ -234,8 +234,8 @@ func (j *job) run(ctx context.Context, dst *surface.Canvas, p Params) error {
 		cy := float64(y) + 0.5
 		for x := x0; x < x1; x++ {
 			cx := float64(x) + 0.5
-			u := inv[0]*cx + inv[2]*cy + inv[4]
-			v := inv[1]*cx + inv[3]*cy + inv[5]
+			u := float64(inv[0]*cx) + float64(inv[2]*cy) + inv[4]
+			v := float64(inv[1]*cx) + float64(inv[3]*cy) + inv[5]
 			// Image space covers [0, w) × [0, h) samples, so the unit square
 			// is half open: u in [0, 1), v in (0, 1].
 			if u < 0 || u >= 1 || v <= 0 || v > 1 || math.IsNaN(u) || math.IsNaN(v) {
@@ -262,9 +262,9 @@ func (j *job) run(ctx context.Context, dst *surface.Canvas, p Params) error {
 					a += w
 					if j.src != nil {
 						r, g, b := j.src.rgb(tx.i, ty.i)
-						pr += w * r
-						pg += w * g
-						pb += w * b
+						pr += float32(w * r)
+						pg += float32(w * g)
+						pb += float32(w * b)
 					}
 				}
 			}
@@ -297,10 +297,10 @@ func (j *job) run(ctx context.Context, dst *surface.Canvas, p Params) error {
 			total = min(total, 1)
 			i := 4 * (y*dst.Width + x)
 			keep := 1 - total
-			dst.Pix[i] = clamp01(r)*total + dst.Pix[i]*keep
-			dst.Pix[i+1] = clamp01(g)*total + dst.Pix[i+1]*keep
-			dst.Pix[i+2] = clamp01(b)*total + dst.Pix[i+2]*keep
-			dst.Pix[i+3] = total + dst.Pix[i+3]*keep
+			dst.Pix[i] = float32(clamp01(r)*total) + float32(dst.Pix[i]*keep)
+			dst.Pix[i+1] = float32(clamp01(g)*total) + float32(dst.Pix[i+1]*keep)
+			dst.Pix[i+2] = float32(clamp01(b)*total) + float32(dst.Pix[i+2]*keep)
+			dst.Pix[i+3] = total + float32(dst.Pix[i+3]*keep)
 		}
 	}
 	return nil
@@ -312,7 +312,7 @@ func sampleAlpha(g *grid, plane *Alpha, u, v float64, xt, yt *axisTaps) float32 
 	var s float32
 	for _, ty := range yt.t[:yt.n] {
 		for _, tx := range xt.t[:xt.n] {
-			s += ty.w * tx.w * plane.at(tx.i, ty.i)
+			s += float32(ty.w * tx.w * plane.at(tx.i, ty.i))
 		}
 	}
 	return s

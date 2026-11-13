@@ -36,12 +36,12 @@ func (t SpotTable) at(t0 float32) Components {
 		}
 		return Components{}
 	}
-	f := clamp01(t0) * float32(n)
+	f := float32(clamp01(t0) * float32(n))
 	i := min(int(f), n-1)
 	w := f - float32(i)
 	var c Components
 	for k := range 4 {
-		c[k] = t[i][k] + (t[i+1][k]-t[i][k])*w
+		c[k] = t[i][k] + float32((t[i+1][k]-t[i][k])*w)
 	}
 	return c
 }

@@ -68,7 +68,7 @@ func axis(s, extent float64, size int, interpolate bool, out *axisTaps) {
 		// A box filter weighs each sample by the length of the footprint it
 		// covers: a footprint of 10/9 sample lies mostly over one sample and
 		// takes a ninth of the next, rather than half of each.
-		lo, hi := s-extent/2, s+extent/2
+		lo, hi := s-float64(extent/2), s+float64(extent/2)
 		n := 0
 		for i := math.Floor(lo); i < hi && n < len(out.t); i++ {
 			cover := min(hi, i+1) - max(lo, i)
@@ -83,9 +83,9 @@ func axis(s, extent float64, size int, interpolate bool, out *axisTaps) {
 		n := maxBoxTaps
 		w := 1 / float32(n)
 		step := extent / float64(n)
-		start := s - extent/2 + step/2
+		start := s - float64(extent/2) + float64(step/2)
 		for k := range n {
-			out.t[k] = tap{i: clampIndex(math.Floor(start+float64(k)*step), size), w: w}
+			out.t[k] = tap{i: clampIndex(math.Floor(start+float64(float64(k)*step)), size), w: w}
 		}
 		out.n = n
 	case interpolate:

@@ -140,7 +140,7 @@ func (dp dashPattern) cut(pc piece, out []piece, toggles *int) ([]piece, error) 
 			t += rem
 			p := b
 			if t < l {
-				p = geom.Point{X: a.X + d.X*t, Y: a.Y + d.Y*t}
+				p = geom.Point{X: a.X + float64(d.X*t), Y: a.Y + float64(d.Y*t)}
 			}
 			if on {
 				cur.add(p, false)

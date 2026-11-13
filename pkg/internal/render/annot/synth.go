@@ -358,7 +358,7 @@ func synthLine(ctx context.Context, doc *document.Document, dict ast.PdfDict) (d
 		for _, x := range []float64{0, length} {
 			var leader geom.Path
 			leader.MoveTo(frame.Apply(geom.Point{X: x, Y: sign * llo}))
-			leader.LineTo(frame.Apply(geom.Point{X: x, Y: ll + sign*lle}))
+			leader.LineTo(frame.Apply(geom.Point{X: x, Y: ll + float64(sign*lle)}))
 			d.add(leader, paintStroke)
 		}
 	}
@@ -481,7 +481,7 @@ func synthMarkup(ctx context.Context, doc *document.Document, dict ast.PdfDict, 
 			u := unit(ll, lr)
 			n := geom.Point{X: -u.Y, Y: u.X}
 			off := func(pt geom.Point, a, c float64) geom.Point {
-				return geom.Point{X: pt.X + a*u.X + c*n.X, Y: pt.Y + a*u.Y + c*n.Y}
+				return geom.Point{X: pt.X + float64(a*u.X) + float64(c*n.X), Y: pt.Y + float64(a*u.Y) + float64(c*n.Y)}
 			}
 			p.MoveTo(ll)
 			p.CubicTo(off(ll, -h, h), off(ul, -h, -h), ul)
@@ -553,7 +553,7 @@ func (d *drawing) ending(frame geom.Matrix, style ast.PdfName, tip geom.Point, s
 	if size == 0 {
 		return
 	}
-	x, y, h := tip.X, tip.Y, size/2
+	x, y, h := tip.X, tip.Y, float64(size/2)
 	at := func(px, py float64) geom.Point { return frame.Apply(geom.Point{X: px, Y: py}) }
 	polygon := func(closed bool, pts ...geom.Point) {
 		var p geom.Path
@@ -580,15 +580,15 @@ func (d *drawing) ending(frame geom.Matrix, style ast.PdfName, tip geom.Point, s
 	case "Diamond":
 		polygon(true, at(x, y), at(x-h, y+h), at(x-size, y), at(x-h, y-h))
 	case "OpenArrow", "ClosedArrow":
-		polygon(style == "ClosedArrow", at(x-size, y+tan30*size), at(x, y), at(x-size, y-tan30*size))
+		polygon(style == "ClosedArrow", at(x-size, y+float64(tan30*size)), at(x, y), at(x-size, y-float64(tan30*size)))
 	case "ROpenArrow", "RClosedArrow":
-		polygon(style == "RClosedArrow", at(x+size, y+tan30*size), at(x, y), at(x+size, y-tan30*size))
+		polygon(style == "RClosedArrow", at(x+size, y+float64(tan30*size)), at(x, y), at(x+size, y-float64(tan30*size)))
 	case "Butt":
 		polygon(false, at(x, y+h), at(x, y-h))
 	case "Slash":
 		// A short line through the tip, 30 degrees clockwise from the
 		// perpendicular (Table 176).
-		off := h * math.Cos(math.Pi/3)
+		off := float64(h * math.Cos(math.Pi/3))
 		polygon(false, at(x-off, y-h), at(x+off, y+h))
 	}
 }
@@ -624,7 +624,7 @@ func (d *drawing) strokes() bool {
 // bounds returns the box the drawing's strokes and fills reach.
 func (d *drawing) bounds() geom.Rect {
 	out := d.pathBounds()
-	reach := miterReach*d.width + 1
+	reach := float64(miterReach*d.width) + 1
 	out.Min.X -= reach
 	out.Min.Y -= reach
 	out.Max.X += reach
@@ -1018,7 +1018,7 @@ func mid(a, b geom.Point) geom.Point {
 // ellipse adds an axis-aligned ellipse of radii rx and ry around c, four
 // cubic Béziers.
 func ellipse(p *geom.Path, c geom.Point, rx, ry float64) {
-	kx, ky := bezierCircle*rx, bezierCircle*ry
+	kx, ky := float64(bezierCircle*rx), float64(bezierCircle*ry)
 	p.MoveTo(geom.Point{X: c.X + rx, Y: c.Y})
 	p.CubicTo(geom.Point{X: c.X + rx, Y: c.Y + ky}, geom.Point{X: c.X + kx, Y: c.Y + ry}, geom.Point{X: c.X, Y: c.Y + ry})
 	p.CubicTo(geom.Point{X: c.X - kx, Y: c.Y + ry}, geom.Point{X: c.X - rx, Y: c.Y + ky}, geom.Point{X: c.X - rx, Y: c.Y})
@@ -1038,7 +1038,7 @@ func squiggle(p *geom.Path, ul, ll, lr geom.Point) {
 	h := math.Hypot(ul.X-ll.X, ul.Y-ll.Y) / 6
 	step := max(2, length/maxSquiggleSteps)
 	at := func(a, c float64) geom.Point {
-		return geom.Point{X: ll.X + a*u.X + c*n.X, Y: ll.Y + a*u.Y + c*n.Y}
+		return geom.Point{X: ll.X + float64(a*u.X) + float64(c*n.X), Y: ll.Y + float64(a*u.Y) + float64(c*n.Y)}
 	}
 	p.MoveTo(at(0, h))
 	up := false

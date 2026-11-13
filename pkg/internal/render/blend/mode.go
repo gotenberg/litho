@@ -169,16 +169,16 @@ func (m Mode) channel(cb, cs float32) float32 {
 		return hardLight(cb, cs)
 	case SoftLight:
 		if cs <= 0.5 {
-			return cb - (1-2*cs)*cb*(1-cb)
+			return cb - float32((1-float32(2*cs))*cb*(1-cb))
 		}
-		return cb + (2*cs-1)*(softLightD(cb)-cb)
+		return cb + float32((float32(2*cs)-1)*(softLightD(cb)-cb))
 	case Difference:
 		if cb > cs {
 			return cb - cs
 		}
 		return cs - cb
 	case Exclusion:
-		return cb + cs - 2*cb*cs
+		return cb + cs - float32(2*cb*cs)
 	case Normal, Hue, Saturation, Color, Luminosity:
 		// Normal selects the source; the non-separable modes never reach a
 		// single component.
@@ -186,7 +186,7 @@ func (m Mode) channel(cb, cs float32) float32 {
 	return cs
 }
 
-func screen(cb, cs float32) float32 { return cb + cs - cb*cs }
+func screen(cb, cs float32) float32 { return cb + cs - float32(cb*cs) }
 
 // hardLight is Table 136's HardLight: Multiply(cb, 2cs) up to 0.5, then
 // Screen(cb, 2cs - 1). Overlay is HardLight with its arguments swapped.
@@ -194,19 +194,19 @@ func hardLight(cb, cs float32) float32 {
 	if cs <= 0.5 {
 		return cb * 2 * cs
 	}
-	return screen(cb, 2*cs-1)
+	return screen(cb, float32(2*cs)-1)
 }
 
 // softLightD is the D(x) of Table 136's SoftLight.
 func softLightD(x float32) float32 {
 	if x <= 0.25 {
-		return ((16*x-12)*x + 4) * x
+		return (float32((float32(16*x)-12)*x) + 4) * x
 	}
 	return float32(math.Sqrt(float64(x)))
 }
 
 // lum is Lum(C) of 11.3.5: 0.3 R + 0.59 G + 0.11 B.
-func lum(c [3]float32) float32 { return 0.3*c[0] + 0.59*c[1] + 0.11*c[2] }
+func lum(c [3]float32) float32 { return float32(0.3*c[0]) + float32(0.59*c[1]) + float32(0.11*c[2]) }
 
 // setLum is SetLum(C, l) of 11.3.5: shift C to luminosity l, then clip it
 // into gamut.

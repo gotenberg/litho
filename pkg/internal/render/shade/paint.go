@@ -333,11 +333,11 @@ func (p *painter) paintFunctionBased(ctx context.Context) error {
 func (p *painter) axial(q geom.Point) (r, g, b float32, ok bool) {
 	c := p.s.coords
 	dx, dy := c[2]-c[0], c[3]-c[1]
-	den := dx*dx + dy*dy
+	den := float64(dx*dx) + float64(dy*dy)
 	if den == 0 {
 		return 0, 0, 0, false
 	}
-	s := ((q.X-c[0])*dx + (q.Y-c[1])*dy) / den
+	s := (float64((q.X-c[0])*dx) + float64((q.Y-c[1])*dy)) / den
 	switch {
 	case s < 0:
 		if !p.s.extend[0] {
@@ -350,7 +350,7 @@ func (p *painter) axial(q geom.Point) (r, g, b float32, ok bool) {
 		}
 		s = 1
 	}
-	r, g, b = p.rampAt(p.s.t0 + s*(p.s.t1-p.s.t0))
+	r, g, b = p.rampAt(p.s.t0 + float64(s*(p.s.t1-p.s.t0)))
 	return r, g, b, true
 }
 
@@ -369,12 +369,12 @@ func (p *painter) radial(q geom.Point) (r, g, b float32, ok bool) {
 	c := p.s.coords
 	cdx, cdy, dr := c[3]-c[0], c[4]-c[1], c[5]-c[2]
 	pdx, pdy := q.X-c[0], q.Y-c[1]
-	qa := cdx*cdx + cdy*cdy - dr*dr
-	qb := pdx*cdx + pdy*cdy + c[2]*dr
-	qc := pdx*pdx + pdy*pdy - c[2]*c[2]
+	qa := float64(cdx*cdx) + float64(cdy*cdy) - float64(dr*dr)
+	qb := float64(pdx*cdx) + float64(pdy*cdy) + float64(c[2]*dr)
+	qc := float64(pdx*pdx) + float64(pdy*pdy) - float64(c[2]*c[2])
 
 	valid := func(s float64) bool {
-		if math.IsNaN(s) || c[2]+s*dr < 0 {
+		if math.IsNaN(s) || c[2]+float64(s*dr) < 0 {
 			return false
 		}
 		return (s >= 0 || p.s.extend[0]) && (s <= 1 || p.s.extend[1])
@@ -386,7 +386,7 @@ func (p *painter) radial(q geom.Point) (r, g, b float32, ok bool) {
 			s = qc / (2 * qb)
 		}
 	} else {
-		disc := qb*qb - qa*qc
+		disc := float64(qb*qb) - float64(qa*qc)
 		if disc < 0 {
 			return 0, 0, 0, false
 		}
@@ -406,7 +406,7 @@ func (p *painter) radial(q geom.Point) (r, g, b float32, ok bool) {
 		return 0, 0, 0, false
 	}
 	s = min(max(s, 0), 1)
-	r, g, b = p.rampAt(p.s.t0 + s*(p.s.t1-p.s.t0))
+	r, g, b = p.rampAt(p.s.t0 + float64(s*(p.s.t1-p.s.t0)))
 	return r, g, b, true
 }
 
@@ -425,7 +425,7 @@ func (p *painter) rampAt(t float64) (r, g, b float32) {
 	i := min(int(x), rampSize-2)
 	f := float32(x - float64(i))
 	a, c := p.rgbRamp[3*i:3*i+3], p.rgbRamp[3*i+3:3*i+6]
-	return a[0] + f*(c[0]-a[0]), a[1] + f*(c[1]-a[1]), a[2] + f*(c[2]-a[2])
+	return a[0] + float32(f*(c[0]-a[0])), a[1] + float32(f*(c[1]-a[1])), a[2] + float32(f*(c[2]-a[2]))
 }
 
 // meshBuffer records, per pixel of the paint area, which triangle or patch
@@ -555,7 +555,7 @@ func pixelSpan(r geom.Rect, within region) region {
 // attributes of a point of the triangle near it. Cost: the pixels of the
 // triangle's bounding box, grown by reach, inside the area.
 func (mb *meshBuffer) triangle(ctx context.Context, d [3]geom.Point, attr [3][2]float32, prim int32, reach float64) error {
-	area := (d[1].X-d[0].X)*(d[2].Y-d[0].Y) - (d[2].X-d[0].X)*(d[1].Y-d[0].Y)
+	area := float64((d[1].X-d[0].X)*(d[2].Y-d[0].Y)) - float64((d[2].X-d[0].X)*(d[1].Y-d[0].Y))
 	if area == 0 || math.IsNaN(area) || math.IsInf(area, 0) {
 		return nil
 	}
@@ -588,8 +588,8 @@ func (mb *meshBuffer) triangle(ctx context.Context, d [3]geom.Point, attr [3][2]
 		py := float64(y) + 0.5
 		for x := span.x0; x < span.x1; x++ {
 			px := float64(x) + 0.5
-			w1 := ((px-d[0].X)*(d[2].Y-d[0].Y) - (d[2].X-d[0].X)*(py-d[0].Y)) / area
-			w2 := ((d[1].X-d[0].X)*(py-d[0].Y) - (px-d[0].X)*(d[1].Y-d[0].Y)) / area
+			w1 := (float64((px-d[0].X)*(d[2].Y-d[0].Y)) - float64((d[2].X-d[0].X)*(py-d[0].Y))) / area
+			w2 := (float64((d[1].X-d[0].X)*(py-d[0].Y)) - float64((px-d[0].X)*(d[1].Y-d[0].Y))) / area
 			w0 := 1 - w1 - w2
 			if w0 < -near[0] || w1 < -near[1] || w2 < -near[2] {
 				continue
@@ -606,8 +606,8 @@ func (mb *meshBuffer) triangle(ctx context.Context, d [3]geom.Point, attr [3][2]
 				mb.exact[i] = true
 			}
 			mb.prim[i] = prim
-			mb.a[i] = float32(w0)*attr[0][0] + float32(w1)*attr[1][0] + float32(w2)*attr[2][0]
-			mb.b[i] = float32(w0)*attr[0][1] + float32(w1)*attr[1][1] + float32(w2)*attr[2][1]
+			mb.a[i] = float32(float32(w0)*attr[0][0]) + float32(float32(w1)*attr[1][0]) + float32(float32(w2)*attr[2][0])
+			mb.b[i] = float32(float32(w0)*attr[0][1]) + float32(float32(w1)*attr[1][1]) + float32(float32(w2)*attr[2][1])
 		}
 	}
 	return nil
@@ -649,8 +649,8 @@ func (p *painter) drawPatches(ctx context.Context, mb *meshBuffer) error {
 				for i := range 4 {
 					for j := range 4 {
 						w := bu[i] * bv[j]
-						pt.X += w * dp[4*i+j].X
-						pt.Y += w * dp[4*i+j].Y
+						pt.X += float64(w * dp[4*i+j].X)
+						pt.Y += float64(w * dp[4*i+j].Y)
 					}
 				}
 				grid = append(grid, pt)
@@ -761,14 +761,14 @@ func (p *painter) meshValues(prim int32, a, b float64, out []float64) {
 		u, v := a, b
 		w := [4]float64{(1 - u) * (1 - v), (1 - u) * v, u * v, u * (1 - v)}
 		for k := range out {
-			out[k] = w[0]*s.colors[int(c[0])+k] + w[1]*s.colors[int(c[1])+k] +
-				w[2]*s.colors[int(c[2])+k] + w[3]*s.colors[int(c[3])+k]
+			out[k] = float64(w[0]*s.colors[int(c[0])+k]) + float64(w[1]*s.colors[int(c[1])+k]) +
+				float64(w[2]*s.colors[int(c[2])+k]) + float64(w[3]*s.colors[int(c[3])+k])
 		}
 		return
 	}
 	tri := s.tris[prim]
 	w0 := 1 - a - b
 	for k := range out {
-		out[k] = w0*s.colors[int(tri[0])*n+k] + a*s.colors[int(tri[1])*n+k] + b*s.colors[int(tri[2])*n+k]
+		out[k] = float64(w0*s.colors[int(tri[0])*n+k]) + float64(a*s.colors[int(tri[1])*n+k]) + float64(b*s.colors[int(tri[2])*n+k])
 	}
 }

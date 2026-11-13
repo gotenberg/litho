@@ -169,8 +169,8 @@ func (s *stroker) side(pts []geom.Point, dirs []geom.Point, smooth []bool) {
 // A vertex inside a flattened curve joins round, since the offset of a
 // smooth curve is the envelope of the pen.
 func (s *stroker) joinAt(p, din, dout geom.Point, smooth bool) {
-	cross := din.X*dout.Y - din.Y*dout.X
-	dot := din.X*dout.X + din.Y*dout.Y
+	cross := float64(din.X*dout.Y) - float64(din.Y*dout.X)
+	dot := float64(din.X*dout.X) + float64(din.Y*dout.Y)
 	nin, nout := left(din), left(dout)
 	end := add(p, scale(nout, s.half))
 	if cross > 0 {
@@ -229,7 +229,7 @@ func (s *stroker) arc(c, from geom.Point, sweep float64) {
 	for i := 1; i <= n && !s.over; i++ {
 		a := sweep * float64(i) / float64(n)
 		sin, cos := math.Sincos(a)
-		v := geom.Point{X: from.X*cos - from.Y*sin, Y: from.X*sin + from.Y*cos}
+		v := geom.Point{X: float64(from.X*cos) - float64(from.Y*sin), Y: float64(from.X*sin) + float64(from.Y*cos)}
 		s.lineTo(add(c, scale(v, s.half)))
 	}
 }
@@ -302,4 +302,6 @@ func add(a, b geom.Point) geom.Point { return geom.Point{X: a.X + b.X, Y: a.Y + 
 
 func sub(a, b geom.Point) geom.Point { return geom.Point{X: a.X - b.X, Y: a.Y - b.Y} }
 
-func scale(v geom.Point, k float64) geom.Point { return geom.Point{X: v.X * k, Y: v.Y * k} }
+func scale(v geom.Point, k float64) geom.Point {
+	return geom.Point{X: float64(v.X * k), Y: float64(v.Y * k)}
+}
