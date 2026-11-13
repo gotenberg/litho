@@ -16,10 +16,11 @@ import (
 // pageSel returns the selector of the unnamed page at a 0-based index:
 // the first page, and a right or a left page, the first page being a right
 // page in a left-to-right document and a left page in a right-to-left one
-// (CSS Page 3, 4.3.2).
+// (CSS Page 3, 4.3.2), at its place in the document for :nth() (CSS GCPM
+// 3, 3.1).
 func pageSel(index int, rtl bool) css.PageSelector {
 	right := (index%2 == 0) != rtl
-	return css.PageSelector{First: index == 0, Right: right, Left: !right}
+	return css.PageSelector{First: index == 0, Right: right, Left: !right, Index: index + 1}
 }
 
 // pageBoxes returns the page box of the first page and, when the pages

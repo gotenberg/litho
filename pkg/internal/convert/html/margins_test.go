@@ -1,9 +1,11 @@
 package html
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // placed is a text run as it lands on a page: its text, the left edge of
@@ -359,5 +362,68 @@ func TestPageSetup_StopsOnCancel(t *testing.T) {
 	}
 	if _, _, err := pageBox(ctx, r, o, css.PageSelector{Name: "wide"}); !errors.Is(err, context.Canceled) {
 		t.Errorf("pageBox on a cancelled context = %v, want context.Canceled", err)
+	}
+}
+
+// TestMarginBoxes_PageCounter locks the page counter of the page context
+// (CSS Page 3, 6.1): it adds 1 on every page unless the page context's
+// counter properties name it, a reset or a set lives on to the next pages,
+// a counter of the page context is in scope for every box, a counter of a
+// margin context for its box alone, and :nth() selects pages by index
+// (CSS GCPM 3, 3.1).
+func TestMarginBoxes_PageCounter(t *testing.T) {
+	for _, tc := range []struct {
+		name, css string
+		want      [4]string
+	}{
+		{"increment", `@page { counter-increment: page 2 }`, [4]string{"P2/4", "P4/4", "P6/4", "P8/4"}},
+		{"reset first", `@page :first { counter-reset: page 5 }`, [4]string{"P5/4", "P6/4", "P7/4", "P8/4"}},
+		{"reset every", `@page { counter-reset: page 5 }`, [4]string{"P5/4", "P5/4", "P5/4", "P5/4"}},
+		{"set first", `@page :first { counter-set: page 10 }`, [4]string{"P10/4", "P11/4", "P12/4", "P13/4"}},
+		{"reset nth", `@page :nth(3) { counter-reset: page 1 }`, [4]string{"P1/4", "P2/4", "P1/4", "P2/4"}},
+		{"pages fixed", `@page { counter-reset: pages 9; counter-increment: pages 3 }`, [4]string{"P1/4", "P2/4", "P3/4", "P4/4"}},
+		{"page context", `@page { counter-increment: sheet 3 }`, [4]string{"P1/4S3", "P2/4S6", "P3/4S9", "P4/4S12"}},
+		{"margin context", `@page { @bottom-right { counter-reset: page 7; content: "M" counter(page) } }`, [4]string{"P1/4M7", "P2/4M7", "P3/4M7", "P4/4M7"}},
+		{"nth selects", `@page :nth(2n+1) { @bottom-right { content: "odd" } }`, [4]string{"P1/4odd", "P2/4", "P3/4odd", "P4/4"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := `<style>
+				@page { size: 400pt 300pt; margin: 40pt; font: 10pt "Test Serif";
+					@bottom-left { content: "P" counter(page) "/" counter(pages) }
+					@bottom-center { content: "S" counter(sheet); }
+				}
+				@page { @bottom-center { content: none } }
+				` + tc.css + `
+				body { margin: 0; font: 10pt "Test Serif" } p { margin: 0 } .b { break-before: page }
+			</style><p>1</p><p class=b>2</p><p class=b>3</p><p class=b>4</p>`
+			if strings.Contains(tc.css, "sheet") {
+				src = strings.Replace(src, "@page { @bottom-center { content: none } }", "", 1)
+			}
+			doc := convertDoc(t, src, Options{PreferCSSPageSize: true})
+			if len(doc.Pages) != 4 {
+				t.Fatalf("%d pages, want 4", len(doc.Pages))
+			}
+			for i, want := range tc.want {
+				runs := pageTexts(doc.Pages[i])
+				slices.SortStableFunc(runs, func(a, b placed) int { return cmp.Compare(a.x, b.x) })
+				var got strings.Builder
+				for _, r := range runs {
+					if r.y > 260 {
+						got.WriteString(r.text)
+					}
+				}
+				if got.String() != want {
+					t.Errorf("page %d: bottom margin shows %q, want %q", i+1, got.String(), want)
+				}
+			}
+		})
+	}
+}
+
+func TestPageCounter_OnElementWarns(t *testing.T) {
+	src := `<style>@page { @top-center { content: counter(page) } } h1 { counter-reset: page 1 }</style><h1>x</h1>`
+	doc := convertDoc(t, src, Options{})
+	if !hasWarning(doc.Warnings, warn.CSSUnsupported, "page counter on an element") {
+		t.Errorf("warnings %+v", doc.Warnings)
 	}
 }

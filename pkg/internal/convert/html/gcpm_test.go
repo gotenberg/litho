@@ -215,6 +215,7 @@ func TestRunning_ShrinksToFitItsBox(t *testing.T) {
 func TestRunning_PageCounters(t *testing.T) {
 	src := `<style>
 		@page { size: 400pt 300pt; margin: 40pt; @top-center { content: element(head) } }
+		@page :first { counter-reset: page 3 }
 		body { margin: 0; font: 10pt "Test Serif"; counter-reset: ch }
 		h1 { counter-increment: ch; break-before: page; font-size: 10pt; margin: 0 }
 		header { position: running(head) }
@@ -225,7 +226,7 @@ func TestRunning_PageCounters(t *testing.T) {
 	if len(doc.Pages) != 3 {
 		t.Fatalf("%d pages, want 3", len(doc.Pages))
 	}
-	for i, want := range []string{"p1/IIIc0.1", "p2/IIIc0.2", "p3/IIIc0.3"} {
+	for i, want := range []string{"p3/IIIc0.3", "p4/IIIc0.4", "p5/IIIc0.5"} {
 		if !hasText(doc.Pages[i], want) {
 			t.Errorf("page %d: no %q in %+v", i+1, want, pageTexts(doc.Pages[i]))
 		}

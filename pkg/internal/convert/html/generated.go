@@ -123,6 +123,10 @@ func clampCounter(v int) int { return min(max(v, -maxListValue), maxListValue) }
 // value of list-item for a list item, 0 otherwise.
 func (b *builder) applyCounters(n *dom.Node, st *css.Style) int {
 	c := &b.counters
+	if pageOp(st) {
+		b.warnOnce(warn.CSSUnsupported, warn.Approximated, "page-counter",
+			"counter-reset, counter-increment and counter-set of the page counter on an element do not number the pages; in an @page rule they do")
+	}
 	inst := func(name string, v int, rev bool) {
 		if !c.instantiate(name, clampCounter(v), rev) {
 			b.warnOnce(warn.LimitReached, warn.Approximated, "counters", fmt.Sprintf("more than %d counters in scope; the others were left out", maxCounters))
@@ -192,6 +196,22 @@ func (b *builder) applyCounters(n *dom.Node, st *css.Style) int {
 		return in.value
 	}
 	return 0
+}
+
+// pageOp reports counter properties of an element or a pseudo-element
+// that name the page counter: the page counter that numbers the pages
+// lives in the page context (CSS Page 3, 6.1), and such an element
+// creates a counter of the document of the same name, which page-margin
+// boxes do not read.
+func pageOp(st *css.Style) bool {
+	for _, ops := range [...][]css.CounterOp{st.CounterReset, st.CounterIncrement, st.CounterSet} {
+		for _, op := range ops {
+			if op.Name == pageCounter {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // increment adds by to the innermost counter named name, instantiating it

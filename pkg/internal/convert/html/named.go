@@ -12,10 +12,13 @@ import (
 )
 
 // pageKey is what selects the @page rules of a page: its name, whether it
-// is the first, its side and whether it is blank (CSS Page 3, 4.2).
+// is the first, its side and whether it is blank (CSS Page 3, 4.2), and
+// its 1-based index when an :nth() rule tells pages apart by it (CSS GCPM
+// 3, 3.1), 0 otherwise.
 type pageKey struct {
 	name                string
 	first, right, blank bool
+	index               int
 }
 
 // pageEntry is the box and style of the pages of one key.
@@ -40,6 +43,11 @@ type pageSetup struct {
 	cache    map[pageKey]*pageEntry
 	seen     map[string]bool
 	warnings []typeset.Warning
+	// nth reports :nth() rules, whose pages each key holds by index.
+	nth bool
+	// counters holds the counters of the page context of each page laid
+	// out so far ([prepared.pageCounters]).
+	counters []map[string]int
 	// err is ctx's error, which stopped a page's resolution. The layout
 	// callbacks that ask for a page return no error: the layout stops at
 	// its own next check of ctx, and [prepared.assemble] reports err.
@@ -50,7 +58,7 @@ type pageSetup struct {
 // root element's style is root and direction rtl, on the paper of o,
 // resolved under ctx.
 func newPageSetup(ctx context.Context, r *css.Resolver, o Options, rtl bool, root *css.Style) *pageSetup {
-	return &pageSetup{ctx: ctx, r: r, o: o, rtl: rtl, root: root, cache: map[pageKey]*pageEntry{}, seen: map[string]bool{}}
+	return &pageSetup{ctx: ctx, r: r, o: o, rtl: rtl, root: root, cache: map[pageKey]*pageEntry{}, seen: map[string]bool{}, nth: r.HasNthPages()}
 }
 
 // key returns the key of the page info names: the first page is a right
@@ -58,7 +66,11 @@ func newPageSetup(ctx context.Context, r *css.Resolver, o Options, rtl bool, roo
 // 4.2.1).
 func (s *pageSetup) key(info layout.PageInfo) pageKey {
 	right := (info.Index%2 == 0) != s.rtl
-	return pageKey{name: info.Name, first: info.Index == 0, right: right, blank: info.Blank}
+	k := pageKey{name: info.Name, first: info.Index == 0, right: right, blank: info.Blank}
+	if s.nth {
+		k.index = info.Index + 1
+	}
+	return k
 }
 
 // entry returns the resolved box and style of the page info names. When
@@ -69,7 +81,7 @@ func (s *pageSetup) entry(info layout.PageInfo) *pageEntry {
 	if e, ok := s.cache[k]; ok {
 		return e
 	}
-	sel := css.PageSelector{Name: k.name, First: k.first, Right: k.right, Left: !k.right, Blank: k.blank}
+	sel := css.PageSelector{Name: k.name, First: k.first, Right: k.right, Left: !k.right, Blank: k.blank, Index: info.Index + 1}
 	b, ws, err := pageBox(s.ctx, s.r, s.o, sel)
 	if err != nil {
 		return s.stopped(err)

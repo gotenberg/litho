@@ -3,6 +3,7 @@ package html
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -609,8 +610,8 @@ func blockStyle(st *css.Style) *css.Style {
 
 // marginNodes returns the content of a page-margin box of style st on
 // the page of index, one of pages, whose page box is pb (CSS Page 3, 5.2;
-// CSS Generated Content 3, 1.1): its strings, its page and pages
-// counters, every other counter at zero, attr() at its fallback since a
+// CSS Generated Content 3, 1.1): its strings, its counters as
+// [prepared.counterValues] gives them, attr() at its fallback since a
 // page-margin box has no element, its images, its leaders, and the named
 // strings and running elements the page shows (CSS GCPM 3, 1), a running
 // element's page and pages counters at the page's values.
@@ -624,16 +625,7 @@ func (p *prepared) marginNodes(ctx context.Context, st *css.Style, index, pages 
 			sb.Reset()
 		}
 	}
-	text := func(it css.ContentItem) string {
-		v := 0
-		switch it.Text {
-		case pageCounter:
-			v = index + 1
-		case pagesCounter:
-			v = pages
-		}
-		return layout.CounterText(it.Style, v)
-	}
+	text := p.counterText(st, index, pages)
 	for _, it := range st.Content.Items {
 		if sb.Len() > maxGeneratedBytes {
 			break
@@ -682,6 +674,131 @@ func (p *prepared) marginNodes(ctx context.Context, st *css.Style, index, pages 
 	}
 	flush()
 	return out
+}
+
+// counterText returns what a counter() or counters() item writes in the
+// page-margin box styled box on the page of index, one of pages (CSS Page
+// 3, 6.1): pages is the page count; a counter the box's own counter
+// properties touch takes the value they give; then the counters of the
+// page context, the page counter among them; 0 for any other.
+func (p *prepared) counterText(box *css.Style, index, pages int) func(css.ContentItem) string {
+	pc := p.pageCounters(index)
+	values := func(name string) []int {
+		if name == pagesCounter {
+			return []int{pages}
+		}
+		if v, ok := pc[name]; ok {
+			return []int{v}
+		}
+		return nil
+	}
+	// The box's counters are in scope for the box alone, over those of
+	// the page context and the document.
+	var local map[string]int
+	if len(box.CounterReset)+len(box.CounterIncrement)+len(box.CounterSet) > 0 {
+		local = map[string]int{}
+		base := func(name string) int {
+			if v, ok := local[name]; ok {
+				return v
+			}
+			if vs := values(name); len(vs) > 0 {
+				return vs[len(vs)-1]
+			}
+			return 0
+		}
+		runCounterOps(local, base, box, false)
+	}
+	return func(it css.ContentItem) string {
+		vals := values(it.Text)
+		if v, ok := local[it.Text]; ok && it.Text != pagesCounter {
+			vals = []int{v}
+		}
+		if len(vals) == 0 {
+			vals = []int{0}
+		}
+		if it.Kind == css.ItemCounter {
+			return layout.CounterText(it.Style, vals[len(vals)-1])
+		}
+		var sb strings.Builder
+		for i, v := range vals {
+			if i > 0 {
+				sb.WriteString(it.Separator)
+			}
+			sb.WriteString(layout.CounterText(it.Style, v))
+		}
+		return sb.String()
+	}
+}
+
+// runCounterOps runs the counter properties of st on the counters cur, in
+// the order CSS Lists 3, 4.5 gives, reset, increment, set, base giving the
+// value of a counter cur does not hold. implicitPage adds 1 to the page
+// counter when no property names it. The pages counter takes none of them
+// (CSS Page 3, 6.1).
+func runCounterOps(cur map[string]int, base func(string) int, st *css.Style, implicitPage bool) {
+	touched := false
+	for _, ops := range [...][]css.CounterOp{st.CounterReset, st.CounterIncrement, st.CounterSet} {
+		for _, op := range ops {
+			touched = touched || op.Name == pageCounter
+		}
+	}
+	for _, op := range st.CounterReset {
+		if op.Name != pagesCounter {
+			cur[op.Name] = clampCounter(op.Value)
+		}
+	}
+	for _, op := range st.CounterIncrement {
+		if op.Name != pagesCounter {
+			cur[op.Name] = addCounter(base(op.Name), op.Value)
+		}
+	}
+	if implicitPage && !touched {
+		cur[pageCounter] = addCounter(base(pageCounter), 1)
+	}
+	for _, op := range st.CounterSet {
+		if op.Name != pagesCounter {
+			cur[op.Name] = clampCounter(op.Value)
+		}
+	}
+}
+
+// addCounter returns a + b within the values [clampCounter] keeps.
+func addCounter(a, b int) int {
+	s := min(max(int64(a)+int64(b), -maxListValue), maxListValue)
+	return int(s) // fits int: within ±maxListValue, 2^30
+}
+
+// pageCounters returns the counters of the page context on the page of
+// index (CSS Page 3, 6.1), computed in page order from the page styles:
+// the page counter starts at 0 before the first page and each page adds 1
+// to it, unless the page context's counter-reset, counter-increment or
+// counter-set names it, as WeasyPrint decides the draft leaves open; a
+// counter of the page context lives on from page to page, the pages being
+// siblings (CSS 2.1, 12.4.1). nil when the page was not laid out.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 numbers four pages 2, 4, 6, 8 under
+//     @page { counter-increment: page 2 }, 10 to 13 under @page :first {
+//     counter-set: page 10 }, 5 on each under @page { counter-reset: page 5
+//     }, and 5, 1, 2, 3 under @page :first { counter-reset: page 5 }, where
+//     litho numbers 5, 6, 7, 8.
+func (p *prepared) pageCounters(index int) map[string]int {
+	s := p.pages
+	for k := len(s.counters); k <= index && k < len(p.infos); k++ {
+		cur := map[string]int{pageCounter: 0}
+		if k > 0 {
+			cur = maps.Clone(s.counters[k-1])
+		}
+		ps := s.entry(p.infos[k]).style
+		st := css.Style{CounterReset: ps.CounterReset, CounterIncrement: ps.CounterIncrement, CounterSet: ps.CounterSet}
+		runCounterOps(cur, func(name string) int { return cur[name] }, &st, true)
+		s.counters = append(s.counters, cur)
+	}
+	if index < len(s.counters) {
+		return s.counters[index]
+	}
+	return nil
 }
 
 // runningBox returns the running element n as the page-margin box styled

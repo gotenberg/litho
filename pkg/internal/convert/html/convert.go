@@ -274,7 +274,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 		// The first page takes the root's start page value (CSS Page 3,
 		// 4.1), and the viewport units its page area: compute again when
 		// that page's area is not the one assumed.
-		named, _, err := pageBox(ctx, resolver, o, css.PageSelector{Name: name, First: true, Right: true})
+		named, _, err := pageBox(ctx, resolver, o, css.PageSelector{Name: name, First: true, Right: true, Index: 1})
 		if err != nil {
 			return nil, err
 		}
