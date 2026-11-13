@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -36,7 +35,7 @@ func every() *css.OfficeEffects {
 
 func TestUnder_PaintsReflectionShadowGlowInOrder(t *testing.T) {
 	var px effect.Page
-	frags, err := Under(context.Background(), square(), every(), &px)
+	frags, _, err := Under(context.Background(), square(), every(), &px)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,12 +71,12 @@ func TestUnder_PaintsReflectionShadowGlowInOrder(t *testing.T) {
 func TestUnder_SameBytesOnEveryArchitecture(t *testing.T) {
 	var px effect.Page
 	src := square()
-	frags, err := Under(context.Background(), src, every(), &px)
+	frags, _, err := Under(context.Background(), src, every(), &px)
 	if err != nil {
 		t.Fatal(err)
 	}
 	src.Content = []typeset.Fragment{&typeset.Path{Ops: src.Paths[0].Ops, Fill: &typeset.Fill{Color: typeset.Color{G: 1, A: 1}}}}
-	soft, err := SoftEdge(context.Background(), src, 4, &px)
+	soft, _, err := SoftEdge(context.Background(), src, 4, &px)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,9 +102,9 @@ func TestUnder_PagePixelsSpent(t *testing.T) {
 	var px effect.Page
 	for px.Take(effect.Resolution{W: 1 << 13, H: 1 << 13}) {
 	}
-	frags, err := Under(context.Background(), square(), every(), &px)
-	if !errors.Is(err, ErrPagePixels) {
-		t.Errorf("error %v, want ErrPagePixels", err)
+	frags, notes, err := Under(context.Background(), square(), every(), &px)
+	if err != nil || !notes.Skipped {
+		t.Errorf("notes %+v, error %v, want the effects skipped", notes, err)
 	}
 	if len(frags) != 0 {
 		t.Errorf("%d fragments past the page's pixels, want none", len(frags))

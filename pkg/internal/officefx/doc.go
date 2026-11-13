@@ -20,6 +20,12 @@
 //   - soft edge (20.1.8.53): the content inside the silhouette made
 //     opaque, shrunk by rad and blurred by a third of rad.
 //
+// PowerPoint departs from these where [PowerPoint] says, and draws the
+// effects of a run of text from its glyphs as they paint, by its rules for
+// a shape's; Word draws a run's from its glyph outlines with tighter
+// falloffs ([Source.Text]). An effect list names its program
+// (css.OfficeEffects.Rules).
+//
 // Each bitmap is drawn at the resolution [effect.Plan] chooses for its
 // blur, an RGB picture with a soft mask (ISO 32000-1, 11.6.5.3) in the
 // page model, and an artifact (ISO 14289-1, 7.1): it decorates content

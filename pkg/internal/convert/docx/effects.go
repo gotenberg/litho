@@ -2,7 +2,6 @@ package docx
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -75,11 +74,11 @@ func (d *document) withEffects(pic *layout.Picture, fx *css.OfficeEffects) *layo
 			return nil
 		}
 		src := &officefx.Source{Paths: silhouette(content, r, pic.Vector == nil), Bounds: r, Content: content}
-		under, err := officefx.Under(ctx, src, fx, &d.effectPixels)
-		d.effectFailed(err)
+		under, notes, err := officefx.Under(ctx, src, fx, &d.effectPixels)
+		d.effectFailed(notes, err)
 		if fx.SoftEdge > 0 {
-			soft, err := officefx.SoftEdge(ctx, src, fx.SoftEdge, &d.effectPixels)
-			d.effectFailed(err)
+			soft, notes, err := officefx.SoftEdge(ctx, src, fx.SoftEdge, &d.effectPixels)
+			d.effectFailed(notes, err)
 			if soft != nil {
 				content = []typeset.Fragment{soft}
 			}
@@ -89,14 +88,19 @@ func (d *document) withEffects(pic *layout.Picture, fx *css.OfficeEffects) *layo
 	return out
 }
 
-// effectFailed settles an error of drawing a drawing's effects: one that
-// ends the conversion fails it, any other leaves the effect out with a
+// effectFailed settles what drawing a drawing's effects noted and its
+// error: an effect left out or drawn coarser warns; an error that ends
+// the conversion fails it, any other leaves the effect out with a
 // warning.
-func (d *document) effectFailed(err error) {
+func (d *document) effectFailed(notes officefx.Notes, err error) {
+	if notes.Skipped {
+		d.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("drawing effects past %d pixels are not drawn", effect.MaxPagePixels))
+	}
+	if notes.Reduced {
+		d.warn(warn.LimitReached, warn.Approximated, fmt.Sprintf("drawing effects past %d pixels a bitmap are drawn at a lower resolution", effect.MaxPixels))
+	}
 	switch {
 	case err == nil:
-	case errors.Is(err, officefx.ErrPagePixels):
-		d.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("drawing effects past %d pixels are not drawn", effect.MaxPagePixels))
 	case limits.Stops(err):
 		if d.err == nil {
 			d.err = fmt.Errorf("drawing effects: %w", err)

@@ -623,7 +623,6 @@ func (b *builder) layoutBody(body *TextBody, w, h float64, f fit) *laidBody {
 	// automatically.
 	b.autoScript = body.FontLineSpacing
 	b.recode = map[string]string{}
-	b.anchors = nil
 	tree := &layout.Node{Kind: layout.Element, Style: root, ID: "slides-body"}
 	nums := numbers(paras)
 	budget := maxBodyText
@@ -646,7 +645,7 @@ func (b *builder) layoutBody(body *TextBody, w, h float64, f fit) *laidBody {
 	b.warnings = append(b.warnings, res.Warnings...)
 	out := &laidBody{}
 	if len(res.Pages) > 0 {
-		out.frags = b.drawTextEffects(res.Pages[0].Content, 0)
+		out.frags = res.Pages[0].Content
 		out.links = res.Pages[0].Links
 		if len(b.recode) > 0 {
 			recodeLabels(out.frags, b.recode)
@@ -887,7 +886,7 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 	}
 	st.Color = textColor(rs.Color)
 	st.TextDecorationColor = st.Color
-	st.TextShadow = b.textAnchorStyle(rs)
+	st.TextEffects = b.textEffects(rs)
 	if rs.Underline {
 		st.TextDecoration |= css.Underline
 		st.TextDecorationStyle = rs.UnderlineStyle

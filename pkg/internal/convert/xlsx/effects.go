@@ -2,7 +2,6 @@ package xlsx
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
@@ -119,10 +118,14 @@ func underEffects(ctx context.Context, leaves []leaf, rect typeset.Rect, pixels 
 				}
 			}
 		}
-		frags, err := officefx.Under(ctx, &officefx.Source{Paths: paths, Bounds: box, Content: content}, l.fx, pixels)
-		switch {
-		case errors.Is(err, officefx.ErrPagePixels):
+		frags, notes, err := officefx.Under(ctx, &officefx.Source{Paths: paths, Bounds: box, Content: content}, l.fx, pixels)
+		if notes.Skipped {
 			late.add(warn.LimitReached, warn.Omitted, fmt.Sprintf("drawing effects past %d pixels are not drawn", effect.MaxPagePixels))
+		}
+		if notes.Reduced {
+			late.add(warn.LimitReached, warn.Approximated, fmt.Sprintf("drawing effects past %d pixels a bitmap are drawn at a lower resolution", effect.MaxPixels))
+		}
+		switch {
 		case limits.Stops(err):
 			return nil
 		case err != nil:

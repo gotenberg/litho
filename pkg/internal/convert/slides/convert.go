@@ -89,9 +89,6 @@ type builder struct {
 	// is being drawn: a hatch keeps its angle on the page whatever the
 	// shape's turn.
 	hatchTurn float64
-	// anchors are the runs with effects of the text body being laid out,
-	// in the order of their marker colours ([builder.textAnchorStyle]).
-	anchors []textAnchor
 	// effectPixels counts the pixels of the effect bitmaps of the slide
 	// being drawn.
 	effectPixels effect.Page

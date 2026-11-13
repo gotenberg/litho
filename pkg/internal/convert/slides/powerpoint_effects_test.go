@@ -371,10 +371,10 @@ func TestShape_ContentEffects(t *testing.T) {
 func TestText_RunEffects(t *testing.T) {
 	st := arial(40)
 	st.Color = css.Color{G: 0.5, A: 1}
-	st.Effects = &TextEffects{
-		Shadow:     &Shadow{Color: css.Color{A: 1}, Opacity: 0.6, OffsetX: 2, OffsetY: 2, Blur: 3, ScaleX: 1, ScaleY: 1},
-		Glow:       &Glow{Color: css.Color{R: 1, G: 0.75, A: 1}, Opacity: 0.6, Radius: 8},
-		Reflection: &Reflection{ScaleX: 1, ScaleY: -1, StartOpacity: 0.55, EndPos: 0.45, FadeDir: 90}, ReflectionAlignY: 1,
+	st.Effects = &css.OfficeEffects{
+		Shadow:     &css.OfficeShadow{Color: css.Color{A: 0.6}, Dist: 2 * math.Sqrt2, Dir: 45, Blur: 3, SX: 1, SY: 1},
+		Glow:       &css.OfficeGlow{Color: css.Color{R: 1, G: 0.75, A: 0.6}, Radius: 8},
+		Reflection: &css.OfficeReflection{SX: 1, SY: -1, StartAlpha: 0.55, EndPos: 0.45, FadeDir: 90, Align: css.RectAlign{X: 0.5, Y: 1}},
 	}
 	p := para("Glow", st)
 	p.Bullet = &Bullet{Kind: BulletChar, Char: "•"}

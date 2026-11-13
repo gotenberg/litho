@@ -17,7 +17,22 @@ type OfficeEffects struct {
 	// SoftEdge is the radius of the soft edge (20.1.8.53 softEdge), 0
 	// for none.
 	SoftEdge float64
+	// Rules names the program whose rules draw the effects: the zero
+	// value, [OfficeWord], for a WordprocessingML or SpreadsheetML
+	// document, [OfficePowerPoint] for a PresentationML one.
+	Rules OfficeRules
 }
+
+// OfficeRules names the Microsoft Office program whose rules draw a
+// document's effects: each program prints its own documents, and Word
+// and PowerPoint draw some effects apart.
+type OfficeRules uint8
+
+// The programs whose rules draw effects. Excel's drawings take Word's.
+const (
+	OfficeWord OfficeRules = iota
+	OfficePowerPoint
+)
 
 // OfficeShadow is an outer shadow: a copy of the silhouette scaled by SX
 // and SY and skewed by KX and KY about the point of the bounds Align

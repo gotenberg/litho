@@ -178,41 +178,44 @@ func TestEffects_TextEffects(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name, rPr string
-		check     func(t *testing.T, fx *slides.TextEffects)
+		check     func(t *testing.T, fx *css.OfficeEffects)
 		warn      string
 	}{
 		{"shadow, glow and reflection", `<a:effectLst><a:outerShdw blurRad="38100" dist="38100" dir="2700000" algn="tl"><a:srgbClr val="000000"><a:alpha val="60000"/></a:srgbClr></a:outerShdw>` +
 			`<a:glow rad="101600"><a:srgbClr val="FFC000"><a:alpha val="60000"/></a:srgbClr></a:glow><a:reflection blurRad="6350" stA="55000" endPos="45500" dir="5400000" sy="-100000" algn="bl"/></a:effectLst>`,
-			func(t *testing.T, fx *slides.TextEffects) {
+			func(t *testing.T, fx *css.OfficeEffects) {
 				if fx == nil || fx.Shadow == nil || fx.Glow == nil || fx.Reflection == nil {
 					t.Fatalf("effects %+v, want a shadow, a glow and a reflection", fx)
 				}
-				if sh := fx.Shadow; !nearly(sh.Blur, 3) || !nearly(sh.OffsetX, 3*math.Sqrt2/2) || !nearly(sh.Opacity, 0.6) || fx.ShadowAlignX != 0 || fx.ShadowAlignY != 0 {
-					t.Errorf("shadow %+v aligned %v, %v", *sh, fx.ShadowAlignX, fx.ShadowAlignY)
+				if fx.Rules != css.OfficePowerPoint {
+					t.Errorf("rules %v, want PowerPoint's", fx.Rules)
 				}
-				if g := fx.Glow; !nearly(g.Radius, 8) || !nearly(g.Opacity, 0.6) {
+				if sh := fx.Shadow; !nearly(sh.Blur, 3) || !nearly(sh.Dist, 3) || sh.Dir != 45 || !nearly(sh.Color.A, 0.6) || sh.Align != (css.RectAlign{}) {
+					t.Errorf("shadow %+v", *sh)
+				}
+				if g := fx.Glow; !nearly(g.Radius, 8) || !nearly(g.Color.A, 0.6) {
 					t.Errorf("glow %+v", *g)
 				}
-				if r := fx.Reflection; r.ScaleY != -1 || r.OffsetY != 0 || !nearly(r.StartOpacity, 0.55) || fx.ReflectionAlignY != 1 {
-					t.Errorf("reflection %+v aligned %v", *r, fx.ReflectionAlignY)
+				if r := fx.Reflection; r.SY != -1 || r.Dist != 0 || !nearly(r.StartAlpha, 0.55) || r.Align != (css.RectAlign{Y: 1}) {
+					t.Errorf("reflection %+v", *r)
 				}
 			}, ""},
-		{"the list style's", "", func(t *testing.T, fx *slides.TextEffects) {
+		{"the list style's", "", func(t *testing.T, fx *css.OfficeEffects) {
 			if fx == nil || fx.Glow == nil || !nearly(fx.Glow.Radius, 2) {
 				t.Errorf("effects %+v, want the list style's glow", fx)
 			}
 		}, ""},
-		{"an empty list is none", `<a:effectLst/>`, func(t *testing.T, fx *slides.TextEffects) {
+		{"an empty list is none", `<a:effectLst/>`, func(t *testing.T, fx *css.OfficeEffects) {
 			if fx != nil {
 				t.Errorf("effects %+v, want none", fx)
 			}
 		}, ""},
-		{"an inner shadow warns", `<a:effectLst><a:innerShdw blurRad="63500"><a:srgbClr val="000000"/></a:innerShdw></a:effectLst>`, func(t *testing.T, fx *slides.TextEffects) {
+		{"an inner shadow warns", `<a:effectLst><a:innerShdw blurRad="63500"><a:srgbClr val="000000"/></a:innerShdw></a:effectLst>`, func(t *testing.T, fx *css.OfficeEffects) {
 			if fx != nil {
 				t.Errorf("effects %+v, want none", fx)
 			}
 		}, "innerShdw effect of text"},
-		{"an effect container warns", `<a:effectDag><a:cont><a:glow rad="25400"><a:srgbClr val="FF0000"/></a:glow></a:cont></a:effectDag>`, func(t *testing.T, fx *slides.TextEffects) {
+		{"an effect container warns", `<a:effectDag><a:cont><a:glow rad="25400"><a:srgbClr val="FF0000"/></a:glow></a:cont></a:effectDag>`, func(t *testing.T, fx *css.OfficeEffects) {
 			if fx != nil {
 				t.Errorf("effects %+v, want none", fx)
 			}

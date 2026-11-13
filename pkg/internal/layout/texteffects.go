@@ -1,7 +1,6 @@
 package layout
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/effect"
@@ -21,10 +20,12 @@ const maxEffectGlyphs = 4096
 
 // textEffects paints the Office text effects of item it of line l under
 // its glyphs (css.Office.TextEffects): the bitmaps package officefx draws
-// from the run's glyph outlines, artifacts, the glyphs staying text above
-// them. The run's box for the shadow's and the reflection's alignment is
-// its em, the font size, ending at the baseline, so a reflection starts
-// at the baseline and fades over the font size.
+// by the rules the effects name, artifacts, the glyphs staying text above
+// them. Word's rules draw them from the run's glyph outlines, the run's
+// box for the shadow's and the reflection's alignment its em, the font
+// size, ending at the baseline, so a reflection starts at the baseline
+// and fades over the font size; PowerPoint's from the glyphs as they
+// paint.
 //
 // # Corpus evidence
 //
@@ -39,24 +40,35 @@ func (p *painter) textEffects(it *lineItem, l *lineBox, page int) {
 		return
 	}
 	y := l.y + it.baseline
-	ops, x0, x1 := p.runOutlines(it, l, "effects")
-	if len(ops) == 0 {
-		return
+	src := &officefx.Source{Color: t.Color, Text: true}
+	if officefx.FromGlyphs(fx) {
+		glyphs := *t
+		glyphs.Origin = typeset.Point{X: l.x + t.Origin.X + p.dx, Y: l.y + t.Origin.Y + p.dy}
+		glyphs.Parent = nil
+		src.Glyphs = &glyphs
+	} else {
+		ops, x0, x1 := p.runOutlines(it, l, "effects")
+		if len(ops) == 0 {
+			return
+		}
+		oy := l.y + t.Origin.Y + p.dy
+		src.Paths = []effect.Path{{Ops: ops}}
+		src.Bounds = typeset.Rect{X: x0, Y: oy - t.Size, Width: max(x1-x0, 0), Height: t.Size}
 	}
-	col := t.Color
-	oy := l.y + t.Origin.Y + p.dy
-	box := typeset.Rect{X: x0, Y: oy - t.Size, Width: max(x1-x0, 0), Height: t.Size}
-	src := &officefx.Source{Paths: []effect.Path{{Ops: ops}}, Bounds: box, Color: col, Text: true}
-	frags, err := officefx.Under(p.e.ctx, src, fx, &p.effectPixels)
+	frags, notes, err := officefx.Under(p.e.ctx, src, fx, &p.effectPixels)
 	switch {
-	case errors.Is(err, officefx.ErrPagePixels):
-		p.e.warnOnce(warn.LimitReached, warn.Omitted, fmt.Sprintf("text effects past %d pixels are not drawn", effect.MaxPagePixels), y)
 	case err != nil && limits.Stops(err):
 		p.e.fail(fmt.Errorf("drawing text effects: %w", err))
 		return
 	case err != nil:
 		p.e.warnOnce(warn.ContentUnsupported, warn.Omitted, fmt.Sprintf("text effects are not drawn: %v", err), y)
 		return
+	}
+	if notes.Skipped {
+		p.e.warnOnce(warn.LimitReached, warn.Omitted, fmt.Sprintf("text effects past %d pixels are not drawn", effect.MaxPagePixels), y)
+	}
+	if notes.Reduced {
+		p.e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("text effects past %d pixels a bitmap are drawn at a lower resolution", effect.MaxPixels), y)
 	}
 	top, bottom := y-it.ascent, y+it.descent
 	for _, fr := range frags {

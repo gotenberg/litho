@@ -2,8 +2,6 @@ package officefx
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"image"
 	"image/color"
 	"math"
@@ -14,9 +12,21 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
-// ErrPagePixels reports an effect left out because the effects drawn
-// before it hold the pixels [effect.MaxPagePixels] allows.
-var ErrPagePixels = errors.New("effect pixels exhausted")
+// Notes say what drawing a source's effects left out or drew coarser
+// than its rule.
+type Notes struct {
+	// Skipped reports an effect left out because the effects drawn before
+	// it hold the pixels [effect.MaxPagePixels] allows.
+	Skipped bool
+	// Reduced reports an effect drawn at a lower resolution than its rule
+	// gives, past the pixels [effect.MaxPixels] allows a bitmap.
+	Reduced bool
+}
+
+// join returns n with what o notes too.
+func (n Notes) join(o Notes) Notes {
+	return Notes{Skipped: n.Skipped || o.Skipped, Reduced: n.Reduced || o.Reduced}
+}
 
 // MaxRadius caps a blur, glow, soft edge or reflection radius and a
 // distance, in points. Anti-DoS guard, not spec-mandated: the schemas
@@ -49,6 +59,10 @@ type Source struct {
 	// Text marks the glyphs of a run of text, whose glow and shadow Word
 	// draws with tighter falloffs than a shape's: see [textGlowGrow].
 	Text bool
+	// Glyphs is the run of text, placed on the page in its colour, that
+	// PowerPoint's rules draw a run's effects from ([glyphEffects]); nil
+	// for a shape or a picture.
+	Glyphs *typeset.Text
 }
 
 // The falloffs of a run's glow and shadow, as fractions of the radius:
@@ -80,8 +94,11 @@ const (
 // reflection, then the outer shadow, then the glow. Each is an
 // [typeset.Image] with a nil parent, an artifact. pixels counts the
 // pixels of the page's effects; an effect that would pass its cap is left
-// out and the error wraps [ErrPagePixels] once the others are drawn.
-// Other errors are the engine's: the budget's refusal, ctx's end.
+// out, which the notes say, once the others are drawn. The error is the
+// engine's: the budget's refusal, ctx's end; it returns no bitmap with
+// one. A run of text on PowerPoint's rules ([css.OfficePowerPoint]) is
+// drawn from src.Glyphs ([glyphEffects]), any other source from its
+// paths.
 //
 // # Corpus evidence
 //
@@ -89,39 +106,41 @@ const (
 //     shadow, then its glow under the glyphs (the colours of the three
 //     bitmaps of "All together" in paint order), each marked Artifact,
 //     the glyphs text above.
-func Under(ctx context.Context, src *Source, fx *css.OfficeEffects, pixels *effect.Page) ([]typeset.Fragment, error) {
-	if fx == nil || len(src.Paths) == 0 {
-		return nil, nil
+func Under(ctx context.Context, src *Source, fx *css.OfficeEffects, pixels *effect.Page) ([]typeset.Fragment, Notes, error) {
+	if fx == nil {
+		return nil, Notes{}, nil
+	}
+	if FromGlyphs(fx) && src.Glyphs != nil {
+		return glyphEffects(ctx, src.Glyphs, fx, pixels)
+	}
+	if len(src.Paths) == 0 {
+		return nil, Notes{}, nil
 	}
 	var out []typeset.Fragment
-	var skipped error
-	add := func(f typeset.Fragment, err error) error {
-		switch {
-		case errors.Is(err, ErrPagePixels):
-			skipped = err
-		case err != nil:
-			return err
-		case f != nil:
+	var notes Notes
+	add := func(f typeset.Fragment, n Notes, err error) error {
+		notes = notes.join(n)
+		if f != nil {
 			out = append(out, f)
 		}
-		return nil
+		return err
 	}
 	if r := fx.Reflection; r != nil {
 		if err := add(reflection(ctx, src, r, pixels)); err != nil {
-			return nil, err
+			return nil, Notes{}, err
 		}
 	}
 	if sh := fx.Shadow; sh != nil {
 		if err := add(shadow(ctx, src, sh, pixels)); err != nil {
-			return nil, err
+			return nil, Notes{}, err
 		}
 	}
 	if g := fx.Glow; g != nil {
 		if err := add(glow(ctx, src, g, pixels)); err != nil {
-			return nil, err
+			return nil, Notes{}, err
 		}
 	}
-	return out, skipped
+	return out, notes, nil
 }
 
 // shadow draws an outer shadow: the silhouette mapped by the shadow's
@@ -133,25 +152,26 @@ func Under(ctx context.Context, src *Source, fx *css.OfficeEffects, pixels *effe
 //   - litho/pptx effects-shadow, litho/docx shapes-effects-3d: PowerPoint's
 //     and Word's shadow masks fit a Gaussian of a third of blurRad within
 //     half a level to a level, the edge centred on the moved outline.
-func shadow(ctx context.Context, src *Source, sh *css.OfficeShadow, pixels *effect.Page) (typeset.Fragment, error) {
+func shadow(ctx context.Context, src *Source, sh *css.OfficeShadow, pixels *effect.Page) (typeset.Fragment, Notes, error) {
 	col, ok := opaqueEnough(sh.Color)
 	if !ok {
-		return nil, nil
+		return nil, Notes{}, nil
 	}
 	m := mul(translate(offset(sh.Dist, sh.Dir)), scaleSkew(src.Bounds, sh.Align, sh.SX, sh.SY, sh.KX, sh.KY))
 	sigma := radius(sh.Blur) / 3
 	if src.Text {
 		sigma = float64(radius(sh.Blur) * textShadowSigma)
 	}
-	cov, err := cover(ctx, src.Paths, pathBounds(src.Paths), m, sigma, 3*sigma, pixels)
+	cov, notes, err := cover(ctx, src.Paths, pathBounds(src.Paths), m, sigma, 3*sigma, pixels)
 	if err != nil || cov == nil {
-		return nil, err
+		return nil, notes, err
 	}
 	defer cov.Release()
 	if err := blur(ctx, cov, sigma); err != nil {
-		return nil, err
+		return nil, Notes{}, err
 	}
-	return tinted(ctx, cov, col)
+	f, err := tinted(ctx, cov, col)
+	return f, notes, err
 }
 
 // glow draws a glow: the silhouette made opaque, grown by half the radius
@@ -165,32 +185,33 @@ func shadow(ctx context.Context, src *Source, sh *css.OfficeShadow, pixels *effe
 //   - litho/docx shapes-effects-3d: Word's 11 point glow fits a Gaussian of
 //     1.81 points, a sixth of the radius, centred half the radius out
 //     (rms 0.33 levels).
-func glow(ctx context.Context, src *Source, g *css.OfficeGlow, pixels *effect.Page) (typeset.Fragment, error) {
+func glow(ctx context.Context, src *Source, g *css.OfficeGlow, pixels *effect.Page) (typeset.Fragment, Notes, error) {
 	col, ok := opaqueEnough(g.Color)
 	r := radius(g.Radius)
 	if !ok || r <= 0 {
-		return nil, nil
+		return nil, Notes{}, nil
 	}
 	sigma, grow := r/6, r/2
 	if src.Text {
 		sigma, grow = float64(r*textGlowSigma), float64(r*textGlowGrow)
 	}
-	cov, err := cover(ctx, src.Paths, pathBounds(src.Paths), typeset.Identity, sigma, grow+3*sigma, pixels)
+	cov, notes, err := cover(ctx, src.Paths, pathBounds(src.Paths), typeset.Identity, sigma, grow+3*sigma, pixels)
 	if err != nil || cov == nil {
-		return nil, err
+		return nil, notes, err
 	}
 	defer cov.Release()
 	if err := effect.Threshold(cov, 1); err != nil {
-		return nil, err
+		return nil, Notes{}, err
 	}
 	px := pixelsOf(grow, cov.Grid.Scale)
 	if err := effect.Dilate(ctx, cov, px, px); err != nil {
-		return nil, err
+		return nil, Notes{}, err
 	}
 	if err := blur(ctx, cov, sigma); err != nil {
-		return nil, err
+		return nil, Notes{}, err
 	}
-	return tinted(ctx, cov, col)
+	f, err := tinted(ctx, cov, col)
+	return f, notes, err
 }
 
 // reflection draws a reflection: the content mapped by the reflection's
@@ -198,40 +219,40 @@ func glow(ctx context.Context, src *Source, g *css.OfficeGlow, pixels *effect.Pa
 // radius, its opacity running linearly along its fade direction from the
 // start opacity at the start position to the end opacity at the end
 // position, positions taken along the extent of the mapped bounds.
-func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixels *effect.Page) (typeset.Fragment, error) {
+func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixels *effect.Page) (typeset.Fragment, Notes, error) {
 	m := mul(translate(offset(r.Dist, r.Dir)), scaleSkew(src.Bounds, r.Align, r.SX, r.SY, r.KX, r.KY))
 	sigma := radius(r.Blur) / 3
 	var s *effect.Surface
+	var notes Notes
 	if src.Content != nil {
-		res, grid, ok := plan(mapRect(src.Bounds, m), sigma, 3*sigma, pixels)
-		if !ok {
-			return nil, fmt.Errorf("a reflection: %w", ErrPagePixels)
-		}
+		res, grid, n := plan(mapRect(src.Bounds, m), sigma, 3*sigma, pixels)
+		notes = n
 		if res.W == 0 {
-			return nil, nil
+			return nil, notes, nil
 		}
 		ss, err := effect.Paint(ctx, []effect.Content{{Fragments: src.Content, Transform: m, Grid: grid, W: res.W, H: res.H}})
 		if err != nil {
-			return nil, err
+			return nil, Notes{}, err
 		}
 		s = ss[0]
 	} else {
 		if !(src.Color.A > 0) {
-			return nil, nil
+			return nil, Notes{}, nil
 		}
-		cov, err := cover(ctx, src.Paths, src.Bounds, m, sigma, 3*sigma, pixels)
+		cov, n, err := cover(ctx, src.Paths, src.Bounds, m, sigma, 3*sigma, pixels)
+		notes = n
 		if err != nil || cov == nil {
-			return nil, err
+			return nil, notes, err
 		}
 		s, err = effect.Tint(ctx, cov, effect.ColorOf(src.Color))
 		cov.Release()
 		if err != nil {
-			return nil, err
+			return nil, Notes{}, err
 		}
 	}
 	defer s.Release()
 	if err := blur(ctx, s, sigma); err != nil {
-		return nil, err
+		return nil, Notes{}, err
 	}
 	// The fade runs along the extent of the mapped bounds in the fade
 	// direction, through their centre.
@@ -248,9 +269,10 @@ func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixel
 	x0, y0 := at(unit(r.StartPos))
 	x1, y1 := at(unit(r.EndPos))
 	if err := effect.AlphaRamp(ctx, s, x0, y0, x1, y1, unit(r.StartAlpha), unit(r.EndAlpha)); err != nil {
-		return nil, err
+		return nil, Notes{}, err
 	}
-	return encode(ctx, s)
+	f, err := encode(ctx, s)
+	return f, notes, err
 }
 
 // SoftEdge returns src's content as a bitmap whose edge fades inside the
@@ -258,7 +280,7 @@ func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixel
 // blurred by a Gaussian of a third of it, the content drawn through it.
 // The bitmap replaces the content; it takes no structure parent, which
 // the caller sets. It returns nil when the radius draws nothing, and the
-// errors of [Under].
+// notes and errors of [Under].
 //
 // # Corpus evidence
 //
@@ -268,88 +290,88 @@ func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixel
 //     vector path left.
 //   - litho/docx shapes-effects-3d: Word's 5 point soft edge fits a
 //     Gaussian of 1.66 points, a third of the radius (rms 0.35 levels).
-func SoftEdge(ctx context.Context, src *Source, rad float64, pixels *effect.Page) (typeset.Fragment, error) {
+func SoftEdge(ctx context.Context, src *Source, rad float64, pixels *effect.Page) (typeset.Fragment, Notes, error) {
 	r := radius(rad)
 	if r <= 0 || len(src.Paths) == 0 || src.Content == nil {
-		return nil, nil
+		return nil, Notes{}, nil
 	}
 	sigma := r / 3
-	cov, err := cover(ctx, src.Paths, pathBounds(src.Paths), typeset.Identity, sigma, 0, pixels)
+	cov, notes, err := cover(ctx, src.Paths, pathBounds(src.Paths), typeset.Identity, sigma, 0, pixels)
 	if err != nil || cov == nil {
-		return nil, err
+		return nil, notes, err
 	}
 	defer cov.Release()
 	if err := effect.Threshold(cov, 1); err != nil {
-		return nil, err
+		return nil, Notes{}, err
 	}
 	shrink := pixelsOf(r, cov.Grid.Scale)
 	if err := effect.Erode(ctx, cov, shrink, shrink); err != nil {
-		return nil, err
+		return nil, Notes{}, err
 	}
 	if err := blur(ctx, cov, sigma); err != nil {
-		return nil, err
+		return nil, Notes{}, err
 	}
 	ss, err := effect.Paint(ctx, []effect.Content{{Fragments: src.Content, Grid: cov.Grid, W: cov.W, H: cov.H}})
 	if err != nil {
-		return nil, err
+		return nil, Notes{}, err
 	}
 	content := ss[0]
 	defer content.Release()
 	mask, err := effect.Tint(ctx, cov, effect.Color{R: 255, G: 255, B: 255, A: 255})
 	if err != nil {
-		return nil, err
+		return nil, Notes{}, err
 	}
 	defer mask.Release()
 	// The content where the mask is: Porter-Duff In of the content on
 	// the mask.
 	if err := effect.Composite(ctx, mask, content, effect.In); err != nil {
-		return nil, err
+		return nil, Notes{}, err
 	}
-	return encode(ctx, mask)
+	f, err := encode(ctx, mask)
+	return f, notes, err
 }
 
 // cover returns a coverage surface of paths mapped by m, over area mapped
 // by m and grown by pad points, at the resolution of a blur of sigma; nil
-// when they cover nothing.
-func cover(ctx context.Context, paths []effect.Path, area typeset.Rect, m typeset.Matrix, sigma, pad float64, pixels *effect.Page) (*effect.Surface, error) {
+// when they cover nothing or the page's pixels refuse it, which the notes
+// say.
+func cover(ctx context.Context, paths []effect.Path, area typeset.Rect, m typeset.Matrix, sigma, pad float64, pixels *effect.Page) (*effect.Surface, Notes, error) {
 	b := mapRect(area, m)
-	res, grid, ok := plan(b, sigma, pad, pixels)
-	if !ok {
-		return nil, ErrPagePixels
-	}
+	res, grid, notes := plan(b, sigma, pad, pixels)
 	if res.W == 0 {
-		return nil, nil
+		return nil, notes, nil
 	}
 	s, err := effect.New(ctx, effect.Coverage, res.W, res.H, grid)
 	if err != nil {
-		return nil, err
+		return nil, Notes{}, err
 	}
 	k := grid.Scale
 	// Page points to pixels: m, then less the grid's origin, times k.
 	tr := mul(typeset.Matrix{A: k, D: k, E: float64(-grid.X * k), F: float64(-grid.Y * k)}, m)
 	if err := effect.Fill(ctx, s, paths, tr); err != nil {
 		s.Release()
-		return nil, err
+		return nil, Notes{}, err
 	}
-	return s, nil
+	return s, notes, nil
 }
 
 // plan returns the resolution and grid of an effect over b grown by pad
-// points, blurred by sigma, false when the page's effects hold their
-// pixels. A zero resolution is an empty effect.
-func plan(b typeset.Rect, sigma, pad float64, pixels *effect.Page) (effect.Resolution, effect.Grid, bool) {
+// points, blurred by sigma. A zero resolution draws nothing: an empty
+// effect, or one the page's pixels refuse, which the notes say with a
+// resolution the engine's cap lowered.
+func plan(b typeset.Rect, sigma, pad float64, pixels *effect.Page) (effect.Resolution, effect.Grid, Notes) {
 	if !numeric.Finite(b.X) || !numeric.Finite(b.Y) || !(b.Width >= 0) || !(b.Height >= 0) {
-		return effect.Resolution{}, effect.Grid{}, true
+		return effect.Resolution{}, effect.Grid{}, Notes{}
 	}
 	b = typeset.Rect{X: b.X - pad, Y: b.Y - pad, Width: b.Width + 2*pad, Height: b.Height + 2*pad}
 	res, ok := effect.Plan(sigma, b.Width, b.Height)
 	if !ok {
-		return effect.Resolution{}, effect.Grid{}, true
+		return effect.Resolution{}, effect.Grid{}, Notes{}
 	}
 	if !pixels.Take(res) {
-		return effect.Resolution{}, effect.Grid{}, false
+		return effect.Resolution{}, effect.Grid{}, Notes{Skipped: true}
 	}
-	return res, effect.Grid{X: b.X, Y: b.Y, Scale: res.Scale}, true
+	return res, effect.Grid{X: b.X, Y: b.Y, Scale: res.Scale}, Notes{Reduced: res.Reduced}
 }
 
 // blur blurs s by a Gaussian of sigma points, nothing for 0.

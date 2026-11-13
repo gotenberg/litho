@@ -247,25 +247,24 @@ func alignment(e *ooxml.Element) (ax, ay float64) {
 // textEffects reads the effects of a run (21.1.2.3.9 rPr holding
 // 20.1.8.26 effectLst), sc resolving the colours: the outer shadow, the
 // glow and the reflection, as [reader.effectList] reads a shape's, their
-// scales left about the glyphs' bounds, which the builder knows. The
-// other effects of a run, and an effect container (20.1.8.25 effectDag),
-// print nothing, with a warning. It returns nil for a list of none.
-func (r *reader) textEffects(lst *ooxml.Element, sc scope) *slides.TextEffects {
+// scales and skews about the point of the glyphs' ink their alignment
+// names, drawn by PowerPoint's rules. The other effects of a run, and an
+// effect container (20.1.8.25 effectDag), print nothing, with a warning.
+// It returns nil for a list of none.
+func (r *reader) textEffects(lst *ooxml.Element, sc scope) *css.OfficeEffects {
 	if lst.Is(ooxml.NSA, "effectDag") {
 		if len(lst.Kids()) > 0 {
 			r.warn(warn.ContentUnsupported, warn.Approximated, "effect containers (effectDag) on text are not drawn")
 		}
 		return nil
 	}
-	fx := &slides.TextEffects{}
-	color := func(e *ooxml.Element) (css.Color, float64) {
+	fx := &css.OfficeEffects{Rules: css.OfficePowerPoint}
+	color := func(e *ooxml.Element) css.Color {
 		c, ok := sc.color(e, nil)
 		if !ok {
-			return css.Color{}, 0
+			return css.Color{}
 		}
-		a := c.A
-		c.A = 1
-		return c, a
+		return c
 	}
 	for _, e := range lst.Kids() {
 		if e.Space != ooxml.NSA {
@@ -273,21 +272,24 @@ func (r *reader) textEffects(lst *ooxml.Element, sc scope) *slides.TextEffects {
 		}
 		switch e.Local {
 		case "outerShdw":
-			sh := outerShadow(e, typeset.Rect{})
-			sh.Color, sh.Opacity = color(e)
-			if sh.Opacity > 0 {
-				fx.Shadow = sh
-				fx.ShadowAlignX, fx.ShadowAlignY = alignment(e)
+			if c := color(e); c.A > 0 {
+				g := effectGeometry(e)
+				fx.Shadow = &css.OfficeShadow{Color: c, Blur: g.blur, Dist: g.dist, Dir: g.dir, SX: g.sx, SY: g.sy, KX: g.kx, KY: g.ky, Align: g.align}
 			}
 		case "glow":
 			if rad := emuAttr(e, "rad"); numeric.PositiveFinite(rad) {
-				if c, a := color(e); a > 0 {
-					fx.Glow = &slides.Glow{Color: c, Opacity: a, Radius: min(rad, maxEffectRadius)}
+				if c := color(e); c.A > 0 {
+					fx.Glow = &css.OfficeGlow{Color: c, Radius: min(rad, maxEffectRadius)}
 				}
 			}
 		case "reflection":
-			fx.Reflection = reflection(e, typeset.Rect{})
-			fx.ReflectionAlignX, fx.ReflectionAlignY = alignment(e)
+			g := effectGeometry(e)
+			fx.Reflection = &css.OfficeReflection{
+				Blur: g.blur, Dist: g.dist, Dir: g.dir, SX: g.sx, SY: g.sy, KX: g.kx, KY: g.ky, Align: g.align,
+				StartAlpha: effectPercent(e, "stA", 1), StartPos: effectPercent(e, "stPos", 0),
+				EndAlpha: effectPercent(e, "endA", 0), EndPos: effectPercent(e, "endPos", 1),
+				FadeDir: fadeDir(e),
+			}
 		default:
 			r.warn(warn.ContentUnsupported, warn.Approximated, "the "+e.Local+" effect of text is not drawn")
 		}
@@ -296,6 +298,62 @@ func (r *reader) textEffects(lst *ooxml.Element, sc scope) *slides.TextEffects {
 		return nil
 	}
 	return fx
+}
+
+// geometry is the geometry of an outer shadow or a reflection as its
+// attributes give it: its blur radius and distance in points, its
+// direction and skews in degrees, its scales as factors and the point
+// its scales and skews keep fixed.
+type geometry struct {
+	blur, dist, dir float64
+	sx, sy, kx, ky  float64
+	align           css.RectAlign
+}
+
+// effectGeometry reads the geometry of e, an outer shadow or a reflection
+// (20.1.8.45 outerShdw, 20.1.8.50 reflection), as [outerShadow] reads it.
+func effectGeometry(e *ooxml.Element) geometry {
+	var g geometry
+	if v := emuAttr(e, "blurRad"); numeric.PositiveFinite(v) {
+		g.blur = min(v, maxEffectRadius)
+	}
+	if v := emuAttr(e, "dist"); numeric.PositiveFinite(v) {
+		g.dist = min(v, maxEffectRadius)
+	}
+	dir, _ := intAttr(e, "dir")
+	g.dir = float64(dir) / 60000
+	scale := func(name string) float64 {
+		v, ok := intAttr(e, name)
+		if !ok {
+			return 1
+		}
+		return min(max(float64(v)/100000, -maxShadowScale), maxShadowScale)
+	}
+	g.sx, g.sy = scale("sx"), scale("sy")
+	kx, _ := intAttr(e, "kx")
+	ky, _ := intAttr(e, "ky")
+	g.kx, g.ky = float64(kx)/60000, float64(ky)/60000
+	g.align.X, g.align.Y = alignment(e)
+	return g
+}
+
+// effectPercent returns e's attribute name, 1,000ths of a percent, as a
+// fraction within [0, 1], def when it is missing.
+func effectPercent(e *ooxml.Element, name string, def float64) float64 {
+	v, ok := intAttr(e, name)
+	if !ok {
+		return def
+	}
+	return min(max(float64(v)/100000, 0), 1)
+}
+
+// fadeDir returns a reflection's fadeDir in degrees, 90 by default
+// (CT_ReflectionEffect).
+func fadeDir(e *ooxml.Element) float64 {
+	if v, ok := intAttr(e, "fadeDir"); ok {
+		return float64(v) / 60000
+	}
+	return 90
 }
 
 // presetShadow reads a preset shadow (20.1.8.49 prstShdw; its presets,
@@ -383,22 +441,11 @@ func innerShadow(e *ooxml.Element) *slides.Shadow {
 // bottom. The alphas and positions are 1,000ths of a percent.
 func reflection(e *ooxml.Element, box typeset.Rect) *slides.Reflection {
 	sh := outerShadow(e, box)
-	pct := func(name string, def float64) float64 {
-		v, ok := intAttr(e, name)
-		if !ok {
-			return def
-		}
-		return min(max(float64(v)/100000, 0), 1)
-	}
-	fade := 90.0
-	if v, ok := intAttr(e, "fadeDir"); ok {
-		fade = float64(v) / 60000
-	}
 	return &slides.Reflection{
 		ScaleX: sh.ScaleX, ScaleY: sh.ScaleY, OffsetX: sh.OffsetX, OffsetY: sh.OffsetY, Blur: sh.Blur,
-		StartOpacity: pct("stA", 1), StartPos: pct("stPos", 0),
-		EndOpacity: pct("endA", 0), EndPos: pct("endPos", 1),
-		FadeDir: fade,
+		StartOpacity: effectPercent(e, "stA", 1), StartPos: effectPercent(e, "stPos", 0),
+		EndOpacity: effectPercent(e, "endA", 0), EndPos: effectPercent(e, "endPos", 1),
+		FadeDir: fadeDir(e),
 	}
 }
 

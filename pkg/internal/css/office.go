@@ -273,7 +273,9 @@ type Office struct {
 	// TextEffects are the effects drawn around the glyphs of the inline
 	// box that sets it, nil for none: the glow, shadow and reflection of
 	// a WordprocessingML run (MS-DOCX, 2.6.1 rPr extensions w14:glow,
-	// w14:shadow, w14:reflection). The glyphs stay text above them. See
+	// w14:shadow, w14:reflection) or of a DrawingML one (ECMA-376 Part 1,
+	// 21.1.2.3.9 rPr holding 20.1.8.26 effectLst), drawn by the rules
+	// its Rules names. The glyphs stay text above them. See
 	// [OfficeEffects].
 	TextEffects *OfficeEffects
 	// TextPaint paints the glyphs of the inline box that sets it otherwise
