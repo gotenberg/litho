@@ -1465,6 +1465,12 @@ func (s *inlineState) align(l *lineBox, indent float64, last bool) {
 	s.fillLeaders(l, indent)
 	st := s.root.st
 	ltr := st.Direction != css.RTL
+	if st.UnicodeBidi == css.Plaintext {
+		// A line of unicode-bidi: plaintext takes its start and end from
+		// its paragraph's direction, the one its text gives (CSS Text 3,
+		// 8.3): hangLeft is that direction.
+		ltr = !l.hangLeft
+	}
 	width := 0.0
 	for _, it := range l.items {
 		width = max(width, it.x+it.w)

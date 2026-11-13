@@ -41,3 +41,20 @@ func TestTextIndent_HangingEachLine(t *testing.T) {
 		})
 	}
 }
+
+// CSS Text 3, 8.3: a line of unicode-bidi: plaintext starts on the side
+// its paragraph's own direction gives, whatever the block's direction.
+func TestTextAlign_PlaintextParagraphDirection(t *testing.T) {
+	st := sty(func(s *css.Style) { s.UnicodeBidi = css.Plaintext })
+	rb := boxes(t, doc(el(st, txt(st, "aa"), br(st), txt(st, "אא"))), page(100, 100))
+	lines := kid(t, rb, 0, 0).lines
+	if len(lines) != 2 {
+		t.Fatalf("%d lines, want 2", len(lines))
+	}
+	if got := lines[0].items[0].x / css.Pt; !near(got, 0) {
+		t.Errorf("left-to-right line starts at %vpx, want 0", got)
+	}
+	if got := lines[1].items[0].x / css.Pt; !near(got, 80) {
+		t.Errorf("right-to-left line starts at %vpx, want 80", got)
+	}
+}
