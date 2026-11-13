@@ -241,6 +241,22 @@ func TestTextIndent_NotAfterABlock(t *testing.T) {
 	}
 }
 
+// TestLineHeight_ZeroSizeText locks CSS 2.1, 9.4.2 and 10.8: a line
+// holding text at font size 0 is not empty, so it takes the block's
+// strut; one holding collapsible white space alone at that size is.
+func TestLineHeight_ZeroSizeText(t *testing.T) {
+	z := func(s *css.Style) { s.FontSize = 0 }
+	for _, tc := range []struct {
+		text string
+		want float64
+	}{{"zero", 10}, {" \n ", 0}} {
+		rb := boxes(t, doc(el(sty(), el(sty(display(css.Inline), z), txt(sty(z), tc.text)))), page(100, 100))
+		if got := kid(t, rb, 0).h / css.Pt; !near(got, tc.want) {
+			t.Errorf("%q: block height %v, want %v", tc.text, got, tc.want)
+		}
+	}
+}
+
 func TestLetterSpacing_Widens(t *testing.T) {
 	ls := func(s *css.Style) { s.LetterSpacing = css.Pts(px(2)) }
 	res := run(t, doc(el(sty(ls), txt(sty(ls), "abc"))), page(100, 50))

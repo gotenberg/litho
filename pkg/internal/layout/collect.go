@@ -66,6 +66,10 @@ type ifcPara struct {
 	// forced reports a paragraph ended by a forced break, which makes a
 	// line even when empty.
 	forced bool
+	// sizeless reports a paragraph holding text of font size 0, which
+	// draws nothing yet makes the paragraph's line, strut and all: a line
+	// box holding text is not empty (CSS 2.1, 9.4.2 and 10.8).
+	sizeless bool
 	// clear is the clear value of the line break that ends the paragraph:
 	// the next line moves below the floats it names.
 	clear css.Clear
@@ -282,6 +286,10 @@ func keepsSpaces(ws css.WhiteSpace) bool {
 // and text-transform.
 func (c *collector) text(k *box) {
 	if c.e.fontSize(k.st) <= 0 {
+		c.cur.sizeless = c.cur.sizeless || strings.ContainsFunc(k.text, func(r rune) bool {
+			// Document white space (CSS Text 3, 4.1) collapses away.
+			return !collapses(k.st.WhiteSpace) || r != ' ' && r != '\t' && r != '\n' && r != '\r' && r != '\f'
+		})
 		return
 	}
 	ws := k.st.WhiteSpace

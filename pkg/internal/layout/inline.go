@@ -802,7 +802,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			s.recordEmptyAnchors(p, 0, 0, &lineBox{x: cb.x, y: pendingTop(y, mc, first)})
 			s.placeFloats(p, 0, math.MaxInt, pendingTop(y, mc, first), mc, first)
 			s.staticRest(p, y, mc, first)
-			if p.forced {
+			if p.forced || p.sizeless {
 				top := y
 				if first {
 					top = e.pastMargin(y, mc.strut, mc.kept)
