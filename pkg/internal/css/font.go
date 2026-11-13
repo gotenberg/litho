@@ -104,7 +104,7 @@ func computeFontSize(s *styler, st *Style, v any) {
 	case f.isLen:
 		lc := s.lc
 		lc.fontSize = parent
-		size = f.l.points(lc) + f.l.pct/100*parent
+		size = f.l.resolve(lc, parent)
 		st.fontSizeAbsolute = st.fontSizeAbsolute || !f.relative
 	case f.step > 0:
 		size = parent * fontSizeScale
@@ -317,7 +317,7 @@ func computeLineHeight(s *styler, st *Style, v any) {
 	}
 	switch d.kind { //nolint:exhaustive // the other kinds take the default
 	case Points:
-		st.LineHeight = Pts(math.Max(0, d.l.points(s.lc)+d.l.pct/100*st.FontSize))
+		st.LineHeight = Pts(math.Max(0, d.l.resolve(s.lc, st.FontSize)))
 	case Number:
 		st.LineHeight = Dimension{Kind: Number, Value: math.Min(d.num, maxLength)}
 	default:

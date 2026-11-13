@@ -185,10 +185,10 @@ func evalCondition(l []token, leaf func(token) (bool, bool)) (bool, bool) {
 // and rem are the initial font size, 16px (Media Queries 4, 1.3).
 func mediaLength(t token) (float64, bool) {
 	l, ok := parseLength(t, 0)
-	if !ok || l.vw != 0 || l.vh != 0 || l.vmin != 0 || l.vmax != 0 {
+	if !ok || l.viewportRelative() {
 		return 0, false
 	}
-	return (l.pt + (l.em+(l.ex+l.ch)/2+l.rem)*mediumFontSize) / Pt, true
+	return l.points(lenCtx{fontSize: mediumFontSize, rootFontSize: mediumFontSize, lineHeight: normalLineHeight * mediumFontSize, rootLineHeight: normalLineHeight * mediumFontSize}) / Pt, true
 }
 
 // mediaRatio evaluates a <ratio>: a number, or two separated by a slash.

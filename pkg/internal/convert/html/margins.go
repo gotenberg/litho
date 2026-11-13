@@ -124,7 +124,7 @@ func edges(st *css.Style, start, end css.Side, ref float64) float64 {
 	return usedBorder(st.Border[start]) + usedBorder(st.Border[end]) + max(resolveDim(st.Padding[start], ref), 0) + max(resolveDim(st.Padding[end], ref), 0)
 }
 
-// resolveDim returns a length, a percentage of ref or a calc() sum of
+// resolveDim returns a length, a percentage of ref or a calculation of
 // both, 0 otherwise.
 func resolveDim(d css.Dimension, ref float64) float64 {
 	switch d.Kind { //nolint:exhaustive // the other kinds have no length here
@@ -133,7 +133,7 @@ func resolveDim(d css.Dimension, ref float64) float64 {
 	case css.Percent:
 		return d.Value * ref
 	case css.Calc:
-		return d.Value + d.Fraction*ref
+		return d.Resolve(ref)
 	}
 	return 0
 }

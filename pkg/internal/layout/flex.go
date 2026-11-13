@@ -234,8 +234,8 @@ func (flexFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 	gap := 0.0
 	if g := b.st.ColumnGap; g.Kind == css.Points || g.Kind == css.Calc {
 		// A percentage resolves against zero here (CSS Box Alignment 3,
-		// 8.3), so a calc() contributes its length part.
-		gap = max(clamp(g.Value), 0)
+		// 8.3), and so does that of a calculation.
+		gap = max(clamp(g.Resolve(0)), 0)
 	}
 	lo, hi := 0.0, 0.0
 	n := 0

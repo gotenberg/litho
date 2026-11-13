@@ -314,11 +314,11 @@ func TestFontUnits_ResolveExAndCh(t *testing.T) {
 	t.Parallel()
 	root := parseHTML(t, `<body><div id=t style="font-family: f; width: 2ch; height: 2ex; font-size: 2ex"></div></body>`)
 	r := NewResolver(a4, []Sheet{{Sheet: HTMLUserAgent(), Origin: UserAgent}, {Sheet: mustParse(t, `body { font-size: 20px }`), Origin: Author}})
-	units := func(st *Style) (float64, float64) {
+	units := func(st *Style) FontUnits {
 		if len(st.FontFamilies) > 0 && st.FontFamilies[0] == "f" {
-			return 0.25, 0.75
+			return FontUnits{XHeight: 0.25, Zero: 0.75}
 		}
-		return 0.5, 0.5
+		return FontUnits{XHeight: 0.5, Zero: 0.5}
 	}
 	c, err := r.Compute(context.Background(), root, ComputeOptions{Hints: HTMLHints, FontUnits: units})
 	if err != nil {

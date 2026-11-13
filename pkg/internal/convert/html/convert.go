@@ -671,23 +671,35 @@ func collapse(s string) string {
 const fontUnitSize = 100
 
 // fontUnits returns the [css.ComputeOptions.FontUnits] of fonts: the
-// x-height of the face a style selects and the advance of its "0" (CSS
+// x-height, cap height and ascent of the face a style selects, the
+// advance of its "0", and the advance of its "水" when it maps one (CSS
 // Values 4, 6.1.1), nil without fonts.
-func fontUnits(ctx context.Context, fonts *text.Fonts) func(*css.Style) (float64, float64) {
+func fontUnits(ctx context.Context, fonts *text.Fonts) func(*css.Style) css.FontUnits {
 	if fonts == nil {
 		return nil
 	}
-	return func(st *css.Style) (float64, float64) {
+	return func(st *css.Style) css.FontUnits {
 		ts := text.Style{Families: text.BrowserFamilies(st.FontFamilies), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: fontUnitSize}
 		fc := fonts.Match(ts)
 		if fc == nil {
-			return 0, 0
+			return css.FontUnits{}
 		}
-		ex := fc.Metrics(fontUnitSize).XHeight / fontUnitSize
-		ch := 0.0
-		if p, _, err := fonts.Shape(ctx, []text.ParagraphRun{{Text: "0", Style: ts}}, text.ParagraphOptions{}); err == nil && p.Len() == 1 {
-			ch = p.Advance(0) / fontUnitSize
+		m := fc.Metrics(fontUnitSize)
+		u := css.FontUnits{XHeight: m.XHeight / fontUnitSize, CapHeight: m.CapHeight / fontUnitSize, Ascent: m.Ascent / fontUnitSize}
+		u.Zero = advance(ctx, fonts, ts, "0")
+		if fc.Covers('水') {
+			u.Ideograph = advance(ctx, fonts, ts, "水")
 		}
-		return ex, ch
+		return u
 	}
+}
+
+// advance returns the advance of s, one character, in style ts, as a
+// fraction of the font size; 0 when it does not shape to one glyph.
+func advance(ctx context.Context, fonts *text.Fonts, ts text.Style, s string) float64 {
+	p, _, err := fonts.Shape(ctx, []text.ParagraphRun{{Text: s, Style: ts}}, text.ParagraphOptions{})
+	if err != nil || p.Len() != 1 {
+		return 0
+	}
+	return p.Advance(0) / fontUnitSize
 }

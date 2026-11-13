@@ -228,7 +228,7 @@ func parsePageSize(v []token) (pageSize, bool) {
 				t = v[i]
 			}
 			l, ok := parseLength(t, nonNeg)
-			if !ok || l.vw != 0 || l.vh != 0 || l.vmin != 0 || l.vmax != 0 {
+			if !ok || l.viewportRelative() {
 				return pageSize{}, false
 			}
 			dims[i] = l.points(lc)

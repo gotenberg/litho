@@ -64,8 +64,8 @@ func (e *engine) intrinsic(b *box) (float64, float64) {
 	}
 	if k := src.MinWidth.Kind; k == css.Points || k == css.Calc {
 		// A percentage of a min-width resolves against zero here (CSS
-		// Sizing 3, 5.2.1c): a calc() keeps its length part.
-		mn := clamp(src.MinWidth.Value)
+		// Sizing 3, 5.2.1c), and so does that of a calculation.
+		mn := clamp(src.MinWidth.Resolve(0))
 		if src.BoxSizing == css.BorderBox {
 			mn -= edges
 		}

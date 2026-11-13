@@ -9,45 +9,27 @@ import (
 )
 
 // length is a specified <length-percentage>: a linear combination of units
-// that calc() sums (CSS Values 4, 10.7). A plain "12px" sets pt alone. ex
-// and ch resolve against the font's x-height and "0" advance when
-// [ComputeOptions.FontUnits] gives them, else at half an em, the fallback
-// CSS Values 4, 6.1.1 allows when no font metrics are at hand.
+// and of a percentage (CSS Values 4, 10.10), or a calculation tree that is
+// not one, such as min(100%, 30em). A plain "12px" sets the points alone.
 type length struct {
-	pt, em, ex, ch, rem, vw, vh, vmin, vmax, pct float64
-	// lh and rlh are line heights of the element and of the root (CSS
-	// Values 4, 6.1.1).
-	lh, rlh float64
+	// u holds the coefficient of each unit, num a number, which only a
+	// calculation folding a <number> holds.
+	u   [numLenUnits]float64
+	pct float64
+	num float64
 	// hasLen and hasPct record the types the value holds, whatever the
 	// coefficients: calc(10px + 0%) is still a mix (CSS Values 4, 10.8).
+	// A tree with a percentage is a mix whatever its leaves.
 	hasLen, hasPct bool
-	// cmp, when set, is a comparison function the value adds cmpK times:
-	// a min(), max() or clamp() whose arguments only resolve at computed
-	// value time (CSS Values 4, 10.2). It is shared and never mutated.
-	cmp  *calcCmp
-	cmpK float64
-	// bad marks a sum of two comparison functions, which a length cannot
-	// hold: the value is invalid.
-	bad bool
+	// expr, when set, is a calculation that is not linear, evaluated when
+	// its units are known; the coefficients are then zero. It is shared
+	// and never mutated.
+	expr *calcNode
 }
 
-// calcCmp is a min() or max() of lengths (CSS Values 4, 10.2); clamp(a, b,
-// c) is max(a, min(b, c)).
-type calcCmp struct {
-	max  bool
-	args []length
-}
-
-// eval resolves the comparison against c.
-func (m *calcCmp) eval(c lenCtx) float64 {
-	v := 0.0
-	for i, a := range m.args {
-		x := a.points(c)
-		if i == 0 || m.max && x > v || !m.max && x < v {
-			v = x
-		}
-	}
-	return v
+// constant reports a value of no unit and no percentage: a number.
+func (l length) constant() bool {
+	return !l.hasLen && !l.hasPct && l.expr == nil
 }
 
 func (l length) mixed() bool { return l.hasLen && l.hasPct }
@@ -55,72 +37,132 @@ func (l length) mixed() bool { return l.hasLen && l.hasPct }
 // zeroLen reports a length part that is zero in every unit, as in
 // calc(50% - 0px): with a percentage the value is that percentage alone.
 func (l length) zeroLen() bool {
-	return l.cmp == nil && l.pt == 0 && l.em == 0 && l.ex == 0 && l.ch == 0 && l.rem == 0 &&
-		l.vw == 0 && l.vh == 0 && l.vmin == 0 && l.vmax == 0 && l.lh == 0 && l.rlh == 0
+	if l.expr != nil {
+		return false
+	}
+	for _, v := range l.u {
+		if v != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// viewportRelative reports a length that depends on the page size, which
+// a media query, a page size and a bleed cannot.
+func (l length) viewportRelative() bool {
+	if l.expr != nil {
+		return l.expr.usesUnit(uVw, uVh, uVmin, uVmax, uVi, uVb)
+	}
+	return l.u[uVw] != 0 || l.u[uVh] != 0 || l.u[uVmin] != 0 || l.u[uVmax] != 0 || l.u[uVi] != 0 || l.u[uVb] != 0
 }
 
 func (l length) scale(k float64) length {
-	l.pt *= k
-	l.em *= k
-	l.ex *= k
-	l.ch *= k
-	l.rem *= k
-	l.vw *= k
-	l.vh *= k
-	l.vmin *= k
-	l.vmax *= k
-	l.lh *= k
-	l.rlh *= k
+	for i := range l.u {
+		l.u[i] *= k
+	}
 	l.pct *= k
-	l.cmpK *= k
+	l.num *= k
 	return l
 }
 
 func (l length) add(o length) length {
-	cmp, k := l.cmp, l.cmpK
-	if o.cmp != nil {
-		cmp, k = o.cmp, o.cmpK
+	for i := range l.u {
+		l.u[i] += o.u[i]
 	}
-	return length{
-		cmp: cmp, cmpK: k, bad: l.bad || o.bad || l.cmp != nil && o.cmp != nil,
-		pt: l.pt + o.pt, em: l.em + o.em, ex: l.ex + o.ex, ch: l.ch + o.ch, rem: l.rem + o.rem,
-		vw: l.vw + o.vw, vh: l.vh + o.vh, vmin: l.vmin + o.vmin, vmax: l.vmax + o.vmax,
-		lh: l.lh + o.lh, rlh: l.rlh + o.rlh,
-		pct: l.pct + o.pct, hasLen: l.hasLen || o.hasLen, hasPct: l.hasPct || o.hasPct,
-	}
+	l.pct += o.pct
+	l.num += o.num
+	l.hasLen = l.hasLen || o.hasLen
+	l.hasPct = l.hasPct || o.hasPct
+	return l
 }
 
 // lenCtx is what resolves a length to points: the element's font size,
 // the root's, and the page box size for the viewport units.
 type lenCtx struct {
 	fontSize, rootFontSize float64
-	// ex and ch are the font's x-height and "0" advance as fractions of
-	// its size, 0 for the half-em fallback.
-	ex, ch        float64
-	width, height float64
+	// font and rootFont are the measures of the element's first
+	// available font and of the root's, as fractions of their sizes.
+	font, rootFont FontUnits
+	width, height  float64
 	// lineHeight and rootLineHeight are the used line heights the lh and
 	// rlh units resolve against, in points: the element's, its parent's
 	// while line-height itself computes, and the root's.
 	lineHeight, rootLineHeight float64
+	// verticalRoot swaps the vi and vb units, which follow the root's
+	// inline and block axes (CSS Values 4, 6.1.2.2).
+	verticalRoot bool
 }
 
-// points resolves the length part to points, clamped to maxLength.
+// unitSizes returns the size of each unit in points.
+func (c *lenCtx) unitSizes() [numLenUnits]float64 {
+	var s [numLenUnits]float64
+	s[uPt] = 1
+	s[uEm] = c.fontSize
+	s[uRem] = c.rootFontSize
+	s[uEx], s[uCh], s[uCap], s[uIc] = c.font.sizes(c.fontSize)
+	s[uRex], s[uRch], s[uRcap], s[uRic] = c.rootFont.sizes(c.rootFontSize)
+	s[uVw], s[uVh] = c.width/100, c.height/100
+	s[uVmin], s[uVmax] = math.Min(s[uVw], s[uVh]), math.Max(s[uVw], s[uVh])
+	s[uVi], s[uVb] = s[uVw], s[uVh]
+	if c.verticalRoot {
+		s[uVi], s[uVb] = s[uVb], s[uVi]
+	}
+	s[uLh], s[uRlh] = c.lineHeight, c.rootLineHeight
+	return s
+}
+
+// FontUnits are the measures of a font the ex, ch, cap and ic units and
+// their root forms resolve against (CSS Values 4, 6.1.1), as fractions of
+// the font size. A measure that is not positive takes the fallback CSS
+// Values 4, 6.1.1 gives when the font has none: half an em for ex and ch,
+// one em for ic, and for cap the ascent, or 0.7 em without one.
+type FontUnits struct {
+	// XHeight is the x-height, Zero the advance of "0", CapHeight the
+	// height of a capital letter, Ascent the font's ascent, and
+	// Ideograph the advance of "水".
+	XHeight, Zero, CapHeight, Ascent, Ideograph float64
+}
+
+// fallbackCap is the cap height, in ems, of a font that records neither a
+// cap height nor an ascent: the cap height of the common Latin faces.
+const fallbackCap = 0.7
+
+// sizes returns the ex, ch, cap and ic of the font at size, in points.
+func (f FontUnits) sizes(size float64) (ex, ch, capH, ic float64) {
+	pick := func(v, fallback float64) float64 {
+		if v > 0 && numeric.Finite(v) {
+			return v * size
+		}
+		return fallback * size
+	}
+	asc := pick(f.Ascent, fallbackCap) / size
+	if size == 0 {
+		asc = fallbackCap
+	}
+	return pick(f.XHeight, 0.5), pick(f.Zero, 0.5), pick(f.CapHeight, asc), pick(f.Ideograph, 1)
+}
+
+// points resolves the length part to points, clamped to maxLength. A
+// percentage in a calculation tree counts as zero.
 func (l length) points(c lenCtx) float64 {
-	vmin, vmax := math.Min(c.width, c.height), math.Max(c.width, c.height)
-	ex, ch := c.ex, c.ch
-	if ex <= 0 {
-		ex = 0.5
+	return l.resolve(c, 0)
+}
+
+// resolve resolves the length to points against basis, the size its
+// percentage is of, clamped to maxLength.
+func (l length) resolve(c lenCtx, basis float64) float64 {
+	sizes := c.unitSizes()
+	if l.expr != nil {
+		return clampLen(censor(l.expr.eval(&calcScope{units: &sizes, basis: basis})))
 	}
-	if ch <= 0 {
-		ch = 0.5
+	v := l.pct / 100 * basis
+	for i, k := range l.u {
+		if k != 0 {
+			v += k * sizes[i]
+		}
 	}
-	v := l.pt + (l.em+l.ex*ex+l.ch*ch)*c.fontSize + l.rem*c.rootFontSize +
-		(l.vw*c.width+l.vh*c.height+l.vmin*vmin+l.vmax*vmax)/100 +
-		l.lh*c.lineHeight + l.rlh*c.rootLineHeight
-	if l.cmp != nil {
-		v += l.cmpK * l.cmp.eval(c)
-	}
-	return clampLen(v)
+	return clampLen(censor(v))
 }
 
 func clampLen(v float64) float64 {
@@ -141,6 +183,9 @@ func clampLen(v float64) float64 {
 // Calc only knows its sign once resolved, so the layout engine clamps it
 // at used-value time.
 func (l length) dim(c lenCtx, nonNeg bool) Dimension {
+	if l.expr != nil && l.hasPct {
+		return l.exprDim(c, nonNeg)
+	}
 	if l.hasPct && !l.hasLen {
 		v := l.pct / 100
 		if nonNeg && v < 0 {
@@ -158,6 +203,35 @@ func (l length) dim(c lenCtx, nonNeg bool) Dimension {
 	return Pts(v)
 }
 
+// exprDim computes a calculation tree that holds a percentage: a linear
+// one becomes a Calc of its length and percentage parts, any other keeps
+// its tree, its units resolved, for the layout engine to evaluate against
+// the percentage basis (CSS Values 4, 10.11).
+func (l length) exprDim(c lenCtx, nonNeg bool) Dimension {
+	sizes := c.unitSizes()
+	n := l.expr.resolveUnits(&sizes)
+	if lin, ok := n.linear(nil); ok {
+		v := lin.u[uPt]
+		if !lin.hasLen {
+			pct := clampLen(censor(lin.pct / 100))
+			if nonNeg && pct < 0 {
+				pct = 0
+			}
+			return Dimension{Kind: Percent, Value: pct}
+		}
+		return Dimension{Kind: Calc, Value: clampLen(censor(v)), Fraction: clampLen(censor(lin.pct / 100))}
+	}
+	return Dimension{Kind: Calc, expr: n}
+}
+
+// ptLength returns the length of v points.
+func ptLength(v float64) length {
+	var l length
+	l.u[uPt] = v
+	l.hasLen = true
+	return l
+}
+
 // absUnits maps the absolute length units to points (CSS Values 4, 6.2).
 var absUnits = map[string]float64{
 	"px": Pt, "pt": 1, "pc": 12, "in": 72, "cm": 72 / 2.54, "mm": 72 / 25.4, "q": 72 / 101.6,
@@ -167,39 +241,17 @@ var absUnits = map[string]float64{
 // not support.
 func unitLength(n float64, unit string) (length, bool) {
 	unit = lower(unit)
+	var l length
+	l.hasLen = true
 	if k, ok := absUnits[unit]; ok {
-		return length{pt: n * k, hasLen: true}, true
+		l.u[uPt] = n * k
+		return l, true
 	}
-	l := length{hasLen: true}
-	switch unit {
-	case "em":
-		l.em = n
-	case "ex":
-		l.ex = n
-	case "ch":
-		l.ch = n
-	case "rem":
-		l.rem = n
-	case "ic":
-		// The ideographic advance: the fallback of CSS Values 4, 6.1.1,
-		// 1em, which a full-width ideograph's advance is in the CJK
-		// faces.
-		l.em = n
-	case "vw":
-		l.vw = n
-	case "vh":
-		l.vh = n
-	case "vmin":
-		l.vmin = n
-	case "vmax":
-		l.vmax = n
-	case "lh":
-		l.lh = n
-	case "rlh":
-		l.rlh = n
-	default:
+	u, ok := lengthUnits[unit]
+	if !ok {
 		return length{}, false
 	}
+	l.u[u] = n
 	return l, true
 }
 
@@ -218,116 +270,6 @@ const (
 	// paddings, insets, gaps and flex-basis).
 	allowMixed
 )
-
-// isCalc reports whether t is a math function: calc(), prefixed or not,
-// or one of the comparison functions min(), max() and clamp() (CSS Values
-// 4, 10.1 and 10.2).
-func isCalc(t *token) bool {
-	if t.typ != tFunction {
-		return false
-	}
-	switch lower(t.value) {
-	case "calc", "-webkit-calc", "-moz-calc", "min", "max", "clamp":
-		return true
-	}
-	return false
-}
-
-// maxCmpArgs caps the arguments of one min() or max(): 32. Real styles
-// compare two or three values. Anti-DoS guard, not spec-mandated.
-const maxCmpArgs = 32
-
-// calcOf evaluates the math function t, which [isCalc] accepts.
-func calcOf(t *token, depth int) (calcValue, bool) {
-	name := lower(t.value)
-	if name != "min" && name != "max" && name != "clamp" {
-		return parseCalc(t.children, depth)
-	}
-	if depth > maxCalcDepth {
-		return calcValue{}, false
-	}
-	parts := splitCommas(t.children)
-	if len(parts) == 0 || len(parts) > maxCmpArgs || name == "clamp" && len(parts) != 3 {
-		return calcValue{}, false
-	}
-	vals := make([]calcValue, len(parts))
-	for i, p := range parts {
-		v, ok := parseCalc(p, depth+1)
-		if !ok || (i > 0 && v.isNum != vals[0].isNum) || v.l.bad {
-			return calcValue{}, false
-		}
-		vals[i] = v
-	}
-	if name == "clamp" {
-		inner, ok := compare(vals[1:], false)
-		if !ok || inner.l.bad {
-			return calcValue{}, false
-		}
-		return compare([]calcValue{vals[0], inner}, true)
-	}
-	return compare(vals, name == "max")
-}
-
-// compare returns the minimum of vals, or their maximum when isMax: a
-// number or a plain length at once, a deferred [calcCmp] otherwise.
-func compare(vals []calcValue, isMax bool) (calcValue, bool) {
-	if vals[0].isNum {
-		v := vals[0].num
-		for _, x := range vals[1:] {
-			if isMax && x.num > v || !isMax && x.num < v {
-				v = x.num
-			}
-		}
-		return calcValue{isNum: true, num: v}, numeric.Finite(v)
-	}
-	pcts, pure := 0, true
-	for _, x := range vals {
-		if x.l.hasPct {
-			pcts++
-		}
-		if !x.l.hasPct || x.l.hasLen && !x.l.zeroLen() {
-			pure = false
-		}
-	}
-	if pure {
-		// Percentages of one reference compare as they are (CSS Values
-		// 4, 10.2).
-		v := vals[0].l.pct
-		for _, x := range vals[1:] {
-			if isMax && x.l.pct > v || !isMax && x.l.pct < v {
-				v = x.l.pct
-			}
-		}
-		return calcValue{l: length{pct: v, hasPct: true}}, true
-	}
-	if pcts > 0 {
-		// A comparison of a length and a percentage resolves only once
-		// the reference is known, which a [Dimension] cannot defer: the
-		// value is invalid rather than compared with the percentage
-		// taken as zero.
-		return calcValue{l: length{hasLen: true, bad: true}}, true
-	}
-	plain := true
-	for _, x := range vals {
-		if x.l.cmp != nil || x.l.lh != 0 || x.l.rlh != 0 || x.l.em != 0 || x.l.ex != 0 || x.l.ch != 0 || x.l.rem != 0 || x.l.vw != 0 || x.l.vh != 0 || x.l.vmin != 0 || x.l.vmax != 0 {
-			plain = false
-		}
-	}
-	if plain {
-		v := vals[0].l.pt
-		for _, x := range vals[1:] {
-			if isMax && x.l.pt > v || !isMax && x.l.pt < v {
-				v = x.l.pt
-			}
-		}
-		return calcValue{l: length{pt: v, hasLen: true}}, true
-	}
-	m := &calcCmp{max: isMax, args: make([]length, len(vals))}
-	for i, x := range vals {
-		m.args[i] = x.l
-	}
-	return calcValue{l: length{hasLen: true, cmp: m, cmpK: 1}}, true
-}
 
 // parseLength parses a <length> or <length-percentage> component value
 // (CSS Values 4, 6 and 5.6). A unitless zero is a length (CSS Values 4,
@@ -352,199 +294,77 @@ func parseLength(t token, f lengthFlags) (length, bool) {
 		if !isCalc(&t) {
 			return length{}, false
 		}
-		v, ok := calcOf(&t, 0)
-		if !ok || v.isNum || v.l.bad {
+		l, ok := calcLength(&t)
+		if !ok {
 			return length{}, false
 		}
-		if v.l.hasPct && f&allowPct == 0 {
+		if l.hasPct && f&allowPct == 0 {
 			return length{}, false
 		}
-		if v.l.hasPct && v.l.zeroLen() {
+		if l.hasPct && l.zeroLen() {
 			// A length part that cancels out leaves a percentage, which
 			// resolves as one (CSS Values 4, 10.9: the used value is the
 			// same).
-			v.l.hasLen = false
+			l.hasLen = false
 		}
-		if v.l.mixed() && f&allowMixed == 0 {
+		if l.mixed() && f&allowMixed == 0 {
 			return length{}, false
 		}
-		return v.l, true
+		return l, true
 	}
 	return length{}, false
 }
 
-// calcValue is the value of a calc() sub-expression: a number, or a
-// length-percentage.
-type calcValue struct {
-	isNum bool
-	num   float64
-	l     length
+// calcLength parses the math function t as a <length-percentage>: a
+// linear combination when the tree folds to one, else the tree, which a
+// percentage makes a mix of a length and a percentage.
+func calcLength(t *token) (length, bool) {
+	p := &calcParser{pctLength: true}
+	n, ty, ok := p.fn(t, 0)
+	if !ok || ty != typeLength {
+		return length{}, false
+	}
+	if !n.relative() {
+		var l length
+		l.u[uPt] = n.eval(&calcScope{})
+		l.hasLen = true
+		return l, true
+	}
+	if l, ok := n.linear(nil); ok {
+		l.num = 0
+		return l, true
+	}
+	pct := n.hasPct()
+	return length{expr: n, hasLen: true, hasPct: pct}, true
 }
 
-// calcCursor walks the component values inside calc().
-type calcCursor struct {
-	l []token
-	i int
-}
-
-func (c *calcCursor) ws() bool {
-	seen := false
-	for c.i < len(c.l) && c.l[c.i].typ == tWhitespace {
-		c.i++
-		seen = true
-	}
-	return seen
-}
-
-func (c *calcCursor) peek() *token {
-	if c.i < len(c.l) {
-		return &c.l[c.i]
-	}
-	return nil
-}
-
-// parseCalc parses the contents of calc() or of a parenthesised
-// sub-expression (CSS Values 4, 10.1): <calc-sum>. Multiplication needs a
-// number on one side and division a non-zero number on the right, so every
-// result stays a linear combination.
-func parseCalc(list []token, depth int) (calcValue, bool) {
-	if depth > maxCalcDepth {
-		return calcValue{}, false
-	}
-	c := &calcCursor{l: list}
-	c.ws()
-	sum, ok := calcProduct(c, depth)
-	if !ok {
-		return calcValue{}, false
-	}
-	for {
-		hadWS := c.ws()
-		t := c.peek()
-		if t == nil {
-			break
-		}
-		if !hadWS || !t.isDelim('+') && !t.isDelim('-') {
-			return calcValue{}, false
-		}
-		neg := t.isDelim('-')
-		c.i++
-		if !c.ws() {
-			return calcValue{}, false
-		}
-		rhs, ok := calcProduct(c, depth)
-		if !ok || rhs.isNum != sum.isNum {
-			return calcValue{}, false
-		}
-		if neg {
-			rhs.num, rhs.l = -rhs.num, rhs.l.scale(-1)
-		}
-		sum.num += rhs.num
-		sum.l = sum.l.add(rhs.l)
-	}
-	if !numeric.Finite(sum.num) {
-		return calcValue{}, false
-	}
-	return sum, true
-}
-
-// calcProduct parses a <calc-product>.
-func calcProduct(c *calcCursor, depth int) (calcValue, bool) {
-	v, ok := calcLeaf(c, depth)
-	if !ok {
-		return calcValue{}, false
-	}
-	for {
-		save := c.i
-		c.ws()
-		t := c.peek()
-		if t == nil || !t.isDelim('*') && !t.isDelim('/') {
-			c.i = save
-			return v, true
-		}
-		div := t.isDelim('/')
-		c.i++
-		c.ws()
-		rhs, ok := calcLeaf(c, depth)
-		if !ok {
-			return calcValue{}, false
-		}
-		switch {
-		case div:
-			if !rhs.isNum || rhs.num == 0 {
-				return calcValue{}, false
+// usesUnit reports whether the tree holds one of units.
+func (n *calcNode) usesUnit(units ...lenUnit) bool {
+	if n.op == opLen {
+		for _, u := range units {
+			if n.unit == u {
+				return true
 			}
-			v.num /= rhs.num
-			v.l = v.l.scale(1 / rhs.num)
-		case rhs.isNum:
-			v.num *= rhs.num
-			v.l = v.l.scale(rhs.num)
-		case v.isNum:
-			rhs.l = rhs.l.scale(v.num)
-			v = rhs
-		default:
-			return calcValue{}, false
+		}
+		return false
+	}
+	for _, k := range n.kids {
+		if k.usesUnit(units...) {
+			return true
 		}
 	}
+	return false
 }
 
-// calcLeaf parses a <calc-value>.
-func calcLeaf(c *calcCursor, depth int) (calcValue, bool) {
-	t := c.peek()
-	if t == nil {
-		return calcValue{}, false
-	}
-	c.i++
-	switch t.typ { //nolint:exhaustive // the other token types are invalid here
-	case tNumber:
-		return calcValue{isNum: true, num: t.num}, numeric.Finite(t.num)
-	case tDimension:
-		if !numeric.Finite(t.num) {
-			return calcValue{}, false
-		}
-		l, ok := unitLength(t.num, t.value)
-		return calcValue{l: l}, ok
-	case tPercentage:
-		return calcValue{l: length{pct: t.num, hasPct: true}}, numeric.Finite(t.num)
-	case tLParen:
-		return parseCalc(t.children, depth+1)
-	case tFunction:
-		if isCalc(t) {
-			return calcOf(t, depth+1)
-		}
-	case tIdent:
-		// CSS Values 4, 10.7.1: the numeric constants. An infinite value
-		// stands for the largest one representable (10.9), here a huge
-		// finite number every computed length clamps.
-		switch lower(t.value) {
-		case "e":
-			return calcValue{isNum: true, num: math.E}, true
-		case "pi":
-			return calcValue{isNum: true, num: math.Pi}, true
-		case "infinity":
-			return calcValue{isNum: true, num: calcInfinity}, true
-		case "-infinity":
-			return calcValue{isNum: true, num: -calcInfinity}, true
-		}
-	}
-	return calcValue{}, false
-}
-
-// calcInfinity is the value of the infinity constant: finite, so sums and
-// products stay finite, and far past maxLength, so a length using it
-// clamps there.
-const calcInfinity = 1e100
-
-// parseNumber parses a <number>, calc() included (CSS Values 4, 5.4).
+// parseNumber parses a <number>, a math function included (CSS Values 4,
+// 5.4).
 func parseNumber(t token) (float64, bool) {
 	switch t.typ { //nolint:exhaustive // the other token types are invalid here
 	case tNumber:
 		return t.num, numeric.Finite(t.num)
 	case tFunction:
 		if isCalc(&t) {
-			v, ok := calcOf(&t, 0)
-			if ok && v.isNum {
-				return v.num, true
-			}
+			return calcNumber(&t, nil)
 		}
 	}
 	return 0, false
@@ -556,33 +376,40 @@ func parseNumber(t token) (float64, bool) {
 // below it.
 const maxInteger = 1 << 30
 
-// parseInteger parses an <integer> (CSS Values 4, 5.3).
+// parseInteger parses an <integer> (CSS Values 4, 5.3). A math function
+// resolving to a number rounds to the nearest integer (CSS Values 4,
+// 10.12).
 func parseInteger(t token) (int, bool) {
 	if t.typ == tNumber && t.integer && numeric.Finite(t.num) && math.Abs(t.num) < maxInteger {
 		return int(t.num), true
+	}
+	if t.typ == tFunction && isCalc(&t) {
+		if v, ok := calcNumber(&t, nil); ok {
+			v = math.Max(-maxInteger+1, math.Min(maxInteger-1, math.Floor(v+0.5)))
+			return int(v), true // fits int: clamped to ±maxInteger above
+		}
 	}
 	return 0, false
 }
 
 // parseAngle parses an <angle> or a bare number, in degrees (CSS Values 4,
-// 7.1).
+// 7.1), a math function of type <angle> included.
 func parseAngle(t token) (float64, bool) {
-	if !numeric.Finite(t.num) {
-		return 0, false
-	}
 	switch t.typ { //nolint:exhaustive // the other token types are invalid here
 	case tNumber:
-		return t.num, true
+		return t.num, numeric.Finite(t.num)
 	case tDimension:
-		switch lower(t.value) {
-		case "deg":
-			return t.num, true
-		case "grad":
-			return t.num * 0.9, true
-		case "rad":
-			return t.num * 180 / math.Pi, true
-		case "turn":
-			return t.num * 360, true
+		if !numeric.Finite(t.num) {
+			return 0, false
+		}
+		if o, ok := otherUnits[lower(t.value)]; ok && o.t == typeAngle {
+			return t.num * o.k, true
+		}
+	case tFunction:
+		if isCalc(&t) {
+			if v, ty, ok := calcConst(&t, nil); ok && ty == typeAngle {
+				return v, true
+			}
 		}
 	}
 	return 0, false
@@ -751,15 +578,14 @@ func numberOrPct(t token, allowNone bool) (v float64, pct bool, ok bool) {
 		}
 	case tFunction:
 		if isCalc(&t) {
-			c, ok := calcOf(&t, 0)
-			if !ok {
+			v, ty, ok := calcConst(&t, nil)
+			switch {
+			case !ok:
 				return 0, false, false
-			}
-			if c.isNum {
-				return c.num, false, true
-			}
-			if c.l.hasPct && !c.l.hasLen {
-				return c.l.pct / 100, true, true
+			case ty == typeNumber:
+				return v, false, true
+			case ty == typePct:
+				return v / 100, true, true
 			}
 			return 0, false, false
 		}

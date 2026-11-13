@@ -11,7 +11,6 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
-	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // Origin is a cascade origin (CSS Cascade 4, 6.2).
@@ -246,11 +245,12 @@ type ComputeOptions struct {
 	// BaseURL resolves the url() values of style attributes: the
 	// document's URL. Empty keeps them as written.
 	BaseURL string
-	// FontUnits returns the x-height and the advance of "0" of the first
-	// font a style's families, weight and style select, as fractions of the
-	// font size, for the ex and ch units (CSS Values 4, 6.1.1). nil, or a
-	// result that is not positive, takes half an em for either.
-	FontUnits func(st *Style) (ex, ch float64)
+	// FontUnits returns the measures of the first font a style's
+	// families, weight and style select, as fractions of the font size,
+	// for the ex, ch, cap and ic units and their root forms (CSS Values 4,
+	// 6.1.1). nil, or a measure that is not positive, takes the fallback
+	// [FontUnits] names.
+	FontUnits func(st *Style) FontUnits
 }
 
 // Computed holds the computed style of every element of a tree. It is
@@ -357,7 +357,7 @@ type computeState struct {
 	root   *Style
 	nodes  int
 	// units caches FontUnits by font selection.
-	units map[fontKey][2]float64
+	units map[fontKey]FontUnits
 	// mem is the conversion's memory budget each distinct computed style
 	// is charged to, nil for none.
 	mem *limits.Budget
@@ -387,24 +387,21 @@ type fontKey struct {
 	style    FontStyle
 }
 
-// fontUnits returns the ex and ch ratios of st, 0 for the fallback.
-func (cs *computeState) fontUnits(st *Style) (float64, float64) {
-	if cs.opts.FontUnits == nil {
-		return 0, 0
+// fontUnits returns the font measures of st, zero for the fallbacks.
+func (cs *computeState) fontUnits(st *Style) FontUnits {
+	if cs.opts.FontUnits == nil || st == nil {
+		return FontUnits{}
 	}
 	k := fontKey{families: strings.Join(st.FontFamilies, "\x00"), weight: st.FontWeight, style: st.FontStyle}
 	if u, ok := cs.units[k]; ok {
-		return u[0], u[1]
+		return u
 	}
-	ex, ch := cs.opts.FontUnits(st)
-	if !numeric.Finite(ex) || !numeric.Finite(ch) {
-		ex, ch = 0, 0
-	}
+	u := cs.opts.FontUnits(st)
 	if cs.units == nil {
-		cs.units = map[fontKey][2]float64{}
+		cs.units = map[fontKey]FontUnits{}
 	}
-	cs.units[k] = [2]float64{ex, ch}
-	return ex, ch
+	cs.units[k] = u
+	return u
 }
 
 // normalLineHeight is the factor of the font size the lh and rlh units
@@ -749,7 +746,11 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 	}
 	vw, vh := cs.r.media.viewport()
 	s.lc = lenCtx{fontSize: parent.FontSize, rootFontSize: rootFS, width: vw, height: vh}
-	s.lc.ex, s.lc.ch = cs.fontUnits(parent)
+	s.lc.font = cs.fontUnits(parent)
+	s.lc.rootFont = cs.fontUnits(cs.root)
+	if cs.root != nil {
+		s.lc.verticalRoot = cs.root.WritingMode != HorizontalTB
+	}
 	s.lc.lineHeight = usedLineHeight(parent)
 	s.lc.rootLineHeight = s.lc.lineHeight
 	if cs.root != nil {
@@ -797,7 +798,10 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 				s.lc.rootFontSize = st.FontSize
 			}
 		case pFontStyle:
-			s.lc.ex, s.lc.ch = cs.fontUnits(st)
+			s.lc.font = cs.fontUnits(st)
+			if isRoot {
+				s.lc.rootFont = s.lc.font
+			}
 		case pLineHeight:
 			s.lc.lineHeight = usedLineHeight(st)
 			if isRoot {

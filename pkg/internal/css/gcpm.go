@@ -212,7 +212,7 @@ func pageMarkDecl(name string, v []token) (pageDecl, bool) {
 			return pageDecl{}, false
 		}
 		l, ok := parseLength(t, nonNeg)
-		if !ok || l.vw != 0 || l.vh != 0 || l.vmin != 0 || l.vmax != 0 {
+		if !ok || l.viewportRelative() {
 			return pageDecl{}, false
 		}
 		d := Pts(l.points(lenCtx{fontSize: mediumFontSize, rootFontSize: mediumFontSize}))
@@ -252,7 +252,7 @@ func pageAreaSide(v []token) (Dimension, bool) {
 		return Dimension{}, false
 	}
 	l, ok := parseLength(t, nonNeg)
-	if !ok || l.vw != 0 || l.vh != 0 || l.vmin != 0 || l.vmax != 0 {
+	if !ok || l.viewportRelative() {
 		return Dimension{}, false
 	}
 	return Pts(l.points(lenCtx{fontSize: mediumFontSize, rootFontSize: mediumFontSize})), true

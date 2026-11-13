@@ -50,7 +50,7 @@ func TestParseLength_Units(t *testing.T) {
 		{"calc(100% - 20px)", allowPct, Dimension{}, false},
 		{"calc(1px+2px)", 0, Dimension{}, false},
 		{"calc(1px * 2px)", 0, Dimension{}, false},
-		{"calc(1px / 0)", 0, Dimension{}, false},
+		{"calc(1px / 0)", 0, pts(maxLength), true},
 		{"calc(3)", 0, Dimension{}, false},
 		{"calc(1px + 2)", 0, Dimension{}, false},
 		{"-webkit-calc(2px)", 0, pts(1.5), true},
@@ -63,7 +63,7 @@ func TestParseLength_Units(t *testing.T) {
 		{"min(2em, 30px)", 0, pts(20), true},
 		{"clamp(1px, 1em, 4px)", 0, pts(3), true},
 		{"calc(2 * max(1px, 1em) + 1px)", 0, pts(20.75), true},
-		{"calc(max(1em, 1px) - min(1em, 1px))", 0, Dimension{}, false},
+		{"calc(max(1em, 1px) - min(1em, 1px))", 0, pts(9.25), true},
 		{"max(1px, 50%)", allowPct, Dimension{}, false},
 		{"min(1px)", 0, pts(0.75), true},
 		{"clamp(1px, 2px)", 0, Dimension{}, false},
@@ -179,31 +179,40 @@ func TestResolveURL_AgainstBase(t *testing.T) {
 	}
 }
 
-func TestParseCalc_CompareLengthWithPercentIsInvalid(t *testing.T) {
+// TestCalc_ComparesPercentagesAtUsedValueTime locks min(), max() and
+// clamp() of a percentage and a length: the value keeps its calculation
+// and resolves once the percentage's basis is known (CSS Values 4, 10.2
+// and 10.11). A comparison of percentages alone is a percentage.
+func TestCalc_ComparesPercentagesAtUsedValueTime(t *testing.T) {
 	t.Parallel()
 	c := compute(t, `<div id=d></div><p id=p></p>`, `div { width: 80%; width: min(100%, 600px) } p { width: max(10%, 20%) }`)
-	if got := c.of("d").Width; !dimEq(got, pct(0.8)) {
-		t.Errorf("min(100%%, 600px) = %+v, want the earlier 80%%, not 0", got)
-	}
 	if got := c.of("p").Width; !dimEq(got, pct(0.2)) {
 		t.Errorf("max(10%%, 20%%) = %+v, want 20%%", got)
+	}
+	w := c.of("d").Width
+	if w.Kind != Calc || !near(w.Resolve(1000), 450) || !near(w.Resolve(300), 300) {
+		t.Errorf("min(100%%, 600px) = %+v, resolves to %v and %v; want 450 and 300", w, w.Resolve(1000), w.Resolve(300))
 	}
 	if got := styleOf(t, `margin-top: calc(max(10%, 20%) + 2px)`).Margin[Top]; got != (Dimension{Kind: Calc, Value: 1.5, Fraction: 0.2}) {
 		t.Errorf("calc(max(10%%, 20%%) + 2px) = %+v, want calc(20%% + 1.5pt)", got)
 	}
-	if got := styleOf(t, `margin-top: calc(min(10%, 5px) + 2px)`).Margin[Top]; got != Pts(0) {
-		t.Errorf("calc(min(10%%, 5px) + 2px) = %+v, want the value dropped", got)
+	tests := []struct {
+		decl      string
+		ref, want float64
+	}{
+		{"calc(min(10%, 5px) + 2px)", 100, 5.25},
+		{"calc(min(10%, 5px) + 2px)", 20, 3.5},
+		{"clamp(10px, 50%, 20px)", 100, 15},
+		{"clamp(10px, 50%, 20px)", 10, 7.5},
+		{"clamp(50%, 10px, 20px)", 100, 50},
+		{"round(50%, 37px)", 300, 138.75},
+		{"abs(20% - 300px)", 300, 165},
+		{"calc(min(50%, 100px) + 10px)", 300, 82.5},
 	}
-}
-
-// TestClamp_PercentageComparisonInvalid locks clamp() on a percentage
-// mixed with a length, which a [Dimension] cannot defer: the declaration
-// is invalid, as min() and max() make it (CSS Values 4, 10.2).
-func TestClamp_PercentageComparisonInvalid(t *testing.T) {
-	t.Parallel()
-	for _, v := range []string{"min(10px, 50%)", "clamp(10px, 50%, 20px)", "clamp(50%, 10px, 20px)"} {
-		if s := styleOf(t, "width: 5px; width: "+v); s.Width != pts(3.75) {
-			t.Errorf("width: %s computes to %+v, want it rejected", v, s.Width)
+	for _, tt := range tests {
+		got := styleOf(t, "width: "+tt.decl).Width
+		if got.Kind != Calc || !near(got.Resolve(tt.ref), tt.want) {
+			t.Errorf("width: %s = %+v, resolves against %v to %v, want %v", tt.decl, got, tt.ref, got.Resolve(tt.ref), tt.want)
 		}
 	}
 }

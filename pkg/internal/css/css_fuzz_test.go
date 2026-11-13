@@ -48,6 +48,7 @@ func FuzzParseDeclarations(f *testing.F) {
 	f.Add("font: oblique condensed 12px serif; font-style: oblique -30deg; font-synthesis: weight small-caps; text-autospace: ideograph-alpha insert; text-shadow: 1px 2px 3px red, 0 0 blue; text-justify: distribute")
 	f.Add("columns: 12em 3; column-rule: thin dotted red; column-span: all; column-fill: balance-all; column-height: 2em; column-wrap: wrap; break-before: column; break-inside: avoid-column; overflow: auto")
 	f.Add("display: inline flex; flex: 2 1 10%; flex-flow: column wrap-reverse; place-content: safe center space-evenly; align-self: last baseline; gap: 1px 2%; order: -2; min-width: auto")
+	f.Add("width: round(up, mod(-7px, 3em), 1vi); height: calc(sin(30deg) * hypot(3cap, 4rex) / 1px * 1px); margin: abs(10% - 2svh) clamp(1px, 50%, 2lh); z-index: calc(7 / 2); rotate: atan2(1, -1)")
 	f.Fuzz(func(t *testing.T, src string) {
 		ParseDeclarations(src, ParseOptions{BaseURL: "https://e.com/"})
 		Hint("color", src)
@@ -90,6 +91,7 @@ func FuzzCompute(f *testing.F) {
 	f.Add([]byte(selectorDoc + "\x00" + fuzzSheet))
 	f.Add([]byte("<p style='--a: var(--a); width: var(--a)'>x\x00p { color: var(--b, red) }"))
 	f.Add([]byte("<span id=a>x</span>\x00#a { position: absolute; z-index: 2; transform: scale(2) translateX(1em); transform-origin: 1px 2px 3px }"))
+	f.Add([]byte("<p id=a>x</p>\x00#a { width: min(100%, round(10em, 3vi)); margin: mod(5%, 3%) calc(1px / 0); font-size: clamp(1rem, 2cap, 3ric) }"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		doc, sheet, _ := bytes.Cut(data, []byte{0})
 		root, err := html.Parse(bytes.NewReader(doc))

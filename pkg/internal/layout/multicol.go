@@ -410,7 +410,7 @@ func (multicolFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 	case css.Normal:
 		g = e.fontSize(b.st)
 	case css.Points, css.Calc:
-		g = max(clamp(b.st.ColumnGap.Value), 0)
+		g = max(clamp(b.st.ColumnGap.Resolve(0)), 0)
 	}
 	k := float64(n)
 	return lo*k + g*(k-1), hi*k + g*(k-1)

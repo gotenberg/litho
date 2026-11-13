@@ -63,7 +63,7 @@ func outlineProps() (style, width, colour, offset propDef) {
 			}
 		},
 		copyFrom: field(func(s *Style) *float64 { return &s.Outline.Width }),
-		initial:  length{pt: 3 * Pt, hasLen: true},
+		initial:  ptLength(3 * Pt),
 	}
 	// CSS UI 3, 5.4: the initial colour is currentColor where invert is
 	// not supported.

@@ -543,7 +543,7 @@ func parseBorderWidth(v []token, _ *declCtx) (any, bool) {
 	}
 	if t.typ == tIdent {
 		px, ok := borderWidthKeywords[lower(t.value)]
-		return length{pt: px * Pt, hasLen: true}, ok
+		return ptLength(px * Pt), ok
 	}
 	l, ok := parseLength(t, nonNeg)
 	return l, ok
@@ -570,7 +570,7 @@ func borderProps(side Side, name string) (style, width, colour propDef) {
 			}
 		},
 		copyFrom: field(func(s *Style) *float64 { return &s.Border[side].Width }),
-		initial:  length{pt: borderWidthKeywords["medium"] * Pt, hasLen: true},
+		initial:  ptLength(borderWidthKeywords["medium"] * Pt),
 	}
 	colour = colorProp(name+"-color", func(s *Style) *Color { return &s.Border[side].Color }, slotBorderTop<<side, colorValue{current: true})
 	return style, width, colour

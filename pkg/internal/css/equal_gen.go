@@ -854,6 +854,9 @@ func equalDimension(a, b *Dimension) bool {
 	if math.Float64bits(a.Fraction) != math.Float64bits(b.Fraction) {
 		return false
 	}
+	if a.expr != b.expr {
+		return false
+	}
 	return true
 }
 
@@ -862,6 +865,7 @@ func hashDimension(h uint64, x *Dimension) uint64 {
 	h = mix(h, uint64(x.Kind))
 	h = mix(h, math.Float64bits(x.Value))
 	h = mix(h, math.Float64bits(x.Fraction))
+	h = mixBool(h, x.expr != nil)
 	return h
 }
 

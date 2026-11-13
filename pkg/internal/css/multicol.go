@@ -207,7 +207,7 @@ func multicolProps() map[propID]propDef {
 				}
 			},
 			copyFrom: field(func(s *Style) *float64 { return &s.Columns.RuleWidth }),
-			initial:  length{pt: 3 * Pt, hasLen: true},
+			initial:  ptLength(3 * Pt),
 		},
 		pColumnRuleColor: {
 			name: "column-rule-color",

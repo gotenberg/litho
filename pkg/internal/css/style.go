@@ -41,10 +41,11 @@ const (
 	MaxContent
 	FitContent
 	Stretch
-	// Calc is a calc() sum of a length and a percentage, which only
+	// Calc is a calculation of a length and a percentage, which only
 	// resolves once the reference is known (CSS Values 4, 10.8): Value
-	// points plus Fraction of the reference. calc(10% + 100px) is
-	// {Calc, 75, 0.1}.
+	// points plus Fraction of the reference for a sum, calc(10% + 100px)
+	// being {Calc, 75, 0.1}, or a function of the reference such as
+	// min(100%, 300px), which [Dimension.Resolve] evaluates.
 	Calc
 )
 
@@ -58,6 +59,9 @@ type Dimension struct {
 	// Fraction is the percentage part of a Calc as a fraction of the
 	// reference (0.1 for 10%), 0 for every other kind.
 	Fraction float64
+	// expr is the calculation of a Calc that is not a sum, its lengths
+	// in points, nil otherwise. It is shared and never mutated.
+	expr *calcNode
 }
 
 // Pts is the Dimension of an absolute length in points.
