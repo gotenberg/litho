@@ -1217,8 +1217,8 @@ func (s *inlineState) newVbox(b *box, parent *vbox) *vbox {
 	e := s.e
 	m := e.faceMetrics(b.st)
 	lh := e.lineHeight(b.st)
-	half := (lh - (m.Ascent + m.Descent)) / 2
-	v := &vbox{b: b, parent: parent, above: m.Ascent + half, below: m.Descent + half, ca: m.Ascent, cd: m.Descent, size: e.fontSize(b.st), lh: lh, xh: m.XHeight}
+	up, down := e.leading(lh - (m.Ascent + m.Descent))
+	v := &vbox{b: b, parent: parent, above: m.Ascent + up, below: m.Descent + down, ca: m.Ascent, cd: m.Descent, size: e.fontSize(b.st), lh: lh, xh: m.XHeight}
 	if parent == nil {
 		return v
 	}
@@ -1229,6 +1229,32 @@ func (s *inlineState) newVbox(b *box, parent *vbox) *vbox {
 		v.shift = parent.shift
 	}
 	return v
+}
+
+// leadingSlack absorbs the rounding of a leading that falls on a whole
+// pixel, half of Blink's layout unit of 1/64 px, so floating-point error
+// does not floor it a pixel down.
+const leadingSlack = 1.0 / 128
+
+// leading splits the leading lead of an inline box, its line height less
+// its content area, into the half-leading above its content and the one
+// below (CSS 2.1, 10.8.1: half each). With pixel font metrics the part
+// above is the half floored to a whole CSS pixel and the part below the
+// rest, as Blink splits it (CalculateLeadingSpace).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 starts the
+//     background of a 16 px Liberation Serif span at the top of its line
+//     at line-height: normal (a leading of 1 px), 1 px below it at
+//     line-height: 20px (3 px), 2 px below it at 21px (4 px); a 20 px
+//     DejaVu Sans line (1 px) starts it at the top.
+func (e *engine) leading(lead float64) (float64, float64) {
+	if !e.opts.PixelFontMetrics {
+		return lead / 2, lead / 2
+	}
+	up := math.Floor(lead/2/css.Pt+leadingSlack) * css.Pt
+	return up, lead - up
 }
 
 // alignShift returns the baseline shift of a box with extent above and
@@ -1593,8 +1619,8 @@ func (s *inlineState) vertical(l *lineBox) {
 			// as CSS Inline 3, 5.1 lets the user agent do and browsers do:
 			// text a fallback face draws taller grows the line.
 			lh := it.ascent + it.descent + max(it.gap, 0)
-			half := (lh - (it.ascent + it.descent)) / 2
-			include(v, v.shift-wider(it.ascent+half, v.above), v.shift+wider(it.descent+half, v.below))
+			up, down := s.e.leading(lh - (it.ascent + it.descent))
+			include(v, v.shift-wider(it.ascent+up, v.above), v.shift+wider(it.descent+down, v.below))
 		} else if it.text != nil || it.box.kind == kindInline && !empty {
 			// Any other line-height lays the box out on its first
 			// available font's metrics alone, whichever face draws its

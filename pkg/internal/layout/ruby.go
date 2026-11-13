@@ -228,8 +228,8 @@ func (e *engine) layoutRuby(a *box, lcb cblock) {
 	} else {
 		// An empty base takes its ruby's strut.
 		lh := e.lineHeight(a.st)
-		half := (lh - m.Ascent - m.Descent) / 2
-		bl = r.base.y + m.Ascent + half
+		up, _ := e.leading(lh - m.Ascent - m.Descent)
+		bl = r.base.y + m.Ascent + up
 		top, bottom = r.base.y, r.base.y+lh
 	}
 	r.baseAbove = bl - top

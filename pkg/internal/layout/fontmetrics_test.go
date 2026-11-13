@@ -49,3 +49,28 @@ func TestPixelFontMetrics_MovesTheBaseline(t *testing.T) {
 		}
 	}
 }
+
+// TestPixelFontMetrics_FloorsTheLeadingAbove locks that pixel font
+// metrics split a leading as Blink does, the half above floored to a
+// whole pixel and the rest below, while fractional metrics split it in
+// halves (CSS 2.1, 10.8.1).
+func TestPixelFontMetrics_FloorsTheLeadingAbove(t *testing.T) {
+	t.Parallel()
+	// Ahem at 10px, ascent 8px and descent 2px, on lines of 13px: a
+	// leading of 3px.
+	tall := func(s *css.Style) { s.LineHeight = css.Pts(px(13)) }
+	for _, tt := range []struct {
+		pixel    bool
+		baseline float64
+	}{{false, px(9.5)}, {true, px(9)}} {
+		st := sty(tall)
+		res, err := Layout(context.Background(), doc(el(st, txt(st, "a"))), ahem(t), Options{Page: page(40, 40), PixelFontMetrics: tt.pixel})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ts := texts(res, 1)
+		if len(ts) != 1 || !near(ts[0].y, tt.baseline) {
+			t.Errorf("pixel %v: texts %+v, want the baseline at %v", tt.pixel, ts, tt.baseline)
+		}
+	}
+}
