@@ -81,6 +81,11 @@ type ParagraphRun struct {
 	// keeps its place in the paragraph's text and draws nothing.
 	Text  string
 	Style Style
+	// Extract, when set, is the text the run's glyphs extract as in place
+	// of Text, of as many characters: the characters before a case
+	// mapping the caller applied for drawing, as synthesised small
+	// capitals are. An Extract of another length is ignored.
+	Extract string
 	// Object, when set, makes the run one U+FFFC character of the object's
 	// advance; Text and Style are then ignored.
 	Object *Object
@@ -155,6 +160,9 @@ type ParagraphLine struct {
 // A Paragraph is not safe for concurrent use.
 type Paragraph struct {
 	text []rune
+	// extract is the text the glyphs extract as, character for character,
+	// nil when it is text ([ParagraphRun.Extract]).
+	extract []rune
 	// runOf is the run of each character: a run index fits 16 bits, since
 	// a paragraph holds at most [MaxLayoutRuns] runs.
 	runOf []uint16
@@ -317,8 +325,10 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 			shapeText = append(shapeText, objectReplacement)
 			p.runOf = append(p.runOf, run)
 			p.objects[i] = r.Object
+			p.setExtract(len(p.text)-1, "", total)
 			continue
 		}
+		from := len(p.text)
 		for _, c := range r.Text {
 			p.text = append(p.text, c)
 			if unicode.IsControl(c) {
@@ -327,6 +337,7 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 			shapeText = append(shapeText, c)
 			p.runOf = append(p.runOf, run)
 		}
+		p.setExtract(from, r.Extract, total)
 	}
 	n := len(p.text)
 	p.adv = make([]float64, n)
@@ -778,7 +789,7 @@ func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int)
 		if c != cluster {
 			cluster = c
 			e := min(c+max(g.clusterLen(), 1), len(p.text))
-			cg.Text = clusterText(p.text[c:e])
+			cg.Text = clusterText(p.extractText(c, e))
 		}
 		t.Glyphs = append(t.Glyphs, cg)
 		pen += adv
@@ -790,6 +801,32 @@ func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int)
 		sp.Text = t
 	}
 	return pen
+}
+
+// setExtract records the extracted text of the characters from from on,
+// those of the run just added: ex when it has as many characters, else
+// the characters themselves. total is the paragraph's character count.
+func (p *Paragraph) setExtract(from int, ex string, total int) {
+	valid := ex != "" && utf8.RuneCountInString(ex) == len(p.text)-from
+	switch {
+	case valid && p.extract == nil:
+		p.extract = make([]rune, from, total)
+		copy(p.extract, p.text[:from])
+		p.extract = append(p.extract, []rune(ex)...)
+	case valid:
+		p.extract = append(p.extract, []rune(ex)...)
+	case p.extract != nil:
+		p.extract = append(p.extract, p.text[from:]...)
+	}
+}
+
+// extractText returns the text the glyphs of the characters [c, e)
+// extract as.
+func (p *Paragraph) extractText(c, e int) []rune {
+	if p.extract != nil && e <= len(p.extract) {
+		return p.extract[c:e]
+	}
+	return p.text[c:e]
 }
 
 // control reports whether the glyph of the cluster at i stands for a

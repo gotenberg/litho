@@ -294,11 +294,14 @@ func (p capsPlan) caseMap(upper bool) byte {
 
 // smallCapsPiece is a run of text of one case behaviour: its characters
 // after case mapping, whether it is drawn at the small capitals' size,
-// and the caps features it is shaped with.
+// the caps features it is shaped with, and the characters it extracts as.
 type smallCapsPiece struct {
 	text     string
 	small    bool
 	features []text.Feature
+	// source is the piece's text before case mapping, "" when the
+	// mapping left it as it was.
+	source string
 }
 
 // needsUpper reports whether r changes when uppercased, Unicode's
@@ -309,9 +312,21 @@ func needsUpper(r rune) bool {
 }
 
 // smallCaps cuts s into the pieces plan draws it as: one piece when no
-// synthesis is needed, else one per change of case behaviour, a
-// combining mark taking the behaviour of the character before it
-// (SmallCapsIterator).
+// synthesis is needed, else one per change of case behaviour, a combining
+// mark taking the behaviour of the character before it
+// (SmallCapsIterator). The caller has a case-mapped piece extract as its
+// characters before the mapping under BrowserRules, as Chromium's PDF
+// marks each such glyph with its character, and as drawn otherwise, as
+// Word's PDF reads small capitals.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws
+//     font-variant: small-caps in Liberation Serif at 40px with the
+//     capitals of the lowercase letters at 28px, each in a /Span whose
+//     ActualText is the lowercase letter; pdftotext reads "Small Caps".
+//   - litho/docx: run-effects, Word's reference reads "SMALL CAPS TEXT"
+//     for w:smallCaps text typed "Small Caps Text".
 func smallCaps(s string, plan capsPlan) []smallCapsPiece {
 	if plan.caps == css.VariantNormal {
 		return []smallCapsPiece{{text: s}}
@@ -326,14 +341,18 @@ func smallCaps(s string, plan capsPlan) []smallCapsPiece {
 		if len(cur) == 0 {
 			return
 		}
-		t := string(cur)
+		src := string(cur)
+		t := src
 		switch plan.caseMap(upper) {
 		case 'U':
 			t = string(mapRunes(cur, unicode.ToUpper))
 		case 'L':
 			t = string(mapRunes(cur, unicode.ToLower))
 		}
-		out = append(out, smallCapsPiece{text: t, small: plan.synthetic(upper), features: plan.features(upper)})
+		if t == src {
+			src = ""
+		}
+		out = append(out, smallCapsPiece{text: t, small: plan.synthetic(upper), features: plan.features(upper), source: src})
 		cur = cur[:0]
 	}
 	for _, r := range s {

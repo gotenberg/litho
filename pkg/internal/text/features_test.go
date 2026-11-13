@@ -87,3 +87,24 @@ func TestStyle_LanguageSystem(t *testing.T) {
 		}
 	}
 }
+
+// TestShape_ExtractText checks [ParagraphRun.Extract]: the glyphs of a
+// run extract as its Extract, those of the other runs as their text, and
+// an Extract of another length is ignored.
+func TestShape_ExtractText(t *testing.T) {
+	t.Parallel()
+	f := newTestFonts(t, repoFont(t, "ab.ttf", dejavuAB))
+	st := style()
+	st.Families = []string{"DejaVu Sans"}
+	p := shape(t, f, []ParagraphRun{
+		{Text: "A", Style: st}, {Text: "AB", Extract: "ab", Style: st},
+		{Text: "BA", Extract: "b", Style: st}, {Text: "B", Style: st},
+	}, ParagraphOptions{})
+	if got := string(p.extractText(0, 6)); got != "AabBAB" {
+		t.Errorf("extracted %q, want %q", got, "AabBAB")
+	}
+	plain := shape(t, f, []ParagraphRun{{Text: "AB", Style: st}}, ParagraphOptions{})
+	if plain.extract != nil {
+		t.Errorf("a paragraph without Extract holds %q", string(plain.extract))
+	}
+}

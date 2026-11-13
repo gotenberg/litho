@@ -285,7 +285,11 @@ func (c *collector) text(k *box) {
 			if pc.features != nil {
 				st.Features = append(slices.Clone(pc.features), st.Features...)
 			}
-			c.addRun(text.ParagraphRun{Text: pc.text, Style: st}, runInfo{kind: runText, box: k, ws: ws})
+			run := text.ParagraphRun{Text: pc.text, Style: st}
+			if c.e.opts.BrowserRules {
+				run.Extract = pc.source
+			}
+			c.addRun(run, runInfo{kind: runText, box: k, ws: ws})
 			c.cur.n += utf8.RuneCountInString(pc.text)
 		}
 		buf.Reset()

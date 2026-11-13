@@ -562,16 +562,16 @@ func TestSmallCaps_Pieces(t *testing.T) {
 		want []smallCapsPiece
 	}{
 		{"abc", capsPlan{}, []smallCapsPiece{{text: "abc"}}},
-		{"abc", small, []smallCapsPiece{{text: "ABC", small: true}}},
-		{"Hé 2", small, []smallCapsPiece{{text: "H"}, {text: "É", small: true}, {text: " 2"}}},
-		{"He\u0301!", small, []smallCapsPiece{{text: "H"}, {text: "E\u0301", small: true}, {text: "!"}}},
+		{"abc", small, []smallCapsPiece{{text: "ABC", small: true, source: "abc"}}},
+		{"Hé 2", small, []smallCapsPiece{{text: "H"}, {text: "É", small: true, source: "é"}, {text: " 2"}}},
+		{"He\u0301!", small, []smallCapsPiece{{text: "H"}, {text: "E\u0301", small: true, source: "e\u0301"}, {text: "!"}}},
 		// ß has no one-rune uppercase: it keeps its form and size.
 		{"ß", small, []smallCapsPiece{{text: "ß"}}},
 		{"", small, nil},
 		{"aB1", capsPlan{caps: css.AllSmallCaps, support: capsNone, synth: synthBoth, allowed: true},
-			[]smallCapsPiece{{text: "A", small: true}, {text: "B1", small: true}}},
+			[]smallCapsPiece{{text: "A", small: true, source: "a"}, {text: "B1", small: true}}},
 		{"aB", capsPlan{caps: css.Unicase, support: capsFallback, synth: synthUpper, allowed: true},
-			[]smallCapsPiece{{text: "a"}, {text: "b", features: smcp}}},
+			[]smallCapsPiece{{text: "a"}, {text: "b", features: smcp, source: "B"}}},
 		{"aB", capsPlan{caps: css.Unicase, support: capsNone, synth: synthUpper, allowed: true},
 			[]smallCapsPiece{{text: "a"}, {text: "B", small: true}}},
 		{"aB", capsPlan{caps: css.SmallCaps, allowed: true}, []smallCapsPiece{{text: "aB", features: smcp}}},
