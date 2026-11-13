@@ -17,6 +17,14 @@ import (
 // [TestRaceSeparationRemediation] runs at once.
 const maxRaceSeparationWorkers = 32
 
+// raceSeparationSample is the share of the other fixtures
+// [TestRaceSeparationRemediation] remediates beside its target under the
+// race detector: one in this many. They are there to keep remediations in
+// flight, not to be judged, and all 221 of them at twenty rounds take four
+// minutes of the package's ten under the detector. The target is still
+// remediated twenty times.
+const raceSeparationSample = 5
+
 // TestRaceSeparationRemediation guards Separation canonicalisation
 // determinism. The fixer once picked the canonical (alt, tintFunc) per colorant
 // by iterating the /ColorSpace dict in Go's randomised map order, so the same
@@ -35,6 +43,15 @@ func TestRaceSeparationRemediation(t *testing.T) {
 	target, _ := filepath.Glob(filepath.Join(dir, "*6-2-4-4-t03-fail-d*"))
 	if len(target) == 0 {
 		t.Skip("target fixture missing")
+	}
+	if raceEnabled {
+		sampled := others[:0:0]
+		for i, m := range others {
+			if i%raceSeparationSample == 0 {
+				sampled = append(sampled, m)
+			}
+		}
+		others = sampled
 	}
 	remediate := func(path string) (string, []string) {
 		data, err := os.ReadFile(path)
