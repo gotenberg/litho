@@ -32,6 +32,9 @@
 //   - [Blend] by the sixteen [BlendMode]s.
 //   - [Tile], [AlphaRamp].
 //   - [Plan] and [Page]: the resolution an effect is drawn at.
+//   - [Paint]: page content, text, pictures, shadings and groups, drawn
+//     into RGBA surfaces by litho's PDF renderer, for the effects that
+//     read the content itself rather than its silhouette.
 //
 // # What realises what
 //
@@ -47,8 +50,8 @@
 //   - feMorphology: [Dilate] or [Erode].
 //   - feDropShadow: [AlphaOf], [Blur], [Offset], [Flood] and [Composite]
 //     In for the shadow's colour, then [Merge] under the source.
-//   - feImage: the content it names drawn into a surface, then [Transform]
-//     into place; drawing content belongs to the caller.
+//   - feImage: the content it names drawn by [Paint], then [Transform]
+//     into place.
 //   - SourceAlpha: [AlphaOf].
 //
 // CSS filter functions (Filter Effects 1, 6.1 and 13.1):
@@ -139,4 +142,13 @@
 // which amd64 and arm64 implement differently; then they are rounded to
 // fixed point before use. The tests pin the SHA-256 of every primitive's
 // output on fixed inputs.
+//
+// [Paint] draws with litho's PDF renderer, which works in floating point
+// and rounds every product on its own before it is summed (see package
+// render), and rounds its result to 8 bits the same way. The renderer
+// also calls the math package's Hypot, Sincos, Atan2 and Acos on stroke
+// and curve geometry, and reads fonts and colour through packages not
+// held to that rule: a surface [Paint] draws is the same on every machine
+// as far as those agree. The tests pin the SHA-256 of its surfaces for
+// text, pictures, shadings, shapes and transparency.
 package effect

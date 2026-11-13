@@ -19,4 +19,9 @@ var (
 	// an operation receives a format it does not take. It is a mistake of
 	// the caller's code, not of a document.
 	ErrFormat = errors.New("effect surface format or size mismatch")
+
+	// ErrGrid is returned, wrapped in an error naming the grid, for a
+	// [Grid] whose scale is not positive and finite or whose origin is not
+	// finite. It is a mistake of the caller's code, not of a document.
+	ErrGrid = errors.New("effect grid not positive and finite")
 )
