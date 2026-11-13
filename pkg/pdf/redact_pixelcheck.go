@@ -573,7 +573,7 @@ func unitTo8(v float32) uint8 {
 	case v >= 1:
 		return 255
 	}
-	return uint8(v*255 + 0.5)
+	return uint8(float64(v*255) + 0.5)
 }
 
 // rgbDelta returns the largest difference between two RGB triples' channels.

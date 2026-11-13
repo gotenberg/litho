@@ -382,7 +382,7 @@ type luminance struct {
 
 func (l *luminance) Convert(in, out []float64) {
 	l.toRGB.Convert(in, l.rgb[:])
-	out[0] = min(max(0.3*l.rgb[0]+0.59*l.rgb[1]+0.11*l.rgb[2], 0), 1)
+	out[0] = min(max(float64(0.3*l.rgb[0])+float64(0.59*l.rgb[1])+float64(0.11*l.rgb[2]), 0), 1)
 }
 
 // paintedObjects returns the numbers of the indirect objects pg's painting

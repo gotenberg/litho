@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/render/annot"
@@ -282,9 +283,9 @@ func relativeLuminance(r, g, b float64) float64 {
 		if c <= 0.04045 {
 			return c / 12.92
 		}
-		return math.Pow((c+0.055)/1.055, 2.4)
+		return detmath.Pow((c+0.055)/1.055, 2.4)
 	}
-	return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b)
+	return float64(0.2126*lin(r)) + float64(0.7152*lin(g)) + float64(0.0722*lin(b))
 }
 
 // inkChanged reports two RGB pixels apart by more than
@@ -340,9 +341,10 @@ func sameLine(a, b models.TextElement) bool {
 	}
 	size := math.Max(math.Abs(a.FontSize), math.Abs(b.FontSize))
 	dx, dy := b.X-a.X, b.Y-a.Y
-	across := -dx*math.Sin(a.Angle) + dy*math.Cos(a.Angle)
+	sin, cos := detmath.Sincos(a.Angle)
+	across := float64(dy*cos) - float64(dx*sin)
 	if a.Vertical {
-		across = dx*math.Cos(a.Angle) + dy*math.Sin(a.Angle)
+		across = float64(dx*cos) + float64(dy*sin)
 	}
 	return math.Abs(across) <= size/2
 }

@@ -678,7 +678,7 @@ func segmentDistance(p, a, b [3]float64) float64 {
 		return colourDistance(p, a)
 	}
 	t := math.Max(0, math.Min(1, dot3(sub3(p, a), ab)/l))
-	return colourDistance(p, [3]float64{a[0] + t*ab[0], a[1] + t*ab[1], a[2] + t*ab[2]})
+	return colourDistance(p, [3]float64{a[0] + float64(t*ab[0]), a[1] + float64(t*ab[1]), a[2] + float64(t*ab[2])})
 }
 
 // triangleDistance is the distance of p from the triangle abc, inside and
@@ -686,18 +686,22 @@ func segmentDistance(p, a, b [3]float64) float64 {
 func triangleDistance(p, a, b, c [3]float64) float64 {
 	ab, ac, ap := sub3(b, a), sub3(c, a), sub3(p, a)
 	d00, d01, d11 := dot3(ab, ab), dot3(ab, ac), dot3(ac, ac)
-	den := d00*d11 - d01*d01
+	den := float64(d00*d11) - float64(d01*d01)
 	edges := math.Min(segmentDistance(p, a, b), math.Min(segmentDistance(p, b, c), segmentDistance(p, a, c)))
 	if den <= 1e-12 {
 		return edges
 	}
 	d20, d21 := dot3(ap, ab), dot3(ap, ac)
-	v := (d11*d20 - d01*d21) / den
-	w := (d00*d21 - d01*d20) / den
+	v := (float64(d11*d20) - float64(d01*d21)) / den
+	w := (float64(d00*d21) - float64(d01*d20)) / den
 	if v < 0 || w < 0 || v+w > 1 {
 		return edges
 	}
-	return colourDistance(p, [3]float64{a[0] + v*ab[0] + w*ac[0], a[1] + v*ab[1] + w*ac[1], a[2] + v*ab[2] + w*ac[2]})
+	return colourDistance(p, [3]float64{
+		a[0] + float64(v*ab[0]) + float64(w*ac[0]),
+		a[1] + float64(v*ab[1]) + float64(w*ac[1]),
+		a[2] + float64(v*ab[2]) + float64(w*ac[2]),
+	})
 }
 
 // sub3 is a - b.
@@ -707,5 +711,5 @@ func sub3(a, b [3]float64) [3]float64 {
 
 // dot3 is the dot product of a and b.
 func dot3(a, b [3]float64) float64 {
-	return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
+	return float64(a[0]*b[0]) + float64(a[1]*b[1]) + float64(a[2]*b[2])
 }
