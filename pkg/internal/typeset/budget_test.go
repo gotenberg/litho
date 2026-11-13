@@ -67,3 +67,28 @@ func TestWrite_GivesBackTheStreamsCharge(t *testing.T) {
 		})
 	}
 }
+
+// TestWrite_ChargesEachPageWritten checks that every page written costs
+// the budget until the file is written, whether its streams stay in
+// memory or spool: the page objects wait for the page tree at the end.
+func TestWrite_ChargesEachPageWritten(t *testing.T) {
+	held := func(pages int) int64 {
+		ctx, budget, cancel := limits.WithBudget(context.Background(), limits.Limits{})
+		defer cancel()
+		s, err := typeset.NewStream(ctx, typeset.Options{Spool: 0, TempDir: t.TempDir()}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.Abort()
+		for range pages {
+			if err := s.Page(ctx, letter(run(t, sans, 12, typeset.Point{X: 20, Y: 40}, "Hello, World!"))); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return budget.Held()
+	}
+	one, ten := held(1), held(10)
+	if per := (ten - one) / 9; per < 1<<10 {
+		t.Errorf("a page written holds %d bytes of the budget, want at least 1 KiB", per)
+	}
+}

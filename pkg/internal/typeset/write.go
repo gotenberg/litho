@@ -221,11 +221,25 @@ type docWriter struct {
 	held   int64
 	mark   int
 	shared map[int]bool
-	// charged is what the streams kept in memory cost the budget, given
-	// back when the file is written or abandoned ([Stream.Abort]). held is
-	// not that amount once a stream has spooled: it is set to hold.
+	// charged is what the streams kept in memory and the pages written
+	// cost the budget, given back when the file is written or abandoned
+	// ([Stream.Abort]). held is not that amount once a stream has spooled:
+	// it is set to hold.
 	charged int64
 }
+
+// pageCost is what one page written costs the conversion's memory budget
+// until the file is written: its page dictionary, MediaBox, resource and
+// font dictionaries and the dictionary of its content stream, which wait
+// for the end of the file with the page tree. The content stream's bytes
+// are charged apart, as a stream kept in memory.
+//
+// # Corpus evidence
+//
+//   - probe, odp: a deck of 2,000 slides, each a title and a list, holds
+//     4.5 MB of live heap in the page, resource and content dictionaries
+//     of its pages at the peak, 2.3 KB a page.
+const pageCost = 2 << 10
 
 // pendingLink is a link of a page written whose annotation is finished at
 // the end: its destination's page and element are resolved then.
@@ -596,6 +610,10 @@ func (w *docWriter) hashBytes(b []byte) {
 // 32000-1, 7.7.3.3, Table 30). The annotations are finished at the end.
 func (w *docWriter) page(ctx context.Context, page *Page, links []Link) error {
 	i := len(w.heights)
+	if err := w.mem.ChargeUnits(1, pageCost, "the pages written"); err != nil {
+		return fmt.Errorf("writing page %d: %w", i+1, err)
+	}
+	w.charged += pageCost
 	if w.st != nil {
 		w.st.addPage()
 	}
