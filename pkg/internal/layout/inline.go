@@ -1525,15 +1525,16 @@ func (s *inlineState) recordAnchors(l *lineBox) {
 	}
 }
 
-// recordEmptyAnchors records where the empty inline boxes with an ID that
-// open in the characters [start, end) of p land on the line l: at the
-// item that follows them, on the line's top. Such a box makes no fragment
-// of its own (CSS 2.1, 9.4.2), yet the converter anchors running elements
-// and named strings to it.
+// recordEmptyAnchors records where the empty inline boxes with an ID, or
+// positioned, that open in the characters [start, end) of p land on the
+// line l: at the item that follows them, on the line's top. Such a box
+// makes no fragment of its own (CSS 2.1, 9.4.2), yet the converter anchors
+// running elements and named strings to it, and a positioned one holds
+// its absolutely positioned descendants there (10.1).
 func (s *inlineState) recordEmptyAnchors(p *ifcPara, start, end int, l *lineBox) {
 	for _, o := range p.opens {
 		b := o.box
-		if b.id == "" || b.anchorSet || o.pos < start || o.pos > end || o.pos == end && end < p.n {
+		if b.id == "" && b.st.Position == css.Static || b.anchorSet || o.pos < start || o.pos > end || o.pos == end && end < p.n {
 			continue
 		}
 		x := 0.0

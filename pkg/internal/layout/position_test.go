@@ -316,3 +316,13 @@ func TestPosition_TransformBox(t *testing.T) {
 	// The 3 px border box scales about x = 1: it spans -1 to 5.
 	assertPixels(t, run(t, doc(sq), page(6, 3)), 1, "BBBBB_\nBBBBB_\nBBBBB_")
 }
+
+func TestPosition_EmptyInlineHoldsAbsolute(t *testing.T) {
+	// CSS 2.1, 10.1: a relatively positioned inline box with no content of
+	// its own holds its absolutely positioned child where it would sit, at
+	// the start of its empty line.
+	child := square(2, 1, blue, abs(0, auto, auto, 0))
+	span := el(inlineSty(rel(0, 0)), child)
+	root := doc(square(2, 1, red), el(sty(), span))
+	assertPixels(t, run(t, root, page(2, 3)), 1, "RR\nBB\n__")
+}
