@@ -1061,8 +1061,10 @@ func (st *layoutState) report() Report {
 	if len(st.emoji) > 0 {
 		rep.MissingEmoji = slices.Sorted(maps.Keys(st.emoji))
 	}
-	for _, name := range slices.Sorted(maps.Keys(st.defaultInstances)) {
-		rep.DefaultInstances = append(rep.DefaultInstances, st.defaultInstances[name])
+	if len(st.defaultInstances) > 0 {
+		for _, name := range slices.Sorted(maps.Keys(st.defaultInstances)) {
+			rep.DefaultInstances = append(rep.DefaultInstances, st.defaultInstances[name])
+		}
 	}
 	return rep
 }
