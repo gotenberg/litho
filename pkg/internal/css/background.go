@@ -1,17 +1,20 @@
 package css
 
-import "github.com/gotenberg/litho/pkg/internal/warn"
+import (
+	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/warn"
+)
 
 // unsupportedImages are the <image> functions litho parses and does not
 // paint: a background or a marker using one computes to none with a
-// warning (CSS Images 3 and 4). A background takes the linear and radial
-// gradients before this table is read (see [bgImageValue]); a list marker
-// does not.
+// warning (CSS Images 3 and 4). A background takes the linear, radial and
+// conic gradients before this table is read (see [bgImageValue]); a list
+// marker does not.
 var unsupportedImages = map[string]bool{
 	"linear-gradient": true, "radial-gradient": true, "conic-gradient": true,
 	"repeating-linear-gradient": true, "repeating-radial-gradient": true,
-	"repeating-conic-gradient": true, "image-set": true, "-webkit-image-set": true,
-	"cross-fade": true, "-webkit-cross-fade": true, "element": true, "-moz-element": true,
+	"repeating-conic-gradient": true, "cross-fade": true, "-webkit-cross-fade": true,
+	"element": true, "-moz-element": true,
 	"image": true, "paint": true, "-webkit-gradient": true, "-webkit-linear-gradient": true,
 	"-webkit-radial-gradient": true, "-moz-linear-gradient": true, "-moz-radial-gradient": true,
 	"-o-linear-gradient": true, "-webkit-repeating-linear-gradient": true,
@@ -23,6 +26,16 @@ var unsupportedImages = map[string]bool{
 func imageValue(t token, c *declCtx, prop string) (string, bool) {
 	if t.isIdent("none") {
 		return "", true
+	}
+	if isImageSet(t) {
+		chosen, ok := imageSetChoice(t)
+		if !ok {
+			return "", false
+		}
+		if chosen.typ == tString {
+			return resolveURL(c.baseURL, chosen.value), true
+		}
+		return imageValue(chosen, c, prop)
 	}
 	if u, ok := parseURL(t, c.baseURL); ok {
 		return u, true
@@ -402,4 +415,95 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 		}
 	}
 	return out, true
+}
+
+// maxImageSetOptions caps the options of one image-set(): 64. Real sets
+// list two or three densities. Anti-DoS guard, not spec-mandated.
+const maxImageSetOptions = 64
+
+// imageSetTypes are the media types an image-set() option's type() may
+// name for litho to choose it (CSS Images 4, 2.2): the raster formats
+// and SVG litho decodes.
+var imageSetTypes = map[string]bool{
+	"image/png": true, "image/apng": true, "image/jpeg": true, "image/pjpeg": true, "image/jpg": true,
+	"image/gif": true, "image/webp": true, "image/bmp": true, "image/x-ms-bmp": true, "image/tiff": true,
+	"image/svg+xml": true,
+}
+
+// isImageSet reports an image-set() or its -webkit- legacy name.
+func isImageSet(t token) bool {
+	return t.typ == tFunction && (eqFold(t.value, "image-set") || eqFold(t.value, "-webkit-image-set"))
+}
+
+// imageSetChoice returns the image an image-set() paints (CSS Images 4,
+// 2.2): of the options whose type litho decodes, the one of the lowest
+// resolution at least 1x, the first of equals, else the one of the
+// highest. The specification leaves the choice to the user agent; this
+// is Chromium's on paper, whose device pixel ratio is 1. A string option
+// is returned as the string token, a URL to resolve.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 prints image-set(A 1x, B 2x) and (B 2x,
+//     A 1x) as A, (A 2x, B 3x) as A, (A 0.5x, B 0.8x) as B, (A 1.5x, B
+//     1x) as B, (A, B 1x) as A, and skips an option of type('image/foo').
+func imageSetChoice(t token) (token, bool) {
+	opts := splitCommas(t.children)
+	if len(opts) == 0 || len(opts) > maxImageSetOptions {
+		return token{}, false
+	}
+	best, bestRes, found := token{}, 0.0, false
+	for _, o := range opts {
+		o = significant(o)
+		if len(o) == 0 || len(o) > 3 {
+			return token{}, false
+		}
+		img := o[0]
+		if img.typ != tString && img.typ != tURL && img.typ != tFunction {
+			return token{}, false
+		}
+		res, typed, typeOK := 1.0, false, true
+		for _, d := range o[1:] {
+			switch {
+			case d.typ == tFunction && eqFold(d.value, "type"):
+				a := significant(d.children)
+				if typed || len(a) != 1 || a[0].typ != tString {
+					return token{}, false
+				}
+				typed, typeOK = true, imageSetTypes[lower(a[0].value)]
+			default:
+				v, ok := resolutionOf(d)
+				if !ok || v < 0 {
+					return token{}, false
+				}
+				res = v
+			}
+		}
+		if !typeOK {
+			continue
+		}
+		better := !found || res >= 1 && (bestRes < 1 || res < bestRes) || res < 1 && bestRes < 1 && res > bestRes
+		if better {
+			best, bestRes, found = img, res, true
+		}
+	}
+	return best, found
+}
+
+// resolutionOf parses a <resolution> in dppx (CSS Values 4, 7.4), a math
+// function included.
+func resolutionOf(t token) (float64, bool) {
+	switch t.typ { //nolint:exhaustive // the other token types are not resolutions
+	case tDimension:
+		if o, ok := otherUnits[lower(t.value)]; ok && o.t == typeRes && numeric.Finite(t.num) {
+			return t.num * o.k, true
+		}
+	case tFunction:
+		if isCalc(&t) {
+			if v, ty, ok := calcConst(&t, nil); ok && ty == typeRes {
+				return v, true
+			}
+		}
+	}
+	return 0, false
 }

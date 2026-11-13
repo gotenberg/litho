@@ -1,6 +1,10 @@
 package css
 
-import "math"
+import (
+	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
+)
 
 // maxGradientStops caps the comma-separated stops and hints of one
 // gradient: 256, a stop with two positions counting once.
@@ -19,6 +23,11 @@ type gradientSpec struct {
 	radius    [2]length
 	center    [2]length
 	stops     []stopSpec
+	// space and hue are the <color-interpolation-method>, method set
+	// when one is written.
+	space  colorSpace
+	hue    hueMethod
+	method bool
 }
 
 // stopSpec is a specified colour stop or transition hint.
@@ -46,11 +55,23 @@ var gradientFunctions = map[string]struct {
 	"repeating-linear-gradient": {LinearGradient, true},
 	"radial-gradient":           {RadialGradient, false},
 	"repeating-radial-gradient": {RadialGradient, true},
+	"conic-gradient":            {ConicGradient, false},
+	"repeating-conic-gradient":  {ConicGradient, true},
 }
 
 // bgImageValue parses one background <image> or none: a gradient function
 // litho paints, else what [imageValue] takes.
 func bgImageValue(t token, c *declCtx, prop string) (imageSpec, bool) {
+	if isImageSet(t) {
+		chosen, ok := imageSetChoice(t)
+		if !ok {
+			return imageSpec{}, false
+		}
+		if chosen.typ == tString {
+			return imageSpec{url: resolveURL(c.baseURL, chosen.value)}, true
+		}
+		return bgImageValue(chosen, c, prop)
+	}
 	if t.typ == tFunction {
 		if f, ok := gradientFunctions[lower(t.value)]; ok {
 			g, ok := parseGradient(significant(t.children), f.kind, f.repeating)
@@ -64,33 +85,51 @@ func bgImageValue(t token, c *declCtx, prop string) (imageSpec, bool) {
 	return imageSpec{url: u}, ok
 }
 
-// parseGradient parses the arguments of a linear or radial gradient
-// function (CSS Images 3, 3.1.1 and 3.2.1): an optional first argument
-// for the direction or the shape, then the colour stop list.
+// parseGradient parses the arguments of a linear, radial or conic
+// gradient function (CSS Images 3, 3.1.1 and 3.2.1; CSS Images 4, 3.1,
+// 3.2 and 3.3): an optional first argument for the direction, the shape
+// or the from angle and centre, and the colour interpolation method, then
+// the colour stop list.
 func parseGradient(args []token, kind GradientKind, repeating bool) (*gradientSpec, bool) {
 	parts := splitCommas(args)
 	if len(parts) == 0 {
 		return nil, false
 	}
 	g := &gradientSpec{kind: kind, repeating: repeating, angle: 180}
-	first := parts[0]
-	if kind == LinearGradient {
-		if ok, consumed := g.linearDirection(first); consumed {
+	first, method, ok := g.takeInterpolation(parts[0])
+	if !ok {
+		return nil, false
+	}
+	if method && len(first) == 0 {
+		parts = parts[1:]
+	}
+	switch kind {
+	case LinearGradient:
+		if ok, consumed := g.linearDirection(first); consumed || method && len(first) > 0 {
 			if !ok {
 				return nil, false
 			}
 			parts = parts[1:]
 		}
-	} else {
+	case RadialGradient:
 		g.center = [2]length{pctLength(50), pctLength(50)}
-		if ok, consumed := g.radialShape(first); consumed {
+		if ok, consumed := g.radialShape(first); consumed || method && len(first) > 0 {
+			if !ok {
+				return nil, false
+			}
+			parts = parts[1:]
+		}
+	case ConicGradient:
+		g.angle = 0
+		g.center = [2]length{pctLength(50), pctLength(50)}
+		if ok, consumed := g.conicStart(first); consumed || method && len(first) > 0 {
 			if !ok {
 				return nil, false
 			}
 			parts = parts[1:]
 		}
 	}
-	stops, ok := parseStops(parts)
+	stops, ok := parseStops(parts, kind == ConicGradient)
 	if !ok {
 		return nil, false
 	}
@@ -267,11 +306,129 @@ func (g *gradientSpec) radialShape(v []token) (ok, consumed bool) {
 	return true, true
 }
 
+// takeInterpolation removes a <color-interpolation-method> (CSS Color 4,
+// 12.1) from the first argument of a gradient, where CSS Images 4, 3.1
+// to 3.3 allow it before or after the rest, and records it in g. method
+// reports one was there.
+//
+// The colours interpolate in that space, as CSS Images 4, 3.5.2 asks and
+// Chromium paints on screen; Chromium's PDF writes every gradient
+// interpolated in sRGB instead, a function of its PDF backend that
+// litho does not copy.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 prints linear-gradient(in oklch, red,
+//     blue), linear-gradient(in hsl longer hue, red, blue) and
+//     linear-gradient(red, blue) as one type 2 shading from 1 0 0 to 0 0 1,
+//     and linear-gradient(lab(50 80 60), lab(50 -40 -60)) from 0.938 0
+//     0.0806 to 0 0.5476 0.8687, the two colours clipped to sRGB.
+func (g *gradientSpec) takeInterpolation(v []token) (rest []token, method, ok bool) {
+	for i, t := range v {
+		if !t.isIdent("in") {
+			continue
+		}
+		n := 2
+		if i+3 < len(v) && v[i+3].isIdent("hue") {
+			n = 4
+		}
+		if i+n > len(v) {
+			return nil, false, false
+		}
+		space, hue, ok := parseInterpolation(v[i : i+n])
+		if !ok {
+			return nil, false, false
+		}
+		g.space, g.hue, g.method = space, hue, true
+		rest = append(append(rest, v[:i]...), v[i+n:]...)
+		return rest, true, true
+	}
+	return v, false, true
+}
+
+// conicStart parses [ from <angle> ]? [ at <position> ]? (CSS Images 4,
+// 3.3.1). consumed is false when v is neither, so that it is the first
+// colour stop.
+func (g *gradientSpec) conicStart(v []token) (ok, consumed bool) {
+	if len(v) == 0 || !v[0].isIdent("from") && !v[0].isIdent("at") {
+		return false, false
+	}
+	if v[0].isIdent("from") {
+		if len(v) < 2 {
+			return false, true
+		}
+		a, ok := parseAngle(v[1])
+		if !ok || v[1].typ == tNumber && v[1].num != 0 {
+			return false, true
+		}
+		a = math.Mod(a, 360)
+		if a < 0 {
+			a += 360
+		}
+		g.angle = a
+		v = v[2:]
+	}
+	if len(v) == 0 {
+		return true, true
+	}
+	if !v[0].isIdent("at") {
+		return false, true
+	}
+	pos := v[1:]
+	for _, t := range pos {
+		if t.typ == tIdent && !isPositionToken(t) {
+			return false, true
+		}
+	}
+	p, ok := parsePosition(pos)
+	if !ok {
+		return false, true
+	}
+	g.center = p
+	return true, true
+}
+
+// stopPosition parses a stop or hint position: a <length-percentage>, or
+// for a conic gradient an <angle-percentage> (CSS Images 4, 3.3.2), kept
+// as the fraction of a turn it is, in percent.
+func stopPosition(t token, conic bool) (length, bool) {
+	if !conic {
+		return parseLength(t, allowPct)
+	}
+	deg := 0.0
+	switch t.typ { //nolint:exhaustive // the other token types are not positions
+	case tPercentage:
+		return pctLength(t.num), numeric.Finite(t.num)
+	case tNumber:
+		if t.num != 0 {
+			return length{}, false
+		}
+	case tDimension:
+		v, ok := parseAngle(t)
+		if !ok {
+			return length{}, false
+		}
+		deg = v
+	case tFunction:
+		if !isCalc(&t) {
+			return length{}, false
+		}
+		v, ok := calcAnglePercent(&t)
+		if !ok {
+			return length{}, false
+		}
+		deg = v
+	default:
+		return length{}, false
+	}
+	return pctLength(deg / 360 * 100), true
+}
+
 // parseStops parses a <color-stop-list> (CSS Images 3, 3.4) with the
 // transition hints of CSS Images 4, 3.5.3: stops of a colour and up to two
 // positions, a hint a lone position between two stops. One stop is
-// enough, as CSS Images 4 allows.
-func parseStops(parts [][]token) ([]stopSpec, bool) {
+// enough, as CSS Images 4 allows. conic takes angular positions.
+func parseStops(parts [][]token, conic bool) ([]stopSpec, bool) {
 	if len(parts) == 0 || len(parts) > maxGradientStops {
 		return nil, false
 	}
@@ -281,7 +438,7 @@ func parseStops(parts [][]token) ([]stopSpec, bool) {
 			return nil, false
 		}
 		if len(p) == 1 {
-			if l, ok := parseLength(p[0], allowPct); ok {
+			if l, ok := stopPosition(p[0], conic); ok {
 				// A hint sits between two stops, never next to another.
 				if i == 0 || i == len(parts)-1 || out[len(out)-1].hint {
 					return nil, false
@@ -299,7 +456,7 @@ func parseStops(parts [][]token) ([]stopSpec, bool) {
 			continue
 		}
 		for _, t := range p[1:] {
-			l, ok := parseLength(t, allowPct)
+			l, ok := stopPosition(t, conic)
 			if !ok {
 				return nil, false
 			}
@@ -317,12 +474,24 @@ func (g *gradientSpec) compute(lc lenCtx, color Color) *Gradient {
 		Circle: g.circle, Size: g.size,
 		Stops: make([]GradientStop, len(g.stops)),
 	}
-	if g.kind == RadialGradient {
+	if g.kind != LinearGradient {
 		out.Center = [2]Dimension{g.center[0].dim(lc, false), g.center[1].dim(lc, false)}
 	}
 	if g.size == RadialExplicit {
 		out.Radius = [2]Dimension{g.radius[0].dim(lc, true), g.radius[1].dim(lc, true)}
 	}
+	// CSS Color 4, 13.1: without a method, legacy sRGB colours
+	// interpolate in sRGB, any other in Oklab.
+	out.space, out.hue = g.space, g.hue
+	if !g.method {
+		out.space = spaceSRGB
+		for _, s := range g.stops {
+			if !s.hint && !s.color.legacy {
+				out.space = spaceOKLab
+			}
+		}
+	}
+	out.interpolated = out.space != spaceSRGB
 	for i, s := range g.stops {
 		st := GradientStop{Hint: s.hint, Position: Dimension{Kind: Auto}}
 		if s.hasPos {
@@ -330,6 +499,10 @@ func (g *gradientSpec) compute(lc lenCtx, color Color) *Gradient {
 		}
 		if !s.hint {
 			st.Color = s.color.resolve(color)
+			st.sc = s.color.space(color)
+			if st.sc.none != [4]bool{} {
+				out.interpolated = true
+			}
 		}
 		out.Stops[i] = st
 	}

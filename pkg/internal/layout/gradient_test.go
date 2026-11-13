@@ -80,6 +80,39 @@ func TestGradient_RadialCircle(t *testing.T) {
 		BBBBBB`)
 }
 
+func TestGradient_Conic(t *testing.T) {
+	t.Parallel()
+	// From 90deg, right: red over the first half turn, through bottom,
+	// blue over the second, through top (CSS Images 4, 3.3).
+	half := css.Dimension{Kind: css.Percent, Value: 0.5}
+	g := &css.Gradient{
+		Kind: css.ConicGradient, Angle: 90,
+		Center: [2]css.Dimension{{Kind: css.Percent, Value: 0.5}, {Kind: css.Percent, Value: 0.5}},
+		Stops:  gstops(red, half, blue, half),
+	}
+	res := run(t, doc(el(sty(width(6), height(6), grad(g)))), page(6, 6))
+	assertPixels(t, res, 1, `
+		BBBBBB
+		BBBBBB
+		BBBBBB
+		RRRRRR
+		RRRRRR
+		RRRRRR`)
+	// A repeating conic gradient of four sectors.
+	q := css.Dimension{Kind: css.Percent, Value: 0.25}
+	g = &css.Gradient{
+		Kind: css.ConicGradient, Repeating: true,
+		Center: [2]css.Dimension{{Kind: css.Percent, Value: 0.5}, {Kind: css.Percent, Value: 0.5}},
+		Stops:  gstops(red, css.Dimension{Kind: css.Percent}, red, q, blue, q, blue, half),
+	}
+	res = run(t, doc(el(sty(width(4), height(4), grad(g)))), page(4, 4))
+	assertPixels(t, res, 1, `
+		BBRR
+		BBRR
+		RRBB
+		RRBB`)
+}
+
 func TestGradient_BackgroundSizeTilesAndClip(t *testing.T) {
 	t.Parallel()
 	// A 2px tile of red then blue, repeated over the padding box from the
@@ -131,20 +164,20 @@ func TestGradient_ColorStops(t *testing.T) {
 		},
 		{"radial before its centre", &css.Gradient{Stops: gstops(red, -3.0, blue, -1.0)}, typeset.Color{B: 1, A: 1}},
 	} {
-		_, _, _, solid, ok := e.colorStops(tc.g, px(10), 0, px(10), tc.name == "radial before its centre", 0)
+		_, _, _, solid, ok := e.colorStops(tc.g, px(10), 0, px(10), tc.name == "radial before its centre", false, 0)
 		if ok || math.Abs(solid.R-tc.solid.R) > 1e-6 || math.Abs(solid.B-tc.solid.B) > 1e-6 || solid.A != tc.solid.A {
 			t.Errorf("%s: solid %v %v, want %v", tc.name, solid, ok, tc.solid)
 		}
 	}
 	// Too many periods fall back to the average colour, with a warning.
 	g := &css.Gradient{Repeating: true, Stops: gstops(red, 0.0, blue, 0.01)}
-	if _, _, _, _, ok := e.colorStops(g, 1000, 0, 1000, false, 0); ok || len(e.warnings) != 1 {
+	if _, _, _, _, ok := e.colorStops(g, 1000, 0, 1000, false, false, 0); ok || len(e.warnings) != 1 {
 		t.Errorf("unrolled %v, warnings %v", ok, e.warnings)
 	}
 	// A hint and a change of alpha split their ramp; the stops stay in
 	// order within [0, 1].
 	g = &css.Gradient{Stops: gstops(red, 0.0, nil, 2.0, css.Color{B: 1, A: 0.5}, 10.0)}
-	stops, lo, hi, _, ok := e.colorStops(g, px(10), 0, px(10), false, 0)
+	stops, lo, hi, _, ok := e.colorStops(g, px(10), 0, px(10), false, false, 0)
 	if !ok || len(stops) < gradientSplits || math.IsNaN(hi) || math.IsNaN(lo) || hi <= lo || stops[0].Offset != 0 || stops[len(stops)-1].Offset != 1 {
 		t.Fatalf("stops %v over [%v, %v]", stops, lo, hi)
 	}

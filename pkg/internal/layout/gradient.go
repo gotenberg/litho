@@ -25,12 +25,26 @@ const maxGradientStops = 1024
 // Eight pieces keep the curve within a few levels of 8-bit colour.
 const gradientSplits = 8
 
+// interpolatedStep is the length in points of the linear pieces a
+// segment of a gradient interpolated outside sRGB is split into (CSS
+// Images 4, 3.5.2), between interpolatedMin and interpolatedMax pieces: a
+// hue sweep or an Oklab ramp bends further from a line in sRGB than a
+// hint's curve, and clipping to sRGB bends it sharply, so the pieces
+// follow the length rather than a fixed count.
+const (
+	interpolatedStep = 0.5
+	interpolatedMin  = 16
+	interpolatedMax  = 256
+)
+
 // gstop is a colour stop or hint after the fixup of CSS Images 3, 3.4.3,
 // its position in points along the gradient line or ray.
 type gstop struct {
 	pos  float64
 	c    typeset.Color
 	hint bool
+	// idx is the stop's index in the gradient's stops.
+	idx int
 }
 
 // gpiece is one piece of a gradient's colour function: constant before the
@@ -41,6 +55,10 @@ type gpiece struct {
 	// hint is the transition hint's position as a fraction of [a, b], -1
 	// for none.
 	hint float64
+	// g, when set, interpolates the colours between its stops ia and ib
+	// outside sRGB ([css.Gradient.Interpolated]).
+	g      *css.Gradient
+	ia, ib int
 }
 
 // at returns the piece's colour at s, interpolated in premultiplied sRGB
@@ -66,12 +84,16 @@ func (p gpiece) at(s float64) typeset.Color {
 			t = math.Pow(t, math.Log(0.5)/math.Log(p.hint))
 		}
 	}
+	if p.g != nil {
+		c, _ := colorOf(p.g.Mix(p.ia, p.ib, t))
+		return c
+	}
 	return mix(p.ca, p.cb, t)
 }
 
 // curved reports whether the piece is not linear in straight alpha.
 func (p gpiece) curved() bool {
-	return p.hint >= 0 || p.ca.A != p.cb.A
+	return p.hint >= 0 || p.ca.A != p.cb.A || p.g != nil
 }
 
 // mix interpolates a and b at t in premultiplied space and returns the
@@ -103,7 +125,7 @@ func fixStops(g *css.Gradient, length float64) []gstop {
 			// premultiplied neighbours decide (CSS Images 3, 3.4.3).
 			c = typeset.Color{}
 		}
-		out[i] = gstop{c: c, hint: s.Hint}
+		out[i] = gstop{c: c, hint: s.Hint, idx: i}
 		if s.Position.IsLength() {
 			out[i].pos, set[i] = resolve(s.Position, length), true
 		}
@@ -141,8 +163,9 @@ func fixStops(g *css.Gradient, length float64) []gstop {
 }
 
 // pieces returns the ramps between consecutive stops, a hint between two
-// stops bending the ramp it sits in.
-func pieces(stops []gstop) []gpiece {
+// stops bending the ramp it sits in, interpolated by g when it
+// interpolates outside sRGB, nil for none.
+func pieces(stops []gstop, g *css.Gradient) []gpiece {
 	var out []gpiece
 	prev := -1
 	hint := math.NaN()
@@ -154,6 +177,9 @@ func pieces(stops []gstop) []gpiece {
 		if prev >= 0 {
 			a, b := stops[prev], s
 			p := gpiece{a: a.pos, b: b.pos, ca: a.c, cb: b.c, hint: -1}
+			if g != nil && g.Interpolated() {
+				p.g, p.ia, p.ib = g, a.idx, b.idx
+			}
 			if !math.IsNaN(hint) && b.pos > a.pos {
 				p.hint = min(max((hint-a.pos)/(b.pos-a.pos), 0), 1)
 			}
@@ -169,11 +195,12 @@ func pieces(stops []gstop) []gpiece {
 // A repeating gradient is unrolled over [from, to], the part of the line
 // or ray its box shows; a plain one spans its stops and the shading
 // extends past them. ray clamps the span at 0, where a radial gradient
-// starts. ok is false when the gradient paints a single colour, solid,
-// which is then returned.
-func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray bool, y float64) (stops []typeset.ColorStop, lo, hi float64, solid typeset.Color, ok bool) {
+// starts; turn spans [from, to] whatever the stops, the full turn of a
+// conic gradient. ok is false when the gradient paints a single colour,
+// solid, which is then returned.
+func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray, turn bool, y float64) (stops []typeset.ColorStop, lo, hi float64, solid typeset.Color, ok bool) {
 	gs := fixStops(g, length)
-	ps := pieces(gs)
+	ps := pieces(gs, g)
 	var first, last typeset.Color
 	for _, s := range gs {
 		if !s.hint {
@@ -216,6 +243,9 @@ func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray bool,
 		// an end stop falls inside it: the shading extends with the
 		// colour its end offsets carry.
 		lo, hi = p0-1, pn+1
+		if turn {
+			lo, hi = from, to
+		}
 		if ray {
 			if pn <= 0 {
 				return nil, 0, 0, last, false
@@ -237,6 +267,9 @@ func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray bool,
 			n := 1
 			if p.curved() && b > a {
 				n = splits
+				if p.g != nil && splits > 1 {
+					n = int(min(max(math.Ceil((b-a)/interpolatedStep), interpolatedMin), interpolatedMax)) // fits int: at most interpolatedMax
+				}
 			}
 			for i := 0; i <= n; i++ {
 				s := a + (b-a)*float64(i)/float64(n)
@@ -322,7 +355,7 @@ func averageEquidistant(gs []gstop) typeset.Color {
 	for i := range even {
 		even[i].pos = float64(i)
 	}
-	return average(pieces(even))
+	return average(pieces(even, nil))
 }
 
 // gradientFill returns the fill of the gradient g over a w by h box at the
@@ -332,8 +365,12 @@ func (e *engine) gradientFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, 
 	if !numeric.Positive(w) || !numeric.Positive(h) || len(g.Stops) == 0 {
 		return nil, false
 	}
-	if g.Kind == css.RadialGradient {
+	switch g.Kind {
+	case css.RadialGradient:
 		return e.radialFill(g, w, h, y)
+	case css.ConicGradient:
+		return e.conicFill(g, w, h, y)
+	case css.LinearGradient:
 	}
 	// CSS Images 3, 3.1.1: the angle points from the start to the end of
 	// the gradient line, 0deg up and 90deg right; "to <corner>" makes the
@@ -344,7 +381,7 @@ func (e *engine) gradientFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, 
 	}
 	dx, dy := math.Sin(theta), -math.Cos(theta)
 	length := math.Abs(w*dx) + math.Abs(h*dy)
-	stops, lo, hi, solid, ok := e.colorStops(g, length, 0, length, false, y)
+	stops, lo, hi, solid, ok := e.colorStops(g, length, 0, length, false, false, y)
 	if !ok {
 		return flatFill(solid)
 	}
@@ -435,7 +472,7 @@ func (e *engine) radialFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, bo
 	for _, c := range corners {
 		reach = max(reach, math.Hypot(c[0], c[1]/k))
 	}
-	stops, lo, hi, solid, ok := e.colorStops(g, rx, 0, reach, true, y)
+	stops, lo, hi, solid, ok := e.colorStops(g, rx, 0, reach, true, false, y)
 	if !ok {
 		return flatFill(solid)
 	}
@@ -444,6 +481,24 @@ func (e *engine) radialFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, bo
 		Kind: typeset.Radial, From: c, To: c, FromRadius: lo, ToRadius: hi,
 		Stops:     stops,
 		Transform: typeset.Matrix{A: 1, D: k, F: cy * (1 - k)},
+	}}, true
+}
+
+// conicFill returns the fill of the conic gradient g over a w by h box at
+// the origin (CSS Images 4, 3.3): its stops over the full turn about its
+// centre, starting at its from angle, 0deg up and growing clockwise.
+// Positions are fractions of the turn, resolved here against 360.
+func (e *engine) conicFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, bool) {
+	stops, _, _, solid, ok := e.colorStops(g, 360, 0, 360, false, true, y)
+	if !ok {
+		return flatFill(solid)
+	}
+	cx, cy := resolve(g.Center[0], w), resolve(g.Center[1], h)
+	a := g.Angle * math.Pi / 180
+	c := typeset.Point{X: cx, Y: cy}
+	return &typeset.Fill{Shading: &typeset.Shading{
+		Kind: typeset.Conic, From: c, To: typeset.Point{X: cx + math.Sin(a), Y: cy - math.Cos(a)},
+		Stops: stops,
 	}}, true
 }
 
@@ -515,7 +570,7 @@ func gradientAverage(g *css.Gradient, w, h float64) typeset.Color {
 	if len(gs) == 0 {
 		return typeset.Color{}
 	}
-	ps := pieces(gs)
+	ps := pieces(gs, g)
 	if len(ps) == 0 {
 		return gs[0].c
 	}

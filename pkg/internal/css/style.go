@@ -309,10 +309,11 @@ const (
 // GradientKind is the shape of a [Gradient].
 type GradientKind uint8
 
-// The gradient shapes (CSS Images 3, 3.1 and 3.2).
+// The gradient shapes (CSS Images 3, 3.1 and 3.2; CSS Images 4, 3.3).
 const (
 	LinearGradient GradientKind = iota
 	RadialGradient
+	ConicGradient
 )
 
 // RadialSize is the size of a radial gradient's ending shape (CSS Images
@@ -338,23 +339,28 @@ type GradientStop struct {
 	// Color is the stop's colour, currentColor resolved. A hint has none.
 	Color Color
 	// Position is Auto for a stop written without one, else Points or
-	// Percent of the gradient line's length for a linear gradient and of
-	// the ending shape's horizontal radius for a radial one. The fixup of
+	// Percent of the gradient line's length for a linear gradient, of
+	// the ending shape's horizontal radius for a radial one, and Percent
+	// of a full turn for a conic one. The fixup of
 	// CSS Images 3, 3.4.3 is left to the layout engine, which knows the
 	// length.
 	Position Dimension
 	// Hint marks a transition hint: Position is set and Color unused.
 	Hint bool
+	// sc is Color in its own space, which [Gradient.Mix] interpolates.
+	sc spaceColor
 }
 
-// Gradient is a computed <gradient> (CSS Images 3, 3): a linear or radial
-// one, repeating or not. A conic gradient is not represented.
+// Gradient is a computed <gradient> (CSS Images 3, 3; CSS Images 4, 3):
+// a linear, radial or conic one, repeating or not.
 type Gradient struct {
 	Kind      GradientKind
 	Repeating bool
 	// Angle is the direction of a linear gradient in degrees, clockwise
 	// from toward the top (CSS Images 3, 3.1.1), when Corner is zero. "to
-	// bottom", the default, is 180.
+	// bottom", the default, is 180. For a conic gradient it is the from
+	// angle, where its turn starts, clockwise from the top (CSS Images 4,
+	// 3.3.1), in [0, 360).
 	Angle float64
 	// Corner points a linear gradient at a corner of its box, horizontal
 	// then vertical, -1 for left or top and +1 for right or bottom; zero
@@ -367,12 +373,35 @@ type Gradient struct {
 	// an ellipse's horizontal then vertical radius, Points or Percent of
 	// the box's width and height.
 	Radius [2]Dimension
-	// Center is the centre of a radial gradient, horizontal then vertical,
+	// Center is the centre of a radial or conic gradient, horizontal then vertical,
 	// Points or Percent of the box's width and height from its top-left
 	// corner (CSS Images 3, 3.2.1, the at <position> clause).
 	Center [2]Dimension
 	// Stops holds at least one colour stop, hints only between two stops.
 	Stops []GradientStop
+	// space and hue are the colour interpolation method (CSS Color 4,
+	// 13), and interpolated is set unless it is sRGB on stops with no
+	// missing component, where the colours interpolate as Color does. The
+	// zero value interpolates in sRGB.
+	space        colorSpace
+	hue          hueMethod
+	interpolated bool
+}
+
+// Interpolated reports whether the colours between two stops interpolate
+// in a space other than sRGB, or with a missing component: [Gradient.Mix]
+// then gives them, a curve in sRGB. Otherwise they interpolate as their
+// sRGB colours, premultiplied (CSS Images 3, 3.4.3).
+func (g *Gradient) Interpolated() bool { return g.interpolated }
+
+// Mix returns the colour between the stops a and b at t, 0 at a and 1 at
+// b, interpolated in the gradient's colour space with premultiplied alpha
+// (CSS Images 4, 3.5.2; CSS Color 4, 13.4 to 13.6), clipped to sRGB.
+func (g *Gradient) Mix(a, b int, t float64) Color {
+	if a < 0 || b < 0 || a >= len(g.Stops) || b >= len(g.Stops) {
+		return Color{}
+	}
+	return interpolate(g.Stops[a].sc, g.Stops[b].sc, t, g.space, g.hue).paint()
 }
 
 // SizeKind says what a [BackgroundSize] holds.

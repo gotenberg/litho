@@ -1,10 +1,9 @@
 package css
 
 import (
+	"math"
 	"reflect"
 	"testing"
-
-	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func TestGradient_Parses(t *testing.T) {
@@ -40,9 +39,18 @@ func TestGradient_Parses(t *testing.T) {
 			Kind: RadialGradient, Angle: 180, Repeating: true, Size: RadialExplicit,
 			Radius: [2]Dimension{pct(0.5), pts(15)}, Center: [2]Dimension{pts(0), pts(0)}, Stops: []GradientStop{stop(black, auto), stop(red, auto)},
 		}},
+		{"background-image: conic-gradient(red, blue)", &Gradient{Kind: ConicGradient, Center: center, Stops: []GradientStop{stop(red, auto), stop(blue, auto)}}},
+		{"background-image: repeating-conic-gradient(from -90deg at 10px 25%, red 0 25%, blue 90deg calc(50% + 0.25turn), 75%, black 1rad)", &Gradient{
+			Kind: ConicGradient, Repeating: true, Angle: 270, Center: [2]Dimension{pts(7.5), pct(0.25)},
+			Stops: []GradientStop{stop(red, pct(0)), stop(red, pct(0.25)), stop(blue, pct(0.25)), stop(blue, pct(0.75)), {Position: pct(0.75), Hint: true}, stop(black, pct(1/(2*math.Pi)))},
+		}},
+		{"background-image: conic-gradient(at left in oklch longer hue, red, blue)", &Gradient{Kind: ConicGradient, Center: [2]Dimension{pct(0), pct(0.5)}, Stops: []GradientStop{stop(red, auto), stop(blue, auto)}}},
+		{"background-image: linear-gradient(in hsl to right, red, blue)", &Gradient{Angle: 90, Stops: []GradientStop{stop(red, auto), stop(blue, auto)}}},
+		{"background-image: radial-gradient(circle in srgb-linear, red, blue)", &Gradient{Kind: RadialGradient, Angle: 180, Circle: true, Center: center, Stops: []GradientStop{stop(red, auto), stop(blue, auto)}}},
+		{"background-image: image-set(linear-gradient(red, red) 2x, linear-gradient(blue, blue) 1x)", &Gradient{Angle: 180, Stops: []GradientStop{stop(blue, auto), stop(blue, auto)}}},
 	} {
 		s := styleOf(t, tc.decl)
-		if s.BackgroundImage != "" || !reflect.DeepEqual(s.BackgroundGradient, tc.want) {
+		if s.BackgroundImage != "" || !reflect.DeepEqual(exported(s.BackgroundGradient), tc.want) {
 			t.Errorf("%s:\n got %+v\nwant %+v", tc.decl, s.BackgroundGradient, tc.want)
 		}
 	}
@@ -74,14 +82,50 @@ func TestGradient_RejectsInvalid(t *testing.T) {
 	}
 }
 
-func TestGradient_ConicWarnsAndComputesToNone(t *testing.T) {
-	t.Parallel()
-	c := compute(t, `<div id=t></div>`, `#t { background: conic-gradient(red, blue) }`)
-	if s := c.of("t"); s.BackgroundGradient != nil || s.BackgroundImage != "" {
-		t.Errorf("conic gradient computed to %+v %q", s.BackgroundGradient, s.BackgroundImage)
+// exported returns a copy of g without its unexported fields, which the
+// tables of TestGradient_Parses leave out.
+func exported(g *Gradient) *Gradient {
+	if g == nil {
+		return nil
 	}
-	if !hasWarning(c.c.Warnings(), warn.CSSUnsupported, "conic-gradient") {
-		t.Errorf("no warning in %v", c.c.Warnings())
+	c := *g
+	c.space, c.hue, c.interpolated = 0, 0, false
+	c.Stops = make([]GradientStop, len(g.Stops))
+	for i, s := range g.Stops {
+		s.sc = spaceColor{}
+		c.Stops[i] = s
+	}
+	return &c
+}
+
+// TestGradient_InterpolationSpace locks the colour space a gradient
+// interpolates in (CSS Images 4, 3.5.2; CSS Color 4, 13.1): the one its
+// method names, else sRGB for legacy colours and Oklab for any other,
+// and a hue taken from the other stop where one is missing (13.4).
+func TestGradient_InterpolationSpace(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		decl         string
+		interpolated bool
+		mid          Color
+	}{
+		{"linear-gradient(red, blue)", false, Color{R: 0.5, B: 0.5, A: 1}},
+		{"linear-gradient(#f00, hwb(240 0% 0%))", false, Color{R: 0.5, B: 0.5, A: 1}},
+		{"linear-gradient(in srgb, red, blue)", false, Color{R: 0.5, B: 0.5, A: 1}},
+		{"linear-gradient(red, color(srgb 0 0 1))", true, Color{R: 0.5504, G: 0.3256, B: 0.6365, A: 1}},
+		{"linear-gradient(in oklch, red, blue)", true, Color{R: 0.7299, B: 0.7601, A: 1}},
+		{"linear-gradient(in hsl longer hue, red, blue)", true, Color{G: 1, A: 1}},
+		{"linear-gradient(in srgb, rgb(none 0 0), rgb(200 100 50))", true, Color{R: 200.0 / 255, G: 50.0 / 255, B: 25.0 / 255, A: 1}},
+	}
+	for _, tt := range tests {
+		g := styleOf(t, "background-image: "+tt.decl).BackgroundGradient
+		if g == nil || g.Interpolated() != tt.interpolated {
+			t.Errorf("%s: %+v", tt.decl, g)
+			continue
+		}
+		if got := g.Mix(0, 1, 0.5); !nearColor(got, tt.mid) {
+			t.Errorf("%s: midpoint %+v, want %+v", tt.decl, got, tt.mid)
+		}
 	}
 }
 

@@ -15,8 +15,14 @@ import (
 // colorValue is a specified <color>: a colour, currentColor, or a colour
 // function that refers to currentColor.
 type colorValue struct {
-	c       Color
+	c Color
+	// sc is the colour in its own space, which an interpolation reads.
+	sc      spaceColor
 	current bool
+	// legacy marks a colour of the legacy sRGB formats, which interpolate
+	// in sRGB by default (CSS Color 4, 13.1): a named, system or hex
+	// colour, rgb(), hsl() or hwb().
+	legacy bool
 	// expr, when set, is a colour function that refers to currentColor,
 	// such as color-mix(in srgb, currentColor, red): its value is
 	// resolved against each element's color (CSS Color 5, 3 and 4). It is
@@ -38,6 +44,21 @@ func (v colorValue) resolve(cur Color) Color {
 	return v.c
 }
 
+// space returns the colour in its own space against cur, the element's
+// color.
+func (v colorValue) space(cur Color) spaceColor {
+	switch {
+	case v.current:
+		return srgbColor(cur.R, cur.G, cur.B, cur.A)
+	case v.expr != nil:
+		e := colorEnv{current: &cur}
+		if sc, ok := e.parse(*v.expr, 0); ok {
+			return sc
+		}
+	}
+	return v.sc
+}
+
 // dependsOnCurrent reports whether the value resolves against the
 // element's color.
 func (v colorValue) dependsOnCurrent() bool { return v.current || v.expr != nil }
@@ -45,7 +66,7 @@ func (v colorValue) dependsOnCurrent() bool { return v.current || v.expr != nil 
 // parseColor parses a <color> (CSS Color 4, 4.1 and CSS Color 5, 2).
 func parseColor(t token) (colorValue, bool) {
 	if t.isIdent("currentcolor") {
-		return colorValue{current: true}, true
+		return colorValue{current: true, legacy: true}, true
 	}
 	e := colorEnv{}
 	sc, ok := e.parse(t, 0)
@@ -56,7 +77,24 @@ func parseColor(t token) (colorValue, bool) {
 		expr := t
 		return colorValue{expr: &expr}, true
 	}
-	return colorValue{c: sc.paint()}, true
+	return colorValue{c: sc.paint(), sc: sc, legacy: legacySRGB(t)}, true
+}
+
+// legacySRGB reports a colour written in a legacy sRGB format (CSS Color
+// 4, 13.1): a keyword, a hex colour, or rgb(), rgba(), hsl(), hsla() or
+// hwb() without an origin colour.
+func legacySRGB(t token) bool {
+	switch t.typ { //nolint:exhaustive // the other token types are no colours
+	case tIdent, tHash:
+		return true
+	case tFunction:
+		switch lower(t.value) {
+		case "rgb", "rgba", "hsl", "hsla", "hwb":
+			a := significant(t.children)
+			return len(a) == 0 || !a[0].isIdent("from")
+		}
+	}
+	return false
 }
 
 // colorSpace is a colour space of CSS Color 4: the predefined RGB and XYZ

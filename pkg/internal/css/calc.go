@@ -173,7 +173,11 @@ type calcParser struct {
 	// percentages resolve against a length (CSS Values 4, 10.9, the
 	// percent hint).
 	pctLength bool
-	nodes     int
+	// pctAngle types a percentage as an angle, in a context whose
+	// percentages resolve against a full turn: a conic gradient's stops
+	// (CSS Images 4, 3.3.2).
+	pctAngle bool
+	nodes    int
 }
 
 // isCalc reports whether t is a math function (CSS Values 4, 10): calc(),
@@ -446,6 +450,9 @@ func (p *calcParser) value(c *calcCursor, depth int) (*calcNode, calcType, bool)
 		}
 		if p.pctLength {
 			return &calcNode{op: opPct, v: t.num}, typeLength, true
+		}
+		if p.pctAngle {
+			return &calcNode{op: opPct, v: t.num}, typeAngle, true
 		}
 		return &calcNode{op: opNum, v: t.num}, typePct, true
 	case tLParen:
@@ -878,4 +885,19 @@ func calcConst(t *token, vars *channelVars) (float64, calcType, bool) {
 		v = math.Copysign(maxLength, v)
 	}
 	return v, ty, true
+}
+
+// calcAnglePercent parses a math function of type <angle-percentage>, a
+// percentage being of a full turn, into degrees.
+func calcAnglePercent(t *token) (float64, bool) {
+	p := &calcParser{pctAngle: true}
+	n, ty, ok := p.fn(t, 0)
+	if !ok || ty != typeAngle {
+		return 0, false
+	}
+	v := censor(n.eval(&calcScope{basis: 360}))
+	if math.IsInf(v, 0) {
+		v = math.Copysign(maxLength, v)
+	}
+	return v, true
 }
