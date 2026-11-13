@@ -228,6 +228,7 @@ const (
 	pAspectRatio
 	pContainIntrinsicWidth
 	pContainIntrinsicHeight
+	pBgPositionY
 	numProps
 )
 
@@ -793,11 +794,7 @@ func init() {
 				st.BackgroundRepeat = r
 			}
 		}, copyFrom: field(func(s *Style) *[2]Repeat { return &s.BackgroundRepeat })}},
-		{pBgPosition, propDef{name: "background-position", parse: parseBgPosition, compute: func(s *styler, st *Style, v any) {
-			if p, ok := v.([2]length); ok {
-				st.BackgroundPosition = [2]Dimension{p[0].dim(s.lc, false), p[1].dim(s.lc, false)}
-			}
-		}, copyFrom: field(func(s *Style) *[2]Dimension { return &s.BackgroundPosition })}},
+		{pBgPosition, bgPositionAxis(0)},
 		{pBgSize, propDef{name: "background-size", parse: parseBgSize, compute: func(s *styler, st *Style, v any) {
 			if b, ok := v.(bgSizeSpec); ok {
 				st.BackgroundSize = BackgroundSize{Kind: b.kind, Width: s.computeDim(b.w, true), Height: s.computeDim(b.h, true)}
@@ -1005,6 +1002,7 @@ func init() {
 	for id, def := range containIntrinsicProps() {
 		props[id] = def
 	}
+	props[pBgPositionY] = bgPositionAxis(1)
 	gcpmProps()
 	for id, def := range overflowClipProps() {
 		props[id] = def

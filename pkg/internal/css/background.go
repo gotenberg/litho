@@ -128,6 +128,16 @@ func parseBgRepeat(v []token, c *declCtx) (any, bool) {
 
 func pctLength(p float64) length { return length{pct: p, hasPct: true} }
 
+// fromFarEdge returns the offset from the left or top edge of an offset
+// off from the right or bottom one: 100% less off. A calculation that is
+// not linear has no such form here, and is refused.
+func fromFarEdge(off length) (length, bool) {
+	if off.expr != nil {
+		return length{}, false
+	}
+	return pctLength(100).add(off.scale(-1)), true
+}
+
 // isPositionToken reports whether t can be part of a <bg-position>.
 func isPositionToken(t token) bool {
 	if t.typ == tIdent {
@@ -143,8 +153,7 @@ func isPositionToken(t token) bool {
 
 // parsePosition parses a <bg-position> (CSS Backgrounds 3, 3.6) into the
 // horizontal and vertical offsets. An offset from the right or bottom
-// edge stays representable only as a percentage: "right 10px" would need
-// calc(100% - 10px), which [Style] cannot hold, and is rejected.
+// edge, "right 10px", is calc(100% - 10px).
 func parsePosition(v []token) ([2]length, bool) {
 	kw := func(t token) string {
 		if t.typ == tIdent {
@@ -189,28 +198,24 @@ func parsePosition(v []token) ([2]length, bool) {
 		}
 		return [2]length{}, false
 	case 3, 4:
+		// Each keyword but center may take an offset from its edge;
+		// center takes the axis the other keyword leaves.
 		var out [2]length
 		var set [2]bool
+		centers := 0
 		for i := 0; i < len(v); {
 			k := kw(v[i])
 			if _, ok := edge[k]; !ok {
 				return out, false
 			}
 			i++
+			if k == "center" {
+				centers++
+				continue
+			}
 			axis := 0
 			if k == "top" || k == "bottom" {
 				axis = 1
-			}
-			if k == "center" {
-				axis = 0
-				if set[0] {
-					axis = 1
-				}
-				if set[axis] {
-					return out, false
-				}
-				out[axis], set[axis] = pctLength(50), true
-				continue
 			}
 			if set[axis] {
 				return out, false
@@ -225,25 +230,91 @@ func parsePosition(v []token) ([2]length, bool) {
 				i++
 			}
 			if k == "right" || k == "bottom" {
-				if off.hasLen {
+				far, ok := fromFarEdge(off)
+				if !ok {
 					return out, false
 				}
-				off = pctLength(100 - off.pct)
+				off = far
 			}
 			out[axis], set[axis] = off, true
 		}
-		return out, set[0] && set[1]
+		for axis := range out {
+			if !set[axis] && centers > 0 {
+				out[axis], set[axis] = pctLength(50), true
+				centers--
+			}
+		}
+		return out, set[0] && set[1] && centers == 0
 	}
 	return [2]length{}, false
 }
 
-func parseBgPosition(v []token, c *declCtx) (any, bool) {
-	l, ok := firstLayer(v, c, "background-position")
-	if !ok {
-		return nil, false
+// bgPositionShorthand is background-position, the shorthand of
+// background-position-x and background-position-y (CSS Backgrounds 4,
+// 2.4): a <bg-position> of the first layer gives both.
+func bgPositionShorthand() shorthandDef {
+	return shorthandDef{
+		longhands: []propID{pBgPosition, pBgPositionY},
+		expand: func(v []token, c *declCtx) ([]entry, bool) {
+			l, ok := firstLayer(v, c, "background-position")
+			if !ok {
+				return nil, false
+			}
+			p, ok := parsePosition(l)
+			if !ok {
+				return nil, false
+			}
+			return []entry{{pBgPosition, p[0]}, {pBgPositionY, p[1]}}, true
+		},
 	}
-	p, ok := parsePosition(l)
-	return p, ok
+}
+
+// bgPositionAxis defines background-position-x (axis 0) or
+// background-position-y (axis 1) (CSS Backgrounds 4, 2.4): center, or an
+// offset from the start edge, or from left or right (top or bottom), as
+// Chromium parses them; it does not parse x-start and its kin.
+func bgPositionAxis(axis int) propDef {
+	near, far, name := "left", "right", "background-position-x"
+	if axis == 1 {
+		near, far, name = "top", "bottom", "background-position-y"
+	}
+	return propDef{
+		name: name,
+		parse: func(v []token, c *declCtx) (any, bool) {
+			l, ok := firstLayer(v, c, name)
+			if !ok || len(l) > 2 {
+				return nil, false
+			}
+			k := ""
+			if l[0].typ == tIdent {
+				k = lower(l[0].value)
+				l = l[1:]
+			}
+			off := pctLength(0)
+			switch {
+			case k == "center" && len(l) == 0:
+				return pctLength(50), true
+			case k != "" && k != near && k != far, len(l) > 1:
+				return nil, false
+			case len(l) == 1:
+				if off, ok = parseLength(l[0], allowPct); !ok {
+					return nil, false
+				}
+			case k == "":
+				return nil, false
+			}
+			if k == far {
+				return fromFarEdge(off)
+			}
+			return off, true
+		},
+		compute: func(s *styler, st *Style, v any) {
+			if l, ok := v.(length); ok {
+				st.BackgroundPosition[axis] = l.dim(s.lc, false)
+			}
+		},
+		copyFrom: func(dst, src *Style) { dst.BackgroundPosition[axis] = src.BackgroundPosition[axis] },
+	}
 }
 
 // bgSizeSpec is a specified background-size.
@@ -306,6 +377,7 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 		{pBgImage, wideInitial},
 		{pBgRepeat, wideInitial},
 		{pBgPosition, wideInitial},
+		{pBgPositionY, wideInitial},
 		{pBgSize, wideInitial},
 		{pBgOrigin, wideInitial},
 		{pBgClip, wideInitial},
@@ -351,7 +423,7 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 			if a, ok := attachments[lower(t.value)]; ok && !attach && t.typ == tIdent {
 				attach = true
 				if li == 0 {
-					out[7].v = a
+					out[8].v = a
 				}
 				i++
 				continue
@@ -381,7 +453,7 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 				pos = true
 				i = j
 				if li == 0 {
-					out[3].v = p
+					out[3].v, out[4].v = p[0], p[1]
 				}
 				if i < len(layer) && layer[i].isDelim('/') {
 					i++
@@ -397,7 +469,7 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 					}
 					s, _ := sizeValue(layer[i:k])
 					if li == 0 {
-						out[4].v = s
+						out[5].v = s
 					}
 					i = k
 				}
@@ -408,9 +480,9 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 		if li == 0 {
 			switch len(boxes) {
 			case 1:
-				out[5].v, out[6].v = boxes[0], boxes[0]
+				out[6].v, out[7].v = boxes[0], boxes[0]
 			case 2:
-				out[5].v, out[6].v = boxes[0], boxes[1]
+				out[6].v, out[7].v = boxes[0], boxes[1]
 			}
 		}
 	}

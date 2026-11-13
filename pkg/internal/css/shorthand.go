@@ -148,6 +148,7 @@ func initShorthands() {
 		"inset-inline":   pairShorthand(pLeft, pRight),
 
 		"contain-intrinsic-size": containIntrinsicShorthand(),
+		"background-position":    bgPositionShorthand(),
 
 		"border-top":    borderSideShorthand(Top),
 		"border-right":  borderSideShorthand(Right),

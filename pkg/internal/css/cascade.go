@@ -476,7 +476,7 @@ var firstLineProps = func() [numProps]bool {
 	for _, id := range []propID{
 		pFontSize, pColor, pVisibility, pOpacity, pFontFamily, pFontWeight, pFontStyle, pFontVariant,
 		pFontStretch, pFontSynthesisWeight, pFontSynthesisStyle, pFontKerning, pLineHeight,
-		pBgColor, pBgImage, pBgRepeat, pBgPosition, pBgSize, pBgOrigin, pBgClip, pBgAttachment,
+		pBgColor, pBgImage, pBgRepeat, pBgPosition, pBgPositionY, pBgSize, pBgOrigin, pBgClip, pBgAttachment,
 		pBoxShadow, pTextShadow, pTextDecoration, pTextDecorationColor, pTextDecorationStyle,
 		pTextDecorationThickness, pTextDecorationSkipInk, pTextUnderlineOffset, pTextUnderlinePosition,
 		pTextEmphasisColor, pTextTransform, pLetterSpacing, pWordSpacing, pRubyPosition, pTextJustify,
