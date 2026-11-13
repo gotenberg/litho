@@ -1161,6 +1161,9 @@ type Style struct {
 	TextEmphasisMark     string
 	TextEmphasisColor    Color
 	TextEmphasisPosition EmphasisPosition
+	// InitialLetter makes a ::first-letter an initial letter, the size of
+	// several lines, sunk into them (CSS Inline 3, 4.3).
+	InitialLetter InitialLetter
 	// TextUnderlinePosition says where underlines lie (CSS Text Decoration
 	// 4, 2.7), zero for auto.
 	TextUnderlinePosition UnderlinePosition

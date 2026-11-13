@@ -330,6 +330,9 @@ func equalStyle(a, b *Style) bool {
 	if a.TextEmphasisPosition != b.TextEmphasisPosition {
 		return false
 	}
+	if !equalInitialLetter(&a.InitialLetter, &b.InitialLetter) {
+		return false
+	}
 	if a.TextUnderlinePosition != b.TextUnderlinePosition {
 		return false
 	}
@@ -803,6 +806,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mixString(h, x.TextEmphasisMark)
 	h = hashColor(h, &x.TextEmphasisColor)
 	h = mix(h, uint64(x.TextEmphasisPosition))
+	h = hashInitialLetter(h, &x.InitialLetter)
 	h = mix(h, uint64(x.TextUnderlinePosition))
 	h = hashDimension(h, &x.TextDecorationThickness)
 	h = hashDimension(h, &x.TextUnderlineOffset)
@@ -1262,6 +1266,24 @@ func equalHyphenateCharacter(a, b *HyphenateCharacter) bool {
 func hashHyphenateCharacter(h uint64, x *HyphenateCharacter) uint64 {
 	h = mixBool(h, x.Given)
 	h = mixString(h, x.Text)
+	return h
+}
+
+// equalInitialLetter reports whether a and b hold equal values, field by field.
+func equalInitialLetter(a, b *InitialLetter) bool {
+	if math.Float64bits(a.Size) != math.Float64bits(b.Size) {
+		return false
+	}
+	if a.Sink != b.Sink {
+		return false
+	}
+	return true
+}
+
+// hashInitialLetter folds every field of x into h.
+func hashInitialLetter(h uint64, x *InitialLetter) uint64 {
+	h = mix(h, math.Float64bits(x.Size))
+	h = mix(h, uint64(x.Sink))
 	return h
 }
 

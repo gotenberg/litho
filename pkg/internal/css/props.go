@@ -210,6 +210,7 @@ const (
 	pFontLanguageOverride
 	pFontSynthesisSmallCaps
 	pFontSizeAdjust
+	pInitialLetter
 	numProps
 )
 
@@ -966,6 +967,9 @@ func init() {
 		props[id] = def
 	}
 	for id, def := range emphasisProps() {
+		props[id] = def
+	}
+	for id, def := range initialLetterProps() {
 		props[id] = def
 	}
 	gcpmProps()
