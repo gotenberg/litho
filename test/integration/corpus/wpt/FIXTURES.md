@@ -4,8 +4,8 @@ Reftests from [web-platform-tests](https://github.com/web-platform-tests/wpt) at
 
 | File            | What it holds                                                                                                                                               |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `reftests.json` | The 2328 tests: each test's WPT path, whether it is a print reftest, its pages compared, its resources, and each reference with its relation and fuzziness  |
-| `files.sha256`  | Every file the tests read (tests, references, their stylesheets and images, `LICENSE.md`, `fonts/Ahem.ttf`): 4002 lines of `<sha256>  <WPT path>`           |
+| `reftests.json` | The 2523 tests: each test's WPT path, whether it is a print reftest, its pages compared, its resources, and each reference with its relation and fuzziness  |
+| `files.sha256`  | Every file the tests read (tests, references, their stylesheets and images, `LICENSE.md`, `fonts/Ahem.ttf`): 4367 lines of `<sha256>  <WPT path>`           |
 | `corpus update` | The selection script: reads a WPT checkout and writes `reftests.json`                                                                                       |
 | `corpus fetch`  | Downloads each listed file from `raw.githubusercontent.com` at the pinned commit, refuses one whose hash differs, and records the commit in `versions.json` |
 
@@ -31,7 +31,7 @@ A test qualifies when:
 - an XHTML file (`.xht`) parses alike as HTML: no CDATA section, no self-closed element other than a void one. CSS 2.1 tests wrap their style sheets in `<![CDATA[ ]]>`, which an HTML parser hands to CSS as text that swallows the whole sheet; that rule keeps out most of the CSS 2.1 suite;
 - every stylesheet and image a file names resolves inside that file's own directory and exists. The feature converts each document with the file system rooted there, so a `../support/` image (145 CSS 2.1 tests use `../support/black96x96.png`) cannot be read. The one absolute URL allowed is `/fonts/ahem.css`, whose `@font-face` the converter cannot load: the corpus installs Ahem as a font instead.
 
-That leaves 7340 candidates. Each area and each probe then keeps at most its cap, the candidates whose path hashes lowest (SHA-256), so the choice stays put when WPT adds or removes other tests: 24 per CSS 2.1 chapter but 100 from `tables`, 60 from `generated-content` and 40 each from `fonts`, `positioning` and `selectors`; 80 from `css-backgrounds`, 120 from `css-text`, 40 each from `css-lists`, `css-page` and `css-break`, 200 from `css-flexbox`, 20 from `css-align`, 200 from `css-grid`, 80 from `css-multicol`, 60 from `css-writing-modes`, 40 each from `css-overflow`, `css-text-decor` and `css-sizing`; 80 from `css-tables`, 100 from `css-transforms`, 60 each from `css-fonts`, `css-inline`, `css-position`, `css-values`, `css-variables`, `css-color`, `css-images`, `css-display` and `selectors`, 40 each from `css-content` and `css-counter-styles`, and 10 from `css-ruby` and from each probe. `corpus update` prints the candidate count and the five rules that kept the most test files out.
+That leaves 7340 candidates. Each area and each probe then keeps at most its cap, the candidates whose path hashes lowest (SHA-256), so the choice stays put when WPT adds or removes other tests: 24 per CSS 2.1 chapter but 100 from `tables`, 60 from `generated-content` and 40 each from `fonts`, `positioning` and `selectors`; 80 from `css-backgrounds`, 120 from `css-text`, 40 each from `css-lists`, `css-page` and `css-break`, 200 from `css-flexbox`, 20 from `css-align`, 200 from `css-grid`, 80 from `css-multicol`, 60 from `css-writing-modes`, 40 each from `css-overflow`, `css-text-decor` and `css-sizing`; 80 from `css-tables`, 100 from `css-transforms`, every candidate of `css-fonts`, 60 each from `css-inline`, `css-position`, `css-values`, `css-variables`, `css-color`, `css-images`, `css-display` and `selectors`, 40 each from `css-content` and `css-counter-styles`, and 10 from `css-ruby` and from each probe. `corpus update` prints the candidate count and the five rules that kept the most test files out.
 
 | Area                            | Tests | Print reftests |
 | ------------------------------- | ----- | -------------- |
@@ -64,7 +64,7 @@ That leaves 7340 candidates. Each area and each probe then keeps at most its cap
 | `css/css-counter-styles`        | 40    |                |
 | `css/css-display`               | 56    |                |
 | `css/css-flexbox`               | 200   | 2              |
-| `css/css-fonts`                 | 60    |                |
+| `css/css-fonts`                 | 255   | 1              |
 | `css/css-grid`                  | 200   |                |
 | `css/css-images`                | 60    |                |
 | `css/css-inline`                | 60    | 1              |
@@ -83,7 +83,7 @@ That leaves 7340 candidates. Each area and each probe then keeps at most its cap
 | `css/css-variables`             | 60    |                |
 | `css/css-writing-modes`         | 13    |                |
 | `css/selectors`                 | 60    |                |
-| Total                           | 2328  | 78             |
+| Total                           | 2523  | 79             |
 
 58 tests have a mismatch reference, 47 more than one reference, and 74 declare a fuzziness. The cell applies a fuzziness as WPT's runner does, lower bounds included: seven `css-images` gradient tests (`display-p3-linear-gradient`, `gradient-eval-001`, `-003`, `-006` and `-009`, `gradient-none-interpolation`, `gradient-powerless-hue-lch`) declare a maximum difference from 1, which a drawing within the range must reach; one identical to its reference passes, since their pixel ranges start at 0. Three print tests declare `<meta name="reftest-pages">`: `css/css-page/subpixel-page-size-001-print.html` (page 2) and `css/css-tables/collapsed-border-fragmentation-001-print.html` and `-002-print.html` (pages 1 and 2). `corpus update` writes it as the entry's `pages`, and the cell compares only those pages of the test with the reference, as WPT's runner does. 499 are XHTML files that parse as HTML.
 

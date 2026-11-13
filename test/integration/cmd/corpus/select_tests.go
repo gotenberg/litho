@@ -235,7 +235,7 @@ var wptAreaCap = map[string]int{
 	"css/css-break": 40, "css/css-flexbox": 200, "css/css-align": 20, "css/css-grid": 200, "css/css-multicol": 80,
 	"css/css-writing-modes": 60, "css/css-overflow": 40, "css/css-text-decor": 40, "css/css-sizing": 40,
 	"css/CSS2/tables": 100, "css/CSS2/fonts": 40, "css/CSS2/positioning": 40, "css/CSS2/generated-content": 60,
-	"css/CSS2/selectors": 40, "css/css-tables": 80, "css/css-fonts": 60, "css/css-inline": 60,
+	"css/CSS2/selectors": 40, "css/css-tables": 80, "css/css-fonts": 300, "css/css-inline": 60,
 	"css/css-position": 60, "css/css-transforms": 100, "css/css-ruby": 10, "css/css-content": 40,
 	"css/css-counter-styles": 40, "css/css-values": 60, "css/css-variables": 60, "css/selectors": 60,
 	"css/css-color": 60, "css/css-images": 60, "css/css-display": 60,

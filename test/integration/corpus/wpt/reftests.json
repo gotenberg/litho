@@ -13493,6 +13493,18 @@
     "resources": ["css/css-fonts/support/fonts/LinLibertine_Re-4.7.5.woff"]
   },
   {
+    "id": "css/css-fonts/cluster-matching-canonical-equivalence-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/cluster-matching-canonical-equivalence-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-fonts/cluster-matching-canonical-equivalence-002.html",
     "print": false,
     "refs": [
@@ -13515,6 +13527,54 @@
       }
     ],
     "resources": ["css/css-fonts/support/fonts/no-combining-marks.ttf"]
+  },
+  {
+    "id": "css/css-fonts/downloadable-font-print.html",
+    "print": true,
+    "refs": [
+      {
+        "path": "css/css-fonts/downloadable-font-print-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/markB.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/markA.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-colorization.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-colorization-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": ["css/css-fonts/resources/colorization_SVG_COLR.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-default-01.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-default-01-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-default-02.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-default-02-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
   },
   {
     "id": "css/css-fonts/font-default-03.html",
@@ -13541,6 +13601,42 @@
     "resources": ["css/css-fonts/support/fonts/RobotoExtremo-VF.subset.ttf"]
   },
   {
+    "id": "css/css-fonts/font-face-stretch-default-variable.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-face-stretch-default-variable-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/RobotoExtremo-VF.subset.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/RobotoExtremo-VF.subset.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-face-style-auto-variable.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-face-style-auto-variable-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/Inter-VF.subset.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/Inter-VF.subset.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-face-style-default-variable.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-face-style-default-variable-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/Inter-VF.subset.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/Inter-VF.subset.ttf"]
+  },
+  {
     "id": "css/css-fonts/font-face-unicode-range-2.html",
     "print": false,
     "refs": [
@@ -13557,6 +13653,30 @@
       "css/css-fonts/support/fonts/LigatureSymbolsWithSpaces.woff",
       "css/css-fonts/support/fonts/Rochester.otf"
     ]
+  },
+  {
+    "id": "css/css-fonts/font-face-weight-auto-variable.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-face-weight-auto-variable-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/RobotoExtremo-VF.subset.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/RobotoExtremo-VF.subset.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-face-weight-default-variable.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-face-weight-default-variable-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/RobotoExtremo-VF.subset.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/RobotoExtremo-VF.subset.ttf"]
   },
   {
     "id": "css/css-fonts/font-family-name-000.xht",
@@ -13583,11 +13703,191 @@
     "resources": []
   },
   {
+    "id": "css/css-fonts/font-family-name-002.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-003.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-004.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-005.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-006.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-007.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-008.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-009.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-010.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-011.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-012.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-013.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-fonts/font-family-name-014.xht",
     "print": false,
     "refs": [
       {
         "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-015.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-016.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-016-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-017.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-mixcase-ref.xht",
         "rel": "match",
         "resources": []
       }
@@ -13607,11 +13907,59 @@
     "resources": []
   },
   {
+    "id": "css/css-fonts/font-family-name-019.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-mixcase-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-020.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-mixcase-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-021.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-fonts/font-family-name-022.xht",
     "print": false,
     "refs": [
       {
         "path": "css/css-fonts/font-family-name-022-ref.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-family-name-023.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-023-ref.xht",
         "rel": "match",
         "resources": []
       }
@@ -13631,6 +13979,30 @@
     "resources": []
   },
   {
+    "id": "css/css-fonts/font-family-name-025.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-family-name-025-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-feature-settings-descriptor-01.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-feature-settings-descriptor-01-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
     "id": "css/css-fonts/font-feature-settings-descriptor-02.html",
     "print": false,
     "refs": [
@@ -13645,6 +14017,281 @@
     "resources": ["css/css-fonts/support/fonts/LigatureSymbolsWithSpaces.woff"]
   },
   {
+    "id": "css/css-fonts/font-feature-settings-tibetan.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-feature-settings-tibetan-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-features-across-space-1.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-features-across-space-1-ref.html",
+        "rel": "match",
+        "resources": [
+          "css/css-fonts/support/fonts/LigatureSymbolsWithSpaces.woff"
+        ]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/LigatureSymbolsWithSpaces.woff"]
+  },
+  {
+    "id": "css/css-fonts/font-features-across-space-2.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-features-across-space-1-ref.html",
+        "rel": "match",
+        "resources": [
+          "css/css-fonts/support/fonts/LigatureSymbolsWithSpaces.woff"
+        ]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/LigatureSymbolsWithSpaces.woff"]
+  },
+  {
+    "id": "css/css-fonts/font-features-across-space-3.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-features-across-space-1-ref.html",
+        "rel": "match",
+        "resources": [
+          "css/css-fonts/support/fonts/LigatureSymbolsWithSpaces.woff"
+        ]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/LigatureSymbolsWithSpaces.woff"]
+  },
+  {
+    "id": "css/css-fonts/font-kerning-01.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-kerning-01-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-kerning-02.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-kerning-02-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-kerning-04.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-kerning-04-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-language-override-01.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-language-override-01-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/LinLibertine_Re-4.7.5.woff"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/LinLibertine_Re-4.7.5.woff"]
+  },
+  {
+    "id": "css/css-fonts/font-language-override-02.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-language-override-02-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/LinLibertine_Re-4.7.5.woff"]
+      },
+      {
+        "path": "css/css-fonts/font-language-override-02-notref.html",
+        "rel": "mismatch",
+        "resources": ["css/css-fonts/support/fonts/LinLibertine_Re-4.7.5.woff"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/LinLibertine_Re-4.7.5.woff"]
+  },
+  {
+    "id": "css/css-fonts/font-language-override-03.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-language-override-02-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/LinLibertine_Re-4.7.5.woff"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/LinLibertine_Re-4.7.5.woff"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-10.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-10-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-11.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-11-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-12.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-12-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-13.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-13-notref.html",
+        "rel": "mismatch",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-14.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-14-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-15.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-15-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-16.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-16-notref.html",
+        "rel": "mismatch",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-17.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-17-notref.html",
+        "rel": "mismatch",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-18.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-18-notref.html",
+        "rel": "mismatch",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-19.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-19-notref.html",
+        "rel": "mismatch",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-2.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-2-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-20.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-20-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
     "id": "css/css-fonts/font-palette-21.html",
     "print": false,
     "refs": [
@@ -13657,7 +14304,31 @@
     "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
   },
   {
+    "id": "css/css-fonts/font-palette-22.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-22-notref.html",
+        "rel": "mismatch",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
     "id": "css/css-fonts/font-palette-23.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-23-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-23b.html",
     "print": false,
     "refs": [
       {
@@ -13681,11 +14352,285 @@
     "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
   },
   {
+    "id": "css/css-fonts/font-palette-25.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-25-ref.html",
+        "rel": "match",
+        "resources": [
+          "css/css-fonts/resources/COLR-palettes-test-font-no-light-dark.ttf"
+        ]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/resources/COLR-palettes-test-font-no-light-dark.ttf"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-palette-26.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-26-ref.html",
+        "rel": "match",
+        "resources": [
+          "css/css-fonts/resources/COLR-palettes-test-font-no-light-dark.ttf"
+        ]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/resources/COLR-palettes-test-font-no-light-dark.ttf"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-palette-27.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-27-ref.html",
+        "rel": "match",
+        "resources": [
+          "css/css-fonts/resources/COLR-palettes-test-font-no-light-dark.ttf"
+        ]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/resources/COLR-palettes-test-font-no-light-dark.ttf"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-palette-28.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-27-ref.html",
+        "rel": "match",
+        "resources": [
+          "css/css-fonts/resources/COLR-palettes-test-font-no-light-dark.ttf"
+        ]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/resources/COLR-palettes-test-font-no-light-dark.ttf"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-palette-29.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-29-ref.html",
+        "rel": "match",
+        "resources": [
+          "css/css-fonts/resources/COLR-palettes-test-font-no-light-dark.ttf",
+          "css/css-fonts/resources/COLR-palettes-test-font.ttf"
+        ]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/resources/COLR-palettes-test-font-no-light-dark.ttf",
+      "css/css-fonts/resources/COLR-palettes-test-font.ttf"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-palette-3.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-3-notref.html",
+        "rel": "mismatch",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-30.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-30-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-31.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-31-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
     "id": "css/css-fonts/font-palette-32.html",
     "print": false,
     "refs": [
       {
         "path": "css/css-fonts/font-palette-32-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-33.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-33-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-34.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-34-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-35.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-35-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-36.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-36-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-4.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-4-notref.html",
+        "rel": "mismatch",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-5.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-5-notref.html",
+        "rel": "mismatch",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-6.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-6-notref.html",
+        "rel": "mismatch",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-7.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-7-notref.html",
+        "rel": "mismatch",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-8.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-8-notref.html",
+        "rel": "mismatch",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-9.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-9-notref.html",
+        "rel": "mismatch",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-empty-font-family.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-empty-font-family-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-mix.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-mix-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-palette-non-ident-font-family.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-non-ident-font-family-ref.html",
         "rel": "match",
         "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
       }
@@ -13705,6 +14650,80 @@
     "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
   },
   {
+    "id": "css/css-fonts/font-palette.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-palette-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/COLR-palettes-test-font.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-size-adjust-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-size-adjust-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-size-adjust-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-size-adjust-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-size-adjust-012.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 130, 0, 350],
+        "path": "css/css-fonts/font-size-adjust-012-ref.html",
+        "rel": "match",
+        "resources": [
+          "css/css-fonts/resources/ahem-ex-250.otf",
+          "css/css-fonts/resources/ahem-ex-500.otf"
+        ]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/resources/ahem-ex-250.otf",
+      "css/css-fonts/resources/ahem-ex-500.otf"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-size-adjust-013.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 130, 0, 350],
+        "path": "css/css-fonts/font-size-adjust-013-ref.html",
+        "rel": "match",
+        "resources": [
+          "css/css-fonts/resources/ahem-ex-250.otf",
+          "css/css-fonts/resources/ahem-ex-500.otf"
+        ]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/resources/ahem-ex-250.otf",
+      "css/css-fonts/resources/ahem-ex-500.otf"
+    ]
+  },
+  {
     "id": "css/css-fonts/font-size-adjust-014.html",
     "print": false,
     "refs": [
@@ -13717,6 +14736,93 @@
     "resources": [
       "css/css-fonts/resources/ahem-ex-250.otf",
       "css/css-fonts/resources/ahem-ex-500.otf"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-size-adjust-order-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-size-adjust-order-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-size-adjust-units-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-size-adjust-units-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-size-adjust-zero-1.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-size-zero-2-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-size-adjust-zero-2.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-size-zero-2-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-size-xxx-large.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-size-xxx-large-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-size-zero-2.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-size-zero-2-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-stretch-01.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-stretch-pass-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/pass.woff"]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/support/fonts/fail.woff",
+      "css/css-fonts/support/fonts/pass.woff"
     ]
   },
   {
@@ -13750,7 +14856,112 @@
     ]
   },
   {
+    "id": "css/css-fonts/font-stretch-04.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-stretch-pass-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/pass.woff"]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/support/fonts/fail.woff",
+      "css/css-fonts/support/fonts/pass.woff"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-stretch-05.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-stretch-pass-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/pass.woff"]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/support/fonts/fail.woff",
+      "css/css-fonts/support/fonts/pass.woff"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-stretch-06.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-stretch-pass-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/pass.woff"]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/support/fonts/fail.woff",
+      "css/css-fonts/support/fonts/pass.woff"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-stretch-07.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-stretch-pass-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/pass.woff"]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/support/fonts/fail.woff",
+      "css/css-fonts/support/fonts/pass.woff"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-stretch-08.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-stretch-pass-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/pass.woff"]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/support/fonts/fail.woff",
+      "css/css-fonts/support/fonts/pass.woff"
+    ]
+  },
+  {
     "id": "css/css-fonts/font-stretch-09.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-stretch-pass-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/pass.woff"]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/support/fonts/fail.woff",
+      "css/css-fonts/support/fonts/pass.woff"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-stretch-10.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-stretch-pass-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/pass.woff"]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/support/fonts/fail.woff",
+      "css/css-fonts/support/fonts/pass.woff"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-stretch-11.html",
     "print": false,
     "refs": [
       {
@@ -13840,11 +15051,128 @@
     ]
   },
   {
+    "id": "css/css-fonts/font-stretch-17.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-stretch-pass-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/pass.woff"]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/support/fonts/fail.woff",
+      "css/css-fonts/support/fonts/pass.woff"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-stretch-18.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-stretch-pass-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/pass.woff"]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/support/fonts/fail.woff",
+      "css/css-fonts/support/fonts/pass.woff"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-synthesis-06.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-synthesis-06-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-synthesis-small-caps-not-applied.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-synthesis-small-caps-not-applied-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/Exo-DemiBold.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/Exo-DemiBold.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-synthesis-style-oblique-only.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-synthesis-style-oblique-only-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/markA.ttf"]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/resources/markA.ttf",
+      "css/css-fonts/resources/markB.ttf"
+    ]
+  },
+  {
+    "id": "css/css-fonts/font-variant-01.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-01-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-02.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-02-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
     "id": "css/css-fonts/font-variant-03.html",
     "print": false,
     "refs": [
       {
         "path": "css/css-fonts/font-variant-03-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-04.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-04-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-alternates-01.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-alternates-01-ref.html",
         "rel": "match",
         "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
       }
@@ -13869,6 +15197,54 @@
     "refs": [
       {
         "path": "css/css-fonts/font-variant-alternates-03-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-alternates-04.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-alternates-04-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-alternates-05.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-alternates-05-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-alternates-06.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-alternates-06-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-alternates-07.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-alternates-07-ref.html",
         "rel": "match",
         "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
       }
@@ -13924,6 +15300,18 @@
     "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
   },
   {
+    "id": "css/css-fonts/font-variant-alternates-12.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-alternates-12-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
     "id": "css/css-fonts/font-variant-alternates-13.html",
     "print": false,
     "refs": [
@@ -13948,6 +15336,198 @@
     "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
   },
   {
+    "id": "css/css-fonts/font-variant-alternates-15.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-alternates-15-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-alternates-16.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-alternates-16-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-alternates-17.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-alternates-17-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-alternates-18.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-alternates-18-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-alternates-19.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-alternates-19-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-alternates-layers.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-alternates-layers-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-caps-01.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-caps-01-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-caps-02.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-caps-02-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-caps-03.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-caps-03-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-caps-04.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-caps-04-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-caps-05.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-caps-05-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-caps-06.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-caps-06-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-caps-07.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-caps-07-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-east-asian-01.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-east-asian-01-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-east-asian-02.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-east-asian-02-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-east-asian-03.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-east-asian-03-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
     "id": "css/css-fonts/font-variant-east-asian-04.html",
     "print": false,
     "refs": [
@@ -13965,6 +15545,66 @@
     "refs": [
       {
         "path": "css/css-fonts/font-variant-east-asian-05-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-east-asian-06.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-east-asian-06-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-east-asian-07.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-east-asian-07-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-east-asian-08.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-east-asian-08-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-east-asian-09.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-east-asian-09-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-east-asian-10.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-east-asian-10-ref.html",
         "rel": "match",
         "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
       }
@@ -14032,11 +15672,119 @@
     ]
   },
   {
+    "id": "css/css-fonts/font-variant-emoji-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-emoji-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-variant-emoji-1.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-emoji-1-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-variant-emoji-2.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-emoji-2-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-fonts/font-variant-ligatures-01.html",
     "print": false,
     "refs": [
       {
         "path": "css/css-fonts/font-variant-ligatures-01-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-ligatures-02.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-ligatures-02-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-ligatures-03.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-ligatures-03-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-ligatures-04.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-ligatures-04-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-ligatures-05.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-ligatures-05-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-ligatures-06.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-ligatures-06-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-ligatures-07.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-ligatures-07-ref.html",
         "rel": "match",
         "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
       }
@@ -14068,6 +15816,18 @@
     "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
   },
   {
+    "id": "css/css-fonts/font-variant-ligatures-10.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-ligatures-10-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
     "id": "css/css-fonts/font-variant-ligatures-11.optional.html",
     "print": false,
     "refs": [
@@ -14078,6 +15838,222 @@
       }
     ],
     "resources": []
+  },
+  {
+    "id": "css/css-fonts/font-variant-numeric-01.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-numeric-01-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-numeric-02.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-numeric-02-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-numeric-03.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-numeric-03-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-numeric-04.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-numeric-04-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-numeric-05.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-numeric-05-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-numeric-06.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-numeric-06-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-numeric-07.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-numeric-07-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-numeric-08.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-numeric-08-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-numeric-09.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-numeric-09-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-position-01.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-position-01-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-position-02.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-position-02-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variant-position-03.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variant-position-03-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/FontWithFancyFeatures.otf"]
+  },
+  {
+    "id": "css/css-fonts/font-variation-settings-descriptor-01.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variation-settings-descriptor-01-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/variations/resources/Inter.var.subset.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/variations/resources/Inter.var.subset.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-variation-settings-descriptor-02.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variation-settings-descriptor-02-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/variations/resources/Inter.var.subset.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/variations/resources/Inter.var.subset.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-variation-settings-descriptor-03.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variation-settings-descriptor-03-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/RobotoExtremo-VF.subset.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/RobotoExtremo-VF.subset.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-variation-settings-descriptor-04.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-variation-settings-descriptor-04-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/fonts/RobotoExtremo-VF.subset.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/fonts/RobotoExtremo-VF.subset.ttf"]
+  },
+  {
+    "id": "css/css-fonts/font-weight-bolder-001.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-weight-bolder-001-ref.xht",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/font-weight-bolder-001-ref.png"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/font-weight-bolder-001-ref.png"]
+  },
+  {
+    "id": "css/css-fonts/font-weight-lighter-001.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/font-weight-lighter-001-ref.xht",
+        "rel": "match",
+        "resources": ["css/css-fonts/support/font-weight-lighter-001-ref.png"]
+      }
+    ],
+    "resources": ["css/css-fonts/support/font-weight-lighter-001-ref.png"]
   },
   {
     "id": "css/css-fonts/font-weight-normal-001.xht",
@@ -14104,6 +16080,18 @@
     "resources": ["css/css-fonts/support/fonts/NotoSansJP.subset.ttf"]
   },
   {
+    "id": "css/css-fonts/generic-family-lang-attr-cascade.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/generic-family-lang-attr-cascade-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-fonts/hiragana-katakana-kerning.html",
     "print": false,
     "refs": [
@@ -14116,12 +16104,110 @@
     "resources": ["css/css-fonts/resources/NotoSansJP-kana_test-subset.otf"]
   },
   {
+    "id": "css/css-fonts/italic-oblique-fallback.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/italic-oblique-fallback-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/markA.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/markA.ttf"]
+  },
+  {
     "id": "css/css-fonts/matching/font-unicode-PUA-primary-font.html",
     "print": false,
     "refs": [
       {
         "path": "css/css-fonts/matching/font-unicode-PUA-primary-font-notref.html",
         "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/matching/font-unicode-presented-as-emoji-outline.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/matching/font-unicode-presented-as-emoji-outline-ref.html",
+        "rel": "match",
+        "resources": [
+          "css/css-fonts/matching/resources/AhemCrossmarkSupport.otf"
+        ]
+      }
+    ],
+    "resources": ["css/css-fonts/matching/resources/AhemCrossmarkSupport.otf"]
+  },
+  {
+    "id": "css/css-fonts/oblique-last-resort-weight-selection.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/oblique-last-resort-weight-selection-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/resources/markA.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/resources/markA.ttf"]
+  },
+  {
+    "id": "css/css-fonts/quoted-generic-ignored.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/quoted-generic-ignored-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/rcap-in-monospace.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/rcap-in-monospace-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/rch-in-monospace.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/rch-in-monospace-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/rem-in-monospace.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/rem-in-monospace-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/rlh-in-monospace.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/rlh-in-monospace-ref.html",
+        "rel": "match",
         "resources": []
       }
     ],
@@ -14158,11 +16244,191 @@
     "resources": ["css/css-fonts/resources/separator-test-font.ttf"]
   },
   {
+    "id": "css/css-fonts/small-caps-letter-spacing-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/small-caps-letter-spacing-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-10.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-10-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-11.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-11-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-12.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-12-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-13.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-13-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-14.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-14-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-fonts/standard-font-family-15.html",
     "print": false,
     "refs": [
       {
         "path": "css/css-fonts/standard-font-family-15-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-16.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-16-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-17.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-17-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-18.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-18-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-19.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-19-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-2.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-2-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-20.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-20-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-3.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-3-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-4.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-4-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-5.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-5-notref.html",
         "rel": "mismatch",
         "resources": []
       }
@@ -14182,12 +16448,76 @@
     "resources": []
   },
   {
+    "id": "css/css-fonts/standard-font-family-7.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-7-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-fonts/standard-font-family-8.html",
     "print": false,
     "refs": [
       {
         "path": "css/css-fonts/standard-font-family-8-notref.html",
         "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family-9.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-9-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/standard-font-family.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/standard-font-family-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/synthetic-bold-out-of-capabilities-range.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/synthetic-bold-out-of-capabilities-range-ref.html",
+        "rel": "match",
+        "resources": [
+          "css/css-fonts/support/fonts/RobotoExtremo-VF-wght-400-500.subset.ttf"
+        ]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/support/fonts/RobotoExtremo-VF-wght-400-500.subset.ttf"
+    ]
+  },
+  {
+    "id": "css/css-fonts/synthetic-bold-space-width.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/synthetic-bold-space-width-ref.html",
+        "rel": "match",
         "resources": []
       }
     ],
@@ -14218,6 +16548,30 @@
     "resources": []
   },
   {
+    "id": "css/css-fonts/system-ui.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/system-ui-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-fonts/test-synthetic-bold.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/test-synthetic-bold-notref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-fonts/test-synthetic-italic.html",
     "print": false,
     "refs": [
@@ -14230,7 +16584,43 @@
     "resources": []
   },
   {
+    "id": "css/css-fonts/variations/font-slant-1.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/variations/font-slant-1-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/variations/resources/Inter.var.subset.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/variations/resources/Inter.var.subset.ttf"]
+  },
+  {
     "id": "css/css-fonts/variations/font-slant-2a.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/variations/font-slant-2-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/variations/resources/Inter.var.subset.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/variations/resources/Inter.var.subset.ttf"]
+  },
+  {
+    "id": "css/css-fonts/variations/font-slant-2b.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/variations/font-slant-2-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/variations/resources/Inter.var.subset.ttf"]
+      }
+    ],
+    "resources": ["css/css-fonts/variations/resources/Inter.var.subset.ttf"]
+  },
+  {
+    "id": "css/css-fonts/variations/font-slant-2c.html",
     "print": false,
     "refs": [
       {
@@ -14251,6 +16641,32 @@
         "resources": [
           "css/css-fonts/variations/resources/Inter.no-var.subset.ttf"
         ]
+      }
+    ],
+    "resources": ["css/css-fonts/variations/resources/Inter.var.subset.ttf"]
+  },
+  {
+    "id": "css/css-fonts/variations/font-weight-3.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/variations/font-weight-3-ref.html",
+        "rel": "match",
+        "resources": [
+          "css/css-fonts/variations/resources/Inter.no-var.subset.ttf"
+        ]
+      }
+    ],
+    "resources": ["css/css-fonts/variations/resources/Inter.var.subset.ttf"]
+  },
+  {
+    "id": "css/css-fonts/variations/font-weight-metrics.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/variations/font-weight-metrics-ref.html",
+        "rel": "match",
+        "resources": ["css/css-fonts/variations/resources/Inter.var.subset.ttf"]
       }
     ],
     "resources": ["css/css-fonts/variations/resources/Inter.var.subset.ttf"]
@@ -14287,6 +16703,22 @@
     ],
     "resources": [
       "css/css-fonts/variations/resources/FontStyleTest-slnt_backslant-VF.woff2"
+    ]
+  },
+  {
+    "id": "css/css-fonts/variations/slnt-variable.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-fonts/variations/slnt-variable-ref.html",
+        "rel": "match",
+        "resources": [
+          "css/css-fonts/variations/resources/FontStyleTest-slnt-VF.woff2"
+        ]
+      }
+    ],
+    "resources": [
+      "css/css-fonts/variations/resources/FontStyleTest-slnt-VF.woff2"
     ]
   },
   {
