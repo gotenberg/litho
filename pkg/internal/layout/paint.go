@@ -366,10 +366,19 @@ func ownOffset(b *box) (float64, float64) {
 		return 0, 0
 	}
 	cbw, cbh := 0.0, 0.0
-	if b.parent != nil {
-		cbw, cbh = b.parent.w, b.parent.h
+	cb := relContainer(b)
+	if cb != nil {
+		cbw, cbh = cb.w, cb.h
 	}
 	top, bottom := b.st.Top, b.st.Bottom
+	if !b.tpart.internal() && cb != nil && contentHeight(cb) {
+		if top.HasPercent() {
+			top = css.Dimension{}
+		}
+		if bottom.HasPercent() {
+			bottom = css.Dimension{}
+		}
+	}
 	if b.tpart.internal() {
 		// A table part's percentage top or bottom resolves against the
 		// height its parent specifies, not the one its rows give it, and
@@ -401,6 +410,50 @@ func ownOffset(b *box) (float64, float64) {
 		dy = -resolve(bottom, cbh)
 	}
 	return dx, dy
+}
+
+// relContainer returns the box whose content box the percentage insets
+// of the relatively positioned box b resolve against: its nearest block
+// container ancestor (CSS 2.1, 10.1), passing over inline boxes and over
+// anonymous block boxes, which percentages ignore (9.2.1.1). A table
+// part takes its parent.
+func relContainer(b *box) *box {
+	a := b.parent
+	if b.tpart.internal() {
+		return a
+	}
+	for a != nil && (a.anon || a.kind == kindInline) {
+		a = a.parent
+	}
+	return a
+}
+
+// contentHeight reports a containing block cb whose height is not
+// specified explicitly but depends on its content: an auto height on an
+// in-flow block that no flex or grid container sizes and that is no
+// table part. A percentage top or bottom of a relatively positioned box
+// in it computes to auto (CSS 2.1, 9.3.2).
+//
+// # Corpus evidence
+//
+//   - wpt: css-position/position-relative-006 and -007 (top: -10000% and
+//     calc(10px + 10%) in a block of min-height 100px) and -001 (top and
+//     left 100% on an inline in a 100px block, with a block inside it)
+//     draw as their references in Chromium 156.
+func contentHeight(cb *box) bool {
+	if cb.st.Height.Kind != css.Auto || cb.abs || cb.tpart != partNone || cb.kind != kindBlock {
+		return false
+	}
+	if p := cb.parent; p != nil && (p.flex != nil || p.grid != nil) {
+		return false
+	}
+	return !ratioSized(cb)
+}
+
+// ratioSized reports a box whose height its preferred aspect ratio gives.
+func ratioSized(b *box) bool {
+	r, _ := prefRatio(b)
+	return r > 0
 }
 
 // ancestorOffset returns the relative positioning offsets b's position

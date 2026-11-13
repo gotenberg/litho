@@ -400,3 +400,55 @@ func TestFixed_WidensNoContent(t *testing.T) {
 		}
 	}
 }
+
+// TestRelative_PercentageInsets holds the percentage insets of a
+// relatively positioned box to CSS 2.1, 9.3.2 and 9.2.1.1: top and bottom
+// compute to auto when the containing block's height depends on its
+// content, and resolve against the nearest non-anonymous block container,
+// past an inline box split around a block, when it is specified.
+func TestRelative_PercentageInsets(t *testing.T) {
+	t.Parallel()
+	pct := func(v float64) css.Dimension { return css.Dimension{Kind: css.Percent, Value: v} }
+	rel := func(top, left css.Dimension) func(*css.Style) {
+		return func(s *css.Style) { s.Position, s.Top, s.Left = css.Relative, top, left }
+	}
+	tests := []struct {
+		name string
+		root *Node
+		want string
+	}{
+		{
+			"an auto height ignores a percentage top",
+			doc(el(sty(width(2), minH(2)), el(sty(width(1), height(1), bg(red), rel(pct(1), css.Pts(0)))))),
+			`
+			R___
+			____
+			____
+			____`,
+		},
+		{
+			"a fixed height resolves it",
+			doc(el(sty(width(2), height(2)), el(sty(width(1), height(1), bg(red), rel(pct(0.5), css.Pts(0)))))),
+			`
+			____
+			R___
+			____
+			____`,
+		},
+		{
+			"an inline resolves against its block container",
+			doc(el(sty(width(2), height(2)), el(inlineSty(rel(pct(0.5), pct(0.5))), el(sty(width(1), height(1), bg(red)))))),
+			`
+			____
+			_R__
+			____
+			____`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assertPixels(t, run(t, tt.root, page(4, 4)), 1, tt.want)
+		})
+	}
+}
