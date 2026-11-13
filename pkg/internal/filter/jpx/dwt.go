@@ -92,16 +92,16 @@ func sr97(s []float32, i0 int, ext []float32) {
 		*at(2*k + 1) *= 1 / liftK
 	}
 	for k := h0 - 1; k < h1+2; k++ {
-		*at(2 * k) -= liftDelta * (*at(2*k - 1) + *at(2*k + 1))
+		*at(2 * k) -= float32(liftDelta * (*at(2*k - 1) + *at(2*k + 1)))
 	}
 	for k := h0 - 1; k < h1+1; k++ {
-		*at(2*k + 1) -= liftGamma * (*at(2 * k) + *at(2*k + 2))
+		*at(2*k + 1) -= float32(liftGamma * (*at(2 * k) + *at(2*k + 2)))
 	}
 	for k := h0; k < h1+1; k++ {
-		*at(2 * k) -= liftBeta * (*at(2*k - 1) + *at(2*k + 1))
+		*at(2 * k) -= float32(liftBeta * (*at(2*k - 1) + *at(2*k + 1)))
 	}
 	for k := h0; k < h1; k++ {
-		*at(2*k + 1) -= liftAlpha * (*at(2 * k) + *at(2*k + 2))
+		*at(2*k + 1) -= float32(liftAlpha * (*at(2 * k) + *at(2*k + 2)))
 	}
 	copy(s, e[extension:extension+n])
 }

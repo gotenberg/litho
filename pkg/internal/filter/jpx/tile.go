@@ -323,7 +323,7 @@ func (tc *tileComponent) decodeBlock(t *t1, b *band, cb *codeBlock, precision in
 	}
 	// E-3 and E-4: the step size of an irreversible sub-band.
 	st := tc.stepSize(b)
-	delta := math.Ldexp(1+float64(st.mantissa)/2048, precision+logGain[b.orient]-st.exponent)
+	delta := math.Ldexp(1+float64(float64(st.mantissa)/2048), precision+logGain[b.orient]-st.exponent)
 	stride := tc.coeffs.stride
 	for j := range t.w * t.h {
 		v, nb := t.coefficient(j, mb, tc.roi, cb.zeroPlanes)

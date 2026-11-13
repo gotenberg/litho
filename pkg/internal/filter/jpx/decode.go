@@ -225,9 +225,9 @@ func inverseMCT(cs *codestream, d *tileDecoder) error {
 	}
 	for i := range p0.floats {
 		y0, y1, y2 := p0.floats[i], p1.floats[i], p2.floats[i]
-		p0.floats[i] = y0 + 1.402*y2
-		p1.floats[i] = y0 - 0.34413*y1 - 0.71414*y2
-		p2.floats[i] = y0 + 1.772*y1
+		p0.floats[i] = y0 + float32(1.402*y2)
+		p1.floats[i] = y0 - float32(0.34413*y1) - float32(0.71414*y2)
+		p2.floats[i] = y0 + float32(1.772*y1)
 	}
 	return nil
 }
