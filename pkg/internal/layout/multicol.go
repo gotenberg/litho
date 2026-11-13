@@ -468,7 +468,9 @@ func (multicolFormatter) layout(e *engine, b *box, cb cblock, bc *bfc, cursor fl
 		}
 		if s.spanner != nil {
 			if smc == nil {
-				smc = &marginState{kept: true}
+				// A spanner before any column content adjoins the
+				// container's block-start edge (CSS Box 4, 3.3).
+				smc = &marginState{kept: true, trimStart: mc.trimStart && len(d.sets) == 0}
 			}
 			y = e.layoutBlock(s.spanner, cb, bc, y, smc, breakNone)
 			d.sets = append(d.sets, s)
@@ -488,6 +490,14 @@ func (multicolFormatter) layout(e *engine, b *box, cb cblock, bc *bfc, cursor fl
 		if empty && spanned {
 			// Nothing between two spanners, white space alone: their
 			// margins adjoin and collapse.
+			continue
+		}
+		if empty && smc != nil {
+			// Nothing after the last spanner takes room: its bottom
+			// margin stays pending for the container's end, where
+			// margin-trim may truncate it (CSS Box 4, 3.3). The set keeps
+			// its out-of-flow boxes.
+			d.sets = append(d.sets, s)
 			continue
 		}
 		if smc != nil {

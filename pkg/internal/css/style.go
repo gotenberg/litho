@@ -1022,6 +1022,9 @@ type Style struct {
 	// last lines to a metric of their text (CSS Inline 3, 5).
 	TextBoxTrim TextBoxTrim
 	TextBoxEdge TextBoxEdge
+	// MarginTrim truncates the margins of a block container's children
+	// at its edges (CSS Box 4, 3.3).
+	MarginTrim MarginTrim
 	// ObjectViewBox is the part of a replaced element's picture that
 	// stands for the whole (CSS Images 5, 4.1), an inset, nil for none.
 	ObjectViewBox *Shape

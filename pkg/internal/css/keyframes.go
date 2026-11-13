@@ -317,7 +317,7 @@ var discreteAnimation = func() [numProps]bool {
 		pFontVariantPosition, pFontVariantAlternates, pFontVariantEmoji, pFontLanguageOverride,
 		pFontSynthesisSmallCaps, pMixBlendMode, pBgBlendMode, pIsolation, pMaskImage, pMaskMode,
 		pMaskRepeat, pMaskOrigin, pMaskClip, pMaskComposite, pMaskType, pBaselineSource, pTextBoxTrim,
-		pTextBoxEdge, pPrintColorAdjust, pFontOpticalSizing,
+		pTextBoxEdge, pPrintColorAdjust, pFontOpticalSizing, pMarginTrim,
 	} {
 		on[id] = true
 	}

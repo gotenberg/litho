@@ -73,6 +73,11 @@ type marginState struct {
 	// absorb drops the top margins adjoining the top of a box placed by
 	// clearance: they collapsed into the margin the clearance replaced.
 	absorb bool
+	// trimStart reports margins adjoining the block-start edge of a
+	// container whose margin-trim trims it: a box laid out under them
+	// takes no top margin, and an empty one no bottom margin either (CSS
+	// Box 4, 3.3).
+	trimStart bool
 	// kept reports margins pending after a forced break or at a box's
 	// content edge: they do not truncate at a page top (CSS Fragmentation
 	// 3, 5.2).
@@ -191,6 +196,7 @@ func (mc *marginState) commit(y float64) {
 	mc.waiting = nil
 	mc.strut = strut{}
 	mc.absorb = false
+	mc.trimStart = false
 	mc.kept = false
 }
 
@@ -269,7 +275,59 @@ func (e *engine) collapsingThrough(b *box, cb cblock) (strut, bool) {
 	if math.Abs(end-b.contentY()) > eps {
 		return strut{}, false
 	}
+	if marginTrim(b) != 0 {
+		// The margins of b's children adjoin both its edges: margin-trim
+		// truncates them (CSS Box 4, 3.3).
+		return strut{}, true
+	}
 	return inner.strut, true
+}
+
+// marginTrim returns the edges at which b truncates the margins of its
+// in-flow children and of the descendants whose margins collapse with
+// theirs (CSS Box 4, 3.3 and 3.3.1). margin-trim applies to block
+// containers and multi-column containers: a flex, grid or table
+// container, whose formatter is not flow, trims none.
+//
+// # Corpus evidence
+//
+//   - wpt: css-box/margin-trim (29 block-container tests, 7
+//     multicol-spanner tests) draws every reference in Chromium 156,
+//     trimmed margins of self-collapsing children and of blocks split out
+//     of an inline included.
+func marginTrim(b *box) css.MarginTrim {
+	if b.st.MarginTrim == 0 {
+		return 0
+	}
+	switch formatterFor(b).(type) {
+	case flowFormatter, multicolFormatter:
+		return b.st.MarginTrim
+	}
+	return 0
+}
+
+// settleTrimmed moves the empty in-flow children that end b, whose
+// margins collapse through them and adjoin b's trimmed block-end edge, to
+// y, where b's content ends: with their margins truncated to zero they sit
+// there (CSS Box 4, 3.3; CSS 2.1, 8.3.1 places a box whose margins
+// collapse through it where its top border edge would be).
+//
+// # Corpus evidence
+//
+//   - wpt: css-box/margin-trim/block-container-block-end-self-collapsing-and-border
+//     draws the outlines of two such children at the content's end in
+//     Chromium 156.
+func settleTrimmed(b *box, y float64) {
+	for i := len(b.kids) - 1; i >= 0; i-- {
+		k := b.kids[i]
+		if k.abs || k.float != css.FloatNone || !k.laidOut {
+			continue
+		}
+		if k.inline || k.borderH() > eps || k.y <= y+eps {
+			return
+		}
+		k.shift(0, y-k.y)
+	}
 }
 
 // breakMode is how a box starts with respect to the page cuts.
@@ -568,7 +626,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	b.laidOut = true
 	resolveEdges(b, cb.w)
 	e.resolveSizing(b, cb, -1, -1)
-	if mc.absorb {
+	if mc.absorb || mc.trimStart {
 		b.m[css.Top] = 0
 	}
 	mt, mb := b.m[css.Top], b.m[css.Bottom]
@@ -672,22 +730,29 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	blockWidths(b, cb.w, cb.rtl(b), 0, false)
 	b.x = cb.x + b.m[css.Left]
 	collapseTop := !cleared && b.bd[css.Top] == 0 && b.pd[css.Top] == 0
+	trim := marginTrim(b)
 	inner := mc
 	start := cursor
+	// outerTrim and outerStrut are the state of the margins b's top joins,
+	// restored when b turns out empty and its margins collapse through.
+	outerTrim := mc.trimStart
+	var outerStrut strut
 	switch {
 	case cleared:
 		b.y = clearY
-		inner = &marginState{absorb: b.bd[css.Top] == 0 && b.pd[css.Top] == 0, kept: true}
+		inner = &marginState{absorb: b.bd[css.Top] == 0 && b.pd[css.Top] == 0, kept: true, trimStart: trim&css.TrimBlockStart != 0}
 		start = b.contentY()
 	case collapseTop:
 		mc.strut = mc.strut.add(mt)
 		mc.waiting = append(mc.waiting, b)
 		b.y = e.pastMargin(cursor, mc.strut, mc.kept)
+		outerStrut = mc.strut
+		mc.trimStart = mc.trimStart || trim&css.TrimBlockStart != 0
 	default:
 		top := e.pastMargin(cursor, mc.strut.add(mt), mc.kept)
 		mc.commit(top)
 		b.y = top
-		inner = &marginState{kept: true}
+		inner = &marginState{kept: true, trimStart: trim&css.TrimBlockStart != 0}
 		start = b.contentY()
 	}
 	specH, hSet := specHeight(b, b.st.Height, cb)
@@ -718,8 +783,19 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		if (collapseBottom || zero && b.bd[css.Bottom] == 0 && b.pd[css.Bottom] == 0) && b.st.MinHeight.Value <= 0 {
 			mc.waiting = slices.Delete(mc.waiting, i, i+1)
 			mc.collapsedThrough(b)
+			if trim&css.TrimBlockEnd != 0 {
+				// The margins of b's children adjoin its bottom edge.
+				mc.strut = outerStrut
+			}
+			mc.trimStart = outerTrim
+			if mc.trimStart {
+				mb = 0
+			}
 			b.y = cursor + mc.strut.sum()
 			b.h = 0
+			if trim&css.TrimBlockEnd != 0 {
+				settleTrimmed(b, b.y)
+			}
 			if !mc.absorb {
 				// Under absorb, the margins of an empty box collapse into
 				// the clearance above it, the bottom one as the top.
@@ -735,6 +811,10 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		// Margins that collapse with the top margin of a box with
 		// clearance do not collapse with b's bottom margin (8.3.1).
 		collapseBottom = false
+	}
+	if trim&css.TrimBlockEnd != 0 {
+		trailing = strut{}
+		settleTrimmed(b, end)
 	}
 	contentBottom := end
 	if !collapseBottom {
@@ -965,11 +1045,15 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 		e.noPaginate--
 		specH = constrainHeight(b, max(specH, end-b.contentY()), cb)
 	}
-	mc := &marginState{kept: true}
+	trim := marginTrim(b)
+	mc := &marginState{kept: true, trimStart: trim&css.TrimBlockStart != 0}
 	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: usedSpecH(b, specH, hSet, cb), hDefinite: hSet}, cb)
 	saved := e.enterClamp(b, cb, b.contentY())
 	end := formatterFor(b).layout(e, b, kcb, own, b.contentY(), mc)
 	e.leaveClamp(saved)
+	if trim&css.TrimBlockEnd != 0 {
+		mc.strut = strut{}
+	}
 	end = e.pastMargin(end, mc.strut, false)
 	mc.commit(end)
 	end = max(end, own.bottom(), b.contentY())

@@ -74,6 +74,9 @@ func equalStyle(a, b *Style) bool {
 	if !equalTextBoxEdge(&a.TextBoxEdge, &b.TextBoxEdge) {
 		return false
 	}
+	if a.MarginTrim != b.MarginTrim {
+		return false
+	}
 	if a.ObjectViewBox != b.ObjectViewBox {
 		return false
 	}
@@ -798,6 +801,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.BaselineSource))
 	h = mix(h, uint64(x.TextBoxTrim))
 	h = hashTextBoxEdge(h, &x.TextBoxEdge)
+	h = mix(h, uint64(x.MarginTrim))
 	h = mixBool(h, x.ObjectViewBox != nil)
 	h = mix(h, uint64(x.PrintColorAdjust))
 	h = mix(h, uint64(x.ContentVisibility))

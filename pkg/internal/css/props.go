@@ -268,6 +268,7 @@ const (
 	pBackdropFilter
 	pFontVariationSettings
 	pFontOpticalSizing
+	pMarginTrim
 	numProps
 )
 
@@ -1071,6 +1072,7 @@ func init() {
 	props[pObjectViewBox] = objectViewBoxProp()
 	props[pPrintColorAdjust] = printColorAdjustProp()
 	props[pContentVisibility] = contentVisibilityProp()
+	props[pMarginTrim] = marginTrimProp()
 	for id, def := range textBoxProps() {
 		props[id] = def
 	}
