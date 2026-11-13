@@ -136,9 +136,9 @@ type Report struct {
 	MissingEmoji []rune
 	// DefaultInstances lists the variable faces drawn at their default
 	// instance where the text asked for another, by family, with why: font
-	// variations litho does not instance (CFF2 outlines, 'avar' version 2),
-	// tables that do not read, the bound on instances, or an installed face
-	// laid out on an index that serves no conversion.
+	// variations litho does not instance ('avar' version 2), tables that do
+	// not read, the bound on instances, or an installed face laid out on an
+	// index that serves no conversion.
 	DefaultInstances []DefaultInstance
 }
 
@@ -224,10 +224,12 @@ type DefaultInstance struct {
 // [Fonts.ForConversion] or [Fonts.WithFaces] returned, and belongs to that
 // conversion alone.
 //
-// A face whose variations litho does not instance, CFF2 outlines among
-// them, every face past 128 instances in one conversion, and an installed
-// face laid out on an index that serves no conversion draw at their
-// default instance, listed in [Report.DefaultInstances].
+// A face with CFF2 outlines draws an instance even at its default
+// coordinates: its outlines are embedded as CFF. A face whose variations
+// litho does not instance, every face past 128 instances in one
+// conversion, and an installed face laid out on an index that serves no
+// conversion draw at their default instance, listed in
+// [Report.DefaultInstances].
 //
 // Layout parses the font programs of the faces it draws with on first use
 // and keeps them in the index's bounded cache.

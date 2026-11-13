@@ -216,8 +216,11 @@ func (fc *Face) userCoordinates(style *Style) []float64 {
 // instanceOf returns the face that draws fc, a document face, in style: fc
 // itself for a face that is not variable or a style at the default
 // instance; else the instance of fc at the style's coordinates, created on
-// first use and counted by count. A face whose variations litho cannot
-// apply draws as fc, its default instance, and why is returned with it.
+// first use and counted by count. A face with CFF2 outlines draws an
+// instance at the default instance too, whose outlines are CFF: a PDF
+// embeds CFF in a font file and no CFF2 (ISO 32000-1, 9.9, Table 126). A
+// face whose variations litho cannot apply draws as fc, its default
+// instance, and why is returned with it.
 func (fc *Face) instanceOf(ctx context.Context, style *Style, mem *limits.Budget, count *instanceCount) (*Face, error) {
 	if fc.doc == nil || fc.base != nil {
 		return fc, nil
@@ -230,7 +233,7 @@ func (fc *Face) instanceOf(ctx context.Context, style *Style, mem *limits.Budget
 	}
 	user := fc.userCoordinates(style)
 	coords := fc.vf.Normalize(user)
-	if !slicesNonZero(coords) {
+	if !slicesNonZero(coords) && !fc.vf.HasCFF2() {
 		return fc, nil
 	}
 	key := coordsKey(coords)

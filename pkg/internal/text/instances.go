@@ -327,8 +327,9 @@ func (fc *Face) installedUserCoordinates(style *Style) []float64 {
 // in style: fc itself for a static face; the instance of its file at the
 // coordinates [Face.installedUserCoordinates] gives, created on first use
 // in the conversion; or the face of its file, its default instance, at the
-// default coordinates. A file litho cannot instance draws at its default
-// instance, returned with why.
+// default coordinates, except for a file with CFF2 outlines, which draws
+// its instance there too (see [Face.instanceOf]). A file litho cannot
+// instance draws at its default instance, returned with why.
 func (f *Fonts) installedInstance(ctx context.Context, fc *Face, style *Style, mem *limits.Budget) (*Face, error) {
 	if fc.axes == nil {
 		return fc, nil
@@ -352,7 +353,7 @@ func (f *Fonts) installedInstance(ctx context.Context, fc *Face, style *Style, m
 		return file, err
 	}
 	coords := vf.Normalize(user)
-	if !slicesNonZero(coords) {
+	if !slicesNonZero(coords) && !vf.HasCFF2() {
 		return file, nil
 	}
 	key := instanceKey{file: file, coords: coordsKey(coords)}

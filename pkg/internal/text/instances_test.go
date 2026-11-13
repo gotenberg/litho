@@ -229,3 +229,59 @@ func parseVarFont(t *testing.T) *varfont.Font {
 	}
 	return vf
 }
+
+// varCFF2Path is a variable font with CFF2 outlines, LithoVarCFF: wght
+// 200 to 900 (default 200) and wdth 75 to 100, named instances Regular
+// (wght 450) and Bold (wght 742.1).
+const varCFF2Path = "../typography/varfont/testdata/varfont_cff2.otf"
+
+// TestCFF2FacesEmbedAsCFF pins that a face with CFF2 outlines, a document
+// face or an installed one, is embedded as a program with CFF outlines,
+// at its default coordinates too: a PDF font file holds CFF, never CFF2
+// (ISO 32000-1, 9.9, Table 126).
+func TestCFF2FacesEmbedAsCFF(t *testing.T) {
+	t.Parallel()
+	program := repoFont(t, "cff2.otf", varCFF2Path).data
+	doc, err := LoadFace(context.Background(), program, FaceDescriptor{Family: "Var"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fonts := newTestFonts(t, fontFile{"cff2.otf", program}, fontFile{"sans.ttf", testSans("Regular", 400, false, 100)})
+	conv := fonts.ForConversion().WithFaces(NewFaceSet([]*Face{doc}))
+	for _, tc := range []struct {
+		name   string
+		family string
+		style  Style
+		ps     string
+	}{
+		{"document face at its default", "Var", Style{Weight: 200, Size: 12}, "LithoVarCFF_200wght_100wdth"},
+		{"installed face at its default", "LithoVarCFF", Style{Weight: 200, Fallback: FallbackChromium}, "LithoVarCFF_200wght_100wdth"},
+		{"installed named instance", "LithoVarCFF", Style{Weight: 700, Fallback: FallbackChromium}, "LithoVarCFF-BoldInstance"},
+	} {
+		tc.style.Families = []string{tc.family}
+		if tc.style.Size == 0 {
+			tc.style.Size = 30
+		}
+		p, rep, err := conv.Shape(context.Background(), []ParagraphRun{{Text: "OH", Style: tc.style}}, ParagraphOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rep.DefaultInstances) > 0 || len(p.items) != 1 {
+			t.Fatalf("%s: %d items, default instances %v", tc.name, len(p.items), rep.DefaultInstances)
+		}
+		face := p.items[0].face.Program
+		records, err := truetype.ParseTableDirectory(face)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := truetype.TableData(face, records, "CFF2"); err == nil {
+			t.Errorf("%s: the embedded program keeps CFF2", tc.name)
+		}
+		if _, err := truetype.CFFTable(face); err != nil {
+			t.Errorf("%s: the embedded program has no CFF table: %v", tc.name, err)
+		}
+		if got := postScriptNameOf(t, face); got != tc.ps {
+			t.Errorf("%s: PostScript name %q, want %q", tc.name, got, tc.ps)
+		}
+	}
+}
