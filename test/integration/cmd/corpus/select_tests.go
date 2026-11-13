@@ -41,6 +41,14 @@ var resvgAreas = map[string]int{
 	"paint-servers/radialGradient": 10, "paint-servers/stop": 6, "paint-servers/stop-color": 3,
 	"paint-servers/stop-opacity": 3, "masking/clipPath": 10, "masking/clip-rule": 2, "text/text": 6,
 	"text/tspan": 4, "text/text-anchor": 3, "text/font-size": 3,
+	"masking/mask": 40, "painting/mix-blend-mode": 25, "painting/isolation": 4,
+}
+
+// resvgLift names, for an area, the reasons of resvgReject its tests may
+// use: the masks of masking/mask and the blending of painting/mix-blend-mode
+// and painting/isolation.
+var resvgLift = map[string][]string{
+	"masking/mask": {"mask"}, "painting/mix-blend-mode": {"blending"}, "painting/isolation": {"blending"},
 }
 
 // resvgReject are the constructs a test may not use, each with the reason it
@@ -61,7 +69,8 @@ var resvgReject = []struct {
 	{regexp.MustCompile(`<!ENTITY`), "XML entity"},
 	{regexp.MustCompile(`@import|@font-face|@media`), "at-rule"},
 	{regexp.MustCompile(`context-fill|context-stroke`), "context paint"},
-	{regexp.MustCompile(`mix-blend-mode|isolation|paint-order|vector-effect`), "compositing"},
+	{regexp.MustCompile(`mix-blend-mode|isolation`), "blending"},
+	{regexp.MustCompile(`paint-order|vector-effect`), "compositing"},
 	{regexp.MustCompile(`transform-origin|transform-box|\btransform\s*:`), "CSS transform"},
 	{regexp.MustCompile(`shape-rendering|text-rendering|image-rendering|color-rendering|color-interpolation`), "rendering hint"},
 	{regexp.MustCompile(`textLength|lengthAdjust|\brotate\s*=`), "text adjustment"},
@@ -137,7 +146,7 @@ func selectResvg(_ context.Context, checkout, _, dir string, _ map[string]string
 			if err != nil {
 				return err
 			}
-			if resvgRejected(src) || resvgUndefined.Match(src) {
+			if resvgRejected(src, resvgLift[area]) || resvgUndefined.Match(src) {
 				continue
 			}
 			w, h, ok := pngSize(png)
@@ -165,9 +174,9 @@ func selectResvg(_ context.Context, checkout, _, dir string, _ map[string]string
 	return writeHashList(checkout, dir, paths)
 }
 
-func resvgRejected(src []byte) bool {
+func resvgRejected(src []byte, lift []string) bool {
 	for _, r := range resvgReject {
-		if r.re.Match(src) {
+		if r.re.Match(src) && !slices.Contains(lift, r.why) {
 			return true
 		}
 	}

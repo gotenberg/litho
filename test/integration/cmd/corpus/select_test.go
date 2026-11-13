@@ -279,7 +279,7 @@ func TestWPTRules(t *testing.T) {
 	if xhtParsesAsHTML(`<div/>`) || !xhtParsesAsHTML(`<br/><img src="a"/>`) {
 		t.Error("the XHTML self-closing rule")
 	}
-	if !resvgRejected([]byte(`<use href="other.svg#a"/>`)) || resvgRejected([]byte(`<use href="#a"/>`)) {
+	if !resvgRejected([]byte(`<use href="other.svg#a"/>`), nil) || resvgRejected([]byte(`<use href="#a"/>`), nil) {
 		t.Error("the resvg href rule")
 	}
 }

@@ -4,30 +4,31 @@ SVG tests from [resvg](https://github.com/linebender/resvg) at the commit `RESVG
 
 | File            | What it holds                                                                                                                                                         |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tests.json`    | The 246 tests: each SVG's path under `crates/resvg/tests/tests/`, its reference PNG and the PNG's size                                                                |
-| `files.sha256`  | Every file the tests read (each SVG and PNG, the Noto Sans, Serif and Mono and Amiri fonts with their licences, resvg's MIT licence): 501 lines of `<sha256>  <path>` |
+| `tests.json`    | The 305 tests: each SVG's path under `crates/resvg/tests/tests/`, its reference PNG and the PNG's size                                                                |
+| `files.sha256`  | Every file the tests read (each SVG and PNG, the Noto Sans, Serif and Mono and Amiri fonts with their licences, resvg's MIT licence): 619 lines of `<sha256>  <path>` |
 | `corpus update` | The selection script: reads a resvg checkout and writes `tests.json`                                                                                                  |
 | `corpus fetch`  | Downloads each listed file from `raw.githubusercontent.com` at the pinned commit, refuses one whose hash differs, and records the commit in `versions.json`           |
 
 ## How the tests were chosen
 
-resvg's tests are SVG files with a PNG reference beside each, drawn by resvg scaled to 300 pixels wide (a few 500). `corpus update` walks the directories of the features litho's SVG renderer draws: structure (`svg`, `g`, `defs`, `use`, `symbol`, `switch`, `systemLanguage`, `style`, `style-attribute`, `transform`), shapes (all seven), painting (fill and stroke with their properties, `opacity`, `display`, `visibility`, `color`), paint servers (`linearGradient`, `radialGradient`, `stop`, `stop-color`, `stop-opacity`), clipping (`clipPath`, `clip-rule`) and text basics (`text`, `tspan`, `text-anchor`, `font-size`). It leaves out the filters, masks, patterns, markers and the rest of text, which the renderer does not draw.
+resvg's tests are SVG files with a PNG reference beside each, drawn by resvg scaled to 300 pixels wide (a few 500). `corpus update` walks the directories of the features litho's SVG renderer draws: structure (`svg`, `g`, `defs`, `use`, `symbol`, `switch`, `systemLanguage`, `style`, `style-attribute`, `transform`), shapes (all seven), painting (fill and stroke with their properties, `opacity`, `display`, `visibility`, `color`), paint servers (`linearGradient`, `radialGradient`, `stop`, `stop-color`, `stop-opacity`), clipping (`clipPath`, `clip-rule`), masking (`mask`), compositing (`mix-blend-mode`, `isolation`) and text basics (`text`, `tspan`, `text-anchor`, `font-size`). It leaves out the filters, patterns, markers and the rest of text, which the renderer does not draw.
 
 A test qualifies when it has a reference PNG and uses none of:
 
-- a filter, a mask, a pattern, a marker, animation, a foreign object, text on a path, an image element, a script;
+- a filter, a mask (outside `masking/mask`), a pattern, a marker, animation, a foreign object, text on a path, an image element, a script;
 - an XML entity, an at-rule, a pseudo-class in a style element, a CSS function, a unit other than px, pt, pc, mm, cm, in, em, ex and %;
-- context paint, blending, isolation, paint order, vector effects, CSS transforms, rendering hints, a gradient spread method other than pad;
+- context paint, blending and isolation (outside `painting/mix-blend-mode` and `painting/isolation`), paint order, vector effects, CSS transforms, rendering hints, a gradient spread method other than pad;
 - text length adjustment and rotation, spacing, decoration, baselines, font variants, stretch, kerning, features and variations, writing modes, direction, the font shorthand;
 - a reference to a file outside itself;
 - undefined behaviour: resvg marks a test whose rendering no specification decides with `(UB)` in its title.
 
-That leaves 696 candidates. Each area then keeps at most its cap, the candidates whose path hashes lowest (SHA-256), so the choice stays put when resvg adds or removes other tests.
+That leaves 755 candidates. Each area then keeps at most its cap, the candidates whose path hashes lowest (SHA-256), so the choice stays put when resvg adds or removes other tests.
 
 | Area                           | Tests |
 | ------------------------------ | ----- |
 | `masking/clip-rule`            | 1     |
 | `masking/clipPath`             | 10    |
+| `masking/mask`                 | 36    |
 | `paint-servers/linearGradient` | 12    |
 | `paint-servers/radialGradient` | 10    |
 | `paint-servers/stop`           | 6     |
@@ -38,6 +39,8 @@ That leaves 696 candidates. Each area then keeps at most its cap, the candidates
 | `painting/fill`                | 10    |
 | `painting/fill-opacity`        | 3     |
 | `painting/fill-rule`           | 2     |
+| `painting/isolation`           | 2     |
+| `painting/mix-blend-mode`      | 21    |
 | `painting/opacity`             | 4     |
 | `painting/stroke`              | 5     |
 | `painting/stroke-dasharray`    | 6     |
@@ -69,7 +72,7 @@ That leaves 696 candidates. Each area then keeps at most its cap, the candidates
 | `text/text`                    | 6     |
 | `text/text-anchor`             | 3     |
 | `text/tspan`                   | 4     |
-| Total                          | 246   |
+| Total                          | 305   |
 
 To list the candidates again, at the pinned commit or a new one:
 

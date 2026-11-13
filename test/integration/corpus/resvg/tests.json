@@ -66,6 +66,222 @@
     "height": 300
   },
   {
+    "id": "masking/mask/half-width-region-with-rotation.svg",
+    "png": "masking/mask/half-width-region-with-rotation.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/invalid-FuncIRI.svg",
+    "png": "masking/mask/invalid-FuncIRI.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/invalid-child.svg",
+    "png": "masking/mask/invalid-child.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/invisible-child-1.svg",
+    "png": "masking/mask/invisible-child-1.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/invisible-child-2.svg",
+    "png": "masking/mask/invisible-child-2.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/mask-on-child.svg",
+    "png": "masking/mask/mask-on-child.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/mask-on-self-with-mask-type=alpha.svg",
+    "png": "masking/mask/mask-on-self-with-mask-type=alpha.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/mask-on-self-with-mixed-mask-type.svg",
+    "png": "masking/mask/mask-on-self-with-mixed-mask-type.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/mask-on-self.svg",
+    "png": "masking/mask/mask-on-self.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/mask-type-in-style.svg",
+    "png": "masking/mask/mask-type-in-style.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/mask-type=alpha.svg",
+    "png": "masking/mask/mask-type=alpha.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/mask-type=invalid.svg",
+    "png": "masking/mask/mask-type=invalid.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/mask-type=luminance.svg",
+    "png": "masking/mask/mask-type=luminance.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/maskContentUnits=objectBoundingBox.svg",
+    "png": "masking/mask/maskContentUnits=objectBoundingBox.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/maskUnits=objectBoundingBox-with-percent.svg",
+    "png": "masking/mask/maskUnits=objectBoundingBox-with-percent.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/maskUnits=userSpaceOnUse-with-percent.svg",
+    "png": "masking/mask/maskUnits=userSpaceOnUse-with-percent.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/maskUnits=userSpaceOnUse-with-rect.svg",
+    "png": "masking/mask/maskUnits=userSpaceOnUse-with-rect.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/maskUnits=userSpaceOnUse-with-width-only.svg",
+    "png": "masking/mask/maskUnits=userSpaceOnUse-with-width-only.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/maskUnits=userSpaceOnUse-without-rect.svg",
+    "png": "masking/mask/maskUnits=userSpaceOnUse-without-rect.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/nested-objectBoundingBox.svg",
+    "png": "masking/mask/nested-objectBoundingBox.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/no-children.svg",
+    "png": "masking/mask/no-children.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/none.svg",
+    "png": "masking/mask/none.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/on-a-horizontal-line.svg",
+    "png": "masking/mask/on-a-horizontal-line.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/on-a-small-object.svg",
+    "png": "masking/mask/on-a-small-object.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/on-group-with-transform.svg",
+    "png": "masking/mask/on-group-with-transform.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/recursive-on-self.svg",
+    "png": "masking/mask/recursive-on-self.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/recursive.svg",
+    "png": "masking/mask/recursive.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/self-recursive.svg",
+    "png": "masking/mask/self-recursive.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/shared-with-objectBoundingBox-gradient.svg",
+    "png": "masking/mask/shared-with-objectBoundingBox-gradient.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/simple-case.svg",
+    "png": "masking/mask/simple-case.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/transform-has-no-effect.svg",
+    "png": "masking/mask/transform-has-no-effect.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/transform-on-shape.svg",
+    "png": "masking/mask/transform-on-shape.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/with-clip-path.svg",
+    "png": "masking/mask/with-clip-path.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/with-opacity-1.svg",
+    "png": "masking/mask/with-opacity-1.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/with-opacity-2.svg",
+    "png": "masking/mask/with-opacity-2.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "masking/mask/with-opacity-3.svg",
+    "png": "masking/mask/with-opacity-3.png",
+    "width": 300,
+    "height": 300
+  },
+  {
     "id": "paint-servers/linearGradient/attributes-via-xlink-href-only-required.svg",
     "png": "paint-servers/linearGradient/attributes-via-xlink-href-only-required.png",
     "width": 300,
@@ -374,6 +590,144 @@
   {
     "id": "painting/fill/valid-FuncIRI-with-a-fallback-ICC-color.svg",
     "png": "painting/fill/valid-FuncIRI-with-a-fallback-ICC-color.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/isolation/as-property.svg",
+    "png": "painting/isolation/as-property.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/isolation/isolate.svg",
+    "png": "painting/isolation/isolate.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/as-property.svg",
+    "png": "painting/mix-blend-mode/as-property.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/color-burn.svg",
+    "png": "painting/mix-blend-mode/color-burn.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/color-dodge.svg",
+    "png": "painting/mix-blend-mode/color-dodge.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/color.svg",
+    "png": "painting/mix-blend-mode/color.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/darken.svg",
+    "png": "painting/mix-blend-mode/darken.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/difference.svg",
+    "png": "painting/mix-blend-mode/difference.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/exclusion.svg",
+    "png": "painting/mix-blend-mode/exclusion.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/hard-light.svg",
+    "png": "painting/mix-blend-mode/hard-light.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/hue.svg",
+    "png": "painting/mix-blend-mode/hue.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/lighten.svg",
+    "png": "painting/mix-blend-mode/lighten.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/luminosity.svg",
+    "png": "painting/mix-blend-mode/luminosity.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/multiply.svg",
+    "png": "painting/mix-blend-mode/multiply.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/normal.svg",
+    "png": "painting/mix-blend-mode/normal.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/opacity-on-element.svg",
+    "png": "painting/mix-blend-mode/opacity-on-element.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/opacity-on-group.svg",
+    "png": "painting/mix-blend-mode/opacity-on-group.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/overlay.svg",
+    "png": "painting/mix-blend-mode/overlay.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/plus-lighter.svg",
+    "png": "painting/mix-blend-mode/plus-lighter.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/saturation.svg",
+    "png": "painting/mix-blend-mode/saturation.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/screen.svg",
+    "png": "painting/mix-blend-mode/screen.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/soft-light.svg",
+    "png": "painting/mix-blend-mode/soft-light.png",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "id": "painting/mix-blend-mode/xor.svg",
+    "png": "painting/mix-blend-mode/xor.png",
     "width": 300,
     "height": 300
   },

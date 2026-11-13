@@ -26,8 +26,8 @@ func TestSVGListAndHashesAgree(t *testing.T) {
 	if err := json.Unmarshal(data, &tests); err != nil {
 		t.Fatal(err)
 	}
-	if len(tests) < 150 || len(tests) > 250 {
-		t.Errorf("%d tests, want 150 to 250", len(tests))
+	if len(tests) < 150 || len(tests) > 350 {
+		t.Errorf("%d tests, want 150 to 350", len(tests))
 	}
 	hashes, err := os.ReadFile(filepath.Join(dir, "files.sha256"))
 	if err != nil {
