@@ -171,8 +171,18 @@
 // column, so they fragment across the page cuts like the flow. A fixed box
 // is laid out once on the page area and painted on every page (CSS 2.1,
 // 9.6.1). Painting follows the stacking contexts of CSS 2.1, 9.9 and
-// Appendix E: z-index, opacity and 2D transforms (CSS Transforms 1) create
-// them; a transform paints its box through a group transform.
+// Appendix E: z-index, opacity, 2D transforms (CSS Transforms 1), blend
+// modes, isolation, clip paths and masks create them; a transform paints
+// its box through a group transform. A box of opacity below 1 or of a
+// blend mode is one isolated transparency group unless it paints one
+// object; a stacking context that holds something blending is isolated
+// (CSS Compositing 1, 3.2 and 3.3), and an inline box of either is one
+// group a line. clip-path is a clipping path of a basic shape, a
+// reference box or an SVG clipPath element (CSS Masking 1, 5.1), clip one
+// of the rectangle of an absolutely positioned box (CSS 2.2, 11.1.2), and
+// a mask a soft mask of its layers, gradients, vector images and SVG mask
+// elements (CSS Masking 1, 6 and 7). A raster mask image, and a mask that
+// names nothing, leave the box unmasked, as Chromium prints them.
 //
 // # Office documents
 //
