@@ -1416,7 +1416,7 @@ func (p *effectPlan) contentBitmap(ctx context.Context, own []typeset.Fragment, 
 		return nil
 	}
 	out := surfaces[0]
-	defer func() { out.Release() }()
+	defer out.Release()
 	if bl := s.Blur; bl != nil {
 		k := effect.GaussianKernel(g.span(bl.Radius / 3))
 		if err := effect.Blur(ctx, out, k, k, effect.EdgeNone); err != nil {
@@ -1429,12 +1429,9 @@ func (p *effectPlan) contentBitmap(ctx context.Context, own []typeset.Fragment, 
 		}
 	}
 	if s.SoftEdge > 0 {
-		faded, err := p.fadeContent(ctx, g, out)
-		if err != nil {
+		if err := p.fadeContent(ctx, g, out); err != nil {
 			return nil
 		}
-		out.Release()
-		out = faded
 	}
 	img, err := straight(ctx, out)
 	if err != nil {
@@ -1443,25 +1440,16 @@ func (p *effectPlan) contentBitmap(ctx context.Context, own []typeset.Fragment, 
 	return g.image(ctx, img)
 }
 
-// fadeContent returns the content surface c faded by the shape's soft
-// edge: each pixel times the fade, which leaves the content's own
+// fadeContent fades the content surface c by the shape's soft edge, in
+// place: each pixel times the fade, which leaves the content's own
 // coverage to its alpha.
-func (p *effectPlan) fadeContent(ctx context.Context, g effectGrid, c *effect.Surface) (*effect.Surface, error) {
+func (p *effectPlan) fadeContent(ctx context.Context, g effectGrid, c *effect.Surface) error {
 	fade, err := p.softFade(ctx, g, typeset.Identity, false)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer fade.Release()
-	out, err := effect.Tint(ctx, fade, effect.Color{R: 255, G: 255, B: 255, A: 255})
-	if err != nil {
-		return nil, err
-	}
-	// The content In the fade: the content times the fade's alpha.
-	if err := effect.Composite(ctx, out, c, effect.In); err != nil {
-		out.Release()
-		return nil, err
-	}
-	return out, nil
+	return effect.Mask(ctx, c, fade)
 }
 
 // overlayModes maps an overlay's mode to its blend mode (Compositing 1,
