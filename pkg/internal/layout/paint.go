@@ -1119,6 +1119,7 @@ func decoIndex(line css.TextDecoration) int {
 		return 1
 	case css.LineThrough:
 		return 2
+	case css.Underline:
 	}
 	return 0
 }
