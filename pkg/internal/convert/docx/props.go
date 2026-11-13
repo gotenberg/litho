@@ -53,6 +53,11 @@ type runProps struct {
 	kern                                    *float64
 	vertAlign, lang, langEastAsia, langBidi *string
 	specVanish                              *bool
+	// glow, textShadow and reflection are the run's text effects (MS-DOCX,
+	// 2.6.1 w14:glow, w14:shadow, w14:reflection), each nil when unset.
+	glow       *css.OfficeGlow
+	textShadow *css.OfficeShadow
+	reflection *css.OfficeReflection
 }
 
 // merge returns r with the properties o sets laid over it.
@@ -116,6 +121,15 @@ func (r runProps) merge(o *runProps) runProps {
 	}
 	if o.shading != nil || o.noShading {
 		r.shading, r.noShading = o.shading, o.noShading
+	}
+	if o.glow != nil {
+		r.glow = o.glow
+	}
+	if o.textShadow != nil {
+		r.textShadow = o.textShadow
+	}
+	if o.reflection != nil {
+		r.reflection = o.reflection
 	}
 	return r
 }
@@ -225,6 +239,8 @@ func (d *document) parseRunProps(e *ooxml.Element) *runProps {
 			}
 		}
 	}
+	fx := ooxml.ParseTextEffects(e, d.theme).Effects
+	r.glow, r.textShadow, r.reflection = fx.Glow, fx.Shadow, fx.Reflection
 	return r
 }
 

@@ -210,6 +210,10 @@ func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
 		off := max(st.FontSize/20, 0.5)
 		st.TextShadow = []css.Shadow{{X: off, Y: off, Color: css.Color{R: 0.6, G: 0.6, B: 0.6, A: 1}}}
 	}
+	st.TextEffects = nil
+	if r.glow != nil || r.textShadow != nil || r.reflection != nil {
+		st.TextEffects = &css.OfficeEffects{Glow: r.glow, Shadow: r.textShadow, Reflection: r.reflection}
+	}
 	if lineMult > 0 {
 		st.LineHeight = css.Pts(d.proportionalLine(st, lineMult))
 	}
