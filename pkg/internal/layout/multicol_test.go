@@ -120,6 +120,20 @@ func TestMulticol_FillAuto(t *testing.T) {
 		_____`)
 }
 
+func TestMulticol_FillAutoUnderMaxHeight(t *testing.T) {
+	t.Parallel()
+	// CSS Multicol 1, 7.1 fills the columns in turn up to the max-height;
+	// the container's height stays auto, its tallest column's (CSS 2.1,
+	// 10.6.3), so the blue box after it starts below one strip.
+	auto := func(s *css.Style) { s.Columns.Fill = css.FillAuto }
+	maxH := func(s *css.Style) { s.MaxHeight = css.Pts(px(3)) }
+	res := run(t, doc(el(sty(columns(2, 1), maxH, auto), strip(red)), strip(blue)), page(5, 3))
+	assertPixels(t, res, 1, `
+		RR___
+		BBBBB
+		_____`)
+}
+
 func TestMulticol_FloatAvoidingBreaksMovesWhole(t *testing.T) {
 	t.Parallel()
 	// CSS Fragmentation 3, 3.2 and 4.4: a float with break-inside: avoid

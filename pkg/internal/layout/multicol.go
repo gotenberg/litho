@@ -190,7 +190,10 @@ type colCtx struct {
 	limit float64
 	colH  float64
 	wrap  bool
-	gap   float64
+	// capped reports a limit that only a max-height sets: the container's
+	// height stays auto, the content's.
+	capped bool
+	gap    float64
 	// start is where the set's first row starts, in the outer flow.
 	start float64
 	// balanceRow and balanceH override the height of one row, the one
@@ -532,7 +535,7 @@ func (e *engine) placeOutOfFlow(kids []*box, cb cblock, y float64) {
 // (CSS Multicol 1, 6.1).
 func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64, spanned bool) (float64, bool) {
 	st := &b.st.Columns
-	ctx := &colCtx{e: e, parent: e.cols, noPag: e.noPaginate, n: b.mc.n, limit: limit, start: y, balanceRow: -1}
+	ctx := &colCtx{e: e, parent: e.cols, noPag: e.noPaginate, n: b.mc.n, limit: limit, start: y, balanceRow: -1, capped: !cb.hDefinite}
 	if st.Height.Kind == css.Points {
 		ctx.colH = max(clamp(st.Height.Value), minColumnHeight)
 		ctx.wrap = st.Wrap()
@@ -890,7 +893,10 @@ func (c *colCtx) finish(b *box, s *colSet, cons []float64, balanced bool) float6
 	for r := 0; r <= lr; r++ {
 		row := c.rows[r]
 		row.used = row.h
-		if r == lr && !balanced && math.IsInf(c.limit, 1) && c.colH <= 0 {
+		if r == lr && !balanced && (math.IsInf(c.limit, 1) || c.capped) && c.colH <= 0 {
+			// Filled columns under no height or a max-height alone: the
+			// container's auto height is that of its tallest column (CSS
+			// Multicol 1, 7.1 fills them sequentially; CSS 2.1, 10.6.3).
 			row.used = min(c.rowMax(cons, r), row.h)
 		}
 		if r == lr && (row.h >= unbounded || c.rowMax(cons, r) <= eps && math.IsInf(c.limit, 1) && c.colH <= 0) {
