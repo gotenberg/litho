@@ -132,6 +132,8 @@ var silentProperties = map[string]bool{
 	"scrollbar-gutter": true, "print-color-adjust": true, "color-adjust": true,
 	"text-rendering": true, "font-smooth": true, "speak": true, "zoom": true,
 	"font-palette": true,
+	// Chromium applies these to SVG text alone (baselineProps).
+	"alignment-baseline": true, "dominant-baseline": true, "baseline-shift": true,
 }
 
 // knownProperty reports whether litho parses the property name.

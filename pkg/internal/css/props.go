@@ -255,6 +255,7 @@ const (
 	pShapeOutside
 	pShapeMargin
 	pShapeImageThreshold
+	pBaselineSource
 	numProps
 )
 
@@ -1043,6 +1044,9 @@ func init() {
 		props[id] = def
 	}
 	props[pClipPath] = clipPathProp()
+	for id, def := range baselineProps() {
+		props[id] = def
+	}
 	for id, def := range shapeOutsideProps() {
 		props[id] = def
 	}

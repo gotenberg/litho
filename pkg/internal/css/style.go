@@ -991,6 +991,9 @@ type Style struct {
 	// ShapeOutside is the float area of a float (CSS Shapes 1, 6), nil for
 	// none with no shape-margin or shape-image-threshold set.
 	ShapeOutside *ShapeOutside
+	// BaselineSource picks the line an inline-level box with several
+	// aligns by (CSS Inline 3, 4.3).
+	BaselineSource BaselineSource
 	// Clip clips an absolutely positioned element and its content (CSS
 	// 2.2, 11.1.2).
 	Clip ClipRect

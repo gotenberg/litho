@@ -45,6 +45,9 @@ func equalStyle(a, b *Style) bool {
 	if a.ShapeOutside != b.ShapeOutside {
 		return false
 	}
+	if a.BaselineSource != b.BaselineSource {
+		return false
+	}
 	if !equalClipRect(&a.Clip, &b.Clip) {
 		return false
 	}
@@ -718,6 +721,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.Isolation))
 	h = hashClipPath(h, &x.ClipPath)
 	h = mixBool(h, x.ShapeOutside != nil)
+	h = mix(h, uint64(x.BaselineSource))
 	h = hashClipRect(h, &x.Clip)
 	h = hashMask(h, &x.Mask)
 	h = hashZIndex(h, &x.ZIndex)

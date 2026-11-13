@@ -1253,14 +1253,21 @@ func (e *engine) layoutAtomic(a *box, lcb cblock) {
 		}
 	case a.flex != nil:
 		// An inline flex container's baseline is its first main-axis
-		// baseline (CSS Flexbox 1, 8.5).
-		if y, ok := flexBaseline(a, false); ok {
+		// baseline (CSS Flexbox 1, 8.5), its last under baseline-source:
+		// last (CSS Inline 3, 4.3).
+		if y, ok := flexBaseline(a, a.st.BaselineSource == css.BaselineLast); ok {
 			a.baseline, a.hasBaseline = y-a.y, true
 		}
 	case a.grid != nil:
 		// An inline grid container's baseline is its first one (CSS
-		// Grid 1, 10.7).
-		if y, ok := gridBaseline(a, false); ok {
+		// Grid 1, 10.7), or its last under baseline-source: last.
+		if y, ok := gridBaseline(a, a.st.BaselineSource == css.BaselineLast); ok {
+			a.baseline, a.hasBaseline = y-a.y, true
+		}
+	case a.st.Overflow == css.OverflowVisible && a.st.BaselineSource == css.BaselineFirst:
+		// baseline-source: first aligns an inline-block by its first line
+		// (CSS Inline 3, 4.3).
+		if y, ok := firstBaseline(a); ok {
 			a.baseline, a.hasBaseline = y-a.y, true
 		}
 	case a.st.Overflow == css.OverflowVisible:
