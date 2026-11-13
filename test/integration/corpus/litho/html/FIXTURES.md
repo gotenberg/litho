@@ -4,7 +4,7 @@ HTML and Markdown sources litho authored, converted twice: by Chromium, through 
 
 | Path                | What it holds                                                                                                                   |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `sources/`          | The 75 sources                                                                                                                  |
+| `sources/`          | The 77 sources                                                                                                                  |
 | `corpus references` | Posts each source to the Gotenberg image and writes `testdata/litho/html/references/<name>.pdf` and their `manifest.json`       |
 | `../../../fixture/` | Reads a source directory and its `options.json` for `corpus references` and the `diff` feature (shared with the Office corpora) |
 
@@ -182,6 +182,15 @@ The nine sources below lock the paint effects Chromium prints as PDF constructs,
 | `mask-image`            | 1     | none    | `mask-image` gradients by alpha and by luminance, sized, positioned, repeated, by content box, and through `-webkit-mask-image`                                              |
 | `mask-layers`           | 1     | none    | Two mask layers added by alpha, by luminance and alpha, and intersected through the `mask` shorthand                                                                         |
 | `svg-mask`              | 1     | none    | `mask: url()` naming SVG mask elements by luminance and by alpha; in an SVG drawing, masks, `mix-blend-mode`, `isolation` and group opacity                                  |
+
+## Animations
+
+The two sources below lock what Chromium prints of CSS animations: each animation at time zero, the moment Chromium prints a page as soon as it loads (Web Animations 1, 4.7). Every animation runs 100 seconds, so the 20 to 90 milliseconds Chromium takes to print moves no box by more than a thousandth; a fade of one second does, and its reference changes from one build to the next. Each row holds a box the animation styles and a label it leaves alone, so the layout score reads the box and the text score stays whole.
+
+| Source                     | Pages | Options | Exercises                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------------- | ----- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `animation-time-zero`      | 1     | none    | A fade at zero, after a negative delay, reversed, alternating; keyframes missing from or to; `steps()` and a keyframe's own easing; `ease` half way; colour, transform, margin and width interpolated; visibility and `display: none` from keyframes; two animations, `!important`, two rules of a name, two blocks at an offset, string and case-sensitive names, `@-webkit-keyframes`, `@media screen`; a `::before`; a custom property; the timelines `none`, `scroll()` and `view()` |
+| `animation-fill-and-delay` | 1     | none    | Content hidden by its own style and revealed by a fade; positive delays without fill, filled backwards and both ways; zero durations; no iteration; ended animations with and without fill; paused animations; `animation: none` for print, alone and with `!important`; a visibility step; a slide in; a transition from `@starting-style`; `transition: all`                                                                                                                           |
 
 ## The Chromium references
 

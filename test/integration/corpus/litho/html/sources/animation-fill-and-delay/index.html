@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Animation delays and fill modes</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 10pt; margin: 0; }
+h1 { font-size: 14pt; margin: 0 0 8px; }
+.row { display: flex; align-items: center; gap: 12px; height: 30px; }
+.box { flex: none; width: 160px; height: 22px; background: #2a9d8f; }
+.hide { opacity: 0; }
+@keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes unfade { from { opacity: 1 } to { opacity: 0 } }
+@keyframes show { from { visibility: hidden } to { visibility: visible } }
+@keyframes slide { from { transform: translateX(-2000px) } to { transform: none } }
+@media print {
+  #cancel { animation: none; }
+  #reveal { animation: none !important; opacity: 1 !important; }
+}
+#start { transition: opacity 100s linear; }
+@starting-style { #start { opacity: 0; } }
+</style>
+</head>
+<body>
+<h1>Delays, fill modes and the pages that reveal content</h1>
+<div class="row"><div class="box hide" style="animation: fade 100s"></div><span>Hidden by its own style, revealed by a fade: hidden</span></div>
+<div class="row"><div class="box hide" style="animation: fade 100s forwards"></div><span>The same filled forwards: hidden</span></div>
+<div class="row"><div class="box hide" style="animation: fade 100s 100s forwards"></div><span>The same after a delay: hidden</span></div>
+<div class="row"><div class="box hide" style="animation: fade 100s infinite alternate"></div><span>An infinite alternating fade: hidden</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear 100s"></div><span>A visible box faded after a delay without fill: visible</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear 100s backwards"></div><span>The same filled backwards: hidden</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear 100s both"></div><span>The same filled both ways: hidden</span></div>
+<div class="row"><div class="box" style="animation: fade 0s"></div><span>A zero duration without fill: visible</span></div>
+<div class="row"><div class="box" style="animation: unfade 0s forwards"></div><span>A zero duration filled forwards: its last keyframe, hidden</span></div>
+<div class="row"><div class="box" style="animation: fade 0s 100s backwards"></div><span>A zero duration in a backwards delay: its first keyframe, hidden</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear 0 forwards"></div><span>No iteration, filled forwards: its first keyframe, hidden</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear 2.5 forwards -1000s"></div><span>Two and a half iterations ended, filled: half</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear -150s"></div><span>Ended without fill: visible</span></div>
+<div class="row"><div class="box" style="animation: unfade 100s linear -150s forwards"></div><span>Ended, filled forwards: hidden</span></div>
+<div class="row"><div class="box" style="animation: unfade 100s linear 2 alternate forwards -500s"></div><span>Twice alternating, ended, filled: its first keyframe, visible</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear -50s paused"></div><span>Paused half way: half</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear 100s backwards paused"></div><span>Paused in a backwards delay: hidden</span></div>
+<div class="row"><div class="box hide" id="cancel" style="animation: fade 100s forwards"></div><span>animation: none for print leaves its own opacity: hidden</span></div>
+<div class="row"><div class="box hide" id="reveal" style="animation: fade 100s forwards"></div><span>animation: none and opacity: 1, both !important, for print: visible</span></div>
+<div class="row"><div class="box" style="visibility: hidden; animation: show 100s forwards"></div><span>Visibility stepped to visible: hidden</span></div>
+<div class="row"><div class="box" style="animation: slide 100s ease-out"></div><span>A slide in from the left: off the page</span></div>
+<div class="row"><div class="box" style="animation: slide 100s ease-out 100s"></div><span>The same slide after a delay without fill: in place</span></div>
+<div class="row"><div class="box" id="start"></div><span>A transition from @starting-style: no transition runs, visible</span></div>
+<div class="row"><div class="box" style="opacity: .5; transition: all 100s linear"></div><span>transition: all on a half-opaque box: half</span></div>
+</body>
+</html>

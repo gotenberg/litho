@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Animations at time zero</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 10pt; margin: 0; }
+h1 { font-size: 14pt; margin: 0 0 8px; }
+.row { display: flex; align-items: center; gap: 12px; height: 30px; }
+.box { flex: none; width: 120px; height: 22px; background: #1d3557; }
+.wide { width: 420px; }
+@keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes unfade { from { opacity: 1 } to { opacity: 0 } }
+@keyframes tohalf { to { opacity: 0 } }
+@keyframes fromq { from { opacity: .25 } }
+@keyframes kt { from { opacity: 0; animation-timing-function: steps(2, jump-start) } to { opacity: 1 } }
+@keyframes bg { from { background-color: #fff } to { background-color: #1d3557 } }
+@keyframes show { from { visibility: hidden } to { visibility: visible } }
+@keyframes dn { from { display: none } to { display: none } }
+@keyframes mv { from { transform: translateX(300px) } to { transform: none } }
+@keyframes mvl { from { margin-left: 300px } to { margin-left: 0 } }
+@keyframes widthk { from { width: 20px } }
+@keyframes cv { from { --c: #fff } to { --c: #fff } }
+@keyframes dup { from { opacity: 0 } }
+@keyframes dup { from { opacity: .5 } }
+@keyframes same { 0% { opacity: .2 } 0% { opacity: .6 } to { opacity: 1 } }
+@keyframes "f a" { from { opacity: 0 } }
+@-webkit-keyframes wk { from { opacity: 0 } }
+@media screen { @keyframes scr { from { opacity: 0 } } }
+#pe { background: none; }
+#pe::before { content: ""; display: block; width: 120px; height: 22px; background: #1d3557; animation: fade 100s linear; }
+</style>
+</head>
+<body>
+<h1>Each box as an animation shows it at time zero</h1>
+<div class="row"><div class="box" style="animation: fade 100s linear"></div><span>A fade without delay shows its first keyframe: hidden</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear -25s"></div><span>A negative delay of a quarter: a quarter opaque</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear reverse"></div><span>Reversed: the last keyframe, opaque</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear alternate-reverse infinite"></div><span>Alternate-reverse: opaque</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear alternate infinite -125s"></div><span>Alternate, a quarter into the second iteration: three quarters opaque</span></div>
+<div class="row"><div class="box" style="opacity: .5; animation: tohalf 100s linear"></div><span>No from keyframe: the element's own half opacity</span></div>
+<div class="row"><div class="box" style="animation: fromq 100s linear -50s"></div><span>No to keyframe, half way from a quarter to the element's own opacity</span></div>
+<div class="row"><div class="box" style="animation: fade 100s steps(4, jump-start)"></div><span>steps(4, jump-start) at zero: a quarter</span></div>
+<div class="row"><div class="box" style="animation: fade 100s step-start"></div><span>step-start: opaque</span></div>
+<div class="row"><div class="box" style="animation: kt 100s linear"></div><span>A keyframe's own steps(2, jump-start): half</span></div>
+<div class="row"><div class="box" style="animation: fade 100s -50s"></div><span>ease, half way: 0.80</span></div>
+<div class="row"><div class="box" style="animation: bg 100s linear -50s"></div><span>White to navy, half way</span></div>
+<div class="row"><div class="box" style="animation: mv 100s linear -50s"></div><span>translateX from 300px, half way: 150px right</span></div>
+<div class="row"><div class="box" style="animation: mvl 100s linear"></div><span>margin-left from 300px at zero</span></div>
+<div class="row"><div class="box" style="animation: widthk 100s linear -50s"></div><span>Width from 20px to its own 120px, half way: 70px</span></div>
+<div class="row"><div class="box" style="animation: show 100s linear"></div><span>Visibility hidden to visible at zero: hidden</span></div>
+<div class="row"><div class="box" style="animation: show 100s linear -50s"></div><span>Visibility hidden to visible, half way: visible</span></div>
+<div class="row"><div class="box" style="animation: dn 100s linear"></div><span>display: none in both keyframes: no box</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear, unfade 100s linear"></div><span>Two animations: the last wins, opaque</span></div>
+<div class="row"><div class="box" style="opacity: 1 !important; animation: fade 100s linear"></div><span>An !important opacity overrides the animation</span></div>
+<div class="row"><div class="box" style="animation: dup 100s linear"></div><span>Two @keyframes of one name: the last, half</span></div>
+<div class="row"><div class="box" style="animation: same 100s linear"></div><span>Two blocks at 0%: the later, 0.6</span></div>
+<div class="row"><div class="box" style="animation: 'f a' 100s linear"></div><span>A name written as a string: hidden</span></div>
+<div class="row"><div class="box" style="animation: FADE 100s linear"></div><span>Names are case-sensitive: no animation, opaque</span></div>
+<div class="row"><div class="box" style="animation: wk 100s linear"></div><span>@-webkit-keyframes: hidden</span></div>
+<div class="row"><div class="box" style="animation: scr 100s linear"></div><span>@keyframes under @media screen: no animation in print</span></div>
+<div class="row"><div class="box" id="pe"></div><span>A ::before fading in: hidden</span></div>
+<div class="row"><div class="box" style="background: var(--c, #1d3557); animation: cv 100s linear"></div><span>A custom property set by a keyframe: white</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear; animation-timeline: none"></div><span>On the timeline none: held at zero, hidden</span></div>
+<div class="row"><div class="box" style="animation: fade 100s linear; animation-timeline: scroll()"></div><span>On scroll(), the page unscrolled: hidden</span></div>
+<div class="row"><div class="box wide" style="animation: fade linear both; animation-timeline: view()"></div><span>On view(), below the first screen, filled backwards: hidden</span></div>
+<div class="row"><div class="box wide" style="animation: fade linear; animation-timeline: view()"></div><span>On view(), below the first screen, without fill: opaque</span></div>
+</body>
+</html>
