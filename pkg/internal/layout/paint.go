@@ -60,29 +60,30 @@ func (d *ditem) fixedGroup() bool {
 	return d.fx != nil && d.fx.fixed
 }
 
-// groupFx is what a display list group draws its content through.
+// groupFx is what a display list group draws its content through. Its
+// flags come last, where they share one word.
 type groupFx struct {
 	// opacity, clip and transform are the group's, in flow coordinates;
 	// transform is nil for none.
 	opacity   float64
 	clip      *typeset.Path
 	transform *typeset.Matrix
-	// blend is the group's blend mode, isolate whether its content is an
-	// isolated transparency group whatever it paints, mask the soft mask
-	// of that group, nil for none.
-	blend   typeset.BlendMode
-	isolate bool
-	mask    *typeset.SoftMask
+	// mask is the soft mask of the group, nil for none.
+	mask *typeset.SoftMask
 	// filter is the filter list the group's content is drawn through as
-	// one image, nil for none, box its element's border box; flow
-	// reports that no group around it moves it, so its content is in
-	// flow coordinates.
+	// one image, nil for none, box its element's border box.
 	filter []css.Filter
 	box    typeset.Rect
-	flow   bool
 	// zoom is how much the groups around a filter group enlarge its
 	// content on the page, 1 for none: its image is drawn that much finer.
 	zoom float64
+	// blend is the group's blend mode, isolate whether its content is an
+	// isolated transparency group whatever it paints.
+	blend   typeset.BlendMode
+	isolate bool
+	// flow reports, for a filter group, that no group around it moves it,
+	// so its content is in flow coordinates.
+	flow bool
 	// fixed reports the group of a fixed box: its content is in the
 	// coordinates of the first page and paints on every page (CSS 2.1,
 	// 9.6.1).
