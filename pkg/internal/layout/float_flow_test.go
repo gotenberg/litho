@@ -336,3 +336,19 @@ func TestClearance_EmptyClearedBoxSpendsItsMargins(t *testing.T) {
 		t.Errorf("box after the cleared box at y %v, want 64", got[1])
 	}
 }
+
+func TestMargins_ZeroHeightBoxCollapsesThrough(t *testing.T) {
+	// CSS 2.1, 8.3.1: an empty box of zero height has adjoining top and
+	// bottom margins, which collapse with its parent's top margin and
+	// its next sibling's: the sibling sits at the parent's top.
+	rb := boxes(t, doc(el(sty(width(100), border(1, css.Solid, black)),
+		el(sty(height(20)),
+			el(sty(height(0), margin(40, 0, 40, 0))),
+			el(sty(height(20), margin(40, 0, 0, 0)))),
+	)), page(200, 200))
+	parent, sib := rect(kid(t, rb, 0, 0, 0)), rect(kid(t, rb, 0, 0, 0, 1))
+	if parent[1] != 41 || sib[1] != 41 {
+		t.Errorf("parent at y %v, sibling at %v, want both 41", parent[1], sib[1])
+	}
+}
+

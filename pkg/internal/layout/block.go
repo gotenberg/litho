@@ -686,8 +686,10 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	// margin off instead of moving it into b, as browsers do.
 	collapseBottom := b.bd[css.Bottom] == 0 && b.pd[css.Bottom] == 0 && !hSet
 	if i := slices.Index(mc.waiting, b); i >= 0 {
-		// No content resolved the margins: b is empty.
-		if collapseBottom && b.st.MinHeight.Value <= 0 {
+		// No content resolved the margins: b is empty. Its top and bottom
+		// margins adjoin when its height is auto or zero (CSS 2.1, 8.3.1).
+		zero := hSet && specH <= eps && !ratioH
+		if (collapseBottom || zero && b.bd[css.Bottom] == 0 && b.pd[css.Bottom] == 0) && b.st.MinHeight.Value <= 0 {
 			mc.waiting = slices.Delete(mc.waiting, i, i+1)
 			mc.collapsedThrough(b)
 			b.y = cursor + mc.strut.sum()
