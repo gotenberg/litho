@@ -17,6 +17,10 @@ type ShapeCommand struct {
 	// flags.
 	Rotate       float64
 	Large, Sweep bool
+	// OneRadius marks an arc written with one radius: both radii resolve
+	// against the reference box's diagonal over the square root of 2
+	// (CSS Shapes 1, 3.1.1, as circle() does).
+	OneRadius bool
 }
 
 // maxShapeCommands caps the commands of a shape(). Anti-DoS guard, not
@@ -31,6 +35,7 @@ type shapeCmdSpec struct {
 	vertical     []bool
 	rotate       float64
 	large, sweep bool
+	oneRadius    bool
 }
 
 // parseShapeFunction parses the arguments of shape(): an optional fill
@@ -256,6 +261,7 @@ func parseShapeArc(v []token, rel bool, letter func(byte) byte) (shapeCmdSpec, b
 		return shapeCmdSpec{}, false
 	case 1:
 		radii = append(radii, radii[0])
+		out.oneRadius = true
 	}
 	for len(rest) > 0 {
 		switch lower(rest[0].value) {
@@ -287,7 +293,7 @@ func parseShapeArc(v []token, rel bool, letter func(byte) byte) (shapeCmdSpec, b
 
 // compute returns the computed command.
 func (c shapeCmdSpec) compute(lc lenCtx) ShapeCommand {
-	out := ShapeCommand{Op: c.op, Vertical: c.vertical, Rotate: c.rotate, Large: c.large, Sweep: c.sweep}
+	out := ShapeCommand{Op: c.op, Vertical: c.vertical, Rotate: c.rotate, Large: c.large, Sweep: c.sweep, OneRadius: c.oneRadius}
 	if len(c.args) > 0 {
 		out.Args = make([]Dimension, len(c.args))
 		for i, a := range c.args {

@@ -37,3 +37,16 @@ func TestShapeFunction_Commands(t *testing.T) {
 		}
 	}
 }
+
+// TestShapeFunction_OneArcRadius locks CSS Shapes 1, 3.1.1: an arc of one
+// radius uses it for both and marks it for the box's diagonal; an arc of
+// two takes the width and the height.
+func TestShapeFunction_OneArcRadius(t *testing.T) {
+	t.Parallel()
+	for v, want := range map[string]bool{"of 10%": true, "of 10% 20%": false} {
+		c := styleOf(t, "clip-path: shape(from 0 0, arc to 10px 0 "+v+")").ClipPath
+		if c.Shape == nil || len(c.Shape.Commands) != 2 || c.Shape.Commands[1].OneRadius != want {
+			t.Errorf("arc %s: %+v, want OneRadius %v", v, c.Shape, want)
+		}
+	}
+}

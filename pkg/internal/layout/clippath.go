@@ -165,7 +165,10 @@ func shapePathData(s *css.Shape, w, h float64) string {
 		b = append(b, c.Op)
 		for i, a := range c.Args {
 			ref := w
-			if i < len(c.Vertical) && c.Vertical[i] {
+			switch {
+			case c.OneRadius && i < 2:
+				ref = math.Hypot(w, h) / math.Sqrt2
+			case i < len(c.Vertical) && c.Vertical[i]:
 				ref = h
 			}
 			if c.Op|0x20 == 'a' && i == 2 {

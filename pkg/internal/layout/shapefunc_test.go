@@ -21,3 +21,17 @@ func TestShapePathData_ResolvesAgainstTheBox(t *testing.T) {
 		t.Errorf("path data %q, want %q", got, want)
 	}
 }
+
+func TestShapePathData_OneArcRadiusOfTheDiagonal(t *testing.T) {
+	// CSS Shapes 1, 3.1.1: an arc written with one radius resolves its
+	// percentage against the box's diagonal over the square root of 2,
+	// 500 / sqrt(2) for a box 400 by 300.
+	pct := func(v float64) css.Dimension { return css.Dimension{Kind: css.Percent, Value: v} }
+	s := &css.Shape{Kind: css.ShapeShape, Commands: []css.ShapeCommand{
+		{Op: 'M', Args: []css.Dimension{css.Pts(0), css.Pts(0)}, Vertical: []bool{false, true}},
+		{Op: 'A', Args: []css.Dimension{pct(0.5), pct(0.5), css.Pts(0), css.Pts(px(10))}, Vertical: []bool{false, true, false, true}, OneRadius: true},
+	}}
+	if got, want := shapePathData(s, px(400), px(300)), "M 0 0 A 176.77669529663686 176.77669529663686 0 0 0 0 10 "; got != want {
+		t.Errorf("path data %q, want %q", got, want)
+	}
+}
