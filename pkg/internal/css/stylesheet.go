@@ -51,7 +51,11 @@ type Stylesheet struct {
 	counterStyles []*counterStyleRule
 	// keyframes are the @keyframes rules, in order.
 	keyframes []*keyframesRule
-	warns     []Warning
+	// layers are the paths of the cascade layers the sheet names, in the
+	// order they first appear (CSS Cascade 5, 6.4), each rule holding an
+	// index into it or unlayered.
+	layers []string
+	warns  []Warning
 }
 
 // Warnings returns what parsing dropped or approximated, deduplicated and
@@ -63,6 +67,7 @@ type styleRule struct {
 	selectors []*complexSel
 	decls     []Declaration
 	cond      *mediaCond
+	layer     int
 }
 
 // fontFaceRule is an @font-face rule and its media condition.
@@ -76,6 +81,7 @@ type fontFaceRule struct {
 type featureValuesRule struct {
 	values FontFeatureValues
 	cond   *mediaCond
+	layer  int
 }
 
 // sheetParser parses one stylesheet and its imports.
@@ -90,6 +96,12 @@ type sheetParser struct {
 	nesting int
 	chain   []string
 	err     error
+	// layer is the index of the cascade layer the rules being parsed
+	// belong to, unlayered outside any; layerIndex finds a layer path's
+	// index, anon counts the anonymous layers.
+	layer      int
+	layerIndex map[string]int
+	anon       int
 }
 
 // Parse parses a stylesheet (CSS Syntax 3, 5.3.3) and the stylesheets it
@@ -102,7 +114,7 @@ type sheetParser struct {
 // error when it is done; the returned Stylesheet then holds the rules read
 // so far.
 func Parse(ctx context.Context, src []byte, opts ParseOptions) (*Stylesheet, error) {
-	sp := &sheetParser{opts: opts, log: opts.Logger, sheet: &Stylesheet{}}
+	sp := &sheetParser{opts: opts, log: opts.Logger, sheet: &Stylesheet{}, layer: unlayered}
 	if sp.log == nil {
 		sp.log = slog.New(slog.DiscardHandler)
 	}
@@ -198,12 +210,12 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 				sp.nested(ctx, it.block, base, cond, depth)
 			}
 		case "layer":
-			// Cascade layers (CSS Cascade 5) are flattened: a layer's
-			// rules join the unlayered ones in source order, which keeps
-			// what layered frameworks draw and loses only the layer
-			// precedence.
+			// Cascade layers (CSS Cascade 5, 6.4): a block holds the
+			// rules of one layer, a statement fixes the order of names.
 			if it.hasBlock {
-				sp.nested(ctx, it.block, base, cond, depth)
+				sp.enterLayer(it.prelude, func() { sp.nested(ctx, it.block, base, cond, depth) })
+			} else {
+				sp.declareLayers(it.prelude)
 			}
 		case "page":
 			sels, unsupported, ok := parsePageSelectors(it.prelude)
@@ -219,13 +231,13 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 				return
 			}
 			ctx, boxes := pageCtxDecls(it.block, c)
-			sp.sheet.pages = append(sp.sheet.pages, pageRule{sels: sels, decls: pageDecls(it.block, c), cond: cond, context: ctx, margins: boxes})
+			sp.sheet.pages = append(sp.sheet.pages, pageRule{sels: sels, decls: pageDecls(it.block, c), cond: cond, context: ctx, margins: boxes, layer: sp.layer})
 		case "counter-style":
 			if !it.hasBlock {
 				return
 			}
 			if r, ok := parseCounterStyleRule(it.prelude, it.block, c, sp.opts.predefined); ok && sp.count() {
-				r.cond = cond
+				r.cond, r.layer = cond, sp.layer
 				sp.sheet.counterStyles = append(sp.sheet.counterStyles, r)
 			}
 		case "font-face":
@@ -242,7 +254,7 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 				return
 			}
 			if r, ok := parseKeyframesRule(it.prelude, it.block, c); ok && sp.count() {
-				r.cond = cond
+				r.cond, r.layer = cond, sp.layer
 				sp.sheet.keyframes = append(sp.sheet.keyframes, r)
 			}
 		case "font-feature-values":
@@ -250,7 +262,7 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 				return
 			}
 			for _, v := range parseFontFeatureValues(it.prelude, it.block) {
-				sp.sheet.featureValues = append(sp.sheet.featureValues, featureValuesRule{values: v, cond: cond})
+				sp.sheet.featureValues = append(sp.sheet.featureValues, featureValuesRule{values: v, cond: cond, layer: sp.layer})
 			}
 		default:
 			if !ignoredAtRules[name] && !strings.HasPrefix(name, "-") {
@@ -274,11 +286,11 @@ func (sp *sheetParser) styleBlock(ctx context.Context, prelude []token, sels []*
 		if len(decls) == 0 && !first || !sp.count() {
 			return
 		}
-		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: decls, cond: cond})
+		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: decls, cond: cond, layer: sp.layer})
 		decls, first = nil, false
 	}
 	if sp.nesting >= maxNestingDepth {
-		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: parseDeclList(block, c), cond: cond})
+		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: parseDeclList(block, c), cond: cond, layer: sp.layer})
 		return
 	}
 	sp.nesting++
@@ -375,7 +387,7 @@ func (sp *sheetParser) nestedAtRule(ctx context.Context, parent []token, sels []
 			sp.styleBlock(ctx, parent, sels, n.block, base, cond, depth, c)
 		}
 	case "layer":
-		sp.styleBlock(ctx, parent, sels, n.block, base, cond, depth, c)
+		sp.enterLayer(n.prelude, func() { sp.styleBlock(ctx, parent, sels, n.block, base, cond, depth, c) })
 	default:
 		if !ignoredAtRules[name] && !strings.HasPrefix(name, "-") {
 			c.warn(warn.CSSUnsupported, warn.Approximated, "the @%s rule is not supported and was ignored", name)
@@ -434,7 +446,17 @@ func (sp *sheetParser) importRule(ctx context.Context, it item, base string, con
 		ref = u
 	}
 	rest := trimWS(pre[1:])
+	// layer and layer(<layer-name>) put the imported rules in a new
+	// anonymous layer or the named one (CSS Cascade 5, 2.2).
+	var layer []token
+	inLayer := false
 	if len(rest) > 0 && (rest[0].isIdent("layer") || rest[0].typ == tFunction && eqFold(rest[0].value, "layer")) {
+		if rest[0].typ == tFunction {
+			if layer = significant(rest[0].children); len(layer) == 0 {
+				return
+			}
+		}
+		inLayer = true
 		rest = trimWS(rest[1:])
 	}
 	if len(rest) > 0 && rest[0].typ == tFunction && eqFold(rest[0].value, "supports") {
@@ -486,7 +508,12 @@ func (sp *sheetParser) importRule(ctx context.Context, it item, base string, con
 	}
 	sp.chain = append(sp.chain, target)
 	sp.flush(c)
-	sp.parseSheet(ctx, body, final, inner, depth+1)
+	parse := func() { sp.parseSheet(ctx, body, final, inner, depth+1) }
+	if !inLayer {
+		parse()
+	} else if !sp.enterLayer(layer, parse) {
+		c.warn(warn.CSSInvalid, warn.Approximated, "the @import of %s was ignored: its layer name is invalid", target)
+	}
 	sp.chain = sp.chain[:len(sp.chain)-1]
 }
 

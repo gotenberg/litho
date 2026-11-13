@@ -82,6 +82,8 @@ type counterStyleRule struct {
 	digits []string
 
 	cond *mediaCond
+	// layer is the rule's cascade layer index in its sheet.
+	layer int
 }
 
 // maxCounterSymbols bounds the symbols and additive tuples of one

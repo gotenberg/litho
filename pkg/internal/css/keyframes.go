@@ -16,6 +16,8 @@ type keyframesRule struct {
 	// keyframes set, as animated returns them.
 	ids    []propID
 	custom []string
+	// layer is the rule's cascade layer index in its sheet.
+	layer int
 }
 
 // keyframeBlock is one <keyframe-block>: the offsets its selectors name,

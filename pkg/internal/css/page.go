@@ -62,6 +62,8 @@ type pageRule struct {
 	// margins its margin at-rules (CSS Page 3, 4.4 and 5.1).
 	context []Declaration
 	margins []marginRule
+	// layer is the rule's cascade layer index in its sheet.
+	layer int
 }
 
 // pageSize is a specified size descriptor (CSS Page 3, 5.1).
@@ -399,10 +401,11 @@ func pageDecls(block []token, c *declCtx) []pageDecl {
 // it.
 func (r *Resolver) Page(ctx context.Context, sel PageSelector) (PageStyle, error) {
 	type cand struct {
-		d    *pageDecl
-		rank int
-		spec uint32
-		ord  int
+		d     *pageDecl
+		rank  int
+		layer int
+		spec  uint32
+		ord   int
 	}
 	var cands []cand
 	for i := range r.pages {
@@ -425,11 +428,14 @@ func (r *Resolver) Page(ctx context.Context, sel PageSelector) (PageStyle, error
 		}
 		for j := range pr.rule.decls {
 			d := &pr.rule.decls[j]
-			cands = append(cands, cand{d: d, rank: rank(pr.origin, d.important), spec: spec, ord: pr.order})
+			cands = append(cands, cand{d: d, rank: rank(pr.origin, d.important), layer: layerRank(pr.layer, d.important), spec: spec, ord: pr.order})
 		}
 	}
 	slices.SortStableFunc(cands, func(a, b cand) int {
 		if c := cmp.Compare(a.rank, b.rank); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(a.layer, b.layer); c != 0 {
 			return c
 		}
 		if c := cmp.Compare(a.spec, b.spec); c != 0 {

@@ -349,7 +349,7 @@ func (r *Resolver) PageIn(ctx context.Context, sel PageSelector, root *Style) (P
 	for _, s := range srcs {
 		for i := range s.rule.rule.context {
 			d := &s.rule.rule.context[i]
-			ctxCands = append(ctxCands, cand{d: d, rank: rank(s.rule.origin, d.Important), spec: uint64(s.spec), ord: s.rule.order, idx: i})
+			ctxCands = append(ctxCands, cand{d: d, rank: rank(s.rule.origin, d.Important), layer: layerRank(s.rule.layer, d.Important), spec: uint64(s.spec), ord: s.rule.order, idx: i})
 		}
 		// idx orders the declarations of the rule's margin blocks by
 		// appearance, whatever their count.
@@ -358,7 +358,7 @@ func (r *Resolver) PageIn(ctx context.Context, sel PageSelector, root *Style) (P
 			m := &s.rule.rule.margins[j]
 			for i := range m.decls {
 				d := &m.decls[i]
-				boxCands[m.box] = append(boxCands[m.box], cand{d: d, rank: rank(s.rule.origin, d.Important), spec: uint64(s.spec), ord: s.rule.order, idx: idx})
+				boxCands[m.box] = append(boxCands[m.box], cand{d: d, rank: rank(s.rule.origin, d.Important), layer: layerRank(s.rule.layer, d.Important), spec: uint64(s.spec), ord: s.rule.order, idx: idx})
 				idx++
 			}
 		}

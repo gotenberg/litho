@@ -85,12 +85,16 @@ type resolvedRule struct {
 	rule   *styleRule
 	origin Origin
 	order  int
+	// layer is the position of the rule's cascade layer in its origin's
+	// layer order (see [orderLayers]).
+	layer int
 }
 
 type resolvedPage struct {
 	rule   *pageRule
 	origin Origin
 	order  int
+	layer  int
 }
 
 // selRef is one selector of a rule in the index, with the ancestor
@@ -162,7 +166,15 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 	var w warnings
 	order := 0
 	var counterRules []*counterStyleRule
-	for _, sh := range sheets {
+	var counterPos []int
+	kfPos := map[string]int{}
+	type layeredValues struct {
+		v   FontFeatureValues
+		pos int
+	}
+	var values []layeredValues
+	lay := orderLayers(sheets)
+	for si, sh := range sheets {
 		if sh.Sheet == nil {
 			continue
 		}
@@ -176,7 +188,7 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 				continue
 			}
 			idx := len(r.rules)
-			r.rules = append(r.rules, resolvedRule{rule: sr, origin: sh.Origin, order: order})
+			r.rules = append(r.rules, resolvedRule{rule: sr, origin: sh.Origin, order: order, layer: lay.of(si, sh.Origin, sr.layer)})
 			for _, s := range sr.selectors {
 				ref := selRef{rule: idx, sel: s, anc: ancestorFeatures(s)}
 				if s.pseudoElement == "" {
@@ -190,12 +202,13 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 			pr := &sh.Sheet.pages[i]
 			order++
 			if pr.cond.matches(media, cache) {
-				r.pages = append(r.pages, resolvedPage{rule: pr, origin: sh.Origin, order: order})
+				r.pages = append(r.pages, resolvedPage{rule: pr, origin: sh.Origin, order: order, layer: lay.of(si, sh.Origin, pr.layer)})
 			}
 		}
 		for _, cr := range sh.Sheet.counterStyles {
 			if cr.cond.matches(media, cache) {
 				counterRules = append(counterRules, cr)
+				counterPos = append(counterPos, lay.of(si, sh.Origin, cr.layer))
 			}
 		}
 		for i := range sh.Sheet.faces {
@@ -208,17 +221,38 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 				if r.keyframes == nil {
 					r.keyframes = keyframesAt{}
 				}
-				r.keyframes[k.name] = k
+				// The last rule of a name in the highest layer wins
+				// (CSS Cascade 5, 6.4.3; CSS Animations 1, 3).
+				pos := lay.of(si, sh.Origin, k.layer)
+				if prev, ok := kfPos[k.name]; !ok || pos >= prev {
+					kfPos[k.name] = pos
+					r.keyframes[k.name] = k
+				}
 			}
 		}
 		for i := range sh.Sheet.featureValues {
 			if f := &sh.Sheet.featureValues[i]; f.cond.matches(media, cache) {
-				r.addFeatureValues(f.values)
+				values = append(values, layeredValues{f.values, lay.of(si, sh.Origin, f.layer)})
 			}
 		}
 	}
+	// A later layer's values and counter styles win over an earlier
+	// one's, whatever their order (CSS Cascade 5, 6.4.3).
+	slices.SortStableFunc(values, func(a, b layeredValues) int { return cmp.Compare(a.pos, b.pos) })
+	for _, v := range values {
+		r.addFeatureValues(v.v)
+	}
+	idx := make([]int, len(counterRules))
+	for i := range idx {
+		idx[i] = i
+	}
+	slices.SortStableFunc(idx, func(a, b int) int { return cmp.Compare(counterPos[a], counterPos[b]) })
+	sorted := make([]*counterStyleRule, len(idx))
+	for i, j := range idx {
+		sorted[i] = counterRules[j]
+	}
 	r.warns = w.result()
-	r.counters = newCounterStyles(counterRules)
+	r.counters = newCounterStyles(sorted)
 	return r
 }
 
@@ -524,9 +558,12 @@ const styleAttrSpec = 1 << 31
 type cand struct {
 	d    *Declaration
 	rank int
-	spec uint64
-	ord  int
-	idx  int
+	// layer orders the declarations of one rank by cascade layer
+	// ([layerRank]), before specificity.
+	layer int
+	spec  uint64
+	ord   int
+	idx   int
 }
 
 // pendingRef marks a longhand whose winning declaration holds var().
@@ -781,13 +818,15 @@ func (cs *computeState) elementCands(n *html.Node) []cand {
 	if cs.opts.Hints != nil {
 		hints := cs.opts.Hints(n)
 		for i := range hints {
-			cands = append(cands, cand{d: &hints[i], rank: rank(Author, false), ord: -1, idx: i})
+			// Presentational hints lose to every author rule, whatever
+			// its layer (CSS Cascade 5, 6.2).
+			cands = append(cands, cand{d: &hints[i], rank: rank(Author, false), layer: -attachedRank, ord: -1, idx: i})
 		}
 	}
 	if v, ok := attr(n, "style"); ok && (n.Namespace == "" || n.Namespace == "svg") {
 		decls := ParseDeclarations(v, ParseOptions{BaseURL: cs.opts.BaseURL})
 		for i := range decls {
-			cands = append(cands, cand{d: &decls[i], rank: rank(Author, decls[i].Important), spec: styleAttrSpec, ord: len(cs.r.rules) + 1, idx: i})
+			cands = append(cands, cand{d: &decls[i], rank: rank(Author, decls[i].Important), layer: attachedRank, spec: styleAttrSpec, ord: len(cs.r.rules) + 1, idx: i})
 		}
 	}
 	return cands
@@ -847,6 +886,9 @@ func (cs *computeState) boxParentOf(p *html.Node) Display {
 func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map[string][]token, isRoot bool, only *[numProps]bool) (*Style, map[string][]token) {
 	slices.SortStableFunc(cands, func(a, b cand) int {
 		if c := cmp.Compare(a.rank, b.rank); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(a.layer, b.layer); c != 0 {
 			return c
 		}
 		if c := cmp.Compare(a.spec, b.spec); c != 0 {
@@ -1043,7 +1085,7 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 		rr := &cs.r.rules[ri]
 		for i := range rr.rule.decls {
 			d := &rr.rule.decls[i]
-			out = append(out, cand{d: d, rank: rank(rr.origin, d.Important), spec: uint64(cs.spec[ri]), ord: rr.order, idx: i})
+			out = append(out, cand{d: d, rank: rank(rr.origin, d.Important), layer: layerRank(rr.layer, d.Important), spec: uint64(cs.spec[ri]), ord: rr.order, idx: i})
 		}
 	}
 	cs.cands = out[:0]
