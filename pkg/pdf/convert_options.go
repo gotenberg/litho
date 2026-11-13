@@ -434,6 +434,13 @@ func WithConvertVersion(version string) ConvertOption {
 // directories, the ones [WithSystemFonts] reads, and its output then
 // depends on the fonts installed where litho runs.
 //
+// A variable font among them, with TrueType or CFF2 outlines, offers each of
+// its named instances as a face of its family: a run draws the one its
+// weight and style select, embedded at that instance's coordinates. A
+// conversion makes at most 128 instances, the fonts its style sheets load
+// included; past them a variable font draws its default instance, and the
+// conversion reports a warning.
+//
 // The faces of a list of directories are indexed once per process and kept
 // for later conversions with the same list, so a font added to a directory
 // after its first conversion is not seen. A few lists are kept at a time; a
