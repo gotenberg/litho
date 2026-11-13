@@ -15,10 +15,11 @@ func maxRSS(ps *os.ProcessState) int64 {
 	if !ok {
 		return 0
 	}
+	rss := int64(ru.Maxrss) //nolint:unconvert // ru_maxrss is 32 bits wide on 386 and arm
 	// getrusage(2) reports ru_maxrss in bytes on Darwin, in kilobytes on
 	// Linux and the BSDs.
 	if runtime.GOOS == "darwin" || runtime.GOOS == "ios" {
-		return ru.Maxrss
+		return rss
 	}
-	return ru.Maxrss * 1024
+	return rss * 1024
 }

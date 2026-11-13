@@ -22,7 +22,7 @@ func readCostRusage() costRusage {
 	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
 		return costRusage{}
 	}
-	rss := ru.Maxrss
+	rss := int64(ru.Maxrss) //nolint:unconvert // ru_maxrss is 32 bits wide on 386 and arm
 	// getrusage(2) reports ru_maxrss in bytes on Darwin, in kilobytes on
 	// Linux and the BSDs.
 	if runtime.GOOS != "darwin" && runtime.GOOS != "ios" {

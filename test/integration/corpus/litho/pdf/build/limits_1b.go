@@ -55,7 +55,7 @@ func limits1b() ([]byte, error) {
 
 	// t1: the first integer past each end of the 32-bit range, against the two
 	// values that sit on it.
-	intsOver := pdf.Indirect(d("Hi", 2147483648, "Lo", -2147483649))
+	intsOver := pdf.Indirect(d("Hi", int64(2147483648), "Lo", int64(-2147483649)))
 	intsEdge := pdf.Indirect(d("Hi", 2147483647, "Lo", -2147483648))
 
 	// t2: the same, half a unit past each end. pdfgen.Real keeps the token

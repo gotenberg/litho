@@ -57,7 +57,7 @@ func init() { register("xrefstm_2b", xrefstm2b) }
 // See ../FIXTURES.md for the authoritative expected firing set.
 func xrefstm2b() ([]byte, error) {
 	longKey := strings.Repeat("K", 200)
-	const bigInt = 2147483648
+	const bigInt int64 = 2147483648
 
 	pdf := pdfgen.New()
 	content := pdf.Stream([]byte("0 0 m 10 10 l n\n"))

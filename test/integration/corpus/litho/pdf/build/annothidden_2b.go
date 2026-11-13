@@ -53,7 +53,7 @@ func init() { register("annothidden_2b", annothidden2b) }
 func annothidden2b() ([]byte, error) {
 	cmsReal := "pkg/internal/compliance/testdata/cms_real.der"
 	// A fixed-width placeholder the post-save patch overwrites in place.
-	const placeholder = 9999999999
+	const placeholder int64 = 9999999999
 
 	pdf := pdfgen.New()
 
