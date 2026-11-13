@@ -197,8 +197,9 @@ type Options struct {
 	// HTML converter follows, Blink, where CSS leaves the drawing to the
 	// user agent: the shades of the groove, ridge, inset and outset borders
 	// ([shades]), the shapes of the outside disc, circle and square list
-	// markers ([symbolRect]) and the position and thickness of an auto
-	// underline. Off, as the Office converters leave it, the engine's own
+	// markers ([symbolRect]), the position and thickness of an auto
+	// underline and the decorations of text inside a decorating box of
+	// another size. Off, as the Office converters leave it, the engine's own
 	// rules apply: a darker shade of every colour, the marker's text, the
 	// face's underline position.
 	BrowserRules bool

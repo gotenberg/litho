@@ -165,7 +165,7 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 		b.link = l
 	}
 	if b.st.TextDecoration != 0 {
-		out.decos = append(slices.Clip(ctx.decos), newDeco(b.st))
+		out.decos = append(slices.Clip(ctx.decos), newDeco(b, b.st))
 	}
 	return out
 }
@@ -303,7 +303,7 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		b.inline = float == css.FloatNone && !b.abs && (st.Display == css.InlineFlex || st.Display == css.InlineGrid)
 		cctx := e.enter(n, b, ctx)
 		if float != css.FloatNone || b.abs || b.inline {
-			cctx.decos = ownDecos(b.st)
+			cctx.decos = ownDecos(b, b.st)
 		}
 		if isGrid(st.Display) {
 			e.genGrid(b, n.Children, cctx)
@@ -315,7 +315,7 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		b := e.newBox(n, st, kindBlock, ctx)
 		b.inline = true
 		cctx := e.enter(n, b, ctx)
-		cctx.decos = ownDecos(b.st)
+		cctx.decos = ownDecos(b, b.st)
 		e.genChildren(b, n.Children, cctx)
 		return []*box{b}
 	}
@@ -324,7 +324,7 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 	b.abs = isAbs(st)
 	cctx := e.enter(n, b, ctx)
 	if float != css.FloatNone || b.abs {
-		cctx.decos = ownDecos(b.st)
+		cctx.decos = ownDecos(b, b.st)
 	}
 	if st.Display == css.ListItem {
 		*ordinal++
@@ -383,13 +383,13 @@ func (e *engine) genInline(n *Node, st *css.Style, ctx genCtx, ordinal *int) []*
 	return out
 }
 
-// ownDecos returns the decorations a box that does not inherit them, a
-// float or an inline block, draws on its own text.
-func ownDecos(st *css.Style) []deco {
+// ownDecos returns the decorations a box b of style st that does not
+// inherit them, a float or an inline block, draws on its own text.
+func ownDecos(b *box, st *css.Style) []deco {
 	if st.TextDecoration == 0 {
 		return nil
 	}
-	return []deco{newDeco(st)}
+	return []deco{newDeco(b, st)}
 }
 
 // isAbs reports an absolutely positioned style: absolute or fixed, out of

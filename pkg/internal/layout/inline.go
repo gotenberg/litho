@@ -78,8 +78,9 @@ type lineItem struct {
 type inlineFrag struct {
 	box *box
 	// x0 and x1 are the border box's left and right edges, top and bottom
-	// its top and bottom, relative to the line box.
+	// its top and bottom, and base its baseline, relative to the line box.
 	x0, x1, top, bottom float64
+	base                float64
 	// left and right report whether the fragment draws the box's left and
 	// right edges (box-decoration-break: slice).
 	left, right bool
@@ -1374,6 +1375,7 @@ func (s *inlineState) vertical(l *lineBox) {
 	for _, f := range l.frags {
 		v := s.vboxOf(f.box)
 		b := v.shift + l.baseline
+		f.base = b
 		f.top = b - v.ca - f.box.pd[css.Top] - f.box.bd[css.Top]
 		f.bottom = b + v.cd + f.box.pd[css.Bottom] + f.box.bd[css.Bottom]
 	}

@@ -109,9 +109,14 @@ func (l *link) describe() string {
 // the lines, colour, style, thickness and underline offset of the
 // decorating box (CSS Text Decoration 4, 2 and 3).
 type deco struct {
-	lines css.TextDecoration
-	color css.Color
-	style css.DecorationStyle
+	// origin is the decorating box, size its font size: the decoration
+	// keeps one thickness, and an underline one position, across all the
+	// text it decorates on a line (CSS Text Decoration 3, 2.5).
+	origin *box
+	size   float64
+	lines  css.TextDecoration
+	color  css.Color
+	style  css.DecorationStyle
 	// thick is the thickness in points, autoThickness or fromFont.
 	thick float64
 	// offset is the underline offset below the baseline in points, valid
@@ -126,10 +131,11 @@ const (
 	fromFont      = -2
 )
 
-// newDeco returns the decoration a box of style st draws on its text.
-func newDeco(st *css.Style) deco {
-	d := deco{lines: st.TextDecoration, color: st.TextDecorationColor, style: st.TextDecorationStyle, thick: autoThickness}
-	size := max(clamp(st.FontSize), 0)
+// newDeco returns the decoration the box origin of style st draws on its
+// text.
+func newDeco(origin *box, st *css.Style) deco {
+	size := min(max(clamp(st.FontSize), 0), maxFontSize)
+	d := deco{origin: origin, size: size, lines: st.TextDecoration, color: st.TextDecorationColor, style: st.TextDecorationStyle, thick: autoThickness}
 	switch t := st.TextDecorationThickness; t.Kind {
 	case css.Points, css.Percent, css.Calc:
 		d.thick = max(resolve(t, size), 0)

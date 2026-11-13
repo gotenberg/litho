@@ -90,6 +90,10 @@ type painter struct {
 	// outlines caches the parsed faces whose glyph outlines a
 	// background-clip: text clip draws.
 	outlines map[*typeset.Face]*gofont.Face
+	// cuts reports, for each item of the line being painted, inline box
+	// fragments that paint before it, nil for none: a decoration line
+	// spanning several runs does not cross them (decoRun).
+	cuts []bool
 	// crops caches the parts of raster images border images cut out.
 	crops map[cropKey]*typeset.ImageSource
 	// strip is the inline box fragment being painted, laid on the strip
@@ -828,9 +832,19 @@ func (p *painter) line(l *lineBox) {
 		at := first[f.box] // 0 for a box with no item on the line
 		before[at] = append(before[at], f)
 	}
-	for _, fs := range before {
+	var cuts []bool
+	for i, fs := range before {
 		slices.SortStableFunc(fs, func(a, b *inlineFrag) int { return a.box.depth - b.box.depth })
+		if i > 0 && slices.ContainsFunc(fs, fragPaints) {
+			if cuts == nil {
+				cuts = make([]bool, len(before))
+			}
+			cuts[i] = true
+		}
 	}
+	saved := p.cuts
+	p.cuts = cuts
+	defer func() { p.cuts = saved }()
 	paintFrags := func(fs []*inlineFrag) {
 		for _, f := range fs {
 			p.lineFrag(l, f, page)
@@ -921,6 +935,13 @@ func (p *painter) lineFrag(l *lineBox, f *inlineFrag, page int) {
 	p.inlineFrag(f.box, r, radii, bd, pd, sides, page)
 }
 
+// fragPaints reports an inline box fragment that paints a background, a
+// border or a shadow.
+func fragPaints(f *inlineFrag) bool {
+	st := f.box.st
+	return hasBackground(st) || f.box.bd != [4]float64{} || len(st.BoxShadow) > 0 || st.BorderImage.HasImage()
+}
+
 // inlineOffset returns the relative positioning offsets of the inline box
 // b and of the inline boxes it sits in (CSS 2.1, 9.4.3), which move its
 // fragments and its content.
@@ -989,7 +1010,7 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 		return
 	}
 	p.textShadows(it, l, page, alpha)
-	p.textDecorations(it, l, page, alpha, css.Underline|css.Overline)
+	p.textDecorations(it, l, page, alpha, css.Underline|css.Overline, nil)
 	c := *t
 	c.Origin = typeset.Point{X: l.x + t.Origin.X + p.dx, Y: l.y + t.Origin.Y + p.dy}
 	c.Color.A *= alpha
@@ -998,13 +1019,35 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 	if c.Color.A > 0 {
 		p.emit(it.box, true, &c, top, bottom, page)
 	}
-	p.textDecorations(it, l, page, alpha, css.LineThrough)
+	p.textDecorations(it, l, page, alpha, css.LineThrough, nil)
 }
 
 // roundPx rounds v points to whole CSS pixels.
 func roundPx(v float64) float64 { return math.Round(v/css.Pt) * css.Pt }
 
-// textDecorations paints the decoration lines of item it among which.
+// decoShadow is a text shadow drawing the decorations of a glyph run: a
+// copy of each moved by x and y, in color (CSS Text Decoration 3, 4: the
+// shadow applies to the text and its decorations).
+type decoShadow struct {
+	x, y  float64
+	color typeset.Color
+}
+
+// textDecorations paints the decoration lines of item it among which, or
+// their shadow sh when not nil.
+//
+// With [Options.BrowserRules] each decoration takes its thickness from its
+// decorating box, and an underline its position too, whatever the size
+// and vertical alignment of the text inside, and the runs of one
+// decorating box that touch draw one line (CSS Text Decoration 3, 2.5:
+// one thickness and position on each line for the decorations of one
+// decorating box). Chromium departs from that clause for overlines and
+// line-throughs, which follow it: it draws them against each glyph run's
+// own ascent, an overline grown up from one pixel below it, a line-through
+// as far below it as the decorating box's strikeout lies below its own
+// ascent. Off, as the Office converters leave it, each glyph run draws its
+// own decorations at its own size.
+//
 // With [Options.BrowserRules] an underline lies as Blink places it for a
 // face without an underline position, whatever the face's: half its
 // unrounded thickness below the baseline, rounded up to whole pixels, at
@@ -1015,107 +1058,285 @@ func roundPx(v float64) float64 { return math.Round(v/css.Pt) * css.Pt }
 //   - probe, html: Chromium 9.0.0 draws the underline of every face tried,
 //     Liberation Serif and Sans, DejaVu Sans and Ahem from 13 to 64px, at
 //     that gap whatever the face's underline position.
-func (p *painter) textDecorations(it *lineItem, l *lineBox, page int, alpha float64, which css.TextDecoration) {
-	size := it.text.Size
+//   - probe, html: Chromium 156 (Gotenberg 9.4.1) draws a block's
+//     underline as one line at the block's baseline across superscripts,
+//     subscripts and larger text, each overline and line-through at the
+//     glyph run's own height, all at the block's thickness; an Ahem
+//     overline 1 to 30px thick at 16, 20, 40 and 50px ends one pixel
+//     below the glyphs' top edge.
+func (p *painter) textDecorations(it *lineItem, l *lineBox, page int, alpha float64, which css.TextDecoration, sh *decoShadow) {
 	for _, d := range it.box.decos {
 		lines := d.lines & which
 		if lines == 0 {
 			continue
 		}
-		col, ok := colorOf(d.color)
-		col.A *= alpha
-		if !ok || col.A <= 0 {
+		g, ok := p.decoGeom(it, l, d, alpha, sh)
+		if !ok {
 			continue
 		}
-		// auto is a tenth of the font size, at least one pixel; from-font
-		// is the face's underline thickness (CSS Text Decoration 4, 2.6).
-		thick := d.thick
-		if thick == fromFont {
-			thick = autoThickness
-			if it.ulThick > 0 {
-				thick = max(roundPx(it.ulThick), css.Pt)
-			}
+		dl := decoLine{it: it, l: l, page: page, style: d.style, color: g.color, thick: g.thick, x0: p.decoStart(it, l, d), x: it.x, w: it.w}
+		if sh != nil {
+			dl.dx, dl.dy = sh.x, sh.y
 		}
-		auto := thick == autoThickness
-		if auto {
-			thick = max(roundPx(size/10), css.Pt)
-			if p.blink() {
-				// Blink floors the tenth of the font size.
-				thick = max(math.Floor(size/10/css.Pt)*css.Pt, css.Pt)
+		for _, line := range [...]css.TextDecoration{css.Underline, css.Overline, css.LineThrough} {
+			if lines&line == 0 {
+				continue
 			}
-		}
-		if thick <= 0 {
-			continue
-		}
-		if lines&css.Underline != 0 {
-			// The face's underline position, else a tenth of the font
-			// size, rounded to the pixel grid as browsers draw it.
-			pos := size / 10
-			if it.ulThick > 0 {
-				pos = it.ulPos
-			}
-			pos = roundPx(pos)
-			if p.blink() {
-				// Blink's gap for a face without an underline position,
-				// whatever the face's.
-				t := thick / css.Pt
-				if auto {
-					t = size / 10 / css.Pt
+			k := decoIndex(line)
+			if sh == nil && p.blink() {
+				// One line spans the runs of the decorating box that
+				// touch: the first run draws an underline or overline under
+				// the glyphs of all, the last a line-through over them.
+				lo, hi, ok := p.decoRun(it, l, d, k, alpha, line == css.LineThrough)
+				if !ok {
+					continue
 				}
-				pos = max(math.Ceil(t/2-1e-9), 1) * css.Pt
+				dl.x, dl.w = lo, hi-lo
 			}
-			if d.hasOffset {
-				pos = d.offset
-			}
-			p.decoLine(it, l, page, d.style, col, it.baseline+pos, thick, true)
-		}
-		if lines&css.Overline != 0 {
-			p.decoLine(it, l, page, d.style, col, it.baseline-it.ascent, thick, false)
-		}
-		if lines&css.LineThrough != 0 {
-			// Centred on the face's strikeout stroke, else a third of the
-			// font size above the baseline.
-			mid := it.baseline - size/3
-			if it.stThick > 0 {
-				ft := max(roundPx(it.stThick), css.Pt)
-				mid = it.baseline - roundPx(it.stPos) + ft/2
-			}
-			p.decoLine(it, l, page, d.style, col, mid-thick/2, thick, false)
+			dl.y, dl.under = g.y[k], line == css.Underline
+			p.decoLine(dl)
 		}
 	}
 }
 
-// decoLine paints one decoration line of item it whose top is at y below
-// the line top, thick points thick, in style st (CSS Text Decoration 3,
-// 2.3): a double line adds a second one a thickness below (above for an
-// overline or line-through, away from the glyphs for an underline),
-// dotted and dashed lines are dashes of one and three thicknesses, a wavy
-// line zigzags over twice the thickness.
-func (p *painter) decoLine(it *lineItem, l *lineBox, page int, st css.DecorationStyle, col typeset.Color, y, thick float64, under bool) {
-	x0 := l.x + it.x + p.dx
-	w := it.w
+// decoIndex returns the index of the decoration line among the positions
+// of a [decoGeom].
+func decoIndex(line css.TextDecoration) int {
+	switch line {
+	case css.Overline:
+		return 1
+	case css.LineThrough:
+		return 2
+	}
+	return 0
+}
+
+// decoGeom is where decoration d draws on a glyph run: its colour, its
+// thickness and the tops of its underline, overline and line-through
+// below the line top.
+type decoGeom struct {
+	color typeset.Color
+	thick float64
+	y     [3]float64
+}
+
+// decoGeom returns where decoration d draws on item it of line l, false
+// when it draws nothing.
+func (p *painter) decoGeom(it *lineItem, l *lineBox, d deco, alpha float64, sh *decoShadow) (decoGeom, bool) {
+	var g decoGeom
+	col, ok := colorOf(d.color)
+	if sh != nil {
+		col, ok = sh.color, true
+	}
+	col.A *= alpha
+	if !ok || col.A <= 0 {
+		return g, false
+	}
+	size, k := it.text.Size, 1.0
+	if own := min(max(clamp(it.box.st.FontSize), 0), maxFontSize); p.blink() && d.origin != nil && d.size != own && own > 0 {
+		k = d.size / own
+		size *= k
+	}
+	// auto is a tenth of the font size, at least one pixel; from-font is
+	// the face's underline thickness (CSS Text Decoration 4, 2.6).
+	thick := d.thick
+	if thick == fromFont {
+		thick = autoThickness
+		if it.ulThick > 0 {
+			thick = max(roundPx(it.ulThick*k), css.Pt)
+		}
+	}
+	auto := thick == autoThickness
+	if auto {
+		thick = max(roundPx(size/10), css.Pt)
+		if p.blink() {
+			// Blink floors the tenth of the font size.
+			thick = max(math.Floor(size/10/css.Pt)*css.Pt, css.Pt)
+		}
+	}
+	if thick <= 0 {
+		return g, false
+	}
+	g.color, g.thick = col, thick
+	// The face's underline position, else a tenth of the font size,
+	// rounded to the pixel grid as browsers draw it.
+	pos := size / 10
+	if it.ulThick > 0 {
+		pos = it.ulPos * k
+	}
+	pos = roundPx(pos)
+	if p.blink() {
+		// Blink's gap for a face without an underline position, whatever
+		// the face's.
+		t := thick / css.Pt
+		if auto {
+			t = size / 10 / css.Pt
+		}
+		pos = max(math.Ceil(t/2-1e-9), 1) * css.Pt
+	}
+	if d.hasOffset {
+		pos = d.offset
+	}
+	g.y[0] = it.baseline + pos
+	if p.blink() {
+		g.y[0] = decoBaseline(it, l, d) + pos
+	}
+	top := it.baseline - it.ascent
+	g.y[1] = top
+	if p.blink() {
+		g.y[1] = top + css.Pt - thick
+	}
+	// Centred on the face's strikeout stroke, else a third of the font
+	// size above the baseline, at the decorating box's size.
+	mid := size / 3
+	if it.stThick > 0 {
+		ft := max(roundPx(it.stThick*k), css.Pt)
+		mid = roundPx(it.stPos*k) - ft/2
+	}
+	g.y[2] = top + it.ascent*k - mid - thick/2
+	return g, true
+}
+
+// decoRun returns the left and right edges, relative to the line box, of
+// the decoration line k of d that item it draws: its own and those of the
+// runs beside it in l that d decorates at the same place, in the same
+// colour and moved by the same relative offset. It reports false when
+// another run of them draws the line: the first for an underline or
+// overline, the last for a line-through (last).
+func (p *painter) decoRun(it *lineItem, l *lineBox, d deco, k int, alpha float64, last bool) (float64, float64, bool) {
+	at := slices.Index(l.items, it)
+	g, _ := p.decoGeom(it, l, d, alpha, nil)
+	ox, oy := inlineOffset(it.box.parent)
+	joins := func(a, b *lineItem) bool {
+		if b.text == nil || b.text.Face == nil || b.box == nil || b.box.hidden {
+			return false
+		}
+		if math.Abs(a.x+a.w-b.x) > metricSlack && math.Abs(b.x+b.w-a.x) > metricSlack {
+			return false
+		}
+		bx, by := inlineOffset(b.box.parent)
+		if bx != ox || by != oy || inlineAlpha(b.box) != alpha {
+			return false
+		}
+		for _, bd := range b.box.decos {
+			if bd != d {
+				continue
+			}
+			bg, ok := p.decoGeom(b, l, bd, alpha, nil)
+			return ok && bg.color == g.color && bg.thick == g.thick && bg.y[k] == g.y[k]
+		}
+		return false
+	}
+	lo, hi := it.x, it.x+it.w
+	if at < 0 {
+		return lo, hi, true
+	}
+	cut := func(i int) bool { return i < len(p.cuts) && p.cuts[i] }
+	for i := at; i > 0 && !cut(i) && joins(l.items[i], l.items[i-1]); i-- {
+		if !last {
+			return 0, 0, false
+		}
+		lo, hi = min(lo, l.items[i-1].x), max(hi, l.items[i-1].x+l.items[i-1].w)
+	}
+	for i := at; i+1 < len(l.items) && !cut(i+1) && joins(l.items[i], l.items[i+1]); i++ {
+		if last {
+			return 0, 0, false
+		}
+		lo, hi = min(lo, l.items[i+1].x), max(hi, l.items[i+1].x+l.items[i+1].w)
+	}
+	return lo, hi, true
+}
+
+// decoBaseline returns the baseline, below the line top, of the decorating
+// box of d on line l: the line's for a block container, the inline box's
+// own for an inline box, the baseline of item it when the box is not on
+// the line.
+func decoBaseline(it *lineItem, l *lineBox, d deco) float64 {
+	o := d.origin
+	if o == nil {
+		return it.baseline
+	}
+	if o.kind != kindInline {
+		return l.baseline
+	}
+	for _, f := range l.frags {
+		if f.box == o || o.node != nil && f.box.node == o.node {
+			return f.base
+		}
+	}
+	return it.baseline
+}
+
+// decoStart returns the left edge, relative to the line box, of the first
+// glyph run of line l that d decorates: a wavy line keeps its phase from
+// there across the runs of other boxes.
+func (p *painter) decoStart(it *lineItem, l *lineBox, d deco) float64 {
+	x := it.x
+	if d.origin == nil || !p.blink() {
+		return x
+	}
+	for _, o := range l.items {
+		if o.text == nil || o.x >= x {
+			continue
+		}
+		for _, od := range o.box.decos {
+			if od.origin == d.origin {
+				x = o.x
+				break
+			}
+		}
+	}
+	return x
+}
+
+// decoLine is one decoration line of item it of line l to paint: its top
+// at y below the line top, thick points thick, in style and color, moved
+// by dx and dy for a shadow, from x to x+w relative to the line box. under
+// reports an underline; x0 is where a wavy line's phase starts, relative
+// to the line box.
+type decoLine struct {
+	it         *lineItem
+	l          *lineBox
+	page       int
+	style      css.DecorationStyle
+	color      typeset.Color
+	y, thick   float64
+	x, w       float64
+	dx, dy, x0 float64
+	under      bool
+}
+
+// decoLine paints one decoration line (CSS Text Decoration 3, 2.3): a
+// double line adds a second one a thickness below (above for an overline
+// or line-through, away from the glyphs for an underline), dotted and
+// dashed lines are dashes of one and three thicknesses, a wavy line
+// zigzags over twice the thickness.
+func (p *painter) decoLine(dl decoLine) {
+	it, l, thick, col := dl.it, dl.l, dl.thick, dl.color
+	x0 := l.x + dl.x + p.dx + dl.dx
+	w := dl.w
 	if w <= 0 {
 		return
 	}
-	top := l.y + y + p.dy
+	top := l.y + dl.y + p.dy + dl.dy
 	add := func(ops []typeset.PathOp, fill bool, stroke *typeset.Stroke) {
 		path := &typeset.Path{Ops: ops, Stroke: stroke}
 		if fill {
 			path.Fill = &typeset.Fill{Color: col}
 		}
-		p.emit(it.box, true, path, l.y, l.y+l.h, page)
+		p.emit(it.box, true, path, l.y+dl.dy, l.y+l.h+dl.dy, dl.page)
 	}
-	switch st {
+	switch dl.style {
 	case css.DecorationDouble:
 		second := top + 2*thick
-		if !under {
+		if !dl.under {
 			second = top - 2*thick
 		}
 		add(rectOps(typeset.Rect{X: x0, Y: top, Width: w, Height: thick}), true, nil)
 		add(rectOps(typeset.Rect{X: x0, Y: second, Width: w, Height: thick}), true, nil)
 	case css.DecorationDotted, css.DecorationDashed:
 		dash := []float64{thick, thick}
-		if st == css.DecorationDashed {
+		if dl.style == css.DecorationDashed {
 			dash = []float64{3 * thick, 3 * thick}
 		}
 		mid := top + thick/2
@@ -1124,21 +1345,46 @@ func (p *painter) decoLine(it *lineItem, l *lineBox, page int, st css.Decoration
 			{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x0 + w, Y: mid}}},
 		}, false, &typeset.Stroke{Color: col, Width: thick, Dash: dash})
 	case css.DecorationWavy:
-		mid := top + thick/2
-		step := 2 * thick
-		ops := []typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x0, Y: mid}}}}
-		n := min(int(math.Ceil(w/step)), maxWaveSegments) // fits int: capped
-		for k := 1; k <= n; k++ {
-			dy := thick
-			if k%2 == 1 {
-				dy = -thick
-			}
-			ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: min(x0+float64(k)*step, x0+w), Y: mid + dy}}})
-		}
-		add(ops, false, &typeset.Stroke{Color: col, Width: thick})
+		add(waveOps(l.x+dl.x0+p.dx+dl.dx, x0, x0+w, top+thick/2, thick), false, &typeset.Stroke{Color: col, Width: thick})
 	case css.DecorationSolid:
 		add(rectOps(typeset.Rect{X: x0, Y: top, Width: w, Height: thick}), true, nil)
 	}
+}
+
+// waveOps returns the zigzag of a wavy line from x0 to x1 about mid, its
+// vertices thick above and below mid every two thicknesses from origin,
+// where it starts on mid: the runs of one decorating box drawn from one
+// origin join into one wave. The last vertex moves back to x1.
+func waveOps(origin, x0, x1, mid, thick float64) []typeset.PathOp {
+	step := 2 * thick
+	at := func(k int) (float64, float64) {
+		switch {
+		case k == 0:
+			return origin, mid
+		case k%2 == 1:
+			return origin + float64(k)*step, mid - thick
+		}
+		return origin + float64(k)*step, mid + thick
+	}
+	// y returns the wave's height at x, between vertices k and k+1.
+	y := func(x float64, k int) float64 {
+		ax, ay := at(k)
+		bx, by := at(k + 1)
+		return ay + (by-ay)*(x-ax)/(bx-ax)
+	}
+	first := 0
+	if x0 > origin {
+		first = min(int((x0-origin)/step), maxWaveSegments) // fits int: capped
+	}
+	ops := []typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x0, Y: y(x0, first)}}}}
+	for k, n := first+1, 0; n < maxWaveSegments; k, n = k+1, n+1 {
+		vx, vy := at(k)
+		ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: min(vx, x1), Y: vy}}})
+		if vx >= x1 {
+			break
+		}
+	}
+	return ops
 }
 
 // maxWaveSegments bounds the segments of one wavy decoration line. Anti-DoS

@@ -335,7 +335,7 @@ func (e *engine) genTable(n *Node, st *css.Style, ctx genCtx, float css.Float) *
 	w.inline = float == css.FloatNone && st.Display == css.InlineTable
 	cctx := e.enter(n, w, ctx)
 	if w.float != css.FloatNone || w.inline {
-		cctx.decos = ownDecos(st)
+		cctx.decos = ownDecos(w, st)
 	}
 	t := e.newBox(nil, e.shareStyle(tableStyle(st)), kindBlock, cctx)
 	t.tpart = partTable
