@@ -272,11 +272,14 @@ func (c *collector) text(k *box) {
 			return
 		}
 		str := buf.String()
-		var plan capsPlan
-		if k.st.FontVariant != css.VariantNormal {
-			r, _ := utf8.DecodeRuneInString(str)
-			plan = c.e.planCaps(k.st, style, r)
+		if k.st.FontVariant == css.VariantNormal {
+			c.addRun(text.ParagraphRun{Text: str, Style: style}, runInfo{kind: runText, box: k, ws: ws})
+			c.cur.n += utf8.RuneCountInString(str)
+			buf.Reset()
+			return
 		}
+		r, _ := utf8.DecodeRuneInString(str)
+		plan := c.e.planCaps(k.st, style, r)
 		for _, pc := range smallCaps(str, plan) {
 			st := style
 			if pc.small {

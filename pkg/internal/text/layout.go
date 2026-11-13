@@ -296,8 +296,6 @@ type styleState struct {
 	letter  fixed.Int26_6
 	word    fixed.Int26_6
 	lang    language.Language
-	// features are the font features the shaper is handed for the run.
-	features []shaping.FontFeature
 }
 
 // resolveKey identifies one per-character face resolution.
@@ -351,7 +349,6 @@ func newLayoutState(f *Fonts, runs []Run) (*layoutState, error) {
 		if l, ok := r.Style.languageSystem(); ok {
 			s.lang = l
 		}
-		s.features = r.Style.features()
 		key := matchKey{families: strings.Join(r.Style.Families, "\x00"), req: s.req, lang: r.Style.Lang}
 		if prev, ok := matched[key]; ok {
 			s.families, s.primary, s.refs = prev.families, prev.primary, prev.refs
@@ -760,7 +757,7 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 			if s.lang != "" {
 				piece.Language = s.lang
 			}
-			piece.FontFeatures = s.features
+			piece.FontFeatures = s.style.features()
 			for _, in := range shaping.SplitByFace(piece, styleFontmap{st: st, style: idx, script: piece.Script}) {
 				st.faceInput(&in, &s.style)
 				out := st.kit.shaper.Shape(in)

@@ -475,7 +475,7 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 			if ss.lang != "" {
 				piece.Language = ss.lang
 			}
-			piece.FontFeatures = ss.features
+			piece.FontFeatures = ss.style.features()
 			// The resolved level, explicit embeddings and overrides
 			// included, decides the direction (UAX #9, L2).
 			piece.Direction = di.DirectionLTR
