@@ -222,7 +222,7 @@ var wptDirs = []string{
 	"css/CSS2/generated-content", "css/CSS2/values", "css/CSS2/selectors", "css/css-tables", "css/css-fonts",
 	"css/css-inline", "css/css-position", "css/css-transforms", "css/css-ruby", "css/css-content",
 	"css/css-counter-styles", "css/css-values", "css/css-variables", "css/selectors", "css/css-color",
-	"css/css-images", "css/css-display",
+	"css/css-images", "css/css-display", "css/css-pseudo",
 }
 
 // wptAreaCap bounds the tests one area contributes, an area being a CSS2
@@ -237,8 +237,8 @@ var wptAreaCap = map[string]int{
 	"css/CSS2/tables": 100, "css/CSS2/fonts": 40, "css/CSS2/positioning": 40, "css/CSS2/generated-content": 60,
 	"css/CSS2/selectors": 40, "css/css-tables": 80, "css/css-fonts": 300, "css/css-inline": 60,
 	"css/css-position": 60, "css/css-transforms": 100, "css/css-ruby": 10, "css/css-content": 40,
-	"css/css-counter-styles": 40, "css/css-values": 60, "css/css-variables": 60, "css/selectors": 60,
-	"css/css-color": 60, "css/css-images": 60, "css/css-display": 60,
+	"css/css-counter-styles": 40, "css/css-values": 60, "css/css-variables": 60, "css/selectors": 100,
+	"css/css-color": 60, "css/css-images": 60, "css/css-display": 60, "css/css-pseudo": 100,
 }
 
 func compileAll(flags string, patterns ...string) []*regexp.Regexp {
@@ -255,6 +255,10 @@ var (
 	wptVertical = regexp.MustCompile(`(?i)vertical-(rl|lr)`)
 	wptSideways = regexp.MustCompile(`(?i)sideways`)
 )
+
+// wptFirstLine finds a ::first-line selector, which the CSS 2.1 selectors
+// chapter's probe requires and the chapter's own rules forbid.
+var wptFirstLine = regexp.MustCompile(`(?i):first-line\b`)
 
 // wptForbidden keeps a test out: scripts, SVG, MathML, form controls,
 // embedded documents and media, @font-face, data: and javascript: URLs, a
@@ -331,7 +335,7 @@ var wptAreas = map[string]wptAreaRules{
 	"css/CSS2/abspos":            wptFontFaceRules,
 	"css/CSS2/generated-content": wptFontFaceRules,
 	"css/CSS2/values":            wptFontFaceRules,
-	"css/CSS2/selectors":         wptFontFaceRules,
+	"css/CSS2/selectors":         {forbidden: []*regexp.Regexp{wptFirstLine}, lift: wptFontFaceRules.lift},
 	"css/css-tables":             wptFontFaceRules,
 	"css/css-fonts":              wptFontFaceRules,
 	"css/css-inline":             wptFontFaceRules,
@@ -346,12 +350,14 @@ var wptAreas = map[string]wptAreaRules{
 	"css/css-display":            wptFontFaceRules,
 	"css/css-color":              wptFontFaceRules,
 	"css/css-images":             wptFontFaceRules,
+	"css/css-pseudo":             wptFontFaceRules,
 }
 
 // wptProbe is a part of an area a rule singles out and caps on its own: the
 // tests of a feature the converter does not lay out, of which a few say as
-// much as many would. Its tests are not candidates of the area's own rules,
-// which forbid what the probe requires.
+// much as many would, or of one the area's cap would leave out. Its tests
+// are not candidates of the area's own rules, which forbid what the probe
+// requires.
 type wptProbe struct {
 	name, dir string
 	rules     wptAreaRules
@@ -369,6 +375,10 @@ var wptProbes = []wptProbe{
 	{
 		name: "css/css-transforms 3D", dir: "css/css-transforms", cap: 10,
 		rules: wptAreaRules{lift: wptFontFaceRules.lift, required: wptTransform3D},
+	},
+	{
+		name: "css/CSS2/selectors first-line", dir: "css/CSS2/selectors", cap: 10,
+		rules: wptAreaRules{lift: wptFontFaceRules.lift, required: wptFirstLine},
 	},
 }
 
