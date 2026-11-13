@@ -27,6 +27,20 @@ func isLeader(b *box) bool {
 	return b != nil && b.node != nil && b.node.Leader && b.kind == kindBlock && b.inline
 }
 
+// inLeader reports a box of a leader, or one inside it. A leader's copies
+// are a layout artifact (ISO 32000-1, 14.8.2.2.2: purely cosmetic
+// typographical elements; ISO 14289-1, 7.1): a reader hears the text on
+// either side of it, a title and its page number, not a run of dots.
+func inLeader(b *box) bool {
+	for depth := 0; b != nil && depth < 3; depth++ {
+		if isLeader(b) {
+			return true
+		}
+		b = b.parent
+	}
+	return false
+}
+
 // leaderText returns the text box of the leader b, nil when it has none.
 func leaderText(b *box) *box {
 	stack := []*box{b}

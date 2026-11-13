@@ -323,7 +323,7 @@ func (p *painter) emit(b *box, content bool, frag typeset.Fragment, y0, y1 float
 	if p.mono >= 0 {
 		page = p.mono
 	}
-	if p.artifact {
+	if p.artifact || inLeader(b) {
 		frag = cloneFragment(frag)
 		switch v := frag.(type) {
 		case *typeset.Text:

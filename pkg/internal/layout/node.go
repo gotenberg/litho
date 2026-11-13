@@ -150,7 +150,8 @@ type Node struct {
 	// inline-level Element whose one Text child is the leader string.
 	// The engine gives it no width of its own, keeps the content after
 	// it in its parent on its line, and fills the room the line leaves
-	// with copies of the string aligned on the line's end edge.
+	// with copies of the string aligned on the line's end edge. The
+	// copies paint as a layout artifact.
 	Leader bool
 	// ChangeBar, set on an inline Element or a Replaced node, marks
 	// content a tracked change touches, as an Office marked view shows

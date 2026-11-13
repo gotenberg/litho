@@ -2,6 +2,7 @@ package layout
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -49,6 +50,27 @@ func TestLeader_Draw(t *testing.T) {
 			t.Parallel()
 			assertPixels(t, run(t, tt.root, page(tt.w, tt.h)), 1, tt.want)
 		})
+	}
+}
+
+// TestLeader_Artifact locks the tagging of a leader: its copies are a
+// layout artifact, the text on either side of it the content of its
+// element (ISO 32000-1, 14.8.2.2.2).
+func TestLeader_Artifact(t *testing.T) {
+	t.Parallel()
+	red2 := sty(font(2), fg(red))
+	p := el(red2, txt(red2, "A"), leaderNode("X", blue), txt(red2, "B"))
+	p.Role = "P"
+	res := run(t, doc(p), page(12, 2))
+	seen := map[string]bool{}
+	for _, r := range texts(res, 1) {
+		seen[r.text] = true
+		if tagged := r.run.Parent != nil; tagged != (r.text != strings.Repeat("X", len(r.text))) {
+			t.Errorf("run %q tagged %v", r.text, tagged)
+		}
+	}
+	if !seen["A"] || !seen["B"] {
+		t.Errorf("runs %v", seen)
 	}
 }
 
