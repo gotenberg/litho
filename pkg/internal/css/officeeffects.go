@@ -58,3 +58,31 @@ type OfficeReflection struct {
 type RectAlign struct {
 	X, Y float64
 }
+
+// OfficeTextPaint paints the glyphs of a run otherwise than filled in
+// the run's colour: unfilled, filled with a linear gradient, outlined
+// (MS-DOCX, 2.6.1 w14:textFill and w14:textOutline; ECMA-376 Part 1,
+// 17.3.2.23 outline). The glyphs stay text, drawn invisible under the
+// paint.
+type OfficeTextPaint struct {
+	// NoFill leaves the glyphs unfilled.
+	NoFill bool
+	// Gradient, two stops or more in increasing Pos, fills the glyphs
+	// along Angle degrees, clockwise from the x axis, over the run's box.
+	Gradient []OfficeStop
+	Angle    float64
+	// Outline strokes the glyphs' outlines, nil for none.
+	Outline *OfficeOutline
+}
+
+// OfficeStop is a gradient stop: a colour at a fraction of the way.
+type OfficeStop struct {
+	Pos   float64
+	Color Color
+}
+
+// OfficeOutline is a stroke of Width points in Color.
+type OfficeOutline struct {
+	Color Color
+	Width float64
+}

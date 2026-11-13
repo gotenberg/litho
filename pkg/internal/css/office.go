@@ -276,6 +276,10 @@ type Office struct {
 	// w14:shadow, w14:reflection). The glyphs stay text above them. See
 	// [OfficeEffects].
 	TextEffects *OfficeEffects
+	// TextPaint paints the glyphs of the inline box that sets it otherwise
+	// than in its colour, nil for none: unfilled, a gradient, an outline.
+	// See [OfficeTextPaint].
+	TextPaint *OfficeTextPaint
 }
 
 // WordAnchor places a float of [Office.WordAnchor] at a fixed offset, as
