@@ -172,18 +172,32 @@ func (e *engine) overflowRight(rb *box) float64 {
 		}
 		right = max(right, clamp(edge))
 	}
-	stack := []*box{rb}
+	// Each box counts where its relative offsets and its ancestors' put
+	// it (CSS Overflow 3, 2.2; CSS Position 3, 3.1: a relatively
+	// positioned box moves with its overflow), as Chromium measures it.
+	type entry struct {
+		b  *box
+		dx float64
+	}
+	stack := []entry{{b: rb}}
 	for len(stack) > 0 {
-		b := stack[len(stack)-1]
+		en := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
+		b := en.b
 		if !b.laidOut || b.fixed {
 			// A fixed box overflows the viewport, not the document: it
 			// widens nothing (CSS Overflow 3, 2.2: its containing block
 			// is the viewport's).
 			continue
 		}
+		dx := en.dx
+		if b.abs {
+			dx, _ = ancestorOffset(b)
+		}
+		ox, _ := offset(b)
+		dx += ox
 		if b.kind == kindBlock || b.kind == kindReplaced {
-			count(b.x+b.borderW(), b.y)
+			count(b.x+dx+b.borderW(), b.y)
 		}
 		if b.kind == kindBlock && b.parent != nil && b.st.Overflow == css.OverflowHidden && b != vp {
 			// The box clips its content: its border box alone counts.
@@ -191,13 +205,15 @@ func (e *engine) overflowRight(rb *box) float64 {
 		}
 		for _, l := range b.lines {
 			for _, it := range l.items {
-				count(l.x+it.x+it.w, l.y)
+				count(l.x+dx+it.x+it.w, l.y)
 			}
 			for _, f := range l.frags {
-				count(l.x+f.x1, l.y)
+				count(l.x+dx+f.x1, l.y)
 			}
 		}
-		stack = append(stack, b.kids...)
+		for _, k := range b.kids {
+			stack = append(stack, entry{b: k, dx: dx})
+		}
 	}
 	return right
 }

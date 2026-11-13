@@ -452,3 +452,24 @@ func TestRelative_PercentageInsets(t *testing.T) {
 		})
 	}
 }
+
+// TestRelative_OverflowMovesWithTheBox locks that a relatively positioned
+// box widens the content where its offset puts it, it and its content
+// (CSS Overflow 3, 2.2), so a converter shrinks no page for a box that
+// its offset brings back inside.
+//
+// # Corpus evidence
+//
+//   - wpt: CSS2/positioning/right-019 (a box 144pt past the right edge
+//     moved back by right: 72pt) prints at full scale in Chromium 156.
+func TestRelative_OverflowMovesWithTheBox(t *testing.T) {
+	t.Parallel()
+	moved := el(sty(width(8), height(1), func(s *css.Style) {
+		s.Position = css.Relative
+		s.Left = css.Pts(px(-3))
+	}), el(sty(width(9), height(1))))
+	res := run(t, doc(moved), page(6, 2))
+	if !near(res.ContentWidth, px(6)) {
+		t.Errorf("content width %v, want %v", res.ContentWidth, px(6))
+	}
+}
