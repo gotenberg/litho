@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // maxObjStmObjects bounds how many objects one object stream carries. It is a
@@ -117,13 +116,14 @@ func PackObjectStreams(ctx context.Context, alloc *ObjAllocator, trailer ast.Pdf
 	sort.Ints(candidates)
 
 	var placements []PackedObject
+	var d Deflater
 	for start := 0; start < len(candidates); {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("packing object streams: %w", err)
 		}
 		end := min(start+maxObjStmObjects, len(candidates))
 
-		placed, consumed, err := writeOneObjStm(ctx, alloc, pending, candidates[start:end])
+		placed, consumed, err := writeOneObjStm(ctx, &d, alloc, pending, candidates[start:end])
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +141,7 @@ func PackObjectStreams(ctx context.Context, alloc *ObjAllocator, trailer ast.Pdf
 
 // writeOneObjStm builds one object stream from as many of batch as fit within
 // [maxObjStmPayload], removes those objects from pending, and reports their
-// placements along with the number consumed.
+// placements along with the number consumed. d compresses the stream.
 //
 // # Corpus evidence
 //
@@ -151,6 +151,7 @@ func PackObjectStreams(ctx context.Context, alloc *ObjAllocator, trailer ast.Pdf
 //     check declines such a batch.
 func writeOneObjStm(
 	ctx context.Context,
+	d *Deflater,
 	alloc *ObjAllocator,
 	pending map[int]ast.PdfObject,
 	batch []int,
@@ -189,9 +190,9 @@ func writeOneObjStm(
 	payload = append(payload, header.Bytes()...)
 	payload = append(payload, bodies.Bytes()...)
 
-	compressed, err := filter.ApplyEncodeFilter(payload, "FlateDecode")
+	compressed, err := d.Deflate(payload)
 	if err != nil {
-		return nil, 0, fmt.Errorf("compressing object stream: %w", err)
+		return nil, 0, fmt.Errorf("object stream: %w", err)
 	}
 
 	// Decline a batch that packing would not shrink. On a small batch the
