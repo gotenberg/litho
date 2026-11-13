@@ -475,6 +475,12 @@ func (e *engine) layoutFlex(b *box, cb cblock, top float64) float64 {
 					it.cross = constrainHeight(it.b, it.cross, pcb)
 				} else {
 					it.cross = constrainWidth(it.b, it.cross, cb.w)
+					if it.b.tpart == partWrapper {
+						// A stretched table is never narrower than its
+						// min-content width (CSS 2.1, 17.5.2).
+						lo, _ := e.intrinsic(it.b)
+						it.cross = max(it.cross, lo)
+					}
 				}
 			}
 		}

@@ -501,3 +501,20 @@ func TestFlex_TableItemCaptions(t *testing.T) {
 		})
 	}
 }
+
+// TestFlex_StretchedTableKeepsItsMinContentWidth holds a table item a
+// column stretches to CSS 2.1, 17.5.2: a table is never narrower than
+// its min-content width, so it overflows a narrower container.
+//
+// # Corpus evidence
+//
+//   - wpt: css-flexbox/table-as-item-stretch-cross-size-4 (a table holding
+//     a 100px block in a 50px column) draws a 100px square in Chromium 156.
+func TestFlex_StretchedTableKeepsItsMinContentWidth(t *testing.T) {
+	t.Parallel()
+	tb := table(nil, tr(nil, part(css.TableCell, nil, el(sty(width(100), height(100))))))
+	w := kid(t, boxes(t, doc(el(flexBox(width(50), dir(css.FlexColumn)), tb)), page(200, 200)), 0, 0, 0)
+	if got := rect(w); got[2] != 100 {
+		t.Errorf("table item %v wide, want 100", got[2])
+	}
+}
