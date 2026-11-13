@@ -252,6 +252,14 @@ func (e *engine) colAutoMin(k *box) float64 {
 // the columns tracks (CSS Grid 1, 11.5): its min- or max-content
 // contribution, or its minimum contribution, the outer size its used
 // minimum width gives it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) sizes a
+//     min-content grid holding one overflow: auto item of height 100px
+//     and aspect-ratio 2 to 0 wide, a max-content one to 200; a
+//     min-content block, inline block or flex container holding it to
+//     200.
 func (e *engine) colContrib(it *gitem, k contribKind, tracks []*gtrack) float64 {
 	b := it.b
 	switch r, _ := prefRatio(b); k {
@@ -588,6 +596,14 @@ func (l *gridLayout) measure(it *gitem, top float64) {
 // false when it has none or the ratio does not give its height: an auto
 // height under a width the inline axis stretches, as Chromium sizes grid
 // items. The item's content must be laid out at w.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) draws an item
+//     of aspect-ratio 1 in a 200px column and a 50px row 200 by 200 with
+//     the default alignments, 50 by 50 under justify-items: start; and
+//     an item of aspect-ratio 2 in an auto row of a 200px column 200 by
+//     100.
 func (l *gridLayout) ratioItemHeight(it *gitem, w float64) (float64, bool) {
 	k := it.b
 	src := k.sizeSrc()
@@ -872,6 +888,14 @@ func (l *gridLayout) pushRow(items []*gitem, rowTop float64) bool {
 
 // put lays the item it out in its area, the area's top at rowTop, and
 // returns the bottom of its margin box.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) draws the WPT
+//     tests grid-aspect-ratio-028 and -029 (an item of aspect-ratio 1 and
+//     align-self stretch in a 100px row, under a 200px and a 50px column)
+//     as a 100px square, and -032 and -033 (stretch in both axes) as the
+//     area.
 func (l *gridLayout) put(it *gitem, rowTop float64) float64 {
 	e := l.e
 	k := it.b

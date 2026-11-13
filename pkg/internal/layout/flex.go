@@ -307,6 +307,13 @@ func usedAlign(st, c *css.Style) css.BoxAlign {
 // layoutFlex lays out the flex container b's content in its content box
 // cb, from top down, and returns the bottom of its content (CSS Flexbox
 // 1, 9).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) draws an item
+//     of aspect-ratio 1, min-height 100px and flex 1 0 auto beside one of
+//     flex 1 0 1px in a 200px tall column of align-items start 149.5 by
+//     149.5: its width follows its flexed height.
 func (e *engine) layoutFlex(b *box, cb cblock, top float64) float64 {
 	fd := b.flex
 	fd.hasFirst, fd.hasLast = false, false

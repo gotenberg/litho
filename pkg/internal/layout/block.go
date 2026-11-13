@@ -728,6 +728,14 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 // layoutOwnContext lays out the content of a box that establishes a block
 // formatting context, its width and position set: its floats stay inside
 // and count toward its auto height (CSS 2.1, 10.6.7).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) draws the WPT
+//     test flex-aspect-ratio-008, a 100px wide column-wrap flex container
+//     of aspect-ratio 1 holding two 50 by 100 items, as a 100px square,
+//     and -040, a 100px wide row container of aspect-ratio 2 holding a
+//     100px tall item, 100px tall.
 func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	specH, hSet := specHeight(b, b.st.Height, cb)
 	if !hSet && cb.shrinkScrollers && b.st.ScrollContainer() && b.st.Height.HasPercent() {

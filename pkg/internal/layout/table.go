@@ -822,6 +822,9 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw, fixedH float64) {
 //     100px for min-height 100px and max-height 60px, and a caption
 //     outside the 100px; one of content-box sizing and min-height 100px
 //     draws its content 100px tall.
+//   - probe, html: Chromium 156 draws a 100px wide table of aspect-ratio
+//     2 50px tall, and a cell of aspect-ratio 2 and width 100px at its
+//     content's height.
 func tableHeight(t *box, cb cblock) (float64, bool) {
 	h, ok := specHeight(t, t.st.Height, cb)
 	if !ok {

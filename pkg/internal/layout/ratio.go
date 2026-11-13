@@ -79,6 +79,15 @@ func borderBoxed(b *box, w float64, st *css.Style) float64 {
 // the height an absolutely positioned box's insets leave it, definite when
 // both its top and bottom are set. The edges of b must be resolved and
 // b.st must be st.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) draws a block
+//     of aspect-ratio 1 and max-height 50px 50 wide, an inline block of
+//     aspect-ratio 2, max-height 20px and wider text 40 wide, one of
+//     min-width 100px 100 by 50, and passes the WPT tests
+//     block-aspect-ratio-021 and -032 (width: max-content and
+//     min-content with a ratio and a height).
 func (e *engine) applyRatio(b *box, st *css.Style, cb cblock, availH float64) bool {
 	r, content := prefRatio(b)
 	if k := b.sizeSrc().Width.Kind; r == 0 || k != css.Auto && !contentKeyword(b.sizeSrc().Width) {
