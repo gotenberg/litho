@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/antchfx/xmlquery"
+
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 )
 
 // PEPPOL BIS 3.0 + XRechnung-overlay rules whose XPath source uses
@@ -84,9 +86,9 @@ func peppolR120LineNetAmount(_ context.Context, node *xmlquery.Node) (bool, erro
 		}
 	}
 
-	computed := quantity*(priceAmount/baseQuantity) + chargesTotal - allowancesTotal
+	computed := float64(quantity*(priceAmount/baseQuantity)) + chargesTotal - allowancesTotal
 	// u:slack: |LineExtensionAmount - computed| <= 0.02 + 1/(10^scale).
-	tolerance := 0.02 + math.Pow(10, -float64(priceScale))
+	tolerance := 0.02 + detmath.Pow(10, -float64(priceScale))
 	return math.Abs(lineExt-computed) <= tolerance, nil
 }
 
