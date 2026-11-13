@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Display contents</title>
+    <style>
+      body {
+        font: 11pt/1.4 "Liberation Sans", sans-serif;
+        color: #222;
+      }
+      h1 {
+        font-size: 20pt;
+        margin: 0 0 8pt;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10pt;
+        list-style: none;
+        padding: 0;
+      }
+      .cards li,
+      .cards a,
+      .group {
+        display: contents;
+      }
+      .card {
+        border: 1pt solid #4a5bd4;
+        border-radius: 6pt;
+        padding: 8pt;
+        background: #eef0ff;
+      }
+      .card h2 {
+        font-size: 13pt;
+        margin: 0 0 4pt;
+      }
+      .toolbar {
+        display: flex;
+        gap: 6pt;
+        margin: 14pt 0;
+      }
+      .toolbar span {
+        border: 1pt solid #888;
+        padding: 2pt 6pt;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      td,
+      th {
+        border: 1pt solid #999;
+        padding: 3pt 6pt;
+        text-align: left;
+      }
+      .note {
+        display: contents;
+        color: #a33;
+        border: 4pt solid red;
+        text-decoration: underline;
+      }
+      ol .skip {
+        display: contents;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Release board</h1>
+    <ul class="cards">
+      <li>
+        <a href="https://example.com/a"
+          ><div class="card">
+            <h2>Alpha</h2>
+            <p>The wrapper list item and link draw no box.</p>
+          </div></a
+        >
+      </li>
+      <li>
+        <div class="card">
+          <h2>Beta</h2>
+          <p>Each card is a grid item of the list.</p>
+        </div>
+      </li>
+      <li>
+        <div class="card">
+          <h2>Gamma</h2>
+          <p>Three columns, one row.</p>
+        </div>
+      </li>
+    </ul>
+    <div class="toolbar">
+      <span>Build</span>
+      <div class="group"><span>Test</span><span>Lint</span></div>
+      <span>Ship</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Stage</th>
+          <th>Owner</th>
+        </tr>
+      </thead>
+      <tbody class="group">
+        <tr>
+          <td>Review</td>
+          <td>Docs team</td>
+        </tr>
+        <tr>
+          <td>Release</td>
+          <td><span class="group">Platform</span> team</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      A sentence with <span class="note">a contents span that sets a colour</span>,
+      which its text inherits, and a border and an underline, which nothing draws.
+    </p>
+    <ol>
+      <li>First step</li>
+      <li class="skip">An item without a marker</li>
+      <li>Second step</li>
+    </ol>
+  </body>
+</html>

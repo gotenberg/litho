@@ -4,7 +4,7 @@ HTML and Markdown sources litho authored, converted twice: by Chromium, through 
 
 | Path                | What it holds                                                                                                                   |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `sources/`          | The 65 sources                                                                                                                  |
+| `sources/`          | The 66 sources                                                                                                                  |
 | `corpus references` | Posts each source to the Gotenberg image and writes `testdata/litho/html/references/<name>.pdf` and their `manifest.json`       |
 | `../../../fixture/` | Reads a source directory and its `options.json` for `corpus references` and the `diff` feature (shared with the Office corpora) |
 
@@ -48,7 +48,7 @@ A symbolic link in a source directory is followed by both sides (`curl -F` and `
 | `images`        | 1                | Self-authored                 | A JPEG and a PNG at their own size, scaled by attributes, an inline image on the middle of a line, a full-width image                                                                                    |
 | `borders-cards` | 1                | Self-authored                 | Border images from a gradient and a sliced PNG frame (stretch, round, space, fill, outset), hard and blurred inset shadows, inset and outset shadows on a rounded card, `background-clip: text` headings |
 
-The 17 sources below exercise the route's options and the CSS a print route meets, as Gotenberg's integration tests for the Chromium route do (`test/integration/features/chromium_convert_html.feature` and `chromium_convert_markdown.feature`); each sets the options in the third column.
+The 18 sources below exercise the route's options and the CSS a print route meets, as Gotenberg's integration tests for the Chromium route do (`test/integration/features/chromium_convert_html.feature` and `chromium_convert_markdown.feature`); each sets the options in the third column.
 
 | Source                   | Pages (Chromium) | Options                                                                  | Origin                                                     | Exercises                                                                                                                                                                                 |
 | ------------------------ | ---------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -69,6 +69,7 @@ The 17 sources below exercise the route's options and the CSS a print route meet
 | `cjk-article`            | 1                | none                                                                     | Self-authored                                              | A Japanese article: ideographs mixed with Latin and digits, full-width punctuation, justified paragraphs, `line-break: strict`, `loose`, `anywhere`                                       |
 | `multicol-article`       | 3                | none                                                                     | Self-authored, generated text                              | A long article in two balanced columns across pages, section headings spanning both (`column-span: all`), pull quotes kept whole (`break-inside: avoid`)                                  |
 | `multicol-newsletter`    | 2                | none                                                                     | Self-authored, generated text                              | A newsletter in three columns with rules, a boxed brief kept whole, a notice spanning the columns, `break-after: avoid` headings and a forced column break                                |
+| `display-contents`       | 1                | none                                                                     | Self-authored                                              | `display: contents` on the items and links of a grid list, a group of flex items, a table row group and a span, and on a list item, which then draws no marker                            |
 
 ## Gotenberg's option cases
 
