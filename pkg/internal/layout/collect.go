@@ -347,11 +347,12 @@ func (c *collector) text(k *box) {
 				i++
 			}
 			flush()
+			// A collapsible space after the break starts a line and is
+			// removed (CSS Text 3, 4.1.2).
 			c.breakPara()
 			if c.done {
 				return
 			}
-			c.space = false
 		case r == '\t':
 			flush()
 			c.object(runTab, k)

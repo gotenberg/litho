@@ -45,6 +45,9 @@ func TestWhiteSpace_Processing(t *testing.T) {
 		{"nowrap does not wrap", doc(el(sty(ws(css.Nowrap)), txt(sty(ws(css.Nowrap)), "aa  bb cc"))), 30, []string{"aa bb cc"}},
 		{"normal wraps", doc(el(sty(), txt(sty(), "aa bb cc"))), 30, []string{"aa ", "bb ", "cc"}},
 		{"forced break", doc(el(sty(), txt(sty(), "a "), br(sty()), txt(sty(), " b"))), 200, []string{"a ", "b"}},
+		// A collapsible space after a preserved newline starts a line and
+		// is removed (CSS Text 3, 4.1.2).
+		{"space after a preserved newline", doc(el(sty(), txt(inlineSty(ws(css.BreakSpaces)), "ab\n"), txt(sty(), " cd"))), 200, []string{"ab", "cd"}},
 		// break-spaces: the spaces take room and wrap after themselves.
 		{"break-spaces wraps spaces", doc(el(sty(ws(css.BreakSpaces)), txt(sty(ws(css.BreakSpaces)), "aa  bb"))), 30, []string{"aa ", " bb"}},
 		// A control character is drawn as a visible symbol (CSS Text 3,
