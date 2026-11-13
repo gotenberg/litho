@@ -283,7 +283,12 @@ func (c *collector) text(k *box) {
 				st.Size *= smallCapsScale
 			}
 			if pc.features != nil {
-				st.Features = append(slices.Clone(pc.features), st.Features...)
+				fs := text.FontSettings{}
+				if st.Settings != nil {
+					fs = *st.Settings
+				}
+				fs.Features = append(slices.Clone(pc.features), fs.Features...)
+				st.Settings = &fs
 			}
 			run := text.ParagraphRun{Text: pc.text, Style: st}
 			if c.e.opts.BrowserRules {

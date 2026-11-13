@@ -217,7 +217,7 @@ func pinFace(fc *Face, d FaceDescriptor) (*Face, error) {
 	}
 	nd := d.normalized()
 	fc.pinned, fc.doc = ft, &nd
-	fc.features = Style{Features: nd.Features}.features()
+	fc.features = Style{Settings: &FontSettings{Features: nd.Features}}.features()
 	// A document face joins its rule's family alone: no installed family
 	// of the same name, and no index fallback, reaches it.
 	fc.keys = nil

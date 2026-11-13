@@ -70,7 +70,7 @@ func (fc *Face) MetricsFor(style Style) Metrics {
 	if m, ok := fc.wordMetrics(style, style.Size); ok {
 		return m
 	}
-	if style.SizeAdjust.Value > 0 {
+	if style.settings().SizeAdjust.Value > 0 {
 		return fc.Metrics(style.Size * adjustFactor(&style, fc, fc.parsedFace()))
 	}
 	return fc.Metrics(style.Size)

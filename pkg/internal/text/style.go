@@ -3,6 +3,7 @@ package text
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/go-text/typesetting/font/opentype"
@@ -114,6 +115,23 @@ type Style struct {
 	// feature at 0, which turns off the GPOS kern feature and the kern
 	// table alike. The default kerns.
 	NoKerning bool
+	// Settings holds the font settings few runs set, nil for none: a
+	// style that sets none costs no more than a pointer.
+	Settings *FontSettings
+	// WordMetrics gives the line box of a run the vertical metrics Word
+	// lays a Microsoft face out with when a metric-compatible stand-in
+	// draws the face the style names, as Word prints WordprocessingML:
+	// its ascent and descent, and no line gap. Only the line box changes:
+	// the glyphs keep the stand-in's outlines and advances. A face whose
+	// stand-in records Word's metrics keeps them, and when the index
+	// holds the named face itself, it draws the run and nothing changes.
+	WordMetrics bool
+}
+
+// FontSettings are the font settings of a [Style] that most text leaves
+// at their defaults. A FontSettings is shared between styles and never
+// modified once a style holds it.
+type FontSettings struct {
 	// Features are OpenType features handed to the shaper after the
 	// font's defaults and the kerning NoKerning turns off, in order: a
 	// later setting of a tag overrides an earlier one, as the CSS feature
@@ -128,14 +146,31 @@ type Style struct {
 	// font-language-override (CSS Fonts 4, 6.14): up to four characters
 	// from U+20 to U+7E, padded with spaces. "" keeps Lang's.
 	LanguageSystem string
-	// WordMetrics gives the line box of a run the vertical metrics Word
-	// lays a Microsoft face out with when a metric-compatible stand-in
-	// draws the face the style names, as Word prints WordprocessingML:
-	// its ascent and descent, and no line gap. Only the line box changes:
-	// the glyphs keep the stand-in's outlines and advances. A face whose
-	// stand-in records Word's metrics keeps them, and when the index
-	// holds the named face itself, it draws the run and nothing changes.
-	WordMetrics bool
+}
+
+// settings returns the font settings of s, the zero value for none.
+func (s *Style) settings() *FontSettings {
+	if s.Settings == nil {
+		return &noSettings
+	}
+	return s.Settings
+}
+
+// noSettings is the zero [FontSettings], never modified.
+var noSettings FontSettings
+
+// equalSettings reports whether a and b hold the same font settings.
+func equalSettings(a, b *FontSettings) bool {
+	if a == b {
+		return true
+	}
+	if a == nil {
+		a = &noSettings
+	}
+	if b == nil {
+		b = &noSettings
+	}
+	return a.SizeAdjust == b.SizeAdjust && a.LanguageSystem == b.LanguageSystem && slices.Equal(a.Features, b.Features)
 }
 
 // Feature is one OpenType feature setting: its tag and value, 0 for off
@@ -155,17 +190,18 @@ var kernOff = []shaping.FontFeature{{Tag: kernTag, Value: 0}}
 // features returns the font features the shaper is handed for s, nil for
 // the font's defaults.
 func (s Style) features() []shaping.FontFeature {
-	if len(s.Features) == 0 {
+	feats := s.settings().Features
+	if len(feats) == 0 {
 		if s.NoKerning {
 			return kernOff
 		}
 		return nil
 	}
-	out := make([]shaping.FontFeature, 0, len(s.Features)+1)
+	out := make([]shaping.FontFeature, 0, len(feats)+1)
 	if s.NoKerning {
 		out = append(out, kernOff[0])
 	}
-	for _, f := range s.Features {
+	for _, f := range feats {
 		if tag, ok := featureTag(f.Tag); ok {
 			out = append(out, shaping.FontFeature{Tag: tag, Value: f.Value})
 		}
@@ -194,7 +230,7 @@ func featureTag(s string) (opentype.Tag, bool) {
 // A tag shorter than four characters is padded with spaces, as
 // hb_tag_from_string does, and a longer one is cut.
 func (s Style) languageSystem() (language.Language, bool) {
-	t := s.LanguageSystem
+	t := s.settings().LanguageSystem
 	if t == "" {
 		return "", false
 	}

@@ -151,11 +151,12 @@ const maxAdjustFactor = 10
 // face fc, parsed as ft, by, 1 for none: Value over the face's aspect
 // value.
 func adjustFactor(style *Style, fc *Face, ft *font.Face) float64 {
-	v := style.SizeAdjust.Value
+	sa := style.settings().SizeAdjust
+	v := sa.Value
 	if !(v > 0) {
 		return 1
 	}
-	aspect := faceAspect(fc, ft, style.SizeAdjust.Metric)
+	aspect := faceAspect(fc, ft, sa.Metric)
 	if !(aspect > 0) || !numeric.Finite(aspect) {
 		return 1
 	}

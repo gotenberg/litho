@@ -920,8 +920,8 @@ func shapesTogether(a, b Style) bool {
 		a.Autospace == b.Autospace && a.AutospaceAlpha == b.AutospaceAlpha && a.AutospaceNumeric == b.AutospaceNumeric &&
 		a.NoSpacingTrim == b.NoSpacingTrim && a.Size == b.Size && a.Lang == b.Lang &&
 		a.LetterSpacing == b.LetterSpacing && a.WordSpacing == b.WordSpacing && a.Scale == b.Scale &&
-		a.NoKerning == b.NoKerning && a.WordMetrics == b.WordMetrics && a.SizeAdjust == b.SizeAdjust &&
-		slices.Equal(a.Features, b.Features) && a.LanguageSystem == b.LanguageSystem
+		a.NoKerning == b.NoKerning && a.WordMetrics == b.WordMetrics &&
+		equalSettings(a.Settings, b.Settings)
 }
 
 // splitByRun cuts out into one output per run of its characters, each

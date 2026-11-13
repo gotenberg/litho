@@ -400,16 +400,28 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 		Scale:             textScale(st.TextScale),
 		NoKerning:         st.FontKerning == css.KerningNone,
 		WordMetrics:       st.WordRules > 0,
-		LanguageSystem:    st.FontLanguageOverride,
 	}
-	ts.Features = e.fontFeatures(st, &ts)
-	if a := st.FontSizeAdjust; a.Set {
-		ts.SizeAdjust = text.SizeAdjust{Metric: text.AdjustMetric(a.Metric), Value: a.Value}
+	ts.Settings = e.fontSettings(st, &ts)
+	return ts
+}
+
+// fontSettings returns the font settings of st for its text style ts,
+// nil when every one is at its default, as for most text: the features
+// of the font properties, font-size-adjust and font-language-override.
+func (e *engine) fontSettings(st *css.Style, ts *text.Style) *text.FontSettings {
+	features := e.fontFeatures(st, ts)
+	a := st.FontSizeAdjust
+	if features == nil && !a.Set && st.FontLanguageOverride == "" {
+		return nil
+	}
+	fs := &text.FontSettings{Features: features, LanguageSystem: st.FontLanguageOverride}
+	if a.Set {
+		fs.SizeAdjust = text.SizeAdjust{Metric: text.AdjustMetric(a.Metric), Value: a.Value}
 		if a.FromFont {
-			ts.SizeAdjust.Value = e.fonts.Aspect(ts, ts.SizeAdjust.Metric)
+			fs.SizeAdjust.Value = e.fonts.Aspect(*ts, fs.SizeAdjust.Metric)
 		}
 	}
-	return ts
+	return fs
 }
 
 // textScale returns the horizontal scale of the text stack for an Office

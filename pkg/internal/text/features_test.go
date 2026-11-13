@@ -42,7 +42,7 @@ func TestHasSubstitution(t *testing.T) {
 	}
 }
 
-// TestShape_FeaturesSubstitute checks that [Style.Features] reach the
+// TestShape_FeaturesSubstitute checks that [FontSettings.Features] reach the
 // shaper: smcp draws Noto Sans's small capitals, narrower than its
 // lowercase, and a later setting of the tag overrides an earlier one.
 func TestShape_FeaturesSubstitute(t *testing.T) {
@@ -56,7 +56,7 @@ func TestShape_FeaturesSubstitute(t *testing.T) {
 		st := style()
 		st.Families = []string{"Noto Sans"}
 		st.Size = 100
-		st.Features = features
+		st.Settings = &FontSettings{Features: features}
 		p := shape(t, f, []ParagraphRun{{Text: "mmm", Style: st}}, ParagraphOptions{})
 		return p.Line(0, 3, false).Width
 	}
@@ -82,7 +82,7 @@ func TestStyle_LanguageSystem(t *testing.T) {
 		"ROMANI": "x-hbot-524f4d41",
 		"\x01AB": "",
 	} {
-		got, ok := Style{LanguageSystem: in}.languageSystem()
+		got, ok := Style{Settings: &FontSettings{LanguageSystem: in}}.languageSystem()
 		if got != want || ok != (want != "") {
 			t.Errorf("languageSystem(%q) = %q, %v, want %q", in, got, ok, want)
 		}
@@ -153,14 +153,14 @@ func TestShape_FontSizeAdjust(t *testing.T) {
 		t.Fatalf("Ahem's ex aspect %v, want 0.8", got)
 	}
 	adjusted := st
-	adjusted.SizeAdjust = SizeAdjust{Value: 0.4}
+	adjusted.Settings = &FontSettings{SizeAdjust: SizeAdjust{Value: 0.4}}
 	if got := w(adjusted); math.Abs(got-plain/2) > 1e-6 {
 		t.Errorf("adjusted width %v, want %v", got, plain/2)
 	}
 	if m, pm := f.Match(st).MetricsFor(adjusted), f.Match(st).MetricsFor(st); math.Abs(m.Ascent-pm.Ascent/2) > 1e-9 {
 		t.Errorf("adjusted ascent %v, plain %v", m.Ascent, pm.Ascent)
 	}
-	adjusted.SizeAdjust = SizeAdjust{Metric: AdjustCapHeight}
+	adjusted.Settings = &FontSettings{SizeAdjust: SizeAdjust{Metric: AdjustCapHeight}}
 	if got := w(adjusted); got != plain {
 		t.Errorf("a value of 0: width %v, want %v", got, plain)
 	}
