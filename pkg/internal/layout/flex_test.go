@@ -551,3 +551,31 @@ func TestFlex_PercentageBasisOfIndefiniteMain(t *testing.T) {
 		t.Errorf("rects = %v, want %v", got, want)
 	}
 }
+
+// TestFlex_PercentageOfAnIndefiniteColumnItem holds the children of an
+// item of a column of auto height: a percentage height resolves against
+// an item whose flex basis is definite of its own, and behaves as auto in
+// one of auto height (CSS Flexbox 1, 9.8; CSS 2.1, 10.5).
+func TestFlex_PercentageOfAnIndefiniteColumnItem(t *testing.T) {
+	t.Parallel()
+	half := func(s *css.Style) { s.Height = css.Dimension{Kind: css.Percent, Value: 0.5} }
+	tests := []struct {
+		name string
+		item *Node
+		want float64
+	}{
+		{"an auto height", el(flexBox(dir(css.FlexColumn)), item(10, 40), item(10, math.NaN(), half)), 0},
+		{"a length height", el(sty(height(40)), item(10, math.NaN(), half)), 20},
+		{"a length basis", el(sty(flexF(0, 0, 40)), item(10, math.NaN(), half)), 20},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			it := kid(t, boxes(t, doc(el(flexBox(width(50), dir(css.FlexColumn)), tt.item)), page(100, 100)), 0, 0, 0)
+			c := it.kids[len(it.kids)-1]
+			if got := rect(c)[3]; got != tt.want {
+				t.Errorf("child %v tall, want %v", got, tt.want)
+			}
+		})
+	}
+}

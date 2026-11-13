@@ -492,7 +492,7 @@ func (e *engine) layoutFlex(b *box, cb cblock, top float64) float64 {
 		k := it.b
 		k.m[ms], k.m[me], k.m[cs], k.m[ce] = it.mm[0], it.mm[1], it.cm[0], it.cm[1]
 	}
-	place := placement{e: e, fd: fd, ax: ax, cb: cb, pcb: pcb, top: top, innerMain: innerMain, innerCross: innerCross}
+	place := placement{e: e, fd: fd, ax: ax, cb: cb, pcb: pcb, top: top, innerMain: innerMain, innerCross: innerCross, mainDef: mainDef}
 	var end float64
 	if ax.row {
 		end = place.rows(lines)
@@ -1206,6 +1206,10 @@ type placement struct {
 	cb, pcb               cblock
 	top                   float64
 	innerMain, innerCross float64
+	// mainDef reports a definite main size: an item's size after flexing
+	// is then definite, and its children's percentages resolve against it
+	// (CSS Flexbox 1, 9.8).
+	mainDef bool
 }
 
 // mainPhys returns the offset from the content box's left or top edge of
@@ -1454,7 +1458,7 @@ func (p *placement) columns(lines []*flexLine) float64 {
 // returns how much the page cuts made it grow.
 func (p *placement) columnItem(it *fitem, x, y float64) float64 {
 	k := it.b
-	if k.kind == kindReplaced || dependsOnHeight(k) {
+	if k.kind == kindReplaced || dependsOnHeight(k) && (p.mainDef || k.tpart == partWrapper || definiteBasis(k)) {
 		p.put(k, x, y, it.cross, it.target, true)
 		k.h = it.target
 		if k.tpart == partWrapper && k.tdata != nil && len(k.kids) == 1 {
@@ -1474,6 +1478,35 @@ func (p *placement) columnItem(it *fitem, x, y float64) float64 {
 	grow := max(got-ref, 0)
 	k.h = it.target + grow
 	return grow
+}
+
+// definiteBasis reports an item of a column whose flex basis is definite
+// of its own: a length, or auto over a length height or a ratio of its
+// width. Its size after flexing is then definite in a column of
+// indefinite height too, as Chromium sizes it; CSS Flexbox 1, 9.8 makes it
+// definite only in a column of definite height. A percentage basis there
+// is content, which is not definite.
+//
+// # Corpus evidence
+//
+//   - wpt: css-flexbox/percentage-heights-005 to -008 and -016 to -018,
+//     flex-basis-012, flex-minimum-height-flex-items-030 and
+//     css-sizing/aspect-ratio/flex-aspect-ratio-032 and -033 draw their
+//     references in Chromium 156: a child's percentage height resolves in
+//     an item of flex-basis 100px, of flex-basis 0px and height 70px, of
+//     height 100px or of a ratio, and not in one of auto height, nor in
+//     one of height 100px and flex-basis content or 0%.
+func definiteBasis(k *box) bool {
+	switch k.st.FlexBasis.Kind { //nolint:exhaustive // the other kinds are not definite here
+	case css.Points:
+		return true
+	case css.Auto:
+		if _, ok := specHeight(k, k.st.Height, cblock{}); ok {
+			return true
+		}
+		return ratioSized(k)
+	}
+	return false
 }
 
 // pushItem reports an item of a column that must move to the next page:
