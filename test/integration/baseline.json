@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T06:41:40Z",
+  "captured_at": "2026-11-13T06:53:44Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -19509,7 +19509,7 @@
               "text_f1": 1
             },
             "sd/shadow-blur.odp": {
-              "layout": 0.9896,
+              "layout": 0.9901,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19517,7 +19517,7 @@
               "text_f1": 1
             },
             "sd/shape-text-glow-effect.odp": {
-              "layout": 0.941,
+              "layout": 0.9434,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -37895,7 +37895,7 @@
               "text_f1": 0.6667
             },
             "sd-data/n762695.pptx": {
-              "layout": 0.8731,
+              "layout": 0.8732,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -37959,7 +37959,7 @@
               "text_f1": 1
             },
             "sd/3columns.pptx": {
-              "layout": 0.8347,
+              "layout": 0.8349,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38031,7 +38031,7 @@
               "text_f1": 1
             },
             "sd/bnc862510_5.pptx": {
-              "layout": 0.9007,
+              "layout": 0.8991,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38183,7 +38183,7 @@
               "text_f1": 1
             },
             "sd/effectOrder.pptx": {
-              "layout": 0.9862,
+              "layout": 0.9865,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38431,7 +38431,7 @@
               "text_f1": 1
             },
             "sd/rightToLeftParagraph.pptx": {
-              "layout": 0.828,
+              "layout": 0.8554,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38439,7 +38439,7 @@
               "text_f1": 0
             },
             "sd/shape-blur-effect.pptx": {
-              "layout": 0.9856,
+              "layout": 0.9812,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38447,7 +38447,7 @@
               "text_f1": 1
             },
             "sd/shape-glow-effect.pptx": {
-              "layout": 0.9842,
+              "layout": 0.9896,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38751,7 +38751,7 @@
               "text_f1": 1
             },
             "sd/smartart-tdf134221.pptx": {
-              "layout": 0.9878,
+              "layout": 0.9873,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38879,7 +38879,7 @@
               "text_f1": 1
             },
             "sd/tdf104015.pptx": {
-              "layout": 0.9891,
+              "layout": 0.9892,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -39095,7 +39095,7 @@
               "text_f1": 1
             },
             "sd/tdf114845_rotateShape.pptx": {
-              "layout": 0.9452,
+              "layout": 0.9408,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -39103,7 +39103,7 @@
               "text_f1": 1
             },
             "sd/tdf114848.pptx": {
-              "layout": 0.7409,
+              "layout": 0.7418,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -39231,7 +39231,7 @@
               "text_f1": 1
             },
             "sd/tdf125551.pptx": {
-              "layout": 0.9365,
+              "layout": 0.9362,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -59926,8 +59926,8 @@
     "litho/html": {
       "features": {
         "diff": {
-          "matched": 159,
-          "mismatched": 8,
+          "matched": 160,
+          "mismatched": 7,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -60104,12 +60104,12 @@
               "text_f1": 0.9167
             },
             "ja-ruby": {
-              "layout": 0.1812,
+              "layout": 0.8905,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.2623
+              "strict": 1,
+              "text_f1": 0.9783
             },
             "ja-vertical": {
               "layout": 0,
@@ -71160,7 +71160,7 @@
               "text_f1": 0.9915
             },
             "effects-glow-softedge-reflection": {
-              "layout": 0.8598,
+              "layout": 0.862,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -71168,11 +71168,11 @@
               "text_f1": 1
             },
             "effects-shadow": {
-              "layout": 0.9707,
+              "layout": 0.9847,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "fill-gradient": {
@@ -71592,11 +71592,11 @@
               "text_f1": 1
             },
             "picture-geometry": {
-              "layout": 0.969,
+              "layout": 0.9679,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 1,
+              "strict": 0,
               "text_f1": 1
             },
             "picture-linked": {
@@ -71864,7 +71864,7 @@
               "text_f1": 0.7909
             },
             "text-fill-effects": {
-              "layout": 0.4383,
+              "layout": 0.513,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -71904,7 +71904,7 @@
               "text_f1": 1
             },
             "text-warp-wordart": {
-              "layout": 0.0649,
+              "layout": 0.088,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -87262,7 +87262,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Graphics/anchorModified.pptx": {
-              "layout": 0.9047,
+              "layout": 0.9048,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -87374,7 +87374,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/PowerPoint/Photo_Album3.pptx": {
-              "layout": 0.9476,
+              "layout": 0.9438,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -87814,7 +87814,7 @@
               "text_f1": 0
             },
             "v2FxTestFiles/asSources/presentation/Text_withShadow_100chars.pptx": {
-              "layout": 0.9089,
+              "layout": 0.9278,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -87822,7 +87822,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/asSources/presentation/Text_withShadow_100chars_Animation_Fly_In_all_at_once_.pptx": {
-              "layout": 0.9089,
+              "layout": 0.9278,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -87830,7 +87830,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/asSources/presentation/Text_withShadow_100chars_Animation_Fly_In_by_letter_.pptx": {
-              "layout": 0.9089,
+              "layout": 0.9278,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -87838,7 +87838,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/asSources/presentation/Text_withShadow_200chars.pptx": {
-              "layout": 0.9113,
+              "layout": 0.915,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -87846,7 +87846,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/asSources/presentation/Text_withShadow_200chars_Animation_Fly_In_all_at_once_.pptx": {
-              "layout": 0.9113,
+              "layout": 0.915,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -87870,7 +87870,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/AutoShapes_2D_Shadow_Offset_Diagonal_.pptx": {
-              "layout": 0.9613,
+              "layout": 0.9564,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -87894,7 +87894,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/AutoShapes_3D_Bevel_Circle_Shadow_Offset_Diagonal_.pptx": {
-              "layout": 0.6292,
+              "layout": 0.6242,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -88110,7 +88110,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/O12_templates/CertExcEmp_TP10164190.potx": {
-              "layout": 0.9588,
+              "layout": 0.9581,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -88278,7 +88278,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/Text_withEffects_100chars.pptx": {
-              "layout": 0.5254,
+              "layout": 0.6334,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -88286,7 +88286,7 @@
               "text_f1": 0.2609
             },
             "v2FxTestFiles/presentation/Text_withEffects_100chars_Animation_Fly_In_all_at_once_.pptx": {
-              "layout": 0.5254,
+              "layout": 0.6334,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -88294,7 +88294,7 @@
               "text_f1": 0.2609
             },
             "v2FxTestFiles/presentation/Text_withEffects_100chars_Animation_Fly_In_by_letter_.pptx": {
-              "layout": 0.5254,
+              "layout": 0.6334,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -88302,7 +88302,7 @@
               "text_f1": 0.2609
             },
             "v2FxTestFiles/presentation/Text_withEffects_200chars.pptx": {
-              "layout": 0.5183,
+              "layout": 0.6028,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -88334,7 +88334,7 @@
               "text_f1": 0
             },
             "v2FxTestFiles/presentation/Text_withShadow_200chars_Animation_Fly_In_by_letter_.pptx": {
-              "layout": 0.9113,
+              "layout": 0.915,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -102528,7 +102528,7 @@
               "text_f1": 0
             },
             "slideshow/54542_cropped_bitmap.pptx": {
-              "layout": 0.9762,
+              "layout": 0.9755,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -115957,8 +115957,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 1884,
-          "mismatched": 388,
+          "matched": 1893,
+          "mismatched": 379,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -117651,7 +117651,7 @@
             "css/css-ruby/break-within-bases/no-break-opportunity-at-end.html": "fail",
             "css/css-ruby/empty-ruby-text-container-abs.html": "pass",
             "css/css-ruby/intra-base-white-space-001.html": "fail",
-            "css/css-ruby/ruby-base-container-float.html": "fail",
+            "css/css-ruby/ruby-base-container-float.html": "pass",
             "css/css-ruby/ruby-box-model-001.html": "fail",
             "css/css-ruby/ruby-overhang-spaces-003.html": "fail",
             "css/css-ruby/ruby-overhang-spaces-008.html": "fail",
@@ -117799,16 +117799,16 @@
             "css/css-text-decor/text-decoration-thickness-linethrough-descendant-004.html": "pass",
             "css/css-text-decor/text-decoration-thickness-overline-001.html": "pass",
             "css/css-text-decor/text-decoration-wavy-phase-across-elements-001.html": "pass",
-            "css/css-text-decor/text-emphasis-color-property-001.html": "fail",
+            "css/css-text-decor/text-emphasis-color-property-001.html": "pass",
             "css/css-text-decor/text-emphasis-line-height-001b.html": "fail",
             "css/css-text-decor/text-emphasis-property-001.html": "pass",
-            "css/css-text-decor/text-emphasis-property-004.html": "fail",
-            "css/css-text-decor/text-emphasis-property-004a.html": "fail",
+            "css/css-text-decor/text-emphasis-property-004.html": "pass",
+            "css/css-text-decor/text-emphasis-property-004a.html": "pass",
             "css/css-text-decor/text-emphasis-style-010.html": "fail",
-            "css/css-text-decor/text-emphasis-style-021.html": "fail",
-            "css/css-text-decor/text-emphasis-style-property-011a.html": "fail",
-            "css/css-text-decor/text-emphasis-style-property-012.html": "fail",
-            "css/css-text-decor/text-emphasis-style-property-017a.html": "fail",
+            "css/css-text-decor/text-emphasis-style-021.html": "pass",
+            "css/css-text-decor/text-emphasis-style-property-011a.html": "pass",
+            "css/css-text-decor/text-emphasis-style-property-012.html": "pass",
+            "css/css-text-decor/text-emphasis-style-property-017a.html": "pass",
             "css/css-text-decor/text-shadow/lineoverflow.html": "pass",
             "css/css-text-decor/text-shadow/quirks-decor-noblur.html": "pass",
             "css/css-text-decor/text-underline-offset-001.html": "pass",
@@ -117863,7 +117863,7 @@
             "css/css-text/text-align/text-align-start-009.html": "pass",
             "css/css-text/text-align/text-align-start-016.html": "pass",
             "css/css-text/text-autospace/text-autospace-size-001.html": "pass",
-            "css/css-text/text-autospace/text-autospace-vs-001.html": "fail",
+            "css/css-text/text-autospace/text-autospace-vs-001.html": "pass",
             "css/css-text/text-fit/grow-per-line.html": "fail",
             "css/css-text/text-indent/text-indent-abspos-hanging-001.html": "pass",
             "css/css-text/text-indent/text-indent-caret-001.html": "pass",
