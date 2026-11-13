@@ -265,6 +265,41 @@ func (td *tableData) cellAt(r, c int) *box {
 	return td.cells[i]
 }
 
+// colTakesRoom reports whether a column no cell reaches keeps its track
+// and its border spacing: when its column or column group gives it a
+// width of a length above zero or a percentage, as Chromium keeps it. An
+// auto, zero or calc() width drops it, and every column after it;
+// min-width and max-width play no part. CSS Tables 3, 3.3.2 merges the
+// tracks no cell spans with the one before them; Chromium keeps or drops
+// them by their width instead.
+//
+// # Corpus evidence
+//
+//   - wpt, css/css-tables/col-definite-size-001.html,
+//     col-definite-min-size-001.html and col-definite-max-size-001.html:
+//     the pinned Chromium keeps trailing empty columns of width 100px,
+//     also under a max-width of 0, 40px, 10% or calc(), and of width 50%
+//     at no width; it drops those of a calc() width, of width 0, of auto
+//     width, and of auto width with min-width 100px. It fails the three
+//     tests, whose references drop the percentage columns and keep the
+//     min-width ones.
+func colTakesRoom(c tableCol) bool {
+	for _, b := range []*box{c.group, c.col} {
+		if b == nil {
+			continue
+		}
+		switch w := b.st.Width; w.Kind { //nolint:exhaustive // the other kinds keep no column
+		case css.Points:
+			if w.Value > 0 {
+				return true
+			}
+		case css.Percent:
+			return true
+		}
+	}
+	return false
+}
+
 // wrapperStyle returns the style of a table's wrapper box: the properties
 // that place the table, its margins, position, float and breaks (CSS 2.1,
 // 17.4); the table box takes the others.
@@ -762,10 +797,17 @@ func (e *engine) placeCells(td *tableData, head, foot *box) {
 		}
 		row.box.kids = kept
 	}
-	nc := len(td.cols)
+	nc := 0
 	for _, o := range occ {
 		nc = max(nc, len(o))
 	}
+	for i := len(td.cols) - 1; i >= nc; i-- {
+		if colTakesRoom(td.cols[i]) {
+			nc = i + 1
+			break
+		}
+	}
+	td.cols = td.cols[:min(len(td.cols), nc)]
 	if nc > 0 && nr*nc > maxTableSlots {
 		// The grid is too large: keep the rows that fit.
 		tooLarge(fmt.Sprintf("%d slots", maxTableSlots))

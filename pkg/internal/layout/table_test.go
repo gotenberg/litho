@@ -52,6 +52,30 @@ func colWidths(tm *tableData) []float64 {
 
 func pxOf(v float64) float64 { return math.Round(v/css.Pt*1000) / 1000 }
 
+func TestTable_EmptyTrailingColumns(t *testing.T) {
+	// A trailing column no cell reaches keeps its track for a width of a
+	// length above zero or a percentage alone, as Chromium keeps it.
+	calc := css.Dimension{Kind: css.Calc, Value: px(100), Fraction: 0.01}
+	for _, tc := range []struct {
+		name string
+		m    []func(*css.Style)
+		want int
+	}{
+		{"auto", nil, 1},
+		{"zero", mods(width(0)), 1},
+		{"calc()", mods(func(s *css.Style) { s.Width = calc }), 1},
+		{"min-width", mods(func(s *css.Style) { s.MinWidth = css.Pts(px(100)) }), 1},
+		{"length", mods(width(100)), 2},
+		{"length under a max-width of 0", mods(width(100), func(s *css.Style) { s.MaxWidth = css.Pts(0) }), 2},
+		{"percentage", mods(func(s *css.Style) { s.Width = pct(0.5) }), 2},
+	} {
+		tm := tableOf(t, doc(table(nil, col(nil), col(tc.m), tr(nil, td(nil, "a")))), page(400, 1000))
+		if tm.nCols != tc.want {
+			t.Errorf("%s: %d columns, want %d", tc.name, tm.nCols, tc.want)
+		}
+	}
+}
+
 func TestTable_ColumnWidths(t *testing.T) {
 	w := func(v float64) []func(*css.Style) { return mods(width(v)) }
 	tests := []struct {
@@ -68,7 +92,9 @@ func TestTable_ColumnWidths(t *testing.T) {
 		{"spanning cell", table(nil,
 			tr(nil, spans(td(nil, "aaaaaaaaaa"), 2, 1)),
 			tr(nil, td(nil, "a"), td(nil, "aaa"))), []float64{25, 75}, 100},
-		{"empty column", table(w(100), col(nil), col(nil), tr(nil, td(nil, "a"))), []float64{100, 0}, 100},
+		{"empty auto column dropped", table(w(100), col(nil), col(nil), tr(nil, td(nil, "a"))), []float64{100}, 100},
+		{"column calc() min-width ignored", table(nil, col(mods(func(s *css.Style) { s.MinWidth = css.Dimension{Kind: css.Calc, Value: px(100), Fraction: 0.01} })), tr(nil, td(nil, "a"))), []float64{10}, 10},
+		{"empty column of a width kept", table(w(100), col(nil), col(w(20)), tr(nil, td(nil, "a"))), []float64{80, 20}, 100},
 		{"fixed layout", table(mods(width(100), fixedLayout), col(w(20)), tr(nil, td(nil, "aaaaaaaa"), td(nil, ""), td(nil, ""))), []float64{20, 40, 40}, 100},
 		{"fixed layout first row", table(mods(width(100), fixedLayout), tr(nil, td(nil, ""), td(w(10), ""))), []float64{90, 10}, 100},
 		{"max-width", table(mods(func(s *css.Style) { s.MaxWidth = css.Pts(px(30)) }), tr(nil, td(nil, "a a a a"))), []float64{30}, 30},
@@ -292,7 +318,7 @@ func TestTable_AnonymousObjects(t *testing.T) {
 				t.Errorf("head %d foot %d, want the header first and the footer last", tm.headN, tm.footN)
 			}
 		}},
-		{"columns and spans", doc(table(nil, colgroup(nil, col(nil), col(nil)), func() *Node { c := col(nil); c.Span = 3; return c }(), tr(nil, cell("a")))), func(t *testing.T, rb *box) {
+		{"columns and spans", doc(table(nil, colgroup(nil, col(nil), col(nil)), func() *Node { c := col(mods(width(10))); c.Span = 3; return c }(), tr(nil, cell("a")))), func(t *testing.T, rb *box) {
 			tm := kid(t, rb, 0, 0).tdata
 			if tm.nCols != 5 || tm.cols[1].group == nil || tm.cols[4].col == nil {
 				t.Errorf("cols %d, want 5 from the column elements", tm.nCols)

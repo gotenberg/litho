@@ -240,10 +240,11 @@ func (e *engine) measureColumns(td *tableData) []colMeasure {
 				cm[i].pct = max(clamp(b.st.Width.Value), 0)
 			case css.Auto, css.None, css.Normal, css.Number, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch, css.Calc:
 			}
-			if k := b.st.MinWidth.Kind; k == css.Points || k == css.Calc {
-				// A column's or column group's min-width is a floor on
-				// each column it applies to, as Chromium honours it.
-				mw := max(clamp(b.st.MinWidth.Resolve(0)), 0)
+			if b.st.MinWidth.Kind == css.Points {
+				// A column's or column group's min-width of a length is a
+				// floor on each column it applies to, as Chromium honours
+				// it; a percentage or calc() one counts for nothing.
+				mw := max(clamp(b.st.MinWidth.Value), 0)
 				cm[i].min, cm[i].max = max(cm[i].min, mw), max(cm[i].max, mw)
 			}
 		}
