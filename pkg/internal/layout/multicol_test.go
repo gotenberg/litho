@@ -134,6 +134,22 @@ func TestMulticol_FillAutoUnderMaxHeight(t *testing.T) {
 		_____`)
 }
 
+func TestMulticol_SpannerInTransformDoesNotSpan(t *testing.T) {
+	t.Parallel()
+	// A column-span: all box inside a transformed block runs in the
+	// columns, as Chromium lays it out (holdsSpanner).
+	span := func(s *css.Style) { s.Columns.SpanAll = true }
+	tf := func(s *css.Style) {
+		s.Transform = []css.TransformFunc{{Kind: css.TransformScale, V: [6]float64{1, 1}}}
+	}
+	auto := func(s *css.Style) { s.Columns.Fill = css.FillAuto }
+	res := run(t, doc(el(sty(columns(2, 1), height(2), auto), el(sty(tf), el(sty(span, width(2), height(4), bg(lime)))))), page(5, 3))
+	assertPixels(t, res, 1, `
+		GG_GG
+		GG_GG
+		_____`)
+}
+
 func TestMulticol_FloatAvoidingBreaksMovesWhole(t *testing.T) {
 	t.Parallel()
 	// CSS Fragmentation 3, 3.2 and 4.4: a float with break-inside: avoid

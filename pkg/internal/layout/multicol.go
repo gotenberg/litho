@@ -1169,9 +1169,19 @@ func isSpanner(k *box) bool {
 }
 
 // holdsSpanner reports a block in the column flow with a spanner among its
-// in-flow descendants of the same block formatting context.
+// in-flow descendants of the same block formatting context. A transformed
+// block holds none: Chromium lays a column-span: all box inside one out in
+// the columns, departing from CSS Multicol 1, 6.1, under which a transform,
+// which makes no formatting context, would not stop it spanning.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) draws the WPT
+//     test multicol-span-all-017, a 200px tall column-span: all box inside
+//     a transform: scale(1) block, as its reference: the box runs down
+//     two 100px columns.
 func holdsSpanner(k *box, depth int) bool {
-	if k.kind != kindBlock || k.inline || k.abs || k.float != css.FloatNone || k.inlineKids || k.establishesBFC() || k.st.FlexOrGrid() || depth > maxTreeDepth {
+	if k.kind != kindBlock || k.inline || k.abs || k.float != css.FloatNone || k.inlineKids || k.establishesBFC() || k.st.FlexOrGrid() || k.st.HasTransform() || depth > maxTreeDepth {
 		return false
 	}
 	for _, kk := range k.kids {
