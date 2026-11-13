@@ -416,3 +416,15 @@ func TestFloat_PositionedDescendantsPaintInParentContext(t *testing.T) {
 		GGB_
 		GGB_`)
 }
+
+// TestOutlineRect_FollowsTheBorderRadius locks CSS UI 4, 3.1 as Chromium
+// draws it: an outline 30 wide around a corner of radius 10 has an outer
+// radius of 40, so its inner edge is the border edge; a sharp corner
+// stays sharp.
+func TestOutlineRect_FollowsTheBorderRadius(t *testing.T) {
+	r := typeset.Rect{Width: 50, Height: 50}
+	out, radii := outlineRect(r, [4][2]float64{{10, 10}, {}, {10, 10}, {10, 10}}, 30)
+	if out.Width != 110 || radii[css.TopLeft] != [2]float64{40, 40} || radii[css.TopRight] != [2]float64{} {
+		t.Errorf("outline %+v radii %v", out, radii)
+	}
+}

@@ -340,6 +340,33 @@ func (p *painter) effectFailed(err error, y float64) {
 	p.e.warnOnce(warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("a blurred shadow is drawn sharp: %v", err), y)
 }
 
+// outlineRect returns the border box r grown by d, the outline offset
+// plus its width, and the outline's outer radii: each rounded corner of
+// the box grows by d, so the outline's inner edge follows the border edge
+// at offset 0 (CSS UI 4, 3.1: the outline "should follow the
+// border-radius curve"); a sharp corner stays sharp.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) draws the
+//     outline of a 50px box of border-radius 10px, 30px and 5px wide, up
+//     to the rounded border edge, and its outer corner at radius 40px and
+//     15px; the cubic rule of shadows would give about 31px.
+func outlineRect(r typeset.Rect, radii [4][2]float64, d float64) (typeset.Rect, [4][2]float64) {
+	out := typeset.Rect{X: r.X - d, Y: r.Y - d, Width: max(r.Width+2*d, 0), Height: max(r.Height+2*d, 0)}
+	for c := range radii {
+		if radii[c][0] <= 0 || radii[c][1] <= 0 {
+			radii[c] = [2]float64{}
+			continue
+		}
+		radii[c] = [2]float64{max(radii[c][0]+d, 0), max(radii[c][1]+d, 0)}
+		if radii[c][0] == 0 || radii[c][1] == 0 {
+			radii[c] = [2]float64{}
+		}
+	}
+	return out, fitRadii(out, radii)
+}
+
 // outline paints the outline of b outside its border box, offset by
 // outline-offset, following its border radius (CSS UI 3, 5), around each
 // fragment a box that clones its decorations paints (CSS Fragmentation 3,
@@ -359,8 +386,7 @@ func (p *painter) outline(b *box) {
 	}
 	frags, columns := p.fragments(b)
 	for _, r := range frags {
-		radii := radiiOf(b, r.Width, r.Height)
-		outer, oradii := growRect(r, radii, clamp(b.st.OutlineOffset)+w)
+		outer, oradii := outlineRect(r, radiiOf(b, r.Width, r.Height), clamp(b.st.OutlineOffset)+w)
 		if outer.Width <= 0 || outer.Height <= 0 {
 			continue
 		}
