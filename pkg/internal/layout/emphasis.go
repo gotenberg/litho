@@ -143,9 +143,8 @@ func (e *engine) markRuns(it *lineItem) []typeset.Text {
 // emphasisMarks paints the emphasis marks of item it of line l in
 // text-emphasis-color. A mark is decoration: it paints as an artifact,
 // and a reader takes the text without it.
-func (p *painter) emphasisMarks(it *lineItem, l *lineBox, page int, alpha float64) {
+func (p *painter) emphasisMarks(it *lineItem, l *lineBox, page int) {
 	color, _ := colorOf(it.box.st.TextEmphasisColor)
-	color.A *= alpha
 	if color.A <= 0 {
 		return
 	}

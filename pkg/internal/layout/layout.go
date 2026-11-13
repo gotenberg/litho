@@ -360,11 +360,12 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*typeset.StructEle
 }
 
 // groupOf returns the group of the display list group it, holding content.
-// A box of opacity below 1 is composited as a whole (CSS Color 4, 4.1):
-// its content is one isolated transparency group (ISO 32000-1, 11.4), as
-// every stacking context is in CSS Compositing 1, 3.3, unless the content
-// is one object, whose own alpha composites alike and costs no form
-// XObject.
+// A box of opacity below 1 or of a blend mode is composited as a whole
+// (CSS Color 4, 4.1; CSS Compositing 1, 3.2): its content is one isolated
+// transparency group (ISO 32000-1, 11.4), as every stacking context is in
+// CSS Compositing 1, 3.3, unless the content is one object, whose own
+// alpha and blend mode composite alike and cost no form XObject. A group
+// that holds something blending is isolated whatever it paints.
 //
 // # Corpus evidence
 //
@@ -372,8 +373,8 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*typeset.StructEle
 //     transparency group form painted under /ca 0.5, one filled rectangle
 //     or one line of text included.
 func groupOf(it *ditem, content []typeset.Fragment) *typeset.Group {
-	g := &typeset.Group{Transform: groupTransform(it), Clip: it.clip, Opacity: it.opacity, Content: content}
-	if it.opacity < 1 && !oneObject(content) {
+	g := &typeset.Group{Transform: groupTransform(it), Clip: it.clip, Opacity: it.opacity, Blend: it.blend, Content: content}
+	if it.isolate || (it.opacity < 1 || it.blend != typeset.BlendNormal) && !oneObject(content) {
 		g.Transparency = &typeset.TransparencyGroup{Isolated: true}
 	}
 	return g

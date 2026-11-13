@@ -32,7 +32,7 @@ const maxEffectGlyphs = 4096
 //     runs start 0.6 point above the baseline (their blur's margin), the
 //     mirrored descenders cut off, and fade to their end opacity over
 //     10.9 points at w14:endPos 45.5%: 45.5% of the 24 point em.
-func (p *painter) textEffects(it *lineItem, l *lineBox, page int, alpha float64) {
+func (p *painter) textEffects(it *lineItem, l *lineBox, page int) {
 	fx := it.box.st.TextEffects
 	t := it.text
 	if fx == nil || t.Face == nil || len(t.Glyphs) == 0 {
@@ -44,7 +44,6 @@ func (p *painter) textEffects(it *lineItem, l *lineBox, page int, alpha float64)
 		return
 	}
 	col := t.Color
-	col.A *= alpha
 	oy := l.y + t.Origin.Y + p.dy
 	box := typeset.Rect{X: x0, Y: oy - t.Size, Width: max(x1-x0, 0), Height: t.Size}
 	src := &officefx.Source{Paths: []effect.Path{{Ops: ops}}, Bounds: box, Color: col, Text: true}

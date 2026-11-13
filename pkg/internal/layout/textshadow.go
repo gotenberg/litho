@@ -12,23 +12,22 @@ import (
 // last listed painted first, its underlines and overlines under its
 // glyphs and its line-throughs over them as the text paints its own. A
 // blur radius is not drawn: the copy keeps sharp edges.
-func (p *painter) textShadows(it *lineItem, l *lineBox, page int, alpha float64) {
+func (p *painter) textShadows(it *lineItem, l *lineBox, page int) {
 	shadows := it.box.st.TextShadow
 	for _, sh := range slices.Backward(shadows) {
 		col, ok := colorOf(sh.Color)
-		if !ok || col.A*alpha <= 0 {
+		if !ok || col.A <= 0 {
 			continue
 		}
 		ds := &decoShadow{x: sh.X, y: sh.Y, color: col}
-		p.textDecorations(it, l, page, alpha, css.Underline|css.Overline, ds)
+		p.textDecorations(it, l, page, css.Underline|css.Overline, ds)
 		c := *it.text
 		c.Origin.X = l.x + it.text.Origin.X + p.dx + sh.X
 		c.Origin.Y = l.y + it.text.Origin.Y + p.dy + sh.Y
 		c.Color = col
-		c.Color.A *= alpha
 		c.Parent = nil
 		top, bottom := l.y+it.baseline-it.ascent+sh.Y, l.y+it.baseline+it.descent+sh.Y
 		p.emit(it.box, true, &c, top, bottom, page)
-		p.textDecorations(it, l, page, alpha, css.LineThrough, ds)
+		p.textDecorations(it, l, page, css.LineThrough, ds)
 	}
 }

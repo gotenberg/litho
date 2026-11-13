@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // ditem is one node of the display list, in flow coordinates: a fragment,
@@ -27,6 +28,10 @@ type ditem struct {
 	opacity   float64
 	clip      *typeset.Path
 	transform *typeset.Matrix
+	// blend is the group's blend mode, isolate whether its content is an
+	// isolated transparency group whatever it paints.
+	blend   typeset.BlendMode
+	isolate bool
 	// fixed reports the group of a fixed box: its content is in the
 	// coordinates of the first page and paints on every page (CSS 2.1,
 	// 9.6.1).
@@ -72,9 +77,6 @@ type painter struct {
 	// dx and dy are the relative positioning offset in force (CSS 2.1,
 	// 9.4.3).
 	dx, dy float64
-	// alpha is the opacity of the inline boxes the current text sits in,
-	// folded into its colours.
-	alpha float64
 	// canvas is the box whose background paints the canvas.
 	canvas *box
 	// viewport is the box whose overflow applies to the viewport instead
@@ -102,7 +104,7 @@ type painter struct {
 
 // paint returns the display list of the box tree rooted at root.
 func (e *engine) paint(root *box) (*ditem, []pendingLink, *box) {
-	p := &painter{e: e, top: &ditem{group: true, opacity: 1}, mono: -1, alpha: 1}
+	p := &painter{e: e, top: &ditem{group: true, opacity: 1}, mono: -1}
 	p.frames = []*frame{{container: p.top, root: root}}
 	p.canvas = canvasBox(root)
 	p.viewport = viewportBox(root)
@@ -433,8 +435,9 @@ func (p *painter) unit(b *box, own bool) {
 			return
 		}
 	}
-	if op < 1 || has {
-		g := &ditem{group: true, opacity: op}
+	blend, isolate := p.compositing(b)
+	if op < 1 || has || blend != typeset.BlendNormal || isolate {
+		g := &ditem{group: true, opacity: op, blend: blend, isolate: isolate}
 		if has {
 			g.transform = &m
 		}
@@ -867,11 +870,7 @@ func (p *painter) line(l *lineBox, fl *firstLine) {
 	saved := p.cuts
 	p.cuts = cuts
 	defer func() { p.cuts = saved }()
-	paintFrags := func(fs []*inlineFrag) {
-		for _, f := range fs {
-			p.lineFrag(l, f, page)
-		}
-	}
+	var paintFrags func(fs []*inlineFrag)
 	type span struct {
 		rect typeset.Rect
 		set  bool
@@ -880,6 +879,14 @@ func (p *painter) line(l *lineBox, fl *firstLine) {
 	linkRects := map[*link]*span{}
 	p.barRules(l, page)
 	p.changeBar(l, page)
+	var groups []*box
+	defer func() { p.enterInlines(&groups, nil) }()
+	paintFrags = func(fs []*inlineFrag) {
+		for _, f := range fs {
+			p.enterInlines(&groups, compositedInlines(f.box))
+			p.lineFrag(l, f, page)
+		}
+	}
 	paintFrags(before[0])
 	for i, it := range l.items {
 		if i > 0 {
@@ -888,6 +895,7 @@ func (p *painter) line(l *lineBox, fl *firstLine) {
 		if it.box == nil {
 			continue
 		}
+		p.enterInlines(&groups, compositedInlines(it.box))
 		ox, oy := inlineOffset(it.box.parent)
 		p.dx += ox
 		p.dy += oy
@@ -924,6 +932,65 @@ func (p *painter) line(l *lineBox, fl *firstLine) {
 		if s := linkRects[lk]; s.rect.Width > 0 && s.rect.Height > 0 {
 			p.links = append(p.links, pendingLink{lk: lk, rect: s.rect})
 		}
+	}
+}
+
+// compositedInlines returns the inline boxes b sits in, b included, up to
+// its block container, that composite their content as a group: an
+// opacity below 1 or a blend mode (CSS Color 4, 4.1; CSS Compositing 1,
+// 3.2), outermost first. Each fragment of such a box on a line is one
+// group: what Chromium composites once per box, litho composites once per
+// line, which differs only where its lines overlap.
+func compositedInlines(b *box) []*box {
+	var out []*box
+	for k := b; k != nil; k = k.parent {
+		if k.kind != kindInline {
+			if k != b {
+				break
+			}
+			continue
+		}
+		if inlineGroup(k) {
+			out = append(out, k)
+		}
+	}
+	slices.Reverse(out)
+	return out
+}
+
+// inlineGroup reports an inline box that composites as a group.
+func inlineGroup(b *box) bool {
+	return b.kind == kindInline && (b.st.Opacity < 1 || b.st.MixBlendMode != css.BlendNormal)
+}
+
+// innerComposited returns the innermost inline box b sits in, b included,
+// that composites as a group, nil for none.
+func innerComposited(b *box) *box {
+	if c := compositedInlines(b); len(c) > 0 {
+		return c[len(c)-1]
+	}
+	return nil
+}
+
+// enterInlines closes the groups of open that want does not hold and opens
+// those of want that are not open, so what paints next paints in the
+// groups of want, outermost first. Each group is a frame whose root is its
+// inline box: the clips outside it apply to the group.
+func (p *painter) enterInlines(open *[]*box, want []*box) {
+	k := 0
+	for k < len(*open) && k < len(want) && (*open)[k] == want[k] {
+		k++
+	}
+	p.frames = p.frames[:len(p.frames)-(len(*open)-k)]
+	*open = (*open)[:k]
+	for _, b := range want[k:] {
+		c := p.sync(p.chain(b, false))
+		op := min(max(clamp(b.st.Opacity), 0), 1)
+		blend, isolate := p.blendOf(b), blendsInside(b)
+		g := &ditem{group: true, opacity: op, blend: blend, isolate: isolate}
+		c.kids = append(c.kids, g)
+		p.frames = append(p.frames, &frame{container: g, root: b})
+		*open = append(*open, b)
 	}
 }
 
@@ -996,6 +1063,64 @@ func union(a, b typeset.Rect) typeset.Rect {
 	return typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 }
 
+// compositing returns the blend mode b composites its stacking context
+// with and whether its content must be an isolated group: a stacking
+// context is one when something inside it blends (CSS Compositing 1, 3.2
+// and 3.3), as Chromium prints it, and need not be one otherwise, since
+// isolation changes nothing that composites in normal mode. The root
+// composites with the page alone, which ISO 32000-1, 11.4.7 already
+// isolates.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium writes a box of mix-blend-mode multiply as an
+//     isolated transparency group painted under /BM /Multiply, its opacity
+//     in the same graphics state; a stacking context made by isolation,
+//     z-index or a transform holding it as one more isolated group; and a
+//     box of isolation isolate holding nothing that blends as no group.
+//   - probe, html: Chromium writes plus-lighter as an isolated group under
+//     /BM /Normal, and parses no plus-darker.
+func (p *painter) compositing(b *box) (typeset.BlendMode, bool) {
+	if b.parent == nil || !b.isStackingContext() {
+		return typeset.BlendNormal, false
+	}
+	return p.blendOf(b), blendsInside(b)
+}
+
+// blendOf returns the blend mode of b, a stacking context or an inline
+// box that composites as a group.
+func (p *painter) blendOf(b *box) typeset.BlendMode {
+	switch m := b.st.MixBlendMode; m {
+	case css.BlendNormal:
+	case css.BlendPlusLighter:
+		// PDF has no additive blend mode (ISO 32000-1, 11.3.5).
+		p.e.warnOnce(warn.CSSUnsupported, warn.Approximated, "mix-blend-mode plus-lighter is printed as normal, as Chromium prints it", -1)
+	default:
+		// css.BlendMode orders the sixteen modes as typeset does, after
+		// ISO 32000-1, Tables 136 and 137.
+		return typeset.BlendMode(m)
+	}
+	return typeset.BlendNormal
+}
+
+// blendsInside reports whether a box inside b blends with b's content: a
+// stacking context or an inline box of a blend mode, which b's stacking
+// context or b's inline group holds. The stacking contexts and the inline
+// groups inside b are groups of their own, whose content blends within
+// them.
+func blendsInside(b *box) bool {
+	for _, k := range b.kids {
+		group := k.isStackingContext() || inlineGroup(k)
+		if m := k.st.MixBlendMode; group && m != css.BlendNormal && m != css.BlendPlusLighter {
+			return true
+		}
+		if !group && blendsInside(k) {
+			return true
+		}
+	}
+	return false
+}
+
 // inlineFrag paints the background and borders of one line fragment of an
 // inline box (CSS 2.1, 8.6; box-decoration-break: slice).
 func (p *painter) inlineFrag(b *box, r typeset.Rect, radii [4][2]float64, bd, pd [4]float64, sides [4]bool, page int) {
@@ -1010,41 +1135,27 @@ func (p *painter) inlineFrag(b *box, r typeset.Rect, radii [4][2]float64, bd, pd
 	p.mono = saved
 }
 
-// inlineAlpha returns the product of the opacities of the inline boxes b
-// sits in up to its block container: an inline box with an opacity below 1
-// folds it into the colours of its text, an approximation of the group it
-// would form.
-func inlineAlpha(b *box) float64 {
-	a := 1.0
-	for k := b.parent; k != nil && k.kind == kindInline; k = k.parent {
-		a *= min(max(clamp(k.st.Opacity), 0), 1)
-	}
-	return a
-}
-
 // text paints the glyph run of item it of line l and its decorations
 // (CSS Text Decoration 3, 2): underlines and overlines under the glyphs,
 // line-throughs over them (CSS Text Decoration 3, 2.4 and CSS 2.1,
 // appendix E).
 func (p *painter) text(it *lineItem, l *lineBox, page int) {
-	alpha := inlineAlpha(it.box)
 	t := it.text
 	if t.Face == nil {
 		return
 	}
-	p.textEffects(it, l, page, alpha)
-	p.textShadows(it, l, page, alpha)
-	p.textDecorations(it, l, page, alpha, css.Underline|css.Overline, nil)
+	p.textEffects(it, l, page)
+	p.textShadows(it, l, page)
+	p.textDecorations(it, l, page, css.Underline|css.Overline, nil)
 	c := *t
 	c.Origin = typeset.Point{X: l.x + t.Origin.X + p.dx, Y: l.y + t.Origin.Y + p.dy}
-	c.Color.A *= alpha
 	c.Parent = it.box.elem
 	top, bottom := l.y+it.baseline-it.ascent, l.y+it.baseline+it.descent
 	if !p.textPaint(it, l, page, &c, top, bottom) && c.Color.A > 0 {
 		p.emit(it.box, true, &c, top, bottom, page)
 	}
-	p.emphasisMarks(it, l, page, alpha)
-	p.textDecorations(it, l, page, alpha, css.LineThrough, nil)
+	p.emphasisMarks(it, l, page)
+	p.textDecorations(it, l, page, css.LineThrough, nil)
 }
 
 // roundPx rounds v points to whole CSS pixels.
@@ -1089,13 +1200,13 @@ type decoShadow struct {
 //     glyph run's own height, all at the block's thickness; an Ahem
 //     overline 1 to 30px thick at 16, 20, 40 and 50px ends one pixel
 //     below the glyphs' top edge.
-func (p *painter) textDecorations(it *lineItem, l *lineBox, page int, alpha float64, which css.TextDecoration, sh *decoShadow) {
+func (p *painter) textDecorations(it *lineItem, l *lineBox, page int, which css.TextDecoration, sh *decoShadow) {
 	for _, d := range it.box.decos {
 		lines := d.lines & which
 		if lines == 0 {
 			continue
 		}
-		g, ok := p.decoGeom(it, l, d, alpha, sh)
+		g, ok := p.decoGeom(it, l, d, sh)
 		if !ok {
 			continue
 		}
@@ -1113,7 +1224,7 @@ func (p *painter) textDecorations(it *lineItem, l *lineBox, page int, alpha floa
 				// One line spans the runs of the decorating box that
 				// touch: the first run draws an underline or overline under
 				// the glyphs of all, the last a line-through over them.
-				from, to, ok := p.decoRun(it, l, d, k, alpha, line == css.LineThrough)
+				from, to, ok := p.decoRun(it, l, d, k, line == css.LineThrough)
 				if !ok {
 					continue
 				}
@@ -1160,13 +1271,12 @@ type decoGeom struct {
 
 // decoGeom returns where decoration d draws on item it of line l, false
 // when it draws nothing.
-func (p *painter) decoGeom(it *lineItem, l *lineBox, d deco, alpha float64, sh *decoShadow) (decoGeom, bool) {
+func (p *painter) decoGeom(it *lineItem, l *lineBox, d deco, sh *decoShadow) (decoGeom, bool) {
 	var g decoGeom
 	col, ok := colorOf(d.color)
 	if sh != nil {
 		col, ok = sh.color, true
 	}
-	col.A *= alpha
 	if !ok || col.A <= 0 {
 		return g, false
 	}
@@ -1263,12 +1373,12 @@ func (p *painter) decoGeom(it *lineItem, l *lineBox, d deco, alpha float64, sh *
 // the same relative offset. It reports false when another run of them
 // draws the line: the first for an underline or overline, the last for a
 // line-through (last).
-func (p *painter) decoRun(it *lineItem, l *lineBox, d deco, k int, alpha float64, last bool) (int, int, bool) {
+func (p *painter) decoRun(it *lineItem, l *lineBox, d deco, k int, last bool) (int, int, bool) {
 	at := slices.Index(l.items, it)
 	if at < 0 {
 		return 0, -1, false
 	}
-	g, _ := p.decoGeom(it, l, d, alpha, nil)
+	g, _ := p.decoGeom(it, l, d, nil)
 	ox, oy := inlineOffset(it.box.parent)
 	joins := func(a, b *lineItem) bool {
 		if b.text == nil || b.text.Face == nil || b.box == nil || b.box.hidden {
@@ -1278,14 +1388,14 @@ func (p *painter) decoRun(it *lineItem, l *lineBox, d deco, k int, alpha float64
 			return false
 		}
 		bx, by := inlineOffset(b.box.parent)
-		if bx != ox || by != oy || inlineAlpha(b.box) != alpha {
+		if bx != ox || by != oy || innerComposited(b.box) != innerComposited(it.box) {
 			return false
 		}
 		for _, bd := range b.box.decos {
 			if bd != d {
 				continue
 			}
-			bg, ok := p.decoGeom(b, l, bd, alpha, nil)
+			bg, ok := p.decoGeom(b, l, bd, nil)
 			return ok && bg.color == g.color && bg.thick == g.thick && bg.y[k] == g.y[k]
 		}
 		return false

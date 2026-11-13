@@ -385,18 +385,26 @@ func (b *box) layered() bool {
 		// column or a column group.
 		return b.tpart <= partCell && (b.st.Position != css.Static || b.transformed())
 	}
-	return b.st.Position != css.Static || b.st.Opacity < 1 || b.transformed() || b.isItem() && !b.st.ZIndex.Auto
+	return b.st.Position != css.Static || b.st.Opacity < 1 || b.transformed() || b.composited() || b.isItem() && !b.st.ZIndex.Auto
 }
 
 // isStackingContext reports whether the box creates a stacking context: a
 // positioned box with an integer z-index (CSS 2.1, 9.9.1), a fixed box
-// (CSS Position 3, 3.4), an opacity below 1 (CSS Color 3, 3.2) or a
-// transform (CSS Transforms 1, 6).
+// (CSS Position 3, 3.4), an opacity below 1 (CSS Color 3, 3.2), a
+// transform (CSS Transforms 1, 6), or a blend mode or isolation (CSS
+// Compositing 1, 3.2 and 3.3).
 func (b *box) isStackingContext() bool {
 	if !b.layered() {
 		return false
 	}
-	return (b.st.Position != css.Static || b.isItem()) && !b.st.ZIndex.Auto || b.st.Position == css.Fixed || b.st.Opacity < 1 || b.transformed()
+	return (b.st.Position != css.Static || b.isItem()) && !b.st.ZIndex.Auto || b.st.Position == css.Fixed || b.st.Opacity < 1 || b.transformed() || b.composited()
+}
+
+// composited reports a box whose blend mode is not normal or whose
+// isolation is isolate: either makes it a stacking context (CSS
+// Compositing 1, 3.2 and 3.3).
+func (b *box) composited() bool {
+	return b.st.MixBlendMode != css.BlendNormal || b.st.Isolation == css.IsolationIsolate
 }
 
 // zLevel returns the stack level of a stacking context: its z-index, 0

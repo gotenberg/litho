@@ -148,16 +148,51 @@ func (p *painter) background(b *box, st *css.Style, r typeset.Rect, radii [4][2]
 		g := &ditem{group: true, opacity: 1, clip: tc}
 		c := p.sync(p.chain(b, false))
 		c.kids = append(c.kids, g)
-		p.backgroundInto(g, b, st, r, radii, bd, pd, clipR, clipRadii)
+		into, blend := p.blendedBackground(g, b, st)
+		p.backgroundInto(into, blend, b, st, r, radii, bd, pd, clipR, clipRadii)
 		return
 	}
-	p.backgroundInto(nil, b, st, r, radii, bd, pd, clipR, clipRadii)
+	into, blend := p.blendedBackground(nil, b, st)
+	p.backgroundInto(into, blend, b, st, r, radii, bd, pd, clipR, clipRadii)
+}
+
+// blendedBackground returns the group the background of b, styled st,
+// paints into and the blend mode of its image: when the image blends with
+// the colour, an isolated group, since the layers of a background blend
+// with each other and its colour and not with what lies beneath the
+// element (CSS Compositing 1, 3.4), added to into, or to the display list
+// when into is nil. It returns into and normal when nothing blends: an
+// image over no colour blends with nothing.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium writes a background of a gradient and a
+//     colour, background-blend-mode multiply, screen or luminosity, as an
+//     isolated transparency group holding the colour and the gradient
+//     under /BM of the mode.
+func (p *painter) blendedBackground(into *ditem, b *box, st *css.Style) (*ditem, typeset.BlendMode) {
+	if st.BackgroundBlendMode == css.BlendNormal || st.BackgroundImage == "" && st.BackgroundGradient == nil {
+		return into, typeset.BlendNormal
+	}
+	if _, ok := colorOf(st.BackgroundColor); !ok {
+		return into, typeset.BlendNormal
+	}
+	g := &ditem{group: true, opacity: 1, isolate: true}
+	if into != nil {
+		into.kids = append(into.kids, g)
+	} else {
+		c := p.sync(p.chain(b, false))
+		c.kids = append(c.kids, g)
+	}
+	// css.BlendMode orders the sixteen modes as typeset does; a
+	// background takes no plus-lighter.
+	return g, typeset.BlendMode(st.BackgroundBlendMode)
 }
 
 // backgroundInto paints the colour and the image of the background of b
 // clipped to clipR with clipRadii, into the group into, or into the
-// display list when into is nil.
-func (p *painter) backgroundInto(into *ditem, b *box, st *css.Style, r typeset.Rect, radii [4][2]float64, bd, pd [4]float64, clipR typeset.Rect, clipRadii [4][2]float64) {
+// display list when into is nil, the image under the blend mode blend.
+func (p *painter) backgroundInto(into *ditem, blend typeset.BlendMode, b *box, st *css.Style, r typeset.Rect, radii [4][2]float64, bd, pd [4]float64, clipR typeset.Rect, clipRadii [4][2]float64) {
 	if c, ok := colorOf(st.BackgroundColor); ok {
 		path := &typeset.Path{Ops: roundedRect(clipR, clipRadii), Fill: &typeset.Fill{Color: c}}
 		if into == nil {
@@ -184,7 +219,7 @@ func (p *painter) backgroundInto(into *ditem, b *box, st *css.Style, r typeset.R
 	if st.BackgroundAttachment == css.AttachLocal {
 		area = p.localArea(b, area, r, pd)
 	}
-	g := &ditem{group: true, opacity: 1, clip: &typeset.Path{Ops: roundedRect(clipR, clipRadii), Fill: &typeset.Fill{}}}
+	g := &ditem{group: true, opacity: 1, blend: blend, clip: &typeset.Path{Ops: roundedRect(clipR, clipRadii), Fill: &typeset.Fill{}}}
 	if st.BackgroundGradient != nil {
 		for _, pa := range p.e.gradientTiles(st, area, clipR, r.Y) {
 			t := pa.Ops[0].P[0]
