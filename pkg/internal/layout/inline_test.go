@@ -186,6 +186,39 @@ func TestVerticalAlign_Kinds(t *testing.T) {
 	}
 }
 
+// TestVerticalAlign_BlinkScriptShift locks the shift of sub and super
+// under BrowserRules: CSS 2.1, 10.8.1 leaves "the proper position" to the
+// user agent, and Blink moves the baseline by the fifth (sub) or the third
+// (super) of the parent's font size, floored to 1/64 px, plus one pixel.
+// The 20 px Ahem box sits under a 10 px parent.
+func TestVerticalAlign_BlinkScriptShift(t *testing.T) {
+	big := func(va css.VerticalAlign) *Node {
+		st := inlineSty(func(s *css.Style) { s.FontSize = px(20); s.VerticalAlign = va })
+		return el(st, txt(st, "b"))
+	}
+	tests := []struct {
+		name     string
+		va       css.VerticalAlign
+		lineH    float64
+		baseline float64
+	}{
+		// Lowered by 2 + 1 px: 16 above, 3 + 4 below.
+		{"sub", css.VerticalAlign{Kind: css.Sub}, 20, 13},
+		// Raised by 213/64 + 1 px.
+		{"super", css.VerticalAlign{Kind: css.Super}, 22 + 21.0/64, 20 + 21.0/64},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pb := page(100, 50)
+			rb := boxesWith(t, doc(el(sty(), txt(sty(), "a"), big(tt.va))), Options{Page: pb, BrowserRules: true})
+			l := kid(t, rb, 0, 0).lines[0]
+			if !near(l.h/css.Pt, tt.lineH) || !near(l.baseline/css.Pt, tt.baseline) {
+				t.Errorf("line height %v baseline %v, want %v and %v", l.h/css.Pt, l.baseline/css.Pt, tt.lineH, tt.baseline)
+			}
+		})
+	}
+}
+
 func TestTextIndent_FirstLine(t *testing.T) {
 	in := func(s *css.Style) { s.TextIndent = css.Pts(px(10)) }
 	res := run(t, doc(el(sty(in), txt(sty(in), "aa bb"))), page(40, 50))

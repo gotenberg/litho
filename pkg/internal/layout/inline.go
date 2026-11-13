@@ -1438,7 +1438,7 @@ func (s *inlineState) newVbox(b *box, parent *vbox) *vbox {
 		return v
 	}
 	v.inAligned = parent.inAligned || parent.aligned
-	v.shift = alignShift(b.st.VerticalAlign, parent, v.above, v.below, lh)
+	v.shift = e.alignShift(b.st.VerticalAlign, parent, v.above, v.below, lh)
 	if k := b.st.VerticalAlign.Kind; k == css.AlignTop || k == css.AlignBottom {
 		v.aligned = true
 		v.shift = parent.shift
@@ -1475,12 +1475,18 @@ func (e *engine) leading(lead float64) (float64, float64) {
 // alignShift returns the baseline shift of a box with extent above and
 // below its baseline, aligned in parent by va (CSS 2.1, 10.8.1). lh is the
 // box's line height, for percentages.
-func alignShift(va css.VerticalAlign, parent *vbox, above, below, lh float64) float64 {
+func (e *engine) alignShift(va css.VerticalAlign, parent *vbox, above, below, lh float64) float64 {
 	ps := parent.shift
 	switch va.Kind {
 	case css.Sub:
+		if e.opts.BrowserRules {
+			return ps + blinkScriptShift(parent.size, 5)
+		}
 		return ps + float64(parent.size*0.2)
 	case css.Super:
+		if e.opts.BrowserRules {
+			return ps - blinkScriptShift(parent.size, 3)
+		}
 		return ps - parent.size/3
 	case css.TextTop:
 		return ps - parent.ca + above
@@ -1493,6 +1499,23 @@ func alignShift(va css.VerticalAlign, parent *vbox, above, below, lh float64) fl
 	case css.Baseline, css.AlignTop, css.AlignBottom:
 	}
 	return ps
+}
+
+// blinkScriptShift returns how far Blink lowers a baseline under
+// vertical-align: sub (part 5) or raises it under super (part 3) in a
+// parent of font size size: that part of the size floored to Blink's
+// layout unit of 1/64 px, plus one pixel. CSS 2.1, 10.8.1 leaves "the proper position" of both to the user agent; outside
+// BrowserRules the shift is the part of the size alone.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 lowers a 16 px
+//     sub of the parent's size by 4.1875 px, a 17 px one by 4.390625 px
+//     and a 20 px one by 5 px, raises a 16 px super by 6.328125 px and a
+//     17 px one by 6.65625 px; a smaller sub under a 16 px parent moves as
+//     far as one of the parent's size.
+func blinkScriptShift(size, part float64) float64 {
+	return float64(math.Floor(size/css.Pt/part*64)/64+1) * css.Pt
 }
 
 // vboxOf returns the vertical alignment record of inline box b, creating
@@ -1841,7 +1864,7 @@ func (s *inlineState) vertical(l *lineBox) {
 			if r := a.ruby; r != nil && r.over && a.st.VerticalAlign.Kind != css.AlignTop && a.st.VerticalAlign.Kind != css.AlignBottom {
 				// The annotation over a column takes the room above the
 				// line before it grows the line (rubyRoom).
-				shift := alignShift(a.st.VerticalAlign, parent, above, below, s.e.lineHeight(a.st, a.lang))
+				shift := s.e.alignShift(a.st.VerticalAlign, parent, above, below, s.e.lineHeight(a.st, a.lang))
 				it.baseline = shift
 				it.ascent, it.descent = above, below
 				annTop = min(annTop, shift-above)
@@ -1850,7 +1873,7 @@ func (s *inlineState) vertical(l *lineBox) {
 				continue
 			}
 			av := atomicV{it: it, v: parent, above: above, below: below}
-			shift := alignShift(a.st.VerticalAlign, parent, above, below, s.e.lineHeight(a.st, a.lang))
+			shift := s.e.alignShift(a.st.VerticalAlign, parent, above, below, s.e.lineHeight(a.st, a.lang))
 			if k := a.st.VerticalAlign.Kind; k == css.AlignTop || k == css.AlignBottom {
 				av.aligned = true
 				shift = parent.shift
