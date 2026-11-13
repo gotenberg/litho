@@ -356,6 +356,9 @@ type computeState struct {
 	elem   int
 	root   *Style
 	nodes  int
+	// node is the element being cascaded, whose attributes attr()
+	// reads; a pseudo-element's is its originating element.
+	node *html.Node
 	// units caches FontUnits by font selection.
 	units map[fontKey]FontUnits
 	// mem is the conversion's memory budget each distinct computed style
@@ -528,6 +531,7 @@ func (cs *computeState) element(n, parent *html.Node) {
 			cands = append(cands, cand{d: &decls[i], rank: rank(Author, decls[i].Important), spec: styleAttrSpec, ord: len(cs.r.rules) + 1, idx: i})
 		}
 	}
+	cs.node = n
 	st, vars := cs.cascade(cands, parentStyle, parentVars, parent == nil)
 	cs.cands = cands[:0]
 	cs.out[n] = st

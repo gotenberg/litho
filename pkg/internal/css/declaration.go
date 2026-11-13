@@ -156,6 +156,21 @@ func containsVar(l []token) bool {
 	return false
 }
 
+// containsSubstitution reports whether a value calls attr() or env()
+// anywhere.
+func containsSubstitution(l []token) bool {
+	for i := range l {
+		t := &l[i]
+		if t.typ == tFunction && (eqFold(t.value, "attr") || eqFold(t.value, "env")) {
+			return true
+		}
+		if len(t.children) > 0 && containsSubstitution(t.children) {
+			return true
+		}
+	}
+	return false
+}
+
 // declare turns a parsed declaration into a [Declaration]: a custom
 // property keeps its tokens, a value with var() waits for computed-value
 // time, anything else is parsed and expanded into longhands now. An
@@ -181,6 +196,13 @@ func (c *declCtx) declare(name string, value []token, important bool) Declaratio
 		return d
 	}
 	entries, ok := c.expand(name, value)
+	if !ok && containsSubstitution(value) {
+		// attr() and env() substitute at computed-value time (CSS Values
+		// 5, 7.7; CSS Environment Variables 1, 3). content reads an
+		// untyped attr() itself, and only waits when it cannot.
+		d.pending, d.base = value, c.baseURL
+		return d
+	}
 	if v := significant(value); len(v) == 1 && v[0].typ == tIdent {
 		k := lower(v[0].value)
 		d.revert = k == "revert" || k == "revert-layer"

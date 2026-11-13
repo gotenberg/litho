@@ -78,13 +78,37 @@ func (cs *computeState) resolveCustom(names []string, declared map[string][]toke
 
 // substitute replaces every var() in l (CSS Variables 1, 3): with the
 // referenced property's value, else with the fallback, else the whole
-// value fails. budget counts the tokens produced.
+// value fails; and every attr() and env() (substituteFunc). budget counts
+// the tokens produced.
 func (cs *computeState) substitute(l []token, lookup func(string) ([]token, bool), budget *int, depth int) ([]token, bool) {
 	if depth > maxNestingDepth {
 		return nil, false
 	}
 	out := make([]token, 0, len(l))
 	for _, t := range l {
+		if t.typ == tFunction && (eqFold(t.value, "attr") || eqFold(t.value, "env")) {
+			v, fallback, ok := cs.substituteFunc(&t)
+			if !ok {
+				return nil, false
+			}
+			if fallback {
+				if v, ok = cs.substitute(v, lookup, budget, depth+1); !ok {
+					return nil, false
+				}
+			}
+			*budget -= len(v)
+			if *budget < 0 || !cs.m.charge(len(v)) {
+				cs.warns.add(Warning{Code: warn.LimitReached, Effect: warn.Approximated, Message: "a var() substitution grew past the size limit and was dropped"})
+				return nil, false
+			}
+			out = append(out, v...)
+			continue
+		}
+		if t.typ == tFunction && urlFunction(t.value) && containsSubstitution(t.children) {
+			// CSS Values 5, 7.7.2: a value an attr() gives never becomes
+			// a URL, so a document's attributes cannot make litho fetch.
+			return nil, false
+		}
 		if t.typ == tFunction && eqFold(t.value, "var") {
 			args := t.children
 			i := 0
@@ -139,6 +163,177 @@ func (cs *computeState) substitute(l []token, lookup func(string) ([]token, bool
 		out = append(out, t)
 	}
 	return out, true
+}
+
+// urlFunction reports the functions whose argument is fetched.
+func urlFunction(name string) bool {
+	switch lower(name) {
+	case "url", "src", "image", "image-set", "-webkit-image-set":
+		return true
+	}
+	return false
+}
+
+// substituteFunc returns what the attr() or env() t substitutes for, or
+// its fallback, which the caller substitutes in turn, false when neither
+// is valid: the declaration is then invalid at computed-value time.
+func (cs *computeState) substituteFunc(t *token) (v []token, fallback, ok bool) {
+	var args, fb []token
+	hasFallback := false
+	for i, a := range t.children {
+		if a.typ == tComma {
+			args, fb, hasFallback = t.children[:i], t.children[i+1:], true
+			break
+		}
+	}
+	if !hasFallback {
+		args = t.children
+	}
+	args = significant(args)
+	var got []token
+	var found bool
+	if eqFold(t.value, "env") {
+		got, found = envValue(args)
+	} else {
+		got, found = cs.attrValue(args)
+	}
+	switch {
+	case found:
+		return got, false, true
+	case hasFallback:
+		return fb, true, true
+	case got != nil:
+		return got, false, true
+	}
+	return nil, false, false
+}
+
+// envValue returns the value of an environment variable (CSS Environment
+// Variables 1, 3): the safe area insets are zero on paper, as Chromium
+// prints them; every other name is unknown and takes the fallback.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 prints env(safe-area-inset-left, 77px)
+//     as 0px and env(nonexistent, 66px) as 66px.
+func envValue(args []token) ([]token, bool) {
+	if len(args) == 0 || args[0].typ != tIdent {
+		return nil, false
+	}
+	switch lower(args[0].value) {
+	case "safe-area-inset-top", "safe-area-inset-right", "safe-area-inset-bottom", "safe-area-inset-left",
+		"safe-area-max-inset-top", "safe-area-max-inset-right", "safe-area-max-inset-bottom", "safe-area-max-inset-left":
+		return []token{{typ: tDimension, num: 0, repr: "0", value: "px"}}, len(args) == 1
+	}
+	return nil, false
+}
+
+// attrValue returns what attr() substitutes for (CSS Values 5, 7.7): the
+// attribute of the element as a string without a type, as a number of
+// the unit given, or parsed as the type(<syntax>) given. found is false
+// for a missing attribute or a value that does not parse as the type;
+// without a type a missing attribute still gives the empty string.
+func (cs *computeState) attrValue(args []token) (v []token, found bool) {
+	if len(args) == 0 || len(args) > 2 || args[0].typ != tIdent || cs.node == nil {
+		return nil, false
+	}
+	val, has := attr(cs.node, args[0].value)
+	if len(args) == 1 || args[1].isIdent("raw-string") {
+		str := []token{{typ: tString, value: val}}
+		if !has {
+			return str, false
+		}
+		return str, true
+	}
+	if !has {
+		return nil, false
+	}
+	toks, _ := parseComponentValues(val)
+	toks = significant(toks)
+	typ := args[1]
+	if typ.typ == tIdent || typ.typ == tDelim && typ.delim == '%' {
+		// A unit: the attribute is a number of it.
+		if len(toks) != 1 || toks[0].typ != tNumber {
+			return nil, false
+		}
+		n := toks[0]
+		if typ.typ == tDelim {
+			return []token{{typ: tPercentage, num: n.num, repr: n.repr}}, true
+		}
+		unit := lower(typ.value)
+		if _, ok := absUnits[unit]; !ok {
+			if _, ok := lengthUnits[unit]; !ok {
+				if _, ok := otherUnits[unit]; !ok {
+					return nil, false
+				}
+			}
+		}
+		return []token{{typ: tDimension, num: n.num, repr: n.repr, value: unit}}, true
+	}
+	if typ.typ != tFunction || !eqFold(typ.value, "type") || len(toks) != 1 {
+		return nil, false
+	}
+	for _, name := range syntaxTypes(typ.children) {
+		if matchesType(toks[0], name) {
+			return toks, true
+		}
+	}
+	return nil, false
+}
+
+// syntaxTypes reads the <syntax> of type(): data type names joined by |,
+// each "<name>". It returns nil for any other syntax, which litho does
+// not match: a keyword, a multiplier, or the universal syntax, whose
+// tokens could reach a URL.
+func syntaxTypes(l []token) []string {
+	l = significant(l)
+	var out []string
+	for i := 0; i < len(l); {
+		if i+2 >= len(l) || !l[i].isDelim('<') || l[i+1].typ != tIdent || !l[i+2].isDelim('>') {
+			return nil
+		}
+		out = append(out, lower(l[i+1].value))
+		i += 3
+		if i < len(l) {
+			if !l[i].isDelim('|') {
+				return nil
+			}
+			i++
+		}
+	}
+	return out
+}
+
+// matchesType reports whether t is a value of the CSS data type name.
+func matchesType(t token, name string) bool {
+	switch name {
+	case "length":
+		_, ok := parseLength(t, 0)
+		return ok && t.typ != tPercentage
+	case "length-percentage":
+		_, ok := parseLength(t, allowPct|allowMixed)
+		return ok
+	case "percentage":
+		return t.typ == tPercentage
+	case "number":
+		_, ok := parseNumber(t)
+		return ok
+	case "integer":
+		_, ok := parseInteger(t)
+		return ok
+	case "angle":
+		_, ok := parseAngle(t)
+		return ok && t.typ != tNumber
+	case "color":
+		_, ok := parseColor(t)
+		return ok
+	case "custom-ident":
+		_, wide := wideKeyword([]token{t})
+		return t.typ == tIdent && !wide && !t.isIdent("default")
+	case "string":
+		return t.typ == tString
+	}
+	return false
 }
 
 // substituteDecl substitutes the var() references of a declaration and
