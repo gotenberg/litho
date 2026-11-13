@@ -180,6 +180,9 @@ type prepared struct {
 	// infos are the pages the layout laid out, in order, once it called
 	// layout.Options.MarginContent for them.
 	infos []layout.PageInfo
+	// templates holds the resources of the header and footer templates,
+	// nil before the first page draws them.
+	templates *resources
 	// fonts is the conversion's font index: the one Convert received with
 	// the document's @font-face faces ahead of it.
 	fonts *text.Fonts
@@ -208,13 +211,15 @@ func parse(data []byte) (*dom.Node, error) {
 // resolves the ex and ch units; nil takes their half-em fallback. It
 // leaves doc as it is, so a second layout prepares it again.
 func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, setup printSetup) (*prepared, error) {
-	return prepareTagged(ctx, doc, o, fonts, setup, nil)
+	return prepareTagged(ctx, doc, o, fonts, setup, nil, nil)
 }
 
 // prepareTagged is [prepareDoc] with the anchors ids gives elements of doc
 // on top of their id attributes, for the header and footer templates,
-// which measure where their elements land.
-func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, setup printSetup, ids map[*dom.Node]string) (*prepared, error) {
+// which measure where their elements land, and the resources res, nil for
+// a store of its own: the templates of every page share one, so that a
+// picture they show is decoded and written once.
+func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, setup printSetup, ids map[*dom.Node]string, res *resources) (*prepared, error) {
 	scan, err := scanDocument(ctx, doc, documentBase(o.BaseURL))
 	if err != nil {
 		return nil, err
@@ -222,7 +227,9 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	if scan.lang == "" {
 		scan.lang, scan.meta.Lang = o.DefaultLang, o.DefaultLang
 	}
-	res := newResources(o.Resources)
+	if res == nil {
+		res = newResources(o.Resources)
+	}
 	res.svg.fonts = fonts
 	res.client = o.HTTPClient
 	c := &collector{res: res, base: scan.resourceBase, logger: o.Logger}

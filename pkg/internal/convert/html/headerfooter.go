@@ -256,7 +256,10 @@ func (p *prepared) layTemplate(ctx context.Context, hf *headerFooter, pb layout.
 	if err != nil {
 		return nil, err
 	}
-	tp, err := prepareTagged(ctx, hf.doc, o, p.fonts, newPrintSetup(o), hf.ids)
+	if p.templates == nil {
+		p.templates = newResources(o.Resources)
+	}
+	tp, err := prepareTagged(ctx, hf.doc, o, p.fonts, newPrintSetup(o), hf.ids, p.templates)
 	if err != nil {
 		return nil, err
 	}

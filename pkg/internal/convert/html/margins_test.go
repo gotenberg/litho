@@ -3,6 +3,7 @@ package html
 import (
 	"cmp"
 	"context"
+	"encoding/base64"
 	"errors"
 	"math"
 	"slices"
@@ -483,5 +484,34 @@ func TestMarginBoxes_OverflowWarns(t *testing.T) {
 	}
 	if n != 1 {
 		t.Errorf("%d overflow warnings, want 1 in %+v", n, doc.Warnings)
+	}
+}
+
+// TestHeaderFooter_SharesPictures locks a picture of the templates drawn
+// on every page from one decoded source, which the writer writes once.
+func TestHeaderFooter_SharesPictures(t *testing.T) {
+	data := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes(t, 2, 2))
+	doc := convertDoc(t, `<p>a</p><p style="break-before: page">b</p><p style="break-before: page">c</p>`,
+		Options{MarginTop: 72, HeaderTemplate: `<img src="` + data + `" style="height: 10px">`})
+	if len(doc.Pages) != 3 {
+		t.Fatalf("%d pages, want 3", len(doc.Pages))
+	}
+	sources := map[*typeset.ImageSource]bool{}
+	var walk func([]typeset.Fragment)
+	walk = func(frags []typeset.Fragment) {
+		for _, f := range frags {
+			switch v := f.(type) {
+			case *typeset.Image:
+				sources[v.Source] = true
+			case *typeset.Group:
+				walk(v.Content)
+			}
+		}
+	}
+	for _, pg := range doc.Pages {
+		walk(pg.Content)
+	}
+	if len(sources) != 1 {
+		t.Errorf("%d image sources for the template's picture on 3 pages, want 1", len(sources))
 	}
 }
