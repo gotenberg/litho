@@ -204,3 +204,22 @@ func sfntTable(t *testing.T, data []byte, tag string) []byte {
 	t.Fatalf("no %s table", tag)
 	return nil
 }
+
+// TestFace_EmBoxSplitsTypoMetrics locks the em box a ruby annotation and
+// an emphasis mark sit against: the font size split at the baseline as
+// the OS/2 typographic ascender and descender split their sum.
+func TestFace_EmBoxSplitsTypoMetrics(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(dejavuAB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os2 := sfntTable(t, data, "OS/2")
+	asc := float64(int16(binary.BigEndian.Uint16(os2[68:])))
+	desc := -float64(int16(binary.BigEndian.Uint16(os2[70:])))
+	f := newTestFonts(t, fontFile{name: "dejavu.ttf", data: data})
+	m := f.Match(Style{Size: 10}).Metrics(20)
+	if want := 20 * asc / (asc + desc); !near(m.EmAscent, want) || !near(m.EmAscent+m.EmDescent, 20) {
+		t.Errorf("em box %v over %v, want %v over %v", m.EmAscent, m.EmDescent, want, 20-want)
+	}
+}

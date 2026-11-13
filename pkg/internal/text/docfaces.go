@@ -194,7 +194,7 @@ func (f *Fonts) LocalFace(name string, d FaceDescriptor) (*Face, error) {
 			family: ix.family, postScript: ix.postScript, fullName: ix.fullName,
 			weight: ix.weight, slant: ix.slant, width: ix.width,
 			ascent: ix.ascent, descent: ix.descent, lineGap: ix.lineGap,
-			xHeight: ix.xHeight, capHeight: ix.capHeight, upem: ix.upem, coverage: ix.coverage, size: ix.size,
+			xHeight: ix.xHeight, capHeight: ix.capHeight, typoAscent: ix.typoAscent, typoDescent: ix.typoDescent, upem: ix.upem, coverage: ix.coverage, size: ix.size,
 		}
 		return pinFace(fc, d)
 	}

@@ -488,6 +488,9 @@ func (fc *Face) setMetrics(hasOS2 bool, os2 tables.Os2, hasHhea bool, hhea table
 	default:
 		fc.ascent, fc.descent = 0.8*fc.upem, 0.2*fc.upem
 	}
+	if hasOS2 {
+		fc.typoAscent, fc.typoDescent = float64(os2.STypoAscender), -float64(os2.STypoDescender)
+	}
 	// OS/2 version 2 adds sxHeight and sCapHeight after the two code page
 	// ranges (OpenType 1.9, OS/2 table).
 	if hasOS2 && os2.Version >= 2 && len(os2.HigherVersionData) >= 10 {

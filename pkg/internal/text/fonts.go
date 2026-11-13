@@ -218,7 +218,11 @@ type Face struct {
 	// xHeight and capHeight are the OS/2 x-height and cap height in
 	// font units, 0 when the face records none.
 	xHeight, capHeight float64
-	upem               float64
+	// typoAscent and typoDescent are the OS/2 typographic ascender and
+	// descender in font units, descent positive below the baseline, 0
+	// when the face has no OS/2 table.
+	typoAscent, typoDescent float64
+	upem                    float64
 	// revision is the head table's fontRevision, a 16.16 fixed-point
 	// number, which ranks faces of last resort (see [compareLastResort]).
 	revision uint32
@@ -264,6 +268,13 @@ type Metrics struct {
 	// CapHeight is the height of a capital letter above the baseline,
 	// from the OS/2 table, 0 when the face records none.
 	CapHeight float64
+	// EmAscent and EmDescent split the em box, the font size, at the
+	// baseline in the proportions of the OS/2 typographic ascender and
+	// descender, else of Ascent and Descent: the box a ruby annotation
+	// and an emphasis mark sit against, as Chromium's normalized typo
+	// ascent and descent place them (CSS Ruby 1, 3.3; CSS Text Decoration
+	// 3, 3.5).
+	EmAscent, EmDescent float64
 }
 
 // NewFonts indexes the font faces in the files under dirs.
@@ -647,6 +658,16 @@ func (fc *Face) Metrics(size float64) Metrics {
 	}
 	if m.XHeight <= 0 {
 		m.XHeight = size / 2
+	}
+	asc, desc := fc.typoAscent, fc.typoDescent
+	if asc+desc <= 0 || asc < 0 || desc < 0 {
+		asc, desc = fc.ascent, fc.descent
+	}
+	if asc+desc > 0 {
+		m.EmAscent = size * asc / (asc + desc)
+		m.EmDescent = size - m.EmAscent
+	} else {
+		m.EmAscent, m.EmDescent = 0.8*size, 0.2*size
 	}
 	return m
 }
