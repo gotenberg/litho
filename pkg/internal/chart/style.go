@@ -36,13 +36,13 @@ func (c *Chart) AutoColor(i, n int) typeset.Color {
 		return col
 	}
 	cycle, last := i/len(pal), (n-1)/len(pal)
-	t := float64(cycle+1)/float64(last+2)*1.4 - 0.7
+	t := float64(float64(cycle+1)/float64(last+2)*1.4) - 0.7
 	switch {
 	case t < -1e-9:
 		f := 1 + t
 		col.R, col.G, col.B = col.R*f, col.G*f, col.B*f
 	case t > 1e-9:
-		col.R, col.G, col.B = col.R+(1-col.R)*t, col.G+(1-col.G)*t, col.B+(1-col.B)*t
+		col.R, col.G, col.B = col.R+float64((1-col.R)*t), col.G+float64((1-col.G)*t), col.B+float64((1-col.B)*t)
 	}
 	return col
 }

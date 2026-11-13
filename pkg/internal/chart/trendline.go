@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -84,7 +85,7 @@ func fitTrend(t Trendline, xs, ys []float64) func(float64) float64 {
 		if c == nil {
 			return nil
 		}
-		return func(x float64) float64 { return c[0] + c[1]*x }
+		return func(x float64) float64 { return c[0] + float64(c[1]*x) }
 	case TrendPolynomial:
 		order := min(max(t.Order, 2), maxPolynomialOrder)
 		c := polyFit(xs, ys, order, t.HasIntercept, t.Intercept)
@@ -94,7 +95,7 @@ func fitTrend(t Trendline, xs, ys []float64) func(float64) float64 {
 		return func(x float64) float64 {
 			y := 0.0
 			for _, v := range slices.Backward(c) {
-				y = y*x + v
+				y = float64(y*x) + v
 			}
 			return y
 		}
@@ -103,38 +104,38 @@ func fitTrend(t Trendline, xs, ys []float64) func(float64) float64 {
 		var px, py []float64
 		for i := range xs {
 			if ys[i] > 0 {
-				px, py = append(px, xs[i]), append(py, math.Log(ys[i]))
+				px, py = append(px, xs[i]), append(py, detmath.Log(ys[i]))
 			}
 		}
-		c := polyFit(px, py, 1, t.HasIntercept && t.Intercept > 0, math.Log(math.Max(t.Intercept, math.SmallestNonzeroFloat64)))
+		c := polyFit(px, py, 1, t.HasIntercept && t.Intercept > 0, detmath.Log(math.Max(t.Intercept, math.SmallestNonzeroFloat64)))
 		if c == nil {
 			return nil
 		}
-		return func(x float64) float64 { return math.Exp(c[0] + c[1]*x) }
+		return func(x float64) float64 { return detmath.Exp(c[0] + float64(c[1]*x)) }
 	case TrendLogarithmic:
 		var px, py []float64
 		for i := range xs {
 			if xs[i] > 0 {
-				px, py = append(px, math.Log(xs[i])), append(py, ys[i])
+				px, py = append(px, detmath.Log(xs[i])), append(py, ys[i])
 			}
 		}
 		c := polyFit(px, py, 1, false, 0)
 		if c == nil {
 			return nil
 		}
-		return func(x float64) float64 { return c[0] + c[1]*math.Log(x) }
+		return func(x float64) float64 { return c[0] + float64(c[1]*detmath.Log(x)) }
 	case TrendPower:
 		var px, py []float64
 		for i := range xs {
 			if xs[i] > 0 && ys[i] > 0 {
-				px, py = append(px, math.Log(xs[i])), append(py, math.Log(ys[i]))
+				px, py = append(px, detmath.Log(xs[i])), append(py, detmath.Log(ys[i]))
 			}
 		}
 		c := polyFit(px, py, 1, false, 0)
 		if c == nil {
 			return nil
 		}
-		return func(x float64) float64 { return math.Exp(c[0]) * math.Pow(x, c[1]) }
+		return func(x float64) float64 { return detmath.Exp(c[0]) * detmath.Pow(x, c[1]) }
 	case TrendMovingAverage:
 	}
 	return nil
@@ -165,11 +166,11 @@ func polyFit(xs, ys []float64, order int, forced bool, c0 float64) []float64 {
 			y -= c0
 		}
 		for i := range k {
-			xi := math.Pow(xs[p], float64(i+first))
+			xi := detmath.Pow(xs[p], float64(i+first))
 			for j := range k {
-				a[i][j] += xi * math.Pow(xs[p], float64(j+first))
+				a[i][j] += float64(xi * detmath.Pow(xs[p], float64(j+first)))
 			}
-			a[i][k] += xi * y
+			a[i][k] += float64(xi * y)
 		}
 	}
 	sol, ok := solve(a)
@@ -202,7 +203,7 @@ func solve(a [][]float64) ([]float64, bool) {
 		for r := c + 1; r < n; r++ {
 			f := a[r][c] / a[c][c]
 			for j := c; j <= n; j++ {
-				a[r][j] -= f * a[c][j]
+				a[r][j] -= float64(f * a[c][j])
 			}
 		}
 	}
@@ -210,7 +211,7 @@ func solve(a [][]float64) ([]float64, bool) {
 	for r := n - 1; r >= 0; r-- {
 		s := a[r][n]
 		for j := r + 1; j < n; j++ {
-			s -= a[r][j] * x[j]
+			s -= float64(a[r][j] * x[j])
 		}
 		x[r] = s / a[r][r]
 		if !numeric.Finite(x[r]) {

@@ -4,6 +4,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -99,9 +100,9 @@ func (d *dim) catFrac(i float64) float64 {
 // pixel maps a fraction along d to a page coordinate.
 func (d *dim) pixel(f float64) float64 {
 	if d.vertical {
-		return d.inner.Y + d.inner.Height - f*d.inner.Height
+		return d.inner.Y + d.inner.Height - float64(f*d.inner.Height)
 	}
-	return d.inner.X + f*d.inner.Width
+	return d.inner.X + float64(f*d.inner.Width)
 }
 
 // valuePixel maps a value to a page coordinate.
@@ -325,7 +326,7 @@ func labelBounds(inner typeset.Rect, dims []*dim) typeset.Rect {
 	for _, d := range dims {
 		for _, l := range d.labels {
 			w, h := l.b.rotated()
-			bb = union(bb, typeset.Rect{X: l.cx - w/2, Y: l.cy - h/2, Width: w, Height: h})
+			bb = union(bb, typeset.Rect{X: l.cx - float64(w/2), Y: l.cy - float64(h/2), Width: w, Height: h})
 		}
 	}
 	return bb
@@ -622,7 +623,7 @@ func (rd *renderer) placeLabels(d *dim) {
 		d.table = t
 		right := d.inner.X + d.inner.Width
 		h := t.height()
-		d.labels = append(d.labels, tickLabel{b: &block{w: right - t.x, h: h}, cx: (t.x + right) / 2, cy: t.top + h/2})
+		d.labels = append(d.labels, tickLabel{b: &block{w: right - t.x, h: h}, cx: (t.x + right) / 2, cy: t.top + float64(h/2)})
 		return
 	}
 	if !d.labelled() {
@@ -650,7 +651,7 @@ func (rd *renderer) placeLabels(d *dim) {
 			// A label breaks 5% short of the distance between ticks, to
 			// keep a gap between labels (chart2's createTextShapes).
 			maxW *= 0.95
-			if s := math.Abs(math.Sin(st.Rotation * math.Pi / 180)); s > 0.5 {
+			if s := math.Abs(detmath.Sin(st.Rotation * math.Pi / 180)); s > 0.5 {
 				// A turned label breaks at a share of the chart's height.
 				maxW = rd.page.Height * 0.4 / s
 			}
@@ -719,16 +720,16 @@ func (rd *renderer) placeLabels(d *dim) {
 			// AXIS2D_TICKLABELSPACING).
 			if d.vertical {
 				l.cy = p
-				l.cx = d.lineAt + d.outside*(gap+w/2)
+				l.cx = d.lineAt + float64(d.outside*(gap+float64(w/2)))
 			} else {
 				l.cx = p
-				l.cy = d.lineAt - d.outside*(gap+h/2)
+				l.cy = d.lineAt - float64(d.outside*(gap+float64(h/2)))
 				if r := b.style.Rotation; d.outside < 0 && r != 0 && math.Abs(r) < 90 {
 					// A turned label under the axis ends at its tick, its
 					// box beside it (chart2's lcl_correctRotation_Bottom).
 					a := math.Abs(r) * math.Pi / 180
 					l.cx = p - math.Copysign(w/2, r)
-					l.cy = d.lineAt + gap + b.h/2 + b.w*math.Sin(a)/2
+					l.cy = d.lineAt + gap + float64(b.h/2) + float64(b.w*detmath.Sin(a)/2)
 				}
 			}
 			d.labels = append(d.labels, l)
@@ -789,9 +790,9 @@ func overlapping(ls []tickLabel) bool {
 func labelsOverlap(a, b tickLabel) bool {
 	r := a.b.style.Rotation * math.Pi / 180
 	dx, dy := b.cx-a.cx, b.cy-a.cy
-	along := math.Abs(dx*math.Cos(r) - dy*math.Sin(r))
-	across := math.Abs(dx*math.Sin(r) + dy*math.Cos(r))
-	return along < (a.b.w+b.b.w)/2-0.01 && across < (a.b.h+b.b.h)/2-0.01
+	along := math.Abs(float64(dx*detmath.Cos(r)) - float64(dy*detmath.Sin(r)))
+	across := math.Abs(float64(dx*detmath.Sin(r)) + float64(dy*detmath.Cos(r)))
+	return along < float64((a.b.w+b.b.w)/2)-0.01 && across < float64((a.b.h+b.b.h)/2)-0.01
 }
 
 // breaksWord reports a label whose layout in blocks, at most maxW wide,
@@ -820,7 +821,7 @@ func thin(ls []tickLabel, vertical bool) []tickLabel {
 		if vertical {
 			_, ah := a.b.rotated()
 			_, bh := b.b.rotated()
-			return math.Abs(a.cy-b.cy) < (ah+bh)/2-0.01
+			return math.Abs(a.cy-b.cy) < float64((ah+bh)/2)-0.01
 		}
 		return labelsOverlap(a, b)
 	}
@@ -902,11 +903,11 @@ func (rd *renderer) axisLine(d *dim) {
 		}
 		for _, f := range fs {
 			p := d.pixel(f)
-			a, b := at-d.outside*in, at+d.outside*out
+			a, b := at-float64(d.outside*in), at+float64(d.outside*out)
 			if d.vertical {
 				rd.add(line(a, p, b, p, d.ax.Line))
 			} else {
-				rd.add(line(p, at+d.outside*in, p, at-d.outside*out, d.ax.Line))
+				rd.add(line(p, at+float64(d.outside*in), p, at-float64(d.outside*out), d.ax.Line))
 			}
 		}
 	}
@@ -951,8 +952,8 @@ func (rd *renderer) reserveTitles(avail typeset.Rect, dims ...*dim) typeset.Rect
 			continue
 		}
 		w, h := b.rotated()
-		w += 2 * titleHPad * b.style.Size
-		h += 2 * titleVPad * b.style.Size
+		w += float64(2 * titleHPad * b.style.Size)
+		h += float64(2 * titleVPad * b.style.Size)
 		high := d.atHighEnd()
 		if !d.vertical && rd.officeLayout() {
 			_, th := b.rotated()
@@ -986,23 +987,23 @@ func (rd *renderer) axisTitle(d *dim, ext typeset.Rect) {
 		return
 	}
 	w, h := b.rotated()
-	w += 2 * titleHPad * b.style.Size
-	h += 2 * titleVPad * b.style.Size
-	dx, dy := layoutDistance*rd.page.Width, layoutDistance*rd.page.Height
+	w += float64(2 * titleHPad * b.style.Size)
+	h += float64(2 * titleVPad * b.style.Size)
+	dx, dy := float64(layoutDistance*rd.page.Width), float64(layoutDistance*rd.page.Height)
 	var cx, cy float64
 	if d.vertical {
-		cy = ext.Y + ext.Height/2
+		cy = ext.Y + float64(ext.Height/2)
 		if d.outside > 0 {
-			cx = ext.X + ext.Width + dx + w/2
+			cx = ext.X + ext.Width + dx + float64(w/2)
 		} else {
-			cx = ext.X - dx - w/2
+			cx = ext.X - dx - float64(w/2)
 		}
 	} else {
-		cx = ext.X + ext.Width/2
-		gap := dy + h/2
+		cx = ext.X + float64(ext.Width/2)
+		gap := dy + float64(h/2)
 		if rd.officeLayout() {
 			_, th := b.rotated()
-			gap = officeAxisTitlePad + th/2
+			gap = officeAxisTitlePad + float64(th/2)
 		}
 		if d.outside > 0 {
 			cy = ext.Y - gap
@@ -1010,8 +1011,8 @@ func (rd *renderer) axisTitle(d *dim, ext typeset.Rect) {
 			cy = ext.Y + ext.Height + gap
 		}
 	}
-	cx = math.Max(rd.page.X+w/2, math.Min(cx, rd.page.X+rd.page.Width-w/2))
-	cy = math.Max(rd.page.Y+h/2, math.Min(cy, rd.page.Y+rd.page.Height-h/2))
-	rd.frame(typeset.Rect{X: cx - w/2, Y: cy - h/2, Width: w, Height: h}, d.ax.Title.Frame)
+	cx = math.Max(rd.page.X+float64(w/2), math.Min(cx, rd.page.X+rd.page.Width-float64(w/2)))
+	cy = math.Max(rd.page.Y+float64(h/2), math.Min(cy, rd.page.Y+rd.page.Height-float64(h/2)))
+	rd.frame(typeset.Rect{X: cx - float64(w/2), Y: cy - float64(h/2), Width: w, Height: h}, d.ax.Title.Frame)
 	rd.out = append(rd.out, b.draw(cx, cy, alignCenter)...)
 }

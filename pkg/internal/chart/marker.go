@@ -3,6 +3,7 @@ package chart
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -26,7 +27,7 @@ func polygon(pts ...typeset.Point) []typeset.PathOp {
 // ellipse returns the outline of the ellipse of centre (cx, cy) and radii
 // rx, ry.
 func ellipse(cx, cy, rx, ry float64) []typeset.PathOp {
-	kx, ky := rx*kappa, ry*kappa
+	kx, ky := float64(rx*kappa), float64(ry*kappa)
 	return []typeset.PathOp{
 		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: cx + rx, Y: cy}}},
 		{Kind: typeset.CurveTo, P: [3]typeset.Point{{X: cx + rx, Y: cy + ky}, {X: cx + kx, Y: cy + ry}, {X: cx, Y: cy + ry}}},
@@ -41,7 +42,7 @@ func ellipse(cx, cy, rx, ry float64) []typeset.PathOp {
 // y), as LibreOffice's ShapeFactory draws its standard symbols.
 func markerPath(sym MarkerSymbol, x, y, s float64) []typeset.PathOp {
 	h := s / 2
-	pt := func(dx, dy float64) typeset.Point { return typeset.Point{X: x + dx*h, Y: y + dy*h} }
+	pt := func(dx, dy float64) typeset.Point { return typeset.Point{X: x + float64(dx*h), Y: y + float64(dy*h)} }
 	switch sym {
 	case MarkerDiamond:
 		return polygon(pt(0, -1), pt(1, 0), pt(0, 1), pt(-1, 0))
@@ -62,12 +63,12 @@ func markerPath(sym MarkerSymbol, x, y, s float64) []typeset.PathOp {
 	case MarkerStar:
 		var pts []typeset.Point
 		for i := range 8 {
-			a := float64(i)*math.Pi/4 - math.Pi/2
+			a := float64(float64(i)*math.Pi/4) - math.Pi/2
 			r := 1.0
 			if i%2 == 1 {
 				r = 0.35
 			}
-			pts = append(pts, pt(r*math.Cos(a), r*math.Sin(a)))
+			pts = append(pts, pt(r*detmath.Cos(a), r*detmath.Sin(a)))
 		}
 		return polygon(pts...)
 	case MarkerX:
@@ -82,8 +83,8 @@ func markerPath(sym MarkerSymbol, x, y, s float64) []typeset.PathOp {
 		var pts []typeset.Point
 		for i := range 6 {
 			a := float64(i) * math.Pi / 3
-			c, s := math.Cos(a), math.Sin(a)
-			pts = append(pts, pt(c-t*s, s+t*c), pt(c+t*s, s-t*c))
+			c, s := detmath.Cos(a), detmath.Sin(a)
+			pts = append(pts, pt(c-float64(t*s), s+float64(t*c)), pt(c+float64(t*s), s-float64(t*c)))
 		}
 		return polygon(pts...)
 	case MarkerHorizontalBar:

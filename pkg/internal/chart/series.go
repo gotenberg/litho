@@ -174,9 +174,9 @@ func (rd *renderer) bars(g *Group, x, y *dim) []func() {
 	if !x.between && x.n > 1 {
 		catW = x.length() / float64(x.n-1)
 	}
-	barW := catW / (float64(k) - float64(k-1)*ov + gap)
+	barW := catW / (float64(k) - float64(float64(k-1)*ov) + gap)
 	step := barW * (1 - ov)
-	total := barW + float64(k-1)*step
+	total := barW + float64(float64(k-1)*step)
 	base := y.sc.clamp(x.crossValue())
 	if y.sc.log > 0 {
 		base = y.sc.min
@@ -204,8 +204,8 @@ func (rd *renderer) bars(g *Group, x, y *dim) []func() {
 			if x.vertical {
 				sign = -sign
 			}
-			p0 := c + sign*(-total/2+float64(slot)*step)
-			p1 := p0 + sign*barW
+			p0 := c + float64(sign*(float64(-total/2)+float64(float64(slot)*step)))
+			p1 := p0 + float64(sign*barW)
 			v0, v1 := y.valuePixel(y.sc.clamp(b)), y.valuePixel(y.sc.clamp(v))
 			var r typeset.Rect
 			if x.vertical {
@@ -268,7 +268,7 @@ func (rd *renderer) barLabel(g *Group, s *Series, j int, v float64, lb Labels, r
 		pl = LabelInsideBase
 	case LabelCenter, LabelInsideEnd, LabelInsideBase, LabelOutsideEnd:
 	}
-	cx, cy := r.X+r.Width/2, r.Y+r.Height/2
+	cx, cy := r.X+float64(r.Width/2), r.Y+float64(r.Height/2)
 	end := func(inside bool) {
 		d := labelSpacing
 		if inside {
@@ -276,27 +276,27 @@ func (rd *renderer) barLabel(g *Group, s *Series, j int, v float64, lb Labels, r
 		}
 		if horizontal {
 			if neg {
-				cx = r.X - d - w/2
+				cx = r.X - d - float64(w/2)
 				if inside {
-					cx = r.X - d + w/2
+					cx = r.X - d + float64(w/2)
 				}
 			} else {
-				cx = r.X + r.Width + d + w/2
+				cx = r.X + r.Width + d + float64(w/2)
 				if inside {
-					cx = r.X + r.Width + d - w/2
+					cx = r.X + r.Width + d - float64(w/2)
 				}
 			}
 			return
 		}
 		if neg {
-			cy = r.Y + r.Height + d + h/2
+			cy = r.Y + r.Height + d + float64(h/2)
 			if inside {
-				cy = r.Y + r.Height + d - h/2
+				cy = r.Y + r.Height + d - float64(h/2)
 			}
 		} else {
-			cy = r.Y - d - h/2
+			cy = r.Y - d - float64(h/2)
 			if inside {
-				cy = r.Y - d + h/2
+				cy = r.Y - d + float64(h/2)
 			}
 		}
 	}
@@ -307,9 +307,9 @@ func (rd *renderer) barLabel(g *Group, s *Series, j int, v float64, lb Labels, r
 		end(true)
 	case LabelInsideBase:
 		if horizontal {
-			cx = r.X + labelSpacing + w/2
+			cx = r.X + labelSpacing + float64(w/2)
 		} else {
-			cy = r.Y + r.Height - labelSpacing - h/2
+			cy = r.Y + r.Height - labelSpacing - float64(h/2)
 		}
 	case LabelAuto, LabelCenter, LabelAbove, LabelBelow, LabelLeft, LabelRight, LabelBestFit:
 	}
@@ -320,8 +320,8 @@ func (rd *renderer) barLabel(g *Group, s *Series, j int, v float64, lb Labels, r
 func (rd *renderer) labelFrame(b *block, lb Labels, cx, cy float64) {
 	w, h := b.rotated()
 	if lb.Frame.Fill != nil || lb.Frame.Border != nil {
-		pad := 0.18 * b.style.Size
-		rd.frame(typeset.Rect{X: cx - w/2 - pad, Y: cy - h/2, Width: w + 2*pad, Height: h}, lb.Frame)
+		pad := float64(0.18 * b.style.Size)
+		rd.frame(typeset.Rect{X: cx - float64(w/2) - pad, Y: cy - float64(h/2), Width: w + 2*pad, Height: h}, lb.Frame)
 	}
 	rd.out = append(rd.out, b.draw(cx, cy, alignCenter)...)
 }
@@ -449,7 +449,7 @@ func splineSlopes(v []float64) []float64 {
 	c := make([]float64, n)
 	d := make([]float64, n)
 	for i := 1; i < n-1; i++ {
-		r := 6 * (v[i+1] - 2*v[i] + v[i-1])
+		r := float64(6 * (v[i+1] - 2*v[i] + v[i-1]))
 		den := 4.0
 		if i > 1 {
 			den -= c[i-1]
@@ -459,7 +459,7 @@ func splineSlopes(v []float64) []float64 {
 		d[i] = r / den
 	}
 	for i := n - 2; i >= 1; i-- {
-		m[i] = d[i] - c[i]*m[i+1]
+		m[i] = d[i] - float64(c[i]*m[i+1])
 	}
 	out := make([]float64, n)
 	for i := 0; i < n-1; i++ {
@@ -530,18 +530,18 @@ func (rd *renderer) pointLabel(g *Group, s *Series, j int, v float64, lb Labels,
 		return
 	}
 	w, h := b.rotated()
-	d := labelSpacing + ms/2
+	d := labelSpacing + float64(ms/2)
 	cx, cy := p.X, p.Y
 	switch lb.Placement {
 	case LabelCenter:
 	case LabelBelow:
-		cy += d + h/2
+		cy += d + float64(h/2)
 	case LabelLeft:
-		cx -= d + w/2
+		cx -= d + float64(w/2)
 	case LabelRight:
-		cx += d + w/2
+		cx += d + float64(w/2)
 	case LabelAuto, LabelInsideEnd, LabelInsideBase, LabelOutsideEnd, LabelAbove, LabelBestFit:
-		cy -= d + h/2
+		cy -= d + float64(h/2)
 	}
 	rd.labelFrame(b, lb, cx, cy)
 }

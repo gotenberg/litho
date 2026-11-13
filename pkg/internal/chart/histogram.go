@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
@@ -73,7 +74,7 @@ func histogram(vals []float64, b Binning) ([]string, []float64) {
 	for _, v := range vals {
 		lo, hi = math.Min(lo, v), math.Max(hi, v)
 		sum += v
-		sq += v * v
+		sq += float64(v * v)
 	}
 	n := float64(len(vals))
 	type bin struct{ a, b float64 }
@@ -91,8 +92,8 @@ func histogram(vals []float64, b Binning) ([]string, []float64) {
 			width = (hi - lo) / count
 		default:
 			mean := sum / n
-			sd := math.Sqrt(math.Max(0, (sq-sum*mean)/(n-1)))
-			width = 3.5 * sd / math.Cbrt(n)
+			sd := math.Sqrt(math.Max(0, (sq-float64(sum*mean))/(n-1)))
+			width = 3.5 * sd / detmath.Cbrt(n)
 			count = math.Ceil((hi - lo) / width)
 		}
 		if !atLeast(count, 1) || math.IsInf(count, 0) {
@@ -121,9 +122,9 @@ func histogram(vals []float64, b Binning) ([]string, []float64) {
 	}
 	digits := 2
 	if w := bins[0].b - bins[0].a; w > 0 {
-		digits = max(1, 2-int(math.Floor(math.Log10(w))))
+		digits = max(1, 2-int(math.Floor(detmath.Log10(w))))
 	}
-	scale := math.Pow(10, float64(digits))
+	scale := detmath.Pow(10, float64(digits))
 	bound := func(v float64) string {
 		return strconv.FormatFloat(math.Round(v*scale)/scale, 'f', -1, 64)
 	}

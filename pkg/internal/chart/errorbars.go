@@ -3,6 +3,7 @@ package chart
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -35,7 +36,7 @@ func seriesErrorStats(e ErrorBars, vals Data) errorStats {
 	case ErrorStdDev, ErrorStdErr, ErrorVariance:
 		for i := range min(vals.Len(), MaxPoints) {
 			if x, ok := vals.number(i); ok {
-				st.n, st.sum, st.sq = st.n+1, st.sum+x, st.sq+x*x
+				st.n, st.sum, st.sq = st.n+1, st.sum+x, st.sq+float64(x*x)
 			}
 		}
 	case ErrorFixed, ErrorPercent, ErrorCustom:
@@ -142,11 +143,11 @@ func (rd *renderer) errorBars(g *Group, s *Series, x, y *dim, at func(j int) (fl
 				}
 				// The cap runs across the bar.
 				dx, dy := p.X-c.X, p.Y-c.Y
-				l := math.Hypot(dx, dy)
+				l := detmath.Hypot(dx, dy)
 				if l == 0 {
 					continue
 				}
-				nx, ny := -dy/l*errorCap, dx/l*errorCap
+				nx, ny := float64(-dy/l*errorCap), float64(dx/l*errorCap)
 				rd.out = append(rd.out, &typeset.Path{Ops: polyline([]typeset.Point{{X: p.X - nx, Y: p.Y - ny}, {X: p.X + nx, Y: p.Y + ny}}, false), Stroke: cs})
 			}
 		}

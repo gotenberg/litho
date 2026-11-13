@@ -3,6 +3,7 @@ package chart
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
@@ -117,7 +118,7 @@ func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
 				tMin = 0
 			}
 		} else if opt.zero {
-			tMin -= (tMax - tMin) / 2
+			tMin -= float64((tMax - tMin) / 2)
 		}
 	}
 	if tMin == tMax {
@@ -160,8 +161,8 @@ func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
 				case math.IsInf(d, 0):
 					norm, mag = 1, math.MaxFloat64
 				default:
-					e := math.Floor(math.Log10(d) + 1e-12)
-					mag = math.Pow(10, e)
+					e := math.Floor(detmath.Log10(d) + 1e-12)
+					mag = detmath.Pow(10, e)
 					norm = d / mag
 					switch {
 					case norm <= 1:
@@ -224,7 +225,7 @@ func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
 // values span, ticks at the powers of the base.
 func logScale(sc scale, lo, hi, fixMin, fixMax, fixMajor float64) scale {
 	b := sc.log
-	lg := func(v float64) float64 { return math.Log(v) / math.Log(b) }
+	lg := func(v float64) float64 { return detmath.Log(v) / detmath.Log(b) }
 	if lo <= 0 {
 		lo = 1
 	}
@@ -248,7 +249,7 @@ func logScale(sc scale, lo, hi, fixMin, fixMax, fixMajor float64) scale {
 	if fixMajor > 1 {
 		step = math.Max(lg(fixMajor), 1e-3)
 	}
-	sc.min, sc.max, sc.major = math.Pow(b, lmin), math.Pow(b, lmax), step
+	sc.min, sc.max, sc.major = detmath.Pow(b, lmin), detmath.Pow(b, lmax), step
 	return sc
 }
 
@@ -273,7 +274,7 @@ func floorAt(v, dist, base float64) float64 {
 	if q-f > 1-1e-9 {
 		f++
 	}
-	return base + f*dist
+	return base + float64(f*dist)
 }
 
 // ceilAt rounds v up to a multiple of dist from base.
@@ -283,7 +284,7 @@ func ceilAt(v, dist, base float64) float64 {
 	if c-q > 1-1e-9 {
 		c--
 	}
-	return base + c*dist
+	return base + float64(c*dist)
 }
 
 // frac returns where v lies along the scale, 0 at its start and 1 at its
@@ -294,8 +295,8 @@ func (s scale) frac(v float64) float64 {
 		if v <= 0 {
 			f = 0
 		} else {
-			l := math.Log(s.log)
-			f = (math.Log(v)/l - math.Log(s.min)/l) / (math.Log(s.max)/l - math.Log(s.min)/l)
+			l := detmath.Log(s.log)
+			f = (detmath.Log(v)/l - detmath.Log(s.min)/l) / (detmath.Log(s.max)/l - detmath.Log(s.min)/l)
 		}
 	} else {
 		f = (v - s.min) / (s.max - s.min)
@@ -310,20 +311,20 @@ func (s scale) frac(v float64) float64 {
 func (s scale) ticks() []float64 {
 	var out []float64
 	if s.log > 0 {
-		lmin := math.Log(s.min) / math.Log(s.log)
-		lmax := math.Log(s.max) / math.Log(s.log)
+		lmin := detmath.Log(s.min) / detmath.Log(s.log)
+		lmax := detmath.Log(s.max) / detmath.Log(s.log)
 		for e := lmin; e <= lmax+1e-9 && len(out) <= maxIntervals; e += s.major {
-			out = append(out, math.Pow(s.log, e))
+			out = append(out, detmath.Pow(s.log, e))
 		}
 		return out
 	}
 	start := ceilAt(s.min, s.major, s.origin)
-	if math.Abs(start-s.min) > 1e-9*math.Max(1, math.Abs(s.major)) && start-s.major >= s.min-1e-9*s.major {
+	if math.Abs(start-s.min) > 1e-9*math.Max(1, math.Abs(s.major)) && start-s.major >= s.min-float64(1e-9*s.major) {
 		start -= s.major
 	}
 	for i := 0; i <= maxIntervals; i++ {
-		v := start + float64(i)*s.major
-		if v > s.max+1e-9*s.major {
+		v := start + float64(float64(i)*s.major)
+		if v > s.max+float64(1e-9*s.major) {
 			break
 		}
 		if math.Abs(v) < 1e-12*s.major {
@@ -351,7 +352,7 @@ func (s scale) minorTicks() []float64 {
 	// start + i*step. A step under half the spacing of the floats near v
 	// leaves v where it is, and the walk stops there.
 	v := ceilAt(s.min, step, s.origin)
-	for i := 0; i < maxMinorSteps && v <= s.max+1e-9*step; i++ {
+	for i := 0; i < maxMinorSteps && v <= s.max+float64(1e-9*step); i++ {
 		r := math.Abs(math.Remainder(v-s.origin, s.major))
 		if r > 1e-9*s.major {
 			out = append(out, v)

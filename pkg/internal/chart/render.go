@@ -94,7 +94,7 @@ func (rd *renderer) render(r typeset.Rect) {
 	}
 	rem := r
 	if c.Title != nil {
-		rd.title(c.Title, r, &rem, layoutDistance*r.Height+mainTitleExtra)
+		rd.title(c.Title, r, &rem, float64(layoutDistance*r.Height)+mainTitleExtra)
 	}
 	if c.Subtitle != nil {
 		rd.title(c.Subtitle, r, &rem, layoutDistance*r.Height)
@@ -146,31 +146,31 @@ func (rd *renderer) notice(t *Title, r typeset.Rect) {
 		return
 	}
 	w, h := b.rotated()
-	cx, cy := r.X+r.Width/2, r.Y+r.Height/2
-	rd.frame(typeset.Rect{X: cx - w/2, Y: cy - h/2, Width: w, Height: h}, t.Frame)
+	cx, cy := r.X+float64(r.Width/2), r.Y+float64(r.Height/2)
+	rd.frame(typeset.Rect{X: cx - float64(w/2), Y: cy - float64(h/2), Width: w, Height: h}, t.Frame)
 	rd.out = append(rd.out, b.draw(cx, cy, alignCenter)...)
 }
 
 // title places t centred at the top of rem, top distance below rem's top,
 // and takes its height from rem unless it overlays.
 func (rd *renderer) title(t *Title, page typeset.Rect, rem *typeset.Rect, distance float64) {
-	b := rd.measure(t.Text, t.Style, page.Width*0.8-2*titleHPad*t.Style.Size)
+	b := rd.measure(t.Text, t.Style, float64(page.Width*0.8)-float64(2*titleHPad*t.Style.Size))
 	if b == nil {
 		return
 	}
 	w, h := b.rotated()
-	w += 2 * titleHPad * b.style.Size
-	h += 2 * titleVPad * b.style.Size
-	cx := rem.X + rem.Width/2
+	w += float64(2 * titleHPad * b.style.Size)
+	h += float64(2 * titleVPad * b.style.Size)
+	cx := rem.X + float64(rem.Width/2)
 	top := rem.Y + distance
 	if t.Layout != nil {
 		// A placed title keeps its top-left corner where the file says
 		// (oox's LayoutConverter positions the title shape).
 		lr := t.Layout.rect(page)
-		cx, top = lr.X+w/2, lr.Y
+		cx, top = lr.X+float64(w/2), lr.Y
 	}
-	rd.frame(typeset.Rect{X: cx - w/2, Y: top, Width: w, Height: h}, t.Frame)
-	rd.out = append(rd.out, b.draw(cx, top+h/2, alignCenter)...)
+	rd.frame(typeset.Rect{X: cx - float64(w/2), Y: top, Width: w, Height: h}, t.Frame)
+	rd.out = append(rd.out, b.draw(cx, top+float64(h/2), alignCenter)...)
 	if t.Overlay {
 		return
 	}

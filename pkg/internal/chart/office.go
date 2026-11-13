@@ -116,7 +116,7 @@ func (rd *renderer) officePlot(r typeset.Rect) typeset.Rect {
 		}
 	}
 	left, right, bottom := officePad, officePad, officePad
-	dx, dy := layoutDistance*r.Width, layoutDistance*r.Height
+	dx, dy := layoutDistance*r.Width, float64(layoutDistance*r.Height)
 	if lg := c.Legend; lg != nil {
 		if !top && rd.officeLegend() && lg.Position == LegendTop {
 			rem.Y += dy
@@ -152,19 +152,19 @@ func (rd *renderer) officePlot(r typeset.Rect) typeset.Rect {
 // line officeTitleTop under r's top unless the file places it, and returns
 // the bottom of its last line; ok is false when t draws nothing.
 func (rd *renderer) officeTitle(t *Title, r typeset.Rect) (float64, bool) {
-	b := rd.measure(t.Text, t.Style, r.Width*0.8-2*titleHPad*t.Style.Size)
+	b := rd.measure(t.Text, t.Style, float64(r.Width*0.8)-float64(2*titleHPad*t.Style.Size))
 	if b == nil {
 		return 0, false
 	}
 	w, h := b.rotated()
-	cx, top := r.X+r.Width/2, r.Y+officeTitleTop
+	cx, top := r.X+float64(r.Width/2), r.Y+officeTitleTop
 	if t.Layout != nil {
 		lr := t.Layout.rect(r)
-		cx, top = lr.X+w/2, lr.Y
+		cx, top = lr.X+float64(w/2), lr.Y
 	}
-	px, py := titleHPad*b.style.Size, titleVPad*b.style.Size
-	rd.frame(typeset.Rect{X: cx - w/2 - px, Y: top - py, Width: w + 2*px, Height: h + 2*py}, t.Frame)
-	rd.out = append(rd.out, b.draw(cx, top+h/2, alignCenter)...)
+	px, py := float64(titleHPad*b.style.Size), float64(titleVPad*b.style.Size)
+	rd.frame(typeset.Rect{X: cx - float64(w/2) - px, Y: top - py, Width: w + 2*px, Height: h + 2*py}, t.Frame)
+	rd.out = append(rd.out, b.draw(cx, top+float64(h/2), alignCenter)...)
 	return r.Y + officeTitleTop + h, true
 }
 
@@ -182,9 +182,9 @@ func (rd *renderer) officeTitle(t *Title, r typeset.Rect) (float64, bool) {
 //     over 9 pt category labels.
 func officeLabelGap(d *dim, size float64) float64 {
 	if d.vertical {
-		return officeSideLabelGap * size
+		return float64(officeSideLabelGap * size)
 	}
-	return officeUnderLabelGap * size
+	return float64(officeUnderLabelGap * size)
 }
 
 // officeRoom returns bb, the plot area inner with its axis labels, grown
@@ -227,7 +227,7 @@ func (rd *renderer) officeRoom(bb, inner typeset.Rect, dims []*dim) typeset.Rect
 		}
 		for _, l := range d.labels {
 			w, _ := l.b.rotated()
-			right = math.Max(right, l.cx+w/2)
+			right = math.Max(right, l.cx+float64(w/2))
 		}
 	}
 	if lg := rd.c.Legend; lg != nil && !lg.Overlay && (lg.Position == LegendRight || lg.Position == LegendTopRight) {

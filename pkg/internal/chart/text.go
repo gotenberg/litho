@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -51,8 +52,8 @@ func (b *block) rotated() (float64, float64) {
 		return 0, 0
 	}
 	a := b.style.Rotation * math.Pi / 180
-	c, s := math.Abs(math.Cos(a)), math.Abs(math.Sin(a))
-	return b.w*c + b.h*s, b.w*s + b.h*c
+	c, s := math.Abs(detmath.Cos(a)), math.Abs(detmath.Sin(a))
+	return float64(b.w*c) + float64(b.h*s), float64(b.w*s) + float64(b.h*c)
 }
 
 // textStyle maps a chart text style to the text stack's.
@@ -150,7 +151,7 @@ func (b *block) draw(cx, cy float64, al align) []typeset.Fragment {
 	if b == nil {
 		return nil
 	}
-	x0, y := cx-b.w/2, cy-b.h/2
+	x0, y := cx-float64(b.w/2), cy-float64(b.h/2)
 	var out []typeset.Fragment
 	for i, l := range b.lines {
 		dx := 0.0
@@ -161,7 +162,7 @@ func (b *block) draw(cx, cy float64, al align) []typeset.Fragment {
 			dx = b.w - l.Width
 		case alignLeft:
 		}
-		base := y + (b.lineH[i]-l.Ascent-l.Descent)/2 + l.Ascent
+		base := y + float64((b.lineH[i]-l.Ascent-l.Descent)/2) + l.Ascent
 		for _, run := range l.Runs {
 			t := *run
 			t.Origin = typeset.Point{X: x0 + dx + run.Origin.X, Y: base}
@@ -179,8 +180,8 @@ func (b *block) draw(cx, cy float64, al align) []typeset.Fragment {
 // by deg degrees about (cx, cy), in y-down coordinates.
 func rotateAbout(deg, cx, cy float64) typeset.Matrix {
 	a := deg * math.Pi / 180
-	c, s := math.Cos(a), math.Sin(a)
-	return typeset.Matrix{A: c, B: -s, C: s, D: c, E: cx - cx*c - cy*s, F: cy + cx*s - cy*c}
+	c, s := detmath.Cos(a), detmath.Sin(a)
+	return typeset.Matrix{A: c, B: -s, C: s, D: c, E: cx - float64(cx*c) - float64(cy*s), F: cy + float64(cx*s) - float64(cy*c)}
 }
 
 // renderer holds one [Render] call's state.

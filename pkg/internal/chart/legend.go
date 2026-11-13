@@ -121,7 +121,7 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 		yPad, yOff = officeLegendPad, 2*officeLegendPad
 	}
 	symDist := max(minLegendSpacing, fs*0.22)
-	symH := fs * 0.6
+	symH := float64(fs * 0.6)
 	symW := symH
 	side := lg.Position == LegendLeft || lg.Position == LegendRight || lg.Position == LegendTopRight
 	maxText := rem.Width * 3 / 10
@@ -173,7 +173,7 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 		colW[c] = max(colW[c], e.label.w+symPlus)
 		rowH[r] = max(rowH[r], e.label.h)
 	}
-	w, h := 2*xPad+float64(cols-1)*xOff, 2*yPad+float64(rows-1)*yOff
+	w, h := float64(2*xPad)+float64(float64(cols-1)*xOff), float64(2*yPad)+float64(float64(rows-1)*yOff)
 	for _, v := range colW {
 		w += v
 	}
@@ -183,21 +183,21 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 	var x, y float64
 	switch lg.Position {
 	case LegendLeft:
-		x, y = page.X+legendSideMargin, page.Y+page.Height/2-h/2
+		x, y = page.X+legendSideMargin, page.Y+float64(page.Height/2)-float64(h/2)
 	case LegendTop:
-		x, y = page.X+page.Width/2-w/2, rem.Y+legendTopMargin
+		x, y = page.X+float64(page.Width/2)-float64(w/2), rem.Y+legendTopMargin
 		if office {
 			y = rem.Y
 		}
 	case LegendBottom:
-		x, y = page.X+page.Width/2-w/2, rem.Y+rem.Height-legendTopMargin-h
+		x, y = page.X+float64(page.Width/2)-float64(w/2), rem.Y+rem.Height-legendTopMargin-h
 		if office {
 			y = page.Y + page.Height - officePad - h
 		}
 	case LegendTopRight:
 		x, y = page.X+page.Width-legendSideMargin-w, rem.Y+legendTopMargin
 	case LegendRight:
-		x, y = page.X+page.Width-legendSideMargin-w, page.Y+page.Height/2-h/2
+		x, y = page.X+page.Width-legendSideMargin-w, page.Y+float64(page.Height/2)-float64(h/2)
 	}
 	if l := lg.Layout; l != nil {
 		// A placed legend keeps its corner, and its size when the file
@@ -211,12 +211,12 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 		}
 		const edge = 30 * mm100
 		if x+w > page.X+page.Width {
-			if nx := page.X + page.Width - w - edge; nx > page.X+page.Width/4 {
+			if nx := page.X + page.Width - w - edge; nx > page.X+float64(page.Width/4) {
 				x = nx
 			}
 		}
 		if y+h > page.Y+page.Height {
-			if ny := page.Y + page.Height - h - edge; ny > page.Y+page.Height/4 {
+			if ny := page.Y + page.Height - h - edge; ny > page.Y+float64(page.Height/4) {
 				y = ny
 			}
 		}
@@ -234,9 +234,9 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 			}
 			e := entries[i]
 			lineH := e.label.lineH[0]
-			sy := cy + (lineH-symH)/2
+			sy := cy + float64((lineH-symH)/2)
 			rd.key(e, typeset.Rect{X: cx, Y: sy, Width: symW, Height: symH})
-			rd.out = append(rd.out, e.label.draw(cx+symPlus+e.label.w/2, cy+e.label.h/2, alignLeft)...)
+			rd.out = append(rd.out, e.label.draw(cx+symPlus+float64(e.label.w/2), cy+float64(e.label.h/2), alignLeft)...)
 			cy += rowH[r] + yOff
 		}
 		cx += colW[c] + xOff
@@ -294,20 +294,20 @@ func oneRow(entries []legendEntry, symPlus, xOff, avail float64) bool {
 func (rd *renderer) key(e legendEntry, r typeset.Rect) {
 	if e.circleKey {
 		d := math.Min(r.Width, r.Height) / 2
-		rd.paint(ellipse(r.X+r.Width/2, r.Y+r.Height/2, d, d), e.fill, nil)
+		rd.paint(ellipse(r.X+float64(r.Width/2), r.Y+float64(r.Height/2), d, d), e.fill, nil)
 		return
 	}
 	if e.markerKey {
 		m := e.marker
 		m.Size = math.Min(m.Size, r.Height)
-		rd.marker(m, r.X+r.Width/2, r.Y+r.Height/2)
+		rd.marker(m, r.X+float64(r.Width/2), r.Y+float64(r.Height/2))
 		return
 	}
 	if !e.lineKey {
 		rd.paint(rectPath(r).Ops, e.fill, keyBorder(e.border))
 		return
 	}
-	cy := r.Y + r.Height/2
+	cy := r.Y + float64(r.Height/2)
 	if e.border != nil {
 		b := *e.border
 		b.Width = math.Min(b.Width, r.Height)
@@ -315,7 +315,7 @@ func (rd *renderer) key(e legendEntry, r typeset.Rect) {
 	}
 	m := e.marker
 	m.Size = math.Min(m.Size, r.Height)
-	rd.marker(m, r.X+r.Width/2, cy)
+	rd.marker(m, r.X+float64(r.Width/2), cy)
 }
 
 // keyBorder returns the border a legend key draws: the item's border, no

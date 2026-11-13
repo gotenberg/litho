@@ -497,7 +497,7 @@ type ManualLayout struct {
 
 // rect returns the layout's rectangle in r, its size 0 when automatic.
 func (l *ManualLayout) rect(r typeset.Rect) typeset.Rect {
-	return typeset.Rect{X: r.X + l.X*r.Width, Y: r.Y + l.Y*r.Height, Width: l.Width * r.Width, Height: l.Height * r.Height}
+	return typeset.Rect{X: r.X + float64(l.X*r.Width), Y: r.Y + float64(l.Y*r.Height), Width: l.Width * r.Width, Height: l.Height * r.Height}
 }
 
 // LegendPosition is where the legend sits.

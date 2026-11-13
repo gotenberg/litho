@@ -3,6 +3,7 @@ package chart
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -28,13 +29,15 @@ func arc(ops []typeset.PathOp, cx, cy, r, a0, a1 float64) []typeset.PathOp {
 	n := int(math.Ceil(math.Abs(a1-a0) / (math.Pi / 2)))
 	n = max(n, 1)
 	step := (a1 - a0) / float64(n)
-	k := 4.0 / 3 * math.Tan(step/4)
-	at := func(a float64) typeset.Point { return typeset.Point{X: cx + r*math.Cos(a), Y: cy - r*math.Sin(a)} }
+	k := 4.0 / 3 * detmath.Tan(step/4)
+	at := func(a float64) typeset.Point {
+		return typeset.Point{X: cx + float64(r*detmath.Cos(a)), Y: cy - float64(r*detmath.Sin(a))}
+	}
 	for i := range n {
-		s, e := a0+float64(i)*step, a0+float64(i+1)*step
+		s, e := a0+float64(float64(i)*step), a0+float64(float64(i+1)*step)
 		p0, p3 := at(s), at(e)
-		c1 := typeset.Point{X: p0.X - k*r*math.Sin(s), Y: p0.Y - k*r*math.Cos(s)}
-		c2 := typeset.Point{X: p3.X + k*r*math.Sin(e), Y: p3.Y + k*r*math.Cos(e)}
+		c1 := typeset.Point{X: p0.X - float64(k*r*detmath.Sin(s)), Y: p0.Y - float64(k*r*detmath.Cos(s))}
+		c2 := typeset.Point{X: p3.X + float64(k*r*detmath.Sin(e)), Y: p3.Y + float64(k*r*detmath.Cos(e))}
 		ops = append(ops, typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{c1, c2, p3}})
 	}
 	return ops
@@ -43,13 +46,13 @@ func arc(ops []typeset.PathOp, cx, cy, r, a0, a1 float64) []typeset.PathOp {
 // sector returns the outline of the ring sector between radii r0 and r1
 // and angles a0 and a1, a pie slice when r0 is 0.
 func sector(cx, cy, r0, r1, a0, a1 float64) []typeset.PathOp {
-	start := typeset.Point{X: cx + r1*math.Cos(a0), Y: cy - r1*math.Sin(a0)}
+	start := typeset.Point{X: cx + float64(r1*detmath.Cos(a0)), Y: cy - float64(r1*detmath.Sin(a0))}
 	ops := []typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{start}}}
 	ops = arc(ops, cx, cy, r1, a0, a1)
 	if r0 <= 0 {
 		ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: cx, Y: cy}}})
 	} else {
-		ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: cx + r0*math.Cos(a1), Y: cy - r0*math.Sin(a1)}}})
+		ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: cx + float64(r0*detmath.Cos(a1)), Y: cy - float64(r0*detmath.Sin(a1))}}})
 		ops = arc(ops, cx, cy, r0, a1, a0)
 	}
 	return append(ops, typeset.PathOp{Kind: typeset.ClosePath})
@@ -78,7 +81,7 @@ func (rd *renderer) pies(plot typeset.Rect) {
 	if g.Kind == Pie {
 		series = series[:1]
 	}
-	cx, cy := plot.X+plot.Width/2, plot.Y+plot.Height/2
+	cx, cy := plot.X+float64(plot.Width/2), plot.Y+float64(plot.Height/2)
 	r := math.Min(plot.Width, plot.Height) / 2
 	maxExpl := 0.0
 	for _, s := range series {
@@ -115,9 +118,9 @@ func (rd *renderer) pies(plot typeset.Rect) {
 		// it before its height does.
 		w := plot.Width / 2
 		if outside {
-			w = (plot.Width-2*maxW)/2 - labelSpacing
+			w = float64((plot.Width-2*maxW)/2) - labelSpacing
 		}
-		r = math.Min(w, (plot.Height/2-maxH)/(t.tilt+t.rim/2))
+		r = math.Min(w, (float64(plot.Height/2)-maxH)/(t.tilt+float64(t.rim/2)))
 	}
 	r /= 1 + maxExpl
 	if !above(r, 1) {
@@ -125,7 +128,7 @@ func (rd *renderer) pies(plot typeset.Rect) {
 	}
 	hole := 0.0
 	if g.Kind == Doughnut {
-		hole = r * math.Max(minHoleSize, math.Min(holeSize(g), maxHoleSize)) / 100
+		hole = float64(r * math.Max(minHoleSize, math.Min(holeSize(g), maxHoleSize)) / 100)
 	}
 	first := g.FirstSliceAngle
 	dir := -1.0
@@ -137,19 +140,19 @@ func (rd *renderer) pies(plot typeset.Rect) {
 		// exploded sector takes (chart2's PieChart::getMaxOffset).
 		r = math.Min(plot.Width, plot.Height) / 2 / (1 + maxExpl)
 		if t != nil {
-			r = math.Min(plot.Width/2, plot.Height/2/(t.tilt+t.rim/2)) / (1 + maxExpl)
+			r = math.Min(plot.Width/2, plot.Height/2/(t.tilt+float64(t.rim/2))) / (1 + maxExpl)
 		}
 		if g.Kind == Doughnut {
-			hole = r * math.Max(minHoleSize, math.Min(holeSize(g), maxHoleSize)) / 100
+			hole = float64(r * math.Max(minHoleSize, math.Min(holeSize(g), maxHoleSize)) / 100)
 		}
 	}
 	if t != nil {
 		// A three-dimensional pie turns by its view's rotY: its group has
 		// no first slice angle (ECMA-376 Part 1, 21.2.2.140 pie3DChart).
 		first += rd.c.View3D.RotY
-		cy -= t.rim * r / 2
+		cy -= float64(t.rim * r / 2)
 	}
-	start := (90 - first) * math.Pi / 180
+	start := float64((90 - first) * math.Pi / 180)
 	ringW := (r - hole) / float64(len(series))
 	var labels []pieLabel
 	var tops []typeset.Fragment
@@ -165,7 +168,7 @@ func (rd *renderer) pies(plot typeset.Rect) {
 		if total <= 0 {
 			continue
 		}
-		r0 := hole + float64(si)*ringW
+		r0 := hole + float64(float64(si)*ringW)
 		r1 := r0 + ringW
 		a := start
 		for j := range n {
@@ -173,7 +176,7 @@ func (rd *renderer) pies(plot typeset.Rect) {
 			if !ok || v == 0 {
 				continue
 			}
-			sweep := dir * math.Abs(v) / total * 2 * math.Pi
+			sweep := float64(dir * math.Abs(v) / total * 2 * math.Pi)
 			a0, a1 := a, a+sweep
 			a = a1
 			mid := (a0 + a1) / 2
@@ -185,7 +188,7 @@ func (rd *renderer) pies(plot typeset.Rect) {
 			if g.Kind == Doughnut && si != len(series)-1 {
 				ex = 0
 			}
-			pcx, pcy := cx+ex*math.Cos(mid), cy-ex*math.Sin(mid)
+			pcx, pcy := cx+float64(ex*detmath.Cos(mid)), cy-float64(ex*detmath.Sin(mid))
 			lo, hi := math.Min(a0, a1), math.Max(a0, a1)
 			ops := sector(pcx, pcy, r0, r1, hi, lo)
 			if math.Abs(sweep) >= 2*math.Pi-1e-9 {
@@ -248,7 +251,7 @@ func (rd *renderer) pieSector(ops []typeset.PathOp, fill *Paint, border *Stroke)
 // with a leader line.
 func (rd *renderer) placePieLabel(l pieLabel) {
 	w, h := l.b.rotated()
-	c, s := math.Cos(l.mid), math.Sin(l.mid)
+	c, s := detmath.Cos(l.mid), detmath.Sin(l.mid)
 	if l.tilt > 0 {
 		s *= l.tilt
 	}
@@ -258,21 +261,21 @@ func (rd *renderer) placePieLabel(l pieLabel) {
 		rm = l.r1 * 0.6
 	}
 	if l.lb.Placement == LabelInsideEnd {
-		rm = l.r1 - math.Max(w, h)/2 - labelSpacing
+		rm = l.r1 - float64(math.Max(w, h)/2) - labelSpacing
 	}
 	if inside && l.lb.Placement != LabelCenter && l.lb.Placement != LabelInsideEnd {
 		// Best fit: inside when the label's half diagonal fits the ring.
-		if math.Hypot(w, h)/2 > (l.r1-l.r0)/2+l.r0*0.4 {
+		if detmath.Hypot(w, h)/2 > float64((l.r1-l.r0)/2)+float64(l.r0*0.4) {
 			inside = false
 		}
 	}
 	if inside {
-		rd.labelFrame(l.b, l.lb, l.cx+rm*c, l.cy-rm*s)
+		rd.labelFrame(l.b, l.lb, l.cx+float64(rm*c), l.cy-float64(rm*s))
 		return
 	}
 	d := l.r1 + labelSpacing
-	ex, ey := l.cx+d*c, l.cy-d*s
-	lx, ly := ex+c*w/2, ey-s*h/2
+	ex, ey := l.cx+float64(d*c), l.cy-float64(d*s)
+	lx, ly := ex+float64(c*w/2), ey-float64(s*h/2)
 	rd.labelFrame(l.b, l.lb, lx, ly)
 }
 
@@ -315,8 +318,8 @@ func (rd *renderer) radar(avail typeset.Rect) {
 			maxW, maxH = math.Max(maxW, w), math.Max(maxH, h)
 		}
 	}
-	cx, cy := avail.X+avail.Width/2, avail.Y+avail.Height/2
-	r := math.Min(avail.Width/2-maxW-labelSpacing, avail.Height/2-maxH-labelSpacing)
+	cx, cy := avail.X+float64(avail.Width/2), avail.Y+float64(avail.Height/2)
+	r := math.Min(float64(avail.Width/2)-maxW-labelSpacing, float64(avail.Height/2)-maxH-labelSpacing)
 	if !above(r, 1) {
 		return
 	}
@@ -324,7 +327,7 @@ func (rd *renderer) radar(avail typeset.Rect) {
 	at := func(i int, v float64) typeset.Point {
 		f := math.Max(0, math.Min(1, y.sc.frac(v)))
 		a := angle(i)
-		return typeset.Point{X: cx + r*f*math.Cos(a), Y: cy - r*f*math.Sin(a)}
+		return typeset.Point{X: cx + float64(r*f*detmath.Cos(a)), Y: cy - float64(r*f*detmath.Sin(a))}
 	}
 	if y.ax != nil && y.ax.MajorGrid != nil {
 		for _, v := range y.sc.ticks() {
@@ -381,8 +384,8 @@ func (rd *renderer) radar(avail typeset.Rect) {
 			w, h := b.rotated()
 			a := angle(i)
 			d := r + labelSpacing
-			lx := cx + d*math.Cos(a) + math.Cos(a)*w/2
-			ly := cy - d*math.Sin(a) - math.Sin(a)*h/2
+			lx := cx + float64(d*detmath.Cos(a)) + float64(detmath.Cos(a)*w/2)
+			ly := cy - float64(d*detmath.Sin(a)) - float64(detmath.Sin(a)*h/2)
 			rd.out = append(rd.out, b.draw(lx, ly, alignCenter)...)
 		}
 	}
@@ -394,7 +397,7 @@ func (rd *renderer) radar(avail typeset.Rect) {
 			}
 			w, _ := b.rotated()
 			p := at(0, v)
-			rd.out = append(rd.out, b.draw(p.X-labelSpacing-w/2, p.Y, alignRight)...)
+			rd.out = append(rd.out, b.draw(p.X-labelSpacing-float64(w/2), p.Y, alignRight)...)
 		}
 	}
 }

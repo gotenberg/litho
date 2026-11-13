@@ -43,7 +43,7 @@ func (rd *renderer) layoutDataTable(d *dim) *dataTable {
 	st := dt.Style
 	size := textStyle(st).Size
 	t := &dataTable{top: d.lineAt}
-	t.rowH = size*chartLineHeight + 2*titleVPad*size
+	t.rowH = float64(size*chartLineHeight) + float64(2*titleVPad*size)
 	t.symH = size * 0.6
 	t.symW = t.symH
 	for _, g := range rd.c.Groups {
@@ -61,7 +61,7 @@ func (rd *renderer) layoutDataTable(d *dim) *dataTable {
 			}
 		}
 	}
-	t.nameW += 2 * titleHPad * size
+	t.nameW += float64(2 * titleHPad * size)
 	if dt.Keys {
 		t.nameW += t.symW + 2*tableKeyMargin
 	}
@@ -87,20 +87,20 @@ func (rd *renderer) drawDataTable(d *dim, t *dataTable) {
 		if b == nil {
 			return
 		}
-		cy := y + t.rowH/2
-		cx := (x0 + x1) / 2
+		cy := y + float64(t.rowH/2)
+		cx := float64((x0 + x1) / 2)
 		if al == alignLeft {
-			cx = x0 + indent + titleHPad*b.style.Size + b.w/2
+			cx = x0 + indent + float64(titleHPad*b.style.Size) + float64(b.w/2)
 		}
 		if f := dt.Fill; f != nil && !f.None && f.Color.A > 0 {
-			rd.add(paintPath(rectPath(typeset.Rect{X: cx - b.w/2, Y: cy - b.h/2, Width: b.w, Height: b.h}).Ops, f, nil))
+			rd.add(paintPath(rectPath(typeset.Rect{X: cx - float64(b.w/2), Y: cy - float64(b.h/2), Width: b.w, Height: b.h}).Ops, f, nil))
 		}
 		rd.out = append(rd.out, b.draw(cx, cy, alignCenter)...)
 	}
 	hline := func(x0, x1, y float64) { rd.add(line(x0, y, x1, y, dt.Line)) }
 	vline := func(x, y0, y1 float64) { rd.add(line(x, y0, x, y1, dt.Line)) }
 	for j := 0; j < n && j < len(d.names); j++ {
-		x0 := d.inner.X + float64(j)*colW
+		x0 := d.inner.X + float64(float64(j)*colW)
 		cell(d.names[j], x0, x0+colW, t.top, alignCenter, 0)
 		col := j + 1
 		if (dt.Outline && col == 1) || (dt.VBorder && col > 1 && col < n) {
@@ -114,13 +114,13 @@ func (rd *renderer) drawDataTable(d *dim, t *dataTable) {
 		}
 	}
 	for i, ts := range t.series {
-		y := t.top + t.rowH*float64(i+1)
+		y := t.top + float64(t.rowH*float64(i+1))
 		row := i + 1
 		indent := 0.0
 		if dt.Keys {
 			indent = t.symW + 2*tableKeyMargin
 			e := rd.entry(ts.g, ts.s, -1, "", st, 0)
-			rd.key(e, typeset.Rect{X: t.x + tableKeyMargin, Y: y + (t.rowH-t.symH)/2, Width: t.symW, Height: t.symH})
+			rd.key(e, typeset.Rect{X: t.x + tableKeyMargin, Y: y + float64((t.rowH-t.symH)/2), Width: t.symW, Height: t.symH})
 		}
 		if ts.s.Name != "" {
 			cell(ts.s.Name, t.x, d.inner.X, y, alignLeft, indent)
@@ -137,7 +137,7 @@ func (rd *renderer) drawDataTable(d *dim, t *dataTable) {
 		}
 		vals := rd.data(ts.s.Values)
 		for j := range n {
-			x0 := d.inner.X + float64(j)*colW
+			x0 := d.inner.X + float64(float64(j)*colW)
 			if txt := vals.label(j, rd.c.Locale); txt != "" {
 				cell(txt, x0, x0+colW, y, alignCenter, 0)
 			}

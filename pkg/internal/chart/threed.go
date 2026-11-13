@@ -5,6 +5,7 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -144,12 +145,12 @@ type projection struct {
 
 // at returns the page point of front-plane point (x, y) at depth z.
 func (p *projection) at(x, y, z float64) typeset.Point {
-	return typeset.Point{X: x + z*p.dx, Y: y - z*p.dy}
+	return typeset.Point{X: x + float64(z*p.dx), Y: y - float64(z*p.dy)}
 }
 
 // row returns the front and back depths of the solids of row i.
 func (p *projection) row(i int) (float64, float64) {
-	z0 := float64(i)*p.rowDepth + (p.rowDepth-p.solid)/2
+	z0 := float64(float64(i)*p.rowDepth) + float64((p.rowDepth-p.solid)/2)
 	return z0, z0 + p.solid
 }
 
@@ -169,8 +170,8 @@ func (rd *renderer) threeD(g0 *Group) *projection {
 		ry = 0
 	}
 	return &projection{
-		dx:         math.Sin(ry * math.Pi / 180),
-		dy:         math.Sin(rx * math.Pi / 180),
+		dx:         detmath.Sin(ry * math.Pi / 180),
+		dy:         detmath.Sin(rx * math.Pi / 180),
 		horizontal: g0.Kind == Bar && g0.Horizontal,
 	}
 }
@@ -233,14 +234,14 @@ func (p *projection) layout(rd *renderer, g0 *Group, x *dim, inner typeset.Rect)
 		}
 	}
 	// The depth per point of the category axis's length.
-	ratio := float64(rows) * dp * (1 + gd) / (units * (float64(k) - float64(k-1)*ov + gap))
+	ratio := float64(rows) * dp * (1 + gd) / (units * (float64(k) - float64(float64(k-1)*ov) + gap))
 	ax, ay := math.Abs(p.dx), math.Abs(p.dy)
 	var front typeset.Rect
 	if p.horizontal {
-		front.Height = inner.Height / (1 + ratio*ay)
+		front.Height = inner.Height / (1 + float64(ratio*ay))
 		p.depth = ratio * front.Height
 	} else {
-		front.Width = inner.Width / (1 + ratio*ax)
+		front.Width = inner.Width / (1 + float64(ratio*ax))
 		p.depth = ratio * front.Width
 	}
 	if ax > 0 {
@@ -249,17 +250,17 @@ func (p *projection) layout(rd *renderer, g0 *Group, x *dim, inner typeset.Rect)
 	if ay > 0 {
 		p.depth = math.Min(p.depth, maxDepthShare*inner.Height/ay)
 	}
-	front.Width = inner.Width - p.depth*ax
-	front.Height = inner.Height - p.depth*ay
+	front.Width = inner.Width - float64(p.depth*ax)
+	front.Height = inner.Height - float64(p.depth*ay)
 	p.rowDepth = p.depth / float64(rows)
 	p.solid = p.rowDepth / (1 + gd)
 	front.X = inner.X
 	if p.dx < 0 {
-		front.X += p.depth * ax
+		front.X += float64(p.depth * ax)
 	}
 	front.Y = inner.Y
 	if p.dy > 0 {
-		front.Y += p.depth * ay
+		front.Y += float64(p.depth * ay)
 	}
 	return front
 }
@@ -411,9 +412,9 @@ func (rd *renderer) bars3D(p *projection, g *Group, x, y *dim) ([]solid, []func(
 	if !x.between && x.n > 1 {
 		catW = x.length() / float64(x.n-1)
 	}
-	barW := catW / (float64(k) - float64(k-1)*ov + gap)
+	barW := catW / (float64(k) - float64(float64(k-1)*ov) + gap)
 	step := barW * (1 - ov)
-	total := barW + float64(k-1)*step
+	total := barW + float64(float64(k-1)*step)
 	base := y.sc.clamp(x.crossValue())
 	if y.sc.log > 0 {
 		base = y.sc.min
@@ -447,8 +448,8 @@ func (rd *renderer) bars3D(p *projection, g *Group, x, y *dim) ([]solid, []func(
 			if x.vertical {
 				sign = -sign
 			}
-			p0 := c + sign*(-total/2+float64(slot)*step)
-			p1 := p0 + sign*barW
+			p0 := c + float64(sign*(float64(-total/2)+float64(float64(slot)*step)))
+			p1 := p0 + float64(sign*barW)
 			v0, v1 := y.valuePixel(y.sc.clamp(b)), y.valuePixel(y.sc.clamp(v))
 			var r typeset.Rect
 			if x.vertical {
@@ -507,12 +508,12 @@ const roundSteps = 32
 // scaled by s about its axis.
 func (b bar3D) section(v, s float64) []typeset.Point {
 	p := b.p
-	zc, hz := (b.z0+b.z1)/2, (b.z1-b.z0)/2*s
+	zc, hz := float64((b.z0+b.z1)/2), float64((b.z1-b.z0)/2*s)
 	var c, hw float64
 	if p.horizontal {
-		c, hw = b.r.Y+b.r.Height/2, b.r.Height/2*s
+		c, hw = b.r.Y+float64(b.r.Height/2), b.r.Height/2*s
 	} else {
-		c, hw = b.r.X+b.r.Width/2, b.r.Width/2*s
+		c, hw = b.r.X+float64(b.r.Width/2), b.r.Width/2*s
 	}
 	at := func(u, z float64) typeset.Point {
 		if p.horizontal {
@@ -526,7 +527,7 @@ func (b bar3D) section(v, s float64) []typeset.Point {
 	pts := make([]typeset.Point, roundSteps)
 	for i := range pts {
 		a := 2 * math.Pi * float64(i) / roundSteps
-		pts[i] = at(hw*math.Cos(a), zc+hz*math.Sin(a))
+		pts[i] = at(float64(hw*detmath.Cos(a)), zc+float64(hz*detmath.Sin(a)))
 	}
 	return pts
 }
@@ -591,7 +592,7 @@ func hull(pts []typeset.Point) []typeset.Point {
 		return 0
 	})
 	cross := func(o, a, b typeset.Point) float64 {
-		return (a.X-o.X)*(b.Y-o.Y) - (a.Y-o.Y)*(b.X-o.X)
+		return float64((a.X-o.X)*(b.Y-o.Y)) - float64((a.Y-o.Y)*(b.X-o.X))
 	}
 	out := make([]typeset.Point, 0, 2*len(pts))
 	for _, pt := range pts {
@@ -618,7 +619,7 @@ func (p *projection) strip(a, b typeset.Point, z0, z1 float64) ([]typeset.PathOp
 	ops := polygon(p.at(a.X, a.Y, z0), p.at(b.X, b.Y, z0), p.at(b.X, b.Y, z1), p.at(a.X, a.Y, z1))
 	// The sign of the cross product of the segment and the depth axis says
 	// which side of the face the view sees.
-	c := (b.X-a.X)*(-p.dy) - (b.Y-a.Y)*p.dx
+	c := float64((b.X-a.X)*(-p.dy)) - float64((b.Y-a.Y)*p.dx)
 	if c <= 0 {
 		return ops, faceUp
 	}
@@ -771,7 +772,7 @@ func (rd *renderer) rowLabels(p *projection, g *Group, f typeset.Rect) {
 		}
 		w, _ := b.rotated()
 		pt := p.at(edge, f.Y+f.Height, (z0+z1)/2)
-		rd.out = append(rd.out, b.draw(pt.X+dir*(labelSpacing+w/2), pt.Y, al)...)
+		rd.out = append(rd.out, b.draw(pt.X+float64(dir*(labelSpacing+float64(w/2))), pt.Y, al)...)
 	}
 }
 
@@ -805,8 +806,8 @@ func (rd *renderer) pieView(g *Group) *pie3D {
 	}
 	a := rx * math.Pi / 180
 	return &pie3D{
-		tilt: math.Sin(a) * (1 - persp/600),
-		rim:  pieHeight * math.Cos(a) * v.depthPercent() / 100,
+		tilt: detmath.Sin(a) * (1 - persp/600),
+		rim:  pieHeight * detmath.Cos(a) * v.depthPercent() / 100,
 	}
 }
 
@@ -816,7 +817,7 @@ func tiltOps(ops []typeset.PathOp, cy, k float64) []typeset.PathOp {
 	for i, op := range ops {
 		out[i] = op
 		for j := range op.P {
-			out[i].P[j].Y = cy + (op.P[j].Y-cy)*k
+			out[i].P[j].Y = cy + float64((op.P[j].Y-cy)*k)
 		}
 	}
 	return out
@@ -827,19 +828,19 @@ func tiltOps(ops []typeset.PathOp, cy, k float64) []typeset.PathOp {
 // up), the part of it in front, below the centre: nil when none is.
 func (t *pie3D) rimOps(cx, cy, r, a0, a1 float64) [][]typeset.PathOp {
 	lo, hi := math.Min(a0, a1), math.Max(a0, a1)
-	h := t.rim * r
+	h := float64(t.rim * r)
 	var out [][]typeset.PathOp
 	// The front half turns from pi to 2 pi, once a turn.
 	for m := math.Floor(lo/(2*math.Pi)) - 1; m <= math.Ceil(hi/(2*math.Pi)); m++ {
-		s := math.Max(lo, math.Pi+2*math.Pi*m)
-		e := math.Min(hi, 2*math.Pi+2*math.Pi*m)
+		s := math.Max(lo, math.Pi+float64(2*math.Pi*m))
+		e := math.Min(hi, 2*math.Pi+float64(2*math.Pi*m))
 		if e-s < 1e-9 {
 			continue
 		}
-		start := typeset.Point{X: cx + r*math.Cos(s), Y: cy - r*math.Sin(s)}
+		start := typeset.Point{X: cx + float64(r*detmath.Cos(s)), Y: cy - float64(r*detmath.Sin(s))}
 		up := arc([]typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{start}}}, cx, cy, r, s, e)
 		up = tiltOps(up, cy, t.tilt)
-		end := typeset.Point{X: cx + r*math.Cos(e), Y: cy + h - r*math.Sin(e)*t.tilt}
+		end := typeset.Point{X: cx + float64(r*detmath.Cos(e)), Y: cy + h - float64(r*detmath.Sin(e)*t.tilt)}
 		down := tiltOps(arc(nil, cx, cy+h, r, e, s), cy+h, t.tilt)
 		up = append(up, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{end}})
 		up = append(up, down...)
