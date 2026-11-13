@@ -179,11 +179,13 @@ func parseFactor(v []token) (float64, bool) {
 // already takes all of a line's free space.
 const maxFlexFactor = 1e9
 
-// kwFlexBasis are the keywords of flex-basis (CSS Flexbox 1, 7.3.3): the
-// intrinsic sizing keywords compute to content, the size of the content.
+// kwFlexBasis are the keywords of flex-basis (CSS Flexbox 1, 7.3.3): auto,
+// content, and the sizing keywords <'width'> takes (CSS Sizing 3, 3.1;
+// CSS Sizing 4, 3.1), which the layout resolves as it resolves a width.
+// Chromium parses none of their prefixed spellings here.
 var kwFlexBasis = map[string]DimKind{
 	"auto": Auto, "content": FlexContent,
-	"min-content": FlexContent, "max-content": FlexContent, "fit-content": FlexContent,
+	"min-content": MinContent, "max-content": MaxContent, "fit-content": FitContent, "stretch": Stretch,
 }
 
 // flexBasisProp defines flex-basis: auto, content, or a non-negative

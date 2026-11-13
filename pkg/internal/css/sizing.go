@@ -11,12 +11,15 @@ package css
 
 import "maps"
 
-// sizingKeywords are the sizing keywords and their kinds.
+// sizingKeywords are the sizing keywords and their kinds, with the
+// prefixed spellings Chromium parses on width and height. The -moz-
+// spellings are in no specification and Chromium refuses them, so litho
+// does too.
 var sizingKeywords = map[string]DimKind{
-	"min-content": MinContent, "-webkit-min-content": MinContent, "-moz-min-content": MinContent,
-	"max-content": MaxContent, "-webkit-max-content": MaxContent, "-moz-max-content": MaxContent,
-	"fit-content": FitContent, "-webkit-fit-content": FitContent, "-moz-fit-content": FitContent,
-	"stretch": Stretch, "-webkit-fill-available": Stretch, "-moz-available": Stretch,
+	"min-content": MinContent, "-webkit-min-content": MinContent,
+	"max-content": MaxContent, "-webkit-max-content": MaxContent,
+	"fit-content": FitContent, "-webkit-fit-content": FitContent,
+	"stretch": Stretch, "-webkit-fill-available": Stretch,
 }
 
 // withSizing returns kws with the sizing keywords added.
