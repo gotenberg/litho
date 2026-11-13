@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T17:57:25Z",
+  "captured_at": "2026-11-13T18:12:18Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9848,7 +9848,7 @@
               "text_f1": 0.7353
             },
             "ooxmlexport/SdtContent.docx": {
-              "layout": 0.7867,
+              "layout": 0.7871,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9952,7 +9952,7 @@
               "text_f1": 0
             },
             "ooxmlexport/TextEffects_Glow_Shadow_Reflection.docx": {
-              "layout": 0.8707,
+              "layout": 0.9137,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54468,8 +54468,8 @@
     "litho/docx": {
       "features": {
         "diff": {
-          "matched": 134,
-          "mismatched": 23,
+          "matched": 135,
+          "mismatched": 22,
           "skipped": 26,
           "metrics": {
             "convert_error": 0,
@@ -55430,11 +55430,11 @@
               "text_f1": 1
             },
             "run-w14-effects": {
-              "layout": 0.6389,
+              "layout": 0.9115,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 0.9706
             },
             "sections-columns": {
@@ -82622,7 +82622,7 @@
               "text_f1": 0.9996
             },
             "v2FxTestFiles/wordprocessing/mixed_features/webappdis.docx": {
-              "layout": 0.6209,
+              "layout": 0.621,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -98041,7 +98041,7 @@
               "text_f1": 1
             },
             "document/bib-chernigovka.netdo.ru_download_docs_17459.docx": {
-              "layout": 0.5649,
+              "layout": 0.565,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
