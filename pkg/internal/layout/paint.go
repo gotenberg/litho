@@ -514,8 +514,12 @@ func ownOffset(b *box) (float64, float64) {
 		}
 	}
 	dx, dy := 0.0, 0.0
+	// With both left and right set, the containing block's direction
+	// picks the one that wins: right in a right-to-left one (CSS 2.1,
+	// 9.4.3).
+	rightWins := b.st.Right.Kind != css.Auto && cb != nil && cb.st.Direction == css.RTL && cb.st.WritingMode == css.HorizontalTB
 	switch {
-	case b.st.Left.Kind != css.Auto:
+	case b.st.Left.Kind != css.Auto && !rightWins:
 		dx = resolve(b.st.Left, cbw)
 	case b.st.Right.Kind != css.Auto:
 		dx = -resolve(b.st.Right, cbw)

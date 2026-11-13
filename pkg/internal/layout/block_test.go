@@ -193,6 +193,24 @@ func TestRelative_PaintOffset(t *testing.T) {
 		____`)
 }
 
+// TestRelative_OverConstrainedInsets locks CSS 2.1, 9.4.3: with left and
+// right both set, left wins in a left-to-right containing block and right
+// in a right-to-left one.
+func TestRelative_OverConstrainedInsets(t *testing.T) {
+	both := func(s *css.Style) {
+		s.Position = css.Relative
+		s.Left, s.Right = css.Pts(px(1)), css.Pts(px(1))
+	}
+	res := run(t, doc(el(sty(width(4), rtl), el(sty(width(2), height(1), bg(red), both)))), page(4, 2))
+	assertPixels(t, res, 1, `
+		_RR_
+		____`)
+	res = run(t, doc(el(sty(width(4)), el(sty(width(2), height(1), bg(red), both)))), page(4, 2))
+	assertPixels(t, res, 1, `
+		_RR_
+		____`)
+}
+
 func TestInlineBlock_ShrinkAndBaseline(t *testing.T) {
 	ib := el(sty(display(css.InlineBlock), padding(0, 1)), txt(sty(), "ab"))
 	rb := boxes(t, doc(el(sty(), txt(sty(), "x "), ib)), page(100, 100))
