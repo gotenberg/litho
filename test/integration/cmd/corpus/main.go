@@ -91,7 +91,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  prepare       Run every missing or stale step below, in order")
-	fmt.Fprintln(w, "  fetch         Copy the Gotenberg image's fonts, download the other fixture fonts and the files of the fetched corpora (--jobs=N; --corpus=fonts: the fonts alone)")
+	fmt.Fprintln(w, "  fetch         Copy the Gotenberg image's fonts, download the other fixture fonts and the files of the fetched corpora (--jobs=N; --corpus=fonts: the fonts alone; --corpus=fonts/<dir>: one font release)")
 	fmt.Fprintln(w, "  build         Generate the inputs kept as sources in git: Office and hostile documents, litho/pdf and litho/text PDFs")
 	fmt.Fprintln(w, "  references    Convert the sources with the pinned Gotenberg image: the Chromium and LibreOffice PDFs the diff compares to (--fixtures=a,b)")
 	fmt.Fprintln(w, "  goldens       Derive the goldens the corpora lack in the provisioning image (Docker)")

@@ -81,6 +81,16 @@ var localToolPins = map[string]bool{
 	// `corpus fetch --corpus=fonts` on the host like the two above.
 	"NOTO_SANS_CJK_OTC_SHA256": true,
 
+	// The variable families a converter fixture installs by name,
+	// fetched by `corpus fetch` on the host and mounted into the Gotenberg
+	// container by `corpus references`.
+	"ROBOTO_FLEX_COMMIT":           true,
+	"ROBOTO_FLEX_SHA256":           true,
+	"ROBOTO_FLEX_LICENSE_SHA256":   true,
+	"SOURCE_SANS_3_COMMIT":         true,
+	"SOURCE_SANS_3_SHA256":         true,
+	"SOURCE_SANS_3_LICENSE_SHA256": true,
+
 	// The converter oracles: the web-platform-tests commit `make corpus-fetch CORPUS=wpt`
 	// downloads, the WeasyPrint release `make corpus-update CORPUS=weasyprint`
 	// extracts, and the Gotenberg image `make corpus-references` converts

@@ -15,6 +15,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -45,6 +46,9 @@ type fontRelease struct {
 	files []fontDownload
 	// archive, when set, is fetched and unpacked by unpack instead.
 	archive *fontArchive
+	// plainAgent sends Go's default User-Agent in place of
+	// [fetchUserAgent]: the release's host needs no client name.
+	plainAgent bool
 }
 
 // fontArchive is a release archive, of which every TrueType and OpenType
@@ -57,8 +61,10 @@ type fontArchive struct {
 
 // fontReleases lists the font releases versions.env pins (see the comments
 // there for what each draws): the faces the litho/text builder converts
-// with, and the WeasyPrint test font. The converter features draw with the
-// Gotenberg image's fonts instead (see [fetchImageFonts]).
+// with, the WeasyPrint test font, and the variable families a converter
+// fixture installs by name (installedFonts in its options.json). The
+// converter features draw with the Gotenberg image's fonts otherwise (see
+// [fetchImageFonts]).
 func fontReleases(pins map[string]string) ([]fontRelease, error) {
 	var missing []string
 	pin := func(k string) string {
@@ -100,25 +106,70 @@ func fontReleases(pins map[string]string) ([]fontRelease, error) {
 		stamp: weasyURL + " " + pin("WEASYPRINT_FONT_SHA256"),
 		files: []fontDownload{{url: weasyURL, shaPin: "WEASYPRINT_FONT_SHA256", name: "weasyprint.otf"}},
 	}
-	out := []fontRelease{
+	// The variable families, each read from its repository at a pinned
+	// commit, the licence hash-checked with the faces. The directories keep
+	// no version: an options.json names them.
+	roboto := githubRaw + "google/fonts/" + pin("ROBOTO_FLEX_COMMIT") + "/ofl/robotoflex/"
+	sourceSans := githubRaw + "adobe-fonts/source-sans/" + pin("SOURCE_SANS_3_COMMIT") + "/"
+	variable := []fontRelease{
+		pinnedFiles("roboto-flex",
+			fontDownload{roboto + "RobotoFlex%5BGRAD,XOPQ,XTRA,YOPQ,YTAS,YTDE,YTFI,YTLC,YTUC,opsz,slnt,wdth,wght%5D.ttf", "ROBOTO_FLEX_SHA256", "RobotoFlex.ttf"},
+			fontDownload{roboto + "OFL.txt", "ROBOTO_FLEX_LICENSE_SHA256", "OFL.txt"}),
+		pinnedFiles("source-sans-3",
+			fontDownload{sourceSans + "VF/SourceSans3VF-Upright.otf", "SOURCE_SANS_3_SHA256", "SourceSans3VF-Upright.otf"},
+			fontDownload{sourceSans + "LICENSE.md", "SOURCE_SANS_3_LICENSE_SHA256", "LICENSE.md"}),
+	}
+	for i := range variable {
+		for _, f := range variable[i].files {
+			variable[i].stamp += " " + pin(f.shaPin)
+		}
+	}
+	out := slices.Concat([]fontRelease{
 		archive("liberation-"+pin("LIBERATION_FONTS_VERSION"), "LIBERATION_FONTS", "tar.gz"),
 		archive("dejavu-"+pin("DEJAVU_FONTS_VERSION"), "DEJAVU_FONTS", "tar.bz2"),
 		cjk,
 		otc,
 		weasy,
-	}
+	}, variable)
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("not pinned: %s", strings.Join(missing, ", "))
 	}
 	return out, nil
 }
 
+// pinnedFiles is a release of whole files, each hash-checked, fetched with
+// Go's default User-Agent; its stamp starts with the URLs, the caller adds
+// the hashes.
+func pinnedFiles(dir string, files ...fontDownload) fontRelease {
+	r := fontRelease{dir: dir, files: files, plainAgent: true}
+	for i, f := range files {
+		if i > 0 {
+			r.stamp += " "
+		}
+		r.stamp += f.url
+	}
+	return r
+}
+
 // fetchFonts installs every fixture font release under dir that is not
-// there at its pinned release, the releases at once.
-func fetchFonts(ctx context.Context, client *http.Client, pins map[string]string, dir string) error {
+// there at its pinned release, the releases at once; only, when set, names
+// the release directories to install, the others left alone.
+func fetchFonts(ctx context.Context, client *http.Client, pins map[string]string, dir string, only []string) error {
 	releases, err := fontReleases(pins)
 	if err != nil {
 		return err
+	}
+	if len(only) > 0 {
+		var known []string
+		for _, r := range releases {
+			known = append(known, r.dir)
+		}
+		for _, name := range only {
+			if !slices.Contains(known, name) {
+				return fmt.Errorf("no font release %q: want one of %s", name, strings.Join(known, ", "))
+			}
+		}
+		releases = slices.DeleteFunc(releases, func(r fontRelease) bool { return !slices.Contains(only, r.dir) })
 	}
 	errs := make([]error, len(releases))
 	var wg sync.WaitGroup
@@ -137,6 +188,13 @@ func installFontRelease(ctx context.Context, client *http.Client, pins map[strin
 	if got, err := os.ReadFile(filepath.Join(target, fontPinnedFile)); err == nil && string(got) == r.stamp { //nolint:gosec // the fonts directory's own record
 		fmt.Printf("  fonts: %s already at the pinned release\n", r.dir)
 		return nil
+	}
+	if r.plainAgent {
+		base := client.Transport
+		if base == nil {
+			base = http.DefaultTransport
+		}
+		client = &http.Client{Transport: plainAgentTransport{base}, Timeout: client.Timeout}
 	}
 	files := make(map[string][]byte)
 	for _, f := range r.files {
@@ -185,6 +243,18 @@ func installFontRelease(ctx context.Context, client *http.Client, pins map[strin
 	}
 	fmt.Printf("  fonts: %s installed (%d faces)\n", r.dir, faces)
 	return nil
+}
+
+// plainAgentTransport sends each request without the User-Agent its caller
+// set, so the client sends Go's default, Go-http-client/1.1.
+type plainAgentTransport struct {
+	base http.RoundTripper
+}
+
+func (t plainAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Del("User-Agent")
+	return t.base.RoundTrip(req)
 }
 
 // fetchVerified downloads u and checks it against the hash the pin key

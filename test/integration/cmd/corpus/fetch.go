@@ -131,7 +131,7 @@ type fetchFile struct {
 
 func runFetch(ctx context.Context, args []string) int {
 	fs := flag.NewFlagSet("fetch", flag.ContinueOnError)
-	corpus := fs.String("corpus", "", corpusFlagUsage+`, or "fonts" for the fixture fonts alone`)
+	corpus := fs.String("corpus", "", corpusFlagUsage+`, or "fonts" for the fixture fonts alone, "fonts/<dir>" for one font release`)
 	jobs := fs.Int("jobs", fetchJobs, "Files downloaded at once")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -141,6 +141,23 @@ func runFetch(ctx context.Context, args []string) int {
 		return 2
 	}
 	selected := splitCSV(*corpus)
+	var releases []string
+	selected = slices.DeleteFunc(selected, func(s string) bool {
+		dir, ok := strings.CutPrefix(s, fetchFontsName+"/")
+		if ok {
+			releases = append(releases, dir)
+		}
+		return ok
+	})
+	if len(releases) > 0 {
+		if err := fetchFontReleases(ctx, releases); err != nil {
+			fmt.Fprintf(os.Stderr, "fetch: %v\n", err)
+			return 1
+		}
+		if len(selected) == 0 {
+			return 0
+		}
+	}
 	fonts := len(selected) == 0 || slices.Contains(selected, fetchFontsName)
 	patterns := slices.DeleteFunc(slices.Clone(selected), func(s string) bool { return s == fetchFontsName })
 	var ms []*Manifest
@@ -158,8 +175,20 @@ func runFetch(ctx context.Context, args []string) int {
 	return 0
 }
 
-// fetchFontsName selects the fixture fonts alone in a fetch's --corpus.
+// fetchFontsName selects the fixture fonts alone in a fetch's --corpus, and,
+// followed by a slash and a release's directory, that font release alone.
 const fetchFontsName = "fonts"
+
+// fetchFontReleases installs the font releases whose directories names
+// lists, each unless it is there at its pin: neither the other releases nor
+// the Gotenberg image's fonts, so it needs no Docker.
+func fetchFontReleases(ctx context.Context, names []string) error {
+	pins, err := loadPins()
+	if err != nil {
+		return err
+	}
+	return fetchFonts(ctx, http.DefaultClient, pins.Values, filepath.Join(testdataDir(), fixtureFontsDir), names)
+}
 
 // fetchBuilderFonts installs the font releases the litho/text builder
 // converts with that are not at their pins. The builder reads none of the
@@ -169,7 +198,7 @@ func fetchBuilderFonts(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return fetchFonts(ctx, http.DefaultClient, pins.Values, filepath.Join(testdataDir(), fixtureFontsDir))
+	return fetchFonts(ctx, http.DefaultClient, pins.Values, filepath.Join(testdataDir(), fixtureFontsDir), nil)
 }
 
 // fetch installs the fixture fonts when fonts is set, the pinned releases and
@@ -184,7 +213,7 @@ func fetch(ctx context.Context, ms []*Manifest, fonts bool, jobs int, client *ht
 	testdata := testdataDir()
 	if fonts {
 		dir := filepath.Join(testdata, fixtureFontsDir)
-		if err := fetchFonts(ctx, client, pins.Values, dir); err != nil {
+		if err := fetchFonts(ctx, client, pins.Values, dir, nil); err != nil {
 			return fmt.Errorf("fixture fonts: %w", err)
 		}
 		if err := fetchImageFonts(ctx, pins.Values, dir); err != nil {
