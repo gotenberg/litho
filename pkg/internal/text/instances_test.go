@@ -317,3 +317,26 @@ func TestInstalledVariableFaceThatDoesNotInstance(t *testing.T) {
 		}
 	}
 }
+
+// TestInstalledVariableFaceDrawsLeadingSpace pins that a space opening a
+// run of an installed variable family, after a run of another family, is
+// drawn by the named instance the run's weight selects, with the run's
+// other characters.
+func TestInstalledVariableFaceDrawsLeadingSpace(t *testing.T) {
+	t.Parallel()
+	fonts := installedVar(t).ForConversion()
+	sans, bold := Style{Families: []string{"Test Sans"}, Size: 30}, Style{Families: []string{"LithoVar"}, Weight: 700, Size: 30, Fallback: FallbackChromium}
+	p, _, err := fonts.Shape(context.Background(), []ParagraphRun{{Text: "A", Style: sans}, {Text: " AB", Style: bold}}, ParagraphOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := parseVarFont(t).Instance(context.Background(), []float64{733.3333282470703, 100, 0, 12, 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range p.items {
+		if it.start <= 1 && 1 < it.end && string(it.face.Program) != string(want) {
+			t.Errorf("the leading space is drawn by %q, not the Bold instance", it.face.Key)
+		}
+	}
+}

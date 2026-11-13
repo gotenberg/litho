@@ -359,6 +359,11 @@ func TestShape_EveryRunIndexFits(t *testing.T) {
 //
 //   - wpt: css/CSS2/fonts/font-family-013 (a space and an em dash after a
 //     span of Ahem) draws its reference in Chromium 156.
+//   - probe, docx: LibreOffice of gotenberg/gotenberg:9.4.1 draws " X"
+//     in Liberation Serif after an X in Liberation Mono with a 9 pt space
+//     at 36 pt (Serif's), and " X" in Mono after Serif with a 21.6 pt one
+//     (Mono's).
+//   - probe, odt: the same runs as text spans draw the same widths.
 func TestShape_LeadingSpaceTakesItsRunsFace(t *testing.T) {
 	t.Parallel()
 	f := newTestFonts(t, repoFont(t, "Ahem.ttf", ahemPath), repoFont(t, "ab.ttf", dejavuAB))
