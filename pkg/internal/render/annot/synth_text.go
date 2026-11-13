@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
@@ -225,7 +226,7 @@ func noRotateBox(box geom.Rect, pivot geom.Point, rotate int) geom.Rect {
 	if rotate == 0 {
 		return box
 	}
-	sin, cos := math.Sincos(float64(rotate) * math.Pi / 180)
+	sin, cos := detmath.Sincos(float64(rotate) * math.Pi / 180)
 	sin, cos = math.Round(sin), math.Round(cos)
 	turn := func(p geom.Point) geom.Point {
 		dx, dy := p.X-pivot.X, p.Y-pivot.Y

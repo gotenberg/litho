@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
@@ -129,7 +130,7 @@ func (dp dashPattern) cut(pc piece, out []piece, toggles *int) ([]piece, error) 
 	var d geom.Point
 	for i := range segs {
 		a, b := pc.pts[i], pc.pts[(i+1)%len(pc.pts)]
-		l := math.Hypot(b.X-a.X, b.Y-a.Y)
+		l := detmath.Hypot(b.X-a.X, b.Y-a.Y)
 		d = geom.Point{X: (b.X - a.X) / l, Y: (b.Y - a.Y) / l}
 		t := 0.0
 		for rem <= l-t {

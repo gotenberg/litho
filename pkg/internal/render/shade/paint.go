@@ -6,6 +6,7 @@ import (
 	"image"
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
 )
@@ -570,7 +571,7 @@ func (mb *meshBuffer) triangle(ctx context.Context, d [3]geom.Point, attr [3][2]
 	var near [3]float64
 	for k := range 3 {
 		e0, e1 := d[(k+1)%3], d[(k+2)%3]
-		near[k] = insideTolerance + reach*math.Hypot(e1.X-e0.X, e1.Y-e0.Y)/math.Abs(area)
+		near[k] = insideTolerance + reach*detmath.Hypot(e1.X-e0.X, e1.Y-e0.Y)/math.Abs(area)
 	}
 	span := pixelSpan(box, mb.area)
 	for y := span.y0; y < span.y1; y++ {
@@ -689,7 +690,7 @@ func (p *painter) drawPatches(ctx context.Context, mb *meshBuffer) error {
 func chordReach(dp *[16]geom.Point, n int) float64 {
 	d := 0.0
 	second := func(a, b, c geom.Point) {
-		d = max(d, math.Hypot(a.X-2*b.X+c.X, a.Y-2*b.Y+c.Y))
+		d = max(d, detmath.Hypot(a.X-2*b.X+c.X, a.Y-2*b.Y+c.Y))
 	}
 	for _, k := range [2]int{0, 3} {
 		for m := range 2 {

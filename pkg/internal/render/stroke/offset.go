@@ -3,6 +3,7 @@ package stroke
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
@@ -190,7 +191,7 @@ func (s *stroker) joinAt(p, din, dout geom.Point, smooth bool) {
 	case RoundJoin:
 		// Abs, not negation: at a reversal cross is 0 or −0, and
 		// atan2(−0, −1) is −π, which would sweep the arc inside the turn.
-		s.arc(p, nin, -math.Atan2(math.Abs(cross), dot))
+		s.arc(p, nin, -detmath.Atan2(math.Abs(cross), dot))
 	case BevelJoin:
 	case MiterJoin:
 		// The miter length over the line width is 1/sin(φ/2), φ the angle
@@ -228,7 +229,7 @@ func (s *stroker) arc(c, from geom.Point, sweep float64) {
 	n := arcSteps(s.half, s.tol, math.Abs(sweep))
 	for i := 1; i <= n && !s.over; i++ {
 		a := sweep * float64(i) / float64(n)
-		sin, cos := math.Sincos(a)
+		sin, cos := detmath.Sincos(a)
 		v := geom.Point{X: float64(from.X*cos) - float64(from.Y*sin), Y: float64(from.X*sin) + float64(from.Y*cos)}
 		s.lineTo(add(c, scale(v, s.half)))
 	}
@@ -237,7 +238,7 @@ func (s *stroker) arc(c, from geom.Point, sweep float64) {
 func arcSteps(r, tol, sweep float64) int {
 	step := 2 * math.Pi / minArcSegments
 	if tol < r {
-		step = min(step, 2*math.Acos(1-tol/r))
+		step = min(step, 2*detmath.Acos(1-tol/r))
 	}
 	f := math.Ceil(sweep / step)
 	if limit := math.Ceil(sweep / (2 * math.Pi) * maxArcSegments); f > limit || math.IsNaN(f) || math.IsNaN(limit) {
@@ -288,7 +289,7 @@ func reversedBools(v []bool, closed bool) []bool {
 
 // unit returns v scaled to length 1, and the x axis for the zero vector.
 func unit(v geom.Point) geom.Point {
-	l := math.Hypot(v.X, v.Y)
+	l := detmath.Hypot(v.X, v.Y)
 	if l == 0 || !finite(l) {
 		return geom.Point{X: 1}
 	}

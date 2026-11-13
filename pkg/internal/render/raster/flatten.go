@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
@@ -148,8 +149,8 @@ func (f *flattener) cubic(pl *Polyline, p0, p1, p2, p3 geom.Point) error {
 	// Halved differences keep control points near the float64 limit from
 	// overflowing to infinity.
 	dd := max(
-		math.Hypot(float64(p0.X/2)-p1.X+float64(p2.X/2), float64(p0.Y/2)-p1.Y+float64(p2.Y/2)),
-		math.Hypot(float64(p1.X/2)-p2.X+float64(p3.X/2), float64(p1.Y/2)-p2.Y+float64(p3.Y/2)),
+		detmath.Hypot(float64(p0.X/2)-p1.X+float64(p2.X/2), float64(p0.Y/2)-p1.Y+float64(p2.Y/2)),
+		detmath.Hypot(float64(p1.X/2)-p2.X+float64(p3.X/2), float64(p1.Y/2)-p2.Y+float64(p3.Y/2)),
 	)
 	n := 1
 	if est := math.Ceil(math.Sqrt(1.5 * dd / f.tol)); est >= maxCurveSegments || math.IsNaN(est) {

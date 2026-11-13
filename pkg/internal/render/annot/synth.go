@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
@@ -328,7 +329,7 @@ func synthLine(ctx context.Context, doc *document.Document, dict ast.PdfDict) (d
 		return d, false
 	}
 	start, end := geom.Point{X: l[0], Y: l[1]}, geom.Point{X: l[2], Y: l[3]}
-	length := math.Hypot(end.X-start.X, end.Y-start.Y)
+	length := detmath.Hypot(end.X-start.X, end.Y-start.Y)
 	if length == 0 {
 		return d, false
 	}
@@ -397,8 +398,8 @@ func synthPoly(ctx context.Context, doc *document.Document, dict ast.PdfDict, su
 	}
 	startStyle, endStyle := readEndings(ctx, doc, dict["LE"])
 	first, last := segmentFrame(pts[0], pts[1]), segmentFrame(pts[len(pts)-2], pts[len(pts)-1])
-	firstLen := math.Hypot(pts[1].X-pts[0].X, pts[1].Y-pts[0].Y)
-	lastLen := math.Hypot(pts[len(pts)-1].X-pts[len(pts)-2].X, pts[len(pts)-1].Y-pts[len(pts)-2].Y)
+	firstLen := detmath.Hypot(pts[1].X-pts[0].X, pts[1].Y-pts[0].Y)
+	lastLen := detmath.Hypot(pts[len(pts)-1].X-pts[len(pts)-2].X, pts[len(pts)-1].Y-pts[len(pts)-2].Y)
 	firstSize, lastSize := min(endingScale*d.width, firstLen/2), min(endingScale*d.width, lastLen/2)
 	var p geom.Path
 	p.MoveTo(first.Apply(geom.Point{X: endingShorten(startStyle, firstSize)}))
@@ -477,7 +478,7 @@ func synthMarkup(ctx context.Context, doc *document.Document, dict ast.PdfDict, 
 		var p geom.Path
 		switch subtype {
 		case "Highlight":
-			h := math.Hypot(ul.X-ll.X, ul.Y-ll.Y) / 4
+			h := detmath.Hypot(ul.X-ll.X, ul.Y-ll.Y) / 4
 			u := unit(ll, lr)
 			n := geom.Point{X: -u.Y, Y: u.X}
 			off := func(pt geom.Point, a, c float64) geom.Point {
@@ -588,7 +589,7 @@ func (d *drawing) ending(frame geom.Matrix, style ast.PdfName, tip geom.Point, s
 	case "Slash":
 		// A short line through the tip, 30 degrees clockwise from the
 		// perpendicular (Table 176).
-		off := float64(h * math.Cos(math.Pi/3))
+		off := float64(h * detmath.Cos(math.Pi/3))
 		polygon(false, at(x-off, y-h), at(x+off, y+h))
 	}
 }
@@ -1004,7 +1005,7 @@ func segmentFrame(a, b geom.Point) geom.Matrix {
 // unit returns the unit vector from a to b, +x when they coincide.
 func unit(a, b geom.Point) geom.Point {
 	dx, dy := b.X-a.X, b.Y-a.Y
-	l := math.Hypot(dx, dy)
+	l := detmath.Hypot(dx, dy)
 	if l == 0 {
 		return geom.Point{X: 1}
 	}
@@ -1034,8 +1035,8 @@ func ellipse(p *geom.Path, c geom.Point, rx, ry float64) {
 func squiggle(p *geom.Path, ul, ll, lr geom.Point) {
 	u := unit(ll, lr)
 	n := geom.Point{X: -u.Y, Y: u.X}
-	length := math.Hypot(lr.X-ll.X, lr.Y-ll.Y)
-	h := math.Hypot(ul.X-ll.X, ul.Y-ll.Y) / 6
+	length := detmath.Hypot(lr.X-ll.X, lr.Y-ll.Y)
+	h := detmath.Hypot(ul.X-ll.X, ul.Y-ll.Y) / 6
 	step := max(2, length/maxSquiggleSteps)
 	at := func(a, c float64) geom.Point {
 		return geom.Point{X: ll.X + float64(a*u.X) + float64(c*n.X), Y: ll.Y + float64(a*u.Y) + float64(c*n.Y)}

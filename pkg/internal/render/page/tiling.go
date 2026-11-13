@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
@@ -290,7 +291,7 @@ func (r *renderer) tilingSource(s *scope, tp *tilingPattern, resources ast.PdfDi
 		return r.directSource(s, tp, resources, p, cov)
 	}
 
-	nu, nv := math.Ceil(math.Hypot(u.X, u.Y)), math.Ceil(math.Hypot(v.X, v.Y))
+	nu, nv := math.Ceil(detmath.Hypot(u.X, u.Y)), math.Ceil(detmath.Hypot(v.X, v.Y))
 	if nu*nv < float64(area) && nu*nv <= float64(cacheCap) && r.cellCount(tp, p, cov) > directCellLimit {
 		inv, ok := p.Invert()
 		if !ok {

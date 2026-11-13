@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
@@ -476,7 +477,7 @@ const maskOversample = 2
 // along each side of the square.
 func maskFootprint(m geom.Matrix) (cols, rows int) {
 	side := func(x, y float64) int {
-		v := math.Ceil(math.Hypot(x, y) * maskOversample)
+		v := math.Ceil(detmath.Hypot(x, y) * maskOversample)
 		if v < 1 || math.IsNaN(v) {
 			return 1
 		}

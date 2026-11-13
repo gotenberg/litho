@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
@@ -180,8 +181,8 @@ func flatten(p geom.Path, tol float64) ([]piece, error) {
 // larger norm of the second differences of the control points.
 func cubicSteps(p0, p1, p2, p3 geom.Point, tol float64) int {
 	m := max(
-		math.Hypot(p0.X-2*p1.X+p2.X, p0.Y-2*p1.Y+p2.Y),
-		math.Hypot(p1.X-2*p2.X+p3.X, p1.Y-2*p2.Y+p3.Y),
+		detmath.Hypot(p0.X-2*p1.X+p2.X, p0.Y-2*p1.Y+p2.Y),
+		detmath.Hypot(p1.X-2*p2.X+p3.X, p1.Y-2*p2.Y+p3.Y),
 	)
 	f := math.Ceil(math.Sqrt(0.75 * m / tol))
 	if f >= maxCurveSegments || math.IsNaN(f) {
