@@ -23,7 +23,7 @@ import (
 // same feature. With BrowserRules off, letter spacing keeps the
 // ligatures.
 func (e *engine) fontFeatures(st *css.Style, ts *text.Style) []text.Feature {
-	alt := &st.FontVariantAlternates
+	alt := st.FontVariantAlternates
 	lig := st.FontVariantLigatures
 	spaced := e.opts.BrowserRules && ts.LetterSpacing != 0
 	if alt.IsNormal() && lig == 0 && st.FontVariantEastAsian == 0 && st.FontVariantNumeric == 0 &&

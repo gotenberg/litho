@@ -27,7 +27,7 @@ func TestFontVariant_Shorthand(t *testing.T) {
 		}},
 		{"font-variant: stylistic(fancy) styleset(a, b) historical-forms", func(s *Style) bool {
 			a := s.FontVariantAlternates
-			return a.Stylistic == "fancy" && reflect.DeepEqual(a.Styleset, []string{"a", "b"}) && a.HistoricalForms
+			return a != nil && a.Stylistic == "fancy" && reflect.DeepEqual(a.Styleset, []string{"a", "b"}) && a.HistoricalForms
 		}},
 		{"font-variant: jis78 ruby full-width super emoji no-contextual", func(s *Style) bool {
 			return s.FontVariantEastAsian == EastAsianJIS78|EastAsianRuby|EastAsianFullWidth &&

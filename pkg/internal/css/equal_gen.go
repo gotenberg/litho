@@ -245,7 +245,7 @@ func equalStyle(a, b *Style) bool {
 	if a.FontVariantPosition != b.FontVariantPosition {
 		return false
 	}
-	if !equalAlternates(&a.FontVariantAlternates, &b.FontVariantAlternates) {
+	if a.FontVariantAlternates != b.FontVariantAlternates {
 		return false
 	}
 	if a.FontVariantEmoji != b.FontVariantEmoji {
@@ -773,7 +773,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.FontVariantNumeric))
 	h = mix(h, uint64(x.FontVariantEastAsian))
 	h = mix(h, uint64(x.FontVariantPosition))
-	h = hashAlternates(h, &x.FontVariantAlternates)
+	h = mixBool(h, x.FontVariantAlternates != nil)
 	h = mix(h, uint64(x.FontVariantEmoji))
 	h = mixBool(h, x.FontFeatureSettings == nil)
 	h = mix(h, uint64(len(x.FontFeatureSettings)))
@@ -1200,66 +1200,6 @@ func hashShadow(h uint64, x *Shadow) uint64 {
 	h = hashColor(h, &x.Color)
 	h = mixBool(h, x.Inset)
 	h = mixBool(h, x.current)
-	return h
-}
-
-// equalAlternates reports whether a and b hold equal values, field by field.
-func equalAlternates(a, b *Alternates) bool {
-	if a.Stylistic != b.Stylistic {
-		return false
-	}
-	if a.Swash != b.Swash {
-		return false
-	}
-	if a.Ornaments != b.Ornaments {
-		return false
-	}
-	if a.Annotation != b.Annotation {
-		return false
-	}
-	if (a.Styleset == nil) != (b.Styleset == nil) || len(a.Styleset) != len(b.Styleset) {
-		return false
-	}
-	if len(a.Styleset) > 0 && &a.Styleset[0] != &b.Styleset[0] {
-		for i1 := range a.Styleset {
-			if a.Styleset[i1] != b.Styleset[i1] {
-				return false
-			}
-		}
-	}
-	if (a.CharacterVariant == nil) != (b.CharacterVariant == nil) || len(a.CharacterVariant) != len(b.CharacterVariant) {
-		return false
-	}
-	if len(a.CharacterVariant) > 0 && &a.CharacterVariant[0] != &b.CharacterVariant[0] {
-		for i1 := range a.CharacterVariant {
-			if a.CharacterVariant[i1] != b.CharacterVariant[i1] {
-				return false
-			}
-		}
-	}
-	if a.HistoricalForms != b.HistoricalForms {
-		return false
-	}
-	return true
-}
-
-// hashAlternates folds every field of x into h.
-func hashAlternates(h uint64, x *Alternates) uint64 {
-	h = mixString(h, x.Stylistic)
-	h = mixString(h, x.Swash)
-	h = mixString(h, x.Ornaments)
-	h = mixString(h, x.Annotation)
-	h = mixBool(h, x.Styleset == nil)
-	h = mix(h, uint64(len(x.Styleset)))
-	for i1 := range x.Styleset {
-		h = mixString(h, x.Styleset[i1])
-	}
-	h = mixBool(h, x.CharacterVariant == nil)
-	h = mix(h, uint64(len(x.CharacterVariant)))
-	for i1 := range x.CharacterVariant {
-		h = mixString(h, x.CharacterVariant[i1])
-	}
-	h = mixBool(h, x.HistoricalForms)
 	return h
 }
 

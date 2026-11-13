@@ -27,7 +27,7 @@ func TestFontFeatures_Order(t *testing.T) {
 	}{
 		{"normal", true, css.Style{}, 0, nil},
 		{"every property", true, css.Style{
-			FontVariantAlternates: css.Alternates{HistoricalForms: true},
+			FontVariantAlternates: &css.Alternates{HistoricalForms: true},
 			FontVariantLigatures:  css.LigaturesCommonOff | css.LigaturesDiscretionary,
 			FontVariantEastAsian:  css.EastAsianJIS04 | css.EastAsianRuby,
 			FontVariantNumeric:    css.NumericOldstyle | css.NumericSlashedZero,

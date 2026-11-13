@@ -1090,15 +1090,16 @@ type Style struct {
 	// FontVariantLigatures, FontVariantNumeric, FontVariantEastAsian,
 	// FontVariantPosition, FontVariantAlternates and FontVariantEmoji are
 	// the font-variant longhands other than font-variant-caps (CSS Fonts
-	// 4, 6.4 to 6.13), zero for normal.
+	// 4, 6.4 to 6.13), zero for normal; FontVariantAlternates is nil for
+	// normal and shared, never modified.
 	FontVariantLigatures  Ligatures
 	FontVariantNumeric    NumericVariant
 	FontVariantEastAsian  EastAsianVariant
 	FontVariantPosition   VariantPosition
-	FontVariantAlternates Alternates
+	FontVariantAlternates *Alternates
 	FontVariantEmoji      VariantEmoji
 	// FontFeatureSettings is font-feature-settings (CSS Fonts 4, 6.12),
-	// nil for normal.
+	// nil for normal; the slice is shared and never modified.
 	FontFeatureSettings []FeatureSetting
 	// FontLanguageOverride is font-language-override (CSS Fonts 4, 6.14),
 	// the OpenType language system tag that shapes the text, "" for

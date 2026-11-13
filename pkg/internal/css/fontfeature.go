@@ -1,9 +1,6 @@
 package css
 
-import (
-	"slices"
-	"strings"
-)
+import "strings"
 
 // FeatureSetting is one entry of font-feature-settings (CSS Fonts 4, 6.12):
 // an OpenType feature tag and its value, 1 for on and 0 for off.
@@ -109,9 +106,9 @@ type Alternates struct {
 	HistoricalForms                         bool
 }
 
-// IsNormal reports whether a is normal.
+// IsNormal reports whether a is normal; nil is.
 func (a *Alternates) IsNormal() bool {
-	return !a.HistoricalForms && a.Stylistic == "" && a.Swash == "" && a.Ornaments == "" &&
+	return a == nil || !a.HistoricalForms && a.Stylistic == "" && a.Swash == "" && a.Ornaments == "" &&
 		a.Annotation == "" && len(a.Styleset) == 0 && len(a.CharacterVariant) == 0
 }
 
@@ -430,7 +427,7 @@ func fontFeatureProps() map[propID]propDef {
 	return map[propID]propDef{
 		pFontFeatureSettings: {
 			name: "font-feature-settings", inherited: true, parse: parseFeatureSettings, compute: computeFeatureSettings,
-			copyFrom: func(dst, src *Style) { dst.FontFeatureSettings = slices.Clone(src.FontFeatureSettings) },
+			copyFrom: field(func(s *Style) *[]FeatureSetting { return &s.FontFeatureSettings }),
 		},
 		pFontVariantLigatures: {
 			name: "font-variant-ligatures", inherited: true, parse: parseLigatures,
@@ -469,14 +466,13 @@ func fontFeatureProps() map[propID]propDef {
 			name: "font-variant-alternates", inherited: true, parse: parseAlternates,
 			compute: func(_ *styler, st *Style, v any) {
 				if a, ok := v.(Alternates); ok {
-					st.FontVariantAlternates = a
+					st.FontVariantAlternates = nil
+					if !a.IsNormal() {
+						st.FontVariantAlternates = &a
+					}
 				}
 			},
-			copyFrom: func(dst, src *Style) {
-				dst.FontVariantAlternates = src.FontVariantAlternates
-				dst.FontVariantAlternates.Styleset = slices.Clone(src.FontVariantAlternates.Styleset)
-				dst.FontVariantAlternates.CharacterVariant = slices.Clone(src.FontVariantAlternates.CharacterVariant)
-			},
+			copyFrom: field(func(s *Style) **Alternates { return &s.FontVariantAlternates }),
 		},
 		pFontLanguageOverride: {
 			name: "font-language-override", inherited: true, parse: parseLanguageOverride,
@@ -623,6 +619,9 @@ type FontFeatureValues struct {
 // name. A name the values do not define, or define with a value count or
 // range the feature type does not take, is ignored (CSS Fonts 4, 6.9.1).
 func (a *Alternates) Resolve(v *FontFeatureValues) []FeatureSetting {
+	if a == nil {
+		return nil
+	}
 	lookup := func(kind, name string) []int {
 		if v == nil || name == "" {
 			return nil
