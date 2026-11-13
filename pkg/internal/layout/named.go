@@ -39,7 +39,7 @@ func usedPage(b *box) string {
 func pageApplies(b *box) bool {
 	return !b.inline && !b.abs && b.float == css.FloatNone && b.kind == kindBlock &&
 		(b.parent == nil || b.parent.tpart == partNone || b.parent.tpart == partWrapper) &&
-		!(b.anon && b.inlineKids && blankInline(b.kids, 0))
+		(!b.anon || !b.inlineKids || !blankInline(b.kids, 0))
 }
 
 // blankInline reports inline content, at depth, that makes no line box
@@ -50,12 +50,12 @@ func blankInline(kids []*box, depth int) bool {
 		return false
 	}
 	for _, k := range kids {
-		switch {
-		case k.kind == kindText:
+		switch k.kind { //nolint:exhaustive // any other kind of box makes a line box exist
+		case kindText:
 			if k.marker || k.st == nil || !collapses(k.st.WhiteSpace) || strings.Trim(k.text, " \t\n\r\f") != "" {
 				return false
 			}
-		case k.kind == kindInline:
+		case kindInline:
 			st := k.st
 			if st == nil {
 				return false
