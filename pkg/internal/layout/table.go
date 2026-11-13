@@ -332,7 +332,7 @@ func (e *engine) measureColumns(td *tableData) []colMeasure {
 	for _, c := range spans {
 		cd := c.cell
 		cols := cm[cd.col : cd.col+cd.colSpan]
-		inner := float64(cd.colSpan-1) * hs
+		inner := float64(float64(cd.colSpan-1) * hs)
 		lo, hi := e.cellMeasure(td, c)
 		sumMin, sumMax, sumPct := 0.0, 0.0, 0.0
 		for _, m := range cols {
@@ -516,7 +516,7 @@ func autoWidths(cm []colMeasure, avail float64) []float64 {
 				f = (avail - total[k-1]) / d
 			}
 			for i := range out {
-				out[i] = guess[k-1][i] + f*(guess[k][i]-guess[k-1][i])
+				out[i] = guess[k-1][i] + float64(f*(guess[k][i]-guess[k-1][i]))
 			}
 			return out
 		}
@@ -597,7 +597,7 @@ func (e *engine) fixedWidths(td *tableData, avail float64) []float64 {
 		}
 		cw += hEdges(c)
 		hs, _ := td.spacing()
-		share := max(cw-float64(cd.colSpan-1)*hs, 0) / float64(cd.colSpan)
+		share := max(cw-float64(float64(cd.colSpan-1)*hs), 0) / float64(cd.colSpan)
 		for x := cd.col; x < cd.col+cd.colSpan; x++ {
 			if !set[x] {
 				w[x], set[x] = share, true
@@ -924,7 +924,7 @@ func (e *engine) relayoutPercentCells(td *tableData, rowH []float64, cb cblock) 
 		for r := cd.row; r < cd.row+cd.rowSpan && r < len(rowH); r++ {
 			h += rowH[r]
 		}
-		h += vs * float64(max(cd.rowSpan-1, 0))
+		h += float64(vs * float64(max(cd.rowSpan-1, 0)))
 		e.layoutCell(td, c, td.table.w, max(h-vEdges(c), 0))
 		again = true
 	}
@@ -1059,7 +1059,7 @@ func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []b
 		ref := max(tableH-2*vs, 0)
 		extra := tableH - total
 		for r := range rowH {
-			if want := pct[r]*ref - rowH[r]; want > eps && extra > eps && !exact[r] && !td.rowCollapsed(r) {
+			if want := float64(pct[r]*ref) - rowH[r]; want > eps && extra > eps && !exact[r] && !td.rowCollapsed(r) {
 				give := min(want, extra)
 				rowH[r] += give
 				extra -= give
@@ -1208,7 +1208,7 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 			s += rowH[r]
 		}
 		if hi > lo {
-			s += float64(hi-lo-1) * gap
+			s += float64(float64(hi-lo-1) * gap)
 		}
 		return s
 	}

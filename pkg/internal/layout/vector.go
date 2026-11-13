@@ -31,7 +31,7 @@ func (e *engine) pictureFrag(pic *Picture, r typeset.Rect, parent *typeset.Struc
 		kx, ky := r.Width/pic.Width, r.Height/pic.Height
 		whole := *pic
 		whole.view, whole.Width, whole.Height = nil, v.w, v.h
-		f := e.pictureFrag(&whole, typeset.Rect{X: r.X - v.x*kx, Y: r.Y - v.y*ky, Width: v.w * kx, Height: v.h * ky}, parent)
+		f := e.pictureFrag(&whole, typeset.Rect{X: r.X - float64(v.x*kx), Y: r.Y - float64(v.y*ky), Width: v.w * kx, Height: v.h * ky}, parent)
 		if f == nil {
 			return nil
 		}

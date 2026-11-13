@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -125,9 +126,9 @@ func shapePath(s *css.Shape, r typeset.Rect) (*typeset.Path, bool) {
 			case css.RadiusLength:
 				return max(resolve(sr.Length, ref), 0)
 			case css.RadiusClosestCorner:
-				return math.Hypot(min(dx0, dx1), min(dy0, dy1))
+				return detmath.Hypot(min(dx0, dx1), min(dy0, dy1))
 			case css.RadiusFarthestCorner:
-				return math.Hypot(max(dx0, dx1), max(dy0, dy1))
+				return detmath.Hypot(max(dx0, dx1), max(dy0, dy1))
 			case css.RadiusClosest:
 			}
 			return near
@@ -136,7 +137,7 @@ func shapePath(s *css.Shape, r typeset.Rect) (*typeset.Path, bool) {
 		if s.Kind == css.ShapeCircle {
 			// A circle's percentage is of the reference box's diagonal
 			// over the square root of 2 (CSS Shapes 1, 3.1).
-			rx = side(s.Radius[0], min(dx0, dx1, dy0, dy1), max(dx0, dx1, dy0, dy1), math.Hypot(w, h)/math.Sqrt2)
+			rx = side(s.Radius[0], min(dx0, dx1, dy0, dy1), max(dx0, dx1, dy0, dy1), detmath.Hypot(w, h)/math.Sqrt2)
 			ry = rx
 		} else {
 			rx = side(s.Radius[0], min(dx0, dx1), max(dx0, dx1), w)
@@ -158,7 +159,7 @@ func shapePath(s *css.Shape, r typeset.Rect) (*typeset.Path, bool) {
 		data, _ := svg.PathData(shapePathData(s, w, h)) // a path cut short by an error clips with what it drew, as SVG 1.1, F.2 asks
 		for _, op := range data {
 			for i := range op.P {
-				op.P[i] = typeset.Point{X: r.X + op.P[i].X*css.Pt, Y: r.Y + op.P[i].Y*css.Pt}
+				op.P[i] = typeset.Point{X: r.X + float64(op.P[i].X*css.Pt), Y: r.Y + float64(op.P[i].Y*css.Pt)}
 			}
 			ops = append(ops, op)
 		}
@@ -188,30 +189,30 @@ func roundedPolygon(pts []typeset.Point, round float64) []typeset.PathOp {
 			continue
 		}
 		a, b := pts[(i+n-1)%n], pts[(i+1)%n]
-		la, lb := math.Hypot(a.X-p.X, a.Y-p.Y), math.Hypot(b.X-p.X, b.Y-p.Y)
+		la, lb := detmath.Hypot(a.X-p.X, a.Y-p.Y), detmath.Hypot(b.X-p.X, b.Y-p.Y)
 		if la <= 0 || lb <= 0 {
 			ops = append(ops, typeset.PathOp{Kind: k, P: [3]typeset.Point{p}})
 			continue
 		}
 		ua := typeset.Point{X: (a.X - p.X) / la, Y: (a.Y - p.Y) / la}
 		ub := typeset.Point{X: (b.X - p.X) / lb, Y: (b.Y - p.Y) / lb}
-		angle := math.Acos(min(max(ua.X*ub.X+ua.Y*ub.Y, -1), 1))
-		half := math.Tan(angle / 2)
+		angle := detmath.Acos(min(max(float64(ua.X*ub.X)+float64(ua.Y*ub.Y), -1), 1))
+		half := detmath.Tan(angle / 2)
 		if !(half > 0) || angle >= math.Pi {
 			ops = append(ops, typeset.PathOp{Kind: k, P: [3]typeset.Point{p}})
 			continue
 		}
 		r := min(round, half*la/2, half*lb/2)
 		d := r / half
-		t1 := typeset.Point{X: p.X + ua.X*d, Y: p.Y + ua.Y*d}
-		t2 := typeset.Point{X: p.X + ub.X*d, Y: p.Y + ub.Y*d}
+		t1 := typeset.Point{X: p.X + float64(ua.X*d), Y: p.Y + float64(ua.Y*d)}
+		t2 := typeset.Point{X: p.X + float64(ub.X*d), Y: p.Y + float64(ub.Y*d)}
 		// The arc turns by pi less the angle; its control points lie on
 		// the tangents, toward the vertex, 4/3 tan(turn / 4) r away.
-		c := 4.0 / 3 * math.Tan((math.Pi-angle)/4) * r
+		c := 4.0 / 3 * detmath.Tan((math.Pi-angle)/4) * r
 		ops = append(ops,
 			typeset.PathOp{Kind: k, P: [3]typeset.Point{t1}},
 			typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{
-				{X: t1.X - ua.X*c, Y: t1.Y - ua.Y*c}, {X: t2.X - ub.X*c, Y: t2.Y - ub.Y*c}, t2,
+				{X: t1.X - float64(ua.X*c), Y: t1.Y - float64(ua.Y*c)}, {X: t2.X - float64(ub.X*c), Y: t2.Y - float64(ub.Y*c)}, t2,
 			}})
 	}
 	return append(ops, typeset.PathOp{Kind: typeset.ClosePath})
@@ -232,7 +233,7 @@ func shapePathData(s *css.Shape, w, h float64) string {
 			ref := w
 			switch {
 			case c.OneRadius && i < 2:
-				ref = math.Hypot(w, h) / math.Sqrt2
+				ref = detmath.Hypot(w, h) / math.Sqrt2
 			case i < len(c.Vertical) && c.Vertical[i]:
 				ref = h
 			}

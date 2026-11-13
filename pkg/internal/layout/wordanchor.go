@@ -63,7 +63,7 @@ func newWordShape(poly []css.WrapPoint, x, y, w, h float64, gap [4]float64) *wor
 	}
 	s := &wordShape{gap: gap, pts: make([]wrapPt, 0, min(len(poly), maxWrapPoints))}
 	for _, p := range poly[:min(len(poly), maxWrapPoints)] {
-		s.pts = append(s.pts, wrapPt{x: x + clamp01(p.X)*w, y: y + clamp01(p.Y)*h})
+		s.pts = append(s.pts, wrapPt{x: x + float64(clamp01(p.X)*w), y: y + float64(clamp01(p.Y)*h)})
 	}
 	return s
 }
@@ -95,7 +95,7 @@ func (s *wordShape) extent(y, h float64) (float64, float64, bool) {
 			ta, tb = max(0, min(t0, t1)), min(1, max(t0, t1))
 		}
 		for _, t := range [2]float64{ta, tb} {
-			x := a.x + t*(b.x-a.x)
+			x := a.x + float64(t*(b.x-a.x))
 			lo, hi = min(lo, x), max(hi, x)
 		}
 	}

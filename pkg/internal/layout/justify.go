@@ -89,7 +89,7 @@ func (s *inlineState) justifyAs(l *lineBox, free float64, mode css.TextJustify) 
 			c := cls[k]
 			x := c.it.x + c.it.w
 			if c.it.text != nil && c.g1+1 < len(c.it.text.Glyphs) {
-				x = c.it.x + c.it.text.Glyphs[c.g1+1].X*hscale(c.it.text)
+				x = c.it.x + float64(c.it.text.Glyphs[c.g1+1].X*hscale(c.it.text))
 			}
 			at = append(at, x)
 		}
@@ -101,7 +101,7 @@ func (s *inlineState) justifyAs(l *lineBox, free float64, mode css.TextJustify) 
 				m++
 			}
 		}
-		return x + float64(m)*extra
+		return x + float64(float64(m)*extra)
 	}
 	for _, f := range l.frags {
 		f.x0, f.x1 = moved(f.x0), moved(f.x1)
@@ -252,7 +252,7 @@ func (e *engine) shrinkBreak(p *ifcPara, w []float64, start, end int, x0, avail 
 	if spaces <= 0 || space <= 0 {
 		return end
 	}
-	more := root.st.JustifyShrink * space * float64(spaces+1)
+	more := float64(root.st.JustifyShrink * space * float64(spaces+1))
 	end2, fits := e.breakLineIn(p, w, start, x0, avail+more, root, org)
 	if !fits || end2 <= end {
 		return end
@@ -281,7 +281,7 @@ func (e *engine) shrinkBreak(p *ifcPara, w []float64, start, end int, x0, avail 
 			word += w[i]
 		}
 	}
-	if x-avail > shrinkWordOverflow*word+eps {
+	if x-avail > float64(shrinkWordOverflow*word)+eps {
 		return end
 	}
 	return next

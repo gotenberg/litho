@@ -22,10 +22,10 @@ import (
 func growRect(r typeset.Rect, radii [4][2]float64, d float64) (typeset.Rect, [4][2]float64) {
 	out := typeset.Rect{X: r.X - d, Y: r.Y - d, Width: max(r.Width+2*d, 0), Height: max(r.Height+2*d, 0)}
 	if out.Width == 0 {
-		out.X = r.X + r.Width/2
+		out.X = r.X + float64(r.Width/2)
 	}
 	if out.Height == 0 {
-		out.Y = r.Y + r.Height/2
+		out.Y = r.Y + float64(r.Height/2)
 	}
 	var rr [4][2]float64
 	for c := range radii {
@@ -35,7 +35,7 @@ func growRect(r typeset.Rect, radii [4][2]float64, d float64) (typeset.Rect, [4]
 			case v <= 0:
 			case d >= 0 && v < d:
 				q := v/d - 1
-				rr[c][a] = v + d*(1+q*q*q)
+				rr[c][a] = v + float64(d*(1+float64(q*q*q)))
 			default:
 				rr[c][a] = max(v+d, 0)
 			}
@@ -100,7 +100,7 @@ func (p *painter) outerShadow(b *box, r typeset.Rect, radii [4][2]float64, x, y,
 	if shape.Width <= 0 || shape.Height <= 0 {
 		return
 	}
-	reach := 1.5 * blur
+	reach := float64(1.5 * blur)
 	bounds := union(r, typeset.Rect{X: shape.X - reach, Y: shape.Y - reach, Width: shape.Width + 2*reach, Height: shape.Height + 2*reach})
 	bounds = typeset.Rect{X: bounds.X - 1, Y: bounds.Y - 1, Width: bounds.Width + 2, Height: bounds.Height + 2}
 	// The shadow never shows under the box (CSS Backgrounds 3, 7.1).
@@ -165,7 +165,7 @@ func holePaths(r typeset.Rect, radii [4][2]float64) []effect.Path {
 //     whatever the spread and the offset, blurred by its deviation
 //     (root mean square 0.9 to 1.7 levels).
 func innerReach(blur float64) float64 {
-	return max(blur/2-css.Pt, 0)
+	return max(float64(blur/2)-css.Pt, 0)
 }
 
 // emitGroup adds the group g of box b's decoration to the display list.
@@ -220,9 +220,9 @@ func skiaBoxWidth(sigma float64) int {
 func boxVariance(d int) float64 {
 	n := float64(d)
 	if d%2 == 1 {
-		return float64(3*float64(n*n-1)) / 12
+		return float64(3*float64(float64(n*n)-1)) / 12
 	}
-	return (float64(2*float64(n*n-1)) + float64((n+1)*(n+1)) - 1) / 12
+	return (float64(2*float64(float64(n*n)-1)) + float64((n+1)*(n+1)) - 1) / 12
 }
 
 // boxWidth returns the width of three box blurs whose deviation is

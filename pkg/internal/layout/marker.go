@@ -137,7 +137,7 @@ func markerX(b *box, m *markerBox, w float64) float64 {
 	end := false
 	switch m.st.TextAlign {
 	case css.AlignCenter:
-		return anchor - w/2
+		return anchor - float64(w/2)
 	case css.AlignEnd:
 		end = true
 	case css.AlignLeft:
@@ -189,12 +189,12 @@ func (e *engine) markerEdges(b *box) (float64, float64) {
 func symbolRect(b *box, ascent, baseline, left, right float64) typeset.Rect {
 	a := int(math.Round(min(max(ascent/css.Pt, 0), maxSymbolAscent))) // fits int: bounded
 	o := a * 2 / 3
-	w := float64((o+1)/2) * css.Pt
-	x := left - float64(o+7+1-1)*css.Pt
+	w := float64(float64((o+1)/2) * css.Pt)
+	x := left - float64(float64(o+7+1-1)*css.Pt)
 	if b.st.Direction == css.RTL {
-		x = right + float64(o+7+1-1)*css.Pt - w
+		x = right + float64(float64(o+7+1-1)*css.Pt) - w
 	}
-	y := baseline - float64(a)*css.Pt + float64(3*(a-o)/2)*css.Pt
+	y := baseline - float64(float64(a)*css.Pt) + float64(float64(3*(a-o)/2)*css.Pt)
 	return typeset.Rect{X: x, Y: y, Width: w, Height: w}
 }
 

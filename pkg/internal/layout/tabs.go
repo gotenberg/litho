@@ -107,7 +107,7 @@ func (e *engine) officeTab(root *box, p *ifcPara, w []float64, i int, at, lineEn
 	case css.TabRight:
 		tw -= seg
 	case css.TabCenter:
-		tw -= seg / 2
+		tw -= float64(seg / 2)
 	case css.TabDecimal:
 		tw -= before
 	case css.TabLeft, css.TabBar:
@@ -199,7 +199,7 @@ func (e *engine) tabLeader(p *ifcPara, it *lineItem) *typeset.Text {
 		return nil
 	}
 	cw := pl.Width
-	twip := math.Floor(cw*twips + 1e-6)
+	twip := math.Floor(float64(cw*twips) + 1e-6)
 	if twip < 1 {
 		twip = 1
 	}

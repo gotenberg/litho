@@ -251,7 +251,7 @@ func (e *engine) cutItem(it *ditem, b *box, s *colSet, oy float64, depth int) (m
 		if k.page >= 0 || k.page == pageMono {
 			// A glyph run's extent reaches above and below its line box
 			// by its ascent and descent: its middle is on its line.
-			i := s.fragOf(b, (k.y0+max(k.y1, k.y0))/2-oy)
+			i := s.fragOf(b, float64((k.y0+max(k.y1, k.y0))/2)-oy)
 			_, dy := b.mc.shiftOf(s, i)
 			leaf := *k
 			leaf.y0, leaf.y1, leaf.page = k.y0+dy, k.y1+dy, pageMono
@@ -346,7 +346,7 @@ func (p *painter) columnRules(b *box) {
 			}
 			for j := 0; j+1 < r.cols; j++ {
 				mid := d.ruleX(j)
-				rect := typeset.Rect{X: b.contentX() + mid - w/2 + p.dx, Y: b.y + r.top + p.dy, Width: w, Height: h}
+				rect := typeset.Rect{X: b.contentX() + mid - float64(w/2) + p.dx, Y: b.y + r.top + p.dy, Width: w, Height: h}
 				if rect.Height <= 0 {
 					continue
 				}
@@ -378,14 +378,14 @@ func (d *mcolData) ruleX(j int) float64 {
 		x, w := d.track(j)
 		gap := d.gapAfter(j)
 		if d.rtl {
-			return d.span - x - w - gap/2
+			return d.span - x - w - float64(gap/2)
 		}
-		return x + w + gap/2
+		return x + w + float64(gap/2)
 	}
 	if d.rtl {
-		return d.columnX(j) - d.gap/2
+		return d.columnX(j) - float64(d.gap/2)
 	}
-	return d.columnX(j) + d.w + d.gap/2
+	return d.columnX(j) + d.w + float64(d.gap/2)
 }
 
 // moveItem returns a copy of the display item it with its extents, and

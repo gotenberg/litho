@@ -496,12 +496,12 @@ func (p *painter) collapsedBorders(td *tableData, owner *box) {
 					// The page cut runs along the line: the cloned border
 					// lies on the piece's side of it.
 					if k == n {
-						y -= b.w / 2
+						y -= float64(b.w / 2)
 					} else {
-						y += b.w / 2
+						y += float64(b.w / 2)
 					}
 				}
-				p.segment(t, b, typeset.Rect{X: x0, Y: y - b.w/2, Width: x1 - x0, Height: b.w}, true)
+				p.segment(t, b, typeset.Rect{X: x0, Y: y - float64(b.w/2), Width: x1 - x0, Height: b.w}, true)
 			}
 		}
 		for k := range n {
@@ -522,7 +522,7 @@ func (p *painter) collapsedBorders(td *tableData, owner *box) {
 					y1 -= hh
 				}
 				cx := x(i)
-				p.segment(t, b, typeset.Rect{X: cx - b.w/2, Y: y0, Width: b.w, Height: y1 - y0}, false)
+				p.segment(t, b, typeset.Rect{X: cx - float64(b.w/2), Y: y0, Width: b.w, Height: y1 - y0}, false)
 			}
 		}
 		p.mono = mono
@@ -584,10 +584,10 @@ func (p *painter) segment(t *box, b cborder, r typeset.Rect, horizontal bool) {
 	split := func(f float64) (typeset.Rect, typeset.Rect) {
 		a, z := r, r
 		if horizontal {
-			a.Height = r.Height * f
+			a.Height = float64(r.Height * f)
 			z.Y, z.Height = r.Y+a.Height, r.Height-a.Height
 		} else {
-			a.Width = r.Width * f
+			a.Width = float64(r.Width * f)
 			z.X, z.Width = r.X+a.Width, r.Width-a.Width
 		}
 		return a, z
@@ -608,10 +608,10 @@ func (p *painter) segment(t *box, b cborder, r typeset.Rect, horizontal bool) {
 		fill(z, light)
 	case css.Dashed, css.Dotted:
 		w := b.w
-		a := typeset.Point{X: r.X, Y: r.Y + r.Height/2}
+		a := typeset.Point{X: r.X, Y: r.Y + float64(r.Height/2)}
 		z := typeset.Point{X: r.X + r.Width, Y: a.Y}
 		if !horizontal {
-			a = typeset.Point{X: r.X + r.Width/2, Y: r.Y}
+			a = typeset.Point{X: r.X + float64(r.Width/2), Y: r.Y}
 			z = typeset.Point{X: a.X, Y: r.Y + r.Height}
 		}
 		stroke := &typeset.Stroke{Color: col, Width: w, Dash: []float64{3 * w, 3 * w}}
@@ -626,11 +626,11 @@ func (p *painter) segment(t *box, b cborder, r typeset.Rect, horizontal bool) {
 		if t.st.StrokeBorders {
 			// Writer strokes a collapsed cell border along its middle
 			// (css.Office.StrokeBorders).
-			a := typeset.Point{X: r.X, Y: r.Y + r.Height/2}
+			a := typeset.Point{X: r.X, Y: r.Y + float64(r.Height/2)}
 			z := typeset.Point{X: r.X + r.Width, Y: a.Y}
 			w := r.Height
 			if !horizontal {
-				a = typeset.Point{X: r.X + r.Width/2, Y: r.Y}
+				a = typeset.Point{X: r.X + float64(r.Width/2), Y: r.Y}
 				z = typeset.Point{X: a.X, Y: r.Y + r.Height}
 				w = r.Width
 			}

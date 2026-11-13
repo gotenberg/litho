@@ -305,7 +305,7 @@ func lineInsets(b *box, w float64) (float64, float64) {
 // the font size of the content.
 func (s *inlineState) rubyAlign(l *lineBox, free float64, ltr bool) float64 {
 	st := s.root.st
-	center := free / 2
+	center := float64(free / 2)
 	switch st.RubyAlign {
 	case css.RubyStart:
 		if ltr {

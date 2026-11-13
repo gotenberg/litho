@@ -156,7 +156,7 @@ func columnLayout(c *css.Columns, u, g float64) (int, float64) {
 	u = max(u, 0)
 	if c.Width.Kind != css.Points {
 		n := max(c.Count, 1)
-		return n, max((u-float64(n-1)*g)/float64(n), 0)
+		return n, max((u-float64(float64(n-1)*g))/float64(n), 0)
 	}
 	// A column-width of 0 sizes as one pixel, the narrowest column
 	// Chromium lays out: the pseudo-algorithm of CSS Multicol 1, 3.4
@@ -355,7 +355,7 @@ func (c *colCtx) top(i int) float64 {
 		return c.frags[max(i, 0)].vtop
 	}
 	last := c.frags[len(c.frags)-1]
-	return last.vtop + last.h*float64(i-len(c.frags)+1)
+	return last.vtop + float64(last.h*float64(i-len(c.frags)+1))
 }
 
 // height returns the height of column i.
@@ -416,7 +416,7 @@ func (multicolFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 		g = max(clamp(b.st.ColumnGap.Resolve(0)), 0)
 	}
 	k := float64(n)
-	return lo*k + g*(k-1), hi*k + g*(k-1)
+	return float64(lo*k) + float64(g*(k-1)), float64(hi*k) + float64(g*(k-1))
 }
 
 // layout lays out the content of the multi-column container b: its column
@@ -946,7 +946,7 @@ func (d *mcolData) columnX(col int) float64 {
 		}
 		return x
 	}
-	step := float64(col) * (d.w + d.gap)
+	step := float64(float64(col) * (d.w + d.gap))
 	if d.rtl {
 		return d.span - d.w - step
 	}
@@ -961,7 +961,7 @@ func (d *mcolData) track(col int) (float64, float64) {
 	if col < n {
 		return d.xs[max(col, 0)], d.ws[max(col, 0)]
 	}
-	return d.xs[n-1] + float64(col-n+1)*(d.ws[n-1]+d.gapAfter(n-1)), d.ws[n-1]
+	return d.xs[n-1] + float64(float64(col-n+1)*(d.ws[n-1]+d.gapAfter(n-1))), d.ws[n-1]
 }
 
 // gapAfter returns the gap after column col of a row of columns of
@@ -1342,7 +1342,7 @@ func (e *engine) cloneEdges(b *box, hSet bool) {
 	base, edges := b.h, vEdges(b)
 	for range maxFitPasses {
 		k := e.pageOf(b.y+b.borderH()-1e-3) - e.pageOf(b.y)
-		want := base + float64(k)*edges
+		want := base + float64(float64(k)*edges)
 		if k <= 0 || want <= b.h+eps {
 			return
 		}

@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -81,7 +82,7 @@ func (p gpiece) at(s float64) typeset.Color {
 		case p.hint >= 1:
 			t = 0
 		default:
-			t = math.Pow(t, math.Log(0.5)/math.Log(p.hint))
+			t = detmath.Pow(t, detmath.Log(0.5)/detmath.Log(p.hint))
 		}
 	}
 	if p.g != nil {
@@ -99,12 +100,12 @@ func (p gpiece) curved() bool {
 // mix interpolates a and b at t in premultiplied space and returns the
 // straight colour.
 func mix(a, b typeset.Color, t float64) typeset.Color {
-	al := a.A + (b.A-a.A)*t
+	al := a.A + float64((b.A-a.A)*t)
 	if al <= 0 {
 		return typeset.Color{}
 	}
 	ch := func(x, y float64) float64 {
-		return min(max((x*a.A*(1-t)+y*b.A*t)/al, 0), 1)
+		return min(max((float64(x*a.A*(1-t))+float64(y*b.A*t))/al, 0), 1)
 	}
 	return typeset.Color{R: ch(a.R, b.R), G: ch(a.G, b.G), B: ch(a.B, b.B), A: min(al, 1)}
 }
@@ -229,8 +230,8 @@ func (e *engine) colorStops(g *css.Gradient, length, from, to float64, ray, turn
 		}
 		for k := kmin; k <= kmax; k++ {
 			for _, p := range ps {
-				p.a += k * period
-				p.b += k * period
+				p.a += float64(k * period)
+				p.b += float64(k * period)
 				span = append(span, p)
 			}
 		}
@@ -324,12 +325,12 @@ func average(ps []gpiece) typeset.Color {
 			continue
 		}
 		for i := range samples {
-			c := p.at(p.a + w*(float64(i)+0.5)/samples)
-			k := w / samples
-			r += c.R * c.A * k
-			g += c.G * c.A * k
-			b += c.B * c.A * k
-			a += c.A * k
+			c := p.at(p.a + float64(w*(float64(i)+0.5)/samples))
+			k := float64(w / samples)
+			r += float64(c.R * c.A * k)
+			g += float64(c.G * c.A * k)
+			b += float64(c.B * c.A * k)
+			a += float64(c.A * k)
 			total += k
 		}
 	}
@@ -377,19 +378,19 @@ func (e *engine) gradientFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, 
 	// line perpendicular to the diagonal between the two other corners.
 	theta := g.Angle * math.Pi / 180
 	if g.Corner != [2]int8{} {
-		theta = math.Atan2(float64(g.Corner[0])*h, -float64(g.Corner[1])*w)
+		theta = detmath.Atan2(float64(g.Corner[0])*h, -float64(g.Corner[1])*w)
 	}
-	dx, dy := math.Sin(theta), -math.Cos(theta)
+	dx, dy := detmath.Sin(theta), -detmath.Cos(theta)
 	length := math.Abs(w*dx) + math.Abs(h*dy)
 	stops, lo, hi, solid, ok := e.colorStops(g, length, 0, length, false, false, y)
 	if !ok {
 		return flatFill(solid)
 	}
-	sx, sy := w/2-dx*length/2, h/2-dy*length/2
+	sx, sy := float64(w/2)-float64(dx*length/2), float64(h/2)-float64(dy*length/2)
 	return &typeset.Fill{Shading: &typeset.Shading{
 		Kind:  typeset.Axial,
-		From:  typeset.Point{X: sx + dx*lo, Y: sy + dy*lo},
-		To:    typeset.Point{X: sx + dx*hi, Y: sy + dy*hi},
+		From:  typeset.Point{X: sx + float64(dx*lo), Y: sy + float64(dy*lo)},
+		To:    typeset.Point{X: sx + float64(dx*hi), Y: sy + float64(dy*hi)},
 		Stops: stops,
 	}}, true
 }
@@ -417,7 +418,7 @@ func (e *engine) radialFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, bo
 	corner := func(far bool) (float64, float64) {
 		best := corners[0]
 		for _, c := range corners[1:] {
-			d, bd := math.Hypot(c[0], c[1]), math.Hypot(best[0], best[1])
+			d, bd := detmath.Hypot(c[0], c[1]), detmath.Hypot(best[0], best[1])
 			if (far && d > bd) || (!far && d < bd) {
 				best = c
 			}
@@ -440,7 +441,7 @@ func (e *engine) radialFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, bo
 		far := g.Size == css.FarthestCorner
 		dx, dy := corner(far)
 		if g.Circle {
-			rx = math.Hypot(dx, dy)
+			rx = detmath.Hypot(dx, dy)
 			ry = rx
 			break
 		}
@@ -453,7 +454,7 @@ func (e *engine) radialFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, bo
 		sx, sy := pick(l, r), pick(t, b)
 		if sx > 0 && sy > 0 {
 			k := sx / sy
-			rx = math.Sqrt(dx*dx + k*k*dy*dy)
+			rx = math.Sqrt(float64(dx*dx) + float64(k*k*dy*dy))
 			ry = rx / k
 		}
 	case css.RadialExplicit:
@@ -470,7 +471,7 @@ func (e *engine) radialFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, bo
 	// by k, bounds the radii the box shows.
 	reach := 0.0
 	for _, c := range corners {
-		reach = max(reach, math.Hypot(c[0], c[1]/k))
+		reach = max(reach, detmath.Hypot(c[0], c[1]/k))
 	}
 	stops, lo, hi, solid, ok := e.colorStops(g, rx, 0, reach, true, false, y)
 	if !ok {
@@ -497,7 +498,7 @@ func (e *engine) conicFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, boo
 	a := g.Angle * math.Pi / 180
 	c := typeset.Point{X: cx, Y: cy}
 	return &typeset.Fill{Shading: &typeset.Shading{
-		Kind: typeset.Conic, From: c, To: typeset.Point{X: cx + math.Sin(a), Y: cy - math.Cos(a)},
+		Kind: typeset.Conic, From: c, To: typeset.Point{X: cx + detmath.Sin(a), Y: cy - detmath.Cos(a)},
 		Stops: stops,
 	}}, true
 }

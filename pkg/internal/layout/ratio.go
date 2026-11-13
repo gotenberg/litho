@@ -49,7 +49,7 @@ func edgesFor(b *box, content bool) ratioEdges {
 // widthOfHeight returns the content width that the ratio r gives the
 // content height h of a box of edges ed.
 func widthOfHeight(h, r float64, ed ratioEdges) float64 {
-	return max((h+ed.v)*r-ed.h, 0)
+	return max(float64((h+ed.v)*r)-ed.h, 0)
 }
 
 // heightOfWidth returns the content height that the ratio r gives the

@@ -591,7 +591,7 @@ func (e *engine) noteSignature() float64 {
 	}
 	sig := 0.0
 	for p, fp := range e.foot.pages {
-		sig += float64(p+1) * (fp.h + 2*fp.nh)
+		sig += float64(float64(p+1) * (fp.h + 2*fp.nh))
 	}
 	return sig
 }

@@ -61,8 +61,8 @@ func (e *engine) layoutInitialLetter(f *box, cb cblock, bc *bfc, lineTop float64
 	lh := e.lineHeight(root.st)
 	rm := e.faceMetrics(root.st)
 	capP := e.capHeight(root.st)
-	capTop := lineTop + rm.Ascent + (lh-rm.Ascent-rm.Descent)/2 - capP
-	capL := (il.Size-1)*lh + capP
+	capTop := lineTop + rm.Ascent + float64((lh-rm.Ascent-rm.Descent)/2) - capP
+	capL := float64((il.Size-1)*lh) + capP
 	e.sizeInitialLetter(f, capL)
 	f.laidOut = true
 	resolveEdges(f, cb.w)
@@ -96,7 +96,7 @@ func (e *engine) layoutInitialLetter(f *box, cb cblock, bc *bfc, lineTop float64
 				inset = math.Floor(max(left, 0)/css.Pt) * css.Pt
 			}
 			dx = -inset
-			f.w = math.Ceil((ink.right-inset)/css.Pt-eps)*css.Pt - cx
+			f.w = float64(math.Ceil((ink.right-inset)/css.Pt-eps)*css.Pt) - cx
 		} else {
 			inset := 0.0
 			if f.pd[css.Right]+f.bd[css.Right] == 0 {
@@ -104,7 +104,7 @@ func (e *engine) layoutInitialLetter(f *box, cb cblock, bc *bfc, lineTop float64
 			}
 			// The box keeps its right edge and starts where the glyphs,
 			// moved inset to the right, start.
-			l := math.Floor((ink.left+inset)/css.Pt+eps) * css.Pt
+			l := float64(math.Floor((ink.left+inset)/css.Pt+eps) * css.Pt)
 			dx = inset
 			f.x += l - cx
 			f.w = cx + f.w - l
@@ -217,7 +217,7 @@ func (e *engine) letterInk(f *box) (ink, bool) {
 			hs := hscale(t)
 			x0, y0 := l.x+t.Origin.X, l.y+t.Origin.Y
 			for _, g := range t.Glyphs {
-				ops = appendGlyph(ops[:0], face, g.GID, x0+g.X*hs, y0+g.Y, k, hs, t.Skew)
+				ops = appendGlyph(ops[:0], face, g.GID, x0+float64(g.X*hs), y0+g.Y, k, hs, t.Skew)
 				for _, op := range ops {
 					n := 1
 					if op.Kind == typeset.CurveTo {

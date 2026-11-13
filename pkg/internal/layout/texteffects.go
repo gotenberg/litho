@@ -92,7 +92,7 @@ func (p *painter) runOutlines(it *lineItem, l *lineBox, what string) ([]typeset.
 	ox, oy := l.x+t.Origin.X+p.dx, l.y+t.Origin.Y+p.dy
 	var ops []typeset.PathOp
 	for _, g := range t.Glyphs {
-		ops = appendGlyph(ops, f, g.GID, ox+g.X*hs, oy+g.Y, k, hs, t.Skew)
+		ops = appendGlyph(ops, f, g.GID, ox+float64(g.X*hs), oy+g.Y, k, hs, t.Skew)
 	}
 	if len(ops) == 0 {
 		return nil, 0, 0

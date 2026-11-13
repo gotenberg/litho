@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -96,19 +97,19 @@ func roundedRect(r typeset.Rect, radii [4][2]float64) []typeset.PathOp {
 	}
 	line(x1-tr[0], y0)
 	if tr[0] > 0 {
-		curve(pt(x1-tr[0]+kappa*tr[0], y0), pt(x1, y0+tr[1]-kappa*tr[1]), pt(x1, y0+tr[1]))
+		curve(pt(x1-tr[0]+float64(kappa*tr[0]), y0), pt(x1, y0+tr[1]-float64(kappa*tr[1])), pt(x1, y0+tr[1]))
 	}
 	line(x1, y1-br[1])
 	if br[0] > 0 {
-		curve(pt(x1, y1-br[1]+kappa*br[1]), pt(x1-br[0]+kappa*br[0], y1), pt(x1-br[0], y1))
+		curve(pt(x1, y1-br[1]+float64(kappa*br[1])), pt(x1-br[0]+float64(kappa*br[0]), y1), pt(x1-br[0], y1))
 	}
 	line(x0+bl[0], y1)
 	if bl[0] > 0 {
-		curve(pt(x0+bl[0]-kappa*bl[0], y1), pt(x0, y1-bl[1]+kappa*bl[1]), pt(x0, y1-bl[1]))
+		curve(pt(x0+bl[0]-float64(kappa*bl[0]), y1), pt(x0, y1-bl[1]+float64(kappa*bl[1])), pt(x0, y1-bl[1]))
 	}
 	line(x0, y0+tl[1])
 	if tl[0] > 0 {
-		curve(pt(x0, y0+tl[1]-kappa*tl[1]), pt(x0+tl[0]-kappa*tl[0], y0), pt(x0+tl[0], y0))
+		curve(pt(x0, y0+tl[1]-float64(kappa*tl[1])), pt(x0+tl[0]-float64(kappa*tl[0]), y0), pt(x0+tl[0], y0))
 	}
 	return append(ops, typeset.PathOp{Kind: typeset.ClosePath})
 }
@@ -430,22 +431,22 @@ func positions(rep css.Repeat, start, size, areaStart, areaSize, clipStart, clip
 			}
 			return []float64{start}
 		}
-		gap := (areaSize - n*size) / (n - 1)
+		gap := (areaSize - float64(n*size)) / (n - 1)
 		out := make([]float64, 0, int(n)) // fits int: at most limit, checked above
 		for i := 0.0; i < n; i++ {
-			out = append(out, areaStart+i*(size+gap))
+			out = append(out, areaStart+float64(i*(size+gap)))
 		}
 		return out
 	case css.RepeatRepeat, css.RepeatRound:
 	}
-	first := start - math.Ceil((start-clipStart)/size)*size
+	first := start - float64(math.Ceil((start-clipStart)/size)*size)
 	n := math.Ceil((clipStart + clipSize - first) / size)
 	if n > limit {
 		return make([]float64, maxBackgroundTiles+1)
 	}
 	out := make([]float64, 0, max(int(n), 0)) // fits int: at most limit, checked above
 	for i := 0.0; i < n; i++ {
-		out = append(out, first+i*size)
+		out = append(out, first+float64(i*size))
 	}
 	return out
 }
@@ -516,9 +517,9 @@ func veryDark(c typeset.Color) bool {
 		if v <= 0.04045 {
 			return v / 12.92
 		}
-		return math.Pow((v+0.055)/1.055, 2.4)
+		return detmath.Pow((v+0.055)/1.055, 2.4)
 	}
-	l := 0.2126*lin(c.R) + 0.7152*lin(c.G) + 0.0722*lin(c.B)
+	l := float64(0.2126*lin(c.R)) + float64(0.7152*lin(c.G)) + float64(0.0722*lin(c.B))
 	return l <= lin(0x20/255.0)+1e-9
 }
 
@@ -737,9 +738,9 @@ func bestGap(l, dash, gap float64) float64 {
 		return gap
 	}
 	hi := lo + 1
-	loGap, hiGap := math.Inf(1), (l-hi*dash)/(hi-1)
+	loGap, hiGap := math.Inf(1), (l-float64(hi*dash))/(hi-1)
 	if lo > 1 {
-		loGap = (l - lo*dash) / (lo - 1)
+		loGap = (l - float64(lo*dash)) / (lo - 1)
 	}
 	if hiGap <= 0 || math.Abs(loGap-gap) < math.Abs(hiGap-gap) {
 		if math.IsInf(loGap, 0) {
@@ -761,7 +762,7 @@ func roundedLength(r typeset.Rect, radii [4][2]float64) float64 {
 			continue
 		}
 		h := (a - b) * (a - b) / ((a + b) * (a + b))
-		quarter := math.Pi * (a + b) * (1 + 3*h/(10+math.Sqrt(4-3*h))) / 4
+		quarter := float64(math.Pi * (a + b) * (1 + 3*h/(10+math.Sqrt(4-float64(3*h)))) / 4)
 		l += quarter - a - b
 	}
 	return l
@@ -840,15 +841,15 @@ func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r typ
 		var a, z typeset.Point
 		switch s {
 		case css.Top:
-			a, z = typeset.Point{X: r.X, Y: r.Y + w/2}, typeset.Point{X: r.X + r.Width, Y: r.Y + w/2}
+			a, z = typeset.Point{X: r.X, Y: r.Y + float64(w/2)}, typeset.Point{X: r.X + r.Width, Y: r.Y + float64(w/2)}
 		case css.Right:
-			a, z = typeset.Point{X: r.X + r.Width - w/2, Y: r.Y}, typeset.Point{X: r.X + r.Width - w/2, Y: r.Y + r.Height}
+			a, z = typeset.Point{X: r.X + r.Width - float64(w/2), Y: r.Y}, typeset.Point{X: r.X + r.Width - float64(w/2), Y: r.Y + r.Height}
 		case css.Bottom:
-			a, z = typeset.Point{X: r.X + r.Width, Y: r.Y + r.Height - w/2}, typeset.Point{X: r.X, Y: r.Y + r.Height - w/2}
+			a, z = typeset.Point{X: r.X + r.Width, Y: r.Y + r.Height - float64(w/2)}, typeset.Point{X: r.X, Y: r.Y + r.Height - float64(w/2)}
 		case css.Left:
-			a, z = typeset.Point{X: r.X + w/2, Y: r.Y + r.Height}, typeset.Point{X: r.X + w/2, Y: r.Y}
+			a, z = typeset.Point{X: r.X + float64(w/2), Y: r.Y + r.Height}, typeset.Point{X: r.X + float64(w/2), Y: r.Y}
 		}
-		l := math.Hypot(z.X-a.X, z.Y-a.Y)
+		l := detmath.Hypot(z.X-a.X, z.Y-a.Y)
 		if bdr.Style == css.Dotted && !squareDots(w) {
 			// The dots sit on the line, the first and the last centred
 			// half a width in from the corners.
@@ -856,8 +857,8 @@ func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r typ
 				return
 			}
 			ux, uy := (z.X-a.X)/l, (z.Y-a.Y)/l
-			a = typeset.Point{X: a.X + ux*w/2, Y: a.Y + uy*w/2}
-			z = typeset.Point{X: z.X - ux*w/2, Y: z.Y - uy*w/2}
+			a = typeset.Point{X: a.X + float64(ux*w/2), Y: a.Y + float64(uy*w/2)}
+			z = typeset.Point{X: z.X - float64(ux*w/2), Y: z.Y - float64(uy*w/2)}
 			l -= w
 		}
 		g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: []typeset.PathOp{
@@ -879,13 +880,13 @@ func strokedSide(s css.Side, r typeset.Rect, w float64, c typeset.Color) *typese
 	var a, z typeset.Point
 	switch s {
 	case css.Top:
-		a, z = typeset.Point{X: r.X, Y: r.Y + w/2}, typeset.Point{X: r.X + r.Width, Y: r.Y + w/2}
+		a, z = typeset.Point{X: r.X, Y: r.Y + float64(w/2)}, typeset.Point{X: r.X + r.Width, Y: r.Y + float64(w/2)}
 	case css.Bottom:
-		a, z = typeset.Point{X: r.X, Y: r.Y + r.Height - w/2}, typeset.Point{X: r.X + r.Width, Y: r.Y + r.Height - w/2}
+		a, z = typeset.Point{X: r.X, Y: r.Y + r.Height - float64(w/2)}, typeset.Point{X: r.X + r.Width, Y: r.Y + r.Height - float64(w/2)}
 	case css.Left:
-		a, z = typeset.Point{X: r.X + w/2, Y: r.Y}, typeset.Point{X: r.X + w/2, Y: r.Y + r.Height}
+		a, z = typeset.Point{X: r.X + float64(w/2), Y: r.Y}, typeset.Point{X: r.X + float64(w/2), Y: r.Y + r.Height}
 	case css.Right:
-		a, z = typeset.Point{X: r.X + r.Width - w/2, Y: r.Y}, typeset.Point{X: r.X + r.Width - w/2, Y: r.Y + r.Height}
+		a, z = typeset.Point{X: r.X + r.Width - float64(w/2), Y: r.Y}, typeset.Point{X: r.X + r.Width - float64(w/2), Y: r.Y + r.Height}
 	}
 	return strokedLine(a, z, w, c)
 }

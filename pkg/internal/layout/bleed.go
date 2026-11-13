@@ -74,23 +74,23 @@ func (e *engine) paintMarks(pg *typeset.Page, pb PageBox) {
 			if c[1] > 0 {
 				sy = -1
 			}
-			line(c[0], c[1]+sy*b, c[0]+sx*hb, c[1]+sy*b, markLine)
-			line(c[0]+sx*b, c[1], c[0]+sx*b, c[1]+sy*hb, markLine)
+			line(c[0], c[1]+float64(sy*b), c[0]+float64(sx*hb), c[1]+float64(sy*b), markLine)
+			line(c[0]+float64(sx*b), c[1], c[0]+float64(sx*b), c[1]+float64(sy*hb), markLine)
 		}
 	}
 	if pb.Marks&css.MarksCross != 0 {
-		q := b / 4
+		q := float64(b / 4)
 		// Top and bottom: a crosshair centred at (w/2, q) from the edge.
 		for _, y := range [2][2]float64{{0, 1}, {h, -1}} {
-			cy := y[0] + y[1]*q
-			line(w/2-q, cy, w/2+q, cy, markLine/2)
-			line(w/2, y[0], w/2, y[0]+y[1]*hb, markLine/2)
+			cy := y[0] + float64(y[1]*q)
+			line(float64(w/2)-q, cy, float64(w/2)+q, cy, markLine/2)
+			line(float64(w/2), y[0], float64(w/2), y[0]+float64(y[1]*hb), markLine/2)
 			circle(w/2, cy, b/8, markLine/4)
 		}
 		for _, x := range [2][2]float64{{0, 1}, {w, -1}} {
-			cx := x[0] + x[1]*q
-			line(cx, h/2-q, cx, h/2+q, markLine/2)
-			line(x[0], h/2, x[0]+x[1]*hb, h/2, markLine/2)
+			cx := x[0] + float64(x[1]*q)
+			line(cx, float64(h/2)-q, cx, float64(h/2)+q, markLine/2)
+			line(x[0], float64(h/2), x[0]+float64(x[1]*hb), float64(h/2), markLine/2)
 			circle(cx, h/2, b/8, markLine/4)
 		}
 	}
@@ -103,17 +103,17 @@ func (e *engine) paintMarks(pg *typeset.Page, pb PageBox) {
 // snapOut grows r to the CSS pixel grid around it.
 func snapOut(r typeset.Rect) typeset.Rect {
 	const slack = 1e-6
-	x0 := math.Floor(r.X/css.Pt+slack) * css.Pt
-	y0 := math.Floor(r.Y/css.Pt+slack) * css.Pt
-	x1 := math.Ceil((r.X+r.Width)/css.Pt-slack) * css.Pt
-	y1 := math.Ceil((r.Y+r.Height)/css.Pt-slack) * css.Pt
+	x0 := float64(math.Floor(r.X/css.Pt+slack) * css.Pt)
+	y0 := float64(math.Floor(r.Y/css.Pt+slack) * css.Pt)
+	x1 := float64(math.Ceil((r.X+r.Width)/css.Pt-slack) * css.Pt)
+	y1 := float64(math.Ceil((r.Y+r.Height)/css.Pt-slack) * css.Pt)
 	return typeset.Rect{X: x0, Y: y0, Width: max(x1-x0, css.Pt), Height: max(y1-y0, css.Pt)}
 }
 
 // circleOps returns the path of the circle of radius r centred on (cx,
 // cy), four cubic Béziers.
 func circleOps(cx, cy, r float64) []typeset.PathOp {
-	k := kappa * r
+	k := float64(kappa * r)
 	pt := func(x, y float64) typeset.Point { return typeset.Point{X: cx + x, Y: cy + y} }
 	curve := func(a, b, c typeset.Point) typeset.PathOp {
 		return typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{a, b, c}}

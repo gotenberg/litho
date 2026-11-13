@@ -229,7 +229,7 @@ func (s *inlineState) drawLeader(it *lineItem, x0, avail, end float64, ltr bool)
 		if ltr {
 			lo = math.Ceil((end-x0-avail)/pw - 1e-6)
 			hi = math.Floor((end-x0)/pw+1e-6) - 1
-			start = end - (hi+1)*pw
+			start = end - float64((hi+1)*pw)
 		} else {
 			lo = math.Ceil(x0/pw - 1e-6)
 			hi = math.Floor((x0+avail)/pw+1e-6) - 1

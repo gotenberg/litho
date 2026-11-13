@@ -7,6 +7,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -133,9 +134,9 @@ func (e *engine) imageShape(f *box, so *css.ShapeOutside, m float64) *floatShape
 		for c := range cols {
 			if alpha((float64(c)+0.5)*cw, yc) > so.Threshold {
 				if row.x0 > row.x1 {
-					row.x0 = x0 + float64(c)*cw
+					row.x0 = x0 + float64(float64(c)*cw)
 				}
-				row.x1 = x0 + float64(c+1)*cw
+				row.x1 = x0 + float64(float64(c+1)*cw)
 			}
 		}
 		s.rows[r] = row
@@ -166,29 +167,29 @@ func fillAlpha(fill *typeset.Fill, x, y float64) float64 {
 	if tm == (typeset.Matrix{}) {
 		tm = typeset.Identity
 	}
-	det := tm.A*tm.D - tm.B*tm.C
+	det := float64(tm.A*tm.D) - float64(tm.B*tm.C)
 	if det == 0 {
 		return 0
 	}
 	// The point in the shading's coordinates: tm inverted.
 	ux, uy := x-tm.E, y-tm.F
-	p := typeset.Point{X: (tm.D*ux - tm.C*uy) / det, Y: (tm.A*uy - tm.B*ux) / det}
+	p := typeset.Point{X: (float64(tm.D*ux) - float64(tm.C*uy)) / det, Y: (float64(tm.A*uy) - float64(tm.B*ux)) / det}
 	var t float64
 	switch sh.Kind {
 	case typeset.Axial:
 		dx, dy := sh.To.X-sh.From.X, sh.To.Y-sh.From.Y
-		if l := dx*dx + dy*dy; l > 0 {
-			t = ((p.X-sh.From.X)*dx + (p.Y-sh.From.Y)*dy) / l
+		if l := float64(dx*dx) + float64(dy*dy); l > 0 {
+			t = (float64((p.X-sh.From.X)*dx) + float64((p.Y-sh.From.Y)*dy)) / l
 		}
 	case typeset.Radial:
 		// The circles are concentric: the radius at p over the span.
 		if d := sh.ToRadius - sh.FromRadius; d != 0 {
-			t = (math.Hypot(p.X-sh.From.X, p.Y-sh.From.Y) - sh.FromRadius) / d
+			t = (detmath.Hypot(p.X-sh.From.X, p.Y-sh.From.Y) - sh.FromRadius) / d
 		}
 	case typeset.Conic:
 		// The turn from the direction of To, clockwise.
-		a0 := math.Atan2(sh.To.X-sh.From.X, -(sh.To.Y - sh.From.Y))
-		a := math.Atan2(p.X-sh.From.X, -(p.Y - sh.From.Y))
+		a0 := detmath.Atan2(sh.To.X-sh.From.X, -(sh.To.Y - sh.From.Y))
+		a := detmath.Atan2(p.X-sh.From.X, -(p.Y - sh.From.Y))
 		t = math.Mod(a-a0+4*math.Pi, 2*math.Pi) / (2 * math.Pi)
 	}
 	stops := sh.Stops
@@ -369,7 +370,7 @@ func marginRadius(r, m float64) float64 {
 		return max(r+m, 0)
 	}
 	q := r/m - 1
-	return r + m*(1+q*q*q)
+	return r + float64(m*(1+float64(q*q*q)))
 }
 
 // basicShapeRect returns the rounded rectangle of an inset(), a circle()
@@ -417,9 +418,9 @@ func ellipseOf(s *css.Shape, w, h float64) (float64, float64, float64, float64) 
 		case css.RadiusLength:
 			return max(resolve(sr.Length, ref), 0)
 		case css.RadiusClosestCorner:
-			return math.Hypot(min(dx0, dx1), min(dy0, dy1))
+			return detmath.Hypot(min(dx0, dx1), min(dy0, dy1))
 		case css.RadiusFarthestCorner:
-			return math.Hypot(max(dx0, dx1), max(dy0, dy1))
+			return detmath.Hypot(max(dx0, dx1), max(dy0, dy1))
 		case css.RadiusClosest:
 		}
 		return near
@@ -427,7 +428,7 @@ func ellipseOf(s *css.Shape, w, h float64) (float64, float64, float64, float64) 
 	if s.Kind == css.ShapeCircle {
 		// A circle's percentage is of the reference box's diagonal over
 		// the square root of 2.
-		r := side(s.Radius[0], min(dx0, dx1, dy0, dy1), max(dx0, dx1, dy0, dy1), math.Hypot(w, h)/math.Sqrt2)
+		r := side(s.Radius[0], min(dx0, dx1, dy0, dy1), max(dx0, dx1, dy0, dy1), detmath.Hypot(w, h)/math.Sqrt2)
 		return cx, cy, r, r
 	}
 	return cx, cy, side(s.Radius[0], min(dx0, dx1), max(dx0, dx1), w), side(s.Radius[1], min(dy0, dy1), max(dy0, dy1), h)
@@ -442,7 +443,9 @@ func pathRings(d string, ref typeset.Rect) [][]wrapPt {
 	var rings [][]wrapPt
 	var cur []wrapPt
 	n := 0
-	at := func(p typeset.Point) wrapPt { return wrapPt{x: ref.X + p.X*css.Pt, y: ref.Y + p.Y*css.Pt} }
+	at := func(p typeset.Point) wrapPt {
+		return wrapPt{x: ref.X + float64(p.X*css.Pt), y: ref.Y + float64(p.Y*css.Pt)}
+	}
 	flush := func() {
 		if len(cur) > 1 {
 			rings = append(rings, cur)
@@ -467,11 +470,11 @@ func pathRings(d string, ref typeset.Rect) [][]wrapPt {
 			p0 := cur[len(cur)-1]
 			p1, p2, p3 := at(op.P[0]), at(op.P[1]), at(op.P[2])
 			for i := 1; i <= shapeCurveSteps; i++ {
-				t := float64(i) / shapeCurveSteps
+				t := float64(float64(i) / shapeCurveSteps)
 				u := 1 - t
 				cur = append(cur, wrapPt{
-					x: u*u*u*p0.x + 3*u*u*t*p1.x + 3*u*t*t*p2.x + t*t*t*p3.x,
-					y: u*u*u*p0.y + 3*u*u*t*p1.y + 3*u*t*t*p2.y + t*t*t*p3.y,
+					x: float64(u*u*u*p0.x) + float64(3*u*u*t*p1.x) + float64(3*u*t*t*p2.x) + float64(t*t*t*p3.x),
+					y: float64(u*u*u*p0.y) + float64(3*u*u*t*p1.y) + float64(3*u*t*t*p2.y) + float64(t*t*t*p3.y),
 				})
 			}
 			n += shapeCurveSteps
@@ -563,7 +566,7 @@ func roundedAt(r typeset.Rect, radii [4][2]float64, y float64) (float64, float64
 			return 0
 		}
 		t := min(math.Abs(dy)/ry, 1)
-		return rx - rx*math.Sqrt(1-t*t)
+		return rx - float64(rx*math.Sqrt(1-float64(t*t)))
 	}
 	top, bottom := r.Y, r.Y+r.Height
 	if tl := radii[css.TopLeft]; y < top+tl[1] {
@@ -623,7 +626,7 @@ func segmentExtent(a, b wrapPt, y0, y1, m float64) (float64, float64, bool) {
 		t0, t1 := (y0-a.y)/dy, (y1-a.y)/dy
 		ta, tb := max(0, min(t0, t1)), min(1, max(t0, t1))
 		if ta <= tb && (!open || (tb-ta)*math.Abs(dy) > eps) {
-			xa, xb := a.x+ta*(b.x-a.x), a.x+tb*(b.x-a.x)
+			xa, xb := a.x+float64(ta*(b.x-a.x)), a.x+float64(tb*(b.x-a.x))
 			add(min(xa, xb)-m, max(xa, xb)+m)
 		}
 	}
@@ -672,9 +675,9 @@ func capReach(a, b wrapPt, e, m float64, below bool) (float64, float64, bool) {
 			return 0, 0, false
 		}
 	}
-	x := func(t float64) float64 { return a.x + t*(b.x-a.x) }
-	u := func(t float64) float64 { return ua + t*du }
-	reach := func(t float64) float64 { return math.Sqrt(max(m*m-u(t)*u(t), 0)) }
+	x := func(t float64) float64 { return a.x + float64(t*(b.x-a.x)) }
+	u := func(t float64) float64 { return ua + float64(t*du) }
+	reach := func(t float64) float64 { return math.Sqrt(max(float64(m*m)-float64(u(t)*u(t)), 0)) }
 	lo, hi := math.Inf(1), math.Inf(-1)
 	for _, t := range [2]float64{t0, t1} {
 		lo, hi = min(lo, x(t)-reach(t)), max(hi, x(t)+reach(t))
@@ -683,7 +686,7 @@ func capReach(a, b wrapPt, e, m float64, below bool) (float64, float64, bool) {
 		// x + sqrt(m² - u²) peaks where u = m k / sqrt(1 + k²), k being
 		// dx/du; x - sqrt(m² - u²) bottoms out at the opposite k.
 		k := (b.x - a.x) / du
-		for _, uk := range [2]float64{m * k / math.Sqrt(1+k*k), -m * k / math.Sqrt(1+k*k)} {
+		for _, uk := range [2]float64{m * k / math.Sqrt(1+float64(k*k)), -m * k / math.Sqrt(1+float64(k*k))} {
 			t := (uk - ua) / du
 			if t > t0 && t < t1 {
 				lo, hi = min(lo, x(t)-reach(t)), max(hi, x(t)+reach(t))
@@ -700,7 +703,7 @@ func (s *floatShape) rowExtent(y0, y1 float64) (float64, float64, bool) {
 	m := s.margin
 	first := max(int(math.Floor((y0-m-s.rowTop)/s.rowH)), 0) // fits int: clamped to the row count below
 	for i := first; i < len(s.rows); i++ {
-		top := s.rowTop + float64(i)*s.rowH
+		top := s.rowTop + float64(float64(i)*s.rowH)
 		if top > y1+m {
 			break
 		}
@@ -716,7 +719,7 @@ func (s *floatShape) rowExtent(y0, y1 float64) (float64, float64, bool) {
 			if d > m {
 				continue
 			}
-			reach = math.Sqrt(m*m - d*d)
+			reach = math.Sqrt(float64(m*m) - float64(d*d))
 		} else if top+s.rowH <= y0 || top > y1 || (top == y1 && y1 > y0) {
 			continue
 		}

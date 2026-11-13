@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -511,7 +512,7 @@ func staticRoom(b *box, cb absCB) (float64, bool) {
 	if frac >= 1-eps {
 		return max(end-edges, 0), true
 	}
-	mid := (start + end) / 2
+	mid := float64((start + end) / 2)
 	return max(2*min(mid, cb.w-mid)-edges, 0), true
 }
 
@@ -567,7 +568,7 @@ func (e *engine) absHeights(b *box, cb absCB, ccb cblock) {
 		mt, mb := b.m[css.Top], b.m[css.Bottom]
 		switch {
 		case mtAuto && mbAuto:
-			mt = rest / 2
+			mt = float64(rest / 2)
 			mb = rest - mt
 		case mtAuto:
 			mt = rest - mb
@@ -660,7 +661,7 @@ func transformOf(b *box, r typeset.Rect) (typeset.Matrix, bool, bool) {
 			return typeset.Identity, true, false
 		}
 	}
-	if math.Abs(m.A*m.D-m.B*m.C) < 1e-12 {
+	if math.Abs(float64(m.A*m.D)-float64(m.B*m.C)) < 1e-12 {
 		return typeset.Identity, true, false
 	}
 	return m, true, true
@@ -681,10 +682,10 @@ func funcMatrix(f css.TransformFunc, r typeset.Rect) typeset.Matrix {
 	case css.TransformScale:
 		return typeset.Matrix{A: v[0], D: v[1]}
 	case css.TransformRotate:
-		sin, cos := math.Sincos(v[0])
+		sin, cos := detmath.Sincos(v[0])
 		return typeset.Matrix{A: cos, B: sin, C: -sin, D: cos}
 	case css.TransformSkew:
-		return typeset.Matrix{A: 1, B: math.Tan(v[1]), C: math.Tan(v[0]), D: 1}
+		return typeset.Matrix{A: 1, B: detmath.Tan(v[1]), C: detmath.Tan(v[0]), D: 1}
 	}
 	return typeset.Identity
 }
@@ -692,12 +693,12 @@ func funcMatrix(f css.TransformFunc, r typeset.Rect) typeset.Matrix {
 // mul returns the matrix that applies b, then a.
 func mul(a, b typeset.Matrix) typeset.Matrix {
 	return typeset.Matrix{
-		A: a.A*b.A + a.C*b.B,
-		B: a.B*b.A + a.D*b.B,
-		C: a.A*b.C + a.C*b.D,
-		D: a.B*b.C + a.D*b.D,
-		E: a.A*b.E + a.C*b.F + a.E,
-		F: a.B*b.E + a.D*b.F + a.F,
+		A: float64(a.A*b.A) + float64(a.C*b.B),
+		B: float64(a.B*b.A) + float64(a.D*b.B),
+		C: float64(a.A*b.C) + float64(a.C*b.D),
+		D: float64(a.B*b.C) + float64(a.D*b.D),
+		E: float64(a.A*b.E) + float64(a.C*b.F) + a.E,
+		F: float64(a.B*b.E) + float64(a.D*b.F) + a.F,
 	}
 }
 

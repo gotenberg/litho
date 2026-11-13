@@ -447,7 +447,7 @@ func (l *gridLayout) position(ax int, a css.BoxAlign, size float64) []float64 {
 			used += t.base
 		}
 	}
-	used += l.gap[ax] * float64(max(n-1, 0))
+	used += float64(l.gap[ax] * float64(max(n-1, 0)))
 	free := size - used
 	kw := a.Keyword()
 	if kw == css.BoxNormal || kw == css.BoxStretch {
@@ -496,7 +496,7 @@ func (l *gridLayout) colArea(it *gitem) float64 {
 			n++
 		}
 	}
-	return sum + l.gap[colAxis]*float64(max(n-1, 0))
+	return sum + float64(l.gap[colAxis]*float64(max(n-1, 0)))
 }
 
 // justifySelf returns the used justify-self of the item k of the grid
@@ -954,8 +954,8 @@ func (l *gridLayout) put(it *gitem, rowTop float64) float64 {
 	case (lAuto || rAuto) && free > 0:
 		switch {
 		case lAuto && rAuto:
-			k.m[css.Left] += free / 2
-			k.m[css.Right] += free / 2
+			k.m[css.Left] += float64(free / 2)
+			k.m[css.Right] += float64(free / 2)
 		case lAuto:
 			k.m[css.Left] += free
 		default:
@@ -1015,8 +1015,8 @@ func (l *gridLayout) put(it *gitem, rowTop float64) float64 {
 	case (tAuto || bAuto) && vfree > 0:
 		switch {
 		case tAuto && bAuto:
-			k.m[css.Top] += vfree / 2
-			k.m[css.Bottom] += vfree / 2
+			k.m[css.Top] += float64(vfree / 2)
+			k.m[css.Bottom] += float64(vfree / 2)
 		case tAuto:
 			k.m[css.Top] += vfree
 		default:

@@ -348,7 +348,7 @@ func tileSpans(rep css.ImageRepeat, start, size, n, k float64) []span {
 	if !numeric.Positive(size) || !numeric.Positive(n) {
 		return nil
 	}
-	t := n * k
+	t := float64(n * k)
 	if rep == css.ImageStretch || !numeric.PositiveFinite(t) {
 		return []span{{start, size}}
 	}
@@ -369,24 +369,24 @@ func tileSpans(rep css.ImageRepeat, start, size, n, k float64) []span {
 		if c < 1 || c > limit {
 			return nil
 		}
-		gap := (size - c*t) / (c + 1)
+		gap := (size - float64(c*t)) / (c + 1)
 		out := make([]span, 0, int(c)) // fits int: at most limit, checked above
 		for i := 0.0; i < c; i++ {
-			out = append(out, span{start + gap + i*(t+gap), t})
+			out = append(out, span{start + gap + float64(i*(t+gap)), t})
 		}
 		return out
 	}
 	// Repeat: a tile centred on the region, then as many as cover it on
 	// either side.
-	first := start + (size-t)/2
-	first -= math.Ceil((first-start)/t) * t
+	first := start + float64((size-t)/2)
+	first -= float64(math.Ceil((first-start)/t) * t)
 	c := math.Ceil((start + size - first) / t)
 	if c > limit {
 		return nil
 	}
 	out := make([]span, 0, max(int(c), 0)) // fits int: at most limit, checked above
 	for i := 0.0; i < c; i++ {
-		out = append(out, span{first + i*t, t})
+		out = append(out, span{first + float64(i*t), t})
 	}
 	return out
 }
@@ -420,7 +420,7 @@ func (p *painter) nineTile(src nineSource, pc ninePiece, t typeset.Rect) *ditem 
 		return nil
 	}
 	kx, ky := t.Width/pc.src.Width, t.Height/pc.src.Height
-	img := typeset.Rect{X: t.X - pc.src.X*kx, Y: t.Y - pc.src.Y*ky, Width: src.w * kx, Height: src.h * ky}
+	img := typeset.Rect{X: t.X - float64(pc.src.X*kx), Y: t.Y - float64(pc.src.Y*ky), Width: src.w * kx, Height: src.h * ky}
 	// A vector image and a gradient are drawn at the image's size, then
 	// scaled: the image is cut after it is sized (CSS Backgrounds 3,
 	// 6.2), so a vector one keeps its own aspect ratio inside it.

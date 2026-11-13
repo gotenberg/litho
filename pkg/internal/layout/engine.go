@@ -286,7 +286,7 @@ func (e *engine) pageTop(p int) float64 {
 			return g.tops[max(p, 0)]
 		}
 		last := len(g.tops) - 1
-		return g.tops[last] + float64(p-last)*e.pageH
+		return g.tops[last] + float64(float64(p-last)*e.pageH)
 	}
 	return float64(p) * e.pageH
 }

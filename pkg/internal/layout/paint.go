@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -785,7 +786,7 @@ func (p *painter) zoom() float64 {
 	z := 1.0
 	for _, f := range p.frames {
 		if m := f.container.effects().transform; m != nil {
-			z = float64(z * max(math.Hypot(m.A, m.B), math.Hypot(m.C, m.D)))
+			z = float64(z * max(detmath.Hypot(m.A, m.B), detmath.Hypot(m.C, m.D)))
 		}
 	}
 	if !(z > 0) {
@@ -1080,7 +1081,7 @@ func objectRect(st *css.Style, pic *Picture, box typeset.Rect) typeset.Rect {
 		k = min(contain, 1)
 	case css.FitNone, css.FitFill:
 	}
-	w, h := iw*k, ih*k
+	w, h := float64(iw*k), float64(ih*k)
 	return typeset.Rect{
 		X:     box.X + resolve(st.ObjectPosition[0], box.Width-w),
 		Y:     box.Y + resolve(st.ObjectPosition[1], box.Height-h),
@@ -1172,9 +1173,9 @@ func (p *painter) symbolMarker(b *box, m *markerBox) {
 		path = &typeset.Path{Ops: rectOps(r), Fill: &typeset.Fill{Color: col}}
 	case css.Circle:
 		sw := min(css.Pt, r.Width/2)
-		path = &typeset.Path{Ops: circleOps(r.X+r.Width/2, r.Y+r.Height/2, (r.Width-sw)/2), Stroke: &typeset.Stroke{Color: col, Width: sw}}
+		path = &typeset.Path{Ops: circleOps(r.X+float64(r.Width/2), r.Y+float64(r.Height/2), (r.Width-sw)/2), Stroke: &typeset.Stroke{Color: col, Width: sw}}
 	default:
-		path = &typeset.Path{Ops: circleOps(r.X+r.Width/2, r.Y+r.Height/2, r.Width/2), Fill: &typeset.Fill{Color: col}}
+		path = &typeset.Path{Ops: circleOps(r.X+float64(r.Width/2), r.Y+float64(r.Height/2), r.Width/2), Fill: &typeset.Fill{Color: col}}
 	}
 	path.Parent = m.elem
 	p.emit(b, true, path, r.Y, r.Y+r.Height, p.e.pageOf(m.sym.Y+eps))
@@ -1381,7 +1382,7 @@ func (p *painter) lineFrag(l *lineBox, f *inlineFrag, page int) {
 		// The relative offset moves the fragment after the columns cut
 		// the flow (CSS Fragmentation 3, 5.5): it paints in the column of
 		// its line, where the line's text paints, however far it moves.
-		g := &ditem{group: true, page: pageMono, y0: l.y + (f.top+f.bottom)/2}
+		g := &ditem{group: true, page: pageMono, y0: l.y + float64((f.top+f.bottom)/2)}
 		c := p.sync(p.chain(f.box, false))
 		c.kids = append(c.kids, g)
 		p.frames = append(p.frames, &frame{container: g, root: f.box})
@@ -1539,7 +1540,7 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 }
 
 // roundPx rounds v points to whole CSS pixels.
-func roundPx(v float64) float64 { return math.Round(v/css.Pt) * css.Pt }
+func roundPx(v float64) float64 { return float64(math.Round(v/css.Pt) * css.Pt) }
 
 // decoShadow is a text shadow drawing the decorations of a glyph run: a
 // copy of each moved by x and y, in color (CSS Text Decoration 3, 4: the
@@ -1688,9 +1689,9 @@ func (p *painter) decoGeom(it *lineItem, l *lineBox, d deco, sh *decoShadow) (de
 	g.color, g.thick = col, thick
 	// The face's underline position, else a tenth of the font size,
 	// rounded to the pixel grid as browsers draw it.
-	pos := size / 10
+	pos := float64(size / 10)
 	if it.ulThick > 0 {
-		pos = it.ulPos * k
+		pos = float64(it.ulPos * k)
 	}
 	pos = roundPx(pos)
 	switch {
@@ -1698,7 +1699,7 @@ func (p *painter) decoGeom(it *lineItem, l *lineBox, d deco, sh *decoShadow) (de
 		// Under the decorating box's descent, a pixel below it as
 		// Chromium draws it, the offset counted from there (CSS Text
 		// Decoration 4, 2.7 and 2.8.1).
-		pos = it.descent * k
+		pos = float64(it.descent * k)
 		if d.origin != nil {
 			pos = p.e.faceMetrics(d.origin.st).Descent
 		}
@@ -1721,7 +1722,7 @@ func (p *painter) decoGeom(it *lineItem, l *lineBox, d deco, sh *decoShadow) (de
 			if auto {
 				t = size / 10 / css.Pt
 			}
-			pos = max(math.Ceil(t/2-1e-9), 1) * css.Pt
+			pos = float64(max(math.Ceil(float64(t/2)-1e-9), 1) * css.Pt)
 		}
 		if d.hasOffset {
 			pos = d.offset
@@ -1738,12 +1739,12 @@ func (p *painter) decoGeom(it *lineItem, l *lineBox, d deco, sh *decoShadow) (de
 	}
 	// Centred on the face's strikeout stroke, else a third of the font
 	// size above the baseline, at the decorating box's size.
-	mid := size / 3
+	mid := float64(size / 3)
 	if it.stThick > 0 {
 		ft := max(roundPx(it.stThick*k), css.Pt)
-		mid = roundPx(it.stPos*k) - ft/2
+		mid = roundPx(it.stPos*k) - float64(ft/2)
 	}
-	g.y[2] = top + it.ascent*k - mid - thick/2
+	g.y[2] = top + float64(it.ascent*k) - mid - float64(thick/2)
 	return g, true
 }
 
@@ -1877,7 +1878,7 @@ func (p *painter) decoLine(dl decoLine) {
 	switch dl.style {
 	case css.DecorationDouble:
 		if dl.under {
-			b1 = top + 3*thick
+			b1 = top + float64(3*thick)
 		} else {
 			b0 = top - 2*thick
 		}
@@ -1943,13 +1944,13 @@ func (p *painter) decoLine(dl decoLine) {
 		if dl.style == css.DecorationDashed {
 			dash = []float64{3 * thick, 3 * thick}
 		}
-		mid := top + thick/2
+		mid := top + float64(thick/2)
 		stroke([]typeset.PathOp{
 			{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x0, Y: mid}}},
 			{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x0 + w, Y: mid}}},
 		}, &typeset.Stroke{Color: col, Width: thick, Dash: dash})
 	case css.DecorationWavy:
-		stroke(waveOps(l.x+dl.x0+p.dx+dl.dx, x0, x0+w, top+thick/2, thick), &typeset.Stroke{Color: col, Width: thick})
+		stroke(waveOps(l.x+dl.x0+p.dx+dl.dx, x0, x0+w, top+float64(thick/2), thick), &typeset.Stroke{Color: col, Width: thick})
 	case css.DecorationSolid:
 		rect(top, thick)
 	}
@@ -1966,9 +1967,9 @@ func waveOps(origin, x0, x1, mid, thick float64) []typeset.PathOp {
 		case k == 0:
 			return origin, mid
 		case k%2 == 1:
-			return origin + float64(k)*step, mid - thick
+			return origin + float64(float64(k)*step), mid - thick
 		}
-		return origin + float64(k)*step, mid + thick
+		return origin + float64(float64(k)*step), mid + thick
 	}
 	// y returns the wave's height at x, between vertices k and k+1.
 	y := func(x float64, k int) float64 {
@@ -2055,7 +2056,7 @@ func (e *engine) placeMarker(b *box) {
 	rtl := b.st.Direction == css.RTL
 	baseline, ok := markerBaseline(b)
 	if m.picture != nil {
-		gap := e.fontSize(b.st) / 2
+		gap := float64(e.fontSize(b.st) / 2)
 		m.width = m.picture.Width + gap
 		m.ascent = m.picture.Height
 		if !ok {

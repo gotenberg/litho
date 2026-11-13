@@ -109,9 +109,9 @@ func (e *engine) markRuns(it *lineItem) []typeset.Text {
 		}
 		r, _ := utf8.DecodeRuneInString(gs[i].Text)
 		if gs[i].Text != "" && takesMark(r) {
-			x0, x1 := gs[i].X*hs, it.w
+			x0, x1 := float64(gs[i].X*hs), it.w
 			if j < len(gs) {
-				x1 = gs[j].X * hs
+				x1 = float64(gs[j].X * hs)
 			}
 			centres = append(centres, (x0+x1)/2)
 		}
@@ -129,7 +129,7 @@ func (e *engine) markRuns(it *lineItem) []typeset.Text {
 		c.Glyphs = make([]typeset.Glyph, 0, len(centres)*len(sp.Text.Glyphs))
 		for _, x := range centres {
 			for _, g := range sp.Text.Glyphs {
-				g.X += x - m.width/2 + sp.X
+				g.X += x - float64(m.width/2) + sp.X
 				c.Glyphs = append(c.Glyphs, g)
 			}
 		}

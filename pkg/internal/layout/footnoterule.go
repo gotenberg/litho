@@ -86,7 +86,7 @@ func (e *engine) paintFootnoteRule(pg *typeset.Page, pb PageBox, top float64) {
 		return
 	}
 	aw, _ := areaOf(pb)
-	w := r.Width * aw
+	w := float64(r.Width * aw)
 	align := r.Align
 	rtl := e.rootBox != nil && e.rootBox.st.Direction == css.RTL
 	switch align { //nolint:exhaustive // the other values read as left
@@ -104,7 +104,7 @@ func (e *engine) paintFootnoteRule(pg *typeset.Page, pb PageBox, top float64) {
 	x := pb.Margin[css.Left]
 	switch align { //nolint:exhaustive // the other values read as left
 	case css.AlignCenter:
-		x += (aw - w) / 2
+		x += float64((aw - w) / 2)
 	case css.AlignRight:
 		x += aw - w
 	}

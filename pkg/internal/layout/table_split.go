@@ -202,8 +202,8 @@ func (td *tableData) splitCells(r int, blank bool) []*splitCell {
 				// line lies whole on the piece's side of the cut.
 				k = 2
 			}
-			sc.tail = k*c.bd[css.Bottom] + c.pd[css.Bottom]
-			sc.head = k*c.bd[css.Top] + c.pd[css.Top]
+			sc.tail = float64(k*c.bd[css.Bottom]) + c.pd[css.Bottom]
+			sc.head = float64(k*c.bd[css.Top]) + c.pd[css.Top]
 		}
 		for _, k := range cellBreaks(c) {
 			sc.cands = append(sc.cands, breakCand{y: k.y - c.y + off, soft: k.soft})

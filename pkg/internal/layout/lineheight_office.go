@@ -60,7 +60,7 @@ func (s *inlineState) officeLine(l *lineBox) {
 		// the text of the line alone: an as-character picture taller than
 		// the text keeps its height, the room going below it; below 100%
 		// the whole line shrinks.
-		h = above + below + (f-1)*text
+		h = above + below + float64((f-1)*text)
 		base = above
 		l.slack = max((f-1)*text, 0)
 		if f < 1 {

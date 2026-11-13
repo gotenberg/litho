@@ -53,7 +53,7 @@ func (p *painter) inkGaps(runs []*lineItem, l *lineBox, dx, dy, top, bottom floa
 			if mode == css.SkipInkAuto && ideographic(g.Text) {
 				continue
 			}
-			ops = appendGlyph(ops[:0], f, g.GID, x0+g.X*hs, y0+g.Y, k, hs, t.Skew)
+			ops = appendGlyph(ops[:0], f, g.GID, x0+float64(g.X*hs), y0+g.Y, k, hs, t.Skew)
 			if lo, hi, ok := crossing(ops, top, bottom); ok {
 				gaps = append(gaps, [2]float64{lo - widen, hi + widen})
 			}
@@ -127,11 +127,11 @@ func crossing(ops []typeset.PathOp, top, bottom float64) (float64, float64, bool
 		case typeset.CurveTo:
 			prev := cur
 			for i := 1; i <= curveSteps; i++ {
-				u := float64(i) / curveSteps
+				u := float64(float64(i) / curveSteps)
 				v := 1 - u
 				q := typeset.Point{
-					X: v*v*v*cur.X + 3*v*v*u*op.P[0].X + 3*v*u*u*op.P[1].X + u*u*u*op.P[2].X,
-					Y: v*v*v*cur.Y + 3*v*v*u*op.P[0].Y + 3*v*u*u*op.P[1].Y + u*u*u*op.P[2].Y,
+					X: float64(v*v*v*cur.X) + float64(3*v*v*u*op.P[0].X) + float64(3*v*u*u*op.P[1].X) + float64(u*u*u*op.P[2].X),
+					Y: float64(v*v*v*cur.Y) + float64(3*v*v*u*op.P[0].Y) + float64(3*v*u*u*op.P[1].Y) + float64(u*u*u*op.P[2].Y),
 				}
 				seg(prev, q)
 				prev = q

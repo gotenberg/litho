@@ -563,7 +563,7 @@ func blockWidths(b *box, cbw float64, rtl bool, w float64, wSet bool) {
 			rest := cbw - width - edges
 			switch {
 			case mlAuto && mrAuto:
-				ml = rest / 2
+				ml = float64(rest / 2)
 				mr = rest - ml
 			case mlAuto:
 				ml = rest - mr

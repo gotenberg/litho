@@ -182,7 +182,7 @@ func (e *engine) overflowRight(rb *box) float64 {
 		m typeset.Matrix
 	}
 	countAt := func(m typeset.Matrix, x, y float64) {
-		count(m.A*x+m.C*y+m.E, m.B*x+m.D*y+m.F)
+		count(float64(m.A*x)+float64(m.C*y)+m.E, float64(m.B*x)+float64(m.D*y)+m.F)
 	}
 	stack := []entry{{b: rb, m: typeset.Identity}}
 	for len(stack) > 0 {

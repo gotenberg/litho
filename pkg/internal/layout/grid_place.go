@@ -103,13 +103,13 @@ func repeatCount(l css.TrackList, avail float64, def bool, minSize, maxSize, gap
 	// total(k) = fixed + k*rep + gaps between nFixed + k*nRep tracks.
 	total := func(k int) float64 {
 		n := nFixed + k*nRep
-		return fixed + float64(k)*rep + gap*float64(max(n-1, 0))
+		return fixed + float64(float64(k)*rep) + float64(gap*float64(max(n-1, 0)))
 	}
 	room := (MaxTracksPerAxis - nFixed) / nRep
 	if room < 1 {
 		return 1
 	}
-	if rep+gap*float64(nRep) <= eps {
+	if rep+float64(gap*float64(nRep)) <= eps {
 		// Repetitions take no room: one, as Chromium resolves it.
 		return 1
 	}

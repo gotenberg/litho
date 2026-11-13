@@ -53,7 +53,7 @@ func (p *painter) textClip(b *box) *typeset.Path {
 			}
 			glyphs++
 			hs := hscale(t)
-			ox, oy := x+g.X*hs, y+g.Y
+			ox, oy := x+float64(g.X*hs), y+g.Y
 			ops = appendGlyph(ops, f, g.GID, ox, oy, k, hs, t.Skew)
 		}
 	}
@@ -157,8 +157,8 @@ func appendGlyph(ops []typeset.PathOp, f *gofont.Face, gid uint16, x, y, k, hs, 
 		return ops
 	}
 	pt := func(s opentype.SegmentPoint) typeset.Point {
-		up := float64(s.Y) * k
-		return typeset.Point{X: x + hs*float64(s.X)*k + skew*up, Y: y - up}
+		up := float64(float64(s.Y) * k)
+		return typeset.Point{X: x + float64(hs*float64(s.X)*k) + float64(skew*up), Y: y - up}
 	}
 	var last typeset.Point
 	open := false

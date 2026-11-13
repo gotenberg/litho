@@ -326,10 +326,10 @@ const defaultTabSize = 8
 // already carries.
 func (e *engine) tabWidth(b *box, x float64) float64 {
 	space := e.spaceWidth(b.st, b.lang)
-	step := defaultTabSize * space
+	step := float64(defaultTabSize * space)
 	switch b.st.TabSize.Kind {
 	case css.Number:
-		step = max(clamp(b.st.TabSize.Value), 0) * space
+		step = float64(max(clamp(b.st.TabSize.Value), 0) * space)
 	case css.Points:
 		step = max(clamp(b.st.TabSize.Value), 0)
 	case css.Auto, css.Percent, css.None, css.Normal, css.FlexContent, css.MinContent, css.MaxContent, css.FitContent, css.Stretch, css.Calc:
@@ -337,7 +337,7 @@ func (e *engine) tabWidth(b *box, x float64) float64 {
 	if step <= eps {
 		return 0
 	}
-	next := (math.Floor(x/step+eps) + 1) * step
+	next := float64((math.Floor(x/step+eps) + 1) * step)
 	if next-x < space/2 {
 		next += step
 	}
@@ -1306,7 +1306,7 @@ func (e *engine) leading(lead float64) (float64, float64) {
 	if !e.opts.PixelFontMetrics {
 		return lead / 2, lead / 2
 	}
-	up := math.Floor(lead/2/css.Pt+leadingSlack) * css.Pt
+	up := float64(math.Floor(lead/2/css.Pt+leadingSlack) * css.Pt)
 	return up, lead - up
 }
 
@@ -1317,7 +1317,7 @@ func alignShift(va css.VerticalAlign, parent *vbox, above, below, lh float64) fl
 	ps := parent.shift
 	switch va.Kind {
 	case css.Sub:
-		return ps + parent.size*0.2
+		return ps + float64(parent.size*0.2)
 	case css.Super:
 		return ps - parent.size/3
 	case css.TextTop:
@@ -1325,7 +1325,7 @@ func alignShift(va css.VerticalAlign, parent *vbox, above, below, lh float64) fl
 	case css.TextBottom:
 		return ps + parent.cd - below
 	case css.Middle:
-		return ps - parent.xh/2 + (above-below)/2
+		return ps - float64(parent.xh/2) + float64((above-below)/2)
 	case css.AlignLength:
 		return ps - resolve(va.Length, lh)
 	case css.Baseline, css.AlignTop, css.AlignBottom:
@@ -1900,7 +1900,7 @@ func (s *inlineState) align(l *lineBox, indent float64, last bool) {
 				off = free
 			}
 		case css.AlignCenter:
-			off = free / 2
+			off = float64(free / 2)
 			if ltr {
 				off += indent
 			}

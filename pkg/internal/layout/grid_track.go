@@ -143,7 +143,7 @@ func (z *gridSizer) gaps(s, e int) float64 {
 			n++
 		}
 	}
-	return z.gap * float64(max(n-1, 0))
+	return float64(z.gap * float64(max(n-1, 0)))
 }
 
 // spansFlex reports an item spanning a flexible track.
@@ -476,8 +476,8 @@ func share(cur, lim, inc []float64, space float64, pick []bool, weights []float6
 			if weights != nil {
 				w = weights[i]
 			}
-			inc[i] += step * w
-			space -= step * w
+			inc[i] += float64(step * w)
+			space -= float64(step * w)
 			if cur[i]+inc[i] >= lim[i]-eps {
 				frozen[i] = true
 			}

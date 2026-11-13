@@ -257,9 +257,9 @@ func (flexFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 		n++
 	}
 	if ax.row && n > 1 {
-		hi += gap * float64(n-1)
+		hi += float64(gap * float64(n-1))
 		if !ax.wrap {
-			lo += gap * float64(n-1)
+			lo += float64(gap * float64(n-1))
 		}
 	}
 	return lo, max(hi, lo)
@@ -411,7 +411,7 @@ func (e *engine) layoutFlex(b *box, cb cblock, top float64) float64 {
 			for _, it := range ln.items {
 				s += it.outerHypo()
 			}
-			widest = max(widest, s+mainGap*float64(len(ln.items)-1))
+			widest = max(widest, s+float64(mainGap*float64(len(ln.items)-1)))
 		}
 		innerMain = clampH(widest)
 	}
@@ -871,7 +871,7 @@ func collectLines(items []*fitem, avail, gap float64, wrap bool) []*flexLine {
 // resolveFlexible resolves the flexible lengths of the items of one line
 // of inner main size main (CSS Flexbox 1, 9.7).
 func resolveFlexible(items []*fitem, main, gap float64) {
-	gaps := gap * float64(len(items)-1)
+	gaps := float64(gap * float64(len(items)-1))
 	sum := gaps
 	for _, it := range items {
 		sum += it.outerHypo()
@@ -931,7 +931,7 @@ func resolveFlexible(items []*fitem, main, gap float64) {
 			} else {
 				scaled := 0.0
 				for _, it := range unfrozen {
-					scaled += it.shrink * it.base
+					scaled += float64(it.shrink * it.base)
 				}
 				for _, it := range unfrozen {
 					if scaled > 0 {
@@ -1142,8 +1142,8 @@ func alignCross(ln *flexLine, ax flexAxes) {
 			}
 			switch {
 			case it.cAuto[0] && it.cAuto[1]:
-				it.cm[0] += free / 2
-				it.cm[1] += free / 2
+				it.cm[0] += float64(free / 2)
+				it.cm[1] += float64(free / 2)
 			case it.cAuto[0]:
 				it.cm[0] += free
 			default:
