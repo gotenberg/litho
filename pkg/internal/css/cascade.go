@@ -310,6 +310,9 @@ type ComputeOptions struct {
 	// maxSteps lowers the step budget below maxComputeSteps, for tests;
 	// zero keeps it.
 	maxSteps int
+	// noReuse computes every element's style without reusing an equal
+	// cascade's (reuse.go), for tests.
+	noReuse bool
 }
 
 // Computed holds the computed style of every element of a tree. It is
@@ -582,6 +585,9 @@ type computeState struct {
 	// ::first-letter and ::first-line, for [Computed.FirstLetter] and
 	// [Computed.FirstLine], nil for none.
 	letterCands, lineCands map[*html.Node][]cand
+	// reuse remembers the styles of the cascades computed, for the
+	// elements whose cascade is the same (reuse.go).
+	reuse reuseCache
 }
 
 // fontKey is what selects a font for the ex and ch units.
@@ -668,6 +674,7 @@ func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOpt
 		exit   bool
 	}
 	stack := []frame{{n: root}}
+	cs.reuse.on = !opts.noReuse
 	for len(stack) > 0 {
 		f := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
@@ -702,6 +709,9 @@ func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOpt
 			stack = append(stack, frame{n: kid, parent: parent})
 		}
 	}
+	// The styles a restyle computes inherit from styles the caller
+	// gives, which no shared table holds: none is reused.
+	cs.reuse = reuseCache{}
 	c := &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result()}
 	if cs.letterCands != nil || cs.lineCands != nil {
 		c.re = &restyler{cs: cs, letters: cs.letterCands, lines: cs.lineCands}
@@ -847,6 +857,19 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		}
 		return cmp.Compare(a.idx, b.idx)
 	})
+	reuse := cs.reusable(cands, only)
+	var key reuseKey
+	if reuse {
+		key = cs.reuseKeyOf(cands, parentStyle, isRoot)
+		if st := cs.reused(key, cands); st != nil {
+			for _, c := range cands {
+				for _, w := range c.d.warns {
+					cs.warns.add(w)
+				}
+			}
+			return st, parentVars
+		}
+	}
 	var winners [numProps]any
 	// imp records the longhands an !important declaration sets, which an
 	// animation does not override (CSS Cascade 4, 6.2).
@@ -949,7 +972,11 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 	if only == nil && cs.animates(winners[pAnimationName], parentStyle) {
 		vars = cs.animate(&winners, &imp, pend, cands, parentStyle, parentVars, vars, isRoot)
 	}
-	return cs.computeStyle(&winners, parentStyle, isRoot), vars
+	st := cs.computeStyle(&winners, parentStyle, isRoot)
+	if reuse {
+		cs.remember(key, cands, st)
+	}
+	return st, vars
 }
 
 // linearClasses is how many distinct classes of an element match tells
