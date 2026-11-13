@@ -52,6 +52,57 @@ func TestScriptTextProperties(t *testing.T) {
 	}
 }
 
+// TestPercentFontSizes checks the font sizes in percent of each script
+// as Writer reads them: a common paragraph style's multiplies its parent
+// style's size, a common text style's the size of its own chain from the
+// default paragraph style's, whatever the paragraph sets; an automatic
+// style's leaves the size below it (see [stylePercent], which holds the
+// measurements).
+func TestPercentFontSizes(t *testing.T) {
+	size := func(name, family, parent, w, a, c string) string {
+		if parent != "" {
+			parent = ` style:parent-style-name="` + parent + `"`
+		}
+		return `<style:style style:name="` + name + `" style:family="` + family + `"` + parent + `><style:text-properties fo:font-size="` + w +
+			`" style:font-size-asian="` + a + `" style:font-size-complex="` + c + `"/></style:style>`
+	}
+	common := size("P20", "paragraph", "Standard", "20pt", "20pt", "20pt") +
+		size("C50", "paragraph", "P20", "50%", "50%", "50%") +
+		size("C200", "paragraph", "C50", "200%", "200%", "200%") +
+		size("N50", "text", "", "50%", "50%", "50%")
+	auto := size("A50", "paragraph", "P20", "50%", "50%", "50%") +
+		size("T50", "text", "", "50%", "50%", "50%")
+	const words = "abc 漢字 עברית"
+	for _, tc := range []struct {
+		name, body string
+		want       [3]float64
+	}{
+		{"common style under a 20-point parent", `<text:p text:style-name="C50">` + words + `</text:p>`, [3]float64{10, 10, 10}},
+		{"common style under a percentage parent", `<text:p text:style-name="C200">` + words + `</text:p>`, [3]float64{20, 20, 20}},
+		{"automatic paragraph style", `<text:p text:style-name="A50">` + words + `</text:p>`, [3]float64{20, 20, 20}},
+		{"automatic text style", `<text:p text:style-name="P20"><text:span text:style-name="T50">` + words + `</text:span></text:p>`, [3]float64{20, 20, 20}},
+		{"common text style", `<text:p text:style-name="P20"><text:span text:style-name="N50">` + words + `</text:span></text:p>`, [3]float64{6, 5.25, 6}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := doc{styles: common, contentAuto: auto, body: tc.body}
+			out := convertDoc(t, d.pack(t), office.Options{})
+			got := map[string]float64{}
+			for _, r := range runs(out.Pages[0]) {
+				for _, word := range []string{"abc", "漢字", "תירבע"} {
+					if strings.Contains(r.text, word) {
+						got[word] = r.size
+					}
+				}
+			}
+			for i, word := range []string{"abc", "漢字", "תירבע"} {
+				if !near(got[word], tc.want[i], 0.01) {
+					t.Errorf("%q prints at %v points, want %v", word, got[word], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
 // TestRuby checks that a ruby annotation prints at 6 points centred above
 // its base, its descent on the base's ascent, and below it under
 // style:ruby-position below; no warning.

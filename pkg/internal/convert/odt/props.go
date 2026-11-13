@@ -64,6 +64,88 @@ type textState struct {
 	// scripts are the size, weight, posture and language of Asian and
 	// complex text, which a style sets apart from the Western text's.
 	scripts [2]scriptText
+	// base holds the Western, Asian and complex sizes of the default
+	// paragraph style, where the size of a text style's chain starts, and
+	// chain the sizes that chain has reached ([builder.spanText]).
+	base, chain [3]float64
+}
+
+// percentRule says what a font size in percent is a percentage of, by the
+// layer that sets it: fo:font-size (ODF 1.3, Part 3, 20.190) and its
+// -asian and -complex counterparts (20.270 to 20.281). 20.190 allows a
+// percentage in a common style alone and bases it on the parent style's
+// size.
+type percentRule uint8
+
+const (
+	// percentOfBelow multiplies the size the layers below set: a common
+	// paragraph style's parent styles, the default style at the root
+	// (20.190), and a list level's text properties.
+	percentOfBelow percentRule = iota
+	// percentOfTextChain multiplies the size the chain of a common text
+	// style has reached, from the default paragraph style's: the text
+	// style's parent styles, not the paragraph it sits in.
+	percentOfTextChain
+	// percentIgnored leaves the size below as it is: an automatic style,
+	// where 20.190 allows no percentage, and the default style, which has
+	// no parent.
+	percentIgnored
+)
+
+// stylePercent returns the [percentRule] of the style st's text
+// properties, as Writer reads them.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, "abc 漢字 عربي" under
+//     fo:font-size, style:font-size-asian and style:font-size-complex all
+//     50% prints in all three scripts at 10 points (Tf) in a common
+//     paragraph style whose parent sets 20, at 20 under 200% below that
+//     style, at 6 under Standard; at 6 in a common text style without a
+//     parent inside a 20-point paragraph, and at 10 there when the
+//     default style sets 20 points and the paragraph 30; 50% and 150% in
+//     an automatic paragraph or text style print the size below; 50% in
+//     the default style prints 12.
+//   - probe, odt: a styles.xml without office:master-styles makes Writer
+//     read a common paragraph style's percentage against the default
+//     style's size (6 points at 50% under a 20-point parent), the import
+//     alone; a document Writer saves always holds master pages.
+//   - libreoffice/odt odfexport/tdf107696.odt: Heading 1 at 130% under the
+//     14-point Heading prints at 18.2 points.
+func stylePercent(st *odf.Style) percentRule {
+	switch {
+	case st.Auto:
+		return percentIgnored
+	case st.Family == odf.FamilyText:
+		return percentOfTextChain
+	}
+	return percentOfBelow
+}
+
+// foldSize lays the font size v of a layer over size, the size below, as
+// pct says: a length sets it, a percentage multiplies what pct names.
+// chain is the size a text style's chain has reached, which a length sets
+// too under percentOfTextChain.
+func foldSize(size, chain *float64, v string, pct percentRule) {
+	if pt, ok := odf.Length(v); ok && pt > 0 {
+		*size = pt
+		if pct == percentOfTextChain {
+			*chain = pt
+		}
+		return
+	}
+	pc, ok := odf.Percent(v)
+	if !ok || pc <= 0 {
+		return
+	}
+	switch pct {
+	case percentOfBelow:
+		*size *= pc
+	case percentOfTextChain:
+		*chain *= pc
+		*size = *chain
+	case percentIgnored:
+	}
 }
 
 // scriptText is the text properties an OpenDocument style gives Asian or
@@ -153,13 +235,10 @@ var textTransforms = map[string]css.TextTransform{
 }
 
 // foldText returns t with the text properties layer laid over it.
-func (b *builder) foldText(t textState, layer odf.Props) textState {
+// A size in percent follows pct.
+func (b *builder) foldText(t textState, layer odf.Props, pct percentRule) textState {
 	if v, ok := layer.Lookup("fo:font-size"); ok {
-		if pt, ok := odf.Length(v); ok && pt > 0 {
-			t.size = pt
-		} else if pc, ok := odf.Percent(v); ok && pc > 0 {
-			t.size *= pc
-		}
+		foldSize(&t.size, &t.chain[0], v, pct)
 	}
 	for i, suffix := range []string{"", "-asian", "-complex"} {
 		if name, ok := layer.Lookup("style:font-name" + suffix); ok {
@@ -185,7 +264,7 @@ func (b *builder) foldText(t textState, layer odf.Props) textState {
 		t.italic = v == "italic" || v == "oblique"
 	}
 	for i, suffix := range [2]string{"-asian", "-complex"} {
-		t.scripts[i] = foldScriptText(t.scripts[i], layer, suffix)
+		t.scripts[i] = foldScriptText(t.scripts[i], layer, suffix, &t.chain[i+1], pct)
 	}
 	if v, ok := layer.Lookup("fo:color"); ok {
 		if c, ok := odf.ParseColor(v); ok {
@@ -255,14 +334,11 @@ func (b *builder) foldText(t textState, layer odf.Props) textState {
 
 // foldScriptText returns s with the Asian or complex text properties of
 // layer, the attributes of suffix -asian or -complex, laid over it: a
-// size in percent is relative to the size below it.
-func foldScriptText(s scriptText, layer odf.Props, suffix string) scriptText {
+// size follows pct ([foldSize]), chain being the size the text style's
+// chain has reached.
+func foldScriptText(s scriptText, layer odf.Props, suffix string, chain *float64, pct percentRule) scriptText {
 	if v, ok := layer.Lookup("style:font-size" + suffix); ok {
-		if pt, ok := odf.Length(v); ok && pt > 0 {
-			s.size = pt
-		} else if pc, ok := odf.Percent(v); ok && pc > 0 {
-			s.size *= pc
-		}
+		foldSize(&s.size, chain, v, pct)
 	}
 	if v, ok := layer.Lookup("style:font-weight" + suffix); ok {
 		s.weight = fontWeight(v, s.weight)

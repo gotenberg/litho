@@ -376,7 +376,7 @@ func (item *itemCtx) attach(b *builder, n *layout.Node, t textState) {
 		return
 	}
 	lvl := item.lvl
-	lt := b.foldText(t, lvl.Text)
+	lt := b.foldText(t, lvl.Text, percentOfBelow)
 	lt.under, lt.through, lt.over = decoLine{}, decoLine{}, decoLine{}
 	if cs := lvl.El.A(odf.NSText, "style-name"); cs != "" {
 		lt = b.spanText(lt, cs)

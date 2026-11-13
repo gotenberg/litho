@@ -57,11 +57,6 @@ func TestConvert_TextProperties(t *testing.T) {
 				t.Errorf("size = %v, want 20", l.size)
 			}
 		}},
-		{"size in percent", `fo:font-size="50%"`, func(t *testing.T, l textLine) {
-			if !near(l.size, 6, 0.01) {
-				t.Errorf("size = %v, want 6", l.size)
-			}
-		}},
 		{"superscript", `style:text-position="super 58%"`, func(t *testing.T, l textLine) {
 			if !near(l.size, 12*0.58, 0.01) {
 				t.Errorf("size = %v, want 6.96", l.size)

@@ -410,12 +410,13 @@ func (b *builder) paraStyleName(el *odf.Element) string {
 
 // paraText returns the text properties of the paragraph style name.
 func (b *builder) paraText(name string) textState {
-	t := newTextState()
-	for _, l := range b.styles.Layers(b.scope, odf.FamilyParagraph, name, odf.TextProps) {
-		t = b.foldText(t, l)
+	t := b.foldText(newTextState(), b.styles.Default(odf.FamilyParagraph, odf.TextProps), percentIgnored)
+	t.base = [3]float64{t.size, t.scripts[0].size, t.scripts[1].size}
+	for _, st := range b.styles.Chain(b.scope, odf.FamilyParagraph, name) {
+		t = b.foldText(t, st.Props(odf.TextProps), stylePercent(st))
 	}
 	for _, l := range b.builtinLayers(name, odf.TextProps) {
-		t = b.foldText(t, l)
+		t = b.foldText(t, l, percentOfBelow)
 	}
 	return t
 }
@@ -593,10 +594,13 @@ func (ws *wsState) collapse(s string) string {
 
 // spanText returns t with the text properties of the text style name laid
 // over it, its chain from the farthest (the text family has no default
-// style that would reset the paragraph's).
+// style that would reset the paragraph's). A size in percent of a common
+// text style multiplies its chain's size, which starts from the default
+// paragraph style's ([stylePercent]).
 func (b *builder) spanText(t textState, name string) textState {
+	t.chain = t.base
 	for _, st := range b.styles.Chain(b.scope, odf.FamilyText, name) {
-		t = b.foldText(t, st.Props(odf.TextProps))
+		t = b.foldText(t, st.Props(odf.TextProps), stylePercent(st))
 	}
 	return t
 }
