@@ -1147,7 +1147,7 @@ func (e *engine) layoutPositionedInColumns(b *box) {
 // it moves to the next column when it straddles a cut, overflowing one it
 // is taller than.
 func (e *engine) layoutContextIn(b *box, cb cblock, top float64) float64 {
-	b.monoCol = e.cols != nil && b.parent != nil && (b.st.Overflow != css.OverflowVisible || b.st.ScrollContainer()) && !isMulticol(b)
+	b.monoCol = e.cols != nil && b.parent != nil && (b.st.Overflow != css.OverflowVisible && !b.st.ClipOnly() || b.st.ScrollContainer()) && !isMulticol(b)
 	if !b.monoCol {
 		e.layoutOwnContext(b, cb)
 		return top

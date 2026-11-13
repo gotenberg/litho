@@ -38,6 +38,9 @@ type Columns struct {
 	// scroller records an overflow of scroll or auto, read through
 	// [Style.ScrollContainer].
 	scroller bool
+	// clipOnly records an overflow of clip, read through
+	// [Style.ClipOnly].
+	clipOnly bool
 	// Tracks, when not empty, gives each column of a row its own width and
 	// the gap after it, as the Office formats lay columns of different
 	// widths out (see [ColumnTrack]); no CSS property sets it. The column
@@ -55,6 +58,14 @@ type scrollOverflow struct{}
 // container, which is monolithic in a fragmentation context (CSS
 // Fragmentation 3, 4.1), as Chromium lays it out in columns.
 func (s *Style) ScrollContainer() bool { return s.Columns.scroller }
+
+// clipOverflow is a specified overflow of clip, alone or beside visible.
+type clipOverflow struct{}
+
+// ClipOnly reports an overflow of clip: the box clips its content as
+// hidden does but is no scroll container and establishes no formatting
+// context (CSS Overflow 3, 3.1), so it fragments as a block in flow does.
+func (s *Style) ClipOnly() bool { return s.Columns.clipOnly }
 
 // Wrap reports column-wrap: wrap, which starts a new row of columns below
 // a full one instead of an overflow column; auto behaves as wrap when the

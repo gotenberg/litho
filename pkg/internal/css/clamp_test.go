@@ -58,3 +58,26 @@ func TestBlockEllipsis_Inherits(t *testing.T) {
 		t.Errorf("child clamp = %+v", got)
 	}
 }
+
+func TestOverflow_ClipOnly(t *testing.T) {
+	// CSS Overflow 3, 3.1: clip clips without making a scroll container;
+	// beside hidden, scroll or auto it computes to hidden.
+	tests := []struct {
+		decl         string
+		clip, scroll bool
+		wantClipped  bool
+	}{
+		{"overflow: clip", true, false, true},
+		{"overflow: clip visible", true, false, true},
+		{"overflow: hidden clip", false, false, true},
+		{"overflow: auto clip", false, true, true},
+		{"overflow: hidden", false, false, true},
+		{"overflow: visible", false, false, false},
+	}
+	for _, tt := range tests {
+		st := styleOf(t, tt.decl)
+		if st.ClipOnly() != tt.clip || st.ScrollContainer() != tt.scroll || (st.Overflow == OverflowHidden) != tt.wantClipped {
+			t.Errorf("%s: clip only %v, scroll container %v, overflow %v", tt.decl, st.ClipOnly(), st.ScrollContainer(), st.Overflow)
+		}
+	}
+}

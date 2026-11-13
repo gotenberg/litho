@@ -591,12 +591,14 @@ func displayName(d Display) string {
 // printed at their initial scroll position and clipped to their padding
 // box, as Chromium prints them, and a scroll container is marked as one
 // (see [scrollOverflow]). Two values compute to hidden when either clips.
+// clip with no hidden, scroll or auto beside it is marked as such (see
+// [clipOverflow]).
 func parseOverflow(v []token, _ *declCtx) (any, bool) {
 	if len(v) < 1 || len(v) > 2 {
 		return nil, false
 	}
 	out := OverflowVisible
-	scroll := false
+	scroll, hidden := false, false
 	for _, t := range v {
 		if t.typ != tIdent {
 			return nil, false
@@ -605,14 +607,19 @@ func parseOverflow(v []token, _ *declCtx) (any, bool) {
 		case "visible":
 		case "scroll", "auto", "overlay":
 			scroll, out = true, OverflowHidden
-		case "hidden", "clip":
+		case "hidden":
+			hidden, out = true, OverflowHidden
+		case "clip":
 			out = OverflowHidden
 		default:
 			return nil, false
 		}
 	}
-	if scroll {
+	switch {
+	case scroll:
 		return scrollOverflow{}, true
+	case out == OverflowHidden && !hidden:
+		return clipOverflow{}, true
 	}
 	return out, true
 }
@@ -783,12 +790,14 @@ func init() {
 		{pOverflow, propDef{name: "overflow", parse: parseOverflow, compute: func(_ *styler, st *Style, v any) {
 			switch o := v.(type) {
 			case Overflow:
-				st.Overflow, st.Columns.scroller = o, false
+				st.Overflow, st.Columns.scroller, st.Columns.clipOnly = o, false, false
 			case scrollOverflow:
 				st.Overflow, st.Columns.scroller = OverflowHidden, true
+			case clipOverflow:
+				st.Overflow, st.Columns.scroller, st.Columns.clipOnly = OverflowHidden, false, true
 			}
 		}, copyFrom: func(dst, src *Style) {
-			dst.Overflow, dst.Columns.scroller = src.Overflow, src.Columns.scroller
+			dst.Overflow, dst.Columns.scroller, dst.Columns.clipOnly = src.Overflow, src.Columns.scroller, src.Columns.clipOnly
 		}}},
 		{pBoxSizing, enumProp("box-sizing", false, func(s *Style) *BoxSizing { return &s.BoxSizing }, map[string]BoxSizing{
 			"content-box": ContentBox, "border-box": BorderBox,

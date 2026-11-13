@@ -1904,6 +1904,9 @@ func equalColumns(a, b *Columns) bool {
 	if a.scroller != b.scroller {
 		return false
 	}
+	if a.clipOnly != b.clipOnly {
+		return false
+	}
 	if (a.Tracks == nil) != (b.Tracks == nil) || len(a.Tracks) != len(b.Tracks) {
 		return false
 	}
@@ -1930,6 +1933,7 @@ func hashColumns(h uint64, x *Columns) uint64 {
 	h = hashDimension(h, &x.Height)
 	h = mix(h, uint64(x.wrap))
 	h = mixBool(h, x.scroller)
+	h = mixBool(h, x.clipOnly)
 	h = mixBool(h, x.Tracks == nil)
 	h = mix(h, uint64(len(x.Tracks)))
 	for i1 := range x.Tracks {
