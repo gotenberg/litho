@@ -29,6 +29,9 @@ type ParseOptions struct {
 	FetchCode func(err error) warn.Code
 	// Logger receives debug records of dropped imports; nil discards them.
 	Logger *slog.Logger
+	// predefined parses the predefined counter styles, whose names no
+	// document rule may define.
+	predefined bool
 }
 
 // Stylesheet is a parsed stylesheet with its imports. It is immutable and
@@ -207,7 +210,7 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 			if !it.hasBlock {
 				return
 			}
-			if r, ok := parseCounterStyleRule(it.prelude, it.block, c); ok && sp.count() {
+			if r, ok := parseCounterStyleRule(it.prelude, it.block, c, sp.opts.predefined); ok && sp.count() {
 				r.cond = cond
 				sp.sheet.counterStyles = append(sp.sheet.counterStyles, r)
 			}

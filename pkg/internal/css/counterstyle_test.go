@@ -98,6 +98,7 @@ func TestCounterStyles_Rules(t *testing.T) {
 		@counter-style decimal { system: cyclic; symbols: no }
 		@counter-style lower-roman { system: cyclic; symbols: R }
 		@counter-style Mixed { system: cyclic; symbols: m }
+		@counter-style my-circle { system: extends circle }
 	`), ParseOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -122,6 +123,7 @@ func TestCounterStyles_Rules(t *testing.T) {
 		{"decimal", 2, "2"},
 		{"lower-roman", 2, "R"},
 		{"Mixed", 1, "m"}, {"mixed", 1, "1"},
+		{"my-circle", 4, "◦"}, {"square", 1, "▪"}, {"disc", 1, "•"},
 	} {
 		if got := cs.Counter(tc.style, tc.v); got != tc.want {
 			t.Errorf("%s(%d) = %q, want %q", tc.style, tc.v, got, tc.want)

@@ -50,7 +50,7 @@ var predefinedNames = sync.OnceValue(func() map[string]bool {
 // buildPredefined fills predefined.
 func buildPredefined() {
 	out := map[string]*counterStyleRule{}
-	sheet, _ := Parse(context.Background(), []byte(predefinedCounterStyleSheet), ParseOptions{}) //nolint:errcheck // a constant sheet parses whole; TestPredefinedCounterStyles reads every style
+	sheet, _ := Parse(context.Background(), []byte(predefinedCounterStyleSheet), ParseOptions{predefined: true}) //nolint:errcheck // a constant sheet parses whole; TestPredefinedCounterStyles reads every style
 	if sheet != nil {
 		for _, r := range sheet.counterStyles {
 			out[r.name] = r

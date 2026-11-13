@@ -125,10 +125,11 @@ func counterStyleName(ident string) string {
 // parseCounterStyleRule parses the prelude and block of an @counter-style
 // rule (CSS Counter Styles 3, 3). It reports false for a rule that
 // defines nothing: a name that is not a <custom-ident> or that a rule
-// cannot define. An invalid descriptor is dropped alone.
-func parseCounterStyleRule(prelude, block []token, c *declCtx) (*counterStyleRule, bool) {
+// cannot define, unless predefined, for the predefined styles' own rules.
+// An invalid descriptor is dropped alone.
+func parseCounterStyleRule(prelude, block []token, c *declCtx, predefined bool) (*counterStyleRule, bool) {
 	p := significant(prelude)
-	if len(p) != 1 || p[0].typ != tIdent || cssWideKeywords[lower(p[0].value)] || fixedCounterNames[lower(p[0].value)] {
+	if len(p) != 1 || p[0].typ != tIdent || cssWideKeywords[lower(p[0].value)] || fixedCounterNames[lower(p[0].value)] && !predefined {
 		return nil, false
 	}
 	r := &counterStyleRule{name: counterStyleName(p[0].value)}
