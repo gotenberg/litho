@@ -206,7 +206,7 @@ func onPage(items []*ditem, page, depth int) {
 // band returns the column flow slice of column i of s in the container b.
 func (s *colSet) band(b *box, i int) (float64, float64) {
 	f := s.frags[min(max(i, 0), len(s.frags)-1)]
-	return b.y + f.vtop, b.y + f.vtop + f.h
+	return b.y + f.vtop, b.y + f.end()
 }
 
 // cutItem returns the items of the group it per column of s, groups

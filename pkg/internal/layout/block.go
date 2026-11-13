@@ -914,7 +914,7 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 			blockWidths(b, avail, rtl, w, true)
 			b.w, b.h = w, h
 			b.x = besideX(b, lo, hi, rtl)
-			b.y = e.fit(top, b.borderH())
+			b.y = e.fitWhole(top, b.borderH())
 		} else {
 			// A table's width comes from its columns, its auto margins
 			// centre it (CSS 2.1, 17.4).
@@ -1859,7 +1859,7 @@ func (d *mcolData) place(b *box, y float64) float64 {
 	rel := y - b.y
 	for _, s := range d.sets {
 		for _, f := range s.frags {
-			if rel >= f.vtop-eps && rel < f.vtop+f.h-eps && f.row < len(s.rows) {
+			if rel >= f.vtop-eps && rel < f.end()-eps && f.row < len(s.rows) {
 				return b.y + s.rows[f.row].top + rel - f.vtop
 			}
 		}

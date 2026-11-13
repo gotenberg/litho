@@ -339,6 +339,24 @@ func (e *engine) fit(y, h float64) float64 {
 	return y
 }
 
+// fitWhole returns where a monolithic piece of height h whose top would
+// be at y lands, as [engine.fit] does; in columns, a piece that reaches
+// past the end of the column it lands in overflows that column whole
+// ([colCtx.overflow]).
+func (e *engine) fitWhole(y, h float64) float64 {
+	y = e.fit(y, h)
+	e.overflowColumn(y, h)
+	return y
+}
+
+// overflowColumn records, in columns, a monolithic piece of height h at y
+// that reaches past the end of its column ([colCtx.overflow]).
+func (e *engine) overflowColumn(y, h float64) {
+	if e.cols != nil && e.paginating() && h > 0 {
+		e.cols.overflow(y, y+h)
+	}
+}
+
 // clamp returns v bounded to [-maxLength, maxLength], 0 when it is not
 // finite.
 func clamp(v float64) float64 {

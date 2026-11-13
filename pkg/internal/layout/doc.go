@@ -162,7 +162,9 @@
 // goes to overflow columns. column-height and column-wrap (CSS Multicol 2)
 // wrap rows. Scroll containers and boxes with overflow: hidden are
 // monolithic in columns, and absolutely positioned boxes break at the
-// columns as the flow does.
+// columns as the flow does. A monolithic piece taller than what its column
+// has left from its top overflows that column whole, and the content
+// after it starts at the top of the next column.
 //
 // # Positioning
 //

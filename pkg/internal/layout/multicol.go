@@ -106,11 +106,19 @@ type colSet struct {
 }
 
 // colFrag is one column: the top of its slice of the column flow and its
-// height, the row it sits in and its index in the row.
+// height, the row it sits in and its index in the row. over is the column
+// flow the slice holds past the column's height: a monolithic piece taller
+// than what the column has left from its top, which overflows the column
+// ([colCtx.overflow]).
 type colFrag struct {
 	vtop, h  float64
+	over     float64
 	row, col int
 }
+
+// end returns the column flow position the slice of f ends at, where the
+// next column's starts.
+func (f colFrag) end() float64 { return f.vtop + f.h + f.over }
 
 // colRow is a row of columns: its top, its columns' height, the height
 // it takes in the container, how many columns hold content, and whether a
@@ -258,7 +266,7 @@ func (c *colCtx) newRow(top float64) {
 	h = max(h, minColumnHeight)
 	vtop := c.start
 	if n := len(c.frags); n > 0 {
-		vtop = c.frags[n-1].vtop + c.frags[n-1].h
+		vtop = c.frags[n-1].end()
 	}
 	c.rows = append(c.rows, colRow{top: top, h: h, next: next, first: len(c.frags)})
 	c.frags = append(c.frags, colFrag{vtop: vtop, h: h, row: r})
@@ -277,7 +285,7 @@ func (c *colCtx) grow() bool {
 	last := c.frags[n-1]
 	row := c.rows[last.row]
 	if (last.col+1 < c.target() && (row.stop == 0 || last.col+1 < row.stop)) || !row.next {
-		c.frags = append(c.frags, colFrag{vtop: last.vtop + last.h, h: last.h, row: last.row, col: last.col + 1})
+		c.frags = append(c.frags, colFrag{vtop: last.end(), h: last.h, row: last.row, col: last.col + 1})
 		return true
 	}
 	top := row.top + row.h + c.gap
@@ -318,8 +326,7 @@ func (c *colCtx) breakRow(y float64) float64 {
 
 // bottom returns the column flow position the last column ends at.
 func (c *colCtx) bottom() float64 {
-	l := c.frags[len(c.frags)-1]
-	return l.vtop + l.h
+	return c.frags[len(c.frags)-1].end()
 }
 
 // of returns the column the column flow position y lies in.
@@ -355,7 +362,7 @@ func (c *colCtx) top(i int) float64 {
 		return c.frags[max(i, 0)].vtop
 	}
 	last := c.frags[len(c.frags)-1]
-	return last.vtop + float64(last.h*float64(i-len(c.frags)+1))
+	return last.end() + float64(last.h*float64(i-len(c.frags)))
 }
 
 // height returns the height of column i.
@@ -365,6 +372,44 @@ func (c *colCtx) height(i int) float64 {
 		return minColumnHeight
 	}
 	return c.frags[min(max(i, 0), len(c.frags)-1)].h
+}
+
+// overflow records that a monolithic piece whose top is at y ends at
+// bottom, past the end of its column: the column's slice holds the whole
+// piece, and the next column starts at its bottom, the columns grown past
+// it given up. CSS Fragmentation 3, 4.4 lets a user agent slice such a
+// piece; in columns Chromium does not, on screen as in print: it lets the
+// piece overflow its column and starts the content after it at the top of
+// the next column, and a box around it that ends before its bottom ends in
+// its column.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) draws an
+//     image, an inline image, an inline block and a box of overflow hidden
+//     150 pixels tall in a column 100 pixels tall whole in the column whose
+//     top they start at, overflowing it, and the block after them at the
+//     top of the next column, in a screenshot and through its PDF route
+//     alike (the overflow hidden box aside: the PDF route slices it).
+//   - wpt, css/css-break/block-max-height-004.html: Chromium draws the
+//     80 pixel image whole in the first 30 pixel column, with the bottom
+//     border of its 40 pixel block, and the block's overflowing sibling
+//     content from the top of the second column.
+//   - wpt, css/css-break/tall-line-in-short-fragmentainer-001.html: an
+//     inline block taller than its column draws whole in it.
+func (c *colCtx) overflow(y, bottom float64) {
+	i := c.of(y)
+	if i >= len(c.frags) {
+		return
+	}
+	f := &c.frags[i]
+	if bottom <= f.end()+eps {
+		return
+	}
+	f.over = bottom - f.vtop - f.h
+	row := f.row
+	c.frags = c.frags[:i+1]
+	c.rows = c.rows[:row+1]
 }
 
 // reach records that the content reached column flow position y: the
@@ -1165,7 +1210,7 @@ func (e *engine) layoutContextIn(b *box, cb cblock, top float64) float64 {
 	e.noPaginate++
 	e.layoutOwnContext(b, cb)
 	e.noPaginate--
-	if y := e.fit(top, b.borderH()); y != top {
+	if y := e.fitWhole(top, b.borderH()); y != top {
 		b.shift(0, y-top)
 		return y
 	}

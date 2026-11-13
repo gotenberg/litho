@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"image/color"
 	"strings"
 	"testing"
 
@@ -505,4 +506,48 @@ func TestMulticol_FirstBaselineIsTheHighestColumns(t *testing.T) {
 	if !near((first-b.contentY())/css.Pt, 8) || !near((flow-b.contentY())/css.Pt, 18) {
 		t.Errorf("baselines %v and %v px below the top, want 8 (the second column) and 18 (the first line)", (first-b.contentY())/css.Pt, (flow-b.contentY())/css.Pt)
 	}
+}
+
+// TestMulticol_MonolithicOverflowsItsColumnWhole locks the overflow of a
+// monolithic piece taller than its column (CSS Fragmentation 3, 4.1 and
+// 4.4): an image and an inline block draw whole in the column they start
+// in, a box around the image that ends before the image's bottom ends in
+// that column, and the content after them starts at the top of the next
+// column, as Chromium draws them.
+//
+// # Corpus evidence
+//
+//   - wpt, css/css-break/block-max-height-004.html: the 80 pixel image in a
+//     30 pixel column, cut across three columns before.
+func TestMulticol_MonolithicOverflowsItsColumnWhole(t *testing.T) {
+	t.Parallel()
+	auto := func(s *css.Style) { s.Columns.Fill = css.FillAuto }
+	maxH := func(s *css.Style) { s.MaxHeight = css.Pts(px(4)) }
+	img := &Node{Kind: Replaced, Style: sty(width(1), height(8)), Picture: pic(color.NRGBA{B: 255, A: 255}, 1, 8)}
+	res := run(t, doc(el(sty(columns(2, 1), height(3), auto), el(sty(bg(lime), maxH), img, strip(red, width(1), height(8))))), page(9, 10))
+	assertPixels(t, res, 1, `
+		BG_R__R__
+		BG_R__R__
+		BG_R__R__
+		BG_______
+		B________
+		B________
+		B________
+		B________
+		_________
+		_________`)
+	zero := func(s *css.Style) { s.LineHeight = css.Dimension{Kind: css.Number, Value: 0} }
+	ib := el(sty(display(css.InlineBlock), width(1), height(8), bg(blue)))
+	res = run(t, doc(el(sty(columns(2, 1), height(3), auto), strip(lime), el(sty(zero), ib), strip(red))), page(9, 10))
+	assertPixels(t, res, 1, `
+		GG_B__RR_
+		___B_____
+		___B_____
+		___B_____
+		___B_____
+		___B_____
+		___B_____
+		___B_____
+		_________
+		_________`)
 }

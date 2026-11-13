@@ -1165,6 +1165,7 @@ func (e *engine) advance(l *lineBox) float64 {
 	for _, it := range l.items {
 		if it.atomic != nil && it.atomic.marginH() > area+eps {
 			l.overflows = true
+			e.overflowColumn(l.y, l.h)
 			return l.h
 		}
 	}
