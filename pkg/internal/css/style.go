@@ -1407,4 +1407,8 @@ type PageStyle struct {
 	// box grows or shrinks around it with its margins, over the size
 	// descriptor (CSS Page 3, 3.2, the page area).
 	AreaWidth, AreaHeight Dimension
+	// CounterReset, CounterIncrement and CounterSet are the counter
+	// properties of the page context (CSS Page 3, 6.1), filled by
+	// [Resolver.PageIn] when a page-margin box exists.
+	CounterReset, CounterIncrement, CounterSet []CounterOp
 }

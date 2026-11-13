@@ -199,11 +199,25 @@ func pageDescriptor(name string) bool {
 }
 
 // HasNamedPages reports whether an @page rule selects named or blank
-// pages, which only a layout that tracks page names can match.
+// pages, or pages by their index with :nth(), which only a layout that
+// reports each page can match.
 func (r *Resolver) HasNamedPages() bool {
 	for i := range r.pages {
 		for _, s := range r.pages[i].rule.sels {
-			if s.name != "" || s.blank {
+			if s.name != "" || s.blank || len(s.nth) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// HasNthPages reports whether an @page rule selects pages by their index
+// with :nth() (CSS GCPM 3, 3.1).
+func (r *Resolver) HasNthPages() bool {
+	for i := range r.pages {
+		for _, s := range r.pages[i].rule.sels {
+			if len(s.nth) > 0 {
 				return true
 			}
 		}
@@ -221,6 +235,37 @@ func (r *Resolver) HasMarginBoxes() bool {
 		}
 	}
 	return false
+}
+
+// MarginCounters returns the names of the counters, page and pages
+// aside, that counter() and counters() read in the content of a
+// page-margin box, sorted: their values in the document at the start of
+// each page show there (CSS Page 3, 6.1). A content value holding var()
+// is parsed only when cascaded, and is not read.
+func (r *Resolver) MarginCounters() []string {
+	var out []string
+	for i := range r.pages {
+		for _, m := range r.pages[i].rule.margins {
+			if m.box >= NumMarginBoxes {
+				continue
+			}
+			for _, d := range m.decls {
+				for _, e := range d.entries {
+					c, ok := e.v.(Content)
+					if !ok || e.id != pContent {
+						continue
+					}
+					for _, it := range c.Items {
+						if (it.Kind == ItemCounter || it.Kind == ItemCounters) && it.Text != "page" && it.Text != "pages" && !slices.Contains(out, it.Text) {
+							out = append(out, it.Text)
+						}
+					}
+				}
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // HasFootnoteArea reports whether an @page rule holds an @footnote rule
@@ -321,6 +366,7 @@ func (r *Resolver) PageIn(ctx context.Context, sel PageSelector, root *Style) (P
 		return PageStyle{}, err
 	}
 	pageCtx, vars := cs.cascade(ctxCands, root, nil, false)
+	ps.CounterReset, ps.CounterIncrement, ps.CounterSet = pageCtx.CounterReset, pageCtx.CounterIncrement, pageCtx.CounterSet
 	if fc := boxCands[footnoteArea]; len(fc) > 0 {
 		st, _ := cs.cascade(slices.Clone(fc), pageCtx, vars, false)
 		st.Display, st.Float, st.Position = Block, FloatNone, Static

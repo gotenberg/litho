@@ -19,12 +19,17 @@ type PageSelector struct {
 	// Blank is set for a page a forced break to a left or a right page
 	// left empty (CSS Page 3, 4.2.3).
 	Blank bool
+	// Index is the page's 1-based place in the document, which :nth()
+	// matches (CSS GCPM 3, 3.1).
+	Index int
 }
 
-// pageSel is a parsed page selector.
+// pageSel is a parsed page selector. nth holds the An+B of its :nth()
+// pseudo-classes, each of which the page's index must match.
 type pageSel struct {
 	name                      string
 	first, left, right, blank bool
+	nth                       [][2]int
 	spec                      uint32
 }
 
@@ -61,70 +66,136 @@ type pageDecl struct {
 }
 
 // parsePageSelectors parses a page selector list (CSS Page 3, 4.1); an
-// empty prelude matches every page.
-func parsePageSelectors(prelude []token) ([]pageSel, bool) {
+// empty prelude matches every page. A list litho cannot match returns
+// false, and the pseudo-class it does not support when that is the
+// reason: the whole rule is dropped, as an invalid selector drops a style
+// rule (Selectors 4, 3.1).
+func parsePageSelectors(prelude []token) ([]pageSel, string, bool) {
 	l := trimWS(prelude)
 	if len(l) == 0 {
-		return []pageSel{{}}, true
+		return []pageSel{{}}, "", true
 	}
 	var out []pageSel
 	for _, part := range splitCommas(l) {
 		part = trimWS(part)
 		if len(part) == 0 {
-			return nil, false
+			return nil, "", false
 		}
-		var s pageSel
-		i := 0
-		if part[0].typ == tIdent {
-			s.name = part[0].value
-			i++
+		s, unsupported, ok := parsePageSelector(part)
+		if !ok {
+			return nil, unsupported, false
 		}
-		for i < len(part) {
-			if part[i].typ != tColon || i+1 >= len(part) || part[i+1].typ != tIdent {
-				return nil, false
-			}
-			switch lower(part[i+1].value) {
-			case "first":
-				s.first = true
-			case "left":
-				s.left = true
-			case "right":
-				s.right = true
-			case "blank":
-				s.blank = true
-			default:
-				return nil, false
-			}
-			i += 2
-		}
-		// CSS Page 3, 4.2: page type names count as f, :first and :blank
-		// as g, :left and :right as h.
-		f, g, h := 0, 0, 0
-		if s.name != "" {
-			f = 1
-		}
-		if s.first {
-			g++
-		}
-		if s.blank {
-			g++
-		}
-		if s.left {
-			h++
-		}
-		if s.right {
-			h++
-		}
-		s.spec = packSpec(f, g, h)
 		out = append(out, s)
 	}
-	return out, true
+	return out, "", true
 }
+
+// parsePageSelector parses one page selector: an optional page type name
+// and its pseudo-classes, :first, :left, :right, :blank (CSS Page 3, 4.2)
+// and :nth(An+B) (CSS GCPM 3, 3.1).
+//
+// :nth() of a named page, and :nth(An+B of name), select pages inside a
+// page group (CSS GCPM 3, 3.2), which the layout does not track: they are
+// not supported, and neither is a pseudo-class the drafts do not define:
+// the second result names it.
+func parsePageSelector(part []token) (pageSel, string, bool) {
+	var s pageSel
+	i := 0
+	if part[0].typ == tIdent {
+		s.name = part[0].value
+		i++
+	}
+	for i < len(part) {
+		if part[i].typ != tColon || i+1 >= len(part) {
+			return pageSel{}, "", false
+		}
+		t := part[i+1]
+		i += 2
+		if t.typ == tFunction {
+			if lower(t.value) != "nth" {
+				return pageSel{}, ":" + lower(t.value) + "()", false
+			}
+			if s.name != "" {
+				return pageSel{}, s.name + ":nth()", false
+			}
+			a, b, ok := parseAnB(t.children)
+			if !ok {
+				if pageGroup(t.children) {
+					return pageSel{}, ":nth(of)", false
+				}
+				return pageSel{}, "", false
+			}
+			if len(s.nth) == maxPageNth {
+				return pageSel{}, "", false
+			}
+			s.nth = append(s.nth, [2]int{a, b})
+			continue
+		}
+		if t.typ != tIdent {
+			return pageSel{}, "", false
+		}
+		switch lower(t.value) {
+		case "first":
+			s.first = true
+		case "left":
+			s.left = true
+		case "right":
+			s.right = true
+		case "blank":
+			s.blank = true
+		default:
+			return pageSel{}, ":" + lower(t.value), false
+		}
+	}
+	// CSS Page 3, 4.4: page type names count as f, :first and :blank
+	// as g, :left and :right as h. The drafts give :nth() no weight
+	// (CSSWG issue 3524): it counts as g, as :first, the page it
+	// generalizes, and as WeasyPrint weighs it.
+	f, g, h := 0, len(s.nth), 0
+	if s.name != "" {
+		f = 1
+	}
+	if s.first {
+		g++
+	}
+	if s.blank {
+		g++
+	}
+	if s.left {
+		h++
+	}
+	if s.right {
+		h++
+	}
+	s.spec = packSpec(f, g, h)
+	return s, "", true
+}
+
+// pageGroup reports an :nth() argument that names a page group, An+B of
+// name (CSS GCPM 3, 3.2).
+func pageGroup(args []token) bool {
+	for _, t := range args {
+		if t.isIdent("of") {
+			return true
+		}
+	}
+	return false
+}
+
+// maxPageNth bounds the :nth() pseudo-classes of one page selector: 8.
+// Anti-DoS guard, not spec-mandated: a selector names one page pattern,
+// and every page of the document tests each.
+const maxPageNth = 8
 
 // matches reports whether the selector applies to the page sel names.
 func (s *pageSel) matches(sel PageSelector) bool {
 	if s.name != "" && s.name != sel.Name {
 		return false
+	}
+	for _, ab := range s.nth {
+		if !nthMatches(ab[0], ab[1], sel.Index) {
+			return false
+		}
 	}
 	return (!s.first || sel.First) && (!s.left || sel.Left) && (!s.right || sel.Right) && (!s.blank || sel.Blank)
 }

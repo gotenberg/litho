@@ -187,8 +187,16 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 				sp.nested(ctx, it.block, base, cond, depth)
 			}
 		case "page":
-			sels, ok := parsePageSelectors(it.prelude)
-			if !ok || !it.hasBlock || !sp.count() {
+			sels, unsupported, ok := parsePageSelectors(it.prelude)
+			if !ok {
+				if unsupported != "" {
+					c.warn(warn.CSSUnsupported, warn.Approximated, "an @page rule with the selector %s was ignored", unsupported)
+				} else {
+					c.warn(warn.CSSInvalid, warn.Approximated, "an @page rule with an invalid selector was ignored")
+				}
+				return
+			}
+			if !it.hasBlock || !sp.count() {
 				return
 			}
 			ctx, boxes := pageCtxDecls(it.block, c)

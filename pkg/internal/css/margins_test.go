@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // resolverOf returns the resolver of the author sheet src.
@@ -189,5 +191,82 @@ func TestPage_StopsOnCancel(t *testing.T) {
 	}
 	if _, err := r.PageIn(ctx, PageSelector{First: true}, nil); !errors.Is(err, context.Canceled) {
 		t.Errorf("PageIn on a cancelled context = %v, want context.Canceled", err)
+	}
+}
+
+func TestPage_NthSelector(t *testing.T) {
+	t.Parallel()
+	r := resolverOf(t, `
+		@page :nth(2n) { margin: 2pt }
+		@page :nth(3) { margin-top: 3pt }
+		@page :first { margin-top: 1pt }
+		@page :nth(1) { margin-top: 9pt }`)
+	if !r.HasNamedPages() {
+		t.Error("HasNamedPages false with :nth() rules")
+	}
+	for _, tc := range []struct {
+		index    int
+		top, rgt float64
+		auto     bool
+	}{
+		// :nth(1) and :first weigh the same; the later rule wins.
+		{index: 1, top: 9, auto: true},
+		{index: 2, top: 2, rgt: 2},
+		{index: 3, top: 3, auto: true},
+		{index: 4, top: 2, rgt: 2},
+		{index: 5, auto: true},
+	} {
+		ps := r.pageOf(t, PageSelector{Index: tc.index, First: tc.index == 1})
+		top, right := ps.Margin[Top], ps.Margin[Right]
+		if tc.top != 0 && (top.Kind != Points || top.Value != tc.top) || tc.top == 0 && top.Kind != Auto {
+			t.Errorf("page %d: top margin %+v, want %v", tc.index, top, tc.top)
+		}
+		if tc.auto != (right.Kind == Auto) || !tc.auto && right.Value != tc.rgt {
+			t.Errorf("page %d: right margin %+v, want %v", tc.index, right, tc.rgt)
+		}
+	}
+}
+
+func TestPage_UnsupportedSelectorsWarn(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ src, code, part string }{
+		{`@page chapter:nth(2) { margin: 1pt }`, "unsupported", "chapter:nth()"},
+		{`@page :nth(1 of chapter) { margin: 1pt }`, "unsupported", ":nth(of)"},
+		{`@page :recto { margin: 1pt }`, "unsupported", ":recto"},
+		{`@page :nth(x) { margin: 1pt }`, "invalid", "invalid selector"},
+	} {
+		s := mustParse(t, tc.src)
+		code := warn.CSSUnsupported
+		if tc.code == "invalid" {
+			code = warn.CSSInvalid
+		}
+		if !hasWarning(s.Warnings(), code, tc.part) {
+			t.Errorf("%s: warnings %v, want %s %q", tc.src, s.Warnings(), code, tc.part)
+		}
+		if len(s.pages) != 0 {
+			t.Errorf("%s: the rule was kept", tc.src)
+		}
+	}
+}
+
+func TestPageIn_PageContextCounters(t *testing.T) {
+	t.Parallel()
+	r := resolverOf(t, `
+		@page { counter-increment: page 2 sheet; @top-center { content: counter(page) counter(chapter) counters(sec, ".") } }
+		@page :first { counter-reset: page 5 }
+		@page :left { @bottom-left { content: counter(pages) counter(appendix) } }`)
+	ps, err := r.PageIn(t.Context(), PageSelector{Index: 1, First: true, Right: true}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []CounterOp{{Name: "page", Value: 5}}
+	if !reflect.DeepEqual(ps.CounterReset, want) {
+		t.Errorf("counter-reset %+v, want %+v", ps.CounterReset, want)
+	}
+	if want := []CounterOp{{Name: "page", Value: 2}, {Name: "sheet", Value: 1}}; !reflect.DeepEqual(ps.CounterIncrement, want) {
+		t.Errorf("counter-increment %+v, want %+v", ps.CounterIncrement, want)
+	}
+	if got, want := r.MarginCounters(), []string{"appendix", "chapter", "sec"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("margin counters %v, want %v", got, want)
 	}
 }
