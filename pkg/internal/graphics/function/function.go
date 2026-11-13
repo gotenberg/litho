@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/graphics/postscript"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
@@ -497,7 +498,7 @@ func (f *Function) evalSampled(inputs []float64) []float64 {
 			continue
 		}
 		for j := range f.outputs {
-			out[j] += weight * f.samples[idx*f.outputs+j]
+			out[j] += float64(weight * f.samples[idx*f.outputs+j])
 		}
 	}
 
@@ -544,11 +545,11 @@ func (f *Function) evalStitching(x float64) ([]float64, error) {
 func (f *Function) evalExponential(x float64) []float64 {
 	xn := x
 	if f.expN != 1 {
-		xn = math.Pow(x, f.expN)
+		xn = detmath.Pow(x, f.expN)
 	}
 	out := make([]float64, len(f.c0))
 	for j := range f.c0 {
-		out[j] = f.c0[j] + xn*(f.c1[j]-f.c0[j])
+		out[j] = f.c0[j] + float64(xn*(f.c1[j]-f.c0[j]))
 		if len(f.rng) == 2*len(f.c0) {
 			out[j] = clamp(out[j], f.rng[2*j], f.rng[2*j+1])
 		}
@@ -578,7 +579,7 @@ func interpolate(x, xmin, xmax, ymin, ymax float64) float64 {
 	if xmin == xmax {
 		return ymin
 	}
-	return ymin + (x-xmin)*((ymax-ymin)/(xmax-xmin))
+	return ymin + float64((x-xmin)*((ymax-ymin)/(xmax-xmin)))
 }
 
 func clamp(v, lo, hi float64) float64 {
