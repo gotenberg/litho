@@ -9,6 +9,7 @@ import (
 	dom "golang.org/x/net/html"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -275,6 +276,30 @@ func (b *builder) maskSource(ctx context.Context, url string, box typeset.Rect) 
 		Opacity:   1,
 		Content:   content,
 	}}, alpha, found
+}
+
+// filterSource returns the filter element url names for an element whose
+// border box is box, in points in the layout's coordinates: the filter's
+// user space has its origin at the box's top left and a unit of one CSS
+// pixel, the box its bounding box (Filter Effects 1, 7).
+func (b *builder) filterSource(ctx context.Context, url string, box typeset.Rect) (*layout.FilterRef, bool) {
+	doc, id, ok := b.definition(ctx, url, "filter")
+	if !ok {
+		return nil, false
+	}
+	f, found := doc.Filter(ctx, id, box.Width/css.Pt, box.Height/css.Pt)
+	if !found {
+		return nil, false
+	}
+	return &layout.FilterRef{
+		Region:  typeset.Rect{X: box.X + f.X*css.Pt, Y: box.Y + f.Y*css.Pt, Width: f.W * css.Pt, Height: f.H * css.Pt},
+		Sigma:   f.Sigma * css.Pt,
+		Skipped: f.Skipped,
+		Apply: func(ctx context.Context, s *effect.Surface) (*effect.Surface, error) {
+			k := s.Grid.Scale * css.Pt
+			return f.Apply(ctx, s, k, (s.Grid.X-box.X)/css.Pt, (s.Grid.Y-box.Y)/css.Pt)
+		},
+	}, true
 }
 
 // svgTitle returns the text of the first title child of an svg element,

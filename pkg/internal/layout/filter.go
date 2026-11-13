@@ -15,8 +15,62 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
-// errFilterUnsupported reports a filter list the layout cannot apply.
-var errFilterUnsupported = errors.New("filter not applied")
+// errFilterUnsupported reports a filter list the layout cannot apply, and
+// errNoFilter one that names no filter element, which applies no filter
+// (Filter Effects 1, 6).
+var (
+	errFilterUnsupported = errors.New("filter not applied")
+	errNoFilter          = errors.New("filter names no filter element")
+)
+
+// FilterRef is the SVG filter element a filter list names, resolved for
+// the element it filters (Filter Effects 1, 7).
+type FilterRef struct {
+	// Region is where the filter draws, in the layout's coordinates; one
+	// without area draws nothing.
+	Region typeset.Rect
+	// Sigma is the smallest standard deviation of the filter's blurs, in
+	// points, 0 for none: it sets the resolution of the element's image.
+	Sigma float64
+	// Skipped, when not nil, says why the filter is not applied: the
+	// element is drawn unfiltered, with a warning.
+	Skipped error
+	// Apply filters s, the element's rendering on a grid in the layout's
+	// coordinates, and returns the result: a new surface of s's size and
+	// grid, which the caller releases.
+	Apply func(ctx context.Context, s *effect.Surface) (*effect.Surface, error)
+}
+
+// filterRefs resolves the url() entries of fs for an element whose border
+// box is box, nil at the other entries. A url that names no filter
+// element ignores the whole list, as Filter Effects 1, 6 says and
+// Chromium prints: the error wraps errNoFilter.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium prints a box of filter: url(#missing) as its
+//     vector fill, no image.
+func (e *engine) filterRefs(fs []css.Filter, box typeset.Rect) ([]*FilterRef, error) {
+	refs := make([]*FilterRef, len(fs))
+	for i, f := range fs {
+		if f.Kind != css.FilterURL {
+			continue
+		}
+		var ref *FilterRef
+		found := false
+		if e.opts.FilterSource != nil {
+			ref, found = e.opts.FilterSource(e.ctx, f.URL, box)
+		}
+		if !found || ref == nil {
+			return nil, errNoFilter
+		}
+		if ref.Skipped != nil {
+			return nil, fmt.Errorf("%w: %w", errFilterUnsupported, ref.Skipped)
+		}
+		refs[i] = ref
+	}
+	return refs, nil
+}
 
 // chromiumSigma returns the standard deviation in points of the three box
 // blurs Chromium draws a Gaussian of deviation sigma points with: the
@@ -61,9 +115,10 @@ func filterReach(fs []css.Filter) (reach, sigma float64) {
 // artifact; then the content's tagged fragments again, invisible, so the
 // element's text extracts and its structure keeps its content. band, when
 // not nil, is the part of the flow the page shows: the image covers no
-// more of it than the filter reaches past. A list holding a url() or one
-// the page's effect pixels cannot hold leaves the content unfiltered,
-// with a warning.
+// more of it than the filter reaches past. A list holding a url() that
+// names no filter element leaves the content unfiltered (see filterRefs);
+// one naming a filter of a primitive the engine has not, or one the
+// page's effect pixels cannot hold, too, with a warning.
 //
 // # Corpus evidence
 //
@@ -72,9 +127,11 @@ func filterReach(fs []css.Filter) (reach, sigma float64) {
 //     image with a soft mask at 300 pixels an inch, its content gone: no
 //     text extracts and no link annotation is left.
 func (e *engine) filtered(it *ditem, frags []typeset.Fragment, band *typeset.Rect) []typeset.Fragment {
-	img, err := e.filterImage(it.filter, frags, band, max(it.zoom, 1.0/64))
+	img, err := e.filterImage(it.filter, frags, it.box, band, max(it.zoom, 1.0/64))
 	switch {
 	case err == nil:
+	case errors.Is(err, errNoFilter):
+		return frags
 	case limits.Stops(err):
 		e.fail(fmt.Errorf("drawing a filter: %w", err))
 		return frags
@@ -98,20 +155,29 @@ func (e *engine) filtered(it *ditem, frags []typeset.Fragment, band *typeset.Rec
 // filterImage draws frags filtered by fs as an image, nil when the
 // filter leaves nothing to see. zoom is how much the page enlarges the
 // content: the resolution is chosen for the content as the page shows it.
-func (e *engine) filterImage(fs []css.Filter, frags []typeset.Fragment, band *typeset.Rect, zoom float64) (*typeset.Image, error) {
-	for _, f := range fs {
-		if f.Kind == css.FilterURL {
-			return nil, fmt.Errorf("%w: url() references", errFilterUnsupported)
-		}
+func (e *engine) filterImage(fs []css.Filter, frags []typeset.Fragment, box typeset.Rect, band *typeset.Rect, zoom float64) (*typeset.Image, error) {
+	refs, err := e.filterRefs(fs, box)
+	if err != nil {
+		return nil, err
 	}
 	b, ok := typeset.NewMeasurer(e.ctx).Bounds(frags)
 	if !ok {
-		return nil, nil
+		b = typeset.Rect{X: box.X, Y: box.Y}
 	}
 	reach, sigma := filterReach(fs)
 	// A point more holds the ink a glyph puts past its advance.
 	reach++
 	x0, y0, x1, y1 := b.X-reach, b.Y-reach, b.X+b.Width+reach, b.Y+b.Height+reach
+	for _, ref := range refs {
+		if ref == nil {
+			continue
+		}
+		r := ref.Region
+		x0, y0, x1, y1 = min(x0, r.X-reach), min(y0, r.Y-reach), max(x1, r.X+r.Width+reach), max(y1, r.Y+r.Height+reach)
+		if s := ref.Sigma; s > 0 && (sigma == 0 || s < sigma) {
+			sigma = s
+		}
+	}
 	if band != nil {
 		y0, y1 = max(y0, band.Y-reach), min(y1, band.Y+band.Height+reach)
 	}
@@ -142,8 +208,14 @@ func (e *engine) filterImage(fs []css.Filter, frags []typeset.Fragment, band *ty
 	}
 	s := ss[0]
 	defer func() { s.Release() }()
-	for _, f := range fs {
-		next, err := applyFilter(e.ctx, s, f)
+	for i, f := range fs {
+		var next *effect.Surface
+		var err error
+		if f.Kind == css.FilterURL {
+			next, err = refs[i].Apply(e.ctx, s)
+		} else {
+			next, err = applyFilter(e.ctx, s, f)
+		}
 		if err != nil {
 			return nil, err
 		}

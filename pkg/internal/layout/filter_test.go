@@ -1,10 +1,12 @@
 package layout
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -90,20 +92,42 @@ func TestFilter_AppliesBeforeOpacity(t *testing.T) {
 	}
 }
 
-func TestFilter_URLDrawsUnfilteredWithAWarning(t *testing.T) {
-	st := sty(width(20), height(20), bg(blue), filters(css.Filter{Kind: css.FilterURL, URL: "#none"}))
+func TestFilter_URLNamingNothingIgnoresTheList(t *testing.T) {
+	// Filter Effects 1, 6: a reference to no filter element ignores the
+	// whole list, the grayscale with it.
+	st := sty(width(20), height(20), bg(blue), filters(css.Filter{Kind: css.FilterGrayscale, Amount: 1}, css.Filter{Kind: css.FilterURL, URL: "#none"}))
 	res := run(t, doc(el(st)), page(40, 40))
 	if got := strings.Join(paintedKinds(res), ", "); got != "path" {
 		t.Errorf("painted %s, want the box unfiltered", got)
 	}
-	n := 0
-	for _, w := range res.Warnings {
-		if w.Code == warn.CSSUnsupported && strings.Contains(w.Message, "unfiltered") {
-			n++
+}
+
+func TestFilter_URLAppliesTheFilterElement(t *testing.T) {
+	st := sty(width(20), height(20), margin(10), bg(blue), filters(css.Filter{Kind: css.FilterURL, URL: "#f"}))
+	var asked typeset.Rect
+	o := Options{Page: page(40, 40), FilterSource: func(_ context.Context, url string, box typeset.Rect) (*FilterRef, bool) {
+		if url != "#f" {
+			return nil, false
 		}
+		asked = box
+		return &FilterRef{Region: box, Apply: func(ctx context.Context, s *effect.Surface) (*effect.Surface, error) {
+			out, err := s.Clone(ctx)
+			if err != nil {
+				return nil, err
+			}
+			// Red where the source is.
+			for i := 0; i < len(out.Pix); i += 4 {
+				out.Pix[i], out.Pix[i+2] = out.Pix[i+3], 0
+			}
+			return out, nil
+		}}, true
+	}}
+	res := runWith(t, doc(el(st)), o)
+	if !near(asked.Width, px(20)) || !near(asked.X, px(10)) {
+		t.Errorf("filter asked for box %+v, want the border box", asked)
 	}
-	if n != 1 {
-		t.Errorf("warnings %+v, want one for the unfiltered element", res.Warnings)
+	if c := at(render(t, res, 1), 20, 20); code(c) != 'R' {
+		t.Errorf("filtered box %v, want red", c)
 	}
 }
 

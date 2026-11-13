@@ -278,6 +278,11 @@ type Options struct {
 	// rather than luminance. found reports that url names a mask element.
 	// The content hangs from no structure element. nil names none.
 	MaskSource func(ctx context.Context, url string, box typeset.Rect) (content []typeset.Fragment, alpha, found bool)
+	// FilterSource returns the SVG filter element url names, for an
+	// element whose border box is box, in the same coordinates (Filter
+	// Effects 1, 6 and 7). found reports that url names a filter element.
+	// nil names none.
+	FilterSource func(ctx context.Context, url string, box typeset.Rect) (f *FilterRef, found bool)
 	// MaxPages bounds the pages laid out; past it Layout fails with
 	// [limits.ErrTooManyPages]. Zero means [DefaultMaxPages].
 	MaxPages int

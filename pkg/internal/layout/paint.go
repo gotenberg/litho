@@ -35,9 +35,11 @@ type ditem struct {
 	isolate bool
 	mask    *typeset.SoftMask
 	// filter is the filter list the group's content is drawn through as
-	// one image, nil for none; flow reports that no group around it
-	// moves it, so its content is in flow coordinates.
+	// one image, nil for none, box its element's border box; flow
+	// reports that no group around it moves it, so its content is in
+	// flow coordinates.
 	filter []css.Filter
+	box    typeset.Rect
 	flow   bool
 	// zoom is how much the groups around a filter group enlarge its
 	// content on the page, 1 for none: its image is drawn that much finer.
@@ -533,7 +535,7 @@ func (p *painter) unit(b *box, own bool) {
 		// The filter applies to the element's rendering before its clip,
 		// mask and opacity (Filter Effects 1, 6; CSS Masking 1, 4): the
 		// innermost group.
-		push(&ditem{group: true, opacity: 1, filter: b.st.Filter, flow: p.inFlow(), zoom: p.zoom()})
+		push(&ditem{group: true, opacity: 1, filter: b.st.Filter, box: p.borderRect(b), flow: p.inFlow(), zoom: p.zoom()})
 	}
 	if p.clips(b) && pushed == 0 {
 		// The box's own clip is relative to the frame of its context: a

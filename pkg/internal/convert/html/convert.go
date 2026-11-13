@@ -351,6 +351,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 			Fallback:         text.FallbackChromium,
 			Image:            res.picture,
 			ClipSource:       b.clipSource,
+			FilterSource:     b.filterSource,
 			MaskSource:       b.maskSource,
 			MaxPages:         o.MaxPages,
 			Logger:           o.Logger,
@@ -478,9 +479,9 @@ type scan struct {
 	sheets []*dom.Node
 	// ids holds every id attribute and a[name] of the document.
 	ids map[string]bool
-	// defs holds the first SVG clipPath and mask element of each id, the
-	// elements a clip-path or a mask names by url() (CSS Masking 1, 5.1
-	// and 6.2).
+	// defs holds the first SVG clipPath, mask and filter element of each
+	// id, the elements a clip-path, a mask or a filter names by url() (CSS
+	// Masking 1, 5.1 and 6.2; Filter Effects 1, 6).
 	defs map[string]*dom.Node
 	// resourceBase resolves resource references: the document's URL, or
 	// the <base href> resolved against it when that is relative or an http
@@ -522,7 +523,7 @@ func scanDocument(ctx context.Context, doc *dom.Node, docURL string) (*scan, err
 		}
 		if id, ok := attr(n, "id"); ok && id != "" {
 			s.ids[id] = true
-			if _, seen := s.defs[id]; !seen && n.Namespace == "svg" && (n.Data == "clipPath" || n.Data == "mask") {
+			if _, seen := s.defs[id]; !seen && n.Namespace == "svg" && (n.Data == "clipPath" || n.Data == "mask" || n.Data == "filter") {
 				s.defs[id] = n
 			}
 		}

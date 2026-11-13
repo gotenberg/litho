@@ -3,6 +3,7 @@ package svg
 import (
 	"context"
 
+	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -84,4 +85,63 @@ func (d *Document) viewport() (float64, float64) {
 		h = d.size.Height / ptPerPx
 	}
 	return w, h
+}
+
+// Filter is a filter element of the drawing resolved for an element of an
+// HTML document (Filter Effects 1, 7): its region and its primitives, in
+// a user space whose origin is the element's border box's top left and
+// whose unit is one CSS pixel. A Filter holds no context; it is safe for
+// use by one goroutine at a time.
+type Filter struct {
+	d    *Document
+	id   string
+	w, h float64
+	// X, Y, W and H are the filter region in that user space; Sigma the
+	// smallest standard deviation of its blurs, 0 for none.
+	X, Y, W, H float64
+	Sigma      float64
+	// Skipped, when not nil, says why the filter is not drawn: it holds a
+	// primitive the renderer has not. The element is then drawn
+	// unfiltered.
+	Skipped error
+}
+
+// Filter returns the filter element of id for an element of an HTML
+// document whose border box is w by h CSS pixels, the box being its
+// bounding box for objectBoundingBox units. found reports an id that names
+// a filter element. A filter whose region has no area draws nothing.
+func (d *Document) Filter(ctx context.Context, id string, w, h float64) (f *Filter, found bool) {
+	if d.disabled || !numeric.Finite(w) || !numeric.Finite(h) || w < 0 || h < 0 {
+		return nil, false
+	}
+	g, found := d.graph(ctx, id, w, h)
+	if !found {
+		return nil, false
+	}
+	f = &Filter{d: d, id: id, w: w, h: h}
+	if g.empty() {
+		return f, true
+	}
+	f.X, f.Y, f.W, f.H, f.Sigma, f.Skipped = g.x, g.y, g.w, g.h, g.sigma(), g.check()
+	return f, true
+}
+
+// graph resolves the filter element of id for a box of w by h user units.
+func (d *Document) graph(ctx context.Context, id string, w, h float64) (*filterGraph, bool) {
+	vw, vh := d.viewport()
+	r := newRenderer(ctx, d, vw, vh)
+	return r.filterGraph(id, bbox{x1: w, y1: h, ok: true})
+}
+
+// Apply runs the filter on src, the element's rendering, an RGBA surface
+// of k pixels a CSS pixel whose pixel (0, 0) has its top left corner at
+// (ox, oy) in the filter's user space, and returns the result: a new
+// surface of src's size and grid, in sRGB, transparent outside the
+// filter region. The caller releases both.
+func (f *Filter) Apply(ctx context.Context, src *effect.Surface, k, ox, oy float64) (*effect.Surface, error) {
+	g, found := f.d.graph(ctx, f.id, f.w, f.h)
+	if !found || g.empty() {
+		return effect.New(ctx, effect.RGBA, src.W, src.H, src.Grid)
+	}
+	return g.run(ctx, src, k, ox, oy)
 }
