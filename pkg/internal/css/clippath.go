@@ -98,6 +98,9 @@ type Shape struct {
 	// Points are the vertices of a polygon, each its horizontal then
 	// vertical offset from the reference box's top left.
 	Points [][2]Dimension
+	// Round is the radius that rounds each vertex of a polygon, in
+	// points, 0 for sharp vertices (CSS Shapes 1, 3.1, polygon()).
+	Round float64
 	// Path is the SVG path data of a path, in pixels from the reference
 	// box's top left.
 	Path string
@@ -125,6 +128,7 @@ type shapeSpec struct {
 	center  [2]length
 	evenOdd bool
 	points  [][2]length
+	round   length
 	path    string
 	cmds    []shapeCmdSpec
 }
@@ -359,11 +363,28 @@ func fillRule(parts [][]token) ([][]token, bool, bool) {
 // parsePolygon parses the arguments of polygon(): an optional fill rule,
 // then vertices, each two length-percentages.
 func parsePolygon(args []token) (*shapeSpec, bool) {
-	parts, evenOdd, ok := fillRule(splitCommas(args))
+	parts := splitCommas(args)
+	// polygon( <'fill-rule'>? [ round <length> ]? , ... ): the round
+	// clause ends the first part.
+	var round length
+	if len(parts) > 1 {
+		if first := parts[0]; len(first) >= 2 && first[len(first)-2].isIdent("round") {
+			r, ok := parseLength(first[len(first)-1], nonNeg)
+			if !ok {
+				return nil, false
+			}
+			round = r
+			parts[0] = first[:len(first)-2]
+			if len(parts[0]) == 0 {
+				parts = parts[1:]
+			}
+		}
+	}
+	parts, evenOdd, ok := fillRule(parts)
 	if !ok || len(parts) == 0 || len(parts) > maxPolygonPoints {
 		return nil, false
 	}
-	s := &shapeSpec{kind: ShapePolygon, evenOdd: evenOdd, points: make([][2]length, len(parts))}
+	s := &shapeSpec{kind: ShapePolygon, evenOdd: evenOdd, round: round, points: make([][2]length, len(parts))}
 	for i, p := range parts {
 		if len(p) != 2 {
 			return nil, false
@@ -410,6 +431,7 @@ func (s *shapeSpec) compute(lc lenCtx) *Shape {
 		}
 	}
 	if len(s.points) > 0 {
+		out.Round = max(s.round.points(lc), 0)
 		out.Points = make([][2]Dimension, len(s.points))
 		for i, p := range s.points {
 			out.Points[i] = [2]Dimension{p[0].dim(lc, false), p[1].dim(lc, false)}

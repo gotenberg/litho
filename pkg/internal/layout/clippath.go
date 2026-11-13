@@ -128,14 +128,11 @@ func shapePath(s *css.Shape, r typeset.Rect) (*typeset.Path, bool) {
 		e := typeset.Rect{X: r.X + cx - rx, Y: r.Y + cy - ry, Width: 2 * rx, Height: 2 * ry}
 		ops = roundedRect(e, [4][2]float64{{rx, ry}, {rx, ry}, {rx, ry}, {rx, ry}})
 	case css.ShapePolygon:
+		pts := make([]typeset.Point, len(s.Points))
 		for i, pt := range s.Points {
-			k := typeset.LineTo
-			if i == 0 {
-				k = typeset.MoveTo
-			}
-			ops = append(ops, typeset.PathOp{Kind: k, P: [3]typeset.Point{{X: r.X + resolve(pt[0], w), Y: r.Y + resolve(pt[1], h)}}})
+			pts[i] = typeset.Point{X: r.X + resolve(pt[0], w), Y: r.Y + resolve(pt[1], h)}
 		}
-		ops = append(ops, typeset.PathOp{Kind: typeset.ClosePath})
+		ops = roundedPolygon(pts, s.Round)
 	case css.ShapePath, css.ShapeShape:
 		// Path data is in CSS pixels from the reference box's top left.
 		data, _ := svg.PathData(shapePathData(s, w, h)) // a path cut short by an error clips with what it drew, as SVG 1.1, F.2 asks
@@ -150,6 +147,54 @@ func shapePath(s *css.Shape, r typeset.Rect) (*typeset.Path, bool) {
 		return nil, false
 	}
 	return &typeset.Path{Ops: ops, Fill: fill}, true
+}
+
+// roundedPolygon returns the closed path through pts, each vertex
+// rounded by a circle of radius round tangent to both its sides, centred
+// on the bisector of its angle (CSS Shapes 1, 3.1, polygon()). The radius
+// of each vertex is clamped so that its rounding takes at most half of
+// either side: tan(angle / 2) times half the side. The arc is drawn as
+// one cubic Bézier curve.
+func roundedPolygon(pts []typeset.Point, round float64) []typeset.PathOp {
+	ops := make([]typeset.PathOp, 0, 2*len(pts)+1)
+	n := len(pts)
+	for i, p := range pts {
+		k := typeset.LineTo
+		if i == 0 {
+			k = typeset.MoveTo
+		}
+		if !(round > 0) || n < 3 {
+			ops = append(ops, typeset.PathOp{Kind: k, P: [3]typeset.Point{p}})
+			continue
+		}
+		a, b := pts[(i+n-1)%n], pts[(i+1)%n]
+		la, lb := math.Hypot(a.X-p.X, a.Y-p.Y), math.Hypot(b.X-p.X, b.Y-p.Y)
+		if la <= 0 || lb <= 0 {
+			ops = append(ops, typeset.PathOp{Kind: k, P: [3]typeset.Point{p}})
+			continue
+		}
+		ua := typeset.Point{X: (a.X - p.X) / la, Y: (a.Y - p.Y) / la}
+		ub := typeset.Point{X: (b.X - p.X) / lb, Y: (b.Y - p.Y) / lb}
+		angle := math.Acos(min(max(ua.X*ub.X+ua.Y*ub.Y, -1), 1))
+		half := math.Tan(angle / 2)
+		if !(half > 0) || angle >= math.Pi {
+			ops = append(ops, typeset.PathOp{Kind: k, P: [3]typeset.Point{p}})
+			continue
+		}
+		r := min(round, half*la/2, half*lb/2)
+		d := r / half
+		t1 := typeset.Point{X: p.X + ua.X*d, Y: p.Y + ua.Y*d}
+		t2 := typeset.Point{X: p.X + ub.X*d, Y: p.Y + ub.Y*d}
+		// The arc turns by pi less the angle; its control points lie on
+		// the tangents, toward the vertex, 4/3 tan(turn / 4) r away.
+		c := 4.0 / 3 * math.Tan((math.Pi-angle)/4) * r
+		ops = append(ops,
+			typeset.PathOp{Kind: k, P: [3]typeset.Point{t1}},
+			typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{
+				{X: t1.X - ua.X*c, Y: t1.Y - ua.Y*c}, {X: t2.X - ub.X*c, Y: t2.Y - ub.Y*c}, t2,
+			}})
+	}
+	return append(ops, typeset.PathOp{Kind: typeset.ClosePath})
 }
 
 // shapePathData returns the SVG path data of a path() or a shape() in a

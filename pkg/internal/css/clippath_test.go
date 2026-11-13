@@ -101,3 +101,23 @@ func TestClip_Values(t *testing.T) {
 		}
 	}
 }
+
+// TestClipPath_PolygonRound locks the polygon() grammar of CSS Shapes 1,
+// 3.1: an optional fill rule, then round and a length, before the first
+// comma.
+func TestClipPath_PolygonRound(t *testing.T) {
+	t.Parallel()
+	for v, want := range map[string]float64{
+		"polygon(round 40px, 0 0, 100% 0, 0 100%)":        30,
+		"polygon(evenodd round 4px, 0 0, 100% 0, 0 100%)": 3,
+		"polygon(0 0, 100% 0, 0 100%)":                    0,
+	} {
+		c := styleOf(t, "clip-path: "+v).ClipPath
+		if c.Shape == nil || c.Shape.Round != want || len(c.Shape.Points) != 3 {
+			t.Errorf("%s = %+v, want round %v", v, c.Shape, want)
+		}
+	}
+	if c := styleOf(t, "clip-path: polygon(round, 0 0, 1px 0, 0 1px)").ClipPath; c.Shape != nil {
+		t.Errorf("round without a length parsed: %+v", c.Shape)
+	}
+}

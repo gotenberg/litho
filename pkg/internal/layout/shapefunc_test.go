@@ -1,9 +1,11 @@
 package layout
 
 import (
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestShapePathData_ResolvesAgainstTheBox(t *testing.T) {
@@ -33,5 +35,26 @@ func TestShapePathData_OneArcRadiusOfTheDiagonal(t *testing.T) {
 	}}
 	if got, want := shapePathData(s, px(400), px(300)), "M 0 0 A 176.77669529663686 176.77669529663686 0 0 0 0 10 "; got != want {
 		t.Errorf("path data %q, want %q", got, want)
+	}
+}
+
+func TestRoundedPolygon_ClampsToHalfASide(t *testing.T) {
+	// CSS Shapes 1, 3.1, polygon(): each vertex is rounded by a circle
+	// tangent to both sides, its radius clamped to tan(angle / 2) times
+	// half a side. A square 100 wide rounded by 80 takes radius 50: the
+	// tangent points are the midpoints of the sides.
+	sq := []typeset.Point{{X: 0, Y: 0}, {X: 100, Y: 0}, {X: 100, Y: 100}, {X: 0, Y: 100}}
+	ops := roundedPolygon(sq, 80)
+	if len(ops) != 9 || ops[0].Kind != typeset.MoveTo || ops[1].Kind != typeset.CurveTo {
+		t.Fatalf("ops %+v", ops)
+	}
+	if p := ops[0].P[0]; p.X != 0 || p.Y != 50 {
+		t.Errorf("first tangent point %+v, want (0, 50)", p)
+	}
+	if p := ops[1].P[2]; math.Abs(p.X-50) > 1e-9 || math.Abs(p.Y) > 1e-9 {
+		t.Errorf("arc end %+v, want (50, 0)", p)
+	}
+	if got := roundedPolygon(sq, 0); len(got) != 5 {
+		t.Errorf("no rounding: %d ops, want 5", len(got))
 	}
 }
