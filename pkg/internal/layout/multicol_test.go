@@ -321,3 +321,23 @@ func TestMulticol_BalancesToTheLayoutUnit(t *testing.T) {
 		t.Errorf("column height %v pt, want %v", h, px(85))
 	}
 }
+
+// TestMulticol_LastRuleReachesTheContentEdge locks that the rule of the
+// last row of columns runs down to the content edge of a container taller
+// than its balanced content, as Chromium draws it (CSS Multicol 1, 4.5),
+// while a row before a spanner keeps its own height.
+func TestMulticol_LastRuleReachesTheContentEdge(t *testing.T) {
+	t.Parallel()
+	rule := func(s *css.Style) {
+		s.Columns.RuleWidth, s.Columns.RuleStyle, s.Columns.RuleColor = px(1), css.Solid, red
+	}
+	span := func(s *css.Style) { s.Columns.SpanAll = true }
+	res := run(t, doc(el(sty(columns(2, 1), rule, height(5)), strip(blue), strip(lime), strip(black, span), strip(blue), strip(lime))), page(5, 6))
+	assertPixels(t, res, 1, `
+		BBRGG
+		KKKKK
+		BBRGG
+		__R__
+		__R__
+		_____`)
+}
