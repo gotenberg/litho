@@ -904,6 +904,10 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 				if e.relayout(k.y) {
 					cursor = e.layoutBlock(k, cbFor(e.pageOf(k.y)+1), bc, restore(snap), mc, breakPush)
 				}
+			case !e.atPageTop(k.y) && !hasContent(k) && e.straddles(k) && e.edgesStraddle(k):
+				if e.relayout(k.y) {
+					cursor = e.layoutBlock(k, cbFor(e.pageOf(k.y)+1), bc, restore(snap), mc, breakPush)
+				}
 			}
 		}
 		if !k.anon || k.borderH() > 0 || len(k.lines) > 0 {
@@ -1009,6 +1013,27 @@ func firstContent(b *box) float64 {
 		}
 	}
 	return b.contentY()
+}
+
+// edgesStraddle reports whether the page cut after the top of b, a block
+// with no content, runs through its block-start border and padding, or
+// through a box whose content box is empty. Neither is a possible break point: a break
+// inside a block falls between its content edge and its content (CSS
+// Fragmentation 3, 4.4, class C), so the box moves to the next page
+// whole, as Chromium moves it. A cut at the content edge itself stays,
+// the border alone ending the page.
+//
+// # Corpus evidence
+//
+//   - probe, html: in four 100px columns, an empty box whose 10px top
+//     border, or 10px border then 20px top padding, crosses the column
+//     end moves whole to the next column, as do a 20px box of border
+//     alone and a 30px box of border and bottom padding with no content
+//     height; a box whose top border ends exactly at the column end keeps
+//     it there and breaks its 80px content height into the next column.
+func (e *engine) edgesStraddle(b *box) bool {
+	cut := e.nextPage(b.y)
+	return cut < b.contentY()-eps || b.h <= eps
 }
 
 // hasContent reports a box with a line box or an in-flow block-level child

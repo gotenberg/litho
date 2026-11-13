@@ -82,6 +82,36 @@ func TestFragmentation_BackgroundSliced(t *testing.T) {
 	}
 }
 
+// TestFragmentation_EmptyBoxEdgesUnbroken locks that a page cut never runs
+// through the block-start border and padding of a box with no content,
+// nor through one with no content height: the box moves to the next page.
+// A cut at its content edge breaks its content height (CSS Fragmentation
+// 3, 4.4, class C).
+func TestFragmentation_EmptyBoxEdgesUnbroken(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		spacer  float64
+		mods    []func(*css.Style)
+		wantTop float64
+	}{
+		{name: "border crosses", spacer: 9, mods: []func(*css.Style){border(2, css.Solid, red), height(8)}, wantTop: 10},
+		{name: "padding crosses", spacer: 7, mods: []func(*css.Style){border(2, css.Solid, red), padding(2, 0, 0), height(6)}, wantTop: 10},
+		{name: "edges alone", spacer: 8, mods: []func(*css.Style){border(2, css.Solid, red)}, wantTop: 10},
+		{name: "border ends at the cut", spacer: 8, mods: []func(*css.Style){border(2, css.Solid, red), height(8)}, wantTop: 8},
+		{name: "cut in the content", spacer: 5, mods: []func(*css.Style){border(2, css.Solid, red), height(8)}, wantTop: 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			rb := boxes(t, doc(el(sty(height(tt.spacer))), el(sty(tt.mods...))), page(20, 10))
+			if got := rect(kid(t, rb, 0, 1))[1]; got != tt.wantTop {
+				t.Errorf("top %v, want %v", got, tt.wantTop)
+			}
+		})
+	}
+}
+
 func TestFragmentation_MonolithicMovesAndOverflows(t *testing.T) {
 	img := func(h int) *Node {
 		return &Node{Kind: Replaced, Style: sty(), Picture: pic(color.NRGBA{B: 255, A: 255}, 2, h)}
