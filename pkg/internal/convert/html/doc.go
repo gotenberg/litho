@@ -73,7 +73,10 @@
 // rules apply to the first page and to the right and left pages, the first
 // page being a right page unless the root's direction is right to left;
 // :blank rules to the pages a break to a left or a right page leaves
-// empty. An element's page property puts it on pages of that name, with a
+// empty, :nth(An+B) rules to the pages at those places in the document
+// (CSS GCPM 3, 3.1). :nth() on a named page and :nth(An+B of name) select
+// inside page groups, which are not supported: their rule is dropped with
+// a warning. An element's page property puts it on pages of that name, with a
 // forced break where the name changes (CSS Page 3, 4.1); each page takes
 // the size and margins of its named rules, and the content after such a
 // break is laid out at that page's width.
@@ -89,13 +92,24 @@
 // The sixteen page-margin boxes of the @page rules (@top-left-corner to
 // @left-top) draw their content in the page margins, sized and aligned as
 // CSS Page 3, 5 asks, min-width and max-width included: strings, images,
-// leaders, the page and pages counters, other counters at zero, attr() at
-// its fallback, and the paged media extras of CSS GCPM 3, 2: string()
-// shows the named strings string-set assigns, element() a copy of the
-// running elements position: running() takes out of the flow, each with
-// the first, start, last or first-except assignment of the page. A block
-// running element of auto width fits its content and sits where the box's
-// text-align puts a line, as WeasyPrint lays it out.
+// leaders, counters, attr() at its fallback, and the paged media extras of
+// CSS GCPM 3, 1: string() shows the named strings string-set assigns,
+// element() a copy of the running elements position: running() takes out
+// of the flow, each with the first, start, last or first-except
+// assignment of the page. A block running element of auto width fits its
+// content and sits where the box's text-align puts a line, as WeasyPrint
+// lays it out; its page and pages counters take the page's values, and its
+// links keep their annotations on every page that shows it.
+//
+// The page counter adds 1 on every page unless the page context's
+// counter-reset, counter-increment or counter-set name it, and the pages
+// counter is the page count (CSS Page 3, 6.1). A counter the page context
+// or a margin context sets is in scope for every box or for that box; any
+// other counter takes the value an element at the start of the page sees
+// in the document. counter-reset, counter-increment and counter-set of the
+// page counter on an element do not number the pages, with a warning. A
+// box whose content is taller than the box overflows it, over the page
+// area, with a warning: the page area keeps its size.
 //
 // float: footnote turns an element into a footnote (CSS GCPM 3, 3): its
 // ::footnote-call stays in the flow, numbered by the footnote counter,
