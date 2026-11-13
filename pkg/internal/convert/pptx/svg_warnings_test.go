@@ -17,7 +17,7 @@ func TestConvert_SVGPictureWarnings(t *testing.T) {
 		`<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="508000" cy="254000"/></a:xfrm><a:prstGeom prst="rect"/></p:spPr></p:pic>`
 	files := deckFiles(testDeck{
 		slides: []testSlide{{tree: pic, rels: `<Relationship Id="rIdP" Type="` + tRelImage + `" Target="../media/a.svg"/>`}},
-		parts:  map[string]string{"ppt/media/a.svg": `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><mask id="m"/><rect width="40" height="20" mask="url(#m)"/></svg>`},
+		parts:  map[string]string{"ppt/media/a.svg": `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><marker id="k"/><path d="M0 0L40 20" stroke="black" marker-end="url(#k)"/></svg>`},
 	})
 	out, err := Convert(context.Background(), bytes.NewReader(zipFiles(t, files)), testFonts(t), office.Options{})
 	if err != nil {
@@ -25,11 +25,11 @@ func TestConvert_SVGPictureWarnings(t *testing.T) {
 	}
 	n := 0
 	for _, w := range out.Warnings {
-		if w.Message == "in the SVG picture ppt/media/a.svg: masks are not drawn; the masked content is drawn unmasked" {
+		if w.Message == "in the SVG picture ppt/media/a.svg: markers are not drawn" {
 			n++
 		}
 	}
 	if n != 1 {
-		t.Errorf("%d mask warnings, want 1: %+v", n, out.Warnings)
+		t.Errorf("%d marker warnings, want 1: %+v", n, out.Warnings)
 	}
 }

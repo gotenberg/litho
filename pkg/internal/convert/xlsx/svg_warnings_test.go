@@ -23,7 +23,7 @@ func TestConvert_SVGPictureWarnings(t *testing.T) {
 		"xl/drawings/drawing1.xml": drawing,
 		"xl/drawings/_rels/drawing1.xml.rels": `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
 			`<Relationship Id="rIdImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/a.svg"/></Relationships>`,
-		"xl/media/a.svg": `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><mask id="m"/><rect width="40" height="20" mask="url(#m)"/></svg>`,
+		"xl/media/a.svg": `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><marker id="k"/><path d="M0 0L40 20" stroke="black" marker-end="url(#k)"/></svg>`,
 	})
 	out, err := Convert(context.Background(), bytes.NewReader(zipFiles(t, files)), testFonts(t), office.Options{})
 	if err != nil {
@@ -31,11 +31,11 @@ func TestConvert_SVGPictureWarnings(t *testing.T) {
 	}
 	n := 0
 	for _, w := range out.Warnings {
-		if w.Message == "in the SVG picture xl/media/a.svg: masks are not drawn; the masked content is drawn unmasked" {
+		if w.Message == "in the SVG picture xl/media/a.svg: markers are not drawn" {
 			n++
 		}
 	}
 	if n != 1 {
-		t.Errorf("%d mask warnings, want 1: %+v", n, out.Warnings)
+		t.Errorf("%d marker warnings, want 1: %+v", n, out.Warnings)
 	}
 }
