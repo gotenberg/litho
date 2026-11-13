@@ -93,3 +93,44 @@ func TestClipPath_Circle(t *testing.T) {
 		}
 	}
 }
+
+// TestClip_AbsolutelyPositioned locks CSS 2.2, 11.1.2: clip cuts an
+// absolutely positioned box, its border and its content, absolutely
+// positioned descendants included, to a rectangle from its border box's
+// top left, auto its own edge; it does not apply to a box in flow.
+func TestClip_AbsolutelyPositioned(t *testing.T) {
+	autoEdge := css.Dimension{Kind: css.Auto}
+	clip := func(top, right, bottom, left css.Dimension) func(*css.Style) {
+		return func(s *css.Style) {
+			s.Clip = css.ClipRect{Set: true, Edges: [4]css.Dimension{top, right, bottom, left}}
+		}
+	}
+	pxd := func(v float64) css.Dimension { return css.Pts(px(v)) }
+	tests := []struct {
+		name string
+		root *Node
+		want string
+	}{
+		{"rect", doc(el(sty(abs(0, auto, auto, 0), width(4), height(4), bg(red), clip(pxd(1), pxd(3), pxd(3), pxd(1))),
+			square(6, 1, blue, abs(1, auto, auto, 0)))), `
+			______
+			_BB___
+			_RR___
+			______`},
+		{"auto", doc(el(sty(abs(0, auto, auto, 0), width(4), height(4), bg(red), clip(autoEdge, autoEdge, pxd(2), autoEdge)))), `
+			RRRR__
+			RRRR__
+			______
+			______`},
+		{"in flow", doc(el(sty(width(4), height(4), bg(red), clip(pxd(1), pxd(3), pxd(3), pxd(1))))), `
+			RRRR__
+			RRRR__
+			RRRR__
+			RRRR__`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertPixels(t, run(t, tt.root, page(6, 4)), 1, tt.want)
+		})
+	}
+}

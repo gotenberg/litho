@@ -215,6 +215,7 @@ const (
 	pBgBlendMode
 	pIsolation
 	pClipPath
+	pClip
 	numProps
 )
 
@@ -987,6 +988,7 @@ func init() {
 		props[id] = def
 	}
 	props[pClipPath] = clipPathProp()
+	props[pClip] = clipProp()
 	longhandByName = map[string]propID{}
 	for i := range props {
 		longhandByName[props[i].name] = propID(i)

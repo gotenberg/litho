@@ -76,3 +76,25 @@ func TestClipPath_Invalid(t *testing.T) {
 		}
 	}
 }
+
+func TestClip_Values(t *testing.T) {
+	t.Parallel()
+	auto := Dimension{Kind: Auto}
+	tests := []struct {
+		decl string
+		want ClipRect
+	}{
+		{"", ClipRect{}},
+		{"clip: auto", ClipRect{}},
+		{"clip: rect(1px, 2px, 3px, 4px)", ClipRect{Set: true, Edges: [4]Dimension{pts(0.75), pts(1.5), pts(2.25), pts(3)}}},
+		{"clip: rect(1px 2px 3px 4px)", ClipRect{Set: true, Edges: [4]Dimension{pts(0.75), pts(1.5), pts(2.25), pts(3)}}},
+		{"clip: rect(auto, auto, 3px, auto)", ClipRect{Set: true, Edges: [4]Dimension{auto, auto, pts(2.25), auto}}},
+		{"clip: rect(1px, 2px, 3px, 4px); clip: rect(1%, 2px, 3px, 4px)", ClipRect{Set: true, Edges: [4]Dimension{pts(0.75), pts(1.5), pts(2.25), pts(3)}}},
+		{"clip: rect(1px, 2px, 3px, 4px); clip: rect(1px, 2px, 3px)", ClipRect{Set: true, Edges: [4]Dimension{pts(0.75), pts(1.5), pts(2.25), pts(3)}}},
+	}
+	for _, tt := range tests {
+		if got := styleOf(t, tt.decl).Clip; got != tt.want {
+			t.Errorf("%q: %+v, want %+v", tt.decl, got, tt.want)
+		}
+	}
+}

@@ -162,7 +162,7 @@ func viewportBox(root *box) *box {
 // box: overflow hidden, unless its overflow went to the viewport (CSS
 // 2.1, 11.1.1).
 func (p *painter) clips(a *box) bool {
-	return a.kind == kindBlock && a.parent != nil && (a.st.Overflow == css.OverflowHidden || a.clipExact) && a != p.viewport
+	return a.kind == kindBlock && a.parent != nil && (a.st.Overflow == css.OverflowHidden || a.clipExact) && a != p.viewport || clipsRect(a)
 }
 
 // hasBackground reports a style that paints a background.
@@ -251,6 +251,15 @@ func (p *painter) clipPath(b *box) *typeset.Path {
 	ax, ay := ancestorOffset(b)
 	ox, oy := offset(b)
 	r := typeset.Rect{X: b.x + ax + ox, Y: b.y + ay + oy, Width: b.borderW(), Height: b.borderH()}
+	if clipsRect(b) {
+		c := clipRectOf(b, r)
+		if b.st.Overflow == css.OverflowHidden {
+			// One clip a box: where overflow and clip both apply, the
+			// clip keeps within the border box, its corners square.
+			c, _ = intersect(c, r) // an empty intersection clips everything, which the empty rectangle does
+		}
+		return &typeset.Path{Ops: rectOps(c), Fill: &typeset.Fill{}}
+	}
 	radii := radiiOf(b, r.Width, r.Height)
 	cm := b.st.OverflowClipMargin
 	if b.st.ScrollContainer() {
@@ -442,6 +451,13 @@ func (p *painter) unit(b *box, own bool) {
 		if clips, visible = p.clipPathOf(b); !visible {
 			return
 		}
+	}
+	if clipsRect(b) {
+		c := clipRectOf(b, p.borderRect(b))
+		if c.Width <= 0 || c.Height <= 0 {
+			return
+		}
+		clips = append(clips, &typeset.Path{Ops: rectOps(c), Fill: &typeset.Fill{}})
 	}
 	if op < 1 || has || blend != typeset.BlendNormal || isolate || len(clips) > 0 {
 		g := &ditem{group: true, opacity: op, blend: blend, isolate: isolate}

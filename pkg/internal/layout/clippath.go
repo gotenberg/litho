@@ -166,3 +166,23 @@ func (p *painter) clipURL(b *box, url string) ([]*typeset.Path, bool) {
 	}
 	return regions[0], true
 }
+
+// clipsRect reports an absolutely positioned box that clip clips: clip
+// applies to absolutely positioned elements alone (CSS 2.2, 11.1.2).
+func clipsRect(b *box) bool {
+	return b.abs && b.st.Clip.Set && b.parent != nil
+}
+
+// clipRectOf returns the rectangle clip cuts from b's border box r, each
+// offset from r's top left, auto the box's own edge (CSS 2.2, 11.1.2).
+func clipRectOf(b *box, r typeset.Rect) typeset.Rect {
+	e := b.st.Clip.Edges
+	edge := func(d css.Dimension, auto float64) float64 {
+		if d.Kind == css.Auto {
+			return auto
+		}
+		return resolve(d, 0)
+	}
+	top, right, bottom, left := edge(e[css.Top], 0), edge(e[css.Right], r.Width), edge(e[css.Bottom], r.Height), edge(e[css.Left], 0)
+	return typeset.Rect{X: r.X + left, Y: r.Y + top, Width: right - left, Height: bottom - top}
+}

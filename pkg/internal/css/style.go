@@ -988,6 +988,9 @@ type Style struct {
 	Isolation    Isolation
 	// ClipPath clips the element and its content (CSS Masking 1, 5.1).
 	ClipPath ClipPath
+	// Clip clips an absolutely positioned element and its content (CSS
+	// 2.2, 11.1.2).
+	Clip ClipRect
 	// ZIndex is the stack level of a positioned box (CSS 2.1, 9.9.1).
 	ZIndex ZIndex
 	// Transform is the 2D transform list, nil for none (CSS Transforms 1,

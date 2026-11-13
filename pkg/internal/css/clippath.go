@@ -407,3 +407,80 @@ func clipPathProp() propDef {
 		}
 	}, copyFrom: field(func(s *Style) *ClipPath { return &s.ClipPath })}
 }
+
+// ClipRect is the clip of an absolutely positioned element (CSS 2.2,
+// 11.1.2): a rectangle whose edges are offsets from the top left of its
+// border box. The zero value is auto, which clips nothing.
+type ClipRect struct {
+	// Set reports rect(); Edges then hold the top, right, bottom and left
+	// offsets, each Points or Auto, which is the border box's own edge.
+	Set   bool
+	Edges [4]Dimension
+}
+
+// parseClip parses clip: auto or rect() of four lengths or auto,
+// separated by commas or, as user agents accept, by spaces (CSS 2.2,
+// 11.1.2).
+func parseClip(v []token, _ *declCtx) (any, bool) {
+	t, ok := single(v)
+	if !ok {
+		return nil, false
+	}
+	if t.isIdent("auto") {
+		return clipSpec{}, true
+	}
+	if t.typ != tFunction || lower(t.value) != "rect" {
+		return nil, false
+	}
+	args := significant(t.children)
+	parts := splitCommas(args)
+	if len(parts) == 1 {
+		parts = make([][]token, len(args))
+		for i := range args {
+			parts[i] = args[i : i+1]
+		}
+	}
+	if len(parts) != 4 {
+		return nil, false
+	}
+	out := clipSpec{set: true}
+	for i, p := range parts {
+		if len(p) != 1 {
+			return nil, false
+		}
+		if p[0].isIdent("auto") {
+			out.auto[i] = true
+			continue
+		}
+		if out.edges[i], ok = parseLength(p[0], 0); !ok {
+			return nil, false
+		}
+	}
+	return out, true
+}
+
+// clipSpec is a specified clip.
+type clipSpec struct {
+	set   bool
+	edges [4]length
+	auto  [4]bool
+}
+
+// clipProp is the clip property.
+func clipProp() propDef {
+	return propDef{name: "clip", parse: parseClip, compute: func(s *styler, st *Style, v any) {
+		c, ok := v.(clipSpec)
+		if !ok {
+			return
+		}
+		st.Clip = ClipRect{Set: c.set}
+		if c.set {
+			for i := range st.Clip.Edges {
+				st.Clip.Edges[i] = Dimension{Kind: Auto}
+				if !c.auto[i] {
+					st.Clip.Edges[i] = c.edges[i].dim(s.lc, false)
+				}
+			}
+		}
+	}, copyFrom: field(func(s *Style) *ClipRect { return &s.Clip })}
+}

@@ -42,6 +42,9 @@ func equalStyle(a, b *Style) bool {
 	if !equalClipPath(&a.ClipPath, &b.ClipPath) {
 		return false
 	}
+	if !equalClipRect(&a.Clip, &b.Clip) {
+		return false
+	}
 	if !equalZIndex(&a.ZIndex, &b.ZIndex) {
 		return false
 	}
@@ -699,6 +702,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.MixBlendMode))
 	h = mix(h, uint64(x.Isolation))
 	h = hashClipPath(h, &x.ClipPath)
+	h = hashClipRect(h, &x.Clip)
 	h = hashZIndex(h, &x.ZIndex)
 	h = mixBool(h, x.Transform == nil)
 	h = mix(h, uint64(len(x.Transform)))
@@ -994,6 +998,28 @@ func hashClipPath(h uint64, x *ClipPath) uint64 {
 	h = mixBool(h, x.Shape != nil)
 	h = mix(h, uint64(x.Box))
 	h = mixBool(h, x.Boxed)
+	return h
+}
+
+// equalClipRect reports whether a and b hold equal values, field by field.
+func equalClipRect(a, b *ClipRect) bool {
+	if a.Set != b.Set {
+		return false
+	}
+	for i1 := range a.Edges {
+		if !equalDimension(&a.Edges[i1], &b.Edges[i1]) {
+			return false
+		}
+	}
+	return true
+}
+
+// hashClipRect folds every field of x into h.
+func hashClipRect(h uint64, x *ClipRect) uint64 {
+	h = mixBool(h, x.Set)
+	for i1 := range x.Edges {
+		h = hashDimension(h, &x.Edges[i1])
+	}
 	return h
 }
 
