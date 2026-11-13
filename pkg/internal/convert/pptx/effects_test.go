@@ -58,7 +58,9 @@ func TestEffects_EffectList(t *testing.T) {
 		},
 		{"an empty list overrides the style", `<a:effectLst/>`, style, nil, nil, 0, false, ""},
 		{"preset shadow", `<a:effectLst><a:prstShdw prst="shdw1"><a:prstClr val="black"/></a:prstShdw></a:effectLst>`, "", nil, nil, 0, false, "preset shadows"},
-		{"skewed shadow", `<a:effectLst><a:outerShdw kx="-800400"><a:prstClr val="black"/></a:outerShdw></a:effectLst>`, "", &slides.Shadow{Color: css.Color{A: 1}, Opacity: 1, ScaleX: 1, ScaleY: 1}, nil, 0, false, "skew of shadows"},
+		// The skew keeps the bottom fixed: the centre, 10 pt above it,
+		// moves right by 10 tan 13.34 degrees.
+		{"skewed shadow", `<a:effectLst><a:outerShdw kx="-800400"><a:prstClr val="black"/></a:outerShdw></a:effectLst>`, "", &slides.Shadow{Color: css.Color{A: 1}, Opacity: 1, OffsetX: 10 * math.Tan(13.34*math.Pi/180), ScaleX: 1, ScaleY: 1, SkewX: -13.34}, nil, 0, false, ""},
 		{"a fill overlay of a gradient", `<a:effectLst><a:fillOverlay blend="mult"><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs></a:gsLst></a:gradFill></a:fillOverlay></a:effectLst>`, "", nil, nil, 0, false, "fill overlays"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -76,7 +78,7 @@ func TestEffects_EffectList(t *testing.T) {
 			case s.Shadow != nil:
 				got, want := *s.Shadow, *tc.shadow
 				if !colorNear(got.Color, want.Color) || !nearly(got.Opacity, want.Opacity) || !nearly(got.OffsetX, want.OffsetX) || !nearly(got.OffsetY, want.OffsetY) ||
-					!nearly(got.ScaleX, want.ScaleX) || !nearly(got.ScaleY, want.ScaleY) || !nearly(got.Blur, want.Blur) {
+					!nearly(got.ScaleX, want.ScaleX) || !nearly(got.ScaleY, want.ScaleY) || !nearly(got.Blur, want.Blur) || !nearly(got.SkewX, want.SkewX) || !nearly(got.SkewY, want.SkewY) {
 					t.Errorf("shadow %+v, want %+v", got, want)
 				}
 			}

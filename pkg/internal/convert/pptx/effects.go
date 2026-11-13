@@ -36,7 +36,9 @@ import (
 // the fill overlay of a solid fill (20.1.8.29) [slides.Shape.FillOverlay].
 // Preset shadows (20.1.8.52) and fill overlays of other fills print
 // nothing, with a warning; so does an effect container (20.1.8.25 effectDag). A
-// shadow's skew (kx, ky) is left out, with a warning.
+// shadow's skew (kx, ky, 60,000ths of a degree) fills
+// [slides.Shadow.SkewX] and [slides.Shadow.SkewY], about the same
+// alignment as its scale.
 //
 // # Corpus evidence
 //
@@ -114,9 +116,6 @@ func (r *reader) effectList(chain []*ooxml.Element, style *ooxml.Element, fc *fi
 		switch e.Local {
 		case "outerShdw":
 			s.Shadow = outerShadow(e, s.Box)
-			if attr(e, "kx") != "" || attr(e, "ky") != "" {
-				r.warn(warn.ContentUnsupported, warn.Approximated, "the skew of shadows is not drawn")
-			}
 			s.Shadow.Color, s.Shadow.Opacity = color(e)
 			if len(e.Kids()) == 0 {
 				// Impress prints a shadow without a colour white.
@@ -196,11 +195,21 @@ func outerShadow(e *ooxml.Element, box typeset.Rect) *slides.Shadow {
 		return min(max(f, -maxShadowScale), maxShadowScale)
 	}
 	sh.ScaleX, sh.ScaleY = scale("sx"), scale("sy")
+	skew := func(name string) float64 {
+		v, _ := intAttr(e, name)
+		return float64(v) / 60000
+	}
+	sh.SkewX, sh.SkewY = skew("kx"), skew("ky")
 	ax, ay := alignment(e)
-	// Scaling about the alignment point P is scaling about the centre C
-	// and moving by (P - C)(1 - s).
-	sh.OffsetX += (ax - 0.5) * box.Width * (1 - sh.ScaleX)
-	sh.OffsetY += (ay - 0.5) * box.Height * (1 - sh.ScaleY)
+	// Scaling and skewing by A about the alignment point P is doing so
+	// about the centre C and moving by (I - A)(P - C).
+	dx, dy := (ax-0.5)*box.Width, (ay-0.5)*box.Height
+	kx, ky := math.Tan(sh.SkewX*math.Pi/180), math.Tan(sh.SkewY*math.Pi/180)
+	if !numeric.Finite(kx) || !numeric.Finite(ky) {
+		kx, ky = 0, 0
+	}
+	sh.OffsetX += dx - sh.ScaleX*(dx+kx*dy)
+	sh.OffsetY += dy - sh.ScaleY*(ky*dx+dy)
 	return sh
 }
 
@@ -262,9 +271,6 @@ func (r *reader) textEffects(lst *ooxml.Element, sc scope) *slides.TextEffects {
 			if sh.Opacity > 0 {
 				fx.Shadow = sh
 				fx.ShadowAlignX, fx.ShadowAlignY = alignment(e)
-			}
-			if attr(e, "kx") != "" || attr(e, "ky") != "" {
-				r.warn(warn.ContentUnsupported, warn.Approximated, "the skew of shadows is not drawn")
 			}
 		case "glow":
 			if rad := emuAttr(e, "rad"); numeric.PositiveFinite(rad) {

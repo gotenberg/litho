@@ -589,13 +589,19 @@ func (b *builder) paintEffects(s *Shape, own, text []typeset.Fragment, toSlide t
 }
 
 // shadowMatrix returns the shadow's transform in slide coordinates: the
-// scale about the centre of bounds, then the offsets (ECMA-376 Part 1,
-// 20.1.8.45 outerShdw: sx, sy, dist and dir, which the reader resolves
-// into the scale and the offsets, turned with the shape by
-// [turnedShadow] when the shadow turns with it).
+// skew, then the scale, about the centre of bounds, then the offsets
+// (ECMA-376 Part 1, 20.1.8.45 outerShdw: kx, ky, sx, sy, dist and dir,
+// which the reader resolves into the skew, the scale and the offsets,
+// turned with the shape by [turnedShadow] when the shadow turns with it).
 //
 // # Corpus evidence
 //
+//   - litho/pptx: effects-shadow's shadow skewed by kx -13.34 degrees and
+//     scaled by sy -23% about the bottom left: PowerPoint's soft mask
+//     against the skew then the scale rms 2.29 levels (at most 10.3)
+//     over the bitmap after the best shift; against the scale then the
+//     skew 17.91, against either with the angle negated 21.23 and 13.66,
+//     against no skew 16.03.
 //   - probe, pptx: in Impress, two rectangles turned 30 degrees with a
 //     shadow 20 pt to the right print the same shadow bitmap 20 pt to the
 //     right of each, whether rotWithShape is 0 or 1.
@@ -608,8 +614,21 @@ func shadowMatrix(sh *Shadow, bounds typeset.Rect) typeset.Matrix {
 		sy = 1
 	}
 	cx, cy := bounds.X+bounds.Width/2, bounds.Y+bounds.Height/2
-	m := then(translate(-cx, -cy), typeset.Matrix{A: sx, D: sy})
+	m := translate(-cx, -cy)
+	if kx, ky := skewTan(sh.SkewX), skewTan(sh.SkewY); kx != 0 || ky != 0 {
+		m = then(m, typeset.Matrix{A: 1, B: ky, C: kx, D: 1})
+	}
+	m = then(m, typeset.Matrix{A: sx, D: sy})
 	return then(m, translate(cx+sh.OffsetX, cy+sh.OffsetY))
+}
+
+// skewTan returns the tangent of a skew of deg degrees, deg clamped to
+// [-maxSkew, maxSkew]; 0 for an angle that is not finite.
+func skewTan(deg float64) float64 {
+	if !numeric.Finite(deg) || deg == 0 {
+		return 0
+	}
+	return math.Tan(min(max(deg, -maxSkew), maxSkew) * math.Pi / 180)
 }
 
 // turnedShadow returns s with its shadow's offsets turned clockwise by

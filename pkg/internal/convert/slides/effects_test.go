@@ -3,6 +3,7 @@ package slides
 import (
 	"image"
 	"image/color"
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -253,5 +254,22 @@ func TestShape_PictureShadow(t *testing.T) {
 	}
 	if got := alphaAt(t, ps[0], 95, 70); got != 255 {
 		t.Errorf("shadow middle alpha %d, want 255", got)
+	}
+}
+
+// TestShadowMatrix_SkewThenScale checks that a shadow's transform skews
+// about the centre of the bounds before it scales, then moves by the
+// offsets.
+func TestShadowMatrix_SkewThenScale(t *testing.T) {
+	b := typeset.Rect{X: 0, Y: 0, Width: 20, Height: 10}
+	m := shadowMatrix(&Shadow{ScaleX: 1, ScaleY: -0.5, SkewX: 45, OffsetX: 3}, b)
+	// The bottom-left corner, 5 below and 10 left of the centre: skewed
+	// to (-5, 5), scaled to (-5, -2.5), back about the centre (10, 5),
+	// moved by 3.
+	if x, y := apply(m, 0, 10); !near(x, 8, 1e-9) || !near(y, 2.5, 1e-9) {
+		t.Errorf("bottom left to %v, %v, want 8, 2.5", x, y)
+	}
+	if m := shadowMatrix(&Shadow{ScaleX: 1, ScaleY: 1, SkewX: math.NaN()}, b); m != typeset.Identity {
+		t.Errorf("a skew that is not finite gives %+v, want the identity", m)
 	}
 }

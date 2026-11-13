@@ -240,6 +240,10 @@ type Shadow struct {
 	OffsetX, OffsetY float64
 	// ScaleX and ScaleY scale the silhouette, 1 or 0 for none.
 	ScaleX, ScaleY float64
+	// SkewX and SkewY then shear it, in degrees within (-90, 90): x moves
+	// by y times the tangent of SkewX, y by x times the tangent of SkewY,
+	// about the shape's centre; 0 for none.
+	SkewX, SkewY float64
 	// Blur is the blur radius in points, 0 for a hard shadow.
 	Blur float64
 	// RotateWithShape turns the offsets with the shape's rotation
