@@ -829,11 +829,12 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 	var customNames []string
 	custom := map[string][]token{}
 	// The flow-relative properties take their sides from the direction
-	// (CSS Logical Properties 1, 4).
-	rtl := cascadedRTL(cands, parentStyle)
+	// and the writing mode (CSS Logical Properties 1, 4).
+	flow := cascadedFlow(cands, parentStyle)
+	mapped := !flow.identity()
 	side := func(d *Declaration, id propID) propID {
-		if rtl && isInlineLogical(d.Property) {
-			return mirrorInline(id)
+		if mapped && isFlowRelative(d.Property) {
+			return flow.mapID(id)
 		}
 		return id
 	}

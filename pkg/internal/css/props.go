@@ -716,11 +716,21 @@ func init() {
 		{pPosition, enumProp("position", false, func(s *Style) *Position { return &s.Position }, map[string]Position{
 			"static": Static, "relative": Relative, "absolute": Absolute, "fixed": Fixed, "sticky": Relative, "-webkit-sticky": Relative,
 		})},
-		{pFloat, enumProp("float", false, func(s *Style) *Float { return &s.Float }, map[string]Float{
-			"none": FloatNone, "left": FloatLeft, "right": FloatRight, "inline-start": FloatLeft, "inline-end": FloatRight,
+		{pFloat, flowRelative(enumProp("float", false, func(s *Style) *Float { return &s.Float }, map[string]Float{
+			"none": FloatNone, "left": FloatLeft, "right": FloatRight,
+		}), func(st *Style, end, rtl bool) {
+			st.Float = FloatLeft
+			if end != rtl {
+				st.Float = FloatRight
+			}
 		})},
-		{pClear, enumProp("clear", false, func(s *Style) *Clear { return &s.Clear }, map[string]Clear{
-			"none": ClearNone, "left": ClearLeft, "right": ClearRight, "both": ClearBoth, "inline-start": ClearLeft, "inline-end": ClearRight,
+		{pClear, flowRelative(enumProp("clear", false, func(s *Style) *Clear { return &s.Clear }, map[string]Clear{
+			"none": ClearNone, "left": ClearLeft, "right": ClearRight, "both": ClearBoth,
+		}), func(st *Style, end, rtl bool) {
+			st.Clear = ClearLeft
+			if end != rtl {
+				st.Clear = ClearRight
+			}
 		})},
 		{pVisibility, enumProp("visibility", true, func(s *Style) *Visibility { return &s.Visibility }, map[string]Visibility{
 			"visible": Visible, "hidden": Hidden, "collapse": VisibilityCollapse,
@@ -1024,6 +1034,7 @@ func init() {
 		"-webkit-box-decoration-break": pBoxDecorationBreak,
 	})
 	maps.Copy(longhandByName, logicalAliases())
+	maps.Copy(longhandByName, logicalRadii)
 	initShorthands()
 }
 
