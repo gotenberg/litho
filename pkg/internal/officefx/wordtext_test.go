@@ -57,6 +57,39 @@ func TestWordScale_SameBitsOnEveryArchitecture(t *testing.T) {
 	}
 }
 
+func TestWordRunReach(t *testing.T) {
+	k := wordScale(24)
+	black := css.Color{A: 0.4}
+	for _, tc := range []struct {
+		name          string
+		fx            css.OfficeEffects
+		above, below  float64
+		descent, size float64
+	}{
+		{"glow", css.OfficeEffects{Glow: &css.OfficeGlow{Color: black, Radius: 8}}, wordGlowReach * 8 * k, wordGlowReach * 8 * k, 6, 24},
+		{"shadow down", css.OfficeEffects{Shadow: &css.OfficeShadow{Color: black, Dist: 10, Dir: 90}}, 0, 10 * k, 6, 24},
+		{"shadow up", css.OfficeEffects{Shadow: &css.OfficeShadow{Color: black, Dist: 10, Dir: 270}}, 10 * k, 0, 6, 24},
+		{"blurred shadow", css.OfficeEffects{Shadow: &css.OfficeShadow{Color: black, Blur: 8}}, 8 * k, 8 * k, 6, 24},
+		{"shadow over glow", css.OfficeEffects{
+			Glow:   &css.OfficeGlow{Color: black, Radius: 8},
+			Shadow: &css.OfficeShadow{Color: black, Blur: 4, Dist: 3, Dir: 90},
+		}, wordGlowReach*8*k + k, wordGlowReach*8*k + 7*k, 6, 24},
+		{"reflection", css.OfficeEffects{Reflection: &css.OfficeReflection{StartAlpha: 0.5, EndPos: 0.5, Dir: 90, SY: -1}}, 0, 0.5*wordRunBox*24 - 6, 6, 24},
+		{"reflection away", css.OfficeEffects{Reflection: &css.OfficeReflection{StartAlpha: 0.5, EndPos: 0.5, Dist: 7, Dir: 90, SY: -1}}, 0, 0.5*wordRunBox*24 + 12 - 6, 6, 24},
+		{"invisible", css.OfficeEffects{Glow: &css.OfficeGlow{Radius: 8}}, 0, 0, 6, 24},
+		{"powerpoint", css.OfficeEffects{Glow: &css.OfficeGlow{Color: black, Radius: 8}, Rules: css.OfficePowerPoint}, 0, 0, 6, 24},
+		{"no size", css.OfficeEffects{Glow: &css.OfficeGlow{Color: black, Radius: 8}}, 0, 0, 6, 0},
+	} {
+		above, below := WordRunReach(&tc.fx, tc.size, tc.descent)
+		if math.Abs(above-tc.above) > 1e-9 || math.Abs(below-tc.below) > 1e-9 {
+			t.Errorf("%s: reach %.4f above, %.4f below, want %.4f, %.4f", tc.name, above, below, tc.above, tc.below)
+		}
+	}
+	if a, b := WordRunReach(nil, 24, 6); a != 0 || b != 0 {
+		t.Errorf("no effects reach %v, %v, want none", a, b)
+	}
+}
+
 // wordSquare returns a 20 point square drawn as a run of Word's text of
 // size points.
 func wordSquare(size float64) *Source {

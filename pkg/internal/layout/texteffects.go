@@ -23,7 +23,8 @@ const maxEffectGlyphs = 4096
 // by the rules the effects name, artifacts, the glyphs staying text above
 // them. Word's rules draw them from the run's glyph outlines at lengths
 // scaled by the font size, the run's box for the shadow's and the
-// reflection's alignment its em ending at the baseline; PowerPoint's from
+// reflection's alignment its em ending at the baseline
+// ([officefx.WordRunReach] says how far they reach); PowerPoint's from
 // the glyphs as they paint.
 func (p *painter) textEffects(it *lineItem, l *lineBox, page int) {
 	fx := it.box.st.TextEffects

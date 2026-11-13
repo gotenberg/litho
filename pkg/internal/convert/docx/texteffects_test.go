@@ -197,6 +197,51 @@ func TestRunEffectsFollowWord(t *testing.T) {
 	}
 }
 
+// TestRunEffectsGrowTheLine checks that a run's glow and shadow push the
+// next line down by the room officefx.WordRunReach gives them, at single
+// spacing.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word grows a 24 point Calibri line by 5.02 points below
+//     for a shadow 10 points down, by 3.00 above and below for a glow of 8
+//     points.
+func TestRunEffectsGrowTheLine(t *testing.T) {
+	next := func(doc *typeset.Document) float64 {
+		t.Helper()
+		var y float64
+		var walk func(frags []typeset.Fragment)
+		walk = func(frags []typeset.Fragment) {
+			for _, f := range frags {
+				switch v := f.(type) {
+				case *typeset.Text:
+					if len(v.Glyphs) > 0 && v.Size == 12 {
+						y = v.Origin.Y
+					}
+				case *typeset.Group:
+					walk(v.Content)
+				}
+			}
+		}
+		walk(doc.Pages[0].Content)
+		return y
+	}
+	plain := next(runDoc(t, ""))
+	for _, tc := range []struct {
+		name, fx string
+		want     float64
+	}{
+		{"shadow", `<w14:shadow w14:blurRad="0" w14:dist="127000" w14:dir="5400000" w14:sx="100000" w14:sy="100000" w14:algn="tl"><w14:srgbClr w14:val="000000"><w14:alpha w14:val="60000"/></w14:srgbClr></w14:shadow>`, 10},
+		{"glow", `<w14:glow w14:rad="101600"><w14:srgbClr w14:val="ED7D31"><w14:alpha w14:val="60000"/></w14:srgbClr></w14:glow>`, 2 * 0.74 * 8},
+	} {
+		got := next(runDoc(t, tc.fx)) - plain
+		want := tc.want * math.Pow(24.0/74, 2.0/3)
+		if math.Abs(got-want) > 0.05 {
+			t.Errorf("%s: next line %.2f points lower, want %.2f", tc.name, got, want)
+		}
+	}
+}
+
 // TestRunReflectionStartsAtBaseline checks that a run's reflection hangs
 // from its baseline and fades to nothing at its end position of the
 // run's box.

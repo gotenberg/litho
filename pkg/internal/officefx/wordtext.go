@@ -104,7 +104,77 @@ const wordReflectionDist = 14
 //     48 points, along the stem of the mirrored H: the fades end 0.93 to
 //     0.96 sizes down at the end position; Times New Roman's at 24 points
 //     end where Calibri's do.
+//   - probe, docx: the same reflections grow the line below by 1.08 times
+//     the end position of 0.96 to 0.97 sizes less the line's descent.
 const wordRunBox = 0.95
+
+// wordGlowReach is how far a glow of a run of Word's text grows the line
+// past the run's ascent and descent, a share of its scaled radius
+// ([wordScale]).
+//
+// # Corpus evidence
+//
+//   - probe, docx: glows of 2, 4, 5, 8, 11, 16 and 18 points at 24
+//     points grow the line above by 0.75, 1.51, 1.76, 3.00, 4.00, 5.75 and
+//     6.26 points, of 4, 8 and 16 points at 12 points by 0.99, 1.73 and
+//     3.48, at 48 points by 2.48, 4.75 and 8.99: 0.73 of the scaled radius
+//     rounded up to a quarter point gives every one at 24 points. Taken
+//     unrounded, 0.74 leaves 128 of the four probes' 168 growths above and
+//     below their lines within a quarter point of Word's and 159 within
+//     half a point under the rules of [WordRunReach], 0.235 points rms;
+//     0.72 and 0.76 leave more past 0.3 points.
+const wordGlowReach = 0.74
+
+// WordRunReach returns how far the effects fx of a run of Word's text
+// reach above its ascent and below its descent, in points, none past
+// either, the run's font size and descent given: the room Word adds to
+// the line that holds the run, which a proportional line spacing then
+// scales as it scales the glyphs'. A glow reaches [wordGlowReach] of its
+// scaled radius ([wordScale]) every way; an outer shadow its scaled blur
+// radius past where its scaled distance moves the run, from the glow's
+// reach when the run has both; a reflection the end of its fade below the
+// baseline and its scaled blur radius, past the descent. fx on
+// PowerPoint's rules reaches nothing.
+//
+// # Corpus evidence
+//
+//   - probe, docx: 24 point Calibri lines at 259/240 with a shadow 10
+//     points down grow 5.02 points below, 10 points up 4.75 above and 0.25
+//     below (the spacing's share of the room above); a shadow blurred 8
+//     points grows them 3.76 above and 4.25 below at 24 points, 2.24 and
+//     2.52 at 12, 5.99 and 6.98 at 48; one blurred 4 points and 10 down
+//     0.00 and 7.00.
+//   - probe, docx: a glow of 8 points, a shadow blurred 4 points 3 points
+//     to the lower right and a reflection to 45.5% on one 24 point run grow
+//     the line 3.76 above and 6.25 below. The greatest of the three
+//     effects' reaches gives 2.79 and 4.71, their sum 3.68 and 10.9, the
+//     shadow cast from the glyphs over their glow 3.68 and 6.42.
+//   - probe, docx: reflections 4 and 8 points away at 24 points grow the
+//     line 11.77 and 18.52 below at 45.5%, 29.51 at 90%; 8 points away at
+//     12 points 9.28.
+func WordRunReach(fx *css.OfficeEffects, size, descent float64) (above, below float64) {
+	if fx == nil || fx.Rules != css.OfficeWord || !numeric.PositiveFinite(size) {
+		return 0, 0
+	}
+	k := wordScale(size)
+	var glow float64
+	if g := fx.Glow; g != nil && g.Color.A > 0 {
+		glow = float64(wordGlowReach * float64(k*radius(g.Radius)))
+		above, below = glow, glow
+	}
+	if sh := fx.Shadow; sh != nil && sh.Color.A > 0 {
+		s, _ := sincosDeg(sh.Dir)
+		dy := float64(s * float64(k*radius(sh.Dist)))
+		b := float64(k * radius(sh.Blur))
+		above = max(above, glow+b-dy)
+		below = max(below, glow+b+dy)
+	}
+	if rf := fx.Reflection; rf != nil && (rf.StartAlpha > 0 || rf.EndAlpha > 0) {
+		end := wordReflectionShift(rf, size) + float64(unit(rf.EndPos)*float64(wordRunBox*size)) + float64(k*radius(rf.Blur))
+		below = max(below, end-max(descent, 0))
+	}
+	return max(above, 0), max(below, 0)
+}
 
 // wordReflectionShift returns how far down Word moves the mirrored copy
 // of a run of size points for the reflection rf: its distance times the

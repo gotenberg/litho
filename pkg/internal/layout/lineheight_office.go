@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/officefx"
 )
 
 // exactAscent is the share of an exact or shrunk line height above the
@@ -101,7 +102,10 @@ func (s *inlineState) officeLine(l *lineBox) {
 // gap of each glyph run and of the container's strut above, the descents
 // below, each run where its baseline shift puts it, and the margin boxes
 // of the atomic inlines. text is the height the glyph runs and the strut
-// alone take, the atomic inlines left out. Under css.Style.WordRules
+// alone take, the atomic inlines left out. Under css.Style.WordRules a
+// run's text effects add the room Word gives them
+// ([officefx.WordRunReach]), which the proportional spacing scales with
+// the glyphs'; under css.Style.WordRules
 // the strut counts only on an empty line and, from mode 15, on a line of
 // pictures alone, as Word measures a line; before mode 15 such a line is
 // its pictures' height, which a proportional spacing does not scale.
@@ -130,17 +134,21 @@ func (s *inlineState) naturalExtent(l *lineBox) (above, below, text float64) {
 	}
 	for _, it := range l.items {
 		shift := it.baseline - l.baseline
-		up := it.ascent
+		up, down := it.ascent, it.descent
 		switch {
 		case it.text != nil && it.atomic == nil:
 			up += max(it.gap, 0)
+			if st.WordRules > 0 {
+				a, b := officefx.WordRunReach(it.box.st.TextEffects, it.text.Size, it.descent)
+				up, down = up+a, down+b
+			}
 			textAbove = max(textAbove, up-shift)
-			textBelow = max(textBelow, it.descent+shift)
+			textBelow = max(textBelow, down+shift)
 		case it.atomic == nil:
 			continue
 		}
 		above = max(above, up-shift)
-		below = max(below, it.descent+shift)
+		below = max(below, down+shift)
 	}
 	return above, below, textAbove + textBelow
 }
