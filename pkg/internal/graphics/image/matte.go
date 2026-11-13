@@ -102,7 +102,7 @@ func unblend(c, m, a uint8) uint8 {
 func matteRGB(ctx context.Context, doc *document.Document, dict ast.PdfDict, cc colorContext, matte []float64) (uint8, uint8, uint8, bool) {
 	comp := make([]uint8, len(matte))
 	for i, v := range matte {
-		comp[i] = uint8(min(max(v*255+0.5, 0), 255))
+		comp[i] = uint8(min(max(float64(v*255)+0.5, 0), 255))
 	}
 	// The matte is converted as the image's samples are, so a colour-managed
 	// image unblends against the colour its pixels were blended with.

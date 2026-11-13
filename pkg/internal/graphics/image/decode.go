@@ -439,7 +439,7 @@ func buildDecodeLUTs(dec []float64, components int) [][256]byte {
 			case v > 1:
 				v = 1
 			}
-			luts[j][s] = byte(v*255 + 0.5)
+			luts[j][s] = byte(float64(v*255) + 0.5)
 		}
 	}
 	return luts
@@ -971,7 +971,7 @@ func resolveTintAlternate(ctx context.Context, doc *document.Document, obj ast.P
 // transform's /Range defines them: L*, a* and b* for Lab, [0, 1] otherwise.
 func (a tintAlternate) rgb(v []float64) color.RGBA {
 	unit := func(f float64) uint8 {
-		return uint8(min(max(f, 0), 1)*255 + 0.5)
+		return uint8(float64(min(max(f, 0), 1)*255) + 0.5)
 	}
 	if a.lab != nil {
 		r, g, b := labValuesToRGB(v[0], v[1], v[2], *a.lab)

@@ -118,7 +118,7 @@ func (d darkness) less(o darkness) bool {
 func sampleDarkness(sc *SampleColor, s []byte) (darkness, error) {
 	if sc.lab != nil {
 		l, a, b := sc.lab(s)
-		return darkness{far: math.Sqrt(max(l, 0)*max(l, 0) + a*a + b*b)}, nil
+		return darkness{far: math.Sqrt(float64(max(l, 0)*max(l, 0)) + float64(a*a) + float64(b*b))}, nil
 	}
 	c, err := sc.Convert(s)
 	if err != nil {

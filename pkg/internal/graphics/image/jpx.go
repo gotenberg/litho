@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 )
@@ -137,9 +138,9 @@ func yccToRGB(data []byte, neutral [2]float64) {
 	for i := 0; i+2 < len(data); i += 3 {
 		y := float64(data[i])
 		cb, cr := float64(data[i+1])-neutral[0], float64(data[i+2])-neutral[1]
-		data[i] = clip(y + 1.402*cr)
-		data[i+1] = clip(y - 0.34414*cb - 0.71414*cr)
-		data[i+2] = clip(y + 1.772*cb)
+		data[i] = clip(y + float64(1.402*cr))
+		data[i+1] = clip(y - float64(0.34414*cb) - float64(0.71414*cr))
+		data[i+2] = clip(y + float64(1.772*cb))
 	}
 }
 
@@ -229,7 +230,7 @@ func jpxROMM() func([]byte) {
 		if e < 16*et {
 			lin[b] = e / 16
 		} else {
-			lin[b] = math.Pow(e, 1.8)
+			lin[b] = detmath.Pow(e, 1.8)
 		}
 	}
 	m := mul3(xyzToLinearS, mul3(adaptToD65(d50White), rommToXYZ))

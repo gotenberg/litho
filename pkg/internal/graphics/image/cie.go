@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 )
 
 // The D65 white of sRGB and the matrix that takes XYZ relative to it to linear
@@ -119,7 +120,7 @@ func resolveCalSpace(ctx context.Context, doc *document.Document, obj ast.PdfObj
 			return nil, false
 		}
 		for s := range 256 {
-			cs.gamma[c][s] = math.Pow(float64(s)/255, gm)
+			cs.gamma[c][s] = detmath.Pow(float64(s)/255, gm)
 		}
 	}
 	if !cs.grey {
@@ -157,23 +158,23 @@ func encodeSRGB(v float64) uint8 {
 	if v <= 0.0031308 {
 		v *= 12.92
 	} else {
-		v = 1.055*math.Pow(v, 1/2.4) - 0.055
+		v = float64(1.055*detmath.Pow(v, 1/2.4)) - 0.055
 	}
 	return uint8(min(max(math.Round(v*255), 0), 255))
 }
 
 // encode returns the sRGB byte of a linear value.
 func (cs *calSpace) encode(v float64) uint8 {
-	return cs.encoded[int(min(max(v, 0), 1)*linearSteps+0.5)]
+	return cs.encoded[int(float64(min(max(v, 0), 1)*linearSteps)+0.5)]
 }
 
 // convertRGB converts one CalRGB sample, three bytes, to sRGB.
 func (cs *calSpace) convertRGB(a, b, c byte) (uint8, uint8, uint8) {
 	x, y, z := cs.gamma[0][a], cs.gamma[1][b], cs.gamma[2][c]
 	m := &cs.rgb
-	return cs.encode(m[0]*x + m[1]*y + m[2]*z),
-		cs.encode(m[3]*x + m[4]*y + m[5]*z),
-		cs.encode(m[6]*x + m[7]*y + m[8]*z)
+	return cs.encode(float64(m[0]*x) + float64(m[1]*y) + float64(m[2]*z)),
+		cs.encode(float64(m[3]*x) + float64(m[4]*y) + float64(m[5]*z)),
+		cs.encode(float64(m[6]*x) + float64(m[7]*y) + float64(m[8]*z))
 }
 
 // convertGrey converts one CalGray sample to an sRGB grey level. A grey of
@@ -233,7 +234,7 @@ func mul3(a, b [9]float64) [9]float64 {
 	var out [9]float64
 	for r := range 3 {
 		for c := range 3 {
-			out[r*3+c] = a[r*3]*b[c] + a[r*3+1]*b[3+c] + a[r*3+2]*b[6+c]
+			out[r*3+c] = float64(a[r*3]*b[c]) + float64(a[r*3+1]*b[3+c]) + float64(a[r*3+2]*b[6+c])
 		}
 	}
 	return out
@@ -242,8 +243,8 @@ func mul3(a, b [9]float64) [9]float64 {
 // apply3 multiplies a row-major 3x3 matrix by a vector.
 func apply3(m [9]float64, v [3]float64) [3]float64 {
 	return [3]float64{
-		m[0]*v[0] + m[1]*v[1] + m[2]*v[2],
-		m[3]*v[0] + m[4]*v[1] + m[5]*v[2],
-		m[6]*v[0] + m[7]*v[1] + m[8]*v[2],
+		float64(m[0]*v[0]) + float64(m[1]*v[1]) + float64(m[2]*v[2]),
+		float64(m[3]*v[0]) + float64(m[4]*v[1]) + float64(m[5]*v[2]),
+		float64(m[6]*v[0]) + float64(m[7]*v[1]) + float64(m[8]*v[2]),
 	}
 }
