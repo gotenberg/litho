@@ -1270,7 +1270,7 @@ func (e *engine) cloneEdges(b *box, hSet bool) {
 	}
 	base, edges := b.h, vEdges(b)
 	for range maxFitPasses {
-		k := e.pageOf(b.y+b.borderH()-eps) - e.pageOf(b.y)
+		k := e.pageOf(b.y+b.borderH()-1e-3) - e.pageOf(b.y)
 		want := base + float64(k)*edges
 		if k <= 0 || want <= b.h+eps {
 			return

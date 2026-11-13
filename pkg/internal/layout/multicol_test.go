@@ -171,6 +171,24 @@ func TestMulticol_CloneDecoration(t *testing.T) {
 		_____`)
 }
 
+// TestMulticol_CloneFillsItsColumns locks that a cloned box whose
+// fragments, each with its top and bottom borders, fill its columns
+// exactly grows by the borders of the breaks between them alone, and
+// starts no fragment past its last column (CSS Fragmentation 3, 5.4).
+func TestMulticol_CloneFillsItsColumns(t *testing.T) {
+	t.Parallel()
+	cols := func(s *css.Style) {
+		s.Columns.Count, s.Columns.Fill = 3, css.FillAuto
+		s.ColumnGap = css.Pts(px(10))
+		s.Width = css.Pts(px(320))
+	}
+	clone := func(s *css.Style) { s.BoxDecorationBreak = css.DecorationClone }
+	rb := boxes(t, doc(el(sty(cols, height(100)), el(sty(width(80), height(240), border(10, css.Solid, black), clone)))), page(400, 200))
+	if got := kid(t, rb, 0, 0, 0).h; !near(got, px(280)) {
+		t.Errorf("content height %vpx, want 280px: 240px and the borders of two breaks", got/px(1))
+	}
+}
+
 func TestMulticol_BalancesOverAbsoluteBoxes(t *testing.T) {
 	t.Parallel()
 	abs := el(sty(width(2), func(s *css.Style) { s.Position = css.Absolute; s.Top = css.Pts(0) }), strip(blue), strip(blue), strip(blue), strip(blue))
