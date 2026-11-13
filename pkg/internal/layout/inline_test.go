@@ -586,3 +586,19 @@ func TestSmallCaps_Pieces(t *testing.T) {
 		}
 	}
 }
+
+// TestLineHeight_EmptyInline locks CSS 2.1, 10.8: an empty inline box
+// keeps its line height, which grows the line it sits on, while a line of
+// empty inline boxes alone is no line (9.4.2).
+func TestLineHeight_EmptyInline(t *testing.T) {
+	t.Parallel()
+	tall := func(s *css.Style) { s.LineHeight = css.Dimension{Kind: css.Number, Value: 5} }
+	rb := boxes(t, doc(el(sty(), el(inlineSty(tall)), txt(sty(), "X"))), page(100, 200))
+	if got := rect(kid(t, rb, 0, 0))[3]; got != 50 {
+		t.Errorf("block height %v, want 50: the empty span's line height", got)
+	}
+	rb = boxes(t, doc(el(sty(), el(inlineSty(tall)))), page(100, 200))
+	if got := rect(kid(t, rb, 0, 0))[3]; got != 0 {
+		t.Errorf("block height %v, want 0: an empty span alone makes no line", got)
+	}
+}

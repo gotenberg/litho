@@ -1477,8 +1477,34 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		f.left, f.right = edgeSides(k, p.opensIn(k, start, end), p.closesIn(k, start, end))
 		l.frags = append(l.frags, f)
 	}
+	s.emptyStruts(p, start, end)
 	s.vertical(l)
 	return l
+}
+
+// emptyStruts gives a vertical box to every inline box that opens on the
+// line of characters [start, end) of p, an empty one included: an empty
+// inline box still has its line-height and font, which grow the line it
+// sits on (CSS 2.1, 10.8: "Empty inline elements generate empty inline
+// boxes, but these boxes still have margins, padding, borders and a line
+// height"). A line of such boxes alone is no line (9.4.2): this runs only
+// for a line that is laid out.
+//
+// # Corpus evidence
+//
+//   - wpt: css/CSS2/linebox/empty-inline-003 (an empty span of
+//     line-height 5 beside an X of line-height 1) draws its reference in
+//     Chromium 156.
+func (s *inlineState) emptyStruts(p *ifcPara, start, end int) {
+	last := end
+	if end < p.p.Len() {
+		last = end - 1
+	}
+	// The collector appends p.opens in position order.
+	i, _ := slices.BinarySearchFunc(p.opens, start, func(o posBox, pos int) int { return o.pos - pos })
+	for ; i < len(p.opens) && p.opens[i].pos <= last; i++ {
+		s.vboxOf(p.opens[i].box)
+	}
 }
 
 // parentInline returns the inline box b sits in, nil at the root.
