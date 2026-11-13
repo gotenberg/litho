@@ -26,6 +26,24 @@ func TestBorders_Solid(t *testing.T) {
 		______`)
 }
 
+// TestBorders_SolidWithoutASide locks that solid sides of one colour meet
+// at their corners with no seam when another side has no width: the
+// corner pixels on the diagonal two clipped trapezoids would share are
+// fully covered.
+func TestBorders_SolidWithoutASide(t *testing.T) {
+	root := doc(el(sty(width(4), height(4), border(3, css.Solid, red), func(s *css.Style) {
+		s.Border[css.Bottom] = css.Border{}
+	})))
+	img := render(t, run(t, root, page(12, 9)), 1)
+	for i := range 3 {
+		for _, x := range []int{i, 9 - i} {
+			if c := at(img, x, i); c != (color.NRGBA{255, 0, 0, 255}) {
+				t.Errorf("corner pixel (%d, %d) is %v, want pure red", x, i, c)
+			}
+		}
+	}
+}
+
 func TestBorders_Double(t *testing.T) {
 	root := doc(el(sty(width(1), height(1), border(3, css.Double, red))))
 	res := run(t, root, page(7, 7))

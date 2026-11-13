@@ -482,17 +482,24 @@ func (p *painter) border(b *box, st *css.Style, r typeset.Rect, radii [4][2]floa
 	}
 	// A side cut away, not drawn and of no width, as the slice of a box a
 	// page break cuts has, does not break the uniformity of the others.
-	uniform := true
+	// The ring of the solid and double styles also passes over a side of
+	// no width, which paints nothing at the corners it shares.
+	uniform, ringed := true, true
 	for s := range 4 {
-		if !visible[s] && !draw[s] && bd[s] == 0 {
+		if !visible[s] && bd[s] == 0 {
+			if draw[s] {
+				uniform = false
+			}
 			continue
 		}
 		if !visible[s] || st.Border[s] != st.Border[ref] || bd[s] != bd[ref] {
-			uniform = false
+			uniform, ringed = false, false
 		}
 	}
-	if uniform && (st.Border[ref].Style == css.Solid || st.Border[ref].Style == css.Double) {
-		// One colour all round needs no cut at the corners.
+	if ringed && (st.Border[ref].Style == css.Solid || st.Border[ref].Style == css.Double) {
+		// One colour all round needs no cut at the corners: the sides
+		// meet without the seam two clipped trapezoids leave on their
+		// shared diagonal, as Chromium fills them.
 		g := &ditem{}
 		p.side(g, css.Side(ref), st.Border[ref], st.BorderColorIsCurrent(css.Side(ref)), r, radii, inner, iradii, bd)
 		for _, k := range g.kids {
