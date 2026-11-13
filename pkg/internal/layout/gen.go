@@ -344,7 +344,10 @@ func validPicture(p *Picture) bool {
 }
 
 // genInline generates an inline element: its inline box, split around the
-// block-level boxes among its descendants (CSS 2.1, 9.2.1.1).
+// block-level boxes among its descendants (CSS 2.1, 9.2.1.1). Each piece
+// of a box that clones its decorations draws its start and end edges
+// (CSS Fragmentation 3, 5.4: each box fragment is wrapped independently);
+// the pieces of a sliced one draw them on the first and the last alone.
 func (e *engine) genInline(n *Node, st *css.Style, ctx genCtx, ordinal *int) []*box {
 	ib := e.newBox(n, st, kindInline, ctx)
 	ib.inline = true
@@ -370,12 +373,12 @@ func (e *engine) genInline(n *Node, st *css.Style, ctx genCtx, ordinal *int) []*
 			cur.kids = append(cur.kids, k)
 			continue
 		}
-		cur.last = false
+		cur.last = clones(st)
 		out = append(out, k)
 		piece := e.newBox(n, st, kindInline, ctx)
 		*piece = *ib
 		piece.kids = nil
-		piece.first, piece.last = false, true
+		piece.first, piece.last = clones(st), true
 		piece.id, piece.fnBody = "", nil
 		out = append(out, piece)
 		cur = piece
