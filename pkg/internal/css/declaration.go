@@ -125,6 +125,14 @@ func (c *declCtx) warn(code warn.Code, effect warn.Effect, format string, args .
 // rendering, ignored without a warning. font-palette picks the palette of
 // a colour font (CSS Fonts 4, 9.1), and litho draws no colour glyphs: an
 // outline face draws them, in the text's colour, whatever the palette.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium writes one image XObject, with no
+//     /Interpolate, for a 4px PNG scaled to 80px under image-rendering
+//     auto, pixelated and crisp-edges.
+//   - probe, html: Chromium prints a JPEG of EXIF orientation 6 turned a
+//     quarter under image-orientation: none as under from-image.
 var silentProperties = map[string]bool{
 	"cursor": true, "pointer-events": true, "user-select": true, "touch-action": true,
 	"will-change": true, "resize": true, "scroll-behavior": true, "caret-color": true, "accent-color": true,
@@ -134,6 +142,12 @@ var silentProperties = map[string]bool{
 	"font-palette": true,
 	// Chromium applies these to SVG text alone (baselineProps).
 	"alignment-baseline": true, "dominant-baseline": true, "baseline-shift": true,
+	// image-rendering picks a scaling filter (CSS Images 3, 5.4) and a PDF
+	// image holds only /Interpolate, which Chromium writes for no value;
+	// image-orientation: none (5.3) Chromium ignores for a picture another
+	// origin serves, as every file of a conversion is, and applies the
+	// EXIF orientation.
+	"image-rendering": true, "image-orientation": true,
 }
 
 // knownProperty reports whether litho parses the property name.
