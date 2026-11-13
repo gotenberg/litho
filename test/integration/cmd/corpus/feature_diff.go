@@ -638,8 +638,10 @@ func readDiffPages(ctx context.Context, data []byte, hideAnnotations bool) (diff
 	for i, size := range sizes {
 		p := i + 1
 		// The goldens hold every word of the page, headers and footers
-		// included, which litho writes as pagination artifacts.
-		text, err := r.ExtractText(ctx, p, pdf.WithArtifacts())
+		// included, which litho writes as pagination artifacts, and the
+		// text that paints nothing (rendering mode 3, white on white),
+		// which PDF.js keeps: both sides are read alike.
+		text, err := r.ExtractText(ctx, p, pdf.WithArtifacts(), pdf.WithInvisibleText())
 		if errors.Is(err, pdf.ErrRequiresOCR) {
 			text, err = "", nil
 		}
