@@ -205,6 +205,7 @@ func initShorthands() {
 		},
 		"border-image":      {longhands: ids(pBorderImageSource, 5), expand: expandBorderImage(pBorderImageSource)},
 		"mask-border":       {longhands: ids(pMaskBorderSource, 5), expand: expandBorderImage(pMaskBorderSource)},
+		"mask":              {longhands: ids(pMaskImage, 8), expand: expandMask},
 		"page-break-before": legacyBreak(pBreakBefore),
 		"page-break-after":  legacyBreak(pBreakAfter),
 		"page-break-inside": legacyBreakInside(),

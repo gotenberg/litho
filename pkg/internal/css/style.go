@@ -991,6 +991,8 @@ type Style struct {
 	// Clip clips an absolutely positioned element and its content (CSS
 	// 2.2, 11.1.2).
 	Clip ClipRect
+	// Mask masks the element and its content (CSS Masking 1, 6).
+	Mask Mask
 	// ZIndex is the stack level of a positioned box (CSS 2.1, 9.9.1).
 	ZIndex ZIndex
 	// Transform is the 2D transform list, nil for none (CSS Transforms 1,

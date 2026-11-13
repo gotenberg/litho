@@ -45,6 +45,9 @@ func equalStyle(a, b *Style) bool {
 	if !equalClipRect(&a.Clip, &b.Clip) {
 		return false
 	}
+	if !equalMask(&a.Mask, &b.Mask) {
+		return false
+	}
 	if !equalZIndex(&a.ZIndex, &b.ZIndex) {
 		return false
 	}
@@ -703,6 +706,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.Isolation))
 	h = hashClipPath(h, &x.ClipPath)
 	h = hashClipRect(h, &x.Clip)
+	h = hashMask(h, &x.Mask)
 	h = hashZIndex(h, &x.ZIndex)
 	h = mixBool(h, x.Transform == nil)
 	h = mix(h, uint64(len(x.Transform)))
@@ -1019,6 +1023,142 @@ func hashClipRect(h uint64, x *ClipRect) uint64 {
 	h = mixBool(h, x.Set)
 	for i1 := range x.Edges {
 		h = hashDimension(h, &x.Edges[i1])
+	}
+	return h
+}
+
+// equalMask reports whether a and b hold equal values, field by field.
+func equalMask(a, b *Mask) bool {
+	if (a.Images == nil) != (b.Images == nil) || len(a.Images) != len(b.Images) {
+		return false
+	}
+	if len(a.Images) > 0 && &a.Images[0] != &b.Images[0] {
+		for i1 := range a.Images {
+			if !equalMaskImage(&a.Images[i1], &b.Images[i1]) {
+				return false
+			}
+		}
+	}
+	if (a.Modes == nil) != (b.Modes == nil) || len(a.Modes) != len(b.Modes) {
+		return false
+	}
+	if len(a.Modes) > 0 && &a.Modes[0] != &b.Modes[0] {
+		for i1 := range a.Modes {
+			if a.Modes[i1] != b.Modes[i1] {
+				return false
+			}
+		}
+	}
+	if (a.Repeats == nil) != (b.Repeats == nil) || len(a.Repeats) != len(b.Repeats) {
+		return false
+	}
+	if len(a.Repeats) > 0 && &a.Repeats[0] != &b.Repeats[0] {
+		for i1 := range a.Repeats {
+			if a.Repeats[i1] != b.Repeats[i1] {
+				return false
+			}
+		}
+	}
+	if (a.Positions == nil) != (b.Positions == nil) || len(a.Positions) != len(b.Positions) {
+		return false
+	}
+	if len(a.Positions) > 0 && &a.Positions[0] != &b.Positions[0] {
+		for i1 := range a.Positions {
+			for i2 := range a.Positions[i1] {
+				if !equalDimension(&a.Positions[i1][i2], &b.Positions[i1][i2]) {
+					return false
+				}
+			}
+		}
+	}
+	if (a.Sizes == nil) != (b.Sizes == nil) || len(a.Sizes) != len(b.Sizes) {
+		return false
+	}
+	if len(a.Sizes) > 0 && &a.Sizes[0] != &b.Sizes[0] {
+		for i1 := range a.Sizes {
+			if !equalBackgroundSize(&a.Sizes[i1], &b.Sizes[i1]) {
+				return false
+			}
+		}
+	}
+	if (a.Origins == nil) != (b.Origins == nil) || len(a.Origins) != len(b.Origins) {
+		return false
+	}
+	if len(a.Origins) > 0 && &a.Origins[0] != &b.Origins[0] {
+		for i1 := range a.Origins {
+			if a.Origins[i1] != b.Origins[i1] {
+				return false
+			}
+		}
+	}
+	if (a.Clips == nil) != (b.Clips == nil) || len(a.Clips) != len(b.Clips) {
+		return false
+	}
+	if len(a.Clips) > 0 && &a.Clips[0] != &b.Clips[0] {
+		for i1 := range a.Clips {
+			if !equalMaskClip(&a.Clips[i1], &b.Clips[i1]) {
+				return false
+			}
+		}
+	}
+	if (a.Composites == nil) != (b.Composites == nil) || len(a.Composites) != len(b.Composites) {
+		return false
+	}
+	if len(a.Composites) > 0 && &a.Composites[0] != &b.Composites[0] {
+		for i1 := range a.Composites {
+			if a.Composites[i1] != b.Composites[i1] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// hashMask folds every field of x into h.
+func hashMask(h uint64, x *Mask) uint64 {
+	h = mixBool(h, x.Images == nil)
+	h = mix(h, uint64(len(x.Images)))
+	for i1 := range x.Images {
+		h = hashMaskImage(h, &x.Images[i1])
+	}
+	h = mixBool(h, x.Modes == nil)
+	h = mix(h, uint64(len(x.Modes)))
+	for i1 := range x.Modes {
+		h = mix(h, uint64(x.Modes[i1]))
+	}
+	h = mixBool(h, x.Repeats == nil)
+	h = mix(h, uint64(len(x.Repeats)))
+	for i1 := range x.Repeats {
+		for i2 := range x.Repeats[i1] {
+			h = mix(h, uint64(x.Repeats[i1][i2]))
+		}
+	}
+	h = mixBool(h, x.Positions == nil)
+	h = mix(h, uint64(len(x.Positions)))
+	for i1 := range x.Positions {
+		for i2 := range x.Positions[i1] {
+			h = hashDimension(h, &x.Positions[i1][i2])
+		}
+	}
+	h = mixBool(h, x.Sizes == nil)
+	h = mix(h, uint64(len(x.Sizes)))
+	for i1 := range x.Sizes {
+		h = hashBackgroundSize(h, &x.Sizes[i1])
+	}
+	h = mixBool(h, x.Origins == nil)
+	h = mix(h, uint64(len(x.Origins)))
+	for i1 := range x.Origins {
+		h = mix(h, uint64(x.Origins[i1]))
+	}
+	h = mixBool(h, x.Clips == nil)
+	h = mix(h, uint64(len(x.Clips)))
+	for i1 := range x.Clips {
+		h = hashMaskClip(h, &x.Clips[i1])
+	}
+	h = mixBool(h, x.Composites == nil)
+	h = mix(h, uint64(len(x.Composites)))
+	for i1 := range x.Composites {
+		h = mix(h, uint64(x.Composites[i1]))
 	}
 	return h
 }
@@ -1816,6 +1956,42 @@ func hashOffice(h uint64, x *Office) uint64 {
 	h = mixBool(h, x.KeepHangul)
 	h = mixBool(h, x.TextEffects != nil)
 	h = mixBool(h, x.TextPaint != nil)
+	return h
+}
+
+// equalMaskImage reports whether a and b hold equal values, field by field.
+func equalMaskImage(a, b *MaskImage) bool {
+	if a.URL != b.URL {
+		return false
+	}
+	if a.Gradient != b.Gradient {
+		return false
+	}
+	return true
+}
+
+// hashMaskImage folds every field of x into h.
+func hashMaskImage(h uint64, x *MaskImage) uint64 {
+	h = mixString(h, x.URL)
+	h = mixBool(h, x.Gradient != nil)
+	return h
+}
+
+// equalMaskClip reports whether a and b hold equal values, field by field.
+func equalMaskClip(a, b *MaskClip) bool {
+	if a.Box != b.Box {
+		return false
+	}
+	if a.None != b.None {
+		return false
+	}
+	return true
+}
+
+// hashMaskClip folds every field of x into h.
+func hashMaskClip(h uint64, x *MaskClip) uint64 {
+	h = mix(h, uint64(x.Box))
+	h = mixBool(h, x.None)
 	return h
 }
 

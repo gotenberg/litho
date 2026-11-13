@@ -216,6 +216,15 @@ const (
 	pIsolation
 	pClipPath
 	pClip
+	pMaskImage
+	pMaskMode
+	pMaskRepeat
+	pMaskPosition
+	pMaskSize
+	pMaskOrigin
+	pMaskClip
+	pMaskComposite
+	pMaskType
 	numProps
 )
 
@@ -989,6 +998,9 @@ func init() {
 	}
 	props[pClipPath] = clipPathProp()
 	props[pClip] = clipProp()
+	for id, def := range maskProps() {
+		props[id] = def
+	}
 	longhandByName = map[string]propID{}
 	for i := range props {
 		longhandByName[props[i].name] = propID(i)
