@@ -7,27 +7,12 @@ import (
 	"math"
 	"slices"
 
-	"golang.org/x/image/vector"
-
 	"github.com/gotenberg/litho/pkg/internal/css"
-	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/effect"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
-
-// shadowScale is the resolution of a blurred shadow's raster: 2 pixels per
-// point, 192 dpi, twice the 96 dpi a reader draws a page at by default.
-const shadowScale = 2.0
-
-// maxShadowPixels bounds the raster of one blurred shadow: 4 Mpx, a shadow
-// of 1000 by 1000 points at full resolution. A larger one is drawn at a
-// lower resolution, which a blur hides. Anti-DoS guard, not spec-mandated.
-const maxShadowPixels = 4 << 20
-
-// maxShadowBudget bounds the raster pixels of every blurred shadow of one
-// layout: 64 Mpx. Past it a blurred shadow is drawn sharp, with a warning.
-// Anti-DoS guard, not spec-mandated: each raster is kept in the output.
-const maxShadowBudget = 64 << 20
 
 // growRect returns r grown by d on every side, shrunk when d is negative,
 // and its corner radii adjusted the way CSS Backgrounds 3, 7.2 adjusts a
@@ -121,7 +106,7 @@ func (p *painter) outerShadow(b *box, r typeset.Rect, radii [4][2]float64, x, y,
 	// The shadow never shows under the box (CSS Backgrounds 3, 7.1).
 	clip := &typeset.Path{Ops: append(rectOps(bounds), roundedRect(r, radii)...), Fill: &typeset.Fill{Rule: typeset.EvenOdd}}
 	g := &ditem{group: true, opacity: 1, clip: clip}
-	if frag := p.blurred(roundedRect(shape, sradii), shape, blur, false, col, r.Y); frag != nil {
+	if frag := p.blurred([]effect.Path{{Ops: roundedRect(shape, sradii)}}, nil, shape, blur, col, r.Y); frag != nil {
 		g.kids = append(g.kids, &ditem{frag: frag, y0: bounds.Y, y1: bounds.Y + bounds.Height, page: -1})
 	} else {
 		g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: roundedRect(shape, sradii), Fill: &typeset.Fill{Color: col}}, y0: shape.Y, y1: shape.Y + shape.Height, page: -1})
@@ -142,7 +127,10 @@ func (p *painter) innerShadow(b *box, r typeset.Rect, radii [4][2]float64, bd [4
 	clip := &typeset.Path{Ops: roundedRect(pr, pradii), Fill: &typeset.Fill{}}
 	g := &ditem{group: true, opacity: 1, clip: clip}
 	y0, y1 := pr.Y, pr.Y+pr.Height
-	if frag := p.blurred(roundedRect(hole, hradii), pr, blur, true, col, r.Y); frag != nil {
+	// The shadow is the padding box, grown as Chromium grows it, less the
+	// hole (see innerReach).
+	ring, rradii := growRect(pr, pradii, innerReach(blur))
+	if frag := p.blurred([]effect.Path{{Ops: roundedRect(ring, rradii)}}, holePaths(hole, hradii), ring, blur, col, r.Y); frag != nil {
 		g.kids = append(g.kids, &ditem{frag: frag, y0: y0, y1: y1, page: -1})
 	} else {
 		ops := rectOps(pr)
@@ -152,6 +140,32 @@ func (p *painter) innerShadow(b *box, r typeset.Rect, radii [4][2]float64, bd [4
 		g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: ops, Fill: &typeset.Fill{Color: col, Rule: typeset.EvenOdd}}, y0: y0, y1: y1, page: -1})
 	}
 	p.emitGroup(b, g)
+}
+
+// holePaths returns the hole of an inner shadow, the rectangle r with
+// corner radii, as paths to cover: none when it is empty.
+func holePaths(r typeset.Rect, radii [4][2]float64) []effect.Path {
+	if r.Width <= 0 || r.Height <= 0 {
+		return nil
+	}
+	return []effect.Path{{Ops: roundedRect(r, radii)}}
+}
+
+// innerReach returns how far past the padding box Chromium covers an
+// inner shadow of blur radius blur points before it blurs it: half the
+// radius less a pixel. CSS Backgrounds 3, 7.1 casts the shadow as if
+// everything outside the padding box were opaque; Chromium leaves it
+// transparent past that reach, so its blurred inner shadows fade towards
+// the padding edge, and litho draws them as Chromium does.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium's masks of inner shadows blurred 12, 20 and
+//     40px fit a coverage that ends 5, 9 and 18.5px past the padding box,
+//     whatever the spread and the offset, blurred by its deviation
+//     (root mean square 0.9 to 1.7 levels).
+func innerReach(blur float64) float64 {
+	return max(blur/2-css.Pt, 0)
 }
 
 // emitGroup adds the group g of box b's decoration to the display list.
@@ -165,168 +179,169 @@ func (p *painter) emitGroup(b *box, g *ditem) {
 	c.kids = append(c.kids, g)
 }
 
-// blurred returns the shadow of shape blurred by a Gaussian of standard
-// deviation blur/2 (CSS Backgrounds 3, 7.3) as a raster image in colour
-// col, or nil for no blur, or when the layout's raster budget is spent.
-// For an outer shadow the shadow is shape, whose bounding box is area; for
-// an inner one (inner true) it is everything outside shape, drawn over
-// area, the padding box.
-func (p *painter) blurred(shape []typeset.PathOp, area typeset.Rect, blur float64, inner bool, col typeset.Color, y float64) typeset.Fragment {
-	if blur <= 0 {
+// chromiumScale is the pixels a point Chromium draws a blurred shadow's
+// mask at: 300 pixels an inch.
+const chromiumScale = 300.0 / 72
+
+// boxFactor is 3 sqrt(2 pi) / 4, the width of a box blur a deviation
+// spans in Filter Effects 1, 9.14.
+const boxFactor = 1.8799712059732503
+
+// shadowSigma returns the standard deviation in points of the blur
+// Chromium draws a shadow of blur radius blur points with, 0 when it
+// draws none. CSS Backgrounds 3, 7.3 asks for a Gaussian of half the
+// radius; Chromium draws three box blurs of the width Filter Effects 1,
+// 9.14 derives from that deviation at 300 pixels an inch, whose deviation
+// is a little smaller. The shadow takes the boxes' deviation, so the
+// falloff spreads as Chromium's at any resolution.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium's masks of outer box shadows blurred 10, 20
+//     and 40px, one row across each, fit three boxes of that width within
+//     0.99, 0.78 and 0.80 levels (root mean square, its JPEG's noise
+//     included) and a Gaussian of half the radius within 1.71, 1.53 and
+//     1.74; 4px fits both within 1.3.
+func shadowSigma(blur float64) float64 {
+	d := skiaBoxWidth(float64(blur/2) * chromiumScale)
+	if d < 2 {
+		return 0
+	}
+	return math.Sqrt(boxVariance(d)) / chromiumScale
+}
+
+// skiaBoxWidth returns the width of the three box blurs Filter Effects 1,
+// 9.14 approximates a Gaussian of deviation sigma pixels with:
+// floor(sigma 3 sqrt(2 pi) / 4 + 0.5).
+func skiaBoxWidth(sigma float64) int {
+	return int(math.Floor(float64(sigma*boxFactor) + 0.5)) // fits int: sigma is at most maxLength points at chromiumScale
+}
+
+// boxVariance returns the variance in squared pixels of three box blurs
+// of width d as Filter Effects 1, 9.14 runs them: three of width d for an
+// odd d, two of width d and one of d+1 for an even one. A box of n
+// pixels spreads by (n^2 - 1) / 12.
+func boxVariance(d int) float64 {
+	n := float64(d)
+	if d%2 == 1 {
+		return float64(3*float64(n*n-1)) / 12
+	}
+	return (float64(2*float64(n*n-1)) + float64((n+1)*(n+1)) - 1) / 12
+}
+
+// boxWidth returns the width of three box blurs whose deviation is
+// nearest sigma pixels: below 2 for one too small to blur. Three odd
+// boxes of width d spread by (d^2 - 1) / 4, so d is near
+// sqrt(4 sigma^2 + 1).
+func boxWidth(sigma float64) int {
+	want := float64(sigma * sigma)
+	near := int(math.Round(math.Sqrt(float64(4*want) + 1))) // fits int: sigma is at most maxLength points at MaxScale
+	best, gap := 0, math.Inf(1)
+	for d := max(near-1, 2); d <= near+1; d++ {
+		if g := math.Abs(boxVariance(d) - want); g < gap {
+			best, gap = d, g
+		}
+	}
+	return best
+}
+
+// blurred returns the shadow of paths less cut, in page points, blurred
+// as Chromium blurs a shadow of blur radius blur (see shadowSigma), as an
+// image in colour col drawn by package effect; nil for no blur, or when
+// the page's effect pixels are spent. area bounds what paths cover, and
+// nothing past them is covered. y is the flow position a warning names.
+func (p *painter) blurred(paths, cut []effect.Path, area typeset.Rect, blur float64, col typeset.Color, y float64) *typeset.Image {
+	sigma := shadowSigma(blur)
+	if sigma <= 0 {
 		return nil
 	}
-	reach := 1.5 * blur
+	// Three deviations reach past the boxes' half width; a point more
+	// keeps the image's edge clear of the falloff.
+	reach := float64(3*sigma) + 1
 	bounds := typeset.Rect{X: area.X - reach, Y: area.Y - reach, Width: area.Width + 2*reach, Height: area.Height + 2*reach}
-	k := shadowScale
-	if px := bounds.Width * bounds.Height * k * k; px > maxShadowPixels {
-		k *= math.Sqrt(maxShadowPixels / px)
-	}
-	w, h := int(math.Ceil(bounds.Width*k)), int(math.Ceil(bounds.Height*k)) // fits int: at most maxShadowPixels
-	if w <= 0 || h <= 0 || w*h > 2*maxShadowPixels {
+	res, ok := effect.Plan(sigma, bounds.Width, bounds.Height)
+	if !ok {
 		return nil
 	}
-	if p.shadowPixels+w*h > maxShadowBudget {
-		p.e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("blurred shadows past %d raster pixels drawn sharp", maxShadowBudget), y)
+	if !p.effectPixels.Take(res) {
+		p.e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("blurred shadows past %d pixels a page are drawn sharp", effect.MaxPagePixels), y)
 		return nil
 	}
-	p.shadowPixels += w * h
-	mask := rasterize(shape, bounds, k, w, h)
-	if inner {
-		for i, v := range mask.Pix {
-			mask.Pix[i] = 255 - v
-		}
+	if res.Reduced {
+		p.e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("a blurred shadow past %d pixels is drawn at a lower resolution", effect.MaxPixels), y)
 	}
-	blurAlpha(mask, blur/2*k, inner)
-	if err := typeset.ChargeImage(p.e.ctx, w, h, color.NRGBAModel); err != nil {
-		// The refusal stops the conversion, which reports it.
-		return nil
-	}
-	img := image.NewNRGBA(image.Rect(0, 0, w, h))
-	r8, g8, b8 := uint8(col.R*255+0.5), uint8(col.G*255+0.5), uint8(col.B*255+0.5)
-	for i, v := range mask.Pix {
-		img.Pix[4*i] = r8
-		img.Pix[4*i+1] = g8
-		img.Pix[4*i+2] = b8
-		img.Pix[4*i+3] = uint8(float64(v)*col.A + 0.5)
-	}
-	src, err := typeset.EncodeImage(p.e.ctx, img)
+	k := res.Scale
+	ctx := p.e.ctx
+	s, err := effect.New(ctx, effect.Coverage, res.W, res.H, effect.Grid{X: bounds.X, Y: bounds.Y, Scale: k})
 	if err != nil {
+		p.effectFailed(err, y)
 		return nil
 	}
-	rect := typeset.Rect{X: bounds.X, Y: bounds.Y, Width: float64(w) / k, Height: float64(h) / k}
-	return &typeset.Image{Rect: rect, Source: src}
-}
-
-// rasterize draws the path ops, in flow coordinates, into a w by h alpha
-// mask of bounds at k pixels per point.
-func rasterize(ops []typeset.PathOp, bounds typeset.Rect, k float64, w, h int) *image.Alpha {
-	z := vector.NewRasterizer(w, h)
-	pt := func(q typeset.Point) (float32, float32) {
-		return float32((q.X - bounds.X) * k), float32((q.Y - bounds.Y) * k)
+	defer s.Release()
+	tr := typeset.Matrix{A: k, D: k, E: float64(-bounds.X * k), F: float64(-bounds.Y * k)}
+	if err := effect.Fill(ctx, s, paths, tr); err != nil {
+		p.effectFailed(err, y)
+		return nil
 	}
-	open := false
-	for _, op := range ops {
-		switch op.Kind {
-		case typeset.MoveTo:
-			if open {
-				z.ClosePath()
+	if len(cut) > 0 {
+		h, err := effect.New(ctx, effect.Coverage, res.W, res.H, s.Grid)
+		if err != nil {
+			p.effectFailed(err, y)
+			return nil
+		}
+		err = effect.Fill(ctx, h, cut, tr)
+		if err == nil {
+			for i, v := range h.Pix {
+				s.Pix[i] = uint8((uint32(s.Pix[i])*uint32(255-v) + 127) / 255) //nolint:gosec // at most 255
 			}
-			z.MoveTo(pt(op.P[0]))
-			open = true
-		case typeset.LineTo:
-			z.LineTo(pt(op.P[0]))
-		case typeset.CurveTo:
-			ax, ay := pt(op.P[0])
-			bx, by := pt(op.P[1])
-			cx, cy := pt(op.P[2])
-			z.CubeTo(ax, ay, bx, by, cx, cy)
-		case typeset.ClosePath:
-			z.ClosePath()
-			open = false
+		}
+		h.Release()
+		if err != nil {
+			p.effectFailed(err, y)
+			return nil
 		}
 	}
-	if open {
-		z.ClosePath()
+	kern := effect.BoxKernel(boxWidth(float64(sigma*k)), 3)
+	if err := effect.Blur(ctx, s, kern, kern, effect.EdgeNone); err != nil {
+		p.effectFailed(err, y)
+		return nil
 	}
-	dst := image.NewAlpha(image.Rect(0, 0, w, h))
-	z.Draw(dst, dst.Bounds(), image.NewUniform(color.Alpha{A: 255}), image.Point{})
-	return dst
+	if err := typeset.ChargeImage(ctx, s.W, s.H, color.NRGBAModel); err != nil {
+		p.effectFailed(err, y)
+		return nil
+	}
+	img := image.NewNRGBA(image.Rect(0, 0, s.W, s.H))
+	r8, g8, b8 := channel(col.R), channel(col.G), channel(col.B)
+	var alpha [256]uint8
+	for v := range alpha {
+		alpha[v] = uint8(float64(float64(v)*min(max(col.A, 0), 1)) + 0.5) //nolint:gosec // at most 255
+	}
+	for i, v := range s.Pix {
+		q := img.Pix[4*i : 4*i+4 : 4*i+4]
+		q[0], q[1], q[2], q[3] = r8, g8, b8, alpha[v]
+	}
+	src, err := typeset.EncodeImage(ctx, img)
+	if err != nil {
+		p.effectFailed(err, y)
+		return nil
+	}
+	return &typeset.Image{Rect: typeset.Rect{X: bounds.X, Y: bounds.Y, Width: float64(s.W) / k, Height: float64(s.H) / k}, Source: src}
 }
 
-// blurAlpha blurs m in place by three box blurs approximating a Gaussian
-// of standard deviation sigma pixels. Pixels past the edge read as the
-// edge's when extend is set, else as transparent.
-func blurAlpha(m *image.Alpha, sigma float64, extend bool) {
-	if !numeric.Positive(sigma) {
+// channel returns the colour channel v, in [0, 1], as a byte.
+func channel(v float64) uint8 {
+	return uint8(float64(min(max(v, 0), 1)*255) + 0.5) //nolint:gosec // at most 255
+}
+
+// effectFailed settles an error of drawing a blurred shadow at flow
+// position y: one that ends the conversion (see limits.Stops) fails the
+// layout, any other leaves the shadow sharp with a warning.
+func (p *painter) effectFailed(err error, y float64) {
+	if limits.Stops(err) {
+		p.e.fail(fmt.Errorf("drawing a blurred shadow: %w", err))
 		return
 	}
-	w, h := m.Rect.Dx(), m.Rect.Dy()
-	buf := make([]float64, w*h)
-	for i, v := range m.Pix {
-		buf[i] = float64(v)
-	}
-	// Three box blurs of widths from sigma (W. Jarosz, "Fast Image
-	// Convolutions", 2001): the ideal width sqrt(12 sigma^2 / n + 1).
-	ideal := math.Sqrt(12*sigma*sigma/3 + 1)
-	lo := int(math.Floor(ideal)) // fits int: sigma is bounded by the raster size
-	if lo%2 == 0 {
-		lo--
-	}
-	hi := lo + 2
-	mIdeal := (12*sigma*sigma - 3*float64(lo*lo) - 12*float64(lo) - 9) / (-4*float64(lo) - 4)
-	mm := int(math.Round(mIdeal))
-	tmp := make([]float64, max(w, h))
-	for pass := range 3 {
-		size := hi
-		if pass < mm {
-			size = lo
-		}
-		r := (size - 1) / 2
-		if r <= 0 {
-			continue
-		}
-		for y := range h {
-			boxLine(buf[y*w:(y+1)*w], 1, w, r, extend, tmp)
-		}
-		for x := range w {
-			boxLine(buf[x:], w, h, r, extend, tmp)
-		}
-	}
-	for i, v := range buf {
-		m.Pix[i] = uint8(min(max(v, 0), 255) + 0.5)
-	}
-}
-
-// boxLine averages the n values of line, stride apart, over a window of
-// radius r, in place, tmp holding at least n values.
-func boxLine(line []float64, stride, n, r int, extend bool, tmp []float64) {
-	get := func(i int) float64 {
-		switch {
-		case i < 0:
-			if !extend {
-				return 0
-			}
-			i = 0
-		case i >= n:
-			if !extend {
-				return 0
-			}
-			i = n - 1
-		}
-		return line[i*stride]
-	}
-	sum := 0.0
-	for i := -r - 1; i < r; i++ {
-		sum += get(i)
-	}
-	win := float64(2*r + 1)
-	for i := range n {
-		sum += get(i+r) - get(i-r-1)
-		tmp[i] = sum / win
-	}
-	for i := range n {
-		line[i*stride] = tmp[i]
-	}
+	p.e.warnOnce(warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("a blurred shadow is drawn sharp: %v", err), y)
 }
 
 // outline paints the outline of b outside its border box, offset by

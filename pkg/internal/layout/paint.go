@@ -87,15 +87,16 @@ type painter struct {
 	// artifact reports a repeated table header or footer being painted:
 	// its fragments hang from no structure element.
 	artifact bool
-	// shadowPixels counts the raster pixels of the blurred shadows drawn,
-	// against maxShadowBudget.
-	shadowPixels int
+	// capture, when not nil, collects the fragments emit would add to the
+	// display list instead: a blurred text shadow draws its decorations'
+	// copies into its bitmap.
+	capture *[]typeset.Fragment
 	// cuts reports, for each item of the line being painted, inline box
 	// fragments that paint before it, nil for none: a decoration line
 	// spanning several runs does not cross them (decoRun).
 	cuts []bool
-	// effectPixels counts the pixels of the Office text effects drawn,
-	// against effect.MaxPagePixels.
+	// effectPixels counts the pixels of the Office text effects and the
+	// blurred shadows drawn, against effect.MaxPagePixels.
 	effectPixels effect.Page
 	// crops caches the parts of raster images border images cut out.
 	crops map[cropKey]*typeset.ImageSource
@@ -304,6 +305,10 @@ func (p *painter) clipPath(b *box) *typeset.Path {
 // emit adds a fragment of box b to the display list. content reports a
 // fragment of b's content, which b's own clip covers.
 func (p *painter) emit(b *box, content bool, frag typeset.Fragment, y0, y1 float64, page int) {
+	if p.capture != nil {
+		*p.capture = append(*p.capture, frag)
+		return
+	}
 	c := p.sync(p.chain(b, content))
 	if p.mono >= 0 {
 		page = p.mono

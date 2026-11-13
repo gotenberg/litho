@@ -1,8 +1,12 @@
 package layout
 
 import (
+	"crypto/sha256"
+	"fmt"
+	"image"
 	"image/color"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -274,4 +278,87 @@ func TestOutline_UnderPositionedDescendants(t *testing.T) {
 		BBBB_R
 		R____R
 		RRRRRR`)
+}
+
+func TestShadowSigma_ChromiumBoxes(t *testing.T) {
+	// A 10px blur is a deviation of 5px, 15.625 pixels at 300 pixels an
+	// inch: three boxes of 29 pixels, as Chromium draws it.
+	s := shadowSigma(px(10))
+	if d := boxWidth(s * chromiumScale); d != 29 {
+		t.Errorf("box width at 300 pixels an inch %d, want 29", d)
+	}
+	if want := math.Sqrt(210) / chromiumScale; math.Abs(s-want) > 1e-12 {
+		t.Errorf("deviation %v, want %v", s, want)
+	}
+	if s := shadowSigma(px(0.4)); s != 0 {
+		t.Errorf("a 0.4px blur has deviation %v, want none: Chromium's boxes are narrower than 2 pixels", s)
+	}
+	for _, d := range []int{2, 3, 8, 9, 30} {
+		if got := boxWidth(math.Sqrt(boxVariance(d))); got != d {
+			t.Errorf("boxWidth of the deviation of %d boxes is %d", d, got)
+		}
+	}
+}
+
+func TestBoxShadow_BlurredInsetFadesAtThePaddingEdge(t *testing.T) {
+	// Chromium covers an inner shadow 5px past the padding box before a
+	// 12px blur, so its edge holds 30% of the colour where CSS Backgrounds
+	// 3, 7.1 asks for half.
+	root := doc(el(sty(width(60), height(60), margin(10), bg(css.Color{R: 1, G: 1, B: 1, A: 1}), shadow(0, 0, 12, 0, css.Color{A: 1}, true))))
+	img := render(t, run(t, root, page(80, 80)), 1)
+	if c := at(img, 10, 40); c.G < 160 || c.G > 205 {
+		t.Errorf("at the padding edge: %v, want about 70%% of white", c)
+	}
+	if c := at(img, 40, 40); c.G < 250 {
+		t.Errorf("in the middle: %v, want white", c)
+	}
+}
+
+// shadowImages returns the images of the first page of res, in paint
+// order, and the SHA-256 of their samples.
+func shadowImages(t *testing.T, res *Result) []string {
+	t.Helper()
+	var sums []string
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *typeset.Image:
+				img, err := v.Source.Decode(t.Context())
+				if err != nil {
+					t.Fatalf("Decode: %v", err)
+				}
+				n, ok := img.(*image.NRGBA)
+				if !ok {
+					t.Fatalf("image %T, want NRGBA", img)
+				}
+				sum := sha256.Sum256(n.Pix)
+				sums = append(sums, fmt.Sprintf("%dx%d %x", n.Rect.Dx(), n.Rect.Dy(), sum[:8]))
+			case *typeset.Group:
+				walk(v.Content)
+			}
+		}
+	}
+	walk(res.Pages[0].Content)
+	return sums
+}
+
+func TestShadows_SameBytesOnEveryArchitecture(t *testing.T) {
+	st := sty(width(40), height(30), margin(20), bg(blue), border(2, css.Solid, lime),
+		func(s *css.Style) {
+			s.BorderRadius[css.TopLeft] = css.Radius{H: css.Pts(px(9)), V: css.Pts(px(9))}
+		},
+		shadow(5, 3, 14, 2, red, false), shadow(-2, 4, 9, 1, css.Color{G: 0.5, A: 0.6}, true),
+		func(s *css.Style) {
+			s.TextShadow = []css.Shadow{{X: px(3), Y: px(2), Blur: px(5), Color: css.Color{B: 1, A: 0.8}}}
+		})
+	got := shadowImages(t, run(t, doc(el(st, txt(st, "ab"))), page(100, 100)))
+	want := []string{
+		"69x62 8b77fc880ef10b4c",
+		"89x78 625ec3c923ed60f3",
+		"78x57 2bec32ecf5fc4de2",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("shadow images:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
 }
