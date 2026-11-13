@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
 )
@@ -877,8 +878,8 @@ type imageBlock struct {
 func unitSquareBox(ctm [6]float64) [4]float64 {
 	box := [4]float64{math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)}
 	for _, p := range [4][2]float64{{0, 0}, {1, 0}, {0, 1}, {1, 1}} {
-		x := p[0]*ctm[0] + p[1]*ctm[2] + ctm[4]
-		y := p[0]*ctm[1] + p[1]*ctm[3] + ctm[5]
+		x := float64(p[0]*ctm[0]) + float64(p[1]*ctm[2]) + ctm[4]
+		y := float64(p[0]*ctm[1]) + float64(p[1]*ctm[3]) + ctm[5]
 		box[0], box[1] = math.Min(box[0], x), math.Min(box[1], y)
 		box[2], box[3] = math.Max(box[2], x), math.Max(box[3], y)
 	}
@@ -1099,8 +1100,8 @@ func isSpaceByte(c byte) bool {
 // Table 108), so the offset is scaled and turned by the matrix it moves in.
 // The scale entries are left as they are.
 func moveLine(tm *[6]float64, tx, ty float64) {
-	tm[4] += tx*tm[0] + ty*tm[2]
-	tm[5] += tx*tm[1] + ty*tm[3]
+	tm[4] += float64(tx*tm[0]) + float64(ty*tm[2])
+	tm[5] += float64(tx*tm[1]) + float64(ty*tm[3])
 }
 
 // lineOrigin returns the default user space Y of the current line's origin,
@@ -1109,10 +1110,10 @@ func moveLine(tm *[6]float64, tx, ty float64) {
 // uprightSkew, and its glyphs stand up the page. A slant (an oblique made by
 // shearing the vertical) keeps a line upright.
 func lineOrigin(tm, ctm [6]float64) (float64, bool) {
-	y := tm[4]*ctm[1] + tm[5]*ctm[3] + ctm[5]
-	bx := tm[0]*ctm[0] + tm[1]*ctm[2]
-	by := tm[0]*ctm[1] + tm[1]*ctm[3]
-	uy := tm[2]*ctm[1] + tm[3]*ctm[3]
+	y := float64(tm[4]*ctm[1]) + float64(tm[5]*ctm[3]) + ctm[5]
+	bx := float64(tm[0]*ctm[0]) + float64(tm[1]*ctm[2])
+	by := float64(tm[0]*ctm[1]) + float64(tm[1]*ctm[3])
+	uy := float64(tm[2]*ctm[1]) + float64(tm[3]*ctm[3])
 	upright := bx > 0 && uy > 0 && math.Abs(by) <= uprightSkew*bx
 	return y, upright
 }
@@ -1269,12 +1270,12 @@ func pageTextBlocks(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 				}
 				if ok {
 					ctm = [6]float64{
-						m[0]*ctm[0] + m[1]*ctm[2],
-						m[0]*ctm[1] + m[1]*ctm[3],
-						m[2]*ctm[0] + m[3]*ctm[2],
-						m[2]*ctm[1] + m[3]*ctm[3],
-						m[4]*ctm[0] + m[5]*ctm[2] + ctm[4],
-						m[4]*ctm[1] + m[5]*ctm[3] + ctm[5],
+						float64(m[0]*ctm[0]) + float64(m[1]*ctm[2]),
+						float64(m[0]*ctm[1]) + float64(m[1]*ctm[3]),
+						float64(m[2]*ctm[0]) + float64(m[3]*ctm[2]),
+						float64(m[2]*ctm[1]) + float64(m[3]*ctm[3]),
+						float64(m[4]*ctm[0]) + float64(m[5]*ctm[2]) + ctm[4],
+						float64(m[4]*ctm[1]) + float64(m[5]*ctm[3]) + ctm[5],
 					}
 				}
 			}
@@ -1362,7 +1363,7 @@ func pageTextBlocks(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 					cur.upright = cur.upright && upright
 					cur.textLen += n
 					cur.appendShown(op)
-					size := curFont * textVScale(tm, ctm)
+					size := float64(curFont * textVScale(tm, ctm))
 					cur.addLine(op, r.Start, lineStart, n, uy, size)
 					lineStart = -1
 					sizeChars[roundHalf(size)] += n
@@ -1419,9 +1420,9 @@ func pageImageXObjectNames(ctx context.Context, alloc *writer.ObjAllocator, doc 
 // the other component, and reading d would report a quarter-turned heading as
 // zero-sized. With no rotation or shear this is exactly |tm.d * ctm.d|.
 func textVScale(tm, ctm [6]float64) float64 {
-	x := tm[2]*ctm[0] + tm[3]*ctm[2]
-	y := tm[2]*ctm[1] + tm[3]*ctm[3]
-	return math.Hypot(x, y)
+	x := float64(tm[2]*ctm[0]) + float64(tm[3]*ctm[2])
+	y := float64(tm[2]*ctm[1]) + float64(tm[3]*ctm[3])
+	return detmath.Hypot(x, y)
 }
 
 // dominantSize returns the rounded font size that painted the most characters,
@@ -1594,7 +1595,7 @@ func listItemAdjacent(a, b elemMeta) bool {
 	if !a.hasY || !b.hasY {
 		return false
 	}
-	lh := math.Max(a.fontSize, b.fontSize) * lineHeightFactor
+	lh := float64(math.Max(a.fontSize, b.fontSize) * lineHeightFactor)
 	if lh <= 0 {
 		return false
 	}
@@ -1694,7 +1695,7 @@ func lineAdjacent(a, b textBlock) bool {
 	if !a.hasY || !b.hasY {
 		return false
 	}
-	lh := math.Max(a.fontSize, b.fontSize) * lineHeightFactor
+	lh := float64(math.Max(a.fontSize, b.fontSize) * lineHeightFactor)
 	if lh <= 0 {
 		return false
 	}

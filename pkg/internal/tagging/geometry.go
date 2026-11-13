@@ -240,7 +240,7 @@ func (g *pageGeometry) ruled(ctx context.Context, rows []blockRow, boxAt map[int
 			size = math.Max(size, b.fontSize)
 		}
 	}
-	lead := lineHeightFactor * size
+	lead := float64(lineHeightFactor * size)
 	for _, l := range slices.Concat(stroked, filled) {
 		if math.Abs(l.Y1-l.Y2) > rowBaselineTol {
 			continue
