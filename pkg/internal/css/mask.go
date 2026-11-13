@@ -204,7 +204,7 @@ func maskProps() map[propID]propDef {
 			})
 		}, func(st *Style, v any) {
 			if l, ok := v.([]MaskMode); ok {
-				st.Mask.Modes = l
+				st.Mask.Modes = initialList(l, MaskMatchSource)
 			}
 		}, func(dst, src *Style) { dst.Mask.Modes = src.Mask.Modes }),
 		pMaskRepeat: list("mask-repeat", func(v []token, _ *declCtx) (any, bool) {
@@ -214,7 +214,7 @@ func maskProps() map[propID]propDef {
 			})
 		}, func(st *Style, v any) {
 			if l, ok := v.([][2]Repeat); ok {
-				st.Mask.Repeats = l
+				st.Mask.Repeats = initialList(l, [2]Repeat{RepeatRepeat, RepeatRepeat})
 			}
 		}, func(dst, src *Style) { dst.Mask.Repeats = src.Mask.Repeats }),
 		pMaskPosition: {name: "mask-position", parse: func(v []token, _ *declCtx) (any, bool) {
@@ -225,6 +225,7 @@ func maskProps() map[propID]propDef {
 				for i, p := range l {
 					st.Mask.Positions[i] = [2]Dimension{p[0].dim(s.lc, false), p[1].dim(s.lc, false)}
 				}
+				st.Mask.Positions = initialList(st.Mask.Positions, [2]Dimension{{Kind: Percent}, {Kind: Percent}})
 			}
 		}, copyFrom: func(dst, src *Style) { dst.Mask.Positions = src.Mask.Positions }},
 		pMaskSize: {name: "mask-size", parse: func(v []token, _ *declCtx) (any, bool) {
@@ -235,13 +236,14 @@ func maskProps() map[propID]propDef {
 				for i, b := range l {
 					st.Mask.Sizes[i] = BackgroundSize{Kind: b.kind, Width: s.computeDim(b.w, true), Height: s.computeDim(b.h, true)}
 				}
+				st.Mask.Sizes = initialList(st.Mask.Sizes, BackgroundSize{Kind: SizeExplicit, Width: Dimension{Kind: Auto}, Height: Dimension{Kind: Auto}})
 			}
 		}, copyFrom: func(dst, src *Style) { dst.Mask.Sizes = src.Mask.Sizes }},
 		pMaskOrigin: list("mask-origin", func(v []token, _ *declCtx) (any, bool) {
 			return maskList(v, maskGeometry)
 		}, func(st *Style, v any) {
 			if l, ok := v.([]GeometryBox); ok {
-				st.Mask.Origins = l
+				st.Mask.Origins = initialList(l, GeoBorder)
 			}
 		}, func(dst, src *Style) { dst.Mask.Origins = src.Mask.Origins }),
 		pMaskClip: list("mask-clip", func(v []token, _ *declCtx) (any, bool) {
@@ -254,7 +256,7 @@ func maskProps() map[propID]propDef {
 			})
 		}, func(st *Style, v any) {
 			if l, ok := v.([]MaskClip); ok {
-				st.Mask.Clips = l
+				st.Mask.Clips = initialList(l, MaskClip{})
 			}
 		}, func(dst, src *Style) { dst.Mask.Clips = src.Mask.Clips }),
 		pMaskComposite: list("mask-composite", func(v []token, _ *declCtx) (any, bool) {
@@ -265,7 +267,7 @@ func maskProps() map[propID]propDef {
 			})
 		}, func(st *Style, v any) {
 			if l, ok := v.([]MaskComposite); ok {
-				st.Mask.Composites = l
+				st.Mask.Composites = initialList(l, CompositeAdd)
 			}
 		}, func(dst, src *Style) { dst.Mask.Composites = src.Mask.Composites }),
 		// mask-type applies to SVG mask elements, which the svg package
@@ -419,4 +421,15 @@ func expandMask(v []token, c *declCtx) ([]entry, bool) {
 		{pMaskComposite, composites},
 	}
 	return out, true
+}
+
+// initialList returns l, nil when it holds the initial value alone: the
+// value a longhand's initial keyword computes to, so a list written as its
+// initial value and the initial keyword compute alike, and a style that
+// names neither holds no list.
+func initialList[T comparable](l []T, initial T) []T {
+	if len(l) == 1 && l[0] == initial {
+		return nil
+	}
+	return l
 }

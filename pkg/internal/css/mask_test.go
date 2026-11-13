@@ -71,3 +71,14 @@ func TestMask_Shorthand(t *testing.T) {
 		}
 	}
 }
+
+// TestMask_InitialListsComputeAsInitial locks that a mask longhand written
+// as its initial value computes as the initial keyword does: to no list.
+func TestMask_InitialListsComputeAsInitial(t *testing.T) {
+	t.Parallel()
+	s := styleOf(t, "mask-mode: match-source; mask-repeat: repeat; mask-position: 0% 0%; mask-size: auto;"+
+		"mask-origin: border-box; mask-clip: border-box; mask-composite: add")
+	if m := s.Mask; m.Modes != nil || m.Repeats != nil || m.Positions != nil || m.Sizes != nil || m.Origins != nil || m.Clips != nil || m.Composites != nil {
+		t.Errorf("%+v", m)
+	}
+}
