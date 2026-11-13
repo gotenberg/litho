@@ -228,6 +228,19 @@ func TestTextIndent_FirstLine(t *testing.T) {
 	}
 }
 
+// TestTextIndent_NotAfterABlock locks CSS Text 3, 8.1: text-indent
+// indents the element's first formatted line alone, so the anonymous block
+// holding text after a block child is not indented, while one before any
+// block child is.
+func TestTextIndent_NotAfterABlock(t *testing.T) {
+	in := func(s *css.Style) { s.TextIndent = css.Pts(px(10)) }
+	res := run(t, doc(el(sty(in), txt(sty(in), "aa"), el(sty(in), txt(sty(in), "bb")), txt(sty(in), "cc"))), page(40, 50))
+	got, pos := lineTexts(res, 1)
+	if len(pos) != 3 || !near(pos[0][0], 10) || !near(pos[1][0], 10) || !near(pos[2][0], 0) {
+		t.Errorf("lines %q at %v, want x 10, 10 then 0", got, pos)
+	}
+}
+
 func TestLetterSpacing_Widens(t *testing.T) {
 	ls := func(s *css.Style) { s.LetterSpacing = css.Pts(px(2)) }
 	res := run(t, doc(el(sty(ls), txt(sty(ls), "abc"))), page(100, 50))

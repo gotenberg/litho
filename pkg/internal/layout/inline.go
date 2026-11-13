@@ -776,6 +776,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 	// room under the previous line's content after it (rubyRoom).
 	room := 0.0
 	indent := resolve(b.st.TextIndent, cb.w)
+	after := afterBlock(b)
 	strutH := s.rootV.above + s.rootV.below
 	afterForced := false
 	rootV := s.rootV
@@ -910,7 +911,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			}
 			s.placeFloats(lp, pos, pos, top, mc, false)
 			lineIndent := 0.0
-			if indents(b.st, len(s.lines) == 0, paraFirst && prevForced) && !lettered {
+			if indents(b.st, len(s.lines) == 0 && !after, paraFirst && prevForced) && !lettered {
 				lineIndent = indent
 			}
 			if first {
@@ -1088,6 +1089,26 @@ func (e *engine) lineWidths(p *ifcPara) []float64 {
 func indents(st *css.Style, first, afterForced bool) bool {
 	on := first || st.TextIndentEachLine && afterForced
 	return on != st.TextIndentHanging
+}
+
+// afterBlock reports an anonymous block box b that an in-flow block of its
+// parent precedes: its first line is not the parent's first formatted line,
+// which alone text-indent indents (CSS Text 3, 8.1; CSS 2.1, 9.2.1.1: the
+// anonymous box inherits text-indent but holds no first line of the
+// element).
+func afterBlock(b *box) bool {
+	if !b.anon || b.parent == nil {
+		return false
+	}
+	for _, k := range b.parent.kids {
+		if k == b {
+			return false
+		}
+		if k.float == css.FloatNone && !k.abs {
+			return true
+		}
+	}
+	return false
 }
 
 // pendingTop returns y with the margins pending in mc added when pending.
@@ -2262,7 +2283,7 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 		maxW := mp.paraWidths(func(a *box) float64 { _, h := e.contribution(a); return h })
 		n := p.p.Len()
 		x := 0.0
-		if indents(b.st, pi == 0, pi > 0 && d.paras[pi-1].forced) {
+		if indents(b.st, pi == 0 && !afterBlock(b), pi > 0 && d.paras[pi-1].forced) {
 			x = indent
 		}
 		trail := 0.0
