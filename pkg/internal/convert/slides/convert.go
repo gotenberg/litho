@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
@@ -88,6 +89,9 @@ type builder struct {
 	// is being drawn: a hatch keeps its angle on the page whatever the
 	// shape's turn.
 	hatchTurn float64
+	// effectPixels counts the pixels of the effect bitmaps of the slide
+	// being drawn.
+	effectPixels effect.Page
 }
 
 // warn records a warning once per code, effect and message.
@@ -544,6 +548,7 @@ func (b *builder) slidePage(s *Slide, n int) (*typeset.Page, *typeset.StructElem
 // element.
 func (b *builder) slideContent(s *Slide, n int, w, h float64) ([]typeset.Fragment, []typeset.Link, *typeset.StructElem) {
 	b.slide, b.number, b.shapes, b.links = s, n, 0, nil
+	b.effectPixels = effect.Page{}
 	b.groupFit = b.groupFits(s.Shapes)
 	sect := &typeset.StructElem{Role: "Sect"}
 	var out []typeset.Fragment

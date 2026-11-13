@@ -6,9 +6,8 @@ import (
 	"image/color"
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
-	"github.com/gotenberg/litho/pkg/internal/raster"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -78,6 +77,17 @@ func (g effectGrid) pixels() typeset.Matrix {
 	return typeset.Matrix{A: sx, D: sy, E: -g.box.X * sx, F: -g.box.Y * sy}
 }
 
+// place returns where the grid's surfaces sit on the slide.
+func (g effectGrid) place() effect.Grid {
+	return effect.Grid{X: g.box.X, Y: g.box.Y, Scale: float64(g.w) / g.box.Width}
+}
+
+// surface returns a transparent surface of the grid's size in format f,
+// charged to the conversion's budget.
+func (g effectGrid) surface(ctx context.Context, f effect.Format) (*effect.Surface, error) {
+	return effect.New(ctx, f, g.w, g.h, g.place())
+}
+
 // radius returns the radius r points spans on the grid in whole pixels,
 // as Impress's filters take it: r at effectScale rounded up, scaled by the
 // budget's reduction, then truncated.
@@ -86,7 +96,36 @@ func (g effectGrid) radius(r float64) int {
 	if math.IsNaN(v) || v < 1 {
 		return 0
 	}
-	return int(min(v, raster.MaxKernelRadius)) // fits int: at most MaxKernelRadius
+	return int(min(v, effect.MaxKernelRadius)) // fits int: at most MaxKernelRadius
+}
+
+// tent blurs s in place by the tent of radius r pixels, Impress's stack
+// blur, the pixels past the bitmap's edge repeating the edge's: a mask
+// its caller clipped keeps its coverage at the cut.
+func tent(ctx context.Context, s *effect.Surface, r int) error {
+	k := effect.TentKernel(float64(r))
+	return effect.Blur(ctx, s, k, k, effect.EdgeDuplicate)
+}
+
+// tinted returns the coverage cov in the one colour c as an image whose
+// alpha is the coverage times c's alpha, colours straight, charged to the
+// budget for [typeset.EncodeImage] to give back.
+func tinted(ctx context.Context, cov *effect.Surface, c typeset.Color) (*image.NRGBA, error) {
+	if err := typeset.ChargeImage(ctx, cov.W, cov.H, color.NRGBAModel); err != nil {
+		return nil, err
+	}
+	return tint(cov.Pix, cov.W, cov.H, effect.ColorOf(c)), nil
+}
+
+// tint returns the w by h alpha samples in the one colour c as an image,
+// each alpha times c's.
+func tint(alpha []uint8, w, h int, c effect.Color) *image.NRGBA {
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	for i, v := range alpha[:w*h] {
+		p := img.Pix[4*i : 4*i+4 : 4*i+4]
+		p[0], p[1], p[2], p[3] = c.R, c.G, c.B, uint8((uint32(v)*uint32(c.A)+127)/255) //nolint:gosec // a byte times a fraction of 1
+	}
+	return img
 }
 
 // image returns the bitmap img placed over the grid's area, in slide
@@ -103,7 +142,7 @@ func (g effectGrid) image(ctx context.Context, img image.Image) typeset.Fragment
 // silhouette is what a shape paints, as the filters see it: its painted
 // paths in slide coordinates and their bounds there.
 type silhouette struct {
-	paths  []raster.Path
+	paths  []effect.Path
 	colors []typeset.Color
 	// flat is false when a path paints a shading or a picture, which a
 	// soft edge's bitmap cannot redraw in one colour.
@@ -114,7 +153,8 @@ type silhouette struct {
 // silhouetteOf returns the silhouette of frags drawn under m (their
 // coordinates to the slide's): each path filled or stroked, each picture
 // its rectangle, each clipped group its clip. Text is left out: its
-// glyphs have no outline here.
+// glyphs have no outline here. Every path covers by the non-zero rule,
+// its subpaths summed by direction, as Impress's silhouettes do.
 func silhouetteOf(frags []typeset.Fragment, m typeset.Matrix) *silhouette {
 	s := &silhouette{flat: true}
 	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
@@ -134,7 +174,7 @@ func silhouetteOf(frags []typeset.Fragment, m typeset.Matrix) *silhouette {
 				x0, y0, x1, y1 = min(x0, p.X-hw), min(y0, p.Y-hw), max(x1, p.X+hw), max(y1, p.Y+hw)
 			}
 		}
-		s.paths = append(s.paths, raster.Path{Ops: ops, Width: width})
+		s.paths = append(s.paths, effect.Path{Ops: ops, Width: width})
 		s.colors = append(s.colors, c)
 	}
 	var walk func(fs []typeset.Fragment, tr typeset.Matrix, depth int)
@@ -194,12 +234,24 @@ func mapOps(ops []typeset.PathOp, m typeset.Matrix) []typeset.PathOp {
 	return out
 }
 
+// coverage returns the coverage on g of paths, moved by tr in slide
+// coordinates first.
+func coverage(ctx context.Context, g effectGrid, paths []effect.Path, tr typeset.Matrix) (*effect.Surface, error) {
+	cov, err := g.surface(ctx, effect.Coverage)
+	if err != nil {
+		return nil, err
+	}
+	if err := effect.Fill(ctx, cov, paths, then(tr, g.pixels())); err != nil {
+		cov.Release()
+		return nil, err
+	}
+	return cov, nil
+}
+
 // coverage returns the silhouette's coverage on g, its paths moved by tr
 // in slide coordinates first.
-func (s *silhouette) coverage(g effectGrid, tr typeset.Matrix) *image.Alpha {
-	m := image.NewAlpha(image.Rect(0, 0, g.w, g.h))
-	raster.Draw(m, s.paths, then(tr, g.pixels()))
-	return m
+func (s *silhouette) coverage(ctx context.Context, g effectGrid, tr typeset.Matrix) (*effect.Surface, error) {
+	return coverage(ctx, g, s.paths, tr)
 }
 
 // grow returns r grown by d on every side.
@@ -216,14 +268,6 @@ func intersect(a, b typeset.Rect) (typeset.Rect, bool) {
 		return typeset.Rect{}, false
 	}
 	return typeset.Rect{X: x0, Y: y0, Width: w, Height: h}, true
-}
-
-// union raises the coverage of m by that of n, source-over, in place.
-func union(m, n *image.Alpha) {
-	for i, v := range n.Pix {
-		a, b := uint32(m.Pix[i]), uint32(v)
-		m.Pix[i] = uint8(a + (b*(255-a)+127)/255) //nolint:gosec // a + b(1-a) of two coverages is a coverage
-	}
 }
 
 // minDeterminant is the smallest determinant a transform inverts with:
@@ -250,18 +294,22 @@ type effectPlan struct {
 	sil   *silhouette
 	area  typeset.Rect
 	twice bool
-	// mem is the conversion's memory budget the bitmaps are charged to.
-	mem *limits.Budget
+	// page counts the pixels of the slide's effect bitmaps; capped warns
+	// once it refuses one.
+	page   *effect.Page
+	capped func()
 }
 
-// grid returns the grid of an effect over box, as [newGrid] does, and
-// charges the bitmap the effect paints at its size, four bytes a pixel,
-// which [typeset.EncodeImage] releases once it has encoded it; false for
-// an area too small to draw or a bitmap the budget refuses, whose refusal
-// stops the conversion.
+// grid returns the grid of an effect over box, as [newGrid] does; false
+// for an area too small to draw or a bitmap past the slide's pixel cap
+// ([effect.MaxPagePixels]), which warns that the effect is left out.
 func (p *effectPlan) grid(box typeset.Rect) (effectGrid, bool) {
 	g, ok := newGrid(box)
-	if !ok || !p.mem.Take(int64(g.w)*int64(g.h), limits.DecodedPixelCost, "effect bitmaps") {
+	if !ok {
+		return effectGrid{}, false
+	}
+	if !p.page.Take(effect.Resolution{W: g.w, H: g.h}) {
+		p.capped()
 		return effectGrid{}, false
 	}
 	return g, true
@@ -419,7 +467,9 @@ func (b *builder) paintEffects(s *Shape, own, text []typeset.Fragment, toSlide t
 		return nil, nil
 	}
 	sw, sh := b.slideSize()
-	p := &effectPlan{s: s, sil: sil, area: typeset.Rect{Width: sw, Height: sh}, twice: twice, mem: limits.BudgetFrom(b.ctx)}
+	p := &effectPlan{s: s, sil: sil, area: typeset.Rect{Width: sw, Height: sh}, twice: twice, page: &b.effectPixels, capped: func() {
+		b.warn(warn.LimitReached, warn.Omitted, "effects past the pixels a slide's effect bitmaps may hold are not drawn")
+	}}
 	var top []typeset.Fragment
 	var drawn []typeset.Fragment
 	if s.SoftEdge > 0 {
@@ -574,14 +624,15 @@ func retint(ctx context.Context, src *typeset.ImageSource, c typeset.Color) *typ
 	if !ok {
 		return nil
 	}
-	a := image.NewAlpha(img.Bounds())
-	for i := range a.Pix {
-		a.Pix[i] = img.Pix[4*i+3]
-	}
-	if err := typeset.ChargeImage(ctx, a.Rect.Dx(), a.Rect.Dy(), color.NRGBAModel); err != nil {
+	w, h := img.Rect.Dx(), img.Rect.Dy()
+	if err := typeset.ChargeImage(ctx, w, h, color.NRGBAModel); err != nil {
 		return nil
 	}
-	out, err := typeset.EncodeImage(ctx, raster.Tint(a, c))
+	a := make([]uint8, w*h)
+	for i := range a {
+		a[i] = img.Pix[4*i+3]
+	}
+	out, err := typeset.EncodeImage(ctx, tint(a, w, h, effect.ColorOf(c)))
 	if err != nil {
 		return nil
 	}
@@ -633,17 +684,46 @@ func recolor(frags []typeset.Fragment, c typeset.Color, depth int) []typeset.Fra
 // and blurred over the other half, so it fades from the outline to
 // nothing one radius out (LibreOffice's GlowPrimitive2D). The outer glow
 // grows the outline of the first glow instead.
-func (p *effectPlan) glowMask(g effectGrid, tr typeset.Matrix, outer bool) *image.Alpha {
+func (p *effectPlan) glowMask(ctx context.Context, g effectGrid, tr typeset.Matrix, outer bool) (*effect.Surface, error) {
 	half := g.radius(p.s.Glow.Radius) / 2
-	base := p.sil.coverage(g, tr)
-	raster.Threshold(base)
-	inner := raster.Blur(raster.Dilate(base, half), raster.Tent(float64(half)))
-	if outer {
-		union(base, inner)
-		raster.Threshold(base)
-		inner = raster.Blur(raster.Dilate(base, half), raster.Tent(float64(half)))
+	base, err := p.sil.coverage(ctx, g, tr)
+	if err != nil {
+		return nil, err
 	}
-	return inner
+	defer base.Release()
+	if err := effect.Threshold(base, 1); err != nil {
+		return nil, err
+	}
+	inner, err := grownBlur(ctx, base, half)
+	if err != nil || !outer {
+		return inner, err
+	}
+	defer inner.Release()
+	if err := effect.Composite(ctx, base, inner, effect.Over); err != nil {
+		return nil, err
+	}
+	if err := effect.Threshold(base, 1); err != nil {
+		return nil, err
+	}
+	return grownBlur(ctx, base, half)
+}
+
+// grownBlur returns a copy of the coverage cov grown by r pixels and
+// blurred by the tent of radius r.
+func grownBlur(ctx context.Context, cov *effect.Surface, r int) (*effect.Surface, error) {
+	out, err := cov.Clone(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := effect.Dilate(ctx, out, r, r); err != nil {
+		out.Release()
+		return nil, err
+	}
+	if err := tent(ctx, out, r); err != nil {
+		out.Release()
+		return nil, err
+	}
+	return out, nil
 }
 
 // glow returns the bitmap of the shape's glow in slide coordinates, the
@@ -670,10 +750,18 @@ func (p *effectPlan) glow(ctx context.Context, outer bool) typeset.Fragment {
 	if !ok {
 		return nil
 	}
-	mask := p.glowMask(g, typeset.Identity, outer)
+	mask, err := p.glowMask(ctx, g, typeset.Identity, outer)
+	if err != nil {
+		return nil
+	}
+	defer mask.Release()
 	c := colorOf(gl.Color)
 	c.A = min(gl.Opacity, 1)
-	return g.image(ctx, raster.Tint(mask, c))
+	img, err := tinted(ctx, mask, c)
+	if err != nil {
+		return nil
+	}
+	return g.image(ctx, img)
 }
 
 // softMask returns a soft edge's coverage on g: the silhouette made
@@ -681,18 +769,53 @@ func (p *effectPlan) glow(ctx context.Context, outer bool) typeset.Fragment {
 // outline to opaque two radii in (LibreOffice's SoftEdgePrimitive2D), the
 // fade squared when the soft edge applies twice, times the silhouette's
 // own coverage.
-func (p *effectPlan) softMask(g effectGrid, tr typeset.Matrix) *image.Alpha {
+func (p *effectPlan) softMask(ctx context.Context, g effectGrid, tr typeset.Matrix) (*effect.Surface, error) {
 	r := g.radius(p.s.SoftEdge)
-	cov := p.sil.coverage(g, tr)
-	base := image.NewAlpha(cov.Rect)
-	copy(base.Pix, cov.Pix)
-	raster.Threshold(base)
-	fade := raster.Blur(raster.Erode(base, r), raster.Tent(float64(r)))
-	if p.twice {
-		raster.Multiply(fade, fade)
+	cov, err := p.sil.coverage(ctx, g, tr)
+	if err != nil {
+		return nil, err
 	}
-	raster.Multiply(fade, cov)
-	return fade
+	defer cov.Release()
+	fade, err := cov.Clone(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ok := false
+	defer func() {
+		if !ok {
+			fade.Release()
+		}
+	}()
+	if err := effect.Threshold(fade, 1); err != nil {
+		return nil, err
+	}
+	if err := effect.Erode(ctx, fade, r, r); err != nil {
+		return nil, err
+	}
+	if err := tent(ctx, fade, r); err != nil {
+		return nil, err
+	}
+	if p.twice {
+		if err := square(ctx, fade); err != nil {
+			return nil, err
+		}
+	}
+	// The coverage In the fade: the fade times the coverage.
+	if err := effect.Composite(ctx, fade, cov, effect.In); err != nil {
+		return nil, err
+	}
+	ok = true
+	return fade, nil
+}
+
+// square multiplies the coverage of s by itself, in place.
+func square(ctx context.Context, s *effect.Surface) error {
+	c, err := s.Clone(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.Release()
+	return effect.Composite(ctx, s, c, effect.In)
 }
 
 // softEdge returns the shape drawn as a bitmap whose alpha fades over the
@@ -717,21 +840,60 @@ func (p *effectPlan) softEdge(ctx context.Context) typeset.Fragment {
 	if !ok {
 		return nil
 	}
-	img := image.NewNRGBA(image.Rect(0, 0, g.w, g.h))
-	for i, path := range p.sil.paths {
-		m := image.NewAlpha(img.Rect)
-		raster.Draw(m, []raster.Path{path}, g.pixels())
-		raster.Paint(img, m, p.sil.colors[i])
-	}
-	fade := p.softMask(g, typeset.Identity)
-	// The colours keep their own coverage; the fade replaces it with the
-	// soft edge's, which already holds the coverage.
-	for i, v := range fade.Pix {
-		if img.Pix[4*i+3] != 0 {
-			img.Pix[4*i+3] = v
-		}
+	img, err := p.softEdgeImage(ctx, g)
+	if err != nil {
+		return nil
 	}
 	return g.image(ctx, img)
+}
+
+// softEdgeImage paints the silhouette's paths in their colours on g, each
+// over the ones before, and gives each painted pixel the soft edge's
+// alpha in place of its own, which the soft edge's coverage already holds.
+func (p *effectPlan) softEdgeImage(ctx context.Context, g effectGrid) (*image.NRGBA, error) {
+	paint, err := g.surface(ctx, effect.RGBA)
+	if err != nil {
+		return nil, err
+	}
+	defer paint.Release()
+	for i, path := range p.sil.paths {
+		cov, err := coverage(ctx, g, []effect.Path{path}, typeset.Identity)
+		if err != nil {
+			return nil, err
+		}
+		layer, err := effect.Tint(ctx, cov, effect.ColorOf(p.sil.colors[i]))
+		cov.Release()
+		if err != nil {
+			return nil, err
+		}
+		err = effect.Composite(ctx, paint, layer, effect.Over)
+		layer.Release()
+		if err != nil {
+			return nil, err
+		}
+	}
+	fade, err := p.softMask(ctx, g, typeset.Identity)
+	if err != nil {
+		return nil, err
+	}
+	defer fade.Release()
+	if err := typeset.ChargeImage(ctx, g.w, g.h, color.NRGBAModel); err != nil {
+		return nil, err
+	}
+	img := image.NewNRGBA(image.Rect(0, 0, g.w, g.h))
+	for i, v := range fade.Pix {
+		px, out := paint.Pix[4*i:4*i+4:4*i+4], img.Pix[4*i:4*i+4:4*i+4]
+		if a := px[3]; a != 0 {
+			out[0], out[1], out[2], out[3] = unpremultiply(px[0], a), unpremultiply(px[1], a), unpremultiply(px[2], a), v
+		}
+	}
+	return img, nil
+}
+
+// unpremultiply returns the colour channel c of a pixel premultiplied by
+// its alpha a, not zero, as a straight channel, rounded.
+func unpremultiply(c, a uint8) uint8 {
+	return uint8(min((uint32(c)*255+uint32(a)/2)/uint32(a), 255)) //nolint:gosec // clamped to a byte
 }
 
 // shadow returns the bitmap of the shape's blurred shadow in slide
@@ -768,32 +930,60 @@ func (p *effectPlan) shadow(ctx context.Context) typeset.Fragment {
 	if !ok {
 		return nil
 	}
-	var mask *image.Alpha
+	mask, err := p.shadowMask(ctx, g, tr)
+	if err != nil {
+		return nil
+	}
+	defer mask.Release()
+	c := colorOf(sh.Color)
+	c.A = min(sh.Opacity, 1)
+	img, err := tinted(ctx, mask, c)
+	if err != nil {
+		return nil
+	}
+	return g.image(ctx, img)
+}
+
+// shadowMask returns the coverage of the shadow on g, the silhouette moved
+// by tr: the soft edge's coverage, or the silhouette's, with the glows at
+// their opacity over it, blurred by the shadow's radius.
+func (p *effectPlan) shadowMask(ctx context.Context, g effectGrid, tr typeset.Matrix) (*effect.Surface, error) {
+	var mask *effect.Surface
+	var err error
 	if p.s.SoftEdge > 0 && p.sil.flat {
-		mask = p.softMask(g, tr)
+		mask, err = p.softMask(ctx, g, tr)
 	} else {
-		mask = p.sil.coverage(g, tr)
+		mask, err = p.sil.coverage(ctx, g, tr)
+	}
+	if err != nil {
+		return nil, err
+	}
+	fail := func(err error) (*effect.Surface, error) {
+		mask.Release()
+		return nil, err
 	}
 	if gl := p.s.Glow; gl != nil && gl.Radius > 0 && gl.Opacity > 0 {
+		lut := effect.OpacityTransfer(gl.Opacity).Table()
 		for _, outer := range []bool{false, true} {
 			if outer && !p.twice {
 				continue
 			}
-			m := p.glowMask(g, tr, outer)
-			scale(m, gl.Opacity)
-			union(mask, m)
+			m, err := p.glowMask(ctx, g, tr, outer)
+			if err != nil {
+				return fail(err)
+			}
+			for i, v := range m.Pix {
+				m.Pix[i] = lut[v]
+			}
+			err = effect.Composite(ctx, mask, m, effect.Over)
+			m.Release()
+			if err != nil {
+				return fail(err)
+			}
 		}
 	}
-	mask = raster.Blur(mask, raster.Tent(float64(g.radius(sh.Blur))))
-	c := colorOf(sh.Color)
-	c.A = min(sh.Opacity, 1)
-	return g.image(ctx, raster.Tint(mask, c))
-}
-
-// scale multiplies the coverage of m by f, in place.
-func scale(m *image.Alpha, f float64) {
-	f = min(max(f, 0), 1)
-	for i, v := range m.Pix {
-		m.Pix[i] = uint8(math.Round(float64(v) * f)) //nolint:gosec // a coverage times a fraction is a coverage
+	if err := tent(ctx, mask, g.radius(p.s.Shadow.Blur)); err != nil {
+		return fail(err)
 	}
+	return mask, nil
 }
