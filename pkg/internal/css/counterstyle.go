@@ -551,7 +551,7 @@ func (s *counterStyle) inRange(v int) bool {
 			return v >= 0
 		case systemChinese, systemKorean:
 			// The extended range of CSS Counter Styles 3, 7.1.5.
-			return v > -1e16 && v < 1e16
+			return int64(v) > -1e16 && int64(v) < 1e16
 		case systemCyclic, systemNumeric, systemFixed, systemExtends:
 		}
 		return true
