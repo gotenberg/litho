@@ -436,12 +436,25 @@ func (p *painter) unit(b *box, own bool) {
 		}
 	}
 	blend, isolate := p.compositing(b)
-	if op < 1 || has || blend != typeset.BlendNormal || isolate {
+	var clips []*typeset.Path
+	if b.parent != nil && b.isStackingContext() {
+		var visible bool
+		if clips, visible = p.clipPathOf(b); !visible {
+			return
+		}
+	}
+	if op < 1 || has || blend != typeset.BlendNormal || isolate || len(clips) > 0 {
 		g := &ditem{group: true, opacity: op, blend: blend, isolate: isolate}
 		if has {
 			g.transform = &m
 		}
+		if len(clips) > 0 {
+			g.clip = clips[0]
+		}
 		push(g)
+		for _, c := range clips[min(len(clips), 1):] {
+			push(&ditem{group: true, opacity: 1, clip: c})
+		}
 	}
 	if p.clips(b) && pushed == 0 {
 		// The box's own clip is relative to the frame of its context: a

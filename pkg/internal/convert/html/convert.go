@@ -344,6 +344,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 			Lang:             scan.lang,
 			Fallback:         text.FallbackChromium,
 			Image:            res.picture,
+			ClipSource:       b.clipSource,
 			MaxPages:         o.MaxPages,
 			Logger:           o.Logger,
 		},
@@ -470,6 +471,10 @@ type scan struct {
 	sheets []*dom.Node
 	// ids holds every id attribute and a[name] of the document.
 	ids map[string]bool
+	// defs holds the first SVG clipPath and mask element of each id, the
+	// elements a clip-path or a mask names by url() (CSS Masking 1, 5.1
+	// and 6.2).
+	defs map[string]*dom.Node
 	// resourceBase resolves resource references: the document's URL, or
 	// the <base href> resolved against it when that is relative or an http
 	// or https URL. linkBase resolves links, "" without a <base> in a
@@ -485,7 +490,7 @@ type scan struct {
 // elements, the ids and the base URL. docURL is the document's URL, see
 // [documentBase].
 func scanDocument(ctx context.Context, doc *dom.Node, docURL string) (*scan, error) {
-	s := &scan{ids: map[string]bool{}, resourceBase: docURL, docURL: docURL}
+	s := &scan{ids: map[string]bool{}, defs: map[string]*dom.Node{}, resourceBase: docURL, docURL: docURL}
 	if docURL != documentURL {
 		// A document on the network resolves its links against its URL.
 		s.linkBase = docURL
@@ -510,6 +515,9 @@ func scanDocument(ctx context.Context, doc *dom.Node, docURL string) (*scan, err
 		}
 		if id, ok := attr(n, "id"); ok && id != "" {
 			s.ids[id] = true
+			if _, seen := s.defs[id]; !seen && n.Namespace == "svg" && (n.Data == "clipPath" || n.Data == "mask") {
+				s.defs[id] = n
+			}
 		}
 		if n.Namespace != "" {
 			return true

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	dom "golang.org/x/net/html"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -102,6 +104,11 @@ type builder struct {
 	// lines styles the first formatted lines, nil when no element has a
 	// ::first-line.
 	lines *firstLines
+	// defDocs holds the drawing of each svg element a clip-path or a mask
+	// reached, nil for one that does not parse; the layout reads it
+	// through defsMu.
+	defDocs map[*dom.Node]*svg.Document
+	defsMu  sync.Mutex
 }
 
 // buildRoot builds the content tree of the root element.

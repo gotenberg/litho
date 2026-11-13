@@ -124,27 +124,7 @@ func (b *builder) inlineSVG(ctx context.Context, n *dom.Node, st *css.Style) []*
 	if st == nil || st.Display == css.DisplayNone {
 		return nil
 	}
-	var sheets []string
-	for _, s := range b.scan.sheets {
-		if s.Namespace == "" && s.Data == "style" {
-			sheets = append(sheets, textContent(s))
-		}
-	}
-	doc, err := svg.FromNode(ctx, n, svg.Options{
-		Fonts: b.res.svg.fonts,
-		Image: func(ctx context.Context, href string) (*svg.Raster, error) {
-			return b.res.svgRaster(ctx, resolveRef(b.scan.resourceBase, href))
-		},
-		Context: svg.Context{
-			Color:    typeset.Color{R: st.Color.R, G: st.Color.G, B: st.Color.B, A: st.Color.A},
-			Families: st.FontFamilies,
-			FontSize: st.FontSize / css.Pt,
-			Weight:   st.FontWeight,
-			Italic:   st.FontStyle != css.FontNormal,
-			Lang:     b.scan.lang,
-		},
-		Sheets: sheets,
-	})
+	doc, err := svg.FromNode(ctx, n, b.svgOptions(st))
 	if err != nil {
 		if ctx.Err() == nil {
 			b.warnings = append(b.warnings, typeset.Warning{Code: warningCode(pictureDataError{err}), Effect: warn.Omitted, Message: fmt.Sprintf("an inline SVG was left out: %v", err)})
@@ -177,6 +157,104 @@ func (b *builder) inlineSVG(ctx context.Context, n *dom.Node, st *css.Style) []*
 	node.Role = "Figure"
 	node.Alt = svgTitle(n)
 	return []*layout.Node{node}
+}
+
+// svgOptions returns the options an svg element of the document styled
+// st draws with: the document's style elements apply to its content, and
+// it inherits the element's colour and font.
+func (b *builder) svgOptions(st *css.Style) svg.Options {
+	var sheets []string
+	for _, s := range b.scan.sheets {
+		if s.Namespace == "" && s.Data == "style" {
+			sheets = append(sheets, textContent(s))
+		}
+	}
+	return svg.Options{
+		Fonts: b.res.svg.fonts,
+		Image: func(ctx context.Context, href string) (*svg.Raster, error) {
+			return b.res.svgRaster(ctx, resolveRef(b.scan.resourceBase, href))
+		},
+		Context: svg.Context{
+			Color:    typeset.Color{R: st.Color.R, G: st.Color.G, B: st.Color.B, A: st.Color.A},
+			Families: st.FontFamilies,
+			FontSize: st.FontSize / css.Pt,
+			Weight:   st.FontWeight,
+			Italic:   st.FontStyle != css.FontNormal,
+			Lang:     b.scan.lang,
+		},
+		Sheets: sheets,
+	}
+}
+
+// definition returns the drawing of the svg element that holds the
+// clipPath or mask element of kind url names, and that element's id:
+// url names an element of the document by its fragment (CSS Masking 1,
+// 5.1 and 6.2). A url into another document names none.
+func (b *builder) definition(ctx context.Context, url, kind string) (*svg.Document, string, bool) {
+	i := strings.LastIndexByte(url, '#')
+	if i < 0 || url[:i] != "" && url[:i] != b.scan.resourceBase && url[:i] != b.scan.docURL {
+		return nil, "", false
+	}
+	id := url[i+1:]
+	def := b.scan.defs[id]
+	if def == nil || def.Data != kind {
+		return nil, "", false
+	}
+	var owner *dom.Node
+	for a := def.Parent; a != nil && a.Type == dom.ElementNode && a.Namespace == "svg"; a = a.Parent {
+		if a.Data == "svg" {
+			owner = a
+		}
+	}
+	if owner == nil {
+		return nil, "", false
+	}
+	b.defsMu.Lock()
+	defer b.defsMu.Unlock()
+	if doc, ok := b.defDocs[owner]; ok {
+		return doc, id, doc != nil
+	}
+	st := b.computed.Style(owner)
+	if st == nil {
+		st = css.Initial()
+	}
+	doc, err := svg.FromNode(ctx, owner, b.svgOptions(st))
+	if err != nil {
+		// The drawing that holds the definition does not parse, which its
+		// own placement reports: the url names nothing, as one that names
+		// no element does.
+		doc = nil
+	}
+	if b.defDocs == nil {
+		b.defDocs = map[*dom.Node]*svg.Document{}
+	}
+	b.defDocs[owner] = doc
+	return doc, id, doc != nil
+}
+
+// clipSource returns the clipping regions of the clipPath element url
+// names for an element whose border box is box, in points in the layout's
+// coordinates: the clip path's user space has its origin at the box's top
+// left and a unit of one CSS pixel (CSS Masking 1, 5.1).
+func (b *builder) clipSource(ctx context.Context, url string, box typeset.Rect) ([][]*typeset.Path, bool) {
+	doc, id, ok := b.definition(ctx, url, "clipPath")
+	if !ok {
+		return nil, false
+	}
+	regions, found := doc.ClipRegions(ctx, id, box.Width/css.Pt, box.Height/css.Pt)
+	for _, reg := range regions {
+		for i, p := range reg {
+			ops := make([]typeset.PathOp, len(p.Ops))
+			for k, op := range p.Ops {
+				for j := range op.P {
+					op.P[j] = typeset.Point{X: box.X + op.P[j].X*css.Pt, Y: box.Y + op.P[j].Y*css.Pt}
+				}
+				ops[k] = op
+			}
+			reg[i] = &typeset.Path{Ops: ops, Fill: p.Fill}
+		}
+	}
+	return regions, found
 }
 
 // svgTitle returns the text of the first title child of an svg element,

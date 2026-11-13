@@ -400,11 +400,11 @@ func (b *box) isStackingContext() bool {
 	return (b.st.Position != css.Static || b.isItem()) && !b.st.ZIndex.Auto || b.st.Position == css.Fixed || b.st.Opacity < 1 || b.transformed() || b.composited()
 }
 
-// composited reports a box whose blend mode is not normal or whose
-// isolation is isolate: either makes it a stacking context (CSS
-// Compositing 1, 3.2 and 3.3).
+// composited reports a box whose blend mode is not normal, whose
+// isolation is isolate or that has a clip-path: each makes it a stacking
+// context (CSS Compositing 1, 3.2 and 3.3; CSS Masking 1, 5.1).
 func (b *box) composited() bool {
-	return b.st.MixBlendMode != css.BlendNormal || b.st.Isolation == css.IsolationIsolate
+	return b.st.MixBlendMode != css.BlendNormal || b.st.Isolation == css.IsolationIsolate || !b.st.ClipPath.None()
 }
 
 // zLevel returns the stack level of a stacking context: its z-index, 0

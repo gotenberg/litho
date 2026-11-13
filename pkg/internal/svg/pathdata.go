@@ -318,3 +318,9 @@ func arcToCubics(p0 typeset.Point, rx, ry, rotDeg float64, large, sweep bool, p1
 	}
 	return ops
 }
+
+// PathData parses SVG path data (SVG 1.1, 8.3) into path operators in user
+// units, as the d attribute of a path element reads: on an error, the path
+// up to the last complete command and false. A CSS path() shape takes the
+// same grammar (CSS Shapes 1, 3.1).
+func PathData(d string) ([]typeset.PathOp, bool) { return parsePath(d) }

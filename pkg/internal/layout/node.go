@@ -261,6 +261,13 @@ type Options struct {
 	// list markers. nil refuses every URL. An error is reported as a
 	// warning and the image is left out.
 	Image func(ctx context.Context, url string) (*Picture, error)
+	// ClipSource returns the clipping regions of the SVG clipPath element
+	// url names, for an element whose border box is box, in the same
+	// coordinates (CSS Masking 1, 5.1): the content shows where it lies
+	// inside every path of a region, in any of the regions. found reports
+	// that url names a clipPath element; found with no region hides the
+	// element. nil names none.
+	ClipSource func(ctx context.Context, url string, box typeset.Rect) (regions [][]*typeset.Path, found bool)
 	// MaxPages bounds the pages laid out; past it Layout fails with
 	// [limits.ErrTooManyPages]. Zero means [DefaultMaxPages].
 	MaxPages int
