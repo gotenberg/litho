@@ -165,6 +165,25 @@ func TestMulticol_FloatAvoidingBreaksMovesWhole(t *testing.T) {
 		_____`)
 }
 
+func TestMulticol_CloneBorderBoxHeightIsTheFragmentsSum(t *testing.T) {
+	t.Parallel()
+	// CSS Fragmentation 3, 5.4: each fragment of a cloned box holds its
+	// borders whole; a border-box height of 4 over columns 2 tall is two
+	// fragments of 2, as Chromium sizes it, not one spilling into a third
+	// column.
+	clone := func(s *css.Style) {
+		s.BoxDecorationBreak = css.DecorationClone
+		s.BoxSizing = css.BorderBox
+	}
+	auto := func(s *css.Style) { s.Columns.Fill = css.FillAuto }
+	mc := el(sty(columns(3, 0), height(2), auto),
+		el(sty(height(4), bg(lime), border(1, css.Solid, blue), clone)))
+	rb := boxes(t, doc(mc), page(6, 3))
+	if got := rect(kid(t, rb, 0, 0, 0)); got[3] != 4 {
+		t.Errorf("border box height %v, want 4: the box does not grow", got[3])
+	}
+}
+
 func TestMulticol_Paginates(t *testing.T) {
 	t.Parallel()
 	res := run(t, doc(el(sty(columns(2, 1)), strip(red), strip(blue), strip(lime), strip(black), strip(red), strip(blue))), page(5, 2))

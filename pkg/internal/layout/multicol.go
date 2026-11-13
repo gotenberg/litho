@@ -1312,15 +1312,21 @@ func (e *engine) balanceBudget(y float64) bool {
 // cloneEdges grows the block b of a specified height, hSet, whose
 // box-decoration-break is clone, by its top and bottom borders and padding
 // at each column break it crosses: each fragment holds them whole (CSS
-// Fragmentation 3, 5.4). At page breaks the box stays sliced, as Chromium
-// prints it.
+// Fragmentation 3, 5.4). A height of box-sizing: border-box is the sum of
+// the fragments' border boxes, as Chromium sizes it: the content gives up
+// the room the cloned edges take, and the box does not grow. At page
+// breaks the box stays sliced, as Chromium prints it.
 //
 // # Corpus evidence
 //
 //   - wpt, css/css-page/monolithic-overflow-031-print.html: Chromium
 //     prints the box sliced at the page break.
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) lays a cloned
+//     box of 10px borders in 100px columns as 100 and 100px fragments for
+//     height: 160px, and for height: 200px with box-sizing: border-box;
+//     as 100, 100 and 50px fragments for 250px border-box.
 func (e *engine) cloneEdges(b *box, hSet bool) {
-	if !hSet || !clones(b.st) || !e.paginating() || e.cols == nil {
+	if !hSet || !clones(b.st) || !e.paginating() || e.cols == nil || b.st.BoxSizing == css.BorderBox {
 		return
 	}
 	base, edges := b.h, vEdges(b)
