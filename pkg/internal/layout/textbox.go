@@ -14,7 +14,7 @@ import (
 // descendant, or a block that lays out a flex, grid or table formatting
 // context, is not trimmed.
 func (e *engine) trimTextBox(b *box, end float64) float64 {
-	if b.flex != nil || b.grid != nil || b.tdata != nil {
+	if b.st.TextBoxTrim == css.TrimNone || b.flex != nil || b.grid != nil || b.tdata != nil {
 		return end
 	}
 	trim := b.st.TextBoxTrim
@@ -83,7 +83,7 @@ func edgeLineAt(b *box, last bool, depth int) (*lineBox, *box) {
 		if l, owner := edgeLineAt(k, last, depth+1); l != nil {
 			return l, owner
 		}
-		if !k.anon || k.borderH() > eps || !splitsInline(b) {
+		if !k.anon || k.borderH() > eps || !splitsInline(b) && !holdsNoInline(k) {
 			// A block without a line ends the search: b has no first
 			// or last formatted line (CSS Pseudo 4, 2.1.1).
 			return nil, nil
@@ -103,6 +103,19 @@ func splitsInline(b *box) bool {
 		}
 	}
 	return false
+}
+
+// holdsNoInline reports whether the anonymous block k holds nothing but
+// text and out-of-flow boxes: laid out with no line, its text is white
+// space that collapses away, which generates no box (CSS 2.1, 9.2.2.1;
+// CSS Text 3, 4.1.1), so k is no block-level child to look into.
+func holdsNoInline(k *box) bool {
+	for _, c := range k.kids {
+		if c.kind != kindText && !c.abs {
+			return false
+		}
+	}
+	return true
 }
 
 // maxEdgeLineDepth caps the nested blocks edgeLine descends. Anti-DoS

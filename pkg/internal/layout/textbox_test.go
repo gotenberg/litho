@@ -23,3 +23,22 @@ func TestTextBoxTrim_CutsFirstAndLastLines(t *testing.T) {
 		t.Errorf("heights %v and %v, want 60 and %v: the half leading off both sides", p.h/css.Pt, q.h/css.Pt, (l.h-2*d)/css.Pt)
 	}
 }
+
+func TestTextBoxTrim_PassesOverCollapsedWhiteSpace(t *testing.T) {
+	// CSS Inline 3, 6.2: the first and last formatted lines of a block
+	// lie in its first and last in-flow block children, flow roots
+	// included. The white space between them generates no box (CSS 2.1,
+	// 9.2.2.1): its anonymous blocks hide no line.
+	lh := func(s *css.Style) { s.LineHeight = css.Pts(px(60)) }
+	root := func(s *css.Style) { s.Display = css.FlowRoot }
+	trim := func(s *css.Style) { s.TextBoxTrim = css.TrimBoth }
+	b := boxes(t, doc(el(sty(lh, trim),
+		txt(sty(lh), " "), el(sty(lh, root), txt(sty(lh), "a")), txt(sty(lh), " "),
+		el(sty(lh, root), txt(sty(lh), "a")), txt(sty(lh), " "),
+	)), page(200, 200))
+	c := kid(t, b, 0, 0)
+	// Two 60px lines of 10px Ahem lose their outer 25px half leadings.
+	if !near(c.h/css.Pt, 70) {
+		t.Errorf("height %v, want 70: the outer half leadings trimmed", c.h/css.Pt)
+	}
+}
