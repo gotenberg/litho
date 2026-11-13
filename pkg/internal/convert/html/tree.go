@@ -89,6 +89,8 @@ type builder struct {
 	ids map[*dom.Node]string
 	// gcpm holds the named strings and running elements (CSS GCPM 3, 2).
 	gcpm gcpmState
+	// firstLetters marks the boxes cut for ::first-letter, nil for none.
+	firstLetters map[*layout.Node]bool
 }
 
 // buildRoot builds the content tree of the root element.
@@ -141,6 +143,11 @@ func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, s
 	after := b.pseudo(ctx, n, css.PseudoAfter)
 	if after != nil {
 		node.Children = append(node.Children, after)
+	}
+	if takesFirstLetter(st.Display) {
+		if b.computed.Pseudo(n, css.PseudoFirstLetter) != nil {
+			b.firstLetter(node, n)
+		}
 	}
 	if len(st.StringSet) > 0 {
 		b.setStrings(n, node, st, before, after)

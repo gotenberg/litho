@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	dom "golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -426,15 +424,15 @@ func domText(n *dom.Node) string {
 	return sb.String()
 }
 
-// firstLetter returns the first letter of s with the punctuation before
-// it (CSS Pseudo 4, 2.4, the first typographic letter unit).
+// firstLetter returns the first letter of s as ::first-letter takes it
+// (CSS GCPM 3, 2.1.1.1, content(first-letter); see [firstLetterSpan]):
+// the punctuation alone when no letter follows it, "" for white space.
 func firstLetter(s string) string {
-	for i, r := range s {
-		if !unicode.IsPunct(r) {
-			return s[:i+utf8.RuneLen(r)]
-		}
+	pre, n, _ := firstLetterSpan(s)
+	if n < 0 {
+		return ""
 	}
-	return s
+	return s[pre:n]
 }
 
 // pick returns the assignment of name in list that a page-margin box of

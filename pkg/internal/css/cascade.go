@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
 	"golang.org/x/net/html"
 
@@ -123,6 +124,10 @@ const (
 	PseudoNoteCall
 	PseudoNoteMarker
 	PseudoNoteCallback
+	// PseudoFirstLetter is ::first-letter, the first typographic letter
+	// unit of the first formatted line of a block container (CSS Pseudo 4,
+	// 2.3). The converter cuts it from the text that holds it.
+	PseudoFirstLetter
 	numPseudos
 )
 
@@ -132,6 +137,7 @@ var pseudoNames = map[string]PseudoElement{
 	"before": PseudoBefore, "after": PseudoAfter, "marker": PseudoMarker,
 	"footnote-call": PseudoFootnoteCall, "footnote-marker": PseudoFootnoteMarker,
 	"note-call": PseudoNoteCall, "note-marker": PseudoNoteMarker, "note-callback": PseudoNoteCallback,
+	"first-letter": PseudoFirstLetter,
 }
 
 // NewResolver indexes the rules of sheets, in order, whose media
@@ -238,6 +244,18 @@ type Computed struct {
 	styles map[*html.Node]*Style
 	pseudo map[pseudoKey]*Style
 	warns  []Warning
+	// letters restyles ::first-letter for the inline box that holds the
+	// letter, nil when no element has one.
+	letters *letterStyler
+}
+
+// letterStyler cascades the ::first-letter of an element again under
+// another parent style. It keeps the state of the Compute call that made
+// it, which mu guards.
+type letterStyler struct {
+	mu    sync.Mutex
+	cs    *computeState
+	cands map[*html.Node][]cand
 }
 
 // pseudoKey names one pseudo-element of one element.
@@ -259,6 +277,29 @@ func (c *Computed) Style(n *html.Node) *Style { return c.styles[n] }
 // shared: do not modify it.
 func (c *Computed) Pseudo(n *html.Node, which PseudoElement) *Style {
 	return c.pseudo[pseudoKey{n, which}]
+}
+
+// FirstLetter returns the style of the ::first-letter of the element n
+// when the letter sits in an inline box styled parent, a descendant of n
+// on its first line (CSS Pseudo 4, 2.3): the letter inherits from the box
+// that holds it, as the fictional tag sequence nests it there. A nil
+// parent, or n's own style, gives [Computed.Pseudo]'s style. It returns
+// nil when no rule targets n's ::first-letter. The Style is shared: do
+// not modify it.
+func (c *Computed) FirstLetter(n *html.Node, parent *Style) *Style {
+	ps := c.pseudo[pseudoKey{n, PseudoFirstLetter}]
+	if ps == nil || parent == nil || parent == c.styles[n] || c.letters == nil {
+		return ps
+	}
+	l := c.letters
+	cands, ok := l.cands[n]
+	if !ok {
+		return ps
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	st, _ := l.cs.cascade(cands, parent, l.cs.vars[n], false)
+	return st
 }
 
 // Warnings returns what the cascade and the stylesheets dropped or
@@ -319,6 +360,9 @@ type computeState struct {
 	cands   []cand
 	matched []int
 	classes []string
+	// letterCands holds the declarations of each ::first-letter, for
+	// [Computed.FirstLetter], nil for none.
+	letterCands map[*html.Node][]cand
 }
 
 // fontKey is what selects a font for the ex and ch units.
@@ -442,7 +486,11 @@ func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOpt
 			stack = append(stack, frame{n: kid, parent: parent})
 		}
 	}
-	return &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result()}, nil
+	c := &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result()}
+	if cs.letterCands != nil {
+		c.letters = &letterStyler{cs: cs, cands: cs.letterCands}
+	}
+	return c, nil
 }
 
 // element computes the style of n, whose parent element (nil for the
@@ -484,6 +532,14 @@ func (cs *computeState) element(n, parent *html.Node) {
 		pc := cs.match(n, x)
 		if len(pc) == 0 {
 			continue
+		}
+		if pe == PseudoFirstLetter {
+			// The buffer match returns is reused by the next element.
+			pc = slices.Clone(pc)
+			if cs.letterCands == nil {
+				cs.letterCands = map[*html.Node][]cand{}
+			}
+			cs.letterCands[n] = pc
 		}
 		ps, _ := cs.cascade(pc, st, vars, false)
 		cs.pseudo[pseudoKey{n, pe}] = ps

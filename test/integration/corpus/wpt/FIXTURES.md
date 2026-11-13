@@ -104,6 +104,7 @@ cd .. && make corpus-update CORPUS=wpt CHECKOUT=wpt
 Chromium is the reference where a test and Chromium draw differently, so these fixtures stay failing on purpose, recorded in `baseline.json`:
 
 - `css/css-text-decor/text-decoration-inset-auto`: the pinned Chromium does not support the property, so its drawing equals the test's `!=` reference, and so does litho's.
+- `css/CSS2/selectors/first-letter-quote-002`: the test joins the open quote of a `::before` to the letter after it in `::first-letter`; the pinned Chromium takes the quote alone, and so does litho.
 
 ## Licence
 
