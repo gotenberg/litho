@@ -3,6 +3,7 @@ package css
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -93,12 +94,17 @@ func TestFontFace_IgnoredDescriptorsWarn(t *testing.T) {
 	if !ok || f.Family != "F" {
 		t.Fatalf("the rule was dropped: %+v", f)
 	}
-	for _, name := range []string{"size-adjust", "font-feature-settings", "ascent-override"} {
+	for _, name := range []string{"size-adjust", "ascent-override"} {
 		if !hasWarning(warns, warn.CSSUnsupported, name) {
 			t.Errorf("no warning for %s: %v", name, warns)
 		}
 	}
-	if hasWarning(warns, warn.CSSUnsupported, "font-display") {
-		t.Errorf("font-display warned: %v", warns)
+	for _, name := range []string{"font-display", "font-feature-settings"} {
+		if hasWarning(warns, warn.CSSUnsupported, name) {
+			t.Errorf("%s warned: %v", name, warns)
+		}
+	}
+	if want := []FeatureSetting{{"liga", 0}}; !reflect.DeepEqual(f.FeatureSettings, want) {
+		t.Errorf("font-feature-settings = %v, want %v", f.FeatureSettings, want)
 	}
 }

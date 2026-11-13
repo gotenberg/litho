@@ -461,10 +461,10 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 			piece := item
 			piece.RunStart, piece.RunEnd = s, e
 			piece.Size = ss.size
-			if ss.style.Lang != "" {
+			if ss.lang != "" {
 				piece.Language = ss.lang
 			}
-			piece.FontFeatures = ss.style.features()
+			piece.FontFeatures = ss.features
 			// The resolved level, explicit embeddings and overrides
 			// included, decides the direction (UAX #9, L2).
 			piece.Direction = di.DirectionLTR
@@ -472,6 +472,7 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 				piece.Direction = di.DirectionRTL
 			}
 			for _, in := range shaping.SplitByFace(piece, styleFontmap{st: st, style: idx, script: piece.Script}) {
+				st.faceFeatures(&in)
 				out := st.kit.shaper.Shape(in)
 				rescale(&out, in.Size)
 				st.collectMissing(&out, text)
@@ -869,7 +870,8 @@ func shapesTogether(a, b Style) bool {
 		a.Autospace == b.Autospace && a.AutospaceAlpha == b.AutospaceAlpha && a.AutospaceNumeric == b.AutospaceNumeric &&
 		a.NoSpacingTrim == b.NoSpacingTrim && a.Size == b.Size && a.Lang == b.Lang &&
 		a.LetterSpacing == b.LetterSpacing && a.WordSpacing == b.WordSpacing && a.Scale == b.Scale &&
-		a.NoKerning == b.NoKerning && a.WordMetrics == b.WordMetrics
+		a.NoKerning == b.NoKerning && a.WordMetrics == b.WordMetrics &&
+		slices.Equal(a.Features, b.Features) && a.LanguageSystem == b.LanguageSystem
 }
 
 // splitByRun cuts out into one output per run of its characters, each

@@ -500,14 +500,18 @@ const (
 )
 
 // FontVariant is the font-variant-caps property (CSS Fonts 4, 6.6), which
-// the font-variant and font shorthands set. all-small-caps computes as
-// small-caps.
+// the font-variant and font shorthands set.
 type FontVariant uint8
 
 // The font-variant-caps values.
 const (
 	VariantNormal FontVariant = iota
 	SmallCaps
+	AllSmallCaps
+	PetiteCaps
+	AllPetiteCaps
+	Unicase
+	TitlingCaps
 )
 
 // FontKerning is the font-kerning property (CSS Fonts 4, 6.3): whether
@@ -1083,6 +1087,26 @@ type Style struct {
 	FontStyle   FontStyle
 	FontVariant FontVariant
 	FontKerning FontKerning
+	// FontVariantLigatures, FontVariantNumeric, FontVariantEastAsian,
+	// FontVariantPosition, FontVariantAlternates and FontVariantEmoji are
+	// the font-variant longhands other than font-variant-caps (CSS Fonts
+	// 4, 6.4 to 6.13), zero for normal.
+	FontVariantLigatures  Ligatures
+	FontVariantNumeric    NumericVariant
+	FontVariantEastAsian  EastAsianVariant
+	FontVariantPosition   VariantPosition
+	FontVariantAlternates Alternates
+	FontVariantEmoji      VariantEmoji
+	// FontFeatureSettings is font-feature-settings (CSS Fonts 4, 6.12),
+	// nil for normal.
+	FontFeatureSettings []FeatureSetting
+	// FontLanguageOverride is font-language-override (CSS Fonts 4, 6.14),
+	// the OpenType language system tag that shapes the text, "" for
+	// normal.
+	FontLanguageOverride string
+	// NoSynthesizeSmallCaps is font-synthesis-small-caps: none, small
+	// capitals a face lacks are not synthesised (CSS Fonts 4, 5.5).
+	NoSynthesizeSmallCaps bool
 	// FontObliqueAngle is the angle of font-style: oblique in degrees,
 	// 14 for a bare oblique, 0 for normal and italic (CSS Fonts 4, 2.4).
 	FontObliqueAngle float64

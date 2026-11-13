@@ -242,6 +242,9 @@ func descriptorOf(rule css.FontFace) text.FaceDescriptor {
 		StretchMax:   rule.StretchMax,
 		UnicodeRange: rule.UnicodeRange,
 	}
+	for _, f := range rule.FeatureSettings {
+		d.Features = append(d.Features, text.Feature{Tag: f.Tag, Value: uint32(f.Value)}) //nolint:gosec // a feature value is in [0, 2^30], checked by the parser
+	}
 	switch rule.Style {
 	case css.FontItalic:
 		d.Style = text.FaceItalic

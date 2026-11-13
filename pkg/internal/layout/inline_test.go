@@ -1,10 +1,12 @@
 package layout
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -545,29 +547,39 @@ func TestSmallCaps_Synthesised(t *testing.T) {
 	}
 }
 
+// TestSmallCaps_Pieces checks how a font-variant-caps value cuts and maps
+// text in a face by its support, after Chromium's OpenTypeCapsSupport:
+// synthesis uppercases the lowercase letters at the small size, a
+// combining mark goes with its base, all-small-caps shrinks every
+// character, unicase in a face with smcp lowercases the capitals and
+// shapes them with smcp, and a face with the features shapes them.
 func TestSmallCaps_Pieces(t *testing.T) {
+	small := capsPlan{caps: css.SmallCaps, support: capsNone, synth: synthLower, allowed: true}
+	smcp := []text.Feature{{Tag: "smcp", Value: 1}}
 	for _, tc := range []struct {
 		in   string
-		on   bool
+		plan capsPlan
 		want []smallCapsPiece
 	}{
-		{"abc", false, []smallCapsPiece{{text: "abc"}}},
-		{"abc", true, []smallCapsPiece{{text: "ABC", small: true}}},
-		{"Hé 2", true, []smallCapsPiece{{text: "H"}, {text: "É", small: true}, {text: " 2"}}},
+		{"abc", capsPlan{}, []smallCapsPiece{{text: "abc"}}},
+		{"abc", small, []smallCapsPiece{{text: "ABC", small: true}}},
+		{"Hé 2", small, []smallCapsPiece{{text: "H"}, {text: "É", small: true}, {text: " 2"}}},
+		{"He\u0301!", small, []smallCapsPiece{{text: "H"}, {text: "E\u0301", small: true}, {text: "!"}}},
 		// ß has no one-rune uppercase: it keeps its form and size.
-		{"ß", true, []smallCapsPiece{{text: "ß"}}},
-		{"", true, nil},
+		{"ß", small, []smallCapsPiece{{text: "ß"}}},
+		{"", small, nil},
+		{"aB1", capsPlan{caps: css.AllSmallCaps, support: capsNone, synth: synthBoth, allowed: true},
+			[]smallCapsPiece{{text: "A", small: true}, {text: "B1", small: true}}},
+		{"aB", capsPlan{caps: css.Unicase, support: capsFallback, synth: synthUpper, allowed: true},
+			[]smallCapsPiece{{text: "a"}, {text: "b", features: smcp}}},
+		{"aB", capsPlan{caps: css.Unicase, support: capsNone, synth: synthUpper, allowed: true},
+			[]smallCapsPiece{{text: "a"}, {text: "B", small: true}}},
+		{"aB", capsPlan{caps: css.SmallCaps, allowed: true}, []smallCapsPiece{{text: "aB", features: smcp}}},
+		{"aB", capsPlan{caps: css.SmallCaps, support: capsNone, synth: synthLower}, []smallCapsPiece{{text: "aB"}}},
+		{"aB", capsPlan{caps: css.TitlingCaps, support: capsNone, allowed: true}, []smallCapsPiece{{text: "aB"}}},
 	} {
-		got := smallCaps(tc.in, tc.on)
-		if len(got) != len(tc.want) {
-			t.Errorf("smallCaps(%q, %v) = %+v, want %+v", tc.in, tc.on, got, tc.want)
-			continue
-		}
-		for i := range got {
-			if got[i] != tc.want[i] {
-				t.Errorf("smallCaps(%q, %v) = %+v, want %+v", tc.in, tc.on, got, tc.want)
-				break
-			}
+		if got := smallCaps(tc.in, tc.plan); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("smallCaps(%q, %+v) = %+v, want %+v", tc.in, tc.plan, got, tc.want)
 		}
 	}
 }

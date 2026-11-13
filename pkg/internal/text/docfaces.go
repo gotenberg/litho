@@ -46,6 +46,10 @@ type FaceDescriptor struct {
 	// UnicodeRange lists the inclusive character ranges the face is used
 	// for, nil for every character.
 	UnicodeRange [][2]rune
+	// Features are the OpenType features the rule's font-feature-settings
+	// descriptor sets: text drawn in the face is shaped with them before
+	// the features of its [Style] (CSS Fonts 4, 7.2).
+	Features []Feature
 }
 
 // normalized returns d with its zero values defaulted and its ranges in
@@ -61,6 +65,7 @@ func (d FaceDescriptor) normalized() FaceDescriptor {
 	d.StretchMin, d.StretchMax = min(d.StretchMin, d.StretchMax), max(d.StretchMin, d.StretchMax)
 	d.ObliqueMin, d.ObliqueMax = min(d.ObliqueMin, d.ObliqueMax), max(d.ObliqueMin, d.ObliqueMax)
 	d.UnicodeRange = slices.Clone(d.UnicodeRange)
+	d.Features = slices.Clone(d.Features)
 	return d
 }
 
@@ -167,6 +172,7 @@ func pinFace(fc *Face, d FaceDescriptor) (*Face, error) {
 	}
 	nd := d.normalized()
 	fc.pinned, fc.doc = ft, &nd
+	fc.features = Style{Features: nd.Features}.features()
 	// A document face joins its rule's family alone: no installed family
 	// of the same name, and no index fallback, reaches it.
 	fc.keys = nil

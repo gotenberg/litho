@@ -3,6 +3,9 @@ package text
 import (
 	"fmt"
 	"math"
+	"strings"
+
+	"github.com/go-text/typesetting/language"
 
 	"github.com/go-text/typesetting/font/opentype"
 	"github.com/go-text/typesetting/shaping"
@@ -112,6 +115,17 @@ type Style struct {
 	// feature at 0, which turns off the GPOS kern feature and the kern
 	// table alike. The default kerns.
 	NoKerning bool
+	// Features are OpenType features handed to the shaper after the
+	// font's defaults and the kerning NoKerning turns off, in order: a
+	// later setting of a tag overrides an earlier one, as the CSS feature
+	// resolution asks (CSS Fonts 4, 7.2). A tag is four bytes from U+20
+	// to U+7E; another entry is ignored.
+	Features []Feature
+	// LanguageSystem is the OpenType language system tag the text is
+	// shaped with in place of the one Lang maps to, CSS
+	// font-language-override (CSS Fonts 4, 6.14): up to four characters
+	// from U+20 to U+7E, padded with spaces. "" keeps Lang's.
+	LanguageSystem string
 	// WordMetrics gives the line box of a run the vertical metrics Word
 	// lays a Microsoft face out with when a metric-compatible stand-in
 	// draws the face the style names, as Word prints WordprocessingML:
@@ -122,17 +136,75 @@ type Style struct {
 	WordMetrics bool
 }
 
-// kernOff is the feature list that shapes without kerning (OpenType
-// feature registry, kern).
-var kernOff = []shaping.FontFeature{{Tag: opentype.MustNewTag("kern"), Value: 0}}
+// Feature is one OpenType feature setting: its tag and value, 0 for off
+// and 1 for on, or the index of an alternate.
+type Feature struct {
+	Tag   string
+	Value uint32
+}
+
+// kernTag is the OpenType kerning feature (OpenType feature registry,
+// kern).
+var kernTag = opentype.MustNewTag("kern")
+
+// kernOff is the feature list that shapes without kerning.
+var kernOff = []shaping.FontFeature{{Tag: kernTag, Value: 0}}
 
 // features returns the font features the shaper is handed for s, nil for
 // the font's defaults.
 func (s Style) features() []shaping.FontFeature {
-	if s.NoKerning {
-		return kernOff
+	if len(s.Features) == 0 {
+		if s.NoKerning {
+			return kernOff
+		}
+		return nil
 	}
-	return nil
+	out := make([]shaping.FontFeature, 0, len(s.Features)+1)
+	if s.NoKerning {
+		out = append(out, kernOff[0])
+	}
+	for _, f := range s.Features {
+		if tag, ok := featureTag(f.Tag); ok {
+			out = append(out, shaping.FontFeature{Tag: tag, Value: f.Value})
+		}
+	}
+	return out
+}
+
+// featureTag returns the OpenType tag of s, four bytes from U+20 to U+7E
+// (OpenType, Data types: Tag).
+func featureTag(s string) (opentype.Tag, bool) {
+	if len(s) != 4 {
+		return 0, false
+	}
+	for i := range 4 {
+		if s[i] < 0x20 || s[i] > 0x7e {
+			return 0, false
+		}
+	}
+	return opentype.NewTag(s[0], s[1], s[2], s[3]), true
+}
+
+// languageSystem returns the language the shaper is handed for the
+// language system tag of s, false when s has none: HarfBuzz's private use
+// subtag hbot with the tag's bytes in hexadecimal, which selects that
+// language system whatever its BCP 47 equivalent (hb_ot_tag_to_language).
+// A tag shorter than four characters is padded with spaces, as
+// hb_tag_from_string does, and a longer one is cut.
+func (s Style) languageSystem() (language.Language, bool) {
+	t := s.LanguageSystem
+	if t == "" {
+		return "", false
+	}
+	if len(t) > 4 {
+		t = t[:4]
+	}
+	t += strings.Repeat(" ", 4-len(t))
+	tag, ok := featureTag(t)
+	if !ok {
+		return "", false
+	}
+	return language.Language(fmt.Sprintf("x-hbot-%08x", uint32(tag))), true
 }
 
 // scale returns the horizontal scale of s, 1 for none.

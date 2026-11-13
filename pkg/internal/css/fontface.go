@@ -32,6 +32,10 @@ type FontFace struct {
 	// UnicodeRange lists the inclusive code point ranges the face covers,
 	// nil for all of them.
 	UnicodeRange [][2]rune
+	// FeatureSettings are the font-feature-settings descriptor's
+	// features, which apply to text drawn in the face before those of the
+	// font properties (CSS Fonts 4, 4.8 and 7.2); nil for normal.
+	FeatureSettings []FeatureSetting
 }
 
 // FontSource is one entry of an @font-face src descriptor (CSS Fonts 4,
@@ -63,12 +67,11 @@ const (
 )
 
 // ignoredFaceDescriptors are @font-face descriptors litho parses and does
-// not apply: the font feature and variation settings, the metric overrides
+// not apply: the font variation settings, the metric overrides
 // (CSS Fonts 4, 4.8 to 4.10; CSS Fonts 5, 4.10 and 4.11) and the named
 // instance. A rule that sets one still loads, without it, and gets a
 // warning.
 var ignoredFaceDescriptors = map[string]bool{
-	"font-feature-settings":   true,
 	"font-variation-settings": true,
 	"font-named-instance":     true,
 	"font-language-override":  true,
@@ -112,6 +115,10 @@ func parseFontFace(block []token, c *declCtx) (FontFace, bool) {
 			}
 		case "unicode-range":
 			f.UnicodeRange = parseUnicodeRanges(it.value)
+		case "font-feature-settings":
+			if l, ok := parseFeatureSettings(v, c); ok {
+				f.FeatureSettings, _ = l.([]FeatureSetting) // always that type when ok
+			}
 		case "font-display":
 			// Loading is synchronous: every face is there before layout,
 			// so the display policy has nothing to choose (CSS Fonts 4,

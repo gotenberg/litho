@@ -200,6 +200,15 @@ const (
 	pTextEmphasisStyle
 	pTextEmphasisColor
 	pTextEmphasisPosition
+	pFontFeatureSettings
+	pFontVariantLigatures
+	pFontVariantNumeric
+	pFontVariantEastAsian
+	pFontVariantPosition
+	pFontVariantAlternates
+	pFontVariantEmoji
+	pFontLanguageOverride
+	pFontSynthesisSmallCaps
 	numProps
 )
 
@@ -780,9 +789,7 @@ func init() {
 		{pFontStyle, propDef{name: "font-style", inherited: true, parse: parseFontStyle, compute: computeFontStyle, copyFrom: func(dst, src *Style) {
 			dst.FontStyle, dst.FontObliqueAngle = src.FontStyle, src.FontObliqueAngle
 		}}},
-		{pFontVariant, enumProp("font-variant-caps", true, func(s *Style) *FontVariant { return &s.FontVariant }, map[string]FontVariant{
-			"normal": VariantNormal, "small-caps": SmallCaps, "all-small-caps": SmallCaps,
-		})},
+		{pFontVariant, enumProp("font-variant-caps", true, func(s *Style) *FontVariant { return &s.FontVariant }, capsKeywords)},
 		{pLineHeight, propDef{name: "line-height", inherited: true, parse: parseLineHeight, compute: computeLineHeight, copyFrom: field(func(s *Style) *Dimension { return &s.LineHeight })}},
 		{pTextAlign, textAlignProp(enumProp("text-align", true, func(s *Style) *TextAlign { return &s.TextAlign }, map[string]TextAlign{
 			"start": AlignStart, "end": AlignEnd, "left": AlignLeft, "right": AlignRight,
@@ -946,6 +953,9 @@ func init() {
 		props[id] = def
 	}
 	for id, def := range textFontProps() {
+		props[id] = def
+	}
+	for id, def := range fontFeatureProps() {
 		props[id] = def
 	}
 	for id, def := range textProps() {

@@ -40,6 +40,9 @@ type Stylesheet struct {
 	rules []styleRule
 	pages []pageRule
 	faces []fontFaceRule
+	// featureValues are the @font-feature-values rules, one entry per
+	// family each names, in order.
+	featureValues []featureValuesRule
 	// counterStyles are the @counter-style rules, in order.
 	counterStyles []*counterStyleRule
 	warns         []Warning
@@ -60,6 +63,13 @@ type styleRule struct {
 type fontFaceRule struct {
 	face FontFace
 	cond *mediaCond
+}
+
+// featureValuesRule is an @font-feature-values rule's values for one
+// family and its media condition.
+type featureValuesRule struct {
+	values FontFeatureValues
+	cond   *mediaCond
 }
 
 // sheetParser parses one stylesheet and its imports.
@@ -137,8 +147,8 @@ func (sp *sheetParser) flush(c *declCtx) {
 // warning: they style nothing a static page shows.
 var ignoredAtRules = map[string]bool{
 	"keyframes": true, "-webkit-keyframes": true, "-moz-keyframes": true, "-o-keyframes": true,
-	"font-feature-values": true, "font-palette-values": true,
-	"property": true, "viewport": true, "-ms-viewport": true, "view-transition": true,
+	"font-palette-values": true,
+	"property":            true, "viewport": true, "-ms-viewport": true, "view-transition": true,
 	"namespace": true, "charset": true,
 }
 
@@ -216,6 +226,13 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 			}
 			if f, ok := parseFontFace(it.block, c); ok && sp.count() {
 				sp.sheet.faces = append(sp.sheet.faces, fontFaceRule{face: f, cond: cond})
+			}
+		case "font-feature-values":
+			if !it.hasBlock || !sp.count() {
+				return
+			}
+			for _, v := range parseFontFeatureValues(it.prelude, it.block) {
+				sp.sheet.featureValues = append(sp.sheet.featureValues, featureValuesRule{values: v, cond: cond})
 			}
 		default:
 			if !ignoredAtRules[name] && !strings.HasPrefix(name, "-") {

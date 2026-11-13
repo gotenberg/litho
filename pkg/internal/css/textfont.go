@@ -258,12 +258,12 @@ func parseAutospace(v []token, _ *declCtx) (any, bool) {
 func textFontShorthands() map[string]shorthandDef {
 	return map[string]shorthandDef{
 		"font-synthesis": {
-			longhands: []propID{pFontSynthesisWeight, pFontSynthesisStyle},
+			longhands: []propID{pFontSynthesisWeight, pFontSynthesisStyle, pFontSynthesisSmallCaps},
 			expand: func(v []token, _ *declCtx) ([]entry, bool) {
 				if k, ok := keyword(v); ok && k == "none" {
-					return []entry{{pFontSynthesisWeight, true}, {pFontSynthesisStyle, true}}, true
+					return []entry{{pFontSynthesisWeight, true}, {pFontSynthesisStyle, true}, {pFontSynthesisSmallCaps, true}}, true
 				}
-				weight, style := true, true
+				weight, style, smallCaps := true, true, true
 				seen := map[string]bool{}
 				for _, t := range v {
 					k := lower(t.value)
@@ -276,12 +276,14 @@ func textFontShorthands() map[string]shorthandDef {
 						weight = false
 					case "style":
 						style = false
-					case "small-caps", "position":
+					case "small-caps":
+						smallCaps = false
+					case "position":
 					default:
 						return nil, false
 					}
 				}
-				return []entry{{pFontSynthesisWeight, weight}, {pFontSynthesisStyle, style}}, true
+				return []entry{{pFontSynthesisWeight, weight}, {pFontSynthesisStyle, style}, {pFontSynthesisSmallCaps, smallCaps}}, true
 			},
 		},
 	}

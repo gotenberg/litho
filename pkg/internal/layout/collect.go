@@ -2,6 +2,7 @@ package layout
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -270,10 +271,19 @@ func (c *collector) text(k *box) {
 		if buf.Len() == 0 {
 			return
 		}
-		for _, pc := range smallCaps(buf.String(), k.st.FontVariant == css.SmallCaps) {
+		str := buf.String()
+		var plan capsPlan
+		if k.st.FontVariant != css.VariantNormal {
+			r, _ := utf8.DecodeRuneInString(str)
+			plan = c.e.planCaps(k.st, style, r)
+		}
+		for _, pc := range smallCaps(str, plan) {
 			st := style
 			if pc.small {
 				st.Size *= smallCapsScale
+			}
+			if pc.features != nil {
+				st.Features = append(slices.Clone(pc.features), st.Features...)
 			}
 			c.addRun(text.ParagraphRun{Text: pc.text, Style: st}, runInfo{kind: runText, box: k, ws: ws})
 			c.cur.n += utf8.RuneCountInString(pc.text)
@@ -331,45 +341,6 @@ func (c *collector) text(k *box) {
 // fraction of the font size: Chromium's kSmallCapsFontSizeMultiplier, the
 // 0.7 em browsers use for a face without small capitals.
 const smallCapsScale = 0.7
-
-// smallCapsPiece is a piece of text drawn at the font size, or, small, in
-// synthesised small capitals.
-type smallCapsPiece struct {
-	text  string
-	small bool
-}
-
-// smallCaps splits s for font-variant: small-caps when on, synthesising
-// small capitals as CSS Fonts 4, 6.6 allows for a face without them: each
-// lowercase letter with an uppercase mapping becomes that uppercase letter,
-// drawn at [smallCapsScale] of the size, and every other character keeps
-// the size. A rune maps to one rune, so positions in the paragraph keep
-// their meaning. Off, s is one piece.
-func smallCaps(s string, on bool) []smallCapsPiece {
-	if !on {
-		return []smallCapsPiece{{text: s}}
-	}
-	var out []smallCapsPiece
-	var b strings.Builder
-	small := false
-	for _, r := range s {
-		up := unicode.ToUpper(r)
-		lower := up != r && unicode.IsLower(r)
-		if lower != small && b.Len() > 0 {
-			out = append(out, smallCapsPiece{text: b.String(), small: small})
-			b.Reset()
-		}
-		small = lower
-		if lower {
-			r = up
-		}
-		b.WriteRune(r)
-	}
-	if b.Len() > 0 {
-		out = append(out, smallCapsPiece{text: b.String(), small: small})
-	}
-	return out
-}
 
 // visibleControl returns the visible glyph a control character other than
 // tab, line feed, carriage return and form feed draws as (CSS Text 3, 4.1:

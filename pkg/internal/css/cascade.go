@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -68,7 +69,10 @@ type Resolver struct {
 	pseudos [numPseudos]selIndex
 	pages   []resolvedPage
 	faces   []FontFace
-	warns   []Warning
+	// featureValues holds the merged @font-feature-values rules whose
+	// media conditions match, by lowercased family name.
+	featureValues map[string]*FontFeatureValues
+	warns         []Warning
 	// counters holds the counter styles, the predefined ones and those
 	// of the @counter-style rules whose media conditions match.
 	counters *CounterStyles
@@ -192,6 +196,11 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 				r.faces = append(r.faces, f.face)
 			}
 		}
+		for i := range sh.Sheet.featureValues {
+			if f := &sh.Sheet.featureValues[i]; f.cond.matches(media, cache) {
+				r.addFeatureValues(f.values)
+			}
+		}
 	}
 	r.warns = w.result()
 	r.counters = newCounterStyles(counterRules)
@@ -229,6 +238,34 @@ func (x *selIndex) empty() bool {
 // ones and those the @counter-style rules whose media conditions match
 // define, the last rule of a name winning.
 func (r *Resolver) CounterStyles() *CounterStyles { return r.counters }
+
+// addFeatureValues merges the values of one @font-feature-values rule into
+// those of its family: a name defined again takes its later values (CSS
+// Fonts 4, 6.9.1).
+func (r *Resolver) addFeatureValues(v FontFeatureValues) {
+	if r.featureValues == nil {
+		r.featureValues = map[string]*FontFeatureValues{}
+	}
+	key := strings.ToLower(v.Family)
+	dst := r.featureValues[key]
+	if dst == nil {
+		dst = &FontFeatureValues{Family: v.Family, Values: map[string]map[string][]int{}}
+		r.featureValues[key] = dst
+	}
+	for kind, names := range v.Values {
+		if dst.Values[kind] == nil {
+			dst.Values[kind] = map[string][]int{}
+		}
+		maps.Copy(dst.Values[kind], names)
+	}
+}
+
+// FontFeatureValues returns the feature values the @font-feature-values
+// rules define for family, matched without regard to ASCII case, nil for
+// none. The result is shared and must not be modified.
+func (r *Resolver) FontFeatureValues(family string) *FontFeatureValues {
+	return r.featureValues[strings.ToLower(family)]
+}
 
 // FontFaces returns the @font-face rules whose media conditions match, in
 // order. The slice is a copy; the faces' slices are shared and must not be

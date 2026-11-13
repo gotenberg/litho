@@ -379,7 +379,7 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 	if st.FontStyle == css.FontOblique {
 		oblique = min(max(st.FontObliqueAngle, -90), 90)
 	}
-	return text.Style{
+	ts := text.Style{
 		Families:          text.BrowserFamilies(st.FontFamilies),
 		Weight:            st.FontWeight,
 		Italic:            st.FontStyle == css.FontItalic || oblique != 0,
@@ -400,7 +400,10 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 		Scale:             textScale(st.TextScale),
 		NoKerning:         st.FontKerning == css.KerningNone,
 		WordMetrics:       st.WordRules > 0,
+		LanguageSystem:    st.FontLanguageOverride,
 	}
+	ts.Features = e.fontFeatures(st, &ts)
+	return ts
 }
 
 // textScale returns the horizontal scale of the text stack for an Office

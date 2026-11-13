@@ -250,6 +250,9 @@ type Face struct {
 	// @font-face descriptors. Both are nil for an indexed face.
 	pinned *font.Font
 	doc    *FaceDescriptor
+	// features are the shaper's form of the features of doc, nil for
+	// none.
+	features []shaping.FontFeature
 }
 
 // Metrics are the vertical metrics of a face at a size, in points.
@@ -487,6 +490,16 @@ func (f *Fonts) Covers(family string, aliases bool, r rune) bool {
 // Family returns the face's typographic family name (name ID 16), or its
 // family name (name ID 1) when it records none.
 func (fc *Face) Family() string {
+	return fc.family
+}
+
+// DeclaredFamily returns the family a face answers to in a document: the
+// family of its @font-face rule for a document face, [Face.Family] for an
+// indexed one.
+func (fc *Face) DeclaredFamily() string {
+	if fc.doc != nil {
+		return fc.doc.Family
+	}
 	return fc.family
 }
 

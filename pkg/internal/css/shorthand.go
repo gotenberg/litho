@@ -174,7 +174,7 @@ func initShorthands() {
 		"outline":       {longhands: ids(pOutlineStyle, 3), expand: expandOutline},
 		"background":    {longhands: append(ids(pBgColor, 7), pBgAttachment), expand: expandBackground},
 		"font": {
-			longhands: []propID{pFontStyle, pFontVariant, pFontWeight, pFontSize, pLineHeight, pFontFamily, pFontStretch, pFontKerning},
+			longhands: append([]propID{pFontStyle, pFontWeight, pFontSize, pLineHeight, pFontFamily, pFontStretch, pFontKerning, pFontFeatureSettings, pFontLanguageOverride}, variantLonghands...),
 			expand:    expandFont,
 		},
 		"list-style": {longhands: []propID{pListStyleType, pListStylePosition, pListStyleImage}, expand: expandListStyle},
@@ -209,7 +209,7 @@ func initShorthands() {
 		"page-break-after":  legacyBreak(pBreakAfter),
 		"page-break-inside": legacyBreakInside(),
 		"all":               {longhands: allLonghands(), expand: expandAll},
-		"font-variant":      {longhands: []propID{pFontVariant}, expand: expandFontVariant},
+		"font-variant":      {longhands: variantLonghands, expand: expandFontVariant},
 	}
 	maps.Copy(shorthands, flexShorthands())
 	maps.Copy(shorthands, gridShorthands())
@@ -344,9 +344,18 @@ func expandFont(v []token, c *declCtx) ([]entry, bool) {
 		{pLineHeight, wideInitial},
 		{pFontFamily, wideInitial},
 		{pFontStretch, wideInitial},
-		// The shorthand resets font-kerning, which it cannot set (CSS
-		// Fonts 4, 2.8).
+		// The shorthand resets font-kerning, font-feature-settings,
+		// font-language-override and the font-variant longhands it
+		// cannot set (CSS Fonts 4, 2.8).
 		{pFontKerning, wideInitial},
+		{pFontFeatureSettings, wideInitial},
+		{pFontLanguageOverride, wideInitial},
+		{pFontVariantLigatures, wideInitial},
+		{pFontVariantAlternates, wideInitial},
+		{pFontVariantNumeric, wideInitial},
+		{pFontVariantEastAsian, wideInitial},
+		{pFontVariantPosition, wideInitial},
+		{pFontVariantEmoji, wideInitial},
 	}
 	if k, ok := keyword(v); ok && systemFonts[k] {
 		c.warn(warn.CSSUnsupported, warn.Approximated, "font: the system font %s is not supported and computes to the initial font", k)
