@@ -335,24 +335,31 @@ func shapeReferenceBox(f *box, g css.GeometryBox) (typeset.Rect, [4][2]float64) 
 		r, radii = insetRect(r, radii, addSides(f.bd, f.pd))
 	case css.GeoMargin:
 		r = typeset.Rect{Width: f.marginW(), Height: f.marginH()}
-		side := [4][2]css.Side{
-			css.TopLeft: {css.Left, css.Top}, css.TopRight: {css.Right, css.Top},
-			css.BottomRight: {css.Right, css.Bottom}, css.BottomLeft: {css.Left, css.Bottom},
-		}
-		for c := range radii {
-			if radii[c] == [2]float64{} {
-				continue
-			}
-			for a := range 2 {
-				radii[c][a] = marginRadius(radii[c][a], f.m[side[c][a]])
-			}
-			if radii[c][0] <= 0 || radii[c][1] <= 0 {
-				radii[c] = [2]float64{}
-			}
-		}
-		radii = fitRadii(r, radii)
+		radii = marginRadii(r, radii, f.m)
 	}
 	return r, radii
+}
+
+// marginRadii returns the corner radii of the margin box r of a box whose
+// border radii are radii and margins m: each grown by the margin of its
+// side ([marginRadius]), then fitted to r.
+func marginRadii(r typeset.Rect, radii [4][2]float64, m [4]float64) [4][2]float64 {
+	side := [4][2]css.Side{
+		css.TopLeft: {css.Left, css.Top}, css.TopRight: {css.Right, css.Top},
+		css.BottomRight: {css.Right, css.Bottom}, css.BottomLeft: {css.Left, css.Bottom},
+	}
+	for c := range radii {
+		if radii[c] == [2]float64{} {
+			continue
+		}
+		for a := range 2 {
+			radii[c][a] = marginRadius(radii[c][a], m[side[c][a]])
+		}
+		if radii[c][0] <= 0 || radii[c][1] <= 0 {
+			radii[c] = [2]float64{}
+		}
+	}
+	return fitRadii(r, radii)
 }
 
 // marginRadius returns the radius of a margin box corner whose border

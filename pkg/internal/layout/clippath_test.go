@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -159,5 +160,22 @@ func TestClipPath_InsetRoundPercent(t *testing.T) {
 	img := render(t, run(t, root, page(20, 20)), 1)
 	if code(img.At(10, 17)) != 'R' || code(img.At(0, 16)) == 'R' || code(img.At(10, 10)) == 'R' {
 		t.Errorf("middle %v, corner %v, above %v", at(img, 10, 17), at(img, 0, 16), at(img, 10, 10))
+	}
+}
+
+// TestClipPath_MarginBoxRadii locks the margin box of CSS Shapes 1, 5,
+// which clip-path: margin-box takes (CSS Masking 1, 5.1): a radius of
+// 10 beside a margin of 50 grows to 10 + 50 (1 + (10/50 - 1)^3) = 34.4,
+// one of 50 beside 25 to 75, fitted to the box.
+func TestClipPath_MarginBoxRadii(t *testing.T) {
+	for _, tc := range []struct{ r, m, want float64 }{{10, 50, 34.4}, {50, 25, 50}} {
+		b := &box{st: &css.Style{}, w: 50, h: 50, m: [4]float64{tc.m, tc.m, tc.m, tc.m}}
+		for c := range b.st.BorderRadius {
+			b.st.BorderRadius[c] = css.Radius{H: css.Pts(tc.r), V: css.Pts(tc.r)}
+		}
+		r, radii := (&painter{}).referenceBox(b, css.GeoMargin)
+		if r.Width != 50+2*tc.m || math.Abs(radii[css.TopLeft][0]-tc.want) > 1e-9 {
+			t.Errorf("radius %v beside margin %v: box %+v radii %v, want %v", tc.r, tc.m, r, radii[css.TopLeft], tc.want)
+		}
 	}
 }

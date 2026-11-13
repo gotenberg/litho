@@ -58,12 +58,8 @@ func (p *painter) referenceBox(b *box, g css.GeometryBox) (typeset.Rect, [4][2]f
 	case css.GeoMargin:
 		m := b.m
 		r = typeset.Rect{X: r.X - m[css.Left], Y: r.Y - m[css.Top], Width: r.Width + m[css.Left] + m[css.Right], Height: r.Height + m[css.Top] + m[css.Bottom]}
-		for i := range radii {
-			if radii[i] != [2]float64{} {
-				radii[i] = [2]float64{radii[i][0] + max(m[css.Left], m[css.Right]), radii[i][1] + max(m[css.Top], m[css.Bottom])}
-			}
-		}
-		radii = fitRadii(r, radii)
+		// CSS Masking 1, 5.1 takes the margin box of CSS Shapes 1, 5.
+		radii = marginRadii(r, radii, m)
 	}
 	return r, radii
 }
