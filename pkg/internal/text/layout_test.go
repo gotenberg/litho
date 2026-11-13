@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-text/typesetting/di"
 
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -404,5 +405,39 @@ func TestLayout_CutsAVeryLongWord(t *testing.T) {
 	lines, _ := layout(t, f, word+" A", style(), maxLineWidth, Collapse)
 	if got := collect(lines); len(got) != 3 || len([]rune(got[0])) != maxWordRunes || strings.Join(got, "") != word+" A" {
 		t.Errorf("%d lines of %v characters", len(got), []int{len(got[0]), len(got[len(got)-1])})
+	}
+}
+
+// TestLayout_ChargesTheShapingStateWhileItRuns pins the charge of the
+// shaping state: a call the budget cannot shape fails with
+// [limits.ErrMemoryBudget], and a call that succeeds gives the state back
+// as it returns, keeping the charge of the glyphs it hands over.
+func TestLayout_ChargesTheShapingStateWhileItRuns(t *testing.T) {
+	t.Parallel()
+	f := newTestFonts(t, sansFamily()...)
+	s := strings.Repeat("AB ", 1000)
+	run := []Run{{Text: s, Style: style()}}
+	ctx, mem, done := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 1 << 20})
+	defer done()
+	lines, _, err := f.Layout(ctx, run, 100, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	glyphs := 0
+	for _, l := range lines {
+		for _, r := range l.Runs {
+			glyphs += len(r.Glyphs)
+		}
+	}
+	if got, want := mem.Held(), int64(glyphs)*glyphCost; got != want {
+		t.Errorf("held %d bytes after the call, want the %d of its glyphs", got, want)
+	}
+	if got, want := mem.Peak(), int64(len(s))*shapeRuneCost; got < want {
+		t.Errorf("peak %d bytes, want at least the %d of the shaping state", got, want)
+	}
+	small, _, done2 := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: int64(len(s))*shapeRuneCost - 1})
+	defer done2()
+	if _, _, err := f.Layout(small, run, 100, Options{}); !errors.Is(err, limits.ErrMemoryBudget) {
+		t.Errorf("under %d bytes: %v, want limits.ErrMemoryBudget", int64(len(s))*shapeRuneCost-1, err)
 	}
 }

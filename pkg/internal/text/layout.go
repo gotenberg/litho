@@ -38,6 +38,20 @@ const MaxLayoutRunes = 1 << 20
 // others hold the lines until the document is written.
 const glyphCost = limits.GlyphCost
 
+// shapeRuneCost is what one character costs the conversion's memory budget
+// while a [Fonts.Layout] call shapes it: its normalized copy, the bidi and
+// break state, the shaper's buffer and output, and the line state. Layout
+// charges it for every character it is given and gives it back as it
+// returns; the glyphs it keeps are charged apart ([glyphCost]).
+//
+// # Corpus evidence
+//
+//   - probe, text: a paragraph of 65,000 characters laid out in one call
+//     holds about 13 MB of live heap in the shaper, the line state, the
+//     normalized text and the bidi input at the peak, 200 bytes a
+//     character.
+const shapeRuneCost = 256
+
 // MaxLayoutRuns bounds the runs of one [Fonts.Layout] call. Anti-DoS guard,
 // not spec-mandated: every run costs a face match, and a paragraph changes
 // style a few times per sentence, not tens of thousands of times.
@@ -277,6 +291,11 @@ func (f *Fonts) Layout(ctx context.Context, runs []Run, width float64, opts Opti
 	}
 	defer st.release()
 	st.mem = limits.BudgetFrom(ctx)
+	// The shaping state lives for the call alone.
+	if err := st.mem.ChargeUnits(int64(total), shapeRuneCost, "text being shaped"); err != nil {
+		return nil, Report{}, fmt.Errorf("laying out text: %w", err)
+	}
+	defer st.mem.Release(int64(total) * shapeRuneCost)
 	norm := normalize(runs, opts.Whitespace)
 	maxWidth := st.toFixed(width)
 	var lines []Line

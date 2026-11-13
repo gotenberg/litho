@@ -20,8 +20,8 @@ import (
 func TestConvert_MemoryBudget(t *testing.T) {
 	t.Parallel()
 	dir := convertFontDir(t)
-	// One source line is one paragraph, laid out whole: its glyphs are held
-	// at once, whatever the pages they fill.
+	// One source line is one paragraph, shaped whole: its shaping state is
+	// held at once, whatever the pages it fills.
 	text := strings.Repeat("words and more words on a line of text ", 1600)
 	var cells strings.Builder
 	for i := range 5000 {
@@ -44,7 +44,7 @@ func TestConvert_MemoryBudget(t *testing.T) {
 		resources fstest.MapFS
 		holds     string
 	}{
-		"text glyph runs": {format: formatText, src: text, holds: "glyph runs"},
+		"text shaping":    {format: formatText, src: text, holds: "text being shaped"},
 		"html styles":     {format: formatHTML, src: styled.String(), holds: "computed styles"},
 		"csv cells":       {format: formatCSV, src: cells.String(), holds: "cells"},
 		"docx paragraphs": {format: formatDOCX, src: docx, holds: "XML trees"},
