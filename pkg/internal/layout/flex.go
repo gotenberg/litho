@@ -965,6 +965,12 @@ func resolveFlexible(items []*fitem, main, gap float64) {
 	}
 }
 
+// autoOrStretch reports a cross size property that lets an item stretch:
+// auto, or the stretch keyword, which asks for the same fill.
+func autoOrStretch(d css.Dimension) bool {
+	return d.Kind == css.Auto || d.Kind == css.Stretch
+}
+
 // rowCross sets the hypothetical cross size, the height, of the item it
 // of a row container, laid out off the page cuts at its main size (CSS
 // Flexbox 1, 9.4, 7), and its baselines; definite reports a single line
@@ -973,7 +979,10 @@ func (e *engine) rowCross(fd *flexData, it *fitem, definite bool, cross float64,
 	k := it.b
 	st := k.st
 	h, hSet := specHeight(k, st.Height, pcb)
-	it.stretch = it.align.Keyword() == css.BoxStretch && !hSet && !it.cAuto[0] && !it.cAuto[1]
+	// Only a computed height of auto stretches: a percentage of an
+	// indefinite height behaves as auto for sizing, not for stretching
+	// (CSS Flexbox 1, 9.4, step 11).
+	it.stretch = it.align.Keyword() == css.BoxStretch && !hSet && autoOrStretch(k.sizeSrc().Height) && !it.cAuto[0] && !it.cAuto[1]
 	if k.kind == kindReplaced {
 		switch r := ratioOf(k); {
 		case hSet:

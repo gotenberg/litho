@@ -518,3 +518,21 @@ func TestFlex_StretchedTableKeepsItsMinContentWidth(t *testing.T) {
 		t.Errorf("table item %v wide, want 100", got[2])
 	}
 }
+
+// TestFlex_PercentageHeightDoesNotStretch holds a row item of a cyclic
+// percentage height to CSS Flexbox 1, 9.4, step 11: only a computed cross
+// size of auto stretches, and a percentage of an indefinite height
+// behaves as auto for sizing alone.
+//
+// # Corpus evidence
+//
+//   - wpt: css-flexbox/stretch-requires-computed-auto-size draws its
+//     reference in Chromium 156.
+func TestFlex_PercentageHeightDoesNotStretch(t *testing.T) {
+	t.Parallel()
+	half := func(s *css.Style) { s.Height = css.Dimension{Kind: css.Percent, Value: 0.5} }
+	got := flexRects(t, doc(el(flexBox(), item(10, 30), item(10, math.NaN(), half))), 0, 0)
+	if want := [][4]float64{{0, 0, 10, 30}, {10, 0, 10, 0}}; !eqRects(got, want) {
+		t.Errorf("rects = %v, want %v", got, want)
+	}
+}
