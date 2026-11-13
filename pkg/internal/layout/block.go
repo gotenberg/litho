@@ -611,6 +611,9 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	}
 	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: specH, hDefinite: hSet}, cb)
 	end := formatterFor(b).layout(e, b, kcb, bc, start, inner)
+	if b.st.TextBoxTrim != css.TrimNone {
+		end = e.trimTextBox(b, end)
+	}
 	// The last child's bottom margin adjoins b's when b's height is auto
 	// (CSS 2.1, 8.3.1); a min-height that then makes b taller cuts that
 	// margin off instead of moving it into b, as browsers do.

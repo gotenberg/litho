@@ -994,6 +994,10 @@ type Style struct {
 	// BaselineSource picks the line an inline-level box with several
 	// aligns by (CSS Inline 3, 4.3).
 	BaselineSource BaselineSource
+	// TextBoxTrim and TextBoxEdge trim a block container's first and
+	// last lines to a metric of their text (CSS Inline 3, 5).
+	TextBoxTrim TextBoxTrim
+	TextBoxEdge TextBoxEdge
 	// Clip clips an absolutely positioned element and its content (CSS
 	// 2.2, 11.1.2).
 	Clip ClipRect

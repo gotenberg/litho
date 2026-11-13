@@ -256,6 +256,8 @@ const (
 	pShapeMargin
 	pShapeImageThreshold
 	pBaselineSource
+	pTextBoxTrim
+	pTextBoxEdge
 	numProps
 )
 
@@ -1044,6 +1046,9 @@ func init() {
 		props[id] = def
 	}
 	props[pClipPath] = clipPathProp()
+	for id, def := range textBoxProps() {
+		props[id] = def
+	}
 	for id, def := range baselineProps() {
 		props[id] = def
 	}

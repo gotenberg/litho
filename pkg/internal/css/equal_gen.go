@@ -48,6 +48,12 @@ func equalStyle(a, b *Style) bool {
 	if a.BaselineSource != b.BaselineSource {
 		return false
 	}
+	if a.TextBoxTrim != b.TextBoxTrim {
+		return false
+	}
+	if !equalTextBoxEdge(&a.TextBoxEdge, &b.TextBoxEdge) {
+		return false
+	}
 	if !equalClipRect(&a.Clip, &b.Clip) {
 		return false
 	}
@@ -722,6 +728,8 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = hashClipPath(h, &x.ClipPath)
 	h = mixBool(h, x.ShapeOutside != nil)
 	h = mix(h, uint64(x.BaselineSource))
+	h = mix(h, uint64(x.TextBoxTrim))
+	h = hashTextBoxEdge(h, &x.TextBoxEdge)
 	h = hashClipRect(h, &x.Clip)
 	h = hashMask(h, &x.Mask)
 	h = hashZIndex(h, &x.ZIndex)
@@ -1022,6 +1030,24 @@ func hashClipPath(h uint64, x *ClipPath) uint64 {
 	h = mixBool(h, x.Shape != nil)
 	h = mix(h, uint64(x.Box))
 	h = mixBool(h, x.Boxed)
+	return h
+}
+
+// equalTextBoxEdge reports whether a and b hold equal values, field by field.
+func equalTextBoxEdge(a, b *TextBoxEdge) bool {
+	if a.Over != b.Over {
+		return false
+	}
+	if a.Under != b.Under {
+		return false
+	}
+	return true
+}
+
+// hashTextBoxEdge folds every field of x into h.
+func hashTextBoxEdge(h uint64, x *TextBoxEdge) uint64 {
+	h = mix(h, uint64(x.Over))
+	h = mix(h, uint64(x.Under))
 	return h
 }
 
