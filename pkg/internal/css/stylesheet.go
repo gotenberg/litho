@@ -32,6 +32,10 @@ type ParseOptions struct {
 	// predefined parses the predefined counter styles, whose names no
 	// document rule may define.
 	predefined bool
+	// userAgent parses the user agent sheet, the one sheet whose
+	// declarations may use the engine's internal values (see
+	// [declCtx.userAgent]).
+	userAgent bool
 }
 
 // Stylesheet is a parsed stylesheet with its imports. It is immutable and
@@ -162,7 +166,7 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 		sp.err = err
 		return
 	}
-	c := &declCtx{baseURL: base}
+	c := &declCtx{baseURL: base, userAgent: sp.opts.userAgent}
 	defer sp.flush(c)
 	switch it.kind { //nolint:exhaustive // declarations and errors cannot reach the top level
 	case itemQualified:

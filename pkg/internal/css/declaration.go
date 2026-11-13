@@ -112,6 +112,12 @@ type declCtx struct {
 	warns   []Warning
 	// quiet drops warnings, for @supports evaluation.
 	quiet bool
+	// userAgent reports a declaration of the user agent sheet, which alone
+	// may use the internal values the sheet is written with
+	// (-internal-th-center): an author or user sheet that writes one
+	// writes an invalid value, as Chromium parses its own -internal-
+	// values in its user agent sheet alone.
+	userAgent bool
 }
 
 func (c *declCtx) warn(code warn.Code, effect warn.Effect, format string, args ...any) {

@@ -1373,11 +1373,15 @@ func textAlignProp(def propDef) propDef {
 //     those values, right under a table in a right-aligned block.
 type thCenter struct{}
 
-// thCenterProp adds -internal-th-center to the text-align property def.
+// thCenterProp adds -internal-th-center to the text-align property def,
+// a value of the user agent sheet alone.
 func thCenterProp(def propDef) propDef {
 	parse, compute := def.parse, def.compute
 	def.parse = func(v []token, c *declCtx) (any, bool) {
 		if k, ok := keyword(v); ok && k == "-internal-th-center" {
+			if !c.userAgent {
+				return nil, false
+			}
 			return thCenter{}, true
 		}
 		return parse(v, c)

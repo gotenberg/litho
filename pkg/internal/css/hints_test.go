@@ -287,3 +287,26 @@ func TestUserAgent_ThCentresUnderStart(t *testing.T) {
 		}
 	}
 }
+
+// TestAuthor_RefusesInternalValues locks that -internal-th-center, a value
+// of the user agent sheet, is an invalid value in an author sheet and in a
+// style attribute, whose declaration is dropped: Chromium parses its
+// -internal- values in its own sheet alone.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints a p at the
+//     left edge, where its parent's initial text-align puts it, when the
+//     p's author rule or style attribute sets text-align to
+//     -internal-center or -internal-th-center, and centres it under
+//     -webkit-center.
+func TestAuthor_RefusesInternalValues(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<div><p id=a class=x>A</p>
+		<p id=b style="text-align:-internal-th-center">B</p></div>`, `.x { text-align: -internal-th-center }`)
+	for id, want := range map[string]TextAlign{"a": AlignStart, "b": AlignStart} {
+		if got := c.of(id).TextAlign; got != want {
+			t.Errorf("#%s: text-align %v, want %v", id, got, want)
+		}
+	}
+}
