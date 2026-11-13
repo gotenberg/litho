@@ -59,6 +59,37 @@ func jpegOrientation(data []byte) int {
 	return 1
 }
 
+// pngOrientation returns the orientation of the EXIF data of the PNG
+// data's eXIf chunk, 1 to 8, 1 when it carries none or a malformed one
+// (PNG 3rd edition, 11.3.3.7: the chunk holds the TIFF structure of an
+// EXIF segment, and comes before the first IDAT). CSS Images 3, 5.3:
+// Chromium applies it as it applies a JPEG's.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium prints a 40 by 20 PNG whose eXIf chunk holds
+//     orientation 6 turned a quarter clockwise, 20 by 40, as it prints
+//     the same JPEG.
+func pngOrientation(data []byte) int {
+	data = data[:min(len(data), maxEXIFScan)]
+	if !bytes.HasPrefix(data, []byte("\x89PNG\r\n\x1a\n")) {
+		return 1
+	}
+	for i := 8; i+8 <= len(data); {
+		n := int64(binary.BigEndian.Uint32(data[i:]))
+		typ := string(data[i+4 : i+8])
+		end := int64(i) + 12 + n
+		if typ == "IDAT" || end > int64(len(data)) {
+			return 1
+		}
+		if typ == "eXIf" {
+			return tiffOrientation(data[i+8 : i+8+int(n)]) // fits int: i+8+n < end, within len(data)
+		}
+		i = int(end) // fits int: at most len(data)
+	}
+	return 1
+}
+
 // tiffOrientation reads the orientation tag of IFD0 of the TIFF structure
 // an EXIF segment holds (EXIF 2.32, 4.5.2; TIFF 6.0, section 2).
 func tiffOrientation(t []byte) int {

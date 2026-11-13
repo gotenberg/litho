@@ -303,8 +303,11 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 	}
 	pic := &layout.Picture{Width: float64(cfg.Width) * css.Pt, Height: float64(cfg.Height) * css.Pt}
 	orient := 1
-	if format == "jpeg" {
+	switch format {
+	case "jpeg":
 		orient = jpegOrientation(data)
+	case "png":
+		orient = pngOrientation(data)
 	}
 	if orient >= 5 {
 		// Orientations 5 to 8 turn the picture a quarter.

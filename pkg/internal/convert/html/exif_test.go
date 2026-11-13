@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"hash/crc32"
 	"image"
 	"image/color"
 	"image/jpeg"
+	"image/png"
 	"testing"
 	"testing/fstest"
 
@@ -171,5 +173,59 @@ func FuzzJPEGOrientation(f *testing.F) {
 			t.Fatalf("orientation %d", o)
 		}
 		_ = unsupportedFormat(data, "")
+	})
+}
+
+// pngWithEXIF returns a 4 by 2 PNG whose eXIf chunk, before its IDAT,
+// holds the orientation o.
+func pngWithEXIF(t *testing.T, o uint16) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	if err := png.Encode(&b, image.NewGray(image.Rect(0, 0, 4, 2))); err != nil {
+		t.Fatal(err)
+	}
+	data := b.Bytes()
+	tiff := exifSegment(binary.BigEndian, o)[10:]
+	chunk := make([]byte, 8, 12+len(tiff))
+	binary.BigEndian.PutUint32(chunk, uint32(len(tiff)))
+	copy(chunk[4:], "eXIf")
+	chunk = append(chunk, tiff...)
+	chunk = binary.BigEndian.AppendUint32(chunk, crc32.ChecksumIEEE(chunk[4:]))
+	// After the signature and the IHDR chunk, 8 + 25 bytes.
+	return append(append(append([]byte{}, data[:33]...), chunk...), data[33:]...)
+}
+
+func TestPNGOrientation(t *testing.T) {
+	t.Parallel()
+	six := pngWithEXIF(t, 6)
+	for _, tc := range []struct {
+		name string
+		data []byte
+		want int
+	}{
+		{"eXIf 6", six, 6},
+		{"eXIf out of range", pngWithEXIF(t, 9), 1},
+		{"truncated", six[:40], 1},
+		{"none", pngWithEXIF(t, 1), 1},
+		{"not a PNG", []byte{0xFF, 0xD8}, 1},
+	} {
+		if got := pngOrientation(tc.data); got != tc.want {
+			t.Errorf("%s: orientation %d, want %d", tc.name, got, tc.want)
+		}
+	}
+	if _, err := png.Decode(bytes.NewReader(six)); err != nil {
+		t.Fatalf("the PNG with eXIf does not decode: %v", err)
+	}
+}
+
+func FuzzPNGOrientation(f *testing.F) {
+	var b bytes.Buffer
+	_ = png.Encode(&b, image.NewGray(image.Rect(0, 0, 1, 1))) // a bytes.Buffer takes every write
+	f.Add(b.Bytes())
+	f.Add(b.Bytes()[:20])
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if o := pngOrientation(data); o < 1 || o > 8 {
+			t.Fatalf("orientation %d", o)
+		}
 	})
 }
