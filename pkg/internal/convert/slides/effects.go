@@ -167,13 +167,14 @@ const minDeterminant = 1e-12
 
 // invert returns the inverse of m, false when m is singular.
 func invert(m typeset.Matrix) (typeset.Matrix, bool) {
-	det := m.A*m.D - m.B*m.C
+	// Each product is rounded on its own, as in [then].
+	det := float64(m.A*m.D) - float64(m.B*m.C)
 	if !numeric.Finite(det) || math.Abs(det) <= minDeterminant {
 		return typeset.Matrix{}, false
 	}
 	return typeset.Matrix{
 		A: m.D / det, B: -m.B / det, C: -m.C / det, D: m.A / det,
-		E: (m.C*m.F - m.D*m.E) / det, F: (m.B*m.E - m.A*m.F) / det,
+		E: (float64(m.C*m.F) - float64(m.D*m.E)) / det, F: (float64(m.B*m.E) - float64(m.A*m.F)) / det,
 	}, true
 }
 

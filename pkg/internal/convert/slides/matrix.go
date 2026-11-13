@@ -7,21 +7,25 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
-// then returns the transform that applies a, then b.
+// then returns the transform that applies a, then b. Each product is
+// rounded on its own (the Go specification lets a compiler fuse x*y + z
+// into one rounding, which arm64 does and amd64 does not), so that every
+// architecture computes the same matrix.
 func then(a, b typeset.Matrix) typeset.Matrix {
 	return typeset.Matrix{
-		A: b.A*a.A + b.C*a.B,
-		B: b.B*a.A + b.D*a.B,
-		C: b.A*a.C + b.C*a.D,
-		D: b.B*a.C + b.D*a.D,
-		E: b.A*a.E + b.C*a.F + b.E,
-		F: b.B*a.E + b.D*a.F + b.F,
+		A: float64(b.A*a.A) + float64(b.C*a.B),
+		B: float64(b.B*a.A) + float64(b.D*a.B),
+		C: float64(b.A*a.C) + float64(b.C*a.D),
+		D: float64(b.B*a.C) + float64(b.D*a.D),
+		E: float64(b.A*a.E) + float64(b.C*a.F) + b.E,
+		F: float64(b.B*a.E) + float64(b.D*a.F) + b.F,
 	}
 }
 
-// apply maps the point (x, y) through m.
+// apply maps the point (x, y) through m, each product rounded on its own
+// as in [then].
 func apply(m typeset.Matrix, x, y float64) (float64, float64) {
-	return m.A*x + m.C*y + m.E, m.B*x + m.D*y + m.F
+	return float64(m.A*x) + float64(m.C*y) + m.E, float64(m.B*x) + float64(m.D*y) + m.F
 }
 
 // transformRect returns the bounding box of r mapped through m.
