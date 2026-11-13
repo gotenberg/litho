@@ -14,54 +14,62 @@ type IntrinsicSize struct {
 
 // containIntrinsicProps returns contain-intrinsic-width and
 // contain-intrinsic-height, not inherited. Both rarely set, they share
-// one pointer of [Style], nil for none and none.
+// one pointer of [Style], nil for none and none, which a style that sets
+// neither never allocates.
 func containIntrinsicProps() map[propID]propDef {
-	side := func(name string, set func(*IntrinsicSize, float64), get func(IntrinsicSize) float64) propDef {
+	side := func(name string, axis int) propDef {
 		return propDef{
 			name:  name,
 			parse: parseContainIntrinsic,
 			compute: func(s *styler, st *Style, v any) {
-				l, ok := v.(intrinsicLength)
-				if !ok {
-					return
-				}
-				n := IntrinsicSize{Width: -1, Height: -1}
-				if st.ContainIntrinsic != nil {
-					n = *st.ContainIntrinsic
-				}
-				w := -1.0
-				if l.set {
-					w = max(l.l.points(s.lc), 0)
-				}
-				set(&n, w)
-				st.ContainIntrinsic = nil
-				if n.Width >= 0 || n.Height >= 0 {
-					st.ContainIntrinsic = &n
+				if l, ok := v.(intrinsicLength); ok {
+					w := -1.0
+					if l.set {
+						w = max(l.l.points(s.lc), 0)
+					}
+					setIntrinsic(st, axis, w)
 				}
 			},
-			copyFrom: func(dst, src *Style) {
-				v := -1.0
-				if src.ContainIntrinsic != nil {
-					v = get(*src.ContainIntrinsic)
-				}
-				n := IntrinsicSize{Width: -1, Height: -1}
-				if dst.ContainIntrinsic != nil {
-					n = *dst.ContainIntrinsic
-				}
-				set(&n, v)
-				dst.ContainIntrinsic = nil
-				if n.Width >= 0 || n.Height >= 0 {
-					dst.ContainIntrinsic = &n
-				}
-			},
+			copyFrom: func(dst, src *Style) { setIntrinsic(dst, axis, intrinsicOf(src, axis)) },
 		}
 	}
 	return map[propID]propDef{
-		pContainIntrinsicWidth: side("contain-intrinsic-width",
-			func(n *IntrinsicSize, v float64) { n.Width = v }, func(n IntrinsicSize) float64 { return n.Width }),
-		pContainIntrinsicHeight: side("contain-intrinsic-height",
-			func(n *IntrinsicSize, v float64) { n.Height = v }, func(n IntrinsicSize) float64 { return n.Height }),
+		pContainIntrinsicWidth:  side("contain-intrinsic-width", 0),
+		pContainIntrinsicHeight: side("contain-intrinsic-height", 1),
 	}
+}
+
+// intrinsicOf returns the contain-intrinsic-width (axis 0) or -height
+// (axis 1) of st, negative for none.
+func intrinsicOf(st *Style, axis int) float64 {
+	switch {
+	case st.ContainIntrinsic == nil:
+		return -1
+	case axis == 0:
+		return st.ContainIntrinsic.Width
+	}
+	return st.ContainIntrinsic.Height
+}
+
+// setIntrinsic sets the contain-intrinsic-width (axis 0) or -height (axis
+// 1) of st to v, negative for none, keeping the other: it allocates only
+// for a value that differs and is not none on both axes. The shared value
+// is never mutated.
+func setIntrinsic(st *Style, axis int, v float64) {
+	if intrinsicOf(st, axis) == v || v < 0 && intrinsicOf(st, axis) < 0 {
+		return
+	}
+	n := IntrinsicSize{Width: intrinsicOf(st, 0), Height: intrinsicOf(st, 1)}
+	if axis == 0 {
+		n.Width = v
+	} else {
+		n.Height = v
+	}
+	if n.Width < 0 && n.Height < 0 {
+		st.ContainIntrinsic = nil
+		return
+	}
+	st.ContainIntrinsic = &IntrinsicSize{Width: n.Width, Height: n.Height}
 }
 
 // intrinsicLength is a specified contain-intrinsic-width or -height: a
