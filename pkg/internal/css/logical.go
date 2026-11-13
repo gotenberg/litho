@@ -99,10 +99,10 @@ func (m flowMap) mapID(id propID) propID {
 	}
 	if m.swap {
 		for _, p := range sizePairs {
-			switch id {
-			case p[0]:
+			if id == p[0] {
 				return p[1]
-			case p[1]:
+			}
+			if id == p[1] {
 				return p[0]
 			}
 		}
@@ -113,6 +113,8 @@ func (m flowMap) mapID(id propID) propID {
 // cornerSides returns the vertical and horizontal sides corner c joins.
 func cornerSides(c Corner) (Side, Side) {
 	switch c {
+	case TopLeft:
+		return Top, Left
 	case TopRight:
 		return Top, Right
 	case BottomRight:

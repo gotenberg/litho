@@ -958,10 +958,8 @@ func (l *gridLayout) put(it *gitem, rowTop float64) float64 {
 	if bl, _ := l.baselineAligned(it); bl {
 		stretch = false
 	}
-	ratioH, byRatio := 0.0, false
 	if k.kind != kindReplaced && !hSet {
-		ratioH, byRatio = l.ratioItemHeight(it, w)
-		if byRatio {
+		if ratioH, byRatio := l.ratioItemHeight(it, w); byRatio {
 			// The ratio gives the height: the item does not stretch.
 			stretch, hSet, sh = false, true, ratioH
 		}

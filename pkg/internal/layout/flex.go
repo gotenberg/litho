@@ -977,7 +977,7 @@ func (e *engine) rowCross(fd *flexData, it *fitem, definite bool, cross float64,
 		it.m = itemMeasure{h: it.cross}
 		return
 	}
-	if !hSet && !(it.stretch && definite) {
+	if !hSet && (!it.stretch || !definite) {
 		if _, ok := itemRatioHeight(k, it.target); ok {
 			// The ratio gives the height from the main size (CSS Sizing
 			// 4, 4.2), over the content's height when that is the
