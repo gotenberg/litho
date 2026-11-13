@@ -267,7 +267,7 @@ func findColumnBoundaries(rows [][]models.TextElement, gapThreshold float64) []f
 		for _, row := range rows {
 			for i := 0; i < len(row)-1; i++ {
 				if row[i+1].X-row[i].X > gapThreshold {
-					mid := (row[i].X + row[i+1].X) / 2
+					mid := float64((row[i].X + row[i+1].X) / 2)
 					if math.Abs(mid-boundary) < gapThreshold*0.5 {
 						count++
 						break

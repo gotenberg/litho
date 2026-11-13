@@ -3,6 +3,7 @@ package heuristics
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -145,16 +146,16 @@ func ElementZone(el models.TextElement) Zone {
 	}
 
 	xs := [4]float64{
-		el.X + perpX*near,
-		el.X + perpX*far,
-		el.X + dirX*el.Width + perpX*near,
-		el.X + dirX*el.Width + perpX*far,
+		el.X + float64(perpX*near),
+		el.X + float64(perpX*far),
+		el.X + float64(dirX*el.Width) + float64(perpX*near),
+		el.X + float64(dirX*el.Width) + float64(perpX*far),
 	}
 	ys := [4]float64{
-		el.Y + perpY*near,
-		el.Y + perpY*far,
-		el.Y + dirY*el.Width + perpY*near,
-		el.Y + dirY*el.Width + perpY*far,
+		el.Y + float64(perpY*near),
+		el.Y + float64(perpY*far),
+		el.Y + float64(dirY*el.Width) + float64(perpY*near),
+		el.Y + float64(dirY*el.Width) + float64(perpY*far),
 	}
 
 	z := Zone{minX: xs[0], maxX: xs[0], minY: ys[0], maxY: ys[0]}
@@ -173,9 +174,9 @@ func ElementZone(el models.TextElement) Zone {
 // convention the typography package uses to coalesce glyphs into runs.
 func baselineDirection(el models.TextElement) (float64, float64) {
 	if el.Vertical {
-		return math.Sin(el.Angle), math.Cos(el.Angle)
+		return detmath.Sin(el.Angle), detmath.Cos(el.Angle)
 	}
-	return math.Cos(el.Angle), math.Sin(el.Angle)
+	return detmath.Cos(el.Angle), detmath.Sin(el.Angle)
 }
 
 // ZonesOverlap reports whether two axis-aligned boxes share any area.

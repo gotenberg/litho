@@ -40,7 +40,7 @@ func MarginEdge(minY, maxY, boxBottom, boxTop float64) (Edge, float64) {
 	if h <= 0 || minY > maxY || minY < boxBottom || maxY > boxTop {
 		return EdgeNone, 0
 	}
-	band := h * marginBandRatio
+	band := float64(h * marginBandRatio)
 	switch {
 	case minY >= boxTop-band:
 		return EdgeTop, boxTop - maxY
