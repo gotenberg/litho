@@ -2,12 +2,12 @@ package svg
 
 import (
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 
 	"golang.org/x/net/html"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -95,8 +95,8 @@ func middleColor(stops []typeset.ColorStop) typeset.Color {
 			}
 			t = min(max(t, 0), 1)
 			return typeset.Color{
-				R: a.Color.R + t*(b.Color.R-a.Color.R), G: a.Color.G + t*(b.Color.G-a.Color.G),
-				B: a.Color.B + t*(b.Color.B-a.Color.B), A: a.Color.A + t*(b.Color.A-a.Color.A),
+				R: a.Color.R + float64(t*(b.Color.R-a.Color.R)), G: a.Color.G + float64(t*(b.Color.G-a.Color.G)),
+				B: a.Color.B + float64(t*(b.Color.B-a.Color.B)), A: a.Color.A + float64(t*(b.Color.A-a.Color.A)),
 			}
 		}
 	}
@@ -266,9 +266,9 @@ func (r *renderer) shading(p paint, st *style, box bbox) (*typeset.Shading, *pai
 		return solid()
 	}
 	// SVG 1.1, 13.2.3: a focal point outside the end circle moves onto it.
-	if d := math.Hypot(fx-cx, fy-cy); d > rad*focalInside {
+	if d := detmath.Hypot(fx-cx, fy-cy); d > rad*focalInside {
 		k := rad * focalInside / d
-		fx, fy = cx+(fx-cx)*k, cy+(fy-cy)*k
+		fx, fy = cx+float64((fx-cx)*k), cy+float64((fy-cy)*k)
 	}
 	if fx == cx && fy == cy && fr == rad {
 		return solid()

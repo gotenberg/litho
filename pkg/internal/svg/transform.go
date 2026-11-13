@@ -3,6 +3,7 @@ package svg
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -86,7 +87,7 @@ func transformFunc(name string, a []float64) (typeset.Matrix, bool) {
 		if len(a) != 1 && len(a) != 3 {
 			return identity, false
 		}
-		c, s := math.Cos(rad(a[0])), math.Sin(rad(a[0]))
+		c, s := detmath.Cos(rad(a[0])), detmath.Sin(rad(a[0]))
 		r := typeset.Matrix{A: c, B: s, C: -s, D: c}
 		if len(a) == 3 {
 			r = mul(translate(a[1], a[2]), mul(r, translate(-a[1], -a[2])))
@@ -94,11 +95,11 @@ func transformFunc(name string, a []float64) (typeset.Matrix, bool) {
 		return r, true
 	case "skewX":
 		if len(a) == 1 {
-			return typeset.Matrix{A: 1, C: math.Tan(rad(a[0])), D: 1}, true
+			return typeset.Matrix{A: 1, C: detmath.Tan(rad(a[0])), D: 1}, true
 		}
 	case "skewY":
 		if len(a) == 1 {
-			return typeset.Matrix{A: 1, B: math.Tan(rad(a[0])), D: 1}, true
+			return typeset.Matrix{A: 1, B: detmath.Tan(rad(a[0])), D: 1}, true
 		}
 	}
 	return identity, false

@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/stroke"
@@ -42,7 +42,7 @@ const maxOutlineGlyphs = 20_000
 // stroke paints nothing or the stroker refuses it.
 func strokeOutline(ops []typeset.PathOp, s *typeset.Stroke) []typeset.PathOp {
 	b := opsBBox(ops)
-	diag := math.Hypot(b.x1-b.x0, b.y1-b.y0) + s.Width
+	diag := detmath.Hypot(b.x1-b.x0, b.y1-b.y0) + s.Width
 	if !b.ok || !numeric.PositiveFinite(diag) {
 		return nil
 	}

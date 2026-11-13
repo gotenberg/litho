@@ -133,7 +133,7 @@ func trimTrailingMove(ops []typeset.PathOp) []typeset.PathOp {
 // four cubic Béziers, starting at the rightmost point and turning
 // clockwise on screen, the direction SVG 2, 10.4 draws it in.
 func ellipseOps(cx, cy, rx, ry float64) []typeset.PathOp {
-	kx, ky := rx*kappa, ry*kappa
+	kx, ky := float64(rx*kappa), float64(ry*kappa)
 	pt := func(x, y float64) typeset.Point { return typeset.Point{X: x, Y: y} }
 	return []typeset.PathOp{
 		{Kind: typeset.MoveTo, P: [3]typeset.Point{pt(cx+rx, cy)}},
@@ -148,7 +148,7 @@ func ellipseOps(cx, cy, rx, ry float64) []typeset.PathOp {
 // roundRect returns the rectangle at (x, y) of w by h with corners of
 // radii rx and ry, drawn as SVG 1.1, 9.2 lays it out.
 func roundRect(x, y, w, h, rx, ry float64) []typeset.PathOp {
-	kx, ky := rx*kappa, ry*kappa
+	kx, ky := float64(rx*kappa), float64(ry*kappa)
 	pt := func(px, py float64) typeset.Point { return typeset.Point{X: px, Y: py} }
 	line := func(px, py float64) typeset.PathOp {
 		return typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{pt(px, py)}}
@@ -244,7 +244,7 @@ func (r *renderer) shape(n *html.Node, st *style, s sink) {
 // out. It returns ops without them and the caps' outlines.
 func zeroLengthCaps(ops []typeset.PathOp, s *typeset.Stroke) ([]typeset.PathOp, []typeset.PathOp) {
 	var keep, caps []typeset.PathOp
-	half := s.Width / 2
+	half := float64(s.Width / 2)
 	for i := 0; i < len(ops); {
 		j := i + 1
 		for j < len(ops) && ops[j].Kind != typeset.MoveTo {

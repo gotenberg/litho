@@ -54,9 +54,9 @@ func (r *renderer) mask(n *html.Node, st *style, id string, box *bbox, depth int
 			v /= 100
 		}
 		if a == axisX {
-			return b.x0 + v*w
+			return b.x0 + float64(v*w)
 		}
-		return b.y0 + v*h
+		return b.y0 + float64(v*h)
 	}
 	bboxRegion := attrOf(me, "maskUnits") != "userSpaceOnUse"
 	if bboxRegion && !hasBox {

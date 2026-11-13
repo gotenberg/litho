@@ -15,18 +15,18 @@ var identity = typeset.Matrix{A: 1, D: 1}
 // grandparent's, the result maps the element's to the grandparent's.
 func mul(a, b typeset.Matrix) typeset.Matrix {
 	return typeset.Matrix{
-		A: a.A*b.A + a.C*b.B,
-		B: a.B*b.A + a.D*b.B,
-		C: a.A*b.C + a.C*b.D,
-		D: a.B*b.C + a.D*b.D,
-		E: a.A*b.E + a.C*b.F + a.E,
-		F: a.B*b.E + a.D*b.F + a.F,
+		A: float64(a.A*b.A) + float64(a.C*b.B),
+		B: float64(a.B*b.A) + float64(a.D*b.B),
+		C: float64(a.A*b.C) + float64(a.C*b.D),
+		D: float64(a.B*b.C) + float64(a.D*b.D),
+		E: float64(a.A*b.E) + float64(a.C*b.F) + a.E,
+		F: float64(a.B*b.E) + float64(a.D*b.F) + a.F,
 	}
 }
 
 // apply maps p through m.
 func apply(m typeset.Matrix, p typeset.Point) typeset.Point {
-	return typeset.Point{X: m.A*p.X + m.C*p.Y + m.E, Y: m.B*p.X + m.D*p.Y + m.F}
+	return typeset.Point{X: float64(m.A*p.X) + float64(m.C*p.Y) + m.E, Y: float64(m.B*p.X) + float64(m.D*p.Y) + m.F}
 }
 
 // translate returns the translation by (x, y).
@@ -42,19 +42,19 @@ func isIdentity(m typeset.Matrix) bool { return m == identity }
 // singular transform collapses what it draws to a line or a point, which
 // paints nothing (SVG 1.1, 7.5).
 func invertible(m typeset.Matrix) bool {
-	det := m.A*m.D - m.B*m.C
+	det := float64(m.A*m.D) - float64(m.B*m.C)
 	return det != 0 && numeric.Finite(det) && numeric.Finite(m.A) && numeric.Finite(m.B) && numeric.Finite(m.C) && numeric.Finite(m.D) && numeric.Finite(m.E) && numeric.Finite(m.F)
 }
 
 // invert returns the inverse of m, false when it has none.
 func invert(m typeset.Matrix) (typeset.Matrix, bool) {
-	det := m.A*m.D - m.B*m.C
+	det := float64(m.A*m.D) - float64(m.B*m.C)
 	if det == 0 || !numeric.Finite(det) {
 		return identity, false
 	}
 	inv := typeset.Matrix{
 		A: m.D / det, B: -m.B / det, C: -m.C / det, D: m.A / det,
-		E: (m.C*m.F - m.D*m.E) / det, F: (m.B*m.E - m.A*m.F) / det,
+		E: (float64(m.C*m.F) - float64(m.D*m.E)) / det, F: (float64(m.B*m.E) - float64(m.A*m.F)) / det,
 	}
 	return inv, invertible(inv)
 }
@@ -120,8 +120,8 @@ func cubicExtrema(p0, p1, p2, p3 typeset.Point, add func(typeset.Point)) {
 	at := func(t float64) typeset.Point {
 		u := 1 - t
 		return typeset.Point{
-			X: u*u*u*p0.X + 3*u*u*t*p1.X + 3*u*t*t*p2.X + t*t*t*p3.X,
-			Y: u*u*u*p0.Y + 3*u*u*t*p1.Y + 3*u*t*t*p2.Y + t*t*t*p3.Y,
+			X: float64(u*u*u*p0.X) + float64(3*u*u*t*p1.X) + float64(3*u*t*t*p2.X) + float64(t*t*t*p3.X),
+			Y: float64(u*u*u*p0.Y) + float64(3*u*u*t*p1.Y) + float64(3*u*t*t*p2.Y) + float64(t*t*t*p3.Y),
 		}
 	}
 	for axis := range 2 {
@@ -130,7 +130,7 @@ func cubicExtrema(p0, p1, p2, p3 typeset.Point, add func(typeset.Point)) {
 			v = [4]float64{p0.Y, p1.Y, p2.Y, p3.Y}
 		}
 		// The derivative is a quadratic a t^2 + b t + c.
-		a := -v[0] + 3*v[1] - 3*v[2] + v[3]
+		a := -v[0] + float64(3*v[1]) - float64(3*v[2]) + v[3]
 		bq := 2 * (v[0] - 2*v[1] + v[2])
 		c := v[1] - v[0]
 		for _, t := range quadRoots(a, bq, c) {
@@ -150,7 +150,7 @@ func quadRoots(a, b, c float64) []float64 {
 		}
 		return []float64{-c / b}
 	}
-	d := b*b - 4*a*c
+	d := float64(b*b) - float64(4*a*c)
 	if d < 0 {
 		return nil
 	}

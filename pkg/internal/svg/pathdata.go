@@ -3,6 +3,7 @@ package svg
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -231,8 +232,8 @@ func (sc *scanner) point() (typeset.Point, bool) {
 // quadToCubic raises the quadratic Bézier p0 q p1 to the cubic that draws
 // the same curve.
 func quadToCubic(p0, q, p1 typeset.Point) typeset.PathOp {
-	c1 := typeset.Point{X: p0.X + 2.0/3*(q.X-p0.X), Y: p0.Y + 2.0/3*(q.Y-p0.Y)}
-	c2 := typeset.Point{X: p1.X + 2.0/3*(q.X-p1.X), Y: p1.Y + 2.0/3*(q.Y-p1.Y)}
+	c1 := typeset.Point{X: p0.X + float64(2.0/3*(q.X-p0.X)), Y: p0.Y + float64(2.0/3*(q.Y-p0.Y))}
+	c2 := typeset.Point{X: p1.X + float64(2.0/3*(q.X-p1.X)), Y: p1.Y + float64(2.0/3*(q.Y-p1.Y))}
 	return typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{c1, c2, p1}}
 }
 
@@ -251,19 +252,19 @@ func arcToCubics(p0 typeset.Point, rx, ry, rotDeg float64, large, sweep bool, p1
 		return []typeset.PathOp{{Kind: typeset.LineTo, P: [3]typeset.Point{p1}}}
 	}
 	phi := rotDeg * math.Pi / 180
-	cos, sin := math.Cos(phi), math.Sin(phi)
+	cos, sin := detmath.Cos(phi), detmath.Sin(phi)
 	// F.6.5.1: the midpoint in the ellipse's axes.
 	dx, dy := (p0.X-p1.X)/2, (p0.Y-p1.Y)/2
-	x1 := cos*dx + sin*dy
-	y1 := -sin*dx + cos*dy
+	x1 := float64(cos*dx) + float64(sin*dy)
+	y1 := float64(-sin*dx) + float64(cos*dy)
 	// F.6.6.2: scale the radii up when no ellipse reaches both ends.
 	if lam := x1*x1/(rx*rx) + y1*y1/(ry*ry); lam > 1 {
 		s := math.Sqrt(lam)
 		rx, ry = rx*s, ry*s
 	}
 	// F.6.5.2: the centre in the ellipse's axes.
-	num := rx*rx*ry*ry - rx*rx*y1*y1 - ry*ry*x1*x1
-	den := rx*rx*y1*y1 + ry*ry*x1*x1
+	num := float64(rx*rx*ry*ry) - float64(rx*rx*y1*y1) - float64(ry*ry*x1*x1)
+	den := float64(rx*rx*y1*y1) + float64(ry*ry*x1*x1)
 	k := 0.0
 	if den > 0 && num > 0 {
 		k = math.Sqrt(num / den)
@@ -273,13 +274,13 @@ func arcToCubics(p0 typeset.Point, rx, ry, rotDeg float64, large, sweep bool, p1
 	}
 	cx1, cy1 := k*rx*y1/ry, -k*ry*x1/rx
 	// F.6.5.3: the centre in user space.
-	cx := cos*cx1 - sin*cy1 + (p0.X+p1.X)/2
-	cy := sin*cx1 + cos*cy1 + (p0.Y+p1.Y)/2
+	cx := float64(cos*cx1) - float64(sin*cy1) + float64((p0.X+p1.X)/2)
+	cy := float64(sin*cx1) + float64(cos*cy1) + float64((p0.Y+p1.Y)/2)
 	// F.6.5.5 and F.6.5.6: the start angle and the sweep.
 	ux, uy := (x1-cx1)/rx, (y1-cy1)/ry
 	vx, vy := (-x1-cx1)/rx, (-y1-cy1)/ry
-	theta := math.Atan2(uy, ux)
-	delta := math.Atan2(ux*vy-uy*vx, ux*vx+uy*vy)
+	theta := detmath.Atan2(uy, ux)
+	delta := detmath.Atan2(float64(ux*vy)-float64(uy*vx), float64(ux*vx)+float64(uy*vy))
 	if !sweep && delta > 0 {
 		delta -= 2 * math.Pi
 	} else if sweep && delta < 0 {
@@ -291,14 +292,14 @@ func arcToCubics(p0 typeset.Point, rx, ry, rotDeg float64, large, sweep bool, p1
 	n := int(math.Ceil(math.Abs(delta)/(math.Pi/2) - 1e-9)) // at most 4: |delta| <= 2π
 	n = max(n, 1)
 	step := delta / float64(n)
-	t := 4.0 / 3 * math.Tan(step/4)
+	t := 4.0 / 3 * detmath.Tan(step/4)
 	onEllipse := func(a float64) (typeset.Point, typeset.Point) {
-		ca, sa := math.Cos(a), math.Sin(a)
+		ca, sa := detmath.Cos(a), detmath.Sin(a)
 		// The point and the derivative, both rotated by phi.
 		px, py := rx*ca, ry*sa
 		tx, ty := -rx*sa, ry*ca
-		return typeset.Point{X: cos*px - sin*py + cx, Y: sin*px + cos*py + cy},
-			typeset.Point{X: cos*tx - sin*ty, Y: sin*tx + cos*ty}
+		return typeset.Point{X: float64(cos*px) - float64(sin*py) + cx, Y: float64(sin*px) + float64(cos*py) + cy},
+			typeset.Point{X: float64(cos*tx) - float64(sin*ty), Y: float64(sin*tx) + float64(cos*ty)}
 	}
 	ops := make([]typeset.PathOp, 0, n)
 	a := theta
@@ -310,8 +311,8 @@ func arcToCubics(p0 typeset.Point, rx, ry, rotDeg float64, large, sweep bool, p1
 			to = p1
 		}
 		ops = append(ops, typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{
-			{X: from.X + t*d0.X, Y: from.Y + t*d0.Y},
-			{X: to.X - t*d1.X, Y: to.Y - t*d1.Y},
+			{X: from.X + float64(t*d0.X), Y: from.Y + float64(t*d0.Y)},
+			{X: to.X - float64(t*d1.X), Y: to.Y - float64(t*d1.Y)},
 			to,
 		}})
 		a, from, d0 = b, to, d1

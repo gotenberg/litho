@@ -213,7 +213,7 @@ func (l length) resolve(c lengthCtx, a axis) float64 {
 		case axisY:
 			ref = c.vh
 		case axisDiag:
-			ref = math.Sqrt(c.vw*c.vw+c.vh*c.vh) / math.Sqrt2
+			ref = math.Sqrt(float64(c.vw*c.vw)+float64(c.vh*c.vh)) / math.Sqrt2
 		case axisX:
 		}
 		return clampCoord(l.v / 100 * ref)

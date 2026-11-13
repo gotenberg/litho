@@ -360,7 +360,7 @@ func (r *renderer) drawPiece(p *piece, s sink) {
 	}
 	box := bbox{}
 	box.add(typeset.Point{X: p.x, Y: p.y - st.fontSize})
-	box.add(typeset.Point{X: p.x + p.width, Y: p.y + st.fontSize/4})
+	box.add(typeset.Point{X: p.x + p.width, Y: p.y + float64(st.fontSize/4)})
 	fill, ok := r.flatPaint(st.fill, st, box, "text fill")
 	if st.fill.kind == paintNone {
 		ok = false

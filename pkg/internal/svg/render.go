@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/net/html"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -543,7 +544,7 @@ func transformLeaf(f typeset.Fragment, m typeset.Matrix) (typeset.Fragment, bool
 			return nil, false
 		}
 		im := *v
-		im.Rect = typeset.Rect{X: m.A*v.Rect.X + m.E, Y: m.D*v.Rect.Y + m.F, Width: m.A * v.Rect.Width, Height: m.D * v.Rect.Height}
+		im.Rect = typeset.Rect{X: float64(m.A*v.Rect.X) + m.E, Y: float64(m.D*v.Rect.Y) + m.F, Width: m.A * v.Rect.Width, Height: m.D * v.Rect.Height}
 		return &im, true
 	case *typeset.Text:
 		if m.B != 0 || m.C != 0 || m.A != m.D || !numeric.Positive(m.A) || v.Size*m.A > maxFontSize {
@@ -569,7 +570,7 @@ func transformLeaf(f typeset.Fragment, m typeset.Matrix) (typeset.Fragment, bool
 // with a uniform scale and a translation, and its scale factor.
 func similarity(m typeset.Matrix) (float64, bool) {
 	const eps = 1e-9
-	k := math.Hypot(m.A, m.B)
+	k := detmath.Hypot(m.A, m.B)
 	if !numeric.Positive(k) {
 		return 0, false
 	}

@@ -105,8 +105,8 @@ func viewBoxTransform(vb viewBox, par aspect, w, h float64) (typeset.Matrix, boo
 	if par.slice {
 		s = max(sx, sy)
 	}
-	tx := (w - vb.w*s) * float64(par.ax) / 2
-	ty := (h - vb.h*s) * float64(par.ay) / 2
+	tx := (w - float64(vb.w*s)) * float64(par.ax) / 2
+	ty := (h - float64(vb.h*s)) * float64(par.ay) / 2
 	return mul(translate(tx, ty), mul(scale(s, s), translate(-vb.x, -vb.y))), true
 }
 
@@ -120,9 +120,9 @@ func fitRect(cw, ch float64, par aspect, x, y, w, h float64) typeset.Rect {
 	if par.slice {
 		s = max(w/cw, h/ch)
 	}
-	rw, rh := cw*s, ch*s
+	rw, rh := float64(cw*s), float64(ch*s)
 	return typeset.Rect{
-		X: x + (w-rw)*float64(par.ax)/2, Y: y + (h-rh)*float64(par.ay)/2,
+		X: x + float64((w-rw)*float64(par.ax)/2), Y: y + float64((h-rh)*float64(par.ay)/2),
 		Width: rw, Height: rh,
 	}
 }
