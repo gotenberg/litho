@@ -95,8 +95,11 @@ func detPow(x, y float64) float64 {
 	return detExp(float64(y * detLog(x)))
 }
 
-// detSincos returns the sine and cosine of deg degrees.
-func detSincos(deg float64) (float64, float64) {
+// Sincos returns the sine and cosine of deg degrees, the same bits on
+// every machine, which math.Sincos does not promise: a multiple of 90
+// degrees exactly, any other angle within 4e-15 of math.Sincos. It
+// returns NaN for both when deg is not finite.
+func Sincos(deg float64) (float64, float64) {
 	if math.IsNaN(deg) || math.IsInf(deg, 0) {
 		return math.NaN(), math.NaN()
 	}

@@ -536,46 +536,12 @@ func pathBounds(paths []effect.Path) typeset.Rect {
 	return typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 }
 
-// sincosDeg returns the sine and cosine of deg degrees with results that
-// do not depend on the machine: a multiple of 90 degrees exactly, any
-// other angle by a Taylor series whose every product is rounded on its
-// own, which the math package's Sincos does not promise.
+// sincosDeg returns the sine and cosine of deg degrees, the same on
+// every machine ([effect.Sincos]); 0 and 1 for an angle that is not
+// finite.
 func sincosDeg(deg float64) (float64, float64) {
 	if !numeric.Finite(deg) {
 		return 0, 1
 	}
-	d := math.Mod(deg, 360)
-	if d < 0 {
-		d += 360
-	}
-	q := math.Floor(d/90 + 0.5)
-	r := float64((d - float64(q*90)) * (math.Pi / 180))
-	r2 := float64(r * r)
-	// Taylor series on |r| <= pi/4 to the 21st power: under 2^-60 left.
-	sp := 1.0 / 51090942171709440000
-	for _, c := range [...]float64{
-		-1.0 / 121645100408832000, 1.0 / 355687428096000, -1.0 / 1307674368000,
-		1.0 / 6227020800, -1.0 / 39916800, 1.0 / 362880, -1.0 / 5040, 1.0 / 120,
-		-1.0 / 6, 1,
-	} {
-		sp = float64(sp*r2) + c
-	}
-	cp := 1.0 / 2432902008176640000
-	for _, c := range [...]float64{
-		-1.0 / 6402373705728000, 1.0 / 20922789888000, -1.0 / 87178291200,
-		1.0 / 479001600, -1.0 / 3628800, 1.0 / 40320, -1.0 / 720, 1.0 / 24,
-		-1.0 / 2, 1,
-	} {
-		cp = float64(cp*r2) + c
-	}
-	s, c := float64(sp*r), cp
-	switch int(q) % 4 { // fits int: q is 0 to 4
-	case 1:
-		return c, -s
-	case 2:
-		return -s, -c
-	case 3:
-		return -c, s
-	}
-	return s, c
+	return effect.Sincos(deg)
 }

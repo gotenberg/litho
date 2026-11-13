@@ -35,10 +35,10 @@ func TestDetMath_MatchesMath(t *testing.T) {
 		}
 	}
 	for d := -720.0; d <= 720; d += 0.913 {
-		s, c := detSincos(d)
+		s, c := Sincos(d)
 		ws, wc := math.Sincos(d * math.Pi / 180)
 		if math.Abs(s-ws) > 4e-15 || math.Abs(c-wc) > 4e-15 {
-			t.Fatalf("detSincos(%v) = %v, %v, want %v, %v", d, s, c, ws, wc)
+			t.Fatalf("Sincos(%v) = %v, %v, want %v, %v", d, s, c, ws, wc)
 		}
 	}
 	for _, tc := range []struct{ got, want float64 }{

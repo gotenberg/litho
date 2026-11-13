@@ -186,9 +186,9 @@ func SaturateMatrix(s float64) Matrix {
 
 // HueRotateMatrix returns the matrix of Filter Effects 1, 9.6 type
 // hueRotate, the CSS hue-rotate(deg) of Filter Effects 1, 13.1, its sine
-// and cosine from [detSincos].
+// and cosine from [Sincos].
 func HueRotateMatrix(deg float64) Matrix {
-	s, c := detSincos(deg)
+	s, c := Sincos(deg)
 	if math.IsNaN(s) {
 		return IdentityMatrix
 	}
