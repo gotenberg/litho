@@ -445,7 +445,11 @@ func resolvedFamilies(style Style) familyLists {
 // [FallbackChromium] passes a language.
 func BrowserFamilies(families []string, lang string) []string {
 	region := chromiumHanRegion(lang)
-	out := make([]string, 0, len(families)+3)
+	n := len(families) + 2
+	if region != "" {
+		n++
+	}
+	out := make([]string, 0, n)
 	hasGeneric := false
 	for _, name := range families {
 		if g := genericOf(name); g != genericNone {
