@@ -34,8 +34,9 @@ var roles = map[atom.Atom]string{
 	atom.H1: "H1", atom.H2: "H2", atom.H3: "H3", atom.H4: "H4", atom.H5: "H5", atom.H6: "H6",
 	atom.P:  "P",
 	atom.Ul: "L", atom.Ol: "L", atom.Dl: "L",
-	// The engine writes the Lbl and LBody of a list item.
-	atom.Li: "LI", atom.Dt: "LI", atom.Dd: "LI",
+	// The engine writes the Lbl and LBody of a list item, and groups a
+	// definition list's terms and descriptions into its items.
+	atom.Li: "LI", atom.Dt: "Lbl", atom.Dd: "LBody",
 	atom.Blockquote: "BlockQuote",
 	atom.Pre:        "Code", atom.Code: "Code", atom.Kbd: "Code", atom.Samp: "Code",
 	atom.Q: "Quote", atom.Cite: "Quote",
@@ -293,6 +294,21 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 		node.Alt = figureName(n)
 	case atom.Dl:
 		node.Numbering = typeset.NumberingDescription
+	case atom.Dt, atom.Dd:
+		if !inDefinitionList(n) {
+			// A Lbl or a LBody belongs in a list item (ISO 32000-1,
+			// 14.8.4.3.3): a term or a description outside a definition
+			// list starts no element.
+			node.Role = ""
+		}
+	case atom.Div:
+		if p := n.Parent; p != nil && p.DataAtom == atom.Dl && p.Namespace == "" {
+			// A div that wraps a group of a definition list (HTML
+			// Standard, 4.4.9) starts no element: a list holds no Div
+			// (ISO/TS 32005, Table 5), and the group's LI is the
+			// engine's.
+			node.Role = ""
+		}
 	case atom.Col, atom.Colgroup:
 		node.Span = spanAttr(n, "span", maxColSpan)
 	case atom.H1, atom.H2, atom.H3, atom.H4, atom.H5, atom.H6:
@@ -301,6 +317,16 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 		}
 		b.headings = append(b.headings, heading{node: node, level: int(n.Data[1] - '0')})
 	}
+}
+
+// inDefinitionList reports whether n, a dt or a dd, is a child of a dl or
+// of a div that is one (HTML Standard, 4.4.9).
+func inDefinitionList(n *dom.Node) bool {
+	p := n.Parent
+	if p != nil && p.DataAtom == atom.Div && p.Namespace == "" {
+		p = p.Parent
+	}
+	return p != nil && p.DataAtom == atom.Dl && p.Namespace == ""
 }
 
 // headerScope returns the cells a th heads (ISO 32000-1, 14.8.5.7, Table

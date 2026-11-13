@@ -256,3 +256,55 @@ func TestListItems_HoldLblAndLBody(t *testing.T) {
 		})
 	}
 }
+
+// TestListItems_GroupDefinitions locks the structure of a definition list:
+// its terms (Lbl) and descriptions (LBody) group into one LI per run of
+// terms and the descriptions after them (ISO 32000-1, 14.8.4.3.3, Table
+// 336; HTML Standard, 4.4.9).
+//
+// # Corpus evidence
+//
+//   - litho/html markdown-definition-list: each term and each description
+//     was an LI of its own, the description's holding a P, six Table 5
+//     LI-P violations PDF/UA-2 remediation left.
+//   - probe, html: several terms or descriptions to a group, a description
+//     with no term, div-wrapped groups, a nested definition list and a
+//     term and description outside a list left 2 PDF/UA-1 and 8 PDF/UA-2
+//     violations after remediation (LI holding L, Span or Link, L holding
+//     Div, Document holding LI), and none with this structure; veraPDF
+//     passes PDF/UA-1 and PDF/UA-2 on the output.
+func TestListItems_GroupDefinitions(t *testing.T) {
+	in := inlineSty()
+	part := func(r, s string) *Node { return role(r, el(sty(), txt(in, s))) }
+	for name, tc := range map[string]struct {
+		root *Node
+		want string
+	}{
+		"definitions grouped by term": {
+			doc(role("L", el(sty(), part("Lbl", "t1"), part("Lbl", "t2"), part("LBody", "d1"), part("LBody", "d2"), part("Lbl", "t3"), part("LBody", "d3")))),
+			"Document[L[LI[Lbl# Lbl# LBody# LBody#] LI[Lbl# LBody#]]]",
+		},
+		"description with no term": {
+			doc(role("L", el(sty(), part("LBody", "d1"), part("Lbl", "t2"), part("LBody", "d2")))),
+			"Document[L[LI[LBody#] LI[Lbl# LBody#]]]",
+		},
+		"groups wrapped in blocks with no role": {
+			doc(role("L", el(sty(), el(sty(), part("Lbl", "t1"), part("LBody", "d1")), el(sty(), part("Lbl", "t2"), part("LBody", "d2"))))),
+			"Document[L[LI[Lbl# LBody#] LI[Lbl# LBody#]]]",
+		},
+		"description holding a list": {
+			doc(role("L", el(sty(), part("Lbl", "t"), role("LBody", el(sty(), role("L", el(sty(), part("Lbl", "u"), part("LBody", "e")))))))),
+			"Document[L[LI[Lbl# LBody[L[LI[Lbl# LBody#]]]]]]",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			res := run(t, tc.root, page(200, 200))
+			if got := shape(res, res.Structure); got != tc.want {
+				t.Errorf("structure %s, want %s", got, tc.want)
+			}
+			if err := document(res).Validate(t.Context()); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}

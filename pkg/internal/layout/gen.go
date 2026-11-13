@@ -88,7 +88,9 @@ func (e *engine) newBox(n *Node, st *css.Style, kind boxKind, ctx genCtx) *box {
 //
 // An LI holds a Lbl and a LBody alone (ISO 32000-2, 14.8.4.8.3; ISO/TS
 // 32005, Table 5): the item's content hangs from a LBody the LI starts
-// with, and [engine.genMarker] puts the marker's Lbl before it.
+// with, and [engine.genMarker] puts the marker's Lbl before it. A Lbl or a
+// LBody a node names as a list's child, a definition list's term or
+// description, joins an LI of the list, one per group (see [listGroup]).
 func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 	out := ctx
 	out.depth = ctx.depth + 1
@@ -102,6 +104,11 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 		// ActualText is an entry of a structure element (ISO 32000-1,
 		// 14.9.4): a node without a role takes a Span to carry it.
 		role = "Span"
+	}
+	parent := ctx.elem
+	if (role == "Lbl" || role == "LBody") && parent != nil && parent.Role == "L" && ctx.structDepth+1 < maxStructDepth {
+		parent = listGroup(parent, role)
+		out.structDepth++
 	}
 	own := ctx.elem
 	if role != "" {
@@ -130,8 +137,8 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 			if n.Alt != "" && (n.Kind == Replaced || n.Role == "Figure" || n.Role == "Link") {
 				el.Alt = n.Alt
 			}
-			if ctx.elem != nil {
-				ctx.elem.Kids = append(ctx.elem.Kids, el)
+			if parent != nil {
+				parent.Kids = append(parent.Kids, el)
 			}
 			own = el
 			out.elem = el
@@ -157,6 +164,28 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 		out.decos = append(slices.Clip(ctx.decos), newDeco(b.st))
 	}
 	return out
+}
+
+// listGroup returns the LI of the list l that an element of role, Lbl or
+// LBody, joins: the list's last LI, unless it holds no element yet or the
+// element is a Lbl and the LI holds a LBody already, and a new LI
+// otherwise. A definition list's group is one or more terms followed by
+// one or more descriptions (HTML Standard, 4.4.9), and its LI holds the
+// terms as Lbl elements and the descriptions as LBody elements (ISO
+// 32000-1, 14.8.4.3.3, Table 336: in a dictionary list the label is the
+// term defined, the body its definition). So a term after a description
+// starts the next group, and a description with no term before it starts
+// a group of its own.
+func listGroup(l *typeset.StructElem, role string) *typeset.StructElem {
+	if k := len(l.Kids); k > 0 {
+		if last := l.Kids[k-1]; last.Role == "LI" && len(last.Kids) > 0 &&
+			(role == "LBody" || !slices.ContainsFunc(last.Kids, func(c *typeset.StructElem) bool { return c.Role == "LBody" })) {
+			return last
+		}
+	}
+	li := &typeset.StructElem{Role: "LI"}
+	l.Kids = append(l.Kids, li)
+	return li
 }
 
 // genChildren generates the boxes of children into the block container b,
