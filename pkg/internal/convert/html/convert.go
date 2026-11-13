@@ -754,20 +754,21 @@ func fontUnits(ctx context.Context, fonts *text.Fonts) func(*css.Style) css.Font
 		}
 		m := fc.Metrics(fontUnitSize)
 		u := css.FontUnits{XHeight: m.XHeight / fontUnitSize, CapHeight: m.CapHeight / fontUnitSize, Ascent: m.Ascent / fontUnitSize}
-		u.Zero = advance(ctx, fonts, ts, "0")
+		u.Zero, u.ZeroMeasured = advance(ctx, fonts, ts, "0")
+		u.ZeroMeasured = u.ZeroMeasured && fc.Covers('0')
 		if fc.Covers('水') {
-			u.Ideograph = advance(ctx, fonts, ts, "水")
+			u.Ideograph, u.IdeographMeasured = advance(ctx, fonts, ts, "水")
 		}
 		return u
 	}
 }
 
 // advance returns the advance of s, one character, in style ts, as a
-// fraction of the font size; 0 when it does not shape to one glyph.
-func advance(ctx context.Context, fonts *text.Fonts, ts text.Style, s string) float64 {
+// fraction of the font size; false when it does not shape to one glyph.
+func advance(ctx context.Context, fonts *text.Fonts, ts text.Style, s string) (float64, bool) {
 	p, _, err := fonts.Shape(ctx, []text.ParagraphRun{{Text: s, Style: ts}}, text.ParagraphOptions{})
 	if err != nil || p.Len() != 1 {
-		return 0
+		return 0, false
 	}
-	return p.Advance(0) / fontUnitSize
+	return p.Advance(0) / fontUnitSize, true
 }

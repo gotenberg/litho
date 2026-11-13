@@ -444,3 +444,16 @@ func TestFont_StretchOnce(t *testing.T) {
 		t.Errorf("font size %v, want the declaration rejected", s.FontSize)
 	}
 }
+
+// TestFontUnits_ZeroAdvanceCounts locks CSS Values 4, 6.1.1: ch and ic
+// fall back to 0.5em and 1em only when the advance cannot be measured; a
+// font whose "0" or "水" has no advance gives 0.
+func TestFontUnits_ZeroAdvanceCounts(t *testing.T) {
+	t.Parallel()
+	if _, ch, _, ic := (FontUnits{}).sizes(20); ch != 10 || ic != 20 {
+		t.Errorf("unmeasured ch %v ic %v, want 10 20", ch, ic)
+	}
+	if _, ch, _, ic := (FontUnits{ZeroMeasured: true, IdeographMeasured: true}).sizes(20); ch != 0 || ic != 0 {
+		t.Errorf("zero-advance ch %v ic %v, want 0 0", ch, ic)
+	}
+}

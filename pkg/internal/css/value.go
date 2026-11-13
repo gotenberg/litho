@@ -126,6 +126,10 @@ type FontUnits struct {
 	// height of a capital letter, Ascent the font's ascent, and
 	// Ideograph the advance of "水".
 	XHeight, Zero, CapHeight, Ascent, Ideograph float64
+	// ZeroMeasured and IdeographMeasured report a font that holds the
+	// glyph: its advance counts even when it is 0 (CSS Values 4, 6.1.1:
+	// the fallback stands for a measure that cannot be determined).
+	ZeroMeasured, IdeographMeasured bool
 }
 
 // fallbackCap is the cap height, in ems, of a font that records neither a
@@ -178,7 +182,13 @@ func (f FontUnits) sizes(size float64) (ex, ch, capH, ic float64) {
 	if size == 0 {
 		asc = fallbackCap
 	}
-	return pick(f.XHeight, 0.5), pick(f.Zero, 0.5), pick(f.CapHeight, asc), pick(f.Ideograph, 1)
+	measured := func(v float64, ok bool, fallback float64) float64 {
+		if ok && v >= 0 && numeric.Finite(v) {
+			return v * size
+		}
+		return pick(v, fallback)
+	}
+	return pick(f.XHeight, 0.5), measured(f.Zero, f.ZeroMeasured, 0.5), pick(f.CapHeight, asc), measured(f.Ideograph, f.IdeographMeasured, 1)
 }
 
 // points resolves the length part to points, clamped to maxLength. A
