@@ -490,7 +490,7 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 			if p.level[s]%2 == 1 {
 				piece.Direction = di.DirectionRTL
 			}
-			for _, in := range shaping.SplitByFace(piece, styleFontmap{st: st, style: idx, script: piece.Script}) {
+			for _, in := range shaping.SplitByFace(piece, st.fontmap(idx, piece.Script)) {
 				if err := st.instanceInput(ctx, &in, &ss.style); err != nil {
 					return fmt.Errorf("shaping text: %w", err)
 				}

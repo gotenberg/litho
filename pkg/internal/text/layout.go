@@ -17,6 +17,7 @@ import (
 	"github.com/go-text/typesetting/segmenter"
 	"github.com/go-text/typesetting/shaping"
 	"golang.org/x/image/math/fixed"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
@@ -301,6 +302,9 @@ func (f *Fonts) Layout(ctx context.Context, runs []Run, width float64, opts Opti
 type layoutState struct {
 	fonts  *Fonts
 	styles []styleState
+	// cluster is the cluster state each split by face starts afresh
+	// (see [layoutState.fontmap]).
+	cluster clusterFace
 	// unit is the number of shaping units per point.
 	unit float64
 
@@ -730,11 +734,57 @@ type styleFontmap struct {
 	st     *layoutState
 	style  int
 	script language.Script
+	// cluster is the cluster the characters resolved so far end with,
+	// nil to resolve each character alone.
+	cluster *clusterFace
 }
 
-// ResolveFace returns this call's face for the face that draws r.
+// maxClusterMarks caps the combining marks after one base that cluster
+// matching composes: 16. Anti-DoS guard, not spec-mandated: each mark
+// normalizes the cluster again, and real text stacks two or three.
+const maxClusterMarks = 16
+
+// clusterFace is the cluster a split by face is in: its characters so
+// far and the face of its base.
+type clusterFace struct {
+	text []rune
+	face *Face
+}
+
+// fontmap returns the fontmap of style idx in script, with cluster
+// matching from a fresh cluster.
+func (st *layoutState) fontmap(idx int, script language.Script) styleFontmap {
+	st.cluster.text, st.cluster.face = st.cluster.text[:0], nil
+	return styleFontmap{st: st, style: idx, script: script, cluster: &st.cluster}
+}
+
+// ResolveFace returns this call's face for the face that draws r. A
+// combining mark the face of its base lacks stays with that face when the
+// face holds the character canonically equivalent to the cluster so far
+// (CSS Fonts 4, 5.4, cluster matching): HarfBuzz composes the cluster in
+// shaping into that character's glyph. Any other character resolves
+// alone.
 func (m styleFontmap) ResolveFace(r rune) *font.Face {
-	return m.st.face(m.st.resolve(m.style, m.script, r))
+	cl := m.cluster
+	mark := unicode.In(r, unicode.Mn, unicode.Me)
+	if cl != nil && mark && cl.face != nil && len(cl.text) > 0 && len(cl.text) <= maxClusterMarks && !m.st.covers(cl.face, r) {
+		cl.text = append(cl.text, r)
+		composed := norm.NFC.String(string(cl.text))
+		if c, n := utf8.DecodeRuneInString(composed); n == len(composed) && m.st.covers(cl.face, c) {
+			return m.st.face(cl.face)
+		}
+		cl.text, cl.face = cl.text[:0], nil
+	}
+	fc := m.st.resolve(m.style, m.script, r)
+	if cl != nil {
+		switch {
+		case !mark:
+			cl.text, cl.face = append(cl.text[:0], r), fc
+		case cl.face != nil && len(cl.text) > 0 && len(cl.text) <= maxClusterMarks:
+			cl.text = append(cl.text, r)
+		}
+	}
+	return m.st.face(fc)
 }
 
 // fixedFontmap resolves every character to one face. Itemizing by
@@ -814,7 +864,7 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 				piece.Language = s.lang
 			}
 			piece.FontFeatures = s.style.features()
-			for _, in := range shaping.SplitByFace(piece, styleFontmap{st: st, style: idx, script: piece.Script}) {
+			for _, in := range shaping.SplitByFace(piece, st.fontmap(idx, piece.Script)) {
 				if err := st.instanceInput(ctx, &in, &s.style); err != nil {
 					return nil, fmt.Errorf("laying out text: %w", err)
 				}
