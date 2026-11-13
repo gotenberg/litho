@@ -177,8 +177,8 @@ type splitCell struct {
 // splitCells returns the cells of row r of td to split, aligned at their
 // top or on the row's baseline: a cell broken across pages does not
 // align in the middle or at the bottom. blank lets a page edge cut the
-// blank height of a block in a cell, as Chromium cuts a row that must
-// break on its page.
+// blank height of a block in a cell, as Chromium cuts a row that does not
+// fit what is left of its page.
 func (td *tableData) splitCells(r int, blank bool) []*splitCell {
 	var out []*splitCell
 	for _, c := range td.cells {
@@ -235,6 +235,13 @@ func (td *tableData) splitCells(r int, blank bool) []*splitCell {
 //     next, as it prints the same blocks in a div.
 //   - wpt: CSS2/pagination/rowgroup-page-break-inside-avoid-2-print and
 //     -8-print break so in Chromium, test and reference alike.
+//   - wpt, CSS2/pagination/rowgroup-page-break-inside-avoid-7-print.html:
+//     Chromium fills the page with the first row of a row group of
+//     page-break-inside: avoid taller than a page and the first block of
+//     its second row, cut at the page edge.
+//   - wpt, CSS2/pagination/table-page-break-inside-avoid-6-print.html:
+//     Chromium keeps the rows of a table of page-break-inside: avoid
+//     taller than a page on the page of its caption, cut at its edge.
 func chooseCuts(cells []*splitCell, top, limit float64, moveAll bool) bool {
 	kept := false
 	for _, sc := range cells {

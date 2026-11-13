@@ -1370,10 +1370,7 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 	split := func(u rowUnit, force bool) bool {
 		r := u.lo
 		rowTop := y
-		// A row that must break where it is, taller than what is left of
-		// its page, may be cut through a blank height; one that may move
-		// to the next page breaks only at its break points.
-		cells := td.splitCells(r, e.opts.BrowserRules && force)
+		cells := td.splitCells(r, e.opts.BrowserRules)
 		bottom := func() float64 {
 			b := rowH[r]
 			for _, sc := range cells {
@@ -1450,25 +1447,26 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 			// unless a header group precedes it: then it falls between
 			// the header group and the body (CSS 2.1, 13.3.1).
 			forced := u.forced && (k > 0 || headN > 0)
-			if !fits && single && !forced && canBreak && !td.avoidsSplit(u.lo) && split(u, false) {
-				continue
-			}
-			brk := forced || canBreak && !fits
-			if g := td.rows[u.lo].group; canBreak && !brk && td.firstRow(u.lo) && avoidsInside(g) {
-				// A row group that avoids breaks inside it and does not
-				// fit what is left of the page starts the next one, even
-				// when it is taller than a page and breaks there anyway
-				// (CSS Fragmentation 3, 4.4). A forced break inside it ends
-				// what has to fit.
+			// A row group that avoids breaks inside it and does not fit
+			// what is left of the page starts the next one, even when it
+			// is taller than a page and breaks there anyway (CSS
+			// Fragmentation 3, 4.4). A forced break inside it ends what
+			// has to fit.
+			groupMoves := false
+			if g := td.rows[u.lo].group; canBreak && !forced && td.firstRow(u.lo) && avoidsInside(g) {
 				end := u.lo
 				for end+1 < nr-footN && td.rows[end+1].group == g {
-					if forced, _ := td.breakBefore(end + 1); forced {
+					if f, _ := td.breakBefore(end + 1); f {
 						break
 					}
 					end++
 				}
-				brk = y+sumH(u.lo, end+1)+footNeed(u) > pb+eps
+				groupMoves = y+sumH(u.lo, end+1)+footNeed(u) > pb+eps
 			}
+			if !fits && single && !forced && canBreak && !groupMoves && !td.avoidsSplit(u.lo) && split(u, false) {
+				continue
+			}
+			brk := forced || canBreak && !fits || groupMoves
 			if brk && !forced && k == 0 && !e.atPageTop(td.table.y) && y-td.table.y+need <= e.pageH+eps {
 				return y, true
 			}

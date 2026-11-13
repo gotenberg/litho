@@ -368,3 +368,41 @@ func TestTables_PageEdgeCutsABlankHeight(t *testing.T) {
 		____
 		____`, nil)
 }
+
+func TestTables_RowAfterOthersCutsABlankHeight(t *testing.T) {
+	// CSS Fragmentation 3, 4.4: a row group that avoids breaks inside it
+	// but is taller than a page breaks inside anyway, and a row of it that
+	// does not fit what is left of the page breaks there like any row: as
+	// Chromium breaks it, the page edge cuts the blank height of the block
+	// it runs through, past the lines above it, rather than the row moving
+	// whole to the next page.
+	first := td(mods(valign(css.AlignTop)), "")
+	first.Children = []*Node{el(sty(width(4), height(4), bg(lime)))}
+	c := td(mods(valign(css.AlignTop)), "")
+	c.Children = []*Node{el(sty(width(4), height(7), bg(blue))), el(sty(width(4), height(6), bg(red)))}
+	group := tbody(nil, tr(nil, first), tr(nil, c))
+	group.Style.BreakInside = css.InsideAvoid
+	root := doc(table(mods(spacing(0, 0)), group))
+	res := runWith(t, root, Options{Page: page(4, 10), BrowserRules: true})
+	assertPages(t, res, 10, `
+		GGGG
+		GGGG
+		GGGG
+		GGGG
+		BBBB
+		BBBB
+		BBBB
+		BBBB
+		BBBB
+		BBBB
+		BBBB
+		RRRR
+		RRRR
+		RRRR
+		RRRR
+		RRRR
+		RRRR
+		____
+		____
+		____`, nil)
+}
