@@ -508,9 +508,14 @@ func repairGraphicsState(ctx context.Context, doc *document.Document, name ast.P
 		}
 	}
 
-	// Fix invalid blend mode (6.2.10).
+	// Replace a blend mode ISO 32000-1 does not define (ISO 19005-2 and
+	// 19005-3, 6.2.10 t1; ISO 19005-4, 6.2.9 t1). A standard mode stays:
+	// those parts allow every one, and this repair runs for any graphics
+	// rule, so resetting them all changed how a page looks to answer a rule
+	// about something else. Part 1 forbids them as transparency (ISO
+	// 19005-1, 6.4), which the transparency repair owns.
 	if bmObj, ok := newGS["BM"]; ok {
-		if bmName, ok := bmObj.(ast.PdfName); ok && bmName != "Normal" && bmName != "Compatible" {
+		if bmName, ok := bmObj.(ast.PdfName); ok && !compliance.StandardBlendMode(string(bmName)) {
 			newGS["BM"] = ast.PdfName("Normal")
 			notes = append(notes, fmt.Sprintf("set blend mode to Normal in ExtGState %s", string(name)))
 		}

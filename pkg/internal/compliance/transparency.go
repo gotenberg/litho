@@ -478,6 +478,12 @@ var standardBlendModes = map[string]bool{
 	"Luminosity": true,
 }
 
+// StandardBlendMode reports whether name is a blend mode ISO 32000-1, 11.3.5
+// defines, the only ones ISO 19005-2 and 19005-3, 6.2.10 and ISO 19005-4,
+// 6.2.9 allow a graphics state. Exported so the remediation package replaces
+// the names this package reports and no other.
+func StandardBlendMode(name string) bool { return standardBlendModes[name] }
+
 // blendModeRule returns the rule for invalid blend mode, varying by part.
 func blendModeRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_10_t01, Rule_19005_3_6_2_10_t01, Rule_19005_4_6_2_9_t01)
