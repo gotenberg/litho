@@ -37,7 +37,9 @@ func TestWhiteSpace_Processing(t *testing.T) {
 		width float64
 		want  []string
 	}{
-		{"collapse across elements", doc(el(sty(), txt(sty(), "  a  "), el(inlineSty(), txt(inlineSty(), "  b ")), txt(sty(), "\n c "))), 200, []string{"a b c "}},
+		// The space that ends the block is removed before shaping (CSS
+		// Text 3, 4.1.2), so it kerns with nothing.
+		{"collapse across elements", doc(el(sty(), txt(sty(), "  a  "), el(inlineSty(), txt(inlineSty(), "  b ")), txt(sty(), "\n c "))), 200, []string{"a b c"}},
 		{"pre keeps spaces and breaks", doc(el(sty(ws(css.Pre)), txt(sty(ws(css.Pre)), " a  b\nc"))), 200, []string{" a  b", "c"}},
 		{"pre does not wrap", doc(el(sty(ws(css.Pre)), txt(sty(ws(css.Pre)), "aa bb cc"))), 30, []string{"aa bb cc"}},
 		{"pre-wrap wraps and keeps", doc(el(sty(ws(css.PreWrap)), txt(sty(ws(css.PreWrap)), "aa  bb"))), 30, []string{"aa  ", "bb"}},

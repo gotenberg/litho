@@ -138,6 +138,11 @@ func (e *engine) ifcOf(b *box) *ifcData {
 	for _, k := range b.kids {
 		c.walk(k)
 	}
+	// The collapsible space that ends the block is removed at the end of
+	// its last line (CSS Text 3, 4.1.2): it is left out before shaping,
+	// so it neither kerns with the character before it nor counts in an
+	// intrinsic size.
+	c.trimSpace()
 	c.d.paras = append(c.d.paras, c.cur)
 	b.ifc = c.d
 	c.d.order = make(map[*box]int, len(c.d.boxes))
