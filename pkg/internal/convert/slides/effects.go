@@ -131,7 +131,10 @@ type silhouette struct {
 	colors []typeset.Color
 	// flat is false when a path paints a shading or a picture, which a
 	// soft edge's bitmap cannot redraw in one colour.
-	flat   bool
+	flat bool
+	// filled is true when a path is filled or a picture or a clip covers
+	// an area, false for lines alone.
+	filled bool
 	bounds typeset.Rect
 }
 
@@ -141,6 +144,12 @@ type silhouette struct {
 // glyphs have no outline here. Every path covers by the non-zero rule,
 // its subpaths summed by direction, as Impress's silhouettes do.
 func silhouetteOf(frags []typeset.Fragment, m typeset.Matrix) *silhouette {
+	return silhouetteLined(frags, m, 1)
+}
+
+// silhouetteLined returns the silhouette of frags as [silhouetteOf] does,
+// each stroke at share times its width.
+func silhouetteLined(frags []typeset.Fragment, m typeset.Matrix, share float64) *silhouette {
 	s := &silhouette{flat: true}
 	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
 	add := func(ops []typeset.PathOp, width float64, c typeset.Color, tr typeset.Matrix) {
@@ -171,13 +180,14 @@ func silhouetteOf(frags []typeset.Fragment, m typeset.Matrix) *silhouette {
 					if f.Fill.Shading != nil {
 						s.flat = false
 					}
+					s.filled = true
 					add(f.Ops, 0, f.Fill.Color, tr)
 				}
 				if f.Stroke != nil && f.Stroke.Width > 0 {
-					add(f.Ops, f.Stroke.Width, f.Stroke.Color, tr)
+					add(f.Ops, f.Stroke.Width*share, f.Stroke.Color, tr)
 				}
 			case *typeset.Image:
-				s.flat = false
+				s.flat, s.filled = false, true
 				add(rectOps(f.Rect), 0, typeset.Color{A: 1}, tr)
 			case *typeset.Group:
 				if depth < maxGroupDepth {
@@ -188,7 +198,7 @@ func silhouetteOf(frags []typeset.Fragment, m typeset.Matrix) *silhouette {
 					if f.Clip != nil {
 						// A clipped fill, a picture or a gradient in its
 						// shape, covers its clip.
-						s.flat = false
+						s.flat, s.filled = false, true
 						add(f.Clip.Ops, 0, typeset.Color{A: 1}, then(t, tr))
 						continue
 					}
@@ -276,11 +286,15 @@ func invert(m typeset.Matrix) (typeset.Matrix, bool) {
 // coordinates, whose rules draw them and how many times its glow and soft
 // edge apply.
 type effectPlan struct {
-	s       *Shape
-	sil     *silhouette
-	area    typeset.Rect
-	impress bool
-	twice   bool
+	s   *Shape
+	sil *silhouette
+	// shadowSil is the silhouette a blurred shadow is drawn from:
+	// [officeShadowLine] of its lines on PowerPoint's rules, sil on
+	// Impress's.
+	shadowSil *silhouette
+	area      typeset.Rect
+	impress   bool
+	twice     bool
 	// page counts the pixels of the slide's effect bitmaps; capped warns
 	// once it refuses one, reduced once the engine draws one coarser than
 	// its rule.
@@ -499,8 +513,14 @@ func (b *builder) paintEffects(s *Shape, own, text []typeset.Fragment, toSlide t
 		return nil, nil
 	}
 	sw, sh := b.slideSize()
+	shadowSil := sil
+	if b.doc.Effects == EffectsPowerPoint && sil.filled {
+		if ss := silhouetteLined(own, toSlide, officeShadowLine); ss != nil {
+			shadowSil = ss
+		}
+	}
 	p := &effectPlan{
-		s: s, sil: sil, area: typeset.Rect{Width: sw, Height: sh},
+		s: s, sil: sil, shadowSil: shadowSil, area: typeset.Rect{Width: sw, Height: sh},
 		impress: b.doc.Effects == EffectsImpress, twice: twice, page: &b.effectPixels,
 		capped: func() {
 			b.warn(warn.LimitReached, warn.Omitted, "effects past the pixels a slide's effect bitmaps may hold are not drawn")
@@ -1115,7 +1135,7 @@ func (p *effectPlan) shadowMask(ctx context.Context, g effectGrid, tr typeset.Ma
 	if p.s.SoftEdge > 0 && p.sil.flat {
 		mask, err = p.softMask(ctx, g, tr)
 	} else {
-		mask, err = p.sil.coverage(ctx, g, tr)
+		mask, err = p.shadowSil.coverage(ctx, g, tr)
 	}
 	if err != nil {
 		return nil, err
@@ -1191,6 +1211,23 @@ const officeGlowGrow = 5.0 / 12
 //     rectangle with a hairline, is centred 0.85 radii in.
 const officeSoftShrink = 11.0 / 12
 
+// officeShadowLine is the share of a filled shape's line width the
+// silhouette of its Microsoft Office blurred shadow takes: the line at
+// half its width, the silhouette reaching a quarter of the line past the
+// outline. A shape of lines alone takes its whole lines.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: effects-shadow's rounded rectangles with a line of 1 pt,
+//     their shadows blurred 4 and 20 pt and the theme's shadow of its
+//     effectRef shape, against PowerPoint's soft masks over the whole
+//     bitmap after the best shift: rms 0.73, 0.84 and 0.59 levels with
+//     half the line, 2.29, 0.67 and 2.76 with the whole line, 1.43, 1.65
+//     and 2.74 with none; three quarters 1.47, 0.60, 1.47; a quarter
+//     0.78, 1.27, 1.52. Its shadow scaled to 110% fits the whole line
+//     best: 0.54, half 2.21.
+const officeShadowLine = 0.5
+
 // silhouetteLevel returns the coverage from which a pixel belongs to the
 // silhouette a glow grows and a soft edge shrinks: any coverage on
 // Impress's rule, as its filters make the silhouette opaque wherever it
@@ -1224,6 +1261,14 @@ func (p *effectPlan) silhouetteLevel() uint8 {
 //     the rounded rectangle's fill and under its line, darkest along the
 //     top and left edges, half dark 2.9 pt in; its inner shadow blurred
 //     15 pt with no offset fades from 82 of 255 at the outline, at 70%.
+//   - litho/pptx: effects-shadow's two inner shadows, inside the fill's
+//     straight edges, against PowerPoint's soft masks after the best
+//     shift: the whole fill as the silhouette rms 0.54 and 1.14 levels,
+//     the fill less its line of 1 pt 0.62 and 2.49. The shadow without an
+//     offset, which fades from every edge, decides it. PowerPoint's
+//     bitmaps sit 0.45 to 0.55 pt right of and below the shape, as its
+//     outer shadows' do (up to 0.4 pt right, 0.4 to 0.5 pt below), which a
+//     shadow faded on two sides cannot tell from a smaller silhouette.
 func (b *builder) innerShadow(s *Shape, fills []typeset.Fragment, toSlide typeset.Matrix) []typeset.Fragment {
 	sh := s.InnerShadow
 	if sh == nil || sh.Opacity <= 0 || len(fills) == 0 || b.doc.Effects == EffectsImpress {
