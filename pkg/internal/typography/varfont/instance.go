@@ -548,7 +548,7 @@ func (in *instancer) assemble(tables map[string][]byte, user []float64) ([]byte,
 		}
 	}
 	loca = binary.BigEndian.AppendUint32(loca, uint32(len(glyf))) //nolint:gosec // as above
-	if len(glyf) > math.MaxUint32 {
+	if uint64(len(glyf)) > math.MaxUint32 {
 		return nil, fmt.Errorf("%w: instance glyf table of %d bytes", ErrInvalid, len(glyf))
 	}
 
