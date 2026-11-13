@@ -226,8 +226,20 @@ func fixedSpan(tracks []*gtrack, s, e int, gap float64) (float64, bool) {
 }
 
 // colAutoMin returns the content box width the automatic minimum size of
-// the item k gives it (CSS Grid 1, 6.6): the smaller of its min-content
-// width and its specified width, within its max-width.
+// the item k gives it (CSS Grid 1, 6.6): its content-based minimum, the
+// specified size suggestion, its fixed width, when it has one, else the
+// content size suggestion, its min-content width; within its max-width.
+// Unlike a flex item's (CSS Flexbox 1, 4.5), the content does not lower
+// the specified width of a non-replaced item.
+//
+// # Corpus evidence
+//
+//   - wpt: css-grid/layout-algorithm/grid-find-fr-size-restart-algorithm
+//     (empty items of width 30px and 50px in 1fr and 0fr columns) draws
+//     its reference in Chromium 156.
+//   - wpt: css-grid/grid-items/replaced-element-014 (an image of width
+//     200px and max-width 100% in an auto column) passes only with the
+//     replaced element's cap.
 func (e *engine) colAutoMin(k *box) float64 {
 	var c float64
 	switch {
@@ -240,7 +252,14 @@ func (e *engine) colAutoMin(k *box) float64 {
 		c, _ = e.contentWidths(k)
 	}
 	if w, ok := specWidth(k, k.st.Width, 0); ok && k.st.Width.Kind == css.Points {
-		c = min(c, w)
+		if k.kind == kindReplaced {
+			// A replaced element's natural size, its percentage
+			// max-width resolved against zero, caps the suggestion
+			// (CSS Sizing 3, 5.2.2), as Chromium sizes it.
+			c = min(c, w)
+		} else {
+			c = w
+		}
 	}
 	if mx, ok := specWidth(k, k.st.MaxWidth, 0); ok && k.st.MaxWidth.Kind == css.Points {
 		c = min(c, mx)
@@ -663,7 +682,8 @@ func (l *gridLayout) rowContrib(it *gitem, kd contribKind) float64 {
 	if autoMinApplies(it, rowAxis, l.tracks[rowAxis], k.st.MinHeightAuto) {
 		c := l.ms[it].h
 		if h, ok := specHeight(k, k.st.Height, cblock{}); ok {
-			c = min(c, h)
+			// The specified size suggestion wins (CSS Grid 1, 6.6).
+			c = h
 		}
 		if mx, ok := specHeight(k, k.st.MaxHeight, cblock{}); ok {
 			c = min(c, mx)

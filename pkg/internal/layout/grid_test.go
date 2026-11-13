@@ -544,3 +544,15 @@ func TestSizing_StretchHeightMargins(t *testing.T) {
 		})
 	}
 }
+
+// TestGrid_SpecifiedSizeSuggestion holds the automatic minimum size of a
+// grid item to CSS Grid 1, 6.6: its content-based minimum is its
+// specified size suggestion, a fixed width, even past its content, so a
+// 0fr column keeps the width of its empty item.
+func TestGrid_SpecifiedSizeSuggestion(t *testing.T) {
+	t.Parallel()
+	got := flexRects(t, doc(el(gridBox(width(100), cols(tfr(0), tfr(1)), rowsT(tpx(10))), cell(width(50)), cell())), 0, 0)
+	if want := [][4]float64{{0, 0, 50, 10}, {50, 0, 50, 10}}; !eqRects(got, want) {
+		t.Errorf("rects = %v, want %v", got, want)
+	}
+}
