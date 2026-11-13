@@ -123,6 +123,8 @@ func TestAspectRatio_Items(t *testing.T) {
 		{"column: the width follows the used height", flexBox(width(400), height(200), dir(css.FlexColumn), alignItems(css.BoxStart)), sty(ratio(1, 1), minH(100), flexF(1, 0, -1)), [2]float64{149.5, 149.5}},
 		{"grid: the column width gives the height", sty(display(css.Grid), cols(tpx(200))), sty(ratio(2, 1)), [2]float64{200, 100}},
 		{"grid: a definite height gives the width", sty(display(css.Grid), cols(tpx(200))), sty(ratio(1, 1), height(50)), [2]float64{50, 50}},
+		{"grid: a fixed width gives the height", sty(display(css.Grid)), sty(ratio(2, 1), width(100)), [2]float64{100, 50}},
+		{"grid: a percentage height sizes the row as auto", sty(display(css.Grid), width(100)), sty(ratio(4, 1), width(100), func(s *css.Style) { s.Height = css.Dimension{Kind: css.Percent, Value: 0.5} }), [2]float64{100, 12.5}},
 		{"grid: a stretched width wins over the row", sty(display(css.Grid), cols(tpx(200)), rowsT(tpx(50))), sty(ratio(1, 1)), [2]float64{200, 200}},
 		{"grid: a stretched height gives the width", sty(display(css.Grid), cols(tpx(200)), rowsT(tpx(50)), func(s *css.Style) { s.JustifyItems = css.BoxStart }), sty(ratio(1, 1)), [2]float64{50, 50}},
 	}

@@ -593,9 +593,13 @@ func (l *gridLayout) measure(it *gitem, top float64) {
 // ratioItemHeight returns the content height the preferred aspect ratio
 // of the non-replaced item it gives its content width w (CSS Sizing 4,
 // 4.2), at least its content's when that is its automatic minimum, and
-// false when it has none or the ratio does not give its height: an auto
-// height under a width the inline axis stretches, as Chromium sizes grid
-// items. The item's content must be laid out at w.
+// false when it has none or the ratio does not give its height: a
+// definite height, an explicit stretch in the block axis, or an auto
+// width the block axis stretches while the inline axis does not, as
+// Chromium sizes grid items. A fixed width gives the height as an auto
+// one does, and a percentage height of an area not yet sized behaves as
+// auto (CSS 2.1, 10.5). The caller asks only when the height is not
+// definite. The item's content must be laid out at w.
 //
 // # Corpus evidence
 //
@@ -604,12 +608,17 @@ func (l *gridLayout) measure(it *gitem, top float64) {
 //     the default alignments, 50 by 50 under justify-items: start; and
 //     an item of aspect-ratio 2 in an auto row of a 200px column 200 by
 //     100.
+//   - probe, html: Chromium 156 draws an item of width 100px and
+//     aspect-ratio 2 in an auto grid 100 by 50, and one of width 100px,
+//     height 50% and aspect-ratio 4 in an auto-height grid in a 25px row,
+//     12.5 tall.
 func (l *gridLayout) ratioItemHeight(it *gitem, w float64) (float64, bool) {
 	k := it.b
 	src := k.sizeSrc()
-	if src.Height.Kind != css.Auto || src.Width.Kind != css.Auto && !contentKeyword(src.Width) {
+	if src.Height.Kind != css.Auto && !src.Height.HasPercent() {
 		return 0, false
 	}
+	autoWidth := src.Width.Kind == css.Auto || contentKeyword(src.Width)
 	autoMargin := src.Margin[css.Left].Kind == css.Auto || src.Margin[css.Right].Kind == css.Auto
 	vAuto := src.Margin[css.Top].Kind == css.Auto || src.Margin[css.Bottom].Kind == css.Auto
 	align := alignSelfOf(src, l.b.st)
@@ -618,7 +627,7 @@ func (l *gridLayout) ratioItemHeight(it *gitem, w float64) (float64, bool) {
 		// An explicit stretch fills the area whatever the ratio gives
 		// (CSS Box Alignment 3, 6.1).
 		return 0, false
-	case !autoMargin && !stretches(justifySelf(src, l.b.st), false) && stretches(align, false) && !vAuto:
+	case autoWidth && !autoMargin && !stretches(justifySelf(src, l.b.st), false) && stretches(align, false) && !vAuto:
 		// An item the block axis stretches and the inline axis does not
 		// takes its width from its stretched height instead.
 		return 0, false
