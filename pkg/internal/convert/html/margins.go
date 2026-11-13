@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"strings"
 
@@ -281,6 +282,9 @@ func (p *prepared) marginContent(ctx context.Context, info layout.PageInfo, page
 		p.warnMargins(err)
 		return nil
 	}
+	for _, mb := range boxes {
+		p.warnOverflow(mb)
+	}
 	frags, links, err := p.paintMargins(ctx, boxes, pb)
 	if err != nil {
 		p.warnMargins(err)
@@ -288,6 +292,26 @@ func (p *prepared) marginContent(ctx context.Context, info layout.PageInfo, page
 	}
 	p.pages.links = links
 	return frags
+}
+
+// overflowSlack is how far a page-margin box's content may pass its box
+// before it counts as overflowing: a hundredth of a point, below what
+// rounding the measured heights moves.
+const overflowSlack = 0.01
+
+// warnOverflow records a page-margin box whose content is taller than the
+// box. The box's height is the page margin's less its own margins,
+// borders and paddings, or its share of a side, and the page area keeps
+// its size (CSS Page 3, 5.3.3): the content overflows the box, over the
+// page area's content or off the page, as overflow: visible draws it.
+func (p *prepared) warnOverflow(mb *marginBox) {
+	if mb.contentH <= mb.y.size+overflowSlack {
+		return
+	}
+	round := func(v float64) float64 { return math.Round(v*100) / 100 }
+	p.warnOnce(warn.Approximated, fmt.Sprintf(
+		"the content of the @%s page-margin box is %v points tall and the box %v points: it overflows the box",
+		mb.which, round(mb.contentH), round(mb.y.size)))
 }
 
 // warnMargins records that the page-margin boxes could not be laid out.

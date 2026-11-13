@@ -459,3 +459,29 @@ func TestPageCounter_OnElementWarns(t *testing.T) {
 		t.Errorf("warnings %+v", doc.Warnings)
 	}
 }
+
+// TestMarginBoxes_OverflowWarns locks the warning of a page-margin box
+// whose content is taller than the box: the page area keeps its size (CSS
+// Page 3, 5.3.3), and the warning says both heights.
+func TestMarginBoxes_OverflowWarns(t *testing.T) {
+	src := `<style>
+		@page { size: 400pt 300pt; margin: 30pt 40pt; font: 10pt/10pt "Test Serif";
+			@top-center { content: "one\A two\A three\A four\A five"; white-space: pre; padding: 2pt }
+			@bottom-center { content: "fits" } }
+		body { margin: 0; font: 10pt "Test Serif" }
+	</style><p>x</p>`
+	doc := convertDoc(t, src, Options{PreferCSSPageSize: true})
+	n := 0
+	for _, w := range doc.Warnings {
+		if strings.Contains(w.Message, "overflows") {
+			n++
+			if w.Code != warn.PageSetupUnsupported || w.Effect != warn.Approximated ||
+				!strings.Contains(w.Message, "@top-center") || !strings.Contains(w.Message, "50 points tall and the box 26 points") {
+				t.Errorf("warning %+v", w)
+			}
+		}
+	}
+	if n != 1 {
+		t.Errorf("%d overflow warnings, want 1 in %+v", n, doc.Warnings)
+	}
+}
