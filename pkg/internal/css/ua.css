@@ -125,6 +125,24 @@ xmp {
 dialog:not([open]) {
   display: none;
 }
+/* 15.3.3 An open dialog, never modal on paper, which needs a script. A
+ * popover is never shown on paper either: opening one needs a script or
+ * a click, and :popover-open never matches. */
+[popover]:not(dialog[open]) {
+  display: none;
+}
+dialog {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
+  width: fit-content;
+  height: fit-content;
+  margin: auto;
+  border: solid;
+  padding: 1em;
+  background-color: Canvas;
+  color: CanvasText;
+}
 center {
   text-align: center;
 }
@@ -181,7 +199,7 @@ sup {
   text-decoration: underline;
 }
 mark {
-  background-color: yellow;
+  background: yellow;
   color: black;
 }
 abbr[title],
@@ -683,6 +701,18 @@ legend {
   padding-inline: 2px;
 }
 
+/* 15.4.1 and 15.5.15: a video's picture, and the options of a select,
+ * which litho draws as the selected option's text. */
+video {
+  object-fit: contain;
+}
+option {
+  display: block;
+}
+optgroup {
+  display: block;
+  font-weight: bolder;
+}
 /* 15.4.1 Embedded content */
 iframe {
   border: 2px inset;

@@ -97,3 +97,29 @@ func TestUserAgent_FormControlText(t *testing.T) {
 		t.Errorf("textarea: white-space %v, text-indent %v", ta.WhiteSpace, ta.TextIndent)
 	}
 }
+
+// TestUserAgent_DialogAndPopover locks an open dialog's box (HTML
+// Standard, 15.3.3): absolutely positioned, centred by its auto margins,
+// with a solid border, a 1em padding and the Canvas colours; and a
+// popover, never open on paper, hidden.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium in gotenberg/gotenberg:9.4.1 computes an open
+//     dialog's position as absolute, its border style as solid, its
+//     padding as 16px and its colours as white and black, and a popover's
+//     display as none.
+func TestUserAgent_DialogAndPopover(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<body><dialog id=d open>d</dialog><div id=p popover>p</div><dialog id=q popover open>q</dialog></body>`, ``)
+	d := c.of("d")
+	if d.Position != Absolute || d.Border[Top].Style != Solid || !colorEq(d.BackgroundColor, rgb(255, 255, 255)) {
+		t.Errorf("open dialog: position %v, border %v, background %v", d.Position, d.Border[Top].Style, d.BackgroundColor)
+	}
+	if p := c.of("p"); p.Display != DisplayNone {
+		t.Errorf("popover: display %v", p.Display)
+	}
+	if q := c.of("q"); q.Display == DisplayNone {
+		t.Errorf("open dialog with popover: hidden")
+	}
+}
