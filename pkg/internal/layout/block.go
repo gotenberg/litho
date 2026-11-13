@@ -614,7 +614,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		specH, ratioH = ratioHeight(b)
 		hSet = ratioH
 	}
-	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: specH, hDefinite: hSet}, cb)
+	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: usedSpecH(b, specH, hSet, cb), hDefinite: hSet}, cb)
 	end := formatterFor(b).layout(e, b, kcb, bc, start, inner)
 	if b.st.TextBoxTrim != css.TrimNone {
 		end = e.trimTextBox(b, end)
@@ -733,6 +733,23 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 	}
 }
 
+// usedSpecH returns the content height the children of b, of definite
+// height specH when hSet, resolve their percentages against: specH within
+// b's min-height and max-height, the used height (CSS 2.1, 10.5 and
+// 10.7), as Chromium resolves them.
+//
+// # Corpus evidence
+//
+//   - wpt: css-values/calc-min-height (a child of min-height 100% in a
+//     box of height 50px and min-height 100px) draws its reference in
+//     Chromium 156.
+func usedSpecH(b *box, specH float64, hSet bool, cb cblock) float64 {
+	if !hSet {
+		return specH
+	}
+	return constrainHeight(b, specH, cb)
+}
+
 // layoutOwnContext lays out the content of a box that establishes a block
 // formatting context, its width and position set: its floats stay inside
 // and count toward its auto height (CSS 2.1, 10.6.7).
@@ -773,7 +790,7 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 		specH = constrainHeight(b, max(specH, end-b.contentY()), cb)
 	}
 	mc := &marginState{kept: true}
-	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: specH, hDefinite: hSet}, cb)
+	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: usedSpecH(b, specH, hSet, cb), hDefinite: hSet}, cb)
 	saved := e.enterClamp(b, cb, b.contentY())
 	end := formatterFor(b).layout(e, b, kcb, own, b.contentY(), mc)
 	e.leaveClamp(saved)

@@ -397,3 +397,15 @@ func TestFragmentation_SizeContainedMovesInAbsolute(t *testing.T) {
 		t.Errorf("second box at y %v, want 10", got)
 	}
 }
+
+// TestBlock_PercentageOfAMinHeight holds a percentage height to CSS 2.1,
+// 10.5 and 10.7: it resolves against the used height of its containing
+// block, the specified height raised to the min-height.
+func TestBlock_PercentageOfAMinHeight(t *testing.T) {
+	t.Parallel()
+	full := func(s *css.Style) { s.Height = css.Dimension{Kind: css.Percent, Value: 1} }
+	rb := boxes(t, doc(el(sty(height(5), minH(20)), el(sty(full)))), page(40, 40))
+	if got := rect(kid(t, rb, 0, 0, 0)); got[3] != 20 {
+		t.Errorf("child %v tall, want 20", got[3])
+	}
+}
