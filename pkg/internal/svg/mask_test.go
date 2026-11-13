@@ -33,6 +33,11 @@ func TestDraw_MaskAndBlending(t *testing.T) {
 			[]probe{{25, 50, lime}, {75, 50, yellow}},
 		},
 		{
+			// mix-blend-mode is no presentation attribute.
+			"mix-blend-mode-attribute", `<svg width="100" height="100"><rect width="100" height="100" fill="yellow"/><rect width="50" height="100" fill="cyan" mix-blend-mode="multiply"/></svg>`,
+			[]probe{{25, 50, cyan}},
+		},
+		{
 			// An isolated group blends its content with nothing beneath it.
 			"isolation", `<svg width="100" height="100"><rect width="100" height="100" fill="yellow"/><g style="isolation:isolate"><rect width="50" height="100" fill="cyan" style="mix-blend-mode:multiply"/></g></svg>`,
 			[]probe{{25, 50, cyan}},

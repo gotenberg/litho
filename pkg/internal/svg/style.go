@@ -462,7 +462,9 @@ func (st *style) copyFrom(prop string, parent *style) {
 }
 
 // presentationAttrs are the presentation attributes (SVG 1.1, 6.4) the
-// renderer reads, which map to the property of the same name.
+// renderer reads, which map to the property of the same name. mask-type is
+// one (CSS Masking 1, 7.1); mix-blend-mode and isolation are not (CSS
+// Compositing 1, 3.2 and 3.3): they apply from a style alone.
 var presentationAttrs = map[string]bool{
 	"fill": true, "fill-opacity": true, "fill-rule": true, "stroke": true, "stroke-width": true,
 	"stroke-opacity": true, "stroke-linecap": true, "stroke-linejoin": true, "stroke-miterlimit": true,
@@ -471,7 +473,6 @@ var presentationAttrs = map[string]bool{
 	"stop-opacity": true, "mask": true, "filter": true, "marker-start": true, "marker-mid": true,
 	"marker-end": true, "overflow": true, "font-family": true, "font-size": true,
 	"font-weight": true, "font-style": true, "text-anchor": true, "mask-type": true,
-	"mix-blend-mode": true, "isolation": true,
 }
 
 // blendModes are the <blend-mode> keywords (CSS Compositing 1, 5.3), in
