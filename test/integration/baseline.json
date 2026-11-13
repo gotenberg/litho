@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T17:10:52Z",
+  "captured_at": "2026-11-13T17:49:36Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -55510,7 +55510,7 @@
               "text_f1": 1
             },
             "shapes-effects-3d": {
-              "layout": 0.856,
+              "layout": 0.8581,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
