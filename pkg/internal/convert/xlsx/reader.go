@@ -310,7 +310,7 @@ func (r *reader) measureNormalFont() {
 		// The screen draws the size at whole pixels of 0.75 points and
 		// the digit truncated to a pixel.
 		em := math.Round(f.Size / 0.75)
-		r.screenDigit = max(math.Floor(digit/size*em+1e-9), 1)
+		r.screenDigit = max(math.Floor(float64(digit/size*em)+1e-9), 1)
 	}
 	if sp := p.Advance(10); sp > 0 {
 		r.spaceWidth = printerPixels(sp)

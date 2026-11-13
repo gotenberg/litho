@@ -100,7 +100,7 @@ func tint(c css.Color, t float64) css.Color {
 	if t < 0 {
 		l *= 1 + t
 	} else {
-		l = l*(1-t) + t
+		l = float64(l*(1-t)) + t
 	}
 	return fromHSL(h, s, max(0, min(1, l)), c.A)
 }
@@ -138,11 +138,11 @@ func fromHSL(h, s, l, a float64) css.Color {
 	if s == 0 {
 		return css.Color{R: l, G: l, B: l, A: a}
 	}
-	q := l * (1 + s)
+	q := float64(l * (1 + s))
 	if l >= 0.5 {
-		q = l + s - l*s
+		q = l + s - float64(l*s)
 	}
-	p := 2*l - q
+	p := float64(2*l) - q
 	hue := func(t float64) float64 {
 		switch {
 		case t < 0:
@@ -152,11 +152,11 @@ func fromHSL(h, s, l, a float64) css.Color {
 		}
 		switch {
 		case t < 1.0/6:
-			return p + (q-p)*6*t
+			return p + float64((q-p)*6*t)
 		case t < 0.5:
 			return q
 		case t < 2.0/3:
-			return p + (q-p)*(2.0/3-t)*6
+			return p + float64((q-p)*(2.0/3-t)*6)
 		}
 		return p
 	}

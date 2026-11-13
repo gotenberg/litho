@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -198,7 +199,7 @@ type leaf struct {
 
 // outer returns the box the leaf fills in the anchor's box rect.
 func (l *leaf) outer(rect typeset.Rect) typeset.Rect {
-	return typeset.Rect{X: rect.X + l.x*rect.Width, Y: rect.Y + l.y*rect.Height, Width: l.w * rect.Width, Height: l.h * rect.Height}
+	return typeset.Rect{X: rect.X + float64(l.x*rect.Width), Y: rect.Y + float64(l.y*rect.Height), Width: float64(l.w * rect.Width), Height: float64(l.h * rect.Height)}
 }
 
 // box returns the leaf's own box in the anchor's box rect: its outer box,
@@ -206,7 +207,7 @@ func (l *leaf) outer(rect typeset.Rect) typeset.Rect {
 func (l *leaf) box(rect typeset.Rect) typeset.Rect {
 	outer := l.outer(rect)
 	if l.anchored && quarterTurn(l.rot) {
-		return typeset.Rect{X: outer.X + (outer.Width-outer.Height)/2, Y: outer.Y + (outer.Height-outer.Width)/2, Width: outer.Height, Height: outer.Width}
+		return typeset.Rect{X: outer.X + float64((outer.Width-outer.Height)/2), Y: outer.Y + float64((outer.Height-outer.Width)/2), Width: outer.Height, Height: outer.Width}
 	}
 	return outer
 }
@@ -369,7 +370,7 @@ func (w *sheetReader) leaves(part string, obj *ooxml.Element, x, y, bw, bh float
 			}
 			ox, oy := emuAttr(kx.Child(ooxml.NSA, "off"), "x"), emuAttr(kx.Child(ooxml.NSA, "off"), "y")
 			ew, eh := emuAttr(kx.Child(ooxml.NSA, "ext"), "cx"), emuAttr(kx.Child(ooxml.NSA, "ext"), "cy")
-			w.leaves(part, k, x+(ox-cx)/cw*bw, y+(oy-cy)/ch*bh, ew/cw*bw, eh/ch*bh, depth+1, out)
+			w.leaves(part, k, x+float64((ox-cx)/cw*bw), y+float64((oy-cy)/ch*bh), ew/cw*bw, eh/ch*bh, depth+1, out)
 		}
 	}
 }
@@ -506,7 +507,7 @@ func transform(box typeset.Rect, rot float64, flipH, flipV bool) (typeset.Matrix
 	if rot == 0 && !flipH && !flipV {
 		return typeset.Matrix{}, false
 	}
-	cx, cy := box.X+box.Width/2, box.Y+box.Height/2
+	cx, cy := box.X+float64(box.Width/2), box.Y+float64(box.Height/2)
 	sx, sy := 1.0, 1.0
 	if flipH {
 		sx = -1
@@ -517,9 +518,9 @@ func transform(box typeset.Rect, rot float64, flipH, flipV bool) (typeset.Matrix
 	// Page coordinates grow downwards, so a clockwise turn is a positive
 	// angle.
 	rad := rot * math.Pi / 180
-	cos, sin := math.Cos(rad), math.Sin(rad)
+	cos, sin := detmath.Cos(rad), detmath.Sin(rad)
 	a, b, c, dd := cos*sx, sin*sx, -sin*sy, cos*sy
-	return typeset.Matrix{A: a, B: b, C: c, D: dd, E: cx - a*cx - c*cy, F: cy - b*cx - dd*cy}, true
+	return typeset.Matrix{A: a, B: b, C: c, D: dd, E: cx - float64(a*cx) - float64(c*cy), F: cy - float64(b*cx) - float64(dd*cy)}, true
 }
 
 // loadPicture decodes the picture the relationship id of part names, once

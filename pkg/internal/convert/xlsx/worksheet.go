@@ -179,7 +179,7 @@ func (r *reader) columnWidth(chars float64) float64 {
 // stores a width, then printed as any width.
 func (r *reader) baseColumnWidth(base int) float64 {
 	d := max(r.screenDigit, 1)
-	px := math.Ceil((float64(base)*d+baseColumnPadding)/baseColumnStep) * baseColumnStep
+	px := math.Ceil((float64(float64(base)*d)+baseColumnPadding)/baseColumnStep) * baseColumnStep
 	return r.columnWidth(math.Floor(px/d*256) / 256)
 }
 

@@ -495,7 +495,7 @@ func (r *reader) fill(e *ooxml.Element) sheet.Fill {
 // channel in 8 bits as LibreOffice mixes a pattern.
 func mix(fg, bg css.Color, share int) css.Color {
 	ch := func(f, b float64) float64 {
-		fi, bi := int(f*255+0.5), int(b*255+0.5)
+		fi, bi := int(float64(f*255)+0.5), int(float64(b*255)+0.5)
 		return float64((fi-bi)*share/0x80+bi) / 255
 	}
 	return css.Color{R: ch(fg.R, bg.R), G: ch(fg.G, bg.G), B: ch(fg.B, bg.B), A: 1}

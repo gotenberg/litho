@@ -198,7 +198,7 @@ func (st *shapeText) draw(ctx context.Context, fonts *text.Fonts, box typeset.Re
 	inner := box.Height - st.insets[css.Top] - st.insets[css.Bottom]
 	switch st.anchor {
 	case "ctr":
-		top += (inner - height) / 2
+		top += float64((inner - height) / 2)
 	case "b":
 		top += inner - height
 	}
@@ -210,7 +210,7 @@ func (st *shapeText) draw(ctx context.Context, fonts *text.Fonts, box typeset.Re
 		x := box.X + st.insets[css.Left]
 		switch pl.align {
 		case "ctr":
-			x += (avail - l.Width) / 2
+			x += float64((avail - l.Width) / 2)
 		case "r":
 			x += avail - l.Width
 		}
