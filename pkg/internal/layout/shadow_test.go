@@ -233,11 +233,11 @@ func TestDashStroke_FitsTheSide(t *testing.T) {
 	// The Chromium reference of the html borders fixture: a 4px dashed
 	// side 170px long has 15 dashes of 8px; a dotted one 22 dots.
 	w := px(4)
-	st := dashStroke(css.Dashed, typeset.Color{A: 1}, w, px(170), false)
+	st := dashStroke(css.Dashed, typeset.Color{A: 1}, w, px(170), false, false)
 	if dash, gap := st.Dash[0], st.Dash[1]; math.Abs(dash-px(8)) > 1e-9 || math.Abs(15*dash+14*gap-px(170)) > 1e-9 {
 		t.Errorf("dashed pattern %v", st.Dash)
 	}
-	st = dashStroke(css.Dotted, typeset.Color{A: 1}, w, px(166), false)
+	st = dashStroke(css.Dotted, typeset.Color{A: 1}, w, px(166), false, false)
 	if pitch := st.Dash[1]; st.Dash[0] != 0 || st.Cap != typeset.RoundCap || math.Abs(21*pitch-px(166)) > 1e-9 {
 		t.Errorf("dotted pattern %v, cap %v", st.Dash, st.Cap)
 	}
@@ -246,9 +246,71 @@ func TestDashStroke_FitsTheSide(t *testing.T) {
 func TestDashStroke_ThinDotsAreSquare(t *testing.T) {
 	// Under 3px the dots are squares a width long, butt-capped.
 	w := px(1)
-	st := dashStroke(css.Dotted, typeset.Color{A: 1}, w, px(9), false)
+	st := dashStroke(css.Dotted, typeset.Color{A: 1}, w, px(9), false, false)
 	if st.Cap == typeset.RoundCap || st.Dash[0] != w || math.Abs(5*w+4*st.Dash[1]-px(9)) > 1e-9 {
 		t.Errorf("thin dotted pattern %v, cap %v", st.Dash, st.Cap)
+	}
+}
+
+func TestBlinkDashStroke_ChromiumPattern(t *testing.T) {
+	// CSS Backgrounds 3, 4.2 leaves the dash pattern to the user agent;
+	// under BrowserRules it is Blink's, measured in Chromium's drawings.
+	black := typeset.Color{A: 1}
+	near := func(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
+	// Thin dashes are three widths long with gaps near two widths: a 1px
+	// side 150px long holds 30 dashes of 3px.
+	st := blinkDashStroke(css.Dashed, black, px(1), px(150), false)
+	if len(st.Dash) != 2 || !near(st.Dash[0], px(3)) || !near(30*st.Dash[0]+29*st.Dash[1], px(150)) {
+		t.Errorf("1px dashed pattern %v", st.Dash)
+	}
+	// From 3px the dashes are two widths with gaps near one.
+	st = blinkDashStroke(css.Dashed, black, px(4), px(150), false)
+	if len(st.Dash) != 2 || !near(st.Dash[0], px(8)) || !near(13*st.Dash[0]+12*st.Dash[1], px(150)) {
+		t.Errorf("4px dashed pattern %v", st.Dash)
+	}
+	// A side no longer than two dashes and a gap holds two dashes scaled
+	// to fit: a 9px side 39px long.
+	st = blinkDashStroke(css.Dashed, black, px(9), px(39), false)
+	if len(st.Dash) != 2 || !near(st.Dash[0], px(15.6)) || !near(st.Dash[1], px(7.8)) {
+		t.Errorf("short dashed pattern %v", st.Dash)
+	}
+	// One no longer than two dashes is solid.
+	if st = blinkDashStroke(css.Dashed, black, px(4), px(16), false); len(st.Dash) != 0 {
+		t.Errorf("dashed side of two dashes %v, want solid", st.Dash)
+	}
+	// Dots of 3px are squares a width apart.
+	st = blinkDashStroke(css.Dotted, black, px(3), px(150), false)
+	if st.Cap == typeset.RoundCap || len(st.Dash) != 2 || !near(st.Dash[0], px(3)) || !near(st.Dash[1], px(3)) {
+		t.Errorf("3px dotted pattern %v, cap %v", st.Dash, st.Cap)
+	}
+}
+
+func TestBlinkDashedSide_SquareDotsEndOnWholeDots(t *testing.T) {
+	// Blink's EnforceDotsAtEndpoints: a 2px dotted side 152px long (a
+	// multiple of 4) fills both end dots and strokes the dots between
+	// them from 3px in to 3px short of the end.
+	g := &ditem{}
+	blinkDashedSide(g, css.Top, css.Dotted, typeset.Color{A: 1}, typeset.Rect{Width: px(152), Height: px(20)}, px(2))
+	if len(g.kids) != 3 {
+		t.Fatalf("%d fragments, want two end dots and a line", len(g.kids))
+	}
+	line := g.kids[2].frag.(*typeset.Path)
+	a, z := line.Ops[0].P[0], line.Ops[1].P[0]
+	if math.Abs(a.X-px(3)) > 1e-9 || math.Abs(z.X-px(149)) > 1e-9 || math.Abs(a.Y-px(1)) > 1e-9 {
+		t.Errorf("line from %v to %v, want x 3px to 149px at y 1px", a, z)
+	}
+	// Blink snaps the side's ends to whole pixels first: the same side
+	// from 0.4px to 152.4px draws alike.
+	g = &ditem{}
+	blinkDashedSide(g, css.Top, css.Dotted, typeset.Color{A: 1}, typeset.Rect{X: px(0.4), Width: px(152), Height: px(20)}, px(2))
+	if a := g.kids[len(g.kids)-1].frag.(*typeset.Path).Ops[0].P[0]; math.Abs(a.X-px(3)) > 1e-9 {
+		t.Errorf("line of a fractional side starts at %v, want 3px", a.X)
+	}
+	// A 1px side of an odd length ends on whole dots alone.
+	g = &ditem{}
+	blinkDashedSide(g, css.Left, css.Dotted, typeset.Color{A: 1}, typeset.Rect{Width: px(20), Height: px(151)}, px(1))
+	if len(g.kids) != 1 {
+		t.Errorf("%d fragments, want the line alone", len(g.kids))
 	}
 }
 

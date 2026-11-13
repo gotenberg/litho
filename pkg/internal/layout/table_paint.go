@@ -450,8 +450,9 @@ func (p *painter) collapsedBorders(td *tableData, owner *box) {
 		}
 		// corner returns which border wins the crossing of line k and grid
 		// line i, 0 the vertical above, 1 the horizontal left, 2 the
-		// vertical below, 3 the horizontal right, and the half sizes of
-		// the corner square.
+		// vertical below, 3 the horizontal right, in its two low bits,
+		// with a bit 1<<(j+2) for each border j that ties with a dashed or
+		// dotted winner, and the half sizes of the corner square.
 		corner := func(k, i int) (int, float64, float64) {
 			var c [4]cborder
 			if k > 0 {
@@ -472,8 +473,23 @@ func (p *painter) collapsedBorders(td *tableData, owner *box) {
 					win = j
 				}
 			}
+			if p.blink() && (c[win].style == css.Dashed || c[win].style == css.Dotted) {
+				// Blink's tied edges both take the corner
+				// (ComputeEdgeJoints): a dashed or dotted run reaches
+				// over it when no edge there beats it, so its pattern
+				// runs from corner to corner as a box's side does.
+				first, w := win, c[win]
+				for j := range 4 {
+					if j != first && !w.beats(c[j]) && c[j].style == w.style && c[j].w == w.w {
+						win |= 1 << (j + 2)
+					}
+				}
+			}
 			return win, max(c[0].w, c[2].w) / 2, max(c[1].w, c[3].w) / 2
 		}
+		// takes reports whether border j of the crossing a corner returns
+		// covers it.
+		takes := func(win, j int) bool { return win&3 == j || win&(1<<(j+2)) != 0 }
 		for k := 0; k <= n; k++ {
 			for c := range nc {
 				b := h[k][c]
@@ -481,12 +497,12 @@ func (p *painter) collapsedBorders(td *tableData, owner *box) {
 					continue
 				}
 				x0, x1 := x(c), x(c+1)
-				if win, hw, _ := corner(k, c); win == 3 {
+				if win, hw, _ := corner(k, c); takes(win, 3) {
 					x0 -= hw
 				} else {
 					x0 += hw
 				}
-				if win, hw, _ := corner(k, c+1); win == 1 {
+				if win, hw, _ := corner(k, c+1); takes(win, 1) {
 					x1 += hw
 				} else {
 					x1 -= hw
@@ -511,12 +527,12 @@ func (p *painter) collapsedBorders(td *tableData, owner *box) {
 					continue
 				}
 				y0, y1 := lineY(k), td.bottom(seq[k])+p.dy
-				if win, _, hh := corner(k, i); win == 2 {
+				if win, _, hh := corner(k, i); takes(win, 2) {
 					y0 -= hh
 				} else {
 					y0 += hh
 				}
-				if win, _, hh := corner(k+1, i); win == 0 {
+				if win, _, hh := corner(k+1, i); takes(win, 0) {
 					y1 += hh
 				} else {
 					y1 -= hh
@@ -608,6 +624,20 @@ func (p *painter) segment(t *box, b cborder, r typeset.Rect, horizontal bool) {
 		fill(z, light)
 	case css.Dashed, css.Dotted:
 		w := b.w
+		if p.blink() {
+			// Blink draws a collapsed border's run as it draws a box's
+			// side ([blinkDashedSide]).
+			side := css.Top
+			if !horizontal {
+				side = css.Left
+			}
+			g := &ditem{}
+			blinkDashedSide(g, side, b.style, col, r, w)
+			for _, k := range g.kids {
+				p.emit(t, false, k.frag, r.Y, r.Y+r.Height, -1)
+			}
+			return
+		}
 		a := typeset.Point{X: r.X, Y: r.Y + float64(r.Height/2)}
 		z := typeset.Point{X: r.X + r.Width, Y: a.Y}
 		if !horizontal {

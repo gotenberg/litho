@@ -654,7 +654,13 @@ func (p *painter) border(b *box, st *css.Style, r typeset.Rect, radii [4][2]floa
 		c, _ := colorOf(st.Border[0].Color)
 		mid, midRadii := insetRect(r, radii, [4]float64{bd[0] / 2, bd[0] / 2, bd[0] / 2, bd[0] / 2})
 		ops := roundedRect(mid, midRadii)
-		stroke := dashStroke(bs, c, bd[0], roundedLength(mid, midRadii), true)
+		l := roundedLength(mid, midRadii)
+		if p.blink() {
+			// Blink measures the outline in whole pixels, dropping the
+			// fraction.
+			l = math.Floor(l/css.Pt) * css.Pt
+		}
+		stroke := dashStroke(bs, c, bd[0], l, true, p.blink())
 		p.emit(b, false, &typeset.Path{Ops: ops, Stroke: stroke}, r.Y, r.Y+r.Height, -1)
 		return
 	}
@@ -688,8 +694,12 @@ func (p *painter) border(b *box, st *css.Style, r typeset.Rect, radii [4][2]floa
 // under 3px, dots round and as wide as the line, and the gaps, nominally
 // the width, stretch or shrink so the pattern starts and ends on a dash or
 // a dot: on the corners of a side. closed reports a closed path, whose
-// pattern repeats a whole number of times around it.
-func dashStroke(bs css.BorderStyle, c typeset.Color, w, l float64, closed bool) *typeset.Stroke {
+// pattern repeats a whole number of times around it. blink selects
+// [blinkDashStroke].
+func dashStroke(bs css.BorderStyle, c typeset.Color, w, l float64, closed, blink bool) *typeset.Stroke {
+	if blink {
+		return blinkDashStroke(bs, c, w, l, closed)
+	}
 	st := &typeset.Stroke{Color: c, Width: w}
 	dash := 2 * w
 	if w < 3*css.Pt {
@@ -720,6 +730,198 @@ func dashStroke(bs css.BorderStyle, c typeset.Color, w, l float64, closed bool) 
 	}
 	st.Dash = []float64{dash, gap}
 	return st
+}
+
+// blinkDashStroke returns the stroke of a dashed or dotted line of width
+// w along a path of length l as Blink strokes it (StyledStrokeData's dash
+// effect; CSS Backgrounds 3, 4.2 leaves the pattern to the user agent).
+// Dashes are three widths long with gaps of two under 3px, two widths with
+// gaps of one from 3px; dots of 3px and less are squares a width long a
+// width apart, thicker ones round. A line no longer than two dashes is
+// solid, one no longer than two dashes and a gap holds two dashes scaled to
+// fit, and otherwise the gaps of dashes and round dots stretch or shrink
+// ([blinkGap]) so the pattern starts and ends on a dash or a dot. closed
+// reports a closed path.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws dashed and
+//     dotted sides 150 and 157px long at widths 1 to 10px with these
+//     dashes, dots and gaps, and a dashed side 39px long and 9px wide as
+//     two dashes; its PDF route fills the same dashes as rectangles (6px
+//     dashes and 4.29px gaps on a 2px side 150px long).
+func blinkDashStroke(bs css.BorderStyle, c typeset.Color, w, l float64, closed bool) *typeset.Stroke {
+	st := &typeset.Stroke{Color: c, Width: w}
+	if bs == css.Dotted && !blinkSquareDots(w) {
+		st.Cap = typeset.RoundCap
+		if l < 2*w {
+			// One dot: the gap passes the end of the line.
+			st.Dash = []float64{0, 2 * w}
+			return st
+		}
+		// Blink shortens the pitch by a hundredth of a pixel so that
+		// rounding along the line keeps the last dot.
+		st.Dash = []float64{0, blinkGap(l, w, w, closed) + w - 0.01*css.Pt}
+		return st
+	}
+	dash, gap := w, w
+	if bs == css.Dashed {
+		dash, gap = 2*w, w
+		if w < 3*css.Pt {
+			dash, gap = 3*w, 2*w
+		}
+	}
+	if l <= 2*dash {
+		return st
+	}
+	two := float64(2*dash) + gap
+	if closed {
+		two += gap
+	}
+	if l <= two {
+		f := l / two
+		st.Dash = []float64{dash * f, gap * f}
+		return st
+	}
+	if bs == css.Dashed {
+		gap = blinkGap(l, dash, gap, closed)
+	}
+	st.Dash = []float64{dash, gap}
+	return st
+}
+
+// blinkSquareDots reports a dotted line w points wide that Blink draws as
+// square dots: 3 pixels and less.
+func blinkSquareDots(w float64) bool { return w <= 3*css.Pt }
+
+// blinkGap returns the gap closest to gap that fits a whole number of
+// dashes of length dash, gaps between them, in length l (Blink's
+// SelectBestDashGap): on an open path with a dash at each end, on a closed
+// one with as many gaps as dashes.
+func blinkGap(l, dash, gap float64, closed bool) float64 {
+	if !numeric.Positive(l) || !numeric.Positive(dash+gap) {
+		return gap
+	}
+	avail := l
+	if !closed {
+		avail += gap
+	}
+	lo := math.Floor(avail / (dash + gap))
+	if lo > float64(maxBackgroundTiles) {
+		return gap
+	}
+	hi := lo + 1
+	loN, hiN := lo, hi
+	if !closed {
+		loN, hiN = lo-1, hi-1
+	}
+	loGap := math.Inf(1)
+	if loN > 0 {
+		loGap = (l - float64(lo*dash)) / loN
+	}
+	g := (l - float64(hi*dash)) / hiN
+	if g <= 0 || math.Abs(loGap-gap) < math.Abs(g-gap) {
+		g = loGap
+	}
+	if math.IsInf(g, 0) {
+		// One dash: the gap passes the end of the line.
+		return l + gap
+	}
+	return max(g, 0)
+}
+
+// blinkDashedSide draws side s of style bs (dashed or dotted), w points
+// wide, of the border box r into g as Blink draws a straight side
+// (DrawDashedOrDottedBoxSide): a line along the middle of the side from one
+// outer corner to the other, left to right or top to bottom, stroked by
+// [blinkDashStroke], half a width in at each end for round dots. A line of
+// square dots starts and ends on a whole dot
+// (EnforceDotsAtEndpoints): where its length in pixels would end it on a
+// part of one, Blink fills the end dots as rectangles of their own, some a
+// pixel longer, and strokes the pattern between them.
+func blinkDashedSide(g *ditem, s css.Side, bs css.BorderStyle, c typeset.Color, r typeset.Rect, w float64) {
+	horizontal := s == css.Top || s == css.Bottom
+	t0, t1, c0 := r.X, r.X+r.Width, r.Y
+	switch s {
+	case css.Top:
+	case css.Bottom:
+		c0 = r.Y + r.Height - w
+	case css.Left:
+		t0, t1, c0 = r.Y, r.Y+r.Height, r.X
+	case css.Right:
+		t0, t1, c0 = r.Y, r.Y+r.Height, r.X+r.Width-w
+	}
+	// Blink snaps the side's ends to whole pixels before it lays the
+	// pattern along it.
+	t0, t1 = float64(math.Round(t0/css.Pt)*css.Pt), float64(math.Round(t1/css.Pt)*css.Pt)
+	l := t1 - t0
+	if l <= 0 {
+		return
+	}
+	pt := func(t, u float64) typeset.Point {
+		if horizontal {
+			return typeset.Point{X: t, Y: u}
+		}
+		return typeset.Point{X: u, Y: t}
+	}
+	dot := func(a, z float64) {
+		rc := typeset.Rect{X: a, Y: c0, Width: z - a, Height: w}
+		if !horizontal {
+			rc = typeset.Rect{X: c0, Y: a, Width: w, Height: z - a}
+		}
+		g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: rectOps(rc), Fill: &typeset.Fill{Color: c}}})
+	}
+	stroke := blinkDashStroke(bs, c, w, l, false)
+	switch {
+	case bs == css.Dotted && blinkSquareDots(w):
+		t0, t1 = blinkEndDots(dot, t0, t1, w, l)
+	case bs == css.Dotted:
+		// Round caps reach half a width past each end of a dot: the line
+		// starts and ends half a width in.
+		t0, t1 = t0+float64(w/2), t1-float64(w/2)
+	}
+	mid := c0 + float64(w/2)
+	g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{pt(t0, mid)}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{pt(t1, mid)}},
+	}, Stroke: stroke}})
+}
+
+// blinkEndDots fills by dot the end dots of a line of square dots w points
+// wide and l long from t0 to t1, as Blink's EnforceDotsAtEndpoints does for
+// widths of 1, 2 and 3 pixels and lengths in whole pixels, and returns the
+// ends of the line left to stroke.
+func blinkEndDots(dot func(a, z float64), t0, t1, w, l float64) (float64, float64) {
+	wp, lp := math.Round(w/css.Pt), math.Round(l/css.Pt)
+	m2, m4, m6 := math.Mod(lp, 2), math.Mod(lp, 4), math.Mod(lp, 6)
+	start, end := false, false
+	var startGrow, startShift, endGrow float64
+	if wp == 1 && m2 == 0 || wp == 3 && m6 == 0 {
+		start, startGrow, startShift = true, 1, 1
+	}
+	if wp == 2 && (m4 == 0 || m4 == 1) || wp == 3 && (m6 == 1 || m6 == 2) {
+		start, startShift = true, -1
+	}
+	if wp == 2 && m4 == 0 || wp == 3 && m6 == 1 {
+		end = true
+	}
+	if wp == 2 && m4 == 3 || wp == 3 && (m6 == 4 || m6 == 5) {
+		start, startShift = true, 1
+	}
+	if wp == 3 && m6 == 5 {
+		end = true
+	} else if wp == 3 && m6 == 0 {
+		end, endGrow = true, 1
+	}
+	if start {
+		dot(t0, t0+w+float64(startGrow*css.Pt))
+		t0 += float64(2*w) + float64(startShift*css.Pt)
+	}
+	if end {
+		dot(t1-w-float64(endGrow*css.Pt), t1)
+		t1 -= w + float64((endGrow+1)*css.Pt)
+	}
+	return t0, t1
 }
 
 // squareDots reports a dotted line too thin for round dots, w points
@@ -838,6 +1040,10 @@ func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r typ
 		fill(ring(r, radii, inner, iradii), col)
 	case css.Dashed, css.Dotted:
 		w := bd[s]
+		if p.blink() {
+			blinkDashedSide(g, s, bdr.Style, c, r, w)
+			return
+		}
 		var a, z typeset.Point
 		switch s {
 		case css.Top:
@@ -864,7 +1070,7 @@ func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r typ
 		g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: []typeset.PathOp{
 			{Kind: typeset.MoveTo, P: [3]typeset.Point{a}},
 			{Kind: typeset.LineTo, P: [3]typeset.Point{z}},
-		}, Stroke: dashStroke(bdr.Style, c, w, l, false)}})
+		}, Stroke: dashStroke(bdr.Style, c, w, l, false, false)}})
 	case css.Solid, css.BorderNone, css.BorderHidden:
 		fill(ring(r, radii, inner, iradii), c)
 	}

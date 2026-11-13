@@ -100,3 +100,28 @@ func TestDraw_CellScrollerTakesItsMinHeight(t *testing.T) {
 		})
 	}
 }
+
+func TestDraw_DashedBordersFollowBlink(t *testing.T) {
+	t.Parallel()
+	// CSS Backgrounds 3, 4.2 leaves the dash pattern to the user agent;
+	// the HTML converter draws Blink's, as the pinned Chromium draws it: a
+	// 2px dashed side 150px long starts with a 6px dash and a gap of 4 to
+	// 5px, a 3px dotted one with a square end dot a pixel longer, a dashed collapsed cell
+	// border runs its pattern from the table's outer corner.
+	tests := []struct {
+		name, src, want string
+	}{
+		{"box side", `<div style="box-sizing:border-box;width:150px;height:20px;border:2px dashed red"></div>`, "RRRRRR___"},
+		{"square dots", `<div style="box-sizing:border-box;width:150px;height:20px;border:3px dotted red"></div>`, "RRRR___RRR___R"},
+		{"collapsed cell", `<table style="border-collapse:collapse"><td style="width:146px;height:20px;padding:0;border:2px dashed red"></td></table>`, "RRRRRR___"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			rows := drawPage(t, `<body style="margin:0">`+tt.src, 160, 30, Options{})
+			if got := rows[1][:len(tt.want)]; got != tt.want {
+				t.Errorf("top side %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
