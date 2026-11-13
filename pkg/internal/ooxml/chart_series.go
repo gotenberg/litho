@@ -11,7 +11,7 @@ import (
 // group reads one chart type element of the plot area, nil for an element
 // that is not one.
 func (p *chartReader) group(e *Element) *chart.Group {
-	g := &chart.Group{XAxis: -1, YAxis: -1, GapWidth: 150, BubbleScale: 100}
+	g := &chart.Group{XAxis: -1, YAxis: -1, ZAxis: -1, GapWidth: 150, BubbleScale: 100, GapDepth: 150}
 	switch e.Local {
 	case "barChart", "bar3DChart":
 		g.Kind = chart.Bar
@@ -49,7 +49,7 @@ func (p *chartReader) group(e *Element) *chart.Group {
 	}
 	if strings.HasSuffix(e.Local, "3DChart") {
 		g.ThreeD = true
-		p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D "+g.Kind.String()+" chart is drawn flat")
+		p.read3D(e, g)
 	}
 	if e.Local == "stockChart" {
 		p.warn(warn.ContentUnsupported, warn.Approximated, "a stock chart is drawn as a line chart")
@@ -88,6 +88,11 @@ func (p *chartReader) group(e *Element) *chart.Group {
 		}
 		if i, ok := p.axes[ids[1]]; ok {
 			g.YAxis = i
+		}
+	}
+	if len(ids) >= 3 && g.ThreeD {
+		if i, ok := p.axes[ids[2]]; ok {
+			g.ZAxis = i
 		}
 	}
 	if g.Kind == chart.Bar && g.Horizontal {
@@ -130,6 +135,41 @@ func (p *chartReader) group(e *Element) *chart.Group {
 	// by its mnIndex, the idx).
 	sortSeries(g.Series, idx)
 	return g
+}
+
+// read3D reads what a three-dimensional chart group adds to its kind: a
+// bar group's solid, the gap between its rows, and whether its series
+// stand one behind the other (ECMA-376 Part 1, 21.2.2.15 bar3DChart,
+// 21.2.2.95 line3DChart, 21.2.2.4 area3DChart: the standard grouping
+// puts each series in a row of its own).
+func (p *chartReader) read3D(e *Element, g *chart.Group) {
+	g.Rows = childVal(e, "grouping") == "standard" && g.Kind != chart.Pie
+	if v := percentVal(e, "gapDepth", 150); !math.IsNaN(v) {
+		g.GapDepth = math.Max(0, math.Min(v, 500))
+	}
+	if g.Kind != chart.Bar {
+		return
+	}
+	// A shape a series sets stands for the group's when the group sets
+	// none (21.2.2.162 shape is CT_Shape on the group and on each series).
+	shape := childVal(e, "shape")
+	if shape == "" {
+		if se := e.Child(NSChart, "ser"); se != nil {
+			shape = childVal(se, "shape")
+		}
+	}
+	switch shape {
+	case "cylinder":
+		g.Shape = chart.ShapeCylinder
+	case "cone":
+		g.Shape = chart.ShapeCone
+	case "coneToMax":
+		g.Shape = chart.ShapeConeToMax
+	case "pyramid":
+		g.Shape = chart.ShapePyramid
+	case "pyramidToMax":
+		g.Shape = chart.ShapePyramidToMax
+	}
 }
 
 // maxTrendlines caps the trendlines of one series. Anti-DoS guard, not

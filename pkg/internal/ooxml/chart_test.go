@@ -245,6 +245,31 @@ func TestChartFromElement_DataLabelsInherit(t *testing.T) {
 	}
 }
 
+func TestChartFromElement_View3D(t *testing.T) {
+	plot := `<c:bar3DChart><c:barDir val="col"/><c:grouping val="standard"/>` + ser(0, "A", "", "1", "2") +
+		`<c:gapDepth val="80"/><c:shape val="cylinder"/><c:axId val="1"/><c:axId val="2"/><c:axId val="3"/></c:bar3DChart>` +
+		`<c:catAx><c:axId val="1"/></c:catAx><c:valAx><c:axId val="2"/></c:valAx><c:serAx><c:axId val="3"/></c:serAx>`
+	c := readChart(t, chartXML("", `<c:view3D><c:rotY val="45"/><c:depthPercent val="60"/><c:rAngAx/></c:view3D>`, plot), false)
+	want := chart.View3D{RotX: 15, RotY: 45, Depth: 60, Perspective: 30, RightAngle: true}
+	if c.View3D == nil || *c.View3D != want {
+		t.Errorf("view = %+v, want %+v", c.View3D, want)
+	}
+	g := c.Groups[0]
+	if !g.ThreeD || !g.Rows || g.Shape != chart.ShapeCylinder || g.GapDepth != 80 || g.ZAxis != 2 {
+		t.Errorf("group = %+v", g)
+	}
+	// A pie without rotY keeps its first slice where it is.
+	pie := `<c:pie3DChart>` + ser(0, "A", "", "1", "2") + `</c:pie3DChart>`
+	if v := readChart(t, chartXML("", "", pie), false).View3D; v == nil || v.RotX != 15 || v.RotY != 0 {
+		t.Errorf("pie view = %+v, want rotX 15, rotY 0", v)
+	}
+	// A flat chart keeps no view.
+	flat := `<c:barChart><c:barDir val="col"/>` + ser(0, "A", "", "1") + `</c:barChart>`
+	if v := readChart(t, chartXML("", `<c:view3D><c:rotX val="30"/></c:view3D>`, flat), false).View3D; v != nil {
+		t.Errorf("flat chart view = %+v, want none", v)
+	}
+}
+
 func TestChartFromElement_Warnings(t *testing.T) {
 	plot := `<c:line3DChart>` + ser(0, "A", `<c:trendline><c:dispRSqr val="1"/></c:trendline><c:errBars/>`, "1") + `</c:line3DChart><c:surfaceChart/>`
 	c := readChart(t, chartXML("", "", plot), false)
@@ -253,7 +278,7 @@ func TestChartFromElement_Warnings(t *testing.T) {
 		msgs = append(msgs, w.Message)
 	}
 	got := strings.Join(msgs, "|")
-	for _, want := range []string{"3D line", "equation", "surface"} {
+	for _, want := range []string{"perspective", "equation", "surface"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("warnings %q lack %q", got, want)
 		}

@@ -53,8 +53,8 @@ func hexColor(v uint32) css.Color {
 // The data comes from the series' caches (c:strCache, c:numCache, literal
 // c:strLit and c:numLit); a series with none keeps its range reference and
 // is reported with [warn.ChartNoCache]. External data and the formatting of
-// Office 2013's chart style parts are ignored; 3D charts are read as their
-// flat kind.
+// Office 2013's chart style parts are ignored. A 3D chart keeps its view,
+// floor and walls; a 3D surface chart is not drawn.
 //
 // It fails with [ErrNoPart] for a missing part and wraps the parse errors
 // of [Package.ParseXML]; a part whose root is not c:chartSpace fails with
@@ -311,6 +311,7 @@ func (p *chartReader) read(root *Element) {
 		p.warn(warn.ContentUnsupported, warn.Omitted, "the chart has no chart type the reader draws")
 	}
 	p.categoryPositions()
+	p.readView3D(ch)
 	n := 0
 	for _, g := range c.Groups {
 		n += len(g.Series)
@@ -346,6 +347,87 @@ func (p *chartReader) read(root *Element) {
 	}
 	if dt := ch.Child(NSChart, "plotArea").Child(NSChart, "dTable"); dt != nil {
 		p.readDataTable(dt)
+	}
+}
+
+// The settings of a view that a chart omits, as Office draws it: the
+// schema gives 0 for both angles only to an element present without a
+// value (ECMA-376 Part 1, 21.2.2.157 rotX, 21.2.2.158 rotY), 100 for the
+// depth (21.2.2.43) and 30 for the perspective (21.2.2.135).
+//
+// # Corpus evidence
+//
+//   - poi/xlsx: spreadsheet/45544.xlsx, a 3-D pie whose view3D has no
+//     rotX: Excel's pie is 0.258 of its width high, the sine of 15
+//     degrees, as a pie with rotX 15 is.
+//   - openxmlsdk/pptx: v2FxTestFiles/presentation/Chart_3D_Column_.pptx, a
+//     3-D column chart whose view3D sets only the perspective: PowerPoint
+//     draws it seen from the right and above, as litho/pptx chart-3d's
+//     charts that set rotX 15 and rotY 20.
+const (
+	defaultRotX        = 15
+	defaultRotY        = 20
+	defaultDepth       = 100
+	defaultPerspective = 30
+)
+
+// readView3D reads the view of a chart that draws a group in three
+// dimensions (ECMA-376 Part 1, 21.2.2.228 view3D) and its floor and walls,
+// and warns of what the projection leaves out. A chart without such a
+// group keeps no view: it is drawn flat whatever its view3D says.
+func (p *chartReader) readView3D(ch *Element) {
+	var g3 *chart.Group
+	for _, g := range p.c.Groups {
+		if g.ThreeD {
+			g3 = g
+			break
+		}
+	}
+	if g3 == nil {
+		return
+	}
+	e := ch.Child(NSChart, "view3D")
+	v := &chart.View3D{RotX: defaultRotX, RotY: defaultRotY, Depth: defaultDepth, Perspective: defaultPerspective}
+	if g3.Kind == chart.Pie {
+		v.RotY = 0
+	}
+	if x := floatVal(e, "rotX"); !math.IsNaN(x) {
+		v.RotX = math.Max(-90, math.Min(x, 90))
+	}
+	if y := floatVal(e, "rotY"); !math.IsNaN(y) {
+		v.RotY = math.Max(0, math.Min(y, 360))
+	}
+	if d := floatVal(e, "depthPercent"); !math.IsNaN(d) {
+		v.Depth = math.Max(20, math.Min(d, 2000))
+	}
+	if d := floatVal(e, "perspective"); !math.IsNaN(d) {
+		v.Perspective = math.Max(0, math.Min(d, 240))
+	}
+	v.RightAngle = boolVal(e, "rAngAx", false)
+	p.c.View3D = v
+	p.c.Floor = p.frame(ch.Child(NSChart, "floor").Child(NSChart, "spPr"), chart.Frame{})
+	p.c.SideWall = p.frame(ch.Child(NSChart, "sideWall").Child(NSChart, "spPr"), chart.Frame{})
+	p.c.BackWall = p.frame(ch.Child(NSChart, "backWall").Child(NSChart, "spPr"), chart.Frame{})
+	for _, g := range p.c.Groups {
+		if !g.ThreeD {
+			continue
+		}
+		switch g.Kind {
+		case chart.Bar, chart.Line, chart.Area:
+			if !v.RightAngle && v.Perspective > 0 {
+				p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D chart's perspective is drawn as a parallel projection")
+			}
+			if math.Cos(v.RotY*math.Pi/180) < 0 {
+				p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D chart seen from behind is drawn seen from the front")
+			}
+		case chart.Pie:
+		case chart.Doughnut, chart.Scatter, chart.Bubble, chart.Radar, chart.Unsupported:
+			p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D "+g.Kind.String()+" chart is drawn flat")
+		}
+		p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D chart's faces are shaded flat, without its lighting")
+		if e.Child(NSChart, "hPercent") != nil {
+			p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D chart's height percentage is not applied")
+		}
 	}
 }
 
