@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
@@ -165,7 +166,7 @@ func (r *reader) place(ts *tableState, el *odf.Element, at *sheet.Anchor, art sh
 	pic := &layout.Picture{Width: b.Width, Height: b.Height}
 	pic.Vector = func(ctx context.Context, rect typeset.Rect) []typeset.Fragment {
 		sx, sy := rect.Width/b.Width, rect.Height/b.Height
-		m := typeset.Matrix{A: sx, D: sy, E: rect.X - b.X*sx, F: rect.Y - b.Y*sy}
+		m := typeset.Matrix{A: sx, D: sy, E: rect.X - float64(b.X*sx), F: rect.Y - float64(b.Y*sy)}
 		return []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: draw(ctx)}}
 	}
 	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name"), Alt: odf.Describe(el), Decorative: r.decorative(el), Shape: !art.picture, Picture: pic, Width: b.Width, Height: b.Height, Unbounded: true}
@@ -342,18 +343,18 @@ func (s *shapeStroke) stroke(ops []typeset.PathOp) []typeset.Fragment {
 // 30).
 func arrowhead(x, y, fx, fy, w float64, c typeset.Color) typeset.Fragment {
 	dx, dy := x-fx, y-fy
-	n := math.Hypot(dx, dy)
+	n := detmath.Hypot(dx, dy)
 	if n == 0 {
 		return nil
 	}
 	ux, uy := dx/n, dy/n
 	l := 1.5 * w
-	bx, by := x-ux*l, y-uy*l
+	bx, by := x-float64(ux*l), y-float64(uy*l)
 	pt := func(px, py float64) [3]typeset.Point { return [3]typeset.Point{{X: px, Y: py}} }
 	return &typeset.Path{Ops: []typeset.PathOp{
 		{Kind: typeset.MoveTo, P: pt(x, y)},
-		{Kind: typeset.LineTo, P: pt(bx-uy*w/2, by+ux*w/2)},
-		{Kind: typeset.LineTo, P: pt(bx+uy*w/2, by-ux*w/2)},
+		{Kind: typeset.LineTo, P: pt(bx-float64(uy*w/2), by+float64(ux*w/2))},
+		{Kind: typeset.LineTo, P: pt(bx+float64(uy*w/2), by-float64(ux*w/2))},
 		{Kind: typeset.ClosePath},
 	}, Fill: &typeset.Fill{Color: c}}
 }
@@ -434,7 +435,7 @@ func appendFrag(out []typeset.Fragment, f typeset.Fragment) []typeset.Fragment {
 //     prints its dimension line right of its points.
 func measureArt(el *odf.Element, s *shapeStroke, p odf.Props, dx, dy float64) (shapeArt, bool) {
 	x1, y1, x2, y2, ok := lineEnds(el, dx, dy)
-	n := math.Hypot(x2-x1, y2-y1)
+	n := detmath.Hypot(x2-x1, y2-y1)
 	if !ok || s == nil || n == 0 {
 		return shapeArt{}, false
 	}
@@ -450,16 +451,16 @@ func measureArt(el *odf.Element, s *shapeStroke, p odf.Props, dx, dy float64) (s
 	// The normal turns the way from the first point to the second a
 	// quarter counterclockwise on the page.
 	nx, ny := (y2-y1)/n, -(x2-x1)/n
-	ax, ay := x1+nx*dist, y1+ny*dist
-	bx, by := x2+nx*dist, y2+ny*dist
+	ax, ay := x1+float64(nx*dist), y1+float64(ny*dist)
+	bx, by := x2+float64(nx*dist), y2+float64(ny*dist)
 	arrow := s.startArrow
 	if arrow == 0 {
 		arrow = s.endArrow
 	}
 	guide := func(x, y float64) []typeset.PathOp {
-		return segment(x+nx*gap, y+ny*gap, x+nx*(dist+over), y+ny*(dist+over))
+		return segment(x+float64(nx*gap), y+float64(ny*gap), x+float64(nx*(dist+over)), y+float64(ny*(dist+over)))
 	}
-	pts := [][2]float64{{x1, y1}, {x2, y2}, {x1 + nx*(dist+over), y1 + ny*(dist+over)}, {x2 + nx*(dist+over), y2 + ny*(dist+over)}}
+	pts := [][2]float64{{x1, y1}, {x2, y2}, {x1 + float64(nx*(dist+over)), y1 + float64(ny*(dist+over))}, {x2 + float64(nx*(dist+over)), y2 + float64(ny*(dist+over))}}
 	return shapeArt{
 		bounds: bounds(pts, math.Max(arrow, s.line.Width)),
 		line:   [4]float64{ax, ay, bx, by},
@@ -694,7 +695,7 @@ const (
 func (r *reader) measureText(el *odf.Element, art *shapeArt) {
 	var sb strings.Builder
 	x1, y1, x2, y2, _ := lineEnds(el, 0, 0)
-	value := measureValue(math.Hypot(x2-x1, y2-y1))
+	value := measureValue(detmath.Hypot(x2-x1, y2-y1))
 	for _, c := range el.Children {
 		if c.Is(odf.NSText, "p") {
 			spacedText(c, &sb, value, 0)
@@ -715,12 +716,12 @@ func (r *reader) measureText(el *odf.Element, art *shapeArt) {
 	}
 	fonts, prev := r.fonts, art.draw
 	ax, ay, bx, by := art.line[0], art.line[1], art.line[2], art.line[3]
-	angle := math.Atan2(by-ay, bx-ax)
+	angle := detmath.Atan2(by-ay, bx-ax)
 	if angle >= math.Pi/2-turnEpsilon || angle < -math.Pi/2-turnEpsilon {
 		// Text reads left to right or upwards, never upside down.
 		angle -= math.Pi
 	}
-	sin, cos := math.Sincos(angle)
+	sin, cos := detmath.Sincos(angle)
 	mx, my := (ax+bx)/2, (ay+by)/2
 	art.draw = func(ctx context.Context) []typeset.Fragment {
 		out := prev(ctx)
@@ -735,7 +736,7 @@ func (r *reader) measureText(el *odf.Element, art *shapeArt) {
 		var runs []typeset.Fragment
 		for _, run := range l.Runs {
 			t := *run
-			t.Origin = typeset.Point{X: run.Origin.X - l.Width/2, Y: -measureTextGap}
+			t.Origin = typeset.Point{X: run.Origin.X - float64(l.Width/2), Y: -measureTextGap}
 			runs = append(runs, &t)
 		}
 		return append(out, &typeset.Group{Transform: typeset.Matrix{A: cos, B: sin, C: -sin, D: cos, E: mx, F: my}, Opacity: 1, Content: runs})

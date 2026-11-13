@@ -186,9 +186,9 @@ func durationDays(s string) (float64, bool) {
 		}
 		switch unit := rest[i]; {
 		case unit == 'Y' && !inTime:
-			days += v * 365
+			days += float64(v * 365)
 		case unit == 'M' && !inTime:
-			days += v * 30
+			days += float64(v * 30)
 		case unit == 'D' && !inTime:
 			days += v
 		case unit == 'H' && inTime:

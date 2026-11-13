@@ -467,7 +467,7 @@ func (ts *tableState) colLeft(c int) float64 {
 	if c < len(ts.colX) {
 		return ts.colX[c]
 	}
-	return ts.colX[len(ts.colX)-1] + float64(c-len(ts.colX)+1)*ts.sh.DefaultColumnWidth
+	return ts.colX[len(ts.colX)-1] + float64(float64(c-len(ts.colX)+1)*ts.sh.DefaultColumnWidth)
 }
 
 // rowsOf reads the rows of el and of its row groups and header rows
@@ -574,7 +574,7 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 			ts.pending = append(ts.pending, pendingRows{row: row, n: n})
 		}
 		ts.row = start + n
-		ts.rowY += float64(n) * height
+		ts.rowY += float64(float64(n) * height)
 		return
 	}
 	for i := range n {
@@ -606,7 +606,7 @@ func (r *reader) row(ts *tableState, el *odf.Element, hidden, header bool) {
 		}
 	}
 	ts.row = start + n
-	ts.rowY += float64(n) * height
+	ts.rowY += float64(float64(n) * height)
 }
 
 // visAttrStop is the run of rows with equal attributes and no content

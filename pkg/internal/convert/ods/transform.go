@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -13,15 +14,15 @@ import (
 // mul returns m after n: n applied first.
 func mul(m, n typeset.Matrix) typeset.Matrix {
 	return typeset.Matrix{
-		A: m.A*n.A + m.C*n.B, B: m.B*n.A + m.D*n.B,
-		C: m.A*n.C + m.C*n.D, D: m.B*n.C + m.D*n.D,
-		E: m.A*n.E + m.C*n.F + m.E, F: m.B*n.E + m.D*n.F + m.F,
+		A: float64(m.A*n.A) + float64(m.C*n.B), B: float64(m.B*n.A) + float64(m.D*n.B),
+		C: float64(m.A*n.C) + float64(m.C*n.D), D: float64(m.B*n.C) + float64(m.D*n.D),
+		E: float64(m.A*n.E) + float64(m.C*n.F) + m.E, F: float64(m.B*n.E) + float64(m.D*n.F) + m.F,
 	}
 }
 
 // apply maps the point (x, y) by m.
 func apply(m typeset.Matrix, x, y float64) (float64, float64) {
-	return m.A*x + m.C*y + m.E, m.B*x + m.D*y + m.F
+	return float64(m.A*x) + float64(m.C*y) + m.E, float64(m.B*x) + float64(m.D*y) + m.F
 }
 
 // translation returns the transform moving by (x, y).
@@ -89,7 +90,7 @@ func parseTransform(s string) (typeset.Matrix, bool) {
 			if !ok {
 				return m, false
 			}
-			sin, cos := math.Sincos(a)
+			sin, cos := detmath.Sincos(a)
 			op = typeset.Matrix{A: cos, B: -sin, C: sin, D: cos}
 		case "translate":
 			x, ok := num(0, true)
@@ -117,9 +118,9 @@ func parseTransform(s string) (typeset.Matrix, bool) {
 			// the page, y pointing down, as the counterclockwise rotate
 			// turns it.
 			if name == "skewX" {
-				op = typeset.Matrix{A: 1, C: -math.Tan(a), D: 1}
+				op = typeset.Matrix{A: 1, C: -detmath.Tan(a), D: 1}
 			} else {
-				op = typeset.Matrix{A: 1, B: -math.Tan(a), D: 1}
+				op = typeset.Matrix{A: 1, B: -detmath.Tan(a), D: 1}
 			}
 		case "matrix":
 			var v [6]float64

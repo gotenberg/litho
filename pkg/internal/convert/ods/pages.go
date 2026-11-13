@@ -269,7 +269,7 @@ func (r *reader) scale(pg *sheet.PageSetup, pp odf.Props) {
 		return min(n, maxScaleTo), true
 	}
 	if pc, ok := odf.Percent(pp.Get("style:scale-to")); ok && pc > 0 {
-		pg.Scale = max(minScale, min(maxScale, int(pc*100+0.5))) // fits int: odf.Percent caps pc at 10,000
+		pg.Scale = max(minScale, min(maxScale, int(float64(pc*100)+0.5))) // fits int: odf.Percent caps pc at 10,000
 	}
 	x, okX := count("style:scale-to-X")
 	y, okY := count("style:scale-to-Y")
