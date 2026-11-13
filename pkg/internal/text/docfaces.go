@@ -64,10 +64,9 @@ type FaceDescriptor struct {
 	// the features of its [Style] (CSS Fonts 4, 7.2).
 	Features []Feature
 	// Variations are the axis values the rule's font-variation-settings
-	// descriptor sets: a variable face is drawn with them after the
-	// values its [Style]'s weight, stretch and slant imply and before
-	// those of its optical size and of [FontSettings.Variations] (CSS
-	// Fonts 4, 4.6 and 7.2).
+	// descriptor sets (CSS Fonts 4, 4.6): a variable face is drawn with
+	// them after the values its [Style]'s weight, stretch, slant and
+	// optical size imply and before [FontSettings.Variations].
 	Variations []Variation
 
 	// autoWeight and autoStretch record a weight or stretch range left at

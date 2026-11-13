@@ -147,10 +147,10 @@ type FontSettings struct {
 	// from U+20 to U+7E, padded with spaces. "" keeps Lang's.
 	LanguageSystem string
 	// Variations are the axis values of a variable face set after those
-	// the style's weight, stretch, slant and size imply, in order, a later
-	// value of a tag overriding an earlier one: CSS font-variation-settings
-	// (CSS Fonts 4, 8.2 and 7.2). A face that is not variable ignores
-	// them.
+	// the style's weight, stretch, slant and size and the face's
+	// descriptors imply, in order, a later value of a tag overriding an
+	// earlier one: CSS font-variation-settings (CSS Fonts 4, 8.2 and 7.2).
+	// A face that is not variable ignores them.
 	Variations []Variation
 	// NoOpticalSizing leaves the opsz axis of a variable face at its
 	// default, CSS font-optical-sizing: none (CSS Fonts 4, 8.1); by

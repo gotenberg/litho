@@ -45,8 +45,8 @@ type FontFace struct {
 	FeatureSettings []FeatureSetting
 	// VariationSettings are the font-variation-settings descriptor's axis
 	// values, which apply to text drawn in the face after the font
-	// properties' and before font-optical-sizing and the property's (CSS
-	// Fonts 4, 4.6 and 7.2); nil for normal.
+	// properties' and before the property's (CSS Fonts 4, 4.6 and 7.2);
+	// nil for normal.
 	VariationSettings []VariationSetting
 	// WeightAuto, StretchAuto and StyleAuto report a font-weight,
 	// font-stretch or font-style descriptor left out or set to auto:

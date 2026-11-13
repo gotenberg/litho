@@ -139,10 +139,10 @@ func TestVariableFaceDefaultInstance(t *testing.T) {
 	}
 }
 
-// TestVariableFaceCoordinates pins the axis values a style and a rule set
-// (CSS Fonts 4, 7.2): the font properties clamped to the rule's
-// descriptors, the rule's variations, the optical size, then the style's
-// variations; italic as a slant of 14 degrees, never the ital axis.
+// TestVariableFaceCoordinates pins the axis values a style and a rule set:
+// the font properties clamped to the rule's descriptors, the optical size,
+// the rule's variations, then the style's variations, as Chromium orders
+// them; italic as a slant of 14 degrees, never the ital axis.
 func TestVariableFaceCoordinates(t *testing.T) {
 	t.Parallel()
 	// The axes are wght, wdth, slnt, opsz and TEST.
@@ -161,7 +161,7 @@ func TestVariableFaceCoordinates(t *testing.T) {
 		{"oblique range", FaceDescriptor{Style: FaceOblique, ObliqueMin: 0, ObliqueMax: 3}, Style{Italic: true, Oblique: 5, Size: 12}, []float64{400, 100, -3, 12, 0}},
 		{"italic rule", FaceDescriptor{Style: FaceItalic}, Style{Size: 12}, []float64{400, 100, -14, 12, 0}},
 		{"normal rule", FaceDescriptor{}, Style{Italic: true, Size: 12}, []float64{400, 100, 0, 12, 0}},
-		{"rule optical size", FaceDescriptor{Variations: []Variation{{"opsz", 100}}}, Style{Size: 24}, []float64{400, 100, 0, 24, 0}},
+		{"rule optical size", FaceDescriptor{Variations: []Variation{{"opsz", 100}}}, Style{Size: 24}, []float64{400, 100, 0, 100, 0}},
 		{"no optical sizing", FaceDescriptor{}, Style{Size: 24, Settings: &FontSettings{NoOpticalSizing: true}}, []float64{400, 100, 0, 12, 0}},
 		{"pixels", FaceDescriptor{}, Style{Size: 24, Fallback: FallbackChromium}, []float64{400, 100, 0, 32, 0}},
 	} {

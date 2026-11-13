@@ -203,8 +203,8 @@ type DefaultInstance struct {
 // A variable document face ([LoadFace], [Fonts.LocalFace]) draws the
 // instance its run's style asks for (CSS Fonts 4, 7.2): wght from the
 // weight, wdth from the stretch and slnt from the slant, each clamped to
-// the face's descriptors, then the descriptors' variations, opsz from the
-// size unless [FontSettings.NoOpticalSizing], then
+// the face's descriptors, opsz from the size unless
+// [FontSettings.NoOpticalSizing], then the descriptors' variations and
 // [FontSettings.Variations], each clamped to its axis. The run is shaped
 // with the variable font at those coordinates, its glyphs advance by the
 // instance's own rounded advances, and its [typeset.Face] is the static

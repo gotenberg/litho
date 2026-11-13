@@ -113,11 +113,14 @@ func (fc *Face) readVariations(program []byte, d *FaceDescriptor) {
 }
 
 // userCoordinates returns the user coordinates the face is drawn at in
-// style, one per axis of its 'fvar' table, in the order CSS Fonts 4, 7.2
-// applies them: the font-weight, font-stretch and font-style properties
-// clamped to the rule's descriptors, the rule's font-variation-settings,
-// font-optical-sizing, then the style's font-variation-settings. Each
-// value is clamped to its axis when the coordinates are normalized.
+// style, one per axis of its 'fvar' table: the font-weight, font-stretch
+// and font-style properties clamped to the rule's descriptors,
+// font-optical-sizing, the rule's font-variation-settings, then the
+// style's font-variation-settings. Each value is clamped to its axis when
+// the coordinates are normalized. CSS Fonts 4, 7.2 applies
+// font-optical-sizing after the rule's font-variation-settings; Chromium
+// applies it before, so that a rule's opsz holds, and litho follows
+// Chromium.
 //
 // font-style sets the slnt axis to the negated slope (CSS Fonts 4, 2.4:
 // slnt counts counter-clockwise), italic as 14 degrees; it never sets the
@@ -134,7 +137,8 @@ func (fc *Face) readVariations(program []byte, d *FaceDescriptor) {
 //     "wght" 700 at font-weight: 400 with those of wght 700; a rule's
 //     font-variation-settings: "wght" 800 at font-weight: 300 with those
 //     of wght 800; font-weight: 900 under font-weight: 300 500 with those
-//     of wght 500.
+//     of wght 500; a rule's font-variation-settings: "opsz" 144, "wdth" 125
+//     at 48px with those of opsz 144 and wdth 125, as the same property.
 func (fc *Face) userCoordinates(style *Style) []float64 {
 	axes := fc.vf.Axes()
 	user := axes.Defaults()
@@ -172,11 +176,6 @@ func (fc *Face) userCoordinates(style *Style) []float64 {
 	set(axisWeight, weight)
 	set(axisWidth, stretch)
 	set(axisSlant, 0-slope)
-	if d != nil {
-		for _, v := range d.Variations {
-			set(v.Tag, v.Value)
-		}
-	}
 	settings := style.settings()
 	if !settings.NoOpticalSizing {
 		size := style.Size
@@ -184,6 +183,11 @@ func (fc *Face) userCoordinates(style *Style) []float64 {
 			size *= cssPixelsPerPoint
 		}
 		set(axisOpticalSize, size)
+	}
+	if d != nil {
+		for _, v := range d.Variations {
+			set(v.Tag, v.Value)
+		}
 	}
 	for _, v := range settings.Variations {
 		set(v.Tag, v.Value)
