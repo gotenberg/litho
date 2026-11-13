@@ -442,11 +442,6 @@ td,
 th {
   vertical-align: inherit;
 }
-table,
-td,
-th {
-  border-color: gray;
-}
 thead,
 tbody,
 tfoot,
@@ -476,6 +471,131 @@ table[border]:not([border="0"]) > :is(thead, tbody, tfoot) > tr > :is(td, th) {
   border-style: inset;
 }
 
+/* 15.3.8 The cells of a table with a rules attribute, and a form a
+ * table holds, which the parser lets in. */
+table[rules="none" i] > tr > td {
+  border-color: black;
+}
+table[rules="none" i] > tr > th {
+  border-color: black;
+}
+table[rules="groups" i] > tr > td {
+  border-color: black;
+}
+table[rules="groups" i] > tr > th {
+  border-color: black;
+}
+table[rules="rows" i] > tr > td {
+  border-color: black;
+}
+table[rules="rows" i] > tr > th {
+  border-color: black;
+}
+table[rules="cols" i] > tr > td {
+  border-color: black;
+}
+table[rules="cols" i] > tr > th {
+  border-color: black;
+}
+table[rules="all" i] > tr > td {
+  border-color: black;
+}
+table[rules="all" i] > tr > th {
+  border-color: black;
+}
+table[rules="none" i] > thead > tr > td {
+  border-color: black;
+}
+table[rules="none" i] > thead > tr > th {
+  border-color: black;
+}
+table[rules="groups" i] > thead > tr > td {
+  border-color: black;
+}
+table[rules="groups" i] > thead > tr > th {
+  border-color: black;
+}
+table[rules="rows" i] > thead > tr > td {
+  border-color: black;
+}
+table[rules="rows" i] > thead > tr > th {
+  border-color: black;
+}
+table[rules="cols" i] > thead > tr > td {
+  border-color: black;
+}
+table[rules="cols" i] > thead > tr > th {
+  border-color: black;
+}
+table[rules="all" i] > thead > tr > td {
+  border-color: black;
+}
+table[rules="all" i] > thead > tr > th {
+  border-color: black;
+}
+table[rules="none" i] > tbody > tr > td {
+  border-color: black;
+}
+table[rules="none" i] > tbody > tr > th {
+  border-color: black;
+}
+table[rules="groups" i] > tbody > tr > td {
+  border-color: black;
+}
+table[rules="groups" i] > tbody > tr > th {
+  border-color: black;
+}
+table[rules="rows" i] > tbody > tr > td {
+  border-color: black;
+}
+table[rules="rows" i] > tbody > tr > th {
+  border-color: black;
+}
+table[rules="cols" i] > tbody > tr > td {
+  border-color: black;
+}
+table[rules="cols" i] > tbody > tr > th {
+  border-color: black;
+}
+table[rules="all" i] > tbody > tr > td {
+  border-color: black;
+}
+table[rules="all" i] > tbody > tr > th {
+  border-color: black;
+}
+table[rules="none" i] > tfoot > tr > td {
+  border-color: black;
+}
+table[rules="none" i] > tfoot > tr > th {
+  border-color: black;
+}
+table[rules="groups" i] > tfoot > tr > td {
+  border-color: black;
+}
+table[rules="groups" i] > tfoot > tr > th {
+  border-color: black;
+}
+table[rules="rows" i] > tfoot > tr > td {
+  border-color: black;
+}
+table[rules="rows" i] > tfoot > tr > th {
+  border-color: black;
+}
+table[rules="cols" i] > tfoot > tr > td {
+  border-color: black;
+}
+table[rules="cols" i] > tfoot > tr > th {
+  border-color: black;
+}
+table[rules="all" i] > tfoot > tr > td {
+  border-color: black;
+}
+table[rules="all" i] > tfoot > tr > th {
+  border-color: black;
+}
+:is(table, thead, tbody, tfoot, tr) > form {
+  display: none !important;
+}
 /* 15.3.10 Form controls */
 input,
 select,

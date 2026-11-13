@@ -39,3 +39,32 @@ func TestUserAgent_RenderingRules(t *testing.T) {
 		t.Errorf("marquee: overflow %v, text-align %v", m.Overflow, m.TextAlign)
 	}
 }
+
+// TestUserAgent_TableBorderColors locks the border colours of tables and
+// cells: currentColor, as the HTML Standard's Rendering section leaves
+// them (15.3.8), black for the cells of a table with a rules attribute,
+// and a form a table holds hidden.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium in gotenberg/gotenberg:9.4.1 computes the
+//     top border colour of a table with border=1 and of its cell, of a
+//     cell of a table with rules=all and of a plain table's cell as
+//     rgb(0, 0, 0), and a form between tr and td as display none.
+func TestUserAgent_TableBorderColors(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<body><table id=t border=1><tr><td id=c>a</td></tr></table>
+<table rules=all><tr><td id=r>b</td></tr></table><table><tr><form id=f><td>c</td></form></tr></table></body>`, `table { color: red } #r { color: blue }`)
+	if s := c.of("t"); !colorEq(s.Border[Top].Color, rgb(255, 0, 0)) {
+		t.Errorf("table border colour %+v, want currentColor", s.Border[Top].Color)
+	}
+	if s := c.of("c"); !colorEq(s.Border[Top].Color, rgb(255, 0, 0)) {
+		t.Errorf("cell border colour %+v, want currentColor", s.Border[Top].Color)
+	}
+	if s := c.of("r"); !colorEq(s.Border[Top].Color, rgb(0, 0, 0)) {
+		t.Errorf("cell of rules=all: border colour %+v, want black", s.Border[Top].Color)
+	}
+	if s := c.of("f"); s != nil && s.Display != DisplayNone {
+		t.Errorf("form in a table: display %v", s.Display)
+	}
+}
