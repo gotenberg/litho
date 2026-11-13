@@ -44,6 +44,9 @@ type scale struct {
 	// log is the logarithm base of a logarithmic scale, 0 for linear.
 	log     float64
 	reverse bool
+	// origin is the value the ticks of a linear scale count from: they
+	// fall on its multiples of major and minor.
+	origin float64
 }
 
 // scaleOptions are the automatic scaling rules of a dimension, as
@@ -56,7 +59,7 @@ type scaleOptions struct {
 	// border adds an interval when a value lies within 1/21 of the range
 	// of the axis end.
 	border bool
-	// maxCount is the most major intervals, from 2 to 10.
+	// maxCount is the most major intervals, from 1 to 10.
 	maxCount int
 }
 
@@ -90,8 +93,8 @@ func autoScale(ax *Axis, lo, hi float64, opt scaleOptions) scale {
 	if !autoMax {
 		hi = fixMax
 	}
-	if opt.maxCount < 2 {
-		opt.maxCount = 2
+	if opt.maxCount < 1 {
+		opt.maxCount = 1
 	}
 	opt.maxCount = min(opt.maxCount, maxAutoTicks)
 	if lo > hi {
@@ -314,7 +317,7 @@ func (s scale) ticks() []float64 {
 		}
 		return out
 	}
-	start := ceilAt(s.min, s.major, 0)
+	start := ceilAt(s.min, s.major, s.origin)
 	if math.Abs(start-s.min) > 1e-9*math.Max(1, math.Abs(s.major)) && start-s.major >= s.min-1e-9*s.major {
 		start -= s.major
 	}
@@ -347,9 +350,9 @@ func (s scale) minorTicks() []float64 {
 	// The ticks accumulate the step, which rounds differently from
 	// start + i*step. A step under half the spacing of the floats near v
 	// leaves v where it is, and the walk stops there.
-	v := ceilAt(s.min, step, 0)
+	v := ceilAt(s.min, step, s.origin)
 	for i := 0; i < maxMinorSteps && v <= s.max+1e-9*step; i++ {
-		r := math.Abs(math.Remainder(v, s.major))
+		r := math.Abs(math.Remainder(v-s.origin, s.major))
 		if r > 1e-9*s.major {
 			out = append(out, v)
 		}

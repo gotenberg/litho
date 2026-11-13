@@ -111,6 +111,26 @@ func lineHeight(size float64) float64 {
 	return size * chartLineHeight
 }
 
+// faceLineHeight returns the height Office gives a line of chart text: the
+// ascent, descent and line gap of the faces on l, or lineHeight(size) for
+// a line without metrics.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: Excel prints a 10 pt bold Calibri title's baseline
+//     9.52 pt below the line's top, Calibri's ascent, and moves the plot
+//     area 2.44 pt down from 10 pt tick labels to 14 pt ones, half of four
+//     times Calibri's line of 1.2207 ems.
+//   - litho/xlsx: Excel prints a 14 pt title's baseline 13.33 pt below the
+//     same top, and puts the plot area 4.89 pt lower than under the
+//     probe's 10 pt title.
+func faceLineHeight(l text.Line, size float64) float64 {
+	if h := l.Ascent + l.Descent + l.LineGap; numeric.Positive(h) {
+		return h
+	}
+	return lineHeight(size)
+}
+
 // align is a horizontal alignment of a block's lines.
 type align uint8
 

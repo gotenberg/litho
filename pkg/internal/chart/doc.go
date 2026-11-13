@@ -30,6 +30,12 @@
 // is shaped through the text package and emitted as [typeset.Text], so
 // extraction reads it.
 //
+// A chart under [OfficeRules], as a DrawingML reader returns it, follows
+// Office's rules where they are known: its vertical primary value axis
+// takes as many intervals as its labels fit end to end, each label the
+// height of its line rounded to a whole pixel, and counts its ticks from
+// its minimum. The rest keeps LibreOffice's rules.
+//
 // Trendlines fit their series by least squares, or average them, and
 // enter the legend after their series. Error bars mark each point's error
 // with a capped line.

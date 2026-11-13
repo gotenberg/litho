@@ -34,6 +34,9 @@ type dim struct {
 	lo, hi       float64
 	// percent formats the ticks as percentages of a percent-stacked group.
 	percent bool
+	// officeScale counts the automatic major intervals by Office's rule
+	// (officeIntervals) rather than LibreOffice's.
+	officeScale bool
 	// loc is the separators of the chart's locale.
 	loc numfmt.Locale
 	// other is the crossing dimension.
@@ -465,6 +468,12 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 			}
 		}
 	}
+	if rd.office() && !horizontal && rd.threeD(g0) == nil && g0.Kind != Unsupported {
+		// Office's count holds for the vertical primary value axis
+		// (officeIntervals); a horizontal one, a secondary one and a
+		// percent-stacked one keep LibreOffice's.
+		ys[0].officeScale = !ys[0].percent
+	}
 	if xy && (math.IsInf(x.lo, 0) || math.IsInf(x.hi, 0)) {
 		x.lo, x.hi = 0, 0
 	}
@@ -543,12 +552,23 @@ func (rd *renderer) fitScale(d *dim) {
 			need = math.Max(need, w)
 		}
 	}
+	if d.officeScale {
+		if b := rd.measure(d.tickText(ticks[0]), d.style(), 0); b != nil {
+			opt.maxCount = officeIntervals(d.length(), faceLineHeight(b.lines[0], b.style.Size))
+			if same > 0 {
+				opt.maxCount = max(1, min(opt.maxCount, len(ticks)/(same+1)))
+			}
+			d.sc = autoScale(d.ax, d.lo, d.hi, opt)
+			d.sc.origin = officeOrigin(d.sc)
+			return
+		}
+	}
 	if need > 0 || same > 0 {
 		if need > 0 {
-			opt.maxCount = int(d.length() / need)
+			opt.maxCount = max(2, int(d.length()/need))
 		}
 		if same > 0 {
-			opt.maxCount = min(opt.maxCount, len(ticks)/(same+1))
+			opt.maxCount = max(2, min(opt.maxCount, len(ticks)/(same+1)))
 		}
 		d.sc = autoScale(d.ax, d.lo, d.hi, opt)
 	}
