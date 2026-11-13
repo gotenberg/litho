@@ -285,3 +285,21 @@ func TestMulticol_MarkerBySpannerLine(t *testing.T) {
 		t.Errorf("markers %+v, want one on the baseline of the spanner's line %v", marks, x.y)
 	}
 }
+
+// TestMulticol_OutlineUnderSpannerOutline locks that the outline of a
+// multi-column container paints before those of the boxes inside it, a
+// spanner's among them, as in a container without columns (CSS 2.1,
+// Appendix E, step 10, in tree order).
+func TestMulticol_OutlineUnderSpannerOutline(t *testing.T) {
+	t.Parallel()
+	outline := func(c css.Color) func(*css.Style) {
+		return func(s *css.Style) { s.Outline = css.Border{Width: px(1), Style: css.Solid, Color: c} }
+	}
+	span := func(s *css.Style) { s.Columns.SpanAll = true }
+	res := run(t, doc(el(sty(columns(1, 0), margin(1, 0, 0, 1), outline(red)), strip(lime, height(2), span, outline(blue)))), page(7, 4))
+	assertPixels(t, res, 1, `
+		BBBBBBB
+		BGGGGGB
+		BGGGGGB
+		BBBBBBB`)
+}

@@ -18,12 +18,13 @@ const pageMono = -2
 const farEdge = 1e5
 
 // multicol paints the multi-column container b: its background and
-// borders, its column rules, its outside marker, then each column set
-// painted in its column flow and cut at its columns, each column moved to
-// its place, and its spanners across the container (CSS Multicol 1, 2 and
-// 4). The marker sits by the first line box, whose painted place
-// [firstBaseline] already gives, in a column or in a spanner: it is
-// painted once, outside the columns.
+// borders, its column rules, its outside marker and its outline, then each
+// column set painted in its column flow and cut at its columns, each
+// column moved to its place, and its spanners across the container (CSS
+// Multicol 1, 2 and 4). The marker sits by the first line box, whose
+// painted place [firstBaseline] already gives, in a column or in a
+// spanner: it is painted once, outside the columns. The outline comes
+// before those of the boxes inside, as in a box without columns.
 func (p *painter) multicol(b *box) {
 	if b == p.canvas || b.parent == nil {
 		p.borders(b)
@@ -33,6 +34,7 @@ func (p *painter) multicol(b *box) {
 	p.linkBox(b)
 	p.columnRules(b)
 	p.marker(b)
+	p.outline(b)
 	marker := b.outside
 	b.outside = nil
 	defer func() { b.outside = marker }()
@@ -67,7 +69,6 @@ func (p *painter) multicol(b *box) {
 			p.dx, p.dy = sdx, sdy
 		}
 	}
-	p.outline(b)
 }
 
 // setBody paints the content of the column set whose boxes are the kids of
