@@ -264,6 +264,12 @@ type Office struct {
 	// hanging-punctuation: allow-end). It applies to the lines of a block
 	// container.
 	HangPunctuation bool
+	// KeepHangul keeps two Hangul syllables or jamo next to each other on
+	// one line, so that Korean text breaks at its spaces alone, as
+	// LibreOffice breaks it whatever the text's language, where UAX #14
+	// breaks between any two syllables (class H2, H3, LB31). It applies
+	// to the characters of the inline box that sets it.
+	KeepHangul bool
 }
 
 // WordAnchor places a float of [Office.WordAnchor] at a fixed offset, as

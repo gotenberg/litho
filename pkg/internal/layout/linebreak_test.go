@@ -111,3 +111,37 @@ func TestLineBreak_HangPunctuation(t *testing.T) {
 		})
 	}
 }
+
+// TestLineBreak_KeepHangul checks that css.Office.KeepHangul keeps two
+// Hangul syllables on one line, Korean breaking at its spaces alone,
+// while ideographs still break between each other.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, Korean paragraphs
+//     wrap at their spaces alone, Han text between any two ideographs.
+//   - litho/ods: cjk-cells and litho/odp: cjk-slides wrap their Korean
+//     articles at spaces alone.
+func TestLineBreak_KeepHangul(t *testing.T) {
+	keep := func(s *css.Style) { s.KeepHangul = true }
+	tests := []struct {
+		name string
+		st   *css.Style
+		text string
+		want []string
+	}{
+		{"breaks between syllables", sty(), "가나다라마", []string{"가나다", "라마"}},
+		{"keeps syllables together", sty(keep), "가나다라마", []string{"가나다라마"}},
+		{"breaks at a space", sty(keep), "가 나다라", []string{"가 ", "나다라"}},
+		{"breaks ideographs", sty(keep), "漢字漢字漢", []string{"漢字漢", "字漢"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := run(t, doc(el(tt.st, txt(tt.st, tt.text))), page(30, 100))
+			got, _ := lineTexts(res, 1)
+			if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+				t.Errorf("lines %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

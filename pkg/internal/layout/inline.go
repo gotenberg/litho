@@ -240,9 +240,12 @@ func (p *ifcPara) allowed(i int) bool {
 // keptTogether reports a boundary between two letters or digits that
 // word-break: keep-all closes (CSS Text 3, 5.3): the opportunities of UAX
 // #14 and those line-break opens between the typographic letter units of
-// CJK alike.
+// CJK alike; and one between two Hangul characters that
+// [css.Office.KeepHangul] closes.
 func (p *ifcPara) keptTogether(i int, a, b rune) bool {
-	return p.styleAt(i).WordBreak == css.KeepAll && isWordChar(a) && isWordChar(b)
+	st := p.styleAt(i)
+	return st.WordBreak == css.KeepAll && isWordChar(a) && isWordChar(b) ||
+		st.KeepHangul && unicode.Is(unicode.Hangul, a) && unicode.Is(unicode.Hangul, b)
 }
 
 // hangsPunct reports whether character i of p is punctuation that may

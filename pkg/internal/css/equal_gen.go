@@ -1470,6 +1470,9 @@ func equalOffice(a, b *Office) bool {
 	if a.HangPunctuation != b.HangPunctuation {
 		return false
 	}
+	if a.KeepHangul != b.KeepHangul {
+		return false
+	}
 	return true
 }
 
@@ -1492,6 +1495,7 @@ func hashOffice(h uint64, x *Office) uint64 {
 	h = mixBool(h, x.ExactHeight)
 	h = mixBool(h, x.WriterLines)
 	h = mixBool(h, x.HangPunctuation)
+	h = mixBool(h, x.KeepHangul)
 	return h
 }
 
