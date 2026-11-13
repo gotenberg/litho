@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
@@ -679,7 +680,7 @@ var idctCos = func() [8][8]float64 {
 			if u == 0 {
 				c = 1 / math.Sqrt2
 			}
-			t[x][u] = c * math.Cos(float64(2*x+1)*float64(u)*math.Pi/16) / 2
+			t[x][u] = c * detmath.Cos(float64(2*x+1)*float64(u)*math.Pi/16) / 2
 		}
 	}
 	return t
@@ -696,7 +697,7 @@ func idct(coef []int16, q *[64]int32, out *[64]byte) {
 		for x := range 8 {
 			s := 0.0
 			for u := range 8 {
-				s += idctCos[x][u] * f[y*8+u]
+				s += float64(idctCos[x][u] * f[y*8+u])
 			}
 			tmp[y*8+x] = s
 		}
@@ -705,7 +706,7 @@ func idct(coef []int16, q *[64]int32, out *[64]byte) {
 		for y := range 8 {
 			s := 0.0
 			for v := range 8 {
-				s += idctCos[y][v] * tmp[v*8+x]
+				s += float64(idctCos[y][v] * tmp[v*8+x])
 			}
 			out[y*8+x] = byte(min(max(math.Round(s+128), 0), 255))
 		}
@@ -785,5 +786,5 @@ func (d *decoder) transform(colorTransform int) bool {
 func ycc(y, cb, cr byte) (byte, byte, byte) {
 	fy, fcb, fcr := float64(y), float64(cb)-128, float64(cr)-128
 	clamp := func(v float64) byte { return byte(min(max(math.Round(v), 0), 255)) }
-	return clamp(fy + 1.402*fcr), clamp(fy - 0.344136*fcb - 0.714136*fcr), clamp(fy + 1.772*fcb)
+	return clamp(fy + float64(1.402*fcr)), clamp(fy - float64(0.344136*fcb) - float64(0.714136*fcr)), clamp(fy + float64(1.772*fcb))
 }

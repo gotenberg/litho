@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 )
 
 // MaxDimension is the largest width or height [Encode] writes: the frame
@@ -232,9 +234,9 @@ func toYCbCr(p [][]byte) {
 	clamp := func(v float64) byte { return byte(min(max(math.Round(v), 0), 255)) }
 	for i := range p[0] {
 		r, g, b := float64(p[0][i]), float64(p[1][i]), float64(p[2][i])
-		p[0][i] = clamp(0.299*r + 0.587*g + 0.114*b)
-		p[1][i] = clamp(-0.299/1.772*r - 0.587/1.772*g + 0.5*b + 128)
-		p[2][i] = clamp(0.5*r - 0.587/1.402*g - 0.114/1.402*b + 128)
+		p[0][i] = clamp(float64(0.299*r) + float64(0.587*g) + float64(0.114*b))
+		p[1][i] = clamp(float64(-0.299/1.772*r) - float64(0.587/1.772*g) + float64(0.5*b) + 128)
+		p[2][i] = clamp(float64(0.5*r) - float64(0.587/1.402*g) - float64(0.114/1.402*b) + 128)
 	}
 }
 
@@ -302,16 +304,16 @@ func (e *encoder) transform(ctx context.Context) error {
 // E71(11), 1988), as the Independent JPEG Group's jfdctflt.c applies them:
 // five multiplications a row, the output of each scaled by aanScale.
 var (
-	aanC4    = math.Cos(4 * math.Pi / 16)
-	aanC6    = math.Cos(6 * math.Pi / 16)
-	aanC2mC6 = math.Cos(2*math.Pi/16) - math.Cos(6*math.Pi/16)
-	aanC2pC6 = math.Cos(2*math.Pi/16) + math.Cos(6*math.Pi/16)
+	aanC4    = detmath.Cos(4 * math.Pi / 16)
+	aanC6    = detmath.Cos(6 * math.Pi / 16)
+	aanC2mC6 = detmath.Cos(2*math.Pi/16) - detmath.Cos(6*math.Pi/16)
+	aanC2pC6 = detmath.Cos(2*math.Pi/16) + detmath.Cos(6*math.Pi/16)
 	// aanScale holds the factor the factorisation leaves on output k, 1 for
 	// k = 0 and sqrt(2) cos(k pi/16) otherwise.
 	aanScale = func() (s [8]float64) {
 		s[0] = 1
 		for k := 1; k < 8; k++ {
-			s[k] = math.Sqrt2 * math.Cos(float64(k)*math.Pi/16)
+			s[k] = math.Sqrt2 * detmath.Cos(float64(k)*math.Pi/16)
 		}
 		return s
 	}()
@@ -371,15 +373,15 @@ func aan8(d []float64, stride int) {
 	t11, t12 := t1+t2, t1-t2
 	d[0] = t10 + t11
 	d[4*stride] = t10 - t11
-	z1 := (t12 + t13) * aanC4
+	z1 := float64((t12 + t13) * aanC4)
 	d[2*stride] = t13 + z1
 	d[6*stride] = t13 - z1
 
 	t10, t11, t12 = t4+t5, t5+t6, t6+t7
-	z5 := (t10 - t12) * aanC6
-	z2 := aanC2mC6*t10 + z5
-	z4 := aanC2pC6*t12 + z5
-	z3 := t11 * aanC4
+	z5 := float64((t10 - t12) * aanC6)
+	z2 := float64(aanC2mC6*t10) + z5
+	z4 := float64(aanC2pC6*t12) + z5
+	z3 := float64(t11 * aanC4)
 	z11, z13 := t7+z3, t7-z3
 	d[5*stride] = z13 + z2
 	d[3*stride] = z13 - z2
