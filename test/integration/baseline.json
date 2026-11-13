@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T16:45:06Z",
+  "captured_at": "2026-11-13T17:10:52Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9952,7 +9952,7 @@
               "text_f1": 0
             },
             "ooxmlexport/TextEffects_Glow_Shadow_Reflection.docx": {
-              "layout": 0.8703,
+              "layout": 0.8707,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9976,12 +9976,12 @@
               "text_f1": 1
             },
             "ooxmlexport/TextEffects_TextFill.docx": {
-              "layout": 0.8955,
+              "layout": 0.8957,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8
+              "text_f1": 0.6667
             },
             "ooxmlexport/TextEffects_TextOutline.docx": {
               "layout": 0.8445,
@@ -10333,7 +10333,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 1
             },
             "ooxmlexport/dml-charheight-default.docx": {
               "layout": 0.9994,
@@ -19621,7 +19621,7 @@
               "text_f1": 1
             },
             "sd/tdf103567.odp": {
-              "layout": 0.9381,
+              "layout": 0.93,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -20162,7 +20162,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9474
+              "text_f1": 1
             },
             "sd/tdf169941.odp": {
               "layout": 0.9231,
@@ -20269,7 +20269,7 @@
               "text_f1": 1
             },
             "sd/tdf90626.odp": {
-              "layout": 0.9623,
+              "layout": 0.9625,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -20322,7 +20322,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.75,
-              "text_f1": 0.7245
+              "text_f1": 1
             },
             "sd/tdf99213-target-missing.odp": {
               "layout": 0.8375,
@@ -25486,7 +25486,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9333
+              "text_f1": 0.9392
             },
             "sc/tdf122331.ods": {
               "layout": 0.7789,
@@ -31462,8 +31462,8 @@
     "libreoffice/odt": {
       "features": {
         "diff": {
-          "matched": 120,
-          "mismatched": 75,
+          "matched": 121,
+          "mismatched": 74,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -31589,7 +31589,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 0.9661
             },
             "layout/drop_vertical.fodt": {
               "layout": 0,
@@ -32397,7 +32397,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.3333
+              "text_f1": 1
             },
             "odfexport/table_styles_3.odt": {
               "layout": 0.9973,
@@ -33022,7 +33022,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.6667
             },
             "odfimport/tdf100033_2.odt": {
               "layout": 0,
@@ -38084,7 +38084,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8235
+              "text_f1": 1
             },
             "sd/bnc910045.pptx": {
               "layout": 0.9853,
@@ -38159,7 +38159,7 @@
               "text_f1": 1
             },
             "sd/croppedTo0.pptx": {
-              "layout": 0.9608,
+              "layout": 0.9714,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38260,7 +38260,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8293
+              "text_f1": 1
             },
             "sd/lineStyle.pptx": {
               "layout": 0.9009,
@@ -38455,7 +38455,7 @@
               "text_f1": 1
             },
             "sd/shape-soft-edges.pptx": {
-              "layout": 0.9328,
+              "layout": 0.9704,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -38564,7 +38564,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 0.4
             },
             "sd/smartart-composite-infer-right.pptx": {
               "layout": 0.9464,
@@ -45995,8 +45995,8 @@
     "libreoffice/xlsx": {
       "features": {
         "diff": {
-          "matched": 154,
-          "mismatched": 74,
+          "matched": 155,
+          "mismatched": 73,
           "skipped": 24,
           "metrics": {
             "convert_error": 0,
@@ -46250,7 +46250,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.2571
+              "text_f1": 0.9615
             },
             "chart2/custom_data_label.xlsx": {
               "layout": 0.8661,
@@ -47514,7 +47514,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8889
+              "text_f1": 1
             },
             "sc/tdf135828_Shape_Rect.xlsx": {
               "layout": 0.5629,
@@ -54782,7 +54782,7 @@
               "text_f1": 1
             },
             "images-crop-transform": {
-              "layout": 0.7974,
+              "layout": 0.7961,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55510,7 +55510,7 @@
               "text_f1": 1
             },
             "shapes-effects-3d": {
-              "layout": 0.8505,
+              "layout": 0.856,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -59926,8 +59926,8 @@
     "litho/html": {
       "features": {
         "diff": {
-          "matched": 187,
-          "mismatched": 9,
+          "matched": 188,
+          "mismatched": 8,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -61464,12 +61464,12 @@
               "text_f1": 1
             },
             "text-shadow-blur": {
-              "layout": 0.947,
+              "layout": 0.9469,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.6783
+              "text_f1": 1
             },
             "th-line-break": {
               "layout": 0.234,
@@ -66758,7 +66758,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9957
+              "text_f1": 1
             },
             "fit-one-page-paper": {
               "layout": 0.9688,
@@ -66766,7 +66766,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9957
+              "text_f1": 1
             },
             "hidden-sheets": {
               "layout": 0.9218,
@@ -66798,7 +66798,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9967
+              "text_f1": 1
             },
             "mixed-sheets-landscape": {
               "layout": 0.9753,
@@ -66806,7 +66806,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9947
+              "text_f1": 1
             },
             "mixed-sheets-paper": {
               "layout": 0.9762,
@@ -66814,7 +66814,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9975
+              "text_f1": 1
             },
             "no-page-size": {
               "layout": 0.9766,
@@ -66822,7 +66822,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9971
+              "text_f1": 1
             },
             "paper-fit": {
               "layout": 0.9779,
@@ -72433,7 +72433,7 @@
               "text_f1": 1
             },
             "picture-geometry": {
-              "layout": 0.9679,
+              "layout": 0.9685,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -72630,7 +72630,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.99
+              "text_f1": 1
             },
             "table-borders": {
               "layout": 0.8657,
@@ -72710,7 +72710,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8
+              "text_f1": 0.8889
             },
             "text-levels": {
               "layout": 0.9513,
@@ -82518,12 +82518,12 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/format/format-font2.docx": {
-              "layout": 0.697,
+              "layout": 0.6968,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.3875
+              "text_f1": 0.3617
             },
             "v2FxTestFiles/wordprocessing/format/format-paragrapsimple.docx": {
               "layout": 0.4875,
@@ -88719,7 +88719,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/AutoShapes_2D_Soft_Edges_5_Point_.pptx": {
-              "layout": 0.9529,
+              "layout": 0.9595,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -88980,7 +88980,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.5
+              "text_f1": 1
             },
             "v2FxTestFiles/presentation/O12_templates/EmpOrienPres_TP10220212.potx": {
               "layout": 0.7471,
@@ -93082,8 +93082,8 @@
     "openxmlsdk/xlsx": {
       "features": {
         "diff": {
-          "matched": 23,
-          "mismatched": 26,
+          "matched": 24,
+          "mismatched": 25,
           "skipped": 5,
           "metrics": {
             "convert_error": 0,
@@ -93258,7 +93258,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8
+              "text_f1": 1
             },
             "v2FxTestFiles/spreadsheet/FilterColumn.xlsx": {
               "layout": 0.9468,
@@ -93346,7 +93346,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9985
+              "text_f1": 1
             },
             "v2FxTestFiles/spreadsheet/O12_templates/VendorScorecardReport_TP10194032.xltx": {
               "layout": 0.8484,
