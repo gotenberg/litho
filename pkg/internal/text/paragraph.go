@@ -310,6 +310,9 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 		return nil, Report{}, err
 	}
 	defer st.release()
+	// The instances of variable faces the paragraph creates are charged
+	// to the conversion.
+	st.mem = limits.BudgetFrom(ctx)
 	// total is the paragraph's character count: the per-character
 	// slices, held as long as the paragraph, take no spare capacity.
 	p := &Paragraph{

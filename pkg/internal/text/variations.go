@@ -329,10 +329,11 @@ func (st *layoutState) instanceInput(ctx context.Context, in *shaping.Input, sty
 	inst, err := fc.instanceOf(ctx, style, st.mem)
 	switch {
 	case err == nil:
+	case errors.Is(err, limits.ErrMemoryBudget):
+		// A refused charge also cancels ctx: the budget's error says why.
+		return err
 	case ctx.Err() != nil:
 		return ctx.Err()
-	case errors.Is(err, limits.ErrMemoryBudget):
-		return err
 	default:
 		st.noteDefaultInstance(fc, err)
 	}

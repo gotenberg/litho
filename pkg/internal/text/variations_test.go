@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 	"github.com/gotenberg/litho/pkg/internal/typography/varfont"
 )
@@ -246,5 +247,26 @@ func TestVariableFaceUnsupported(t *testing.T) {
 	got, err := fc.instanceOf(context.Background(), &Style{Weight: 700, Size: 12}, nil)
 	if got != fc || !errors.Is(err, varfont.ErrUnsupported) {
 		t.Errorf("instanceOf = %p, %v; want the face itself and ErrUnsupported", got, err)
+	}
+}
+
+// TestVariableFaceChargesTheBudget pins that an instance a paragraph
+// creates is charged to the conversion's memory budget: a budget smaller
+// than the instance refuses it.
+func TestVariableFaceChargesTheBudget(t *testing.T) {
+	t.Parallel()
+	fonts, base := loadVarFace(t, FaceDescriptor{})
+	ctx, b, done := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 1 << 20})
+	defer done()
+	if err := b.Charge(1<<20-1024, "test"); err != nil {
+		t.Fatal(err)
+	}
+	style := Style{Families: []string{"Var"}, Weight: 700, Size: 12}
+	_, _, err := fonts.Shape(ctx, []ParagraphRun{{Text: "AB", Style: style}}, ParagraphOptions{})
+	if !errors.Is(err, limits.ErrMemoryBudget) {
+		t.Errorf("Shape past the budget = %v, want ErrMemoryBudget", err)
+	}
+	if len(base.instances) != 0 {
+		t.Error("the refused instance was kept")
 	}
 }
