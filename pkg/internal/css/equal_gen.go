@@ -284,6 +284,12 @@ func equalStyle(a, b *Style) bool {
 	if !equalDimension(&a.TextIndent, &b.TextIndent) {
 		return false
 	}
+	if a.TextIndentHanging != b.TextIndentHanging {
+		return false
+	}
+	if a.TextIndentEachLine != b.TextIndentEachLine {
+		return false
+	}
 	if a.TextTransform != b.TextTransform {
 		return false
 	}
@@ -722,6 +728,8 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = hashDimension(h, &x.TextDecorationThickness)
 	h = hashDimension(h, &x.TextUnderlineOffset)
 	h = hashDimension(h, &x.TextIndent)
+	h = mixBool(h, x.TextIndentHanging)
+	h = mixBool(h, x.TextIndentEachLine)
 	h = mix(h, uint64(x.TextTransform))
 	h = hashDimension(h, &x.LetterSpacing)
 	h = hashDimension(h, &x.WordSpacing)

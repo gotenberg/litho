@@ -796,10 +796,13 @@ func init() {
 		}, copyFrom: field(func(s *Style) *UnderlinePosition { return &s.TextUnderlinePosition })}},
 		{pTextUnderlineOffset, dimProp("text-underline-offset", true, func(s *Style) *Dimension { return &s.TextUnderlineOffset }, allowPct|allowMixed, kwAuto, false)},
 		{pTextIndent, propDef{name: "text-indent", inherited: true, parse: parseTextIndent, compute: func(s *styler, st *Style, v any) {
-			if l, ok := v.(length); ok {
-				st.TextIndent = l.dim(s.lc, false)
+			if t, ok := v.(textIndent); ok {
+				st.TextIndent = t.l.dim(s.lc, false)
+				st.TextIndentHanging, st.TextIndentEachLine = t.hanging, t.eachLine
 			}
-		}, copyFrom: field(func(s *Style) *Dimension { return &s.TextIndent })}},
+		}, copyFrom: func(dst, src *Style) {
+			dst.TextIndent, dst.TextIndentHanging, dst.TextIndentEachLine = src.TextIndent, src.TextIndentHanging, src.TextIndentEachLine
+		}}},
 		{pTextTransform, enumProp("text-transform", true, func(s *Style) *TextTransform { return &s.TextTransform }, map[string]TextTransform{
 			"none": TransformNone, "capitalize": Capitalize, "uppercase": Uppercase, "lowercase": Lowercase,
 		})},
@@ -1010,23 +1013,37 @@ func parseBgClip(v []token, c *declCtx) (any, bool) {
 
 // parseTextIndent parses text-indent (CSS Text 3, 8.1); the hanging and
 // each-line keywords are accepted and ignored.
+// parseTextIndent parses text-indent (CSS Text 3, 8.1):
+// [ <length-percentage> ] && hanging? && each-line?.
 func parseTextIndent(v []token, _ *declCtx) (any, bool) {
-	var l length
+	var t textIndent
 	found := false
-	for _, t := range v {
-		if t.isIdent("hanging") || t.isIdent("each-line") {
+	for _, tok := range v {
+		switch {
+		case tok.isIdent("hanging") && !t.hanging:
+			t.hanging = true
+			continue
+		case tok.isIdent("each-line") && !t.eachLine:
+			t.eachLine = true
 			continue
 		}
 		if found {
 			return nil, false
 		}
 		var ok bool
-		if l, ok = parseLength(t, allowPct); !ok {
+		if t.l, ok = parseLength(tok, allowPct|allowMixed); !ok {
 			return nil, false
 		}
 		found = true
 	}
-	return l, found
+	return t, found
+}
+
+// textIndent is a specified text-indent (CSS Text 3, 8.1): a length or
+// percentage, hanging and each-line.
+type textIndent struct {
+	l                 length
+	hanging, eachLine bool
 }
 
 // valignSpec is a specified vertical-align.

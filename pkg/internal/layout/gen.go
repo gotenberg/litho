@@ -490,6 +490,8 @@ func anonStyle(parent *css.Style) *css.Style {
 	st.LineHeight = parent.LineHeight
 	st.TextAlign = parent.TextAlign
 	st.TextIndent = parent.TextIndent
+	st.TextIndentHanging = parent.TextIndentHanging
+	st.TextIndentEachLine = parent.TextIndentEachLine
 	st.TextTransform = parent.TextTransform
 	st.LetterSpacing = parent.LetterSpacing
 	st.WordSpacing = parent.WordSpacing

@@ -627,10 +627,13 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 	first := true
 	indent := resolve(b.st.TextIndent, cb.w)
 	strutH := s.rootV.above + s.rootV.below
+	afterForced := false
 	for _, p := range d.paras {
 		if e.err != nil {
 			return y
 		}
+		prevForced := afterForced
+		afterForced = p.forced
 		if (p.forced || p.p != nil && p.p.Len() > 0) && e.clampDiscards() {
 			// A line clamp container discards what follows its last line
 			// (CSS Overflow 4, 6).
@@ -718,7 +721,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			}
 			s.placeFloats(p, pos, pos, top, mc, false)
 			lineIndent := 0.0
-			if len(s.lines) == 0 {
+			if indents(b.st, len(s.lines) == 0, paraFirst && prevForced) {
 				lineIndent = indent
 			}
 			top, end, left, right, l := s.fitLine(p, w, pos, lineIndent, top, strutH)
@@ -782,6 +785,15 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 	}
 	b.lines = s.lines
 	return y
+}
+
+// indents reports whether text-indent indents a line of the block of
+// style st (CSS Text 3, 8.1): the block's first line, and with each-line
+// the first line after each forced break too; hanging indents every other
+// line instead.
+func indents(st *css.Style, first, afterForced bool) bool {
+	on := first || st.TextIndentEachLine && afterForced
+	return on != st.TextIndentHanging
 }
 
 // pendingTop returns y with the margins pending in mc added when pending.
@@ -1638,7 +1650,7 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 		maxW := p.paraWidths(func(a *box) float64 { _, h := e.contribution(a); return h })
 		n := p.p.Len()
 		x := 0.0
-		if pi == 0 {
+		if indents(b.st, pi == 0, pi > 0 && d.paras[pi-1].forced) {
 			x = indent
 		}
 		trail := 0.0

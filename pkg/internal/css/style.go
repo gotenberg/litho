@@ -1090,9 +1090,14 @@ type Style struct {
 	// the distance from the alphabetic baseline down to the underline
 	// (CSS Text Decoration 4, 3.3).
 	TextUnderlineOffset Dimension
-	// TextIndent takes Points or Percent of the containing block's width.
-	TextIndent    Dimension
-	TextTransform TextTransform
+	// TextIndent takes Points, Percent or Calc of the containing block's
+	// width; TextIndentHanging inverts the lines it indents, and
+	// TextIndentEachLine indents the first line after each forced break as
+	// well as the first (CSS Text 3, 8.1).
+	TextIndent         Dimension
+	TextIndentHanging  bool
+	TextIndentEachLine bool
+	TextTransform      TextTransform
 	// LetterSpacing and WordSpacing take Normal or Points.
 	LetterSpacing Dimension
 	WordSpacing   Dimension

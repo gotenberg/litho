@@ -177,7 +177,9 @@ func TestProperties_Longhands(t *testing.T) {
 			return reflect.DeepEqual(s.FontFamilies, []string{"Times New Roman", "Arial Black", "serif"})
 		}},
 		{"text-align: justify", func(s *Style) bool { return s.TextAlign == AlignJustify }},
-		{"text-indent: 2em hanging", func(s *Style) bool { return s.TextIndent == pts(30) }},
+		{"text-indent: 2em hanging", func(s *Style) bool { return s.TextIndent == pts(30) && s.TextIndentHanging && !s.TextIndentEachLine }},
+		{"text-indent: each-line hanging 1px", func(s *Style) bool { return s.TextIndent == pts(0.75) && s.TextIndentHanging && s.TextIndentEachLine }},
+		{"text-indent: calc(10px + 10%)", func(s *Style) bool { return s.TextIndent.Kind == Calc }},
 		{"text-transform: uppercase", func(s *Style) bool { return s.TextTransform == Uppercase }},
 		{"letter-spacing: 2px; word-spacing: normal", func(s *Style) bool { return s.LetterSpacing == pts(1.5) && s.WordSpacing.Kind == Normal }},
 		{"white-space: pre-wrap", func(s *Style) bool { return s.WhiteSpace == PreWrap }},
