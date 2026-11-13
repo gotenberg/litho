@@ -58,6 +58,10 @@ type runProps struct {
 	glow       *css.OfficeGlow
 	textShadow *css.OfficeShadow
 	reflection *css.OfficeReflection
+	// textPaint is how w14:textFill and w14:textOutline paint the glyphs,
+	// textSolid a w14:textFill's solid colour, each nil when unset.
+	textPaint *css.OfficeTextPaint
+	textSolid *css.Color
 }
 
 // merge returns r with the properties o sets laid over it.
@@ -130,6 +134,9 @@ func (r runProps) merge(o *runProps) runProps {
 	}
 	if o.reflection != nil {
 		r.reflection = o.reflection
+	}
+	if o.textPaint != nil || o.textSolid != nil {
+		r.textPaint, r.textSolid = o.textPaint, o.textSolid
 	}
 	return r
 }
@@ -241,6 +248,7 @@ func (d *document) parseRunProps(e *ooxml.Element) *runProps {
 	}
 	fx := ooxml.ParseTextEffects(e, d.theme).Effects
 	r.glow, r.textShadow, r.reflection = fx.Glow, fx.Shadow, fx.Reflection
+	r.textPaint, r.textSolid = ooxml.ParseTextPaint(e, d.theme)
 	return r
 }
 

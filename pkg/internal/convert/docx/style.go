@@ -203,16 +203,17 @@ func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
 	if r.position != nil && *r.position != 0 {
 		st.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(*r.position)}
 	}
-	st.TextShadow = nil
-	if boolOf(r.shadow) || boolOf(r.emboss) || boolOf(r.imprint) {
-		// An approximation: Word's shadow is a grey copy offset down and
-		// right; emboss and imprint are drawn as one too.
-		off := max(st.FontSize/20, 0.5)
-		st.TextShadow = []css.Shadow{{X: off, Y: off, Color: css.Color{R: 0.6, G: 0.6, B: 0.6, A: 1}}}
-	}
+	st.TextShadow = legacyShadows(r)
 	st.TextEffects = nil
 	if r.glow != nil || r.textShadow != nil || r.reflection != nil {
 		st.TextEffects = &css.OfficeEffects{Glow: r.glow, Shadow: r.textShadow, Reflection: r.reflection}
+	}
+	if r.textSolid != nil {
+		st.Color = *r.textSolid
+	}
+	st.TextPaint = r.textPaint
+	if st.TextPaint == nil && boolOf(r.outline) {
+		st.TextPaint = &css.OfficeTextPaint{NoFill: true, Outline: &css.OfficeOutline{Color: st.Color, Width: legacyOutline}}
 	}
 	if lineMult > 0 {
 		st.LineHeight = css.Pts(d.proportionalLine(st, lineMult))
@@ -303,4 +304,52 @@ func hasCJK(s string) bool {
 		}
 	}
 	return false
+}
+
+// legacyOutline is the width in points of the stroke of a run of
+// w:outline (ECMA-376 Part 1, 17.3.2.23), whose glyphs Word leaves
+// unfilled.
+//
+// # Corpus evidence
+//
+//   - litho/docx run-effects: Word strokes the outlines of an 18 point run
+//     of w:outline 0.25 point wide in the run's colour, unfilled.
+const legacyOutline = 0.25
+
+// The grey of the legacy text effects' copies.
+var (
+	legacyShadowGrey = css.Color{R: 0xC0 / 255.0, G: 0xC0 / 255.0, B: 0xC0 / 255.0, A: 1}
+	legacyReliefGrey = css.Color{R: 0.6, G: 0.6, B: 0.6, A: 1}
+)
+
+// legacyShadows returns the copies of the glyphs Word paints under a run
+// of w:shadow, w:emboss or w:imprint (ECMA-376 Part 1, 17.3.2.31,
+// 17.3.2.13, 17.3.2.18), the first painted on top, nil for none: a
+// shadow is a copy in #C0C0C0 three quarters of a point right and down;
+// an emboss a grey copy a point right and down under a black one a point
+// left and up; an imprint the reverse. The offsets do not follow the
+// font size.
+//
+// # Corpus evidence
+//
+//   - litho/docx run-effects: at 18 points Word paints the shadow's copy
+//     0.75 point right and down in grey 0.753, the emboss's grey 0.6 copy
+//     right and down of its black one by two points, the imprint's black
+//     copy right and down of its grey one, the run between them.
+//   - libreoffice/docx ooxmlexport/fdo76016: a 16 point shadow's copy is
+//     0.75 point right and down in grey 0.753.
+//   - openxmlsdk/docx v2FxTestFiles/wordprocessing/format/format-font2: a 7
+//     point imprint's black copy is a point right and down of the white
+//     run, its grey 0.6 copy a point left and up.
+func legacyShadows(r runProps) []css.Shadow {
+	black := css.Color{A: 1}
+	switch {
+	case boolOf(r.emboss):
+		return []css.Shadow{{X: -1, Y: -1, Color: black}, {X: 1, Y: 1, Color: legacyReliefGrey}}
+	case boolOf(r.imprint):
+		return []css.Shadow{{X: -1, Y: -1, Color: legacyReliefGrey}, {X: 1, Y: 1, Color: black}}
+	case boolOf(r.shadow):
+		return []css.Shadow{{X: 0.75, Y: 0.75, Color: legacyShadowGrey}}
+	}
+	return nil
 }

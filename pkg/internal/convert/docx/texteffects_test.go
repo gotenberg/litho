@@ -4,10 +4,12 @@ import (
 	"context"
 	"image"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -204,6 +206,24 @@ func TestRunReflectionStartsAtBaseline(t *testing.T) {
 			t.Errorf("opacity %.0f at %.1f points below the baseline, want about 0.55 of 255", as[i], d)
 		case d > 0.455*24+1 && as[i] > 2:
 			t.Errorf("opacity %.0f at %.1f points below the baseline, past the fade", as[i], d)
+		}
+	}
+}
+
+func TestLegacyShadows(t *testing.T) {
+	on := true
+	for _, tc := range []struct {
+		name string
+		r    runProps
+		want []css.Shadow
+	}{
+		{"shadow", runProps{shadow: &on}, []css.Shadow{{X: 0.75, Y: 0.75, Color: legacyShadowGrey}}},
+		{"emboss", runProps{emboss: &on}, []css.Shadow{{X: -1, Y: -1, Color: css.Color{A: 1}}, {X: 1, Y: 1, Color: legacyReliefGrey}}},
+		{"imprint", runProps{imprint: &on}, []css.Shadow{{X: -1, Y: -1, Color: legacyReliefGrey}, {X: 1, Y: 1, Color: css.Color{A: 1}}}},
+		{"none", runProps{}, nil},
+	} {
+		if got := legacyShadows(tc.r); !slices.Equal(got, tc.want) {
+			t.Errorf("%s: %+v, want %+v", tc.name, got, tc.want)
 		}
 	}
 }
