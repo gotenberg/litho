@@ -194,3 +194,37 @@ func TestPosition_SingularTransformPaintsNothing(t *testing.T) {
 	})
 	assertPixels(t, run(t, doc(sq), page(2, 2)), 1, "__\n__")
 }
+
+func TestPosition_RelativeTableParts(t *testing.T) {
+	// CSS Position 3, 3.3: a relatively positioned row moves with the
+	// cells that originate in it, and paints over the positioned box
+	// before it in tree order (CSS 2.1, Appendix E, step 8). A percentage
+	// top of a row whose row group specifies no height behaves as auto, as
+	// Chromium lays it out.
+	topPct := func(s *css.Style) { s.Position, s.Top = css.Relative, pct(1) }
+	cell := func(c css.Color) *Node { return td(mods(width(2), height(2), bg(c)), "") }
+	root := doc(
+		square(2, 2, red, abs(0, auto, auto, 2)),
+		table(mods(spacing(0, 0)), tbody(nil,
+			tr(mods(rel(2, 0)), cell(lime)),
+			tr(mods(topPct), cell(blue)),
+		)),
+	)
+	assertPixels(t, run(t, root, page(6, 4)), 1, `
+		__GG__
+		__GG__
+		BB____
+		BB____`)
+}
+
+func TestPosition_TablePartHoldsAbsolute(t *testing.T) {
+	// CSS Position 3, 2: a positioned row group holds its absolutely
+	// positioned descendants, which move with it.
+	inner := square(1, 1, lime, abs(0, auto, auto, 1))
+	c := td(mods(width(2), height(2), bg(blue)), "")
+	c.Children = []*Node{inner}
+	root := doc(table(mods(spacing(0, 0)), tbody(mods(rel(1, 0)), tr(nil, c))))
+	assertPixels(t, run(t, root, page(4, 2)), 1, `
+		_BG_
+		_BB_`)
+}

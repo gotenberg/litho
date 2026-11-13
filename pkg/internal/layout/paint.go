@@ -303,13 +303,34 @@ func (p *painter) borderRect(b *box) typeset.Rect {
 }
 
 // offset returns the relative positioning offset of b (CSS 2.1, 9.4.3).
+// A row group, a row or a cell moves within its table, with the cells that
+// originate in it; a column or a column group, to which position does not
+// apply, does not move (CSS Position 3, 3.3).
 func offset(b *box) (float64, float64) {
-	if b.st.Position != css.Relative || b.kind == kindText || b.kind == kindBreak || b.tpart.internal() {
+	if b.st.Position != css.Relative || b.kind == kindText || b.kind == kindBreak || b.tpart == partColumn || b.tpart == partColGroup {
 		return 0, 0
 	}
 	cbw, cbh := 0.0, 0.0
 	if b.parent != nil {
 		cbw, cbh = b.parent.w, b.parent.h
+	}
+	top, bottom := b.st.Top, b.st.Bottom
+	if b.tpart.internal() {
+		// A table part's percentage top or bottom resolves against the
+		// height its parent specifies, not the one its rows give it, and
+		// behaves as auto when the parent specifies none, as Chromium
+		// lays it out; CSS Position 3, 3.1 resolves it against the
+		// containing block's height.
+		if b.parent != nil && b.parent.st.Height.Kind == css.Points {
+			cbh = b.parent.st.Height.Value
+		} else {
+			if top.HasPercent() {
+				top = css.Dimension{}
+			}
+			if bottom.HasPercent() {
+				bottom = css.Dimension{}
+			}
+		}
 	}
 	dx, dy := 0.0, 0.0
 	switch {
@@ -319,10 +340,10 @@ func offset(b *box) (float64, float64) {
 		dx = -resolve(b.st.Right, cbw)
 	}
 	switch {
-	case b.st.Top.Kind != css.Auto:
-		dy = resolve(b.st.Top, cbh)
-	case b.st.Bottom.Kind != css.Auto:
-		dy = -resolve(b.st.Bottom, cbh)
+	case top.Kind != css.Auto:
+		dy = resolve(top, cbh)
+	case bottom.Kind != css.Auto:
+		dy = -resolve(bottom, cbh)
 	}
 	return dx, dy
 }
@@ -425,6 +446,10 @@ func (p *painter) unit(b *box, own bool) {
 		p.multicol(b)
 		return
 	}
+	if b.tpart.internal() {
+		p.tablePart(b)
+		return
+	}
 	var blocks, floats, layers []*box
 	p.collect(b, &blocks, &floats, &layers)
 	var neg, zero, pos []*box
@@ -491,7 +516,13 @@ func (p *painter) stack(layers []*box) (neg, zero, pos []*box) {
 				continue
 			}
 			var blocks, floats, sub []*box
-			p.collect(c, &blocks, &floats, &sub)
+			if c.tpart.internal() {
+				// The positioned boxes of a table part's cells paint with
+				// their cells.
+				p.collectParts(c, &sub)
+			} else {
+				p.collect(c, &blocks, &floats, &sub)
+			}
 			walk(sub, depth+1)
 		}
 	}
@@ -538,13 +569,31 @@ func (p *painter) collect(b *box, blocks, floats, layers *[]*box) {
 			var bl, fl []*box
 			p.collect(k, &bl, &fl, layers)
 		case k.tpart == partTable:
-			// A table paints its rows and cells itself (CSS 2.1, 17.5.1).
+			// A table paints its rows and cells itself (CSS 2.1, 17.5.1),
+			// but for the positioned parts among them.
 			*blocks = append(*blocks, k)
+			p.collectParts(k, layers)
+		case k.tpart.internal():
+			p.collectParts(k, layers)
 		default:
 			*blocks = append(*blocks, k)
 			if k.kind == kindBlock {
 				p.collect(k, blocks, floats, layers)
 			}
+		}
+	}
+}
+
+// collectParts lists the positioned row groups, rows and cells of the
+// table part b, in tree order, without entering them or the cells.
+func (p *painter) collectParts(b *box, layers *[]*box) {
+	for _, k := range b.kids {
+		switch {
+		case !k.tpart.internal():
+		case k.layered():
+			*layers = append(*layers, k)
+		case k.tpart < partCell:
+			p.collectParts(k, layers)
 		}
 	}
 }

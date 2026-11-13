@@ -162,7 +162,9 @@
 // # Positioning
 //
 // Relative positioning moves a box, inline boxes included, when it paints
-// (CSS 2.1, 9.4.3). An absolutely positioned box leaves the flow, which
+// (CSS 2.1, 9.4.3); a positioned row group, row or cell moves the cells
+// that originate in it and paints them in the positioned layers (CSS
+// Position 3, 3.3). An absolutely positioned box leaves the flow, which
 // records its static position; once the flow is laid out, the positioned
 // boxes are laid out in tree order in their containing blocks (CSS 2.1,
 // 10.1, 10.3.7, 10.3.8, 10.6.4 and 10.6.5), in the coordinates of the tall

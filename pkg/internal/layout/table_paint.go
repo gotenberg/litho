@@ -118,46 +118,109 @@ func (p *painter) tableDecorations(t *box) {
 	}
 	p.eachRow(td, false, func(pr placedRow, cells []*box) {
 		for _, c := range cells {
-			if !td.cellSkipped(c) {
+			if !td.cellSkipped(c) && partLayer(c) == nil {
 				p.cellBackgrounds(td, c, pr)
 			}
 		}
 	})
 	if td.collapse {
-		p.collapsedBorders(td)
+		p.collapsedBorders(td, nil)
 	} else {
 		if !t.hidden {
 			p.border(t, t.st, r, radii, t.bd, [4]bool{true, true, true, true})
 		}
 		p.eachRow(td, false, func(pr placedRow, cells []*box) {
 			for _, c := range cells {
-				if td.cellSkipped(c) || c.hidden || c.st.EmptyCells == css.Hide && cellEmpty(c) {
+				if td.cellSkipped(c) || partLayer(c) != nil {
 					continue
 				}
-				cr, top, bottom := p.cellRect(c, pr)
-				if c.st.BoxDecorationBreak == css.DecorationCloneAll {
-					// Writer draws a split cell's borders whole on every
-					// page (css.DecorationCloneAll).
-					top, bottom = true, true
-				}
-				bd := c.bd
-				var radii [4][2]float64
-				if top && bottom {
-					radii = radiiOf(c, cr.Width, cr.Height)
-				}
-				if !top {
-					bd[css.Top] = 0
-				}
-				if !bottom {
-					bd[css.Bottom] = 0
-				}
-				p.border(c, c.st, cr, radii, bd, [4]bool{top, true, bottom, true})
+				p.cellBorder(c, pr)
 			}
 		})
 	}
 	for _, c := range td.cells {
 		p.linkBox(c)
 	}
+}
+
+// cellBorder paints the borders of cell c in the placed row pr, in the
+// separated borders model.
+func (p *painter) cellBorder(c *box, pr placedRow) {
+	if c.hidden || c.st.EmptyCells == css.Hide && cellEmpty(c) {
+		return
+	}
+	cr, top, bottom := p.cellRect(c, pr)
+	if c.st.BoxDecorationBreak == css.DecorationCloneAll {
+		// Writer draws a split cell's borders whole on every page
+		// (css.DecorationCloneAll).
+		top, bottom = true, true
+	}
+	bd := c.bd
+	var radii [4][2]float64
+	if top && bottom {
+		radii = radiiOf(c, cr.Width, cr.Height)
+	}
+	if !top {
+		bd[css.Top] = 0
+	}
+	if !bottom {
+		bd[css.Bottom] = 0
+	}
+	p.border(c, c.st, cr, radii, bd, [4]bool{top, true, bottom, true})
+}
+
+// partLayer returns the positioned row group, row or cell the cell c
+// paints with, nil for a cell its table paints.
+func partLayer(c *box) *box {
+	for a := c; a != nil && a.tpart.internal(); a = a.parent {
+		if a.layered() {
+			return a
+		}
+	}
+	return nil
+}
+
+// tablePart paints the positioned row group, row or cell b from its
+// stacking context: the backgrounds, separated borders and flows of the
+// cells that paint with it, each moved by the relative offsets of the
+// parts between it and b (CSS Position 3, 3.3). The collapsed borders
+// stay with the table.
+func (p *painter) tablePart(b *box) {
+	t := b.parent
+	for t != nil && t.tpart != partTable {
+		t = t.parent
+	}
+	if t == nil || t.tdata == nil {
+		return
+	}
+	td := t.tdata
+	each := func(content bool, fn func(c *box, pr placedRow)) {
+		p.eachRow(td, content, func(pr placedRow, cells []*box) {
+			for _, c := range cells {
+				if td.cellSkipped(c) || partLayer(c) != b {
+					continue
+				}
+				dx, dy := 0.0, 0.0
+				for a := c; a != b; a = a.parent {
+					ox, oy := offset(a)
+					dx += ox
+					dy += oy
+				}
+				p.dx += dx
+				p.dy += dy
+				fn(c, pr)
+				p.dx -= dx
+				p.dy -= dy
+			}
+		})
+	}
+	each(false, func(c *box, pr placedRow) { p.cellBackgrounds(td, c, pr) })
+	if td.collapse {
+		p.collapsedBorders(td, b)
+	} else {
+		each(false, p.cellBorder)
+	}
+	each(true, func(c *box, _ placedRow) { p.cellFlow(c) })
 }
 
 // cellBackgrounds paints, on the border box of cell c, the backgrounds of
@@ -239,7 +302,7 @@ func (p *painter) tableContent(t *box) {
 	td := t.tdata
 	p.eachRow(td, true, func(pr placedRow, cells []*box) {
 		for _, c := range cells {
-			if !td.cellSkipped(c) {
+			if !td.cellSkipped(c) && partLayer(c) == nil {
 				p.cellFlow(c)
 			}
 		}
@@ -274,7 +337,9 @@ func (p *painter) cellFlow(c *box) {
 // collapsing model (CSS 2.1, 17.6.2), every run of rows on its own: each
 // border centred on its grid line, and at each crossing the winning
 // border of those that meet there paints the corner (17.6.2.1).
-func (p *painter) collapsedBorders(td *tableData) {
+// Of the borders of a positioned part's cells, owner nil paints none, and
+// a positioned part paints those it is [segmentLayer] of.
+func (p *painter) collapsedBorders(td *tableData, owner *box) {
 	nc, nr := td.nCols, len(td.rows)
 	if nc == 0 || nr == 0 {
 		return
@@ -364,7 +429,7 @@ func (p *painter) collapsedBorders(td *tableData) {
 		for k := 0; k <= n; k++ {
 			for c := range nc {
 				b := h[k][c]
-				if !b.visible() {
+				if !b.visible() || td.segmentLayer(seq, k-1, c, k, c) != owner {
 					continue
 				}
 				x0, x1 := x(c), x(c+1)
@@ -394,7 +459,7 @@ func (p *painter) collapsedBorders(td *tableData) {
 		for k := range n {
 			for i := 0; i <= nc; i++ {
 				b := v[k][i]
-				if !b.visible() {
+				if !b.visible() || td.segmentLayer(seq, k, i-1, k, i) != owner {
 					continue
 				}
 				y0, y1 := lineY(k), td.bottom(seq[k])+p.dy
@@ -414,6 +479,27 @@ func (p *painter) collapsedBorders(td *tableData) {
 		}
 		p.mono = mono
 	}
+}
+
+// segmentLayer returns the positioned part that paints a collapsed border
+// segment between the slots (k0, c0) and (k1, c1) of the run of rows seq,
+// k an index into seq and c a column: the part of the later of the two
+// cells, as the later paints over the earlier, nil when neither is
+// positioned.
+func (td *tableData) segmentLayer(seq []placedRow, k0, c0, k1, c1 int) *box {
+	at := func(k, c int) *box {
+		if k < 0 || k >= len(seq) || c < 0 || c >= td.nCols {
+			return nil
+		}
+		if cell := td.cellAt(seq[k].r, c); cell != nil {
+			return partLayer(cell)
+		}
+		return nil
+	}
+	if l := at(k1, c1); l != nil {
+		return l
+	}
+	return at(k0, c0)
 }
 
 // cutLine reports the grid line k of the run of rows seq that a page break

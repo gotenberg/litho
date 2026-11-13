@@ -148,14 +148,16 @@ func (e *engine) layoutPositioned(b *box) {
 // b (CSS 2.1, 10.1): the padding box of its nearest positioned ancestor, or
 // one with a transform (CSS Transforms 1, 6), the initial containing block
 // when it has none; for a fixed box the page area, unless a transformed
-// ancestor holds it.
+// ancestor holds it. A positioned row group, row or cell holds it as any
+// positioned box does (CSS Position 3, 2); a column or a column group,
+// to which position does not apply, never does.
 func (e *engine) containerOf(b *box) absCB {
 	if b.st.PageAnchor && b.st.Position == css.Absolute {
 		return e.pageCB(b)
 	}
 	fixed := b.st.Position == css.Fixed
 	for a := b.parent; a != nil; a = a.parent {
-		if a.tpart.internal() && a.tpart != partCell {
+		if a.tpart == partColumn || a.tpart == partColGroup {
 			continue
 		}
 		holds := len(a.st.Transform) > 0 && a.kind == kindBlock

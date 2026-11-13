@@ -357,8 +357,14 @@ func (b *box) toViewport() bool {
 // E, steps 2, 8 and 9), a flex item with a z-index among them (CSS
 // Flexbox 1, 4.3).
 func (b *box) layered() bool {
-	if b.parent == nil || b.tpart.internal() || b.kind == kindText || b.kind == kindInline || b.kind == kindBreak {
+	if b.parent == nil || b.kind == kindText || b.kind == kindInline || b.kind == kindBreak {
 		return false
+	}
+	if b.tpart.internal() {
+		// A positioned row group, row or cell paints in its stacking
+		// context's layers with the cells it holds (CSS Position 3, 3.3);
+		// position does not apply to a column or a column group.
+		return b.tpart <= partCell && b.st.Position != css.Static
 	}
 	return b.st.Position != css.Static || b.st.Opacity < 1 || b.transformed() || b.isItem() && !b.st.ZIndex.Auto
 }
