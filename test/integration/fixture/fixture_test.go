@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 func TestParseOptions_RefusesWhatTheRouteRefuses(t *testing.T) {
@@ -21,7 +23,10 @@ func TestParseOptions_RefusesWhatTheRouteRefuses(t *testing.T) {
 		{"every field", `{"paperWidth": 8.5, "paperHeight": 11, "marginTop": 0, "marginRight": 0.5, "marginBottom": 1, "marginLeft": 0.39,
 			"landscape": true, "scale": 0.75, "singlePage": true, "nativePages": "2-3", "preferCssPageSize": false, "printBackground": false,
 			"nativeBookmarks": true, "emulatedMediaType": "screen", "emulatedMediaFeatures": {"prefers-color-scheme": "dark"},
-			"header": "header.html", "footer": "footer.html"}`, ""},
+			"header": "header.html", "footer": "footer.html", "userStylesheets": ["u.css"], "markdownTemplate": "t.html",
+			"bands": [{"edge": "header", "html": "h.html", "css": "h.css", "pages": ["first", "last", "left", "right", "blank", "2-3", "4-", "page:x"],
+			"room": "content", "isolated": true}]}`, ""},
+		{"template without bands", `{"header": "header.html"}`, "want the bands"},
 		{"unknown field", `{"paperwidth": 8.5}`, "unknown field"},
 		{"trailing data", `{} {}`, "data after"},
 		{"not an object", `[]`, "decoding"},
@@ -79,8 +84,12 @@ func TestLoad_ReadsTheOptionsAndTemplates(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, MarkdownDocument, "# x")
 	write(t, dir, "top.html", "<span class=title></span>")
+	write(t, dir, "band.html", "<b>head</b>")
+	write(t, dir, "band.css", "b { color: red }")
 	write(t, dir, OptionsFile, `{"paperWidth": 8.5, "paperHeight": 11, "marginTop": 0.5, "scale": 0.5, "nativePages": "1",
-		"preferCssPageSize": false, "emulatedMediaType": "screen", "emulatedMediaFeatures": {"prefers-color-scheme": "dark"}, "header": "top.html"}`)
+		"preferCssPageSize": false, "emulatedMediaType": "screen", "emulatedMediaFeatures": {"prefers-color-scheme": "dark"}, "header": "top.html",
+		"bands": [{"edge": "header", "html": "band.html", "css": "band.css", "pages": ["first", "3-", "page:x"], "room": "content", "isolated": true},
+			{"edge": "footer", "pages": ["left"]}]}`)
 	s, err := Load(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -97,11 +106,21 @@ func TestLoad_ReadsTheOptionsAndTemplates(t *testing.T) {
 	if s.MediaType() != "screen" || s.PreferCSSPageSize() {
 		t.Errorf("media %q, prefer CSS page size %v", s.MediaType(), s.PreferCSSPageSize())
 	}
-	if s.HeaderTemplate != "<span class=title></span>" || s.FooterTemplate != "" {
-		t.Errorf("templates %q %q", s.HeaderTemplate, s.FooterTemplate)
+	if len(s.Bands) != 2 {
+		t.Fatalf("%d bands, want 2", len(s.Bands))
 	}
-	if n := len(s.PrintOptions()); n != 7 {
-		t.Errorf("%d print options, want 7", n)
+	if b := s.Bands[0]; b.Footer || b.Band.HTML != "<b>head</b>" || b.Band.CSS != "b { color: red }" || b.Band.Room != pdf.RoomContent || !b.Band.Isolated {
+		t.Errorf("header band %+v", b)
+	}
+	if b := s.Bands[1]; !b.Footer || b.Band.HTML != "" {
+		t.Errorf("footer band %+v", b)
+	}
+	if n := len(s.PrintOptions()); n != 8 {
+		t.Errorf("%d print options, want 8", n)
+	}
+	// The Chromium template stands for the bands.
+	if keys := s.LithoOptions(); len(keys) != 0 {
+		t.Errorf("litho options %q, want none", keys)
 	}
 }
 
@@ -114,14 +133,32 @@ func TestLoad_Refuses(t *testing.T) {
 	}
 	missing := t.TempDir()
 	write(t, missing, HTMLDocument, "<p>")
-	write(t, missing, OptionsFile, `{"footer": "absent.html"}`)
+	write(t, missing, OptionsFile, `{"footer": "absent.html", "bands": [{"edge": "footer"}]}`)
 	if _, err := Load(missing); err == nil {
 		t.Error("a missing template loaded")
+	}
+	for _, opts := range []string{
+		`{"header": "h.html"}`,
+		`{"bands": [{"edge": "side"}]}`,
+		`{"bands": [{"edge": "header", "room": "page"}]}`,
+		`{"bands": [{"edge": "header", "pages": ["0-2"]}]}`,
+		`{"bands": [{"edge": "header", "pages": ["3-2"]}]}`,
+		`{"bands": [{"edge": "header", "pages": ["page:"]}]}`,
+		`{"bands": [{"edge": "header", "isolate": true}]}`,
+		`{"bands": [{"edge": "header", "html": "../h.html"}]}`,
+	} {
+		dir := t.TempDir()
+		write(t, dir, HTMLDocument, "<p>")
+		write(t, dir, "h.html", "<p>")
+		write(t, dir, OptionsFile, opts)
+		if _, err := Load(dir); err == nil {
+			t.Errorf("%s loaded", opts)
+		}
 	}
 	big := t.TempDir()
 	write(t, big, HTMLDocument, "<p>")
 	write(t, big, "f.html", strings.Repeat("x", maxTemplateBytes+1))
-	write(t, big, OptionsFile, `{"footer": "f.html"}`)
+	write(t, big, OptionsFile, `{"footer": "f.html", "bands": [{"edge": "footer"}]}`)
 	if _, err := Load(big); err == nil || !strings.Contains(err.Error(), "exceeds") {
 		t.Errorf("an oversized template: %v", err)
 	}

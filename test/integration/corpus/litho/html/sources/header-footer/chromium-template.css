@@ -1,0 +1,72 @@
+/*
+ * The stylesheet of Chromium's header and footer template page
+ * (components/printing/resources/print_header_footer_template_page.html)
+ * and its text defaults (ui/webui/resources/css/text_defaults.css, Noto Sans
+ * at 75%), for a band that holds a Chromium template in #header or #footer:
+ * the box spans the page's width across the 27.75 point side margins, as
+ * the template page's body does, and the classes the template page fills
+ * are generated content.
+ */
+body {
+  font-family: "Noto Sans", system-ui, sans-serif;
+  font-size: 75%;
+}
+
+#header,
+#footer {
+  display: flex;
+  box-sizing: border-box;
+  margin: 0 -27.75pt;
+}
+
+#header {
+  align-items: flex-start;
+  padding-top: 15pt;
+}
+
+#footer {
+  align-items: flex-end;
+  padding-bottom: 15pt;
+}
+
+.left {
+  flex: none;
+  padding-left: 24pt;
+  padding-right: 6pt;
+}
+
+.center {
+  flex: auto;
+  padding-left: 24pt;
+  padding-right: 24pt;
+  text-align: center;
+}
+
+.right {
+  flex: none;
+  padding-left: 6pt;
+  padding-right: 24pt;
+}
+
+.grow {
+  flex: auto;
+}
+
+.text {
+  font-size: 8pt;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title::after {
+  content: string(litho-title);
+}
+
+.pageNumber::after {
+  content: counter(page);
+}
+
+.totalPages::after {
+  content: counter(pages);
+}

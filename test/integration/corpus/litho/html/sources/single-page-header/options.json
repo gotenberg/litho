@@ -1,1 +1,11 @@
-{ "singlePage": true, "header": "header.html", "footer": "footer.html", "marginTop": 0.6, "marginBottom": 0.6 }
+{
+  "singlePage": true,
+  "header": "header.html",
+  "footer": "footer.html",
+  "marginTop": 0.6,
+  "marginBottom": 0.6,
+  "bands": [
+    { "edge": "header", "html": "band-header.html", "css": "band.css" },
+    { "edge": "footer", "html": "band-footer.html", "css": "band.css" }
+  ]
+}

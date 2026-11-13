@@ -222,9 +222,9 @@
 //   - [FromHTML] takes [HTMLOption], and so does [FromMarkdown]:
 //     [WithResources], [WithBaseURL], [WithHTTPClient], [WithMediaType],
 //     [WithMediaFeatures], [WithScale], [WithShrinkToFit],
-//     [WithCanvasBackground], [WithFinishedAnimations], [WithHeaderTemplate],
-//     [WithFooterTemplate], [WithSinglePage], [WithFractionalFontMetrics],
-//     [WithUserStylesheet].
+//     [WithCanvasBackground], [WithFinishedAnimations], [WithHeader],
+//     [WithFooter], [WithFirstPageNumber], [WithSinglePage],
+//     [WithFractionalFontMetrics], [WithUserStylesheet].
 //   - [FromMarkdown] takes [MarkdownOption]: [WithMarkdownTemplate].
 //   - A conversion of an Office package takes [OfficeOption]:
 //     [WithOfficePassword].

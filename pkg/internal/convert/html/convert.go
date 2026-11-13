@@ -102,7 +102,44 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	if res, err = layOutTargets(ctx, lay, p, res); err != nil {
 		return nil, err
 	}
-	return p.assemble(ctx, res)
+	if p.roomed(len(res.Pages)) {
+		if p, err = p.makeRoom(ctx, doc, len(res.Pages)); err != nil {
+			return nil, err
+		}
+		if res, err = layOut(ctx, lay, p); err != nil {
+			return nil, err
+		}
+		if res, err = layOutTargets(ctx, lay, p, res); err != nil {
+			return nil, err
+		}
+	}
+	return p.assemble(res)
+}
+
+// makeRoom readies the second layout of [RoomContent] after a first one
+// whose page count is pages (see [prepared.growRoom]). A single page grows
+// by what its margins grow, so the page area keeps the height the content
+// measured: the document is prepared again on the taller paper, the bands
+// keeping the room they measured.
+func (p *prepared) makeRoom(ctx context.Context, doc *dom.Node, pages int) (*prepared, error) {
+	if !p.o.SinglePage || len(p.infos) == 0 {
+		p.growRoom(pages)
+		return p, nil
+	}
+	info := p.infos[0]
+	before, after := p.pages.box(info), p.grown(info, pages)
+	o := p.o
+	grow := after.Margin[css.Top] - before.Margin[css.Top] + after.Margin[css.Bottom] - before.Margin[css.Bottom]
+	o.PageHeight = min(o.PageHeight+grow, maxPageSide)
+	q, err := prepareDoc(ctx, doc, o, p.fonts, p.setup)
+	if err != nil {
+		return nil, err
+	}
+	for i, s := range q.bands {
+		s.need = p.bands[i].need
+	}
+	q.growRoom(pages)
+	return q, nil
 }
 
 // layOut lays the prepared document p out with lay, with its fonts.
@@ -183,9 +220,12 @@ type prepared struct {
 	// infos are the pages the layout laid out, in order, once it called
 	// layout.Options.MarginContent for them.
 	infos []layout.PageInfo
-	// templates holds the resources of the header and footer templates,
-	// nil before the first page draws them.
-	templates *resources
+	// bands are the bands of the options, in order, bandBoxes the styles
+	// of the page-margin boxes they take, top then bottom, and room the
+	// second layout of RoomContent.
+	bands     []*bandState
+	bandBoxes [2]*css.Style
+	room      roomState
 	// fonts is the conversion's font index: the one Convert received with
 	// the document's @font-face faces ahead of it.
 	fonts *text.Fonts
@@ -215,19 +255,10 @@ func parse(data []byte) (*dom.Node, error) {
 }
 
 // prepareDoc cascades the stylesheets of the parsed document doc and
-// builds its content tree, its pages laid out as setup says. fonts
-// resolves the ex and ch units; nil takes their half-em fallback. It
-// leaves doc as it is, so a second layout prepares it again.
+// builds its content tree and its bands, its pages laid out as setup
+// says. fonts resolves the ex and ch units; nil takes their half-em
+// fallback. It leaves doc as it is, so a second layout prepares it again.
 func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, setup printSetup) (*prepared, error) {
-	return prepareTagged(ctx, doc, o, fonts, setup, nil, nil)
-}
-
-// prepareTagged is [prepareDoc] with the anchors ids gives elements of doc
-// on top of their id attributes, for the header and footer templates,
-// which measure where their elements land, and the resources res, nil for
-// a store of its own: the templates of every page share one, so that a
-// picture they show is decoded and written once.
-func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, setup printSetup, ids map[*dom.Node]string, res *resources) (*prepared, error) {
 	scan, err := scanDocument(ctx, doc, documentBase(o.BaseURL))
 	if err != nil {
 		return nil, err
@@ -235,9 +266,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	if scan.lang == "" {
 		scan.lang, scan.meta.Lang = o.DefaultLang, o.DefaultLang
 	}
-	if res == nil {
-		res = newResources(o.Resources)
-	}
+	res := newResources(o.Resources)
 	res.svg.fonts = fonts
 	res.client = o.HTTPClient
 	c := &collector{res: res, base: scan.resourceBase, logger: o.Logger}
@@ -331,7 +360,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 
 	b := &builder{
 		computed: computed, res: res, scan: scan, media: media,
-		warned: map[string]bool{}, omitBackgrounds: o.OmitBackgrounds, ids: ids,
+		warned: map[string]bool{}, omitBackgrounds: o.OmitBackgrounds,
 		counterStyles: resolver.CounterStyles(),
 	}
 	// The page-margin boxes read these counters of the document as they
@@ -349,6 +378,11 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	// the builder derives from them, generated content's among them, are
 	// shared here.
 	layout.ShareStyles(ctx, root, nil)
+	env := bandEnv{o: o, scan: scan, sheets: sheets, media: media, res: res, c: c, opts: computeOpts}
+	bands, bandBoxes, bandWarns, err := buildBands(ctx, env, rootStyle)
+	if err != nil {
+		return nil, err
+	}
 
 	p := &prepared{
 		root: root,
@@ -368,15 +402,17 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 			MaxPages:         o.MaxPages,
 			Logger:           o.Logger,
 		},
-		meta:     scan.meta,
-		headings: b.headings,
-		o:        o,
-		setup:    setup,
-		first:    sourceFirst,
-		svg:      &res.svg,
-		pages:    newPageSetup(ctx, resolver, o, rtl, rootStyle),
-		fonts:    fonts,
-		b:        b,
+		meta:      scan.meta,
+		headings:  b.headings,
+		o:         o,
+		setup:     setup,
+		first:     sourceFirst,
+		svg:       &res.svg,
+		pages:     newPageSetup(ctx, resolver, o, rtl, rootStyle),
+		fonts:     fonts,
+		b:         b,
+		bands:     bands,
+		bandBoxes: bandBoxes,
 	}
 	if b.lines != nil {
 		p.layout.FirstLine = b.lines
@@ -389,16 +425,16 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	p.warnings = append(p.warnings, fontWarns...)
 	p.warnings = append(p.warnings, pageWarns...)
 	p.warnings = append(p.warnings, b.warnings...)
+	p.warnings = append(p.warnings, newWarnings(p.warnings, bandWarns)...)
 	return p, nil
 }
 
 // assemble returns the document of the layout res: every page, or the
 // first alone for a single page, each placed on its sheet (see
-// [prepared.placement]) with its header and footer drawn on it (see
-// [prepared.decorate]), the links, the outline and the structure tree.
+// [prepared.placement]), the links, the outline and the structure tree.
 // The caller selects pages afterwards: a page keeps the number it was
 // laid out with in what it shows.
-func (p *prepared) assemble(ctx context.Context, res *layout.Result) (*typeset.Document, error) {
+func (p *prepared) assemble(res *layout.Result) (*typeset.Document, error) {
 	keep := make([]int, 0, len(res.Pages))
 	for k := range res.Pages {
 		if k > 0 && p.o.SinglePage {
@@ -443,9 +479,6 @@ func (p *prepared) assemble(ctx context.Context, res *layout.Result) (*typeset.D
 			links = append(links, l)
 		}
 		pg.Links = links
-		if err := p.decorate(ctx, pg, k, len(res.Pages)); err != nil {
-			return nil, err
-		}
 		culled = cullPage(pg) || culled
 		doc.Pages = append(doc.Pages, pg)
 	}

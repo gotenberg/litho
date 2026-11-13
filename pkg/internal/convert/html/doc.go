@@ -106,18 +106,21 @@
 // of the flow, each with the first, start, last or first-except
 // assignment of the page. A block running element of auto width fits its
 // content and sits where the box's text-align puts a line, as WeasyPrint
-// lays it out; its page and pages counters take the page's values, and its
-// links keep their annotations on every page that shows it.
+// lays it out; its page and pages counters and the string() of its
+// generated content take the page's values, and its links keep their
+// annotations on every page that shows it. The named string litho-title
+// is the document's title until an element sets it.
 //
 // The page counter adds 1 on every page unless the page context's
 // counter-reset, counter-increment or counter-set name it, and the pages
 // counter is the page count (CSS Page 3, 6.1). A counter the page context
 // or a margin context sets is in scope for every box or for that box; any
 // other counter takes the value an element at the start of the page sees
-// in the document. counter-reset, counter-increment and counter-set of the
-// page counter on an element do not number the pages, with a warning. A
-// box whose content is taller than the box overflows it, over the page
-// area, with a warning: the page area keeps its size.
+// in the document. [Options.PageCounterStart] is the page counter's value
+// before the first page. counter-reset, counter-increment and counter-set
+// of the page counter on an element do not number the pages, with a
+// warning. A box whose content is taller than the box overflows it, over
+// the page area, with a warning: the page area keeps its size.
 //
 // float: footnote turns an element into a footnote (CSS GCPM 3, 3): its
 // ::footnote-call stays in the flow, numbered by the footnote counter,
@@ -153,15 +156,13 @@
 // takes no room. A floated area does not let the content wrap around it,
 // and every note goes to the area whatever name its element() gives.
 //
-// [Options.HeaderTemplate] and [Options.FooterTemplate] draw as Chromium
-// draws them: on Chromium's template page, a page-sized document whose
-// header and footer boxes hold the templates, laid out by this package,
-// with the classes date, title, url, pageNumber and totalPages filled and
-// the elements of class text that reach into the page area hidden. The
-// template page's stylesheet is Chromium's, flexbox included; until the
-// engine lays flex containers out, a block layout fallback places the
-// header's items at its top and the footer's at the page's bottom, side by
-// side.
+// [Options.Bands] draw headers and footers (see [Band]): each band is an
+// HTML fragment laid out in a document of its own, styled by the
+// document's style sheets unless isolated, and drawn in the page-margin
+// box @top-center or @bottom-center, made as wide as the page area, of the
+// pages it selects, in the place of the page-margin boxes of its margin.
+// [RoomContent] lays the document out a second time with the margins grown
+// to the bands' heights.
 //
 // # Printing
 //

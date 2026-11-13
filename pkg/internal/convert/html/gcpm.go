@@ -462,10 +462,14 @@ func firstLetter(s string) string {
 //     entry value.
 //
 // top is the page area's top on the page: an element is the first on its
-// page when its anchor lands no lower than its lead below it.
-func (g *gcpmState) pick(list []assignment, name string, p css.PagePick, index int, top float64) (assignment, bool) {
+// page when its anchor lands no lower than its lead below it. initial,
+// when not nil, is the entry value before the first assignment.
+func (g *gcpmState) pick(list []assignment, name string, p css.PagePick, index int, top float64, initial *assignment) (assignment, bool) {
 	var entry, first, last assignment
 	hasEntry, onPage, firstAtTop := false, false, false
+	if initial != nil {
+		entry, hasEntry = *initial, true
+	}
 	for _, a := range list {
 		if a.name != name {
 			continue

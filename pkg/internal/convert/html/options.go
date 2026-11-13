@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
@@ -55,7 +54,7 @@ const (
 
 // Options is the setup of an HTML conversion. The zero value asks for an A4
 // page without margins, for print, with no resources, backgrounds and the
-// outline in, no header or footer, no network.
+// outline in, no band, no network.
 //
 // The print options are litho's own. Where a browser's print dialog has
 // the same control, the option behaves as the browser does, so a document
@@ -114,23 +113,17 @@ type Options struct {
 	// for document text (blink::SimpleFontData::PlatformInit), which puts
 	// every line of line-height: normal where a browser puts it.
 	FractionalFontMetrics bool
-	// HeaderTemplate and FooterTemplate are HTML fragments drawn in the top
-	// and bottom margins of every page: each is the inner HTML of a box as
-	// wide as the page and as tall as the margin, laid out with the
-	// template stylesheet of a browser's print header (see headerfooter.go),
-	// where the text of an element of class date, title, url, pageNumber
-	// or totalPages is replaced by Date, the document title, BaseURL, the
-	// page number and the page count, and an element of class text that
-	// reaches into the page area is hidden. Empty draws nothing.
-	HeaderTemplate, FooterTemplate string
-	// Date is what the date class of the templates shows, formatted for
-	// the en-US locale as a browser's print header formats it, "11/6/26,
-	// 10:30 AM". The zero time shows nothing. It is the only date of a
-	// conversion; the output never depends on the clock.
-	Date time.Time
-	// BaseURL is the document's URL: what the url class of the templates
-	// shows, and what relative references resolve against when it is an
-	// http or https URL, fetched through HTTPClient. Empty, relative
+	// Bands are the headers and footers drawn in the top and bottom
+	// margins, in order: on a page two bands of the same margin select,
+	// the later one draws (see [Band]). At most [MaxBands].
+	Bands []Band
+	// PageCounterStart is the value of the page counter before the first
+	// page: the first page is numbered PageCounterStart + 1, 1 when zero
+	// (CSS Page 3, 6.1). The page context's counter properties apply on
+	// top of it. It lies in [MinPageCounterStart, MaxPageCounterStart].
+	PageCounterStart int
+	// BaseURL is the document's URL: what relative references resolve
+	// against when it is an http or https URL, fetched through HTTPClient. Empty, relative
 	// references resolve in Resources. It is absolute when set.
 	BaseURL string
 	// HTTPClient fetches the http and https resources the document names:
@@ -174,9 +167,7 @@ type Options struct {
 	// @font-face, @media and @import. Their relative URLs resolve against
 	// the document's base. Each counts against the resource caps as a
 	// linked stylesheet does, and one past them is left out with a
-	// warning. They style the document only, not HeaderTemplate and
-	// FooterTemplate, which are documents of their own with the defaults
-	// of Chromium's template page: a template carries its own <style>.
+	// warning. A band that is not isolated is styled by them too.
 	UserStylesheets []string
 	// AnimationsAtEnd prints each CSS animation at the end of its active
 	// interval, as the page shows once its animations have run: an
@@ -271,6 +262,12 @@ func (o Options) withDefaults() (Options, error) {
 	}
 	if o.MaxPages < 0 || o.MaxPages > limits.MaxConvertPagesCeiling {
 		return o, fmt.Errorf("%w: page cap %d is not in [1, %d]", typeset.ErrInvalidOptions, o.MaxPages, limits.MaxConvertPagesCeiling)
+	}
+	if o.PageCounterStart < MinPageCounterStart || o.PageCounterStart > MaxPageCounterStart {
+		return o, fmt.Errorf("%w: page counter start %d is not in [%d, %d]", typeset.ErrInvalidOptions, o.PageCounterStart, MinPageCounterStart, MaxPageCounterStart)
+	}
+	if err := checkBands(o.Bands); err != nil {
+		return o, err
 	}
 	return o, nil
 }

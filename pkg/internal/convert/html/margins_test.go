@@ -3,13 +3,11 @@ package html
 import (
 	"cmp"
 	"context"
-	"encoding/base64"
 	"errors"
 	"math"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -261,85 +259,6 @@ func TestNamedPages_SizesAndBlank(t *testing.T) {
 	}
 }
 
-func TestChromiumDate(t *testing.T) {
-	for _, tt := range []struct {
-		t    time.Time
-		want string
-	}{
-		{time.Time{}, ""},
-		{time.Date(2026, 11, 6, 10, 30, 0, 0, time.UTC), "11/6/26, 10:30 AM"},
-		{time.Date(2005, 1, 2, 0, 5, 0, 0, time.UTC), "1/2/05, 12:05 AM"},
-		{time.Date(2026, 12, 31, 12, 0, 0, 0, time.UTC), "12/31/26, 12:00 PM"},
-		{time.Date(2026, 7, 4, 23, 59, 0, 0, time.UTC), "7/4/26, 11:59 PM"},
-	} {
-		if got := chromiumDate(tt.t); got != tt.want {
-			t.Errorf("chromiumDate(%v) = %q, want %q", tt.t, got, tt.want)
-		}
-	}
-}
-
-func TestHeaderFooter_Positions(t *testing.T) {
-	src := `<html><head><title>T1</title><style>body { margin: 0 } p { margin: 0; break-after: page }</style></head><body><p>one</p><p>two</p></body></html>`
-	o := Options{
-		PageWidth: 400, PageHeight: 300, MarginTop: 50, MarginBottom: 60, MarginLeft: 30, MarginRight: 30,
-		HeaderTemplate: `<div class="text"><span class="title"></span> <span class="pageNumber"></span>/<span class="totalPages"></span></div>`,
-		FooterTemplate: `<style>body { font-size: 10pt }</style><p><span class="date"></span> <span class="url"></span></p>`,
-		Date:           time.Date(2026, 11, 6, 10, 30, 0, 0, time.UTC),
-		BaseURL:        "https://example.com/doc.html",
-	}
-	doc := convertDoc(t, src, o)
-	if len(doc.Pages) != 2 {
-		t.Fatalf("%d pages, want 2", len(doc.Pages))
-	}
-	h := find(t, doc.Pages[1], "T1 2/2")
-	// The header's .text is 8pt, below the header's 15pt padding: its
-	// baseline under 15+8*1.2 and over 15.
-	if !approx(h.x, 0, 0.01) || math.IsNaN(h.y) || h.y <= 15 || h.y >= 15+8*1.25 || h.size != 8 {
-		t.Errorf("header at %v,%v size %v", h.x, h.y, h.size)
-	}
-	f := find(t, doc.Pages[0], "11/6/26, 10:30 AM https://example.com/doc.html")
-	// The footer's paragraph sits on its 15pt padding, its 10pt bottom
-	// margin above it: the baseline above 300-25.
-	if math.IsNaN(f.y) || f.y >= 300-25 || f.y <= 300-25-12 || f.size != 10 {
-		t.Errorf("footer baseline %v size %v, want just above 275", f.y, f.size)
-	}
-}
-
-func TestHeaderFooter_HidesTextInPageArea(t *testing.T) {
-	src := `<p>body</p>`
-	tpl := `<div class="text">HIDE</div><div>KEEP</div>`
-	for _, tt := range []struct {
-		name   string
-		margin float64
-		shown  bool
-	}{{"room in the margin", 72, true}, {"no margin", 0, false}} {
-		t.Run(tt.name, func(t *testing.T) {
-			o := Options{MarginTop: tt.margin, MarginBottom: tt.margin, HeaderTemplate: tpl}
-			pg := convertDoc(t, src, o).Pages[0]
-			if hasText(pg, "HIDE") != tt.shown {
-				t.Errorf("text element shown %v, want %v", hasText(pg, "HIDE"), tt.shown)
-			}
-			if !hasText(pg, "KEEP") {
-				t.Error("an element without the text class was hidden")
-			}
-		})
-	}
-}
-
-func TestHeaderFooter_Artifacts(t *testing.T) {
-	doc := convertDoc(t, `<p>x</p>`, Options{MarginTop: 72, HeaderTemplate: `<p>head</p>`})
-	pg := doc.Pages[0]
-	if !hasText(pg, "head") {
-		t.Fatal("no header")
-	}
-	// The page's own content comes first; the header, appended after it,
-	// paints over it as an artifact.
-	n := len(pg.Content)
-	if structured(pg.Content[n-1:]) {
-		t.Error("the header hangs from the structure tree")
-	}
-}
-
 // TestPageSetup_StopsOnCancel checks that a page the layout asks for under
 // a cancelled context gets the paper of the options and leaves the
 // context's error for the conversion to report.
@@ -484,34 +403,5 @@ func TestMarginBoxes_OverflowWarns(t *testing.T) {
 	}
 	if n != 1 {
 		t.Errorf("%d overflow warnings, want 1 in %+v", n, doc.Warnings)
-	}
-}
-
-// TestHeaderFooter_SharesPictures locks a picture of the templates drawn
-// on every page from one decoded source, which the writer writes once.
-func TestHeaderFooter_SharesPictures(t *testing.T) {
-	data := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes(t, 2, 2))
-	doc := convertDoc(t, `<p>a</p><p style="break-before: page">b</p><p style="break-before: page">c</p>`,
-		Options{MarginTop: 72, HeaderTemplate: `<img src="` + data + `" style="height: 10px">`})
-	if len(doc.Pages) != 3 {
-		t.Fatalf("%d pages, want 3", len(doc.Pages))
-	}
-	sources := map[*typeset.ImageSource]bool{}
-	var walk func([]typeset.Fragment)
-	walk = func(frags []typeset.Fragment) {
-		for _, f := range frags {
-			switch v := f.(type) {
-			case *typeset.Image:
-				sources[v.Source] = true
-			case *typeset.Group:
-				walk(v.Content)
-			}
-		}
-	}
-	for _, pg := range doc.Pages {
-		walk(pg.Content)
-	}
-	if len(sources) != 1 {
-		t.Errorf("%d image sources for the template's picture on 3 pages, want 1", len(sources))
 	}
 }

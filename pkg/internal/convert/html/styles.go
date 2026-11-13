@@ -78,6 +78,21 @@ func (c *collector) userSheet(ctx context.Context, n int, body string) *css.Styl
 	return c.parse(ctx, []byte(body), key, "", name)
 }
 
+// bandSheet parses body, the CSS of the n-th band, as [collector.userSheet]
+// parses a user stylesheet.
+func (c *collector) bandSheet(ctx context.Context, n int, body string) *css.Stylesheet {
+	name := fmt.Sprintf("CSS of band %d", n)
+	if err := c.res.admit(ctx, len(body)); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		c.warn(warningCode(err), warn.Approximated, fmt.Sprintf("the %s was left out: %v", name, err))
+		return nil
+	}
+	key := resolveRef(c.base, fmt.Sprintf("?litho-band-style=%d", n))
+	return c.parse(ctx, []byte(body), key, "", name)
+}
+
 // styleElement parses a <style> element whose type is CSS (HTML Standard,
 // 4.2.6): an absent or empty type, or text/css.
 func (c *collector) styleElement(ctx context.Context, n *dom.Node) *css.Stylesheet {

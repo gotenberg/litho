@@ -55,6 +55,9 @@ type pageSetup struct {
 	// page-margin boxes of the page last painted.
 	counters []map[string]int
 	links    []typeset.Link
+	// overflow indexes the warnings of content overflowing its box, which
+	// a second layout drops.
+	overflow []int
 	// err is ctx's error, which stopped a page's resolution. The layout
 	// callbacks that ask for a page return no error: the layout stops at
 	// its own next check of ctx, and [prepared.assemble] reports err.
@@ -142,10 +145,11 @@ func (p *prepared) setupPages(ctx context.Context, r *css.Resolver) {
 		// 3.2).
 		p.layout.PageGroups = r.HasPageGroups()
 	}
-	boxes := r.HasMarginBoxes()
-	if boxes && p.b != nil && p.b.gcpm.active() {
+	boxes := r.HasMarginBoxes() || len(p.bands) > 0
+	if boxes && p.b != nil && (p.b.gcpm.active() || len(p.bands) > 0) {
 		// The named strings and running elements a page shows follow
-		// where their elements landed (CSS GCPM 3, 2).
+		// where their elements landed (CSS GCPM 3, 1), and the links of
+		// a band reach the document's anchors.
 		p.layout.Placed = func(a map[string]typeset.Dest) { p.b.gcpm.placed = a }
 	}
 	if p.b != nil && p.b.targets.use.Any {
@@ -164,24 +168,19 @@ func (p *prepared) setupPages(ctx context.Context, r *css.Resolver) {
 			t.infos, t.pageNums = infos, nil
 		}
 	}
-	if !boxes && p.o.HeaderTemplate == "" && p.o.FooterTemplate == "" {
+	if !boxes {
 		return
 	}
 	p.layout.MarginContent = func(info layout.PageInfo, pages int) []typeset.Fragment {
-		// The headers and footers, drawn once the layout is done, need
-		// the page boxes of the pages it laid out.
+		// The page counters and a second layout of RoomContent read the
+		// pages laid out.
 		p.infos = append(p.infos, info)
-		if !boxes {
-			return nil
-		}
 		return p.marginContent(ctx, info, pages)
 	}
-	if boxes {
-		p.layout.MarginLinks = func(layout.PageInfo) []typeset.Link {
-			links := p.pages.links
-			p.pages.links = nil
-			return links
-		}
+	p.layout.MarginLinks = func(layout.PageInfo) []typeset.Link {
+		links := p.pages.links
+		p.pages.links = nil
+		return links
 	}
 }
 

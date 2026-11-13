@@ -137,8 +137,9 @@ type convertConfig struct {
 	noShrinkToFit         bool
 	finishedAnimations    bool
 	omitCanvasBackground  bool
-	headerTemplate        string
-	footerTemplate        string
+	bands                 []configBand
+	firstPageNumber       int
+	firstPageNumberSet    bool
 	singlePage            bool
 	fractionalFontMetrics bool
 	userStylesheets       []string
@@ -387,11 +388,12 @@ func WithOutline(outline bool) ConvertOption {
 }
 
 // WithDate sets the one date of the conversion, which the fields of the
-// source that show the current date or time take: the date class of an HTML
-// header or footer template, the date and time fields of a spreadsheet's
-// headers and footers and of a slide, and in a text document the fields of
-// the current date, the current time and the print date that the file
-// neither fixes nor locks. A field of the date a document was created or
+// source that show the current date or time take: the date and time fields
+// of a spreadsheet's headers and footers and of a slide, and in a text
+// document the fields of the current date, the current time and the print
+// date that the file neither fixes nor locks. An HTML or Markdown source
+// has no such field: a band of [WithHeader] shows a date written in its
+// HTML. A field of the date a document was created or
 // saved keeps what the file stores. The zero time, the default, leaves
 // every field showing what its file stored, or nothing where the file
 // stores none. The output never depends on the clock.
@@ -628,27 +630,54 @@ func WithFinishedAnimations(finished bool) HTMLOption {
 	return htmlOption(func(c *convertConfig) { c.finishedAnimations = finished })
 }
 
-// WithHeaderTemplate draws the HTML fragment html in the top margin of
-// every page of an HTML or Markdown source: the fragment is the inner HTML
-// of a box as wide as the page and as tall as the margin, laid out with the
-// stylesheet and defaults of a browser's print header, where the text of an
-// element of class date, title, url, pageNumber or totalPages is replaced
-// by the date of [WithDate], the document title, the URL of [WithBaseURL],
-// the page number and the page count, and an element of class text that
-// reaches into the page area is hidden. Empty, the default, draws nothing.
+// WithHeader draws band in the top margin of the pages of an HTML or
+// Markdown source that band.Pages selects, in the place of the
+// page-margin boxes of that margin (CSS Paged Media 3, 5). Several apply in
+// order: on a page two select, the later one draws, and one whose HTML is
+// empty leaves the page to the document's own boxes. None, the default,
+// draws the margins as the document's style sheets do. See [PageBand] for
+// what the band holds and how it is laid out. Past 64 headers and footers
+// together, a band whose HTML and CSS pass 1 MiB together, or a band out of
+// range, the conversion fails with [ErrInvalidConvertOptions].
 //
-// A page-margin box of the document's own stylesheet, or of
-// [WithUserStylesheet], draws a header without a template (CSS Paged Media
-// 3, 6.4).
-func WithHeaderTemplate(html string) HTMLOption {
-	return htmlOption(func(c *convertConfig) { c.headerTemplate = html })
+// A band on every page but the first is two options:
+//
+//	pdf.WithHeader(pdf.PageBand{HTML: header}),
+//	pdf.WithHeader(pdf.PageBand{Pages: pdf.FirstPage()}),
+//
+// In a Markdown source, a band shows the title, its first heading, with
+// string(litho-title), and the current section once a user stylesheet
+// names it:
+//
+//	pdf.FromMarkdown(src,
+//		pdf.WithUserStylesheet(`h2 { string-set: section content(text) }`),
+//		pdf.WithHeader(pdf.PageBand{
+//			HTML: `<span class="t"></span><span class="s"></span>`,
+//			CSS:  `.t::after { content: string(litho-title) } .s::before { content: " | " string(section) }`,
+//		}),
+//	)
+func WithHeader(band PageBand) HTMLOption {
+	return htmlOption(func(c *convertConfig) { c.bands = append(c.bands, configBand{band: band}) })
 }
 
-// WithFooterTemplate draws the HTML fragment html in the bottom margin of
-// every page of an HTML or Markdown source, as [WithHeaderTemplate] does in
-// the top one.
-func WithFooterTemplate(html string) HTMLOption {
-	return htmlOption(func(c *convertConfig) { c.footerTemplate = html })
+// WithFooter draws band in the bottom margin of the pages of an HTML or
+// Markdown source that band.Pages selects, as [WithHeader] draws one in the
+// top margin. Headers and footers are chosen apart: a footer never takes
+// the place of a header.
+func WithFooter(band PageBand) HTMLOption {
+	return htmlOption(func(c *convertConfig) { c.bands = append(c.bands, configBand{band: band, footer: true}) })
+}
+
+// WithFirstPageNumber numbers the first page of an HTML or Markdown source
+// n, and the pages after it on from there: the page counter that
+// counter(page) shows in a [PageBand] and in a page-margin box starts at n
+// (CSS Paged Media 3, 6.1). 1 is the default. The document's @page rules
+// that reset, increment or set the page counter apply on top of it. n lies
+// in [0, 2^30]; any other value fails the conversion with
+// [ErrInvalidConvertOptions]. It numbers nothing else: [WithPageRanges] and
+// [PageRange] count pages from 1 whatever their number.
+func WithFirstPageNumber(n int) HTMLOption {
+	return htmlOption(func(c *convertConfig) { c.firstPageNumber, c.firstPageNumberSet = n, true })
 }
 
 // WithSinglePage writes an HTML or Markdown source on one page sized to its
@@ -679,8 +708,8 @@ func WithFractionalFontMetrics(fractional bool) HTMLOption {
 // wants of any document without editing it: an @page size or margin, a
 // page-margin box, a font, a rule hiding an element. Several stylesheets
 // apply in the order given. Its relative URLs resolve as the document's do.
-// It styles the document only, not the templates of [WithHeaderTemplate]
-// and [WithFooterTemplate], which carry their own stylesheet.
+// It styles the bands of [WithHeader] and [WithFooter] too, unless they are
+// isolated.
 //
 // A stylesheet counts against the caps of [WithResources], and a construct
 // of it the engine does not support is reported as a warning, as one of the

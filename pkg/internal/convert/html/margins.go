@@ -53,6 +53,8 @@ type marginBox struct {
 	// minW and maxW are the outer min- and max-content widths, contentH
 	// the content's height at the used width.
 	minW, maxW, contentH float64
+	// band is the band the box shows, nil for a box of the @page rules.
+	band *bandState
 }
 
 // The page sides a page-margin box belongs to.
@@ -255,23 +257,34 @@ func variableSizes(avail float64, s [3]sizing) [3]float64 {
 
 // marginContent returns the page-margin boxes of the page info names, one
 // of pages, laid out on the page (CSS Page 3, 5), as artifacts: the
-// layout.Options.MarginContent of the document.
+// layout.Options.MarginContent of the document. A band drawn on the page
+// takes the place of the boxes of its margin.
 func (p *prepared) marginContent(ctx context.Context, info layout.PageInfo, pages int) []typeset.Fragment {
 	e := p.pages.entry(info)
-	if len(e.style.MarginBoxes) == 0 {
+	bands := p.bandsOn(info, pages)
+	if len(e.style.MarginBoxes) == 0 && bands[0] == nil && bands[1] == nil {
 		return nil
 	}
-	pb := p.setup.layoutBox(e.box)
+	pb := p.setup.layoutBox(p.pageBox(info))
 	var boxes []*marginBox
 	for which := range css.NumMarginBoxes {
+		side, pos := marginSide(which)
+		if edge := sideEdge(side); edge >= 0 && bands[edge] != nil {
+			if pos == 1 {
+				boxes = append(boxes, p.bandBox(bands[edge], edge, info.Index, pages, pb))
+			}
+			continue
+		}
 		st := e.style.MarginBoxes[which]
 		if st == nil {
 			continue
 		}
 		mb := &marginBox{which: which, st: st, cb: containingBlock(which, pb)}
 		mb.kids = p.marginNodes(ctx, st, info.Index, pages, pb)
-		p.fixedAxes(mb)
 		boxes = append(boxes, mb)
+	}
+	for _, mb := range boxes {
+		p.fixedAxes(mb)
 	}
 	if err := p.measureVariable(ctx, boxes); err != nil {
 		p.warnMargins(err)
@@ -283,6 +296,9 @@ func (p *prepared) marginContent(ctx context.Context, info layout.PageInfo, page
 		return nil
 	}
 	for _, mb := range boxes {
+		if mb.band != nil {
+			p.needRoom(mb)
+		}
 		p.warnOverflow(mb)
 	}
 	frags, links, err := p.paintMargins(ctx, boxes, pb)
@@ -292,6 +308,18 @@ func (p *prepared) marginContent(ctx context.Context, info layout.PageInfo, page
 	}
 	p.pages.links = links
 	return frags
+}
+
+// sideEdge returns the band edge of a page side: 0 for the top, 1 for the
+// bottom, -1 for the others.
+func sideEdge(side int) int {
+	switch side {
+	case sideTop:
+		return 0
+	case sideBottom:
+		return 1
+	}
+	return -1
 }
 
 // overflowSlack is how far a page-margin box's content may pass its box
@@ -308,8 +336,12 @@ func (p *prepared) warnOverflow(mb *marginBox) {
 	if mb.contentH <= mb.y.size+overflowSlack {
 		return
 	}
+	if mb.band != nil {
+		p.warnBand(mb)
+		return
+	}
 	round := func(v float64) float64 { return math.Round(v*100) / 100 }
-	p.warnOnce(warn.Approximated, fmt.Sprintf(
+	p.warnOverflowOnce(fmt.Sprintf(
 		"the content of the @%s page-margin box is %v points tall and the box %v points: it overflows the box",
 		mb.which, round(mb.contentH), round(mb.y.size)))
 }
@@ -697,22 +729,22 @@ func (p *prepared) marginNodes(ctx context.Context, st *css.Style, index, pages 
 				out = append(out, n)
 			}
 		case css.ItemNamedString, css.ItemElement:
-			if p.b == nil {
-				continue
-			}
-			g := &p.b.gcpm
 			top := pb.Bleed + pb.Margin[css.Top]
 			if it.Kind == css.ItemNamedString {
-				if a, ok := g.pick(g.strings, it.Text, it.Pick, index, top); ok {
+				if a, ok := p.namedString(it.Text, it.Pick, index, top); ok {
 					sb.WriteString(a.value)
 				}
 				continue
 			}
-			if a, ok := g.pick(g.running, it.Text, it.Pick, index, top); ok && a.node != nil {
+			if p.b == nil {
+				continue
+			}
+			g := &p.b.gcpm
+			if a, ok := g.pick(g.running, it.Text, it.Pick, index, top, nil); ok && a.node != nil {
 				flush()
 				n := a.node
 				if a.paged {
-					n = g.atPage(n, text, 0)
+					n = g.atPage(n, p.pageText(st, index, pages, top), 0)
 				}
 				out = append(out, runningBox(n, st))
 			}
@@ -830,11 +862,12 @@ func addCounter(a, b int) int {
 
 // pageCounters returns the counters of the page context on the page of
 // index (CSS Page 3, 6.1), computed in page order from the page styles:
-// the page counter starts at 0 before the first page and each page adds 1
-// to it, unless the page context's counter-reset, counter-increment or
-// counter-set names it, as WeasyPrint decides the draft leaves open; a
-// counter of the page context lives on from page to page, the pages being
-// siblings (CSS 2.1, 12.4.1). nil when the page was not laid out.
+// the page counter starts at [Options.PageCounterStart] before the first
+// page and each page adds 1 to it, unless the page context's
+// counter-reset, counter-increment or counter-set names it, as WeasyPrint
+// decides the draft leaves open; a counter of the page context lives on
+// from page to page, the pages being siblings (CSS 2.1, 12.4.1). nil when
+// the page was not laid out.
 //
 // # Corpus evidence
 //
@@ -846,7 +879,7 @@ func addCounter(a, b int) int {
 func (p *prepared) pageCounters(index int) map[string]int {
 	s := p.pages
 	for k := len(s.counters); k <= index && k < len(p.infos); k++ {
-		cur := map[string]int{pageCounter: 0}
+		cur := map[string]int{pageCounter: s.o.PageCounterStart}
 		if k > 0 {
 			cur = maps.Clone(s.counters[k-1])
 		}

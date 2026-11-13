@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/pdf"
@@ -85,10 +86,11 @@ func optionsAs[T, O any](opts []O) []T {
 	return out
 }
 
-// maxTemplateBytes bounds a header or footer template read from a source
-// directory. Anti-DoS guard, not spec-mandated: the templates of the corpus
-// are a few hundred bytes, and a committed file is trusted, so the cap only
-// stops a mistake such as naming the wrong file.
+// maxTemplateBytes bounds a file an option names in a source directory: a
+// header or footer template, a band's HTML or CSS, a stylesheet. Anti-DoS
+// guard, not spec-mandated: the files of the corpus are a few kilobytes,
+// and a committed file is trusted, so the cap only stops a mistake such as
+// naming the wrong file.
 const maxTemplateBytes = 64 << 10
 
 // Options are the Chromium route's form fields a source is converted with,
@@ -137,7 +139,8 @@ type Options struct {
 	EmulatedMediaFeatures map[string]string `json:"emulatedMediaFeatures,omitempty"`
 	// Header and Footer name a file of the source directory posted as the
 	// route's header.html and footer.html, the templates Chromium draws in
-	// the top and bottom margins. Default none.
+	// the top and bottom margins. litho draws no template: a source that
+	// sets one sets Bands too, the bands that stand for it. Default none.
 	Header string `json:"header,omitempty"`
 	Footer string `json:"footer,omitempty"`
 	// UserStylesheets name files of the source directory litho takes as
@@ -149,10 +152,80 @@ type Options struct {
 	// Markdown document into. It is litho's own option, no route field: a
 	// source that sets it names ReferenceOf. Default litho's template.
 	MarkdownTemplate string `json:"markdownTemplate,omitempty"`
+	// Bands are litho's headers and footers, pdf.WithHeader and
+	// pdf.WithFooter, in order. It is litho's own option, no route field:
+	// a source that sets it names ReferenceOf, or posts the Chromium
+	// templates of Header and Footer that it stands for. Default none.
+	Bands []BandOptions `json:"bands,omitempty"`
 	// ReferenceOf names another fixture of the same corpus, by its ID,
 	// whose reference stands for this source's (see
 	// [OfficeOptions.ReferenceOf]). It is no route field. Default none.
 	ReferenceOf string `json:"reference_of,omitempty"`
+}
+
+// BandOptions are one band of [Options.Bands].
+type BandOptions struct {
+	// Edge is "header" or "footer".
+	Edge string `json:"edge"`
+	// HTML and CSS name files of the source directory: the band's
+	// pdf.PageBand.HTML and CSS. Left out, the band's HTML is empty, which
+	// removes a band from the pages it selects.
+	HTML string `json:"html,omitempty"`
+	CSS  string `json:"css,omitempty"`
+	// Pages are the page set's terms, joined by pdf.PageSet.Or: "first",
+	// "last", "left", "right", "blank", "N-M" and "N-" (pdf.PageRange, M
+	// left out for the last page), "page:NAME" (pdf.NamedPages). Left
+	// out, every page.
+	Pages []string `json:"pages,omitempty"`
+	// Room is "margin", the default, or "content".
+	Room string `json:"room,omitempty"`
+	// Isolated sets pdf.PageBand.Isolated.
+	Isolated bool `json:"isolated,omitempty"`
+}
+
+// pageSet returns the page set of the terms of b.
+func (b BandOptions) pageSet() (pdf.PageSet, error) {
+	var set pdf.PageSet
+	for i, term := range b.Pages {
+		var t pdf.PageSet
+		switch {
+		case term == "first":
+			t = pdf.FirstPage()
+		case term == "last":
+			t = pdf.LastPage()
+		case term == "left":
+			t = pdf.LeftPages()
+		case term == "right":
+			t = pdf.RightPages()
+		case term == "blank":
+			t = pdf.BlankPages()
+		case strings.HasPrefix(term, "page:") && len(term) > len("page:"):
+			t = pdf.NamedPages(strings.TrimPrefix(term, "page:"))
+		default:
+			from, to, ok := strings.Cut(term, "-")
+			f, err := strconv.Atoi(from)
+			l := 0
+			if ok && to != "" {
+				l, err = strconv.Atoi(to)
+			}
+			if !ok || err != nil || f < 1 || l != 0 && l < f {
+				return pdf.PageSet{}, fmt.Errorf("band pages %q: want first, last, left, right, blank, N-M, N- or page:NAME", term)
+			}
+			t = pdf.PageRange(f, l)
+		}
+		if i == 0 {
+			set = t
+		} else {
+			set = set.Or(t)
+		}
+	}
+	return set, nil
+}
+
+// SourceBand is a band of a source, read.
+type SourceBand struct {
+	Footer bool
+	Band   pdf.PageBand
 }
 
 // Source is one source directory, read.
@@ -168,9 +241,8 @@ type Source struct {
 	// Options are the options read from options.json, zero when there is
 	// none.
 	Options Options
-	// HeaderTemplate and FooterTemplate are the contents of the files
-	// Options.Header and Options.Footer name.
-	HeaderTemplate, FooterTemplate string
+	// Bands are the bands of Options.Bands, their files read.
+	Bands []SourceBand
 	// UserStylesheets are the contents of the files
 	// Options.UserStylesheets names, in order.
 	UserStylesheets []string
@@ -209,11 +281,29 @@ func Load(dir string) (*Source, error) {
 		return nil, fmt.Errorf("%s: %w", filepath.Join(dir, OptionsFile), err)
 	}
 	s.Options = opts
-	if s.HeaderTemplate, err = readTemplate(dir, opts.Header); err != nil {
-		return nil, err
+	for _, name := range []string{opts.Header, opts.Footer} {
+		// The templates are posted to the route alone: they must be
+		// there and in bounds.
+		if _, err := readTemplate(dir, name); err != nil {
+			return nil, err
+		}
 	}
-	if s.FooterTemplate, err = readTemplate(dir, opts.Footer); err != nil {
-		return nil, err
+	for _, b := range opts.Bands {
+		pages, err := b.pageSet()
+		if err != nil {
+			return nil, err
+		}
+		sb := SourceBand{Footer: b.Edge == "footer", Band: pdf.PageBand{Pages: pages, Isolated: b.Isolated}}
+		if b.Room == "content" {
+			sb.Band.Room = pdf.RoomContent
+		}
+		if sb.Band.HTML, err = readTemplate(dir, b.HTML); err != nil {
+			return nil, err
+		}
+		if sb.Band.CSS, err = readTemplate(dir, b.CSS); err != nil {
+			return nil, err
+		}
+		s.Bands = append(s.Bands, sb)
 	}
 	for _, name := range opts.UserStylesheets {
 		css, err := readTemplate(dir, name)
@@ -258,7 +348,10 @@ func decodeStrict(data []byte, names []string, v any) error {
 			return fmt.Errorf("decoding: unknown field %q", name)
 		}
 	}
-	if err := json.Unmarshal(data, v); err != nil {
+	// A nested object, such as a band, refuses an unknown field too.
+	strict := json.NewDecoder(bytes.NewReader(data))
+	strict.DisallowUnknownFields()
+	if err := strict.Decode(v); err != nil {
 		return fmt.Errorf("decoding: %w", err)
 	}
 	return nil
@@ -273,7 +366,7 @@ var OptionNames = []string{
 
 // LithoOptionNames are the keys of an options file that are litho's own
 // options: the route has no such field and never receives them.
-var LithoOptionNames = []string{"userStylesheets", "markdownTemplate"}
+var LithoOptionNames = []string{"userStylesheets", "markdownTemplate", "bands"}
 
 // validate checks the values against the ranges the Chromium route accepts.
 func (o Options) validate() error {
@@ -299,10 +392,26 @@ func (o Options) validate() error {
 	default:
 		return fmt.Errorf("emulatedMediaType %q: want print or screen", o.EmulatedMediaType)
 	}
-	for _, name := range append([]string{o.Header, o.Footer, o.MarkdownTemplate}, o.UserStylesheets...) {
+	files := append([]string{o.Header, o.Footer, o.MarkdownTemplate}, o.UserStylesheets...)
+	for _, b := range o.Bands {
+		switch {
+		case b.Edge != "header" && b.Edge != "footer":
+			return fmt.Errorf("band edge %q: want header or footer", b.Edge)
+		case b.Room != "" && b.Room != "margin" && b.Room != "content":
+			return fmt.Errorf("band room %q: want margin or content", b.Room)
+		}
+		if _, err := b.pageSet(); err != nil {
+			return err
+		}
+		files = append(files, b.HTML, b.CSS)
+	}
+	for _, name := range files {
 		if name != "" && (name != filepath.Base(name) || strings.ContainsAny(name, `/\`) || name == "." || name == "..") {
 			return fmt.Errorf("template %q: want a file name of the source directory", name)
 		}
+	}
+	if (o.Header != "" || o.Footer != "") && len(o.Bands) == 0 {
+		return errors.New("header or footer: litho draws no template, want the bands that stand for it")
 	}
 	if slices.Contains(o.UserStylesheets, "") {
 		return errors.New("userStylesheets: want file names of the source directory")
@@ -401,8 +510,8 @@ func (s *Source) PreferCSSPageSize() bool {
 // PrintOptions returns the litho options of the route's print fields, every
 // one but the paper, the margins, the media type and the CSS page size,
 // which the callers pass themselves: landscape, scale, page ranges, single
-// page, backgrounds, outline, header and footer templates and media
-// features. A field the options leave out maps to its corpus default. A
+// page, backgrounds, outline and media features; then the bands that stand
+// for the header and footer templates, and the user stylesheets. A field the options leave out maps to its corpus default. A
 // single page sets the page ranges aside: one page has none to select, and
 // a conversion refuses the pair.
 func (s *Source) PrintOptions() []pdf.HTMLOption {
@@ -421,11 +530,12 @@ func (s *Source) PrintOptions() []pdf.HTMLOption {
 	if o.NativePages != "" && !o.SinglePage {
 		opts = append(opts, pdf.WithPageRanges(o.NativePages))
 	}
-	if s.HeaderTemplate != "" {
-		opts = append(opts, pdf.WithHeaderTemplate(s.HeaderTemplate))
-	}
-	if s.FooterTemplate != "" {
-		opts = append(opts, pdf.WithFooterTemplate(s.FooterTemplate))
+	for _, b := range s.Bands {
+		if b.Footer {
+			opts = append(opts, pdf.WithFooter(b.Band))
+		} else {
+			opts = append(opts, pdf.WithHeader(b.Band))
+		}
 	}
 	if len(o.EmulatedMediaFeatures) > 0 {
 		opts = append(opts, pdf.WithMediaFeatures(o.EmulatedMediaFeatures))
@@ -439,7 +549,8 @@ func (s *Source) PrintOptions() []pdf.HTMLOption {
 // LithoOptions returns the keys of [LithoOptionNames] the source's
 // conversion applies, in that list's order: userStylesheets when it names a
 // stylesheet, markdownTemplate when it names a template and the document is
-// Markdown, the only format that renders into one. A source that names none
+// Markdown, the only format that renders into one, bands when it names
+// bands and no Chromium template stands for them. A source that names none
 // converts as Chromium prints it.
 func (s *Source) LithoOptions() []string {
 	var keys []string
@@ -448,6 +559,9 @@ func (s *Source) LithoOptions() []string {
 	}
 	if s.Options.MarkdownTemplate != "" && s.Format == FormatMarkdown {
 		keys = append(keys, "markdownTemplate")
+	}
+	if len(s.Options.Bands) > 0 && s.Options.Header == "" && s.Options.Footer == "" {
+		keys = append(keys, "bands")
 	}
 	return keys
 }

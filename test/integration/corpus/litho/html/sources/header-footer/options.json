@@ -1,1 +1,8 @@
-{ "header": "header.html", "footer": "footer.html" }
+{
+  "header": "header.html",
+  "footer": "footer.html",
+  "bands": [
+    { "edge": "header", "html": "band-header.html", "css": "band.css" },
+    { "edge": "footer", "html": "band-footer.html", "css": "band.css" }
+  ]
+}

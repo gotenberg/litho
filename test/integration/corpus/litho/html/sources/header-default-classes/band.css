@@ -1,0 +1,6 @@
+@import url("chromium-template.css");
+
+#header,
+#footer {
+  height: 27.75pt;
+}

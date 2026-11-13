@@ -39,7 +39,7 @@ type htmlSettings struct {
 	MarkdownTemplate string
 	// Print are the remaining print options of an HTML or Markdown source,
 	// after the ones above: landscape, scale, page ranges, single page,
-	// backgrounds, outline, header and footer templates and media features
+	// backgrounds, outline, media features, bands and user stylesheets
 	// (see fixture.Source.PrintOptions in test/integration/fixture).
 	Print []pdf.HTMLOption
 	// Office is an Office source, nil for an HTML or Markdown one. It

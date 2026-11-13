@@ -99,15 +99,3 @@ func TestConvert_UserPageRules(t *testing.T) {
 		}
 	}
 }
-
-func TestConvert_UserStylesheetLeavesTemplatesAlone(t *testing.T) {
-	t.Parallel()
-	o := Options{MarginTop: 72, HeaderTemplate: `<p>head</p>`, UserStylesheets: []string{`p { font-size: 30px }`}}
-	pg := convertDoc(t, `<p>body</p>`, o).Pages[0]
-	if got := find(t, pg, "body").size; got != 22.5 {
-		t.Errorf("document text size %v, want the user's 30px", got)
-	}
-	if got := find(t, pg, "head").size; got == 22.5 {
-		t.Error("the user stylesheet styled the header template")
-	}
-}

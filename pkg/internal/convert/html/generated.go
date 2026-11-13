@@ -440,7 +440,7 @@ func (b *builder) generate(ctx context.Context, n *dom.Node, ps *css.Style) []*l
 	// segs are the page counter items of the text being joined.
 	var segs []pagedText
 	flush := func() {
-		if sb.Len() > 0 {
+		if sb.Len() > 0 || len(segs) > 0 {
 			t := sb.String()
 			node := &layout.Node{Kind: layout.Text, Style: ps, Text: strings.ToValidUTF8(t, "�")}
 			if len(segs) > 0 && node.Text == t {
@@ -512,9 +512,16 @@ func (b *builder) generate(ctx context.Context, n *dom.Node, ps *css.Style) []*l
 				flush()
 				out = append(out, t)
 			}
-		case css.ItemNamedString, css.ItemElement, css.ItemContent:
-			// string() and element() generate content in a page-margin
-			// box alone, content() in string-set alone (CSS GCPM 3, 2).
+		case css.ItemNamedString:
+			// string() shows the named string of the page a running
+			// element or a band is drawn on, as in a page-margin box (CSS
+			// GCPM 3, 1.1.2), and nothing in the flow.
+			if !cut {
+				segs = append(segs, pagedText{start: sb.Len(), end: sb.Len(), item: it})
+			}
+		case css.ItemElement, css.ItemContent:
+			// element() generates content in a page-margin box alone,
+			// content() in string-set alone (CSS GCPM 3, 1).
 		}
 	}
 	flush()
