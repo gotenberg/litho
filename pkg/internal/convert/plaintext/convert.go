@@ -235,6 +235,11 @@ type layouter struct {
 
 // run reads the source and lays out every source line.
 func (l *layouter) run(ctx context.Context, src io.Reader) error {
+	// The read buffer is all the conversion holds of its source.
+	if err := l.mem.ChargeUnits(1, readBufferBytes, "the source"); err != nil {
+		return err
+	}
+	defer l.mem.Release(readBufferBytes)
 	in := newSource(src, l.opts.MaxInputBytes)
 	if err := in.skipBOM(); err != nil {
 		return err

@@ -517,8 +517,13 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 	case kindDOCX, kindODT, kindXLSX, kindODS, kindCSV, kindPPTX, kindODP:
 		doc, err = convertOffice(ctx, src, c.kind, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages, stream)
 	case kindText:
-		doc, err = convertPlainText(ctx, src, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages, stream)
+		// The text converter holds a piece of its source at a time, which
+		// it charges itself.
+		doc, err = convertPlainText(ctx, c.src, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages, stream)
 	}
+	// The other converters hold their source whole, or the tree they parse
+	// it into, until they return.
+	mem.Release(src.charged)
 	if err != nil {
 		return nil, err
 	}

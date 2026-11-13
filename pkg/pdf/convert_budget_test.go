@@ -9,6 +9,8 @@ import (
 	"image"
 	"image/png"
 	"io"
+	"log/slog"
+	"regexp"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -99,6 +101,33 @@ func TestConvert_PagesLeaveTheBudgetOnceWritten(t *testing.T) {
 	_, err = FromText(strings.NewReader(text), append(low, WithPageRanges("last,1"))...).WriteTo(context.Background(), &out)
 	if !errors.Is(err, ErrConvertInputTooLarge) {
 		t.Errorf("a selection that holds every page under 4 MiB: %v, want ErrConvertInputTooLarge", err)
+	}
+}
+
+// TestConvert_TextChargesThePieceItHolds pins that a plain text
+// conversion charges what it holds of its source, the piece it reads at a
+// time, not every byte it reads: the same lines with CR LF endings, a
+// byte longer each, lay out alike and peak at the same charge.
+func TestConvert_TextChargesThePieceItHolds(t *testing.T) {
+	t.Parallel()
+	dir := convertFontDir(t)
+	peak := func(src string) string {
+		var log bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&log, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		opts := []TextOption{WithConvertFontDirs(dir), WithConvertLogger(logger)}
+		if _, err := FromText(strings.NewReader(src), opts...).WriteTo(context.Background(), io.Discard); err != nil {
+			t.Fatal(err)
+		}
+		m := regexp.MustCompile(`convert: memory account" peak=(\d+)`).FindStringSubmatch(log.String())
+		if m == nil {
+			t.Fatalf("no memory account in the log:\n%s", log.String())
+		}
+		return m[1]
+	}
+	line := "words and more words on a line of text"
+	lf, crlf := peak(strings.Repeat(line+"\n", 4000)), peak(strings.Repeat(line+"\r\n", 4000))
+	if lf != crlf {
+		t.Errorf("peak %s bytes with LF endings, %s with CR LF, want the same", lf, crlf)
 	}
 }
 

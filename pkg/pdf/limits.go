@@ -241,14 +241,19 @@ func convertBudgetError(logger *slog.Logger, name string, b *limits.Budget, err 
 }
 
 // sourceByteCost is what one byte of a conversion's source costs its
-// budget: the converters hold the source whole, in one []byte.
+// budget: the HTML, Markdown, Office and CSV converters read the source
+// whole into one []byte, and hold it, or the tree they parse it into, until
+// they return.
 const sourceByteCost = 1
 
 // chargedReader reads a conversion's source, charging its budget for each
 // byte read, so a source the budget cannot hold fails as it is read.
+// charged counts what it charged, which the conversion gives back once
+// the converter that held the source returns.
 type chargedReader struct {
-	r io.Reader
-	b *limits.Budget
+	r       io.Reader
+	b       *limits.Budget
+	charged int64
 }
 
 func (c *chargedReader) Read(p []byte) (int, error) {
@@ -256,5 +261,6 @@ func (c *chargedReader) Read(p []byte) (int, error) {
 	if cerr := c.b.ChargeUnits(int64(n), sourceByteCost, "the source"); cerr != nil {
 		return n, cerr
 	}
+	c.charged += int64(n) * sourceByteCost
 	return n, err
 }
