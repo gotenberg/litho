@@ -16,6 +16,10 @@ type cblock struct {
 	// h is the height percentages resolve against when definite.
 	h         float64
 	hDefinite bool
+	// shrinkScrollers reports a table cell measured before its height
+	// is known, whose percentage-height scroll containers then take
+	// their min-height alone ([engine.layoutCell]).
+	shrinkScrollers bool
 }
 
 // strut is a set of adjoining margins being collapsed (CSS 2.1, 8.3.1):
@@ -714,6 +718,9 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 // and count toward its auto height (CSS 2.1, 10.6.7).
 func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	specH, hSet := specHeight(b, b.st.Height, cb)
+	if !hSet && cb.shrinkScrollers && b.st.ScrollContainer() && b.st.Height.HasPercent() {
+		specH, hSet = 0, true
+	}
 	own := &bfc{}
 	if b == e.rootBox {
 		// The document's formatting context keeps clear the boxes the

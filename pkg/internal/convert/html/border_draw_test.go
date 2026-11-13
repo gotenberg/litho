@@ -58,3 +58,41 @@ func absDiff(a, b uint8) uint8 {
 	}
 	return b - a
 }
+
+func TestDraw_CellScrollerTakesItsMinHeight(t *testing.T) {
+	t.Parallel()
+	// A table cell 100px tall holds a scroll container of height 100%
+	// around 200px of content: the cell stays 100px tall and the scroller
+	// clips. A visible overflow grows the cell to 200px. Measured on the
+	// pinned Chromium's print.
+	tests := []struct {
+		name     string
+		overflow string
+		want     bool
+	}{
+		{"scroll container", "auto", false},
+		{"visible overflow", "visible", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			o := Options{PageWidth: 40 * 0.75, PageHeight: 300 * 0.75}
+			doc := conv(t, `<body style="margin:0"><div style="display:table-cell;width:40px;height:100px;background:#00ff00"><div style="overflow:`+tt.overflow+`;height:100%"><div style="height:200px"></div></div></div><div style="height:20px;background:#0000ff"></div>`, o)
+			var b bytes.Buffer
+			if err := typeset.Write(context.Background(), doc, &b, typeset.Options{}); err != nil {
+				t.Fatal(err)
+			}
+			if RenderPDF == nil {
+				t.Fatal("no PDF renderer installed")
+			}
+			img, err := RenderPDF(b.Bytes(), 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			c := color.NRGBAModel.Convert(img.At(20, 150)).(color.NRGBA)
+			if grown := c.G > 200 && c.B < 50; grown != tt.want {
+				t.Errorf("pixel 150px down is %v, want the cell grown %v", c, tt.want)
+			}
+		})
+	}
+}

@@ -733,7 +733,23 @@ func (e *engine) layoutTableOnce(t *box, cb cblock, y float64) {
 // table's top, for a table of content width cbw: its height and baseline
 // are those of its content, and the table moves it into place. A fixedH
 // of 0 or more is the definite content height the cell's percentage
-// heights resolve against ([engine.relayoutPercentCells]).
+// heights resolve against ([engine.relayoutPercentCells]). Measured
+// before that, in a cell of a length height or a table of a height other
+// than auto, a child scroll container of a percentage height counts its
+// min-height alone, not its content, as Chromium sizes the cell; CSS
+// Tables 3 leaves it open.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium draws a 100px-tall cell holding a scroll
+//     container of height 100% around 200px of content 100px tall, and
+//     150px with a min-height of 150px; 200px tall for overflow visible,
+//     hidden or clip, and for a cell of auto height. In a table of
+//     height 100% (of an auto-height page) or 50% the cell is as tall as
+//     the scroller's min-height, 100px; in a table of auto height, of a
+//     cell of height 100% or of a row of height 100%, 200px, and a
+//     scroller of height 50% and min-height 100px in a row of height
+//     100px makes it 200px.
 func (e *engine) layoutCell(td *tableData, c *box, cbw, fixedH float64) {
 	cd := c.cell
 	t := td.table
@@ -747,6 +763,8 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw, fixedH float64) {
 	kcb := cblock{x: c.contentX(), w: c.w}
 	if fixedH >= 0 {
 		kcb.h, kcb.hDefinite = fixedH, true
+	} else if _, set := specHeight(c, c.st.Height, cblock{}); set || t.st.Height.Kind != css.Auto {
+		kcb.shrinkScrollers = true
 	}
 	saved := e.enterClamp(c, kcb, c.contentY())
 	end := formatterFor(c).layout(e, c, kcb, own, c.contentY(), mc)
