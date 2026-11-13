@@ -208,6 +208,24 @@ func fontconfigWeight(w float64) float64 {
 	return 0
 }
 
+// fontconfigDistance returns how far a face of weight have lies from a
+// request of weight want in fontconfig's weight scale, in 1/64 units: the
+// request's value truncated to a whole one, as Chromium hands it to
+// fontconfig, against the face's.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1, on screen and in
+//     print, draws an installed static family of 400, 500, 600 and 700
+//     faces (Fira Sans) at font-weight 401 to 449 with the 400 face, 450
+//     to 551.5 with the 500 one, 552 to 649 with the 600 one and from 650
+//     with the 700 one: the request at 551 is 140.8 in fontconfig's scale,
+//     as far from 100 as from 180 once truncated, at 552 141.6, nearer
+//     180.
+func fontconfigDistance(want, have int) int {
+	return int(math.Round(math.Abs(fontconfigWeight(float64(have))-math.Trunc(fontconfigWeight(float64(want)))) * 64))
+}
+
 // instanceWeightRank ranks the named instance (or default instance) of a
 // variable file of weight have for a request of weight want, lower first.
 // Chromium takes the instance fontconfig finds nearest in its weight
@@ -229,12 +247,12 @@ func fontconfigWeight(w float64) float64 {
 //     ExtraBlack instance, wght 1000.
 func instanceWeightRank(want, have int, rule Fallback) (int, int) {
 	if rule == FallbackChromium {
-		d := math.Abs(fontconfigWeight(float64(have)) - fontconfigWeight(float64(want)))
+		d := fontconfigDistance(want, have)
 		lighter := 0
 		if have > want {
 			lighter = 1
 		}
-		return int(math.Round(d * 64)), lighter
+		return d, lighter
 	}
 	class := func(w int) int { return min(max((w+50)/100, 1), 9) }
 	return intAbs(class(have) - class(want)), -have

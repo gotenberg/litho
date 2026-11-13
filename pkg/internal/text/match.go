@@ -851,6 +851,14 @@ type aspectRank [6]int
 // first, above 500 heavier ones. The faces of a variable font, its named
 // instances, rank by weight as [instanceWeightRank] says. Index order breaks
 // ties.
+//
+// Under [FallbackChromium] a static face ranks by weight as fontconfig
+// ranks it for Chromium, nearest in fontconfig's weight scale
+// ([fontconfigDistance]), which departs from CSS Fonts 4, 5.2, step 4c:
+// Chromium draws font-weight 510 to 551 with a family's 500 face where
+// the clause takes its 600 one, on screen and in print alike. A tie goes
+// to the face first in index order, as fontconfig's goes to the first
+// face of its set.
 func rankFace(req request, fc *Face) aspectRank {
 	var r aspectRank
 	k, d := stretchOrder(req.width(), widthPercent(fc.width))
@@ -865,6 +873,8 @@ func rankFace(req request, fc *Face) aspectRank {
 	switch {
 	case fc.axes != nil:
 		r[3], r[4] = instanceWeightRank(want, w, req.rule)
+	case req.rule == FallbackChromium:
+		r[3] = fontconfigDistance(want, w)
 	case want >= 400 && want <= 500:
 		switch {
 		case w >= want && w <= 500:

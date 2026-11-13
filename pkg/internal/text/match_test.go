@@ -435,3 +435,38 @@ func TestMatchFamiliesLeavesTheRequestedListAlone(t *testing.T) {
 		t.Errorf("requestedFamilies = %q after matchFamilies, want %q", got, want)
 	}
 }
+
+// TestMatch_StaticWeightUnderChromium pins that the static faces of an
+// installed family rank by weight as Chromium ranks them through
+// fontconfig under [FallbackChromium] (see [fontconfigDistance], which
+// holds the measurements), and by CSS Fonts 4, 5.2 under the other rules.
+func TestMatch_StaticWeightUnderChromium(t *testing.T) {
+	t.Parallel()
+	f := newTestFonts(t,
+		fontFile{name: "a_bold.ttf", data: familyFace("Fam", "Bold", 700, false)},
+		fontFile{name: "b_medium.ttf", data: familyFace("Fam", "Medium", 500, false)},
+		fontFile{name: "c_regular.ttf", data: familyFace("Fam", "Regular", 400, false)},
+		fontFile{name: "d_semibold.ttf", data: familyFace("Fam", "SemiBold", 600, false)},
+	)
+	for _, tc := range []struct {
+		weight int
+		rule   Fallback
+		want   string
+	}{
+		{449, FallbackChromium, "c_regular"},
+		{450, FallbackChromium, "b_medium"},
+		{510, FallbackChromium, "b_medium"},
+		{551, FallbackChromium, "b_medium"},
+		{552, FallbackChromium, "d_semibold"},
+		{649, FallbackChromium, "d_semibold"},
+		{650, FallbackChromium, "a_bold"},
+		{510, FallbackLibreOffice, "d_semibold"},
+		{450, FallbackLibreOffice, "b_medium"},
+		{649, FallbackLibreOffice, "a_bold"},
+	} {
+		s := Style{Families: []string{"Fam"}, Weight: tc.weight, Size: 10, Fallback: tc.rule}
+		if got := f.Match(s); !strings.Contains(got.Key(), tc.want) {
+			t.Errorf("weight %d, rule %v: %s, want %s", tc.weight, tc.rule, got.Key(), tc.want)
+		}
+	}
+}
