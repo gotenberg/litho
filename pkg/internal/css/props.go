@@ -171,6 +171,9 @@ const (
 	pStringSet
 	pFootnoteDisplay
 	pFootnotePolicy
+	pBookmarkLevel
+	pBookmarkLabel
+	pBookmarkState
 	pColumnCount
 	pColumnWidth
 	pColumnRuleStyle

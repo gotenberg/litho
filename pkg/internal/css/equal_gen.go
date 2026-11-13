@@ -726,6 +726,22 @@ func equalStyle(a, b *Style) bool {
 	if a.FootnotePolicy != b.FootnotePolicy {
 		return false
 	}
+	if a.BookmarkLevel != b.BookmarkLevel {
+		return false
+	}
+	if (a.BookmarkLabel == nil) != (b.BookmarkLabel == nil) || len(a.BookmarkLabel) != len(b.BookmarkLabel) {
+		return false
+	}
+	if len(a.BookmarkLabel) > 0 && &a.BookmarkLabel[0] != &b.BookmarkLabel[0] {
+		for i1 := range a.BookmarkLabel {
+			if !equalContentItem(&a.BookmarkLabel[i1], &b.BookmarkLabel[i1]) {
+				return false
+			}
+		}
+	}
+	if a.BookmarkClosed != b.BookmarkClosed {
+		return false
+	}
 	if !equalOffice(&a.Office, &b.Office) {
 		return false
 	}
@@ -1024,6 +1040,13 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mixBool(h, x.Footnote)
 	h = mix(h, uint64(x.FootnoteDisplay))
 	h = mix(h, uint64(x.FootnotePolicy))
+	h = mix(h, uint64(x.BookmarkLevel))
+	h = mixBool(h, x.BookmarkLabel == nil)
+	h = mix(h, uint64(len(x.BookmarkLabel)))
+	for i1 := range x.BookmarkLabel {
+		h = hashContentItem(h, &x.BookmarkLabel[i1])
+	}
+	h = mixBool(h, x.BookmarkClosed)
 	h = hashOffice(h, &x.Office)
 	h = mix(h, uint64(x.currentColor))
 	h = mixBool(h, x.colorExprs != nil)
@@ -2006,6 +2029,52 @@ func hashNamedString(h uint64, x *NamedString) uint64 {
 	return h
 }
 
+// equalContentItem reports whether a and b hold equal values, field by field.
+func equalContentItem(a, b *ContentItem) bool {
+	if a.Kind != b.Kind {
+		return false
+	}
+	if a.Text != b.Text {
+		return false
+	}
+	if a.Fallback != b.Fallback {
+		return false
+	}
+	if a.Separator != b.Separator {
+		return false
+	}
+	if a.Style != b.Style {
+		return false
+	}
+	if a.StyleName != b.StyleName {
+		return false
+	}
+	if a.Pick != b.Pick {
+		return false
+	}
+	if a.Target != b.Target {
+		return false
+	}
+	if a.TargetAttr != b.TargetAttr {
+		return false
+	}
+	return true
+}
+
+// hashContentItem folds every field of x into h.
+func hashContentItem(h uint64, x *ContentItem) uint64 {
+	h = mix(h, uint64(x.Kind))
+	h = mixString(h, x.Text)
+	h = mixString(h, x.Fallback)
+	h = mixString(h, x.Separator)
+	h = mix(h, uint64(x.Style))
+	h = mixString(h, x.StyleName)
+	h = mix(h, uint64(x.Pick))
+	h = mixString(h, x.Target)
+	h = mixBool(h, x.TargetAttr)
+	return h
+}
+
 // equalOffice reports whether a and b hold equal values, field by field.
 func equalOffice(a, b *Office) bool {
 	if a.FrameWrap != b.FrameWrap {
@@ -2120,52 +2189,6 @@ func equalMaskClip(a, b *MaskClip) bool {
 func hashMaskClip(h uint64, x *MaskClip) uint64 {
 	h = mix(h, uint64(x.Box))
 	h = mixBool(h, x.None)
-	return h
-}
-
-// equalContentItem reports whether a and b hold equal values, field by field.
-func equalContentItem(a, b *ContentItem) bool {
-	if a.Kind != b.Kind {
-		return false
-	}
-	if a.Text != b.Text {
-		return false
-	}
-	if a.Fallback != b.Fallback {
-		return false
-	}
-	if a.Separator != b.Separator {
-		return false
-	}
-	if a.Style != b.Style {
-		return false
-	}
-	if a.StyleName != b.StyleName {
-		return false
-	}
-	if a.Pick != b.Pick {
-		return false
-	}
-	if a.Target != b.Target {
-		return false
-	}
-	if a.TargetAttr != b.TargetAttr {
-		return false
-	}
-	return true
-}
-
-// hashContentItem folds every field of x into h.
-func hashContentItem(h uint64, x *ContentItem) uint64 {
-	h = mix(h, uint64(x.Kind))
-	h = mixString(h, x.Text)
-	h = mixString(h, x.Fallback)
-	h = mixString(h, x.Separator)
-	h = mix(h, uint64(x.Style))
-	h = mixString(h, x.StyleName)
-	h = mix(h, uint64(x.Pick))
-	h = mixString(h, x.Target)
-	h = mixBool(h, x.TargetAttr)
 	return h
 }
 

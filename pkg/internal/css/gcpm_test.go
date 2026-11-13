@@ -135,3 +135,25 @@ func TestStringSet_RefusesCrossReferences(t *testing.T) {
 		t.Errorf("string-set with target-text() parsed as %+v, want invalid", ds)
 	}
 }
+
+func TestBookmarkProperties(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<h2 id=h>x</h2><div id=a>y</div><h1 id=b>z</h1><p id=c>w</p>`,
+		`#a { bookmark-level: 3; bookmark-label: "Note " attr(id) content(before); bookmark-state: closed }
+		 #b { bookmark-level: none; bookmark-label: content(text) }
+		 #c { bookmark-level: 0; bookmark-state: shut }`)
+	if h := c.of("h"); h.BookmarkLevel != 2 || h.BookmarkLabel != nil || h.BookmarkClosed {
+		t.Errorf("h2: level %d label %+v closed %v, want 2 from the user agent sheet", h.BookmarkLevel, h.BookmarkLabel, h.BookmarkClosed)
+	}
+	a := c.of("a")
+	want := []ContentItem{{Kind: ItemString, Text: "Note "}, {Kind: ItemAttr, Text: "id"}, {Kind: ItemContent, Text: "before"}}
+	if a.BookmarkLevel != 3 || !reflect.DeepEqual(a.BookmarkLabel, want) || !a.BookmarkClosed {
+		t.Errorf("div: level %d label %+v closed %v", a.BookmarkLevel, a.BookmarkLabel, a.BookmarkClosed)
+	}
+	if b := c.of("b"); b.BookmarkLevel != 0 || b.BookmarkLabel != nil {
+		t.Errorf("h1 with none: level %d label %+v", b.BookmarkLevel, b.BookmarkLabel)
+	}
+	if p := c.of("c"); p.BookmarkLevel != 0 || p.BookmarkClosed {
+		t.Errorf("invalid values kept: %+v", p.BookmarkLevel)
+	}
+}

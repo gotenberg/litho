@@ -241,6 +241,16 @@ func interpolators() map[propID]interpFn {
 		pFontWeight: intInterp(func(s *Style) *int { return &s.FontWeight }, 1),
 		pOrphans:    intInterp(func(s *Style) *int { return &s.Orphans }, 1),
 		pWidows:     intInterp(func(s *Style) *int { return &s.Widows }, 1),
+		// bookmark-level interpolates as an integer, none discretely (CSS
+		// Generated Content 3, 8.1: by computed value type).
+		pBookmarkLevel: func(dst, a, b *Style, p float64) interpResult {
+			if a.BookmarkLevel == 0 || b.BookmarkLevel == 0 {
+				return discrete
+			}
+			v := roundHalfUp(lerp(float64(a.BookmarkLevel), float64(b.BookmarkLevel), p))
+			dst.BookmarkLevel = max(int(min(max(v, 1), maxInteger)), 1) // fits int: clamped to [1, maxInteger]
+			return interpolated
+		},
 		pZIndex: func(dst, a, b *Style, p float64) interpResult {
 			if a.ZIndex.Auto || b.ZIndex.Auto {
 				return discrete

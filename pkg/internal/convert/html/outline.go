@@ -9,10 +9,13 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
-// outline returns the bookmark tree of the headings, in document order,
-// each nested under the closest preceding heading of a higher rank (HTML
-// Standard, 4.3.11, heading levels). A heading that landed on no page or
-// draws no text is left out.
+// outline returns the bookmark tree of the elements with a bookmark-level,
+// in document order, each nested under the closest preceding one of a
+// lower level (CSS Generated Content 3, 8.1), as the h1 to h6 rank
+// headings (HTML Standard, 4.3.11, heading levels). An entry's title is
+// its bookmark-label, or, for the initial content(text), the text its
+// box draws, generated content and image alternative text included; an
+// entry that landed on no page or whose title is empty is left out.
 func outline(headings []heading, anchors map[string]typeset.Dest) []typeset.Outline {
 	type entry struct {
 		o     typeset.Outline
@@ -26,10 +29,13 @@ func outline(headings []heading, anchors map[string]typeset.Dest) []typeset.Outl
 			continue
 		}
 		title := headingTitle(h.node)
+		if h.labelled {
+			title = clipTitle(collapse(h.label))
+		}
 		if title == "" {
 			continue
 		}
-		e := &entry{o: typeset.Outline{Title: title, Dest: dest}, level: h.level}
+		e := &entry{o: typeset.Outline{Title: title, Dest: dest, Closed: h.closed}, level: h.level}
 		for len(stack) > 0 && stack[len(stack)-1].level >= h.level {
 			stack = stack[:len(stack)-1]
 		}
@@ -41,7 +47,7 @@ func outline(headings []heading, anchors map[string]typeset.Dest) []typeset.Outl
 		}
 		stack = append(stack, e)
 	}
-	// The tree is at most six levels deep, one a heading rank.
+	// The tree is at most maxBookmarkLevel levels deep.
 	var flatten func([]*entry) []typeset.Outline
 	flatten = func(es []*entry) []typeset.Outline {
 		if len(es) == 0 {
@@ -79,7 +85,11 @@ func headingTitle(n *layout.Node) string {
 			}
 		}
 	}
-	s := collapse(strings.ReplaceAll(b.String(), "\u200b", ""))
+	return clipTitle(collapse(strings.ReplaceAll(b.String(), "\u200b", "")))
+}
+
+// clipTitle returns s cut to [maxOutlineTitleRunes] characters.
+func clipTitle(s string) string {
 	if utf8.RuneCountInString(s) > maxOutlineTitleRunes {
 		r := []rune(s)
 		s = strings.TrimSpace(string(r[:maxOutlineTitleRunes]))

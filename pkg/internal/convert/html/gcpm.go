@@ -139,63 +139,73 @@ func (b *builder) setStrings(n *dom.Node, node *layout.Node, st *css.Style, befo
 	}
 	lead := b.lead(n, own)
 	for _, ns := range st.StringSet {
-		var sb strings.Builder
-		for _, it := range ns.Items {
-			switch it.Kind {
-			case css.ItemString:
-				sb.WriteString(it.Text)
-			case css.ItemAttr:
-				if v, ok := attr(n, it.Text); ok {
-					sb.WriteString(v)
-				} else {
-					sb.WriteString(it.Fallback)
-				}
-			case css.ItemCounter:
-				v := 0
-				if in := b.counters.innermost(it.Text); in != nil {
-					v = in.value
-				}
-				sb.WriteString(counterText(b.counterStyles, it.Style, it.StyleName, v))
-			case css.ItemCounters:
-				for i, v := range b.counters.values(it.Text) {
-					if i > 0 {
-						sb.WriteString(it.Separator)
-					}
-					sb.WriteString(counterText(b.counterStyles, it.Style, it.StyleName, v))
-				}
-			case css.ItemContent:
-				// content() collapses white space as white-space: normal
-				// lays it out (CSS GCPM 3, 2.1.1.1).
-				switch it.Text {
-				case "before":
-					sb.WriteString(collapse(nodeText(before)))
-				case "after":
-					sb.WriteString(collapse(nodeText(after)))
-				case "first-letter":
-					sb.WriteString(firstLetter(collapse(domText(n))))
-				case "marker":
-					if node.Marker != nil {
-						sb.WriteString(collapse(nodeText(node.Marker)))
-					}
-				default:
-					sb.WriteString(collapse(domText(n)))
-				}
-			case css.ItemOpenQuote, css.ItemCloseQuote, css.ItemNoOpenQuote, css.ItemNoCloseQuote,
-				css.ItemImage, css.ItemLeader, css.ItemNamedString, css.ItemElement,
-				css.ItemTargetCounter, css.ItemTargetCounters, css.ItemTargetText:
-			}
-			if sb.Len() > maxNamedStringBytes {
-				break
-			}
-		}
-		v := sb.String()
-		if len(v) > maxNamedStringBytes {
-			v = strings.ToValidUTF8(v[:maxNamedStringBytes], "")
-		}
+		v := b.contentText(n, node, ns.Items, before, after)
 		if !b.record(&b.gcpm.strings, assignment{name: ns.Name, id: node.ID, value: v, lead: lead}) {
 			return
 		}
 	}
+}
+
+// contentText returns the text the content list items of string-set or
+// bookmark-label build on the element n, built as node, whose ::before and
+// ::after nodes are before and after (CSS GCPM 3, 1.1.1; CSS Generated
+// Content 3, 8.2), from the counters in scope on the element, at most
+// [maxNamedStringBytes] bytes.
+func (b *builder) contentText(n *dom.Node, node *layout.Node, items []css.ContentItem, before, after *layout.Node) string {
+	var sb strings.Builder
+	for _, it := range items {
+		switch it.Kind {
+		case css.ItemString:
+			sb.WriteString(it.Text)
+		case css.ItemAttr:
+			if v, ok := attr(n, it.Text); ok {
+				sb.WriteString(v)
+			} else {
+				sb.WriteString(it.Fallback)
+			}
+		case css.ItemCounter:
+			v := 0
+			if in := b.counters.innermost(it.Text); in != nil {
+				v = in.value
+			}
+			sb.WriteString(counterText(b.counterStyles, it.Style, it.StyleName, v))
+		case css.ItemCounters:
+			for i, v := range b.counters.values(it.Text) {
+				if i > 0 {
+					sb.WriteString(it.Separator)
+				}
+				sb.WriteString(counterText(b.counterStyles, it.Style, it.StyleName, v))
+			}
+		case css.ItemContent:
+			// content() collapses white space as white-space: normal
+			// lays it out (CSS GCPM 3, 2.1.1.1).
+			switch it.Text {
+			case "before":
+				sb.WriteString(collapse(nodeText(before)))
+			case "after":
+				sb.WriteString(collapse(nodeText(after)))
+			case "first-letter":
+				sb.WriteString(firstLetter(collapse(domText(n))))
+			case "marker":
+				if node.Marker != nil {
+					sb.WriteString(collapse(nodeText(node.Marker)))
+				}
+			default:
+				sb.WriteString(collapse(domText(n)))
+			}
+		case css.ItemOpenQuote, css.ItemCloseQuote, css.ItemNoOpenQuote, css.ItemNoCloseQuote,
+			css.ItemImage, css.ItemLeader, css.ItemNamedString, css.ItemElement,
+			css.ItemTargetCounter, css.ItemTargetCounters, css.ItemTargetText:
+		}
+		if sb.Len() > maxNamedStringBytes {
+			break
+		}
+	}
+	v := sb.String()
+	if len(v) > maxNamedStringBytes {
+		v = strings.ToValidUTF8(v[:maxNamedStringBytes], "")
+	}
+	return v
 }
 
 // lead returns how far below the page area's top the box of the element n

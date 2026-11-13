@@ -152,6 +152,10 @@ func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, s
 	if b.enterFirstLine(node, n, st) {
 		defer b.leaveFirstLine()
 	}
+	bookmark := -1
+	if st.BookmarkLevel > 0 {
+		bookmark = b.bookmark(node, st)
+	}
 	if isListItem(st.Display) {
 		node.ListValue = v
 		node.Marker = b.marker(ctx, n, st, v)
@@ -189,6 +193,10 @@ func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, s
 	}
 	if b.targets.use.Any {
 		b.markTarget(n, node, before, after, targetVals)
+	}
+	if bookmark >= 0 && st.BookmarkLabel != nil {
+		b.headings[bookmark].label = b.contentText(n, node, st.BookmarkLabel, before, after)
+		b.headings[bookmark].labelled = true
 	}
 	return nil
 }
@@ -363,11 +371,6 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 		}
 	case atom.Col, atom.Colgroup:
 		node.Span = spanAttr(n, "span", maxColSpan)
-	case atom.H1, atom.H2, atom.H3, atom.H4, atom.H5, atom.H6:
-		if node.ID == "" {
-			node.ID = b.syntheticID()
-		}
-		b.headings = append(b.headings, heading{node: node, level: int(n.Data[1] - '0')})
 	}
 }
 
@@ -453,8 +456,34 @@ func listNumbering(t css.ListStyleType, ordered bool) typeset.ListNumbering {
 	return typeset.NumberingUnordered
 }
 
+// maxBookmarkLevel is the deepest bookmark-level the outline nests: 64.
+// Anti-DoS guard, not spec-mandated: the draft bounds no level, an outline
+// is a few levels deep, and each level is one more nesting of the
+// document's outline tree; a deeper level nests as this one.
+const maxBookmarkLevel = 64
+
+// maxBookmarks bounds the outline entries a document makes: 65,536.
+// Anti-DoS guard, not spec-mandated: a book has a few hundred headings,
+// and each entry is an object of the PDF.
+const maxBookmarks = 1 << 16
+
+// bookmark records the element built as node, styled st, as an entry of
+// the outline (CSS Generated Content 3, 8): anchored at its ID, or at one
+// it is given. It returns the entry's index, -1 past [maxBookmarks].
+func (b *builder) bookmark(node *layout.Node, st *css.Style) int {
+	if len(b.headings) >= maxBookmarks {
+		b.warnOnce(warn.LimitReached, warn.Omitted, "bookmarks", fmt.Sprintf("more than %d outline entries; the others were left out", maxBookmarks))
+		return -1
+	}
+	if node.ID == "" {
+		node.ID = b.syntheticID()
+	}
+	b.headings = append(b.headings, heading{node: node, level: min(st.BookmarkLevel, maxBookmarkLevel), closed: st.BookmarkClosed})
+	return len(b.headings) - 1
+}
+
 // syntheticID returns an anchor ID no element of the document carries, for
-// a heading the outline points at.
+// an element the outline points at.
 func (b *builder) syntheticID() string {
 	for {
 		b.synthetic++

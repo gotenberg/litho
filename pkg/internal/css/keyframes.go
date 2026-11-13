@@ -309,7 +309,7 @@ var discreteAnimation = func() [numProps]bool {
 		pBorderImageRepeat, pMaskBorderSource, pMaskBorderRepeat, pBgAttachment, pGridTemplateAreas,
 		pGridAutoFlow, pGridRowStart, pGridRowEnd, pGridColumnStart, pGridColumnEnd, pJustifyItems,
 		pJustifySelf, pBlockEllipsis, pContinue, pTextJustify, pTextAutospace, pFontSynthesisWeight,
-		pFontSynthesisStyle, pTextSpacingTrim, pStringSet, pFootnoteDisplay, pFootnotePolicy,
+		pFontSynthesisStyle, pTextSpacingTrim, pStringSet, pFootnoteDisplay, pFootnotePolicy, pBookmarkLabel, pBookmarkState,
 		pColumnRuleStyle, pColumnSpan, pColumnFill, pColumnWrap, pBoxDecorationBreak, pFontKerning,
 		pTransformBox, pTextDecorationSkipInk, pTextUnderlinePosition, pHyphens, pHyphenateCharacter,
 		pTextWrapMode, pTextWrapStyle, pRubyPosition, pTextEmphasisStyle, pTextEmphasisPosition,

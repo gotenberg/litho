@@ -778,3 +778,24 @@ marquee {
 ::note-marker {
   content: counter(note) ". ";
 }
+
+/* CSS Generated Content 3, 8: the headings make the outline, each at its
+ * rank, as WeasyPrint's user agent sheet sets it. */
+h1 {
+  bookmark-level: 1;
+}
+h2 {
+  bookmark-level: 2;
+}
+h3 {
+  bookmark-level: 3;
+}
+h4 {
+  bookmark-level: 4;
+}
+h5 {
+  bookmark-level: 5;
+}
+h6 {
+  bookmark-level: 6;
+}

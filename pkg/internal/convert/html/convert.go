@@ -192,10 +192,15 @@ type prepared struct {
 	b     *builder
 }
 
-// heading is an h1 to h6 of the content tree, for the outline.
+// heading is an element of the content tree the outline lists (CSS
+// Generated Content 3, 8): its node, its bookmark-level, its
+// bookmark-label's text when labelled, and its bookmark-state.
 type heading struct {
-	node  *layout.Node
-	level int
+	node     *layout.Node
+	level    int
+	label    string
+	labelled bool
+	closed   bool
 }
 
 // parse parses the HTML source data.

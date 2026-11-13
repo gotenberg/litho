@@ -141,3 +141,36 @@ func pageLines(pg *typeset.Page) []string {
 func hasLine(pg *typeset.Page, s string) bool {
 	return slices.ContainsFunc(pageLines(pg), func(l string) bool { return strings.Contains(l, s) })
 }
+
+// TestBookmarks_Properties locks the outline of CSS Generated Content 3,
+// 8: the headings at their rank by default, any element at its
+// bookmark-level, none removing a heading, a bookmark-label built from
+// counters and the element's text, and bookmark-state.
+func TestBookmarks_Properties(t *testing.T) {
+	t.Parallel()
+	src := `<style>
+		body { counter-reset: ch }
+		h1 { counter-increment: ch; bookmark-label: "Ch. " counter(ch) ": " content(text); bookmark-state: closed }
+		h2.quiet { bookmark-level: none }
+		div.note { bookmark-level: 2 }
+	</style>
+	<h1>Start</h1><h2>Sub</h2><h2 class=quiet>Hidden</h2><div class=note>A <b>note</b></div><h1>End</h1>`
+	doc := convertDoc(t, src, Options{})
+	var lines []string
+	var walk func([]typeset.Outline, string)
+	walk = func(os []typeset.Outline, indent string) {
+		for _, o := range os {
+			state := ""
+			if o.Closed {
+				state = " (closed)"
+			}
+			lines = append(lines, indent+o.Title+state)
+			walk(o.Kids, indent+"  ")
+		}
+	}
+	walk(doc.Outline, "")
+	want := "Ch. 1: Start (closed)\n  Sub\n  A note\nCh. 2: End (closed)"
+	if got := strings.Join(lines, "\n"); got != want {
+		t.Errorf("outline\n%s\nwant\n%s", got, want)
+	}
+}

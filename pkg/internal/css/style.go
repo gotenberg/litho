@@ -1492,6 +1492,17 @@ type Style struct {
 	// footnote-policy (CSS GCPM 3, 3.3 and 3.8).
 	FootnoteDisplay FootnoteDisplay
 	FootnotePolicy  FootnotePolicy
+	// BookmarkLevel is bookmark-level (CSS Generated Content 3, 8.1): the
+	// level of the outline entry the element makes, 1 at the top, 0 for
+	// none.
+	BookmarkLevel int
+	// BookmarkLabel is bookmark-label (CSS Generated Content 3, 8.2): the
+	// items the entry's title is built from, as string-set takes them; nil
+	// for the initial content(text).
+	BookmarkLabel []ContentItem
+	// BookmarkClosed is bookmark-state: closed (CSS Generated Content 3,
+	// 8.3): the entry starts with its children hidden.
+	BookmarkClosed bool
 
 	// Office holds the fields the Office converters fill for frames,
 	// chains of linked boxes and borders (office.go). None is inherited.

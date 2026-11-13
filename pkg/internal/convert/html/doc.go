@@ -219,10 +219,15 @@
 // # Links and outline
 //
 // An <a href> becomes a link: a fragment to the element of that id or
-// <a name>, anything else to its URI. The outline lists the h1 to h6
-// headings in document order, each under the closest preceding heading of
-// a higher rank. The title is <title>; <meta name> author, description and
-// keywords fill the author, subject and keywords.
+// <a name>, anything else to its URI. The outline lists the elements
+// with a bookmark-level in document order, each under the closest
+// preceding one of a lower level (CSS Generated Content 3, 8): the user
+// agent sheet gives h1 to h6 their rank. An entry's title is its
+// bookmark-label, or, for the initial content(text), the text its box
+// draws, generated content and image alternative text included;
+// bookmark-state: closed hides its children. The title is <title>; <meta
+// name> author, description and keywords fill the author, subject and
+// keywords.
 //
 // # Warnings
 //

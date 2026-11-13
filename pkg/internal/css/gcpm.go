@@ -166,36 +166,109 @@ func parseStringSet(v []token, c *declCtx) (any, bool) {
 		if len(part) < 2 || part[0].typ != tIdent || part[0].isIdent("none") || len(part) > maxContentItems+1 {
 			return nil, false
 		}
-		ns := NamedString{Name: part[0].value}
-		for _, t := range part[1:] {
-			if t.typ == tFunction && eqFold(t.value, "content") {
-				a := significant(t.children)
-				k := "text"
-				if len(a) > 0 {
-					kw, ok := keyword(a)
-					if !ok || !contentParts[kw] {
-						return nil, false
-					}
-					k = kw
-				}
-				ns.Items = append(ns.Items, ContentItem{Kind: ItemContent, Text: k})
-				continue
-			}
-			it, ok := contentItem(t, c)
-			if !ok || it.Kind == ItemImage || it.Kind == ItemElement || it.Kind == ItemNamedString {
-				return nil, false
-			}
-			if it.Kind == ItemTargetCounter || it.Kind == ItemTargetCounters || it.Kind == ItemTargetText {
-				// A named string is set as the builder walks the document,
-				// before the elements a cross-reference reads are laid out.
-				c.warn(warn.CSSUnsupported, warn.Omitted, "string-set: a cross-reference function is not supported there and the declaration was ignored")
-				return nil, false
-			}
-			ns.Items = append(ns.Items, it)
+		items, ok := parseContentList(part[1:], c, "string-set")
+		if !ok {
+			return nil, false
 		}
+		ns := NamedString{Name: part[0].value, Items: items}
 		out = append(out, ns)
 	}
 	return out, true
+}
+
+// parseContentList parses the content list of string-set or
+// bookmark-label, named prop (CSS GCPM 3, 1.1.1; CSS Generated Content 3,
+// 8.2): strings, counter(), counters(), content() and attr().
+func parseContentList(v []token, c *declCtx, prop string) ([]ContentItem, bool) {
+	var items []ContentItem
+	for _, t := range v {
+		if t.typ == tFunction && eqFold(t.value, "content") {
+			a := significant(t.children)
+			k := "text"
+			if len(a) > 0 {
+				kw, ok := keyword(a)
+				if !ok || !contentParts[kw] {
+					return nil, false
+				}
+				k = kw
+			}
+			items = append(items, ContentItem{Kind: ItemContent, Text: k})
+			continue
+		}
+		it, ok := contentItem(t, c)
+		if !ok || it.Kind == ItemImage || it.Kind == ItemElement || it.Kind == ItemNamedString {
+			return nil, false
+		}
+		if it.Kind == ItemTargetCounter || it.Kind == ItemTargetCounters || it.Kind == ItemTargetText {
+			// The value is built as the builder walks the document,
+			// before the elements a cross-reference reads are laid out.
+			c.warn(warn.CSSUnsupported, warn.Omitted, "%s: a cross-reference function is not supported there and the declaration was ignored", prop)
+			return nil, false
+		}
+		items = append(items, it)
+	}
+	return items, len(items) > 0
+}
+
+// bookmarkLabel parses bookmark-label (CSS Generated Content 3, 8.2): a
+// content list, content(text) alone being the initial value, held as nil.
+func bookmarkLabel(v []token, c *declCtx) (any, bool) {
+	items, ok := parseContentList(v, c, "bookmark-label")
+	if !ok || len(items) > maxContentItems {
+		return nil, false
+	}
+	if len(items) == 1 && items[0].Kind == ItemContent && items[0].Text == "text" {
+		return []ContentItem(nil), true
+	}
+	return items, true
+}
+
+// bookmarkProps defines the bookmark properties of CSS Generated Content
+// 3, 8: bookmark-level, none or an integer of at least 1, bookmark-label
+// and bookmark-state.
+func bookmarkProps() {
+	props[pBookmarkLevel] = propDef{
+		name: "bookmark-level",
+		parse: func(v []token, _ *declCtx) (any, bool) {
+			if k, ok := keyword(v); ok && k == "none" {
+				return 0, true
+			}
+			t, ok := single(v)
+			if !ok {
+				return nil, false
+			}
+			n, ok := parseInteger(t)
+			return n, ok && n >= 1
+		},
+		compute: func(_ *styler, st *Style, v any) {
+			if n, ok := v.(int); ok {
+				st.BookmarkLevel = n
+			}
+		},
+		copyFrom: field(func(s *Style) *int { return &s.BookmarkLevel }),
+	}
+	props[pBookmarkLabel] = propDef{
+		name: "bookmark-label", parse: bookmarkLabel,
+		compute: func(_ *styler, st *Style, v any) {
+			if items, ok := v.([]ContentItem); ok {
+				st.BookmarkLabel = items
+			}
+		},
+		copyFrom: field(func(s *Style) *[]ContentItem { return &s.BookmarkLabel }),
+	}
+	props[pBookmarkState] = propDef{
+		name: "bookmark-state",
+		parse: func(v []token, _ *declCtx) (any, bool) {
+			k, ok := keyword(v)
+			return k == "closed", ok && (k == "open" || k == "closed")
+		},
+		compute: func(_ *styler, st *Style, v any) {
+			if closed, ok := v.(bool); ok {
+				st.BookmarkClosed = closed
+			}
+		},
+		copyFrom: field(func(s *Style) *bool { return &s.BookmarkClosed }),
+	}
 }
 
 // running is the specified value position: running(name).
@@ -279,6 +352,7 @@ func gcpmProps() {
 		},
 		copyFrom: field(func(s *Style) *[]NamedString { return &s.StringSet }),
 	}
+	bookmarkProps()
 	props[pFootnoteDisplay] = enumProp("footnote-display", false, func(s *Style) *FootnoteDisplay { return &s.FootnoteDisplay }, map[string]FootnoteDisplay{
 		"block": FootnoteBlock, "inline": FootnoteInline, "compact": FootnoteCompact,
 	})
