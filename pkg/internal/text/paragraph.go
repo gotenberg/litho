@@ -424,7 +424,7 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 		}
 		for s := item.RunStart; s < item.RunEnd; {
 			e := s + 1
-			for e < item.RunEnd && p.runOf[e] == p.runOf[s] && p.level[e] == p.level[s] {
+			for e < item.RunEnd && p.level[e] == p.level[s] && (p.runOf[e] == p.runOf[s] || shapesTogether(st.styles[p.runOf[s]].style, st.styles[p.runOf[e]].style)) {
 				e++
 			}
 			idx := int(p.runOf[s])
@@ -449,11 +449,14 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 				if ss.word != 0 {
 					out.AddWordSpacing(text, ss.word)
 				}
-				it, err := p.convert(ctx, st, &out, idx, ss.style)
-				if err != nil {
-					return err
+				for _, sub := range p.splitByRun(&out) {
+					r := int(p.runOf[sub.Runes.Offset])
+					it, err := p.convert(ctx, st, &sub, r, st.styles[r].style)
+					if err != nil {
+						return err
+					}
+					p.items = append(p.items, it)
 				}
-				p.items = append(p.items, it)
 			}
 			s = e
 		}
@@ -811,4 +814,63 @@ func visualOrder(n int, level func(int) int) []int {
 		}
 	}
 	return order
+}
+
+// shapesTogether reports whether runs of the styles a and b shape as one
+// piece, kerning and contextual forms across their boundary: they differ
+// in colour alone, a change that does not affect shaping, across which
+// CSS Text 3, 7.3 does not break shaping.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws "marks’"
+//     and "marks<span>’</span>" in Liberation Serif at 32px at the same
+//     width, the pair kerned in both; css/css-content/quotes-001 and
+//     fifteen other quotes tests compare a quote of generated content
+//     with the same characters in the text.
+func shapesTogether(a, b Style) bool {
+	return slices.Equal(a.Families, b.Families) && a.Weight == b.Weight && a.Italic == b.Italic &&
+		a.Fallback == b.Fallback && a.Oblique == b.Oblique && a.Stretch == b.Stretch &&
+		a.NoSyntheticBold == b.NoSyntheticBold && a.NoSyntheticItalic == b.NoSyntheticItalic &&
+		a.Autospace == b.Autospace && a.AutospaceAlpha == b.AutospaceAlpha && a.AutospaceNumeric == b.AutospaceNumeric &&
+		a.NoSpacingTrim == b.NoSpacingTrim && a.Size == b.Size && a.Lang == b.Lang &&
+		a.LetterSpacing == b.LetterSpacing && a.WordSpacing == b.WordSpacing && a.Scale == b.Scale &&
+		a.NoKerning == b.NoKerning && a.WordMetrics == b.WordMetrics
+}
+
+// splitByRun cuts out into one output per run of its characters, each
+// glyph going with the run of its cluster's first character, so that a
+// glyph keeps the advance shaping gave it across a run boundary.
+func (p *Paragraph) splitByRun(out *shaping.Output) []shaping.Output {
+	start, end := out.Runes.Offset, out.Runes.Offset+out.Runes.Count
+	one := true
+	for i := start + 1; i < end; i++ {
+		if p.runOf[i] != p.runOf[start] {
+			one = false
+			break
+		}
+	}
+	if one {
+		return []shaping.Output{*out}
+	}
+	var subs []shaping.Output
+	for s := start; s < end; {
+		e := s + 1
+		for e < end && p.runOf[e] == p.runOf[s] {
+			e++
+		}
+		sub := *out
+		sub.Runes = shaping.Range{Offset: s, Count: e - s}
+		sub.Glyphs = nil
+		sub.Advance = 0
+		for _, g := range out.Glyphs {
+			if c := g.TextIndex(); c >= s && c < e {
+				sub.Glyphs = append(sub.Glyphs, g)
+				sub.Advance += g.Advance
+			}
+		}
+		subs = append(subs, sub)
+		s = e
+	}
+	return subs
 }
