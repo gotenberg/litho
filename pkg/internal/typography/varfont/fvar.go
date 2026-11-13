@@ -161,6 +161,6 @@ func fixedToFloat(v int32) float64 { return float64(v) / 65536 }
 // Overview, Coordinate scales and normalization, prescribes: the fraction
 // times 65536 rounded half up. v is clamped to the 16.16 range first.
 func floatToFixed(v float64) int32 {
-	f := math.Floor(v*65536 + 0.5)
+	f := math.Floor(float64(v*65536) + 0.5)
 	return int32(min(max(f, math.MinInt32), math.MaxInt32))
 }

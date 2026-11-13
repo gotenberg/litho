@@ -160,7 +160,7 @@ func (s *itemStore) delta(outer, inner int) float64 {
 			at++
 		}
 		if sc := s.scalars[r]; sc != 0 {
-			sum += sc * float64(v)
+			sum += float64(sc * float64(v))
 		}
 	}
 	return sum

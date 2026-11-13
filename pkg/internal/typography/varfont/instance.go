@@ -510,12 +510,14 @@ func (in *instancer) points(gid, depth int) ([]point, error) {
 	}
 	pts := make([]point, 0, total)
 	for i, c := range comps {
-		move := func(p point) point { return point{c.m[0]*p.x + c.m[2]*p.y, c.m[1]*p.x + c.m[3]*p.y} }
+		move := func(p point) point {
+			return point{float64(c.m[0]*p.x) + float64(c.m[2]*p.y), float64(c.m[1]*p.x) + float64(c.m[3]*p.y)}
+		}
 		var ox, oy float64
 		if c.flags&argsAreXY != 0 {
 			ox, oy = float64(in.offsets[gid][0][i]), float64(in.offsets[gid][1][i])
 			if c.flags&scaledOffset != 0 && c.flags&unscaledOffset == 0 {
-				ox, oy = c.m[0]*ox+c.m[2]*oy, c.m[1]*ox+c.m[3]*oy
+				ox, oy = float64(c.m[0]*ox)+float64(c.m[2]*oy), float64(c.m[1]*ox)+float64(c.m[3]*oy)
 			}
 		} else {
 			parent, own := int(c.dx), int(c.dy)

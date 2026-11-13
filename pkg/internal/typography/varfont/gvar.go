@@ -215,8 +215,8 @@ func (g *gvarTable) glyphDeltas(gid int, coords []int16, orig []point, ends []in
 		}
 		if all {
 			for i := range n {
-				dx[i] += scalar * float64(xs[i])
-				dy[i] += scalar * float64(ys[i])
+				dx[i] += float64(scalar * float64(xs[i]))
+				dy[i] += float64(scalar * float64(ys[i]))
 			}
 			continue
 		}
@@ -233,8 +233,8 @@ func (g *gvarTable) glyphDeltas(gid int, coords []int16, orig []point, ends []in
 			inferDeltas(orig, ends, tx, ty, touched)
 		}
 		for i := range n {
-			dx[i] += scalar * tx[i]
-			dy[i] += scalar * ty[i]
+			dx[i] += float64(scalar * tx[i])
+			dy[i] += float64(scalar * ty[i])
 		}
 	}
 	return dx, dy, nil
