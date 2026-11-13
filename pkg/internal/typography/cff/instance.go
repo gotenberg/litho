@@ -100,6 +100,9 @@ func InstanceCFF2(ctx context.Context, data []byte, fontName string, widths []fl
 	top := readCFF2Top(data[int(data[2]) : int(data[2])+int(binary.BigEndian.Uint16(data[3:5]))])
 	var sc [][]float64
 	if top.vstore > 0 {
+		if top.vstore+2 > len(data) {
+			return nil, fmt.Errorf("%w: VariationStore out of bounds", ErrInvalidCFF)
+		}
 		length := int(binary.BigEndian.Uint16(data[top.vstore:]))
 		if top.vstore+2+length > len(data) {
 			return nil, fmt.Errorf("%w: VariationStore out of bounds", ErrInvalidCFF)
