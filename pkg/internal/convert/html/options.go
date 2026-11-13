@@ -179,6 +179,20 @@ type Options struct {
 	// view timeline, prints the same either way. No transition runs
 	// either way: a document's style changes once, when it loads.
 	AnimationsAtEnd bool
+
+	// maxElements caps the elements of the document: [MaxElements] when
+	// zero, which a larger value cannot raise. A test lowers it to hold a
+	// document at the cap without cascading the full count.
+	maxElements int
+}
+
+// elementCap returns the cap on the elements of the document: o's own when
+// it is set below [MaxElements], [MaxElements] otherwise.
+func (o Options) elementCap() int {
+	if o.maxElements > 0 && o.maxElements < MaxElements {
+		return o.maxElements
+	}
+	return MaxElements
 }
 
 // withDefaults returns o with every zero field set to its default and

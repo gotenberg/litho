@@ -302,7 +302,7 @@ func (s *bandState) build(ctx context.Context, env bandEnv, base *css.Stylesheet
 	if err != nil {
 		return nil, err
 	}
-	sc, err := scanDocument(ctx, doc, documentBase(env.o.BaseURL))
+	sc, err := scanDocument(ctx, doc, documentBase(env.o.BaseURL), env.o.elementCap())
 	if err != nil {
 		return nil, err
 	}

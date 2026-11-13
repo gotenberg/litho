@@ -424,32 +424,46 @@ func TestScanDocument_CapsTheElements(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := scanDocument(t.Context(), doc, documentURL); !errors.Is(err, want) {
+		if _, err := scanDocument(t.Context(), doc, documentURL, MaxElements); !errors.Is(err, want) {
 			t.Errorf("%d elements: %v, want %v", n+3, err, want)
 		}
 	}
 }
 
 // TestPrepare_CapsTheElements checks that a document at the element cap
-// prepares whole and that one past it is refused before anything is built.
+// prepares whole and that one past it is refused before anything is built,
+// at a cap lowered through the options: a document at [MaxElements] takes
+// seconds to cascade, and TestScanDocument_CapsTheElements holds that
+// count.
 func TestPrepare_CapsTheElements(t *testing.T) {
 	t.Parallel()
-	o, err := Options{}.withDefaults()
+	const capped = 1024
+	o, err := Options{maxElements: capped}.withDefaults()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = prepare(context.Background(), []byte(strings.Repeat("<p>", MaxElements-2)), o, nil)
+	// html, head and body come with the parser.
+	_, err = prepare(context.Background(), []byte(strings.Repeat("<p>", capped-2)), o, nil)
 	if !errors.Is(err, ErrTooManyElements) {
 		t.Fatalf("past the cap: %v", err)
 	}
-	if raceEnabled {
-		// The race detector makes the cascade of 262,144 elements take
-		// minutes; TestScanDocument_CapsTheElements holds the count.
-		t.Skip("a document at the cap is prepared without the race detector")
-	}
-	_, err = prepare(context.Background(), []byte(strings.Repeat("<p>", MaxElements-3)), o, nil)
+	p, err := prepare(context.Background(), []byte(strings.Repeat("<p>", capped-3)), o, nil)
 	if err != nil {
 		t.Fatalf("at the cap: %v", err)
+	}
+	if p == nil {
+		t.Fatal("at the cap: nothing prepared")
+	}
+}
+
+// TestOptions_ElementCapNeverRaisesTheCap checks that the options lower the
+// element cap and never raise it past [MaxElements].
+func TestOptions_ElementCapNeverRaisesTheCap(t *testing.T) {
+	t.Parallel()
+	for set, want := range map[int]int{0: MaxElements, 10: 10, MaxElements + 1: MaxElements, -1: MaxElements} {
+		if got := (Options{maxElements: set}).elementCap(); got != want {
+			t.Errorf("maxElements %d: cap %d, want %d", set, got, want)
+		}
 	}
 }
 

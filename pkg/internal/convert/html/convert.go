@@ -259,7 +259,7 @@ func parse(data []byte) (*dom.Node, error) {
 // says. fonts resolves the ex and ch units; nil takes their half-em
 // fallback. It leaves doc as it is, so a second layout prepares it again.
 func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, setup printSetup) (*prepared, error) {
-	scan, err := scanDocument(ctx, doc, documentBase(o.BaseURL))
+	scan, err := scanDocument(ctx, doc, documentBase(o.BaseURL), o.elementCap())
 	if err != nil {
 		return nil, err
 	}
@@ -541,11 +541,11 @@ type scan struct {
 	docURL string
 }
 
-// scanDocument walks doc once, counting its elements against
-// [MaxElements] and collecting the root, the metadata, the stylesheet
-// elements, the ids and the base URL. docURL is the document's URL, see
-// [documentBase].
-func scanDocument(ctx context.Context, doc *dom.Node, docURL string) (*scan, error) {
+// scanDocument walks doc once, counting its elements against maxElements,
+// [MaxElements] outside tests, and collecting the root, the metadata, the
+// stylesheet elements, the ids and the base URL. docURL is the document's
+// URL, see [documentBase].
+func scanDocument(ctx context.Context, doc *dom.Node, docURL string, maxElements int) (*scan, error) {
 	s := &scan{ids: map[string]bool{}, defs: map[string]*dom.Node{}, resourceBase: docURL, docURL: docURL}
 	if docURL != documentURL {
 		// A document on the network resolves its links against its URL.
@@ -559,8 +559,8 @@ func scanDocument(ctx context.Context, doc *dom.Node, docURL string) (*scan, err
 			return true
 		}
 		elements++
-		if elements > MaxElements {
-			walkErr = fmt.Errorf("%w: more than %d elements", ErrTooManyElements, MaxElements)
+		if elements > maxElements {
+			walkErr = fmt.Errorf("%w: more than %d elements", ErrTooManyElements, maxElements)
 			return false
 		}
 		if elements%1024 == 0 {
