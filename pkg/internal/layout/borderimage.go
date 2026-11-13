@@ -75,7 +75,7 @@ func (p *painter) borderImage(b *box, st *css.Style, r typeset.Rect, bd [4]float
 	slices := sliceSizes(bi, src)
 	widths := imageWidths(bi, src, slices, bd, draw, area)
 	pieces := ninePieces(bi, src, slices, widths, area)
-	g := &ditem{group: true, opacity: 1}
+	g := &ditem{group: true}
 	tiles := 0
 	// The picture is decoded once for the nine pieces, on the first cut,
 	// and dropped with them.
@@ -118,7 +118,7 @@ cut:
 		if strip.right {
 			x1 = max(x1, area.X+area.Width)
 		}
-		g.clip = &typeset.Path{Ops: rectOps(typeset.Rect{X: x0, Y: area.Y, Width: x1 - x0, Height: area.Height}), Fill: &typeset.Fill{}}
+		g.setEffects().clip = &typeset.Path{Ops: rectOps(typeset.Rect{X: x0, Y: area.Y, Width: x1 - x0, Height: area.Height}), Fill: &typeset.Fill{}}
 	}
 	c := p.sync(p.chain(b, false))
 	c.kids = append(c.kids, g)
@@ -454,9 +454,9 @@ func (p *painter) nineTile(src nineSource, pc ninePiece, t typeset.Rect) *ditem 
 		f = &typeset.Group{Opacity: 1, Transform: typeset.Matrix{A: kx, D: ky, E: img.X, F: img.Y}, Content: []typeset.Fragment{inner}}
 	}
 	return &ditem{
-		group: true, opacity: 1,
-		clip: &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{}},
-		kids: []*ditem{{frag: f, y0: clip.Y, y1: clip.Y + clip.Height, page: page}},
+		group: true,
+		fx:    &groupFx{opacity: 1, clip: &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{}}},
+		kids:  []*ditem{{frag: f, y0: clip.Y, y1: clip.Y + clip.Height, page: page}},
 	}
 }
 

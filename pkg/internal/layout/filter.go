@@ -134,7 +134,8 @@ func (e *engine) filtered(it *ditem, frags []typeset.Fragment, band *typeset.Rec
 		pixels = &effect.Page{}
 		e.filterPixels[page] = pixels
 	}
-	img, err := e.filterImage(it.filter, frags, it.box, band, max(it.zoom, 1.0/64), pixels)
+	fx := it.effects()
+	img, err := e.filterImage(fx.filter, frags, fx.box, band, max(fx.zoom, 1.0/64), pixels)
 	switch {
 	case err == nil:
 	case errors.Is(err, errNoFilter):

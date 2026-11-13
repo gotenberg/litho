@@ -158,7 +158,7 @@ func (e *engine) paintNoteAreas() {
 			continue
 		}
 		area := e.layoutNoteArea(p, fp.notes, e.noteStyle(p))
-		pt := &painter{e: e, top: &ditem{group: true, opacity: 1}, mono: -1}
+		pt := &painter{e: e, top: &ditem{group: true}, mono: -1}
 		pt.frames = []*frame{{container: pt.top, root: area}}
 		pt.context(area)
 		x, y := e.noteOffset(p, area)

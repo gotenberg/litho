@@ -49,7 +49,7 @@ func (e *engine) paintFrame(pg *typeset.Page, pb PageBox) {
 	}
 	fb := &box{st: f.Style, kind: kindBlock}
 	_, bd, _ := edgesOf(fb, r.Width)
-	p := &painter{e: e, top: &ditem{group: true, opacity: 1}, mono: -1}
+	p := &painter{e: e, top: &ditem{group: true}, mono: -1}
 	p.frames = []*frame{{container: p.top, root: fb}}
 	p.border(fb, f.Style, r, radiiOf(fb, r.Width, r.Height), bd, [4]bool{true, true, true, true})
 	pg.Content = append(pg.Content, e.flatten(p.top, 0, true)...)

@@ -50,7 +50,7 @@ func (p *painter) multicol(b *box) {
 			}
 			continue
 		}
-		g := &ditem{group: true, opacity: 1}
+		g := &ditem{group: true}
 		nl := len(p.links)
 		p.frames = append(p.frames, &frame{container: g, root: b, columns: true, set: s})
 		kids := b.kids
@@ -178,9 +178,9 @@ func (e *engine) cutColumns(g *ditem, b *box, s *colSet, oy float64) []*ditem {
 			for _, pc := range items[j:k] {
 				run = append(run, pc.it)
 			}
-			moved := &ditem{group: true, opacity: 1, transform: m, kids: run}
+			moved := &ditem{group: true, kids: run, fx: &groupFx{opacity: 1, transform: m}}
 			if items[j].clip {
-				moved = &ditem{group: true, opacity: 1, clip: band, kids: []*ditem{moved}}
+				moved = &ditem{group: true, kids: []*ditem{moved}, fx: &groupFx{opacity: 1, clip: band}}
 			}
 			out = append(out, moved)
 			j = k
@@ -198,7 +198,7 @@ func onPage(items []*ditem, page, depth int) {
 			it.page = page
 			continue
 		}
-		if !it.fixed && depth < maxGroupDepth {
+		if !it.fixedGroup() && depth < maxGroupDepth {
 			onPage(it.kids, page, depth+1)
 		}
 	}
@@ -219,7 +219,7 @@ func (e *engine) cutItem(it *ditem, b *box, s *colSet, oy float64, depth int) (m
 	var pass []*ditem
 	last := len(s.frags) - 1
 	for _, k := range it.kids {
-		if k.group && k.fixed {
+		if k.group && k.fixedGroup() {
 			pass = append(pass, k)
 			continue
 		}

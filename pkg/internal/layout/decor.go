@@ -145,7 +145,7 @@ func (p *painter) background(b *box, st *css.Style, r typeset.Rect, radii [4][2]
 		if tc == nil || !hasBackground(st) {
 			return
 		}
-		g := &ditem{group: true, opacity: 1, clip: tc}
+		g := &ditem{group: true, fx: &groupFx{opacity: 1, clip: tc}}
 		c := p.sync(p.chain(b, false))
 		c.kids = append(c.kids, g)
 		into, blend := p.blendedBackground(g, b, st)
@@ -238,7 +238,7 @@ func (p *painter) blendedBackground(into *ditem, b *box, st *css.Style) (*ditem,
 	if _, ok := colorOf(st.BackgroundColor); !ok {
 		return into, typeset.BlendNormal
 	}
-	g := &ditem{group: true, opacity: 1, isolate: true}
+	g := &ditem{group: true, fx: &groupFx{opacity: 1, isolate: true}}
 	if into != nil {
 		into.kids = append(into.kids, g)
 	} else {
@@ -280,7 +280,7 @@ func (p *painter) backgroundInto(into *ditem, blend typeset.BlendMode, b *box, s
 	if st.BackgroundAttachment == css.AttachLocal {
 		area = p.localArea(b, area, r, pd)
 	}
-	g := &ditem{group: true, opacity: 1, blend: blend, clip: &typeset.Path{Ops: roundedRect(clipR, clipRadii), Fill: &typeset.Fill{}}}
+	g := &ditem{group: true, fx: &groupFx{opacity: 1, blend: blend, clip: &typeset.Path{Ops: roundedRect(clipR, clipRadii), Fill: &typeset.Fill{}}}}
 	for _, sl := range p.attachedSlices(b, st, area, clipR) {
 		if st.BackgroundGradient != nil {
 			for _, pa := range p.e.gradientTiles(st, sl.area, sl.clip, r.Y) {
@@ -661,10 +661,10 @@ func (p *painter) border(b *box, st *css.Style, r typeset.Rect, radii [4][2]floa
 		if !visible[s] {
 			continue
 		}
-		g := &ditem{group: true, opacity: 1, clip: &typeset.Path{Ops: sideClip(css.Side(s), r, inner), Fill: &typeset.Fill{}}}
+		g := &ditem{group: true, fx: &groupFx{opacity: 1, clip: &typeset.Path{Ops: sideClip(css.Side(s), r, inner), Fill: &typeset.Fill{}}}}
 		if bs := st.Border[s].Style; bs == css.Dashed || bs == css.Dotted {
 			// A stroke along the side stays inside it: no clip.
-			g = &ditem{group: true, opacity: 1}
+			g = &ditem{group: true}
 		}
 		p.side(g, css.Side(s), st.Border[s], quirkShades(b, st, css.Side(s)), r, radii, inner, iradii, bd)
 		if len(g.kids) == 0 {

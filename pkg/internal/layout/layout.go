@@ -147,12 +147,12 @@ func (e *engine) pageCount(rb *box, d *ditem) int {
 		for _, k := range it.kids {
 			if k.group {
 				klo, khi := lo, hi
-				if k.clip != nil {
-					if y0, y1, ok := pathSpan(k.clip.Ops); ok {
+				if fx := k.effects(); fx.clip != nil {
+					if y0, y1, ok := pathSpan(fx.clip.Ops); ok {
 						klo, khi = max(lo, y0), min(hi, y1)
 					}
 				}
-				if khi > klo && !k.fixed {
+				if khi > klo && !k.fixedGroup() {
 					walk(k, klo, khi)
 				}
 				continue
@@ -322,7 +322,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 func (e *engine) distribute(it *ditem, depth, n int, used map[*typeset.StructElem]bool, free map[typeset.Fragment]bool) map[int][]typeset.Fragment {
 	out := map[int][]typeset.Fragment{}
 	for _, k := range it.kids {
-		if k.group && k.fixed {
+		if k.group && k.fixedGroup() {
 			e.repeat(k, depth, n, used, out)
 			continue
 		}
@@ -336,15 +336,15 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*typeset.StructEle
 					continue
 				}
 				if e.admit(p) {
-					if len(k.filter) > 0 {
+					if fx := k.effects(); len(fx.filter) > 0 {
 						var band *typeset.Rect
-						if k.flow {
+						if fx.flow {
 							band = &typeset.Rect{Y: e.pageTop(p), Height: e.sliceH(p)}
 						}
 						frags = e.filtered(k, frags, band, p)
 					}
 					g := groupOf(k, frags)
-					if depth == 0 && k.transform != nil && len(sub) == 1 {
+					if depth == 0 && k.effects().transform != nil && len(sub) == 1 {
 						free[g] = true
 					}
 					out[p] = append(out[p], g)
@@ -397,9 +397,10 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*typeset.StructEle
 //     transparency group form painted under /ca 0.5, one filled rectangle
 //     or one line of text included.
 func groupOf(it *ditem, content []typeset.Fragment) *typeset.Group {
-	g := &typeset.Group{Transform: groupTransform(it), Clip: it.clip, Opacity: it.opacity, Blend: it.blend, Content: content}
-	if it.isolate || it.mask != nil || (it.opacity < 1 || it.blend != typeset.BlendNormal) && !oneObject(content) {
-		g.Transparency = &typeset.TransparencyGroup{Isolated: true, Mask: it.mask}
+	fx := it.effects()
+	g := &typeset.Group{Transform: groupTransform(it), Clip: fx.clip, Opacity: fx.opacity, Blend: fx.blend, Content: content}
+	if fx.isolate || fx.mask != nil || (fx.opacity < 1 || fx.blend != typeset.BlendNormal) && !oneObject(content) {
+		g.Transparency = &typeset.TransparencyGroup{Isolated: true, Mask: fx.mask}
 	}
 	return g
 }
@@ -440,8 +441,8 @@ func oneObject(content []typeset.Fragment) bool {
 
 // groupTransform returns the transform of the group it.
 func groupTransform(it *ditem) typeset.Matrix {
-	if it.transform != nil {
-		return *it.transform
+	if m := it.effects().transform; m != nil {
+		return *m
 	}
 	return typeset.Identity
 }
@@ -501,7 +502,7 @@ func (e *engine) flatten(it *ditem, depth int, artifact bool) []typeset.Fragment
 				continue
 			}
 			frags := e.flatten(k, depth+1, artifact)
-			if len(k.filter) > 0 {
+			if len(k.effects().filter) > 0 {
 				frags = e.filtered(k, frags, nil, -1)
 			}
 			out = append(out, groupOf(k, frags))

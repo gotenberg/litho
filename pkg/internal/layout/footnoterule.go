@@ -126,7 +126,7 @@ func (e *engine) paintFootnoteRule(pg *typeset.Page, pb PageBox, top float64) {
 	st := css.Initial()
 	st.Border[css.Top] = css.Border{Width: t, Style: line, Color: c}
 	fb := &box{st: st, kind: kindBlock}
-	p := &painter{e: e, top: &ditem{group: true, opacity: 1}, mono: -1}
+	p := &painter{e: e, top: &ditem{group: true}, mono: -1}
 	p.frames = []*frame{{container: p.top, root: fb}}
 	p.border(fb, st, typeset.Rect{X: x, Y: top + r.SpaceAbove, Width: w, Height: t}, [4][2]float64{}, [4]float64{css.Top: t}, [4]bool{css.Top: true})
 	pg.Content = append(pg.Content, e.flatten(p.top, 0, true)...)

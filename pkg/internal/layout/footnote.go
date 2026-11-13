@@ -434,7 +434,7 @@ func (e *engine) paintNotes() {
 			continue
 		}
 		area := e.layoutArea(p, fp.calls, e.areaStyle(p))
-		pt := &painter{e: e, top: &ditem{group: true, opacity: 1}, mono: -1}
+		pt := &painter{e: e, top: &ditem{group: true}, mono: -1}
 		pt.frames = []*frame{{container: pt.top, root: area}}
 		pt.context(area)
 		f.disp[p], f.areas[p], f.links[p] = pt.top, area, pt.links

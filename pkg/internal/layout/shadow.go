@@ -105,7 +105,7 @@ func (p *painter) outerShadow(b *box, r typeset.Rect, radii [4][2]float64, x, y,
 	bounds = typeset.Rect{X: bounds.X - 1, Y: bounds.Y - 1, Width: bounds.Width + 2, Height: bounds.Height + 2}
 	// The shadow never shows under the box (CSS Backgrounds 3, 7.1).
 	clip := &typeset.Path{Ops: append(rectOps(bounds), roundedRect(r, radii)...), Fill: &typeset.Fill{Rule: typeset.EvenOdd}}
-	g := &ditem{group: true, opacity: 1, clip: clip}
+	g := &ditem{group: true, fx: &groupFx{opacity: 1, clip: clip}}
 	if frag := p.blurred([]effect.Path{{Ops: roundedRect(shape, sradii)}}, nil, shape, blur, col, r.Y); frag != nil {
 		g.kids = append(g.kids, &ditem{frag: frag, y0: bounds.Y, y1: bounds.Y + bounds.Height, page: -1})
 	} else {
@@ -125,7 +125,7 @@ func (p *painter) innerShadow(b *box, r typeset.Rect, radii [4][2]float64, bd [4
 	hole.X += x
 	hole.Y += y
 	clip := &typeset.Path{Ops: roundedRect(pr, pradii), Fill: &typeset.Fill{}}
-	g := &ditem{group: true, opacity: 1, clip: clip}
+	g := &ditem{group: true, fx: &groupFx{opacity: 1, clip: clip}}
 	y0, y1 := pr.Y, pr.Y+pr.Height
 	// The shadow is the padding box, grown as Chromium grows it, less the
 	// hole (see innerReach).

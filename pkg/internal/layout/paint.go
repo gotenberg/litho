@@ -14,7 +14,10 @@ import (
 )
 
 // ditem is one node of the display list, in flow coordinates: a fragment,
-// or a group of them under an opacity or a clip.
+// or a group of them under an opacity or a clip. A document paints one
+// leaf per fragment, tens of thousands, held until the layout returns: a
+// leaf holds no more than its place in the list, and a group's effects
+// live in fx, allocated only for a group that has some.
 type ditem struct {
 	frag typeset.Fragment
 	// y0 and y1 are the flow extent of the fragment; page, when not
@@ -23,6 +26,42 @@ type ditem struct {
 	y0, y1 float64
 	page   int
 	group  bool
+	kids   []*ditem
+	// fx holds the group's effects, nil for a leaf and for a group that
+	// draws its content as it is: opacity 1, no clip, transform, blend,
+	// mask or filter, not fixed.
+	fx *groupFx
+}
+
+// noEffects is what a group with no [groupFx] draws with.
+var noEffects = groupFx{opacity: 1}
+
+// effects returns the group's effects, [noEffects] for a group without
+// any; the caller reads the copy and writes through [ditem.setEffects].
+func (d *ditem) effects() groupFx {
+	if d.fx == nil {
+		return noEffects
+	}
+	return *d.fx
+}
+
+// setEffects returns the group's effects to write, allocating them at
+// [noEffects] for a group that had none.
+func (d *ditem) setEffects() *groupFx {
+	if d.fx == nil {
+		fx := noEffects
+		d.fx = &fx
+	}
+	return d.fx
+}
+
+// fixedGroup reports the group of a fixed box.
+func (d *ditem) fixedGroup() bool {
+	return d.fx != nil && d.fx.fixed
+}
+
+// groupFx is what a display list group draws its content through.
+type groupFx struct {
 	// opacity, clip and transform are the group's, in flow coordinates;
 	// transform is nil for none.
 	opacity   float64
@@ -48,7 +87,6 @@ type ditem struct {
 	// coordinates of the first page and paints on every page (CSS 2.1,
 	// 9.6.1).
 	fixed bool
-	kids  []*ditem
 }
 
 // openClip is a clip group open in the painter, for an overflow: hidden
@@ -125,7 +163,7 @@ type painter struct {
 
 // paint returns the display list of the box tree rooted at root.
 func (e *engine) paint(root *box) (*ditem, []pendingLink, *box) {
-	p := &painter{e: e, top: &ditem{group: true, opacity: 1}, mono: -1}
+	p := &painter{e: e, top: &ditem{group: true}, mono: -1}
 	p.frames = []*frame{{container: p.top, root: root}}
 	p.canvas = canvasBox(root)
 	p.viewport = viewportBox(root)
@@ -256,7 +294,7 @@ func (p *painter) sync(chain []*box) *ditem {
 		if len(f.open) > 0 {
 			parent = f.open[len(f.open)-1].item
 		}
-		g := &ditem{group: true, opacity: 1, clip: p.clipPath(b)}
+		g := &ditem{group: true, fx: &groupFx{opacity: 1, clip: p.clipPath(b)}}
 		if b.monoCol {
 			// The positioned boxes a monolithic box in columns clips move
 			// to its column with it, inside its clip.
@@ -600,14 +638,14 @@ func (p *painter) unit(b *box, own bool) {
 	if b.monoCol {
 		// A monolithic box in columns moves to its column whole; the
 		// positioned boxes it holds paint from its stacking context.
-		push(&ditem{group: true, opacity: 1, page: pageMono, y0: b.y + p.dy})
+		push(&ditem{group: true, page: pageMono, y0: b.y + p.dy})
 		own = own && b.isStackingContext()
 	}
 	if b.fixed {
 		savedMono := p.mono
 		p.mono = -1
 		defer func() { p.mono = savedMono }()
-		push(&ditem{group: true, opacity: 1, fixed: true})
+		push(&ditem{group: true, fx: &groupFx{opacity: 1, fixed: true}})
 	}
 	if b.pageAnchored {
 		// A page-anchored box paints on its page alone, unclipped by the
@@ -617,7 +655,7 @@ func (p *painter) unit(b *box, own bool) {
 		p.mono = b.anchorPage
 		defer func() { p.mono = savedMono }()
 		id := typeset.Identity
-		push(&ditem{group: true, opacity: 1, transform: &id, page: b.anchorPage})
+		push(&ditem{group: true, page: b.anchorPage, fx: &groupFx{opacity: 1, transform: &id}})
 	}
 	m, has, visible := transformOf(b, p.borderRect(b))
 	if !visible {
@@ -648,16 +686,17 @@ func (p *painter) unit(b *box, own bool) {
 		clips = append(clips, &typeset.Path{Ops: rectOps(c), Fill: &typeset.Fill{}})
 	}
 	if op < 1 || has || blend != typeset.BlendNormal || isolate || len(clips) > 0 || mask != nil {
-		g := &ditem{group: true, opacity: op, blend: blend, isolate: isolate, mask: mask}
+		fx := &groupFx{opacity: op, blend: blend, isolate: isolate, mask: mask}
 		if has {
-			g.transform = &m
+			fx.transform = &m
 		}
 		if len(clips) > 0 {
-			g.clip = clips[0]
+			fx.clip = clips[0]
 		}
+		g := &ditem{group: true, fx: fx}
 		push(g)
 		for _, c := range clips[min(len(clips), 1):] {
-			push(&ditem{group: true, opacity: 1, clip: c})
+			push(&ditem{group: true, fx: &groupFx{opacity: 1, clip: c}})
 		}
 	}
 	if len(b.st.BackdropFilter) > 0 {
@@ -667,12 +706,12 @@ func (p *painter) unit(b *box, own bool) {
 		// The filter applies to the element's rendering before its clip,
 		// mask and opacity (Filter Effects 1, 6; CSS Masking 1, 4): the
 		// innermost group.
-		push(&ditem{group: true, opacity: 1, filter: b.st.Filter, box: p.borderRect(b), flow: p.inFlow(), zoom: p.zoom()})
+		push(&ditem{group: true, fx: &groupFx{opacity: 1, filter: b.st.Filter, box: p.borderRect(b), flow: p.inFlow(), zoom: p.zoom()}})
 	}
 	if p.clips(b) && pushed == 0 {
 		// The box's own clip is relative to the frame of its context: a
 		// frame of its own keeps the chains short.
-		push(&ditem{group: true, opacity: 1})
+		push(&ditem{group: true})
 	}
 	if b.mc != nil {
 		p.multicol(b)
@@ -734,7 +773,7 @@ func (p *painter) unit(b *box, own bool) {
 // coordinates: none is transformed or fixed.
 func (p *painter) inFlow() bool {
 	for _, f := range p.frames {
-		if c := f.container; c.transform != nil || c.fixed {
+		if fx := f.container.effects(); fx.transform != nil || fx.fixed {
 			return false
 		}
 	}
@@ -746,7 +785,7 @@ func (p *painter) inFlow() bool {
 func (p *painter) zoom() float64 {
 	z := 1.0
 	for _, f := range p.frames {
-		if m := f.container.transform; m != nil {
+		if m := f.container.effects().transform; m != nil {
 			z = float64(z * max(math.Hypot(m.A, m.B), math.Hypot(m.C, m.D)))
 		}
 	}
@@ -964,7 +1003,7 @@ func (p *painter) replaced(b *box) {
 	if p.mono >= 0 {
 		page = p.mono
 	}
-	g := &ditem{group: true, opacity: 1, clip: &typeset.Path{Ops: rectOps(box), Fill: &typeset.Fill{}}}
+	g := &ditem{group: true, fx: &groupFx{opacity: 1, clip: &typeset.Path{Ops: rectOps(box), Fill: &typeset.Fill{}}}}
 	g.kids = append(g.kids, &ditem{frag: img, y0: box.Y, y1: box.Y + box.Height, page: page})
 	c := p.sync(p.chain(b, false))
 	c.kids = append(c.kids, g)
@@ -1257,7 +1296,7 @@ func (p *painter) enterInlines(open *[]*box, want []*box) {
 		c := p.sync(p.chain(b, false))
 		op := min(max(clamp(b.st.Opacity), 0), 1)
 		blend, isolate := p.blendOf(b), blendsInside(b)
-		g := &ditem{group: true, opacity: op, blend: blend, isolate: isolate}
+		g := &ditem{group: true, fx: &groupFx{opacity: op, blend: blend, isolate: isolate}}
 		c.kids = append(c.kids, g)
 		p.frames = append(p.frames, &frame{container: g, root: b})
 		*open = append(*open, b)
@@ -1279,7 +1318,7 @@ func (p *painter) lineFrag(l *lineBox, f *inlineFrag, page int) {
 		// The relative offset moves the fragment after the columns cut
 		// the flow (CSS Fragmentation 3, 5.5): it paints in the column of
 		// its line, where the line's text paints, however far it moves.
-		g := &ditem{group: true, opacity: 1, page: pageMono, y0: l.y + (f.top+f.bottom)/2}
+		g := &ditem{group: true, page: pageMono, y0: l.y + (f.top+f.bottom)/2}
 		c := p.sync(p.chain(f.box, false))
 		c.kids = append(c.kids, g)
 		p.frames = append(p.frames, &frame{container: g, root: f.box})

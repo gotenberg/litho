@@ -278,7 +278,7 @@ func (p *painter) partBackground(b *box, clip typeset.Rect) {
 	if st.BackgroundImage == "" && st.BackgroundGradient == nil {
 		return
 	}
-	g := &ditem{group: true, opacity: 1, clip: &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{}}}
+	g := &ditem{group: true, fx: &groupFx{opacity: 1, clip: &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{}}}}
 	for _, sl := range p.attachedSlices(b, st, p.borderRect(b), clip) {
 		if st.BackgroundGradient != nil {
 			for _, pa := range p.e.gradientTiles(st, sl.area, sl.clip, clip.Y) {

@@ -278,12 +278,12 @@ func (e *engine) fittedHeight(rb *box, d *ditem) float64 {
 	walk = func(it *ditem, lo, hi float64) {
 		for _, k := range it.kids {
 			if k.group {
-				if k.fixed {
+				if k.fixedGroup() {
 					continue
 				}
 				klo, khi := lo, hi
-				if k.clip != nil {
-					if y0, y1, ok := pathSpan(k.clip.Ops); ok {
+				if fx := k.effects(); fx.clip != nil {
+					if y0, y1, ok := pathSpan(fx.clip.Ops); ok {
 						klo, khi = max(lo, y0), min(hi, y1)
 					}
 				}
