@@ -229,7 +229,10 @@ func (p *ifcPara) allowed(i int) bool {
 		// 5.4).
 		return false
 	}
-	if p.styleAt(i).LineBreak == css.LineBreakAnywhere && wraps(after) && p.p.GraphemeStart(i) {
+	if p.styleAt(i).LineBreak == css.LineBreakAnywhere && wraps(after) && p.p.GraphemeStart(i) && (after == css.BreakSpaces || !isPreservedSpace(b)) {
+		// A preserved space that hangs at a line's end (CSS Text 3,
+		// 4.1.3) stays with the character before it: a break before it
+		// would set it alone on a line.
 		return true
 	}
 	if before == css.BreakSpaces && isPreservedSpace(a) && p.infos[p.p.RunOf(i-1)].kind != runAtomic {

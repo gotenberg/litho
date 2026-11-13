@@ -227,6 +227,16 @@ func TestLineBreak_Anywhere(t *testing.T) {
 	}
 }
 
+func TestLineBreak_AnywhereHangsPreservedSpaces(t *testing.T) {
+	// CSS Text 3, 5.3 and 4.1.3: under pre-wrap a preserved space hangs at
+	// the end of the line before it rather than taking a line of its own.
+	lb := func(s *css.Style) { s.LineBreak = css.LineBreakAnywhere; s.WhiteSpace = css.PreWrap }
+	res := run(t, doc(el(sty(lb, width(0)), txt(sty(lb), "2. ab"))), page(100, 100))
+	if got, _ := lineTexts(res, 1); strings.Join(got, "|") != "2|. |a|b" {
+		t.Errorf("lines %q, want 2|. |a|b", got)
+	}
+}
+
 func TestWordBreak_BreakAllAtSpanEdge(t *testing.T) {
 	ba := inlineSty(func(s *css.Style) { s.WordBreak = css.BreakAll })
 	res := run(t, doc(el(sty(), txt(sty(), "aa"), el(ba, txt(ba, "bb")), txt(sty(), "cc"))), page(40, 50))
