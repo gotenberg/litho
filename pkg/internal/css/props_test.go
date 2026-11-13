@@ -369,6 +369,28 @@ func TestFontUnits_ResolveExAndCh(t *testing.T) {
 	}
 }
 
+// TestFontUnits_FollowFontSizeAdjust locks CSS Values 4, 6.1.1 with CSS
+// Fonts 5, 2.6: ex and ch measure the used font, which font-size-adjust
+// scales, whatever the order of the declarations; em does not.
+func TestFontUnits_FollowFontSizeAdjust(t *testing.T) {
+	t.Parallel()
+	root := parseHTML(t, `<body><div id=a></div><div id=b></div><div id=c></div></body>`)
+	sheet := `div { font-size: 20px; width: 4ch; height: 2ex; margin-left: 1em; font-size-adjust: 0.25 }
+#b { font-size-adjust: ch-width 1 } #c { font-size-adjust: from-font }`
+	r := NewResolver(a4, []Sheet{{Sheet: mustParse(t, sheet), Origin: Author}})
+	units := func(*Style) FontUnits { return FontUnits{XHeight: 0.5, Zero: 0.5} }
+	c, err := r.Compute(context.Background(), root, ComputeOptions{FontUnits: units})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	for id, want := range map[string][2]float64{"a": {15, 7.5}, "b": {60, 30}, "c": {30, 15}} {
+		s := c.Style(byID(root, id))
+		if s.Width != pts(want[0]) || s.Height != pts(want[1]) || s.Margin[Left] != pts(15) {
+			t.Errorf("#%s width %+v height %+v margin %+v, want %vpt %vpt 15pt", id, s.Width, s.Height, s.Margin[Left], want[0], want[1])
+		}
+	}
+}
+
 // TestDisplay_RejectsStrayKeywords locks the two-keyword grammar of
 // display (CSS Display 3, 2): an outer and an inner display type, nothing
 // else, so an invalid value leaves the earlier declaration in force.

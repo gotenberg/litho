@@ -632,11 +632,11 @@ func usedLineHeight(st *Style) float64 {
 }
 
 // computeOrder is the order computeStyle computes the longhands in: the
-// font size and colour first, as [propID] says, then the font selection,
-// which the ex and ch units of every other length resolve against, then
-// the rest in propID order.
+// font size and colour first, as [propID] says, then the font selection
+// and font-size-adjust, which the ex and ch units of every other length
+// resolve against, then the rest in propID order.
 var computeOrder = func() []propID {
-	first := []propID{pFontSize, pColor, pFontFamily, pFontWeight, pFontStyle, pLineHeight}
+	first := []propID{pFontSize, pColor, pFontFamily, pFontWeight, pFontStyle, pFontSizeAdjust, pLineHeight}
 	out := slices.Clone(first)
 	for id := range numProps {
 		if !slices.Contains(first, id) {
@@ -1082,7 +1082,11 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 	vw, vh := cs.r.media.viewport()
 	s.lc = lenCtx{fontSize: parent.FontSize, rootFontSize: rootFS, width: vw, height: vh}
 	s.lc.font = cs.fontUnits(parent)
+	s.lc.adjust = parent.FontSizeAdjust
 	s.lc.rootFont = cs.fontUnits(cs.root)
+	if cs.root != nil {
+		s.lc.rootAdjust = cs.root.FontSizeAdjust
+	}
 	if cs.root != nil {
 		s.lc.verticalRoot = cs.root.WritingMode != HorizontalTB
 	}
@@ -1138,6 +1142,11 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 			s.lc.font = cs.fontUnits(st)
 			if isRoot {
 				s.lc.rootFont = s.lc.font
+			}
+		case pFontSizeAdjust:
+			s.lc.adjust = st.FontSizeAdjust
+			if isRoot {
+				s.lc.rootAdjust = s.lc.adjust
 			}
 		case pLineHeight:
 			s.lc.lineHeight = usedLineHeight(st)

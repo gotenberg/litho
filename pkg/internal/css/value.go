@@ -84,7 +84,11 @@ type lenCtx struct {
 	// font and rootFont are the measures of the element's first
 	// available font and of the root's, as fractions of their sizes.
 	font, rootFont FontUnits
-	width, height  float64
+	// adjust and rootAdjust are the font-size-adjust of the element and
+	// of the root, which scale the font the ex, ch, cap and ic units and
+	// their root forms measure.
+	adjust, rootAdjust FontSizeAdjust
+	width, height      float64
 	// lineHeight and rootLineHeight are the used line heights the lh and
 	// rlh units resolve against, in points: the element's, its parent's
 	// while line-height itself computes, and the root's.
@@ -100,8 +104,8 @@ func (c *lenCtx) unitSizes() [numLenUnits]float64 {
 	s[uPt] = 1
 	s[uEm] = c.fontSize
 	s[uRem] = c.rootFontSize
-	s[uEx], s[uCh], s[uCap], s[uIc] = c.font.sizes(c.fontSize)
-	s[uRex], s[uRch], s[uRcap], s[uRic] = c.rootFont.sizes(c.rootFontSize)
+	s[uEx], s[uCh], s[uCap], s[uIc] = c.font.sizes(c.fontSize * c.font.adjustFactor(c.adjust))
+	s[uRex], s[uRch], s[uRcap], s[uRic] = c.rootFont.sizes(c.rootFontSize * c.rootFont.adjustFactor(c.rootAdjust))
 	s[uVw], s[uVh] = c.width/100, c.height/100
 	s[uVmin], s[uVmax] = math.Min(s[uVw], s[uVh]), math.Max(s[uVw], s[uVh])
 	s[uVi], s[uVb] = s[uVw], s[uVh]
@@ -127,6 +131,40 @@ type FontUnits struct {
 // fallbackCap is the cap height, in ems, of a font that records neither a
 // cap height nor an ascent: the cap height of the common Latin faces.
 const fallbackCap = 0.7
+
+// maxAdjustFactor bounds the factor font-size-adjust scales a font by, as
+// the text stack bounds it. Overflow guard, not spec-mandated: a face
+// whose x-height is a hundredth of its em would otherwise measure a
+// hundred times larger than asked.
+const maxAdjustFactor = 10
+
+// adjustFactor returns the factor font-size-adjust a scales the font
+// by: its value over the font's aspect value for the metric a names
+// (CSS Fonts 5, 2.6), 1 for none and for from-font, 0 for a value of 0.
+// The font-relative units measure the used font, the adjusted one (CSS
+// Values 4, 6.1.1).
+func (f FontUnits) adjustFactor(a FontSizeAdjust) float64 {
+	if !a.Set || a.FromFont {
+		return 1
+	}
+	if a.Value == 0 {
+		return 0
+	}
+	ex, ch, capH, ic := f.sizes(1)
+	aspect := ex
+	switch a.Metric {
+	case 1:
+		aspect = capH
+	case 2:
+		aspect = ch
+	case 3, 4:
+		aspect = ic
+	}
+	if !(aspect > 0) || !numeric.Finite(aspect) {
+		return 1
+	}
+	return min(max(a.Value/aspect, 1.0/maxAdjustFactor), maxAdjustFactor)
+}
 
 // sizes returns the ex, ch, cap and ic of the font at size, in points.
 func (f FontUnits) sizes(size float64) (ex, ch, capH, ic float64) {
