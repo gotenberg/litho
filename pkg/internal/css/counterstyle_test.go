@@ -8,7 +8,7 @@ import (
 // TestCounterStyles_Predefined locks the predefined counter styles of CSS
 // Counter Styles 3, 6 and 7 as Chromium spells them, its departures
 // included: armenian past 9999, hebrew 0, the extended range of the
-// Chinese and Korean styles, and no space between Korean groups.
+// Chinese and Korean styles.
 //
 // # Corpus evidence
 //
@@ -46,11 +46,13 @@ func TestCounterStyles_Predefined(t *testing.T) {
 		{"japanese-informal", 1234, "千二百三十四"},
 		{"japanese-informal", 10000, "一〇〇〇〇"},
 		{"japanese-formal", 1234, "壱阡弐百参拾四"},
-		{"korean-hangul-formal", -3, "마이너스삼"},
-		{"korean-hangul-formal", 78010092, "칠천팔백일만구십이"},
+		{"korean-hangul-formal", -3, "마이너스 삼"},
+		{"korean-hangul-formal", 78010092, "칠천팔백일만 구십이"},
+		{"korean-hanja-informal", 12345, "萬 二千三百四十五"},
+		{"korean-hanja-informal", 100100000, "億 十萬"},
 		{"korean-hanja-informal", 110, "百十"},
 		{"korean-hanja-informal", 10000, "萬"},
-		{"korean-hanja-informal", 78010092, "七千八百萬九十二"},
+		{"korean-hanja-informal", 78010092, "七千八百萬 九十二"},
 		{"korean-hanja-formal", 1234, "壹仟貳百參拾四"},
 		{"simp-chinese-informal", 11, "十一"},
 		{"simp-chinese-informal", 110, "一百一十"},

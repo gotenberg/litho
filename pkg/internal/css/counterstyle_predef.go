@@ -220,16 +220,17 @@ func isGroupMarker(chars []string, p string) bool {
 
 // koreanText spells v in a longhand Korean style whose characters are
 // chars (CSS Counter Styles 3, 7.1.5): groups of four digits with their
-// group markers, a digit marker after each non-zero digit and every zero
-// dropped. Two steps follow Chromium instead of 7.1.5: the informal style
-// drops a one before any digit or group marker, where 7.1.5 keeps the one
-// that leads its group, and no space separates the groups.
+// group markers, separated by spaces, a digit marker after each non-zero
+// digit and every zero dropped. Two steps follow Chromium instead of
+// 7.1.5: the informal style drops a one before any digit or group marker,
+// where 7.1.5 keeps the one that leads its group, and a space follows the
+// negative sign, as the limited range's negative descriptor writes it.
 //
 // # Corpus evidence
 //
 //   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 spells 78010092
-//     "칠천팔백일만구십이" in korean-hangul-formal and "七千八百萬九十二" in
-//     korean-hanja-informal, and 10 "十", 110 "百十" and 10000 "萬" in
+//     "칠천팔백일만 구십이" in korean-hangul-formal and -3 "마이너스 삼", and
+//     12345 "萬 二千三百四十五" and 100100000 "億 十萬" in
 //     korean-hanja-informal.
 func koreanText(chars []string, v int) string {
 	if v == 0 {
@@ -243,13 +244,18 @@ func koreanText(chars []string, v int) string {
 	groups := cjkGroups(v)
 	var b strings.Builder
 	if neg {
-		b.WriteString(chars[16])
+		b.WriteString(chars[16] + " ")
 	}
+	sep := false
 	for gi := len(groups) - 1; gi >= 0; gi-- {
 		g := groups[gi]
 		if g == [4]int{} {
 			continue
 		}
+		if sep {
+			b.WriteString(" ")
+		}
+		sep = true
 		for d := 3; d >= 0; d-- {
 			if g[d] == 0 {
 				continue
