@@ -374,8 +374,8 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*typeset.StructEle
 //     or one line of text included.
 func groupOf(it *ditem, content []typeset.Fragment) *typeset.Group {
 	g := &typeset.Group{Transform: groupTransform(it), Clip: it.clip, Opacity: it.opacity, Blend: it.blend, Content: content}
-	if it.isolate || (it.opacity < 1 || it.blend != typeset.BlendNormal) && !oneObject(content) {
-		g.Transparency = &typeset.TransparencyGroup{Isolated: true}
+	if it.isolate || it.mask != nil || (it.opacity < 1 || it.blend != typeset.BlendNormal) && !oneObject(content) {
+		g.Transparency = &typeset.TransparencyGroup{Isolated: true, Mask: it.mask}
 	}
 	return g
 }

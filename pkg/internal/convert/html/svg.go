@@ -257,6 +257,26 @@ func (b *builder) clipSource(ctx context.Context, url string, box typeset.Rect) 
 	return regions, found
 }
 
+// maskSource returns the content of the mask element url names for an
+// element whose border box is box, in points in the layout's coordinates:
+// the mask's user space has its origin at the box's top left and a unit
+// of one CSS pixel (CSS Masking 1, 7.1).
+func (b *builder) maskSource(ctx context.Context, url string, box typeset.Rect) ([]typeset.Fragment, bool, bool) {
+	doc, id, ok := b.definition(ctx, url, "mask")
+	if !ok {
+		return nil, false, false
+	}
+	content, alpha, found := doc.MaskContent(ctx, id, box.Width/css.Pt, box.Height/css.Pt)
+	if len(content) == 0 {
+		return nil, alpha, found
+	}
+	return []typeset.Fragment{&typeset.Group{
+		Transform: typeset.Matrix{A: css.Pt, D: css.Pt, E: box.X, F: box.Y},
+		Opacity:   1,
+		Content:   content,
+	}}, alpha, found
+}
+
 // svgTitle returns the text of the first title child of an svg element,
 // its accessible name (SVG 2, 5.9).
 func svgTitle(n *dom.Node) string {

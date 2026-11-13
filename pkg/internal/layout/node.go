@@ -268,6 +268,12 @@ type Options struct {
 	// that url names a clipPath element; found with no region hides the
 	// element. nil names none.
 	ClipSource func(ctx context.Context, url string, box typeset.Rect) (regions [][]*typeset.Path, found bool)
+	// MaskSource returns the content of the SVG mask element url names,
+	// for an element whose border box is box, in the same coordinates
+	// (CSS Masking 1, 6.1 and 7.1), and whether its mask-type is alpha
+	// rather than luminance. found reports that url names a mask element.
+	// The content hangs from no structure element. nil names none.
+	MaskSource func(ctx context.Context, url string, box typeset.Rect) (content []typeset.Fragment, alpha, found bool)
 	// MaxPages bounds the pages laid out; past it Layout fails with
 	// [limits.ErrTooManyPages]. Zero means [DefaultMaxPages].
 	MaxPages int

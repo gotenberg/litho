@@ -345,6 +345,7 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 			Fallback:         text.FallbackChromium,
 			Image:            res.picture,
 			ClipSource:       b.clipSource,
+			MaskSource:       b.maskSource,
 			MaxPages:         o.MaxPages,
 			Logger:           o.Logger,
 		},

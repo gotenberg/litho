@@ -29,9 +29,11 @@ type ditem struct {
 	clip      *typeset.Path
 	transform *typeset.Matrix
 	// blend is the group's blend mode, isolate whether its content is an
-	// isolated transparency group whatever it paints.
+	// isolated transparency group whatever it paints, mask the soft mask
+	// of that group, nil for none.
 	blend   typeset.BlendMode
 	isolate bool
+	mask    *typeset.SoftMask
 	// fixed reports the group of a fixed box: its content is in the
 	// coordinates of the first page and paints on every page (CSS 2.1,
 	// 9.6.1).
@@ -446,11 +448,13 @@ func (p *painter) unit(b *box, own bool) {
 	}
 	blend, isolate := p.compositing(b)
 	var clips []*typeset.Path
+	var mask *typeset.SoftMask
 	if b.parent != nil && b.isStackingContext() {
 		var visible bool
 		if clips, visible = p.clipPathOf(b); !visible {
 			return
 		}
+		mask = p.maskOf(b)
 	}
 	if clipsRect(b) {
 		c := clipRectOf(b, p.borderRect(b))
@@ -459,8 +463,8 @@ func (p *painter) unit(b *box, own bool) {
 		}
 		clips = append(clips, &typeset.Path{Ops: rectOps(c), Fill: &typeset.Fill{}})
 	}
-	if op < 1 || has || blend != typeset.BlendNormal || isolate || len(clips) > 0 {
-		g := &ditem{group: true, opacity: op, blend: blend, isolate: isolate}
+	if op < 1 || has || blend != typeset.BlendNormal || isolate || len(clips) > 0 || mask != nil {
+		g := &ditem{group: true, opacity: op, blend: blend, isolate: isolate, mask: mask}
 		if has {
 			g.transform = &m
 		}
