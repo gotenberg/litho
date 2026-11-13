@@ -173,7 +173,7 @@ The `targets` cell converts each source of the converter corpora `diff` runs on 
 
 ## Measuring cost
 
-`corpus cost` measures what a conversion or a PDF operation costs. Each row is one operation on one input, and each run of a row is a child process of its own (`corpus convert-one --measure`), so the child's peak memory is the operation's. The runs go round the rows, and the table prints each column's median, with the spread of the wall time, the CPU time and the peak memory as a share of the median. The reading decides nothing: it depends on the machine and its load, no bound reads it, and `baseline.json` holds none of it. Take a wall time with nothing else running.
+`corpus cost` measures what a conversion or a PDF operation costs. Each row is one operation on one input, and each run of a row is a child process of its own (`corpus convert-one --measure`), so the child's peak memory is the operation's. The runs go round the rows, and the table prints each column's median, with the spread of the wall time, the CPU time and the peak memory as a share of the median. The reading decides nothing: it depends on the machine and its load, and `baseline.json` holds none of it; only a comparison of two readings fails, past the bounds it is given. Take a wall time with nothing else running.
 
 ```bash
 make corpus-cost # every row, three runs each
@@ -182,6 +182,7 @@ make corpus-cost ROWS=xlsx-sales-l COST_PROFILE=profiles # one more run writes t
 make corpus-cost ROWS=html-1mib COPIES=4                 # four copies at once in one process
 GOGC=50 make corpus-cost ROWS=html-1mib COPIES=4         # the child inherits GOGC and GOMEMLIMIT
 make corpus-cost-compare BEFORE=before.json AFTER=after.json
+make corpus-cost-compare BEFORE=before.json AFTER=after.json MAX_GROWTH=alloc_bytes:2,alloc_objects:1,budget_peak_bytes:0
 go run ./test/integration/cmd/corpus cost --list # the rows and their inputs
 ```
 
@@ -198,6 +199,10 @@ go run ./test/integration/cmd/corpus cost --list # the rows and their inputs
 | `proc s`     | The child's wall time, start to exit                                                                                                             |
 | `in`, `out`  | The input's bytes (an HTML page's pictures included), the output's pages and bytes (text or pixels for an operation that writes no PDF)          |
 | ratios       | For a conversion: peak resident memory over the input's bytes and over the budget's peak, allocated bytes over the input's bytes                 |
+
+The `heap` column samples the live and the unswept objects: under the default `GOGC=100` it lands anywhere between the live heap and twice it, depending on where a collection falls against the peak, and two runs of one binary differ by a third. Under `GOGC=10` the collector runs often enough that the column reads the live peak within a tenth, and two runs agree within a few percent: compare heaps between readings taken at `GOGC=10`.
+
+`--max-growth` (`MAX_GROWTH`) bounds the growth of each column's median, in percent, and fails the comparison past it. The columns the machine's load does not move are the ones to bound: `alloc_bytes` and `alloc_objects` (two runs of one binary agree within half a percent and a tenth of one), `budget_peak_bytes` (the same on every run), and `heap_peak_bytes` between two `GOGC=10` readings (within about two percent). A reading taken before a change and one after it each move by less than these: comparing every reading with one recorded earlier shows what a series of changes adds up to.
 
 A conversion runs after a one-line text conversion has built the font index, as in a service that converts more than once; the `cold/text-line` row measures a conversion in a process whose index is not built yet. With `COPIES=N`, N copies of the operation run at once on goroutines of one process, the budget's peak summed over them.
 

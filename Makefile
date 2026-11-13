@@ -141,8 +141,8 @@ corpus-cost: ## Measure what each conversion and PDF operation costs, one proces
 		$(if $(COST_OUT),--out=$(COST_OUT)) $(if $(COST_PROFILE),--profile=$(COST_PROFILE)) $(if $(COST_INPUTS),--inputs=$(COST_INPUTS))
 
 .PHONY: corpus-cost-compare
-corpus-cost-compare: ## Compare two cost readings row by row, with the change in each column. Vars: BEFORE, AFTER
-	$(CORPUS_CLI) cost --compare $(BEFORE) $(AFTER)
+corpus-cost-compare: ## Compare two cost readings row by row, with the change in each column; fail past MAX_GROWTH. Vars: BEFORE, AFTER, MAX_GROWTH
+	$(CORPUS_CLI) cost --compare $(if $(MAX_GROWTH),--max-growth=$(MAX_GROWTH)) $(BEFORE) $(AFTER)
 
 .PHONY: corpus-tools
 corpus-tools: ## Compare the local verapdf, node, java, qpdf, pdfsig, fontTools and Pillow with the pinned versions

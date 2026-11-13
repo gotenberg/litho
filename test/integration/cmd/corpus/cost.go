@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -24,8 +25,8 @@ import (
 // a PDF operation on one input, runs in a child process of its own (`corpus
 // convert-one --measure`), so the child's peak memory is the operation's.
 // The reading prints the median of the runs and their spread. It decides
-// nothing: a reading depends on the machine, and no bound or baseline reads
-// it.
+// nothing: a reading depends on the machine. A comparison of two readings
+// fails only past the bounds --max-growth sets.
 
 // costColumn is one measured quantity of a run.
 type costColumn struct {
@@ -132,16 +133,26 @@ func runCost(ctx context.Context, args []string) int {
 	inputs := fs.String("inputs", "", "Directory of the generated inputs, built there when missing (default: the testdata's "+costDefaultInputs+")")
 	list := fs.Bool("list", false, "List the rows and their inputs, and measure nothing")
 	compare := fs.Bool("compare", false, "Compare two JSON readings, BEFORE and AFTER, row by row")
+	maxGrowth := fs.String("max-growth", "", "With --compare: COLUMN:PERCENT pairs, comma-separated; fail when a row's median grows past them (as alloc_bytes:2,heap_peak_bytes:4)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *compare {
-		if fs.NArg() != 2 {
-			fmt.Fprintln(os.Stderr, "usage: corpus cost --compare BEFORE.json AFTER.json")
+		limits, err := parseCostGrowth(*maxGrowth)
+		if fs.NArg() != 2 || err != nil {
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "cost: %v\n", err)
+			}
+			fmt.Fprintln(os.Stderr, "usage: corpus cost --compare [--max-growth=COLUMN:PERCENT,...] BEFORE.json AFTER.json")
 			return 2
 		}
-		if err := compareCost(os.Stdout, fs.Arg(0), fs.Arg(1)); err != nil {
+		over, err := compareCost(os.Stdout, fs.Arg(0), fs.Arg(1), limits)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "cost: %v\n", err)
+			return 1
+		}
+		if len(over) > 0 {
+			fmt.Fprintf(os.Stderr, "cost: %d medians grew past their bound:\n%s\n", len(over), strings.Join(over, "\n"))
 			return 1
 		}
 		return 0
@@ -459,17 +470,45 @@ func printCost(w io.Writer, reading costReading) {
 // the machine's load moves.
 var costSpreadColumns = map[string]bool{"wall_s": true, "cpu_s": true, "rss_peak_bytes": true}
 
+// costGrowth bounds how much a column's median may grow from one reading
+// to the next, in percent of the earlier median.
+type costGrowth map[string]float64
+
+// parseCostGrowth reads the COLUMN:PERCENT pairs of --max-growth, the
+// columns those of [costColumns].
+func parseCostGrowth(spec string) (costGrowth, error) {
+	if spec == "" {
+		return nil, nil
+	}
+	known := map[string]bool{}
+	for _, c := range costColumns {
+		known[c.key] = true
+	}
+	g := costGrowth{}
+	for part := range strings.SplitSeq(spec, ",") {
+		col, pct, ok := strings.Cut(strings.TrimSpace(part), ":")
+		v, err := strconv.ParseFloat(pct, 64)
+		if !ok || err != nil || !known[col] || v < 0 || math.IsInf(v, 0) {
+			return nil, fmt.Errorf("--max-growth: %q is not a column and a percent", part)
+		}
+		g[col] = v
+	}
+	return g, nil
+}
+
 // compareCost prints, for each row two readings share, every column's
-// median before and after and its change.
-func compareCost(w io.Writer, beforePath, afterPath string) error {
+// median before and after and its change, and returns a line for each
+// median that grew past its bound in limits.
+func compareCost(w io.Writer, beforePath, afterPath string, limits costGrowth) ([]string, error) {
 	before, err := readCostReading(beforePath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	after, err := readCostReading(afterPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	var over []string
 	prev := map[string]costRowReading{}
 	for _, rr := range before.Rows {
 		prev[rr.Row] = rr
@@ -509,6 +548,9 @@ func compareCost(w io.Writer, beforePath, afterPath string) error {
 			if bv != 0 {
 				change = fmt.Sprintf("%+.1f", 100*(av-bv)/math.Abs(bv))
 			}
+			if bound, ok := limits[k]; ok && costGrew(bv, av, bound) {
+				over = append(over, fmt.Sprintf("%s %s: "+formats[k]+" to "+formats[k]+" (%s %%, bound %+g %%)", a.Row, titles[k], bv/scales[k], av/scales[k], change, bound))
+			}
 			fmt.Fprintf(tw, "%s\t%s\t"+formats[k]+"\t"+formats[k]+"\t%s\t\n", a.Row, titles[k], bv/scales[k], av/scales[k], change)
 		}
 	}
@@ -525,7 +567,17 @@ func compareCost(w io.Writer, beforePath, afterPath string) error {
 		fmt.Fprintf(w, "the readings differ in setting: copies %d and %d, GOGC %q and %q, GOMEMLIMIT %q and %q, %d and %d CPUs\n",
 			before.Copies, after.Copies, before.GOGC, after.GOGC, before.GOMEMLIMIT, after.GOMEMLIMIT, before.CPUs, after.CPUs)
 	}
-	return nil
+	return over, nil
+}
+
+// costGrew reports whether after is more than bound percent over before.
+// A rounding error of the percentage does not count: a median at its
+// bound is within it.
+func costGrew(before, after, bound float64) bool {
+	if before == 0 {
+		return after > 0
+	}
+	return 100*(after-before)/math.Abs(before) > bound+1e-9
 }
 
 // readCostReading reads a JSON reading.

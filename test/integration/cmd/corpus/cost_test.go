@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -215,11 +216,33 @@ func TestCostReadingSummarizes(t *testing.T) {
 		return p
 	}
 	var out bytes.Buffer
-	if err := compareCost(&out, write("a.json", rr), write("b.json", after, costRowReading{Row: "y"})); err != nil {
+	over, err := compareCost(&out, write("a.json", rr), write("b.json", after, costRowReading{Row: "y"}), nil)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "-50.0") || !strings.Contains(out.String(), "y (after only)") {
-		t.Errorf("comparison:\n%s", out.String())
+	if !strings.Contains(out.String(), "-50.0") || !strings.Contains(out.String(), "y (after only)") || len(over) != 0 {
+		t.Errorf("comparison, %v over:\n%s", over, out.String())
+	}
+
+	// A median past its bound is named; one at the bound or under it, or
+	// a column with no bound, is not.
+	grown := rr
+	grown.Median = map[string]float64{"alloc_bytes": 410, "budget_peak_bytes": 51, "wall_s": 9}
+	limits, err := parseCostGrowth("alloc_bytes:2.5, budget_peak_bytes:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	over, err = compareCost(io.Discard, write("c.json", rr), write("d.json", grown), limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(over) != 1 || !strings.Contains(over[0], "x budget MiB") {
+		t.Errorf("over the bounds: %q", over)
+	}
+	for _, bad := range []string{"alloc_bytes", "alloc_bytes:x", "nothing:2", "alloc_bytes:-1"} {
+		if _, err := parseCostGrowth(bad); err == nil {
+			t.Errorf("--max-growth=%s was accepted", bad)
+		}
 	}
 
 	failed := costRowReading{Row: "z"}
