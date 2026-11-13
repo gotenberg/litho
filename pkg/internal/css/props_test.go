@@ -151,6 +151,9 @@ func TestProperties_Longhands(t *testing.T) {
 		{"text-decoration-thickness: from-font; text-underline-offset: 10%", func(s *Style) bool {
 			return s.TextDecorationThickness.Kind == Normal && s.TextUnderlineOffset == pct(0.1)
 		}},
+		{"text-decoration-skip-ink: all", func(s *Style) bool { return s.TextDecorationSkipInk == SkipInkAll }},
+		{"text-decoration-skip-ink: none", func(s *Style) bool { return s.TextDecorationSkipInk == SkipInkNone }},
+		{"text-decoration-skip-ink: from-font", func(s *Style) bool { return s.TextDecorationSkipInk == SkipInkAuto }},
 		{"width: 2ch; height: 2ex", func(s *Style) bool { return s.Width == pts(15) && s.Height == pts(15) }},
 		{"font-size: x-large", func(s *Style) bool { return s.FontSize == 18 }},
 		{"font-size: larger", func(s *Style) bool { return s.FontSize == 18 }},

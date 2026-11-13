@@ -188,6 +188,7 @@ const (
 	pRotate
 	pScale
 	pTransformBox
+	pTextDecorationSkipInk
 	numProps
 )
 
@@ -782,6 +783,9 @@ func init() {
 		{pTextDecorationColor, colorProp("text-decoration-color", func(s *Style) *Color { return &s.TextDecorationColor }, slotTextDecoration, colorValue{current: true})},
 		{pTextDecorationStyle, enumProp("text-decoration-style", false, func(s *Style) *DecorationStyle { return &s.TextDecorationStyle }, decorationStyles)},
 		{pTextDecorationThickness, dimProp("text-decoration-thickness", false, func(s *Style) *Dimension { return &s.TextDecorationThickness }, allowPct|allowMixed, kwThickness, false)},
+		{pTextDecorationSkipInk, enumProp("text-decoration-skip-ink", true, func(s *Style) *SkipInk { return &s.TextDecorationSkipInk }, map[string]SkipInk{
+			"auto": SkipInkAuto, "none": SkipInkNone, "all": SkipInkAll,
+		})},
 		{pTextUnderlineOffset, dimProp("text-underline-offset", true, func(s *Style) *Dimension { return &s.TextUnderlineOffset }, allowPct|allowMixed, kwAuto, false)},
 		{pTextIndent, propDef{name: "text-indent", inherited: true, parse: parseTextIndent, compute: func(s *styler, st *Style, v any) {
 			if l, ok := v.(length); ok {

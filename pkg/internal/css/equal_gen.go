@@ -263,6 +263,9 @@ func equalStyle(a, b *Style) bool {
 	if a.TextDecorationStyle != b.TextDecorationStyle {
 		return false
 	}
+	if a.TextDecorationSkipInk != b.TextDecorationSkipInk {
+		return false
+	}
 	if !equalDimension(&a.TextDecorationThickness, &b.TextDecorationThickness) {
 		return false
 	}
@@ -703,6 +706,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.TextAlignLast))
 	h = hashColor(h, &x.TextDecorationColor)
 	h = mix(h, uint64(x.TextDecorationStyle))
+	h = mix(h, uint64(x.TextDecorationSkipInk))
 	h = hashDimension(h, &x.TextDecorationThickness)
 	h = hashDimension(h, &x.TextUnderlineOffset)
 	h = hashDimension(h, &x.TextIndent)

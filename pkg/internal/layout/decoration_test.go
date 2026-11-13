@@ -47,6 +47,7 @@ func TestTextDecoration_OneUnderlinePerDecoratingBox(t *testing.T) {
 	block := sty(func(s *css.Style) {
 		s.TextDecoration = css.Underline
 		s.TextDecorationColor = lime
+		s.TextDecorationSkipInk = css.SkipInkNone
 		s.LineHeight = css.Dimension{Kind: css.Number, Value: 3}
 	})
 	sup := inlineSty(func(s *css.Style) {
@@ -87,8 +88,8 @@ func TestTextShadow_ShadowsDecorations(t *testing.T) {
 }
 
 // Chromium draws an overline grown up from one pixel below the glyphs' top
-// edge, however thick, a departure from CSS Text Decoration 4, 2.6 that
-// leaves the side it grows to open.
+// edge, however thick: CSS Text Decoration 4, 2.4 and 2.5 leave its exact
+// position to the user agent.
 func TestTextDecoration_OverlineGrowsUp(t *testing.T) {
 	lime := css.Color{G: 1, A: 1}
 	st := sty(func(s *css.Style) {
@@ -114,10 +115,61 @@ func TestTextDecoration_WavyLineJoinsRuns(t *testing.T) {
 		s.TextDecoration = css.Underline
 		s.TextDecorationStyle = css.DecorationWavy
 		s.TextDecorationColor = lime
+		s.TextDecorationSkipInk = css.SkipInkNone
 	})
 	span := inlineSty()
 	res := runWith(t, doc(el(block, txt(block, "aa"), el(span, txt(span, "bb")), txt(block, "cc"))), Options{Page: page(200, 60), BrowserRules: true})
 	if got := decoPaths(res, lime); len(got) != 1 || !near(got[0].Width, px(60)) {
 		t.Errorf("waves %+v, want one 60px long", got)
+	}
+}
+
+// CSS Text Decoration 4, 2.10.5: an underline of skip-ink auto or all
+// stops short of the glyphs it crosses, by its thickness on each side; one
+// of none crosses them.
+func TestTextDecoration_SkipInk(t *testing.T) {
+	lime := css.Color{G: 1, A: 1}
+	tests := []struct {
+		name   string
+		skip   css.SkipInk
+		text   string
+		width  float64
+		office bool
+	}{
+		// "a a": glyphs at 0-10px and 20-30px, the space between; the
+		// underline keeps 1px clear of each glyph.
+		{"auto", css.SkipInkAuto, "a a", 8, false},
+		{"none", css.SkipInkNone, "a a", 30, false},
+		{"auto without BrowserRules", css.SkipInkAuto, "a a", 30, true},
+		{"all", css.SkipInkAll, "a a", 8, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := sty(func(s *css.Style) {
+				s.TextDecoration = css.Underline
+				s.TextDecorationColor = lime
+				s.TextDecorationSkipInk = tt.skip
+				s.TextUnderlineOffset = css.Pts(px(-3))
+				s.TextDecorationThickness = css.Pts(px(1))
+			})
+			res := runWith(t, doc(el(st, txt(st, tt.text))), Options{Page: page(100, 20), BrowserRules: !tt.office})
+			got := decoPaths(res, lime)
+			if len(got) != 1 {
+				t.Fatalf("%d underline paths, want 1", len(got))
+			}
+			if !near(got[0].Width, px(tt.width)) {
+				t.Errorf("underline %+v, want %vpx wide", got[0], tt.width)
+			}
+		})
+	}
+}
+
+// Chromium's skip-ink auto crosses the glyphs of Han, kana and Hangul and
+// skips any other, a Latin letter among them included.
+func TestIdeographic(t *testing.T) {
+	for s, want := range map[string]bool{"漢": true, "かカ": true, "한": true, "ㄅ": true, "a": false, "漢a": false, "ж": false, "": false} {
+		if got := ideographic(s); got != want {
+			t.Errorf("ideographic(%q) = %v, want %v", s, got, want)
+		}
 	}
 }

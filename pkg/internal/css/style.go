@@ -559,6 +559,21 @@ const (
 	DecorationWavy
 )
 
+// SkipInk is the text-decoration-skip-ink property (CSS Text Decoration
+// 4, 2.7).
+type SkipInk uint8
+
+// The text-decoration-skip-ink values.
+const (
+	// SkipInkAuto interrupts underlines and overlines where they would
+	// cross a glyph, except the glyphs of ideographic scripts.
+	SkipInkAuto SkipInk = iota
+	// SkipInkNone draws them through every glyph.
+	SkipInkNone
+	// SkipInkAll interrupts them at every glyph.
+	SkipInkAll
+)
+
 // TextTransform is the text-transform property (CSS Text 3, 2.1).
 type TextTransform uint8
 
@@ -1039,6 +1054,10 @@ type Style struct {
 	TextDecorationColor Color
 	// TextDecorationStyle is the style of the decoration lines.
 	TextDecorationStyle DecorationStyle
+	// TextDecorationSkipInk says where underlines and overlines skip the
+	// glyphs they cross (CSS Text Decoration 4, 2.7), SkipInkAuto by
+	// default.
+	TextDecorationSkipInk SkipInk
 	// TextDecorationThickness takes Auto, Normal for from-font, Points or
 	// Percent of the font size (CSS Text Decoration 4, 2.6).
 	TextDecorationThickness Dimension
