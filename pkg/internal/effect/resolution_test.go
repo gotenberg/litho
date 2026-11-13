@@ -129,3 +129,15 @@ func TestPlan_Bounds(t *testing.T) {
 		t.Error("take past MaxPagePixels accepted")
 	}
 }
+
+// TestPlan_LastBitsTakeTheSamePixels checks that sides differing in their
+// last bits, as two machines compute one box, take the same pixels: 99.6
+// points at 300 pixels an inch is 415 pixels, which a bit more must not
+// round up to 416.
+func TestPlan_LastBitsTakeTheSamePixels(t *testing.T) {
+	for _, w := range []float64{99.6, math.Nextafter(99.6, 100), math.Nextafter(math.Nextafter(99.6, 100), 100), math.Nextafter(99.6, 99)} {
+		if r, ok := Plan(1, w, 70.8); !ok || r.W != 415 {
+			t.Errorf("Plan of a side of %v points = %d pixels, %v, want 415", w, r.W, ok)
+		}
+	}
+}

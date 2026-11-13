@@ -43,10 +43,10 @@ type Resolution struct {
 // Plan returns the grid of an effect over w by h points whose blur has
 // standard deviation sigma points, the smaller of two when it has two;
 // 0 for content not blurred. The scale is 5 pixels a deviation, within
-// [MinScale, MaxScale]; each side is rounded up to a whole pixel. When
-// the grid would pass [MaxPixels], or a side 65,536 pixels, the scale is
-// lowered until it holds, and Reduced is set: the caller warns that the
-// effect is approximated.
+// [MinScale, MaxScale]; each side is rounded up to a whole pixel
+// ([PixelSide]). When the grid would pass [MaxPixels], or a side 65,536
+// pixels, the scale is lowered until it holds, and Reduced is set: the
+// caller warns that the effect is approximated.
 // It returns false for a side that is not positive and finite.
 //
 // The arithmetic rounds every product on its own, so the grid is the
@@ -60,15 +60,15 @@ func Plan(sigma, w, h float64) (Resolution, bool) {
 		k = min(max(pixelsPerSigma/sigma, MinScale), MaxScale)
 	}
 	r := Resolution{Scale: k}
-	r.W, r.H = pixelSide(float64(w*k)), pixelSide(float64(h*k))
+	r.W, r.H = PixelSide(float64(w*k)), PixelSide(float64(h*k))
 	if !fits(r.W, r.H) {
 		f := min(math.Sqrt(MaxPixels/float64(float64(r.W)*float64(r.H))), maxSide/float64(r.W), maxSide/float64(r.H))
 		r.Scale = float64(k * f)
 		r.Reduced = true
-		r.W, r.H = pixelSide(float64(w*r.Scale)), pixelSide(float64(h*r.Scale))
+		r.W, r.H = PixelSide(float64(w*r.Scale)), PixelSide(float64(h*r.Scale))
 		for !fits(r.W, r.H) {
 			r.Scale = float64(r.Scale * 0.99)
-			r.W, r.H = pixelSide(float64(w*r.Scale)), pixelSide(float64(h*r.Scale))
+			r.W, r.H = PixelSide(float64(w*r.Scale)), PixelSide(float64(h*r.Scale))
 		}
 	}
 	return r, true
@@ -80,9 +80,21 @@ func fits(w, h int) bool {
 	return w <= maxSide && h <= maxSide && int64(w)*int64(h) <= MaxPixels
 }
 
-// pixelSide returns v rounded up to a whole pixel, at least 1.
-func pixelSide(v float64) int {
-	return max(int(math.Ceil(v)), 1) // fits int: at most 2^20 times MaxScale
+// pixelSlack is how far past a whole number of pixels a side may reach and
+// still round down to it. The sides of a box a converter computes differ
+// in their last bits from one machine to another, where Go fuses a product
+// with the sum after it and where it does not; a side within a few of
+// those bits of a whole number of pixels would then round up on one and
+// not on the other. The bitmap falls short of such a box by under 1/4096
+// of a pixel.
+const pixelSlack = 1.0 / 4096
+
+// PixelSide returns a side of v pixels rounded up to a whole pixel, at
+// least 1; a side within 1/4096 of a pixel past a whole number rounds
+// down to it, so that a box whose sides differ in their last bits between
+// machines takes the same pixels on each. Plan rounds its sides so.
+func PixelSide(v float64) int {
+	return max(int(math.Ceil(v-pixelSlack)), 1) // fits int: at most 2^20 times MaxScale
 }
 
 // Page counts the pixels of the surfaces one page's effects take, against

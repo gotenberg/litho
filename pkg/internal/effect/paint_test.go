@@ -207,7 +207,7 @@ func TestPaint_MatchesPageRender(t *testing.T) {
 				if r.x != 0 || r.y != 0 {
 					page = []typeset.Fragment{&typeset.Group{Transform: typeset.Matrix{A: 1, D: 1, E: -r.x, F: -r.y}, Content: frags}}
 				}
-				pw, ph := pixelSide(float64(r.w*scale)), pixelSide(float64(r.h*scale))
+				pw, ph := PixelSide(float64(r.w*scale)), PixelSide(float64(r.h*scale))
 				// The page holds the region's whole pixels, as the
 				// surface does.
 				want := pageRender(t, page, float64(pw)/scale, float64(ph)/scale, scale, 0, 0, pw, ph)
@@ -384,7 +384,7 @@ func TestPaint_PinnedHashes(t *testing.T) {
 	ctx := context.Background()
 	for name, frags := range contentKinds(t) {
 		for _, scale := range []float64{1, 2, 300.0 / 72} {
-			c := Content{Fragments: frags, Grid: Grid{X: 7, Y: 5, Scale: scale}, W: pixelSide(float64(150 * scale)), H: pixelSide(float64(110 * scale))}
+			c := Content{Fragments: frags, Grid: Grid{X: 7, Y: 5, Scale: scale}, W: PixelSide(float64(150 * scale)), H: PixelSide(float64(110 * scale))}
 			s := paintOne(t, ctx, c)
 			sum := sha256.Sum256(s.Pix)
 			key := fmt.Sprintf("%s %.3f", name, scale)

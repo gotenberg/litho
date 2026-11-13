@@ -328,7 +328,7 @@ func planArea(b typeset.Rect, sigma, pad float64, pixels *effect.Page) (effect.R
 		return effect.Resolution{}, effect.Grid{}, Notes{}
 	}
 	b = typeset.Rect{X: b.X - pad, Y: b.Y - pad, Width: b.Width + 2*pad, Height: b.Height + 2*pad}
-	res, ok := plan(sigma, b.Width, b.Height)
+	res, ok := effect.Plan(sigma, b.Width, b.Height)
 	if !ok {
 		return effect.Resolution{}, effect.Grid{}, Notes{}
 	}
