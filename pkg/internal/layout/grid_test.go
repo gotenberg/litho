@@ -556,3 +556,28 @@ func TestGrid_SpecifiedSizeSuggestion(t *testing.T) {
 		t.Errorf("rects = %v, want %v", got, want)
 	}
 }
+
+// TestGrid_RowMovesPastCollapsedWhiteSpace moves a grid row to the next
+// column when the first content of its item, after an anonymous block of
+// collapsed white space, starts there: the item's first child keeps its
+// top margin at the item's content edge, where no break truncates it (CSS
+// Fragmentation 3, 5.2), as Chromium draws it.
+//
+// # Corpus evidence
+//
+//   - wpt, css/css-multicol/multicol-span-all-004.html: Chromium draws the
+//     h3 of the grid item at the top of the third column below its margin.
+func TestGrid_RowMovesPastCollapsedWhiteSpace(t *testing.T) {
+	t.Parallel()
+	auto := func(s *css.Style) { s.Columns.Fill = css.FillAuto }
+	item := el(sty(), txt(inlineSty(), " "), el(sty(margin(2, 0, 0, 0), width(2), height(1), bg(blue))))
+	root := doc(el(sty(columns(2, 1), height(5), auto), strip(lime, height(4)), el(sty(display(css.Grid)), item)))
+	res := run(t, root, page(9, 6))
+	assertPixels(t, res, 1, `
+		GG_______
+		GG_______
+		GG_BB____
+		GG_______
+		_________
+		_________`)
+}

@@ -1479,13 +1479,18 @@ func (e *engine) straddles(b *box) bool {
 }
 
 // firstContent returns the top of b's first line box, or of its content
-// box when it has none.
+// box when it has none. A block of no height that holds no line, such as
+// the anonymous block of collapsed white space before a child, starts
+// nothing: the content after it decides.
 func firstContent(b *box) float64 {
 	if len(b.lines) > 0 {
 		return b.lines[0].y
 	}
 	for _, k := range b.kids {
 		if !k.inline && k.float == css.FloatNone && !k.abs && k.laidOut {
+			if k.borderH() <= eps && !hasContent(k) {
+				continue
+			}
 			return firstContent(k)
 		}
 	}
