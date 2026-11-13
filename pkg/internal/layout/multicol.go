@@ -215,6 +215,11 @@ type colCtx struct {
 	forced int
 	frags  []colFrag
 	rows   []colRow
+	// trim is the text-box-trim of the container, owner, which trims the
+	// first and the last formatted line of each column (CSS Inline 3,
+	// 6.2).
+	trim  css.TextBoxTrim
+	owner *box
 }
 
 // target returns the columns a row holds before the next row starts.
@@ -590,7 +595,7 @@ func (e *engine) placeOutOfFlow(kids []*box, cb cblock, y float64) {
 // (CSS Multicol 1, 6.1).
 func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64, spanned bool) (float64, bool) {
 	st := &b.st.Columns
-	ctx := &colCtx{e: e, parent: e.cols, noPag: e.noPaginate, n: b.mc.n, limit: limit, start: y, balanceRow: -1, capped: !cb.hDefinite}
+	ctx := &colCtx{e: e, parent: e.cols, noPag: e.noPaginate, n: b.mc.n, limit: limit, start: y, balanceRow: -1, capped: !cb.hDefinite, trim: b.st.TextBoxTrim, owner: b}
 	if st.Height.Kind == css.Points {
 		ctx.colH = max(clamp(st.Height.Value), minColumnHeight)
 		ctx.wrap = st.Wrap()
@@ -845,7 +850,7 @@ func (c *colCtx) consumed(b *box, kids []*box, end float64, abs bool) []float64 
 	}
 	lines := func(k *box) {
 		for _, l := range k.lines {
-			i := c.index(l.y)
+			i := c.index(l.top())
 			add(i, l.y+l.h)
 			for _, it := range l.items {
 				if a := it.atomic; a != nil && a.laidOut {

@@ -99,3 +99,36 @@ func TestTextBoxTrim_ReachesThroughMarginsOnce(t *testing.T) {
 		t.Errorf("nested: height %v, want 10: the half leadings trimmed once", c.h/css.Pt)
 	}
 }
+
+func TestTextBoxTrim_TrimsEachColumn(t *testing.T) {
+	// CSS Inline 3, 6.2: a multi-column container's text-box-trim trims the
+	// first and the last formatted line of each column. Lines 20px tall of
+	// 10px Ahem (text edges 8px over and 2px under the baseline) in 35px
+	// columns: each column starts at its first line's glyphs, and the last
+	// line of a column ends 5px past the column's end, which its trim
+	// takes, so two lines fit a column.
+	lh := func(s *css.Style) { s.LineHeight = css.Dimension{Kind: css.Number, Value: 2} }
+	mc := func(s *css.Style) {
+		s.Columns.Count, s.Columns.Fill = 2, css.FillAuto
+		s.ColumnGap = css.Pts(px(10))
+		s.Width, s.Height = css.Pts(px(30)), css.Pts(px(35))
+		s.TextBoxTrim = css.TrimBoth
+		s.TextBoxEdge = css.TextBoxEdge{Over: css.EdgeText, Under: css.EdgeText}
+		s.Orphans, s.Widows = 1, 1
+	}
+	res := run(t, doc(el(sty(mc, lh), txt(sty(lh), "x x x"))), page(40, 40))
+	var got [][2]float64
+	for _, r := range texts(res, 1) {
+		got = append(got, [2]float64{r.x / css.Pt, r.y / css.Pt})
+	}
+	want := [][2]float64{{0, 8}, {0, 28}, {20, 8}}
+	if len(got) != len(want) {
+		t.Fatalf("runs at %v, want %v", got, want)
+	}
+	for i := range want {
+		if !near(got[i][0], want[i][0]) || !near(got[i][1], want[i][1]) {
+			t.Errorf("runs at %v, want %v", got, want)
+			break
+		}
+	}
+}

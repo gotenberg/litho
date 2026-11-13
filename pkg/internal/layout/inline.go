@@ -56,6 +56,9 @@ type lineBox struct {
 	// edge a block container already trimmed by text-box-trim: the
 	// innermost one that asks decides (CSS Inline 3, 6.2).
 	trimmedOver, trimmedUnder bool
+	// colTrimmed reports a line moved up past the top of its column by the
+	// column's text-box-trim ([inlineState.columnTrim]).
+	colTrimmed bool
 	// withEnd reports a last line moved to the next page to keep its
 	// block's end padding and border ([inlineState.endEdges]): the break
 	// before it does not count against orphans and widows.
@@ -487,6 +490,10 @@ type inlineState struct {
 	// reports that they moved it ([inlineState.position]).
 	tail  float64
 	moved bool
+	// under is the room under the text of the line being placed that a
+	// column's trim-end lets hang past the column's end
+	// ([inlineState.columnTrim]).
+	under float64
 	// glyphs counts the glyphs of the line being built.
 	glyphs int
 	// placed holds the floats already placed.
@@ -697,7 +704,7 @@ func (e *engine) fixOrphans(b *box, forced map[int]bool) bool {
 	changed := false
 	segStart := 0
 	for k := 1; k < len(lines); k++ {
-		if e.pageOf(lines[k].y) == e.pageOf(lines[k-1].y) {
+		if e.pageOf(lines[k].top()) == e.pageOf(lines[k-1].top()) {
 			continue
 		}
 		if lines[k].withEnd {
@@ -708,7 +715,7 @@ func (e *engine) fixOrphans(b *box, forced map[int]bool) bool {
 		}
 		next := len(lines)
 		for j := k + 1; j < len(lines); j++ {
-			if e.pageOf(lines[j].y) != e.pageOf(lines[j-1].y) {
+			if e.pageOf(lines[j].top()) != e.pageOf(lines[j-1].top()) {
 				next = j
 				break
 			}
@@ -927,6 +934,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			if end == ln && isLastPara(d, p) {
 				s.tail = s.endEdges()
 			}
+			over := s.columnTrim(l)
 			if newTop := s.position(top, l.h-l.slack, forced); newTop != top {
 				top = newTop
 				nl, nr := s.band(top, l.h)
@@ -941,6 +949,12 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				l.x, l.w = nl, nr-nl
 			}
 			l.withEnd = s.moved
+			if over > 0 && e.atPageTop(top) {
+				// The first formatted line of a column starts at the
+				// column's top by its text edge.
+				top -= over
+				l.trimmedOver, l.colTrimmed = true, true
+			}
 			s.cutSlack(l, top)
 			if e.clampOverflows(top, l.h) {
 				return s.discard(d, p, y)
@@ -978,6 +992,12 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			e.noteLine(lp, pos, end, l)
 			s.staticLine(lp, pos, end, l)
 			y = top + e.advance(l)
+			if col := e.pageOf(top + l.baseline); s.under > 0 && e.pageOf(y-eps) > col {
+				// The trimmed room under a column's last line hangs past
+				// the column's end: the next line starts the next column.
+				y = e.pageTop(col + 1)
+				l.trimmedUnder = true
+			}
 			if s.seg && math.Abs(top-s.segTop) <= eps {
 				y = max(y, s.segBot)
 			}
@@ -1192,6 +1212,16 @@ func (e *engine) advance(l *lineBox) float64 {
 	return area
 }
 
+// top returns where the line l starts in its page or column: its top, or
+// its baseline for a line a column's text-box-trim moved up past the
+// column's top ([inlineState.columnTrim]).
+func (l *lineBox) top() float64 {
+	if l.colTrimmed {
+		return l.y + l.baseline
+	}
+	return l.y
+}
+
 // isLastPara reports whether p is the last paragraph of d.
 func isLastPara(d *ifcData, p *ifcPara) bool {
 	return len(d.paras) > 0 && d.paras[len(d.paras)-1] == p
@@ -1218,12 +1248,48 @@ func (s *inlineState) position(top, h float64, forced map[int]bool) float64 {
 	if s.root.st.BoxDecorationBreak == css.DecorationCloneAll {
 		return s.clonedPosition(top, h)
 	}
-	y := e.fit(top, h)
+	y := e.fit(top, max(h-s.under, 0))
 	if t := s.tail; t > 0 && y == top && !e.atPageTop(y) && e.pageOf(y) != e.pageOf(y+h+t-metricSlack) && h+t <= e.areaH(e.pageOf(y)+1)+eps {
 		y = e.fit(e.nextPage(y), h)
 		s.moved = true
 	}
 	return y
+}
+
+// columnTrim sets s.under for the line l of a multi-column container
+// whose text-box-trim trims the lines of each column, and returns how far
+// a line at the top of a column moves up: the first formatted line of a
+// column starts at its text-box-edge over metric and the last one ends at
+// its under metric (CSS Inline 3, 6.2: the property applies to each
+// column). A line of the container's own, or of an anonymous block of its
+// own text, that ends past the column's end
+// by no more than its trimmed room ends that column; Chromium trims the
+// end of no column whose last line lies in a child block.
+//
+// # Corpus evidence
+//
+//   - wpt, css/css-inline/text-box-trim/text-box-trim-multicol-001.html:
+//     Chromium sets four 80px lines of 40px Ahem in a 290px column of a
+//     container of trim-both, the first starting at the column's top by
+//     its glyphs, the last ending 10px from its end.
+//   - wpt, css/css-inline/text-box-trim/text-box-trim-multicol-005.html:
+//     with the lines in a child block, Chromium starts the second column
+//     at the glyphs of its first line and sets three lines in the first
+//     column, the fourth not fitting untrimmed.
+func (s *inlineState) columnTrim(l *lineBox) float64 {
+	s.under = 0
+	c := s.e.cols
+	if c == nil || c.trim == css.TrimNone || !s.e.paginating() {
+		return 0
+	}
+	overEdge, underEdge := s.e.trimEdges(s.root.st, s.root.lang)
+	if (c.trim == css.TrimEnd || c.trim == css.TrimBoth) && (s.root == c.owner || s.root.anon && s.root.parent == c.owner) {
+		s.under = max(l.h-l.baseline-underEdge, 0)
+	}
+	if c.trim == css.TrimStart || c.trim == css.TrimBoth {
+		return max(l.baseline-overEdge, 0)
+	}
+	return 0
 }
 
 // endEdges returns the block-end padding and border of the root that its

@@ -18,7 +18,9 @@ import (
 // nil when b lays its content out in its parent's: its floats move with
 // the content.
 func (e *engine) trimTextBox(b *box, end float64, own *bfc) float64 {
-	if b.st.TextBoxTrim == css.TrimNone || b.flex != nil || b.grid != nil || b.tdata != nil {
+	if b.st.TextBoxTrim == css.TrimNone || b.flex != nil || b.grid != nil || b.tdata != nil || b.mc != nil {
+		// A multi-column container trims the lines of each column as they
+		// are placed ([inlineState.columnTrim]).
 		return end
 	}
 	trim := b.st.TextBoxTrim

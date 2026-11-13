@@ -9,8 +9,9 @@
 // float areas of shape-outside that the lines beside a float wrap around
 // (CSS Shapes 1; shape-outside on an initial letter is not supported), inline
 // formatting with line boxes (sections 9.4.2, 10.8 and CSS Text 3), the
-// text-box-trim of a block container's first and last lines (CSS Inline
-// 3, 5; not of an inline box), lists
+// text-box-trim of a block container's first and last lines and of each
+// column of a multi-column container (CSS Inline 3, 5 and 6.2; not of an
+// inline box), lists
 // (section 12.5), tables (chapter 17), flexible boxes (CSS Flexbox 1),
 // grids (CSS Grid 1), the sizing keywords (CSS Sizing 3 and 4),
 // multi-column layout (CSS Multicol 1),
