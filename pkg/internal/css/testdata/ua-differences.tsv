@@ -126,4 +126,4 @@ own	|table[border]:not([border=0]) > :is(thead, tbody, tfoot) > tr > :is(td, th)
 own	|table[border]:not([border=0]) > tr > :is(td, th)|border-style	the cells of a table with a border attribute: the Standard's presentational hint, written as a rule
 own	|table[border]:not([border=0]) > tr > :is(td, th)|border-width	the cells of a table with a border attribute: the Standard's presentational hint, written as a rule
 own	|textarea|display	select and textarea are inline blocks, as Chromium computes; the Standard puts select's in its select rendering rules
-own	|th|text-align	th centres its text, as Chromium computes; the Standard leaves it to the presentational hints
+own	|th|text-align	th centres its text when its parent's text-align is start and takes the parent's otherwise, as Chromium computes (-internal-center); the Standard says it in prose

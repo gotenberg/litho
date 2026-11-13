@@ -463,7 +463,7 @@ th {
 }
 th {
   font-weight: bold;
-  text-align: center;
+  text-align: -internal-th-center;
 }
 caption {
   text-align: center;

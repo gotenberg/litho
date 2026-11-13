@@ -807,13 +807,13 @@ func init() {
 		}}},
 		{pFontVariant, enumProp("font-variant-caps", true, func(s *Style) *FontVariant { return &s.FontVariant }, capsKeywords)},
 		{pLineHeight, propDef{name: "line-height", inherited: true, parse: parseLineHeight, compute: computeLineHeight, copyFrom: field(func(s *Style) *Dimension { return &s.LineHeight })}},
-		{pTextAlign, textAlignProp(enumProp("text-align", true, func(s *Style) *TextAlign { return &s.TextAlign }, map[string]TextAlign{
+		{pTextAlign, thCenterProp(textAlignProp(enumProp("text-align", true, func(s *Style) *TextAlign { return &s.TextAlign }, map[string]TextAlign{
 			"start": AlignStart, "end": AlignEnd, "left": AlignLeft, "right": AlignRight,
 			"center": AlignCenter, "justify": AlignJustify, "justify-all": AlignJustifyAll,
 			"-webkit-left": AlignLeft, "-webkit-right": AlignRight,
 			"-webkit-center": AlignCenter, "-moz-left": AlignLeft, "-moz-right": AlignRight,
 			"-moz-center": AlignCenter, "-webkit-auto": AlignStart,
-		}))},
+		})))},
 		{pTextDecoration, propDef{name: "text-decoration-line", parse: parseDecorationLine, compute: func(_ *styler, st *Style, v any) {
 			if d, ok := v.(TextDecoration); ok {
 				st.TextDecoration = d
@@ -1267,6 +1267,41 @@ func textAlignProp(def propDef) propDef {
 			return wideInherit, true
 		}
 		return base(v, c)
+	}
+	return def
+}
+
+// thCenter is the text-align value of the th rule of ua.css,
+// -internal-th-center: center when the parent's computed text-align is
+// its initial value, start, the parent's value otherwise, as the HTML
+// Standard asks of the user agent sheet in prose (15.3.8) and Chromium
+// computes it (its -internal-center).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 computes a th's
+//     text-align as left, center, right and -webkit-left under rows of
+//     those values, right under a table in a right-aligned block.
+type thCenter struct{}
+
+// thCenterProp adds -internal-th-center to the text-align property def.
+func thCenterProp(def propDef) propDef {
+	parse, compute := def.parse, def.compute
+	def.parse = func(v []token, c *declCtx) (any, bool) {
+		if k, ok := keyword(v); ok && k == "-internal-th-center" {
+			return thCenter{}, true
+		}
+		return parse(v, c)
+	}
+	def.compute = func(s *styler, st *Style, v any) {
+		if _, ok := v.(thCenter); ok {
+			st.TextAlign = AlignCenter
+			if s.parent != nil && s.parent.TextAlign != AlignStart {
+				st.TextAlign = s.parent.TextAlign
+			}
+			return
+		}
+		compute(s, st, v)
 	}
 	return def
 }

@@ -270,3 +270,20 @@ func TestHTMLHints_TableRulesAndFrame(t *testing.T) {
 		}
 	}
 }
+
+// TestUserAgent_ThCentresUnderStart locks that a th centres its text when
+// its parent's computed text-align is start, the initial value, and takes
+// the parent's otherwise (HTML Standard, 15.3.8), as Chromium computes it.
+func TestUserAgent_ThCentresUnderStart(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<table><tr><th id=a>A</th></tr>
+		<tr style="text-align:start"><th id=b>B</th></tr>
+		<tr style="text-align:right"><th id=c>C</th></tr>
+		<tr style="text-align:end"><th id=d>D</th></tr>
+		<tr><th id=e style="text-align:inherit">E</th></tr></table>`, "")
+	for id, want := range map[string]TextAlign{"a": AlignCenter, "b": AlignCenter, "c": AlignRight, "d": AlignEnd, "e": AlignStart} {
+		if got := c.of(id).TextAlign; got != want {
+			t.Errorf("th %s: text-align %v, want %v", id, got, want)
+		}
+	}
+}
