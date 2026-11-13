@@ -181,16 +181,16 @@ func (f *Fonts) takeKit() *shapingKit {
 }
 
 // releaseKit hands k back for a later call. The call that held it is
-// over: nothing it returned holds a go-text face. The faces of a
-// conversion, its document faces and the instances it made, leave the
-// kit, which a later conversion may take.
+// over: nothing it returned holds a go-text face. The instances of
+// variable faces the call drew leave the kit, which a later conversion may
+// take: an instance belongs to its conversion.
 func (f *Fonts) releaseKit(k *shapingKit) {
 	if len(k.faces) > maxKitFaces {
 		k.shaper = shaping.HarfbuzzShaper{}
 		clear(k.faces)
 	}
 	for fc := range k.faces {
-		if fc.doc != nil || fc.base != nil {
+		if fc.base != nil {
 			delete(k.faces, fc)
 		}
 	}
