@@ -1,6 +1,10 @@
 package layout
 
-import "github.com/gotenberg/litho/pkg/internal/css"
+import (
+	"slices"
+
+	"github.com/gotenberg/litho/pkg/internal/css"
+)
 
 // releasePolicy is when a layout releases the shaped text of its inline
 // formatting contexts.
@@ -96,17 +100,9 @@ func (e *engine) releaseShaped(b *box) {
 		x.released = true
 		if d := x.ifc; d != nil && !d.released {
 			d.released = true
-			for _, p := range d.paras {
-				// The position indexes of the inline boxes serve line
-				// building alone, and are built again with the text.
-				p.openAt, p.closeAt, p.openPos, p.closePos = nil, nil, nil, nil
-				if p.p == nil {
-					continue
-				}
-				n := int64(p.n) * paraRuneCost
-				e.mem.Release(n)
-				e.held -= n
-				p.p = nil
+			e.releaseParas(d.paras)
+			if f := e.firstLines[x]; f != nil {
+				e.releaseParas(f.d.paras)
 			}
 		}
 		for _, k := range x.kids {
@@ -114,6 +110,22 @@ func (e *engine) releaseShaped(b *box) {
 				stack = append(stack, k)
 			}
 		}
+	}
+}
+
+// releaseParas gives back the shaped text of paras.
+func (e *engine) releaseParas(paras []*ifcPara) {
+	for _, p := range paras {
+		// The position indexes of the inline boxes serve line building
+		// alone, and are built again with the text.
+		p.openAt, p.closeAt, p.openPos, p.closePos = nil, nil, nil, nil
+		if p.p == nil {
+			continue
+		}
+		n := int64(p.n) * paraRuneCost
+		e.mem.Release(n)
+		e.held -= n
+		p.p = nil
 	}
 }
 
@@ -127,7 +139,11 @@ func (e *engine) reshape(b *box, d *ifcData) {
 		a.released = false
 	}
 	e.reshaped++
-	for _, p := range d.paras {
+	paras := d.paras
+	if f := e.firstLines[b]; f != nil {
+		paras = append(slices.Clip(paras), f.d.paras...)
+	}
+	for _, p := range paras {
 		if e.err != nil {
 			return
 		}

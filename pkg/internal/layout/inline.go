@@ -464,6 +464,9 @@ type inlineState struct {
 	segTop, segFrom, segBot float64
 	// unfit counts the lines whose content overflows their band.
 	unfit int
+	// fl is the first formatted line while it is built, nil otherwise:
+	// its boxes hang from its copies (firstline.go).
+	fl *firstLine
 }
 
 // band returns the left and right edges of the space beside the floats in
@@ -512,6 +515,9 @@ func (e *engine) layoutInline(b *box, cb cblock, bc *bfc, cursor float64, mc *ma
 		return cursor
 	}
 	e.prepareInline(d, cb)
+	if f := e.firstLines[b]; f != nil {
+		e.prepareInline(f.d, cb)
+	}
 	forced := map[int]bool{}
 	floats, warnings := len(bc.floats), len(e.warnings)
 	saved := mc.clone()
@@ -702,6 +708,12 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 	for _, k := range d.boxes {
 		k.anchorSet = false
 	}
+	fl := e.firstLines[b]
+	if fl != nil {
+		for _, k := range fl.d.boxes {
+			k.anchorSet = false
+		}
+	}
 	b.lines = nil
 	s.rootV = s.newVbox(b, nil)
 	y := cursor
@@ -713,9 +725,17 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 	indent := resolve(b.st.TextIndent, cb.w)
 	strutH := s.rootV.above + s.rootV.below
 	afterForced := false
-	for _, p := range d.paras {
+	rootV := s.rootV
+	for pi, p := range d.paras {
 		if e.err != nil {
 			return y
+		}
+		// The first line box is the first formatted line: the first
+		// paragraph's, not the one after a forced break (CSS Pseudo 4,
+		// 2.1.1).
+		var first1 *firstLine
+		if pi == 0 {
+			first1 = fl
 		}
 		prevForced := afterForced
 		afterForced = p.forced
@@ -735,6 +755,11 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 					mc.commitFloats(top)
 				}
 				l := &lineBox{x: cb.x, w: cb.w, h: strutH, baseline: s.rootV.above}
+				if first1 != nil {
+					// An empty first line takes the ::first-line's strut.
+					v := s.newVbox(first1.root, nil)
+					l.h, l.baseline = v.above+v.below, v.above
+				}
 				if emptyChanged(p, s.root) {
 					l.changed = s.root
 				}
@@ -753,18 +778,22 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			y = s.clearBreak(p, y)
 			continue
 		}
-		w := p.paraWidths(nil)
-		for _, lp := range p.leaders {
-			// A leader needs room for one copy of its string to share a
-			// line with what precedes it, as WeasyPrint breaks leaders.
-			if lp.pos < len(w) {
-				w[lp.pos] += e.leaderOf(lp.box).w
-			}
-		}
+		w := e.lineWidths(p)
 		n := p.p.Len()
+		// lp is the paragraph the next line is broken from, lw its widths
+		// and ln its length: the first line's own paragraph for the first
+		// formatted line, then p.
+		lp, lw, ln := p, w, n
+		lineStrut := strutH
+		if first1 != nil {
+			lp = first1.para()
+			lw, ln = e.lineWidths(lp), lp.p.Len()
+			s.fl, s.d, s.rootV = first1, first1.d, s.newVbox(first1.root, nil)
+			lineStrut = s.rootV.above + s.rootV.below
+		}
 		pos := 0
 		paraFirst := true
-		for pos < n {
+		for pos < ln {
 			if e.err != nil {
 				return y
 			}
@@ -774,10 +803,10 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				return y
 			}
 			if !paraFirst {
-				for pos < n && p.collapsibleSpace(pos) {
+				for pos < ln && lp.collapsibleSpace(pos) {
 					pos++
 				}
-				if pos >= n {
+				if pos >= ln {
 					break
 				}
 				if e.clampDiscards() {
@@ -803,9 +832,9 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 					// paragraph the floats are positioned from.
 					at = e.nextPage(at)
 				}
-				s.placeWordFloats(p, at)
+				s.placeWordFloats(lp, at)
 			}
-			s.placeFloats(p, pos, pos, top, mc, false)
+			s.placeFloats(lp, pos, pos, top, mc, false)
 			lineIndent := 0.0
 			if indents(b.st, len(s.lines) == 0, paraFirst && prevForced) {
 				lineIndent = indent
@@ -816,17 +845,17 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 					room += b.pd[css.Top]
 				}
 			}
-			top, end, left, right, l := s.fitLine(p, w, pos, lineIndent, top, strutH)
+			top, end, left, right, l := s.fitLine(lp, lw, pos, lineIndent, top, lineStrut)
 			s.rubyRoom(l, room)
 			floatsBefore := len(bc.floats)
-			s.placeFloatsBeside(p, pos, end, l, top)
+			s.placeFloatsBeside(lp, pos, end, l, top)
 			if newTop := s.position(top, l.h-l.slack, forced); newTop != top {
 				top = newTop
 				nl, nr := s.band(top, l.h)
 				if len(bc.floats) == floatsBefore && (math.Abs(nl-left) > eps || math.Abs(nr-right) > eps) {
 					// The page cut moved the line to where the floats
 					// leave another width: break it again there.
-					top, end, _, _, l = s.fitLine(p, w, pos, lineIndent, top, strutH)
+					top, end, _, _, l = s.fitLine(lp, lw, pos, lineIndent, top, lineStrut)
 					s.rubyRoom(l, room)
 					top = s.position(top, l.h-l.slack, forced)
 					nl, nr = s.band(top, l.h)
@@ -837,9 +866,9 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			if e.clampOverflows(top, l.h) {
 				return s.discard(d, p, y)
 			}
-			l = s.overflowMark(p, l, pos, end, lineIndent)
-			last := end == n && (p.forced || isLastPara(d, p))
-			if e.clampKeep(&clampLine{s: s, p: p, l: l, start: pos, end: end, indent: lineIndent}) {
+			l = s.overflowMark(lp, l, pos, end, lineIndent)
+			last := end == ln && (p.forced || isLastPara(d, p))
+			if e.clampKeep(&clampLine{s: s, p: lp, l: l, start: pos, end: end, indent: lineIndent}) {
 				last = true
 			}
 			s.align(l, lineIndent, last)
@@ -856,23 +885,30 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			s.lines = append(s.lines, l)
 			room = l.endRoom
 			s.recordAnchors(l)
-			s.recordEmptyAnchors(p, pos, end, l)
-			e.noteLine(p, pos, end, l)
-			s.staticLine(p, pos, end, l)
+			s.recordEmptyAnchors(lp, pos, end, l)
+			e.noteLine(lp, pos, end, l)
+			s.staticLine(lp, pos, end, l)
 			y = top + e.advance(l)
 			if s.seg && math.Abs(top-s.segTop) <= eps {
 				y = max(y, s.segBot)
 			}
 			s.seg = false
-			if end < n && s.nextPiece(top, l.h, l.x+l.w) {
+			if end < ln && s.nextPiece(top, l.h, l.x+l.w) {
 				// Word sets the text on both sides of a float of
 				// css.FrameWrapBoth: the line goes on in the next piece.
 				s.seg, s.segTop, s.segFrom, s.segBot = true, top, l.x+l.w, y
 				y = top
 			}
-			s.placeFloats(p, pos+1, end, y, mc, false)
+			s.placeFloats(lp, pos+1, end, y, mc, false)
 			paraFirst = false
 			pos = end
+			if s.fl != nil {
+				// The lines after the first go on in p from where the
+				// first ends.
+				pos = e.rest(s.fl, p, end)
+				lp, lw, ln, lineStrut = p, w, n, strutH
+				s.fl, s.d, s.rootV = nil, d, rootV
+			}
 		}
 		s.placeFloats(p, n, math.MaxInt, pendingTop(y, mc, first), mc, first)
 		s.staticRest(p, y, mc, first)
@@ -881,6 +917,20 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 	b.lines = s.lines
 	e.balance.unfit = s.unfit
 	return y
+}
+
+// lineWidths returns the width every character of p takes on a line, a
+// leader's with room for one copy of its string.
+func (e *engine) lineWidths(p *ifcPara) []float64 {
+	w := p.paraWidths(nil)
+	for _, lp := range p.leaders {
+		// A leader needs room for one copy of its string to share a line
+		// with what precedes it, as WeasyPrint breaks leaders.
+		if lp.pos < len(w) {
+			w[lp.pos] += e.leaderOf(lp.box).w
+		}
+	}
+	return w
 }
 
 // indents reports whether text-indent indents a line of the block of
@@ -1325,6 +1375,11 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 
 // parentInline returns the inline box b sits in, nil at the root.
 func (s *inlineState) parentInline(b *box) *box {
+	if s.fl != nil {
+		if p, ok := s.fl.parent[b]; ok {
+			return p
+		}
+	}
 	if b == nil || b.parent == nil || b.parent == s.root || b.parent.kind != kindInline {
 		return nil
 	}
@@ -1727,13 +1782,22 @@ func (s *inlineState) settle(l *lineBox) {
 func (s *inlineState) recordAnchors(l *lineBox) {
 	for _, f := range l.frags {
 		if !f.box.anchorSet {
-			f.box.anchorX, f.box.anchorY, f.box.anchorSet = l.x+f.x0, l.y+f.top, true
+			s.anchor(f.box, l.x+f.x0, l.y+f.top)
 		}
 	}
 	for _, it := range l.items {
 		if b := it.box; b != nil && !b.anchorSet {
-			b.anchorX, b.anchorY, b.anchorSet = l.x+it.x, l.y+it.baseline-it.ascent, true
+			s.anchor(b, l.x+it.x, l.y+it.baseline-it.ascent)
 		}
+	}
+}
+
+// anchor records that b first lands at (x, y), and so does the box a copy
+// on a first formatted line stands for.
+func (s *inlineState) anchor(b *box, x, y float64) {
+	b.anchorX, b.anchorY, b.anchorSet = x, y, true
+	if o, ok := s.e.cloneOf[b]; ok && !o.anchorSet {
+		o.anchorX, o.anchorY, o.anchorSet = x, y, true
 	}
 }
 
@@ -1757,7 +1821,7 @@ func (s *inlineState) recordEmptyAnchors(p *ifcPara, start, end int, l *lineBox)
 			}
 			x = it.x + it.w
 		}
-		b.anchorX, b.anchorY, b.anchorSet = l.x+x, l.y, true
+		s.anchor(b, l.x+x, l.y)
 	}
 }
 
@@ -1769,7 +1833,11 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 	if e.err != nil {
 		return 0, 0
 	}
-	for _, k := range d.boxes {
+	boxes := d.boxes
+	if f := e.firstLines[b]; f != nil {
+		boxes = append(slices.Clip(boxes), f.d.boxes...)
+	}
+	for _, k := range boxes {
 		if k.kind == kindInline {
 			resolveEdges(k, 0)
 		}
@@ -1793,25 +1861,33 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 		if p.p == nil {
 			continue
 		}
-		minW := p.paraWidths(func(a *box) float64 { l, _ := e.contribution(a); return l })
-		maxW := p.paraWidths(func(a *box) float64 { _, h := e.contribution(a); return h })
+		minOf := func(a *box) float64 { l, _ := e.contribution(a); return l }
+		minW := p.paraWidths(minOf)
+		// The max-content line of the first paragraph is its first
+		// formatted line, which a ::first-line styles.
+		mp := p
+		if f := e.firstLines[b]; pi == 0 && f != nil && f.para().p != nil {
+			mp = f.para()
+			lo = max(lo, firstSegment(mp, mp.paraWidths(minOf)))
+		}
+		maxW := mp.paraWidths(func(a *box) float64 { _, h := e.contribution(a); return h })
 		n := p.p.Len()
 		x := 0.0
 		if indents(b.st, pi == 0, pi > 0 && d.paras[pi-1].forced) {
 			x = indent
 		}
 		trail := 0.0
-		for i := range n {
+		for i := range mp.p.Len() {
 			wi := maxW[i]
-			if info := p.infos[p.p.RunOf(i)]; info.kind == runTab {
+			if info := mp.infos[mp.p.RunOf(i)]; info.kind == runTab {
 				if officeTabs(b.st) {
-					wi, _ = e.officeTab(b, p, maxW, i, x, math.Inf(1))
+					wi, _ = e.officeTab(b, mp, maxW, i, x, math.Inf(1))
 				} else {
 					wi = e.tabWidth(info.box, x)
 				}
 			}
 			x += wi
-			if p.hangs(i) {
+			if mp.hangs(i) {
 				trail += wi
 			} else {
 				trail = 0
@@ -1845,6 +1921,25 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 		lo = max(lo, seg-trail)
 	}
 	return lo, max(hi, lo)
+}
+
+// firstSegment returns the width of the characters of p before its first
+// soft wrap opportunity, the spaces that hang there left out: the
+// min-content contribution of a first line's first word.
+func firstSegment(p *ifcPara, w []float64) float64 {
+	seg, trail := 0.0, 0.0
+	for i := range p.p.Len() {
+		if i > 0 && p.allowed(i) {
+			break
+		}
+		seg += w[i]
+		if p.hangs(i) {
+			trail += w[i]
+		} else {
+			trail = 0
+		}
+	}
+	return seg - trail
 }
 
 // reversed returns a reversed copy of bs.

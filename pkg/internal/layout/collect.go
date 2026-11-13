@@ -119,6 +119,9 @@ type collector struct {
 	// bidi lists the inline boxes open whose unicode-bidi opens explicit
 	// formatting characters, outermost first.
 	bidi []*bidiScope
+	// firstOnly stops the walk at the first forced break, done once it
+	// is met: the first line's paragraph is all a first line needs.
+	firstOnly, done bool
 }
 
 // ifcOf returns the inline content of b, collected and shaped on first
@@ -149,12 +152,18 @@ func (e *engine) ifcOf(b *box) *ifcData {
 		p.transformSpaces()
 		e.shapePara(b, p)
 	}
+	if st := e.firstLineStyle(b); st != nil && e.err == nil {
+		if e.firstLines == nil {
+			e.firstLines = map[*box]*firstLine{}
+		}
+		e.firstLines[b] = e.buildFirstLine(b, st)
+	}
 	return b.ifc
 }
 
 // walk collects the box k and its descendants.
 func (c *collector) walk(k *box) {
-	if c.e.err != nil {
+	if c.e.err != nil || c.done {
 		return
 	}
 	c.d.boxes = append(c.d.boxes, k)
@@ -175,6 +184,9 @@ func (c *collector) walk(k *box) {
 		c.openBidi(k)
 		for _, kid := range k.kids {
 			c.walk(kid)
+		}
+		if c.done {
+			return
 		}
 		if c.cur == startPara && c.cur.n == start && hasInlineEdges(k) {
 			// An empty inline box with no margin, border or padding makes
@@ -232,6 +244,7 @@ func (c *collector) object(kind runKind, b *box) {
 func (c *collector) breakPara() {
 	c.cur.forced = true
 	c.d.paras = append(c.d.paras, c.cur)
+	c.done = c.firstOnly
 	c.cur = &ifcPara{}
 	c.reopenBidi()
 	c.space = true
@@ -311,6 +324,9 @@ func (c *collector) text(k *box) {
 				flush()
 				c.trimSpace()
 				c.breakPara()
+				if c.done {
+					return
+				}
 			case r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '\f':
 				if !c.space {
 					buf.WriteRune(' ')
@@ -332,6 +348,9 @@ func (c *collector) text(k *box) {
 			}
 			flush()
 			c.breakPara()
+			if c.done {
+				return
+			}
 			c.space = false
 		case r == '\t':
 			flush()

@@ -671,8 +671,12 @@ func (p *painter) content(b *box) {
 		return
 	}
 	p.marker(b)
-	for _, l := range b.lines {
-		p.line(l)
+	for i, l := range b.lines {
+		var fl *firstLine
+		if i == 0 {
+			fl = p.e.firstLines[b]
+		}
+		p.line(l, fl)
 	}
 	p.chainContent(b)
 }
@@ -814,8 +818,9 @@ func (p *painter) symbolMarker(b *box, m *markerBox) {
 
 // line paints one line box: the backgrounds and borders of its inline
 // boxes, its text, its decorations and its atomic inlines, and records its
-// link regions.
-func (p *painter) line(l *lineBox) {
+// link regions. fl is the first formatted line when l is one, whose
+// atomic inlines sit in the copies of their parents.
+func (p *painter) line(l *lineBox, fl *firstLine) {
 	page := p.e.pageOf(l.y + eps)
 	if l.overflows {
 		page = -1
@@ -827,8 +832,16 @@ func (p *painter) line(l *lineBox) {
 	// just before its first item: over the text of earlier siblings, as
 	// Blink paints them. A box with no item on the line paints first.
 	first := map[*box]int{}
+	parent := func(k *box) *box {
+		if fl != nil {
+			if q, ok := fl.parent[k]; ok {
+				return q
+			}
+		}
+		return k.parent
+	}
 	for i, it := range l.items {
-		for k := it.box; k != nil; k = k.parent {
+		for k := it.box; k != nil; k = parent(k) {
 			if _, ok := first[k]; !ok {
 				first[k] = i
 			}

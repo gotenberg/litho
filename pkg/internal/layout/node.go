@@ -257,9 +257,38 @@ type Options struct {
 	MaxPages int
 	// Logger receives diagnostics, nil for none.
 	Logger *slog.Logger
+	// FirstLine styles the first formatted line of the block containers
+	// that have a ::first-line (CSS Pseudo 4, 2.1); nil styles none.
+	FirstLine FirstLineStyler
 	// release is when the layout releases the shaped text of its inline
 	// formatting contexts, for a test that compares the policies.
 	release releasePolicy
+}
+
+// FirstLineStyler gives the styles of the first formatted lines of a
+// layout (CSS Pseudo 4, 2.1). Layout calls it from its own goroutine.
+//
+// The first formatted line of a block container is the first line box of
+// its inline formatting context, or the first formatted line of its first
+// in-flow block-level child when it holds blocks; a float, a positioned
+// box and an anonymous block of collapsible white space are skipped, and
+// an inline block, a table, a flex or grid item or container, or a table
+// cell keeps its first line to itself. The line takes the ::first-line of
+// the nearest block container it is the first formatted line of, its own
+// block's first. Its content sits in an inline box of that style, which
+// paints its background and decorations, and the line's root inline box
+// takes the style's font and line height; the inline boxes on it take the
+// styles Restyle gives. Only the first line box of a block container is
+// its first formatted line: the line after a forced break is not.
+type FirstLineStyler interface {
+	// Pseudo returns the ::first-line style of the block container node
+	// n inheriting from parent, the style of the block whose first
+	// formatted line it styles, or nil when n has none.
+	Pseudo(n *Node, parent *css.Style) *css.Style
+	// Restyle returns the style of n, an inline Element on a first
+	// formatted line, when it inherits from parent, its parent's style on
+	// that line; nil keeps n's Style.
+	Restyle(n *Node, parent *css.Style) *css.Style
 }
 
 // PageInfo names a page for [Options.PageFor] and [Options.MarginContent].

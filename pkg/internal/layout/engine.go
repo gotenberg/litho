@@ -65,6 +65,13 @@ type engine struct {
 	// it is laid out.
 	balance balanceState
 	missing map[rune]bool
+	// firstLines holds the first formatted line of each inline formatting
+	// context a ::first-line styles, by its block container, and cloneOf
+	// the box each box of those lines stands for (firstline.go); nil
+	// until one is built.
+	firstLines map[*box]*firstLine
+	cloneOf    map[*box]*box
+
 	root    *typeset.StructElem
 	rootBox *box
 	// pageFrags counts the fragments of every page as they are assembled.

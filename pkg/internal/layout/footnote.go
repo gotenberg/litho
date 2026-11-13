@@ -288,6 +288,11 @@ func (e *engine) noteLine(p *ifcPara, start, end int, l *lineBox) {
 	}
 	for _, o := range p.opens {
 		call := o.box
+		if c, ok := e.cloneOf[call]; ok {
+			// The copy of a call on a first formatted line places the
+			// call's body.
+			call = c
+		}
 		if call.fnBody == nil || o.pos < start || o.pos >= end && (o.pos != end || end != p.n) {
 			continue
 		}
