@@ -986,6 +986,12 @@ type Style struct {
 	// group (CSS Compositing 1, 3.2 and 3.3).
 	MixBlendMode BlendMode
 	Isolation    Isolation
+	// Filter is the element's filter list, applied to it and its
+	// descendants as one image, and BackdropFilter the list applied to
+	// what lies behind it; nil for none (Filter Effects 1, 6; Filter
+	// Effects 2, 3).
+	Filter         []Filter
+	BackdropFilter []Filter
 	// ClipPath clips the element and its content (CSS Masking 1, 5.1).
 	ClipPath ClipPath
 	// ShapeOutside is the float area of a float (CSS Shapes 1, 6), nil for

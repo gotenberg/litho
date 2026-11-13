@@ -261,6 +261,8 @@ const (
 	pObjectViewBox
 	pPrintColorAdjust
 	pContentVisibility
+	pFilter
+	pBackdropFilter
 	numProps
 )
 
@@ -1073,6 +1075,9 @@ func init() {
 	}
 	for id, f := range interpolators() {
 		props[id].interp = f
+	}
+	for id, def := range filterProps() {
+		props[id] = def
 	}
 	longhandByName = map[string]propID{}
 	for i := range props {

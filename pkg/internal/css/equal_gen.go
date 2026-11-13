@@ -39,6 +39,26 @@ func equalStyle(a, b *Style) bool {
 	if a.Isolation != b.Isolation {
 		return false
 	}
+	if (a.Filter == nil) != (b.Filter == nil) || len(a.Filter) != len(b.Filter) {
+		return false
+	}
+	if len(a.Filter) > 0 && &a.Filter[0] != &b.Filter[0] {
+		for i1 := range a.Filter {
+			if !equalFilter(&a.Filter[i1], &b.Filter[i1]) {
+				return false
+			}
+		}
+	}
+	if (a.BackdropFilter == nil) != (b.BackdropFilter == nil) || len(a.BackdropFilter) != len(b.BackdropFilter) {
+		return false
+	}
+	if len(a.BackdropFilter) > 0 && &a.BackdropFilter[0] != &b.BackdropFilter[0] {
+		for i1 := range a.BackdropFilter {
+			if !equalFilter(&a.BackdropFilter[i1], &b.BackdropFilter[i1]) {
+				return false
+			}
+		}
+	}
 	if !equalClipPath(&a.ClipPath, &b.ClipPath) {
 		return false
 	}
@@ -734,6 +754,16 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, math.Float64bits(x.Opacity))
 	h = mix(h, uint64(x.MixBlendMode))
 	h = mix(h, uint64(x.Isolation))
+	h = mixBool(h, x.Filter == nil)
+	h = mix(h, uint64(len(x.Filter)))
+	for i1 := range x.Filter {
+		h = hashFilter(h, &x.Filter[i1])
+	}
+	h = mixBool(h, x.BackdropFilter == nil)
+	h = mix(h, uint64(len(x.BackdropFilter)))
+	for i1 := range x.BackdropFilter {
+		h = hashFilter(h, &x.BackdropFilter[i1])
+	}
 	h = hashClipPath(h, &x.ClipPath)
 	h = mixBool(h, x.ShapeOutside != nil)
 	h = mix(h, uint64(x.BaselineSource))
@@ -1016,6 +1046,32 @@ func equalClipMargin(a, b *ClipMargin) bool {
 func hashClipMargin(h uint64, x *ClipMargin) uint64 {
 	h = mix(h, uint64(x.Box))
 	h = mix(h, math.Float64bits(x.Margin))
+	return h
+}
+
+// equalFilter reports whether a and b hold equal values, field by field.
+func equalFilter(a, b *Filter) bool {
+	if a.Kind != b.Kind {
+		return false
+	}
+	if math.Float64bits(a.Amount) != math.Float64bits(b.Amount) {
+		return false
+	}
+	if !equalShadow(&a.Shadow, &b.Shadow) {
+		return false
+	}
+	if a.URL != b.URL {
+		return false
+	}
+	return true
+}
+
+// hashFilter folds every field of x into h.
+func hashFilter(h uint64, x *Filter) uint64 {
+	h = mix(h, uint64(x.Kind))
+	h = mix(h, math.Float64bits(x.Amount))
+	h = hashShadow(h, &x.Shadow)
+	h = mixString(h, x.URL)
 	return h
 }
 
