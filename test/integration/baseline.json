@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T09:02:30Z",
+  "captured_at": "2026-11-13T10:21:38Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9326,8 +9326,8 @@
     "libreoffice/docx": {
       "features": {
         "diff": {
-          "matched": 183,
-          "mismatched": 100,
+          "matched": 184,
+          "mismatched": 99,
           "skipped": 58,
           "metrics": {
             "convert_error": 0,
@@ -9848,7 +9848,7 @@
               "text_f1": 0.7353
             },
             "ooxmlexport/SdtContent.docx": {
-              "layout": 0.7858,
+              "layout": 0.7867,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9952,7 +9952,7 @@
               "text_f1": 0
             },
             "ooxmlexport/TextEffects_Glow_Shadow_Reflection.docx": {
-              "layout": 0.673,
+              "layout": 0.8703,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9976,7 +9976,7 @@
               "text_f1": 1
             },
             "ooxmlexport/TextEffects_TextFill.docx": {
-              "layout": 0.6582,
+              "layout": 0.8955,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9984,7 +9984,7 @@
               "text_f1": 0.8
             },
             "ooxmlexport/TextEffects_TextOutline.docx": {
-              "layout": 0.7868,
+              "layout": 0.8445,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10352,7 +10352,7 @@
               "text_f1": 1
             },
             "ooxmlexport/dml-gradientfill-theme.docx": {
-              "layout": 0.0445,
+              "layout": 0.0431,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10536,7 +10536,7 @@
               "text_f1": 1
             },
             "ooxmlexport/effect-extent.docx": {
-              "layout": 0.8983,
+              "layout": 0.9037,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11048,7 +11048,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo76016.docx": {
-              "layout": 0.7233,
+              "layout": 0.7231,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54782,7 +54782,7 @@
               "text_f1": 1
             },
             "images-crop-transform": {
-              "layout": 0.7822,
+              "layout": 0.7974,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54790,7 +54790,7 @@
               "text_f1": 1
             },
             "images-formats": {
-              "layout": 0.8031,
+              "layout": 0.8036,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55430,7 +55430,7 @@
               "text_f1": 1
             },
             "run-w14-effects": {
-              "layout": 0.485,
+              "layout": 0.6389,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55510,7 +55510,7 @@
               "text_f1": 1
             },
             "shapes-effects-3d": {
-              "layout": 0.8129,
+              "layout": 0.8505,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55558,7 +55558,7 @@
               "text_f1": 1
             },
             "shapes-wordart": {
-              "layout": 0.414,
+              "layout": 0.4216,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81706,12 +81706,12 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/format/format-font2.docx": {
-              "layout": 0.6157,
+              "layout": 0.697,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.4173
+              "text_f1": 0.3875
             },
             "v2FxTestFiles/wordprocessing/format/format-paragrapsimple.docx": {
               "layout": 0.4875,
@@ -97229,7 +97229,7 @@
               "text_f1": 1
             },
             "document/bib-chernigovka.netdo.ru_download_docs_17459.docx": {
-              "layout": 0.5614,
+              "layout": 0.5649,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -109912,7 +109912,7 @@
               "text_f1": 1
             },
             "spreadsheet/47504.xlsx": {
-              "layout": 0.6166,
+              "layout": 0.6154,
               "link_recall": 0,
               "outline_recall": 1,
               "pages": 1,
