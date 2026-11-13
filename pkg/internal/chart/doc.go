@@ -31,10 +31,13 @@
 // extraction reads it.
 //
 // A chart under [OfficeRules], as a DrawingML reader returns it, follows
-// Office's rules where they are known: its vertical primary value axis
+// Office's rules where they are known. Its vertical primary value axis
 // takes as many intervals as its labels fit end to end, each label the
 // height of its line rounded to a whole pixel, and counts its ticks from
-// its minimum. The rest keeps LibreOffice's rules.
+// its minimum. A two-dimensional cartesian chart puts its title, a legend
+// above or below the plot area and the plot area at Office's distances,
+// and its text lines are as high as their faces' ascent, descent and line
+// gap. The rest keeps LibreOffice's rules.
 //
 // Trendlines fit their series by least squares, or average them, and
 // enter the legend after their series. Error bars mark each point's error

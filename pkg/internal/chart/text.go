@@ -94,6 +94,9 @@ func (rd *renderer) measure(s string, st TextStyle, maxW float64) *block {
 	for _, l := range lines {
 		b.w = max(b.w, l.Width)
 		h := lineHeight(ts.Size)
+		if rd.officeLayout() {
+			h = faceLineHeight(l, ts.Size)
+		}
 		b.lineH = append(b.lineH, h)
 		b.h += h
 	}

@@ -67,14 +67,15 @@ type Chart struct {
 	Notice *Title
 	// Warnings lists what the reader did not carry into the model.
 	Warnings []typeset.Warning
-	// Rules names the application whose value-axis scale [Render]
-	// follows where the file leaves it to it.
+	// Rules names the application whose automatic layout and value-axis
+	// scale [Render] follows where the file leaves them to it.
 	Rules Rules
 }
 
-// Rules is the application whose automatic rules a [Chart] follows. Both
-// rule sets read the same model; they differ in the number of intervals of
-// an automatic value axis.
+// Rules is the application whose automatic chart layout a [Chart] follows.
+// Both rule sets read the same model; they differ in the distances around
+// the title, the legend and the plot area, the height of a line of chart
+// text and the number of intervals of an automatic value axis.
 type Rules uint8
 
 // The rule sets.
@@ -82,9 +83,10 @@ const (
 	// LibreOfficeRules lays the chart out and scales its value axes as
 	// LibreOffice's chart2 does: the rules of an OpenDocument chart.
 	LibreOfficeRules Rules = iota
-	// OfficeRules scales the vertical primary value axis of a
-	// two-dimensional chart as Microsoft Office does: the rules of a
-	// DrawingML chart part.
+	// OfficeRules lays a two-dimensional cartesian chart out and scales
+	// its vertical value axis as Microsoft Office does: the rules of a
+	// DrawingML chart part. Pies, radar charts, three-dimensional plots
+	// and a plot area the file places keep LibreOffice's layout.
 	OfficeRules
 )
 

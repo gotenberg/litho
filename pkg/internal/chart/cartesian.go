@@ -249,7 +249,7 @@ func (rd *renderer) cartesian(avail typeset.Rect) {
 	}
 	for pass := 0; pass < passes; pass++ {
 		fit()
-		bb := labelBounds(inner, all)
+		bb := rd.officeRoom(labelBounds(inner, all), inner, all)
 		next := typeset.Rect{X: avail.X + (inner.X - bb.X), Y: avail.Y + (inner.Y - bb.Y)}
 		next.Width = avail.X + avail.Width - (bb.X + bb.Width - (inner.X + inner.Width)) - next.X
 		next.Height = avail.Y + avail.Height - (bb.Y + bb.Height - (inner.Y + inner.Height)) - next.Y
@@ -622,6 +622,9 @@ func (rd *renderer) placeLabels(d *dim) {
 		gap += tickLength
 	}
 	st := d.style()
+	if rd.officeLayout() {
+		gap = officeLabelGap(d, fontSize(st.Size))
+	}
 	var items []item
 	maxW := 0.0
 	if d.category {
@@ -940,6 +943,15 @@ func (rd *renderer) reserveTitles(avail typeset.Rect, dims ...*dim) typeset.Rect
 		w += 2 * titleHPad * b.style.Size
 		h += 2 * titleVPad * b.style.Size
 		high := d.atHighEnd()
+		if !d.vertical && rd.officeLayout() {
+			_, th := b.rotated()
+			room := th + 3*officeAxisTitlePad
+			avail.Height -= room
+			if high {
+				avail.Y += room
+			}
+			continue
+		}
 		if d.vertical {
 			avail.Width -= w + yTitleDistance
 			if !high {
@@ -976,10 +988,15 @@ func (rd *renderer) axisTitle(d *dim, ext typeset.Rect) {
 		}
 	} else {
 		cx = ext.X + ext.Width/2
+		gap := dy + h/2
+		if rd.officeLayout() {
+			_, th := b.rotated()
+			gap = officeAxisTitlePad + th/2
+		}
 		if d.outside > 0 {
-			cy = ext.Y - dy - h/2
+			cy = ext.Y - gap
 		} else {
-			cy = ext.Y + ext.Height + dy + h/2
+			cy = ext.Y + ext.Height + gap
 		}
 	}
 	cx = math.Max(rd.page.X+w/2, math.Min(cx, rd.page.X+rd.page.Width-w/2))

@@ -1,8 +1,12 @@
 package chart
 
 import (
+	"context"
 	"math"
+	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // TestOfficeIntervals_ProbeCharts holds Office's automatic scale to the
@@ -148,5 +152,37 @@ func TestOfficeIntervals_Bounds(t *testing.T) {
 				t.Errorf("officeIntervals(%v, %v) = %d, want %d", tt.length, tt.lineH, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestRender_OfficeLayout holds a titled column chart under OfficeRules to
+// Office's distances: Ahem's line is one em, so a 10 pt title and labels
+// take 10 pt lines and a label 9.75 pt (13 pixels) of the count.
+func TestRender_OfficeLayout(t *testing.T) {
+	c := barChart(2.3333, 3.5, 7)
+	c.Rules = OfficeRules
+	c.Axes[0].Labels, c.Axes[1].Labels = LabelNextTo, LabelNextTo
+	c.Title = &Title{Text: "T", Style: TextStyle{Size: 10, Color: typeset.Black}}
+	c.PlotArea = Frame{Fill: &Paint{Color: blue}}
+	r := typeset.Rect{Width: 361.2, Height: 145.2}
+	frags := Render(context.Background(), ahem(t), c, r)
+	ps := paths(frags, blue)
+	if len(ps) != 1 {
+		t.Fatalf("%d plot area paths", len(ps))
+	}
+	// Top: the title's line, officeTitleTop above and officeTitleGap under
+	// it, then half of officeMinLabelRoom. Bottom: the category labels'
+	// line, officePad under and 0.634 em over it. Left: officePad, a
+	// one-digit label, 0.928 em. Right: officePad and officeRightRoom.
+	want := typeset.Rect{X: 6.5 + 10 + 9.28, Y: 7.5 + 10 + 6.5 + 6}
+	want.Width = 361.2 - 11 - want.X
+	want.Height = 145.2 - (6.5 + 10 + 6.34) - want.Y
+	if b := bounds(ps[0]); math.Abs(b.X-want.X)+math.Abs(b.Y-want.Y)+math.Abs(b.Width-want.Width)+math.Abs(b.Height-want.Height) > 1e-6 {
+		t.Errorf("plot area = %+v, want %+v", b, want)
+	}
+	// 92.36 pt hold nine labels of 9.75 pt: eight intervals of 1.
+	got := strings.Join(texts(frags), " ")
+	if !strings.Contains(got, "8 7 6 5 4 3 2 1 0") && !strings.Contains(got, "0 1 2 3 4 5 6 7 8") {
+		t.Errorf("labels = %q, want 0 to 8 by 1", got)
 	}
 }

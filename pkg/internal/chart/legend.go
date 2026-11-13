@@ -116,6 +116,10 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 	xOff := max(minLegendSpacing, fs*0.66)
 	yPad := max(minLegendSpacing, fs*0.2)
 	yOff := max(minLegendSpacing, fs*0.2)
+	office := rd.officeLegend()
+	if office {
+		yPad, yOff = officeLegendPad, 2*officeLegendPad
+	}
 	symDist := max(minLegendSpacing, fs*0.22)
 	symH := fs * 0.6
 	symW := symH
@@ -179,8 +183,14 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 		x, y = page.X+legendSideMargin, page.Y+page.Height/2-h/2
 	case LegendTop:
 		x, y = page.X+page.Width/2-w/2, rem.Y+legendTopMargin
+		if office {
+			y = rem.Y
+		}
 	case LegendBottom:
 		x, y = page.X+page.Width/2-w/2, rem.Y+rem.Height-legendTopMargin-h
+		if office {
+			y = page.Y + page.Height - officePad - h
+		}
 	case LegendTopRight:
 		x, y = page.X+page.Width-legendSideMargin-w, rem.Y+legendTopMargin
 	case LegendRight:
@@ -229,6 +239,18 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 		cx += colW[c] + xOff
 	}
 	if lg.Overlay {
+		return
+	}
+	if office {
+		// An Office legend above or below the plot area keeps
+		// officeLegendGap from the room of the axis labels.
+		if lg.Position == LegendTop {
+			d := y + h + officeLegendGap - rem.Y
+			rem.Y += d
+			rem.Height -= d
+		} else {
+			rem.Height = y - officeLegendGap - rem.Y
+		}
 		return
 	}
 	switch lg.Position {

@@ -80,8 +80,19 @@ func (rd *renderer) render(r typeset.Rect) {
 	if rd.ctx.Err() != nil {
 		return
 	}
-	rem := r
 	pie := len(c.Groups) > 0 && (c.Groups[0].Kind == Pie || c.Groups[0].Kind == Doughnut)
+	if rd.officeLayout() {
+		plot := rd.officePlot(r)
+		if rd.ctx.Err() != nil || !above(plot.Width, 1) || !above(plot.Height, 1) {
+			return
+		}
+		rd.cartesian(plot)
+		if c.Notice != nil {
+			rd.notice(c.Notice, r)
+		}
+		return
+	}
+	rem := r
 	if c.Title != nil {
 		rd.title(c.Title, r, &rem, layoutDistance*r.Height+mainTitleExtra)
 	}
