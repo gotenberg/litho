@@ -225,6 +225,7 @@ const (
 	pMaskClip
 	pMaskComposite
 	pMaskType
+	pAspectRatio
 	numProps
 )
 
@@ -984,6 +985,9 @@ func init() {
 		props[id] = def
 	}
 	for id, def := range initialLetterProps() {
+		props[id] = def
+	}
+	for id, def := range aspectRatioProps() {
 		props[id] = def
 	}
 	gcpmProps()

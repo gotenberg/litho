@@ -36,25 +36,38 @@ func (e *engine) replacedSize(b *box, cb cblock) (float64, float64) {
 	ch := func(v float64) float64 { return min(max(v, minH), maxH) }
 	w, wSet := specWidth(b, b.st.Width, cb.w)
 	h, hSet := specHeight(b, b.st.Height, cb)
-	ratio := pictureRatio(p)
+	ratio, ed := replacedRatio(b)
 	switch {
 	case wSet && hSet:
 		return cw(w), ch(h)
 	case wSet:
 		w = cw(w)
 		if ratio > 0 {
-			return w, ch(w / ratio)
+			return w, ch(heightOfWidth(w, ratio, ed))
 		}
 		return w, ch(ih)
 	case hSet:
 		h = ch(h)
 		if ratio > 0 {
-			return cw(h * ratio), h
+			return cw(widthOfHeight(h, ratio, ed)), h
 		}
 		return cw(iw), h
 	}
 	if ratio == 0 {
 		return cw(iw), ch(ih)
+	}
+	if r := pictureRatio(p); r != ratio && (p == nil || !p.NoNaturalWidth || !p.NoNaturalHeight) {
+		// A preferred aspect ratio other than the natural one keeps the
+		// natural width, else the natural height, and gives the other
+		// size through the ratio (CSS Sizing 4, 4.1).
+		switch {
+		case p != nil && !p.NoNaturalWidth && iw > 0:
+			ih = heightOfWidth(iw, ratio, ed)
+		case p != nil && !p.NoNaturalHeight && ih > 0:
+			iw = widthOfHeight(ih, ratio, ed)
+		default:
+			return cw(iw), ch(ih)
+		}
 	}
 	if p != nil && p.NoNaturalWidth && p.NoNaturalHeight {
 		// A picture with a ratio and no natural size fills the containing
@@ -63,7 +76,7 @@ func (e *engine) replacedSize(b *box, cb cblock) (float64, float64) {
 		// the picture, as Chromium sizes it.
 		pd, bd, m := edgesOf(b, cb.w)
 		iw = max(cb.w-pd[css.Left]-pd[css.Right]-bd[css.Left]-bd[css.Right]-m[css.Left]-m[css.Right], 0)
-		ih = iw / ratio
+		ih = heightOfWidth(iw, ratio, ed)
 		if !numeric.Positive(iw) {
 			return cw(0), ch(0)
 		}

@@ -132,6 +132,9 @@ func equalStyle(a, b *Style) bool {
 	if !equalDimension(&a.Left, &b.Left) {
 		return false
 	}
+	if !equalAspectRatio(&a.AspectRatio, &b.AspectRatio) {
+		return false
+	}
 	for i1 := range a.Margin {
 		if !equalDimension(&a.Margin[i1], &b.Margin[i1]) {
 			return false
@@ -743,6 +746,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = hashDimension(h, &x.Right)
 	h = hashDimension(h, &x.Bottom)
 	h = hashDimension(h, &x.Left)
+	h = hashAspectRatio(h, &x.AspectRatio)
 	for i1 := range x.Margin {
 		h = hashDimension(h, &x.Margin[i1])
 	}
@@ -1234,6 +1238,20 @@ func hashDimension(h uint64, x *Dimension) uint64 {
 	h = mix(h, math.Float64bits(x.Value))
 	h = mix(h, math.Float64bits(x.Fraction))
 	h = mixBool(h, x.expr != nil)
+	return h
+}
+
+// equalAspectRatio reports whether a and b hold equal values, field by field.
+func equalAspectRatio(a, b *AspectRatio) bool {
+	if math.Float64bits(a.v) != math.Float64bits(b.v) {
+		return false
+	}
+	return true
+}
+
+// hashAspectRatio folds every field of x into h.
+func hashAspectRatio(h uint64, x *AspectRatio) uint64 {
+	h = mix(h, math.Float64bits(x.v))
 	return h
 }
 

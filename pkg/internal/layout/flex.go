@@ -374,7 +374,7 @@ func (e *engine) layoutFlex(b *box, cb cblock, top float64) float64 {
 	for _, it := range items {
 		it.stretchTo = -1
 		k := it.b
-		if ax.row && single && crossDef && k.kind == kindReplaced && it.align.Keyword() == css.BoxStretch &&
+		if r, _ := prefRatio(k); ax.row && single && crossDef && (k.kind == kindReplaced || r > 0) && it.align.Keyword() == css.BoxStretch &&
 			k.st.Height.Kind == css.Auto && !it.cAuto[0] && !it.cAuto[1] {
 			it.stretchTo = constrainHeight(k, max(innerCross-it.cm[0]-it.cm[1]-it.cEdges, 0), pcb)
 		}
@@ -410,6 +410,17 @@ func (e *engine) layoutFlex(b *box, cb cblock, top float64) float64 {
 	}
 	for _, ln := range lines {
 		resolveFlexible(ln.items, innerMain, mainGap)
+	}
+	if !ax.row {
+		for _, it := range items {
+			k := it.b
+			if r, content := prefRatio(k); r > 0 && !it.stretch && !it.crossSet && k.sizeSrc().Width.Kind == css.Auto {
+				// The cross size follows the used main size through the
+				// ratio (CSS Flexbox 1, 9.4, 7; CSS Sizing 4, 4.2), as
+				// Chromium sizes a column item.
+				it.cross = constrainWidth(k, widthOfHeight(it.target, r, edgesFor(k, content)), cb.w)
+			}
+		}
 	}
 
 	// Cross sizes (9.4).
@@ -526,13 +537,14 @@ func (e *engine) fitWidth(k *box, cb cblock) float64 {
 	return constrainWidth(k, e.shrinkToFit(k, cb.w), cb.w)
 }
 
-// ratioOf returns the intrinsic ratio, width over height, of a replaced
-// box, 0 for none.
+// ratioOf returns the aspect ratio, width over height, that sizes a
+// replaced box's content box, 0 for none (see [replacedRatio]).
 func ratioOf(k *box) float64 {
-	if k.kind == kindReplaced && k.picture != nil && k.picture.Width > 0 && k.picture.Height > 0 {
-		return k.picture.Width / k.picture.Height
+	if k.kind != kindReplaced {
+		return 0
 	}
-	return 0
+	r, _ := replacedRatio(k)
+	return r
 }
 
 // baseSize sets the flex base size, the main size bounds and the
@@ -691,7 +703,11 @@ func (e *engine) contentMain(fd *flexData, it *fitem, ax flexAxes, cb, pcb cbloc
 		if k.kind == kindReplaced {
 			return e.replacedMain(k, it.cross, pcb)
 		}
-		return e.measureItem(fd, it, it.cross, 0, false, pcb, cb.x, top).h
+		content := e.measureItem(fd, it, it.cross, 0, false, pcb, cb.x, top).h
+		if h, ok := itemRatioHeight(k, it.cross); ok {
+			return h
+		}
+		return content
 	}
 	if k.kind == kindReplaced {
 		if h, ok := specHeight(k, k.st.Height, pcb); ok {
@@ -705,8 +721,29 @@ func (e *engine) contentMain(fd *flexData, it *fitem, ax flexAxes, cb, pcb cbloc
 		w, _ := e.replacedSize(k, pcb)
 		return w
 	}
+	if r, content := prefRatio(k); r > 0 && it.stretchTo >= 0 && k.sizeSrc().Width.Kind == css.Auto {
+		return constrainWidth(k, widthOfHeight(it.stretchTo, r, edgesFor(k, content)), cb.w)
+	}
 	_, hi := e.contentWidths(k)
 	return hi
+}
+
+// itemRatioHeight returns the content height the preferred aspect ratio
+// of the non-replaced flex item k gives its content width w, at least its
+// content's height when its automatic minimum is (CSS Sizing 4, 4.2 and
+// 4.3; CSS Flexbox 1, 9.2, 3B), and false when k has no ratio. Its own
+// height is not read: the content size of an item ignores it. k's
+// content must be laid out at w.
+func itemRatioHeight(k *box, w float64) (float64, bool) {
+	r, content := prefRatio(k)
+	if r == 0 {
+		return 0, false
+	}
+	h := heightOfWidth(w, r, edgesFor(k, content))
+	if contentMinimum(k) {
+		h = max(h, k.h)
+	}
+	return h, true
 }
 
 // contentWidths returns the min- and max-content widths of the content of
@@ -718,6 +755,10 @@ func (e *engine) contentWidths(k *box) (float64, float64) {
 		return e.intrinsic(k)
 	}
 	lo, hi := formatterFor(k).intrinsic(e, k)
+	if r, _ := prefRatio(k); r > 0 {
+		pd, bd, _ := edgesOf(k, 0)
+		lo, hi = ratioIntrinsic(k, autoWidth(k.sizeSrc()), pd, bd, lo, hi)
+	}
 	if mx, ok := specWidth(k, k.st.MaxWidth, 0); ok && k.st.MaxWidth.Kind == css.Points {
 		lo, hi = min(lo, mx), min(hi, mx)
 	}
@@ -731,7 +772,11 @@ func (e *engine) minContentMain(fd *flexData, it *fitem, ax flexAxes, cb, pcb cb
 	k := it.b
 	if !ax.row || k.kind == kindReplaced {
 		if !ax.row && k.kind != kindReplaced && (k.tpart != partWrapper || k.tdata == nil) {
-			return e.measureItem(fd, it, it.cross, 0, false, pcb, cb.x, top).h
+			h := e.measureItem(fd, it, it.cross, 0, false, pcb, cb.x, top).h
+			if rh, ok := itemRatioHeight(k, it.cross); ok {
+				return rh
+			}
+			return h
 		}
 		return content()
 	}
@@ -890,6 +935,16 @@ func (e *engine) rowCross(fd *flexData, it *fitem, definite bool, cross float64,
 		}
 		it.m = itemMeasure{h: it.cross}
 		return
+	}
+	if !hSet && !(it.stretch && definite) {
+		if _, ok := itemRatioHeight(k, it.target); ok {
+			// The ratio gives the height from the main size (CSS Sizing
+			// 4, 4.2), over the content's height when that is the
+			// automatic minimum.
+			e.measureItem(fd, it, it.target, 0, false, pcb, pcb.x, top)
+			h, _ = itemRatioHeight(k, it.target)
+			hSet = true
+		}
 	}
 	if hSet {
 		h = constrainHeight(k, h, pcb)

@@ -254,12 +254,20 @@ func (e *engine) colAutoMin(k *box) float64 {
 // minimum width gives it.
 func (e *engine) colContrib(it *gitem, k contribKind, tracks []*gtrack) float64 {
 	b := it.b
-	switch k {
-	case contribMinContent, contribMaxContent:
-		lo, hi := e.contribution(b)
-		if k == contribMinContent {
-			return lo
+	switch r, _ := prefRatio(b); k {
+	case contribMinContent:
+		if r > 0 && b.st.Overflow != css.OverflowVisible {
+			// The min-content contribution of a scroll container with a
+			// preferred aspect ratio is its minimum contribution, as
+			// Chromium sizes grid columns: its width through the ratio
+			// is a preferred size its automatic minimum, 0 for a scroll
+			// container, lets it shrink below (CSS Sizing 4, 4.3).
+			break
 		}
+		lo, _ := e.contribution(b)
+		return lo
+	case contribMaxContent:
+		_, hi := e.contribution(b)
 		return hi
 	case contribMinimum:
 	}
@@ -522,6 +530,10 @@ func (l *gridLayout) itemWidth(it *gitem, aw float64) float64 {
 		} else {
 			w, _ = e.replacedSize(k, acb)
 		}
+	case set && k.orig != nil && k.orig.Width.Kind == css.Auto && justifySelf(st, l.b.st).Keyword() == css.BoxStretch && !autoMargin:
+		// An explicit stretch fills the area whatever the width a
+		// preferred aspect ratio gives (CSS Box Alignment 3, 6.1).
+		w = room
 	case set:
 		w = sw
 	case stretches(justifySelf(st, l.b.st), false) && !autoMargin:
@@ -564,7 +576,38 @@ func (l *gridLayout) measure(it *gitem, top float64) {
 	pcb := cblock{x: l.cb.x, w: aw}
 	h, hDef := specHeight(k, k.st.Height, pcb)
 	m := e.measureItem(l.b.grid.fd, &fitem{b: k}, w, h, hDef, pcb, l.cb.x, top)
+	if rh, ok := l.ratioItemHeight(it, w); ok && !hDef {
+		m.h = rh
+	}
 	l.ms[it] = m
+}
+
+// ratioItemHeight returns the content height the preferred aspect ratio
+// of the non-replaced item it gives its content width w (CSS Sizing 4,
+// 4.2), at least its content's when that is its automatic minimum, and
+// false when it has none or the ratio does not give its height: an auto
+// height under a width the inline axis stretches, as Chromium sizes grid
+// items. The item's content must be laid out at w.
+func (l *gridLayout) ratioItemHeight(it *gitem, w float64) (float64, bool) {
+	k := it.b
+	src := k.sizeSrc()
+	if src.Height.Kind != css.Auto || src.Width.Kind != css.Auto && !contentKeyword(src.Width) {
+		return 0, false
+	}
+	autoMargin := src.Margin[css.Left].Kind == css.Auto || src.Margin[css.Right].Kind == css.Auto
+	vAuto := src.Margin[css.Top].Kind == css.Auto || src.Margin[css.Bottom].Kind == css.Auto
+	align := alignSelfOf(src, l.b.st)
+	switch {
+	case align.Keyword() == css.BoxStretch && !vAuto:
+		// An explicit stretch fills the area whatever the ratio gives
+		// (CSS Box Alignment 3, 6.1).
+		return 0, false
+	case !autoMargin && !stretches(justifySelf(src, l.b.st), false) && stretches(align, false) && !vAuto:
+		// An item the block axis stretches and the inline axis does not
+		// takes its width from its stretched height instead.
+		return 0, false
+	}
+	return itemRatioHeight(k, w)
 }
 
 // usedHeight returns the content height of the item it laid out off the
@@ -891,12 +934,26 @@ func (l *gridLayout) put(it *gitem, rowTop float64) float64 {
 	if bl, _ := l.baselineAligned(it); bl {
 		stretch = false
 	}
+	ratioH, byRatio := 0.0, false
+	if k.kind != kindReplaced && !hSet {
+		ratioH, byRatio = l.ratioItemHeight(it, w)
+		if byRatio {
+			// The ratio gives the height: the item does not stretch.
+			stretch, hSet, sh = false, true, ratioH
+		}
+	}
 	if stretch {
 		h = constrainHeight(k, max(ah-vOut, 0), acb)
 		if k.kind == kindReplaced && st.Width.Kind == css.Auto && !stretches(justifySelf(st, l.b.st), true) {
 			if r := ratioOf(k); r > 0 {
 				w = constrainWidth(k, h*r, aw)
 			}
+		}
+		if r, content := prefRatio(k); r > 0 && k.sizeSrc().Width.Kind == css.Auto && (lAuto || rAuto || justifySelf(st, l.b.st).Keyword() != css.BoxStretch) {
+			// The stretched height gives a width the inline axis does
+			// not stretch explicitly (CSS Sizing 4, 4.2), as Chromium
+			// sizes a grid item: normal yields to the ratio there.
+			w = constrainWidth(k, widthOfHeight(h, r, edgesFor(k, content)), aw)
 		}
 	} else if hSet {
 		h = constrainHeight(k, sh, acb)

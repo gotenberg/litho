@@ -1023,6 +1023,10 @@ type Style struct {
 	MaxWidth, MaxHeight Dimension
 	Top, Right          Dimension
 	Bottom, Left        Dimension
+	// AspectRatio is the box's preferred aspect ratio (CSS Sizing 4,
+	// 4.1), which an automatic width or height follows.
+	AspectRatio AspectRatio
+
 	// Margin takes Auto, Points or Percent a side; Padding takes Points or
 	// Percent. Both are indexed by [Side].
 	Margin  [4]Dimension

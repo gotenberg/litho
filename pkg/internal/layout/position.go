@@ -322,7 +322,7 @@ func (e *engine) layoutAbs(b *box) {
 	}
 	resolveEdges(b, cb.w)
 	ccb := cblock{x: cb.x, w: cb.w, h: cb.h, hDefinite: true}
-	if hasSizing(b.sizeSrc()) {
+	if r, _ := prefRatio(b); hasSizing(b.sizeSrc()) || r > 0 {
 		aw, ah := absRoom(b, cb)
 		e.resolveSizing(b, ccb, aw, ah)
 	}
@@ -442,8 +442,12 @@ func (e *engine) absHeights(b *box, cb absCB, ccb cblock) {
 	}
 	mtAuto, mbAuto := st.Margin[css.Top].Kind == css.Auto, st.Margin[css.Bottom].Kind == css.Auto
 	h, hSet := specHeight(b, st.Height, ccb)
+	ratioH := false
 	if b.kind == kindReplaced {
 		h, hSet = b.h, true
+	} else if !hSet {
+		h, ratioH = ratioHeight(b)
+		hSet = ratioH
 	}
 	if k := b.sizeSrc().Height.Kind; !hSet && tSet && bSet && (k == css.MinContent || k == css.MaxContent || k == css.FitContent) {
 		// An intrinsic height keyword does not stretch between the insets:
@@ -453,7 +457,7 @@ func (e *engine) absHeights(b *box, cb absCB, ccb cblock) {
 		// left, negative or not.
 		e.noPaginate++
 		b.y = cb.y
-		e.absContent(b, ccb, 0, false)
+		e.absContent(b, ccb, 0, false, false)
 		e.noPaginate--
 		h, hSet = constrainHeight(b, b.h, ccb), true
 	}
@@ -486,7 +490,7 @@ func (e *engine) absHeights(b *box, cb absCB, ccb cblock) {
 			}
 			return
 		}
-		e.absContent(b, ccb, h, hSet)
+		e.absContent(b, ccb, h, hSet, ratioH && contentMinimum(b))
 	}
 	if tSet {
 		place(t)
@@ -497,7 +501,7 @@ func (e *engine) absHeights(b *box, cb absCB, ccb cblock) {
 	if !hSet {
 		e.noPaginate++
 		b.y = cb.y
-		e.absContent(b, ccb, 0, false)
+		e.absContent(b, ccb, 0, false, false)
 		e.noPaginate--
 		h, hSet = b.h, true
 	}
@@ -506,8 +510,9 @@ func (e *engine) absHeights(b *box, cb absCB, ccb cblock) {
 
 // absContent lays out the content of the absolutely positioned box b, its
 // position and width set, at the height h when hSet, else at the height of
-// its content; b establishes a block formatting context (CSS 2.1, 9.4.1).
-func (e *engine) absContent(b *box, ccb cblock, h float64, hSet bool) {
+// its content, or of its content when taller and grow is set; b
+// establishes a block formatting context (CSS 2.1, 9.4.1).
+func (e *engine) absContent(b *box, ccb cblock, h float64, hSet, grow bool) {
 	own := &bfc{}
 	mc := &marginState{}
 	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: h, hDefinite: hSet}, ccb)
@@ -521,6 +526,9 @@ func (e *engine) absContent(b *box, ccb cblock, h float64, hSet bool) {
 	content := ch
 	if hSet {
 		ch = h
+		if grow {
+			ch = max(ch, content)
+		}
 	}
 	b.h = contentHeightBounds(b, constrainHeight(b, ch, ccb), content)
 	e.placeMarker(b)

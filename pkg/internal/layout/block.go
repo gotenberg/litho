@@ -604,6 +604,11 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		start = b.contentY()
 	}
 	specH, hSet := specHeight(b, b.st.Height, cb)
+	ratioH := false
+	if !hSet {
+		specH, ratioH = ratioHeight(b)
+		hSet = ratioH
+	}
 	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: specH, hDefinite: hSet}, cb)
 	end := formatterFor(b).layout(e, b, kcb, bc, start, inner)
 	// The last child's bottom margin adjoins b's when b's height is auto
@@ -636,6 +641,9 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	content := h
 	if hSet {
 		h = specH
+		if ratioH && contentMinimum(b) {
+			h = max(h, content)
+		}
 	}
 	b.h = contentHeightBounds(b, constrainHeight(b, max(h, 0), cb), max(content, 0))
 	e.cloneEdges(b, hSet)
@@ -725,11 +733,28 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	if !hSet && cb.shrinkScrollers && b.st.ScrollContainer() && b.st.Height.HasPercent() {
 		specH, hSet = 0, true
 	}
+	ratioH := false
+	if !hSet {
+		specH, ratioH = ratioHeight(b)
+		hSet = ratioH
+	}
 	own := &bfc{}
 	if b == e.rootBox {
 		// The document's formatting context keeps clear the boxes the
 		// previous pass wrapped (framewrap.go).
 		own.floats = e.seedWraps(e.wraps)
+	}
+	if ratioH && contentMinimum(b) && b.st.FlexOrGrid() && !wrapsColumns(b) {
+		// A flex or grid container lays its content out against its
+		// height: its content height, the automatic minimum, is measured
+		// with the height indefinite (CSS Sizing 4, 4.3). A multi-line
+		// column flex container wraps its items at that height, as
+		// Chromium measures it.
+		e.noPaginate++
+		kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w}, cb)
+		end := formatterFor(b).layout(e, b, kcb, &bfc{}, b.contentY(), &marginState{kept: true})
+		e.noPaginate--
+		specH = constrainHeight(b, max(specH, end-b.contentY()), cb)
 	}
 	mc := &marginState{kept: true}
 	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: specH, hDefinite: hSet}, cb)
@@ -743,6 +768,9 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	content := h
 	if hSet {
 		h = specH
+		if ratioH && contentMinimum(b) {
+			h = max(h, content)
+		}
 	}
 	b.h = contentHeightBounds(b, constrainHeight(b, h, cb), content)
 	e.cloneEdges(b, hSet)

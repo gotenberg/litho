@@ -62,6 +62,15 @@ func (e *engine) resolveSizing(b *box, cb cblock, availW, availH float64) {
 	if !hasSizing(src) {
 		b.st = src
 		b.orig = nil
+		if r, _ := prefRatio(b); r > 0 {
+			st := *src
+			b.st = &st
+			if e.applyRatio(b, &st, cb, availH) {
+				b.orig = src
+			} else {
+				b.st = src
+			}
+		}
 		return
 	}
 	b.orig = src
@@ -136,6 +145,7 @@ func (e *engine) resolveSizing(b *box, cb cblock, availW, availH float64) {
 		st.MaxHeight = stretchH(css.Dimension{Kind: css.None})
 	}
 	b.st = &st
+	e.applyRatio(b, &st, cb, availH)
 }
 
 // contentHeightBounds applies a min-height or max-height of min-content,
