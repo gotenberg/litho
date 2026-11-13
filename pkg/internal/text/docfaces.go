@@ -143,15 +143,19 @@ func (d *FaceDescriptor) inRange(r rune) bool {
 	return false
 }
 
-// Chromium's thresholds for synthesising a document face
-// (CSSSegmentedFontFace, FontSelectionValue): bold for a requested weight
-// of at least 600 on a face whose weight range stops below it; italic on a
-// face whose slant stops below 20 degrees, the slope an italic face
-// counts as.
-const (
-	syntheticBoldThreshold  = 600
-	syntheticItalicMinSlope = 20
-)
+// syntheticBoldThreshold is Chromium's threshold for synthesising bold on
+// a document face (CSSSegmentedFontFace, FontSelectionValue): a requested
+// weight of at least 600 on a face whose weight range stops below it.
+// Italic is synthesised on a face whose slant stops below
+// [italicThreshold].
+//
+// # Corpus evidence
+//
+//   - wpt: css-fonts/variations/slnt-variable: Chromium 156 draws italic
+//     on a face declared oblique 0deg 15deg by its slnt axis alone, with
+//     no synthetic slant; under oblique 0deg 10deg it adds one (see
+//     [Face.readVariations]).
+const syntheticBoldThreshold = 600
 
 // synthesis returns the stroke width and skew that synthesise what req
 // asks for and the face lacks, at size points (CSS Fonts 4, 5.5
@@ -160,13 +164,13 @@ const (
 // Bold is synthesised when the requested weight is at least 600 and the
 // rule's weight range ends below 600; italic when an italic face is asked
 // for and the rule declares a normal face or an oblique one whose angles
-// stop below 20 degrees, so oblique 10deg is slanted again as Chromium
+// stop below 14 degrees, so oblique 10deg is slanted again as Chromium
 // slants it.
 func (d *FaceDescriptor) synthesis(req request, size float64) (stroke, skew float64) {
 	if req.weight >= syntheticBoldThreshold && d.WeightMax < syntheticBoldThreshold && !req.noBold {
 		stroke = fakeBoldStroke(size)
 	}
-	upright := d.Style == FaceNormal || (d.Style == FaceOblique && d.ObliqueMax < syntheticItalicMinSlope)
+	upright := d.Style == FaceNormal || (d.Style == FaceOblique && d.ObliqueMax < italicThreshold)
 	if req.slant != slantNormal && upright && !req.noItalic && !d.slantAxis {
 		skew = skewOf(req)
 	}

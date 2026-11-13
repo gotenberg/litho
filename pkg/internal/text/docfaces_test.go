@@ -201,10 +201,11 @@ func TestFaceDescriptor_Synthesis(t *testing.T) {
 		{"italic on normal", FaceDescriptor{}, request{weight: 400, slant: slantItalic}, false, true},
 		{"italic on italic", FaceDescriptor{Style: FaceItalic}, request{weight: 400, slant: slantItalic}, false, false},
 		// Chromium slants an oblique 10deg face again for italic, not an
-		// oblique 20deg one.
+		// oblique 20deg one nor one whose range reaches 14deg.
 		{"italic on oblique 10", FaceDescriptor{Style: FaceOblique, ObliqueMin: 10, ObliqueMax: 10}, request{weight: 400, slant: slantItalic}, false, true},
 		{"italic on oblique 20", FaceDescriptor{Style: FaceOblique, ObliqueMin: 20, ObliqueMax: 20}, request{weight: 400, slant: slantItalic}, false, false},
 		{"italic on oblique 0", FaceDescriptor{Style: FaceOblique}, request{weight: 400, slant: slantItalic}, false, true},
+		{"italic on oblique 0 to 15", FaceDescriptor{Style: FaceOblique, ObliqueMax: 15}, request{weight: 400, slant: slantItalic}, false, false},
 	}
 	for _, tt := range tests {
 		d := tt.d.normalized()
