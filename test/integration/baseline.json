@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-12T22:47:51Z",
+  "captured_at": "2026-11-13T02:25:18Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9704,7 +9704,7 @@
               "text_f1": 1
             },
             "ooxmlexport/Cool15788_symbolContentControl.docx": {
-              "layout": 0.9027,
+              "layout": 0.9177,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19269,7 +19269,7 @@
               "text_f1": 1
             },
             "sd/bulletCharAndFont.odp": {
-              "layout": 0.9618,
+              "layout": 0.9647,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19981,7 +19981,7 @@
               "text_f1": 1
             },
             "sd/tdf149551_btlr.odp": {
-              "layout": 0.8275,
+              "layout": 0.8374,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19989,7 +19989,7 @@
               "text_f1": 1
             },
             "sd/tdf149551_tbrl90.odp": {
-              "layout": 0.8325,
+              "layout": 0.8511,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -20037,7 +20037,7 @@
               "text_f1": 1
             },
             "sd/tdf153161_FlushToSave.odp": {
-              "layout": 0.4888,
+              "layout": 0.5212,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -24734,7 +24734,7 @@
               "text_f1": 1
             },
             "sc/formula-across-sheets.ods": {
-              "layout": 0.9134,
+              "layout": 0.9136,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -25641,7 +25641,7 @@
               "text_f1": 1
             },
             "sc/tdf129940.ods": {
-              "layout": 0.4436,
+              "layout": 0.5994,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -31528,12 +31528,12 @@
               "text_f1": 0
             },
             "layout/abi11870-2.odt": {
-              "layout": 0.3914,
-              "link_recall": 0.6053,
+              "layout": 0.3741,
+              "link_recall": 0.5526,
               "outline_recall": 0,
-              "pages": 0.9737,
-              "strict": 0.0263,
-              "text_f1": 0.203
+              "pages": 0.9487,
+              "strict": 0.0256,
+              "text_f1": 0.1819
             },
             "layout/btlr-cell.odt": {
               "layout": 0.8239,
@@ -31568,7 +31568,7 @@
               "text_f1": 1
             },
             "layout/drop_asian_word.fodt": {
-              "layout": 0.7522,
+              "layout": 0.9832,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -31928,12 +31928,12 @@
               "text_f1": 0.5
             },
             "odfexport/WordTest_edit.odt": {
-              "layout": 0.8862,
+              "layout": 0.8984,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9577
+              "text_f1": 1
             },
             "odfexport/allow-overlap.odt": {
               "layout": 0.7949,
@@ -32296,12 +32296,12 @@
               "text_f1": 0.7
             },
             "odfexport/ruby-position.odt": {
-              "layout": 0.4747,
+              "layout": 0.7119,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.4
+              "text_f1": 0.3333
             },
             "odfexport/section-columns-separator.fodt": {
               "layout": 0.8878,
@@ -33036,26 +33036,26 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 172,
-          "mismatched": 23,
+          "matched": 173,
+          "mismatched": 22,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 399,
-            "pass_a1a": 194,
+            "pass_a1a": 195,
             "pass_a1b": 195,
-            "pass_a2a": 194,
-            "pass_a2a+ua1": 172,
-            "pass_a2b": 194,
-            "pass_a2u": 194,
-            "pass_a3a": 194,
-            "pass_a3b": 194,
-            "pass_a3u": 194,
-            "pass_a4": 194,
-            "pass_a4+ua2": 173,
-            "pass_a4e": 194,
-            "pass_ua1": 172,
-            "pass_ua2": 173,
+            "pass_a2a": 195,
+            "pass_a2a+ua1": 173,
+            "pass_a2b": 195,
+            "pass_a2u": 195,
+            "pass_a3a": 195,
+            "pass_a3b": 195,
+            "pass_a3u": 195,
+            "pass_a4": 195,
+            "pass_a4+ua2": 174,
+            "pass_a4e": 195,
+            "pass_ua1": 173,
+            "pass_ua2": 174,
             "pass_v1.4": 195,
             "pass_v1.5": 195,
             "pass_v1.6": 195,
@@ -34268,20 +34268,20 @@
               "v2.0": 1
             },
             "odfexport/WordTest_edit.odt": {
-              "a1a": 0,
+              "a1a": 1,
               "a1b": 1,
-              "a2a": 0,
-              "a2a+ua1": 0,
-              "a2b": 0,
-              "a2u": 0,
-              "a3a": 0,
-              "a3b": 0,
-              "a3u": 0,
-              "a4": 0,
-              "a4+ua2": 0,
-              "a4e": 0,
-              "ua1": 0,
-              "ua2": 0,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -37173,8 +37173,8 @@
     "libreoffice/pptx": {
       "features": {
         "diff": {
-          "matched": 172,
-          "mismatched": 97,
+          "matched": 173,
+          "mismatched": 96,
           "skipped": 42,
           "metrics": {
             "convert_error": 0,
@@ -37191,7 +37191,7 @@
               "text_f1": 1
             },
             "chart2/bnc864396.pptx": {
-              "layout": 0.697,
+              "layout": 0.8798,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54502,7 +54502,7 @@
               "text_f1": 0.984
             },
             "charts-bar-column": {
-              "layout": 0.8708,
+              "layout": 0.8964,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54518,15 +54518,15 @@
               "text_f1": 0.4967
             },
             "charts-line-area": {
-              "layout": 0.793,
+              "layout": 0.8019,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9697
+              "text_f1": 0.9833
             },
             "charts-pie-doughnut": {
-              "layout": 0.6298,
+              "layout": 0.717,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54686,12 +54686,12 @@
               "text_f1": 1
             },
             "fields-logic-formula": {
-              "layout": 0.9598,
+              "layout": 0.9613,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9773
+              "text_f1": 0.9718
             },
             "fields-page": {
               "layout": 0.9489,
@@ -55978,26 +55978,26 @@
           }
         },
         "targets": {
-          "matched": 154,
-          "mismatched": 32,
+          "matched": 157,
+          "mismatched": 29,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 399,
-            "pass_a1a": 182,
+            "pass_a1a": 186,
             "pass_a1b": 186,
-            "pass_a2a": 182,
-            "pass_a2a+ua1": 154,
-            "pass_a2b": 184,
-            "pass_a2u": 182,
-            "pass_a3a": 182,
-            "pass_a3b": 184,
-            "pass_a3u": 182,
-            "pass_a4": 184,
-            "pass_a4+ua2": 155,
-            "pass_a4e": 184,
-            "pass_ua1": 154,
-            "pass_ua2": 155,
+            "pass_a2a": 185,
+            "pass_a2a+ua1": 157,
+            "pass_a2b": 186,
+            "pass_a2u": 186,
+            "pass_a3a": 185,
+            "pass_a3b": 186,
+            "pass_a3u": 186,
+            "pass_a4": 186,
+            "pass_a4+ua2": 158,
+            "pass_a4e": 186,
+            "pass_ua1": 158,
+            "pass_ua2": 158,
             "pass_v1.4": 186,
             "pass_v1.5": 186,
             "pass_v1.6": 186,
@@ -56643,20 +56643,20 @@
               "v2.0": 1
             },
             "fields-logic-formula": {
-              "a1a": 0,
+              "a1a": 1,
               "a1b": 1,
-              "a2a": 0,
-              "a2a+ua1": 0,
-              "a2b": 0,
-              "a2u": 0,
-              "a3a": 0,
-              "a3b": 0,
-              "a3u": 0,
-              "a4": 0,
-              "a4+ua2": 0,
-              "a4e": 0,
-              "ua1": 0,
-              "ua2": 0,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -57105,19 +57105,19 @@
               "v2.0": 1
             },
             "intl-scripts": {
-              "a1a": 0,
+              "a1a": 1,
               "a1b": 1,
               "a2a": 0,
               "a2a+ua1": 0,
               "a2b": 1,
-              "a2u": 0,
+              "a2u": 1,
               "a3a": 0,
               "a3b": 1,
-              "a3u": 0,
+              "a3u": 1,
               "a4": 1,
               "a4+ua2": 0,
               "a4e": 1,
-              "ua1": 0,
+              "ua1": 1,
               "ua2": 0,
               "v1.4": 1,
               "v1.5": 1,
@@ -58554,20 +58554,20 @@
               "v2.0": 1
             },
             "para-alignment": {
-              "a1a": 0,
+              "a1a": 1,
               "a1b": 1,
-              "a2a": 0,
-              "a2a+ua1": 0,
+              "a2a": 1,
+              "a2a+ua1": 1,
               "a2b": 1,
-              "a2u": 0,
-              "a3a": 0,
+              "a2u": 1,
+              "a3a": 1,
               "a3b": 1,
-              "a3u": 0,
+              "a3u": 1,
               "a4": 1,
-              "a4+ua2": 0,
+              "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
-              "ua2": 0,
+              "ua1": 1,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -58848,20 +58848,20 @@
               "v2.0": 1
             },
             "run-fonts-fallback": {
-              "a1a": 0,
+              "a1a": 1,
               "a1b": 1,
-              "a2a": 0,
-              "a2a+ua1": 0,
-              "a2b": 0,
-              "a2u": 0,
-              "a3a": 0,
-              "a3b": 0,
-              "a3u": 0,
-              "a4": 0,
-              "a4+ua2": 0,
-              "a4e": 0,
-              "ua1": 0,
-              "ua2": 0,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -59926,12 +59926,12 @@
     "litho/html": {
       "features": {
         "diff": {
-          "matched": 152,
+          "matched": 159,
           "mismatched": 8,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 160,
+            "pages_equal": 167,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -60008,7 +60008,7 @@
               "text_f1": 0.9592
             },
             "emoji": {
-              "layout": 0.296,
+              "layout": 0.339,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60255,6 +60255,22 @@
               "strict": 1,
               "text_f1": 1
             },
+            "named-strings": {
+              "layout": 0.9475,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "named-strings-twin": {
+              "layout": 0.9475,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "no-background": {
               "layout": 0.9431,
               "link_recall": 1,
@@ -60279,6 +60295,14 @@
               "strict": 0.3333,
               "text_f1": 1
             },
+            "page-counter-increment": {
+              "layout": 0.9606,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "page-larger-than-paper": {
               "layout": 0.9565,
               "link_recall": 1,
@@ -60293,6 +60317,22 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
+              "text_f1": 1
+            },
+            "page-selectors-counters": {
+              "layout": 0.9518,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.8,
+              "text_f1": 1
+            },
+            "page-selectors-counters-twin": {
+              "layout": 0.9518,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.8,
               "text_f1": 1
             },
             "paper-base": {
@@ -61151,6 +61191,22 @@
               "strict": 1,
               "text_f1": 1
             },
+            "running-elements": {
+              "layout": 0.9553,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "running-elements-twin": {
+              "layout": 0.966,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "scale": {
               "layout": 0.9389,
               "link_recall": 1,
@@ -61197,7 +61253,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.3991
+              "text_f1": 0.4088
             },
             "user-stylesheet": {
               "layout": 0.9518,
@@ -61219,31 +61275,31 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 156,
-          "mismatched": 4,
+          "matched": 165,
+          "mismatched": 2,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "oracle_targets": 361,
-            "pass_a1a": 159,
-            "pass_a1b": 160,
-            "pass_a2a": 159,
-            "pass_a2a+ua1": 157,
-            "pass_a2b": 160,
-            "pass_a2u": 159,
-            "pass_a3a": 159,
-            "pass_a3b": 160,
-            "pass_a3u": 159,
-            "pass_a4": 160,
-            "pass_a4+ua2": 157,
-            "pass_a4e": 160,
-            "pass_ua1": 157,
-            "pass_ua2": 157,
-            "pass_v1.4": 160,
-            "pass_v1.5": 160,
-            "pass_v1.6": 160,
-            "pass_v1.7": 160,
-            "pass_v2.0": 160,
+            "oracle_targets": 399,
+            "pass_a1a": 167,
+            "pass_a1b": 167,
+            "pass_a2a": 167,
+            "pass_a2a+ua1": 165,
+            "pass_a2b": 167,
+            "pass_a2u": 167,
+            "pass_a3a": 167,
+            "pass_a3b": 167,
+            "pass_a3u": 167,
+            "pass_a4": 167,
+            "pass_a4+ua2": 166,
+            "pass_a4e": 167,
+            "pass_ua1": 165,
+            "pass_ua2": 166,
+            "pass_v1.4": 167,
+            "pass_v1.5": 167,
+            "pass_v1.6": 167,
+            "pass_v1.7": 167,
+            "pass_v2.0": 167,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -61873,10 +61929,10 @@
               "a3b": 1,
               "a3u": 1,
               "a4": 1,
-              "a4+ua2": 0,
+              "a4+ua2": 1,
               "a4e": 1,
               "ua1": 1,
-              "ua2": 0,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -62093,6 +62149,48 @@
               "v1.7": 1,
               "v2.0": 1
             },
+            "named-strings": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "named-strings-twin": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
             "no-background": {
               "a1a": 1,
               "a1b": 1,
@@ -62156,6 +62254,27 @@
               "v1.7": 1,
               "v2.0": 1
             },
+            "page-counter-increment": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
             "page-larger-than-paper": {
               "a1a": 1,
               "a1b": 1,
@@ -62178,6 +62297,48 @@
               "v2.0": 1
             },
             "page-ranges": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "page-selectors-counters": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "page-selectors-counters-twin": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
@@ -64445,6 +64606,48 @@
               "v1.7": 1,
               "v2.0": 1
             },
+            "running-elements": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "running-elements-twin": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
             "scale": {
               "a1a": 1,
               "a1b": 1,
@@ -64551,20 +64754,20 @@
               "v2.0": 1
             },
             "th-line-break": {
-              "a1a": 0,
+              "a1a": 1,
               "a1b": 1,
-              "a2a": 0,
-              "a2a+ua1": 0,
+              "a2a": 1,
+              "a2a+ua1": 1,
               "a2b": 1,
-              "a2u": 0,
-              "a3a": 0,
+              "a2u": 1,
+              "a3a": 1,
               "a3b": 1,
-              "a3u": 0,
+              "a3u": 1,
               "a4": 1,
-              "a4+ua2": 0,
+              "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
-              "ua2": 0,
+              "ua1": 1,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -64631,12 +64834,12 @@
           },
           "scores": {
             "cjk-slides": {
-              "layout": 0.6194,
+              "layout": 0.9067,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.6101
+              "text_f1": 0.6282
             },
             "handouts-2": {
               "layout": 0.9975,
@@ -64711,7 +64914,7 @@
               "text_f1": 1
             },
             "indic-thai-slides": {
-              "layout": 0.8234,
+              "layout": 0.8841,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -64887,7 +65090,7 @@
               "text_f1": 1
             },
             "rtl-slides": {
-              "layout": 0.8968,
+              "layout": 0.9495,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -64914,26 +65117,26 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 34,
-          "mismatched": 1,
+          "matched": 35,
+          "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 133,
-            "pass_a1a": 34,
+            "pass_a1a": 35,
             "pass_a1b": 35,
-            "pass_a2a": 34,
-            "pass_a2a+ua1": 34,
+            "pass_a2a": 35,
+            "pass_a2a+ua1": 35,
             "pass_a2b": 35,
-            "pass_a2u": 34,
-            "pass_a3a": 34,
+            "pass_a2u": 35,
+            "pass_a3a": 35,
             "pass_a3b": 35,
-            "pass_a3u": 34,
+            "pass_a3u": 35,
             "pass_a4": 35,
-            "pass_a4+ua2": 34,
+            "pass_a4+ua2": 35,
             "pass_a4e": 35,
-            "pass_ua1": 34,
-            "pass_ua2": 34,
+            "pass_ua1": 35,
+            "pass_ua2": 35,
             "pass_v1.4": 35,
             "pass_v1.5": 35,
             "pass_v1.6": 35,
@@ -65159,20 +65362,20 @@
               "v2.0": 1
             },
             "indic-thai-slides": {
-              "a1a": 0,
+              "a1a": 1,
               "a1b": 1,
-              "a2a": 0,
-              "a2a+ua1": 0,
+              "a2a": 1,
+              "a2a+ua1": 1,
               "a2b": 1,
-              "a2u": 0,
-              "a3a": 0,
+              "a2u": 1,
+              "a3a": 1,
               "a3b": 1,
-              "a3u": 0,
+              "a3u": 1,
               "a4": 1,
-              "a4+ua2": 0,
+              "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
-              "ua2": 0,
+              "ua1": 1,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -65691,8 +65894,8 @@
     "litho/ods": {
       "features": {
         "diff": {
-          "matched": 78,
-          "mismatched": 4,
+          "matched": 79,
+          "mismatched": 3,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -65701,12 +65904,12 @@
           },
           "scores": {
             "cjk-cells": {
-              "layout": 0.3205,
+              "layout": 0.9326,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9217
+              "text_f1": 1
             },
             "fit-one-page": {
               "layout": 0.9646,
@@ -65741,12 +65944,12 @@
               "text_f1": 1
             },
             "indic-thai-cells": {
-              "layout": 0.8237,
+              "layout": 0.864,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.1883
+              "text_f1": 0.2162
             },
             "mixed-sheets": {
               "layout": 0.9738,
@@ -66309,12 +66512,12 @@
               "text_f1": 1
             },
             "rtl-sheet": {
-              "layout": 0.3281,
+              "layout": 0.3296,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.3333,
-              "text_f1": 0.7186
+              "text_f1": 0.71
             },
             "sheet-numbers": {
               "layout": 0.9318,
@@ -66360,26 +66563,26 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 81,
-          "mismatched": 1,
+          "matched": 82,
+          "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 228,
-            "pass_a1a": 81,
+            "pass_a1a": 82,
             "pass_a1b": 82,
-            "pass_a2a": 81,
-            "pass_a2a+ua1": 81,
+            "pass_a2a": 82,
+            "pass_a2a+ua1": 82,
             "pass_a2b": 82,
-            "pass_a2u": 81,
-            "pass_a3a": 81,
+            "pass_a2u": 82,
+            "pass_a3a": 82,
             "pass_a3b": 82,
-            "pass_a3u": 81,
+            "pass_a3u": 82,
             "pass_a4": 82,
-            "pass_a4+ua2": 81,
+            "pass_a4+ua2": 82,
             "pass_a4e": 82,
-            "pass_ua1": 81,
-            "pass_ua2": 81,
+            "pass_ua1": 82,
+            "pass_ua2": 82,
             "pass_v1.4": 82,
             "pass_v1.5": 82,
             "pass_v1.6": 82,
@@ -66500,20 +66703,20 @@
               "v2.0": 1
             },
             "indic-thai-cells": {
-              "a1a": 0,
+              "a1a": 1,
               "a1b": 1,
-              "a2a": 0,
-              "a2a+ua1": 0,
+              "a2a": 1,
+              "a2a+ua1": 1,
               "a2b": 1,
-              "a2u": 0,
-              "a3a": 0,
+              "a2u": 1,
+              "a3a": 1,
               "a3b": 1,
-              "a3u": 0,
+              "a3u": 1,
               "a4": 1,
-              "a4+ua2": 0,
+              "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
-              "ua2": 0,
+              "ua1": 1,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -68124,8 +68327,8 @@
     "litho/odt": {
       "features": {
         "diff": {
-          "matched": 71,
-          "mismatched": 8,
+          "matched": 73,
+          "mismatched": 6,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -68134,20 +68337,20 @@
           },
           "scores": {
             "ar-rtl": {
-              "layout": 0,
+              "layout": 0.9554,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.4192
+              "strict": 1,
+              "text_f1": 0.4281
             },
             "cjk-han-variants": {
-              "layout": 0.2397,
+              "layout": 0.9511,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9375
+              "text_f1": 0.9732
             },
             "date-fields": {
               "layout": 0.9507,
@@ -68183,12 +68386,12 @@
               "text_f1": 0.9891
             },
             "he-bidi-numbers": {
-              "layout": 0,
+              "layout": 0.9571,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.7528
+              "strict": 1,
+              "text_f1": 0.8372
             },
             "hi-devanagari": {
               "layout": 0.9696,
@@ -68199,20 +68402,20 @@
               "text_f1": 0.2759
             },
             "ja-line-break": {
-              "layout": 0.8338,
+              "layout": 0.8997,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.6667,
-              "text_f1": 0.6404
+              "text_f1": 0.8523
             },
             "ja-ruby": {
-              "layout": 0.2857,
+              "layout": 0.7994,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.2338
+              "text_f1": 0.629
             },
             "ja-vertical": {
               "layout": 0,
@@ -68223,12 +68426,12 @@
               "text_f1": 0.0106
             },
             "ko-line-break": {
-              "layout": 0.7717,
+              "layout": 0.9732,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.88
+              "strict": 1,
+              "text_f1": 1
             },
             "mixed-sections": {
               "layout": 0.9649,
@@ -68770,26 +68973,26 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 78,
-          "mismatched": 1,
+          "matched": 79,
+          "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 152,
-            "pass_a1a": 78,
+            "pass_a1a": 79,
             "pass_a1b": 79,
-            "pass_a2a": 78,
-            "pass_a2a+ua1": 78,
+            "pass_a2a": 79,
+            "pass_a2a+ua1": 79,
             "pass_a2b": 79,
-            "pass_a2u": 78,
-            "pass_a3a": 78,
+            "pass_a2u": 79,
+            "pass_a3a": 79,
             "pass_a3b": 79,
-            "pass_a3u": 78,
+            "pass_a3u": 79,
             "pass_a4": 79,
-            "pass_a4+ua2": 78,
+            "pass_a4+ua2": 79,
             "pass_a4e": 79,
-            "pass_ua1": 78,
-            "pass_ua2": 78,
+            "pass_ua1": 79,
+            "pass_ua2": 79,
             "pass_v1.4": 79,
             "pass_v1.5": 79,
             "pass_v1.6": 79,
@@ -70296,20 +70499,20 @@
               "v2.0": 1
             },
             "th-line-break": {
-              "a1a": 0,
+              "a1a": 1,
               "a1b": 1,
-              "a2a": 0,
-              "a2a+ua1": 0,
+              "a2a": 1,
+              "a2a+ua1": 1,
               "a2b": 1,
-              "a2u": 0,
-              "a3a": 0,
+              "a2u": 1,
+              "a3a": 1,
               "a3b": 1,
-              "a3u": 0,
+              "a3u": 1,
               "a4": 1,
-              "a4+ua2": 0,
+              "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
-              "ua2": 0,
+              "ua1": 1,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -70805,20 +71008,20 @@
               "text_f1": 1
             },
             "chart-3d": {
-              "layout": 0.0976,
+              "layout": 0.2249,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8672
+              "text_f1": 0.8263
             },
             "chart-area": {
-              "layout": 0.6924,
+              "layout": 0.7599,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8661
+              "text_f1": 0.8462
             },
             "chart-bar": {
               "layout": 0.8435,
@@ -70853,7 +71056,7 @@
               "text_f1": 0.9077
             },
             "chart-pie": {
-              "layout": 0.4561,
+              "layout": 0.5111,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -71934,26 +72137,26 @@
           }
         },
         "targets": {
-          "matched": 121,
-          "mismatched": 21,
+          "matched": 122,
+          "mismatched": 20,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 361,
-            "pass_a1a": 141,
+            "pass_a1a": 142,
             "pass_a1b": 142,
-            "pass_a2a": 141,
-            "pass_a2a+ua1": 121,
+            "pass_a2a": 142,
+            "pass_a2a+ua1": 122,
             "pass_a2b": 142,
-            "pass_a2u": 141,
-            "pass_a3a": 141,
+            "pass_a2u": 142,
+            "pass_a3a": 142,
             "pass_a3b": 142,
-            "pass_a3u": 141,
+            "pass_a3u": 142,
             "pass_a4": 142,
-            "pass_a4+ua2": 121,
+            "pass_a4+ua2": 122,
             "pass_a4e": 142,
-            "pass_ua1": 121,
-            "pass_ua2": 121,
+            "pass_ua1": 122,
+            "pass_ua2": 122,
             "pass_v1.4": 142,
             "pass_v1.5": 142,
             "pass_v1.6": 142,
@@ -74636,20 +74839,20 @@
               "v2.0": 1
             },
             "text-complex-scripts": {
-              "a1a": 0,
+              "a1a": 1,
               "a1b": 1,
-              "a2a": 0,
-              "a2a+ua1": 0,
+              "a2a": 1,
+              "a2a+ua1": 1,
               "a2b": 1,
-              "a2u": 0,
-              "a3a": 0,
+              "a2u": 1,
+              "a3a": 1,
               "a3b": 1,
-              "a3u": 0,
+              "a3u": 1,
               "a4": 1,
-              "a4+ua2": 0,
+              "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
-              "ua2": 0,
+              "ua1": 1,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -75166,7 +75369,7 @@
               "text_f1": 0.9257
             },
             "charts_bar_column": {
-              "layout": 0.8091,
+              "layout": 0.8238,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -75206,7 +75409,7 @@
               "text_f1": 0.978
             },
             "charts_pie_doughnut": {
-              "layout": 0.4588,
+              "layout": 0.6341,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -76531,26 +76734,26 @@
           }
         },
         "targets": {
-          "matched": 164,
-          "mismatched": 3,
+          "matched": 165,
+          "mismatched": 2,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 437,
-            "pass_a1a": 166,
+            "pass_a1a": 167,
             "pass_a1b": 167,
-            "pass_a2a": 166,
-            "pass_a2a+ua1": 164,
+            "pass_a2a": 167,
+            "pass_a2a+ua1": 165,
             "pass_a2b": 167,
-            "pass_a2u": 166,
-            "pass_a3a": 166,
+            "pass_a2u": 167,
+            "pass_a3a": 167,
             "pass_a3b": 167,
-            "pass_a3u": 166,
+            "pass_a3u": 167,
             "pass_a4": 167,
-            "pass_a4+ua2": 164,
+            "pass_a4+ua2": 165,
             "pass_a4e": 167,
-            "pass_ua1": 164,
-            "pass_ua2": 164,
+            "pass_ua1": 165,
+            "pass_ua2": 165,
             "pass_v1.4": 167,
             "pass_v1.5": 167,
             "pass_v1.6": 167,
@@ -77532,20 +77735,20 @@
               "v2.0": 1
             },
             "intl_scripts": {
-              "a1a": 0,
+              "a1a": 1,
               "a1b": 1,
-              "a2a": 0,
-              "a2a+ua1": 0,
+              "a2a": 1,
+              "a2a+ua1": 1,
               "a2b": 1,
-              "a2u": 0,
-              "a3a": 0,
+              "a2u": 1,
+              "a3a": 1,
               "a3b": 1,
-              "a3u": 0,
+              "a3u": 1,
               "a4": 1,
-              "a4+ua2": 0,
+              "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
-              "ua2": 0,
+              "ua1": 1,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -87763,76 +87966,76 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_.pptx": {
-              "layout": 0,
+              "layout": 0.4878,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8627
+              "text_f1": 0.9825
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Box_In_as_one_object_.pptx": {
-              "layout": 0,
+              "layout": 0.5137,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8889
+              "text_f1": 0.9855
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Box_In_by_element_in_category_.pptx": {
-              "layout": 0,
+              "layout": 0.527,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8923
+              "text_f1": 0.9859
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Box_Out_as_one_object_.pptx": {
-              "layout": 0.0076,
+              "layout": 0.5308,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8852
+              "text_f1": 0.9851
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Box_Out_by_element_in_category_.pptx": {
-              "layout": 0.0038,
+              "layout": 0.5293,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8923
+              "text_f1": 0.9859
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Fly_In_as_one_object_.pptx": {
-              "layout": 0,
+              "layout": 0.5137,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8889
+              "text_f1": 0.9855
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Fly_In_by_element_in_category_.pptx": {
-              "layout": 0,
+              "layout": 0.527,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8923
+              "text_f1": 0.9859
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Fly_Out_as_one_object_.pptx": {
-              "layout": 0.0076,
+              "layout": 0.5308,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8852
+              "text_f1": 0.9851
             },
             "v2FxTestFiles/presentation/Chart_3D_Column_Animation_Fly_Out_by_element_in_category_.pptx": {
-              "layout": 0.0038,
+              "layout": 0.5293,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8923
+              "text_f1": 0.9859
             },
             "v2FxTestFiles/presentation/Image_AnimatedGIF.pptx": {
               "layout": 0.9272,
@@ -87963,12 +88166,12 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/O12_templates/SalesPropPres_TP10220213.potx": {
-              "layout": 0.7734,
+              "layout": 0.7847,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.125,
-              "text_f1": 0.9489
+              "text_f1": 0.9493
             },
             "v2FxTestFiles/presentation/SmartArt_OrgChart1.pptx": {
               "layout": 0,
@@ -88163,7 +88366,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/test.pptx": {
-              "layout": 0.4298,
+              "layout": 0.4887,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -92038,8 +92241,8 @@
     "openxmlsdk/xlsx": {
       "features": {
         "diff": {
-          "matched": 22,
-          "mismatched": 27,
+          "matched": 23,
+          "mismatched": 26,
           "skipped": 5,
           "metrics": {
             "convert_error": 0,
@@ -92265,12 +92468,12 @@
               "text_f1": 0.852
             },
             "v2FxTestFiles/spreadsheet/O12_templates/BusinessPerformancetest21_with_content_TP10209823.xltx": {
-              "layout": 0.7237,
+              "layout": 0.7572,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.4118,
-              "text_f1": 0.8939
+              "text_f1": 0.895
             },
             "v2FxTestFiles/spreadsheet/O12_templates/ProductCompetitiveAnalysis_TP10186503.xltx": {
               "layout": 0.7495,
@@ -92305,7 +92508,7 @@
               "text_f1": 0.9985
             },
             "v2FxTestFiles/spreadsheet/O12_templates/VendorScorecardReport_TP10194032.xltx": {
-              "layout": 0.8372,
+              "layout": 0.8464,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -109648,28 +109851,28 @@
               "text_f1": 0.95
             },
             "spreadsheet/45540_classic_Footer.xlsx": {
-              "layout": 0.3827,
+              "layout": 0.3934,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.8182,
               "strict": 0.3636,
-              "text_f1": 0.521
+              "text_f1": 0.5198
             },
             "spreadsheet/45540_classic_Header.xlsx": {
-              "layout": 0.3731,
+              "layout": 0.3838,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.8182,
               "strict": 0.3636,
-              "text_f1": 0.521
+              "text_f1": 0.5198
             },
             "spreadsheet/45544.xlsx": {
-              "layout": 0.3294,
+              "layout": 0.3412,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.8,
               "strict": 0.3,
-              "text_f1": 0.4732
+              "text_f1": 0.4718
             },
             "spreadsheet/46536.xlsx": {
               "layout": 0.9545,
@@ -115754,8 +115957,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 2021,
-          "mismatched": 251,
+          "matched": 2019,
+          "mismatched": 253,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -116595,13 +116798,13 @@
             "css/css-counter-styles/myanmar/css3-counter-styles-142.html": "pass",
             "css/css-counter-styles/persian/css3-counter-styles-104.html": "pass",
             "css/css-counter-styles/simp-chinese-formal/counter-simp-chinese-formal.html": "fail",
-            "css/css-counter-styles/simp-chinese-formal/css3-counter-styles-078.html": "pass",
+            "css/css-counter-styles/simp-chinese-formal/css3-counter-styles-078.html": "fail",
             "css/css-counter-styles/simp-chinese-informal/counter-simp-chinese-informal-extended-range.optional.html": "fail",
             "css/css-counter-styles/simp-chinese-informal/css3-counter-styles-073.html": "pass",
             "css/css-counter-styles/tamil/css3-counter-styles-148.html": "pass",
             "css/css-counter-styles/thai/css3-counter-styles-153.html": "fail",
             "css/css-counter-styles/trad-chinese-formal/css3-counter-styles-087.html": "fail",
-            "css/css-counter-styles/trad-chinese-formal/css3-counter-styles-088.html": "pass",
+            "css/css-counter-styles/trad-chinese-formal/css3-counter-styles-088.html": "fail",
             "css/css-counter-styles/trad-chinese-informal/css3-counter-styles-082.html": "fail",
             "css/css-counter-styles/upper-armenian/css3-counter-styles-107.html": "pass",
             "css/css-counter-styles/upper-roman/css3-counter-styles-024a.html": "pass",
