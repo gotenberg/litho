@@ -1655,12 +1655,20 @@ func flexStaticShift(b *box, horizontal bool) float64 {
 	if c == nil || c.flex == nil || !b.staticSet {
 		return 0
 	}
-	ax := axesOf(c.st)
 	size, space := b.marginW(), c.w
 	if !horizontal {
 		size, space = b.marginH(), c.h
 	}
-	free := space - size
+	return flexStaticAlign(b, horizontal, space-size)
+}
+
+// flexStaticAlign returns the offset of the absolutely positioned child b
+// of a flex container within the container's content box, horizontally or
+// vertically, for the free space free that its margin box leaves there
+// (see [flexStaticShift]).
+func flexStaticAlign(b *box, horizontal bool, free float64) float64 {
+	c := b.parent
+	ax := axesOf(c.st)
 	var off float64
 	var rev bool
 	if horizontal == ax.row {

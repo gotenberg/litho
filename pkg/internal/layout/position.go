@@ -391,6 +391,12 @@ func (e *engine) solveH(b *box, cb absCB, w float64, wAuto bool) (float64, float
 	}
 	ml, mr := b.m[css.Left], b.m[css.Right]
 	rtl := cb.box != nil && cb.box.st.Direction == css.RTL || cb.box == nil && b.srtl
+	if room, ok := staticRoom(b, cb); ok && wAuto && !insetSet(st.Left, cb.w) && !insetSet(st.Right, cb.w) {
+		// The static position rectangle aligns the box: its width fits
+		// the room the alignment leaves it within cb.
+		w = e.shrinkToFit(b, room)
+		return clamp(l), max(clamp(w), 0)
+	}
 	switch {
 	case wAuto && !lSet:
 		w = e.shrinkToFit(b, cb.w-r)
@@ -426,6 +432,46 @@ func (e *engine) solveH(b *box, cb absCB, w float64, wAuto bool) (float64, float
 	}
 	b.m[css.Left], b.m[css.Right] = ml, mr
 	return clamp(l), max(clamp(w), 0)
+}
+
+// insetSet reports an inset other than auto.
+func insetSet(d css.Dimension, ref float64) bool {
+	_, ok := insetOf(d, ref)
+	return ok
+}
+
+// staticRoom returns the width the inset-modified containing block leaves
+// the absolutely positioned child b of a flex container whose left and
+// right insets are auto, when the container aligns it otherwise than at
+// its start edge: centred on the static position rectangle, the
+// container's content box, as wide as cb allows; aligned at its end, from
+// cb's start to the rectangle's end (CSS Position 3, 4.1; CSS Flexbox 1,
+// 4.1). It returns false for a box the start edge places, which takes
+// the room from its static position on.
+//
+// # Corpus evidence
+//
+//   - wpt: css-position/position-absolute-center-001 (a box of two 50px
+//     inline blocks centred in a 40px flex container 10px into a 100px
+//     containing block) draws a 60px box at the containing block's left
+//     edge in Chromium 156.
+func staticRoom(b *box, cb absCB) (float64, bool) {
+	c := b.parent
+	if c == nil || c.flex == nil || !b.staticSet {
+		return 0, false
+	}
+	frac := flexStaticAlign(b, true, 1)
+	if frac <= eps {
+		return 0, false
+	}
+	start := c.contentX() - cb.x
+	end := start + c.w
+	edges := hEdges(b) + nonAuto(b.m[css.Left], b.st.Margin[css.Left].Kind == css.Auto) + nonAuto(b.m[css.Right], b.st.Margin[css.Right].Kind == css.Auto)
+	if frac >= 1-eps {
+		return max(end-edges, 0), true
+	}
+	mid := (start + end) / 2
+	return max(2*min(mid, cb.w-mid)-edges, 0), true
 }
 
 // absHeights sets the content height and vertical margins of the

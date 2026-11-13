@@ -473,3 +473,20 @@ func TestRelative_OverflowMovesWithTheBox(t *testing.T) {
 		t.Errorf("content width %v, want %v", res.ContentWidth, px(6))
 	}
 }
+
+// TestAbs_CentredStaticPositionRoom holds an absolutely positioned child
+// of a flex container that centres it, its left and right insets auto, to
+// CSS Position 3, 4.1: the inset-modified containing block is centred on
+// the container's content box as wide as the containing block allows, so
+// the box shrinks to fit 60px around a centre 30px from the edge.
+func TestAbs_CentredStaticPositionRoom(t *testing.T) {
+	t.Parallel()
+	ib := func() *Node { return el(sty(display(css.InlineBlock), width(50), height(10))) }
+	absBox := el(sty(func(s *css.Style) { s.Position, s.Top = css.Absolute, css.Pts(0) }), ib(), txt(sty(), " "), ib())
+	inner := el(flexBox(width(40), margin(0, 0, 0, 10), justify(css.BoxCenter)), absBox)
+	root := doc(el(sty(width(100), height(20), func(s *css.Style) { s.Position = css.Relative }), inner))
+	got := rect(kid(t, boxes(t, root, page(200, 100)), 0, 0, 0, 0))
+	if got[0] != 0 || got[2] != 60 {
+		t.Errorf("box at %v, %v wide, want at 0, 60 wide", got[0], got[2])
+	}
+}
