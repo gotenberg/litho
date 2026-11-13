@@ -138,7 +138,8 @@ func TestShape_FaceSizeAdjustAndOverrides(t *testing.T) {
 
 // TestShape_FontSizeAdjust checks font-size-adjust (CSS Fonts 5, 2.6): a
 // face whose ex-height is 0.8 em draws at half the size for a value of
-// 0.4, its metrics with it, and a value of 0 adjusts nothing.
+// 0.4, its metrics with it, a value of 0 adjusts nothing, and Zero draws
+// at size 0.
 func TestShape_FontSizeAdjust(t *testing.T) {
 	t.Parallel()
 	f := newTestFonts(t, repoFont(t, "Ahem.ttf", ahemPath))
@@ -163,5 +164,11 @@ func TestShape_FontSizeAdjust(t *testing.T) {
 	adjusted.Settings = &FontSettings{SizeAdjust: SizeAdjust{Metric: AdjustCapHeight}}
 	if got := w(adjusted); got != plain {
 		t.Errorf("a value of 0: width %v, want %v", got, plain)
+	}
+	// Zero, font-size-adjust: 0, gives a used size of 0: the run takes
+	// no room and draws no glyph.
+	adjusted.Settings = &FontSettings{SizeAdjust: SizeAdjust{Zero: true}}
+	if l := shape(t, f, []ParagraphRun{{Text: "XX", Style: adjusted}}, ParagraphOptions{}).Line(0, 2, false); l.Width != 0 || len(l.Spans) > 0 && l.Spans[0].Text != nil {
+		t.Errorf("font-size-adjust 0: width %v, spans %+v; want 0 and no glyph run", l.Width, l.Spans)
 	}
 }

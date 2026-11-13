@@ -136,10 +136,13 @@ const (
 
 // SizeAdjust is CSS font-size-adjust (CSS Fonts 5, 2.6): each face draws
 // at the size that gives its Metric, as a fraction of the font size, the
-// value Value. A Value of 0 or less adjusts nothing.
+// value Value. A Value of 0 or less adjusts nothing, unless Zero is set.
 type SizeAdjust struct {
 	Metric AdjustMetric
 	Value  float64
+	// Zero draws the text at size 0: a value of 0 gives every face a
+	// used size of 0 (CSS Fonts 5, 2.6).
+	Zero bool
 }
 
 // maxAdjustFactor bounds the factor font-size-adjust scales a face by.
@@ -152,6 +155,9 @@ const maxAdjustFactor = 10
 // value.
 func adjustFactor(style *Style, fc *Face, ft *font.Face) float64 {
 	sa := style.settings().SizeAdjust
+	if sa.Zero {
+		return 0
+	}
 	v := sa.Value
 	if !(v > 0) {
 		return 1

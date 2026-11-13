@@ -815,8 +815,9 @@ func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int)
 		t.Glyphs = append(t.Glyphs, cg)
 		pen += adv
 	}
-	if len(t.Glyphs) > 0 && t.Face != nil {
-		// A refusal sticks and cancels the conversion, which stops at its
+	if len(t.Glyphs) > 0 && t.Face != nil && t.Size > 0 {
+		// A run drawn at size 0, as font-size-adjust: 0 draws one, takes
+		// its place and draws nothing. A refusal sticks and cancels the conversion, which stops at its
 		// next checkpoint: a line has no error to return.
 		p.mem.Take(int64(len(t.Glyphs)), glyphCost, "glyph runs")
 		sp.Text = t

@@ -464,6 +464,8 @@ func (e *engine) fontSettings(st *css.Style, ts *text.Style) *text.FontSettings 
 		fs.SizeAdjust = text.SizeAdjust{Metric: text.AdjustMetric(a.Metric), Value: a.Value}
 		if a.FromFont {
 			fs.SizeAdjust.Value = e.fonts.Aspect(*ts, fs.SizeAdjust.Metric)
+		} else {
+			fs.SizeAdjust.Zero = a.Value == 0
 		}
 	}
 	return fs
