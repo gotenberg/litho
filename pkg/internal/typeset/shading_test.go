@@ -122,3 +122,46 @@ func TestWriteShading_ManyStops(t *testing.T) {
 	}}
 	render(t, open(t, write(t, &typeset.Document{Pages: []*typeset.Page{page}})), 1)
 }
+
+// TestWriteShading_PaintsConic locks the conic shading: a type 1
+// shading whose calculator function takes the angle clockwise from the
+// ray toward To, here up from the centre of a square, a translucent stop
+// painting through the same function in grey.
+func TestWriteShading_PaintsConic(t *testing.T) {
+	t.Parallel()
+	green := typeset.Color{G: 1, A: 1}
+	conic := &typeset.Shading{
+		Kind: typeset.Conic, From: typeset.Point{X: 50, Y: 50}, To: typeset.Point{X: 50, Y: 40},
+		Stops: []typeset.ColorStop{{Color: red}, {Offset: 0.25, Color: red}, {Offset: 0.25, Color: blue}, {Offset: 0.5, Color: blue}, {Offset: 0.5, Color: green}, {Offset: 1, Color: typeset.Color{G: 1}}},
+	}
+	page := &typeset.Page{Width: 100, Height: 100, Content: []typeset.Fragment{
+		&typeset.Path{Ops: rect(0, 0, 100, 100), Fill: &typeset.Fill{Color: typeset.Black}},
+		&typeset.Path{Ops: rect(0, 0, 100, 100), Fill: &typeset.Fill{Shading: conic}},
+	}}
+	doc := &typeset.Document{Pages: []*typeset.Page{page}}
+	if err := doc.Validate(t.Context()); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	out := write(t, doc)
+	img := render(t, open(t, out), 1)
+	for _, c := range []struct {
+		x, y int
+		want color.NRGBA
+		what string
+	}{
+		{60, 10, color.NRGBA{R: 255}, "first quarter, clockwise from up"},
+		{90, 60, color.NRGBA{B: 255}, "second quarter"},
+		{40, 90, color.NRGBA{G: 255}, "third quarter, green and opaque"},
+		{10, 15, color.NRGBA{G: 69, A: 255}, "at 311 degrees, green at 27% over black"},
+	} {
+		if !near(img, c.x, c.y, c.want, 48) {
+			t.Errorf("%s pixel (%d, %d) = %v, want %v", c.what, c.x, c.y, img.At(c.x, c.y), c.want)
+		}
+	}
+	if !bytes.Contains(out, []byte("/ShadingType 1")) || !bytes.Contains(out, []byte("/FunctionType 4")) || !bytes.Contains(out, []byte("{exch atan 360 div")) {
+		t.Errorf("no function-based shading with a calculator function in\n%s", out)
+	}
+	if !bytes.Contains(out, []byte("/Luminosity")) {
+		t.Error("no luminosity soft mask for the translucent stop")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -63,14 +64,25 @@ func shadingKey(sh *Shading) string {
 	return b.String()
 }
 
-// shading returns the objects of sh, writing them on first use.
-func (w *docWriter) shading(sh *Shading) shadingRefs {
+// shading returns the objects of sh, writing them on first use. domain
+// is the box a conic shading paints, in its own coordinates, which its
+// objects depend on; the other kinds ignore it.
+func (w *docWriter) shading(sh *Shading, domain [4]float64) shadingRefs {
 	key := shadingKey(sh)
+	if sh.Kind == Conic {
+		key += fmt.Sprintf(";%v %v %v %v", fine(domain[0]), fine(domain[1]), fine(domain[2]), fine(domain[3]))
+	}
 	if r, ok := w.shadings[key]; ok {
 		return r
 	}
 	rgb := func(c Color) ast.PdfArray { return ast.PdfArray{pdfReal(c.R), pdfReal(c.G), pdfReal(c.B)} }
-	r := shadingRefs{color: w.alloc.Alloc(shadingDict(sh, ast.PdfName("DeviceRGB"), rgb))}
+	dict := func(cs ast.PdfName, comp func(Color) ast.PdfArray) ast.PdfDict {
+		if sh.Kind == Conic {
+			return w.conicDict(sh, domain, cs, comp)
+		}
+		return shadingDict(sh, cs, comp)
+	}
+	r := shadingRefs{color: w.alloc.Alloc(dict(ast.PdfName("DeviceRGB"), rgb))}
 	for _, s := range sh.Stops {
 		if round(s.Color.A) < 1 {
 			r.translucent = true
@@ -79,10 +91,105 @@ func (w *docWriter) shading(sh *Shading) shadingRefs {
 	}
 	if r.translucent {
 		grey := func(c Color) ast.PdfArray { return ast.PdfArray{pdfReal(c.A)} }
-		r.alpha = w.alloc.Alloc(shadingDict(sh, ast.PdfName("DeviceGray"), grey))
+		r.alpha = w.alloc.Alloc(dict(ast.PdfName("DeviceGray"), grey))
 	}
 	w.shadings[key] = r
 	return r
+}
+
+// conicDict returns the dictionary of the conic shading sh over domain:
+// type 1, function-based (ISO 32000-1, 8.7.4.5.2, Table 79), whose
+// /Matrix puts From at the origin of its domain and To on the positive x
+// axis, so that the angle of a point, clockwise on the page, is the atan
+// of its coordinates; its function is a PostScript calculator function
+// (7.10.5) of that angle as a fraction of a turn, which looks the stops up
+// by bisection and interpolates between two linearly, as the type 2
+// functions of an axial shading do.
+func (w *docWriter) conicDict(sh *Shading, domain [4]float64, cs ast.PdfName, comp func(Color) ast.PdfArray) ast.PdfDict {
+	ux, uy := sh.To.X-sh.From.X, sh.To.Y-sh.From.Y
+	n := math.Hypot(ux, uy)
+	ux, uy = ux/n, uy/n
+	dom := ast.PdfArray{fine(domain[0]), fine(domain[1]), fine(domain[2]), fine(domain[3])}
+	ncomp := len(comp(Color{}))
+	rng := make(ast.PdfArray, 0, 2*ncomp)
+	for range ncomp {
+		rng = append(rng, ast.PdfInt(0), ast.PdfInt(1))
+	}
+	var prog strings.Builder
+	prog.WriteString("{exch atan 360 div\n")
+	writeConicLookup(&prog, conicSegments(sh.Stops), comp)
+	prog.WriteString("}\n")
+	fn := ast.NewStream(ast.PdfDict{
+		"FunctionType": ast.PdfInt(4),
+		"Domain":       dom,
+		"Range":        rng,
+	}, []byte(prog.String()))
+	return ast.PdfDict{
+		"ShadingType": ast.PdfInt(1),
+		"ColorSpace":  cs,
+		"Domain":      dom,
+		"Matrix":      ast.PdfArray{fine(ux), fine(uy), fine(-uy), fine(ux), fine(sh.From.X), fine(sh.From.Y)},
+		"Function":    w.alloc.Alloc(fn),
+	}
+}
+
+// conicSegment is one ramp of a conic shading's stops: from offset a with
+// colour ca to offset b with colour cb, a below b.
+type conicSegment struct {
+	a, b   float64
+	ca, cb Color
+}
+
+// conicSegments returns the ramps between the stops apart, as
+// [stopFunction] stitches them: a pair at one offset is a sharp edge.
+func conicSegments(stops []ColorStop) []conicSegment {
+	var out []conicSegment
+	for i := 0; i+1 < len(stops); i++ {
+		a, b := stops[i], stops[i+1]
+		if fine(b.Offset) <= fine(a.Offset) {
+			continue
+		}
+		out = append(out, conicSegment{a: a.Offset, b: b.Offset, ca: a.Color, cb: b.Color})
+	}
+	return out
+}
+
+// writeConicLookup writes the PostScript that turns the offset on the
+// stack into the components comp takes of the colour segs give it: a
+// bisection on the segments' starts, then the linear ramp of the one
+// segment left. The bisection keeps the program's nesting logarithmic in
+// the stops.
+func writeConicLookup(b *strings.Builder, segs []conicSegment, comp func(Color) ast.PdfArray) {
+	if len(segs) > 1 {
+		mid := len(segs) / 2
+		fmt.Fprintf(b, "dup %s lt {\n", psNum(segs[mid].a))
+		writeConicLookup(b, segs[:mid], comp)
+		b.WriteString("} {\n")
+		writeConicLookup(b, segs[mid:], comp)
+		b.WriteString("} ifelse\n")
+		return
+	}
+	s := segs[0]
+	ca, cb := comp(s.ca), comp(s.cb)
+	fmt.Fprintf(b, "%s sub %s mul", psNum(s.a), psNum(1/(s.b-s.a)))
+	for i := range ca {
+		x, y := float64(ca[i].(ast.PdfReal)), float64(cb[i].(ast.PdfReal))
+		if i < len(ca)-1 {
+			b.WriteString(" dup")
+		}
+		fmt.Fprintf(b, " %s mul %s add", psNum(y-x), psNum(x))
+		if i < len(ca)-1 {
+			b.WriteString(" exch")
+		}
+	}
+	b.WriteString("\n")
+}
+
+// psNum formats a number of a PostScript calculator function: at most six
+// decimals, never an exponent, which the calculator's grammar lacks (ISO
+// 32000-1, 7.10.5.1).
+func psNum(f float64) string {
+	return strconv.FormatFloat(float64(fine(f)), 'f', -1, 64)
 }
 
 // shadingDict returns the shading dictionary of sh in colour space cs, its
@@ -155,7 +262,11 @@ func stopFunction(stops []ColorStop, comp func(Color) ast.PdfArray) ast.PdfObjec
 // system being the one in force when gs selects it.
 func (p *pageWriter) shadingFill(ctx context.Context, pa *Path, opacity float64) error {
 	sh, m := placedShading(pa.Fill.Shading, p.off)
-	refs := p.w.shading(sh)
+	var domain [4]float64
+	if sh.Kind == Conic {
+		domain = conicDomain(sh, inverseBBox(pa.Ops, p.off, m))
+	}
+	refs := p.w.shading(sh, domain)
 	p.mark(pa.Parent)
 	p.buf.WriteString("q\n")
 	p.alpha = append(p.alpha, p.currentAlpha())
@@ -182,6 +293,23 @@ func (p *pageWriter) shadingFill(ctx context.Context, pa *Path, opacity float64)
 	fmt.Fprintf(&p.buf, "/%s sh\nQ\n", p.shadingName(refs.color))
 	p.alpha = p.alpha[:len(p.alpha)-1]
 	return nil
+}
+
+// conicDomain returns the domain [x0 x1 y0 y1] of the conic shading sh
+// that covers box, [x0 y0 x1 y1] in the shading's coordinates: box
+// mapped into the coordinates whose origin is From and whose x axis runs
+// toward To.
+func conicDomain(sh *Shading, box [4]float64) [4]float64 {
+	ux, uy := sh.To.X-sh.From.X, sh.To.Y-sh.From.Y
+	n := math.Hypot(ux, uy)
+	ux, uy = ux/n, uy/n
+	out := [4]float64{math.Inf(1), math.Inf(-1), math.Inf(1), math.Inf(-1)}
+	for _, c := range [4][2]float64{{box[0], box[1]}, {box[2], box[1]}, {box[0], box[3]}, {box[2], box[3]}} {
+		dx, dy := c[0]-sh.From.X, c[1]-sh.From.Y
+		x, y := dx*ux+dy*uy, -dx*uy+dy*ux
+		out = [4]float64{min(out[0], x), max(out[1], x), min(out[2], y), max(out[3], y)}
+	}
+	return out
 }
 
 // placedShading returns the shading sh paints with once the folded

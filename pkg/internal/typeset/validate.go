@@ -296,11 +296,11 @@ func checkOps(ops []PathOp) error {
 // coordinates, non-negative radii (8.7.4.5.4, Table 81), and a colour
 // function whose domain [0, 1] the stops span in order (7.10.4: the bounds
 // of a stitching function increase within its domain). An axial shading
-// with coincident ends and a radial one with equal circles leave the
-// colour undefined, and a singular transform paints a line, so all three
-// are refused.
+// with coincident ends, a conic one without a direction and a radial one
+// with equal circles leave the colour undefined, and a singular transform
+// paints a line, so all four are refused.
 func checkShading(sh *Shading) error {
-	if sh.Kind > Radial {
+	if sh.Kind > Conic {
 		return fmt.Errorf("%w: kind %d", ErrInvalidShading, sh.Kind)
 	}
 	m := shadingMatrix(sh)
@@ -313,9 +313,9 @@ func checkShading(sh *Shading) error {
 		return fmt.Errorf("%w: transform %v is not invertible", ErrInvalidShading, m)
 	}
 	switch sh.Kind {
-	case Axial:
+	case Axial, Conic:
 		if sh.From == sh.To {
-			return fmt.Errorf("%w: axial shading from and to %v", ErrInvalidShading, sh.From)
+			return fmt.Errorf("%w: shading from and to %v", ErrInvalidShading, sh.From)
 		}
 	case Radial:
 		if sh.FromRadius < 0 || sh.ToRadius < 0 || (sh.FromRadius == 0 && sh.ToRadius == 0) {

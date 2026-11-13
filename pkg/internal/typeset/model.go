@@ -284,6 +284,12 @@ const (
 	// of centre From and radius FromRadius into the circle of centre To
 	// and radius ToRadius (ISO 32000-1, 8.7.4.5.4, type 3 shading).
 	Radial
+	// Conic varies the colour with the angle about From: offset 0 on the
+	// ray from From through To, the offset growing clockwise on the page
+	// to 1 a full turn round. It is a function-based shading (ISO
+	// 32000-1, 8.7.4.5.2, type 1) whose PostScript calculator function
+	// (7.10.5) takes the angle with atan; the radii are ignored.
+	Conic
 )
 
 // ColorStop is one colour of a [Shading] at one point of its parameter.
@@ -295,7 +301,7 @@ type ColorStop struct {
 	Color Color
 }
 
-// Shading is a smooth colour transition, axial or radial. Between two
+// Shading is a smooth colour transition, axial, radial or conic. Between two
 // stops every channel, alpha included, interpolates linearly and
 // independently: the colour is not premultiplied by its alpha, so a
 // converter whose source interpolates premultiplied colours adds stops to
