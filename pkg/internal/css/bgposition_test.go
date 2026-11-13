@@ -1,6 +1,9 @@
 package css
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestBackgroundPosition_Axes holds background-position to CSS
 // Backgrounds 3, 3.6 and CSS Backgrounds 4, 2.4: an offset from the right
@@ -47,6 +50,47 @@ func TestBackgroundPosition_Axes(t *testing.T) {
 				t.Errorf("%s = %+v, want %+v", tt.decl, got, tt.want)
 				break
 			}
+		}
+	}
+}
+
+// TestPosition_ThreeValues holds that a <position> (CSS Values 4, 9.1)
+// takes one, two or four values, and a <bg-position> (CSS Backgrounds 3,
+// 3.6) three as well: mask-position and object-position refuse the
+// three-value forms background-position takes.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) answers
+//     CSS.supports false for mask-position, object-position, a radial
+//     gradient's and a circle()'s position and transform-origin of right
+//     10px top, and for mask-position: center right 10px and left 10px
+//     top; true for background-position: right 10px top and for every
+//     four-value form.
+func TestPosition_ThreeValues(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		decl string
+		ok   bool
+	}{
+		{"mask-position: right 10px bottom 20px", true},
+		{"mask-position: right 10px top", false},
+		{"mask-position: center right 10px", false},
+		{"mask-position: left 10px top", false},
+		{"object-position: right 10px top", false},
+		{"object-position: right 10px bottom 20px", true},
+	} {
+		s := styleOf(t, "mask-image: linear-gradient(red, blue); "+tt.decl)
+		var got [2]Dimension
+		if strings.HasPrefix(tt.decl, "mask") {
+			if l := s.MaskLayers(); len(l) > 0 {
+				got = l[0].Position
+			}
+		} else {
+			got = s.ObjectPosition
+		}
+		if set := got[0].Kind == Calc; set != tt.ok {
+			t.Errorf("%s: parsed %v, want %v (%+v)", tt.decl, set, tt.ok, got)
 		}
 	}
 }

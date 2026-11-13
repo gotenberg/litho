@@ -99,7 +99,7 @@ func TestOutline_Shorthand(t *testing.T) {
 
 func TestObjectFit_Parse(t *testing.T) {
 	t.Parallel()
-	s := styleOf(t, "object-fit: scale-down; object-position: right 25% top")
+	s := styleOf(t, "object-fit: scale-down; object-position: right 25% top 0%")
 	if s.ObjectFit != FitScaleDown || s.ObjectPosition != [2]Dimension{{Kind: Percent, Value: 0.75}, {Kind: Percent}} {
 		t.Errorf("object-fit %v, position %+v", s.ObjectFit, s.ObjectPosition)
 	}

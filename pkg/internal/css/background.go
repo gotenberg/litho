@@ -151,10 +151,21 @@ func isPositionToken(t token) bool {
 	return ok
 }
 
-// parsePosition parses a <bg-position> (CSS Backgrounds 3, 3.6) into the
-// horizontal and vertical offsets. An offset from the right or bottom
-// edge, "right 10px", is calc(100% - 10px).
+// parsePosition parses a <position> (CSS Values 4, 9.1) into the
+// horizontal and vertical offsets: one, two or four values. An offset from
+// the right or bottom edge, "right 10px", is calc(100% - 10px). Chromium
+// refuses the three-value forms wherever <position> is the grammar
+// (mask-position, object-position, gradients, basic shapes, origins).
 func parsePosition(v []token) ([2]length, bool) {
+	if len(v) == 3 {
+		return [2]length{}, false
+	}
+	return parseBgPos(v)
+}
+
+// parseBgPos parses a <bg-position> (CSS Backgrounds 3, 3.6), which
+// takes the three-value forms too.
+func parseBgPos(v []token) ([2]length, bool) {
 	kw := func(t token) string {
 		if t.typ == tIdent {
 			return lower(t.value)
@@ -260,7 +271,7 @@ func bgPositionShorthand() shorthandDef {
 			if !ok {
 				return nil, false
 			}
-			p, ok := parsePosition(l)
+			p, ok := parseBgPos(l)
 			if !ok {
 				return nil, false
 			}
@@ -443,7 +454,7 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 				var p [2]length
 				ok := false
 				for ; j > i; j-- {
-					if p, ok = parsePosition(layer[i:j]); ok {
+					if p, ok = parseBgPos(layer[i:j]); ok {
 						break
 					}
 				}

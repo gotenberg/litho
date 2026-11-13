@@ -8,7 +8,7 @@ import (
 func TestMask_Longhands(t *testing.T) {
 	t.Parallel()
 	s := styleOf(t, "mask-image: url(a.png), linear-gradient(red, blue), none; mask-mode: luminance, alpha; mask-repeat: no-repeat;"+
-		"mask-position: right 10% bottom; mask-size: 10px 20%, contain; mask-origin: content-box; mask-clip: no-clip, padding-box; mask-composite: intersect")
+		"mask-position: right 10% bottom 0%; mask-size: 10px 20%, contain; mask-origin: content-box; mask-clip: no-clip, padding-box; mask-composite: intersect")
 	l := s.MaskLayers()
 	if len(l) != 3 {
 		t.Fatalf("%d layers", len(l))
