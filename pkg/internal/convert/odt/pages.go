@@ -2,6 +2,7 @@ package odt
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -249,6 +250,12 @@ func (f *pageFlow) buildGeom(mp *odf.MasterPage, left, first, hf bool) *pageGeom
 	pp := pl.Page
 	if va := pp.Get("style:vertical-align"); va != "" && va != "top" && va != "auto" {
 		f.b.warn("page-vertical-align", warn.PageSetupUnsupported, warn.Approximated, "a page's text is laid out from the top, not "+va)
+	}
+	if wm := pp.Get("style:writing-mode"); strings.HasPrefix(wm, "tb") {
+		// The layout engine turns a vertical flow a quarter turn, its
+		// glyphs sideways and unpaginated; a page of vertical text is laid
+		// out horizontally instead (ODF 1.3, Part 3, 20.394).
+		f.b.warn("page-writing-mode", warn.PageSetupUnsupported, warn.Approximated, "a page of vertical writing mode "+wm+" is laid out horizontally")
 	}
 	g := &pageGeom{format: pp.Get("style:num-format"), mirrored: pl.PageUsage == "mirrored"}
 	if _, ok := pp.Lookup("style:num-format"); !ok {

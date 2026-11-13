@@ -96,3 +96,17 @@ func TestRuby(t *testing.T) {
 		}
 	}
 }
+
+// TestVerticalPageWarns checks that a page layout of vertical writing
+// mode, laid out horizontally, is reported.
+func TestVerticalPageWarns(t *testing.T) {
+	pl := `<style:page-layout style:name="pv"><style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" style:writing-mode="tb-rl"/></style:page-layout>`
+	d := doc{autoStyles: pl, masters: `<style:master-page style:name="Standard" style:page-layout-name="pv"/>`, body: `<text:p>縦書き</text:p>`}
+	out := convertDoc(t, d.pack(t), office.Options{})
+	for _, w := range out.Warnings {
+		if strings.Contains(w.Message, "vertical writing mode") {
+			return
+		}
+	}
+	t.Errorf("warnings = %+v, want the vertical page reported", out.Warnings)
+}
