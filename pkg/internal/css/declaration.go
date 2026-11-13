@@ -127,9 +127,7 @@ func (c *declCtx) warn(code warn.Code, effect warn.Effect, format string, args .
 // outline face draws them, in the text's colour, whatever the palette.
 var silentProperties = map[string]bool{
 	"cursor": true, "pointer-events": true, "user-select": true, "touch-action": true,
-	"transition": true, "transition-property": true, "transition-duration": true,
-	"transition-timing-function": true, "transition-delay": true, "will-change": true,
-	"resize": true, "scroll-behavior": true, "caret-color": true, "accent-color": true,
+	"will-change": true, "resize": true, "scroll-behavior": true, "caret-color": true, "accent-color": true,
 	"overscroll-behavior": true, "scrollbar-width": true, "scrollbar-color": true,
 	"scrollbar-gutter": true, "print-color-adjust": true, "color-adjust": true,
 	"text-rendering": true, "font-smooth": true, "speak": true, "zoom": true,

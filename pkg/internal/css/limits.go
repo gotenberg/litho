@@ -68,7 +68,8 @@ const maxVarTokens = 1 << 14
 
 // maxComputeSteps caps the work of one Compute call: 2^27 steps, a step
 // being one compound selector tested against one element, one custom
-// property copied or one token substituted. A document of 50 000 elements
+// property copied, one token substituted, one keyframe block an animated
+// property is looked up in or one longhand computed for an animation. A document of 50 000 elements
 // against 30 000 indexed rules takes a few million. Anti-DoS guard, not
 // spec-mandated: past it Compute returns [ErrTooComplex].
 const maxComputeSteps = 1 << 27

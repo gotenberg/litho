@@ -45,7 +45,9 @@ type Stylesheet struct {
 	featureValues []featureValuesRule
 	// counterStyles are the @counter-style rules, in order.
 	counterStyles []*counterStyleRule
-	warns         []Warning
+	// keyframes are the @keyframes rules, in order.
+	keyframes []*keyframesRule
+	warns     []Warning
 }
 
 // Warnings returns what parsing dropped or approximated, deduplicated and
@@ -144,9 +146,11 @@ func (sp *sheetParser) flush(c *declCtx) {
 }
 
 // ignoredAtRules are at-rules litho drops with their blocks without a
-// warning: they style nothing a static page shows.
+// warning: they style nothing a static page shows. @starting-style gives
+// the style a transition starts from on an element's first style (CSS
+// Transitions 2, 3.3), and a converted document runs no transition.
 var ignoredAtRules = map[string]bool{
-	"keyframes": true, "-webkit-keyframes": true, "-moz-keyframes": true, "-o-keyframes": true,
+	"-moz-keyframes": true, "-o-keyframes": true, "starting-style": true,
 	"font-palette-values": true,
 	"property":            true, "viewport": true, "-ms-viewport": true, "view-transition": true,
 	"namespace": true, "charset": true,
@@ -226,6 +230,16 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 			}
 			if f, ok := parseFontFace(it.block, c); ok && sp.count() {
 				sp.sheet.faces = append(sp.sheet.faces, fontFaceRule{face: f, cond: cond})
+			}
+		case "keyframes", "-webkit-keyframes":
+			// The Compatibility Standard defines @-webkit-keyframes as
+			// @keyframes; Chromium drops the -moz- and -o- names.
+			if !it.hasBlock {
+				return
+			}
+			if r, ok := parseKeyframesRule(it.prelude, it.block, c); ok && sp.count() {
+				r.cond = cond
+				sp.sheet.keyframes = append(sp.sheet.keyframes, r)
 			}
 		case "font-feature-values":
 			if !it.hasBlock || !sp.count() {

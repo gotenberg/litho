@@ -1029,6 +1029,11 @@ type Style struct {
 	// ContainIntrinsic is the size a box under size containment takes in
 	// place of its content's (CSS Sizing 4, 5.1), nil for none.
 	ContainIntrinsic *IntrinsicSize
+	// Animation holds the animation longhands and the timeline names the
+	// element declares (CSS Animations 1, 4), nil while every one is
+	// initial. The cascade applies the animations: the other fields hold
+	// their animated values.
+	Animation *Animations
 
 	// Margin takes Auto, Points or Percent a side; Padding takes Points or
 	// Percent. Both are indexed by [Side].

@@ -19,7 +19,11 @@
 //     specificity and order (CSS Cascade 4), adds the style attribute and
 //     the presentational hints, substitutes custom properties (CSS
 //     Variables 1) and computes every longhand into points, as [Style]
-//     promises.
+//     promises. It applies the @keyframes animations at one moment of the
+//     document timeline, time zero unless [ComputeOptions.AnimationTime]
+//     asks for their end (CSS Animations 1 and 2, Web Animations 1).
+//     Transitions parse and never run: a converted document's style
+//     changes once, when it loads.
 //
 // [HTMLUserAgent] is the user agent stylesheet for HTML and [HTMLHints]
 // the presentational hints of HTML attributes.

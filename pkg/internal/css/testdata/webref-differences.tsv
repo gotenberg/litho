@@ -1,4 +1,5 @@
 # Where the property table and @webref/css differ.
+initial	animation-delay	CSS Animations 2 (editor's draft) makes animation-delay a shorthand of animation-delay-start and -end, which webref reads as its initial value; Chromium 156 parses neither longhand (CSS.supports false) and animation-delay as a longhand of initial 0s, and litho follows it
 initial	block-ellipsis	open: CSS Overflow 4 (editor's draft) gives no-ellipsis; litho parses an older draft's none | auto. Chromium 156 has no such property (CSS.supports false), so the standard decides
 initial	border-bottom-left-radius	open: 0 computes to Points 0 where the initial value is held as Auto; both draw a square corner
 initial	border-bottom-right-radius	open: 0 computes to Points 0 where the initial value is held as Auto; both draw a square corner

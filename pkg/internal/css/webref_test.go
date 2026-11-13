@@ -32,6 +32,7 @@ type webrefProperty struct {
 	Initial       string `json:"initial,omitempty"`
 	Inherited     string `json:"inherited,omitempty"`
 	LegacyAliasOf string `json:"legacyAliasOf,omitempty"`
+	AnimationType string `json:"animationType,omitempty"`
 }
 
 // webrefExtract writes the properties of css.json in tgz, the @webref/css
@@ -118,6 +119,27 @@ func jsonString(t *testing.T, s string) string {
 		t.Fatal(err)
 	}
 	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// webrefAnimationTypes returns the animation type of each property of
+// webrefFile.
+func webrefAnimationTypes(t *testing.T) map[string]string {
+	t.Helper()
+	data, err := os.ReadFile(webrefFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ref struct {
+		Properties []webrefProperty `json:"properties"`
+	}
+	if err := json.Unmarshal(data, &ref); err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]string{}
+	for _, p := range ref.Properties {
+		out[p.Name] = p.AnimationType
+	}
+	return out
 }
 
 // TestPropertyTableAgainstWebref holds litho's property table to the

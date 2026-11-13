@@ -132,10 +132,10 @@ func TestLegacyAliases_ParseAsTheirProperty(t *testing.T) {
 func TestLegacyAliases_WarnAsTheirProperty(t *testing.T) {
 	t.Parallel()
 	c := compute(t, `<body><div id=t></div></body>`,
-		`#t { -webkit-animation: x 1s; -webkit-transition: opacity 1s; -webkit-unknown-thing: 1 }`)
+		`#t { -webkit-perspective: 10px; -webkit-transition: opacity 1s; -webkit-unknown-thing: 1 }`)
 	ws := c.c.Warnings()
-	if !hasWarning(ws, warn.CSSUnsupported, `"-webkit-animation"`) {
-		t.Errorf("no warning for -webkit-animation: %v", ws)
+	if !hasWarning(ws, warn.CSSUnsupported, `"-webkit-perspective"`) {
+		t.Errorf("no warning for -webkit-perspective: %v", ws)
 	}
 	if hasWarning(ws, warn.CSSUnsupported, "transition") || hasWarning(ws, warn.CSSUnsupported, "unknown-thing") {
 		t.Errorf("unexpected warning: %v", ws)

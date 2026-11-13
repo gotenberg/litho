@@ -76,6 +76,9 @@ type Resolver struct {
 	// counters holds the counter styles, the predefined ones and those
 	// of the @counter-style rules whose media conditions match.
 	counters *CounterStyles
+	// keyframes holds the @keyframes rules whose media conditions match,
+	// the last of each name.
+	keyframes keyframesAt
 }
 
 type resolvedRule struct {
@@ -200,6 +203,14 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 				r.faces = append(r.faces, f.face)
 			}
 		}
+		for _, k := range sh.Sheet.keyframes {
+			if k.cond.matches(media, cache) {
+				if r.keyframes == nil {
+					r.keyframes = keyframesAt{}
+				}
+				r.keyframes[k.name] = k
+			}
+		}
 		for i := range sh.Sheet.featureValues {
 			if f := &sh.Sheet.featureValues[i]; f.cond.matches(media, cache) {
 				r.addFeatureValues(f.values)
@@ -293,6 +304,12 @@ type ComputeOptions struct {
 	// 6.1.1). nil, or a measure that is not positive, takes the fallback
 	// [FontUnits] names.
 	FontUnits func(st *Style) FontUnits
+	// AnimationTime is the moment the animations are computed at,
+	// [AnimationsAtStart] by default.
+	AnimationTime AnimationTime
+	// maxSteps lowers the step budget below maxComputeSteps, for tests;
+	// zero keeps it.
+	maxSteps int
 }
 
 // Computed holds the computed style of every element of a tree. It is
@@ -556,6 +573,11 @@ type computeState struct {
 	cands   []cand
 	matched []int
 	classes []string
+	// cur is the style of node before its animations, while animate runs.
+	cur *Style
+	// pend is the buffer of the longhands an element's var() values set,
+	// reused from one cascade to the next.
+	pend []pendingAt
 	// letterCands and lineCands hold the declarations of each
 	// ::first-letter and ::first-line, for [Computed.FirstLetter] and
 	// [Computed.FirstLine], nil for none.
@@ -627,7 +649,7 @@ var computeOrder = func() []propID {
 // maxComputeSteps steps, and ctx's error when it is done.
 func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOptions) (*Computed, error) {
 	cs := &computeState{
-		r: r, opts: opts, m: newMatcher(opts.Lang, maxComputeSteps), mem: limits.BudgetFrom(ctx), styles: NewStyles(),
+		r: r, opts: opts, m: newMatcher(opts.Lang, cmp.Or(opts.maxSteps, maxComputeSteps)), mem: limits.BudgetFrom(ctx), styles: NewStyles(),
 		out: map[*html.Node]*Style{}, pseudo: map[pseudoKey]*Style{}, vars: map[*html.Node]map[string][]token{}, anc: &ancestorFilter{},
 		stamp: make([]int, len(r.rules)), spec: make([]uint32, len(r.rules)),
 	}
@@ -826,6 +848,9 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		return cmp.Compare(a.idx, b.idx)
 	})
 	var winners [numProps]any
+	// imp records the longhands an !important declaration sets, which an
+	// animation does not override (CSS Cascade 4, 6.2).
+	var imp [numProps]bool
 	var customNames []string
 	custom := map[string][]token{}
 	// The flow-relative properties take their sides from the direction
@@ -866,10 +891,12 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		case len(c.d.pending) > 0:
 			for _, id := range longhandsOf(c.d.Property) {
 				winners[side(c.d, id)] = pendingRef{c.d}
+				imp[side(c.d, id)] = c.d.Important
 			}
 		default:
 			for _, e := range c.d.entries {
 				winners[side(c.d, e.id)] = e.v
+				imp[side(c.d, e.id)] = c.d.Important
 			}
 		}
 		if originOf(c.rank) == User && !c.d.isCustom {
@@ -898,6 +925,7 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		vars = cs.resolveCustom(customNames, custom, parentVars)
 	}
 	expanded := map[*Declaration][]entry{}
+	pend := cs.pend[:0]
 	for id := range winners {
 		p, ok := winners[id].(pendingRef)
 		if !ok {
@@ -909,11 +937,17 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 			expanded[p.d] = es
 		}
 		winners[id] = wideUnset
+		src := propID(id) // fits propID: id < numProps
 		for _, e := range es {
 			if int(side(p.d, e.id)) == id {
-				winners[id] = e.v
+				winners[id], src = e.v, e.id
 			}
 		}
+		pend = append(pend, pendingAt{id: propID(id), src: src, d: p.d}) // fits propID: id < numProps
+	}
+	cs.pend = pend[:0]
+	if only == nil && cs.animates(winners[pAnimationName], parentStyle) {
+		vars = cs.animate(&winners, &imp, pend, cands, parentStyle, parentVars, vars, isRoot)
 	}
 	return cs.computeStyle(&winners, parentStyle, isRoot), vars
 }
@@ -996,6 +1030,21 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 // styled alike share one [Style].
 func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRoot bool) *Style {
 	st := &cs.scratch
+	cs.computeInto(st, winners, parent, isRoot)
+	shared, adopted := cs.styles.shareCopy(st)
+	if adopted {
+		// A refusal sticks and cancels the conversion, which the
+		// cascade's next context check stops at: a style has no error
+		// to return. A style equal to one held costs nothing more.
+		cs.mem.Take(1, styleCost, "computed styles")
+	}
+	return shared
+}
+
+// computeInto computes into st every longhand from its cascaded value in
+// winners, as [computeState.computeStyle] does, without sharing the
+// result.
+func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *Style, isRoot bool) {
 	*st = *parent
 	s := &cs.sty
 	*s = styler{parent: parent, root: cs.root}
@@ -1039,7 +1088,9 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 				}
 			}
 		}
-		if v != nil {
+		if a, ok := v.(animatedValue); ok {
+			def.copyFrom(st, a.st)
+		} else if v != nil {
 			def.compute(s, st, v)
 		}
 		switch id { //nolint:exhaustive // only the font longhands change the length context
@@ -1088,14 +1139,6 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 		// container or annotation are inlinified.
 		st.Display = inlinify(st.Display)
 	}
-	shared, adopted := cs.styles.shareCopy(st)
-	if adopted {
-		// A refusal sticks and cancels the conversion, which the
-		// cascade's next context check stops at: a style has no error
-		// to return. A style equal to one held costs nothing more.
-		cs.mem.Take(1, styleCost, "computed styles")
-	}
-	return shared
 }
 
 // noContentsElements are the HTML elements display: contents computes to

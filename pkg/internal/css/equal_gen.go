@@ -138,6 +138,9 @@ func equalStyle(a, b *Style) bool {
 	if a.ContainIntrinsic != b.ContainIntrinsic {
 		return false
 	}
+	if a.Animation != b.Animation {
+		return false
+	}
 	for i1 := range a.Margin {
 		if !equalDimension(&a.Margin[i1], &b.Margin[i1]) {
 			return false
@@ -751,6 +754,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = hashDimension(h, &x.Left)
 	h = hashAspectRatio(h, &x.AspectRatio)
 	h = mixBool(h, x.ContainIntrinsic != nil)
+	h = mixBool(h, x.Animation != nil)
 	for i1 := range x.Margin {
 		h = hashDimension(h, &x.Margin[i1])
 	}

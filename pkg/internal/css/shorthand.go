@@ -221,6 +221,7 @@ func initShorthands() {
 	maps.Copy(shorthands, logicalShorthands())
 	maps.Copy(shorthands, textFontShorthands())
 	maps.Copy(shorthands, multicolShorthands())
+	maps.Copy(shorthands, animationShorthands())
 	// word-break is a shorthand for its legacy break-word value: the name
 	// resolves through the shorthand alone.
 	delete(longhandByName, "word-break")

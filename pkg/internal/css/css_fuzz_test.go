@@ -94,6 +94,17 @@ func FuzzSelector(f *testing.F) {
 	})
 }
 
+// fuzzAnimationDoc and fuzzAnimationCSS seed the @keyframes rules, the
+// animation, transition and timeline properties, and the interpolation of
+// the animated values.
+const fuzzAnimationDoc = `<div id=a><p id=b>x</p><p id=c>y</p></div>`
+
+const fuzzAnimationCSS = `@keyframes k { from { opacity: 0; --c: red; transform: translateX(1em) } 40%, 60% { width: 10%; color: var(--c); animation-timing-function: steps(3, jump-both) } to { visibility: hidden; display: none } }
+@-webkit-keyframes "s t" { 50% { margin: 1px 2% 3em; background-color: rgb(1 2 3 / 50%); border-top-left-radius: 1px 2% } }
+#a { scroll-timeline: --s x; view-timeline: --v inline 1px auto; timeline-scope: --s }
+#b { animation: k 2s linear(0, .3 20% 40%, 1) -1s infinite alternate both, "s t" .5s cubic-bezier(.1, 3, .9, -2) 3; animation-timeline: auto, --s; animation-composition: add }
+#c { animation: k calc(1s / 3) -9e9s 2.5 reverse backwards paused; animation-range: entry 10% exit; transition: all 1s allow-discrete, color .2s }`
+
 // FuzzCompute splits its input at the first NUL byte into an HTML
 // document and a stylesheet, and computes the styles.
 func FuzzCompute(f *testing.F) {
@@ -102,6 +113,8 @@ func FuzzCompute(f *testing.F) {
 	f.Add([]byte("<p style='--a: var(--a); width: var(--a)'>x\x00p { color: var(--b, red) }"))
 	f.Add([]byte("<span id=a>x</span>\x00#a { position: absolute; z-index: 2; transform: scale(2) translateX(1em); transform-origin: 1px 2px 3px }"))
 	f.Add([]byte("<p id=a>x</p>\x00#a { width: min(100%, round(10em, 3vi)); margin: mod(5%, 3%) calc(1px / 0); font-size: clamp(1rem, 2cap, 3ric) }"))
+	f.Add([]byte(fuzzAnimationDoc + "\x00" + fuzzAnimationCSS))
+	f.Add([]byte(fuzzAnimationDoc + "\x00" + fuzzAnimationCSS[:len(fuzzAnimationCSS)/2]))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		doc, sheet, _ := bytes.Cut(data, []byte{0})
 		root, err := html.Parse(bytes.NewReader(doc))

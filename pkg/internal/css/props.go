@@ -229,6 +229,29 @@ const (
 	pContainIntrinsicWidth
 	pContainIntrinsicHeight
 	pBgPositionY
+	pAnimationName
+	pAnimationDuration
+	pAnimationTimingFunction
+	pAnimationIterationCount
+	pAnimationDirection
+	pAnimationFillMode
+	pAnimationPlayState
+	pAnimationDelay
+	pAnimationComposition
+	pAnimationTimeline
+	pAnimationRangeStart
+	pAnimationRangeEnd
+	pScrollTimelineName
+	pViewTimelineName
+	pTransitionProperty
+	pTransitionDuration
+	pTransitionTimingFunction
+	pTransitionDelay
+	pTransitionBehavior
+	pScrollTimelineAxis
+	pViewTimelineAxis
+	pViewTimelineInset
+	pTimelineScope
 	numProps
 )
 
@@ -249,6 +272,9 @@ type propDef struct {
 	// computes it instead of copying [Initial]'s field, for an initial
 	// value that depends on other properties (medium, currentColor).
 	initial any
+	// interp interpolates the longhand's computed values, nil for a
+	// longhand litho animates in discrete steps.
+	interp interpFn
 }
 
 // styler computes one element's style.
@@ -1017,6 +1043,15 @@ func init() {
 	props[pClip] = clipProp()
 	for id, def := range maskProps() {
 		props[id] = def
+	}
+	for id, def := range animationProps() {
+		props[id] = def
+	}
+	for id, def := range motionParsedProps() {
+		props[id] = def
+	}
+	for id, f := range interpolators() {
+		props[id].interp = f
 	}
 	longhandByName = map[string]propID{}
 	for i := range props {
