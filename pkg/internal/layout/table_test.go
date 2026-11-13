@@ -99,6 +99,7 @@ func TestTable_ColumnWidths(t *testing.T) {
 		{"empty column of a width kept", table(w(100), col(nil), col(w(20)), tr(nil, td(nil, "a"))), []float64{80, 20}, 100},
 		{"fixed layout", table(mods(width(100), fixedLayout), col(w(20)), tr(nil, td(nil, "aaaaaaaa"), td(nil, ""), td(nil, ""))), []float64{20, 40, 40}, 100},
 		{"fixed layout first row", table(mods(width(100), fixedLayout), tr(nil, td(nil, ""), td(w(10), ""))), []float64{90, 10}, 100},
+		{"fixed layout calc() cell width as auto", table(mods(width(100), fixedLayout), tr(nil, td(mods(func(s *css.Style) { s.Width = css.Dimension{Kind: css.Calc, Value: px(1), Fraction: 0.5} }), ""), td(w(10), ""))), []float64{90, 10}, 100},
 		{"max-width", table(mods(func(s *css.Style) { s.MaxWidth = css.Pts(px(30)) }), tr(nil, td(nil, "a a a a"))), []float64{30}, 30},
 		{"min-width", table(mods(func(s *css.Style) { s.MinWidth = css.Pts(px(80)) }), tr(nil, td(nil, "a"))), []float64{80}, 80},
 		{"border-box", table(mods(width(50), padding(5), func(s *css.Style) { s.BoxSizing = css.BorderBox }), tr(nil, td(nil, "a"))), []float64{40}, 50},

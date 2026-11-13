@@ -556,7 +556,14 @@ func autoWidths(cm []colMeasure, avail float64) []float64 {
 // a column's width, else
 // the width of the first row's cell in it divided over the columns it
 // spans; the other columns share what is left equally, and when every
-// column sets its width the excess spreads in proportion.
+// column sets its width the excess spreads in proportion. A cell width
+// that is a calc() holding a percentage counts as auto.
+//
+// # Corpus evidence
+//
+//   - wpt: css-values/calc-width-table-fixed-1: Chromium 156's screenshot
+//     draws a first-row cell of width calc(50% + 1px) in a 500px fixed
+//     table exactly as one of width auto.
 func (e *engine) fixedWidths(td *tableData, avail float64) []float64 {
 	nc := td.nCols
 	w := make([]float64, nc)
@@ -577,7 +584,10 @@ func (e *engine) fixedWidths(td *tableData, avail float64) []float64 {
 	}
 	for _, c := range td.cells {
 		cd := c.cell
-		if cd.row != 0 || c.st.Width.Kind == css.Auto {
+		if cd.row != 0 || c.st.Width.Kind == css.Auto || c.st.Width.Kind == css.Calc {
+			// A width mixing a length and a percentage sizes its column
+			// as auto, as Chromium lays it out, where CSS Tables 3,
+			// 3.9.3.1 counts it as two columns.
 			continue
 		}
 		td.cellEdges(c, avail)
