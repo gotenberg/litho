@@ -71,7 +71,7 @@ func (s *inlineState) emphasisExtent(it *lineItem) (float64, bool, bool) {
 	if m == nil {
 		return 0, false, false
 	}
-	em := s.e.faceMetrics(it.box.st)
+	em := s.e.faceMetrics(it.box.st, it.box.lang)
 	if it.box.st.TextEmphasisPosition == css.EmphasisUnder {
 		return em.EmDescent + m.emAscent + m.emDescent, false, true
 	}
@@ -92,7 +92,7 @@ func (e *engine) markRuns(it *lineItem) []typeset.Text {
 		return nil
 	}
 	st := it.box.st
-	em := e.faceMetrics(st)
+	em := e.faceMetrics(st, it.box.lang)
 	base := it.baseline - em.EmAscent - m.emDescent
 	if st.TextEmphasisPosition == css.EmphasisUnder {
 		base = it.baseline + em.EmDescent + m.emAscent

@@ -315,7 +315,7 @@ func (r *renderer) anchor(pieces []*piece) {
 // textStyle returns the text package style of an element styled st.
 func textStyle(st *style) text.Style {
 	return text.Style{
-		Families: text.BrowserFamilies(st.families),
+		Families: text.BrowserFamilies(st.families, ""),
 		Weight:   st.weight,
 		Italic:   st.italic,
 		Size:     min(st.fontSize, maxFontSize),

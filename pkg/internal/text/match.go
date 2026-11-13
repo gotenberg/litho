@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/go-text/typesetting/language"
+	xlanguage "golang.org/x/text/language"
 )
 
 // Slants of a face or a request, in the order CSS Fonts 4 (5.2, font-style)
@@ -368,9 +369,19 @@ func resolvedFamilies(style Style) familyLists {
 	// The key is built on the stack and looked up without a copy: a
 	// paragraph whose list was resolved before allocates nothing here.
 	// Each name is written after its length, so that no two lists, nor a
-	// list and its language, write one key.
+	// list and its language, write one key. A key under Chromium's rule
+	// starts with a letter, any other with a digit.
+	//
+	// Under Chromium's rule the language reaches the families through
+	// [BrowserFamilies] alone: a generic family keeps fontconfig's list
+	// without the Noto CJK family of the language in front.
+	chromium := style.Fallback.rule() == FallbackChromium
 	var buf [256]byte
-	kb := strconv.AppendInt(buf[:0], int64(len(style.Lang)), 10)
+	kb := buf[:0]
+	if chromium {
+		kb = append(kb, 'c')
+	}
+	kb = strconv.AppendInt(kb, int64(len(style.Lang)), 10)
 	kb = append(kb, ':')
 	kb = append(kb, style.Lang...)
 	for _, f := range style.Families {
@@ -388,6 +399,9 @@ func resolvedFamilies(style Style) familyLists {
 		}
 	}
 	region := cjkRegion(style.Lang)
+	if chromium {
+		region = ""
+	}
 	requested := slices.Clip(buildRequested(style.Families, region))
 	m := familyList{keys: requested}
 	m.addGeneric(genericSansSerif, region)
@@ -423,12 +437,22 @@ func resolvedFamilies(style Style) familyLists {
 // font, Times New Roman, the family it asks for in place of serif. So
 // Georgia alone draws with Liberation Serif, not with the sans-serif face
 // [Fonts.Match] falls back to.
-func BrowserFamilies(families []string) []string {
-	out := make([]string, 0, len(families)+2)
+//
+// In a language written in Han, Chinese, Japanese or Korean, lang selects
+// the Noto CJK family Chromium draws with in place of its settings' family
+// ([chromiumCJKFamily]), which comes before it; with lang empty, or in any
+// other language, the list is the one above. Only a style under
+// [FallbackChromium] passes a language.
+func BrowserFamilies(families []string, lang string) []string {
+	region := chromiumHanRegion(lang)
+	out := make([]string, 0, len(families)+3)
 	hasGeneric := false
 	for _, name := range families {
 		if g := genericOf(name); g != genericNone {
 			hasGeneric = true
+			if c := chromiumCJKFamily(g, region); c != "" {
+				out = append(out, c)
+			}
 			if d := browserDefaults[g]; d != "" {
 				out = append(out, d)
 			}
@@ -436,9 +460,114 @@ func BrowserFamilies(families []string) []string {
 		out = append(out, name)
 	}
 	if !hasGeneric {
+		if c := chromiumCJKFamily(genericNone, region); c != "" {
+			out = append(out, c)
+		}
 		out = append(out, browserDefaults[genericSerif], "serif")
 	}
 	return out
+}
+
+// chromiumCJKFamily returns the Noto CJK family Chromium draws the generic
+// family g with in the Han variant region (JP, SC, TC or KR; "" for none),
+// genericNone standing for its standard font, the default of a list without
+// a generic family: Noto Serif CJK for serif, Noto Sans Mono CJK JP for
+// monospace in Japanese alone, none for system-ui, and Noto Sans CJK for the
+// others. The names are those fontconfig's conf.d/70-fonts-noto-cjk.conf
+// prepends to serif, sans-serif and monospace in each language.
+//
+// CSS Fonts 4, 2.1.5 leaves the face of a generic family to the user agent
+// and lets it depend on the content language of the element, so this
+// follows Chromium's choice.
+//
+// # Corpus evidence
+//
+//   - probe, html: in the gotenberg/gotenberg:9.4.1 image, Chromium prints
+//     Latin text under lang="ja", "ko", "zh", "zh-CN", "zh-TW" and "zh-HK"
+//     in Noto Serif CJK JP, KR, SC, TC and TC for serif, in Noto Sans CJK of
+//     the same variant for sans-serif, cursive, fantasy, an unavailable
+//     family and no family, in Noto Sans Mono CJK JP for monospace under
+//     "ja" alone and DejaVu Sans Mono under the others, in Noto Sans for
+//     system-ui under each, and in Liberation Serif for serif under "en",
+//     "ja-Latn", "ko-Latn" and "zh-Latn".
+//   - wpt: css/css-content/quotes-016, quotes-025, quotes-026, quotes-027
+//     and quotes-032 set serif under lang="ja" or "zh-Hans".
+func chromiumCJKFamily(g generic, region string) string {
+	switch {
+	case region == "", g == genericSystemUI:
+		return ""
+	case g == genericMonospace:
+		if region == "JP" {
+			return cjkFamily(genericMonospace, region)
+		}
+		return ""
+	case g == genericSerif:
+		return cjkFamily(genericSerif, region)
+	}
+	return cjkFamily(genericSansSerif, region)
+}
+
+// maxHanRegions caps the languages [chromiumHanRegion] remembers. Memory
+// guard, not spec-mandated: a document names a handful of languages, and a
+// table that is full is emptied before the next one goes in.
+const maxHanRegions = 256
+
+// maxHanRegionLangBytes caps the length of a language tag
+// [chromiumHanRegion] remembers. Anti-DoS guard, not spec-mandated: the
+// table outlives the conversion, and a BCP 47 tag of real use is a few
+// dozen bytes; a longer one is resolved at each call, to the same region.
+const maxHanRegionLangBytes = 64
+
+// hanRegions holds the region of each language [chromiumHanRegion] resolved.
+var hanRegions = struct {
+	mu sync.RWMutex
+	m  map[string]string
+}{m: map[string]string{}}
+
+// chromiumHanRegion returns the Han variant Chromium picks a generic
+// family's face by for the content language lang: JP, SC, TC or KR, "" when
+// lang is not written in Han. The script decides, explicit or the likely
+// script of CLDR's likely subtags (Unicode TR35, Likely Subtags): Hans gives
+// SC, Hant TC, Jpan, Hira, Kana and Hrkt JP, Kore and Hang KR. So zh-HK
+// reads TC, as Chromium prints it, although fontconfig's
+// 70-fonts-noto-cjk.conf has a rule of its own for zh-hk.
+func chromiumHanRegion(lang string) string {
+	if lang == "" {
+		return ""
+	}
+	kept := len(lang) <= maxHanRegionLangBytes
+	if kept {
+		hanRegions.mu.RLock()
+		r, ok := hanRegions.m[lang]
+		hanRegions.mu.RUnlock()
+		if ok {
+			return r
+		}
+	}
+	r := ""
+	if tag, err := xlanguage.Parse(lang); err == nil {
+		if script, conf := tag.Script(); conf != xlanguage.No {
+			switch script.String() {
+			case "Hans":
+				r = "SC"
+			case "Hant":
+				r = "TC"
+			case "Jpan", "Hira", "Kana", "Hrkt":
+				r = "JP"
+			case "Kore", "Hang":
+				r = "KR"
+			}
+		}
+	}
+	if kept {
+		hanRegions.mu.Lock()
+		if len(hanRegions.m) >= maxHanRegions {
+			hanRegions.m = make(map[string]string, maxHanRegions/4)
+		}
+		hanRegions.m[lang] = r
+		hanRegions.mu.Unlock()
+	}
+	return r
 }
 
 // Fallback names the program whose font fallback [Fonts.Layout] follows

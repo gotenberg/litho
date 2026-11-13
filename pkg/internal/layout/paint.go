@@ -1701,7 +1701,7 @@ func (p *painter) decoGeom(it *lineItem, l *lineBox, d deco, sh *decoShadow) (de
 		// Decoration 4, 2.7 and 2.8.1).
 		pos = float64(it.descent * k)
 		if d.origin != nil {
-			pos = p.e.faceMetrics(d.origin.st).Descent
+			pos = p.e.faceMetrics(d.origin.st, d.origin.lang).Descent
 		}
 		if p.blink() {
 			pos += css.Pt
@@ -2034,8 +2034,8 @@ func (e *engine) markerLine(b *box) (float64, float64) {
 	if mst == nil {
 		mst = b.st
 	}
-	mt := e.faceMetrics(mst)
-	lh := e.lineHeight(mst)
+	mt := e.faceMetrics(mst, b.lang)
+	lh := e.lineHeight(mst, b.lang)
 	up, _ := e.leading(lh - mt.Ascent - mt.Descent)
 	above := mt.Ascent + up
 	below := lh - above
@@ -2100,7 +2100,7 @@ func (e *engine) placeMarker(b *box) {
 			}
 		}
 	}
-	mt := e.faceMetrics(mst)
+	mt := e.faceMetrics(mst, b.lang)
 	m.ascent = mt.Ascent
 	if !ok {
 		above, _ := e.markerLine(b)

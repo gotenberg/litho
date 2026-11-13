@@ -282,7 +282,7 @@ func (d *document) lineMetrics(st *css.Style) (float64, float64, float64) {
 	f := [3]float64{0.9, 0.25, 0}
 	if d.fonts != nil {
 		const size = 100
-		fc := d.fonts.Match(text.Style{Families: text.BrowserFamilies(st.FontFamilies), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: size})
+		fc := d.fonts.Match(text.Style{Families: text.BrowserFamilies(st.FontFamilies, ""), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: size})
 		if fc != nil {
 			m := fc.Metrics(size)
 			if v := (m.Ascent + m.Descent + m.LineGap) / size; v > 0.5 && v < 5 {

@@ -58,9 +58,9 @@ import (
 func (e *engine) layoutInitialLetter(f *box, cb cblock, bc *bfc, lineTop float64) int {
 	root := paragraphOf(f)
 	il := f.st.InitialLetter
-	lh := e.lineHeight(root.st)
-	rm := e.faceMetrics(root.st)
-	capP := e.capHeight(root.st)
+	lh := e.lineHeight(root.st, root.lang)
+	rm := e.faceMetrics(root.st, root.lang)
+	capP := e.capHeight(root.st, root.lang)
 	capTop := lineTop + rm.Ascent + float64((lh-rm.Ascent-rm.Descent)/2) - capP
 	capL := float64((il.Size-1)*lh) + capP
 	e.sizeInitialLetter(f, capL)
@@ -145,7 +145,8 @@ func (e *engine) initialDrop(f *box) float64 {
 	if k <= 0 {
 		return 0
 	}
-	return k * e.lineHeight(paragraphOf(f).st)
+	root := paragraphOf(f)
+	return k * e.lineHeight(root.st, root.lang)
 }
 
 // sizeInitialLetter gives the initial letter f the style it is drawn in:
@@ -161,14 +162,14 @@ func (e *engine) sizeInitialLetter(f *box, capL float64) {
 	size := e.fontSize(orig)
 	ratio := 0.0
 	if size > 0 {
-		ratio = e.capHeight(orig) / size
+		ratio = e.capHeight(orig, f.lang) / size
 	}
 	if ratio <= 0 || !numeric.PositiveFinite(capL) {
 		return
 	}
 	st := *orig
 	st.FontSize = min(capL/ratio, maxFontSize)
-	m := e.faceMetrics(&st)
+	m := e.faceMetrics(&st, f.lang)
 	st.LineHeight = css.Pts(m.Ascent + m.Descent)
 	if old, ok := e.letters[f]; ok && old.FontSize == st.FontSize {
 		return
@@ -246,13 +247,13 @@ func (e *engine) letterInk(f *box) (ink, bool) {
 // points: the font's own, else the height of its 'H' as Skia measures a
 // font that records none, else its ascent, as CSS Values 4, 6.1.1 takes
 // for the cap unit.
-func (e *engine) capHeight(st *css.Style) float64 {
-	m := e.faceMetrics(st)
+func (e *engine) capHeight(st *css.Style, lang string) float64 {
+	m := e.faceMetrics(st, lang)
 	if m.CapHeight > 0 {
 		return m.CapHeight
 	}
 	size := e.fontSize(st)
-	fc := e.fonts.Match(e.textStyle(st, ""))
+	fc := e.fonts.Match(e.textStyle(st, e.familyLang(lang)))
 	if fc == nil || size <= 0 {
 		return m.Ascent
 	}

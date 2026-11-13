@@ -31,7 +31,7 @@ func (e *engine) trimTextBox(b *box, end float64, own *bfc) float64 {
 				// font (CSS Pseudo 4, 2.1.2).
 				st = fl
 			}
-			over, _ := e.trimEdges(st)
+			over, _ := e.trimEdges(st, owner.lang)
 			if d := l.baseline - over; d > 0 {
 				b.shift(0, -d)
 				b.y, b.sy, b.anchorY = b.y+d, b.sy+d, b.anchorY+d
@@ -43,7 +43,7 @@ func (e *engine) trimTextBox(b *box, end float64, own *bfc) float64 {
 	if trim == css.TrimEnd || trim == css.TrimBoth {
 		if l, owner := edgeLine(b, true); l != nil && !l.trimmedUnder {
 			l.trimmedUnder = true
-			_, under := e.trimEdges(owner.st)
+			_, under := e.trimEdges(owner.st, owner.lang)
 			if d := l.h - l.baseline - under; d > 0 {
 				// A float after the last line is placed at the line's
 				// end, which the trim moves up, as Chromium places it.
@@ -169,14 +169,14 @@ const maxEdgeLineDepth = 256
 // font of st (CSS Inline 3, 5.2): text the font's ascent and descent, cap
 // the cap height, ex the x-height, alphabetic the baseline, ideographic
 // the em box's edges.
-func (e *engine) trimEdges(st *css.Style) (float64, float64) {
-	m := e.faceMetrics(st)
+func (e *engine) trimEdges(st *css.Style, lang string) (float64, float64) {
+	m := e.faceMetrics(st, lang)
 	var over, under float64
 	switch st.TextBoxEdge.Over {
 	case css.EdgeText:
 		over = m.Ascent
 	case css.EdgeCap:
-		over = e.capHeight(st)
+		over = e.capHeight(st, lang)
 	case css.EdgeEx:
 		over = m.XHeight
 	case css.EdgeIdeographic:

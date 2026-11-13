@@ -88,7 +88,7 @@ func TestLayout_FallbackFollowsTheJudgingEngine(t *testing.T) {
 		if fb == FallbackLibreOffice && !strings.Contains(tc.name, "rewritten") {
 			fb = LibreOfficeFallback(named)
 		}
-		s := Style{Families: BrowserFamilies(named), Fallback: fb, Lang: tc.lang, Size: 10}
+		s := Style{Families: BrowserFamilies(named, ""), Fallback: fb, Lang: tc.lang, Size: 10}
 		if got := drawnBy(t, f, "A"+string(tc.r), s); !strings.Contains(got, tc.want) {
 			t.Errorf("%s: drawn with %s, want %s", tc.name, got, tc.want)
 		}
@@ -149,7 +149,7 @@ func TestWithoutBrowserDefaultsUndoesTheInserts(t *testing.T) {
 		{[]string{"Arial", "monospace"}, []string{"Arial", "monospace"}},
 		{[]string{"Imaginary", "sans-serif"}, []string{"Imaginary", "sans-serif"}},
 	} {
-		if got := withoutBrowserDefaults(BrowserFamilies(tc.in)); !slices.Equal(got, tc.want) {
+		if got := withoutBrowserDefaults(BrowserFamilies(tc.in, "")); !slices.Equal(got, tc.want) {
 			t.Errorf("withoutBrowserDefaults(BrowserFamilies(%q)) = %q, want %q", tc.in, got, tc.want)
 		}
 	}

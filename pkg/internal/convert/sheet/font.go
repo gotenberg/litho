@@ -177,7 +177,7 @@ func (f font) textStyle(lang string, fallback text.Fallback) text.Style {
 		size *= scriptScale
 	}
 	return text.Style{
-		Families: text.BrowserFamilies(f.cssFamilies()),
+		Families: text.BrowserFamilies(f.cssFamilies(), ""),
 		Weight:   w,
 		Italic:   f.italic,
 		Size:     size,

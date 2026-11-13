@@ -212,7 +212,7 @@ func (b *builder) faceMetrics(t textState) (ascent, descent float64) {
 	}
 	const size = 100
 	ascent, descent = fallbackAscent, fallbackDescent
-	if fc := b.fonts.Match(text.Style{Families: text.BrowserFamilies(t.families()), Weight: max(t.weight, 100), Italic: t.italic, Size: size}); fc != nil {
+	if fc := b.fonts.Match(text.Style{Families: text.BrowserFamilies(t.families(), ""), Weight: max(t.weight, 100), Italic: t.italic, Size: size}); fc != nil {
 		m := fc.Metrics(size)
 		if a, d := (m.Ascent+m.LineGap)/size, m.Descent/size; a > 0 && a < 10 && d >= 0 && d < 10 {
 			ascent, descent = a, d
@@ -546,7 +546,7 @@ func (b *builder) textWidth(s string, st *css.Style) float64 {
 	if b.fonts == nil || s == "" {
 		return 0
 	}
-	ts := text.Style{Families: text.BrowserFamilies(st.FontFamilies), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: st.FontSize, Fallback: text.LibreOfficeFallback(st.FontFamilies)}
+	ts := text.Style{Families: text.BrowserFamilies(st.FontFamilies, ""), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: st.FontSize, Fallback: text.LibreOfficeFallback(st.FontFamilies)}
 	p, _, err := b.fonts.Shape(b.ctx, []text.ParagraphRun{{Text: s, Style: ts}}, text.ParagraphOptions{})
 	if err != nil || p.Len() == 0 {
 		// A label that does not shape is measured as nothing: the layout

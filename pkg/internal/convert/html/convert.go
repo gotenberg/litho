@@ -750,7 +750,7 @@ func fontUnits(ctx context.Context, fonts *text.Fonts) func(*css.Style) css.Font
 		return nil
 	}
 	return func(st *css.Style) css.FontUnits {
-		ts := text.Style{Families: text.BrowserFamilies(st.FontFamilies), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: fontUnitSize}
+		ts := text.Style{Families: text.BrowserFamilies(st.FontFamilies, ""), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: fontUnitSize}
 		fc := fonts.Match(ts)
 		if fc == nil {
 			return css.FontUnits{}

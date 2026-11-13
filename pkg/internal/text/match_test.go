@@ -102,7 +102,7 @@ func TestBrowserFamilies_ResolveAsChromium(t *testing.T) {
 		{[]string{"ui-monospace"}, []string{"ui-monospace", "Times New Roman", "serif"}},
 	} {
 		in := slices.Clone(tc.in)
-		if got := BrowserFamilies(in); !slices.Equal(got, tc.want) {
+		if got := BrowserFamilies(in, ""); !slices.Equal(got, tc.want) {
 			t.Errorf("BrowserFamilies(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 		if !slices.Equal(in, tc.in) {
@@ -135,7 +135,7 @@ func TestBrowserFamilies_ResolveAsChromium(t *testing.T) {
 		{[]string{"monospace"}, "DejaVu Sans Mono"},
 		{[]string{"system-ui"}, "DejaVu Sans"},
 	} {
-		if got := f.Match(Style{Families: BrowserFamilies(tc.families), Size: 10}).Family(); got != tc.want {
+		if got := f.Match(Style{Families: BrowserFamilies(tc.families, ""), Size: 10}).Family(); got != tc.want {
 			t.Errorf("Match(BrowserFamilies(%q)) = %s, want %s", tc.families, got, tc.want)
 		}
 	}
@@ -144,8 +144,99 @@ func TestBrowserFamilies_ResolveAsChromium(t *testing.T) {
 		fontFile{name: "a_noto_serif.ttf", data: familyFace("Noto Serif", "Regular", 400, false)},
 		fontFile{name: "b_dejavu_serif.ttf", data: familyFace("DejaVu Serif", "Regular", 400, false)},
 	)
-	if got := g.Match(Style{Families: BrowserFamilies([]string{"serif"}), Size: 10}).Family(); got != "DejaVu Serif" {
+	if got := g.Match(Style{Families: BrowserFamilies([]string{"serif"}, ""), Size: 10}).Family(); got != "DejaVu Serif" {
 		t.Errorf("serif without Liberation = %s, want DejaVu Serif", got)
+	}
+}
+
+func TestChromiumHanRegion_ReadsTheScriptOfTheLanguage(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		lang, want string
+	}{
+		{"", ""},
+		{"en", ""},
+		{"fr-CA", ""},
+		{"x-ja", ""},
+		{"ja", "JP"},
+		{"JA", "JP"},
+		{"ja-JP", "JP"},
+		{"ja_JP", "JP"},
+		{"ja-Hira", "JP"},
+		{"ja-Latn", ""},
+		{"ko", "KR"},
+		{"ko-KP", "KR"},
+		{"ko-Latn", ""},
+		{"zh", "SC"},
+		{"zh-CN", "SC"},
+		{"zh-SG", "SC"},
+		{"zh-Hans", "SC"},
+		{"zh-Hans-HK", "SC"},
+		{"zh-TW", "TC"},
+		{"zh-HK", "TC"},
+		{"zh-MO", "TC"},
+		{"zh-Hant", "TC"},
+		{"zh-Hant-CN", "TC"},
+		{"zh-Latn", ""},
+		{"yue", "TC"},
+		{"yue-Hans", "SC"},
+		{"cmn", "SC"},
+		{"wuu", "SC"},
+	} {
+		if got := chromiumHanRegion(tc.lang); got != tc.want {
+			t.Errorf("chromiumHanRegion(%q) = %q, want %q", tc.lang, got, tc.want)
+		}
+	}
+}
+
+func TestBrowserFamilies_CJKLanguageDrawsNotoCJK(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		in   []string
+		lang string
+		want []string
+	}{
+		{in: []string{"serif"}, lang: "ja", want: []string{"Noto Serif CJK JP", "Times New Roman", "serif"}},
+		{in: []string{"sans-serif"}, lang: "zh-HK", want: []string{"Noto Sans CJK TC", "Arial", "sans-serif"}},
+		{in: []string{"cursive"}, lang: "ko", want: []string{"Noto Sans CJK KR", "Comic Sans MS", "cursive"}},
+		{in: []string{"monospace"}, lang: "ja", want: []string{"Noto Sans Mono CJK JP", "monospace"}},
+		{in: []string{"monospace"}, lang: "zh-CN", want: []string{"monospace"}},
+		{in: []string{"system-ui"}, lang: "ja", want: []string{"system-ui"}},
+		{in: []string{"Georgia"}, lang: "zh", want: []string{"Georgia", "Noto Sans CJK SC", "Times New Roman", "serif"}},
+		{in: []string{"serif"}, lang: "en", want: []string{"Times New Roman", "serif"}},
+	} {
+		if got := BrowserFamilies(tc.in, tc.lang); !slices.Equal(got, tc.want) {
+			t.Errorf("BrowserFamilies(%q, %q) = %q, want %q", tc.in, tc.lang, got, tc.want)
+		}
+	}
+	f := newTestFonts(t,
+		fontFile{name: "a_dejavu_mono.ttf", data: familyFace("DejaVu Sans Mono", "Regular", 400, false)},
+		fontFile{name: "b_liberation_serif.ttf", data: familyFace("Liberation Serif", "Regular", 400, false)},
+		fontFile{name: "c_liberation_sans.ttf", data: familyFace("Liberation Sans", "Regular", 400, false)},
+		fontFile{name: "d_serif_jp.ttf", data: familyFace("Noto Serif CJK JP", "Regular", 400, false)},
+		fontFile{name: "e_sans_tc.ttf", data: familyFace("Noto Sans CJK TC", "Regular", 400, false)},
+		fontFile{name: "f_mono_kr.ttf", data: familyFace("Noto Sans Mono CJK KR", "Regular", 400, false)},
+		fontFile{name: "g_mono_jp.ttf", data: familyFace("Noto Sans Mono CJK JP", "Regular", 400, false)},
+	)
+	for _, tc := range []struct {
+		families []string
+		lang     string
+		want     string
+	}{
+		{[]string{"serif"}, "ja", "Noto Serif CJK JP"},
+		{[]string{"sans-serif"}, "zh-HK", "Noto Sans CJK TC"},
+		{[]string{"Unknown"}, "zh-TW", "Noto Sans CJK TC"},
+		{[]string{"monospace"}, "ja", "Noto Sans Mono CJK JP"},
+		// fontconfig would prepend Noto Sans Mono CJK KR; Chromium does not.
+		{[]string{"monospace"}, "ko", "DejaVu Sans Mono"},
+		{[]string{"serif"}, "en", "Liberation Serif"},
+		// No Noto Serif CJK KR: the family of a language-neutral page.
+		{[]string{"serif"}, "ko", "Liberation Serif"},
+	} {
+		s := Style{Families: BrowserFamilies(tc.families, tc.lang), Lang: tc.lang, Fallback: FallbackChromium, Size: 10}
+		if got := f.Match(s).Family(); got != tc.want {
+			t.Errorf("Match(%q in %q) = %s, want %s", tc.families, tc.lang, got, tc.want)
+		}
 	}
 }
 

@@ -80,7 +80,7 @@ func (d *document) vmlTextPath(k *ooxml.Element, st *css.Style, w, h float64) *l
 	vs := ooxml.ParseVMLStyle(attrOr(tp, "style"))
 	family := strings.Trim(strings.TrimSpace(vs["font-family"]), `"'`)
 	ts := text.Style{
-		Families: text.BrowserFamilies(d.families(runProps{fonts: fontSpec{ascii: family, hAnsi: family}})),
+		Families: text.BrowserFamilies(d.families(runProps{fonts: fontSpec{ascii: family, hAnsi: family}}), ""),
 		Size:     h,
 		Weight:   400,
 		Italic:   vs["font-style"] == "italic",

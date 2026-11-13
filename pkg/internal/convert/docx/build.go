@@ -752,7 +752,7 @@ func (d *document) naturalLine(st *css.Style) float64 {
 	if d.fonts == nil {
 		return 0
 	}
-	ts := text.Style{Families: text.BrowserFamilies(st.FontFamilies), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: st.FontSize}
+	ts := text.Style{Families: text.BrowserFamilies(st.FontFamilies, ""), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: st.FontSize}
 	p, _, err := d.fonts.Shape(d.ctx, []text.ParagraphRun{{Text: "X", Style: ts}}, text.ParagraphOptions{})
 	if err != nil || p.Len() == 0 {
 		return 0
@@ -787,7 +787,7 @@ func (d *document) textWidth(s string, st *css.Style) float64 {
 	if d.fonts == nil || s == "" {
 		return 0
 	}
-	ts := text.Style{Families: text.BrowserFamilies(st.FontFamilies), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: st.FontSize}
+	ts := text.Style{Families: text.BrowserFamilies(st.FontFamilies, ""), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: st.FontSize}
 	p, _, err := d.fonts.Shape(d.ctx, []text.ParagraphRun{{Text: s, Style: ts}}, text.ParagraphOptions{})
 	if err != nil || p.Len() == 0 {
 		return 0

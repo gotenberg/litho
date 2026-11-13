@@ -1268,8 +1268,8 @@ func contentWidth(l *lineBox) float64 {
 // of the root inline box when parent is nil.
 func (s *inlineState) newVbox(b *box, parent *vbox) *vbox {
 	e := s.e
-	m := e.faceMetrics(b.st)
-	lh := e.lineHeight(b.st)
+	m := e.faceMetrics(b.st, b.lang)
+	lh := e.lineHeight(b.st, b.lang)
 	up, down := e.leading(lh - (m.Ascent + m.Descent))
 	v := &vbox{b: b, parent: parent, above: m.Ascent + up, below: m.Descent + down, ca: m.Ascent, cd: m.Descent, size: e.fontSize(b.st), lh: lh, xh: m.XHeight}
 	if parent == nil {
@@ -1679,7 +1679,7 @@ func (s *inlineState) vertical(l *lineBox) {
 			if r := a.ruby; r != nil && r.over && a.st.VerticalAlign.Kind != css.AlignTop && a.st.VerticalAlign.Kind != css.AlignBottom {
 				// The annotation over a column takes the room above the
 				// line before it grows the line (rubyRoom).
-				shift := alignShift(a.st.VerticalAlign, parent, above, below, s.e.lineHeight(a.st))
+				shift := alignShift(a.st.VerticalAlign, parent, above, below, s.e.lineHeight(a.st, a.lang))
 				it.baseline = shift
 				it.ascent, it.descent = above, below
 				annTop = min(annTop, shift-above)
@@ -1688,7 +1688,7 @@ func (s *inlineState) vertical(l *lineBox) {
 				continue
 			}
 			av := atomicV{it: it, v: parent, above: above, below: below}
-			shift := alignShift(a.st.VerticalAlign, parent, above, below, s.e.lineHeight(a.st))
+			shift := alignShift(a.st.VerticalAlign, parent, above, below, s.e.lineHeight(a.st, a.lang))
 			if k := a.st.VerticalAlign.Kind; k == css.AlignTop || k == css.AlignBottom {
 				av.aligned = true
 				shift = parent.shift

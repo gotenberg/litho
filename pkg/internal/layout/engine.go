@@ -57,7 +57,7 @@ type engine struct {
 	// nothing moves to a next page.
 	noPaginate int
 	images     map[string]*Picture
-	metrics    map[*css.Style]text.Metrics
+	metrics    map[spaceKey]text.Metrics
 	// fallbacks holds the font fallback rule of each style, under
 	// LibreOffice's rule, nil before the first.
 	fallbacks map[*css.Style]text.Fallback
@@ -402,6 +402,17 @@ func (e *engine) fallback(st *css.Style) text.Fallback {
 	return fb
 }
 
+// familyLang returns the language the generic families of a run in
+// language lang resolve in: lang under Chromium's fallback rule, which
+// draws a generic family in the Noto CJK face of a language written in Han
+// (see [text.BrowserFamilies]), "" under the others.
+func (e *engine) familyLang(lang string) string {
+	if e.opts.Fallback != text.FallbackChromium {
+		return ""
+	}
+	return lang
+}
+
 // textStyle returns the text stack's style for st in language lang.
 func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 	c, _ := colorOf(st.Color)
@@ -420,7 +431,7 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 		oblique = min(max(st.FontObliqueAngle, -90), 90)
 	}
 	ts := text.Style{
-		Families:          text.BrowserFamilies(st.FontFamilies),
+		Families:          text.BrowserFamilies(st.FontFamilies, e.familyLang(lang)),
 		Weight:            st.FontWeight,
 		Italic:            st.FontStyle == css.FontItalic || oblique != 0,
 		Oblique:           oblique,
@@ -492,34 +503,37 @@ func autospace(st *css.Style, size float64) float64 {
 }
 
 // faceMetrics returns the vertical metrics of the first available font of
-// st (CSS 2.1, 10.8.1), 0.8 and 0.2 em when the index has no face.
-func (e *engine) faceMetrics(st *css.Style) text.Metrics {
-	if m, ok := e.metrics[st]; ok {
+// st in language lang (CSS 2.1, 10.8.1), 0.8 and 0.2 em when the index has
+// no face. The language counts where it picks the face of a generic
+// family ([engine.familyLang]).
+func (e *engine) faceMetrics(st *css.Style, lang string) text.Metrics {
+	key := spaceKey{st: st, lang: e.familyLang(lang)}
+	if m, ok := e.metrics[key]; ok {
 		return m
 	}
 	size := e.fontSize(st)
 	m := text.Metrics{Ascent: 0.8 * size, Descent: 0.2 * size, XHeight: size / 2}
-	ts := e.textStyle(st, "")
+	ts := e.textStyle(st, key.lang)
 	if fc := e.fonts.Match(ts); fc != nil && size > 0 {
 		m = fc.MetricsFor(ts)
 		if e.opts.PixelFontMetrics {
 			m = roundMetrics(m)
 		}
 	}
-	e.metrics[st] = m
+	e.metrics[key] = m
 	return m
 }
 
-// lineHeight returns the used line-height of st (CSS 2.1, 10.8.1): normal
-// is the font's ascent, descent and line gap.
-func (e *engine) lineHeight(st *css.Style) float64 {
+// lineHeight returns the used line-height of st in language lang (CSS
+// 2.1, 10.8.1): normal is the font's ascent, descent and line gap.
+func (e *engine) lineHeight(st *css.Style, lang string) float64 {
 	if st.LineHeight.Kind == css.Points {
 		return max(clamp(st.LineHeight.Value), 0)
 	}
 	if st.LineHeight.Kind == css.Number {
 		return max(clamp(st.LineHeight.Value)*e.fontSize(st), 0)
 	}
-	m := e.faceMetrics(st)
+	m := e.faceMetrics(st, lang)
 	return m.Ascent + m.Descent + max(m.LineGap, 0)
 }
 

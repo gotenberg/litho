@@ -215,7 +215,7 @@ func (e *engine) layoutRuby(a *box, lcb cblock) {
 	e.noPaginate++
 	e.layoutOwnContext(a, cblock{w: w})
 	e.noPaginate--
-	m := e.faceMetrics(a.st)
+	m := e.faceMetrics(a.st, a.lang)
 	var bl float64
 	top, bottom := r.base.y, r.base.y+r.base.h
 	if y, ok := firstBaseline(r.base); ok && len(r.base.lines) > 0 {
@@ -227,7 +227,7 @@ func (e *engine) layoutRuby(a *box, lcb cblock) {
 		}
 	} else {
 		// An empty base takes its ruby's strut.
-		lh := e.lineHeight(a.st)
+		lh := e.lineHeight(a.st, a.lang)
 		up, _ := e.leading(lh - m.Ascent - m.Descent)
 		bl = r.base.y + m.Ascent + up
 		top, bottom = r.base.y, r.base.y+lh
@@ -253,7 +253,7 @@ func (e *engine) layoutRuby(a *box, lcb cblock) {
 	}
 	overTop, underBottom := inTop, inBottom
 	if ann := r.ann; ann != nil && len(ann.lines) > 0 {
-		am := e.faceMetrics(ann.st)
+		am := e.faceMetrics(ann.st, ann.lang)
 		abl, _ := firstBaseline(ann)
 		// The ruby's ruby-position places its annotations, whatever an
 		// annotation sets, as Chromium reads it (CSS Ruby 1, 4.1 lets

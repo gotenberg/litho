@@ -45,7 +45,7 @@ func (s *inlineState) officeLine(l *lineBox) {
 	h, base := l.h, l.baseline
 	switch st.LineRule {
 	case css.LineRuleExact:
-		h = s.e.lineHeight(st)
+		h = s.e.lineHeight(st, s.root.lang)
 		base = exactAscent * h
 	case css.LineRuleMultiple:
 		f := 1.0
@@ -113,7 +113,7 @@ func (s *inlineState) officeLine(l *lineBox) {
 // and in text on a line of pictures alone (see [writerStrut]).
 func (s *inlineState) naturalExtent(l *lineBox) (above, below, text float64) {
 	st := s.root.st
-	m := s.e.faceMetrics(st)
+	m := s.e.faceMetrics(st, s.root.lang)
 	above, below = m.Ascent+max(m.LineGap, 0), m.Descent
 	textAbove, textBelow := above, below
 	runs, atomics := lineContent(l)
@@ -252,7 +252,7 @@ func (s *inlineState) dropPictures(l *lineBox) {
 	if runs || !atomics {
 		return
 	}
-	d := s.e.faceMetrics(s.root.st).Descent
+	d := s.e.faceMetrics(s.root.st, s.root.lang).Descent
 	for _, it := range l.items {
 		if it.atomic != nil {
 			it.baseline += d

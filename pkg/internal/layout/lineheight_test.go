@@ -40,6 +40,79 @@ func tallFallback(t *testing.T) *text.Fonts {
 	return f
 }
 
+// cjkSerif indexes Ahem, a face named Liberation Serif covering X with
+// an ascent of 0.9 em and a descent of 0.1 em, and one named Noto Serif
+// CJK JP covering X with an ascent of 1.1 em and a descent of 0.3 em.
+func cjkSerif(t *testing.T) *text.Fonts {
+	t.Helper()
+	dir := t.TempDir()
+	for _, face := range []struct {
+		file, ps, family string
+		ascent, descent  uint16
+	}{
+		{"serif.ttf", "LiberationSerif", "Liberation Serif", 900, 100},
+		{"cjk.ttf", "NotoSerifCJKjp-Regular", "Noto Serif CJK JP", 1100, 300},
+	} {
+		prog := fontbuild.TrueType{
+			PostScriptName: face.ps, Family: face.family, Subfamily: "Regular", NotdefAdvance: 1000, NoOS2: true,
+			Glyphs: []fontbuild.Glyph{{Name: "space", Unicode: ' ', Advance: 500, Empty: true}, {Name: "X", Unicode: 'X', Advance: 1000}},
+		}.Build()
+		n := int(binary.BigEndian.Uint16(prog[4:]))
+		for i := range n {
+			rec := prog[12+16*i:]
+			if string(rec[:4]) == "hhea" {
+				off := binary.BigEndian.Uint32(rec[8:])
+				binary.BigEndian.PutUint16(prog[off+4:], face.ascent)
+				binary.BigEndian.PutUint16(prog[off+6:], -face.descent)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(dir, face.file), prog, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f, err := text.NewFonts(context.Background(), nil, []string{"testdata", dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+// Under Chromium's fallback rule, serif in Japanese is Noto Serif CJK JP,
+// for the line's strut as for its text: line-height normal is that face's
+// 11 above the baseline and 3 below, where serif in English is Liberation
+// Serif's 9 and 1.
+func TestLineHeight_GenericFamilyInLanguage(t *testing.T) {
+	f := cjkSerif(t)
+	for _, tc := range []struct {
+		name     string
+		lang     string
+		fallback text.Fallback
+		want     float64
+	}{
+		{"chromium ja", "ja", text.FallbackChromium, px(14)},
+		{"chromium en", "en", text.FallbackChromium, px(10)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st := sty(func(s *css.Style) {
+				s.FontFamilies = []string{"serif"}
+				s.LineHeight = css.Dimension{Kind: css.Normal}
+			})
+			root := el(st, txt(st, "X"))
+			root.Lang = tc.lang
+			pb := page(200, 200)
+			e := newEngine(context.Background(), f, Options{Page: pb, Fallback: tc.fallback}, pb.Width, pb.Height)
+			rb := e.generate(doc(root))
+			e.layoutRoot(rb)
+			if e.err != nil {
+				t.Fatal(e.err)
+			}
+			if got := kid(t, rb, 0, 0).h; !near(got, tc.want) {
+				t.Errorf("line box %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestLineHeight_FallbackFace(t *testing.T) {
 	f := tallFallback(t)
 	tests := []struct {

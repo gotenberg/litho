@@ -53,10 +53,11 @@ type Style struct {
 	// With a Chinese, Japanese or Korean [Style.Lang], the Noto CJK family
 	// of the language (Noto Sans CJK JP, SC, TC, HK or KR; Noto Serif CJK
 	// for serif; Noto Sans Mono CJK for monospace) comes before the list,
-	// as fontconfig's 70-noto-cjk.conf does. Since serif lists DejaVu Serif
-	// first, it picks DejaVu Serif over Liberation Serif when both are
-	// installed; [BrowserFamilies] rewrites a list to pick the faces
-	// Chromium picks.
+	// as fontconfig's 70-noto-cjk.conf does, except under
+	// [FallbackChromium], where the list itself names the family of the
+	// language ([BrowserFamilies]). Since serif lists DejaVu Serif first,
+	// it picks DejaVu Serif over Liberation Serif when both are installed;
+	// [BrowserFamilies] rewrites a list to pick the faces Chromium picks.
 	Families []string
 	// Weight is the CSS weight, from 1 to 1000; 400 is regular and 700
 	// bold. Zero means 400; values out of range are clamped.
