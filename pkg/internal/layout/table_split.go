@@ -304,8 +304,9 @@ func (td *tableData) breakSpans(r int, cut, at float64, rowH []float64, gap floa
 		top := td.rows[cd.row].box.y
 		limit := cut - top
 		end := cd.contentEnd - c.y
-		var cands []float64
-		for _, k := range cellBreaks(c) {
+		breaks := cellBreaks(c)
+		cands := make([]float64, 0, len(breaks))
+		for _, k := range breaks {
 			cands = append(cands, k.y-c.y)
 		}
 		for _, st := range cd.struts {
