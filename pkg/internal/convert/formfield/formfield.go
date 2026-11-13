@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
@@ -189,7 +190,7 @@ func attach(res *layout.Result, c *Control, byPage map[int][]*formElem, m *types
 		} else if dx < -flowSlack || dx > flowSlack || dy < -flowSlack || dy > maxBaselineDrop {
 			continue
 		}
-		if d := math.Hypot(dx, dy); d < bestD {
+		if d := detmath.Hypot(dx, dy); d < bestD {
 			best, bestD = f, d
 		}
 	}
@@ -323,7 +324,7 @@ func locate(ctx context.Context, pages []*typeset.Page, forms []*formElem, owner
 				}
 				if f.page < 0 {
 					f.page = i
-					f.at = typeset.Point{X: t.A*at.X + t.C*at.Y + t.E, Y: t.B*at.X + t.D*at.Y + t.F}
+					f.at = typeset.Point{X: float64(t.A*at.X) + float64(t.C*at.Y) + t.E, Y: float64(t.B*at.X) + float64(t.D*at.Y) + t.F}
 				}
 			}
 		}
@@ -335,11 +336,11 @@ func locate(ctx context.Context, pages []*typeset.Page, forms []*formElem, owner
 // then returns the transform that applies a, then b.
 func then(a, b typeset.Matrix) typeset.Matrix {
 	return typeset.Matrix{
-		A: a.A*b.A + a.B*b.C,
-		B: a.A*b.B + a.B*b.D,
-		C: a.C*b.A + a.D*b.C,
-		D: a.C*b.B + a.D*b.D,
-		E: a.E*b.A + a.F*b.C + b.E,
-		F: a.E*b.B + a.F*b.D + b.F,
+		A: float64(a.A*b.A) + float64(a.B*b.C),
+		B: float64(a.A*b.B) + float64(a.B*b.D),
+		C: float64(a.C*b.A) + float64(a.D*b.C),
+		D: float64(a.C*b.B) + float64(a.D*b.D),
+		E: float64(a.E*b.A) + float64(a.F*b.C) + b.E,
+		F: float64(a.E*b.B) + float64(a.F*b.D) + b.F,
 	}
 }
