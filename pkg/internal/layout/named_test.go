@@ -244,3 +244,20 @@ func TestNamedPages_WhiteSpaceBeforeFirstBlock(t *testing.T) {
 		t.Errorf("first page %+v, %v wide, want the wide page", seen[0], res.Pages[0].Width)
 	}
 }
+
+// TestNamedPages_NotOutOfFlexOrGrid locks the start page value of a flex
+// or a grid container: its own, whatever the blocks inside its items
+// name, since its items create no class A break points (CSS Page 3, 4.1):
+// no break comes before the container, as in the web platform test
+// css/css-page/page-name-flex-004-print.
+func TestNamedPages_NotOutOfFlexOrGrid(t *testing.T) {
+	column := func(s *css.Style) { s.FlexDirection = css.FlexColumn }
+	for _, d := range []css.Display{css.Flex, css.Grid} {
+		inner := el(sty(), txt(sty(), "\n"), el(sty(height(5), named("a"))))
+		root := doc(el(sty(height(5))), el(sty(display(d), column), el(sty(), inner)), el(sty(height(5))))
+		res, seen := namedRun(t, root)
+		if len(res.Pages) != 1 || seen[0].Name != "" {
+			t.Errorf("display %v: %d pages, the first %+v, want one unnamed page", d, len(res.Pages), seen[0])
+		}
+	}
+}

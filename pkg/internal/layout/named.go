@@ -77,9 +77,11 @@ func blankInline(kids []*box, depth int) bool {
 }
 
 // flowKids returns the in-flow children of b the page property applies
-// to, nil when b lays its content out as lines or as a table.
+// to, nil when b lays its content out as lines, as a table, or as a flex
+// or grid container, whose items create no class A break points (CSS Page
+// 3, 4.1): no start or end page value propagates out of them.
 func flowKids(b *box) []*box {
-	if b.inlineKids || b.tpart != partNone && b.tpart != partWrapper {
+	if b.inlineKids || b.tpart != partNone && b.tpart != partWrapper || b.flex != nil || b.grid != nil {
 		return nil
 	}
 	return b.kids
