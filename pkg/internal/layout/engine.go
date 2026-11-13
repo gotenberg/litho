@@ -59,6 +59,8 @@ type engine struct {
 	// hyphens caches the mark a hyphenated line ends with, by the style
 	// and language of its soft hyphen.
 	hyphens map[spaceKey]*hyphenMark
+	// emMarks caches the emphasis mark of the text of a style and language.
+	emMarks map[spaceKey]*emphasisMark
 	// balance is the block whose lines text-wrap: balance narrows, while
 	// it is laid out.
 	balance balanceState

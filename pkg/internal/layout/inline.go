@@ -1461,6 +1461,16 @@ func (s *inlineState) vertical(l *lineBox) {
 			v = parent
 		}
 		it.baseline = v.shift
+		if ext, over, ok := s.emphasisExtent(it); ok && !v.inAligned && !v.aligned {
+			// Emphasis marks over the text take the room above the line
+			// as a ruby annotation does (rubyRoom); marks under it grow
+			// the line.
+			if over {
+				annTop = min(annTop, v.shift-ext)
+			} else {
+				include(v, v.shift, v.shift+ext)
+			}
+		}
 		// An empty inline box kept for its edges has no glyphs to lay out:
 		// its own box, included below, is all it adds (CSS 2.1, 10.8.1).
 		empty := it.text == nil && it.ascent == 0 && it.descent == 0

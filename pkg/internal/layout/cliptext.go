@@ -77,6 +77,12 @@ func (p *painter) textClip(b *box) *typeset.Path {
 					continue
 				}
 				addRun(it.text, l.x+it.text.Origin.X+dx+ox, l.y+it.text.Origin.Y+dy+oy)
+				// The background clips to the emphasis marks too, as
+				// Chromium clips it: they are glyphs of the text's
+				// geometry (CSS Backgrounds 4, 2.4).
+				for _, m := range p.e.markRuns(it) {
+					addRun(&m, l.x+m.Origin.X+dx+ox, l.y+m.Origin.Y+dy+oy)
+				}
 			}
 		}
 		for _, k := range c.kids {

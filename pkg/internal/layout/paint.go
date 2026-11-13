@@ -1030,6 +1030,7 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 	if c.Color.A > 0 {
 		p.emit(it.box, true, &c, top, bottom, page)
 	}
+	p.emphasisMarks(it, l, page, alpha)
 	p.textDecorations(it, l, page, alpha, css.LineThrough, nil)
 }
 
