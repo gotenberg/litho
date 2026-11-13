@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -97,19 +98,19 @@ func RegularPolygon(corners int, concave bool, sharpness float64) *shape.Custom 
 		// (1 - s%) of its length.
 		inner = 1 - clamp01(sharpness/100)
 		if corners%2 == 0 {
-			start -= step / 2
+			start -= float64(step / 2)
 		}
 	}
 	pts := make([][2]float64, n)
 	for i := range n {
-		a, r := start+float64(i)*step, 1.0
+		a, r := start+float64(float64(i)*step), 1.0
 		if concave {
-			a = start + float64(i)*step/2
+			a = start + float64(float64(i)*step/2)
 			if i%2 == 1 {
 				r = inner
 			}
 		}
-		pts[i] = [2]float64{r * math.Cos(a), r * math.Sin(a)}
+		pts[i] = [2]float64{r * detmath.Cos(a), r * detmath.Sin(a)}
 	}
 	cmds := make([]shape.Cmd, 0, n+1)
 	for i, p := range pts {
@@ -412,15 +413,15 @@ func arcCubics(x0, y0, rx, ry, rotDeg float64, large, sweep bool, x, y float64) 
 	if rx == 0 || ry == 0 {
 		return []shape.Cmd{cmdOf(shape.CmdLine, x, y)}
 	}
-	sin, cos := math.Sincos(rotDeg * math.Pi / 180)
+	sin, cos := detmath.Sincos(rotDeg * math.Pi / 180)
 	dx, dy := (x0-x)/2, (y0-y)/2
-	x1p, y1p := cos*dx+sin*dy, -sin*dx+cos*dy
+	x1p, y1p := float64(cos*dx)+float64(sin*dy), float64(-sin*dx)+float64(cos*dy)
 	if l := x1p*x1p/(rx*rx) + y1p*y1p/(ry*ry); l > 1 {
 		s := math.Sqrt(l)
 		rx, ry = rx*s, ry*s
 	}
-	num := rx*rx*ry*ry - rx*rx*y1p*y1p - ry*ry*x1p*x1p
-	den := rx*rx*y1p*y1p + ry*ry*x1p*x1p
+	num := float64(rx*rx*ry*ry) - float64(rx*rx*y1p*y1p) - float64(ry*ry*x1p*x1p)
+	den := float64(rx*rx*y1p*y1p) + float64(ry*ry*x1p*x1p)
 	co := 0.0
 	if den > 0 && num > 0 {
 		co = math.Sqrt(num / den)
@@ -429,8 +430,10 @@ func arcCubics(x0, y0, rx, ry, rotDeg float64, large, sweep bool, x, y float64) 
 		co = -co
 	}
 	cxp, cyp := co*rx*y1p/ry, -co*ry*x1p/rx
-	ccx, ccy := cos*cxp-sin*cyp+(x0+x)/2, sin*cxp+cos*cyp+(y0+y)/2
-	angle := func(ux, uy, vx, vy float64) float64 { return math.Atan2(ux*vy-uy*vx, ux*vx+uy*vy) }
+	ccx, ccy := float64(cos*cxp)-float64(sin*cyp)+float64((x0+x)/2), float64(sin*cxp)+float64(cos*cyp)+float64((y0+y)/2)
+	angle := func(ux, uy, vx, vy float64) float64 {
+		return detmath.Atan2(float64(ux*vy)-float64(uy*vx), float64(ux*vx)+float64(uy*vy))
+	}
 	t1 := angle(1, 0, (x1p-cxp)/rx, (y1p-cyp)/ry)
 	dt := angle((x1p-cxp)/rx, (y1p-cyp)/ry, (-x1p-cxp)/rx, (-y1p-cyp)/ry)
 	if !sweep && dt > 0 {
@@ -444,12 +447,12 @@ func arcCubics(x0, y0, rx, ry, rotDeg float64, large, sweep bool, x, y float64) 
 	n := int(math.Ceil(math.Abs(dt)/(math.Pi/2) - 1e-9))
 	n = max(n, 1)
 	step := dt / float64(n)
-	k := 4.0 / 3 * math.Tan(step/4)
+	k := 4.0 / 3 * detmath.Tan(step/4)
 	pt := func(t float64) (float64, float64, float64, float64) {
-		st, ct := math.Sincos(t)
+		st, ct := detmath.Sincos(t)
 		px, py := rx*ct, ry*st
 		tx, ty := -rx*st, ry*ct
-		return cos*px - sin*py + ccx, sin*px + cos*py + ccy, cos*tx - sin*ty, sin*tx + cos*ty
+		return float64(cos*px) - float64(sin*py) + ccx, float64(sin*px) + float64(cos*py) + ccy, float64(cos*tx) - float64(sin*ty), float64(sin*tx) + float64(cos*ty)
 	}
 	out := make([]shape.Cmd, 0, n)
 	t := t1
@@ -460,7 +463,7 @@ func arcCubics(x0, y0, rx, ry, rotDeg float64, large, sweep bool, x, y float64) 
 		if i == n-1 {
 			bx, by = x, y
 		}
-		out = append(out, cmdOf(shape.CmdCubic, ax+k*adx, ay+k*ady, bx-k*bdx, by-k*bdy, bx, by))
+		out = append(out, cmdOf(shape.CmdCubic, ax+float64(k*adx), ay+float64(k*ady), bx-float64(k*bdx), by-float64(k*bdy), bx, by))
 		ax, ay, adx, ady, t = bx, by, bdx, bdy, t2
 	}
 	return out
