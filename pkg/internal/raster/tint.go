@@ -33,16 +33,16 @@ func Paint(dst *image.NRGBA, m *image.Alpha, c typeset.Color) {
 	sr, sg, sb, sa := unit(c.R), unit(c.G), unit(c.B), unit(c.A)
 	for y := b.Min.Y; y < b.Max.Y; y++ {
 		for x := b.Min.X; x < b.Max.X; x++ {
-			a := float64(m.Pix[m.PixOffset(x, y)]) / 255 * sa
+			a := float64(float64(m.Pix[m.PixOffset(x, y)]) / 255 * sa)
 			if a == 0 {
 				continue
 			}
 			i := dst.PixOffset(x, y)
 			p := dst.Pix[i : i+4 : i+4]
 			da := float64(p[3]) / 255
-			oa := a + da*(1-a)
+			oa := a + float64(da*(1-a))
 			mix := func(s float64, d uint8) uint8 {
-				return byteOf((s*a + float64(d)/255*da*(1-a)) / oa * 255)
+				return byteOf((float64(s*a) + float64(float64(d)/255*da*(1-a))) / oa * 255)
 			}
 			p[0], p[1], p[2], p[3] = mix(sr, p[0]), mix(sg, p[1]), mix(sb, p[2]), byteOf(oa*255)
 		}

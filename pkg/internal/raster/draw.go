@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/image/vector"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -53,7 +54,7 @@ func Draw(m *image.Alpha, paths []Path, tr typeset.Matrix) {
 		z.Reset(b.Dx(), b.Dy())
 		z.DrawOp = draw.Over
 		if p.Width > 0 {
-			w := p.Width * math.Sqrt(math.Abs(tr.A*tr.D-tr.B*tr.C))
+			w := p.Width * math.Sqrt(math.Abs(float64(tr.A*tr.D)-float64(tr.B*tr.C)))
 			if !numeric.PositiveFinite(w) {
 				continue
 			}
@@ -91,7 +92,7 @@ func finiteOps(ops []typeset.PathOp, tr typeset.Matrix) bool {
 const maxPixelCoordinate = 1 << 22
 
 func apply(m typeset.Matrix, p typeset.Point) (float64, float64) {
-	return m.A*p.X + m.C*p.Y + m.E, m.B*p.X + m.D*p.Y + m.F
+	return float64(m.A*p.X) + float64(m.C*p.Y) + m.E, float64(m.B*p.X) + float64(m.D*p.Y) + m.F
 }
 
 // fill adds the subpaths of ops to z, each closed.
@@ -170,14 +171,14 @@ func polylines(ops []typeset.PathOp, tr typeset.Matrix) []polyline {
 			x1, y1 := apply(tr, op.P[0])
 			x2, y2 := apply(tr, op.P[1])
 			x3, y3 := apply(tr, op.P[2])
-			l := math.Hypot(x1-p0.x, y1-p0.y) + math.Hypot(x2-x1, y2-y1) + math.Hypot(x3-x2, y3-y2)
+			l := detmath.Hypot(x1-p0.x, y1-p0.y) + detmath.Hypot(x2-x1, y2-y1) + detmath.Hypot(x3-x2, y3-y2)
 			n := int(min(math.Ceil(math.Sqrt(l)), maxCurveSegments))
 			n = max(n, 1)
 			for i := 1; i <= n; i++ {
 				t := float64(i) / float64(n)
 				u := 1 - t
 				a, b, c, d := u*u*u, 3*u*u*t, 3*u*t*t, t*t*t
-				add(pt{a*p0.x + b*x1 + c*x2 + d*x3, a*p0.y + b*y1 + c*y2 + d*y3})
+				add(pt{float64(a*p0.x) + float64(b*x1) + float64(c*x2) + float64(d*x3), float64(a*p0.y) + float64(b*y1) + float64(c*y2) + float64(d*y3)})
 			}
 		case typeset.ClosePath:
 			if cur != nil {
@@ -207,11 +208,11 @@ func stroke(z *vector.Rasterizer, lines []polyline, hw float64) {
 		for i := 0; i < segs; i++ {
 			a, b := pts[i], pts[(i+1)%n]
 			dx, dy := b.x-a.x, b.y-a.y
-			d := math.Hypot(dx, dy)
+			d := detmath.Hypot(dx, dy)
 			if d == 0 {
 				continue
 			}
-			nx, ny := -dy/d*hw, dx/d*hw
+			nx, ny := float64(-dy/d*hw), float64(dx/d*hw)
 			polygon(z, []pt{{a.x + nx, a.y + ny}, {b.x + nx, b.y + ny}, {b.x - nx, b.y - ny}, {a.x - nx, a.y - ny}})
 		}
 		for _, p := range pts {
@@ -240,7 +241,7 @@ func discPoints(r float64) []pt {
 	n := int(min(max(math.Ceil(2*math.Pi*r/1.5), minDiscSides), maxDiscSides))
 	out := make([]pt, n)
 	for i := range out {
-		s, c := math.Sincos(2 * math.Pi * float64(i) / float64(n))
+		s, c := detmath.Sincos(2 * math.Pi * float64(i) / float64(n))
 		out[i] = pt{r * c, r * s}
 	}
 	return out
@@ -251,7 +252,7 @@ func polygon(z *vector.Rasterizer, q []pt) {
 	area := 0.0
 	for i := range q {
 		j := (i + 1) % len(q)
-		area += q[i].x*q[j].y - q[j].x*q[i].y
+		area += float64(q[i].x*q[j].y) - float64(q[j].x*q[i].y)
 	}
 	if area < 0 {
 		for i, j := 0, len(q)-1; i < j; i, j = i+1, j-1 {

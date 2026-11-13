@@ -4,6 +4,7 @@ import (
 	"image"
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
@@ -61,7 +62,7 @@ func Gaussian(sigma float64) Kernel {
 	sum := 0.0
 	for i := range k {
 		d := float64(i - n)
-		k[i] = math.Exp(-d * d / (2 * sigma * sigma))
+		k[i] = detmath.Exp(-d * d / (2 * sigma * sigma))
 		sum += k[i]
 	}
 	for i := range k {
@@ -114,7 +115,7 @@ func convolve(src, dst []float64, k Kernel) {
 		s := 0.0
 		for j, w := range k {
 			p := min(max(i+j-n, 0), last)
-			s += w * src[p]
+			s += float64(w * src[p])
 		}
 		dst[i] = s
 	}
