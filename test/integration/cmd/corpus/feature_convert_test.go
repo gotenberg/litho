@@ -97,19 +97,34 @@ func writeFiles(t *testing.T, dir string, files map[string]string) {
 	}
 }
 
-func TestReftestRef_RuleWidensByFuzzy(t *testing.T) {
+func TestReftestRef_EqualFollowsWPTFuzzyRule(t *testing.T) {
 	t.Parallel()
 
-	if got := (reftestRef{}).rule(); got != renderPixelRule {
-		t.Errorf("no fuzzy: %+v, want the render rule", got)
+	diff := func(pixels, delta int) pixelDiff { return pixelDiff{DiffPixels: pixels, MaxDelta: delta} }
+	tests := []struct {
+		name  string
+		fuzzy []int
+		d     pixelDiff
+		want  bool
+	}{
+		{"no fuzzy, identical", nil, diff(0, 0), true},
+		{"no fuzzy, noise", nil, diff(reftestNoisePixels, reftestNoiseDelta), true},
+		{"no fuzzy, one level past the noise", nil, diff(1, reftestNoiseDelta+1), false},
+		{"no fuzzy, one pixel past the noise", nil, diff(reftestNoisePixels+1, 1), false},
+		{"no fuzzy, a small glyph", nil, diff(20, 255), false},
+		{"fuzzy 0;0 is none", []int{0, 0, 0, 0}, diff(20, 255), false},
+		{"inside both ranges", []int{0, 100, 0, 500}, diff(500, 100), true},
+		{"past the pixel range", []int{0, 100, 0, 500}, diff(501, 100), false},
+		{"past the difference range", []int{0, 100, 0, 500}, diff(20, 101), false},
+		{"below a difference lower bound", []int{50, 100, 0, 500}, diff(400, 20), false},
+		{"below a pixel lower bound", []int{0, 100, 450, 500}, diff(400, 20), false},
+		{"nothing differs by a range from 0", []int{20, 100, 0, 500}, diff(0, 0), true},
+		{"size mismatch", []int{0, 255, 0, 1 << 30}, pixelDiff{SizeMismatch: true}, false},
 	}
-	got := reftestRef{Fuzzy: []int{0, 100, 0, 500}}.rule()
-	if got.Tolerance != 100 || got.MaxDiffPixels != 500 || got.Neighbourhood != renderNeighbourhood {
-		t.Errorf("fuzzy 0-100;0-500: %+v", got)
-	}
-	// A fuzziness narrower than the render rule's tolerance keeps it.
-	if got := (reftestRef{Fuzzy: []int{0, 2, 0, 10}}).rule(); got.Tolerance != renderChannelTolerance {
-		t.Errorf("fuzzy 0-2: tolerance %d", got.Tolerance)
+	for _, tc := range tests {
+		if got := (reftestRef{Fuzzy: tc.fuzzy}).equal(tc.d); got != tc.want {
+			t.Errorf("%s: equal = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }
 
@@ -117,20 +132,30 @@ func TestComparePageSets_CountsAndPages(t *testing.T) {
 	t.Parallel()
 
 	r, b := solid(8, 8, color.RGBA{0xff, 0, 0, 0xff}), solid(8, 8, color.RGBA{0, 0, 0xff, 0xff})
+	// noisy differs from r by one level at one pixel, dotted by a black one.
+	noisy := solid(8, 8, color.RGBA{0xff, 0, 0, 0xff})
+	noisy.SetRGBA(3, 3, color.RGBA{0xfe, 0, 0, 0xff})
+	dotted := solid(8, 8, color.RGBA{0xff, 0, 0, 0xff})
+	dotted.SetRGBA(3, 3, color.RGBA{0, 0, 0, 0xff})
 	tests := []struct {
 		name      string
 		test, ref []image.Image
+		fuzzy     []int
 		same      bool
 	}{
-		{"one equal page", []image.Image{r}, []image.Image{r}, true},
-		{"one differing page", []image.Image{r}, []image.Image{b}, false},
-		{"page counts differ", []image.Image{r, r}, []image.Image{r}, false},
-		{"second page differs", []image.Image{r, r}, []image.Image{r, b}, false},
+		{"one equal page", []image.Image{r}, []image.Image{r}, nil, true},
+		{"one differing page", []image.Image{r}, []image.Image{b}, nil, false},
+		{"one pixel off by one level", []image.Image{noisy}, []image.Image{r}, nil, true},
+		{"one black pixel", []image.Image{dotted}, []image.Image{r}, nil, false},
+		{"one black pixel inside the fuzziness", []image.Image{dotted}, []image.Image{r}, []int{0, 255, 0, 1}, true},
+		{"page counts differ", []image.Image{r, r}, []image.Image{r}, nil, false},
+		{"second page differs", []image.Image{r, r}, []image.Image{r, b}, nil, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if same, fail := comparePageSets(tc.test, tc.ref, renderPixelRule); same != tc.same {
+			same, fail := comparePageSets(tc.test, tc.ref, reftestRef{Rel: "match", Fuzzy: tc.fuzzy})
+			if same != tc.same {
 				t.Errorf("same = %v, want %v (%s)", same, tc.same, fail.detail)
 			}
 		})

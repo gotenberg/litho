@@ -84,7 +84,7 @@ That leaves 7284 candidates. Each area and each probe then keeps at most its cap
 | `css/selectors`                 | 60    |                |
 | Total                           | 2272  | 78             |
 
-58 tests have a mismatch reference, 47 more than one reference, and 74 declare a fuzziness. The cell checks only a fuzziness's upper bounds. Seven `css-images` gradient tests (`display-p3-linear-gradient`, `gradient-eval-001`, `-003`, `-006` and `-009`, `gradient-none-interpolation`, `gradient-powerless-hue-lch`) declare a lower bound above 0, which WPT's rule enforces and the cell does not: a drawing closer to the reference than the bound passes here and would fail there. Every other fuzziness allows from 0 differences, and the cell decides those tests as WPT would. Three print tests declare `<meta name="reftest-pages">`: `css/css-page/subpixel-page-size-001-print.html` (page 2) and `css/css-tables/collapsed-border-fragmentation-001-print.html` and `-002-print.html` (pages 1 and 2). `corpus update` writes it as the entry's `pages`, and the cell compares only those pages of the test with the reference, as WPT's runner does. 485 are XHTML files that parse as HTML.
+58 tests have a mismatch reference, 47 more than one reference, and 74 declare a fuzziness. The cell applies a fuzziness as WPT's runner does, lower bounds included: seven `css-images` gradient tests (`display-p3-linear-gradient`, `gradient-eval-001`, `-003`, `-006` and `-009`, `gradient-none-interpolation`, `gradient-powerless-hue-lch`) declare a maximum difference from 1, which a drawing within the range must reach; one identical to its reference passes, since their pixel ranges start at 0. Three print tests declare `<meta name="reftest-pages">`: `css/css-page/subpixel-page-size-001-print.html` (page 2) and `css/css-tables/collapsed-border-fragmentation-001-print.html` and `-002-print.html` (pages 1 and 2). `corpus update` writes it as the entry's `pages`, and the cell compares only those pages of the test with the reference, as WPT's runner does. 485 are XHTML files that parse as HTML.
 
 To list the candidates again, at the pinned commit or a new one:
 
@@ -103,8 +103,7 @@ cd .. && make corpus-update CORPUS=wpt CHECKOUT=wpt
 
 Chromium is the reference where a test and Chromium draw differently, so these fixtures stay failing on purpose, recorded in `baseline.json`:
 
-- `css/css-text/white-space/control-chars-00E`, `-00F`, `-080`, `-083`, `-089`, `-090`, `-095`, `-099`: the tests expect a control character to draw a visible glyph; Chromium's PDF draws nothing for one, and so does litho.
-- Mismatch-reference tests whose own Chromium drawing differs from their `!=` reference by fewer pixels than the cell's 1% tolerance, so that no correct drawing can pass them (Chromium 9.0.0's test against its notref, in pixels): `css/CSS2/borders/ridge-default` (4400, the whole border), `css/CSS2/floats/float-in-nested-multicol-001` (140), `css/css-backgrounds/border-width-small-values-001-b` and `-e` (1604 each), `css/css-lists/list-style-position-001` (2209), `css/css-text-decor/text-decoration-inset-auto` (0: the pinned Chromium does not support the property), `css/css-text-decor/overline-wavy-covers-whole-line-length-001` (1164), `css/css-text-decor/text-decoration-skip-ink-004` (124), `css/css-text-decor/text-underline-offset-001` (320), `css/css-content/object-replacement-2` (3227). Where litho's drawing was wrong as well, it was fixed; the cell counts them as matching the mismatch reference.
+- `css/css-text-decor/text-decoration-inset-auto`: the pinned Chromium does not support the property, so its drawing equals the test's `!=` reference, and so does litho's.
 
 ## Licence
 

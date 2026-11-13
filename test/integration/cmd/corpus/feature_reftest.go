@@ -57,7 +57,7 @@ type reftestEntry struct {
 
 // reftestRef is one reference of a test: the file, whether the test must
 // match it or differ from it, and the fuzziness WPT allows for it (see
-// [reftestRef.rule]).
+// [reftestRef.equal]).
 type reftestRef struct {
 	Rel       string   `json:"rel"`
 	Path      string   `json:"path"`
@@ -68,30 +68,75 @@ type reftestRef struct {
 	Fuzzy []int `json:"fuzzy,omitempty"`
 }
 
-// rule returns the render cell's pixel rule widened by the reference's
-// fuzziness: a pixel counts as equal up to the larger of the two channel
-// tolerances, and the page matches with up to the larger of 1% of its pixels
-// and the fuzzy pixel count differing. WPT's own rule passes a comparison
-// whose maximum difference and pixel count fall in the fuzzy ranges; this
-// rule is never stricter than that one's upper bounds, and keeps the render
-// cell's tolerance of anti-aliasing for the tests that declare none.
-func (r reftestRef) rule() pixelRule {
-	rule := renderPixelRule
-	if len(r.Fuzzy) == 4 {
-		rule.Tolerance = max(rule.Tolerance, r.Fuzzy[1])
-		rule.MaxDiffPixels = max(rule.MaxDiffPixels, r.Fuzzy[3])
+// reftestExact compares two drawings pixel for pixel: a pixel differs when
+// one of its channels does, by any amount, and no neighbour stands in for
+// it. The comparison reports the count of differing pixels and the largest
+// channel difference, the two measures WPT's fuzziness ranges bound.
+var reftestExact = pixelRule{}
+
+// reftestNoiseDelta and reftestNoisePixels bound litho's own rendering
+// noise: a page pair whose largest channel difference is at most
+// reftestNoiseDelta levels, over at most reftestNoisePixels pixels, counts
+// as equal, as a fuzziness of "0-8;0-300" would. Test and reference are both
+// drawn by litho, and the same content placed by two layouts (a float in the
+// test, a block in the reference) can land a hundredth of a pixel apart,
+// which moves the anti-aliased coverage of a glyph or an edge by a few
+// levels. A wrong drawing costs far more: a glyph, a marker or a fill drawn,
+// missing or misplaced differs by over a hundred levels on its pixels, and a
+// colour slightly off covers its whole area. A difference of a whole edge
+// position, even under a pixel, is not noise and fails, as it fails in
+// WPT's comparison.
+//
+// # Corpus evidence
+//
+//   - wpt: of the 2272 tests, 50 differ from their closest match reference
+//     by 1 to 5 levels and by 1 to 265 pixels, all of them drawing the same
+//     content by eye (48 by 1 level, css/css-fonts/variations/font-slant-3 by
+//     4 levels over 265 pixels, floats-clear-multicol-balancing-002 by 5
+//     over 30). No test differs by 6 to 13 levels.
+//   - wpt: the smallest differences of drawings judged wrong are 44 levels
+//     (css/css-inline/text-box-trim/text-box-trim-block-in-inline-end-003, a
+//     grey band 25 pixels too low) and 20 pixels at 251 levels
+//     (css/css-overflow/line-clamp/line-clamp-038, an ellipsis the reference
+//     does not draw).
+const (
+	reftestNoiseDelta  = 8
+	reftestNoisePixels = 300
+)
+
+// equal reports whether a page pair whose exact comparison is d counts as
+// equal for this reference. A size mismatch never does. Within litho's
+// rendering noise ([reftestNoiseDelta], [reftestNoisePixels]) the pair is
+// equal. Past it, WPT's rule decides ("Fuzzy Matching" of
+// web-platform-tests.org's Reftests page, as its runner applies it): with no
+// fuzziness, or one of 0;0, the pair differs; with one, it is equal when the
+// largest channel difference and the count of differing pixels both fall
+// in their inclusive ranges, or when nothing differs by a measure whose
+// range starts at 0.
+func (r reftestRef) equal(d pixelDiff) bool {
+	if d.SizeMismatch {
+		return false
 	}
-	return rule
+	if d.MaxDelta <= reftestNoiseDelta && d.DiffPixels <= reftestNoisePixels {
+		return true
+	}
+	if len(r.Fuzzy) != 4 || (r.Fuzzy[1] == 0 && r.Fuzzy[3] == 0) {
+		return false
+	}
+	deltaLo, deltaHi, pixelsLo, pixelsHi := r.Fuzzy[0], r.Fuzzy[1], r.Fuzzy[2], r.Fuzzy[3]
+	return (d.DiffPixels == 0 && pixelsLo == 0) ||
+		(d.MaxDelta == 0 && deltaLo == 0) ||
+		(deltaLo <= d.MaxDelta && d.MaxDelta <= deltaHi && pixelsLo <= d.DiffPixels && d.DiffPixels <= pixelsHi)
 }
 
 // reftestFeature scores litho's HTML converter on web-platform-tests
 // reftests. Each test and each of its references is converted to PDF,
-// drawn by litho at 96 dpi, and the drawings compared under the render
-// cell's pixel rule widened by the test's fuzziness (see
-// [reftestRef.rule]). A screen reftest is converted for the screen media on
-// an 800 by 600 pixel page with no margin, and its first page compared; a
-// print reftest for print on WPT's 5 by 3 inch page, every page compared, a
-// differing page count failing it.
+// drawn by litho at 96 dpi, and the drawings compared pixel for pixel by
+// WPT's rule, the test's fuzziness included, past litho's own rendering
+// noise (see [reftestRef.equal]). A screen reftest is converted for the
+// screen media on an 800 by 600 pixel page with no margin, and its first
+// page compared; a print reftest for print on WPT's 5 by 3 inch page, page
+// by page, a differing page count failing a match and passing a mismatch.
 //
 // A test passes when it matches one of its match references, if it has any,
 // and differs from every mismatch reference (WPT's multiple-reference rule).
@@ -188,7 +233,8 @@ type reftestOutput struct {
 type reftestRefCheck struct {
 	Path string `json:"path"`
 	Rel  string `json:"rel"`
-	// Same reports whether the drawings matched under the reference's rule.
+	// Same reports whether the drawings are equal for the reference (see
+	// [reftestRef.equal]).
 	Same   bool   `json:"same"`
 	Detail string `json:"detail"`
 }
@@ -227,7 +273,7 @@ func (f *reftestFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]
 			}
 			return json.Marshal(reftestOutput{Outcome: outcomeError, Reason: "reference " + ref.Path + ": " + err.Error()})
 		}
-		same, worst := comparePageSets(testPages, refPages, ref.rule())
+		same, worst := comparePageSets(testPages, refPages, ref)
 		out.Refs = append(out.Refs, reftestRefCheck{Path: ref.Path, Rel: ref.Rel, Same: same, Detail: worst.detail})
 		switch ref.Rel {
 		case "match":
@@ -397,23 +443,23 @@ func (f *reftestFeature) draw(ctx context.Context, root, rel string, paged bool)
 	return pages, nil
 }
 
-// comparePageSets reports whether two drawings match under rule: the same
-// number of pages, each pair within the rule. It returns the first page pair
-// that does not match, or the last compared when all do, to draw.
-func comparePageSets(test, ref []image.Image, rule pixelRule) (bool, reftestFailure) {
+// comparePageSets reports whether two drawings are equal for ref: the same
+// number of pages, each pair equal by [reftestRef.equal]. It returns the
+// first page pair that is not, or the last compared when all are, to draw.
+func comparePageSets(test, refPages []image.Image, ref reftestRef) (bool, reftestFailure) {
 	var last reftestFailure
-	if len(test) != len(ref) {
-		last = reftestFailure{detail: fmt.Sprintf("%d pages against %d", len(test), len(ref))}
-		if len(test) > 0 && len(ref) > 0 {
-			last.test, last.ref = test[0], ref[0]
-			last.diff = comparePixels(test[0], ref[0], rule, 0)
+	if len(test) != len(refPages) {
+		last = reftestFailure{detail: fmt.Sprintf("%d pages against %d", len(test), len(refPages))}
+		if len(test) > 0 && len(refPages) > 0 {
+			last.test, last.ref = test[0], refPages[0]
+			last.diff = comparePixels(test[0], refPages[0], reftestExact, 0)
 		}
 		return false, last
 	}
 	for i := range test {
-		d := comparePixels(test[i], ref[i], rule, 0)
-		last = reftestFailure{test: test[i], ref: ref[i], diff: d, detail: fmt.Sprintf("page %d: %s", i+1, d)}
-		if !d.within(rule) {
+		d := comparePixels(test[i], refPages[i], reftestExact, 0)
+		last = reftestFailure{test: test[i], ref: refPages[i], diff: d, detail: fmt.Sprintf("page %d: %s", i+1, d)}
+		if !ref.equal(d) {
 			return false, last
 		}
 	}
