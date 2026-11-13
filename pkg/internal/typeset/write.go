@@ -221,6 +221,10 @@ type docWriter struct {
 	held   int64
 	mark   int
 	shared map[int]bool
+	// charged is what the streams kept in memory cost the budget, given
+	// back when the file is written or abandoned ([Stream.Abort]). held is
+	// not that amount once a stream has spooled: it is set to hold.
+	charged int64
 }
 
 // pendingLink is a link of a page written whose annotation is finished at
@@ -311,6 +315,7 @@ func (w *docWriter) spill(ctx context.Context) error {
 			if err := w.mem.ChargeUnits(int64(len(data)), 1, "the output streams"); err != nil {
 				return fmt.Errorf("writing PDF: %w", err)
 			}
+			w.charged += int64(len(data))
 			w.held += int64(len(data))
 			continue
 		}

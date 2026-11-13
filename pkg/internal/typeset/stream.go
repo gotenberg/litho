@@ -518,8 +518,8 @@ func (s *Stream) writeFile(ctx context.Context, tail *Document, dst io.Writer, d
 }
 
 // Abort ends the Stream without writing the file: it removes the spool
-// file and gives back what the held pages cost the budget. It does
-// nothing after [Stream.Close] or a first Abort.
+// file and gives back what the held pages and the streams kept in memory
+// cost the budget. It does nothing after [Stream.Close] or a first Abort.
 func (s *Stream) Abort() {
 	if s.err == nil {
 		s.err = errStreamDone
@@ -529,6 +529,8 @@ func (s *Stream) Abort() {
 	s.charged = 0
 	s.w.mem.Release(s.w.form.charged)
 	s.w.form.charged = 0
+	s.w.mem.Release(s.w.charged)
+	s.w.charged = 0
 	s.whole = nil
 	if s.sel != nil {
 		for n, c := range s.sel.heldCost {
