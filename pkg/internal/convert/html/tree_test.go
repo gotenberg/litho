@@ -320,12 +320,13 @@ func TestPrepare_NumbersLists(t *testing.T) {
 func TestPrepare_ReadsSpans(t *testing.T) {
 	t.Parallel()
 	p := prep(t, `<table><colgroup id=g span=3></colgroup><col id=c span=0><tr>`+
-		`<td id=a colspan=2 rowspan=3>a<td id=b colspan=5000 rowspan=99999>b<td id=n colspan=x rowspan=-1>n</table>`, Options{})
+		`<td id=a colspan=2 rowspan=3>a<td id=b colspan=5000 rowspan=99999>b<td id=n colspan=x rowspan=-1>n<td id=z colspan=0 rowspan=0>z</table>`, Options{})
 	for _, tc := range []struct {
 		id              string
 		col, row, group int
 	}{
 		{"a", 2, 3, 0}, {"b", maxColSpan, maxRowSpan, 0}, {"n", 0, 0, 0}, {"g", 0, 0, 3}, {"c", 0, 0, 0},
+		{"z", 0, maxRowSpan, 0},
 	} {
 		n := byID(t, p.root, tc.id)
 		if n.ColSpan != tc.col || n.RowSpan != tc.row || n.Span != tc.group {

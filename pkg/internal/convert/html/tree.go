@@ -294,7 +294,7 @@ func (b *builder) semantics(node *layout.Node, n *dom.Node) {
 		}
 	case atom.Td, atom.Th:
 		node.ColSpan = spanAttr(n, "colspan", maxColSpan)
-		node.RowSpan = spanAttr(n, "rowspan", maxRowSpan)
+		node.RowSpan = rowSpanAttr(n)
 		if n.DataAtom == atom.Th {
 			node.Scope = headerScope(n)
 		}
@@ -624,6 +624,19 @@ func spanAttr(n *dom.Node, key string, maxSpan int) int {
 		return 0
 	}
 	return min(i, maxSpan)
+}
+
+// rowSpanAttr returns the rowspan attribute of the cell n, 0 for none: a
+// rowspan of 0 spans the rest of the cell's row group (HTML Standard,
+// 4.9.11, the cell grows downward), which the layout's grid clamps a
+// span of maxRowSpan to.
+func rowSpanAttr(n *dom.Node) int {
+	if v, ok := attr(n, "rowspan"); ok {
+		if i, ok := parseInteger(v); ok && i == 0 {
+			return maxRowSpan
+		}
+	}
+	return spanAttr(n, "rowspan", maxRowSpan)
 }
 
 // warnOnce records a warning the first time key is met with its code and
