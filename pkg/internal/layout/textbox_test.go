@@ -42,3 +42,21 @@ func TestTextBoxTrim_PassesOverCollapsedWhiteSpace(t *testing.T) {
 		t.Errorf("height %v, want 70: the outer half leadings trimmed", c.h/css.Pt)
 	}
 }
+
+func TestTextBoxTrim_TrimsFormattingContextRoots(t *testing.T) {
+	// CSS Inline 3, 6.2: text-box-trim applies to every block
+	// container, one that establishes a formatting context included: a
+	// flow root, an absolutely positioned box, a scroll container.
+	lh := func(s *css.Style) { s.LineHeight = css.Pts(px(60)) }
+	trim := func(s *css.Style) { s.TextBoxTrim = css.TrimBoth }
+	for name, mod := range map[string]func(*css.Style){
+		"flow-root": func(s *css.Style) { s.Display = css.FlowRoot },
+		"absolute":  func(s *css.Style) { s.Position = css.Absolute; s.Width = css.Pts(px(100)) },
+		"overflow":  func(s *css.Style) { s.Overflow = css.OverflowHidden },
+	} {
+		b := boxes(t, doc(el(sty(lh, trim, mod), txt(sty(lh), "a"), br(sty(lh)), txt(sty(lh), "a"))), page(200, 200))
+		if c := kid(t, b, 0, 0); !near(c.h/css.Pt, 70) {
+			t.Errorf("%s: height %v, want 70: the outer half leadings trimmed", name, c.h/css.Pt)
+		}
+	}
+}

@@ -614,6 +614,7 @@ func (e *engine) absContent(b *box, ccb cblock, h float64, hSet, grow bool) {
 	saved := e.enterClamp(b, ccb, b.contentY())
 	end := formatterFor(b).layout(e, b, kcb, own, b.contentY(), mc)
 	e.leaveClamp(saved)
+	end = e.trimTextBox(b, end, own)
 	end += mc.strut.sum()
 	mc.commit(end)
 	end = max(end, own.bottom(), b.contentY())

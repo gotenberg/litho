@@ -12,8 +12,10 @@ import (
 // line's text-box-edge over metric, trim-end ends it at its last line's
 // under metric. A first or last line behind a border or a padding of a
 // descendant, or a block that lays out a flex, grid or table formatting
-// context, is not trimmed.
-func (e *engine) trimTextBox(b *box, end float64) float64 {
+// context, is not trimmed. own is the formatting context b establishes,
+// nil when b lays its content out in its parent's: its floats move with
+// the content.
+func (e *engine) trimTextBox(b *box, end float64, own *bfc) float64 {
 	if b.st.TextBoxTrim == css.TrimNone || b.flex != nil || b.grid != nil || b.tdata != nil {
 		return end
 	}
@@ -30,6 +32,7 @@ func (e *engine) trimTextBox(b *box, end float64) float64 {
 			if d := l.baseline - over; d > 0 {
 				b.shift(0, -d)
 				b.y, b.sy, b.anchorY = b.y+d, b.sy+d, b.anchorY+d
+				own.shiftFloats(math.Inf(-1), -d)
 				end -= d
 			}
 		}
@@ -43,6 +46,20 @@ func (e *engine) trimTextBox(b *box, end float64) float64 {
 		}
 	}
 	return end
+}
+
+// shiftFloats moves by dy the float rectangles of c whose top is at y or
+// below; a nil c holds none.
+func (c *bfc) shiftFloats(y, dy float64) {
+	if c == nil {
+		return
+	}
+	for i := range c.floats {
+		if f := &c.floats[i]; !f.initial && f.y0 >= y-eps {
+			f.y0 += dy
+			f.y1 += dy
+		}
+	}
 }
 
 // edgeLine returns the first line box in flow inside b, or the last when
