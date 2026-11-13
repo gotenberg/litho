@@ -42,6 +42,10 @@ var resvgAreas = map[string]int{
 	"paint-servers/stop-opacity": 3, "masking/clipPath": 10, "masking/clip-rule": 2, "text/text": 6,
 	"text/tspan": 4, "text/text-anchor": 3, "text/font-size": 3,
 	"masking/mask": 40, "painting/mix-blend-mode": 25, "painting/isolation": 4,
+	"filters/filter": 80, "filters/feGaussianBlur": 20, "filters/feOffset": 10, "filters/feFlood": 10,
+	"filters/feColorMatrix": 20, "filters/feComponentTransfer": 30, "filters/feComposite": 20,
+	"filters/feBlend": 20, "filters/feMerge": 10, "filters/feMorphology": 20, "filters/feTile": 10,
+	"filters/feDropShadow": 10, "filters/flood-color": 10, "filters/flood-opacity": 10,
 }
 
 // resvgLift names, for an area, the reasons of resvgReject its tests may
@@ -49,6 +53,11 @@ var resvgAreas = map[string]int{
 // and painting/isolation.
 var resvgLift = map[string][]string{
 	"masking/mask": {"mask"}, "painting/mix-blend-mode": {"blending"}, "painting/isolation": {"blending"},
+	"filters/filter": {"filter"}, "filters/feGaussianBlur": {"filter"}, "filters/feOffset": {"filter"},
+	"filters/feFlood": {"filter"}, "filters/feColorMatrix": {"filter"}, "filters/feComponentTransfer": {"filter"},
+	"filters/feComposite": {"filter"}, "filters/feBlend": {"filter"}, "filters/feMerge": {"filter"},
+	"filters/feMorphology": {"filter"}, "filters/feTile": {"filter"}, "filters/feDropShadow": {"filter"},
+	"filters/flood-color": {"filter"}, "filters/flood-opacity": {"filter"},
 }
 
 // resvgReject are the constructs a test may not use, each with the reason it
@@ -58,6 +67,8 @@ var resvgReject = []struct {
 	why string
 }{
 	{regexp.MustCompile(`<filter|\bfilter\s*[=:]`), "filter"},
+	{regexp.MustCompile(`<fe(Turbulence|ConvolveMatrix|DisplacementMap|DiffuseLighting|SpecularLighting|Image)\b|enable-background|BackgroundImage|BackgroundAlpha|FillPaint|StrokePaint`), "filter primitive left out"},
+	{regexp.MustCompile(`\bfilter\s*[=:]\s*["']?[^"';]*\b(blur|brightness|contrast|drop-shadow|grayscale|hue-rotate|invert|opacity|saturate|sepia)\(`), "filter function"},
 	{regexp.MustCompile(`<mask|\bmask\s*[=:]`), "mask"},
 	{regexp.MustCompile(`<pattern`), "pattern"},
 	{regexp.MustCompile(`<marker|marker-(start|mid|end)|\bmarker\s*[=:]`), "marker"},
@@ -72,7 +83,7 @@ var resvgReject = []struct {
 	{regexp.MustCompile(`mix-blend-mode|isolation`), "blending"},
 	{regexp.MustCompile(`paint-order|vector-effect`), "compositing"},
 	{regexp.MustCompile(`transform-origin|transform-box|\btransform\s*:`), "CSS transform"},
-	{regexp.MustCompile(`shape-rendering|text-rendering|image-rendering|color-rendering|color-interpolation`), "rendering hint"},
+	{regexp.MustCompile(`shape-rendering|text-rendering|image-rendering|color-rendering|color-interpolation\s*[=:]`), "rendering hint"},
 	{regexp.MustCompile(`textLength|lengthAdjust|\brotate\s*=`), "text adjustment"},
 	{regexp.MustCompile(`letter-spacing|word-spacing|text-decoration|baseline-shift|dominant-baseline|alignment-baseline`), "text property"},
 	{regexp.MustCompile(`font-variant|font-stretch|font-kerning|font-feature|font-variation|writing-mode|direction|unicode-bidi`), "text property"},
