@@ -161,10 +161,19 @@ func contentMinimum(b *box) bool {
 // its computed style st and its padding and borders pd and bd: a fixed
 // height gives both, and an auto width keeps within the fixed minimum
 // and maximum heights through the ratio. A percentage height counts as
-// auto here.
+// auto here, and so does a percentage width: a percentage of the size
+// being measured is cyclic and behaves as auto for the contribution of a
+// non-replaced box (CSS Sizing 3, 5.2.1).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) sizes an
+//     inline block, a min-content grid and a float holding a block of
+//     height 100px, width 50% and aspect-ratio 1 (2 for the float) 100,
+//     100 and 200 wide.
 func ratioIntrinsic(b *box, st *css.Style, pd, bd [4]float64, lo, hi float64) (float64, float64) {
 	r, content := prefRatio(b)
-	if r == 0 || st.Width.Kind != css.Auto && !contentKeyword(st.Width) {
+	if r == 0 || st.Width.Kind != css.Auto && st.Width.Kind != css.Percent && !contentKeyword(st.Width) {
 		return lo, hi
 	}
 	ve := pd[css.Top] + pd[css.Bottom] + bd[css.Top] + bd[css.Bottom]

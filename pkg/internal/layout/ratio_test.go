@@ -61,6 +61,7 @@ func TestAspectRatio_Sizes(t *testing.T) {
 		{"content-box relates the content box", el(sty(ratio(1, 1), width(100), padding(10))), [2]float64{120, 120}},
 		{"auto && ratio relates the content box", el(sty(autoRatio(1, 1), width(100), padding(10), borderBox)), [2]float64{100, 100}},
 		{"a float takes the width of its height", el(sty(ratio(2, 1), height(100), float(css.FloatLeft))), [2]float64{200, 100}},
+		{"a percentage width counts as auto in a contribution", el(sty(display(css.InlineBlock), height(20)), el(sty(ratio(1, 1), height(100), func(s *css.Style) { s.Width = css.Dimension{Kind: css.Percent, Value: 0.5} }))), [2]float64{100, 20}},
 		{"an inline block takes the width of its height", el(sty(ratio(2, 1), height(50), display(css.InlineBlock))), [2]float64{100, 50}},
 		{"a degenerate ratio is auto", el(sty(ratio(0, 1), width(100))), [2]float64{100, 0}},
 		{"an absolute box takes the width of its height", el(sty(ratio(2, 1), height(100), abs(0, auto, auto, 0))), [2]float64{200, 100}},
