@@ -171,6 +171,49 @@ func TestFlattenDropsAnEmptyField(t *testing.T) {
 	}
 }
 
+// TestFlattenDropsAnOffToggleWithNoOffAppearance checks a check box and a
+// radio button that are off and store an appearance for their on state
+// alone, with the on state's mark as their /MK caption: they draw nothing
+// while off, so they leave with the form; a pushbutton's caption is drawn
+// whatever its value, so one with no appearance it can be drawn from stays
+// and fails the flatten, naming the field and the caption (see
+// toggleOffPaints, which holds the evidence).
+func TestFlattenDropsAnOffToggleWithNoOffAppearance(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		widget string
+		kept   bool
+	}{
+		"check box":    {"<< /Type /Annot /Subtype /Widget /FT /Btn /T (c) /AS /Off /MK << /CA (4) >> /Rect [10 10 20 20] /AP << /N << /1 6 0 R >> >> >>", false},
+		"radio button": {"<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 49152 /T (r) /V /Off /AS /Off /MK << /CA (8) >> /Rect [10 10 20 20] /AP << /N << /1 6 0 R >> >> >>", false},
+		"pushbutton":   {"<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (p) /MK << /CA (Go) >> /Rect [10 10 20 20] /AP << /N << /1 6 0 R >> >> >>", true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, doc, alloc := flattenDoc(t, tc.widget,
+				"<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] /Length 14 >>\nstream\n0 0 10 10 re f\nendstream")
+			err := FlattenForm(ctx, alloc, doc)
+			if tc.kept {
+				if !errors.Is(err, ErrFlattenIncomplete) || !strings.Contains(err.Error(), `field "p": the caption or icon`) {
+					t.Fatalf("FlattenForm returned %v, want ErrFlattenIncomplete naming the field and its caption", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("FlattenForm: %v", err)
+			}
+			page, drawn := flattenedPage(t, alloc)
+			if annots, _ := page["Annots"].(ast.PdfArray); len(annots) != 0 {
+				t.Errorf("an off toggle survived the flatten: %v", annots)
+			}
+			if len(drawn) != 0 {
+				t.Errorf("the flatten drew %d appearances for an off toggle", len(drawn))
+			}
+		})
+	}
+}
+
 // TestFlattenDrawsAnEmptyFieldsCharacteristics is the control: an empty field
 // whose /MK states a background or a border colour still paints them when a
 // viewer builds its appearance (ISO 32000-1, Table 189), so the flatten paints

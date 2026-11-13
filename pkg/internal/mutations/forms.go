@@ -676,7 +676,7 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 					// the form rather than outliving it as a field.
 					return widgetDropped, ast.PdfStream{}
 				}
-				failed = flattenFieldError(ctx, doc, alloc, annotObj, errors.New("the value cannot be drawn"))
+				failed = flattenFieldError(ctx, doc, alloc, annotObj, undrawnError(ctx, doc, alloc, annotDict))
 				return widgetKept, ast.PdfStream{}
 			}
 			apStream = generated
@@ -684,6 +684,47 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		return widgetBaked, apStream
 	})
 	return failed
+}
+
+// undrawnError says what a widget shows that the flatten cannot draw, for
+// a widget that stores no appearance for its state, that litho could not
+// draw one for, and that [widgetDrawsNothing] does not know to be blank.
+func undrawnError(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotDict ast.PdfDict) error {
+	fieldType, value := inheritedFieldTypeAndValue(ctx, doc, alloc, annotDict)
+	rect, err := document.ResolveArray(ctx, doc, annotDict["Rect"])
+	if err != nil || len(rect) < 4 {
+		return errors.New("the widget's /Rect does not resolve to a rectangle to draw in")
+	}
+	rect = document.ResolveRectangle(ctx, doc, rect)
+	if document.Float(rect[2]) == document.Float(rect[0]) || document.Float(rect[3]) == document.Float(rect[1]) {
+		return errors.New("the widget's /Rect has no area to draw in")
+	}
+	if appearanceCharacteristicsPaint(ctx, doc, annotDict, true) {
+		// A widget whose /MK states a colour is drawn from it: what is left
+		// is a caption or an icon.
+		return errors.New("the caption or icon the widget's /MK states cannot be drawn")
+	}
+	if fieldType == "" {
+		return errors.New("the widget names no field type to draw its value by")
+	}
+	// The value itself stays out of the message: a form holds what its
+	// users typed.
+	return fmt.Errorf("the %s value of a /%s field cannot be drawn", valueKind(value), fieldType)
+}
+
+// valueKind names the PDF type of a field value for an error message.
+func valueKind(v ast.PdfObject) string {
+	switch v.(type) {
+	case nil, ast.PdfNull:
+		return "missing"
+	case ast.PdfString:
+		return "string"
+	case ast.PdfName:
+		return "name"
+	case ast.PdfArray:
+		return "array"
+	}
+	return "unreadable"
 }
 
 // flattenFieldError wraps cause as the [ErrFlattenIncomplete] of the field
@@ -1157,11 +1198,13 @@ const maxFieldAncestorDepth = 32
 // A viewer builds a missing appearance from the field's value (ISO 32000-1,
 // 12.7.3.3), over the colours and captions the widget's /MK states (12.5.6.19,
 // Table 189). A text or choice field with no value and a button that is off
-// therefore draw nothing once /MK states nothing to paint either, and neither
-// does a signature field, whose appearance comes from its stream alone. Such a
-// widget can leave with the form it belonged to: keeping it left a form field in
-// a document the flatten promised had none. A widget of any other kind, or one
-// holding a value litho could not draw, is not known to be blank and stays.
+// therefore draw nothing once /MK states nothing to paint either, a check box
+// or radio button that is off nothing but its /MK colours
+// ([toggleOffPaints]), and a signature field nothing, its appearance coming
+// from its stream alone. Such a widget can leave with the form it belonged
+// to: keeping it left a form field in a document the flatten promised had
+// none. A widget of any other kind, or one holding a value litho could not
+// draw, is not known to be blank and stays.
 //
 // # Corpus evidence
 //
@@ -1171,10 +1214,13 @@ const maxFieldAncestorDepth = 32
 //   - All corpora, 617 files that mention a form: 32 flattened outputs that
 //     kept a form field keep none.
 func widgetDrawsNothing(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotDict ast.PdfDict) bool {
-	if appearanceCharacteristicsPaint(ctx, doc, annotDict) {
+	fieldType, value := inheritedFieldTypeAndValue(ctx, doc, alloc, annotDict)
+	if fieldType == "Btn" && buttonOff(value) && inheritedFieldFlags(ctx, doc, alloc, annotDict)&buttonFlagPushbutton == 0 {
+		return !toggleOffPaints(ctx, doc, annotDict)
+	}
+	if appearanceCharacteristicsPaint(ctx, doc, annotDict, true) {
 		return false
 	}
-	fieldType, value := inheritedFieldTypeAndValue(ctx, doc, alloc, annotDict)
 	switch fieldType {
 	case "Tx", "Ch":
 		switch v := value.(type) {
@@ -1188,23 +1234,48 @@ func widgetDrawsNothing(ctx context.Context, doc *document.Document, alloc *writ
 		}
 		return false
 	case "Btn":
-		switch v := value.(type) {
-		case nil, ast.PdfNull:
-			return true
-		case ast.PdfName:
-			return v == "" || v == "Off"
-		}
-		return false
+		return buttonOff(value)
 	case "Sig":
 		return true
 	}
 	return false
 }
 
+// buttonOff reports whether a button field's value v leaves it off: no
+// value, or the name Off (ISO 32000-1, 12.7.4.2.3).
+func buttonOff(v ast.PdfObject) bool {
+	switch v := v.(type) {
+	case nil, ast.PdfNull:
+		return true
+	case ast.PdfName:
+		return v == "" || v == "Off"
+	}
+	return false
+}
+
+// toggleOffPaints reports whether a check box or radio button that is off
+// and stores no appearance for its state paints anything: its /MK
+// background or border colour alone (ISO 32000-1, Table 189). Its caption
+// /CA is the mark its on state shows, the character a check box draws in
+// ZapfDingbats, so it is not drawn while the box is off.
+//
+// # Corpus evidence
+//
+//   - pdfjs f1040, prefilled_f1040, 160F-2019, bug1860602: each holds a
+//     check box or radio button, off, with /AS /Off, no /Off appearance in
+//     /AP /N and a /CA of "4" or "8", and no /BG or /BC; pdftoppm 26.11.0
+//     draws the same pixels where the widget lies with annotations shown and
+//     hidden, and draws the on-state mark of a checked widget of
+//     bug1860602. Flattening refused the four documents.
+func toggleOffPaints(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) bool {
+	return appearanceCharacteristicsPaint(ctx, doc, annotDict, false)
+}
+
 // appearanceCharacteristicsPaint reports whether the widget's /MK states
 // something a viewer paints when it builds the widget's appearance: a background
-// or border colour, a caption or an icon (ISO 32000-1, Table 189).
-func appearanceCharacteristicsPaint(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) bool {
+// or border colour, and with captions set a caption or an icon (ISO 32000-1,
+// Table 189).
+func appearanceCharacteristicsPaint(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, captions bool) bool {
 	mk, err := document.ResolveDict(ctx, doc, annotDict["MK"])
 	if err != nil || mk == nil {
 		return false
@@ -1213,6 +1284,9 @@ func appearanceCharacteristicsPaint(ctx context.Context, doc *document.Document,
 		if colour, err := document.ResolveArray(ctx, doc, mk[key]); err == nil && len(colour) > 0 {
 			return true
 		}
+	}
+	if !captions {
+		return false
 	}
 	for _, key := range []ast.PdfName{"CA", "RC", "AC"} {
 		if caption, err := document.ResolveString(ctx, doc, mk[key]); err == nil && len(caption) > 0 {
