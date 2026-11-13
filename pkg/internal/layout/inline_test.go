@@ -546,6 +546,26 @@ func TestFloats_InLineMovesTheLine(t *testing.T) {
 	}
 }
 
+// Under BrowserRules a float that fits beside the content before it goes
+// at the top of its line, however full the line, which is broken again
+// beside it, as Chromium places it.
+func TestFloats_InFullLineBesideTheContentBefore(t *testing.T) {
+	f := el(sty(float(css.FloatLeft), width(20), height(5)))
+	rb := boxesWith(t, doc(el(sty(), txt(sty(), "aa "), f, txt(sty(), "bb cc dd"))), Options{Page: page(80, 50), BrowserRules: true})
+	p := kid(t, rb, 0, 0)
+	if got := rect(p.kids[1]); got[0] != 0 || got[1] != 0 {
+		t.Errorf("float at %v, want the first line's top left", got)
+	}
+	if len(p.lines) == 0 || !near(p.lines[0].x/css.Pt, 20) {
+		t.Errorf("first line not beside the float")
+	}
+	for _, l := range p.lines {
+		if w := contentWidth(l); w > l.w+eps {
+			t.Errorf("line content %v wider than the line, %v", w/css.Pt, l.w/css.Pt)
+		}
+	}
+}
+
 func TestSmallCaps_Synthesised(t *testing.T) {
 	sc := func(s *css.Style) { s.FontVariant = css.SmallCaps }
 	res := run(t, doc(el(sty(sc), txt(sty(sc), "Ab1c"))), page(100, 20))

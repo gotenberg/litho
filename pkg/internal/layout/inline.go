@@ -899,7 +899,15 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			top, end, left, right, l := s.fitLine(lp, lw, pos, lineIndent, top, lineStrut)
 			s.rubyRoom(l, room)
 			floatsBefore := len(bc.floats)
-			s.placeFloatsBeside(lp, pos, end, l, top)
+			for range len(lp.floats) {
+				if !s.placeFloatsBeside(lp, pos, end, l, top) {
+					break
+				}
+				// A float placed beside the content before it narrows the
+				// line, which is broken again beside it.
+				top, end, left, right, l = s.fitLine(lp, lw, pos, lineIndent, top, lineStrut)
+				s.rubyRoom(l, room)
+			}
 			if newTop := s.position(top, l.h-l.slack, forced); newTop != top {
 				top = newTop
 				nl, nr := s.band(top, l.h)
@@ -1230,7 +1238,23 @@ func (s *inlineState) placeFloats(p *ifcPara, from, to int, top float64, mc *mar
 // beside its content, moving the line beside them (CSS 2.1, 9.5.1, rule
 // 8): a float met at the end of a line's content still belongs to that
 // line. The others wait for the line's bottom.
-func (s *inlineState) placeFloatsBeside(p *ifcPara, start, end int, l *lineBox, top float64) {
+//
+// Under [Options.BrowserRules] a float that fits beside the content
+// before it, but not beside the whole line, is placed at the line's top
+// too, and placeFloatsBeside reports true: the line is then broken again
+// beside it. CSS 2.1, 9.5.1 lets a float sit on the current line; Chromium
+// places it there whenever the line's content so far leaves it room.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 puts a 100px left
+//     float met after "In this paragraph " in a paragraph that fills its
+//     line at the top of the first line, the line's text beside it; litho
+//     put it under the first line.
+//   - wpt: css/css-grid/grid-model/grid-empty-floating-positioned-and-inline-001
+//     floats two empty grids from the middle of a full line.
+func (s *inlineState) placeFloatsBeside(p *ifcPara, start, end int, l *lineBox, top float64) bool {
+	refit := false
 	for _, f := range p.floats {
 		// A float at the paragraph's end belongs to its last line too.
 		if f.pos <= start || f.pos > end || f.pos == end && end < p.p.Len() || s.placed[f.box] {
@@ -1247,12 +1271,28 @@ func (s *inlineState) placeFloatsBeside(p *ifcPara, start, end int, l *lineBox, 
 			fw += s.e.shrinkToFit(f.box, s.cb.w)
 		}
 		if contentWidth(l)+fw > l.w+eps {
-			continue
+			if !s.e.opts.BrowserRules || contentWidthBefore(l, f.pos)+fw > l.w+eps {
+				continue
+			}
+			refit = true
 		}
 		s.e.layoutFloat(f.box, s.cb, s.bc, top)
 		s.placed[f.box] = true
 		l.x, l.w = bandOf(s.bc, top, l.h, s.cb)
 	}
+	return refit
+}
+
+// contentWidthBefore returns the width the items of l before the
+// character position pos span.
+func contentWidthBefore(l *lineBox, pos int) float64 {
+	w := 0.0
+	for _, it := range l.items {
+		if it.start < pos {
+			w = max(w, it.x+it.w)
+		}
+	}
+	return w
 }
 
 // contentWidth returns the width the items of l span.
