@@ -38,9 +38,12 @@ type referenceManifest struct {
 // the LibreOffice core commit of a record written before the builder
 // recorded the pin, read as the value of LIBREOFFICE_CORE_COMMIT.
 type referenceRecord struct {
-	Source         string `json:"source"`
-	SourceSHA256   string `json:"source_sha256"`
-	OptionsSHA256  string `json:"options_sha256"`
+	Source        string `json:"source"`
+	SourceSHA256  string `json:"source_sha256"`
+	OptionsSHA256 string `json:"options_sha256"`
+	// FontsSHA256 is the digest of the fixture font directories the source
+	// installs (see [installedFontsDigest]), "" when it names none.
+	FontsSHA256    string `json:"fonts_sha256,omitempty"`
 	PDFSHA256      string `json:"pdf_sha256"`
 	Image          string `json:"image"`
 	SourcePin      string `json:"source_pin,omitempty"`
@@ -71,6 +74,7 @@ type referenceFailure struct {
 	Source        string   `json:"source"`
 	SourceSHA256  string   `json:"source_sha256"`
 	OptionsSHA256 string   `json:"options_sha256"`
+	FontsSHA256   string   `json:"fonts_sha256,omitempty"`
 	Image         string   `json:"image"`
 	Status        string   `json:"status"`
 	Answer        string   `json:"answer"`
@@ -260,11 +264,12 @@ func unreferencedFixtures(m *Manifest) map[string]bool {
 // refuse again: the only case why is set and rebuild false.
 func checkReference(man referenceManifest, refs *ReferenceSpec, name string, fx Fixture, pins map[string]string) (why string, rebuild bool) {
 	srcSum, optSum, srcErr := sourceSums(refs.Engine, fx.PDFPath)
+	fontsSum, fontsErr := sourceFontsDigest(fx.PDFPath)
 	image := referenceBuilder(refs.Engine, pins)
 	rec, ok := man.References[name]
 	if !ok {
 		if fail, refused := man.Failed[name]; refused {
-			again := srcErr != nil || fail.Image != image || fail.SourceSHA256 != srcSum || fail.OptionsSHA256 != optSum
+			again := srcErr != nil || fontsErr != nil || fail.Image != image || fail.SourceSHA256 != srcSum || fail.OptionsSHA256 != optSum || fail.FontsSHA256 != fontsSum
 			return fmt.Sprintf("%s was refused by %s (HTTP %s: %s)", name, fail.Image, fail.Status, refusalCause(fail.Answer)), again
 		}
 		return name + " has no reference", true
@@ -283,7 +288,55 @@ func checkReference(man referenceManifest, refs *ReferenceSpec, name string, fx 
 	if optSum != rec.OptionsSHA256 {
 		return name + "'s options changed since its reference was built", true
 	}
+	if fontsErr != nil {
+		return fmt.Sprintf("%s's installed fonts: %v", name, fontsErr), true
+	}
+	if fontsSum != rec.FontsSHA256 {
+		return name + "'s installed fonts changed since its reference was built", true
+	}
 	return "", false
+}
+
+// sourceFontsDigest returns the digest of the fixture font directories the
+// source at path installs ([installedFontsDigest]): "" when it names none
+// or its options do not load, which the source's own digest reports.
+func sourceFontsDigest(path string) (string, error) {
+	ref, err := fixture.LoadReference(path)
+	if err != nil {
+		return "", nil //nolint:nilerr // an options file that does not load fails the source's digest, which names it
+	}
+	return installedFontsDigest(ref.InstalledFonts)
+}
+
+// installedFontsDigest returns the SHA-256 of the fixture font directories
+// names lists, in order: each directory's name, then each of its files by
+// name and SHA-256, the release record and the licence included. It is ""
+// for no directory, so a reference of a source that names none records
+// none.
+func installedFontsDigest(names []string) (string, error) {
+	if len(names) == 0 {
+		return "", nil
+	}
+	h := sha256.New()
+	for _, name := range names {
+		dir := filepath.Join(testdataDir(), fixtureFontsDir, name)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return "", fmt.Errorf("%w: %s (run go run ./test/integration/cmd/corpus fetch --corpus=fonts/%s)", errFontsMissing, dir, name)
+		}
+		fmt.Fprintf(h, "%s\x00\n", name)
+		for _, e := range entries {
+			if !e.Type().IsRegular() {
+				continue
+			}
+			sum, err := fileSHA256(filepath.Join(dir, e.Name()))
+			if err != nil {
+				return "", err
+			}
+			fmt.Fprintf(h, "%s\x00%s\n", e.Name(), sum)
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // refusalCause shortens a converter's answer to its error code when it

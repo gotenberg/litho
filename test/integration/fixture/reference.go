@@ -16,6 +16,9 @@ type Reference struct {
 	// takes them, so a source that sets one and names no Of has no
 	// reference to be judged against.
 	LithoOptions []string
+	// InstalledFonts are the fixture font directories the source names
+	// under [InstalledFontsName], which its reference is built with.
+	InstalledFonts []string
 }
 
 // Unreferenced reports whether the source sets a litho-only option and
@@ -34,7 +37,7 @@ func LoadReference(path string) (Reference, error) {
 		src, err := Load(path)
 		switch {
 		case err == nil:
-			return Reference{Of: src.Options.ReferenceOf, LithoOptions: src.LithoOptions()}, nil
+			return Reference{Of: src.Options.ReferenceOf, LithoOptions: src.LithoOptions(), InstalledFonts: src.Options.InstalledFonts}, nil
 		case !errors.Is(err, ErrNoDocument):
 			return Reference{}, err
 		}
@@ -43,5 +46,5 @@ func LoadReference(path string) (Reference, error) {
 	if err != nil {
 		return Reference{}, err
 	}
-	return Reference{Of: src.Options.ReferenceOf, LithoOptions: src.LithoOptions()}, nil
+	return Reference{Of: src.Options.ReferenceOf, LithoOptions: src.LithoOptions(), InstalledFonts: src.Options.InstalledFonts}, nil
 }

@@ -218,6 +218,14 @@ Some keys of `options.json` are litho's own options: no reference engine has the
 
 A key on a format the table does not list for it is left out of the conversion, and counts as not set too. A source that sets one of these keys must name a twin with `reference_of`: the engine would print the source without the option, a reference of another document. Without one, `corpus references` converts nothing for it and records it in the reference manifest under `failed`, status `0`, with the keys under `litho_options`, removing any reference built for it before; that record asks no engine, so it needs neither Docker nor a Microsoft sign-in, and `corpus prepare` writes it for a new source whatever the engine. The `diff` cell leaves such a source unscored, a golden left from an earlier reference included, and names it with its keys in a one-line notice; `targets` and `robustness` convert it all the same, since they read no reference. `planReferences` in `cmd/corpus/references_plan.go` holds the rule.
 
+#### Installed fonts
+
+A source converts with the Gotenberg image's fonts (`testdata/fonts/gotenberg`), which every converter cell reads. Its `options.json` may name more under `installedFonts`: directories of the fixture fonts, by name, that the machine converting it has installed, such as `["roboto-flex", "source-sans-3"]`, the variable families `corpus/fonts/FIXTURES.md` lists. The key is no route field and no litho option, and applies to HTML, Markdown and Office sources alike:
+
+- `diff`, `targets` and `robustness` add each directory after the image's fonts (`pdf.WithConvertFontDirs`), and fail the fixture, naming the fetch, when one is missing.
+- `corpus references` converts the source in a Gotenberg container of its own, started with each directory mounted read-only under `/usr/local/share/fonts/<name>`, which the image's fontconfig reads beside `/usr/share/fonts`, and refuses to build when fontconfig in the container does not list every font file mounted. Sources that name the same directories share one container; a source that names none converts in the stock container, as without the key. Each reference of such a source records `fonts_sha256`, a digest of the directories' files, and a reference whose fonts changed since is stale; a source without the key records none, so its reference is untouched.
+- Office for the web installs no font: in a format Microsoft's references judge, the key counts as litho's own option, and the source names a twin or goes unscored, as above.
+
 #### Paper matrix
 
 `corpus build` generates, from a few committed bases per corpus, documents that differ from their base by their page setup alone (`paperDocs` in `cmd/corpus/papers.go`, each corpus's `FIXTURES.md` under "Paper documents"), never committed: the same bases give the same bytes. The `diff` cell scores each against its reference engine like any other source. The matrix has four dimensions:

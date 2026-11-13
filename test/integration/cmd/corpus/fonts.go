@@ -225,7 +225,9 @@ func installFontRelease(ctx context.Context, client *http.Client, pins map[strin
 	defer os.RemoveAll(tmp)
 	faces := 0
 	for name, data := range files {
-		if err := os.WriteFile(filepath.Join(tmp, name), data, 0o600); err != nil {
+		// Readable by every user: corpus references mounts the directory
+		// into a container whose user is not the one that fetched it.
+		if err := os.WriteFile(filepath.Join(tmp, name), data, 0o644); err != nil { //nolint:gosec // a public font release, read by the Gotenberg container's user
 			return fmt.Errorf("%s: write %s: %w", r.dir, name, err)
 		}
 		if ext := strings.ToLower(path.Ext(name)); ext == ".ttf" || ext == ".otf" || ext == ".ttc" {
@@ -237,6 +239,9 @@ func installFontRelease(ctx context.Context, client *http.Client, pins map[strin
 	}
 	if err := os.RemoveAll(target); err != nil {
 		return fmt.Errorf("%s: remove the previous release: %w", r.dir, err)
+	}
+	if err := os.Chmod(tmp, 0o755); err != nil { //nolint:gosec // a public font release, read by the Gotenberg container's user
+		return fmt.Errorf("%s: %w", r.dir, err)
 	}
 	if err := os.Rename(tmp, target); err != nil {
 		return fmt.Errorf("%s: %w", r.dir, err)

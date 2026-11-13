@@ -131,23 +131,26 @@ func referenceBuilder(engine string, pins map[string]string) string {
 }
 
 // referenceBuilders starts each converter the first time a corpus needs
-// it, and keeps it for the next ones.
+// it, and keeps it for the next ones: one Gotenberg container per set of
+// installed fixture fonts, the stock image for a source that names none.
 type referenceBuilders struct {
 	pins *resolvedPins
-	g    *gotenberg
+	g    map[string]*gotenberg
 	ms   *msGraph
 }
 
 // build builds the references of m, the ones only names when set.
 func (b *referenceBuilders) build(ctx context.Context, m *Manifest, only []string) error {
-	return buildReferences(ctx, func(ctx context.Context) (referenceConverter, error) {
-		return b.converter(ctx, m.References.Engine)
+	return buildReferences(ctx, func(ctx context.Context, fonts []string) (referenceConverter, error) {
+		return b.converter(ctx, m.References.Engine, fonts)
 	}, m, b.pins, only)
 }
 
-// converter returns the converter of engine, started the first time a
-// corpus asks for it.
-func (b *referenceBuilders) converter(ctx context.Context, engine string) (referenceConverter, error) {
+// converter returns the converter of engine with the fixture font
+// directories fonts installed, started the first time a corpus asks for
+// it. Office for the web installs no font: a source of its corpora that
+// names some is never converted (see [fixture.Office.LithoOptions]).
+func (b *referenceBuilders) converter(ctx context.Context, engine string, fonts []string) (referenceConverter, error) {
 	if engine == engineMicrosoft {
 		if b.ms == nil {
 			ms, err := newMSGraph(ctx)
@@ -158,23 +161,28 @@ func (b *referenceBuilders) converter(ctx context.Context, engine string) (refer
 		}
 		return b.ms, nil
 	}
-	if b.g == nil {
-		image := b.pins.Values["GOTENBERG_IMAGE"]
-		if image == "" {
-			return nil, errors.New("GOTENBERG_IMAGE is not pinned")
-		}
-		g, err := startGotenberg(ctx, image)
-		if err != nil {
-			return nil, fmt.Errorf("starting %s: %w", image, err)
-		}
-		b.g = g
+	key := strings.Join(fonts, "\n")
+	if g, ok := b.g[key]; ok {
+		return g, nil
 	}
-	return b.g, nil
+	image := b.pins.Values["GOTENBERG_IMAGE"]
+	if image == "" {
+		return nil, errors.New("GOTENBERG_IMAGE is not pinned")
+	}
+	g, err := startGotenberg(ctx, image, fonts)
+	if err != nil {
+		return nil, fmt.Errorf("starting %s: %w", image, err)
+	}
+	if b.g == nil {
+		b.g = map[string]*gotenberg{}
+	}
+	b.g[key] = g
+	return g, nil
 }
 
 func (b *referenceBuilders) close() {
-	if b.g != nil {
-		b.g.close()
+	for _, g := range b.g {
+		g.close()
 	}
 	if b.ms != nil {
 		b.ms.close()
@@ -187,10 +195,34 @@ type gotenberg struct {
 	client         *http.Client
 }
 
-// startGotenberg starts image on a free loopback port and waits for its
-// health route.
-func startGotenberg(ctx context.Context, image string) (*gotenberg, error) {
-	out, err := exec.CommandContext(ctx, "docker", "run", "-d", "--rm", "-p", "127.0.0.1::3000", image).Output() //nolint:gosec // the pinned image
+// gotenbergFontsDir is where the Gotenberg container finds the fixture
+// font directories a source installs, one directory each, read-only: the
+// image's fontconfig reads /usr/local/share/fonts beside /usr/share/fonts
+// (its /etc/fonts/fonts.conf names both). The image caches no font list for
+// it, so fontconfig reads the directory when Chromium or LibreOffice
+// starts, and writes its cache under the home directory of the container's
+// user.
+//
+// # Corpus evidence
+//
+//   - probe, fonts: fc-list in gotenberg/gotenberg:9.4.1 with Roboto Flex and
+//     Source Sans 3 mounted there lists their 28 faces and named instances;
+//     its first run takes 11 ms against 8 ms without them, later runs 4 ms.
+const gotenbergFontsDir = "/usr/local/share/fonts"
+
+// startGotenberg starts image on a free loopback port, with the fixture
+// font directories fonts installed under [gotenbergFontsDir], and waits for
+// its health route and for fontconfig to list every font file of fonts.
+func startGotenberg(ctx context.Context, image string, fonts []string) (*gotenberg, error) {
+	args := []string{"run", "-d", "--rm", "-p", "127.0.0.1::3000"}
+	installed, err := installedFontMounts(fonts)
+	if err != nil {
+		return nil, err
+	}
+	for _, m := range installed {
+		args = append(args, "-v", m.host+":"+m.container+":ro")
+	}
+	out, err := exec.CommandContext(ctx, "docker", append(args, image)...).Output() //nolint:gosec // the pinned image and fixture font directories
 	if err != nil {
 		return nil, fmt.Errorf("docker run %s: %w", image, err)
 	}
@@ -208,6 +240,10 @@ func startGotenberg(ctx context.Context, image string) (*gotenberg, error) {
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
+				if err := g.checkFonts(ctx, installed); err != nil {
+					g.close()
+					return nil, err
+				}
 				return g, nil
 			}
 		}
@@ -222,6 +258,67 @@ func startGotenberg(ctx context.Context, image string) (*gotenberg, error) {
 		case <-time.After(time.Second):
 		}
 	}
+}
+
+// fontMount is one fixture font directory as the container sees it: the
+// host directory, the directory it is mounted at and the font files in it.
+type fontMount struct {
+	host, container string
+	files           []string
+}
+
+// installedFontMounts returns the mounts of the fixture font directories
+// fonts names, each resolved to an absolute path without symbolic links,
+// which docker mounts as given.
+func installedFontMounts(fonts []string) ([]fontMount, error) {
+	mounts := make([]fontMount, 0, len(fonts))
+	for _, name := range fonts {
+		host, err := filepath.Abs(filepath.Join(testdataDir(), fixtureFontsDir, name))
+		if err == nil {
+			host, err = filepath.EvalSymlinks(host)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s (run go run ./test/integration/cmd/corpus fetch --corpus=fonts/%s): %w", errFontsMissing, name, name, err)
+		}
+		m := fontMount{host: host, container: path.Join(gotenbergFontsDir, name)}
+		entries, err := os.ReadDir(host)
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range entries {
+			switch strings.ToLower(filepath.Ext(e.Name())) {
+			case ".ttf", ".otf", ".ttc":
+				m.files = append(m.files, path.Join(m.container, e.Name()))
+			}
+		}
+		if len(m.files) == 0 {
+			return nil, fmt.Errorf("%w: %s holds no font file", errFontsMissing, host)
+		}
+		mounts = append(mounts, m)
+	}
+	return mounts, nil
+}
+
+// checkFonts fails unless fontconfig in the container lists every font
+// file of mounts: a file the container's user cannot read is left out
+// without a word, and its references would print another face.
+func (g *gotenberg) checkFonts(ctx context.Context, mounts []fontMount) error {
+	if len(mounts) == 0 {
+		return nil
+	}
+	out, err := exec.CommandContext(ctx, "docker", "exec", g.id, "fc-list", "--format", "%{file}\n").Output() //nolint:gosec // the container just started
+	if err != nil {
+		return fmt.Errorf("listing the container's fonts: %w", err)
+	}
+	listed := strings.Split(string(out), "\n")
+	for _, m := range mounts {
+		for _, f := range m.files {
+			if !slices.Contains(listed, f) {
+				return fmt.Errorf("%w: fontconfig in %s does not list %s (mounted from %s)", errFontsMissing, g.image, f, m.host)
+			}
+		}
+	}
+	return nil
 }
 
 func (g *gotenberg) close() {
@@ -373,10 +470,13 @@ func chromiumFiles(dir string, opts fixture.Options) ([]formFile, error) {
 // (a source directory, or a fetched document), source how the reference
 // manifest names it, options its options.json ("" without one), litho the
 // litho-only keys it sets: a source that sets some is not converted, and
-// the reference manifest records why (see [referencePlan]).
+// the reference manifest records why (see [referencePlan]). fonts are the
+// fixture font directories its options.json names under installedFonts,
+// installed in the container that converts it.
 type referenceJob struct {
 	name, path, options, source string
 	litho                       []string
+	fonts                       []string
 }
 
 // sourceDigest returns the SHA-256 a reference records for the source at
@@ -496,8 +596,10 @@ func (g *gotenberg) convert(ctx context.Context, engine string, j referenceJob) 
 // no engine takes those options, so its reference would print another
 // document (see [referencePlan]). open is called only when a source is to
 // be converted, so a run that records only such sources needs no container
-// and no sign-in.
-func buildReferences(ctx context.Context, open func(context.Context) (referenceConverter, error), m *Manifest, pins *resolvedPins, only []string) error {
+// and no sign-in, and once for each set of installed fixture fonts the
+// sources to convert name: a source converts with exactly the fonts it
+// names, and its record holds their digest (see [installedFontsDigest]).
+func buildReferences(ctx context.Context, open func(ctx context.Context, fonts []string) (referenceConverter, error), m *Manifest, pins *resolvedPins, only []string) error {
 	if isBuildCorpus(m) || hasFlatPapers(m) {
 		if err := buildCorpus(ctx, m); err != nil {
 			return err
@@ -522,15 +624,23 @@ func buildReferences(ctx context.Context, open func(context.Context) (referenceC
 		}
 	}
 	var (
-		conv    referenceConverter
+		convs   = map[string]referenceConverter{}
 		version string
 		builder = referenceBuilder(engine, pins.Values)
 	)
-	if slices.ContainsFunc(jobs, func(j referenceJob) bool { return len(j.litho) == 0 }) {
-		if conv, err = open(ctx); err != nil {
+	for _, j := range jobs {
+		key := strings.Join(j.fonts, "\n")
+		if _, ok := convs[key]; ok || len(j.litho) > 0 {
+			continue
+		}
+		conv, err := open(ctx, j.fonts)
+		if err != nil {
 			return err
 		}
-		version, builder = conv.version(ctx, engine), conv.builder()
+		if len(convs) == 0 {
+			version, builder = conv.version(ctx, engine), conv.builder()
+		}
+		convs[key] = conv
 	}
 	builtAt := ""
 	if engine == engineMicrosoft {
@@ -558,6 +668,10 @@ func buildReferences(ctx context.Context, open func(context.Context) (referenceC
 				return err
 			}
 		}
+		fontsSum, err := installedFontsDigest(j.fonts)
+		if err != nil {
+			return err
+		}
 		if len(j.litho) > 0 {
 			mu.Lock()
 			defer mu.Unlock()
@@ -570,7 +684,7 @@ func buildReferences(ctx context.Context, open func(context.Context) (referenceC
 			fmt.Printf("  %s: %s sets litho's own %s: no reference\n", m.Name, j.name, strings.Join(j.litho, ", "))
 			return nil
 		}
-		status, body, err := conv.convert(ctx, engine, j)
+		status, body, err := convs[strings.Join(j.fonts, "\n")].convert(ctx, engine, j)
 		switch {
 		case errors.Is(err, errMSGraphSignIn):
 			return err
@@ -585,7 +699,7 @@ func buildReferences(ctx context.Context, open func(context.Context) (referenceC
 			}
 			sum := sha256.Sum256(body)
 			ok[j.name] = referenceRecord{
-				Source: j.source, SourceSHA256: srcSum, OptionsSHA256: optSum, PDFSHA256: hex.EncodeToString(sum[:]),
+				Source: j.source, SourceSHA256: srcSum, OptionsSHA256: optSum, FontsSHA256: fontsSum, PDFSHA256: hex.EncodeToString(sum[:]),
 				Image: builder, SourcePin: sourcePin, SourcePinValue: sourceValue, BuiltAt: builtAt,
 			}
 			fmt.Printf("  %s: references/%s.pdf (%d bytes)\n", m.Name, j.name, len(body))
@@ -594,7 +708,7 @@ func buildReferences(ctx context.Context, open func(context.Context) (referenceC
 		_ = os.Remove(filepath.Join(out, j.name+".pdf")) //nolint:errcheck // a refused source may have had no reference
 		answer := bytes.ReplaceAll(body[:min(len(body), maxReferenceAnswer)], []byte{0}, nil)
 		failed[j.name] = referenceFailure{
-			Source: j.source, SourceSHA256: srcSum, OptionsSHA256: optSum, Image: builder,
+			Source: j.source, SourceSHA256: srcSum, OptionsSHA256: optSum, FontsSHA256: fontsSum, Image: builder,
 			Status: strconv.Itoa(status), Answer: string(answer),
 		}
 		if status == 0 {
@@ -632,7 +746,7 @@ func buildReferences(ctx context.Context, open func(context.Context) (referenceC
 					man.Failed[n] = f
 				}
 			}
-			if conv == nil {
+			if len(convs) == 0 {
 				// No source was converted: the version is the last run's.
 				man.LibreOffice = old.LibreOffice
 			}
@@ -686,11 +800,11 @@ func referenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 			continue
 		}
 		dir := filepath.Join(sources, name)
-		borrows, litho := sourceReference(dir)
+		borrows, litho, fonts := sourceReference(dir)
 		if borrows {
 			continue
 		}
-		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), "sources/" + name, litho})
+		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), "sources/" + name, litho, fonts})
 	}
 	jobs = append(jobs, flatPaperReferenceJobs(m, only)...)
 	if m.Inputs == nil || m.Inputs.List == "" {
@@ -711,7 +825,7 @@ func referenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 		if _, err := os.Stat(doc); err != nil {
 			return nil, fmt.Errorf("%s is missing: run make corpus-fetch CORPUS=%s", doc, m.Name)
 		}
-		jobs = append(jobs, referenceJob{name, doc, "", d.ID, nil})
+		jobs = append(jobs, referenceJob{name, doc, "", d.ID, nil, nil})
 	}
 	sort.Slice(jobs, func(i, j int) bool { return jobs[i].name < jobs[j].name })
 	return jobs, nil
@@ -771,11 +885,11 @@ func builtReferenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 		if _, err := fixture.LoadOffice(dir); err != nil {
 			return nil, fmt.Errorf("%w (run make corpus-build CORPUS=%s)", err, m.Name)
 		}
-		borrows, litho := sourceReference(dir)
+		borrows, litho, fonts := sourceReference(dir)
 		if borrows {
 			continue
 		}
-		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), path.Join(m.Inputs.Build, name), litho})
+		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), path.Join(m.Inputs.Build, name), litho, fonts})
 	}
 	return jobs, nil
 }

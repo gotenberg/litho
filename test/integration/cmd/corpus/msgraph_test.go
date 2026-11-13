@@ -155,7 +155,7 @@ func TestBuildReferences_AnExpiredSignInFailsTheRun(t *testing.T) {
 	t.Chdir(dir)
 	g := &msGraph{client: &http.Client{Transport: stubGraph{srv}}, static: true, token: msGraphToken{AccessToken: "expired"}}
 	m := &Manifest{Name: "stub/docx", Source: "stub/docx", References: &ReferenceSpec{Dir: "references", Engine: engineMicrosoft}}
-	err := buildReferences(t.Context(), func(context.Context) (referenceConverter, error) { return g, nil }, m, &resolvedPins{Values: map[string]string{}}, nil)
+	err := buildReferences(t.Context(), func(context.Context, []string) (referenceConverter, error) { return g, nil }, m, &resolvedPins{Values: map[string]string{}}, nil)
 	if !errors.Is(err, errMSGraphSignIn) {
 		t.Fatalf("error %v, want the refused sign-in", err)
 	}

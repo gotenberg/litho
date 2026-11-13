@@ -86,6 +86,13 @@ type OfficeOptions struct {
 	// reference of a document that sets in itself what its options ask.
 	// Default none.
 	ReferenceOf string `json:"reference_of,omitempty"`
+	// InstalledFonts names directories of the fixture fonts the source is
+	// converted with as installed fonts (see [Options.InstalledFonts]):
+	// corpus references installs them in the Gotenberg container before
+	// LibreOffice starts. Office for the web installs no font, so in a
+	// format Microsoft's references judge the key counts as litho's own
+	// ([Office.LithoOptions]). Default none.
+	InstalledFonts []string `json:"installedFonts,omitempty"`
 }
 
 // OfficeOptionNames are the keys of an Office options file, the JSON names
@@ -211,7 +218,7 @@ func LoadOffice(path string) (*Office, error) {
 func ParseOfficeOptions(data []byte) (OfficeOptions, error) {
 	var o OfficeOptions
 	names := append(slices.Clone(OfficeOptionNames), OfficeLithoOptionNames...)
-	if err := decodeStrict(data, append(names, ReferenceOfName), &o); err != nil {
+	if err := decodeStrict(data, append(names, ReferenceOfName, InstalledFontsName), &o); err != nil {
 		return OfficeOptions{}, err
 	}
 	return o, o.validate()
@@ -245,7 +252,7 @@ func (o OfficeOptions) validate() error {
 			return fmt.Errorf("date %q: want an RFC 3339 time", o.Date)
 		}
 	}
-	return nil
+	return validateInstalledFonts(o.InstalledFonts)
 }
 
 // trackedChangesViews maps the trackedChanges values to litho's views.
@@ -476,10 +483,16 @@ func sameRunes(a, b []rune) bool {
 // out, as the conversion leaves it out: "trackedChanges": "accepted",
 // "recalculation": "asNeeded", "hiddenSheets": false, "csvTypeDetection":
 // true, "handouts": 0 and csvSeparators holding a comma, a semicolon and a
-// tab ([ReferenceCSVSeparators]), in any order. A source that names none
-// converts as its reference engine prints it.
+// tab ([ReferenceCSVSeparators]), in any order. [InstalledFontsName]
+// follows them when the source names installed fonts in a format
+// Microsoft's references judge: Office for the web installs no font. A
+// source that names none converts as its reference engine prints it.
 func (o *Office) LithoOptions() []string {
-	return o.options().litho
+	keys := o.options().litho
+	if len(o.Options.InstalledFonts) > 0 && !judgedByLibreOffice(o.Format) {
+		keys = append(keys, InstalledFontsName)
+	}
+	return keys
 }
 
 // isPresentation reports whether a format is a presentation's, whose slides

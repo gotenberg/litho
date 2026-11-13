@@ -189,6 +189,13 @@ func (f *robustnessFeature) Run(ctx context.Context, srcPath, fixtureID string) 
 	f.mu.RLock()
 	exe, fonts := f.exe, f.fonts
 	f.mu.RUnlock()
+	// A source whose options do not load names no installed fonts: the
+	// conversion reports why it does not load.
+	if ref, err := fixture.LoadReference(srcPath); err == nil {
+		if fonts, err = withInstalledFonts(fonts, ref.InstalledFonts); err != nil {
+			return nil, err
+		}
+	}
 	tmp, err := os.MkdirTemp("", "litho-robustness-*")
 	if err != nil {
 		return nil, fmt.Errorf("temp directory of the conversion: %w", err)

@@ -166,9 +166,10 @@ func TestOfficeOptionNames_MatchTheJSONNames(t *testing.T) {
 		tags = append(tags, name)
 	}
 	// The route's fields, then litho's own options, then the key that
-	// borrows a reference: the last two are no fields of the route's.
+	// borrows a reference and the one that installs fixture fonts: the
+	// last three are no fields of the route's.
 	want := append(slices.Clone(OfficeOptionNames), OfficeLithoOptionNames...)
-	if want = append(want, ReferenceOfName); !slices.Equal(tags, want) {
+	if want = append(want, ReferenceOfName, InstalledFontsName); !slices.Equal(tags, want) {
 		t.Errorf("json names %v, want %v", tags, want)
 	}
 }
@@ -229,5 +230,52 @@ func TestOfficeConversion_TakesEveryField(t *testing.T) {
 		if _, err := c.WriteTo(context.Background(), &bytes.Buffer{}); !errors.Is(err, pdf.ErrConvertNoFonts) {
 			t.Errorf("%s: %v, want ErrConvertNoFonts", ext, err)
 		}
+	}
+}
+
+func TestInstalledFonts_ValidatedAndCountedAsLithosOwnForMicrosoft(t *testing.T) {
+	t.Parallel()
+
+	for _, bad := range []string{`[""]`, `["../x"]`, `["a/b"]`, `["."]`, `["gotenberg"]`, `["a", "a"]`, `[" a"]`} {
+		data := []byte(`{"installedFonts": ` + bad + `}`)
+		if _, err := ParseOptions(data); err == nil {
+			t.Errorf("html %s: accepted", bad)
+		}
+		if _, err := ParseOfficeOptions(data); err == nil {
+			t.Errorf("office %s: accepted", bad)
+		}
+	}
+	data := []byte(`{"installedFonts": ["roboto-flex", "source-sans-3"]}`)
+	html, err := ParseOptions(data)
+	if err != nil || !slices.Equal(html.InstalledFonts, []string{"roboto-flex", "source-sans-3"}) {
+		t.Fatalf("html: %v, %v", html.InstalledFonts, err)
+	}
+	if got := InstalledFontDirs("root", html.InstalledFonts); !slices.Equal(got, []string{filepath.Join("root", "roboto-flex"), filepath.Join("root", "source-sans-3")}) {
+		t.Errorf("InstalledFontDirs = %v", got)
+	}
+	office, err := ParseOfficeOptions(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// LibreOffice installs the fonts, Office for the web cannot.
+	for format, want := range map[Format][]string{
+		FormatODT:  nil,
+		FormatODS:  nil,
+		FormatDOCX: {InstalledFontsName},
+		FormatXLSX: {InstalledFontsName},
+		FormatPPTX: {InstalledFontsName},
+	} {
+		o := &Office{Format: format, Options: office}
+		if got := o.LithoOptions(); !slices.Equal(got, want) {
+			t.Errorf("%s: LithoOptions = %v, want %v", format, got, want)
+		}
+	}
+
+	dir := t.TempDir()
+	write(t, dir, HTMLDocument, "<p>x</p>")
+	write(t, dir, OptionsFile, string(data))
+	ref, err := LoadReference(dir)
+	if err != nil || !slices.Equal(ref.InstalledFonts, html.InstalledFonts) || ref.Unreferenced() {
+		t.Errorf("LoadReference = %+v, %v", ref, err)
 	}
 }

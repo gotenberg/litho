@@ -161,6 +161,12 @@ type Options struct {
 	// whose reference stands for this source's (see
 	// [OfficeOptions.ReferenceOf]). It is no route field. Default none.
 	ReferenceOf string `json:"reference_of,omitempty"`
+	// InstalledFonts names directories of the fixture fonts, beside the
+	// Gotenberg image's, that the source is converted with as installed
+	// fonts: litho reads them as font directories, and corpus references
+	// installs them in the Gotenberg container before Chromium starts. It
+	// is no route field. Default none.
+	InstalledFonts []string `json:"installedFonts,omitempty"`
 }
 
 // BandOptions are one band of [Options.Bands].
@@ -329,7 +335,7 @@ func Load(dir string) (*Source, error) {
 func ParseOptions(data []byte) (Options, error) {
 	var o Options
 	names := append(slices.Clone(OptionNames), LithoOptionNames...)
-	if err := decodeStrict(data, append(names, ReferenceOfName), &o); err != nil {
+	if err := decodeStrict(data, append(names, ReferenceOfName, InstalledFontsName), &o); err != nil {
 		return Options{}, err
 	}
 	return o, o.validate()
@@ -424,7 +430,41 @@ func (o Options) validate() error {
 	if o.ReferenceOf != strings.TrimSpace(o.ReferenceOf) || strings.Contains(o.ReferenceOf, "\x00") {
 		return fmt.Errorf("%s %q: want a fixture ID", ReferenceOfName, o.ReferenceOf)
 	}
+	return validateInstalledFonts(o.InstalledFonts)
+}
+
+// InstalledFontsName is the key of an options file, HTML or Office, that
+// names the fixture font directories a source is converted with as
+// installed fonts ([Options.InstalledFonts], [OfficeOptions.InstalledFonts]).
+// It is no route field and no litho option: it sets up the machine both
+// converters run on.
+const InstalledFontsName = "installedFonts"
+
+// validateInstalledFonts checks that names lists directory names of the
+// fixture fonts, each once: no path, and not [ImageFontsDir], which every
+// source is converted with.
+func validateInstalledFonts(names []string) error {
+	for i, name := range names {
+		switch {
+		case name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\:`) || strings.TrimSpace(name) != name:
+			return fmt.Errorf("%s %q: want a directory name of the fixture fonts", InstalledFontsName, name)
+		case name == ImageFontsDir:
+			return fmt.Errorf("%s %q: every source is converted with the Gotenberg image's fonts", InstalledFontsName, name)
+		case slices.Contains(names[:i], name):
+			return fmt.Errorf("%s %q: named twice", InstalledFontsName, name)
+		}
+	}
 	return nil
+}
+
+// InstalledFontDirs returns the directories under root, the fixture fonts
+// directory, that names lists, in order.
+func InstalledFontDirs(root string, names []string) []string {
+	dirs := make([]string, 0, len(names))
+	for _, name := range names {
+		dirs = append(dirs, filepath.Join(root, name))
+	}
+	return dirs
 }
 
 // readTemplate reads the template file name of dir; "" reads as no template.

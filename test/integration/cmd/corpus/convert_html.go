@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/pdf"
@@ -114,7 +115,9 @@ func conversion(src []byte, s htmlSettings) (*pdf.Conversion, error) {
 // sourceSettings reads a converter corpus source, a source directory or an
 // Office document, and returns its document's bytes with the settings the
 // diff and targets cells convert it at: the options its options.json names,
-// and the font directories fonts. office reads it as an Office source.
+// and the font directories fonts, followed by the fixture font directories
+// its installedFonts names when fonts is not nil (see [withInstalledFonts]).
+// office reads it as an Office source.
 func sourceSettings(srcPath string, office bool, fonts []string) ([]byte, htmlSettings, error) {
 	if office {
 		source, err := fixture.LoadOffice(srcPath)
@@ -124,6 +127,9 @@ func sourceSettings(srcPath string, office bool, fonts []string) ([]byte, htmlSe
 		src, err := os.ReadFile(source.Document)
 		if err != nil {
 			return nil, htmlSettings{}, fmt.Errorf("read: %w", err)
+		}
+		if fonts, err = withInstalledFonts(fonts, source.Options.InstalledFonts); err != nil {
+			return nil, htmlSettings{}, err
 		}
 		return src, htmlSettings{FontDirs: fonts, Format: source.Format, Office: source}, nil
 	}
@@ -138,6 +144,9 @@ func sourceSettings(srcPath string, office bool, fonts []string) ([]byte, htmlSe
 	src, err := os.ReadFile(source.Document)
 	if err != nil {
 		return nil, htmlSettings{}, fmt.Errorf("read: %w", err)
+	}
+	if fonts, err = withInstalledFonts(fonts, source.Options.InstalledFonts); err != nil {
+		return nil, htmlSettings{}, err
 	}
 	width, height := source.Paper()
 	top, right, bottom, left := source.Margins()
@@ -195,6 +204,26 @@ func fixtureFontDirs(root, target string, extra ...string) ([]string, error) {
 		dirs = append(dirs, p)
 	}
 	return dirs, nil
+}
+
+// withInstalledFonts returns fonts followed by the fixture font directories
+// names lists ([fixture.Options.InstalledFonts]), in a new slice: the
+// directories every fixture is converted with, then the source's own. A nil
+// fonts converts with the system's fonts (corpus system-fonts) and is
+// returned as it is. It fails, naming the command that fetches it, when a
+// directory is missing.
+func withInstalledFonts(fonts, names []string) ([]string, error) {
+	if fonts == nil || len(names) == 0 {
+		return fonts, nil
+	}
+	root := fixtureFontsRoot()
+	dirs := fixture.InstalledFontDirs(root, names)
+	for i, d := range dirs {
+		if info, err := os.Stat(d); err != nil || !info.IsDir() {
+			return nil, fmt.Errorf("%w: no %s directory under %s (run go run ./test/integration/cmd/corpus fetch --corpus=fonts/%s)", errFontsMissing, names[i], root, names[i])
+		}
+	}
+	return slices.Concat(fonts, dirs), nil
 }
 
 // maxConvertedPages bounds the pages a converter feature renders of one

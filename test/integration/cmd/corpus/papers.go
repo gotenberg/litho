@@ -729,11 +729,11 @@ func flatPaperReferenceJobs(m *Manifest, only []string) []referenceJob {
 			continue
 		}
 		dir := filepath.Join(flatPapersOut(m), name)
-		borrows, litho := sourceReference(dir)
+		borrows, litho, fonts := sourceReference(dir)
 		if borrows {
 			continue
 		}
-		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), flatPapersDir + "/" + name, litho})
+		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), flatPapersDir + "/" + name, litho, fonts})
 	}
 	return jobs
 }
