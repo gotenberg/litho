@@ -157,7 +157,7 @@ func shadow(ctx context.Context, src *Source, sh *css.OfficeShadow, pixels *effe
 	if !ok {
 		return nil, Notes{}, nil
 	}
-	m := mul(translate(offset(sh.Dist, sh.Dir)), scaleSkew(src.Bounds, sh.Align, sh.SX, sh.SY, sh.KX, sh.KY))
+	m := shadowMatrix(sh, src.Bounds)
 	sigma := radius(sh.Blur) / 3
 	if src.Text {
 		sigma = float64(radius(sh.Blur) * textShadowSigma)
@@ -220,7 +220,7 @@ func glow(ctx context.Context, src *Source, g *css.OfficeGlow, pixels *effect.Pa
 // start opacity at the start position to the end opacity at the end
 // position, positions taken along the extent of the mapped bounds.
 func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixels *effect.Page) (typeset.Fragment, Notes, error) {
-	m := mul(translate(offset(r.Dist, r.Dir)), scaleSkew(src.Bounds, r.Align, r.SX, r.SY, r.KX, r.KY))
+	m := reflectionMatrix(r, src.Bounds)
 	sigma := radius(r.Blur) / 3
 	var s *effect.Surface
 	var notes Notes
@@ -464,19 +464,6 @@ func offset(dist, dir float64) (float64, float64) {
 // translate returns the move by (dx, dy).
 func translate(dx, dy float64) typeset.Matrix {
 	return typeset.Matrix{A: 1, D: 1, E: dx, F: dy}
-}
-
-// scaleSkew returns the map that scales by sx and sy and skews by kx and
-// ky degrees about the point of b that align names: ECMA-376 Part 1,
-// 20.1.8.45 outerShdw sx, sy, kx, ky and algn.
-func scaleSkew(b typeset.Rect, align css.RectAlign, sx, sy, kx, ky float64) typeset.Matrix {
-	sx, sy = factor(sx), factor(sy)
-	tx, ty := tanDeg(kx), tanDeg(ky)
-	px, py := b.X+float64(unit(align.X)*b.Width), b.Y+float64(unit(align.Y)*b.Height)
-	// Skew after scale: x' = sx x + tx sy y, y' = ty sx x + sy y, about
-	// (px, py).
-	m := typeset.Matrix{A: sx, B: float64(ty * sx), C: float64(tx * sy), D: sy}
-	return mul(translate(px, py), mul(m, translate(-px, -py)))
 }
 
 // factor returns a scale factor within [-maxScale, maxScale], 1 for a

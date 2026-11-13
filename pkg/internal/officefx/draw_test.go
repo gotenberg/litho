@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -117,5 +118,26 @@ func TestSincosDeg_Exact(t *testing.T) {
 		if s != tc.s || c != tc.c {
 			t.Errorf("sincos(%v) = %v, %v, want %v, %v", tc.deg, s, c, tc.s, tc.c)
 		}
+	}
+}
+
+// TestUnder_ShadowSkewsBeforeScaling checks that a shadow skewed and
+// scaled about the bottom right of its square is skewed first, as Word
+// and PowerPoint draw a perspective shadow: the top-left corner, 20 points
+// above the bottom, moves 20 points left by a skew of 45 degrees, not the
+// 5 points left a skew after a vertical scale of a quarter moves it.
+func TestUnder_ShadowSkewsBeforeScaling(t *testing.T) {
+	var px effect.Page
+	fx := &css.OfficeEffects{Shadow: &css.OfficeShadow{Color: css.Color{A: 1}, Blur: 1.5, SX: 1, SY: 0.25, KX: 45, Align: css.RectAlign{X: 1, Y: 1}}}
+	frags, _, err := Under(context.Background(), square(), fx, &px)
+	if err != nil || len(frags) != 1 {
+		t.Fatalf("%d fragments, error %v, want the shadow", len(frags), err)
+	}
+	r := frags[0].(*typeset.Image).Rect
+	if left := r.X + 1.5; math.Abs(left-(-10)) > 0.5 {
+		t.Errorf("shadow's left edge at %.2f, want -10", left)
+	}
+	if top := r.Y + 1.5; math.Abs(top-25) > 0.5 {
+		t.Errorf("shadow's top edge at %.2f, want 25, a quarter of the square above its bottom", top)
 	}
 }

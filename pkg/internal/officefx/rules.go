@@ -124,10 +124,10 @@ func (r *Rules) Grown(ctx context.Context, cov *effect.Surface, n int, k effect.
 	return out, nil
 }
 
-// ShadowMatrix returns the map of an outer shadow sh of a source whose
+// shadowMatrix returns the map of an outer shadow sh of a source whose
 // bounds are b: skewed by kx and ky, then scaled by sx and sy, about the
 // point of b its alignment names, then moved dist along dir (ECMA-376
-// Part 1, 20.1.8.45 outerShdw).
+// Part 1, 20.1.8.45 outerShdw), as Word and PowerPoint map it.
 //
 // # Corpus evidence
 //
@@ -137,14 +137,18 @@ func (r *Rules) Grown(ctx context.Context, cov *effect.Surface, n int, k effect.
 //     over the bitmap after the best shift; against the scale then the
 //     skew 17.91, against either with the angle negated 21.23 and 13.66,
 //     against no skew 16.03.
-func (r *Rules) ShadowMatrix(sh *css.OfficeShadow, b typeset.Rect) typeset.Matrix {
+//   - litho/docx: shapes-effects-3d's shadow skewed by kx 20 degrees and
+//     scaled by sy 23% about the bottom right: Word's soft mask against
+//     the skew then the scale rms 0.38 levels (at most 1.3) over the
+//     bitmap, unshifted; against the scale then the skew 10.05 (48.8).
+func shadowMatrix(sh *css.OfficeShadow, b typeset.Rect) typeset.Matrix {
 	return mul(translate(offset(sh.Dist, sh.Dir)), skewScale(b, sh.Align, sh.SX, sh.SY, sh.KX, sh.KY))
 }
 
-// ReflectionMatrix returns the map of a reflection rf of a source whose
-// bounds are b, as [Rules.ShadowMatrix] maps a shadow (ECMA-376 Part 1,
+// reflectionMatrix returns the map of a reflection rf of a source whose
+// bounds are b, as [shadowMatrix] maps a shadow (ECMA-376 Part 1,
 // 20.1.8.50 reflection).
-func (r *Rules) ReflectionMatrix(rf *css.OfficeReflection, b typeset.Rect) typeset.Matrix {
+func reflectionMatrix(rf *css.OfficeReflection, b typeset.Rect) typeset.Matrix {
 	return mul(translate(offset(rf.Dist, rf.Dir)), skewScale(b, rf.Align, rf.SX, rf.SY, rf.KX, rf.KY))
 }
 
