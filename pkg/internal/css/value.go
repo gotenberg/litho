@@ -207,10 +207,10 @@ func (l length) resolve(c lenCtx, basis float64) float64 {
 	if l.expr != nil {
 		return clampLen(censor(l.expr.eval(&calcScope{units: &sizes, basis: basis})))
 	}
-	v := l.pct / 100 * basis
+	v := float64(l.pct / 100 * basis)
 	for i, k := range l.u {
 		if k != 0 {
-			v += k * sizes[i]
+			v += float64(k * sizes[i])
 		}
 	}
 	return clampLen(censor(v))

@@ -341,15 +341,15 @@ func (e *Easing) cubicAt(x float64) float64 {
 	case x > 1:
 		switch {
 		case e.X2 < 1:
-			return 1 + (1-e.Y2)/(1-e.X2)*(x-1)
+			return 1 + float64((1-e.Y2)/(1-e.X2)*(x-1))
 		case e.X1 < 1:
-			return 1 + (1-e.Y1)/(1-e.X1)*(x-1)
+			return 1 + float64((1-e.Y1)/(1-e.X1)*(x-1))
 		}
 		return 1
 	}
 	bez := func(t, p1, p2 float64) float64 {
 		u := 1 - t
-		return 3*u*u*t*p1 + 3*u*t*t*p2 + t*t*t
+		return float64(3*u*u*t*p1) + float64(3*u*t*t*p2) + float64(t*t*t)
 	}
 	// The x of the curve rises with t, the x values of the control points
 	// lying in [0, 1]: bisection finds the t of x.

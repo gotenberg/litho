@@ -3,6 +3,7 @@ package css
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
@@ -586,36 +587,36 @@ func applyCalc(op calcOp, strategy roundStrategy, a []float64) float64 {
 	case opMod, opRem:
 		return modStep(op == opMod, a[0], a[1])
 	case opSin:
-		return math.Sin(a[0] * deg)
+		return detmath.Sin(a[0] * deg)
 	case opCos:
-		return math.Cos(a[0] * deg)
+		return detmath.Cos(a[0] * deg)
 	case opTan:
-		return math.Tan(a[0] * deg)
+		return detmath.Tan(a[0] * deg)
 	case opAsin:
-		return math.Asin(a[0]) / deg
+		return detmath.Asin(a[0]) / deg
 	case opAcos:
-		return math.Acos(a[0]) / deg
+		return detmath.Acos(a[0]) / deg
 	case opAtan:
-		return math.Atan(a[0]) / deg
+		return detmath.Atan(a[0]) / deg
 	case opAtan2:
-		return math.Atan2(a[0], a[1]) / deg
+		return detmath.Atan2(a[0], a[1]) / deg
 	case opPow:
-		return math.Pow(a[0], a[1])
+		return detmath.Pow(a[0], a[1])
 	case opSqrt:
 		return math.Sqrt(a[0])
 	case opHypot:
 		v := 0.0
 		for _, x := range a {
-			v = math.Hypot(v, x)
+			v = detmath.Hypot(v, x)
 		}
 		return v
 	case opLog:
 		if len(a) == 2 {
-			return math.Log(a[0]) / math.Log(a[1])
+			return detmath.Log(a[0]) / detmath.Log(a[1])
 		}
-		return math.Log(a[0])
+		return detmath.Log(a[0])
 	case opExp:
-		return math.Exp(a[0])
+		return detmath.Exp(a[0])
 	case opAbs:
 		return math.Abs(a[0])
 	case opSign:
@@ -657,7 +658,7 @@ func roundStep(strategy roundStrategy, a, b float64) float64 {
 	}
 	b = math.Abs(b)
 	q := a / b
-	lo, hi := math.Floor(q)*b, math.Ceil(q)*b
+	lo, hi := float64(math.Floor(q)*b), float64(math.Ceil(q)*b)
 	if lo == hi {
 		return a
 	}

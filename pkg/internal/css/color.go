@@ -3,6 +3,7 @@ package css
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
@@ -303,9 +304,9 @@ type vec3 = [3]float64
 
 func mul3(m *[3][3]float64, v vec3) vec3 {
 	return vec3{
-		m[0][0]*v[0] + m[0][1]*v[1] + m[0][2]*v[2],
-		m[1][0]*v[0] + m[1][1]*v[1] + m[1][2]*v[2],
-		m[2][0]*v[0] + m[2][1]*v[1] + m[2][2]*v[2],
+		float64(m[0][0]*v[0]) + float64(m[0][1]*v[1]) + float64(m[0][2]*v[2]),
+		float64(m[1][0]*v[0]) + float64(m[1][1]*v[1]) + float64(m[1][2]*v[2]),
+		float64(m[2][0]*v[0]) + float64(m[2][1]*v[1]) + float64(m[2][2]*v[2]),
 	}
 }
 
@@ -409,14 +410,14 @@ func linSRGB(v float64) float64 {
 		if a <= 0.04045 {
 			return a / 12.92
 		}
-		return math.Pow((a+0.055)/1.055, 2.4)
+		return detmath.Pow((a+0.055)/1.055, 2.4)
 	})
 }
 
 func gamSRGB(v float64) float64 {
 	return signed(v, func(a float64) float64 {
 		if a > 0.0031308 {
-			return 1.055*math.Pow(a, 1/2.4) - 0.055
+			return float64(1.055*detmath.Pow(a, 1/2.4)) - 0.055
 		}
 		return 12.92 * a
 	})
@@ -427,25 +428,25 @@ func linProPhoto(v float64) float64 {
 		if a <= 16.0/512 {
 			return a / 16
 		}
-		return math.Pow(a, 1.8)
+		return detmath.Pow(a, 1.8)
 	})
 }
 
 func gamProPhoto(v float64) float64 {
 	return signed(v, func(a float64) float64 {
 		if a >= 1.0/512 {
-			return math.Pow(a, 1/1.8)
+			return detmath.Pow(a, 1/1.8)
 		}
 		return 16 * a
 	})
 }
 
 func linA98(v float64) float64 {
-	return signed(v, func(a float64) float64 { return math.Pow(a, 563.0/256) })
+	return signed(v, func(a float64) float64 { return detmath.Pow(a, 563.0/256) })
 }
 
 func gamA98(v float64) float64 {
-	return signed(v, func(a float64) float64 { return math.Pow(a, 256.0/563) })
+	return signed(v, func(a float64) float64 { return detmath.Pow(a, 256.0/563) })
 }
 
 // The constants of the Rec. ITU-R BT.2020-2 transfer function.
@@ -469,7 +470,7 @@ func linRec2020(v float64) float64 {
 		if a < rec2020Beta*4.5 {
 			return a / 4.5
 		}
-		return math.Pow((a+rec2020Alpha-1)/rec2020Alpha, 1/0.45)
+		return detmath.Pow((a+rec2020Alpha-1)/rec2020Alpha, 1/0.45)
 	})
 }
 
@@ -478,7 +479,7 @@ func gamRec2020(v float64) float64 {
 		if a < rec2020Beta {
 			return a * 4.5
 		}
-		return rec2020Alpha*math.Pow(a, 0.45) - (rec2020Alpha - 1)
+		return float64(rec2020Alpha*detmath.Pow(a, 0.45)) - (rec2020Alpha - 1)
 	})
 }
 
@@ -592,12 +593,12 @@ func xyzToLab(xyz vec3) vec3 {
 	for i := range f {
 		v := xyz[i] / d50White[i]
 		if v > eps {
-			f[i] = math.Cbrt(v)
+			f[i] = detmath.Cbrt(v)
 		} else {
-			f[i] = (kappa*v + 16) / 116
+			f[i] = (float64(kappa*v) + 16) / 116
 		}
 	}
-	return vec3{116*f[1] - 16, 500 * (f[0] - f[1]), 200 * (f[1] - f[2])}
+	return vec3{float64(116*f[1]) - 16, 500 * (f[0] - f[1]), 200 * (f[1] - f[2])}
 }
 
 func okLabToXYZ(lab vec3) vec3 {
@@ -606,24 +607,24 @@ func okLabToXYZ(lab vec3) vec3 {
 }
 
 func xyzToOKLab(xyz vec3) vec3 {
-	return mul3(&lmsToOKLab, mapVec(mul3(&xyzToLMS, xyz), math.Cbrt))
+	return mul3(&lmsToOKLab, mapVec(mul3(&xyzToLMS, xyz), detmath.Cbrt))
 }
 
 // toPolar converts rectangular Lab or Oklab to LCH or OkLCh (CSS Color 4,
 // 9.5), the hue in [0, 360).
 func toPolar(lab vec3) vec3 {
-	h := math.Atan2(lab[2], lab[1]) * 180 / math.Pi
+	h := detmath.Atan2(lab[2], lab[1]) * 180 / math.Pi
 	if h < 0 {
 		h += 360
 	}
-	return vec3{lab[0], math.Hypot(lab[1], lab[2]), h}
+	return vec3{lab[0], detmath.Hypot(lab[1], lab[2]), h}
 }
 
 // fromPolar converts LCH or OkLCh to rectangular Lab or Oklab (CSS Color
 // 4, 9.6).
 func fromPolar(lch vec3) vec3 {
 	r := lch[2] * math.Pi / 180
-	return vec3{lch[0], lch[1] * math.Cos(r), lch[1] * math.Sin(r)}
+	return vec3{lch[0], lch[1] * detmath.Cos(r), lch[1] * detmath.Sin(r)}
 }
 
 // hslToRGB converts HSL, saturation and lightness as fractions, to sRGB
@@ -637,7 +638,7 @@ func hslToRGB(h, s, l float64) (r, g, b float64) {
 	f := func(n float64) float64 {
 		k := math.Mod(n+h/30, 12)
 		a := s * math.Min(l, 1-l)
-		return l - a*math.Max(-1, math.Min(k-3, math.Min(9-k, 1)))
+		return l - float64(a*math.Max(-1, math.Min(k-3, math.Min(9-k, 1))))
 	}
 	return f(0), f(8), f(4)
 }
@@ -646,7 +647,7 @@ func hslToRGB(h, s, l float64) (r, g, b float64) {
 // Color 4, 7.2).
 func rgbToHSL(c vec3) vec3 {
 	mx, mn := math.Max(c[0], math.Max(c[1], c[2])), math.Min(c[0], math.Min(c[1], c[2]))
-	hue, sat, light := 0.0, 0.0, (mn+mx)/2
+	hue, sat, light := 0.0, 0.0, float64((mn+mx)/2)
 	d := mx - mn
 	const eps = 1.0 / 100000
 	if d != 0 {
@@ -693,7 +694,7 @@ func hwbToRGB(h, w, b float64) vec3 {
 	}
 	r, g, bl := hslToRGB(h, 1, 0.5)
 	k := 1 - w - b
-	return vec3{r*k + w, g*k + w, bl*k + w}
+	return vec3{float64(r*k) + w, float64(g*k) + w, float64(bl*k) + w}
 }
 
 // rgbToHWB converts sRGB to HWB, whiteness and blackness 0 to 100 (CSS
@@ -812,7 +813,7 @@ func parseHex(s string) (spaceColor, bool) {
 		if n <= 4 {
 			return d[i] * 17 / 255
 		}
-		return (d[2*i]*16 + d[2*i+1]) / 255
+		return (float64(d[2*i]*16) + d[2*i+1]) / 255
 	}
 	c := srgbColor(ch(0), ch(1), ch(2), 1)
 	if n == 4 || n == 8 {
@@ -1177,18 +1178,18 @@ func interpolate(a, b spaceColor, p float64, s colorSpace, method hueMethod) spa
 	if a.none[3] {
 		aa, ba = 1, 1
 	}
-	out.alpha = aa + (ba-aa)*p
+	out.alpha = aa + float64((ba-aa)*p)
 	hue := hueIndex(s)
 	for i := range 3 {
 		out.none[i] = a.none[i] && b.none[i]
 		x, y := a.c[i], b.c[i]
 		if i == hue {
 			x, y = fixHues(x, y, method)
-			out.c[i] = x + (y-x)*p
+			out.c[i] = x + float64((y-x)*p)
 			continue
 		}
-		x, y = x*aa, y*ba
-		v := x + (y-x)*p
+		x, y = float64(x*aa), float64(y*ba)
+		v := x + float64((y-x)*p)
 		if out.alpha != 0 {
 			v /= out.alpha
 		}
@@ -1415,7 +1416,7 @@ func numberOrPercent(t token) (float64, bool) {
 // relativeLuminance is the WCAG 2.1 relative luminance of an sRGB colour,
 // its alpha ignored.
 func relativeLuminance(c Color) float64 {
-	return 0.2126*linSRGB(c.R) + 0.7152*linSRGB(c.G) + 0.0722*linSRGB(c.B)
+	return float64(0.2126*linSRGB(c.R)) + float64(0.7152*linSRGB(c.G)) + float64(0.0722*linSRGB(c.B))
 }
 
 // systemColors maps the system colours of CSS Color 4, 6.2 and the

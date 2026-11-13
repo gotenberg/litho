@@ -596,7 +596,7 @@ func parseDimensionValue(s string) (float64, bool, bool) {
 	v := 0.0
 	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
 		if v < maxHintInt {
-			v = v*10 + float64(s[i]-'0')
+			v = float64(v*10) + float64(s[i]-'0')
 		}
 		i++
 	}
@@ -607,7 +607,7 @@ func parseDimensionValue(s string) (float64, bool, bool) {
 		i++
 		scale := 0.1
 		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
-			v += float64(s[i]-'0') * scale
+			v += float64(float64(s[i]-'0') * scale)
 			scale /= 10
 			i++
 		}

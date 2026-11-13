@@ -24,7 +24,7 @@ const (
 type interpFn func(dst, a, b *Style, p float64) interpResult
 
 // lerp interpolates linearly between two numbers.
-func lerp(a, b, p float64) float64 { return a + (b-a)*p }
+func lerp(a, b, p float64) float64 { return a + float64((b-a)*p) }
 
 // roundHalfUp rounds to the nearest integer, a half up, as an <integer>
 // interpolates (CSS Values 4, 3.2).

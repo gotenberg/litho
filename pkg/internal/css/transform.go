@@ -3,6 +3,7 @@ package css
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
@@ -375,7 +376,7 @@ func parseRotate(l []token) (tfSpec, bool) {
 	default:
 		return tfSpec{}, false
 	}
-	n := math.Sqrt(x*x + y*y + z*z)
+	n := math.Sqrt(float64(x*x) + float64(y*y) + float64(z*z))
 	if !numeric.Finite(n) || n == 0 {
 		// A zero axis rotates about nothing: the identity.
 		return tfSpec{kind: TransformScale, v: [6]float64{1, 1}}, true
@@ -384,10 +385,10 @@ func parseRotate(l []token) (tfSpec, bool) {
 	if x == 0 && y == 0 {
 		return tfSpec{kind: TransformRotate, v: [6]float64{a * z}}, true
 	}
-	c, s := math.Cos(a), math.Sin(a)
+	c, s := detmath.Cos(a), detmath.Sin(a)
 	return tfSpec{kind: TransformMatrix, v: [6]float64{
-		c + x*x*(1-c), y*x*(1-c) + z*s,
-		x*y*(1-c) - z*s, c + y*y*(1-c),
+		c + float64(x*x*(1-c)), float64(y*x*(1-c)) + float64(z*s),
+		float64(x*y*(1-c)) - float64(z*s), c + float64(y*y*(1-c)),
 	}}, true
 }
 
