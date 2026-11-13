@@ -169,6 +169,11 @@ func (v *validator) text(t *Text) error {
 	if !numeric.Finite(t.Stroke) || t.Stroke < 0 || t.Stroke > t.Size {
 		return fmt.Errorf("%w: stroke %v for size %v", ErrInvalidText, t.Stroke, t.Size)
 	}
+	if t.Invisible && t.Stroke > 0 {
+		// Text rendering mode 3 neither fills nor strokes (ISO 32000-1,
+		// 9.3.6, Table 106): a stroke would draw nothing.
+		return fmt.Errorf("%w: stroke %v of invisible text", ErrInvalidText, t.Stroke)
+	}
 	if !numeric.Finite(t.Skew) || math.Abs(t.Skew) > 1 {
 		return fmt.Errorf("%w: skew %v", ErrInvalidText, t.Skew)
 	}

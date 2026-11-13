@@ -86,6 +86,8 @@ encodes:
 - `Text.Stroke` and `Text.Skew` let a converter synthesise the bold and
   italic a face lacks, as browsers do: a stroke of the outlines in the fill
   colour, and a shear of the glyphs about their baseline.
+- `Text.Invisible` keeps a run as text, extracted and tagged, that paints
+  nothing, for text something else draws, as an OCR layer under a scan.
 - Structure is a tree of `StructElem` fragments point into. A fragment
   with a nil parent in a structured document is an artifact.
 - A page holds its interactive form fields as it holds its links: a
@@ -142,8 +144,8 @@ holds every page until the end.
 - Text runs become `BT`/`ET` blocks with `Tf`, `Tm` and `TJ`; glyph
   positions that differ from the font's advances become kerning
   adjustments or new `Td` moves. A run with a stroke draws in text
-  rendering mode 2 (`2 Tr`, with `w` the stroke width); a skew enters the
-  `Tm` matrix.
+  rendering mode 2 (`2 Tr`, with `w` the stroke width), an invisible run in
+  mode 3 (`3 Tr`); a skew enters the `Tm` matrix.
 - Fonts embed through `embed`: Type0 over CIDFontType2 or CIDFontType0C,
   Identity-H, a ToUnicode CMap that maps every code drawn: a cluster's
   `Glyph.Text` spread over its glyphs, and the font's cmap for a glyph the

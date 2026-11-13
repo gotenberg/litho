@@ -294,8 +294,8 @@ func (p *pageWriter) color(c Color, op string) {
 // selected at size 1 and the text matrix carries the size, with d negated
 // so the glyphs stand upright under the page's flip, and the skew as c:
 // [size 0 size*skew -size x y]. A run with a stroke is drawn in text
-// rendering mode 2 (9.3.6) with that line width, a run with a horizontal
-// scale under Tz (9.3.4).
+// rendering mode 2 (9.3.6) with that line width, an invisible run in mode
+// 3 with no colour set, a run with a horizontal scale under Tz (9.3.4).
 // Glyphs on one baseline share TJ arrays, a glyph away from where the
 // previous one's advance leaves the pen taking a TJ adjustment in
 // thousandths of text space (9.4.3); a change of baseline sets a new text
@@ -310,13 +310,15 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 	}
 	name := p.fontName(fe)
 	p.mark(t.Parent)
-	cur := p.currentAlpha()
-	stroke := cur.stroke
-	if t.Stroke > 0 {
-		stroke = t.Color.A * opacity
+	if !t.Invisible {
+		cur := p.currentAlpha()
+		stroke := cur.stroke
+		if t.Stroke > 0 {
+			stroke = t.Color.A * opacity
+		}
+		p.setAlpha(alphaState{fill: t.Color.A * opacity, stroke: stroke})
+		p.color(t.Color, "rg")
 	}
-	p.setAlpha(alphaState{fill: t.Color.A * opacity, stroke: stroke})
-	p.color(t.Color, "rg")
 	if t.Stroke > 0 {
 		// Synthetic bold: the outline is stroked in the fill colour with
 		// round joins, so no miter spikes at sharp corners (8.4.3.4).
@@ -324,7 +326,10 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 		fmt.Fprintf(&p.buf, "%s w 1 j\n", num(t.Stroke))
 	}
 	fmt.Fprintf(&p.buf, "BT\n/%s 1 Tf\n", name)
-	if t.Stroke > 0 {
+	switch {
+	case t.Invisible:
+		p.buf.WriteString("3 Tr\n")
+	case t.Stroke > 0:
 		p.buf.WriteString("2 Tr\n")
 	}
 	hs := 1.0
@@ -379,7 +384,7 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 		}
 	}
 	tj.end()
-	if t.Stroke > 0 {
+	if t.Stroke > 0 || t.Invisible {
 		// The rendering mode is graphics state that outlives the text
 		// object (9.3.1): later runs fill only.
 		p.buf.WriteString("0 Tr\n")

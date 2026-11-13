@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/embed"
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 func TestWriteTextExtracts(t *testing.T) {
@@ -597,6 +598,41 @@ func TestWriteInfo(t *testing.T) {
 	}
 	if bytes.Contains(buf.Bytes(), []byte("/CreationDate")) || bytes.Contains(buf.Bytes(), []byte("/ModDate")) {
 		t.Error("Info carries a date")
+	}
+}
+
+// TestWriteInvisibleText checks that an invisible run is written in text
+// rendering mode 3 with no colour, paints no ink, and still extracts when
+// invisible text is asked for.
+func TestWriteInvisibleText(t *testing.T) {
+	t.Parallel()
+	txt := run(t, sans, 40, typeset.Point{X: 50, Y: 100}, "Hi")
+	txt.Invisible = true
+	txt.Color = typeset.Color{R: 1, A: 1}
+	page := &typeset.Page{Width: 200, Height: 200, Content: []typeset.Fragment{txt}}
+	out := write(t, &typeset.Document{Pages: []*typeset.Page{page}})
+	content := inflated(t, out)
+	for _, op := range []string{"3 Tr", "0 Tr\nET"} {
+		if !bytes.Contains(content, []byte(op)) {
+			t.Errorf("content lacks %q:\n%s", op, content)
+		}
+	}
+	if bytes.Contains(content, []byte(" rg")) {
+		t.Errorf("invisible run sets a colour:\n%s", content)
+	}
+	r := open(t, out)
+	if n := inkIn(render(t, r, 1), 0, 0, 200, 200); n != 0 {
+		t.Errorf("invisible run paints %d pixels, want none", n)
+	}
+	text, err := r.ExtractText(context.Background(), 1, pdf.WithInvisibleText())
+	if err != nil || !strings.Contains(text, "Hi") {
+		t.Errorf("ExtractText = %q, %v, want the run's text", text, err)
+	}
+	stroked := *txt
+	stroked.Stroke = 1
+	doc := &typeset.Document{Pages: []*typeset.Page{{Width: 200, Height: 200, Content: []typeset.Fragment{&stroked}}}}
+	if err := doc.Validate(context.Background()); !errors.Is(err, typeset.ErrInvalidText) {
+		t.Errorf("Validate of a stroked invisible run = %v, want ErrInvalidText", err)
 	}
 }
 

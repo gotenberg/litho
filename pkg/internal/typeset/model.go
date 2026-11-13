@@ -162,6 +162,12 @@ type Text struct {
 	// Zero draws upright; a negative value leans left. Its magnitude is at
 	// most 1.
 	Skew float64
+	// Invisible draws the glyphs neither filled nor stroked, text
+	// rendering mode 3 (ISO 32000-1, 9.3.6): the run stays in the page as
+	// text, extracted and tagged, while something else draws what it
+	// looks like, as an OCR layer under a scan does. Color, alpha
+	// included, is then not painted. An invisible run has no Stroke.
+	Invisible bool
 	// HScale scales the glyphs horizontally about their origins, the text
 	// state's horizontal scaling (ISO 32000-1, 9.3.4): the glyph shapes
 	// and the positions along the baseline are both scaled, so a converter
