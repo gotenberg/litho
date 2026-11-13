@@ -90,6 +90,11 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 // libreoffice corpora are left to a corpus run: drawing all of them takes a
 // minute.
 //
+// Under the race detector it scores one reference in
+// [officeReferenceRaceSample] and every reference listed under the bars:
+// drawing all of them takes each corpus eight minutes of the package's ten
+// there, and the detector has nothing to find in a score.
+//
 // # Corpus evidence
 //
 // The references are Microsoft's (Office for the web through Graph); the
@@ -124,9 +129,12 @@ func TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 			if err := f.Prepare(t.Context(), fixtures); err != nil {
 				t.Fatal(err)
 			}
-			for _, fx := range fixtures {
+			for i, fx := range fixtures {
 				if !f.HasGolden(fx.ID) {
 					continue // refused by Microsoft: no reference to score
+				}
+				if raceEnabled && i%officeReferenceRaceSample != 0 && !underBars[format][fx.ID] {
+					continue
 				}
 				f.mu.RLock()
 				_, borrows := f.borrowed[fx.ID]
@@ -159,6 +167,11 @@ func TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 		})
 	}
 }
+
+// officeReferenceRaceSample is the share of each corpus's references
+// [TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens] scores under
+// the race detector: one in this many.
+const officeReferenceRaceSample = 4
 
 func TestDiffFeature_PrepareRefusesStaleReferences(t *testing.T) {
 	t.Parallel()
