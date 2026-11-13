@@ -61,6 +61,9 @@ type firstLetterCut struct {
 	pendingIn              *layout.Node
 	pendingAt              int
 	pendingPre, pendingEnd int
+	// started reports white space that stays met first, a line of its
+	// own when a block follows.
+	started bool
 }
 
 // cut looks for the first letter in the children of node, at depth below
@@ -78,10 +81,16 @@ func (w *firstLetterCut) cut(node *layout.Node, depth int) bool {
 			if w.b.gcpm.paged[c] != nil {
 				return true
 			}
-			pre, n, punctOnly := firstLetterSpan(c.Text)
+			pre, n, punctOnly, ended := firstLetterSpan(c.Text, c.Style.WhiteSpace)
 			switch {
+			case ended:
+				// A preserved line break ends the first line before any
+				// letter: it has none.
+				return true
 			case n < 0:
-				// White space alone: the line has not started.
+				// White space alone: the line has not started unless some
+				// stays, which a block after it does not continue.
+				w.started = w.started || pre < len(c.Text)
 				continue
 			case w.pending != nil:
 				w.split(w.pendingIn, w.pendingAt, w.pending, w.pendingPre, w.pendingEnd)
@@ -121,8 +130,9 @@ func (w *firstLetterCut) cut(node *layout.Node, depth int) bool {
 				}
 			case css.Block, css.ListItem, css.FlowRoot:
 				// The first line of a block's first in-flow block child is
-				// its first line (CSS Pseudo 4, 2.3).
-				if w.pending != nil || c.Marker != nil && st.ListStylePosition == css.Inside {
+				// its first line (CSS Pseudo 4, 2.3), unless white space
+				// that stays made a line before it.
+				if w.pending != nil || w.started || c.Marker != nil && st.ListStylePosition == css.Inside {
 					return true
 				}
 				return w.cut(c, depth+1)
@@ -186,13 +196,15 @@ func letterStyle(ps *css.Style) *css.Style {
 	return &st
 }
 
-// firstLetterSpan returns the bytes of s its first letter takes: the white
-// space before it at [0, pre), then the punctuation before the letter, the
+// firstLetterSpan returns the bytes of s, of white-space ws, its first
+// letter takes: the collapsible white space before it at [0, pre), then
+// the white space that stays, the punctuation before the letter, the
 // letter and the punctuation after it up to n (CSS Pseudo 4, 2.3.2, the
-// first typographic letter unit). The letter is the first grapheme cluster
-// that is no punctuation nor white space. n is -1 when s is white space
-// alone. punctOnly reports punctuation that runs to the end of s with no
-// letter, [pre, n) holding it.
+// first typographic letter unit). The letter is the first grapheme
+// cluster that is no punctuation nor white space. n is -1 when s is white
+// space alone. punctOnly reports punctuation that runs to the end of s
+// with no letter, [pre, n) holding it. ended reports a line break ws
+// keeps before any letter, which ends the first line.
 //
 // CSS Pseudo 4 takes the punctuation of the general categories Ps, Pe,
 // Pi, Pf and Po (CSS 2.2, 5.12.2 alike) and the typographic spaces (Zs)
@@ -205,19 +217,26 @@ func letterStyle(ps *css.Style) *css.Style {
 //
 //   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 cuts "-h", "_l",
 //     "\u2014d" and "\"  q" before the letter, "T_" and "T\u2003." after
-//     it, but "T" alone from "T-", "T\u2014" and "T ."; it skips a leading
-//     no-break space and U+3000, and takes "+" and "$" as letters.
-func firstLetterSpan(s string) (pre, n int, punctOnly bool) {
+//     it, but "T" alone from "T-", "T\u2014" and "T ."; it finds the letter
+//     past a leading no-break space and U+3000, and takes "+" and "$" as
+//     letters. The background of the ::first-letter covers leading
+//     no-break spaces, the spaces and the tab white-space: pre and
+//     pre-wrap keep, and not the spaces pre-line collapses; under pre, a
+//     line break before the letter leaves the paragraph without one.
+func firstLetterSpan(s string, ws css.WhiteSpace) (pre, n int, punctOnly, ended bool) {
 	i := 0
 	for i < len(s) {
 		r, size := utf8.DecodeRuneInString(s[i:])
 		if !isFirstLetterSpace(r) {
 			break
 		}
+		if isLineBreak(r) && keepsBreaks(ws) {
+			return 0, -1, false, true
+		}
+		if !collapsibleSpace(r, ws) {
+			break
+		}
 		i += size
-	}
-	if i == len(s) {
-		return 0, -1, false
 	}
 	pre = i
 	end := i
@@ -231,10 +250,16 @@ func firstLetterSpan(s string) (pre, n int, punctOnly bool) {
 		if !isFirstLetterSpace(r) {
 			break
 		}
+		if isLineBreak(r) && keepsBreaks(ws) {
+			return 0, -1, false, true
+		}
 		i += size
 	}
+	if end == pre && i == len(s) {
+		return pre, -1, false, false
+	}
 	if i == len(s) {
-		return pre, end, true
+		return pre, end, true, false
 	}
 	i += graphemeLen(s[i:])
 	for j := i; j < len(s); {
@@ -248,7 +273,29 @@ func firstLetterSpan(s string) (pre, n int, punctOnly bool) {
 			break
 		}
 	}
-	return pre, i, false
+	return pre, i, false, false
+}
+
+// isLineBreak reports a segment break (CSS Text 3, 4.1).
+func isLineBreak(r rune) bool { return r == '\n' || r == '\r' || r == '\f' }
+
+// keepsBreaks reports a white-space value that keeps segment breaks (CSS
+// Text 3, 3).
+func keepsBreaks(ws css.WhiteSpace) bool {
+	return ws != css.WhiteSpaceNormal && ws != css.Nowrap
+}
+
+// collapsibleSpace reports document white space ws collapses (CSS Text 3,
+// 4.1.1): a space, tab or segment break under normal and nowrap, a space
+// or tab under pre-line.
+func collapsibleSpace(r rune, ws css.WhiteSpace) bool {
+	switch ws { //nolint:exhaustive // the other values keep their spaces
+	case css.WhiteSpaceNormal, css.Nowrap:
+		return r == ' ' || r == '\t' || isLineBreak(r)
+	case css.PreLine, css.PreLineNowrap:
+		return r == ' ' || r == '\t'
+	}
+	return false
 }
 
 // maxGraphemeScan bounds the bytes searched for the end of a first

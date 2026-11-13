@@ -8,9 +8,11 @@ import (
 )
 
 // TestFirstLetterSpan locks the characters ::first-letter takes (CSS
-// Pseudo 4, 2.3.2) as Chromium takes them: every punctuation category and
-// the spaces between before the letter, the letter's grapheme cluster,
-// then Ps, Pe, Pi, Pf, Po and Pc, through spaces other than U+0020.
+// Pseudo 4, 2.3.2) as Chromium takes them: the white space before it that
+// stays, every punctuation category and the spaces between before the
+// letter, the letter's grapheme cluster, then Ps, Pe, Pi, Pf, Po and Pc,
+// through spaces other than U+0020; and no letter past a line break that
+// stays.
 func TestFirstLetterSpan(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -21,7 +23,7 @@ func TestFirstLetterSpan(t *testing.T) {
 	}{
 		{"Test", 0, "T", false},
 		{"  Test", 2, "T", false},
-		{" nbsp", 2, "n", false},
+		{"\u00a0nbsp", 0, "\u00a0n", false},
 		{"❱T❱est", 0, "❱T❱", false},
 		{"\"  quoted", 0, "\"  q", false},
 		{"-hyphen", 0, "-h", false},
@@ -38,14 +40,38 @@ func TestFirstLetterSpan(t *testing.T) {
 		{"(", 0, "(", true},
 		{" “ ", 1, "“", true},
 	} {
-		pre, n, punctOnly := firstLetterSpan(tc.in)
+		pre, n, punctOnly, _ := firstLetterSpan(tc.in, css.WhiteSpaceNormal)
 		if pre != tc.pre || n < 0 || tc.in[pre:n] != tc.letter || punctOnly != tc.punctOnly {
 			t.Errorf("firstLetterSpan(%q) = %d, %d, %v: want the letter %q after %d bytes, punctuation alone %v",
 				tc.in, pre, n, punctOnly, tc.letter, tc.pre, tc.punctOnly)
 		}
 	}
-	if _, n, _ := firstLetterSpan(" \n\t"); n != -1 {
+	if _, n, _, _ := firstLetterSpan(" \n\t", css.WhiteSpaceNormal); n != -1 {
 		t.Errorf("white space alone: n = %d, want -1", n)
+	}
+	for _, tc := range []struct {
+		in     string
+		ws     css.WhiteSpace
+		pre    int
+		letter string
+		ended  bool
+	}{
+		{"  Abc", css.Pre, 0, "  A", false},
+		{"\tAbc", css.PreWrap, 0, "\tA", false},
+		{"  Abc", css.PreLine, 2, "A", false},
+		{"\nAbc", css.Pre, 0, "", true},
+		{"\nAbc", css.PreLine, 0, "", true},
+		{"\nAbc", css.WhiteSpaceNormal, 1, "A", false},
+		{"\" \nAbc", css.PreWrap, 0, "", true},
+	} {
+		pre, n, _, ended := firstLetterSpan(tc.in, tc.ws)
+		got := ""
+		if n >= 0 {
+			got = tc.in[pre:n]
+		}
+		if ended != tc.ended || got != tc.letter || !ended && pre != tc.pre {
+			t.Errorf("firstLetterSpan(%q, %d) = %d, %d, ended %v: want %q after %d bytes, ended %v", tc.in, tc.ws, pre, n, ended, tc.letter, tc.pre, tc.ended)
+		}
 	}
 }
 

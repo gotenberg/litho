@@ -427,12 +427,14 @@ func domText(n *dom.Node) string {
 // firstLetter returns the first letter of s as ::first-letter takes it
 // (CSS GCPM 3, 2.1.1.1, content(first-letter); see [firstLetterSpan]):
 // the punctuation alone when no letter follows it, "" for white space.
+// The white space before it, which a ::first-letter box covers when it
+// stays, is no part of the string.
 func firstLetter(s string) string {
-	pre, n, _ := firstLetterSpan(s)
+	pre, n, _, _ := firstLetterSpan(s, css.WhiteSpaceNormal)
 	if n < 0 {
 		return ""
 	}
-	return s[pre:n]
+	return strings.TrimLeftFunc(s[pre:n], isFirstLetterSpace)
 }
 
 // pick returns the assignment of name in list that a page-margin box of
