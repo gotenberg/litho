@@ -516,3 +516,31 @@ func TestGrid_PlacementStopsOnCancel(t *testing.T) {
 	}
 	checkPlaced(t, p)
 }
+
+// TestSizing_StretchHeightMargins holds a block-axis stretch to CSS
+// Sizing 3, 4.2: a margin that would collapse with the parent's, the
+// parent having no border or padding on that side and being no
+// independent formatting context, counts as 0; else it comes off.
+func TestSizing_StretchHeightMargins(t *testing.T) {
+	t.Parallel()
+	stretchH := func(s *css.Style) { s.Height = css.Dimension{Kind: css.Stretch} }
+	tests := []struct {
+		name   string
+		parent []func(*css.Style)
+		want   float64
+	}{
+		{"a margin that would collapse counts as 0", []func(*css.Style){height(100)}, 100},
+		{"padding keeps the margin", []func(*css.Style){height(100), padding(0, 0, 1, 0)}, 50},
+		{"a new formatting context keeps the margin", []func(*css.Style){height(100), display(css.FlowRoot)}, 50},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			root := doc(el(sty(tt.parent...), el(sty(stretchH, margin(0, 0, 50, 0)))))
+			c := kid(t, boxes(t, root, page(200, 200)), 0, 0, 0)
+			if got := rect(c)[3]; got != tt.want {
+				t.Errorf("height = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

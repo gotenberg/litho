@@ -115,7 +115,8 @@ func (e *engine) resolveSizing(b *box, cb cblock, availW, availH float64) {
 	st.MaxWidth = width(src.MaxWidth)
 	roomH, defH := availH, availH >= 0
 	if !defH && cb.hDefinite {
-		roomH, defH = cb.h-nonAuto(b.m[css.Top], src.Margin[css.Top].Kind == css.Auto)-nonAuto(b.m[css.Bottom], src.Margin[css.Bottom].Kind == css.Auto)-ve, true
+		top, bottom := stretchMargins(b, src)
+		roomH, defH = cb.h-top-bottom-ve, true
 	}
 	stretchH := func(fallback css.Dimension) css.Dimension {
 		if !defH {
@@ -147,6 +148,40 @@ func (e *engine) resolveSizing(b *box, cb cblock, availW, availH float64) {
 	}
 	b.st = &st
 	e.applyRatio(b, &st, cb, availH)
+}
+
+// stretchMargins returns the block-start and block-end margins of b, of
+// computed style src, that the stretch-fit height takes out of its
+// containing block's: an auto margin counts as 0, and so does the margin
+// of an in-flow block-level box on a side where its parent, no
+// independent formatting context, has no border or padding: the margin
+// would collapse with the parent's (CSS Sizing 3, 4.2).
+//
+// # Corpus evidence
+//
+//   - wpt: css-sizing/stretch/block-height-006, -009 and -010 (a 50px
+//     bottom margin under height, min-height and max-height stretch in a
+//     100px parent) draw a 100px square in Chromium 156.
+func stretchMargins(b *box, src *css.Style) (float64, float64) {
+	top := nonAuto(b.m[css.Top], src.Margin[css.Top].Kind == css.Auto)
+	bottom := nonAuto(b.m[css.Bottom], src.Margin[css.Bottom].Kind == css.Auto)
+	if b.kind != kindBlock || b.inline || b.abs || b.float != css.FloatNone || b.flexItem || b.gridItem || b.tpart != partNone {
+		return top, bottom
+	}
+	p := b.parent
+	for p != nil && p.anon {
+		p = p.parent
+	}
+	if p == nil || p.establishesBFC() {
+		return top, bottom
+	}
+	if p.bd[css.Top]+p.pd[css.Top] == 0 {
+		top = 0
+	}
+	if p.bd[css.Bottom]+p.pd[css.Bottom] == 0 {
+		bottom = 0
+	}
+	return top, bottom
 }
 
 // contentHeightBounds applies a min-height or max-height of min-content,
