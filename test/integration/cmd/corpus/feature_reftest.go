@@ -11,11 +11,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 // The page a screen reftest is converted on: 800 by 600 CSS pixels, the
 // viewport WPT takes reftest screenshots in, which at 96 dpi is 600 by 450
-// points, with no margin, so the page is the viewport.
+// points, with no margin, so the page is the viewport. Nothing is shrunk to
+// fit it; a print reftest keeps the shrinking a browser prints with.
 const (
 	reftestScreenWidth  = 600
 	reftestScreenHeight = 450
@@ -434,6 +437,12 @@ func (f *reftestFeature) draw(ctx context.Context, root, rel string, paged bool)
 		FontDirs:  fonts,
 	}
 	maxPages := 1
+	if !paged {
+		// A screenshot shows the viewport and what overflows it is cut: a
+		// document wider than the page is not shrunk to fit it, as a
+		// browser shrinks one only when it prints.
+		s.Print = []pdf.HTMLOption{pdf.WithShrinkToFit(false)}
+	}
 	if paged {
 		s.Media = "print"
 		s.Width, s.Height = reftestPrintWidth, reftestPrintHeight

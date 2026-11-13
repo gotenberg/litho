@@ -13,8 +13,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/pdf"
 	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
@@ -229,6 +231,53 @@ func TestReftestFeature_Outcomes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestReftestFeature_ScreenPagesAreNotShrunk pins that a screen reftest is
+// converted without the shrinking a browser prints with, and a print
+// reftest with it: a box wider than the page keeps a square beside it at
+// its size in the first and scales it down in the second.
+func TestReftestFeature_ScreenPagesAreNotShrunk(t *testing.T) {
+	t.Parallel()
+
+	const wide = `<body style="margin:0"><div style="width:2000px;height:10px"></div><div style="width:100px;height:100px;background:#00f"></div></body>`
+	var mu sync.Mutex
+	shrunk := map[bool]bool{}
+	record := func(ctx context.Context, src []byte, s htmlSettings) ([]byte, error) {
+		opts := append([]pdf.HTMLOption{pdf.WithPaper(pdf.Paper{Width: 600, Height: 450}), pdf.WithMargins(0, 0, 0, 0)}, s.Print...)
+		var out bytes.Buffer
+		if _, err := pdf.FromHTML(bytes.NewReader(src), opts...).WriteTo(ctx, &out); err != nil {
+			return nil, err
+		}
+		r, err := pdf.Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+		if err != nil {
+			return nil, err
+		}
+		img, err := r.RenderPage(ctx, 1, pdf.WithRenderDPI(96))
+		if err != nil {
+			return nil, err
+		}
+		// Unshrunk, the square spans rows 10 to 110: its last rows are
+		// blue. Shrunk to fit 2000 pixels in 800, it ends well above.
+		red, _, blue, _ := img.At(50, 100).RGBA()
+		mu.Lock()
+		shrunk[s.Media == "print"] = blue != 0xffff || red != 0
+		mu.Unlock()
+		return colourStub(60, 45)(ctx, []byte("red"), s)
+	}
+	f, root := newTestReftest(t, record, map[string]string{"a/wide.html": wide, "a/ref.html": wide},
+		&reftestEntry{ID: "a/wide.html", Refs: []reftestRef{{Rel: "match", Path: "a/ref.html"}}},
+		&reftestEntry{ID: "a/wide-print.html", Print: true, Refs: []reftestRef{{Rel: "match", Path: "a/ref.html"}}},
+	)
+	writeFiles(t, root, map[string]string{"a/wide-print.html": wide})
+	for _, id := range []string{"a/wide.html", "a/wide-print.html"} {
+		if _, err := f.Run(t.Context(), filepath.Join(root, filepath.FromSlash(id)), id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if shrunk[false] || !shrunk[true] {
+		t.Errorf("shrunk: screen %v, print %v; want false, true", shrunk[false], shrunk[true])
 	}
 }
 
