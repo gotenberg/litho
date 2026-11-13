@@ -356,3 +356,42 @@ func TestMulticol_InlineBlockCutsItsColumns(t *testing.T) {
 		BB_BB
 		_____`)
 }
+
+// TestMulticol_BalancesOverAvoidBoxes locks that balanced columns are no
+// shorter than the tallest box that avoids breaks inside it, in the flow
+// or in an absolutely positioned box, so that box fits a column, as
+// Chromium balances (CSS Fragmentation 3, 4.4).
+//
+// # Corpus evidence
+//
+//   - probe, html: a 200 px avoid box above a 100 px block in two columns
+//     balances to 200 px in Chromium; a 160 px avoid box in a wrapper with
+//     40 px after it balances to 160 px; a 200 px avoid box in an
+//     absolutely positioned box after a 100 px block balances to 200 px.
+func TestMulticol_BalancesOverAvoidBoxes(t *testing.T) {
+	t.Parallel()
+	rel := func(s *css.Style) { s.Position = css.Relative }
+	absl := func(s *css.Style) { s.Position = css.Absolute; s.Top = css.Pts(0) }
+	tests := []struct {
+		name string
+		kids []*Node
+		want float64
+	}{
+		{"in the flow", []*Node{el(sty(height(200), avoid)), el(sty(height(100)))}, 200},
+		{"in a wrapper", []*Node{el(sty(), el(sty(height(160), avoid)), el(sty(height(20)))), el(sty(height(20)))}, 160},
+		{"in an absolute box", []*Node{el(sty(height(100))), el(sty(height(200), rel), el(sty(absl), el(sty(height(200), avoid))))}, 200},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mc := el(sty(columns(2, 0), func(s *css.Style) { s.Width = css.Pts(px(200)) }), tt.kids...)
+			rb := boxes(t, doc(mc), page(400, 300))
+			b := kid(t, rb, 0, 0)
+			if b.mc == nil || len(b.mc.sets) == 0 || len(b.mc.sets[0].rows) == 0 {
+				t.Fatal("no column row")
+			}
+			if h := b.mc.sets[0].rows[0].h; !near(h, px(tt.want)) {
+				t.Errorf("column height %v pt, want %v", h, px(tt.want))
+			}
+		})
+	}
+}

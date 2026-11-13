@@ -614,6 +614,13 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 			flow += inFlow[i]
 		}
 		lo := min(flow, total) / float64(ctx.n)
+		if t := tallestAvoid(s.kids, 0, false); t > lo {
+			// A box that avoids breaks inside it fits a column when the
+			// columns may be that tall: the content balances over columns
+			// no shorter, as Chromium balances them (CSS Fragmentation 3,
+			// 4.4: a break that violates no rule wins).
+			lo = min(t, hi)
+		}
 		best := hi
 		bestFits := row.h == hi
 		// Climb from the least height as Chromium does, by the least
@@ -734,6 +741,29 @@ func (e *engine) layoutMonolithicAbs(kids []*box, depth int, in bool) {
 			e.layoutMonolithicAbs(k.kids, depth+1, in || holdsAbs(k))
 		}
 	}
+}
+
+// tallestAvoid returns the tallest border box among kids and their
+// descendants that avoids a column break inside it (CSS Fragmentation 3,
+// 3.2), the absolutely positioned boxes of in-flow containing blocks
+// included, as [colCtx.consumed] counts them. in reports kids inside such
+// a containing block.
+func tallestAvoid(kids []*box, depth int, in bool) float64 {
+	t := 0.0
+	for _, k := range kids {
+		if depth > maxTreeDepth {
+			break
+		}
+		if !k.laidOut || k.fixed || k.mc != nil || k.abs && (!in || k.st.Position != css.Absolute) {
+			continue
+		}
+		if v := k.st.BreakInside; v == css.InsideAvoid || v == css.InsideAvoidColumn {
+			t = max(t, k.borderH())
+			continue
+		}
+		t = max(t, tallestAvoid(k.kids, depth+1, in || holdsAbs(k)))
+	}
+	return t
 }
 
 // holdsAbs reports a box that is the containing block of its absolutely
