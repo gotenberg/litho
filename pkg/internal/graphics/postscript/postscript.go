@@ -5,6 +5,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 )
 
 // maxStackDepth is the operand stack bound. ISO 32000-1, 7.10.5.1: an
@@ -264,14 +266,14 @@ func execOp(op string, stack *[]float64, _ []token) error {
 		if err != nil {
 			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
-		*stack = append(*stack, math.Sin(a*math.Pi/180))
+		*stack = append(*stack, detmath.Sin(a*math.Pi/180))
 
 	case "cos":
 		a, err := pop1(stack)
 		if err != nil {
 			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
-		*stack = append(*stack, math.Cos(a*math.Pi/180))
+		*stack = append(*stack, detmath.Cos(a*math.Pi/180))
 
 	case "atan":
 		num, den, err := pop2(stack)
@@ -282,7 +284,7 @@ func execOp(op string, stack *[]float64, _ []token) error {
 		// Reference, whose atan answers in degrees from 0 to 360; math.Atan2
 		// answers from -180 to 180, so a tint transform that compares the
 		// angle back to its input gets half the image wrong.
-		angle := math.Atan2(num, den) * 180 / math.Pi
+		angle := detmath.Atan2(num, den) * 180 / math.Pi
 		if angle < 0 {
 			angle += 360
 		}
@@ -293,21 +295,21 @@ func execOp(op string, stack *[]float64, _ []token) error {
 		if err != nil {
 			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
-		*stack = append(*stack, math.Pow(base, exponent))
+		*stack = append(*stack, detmath.Pow(base, exponent))
 
 	case "ln":
 		a, err := pop1(stack)
 		if err != nil {
 			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
-		*stack = append(*stack, math.Log(a))
+		*stack = append(*stack, detmath.Log(a))
 
 	case "log":
 		a, err := pop1(stack)
 		if err != nil {
 			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
-		*stack = append(*stack, math.Log10(a))
+		*stack = append(*stack, detmath.Log10(a))
 
 	case "cvi":
 		a, err := pop1(stack)
