@@ -54,6 +54,10 @@ type Object struct {
 	// separator, which takes the paragraph's level (UAX #9, L1), so that
 	// the text on either side of it orders as separate segments.
 	Tab bool
+	// BreakAs is the character the object stands for in line breaking,
+	// 0 for U+FFFC, which breaks before and after (UAX #14, LB20): a ruby
+	// column breaks as its base text does (CSS Ruby 1, 3.4).
+	BreakAs rune
 }
 
 // Break is the kind of line break opportunity before a character.
@@ -340,13 +344,34 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 		return nil, Report{}, fmt.Errorf("shaping text: %w", err)
 	}
 	p.level = level
-	p.segment(st, shapeText)
+	p.segment(st, segmentText(runs, shapeText, p.runOf))
 	if err := p.shape(ctx, st, shapeText); err != nil {
 		return nil, Report{}, err
 	}
 	p.trimAdjacent()
 	p.autospace()
 	return p, st.report(), nil
+}
+
+// segmentText returns the text the line breaks are found in: text, with
+// the character an object breaks as (Object.BreakAs) in its place. It
+// copies text only when an object sets one.
+func segmentText(runs []ParagraphRun, text []rune, runOf []uint16) []rune {
+	out := text
+	for i, r := range text {
+		if r != objectReplacement {
+			continue
+		}
+		o := runs[runOf[i]].Object
+		if o == nil || o.BreakAs == 0 || !utf8.ValidRune(o.BreakAs) || unicode.IsControl(o.BreakAs) {
+			continue
+		}
+		if &out[0] == &text[0] {
+			out = slices.Clone(text)
+		}
+		out[i] = o.BreakAs
+	}
+	return out
 }
 
 // segment records the break opportunities and grapheme boundaries of text.

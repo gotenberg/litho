@@ -97,6 +97,25 @@ func TestShape_ObjectsAndRuns(t *testing.T) {
 	}
 }
 
+// TestShape_ObjectBreaksAs locks Object.BreakAs: an object that breaks as
+// a letter keeps to the letters beside it, where U+FFFC breaks on both
+// sides (UAX #14, LB20 and LB28).
+func TestShape_ObjectBreaksAs(t *testing.T) {
+	f := newTestFonts(t, sansFamily()...)
+	runs := []ParagraphRun{
+		{Text: "A", Style: style()},
+		{Object: &Object{Width: 4, BreakAs: 'B'}},
+		{Text: "A", Style: style()},
+	}
+	p := shape(t, f, runs, ParagraphOptions{})
+	if p.Break(1) != NoBreak || p.Break(2) != NoBreak {
+		t.Errorf("breaks around an object breaking as B: %d %d, want none", p.Break(1), p.Break(2))
+	}
+	if p.Rune(1) != objectReplacement {
+		t.Errorf("object reads %q, want U+FFFC", p.Rune(1))
+	}
+}
+
 func TestShape_Directions(t *testing.T) {
 	f := newTestFonts(t, append(sansFamily(), fontFile{name: "hebrew.ttf", data: testHebrew()})...)
 	p := shape(t, f, []ParagraphRun{{Text: "אב AB", Style: style()}}, ParagraphOptions{})
