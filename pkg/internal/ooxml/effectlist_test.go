@@ -80,3 +80,25 @@ func TestParseTextEffects_AlphaIsTransparency(t *testing.T) {
 		t.Errorf("reflection %+v", fx.Reflection)
 	}
 }
+
+func TestParseTextPaint(t *testing.T) {
+	rPr := mustParse(t, `<w:rPr `+w14NS+`>`+
+		`<w14:textOutline w14:w="9525"><w14:solidFill><w14:srgbClr w14:val="C00000"/></w14:solidFill></w14:textOutline>`+
+		`<w14:textFill><w14:gradFill><w14:gsLst><w14:gs w14:pos="100000"><w14:srgbClr w14:val="ED7D31"/></w14:gs><w14:gs w14:pos="0"><w14:srgbClr w14:val="4472C4"/></w14:gs></w14:gsLst><w14:lin w14:ang="5400000" w14:scaled="0"/></w14:gradFill></w14:textFill>`+
+		`</w:rPr>`)
+	p, solid := ParseTextPaint(rPr, nil)
+	if solid != nil || p == nil || p.NoFill || len(p.Gradient) != 2 || p.Gradient[0].Pos != 0 || !near(p.Angle, 90) {
+		t.Fatalf("paint %+v, solid %v, want a vertical gradient of two stops in order", p, solid)
+	}
+	if o := p.Outline; o == nil || !near(o.Width, 0.75) || !near(o.Color.R, 0xC0/255.0) {
+		t.Errorf("outline %+v, want 0.75 point of C00000", p.Outline)
+	}
+	p, _ = ParseTextPaint(mustParse(t, `<w:rPr `+w14NS+`><w14:textFill><w14:noFill/></w14:textFill></w:rPr>`), nil)
+	if p == nil || !p.NoFill || p.Outline != nil {
+		t.Errorf("paint %+v, want unfilled", p)
+	}
+	p, solid = ParseTextPaint(mustParse(t, `<w:rPr `+w14NS+`><w14:textFill><w14:solidFill><w14:srgbClr w14:val="FF0000"><w14:alpha w14:val="25000"/></w14:srgbClr></w14:solidFill></w14:textFill></w:rPr>`), nil)
+	if p != nil || solid == nil || solid.R != 1 || !near(solid.A, 0.75) {
+		t.Errorf("paint %+v, solid %+v, want red at 0.75 and no paint", p, solid)
+	}
+}

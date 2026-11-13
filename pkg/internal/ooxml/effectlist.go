@@ -1,6 +1,8 @@
 package ooxml
 
 import (
+	"cmp"
+	"slices"
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -102,6 +104,96 @@ func ParseTextEffects(rPr *Element, theme *Theme) EffectList {
 	}
 	return l
 }
+
+// ParseTextPaint reads how a WordprocessingML run's properties rPr paint
+// its glyphs: w14:textFill (MS-DOCX, 2.6.1.29) unfilled, a solid colour,
+// returned as solid, or a gradient of DrawingML stops along a linear
+// angle (ECMA-376 Part 1, 20.1.8.33 gradFill, 20.1.8.41 lin), and
+// w14:textOutline (2.6.1.30), a line of its width w in its solid colour.
+// paint is nil when rPr sets neither; solid nil when the fill is not a
+// solid colour. A path gradient is read as linear, top to bottom.
+func ParseTextPaint(rPr *Element, theme *Theme) (paint *css.OfficeTextPaint, solid *css.Color) {
+	resolve := themeResolver(theme, nil)
+	color := func(e *Element) (css.Color, bool) {
+		for _, c := range e.Kids() {
+			if c.Space != NSW14 {
+				continue
+			}
+			if col, ok := DrawingColorChoice(w14Color(c), resolve); ok {
+				return col, true
+			}
+		}
+		return css.Color{}, false
+	}
+	var p css.OfficeTextPaint
+	set := false
+	if f := rPr.Child(NSW14, "textFill"); f != nil {
+		switch {
+		case f.Child(NSW14, "noFill") != nil:
+			p.NoFill, set = true, true
+		case f.Child(NSW14, "solidFill") != nil:
+			if c, ok := color(f.Child(NSW14, "solidFill")); ok {
+				solid = &c
+			}
+		case f.Child(NSW14, "gradFill") != nil:
+			g := f.Child(NSW14, "gradFill")
+			for _, gs := range g.Child(NSW14, "gsLst").Kids() {
+				if !gs.Is(NSW14, "gs") {
+					continue
+				}
+				pos, _ := gs.AttrNS(NSW14, "pos")
+				n, ok := Int(pos)
+				c, okc := color(gs)
+				if !ok || !okc {
+					continue
+				}
+				p.Gradient = append(p.Gradient, css.OfficeStop{Pos: min(max(float64(n)/100000, 0), 1), Color: c})
+				if len(p.Gradient) == maxTextStops {
+					break
+				}
+			}
+			slices.SortStableFunc(p.Gradient, func(a, b css.OfficeStop) int { return cmp.Compare(a.Pos, b.Pos) })
+			p.Angle = 90
+			if ang, ok := g.Child(NSW14, "lin").AttrNS(NSW14, "ang"); ok {
+				if n, ok := Int(ang); ok {
+					p.Angle = float64(n) / 60000
+				}
+			}
+			if len(p.Gradient) >= 2 {
+				set = true
+			} else {
+				p.Gradient = nil
+			}
+		}
+	}
+	if o := rPr.Child(NSW14, "textOutline"); o != nil && o.Child(NSW14, "noFill") == nil {
+		w, _ := o.AttrNS(NSW14, "w")
+		width, ok := EMU(w)
+		if !ok {
+			// MS-DOCX gives w no default; Word's dialog starts at 0.75 point.
+			width = 0.75
+		}
+		if c, ok := color(o.Child(NSW14, "solidFill")); ok && width > 0 {
+			p.Outline, set = &css.OfficeOutline{Color: c, Width: width}, true
+		} else if g := o.Child(NSW14, "gradFill"); g != nil && width > 0 {
+			// A gradient outline draws in its first stop's colour.
+			for _, gs := range g.Child(NSW14, "gsLst").Kids() {
+				if c, ok := color(gs); ok {
+					p.Outline, set = &css.OfficeOutline{Color: c, Width: width}, true
+					break
+				}
+			}
+		}
+	}
+	if !set {
+		return nil, solid
+	}
+	return &p, solid
+}
+
+// maxTextStops caps the stops of a run's gradient fill read. Anti-DoS
+// guard, not spec-mandated: Word's dialog makes at most ten stops.
+const maxTextStops = 64
 
 // w14Color returns a w14 colour choice as the DrawingML one it mirrors,
 // its alpha turned from a transparency into an opacity.
