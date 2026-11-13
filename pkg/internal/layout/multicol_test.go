@@ -120,6 +120,21 @@ func TestMulticol_FillAuto(t *testing.T) {
 		_____`)
 }
 
+func TestMulticol_FloatAvoidingBreaksMovesWhole(t *testing.T) {
+	t.Parallel()
+	// CSS Fragmentation 3, 3.2 and 4.4: a float with break-inside: avoid
+	// that a column cut would split starts the next column whole.
+	avoid := func(s *css.Style) { s.BreakInside = css.InsideAvoid }
+	auto := func(s *css.Style) { s.Columns.Fill = css.FillAuto }
+	res := run(t, doc(el(sty(columns(2, 1), height(3), auto),
+		el(sty(height(2), bg(red))),
+		el(sty(float(css.FloatLeft), width(2), height(2), bg(lime), avoid)))), page(5, 3))
+	assertPixels(t, res, 1, `
+		RR_GG
+		RR_GG
+		_____`)
+}
+
 func TestMulticol_Paginates(t *testing.T) {
 	t.Parallel()
 	res := run(t, doc(el(sty(columns(2, 1)), strip(red), strip(blue), strip(lime), strip(black), strip(red), strip(blue))), page(5, 2))

@@ -1359,6 +1359,15 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 			f.shift(x+f.m[css.Left]-f.x, dy)
 		}
 	}
+	if clampPage < 0 && e.paginating() && avoidsInside(f) && e.straddles(f) {
+		if top := f.y - f.m[css.Top]; !e.atPageTop(top) && f.borderH() <= e.areaH(e.pageOf(top)+1) && e.relayout(top) {
+			// A float that avoids breaks inside it and fits the next page
+			// or column starts there whole (CSS Fragmentation 3, 3.2 and
+			// 4.4).
+			x, y := bc.place(f.float, f.marginW(), f.marginH(), e.nextPage(top), cb.x, cb.x+cb.w)
+			place(x, y)
+		}
+	}
 	if clampPage >= 0 {
 		e.clampToPage(f, clampPage)
 	}
