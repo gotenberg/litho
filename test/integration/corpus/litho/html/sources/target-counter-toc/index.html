@@ -16,11 +16,13 @@ nav a::after { content: target-counter(attr(href), page); float: right; }
 a.see::after { content: " (chapter " target-counter(attr(href), chapter, upper-roman) ", " target-text(attr(href)) ", page " target-counter(attr(href), page) ")"; }
 h1 { counter-increment: chapter; break-before: page; font-size: 16pt; }
 h1::before { content: counter(chapter, upper-roman) ". "; }
+h1.front { counter-increment: none; break-before: auto; font-size: 18pt; margin: 0.83em 0; }
+h1.front::before { content: none; }
 p.long { height: 230mm; }
 </style>
 </head>
 <body>
-<h2>Contents</h2>
+<h1 class="front">Contents</h1>
 <nav>
 <ol>
 <li><a href="#intro">Introduction</a></li>
