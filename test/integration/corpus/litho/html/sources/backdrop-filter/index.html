@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Backdrop filters</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; }
+h1 { font-size: 16pt; }
+.scene { position: relative; height: 180px; margin-bottom: 24px; background: linear-gradient(90deg, #e63946, #457b9d); }
+.scene b { position: absolute; left: 20px; top: 20px; font-size: 36pt; color: #f1faee; }
+.glass { position: absolute; left: 120px; top: 50px; width: 280px; height: 90px; padding: 8px; background: rgba(255, 255, 255, 0.3); border: 1px solid rgba(255, 255, 255, 0.6); }
+</style>
+</head>
+<body>
+<h1>backdrop-filter</h1>
+<div class="scene"><b>Backdrop</b><div class="glass" style="backdrop-filter: blur(10px)">Frosted glass</div></div>
+<div class="scene"><b>Backdrop</b><div class="glass" style="backdrop-filter: grayscale(1) blur(4px)">Grey glass</div></div>
+<p>A printed page shows each glass panel over its backdrop unfiltered, its own translucent background and text drawn as they are.</p>
+</body>
+</html>

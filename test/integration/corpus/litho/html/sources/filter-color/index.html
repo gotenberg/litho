@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Colour filters</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; }
+h1 { font-size: 16pt; }
+.row::after { content: ""; display: block; clear: both; }
+.cell { float: left; width: 140px; margin: 0 16px 16px 0; }
+.box { height: 70px; background: linear-gradient(90deg, #e63946, #f4a261 40%, #2a9d8f 70%, #457b9d); }
+.cell p { margin: 4px 0 0; font-size: 9pt; }
+</style>
+</head>
+<body>
+<h1>Colour filter functions</h1>
+<div class="row">
+<div class="cell"><div class="box"></div><p>none</p></div>
+<div class="cell"><div class="box" style="filter: grayscale(1)"></div><p>grayscale(1)</p></div>
+<div class="cell"><div class="box" style="filter: grayscale(50%)"></div><p>grayscale(50%)</p></div>
+<div class="cell"><div class="box" style="filter: sepia(0.8)"></div><p>sepia(0.8)</p></div>
+<div class="cell"><div class="box" style="filter: saturate(3)"></div><p>saturate(3)</p></div>
+<div class="cell"><div class="box" style="filter: hue-rotate(120deg)"></div><p>hue-rotate(120deg)</p></div>
+<div class="cell"><div class="box" style="filter: brightness(1.4)"></div><p>brightness(1.4)</p></div>
+<div class="cell"><div class="box" style="filter: contrast(0.4)"></div><p>contrast(0.4)</p></div>
+<div class="cell"><div class="box" style="filter: invert(1)"></div><p>invert(1)</p></div>
+<div class="cell"><div class="box" style="filter: opacity(0.4)"></div><p>opacity(0.4)</p></div>
+<div class="cell"><div class="box" style="filter: sepia(1) hue-rotate(200deg) saturate(2)"></div><p>three chained</p></div>
+<div class="cell"><div class="box" style="filter: invert(1); opacity: 0.5"></div><p>invert, then opacity</p></div>
+<div class="cell"><div class="box" style="filter: blur(4px); clip-path: inset(10px)"></div><p>blur, then a clip</p></div>
+<div class="cell"><div class="box" style="filter: grayscale(1); mix-blend-mode: multiply"></div><p>grayscale, multiplied</p></div>
+</div>
+<p>The filter applies before the clip, the mask, the opacity and the blend mode of its element.</p>
+</body>
+</html>

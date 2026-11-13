@@ -192,6 +192,19 @@ The two sources below lock what Chromium prints of CSS animations: each animatio
 | `animation-time-zero`      | 1     | none    | A fade at zero, after a negative delay, reversed, alternating; keyframes missing from or to; `steps()` and a keyframe's own easing; `ease` half way; colour, transform, margin and width interpolated; visibility and `display: none` from keyframes; two animations, `!important`, two rules of a name, two blocks at an offset, string and case-sensitive names, `@-webkit-keyframes`, `@media screen`; a `::before`; a custom property; the timelines `none`, `scroll()` and `view()` |
 | `animation-fill-and-delay` | 1     | none    | Content hidden by its own style and revealed by a fade; positive delays without fill, filled backwards and both ways; zero durations; no iteration; ended animations with and without fill; paused animations; `animation: none` for print, alone and with `!important`; a visibility step; a slide in; a transition from `@starting-style`; `transition: all`                                                                                                                           |
 
+## Filters
+
+The six sources below lock the effects Chromium prints as bitmaps. Chromium prints an element with a `filter` as one image of the element and its effect at 300 pixels an inch, its text gone from the page; litho prints the image and keeps the element's text invisible over it, so each source sets its captions outside the filtered elements. Chromium prints a `backdrop-filter` without filtering the backdrop, and a blurred `box-shadow` or `text-shadow` as a colour through a soft mask of the blurred shape, the text staying text.
+
+| Source               | Pages | Options | Exercises                                                                                                                                                                 |
+| -------------------- | ----- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `filter-blur`        | 1     | none    | `blur()` of 1 to 8 pixels and of an `em` on gradient, bordered and dashed boxes, and on a box of one word                                                                 |
+| `filter-drop-shadow` | 1     | none    | `drop-shadow()` sharp, blurred, as a glow round a rounded box, cast by an outline alone, in `currentColor`, and two chained                                               |
+| `filter-color`       | 1     | none    | The eight colour functions and a chain of three on a gradient, then a filter under opacity, a clip path and a blend mode                                                  |
+| `filter-url`         | 1     | none    | `filter: url()` naming SVG filters: a blur, a colour matrix, a shadow merged under its source, a component transfer, one followed by a function and one naming no element |
+| `backdrop-filter`    | 1     | none    | Translucent panels of `backdrop-filter` blur and grayscale over a gradient and a word                                                                                     |
+| `text-shadow-blur`   | 1     | none    | Blurred `text-shadow` of 1 to 12 pixels on headings and body text, two shadows on one run, and the shadow of an underline                                                 |
+
 ## The Chromium references
 
 ```bash

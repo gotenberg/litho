@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blur filters</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; }
+h1 { font-size: 16pt; }
+.row::after { content: ""; display: block; clear: both; }
+.cell { float: left; width: 150px; margin: 0 24px 28px 0; }
+.box { height: 90px; background: linear-gradient(135deg, #e63946, #457b9d); border-radius: 10px; }
+.cell p { margin: 8px 0 0; font-size: 9pt; }
+</style>
+</head>
+<body>
+<h1>filter: blur()</h1>
+<div class="row">
+<div class="cell"><div class="box" style="filter: blur(1px)"></div><p>blur(1px)</p></div>
+<div class="cell"><div class="box" style="filter: blur(3px)"></div><p>blur(3px)</p></div>
+<div class="cell"><div class="box" style="filter: blur(8px)"></div><p>blur(8px)</p></div>
+<div class="cell"><div class="box" style="filter: blur(0.5em)"></div><p>blur(0.5em)</p></div>
+<div class="cell"><div class="box" style="background: #2a9d8f; border: 6px solid #264653; filter: blur(2px)"></div><p>a bordered box</p></div>
+<div class="cell"><div class="box" style="background: none; border: 3px dashed #e76f51; filter: blur(1.5px)"></div><p>a dashed outline</p></div>
+</div>
+<p>Each box above is drawn through a Gaussian blur of the deviation under it; the captions are not filtered.</p>
+<div style="filter: blur(2px); width: 320px; padding: 12px; background: #f1faee; border: 1px solid #1d3557">Blurred</div>
+<p>The box above holds one blurred word.</p>
+</body>
+</html>

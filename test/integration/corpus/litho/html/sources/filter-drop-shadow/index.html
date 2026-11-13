@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Drop shadows</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; color: #1d3557; }
+h1 { font-size: 16pt; }
+.row::after { content: ""; display: block; clear: both; }
+.cell { float: left; width: 150px; margin: 0 24px 32px 0; }
+.box { height: 80px; background: #a8dadc; }
+.cell p { margin: 14px 0 0; font-size: 9pt; }
+</style>
+</head>
+<body>
+<h1>filter: drop-shadow()</h1>
+<div class="row">
+<div class="cell"><div class="box" style="filter: drop-shadow(6px 6px 0 #1d3557)"></div><p>sharp, 6px</p></div>
+<div class="cell"><div class="box" style="filter: drop-shadow(4px 6px 4px rgba(0,0,0,0.6))"></div><p>blurred 4px</p></div>
+<div class="cell"><div class="box" style="border-radius: 40px; filter: drop-shadow(0 0 8px #e63946)"></div><p>a rounded glow</p></div>
+<div class="cell"><div class="box" style="background: none; border: 4px solid #e76f51; filter: drop-shadow(5px 5px 2px #264653)"></div><p>an outline alone</p></div>
+<div class="cell"><div class="box" style="color: #2a9d8f; filter: drop-shadow(-5px 5px 3px)"></div><p>in currentColor</p></div>
+<div class="cell"><div class="box" style="filter: drop-shadow(5px 0 0 #e63946) drop-shadow(0 5px 0 #457b9d)"></div><p>two shadows chained</p></div>
+</div>
+<p>Each shadow follows the alpha of what it is cast from: the outline alone casts its ring, the rounded box its rounded edge.</p>
+</body>
+</html>
