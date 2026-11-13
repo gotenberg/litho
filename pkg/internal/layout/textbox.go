@@ -12,7 +12,9 @@ import (
 // line's text-box-edge over metric, trim-end ends it at its last line's
 // under metric. A first or last line behind a border or a padding of a
 // descendant, or a block that lays out a flex, grid or table formatting
-// context, is not trimmed. own is the formatting context b establishes,
+// context, is not trimmed; margins do not stop the trim. A line edge a
+// descendant already trimmed is left as it trimmed it: the innermost
+// block container that asks decides (CSS Inline 3, 6.2). own is the formatting context b establishes,
 // nil when b lays its content out in its parent's: its floats move with
 // the content.
 func (e *engine) trimTextBox(b *box, end float64, own *bfc) float64 {
@@ -21,7 +23,8 @@ func (e *engine) trimTextBox(b *box, end float64, own *bfc) float64 {
 	}
 	trim := b.st.TextBoxTrim
 	if trim == css.TrimStart || trim == css.TrimBoth {
-		if l, owner := edgeLine(b, false); l != nil && math.Abs(l.y-b.contentY()) <= eps {
+		if l, owner := edgeLine(b, false); l != nil && !l.trimmedOver {
+			l.trimmedOver = true
 			st := owner.st
 			if fl := e.firstLineStyle(owner); fl != nil {
 				// The first line's root inline box takes the ::first-line
@@ -38,7 +41,8 @@ func (e *engine) trimTextBox(b *box, end float64, own *bfc) float64 {
 		}
 	}
 	if trim == css.TrimEnd || trim == css.TrimBoth {
-		if l, owner := edgeLine(b, true); l != nil && math.Abs(l.y+l.h-end) <= eps {
+		if l, owner := edgeLine(b, true); l != nil && !l.trimmedUnder {
+			l.trimmedUnder = true
 			_, under := e.trimEdges(owner.st)
 			if d := l.h - l.baseline - under; d > 0 {
 				// A float after the last line is placed at the line's

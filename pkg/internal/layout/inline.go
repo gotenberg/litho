@@ -52,6 +52,10 @@ type lineBox struct {
 	// before the line grows; endRoom is the room under the line's content,
 	// which a ruby annotation over the next line may take (ruby.go).
 	annOver, endRoom float64
+	// trimmedOver and trimmedUnder report a line whose over or under
+	// edge a block container already trimmed by text-box-trim: the
+	// innermost one that asks decides (CSS Inline 3, 6.2).
+	trimmedOver, trimmedUnder bool
 }
 
 // lineItem is one piece of a line: a glyph run of a text box, or an

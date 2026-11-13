@@ -83,3 +83,19 @@ func TestTextBoxTrim_MovesTheFloatAfterTheLastLine(t *testing.T) {
 		t.Errorf("float at %v, root %v high; want 10 and 20", (f.y-c.y)/css.Pt, c.h/css.Pt)
 	}
 }
+
+func TestTextBoxTrim_ReachesThroughMarginsOnce(t *testing.T) {
+	// CSS Inline 3, 6.2: margins do not stop the trim, and a line edge
+	// that a nested block container trims is not trimmed again by its
+	// ancestors.
+	lh := func(s *css.Style) { s.LineHeight = css.Pts(px(60)) }
+	trim := func(s *css.Style) { s.TextBoxTrim = css.TrimBoth }
+	pulled := boxes(t, doc(el(sty(lh, trim, padding(10)), el(sty(lh, margin(-10)), txt(sty(lh), "a"), br(sty(lh)), txt(sty(lh), "a")))), page(200, 200))
+	if c := kid(t, pulled, 0, 0); !near(c.borderH()/css.Pt, 70) {
+		t.Errorf("negative margin: height %v, want 70: two 60px lines less two half leadings", c.borderH()/css.Pt)
+	}
+	nested := boxes(t, doc(el(sty(lh, trim), el(sty(lh, trim), txt(sty(lh), "a")))), page(200, 200))
+	if c := kid(t, nested, 0, 0); !near(c.h/css.Pt, 10) {
+		t.Errorf("nested: height %v, want 10: the half leadings trimmed once", c.h/css.Pt)
+	}
+}
