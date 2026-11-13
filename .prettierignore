@@ -12,3 +12,6 @@
 /test/integration/corpus/weasyprint/resources/
 # A fetched test suite, never formatted.
 /pkg/internal/css/testdata/css-parsing-tests/
+# An extract TestSpecExtractsMatchDownloads writes, one property a line so
+# that a pin update reads as a diff of properties.
+/pkg/internal/css/testdata/specs/webref-properties.json

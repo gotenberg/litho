@@ -6,5 +6,5 @@
 /gen-rules
 /graphify-out/
 /pkg/internal/css/testdata/css-parsing-tests/
-/pkg/internal/css/testdata/specs/
+/pkg/internal/css/testdata/specs/download/
 /test/integration/cmd/corpus/corpus

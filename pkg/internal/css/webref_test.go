@@ -1,24 +1,123 @@
 package css
 
 import (
+	"archive/tar"
 	"bufio"
+	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"slices"
 	"strings"
 	"testing"
 )
 
-// webrefDifferencesFile lists where litho's property table and the
-// pinned webref data differ, each with its reason.
-const webrefDifferencesFile = "testdata/webref-differences.tsv"
+const (
+	// webrefDifferencesFile lists where litho's property table and the
+	// pinned webref data differ, each with its reason.
+	webrefDifferencesFile = "testdata/webref-differences.tsv"
+	// webrefFile holds the fields of each property of webref's css.json
+	// that TestPropertyTableAgainstWebref reads.
+	webrefFile = specsDir + "/webref-properties.json"
+)
 
-// webrefProperty is one property of webref's css.json.
+// webrefProperty is one property of webref's css.json, the fields
+// TestPropertyTableAgainstWebref reads.
 type webrefProperty struct {
 	Name          string `json:"name"`
-	Initial       string `json:"initial"`
-	Inherited     string `json:"inherited"`
-	LegacyAliasOf string `json:"legacyAliasOf"`
+	Initial       string `json:"initial,omitempty"`
+	Inherited     string `json:"inherited,omitempty"`
+	LegacyAliasOf string `json:"legacyAliasOf,omitempty"`
+}
+
+// webrefExtract writes the properties of css.json in tgz, the @webref/css
+// package at version, as a JSON object: where they come from, the notice
+// of license, the LICENSE file of w3c/webref at licenseCommit, and the
+// webrefProperty fields of every property, one a line, sorted by name.
+func webrefExtract(t *testing.T, tgz, license []byte, version, licenseCommit string) []byte {
+	t.Helper()
+	zr, err := gzip.NewReader(bytes.NewReader(tgz))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := tar.NewReader(zr)
+	var data []byte
+	for data == nil {
+		h, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			t.Fatal("the @webref/css package holds no package/css.json")
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if h.Name == "package/css.json" {
+			if data, err = io.ReadAll(tr); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	var ref struct {
+		Properties []webrefProperty `json:"properties"`
+	}
+	if err := json.Unmarshal(data, &ref); err != nil {
+		t.Fatal(err)
+	}
+	// Stable, so a name webref lists twice keeps its last definition last,
+	// as TestPropertyTableAgainstWebref reads it.
+	slices.SortStableFunc(ref.Properties, func(a, b webrefProperty) int { return strings.Compare(a.Name, b.Name) })
+	sum := sha256.Sum256(tgz)
+	header := []struct{ key, value string }{
+		{"source", "package/css.json of @webref/css " + version + ", https://registry.npmjs.org/@webref/css/-/css-" + version + ".tgz"},
+		{"sha256", hex.EncodeToString(sum[:])},
+		{"made", "by TestSpecExtractsMatchDownloads from testdata/specs/download (testdata/fetch-specs.sh): do not edit"},
+		{"license", "MIT, as the package.json of the package declares. The package carries no copyright or permission notice: the notice is the LICENSE file of https://github.com/w3c/webref at commit " + licenseCommit + "."},
+	}
+	var b bytes.Buffer
+	b.WriteString("{\n")
+	for _, h := range header {
+		b.WriteString("  " + jsonString(t, h.key) + ": " + jsonString(t, h.value) + ",\n")
+	}
+	b.WriteString(`  "notice": [` + "\n")
+	lines := strings.Split(strings.TrimRight(string(license), "\n"), "\n")
+	for i, line := range lines {
+		b.WriteString("    " + jsonString(t, line))
+		if i < len(lines)-1 {
+			b.WriteString(",")
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("  ],\n" + `  "properties": [` + "\n")
+	for i, p := range ref.Properties {
+		b.WriteString("    ")
+		enc := json.NewEncoder(&b)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(p); err != nil {
+			t.Fatal(err)
+		}
+		b.Truncate(b.Len() - 1) // Encode ends the value with a newline.
+		if i < len(ref.Properties)-1 {
+			b.WriteString(",")
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("  ]\n}\n")
+	return b.Bytes()
+}
+
+// jsonString writes s as a JSON string, with <, > and & as they are.
+func jsonString(t *testing.T, s string) string {
+	t.Helper()
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(s); err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 // TestPropertyTableAgainstWebref holds litho's property table to the
@@ -29,18 +128,22 @@ type webrefProperty struct {
 // as written there parses and computes as the initial keyword does.
 // Every exception is listed in testdata/webref-differences.tsv with its
 // clause, its Chromium measurement, or "open" for one still to decide;
-// an entry that no longer holds fails too.
+// an entry that no longer holds fails too. The webref data is read from
+// webrefFile, extracted from a pinned version of the package.
 func TestPropertyTableAgainstWebref(t *testing.T) {
 	t.Parallel()
-	data, err := os.ReadFile(specsDir + "/webref-css.json")
+	data, err := os.ReadFile(webrefFile)
 	if err != nil {
-		t.Skipf("%s/webref-css.json is absent: run testdata/fetch-specs.sh", specsDir)
+		t.Fatal(err)
 	}
 	var ref struct {
 		Properties []webrefProperty `json:"properties"`
 	}
 	if err := json.Unmarshal(data, &ref); err != nil {
 		t.Fatal(err)
+	}
+	if len(ref.Properties) == 0 {
+		t.Fatalf("%s holds no property", webrefFile)
 	}
 	byName := map[string]webrefProperty{}
 	for _, p := range ref.Properties {
