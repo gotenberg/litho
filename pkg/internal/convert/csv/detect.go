@@ -426,7 +426,7 @@ func detectTime(s string) (float64, kind, bool) {
 	case h > 23:
 		k = kElapsed
 	}
-	return (float64(h)*3600 + float64(mi)*60 + sec) / 86400, k, true
+	return (float64(float64(h)*3600) + float64(float64(mi)*60) + sec) / 86400, k, true
 }
 
 // display returns the text Calc shows for v in the format of kind k: the
