@@ -127,12 +127,12 @@ func isCombining(r rune) bool { return unicode.Is(unicode.M, r) }
 
 // cjkGroups splits v > 0 into groups of four decimal digits, ones group
 // first, each group's digits ones first.
-func cjkGroups(v int) [][4]int {
+func cjkGroups(v int64) [][4]int {
 	var groups [][4]int
 	for v > 0 {
 		var g [4]int
 		for i := range g {
-			g[i] = v % 10
+			g[i] = int(v % 10) // fits int: below 10
 			v /= 10
 		}
 		groups = append(groups, g)
@@ -146,7 +146,7 @@ func cjkGroups(v int) [][4]int {
 // non-zero digit, the tens digit of a group from ten to nineteen dropped
 // in the informal styles, the zeros trailing a group dropped and each
 // run of the others, across groups, collapsed into one.
-func chineseText(chars []string, v int) string {
+func chineseText(chars []string, v int64) string {
 	if v == 0 {
 		return chars[0]
 	}
@@ -232,7 +232,7 @@ func isGroupMarker(chars []string, p string) bool {
 //     "칠천팔백일만 구십이" in korean-hangul-formal and -3 "마이너스 삼", and
 //     12345 "萬 二千三百四十五" and 100100000 "億 十萬" in
 //     korean-hanja-informal.
-func koreanText(chars []string, v int) string {
+func koreanText(chars []string, v int64) string {
 	if v == 0 {
 		return chars[0]
 	}
@@ -286,13 +286,13 @@ var (
 // when it is the most significant or has an odd index, losing its digits,
 // then ፻ after each odd group that is not 0 and ፼ after each even one but
 // the first.
-func ethiopicText(v int) string {
+func ethiopicText(v int64) string {
 	if v == 1 {
 		return "፩"
 	}
 	var groups []int
 	for v > 0 {
-		groups = append(groups, v%100)
+		groups = append(groups, int(v%100)) // fits int: below 100
 		v /= 100
 	}
 	var b strings.Builder

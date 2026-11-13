@@ -700,7 +700,9 @@ func (e *engine) pushWordFloats(b *box, d *ifcData, forced map[int]bool) bool {
 // and widows lines after it, and reports whether it added one.
 func (e *engine) fixOrphans(b *box, forced map[int]bool) bool {
 	lines := b.lines
-	orphans, widows := max(b.st.Orphans, 1), max(b.st.Widows, 1)
+	// A count past the lines acts as one more than them; the cap keeps
+	// k - (widows - after) - segStart inside a 32-bit int.
+	orphans, widows := min(max(b.st.Orphans, 1), len(lines)+1), min(max(b.st.Widows, 1), len(lines)+1)
 	changed := false
 	segStart := 0
 	for k := 1; k < len(lines); k++ {

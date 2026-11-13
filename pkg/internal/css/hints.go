@@ -280,8 +280,8 @@ func HTMLHints(n *html.Node) []Declaration {
 
 // htmlInteger parses an integer by the HTML Standard's rules for parsing
 // integers (2.3.4.1): leading white space, a sign, digits, anything after
-// them ignored; false for no digit. The magnitude is clamped below
-// maxInteger.
+// them ignored; false for no digit. The value is clamped to [MinInteger,
+// MaxInteger], as an <integer> is.
 func htmlInteger(s string) (int, bool) {
 	s = strings.TrimLeft(s, "\t\n\f\r ")
 	neg := false
@@ -289,12 +289,15 @@ func htmlInteger(s string) (int, bool) {
 		neg = s[0] == '-'
 		s = s[1:]
 	}
-	v, digits := 0, 0
+	var v int64
+	digits := 0
 	for _, r := range s {
 		if r < '0' || r > '9' {
 			break
 		}
-		v = min(v*10+int(r-'0'), maxInteger-1)
+		// Past MaxInteger + 1 the value only grows: capping it there
+		// keeps the product inside int64.
+		v = min(v*10+int64(r-'0'), MaxInteger+1)
 		digits++
 	}
 	if digits == 0 {
@@ -303,7 +306,7 @@ func htmlInteger(s string) (int, bool) {
 	if neg {
 		v = -v
 	}
-	return v, true
+	return ClampInteger(v), true
 }
 
 // maxDirAutoRunes bounds the characters dir=auto reads looking for a

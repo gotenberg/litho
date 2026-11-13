@@ -119,10 +119,10 @@ const MaxBands = 64
 const maxBandBytes = 1 << 20
 
 // The range of [Options.PageCounterStart]: a first page numbered 0 to
-// 2^30, the largest counter value litho keeps.
+// 2^30.
 const (
 	MinPageCounterStart = -1
-	MaxPageCounterStart = maxListValue - 1
+	MaxPageCounterStart = 1<<30 - 1
 )
 
 // checkBands returns an error wrapping [typeset.ErrInvalidOptions] for

@@ -44,7 +44,7 @@ func MarkerText(st *css.Style, n int) string {
 //   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 writes counter(c,
 //     square) as U+25A0 BLACK SQUARE.
 func CounterText(t css.ListStyleType, n int) string {
-	n = min(max(n, -maxMarkerValue), maxMarkerValue)
+	n = css.ClampInteger(int64(n))
 	switch t {
 	case css.ListNone:
 		return ""
@@ -70,7 +70,7 @@ func CounterText(t css.ListStyleType, n int) string {
 // back to decimal (CSS Counter Styles 3, 3.1.1). ListNone and ListString,
 // whose string the style holds, have no marker here.
 func markerText(t css.ListStyleType, n int) string {
-	n = min(max(n, -maxMarkerValue), maxMarkerValue)
+	n = css.ClampInteger(int64(n))
 	switch t {
 	case css.ListNone, css.ListString:
 		return ""

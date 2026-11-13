@@ -103,7 +103,7 @@ func floatInterp(f func(*Style) *float64, lo, hi float64) interpFn {
 func intInterp(f func(*Style) *int, lo int) interpFn {
 	return func(dst, a, b *Style, p float64) interpResult {
 		v := roundHalfUp(lerp(float64(*f(a)), float64(*f(b)), p))
-		*f(dst) = max(int(min(max(v, -maxInteger), maxInteger)), lo) // fits int: clamped to ±maxInteger
+		*f(dst) = max(clampIntegerFloat(v), lo)
 		return interpolated
 	}
 }
@@ -251,7 +251,7 @@ func interpolators() map[propID]interpFn {
 				return discrete
 			}
 			v := roundHalfUp(lerp(float64(a.BookmarkLevel), float64(b.BookmarkLevel), p))
-			dst.BookmarkLevel = max(int(min(max(v, 1), maxInteger)), 1) // fits int: clamped to [1, maxInteger]
+			dst.BookmarkLevel = max(clampIntegerFloat(v), 1)
 			return interpolated
 		},
 		pZIndex: func(dst, a, b *Style, p float64) interpResult {
@@ -259,7 +259,7 @@ func interpolators() map[propID]interpFn {
 				return discrete
 			}
 			v := roundHalfUp(lerp(float64(a.ZIndex.Level), float64(b.ZIndex.Level), p))
-			dst.ZIndex.Level = int(min(max(v, -maxInteger), maxInteger)) // fits int: clamped to ±maxInteger
+			dst.ZIndex.Level = clampIntegerFloat(v)
 			return interpolated
 		},
 		pColor:               colorInterp(func(s *Style) *Color { return &s.Color }, 0),

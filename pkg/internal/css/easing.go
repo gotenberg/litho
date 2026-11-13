@@ -121,10 +121,6 @@ func parseCubicBezier(args [][]token) (Easing, bool) {
 	return Easing{Kind: EasingCubic, X1: v[0], Y1: v[1], X2: v[2], Y2: v[3]}, true
 }
 
-// maxSteps caps the intervals of steps(): 2^30, the integer range litho
-// parses. Not spec-mandated: CSS Easing 2, 2.3 sets no upper bound.
-const maxSteps = maxInteger
-
 // parseSteps parses the arguments of steps(): an integer and an optional
 // step position; jump-none needs two steps or more, the others one (CSS
 // Easing 2, 2.3).
@@ -137,7 +133,7 @@ func parseSteps(args [][]token) (Easing, bool) {
 		return Easing{}, false
 	}
 	n, ok := parseInteger(t)
-	if !ok || n > maxSteps {
+	if !ok {
 		return Easing{}, false
 	}
 	e := Easing{Kind: EasingSteps, Steps: n, Position: JumpEnd}

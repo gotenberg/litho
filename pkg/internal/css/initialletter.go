@@ -67,7 +67,7 @@ func parseInitialLetter(v []token, _ *declCtx) (any, bool) {
 	case kw == "raise":
 		sink = 1
 	case sink == 0:
-		sink = int(min(size, maxInteger)) // fits int: floored, at most maxInteger
+		sink = int(min(size, MaxInteger)) // fits int: floored, at most MaxInteger
 	}
 	return InitialLetter{Size: size, Sink: sink}, true
 }

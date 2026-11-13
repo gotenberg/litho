@@ -222,7 +222,7 @@ func TestHTMLHints_ListItemValue(t *testing.T) {
 	for id, want := range map[string][]CounterOp{
 		"a": {{Name: "list-item", Value: 7}},
 		"b": {{Name: "list-item", Value: -3}},
-		"c": {{Name: "list-item", Value: maxInteger - 1}},
+		"c": {{Name: "list-item", Value: MaxInteger}},
 		"d": nil,
 		"e": {{Name: "c", Value: 1}},
 		"f": {{Name: "list-item", Value: 99}},

@@ -3,6 +3,7 @@ package html
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"slices"
 	"strconv"
@@ -19,11 +20,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
-
-// maxListValue bounds a list ordinal read from an attribute: 2^30, the
-// largest marker value the layout engine numbers. Anti-DoS guard, not
-// spec-mandated: the HTML Standard allows any integer.
-const maxListValue = 1 << 30
 
 // roles maps an HTML element to the standard structure type it starts (ISO
 // 32000-1, 14.8.4, Tables 333 to 340). An element absent from the map
@@ -710,7 +706,8 @@ func selectText(n *dom.Node) string {
 
 // parseInteger parses an integer as the HTML Standard's rules for parsing
 // integers do (2.3.4.1): leading whitespace, a sign, digits, anything
-// after them ignored. The value is clamped to ±maxListValue.
+// after them ignored. The value is clamped to the range of a counter,
+// [css.MinInteger] to [css.MaxInteger].
 func parseInteger(s string) (int, bool) {
 	s = strings.TrimLeft(s, "\t\n\f\r ")
 	neg := false
@@ -726,13 +723,15 @@ func parseInteger(s string) (int, bool) {
 		return 0, false
 	}
 	v, err := strconv.ParseInt(s[:end], 10, 64)
-	if err != nil || v > maxListValue {
-		v = maxListValue
+	if err != nil {
+		// Only a value past the range of int64 fails: the digits are
+		// checked above.
+		v = math.MaxInt64
 	}
 	if neg {
 		v = -v
 	}
-	return int(v), true // fits int: clamped to ±2^30 above
+	return css.ClampInteger(v), true
 }
 
 // spanAttr returns a span attribute clamped to [1, maxSpan], 0 when absent

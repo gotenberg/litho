@@ -133,12 +133,6 @@ const maxFontStretch = 1000
 // spec-mandated: a dense page holds a few thousand.
 const maxPageFragments = 500_000
 
-// maxMarkerValue bounds the ordinal a list marker spells out: a larger one
-// is clamped. Anti-DoS guard, not spec-mandated: the alphabetic counter
-// styles spell a number in about log26(n) letters, and lists never run that
-// long.
-const maxMarkerValue = 1 << 30
-
 // maxTableColumns bounds the columns of one table: cells and columns past
 // it are left out with a warning. It is the bound HTML puts on colspan.
 // Anti-DoS guard, not spec-mandated: a page shows a few dozen columns.

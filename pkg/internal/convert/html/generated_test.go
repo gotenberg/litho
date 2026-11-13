@@ -193,3 +193,37 @@ func TestGenerated_CapsText(t *testing.T) {
 		t.Errorf("longest generated text %d bytes, warnings %v", longest, p.warnings)
 	}
 }
+
+// TestGenerated_CountersSaturateAtTheIntegerRange locks the range of a
+// counter, that of an <integer>: a literal past it clamps to the nearest
+// bound (CSS Values 4, 5), and an increment, an ol start or a reversed
+// count that would leave it saturates at the bound, as Chromium holds a
+// counter in 32 bits.
+func TestGenerated_CountersSaturateAtTheIntegerRange(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<style>
+		p::before { content: counter(n) " " }
+		#hi { counter-reset: n 2147483646; counter-increment: n 5 }
+		#lo { counter-reset: n -2147483647; counter-increment: n -5 }
+		#over { counter-reset: n 99999999999 }
+		#under { counter-reset: n -99999999999 }
+		#calc { counter-reset: n calc(2147483647 * 4) }
+		#twice { counter-reset: n 2147483647; counter-increment: n 2147483647 n 2147483647 }
+		</style>
+		<p id=hi>a</p><p id=lo>b</p><p id=over>c</p><p id=under>d</p><p id=calc>e</p><p id=twice>f</p>
+		<ol start=2147483647><li id=s1>a<li id=s2>b</ol>
+		<ol reversed><li id=r1 value=2147483647>a<li id=r2>b</ol>`, Options{})
+	for id, want := range map[string]string{
+		"hi": "2147483647 a", "lo": "-2147483648 b", "over": "2147483647 c", "under": "-2147483648 d",
+		"calc": "2147483647 e", "twice": "2147483647 f",
+	} {
+		if got := treeText(byID(t, p.root, id)); got != want {
+			t.Errorf("#%s: %q, want %q", id, got, want)
+		}
+	}
+	for id, want := range map[string]int{"s1": 2147483647, "s2": 2147483647, "r1": 2147483647, "r2": 2147483646} {
+		if got := byID(t, p.root, id).ListValue; got != want {
+			t.Errorf("#%s: list value %d, want %d", id, got, want)
+		}
+	}
+}

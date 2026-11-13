@@ -588,9 +588,10 @@ func (c *CounterStyles) represent(s *counterStyle, v int, depth int) string {
 		return fallback()
 	}
 	neg := v < 0 && s.usesNegative()
-	abs := v
+	// In int64, so that the magnitude of MinInteger is no overflow.
+	abs := int64(v)
 	if neg {
-		abs = -v
+		abs = -abs
 	}
 	rep, ok := s.initial(abs)
 	if !ok {
@@ -629,28 +630,29 @@ func graphemeCount(s string) int {
 // initial generates the initial representation of v, which is not
 // negative when the style uses a negative sign, by the system's
 // algorithm (CSS Counter Styles 3, 3.1). It reports false for a value
-// the algorithm cannot represent.
-func (s *counterStyle) initial(v int) (string, bool) {
+// the algorithm cannot represent. v is an int64 so that no step of an
+// algorithm overflows: v lies within [MinInteger, -MinInteger].
+func (s *counterStyle) initial(v int64) (string, bool) {
 	syms := s.symbols
 	switch s.system {
 	case systemCyclic:
-		n := len(syms)
+		n := int64(len(syms))
 		return syms[((v-1)%n+n)%n], true
 	case systemFixed:
-		i := v - s.first
-		if v < s.first || i >= len(syms) {
+		i := v - int64(s.first)
+		if i < 0 || i >= int64(len(syms)) {
 			return "", false
 		}
 		return syms[i], true
 	case systemSymbolic:
-		n := len(syms)
+		n := int64(len(syms))
 		reps := (v + n - 1) / n
 		if v < 1 || reps > maxCounterLength {
 			return "", false
 		}
-		return strings.Repeat(syms[(v-1)%n], reps), true
+		return strings.Repeat(syms[(v-1)%n], int(reps)), true // fits int: at most maxCounterLength
 	case systemAlphabetic:
-		n := len(syms)
+		n := int64(len(syms))
 		if v < 1 || n < 2 {
 			return "", false
 		}
@@ -662,7 +664,7 @@ func (s *counterStyle) initial(v int) (string, bool) {
 		}
 		return joinBackward(parts), true
 	case systemNumeric:
-		n := len(syms)
+		n := int64(len(syms))
 		if n < 2 {
 			return "", false
 		}
@@ -701,7 +703,7 @@ func joinBackward(parts []string) string {
 // is the symbol of weight 0, else the largest weights first; it fails
 // when a remainder is left or the representation grows past
 // maxCounterLength symbols.
-func additiveRep(tuples []additiveSymbol, v int) (string, bool) {
+func additiveRep(tuples []additiveSymbol, v int64) (string, bool) {
 	if v == 0 {
 		if last := tuples[len(tuples)-1]; last.weight == 0 {
 			return last.symbol, true
@@ -709,18 +711,19 @@ func additiveRep(tuples []additiveSymbol, v int) (string, bool) {
 		return "", false
 	}
 	var b strings.Builder
-	count := 0
+	var count int64
 	for _, t := range tuples {
-		if t.weight == 0 || v < t.weight {
+		w := int64(t.weight)
+		if w == 0 || v < w {
 			continue
 		}
-		reps := v / t.weight
+		reps := v / w
 		count += reps
 		if count > maxCounterLength {
 			return "", false
 		}
-		v -= reps * t.weight
-		b.WriteString(strings.Repeat(t.symbol, reps))
+		v -= reps * w
+		b.WriteString(strings.Repeat(t.symbol, int(reps))) // fits int: at most maxCounterLength
 		if v == 0 {
 			return b.String(), true
 		}

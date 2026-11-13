@@ -144,9 +144,10 @@ func (c *counterState) values(name string) []int {
 // inline (CSS Lists 3, 2).
 func isListItem(d css.Display) bool { return d == css.ListItem || d == css.InlineListItem }
 
-// clampCounter keeps a counter value within ±maxListValue, the values the
-// layout engine numbers.
-func clampCounter(v int) int { return min(max(v, -maxListValue), maxListValue) }
+// clampCounter keeps a counter value within the range of an <integer>,
+// [css.MinInteger] to [css.MaxInteger]: a counter holds a 32-bit
+// integer, as in Chromium, and saturates at its bounds.
+func clampCounter(v int) int { return css.ClampInteger(int64(v)) }
 
 // applyCounters runs the counter properties of the element or
 // pseudo-element styled st (CSS Lists 3, 4.5): counter-reset, then
@@ -288,7 +289,7 @@ func (b *builder) increment(name string, by int, inst func(string, int, bool)) {
 			return
 		}
 	}
-	in.value = clampCounter(in.value + by)
+	in.value = css.AddIntegers(in.value, by)
 }
 
 // olStart returns the value the list-item counter an <ol> resets starts
@@ -308,12 +309,12 @@ func (b *builder) olStart(ol *dom.Node, op css.CounterOp) (int, bool) {
 		return op.Value, op.Reversed
 	}
 	if !revAttr && !op.Reversed {
-		return start - 1, false
+		return css.AddIntegers(start, -1), false
 	}
 	if !hasStart {
 		return b.reversedStart(ol), true
 	}
-	return start + 1, true
+	return css.AddIntegers(start, 1), true
 }
 
 // reversedStart returns the starting value of a reversed list-item
@@ -339,14 +340,14 @@ func (b *builder) reversedStart(n *dom.Node) int {
 		if c.DataAtom == atom.Li && c.Namespace == "" {
 			if v, ok := attr(c, "value"); ok {
 				if i, ok := parseInteger(v); ok {
-					num += i
+					num = css.AddIntegers(num, i)
 					break
 				}
 			}
 		}
-		num++
+		num = css.AddIntegers(num, 1)
 	}
-	return clampCounter(num)
+	return num
 }
 
 // pseudo builds the box of the pseudo-element which of the element n,

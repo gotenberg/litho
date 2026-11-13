@@ -34,7 +34,7 @@ func (e *engine) fontFeatures(st *css.Style, ts *text.Style) []text.Feature {
 		return nil
 	}
 	var out []text.Feature
-	add := func(tag string, v int) { out = append(out, text.Feature{Tag: tag, Value: uint32(max(v, 0))}) } //nolint:gosec // v is at most css.maxFeatureValue, below 2^31
+	add := func(tag string, v int) { out = append(out, text.Feature{Tag: tag, Value: uint32(max(v, 0))}) } //nolint:gosec // v is an <integer>, at most css.MaxInteger, below 2^31
 	if !alt.IsNormal() {
 		var values *css.FontFeatureValues
 		if e.opts.FeatureValues != nil {

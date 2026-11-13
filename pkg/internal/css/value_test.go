@@ -215,3 +215,34 @@ func TestCalc_ComparesPercentagesAtUsedValueTime(t *testing.T) {
 		}
 	}
 }
+
+// TestParseInteger_ClampsToTheInt32Range locks the range of an <integer>:
+// a literal or a math function past the range of a 32-bit integer clamps
+// to its nearest bound, as CSS Values 4, 5 has a value past the supported
+// range converted to the closest supported one, and as Chromium holds an
+// integer.
+func TestParseInteger_ClampsToTheInt32Range(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<p id=a><p id=b><p id=c><p id=d><p id=e>`, `
+		p { position: relative }
+		#a { z-index: 2147483647; order: -2147483648 }
+		#b { z-index: 2147483648; order: -2147483649 }
+		#c { z-index: 99999999999999999999; order: -99999999999999999999 }
+		#d { z-index: calc(2147483647 + 1); order: calc(-2147483647 * 2) }
+		#e { z-index: 1e10; order: 2147483646.5 }`)
+	for id, want := range map[string][2]int{
+		"a": {MaxInteger, MinInteger},
+		"b": {MaxInteger, MinInteger},
+		"c": {MaxInteger, MinInteger},
+		"d": {MaxInteger, MinInteger},
+		"e": {0, 0},
+	} {
+		st := c.of(id)
+		if st.ZIndex.Level != want[0] || st.Order != want[1] {
+			t.Errorf("#%s: z-index %d, order %d, want %d and %d", id, st.ZIndex.Level, st.Order, want[0], want[1])
+		}
+	}
+	if AddIntegers(MaxInteger, MaxInteger) != MaxInteger || AddIntegers(MinInteger, -1) != MinInteger || AddIntegers(MaxInteger, MinInteger) != -1 {
+		t.Error("AddIntegers does not saturate at the integer range")
+	}
+}

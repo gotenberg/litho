@@ -433,26 +433,48 @@ func parseNumber(t token) (float64, bool) {
 	return 0, false
 }
 
-// maxInteger bounds the magnitude of an <integer>: 2^30. Anti-DoS guard,
-// not spec-mandated (CSS Values 4, 5.3 sets no range): it keeps the value
-// inside a 32-bit int, and counters, z-indexes and column counts stay far
-// below it.
-const maxInteger = 1 << 30
+// MinInteger and MaxInteger bound an <integer>: the range of a 32-bit
+// signed integer, the range Chromium holds an integer in. CSS Values 4, 5
+// leaves the range to the implementation and has a value past it
+// converted to the closest supported one, so a literal or a math function
+// beyond it clamps to the nearest bound. Every value fits a 32-bit int;
+// a sum of two of them may not, and goes through [AddIntegers].
+const (
+	MinInteger = math.MinInt32
+	MaxInteger = math.MaxInt32
+)
 
-// parseInteger parses an <integer> (CSS Values 4, 5.3). A math function
-// resolving to a number rounds to the nearest integer (CSS Values 4,
-// 10.12).
+// AddIntegers returns a + b clamped to [MinInteger, MaxInteger], for the
+// arithmetic of counters and other <integer> values: the sum saturates
+// at a bound and never wraps, a 32-bit int included.
+func AddIntegers(a, b int) int {
+	return ClampInteger(int64(a) + int64(b))
+}
+
+// ClampInteger returns v clamped to [MinInteger, MaxInteger].
+func ClampInteger(v int64) int {
+	return int(min(max(v, MinInteger), MaxInteger)) // fits int: within the int32 range
+}
+
+// parseInteger parses an <integer> (CSS Values 4, 5.2), clamped to
+// [MinInteger, MaxInteger]. A math function resolving to a number rounds
+// to the nearest integer (CSS Values 4, 10.12).
 func parseInteger(t token) (int, bool) {
-	if t.typ == tNumber && t.integer && numeric.Finite(t.num) && math.Abs(t.num) < maxInteger {
-		return int(t.num), true
+	if t.typ == tNumber && t.integer && numeric.Finite(t.num) {
+		return clampIntegerFloat(t.num), true
 	}
 	if t.typ == tFunction && isCalc(&t) {
 		if v, ok := calcNumber(&t, nil); ok {
-			v = math.Max(-maxInteger+1, math.Min(maxInteger-1, math.Floor(v+0.5)))
-			return int(v), true // fits int: clamped to ±maxInteger above
+			return clampIntegerFloat(math.Floor(v + 0.5)), true
 		}
 	}
 	return 0, false
+}
+
+// clampIntegerFloat returns the integral v clamped to [MinInteger,
+// MaxInteger]; an infinite v takes the bound of its sign.
+func clampIntegerFloat(v float64) int {
+	return int(math.Max(MinInteger, math.Min(MaxInteger, v))) // fits int: within the int32 range
 }
 
 // parseAngle parses an <angle> or a bare number, in degrees (CSS Values 4,

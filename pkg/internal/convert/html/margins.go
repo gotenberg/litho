@@ -845,23 +845,17 @@ func runCounterOps(cur map[string]int, base func(string) int, st *css.Style, imp
 	}
 	for _, op := range st.CounterIncrement {
 		if op.Name != pagesCounter {
-			cur[op.Name] = addCounter(base(op.Name), op.Value)
+			cur[op.Name] = css.AddIntegers(base(op.Name), op.Value)
 		}
 	}
 	if implicitPage && !touched {
-		cur[pageCounter] = addCounter(base(pageCounter), 1)
+		cur[pageCounter] = css.AddIntegers(base(pageCounter), 1)
 	}
 	for _, op := range st.CounterSet {
 		if op.Name != pagesCounter {
 			cur[op.Name] = clampCounter(op.Value)
 		}
 	}
-}
-
-// addCounter returns a + b within the values [clampCounter] keeps.
-func addCounter(a, b int) int {
-	s := min(max(int64(a)+int64(b), -maxListValue), maxListValue)
-	return int(s) // fits int: within ±maxListValue, 2^30
 }
 
 // pageCounters returns the counters of the page context on the page of

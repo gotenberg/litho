@@ -2,6 +2,7 @@ package css
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -178,6 +179,48 @@ func TestCounterStyles_Symbols(t *testing.T) {
 		}
 		if got := (*CounterStyles)(nil).Marker(st.ListStyleString, tc.v); st.ListStyleType != ListNamed || got != tc.marker {
 			t.Errorf("%s: marker %q, want %q", tc.decl, got, tc.marker)
+		}
+	}
+}
+
+// TestCounterStyles_IntegerRange locks the representation of the ends of
+// the integer range in every system: no step of an algorithm overflows,
+// the magnitude of MinInteger included, whatever the width of int.
+func TestCounterStyles_IntegerRange(t *testing.T) {
+	t.Parallel()
+	sheet, err := Parse(context.Background(), []byte(`
+		@counter-style cyc { system: cyclic; symbols: a b c }
+		@counter-style fix-lo { system: fixed -2147483648; symbols: a b }
+		@counter-style fix-hi { system: fixed 2147483647; symbols: a b }
+		@counter-style sym { system: symbolic; symbols: a b c }
+		@counter-style alp { system: alphabetic; symbols: a b }
+		@counter-style num { system: numeric; symbols: "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" }
+		@counter-style add { system: additive; additive-symbols: 1000000000 G, 1 I }
+	`), ParseOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := NewResolver(Media{}, []Sheet{{Sheet: sheet, Origin: Author}}).CounterStyles()
+	for _, tc := range []struct {
+		style string
+		v     int
+		want  string
+	}{
+		{"cyc", MaxInteger, "a"}, {"cyc", MinInteger, "a"},
+		{"fix-lo", MinInteger, "a"}, {"fix-lo", MaxInteger, "2147483647"},
+		{"fix-hi", MaxInteger, "a"}, {"fix-hi", MinInteger, "-2147483648"},
+		{"sym", MaxInteger, "2147483647"},
+		{"alp", MaxInteger, strings.Repeat("a", 31)}, {"alp", MinInteger, "-2147483648"},
+		{"num", MaxInteger, "2147483647"}, {"num", MinInteger, "-2147483648"},
+		{"add", MaxInteger, "2147483647"}, {"add", MinInteger, "-2147483648"},
+		{"simp-chinese-informal", MaxInteger, "二十一亿四千七百四十八万三千六百四十七"},
+		{"simp-chinese-informal", MinInteger, "负二十一亿四千七百四十八万三千六百四十八"},
+		{"korean-hangul-formal", MinInteger, "마이너스 이십일억 사천칠백사십팔만 삼천육백사십팔"},
+		{"ethiopic-numeric", MaxInteger, "፳፩፼፵፯፻፵፰፼፴፮፻፵፯"},
+		{"lower-roman", MinInteger, "-2147483648"},
+	} {
+		if got := cs.Counter(tc.style, tc.v); got != tc.want {
+			t.Errorf("%s(%d) = %q, want %q", tc.style, tc.v, got, tc.want)
 		}
 	}
 }
