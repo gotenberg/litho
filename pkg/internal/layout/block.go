@@ -256,7 +256,7 @@ func leadingMargins(b *box, cbw float64) strut {
 // layout of b's content: a percentage padding or an intrinsic width
 // decides whether a descendant is empty.
 func (e *engine) collapsingThrough(b *box, cb cblock) (strut, bool) {
-	if b.bd[css.Top] != 0 || b.pd[css.Top] != 0 || b.bd[css.Bottom] != 0 || b.pd[css.Bottom] != 0 || b.st.MinHeight.Value > 0 {
+	if b.bd[css.Top] != 0 || b.pd[css.Top] != 0 || b.bd[css.Bottom] != 0 || b.pd[css.Bottom] != 0 || minHeightSet(b.st.MinHeight) {
 		return strut{}, false
 	}
 	if h, ok := specHeight(b, b.st.Height, cb); ok && h > eps || b.st.AspectRatio.Ratio() > 0 {
@@ -480,6 +480,33 @@ func specHeight(b *box, d css.Dimension, cb cblock) (float64, bool) {
 	return max(h, 0), true
 }
 
+// specMinHeight returns the used min-height d of b in cb: as
+// [specHeight], except that a percentage of a height that is not definite
+// counts as 0, its length part kept (CSS 2.1, 10.7: "the percentage value
+// is treated as '0'"; CSS Values 4, 10.9 resolves a calc() term by term).
+func specMinHeight(b *box, d css.Dimension, cb cblock) (float64, bool) {
+	if !d.HasPercent() || cb.hDefinite {
+		return specHeight(b, d, cb)
+	}
+	h := resolve(d, 0)
+	if b.st.BoxSizing == css.BorderBox {
+		h -= vEdges(b)
+	}
+	return max(h, 0), true
+}
+
+// minHeightSet reports a computed min-height other than zero, which keeps
+// a box's top and bottom margins apart (CSS 2.1, 8.3.1).
+func minHeightSet(d css.Dimension) bool {
+	switch d.Kind { //nolint:exhaustive // the keywords compute to auto or none
+	case css.Points, css.Percent:
+		return d.Value > 0
+	case css.Calc:
+		return d.Resolve(1) != 0 || d.Value != 0
+	}
+	return false
+}
+
 // constrainWidth applies min-width and max-width to the content width w
 // (CSS 2.1, 10.4).
 func constrainWidth(b *box, w, cbw float64) float64 {
@@ -498,7 +525,7 @@ func constrainHeight(b *box, h float64, cb cblock) float64 {
 	if mx, ok := specHeight(b, b.st.MaxHeight, cb); ok {
 		h = min(h, mx)
 	}
-	if mn, ok := specHeight(b, b.st.MinHeight, cb); ok {
+	if mn, ok := specMinHeight(b, b.st.MinHeight, cb); ok {
 		h = max(h, mn)
 	}
 	return max(h, 0)
@@ -780,7 +807,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		// No content resolved the margins: b is empty. Its top and bottom
 		// margins adjoin when its height is auto or zero (CSS 2.1, 8.3.1).
 		zero := hSet && specH <= eps && !ratioH
-		if (collapseBottom || zero && b.bd[css.Bottom] == 0 && b.pd[css.Bottom] == 0) && b.st.MinHeight.Value <= 0 {
+		if (collapseBottom || zero && b.bd[css.Bottom] == 0 && b.pd[css.Bottom] == 0) && !minHeightSet(b.st.MinHeight) {
 			mc.waiting = slices.Delete(mc.waiting, i, i+1)
 			mc.collapsedThrough(b)
 			if trim&css.TrimBlockEnd != 0 {

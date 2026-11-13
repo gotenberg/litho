@@ -26,7 +26,7 @@ func (e *engine) replacedSize(b *box, cb cblock) (float64, float64) {
 		maxW = max(v, minW)
 	}
 	minH, maxH := 0.0, math.Inf(1)
-	if v, ok := specHeight(b, b.st.MinHeight, cb); ok {
+	if v, ok := specMinHeight(b, b.st.MinHeight, cb); ok {
 		minH = v
 	}
 	if v, ok := specHeight(b, b.st.MaxHeight, cb); ok {

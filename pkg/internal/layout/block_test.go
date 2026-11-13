@@ -409,3 +409,20 @@ func TestBlock_PercentageOfAMinHeight(t *testing.T) {
 		t.Errorf("child %v tall, want 20", got[3])
 	}
 }
+
+// TestBlock_CalcMinHeight holds a calc() min-height to CSS 2.1, 10.7 and
+// 8.3.1: against a definite height it resolves whole, a negative length
+// part not making it zero, so an empty box keeps it; against an
+// indefinite height its percentage counts as 0 and its length stays.
+func TestBlock_CalcMinHeight(t *testing.T) {
+	t.Parallel()
+	mh := func(f, v float64) func(*css.Style) { return func(s *css.Style) { s.MinHeight = calcOf(f, v) } }
+	rb := boxes(t, doc(el(sty(height(100)), el(sty(mh(0.75, -30))))), page(200, 200))
+	if got := rect(kid(t, rb, 0, 0, 0)); got[3] != 45 {
+		t.Errorf("definite: child %v tall, want 45", got[3])
+	}
+	rb = boxes(t, doc(el(sty(), el(sty(mh(0.5, 25))))), page(200, 200))
+	if got := rect(kid(t, rb, 0, 0, 0)); got[3] != 25 {
+		t.Errorf("indefinite: child %v tall, want 25", got[3])
+	}
+}
