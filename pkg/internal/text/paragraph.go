@@ -483,7 +483,7 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 				piece.Direction = di.DirectionRTL
 			}
 			for _, in := range shaping.SplitByFace(piece, styleFontmap{st: st, style: idx, script: piece.Script}) {
-				st.faceInput(&in)
+				st.faceInput(&in, &ss.style)
 				out := st.kit.shaper.Shape(in)
 				rescale(&out, in.Size)
 				st.collectMissing(&out, text)
@@ -513,9 +513,7 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 	var doc *FaceDescriptor
 	if fc != nil {
 		doc = fc.doc
-		// A face's size adjustment draws it at a scaled size (CSS Fonts
-		// 5, 4.12).
-		style.Size *= doc.sizeAdjust()
+		style.Size *= faceScale(&style, fc, out.Face)
 	}
 	it := shapedItem{
 		start: out.Runes.Offset, end: out.Runes.Offset + out.Runes.Count, run: run, style: style,
@@ -922,7 +920,7 @@ func shapesTogether(a, b Style) bool {
 		a.Autospace == b.Autospace && a.AutospaceAlpha == b.AutospaceAlpha && a.AutospaceNumeric == b.AutospaceNumeric &&
 		a.NoSpacingTrim == b.NoSpacingTrim && a.Size == b.Size && a.Lang == b.Lang &&
 		a.LetterSpacing == b.LetterSpacing && a.WordSpacing == b.WordSpacing && a.Scale == b.Scale &&
-		a.NoKerning == b.NoKerning && a.WordMetrics == b.WordMetrics &&
+		a.NoKerning == b.NoKerning && a.WordMetrics == b.WordMetrics && a.SizeAdjust == b.SizeAdjust &&
 		slices.Equal(a.Features, b.Features) && a.LanguageSystem == b.LanguageSystem
 }
 

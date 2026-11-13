@@ -264,6 +264,9 @@ func equalStyle(a, b *Style) bool {
 	if a.FontLanguageOverride != b.FontLanguageOverride {
 		return false
 	}
+	if !equalFontSizeAdjust(&a.FontSizeAdjust, &b.FontSizeAdjust) {
+		return false
+	}
 	if a.NoSynthesizeSmallCaps != b.NoSynthesizeSmallCaps {
 		return false
 	}
@@ -778,6 +781,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 		h = hashFeatureSetting(h, &x.FontFeatureSettings[i1])
 	}
 	h = mixString(h, x.FontLanguageOverride)
+	h = hashFontSizeAdjust(h, &x.FontSizeAdjust)
 	h = mixBool(h, x.NoSynthesizeSmallCaps)
 	h = mix(h, math.Float64bits(x.FontObliqueAngle))
 	h = mix(h, math.Float64bits(x.FontStretch))
@@ -1274,6 +1278,32 @@ func equalFeatureSetting(a, b *FeatureSetting) bool {
 func hashFeatureSetting(h uint64, x *FeatureSetting) uint64 {
 	h = mixString(h, x.Tag)
 	h = mix(h, uint64(x.Value))
+	return h
+}
+
+// equalFontSizeAdjust reports whether a and b hold equal values, field by field.
+func equalFontSizeAdjust(a, b *FontSizeAdjust) bool {
+	if a.Set != b.Set {
+		return false
+	}
+	if a.Metric != b.Metric {
+		return false
+	}
+	if math.Float64bits(a.Value) != math.Float64bits(b.Value) {
+		return false
+	}
+	if a.FromFont != b.FromFont {
+		return false
+	}
+	return true
+}
+
+// hashFontSizeAdjust folds every field of x into h.
+func hashFontSizeAdjust(h uint64, x *FontSizeAdjust) uint64 {
+	h = mixBool(h, x.Set)
+	h = mix(h, uint64(x.Metric))
+	h = mix(h, math.Float64bits(x.Value))
+	h = mixBool(h, x.FromFont)
 	return h
 }
 

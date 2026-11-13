@@ -762,7 +762,7 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 			}
 			piece.FontFeatures = s.features
 			for _, in := range shaping.SplitByFace(piece, styleFontmap{st: st, style: idx, script: piece.Script}) {
-				st.faceInput(&in)
+				st.faceInput(&in, &s.style)
 				out := st.kit.shaper.Shape(in)
 				rescale(&out, in.Size)
 				st.collectMissing(&out, para)

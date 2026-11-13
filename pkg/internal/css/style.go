@@ -1104,6 +1104,9 @@ type Style struct {
 	// the OpenType language system tag that shapes the text, "" for
 	// normal.
 	FontLanguageOverride string
+	// FontSizeAdjust is font-size-adjust (CSS Fonts 5, 2.6), which
+	// changes the used font size and leaves the computed one.
+	FontSizeAdjust FontSizeAdjust
 	// NoSynthesizeSmallCaps is font-synthesis-small-caps: none, small
 	// capitals a face lacks are not synthesised (CSS Fonts 4, 5.5).
 	NoSynthesizeSmallCaps bool

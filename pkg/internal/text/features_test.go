@@ -135,3 +135,33 @@ func TestShape_FaceSizeAdjustAndOverrides(t *testing.T) {
 		t.Errorf("metrics %+v, plain %+v", m, pm)
 	}
 }
+
+// TestShape_FontSizeAdjust checks font-size-adjust (CSS Fonts 5, 2.6): a
+// face whose ex-height is 0.8 em draws at half the size for a value of
+// 0.4, its metrics with it, and a value of 0 adjusts nothing.
+func TestShape_FontSizeAdjust(t *testing.T) {
+	t.Parallel()
+	f := newTestFonts(t, repoFont(t, "Ahem.ttf", ahemPath))
+	st := style()
+	st.Families = []string{"Ahem"}
+	st.Size = 20
+	w := func(s Style) float64 {
+		return shape(t, f, []ParagraphRun{{Text: "XX", Style: s}}, ParagraphOptions{}).Line(0, 2, false).Width
+	}
+	plain := w(st)
+	if got := f.Aspect(st, AdjustExHeight); math.Abs(got-0.8) > 1e-9 {
+		t.Fatalf("Ahem's ex aspect %v, want 0.8", got)
+	}
+	adjusted := st
+	adjusted.SizeAdjust = SizeAdjust{Value: 0.4}
+	if got := w(adjusted); math.Abs(got-plain/2) > 1e-6 {
+		t.Errorf("adjusted width %v, want %v", got, plain/2)
+	}
+	if m, pm := f.Match(st).MetricsFor(adjusted), f.Match(st).MetricsFor(st); math.Abs(m.Ascent-pm.Ascent/2) > 1e-9 {
+		t.Errorf("adjusted ascent %v, plain %v", m.Ascent, pm.Ascent)
+	}
+	adjusted.SizeAdjust = SizeAdjust{Metric: AdjustCapHeight}
+	if got := w(adjusted); got != plain {
+		t.Errorf("a value of 0: width %v, want %v", got, plain)
+	}
+}

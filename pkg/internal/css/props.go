@@ -209,6 +209,7 @@ const (
 	pFontVariantEmoji
 	pFontLanguageOverride
 	pFontSynthesisSmallCaps
+	pFontSizeAdjust
 	numProps
 )
 

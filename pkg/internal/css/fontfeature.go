@@ -367,10 +367,65 @@ func parseLanguageOverride(v []token, _ *declCtx) (any, bool) {
 	return t.value, true
 }
 
+// FontSizeAdjust is font-size-adjust (CSS Fonts 5, 2.6): the value a
+// metric of the font keeps as a fraction of the font size. The zero value
+// is none.
+type FontSizeAdjust struct {
+	// Set is false for none.
+	Set bool
+	// Metric is the metric held: ex-height, cap-height, ch-width,
+	// ic-width or ic-height, in that order from 0.
+	Metric uint8
+	// Value is the fraction, from 0 to maxFontSizeAdjust; with FromFont
+	// it is the first available font's own.
+	Value    float64
+	FromFont bool
+}
+
+// fontSizeAdjustMetrics are the metric keywords of font-size-adjust.
+var fontSizeAdjustMetrics = map[string]uint8{
+	"ex-height": 0, "cap-height": 1, "ch-width": 2, "ic-width": 3, "ic-height": 4,
+}
+
+// maxFontSizeAdjust caps the value of font-size-adjust. Overflow guard,
+// not spec-mandated: CSS Fonts 5, 2.6 takes any non-negative number, and
+// a metric of ten ems draws nothing a reader can see whole.
+const maxFontSizeAdjust = 10
+
+// parseFontSizeAdjust parses font-size-adjust: none, or an optional metric
+// keyword then from-font or a non-negative number.
+func parseFontSizeAdjust(v []token, _ *declCtx) (any, bool) {
+	if k, ok := keyword(v); ok && k == "none" {
+		return FontSizeAdjust{}, true
+	}
+	a := FontSizeAdjust{Set: true}
+	if len(v) == 2 {
+		m, ok := fontSizeAdjustMetrics[lower(v[0].value)]
+		if v[0].typ != tIdent || !ok {
+			return nil, false
+		}
+		a.Metric, v = m, v[1:]
+	}
+	t, ok := single(v)
+	if !ok {
+		return nil, false
+	}
+	if t.isIdent("from-font") {
+		a.FromFont = true
+		return a, true
+	}
+	n, ok := parseNumber(t)
+	if !ok || n < 0 {
+		return nil, false
+	}
+	a.Value = min(n, maxFontSizeAdjust)
+	return a, true
+}
+
 // fontFeatureProps returns the longhands of CSS Fonts 4, 6 this file adds,
 // every one inherited: font-feature-settings, font-variant-ligatures,
 // -numeric, -east-asian, -position, -alternates and -emoji,
-// font-language-override and font-synthesis-small-caps.
+// font-language-override, font-size-adjust and font-synthesis-small-caps.
 func fontFeatureProps() map[propID]propDef {
 	return map[propID]propDef{
 		pFontFeatureSettings: {
@@ -431,6 +486,15 @@ func fontFeatureProps() map[propID]propDef {
 				}
 			},
 			copyFrom: field(func(s *Style) *string { return &s.FontLanguageOverride }),
+		},
+		pFontSizeAdjust: {
+			name: "font-size-adjust", inherited: true, parse: parseFontSizeAdjust,
+			compute: func(_ *styler, st *Style, v any) {
+				if a, ok := v.(FontSizeAdjust); ok {
+					st.FontSizeAdjust = a
+				}
+			},
+			copyFrom: field(func(s *Style) *FontSizeAdjust { return &s.FontSizeAdjust }),
 		},
 		pFontSynthesisSmallCaps: synthesisProp("font-synthesis-small-caps", func(s *Style) *bool { return &s.NoSynthesizeSmallCaps }),
 	}

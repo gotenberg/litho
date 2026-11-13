@@ -403,6 +403,12 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 		LanguageSystem:    st.FontLanguageOverride,
 	}
 	ts.Features = e.fontFeatures(st, &ts)
+	if a := st.FontSizeAdjust; a.Set {
+		ts.SizeAdjust = text.SizeAdjust{Metric: text.AdjustMetric(a.Metric), Value: a.Value}
+		if a.FromFont {
+			ts.SizeAdjust.Value = e.fonts.Aspect(ts, ts.SizeAdjust.Metric)
+		}
+	}
 	return ts
 }
 

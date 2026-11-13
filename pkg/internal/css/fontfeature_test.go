@@ -148,3 +148,20 @@ func TestFontFeatureValues(t *testing.T) {
 		t.Errorf("resolved without values %v", got)
 	}
 }
+
+func TestFontSizeAdjust(t *testing.T) {
+	t.Parallel()
+	for value, want := range map[string]FontSizeAdjust{
+		"none":                {},
+		"0.5":                 {Set: true, Value: 0.5},
+		"cap-height 0.7":      {Set: true, Metric: 1, Value: 0.7},
+		"ic-height from-font": {Set: true, Metric: 4, FromFont: true},
+		"-1":                  {Set: true, Value: 0.3},
+		"bold 0.5":            {Set: true, Value: 0.3},
+	} {
+		c := compute(t, `<body><div id=t></div></body>`, `body { font-size-adjust: 0.3 } #t { font-size-adjust: `+value+` }`)
+		if got := c.of("t").FontSizeAdjust; got != want {
+			t.Errorf("font-size-adjust: %s = %+v, want %+v", value, got, want)
+		}
+	}
+}

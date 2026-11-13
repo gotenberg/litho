@@ -121,6 +121,9 @@ type Style struct {
 	// resolution asks (CSS Fonts 4, 7.2). A tag is four bytes from U+20
 	// to U+7E; another entry is ignored.
 	Features []Feature
+	// SizeAdjust scales each face so that its metric keeps a constant
+	// fraction of Size, CSS font-size-adjust (see [SizeAdjust]).
+	SizeAdjust SizeAdjust
 	// LanguageSystem is the OpenType language system tag the text is
 	// shaped with in place of the one Lang maps to, CSS
 	// font-language-override (CSS Fonts 4, 6.14): up to four characters
