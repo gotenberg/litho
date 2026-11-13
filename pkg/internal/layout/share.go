@@ -2,6 +2,7 @@ package layout
 
 import (
 	"context"
+	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
@@ -65,6 +66,7 @@ type sharedStyles struct {
 	table   *css.Styles
 	anon    map[*css.Style]*css.Style
 	markers map[markerKey]*css.Style
+	symbols map[spaceKey]*css.Style
 	charged map[*css.Style]struct{}
 }
 
@@ -112,6 +114,48 @@ func (e *engine) anonOf(parent *css.Style) *css.Style {
 	}
 	e.shared.anon[parent] = st
 	return st
+}
+
+// symbolMarkerOf returns the style of the inside symbol marker of a list
+// item whose marker style is mst, in language lang: an inline replaced box
+// of the bullet's size that ends where the item's content starts, made once
+// a marker style and language and shared. Its width is the bullet's,
+// Blink's (o+1)/2 pixels for a font ascent A rounded to whole pixels and o
+// = A*2/3, followed by a margin of 1em and a pixel; its bottom margin puts
+// the bullet's top 3*(A-o)/2 pixels below the top of the ascent, as
+// [symbolRect] places an outside one. CSS Lists 3, 3.1 leaves the look of
+// a marker to the user agent; this follows Chromium.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws an inside
+//     disc, circle or square of a list in Liberation Serif at 10, 16, 20,
+//     32, 50 and 100px as a 3, 5, 6, 10, 15 and 30 pixel bullet starting
+//     at the item's content edge, and starts the item's text 14, 22, 27,
+//     43, 66 and 131 pixels after that edge: the bullet, 1em and a pixel.
+func (e *engine) symbolMarkerOf(mst *css.Style, lang string) *css.Style {
+	key := spaceKey{st: mst, lang: e.familyLang(lang)}
+	if st, ok := e.shared.symbols[key]; ok {
+		return st
+	}
+	a := int(math.Round(min(max(e.faceMetrics(mst, lang).Ascent/css.Pt, 0), maxSymbolAscent))) // fits int: bounded
+	o := a * 2 / 3
+	w := (o + 1) / 2
+	st := *mst
+	st.Width, st.Height = css.Pts(float64(w)*css.Pt), css.Pts(float64(w)*css.Pt)
+	gap := css.Right
+	if mst.Direction == css.RTL {
+		gap = css.Left
+	}
+	st.Margin[gap] = css.Pts(e.fontSize(mst) + css.Pt)
+	st.Margin[css.Bottom] = css.Pts(float64(a-3*(a-o)/2-w) * css.Pt)
+	st.VerticalAlign = css.VerticalAlign{Kind: css.Baseline}
+	shared := e.shareStyle(&st)
+	if e.shared.symbols == nil {
+		e.shared.symbols = map[spaceKey]*css.Style{}
+	}
+	e.shared.symbols[key] = shared
+	return shared
 }
 
 // markerKey keys the marker styles of [engine.markerOf].

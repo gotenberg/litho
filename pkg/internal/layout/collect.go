@@ -208,6 +208,12 @@ func (c *collector) walk(k *box) {
 		c.space = false
 		c.prev = 0
 	}
+	if k.marker && c.e.opts.BrowserRules {
+		// The content's collapsible spaces after an inside marker are
+		// removed, as at the start of a line: CSS Text 3, 4.1.1 keeps a
+		// space after the marker's preserved one, and Chromium removes it.
+		c.space = true
+	}
 }
 
 // hasInlineEdges reports whether the inline box b takes room at its

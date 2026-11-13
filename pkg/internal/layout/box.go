@@ -219,6 +219,10 @@ type box struct {
 	// or image box, whose white space is preserved.
 	text   string
 	marker bool
+	// symbol reports the bullet of an inside disc, circle or square marker,
+	// a replaced box without a picture that paints the bullet's shape
+	// ([engine.symbolMarkerOf]).
+	symbol bool
 	// initial reports an initial letter, a float the converter made of a
 	// ::first-letter (Node.InitialLetter, initialletter.go).
 	initial bool

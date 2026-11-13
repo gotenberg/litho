@@ -660,10 +660,11 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 		return ctx
 	}
 	outside := b.st.ListStylePosition == css.Outside && !inside
-	// Under [Options.BrowserRules], an outside bullet of disc, circle or
-	// square paints as a shape ([symbolRect]); a ::marker's content, an
-	// Office marker's box or the engine's own rules draw it as text.
-	symbol := e.opts.BrowserRules && outside && pic == nil && markerBoxWidth(n.Marker) == 0 && (n.Marker == nil || len(n.Marker.Children) == 0) &&
+	// Under [Options.BrowserRules], a bullet of disc, circle or square
+	// paints as a shape ([symbolRect], [engine.symbolMarkerOf]); a
+	// ::marker's content, an Office marker's box or the engine's own rules
+	// draw it as text.
+	symbol := e.opts.BrowserRules && pic == nil && markerBoxWidth(n.Marker) == 0 && (n.Marker == nil || len(n.Marker.Children) == 0) &&
 		(st.ListStyleType == css.Disc || st.ListStyleType == css.Circle || st.ListStyleType == css.Square)
 	// Under [Options.BrowserRules] the converter hands the ::marker's
 	// cascaded style in.
@@ -695,10 +696,14 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 	mctx := ctx
 	mctx.elem = markerElem
 	var m *box
-	if pic != nil {
+	switch {
+	case pic != nil:
 		m = e.newBox(nil, e.markerOf(st, cascaded), kindReplaced, mctx)
 		m.picture = pic
-	} else {
+	case symbol:
+		m = e.newBox(nil, e.symbolMarkerOf(e.markerOf(st, cascaded), b.lang), kindReplaced, mctx)
+		m.symbol = true
+	default:
 		m = e.newBox(nil, e.markerOf(st, cascaded), kindText, mctx)
 		m.text = label
 	}

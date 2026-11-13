@@ -1036,6 +1036,14 @@ func (p *painter) content(b *box) {
 // sized by object-fit and placed by object-position (CSS Images 3, 5.5
 // and 5.6), the part outside the content box clipped.
 func (p *painter) replaced(b *box) {
+	if b.symbol && !b.hidden && b.w > 0 {
+		r := typeset.Rect{X: b.contentX() + p.dx, Y: b.contentY() + p.dy, Width: b.w, Height: b.w}
+		if path := symbolPath(b.st, r); path != nil {
+			path.Parent = b.elem
+			p.emit(b, false, ordered(path, p.orderOf(b), 0), r.Y, r.Y+r.Height, p.e.monoPage(r.Y, r.Height))
+		}
+		return
+	}
 	if b.hidden || b.picture == nil || b.w <= 0 || b.h <= 0 {
 		return
 	}
@@ -1160,25 +1168,35 @@ func (p *painter) symbolMarker(b *box, m *markerBox) {
 	if mst == nil {
 		mst = b.st
 	}
-	col, ok := colorOf(mst.Color)
-	if !ok {
-		return
-	}
 	r := m.sym
 	r.X += p.dx
 	r.Y += p.dy
-	var path *typeset.Path
-	switch mst.ListStyleType { //nolint:exhaustive // a symbol marker is a disc, a circle or a square
-	case css.Square:
-		path = &typeset.Path{Ops: rectOps(r), Fill: &typeset.Fill{Color: col}}
-	case css.Circle:
-		sw := min(css.Pt, r.Width/2)
-		path = &typeset.Path{Ops: circleOps(r.X+float64(r.Width/2), r.Y+float64(r.Height/2), (r.Width-sw)/2), Stroke: &typeset.Stroke{Color: col, Width: sw}}
-	default:
-		path = &typeset.Path{Ops: circleOps(r.X+float64(r.Width/2), r.Y+float64(r.Height/2), r.Width/2), Fill: &typeset.Fill{Color: col}}
+	path := symbolPath(mst, r)
+	if path == nil {
+		return
 	}
 	path.Parent = m.elem
 	p.emit(b, true, path, r.Y, r.Y+r.Height, p.e.pageOf(m.sym.Y+eps))
+}
+
+// symbolPath returns the bullet of the symbol marker of style st in the
+// square r, in the marker's colour: a disc fills its square's inscribed
+// circle, a circle strokes it one pixel wide inside the square, a square
+// fills the square, as Blink paints them; nil when the colour paints
+// nothing.
+func symbolPath(st *css.Style, r typeset.Rect) *typeset.Path {
+	col, ok := colorOf(st.Color)
+	if !ok {
+		return nil
+	}
+	switch st.ListStyleType { //nolint:exhaustive // a symbol marker is a disc, a circle or a square
+	case css.Square:
+		return &typeset.Path{Ops: rectOps(r), Fill: &typeset.Fill{Color: col}}
+	case css.Circle:
+		sw := min(css.Pt, r.Width/2)
+		return &typeset.Path{Ops: circleOps(r.X+float64(r.Width/2), r.Y+float64(r.Height/2), (r.Width-sw)/2), Stroke: &typeset.Stroke{Color: col, Width: sw}}
+	}
+	return &typeset.Path{Ops: circleOps(r.X+float64(r.Width/2), r.Y+float64(r.Height/2), r.Width/2), Fill: &typeset.Fill{Color: col}}
 }
 
 // line paints one line box: the backgrounds and borders of its inline

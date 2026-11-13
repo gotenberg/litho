@@ -278,6 +278,31 @@ func TestListMarkersDraw_Square(t *testing.T) {
 //   - probe, html: list items with list-style none, display block or flex
 //     left an LI holding a Link or a Span after PDF/UA-2 remediation; none
 //     with this structure, which veraPDF passes at PDF/UA-1 and PDF/UA-2.
+//
+// TestListMarkersDraw_InsideSymbol locks the inside symbol marker under
+// BrowserRules: at 10px Ahem, ascent 8px, a 3px square at the content edge,
+// 40px in, its top 4px below the line's, and the text after the bullet, 1em
+// and a pixel, at 54px, whether the item's content starts with a space or
+// not, as Chromium draws it (symbolMarkerOf).
+func TestListMarkersDraw_InsideSymbol(t *testing.T) {
+	for _, text := range []string{"x", " x"} {
+		ul := list(css.Square, css.Inside, 0)
+		li := ul.Children[0]
+		li.Children = []*Node{txt(li.Style, text)}
+		assertPixels(t, runWith(t, doc(ul), Options{Page: page(66, 10), BrowserRules: true}), 1, `
+			______________________________________________________KKKKKKKKKK__
+			______________________________________________________KKKKKKKKKK__
+			______________________________________________________KKKKKKKKKK__
+			______________________________________________________KKKKKKKKKK__
+			________________________________________KKK___________KKKKKKKKKK__
+			________________________________________KKK___________KKKKKKKKKK__
+			________________________________________KKK___________KKKKKKKKKK__
+			______________________________________________________KKKKKKKKKK__
+			______________________________________________________KKKKKKKKKK__
+			______________________________________________________KKKKKKKKKK__`)
+	}
+}
+
 func TestListItems_HoldLblAndLBody(t *testing.T) {
 	in := inlineSty()
 	item := func(lt css.ListStyleType, kids ...*Node) *Node {
