@@ -648,3 +648,36 @@ func TestTable_CellBoxShadow(t *testing.T) {
 		____
 		____`)
 }
+
+// TestSpreadMinByPercent locks how a spanning cell's minimum width reaches
+// the percentage columns it spans, as Chromium spreads it: with a cell of
+// 330px over empty columns, each percentage column takes its share.
+func TestSpreadMinByPercent(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cols []colMeasure
+		want []float64
+	}{
+		{"90% and auto", []colMeasure{{pct: 0.9}, {}}, []float64{297, 33}},
+		{"30%, 30% and auto", []colMeasure{{pct: 0.3}, {pct: 0.3}, {}}, []float64{99, 99, 132}},
+		{"percentages alone", []colMeasure{{pct: 0.3}, {pct: 0.3}}, []float64{165, 165}},
+		{"past 100%", []colMeasure{{pct: 0.9}, {pct: 0.6}}, []float64{198, 132}},
+		{"an auto column keeps its minimum", []colMeasure{{pct: 0.9}, {min: 100, max: 100}}, []float64{230, 100}},
+		{"the rest by maximum width", []colMeasure{{pct: 0.5}, {min: 30, max: 30}, {min: 10, max: 10}}, []float64{165, 123.75, 41.25}},
+	} {
+		w := make([]float64, len(tc.cols))
+		sumPct := 0.0
+		for i, m := range tc.cols {
+			sumPct += m.pct
+			if m.pct == 0 {
+				w[i] = max(m.max, eps)
+			}
+		}
+		spreadMinByPercent(tc.cols, 330, sumPct, w)
+		for i, m := range tc.cols {
+			if math.Abs(m.min-tc.want[i]) > 0.01 {
+				t.Errorf("%s: column %d min %v, want %v", tc.name, i, m.min, tc.want[i])
+			}
+		}
+	}
+}

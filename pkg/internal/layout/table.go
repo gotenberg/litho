@@ -349,7 +349,11 @@ func (e *engine) measureColumns(td *tableData) []colMeasure {
 		}
 		all := func(colMeasure) bool { return true }
 		if extra := lo - sumMin - inner; extra > eps {
-			grow(cols, weights(all), extra, func(m *colMeasure, d float64) { m.min += d })
+			if sumPct > 0 {
+				spreadMinByPercent(cols, lo-inner, sumPct, weights(func(m colMeasure) bool { return m.pct == 0 }))
+			} else {
+				grow(cols, weights(all), extra, func(m *colMeasure, d float64) { m.min += d })
+			}
 		}
 		if extra := hi - sumMax - inner; extra > eps {
 			grow(cols, weights(all), extra, func(m *colMeasure, d float64) { m.max += d })
@@ -377,6 +381,56 @@ func (e *engine) measureColumns(td *tableData) []colMeasure {
 	}
 	td.cm = cm
 	return cm
+}
+
+// spreadMinByPercent raises the minimum widths of the columns cols, some
+// of a percentage width, to hold a spanning cell of minimum width total,
+// sumPct the columns' percentages summed: each percentage column takes its
+// percentage of total, of their sum when no other column is spanned or
+// when they pass 100%, scaled down so the other columns keep their
+// minimum; the other columns share what is left in proportion to the
+// weights w, their maximum widths. CSS 2.1, 17.5.2.2 and CSS Tables 3 leave
+// the distribution to the user agent; this follows Chromium.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 gives the empty
+//     columns of 90% and auto under a 331px nowrap cell spanning both
+//     minimum widths of 298 and 32px, 30%, 30% and auto 99, 98 and 132px,
+//     30% and 30% alone 165 each, 90% and 50% 213 and 117px, and 90%
+//     beside an auto column holding 100px 230 and 100px.
+//   - wpt: css/css-tables/table-colspan-percent-auto gives its 90% column
+//     360 of 400px.
+func spreadMinByPercent(cols []colMeasure, total, sumPct float64, w []float64) {
+	others, hasOthers := 0.0, false
+	for _, m := range cols {
+		if m.pct == 0 {
+			others += m.min
+			hasOthers = true
+		}
+	}
+	norm := sumPct
+	if hasOthers {
+		norm = max(sumPct, 1)
+	}
+	share := total
+	if room := max(total-others, 0); hasOthers && float64(total*sumPct/norm) > room {
+		share = float64(room * norm / sumPct)
+	}
+	sum := 0.0
+	for i := range cols {
+		if cols[i].pct > 0 {
+			cols[i].min = max(cols[i].min, float64(share*cols[i].pct/norm))
+		}
+		sum += cols[i].min
+	}
+	if extra := total - sum; extra > eps && hasOthers {
+		grow(cols, w, extra, func(m *colMeasure, d float64) {
+			if m.pct == 0 {
+				m.min += d
+			}
+		})
+	}
 }
 
 // grow spreads extra over the columns cols in proportion to the weights w,
