@@ -146,3 +146,18 @@ func TestClipPath_CircleCorner(t *testing.T) {
 		t.Errorf("corners %v %v, want red", at(img, 0, 0), at(img, 19, 19))
 	}
 }
+
+// TestClipPath_InsetRoundPercent locks that the radii of an inset() are
+// percentages of the reference box, not of the inset rectangle: on a 20
+// by 20 box, inset(16px 0 0 round 50%) rounds a 20 by 4 strip by 10 by
+// 10, which fits to 2 by 2, leaving its middle full.
+func TestClipPath_InsetRoundPercent(t *testing.T) {
+	half := css.Dimension{Kind: css.Percent, Value: 0.5}
+	r := css.Radius{H: half, V: half}
+	clip := css.ClipPath{Boxed: true, Shape: &css.Shape{Kind: css.ShapeInset, Inset: [4]css.Dimension{css.Pts(px(16)), {}, {}, {}}, Radii: [4]css.Radius{r, r, r, r}}}
+	root := doc(el(sty(width(20), height(20), bg(red), clipPath(clip))))
+	img := render(t, run(t, root, page(20, 20)), 1)
+	if code(img.At(10, 17)) != 'R' || code(img.At(0, 16)) == 'R' || code(img.At(10, 10)) == 'R' {
+		t.Errorf("middle %v, corner %v, above %v", at(img, 10, 17), at(img, 0, 16), at(img, 10, 10))
+	}
+}

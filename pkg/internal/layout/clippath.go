@@ -86,7 +86,9 @@ func shapePath(s *css.Shape, r typeset.Rect) (*typeset.Path, bool) {
 		}
 		var radii [4][2]float64
 		for c, rd := range s.Radii {
-			radii[c] = [2]float64{max(resolve(rd.H, in.Width), 0), max(resolve(rd.V, in.Height), 0)}
+			// The radii's percentages are of the reference box, not of
+			// the inset rectangle (CSS Shapes 1, 3.1, inset()).
+			radii[c] = [2]float64{max(resolve(rd.H, w), 0), max(resolve(rd.V, h), 0)}
 			if radii[c][0] == 0 || radii[c][1] == 0 {
 				radii[c] = [2]float64{}
 			}
