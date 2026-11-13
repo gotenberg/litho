@@ -104,8 +104,8 @@ func mediaFrame(s *slides.Shape) *slides.Shape {
 	poster := *s
 	if pic.Width > 0 && pic.Height > 0 && box.Width > 0 && box.Height > 0 {
 		k := min(box.Width/pic.Width, box.Height/pic.Height)
-		w, h := pic.Width*k, pic.Height*k
-		poster.Box = typeset.Rect{X: box.X + (box.Width-w)/2, Y: box.Y + (box.Height-h)/2, Width: w, Height: h}
+		w, h := float64(pic.Width*k), float64(pic.Height*k)
+		poster.Box = typeset.Rect{X: box.X + float64((box.Width-w)/2), Y: box.Y + float64((box.Height-h)/2), Width: w, Height: h}
 	}
 	poster.Href, poster.Jump, poster.Rotation, poster.FlipH, poster.FlipV = "", 0, 0, false, false
 	poster.Fill = slides.Fill{}

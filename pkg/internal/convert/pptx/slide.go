@@ -102,7 +102,7 @@ func (r *reader) slideWindow(bg *layout.Picture, box typeset.Rect) *layout.Pictu
 	}
 	return &layout.Picture{Width: box.Width, Height: box.Height, NoRatio: true, Vector: func(ctx context.Context, area typeset.Rect) []typeset.Fragment {
 		sx, sy := area.Width/box.Width, area.Height/box.Height
-		full := typeset.Rect{X: area.X - box.X*sx, Y: area.Y - box.Y*sy, Width: w * sx, Height: h * sy}
+		full := typeset.Rect{X: area.X - float64(box.X*sx), Y: area.Y - float64(box.Y*sy), Width: w * sx, Height: h * sy}
 		var content []typeset.Fragment
 		if bg.Vector != nil {
 			content = bg.Vector(ctx, full)

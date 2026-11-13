@@ -391,7 +391,7 @@ func fitInsets(b *slides.TextBody, chain []*ooxml.Element, box typeset.Rect, g *
 	}
 	fit := func(a, b *float64, room float64) {
 		if room > 0 && *a+*b >= room {
-			d := (*a + *b - room) / 2
+			d := float64((*a + *b - room) / 2)
 			*a, *b = *a-d, *b-d
 		}
 	}

@@ -281,8 +281,8 @@ func (r *reader) diagramShape(c *shapeCtx, ds *ooxml.DiagramShape, preset string
 		// The layout shape's rotation turns the geometry inside its box:
 		// a quarter turn swaps the box's sides about its centre.
 		if q := math.Mod(math.Abs(rot), 180); q == 90 {
-			cx, cy := s.Box.X+s.Box.Width/2, s.Box.Y+s.Box.Height/2
-			s.Box = typeset.Rect{X: cx - s.Box.Height/2, Y: cy - s.Box.Width/2, Width: s.Box.Height, Height: s.Box.Width}
+			cx, cy := s.Box.X+float64(s.Box.Width/2), s.Box.Y+float64(s.Box.Height/2)
+			s.Box = typeset.Rect{X: cx - float64(s.Box.Height/2), Y: cy - float64(s.Box.Width/2), Width: s.Box.Height, Height: s.Box.Width}
 		}
 		s.Rotation += rot
 	}
@@ -301,8 +301,8 @@ func (r *reader) diagramShape(c *shapeCtx, ds *ooxml.DiagramShape, preset string
 func turnText(s *slides.Shape, rot float64) *slides.Shape {
 	text := &slides.Shape{Kind: slides.KindGeometry, Name: s.Name, Box: s.Box, Rotation: s.Rotation + rot, Text: s.Text}
 	if math.Mod(math.Abs(rot), 180) == 90 {
-		cx, cy := s.Box.X+s.Box.Width/2, s.Box.Y+s.Box.Height/2
-		text.Box = typeset.Rect{X: cx - s.Box.Height/2, Y: cy - s.Box.Width/2, Width: s.Box.Height, Height: s.Box.Width}
+		cx, cy := s.Box.X+float64(s.Box.Width/2), s.Box.Y+float64(s.Box.Height/2)
+		text.Box = typeset.Rect{X: cx - float64(s.Box.Height/2), Y: cy - float64(s.Box.Width/2), Width: s.Box.Height, Height: s.Box.Width}
 	}
 	body := *s
 	body.Text = nil

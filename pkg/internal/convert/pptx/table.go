@@ -215,7 +215,7 @@ func overBackground(cell, bg slides.Fill) slides.Fill {
 		return slides.Fill{Kind: slides.FillSolid, Color: col}
 	case cell.Kind == slides.FillSolid && cell.Color.A < 1:
 		a := max(0, cell.Color.A)
-		mix := func(c, b float64) float64 { return a*c + (1-a)*b }
+		mix := func(c, b float64) float64 { return float64(a*c) + float64((1-a)*b) }
 		return slides.Fill{Kind: slides.FillSolid, Color: css.Color{R: mix(cell.Color.R, col.R), G: mix(cell.Color.G, col.G), B: mix(cell.Color.B, col.B), A: max(col.A, a)}}
 	}
 	return cell

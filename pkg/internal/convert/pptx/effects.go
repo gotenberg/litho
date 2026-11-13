@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/officefx"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -192,7 +193,7 @@ func outerShadow(e *ooxml.Element, box typeset.Rect) *slides.Shadow {
 	}
 	dist = min(dist, maxEffectRadius)
 	dir, _ := intAttr(e, "dir")
-	s, c := math.Sincos(float64(dir) / 60000 * math.Pi / 180)
+	s, c := detmath.Sincos(float64(dir) / 60000 * math.Pi / 180)
 	sh.OffsetX, sh.OffsetY = dist*c, dist*s
 	scale := func(name string) float64 {
 		v, ok := intAttr(e, name)
@@ -219,13 +220,13 @@ func outerShadow(e *ooxml.Element, box typeset.Rect) *slides.Shadow {
 func aligned(sh *slides.Shadow, ax, ay float64, box typeset.Rect) {
 	// Scaling and skewing by A about the alignment point P is doing so
 	// about the centre C and moving by (I - A)(P - C).
-	dx, dy := (ax-0.5)*box.Width, (ay-0.5)*box.Height
-	kx, ky := math.Tan(sh.SkewX*math.Pi/180), math.Tan(sh.SkewY*math.Pi/180)
+	dx, dy := float64((ax-0.5)*box.Width), float64((ay-0.5)*box.Height)
+	kx, ky := detmath.Tan(sh.SkewX*math.Pi/180), detmath.Tan(sh.SkewY*math.Pi/180)
 	if !numeric.Finite(kx) || !numeric.Finite(ky) {
 		kx, ky = 0, 0
 	}
-	sh.OffsetX += dx - sh.ScaleX*(dx+kx*dy)
-	sh.OffsetY += dy - sh.ScaleY*(ky*dx+dy)
+	sh.OffsetX += dx - float64(sh.ScaleX*(dx+float64(kx*dy)))
+	sh.OffsetY += dy - float64(sh.ScaleY*(float64(ky*dx)+dy))
 }
 
 // alignment returns the point of a box an effect's scale keeps fixed,
@@ -395,11 +396,11 @@ func presetShadow(e *ooxml.Element, s *slides.Shape, color func(*ooxml.Element) 
 	}
 	box := s.Box
 	if s.Line.Width > 0 {
-		box = officefx.Grow(box, s.Line.Width/2)
+		box = officefx.Grow(box, float64(s.Line.Width/2))
 	}
 	shadows := make([]*slides.Shadow, len(copies))
 	for i, cp := range copies {
-		sin, cos := math.Sincos(cp.Dir * math.Pi / 180)
+		sin, cos := detmath.Sincos(cp.Dir * math.Pi / 180)
 		sh := &slides.Shadow{
 			Color: css.Color{R: cp.Color.R, G: cp.Color.G, B: cp.Color.B, A: 1}, Opacity: cp.Color.A,
 			OffsetX: cp.Dist * cos, OffsetY: cp.Dist * sin,
@@ -430,7 +431,7 @@ func innerShadow(e *ooxml.Element) *slides.Shadow {
 	}
 	dist = min(dist, maxEffectRadius)
 	dir, _ := intAttr(e, "dir")
-	s, c := math.Sincos(float64(dir) / 60000 * math.Pi / 180)
+	s, c := detmath.Sincos(float64(dir) / 60000 * math.Pi / 180)
 	sh.OffsetX, sh.OffsetY = dist*c, dist*s
 	return sh
 }

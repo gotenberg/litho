@@ -70,14 +70,14 @@ func blipEffects(ctx context.Context, pic *layout.Picture, blip *ooxml.Element, 
 	}
 	scale := 1.0
 	if con < 0 {
-		scale = (128 + 1.28*con) / 128
+		scale = (128 + float64(1.28*con)) / 128
 	} else if con > 0 {
-		scale = 128 / (128 - 1.27*con)
+		scale = 128 / (128 - float64(1.27*con))
 	}
-	offset := lum*2.55 + 128 - scale*128
+	offset := float64(lum*2.55) + 128 - float64(scale*128)
 	var table [256]uint8
 	for v := range table {
-		table[v] = uint8(math.Round(max(0, min(255, float64(v)*scale+offset))))
+		table[v] = uint8(math.Round(max(0, min(255, float64(float64(v)*scale)+offset))))
 	}
 	b := src.Bounds()
 	if err := typeset.ChargeImage(ctx, b.Dx(), b.Dy(), imgcolor.NRGBAModel); err != nil {
