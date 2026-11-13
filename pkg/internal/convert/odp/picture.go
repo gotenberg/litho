@@ -216,7 +216,7 @@ func (r *reader) cropped(pic *layout.Picture, clip string) *layout.Picture {
 	src := pic
 	return &layout.Picture{Width: w, Height: h, Vector: func(ctx context.Context, rect typeset.Rect) []typeset.Fragment {
 		sx, sy := rect.Width/w, rect.Height/h
-		full := typeset.Rect{X: rect.X - in[css.Left]*sx, Y: rect.Y - in[css.Top]*sy, Width: src.Width * sx, Height: src.Height * sy}
+		full := typeset.Rect{X: rect.X - float64(in[css.Left]*sx), Y: rect.Y - float64(in[css.Top]*sy), Width: src.Width * sx, Height: src.Height * sy}
 		var content []typeset.Fragment
 		if src.Vector != nil {
 			content = src.Vector(ctx, full)

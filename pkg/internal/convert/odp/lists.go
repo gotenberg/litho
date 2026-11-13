@@ -41,7 +41,7 @@ func listLevel(ls *odf.ListStyle, lv int) *odf.ListLevel {
 func (r *reader) listIndents(ls *odf.ListStyle, lv int) (float64, float64) {
 	l := listLevel(ls, lv)
 	if l == nil {
-		return float64(lv)*defaultListStep + defaultListLabel, -defaultListLabel
+		return float64(float64(lv)*defaultListStep) + defaultListLabel, -defaultListLabel
 	}
 	if l.Props.Get("text:list-level-position-and-space-mode") == "label-alignment" {
 		return 0, 0

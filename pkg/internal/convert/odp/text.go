@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -509,7 +510,7 @@ func isDark(c css.Color) bool {
 	if c.A == 0 {
 		return false
 	}
-	r8, g8, b8 := uint8(c.R*255+0.5), uint8(c.G*255+0.5), uint8(c.B*255+0.5)
+	r8, g8, b8 := uint8(float64(c.R*255)+0.5), uint8(float64(c.G*255)+0.5), uint8(float64(c.B*255)+0.5)
 	if r8 == 0x72 && g8 == 0x9f && b8 == 0xcf {
 		return (uint(b8)*29+uint(g8)*151+uint(r8)*76)>>8 <= 62
 	}
@@ -517,9 +518,9 @@ func isDark(c css.Color) bool {
 		if v <= 0.04045 {
 			return v / 12.92
 		}
-		return math.Pow((v+0.055)/1.055, 2.4)
+		return detmath.Pow((v+0.055)/1.055, 2.4)
 	}
-	l := lin(c.R)*0.2126 + lin(c.G)*0.7152 + lin(c.B)*0.0722
+	l := float64(lin(c.R)*0.2126) + float64(lin(c.G)*0.7152) + float64(lin(c.B)*0.0722)
 	return uint8(l*255) <= 87
 }
 

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -23,15 +24,15 @@ func translation(x, y float64) matrix { return matrix{a: 1, d: 1, e: x, f: y} }
 // mul returns m after n: n applied first.
 func (m matrix) mul(n matrix) matrix {
 	return matrix{
-		a: m.a*n.a + m.c*n.b, b: m.b*n.a + m.d*n.b,
-		c: m.a*n.c + m.c*n.d, d: m.b*n.c + m.d*n.d,
-		e: m.a*n.e + m.c*n.f + m.e, f: m.b*n.e + m.d*n.f + m.f,
+		a: float64(m.a*n.a) + float64(m.c*n.b), b: float64(m.b*n.a) + float64(m.d*n.b),
+		c: float64(m.a*n.c) + float64(m.c*n.d), d: float64(m.b*n.c) + float64(m.d*n.d),
+		e: float64(m.a*n.e) + float64(m.c*n.f) + m.e, f: float64(m.b*n.e) + float64(m.d*n.f) + m.f,
 	}
 }
 
 // apply maps the point (x, y).
 func (m matrix) apply(x, y float64) (float64, float64) {
-	return m.a*x + m.c*y + m.e, m.b*x + m.d*y + m.f
+	return float64(m.a*x) + float64(m.c*y) + m.e, float64(m.b*x) + float64(m.d*y) + m.f
 }
 
 // place returns the placement of a w by h box at the origin mapped by m:
@@ -42,13 +43,13 @@ func (m matrix) apply(x, y float64) (float64, float64) {
 // skew whose positive angle moves the box's top right of its bottom.
 func (m matrix) place(w, h float64) placement {
 	cx, cy := m.apply(w/2, h/2)
-	sx := math.Hypot(m.a, m.b)
-	det := m.a*m.d - m.b*m.c
+	sx := detmath.Hypot(m.a, m.b)
+	det := float64(m.a*m.d) - float64(m.b*m.c)
 	sy := 0.0
 	if sx > 0 {
 		sy = det / sx
 	}
-	rot := math.Atan2(m.b, m.a) * 180 / math.Pi
+	rot := detmath.Atan2(m.b, m.a) * 180 / math.Pi
 	if rot < 0 {
 		rot += 360
 	}
@@ -61,13 +62,13 @@ func (m matrix) place(w, h float64) placement {
 		// The second column turned back by the rotation: its x is the
 		// shear times sy; x' = x + k y moves the top, y up, left.
 		sin, cos := m.b/sx, m.a/sx
-		k := (m.c*cos + m.d*sin) / sy
-		skew = math.Atan(-k) * 180 / math.Pi
+		k := (float64(m.c*cos) + float64(m.d*sin)) / sy
+		skew = detmath.Atan(-k) * 180 / math.Pi
 		if math.Abs(skew) < 1e-9 {
 			skew = 0
 		}
 	}
-	return placement{box: typeset.Rect{X: cx - bw/2, Y: cy - bh/2, Width: bw, Height: bh}, rotation: rot, flipV: sy < 0, skew: skew}
+	return placement{box: typeset.Rect{X: cx - float64(bw/2), Y: cy - float64(bh/2), Width: bw, Height: bh}, rotation: rot, flipV: sy < 0, skew: skew}
 }
 
 // maxTransformOps bounds the operations of one draw:transform read: 16.
@@ -132,7 +133,7 @@ func parseTransform(s string) (matrix, bool, bool) {
 			if !ok {
 				return m, skew, false
 			}
-			sin, cos := math.Sincos(a)
+			sin, cos := detmath.Sincos(a)
 			op = matrix{a: cos, b: -sin, c: sin, d: cos}
 		case "translate":
 			x, ok := num(0, true)
@@ -161,9 +162,9 @@ func parseTransform(s string) (matrix, bool, bool) {
 			// bottom on the page, y pointing down, as the counterclockwise
 			// rotate turns it.
 			if name == "skewX" {
-				op = matrix{a: 1, c: -math.Tan(a), d: 1}
+				op = matrix{a: 1, c: -detmath.Tan(a), d: 1}
 			} else {
-				op = matrix{a: 1, b: -math.Tan(a), d: 1}
+				op = matrix{a: 1, b: -detmath.Tan(a), d: 1}
 			}
 		case "matrix":
 			var v [6]float64
@@ -175,7 +176,7 @@ func parseTransform(s string) (matrix, bool, bool) {
 				v[i] = x
 			}
 			op = matrix{a: v[0], b: v[1], c: v[2], d: v[3], e: v[4], f: v[5]}
-			skew = skew || math.Abs(v[0]*v[2]+v[1]*v[3]) > 1e-9
+			skew = skew || math.Abs(float64(v[0]*v[2])+float64(v[1]*v[3])) > 1e-9
 		default:
 			return m, skew, false
 		}

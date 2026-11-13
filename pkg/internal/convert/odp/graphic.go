@@ -173,12 +173,12 @@ func (r *reader) gradient(g *odf.Gradient, alpha float64) *slides.Gradient {
 			out.Stops = append(out.Stops, slides.Stop{Position: 0, Color: col(stops[len(stops)-1].Color)})
 		}
 		for _, stop := range slices.Backward(stops) {
-			t := b + (1-b)*(1-stop.Offset)
+			t := b + float64((1-b)*(1-stop.Offset))
 			out.Stops = append(out.Stops, slides.Stop{Position: t / 2, Color: col(stop.Color)})
 		}
 		for i := 1; i < len(stops); i++ {
-			t := b + (1-b)*(1-stops[i].Offset)
-			out.Stops = append(out.Stops, slides.Stop{Position: 1 - t/2, Color: col(stops[i].Color)})
+			t := b + float64((1-b)*(1-stops[i].Offset))
+			out.Stops = append(out.Stops, slides.Stop{Position: 1 - float64(t/2), Color: col(stops[i].Color)})
 		}
 		if b > 0 {
 			out.Stops = append(out.Stops, slides.Stop{Position: 1, Color: col(stops[len(stops)-1].Color)})
@@ -466,8 +466,8 @@ func placedOnce(pic *layout.Picture, ref string, size fillImageSize) *layout.Pic
 		if size.relH > 0 {
 			h = area.Height * size.relH
 		}
-		x := area.X + (area.Width-w)/2
-		y := area.Y + (area.Height-h)/2
+		x := area.X + float64((area.Width-w)/2)
+		y := area.Y + float64((area.Height-h)/2)
 		if strings.Contains(ref, "left") {
 			x = area.X
 		} else if strings.Contains(ref, "right") {
@@ -526,16 +526,16 @@ func (t tiling) picture(pic *layout.Picture) *layout.Picture {
 	return &layout.Picture{Width: pic.Width, Height: pic.Height, NoRatio: true, Vector: func(ctx context.Context, area typeset.Rect) []typeset.Fragment {
 		w, h := t.size.w, t.size.h
 		if t.size.relW > 0 {
-			w = area.Width * t.size.relW
+			w = float64(area.Width * t.size.relW)
 		}
 		if t.size.relH > 0 {
-			h = area.Height * t.size.relH
+			h = float64(area.Height * t.size.relH)
 		}
 		if w <= 0 || h <= 0 || (area.Width/w+2)*(area.Height/h+2) > maxTiles {
 			return nil
 		}
 		// The tile aligned with the reference point, then moved.
-		x0, y0 := area.X+(area.Width-w)/2, area.Y+(area.Height-h)/2
+		x0, y0 := area.X+float64((area.Width-w)/2), area.Y+float64((area.Height-h)/2)
 		if strings.Contains(t.ref, "left") || t.ref == "" {
 			x0 = area.X
 		} else if strings.Contains(t.ref, "right") {
@@ -546,20 +546,20 @@ func (t tiling) picture(pic *layout.Picture) *layout.Picture {
 		} else if strings.HasPrefix(t.ref, "bottom") {
 			y0 = area.Y + area.Height - h
 		}
-		x0 += t.refX * w
-		y0 += t.refY * h
+		x0 += float64(t.refX * w)
+		y0 += float64(t.refY * h)
 		// The first row and column at or before the area's corner, of the
 		// same parity as the aligned tile's.
 		col0 := 2*math.Floor((area.X-x0)/w/2) - 2
 		row0 := 2*math.Floor((area.Y-y0)/h/2) - 2
 		var content []typeset.Fragment
-		for row := row0; y0+row*h < area.Y+area.Height+h; row++ {
-			for col := col0; x0+col*w < area.X+area.Width+w; col++ {
-				x, y := x0+col*w, y0+row*h
+		for row := row0; y0+float64(row*h) < area.Y+area.Height+h; row++ {
+			for col := col0; x0+float64(col*w) < area.X+area.Width+w; col++ {
+				x, y := x0+float64(col*w), y0+float64(row*h)
 				if t.offset > 0 && t.vertical && int(col)%2 != 0 {
-					y += t.offset * h
+					y += float64(t.offset * h)
 				} else if t.offset > 0 && !t.vertical && int(row)%2 != 0 {
-					x += t.offset * w
+					x += float64(t.offset * w)
 				}
 				if x+w <= area.X || y+h <= area.Y || x >= area.X+area.Width || y >= area.Y+area.Height {
 					continue

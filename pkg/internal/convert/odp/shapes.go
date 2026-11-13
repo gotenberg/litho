@@ -443,7 +443,7 @@ func captionGeometry(el *odf.Element, box typeset.Rect) *shape.Geometry {
 	}
 	w, h := box.Width, box.Height
 	// The side whose outward direction points most at the caption point.
-	dx, dy := (px-w/2)/w, (py-h/2)/h
+	dx, dy := (px-float64(w/2))/w, (py-float64(h/2))/h
 	sx, sy := w/2, 0.0
 	switch {
 	case math.Abs(dx) >= math.Abs(dy) && dx < 0:
