@@ -70,7 +70,7 @@ const spGroup = `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/><
 // phShape returns a placeholder shape of type typ ("" for none) and idx
 // (-1 for none), placed at x, y, w, h EMU when w is positive, with the
 // text body body ("" for none).
-func phShape(name, typ string, idx int, x, y, w, h int, body string) string {
+func phShape(name, typ string, idx int64, x, y, w, h int, body string) string {
 	ph := `<p:ph`
 	if typ != "" {
 		ph += ` type="` + typ + `"`
