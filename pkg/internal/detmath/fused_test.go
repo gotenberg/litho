@@ -63,7 +63,9 @@ func TestPackages_FuseNoMultiplyAdd(t *testing.T) {
 	}
 	var sites []string
 	for _, target := range fusingTargets {
-		args := append([]string{"build", "-o", os.DevNull, "-gcflags=github.com/gotenberg/litho/...=-d=fmahash=vy"}, exactPackages...)
+		// -trimpath keeps the directory out of what the build cache keys
+		// a package by, so checkouts of the same sources share one build.
+		args := append([]string{"build", "-trimpath", "-o", os.DevNull, "-gcflags=github.com/gotenberg/litho/...=-d=fmahash=vy"}, exactPackages...)
 		cmd := exec.CommandContext(t.Context(), goTool, args...)
 		cmd.Dir = root
 		cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+target.arch, "GOAMD64="+target.level, "CGO_ENABLED=0")
