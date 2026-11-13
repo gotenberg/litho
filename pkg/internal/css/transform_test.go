@@ -117,6 +117,25 @@ func TestIndividualTransforms_Parse(t *testing.T) {
 	}
 }
 
+func TestTransformBox_Parse(t *testing.T) {
+	t.Parallel()
+	// CSS Transforms 1, 8: a CSS box maps fill-box to content-box, and
+	// stroke-box and view-box, the initial value, to border-box.
+	tests := map[string]TransformBox{
+		"":                           TransformBorderBox,
+		"transform-box: content-box": TransformContentBox,
+		"transform-box: fill-box":    TransformContentBox,
+		"transform-box: stroke-box":  TransformBorderBox,
+		"transform-box: view-box":    TransformBorderBox,
+		"transform-box: padding-box": TransformBorderBox,
+	}
+	for decls, want := range tests {
+		if got := styleOf(t, decls).TransformBox; got != want {
+			t.Errorf("%q: %v, want %v", decls, got, want)
+		}
+	}
+}
+
 func TestTransformOrigin_Parse(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

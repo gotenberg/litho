@@ -173,6 +173,19 @@ type TransformFunc struct {
 	V [6]float64
 }
 
+// TransformBox is the transform-box property of a CSS box (CSS Transforms
+// 1, 8), which knows two reference boxes.
+type TransformBox uint8
+
+// The transform-box values of a CSS box.
+const (
+	// TransformBorderBox is the border box: border-box, view-box and
+	// stroke-box.
+	TransformBorderBox TransformBox = iota
+	// TransformContentBox is the content box: content-box and fill-box.
+	TransformContentBox
+)
+
 // Float is the float property (CSS 2.1, 9.5.1).
 type Float uint8
 
@@ -906,6 +919,9 @@ type Style struct {
 	// properties, each one function or nil for none; they apply before
 	// Transform, in that order (CSS Transforms 2, 5 and 6).
 	Translate, Rotate, Scale []TransformFunc
+	// TransformBox is the reference box of the transform and its origin
+	// (CSS Transforms 1, 8).
+	TransformBox TransformBox
 	// OuterInline reports a box whose display was inline-level before CSS
 	// 2.1, 9.7 blockified it: an absolutely positioned box's static
 	// position is then where its inline box would have sat on the line

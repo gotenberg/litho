@@ -81,6 +81,9 @@ func equalStyle(a, b *Style) bool {
 			}
 		}
 	}
+	if a.TransformBox != b.TransformBox {
+		return false
+	}
 	if a.OuterInline != b.OuterInline {
 		return false
 	}
@@ -626,6 +629,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	for i1 := range x.Scale {
 		h = hashTransformFunc(h, &x.Scale[i1])
 	}
+	h = mix(h, uint64(x.TransformBox))
 	h = mixBool(h, x.OuterInline)
 	h = hashDimension(h, &x.Width)
 	h = hashDimension(h, &x.Height)

@@ -528,12 +528,19 @@ func (e *engine) absContent(b *box, ccb cblock, h float64, hSet bool) {
 }
 
 // transformOf returns the matrix the transform of b maps flow coordinates
-// with, about its origin in the border box r (CSS Transforms 1, 6 and 13),
-// whether b has a transform, and false for a singular one, which paints
-// nothing. A box without a transform takes the identity.
+// with, about its origin in its reference box, the border box r or the
+// content box within it as transform-box says (CSS Transforms 1, 6, 8 and
+// 13), whether b has a transform, and false for a singular one, which
+// paints nothing. A box without a transform takes the identity.
 func transformOf(b *box, r typeset.Rect) (typeset.Matrix, bool, bool) {
 	if !b.transformed() {
 		return typeset.Identity, false, true
+	}
+	if b.st.TransformBox == css.TransformContentBox {
+		r.X += b.bd[css.Left] + b.pd[css.Left]
+		r.Y += b.bd[css.Top] + b.pd[css.Top]
+		r.Width = max(r.Width-hEdges(b), 0)
+		r.Height = max(r.Height-vEdges(b), 0)
 	}
 	ox := r.X + resolve(b.st.TransformOrigin[0], r.Width)
 	oy := r.Y + resolve(b.st.TransformOrigin[1], r.Height)

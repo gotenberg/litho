@@ -187,6 +187,7 @@ const (
 	pTranslate
 	pRotate
 	pScale
+	pTransformBox
 	numProps
 )
 
@@ -704,6 +705,12 @@ func init() {
 		{pTranslate, translateProp()},
 		{pRotate, rotateProp()},
 		{pScale, scaleProp()},
+		// CSS Transforms 1, 8: a CSS box takes fill-box as content-box and
+		// stroke-box and view-box as border-box.
+		{pTransformBox, enumProp("transform-box", false, func(s *Style) *TransformBox { return &s.TransformBox }, map[string]TransformBox{
+			"view-box": TransformBorderBox, "border-box": TransformBorderBox, "stroke-box": TransformBorderBox,
+			"content-box": TransformContentBox, "fill-box": TransformContentBox,
+		})},
 		{pWidth, sizeProp("width", func(s *Style) *Dimension { return &s.Width }, kwSizing)},
 		{pHeight, sizeProp("height", func(s *Style) *Dimension { return &s.Height }, kwSizing)},
 		{pMinWidth, minSizeProp("min-width", func(s *Style) *Dimension { return &s.MinWidth }, func(s *Style) *bool { return &s.MinWidthAuto })},

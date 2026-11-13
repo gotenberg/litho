@@ -304,3 +304,15 @@ func TestPosition_IndividualTransforms(t *testing.T) {
 	})
 	assertPixels(t, run(t, doc(sq), page(6, 1)), 1, "__BB__")
 }
+
+func TestPosition_TransformBox(t *testing.T) {
+	// CSS Transforms 1, 8: transform-box: content-box takes the origin in
+	// the content box, past the padding.
+	sq := square(1, 1, blue, padding(1), func(s *css.Style) {
+		s.TransformBox = css.TransformContentBox
+		s.TransformOrigin = [2]css.Dimension{css.Pts(0), css.Pts(0)}
+		s.Transform = []css.TransformFunc{{Kind: css.TransformScale, V: [6]float64{2, 1}}}
+	})
+	// The 3 px border box scales about x = 1: it spans -1 to 5.
+	assertPixels(t, run(t, doc(sq), page(6, 3)), 1, "BBBBB_\nBBBBB_\nBBBBB_")
+}
