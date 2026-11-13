@@ -311,6 +311,47 @@ func (b *builder) frameBox(g frameGeom) *css.Style {
 	return st
 }
 
+// pageFill gives st, the box of a frame of geometry g holding a text box,
+// the background of the page it is on, white when the page has none, when
+// its graphic style fills it with nothing: Writer paints a text frame
+// without a fill of its own, fo:background-color transparent and
+// draw:fill none included, in the page's background. A picture's frame
+// keeps no fill. ODF 1.3, Part 3,
+// 20.175 and 20.106 leave such a frame transparent; the fill is Writer's.
+// A gradient, hatch or bitmap fill, which litho does not paint on a
+// frame, keeps no page colour under it, nor does a page filled with
+// one, which the frame shows through.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfimport/tdf100033_1.odt fills its text frame,
+//     whose style Frame sets no background, in white.
+//   - libreoffice/odt: odfimport/PageBackground.odt shows its page's
+//     bitmap through four frames without a fill.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a text frame of the
+//     style Frame prints filled in white, also with fo:background-color
+//     transparent or draw:fill none, under the style Graphics or a
+//     common style of its own, and in yellow on a page whose layout sets
+//     fo:background-color #ffff00; a picture frame of the style Graphics
+//     prints no fill.
+func (b *builder) pageFill(st *css.Style, g frameGeom) {
+	if st.BackgroundColor.A > 0 {
+		return
+	}
+	switch g.props.Get("draw:fill") {
+	case "gradient", "hatch", "bitmap":
+		return
+	}
+	pg := b.currentGeom()
+	if pg.pictureFill {
+		return
+	}
+	st.BackgroundColor = css.Color{R: 1, G: 1, B: 1, A: 1}
+	if bg := pg.box.Background; bg != nil && bg.BackgroundColor.A > 0 {
+		st.BackgroundColor = bg.BackgroundColor
+	}
+}
+
 // inlineFrame appends a drawing element met in a paragraph's text (ODF
 // 1.3, Part 3, 10): a frame anchored as a character is an atomic inline
 // box on the line; one anchored to the paragraph or a character floats
@@ -325,7 +366,11 @@ func (b *builder) inlineFrame(c *odf.Element, out *[]*layout.Node, ws *wsState, 
 		*out = append(*out, b.node(&layout.Node{Kind: layout.Element, Style: baseStyle(), Href: c.A(odf.NSXLink, "href"), Role: "Link", Children: kids}))
 		return
 	}
+	if b.duplicateFrame(c) {
+		return
+	}
 	n := b.drawing(c, depth)
+	b.frameRead(c)
 	if n == nil {
 		return
 	}
@@ -361,7 +406,11 @@ func (b *builder) inlineFrame(c *odf.Element, out *[]*layout.Node, ws *wsState, 
 // blockFrame builds a drawing element among the body's blocks: a frame
 // anchored to the page.
 func (b *builder) blockFrame(c *odf.Element, ctx blockCtx) []*layout.Node {
+	if b.duplicateFrame(c) {
+		return nil
+	}
 	n := b.drawing(c, ctx.depth)
+	b.frameRead(c)
 	if n == nil {
 		return nil
 	}
@@ -373,6 +422,60 @@ func (b *builder) blockFrame(c *odf.Element, ctx blockCtx) []*layout.Node {
 		n.Style = &st
 	}
 	return []*layout.Node{n}
+}
+
+// duplicateFrame reports a draw:frame of the body that Writer drops on
+// import as a copy of the frame before it: one that repeats the draw:name
+// of the frame read just before it, with no other element of a text body
+// between them, when the first frame of that name has the same svg:x,
+// svg:y, svg:width and svg:height. Its anchor, page, style, z-index and
+// content are not compared. ODF 1.3, Part 3, 19.197 says nothing of
+// repeated names: the rule is Writer's import (XMLTextImportHelper::
+// IsDuplicateFrame). Shapes are never dropped, nor a frame of a header or
+// footer, which litho builds once a page.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt: odfimport/tdf100033_1.odt repeats a page-anchored
+//     text frame three times; the reference draws it once.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, three frames of one
+//     name and place holding "AAA", "BBB" and "CCC" print "AAA" alone,
+//     whatever their z-index or anchor page, anchored to the page, to one
+//     paragraph or as characters in it; they print all three at three x,
+//     y, widths or heights, under three names, in three paragraphs, or
+//     when a frame of another name stands between the first and the
+//     third; three pictures of one name and place print one picture;
+//     three custom shapes or rectangles of one name and place print
+//     three.
+func (b *builder) duplicateFrame(c *odf.Element) bool {
+	name := c.A(odf.NSDraw, "name")
+	if b.hf != nil || !c.Is(odf.NSDraw, "frame") || name == "" {
+		return false
+	}
+	var key [4]int64
+	for i, attr := range []string{"x", "y", "width", "height"} {
+		v, _ := odf.Length(c.A(odf.NSSVG, attr))
+		// Writer compares the lengths in hundredths of a millimetre.
+		key[i] = int64(math.Round(v * 2540 / 72))
+	}
+	first, seen := b.frameNames[name]
+	if !seen {
+		if b.frameNames == nil {
+			b.frameNames = map[string][4]int64{}
+		}
+		b.frameNames[name] = key
+		return false
+	}
+	return b.lastFrame == name && first == key
+}
+
+// frameRead records that c, a drawing element of the body whose content
+// is built, was read last: the elements of a text box's body come before
+// the frame's end, which Writer records the frame's name at.
+func (b *builder) frameRead(c *odf.Element) {
+	if b.hf == nil && c.Is(odf.NSDraw, "frame") {
+		b.lastFrame = c.A(odf.NSDraw, "name")
+	}
 }
 
 // place positions an anchored frame n: run-through and page-anchored
@@ -822,6 +925,7 @@ func rectOps(r typeset.Rect) []typeset.PathOp {
 // that a reader hears the box either way (ISO 14289-1, 7.3).
 func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 	st := b.frameBox(g)
+	b.pageFill(st, g)
 	applyWritingMode(st, g.props.Get("style:writing-mode"))
 	st.Display = css.InlineBlock
 	if h, ok := odf.Length(k.A(odf.NSFO, "min-height")); ok && h > 0 {

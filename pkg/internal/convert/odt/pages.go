@@ -80,6 +80,10 @@ type pageGeom struct {
 	// top and bottom are the page area's edges less the header and
 	// footer: where the header starts and the footer ends.
 	top, bottom float64
+	// pictureFill reports a page layout filled with a bitmap, a gradient
+	// or a hatch (draw:fill), which a frame without a fill shows through
+	// ([builder.pageFill]).
+	pictureFill bool
 }
 
 // newPageFlow returns the page flow of the document's master pages.
@@ -259,6 +263,10 @@ func (f *pageFlow) buildGeom(mp *odf.MasterPage, left, first, hf bool) *pageGeom
 		f.b.warn("page-writing-mode", warn.PageSetupUnsupported, warn.Approximated, "a page of vertical writing mode "+wm+" is laid out horizontally")
 	}
 	g := &pageGeom{format: pp.Get("style:num-format"), mirrored: pl.PageUsage == "mirrored"}
+	switch pp.Get("draw:fill") {
+	case "bitmap", "gradient", "hatch":
+		g.pictureFill = true
+	}
 	if _, ok := pp.Lookup("style:num-format"); !ok {
 		g.format = "1"
 	}

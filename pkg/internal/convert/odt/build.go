@@ -61,6 +61,12 @@ type builder struct {
 	// chains maps the frames of chains of linked text boxes onto their
 	// place in their chain, by frame name ([scanChains]).
 	chains map[string]chainLink
+	// frameNames holds the place and size of the first frame of the body
+	// by each draw:name, lastFrame the name of the frame read last since
+	// the last element of a text body that is no frame
+	// ([builder.duplicateFrame]).
+	frameNames map[string][4]int64
+	lastFrame  string
 	// data reads the data styles of table cells' values, built on first
 	// use ([builder.cellValueText]).
 	data *odf.DataStyles
@@ -345,6 +351,9 @@ func joinable(a, c *css.Style) bool {
 
 // block builds one child of a text body.
 func (b *builder) block(c *odf.Element, ctx *blockCtx) []*layout.Node {
+	if c.Name.Local != "" && !c.Is(odf.NSDraw, "frame") {
+		b.lastFrame = ""
+	}
 	switch c.Name.Space {
 	case odf.NSText:
 		switch c.Name.Local {
