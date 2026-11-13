@@ -103,9 +103,9 @@ func (p *painter) cellRect(c *box, pr placedRow) (typeset.Rect, bool, bool) {
 
 // tableDecorations paints the layers of the table box t (CSS 2.1, 17.5.1):
 // the table's background, then under every cell the backgrounds of its
-// column group, column, row group and row and its own, then the borders:
-// the table's and the cells' in the separated model, the resolved grid in
-// the collapsing one.
+// column group, column, row group and row and its own, then in the
+// separated model the table's and the cells' borders. The resolved grid
+// of the collapsing model paints with the content ([painter.tableContent]).
 func (p *painter) tableDecorations(t *box) {
 	td := t.tdata
 	r := p.borderRect(t)
@@ -123,9 +123,7 @@ func (p *painter) tableDecorations(t *box) {
 			}
 		}
 	})
-	if td.collapse {
-		p.collapsedBorders(td, nil)
-	} else {
+	if !td.collapse {
 		if !t.hidden {
 			p.border(t, t.st, r, radii, t.bd, [4]bool{true, true, true, true})
 		}
@@ -216,10 +214,12 @@ func (p *painter) tablePart(b *box) {
 	}
 	each(false, func(c *box, pr placedRow) { p.cellBackgrounds(td, c, pr) })
 	if td.collapse {
+		each(true, func(c *box, _ placedRow) { p.cellBlocks(c) })
 		p.collapsedBorders(td, b)
-	} else {
-		each(false, p.cellBorder)
+		each(true, func(c *box, _ placedRow) { p.cellForeground(c) })
+		return
 	}
+	each(false, p.cellBorder)
 	each(true, func(c *box, _ placedRow) { p.cellFlow(c) })
 }
 
@@ -297,22 +297,47 @@ func (p *painter) partBackground(b *box, clip typeset.Rect) {
 
 // tableContent paints the content of every cell of the table box t, row
 // by row, copies included: each cell's flow as a block's (CSS 2.1,
-// Appendix E), its own decorations already painted by the table.
+// Appendix E), its own decorations already painted by the table. In the
+// collapsing model the resolved borders paint between the cells' block
+// backgrounds and the rest of their content.
+//
+// # Corpus evidence
+//
+//   - wpt: css-tables/collapsed-border-paint-phase-002 draws its
+//     reference in Chromium 156.
+//   - probe, html: Chromium 156 paints a collapsed border over the
+//     background of a block that overflows its cell into it, and under the
+//     text and the float that overflow it.
 func (p *painter) tableContent(t *box) {
 	td := t.tdata
-	p.eachRow(td, true, func(pr placedRow, cells []*box) {
-		for _, c := range cells {
-			if !td.cellSkipped(c) && partLayer(c) == nil {
-				p.cellFlow(c)
+	each := func(fn func(c *box)) {
+		p.eachRow(td, true, func(pr placedRow, cells []*box) {
+			for _, c := range cells {
+				if !td.cellSkipped(c) && partLayer(c) == nil {
+					fn(c)
+				}
 			}
-		}
-	})
+		})
+	}
+	if td.collapse {
+		each(p.cellBlocks)
+		p.collapsedBorders(td, nil)
+		each(p.cellForeground)
+		return
+	}
+	each(p.cellFlow)
 }
 
 // cellFlow paints what the cell c holds: its in-flow blocks'
 // decorations, its floats, its line boxes and its blocks' content, then
 // its stacking contexts.
 func (p *painter) cellFlow(c *box) {
+	p.cellBlocks(c)
+	p.cellForeground(c)
+}
+
+// cellBlocks paints the decorations of the in-flow blocks of the cell c.
+func (p *painter) cellBlocks(c *box) {
 	var blocks, floats, contexts []*box
 	p.collect(c, &blocks, &floats, &contexts)
 	for _, k := range blocks {
@@ -321,6 +346,13 @@ func (p *painter) cellFlow(c *box) {
 		}
 		p.decorations(k)
 	}
+}
+
+// cellForeground paints the rest of what the cell c holds: its floats,
+// its line boxes and its blocks' content, then its stacking contexts.
+func (p *painter) cellForeground(c *box) {
+	var blocks, floats, contexts []*box
+	p.collect(c, &blocks, &floats, &contexts)
 	for _, f := range floats {
 		p.floating(f)
 	}

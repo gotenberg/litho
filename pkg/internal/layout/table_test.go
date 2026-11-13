@@ -589,3 +589,19 @@ func TestTable_HiddenTablePaintsNoCollapsedBorder(t *testing.T) {
 		____
 		____`)
 }
+
+// TestTable_CollapsedBordersPaintOverBlockBackgrounds holds the paint
+// order of the collapsing model as Chromium paints it: the resolved
+// borders paint after the backgrounds of the blocks in the cells, so a
+// block that overflows its cell into a border paints under it.
+func TestTable_CollapsedBordersPaintOverBlockBackgrounds(t *testing.T) {
+	t.Parallel()
+	over := el(sty(width(0)), el(sty(width(2), height(2), bg(red))))
+	cell := part(css.TableCell, mods(side(css.Right, 2, css.Solid, blue), height(2)), over)
+	root := doc(table(mods(collapse, spacing(0, 0)), tr(nil, cell)))
+	assertPixels(t, run(t, root, page(4, 4)), 1, `
+		BB__
+		BB__
+		____
+		____`)
+}
