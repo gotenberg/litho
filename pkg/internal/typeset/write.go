@@ -328,13 +328,17 @@ func (w *docWriter) spill(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("writing PDF: %w", err)
 		}
-		if w.hold < 0 || w.held+int64(len(data)) <= w.hold {
+		// A stream kept in memory holds its buffer, whose capacity can
+		// pass its length: the streams the writer compresses are cut to
+		// their length, the ones other packages build are not.
+		n := int64(cap(data))
+		if w.hold < 0 || w.held+n <= w.hold {
 			// A stream kept in memory is held until the file is written.
-			if err := w.mem.ChargeUnits(int64(len(data)), 1, "the output streams"); err != nil {
+			if err := w.mem.ChargeUnits(n, 1, "the output streams"); err != nil {
 				return fmt.Errorf("writing PDF: %w", err)
 			}
-			w.charged += int64(len(data))
-			w.held += int64(len(data))
+			w.charged += n
+			w.held += n
 			continue
 		}
 		spooled, err := w.spool.Stream(s.Dict, data)
