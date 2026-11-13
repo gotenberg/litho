@@ -297,3 +297,42 @@ func TestShape_ShadowUnder(t *testing.T) {
 		}
 	}
 }
+
+// TestShape_ShapeOnlyShadow checks that a hard shadow copies the shape's
+// text unless it is ShapeOnly, as the copies of most preset shadows are,
+// whether the shape has a fill or not.
+func TestShape_ShapeOnlyShadow(t *testing.T) {
+	var count func(frags []typeset.Fragment) int
+	count = func(frags []typeset.Fragment) int {
+		n := 0
+		for _, f := range frags {
+			switch f := f.(type) {
+			case *typeset.Text:
+				n++
+			case *typeset.Group:
+				n += count(f.Content)
+			}
+		}
+		return n
+	}
+	for _, tc := range []struct {
+		name       string
+		filled     bool
+		shapeOnly  bool
+		wantGlyphs int
+	}{{"filled", true, false, 2}, {"filled, shape only", true, true, 1}, {"text alone", false, false, 2}, {"text alone, shape only", false, true, 1}} {
+		t.Run(tc.name, func(t *testing.T) {
+			sh := box(100, 100, 200, 100, para("Shadow", arial(20)))
+			if tc.filled {
+				sh.Fill = Fill{Kind: FillSolid, Color: red}
+			}
+			sh.Shadow = &Shadow{Color: css.Color{A: 1}, Opacity: 1, OffsetX: 4, OffsetY: 4, ScaleX: 1, ScaleY: 1, ShapeOnly: tc.shapeOnly}
+			d := deck(&Slide{Shapes: []*Shape{sh}})
+			d.Effects = EffectsPowerPoint
+			doc := convert(t, d, office.Options{})
+			if n := count(doc.Pages[0].Content); n != tc.wantGlyphs {
+				t.Errorf("%d runs of text, want %d", n, tc.wantGlyphs)
+			}
+		})
+	}
+}

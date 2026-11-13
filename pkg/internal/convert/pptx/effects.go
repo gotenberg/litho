@@ -6,6 +6,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/officefx"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -138,7 +139,7 @@ func (r *reader) effectList(chain []*ooxml.Element, style *ooxml.Element, fc *fi
 			s.InnerShadow = innerShadow(e)
 			s.InnerShadow.Color, s.InnerShadow.Opacity = color(e)
 		case "prstShdw":
-			near, far, ok := presetShadow(e, color)
+			near, far, ok := presetShadow(e, s, color)
 			if !ok {
 				r.warn(warn.ContentUnsupported, warn.Approximated, "the preset shadow "+attr(e, "prst")+" is not drawn")
 				break
@@ -208,6 +209,14 @@ func outerShadow(e *ooxml.Element, box typeset.Rect) *slides.Shadow {
 	}
 	sh.SkewX, sh.SkewY = skew("kx"), skew("ky")
 	ax, ay := alignment(e)
+	aligned(sh, ax, ay, box)
+	return sh
+}
+
+// aligned folds into sh's offsets the point of box its scale and skew
+// keep fixed, at fractions ax and ay of box from the left and the top, as
+// the builder scales and skews about box's centre.
+func aligned(sh *slides.Shadow, ax, ay float64, box typeset.Rect) {
 	// Scaling and skewing by A about the alignment point P is doing so
 	// about the centre C and moving by (I - A)(P - C).
 	dx, dy := (ax-0.5)*box.Width, (ay-0.5)*box.Height
@@ -217,7 +226,6 @@ func outerShadow(e *ooxml.Element, box typeset.Rect) *slides.Shadow {
 	}
 	sh.OffsetX += dx - sh.ScaleX*(dx+kx*dy)
 	sh.OffsetY += dy - sh.ScaleY*(ky*dx+dy)
-	return sh
 }
 
 // alignment returns the point of a box an effect's scale keeps fixed,
@@ -356,63 +364,56 @@ func fadeDir(e *ooxml.Element) float64 {
 	return 90
 }
 
-// presetShadow reads a preset shadow (20.1.8.49 prstShdw; its presets,
-// 20.1.10.52 ST_PresetShadowVal): hard copies of the shape, the near one
-// at dist along dir in the shadow's colour, and for two presets a far one
-// painted under it in the colour lightened four fifths of the way to
-// white: shdw13 at twice the distance, shdw18 at the distance the other
-// way. color resolves the colour. It returns false for the other
-// presets, which no reference shows, and nils for a shadow of no colour.
-// The offsets keep the slide's directions whatever the shape's turn.
+// presetShadow reads a preset shadow (20.1.8.49 prstShdw) of the shape
+// s, its box and line read, as the copies [officefx.PresetCopies] gives on
+// PowerPoint's rules: the near copy, and for shdw13, shdw17 and shdw18
+// the far one painted under it. color resolves the colour. It returns
+// false for a name that is not a preset, and nils for a shadow of no
+// colour. The copies scale and skew about the box grown by half the
+// line, and keep the slide's directions whatever the shape's turn.
 // PowerPoint clips the copies to what lies outside the shape, which an
 // opaque shape hides anyway; the copies here are not clipped.
 //
 // # Corpus evidence
 //
-//   - litho/pptx: effects-shadow prints in PowerPoint its rounded
-//     rectangles with preset shadows 6 pt toward 45 degrees in 808080 as
-//     vector copies of the fill and the line in gray 0.502: shdw1 one
-//     copy 4.24 pt right and down; shdw13 that copy over one twice as far
-//     in gray 0.902; shdw18 that copy over one 4.24 pt left and up in gray
-//     0.902.
-func presetShadow(e *ooxml.Element, color func(*ooxml.Element) (css.Color, float64)) (near, far *slides.Shadow, ok bool) {
-	k := 0.0
-	switch attr(e, "prst") {
-	case "shdw1":
-	case "shdw13":
-		k = 2
-	case "shdw18":
-		k = -1
-	default:
-		return nil, nil, false
-	}
+//   - probe, pptx: PowerPoint prints the copies of the twenty presets on
+//     rectangles with a 1 point line scaled and skewed about the box
+//     grown by half a point: shdw20, mirrored about the bottom, starts 1
+//     point below the line's outer edge plus the offset.
+func presetShadow(e *ooxml.Element, s *slides.Shape, color func(*ooxml.Element) (css.Color, float64)) (near, far *slides.Shadow, ok bool) {
 	c, a := color(e)
-	if a <= 0 {
-		return nil, nil, true
-	}
 	dist := emuAttr(e, "dist")
 	if !numeric.PositiveFinite(dist) {
 		dist = 0
 	}
-	dist = min(dist, maxEffectRadius)
 	dir, _ := intAttr(e, "dir")
-	s, co := math.Sincos(float64(dir) / 60000 * math.Pi / 180)
-	near = &slides.Shadow{Color: c, Opacity: a, OffsetX: dist * co, OffsetY: dist * s, ScaleX: 1, ScaleY: 1}
-	if k == 0 {
-		return near, nil, true
+	c.A = a
+	p := &css.OfficePreset{Name: attr(e, "prst"), Color: c, Dist: min(dist, maxEffectRadius), Dir: float64(dir) / 60000}
+	copies, text, ok := officefx.PresetCopies(p, css.OfficePowerPoint)
+	if !ok || len(copies) == 0 {
+		return nil, nil, ok
 	}
-	light := func(v float64) float64 { return v + (1-v)*presetLighten }
-	far = &slides.Shadow{
-		Color:   css.Color{R: light(c.R), G: light(c.G), B: light(c.B), A: 1},
-		Opacity: a, OffsetX: k * near.OffsetX, OffsetY: k * near.OffsetY, ScaleX: 1, ScaleY: 1,
+	box := s.Box
+	if s.Line.Width > 0 {
+		box = officefx.Grow(box, s.Line.Width/2)
+	}
+	shadows := make([]*slides.Shadow, len(copies))
+	for i, cp := range copies {
+		sin, cos := math.Sincos(cp.Dir * math.Pi / 180)
+		sh := &slides.Shadow{
+			Color: css.Color{R: cp.Color.R, G: cp.Color.G, B: cp.Color.B, A: 1}, Opacity: cp.Color.A,
+			OffsetX: cp.Dist * cos, OffsetY: cp.Dist * sin,
+			ScaleX: cp.SX, ScaleY: cp.SY, SkewX: cp.KX, ShapeOnly: !text,
+		}
+		aligned(sh, cp.Align.X, cp.Align.Y, box)
+		shadows[i] = sh
+	}
+	near = shadows[len(shadows)-1]
+	if len(shadows) > 1 {
+		far = shadows[0]
 	}
 	return near, far, true
 }
-
-// presetLighten is how far toward white the far copy of a preset shadow
-// lightens the shadow's colour: four fifths, 808080 to E6E6E6, the one
-// colour a reference shows.
-const presetLighten = 0.8
 
 // innerShadow reads the geometry of an inner shadow (20.1.8.40
 // innerShdw): blurRad, and dist and dir (60,000ths of a degree, clockwise

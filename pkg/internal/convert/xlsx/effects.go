@@ -33,6 +33,12 @@ func (r *reader) effectList(spPr, style *ooxml.Element) *css.OfficeEffects {
 	for _, n := range l.Undrawn {
 		r.warn(warn.ContentUnsupported, warn.Omitted, fmt.Sprintf("a drawing's %s is not drawn", n))
 	}
+	if l.Effects.Preset != nil {
+		// No reference shows a preset shadow (20.1.8.49 prstShdw) in
+		// Excel.
+		r.warn(warn.ContentUnsupported, warn.Omitted, "a drawing's preset shadow "+l.Effects.Preset.Name+" is not drawn")
+		l.Effects.Preset = nil
+	}
 	if l.Effects == (css.OfficeEffects{}) {
 		return nil
 	}

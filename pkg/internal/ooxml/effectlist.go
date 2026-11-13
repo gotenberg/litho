@@ -14,8 +14,8 @@ import (
 type EffectList struct {
 	Effects css.OfficeEffects
 	// Undrawn names each member left out, in document order, at most once:
-	// "preset shadow", "fill overlay" (of a fill other than a solid
-	// colour), "effect container".
+	// "fill overlay" (of a fill other than a solid colour), "effect
+	// container".
 	Undrawn []string
 }
 
@@ -304,7 +304,14 @@ func (l *EffectList) read(e *Element, local string, color func(*Element) (css.Co
 		}
 		l.Effects.InnerShadow = &css.OfficeShadow{Color: c, Blur: emu("blurRad"), Dist: emu("dist"), Dir: deg("dir"), SX: 1, SY: 1}
 	case "prstShdw":
-		l.undrawn("preset shadow")
+		// CT_PresetShadowEffect requires prst and a colour; dist and dir
+		// default to 0.
+		c, ok := color(e)
+		name, named := attr("prst")
+		if !ok || !named {
+			return
+		}
+		l.Effects.Preset = &css.OfficePreset{Name: name, Color: c, Dist: emu("dist"), Dir: deg("dir")}
 	case "blur":
 		if r := emu("rad"); r > 0 {
 			// 20.1.8.15 gives grow the default true.

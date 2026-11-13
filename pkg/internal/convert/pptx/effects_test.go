@@ -58,7 +58,7 @@ func TestEffects_EffectList(t *testing.T) {
 		},
 		{"an empty list overrides the style", `<a:effectLst/>`, style, nil, nil, 0, false, ""},
 		{"preset shadow", `<a:effectLst><a:prstShdw prst="shdw1" dist="127000"><a:prstClr val="black"/></a:prstShdw></a:effectLst>`, "", &slides.Shadow{Color: css.Color{A: 1}, Opacity: 1, OffsetX: 10, ScaleX: 1, ScaleY: 1}, nil, 0, false, ""},
-		{"a preset no reference shows", `<a:effectLst><a:prstShdw prst="shdw2"><a:prstClr val="black"/></a:prstShdw></a:effectLst>`, "", nil, nil, 0, false, "preset shadow shdw2"},
+		{"a name no preset carries", `<a:effectLst><a:prstShdw prst="shdw21"><a:prstClr val="black"/></a:prstShdw></a:effectLst>`, "", nil, nil, 0, false, "preset shadow shdw21"},
 		// The skew keeps the bottom fixed: the centre, 10 pt above it,
 		// moves right by 10 tan 13.34 degrees.
 		{"skewed shadow", `<a:effectLst><a:outerShdw kx="-800400"><a:prstClr val="black"/></a:outerShdw></a:effectLst>`, "", &slides.Shadow{Color: css.Color{A: 1}, Opacity: 1, OffsetX: 10 * math.Tan(13.34*math.Pi/180), ScaleX: 1, ScaleY: 1, SkewX: -13.34}, nil, 0, false, ""},
@@ -259,6 +259,41 @@ func TestEffects_PresetShadowCopies(t *testing.T) {
 				t.Errorf("far copy %+v, want none", *s.ShadowUnder)
 			case tc.far != 0 && (s.ShadowUnder == nil || !nearly(s.ShadowUnder.OffsetX, tc.far) || !nearly(s.ShadowUnder.Color.R, 0x80/255.0+(1-0x80/255.0)*0.8)):
 				t.Errorf("far copy %+v, want %v pt right, lightened", s.ShadowUnder, tc.far)
+			}
+		})
+	}
+}
+
+// TestEffects_PresetShadowGeometry checks the near copy of preset shadows
+// on a shape 10 by 20 pt: the scale and the skew of the preset folded
+// into the offsets about the box, grown by half the line when there is
+// one, and the text left out of all but shdw1, shdw2, shdw5 and shdw6.
+func TestEffects_PresetShadowGeometry(t *testing.T) {
+	t.Parallel()
+	lean := 10 * math.Sqrt(3) / 2
+	for _, tc := range []struct {
+		name, prst, line string
+		want             slides.Shadow
+	}{
+		{"offset", "shdw2", "", slides.Shadow{OffsetX: 10, ScaleX: 1, ScaleY: 1}},
+		{"half height, leaning left", "shdw3", "", slides.Shadow{OffsetX: 10 - lean, OffsetY: 5, ScaleX: 1, ScaleY: 0.5, SkewX: 40.893394649130904, ShapeOnly: true}},
+		{"mirrored below", "shdw20", "", slides.Shadow{OffsetX: 10, OffsetY: 20, ScaleX: 1, ScaleY: -1, ShapeOnly: true}},
+		{"mirrored below the line", "shdw20", `<a:ln w="25400"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln>`, slides.Shadow{OffsetX: 10, OffsetY: 22, ScaleX: 1, ScaleY: -1, ShapeOnly: true}},
+		{"three quarters about the top left", "shdw9", "", slides.Shadow{OffsetX: 10 - 1.25, OffsetY: -2.5, ScaleX: 0.75, ScaleY: 0.75, ShapeOnly: true}},
+		{"five quarters about the bottom right", "shdw10", "", slides.Shadow{OffsetX: 10 - 1.25, OffsetY: -2.5, ScaleX: 1.25, ScaleY: 1.25, ShapeOnly: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			spPr := `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` + tc.line + `<a:effectLst><a:prstShdw prst="` + tc.prst + `" dist="127000"><a:srgbClr val="808080"/></a:prstShdw></a:effectLst>`
+			doc, _ := readDeck(t, testDeck{slides: []testSlide{{tree: sp("S", spPr, "")}}})
+			s := shapeNamed(doc.Slides[0].Shapes, "S")
+			if s == nil || s.Shadow == nil {
+				t.Fatalf("shape %+v, want a shadow", s)
+			}
+			got, want := *s.Shadow, tc.want
+			if !nearly(got.OffsetX, want.OffsetX) || !nearly(got.OffsetY, want.OffsetY) || !nearly(got.ScaleX, want.ScaleX) || !nearly(got.ScaleY, want.ScaleY) ||
+				!nearly(got.SkewX, want.SkewX) || got.ShapeOnly != want.ShapeOnly || got.Blur != 0 || got.RotateWithShape {
+				t.Errorf("shadow %+v, want %+v", got, want)
 			}
 		})
 	}

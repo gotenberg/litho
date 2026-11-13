@@ -20,7 +20,7 @@ func TestParseEffectList_ReadsTheMembers(t *testing.T) {
 		`<a:glow rad="139700"><a:srgbClr val="FF0000"><a:alpha val="40000"/></a:srgbClr></a:glow>`+
 		`<a:outerShdw blurRad="76200" dist="38100" dir="2700000" sx="90000" sy="-30000" kx="-800400" algn="bl"><a:prstClr val="black"/></a:outerShdw>`+
 		`<a:reflection blurRad="6350" stA="52000" endPos="35000" dist="12700" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/>`+
-		`<a:softEdge rad="63500"/><a:innerShdw blurRad="63500" dist="38100" dir="13500000"><a:prstClr val="black"/></a:innerShdw><a:prstShdw prst="shdw1"/><a:blur rad="12700"/>`+
+		`<a:softEdge rad="63500"/><a:innerShdw blurRad="63500" dist="38100" dir="13500000"><a:prstClr val="black"/></a:innerShdw><a:prstShdw prst="shdw17" dist="17961" dir="2700000"><a:srgbClr val="808080"/></a:prstShdw><a:blur rad="12700"/>`+
 		`<a:fillOverlay blend="mult"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:fillOverlay></a:effectLst></a:spPr>`)
 	l := ParseEffectList(spPr, nil, nil)
 	fx := l.Effects
@@ -45,8 +45,11 @@ func TestParseEffectList_ReadsTheMembers(t *testing.T) {
 	if o := fx.FillOverlay; o == nil || o.Blend != css.OfficeMultiply || o.Color != (css.Color{R: 1, A: 1}) {
 		t.Errorf("fill overlay %+v, want red multiplied", fx.FillOverlay)
 	}
-	if want := []string{"preset shadow"}; !slices.Equal(l.Undrawn, want) {
-		t.Errorf("undrawn %v, want %v", l.Undrawn, want)
+	if p := fx.Preset; p == nil || p.Name != "shdw17" || !near(p.Dist, 17961.0/12700) || !near(p.Dir, 45) || p.Color != (css.Color{R: 0x80 / 255.0, G: 0x80 / 255.0, B: 0x80 / 255.0, A: 1}) {
+		t.Errorf("preset shadow %+v, want shdw17 1.41 points toward 45 degrees in 808080", fx.Preset)
+	}
+	if len(l.Undrawn) != 0 {
+		t.Errorf("undrawn %v, want none", l.Undrawn)
 	}
 }
 

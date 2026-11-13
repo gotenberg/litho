@@ -25,6 +25,8 @@ type OfficeEffects struct {
 	// FillOverlay is a colour blended over what the source paints
 	// (20.1.8.29 fillOverlay).
 	FillOverlay *OfficeOverlay
+	// Preset is the preset shadow (20.1.8.49 prstShdw).
+	Preset *OfficePreset
 	// Rules names the program whose rules draw the effects: the zero
 	// value, [OfficeWord], for a WordprocessingML or SpreadsheetML
 	// document, [OfficePowerPoint] for a PresentationML one.
@@ -79,6 +81,14 @@ type OfficeShadow struct {
 	SX, SY     float64
 	KX, KY     float64
 	Align      RectAlign
+}
+
+// OfficePreset is a preset shadow: the preset Name (20.1.10.52
+// ST_PresetShadowVal, shdw1 to shdw20), in Color, moved Dist along Dir.
+type OfficePreset struct {
+	Name      string
+	Color     Color
+	Dist, Dir float64
 }
 
 // OfficeGlow is a glow: a halo of Radius around the silhouette in Color.

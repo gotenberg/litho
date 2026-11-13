@@ -253,6 +253,10 @@ type Shadow struct {
 	// RotateWithShape turns the offsets with the shape's rotation
 	// (ECMA-376 Part 1, 20.1.8.45 outerShdw rotWithShape).
 	RotateWithShape bool
+	// ShapeOnly leaves the shape's text out of a hard shadow, which then
+	// copies the fill, the line and the pictures alone: the copies of
+	// most preset shadows (20.1.8.49 prstShdw).
+	ShapeOnly bool
 }
 
 // Reflection is a mirrored copy of what a shape paints, its fill, line and

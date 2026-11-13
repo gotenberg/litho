@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -146,5 +147,50 @@ func TestShapeContentEffects(t *testing.T) {
 	b := pix.Bounds()
 	if c := pix.(*image.NRGBA).NRGBAAt(b.Dx()/2, b.Dy()/2); c != (color.NRGBA{R: 0x44, A: 255}) {
 		t.Errorf("overlaid colour %v, want blue 4472C4 multiplied by red", c)
+	}
+}
+
+// TestShapePresetShadow checks that Word's preset shadow shdw17 paints two
+// vector copies of the square under it, the lightened one moved against
+// the distance first, the shadow's colour moved along it next, and that a
+// preset no Word reference shows warns and paints no copy.
+func TestShapePresetShadow(t *testing.T) {
+	doc := shapeDoc(t, `<a:effectLst><a:prstShdw prst="shdw17" dist="127000"><a:srgbClr val="808080"/></a:prstShdw></a:effectLst>`)
+	type fill struct {
+		x    float64
+		gray float64
+	}
+	var fills []fill
+	var walk func(frags []typeset.Fragment, dx float64)
+	walk = func(frags []typeset.Fragment, dx float64) {
+		for _, f := range frags {
+			switch v := f.(type) {
+			case *typeset.Path:
+				if v.Fill != nil {
+					fills = append(fills, fill{v.Ops[0].P[0].X + dx, v.Fill.Color.R})
+				}
+			case *typeset.Group:
+				walk(v.Content, dx+v.Transform.E)
+			}
+		}
+	}
+	walk(doc.Pages[0].Content, 0)
+	if len(fills) != 3 {
+		t.Fatalf("fills %+v, want two copies and the square", fills)
+	}
+	light, dark := 0x80/255.0+(1-0x80/255.0)*0.8, 0x80/255.0
+	sq := fills[2]
+	if math.Abs(fills[0].gray-light) > 1e-6 || math.Abs(fills[0].x-(sq.x-10)) > 1e-6 {
+		t.Errorf("first copy %+v, want gray %.3f 10 points left of the square at %.2f", fills[0], light, sq.x)
+	}
+	if math.Abs(fills[1].gray-dark) > 1e-6 || math.Abs(fills[1].x-(sq.x+10)) > 1e-6 {
+		t.Errorf("second copy %+v, want gray %.3f 10 points right of the square at %.2f", fills[1], dark, sq.x)
+	}
+	if len(doc.Warnings) != 0 {
+		t.Errorf("warnings %v, want none", doc.Warnings)
+	}
+	doc = shapeDoc(t, `<a:effectLst><a:prstShdw prst="shdw3" dist="127000"><a:srgbClr val="808080"/></a:prstShdw></a:effectLst>`)
+	if len(doc.Warnings) != 1 || !strings.Contains(doc.Warnings[0].Message, "preset shadow shdw3") {
+		t.Errorf("warnings %v, want one on shdw3", doc.Warnings)
 	}
 }

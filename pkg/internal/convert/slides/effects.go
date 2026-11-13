@@ -399,7 +399,7 @@ func (b *builder) paintEffects(s *Shape, own, text []typeset.Fragment, toSlide t
 	}
 	sil := silhouetteOf(own, toSlide)
 	if sil == nil {
-		if s.Shadow != nil && s.Shadow.Opacity > 0 && len(text) > 0 && !numeric.Positive(s.Shadow.Blur) {
+		if s.Shadow != nil && s.Shadow.Opacity > 0 && len(text) > 0 && !numeric.Positive(s.Shadow.Blur) && !s.Shadow.ShapeOnly {
 			return group(back, b.hardShadow(b.ctx, s.Shadow, nil, text, toSlide, typeset.Rect{})), nil
 		}
 		if s.Shadow != nil && s.Shadow.Blur > 0 && len(text) > 0 {
@@ -470,10 +470,16 @@ func (b *builder) paintEffects(s *Shape, own, text []typeset.Fragment, toSlide t
 			if drawn != nil {
 				hard = nil
 			}
-			if u := s.ShadowUnder; u != nil && u.Opacity > 0 {
-				top = append(top, b.hardShadow(b.ctx, u, glows, append(append([]typeset.Fragment(nil), hard...), text...), toSlide, sil.bounds)...)
+			copied := func(c *Shadow) []typeset.Fragment {
+				if c.ShapeOnly {
+					return hard
+				}
+				return append(append([]typeset.Fragment(nil), hard...), text...)
 			}
-			top = append(top, b.hardShadow(b.ctx, sh, glows, append(append([]typeset.Fragment(nil), hard...), text...), toSlide, sil.bounds)...)
+			if u := s.ShadowUnder; u != nil && u.Opacity > 0 {
+				top = append(top, b.hardShadow(b.ctx, u, glows, copied(u), toSlide, sil.bounds)...)
+			}
+			top = append(top, b.hardShadow(b.ctx, sh, glows, copied(sh), toSlide, sil.bounds)...)
 			if drawn != nil {
 				top = append(top, p.recolorBitmap(b.ctx, drawn[0], sh)...)
 			}
@@ -572,7 +578,7 @@ func (b *builder) hardShadow(ctx context.Context, sh *Shadow, glows, frags []typ
 			}
 		}
 	}
-	content = append(content, group(toSlide, recolor(frags, c, 0))...)
+	content = append(content, group(toSlide, officefx.Recolor(frags, c))...)
 	if len(content) == 0 {
 		return nil
 	}
@@ -628,45 +634,10 @@ func retint(ctx context.Context, src *typeset.ImageSource, c typeset.Color) *typ
 	return out
 }
 
-// maxRecolorDepth bounds the groups recolor descends. Anti-DoS guard, not
-// spec-mandated: the builder nests groups maxGroupDepth deep, and a shape
-// adds a few of its own.
+// maxRecolorDepth bounds the groups [figureOf] and [withoutText] descend.
+// Anti-DoS guard, not spec-mandated: the builder nests groups
+// maxGroupDepth deep, and a shape adds a few of its own.
 const maxRecolorDepth = maxGroupDepth + 8
-
-// recolor returns a copy of frags painted in the one colour c: fills,
-// strokes and text in c, pictures as their rectangles filled with c.
-func recolor(frags []typeset.Fragment, c typeset.Color, depth int) []typeset.Fragment {
-	var out []typeset.Fragment
-	for _, f := range frags {
-		switch f := f.(type) {
-		case *typeset.Path:
-			p := &typeset.Path{Ops: f.Ops}
-			if f.Fill != nil {
-				p.Fill = &typeset.Fill{Color: c, Rule: f.Fill.Rule}
-			}
-			if f.Stroke != nil {
-				st := *f.Stroke
-				st.Color = c
-				p.Stroke = &st
-			}
-			out = append(out, p)
-		case *typeset.Text:
-			t := *f
-			t.Color = c
-			t.Parent = nil
-			out = append(out, &t)
-		case *typeset.Image:
-			out = append(out, &typeset.Path{Ops: rectOps(f.Rect), Fill: &typeset.Fill{Color: c}})
-		case *typeset.Group:
-			if depth < maxRecolorDepth {
-				g := *f
-				g.Content = recolor(f.Content, c, depth+1)
-				out = append(out, &g)
-			}
-		}
-	}
-	return out
-}
 
 // glowMask returns a glow's coverage on g of the silhouette moved by tr:
 // on PowerPoint's rules [officefx.Rules.GlowMask]; on Impress's the

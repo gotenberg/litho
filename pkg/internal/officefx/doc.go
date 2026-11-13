@@ -26,7 +26,10 @@
 //     blurRad, kept inside the silhouette ([InnerMask]);
 //   - blur (20.1.8.15) and fill overlay (20.1.8.29): the content drawn as
 //     one bitmap, blurred by a third of rad, the overlay's colour blended
-//     over it where it paints ([Content]).
+//     over it where it paints ([Content]);
+//   - preset shadow (20.1.8.49 prstShdw): no bitmap, but one or two vector
+//     copies of the content in one colour, scaled and skewed about a point
+//     of the bounds by the preset's rule ([PresetCopies], [PresetUnder]).
 //
 // A run of text takes the outer shadow, the glow and the reflection.
 // PowerPoint draws them from its glyphs as they paint, by its rules for a

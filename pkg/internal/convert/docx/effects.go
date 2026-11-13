@@ -24,6 +24,12 @@ func (d *document) effectList(spPr, style *ooxml.Element) *css.OfficeEffects {
 	for _, n := range l.Undrawn {
 		d.warn(warn.ContentUnsupported, warn.Omitted, fmt.Sprintf("a drawing's %s is not drawn", n))
 	}
+	if p := l.Effects.Preset; p != nil {
+		if _, _, ok := officefx.PresetCopies(p, l.Effects.Rules); !ok {
+			d.warn(warn.ContentUnsupported, warn.Omitted, "a drawing's preset shadow "+p.Name+" is not drawn")
+			l.Effects.Preset = nil
+		}
+	}
 	if threeD(spPr) {
 		d.warn(warn.ContentUnsupported, warn.Approximated, "a drawing's 3-D bevel, extrusion or camera is drawn flat")
 	}
@@ -56,7 +62,8 @@ func threeD(spPr *ooxml.Element) bool {
 
 // withEffects returns the picture pic with the effects fx drawn around
 // it: the reflection, shadow and glow under it, its silhouette the paths
-// it paints, or its box for a raster picture; a blur, a fill overlay or a
+// it paints, or its box for a raster picture, then the vector copies of
+// its preset shadow ([officefx.PresetUnder]); a blur, a fill overlay or a
 // soft edge turn it into one bitmap ([officefx.Content]); an inner shadow
 // paints over its fills and under its lines. pic itself when fx is nil.
 func (d *document) withEffects(pic *layout.Picture, fx *css.OfficeEffects) *layout.Picture {
@@ -77,6 +84,10 @@ func (d *document) withEffects(pic *layout.Picture, fx *css.OfficeEffects) *layo
 		src := &officefx.Source{Paths: silhouette(content, r, pic.Vector == nil), Bounds: r, Content: content}
 		under, notes, err := officefx.Under(ctx, src, fx, &d.effectPixels)
 		d.effectFailed(notes, err)
+		if fx.Preset != nil {
+			copies, _ := officefx.PresetUnder(src, fx.Preset, fx.Rules)
+			under = append(under, copies...)
+		}
 		inner, notes, err := officefx.Inner(ctx, src, fx, &d.effectPixels)
 		d.effectFailed(notes, err)
 		whole, notes, err := officefx.Content(ctx, src, fx, &d.effectPixels)
