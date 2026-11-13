@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T18:12:18Z",
+  "captured_at": "2026-11-13T19:08:49Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9336,7 +9336,7 @@
           },
           "scores": {
             "layout/CT-formatted-deletion.docx": {
-              "layout": 0.9521,
+              "layout": 0.9531,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9392,7 +9392,7 @@
               "text_f1": 1
             },
             "layout/tdf104797.docx": {
-              "layout": 0.1714,
+              "layout": 0.1716,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9528,7 +9528,7 @@
               "text_f1": 0.8333
             },
             "layout/tdf128198-1.docx": {
-              "layout": 0.7589,
+              "layout": 0.759,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9672,7 +9672,7 @@
               "text_f1": 1
             },
             "ooxmlexport/99_Fields.docx": {
-              "layout": 0.9532,
+              "layout": 0.9537,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9736,11 +9736,11 @@
               "text_f1": 1
             },
             "ooxmlexport/FDO74215.docx": {
-              "layout": 0.9511,
+              "layout": 0.9518,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 1,
+              "strict": 0,
               "text_f1": 0.996
             },
             "ooxmlexport/FDO74774.docx": {
@@ -9800,7 +9800,7 @@
               "text_f1": 1
             },
             "ooxmlexport/IndexFieldFlagF.docx": {
-              "layout": 0.5914,
+              "layout": 0.5915,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9952,7 +9952,7 @@
               "text_f1": 0
             },
             "ooxmlexport/TextEffects_Glow_Shadow_Reflection.docx": {
-              "layout": 0.9137,
+              "layout": 0.9174,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -9992,7 +9992,7 @@
               "text_f1": 0.5
             },
             "ooxmlexport/Unsupportedtextfields.docx": {
-              "layout": 0.9233,
+              "layout": 0.9237,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10040,7 +10040,7 @@
               "text_f1": 1
             },
             "ooxmlexport/afterlines.docx": {
-              "layout": 0.9579,
+              "layout": 0.9556,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10064,7 +10064,7 @@
               "text_f1": 1
             },
             "ooxmlexport/alphabeticalIndex_MultipleColumns.docx": {
-              "layout": 0.9701,
+              "layout": 0.97,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10144,7 +10144,7 @@
               "text_f1": 1
             },
             "ooxmlexport/caption.docx": {
-              "layout": 0.9654,
+              "layout": 0.9677,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10232,7 +10232,7 @@
               "text_f1": 1
             },
             "ooxmlexport/custom-properties.docx": {
-              "layout": 0.9478,
+              "layout": 0.9505,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10352,7 +10352,7 @@
               "text_f1": 1
             },
             "ooxmlexport/dml-gradientfill-theme.docx": {
-              "layout": 0.0431,
+              "layout": 0.0434,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10520,7 +10520,7 @@
               "text_f1": 1
             },
             "ooxmlexport/dropdown-in-cell.docx": {
-              "layout": 0.9643,
+              "layout": 0.9641,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10592,7 +10592,7 @@
               "text_f1": 0.66
             },
             "ooxmlexport/fdo43093.docx": {
-              "layout": 0.9286,
+              "layout": 0.929,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10600,7 +10600,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo43093b.docx": {
-              "layout": 0.8974,
+              "layout": 0.8991,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10632,7 +10632,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo52208.docx": {
-              "layout": 0.2965,
+              "layout": 0.295,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10736,7 +10736,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo65265.docx": {
-              "layout": 0.953,
+              "layout": 0.9569,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10760,7 +10760,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo65718.docx": {
-              "layout": 0.9516,
+              "layout": 0.9529,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10776,7 +10776,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo66543.docx": {
-              "layout": 0.9034,
+              "layout": 0.9037,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10784,7 +10784,7 @@
               "text_f1": 0.925
             },
             "ooxmlexport/fdo66773.docx": {
-              "layout": 0.9515,
+              "layout": 0.9514,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10832,7 +10832,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo69616.docx": {
-              "layout": 0.5325,
+              "layout": 0.5327,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10896,7 +10896,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo71834.docx": {
-              "layout": 0.7266,
+              "layout": 0.7267,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10960,7 +10960,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo73541.docx": {
-              "layout": 0.9493,
+              "layout": 0.9497,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10968,7 +10968,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo73556.docx": {
-              "layout": 0.9567,
+              "layout": 0.9571,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10976,7 +10976,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo73596_AlphaSeparator.docx": {
-              "layout": 0.9665,
+              "layout": 0.9666,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10984,7 +10984,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo73596_RunInStyle.docx": {
-              "layout": 0.8023,
+              "layout": 0.8022,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11000,7 +11000,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo74153.docx": {
-              "layout": 0.9337,
+              "layout": 0.9346,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11024,7 +11024,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo74566.docx": {
-              "layout": 0.9433,
+              "layout": 0.9432,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11088,7 +11088,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo76589.docx": {
-              "layout": 0.9539,
+              "layout": 0.9546,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11160,7 +11160,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo77812.docx": {
-              "layout": 0.8792,
+              "layout": 0.8796,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11312,7 +11312,7 @@
               "text_f1": 1
             },
             "ooxmlimport/groupshape-line.docx": {
-              "layout": 0.2147,
+              "layout": 0.2146,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11408,7 +11408,7 @@
               "text_f1": 1
             },
             "ooxmlimport/n775899.docx": {
-              "layout": 0.8517,
+              "layout": 0.8515,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11576,7 +11576,7 @@
               "text_f1": 0.9423
             },
             "ooxmlimport/tdf108806.docx": {
-              "layout": 0.1659,
+              "layout": 0.1673,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -31462,8 +31462,8 @@
     "libreoffice/odt": {
       "features": {
         "diff": {
-          "matched": 121,
-          "mismatched": 74,
+          "matched": 122,
+          "mismatched": 73,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -31528,7 +31528,7 @@
               "text_f1": 0
             },
             "layout/abi11870-2.odt": {
-              "layout": 0.3741,
+              "layout": 0.374,
               "link_recall": 0.5526,
               "outline_recall": 0,
               "pages": 0.9487,
@@ -33017,12 +33017,12 @@
               "text_f1": 1
             },
             "odfimport/tdf100033_1.odt": {
-              "layout": 0.8562,
+              "layout": 0.9902,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.6667
+              "text_f1": 1
             },
             "odfimport/tdf100033_2.odt": {
               "layout": 0,
@@ -37173,8 +37173,8 @@
     "libreoffice/pptx": {
       "features": {
         "diff": {
-          "matched": 174,
-          "mismatched": 95,
+          "matched": 175,
+          "mismatched": 94,
           "skipped": 42,
           "metrics": {
             "convert_error": 0,
@@ -37223,12 +37223,12 @@
               "text_f1": 0.6364
             },
             "chart2/percentage-number-formats.pptx": {
-              "layout": 0.9377,
+              "layout": 0.986,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
-              "text_f1": 0.6455
+              "strict": 1,
+              "text_f1": 0.9074
             },
             "chart2/sparse-chart.pptx": {
               "layout": 0.942,
@@ -54486,7 +54486,7 @@
               "text_f1": 0.4235
             },
             "bibliography-citations": {
-              "layout": 0.9455,
+              "layout": 0.9466,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54494,7 +54494,7 @@
               "text_f1": 1
             },
             "breaks-symbols": {
-              "layout": 0.6742,
+              "layout": 0.6743,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54534,7 +54534,7 @@
               "text_f1": 0.878
             },
             "charts-scatter-bubble-radar": {
-              "layout": 0.781,
+              "layout": 0.7812,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54542,7 +54542,7 @@
               "text_f1": 0.9231
             },
             "charts-stock-combo": {
-              "layout": 0.7914,
+              "layout": 0.7915,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54550,15 +54550,15 @@
               "text_f1": 1
             },
             "charts-trendlines-errorbars": {
-              "layout": 0.7674,
+              "layout": 0.7645,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.9014
+              "text_f1": 0.943
             },
             "comments": {
-              "layout": 0.9655,
+              "layout": 0.9657,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54566,7 +54566,7 @@
               "text_f1": 1
             },
             "compat-mode-11": {
-              "layout": 0.9536,
+              "layout": 0.9541,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54574,7 +54574,7 @@
               "text_f1": 1
             },
             "compat-mode-12": {
-              "layout": 0.9536,
+              "layout": 0.9541,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54582,7 +54582,7 @@
               "text_f1": 1
             },
             "compat-mode-14": {
-              "layout": 0.9206,
+              "layout": 0.9209,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54590,7 +54590,7 @@
               "text_f1": 1
             },
             "content-controls-repeating-gallery": {
-              "layout": 0.9599,
+              "layout": 0.9605,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54606,7 +54606,7 @@
               "text_f1": 0.9541
             },
             "date-fields": {
-              "layout": 0.9557,
+              "layout": 0.9565,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54614,7 +54614,7 @@
               "text_f1": 1
             },
             "date-fields-ref": {
-              "layout": 0.9557,
+              "layout": 0.9565,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54638,7 +54638,7 @@
               "text_f1": 1
             },
             "doc-protection-settings": {
-              "layout": 0.9565,
+              "layout": 0.9572,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54646,7 +54646,7 @@
               "text_f1": 1
             },
             "doc-watermark-picture": {
-              "layout": 0.9678,
+              "layout": 0.968,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54654,7 +54654,7 @@
               "text_f1": 1
             },
             "doc-watermark-text": {
-              "layout": 0.9465,
+              "layout": 0.9468,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54662,7 +54662,7 @@
               "text_f1": 1
             },
             "embedded-fonts": {
-              "layout": 0.9604,
+              "layout": 0.9605,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54670,7 +54670,7 @@
               "text_f1": 1
             },
             "endnotes": {
-              "layout": 0.7551,
+              "layout": 0.7552,
               "link_recall": 0.7143,
               "outline_recall": 1,
               "pages": 1,
@@ -54678,7 +54678,7 @@
               "text_f1": 0.8605
             },
             "fields-date-doc-info": {
-              "layout": 0.9547,
+              "layout": 0.955,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54686,7 +54686,7 @@
               "text_f1": 1
             },
             "fields-logic-formula": {
-              "layout": 0.9613,
+              "layout": 0.9614,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54694,7 +54694,7 @@
               "text_f1": 0.9718
             },
             "fields-page": {
-              "layout": 0.9489,
+              "layout": 0.9494,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54702,7 +54702,7 @@
               "text_f1": 0.967
             },
             "fields-ref-bookmarks": {
-              "layout": 0.9654,
+              "layout": 0.966,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54710,7 +54710,7 @@
               "text_f1": 1
             },
             "fields-seq-captions": {
-              "layout": 0.9491,
+              "layout": 0.9492,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54726,7 +54726,7 @@
               "text_f1": 0.7632
             },
             "footnotes": {
-              "layout": 0.4204,
+              "layout": 0.4205,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.6667,
@@ -54734,7 +54734,7 @@
               "text_f1": 0.5506
             },
             "footnotes-formats-sections": {
-              "layout": 0.8867,
+              "layout": 0.8869,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54742,7 +54742,7 @@
               "text_f1": 0.9478
             },
             "form-fields-legacy": {
-              "layout": 0.9288,
+              "layout": 0.9295,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54750,7 +54750,7 @@
               "text_f1": 1
             },
             "glossary-document": {
-              "layout": 0.949,
+              "layout": 0.9491,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54758,7 +54758,7 @@
               "text_f1": 1
             },
             "headers-content": {
-              "layout": 0.9451,
+              "layout": 0.9454,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54766,7 +54766,7 @@
               "text_f1": 0.9848
             },
             "headers-first-even-odd": {
-              "layout": 0.957,
+              "layout": 0.9572,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54774,7 +54774,7 @@
               "text_f1": 1
             },
             "hyperlinks": {
-              "layout": 0.9526,
+              "layout": 0.9527,
               "link_recall": 0.9,
               "outline_recall": 1,
               "pages": 1,
@@ -54798,7 +54798,7 @@
               "text_f1": 1
             },
             "images-positioning": {
-              "layout": 0.97,
+              "layout": 0.9701,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54814,7 +54814,7 @@
               "text_f1": 0.9762
             },
             "images-wrap": {
-              "layout": 0.9685,
+              "layout": 0.9687,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54822,7 +54822,7 @@
               "text_f1": 1
             },
             "index-field": {
-              "layout": 0.9567,
+              "layout": 0.9571,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54838,7 +54838,7 @@
               "text_f1": 1
             },
             "numbering-headings": {
-              "layout": 0.9534,
+              "layout": 0.9536,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54846,7 +54846,7 @@
               "text_f1": 1
             },
             "numbering-multilevel": {
-              "layout": 0.9541,
+              "layout": 0.9554,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54854,7 +54854,7 @@
               "text_f1": 0.9868
             },
             "numbering-restart": {
-              "layout": 0.9251,
+              "layout": 0.9258,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54862,7 +54862,7 @@
               "text_f1": 0.9963
             },
             "numbering-suffix-alignment": {
-              "layout": 0.9544,
+              "layout": 0.9547,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54886,7 +54886,7 @@
               "text_f1": 0.987
             },
             "option-landscape-ref": {
-              "layout": 0.9498,
+              "layout": 0.9499,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54910,7 +54910,7 @@
               "text_f1": 1
             },
             "paper-a3-landscape": {
-              "layout": 0.9433,
+              "layout": 0.9435,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54918,7 +54918,7 @@
               "text_f1": 1
             },
             "paper-a3-portrait": {
-              "layout": 0.9499,
+              "layout": 0.95,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54926,7 +54926,7 @@
               "text_f1": 1
             },
             "paper-a4-landscape": {
-              "layout": 0.9478,
+              "layout": 0.948,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54934,7 +54934,7 @@
               "text_f1": 1
             },
             "paper-a4-portrait": {
-              "layout": 0.9318,
+              "layout": 0.932,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54942,7 +54942,7 @@
               "text_f1": 1
             },
             "paper-a5-landscape": {
-              "layout": 0.9332,
+              "layout": 0.9334,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54950,7 +54950,7 @@
               "text_f1": 1
             },
             "paper-a5-portrait": {
-              "layout": 0.8983,
+              "layout": 0.8913,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54958,7 +54958,7 @@
               "text_f1": 0.9912
             },
             "paper-b5-landscape": {
-              "layout": 0.9492,
+              "layout": 0.9494,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54966,7 +54966,7 @@
               "text_f1": 1
             },
             "paper-b5-portrait": {
-              "layout": 0.8855,
+              "layout": 0.8857,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54974,7 +54974,7 @@
               "text_f1": 1
             },
             "paper-base": {
-              "layout": 0.9466,
+              "layout": 0.9468,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54982,7 +54982,7 @@
               "text_f1": 1
             },
             "paper-default-portrait": {
-              "layout": 0.9466,
+              "layout": 0.9468,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54990,7 +54990,7 @@
               "text_f1": 1
             },
             "paper-executive-landscape": {
-              "layout": 0.9455,
+              "layout": 0.9457,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54998,7 +54998,7 @@
               "text_f1": 1
             },
             "paper-executive-portrait": {
-              "layout": 0.9012,
+              "layout": 0.9014,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55006,7 +55006,7 @@
               "text_f1": 1
             },
             "paper-legal-landscape": {
-              "layout": 0.9458,
+              "layout": 0.9459,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55014,7 +55014,7 @@
               "text_f1": 1
             },
             "paper-legal-portrait": {
-              "layout": 0.944,
+              "layout": 0.9442,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55022,7 +55022,7 @@
               "text_f1": 1
             },
             "paper-letter-landscape": {
-              "layout": 0.9511,
+              "layout": 0.9513,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55030,7 +55030,7 @@
               "text_f1": 1
             },
             "paper-letter-portrait": {
-              "layout": 0.9466,
+              "layout": 0.9468,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55038,7 +55038,7 @@
               "text_f1": 1
             },
             "paper-margins-narrow-a3-landscape": {
-              "layout": 0.9401,
+              "layout": 0.9402,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55046,7 +55046,7 @@
               "text_f1": 1
             },
             "paper-margins-narrow-a3-portrait": {
-              "layout": 0.9506,
+              "layout": 0.9508,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55054,15 +55054,15 @@
               "text_f1": 1
             },
             "paper-margins-narrow-a5-landscape": {
-              "layout": 0.942,
+              "layout": 0.9422,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.75,
+              "strict": 0.5,
               "text_f1": 1
             },
             "paper-margins-narrow-a5-portrait": {
-              "layout": 0.908,
+              "layout": 0.9082,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55070,7 +55070,7 @@
               "text_f1": 0.9951
             },
             "paper-margins-narrow-letter-landscape": {
-              "layout": 0.9483,
+              "layout": 0.9485,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55078,15 +55078,15 @@
               "text_f1": 1
             },
             "paper-margins-narrow-letter-portrait": {
-              "layout": 0.9467,
+              "layout": 0.9454,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 1,
+              "strict": 0.5,
               "text_f1": 1
             },
             "paper-margins-none-a3-landscape": {
-              "layout": 0.952,
+              "layout": 0.9521,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55094,7 +55094,7 @@
               "text_f1": 1
             },
             "paper-margins-none-a3-portrait": {
-              "layout": 0.9527,
+              "layout": 0.9528,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55102,7 +55102,7 @@
               "text_f1": 1
             },
             "paper-margins-none-a5-landscape": {
-              "layout": 0.9425,
+              "layout": 0.9403,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55110,7 +55110,7 @@
               "text_f1": 1
             },
             "paper-margins-none-a5-portrait": {
-              "layout": 0.9201,
+              "layout": 0.9203,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55118,7 +55118,7 @@
               "text_f1": 1
             },
             "paper-margins-none-letter-landscape": {
-              "layout": 0.9504,
+              "layout": 0.9505,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55126,7 +55126,7 @@
               "text_f1": 1
             },
             "paper-margins-none-letter-portrait": {
-              "layout": 0.9444,
+              "layout": 0.9446,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55134,7 +55134,7 @@
               "text_f1": 1
             },
             "paper-margins-uneven-a3-landscape": {
-              "layout": 0.94,
+              "layout": 0.9402,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55142,7 +55142,7 @@
               "text_f1": 1
             },
             "paper-margins-uneven-a3-portrait": {
-              "layout": 0.9527,
+              "layout": 0.9528,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55150,7 +55150,7 @@
               "text_f1": 1
             },
             "paper-margins-uneven-a5-landscape": {
-              "layout": 0.9491,
+              "layout": 0.9493,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55158,7 +55158,7 @@
               "text_f1": 1
             },
             "paper-margins-uneven-a5-portrait": {
-              "layout": 0.9101,
+              "layout": 0.9103,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55166,7 +55166,7 @@
               "text_f1": 0.9941
             },
             "paper-margins-uneven-letter-landscape": {
-              "layout": 0.8011,
+              "layout": 0.8013,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55174,7 +55174,7 @@
               "text_f1": 0.9076
             },
             "paper-margins-uneven-letter-portrait": {
-              "layout": 0.9503,
+              "layout": 0.9505,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55182,7 +55182,7 @@
               "text_f1": 1
             },
             "paper-mixed-orientation": {
-              "layout": 0.9502,
+              "layout": 0.9503,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55190,15 +55190,15 @@
               "text_f1": 1
             },
             "paper-mixed-sizes": {
-              "layout": 0.9054,
+              "layout": 0.8543,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.75,
-              "text_f1": 0.9923
+              "strict": 0.25,
+              "text_f1": 0.9749
             },
             "paper-option-a3-landscape": {
-              "layout": 0.9433,
+              "layout": 0.9435,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55206,7 +55206,7 @@
               "text_f1": 1
             },
             "paper-option-a3-portrait": {
-              "layout": 0.9499,
+              "layout": 0.95,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55214,7 +55214,7 @@
               "text_f1": 1
             },
             "paper-option-a4-landscape": {
-              "layout": 0.9479,
+              "layout": 0.9481,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55222,7 +55222,7 @@
               "text_f1": 1
             },
             "paper-option-a4-portrait": {
-              "layout": 0.9318,
+              "layout": 0.932,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55230,7 +55230,7 @@
               "text_f1": 1
             },
             "paper-option-a5-landscape": {
-              "layout": 0.9332,
+              "layout": 0.9334,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55238,7 +55238,7 @@
               "text_f1": 1
             },
             "paper-option-a5-portrait": {
-              "layout": 0.8912,
+              "layout": 0.8913,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55246,7 +55246,7 @@
               "text_f1": 0.9912
             },
             "paper-option-b5-landscape": {
-              "layout": 0.9491,
+              "layout": 0.9494,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55254,7 +55254,7 @@
               "text_f1": 1
             },
             "paper-option-b5-portrait": {
-              "layout": 0.8855,
+              "layout": 0.8857,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55262,7 +55262,7 @@
               "text_f1": 1
             },
             "paper-option-executive-landscape": {
-              "layout": 0.9455,
+              "layout": 0.9457,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55270,7 +55270,7 @@
               "text_f1": 1
             },
             "paper-option-executive-portrait": {
-              "layout": 0.9012,
+              "layout": 0.9014,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55278,7 +55278,7 @@
               "text_f1": 1
             },
             "paper-option-legal-landscape": {
-              "layout": 0.9458,
+              "layout": 0.9459,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55286,7 +55286,7 @@
               "text_f1": 1
             },
             "paper-option-legal-portrait": {
-              "layout": 0.944,
+              "layout": 0.9442,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55294,7 +55294,7 @@
               "text_f1": 1
             },
             "paper-option-letter-landscape": {
-              "layout": 0.9511,
+              "layout": 0.9513,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55302,7 +55302,7 @@
               "text_f1": 1
             },
             "paper-option-letter-portrait": {
-              "layout": 0.9466,
+              "layout": 0.9468,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55310,7 +55310,7 @@
               "text_f1": 1
             },
             "paper-option-tabloid-landscape": {
-              "layout": 0.9497,
+              "layout": 0.95,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55318,7 +55318,7 @@
               "text_f1": 1
             },
             "paper-option-tabloid-portrait": {
-              "layout": 0.9504,
+              "layout": 0.9505,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55326,7 +55326,7 @@
               "text_f1": 1
             },
             "paper-tabloid-landscape": {
-              "layout": 0.9497,
+              "layout": 0.95,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55334,7 +55334,7 @@
               "text_f1": 1
             },
             "paper-tabloid-portrait": {
-              "layout": 0.9504,
+              "layout": 0.9505,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55350,7 +55350,7 @@
               "text_f1": 0.9871
             },
             "para-dropcap-frames": {
-              "layout": 0.5851,
+              "layout": 0.5787,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55358,7 +55358,7 @@
               "text_f1": 1
             },
             "para-hyphenation": {
-              "layout": 0.9283,
+              "layout": 0.9297,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55366,7 +55366,7 @@
               "text_f1": 0.9879
             },
             "para-indent": {
-              "layout": 0.9528,
+              "layout": 0.9527,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55374,11 +55374,11 @@
               "text_f1": 1
             },
             "para-pagination": {
-              "layout": 0.9528,
+              "layout": 0.953,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 1,
+              "strict": 0.8,
               "text_f1": 1
             },
             "para-spacing": {
@@ -55390,7 +55390,7 @@
               "text_f1": 1
             },
             "para-tabs": {
-              "layout": 0.8208,
+              "layout": 0.8211,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55406,7 +55406,7 @@
               "text_f1": 1
             },
             "run-position-spacing": {
-              "layout": 0.9242,
+              "layout": 0.9245,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55414,7 +55414,7 @@
               "text_f1": 0.9533
             },
             "run-theme-fonts-colors": {
-              "layout": 0.7436,
+              "layout": 0.7444,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55422,7 +55422,7 @@
               "text_f1": 1
             },
             "run-underline": {
-              "layout": 0.9368,
+              "layout": 0.9369,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55430,7 +55430,7 @@
               "text_f1": 1
             },
             "run-w14-effects": {
-              "layout": 0.9115,
+              "layout": 0.9111,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55438,7 +55438,7 @@
               "text_f1": 0.9706
             },
             "sections-columns": {
-              "layout": 0.5814,
+              "layout": 0.5816,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.75,
@@ -55446,7 +55446,7 @@
               "text_f1": 0.7129
             },
             "sections-gutter-top-rtl": {
-              "layout": 0.9788,
+              "layout": 0.979,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55454,7 +55454,7 @@
               "text_f1": 1
             },
             "sections-line-numbering": {
-              "layout": 0.9429,
+              "layout": 0.9433,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55462,7 +55462,7 @@
               "text_f1": 0.953
             },
             "sections-margins-gutter": {
-              "layout": 0.9767,
+              "layout": 0.9769,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55470,7 +55470,7 @@
               "text_f1": 1
             },
             "sections-orientation-sizes": {
-              "layout": 0.9596,
+              "layout": 0.9599,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55478,7 +55478,7 @@
               "text_f1": 1
             },
             "sections-page-borders": {
-              "layout": 0.5672,
+              "layout": 0.5673,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55486,7 +55486,7 @@
               "text_f1": 1
             },
             "sections-page-numbers": {
-              "layout": 0.9584,
+              "layout": 0.9587,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55494,7 +55494,7 @@
               "text_f1": 1
             },
             "sections-types": {
-              "layout": 0.9659,
+              "layout": 0.966,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55502,7 +55502,7 @@
               "text_f1": 1
             },
             "sections-valign": {
-              "layout": 0.2382,
+              "layout": 0.2383,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55510,7 +55510,7 @@
               "text_f1": 1
             },
             "shapes-effects-3d": {
-              "layout": 0.8581,
+              "layout": 0.8582,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55558,7 +55558,7 @@
               "text_f1": 1
             },
             "shapes-wordart": {
-              "layout": 0.4216,
+              "layout": 0.4214,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55566,7 +55566,7 @@
               "text_f1": 0.8571
             },
             "sink-newsletter": {
-              "layout": 0.9094,
+              "layout": 0.9095,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55574,7 +55574,7 @@
               "text_f1": 0.9916
             },
             "sink-report": {
-              "layout": 0.7421,
+              "layout": 0.7423,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55582,7 +55582,7 @@
               "text_f1": 0.9125
             },
             "smartart": {
-              "layout": 0.6432,
+              "layout": 0.6431,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55622,7 +55622,7 @@
               "text_f1": 1
             },
             "tables-cell-margins-alignment": {
-              "layout": 0.9645,
+              "layout": 0.9646,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55638,7 +55638,7 @@
               "text_f1": 0.9697
             },
             "tables-floating": {
-              "layout": 0.5285,
+              "layout": 0.5288,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55670,7 +55670,7 @@
               "text_f1": 1
             },
             "tables-nested": {
-              "layout": 0.9536,
+              "layout": 0.9534,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55678,7 +55678,7 @@
               "text_f1": 1
             },
             "tables-row-heights": {
-              "layout": 0.9579,
+              "layout": 0.958,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55694,7 +55694,7 @@
               "text_f1": 0.9902
             },
             "tracked-changes": {
-              "layout": 0.95,
+              "layout": 0.9514,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55702,7 +55702,7 @@
               "text_f1": 1
             },
             "tracked-changes-marked": {
-              "layout": 0.9524,
+              "layout": 0.9538,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55710,7 +55710,7 @@
               "text_f1": 1
             },
             "tracked-changes-marked-ref": {
-              "layout": 0.9526,
+              "layout": 0.9539,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55718,7 +55718,7 @@
               "text_f1": 1
             },
             "tracked-changes-rejected": {
-              "layout": 0.9542,
+              "layout": 0.9558,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55726,7 +55726,7 @@
               "text_f1": 1
             },
             "tracked-changes-rejected-ref": {
-              "layout": 0.9542,
+              "layout": 0.9558,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -71881,12 +71881,12 @@
               "text_f1": 0.942
             },
             "chart-labels-axes": {
-              "layout": 0.8141,
+              "layout": 0.8239,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8716
+              "text_f1": 0.914
             },
             "chart-line": {
               "layout": 0.7949,
@@ -76202,12 +76202,12 @@
               "text_f1": 0.7726
             },
             "charts_axes_legends": {
-              "layout": 0.9232,
+              "layout": 0.923,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9797
+              "text_f1": 1
             },
             "charts_bar_column": {
               "layout": 0.8556,
@@ -76234,15 +76234,15 @@
               "text_f1": 0.9753
             },
             "charts_labels_trend_errors": {
-              "layout": 0.7994,
+              "layout": 0.8193,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8897
+              "text_f1": 0.9187
             },
             "charts_line_area": {
-              "layout": 0.7892,
+              "layout": 0.7901,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -77178,20 +77178,20 @@
               "text_f1": 1
             },
             "real_budget": {
-              "layout": 0.2395,
+              "layout": 0.2396,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9962
+              "text_f1": 1
             },
             "real_dashboard": {
-              "layout": 0.9101,
+              "layout": 0.9223,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.9375
+              "text_f1": 0.9931
             },
             "real_financial_statement": {
               "layout": 0.926,
@@ -81230,7 +81230,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/customXmlDelRangeStart-Custom_XML_Markup_Deletion_Start-val-author-special-chars.docx": {
-              "layout": 0.9514,
+              "layout": 0.9516,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81254,7 +81254,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/fldSimple-Field_Definitions-GreetingLine.docx": {
-              "layout": 0.9298,
+              "layout": 0.934,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81262,7 +81262,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/fldSimple-FormulasAndExpressions-Bookmark-GeneralFormat.docx": {
-              "layout": 0.9472,
+              "layout": 0.9475,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81486,7 +81486,7 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/summaryLength-Percentage_of_Document_to_Use_When_Generating_Summary-val-100.docx": {
-              "layout": 0.9404,
+              "layout": 0.9416,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81550,7 +81550,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment001.docx": {
-              "layout": 0.9466,
+              "layout": 0.9467,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81558,7 +81558,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment002.docx": {
-              "layout": 0.9567,
+              "layout": 0.9569,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81566,7 +81566,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment003.docx": {
-              "layout": 0.9567,
+              "layout": 0.9568,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81590,7 +81590,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment006.docx": {
-              "layout": 0.9568,
+              "layout": 0.9569,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81598,7 +81598,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment007.docx": {
-              "layout": 0.9568,
+              "layout": 0.957,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81606,7 +81606,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment008.docx": {
-              "layout": 0.9527,
+              "layout": 0.9528,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81614,7 +81614,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment009.docx": {
-              "layout": 0.9516,
+              "layout": 0.9517,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81622,7 +81622,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment010.docx": {
-              "layout": 0.9569,
+              "layout": 0.9571,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81638,7 +81638,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment012.docx": {
-              "layout": 0.9566,
+              "layout": 0.9568,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81646,7 +81646,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment017.docx": {
-              "layout": 0.9568,
+              "layout": 0.957,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81662,7 +81662,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment019.docx": {
-              "layout": 0.9534,
+              "layout": 0.9535,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81678,7 +81678,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment021.docx": {
-              "layout": 0.9505,
+              "layout": 0.9506,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81686,7 +81686,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment023.docx": {
-              "layout": 0.9569,
+              "layout": 0.9571,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81694,7 +81694,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment024.docx": {
-              "layout": 0.9541,
+              "layout": 0.9545,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81702,7 +81702,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment025.docx": {
-              "layout": 0.9527,
+              "layout": 0.9528,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81710,7 +81710,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment026.docx": {
-              "layout": 0.9568,
+              "layout": 0.957,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81718,7 +81718,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment029.docx": {
-              "layout": 0.9567,
+              "layout": 0.9569,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81726,7 +81726,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment030.docx": {
-              "layout": 0.9568,
+              "layout": 0.957,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81734,7 +81734,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment031.docx": {
-              "layout": 0.9568,
+              "layout": 0.957,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81742,7 +81742,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment033.docx": {
-              "layout": 0.9501,
+              "layout": 0.9502,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81750,7 +81750,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment034.docx": {
-              "layout": 0.9499,
+              "layout": 0.95,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81766,7 +81766,7 @@
               "text_f1": 0.9966
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment036.docx": {
-              "layout": 0.9783,
+              "layout": 0.9785,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81774,7 +81774,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment037.docx": {
-              "layout": 0.9599,
+              "layout": 0.9601,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81790,7 +81790,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment039.docx": {
-              "layout": 0.9567,
+              "layout": 0.9569,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81798,7 +81798,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment040.docx": {
-              "layout": 0.956,
+              "layout": 0.9561,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81806,7 +81806,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment042.docx": {
-              "layout": 0.4226,
+              "layout": 0.4227,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81814,7 +81814,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment043.docx": {
-              "layout": 0.9566,
+              "layout": 0.9567,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81830,7 +81830,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment047.docx": {
-              "layout": 0.9565,
+              "layout": 0.9569,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81846,7 +81846,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment052.docx": {
-              "layout": 0.9568,
+              "layout": 0.957,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81862,7 +81862,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment054.docx": {
-              "layout": 0.9569,
+              "layout": 0.957,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81870,7 +81870,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment055.docx": {
-              "layout": 0.957,
+              "layout": 0.9571,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81894,7 +81894,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment058.docx": {
-              "layout": 0.9516,
+              "layout": 0.9517,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81902,7 +81902,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment059.docx": {
-              "layout": 0.9565,
+              "layout": 0.9568,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81910,7 +81910,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment060.docx": {
-              "layout": 0.9566,
+              "layout": 0.9568,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81918,7 +81918,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment062.docx": {
-              "layout": 0.9487,
+              "layout": 0.9488,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81926,7 +81926,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment064.dotx": {
-              "layout": 0.9487,
+              "layout": 0.9488,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81934,7 +81934,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Comments-Sample-15-12-01/Comment067.docx": {
-              "layout": 0.9487,
+              "layout": 0.9488,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -81942,7 +81942,7 @@
               "text_f1": 1
             },
             "O15Conformance/WD/CommentExTest/Invalid_Word15Comments.docx": {
-              "layout": 0.9487,
+              "layout": 0.9488,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82006,7 +82006,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/Normalize/conflicting_IDs.docx": {
-              "layout": 0.9831,
+              "layout": 0.9834,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82022,7 +82022,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/Normalize/lastRenderedPageBreak_run.docx": {
-              "layout": 0.9533,
+              "layout": 0.9535,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82038,7 +82038,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/Normalize/p_in_sdt.docx": {
-              "layout": 0.9541,
+              "layout": 0.9543,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82046,7 +82046,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/Normalize/partially_miss_table_row_ID.docx": {
-              "layout": 0.9749,
+              "layout": 0.9751,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82094,7 +82094,7 @@
               "text_f1": 0
             },
             "v2FxTestFiles/wordprocessing/O12_templates/BingoSheet_TP10220238.dotx": {
-              "layout": 0.736,
+              "layout": 0.7362,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82102,7 +82102,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/O12_templates/Framework_for_KPIs_TP10203699.dotx": {
-              "layout": 0.6591,
+              "layout": 0.6592,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82110,7 +82110,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/ParaPr/outlineLvl.docx": {
-              "layout": 0.9058,
+              "layout": 0.9061,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82222,7 +82222,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/bookmark/bookmark-whole_text.docx": {
-              "layout": 0.9249,
+              "layout": 0.925,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82246,7 +82246,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/bullet/bullet-symbol.docx": {
-              "layout": 0.9215,
+              "layout": 0.9216,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82254,7 +82254,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/comment/1_Comment.docx": {
-              "layout": 0.9395,
+              "layout": 0.9398,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82262,7 +82262,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/comment/2_Comments.docx": {
-              "layout": 0.9431,
+              "layout": 0.9433,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82270,7 +82270,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/comment/Comment_for_comment.docx": {
-              "layout": 0.9404,
+              "layout": 0.9406,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82278,7 +82278,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/comment/Comments_with_paragraph.docx": {
-              "layout": 0.9332,
+              "layout": 0.9333,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82286,7 +82286,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/comment/Comments_with_table.docx": {
-              "layout": 0.9331,
+              "layout": 0.9332,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82294,7 +82294,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/comment/comments_by_another_person.docx": {
-              "layout": 0.9444,
+              "layout": 0.9443,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82374,15 +82374,15 @@
               "text_f1": 0.6702
             },
             "v2FxTestFiles/wordprocessing/cover_page/covwepage4.docx": {
-              "layout": 0.8817,
+              "layout": 0.8818,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.9831
+              "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/field/Field-Create_date.docx": {
-              "layout": 0.9194,
+              "layout": 0.9195,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82390,7 +82390,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/field/field.docx": {
-              "layout": 0.812,
+              "layout": 0.8127,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82446,7 +82446,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/footer_header/footer_header_empty.docx": {
-              "layout": 0.9373,
+              "layout": 0.9375,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82462,7 +82462,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/footer_header/no_footer_header.docx": {
-              "layout": 0.9345,
+              "layout": 0.935,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82470,7 +82470,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/footnote_endnote/endnote.docx": {
-              "layout": 0.9317,
+              "layout": 0.9318,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82486,14 +82486,6 @@
               "text_f1": 0.9831
             },
             "v2FxTestFiles/wordprocessing/footnote_endnote/footnote.docx": {
-              "layout": 0.9462,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "v2FxTestFiles/wordprocessing/footnote_endnote/footnote_at_bottom_of_paget_and_resart_for_each_page.docx": {
               "layout": 0.9472,
               "link_recall": 1,
               "outline_recall": 1,
@@ -82501,8 +82493,16 @@
               "strict": 1,
               "text_f1": 1
             },
+            "v2FxTestFiles/wordprocessing/footnote_endnote/footnote_at_bottom_of_paget_and_resart_for_each_page.docx": {
+              "layout": 0.9483,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "v2FxTestFiles/wordprocessing/footnote_endnote/footnote_below_text_and_resart_for_each_section.docx": {
-              "layout": 0.7946,
+              "layout": 0.7947,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82510,7 +82510,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/footnote_endnote/ftEdNote.docx": {
-              "layout": 0.9156,
+              "layout": 0.9166,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82518,7 +82518,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/format/format-font2.docx": {
-              "layout": 0.6968,
+              "layout": 0.6972,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82526,7 +82526,7 @@
               "text_f1": 0.3617
             },
             "v2FxTestFiles/wordprocessing/format/format-paragrapsimple.docx": {
-              "layout": 0.4875,
+              "layout": 0.4876,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82542,7 +82542,7 @@
               "text_f1": 0.9934
             },
             "v2FxTestFiles/wordprocessing/hyperlink/Hyperlink_-_external.docx": {
-              "layout": 0.9489,
+              "layout": 0.9499,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82550,7 +82550,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/hyperlink/Hyperlink_-_relative.docx": {
-              "layout": 0.9459,
+              "layout": 0.947,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82566,7 +82566,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/hyperlink/hyperlink-complex.docx": {
-              "layout": 0.9555,
+              "layout": 0.9559,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82582,7 +82582,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/hyperlink/hyperlink-in_table.docx": {
-              "layout": 0.9042,
+              "layout": 0.9047,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82630,7 +82630,7 @@
               "text_f1": 0.9471
             },
             "v2FxTestFiles/wordprocessing/numbering/numbering-list.docx": {
-              "layout": 0.9244,
+              "layout": 0.9245,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82662,7 +82662,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/page_layout/pagelayout_simple/Columns-Right.docx": {
-              "layout": 0.9324,
+              "layout": 0.9325,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82678,7 +82678,7 @@
               "text_f1": 0.9231
             },
             "v2FxTestFiles/wordprocessing/page_layout/pagelayout_simple/Orientation-landscape.docx": {
-              "layout": 0.9276,
+              "layout": 0.9277,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82710,7 +82710,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/page_layout/pagelayout_simple/margin-narrow.docx": {
-              "layout": 0.9288,
+              "layout": 0.9289,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -82718,7 +82718,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/page_layout/pagelayout_with_break_in_the_end/Columns-Right.docx": {
-              "layout": 0.932,
+              "layout": 0.9321,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -97625,7 +97625,7 @@
               "text_f1": 1
             },
             "document/52449.docx": {
-              "layout": 0.9436,
+              "layout": 0.9453,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -97641,7 +97641,7 @@
               "text_f1": 1
             },
             "document/55966.docx": {
-              "layout": 0.9443,
+              "layout": 0.9448,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -97681,7 +97681,7 @@
               "text_f1": 1
             },
             "document/59030.docx": {
-              "layout": 0.9843,
+              "layout": 0.9846,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -97705,7 +97705,7 @@
               "text_f1": 0.6667
             },
             "document/60316.docx": {
-              "layout": 0.4164,
+              "layout": 0.4165,
               "link_recall": 1,
               "outline_recall": 0.75,
               "pages": 0.5,
@@ -97713,7 +97713,7 @@
               "text_f1": 0.465
             },
             "document/60316.dotx": {
-              "layout": 0.4064,
+              "layout": 0.4065,
               "link_recall": 1,
               "outline_recall": 0.75,
               "pages": 0.5,
@@ -97745,7 +97745,7 @@
               "text_f1": 1
             },
             "document/Bug54771a.docx": {
-              "layout": 0.915,
+              "layout": 0.9166,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -97809,7 +97809,7 @@
               "text_f1": 1
             },
             "document/Bug66263-paragraph.docx": {
-              "layout": 0.5709,
+              "layout": 0.571,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -97857,7 +97857,7 @@
               "text_f1": 1
             },
             "document/EnforcedWith.docx": {
-              "layout": 0.949,
+              "layout": 0.95,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -97897,7 +97897,7 @@
               "text_f1": 1
             },
             "document/Headers.docx": {
-              "layout": 0.9415,
+              "layout": 0.9483,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -97977,7 +97977,7 @@
               "text_f1": 1
             },
             "document/TestPoiXMLDocumentCorePropertiesGetKeywords.docx": {
-              "layout": 0.9424,
+              "layout": 0.9423,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -98161,7 +98161,7 @@
               "text_f1": 1
             },
             "document/documentProtection_no_protection.docx": {
-              "layout": 0.9375,
+              "layout": 0.9396,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -98169,7 +98169,7 @@
               "text_f1": 1
             },
             "document/documentProtection_no_protection_tag_existing.docx": {
-              "layout": 0.9419,
+              "layout": 0.9413,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -98193,7 +98193,7 @@
               "text_f1": 1
             },
             "document/endnotes.docx": {
-              "layout": 0.9445,
+              "layout": 0.9448,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -98233,7 +98233,7 @@
               "text_f1": 1
             },
             "document/heading123.docx": {
-              "layout": 0.9144,
+              "layout": 0.9146,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -98249,7 +98249,7 @@
               "text_f1": 1
             },
             "document/sample.docx": {
-              "layout": 0.956,
+              "layout": 0.9563,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -98329,7 +98329,7 @@
               "text_f1": 0.896
             },
             "integration/stress006.docx": {
-              "layout": 0.9398,
+              "layout": 0.9399,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -98345,7 +98345,7 @@
               "text_f1": 0.4816
             },
             "openxml4j/MultipleCoreProperties.docx": {
-              "layout": 0.9559,
+              "layout": 0.956,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -98369,7 +98369,7 @@
               "text_f1": 1
             },
             "openxml4j/TestOpenPackageINPUT.docx": {
-              "layout": 0.9385,
+              "layout": 0.9387,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -98393,7 +98393,7 @@
               "text_f1": 1
             },
             "openxml4j/TestPackageThumbnail.docx": {
-              "layout": 0.9457,
+              "layout": 0.954,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -98401,7 +98401,7 @@
               "text_f1": 1
             },
             "openxml4j/sample.docx": {
-              "layout": 0.9457,
+              "layout": 0.954,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -98425,7 +98425,7 @@
               "text_f1": 1
             },
             "xmldsign/signed.docx": {
-              "layout": 0.9511,
+              "layout": 0.9523,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
