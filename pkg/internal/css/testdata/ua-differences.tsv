@@ -1,0 +1,127 @@
+# Declarations where ua.css and the HTML Standard Rendering section differ.
+differs	|marquee|display	a block: the Standard's inline-block without a width shrinks a marquee to its content, where Chromium fills the line with it
+missing	@media (scripting)|noscript|display	no script runs: (scripting) never matches, and noscript shows
+missing	|::file-selector-button|align-content	no file selector button is drawn: litho draws a control as its text
+missing	|:autofill|field-sizing	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
+missing	|:focus-visible|outline	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
+missing	|:heading(1)|font-size	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:heading(1)|margin-block	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:heading(2)|font-size	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:heading(2)|margin-block	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:heading(3)|font-size	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:heading(3)|margin-block	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:heading(4)|font-size	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:heading(4)|margin-block	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:heading(5)|font-size	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:heading(5)|margin-block	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:heading(6, 7, 8, 9)|font-size	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:heading(6, 7, 8, 9)|margin-block	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:heading|display	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:heading|font-weight	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:heading|unicode-bidi	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+missing	|:link:active|color	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
+missing	|:link|cursor	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
+missing	|:popover-open::backdrop|background-color	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|:popover-open::backdrop|inset	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|:popover-open::backdrop|pointer-events	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|:popover-open::backdrop|position	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|:visited:active|color	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
+missing	|:visited|cursor	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
+missing	|[dir]:dir(ltr)|direction	written as [dir=ltr i] and [dir=rtl i]: litho does not match :dir(); the direction of bdi and of an input of type tel follows its dir attribute
+missing	|[dir]:dir(rtl)|direction	written as [dir=ltr i] and [dir=rtl i]: litho does not match :dir(); the direction of bdi and of an input of type tel follows its dir attribute
+missing	|[hidden=until-found i]:not(embed)|content-visibility	content-visibility is not supported; hidden=until-found is never found on paper
+missing	|[popover]:not(:popover-open):not(dialog[open])|display	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|[popover]|background-color	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|[popover]|border	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|[popover]|color	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|[popover]|height	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|[popover]|inset	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|[popover]|margin	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|[popover]|overflow	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|[popover]|padding	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|[popover]|position	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|[popover]|width	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|bdi:dir(ltr)|direction	written as [dir=ltr i] and [dir=rtl i]: litho does not match :dir(); the direction of bdi and of an input of type tel follows its dir attribute
+missing	|bdi:dir(rtl)|direction	written as [dir=ltr i] and [dir=rtl i]: litho does not match :dir(); the direction of bdi and of an input of type tel follows its dir attribute
+missing	|br|display-outside	display-outside is a draft property litho does not parse; br and wbr are line breaks litho makes itself
+missing	|button|align-content	align-content on a block container (CSS Align 3, 5.1) is not laid out: a control's text sits at its top
+missing	|button|appearance	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
+missing	|dialog::backdrop|background	a dialog is modal only through showModal(), a script: litho runs none
+missing	|dialog:modal|inset-block	a dialog is modal only through showModal(), a script: litho runs none
+missing	|dialog:modal|max-height	a dialog is modal only through showModal(), a script: litho runs none
+missing	|dialog:modal|max-width	a dialog is modal only through showModal(), a script: litho runs none
+missing	|dialog:modal|overflow	a dialog is modal only through showModal(), a script: litho runs none
+missing	|dialog:modal|position	a dialog is modal only through showModal(), a script: litho runs none
+missing	|dialog:popover-open|display	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+missing	|input:is([type=color i], [type=reset i], [type=button i], [type=submit i])|align-content	align-content on a block container (CSS Align 3, 5.1) is not laid out: a control's text sits at its top
+missing	|input:not([type=file i], [type=range i], [type=checkbox i], [type=radio i])|align-content	align-content on a block container (CSS Align 3, 5.1) is not laid out: a control's text sits at its top
+missing	|input:not([type=range i], [type=checkbox i], [type=radio i])|overflow-clip-margin	overflow-clip-margin is not supported (CSS Overflow 4); litho clips at the padding box
+missing	|input[dir=auto i]:is([type=search i], [type=tel i], [type=url i], [type=email i])|unicode-bidi	unicode-bidi: plaintext of a control's text: litho draws a control's text as one run
+missing	|input[type=file i]|appearance	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
+missing	|input[type=hidden i]|appearance	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
+missing	|input[type=image i]|appearance	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
+missing	|input[type=image i]|overflow-clip-margin	overflow-clip-margin is not supported (CSS Overflow 4); litho clips at the padding box
+missing	|input[type=tel i]:dir(ltr)|direction	written as [dir=ltr i] and [dir=rtl i]: litho does not match :dir(); the direction of bdi and of an input of type tel follows its dir attribute
+missing	|input|appearance	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
+missing	|legend[align=center i]|justify-self	justify-self on a block-level box (CSS Align 3, 6.1) is not laid out: a legend sits at the start
+missing	|legend[align=left i]|justify-self	justify-self on a block-level box (CSS Align 3, 6.1) is not laid out: a legend sits at the start
+missing	|legend[align=right i]|justify-self	justify-self on a block-level box (CSS Align 3, 6.1) is not laid out: a legend sits at the start
+missing	|nobr wbr|white-space	a wbr is a break opportunity litho inserts as U+200B, whatever its white-space
+missing	|rt|display	litho lays ruby out inline; display: ruby would compute to block
+missing	|ruby|display	litho lays ruby out inline; display: ruby would compute to block
+missing	|select|appearance	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
+missing	|slot|display	display: contents is not supported
+missing	|textarea|appearance	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
+missing	|wbr|display-outside	display-outside is a draft property litho does not parse; br and wbr are line breaks litho makes itself
+own	|::footnote-call|content	CSS GCPM 3, Appendix B: the footnote and note calls and markers
+own	|::footnote-call|font-size	CSS GCPM 3, Appendix B: the footnote and note calls and markers
+own	|::footnote-call|vertical-align	CSS GCPM 3, Appendix B: the footnote and note calls and markers
+own	|::footnote-marker|content	CSS GCPM 3, Appendix B: the footnote and note calls and markers
+own	|::note-call|content	CSS GCPM 3, Appendix B: the footnote and note calls and markers
+own	|::note-call|font-size	CSS GCPM 3, Appendix B: the footnote and note calls and markers
+own	|::note-call|vertical-align	CSS GCPM 3, Appendix B: the footnote and note calls and markers
+own	|::note-marker|content	CSS GCPM 3, Appendix B: the footnote and note calls and markers
+own	|[dir=ltr i]|direction	written as [dir=ltr i] and [dir=rtl i]: litho does not match :dir(); the direction of bdi and of an input of type tel follows its dir attribute
+own	|[dir=rtl i]|direction	written as [dir=ltr i] and [dir=rtl i]: litho does not match :dir(); the direction of bdi and of an input of type tel follows its dir attribute
+own	|[popover]:not(dialog[open])|display	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
+own	|body|margin	the margin of the body's presentational hints when no attribute sets it, which Chromium computes
+own	|center|text-align	center aligns its content, as Chromium computes (-webkit-center); the Standard leaves it to the presentational hints
+own	|dir|counter-reset	dir numbers its items as a list, as Chromium does
+own	|h1|display	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h1|font-size	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h1|font-weight	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h1|margin-block	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h1|unicode-bidi	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h2|display	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h2|font-size	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h2|font-weight	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h2|margin-block	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h2|unicode-bidi	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h3|display	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h3|font-size	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h3|font-weight	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h3|margin-block	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h3|unicode-bidi	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h4|display	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h4|font-size	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h4|font-weight	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h4|margin-block	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h4|unicode-bidi	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h5|display	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h5|font-size	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h5|font-weight	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h5|margin-block	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h5|unicode-bidi	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h6|display	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h6|font-size	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h6|font-weight	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h6|margin-block	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|h6|unicode-bidi	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
+own	|hr[noshade]|border-style	hr with noshade: the Standard's presentational hint, written as a rule
+own	|select|display	select and textarea are inline blocks, as Chromium computes; the Standard puts select's in its select rendering rules
+own	|table[border]:not([border=0]) > :is(thead, tbody, tfoot) > tr > :is(td, th)|border-style	the cells of a table with a border attribute: the Standard's presentational hint, written as a rule
+own	|table[border]:not([border=0]) > :is(thead, tbody, tfoot) > tr > :is(td, th)|border-width	the cells of a table with a border attribute: the Standard's presentational hint, written as a rule
+own	|table[border]:not([border=0]) > tr > :is(td, th)|border-style	the cells of a table with a border attribute: the Standard's presentational hint, written as a rule
+own	|table[border]:not([border=0]) > tr > :is(td, th)|border-width	the cells of a table with a border attribute: the Standard's presentational hint, written as a rule
+own	|textarea|display	select and textarea are inline blocks, as Chromium computes; the Standard puts select's in its select rendering rules
+own	|th|text-align	th centres its text, as Chromium computes; the Standard leaves it to the presentational hints
