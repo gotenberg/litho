@@ -9,22 +9,22 @@ import (
 	"testing/fstest"
 )
 
-// maskedSVG is an SVG picture whose rectangle has a mask, which litho
-// draws unmasked with a warning.
-const maskedSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><mask id="m"/><rect width="40" height="20" mask="url(#m)"/></svg>`
+// markedSVG is an SVG picture whose path has a marker, which litho leaves
+// out with a warning.
+const markedSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><marker id="k"/><path d="M0 0L40 20" stroke="black" marker-end="url(#k)"/></svg>`
 
-// maskWarning is the svg renderer's message for maskedSVG.
-const maskWarning = "masks are not drawn; the masked content is drawn unmasked"
+// markerWarning is the svg renderer's message for markedSVG.
+const markerWarning = "markers are not drawn"
 
 // TestConvert_SVGPictureWarningsReachTheReport converts, for each family of
-// formats, a document holding maskedSVG as a picture, and checks that the
+// formats, a document holding markedSVG as a picture, and checks that the
 // renderer's warning reaches the report once, named after the picture,
 // with its code and effect.
 func TestConvert_SVGPictureWarningsReachTheReport(t *testing.T) {
 	t.Parallel()
 
 	fonts := WithConvertFontDirs(convertFontDir(t))
-	embedded := base64.StdEncoding.EncodeToString([]byte(maskedSVG))
+	embedded := base64.StdEncoding.EncodeToString([]byte(markedSVG))
 	image := `<draw:image><office:binary-data>` + embedded + `</office:binary-data></draw:image>`
 	frame := `<draw:frame svg:x="1cm" svg:y="1cm" svg:width="2cm" svg:height="1cm">` + image + `</draw:frame>`
 	for _, tc := range []struct {
@@ -32,10 +32,10 @@ func TestConvert_SVGPictureWarningsReachTheReport(t *testing.T) {
 		conv         func() *Conversion
 	}{
 		{"HTML image", "in the SVG image a.svg: ", func() *Conversion {
-			return FromHTML(strings.NewReader(`<img src="a.svg" alt=""><img src="a.svg" alt="">`), fonts, WithResources(fstest.MapFS{"a.svg": {Data: []byte(maskedSVG)}}))
+			return FromHTML(strings.NewReader(`<img src="a.svg" alt=""><img src="a.svg" alt="">`), fonts, WithResources(fstest.MapFS{"a.svg": {Data: []byte(markedSVG)}}))
 		}},
 		{"HTML inline", "in an inline SVG: ", func() *Conversion {
-			return FromHTML(strings.NewReader(`<p>`+maskedSVG+maskedSVG), fonts)
+			return FromHTML(strings.NewReader(`<p>`+markedSVG+markedSVG), fonts)
 		}},
 		{"word processing, DOCX", "in the SVG picture word/media/a.svg: ", func() *Conversion {
 			return FromDOCX(bytes.NewReader(svgPictureDOCX(t)), fonts)
@@ -60,21 +60,21 @@ func TestConvert_SVGPictureWarningsReachTheReport(t *testing.T) {
 		}
 		n := 0
 		for _, w := range rep.Warnings {
-			if w.Message != tc.want+maskWarning {
+			if w.Message != tc.want+markerWarning {
 				continue
 			}
 			n++
-			if w.Code != WarningContentUnsupported || w.Effect != EffectApproximated {
+			if w.Code != WarningContentUnsupported || w.Effect != EffectOmitted {
 				t.Errorf("%s: the warning is %s, %s", tc.family, w.Code, w.Effect)
 			}
 		}
 		if n != 1 {
-			t.Errorf("%s: %d warnings %q, want 1, in %+v", tc.family, n, tc.want+maskWarning, rep.Warnings)
+			t.Errorf("%s: %d warnings %q, want 1, in %+v", tc.family, n, tc.want+markerWarning, rep.Warnings)
 		}
 	}
 }
 
-// svgPictureDOCX returns a DOCX of one paragraph holding maskedSVG as an
+// svgPictureDOCX returns a DOCX of one paragraph holding markedSVG as an
 // inline picture, the part word/media/a.svg.
 func svgPictureDOCX(t *testing.T) []byte {
 	t.Helper()
@@ -91,6 +91,6 @@ func svgPictureDOCX(t *testing.T) []byte {
 			`<pic:nvPicPr><pic:cNvPr id="1" name="a.svg"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIda"/></pic:blipFill>` +
 			`<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="635000"/></a:xfrm></pic:spPr></pic:pic></a:graphicData></a:graphic>` +
 			`</wp:inline></w:drawing></w:r></w:p></w:body></w:document>`,
-		"word/media/a.svg": maskedSVG,
+		"word/media/a.svg": markedSVG,
 	})
 }
