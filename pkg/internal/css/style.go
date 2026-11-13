@@ -81,8 +81,8 @@ var Transparent = Color{}
 
 // Display is the display property (CSS 2.1, 9.2.4). flex and inline-flex
 // are laid out (CSS Flexbox 1, 3), grid and inline-grid too (CSS Grid 1,
-// 5.1); the other CSS 3 values compute to Block, as litho does not lay
-// them out.
+// 5.1), and contents (CSS Display 3, 2.5); the other CSS 3 values compute
+// to Block, as litho does not lay them out.
 type Display uint8
 
 // The display values.
@@ -131,6 +131,11 @@ const (
 	Ruby
 	BlockRuby
 	RubyText
+	// Contents generates no box: the element's children and
+	// pseudo-elements take its place in the box tree, and it still passes
+	// its inherited properties down (CSS Display 3, 2.5). It is never
+	// blockified (2.7) and computes to Block on the root (2.8).
+	Contents
 )
 
 // Position is the position property (CSS 2.1, 9.3.1). Sticky computes to

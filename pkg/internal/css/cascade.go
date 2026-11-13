@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
@@ -313,6 +314,9 @@ func (c *Computed) FirstLetter(n *html.Node, parent *Style) *Style {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	// The letter sits in a block container, whatever contents element
+	// holds its text.
+	l.cs.boxParent = Block
 	st, _ := l.cs.cascade(cands, parent, l.cs.vars[n], false)
 	return st
 }
@@ -359,6 +363,13 @@ type computeState struct {
 	// node is the element being cascaded, whose attributes attr()
 	// reads; a pseudo-element's is its originating element.
 	node *html.Node
+	// boxParent is the display of the nearest ancestor of node that is
+	// not display: contents, the box whose layout blockifies the boxes a
+	// contents parent hands it (CSS Display 3, 2.5 and 2.7).
+	boxParent Display
+	// noContents reports node an element display: contents computes to
+	// none on, while node itself is cascaded (CSS Display 3, Appendix B).
+	noContents bool
 	// units caches FontUnits by font selection.
 	units map[fontKey]FontUnits
 	// mem is the conversion's memory budget each distinct computed style
@@ -532,7 +543,16 @@ func (cs *computeState) element(n, parent *html.Node) {
 		}
 	}
 	cs.node = n
+	cs.boxParent = Block
+	for p := parent; p != nil; p = p.Parent {
+		if ps := cs.out[p]; ps != nil && ps.Display != Contents {
+			cs.boxParent = ps.Display
+			break
+		}
+	}
+	cs.noContents = contentsIsNone(n)
 	st, vars := cs.cascade(cands, parentStyle, parentVars, parent == nil)
+	cs.noContents = false
 	cs.cands = cands[:0]
 	cs.out[n] = st
 	cs.vars[n] = vars
@@ -814,10 +834,18 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 		}
 	}
 	fixupDisplay(st, isRoot)
-	if !isRoot && (isFlexContainer(parent.Display) || isGridContainer(parent.Display)) {
+	if st.Display == Contents && cs.noContents {
+		st.Display = DisplayNone
+	}
+	pd := parent.Display
+	if pd == Contents {
+		pd = cs.boxParent
+	}
+	if !isRoot && (isFlexContainer(pd) || isGridContainer(pd)) {
 		// The children of a flex or grid container are its items,
 		// blockified (CSS Flexbox 1, 4; CSS Grid 1, 6; CSS Display 3,
-		// 2.7).
+		// 2.7), and so are those a display: contents child of it hands
+		// it (2.5).
 		st.Display, _ = blockify(st.Display)
 	}
 	if !isRoot && (parent.Display == Ruby || parent.Display == RubyText) && st.Float == FloatNone && st.Position != Absolute && st.Position != Fixed {
@@ -835,13 +863,53 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 	return shared
 }
 
+// noContentsElements are the HTML elements display: contents computes to
+// none on: the replaced elements and form controls whose rendering is not
+// entirely controlled by CSS (CSS Display 3, 2.5 and Appendix B). Immutable
+// lookup table.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws neither the
+//     content nor the fallback content of each of these elements, nor of
+//     an svg or a math element, under display: contents; it draws the
+//     content of a fieldset, a legend, a details, a button and a label.
+var noContentsElements = map[atom.Atom]bool{
+	atom.Br: true, atom.Wbr: true, atom.Meter: true, atom.Progress: true, atom.Canvas: true,
+	atom.Embed: true, atom.Object: true, atom.Audio: true, atom.Iframe: true, atom.Img: true,
+	atom.Video: true, atom.Frame: true, atom.Frameset: true, atom.Input: true, atom.Textarea: true,
+	atom.Select: true,
+}
+
+// contentsIsNone reports an element display: contents computes to none on
+// (CSS Display 3, Appendix B): an HTML element of [noContentsElements], an
+// svg element with CSS box layout, one whose parent is no SVG element, and
+// every MathML element. The other SVG elements keep contents: the SVG
+// renderer draws their content in their place.
+func contentsIsNone(n *html.Node) bool {
+	switch n.Namespace {
+	case "":
+		return noContentsElements[n.DataAtom]
+	case "svg":
+		p := n.Parent
+		return n.Data == "svg" && (p == nil || p.Type != html.ElementNode || p.Namespace != "svg")
+	case "math":
+		return true
+	}
+	return false
+}
+
 // fixupDisplay applies CSS 2.1, 9.7: an absolutely positioned box does
 // not float, and a floated, absolutely positioned or root box is
-// blockified.
+// blockified. display: contents generates no box to blockify (CSS Display
+// 3, 2.7), except on the root, where it computes to block (2.8).
 func fixupDisplay(st *Style, isRoot bool) {
 	st.OuterInline = false
-	if st.Display == DisplayNone {
+	if st.Display == DisplayNone || st.Display == Contents && !isRoot {
 		return
+	}
+	if st.Display == Contents {
+		st.Display = Block
 	}
 	if st.Position == Absolute || st.Position == Fixed {
 		st.Float = FloatNone

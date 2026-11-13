@@ -73,12 +73,16 @@ func TestFirstLetter_Cut(t *testing.T) {
 		<p id=br><br>after</p>
 		<p id=ib><span style="display: inline-block">ib</span> after</p>
 		<p id=fl><span style="float: right">floated</span> Flow</p>
+		<p id=ct><span style="display: contents; float: right"><b style="display: contents">Contents</b></span> after</p>
 		<ol><li id=li>item</ol>
 		<table><tr><td id=td>cell</table>
 		<div id=div><p id=inner>nested</p></div>
 		<div id=outer><section><h2 id=deep>Deep</h2></section></div>`, Options{})
 	for id, want := range map[string]string{
 		"span": "S", "f": "D", "b": "(", "li": "i", "td": "c", "inner": "n", "deep": "D", "fl": "F",
+		// An element of display: contents has no box: its float applies to
+		// nothing, and its text is on the first line (CSS Display 3, 2.5).
+		"ct": "C",
 	} {
 		n := byID(t, p.root, id)
 		fl := firstLetterOf(n)

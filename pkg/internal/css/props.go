@@ -406,7 +406,7 @@ var displays = map[string]Display{
 	"table-header-group": TableHeaderGroup, "table-footer-group": TableFooterGroup,
 	"table-row": TableRow, "table-column-group": TableColumnGroup, "table-column": TableColumn,
 	"table-cell": TableCell, "table-caption": TableCaption, "none": DisplayNone,
-	"run-in": Block, "flow-root": FlowRoot, "ruby": Ruby, "ruby-text": RubyText,
+	"run-in": Block, "flow-root": FlowRoot, "ruby": Ruby, "ruby-text": RubyText, "contents": Contents,
 	"flex": Flex, "inline-flex": InlineFlex, "-webkit-flex": Flex, "-ms-flexbox": Flex,
 	"grid": Grid, "inline-grid": InlineGrid, "-ms-grid": Grid, "-ms-inline-grid": InlineGrid,
 	"-webkit-inline-flex": InlineFlex, "-ms-inline-flexbox": InlineFlex,
@@ -415,7 +415,7 @@ var displays = map[string]Display{
 // displays3 are the CSS Display 3 values laid out as Block or InlineBlock
 // in this version, with a warning.
 var displays3 = map[string]Display{
-	"contents": Block, "-webkit-box": Block, "-webkit-inline-box": InlineBlock,
+	"-webkit-box": Block, "-webkit-inline-box": InlineBlock,
 }
 
 // parseDisplay parses display (CSS Display 3, 2), the one- and two-keyword

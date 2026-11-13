@@ -255,14 +255,14 @@ func TestProperties_DisplayFixups(t *testing.T) {
 
 func TestProperties_UnknownWarnedOnce(t *testing.T) {
 	t.Parallel()
-	s := mustParse(t, `p { foo: 1; foo: 2; -webkit-foo: 1; cursor: pointer } div { foo: 3; display: contents; display: contents }`)
+	s := mustParse(t, `p { foo: 1; foo: 2; -webkit-foo: 1; cursor: pointer } div { foo: 3; display: ruby; display: ruby }`)
 	n := 0
 	for _, w := range s.Warnings() {
 		if w.Code == warn.CSSUnsupported && strings.HasPrefix(w.Message, "property ") {
 			n++
 		}
 	}
-	if n != 1 || !hasWarning(s.Warnings(), warn.CSSUnsupported, "display: contents") {
+	if n != 1 || !hasWarning(s.Warnings(), warn.CSSUnsupported, "display: ruby") {
 		t.Errorf("warnings = %v", s.Warnings())
 	}
 }

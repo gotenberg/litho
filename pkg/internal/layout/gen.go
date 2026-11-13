@@ -88,7 +88,10 @@ func (e *engine) newBox(n *Node, st *css.Style, kind boxKind, ctx genCtx) *box {
 }
 
 // enter returns the context the children of n's box b see: its structure
-// element, link, language and propagated decorations.
+// element, link, language and propagated decorations. A nil b is an
+// element of display: contents, which starts its structure element and
+// language and draws no box: it makes no link and decorates nothing (see
+// [engine.genContents]).
 //
 // An LI holds a Lbl and a LBody alone (ISO 32000-2, 14.8.4.8.3; ISO/TS
 // 32005, Table 5): the item's content hangs from a LBody the LI starts
@@ -101,9 +104,16 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 	out.item = nil
 	if n.Lang != "" {
 		out.lang = n.Lang
-		b.lang = n.Lang
+		if b != nil {
+			b.lang = n.Lang
+		}
 	}
 	role := n.Role
+	if b == nil && role == "Link" {
+		// A Link element holds a link annotation (ISO 32000-1, 14.8.4.4.2,
+		// Table 340), which an element without a box does not make.
+		role = "Span"
+	}
 	if role == "" && n.ActualText != "" {
 		// ActualText is an entry of a structure element (ISO 32000-1,
 		// 14.9.4): a node without a role takes a Span to carry it.
@@ -138,7 +148,7 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 			if n.Role == "Form" {
 				el.PrintField = n.PrintField
 			}
-			if n.Alt != "" && (n.Kind == Replaced || n.Role == "Figure" || n.Role == "Link") {
+			if n.Alt != "" && (n.Kind == Replaced || role == "Figure" || role == "Link") {
 				el.Alt = n.Alt
 			}
 			if parent != nil {
@@ -154,6 +164,9 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 				out.structDepth++
 			}
 		}
+	}
+	if b == nil {
+		return out
 	}
 	b.elem = own
 	if n.Href != "" {
@@ -259,6 +272,9 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 	if st.Display == css.DisplayNone {
 		return nil
 	}
+	if st.Display == css.Contents {
+		return e.genContents(n, parent, ctx, ordinal)
+	}
 	if isColumn(st.Display) {
 		// A column generates a box inside a table alone, where it paints
 		// its background (CSS 2.1, 17.2).
@@ -347,6 +363,35 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 	}
 	e.genChildren(b, n.Children, cctx)
 	return []*box{b}
+}
+
+// genContents generates the boxes of the children of n, an element of
+// display: contents, in its place among the children of parent (CSS
+// Display 3, 2.5): n draws no box, so its own box properties, float and
+// position apply to nothing, it holds no marker, and its children join
+// parent's anonymous table, flex and block boxes as its siblings do. Its
+// inherited properties reach its children through their computed styles.
+// It still starts its structure element and its language; it is no
+// decorating box (CSS Text Decoration 3, 2.1), and it is no link target or
+// link: those need a box to place.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws no
+//     underline of a display: contents span, draws an ancestor's through
+//     it, ignores its float, position, vertical-align, border and
+//     background, writes no link annotation for an a of display: contents,
+//     and gives a display: contents li no marker and no ordinal.
+func (e *engine) genContents(n *Node, parent *box, ctx genCtx, ordinal *int) []*box {
+	cctx := e.enter(n, nil, ctx)
+	var out []*box
+	for _, c := range n.Children {
+		if e.err != nil {
+			break
+		}
+		out = append(out, e.genNode(c, parent, cctx, ordinal)...)
+	}
+	return out
 }
 
 // validPicture reports a picture the engine can draw: a source or a

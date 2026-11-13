@@ -100,6 +100,15 @@ func (w *firstLetterCut) cut(node *layout.Node, depth int) bool {
 			if st == nil || c.Leader {
 				return true
 			}
+			if st.Display == css.Contents {
+				// An element of display: contents has no box: its
+				// children sit on the line in its place (CSS Display 3,
+				// 2.5), whatever float or position it sets.
+				if w.cut(c, depth+1) {
+					return true
+				}
+				continue
+			}
 			// Floats and absolutely positioned boxes are out of the flow:
 			// the first line starts after them.
 			if st.Float != css.FloatNone || st.Position == css.Absolute || st.Position == css.Fixed {
