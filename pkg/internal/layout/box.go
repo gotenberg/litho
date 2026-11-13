@@ -210,8 +210,11 @@ type box struct {
 	// around a block (CSS 2.1, 9.2.1.1) that do not start or end it: they
 	// draw no start or end edge.
 	first, last bool
-	parent      *box
-	kids        []*box
+	// host is the inline box a block-level box was split out of (CSS
+	// 2.1, 9.2.1.1), nil for none: its relative offset moves the block.
+	host   *box
+	parent *box
+	kids   []*box
 	// text is the characters of a text box; marker reports a marker's text
 	// or image box, whose white space is preserved.
 	text   string
@@ -385,7 +388,19 @@ func (b *box) layered() bool {
 		// column or a column group.
 		return b.tpart <= partCell && (b.st.Position != css.Static || b.transformed())
 	}
-	return b.st.Position != css.Static || b.st.Opacity < 1 || b.transformed() || b.composited() || b.isItem() && !b.st.ZIndex.Auto
+	return b.st.Position != css.Static || b.st.Opacity < 1 || b.transformed() || b.composited() || b.isItem() && !b.st.ZIndex.Auto || b.hostMoves()
+}
+
+// hostMoves reports a block-level box split out of a relatively
+// positioned inline box: it paints with that box's layer, moved by its
+// offset (CSS 2.1, 9.2.1.1).
+func (b *box) hostMoves() bool {
+	for a := b.host; a != nil && a.kind == kindInline; a = a.parent {
+		if a.st.Position == css.Relative {
+			return true
+		}
+	}
+	return false
 }
 
 // isStackingContext reports whether the box creates a stacking context: a

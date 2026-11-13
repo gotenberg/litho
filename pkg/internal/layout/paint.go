@@ -329,11 +329,24 @@ func (p *painter) borderRect(b *box) typeset.Rect {
 	return typeset.Rect{X: b.x + p.dx, Y: b.y + p.dy, Width: b.borderW(), Height: b.borderH()}
 }
 
-// offset returns the relative positioning offset of b (CSS 2.1, 9.4.3).
-// A row group, a row or a cell moves within its table, with the cells that
+// offset returns the relative positioning offset of b (CSS 2.1, 9.4.3),
+// with that of the inline boxes it was split out of (CSS 2.1, 9.2.1.1: the
+// translation of such an inline box also affects the block-level box it
+// contains).
+func offset(b *box) (float64, float64) {
+	dx, dy := ownOffset(b)
+	if b.host != nil {
+		hx, hy := inlineOffset(b.host)
+		dx, dy = dx+hx, dy+hy
+	}
+	return dx, dy
+}
+
+// ownOffset returns the relative positioning offset of b's own style. A
+// row group, a row or a cell moves within its table, with the cells that
 // originate in it; a column or a column group, to which position does not
 // apply, does not move (CSS Position 3, 3.3).
-func offset(b *box) (float64, float64) {
+func ownOffset(b *box) (float64, float64) {
 	if b.st.Position != css.Relative || b.kind == kindText || b.kind == kindBreak || b.tpart == partColumn || b.tpart == partColGroup {
 		return 0, 0
 	}
@@ -395,6 +408,19 @@ func ancestorOffset(b *box) (float64, float64) {
 		}
 	}
 	return dx, dy
+}
+
+// floating paints the float, multi-column container or monolithic box f
+// as one unit. A float inside relatively positioned inline boxes moves
+// with them, as their descendant (CSS 2.1, 9.4.3).
+func (p *painter) floating(f *box) {
+	if f.parent != nil && f.parent.kind == kindInline {
+		dx, dy := inlineOffset(f.parent)
+		p.dx += dx
+		p.dy += dy
+		defer func() { p.dx -= dx; p.dy -= dy }()
+	}
+	p.context(f)
 }
 
 // context paints b and its descendants as one unit: a stacking context, a
@@ -526,7 +552,7 @@ func (p *painter) unit(b *box, own bool) {
 		p.decorations(k)
 	}
 	for _, f := range floats {
-		p.context(f)
+		p.floating(f)
 	}
 	p.content(b)
 	for _, k := range blocks {

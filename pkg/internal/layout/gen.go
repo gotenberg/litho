@@ -433,6 +433,9 @@ func (e *engine) genInline(n *Node, st *css.Style, ctx genCtx, ordinal *int) []*
 			continue
 		}
 		cur.last = clones(st)
+		if k.host == nil {
+			k.host = ib
+		}
 		out = append(out, k)
 		piece := e.newBox(n, st, kindInline, ctx)
 		*piece = *ib

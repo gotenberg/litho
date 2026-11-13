@@ -326,3 +326,26 @@ func TestPosition_EmptyInlineHoldsAbsolute(t *testing.T) {
 	root := doc(square(2, 1, red), el(sty(), span))
 	assertPixels(t, run(t, root, page(2, 3)), 1, "RR\nBB\n__")
 }
+
+// TestRelative_InlineMovesItsBlocksAndFloats locks that the offset of a
+// relatively positioned inline box moves the block-level boxes split out
+// of it (CSS 2.1, 9.2.1.1) and the floats inside it, its descendants
+// (CSS 2.1, 9.4.3), as Chromium moves them.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 moves a block and
+//     a float inside a span of position: relative; left: 100px by 100 px.
+func TestRelative_InlineMovesItsBlocksAndFloats(t *testing.T) {
+	t.Parallel()
+	moved := inlineSty(func(s *css.Style) {
+		s.Position = css.Relative
+		s.Left = css.Pts(px(2))
+	})
+	block := el(sty(width(3), height(1), bg(red)))
+	fl := el(sty(float(css.FloatLeft), width(2), height(1), bg(blue)))
+	root := doc(el(sty(), el(moved, block)), el(sty(), el(moved, fl)))
+	assertPixels(t, run(t, root, page(6, 2)), 1, `
+		__RRR_
+		__BB__`)
+}

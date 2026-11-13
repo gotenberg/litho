@@ -106,7 +106,7 @@ func (p *painter) setBody(b *box) []*box {
 		p.decorations(k)
 	}
 	for _, f := range floats {
-		p.context(f)
+		p.floating(f)
 	}
 	p.content(b)
 	for _, k := range blocks {

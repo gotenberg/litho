@@ -322,7 +322,7 @@ func (p *painter) cellFlow(c *box) {
 		p.decorations(k)
 	}
 	for _, f := range floats {
-		p.context(f)
+		p.floating(f)
 	}
 	p.content(c)
 	for _, k := range blocks {
