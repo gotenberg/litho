@@ -24,6 +24,10 @@ type cblock struct {
 // the largest positive one and the most negative one.
 type strut struct {
 	pos, neg float64
+	// cleared reports that the set holds the top margin of a box with
+	// clearance, which collapses through it: the set then does not
+	// collapse with its parent's bottom margin (CSS 2.1, 8.3.1).
+	cleared bool
 }
 
 // add returns the strut with margin m adjoined.
@@ -640,6 +644,11 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		end = b.contentY()
 	}
 	trailing := inner.strut
+	if trailing.cleared {
+		// Margins that collapse with the top margin of a box with
+		// clearance do not collapse with b's bottom margin (8.3.1).
+		collapseBottom = false
+	}
 	contentBottom := end
 	if !collapseBottom {
 		contentBottom = e.pastMargin(end, trailing, false)
@@ -662,6 +671,12 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	bottom := b.y + b.borderH()
 	if collapseBottom && math.Abs(b.h-h) < eps {
 		mc.strut = trailing.add(mb)
+		if cleared && b.h <= eps && b.bd[css.Top] == 0 && b.pd[css.Top] == 0 {
+			// The margins of an empty box with clearance collapse with
+			// the margins after it, which then stay inside its parent
+			// (8.3.1).
+			mc.strut.cleared = true
+		}
 		return bottom
 	}
 	mc.strut = strut{}.add(mb)

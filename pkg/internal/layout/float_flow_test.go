@@ -263,3 +263,24 @@ func TestFormattingContextBesideFloat_Margins(t *testing.T) {
 		})
 	}
 }
+
+func TestClearance_MarginsThroughClearedBoxStayInParent(t *testing.T) {
+	// CSS 2.1, 8.3.1: a parent's bottom margin collapses with its last
+	// child's only if that margin does not collapse with a top margin
+	// that has clearance; the margins after an empty cleared box stay in,
+	// through the empty boxes white space between the children makes.
+	for _, ws := range []bool{false, true} {
+		kids := []*Node{
+			el(sty(float(css.FloatRight), width(10), height(1))),
+			el(sty(clearing(css.ClearRight))),
+			el(sty(margin(99, 0, 0, 0))),
+		}
+		if ws {
+			kids = []*Node{kids[0], txt(sty(), " "), kids[1], txt(sty(), " "), kids[2], txt(sty(), " ")}
+		}
+		rb := boxes(t, doc(el(sty(width(100)), kids...)), page(200, 200))
+		if got := rect(kid(t, rb, 0, 0)); got[3] != 100 {
+			t.Errorf("white space %v: parent height %v, want 100", ws, got[3])
+		}
+	}
+}
