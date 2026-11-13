@@ -112,9 +112,17 @@ func blankAnon(k *box) bool {
 // A box on the first line inherits from the ::first-line, its parent's
 // copy, rather than from its parent (CSS Pseudo 4, 2.1.3): an inline box
 // takes the style the styler gives, a text run or a break its parent's
-// copy's.
+// copy's, unless its inherited style differs from its box parent's.
 // Atomic inlines, floats and positioned boxes keep their own style and
 // first line: they are not copied.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws the first
+//     line of a block whose text sits in a span of display: contents in
+//     the ::first-line's colour and size, but keeps that text blue and of
+//     the block's size when the span sets its colour to blue; the
+//     background of the ::first-line covers both.
 func (e *engine) buildFirstLine(b *box, st *css.Style) *firstLine {
 	f := &firstLine{parent: map[*box]*box{}}
 	f.root = &box{st: st, kind: kindBlock, lang: b.lang}
@@ -199,9 +207,12 @@ func (e *engine) copyKids(f *firstLine, kids []*box, parent *box, depth int) []*
 			if r := e.opts.FirstLine.Restyle(k.node, parent.st); r != nil {
 				st = r
 			}
-		case k.kind != kindInline && !k.marker:
-			// A text run or a break shares its parent's style (Node.Style);
-			// an inside marker keeps the ::marker's.
+		case k.kind != kindInline && !k.marker && k.parent != nil && css.InheritsAlike(k.st, k.parent.st):
+			// A text run or a break inherits what its box's parent does,
+			// as it shares its parent's style (Node.Style), and takes the
+			// copy's. One under an element of display: contents that sets
+			// an inherited property keeps its own style, and an inside
+			// marker the ::marker's.
 			st = parent.st
 		}
 		c := e.copyBox(k, st)

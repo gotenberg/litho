@@ -162,3 +162,20 @@ func TestFirstLine_Anchors(t *testing.T) {
 		t.Errorf("anchor %+v, %v; want page 1 at 40px", d, ok)
 	}
 }
+
+// TestFirstLine_ThroughContents checks that text whose style inherits as
+// its box's parent does takes the first line's style, and text whose own
+// inherited style differs, as under an element of display: contents that
+// sets one, keeps it.
+func TestFirstLine_ThroughContents(t *testing.T) {
+	blueSt := sty(func(s *css.Style) { s.Color = blue })
+	p := el(sty(), txt(sty(), "a "), txt(blueSt, "b"))
+	o := Options{Page: page(200, 200), FirstLine: lineStyler{pseudo: map[*Node]func(*css.Style){p: size(20)}}}
+	sizes := map[string]float64{}
+	for _, r := range texts(runWith(t, doc(p), o), 1) {
+		sizes[strings.TrimSpace(r.text)] = r.run.Size
+	}
+	if !near(sizes["a"], px(20)) || !near(sizes["b"], px(10)) {
+		t.Errorf("sizes %v, want a at 20px and b at 10px", sizes)
+	}
+}
