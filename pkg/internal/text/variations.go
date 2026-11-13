@@ -56,11 +56,17 @@ const (
 //
 // # Corpus evidence
 //
-//   - probe, html: Chromium 156 (Gotenberg 9.4.1) draws font-style:
-//     italic and oblique in FontStyleTest-slnt-VF with the outlines of
-//     font-variation-settings: "slnt" -14, unslanted; and draws italic in
-//     FontStyleTest-ital-VF with its default instance, slanted, whatever
-//     the rule's font-style: it never sets the ital axis.
+//   - probe, html: Chromium 156 (Gotenberg 9.4.1), in print and in
+//     screenshots, on four fonts: FontStyleTest-slnt-VF and Inter-VF (slnt
+//     alone) draw font-style: italic and oblique with the outlines of
+//     font-variation-settings: "slnt" -14 (clamped to the axis),
+//     unslanted; FontStyleTest-ital-VF (ital alone) draws italic at its
+//     default ital 0, slanted under a rule without font-style and upright
+//     under font-style: italic; FontStyleTest-slnt_ital-VF (both axes)
+//     draws italic as "slnt" -14 with ital at its default. It never sets
+//     the ital axis.
+//   - wpt, css/css-fonts/variations/ital-variable: Chromium 156 fails it
+//     in print and in screenshots, on all three lines, for that reason.
 const italicSlope = 14
 
 // cssPixelsPerPoint converts points to CSS pixels (CSS Values 4, 6.2).
