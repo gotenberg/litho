@@ -469,6 +469,8 @@ func (b *box) shift(dx, dy float64) {
 	if b.outside != nil {
 		b.outside.x += dx
 		b.outside.baseline += dy
+		b.outside.sym.X += dx
+		b.outside.sym.Y += dy
 	}
 	if b.tpart == partTable {
 		// Column boxes hold no content and are no kids of the table box.

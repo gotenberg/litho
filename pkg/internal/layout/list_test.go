@@ -215,6 +215,42 @@ func TestListMarkers_SymbolGeometry(t *testing.T) {
 	}
 }
 
+func TestListMarkers_SymbolMovesWithItsBox(t *testing.T) {
+	// A list inside an inline-block is laid out, then moved to its place
+	// on the line: the bullet moves with the item (CSS 2.1, 12.5).
+	ul := list(css.Square, css.Outside, 0)
+	ib := el(sty(display(css.InlineBlock)), ul)
+	rb := boxesWith(t, doc(el(sty(), txt(sty(), "xxxx"), ib)), Options{Page: page(200, 100), BrowserRules: true})
+	var li *box
+	var find func(b *box)
+	find = func(b *box) {
+		if b.outside != nil && li == nil {
+			li = b
+		}
+		for _, k := range b.kids {
+			find(k)
+		}
+		for _, l := range b.lines {
+			for _, it := range l.items {
+				if it.atomic != nil {
+					find(it.atomic)
+				}
+			}
+		}
+	}
+	find(rb)
+	if li == nil {
+		t.Fatal("no list item with an outside marker")
+	}
+	m := li.outside
+	if !m.symbol {
+		t.Fatalf("marker %+v, want a symbol", m)
+	}
+	if dx, dy := (li.contentX()-m.sym.X)/css.Pt, (m.sym.Y-li.contentY())/css.Pt; dx <= 0 || dx > 20 || dy < 0 || dy > 10 {
+		t.Errorf("bullet %v px left of and %v px below the item's content box, want beside its first line", dx, dy)
+	}
+}
+
 func TestListMarkersDraw_Square(t *testing.T) {
 	// At 10px: ascent 8px, a 3px square 12px left of the content edge at
 	// 40px, its top 4px below the line's.
