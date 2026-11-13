@@ -56,6 +56,7 @@ func (e *engine) intrinsic(b *box) (float64, float64) {
 			}
 			lo, hi = w, w
 		}
+		lo, hi = keywordWidth(src, lo, hi, clo, chi)
 	}
 	if src.MaxWidth.Kind == css.Points {
 		mx := clamp(src.MaxWidth.Value)
