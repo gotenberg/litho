@@ -1144,7 +1144,8 @@ type Style struct {
 
 	Color Color
 	// FontFamilies is the family list as written, generic names included;
-	// the text stack resolves them.
+	// the text stack resolves them. A quoted name that spells a generic
+	// keyword keeps its double quotes: it names a family, not the generic.
 	FontFamilies []string
 	// FontSize is the computed size in points.
 	FontSize float64

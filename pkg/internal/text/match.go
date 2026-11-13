@@ -23,8 +23,14 @@ const (
 const widthNormal = 5
 
 // familyKey returns the form family names are compared in: lower case,
-// without spaces or tabs, so "DejaVu Sans" and "dejavusans" match.
+// without spaces or tabs, so "DejaVu Sans" and "dejavusans" match. The
+// double quotes that mark a family name spelled like a generic family (see
+// [Style.Families]) do not count.
 func familyKey(name string) string {
+	name = strings.TrimSpace(name)
+	if len(name) >= 2 && name[0] == '"' && name[len(name)-1] == '"' {
+		name = name[1 : len(name)-1]
+	}
 	return strings.Map(func(r rune) rune {
 		if r == ' ' || r == '\t' {
 			return -1
@@ -70,7 +76,7 @@ var genericNames = [...]struct {
 }
 
 // genericOf returns the generic family name stands for, genericNone for a
-// concrete family. Case does not count.
+// concrete family. Case does not count; a quoted name is concrete.
 func genericOf(name string) generic {
 	name = strings.TrimSpace(name)
 	if isASCII(name) {

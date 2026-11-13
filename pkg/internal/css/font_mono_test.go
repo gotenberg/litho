@@ -94,3 +94,17 @@ func TestFontSize_MonospaceQuirk(t *testing.T) {
 		}
 	}
 }
+
+// TestFontFamily_QuotedGenericNamesAFamily locks CSS Fonts 4, 2.1.1: a
+// quoted name that spells a generic keyword is a family name. It keeps
+// its quotes, which the text stack reads as that mark.
+func TestFontFamily_QuotedGenericNamesAFamily(t *testing.T) {
+	t.Parallel()
+	for src, want := range map[string]string{`"fantasy"`: `"fantasy"`, `'Cursive'`: `"Cursive"`, `fantasy`: `fantasy`, `"Arial"`: `Arial`} {
+		v, _ := parseComponentValues(src)
+		got, ok := parseFontFamily(significant(v), nil)
+		if l, isList := got.([]string); !ok || !isList || len(l) != 1 || l[0] != want {
+			t.Errorf("font-family: %s = %q, want %q", src, got, want)
+		}
+	}
+}

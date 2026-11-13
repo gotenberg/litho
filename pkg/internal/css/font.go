@@ -167,7 +167,9 @@ var genericFamilies = map[string]bool{
 // parseFontFamily parses a <family-name> list (CSS Fonts 4, 2.1): strings
 // and sequences of idents joined by single spaces. A generic family is
 // kept lowercased; a CSS-wide or default keyword as a lone ident is
-// invalid.
+// invalid. A string that spells a generic keyword names a family, not the
+// generic (CSS Fonts 4, 2.1.1): it keeps its double quotes, which the text
+// stack reads as that mark.
 func parseFontFamily(v []token, _ *declCtx) (any, bool) {
 	var out []string
 	for _, part := range splitCommas(v) {
@@ -175,7 +177,11 @@ func parseFontFamily(v []token, _ *declCtx) (any, bool) {
 			return nil, false
 		}
 		if len(part) == 1 && part[0].typ == tString {
-			out = append(out, part[0].value)
+			name := part[0].value
+			if genericFamilies[lower(name)] {
+				name = `"` + name + `"`
+			}
+			out = append(out, name)
 			continue
 		}
 		words := make([]string, 0, len(part))

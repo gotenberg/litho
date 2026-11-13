@@ -27,7 +27,10 @@ type Style struct {
 	// regard to case or spaces against a face's family and typographic
 	// family names. An empty list means sans-serif. A concrete family
 	// brings its metric-compatible aliases right after it (see
-	// [Fonts.Match]).
+	// [Fonts.Match]). A name in double quotes is a family name and never a
+	// generic family, as a quoted CSS family name is (CSS Fonts 4,
+	// 2.1.1): "\"serif\"" matches a face named serif; the quotes do not
+	// count in the match.
 	//
 	// A generic family expands, in place, to these families, each with its
 	// metric-compatible aliases, after fontconfig's 60-latin.conf:

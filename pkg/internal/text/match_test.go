@@ -394,10 +394,24 @@ func TestGenericOfIgnoresCaseAndSpaces(t *testing.T) {
 		"System-UI": genericSystemUI, "Liberation Sans": genericNone, "": genericNone,
 		// U+017F folds to s but lower-cases to itself: not serif.
 		"ſerif": genericNone,
+		// CSS Fonts 4, 2.1.1: a quoted name is a family name.
+		`"fantasy"`: genericNone, `"serif"`: genericNone,
 	} {
 		if got := genericOf(name); got != want {
 			t.Errorf("genericOf(%q) = %d, want %d", name, got, want)
 		}
+	}
+}
+
+func TestQuotedGenericNamesAFamily(t *testing.T) {
+	// CSS Fonts 4, 2.1.1: "cursive" in quotes names a family called
+	// cursive, never the generic family's preference list.
+	got := requestedFamilies(Style{Families: []string{`"cursive"`, "serif"}})
+	if want := append([]string{"cursive"}, requestedFamilies(Style{Families: []string{"serif"}})...); !slices.Equal(got, want) {
+		t.Errorf("quoted cursive requests %q, want %q", got, want)
+	}
+	if got := familyKey(`"Fantasy"`); got != "fantasy" {
+		t.Errorf("familyKey of a quoted name = %q, want the quotes dropped", got)
 	}
 }
 
