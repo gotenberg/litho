@@ -64,11 +64,16 @@
 // sends a character outside a face's ranges to the next family, and bold
 // and italic are synthesised where the rules lack them, as Chromium does.
 // font-feature-settings, the metric overrides and size-adjust apply. A
-// variable font with TrueType outlines draws, and embeds, the instance its
-// text asks for through font-weight, font-stretch, font-style,
-// font-optical-sizing and font-variation-settings and the rule's
-// descriptors; one with CFF2 outlines draws its default instance with a
-// warning. font-display has no effect.
+// variable font, of TrueType or CFF2 outlines, draws, and embeds, the
+// instance its text asks for through font-weight, font-stretch,
+// font-style, font-optical-sizing and font-variation-settings and the
+// rule's descriptors. font-display has no effect.
+//
+// An installed variable font offers its named instances as faces of its
+// family and draws the one font-weight and font-style select, at that
+// instance's coordinates, as Chromium draws an installed variable font:
+// font-stretch, font-optical-sizing and font-variation-settings leave it
+// unchanged.
 //
 // # Page
 //
