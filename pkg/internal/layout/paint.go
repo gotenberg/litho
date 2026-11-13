@@ -175,6 +175,17 @@ func hasBackground(st *css.Style) bool {
 // cur returns the current frame.
 func (p *painter) cur() *frame { return p.frames[len(p.frames)-1] }
 
+// inColumns reports painting inside a column set, whose display list the
+// columns cut by the extent of its items.
+func (p *painter) inColumns() bool {
+	for _, f := range p.frames {
+		if f.columns {
+			return true
+		}
+	}
+	return false
+}
+
 // chain returns the overflow: hidden boxes that clip a fragment of b in the
 // current stacking context, outermost first; content reports a fragment of
 // b's content, which b's own clip covers.
@@ -1037,6 +1048,16 @@ func (p *painter) lineFrag(l *lineBox, f *inlineFrag, page int) {
 	r := typeset.Rect{X: l.x + f.x0 + p.dx + ox, Y: l.y + f.top + p.dy + oy, Width: f.x1 - f.x0, Height: f.bottom - f.top}
 	if r.Width <= 0 && r.Height <= 0 {
 		return
+	}
+	if p.dy+oy != 0 && p.inColumns() {
+		// The relative offset moves the fragment after the columns cut
+		// the flow (CSS Fragmentation 3, 5.5): it paints in the column of
+		// its line, where the line's text paints, however far it moves.
+		g := &ditem{group: true, opacity: 1, page: pageMono, y0: l.y + (f.top+f.bottom)/2}
+		c := p.sync(p.chain(f.box, false))
+		c.kids = append(c.kids, g)
+		p.frames = append(p.frames, &frame{container: g, root: f.box})
+		defer func() { p.frames = p.frames[:len(p.frames)-1] }()
 	}
 	radii := radiiOf(f.box, r.Width, r.Height)
 	sides := [4]bool{true, f.right, true, f.left}

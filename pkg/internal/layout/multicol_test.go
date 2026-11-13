@@ -395,3 +395,26 @@ func TestMulticol_BalancesOverAvoidBoxes(t *testing.T) {
 		})
 	}
 }
+
+// TestMulticol_RelativeInlineBackgroundInItsColumn locks that the
+// background of a relatively positioned inline box paints in the column
+// of its line, moved by its offset after the columns cut the flow, as its
+// text does (CSS Fragmentation 3, 5.5), even when the offset reaches past
+// the column.
+func TestMulticol_RelativeInlineBackgroundInItsColumn(t *testing.T) {
+	t.Parallel()
+	small := func(s *css.Style) { s.FontSize = px(2) }
+	span := el(inlineSty(small, bg(red), fg(blue), padding(0, 0, 0, 1), func(s *css.Style) {
+		s.Position = css.Relative
+		s.Top = css.Pts(px(2))
+	}), txt(inlineSty(small, fg(blue)), "X"))
+	mc := el(sty(small, columns(3, 0), height(2), func(s *css.Style) {
+		s.Width = css.Pts(px(12))
+		s.Columns.Fill = css.FillAuto
+	}), br(inlineSty(small)), span, br(inlineSty(small)), txt(inlineSty(small, fg(lime)), "X"))
+	assertPixels(t, run(t, doc(mc), page(12, 4)), 1, `
+		________GG__
+		________GG__
+		____RBB_____
+		____RBB_____`)
+}
