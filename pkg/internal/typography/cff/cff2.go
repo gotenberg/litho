@@ -156,6 +156,11 @@ func readCFF2Top(dict []byte) cff2Top {
 // specification, CFF2 table, PrivateDICT variation operators). The operands
 // stay within the CFF2 stack limit, the 513 of [maxCharstringStack].
 func scanCFF2Dict(dict []byte, regions func() int, fn func(op int, operands []float64)) {
+	scanCFF2DictWith(dict, func(stack []float64) []float64 { return blendDefaults(stack, regions()) }, fn)
+}
+
+// scanCFF2DictWith is [scanCFF2Dict] with blend resolving each blend.
+func scanCFF2DictWith(dict []byte, blend func(stack []float64) []float64, fn func(op int, operands []float64)) {
 	operands := make([]float64, 0, maxDictOperands)
 	for i := 0; i < len(dict); {
 		b := dict[i]
@@ -164,7 +169,7 @@ func scanCFF2Dict(dict []byte, regions func() int, fn func(op int, operands []fl
 		}
 		switch {
 		case b == opCFF2Blend:
-			operands = blendDefaults(operands, regions())
+			operands = blend(operands)
 			i++
 		case b <= opCFF2VStore:
 			op := int(b)
@@ -358,7 +363,7 @@ func (f *Font) readCFF2Private(data []byte, size, offset int) (outlinePrivate, e
 	if vsindex < 0 || vsindex > 0 && f.regionCount(vsindex) == noVariationStore {
 		return outlinePrivate{}, fmt.Errorf("%w: vsindex names no ItemVariationData", ErrInvalidCFF)
 	}
-	p.regions = f.regionCount(vsindex)
+	p.regions, p.vsindex = f.regionCount(vsindex), vsindex
 	if subrs > 0 {
 		at := offset + subrs
 		if at >= len(data) {

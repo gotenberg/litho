@@ -58,8 +58,9 @@ type outlinePrivate struct {
 	defaultWidthX float64
 	matrix        geom.Matrix
 	// regions is k, the region count a CFF2 blend takes under the Private
-	// DICT's vsindex, or noVariationStore.
+	// DICT's vsindex, or noVariationStore; vsindex is that index.
 	regions int
+	vsindex int
 }
 
 // Glyph is one glyph outline in glyph space, the units the charstrings draw
