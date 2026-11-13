@@ -83,19 +83,23 @@ func TestTextPaint_KeepsTheTextUnderItsOutline(t *testing.T) {
 
 // TestTextEffects_GroupWithTheirBox locks that a translucent or blended box
 // holding a run with Office text effects composites the effect bitmaps,
-// the run and its underline as one transparency group.
+// the run and its underline as one transparency group, by Word's rules
+// and by PowerPoint's.
 func TestTextEffects_GroupWithTheirBox(t *testing.T) {
 	for _, c := range []struct {
-		name string
-		mod  func(*css.Style)
+		name  string
+		mod   func(*css.Style)
+		rules css.OfficeRules
 	}{
-		{"opacity", func(s *css.Style) { s.Opacity = 0.5 }},
-		{"blend", func(s *css.Style) { s.MixBlendMode = css.BlendMultiply }},
+		{"opacity", func(s *css.Style) { s.Opacity = 0.5 }, css.OfficeWord},
+		{"blend", func(s *css.Style) { s.MixBlendMode = css.BlendMultiply }, css.OfficeWord},
+		{"opacity, PowerPoint", func(s *css.Style) { s.Opacity = 0.5 }, css.OfficePowerPoint},
+		{"blend, PowerPoint", func(s *css.Style) { s.MixBlendMode = css.BlendMultiply }, css.OfficePowerPoint},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			run1 := sty(func(s *css.Style) {
 				s.TextDecoration = css.Underline
-				s.TextEffects = &css.OfficeEffects{Glow: &css.OfficeGlow{Color: css.Color{R: 1, A: 0.4}, Radius: 6}}
+				s.TextEffects = &css.OfficeEffects{Glow: &css.OfficeGlow{Color: css.Color{R: 1, A: 0.4}, Radius: 6}, Rules: c.rules}
 			})
 			res := run(t, doc(el(sty(c.mod), el(run1, txt(run1, "ab")))), page(200, 100))
 			var group *typeset.Group
