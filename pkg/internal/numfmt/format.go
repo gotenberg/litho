@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
@@ -402,7 +403,7 @@ func generalString(x float64) string {
 		if !fix {
 			// LibreOffice writes small values in fixed point down to
 			// 1e-9 when they have few significant digits.
-			e := int(math.Ceil(-math.Log10(math.Abs(x))))
+			e := int(math.Ceil(-detmath.Log10(math.Abs(x))))
 			if e <= 9 && approxEqual(roundTo(x, 16), roundTo(x, e+16)) {
 				fix = true
 			}
@@ -428,11 +429,11 @@ func roundTo(x float64, dec int) float64 {
 	if dec >= 0 && (math.Abs(x) >= 0x1p52 || x == math.Trunc(x)) {
 		return x
 	}
-	p := math.Pow(10, float64(dec))
+	p := detmath.Pow(10, float64(dec))
 	if math.IsInf(p, 0) || p == 0 {
 		return x
 	}
-	return math.Copysign(math.Floor(math.Abs(x)*p+0.5)/p, x)
+	return math.Copysign(math.Floor(float64(math.Abs(x)*p)+0.5)/p, x)
 }
 
 // approxEqual reports a and b equal to about 15 significant digits

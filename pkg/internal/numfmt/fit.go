@@ -4,6 +4,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
@@ -45,9 +46,9 @@ func (f *Format) Fit(v Value, width float64, measure func(string) float64) Resul
 	if s == "0" && x != 0 {
 		dots = 1
 	}
-	w += float64(dots) * (maxDigit - measure("."))
-	w += float64(signs) * (maxDigit - measure("-"))
-	w += float64(exps) * (maxDigit - measure("E"))
+	w += float64(float64(dots) * (maxDigit - measure(".")))
+	w += float64(float64(signs) * (maxDigit - measure("-")))
+	w += float64(float64(exps) * (maxDigit - measure("E")))
 	if signs+dots+exps > 0 {
 		s = narrowGeneral(x, digitCount(w, maxDigit))
 	}
@@ -93,7 +94,7 @@ func narrowGeneral(x float64, n int) string {
 	if a < expLowerBound {
 		return narrowScientific(x, n)
 	}
-	e := math.Log10(a)
+	e := detmath.Log10(a)
 	pre := 1
 	if e >= 0 {
 		pre = int(math.Ceil(e))
@@ -124,7 +125,7 @@ func narrowGeneral(x float64, n int) string {
 // narrowScientific returns x in scientific notation in about n
 // characters (lcl_GetOutputStringScientific).
 func narrowScientific(x float64, n int) string {
-	e := math.Log10(math.Abs(x))
+	e := detmath.Log10(math.Abs(x))
 	if e < 0 {
 		e = 1 - e
 	}

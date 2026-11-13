@@ -4,6 +4,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 )
 
 // figureSpace is what a "?" placeholder without a digit shows.
@@ -124,7 +126,7 @@ func (s *section) fixed(x float64, first bool) Result {
 	if m.exp < len(s.toks) && x != 0 {
 		n := max(m.intDigits, 1)
 		step := 1
-		e0 := int(math.Floor(math.Log10(x)))
+		e0 := int(math.Floor(detmath.Log10(x)))
 		if m.intDigits > 1 && m.intHash {
 			// Engineering notation: the exponent is a multiple of the
 			// integer placeholders.
@@ -133,14 +135,14 @@ func (s *section) fixed(x float64, first bool) Result {
 		} else {
 			e = e0 - (n - 1)
 		}
-		limit := math.Pow(10, float64(n))
+		limit := detmath.Pow(10, float64(n))
 		if step > 1 {
-			limit = math.Pow(10, float64(step))
+			limit = detmath.Pow(10, float64(step))
 		}
-		if roundTo(x/math.Pow(10, float64(e)), dec) >= limit {
+		if roundTo(x/detmath.Pow(10, float64(e)), dec) >= limit {
 			e += step
 		}
-		x /= math.Pow(10, float64(e))
+		x /= detmath.Pow(10, float64(e))
 	}
 	str := formatFloat(x, fmtF, dec, false)
 	ip, dp, _ := strings.Cut(str, ".")
@@ -417,7 +419,7 @@ scan:
 			d = 1
 		}
 		den = d
-		num = int64(math.Floor(fr*float64(d) + 0.5))
+		num = int64(math.Floor(float64(fr*float64(d)) + 0.5))
 	} else {
 		maxDen := int64(1)
 		for range min(len(denPlaces), maxDenominatorDigits) {

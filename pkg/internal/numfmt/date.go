@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 )
 
 // maxSerialDays bounds the serial numbers a date section formats, about
@@ -111,7 +113,7 @@ func (s *section) date(x float64, first bool) Result {
 		r.Text = "###"
 		return r
 	}
-	scale := math.Pow(10, float64(frac))
+	scale := detmath.Pow(10, float64(frac))
 	// A time that shows whole seconds is cut to the second, as a clock
 	// reads, the value first rounded to 15 significant digits; one that
 	// shows fractions of a second, or no seconds, is rounded to the
@@ -125,12 +127,12 @@ func (s *section) date(x float64, first bool) Result {
 	var days, total int64
 	var sub float64
 	if elapsed {
-		t := whole(x*86400*scale) / scale
+		t := whole(float64(x*86400*scale)) / scale
 		total = int64(t)
 		sub = t - float64(total)
 	} else {
 		d := math.Floor(x)
-		t := whole((x-d)*86400*scale) / scale
+		t := whole(float64((x-d)*86400*scale)) / scale
 		if t >= 86400 {
 			d++
 			t -= 86400
