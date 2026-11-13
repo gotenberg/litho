@@ -55,11 +55,21 @@ func (p *painter) multicol(b *box) {
 		p.frames = append(p.frames, &frame{container: g, root: b, columns: true, set: s})
 		kids := b.kids
 		b.kids = s.kids
+		// The columns cut what the set paints by its extent: a page an
+		// atomic inline or a table row gives its content applies to the
+		// cut pieces, not to what is cut.
+		mono := p.mono
+		p.mono = -1
 		outer := p.setBody(b)
+		p.mono = mono
 		b.kids = kids
 		p.frames = p.frames[:len(p.frames)-1]
 		c := p.sync(p.chain(b, true))
-		c.kids = append(c.kids, p.e.cutColumns(g, b, s, p.dy)...)
+		cut := p.e.cutColumns(g, b, s, p.dy)
+		if mono >= 0 {
+			onPage(cut, mono, 0)
+		}
+		c.kids = append(c.kids, cut...)
 		moved := cutLinks(slices.Clone(p.links[nl:]), b, s, p.dy)
 		p.links = append(p.links[:nl], moved...)
 		for _, o := range outer {
@@ -177,6 +187,21 @@ func (e *engine) cutColumns(g *ditem, b *box, s *colSet, oy float64) []*ditem {
 		}
 	}
 	return append(out, pass...)
+}
+
+// onPage puts the leaves of items on page alone, groups at most
+// maxGroupDepth deep, but those of a fixed box, which paints on every
+// page.
+func onPage(items []*ditem, page, depth int) {
+	for _, it := range items {
+		if !it.group {
+			it.page = page
+			continue
+		}
+		if !it.fixed && depth < maxGroupDepth {
+			onPage(it.kids, page, depth+1)
+		}
+	}
 }
 
 // band returns the column flow slice of column i of s in the container b.

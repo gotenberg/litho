@@ -341,3 +341,18 @@ func TestMulticol_LastRuleReachesTheContentEdge(t *testing.T) {
 		__R__
 		_____`)
 }
+
+// TestMulticol_InlineBlockCutsItsColumns locks that a multi-column inline
+// block, which sits on its line's page whole, still cuts its content at
+// its columns: a block balanced over two columns paints half in each (CSS
+// Multicol 1, 2), whatever its vertical alignment moves it by.
+func TestMulticol_InlineBlockCutsItsColumns(t *testing.T) {
+	t.Parallel()
+	top := func(s *css.Style) { s.VerticalAlign = css.VerticalAlign{Kind: css.AlignTop} }
+	mc := el(sty(columns(2, 1), display(css.InlineBlock), top, margin(1, 0, 0, 0)), strip(blue, height(2)))
+	res := run(t, doc(mc), page(5, 3))
+	assertPixels(t, res, 1, `
+		_____
+		BB_BB
+		_____`)
+}
