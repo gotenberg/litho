@@ -81,7 +81,7 @@ func (p *painter) shadows(b *box, st *css.Style, r typeset.Rect, radii [4][2]flo
 		}
 		col, ok := colorOf(sh.Color)
 		x, y, blur, spread := clamp(sh.X), clamp(sh.Y), max(clamp(sh.Blur), 0), clamp(sh.Spread)
-		if !ok || r.Width <= 0 && r.Height <= 0 {
+		if !ok {
 			continue
 		}
 		if inset {

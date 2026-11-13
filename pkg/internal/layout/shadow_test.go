@@ -36,6 +36,18 @@ func TestBoxShadow_Outer(t *testing.T) {
 		__________`)
 }
 
+// TestBoxShadow_EmptyBox locks that a box of no width and no height casts
+// its outer shadow, grown by its spread (CSS Backgrounds 3, 7.1).
+func TestBoxShadow_EmptyBox(t *testing.T) {
+	root := doc(el(sty(width(0), height(0), shadow(2, 2, 0, 2, red, false))))
+	assertPixels(t, run(t, root, page(5, 5)), 1, `
+		RRRR_
+		RRRR_
+		RRRR_
+		RRRR_
+		_____`)
+}
+
 func TestBoxShadow_OuterSpreadUnderTransparentBox(t *testing.T) {
 	// The shadow does not show under the border box, even a transparent
 	// one (CSS Backgrounds 3, 7.1).
