@@ -3,7 +3,8 @@
 //
 // [Load] parses a TrueType program, or an OpenType program with CFF
 // outlines, far enough to embed it: its metrics, its Unicode cmap, and for
-// CFF outlines the charset. A [Subset] then records the glyphs drawn with
+// CFF outlines the charset. A program with CFF2 outlines is loaded as the
+// same font at its default instance with CFF outlines. A [Subset] then records the glyphs drawn with
 // the font, by glyph ID and with the text each one stands for, hands out the
 // 2-byte code a string selects each glyph by, and writes the font subset to
 // the glyphs recorded:

@@ -17,6 +17,45 @@ import (
 // Font, Table Directory).
 const cffSfntVersion = 0x4F54544F
 
+// IsCFF2 reports whether program, an sfnt program, has CFF2 outlines and
+// no 'glyf' table: a program a PDF cannot embed as it stands, since a font
+// file holds TrueType or CFF outlines (ISO 32000-1, 9.9, Table 126) and
+// only an OpenType font file of PDF 2.0 may hold CFF2 ones. A program
+// whose table directory does not read is not one.
+func IsCFF2(program []byte) bool {
+	records, err := truetype.ParseTableDirectory(program)
+	if err != nil {
+		return false
+	}
+	return (&Font{records: records}).HasCFF2()
+}
+
+// DefaultCFF returns program, an sfnt program with CFF2 outlines (see
+// [IsCFF2]), at its default instance with CFF outlines: the program
+// [Font.Instance] writes at the default coordinates for a variable font,
+// and for a font without 'fvar' the same conversion with every blend at
+// its default value and the program's own names kept. It fails as
+// [Font.Instance] does, with [ErrUnsupported] for a program without CFF2
+// outlines, and with an error wrapping [truetype.ErrTableNotFound] for a
+// program missing a table the conversion needs.
+func DefaultCFF(ctx context.Context, program []byte) ([]byte, error) {
+	if !IsCFF2(program) {
+		return nil, fmt.Errorf("%w: no CFF2 outlines", ErrUnsupported)
+	}
+	f, err := Parse(program)
+	switch {
+	case errors.Is(err, truetype.ErrTableNotFound):
+		records, rerr := truetype.ParseTableDirectory(program)
+		if rerr != nil {
+			return nil, rerr
+		}
+		f = &Font{program: program, records: records, axes: &Axes{}}
+	case err != nil:
+		return nil, err
+	}
+	return f.Instance(ctx, nil)
+}
+
 // instanceCFF2 writes the instance of a program with CFF2 outlines: the
 // 'CFF2' table becomes a 'CFF ' table at the instance (see
 // [cff.InstanceCFF2]), the advances take their 'HVAR' deltas and the side
@@ -28,7 +67,15 @@ const cffSfntVersion = 0x4F54544F
 // OpenType one as OpenType (ISO 32000-1, 9.9, Table 126; ISO 32000-2,
 // 9.9.2, Table 124), and PDF 2.0 alone names OpenType, whose CFF2 form
 // readers of earlier PDFs do not draw.
+//
+// A font without axes, a CFF2 font without 'fvar', is written at its
+// default instance, every region of its variation stores at 0, under its
+// own PostScript name.
 func (in *instancer) instanceCFF2(ctx context.Context, tables map[string][]byte, user []float64) ([]byte, error) {
+	static := len(in.f.axes.Axes) == 0
+	if static {
+		in.coords = nil
+	}
 	head, hhea, maxp, hmtx := tables["head"], tables["hhea"], tables["maxp"], tables["hmtx"]
 	if len(head) < headSize || len(hhea) < hheaSize || len(maxp) < maxpMinSize || hmtx == nil {
 		return nil, fmt.Errorf("%w: head, hhea, maxp or hmtx missing or short", ErrInvalid)
@@ -54,6 +101,9 @@ func (in *instancer) instanceCFF2(ctx context.Context, tables map[string][]byte,
 		widths[gid] = float64(advances[gid])
 	}
 	name := PostScriptName(in.f.axes, tables["name"], user)
+	if own := psChars(nameString(tables["name"], namePostScript)); static && own != "" {
+		name = own
+	}
 	coords := in.coords
 	inst, err := cff.InstanceCFF2(ctx, tables["CFF2"], name, widths, func(store []byte) ([][]float64, error) {
 		s, err := parseItemStore(store, coords)
@@ -126,7 +176,7 @@ func (in *instancer) instanceCFF2(ctx context.Context, tables map[string][]byte,
 		return nil, err
 	}
 	in.applyStyle(out, user)
-	if nameTable := tables["name"]; nameTable != nil {
+	if nameTable := tables["name"]; nameTable != nil && !static {
 		renamed, err := renamePostScript(nameTable, name)
 		if err != nil {
 			return nil, err

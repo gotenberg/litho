@@ -166,3 +166,33 @@ func FuzzInstanceCFF2(f *testing.F) {
 		_, _ = vf.Instance(context.Background(), user) //nolint:errcheck // the target checks only that malformed data neither panics nor hangs
 	})
 }
+
+// FuzzDefaultCFF converts arbitrary bytes as a CFF2 program at its
+// default instance, seeded with testdata/varfont_cff2.otf and the same
+// program without its variation tables, a static CFF2 font.
+func FuzzDefaultCFF(f *testing.F) {
+	font, err := os.ReadFile("testdata/varfont_cff2.otf")
+	if err != nil {
+		f.Fatal(err)
+	}
+	seed(f, font)
+	records, err := truetype.ParseTableDirectory(font)
+	if err != nil {
+		f.Fatal(err)
+	}
+	tables := map[string][]byte{}
+	var tags []string
+	for _, r := range records {
+		if r.Tag == "fvar" || r.Tag == "avar" || r.Tag == "HVAR" || r.Tag == "MVAR" || r.Tag == "STAT" {
+			continue
+		}
+		if tables[r.Tag], err = truetype.TableData(font, records, r.Tag); err != nil {
+			f.Fatal(err)
+		}
+		tags = append(tags, r.Tag)
+	}
+	seed(f, truetype.AssembleTables(cffSfntVersion, tags, tables))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, _ = DefaultCFF(context.Background(), data) //nolint:errcheck // the target checks only that malformed data neither panics nor hangs
+	})
+}

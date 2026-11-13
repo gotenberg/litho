@@ -3,8 +3,10 @@ package varfont
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
@@ -204,5 +206,114 @@ func TestCFF2DefaultInstance(t *testing.T) {
 				t.Fatalf("glyph %d point %d: %v, the CFF2 default %v", gid, i, b.Path.Pts[i], a.Path.Pts[i])
 			}
 		}
+	}
+}
+
+// TestDefaultCFF pins that every CFF2 program converts to CFF outlines at
+// its default instance: a variable one as [Font.Instance] writes it at
+// the default coordinates, a static one without 'fvar' under its own
+// PostScript name with the default outlines, and that a program with
+// glyf outlines is refused.
+func TestDefaultCFF(t *testing.T) {
+	t.Parallel()
+	program, err := os.ReadFile("testdata/varfont_cff2.otf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	vf, err := Parse(program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := vf.Instance(context.Background(), vf.Axes().Defaults())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := DefaultCFF(context.Background(), program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Error("the default CFF program of a variable font is not its instance at the default coordinates")
+	}
+
+	records, err := truetype.ParseTableDirectory(program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tables := map[string][]byte{}
+	var tags []string
+	for _, r := range records {
+		if r.Tag == "fvar" || r.Tag == "avar" || r.Tag == "HVAR" || r.Tag == "MVAR" || r.Tag == "STAT" {
+			continue
+		}
+		if tables[r.Tag], err = truetype.TableData(program, records, r.Tag); err != nil {
+			t.Fatal(err)
+		}
+		tags = append(tags, r.Tag)
+	}
+	static := truetype.AssembleTables(cffSfntVersion, tags, tables)
+	if !IsCFF2(static) {
+		t.Fatal("IsCFF2 = false for a static CFF2 program")
+	}
+	inst, err := DefaultCFF(context.Background(), static)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if IsCFF2(inst) {
+		t.Error("the static program keeps its CFF2 outlines")
+	}
+	instRecords, err := truetype.ParseTableDirectory(inst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, err := truetype.TableData(inst, instRecords, "name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ps := nameString(name, namePostScript); ps != "LithoVarCFF-ExtraLight" {
+		t.Errorf("PostScript name %q, want the program's own LithoVarCFF-ExtraLight", ps)
+	}
+	a, err := truetype.CFFTable(inst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := truetype.CFFTable(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fa, err := cff.ParseFont(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fb, err := cff.ParseFont(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fa.NumGlyphs() != fb.NumGlyphs() {
+		t.Fatalf("%d glyphs, want %d", fa.NumGlyphs(), fb.NumGlyphs())
+	}
+	for gid := range fa.NumGlyphs() {
+		ga, err := fa.Glyph(context.Background(), gid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		gb, err := fb.Glyph(context.Background(), gid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(ga.Path.Pts, gb.Path.Pts) || ga.Advance != gb.Advance {
+			t.Fatalf("glyph %d of the static program differs from the default instance", gid)
+		}
+	}
+
+	ttf, err := os.ReadFile("testdata/varfont.ttf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if IsCFF2(ttf) {
+		t.Error("IsCFF2 = true for glyf outlines")
+	}
+	if _, err := DefaultCFF(context.Background(), ttf); !errors.Is(err, ErrUnsupported) {
+		t.Errorf("glyf outlines: %v, want ErrUnsupported", err)
 	}
 }

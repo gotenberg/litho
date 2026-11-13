@@ -7,8 +7,10 @@ import (
 	"math"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
+	"github.com/gotenberg/litho/pkg/internal/typography/varfont"
 )
 
 // Font is one sfnt program, TrueType or OpenType with CFF outlines, parsed
@@ -41,9 +43,16 @@ type Font struct {
 }
 
 // Load parses program, a single TrueType program or an OpenType program
-// with CFF outlines. It reads the head, hhea, hmtx, maxp and cmap tables,
-// the post and name tables when present, and the CFF charset when the
-// program has CFF outlines.
+// with CFF or CFF2 outlines. It reads the head, hhea, hmtx, maxp and cmap
+// tables, the post and name tables when present, and the CFF charset when
+// the program has CFF outlines.
+//
+// A program with CFF2 outlines is converted first to the same font at its
+// default instance with CFF outlines (see [varfont.DefaultCFF]), which
+// [Font.Program] then returns: a font file holds TrueType or CFF outlines
+// (ISO 32000-1, 9.9, Table 126), and a CFF2 table only inside the OpenType
+// font file of PDF 2.0, which earlier readers do not draw. The converted
+// program is charged to the budget ctx carries.
 //
 // It fails with [ErrCollection] for a collection, and with a descriptive
 // error for a program missing a table it needs or whose tables are
@@ -51,6 +60,16 @@ type Font struct {
 func Load(ctx context.Context, program []byte) (*Font, error) {
 	if truetype.IsCollection(program) {
 		return nil, ErrCollection
+	}
+	if varfont.IsCFF2(program) {
+		converted, err := varfont.DefaultCFF(ctx, program)
+		if err != nil {
+			return nil, fmt.Errorf("converting the CFF2 outlines to CFF: %w", err)
+		}
+		if err := limits.BudgetFrom(ctx).Charge(int64(len(converted)), "font instances"); err != nil {
+			return nil, err
+		}
+		program = converted
 	}
 	f, err := parse(ctx, program)
 	if err != nil {

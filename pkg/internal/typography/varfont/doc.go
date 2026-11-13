@@ -14,7 +14,9 @@
 // are checked against the data before any allocation or loop, and the work
 // one instance may do is bounded.
 //
-// CFF2 outlines are written as CFF outlines at the instance. 'avar'
+// CFF2 outlines are written as CFF outlines at the instance;
+// [DefaultCFF] writes any CFF2 program, a static one without 'fvar'
+// included, at its default instance with CFF outlines. 'avar'
 // version 2 is refused with [ErrUnsupported].
 // Hinting is dropped from an instance ('fpgm', 'prep', 'cvt ', 'cvar' and
 // glyph instructions), since the default instance's instructions do not

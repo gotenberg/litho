@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -15,8 +16,10 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
+	"github.com/gotenberg/litho/pkg/internal/typography/varfont"
 )
 
 // testGlyphs are the glyphs of the test programs: A, B and an "fi"
@@ -376,5 +379,68 @@ func TestLoad_StopsOnCancel(t *testing.T) {
 	cancel()
 	if _, err := Load(ctx, testTrueType()); !errors.Is(err, context.Canceled) {
 		t.Errorf("Load on a cancelled context = %v, want context.Canceled", err)
+	}
+}
+
+// TestLoadWritesCFF2AsCFF pins that a program with CFF2 outlines, which no
+// font file of ISO 32000-1, 9.9, Table 126 holds, is embedded as a
+// CIDFontType0 over CFF outlines at its default instance, whether the
+// program is variable or carries no 'fvar', and that the conversion is
+// charged to the budget.
+func TestLoadWritesCFF2AsCFF(t *testing.T) {
+	t.Parallel()
+	program, err := os.ReadFile("../varfont/testdata/varfont_cff2.otf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	records, err := truetype.ParseTableDirectory(program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tables := map[string][]byte{}
+	var tags []string
+	for _, r := range records {
+		if r.Tag == "fvar" || r.Tag == "avar" || r.Tag == "HVAR" || r.Tag == "MVAR" || r.Tag == "STAT" {
+			continue
+		}
+		if tables[r.Tag], err = truetype.TableData(program, records, r.Tag); err != nil {
+			t.Fatal(err)
+		}
+		tags = append(tags, r.Tag)
+	}
+	static := truetype.AssembleTables(0x4F54544F, tags, tables)
+	for name, p := range map[string][]byte{"variable": program, "static": static} {
+		ctx, budget, release := limits.WithBudget(t.Context(), limits.Default())
+		f, err := Load(ctx, p)
+		if err != nil {
+			release()
+			t.Fatalf("%s: %v", name, err)
+		}
+		if budget.Held() == 0 {
+			t.Errorf("%s: the converted program is not charged", name)
+		}
+		release()
+		if f.CFFTable() == nil || varfont.IsCFF2(f.Program()) {
+			t.Fatalf("%s: the loaded program keeps CFF2 outlines", name)
+		}
+		gid, ok := f.GID('H')
+		if !ok {
+			t.Fatalf("%s: no glyph for H", name)
+		}
+		s := f.NewSubset()
+		s.Code(gid, "H")
+		alloc, font := written(t, s, slog.New(slog.DiscardHandler))
+		kids, _ := font["DescendantFonts"].(ast.PdfArray)
+		desc := pendingDict(t, alloc, kids[0])
+		if desc["Subtype"] != ast.PdfName("CIDFontType0") {
+			t.Errorf("%s: descendant = %v, want CIDFontType0", name, desc["Subtype"])
+		}
+		fd := pendingDict(t, alloc, desc["FontDescriptor"])
+		if _, ok := fd["FontFile2"]; ok {
+			t.Errorf("%s: the descriptor embeds a FontFile2", name)
+		}
+		if _, ok := fd["FontFile3"]; !ok {
+			t.Errorf("%s: the descriptor embeds no FontFile3", name)
+		}
 	}
 }

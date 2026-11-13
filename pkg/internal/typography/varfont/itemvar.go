@@ -47,7 +47,9 @@ type itemStore struct {
 // scalar of each region at coords, the normalized coordinates of the
 // instance (OpenType Font Variations Overview, Algorithm for interpolation
 // of instance values). The store must define its regions over exactly
-// len(coords) axes. The rows stay in data and are read on lookup.
+// len(coords) axes; nil coords stand for the default instance of a store
+// over any number of axes, every axis at 0. The rows stay in data and are
+// read on lookup.
 func parseItemStore(data []byte, coords []int16) (*itemStore, error) {
 	if len(data) < itemStoreHeaderSize || binary.BigEndian.Uint16(data) != 1 {
 		return nil, fmt.Errorf("%w: item variation store header", ErrInvalid)
@@ -60,7 +62,7 @@ func parseItemStore(data []byte, coords []int16) (*itemStore, error) {
 	rl := data[regionsAt:]
 	axisCount := int(binary.BigEndian.Uint16(rl))
 	regionCount := int(binary.BigEndian.Uint16(rl[2:]))
-	if axisCount != len(coords) {
+	if coords != nil && axisCount != len(coords) {
 		return nil, fmt.Errorf("%w: item variation regions over %d axes of %d", ErrInvalid, axisCount, len(coords))
 	}
 	if regionListHeader+regionCount*axisCount*regionAxisSize > len(rl) {
@@ -72,7 +74,11 @@ func parseItemStore(data []byte, coords []int16) (*itemStore, error) {
 		s.scalars[r] = 1
 		for a := range axisCount {
 			at := a * regionAxisSize
-			s.scalars[r] *= axisScalar(int32(coords[a]), f2dot14At(rec, at), f2dot14At(rec, at+2), f2dot14At(rec, at+4))
+			var v int32
+			if coords != nil {
+				v = int32(coords[a])
+			}
+			s.scalars[r] *= axisScalar(v, f2dot14At(rec, at), f2dot14At(rec, at+2), f2dot14At(rec, at+4))
 		}
 	}
 	for i := range s.data {
