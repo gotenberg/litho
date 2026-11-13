@@ -781,6 +781,19 @@ func (e *engine) minContentMain(fd *flexData, it *fitem, ax flexAxes, cb, pcb cb
 		return content()
 	}
 	lo, _ := e.contentWidths(k)
+	if r, content := prefRatio(k); r > 0 && k.sizeSrc().Width.Kind == css.Auto {
+		// The min-content width of a box with a preferred aspect ratio
+		// and a definite height, its own or stretched, is the width the
+		// ratio gives it (CSS Sizing 4, 4.2).
+		switch {
+		case it.stretchTo >= 0:
+			lo = max(lo, widthOfHeight(it.stretchTo, r, edgesFor(k, content)))
+		case k.orig != nil && k.st.Width.Kind == css.Points:
+			if w, ok := specWidth(k, k.st.Width, cb.w); ok {
+				lo = max(lo, w)
+			}
+		}
+	}
 	return lo
 }
 

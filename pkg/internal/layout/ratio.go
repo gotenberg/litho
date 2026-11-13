@@ -19,9 +19,9 @@ import (
 // width over height, 0 for none, and whether it relates the content box
 // rather than the border box (CSS Sizing 4, 4.1). Inline boxes and the
 // internal boxes of a table have none: aspect-ratio does not apply to
-// them.
+// them. A table's ratio is its table box's.
 func prefRatio(b *box) (float64, bool) {
-	if b.kind != kindBlock || b.tpart > partWrapper || b.ruby != nil {
+	if b.kind != kindBlock || b.tpart > partTable || b.ruby != nil {
 		return 0, false
 	}
 	st := b.sizeSrc()

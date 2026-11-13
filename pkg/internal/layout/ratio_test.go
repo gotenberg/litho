@@ -116,6 +116,7 @@ func TestAspectRatio_Items(t *testing.T) {
 		{"row: a definite height gives the width", flexBox(width(400), height(150), alignItems(css.BoxFlexStart)), sty(ratio(2, 1), height(100)), [2]float64{200, 100}},
 		{"row: a stretched height gives the width", flexBox(width(400), height(100)), sty(ratio(2, 1)), [2]float64{200, 100}},
 		{"row: the automatic minimum width", flexBox(width(50)), sty(ratio(1, 1), height(100)), [2]float64{100, 100}},
+		{"row: the automatic minimum of a stretched height", flexBox(width(0), height(100)), sty(ratio(1, 1)), [2]float64{100, 100}},
 		{"row: the used width gives the height", flexBox(width(100)), sty(ratio(1, 1), width(50), minW(0), flexF(1, 1, -1)), [2]float64{100, 100}},
 		{"column: a stretched width gives the height", flexBox(width(400), dir(css.FlexColumn)), sty(ratio(2, 1)), [2]float64{400, 200}},
 		{"column: the automatic minimum height", flexBox(width(400), height(50), dir(css.FlexColumn)), sty(ratio(1, 1), width(100)), [2]float64{100, 100}},
@@ -164,5 +165,36 @@ func TestAspectRatio_Replaced(t *testing.T) {
 				t.Errorf("picture %v by %v, want %v by %v", got[2], got[3], tt.want[0], tt.want[1])
 			}
 		})
+	}
+}
+
+// TestAspectRatio_Table holds that aspect-ratio applies to the table box
+// and not to the internal boxes of a table (CSS Sizing 4, 4.1).
+func TestAspectRatio_Table(t *testing.T) {
+	cell := el(sty(display(css.TableCell), ratio(4, 1), height(50), width(20)))
+	tbl := el(sty(display(css.Table), ratio(2, 1), width(100)), el(sty(display(css.TableRow)), cell))
+	rb := boxes(t, doc(tbl), page(400, 400))
+	var table, td *box
+	var walk func(b *box)
+	walk = func(b *box) {
+		switch b.tpart {
+		case partTable:
+			table = b
+		case partCell:
+			td = b
+		}
+		for _, k := range b.kids {
+			walk(k)
+		}
+	}
+	walk(rb)
+	if table == nil || td == nil {
+		t.Fatal("no table or cell box")
+	}
+	if got := rect(table); got[2] != 100 || got[3] != 50 {
+		t.Errorf("table %v by %v, want 100 by 50", got[2], got[3])
+	}
+	if got := rect(td); got[2] != 100 || got[3] != 50 {
+		t.Errorf("cell %v by %v, want 100 by 50: the ratio does not apply", got[2], got[3])
 	}
 }

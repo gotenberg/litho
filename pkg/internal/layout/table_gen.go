@@ -316,6 +316,8 @@ func wrapperStyle(st *css.Style) *css.Style {
 	w.MaxWidth, w.MaxHeight = css.Dimension{Kind: css.None}, css.Dimension{Kind: css.None}
 	w.Overflow = css.OverflowVisible
 	w.BoxSizing = css.ContentBox
+	// The table box takes the preferred aspect ratio (CSS Sizing 4, 4.1).
+	w.AspectRatio = css.AspectRatio{}
 	return &w
 }
 
