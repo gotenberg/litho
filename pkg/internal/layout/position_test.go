@@ -506,3 +506,17 @@ func TestAbs_TableBetweenInsetsKeepsItsHeight(t *testing.T) {
 		t.Errorf("table at y %v, %v tall, want at 15, 10 tall", got[1], got[3])
 	}
 }
+
+// TestAbs_SplitInlineContainingBlockStartsAtItsFirstPiece holds the
+// containing block of an inline box split around a block to CSS 2.1,
+// 10.1, 4: it starts at the inline's first fragment, here the empty piece
+// before the block, on the line above the one that holds its text.
+func TestAbs_SplitInlineContainingBlockStartsAtItsFirstPiece(t *testing.T) {
+	t.Parallel()
+	absBox := el(sty(width(10), height(10), func(s *css.Style) { s.Position, s.Top, s.Left = css.Absolute, css.Pts(0), css.Pts(0) }))
+	span := el(inlineSty(func(s *css.Style) { s.Position = css.Relative }), el(sty()), txt(sty(), "AA"), absBox)
+	rb := boxes(t, doc(el(sty(width(100)), el(sty(height(60))), txt(sty(), "B "), span)), page(200, 200))
+	if got := rect(kid(t, rb, 0, 0, 3, 0, 1)); got[1] != 60 {
+		t.Errorf("box at y %v, want 60, the first piece's line", got[1])
+	}
+}

@@ -222,6 +222,14 @@ func (e *engine) containerOf(b *box) absCB {
 // inlineCB returns the containing block an inline box a establishes (CSS
 // 2.1, 10.1, 4): from the top-left of the padding box of its first line
 // fragment to the bottom-right of its last one's.
+//
+// # Corpus evidence
+//
+//   - wpt: css-position/position-absolute-in-inline-003 (an inline split
+//     around an empty block) draws its reference in Chromium 156: the
+//     containing block starts at the empty piece before the block.
+//   - probe, html: Chromium 156 puts a box of top: 0 and left: 0 in such
+//     an inline at the inline's first fragment, after the text before it.
 func inlineCB(a *box) absCB {
 	var host *box
 	for h := a.parent; h != nil; h = h.parent {
@@ -234,18 +242,51 @@ func inlineCB(a *box) absCB {
 	if host == nil {
 		return cb
 	}
+	// An inline box split around a block-level box is several pieces, in
+	// the anonymous blocks on either side (CSS 2.1, 9.2.1.1): the first
+	// and last fragments are searched in all of them, in order. A first
+	// piece that holds nothing makes no fragment; it starts the block
+	// where it opens.
+	for host.anon && host.parent != nil {
+		host = host.parent
+	}
+	piece := func(b *box) bool { return b == a || b.kind == kindInline && a.node != nil && b.node == a.node }
 	var first, last *inlineFrag
 	var fl, ll *lineBox
-	for _, l := range host.lines {
-		for _, f := range l.frags {
-			if f.box != a {
-				continue
+	var opener *box
+	var scan func(h *box)
+	scan = func(h *box) {
+		for _, l := range h.lines {
+			for _, f := range l.frags {
+				if !piece(f.box) {
+					continue
+				}
+				if first == nil {
+					first, fl = f, l
+				}
+				last, ll = f, l
 			}
-			if first == nil {
-				first, fl = f, l
-			}
-			last, ll = f, l
 		}
+		for _, k := range h.kids {
+			switch {
+			case piece(k):
+				if opener == nil {
+					opener = k
+				}
+			case k.anon && k.kind == kindBlock, k.kind == kindInline:
+				scan(k)
+			}
+		}
+	}
+	scan(host)
+	if first != nil && opener != nil && first.box != opener && opener.anchorSet {
+		// The first piece is empty: the block starts where it opens.
+		x1 := ll.x + last.x1 - a.bd[css.Right]
+		y1 := ll.y + last.bottom - a.bd[css.Bottom]
+		x0, y0 := opener.anchorX+a.bd[css.Left], opener.anchorY+a.bd[css.Top]
+		cb.x, cb.y = x0, y0
+		cb.w, cb.h = max(x1-x0, 0), max(y1-y0, 0)
+		return cb
 	}
 	if first == nil {
 		return cb
