@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -305,6 +306,13 @@ type Options struct {
 	MaxPages int
 	// Logger receives diagnostics, nil for none.
 	Logger *slog.Logger
+	// EffectPixels, when not nil, counts the pixels of the Office text
+	// effects ([css.Office.TextEffects]) this layout draws together with
+	// those of the other layouts that share it, against
+	// [effect.MaxPagePixels]: a converter that lays out each text body of
+	// a page apart keeps one count for the page. nil counts each painting
+	// of the layout apart. Layout uses it from its own goroutine.
+	EffectPixels *effect.Page
 	// FirstLine styles the first formatted line of the block containers
 	// that have a ::first-line (CSS Pseudo 4, 2.1); nil styles none.
 	FirstLine FirstLineStyler

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -145,5 +146,37 @@ func TestTextEffects_GroupWithTheirBox(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestTextEffects_ShareTheCallersPixels checks that a run's effects count
+// against the pixels Options.EffectPixels holds: a count other layouts
+// have spent leaves them out, with a warning.
+func TestTextEffects_ShareTheCallersPixels(t *testing.T) {
+	var spent effect.Page
+	for spent.Take(effect.Resolution{W: 1 << 13, H: 1 << 13}) {
+	}
+	st := sty(func(s *css.Style) {
+		s.TextEffects = &css.OfficeEffects{Glow: &css.OfficeGlow{Color: css.Color{R: 1, A: 0.4}, Radius: 6}}
+	})
+	res := runWith(t, doc(el(st, txt(st, "ab"))), Options{Page: page(200, 100), EffectPixels: &spent})
+	var images int
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *typeset.Image:
+				images++
+			case *typeset.Group:
+				walk(v.Content)
+			}
+		}
+	}
+	walk(res.Pages[0].Content)
+	if images != 0 {
+		t.Errorf("%d effect bitmaps past the shared pixels, want none", images)
+	}
+	if len(res.Warnings) == 0 {
+		t.Error("no warning for the effects left out")
 	}
 }

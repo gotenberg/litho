@@ -55,7 +55,11 @@ func (p *painter) textEffects(it *lineItem, l *lineBox, page int) {
 		src.Paths = []effect.Path{{Ops: ops}}
 		src.Bounds = typeset.Rect{X: x0, Y: oy - t.Size, Width: max(x1-x0, 0), Height: t.Size}
 	}
-	frags, notes, err := officefx.Under(p.e.ctx, src, fx, &p.effectPixels)
+	pixels := &p.effectPixels
+	if p.e.opts.EffectPixels != nil {
+		pixels = p.e.opts.EffectPixels
+	}
+	frags, notes, err := officefx.Under(p.e.ctx, src, fx, pixels)
 	switch {
 	case err != nil && limits.Stops(err):
 		p.e.fail(fmt.Errorf("drawing text effects: %w", err))

@@ -635,6 +635,9 @@ func (b *builder) layoutBody(body *TextBody, w, h float64, f fit) *laidBody {
 		Fallback: b.doc.Fallback,
 		MaxPages: 2,
 		Logger:   b.opts.Logger,
+		// A slide's run effects count against its effect pixels with its
+		// shapes' ([effect.MaxPagePixels]).
+		EffectPixels: &b.effectPixels,
 	})
 	if err != nil {
 		if !errors.Is(err, b.ctx.Err()) {
