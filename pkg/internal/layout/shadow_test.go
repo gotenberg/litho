@@ -362,3 +362,17 @@ func TestShadows_SameBytesOnEveryArchitecture(t *testing.T) {
 		t.Errorf("shadow images:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+func TestFloat_PositionedDescendantsPaintInParentContext(t *testing.T) {
+	// CSS 2.1, Appendix E, step 5: a float paints as if it made a
+	// stacking context, but its positioned descendants take part in the
+	// enclosing one: a z-index 10 box inside a float paints over a
+	// positioned box that follows the float.
+	inner := square(2, 2, lime, rel(0, 0), zIndex(10))
+	root := doc(el(sty(width(4), height(2)),
+		el(sty(float(css.FloatLeft), width(2), height(2), bg(red)), inner),
+		square(3, 2, blue, rel(0, 0))))
+	assertPixels(t, run(t, root, page(4, 2)), 1, `
+		GGB_
+		GGB_`)
+}

@@ -488,7 +488,9 @@ func ancestorOffset(b *box) (float64, float64) {
 
 // floating paints the float, multi-column container or monolithic box f
 // as one unit. A float inside relatively positioned inline boxes moves
-// with them, as their descendant (CSS 2.1, 9.4.3).
+// with them, as their descendant (CSS 2.1, 9.4.3). The positioned
+// descendants of a float paint from the stacking context around it, which
+// [painter.collect] lists them in (CSS 2.1, Appendix E, step 5).
 func (p *painter) floating(f *box) {
 	if f.parent != nil && f.parent.kind == kindInline {
 		dx, dy := inlineOffset(f.parent)
@@ -496,7 +498,7 @@ func (p *painter) floating(f *box) {
 		p.dy += dy
 		defer func() { p.dx -= dx; p.dy -= dy }()
 	}
-	p.context(f)
+	p.unit(f, f.float == css.FloatNone || f.mc != nil)
 }
 
 // context paints b and its descendants as one unit: a stacking context, a
@@ -749,6 +751,13 @@ func (p *painter) collect(b *box, blocks, floats, layers *[]*box) {
 			// 6.3).
 		case k.layered():
 			*layers = append(*layers, k)
+		case k.float != css.FloatNone && k.mc == nil:
+			// A float paints as a unit, but its positioned descendants
+			// take part in the enclosing stacking context (CSS 2.1,
+			// Appendix E, step 5).
+			*floats = append(*floats, k)
+			var bl, fl []*box
+			p.collect(k, &bl, &fl, layers)
 		case k.float != css.FloatNone || k.mc != nil:
 			// A multi-column container paints its columns as a unit.
 			*floats = append(*floats, k)
