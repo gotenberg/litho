@@ -483,7 +483,7 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 				piece.Direction = di.DirectionRTL
 			}
 			for _, in := range shaping.SplitByFace(piece, styleFontmap{st: st, style: idx, script: piece.Script}) {
-				st.faceFeatures(&in)
+				st.faceInput(&in)
 				out := st.kit.shaper.Shape(in)
 				rescale(&out, in.Size)
 				st.collectMissing(&out, text)
@@ -509,6 +509,14 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 // letter spacing after each cluster and recording every cluster's advance
 // on its first character.
 func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.Output, run int, style Style) (shapedItem, error) {
+	fc := st.byFont[out.Face.Font]
+	var doc *FaceDescriptor
+	if fc != nil {
+		doc = fc.doc
+		// A face's size adjustment draws it at a scaled size (CSS Fonts
+		// 5, 4.12).
+		style.Size *= doc.sizeAdjust()
+	}
 	it := shapedItem{
 		start: out.Runes.Offset, end: out.Runes.Offset + out.Runes.Count, run: run, style: style,
 		rtl:     out.Direction.Progression() == di.TowardTopLeft,
@@ -519,8 +527,15 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 	if it.start >= 0 && it.start < len(p.level) {
 		it.level = int(p.level[it.start])
 	}
-	if fc := st.byFont[out.Face.Font]; fc != nil {
-		m := fc.Metrics(style.Size)
+	if doc != nil {
+		m := Metrics{Ascent: it.ascent, Descent: it.descent, LineGap: it.gap}
+		doc.override(&m, style.Size)
+		it.ascent, it.descent, it.gap = m.Ascent, m.Descent, m.LineGap
+	}
+	if fc != nil {
+		// Metrics applies the rule's size-adjust, which style.Size holds
+		// already.
+		m := fc.Metrics(style.Size / doc.sizeAdjust())
 		it.emAscent, it.emDescent = m.EmAscent, m.EmDescent
 		cf, err := fc.Typeset(ctx)
 		if err != nil {

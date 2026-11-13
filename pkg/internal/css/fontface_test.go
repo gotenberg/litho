@@ -90,21 +90,25 @@ func TestFontFace_Sources(t *testing.T) {
 
 func TestFontFace_IgnoredDescriptorsWarn(t *testing.T) {
 	t.Parallel()
-	f, warns, ok := faceOf(t, `font-display: swap; size-adjust: 90%; font-feature-settings: "liga" 0; ascent-override: 90%`)
+	f, warns, ok := faceOf(t, `font-display: swap; size-adjust: 90%; font-feature-settings: "liga" 0; ascent-override: 90%; `+
+		`descent-override: normal; line-gap-override: -1%; font-variation-settings: "wght" 300`)
 	if !ok || f.Family != "F" {
 		t.Fatalf("the rule was dropped: %+v", f)
 	}
-	for _, name := range []string{"size-adjust", "ascent-override"} {
-		if !hasWarning(warns, warn.CSSUnsupported, name) {
-			t.Errorf("no warning for %s: %v", name, warns)
-		}
+	if !hasWarning(warns, warn.CSSUnsupported, "font-variation-settings") {
+		t.Errorf("no warning for font-variation-settings: %v", warns)
 	}
-	for _, name := range []string{"font-display", "font-feature-settings"} {
+	for _, name := range []string{"font-display", "font-feature-settings", "size-adjust", "ascent-override"} {
 		if hasWarning(warns, warn.CSSUnsupported, name) {
 			t.Errorf("%s warned: %v", name, warns)
 		}
 	}
 	if want := []FeatureSetting{{"liga", 0}}; !reflect.DeepEqual(f.FeatureSettings, want) {
 		t.Errorf("font-feature-settings = %v, want %v", f.FeatureSettings, want)
+	}
+	// A negative percentage is invalid and keeps normal (CSS Fonts 4,
+	// 4.11).
+	if f.SizeAdjust != 0.9 || f.AscentOverride != 0.9 || f.DescentOverride != -1 || f.LineGapOverride != -1 {
+		t.Errorf("metrics %v %v %v %v", f.SizeAdjust, f.AscentOverride, f.DescentOverride, f.LineGapOverride)
 	}
 }

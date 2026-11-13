@@ -46,10 +46,55 @@ type FaceDescriptor struct {
 	// UnicodeRange lists the inclusive character ranges the face is used
 	// for, nil for every character.
 	UnicodeRange [][2]rune
+	// SizeAdjust scales the face's outlines and metrics, CSS size-adjust
+	// (CSS Fonts 5, 4.12): text drawn in the face is drawn at its size
+	// times SizeAdjust. 0 means 1; it is at most 100.
+	SizeAdjust float64
+	// Ascent, Descent and LineGap replace the face's metrics, CSS
+	// ascent-override, descent-override and line-gap-override (CSS Fonts
+	// 4, 4.11), as fractions of the font size the face is drawn at.
+	Ascent, Descent, LineGap MetricOverride
 	// Features are the OpenType features the rule's font-feature-settings
 	// descriptor sets: text drawn in the face is shaped with them before
 	// the features of its [Style] (CSS Fonts 4, 7.2).
 	Features []Feature
+}
+
+// MetricOverride is a metric an @font-face rule sets: a fraction of the
+// font size, from 0 to 100, when Set.
+type MetricOverride struct {
+	Value float64
+	Set   bool
+}
+
+// maxFaceFactor bounds [FaceDescriptor.SizeAdjust] and the metric
+// overrides. Overflow guard, not spec-mandated: a factor of 100 already
+// draws a 10-point font a meter tall.
+const maxFaceFactor = 100
+
+// sizeAdjust returns the factor the face's glyphs are scaled by, 1 for
+// none.
+func (d *FaceDescriptor) sizeAdjust() float64 {
+	if d == nil || d.SizeAdjust <= 0 || !finiteWithin(d.SizeAdjust, maxFaceFactor) {
+		return 1
+	}
+	return d.SizeAdjust
+}
+
+// override applies the metric overrides of d to m, the metrics of the face
+// drawn at size points, its size adjustment applied (CSS Fonts 4, 4.11).
+func (d *FaceDescriptor) override(m *Metrics, size float64) {
+	if d == nil {
+		return
+	}
+	for _, o := range []struct {
+		v   MetricOverride
+		dst *float64
+	}{{d.Ascent, &m.Ascent}, {d.Descent, &m.Descent}, {d.LineGap, &m.LineGap}} {
+		if o.v.Set && o.v.Value >= 0 && finiteWithin(o.v.Value, maxFaceFactor) {
+			*o.dst = o.v.Value * size
+		}
+	}
 }
 
 // normalized returns d with its zero values defaulted and its ranges in

@@ -122,7 +122,9 @@ func (c *declCtx) warn(code warn.Code, effect warn.Effect, format string, args .
 }
 
 // silentProperties are properties with no effect on a static paged
-// rendering, ignored without a warning.
+// rendering, ignored without a warning. font-palette picks the palette of
+// a colour font (CSS Fonts 4, 9.1), and litho draws no colour glyphs: an
+// outline face draws them, in the text's colour, whatever the palette.
 var silentProperties = map[string]bool{
 	"cursor": true, "pointer-events": true, "user-select": true, "touch-action": true,
 	"transition": true, "transition-property": true, "transition-duration": true,
@@ -131,6 +133,7 @@ var silentProperties = map[string]bool{
 	"overscroll-behavior": true, "scrollbar-width": true, "scrollbar-color": true,
 	"scrollbar-gutter": true, "print-color-adjust": true, "color-adjust": true,
 	"text-rendering": true, "font-smooth": true, "speak": true, "zoom": true,
+	"font-palette": true,
 }
 
 // knownProperty reports whether litho parses the property name.

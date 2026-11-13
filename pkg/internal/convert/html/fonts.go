@@ -242,6 +242,12 @@ func descriptorOf(rule css.FontFace) text.FaceDescriptor {
 		StretchMax:   rule.StretchMax,
 		UnicodeRange: rule.UnicodeRange,
 	}
+	if rule.SizeAdjust != 1 {
+		d.SizeAdjust = rule.SizeAdjust
+	}
+	d.Ascent = text.MetricOverride{Value: rule.AscentOverride, Set: rule.AscentOverride >= 0}
+	d.Descent = text.MetricOverride{Value: rule.DescentOverride, Set: rule.DescentOverride >= 0}
+	d.LineGap = text.MetricOverride{Value: rule.LineGapOverride, Set: rule.LineGapOverride >= 0}
 	for _, f := range rule.FeatureSettings {
 		d.Features = append(d.Features, text.Feature{Tag: f.Tag, Value: uint32(f.Value)}) //nolint:gosec // a feature value is in [0, 2^30], checked by the parser
 	}

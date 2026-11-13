@@ -32,6 +32,13 @@ type FontFace struct {
 	// UnicodeRange lists the inclusive code point ranges the face covers,
 	// nil for all of them.
 	UnicodeRange [][2]rune
+	// SizeAdjust is the size-adjust descriptor, the factor the face's
+	// outlines and metrics are scaled by, 1 for 100% (CSS Fonts 5, 4.12).
+	SizeAdjust float64
+	// AscentOverride, DescentOverride and LineGapOverride are the
+	// metric override descriptors as fractions of the used font size,
+	// negative for normal (CSS Fonts 4, 4.11).
+	AscentOverride, DescentOverride, LineGapOverride float64
 	// FeatureSettings are the font-feature-settings descriptor's
 	// features, which apply to text drawn in the face before those of the
 	// font properties (CSS Fonts 4, 4.8 and 7.2); nil for normal.
@@ -67,18 +74,13 @@ const (
 )
 
 // ignoredFaceDescriptors are @font-face descriptors litho parses and does
-// not apply: the font variation settings, the metric overrides
-// (CSS Fonts 4, 4.8 to 4.10; CSS Fonts 5, 4.10 and 4.11) and the named
-// instance. A rule that sets one still loads, without it, and gets a
+// not apply: the font variation settings, the language override and the
+// named instance (CSS Fonts 4, 4.8 to 4.10). A rule that sets one still loads, without it, and gets a
 // warning.
 var ignoredFaceDescriptors = map[string]bool{
 	"font-variation-settings": true,
 	"font-named-instance":     true,
 	"font-language-override":  true,
-	"ascent-override":         true,
-	"descent-override":        true,
-	"line-gap-override":       true,
-	"size-adjust":             true,
 }
 
 // parseFontFace parses an @font-face block, false when it lacks a family
@@ -88,6 +90,7 @@ func parseFontFace(block []token, c *declCtx) (FontFace, bool) {
 	f := FontFace{
 		WeightMin: defaultFaceWeight, WeightMax: defaultFaceWeight,
 		StretchMin: defaultFaceStretch, StretchMax: defaultFaceStretch,
+		SizeAdjust: 1, AscentOverride: -1, DescentOverride: -1, LineGapOverride: -1,
 	}
 	newListParser(block).declarations(func(it item) bool {
 		if it.kind != itemDeclaration {
@@ -115,6 +118,22 @@ func parseFontFace(block []token, c *declCtx) (FontFace, bool) {
 			}
 		case "unicode-range":
 			f.UnicodeRange = parseUnicodeRanges(it.value)
+		case "size-adjust":
+			if p, ok := facePercentage(v, false); ok {
+				f.SizeAdjust = p
+			}
+		case "ascent-override":
+			if p, ok := facePercentage(v, true); ok {
+				f.AscentOverride = p
+			}
+		case "descent-override":
+			if p, ok := facePercentage(v, true); ok {
+				f.DescentOverride = p
+			}
+		case "line-gap-override":
+			if p, ok := facePercentage(v, true); ok {
+				f.LineGapOverride = p
+			}
 		case "font-feature-settings":
 			if l, ok := parseFeatureSettings(v, c); ok {
 				f.FeatureSettings, _ = l.([]FeatureSetting) // always that type when ok
@@ -131,6 +150,28 @@ func parseFontFace(block []token, c *declCtx) (FontFace, bool) {
 		return true
 	})
 	return f, f.Family != "" && len(f.Sources) > 0
+}
+
+// maxFaceFactor caps size-adjust and the metric overrides, as a factor of
+// the font size. Overflow guard, not spec-mandated: CSS Fonts 4, 4.11 and
+// CSS Fonts 5, 4.12 take any non-negative percentage, and a factor of 100
+// already draws a 10-point font a meter tall.
+const maxFaceFactor = 100
+
+// facePercentage parses a non-negative <percentage> as a fraction, or,
+// with normal set, the keyword normal as -1 (CSS Fonts 4, 4.11; CSS Fonts
+// 5, 4.12).
+func facePercentage(v []token, normal bool) (float64, bool) {
+	t, ok := single(v)
+	switch {
+	case !ok:
+		return 0, false
+	case normal && t.isIdent("normal"):
+		return -1, true
+	case t.typ == tPercentage && numeric.Finite(t.num) && t.num >= 0:
+		return min(t.num/100, maxFaceFactor), true
+	}
+	return 0, false
 }
 
 // parseFontSources parses the src descriptor (CSS Fonts 4, 4.3), keeping

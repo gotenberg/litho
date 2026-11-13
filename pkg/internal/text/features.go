@@ -1,7 +1,10 @@
 package text
 
 import (
+	"math"
 	"slices"
+
+	"golang.org/x/image/math/fixed"
 
 	"github.com/go-text/typesetting/font"
 	"github.com/go-text/typesetting/font/opentype"
@@ -90,16 +93,22 @@ func scriptTag(script language.Script) opentype.Tag {
 	return opentype.Tag(script | 0x20000000)
 }
 
-// faceFeatures puts the features of the @font-face rule of in's face
-// before those of its style, so that the style's override them (CSS
-// Fonts 4, 7.2).
-func (st *layoutState) faceFeatures(in *shaping.Input) {
+// faceInput applies the @font-face rule of in's face to in: its features
+// go before those of its style, so that the style's override them (CSS
+// Fonts 4, 7.2), and its size adjustment scales the size (CSS Fonts 5,
+// 4.12).
+func (st *layoutState) faceInput(in *shaping.Input) {
 	if in.Face == nil {
 		return
 	}
 	fc := st.byFont[in.Face.Font]
-	if fc == nil || len(fc.features) == 0 {
+	if fc == nil || fc.doc == nil {
 		return
 	}
-	in.FontFeatures = append(slices.Clone(fc.features), in.FontFeatures...)
+	if len(fc.features) > 0 {
+		in.FontFeatures = append(slices.Clone(fc.features), in.FontFeatures...)
+	}
+	if k := fc.doc.sizeAdjust(); k != 1 {
+		in.Size = fixed.Int26_6(math.Round(float64(in.Size) * k))
+	}
 }

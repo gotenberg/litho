@@ -1,6 +1,7 @@
 package text
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -106,5 +107,31 @@ func TestShape_ExtractText(t *testing.T) {
 	plain := shape(t, f, []ParagraphRun{{Text: "AB", Style: st}}, ParagraphOptions{})
 	if plain.extract != nil {
 		t.Errorf("a paragraph without Extract holds %q", string(plain.extract))
+	}
+}
+
+// TestShape_FaceSizeAdjustAndOverrides checks the size-adjust and metric
+// override descriptors of a document face (CSS Fonts 5, 4.12; CSS Fonts 4,
+// 4.11): the face draws at its scaled size, and its ascent, descent and
+// line gap are the given fractions of that size.
+func TestShape_FaceSizeAdjustAndOverrides(t *testing.T) {
+	t.Parallel()
+	base := newTestFonts(t, fontFile{name: "sans_regular.ttf", data: testSans("Regular", 400, false, 100)})
+	plain := base.WithFaces(NewFaceSet([]*Face{docFace(t, testSans("Regular", 400, false, 100), "Test Sans", FaceDescriptor{})}))
+	adjusted := base.WithFaces(NewFaceSet([]*Face{docFace(t, testSans("Regular", 400, false, 100), "Test Sans", FaceDescriptor{
+		SizeAdjust: 0.5, Ascent: MetricOverride{Value: 0.8, Set: true}, LineGap: MetricOverride{Value: 0, Set: true},
+	})}))
+	st := style()
+	st.Size = 20
+	w := func(f *Fonts) float64 {
+		return shape(t, f, []ParagraphRun{{Text: "AB", Style: st}}, ParagraphOptions{}).Line(0, 2, false).Width
+	}
+	if a, b := w(plain), w(adjusted); math.Abs(b-a/2) > 1e-6 {
+		t.Errorf("adjusted width %v, want half of %v", b, a)
+	}
+	m := adjusted.Match(st).Metrics(20)
+	pm := plain.Match(st).Metrics(20)
+	if math.Abs(m.Ascent-8) > 1e-9 || m.LineGap != 0 || math.Abs(m.Descent-pm.Descent/2) > 1e-9 {
+		t.Errorf("metrics %+v, plain %+v", m, pm)
 	}
 }
