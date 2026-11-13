@@ -85,8 +85,8 @@ const (
 	// resolution the effect engine's rule gives the blur.
 	EffectsPowerPoint EffectRules = iota
 	// EffectsImpress draws them as Impress prints a presentation: the glow
-	// and the soft edge of a rectangle twice, blurred by a tent, at 720
-	// pixels an inch within 250,000 pixels a bitmap.
+	// and the soft edge of a rectangle twice, blurred by a tent, at the
+	// resolution the effect engine's rule gives the tent's deviation.
 	EffectsImpress
 )
 

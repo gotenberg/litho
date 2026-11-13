@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -122,14 +123,16 @@ func TestShape_BlurredShadow(t *testing.T) {
 	if len(ps) != 2 || ps[0].img == nil || ps[1].path == nil {
 		t.Fatalf("%d fragments, want the shadow's bitmap then the shape", len(ps))
 	}
-	if got, want := ps[0].bounds(), (typeset.Rect{X: 102, Y: 112, Width: 216, Height: 116}); !rectNear(got, want, 0.01) {
+	// The grid widens the box to whole pixels of 0.65 pt.
+	if got, want := ps[0].bounds(), (typeset.Rect{X: 102, Y: 112, Width: 216, Height: 116}); !rectNear(got, want, 0.66) {
 		t.Errorf("shadow bounds %+v, want %+v", got, want)
 	}
 	img := decoded(t, ps[0].img.Source)
-	if b := img.Bounds(); b.Dx()*b.Dy() > effectPixels || b.Dx() != 682 || b.Dy() != 366 {
-		t.Errorf("shadow bitmap %v, want 682 by 366 within the budget", b)
+	res, _ := effect.Plan(tentSigma(8), 216, 116)
+	if b := img.Bounds(); b.Dx() != res.W || b.Dy() != res.H {
+		t.Errorf("shadow bitmap %v, want %d by %d, the engine's grid for the tent's deviation", b, res.W, res.H)
 	}
-	if c := img.NRGBAAt(341, 183); c != (color.NRGBA{B: 255, A: 128}) {
+	if c := img.NRGBAAt(res.W/2, res.H/2); c != (color.NRGBA{B: 255, A: 128}) {
 		t.Errorf("shadow middle %v, want blue at half alpha", c)
 	}
 	for _, tc := range []struct {
@@ -221,8 +224,8 @@ func TestShape_SoftEdge(t *testing.T) {
 			if c := img.NRGBAAt(img.Bounds().Dx()/2, img.Bounds().Dy()/2); c != (color.NRGBA{R: 255, A: 255}) {
 				t.Errorf("middle %v, want opaque red", c)
 			}
-			if got := alphaAt(t, ps[0], 100.2, 140); got != 0 {
-				t.Errorf("alpha on the outline %d, want 0", got)
+			if got := alphaAt(t, ps[0], 100.2, 140); got > 4 {
+				t.Errorf("alpha on the outline %d, want about 0", got)
 			}
 			if got := alphaAt(t, ps[0], 110, 140); abs(int(got)-int(tc.at)) > 12 {
 				t.Errorf("alpha a radius in %d, want %d", got, tc.at)
@@ -244,35 +247,11 @@ func TestShape_PictureShadow(t *testing.T) {
 	if len(ps) != 2 || ps[0].img == nil || ps[1].img == nil {
 		t.Fatalf("%d fragments, want the shadow's bitmap then the picture", len(ps))
 	}
-	if got, want := ps[0].bounds(), (typeset.Rect{X: 51, Y: 46, Width: 88, Height: 48}); !rectNear(got, want, 0.01) {
+	// The grid widens the box to whole pixels of 0.33 pt.
+	if got, want := ps[0].bounds(), (typeset.Rect{X: 51, Y: 46, Width: 88, Height: 48}); !rectNear(got, want, 0.34) {
 		t.Errorf("shadow bounds %+v, want %+v", got, want)
 	}
 	if got := alphaAt(t, ps[0], 95, 70); got != 255 {
 		t.Errorf("shadow middle alpha %d, want 255", got)
-	}
-}
-
-// TestNewGrid_Resolution checks the effect bitmap's size: 10 pixels a
-// point rounded up, reduced to the pixel budget with its aspect kept.
-func TestNewGrid_Resolution(t *testing.T) {
-	for _, tc := range []struct {
-		w, h       float64
-		pw, ph     int
-		ok         bool
-		unitAtMost float64
-	}{
-		{14.003, 14.003, 141, 141, true, 10},
-		{41.953, 41.953, 420, 420, true, 10},
-		{171.921, 169.115, 504, 496, true, 2.94},
-		{170.05, 155.877, 522, 479, true, 3.08},
-		{0.1, 30, 0, 0, false, 0},
-	} {
-		g, ok := newGrid(typeset.Rect{Width: tc.w, Height: tc.h})
-		if ok != tc.ok || g.w != tc.pw || g.h != tc.ph {
-			t.Errorf("newGrid(%v, %v) = %d by %d, %v, want %d by %d, %v", tc.w, tc.h, g.w, g.h, ok, tc.pw, tc.ph, tc.ok)
-		}
-		if ok && g.unit > tc.unitAtMost {
-			t.Errorf("newGrid(%v, %v) unit %v, want at most %v", tc.w, tc.h, g.unit, tc.unitAtMost)
-		}
 	}
 }

@@ -13,41 +13,14 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
-// effectScale is the resolution in pixels a point an effect's bitmap is
-// drawn at before its pixel budget applies: 720 pixels an inch, Impress's
-// for a printout.
-//
-// # Corpus evidence
-//
-//   - probe, pptx: a 10 by 10 pt rectangle with a shadow blurred over 2 pt
-//     prints its shadow as a 141 by 141 pixel bitmap over 14 pt, and
-//     rectangles of 20, 40 and 45 pt blurred over 1 pt as bitmaps of 220,
-//     420 and 470 pixels: the range's side in points times 10, rounded up.
-const effectScale = 10
-
-// effectPixels caps the pixels of one effect bitmap: a bitmap past it is
-// drawn at the resolution that holds this many pixels, its aspect kept.
-// Impress's own budget; also an anti-DoS guard, not spec-mandated: 250,000
-// pixels draw a shadow over a whole slide at 2.5 pixels a point, which
-// a blur hides, and bound the work and the bytes of every effect.
-//
-// # Corpus evidence
-//
-//   - probe, pptx: in Impress, sd/shape-blur-effect's oval prints its 171.9 by 169.1 pt
-//     shadow as a bitmap of 504 by 496 pixels, sd/effectOrder's glows as
-//     626 by 399 and 660 by 379, sd-data/n819614's 56 shadows each within
-//     a few hundred pixels of 250,000.
-const effectPixels = 250000
-
 // effectGrid is the pixel grid of an effect bitmap: the slide area box it
 // covers, w by h pixels, and how many pixels a point the radii are taken
 // at.
 type effectGrid struct {
 	box  typeset.Rect
 	w, h int
-	// unit is the pixels of a point the radii are measured in: on
-	// Impress's grid the unreduced resolution times the budget's
-	// reduction, on the engine's its scale.
+	// unit is the pixels of a point the radii are measured in, the grid's
+	// scale.
 	unit float64
 }
 
@@ -87,27 +60,6 @@ func (g effectGrid) whole(v float64) int {
 	return int(min(math.Round(max(g.span(v), 0)), effect.MaxKernelRadius)) // fits int: at most MaxKernelRadius
 }
 
-// newGrid returns the grid of an effect over the slide area box: each side
-// at effectScale pixels a point, rounded up, the whole reduced to
-// effectPixels when it holds more; false for an area too small to draw.
-func newGrid(box typeset.Rect) (effectGrid, bool) {
-	if !usable(box) {
-		return effectGrid{}, false
-	}
-	w0, h0 := math.Ceil(box.Width*effectScale), math.Ceil(box.Height*effectScale)
-	if w0 < 2 || h0 < 2 {
-		return effectGrid{}, false
-	}
-	w, h := w0, h0
-	if w*h > effectPixels {
-		f := math.Sqrt(effectPixels / (w * h))
-		w, h = max(math.Round(w*f), 1), max(math.Round(h*f), 1)
-	}
-	g := effectGrid{box: box, w: int(w), h: int(h)} // fits int: at most effectPixels each, set above
-	g.unit = effectScale * (w/w0 + h/h0) / 2
-	return g, true
-}
-
 // pixels returns the transform from slide points to the grid's pixels.
 func (g effectGrid) pixels() typeset.Matrix {
 	sx, sy := float64(g.w)/g.box.Width, float64(g.h)/g.box.Height
@@ -125,17 +77,6 @@ func (g effectGrid) surface(ctx context.Context, f effect.Format) (*effect.Surfa
 	return effect.New(ctx, f, g.w, g.h, g.place())
 }
 
-// radius returns the radius r points spans on the grid in whole pixels,
-// as Impress's filters take it: r at effectScale rounded up, scaled by the
-// budget's reduction, then truncated.
-func (g effectGrid) radius(r float64) int {
-	v := math.Ceil(r*effectScale) * g.unit / effectScale
-	if math.IsNaN(v) || v < 1 {
-		return 0
-	}
-	return int(min(v, effect.MaxKernelRadius)) // fits int: at most MaxKernelRadius
-}
-
 // blur blurs s in place by k along both axes, the pixels past the
 // bitmap's edge repeating the edge's: a mask its caller clipped to the
 // slide keeps its coverage at the cut.
@@ -143,9 +84,12 @@ func blur(ctx context.Context, s *effect.Surface, k effect.Kernel) error {
 	return effect.Blur(ctx, s, k, k, effect.EdgeDuplicate)
 }
 
-// tent returns the tent of radius r pixels, Impress's stack blur.
-func tent(r int) effect.Kernel {
-	return effect.TentKernel(float64(r))
+// tentSigma returns the standard deviation of a tent of radius r, in r's
+// unit: a triangle of half-width r has variance r^2/6. It sizes the grid
+// of an effect Impress blurs by a tent, as [effect.Plan] takes a blur by
+// its deviation.
+func tentSigma(r float64) float64 {
+	return r / math.Sqrt(6)
 }
 
 // tinted returns the coverage cov in the one colour c as an image whose
@@ -346,24 +290,17 @@ type effectPlan struct {
 }
 
 // grid returns the grid of an effect over box whose blur has standard
-// deviation sigma points, after growing or shrinking by morph points:
-// Impress's ([newGrid]) or the engine's ([planGrid]). It returns false
+// deviation sigma points, after growing or shrinking by morph points, by
+// the engine's rule on both programs' rules ([planGrid]). It returns false
 // for an area too small to draw or a bitmap past the slide's pixel cap
 // ([effect.MaxPagePixels]), which warns that the effect is left out.
 func (p *effectPlan) grid(box typeset.Rect, sigma, morph float64) (effectGrid, bool) {
-	var g effectGrid
-	var ok bool
-	if p.impress {
-		g, ok = newGrid(box)
-	} else {
-		var reduced bool
-		g, reduced, ok = planGrid(box, sigma, morph)
-		if ok && reduced {
-			p.reduced()
-		}
-	}
+	g, reduced, ok := planGrid(box, sigma, morph)
 	if !ok {
 		return effectGrid{}, false
+	}
+	if reduced {
+		p.reduced()
 	}
 	if !p.page.Take(effect.Resolution{W: g.w, H: g.h}) {
 		p.capped()
@@ -413,9 +350,10 @@ func effectsTwice(s *Shape) bool {
 // shadow, a glow and a soft edge are bitmaps over the slide area they
 // reach, clipped to the slide grown by their radius; a hard shadow is a
 // copy of the shape's fill, line and text in the shadow's colour. Impress
-// draws the bitmaps at effectScale pixels a point up to effectPixels and
-// blurs them by a tent, PowerPoint by a Gaussian; litho draws PowerPoint's
-// at the resolution of [effect.Plan].
+// blurs the bitmaps by a tent, PowerPoint by a Gaussian; litho draws both
+// at the resolution [effect.Plan] gives the blur, not at either program's
+// own (Impress's 720 pixels an inch within 250,000 pixels a bitmap,
+// PowerPoint's 100 pixels an inch): one rule for every format.
 //
 // # Corpus evidence
 //
@@ -838,10 +776,20 @@ func (p *effectPlan) glowMask(ctx context.Context, g effectGrid, tr typeset.Matr
 func (p *effectPlan) glowKernel(g effectGrid) (int, effect.Kernel) {
 	r := p.s.Glow.Radius
 	if p.impress {
-		half := g.radius(r) / 2
-		return half, tent(half)
+		return g.whole(r / 2), effect.TentKernel(g.span(r / 2))
 	}
 	return g.whole(r * officeGlowGrow), effect.GaussianKernel(g.span(r / 6))
+}
+
+// glowSize returns the deviation of a glow's blur and how far it grows
+// the silhouette, in points, for its grid ([effectPlan.grid]), as
+// [effectPlan.glowKernel] draws it.
+func (p *effectPlan) glowSize() (sigma, morph float64) {
+	r := p.s.Glow.Radius
+	if p.impress {
+		return tentSigma(r / 2), r / 2
+	}
+	return r / 6, r * officeGlowGrow
 }
 
 // grownBlur returns a copy of the coverage cov grown by r pixels and
@@ -882,7 +830,8 @@ func (p *effectPlan) glow(ctx context.Context, outer bool) typeset.Fragment {
 	if !ok {
 		return nil
 	}
-	g, ok := p.grid(box, gl.Radius/6, gl.Radius*officeGlowGrow)
+	sigma, morph := p.glowSize()
+	g, ok := p.grid(box, sigma, morph)
 	if !ok {
 		return nil
 	}
@@ -966,10 +915,20 @@ func (p *effectPlan) softFade(ctx context.Context, g effectGrid, tr typeset.Matr
 func (p *effectPlan) softKernel(g effectGrid) (int, effect.Kernel) {
 	r := p.s.SoftEdge
 	if p.impress {
-		n := g.radius(r)
-		return n, tent(n)
+		return g.whole(r), effect.TentKernel(g.span(r))
 	}
 	return g.whole(r * officeSoftShrink), effect.GaussianKernel(g.span(r / 3))
+}
+
+// softSize returns the deviation of a soft edge's blur and how far it
+// shrinks the silhouette, in points, for its grid ([effectPlan.grid]), as
+// [effectPlan.softKernel] draws it.
+func (p *effectPlan) softSize() (sigma, morph float64) {
+	r := p.s.SoftEdge
+	if p.impress {
+		return tentSigma(r), r
+	}
+	return r / 3, r * officeSoftShrink
 }
 
 // square multiplies the coverage of s by itself, in place.
@@ -1000,7 +959,8 @@ func (p *effectPlan) softEdge(ctx context.Context) typeset.Fragment {
 	if !ok {
 		return nil
 	}
-	g, ok := p.grid(box, p.s.SoftEdge/3, p.s.SoftEdge*officeSoftShrink)
+	sigma, morph := p.softSize()
+	g, ok := p.grid(box, sigma, morph)
 	if !ok {
 		return nil
 	}
@@ -1099,7 +1059,7 @@ func (p *effectPlan) shadow(ctx context.Context) typeset.Fragment {
 	if !ok {
 		return nil
 	}
-	g, ok := p.grid(box, sh.Blur/3, 0)
+	g, ok := p.grid(box, p.shadowSigma(), 0)
 	if !ok {
 		return nil
 	}
@@ -1157,12 +1117,22 @@ func (p *effectPlan) shadowMask(ctx context.Context, g effectGrid, tr typeset.Ma
 	}
 	k := effect.GaussianKernel(g.span(p.s.Shadow.Blur / 3))
 	if p.impress {
-		k = tent(g.radius(p.s.Shadow.Blur))
+		k = effect.TentKernel(g.span(p.s.Shadow.Blur))
 	}
 	if err := blur(ctx, mask, k); err != nil {
 		return fail(err)
 	}
 	return mask, nil
+}
+
+// shadowSigma returns the deviation of the shadow's blur in points, for
+// its grid ([effectPlan.grid]): a third of the radius on PowerPoint's
+// rules, the deviation of the tent of the radius on Impress's.
+func (p *effectPlan) shadowSigma() float64 {
+	if p.impress {
+		return tentSigma(p.s.Shadow.Blur)
+	}
+	return p.s.Shadow.Blur / 3
 }
 
 // officeGlowGrow is how far a Microsoft Office glow grows the silhouette
