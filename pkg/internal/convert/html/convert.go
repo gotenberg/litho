@@ -312,6 +312,9 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 		computed: computed, res: res, scan: scan, media: media,
 		warned: map[string]bool{}, omitBackgrounds: o.OmitBackgrounds, ids: ids,
 	}
+	// The page-margin boxes read these counters of the document as they
+	// stand at the start of each page (CSS Page 3, 6.1).
+	b.gcpm.track = resolver.MarginCounters()
 	root, err := b.buildRoot(ctx, scan.root)
 	if err != nil {
 		return nil, err

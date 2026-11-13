@@ -123,6 +123,9 @@ func clampCounter(v int) int { return min(max(v, -maxListValue), maxListValue) }
 // value of list-item for a list item, 0 otherwise.
 func (b *builder) applyCounters(n *dom.Node, st *css.Style) int {
 	c := &b.counters
+	if n != nil && len(b.gcpm.track) > 0 {
+		defer b.markCounters(n, st, b.trackedValues())
+	}
 	if pageOp(st) {
 		b.warnOnce(warn.CSSUnsupported, warn.Approximated, "page-counter",
 			"counter-reset, counter-increment and counter-set of the page counter on an element do not number the pages; in an @page rule they do")

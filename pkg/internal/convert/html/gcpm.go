@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	dom "golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -41,7 +42,8 @@ type assignment struct {
 }
 
 // gcpmState holds the named strings and running elements of a document,
-// which the page-margin boxes show.
+// which the page-margin boxes show, and the values the document's
+// counters take along it, which the page-margin boxes read.
 type gcpmState struct {
 	strings, running []assignment
 	// placed are the anchors of the last layout, by ID.
@@ -50,10 +52,19 @@ type gcpmState struct {
 	// paged holds the Text nodes of generated content that read the page
 	// or pages counter.
 	paged map[*layout.Node][]pagedText
+	// track names the document counters a page-margin box reads, marks
+	// their values along the document, and markAt is where the last
+	// lookup of [gcpmState.countersAt] stopped.
+	track  []string
+	marks  []counterMark
+	markAt int
 }
 
-// active reports a document with named strings or running elements.
-func (g *gcpmState) active() bool { return len(g.strings) > 0 || len(g.running) > 0 }
+// active reports a document with named strings, running elements or
+// counter marks, whose anchors the page-margin boxes need.
+func (g *gcpmState) active() bool {
+	return len(g.strings) > 0 || len(g.running) > 0 || len(g.marks) > 0
+}
 
 // pagedText is a counter() or counters() of the page or pages counter that
 // generated content wrote into a Text node, at bytes start to end: shown
@@ -63,6 +74,20 @@ type pagedText struct {
 	start, end int
 	item       css.ContentItem
 }
+
+// counterMark holds the values of the tracked counters just before and
+// just after the element anchored at id runs its counter properties,
+// recorded where they change.
+type counterMark struct {
+	id            string
+	before, after [][]int
+}
+
+// maxCounterMarks bounds the counter marks of a document: 65,536.
+// Anti-DoS guard, not spec-mandated: a mark is recorded where a counter a
+// page-margin box reads changes, once per chapter or section of a book,
+// and every page scans them.
+const maxCounterMarks = 1 << 16
 
 // gcpmID returns an anchor ID no element of the document carries.
 func (b *builder) gcpmID() string {
@@ -281,6 +306,82 @@ func (g *gcpmState) atPage(n *layout.Node, text func(css.ContentItem) string, de
 		}
 	}
 	return &c
+}
+
+// trackedValues returns the values of the counters a page-margin box
+// reads, in the order of [gcpmState.track].
+func (b *builder) trackedValues() [][]int {
+	vals := make([][]int, len(b.gcpm.track))
+	for i, name := range b.gcpm.track {
+		vals[i] = b.counters.values(name)
+	}
+	return vals
+}
+
+// markCounters records the values before, before the element n styled st
+// ran its counter properties, and after it, when the element changed them
+// or something since the last mark did: a page-margin box shows them as an
+// element at the start of the page would see them (CSS Page 3, 6.1). The
+// mark anchors at n; an element whose box gets no anchor where it stands
+// in the flow, out of the flow or replaced, is left unmarked, and the next
+// element records what changed.
+func (b *builder) markCounters(n *dom.Node, st *css.Style, before [][]int) {
+	g := &b.gcpm
+	if len(g.marks) >= maxCounterMarks || n.Namespace != "" || st.Float != css.FloatNone ||
+		st.Position == css.Absolute || st.Position == css.Fixed || st.Running != "" || st.Footnote || st.Note != "" {
+		return
+	}
+	switch n.DataAtom { //nolint:exhaustive // every other element gets its node and its anchor
+	case atom.Br, atom.Wbr, atom.Img, atom.Input, atom.Select, atom.Textarea, atom.Object, atom.Canvas:
+		return
+	}
+	after := b.trackedValues()
+	var last [][]int
+	if k := len(g.marks); k > 0 {
+		last = g.marks[k-1].after
+	} else {
+		last = make([][]int, len(g.track))
+	}
+	if slices.EqualFunc(before, last, slices.Equal) && slices.EqualFunc(after, before, slices.Equal) {
+		return
+	}
+	id, ok := b.ids[n]
+	if !ok {
+		id, _ = attr(n, "id")
+	}
+	if id == "" {
+		if n.DataAtom == atom.A {
+			// A named anchor's name is its anchor.
+			return
+		}
+		id = b.gcpmID()
+		if b.ids == nil {
+			b.ids = map[*dom.Node]string{}
+		}
+		b.ids[n] = id
+	}
+	g.marks = append(g.marks, counterMark{id: id, before: before, after: after})
+}
+
+// countersAt returns the values of the tracked counter of index i at the
+// start of page index: those before the first mark on that page or a
+// later one, those after the last mark past them. Pages come in
+// order, so the scan resumes where the last one stopped.
+func (g *gcpmState) countersAt(i, index int) []int {
+	if len(g.marks) == 0 {
+		return nil
+	}
+	if g.markAt > 0 {
+		if d, ok := g.placed[g.marks[g.markAt-1].id]; ok && d.Page-1 >= index {
+			g.markAt = 0
+		}
+	}
+	for ; g.markAt < len(g.marks); g.markAt++ {
+		if d, ok := g.placed[g.marks[g.markAt].id]; ok && d.Page-1 >= index {
+			return g.marks[g.markAt].before[i]
+		}
+	}
+	return g.marks[len(g.marks)-1].after[i]
 }
 
 // nodeText returns the text of the Text nodes under n.

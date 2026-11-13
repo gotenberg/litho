@@ -420,6 +420,38 @@ func TestMarginBoxes_PageCounter(t *testing.T) {
 	}
 }
 
+// TestMarginBoxes_DocumentCounters locks a counter of the document read
+// in a page-margin box: its value as an element at the start of the page
+// sees it, before the counter properties of the element that starts the
+// page, and out of scope past the parent of the element that reset it
+// (CSS Page 3, 6.1; CSS Lists 3, 4.5).
+func TestMarginBoxes_DocumentCounters(t *testing.T) {
+	src := `<style>
+		@page { size: 400pt 300pt; margin: 40pt; font: 10pt "Test Serif";
+			@top-center { content: "ch" counter(ch) "." counters(sec, "-") } }
+		body { margin: 0; font: 10pt "Test Serif"; counter-reset: ch }
+		h1 { counter-increment: ch; font-size: 10pt; margin: 0 }
+		section { counter-reset: sec 4 }
+		p { margin: 0 } .b { break-before: page }
+	</style>
+	<h1>A</h1><p>x</p><h1 class=b>B</h1><p class=b>still B</p><div><section><h1>C</h1></section></div><p class=b>after</p>`
+	doc := convertDoc(t, src, Options{PreferCSSPageSize: true})
+	if len(doc.Pages) != 4 {
+		t.Fatalf("%d pages, want 4", len(doc.Pages))
+	}
+	for i, want := range []string{"ch0.0", "ch1.0", "ch2.0", "ch3.0"} {
+		var got strings.Builder
+		for _, r := range pageTexts(doc.Pages[i]) {
+			if r.y < 40 {
+				got.WriteString(r.text)
+			}
+		}
+		if got.String() != want {
+			t.Errorf("page %d: top margin shows %q, want %q", i+1, got.String(), want)
+		}
+	}
+}
+
 func TestPageCounter_OnElementWarns(t *testing.T) {
 	src := `<style>@page { @top-center { content: counter(page) } } h1 { counter-reset: page 1 }</style><h1>x</h1>`
 	doc := convertDoc(t, src, Options{})

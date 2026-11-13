@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -680,15 +681,26 @@ func (p *prepared) marginNodes(ctx context.Context, st *css.Style, index, pages 
 // page-margin box styled box on the page of index, one of pages (CSS Page
 // 3, 6.1): pages is the page count; a counter the box's own counter
 // properties touch takes the value they give; then the counters of the
-// page context, the page counter among them; 0 for any other.
+// page context, the page counter among them; then the document's
+// counters as an element at the start of the page sees them; 0 for any
+// other.
 func (p *prepared) counterText(box *css.Style, index, pages int) func(css.ContentItem) string {
 	pc := p.pageCounters(index)
+	var g *gcpmState
+	if p.b != nil {
+		g = &p.b.gcpm
+	}
 	values := func(name string) []int {
 		if name == pagesCounter {
 			return []int{pages}
 		}
 		if v, ok := pc[name]; ok {
 			return []int{v}
+		}
+		if g != nil {
+			if i := slices.Index(g.track, name); i >= 0 {
+				return g.countersAt(i, index)
+			}
 		}
 		return nil
 	}
