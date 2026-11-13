@@ -159,7 +159,7 @@ func newCTMTracker() *ctmTracker {
 }
 
 func (t *ctmTracker) transform(x, y float64) (float64, float64) {
-	return x*t.m[0] + y*t.m[2] + t.m[4], x*t.m[1] + y*t.m[3] + t.m[5]
+	return float64(x*t.m[0]) + float64(y*t.m[2]) + t.m[4], float64(x*t.m[1]) + float64(y*t.m[3]) + t.m[5]
 }
 
 // apply updates the matrix for a q, Q or cm operator and ignores any other.
@@ -179,12 +179,12 @@ func (t *ctmTracker) apply(op content.Operation) {
 			e, f := operandNumber(op.Operands[4]), operandNumber(op.Operands[5])
 			old := t.m
 			t.m = [6]float64{
-				a*old[0] + b*old[2],
-				a*old[1] + b*old[3],
-				c*old[0] + d*old[2],
-				c*old[1] + d*old[3],
-				e*old[0] + f*old[2] + old[4],
-				e*old[1] + f*old[3] + old[5],
+				float64(a*old[0]) + float64(b*old[2]),
+				float64(a*old[1]) + float64(b*old[3]),
+				float64(c*old[0]) + float64(d*old[2]),
+				float64(c*old[1]) + float64(d*old[3]),
+				float64(e*old[0]) + float64(f*old[2]) + old[4],
+				float64(e*old[1]) + float64(f*old[3]) + old[5],
 			}
 		}
 	}

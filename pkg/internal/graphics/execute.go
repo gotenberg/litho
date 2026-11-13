@@ -296,14 +296,14 @@ type FormCall struct {
 func (b ImageBox) ImageSpace(x, y float64) (u, v float64, ok bool) {
 	// The CTM is [a b c d e f] for x' = ax + cy + e, y' = bx + dy + f, so the
 	// linear part is [[a, c], [b, d]] and its determinant is ad - bc.
-	det := b.CTM[0]*b.CTM[3] - b.CTM[1]*b.CTM[2]
+	det := float64(b.CTM[0]*b.CTM[3]) - float64(b.CTM[1]*b.CTM[2])
 	if det == 0 {
 		return 0, 0, false
 	}
 	dx := x - b.CTM[4]
 	dy := y - b.CTM[5]
-	return (dx*b.CTM[3] - dy*b.CTM[2]) / det,
-		(dy*b.CTM[0] - dx*b.CTM[1]) / det,
+	return (float64(dx*b.CTM[3]) - float64(dy*b.CTM[2])) / det,
+		(float64(dy*b.CTM[0]) - float64(dx*b.CTM[1])) / det,
 		true
 }
 
@@ -465,12 +465,12 @@ type ShowAdvance struct {
 func (a ShowAdvance) TextSpaceAdvance() (tx, ty float64, ok bool) {
 	dx := a.After[4] - a.Before[4]
 	dy := a.After[5] - a.Before[5]
-	det := a.Before[0]*a.Before[3] - a.Before[1]*a.Before[2]
+	det := float64(a.Before[0]*a.Before[3]) - float64(a.Before[1]*a.Before[2])
 	if det == 0 {
 		return 0, 0, dx == 0 && dy == 0
 	}
-	tx = (dx*a.Before[3] - dy*a.Before[2]) / det
-	ty = (dy*a.Before[0] - dx*a.Before[1]) / det
+	tx = (float64(dx*a.Before[3]) - float64(dy*a.Before[2])) / det
+	ty = (float64(dy*a.Before[0]) - float64(dx*a.Before[1])) / det
 	return tx, ty, true
 }
 
@@ -595,19 +595,19 @@ func (m *Machine) NoteUnparsedForm(objNum int, resources ast.PdfDict, bbox, matr
 	}
 	ctm := m.Current().CTM
 	full := [6]float64{
-		fm[0]*ctm[0] + fm[1]*ctm[2],
-		fm[0]*ctm[1] + fm[1]*ctm[3],
-		fm[2]*ctm[0] + fm[3]*ctm[2],
-		fm[2]*ctm[1] + fm[3]*ctm[3],
-		fm[4]*ctm[0] + fm[5]*ctm[2] + ctm[4],
-		fm[4]*ctm[1] + fm[5]*ctm[3] + ctm[5],
+		float64(fm[0]*ctm[0]) + float64(fm[1]*ctm[2]),
+		float64(fm[0]*ctm[1]) + float64(fm[1]*ctm[3]),
+		float64(fm[2]*ctm[0]) + float64(fm[3]*ctm[2]),
+		float64(fm[2]*ctm[1]) + float64(fm[3]*ctm[3]),
+		float64(fm[4]*ctm[0]) + float64(fm[5]*ctm[2]) + ctm[4],
+		float64(fm[4]*ctm[1]) + float64(fm[5]*ctm[3]) + ctm[5],
 	}
 	x0, y0 := document.Float(bbox[0]), document.Float(bbox[1])
 	x1, y1 := document.Float(bbox[2]), document.Float(bbox[3])
 	first := true
 	for _, corner := range [4][2]float64{{x0, y0}, {x1, y0}, {x0, y1}, {x1, y1}} {
-		x := full[0]*corner[0] + full[2]*corner[1] + full[4]
-		y := full[1]*corner[0] + full[3]*corner[1] + full[5]
+		x := float64(full[0]*corner[0]) + float64(full[2]*corner[1]) + full[4]
+		y := float64(full[1]*corner[0]) + float64(full[3]*corner[1]) + full[5]
 		if first {
 			form.MinX, form.MaxX, form.MinY, form.MaxY = x, x, y, y
 			first = false
@@ -655,12 +655,12 @@ func handleConcatMatrix(_ context.Context, _ *Machine, state *State, op content.
 
 	// New CTM = provided matrix × current CTM.
 	ctm := state.CTM
-	state.CTM[0] = a*ctm[0] + b*ctm[2]
-	state.CTM[1] = a*ctm[1] + b*ctm[3]
-	state.CTM[2] = c*ctm[0] + d*ctm[2]
-	state.CTM[3] = c*ctm[1] + d*ctm[3]
-	state.CTM[4] = e*ctm[0] + f*ctm[2] + ctm[4]
-	state.CTM[5] = e*ctm[1] + f*ctm[3] + ctm[5]
+	state.CTM[0] = float64(a*ctm[0]) + float64(b*ctm[2])
+	state.CTM[1] = float64(a*ctm[1]) + float64(b*ctm[3])
+	state.CTM[2] = float64(c*ctm[0]) + float64(d*ctm[2])
+	state.CTM[3] = float64(c*ctm[1]) + float64(d*ctm[3])
+	state.CTM[4] = float64(e*ctm[0]) + float64(f*ctm[2]) + ctm[4]
+	state.CTM[5] = float64(e*ctm[1]) + float64(f*ctm[3]) + ctm[5]
 }
 
 var identityTextMatrix = [6]float64{1, 0, 0, 1, 0, 0}
@@ -741,8 +741,8 @@ func handleTextMatrix(_ context.Context, m *Machine, state *State, op content.Op
 // 32000-1, 9.4.2 equation for Td. Shared by Td, TD, T*, ', and ".
 func applyTextMove(state *State, tx, ty float64) {
 	tlm := state.Text.Tlm
-	state.Text.Tlm[4] = tx*tlm[0] + ty*tlm[2] + tlm[4]
-	state.Text.Tlm[5] = tx*tlm[1] + ty*tlm[3] + tlm[5]
+	state.Text.Tlm[4] = float64(tx*tlm[0]) + float64(ty*tlm[2]) + tlm[4]
+	state.Text.Tlm[5] = float64(tx*tlm[1]) + float64(ty*tlm[3]) + tlm[5]
 	state.Text.Tm = state.Text.Tlm
 }
 
@@ -890,8 +890,8 @@ func (m *Machine) updatePathBounds(state *State, x, y float64) {
 		m.pathStartOp = m.OpIndex
 	}
 
-	px := x*state.CTM[0] + y*state.CTM[2] + state.CTM[4]
-	py := x*state.CTM[1] + y*state.CTM[3] + state.CTM[5]
+	px := float64(x*state.CTM[0]) + float64(y*state.CTM[2]) + state.CTM[4]
+	py := float64(x*state.CTM[1]) + float64(y*state.CTM[3]) + state.CTM[5]
 	if px < m.CurrentPath.MinX {
 		m.CurrentPath.MinX = px
 	}
