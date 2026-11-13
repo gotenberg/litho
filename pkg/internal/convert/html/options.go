@@ -178,6 +178,16 @@ type Options struct {
 	// FooterTemplate, which are documents of their own with the defaults
 	// of Chromium's template page: a template carries its own <style>.
 	UserStylesheets []string
+	// AnimationsAtEnd prints each CSS animation at the end of its active
+	// interval, as the page shows once its animations have run: an
+	// animation's last keyframe where its fill mode keeps it, the
+	// element's own style where it does not, the end of the first
+	// iteration for one that repeats forever. Off, the default, prints
+	// every animation at time zero, the moment a browser prints a page
+	// that has just loaded. A paused animation, and one on a scroll or a
+	// view timeline, prints the same either way. No transition runs
+	// either way: a document's style changes once, when it loads.
+	AnimationsAtEnd bool
 }
 
 // withDefaults returns o with every zero field set to its default and

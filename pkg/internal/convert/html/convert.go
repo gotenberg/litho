@@ -273,6 +273,9 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 		fonts = fonts.WithFaces(faceSet)
 	}
 	computeOpts := css.ComputeOptions{Hints: css.HTMLHints, Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts)}
+	if o.AnimationsAtEnd {
+		computeOpts.AnimationTime = css.AnimationsAtEnd
+	}
 	computed, err := resolver.Compute(ctx, doc, computeOpts)
 	if err != nil {
 		return nil, fmt.Errorf("computing styles: %w", err)
