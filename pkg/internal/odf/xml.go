@@ -248,5 +248,10 @@ func parseXML(ctx context.Context, in *office.TokenReader) (*Element, error) {
 	if root == nil {
 		return nil, fmt.Errorf("%w: parsing XML: no root element", office.ErrMalformed)
 	}
+	// The nodes read since the last charge, fewer than xmlChargeEvery,
+	// are the whole tree of a small part.
+	if err := mem.ChargeUnits(int64(count%xmlChargeEvery), limits.XMLElementCost, "XML trees"); err != nil {
+		return nil, err
+	}
 	return root, nil
 }

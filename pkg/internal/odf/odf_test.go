@@ -122,6 +122,22 @@ func TestParseXML_NoEntityExpansion(t *testing.T) {
 	}
 }
 
+func TestParseXML_ChargesEveryNode(t *testing.T) {
+	for _, n := range []int{1, xmlChargeEvery - 1, xmlChargeEvery, xmlChargeEvery + 7} {
+		ctx, mem, done := limits.WithBudget(context.Background(), limits.Limits{})
+		// The root's start and end and n-1 empty children's are n nodes
+		// of each kind: 2n tokens.
+		src := "<a>" + strings.Repeat("<b/>", n-1) + "</a>"
+		if _, err := ParseXML(ctx, []byte(src)); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := mem.Held(), int64(2*n)*limits.XMLElementCost; got != want {
+			t.Errorf("%d elements: %d bytes charged, want %d", n, got, want)
+		}
+		done()
+	}
+}
+
 func TestUnits(t *testing.T) {
 	lengths := []struct {
 		in   string
