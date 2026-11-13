@@ -237,6 +237,19 @@ func TestLineBreak_AnywhereHangsPreservedSpaces(t *testing.T) {
 	}
 }
 
+func TestOverflowWrap_AnywhereInNoRoom(t *testing.T) {
+	// CSS Text 3, 5.5: overflow-wrap: anywhere and break-word break an
+	// unbreakable word at any grapheme boundary when it does not fit, the
+	// first cluster of a line included: in no room each takes a line.
+	for _, ow := range []css.OverflowWrap{css.Anywhere, css.BreakWord} {
+		o := func(s *css.Style) { s.OverflowWrap = ow }
+		res := runWith(t, doc(el(sty(o, width(0)), txt(sty(o), "abc"))), Options{Page: page(100, 100), BrowserRules: true})
+		if got, _ := lineTexts(res, 1); strings.Join(got, "|") != "a|b|c" {
+			t.Errorf("overflow-wrap %v: lines %q, want a|b|c", ow, got)
+		}
+	}
+}
+
 func TestWordBreak_BreakAllAtSpanEdge(t *testing.T) {
 	ba := inlineSty(func(s *css.Style) { s.WordBreak = css.BreakAll })
 	res := run(t, doc(el(sty(), txt(sty(), "aa"), el(ba, txt(ba, "bb")), txt(sty(), "cc"))), page(40, 50))
