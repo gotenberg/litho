@@ -74,7 +74,7 @@ func FuzzParseAvar(f *testing.F) {
 
 func FuzzGvarDeltas(f *testing.F) {
 	seed(f, fuzzTable(f, "gvar"))
-	coords := []int16{9000, -5000, 16384}
+	coords := []int16{9000, -5000, -8000, 4000, 16384}
 	f.Fuzz(func(t *testing.T, data []byte) {
 		g, err := parseGvar(data, len(coords), 8)
 		if err != nil {
@@ -98,7 +98,7 @@ func FuzzGvarDeltas(f *testing.F) {
 
 func FuzzAdvanceVariations(f *testing.F) {
 	seed(f, fuzzTable(f, "HVAR"))
-	coords := []int16{12000, -16384, 3000}
+	coords := []int16{12000, -16384, -3000, 16384, 3000}
 	f.Fuzz(func(t *testing.T, data []byte) {
 		v, err := parseAdvanceVariations(data, coords, false)
 		if err != nil {
@@ -112,7 +112,7 @@ func FuzzAdvanceVariations(f *testing.F) {
 
 func FuzzMVAR(f *testing.F) {
 	seed(f, fuzzTable(f, "MVAR"))
-	coords := []int16{-16384, 8000, 16384}
+	coords := []int16{-16384, 8000, -16384, 2000, 16384}
 	f.Fuzz(func(t *testing.T, data []byte) {
 		_, _ = parseMVAR(data, coords) //nolint:errcheck // the target checks only that malformed data neither panics nor hangs
 	})

@@ -76,7 +76,8 @@ func PostScriptName(axes *Axes, name []byte, user []float64) string {
 	b.WriteString(prefix)
 	for i, ax := range axes.Axes {
 		b.WriteString("_")
-		b.WriteString(strconv.FormatFloat(math.Round(at[i]*1000)/1000, 'f', -1, 64))
+		// Adding 0 turns a negative zero into 0.
+		b.WriteString(strconv.FormatFloat(math.Round(at[i]*1000)/1000+0, 'f', -1, 64))
 		b.WriteString(alnum(ax.Tag))
 	}
 	return limitName(prefix, b.String())

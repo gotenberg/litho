@@ -32,6 +32,10 @@ LOCATIONS = [
     {"TEST": 33},
     {"wght": 840, "wdth": 90, "TEST": 70},
     {"wght": 50, "wdth": 200},
+    {"slnt": -12},
+    {"slnt": -5.5, "opsz": 48},
+    {"opsz": 9},
+    {"opsz": 144, "wght": 700, "slnt": -3},
 ]
 
 FIELDS = {

@@ -272,9 +272,10 @@ func TestInstanceNames(t *testing.T) {
 		want string
 	}{
 		{bold, "LithoVar-BoldInstance"},
-		{[]float64{300, 100, 0}, "LithoVar-Light"},
-		{[]float64{651.25, 80, 12}, "LithoVar_651.25wght_80wdth_12TEST"},
-		{[]float64{2000, 0, -5}, "LithoVar_900wght_75wdth_0TEST"},
+		{[]float64{300, 100, 0, 12, 0}, "LithoVar-Light"},
+		{[]float64{651.25, 80, -2, 30, 12}, "LithoVar_651.25wght_80wdth_-2slnt_30opsz_12TEST"},
+		{[]float64{2000, 0, -50, 0, -5}, "LithoVar_900wght_75wdth_-12slnt_8opsz_0TEST"},
+		{[]float64{500, 100, math.Copysign(0, -1), 12, 0}, "LithoVar_500wght_100wdth_0slnt_12opsz_0TEST"},
 	} {
 		if got := PostScriptName(f.Axes(), name, tc.user); got != tc.want {
 			t.Errorf("PostScriptName(%v) = %q, want %q", tc.user, got, tc.want)

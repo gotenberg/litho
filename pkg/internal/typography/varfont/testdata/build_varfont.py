@@ -4,8 +4,9 @@ The font is built from masters with fontTools' varLib, as font tools build
 variable fonts, so its tables hold what such fonts hold (OpenType Font
 Variations Overview):
 
-  - three axes: wght 100 to 900 (default 400) with an 'avar' segment map,
-    wdth 75 to 125 (default 100), and a private axis TEST 0 to 100;
+  - five axes: wght 100 to 900 (default 400) with an 'avar' segment map,
+    wdth 75 to 125 (default 100), slnt -12 to 0, opsz 8 to 144 (default
+    12), and a private axis TEST 0 to 100;
   - masters at the default, at each axis end, and an intermediate master at
     wght 650, so 'gvar' holds shared tuples, embedded peaks and an
     intermediate region, and sparse point sets (varLib drops the deltas
@@ -46,11 +47,13 @@ def rect(pen, x0, y0, x1, y1):
     pen.closePath()
 
 
-def master(wght, wdth, test):
-    """Returns one master: stems thicken with wght, glyphs widen with wdth,
-    and TEST moves the apex of A and the dot."""
-    stem = 40 + wght // 5
+def master(wght, wdth, test, slnt=0, opsz=12):
+    """Returns one master: stems thicken with wght and thin with opsz,
+    glyphs widen with wdth, slnt shears the outlines, and TEST moves the
+    apex of A and the dot."""
+    stem = 40 + wght // 5 - (opsz - 12) // 8
     wide = wdth / 100
+    shear = -slnt / 60
     fb = FontBuilder(1000, isTTF=True)
     fb.setupGlyphOrder(ORDER)
     fb.setupCharacterMap(CMAP)
@@ -111,6 +114,10 @@ def master(wght, wdth, test):
     glyphs["nested"] = composite([("Adot", 0, 0, None), ("Bscaled", w, -20, None)])
     metrics["nested"] = w + metrics["B"]
 
+    if shear:
+        for g in glyphs.values():
+            if g.numberOfContours > 0:
+                g.coordinates = type(g.coordinates)([(x + int(y * shear), y) for x, y in g.coordinates])
     fb.setupGlyf(glyphs)
     hmtx = {}
     for name in ORDER:
@@ -132,6 +139,8 @@ def main():
     for tag, lo, default, hi, mapping in (
         ("wght", 100, 400, 900, [(100, 100), (400, 400), (650, 600), (900, 900)]),
         ("wdth", 75, 100, 125, None),
+        ("slnt", -12, 0, 0, None),
+        ("opsz", 8, 12, 144, None),
         ("TEST", 0, 0, 100, None),
     ):
         a = AxisDescriptor()
@@ -141,25 +150,28 @@ def main():
             a.map = mapping
         doc.addAxis(a)
     sources = [
-        (400, 100, 0),
-        (100, 100, 0),
-        (900, 100, 0),
-        (600, 100, 0),
-        (400, 75, 0),
-        (400, 125, 0),
-        (400, 100, 100),
+        (400, 100, 0, 0, 12),
+        (100, 100, 0, 0, 12),
+        (900, 100, 0, 0, 12),
+        (600, 100, 0, 0, 12),
+        (400, 75, 0, 0, 12),
+        (400, 125, 0, 0, 12),
+        (400, 100, 100, 0, 12),
+        (400, 100, 0, -12, 12),
+        (400, 100, 0, 0, 8),
+        (400, 100, 0, 0, 144),
     ]
-    for i, (wght, wdth, test) in enumerate(sources):
+    for i, (wght, wdth, test, slnt, opsz) in enumerate(sources):
         s = SourceDescriptor()
-        s.font = master(wght, wdth, test)
-        s.location = {"wght": wght, "wdth": wdth, "TEST": test}
+        s.font = master(wght, wdth, test, slnt, opsz)
+        s.location = {"wght": wght, "wdth": wdth, "TEST": test, "slnt": slnt, "opsz": opsz}
         s.name = "master%d" % i
         doc.addSource(s)
     for style, wght, ps in (("Light", 300, None), ("Bold", 700, "LithoVar-BoldInstance")):
         ins = InstanceDescriptor()
         ins.styleName = style
         ins.familyName = "LithoVar"
-        ins.location = {"wght": wght, "wdth": 100, "TEST": 0}
+        ins.location = {"wght": wght, "wdth": 100, "TEST": 0, "slnt": 0, "opsz": 12}
         if ps:
             ins.postScriptFontName = ps
         doc.addInstance(ins)
