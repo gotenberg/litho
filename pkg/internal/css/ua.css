@@ -146,6 +146,9 @@ dialog {
 center {
   text-align: center;
 }
+slot {
+  display: contents;
+}
 
 /* 15.3.4 Phrasing content */
 cite,
