@@ -168,3 +168,25 @@ func TestRoundInt32(t *testing.T) {
 		}
 	}
 }
+
+// TestSincosDegrees_CloseToMath compares SincosDegrees with math.Sincos of
+// the angle in radians, which loses 4e-15 to the conversion, and checks the
+// multiples of 90 degrees exactly.
+func TestSincosDegrees_CloseToMath(t *testing.T) {
+	t.Parallel()
+	for d := -720.0; d <= 720; d += 0.913 {
+		s, c := SincosDegrees(d)
+		ws, wc := math.Sincos(d * math.Pi / 180)
+		if math.Abs(s-ws) > 4e-15 || math.Abs(c-wc) > 4e-15 {
+			t.Fatalf("SincosDegrees(%v) = %v, %v, want %v, %v", d, s, c, ws, wc)
+		}
+	}
+	for _, tc := range []struct{ deg, s, c float64 }{{0, 0, 1}, {90, 1, 0}, {180, 0, -1}, {-90, -1, 0}, {450, 1, 0}} {
+		if s, c := SincosDegrees(tc.deg); s != tc.s || c != tc.c {
+			t.Errorf("SincosDegrees(%v) = %v, %v, want %v, %v", tc.deg, s, c, tc.s, tc.c)
+		}
+	}
+	if s, c := SincosDegrees(math.Inf(1)); !math.IsNaN(s) || !math.IsNaN(c) {
+		t.Errorf("SincosDegrees(+Inf) = %v, %v, want NaN", s, c)
+	}
+}

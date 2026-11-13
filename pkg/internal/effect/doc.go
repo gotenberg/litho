@@ -141,17 +141,15 @@
 // stroke's normals, a matrix's coefficients) are computed with every
 // product wrapped in an explicit conversion, which The Go Programming
 // Language Specification says rounds it and so forbids fusing it with
-// an addition, and without the math package's Exp, Log, Pow or Sin,
-// which amd64 and arm64 implement differently; then they are rounded to
+// an addition, and with package detmath's Exp, Pow and sine, which give
+// the same bits on every machine; then they are rounded to
 // fixed point before use. The tests pin the SHA-256 of every primitive's
 // output on fixed inputs.
 //
 // [Paint] draws with litho's PDF renderer, which works in floating point
 // and rounds every product on its own before it is summed (see package
-// render), and rounds its result to 8 bits the same way. The renderer
-// also calls the math package's Hypot, Sincos, Atan2 and Acos on stroke
-// and curve geometry, and reads fonts and colour through packages not
-// held to that rule: a surface [Paint] draws is the same on every machine
-// as far as those agree. The tests pin the SHA-256 of its surfaces for
+// render), and rounds its result to 8 bits the same way; its elementary
+// functions come from package detmath. A surface [Paint] draws is the
+// same on every machine. The tests pin the SHA-256 of its surfaces for
 // text, pictures, shadings, shapes and transparency.
 package effect

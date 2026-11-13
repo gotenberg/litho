@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -186,9 +187,9 @@ func SaturateMatrix(s float64) Matrix {
 
 // HueRotateMatrix returns the matrix of Filter Effects 1, 9.6 type
 // hueRotate, the CSS hue-rotate(deg) of Filter Effects 1, 13.1, its sine
-// and cosine from [Sincos].
+// and cosine from [detmath.SincosDegrees].
 func HueRotateMatrix(deg float64) Matrix {
-	s, c := Sincos(deg)
+	s, c := detmath.SincosDegrees(deg)
 	if math.IsNaN(s) {
 		return IdentityMatrix
 	}
@@ -272,7 +273,7 @@ type LUT [256]uint8
 // Table returns f's lookup table: for every byte v, f(v/255) clamped to
 // [0, 1] and rounded to a byte. A table or discrete function with no
 // value, and a function whose result is not finite, is the identity
-// there; the gamma's power comes from [detPow].
+// there; the gamma's power comes from [detmath.Pow].
 func (f TransferFunc) Table() LUT {
 	var t LUT
 	n := len(f.Values)
@@ -295,7 +296,7 @@ func (f TransferFunc) Table() LUT {
 		case TransferLinear:
 			r = mul(f.Slope, c) + f.Intercept
 		case TransferGamma:
-			r = mul(f.Amplitude, detPow(c, f.Exponent)) + f.Offset
+			r = mul(f.Amplitude, detmath.Pow(c, f.Exponent)) + f.Offset
 		case TransferIdentity:
 		}
 		if !numeric.Finite(r) {

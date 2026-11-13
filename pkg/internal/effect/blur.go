@@ -3,6 +3,8 @@ package effect
 import (
 	"context"
 	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 )
 
 // Kernel is a symmetric convolution kernel of integer weights: W[0] for
@@ -49,7 +51,7 @@ func GaussianKernel(sigma float64) Kernel {
 	for i := range w {
 		// i^2 / (2 sigma^2) with sigma = q/256: i^2 * 32768 / q^2.
 		x := float64(int64(i)*int64(i)*32768) / float64(q*q)
-		w[i] = uint32(math.Round(float64(detExp(-x) * kernelUnit))) // fits uint32: at most 2^16
+		w[i] = uint32(math.Round(float64(detmath.Exp(-x) * kernelUnit))) // fits uint32: at most 2^16
 	}
 	return trim(w)
 }

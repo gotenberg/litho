@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -50,7 +51,7 @@ func ellipse(cx, cy, rx, ry float64) []typeset.PathOp {
 func star(cx, cy, r float64) []typeset.PathOp {
 	ops := make([]typeset.PathOp, 0, 6)
 	for i := range 5 {
-		s, c := Sincos(float64(i*144 - 90))
+		s, c := detmath.SincosDegrees(float64(i*144 - 90))
 		k := typeset.LineTo
 		if i == 0 {
 			k = typeset.MoveTo

@@ -7,6 +7,7 @@ import (
 	"math/bits"
 	"slices"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -570,14 +571,14 @@ func (z *rasterizer) closed(q []fx) {
 // circle of radius r steps about the origin, its sides close enough that
 // the polygon stays within 1/512 pixel of the circle: n sides with
 // 1 - cos(pi/n) <= 1/(512 r), at least 8 and at most maxArcSides. The
-// sines come from [Sincos], the same on every machine.
+// sines come from [detmath.SincosDegrees], the same on every machine.
 func discPoints(r int64) []fx {
 	rp := float64(r) / one
 	n := int(min(max(math.Ceil(float64(math.Pi*math.Sqrt(float64(256*rp)))), 8), maxArcSides)) // fits int: within [8, maxArcSides]
 	out := make([]fx, n)
 	fr := float64(r)
 	for k := range n {
-		s, c := Sincos(float64(360*k) / float64(n))
+		s, c := detmath.SincosDegrees(float64(360*k) / float64(n))
 		out[k] = fx{int64(math.Round(float64(fr * c))), int64(math.Round(float64(fr * s)))} // fits int64: at most r
 	}
 	return out

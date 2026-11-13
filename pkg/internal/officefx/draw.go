@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -430,13 +431,13 @@ func pathBounds(paths []effect.Path) typeset.Rect {
 }
 
 // sincosDeg returns the sine and cosine of deg degrees, the same on
-// every machine ([effect.Sincos]); 0 and 1 for an angle that is not
+// every machine ([detmath.SincosDegrees]); 0 and 1 for an angle that is not
 // finite.
 func sincosDeg(deg float64) (float64, float64) {
 	if !numeric.Finite(deg) {
 		return 0, 1
 	}
-	return effect.Sincos(deg)
+	return detmath.SincosDegrees(deg)
 }
 
 // encodeFrag returns [effect.Encode] of s as a fragment, nil for none.

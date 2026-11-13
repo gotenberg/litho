@@ -8,6 +8,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -130,7 +131,7 @@ func TestDeterminism_PinnedHashes(t *testing.T) {
 		"transform": func() []byte {
 			src := detColor(t, 2)
 			dst := newSurface(t, RGBA, 70, 52)
-			sn, cs := Sincos(23.5)
+			sn, cs := detmath.SincosDegrees(23.5)
 			must(Transform(ctx, dst, src, typeset.Matrix{A: float64(1.1 * cs), B: float64(1.1 * sn), C: float64(-0.9 * sn), D: float64(0.9 * cs), E: 12.25, F: -3.5}))
 			return dst.Pix
 		},
