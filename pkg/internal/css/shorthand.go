@@ -176,7 +176,7 @@ func initShorthands() {
 		},
 		"border-radius": {longhands: ids(pRadiusTopLeft, 4), expand: expandRadius},
 		"outline":       {longhands: ids(pOutlineStyle, 3), expand: expandOutline},
-		"background":    {longhands: append(ids(pBgColor, 7), pBgAttachment), expand: expandBackground},
+		"background":    {longhands: append(ids(pBgColor, 7), pBgPositionY, pBgAttachment), expand: expandBackground},
 		"font": {
 			longhands: append([]propID{pFontStyle, pFontWeight, pFontSize, pLineHeight, pFontFamily, pFontStretch, pFontKerning, pFontFeatureSettings, pFontLanguageOverride, pFontSizeAdjust, pFontVariationSettings, pFontOpticalSizing}, variantLonghands...),
 			expand:    expandFont,

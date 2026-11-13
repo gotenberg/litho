@@ -94,3 +94,14 @@ func TestPosition_ThreeValues(t *testing.T) {
 		}
 	}
 }
+
+// TestBackgroundPosition_ShorthandInheritsBothAxes locks CSS Backgrounds
+// 3, 3.10: the background shorthand sets every background longhand, the
+// vertical position included, so background: inherit carries both axes.
+func TestBackgroundPosition_ShorthandInheritsBothAxes(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<div id=w><div id=t></div></div>`, `#w { background: black repeat-x 0.5in 0.5in } #t { background: red; background: inherit }`)
+	if got := c.of("t").BackgroundPosition; !dimEq(got[0], pts(36)) || !dimEq(got[1], pts(36)) {
+		t.Errorf("inherited position = %+v, want 36pt 36pt", got)
+	}
+}
