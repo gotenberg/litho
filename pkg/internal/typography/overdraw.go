@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -415,8 +416,8 @@ func overdrawSameLine(a, b models.TextElement) bool {
 		return false
 	}
 	dx, dy := b.X-a.X, b.Y-a.Y
-	along := dx*math.Cos(a.Angle) + dy*math.Sin(a.Angle)
-	across := -dx*math.Sin(a.Angle) + dy*math.Cos(a.Angle)
+	along := float64(dx*detmath.Cos(a.Angle)) + float64(dy*detmath.Sin(a.Angle))
+	across := float64(-dx*detmath.Sin(a.Angle)) + float64(dy*detmath.Cos(a.Angle))
 	if a.Vertical {
 		along, across = across, along
 	}
@@ -437,7 +438,7 @@ func overdrawKey(el models.TextElement) (overdrawCell, bool) {
 	}
 	return overdrawCell{
 		text: el.Text,
-		size: int64(math.Round(math.Log(size) / overdrawSizeSlack)),
+		size: int64(math.Round(detmath.Log(size) / overdrawSizeSlack)),
 		x:    int64(x),
 		y:    int64(y),
 	}, true
@@ -538,9 +539,9 @@ func overdraws(elements []models.TextElement, piece []int, i, j int) bool {
 		return false
 	}
 	// Along the baseline, measured in the glyph's own direction.
-	along := math.Abs(dx*math.Cos(later.Angle) + dy*math.Sin(later.Angle))
+	along := math.Abs(float64(dx*detmath.Cos(later.Angle)) + float64(dy*detmath.Sin(later.Angle)))
 	if later.Vertical {
-		along = math.Abs(-dx*math.Sin(later.Angle) + dy*math.Cos(later.Angle))
+		along = math.Abs(float64(-dx*detmath.Sin(later.Angle)) + float64(dy*detmath.Cos(later.Angle)))
 	}
 	// A glyph that advances nothing, of a font whose widths are missing, is
 	// set where the next one is, so a character doubled in a word lies on

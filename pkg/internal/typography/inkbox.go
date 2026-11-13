@@ -110,9 +110,9 @@ func glyphInkBox(ctx context.Context, machine *graphics.Machine, font *Font, fon
 	tm, ctm := state.Text.Tm, state.CTM
 	box := [4]float64{originX, originY, originX, originY}
 	for _, c := range corners {
-		tx, ty := c[0]*fontSize*th, c[1]*fontSize+rise
-		ux, uy := tx*tm[0]+ty*tm[2]+tm[4], tx*tm[1]+ty*tm[3]+tm[5]
-		px, py := ux*ctm[0]+uy*ctm[2]+ctm[4], ux*ctm[1]+uy*ctm[3]+ctm[5]
+		tx, ty := c[0]*fontSize*th, float64(c[1]*fontSize)+rise
+		ux, uy := float64(tx*tm[0])+float64(ty*tm[2])+tm[4], float64(tx*tm[1])+float64(ty*tm[3])+tm[5]
+		px, py := float64(ux*ctm[0])+float64(uy*ctm[2])+ctm[4], float64(ux*ctm[1])+float64(uy*ctm[3])+ctm[5]
 		// A comparison with NaN is false, so a matrix a file fills with
 		// non-numbers leaves the box at the origin rather than poisoning it.
 		if px < box[0] {
@@ -289,7 +289,7 @@ func type3TextCorners(font *Font, g [4]float64) [4][2]float64 {
 	fm := font.FontMatrix
 	var out [4][2]float64
 	for i, p := range rectCorners(g[0], g[1], g[2], g[3]) {
-		out[i] = [2]float64{fm[0]*p[0] + fm[2]*p[1] + fm[4], fm[1]*p[0] + fm[3]*p[1] + fm[5]}
+		out[i] = [2]float64{float64(fm[0]*p[0]) + float64(fm[2]*p[1]) + fm[4], float64(fm[1]*p[0]) + float64(fm[3]*p[1]) + fm[5]}
 	}
 	return out
 }
@@ -355,20 +355,20 @@ func nonDegenerate(box *[4]float64) bool {
 // its largest singular value, so a pen of radius r drawn through m reaches no
 // farther than r × maxStretch(m) from the path.
 func maxStretch(m [6]float64) float64 {
-	f2 := m[0]*m[0] + m[1]*m[1] + m[2]*m[2] + m[3]*m[3]
-	det := m[0]*m[3] - m[1]*m[2]
-	return math.Sqrt((f2 + math.Sqrt(math.Max(f2*f2-4*det*det, 0))) / 2)
+	f2 := float64(m[0]*m[0]) + float64(m[1]*m[1]) + float64(m[2]*m[2]) + float64(m[3]*m[3])
+	det := float64(m[0]*m[3]) - float64(m[1]*m[2])
+	return math.Sqrt((f2 + math.Sqrt(math.Max(float64(f2*f2)-float64(4*det*det), 0))) / 2)
 }
 
 // concatMatrix returns a × b, the matrix cm sets when a is its operand and b
 // the current transformation matrix (ISO 32000-1, 8.4.4).
 func concatMatrix(a, b [6]float64) [6]float64 {
 	return [6]float64{
-		a[0]*b[0] + a[1]*b[2],
-		a[0]*b[1] + a[1]*b[3],
-		a[2]*b[0] + a[3]*b[2],
-		a[2]*b[1] + a[3]*b[3],
-		a[4]*b[0] + a[5]*b[2] + b[4],
-		a[4]*b[1] + a[5]*b[3] + b[5],
+		float64(a[0]*b[0]) + float64(a[1]*b[2]),
+		float64(a[0]*b[1]) + float64(a[1]*b[3]),
+		float64(a[2]*b[0]) + float64(a[3]*b[2]),
+		float64(a[2]*b[1]) + float64(a[3]*b[3]),
+		float64(a[4]*b[0]) + float64(a[5]*b[2]) + b[4],
+		float64(a[4]*b[1]) + float64(a[5]*b[3]) + b[5],
 	}
 }

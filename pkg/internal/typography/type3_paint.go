@@ -119,7 +119,7 @@ func (p type3Painter) xobjectBox(ctx context.Context, name ast.PdfObject) ([4][2
 		}
 		var out [4][2]float64
 		for i, c := range rectCorners(document.Float(bbox[0]), document.Float(bbox[1]), document.Float(bbox[2]), document.Float(bbox[3])) {
-			out[i] = [2]float64{m[0]*c[0] + m[2]*c[1] + m[4], m[1]*c[0] + m[3]*c[1] + m[5]}
+			out[i] = [2]float64{float64(m[0]*c[0]) + float64(m[2]*c[1]) + m[4], float64(m[1]*c[0]) + float64(m[3]*c[1]) + m[5]}
 		}
 		return out, true
 	}
@@ -298,7 +298,7 @@ func type3PaintBounds(ctx context.Context, p type3Painter, ops []content.Operati
 	chain := type3ChainFrom(ctx)
 	transform := func(x, y float64) [2]float64 {
 		m := cur.m
-		return [2]float64{m[0]*x + m[2]*y + m[4], m[1]*x + m[3]*y + m[5]}
+		return [2]float64{float64(m[0]*x) + float64(m[2]*y) + m[4], float64(m[1]*x) + float64(m[3]*y) + m[5]}
 	}
 	// mark adds a mark's box, cut to the clip.
 	mark := func(box [4]float64) {

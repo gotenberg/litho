@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -89,9 +90,9 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		// glyph origin at (0, Trise) in text space, so a rise set by Ts
 		// (9.3.7) lifts a superscript off the baseline it was shown on.
 		rise := state.Text.Ts
-		tx, ty := rise*tm[2]+tm[4], rise*tm[3]+tm[5]
-		x := tx*ctm[0] + ty*ctm[2] + ctm[4]
-		y := tx*ctm[1] + ty*ctm[3] + ctm[5]
+		tx, ty := float64(rise*tm[2])+tm[4], float64(rise*tm[3])+tm[5]
+		x := float64(tx*ctm[0]) + float64(ty*ctm[2]) + ctm[4]
+		y := float64(tx*ctm[1]) + float64(ty*ctm[3]) + ctm[5]
 
 		pageWidth := computeGlyphPageWidth(state, font, fontSize, char, cid)
 
@@ -100,12 +101,12 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		// maps to (Tm[0]*CTM[0]+Tm[1]*CTM[2], Tm[0]*CTM[1]+Tm[1]*CTM[3]),
 		// and the glyph advances along it or against it as Tfs × Th has
 		// it ([advancesBackward]).
-		dirX := tm[0]*ctm[0] + tm[1]*ctm[2]
-		dirY := tm[0]*ctm[1] + tm[1]*ctm[3]
+		dirX := float64(tm[0]*ctm[0]) + float64(tm[1]*ctm[2])
+		dirY := float64(tm[0]*ctm[1]) + float64(tm[1]*ctm[3])
 		if advancesBackward(state, font, fontSize) {
 			dirX, dirY = -dirX, -dirY
 		}
-		angle := math.Atan2(dirY, dirX)
+		angle := detmath.Atan2(dirY, dirX)
 
 		// Unresolved single-byte glyphs (char == "") still get a
 		// models.TextElement so downstream layout code sees the
@@ -284,7 +285,7 @@ func type3XSign(font *Font) float64 {
 //     reflection off the matrices alone put their ink on the wrong side.
 func glyphsInkRight(state *graphics.State, font *Font) bool {
 	tm, ctm := state.Text.Tm, state.CTM
-	reflected := state.Text.Tz*type3XSign(font)*(tm[0]*tm[3]-tm[1]*tm[2])*(ctm[0]*ctm[3]-ctm[1]*ctm[2]) < 0
+	reflected := state.Text.Tz*type3XSign(font)*(float64(tm[0]*tm[3])-float64(tm[1]*tm[2]))*(float64(ctm[0]*ctm[3])-float64(ctm[1]*ctm[2])) < 0
 	below := font.Subtype == "Type3" && font.type3InkBelow
 	return reflected != below
 }
@@ -299,9 +300,9 @@ func computeTextScale(state *graphics.State, font *Font, fontSize float64) (effe
 	// effective page-space font size.
 	ctm := state.CTM
 	tm := state.Text.Tm
-	dx := tm[0]*ctm[0] + tm[1]*ctm[2]
-	dy := tm[0]*ctm[1] + tm[1]*ctm[3]
-	scale := math.Sqrt(dx*dx + dy*dy)
+	dx := float64(tm[0]*ctm[0]) + float64(tm[1]*ctm[2])
+	dy := float64(tm[0]*ctm[1]) + float64(tm[1]*ctm[3])
+	scale := math.Sqrt(float64(dx*dx) + float64(dy*dy))
 	effectiveFontSize = fontSize * scale
 	if effectiveFontSize == 0 {
 		effectiveFontSize = fontSize // last resort: use raw
@@ -726,9 +727,9 @@ func computeGlyphPageWidth(state *graphics.State, font *Font, fontSize float64, 
 	if font.WMode == 1 {
 		w1, _, _ := font.VerticalMetrics(cid)
 		advance := (w1 / 1000.0) * fontSize
-		awx := advance * (tm[2]*ctm[0] + tm[3]*ctm[2])
-		awy := advance * (tm[2]*ctm[1] + tm[3]*ctm[3])
-		return math.Sqrt(awx*awx + awy*awy)
+		awx := advance * (float64(tm[2]*ctm[0]) + float64(tm[3]*ctm[2]))
+		awy := advance * (float64(tm[2]*ctm[1]) + float64(tm[3]*ctm[3]))
+		return math.Sqrt(float64(awx*awx) + float64(awy*awy))
 	}
 	return glyphPageAdvance(state, font.GlyphWidth(cid), fontSize)
 }
@@ -741,9 +742,9 @@ func glyphPageAdvance(state *graphics.State, glyphWidth, fontSize float64) float
 	tm := state.Text.Tm
 	ctm := state.CTM
 	advance := (glyphWidth / 1000.0) * fontSize * (state.Text.Tz / 100.0)
-	awx := advance * (tm[0]*ctm[0] + tm[1]*ctm[2])
-	awy := advance * (tm[0]*ctm[1] + tm[1]*ctm[3])
-	return math.Sqrt(awx*awx + awy*awy)
+	awx := advance * (float64(tm[0]*ctm[0]) + float64(tm[1]*ctm[2]))
+	awy := advance * (float64(tm[0]*ctm[1]) + float64(tm[1]*ctm[3]))
+	return math.Sqrt(float64(awx*awx) + float64(awy*awy))
 }
 
 // advanceTextMatrix shifts the text matrix by the FULL per-glyph advance
@@ -771,15 +772,15 @@ func advanceTextMatrix(state *graphics.State, font *Font, fontSize float64, code
 	}
 	if font.WMode == 1 {
 		w1, _, _ := font.VerticalMetrics(cid)
-		advance := (w1/1000.0)*fontSize + state.Text.Tc + wordSpace
-		state.Text.Tm[4] += advance * state.Text.Tm[2]
-		state.Text.Tm[5] += advance * state.Text.Tm[3]
+		advance := float64((w1/1000.0)*fontSize) + state.Text.Tc + wordSpace
+		state.Text.Tm[4] += float64(advance * state.Text.Tm[2])
+		state.Text.Tm[5] += float64(advance * state.Text.Tm[3])
 		return
 	}
 	glyphWidth := font.GlyphWidth(cid)
-	advance := ((glyphWidth/1000.0)*fontSize + state.Text.Tc + wordSpace) * (state.Text.Tz / 100.0)
-	state.Text.Tm[4] += advance * state.Text.Tm[0]
-	state.Text.Tm[5] += advance * state.Text.Tm[1]
+	advance := (float64((glyphWidth/1000.0)*fontSize) + state.Text.Tc + wordSpace) * (state.Text.Tz / 100.0)
+	state.Text.Tm[4] += float64(advance * state.Text.Tm[0])
+	state.Text.Tm[5] += float64(advance * state.Text.Tm[1])
 }
 
 // decomposeLigature replaces Unicode ligature characters with their component

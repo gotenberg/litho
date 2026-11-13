@@ -21,6 +21,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
@@ -1399,13 +1400,13 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 	if nonDegenerate(&fontBox) {
 		font.type3FontInk = unionBox(font.type3FontInk, &fontBox)
 	}
-	if ink == nil && math.Hypot(bbox[2]-bbox[0], bbox[3]-bbox[1]) != 0 {
+	if ink == nil && detmath.Hypot(bbox[2]-bbox[0], bbox[3]-bbox[1]) != 0 {
 		ink = &bbox
 	}
 	if ink != nil {
 		fm := font.FontMatrix
 		xc, yc := (ink[0]+ink[2])/2, (ink[1]+ink[3])/2
-		font.type3InkBelow = fm[1]*xc+fm[3]*yc+fm[5] < 0
+		font.type3InkBelow = float64(fm[1]*xc)+float64(fm[3]*yc)+fm[5] < 0
 	}
 
 	// The height of the font's bounding box comes from /FontBBox (ISO
@@ -1413,7 +1414,7 @@ func resolveType3Font(ctx context.Context, doc *document.Document, fontDict ast.
 	// the paths of the glyphs that begin with d0, as PDF.js reads it
 	// (src/core/evaluator.js, TranslatedFont, loadType3Data and
 	// #guessType3FontBBox). See [Font.type3HeightScale].
-	if math.Hypot(bbox[2]-bbox[0], bbox[3]-bbox[1]) == 0 {
+	if detmath.Hypot(bbox[2]-bbox[0], bbox[3]-bbox[1]) == 0 {
 		if guessed != nil {
 			font.type3BBoxHeight = guessed[3] - guessed[1]
 			font.type3CharBBox = true
@@ -4093,14 +4094,14 @@ func bezierBounds(p [4][2]float64, add func(x, y float64)) {
 	at := func(t float64) {
 		u := 1 - t
 		a, b, c, d := u*u*u, 3*u*u*t, 3*u*t*t, t*t*t
-		add(a*p[0][0]+b*p[1][0]+c*p[2][0]+d*p[3][0], a*p[0][1]+b*p[1][1]+c*p[2][1]+d*p[3][1])
+		add(float64(a*p[0][0])+float64(b*p[1][0])+float64(c*p[2][0])+float64(d*p[3][0]), float64(a*p[0][1])+float64(b*p[1][1])+float64(c*p[2][1])+float64(d*p[3][1]))
 	}
 	for axis := range 2 {
 		p0, p1, p2, p3 := p[0][axis], p[1][axis], p[2][axis], p[3][axis]
 		// The derivative of the segment along one axis is the quadratic
 		// a t^2 + b t + c, whose roots in (0, 1) are where it turns.
-		a := 3 * (-p0 + 3*p1 - 3*p2 + p3)
-		b := 6 * (p0 - 2*p1 + p2)
+		a := float64(3 * (-p0 + float64(3*p1) - float64(3*p2) + p3))
+		b := float64(6 * (p0 - 2*p1 + p2))
 		c := 3 * (p1 - p0)
 		if a == 0 {
 			if b != 0 {
@@ -4110,7 +4111,7 @@ func bezierBounds(p [4][2]float64, add func(x, y float64)) {
 			}
 			continue
 		}
-		disc := b*b - 4*a*c
+		disc := float64(b*b) - float64(4*a*c)
 		if disc < 0 {
 			continue
 		}

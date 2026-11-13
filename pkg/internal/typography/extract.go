@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/semantics"
@@ -552,12 +553,12 @@ func applyTJKerning(machine *graphics.Machine, currentFont *Font, numVal float64
 	}
 	adjustment := -(numVal / 1000.0) * fontSize
 	if currentFont.WMode == 1 {
-		state.Text.Tm[4] += adjustment * state.Text.Tm[2]
-		state.Text.Tm[5] += adjustment * state.Text.Tm[3]
+		state.Text.Tm[4] += float64(adjustment * state.Text.Tm[2])
+		state.Text.Tm[5] += float64(adjustment * state.Text.Tm[3])
 		return
 	}
-	state.Text.Tm[4] += adjustment * state.Text.Tm[0]
-	state.Text.Tm[5] += adjustment * state.Text.Tm[1]
+	state.Text.Tm[4] += float64(adjustment * state.Text.Tm[0])
+	state.Text.Tm[5] += float64(adjustment * state.Text.Tm[1])
 }
 
 // Variants of a form's parsed content in the document's form cache (see
@@ -1177,9 +1178,9 @@ func coalesceTextElements(ctx context.Context, in []models.TextElement) []models
 		// to the end of the final glyph, measured along the text
 		// baseline direction (cos, sin of the rotation angle).
 		dirX, dirY := baselineDirection(*last)
-		dx := (next.X + next.Width*dirX) - last.X
-		dy := (next.Y + next.Width*dirY) - last.Y
-		last.Width = dx*dirX + dy*dirY
+		dx := (next.X + float64(next.Width*dirX)) - last.X
+		dy := (next.Y + float64(next.Width*dirY)) - last.Y
+		last.Width = float64(dx*dirX) + float64(dy*dirY)
 	}
 	return out
 }
@@ -1219,16 +1220,16 @@ func canMergeTextElements(a, b models.TextElement) bool {
 		spaceW = size * 0.25
 	}
 	const kernTolerance = 0.3 // up to 30% of a space counts as kerning.
-	maxGap := spaceW * kernTolerance
-	baselineTolerance := size * 0.2
+	maxGap := float64(spaceW * kernTolerance)
+	baselineTolerance := float64(size * 0.2)
 
 	dirX, dirY := baselineDirection(a)
 	perpX, perpY := -dirY, dirX
 
 	dx := b.X - a.X
 	dy := b.Y - a.Y
-	alongDelta := dx*dirX + dy*dirY
-	perpDelta := dx*perpX + dy*perpY
+	alongDelta := float64(dx*dirX) + float64(dy*dirY)
+	perpDelta := float64(dx*perpX) + float64(dy*perpY)
 
 	expected := a.Width
 	if alongDelta < expected-baselineTolerance || alongDelta > expected+maxGap {
@@ -1245,9 +1246,9 @@ func canMergeTextElements(a, b models.TextElement) bool {
 // text space; horizontal text advances along its rotation angle.
 func baselineDirection(e models.TextElement) (float64, float64) {
 	if e.Vertical {
-		return math.Sin(e.Angle), math.Cos(e.Angle)
+		return detmath.Sin(e.Angle), detmath.Cos(e.Angle)
 	}
-	return math.Cos(e.Angle), math.Sin(e.Angle)
+	return detmath.Cos(e.Angle), detmath.Sin(e.Angle)
 }
 
 // boxRectFromArray converts a PdfArray [llx, lly, urx, ury] to [4]float64.
@@ -1477,7 +1478,7 @@ func elementInsideAnyBead(el models.TextElement, beads []semantics.Bead) bool {
 // that of the origin (ISO 32000-1, 9.4.4).
 func riseOnPage(state *graphics.State) float64 {
 	tm, ctm := state.Text.Tm, state.CTM
-	return state.Text.Ts * (tm[2]*ctm[1] + tm[3]*ctm[3])
+	return state.Text.Ts * (float64(tm[2]*ctm[1]) + float64(tm[3]*ctm[3]))
 }
 
 // renderingMatrixOnPage returns the linear part [a b c d] of the text
@@ -1490,8 +1491,8 @@ func renderingMatrixOnPage(state *graphics.State) [4]float64 {
 	a, b := sx*tm[0], sx*tm[1]
 	c, d := sy*tm[2], sy*tm[3]
 	return [4]float64{
-		a*ctm[0] + b*ctm[2], a*ctm[1] + b*ctm[3],
-		c*ctm[0] + d*ctm[2], c*ctm[1] + d*ctm[3],
+		float64(a*ctm[0]) + float64(b*ctm[2]), float64(a*ctm[1]) + float64(b*ctm[3]),
+		float64(c*ctm[0]) + float64(d*ctm[2]), float64(c*ctm[1]) + float64(d*ctm[3]),
 	}
 }
 
@@ -1501,5 +1502,5 @@ func renderingMatrixOnPage(state *graphics.State) [4]float64 {
 // change against this size (src/core/evaluator.js, ensureTextContentItem).
 func heightOnPage(state *graphics.State) float64 {
 	tm, ctm := state.Text.Tm, state.CTM
-	return math.Abs(state.Text.Tfs) * math.Hypot(tm[2]*ctm[0]+tm[3]*ctm[2], tm[2]*ctm[1]+tm[3]*ctm[3])
+	return math.Abs(state.Text.Tfs) * detmath.Hypot(float64(tm[2]*ctm[0])+float64(tm[3]*ctm[2]), float64(tm[2]*ctm[1])+float64(tm[3]*ctm[3]))
 }

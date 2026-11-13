@@ -8,6 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/semantics"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -910,7 +911,7 @@ func (r *runTracker) breaksItem(i int, el models.TextElement) bool {
 	if r.endsLine(before, i, prev, el, gap, size) {
 		return acrossLine(start, el) > min(lineBreakTolerance, sameBaselineRatio*r.height(fromIdx, from))
 	}
-	if exceedsBound(gap, trackingSpaceFactor*size) {
+	if exceedsBound(gap, float64(trackingSpaceFactor*size)) {
 		return acrossLine(start, prev) > lineBreakTolerance || acrossLine(prev, el) > lineBreakTolerance
 	}
 	return acrossLine(start, el) > lineBreakTolerance
@@ -953,7 +954,7 @@ func spacesItem(r *runTracker, before, i int, el models.TextElement) bool {
 	}
 	size := math.Abs(prev.FontSize)
 	gap := computeLineGap(prev, el)
-	return !r.endsLine(before, i, prev, el, gap, size) && exceedsBound(gap, trackingSpaceFactor*size)
+	return !r.endsLine(before, i, prev, el, gap, size) && exceedsBound(gap, float64(trackingSpaceFactor*size))
 }
 
 // sameBaselineRatio is how far across the baseline, as a fraction of the
@@ -1049,9 +1050,9 @@ func turnsAway(prev, el models.TextElement) bool {
 	if turn <= sameDirectionTolerance {
 		return false
 	}
-	endX := prev.X + prev.Width*math.Cos(prev.Angle)
-	endY := prev.Y + prev.Width*math.Sin(prev.Angle)
-	return math.Hypot(el.X-endX, el.Y-endY) > math.Abs(prev.FontSize)
+	endX := prev.X + float64(prev.Width*detmath.Cos(prev.Angle))
+	endY := prev.Y + float64(prev.Width*detmath.Sin(prev.Angle))
+	return detmath.Hypot(el.X-endX, el.Y-endY) > math.Abs(prev.FontSize)
 }
 
 // skewedAcross returns how far across the line PDF.js reads el, the element
@@ -1098,13 +1099,13 @@ func (r *runTracker) skewedAcross(lastIdx, i int, last, el models.TextElement) (
 		return 0, false
 	}
 	p := r.fonts[lastIdx].trm
-	sm, sp := math.Hypot(m[0], m[1]), math.Hypot(p[0], p[1])
+	sm, sp := detmath.Hypot(m[0], m[1]), detmath.Hypot(p[0], p[1])
 	if sm == 0 || sp == 0 {
 		return 0, false
 	}
-	endX := last.X + last.Width*math.Cos(last.Angle)
-	endY := last.Y + last.Width*math.Sin(last.Angle)
-	return (m[2]*el.X+m[3]*el.Y)/sm - (p[2]*endX+p[3]*endY)/sp, true
+	endX := last.X + float64(last.Width*detmath.Cos(last.Angle))
+	endY := last.Y + float64(last.Width*detmath.Sin(last.Angle))
+	return (float64(m[2]*el.X)+float64(m[3]*el.Y))/sm - (float64(p[2]*endX)+float64(p[3]*endY))/sp, true
 }
 
 // alongPageAxes reports whether the linear part m of a text rendering matrix
@@ -1121,7 +1122,7 @@ func alongPageAxes(m [4]float64) bool {
 // generator measures it (join-lines.mjs, acrossLine).
 func acrossBaseline(a, b models.TextElement) float64 {
 	dx, dy := b.X-a.X, b.Y-a.Y
-	return math.Abs(-dx*math.Sin(b.Angle) + dy*math.Cos(b.Angle))
+	return math.Abs(float64(-dx*detmath.Sin(b.Angle)) + float64(dy*detmath.Cos(b.Angle)))
 }
 
 // height returns the size across its line of the font el, the element i,
@@ -1357,7 +1358,7 @@ func suppressesLiteralSpace(prev, el models.TextElement, gap, size float64, spac
 	// carries; the gap that counts as none is a fraction of its magnitude.
 	size = math.Abs(size)
 	if spaces >= 2 {
-		return !exceedsBound(gap, trackingSpaceFactor*size)
+		return !exceedsBound(gap, float64(trackingSpaceFactor*size))
 	}
 	if math.Abs(gap) < exactAbutment && !setBack {
 		return false
@@ -1660,7 +1661,7 @@ func computeLineGap(prev, curr models.TextElement) float64 {
 		delta = prev.Y - curr.Y
 	case isOrthogonalRotation(curr.Angle):
 		delta = curr.Y - prev.Y
-		if math.Sin(curr.Angle) < 0 {
+		if detmath.Sin(curr.Angle) < 0 {
 			delta = -delta
 		}
 	case isRotated(curr.Angle):
@@ -1673,7 +1674,7 @@ func computeLineGap(prev, curr models.TextElement) float64 {
 	if prev.Width >= 0 {
 		return delta - prev.Width
 	}
-	return delta - 0.5*curr.FontSize
+	return delta - float64(0.5*curr.FontSize)
 }
 
 // glyphBodyRatio is the highest a line's [curveRise] is read, as a fraction
@@ -1764,7 +1765,7 @@ func curveRise(elems []models.TextElement) float64 {
 			turn, ok := curveTurn(p, el)
 			size := math.Abs(p.FontSize)
 			if gap := computeLineGap(p, el); ok && turn > curveTurnFloor() && turn <= maxCurveTurn && gap > 0 && size > 0 {
-				rise = min(rise, gap/(2*size*math.Sin(turn/2)))
+				rise = min(rise, gap/(2*size*detmath.Sin(turn/2)))
 				pairs++
 			}
 		}
@@ -1786,7 +1787,7 @@ const minCurvePairs = 2
 // by less closes its gap by too little to measure the height against the
 // rounding of the glyph positions a content stream sets.
 func curveTurnFloor() float64 {
-	return 2 * math.Asin(trackingSpaceFactor/(4*glyphBodyRatio))
+	return 2 * detmath.Asin(trackingSpaceFactor/(4*glyphBodyRatio))
 }
 
 // curveClosing returns how much nearer each other prev and curr come at rise,
@@ -1804,7 +1805,7 @@ func curveClosing(prev, curr models.TextElement, rise float64) float64 {
 	if !ok || turn <= sameDirectionTolerance || turn > maxCurveTurn {
 		return 0
 	}
-	return 2 * rise * math.Abs(prev.FontSize) * math.Sin(turn/2)
+	return 2 * rise * math.Abs(prev.FontSize) * detmath.Sin(turn/2)
 }
 
 // wordGap returns the gap [computeLineGap] measures from prev to curr, less
@@ -1952,7 +1953,7 @@ func needsSpace(gap, threshold float64) bool {
 // compensating TJ shifts) merges as a single chunk.
 func chunkKerningLimit(prev models.TextElement) float64 {
 	const kerningFactor = 0.102
-	return kerningFactor * math.Abs(prev.FontSize)
+	return float64(kerningFactor * math.Abs(prev.FontSize))
 }
 
 // shouldInsertSpace combines the adaptive per-line threshold with the
@@ -2028,11 +2029,11 @@ func acrossLine(a, b models.TextElement) float64 {
 // |ΔY| check for rotated text.
 func perpDist(a, b models.TextElement) float64 {
 	angle := (a.Angle + b.Angle) / 2
-	sinA := math.Sin(angle)
-	cosA := math.Cos(angle)
+	sinA := detmath.Sin(angle)
+	cosA := detmath.Cos(angle)
 	// Perpendicular direction: (-sin θ, cos θ)
-	pa := -a.X*sinA + a.Y*cosA
-	pb := -b.X*sinA + b.Y*cosA
+	pa := float64(-a.X*sinA) + float64(a.Y*cosA)
+	pb := float64(-b.X*sinA) + float64(b.Y*cosA)
 	return math.Abs(pa - pb)
 }
 
@@ -2040,11 +2041,11 @@ func perpDist(a, b models.TextElement) float64 {
 // the text direction vector. Positive means b is ahead of a in reading order.
 func alongDist(a, b models.TextElement) float64 {
 	angle := (a.Angle + b.Angle) / 2
-	cosA := math.Cos(angle)
-	sinA := math.Sin(angle)
+	cosA := detmath.Cos(angle)
+	sinA := detmath.Sin(angle)
 	// Along direction: (cos θ, sin θ)
-	da := a.X*cosA + a.Y*sinA
-	db := b.X*cosA + b.Y*sinA
+	da := float64(a.X*cosA) + float64(a.Y*sinA)
+	db := float64(b.X*cosA) + float64(b.Y*sinA)
 	return db - da
 }
 

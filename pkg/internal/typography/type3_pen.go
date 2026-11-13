@@ -272,7 +272,7 @@ func (s type3PenStroke) through(m [6]float64) (type3PenStroke, bool) {
 	boxThrough := func(b [4]float64) ([4]float64, bool) {
 		var out *[4]float64
 		for _, c := range rectCorners(b[0], b[1], b[2], b[3]) {
-			x, y := m[0]*c[0]+m[2]*c[1]+m[4], m[1]*c[0]+m[3]*c[1]+m[5]
+			x, y := float64(m[0]*c[0])+float64(m[2]*c[1])+m[4], float64(m[1]*c[0])+float64(m[3]*c[1])+m[5]
 			out = unionBox(out, &[4]float64{x, y, x, y})
 		}
 		return *out, finiteBox(*out)
