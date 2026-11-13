@@ -89,6 +89,8 @@ func TestCounterStyles_Rules(t *testing.T) {
 		@counter-style num { system: numeric; symbols: "0" "1"; negative: "(" ")"; pad: 4 "0" }
 		@counter-style add { system: additive; additive-symbols: 5 V, 1 I }
 		@counter-style ext { system: extends add; suffix: "!" }
+		@counter-style addcalc { system: additive; additive-symbols: 1 I, calc(-1) X }
+		@counter-style addneg { system: additive; additive-symbols: 1 I, -1 X }
 		@counter-style loop1 { system: extends loop2 }
 		@counter-style loop2 { system: extends loop1 }
 		@counter-style few { system: alphabetic; symbols: x }
@@ -115,6 +117,7 @@ func TestCounterStyles_Rules(t *testing.T) {
 		{"alp", 3, "xx"},
 		{"num", 5, "0101"}, {"num", -1, "(01)"},
 		{"add", 7, "VII"}, {"add", 0, "0"},
+		{"addcalc", 0, "X"}, {"addneg", 0, "0"},
 		{"ext", 6, "VI"},
 		{"loop1", 4, "4"},
 		{"few", 2, "2"},

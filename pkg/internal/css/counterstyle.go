@@ -330,6 +330,12 @@ func (r *counterStyleRule) parseAdditive(v []token, c *declCtx) bool {
 			n, sym = sym, n
 		}
 		w, ok := parseInteger(n)
+		if ok && w < 0 && n.typ == tFunction {
+			// A math function out of the <integer [0,∞]> range clamps
+			// to it; a negative literal is invalid (CSS Values 4,
+			// 10.12).
+			w = 0
+		}
 		if !ok || w < 0 || len(out) > 0 && w >= out[len(out)-1].weight {
 			return false
 		}
