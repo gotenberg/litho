@@ -239,8 +239,11 @@ func interpolators() map[propID]interpFn {
 		pFlexGrow:   floatInterp(func(s *Style) *float64 { return &s.FlexGrow }, 0, math.MaxFloat64),
 		pFlexShrink: floatInterp(func(s *Style) *float64 { return &s.FlexShrink }, 0, math.MaxFloat64),
 		pFontWeight: intInterp(func(s *Style) *int { return &s.FontWeight }, 1),
-		pOrphans:    intInterp(func(s *Style) *int { return &s.Orphans }, 1),
-		pWidows:     intInterp(func(s *Style) *int { return &s.Widows }, 1),
+		// font-variation-settings interpolates between lists of the same
+		// axes (CSS Fonts 4, 8.2).
+		pFontVariationSettings: variationInterp,
+		pOrphans:               intInterp(func(s *Style) *int { return &s.Orphans }, 1),
+		pWidows:                intInterp(func(s *Style) *int { return &s.Widows }, 1),
 		// bookmark-level interpolates as an integer, none discretely (CSS
 		// Generated Content 3, 8.1: by computed value type).
 		pBookmarkLevel: func(dst, a, b *Style, p float64) interpResult {

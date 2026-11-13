@@ -198,3 +198,25 @@ func TestFontVariationSettings(t *testing.T) {
 		t.Errorf("font-optical-sizing %v, inherited font-variation-settings %v", st.FontOpticalSizing, st.FontVariationSettings)
 	}
 }
+
+// TestFontVariationSettings_Interpolates pins the animation of
+// font-variation-settings (CSS Fonts 4, 8.2): lists of the same axes
+// interpolate value by value, in the order of the first; other pairs flip.
+func TestFontVariationSettings_Interpolates(t *testing.T) {
+	t.Parallel()
+	a := &Style{FontVariationSettings: []VariationSetting{{"wght", 100}, {"wdth", 80}}}
+	b := &Style{FontVariationSettings: []VariationSetting{{"wdth", 120}, {"wght", 900}}}
+	dst := *a
+	if r := variationInterp(&dst, a, b, 0.25); r != interpolated {
+		t.Fatalf("like lists: %v, want interpolated", r)
+	}
+	if want := []VariationSetting{{"wght", 300}, {"wdth", 90}}; !reflect.DeepEqual(dst.FontVariationSettings, want) {
+		t.Errorf("at 0.25: %v, want %v", dst.FontVariationSettings, want)
+	}
+	for _, c := range []*Style{{}, {FontVariationSettings: []VariationSetting{{"wght", 900}}}, {FontVariationSettings: []VariationSetting{{"wght", 900}, {"opsz", 12}}}} {
+		dst := *a
+		if r := variationInterp(&dst, a, c, 0.5); r != discrete {
+			t.Errorf("%v to %v: %v, want discrete", a.FontVariationSettings, c.FontVariationSettings, r)
+		}
+	}
+}

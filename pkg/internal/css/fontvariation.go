@@ -1,6 +1,9 @@
 package css
 
-import "math"
+import (
+	"math"
+	"slices"
+)
 
 // VariationSetting is one entry of font-variation-settings (CSS Fonts 4,
 // 8.2): a variation axis tag and its value.
@@ -78,4 +81,25 @@ func fontVariationProps() map[propID]propDef {
 			"auto": OpticalSizingAuto, "none": OpticalSizingNone,
 		}),
 	}
+}
+
+// variationInterp interpolates font-variation-settings (CSS Fonts 4, 8.2):
+// two lists that set the same axes, in any order, interpolate value by
+// value, in the order of the first; two that do not, normal included,
+// flip discretely.
+func variationInterp(dst, a, b *Style, p float64) interpResult {
+	la, lb := a.FontVariationSettings, b.FontVariationSettings
+	if len(la) == 0 || len(la) != len(lb) {
+		return discrete
+	}
+	out := make([]VariationSetting, len(la))
+	for i, va := range la {
+		j := slices.IndexFunc(lb, func(v VariationSetting) bool { return v.Tag == va.Tag })
+		if j < 0 {
+			return discrete
+		}
+		out[i] = VariationSetting{Tag: va.Tag, Value: min(max(lerp(va.Value, lb[j].Value, p), -maxVariationValue), maxVariationValue)}
+	}
+	dst.FontVariationSettings = out
+	return interpolated
 }
