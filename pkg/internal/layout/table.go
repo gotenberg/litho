@@ -808,10 +808,14 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw, fixedH float64) {
 	td.cellEdges(c, cbw)
 	c.x = t.contentX() + td.colX[cd.col]
 	c.y = t.contentY()
-	c.w = max(td.spanW(cd.col, cd.colSpan)-hEdges(c), 0)
+	// The cell's border box is its columns' width, even below its
+	// padding and borders, which the fixed layout does not count (CSS
+	// 2.1, 17.5.2.1): its content box is then empty and its content
+	// overflows, as Chromium draws it.
+	c.w = td.spanW(cd.col, cd.colSpan) - hEdges(c)
 	own := &bfc{}
 	mc := &marginState{}
-	kcb := cblock{x: c.contentX(), w: c.w}
+	kcb := cblock{x: c.contentX(), w: max(c.w, 0)}
 	if fixedH >= 0 {
 		kcb.h, kcb.hDefinite = fixedH, true
 	} else if _, set := specHeight(c, c.st.Height, cblock{}); set || t.st.Height.Kind != css.Auto {

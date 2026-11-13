@@ -547,3 +547,29 @@ func TestTable_Structure(t *testing.T) {
 		t.Errorf("links %+v, want the cell's link to the other cell", res.Pages[0].Links)
 	}
 }
+
+// TestTable_CellNarrowerThanItsEdges holds a cell of the fixed table
+// layout whose column is narrower than its padding to CSS 2.1, 17.5.2.1:
+// the auto columns share what the fixed ones leave, here nothing, and a
+// cell's border box is its column's width, so the table keeps its width.
+//
+// # Corpus evidence
+//
+//   - wpt: CSS2/tables/fixed-table-layout-025 and -028 to -031 (cells of
+//     25px side padding in auto columns of a 100px table whose middle
+//     cell takes it all) draw a 100px square in Chromium 156.
+//   - probe, html: Chromium 156 draws the text of such a cell 30px into
+//     a column of width 0, past its 5px border and 25px padding.
+func TestTable_CellNarrowerThanItsEdges(t *testing.T) {
+	pad := mods(padding(0, 10))
+	tm := tableOf(t, doc(table(mods(spacing(0, 0), fixedLayout, width(40)),
+		tr(nil, td(pad, ""), td(mods(width(40)), ""), td(pad, "")))), page(100, 100))
+	if got := rect(tm.table); got[2] != 40 {
+		t.Errorf("table %v wide, want 40", got[2])
+	}
+	for i, want := range [][2]float64{{0, 0}, {0, 40}, {40, 0}} {
+		if got := rect(tm.cells[i]); got[0] != want[0] || got[2] != want[1] {
+			t.Errorf("cell %d at %v, %v wide, want at %v, %v wide", i, got[0], got[2], want[0], want[1])
+		}
+	}
+}
