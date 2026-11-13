@@ -1074,6 +1074,12 @@ type Style struct {
 	// glyphs they cross (CSS Text Decoration 4, 2.7), SkipInkAuto by
 	// default.
 	TextDecorationSkipInk SkipInk
+	// Hyphens says whether a word breaks at its soft hyphens (CSS Text 3,
+	// 5.4), HyphensManual by default.
+	Hyphens Hyphens
+	// HyphenateCharacter is what a line that ends at a soft hyphen ends
+	// with (CSS Text 4, 5.5).
+	HyphenateCharacter HyphenateCharacter
 	// TextUnderlinePosition says where underlines lie (CSS Text Decoration
 	// 4, 2.7), zero for auto.
 	TextUnderlinePosition UnderlinePosition

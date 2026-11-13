@@ -216,7 +216,8 @@
 // orthogonal flow whose text is set sideways, a horizontal layout turned
 // a quarter turn into the box (writing.go); upright glyphs, vertical-lr's
 // line order and vertical flows nested in vertical ones are not laid out.
-// 3D transforms and hyphenation are out of scope;
+// 3D transforms and hyphenation by a dictionary are out of scope (a
+// word breaks at its soft hyphens alone);
 // a footnote call inside an inline block or a flex item is laid out off
 // the page cuts, and its body goes to a page after the flow (a table
 // cell's calls go to the pages their lines land on, the table laid out

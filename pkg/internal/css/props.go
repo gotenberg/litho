@@ -190,6 +190,8 @@ const (
 	pTransformBox
 	pTextDecorationSkipInk
 	pTextUnderlinePosition
+	pHyphens
+	pHyphenateCharacter
 	numProps
 )
 
@@ -930,6 +932,9 @@ func init() {
 		props[id] = def
 	}
 	for id, def := range textFontProps() {
+		props[id] = def
+	}
+	for id, def := range textProps() {
 		props[id] = def
 	}
 	gcpmProps()

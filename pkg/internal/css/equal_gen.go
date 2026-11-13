@@ -266,6 +266,12 @@ func equalStyle(a, b *Style) bool {
 	if a.TextDecorationSkipInk != b.TextDecorationSkipInk {
 		return false
 	}
+	if a.Hyphens != b.Hyphens {
+		return false
+	}
+	if !equalHyphenateCharacter(&a.HyphenateCharacter, &b.HyphenateCharacter) {
+		return false
+	}
 	if a.TextUnderlinePosition != b.TextUnderlinePosition {
 		return false
 	}
@@ -710,6 +716,8 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = hashColor(h, &x.TextDecorationColor)
 	h = mix(h, uint64(x.TextDecorationStyle))
 	h = mix(h, uint64(x.TextDecorationSkipInk))
+	h = mix(h, uint64(x.Hyphens))
+	h = hashHyphenateCharacter(h, &x.HyphenateCharacter)
 	h = mix(h, uint64(x.TextUnderlinePosition))
 	h = hashDimension(h, &x.TextDecorationThickness)
 	h = hashDimension(h, &x.TextUnderlineOffset)
@@ -1105,6 +1113,24 @@ func hashShadow(h uint64, x *Shadow) uint64 {
 	h = hashColor(h, &x.Color)
 	h = mixBool(h, x.Inset)
 	h = mixBool(h, x.current)
+	return h
+}
+
+// equalHyphenateCharacter reports whether a and b hold equal values, field by field.
+func equalHyphenateCharacter(a, b *HyphenateCharacter) bool {
+	if a.Given != b.Given {
+		return false
+	}
+	if a.Text != b.Text {
+		return false
+	}
+	return true
+}
+
+// hashHyphenateCharacter folds every field of x into h.
+func hashHyphenateCharacter(h uint64, x *HyphenateCharacter) uint64 {
+	h = mixBool(h, x.Given)
+	h = mixString(h, x.Text)
 	return h
 }
 

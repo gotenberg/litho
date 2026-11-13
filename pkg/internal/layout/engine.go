@@ -56,9 +56,12 @@ type engine struct {
 	// LibreOffice's rule, nil before the first.
 	fallbacks map[*css.Style]text.Fallback
 	spaces    map[spaceKey]float64
-	missing   map[rune]bool
-	root      *typeset.StructElem
-	rootBox   *box
+	// hyphens caches the mark a hyphenated line ends with, by the style
+	// and language of its soft hyphen.
+	hyphens map[spaceKey]*hyphenMark
+	missing map[rune]bool
+	root    *typeset.StructElem
+	rootBox *box
 	// pageFrags counts the fragments of every page as they are assembled.
 	pageFrags []int
 	// geom is where the pages cut the flow.

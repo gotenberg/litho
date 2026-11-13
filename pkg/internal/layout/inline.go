@@ -212,6 +212,11 @@ func (p *ifcPara) allowed(i int) bool {
 		return true
 	}
 	a, b := p.p.Rune(i-1), p.p.Rune(i)
+	if a == softHyphen && p.styleAt(i-1).Hyphens == css.HyphensNone {
+		// hyphens: none breaks no word at its soft hyphens (CSS Text 3,
+		// 5.4).
+		return false
+	}
 	if p.styleAt(i).LineBreak == css.LineBreakAnywhere && wraps(after) && p.p.GraphemeStart(i) {
 		return true
 	}
@@ -345,11 +350,17 @@ func (e *engine) breakLine(p *ifcPara, w []float64, start int, x0, avail float64
 func (e *engine) breakLineIn(p *ifcPara, w []float64, start int, x0, avail float64, root *box, org float64) (int, bool) {
 	n := p.p.Len()
 	x := x0
-	last := -1
+	last, over := -1, -1
 	office := root != nil && officeTabs(root.st)
 	for i := start; i < n; i++ {
+		// A break at a soft hyphen fits when the hyphen it adds does; one
+		// that does not still ends a line nothing else ends.
 		if i > start && p.allowed(i) {
-			last = i
+			if !p.hyphenates(i) || x+e.hyphenWidth(p, i) <= avail+eps {
+				last = i
+			} else {
+				over = i
+			}
 		}
 		wi := w[i]
 		if info := p.infos[p.p.RunOf(i)]; info.kind == runTab {
@@ -370,6 +381,9 @@ func (e *engine) breakLineIn(p *ifcPara, w []float64, start int, x0, avail float
 		if x+wi > avail+eps && !p.hangs(i) && !p.hangsPunct(root, i) {
 			if last > start {
 				return last, true
+			}
+			if over > start {
+				return over, false
 			}
 			if i > start && p.breakAnywhere(i) {
 				j := i
@@ -1077,6 +1091,35 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 	s.glyphs = 0
 	x := 0.0
 	opened, closed := map[*box]bool{}, map[*box]bool{}
+	// A line broken at a soft hyphen ends with the hyphenate-character,
+	// drawn after the soft hyphen in its inline box (CSS Text 3, 5.4).
+	var hyMark *hyphenMark
+	if end > start && p.hyphenates(end) {
+		hyMark = e.hyphen(p.infos[p.p.RunOf(end-1)].box)
+	}
+	addHyphen := func(b *box) {
+		for _, hs := range hyMark.spans {
+			if hs.Text == nil {
+				continue
+			}
+			t := *hs.Text
+			t.Glyphs = slices.Clone(t.Glyphs)
+			ascent, descent, gap := hs.Ascent, hs.Descent, hs.LineGap
+			if e.opts.PixelFontMetrics {
+				ascent, descent, gap = pixelMetrics(ascent, descent, gap)
+			}
+			it := &lineItem{
+				box: b, text: &t, x: x + hs.X, w: hs.Width, ascent: ascent, descent: descent, gap: gap,
+				ulPos: hs.UnderlinePosition, ulThick: hs.UnderlineThickness, stPos: hs.StrikeoutPosition, stThick: hs.StrikeoutThickness,
+				start: end, end: end, rtl: hs.RTL,
+			}
+			l.items = append(l.items, it)
+			for a := s.parentInline(b); a != nil; a = s.parentInline(a) {
+				widen(a, it.x, it.x+it.w)
+			}
+		}
+		x += hyMark.width
+	}
 	for _, sp := range pl.Spans {
 		info := p.infos[sp.Run]
 		// A left-to-right box draws its start edge on the left of its
@@ -1087,6 +1130,11 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		ascent, descent, gap := sp.Ascent, sp.Descent, sp.LineGap
 		if s.e.opts.PixelFontMetrics {
 			ascent, descent, gap = pixelMetrics(ascent, descent, gap)
+		}
+		holds := hyMark != nil && sp.Start < end && end <= sp.End
+		if holds && sp.RTL {
+			// A right-to-left run ends on its left.
+			addHyphen(info.box)
 		}
 		it := &lineItem{
 			box: info.box, x: x, w: sp.Width, ascent: ascent, descent: descent, gap: gap,
@@ -1112,6 +1160,9 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		}
 		x += sp.Width
 		l.items = append(l.items, it)
+		if holds && !sp.RTL {
+			addHyphen(info.box)
+		}
 		for a := s.parentInline(info.box); a != nil; a = s.parentInline(a) {
 			widen(a, it.x, it.x+it.w)
 		}
