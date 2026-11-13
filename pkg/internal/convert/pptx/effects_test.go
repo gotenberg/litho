@@ -57,7 +57,8 @@ func TestEffects_EffectList(t *testing.T) {
 			&slides.Shadow{Color: css.Color{G: 1, A: 1}, Opacity: 1, OffsetX: 2, ScaleX: 1, ScaleY: 1, Blur: 3}, nil, 0, false, "",
 		},
 		{"an empty list overrides the style", `<a:effectLst/>`, style, nil, nil, 0, false, ""},
-		{"preset shadow", `<a:effectLst><a:prstShdw prst="shdw1"><a:prstClr val="black"/></a:prstShdw></a:effectLst>`, "", nil, nil, 0, false, "preset shadows"},
+		{"preset shadow", `<a:effectLst><a:prstShdw prst="shdw1" dist="127000"><a:prstClr val="black"/></a:prstShdw></a:effectLst>`, "", &slides.Shadow{Color: css.Color{A: 1}, Opacity: 1, OffsetX: 10, ScaleX: 1, ScaleY: 1}, nil, 0, false, ""},
+		{"a preset no reference shows", `<a:effectLst><a:prstShdw prst="shdw2"><a:prstClr val="black"/></a:prstShdw></a:effectLst>`, "", nil, nil, 0, false, "preset shadow shdw2"},
 		// The skew keeps the bottom fixed: the centre, 10 pt above it,
 		// moves right by 10 tan 13.34 degrees.
 		{"skewed shadow", `<a:effectLst><a:outerShdw kx="-800400"><a:prstClr val="black"/></a:outerShdw></a:effectLst>`, "", &slides.Shadow{Color: css.Color{A: 1}, Opacity: 1, OffsetX: 10 * math.Tan(13.34*math.Pi/180), ScaleX: 1, ScaleY: 1, SkewX: -13.34}, nil, 0, false, ""},
@@ -227,6 +228,34 @@ func TestEffects_TextEffects(t *testing.T) {
 			tc.check(t, shapes[0].Text.Paragraphs[0].Runs[0].Style.Effects)
 			if tc.warn != "" && !strings.Contains(fmt.Sprint(warnings), tc.warn) {
 				t.Errorf("warnings %v, want one on %q", warnings, tc.warn)
+			}
+		})
+	}
+}
+
+// TestEffects_PresetShadowCopies checks the far copy of a preset shadow:
+// twice the distance for shdw13, the distance the other way for shdw18,
+// in the colour lightened four fifths of the way to white, and none for
+// shdw1.
+func TestEffects_PresetShadowCopies(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		prst string
+		far  float64
+	}{{"shdw1", 0}, {"shdw13", 20}, {"shdw18", -10}} {
+		t.Run(tc.prst, func(t *testing.T) {
+			t.Parallel()
+			spPr := `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:effectLst><a:prstShdw prst="` + tc.prst + `" dist="127000"><a:srgbClr val="808080"/></a:prstShdw></a:effectLst>`
+			doc, _ := readDeck(t, testDeck{slides: []testSlide{{tree: sp("S", spPr, "")}}})
+			s := shapeNamed(doc.Slides[0].Shapes, "S")
+			if s == nil || s.Shadow == nil || !nearly(s.Shadow.OffsetX, 10) {
+				t.Fatalf("shape %+v, want a shadow 10 pt right", s)
+			}
+			switch {
+			case tc.far == 0 && s.ShadowUnder != nil:
+				t.Errorf("far copy %+v, want none", *s.ShadowUnder)
+			case tc.far != 0 && (s.ShadowUnder == nil || !nearly(s.ShadowUnder.OffsetX, tc.far) || !nearly(s.ShadowUnder.Color.R, 0x80/255.0+(1-0x80/255.0)*0.8)):
+				t.Errorf("far copy %+v, want %v pt right, lightened", s.ShadowUnder, tc.far)
 			}
 		})
 	}

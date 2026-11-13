@@ -273,3 +273,27 @@ func TestShadowMatrix_SkewThenScale(t *testing.T) {
 		t.Errorf("a skew that is not finite gives %+v, want the identity", m)
 	}
 }
+
+// TestShape_ShadowUnder checks that the far copy of a preset shadow is a
+// hard shadow painted under the near one, both under the shape.
+func TestShape_ShadowUnder(t *testing.T) {
+	box := typeset.Rect{X: 100, Y: 100, Width: 80, Height: 40}
+	gray := css.Color{R: 0.5, G: 0.5, B: 0.5, A: 1}
+	light := css.Color{R: 0.9, G: 0.9, B: 0.9, A: 1}
+	sh := &Shape{Box: box, Fill: Fill{Kind: FillSolid, Color: red},
+		Shadow:      &Shadow{Color: gray, Opacity: 1, OffsetX: 4, OffsetY: 4, ScaleX: 1, ScaleY: 1},
+		ShadowUnder: &Shadow{Color: light, Opacity: 1, OffsetX: 8, OffsetY: 8, ScaleX: 1, ScaleY: 1},
+	}
+	ps, _ := effectPage(t, EffectsPowerPoint, sh)
+	if len(ps) != 3 || ps[0].path == nil || ps[1].path == nil || ps[2].path == nil {
+		t.Fatalf("%d fragments, want the far copy, the near copy, then the shape", len(ps))
+	}
+	for i, want := range []struct {
+		c  css.Color
+		at float64
+	}{{light, 108}, {gray, 104}, {red, 100}} {
+		if got := ps[i].bounds(); ps[i].path.Fill == nil || ps[i].path.Fill.Color != colorOf(want.c) || !near(got.X, want.at, 1e-9) {
+			t.Errorf("fragment %d at %+v, want %+v at x %v", i, got, want.c, want.at)
+		}
+	}
+}

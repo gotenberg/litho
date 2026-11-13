@@ -165,6 +165,10 @@ type Shape struct {
 	Shadow   *Shadow
 	Glow     *Glow
 	SoftEdge float64
+	// ShadowUnder is a second hard shadow painted under a hard Shadow, nil
+	// for none: the far copy of a preset shadow (ECMA-376 Part 1, 20.1.8.49
+	// prstShdw).
+	ShadowUnder *Shadow
 	// InnerShadow is the shadow cast inside the shape's fill, over it and
 	// under its line, nil for none (ECMA-376 Part 1, 20.1.8.40 innerShdw):
 	// its offsets say where the shadow falls, toward the edges it darkens;

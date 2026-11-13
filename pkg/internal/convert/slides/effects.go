@@ -575,6 +575,9 @@ func (b *builder) paintEffects(s *Shape, own, text []typeset.Fragment, toSlide t
 			if drawn != nil {
 				hard = nil
 			}
+			if u := s.ShadowUnder; u != nil && u.Opacity > 0 {
+				top = append(top, b.hardShadow(b.ctx, u, glows, append(append([]typeset.Fragment(nil), hard...), text...), toSlide, sil.bounds)...)
+			}
 			top = append(top, b.hardShadow(b.ctx, sh, glows, append(append([]typeset.Fragment(nil), hard...), text...), toSlide, sil.bounds)...)
 			if drawn != nil {
 				top = append(top, p.recolorBitmap(b.ctx, drawn[0], sh)...)

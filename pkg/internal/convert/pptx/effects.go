@@ -34,8 +34,10 @@ import (
 // [slides.Shape.InnerShadow], the reflection (20.1.8.50) fills
 // [slides.Shape.Reflection], the blur (20.1.8.15) [slides.Shape.Blur] and
 // the fill overlay of a solid fill (20.1.8.29) [slides.Shape.FillOverlay].
-// Preset shadows (20.1.8.52) and fill overlays of other fills print
-// nothing, with a warning; so does an effect container (20.1.8.25 effectDag). A
+// A preset shadow (20.1.8.49 prstShdw) fills [slides.Shape.Shadow] and
+// [slides.Shape.ShadowUnder] as [presetShadow] reads it. Fill overlays of
+// other fills print nothing, with a warning; so does an effect container
+// (20.1.8.25 effectDag). A
 // shadow's skew (kx, ky, 60,000ths of a degree) fills
 // [slides.Shadow.SkewX] and [slides.Shadow.SkewY], about the same
 // alignment as its scale.
@@ -136,7 +138,12 @@ func (r *reader) effectList(chain []*ooxml.Element, style *ooxml.Element, fc *fi
 			s.InnerShadow = innerShadow(e)
 			s.InnerShadow.Color, s.InnerShadow.Opacity = color(e)
 		case "prstShdw":
-			r.warn(warn.ContentUnsupported, warn.Approximated, "preset shadows are not drawn")
+			near, far, ok := presetShadow(e, color)
+			if !ok {
+				r.warn(warn.ContentUnsupported, warn.Approximated, "the preset shadow "+attr(e, "prst")+" is not drawn")
+				break
+			}
+			s.Shadow, s.ShadowUnder = near, far
 		case "reflection":
 			s.Reflection = reflection(e, s.Box)
 		case "blur":
@@ -290,6 +297,64 @@ func (r *reader) textEffects(lst *ooxml.Element, sc scope) *slides.TextEffects {
 	}
 	return fx
 }
+
+// presetShadow reads a preset shadow (20.1.8.49 prstShdw; its presets,
+// 20.1.10.52 ST_PresetShadowVal): hard copies of the shape, the near one
+// at dist along dir in the shadow's colour, and for two presets a far one
+// painted under it in the colour lightened four fifths of the way to
+// white: shdw13 at twice the distance, shdw18 at the distance the other
+// way. color resolves the colour. It returns false for the other
+// presets, which no reference shows, and nils for a shadow of no colour.
+// The offsets keep the slide's directions whatever the shape's turn.
+// PowerPoint clips the copies to what lies outside the shape, which an
+// opaque shape hides anyway; the copies here are not clipped.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: effects-shadow prints in PowerPoint its rounded
+//     rectangles with preset shadows 6 pt toward 45 degrees in 808080 as
+//     vector copies of the fill and the line in gray 0.502: shdw1 one
+//     copy 4.24 pt right and down; shdw13 that copy over one twice as far
+//     in gray 0.902; shdw18 that copy over one 4.24 pt left and up in gray
+//     0.902.
+func presetShadow(e *ooxml.Element, color func(*ooxml.Element) (css.Color, float64)) (near, far *slides.Shadow, ok bool) {
+	k := 0.0
+	switch attr(e, "prst") {
+	case "shdw1":
+	case "shdw13":
+		k = 2
+	case "shdw18":
+		k = -1
+	default:
+		return nil, nil, false
+	}
+	c, a := color(e)
+	if a <= 0 {
+		return nil, nil, true
+	}
+	dist := emuAttr(e, "dist")
+	if !numeric.PositiveFinite(dist) {
+		dist = 0
+	}
+	dist = min(dist, maxEffectRadius)
+	dir, _ := intAttr(e, "dir")
+	s, co := math.Sincos(float64(dir) / 60000 * math.Pi / 180)
+	near = &slides.Shadow{Color: c, Opacity: a, OffsetX: dist * co, OffsetY: dist * s, ScaleX: 1, ScaleY: 1}
+	if k == 0 {
+		return near, nil, true
+	}
+	light := func(v float64) float64 { return v + (1-v)*presetLighten }
+	far = &slides.Shadow{
+		Color:   css.Color{R: light(c.R), G: light(c.G), B: light(c.B), A: 1},
+		Opacity: a, OffsetX: k * near.OffsetX, OffsetY: k * near.OffsetY, ScaleX: 1, ScaleY: 1,
+	}
+	return near, far, true
+}
+
+// presetLighten is how far toward white the far copy of a preset shadow
+// lightens the shadow's colour: four fifths, 808080 to E6E6E6, the one
+// colour a reference shows.
+const presetLighten = 0.8
 
 // innerShadow reads the geometry of an inner shadow (20.1.8.40
 // innerShdw): blurRad, and dist and dir (60,000ths of a degree, clockwise
