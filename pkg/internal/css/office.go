@@ -270,6 +270,12 @@ type Office struct {
 	// breaks between any two syllables (class H2, H3, LB31). It applies
 	// to the characters of the inline box that sets it.
 	KeepHangul bool
+	// TextEffects are the effects drawn around the glyphs of the inline
+	// box that sets it, nil for none: the glow, shadow and reflection of
+	// a WordprocessingML run (MS-DOCX, 2.6.1 rPr extensions w14:glow,
+	// w14:shadow, w14:reflection). The glyphs stay text above them. See
+	// [OfficeEffects].
+	TextEffects *OfficeEffects
 }
 
 // WordAnchor places a float of [Office.WordAnchor] at a fixed offset, as

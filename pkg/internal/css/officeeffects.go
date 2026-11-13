@@ -1,0 +1,60 @@
+package css
+
+// OfficeEffects are the effects an Office document draws around a shape,
+// a picture or a run of text as bitmaps: the members of a DrawingML
+// effect list (ECMA-376 Part 1, 20.1.8.26 effectLst) and their
+// WordprocessingML text counterparts (MS-DOCX, 2.6.1 w14:glow,
+// w14:shadow, w14:reflection). Lengths are in points, angles in degrees
+// clockwise from the x axis with y downward, opacities and positions
+// fractions from 0 to 1. A nil member draws nothing.
+type OfficeEffects struct {
+	// Shadow is the outer shadow (20.1.8.45 outerShdw).
+	Shadow *OfficeShadow
+	// Glow is the glow (20.1.8.32 glow).
+	Glow *OfficeGlow
+	// Reflection is the reflection (20.1.8.50 reflection).
+	Reflection *OfficeReflection
+	// SoftEdge is the radius of the soft edge (20.1.8.53 softEdge), 0
+	// for none.
+	SoftEdge float64
+}
+
+// OfficeShadow is an outer shadow: a copy of the silhouette scaled by SX
+// and SY and skewed by KX and KY about the point of the bounds Align
+// names, blurred by Blur, moved Dist along Dir, in Color.
+type OfficeShadow struct {
+	Color      Color
+	Blur, Dist float64
+	Dir        float64
+	SX, SY     float64
+	KX, KY     float64
+	Align      RectAlign
+}
+
+// OfficeGlow is a glow: a halo of Radius around the silhouette in Color.
+type OfficeGlow struct {
+	Color  Color
+	Radius float64
+}
+
+// OfficeReflection is a reflection: the content scaled by SX and SY
+// (SY negative mirrors it) and skewed about the point of the bounds Align
+// names, moved Dist along Dir, blurred by Blur, its opacity fading from
+// StartAlpha at StartPos to EndAlpha at EndPos of its extent along
+// FadeDir.
+type OfficeReflection struct {
+	Blur                 float64
+	StartAlpha, EndAlpha float64
+	StartPos, EndPos     float64
+	Dist, Dir, FadeDir   float64
+	SX, SY               float64
+	KX, KY               float64
+	Align                RectAlign
+}
+
+// RectAlign is a point of a rectangle, its corners, edge midpoints or
+// centre (ECMA-376 Part 1, 20.1.10.53 ST_RectAlignment), as fractions of
+// its width and height from its top-left corner.
+type RectAlign struct {
+	X, Y float64
+}
