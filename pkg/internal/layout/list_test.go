@@ -273,6 +273,10 @@ func TestListItems_HoldLblAndLBody(t *testing.T) {
 //     violations after remediation (LI holding L, Span or Link, L holding
 //     Div, Document holding LI), and none with this structure; veraPDF
 //     passes PDF/UA-1 and PDF/UA-2 on the output.
+//   - probe, html: a term holding a p and a div gave Lbl > P and Lbl > Div,
+//     which veraPDF fails at PDF/UA-2 (ISO/TS 32005, Table 5, Lbl-P and
+//     Lbl-Div) and passes at PDF/UA-1; the term's blocks starting no
+//     element pass both.
 func TestListItems_GroupDefinitions(t *testing.T) {
 	in := inlineSty()
 	part := func(r, s string) *Node { return role(r, el(sty(), txt(in, s))) }
@@ -295,6 +299,10 @@ func TestListItems_GroupDefinitions(t *testing.T) {
 		"description holding a list": {
 			doc(role("L", el(sty(), part("Lbl", "t"), role("LBody", el(sty(), role("L", el(sty(), part("Lbl", "u"), part("LBody", "e")))))))),
 			"Document[L[LI[Lbl# LBody[L[LI[Lbl# LBody#]]]]]]",
+		},
+		"term holding paragraphs and a span": {
+			doc(role("L", el(sty(), role("Lbl", el(sty(), part("P", "t"), role("Span", el(in, txt(in, "u"), part("Div", "v"))))), part("LBody", "d")))),
+			"Document[L[LI[Lbl[Span# Span#] LBody#]]]",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

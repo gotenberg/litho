@@ -20,7 +20,10 @@ type genCtx struct {
 	list *typeset.StructElem
 	// item is the LI element the node just entered starts, nil for any
 	// other node: the marker's Lbl joins it.
-	item  *typeset.StructElem
+	item *typeset.StructElem
+	// label reports content inside a Lbl element, which holds no block
+	// (see [labelForbids]).
+	label bool
 	link  *link
 	lang  string
 	decos []deco
@@ -115,6 +118,11 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 		// content hangs from the enclosing element.
 		role = ""
 	}
+	if ctx.label && labelForbids[role] {
+		// A block inside a label, a definition term holding a paragraph,
+		// starts no element: its content hangs from the Lbl.
+		role = ""
+	}
 	if role == "" && n.ActualText != "" {
 		// ActualText is an entry of a structure element (ISO 32000-1,
 		// 14.9.4): a node without a role takes a Span to carry it.
@@ -145,6 +153,9 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 			}
 			if n.Role == "L" {
 				out.list = el
+			}
+			if role == "Lbl" {
+				out.label = true
 			}
 			if n.Role == "Form" {
 				el.PrintField = n.PrintField
@@ -182,6 +193,22 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 		out.decos = append(slices.Clip(ctx.decos), newDeco(b, b.st))
 	}
 	return out
+}
+
+// labelForbids are the roles ISO/TS 32005, Table 5 forbids inside a Lbl,
+// which veraPDF's PDF/UA-2 profile tests: the grouping, block, list and
+// table types. ISO 32000-1, 14.8.4.3.3, Table 336 makes a Lbl the term or
+// the number that names an item and gives it no structure of its own. The
+// ruby and warichu parts, which Table 5 forbids directly under a Lbl, stay:
+// they sit in their Ruby or Warichu, which a Lbl may hold. Immutable lookup
+// table.
+var labelForbids = map[string]bool{
+	"Document": true, "DocumentFragment": true, "Part": true, "Art": true, "Sect": true,
+	"Div": true, "Aside": true, "BlockQuote": true, "Caption": true, "Index": true,
+	"TOC": true, "TOCI": true, "Title": true,
+	"P": true, "H": true, "H1": true, "H2": true, "H3": true, "H4": true, "H5": true, "H6": true,
+	"L": true, "LI": true, "Lbl": true, "LBody": true,
+	"Table": true, "THead": true, "TBody": true, "TFoot": true, "TR": true, "TH": true, "TD": true,
 }
 
 // listGroup returns the LI of the list l that an element of role, Lbl or
