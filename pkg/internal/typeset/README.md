@@ -144,7 +144,9 @@ holds every page until the end.
   rendering mode 2 (`2 Tr`, with `w` the stroke width); a skew enters the
   `Tm` matrix.
 - Fonts embed through `embed`: Type0 over CIDFontType2 or CIDFontType0C,
-  Identity-H, a ToUnicode CMap built from `Glyph.Text`.
+  Identity-H, a ToUnicode CMap that maps every code drawn: a cluster's
+  `Glyph.Text` spread over its glyphs, and the font's cmap for a glyph the
+  cluster leaves without a character.
 - Images: `image.Image` writes as Flate RGB or Gray with an SMask for
   alpha; `JPEG` writes as DCTDecode untouched.
 - Links become Link annotations with a URI action or an XYZ destination.
