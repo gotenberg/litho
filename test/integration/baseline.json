@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T10:21:38Z",
+  "captured_at": "2026-11-13T10:43:12Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -20269,7 +20269,7 @@
               "text_f1": 1
             },
             "sd/tdf90626.odp": {
-              "layout": 0.9544,
+              "layout": 0.9623,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -32392,7 +32392,7 @@
               "text_f1": 1
             },
             "odfexport/table_styles_2.odt": {
-              "layout": 0.9772,
+              "layout": 0.9808,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -33036,8 +33036,8 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 173,
-          "mismatched": 22,
+          "matched": 174,
+          "mismatched": 21,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -33045,17 +33045,17 @@
             "pass_a1a": 195,
             "pass_a1b": 195,
             "pass_a2a": 195,
-            "pass_a2a+ua1": 173,
+            "pass_a2a+ua1": 174,
             "pass_a2b": 195,
             "pass_a2u": 195,
             "pass_a3a": 195,
             "pass_a3b": 195,
             "pass_a3u": 195,
             "pass_a4": 195,
-            "pass_a4+ua2": 174,
+            "pass_a4+ua2": 175,
             "pass_a4e": 195,
-            "pass_ua1": 173,
-            "pass_ua2": 174,
+            "pass_ua1": 174,
+            "pass_ua2": 175,
             "pass_v1.4": 195,
             "pass_v1.5": 195,
             "pass_v1.6": 195,
@@ -33095,17 +33095,17 @@
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
-              "a2a+ua1": 0,
+              "a2a+ua1": 1,
               "a2b": 1,
               "a2u": 1,
               "a3a": 1,
               "a3b": 1,
               "a3u": 1,
               "a4": 1,
-              "a4+ua2": 0,
+              "a4+ua2": 1,
               "a4e": 1,
-              "ua1": 0,
-              "ua2": 0,
+              "ua1": 1,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -59926,17 +59926,17 @@
     "litho/html": {
       "features": {
         "diff": {
-          "matched": 161,
-          "mismatched": 7,
+          "matched": 169,
+          "mismatched": 8,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 168,
+            "pages_equal": 177,
             "reference_fonts_missing": 0
           },
           "scores": {
             "ar-shaping": {
-              "layout": 0.949,
+              "layout": 0.9517,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -59944,7 +59944,15 @@
               "text_f1": 0.2994
             },
             "article": {
-              "layout": 0.9441,
+              "layout": 0.9451,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "background-blend-mode": {
+              "layout": 0.9724,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -59960,7 +59968,7 @@
               "text_f1": 1
             },
             "bidi-letter": {
-              "layout": 0.9432,
+              "layout": 0.9556,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -59968,7 +59976,7 @@
               "text_f1": 0.3194
             },
             "borders": {
-              "layout": 0.9296,
+              "layout": 0.9315,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -59976,7 +59984,7 @@
               "text_f1": 1
             },
             "borders-cards": {
-              "layout": 0.9566,
+              "layout": 0.9609,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -59984,7 +59992,7 @@
               "text_f1": 0.9674
             },
             "cjk-article": {
-              "layout": 0.8815,
+              "layout": 0.8795,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -59992,7 +60000,7 @@
               "text_f1": 0.9829
             },
             "cjk-han-variants": {
-              "layout": 0.9144,
+              "layout": 0.9163,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60000,15 +60008,31 @@
               "text_f1": 0.984
             },
             "cjk-spacing": {
-              "layout": 0.8653,
+              "layout": 0.8624,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
               "text_f1": 0.9592
             },
+            "clip-path-shapes": {
+              "layout": 0.9911,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9412
+            },
+            "clip-path-svg": {
+              "layout": 0.9731,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9706
+            },
             "display-contents": {
-              "layout": 0.9607,
+              "layout": 0.9637,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60016,7 +60040,7 @@
               "text_f1": 1
             },
             "emoji": {
-              "layout": 0.339,
+              "layout": 0.3416,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60024,7 +60048,7 @@
               "text_f1": 0.6964
             },
             "flex": {
-              "layout": 0.9879,
+              "layout": 0.9882,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60032,7 +60056,7 @@
               "text_f1": 1
             },
             "floats": {
-              "layout": 0.9474,
+              "layout": 0.9541,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60040,7 +60064,7 @@
               "text_f1": 1
             },
             "font-face": {
-              "layout": 0.9552,
+              "layout": 0.9632,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60048,7 +60072,7 @@
               "text_f1": 1
             },
             "grid-dashboard": {
-              "layout": 0.9138,
+              "layout": 0.9156,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60056,7 +60080,7 @@
               "text_f1": 1
             },
             "grid-invoice": {
-              "layout": 0.9508,
+              "layout": 0.952,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60064,7 +60088,7 @@
               "text_f1": 1
             },
             "he-bidi-numbers": {
-              "layout": 0.9448,
+              "layout": 0.9468,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60072,7 +60096,7 @@
               "text_f1": 0.848
             },
             "header-default-classes": {
-              "layout": 0.9411,
+              "layout": 0.955,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60080,7 +60104,7 @@
               "text_f1": 1
             },
             "header-footer": {
-              "layout": 0.9311,
+              "layout": 0.9518,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60088,7 +60112,7 @@
               "text_f1": 1
             },
             "hi-devanagari": {
-              "layout": 0.9504,
+              "layout": 0.9549,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60096,23 +60120,31 @@
               "text_f1": 0.6866
             },
             "images": {
-              "layout": 0.984,
+              "layout": 0.9841,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
               "text_f1": 1
             },
-            "ja-line-break": {
-              "layout": 0.8486,
+            "isolation": {
+              "layout": 0.9828,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
+              "text_f1": 0.8955
+            },
+            "ja-line-break": {
+              "layout": 0.8494,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
               "text_f1": 0.9167
             },
             "ja-ruby": {
-              "layout": 0.8905,
+              "layout": 0.8929,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60128,7 +60160,7 @@
               "text_f1": 0.0101
             },
             "ko-word-break": {
-              "layout": 0.876,
+              "layout": 0.8755,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60136,7 +60168,7 @@
               "text_f1": 1
             },
             "landscape": {
-              "layout": 0.9268,
+              "layout": 0.9533,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60144,7 +60176,7 @@
               "text_f1": 1
             },
             "landscape-page-size": {
-              "layout": 0.9383,
+              "layout": 0.9444,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60152,7 +60184,7 @@
               "text_f1": 1
             },
             "lists": {
-              "layout": 0.9314,
+              "layout": 0.929,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60160,15 +60192,15 @@
               "text_f1": 0.9912
             },
             "long-report": {
-              "layout": 0.9098,
+              "layout": 0.9157,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5306,
+              "strict": 0.5918,
               "text_f1": 0.9967
             },
             "margin-boxes": {
-              "layout": 0.9348,
+              "layout": 0.9184,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60176,7 +60208,7 @@
               "text_f1": 1
             },
             "markdown-definition-list": {
-              "layout": 0.9415,
+              "layout": 0.9647,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60184,7 +60216,7 @@
               "text_f1": 1
             },
             "markdown-long": {
-              "layout": 0.9633,
+              "layout": 0.9695,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60192,7 +60224,7 @@
               "text_f1": 0.9965
             },
             "markdown-nested-lists": {
-              "layout": 0.9522,
+              "layout": 0.9616,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60200,7 +60232,7 @@
               "text_f1": 1
             },
             "markdown-plain": {
-              "layout": 0.9422,
+              "layout": 0.9644,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60208,7 +60240,7 @@
               "text_f1": 1
             },
             "markdown-table-align": {
-              "layout": 0.9395,
+              "layout": 0.9577,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60216,7 +60248,7 @@
               "text_f1": 1
             },
             "markdown-template": {
-              "layout": 0.951,
+              "layout": 0.9579,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60224,15 +60256,39 @@
               "text_f1": 1
             },
             "markdown-template-html": {
-              "layout": 0.951,
+              "layout": 0.9579,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
               "text_f1": 1
             },
+            "mask-image": {
+              "layout": 0.9592,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.7907
+            },
+            "mask-layers": {
+              "layout": 0.9746,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9189
+            },
             "media-dark": {
-              "layout": 0.9979,
+              "layout": 0.9983,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "mix-blend-mode": {
+              "layout": 0.9848,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60240,7 +60296,7 @@
               "text_f1": 1
             },
             "multicol-article": {
-              "layout": 0.8489,
+              "layout": 0.8472,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60248,7 +60304,7 @@
               "text_f1": 1
             },
             "multicol-newsletter": {
-              "layout": 0.9233,
+              "layout": 0.9248,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60256,7 +60312,7 @@
               "text_f1": 1
             },
             "named-pages": {
-              "layout": 0.9443,
+              "layout": 0.9529,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60264,7 +60320,7 @@
               "text_f1": 1
             },
             "named-strings": {
-              "layout": 0.9475,
+              "layout": 0.9318,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60272,7 +60328,7 @@
               "text_f1": 1
             },
             "named-strings-twin": {
-              "layout": 0.9475,
+              "layout": 0.9318,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60287,8 +60343,16 @@
               "strict": 0,
               "text_f1": 1
             },
+            "opacity-group": {
+              "layout": 0.9706,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9767
+            },
             "outline": {
-              "layout": 0.9322,
+              "layout": 0.9447,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60296,15 +60360,15 @@
               "text_f1": 1
             },
             "page-a5-landscape": {
-              "layout": 0.9445,
+              "layout": 0.9549,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.3333,
+              "strict": 0.6667,
               "text_f1": 1
             },
             "page-counter-increment": {
-              "layout": 0.9606,
+              "layout": 0.9401,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60312,7 +60376,7 @@
               "text_f1": 1
             },
             "page-larger-than-paper": {
-              "layout": 0.9565,
+              "layout": 0.9666,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60320,7 +60384,7 @@
               "text_f1": 1
             },
             "page-ranges": {
-              "layout": 0.9265,
+              "layout": 0.9531,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60328,31 +60392,31 @@
               "text_f1": 1
             },
             "page-selectors-counters": {
-              "layout": 0.9518,
+              "layout": 0.9292,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.8,
+              "strict": 1,
               "text_f1": 1
             },
             "page-selectors-counters-twin": {
-              "layout": 0.9518,
+              "layout": 0.9292,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.8,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-base": {
-              "layout": 0.9479,
+              "layout": 0.9412,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 0.5,
               "text_f1": 1
             },
             "paper-css-a3-landscape-paper": {
-              "layout": 0.958,
+              "layout": 0.9708,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60360,7 +60424,7 @@
               "text_f1": 1
             },
             "paper-css-a3-landscape-prefer": {
-              "layout": 0.9528,
+              "layout": 0.9503,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60368,7 +60432,7 @@
               "text_f1": 1
             },
             "paper-css-a3-portrait-paper": {
-              "layout": 0.9484,
+              "layout": 0.943,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60376,7 +60440,7 @@
               "text_f1": 1
             },
             "paper-css-a3-portrait-prefer": {
-              "layout": 0.9356,
+              "layout": 0.9642,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60384,23 +60448,23 @@
               "text_f1": 1
             },
             "paper-css-a4-landscape-paper": {
-              "layout": 0.9473,
+              "layout": 0.9682,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.6667,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-a4-landscape-prefer": {
-              "layout": 0.9458,
+              "layout": 0.9548,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.3333,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-a4-portrait-paper": {
-              "layout": 0.9505,
+              "layout": 0.942,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60408,31 +60472,31 @@
               "text_f1": 1
             },
             "paper-css-a4-portrait-prefer": {
-              "layout": 0.9547,
+              "layout": 0.9469,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-a5-landscape-paper": {
-              "layout": 0.9436,
+              "layout": 0.9556,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.75,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-a5-landscape-prefer": {
-              "layout": 0.9483,
+              "layout": 0.9515,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.25,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-a5-portrait-paper": {
-              "layout": 0.952,
+              "layout": 0.9704,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60440,15 +60504,15 @@
               "text_f1": 1
             },
             "paper-css-a5-portrait-prefer": {
-              "layout": 0.955,
+              "layout": 0.9557,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 0.75,
               "text_f1": 1
             },
             "paper-css-b4-landscape-paper": {
-              "layout": 0.9449,
+              "layout": 0.9599,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60456,15 +60520,15 @@
               "text_f1": 1
             },
             "paper-css-b4-landscape-prefer": {
-              "layout": 0.9563,
+              "layout": 0.9579,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-b4-portrait-paper": {
-              "layout": 0.9558,
+              "layout": 0.9671,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60472,15 +60536,15 @@
               "text_f1": 1
             },
             "paper-css-b4-portrait-prefer": {
-              "layout": 0.9448,
+              "layout": 0.9574,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-b5-landscape-paper": {
-              "layout": 0.948,
+              "layout": 0.9624,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60488,15 +60552,15 @@
               "text_f1": 1
             },
             "paper-css-b5-landscape-prefer": {
-              "layout": 0.9539,
+              "layout": 0.959,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.3333,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-b5-portrait-paper": {
-              "layout": 0.9539,
+              "layout": 0.9595,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60504,47 +60568,47 @@
               "text_f1": 1
             },
             "paper-css-b5-portrait-prefer": {
-              "layout": 0.9535,
+              "layout": 0.9562,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.3333,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-jis-b4-landscape-paper": {
-              "layout": 0.9485,
+              "layout": 0.9478,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-jis-b4-landscape-prefer": {
-              "layout": 0.9557,
+              "layout": 0.9541,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-jis-b4-portrait-paper": {
-              "layout": 0.9489,
+              "layout": 0.9459,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-jis-b4-portrait-prefer": {
-              "layout": 0.9462,
+              "layout": 0.9538,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-jis-b5-landscape-paper": {
-              "layout": 0.9543,
+              "layout": 0.9766,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60552,15 +60616,15 @@
               "text_f1": 1
             },
             "paper-css-jis-b5-landscape-prefer": {
-              "layout": 0.9471,
+              "layout": 0.9591,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.3333,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-jis-b5-portrait-paper": {
-              "layout": 0.9452,
+              "layout": 0.9602,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60568,30 +60632,14 @@
               "text_f1": 1
             },
             "paper-css-jis-b5-portrait-prefer": {
-              "layout": 0.951,
+              "layout": 0.9586,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.3333,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-ledger-landscape-paper": {
-              "layout": 0.9607,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-css-ledger-landscape-prefer": {
-              "layout": 0.949,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-css-ledger-portrait-paper": {
               "layout": 0.9672,
               "link_recall": 1,
               "outline_recall": 1,
@@ -60599,8 +60647,24 @@
               "strict": 1,
               "text_f1": 1
             },
+            "paper-css-ledger-landscape-prefer": {
+              "layout": 0.9521,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-css-ledger-portrait-paper": {
+              "layout": 0.9707,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "paper-css-ledger-portrait-prefer": {
-              "layout": 0.952,
+              "layout": 0.9553,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60608,7 +60672,7 @@
               "text_f1": 1
             },
             "paper-css-legal-landscape-paper": {
-              "layout": 0.9532,
+              "layout": 0.9688,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60616,446 +60680,22 @@
               "text_f1": 1
             },
             "paper-css-legal-landscape-prefer": {
-              "layout": 0.9581,
+              "layout": 0.9562,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-legal-portrait-paper": {
-              "layout": 0.9444,
+              "layout": 0.9632,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-legal-portrait-prefer": {
-              "layout": 0.9562,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-css-lengths-narrow-paper": {
-              "layout": 0.9503,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.3333,
-              "text_f1": 1
-            },
-            "paper-css-lengths-narrow-prefer": {
-              "layout": 0.9562,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.3333,
-              "text_f1": 1
-            },
-            "paper-css-lengths-wide-paper": {
-              "layout": 0.9481,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-css-lengths-wide-prefer": {
-              "layout": 0.9538,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.5,
-              "text_f1": 1
-            },
-            "paper-css-letter-landscape-paper": {
-              "layout": 0.9451,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.6667,
-              "text_f1": 1
-            },
-            "paper-css-letter-landscape-prefer": {
-              "layout": 0.9465,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.6667,
-              "text_f1": 1
-            },
-            "paper-css-letter-portrait-paper": {
-              "layout": 0.9577,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 1
-            },
-            "paper-css-letter-portrait-prefer": {
-              "layout": 0.9608,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 1
-            },
-            "paper-default-landscape": {
-              "layout": 0.9448,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.3333,
-              "text_f1": 1
-            },
-            "paper-letter": {
-              "layout": 0.9503,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.3333,
-              "text_f1": 1
-            },
-            "paper-margins-narrow-a3-landscape": {
-              "layout": 0.9553,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-margins-narrow-a3-portrait": {
-              "layout": 0.9396,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-margins-narrow-a4-landscape": {
-              "layout": 0.9561,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.6667,
-              "text_f1": 1
-            },
-            "paper-margins-narrow-a4-portrait": {
-              "layout": 0.959,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 1
-            },
-            "paper-margins-narrow-a5-landscape": {
-              "layout": 0.948,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.6,
-              "text_f1": 1
-            },
-            "paper-margins-narrow-a5-portrait": {
-              "layout": 0.9595,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.5,
-              "text_f1": 1
-            },
-            "paper-margins-none-a3-landscape": {
-              "layout": 0.942,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-margins-none-a3-portrait": {
-              "layout": 0.9556,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-margins-none-a4-landscape": {
-              "layout": 0.9555,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.5,
-              "text_f1": 1
-            },
-            "paper-margins-none-a4-portrait": {
-              "layout": 0.9508,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.5,
-              "text_f1": 1
-            },
-            "paper-margins-none-a5-landscape": {
-              "layout": 0.9484,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 1
-            },
-            "paper-margins-none-a5-portrait": {
-              "layout": 0.9604,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 1
-            },
-            "paper-margins-uneven-a3-landscape": {
-              "layout": 0.9496,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-margins-uneven-a3-portrait": {
-              "layout": 0.9503,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-margins-uneven-a4-landscape": {
-              "layout": 0.9424,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.3333,
-              "text_f1": 1
-            },
-            "paper-margins-uneven-a4-portrait": {
-              "layout": 0.9572,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 1
-            },
-            "paper-margins-uneven-a5-landscape": {
-              "layout": 0.9547,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.2,
-              "text_f1": 1
-            },
-            "paper-margins-uneven-a5-portrait": {
-              "layout": 0.957,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.5,
-              "text_f1": 1
-            },
-            "paper-markdown": {
-              "layout": 0.9496,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-a3-landscape": {
-              "layout": 0.949,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-a3-portrait": {
-              "layout": 0.9449,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-a4-landscape": {
-              "layout": 0.9435,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-a4-portrait": {
-              "layout": 0.9496,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-a5-landscape": {
-              "layout": 0.9487,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-a5-portrait": {
-              "layout": 0.9492,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-b5-landscape": {
-              "layout": 0.9503,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.75,
-              "text_f1": 1
-            },
-            "paper-markdown-b5-portrait": {
-              "layout": 0.9473,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-default-landscape": {
-              "layout": 0.9435,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-executive-landscape": {
-              "layout": 0.9463,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-executive-portrait": {
-              "layout": 0.9527,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-legal-landscape": {
-              "layout": 0.946,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-legal-portrait": {
-              "layout": 0.9518,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-letter-landscape": {
-              "layout": 0.9428,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-letter-portrait": {
-              "layout": 0.9485,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-margins-narrow-landscape": {
-              "layout": 0.9474,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.6667,
-              "text_f1": 1
-            },
-            "paper-markdown-margins-narrow-portrait": {
-              "layout": 0.9619,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.5,
-              "text_f1": 0.9958
-            },
-            "paper-markdown-margins-none-landscape": {
-              "layout": 0.9493,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-margins-none-portrait": {
-              "layout": 0.9547,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-margins-uneven-landscape": {
-              "layout": 0.9409,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-margins-uneven-portrait": {
-              "layout": 0.9485,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-tabloid-landscape": {
-              "layout": 0.9493,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-markdown-tabloid-portrait": {
-              "layout": 0.9402,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-option-a3-landscape": {
               "layout": 0.9554,
               "link_recall": 1,
               "outline_recall": 1,
@@ -61063,87 +60703,39 @@
               "strict": 1,
               "text_f1": 1
             },
-            "paper-option-a3-portrait": {
-              "layout": 0.936,
+            "paper-css-lengths-narrow-paper": {
+              "layout": 0.9648,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
               "text_f1": 1
             },
-            "paper-option-a4-landscape": {
-              "layout": 0.9447,
+            "paper-css-lengths-narrow-prefer": {
+              "layout": 0.9519,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.3333,
+              "strict": 1,
               "text_f1": 1
             },
-            "paper-option-a4-portrait": {
-              "layout": 0.9406,
+            "paper-css-lengths-wide-paper": {
+              "layout": 0.9642,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
-            "paper-option-a5-landscape": {
-              "layout": 0.9333,
+            "paper-css-lengths-wide-prefer": {
+              "layout": 0.9575,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
-            "paper-option-a5-portrait": {
-              "layout": 0.9481,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.5,
-              "text_f1": 1
-            },
-            "paper-option-b5-landscape": {
-              "layout": 0.9556,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.3333,
-              "text_f1": 1
-            },
-            "paper-option-b5-portrait": {
-              "layout": 0.9543,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.3333,
-              "text_f1": 1
-            },
-            "paper-option-executive-landscape": {
-              "layout": 0.9489,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.3333,
-              "text_f1": 1
-            },
-            "paper-option-executive-portrait": {
-              "layout": 0.9515,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.3333,
-              "text_f1": 1
-            },
-            "paper-option-legal-landscape": {
-              "layout": 0.9581,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 1
-            },
-            "paper-option-legal-portrait": {
+            "paper-css-letter-landscape-paper": {
               "layout": 0.9562,
               "link_recall": 1,
               "outline_recall": 1,
@@ -61151,24 +60743,496 @@
               "strict": 1,
               "text_f1": 1
             },
-            "paper-option-letter-landscape": {
-              "layout": 0.9465,
+            "paper-css-letter-landscape-prefer": {
+              "layout": 0.9587,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-css-letter-portrait-paper": {
+              "layout": 0.9491,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-css-letter-portrait-prefer": {
+              "layout": 0.9537,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-default-landscape": {
+              "layout": 0.9541,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-letter": {
+              "layout": 0.9576,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-narrow-a3-landscape": {
+              "layout": 0.9546,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-narrow-a3-portrait": {
+              "layout": 0.9599,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-narrow-a4-landscape": {
+              "layout": 0.9577,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-narrow-a4-portrait": {
+              "layout": 0.9564,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-narrow-a5-landscape": {
+              "layout": 0.955,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-narrow-a5-portrait": {
+              "layout": 0.9566,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-none-a3-landscape": {
+              "layout": 0.9356,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-none-a3-portrait": {
+              "layout": 0.9535,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-none-a4-landscape": {
+              "layout": 0.9574,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-none-a4-portrait": {
+              "layout": 0.961,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-none-a5-landscape": {
+              "layout": 0.953,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
+            },
+            "paper-margins-none-a5-portrait": {
+              "layout": 0.9557,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.6667,
               "text_f1": 1
             },
-            "paper-option-letter-portrait": {
-              "layout": 0.9608,
+            "paper-margins-uneven-a3-landscape": {
+              "layout": 0.947,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-uneven-a3-portrait": {
+              "layout": 0.9524,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-uneven-a4-landscape": {
+              "layout": 0.9433,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-uneven-a4-portrait": {
+              "layout": 0.9529,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-margins-uneven-a5-landscape": {
+              "layout": 0.9508,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.8,
+              "text_f1": 1
+            },
+            "paper-margins-uneven-a5-portrait": {
+              "layout": 0.9593,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown": {
+              "layout": 0.9587,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-a3-landscape": {
+              "layout": 0.957,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-a3-portrait": {
+              "layout": 0.9586,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-a4-landscape": {
+              "layout": 0.9569,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-a4-portrait": {
+              "layout": 0.9587,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-a5-landscape": {
+              "layout": 0.9618,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-a5-portrait": {
+              "layout": 0.9597,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-b5-landscape": {
+              "layout": 0.965,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.75,
+              "text_f1": 1
+            },
+            "paper-markdown-b5-portrait": {
+              "layout": 0.9577,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-default-landscape": {
+              "layout": 0.9569,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-executive-landscape": {
+              "layout": 0.9603,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-executive-portrait": {
+              "layout": 0.9658,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-legal-landscape": {
+              "layout": 0.9641,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-legal-portrait": {
+              "layout": 0.9597,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-letter-landscape": {
+              "layout": 0.9583,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-letter-portrait": {
+              "layout": 0.9604,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-margins-narrow-landscape": {
+              "layout": 0.9497,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-margins-narrow-portrait": {
+              "layout": 0.9663,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 0.9958
+            },
+            "paper-markdown-margins-none-landscape": {
+              "layout": 0.9617,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-margins-none-portrait": {
+              "layout": 0.9575,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
+            },
+            "paper-markdown-margins-uneven-landscape": {
+              "layout": 0.953,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-margins-uneven-portrait": {
+              "layout": 0.9609,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-tabloid-landscape": {
+              "layout": 0.9605,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-markdown-tabloid-portrait": {
+              "layout": 0.9572,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-option-a3-landscape": {
+              "layout": 0.9529,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-option-a3-portrait": {
+              "layout": 0.9649,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-option-a4-landscape": {
+              "layout": 0.954,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-option-a4-portrait": {
+              "layout": 0.9333,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
+            },
+            "paper-option-a5-landscape": {
+              "layout": 0.9364,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.25,
+              "text_f1": 1
+            },
+            "paper-option-a5-portrait": {
+              "layout": 0.9505,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 1
+            },
+            "paper-option-b5-landscape": {
+              "layout": 0.9607,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-option-b5-portrait": {
+              "layout": 0.957,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-option-executive-landscape": {
+              "layout": 0.9613,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-option-executive-portrait": {
+              "layout": 0.9644,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-option-legal-landscape": {
+              "layout": 0.9562,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-option-legal-portrait": {
+              "layout": 0.9554,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-option-letter-landscape": {
+              "layout": 0.9587,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-option-letter-portrait": {
+              "layout": 0.9537,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-option-tabloid-landscape": {
-              "layout": 0.949,
+              "layout": 0.9521,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61176,30 +61240,6 @@
               "text_f1": 1
             },
             "paper-option-tabloid-portrait": {
-              "layout": 0.952,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "prefer-over-paper": {
-              "layout": 0.9439,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.3333,
-              "text_f1": 1
-            },
-            "print-css-fit": {
-              "layout": 0.9556,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "running-elements": {
               "layout": 0.9553,
               "link_recall": 1,
               "outline_recall": 1,
@@ -61207,8 +61247,32 @@
               "strict": 1,
               "text_f1": 1
             },
+            "prefer-over-paper": {
+              "layout": 0.9555,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0.3333,
+              "text_f1": 1
+            },
+            "print-css-fit": {
+              "layout": 0.9629,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "running-elements": {
+              "layout": 0.9355,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "running-elements-twin": {
-              "layout": 0.966,
+              "layout": 0.9461,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61216,7 +61280,7 @@
               "text_f1": 1
             },
             "scale": {
-              "layout": 0.9388,
+              "layout": 0.9397,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61224,7 +61288,7 @@
               "text_f1": 1
             },
             "single-page": {
-              "layout": 0.9268,
+              "layout": 0.9533,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61232,7 +61296,7 @@
               "text_f1": 1
             },
             "single-page-header": {
-              "layout": 0.9208,
+              "layout": 0.9427,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61240,7 +61304,7 @@
               "text_f1": 1
             },
             "single-page-landscape": {
-              "layout": 0.9615,
+              "layout": 0.9684,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61248,15 +61312,23 @@
               "text_f1": 1
             },
             "svg": {
-              "layout": 0.9724,
+              "layout": 0.9752,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
               "text_f1": 1
             },
+            "svg-mask": {
+              "layout": 0.9834,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9296
+            },
             "th-line-break": {
-              "layout": 0.2356,
+              "layout": 0.234,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61264,7 +61336,7 @@
               "text_f1": 0.4088
             },
             "user-stylesheet": {
-              "layout": 0.9541,
+              "layout": 0.9386,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61272,7 +61344,7 @@
               "text_f1": 1
             },
             "user-stylesheet-twin": {
-              "layout": 0.9541,
+              "layout": 0.9386,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61283,31 +61355,31 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 166,
+          "matched": 175,
           "mismatched": 2,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 399,
-            "pass_a1a": 168,
-            "pass_a1b": 168,
-            "pass_a2a": 168,
-            "pass_a2a+ua1": 166,
-            "pass_a2b": 168,
-            "pass_a2u": 168,
-            "pass_a3a": 168,
-            "pass_a3b": 168,
-            "pass_a3u": 168,
-            "pass_a4": 168,
-            "pass_a4+ua2": 167,
-            "pass_a4e": 168,
-            "pass_ua1": 166,
-            "pass_ua2": 167,
-            "pass_v1.4": 168,
-            "pass_v1.5": 168,
-            "pass_v1.6": 168,
-            "pass_v1.7": 168,
-            "pass_v2.0": 168,
+            "pass_a1a": 177,
+            "pass_a1b": 177,
+            "pass_a2a": 177,
+            "pass_a2a+ua1": 175,
+            "pass_a2b": 177,
+            "pass_a2u": 177,
+            "pass_a3a": 177,
+            "pass_a3b": 177,
+            "pass_a3u": 177,
+            "pass_a4": 177,
+            "pass_a4+ua2": 176,
+            "pass_a4e": 177,
+            "pass_ua1": 175,
+            "pass_ua2": 176,
+            "pass_v1.4": 177,
+            "pass_v1.5": 177,
+            "pass_v1.6": 177,
+            "pass_v1.7": 177,
+            "pass_v2.0": 177,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -61339,6 +61411,27 @@
               "v2.0": 1
             },
             "article": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "background-blend-mode": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
@@ -61506,6 +61599,48 @@
               "v1.7": 1,
               "v2.0": 1
             },
+            "clip-path-shapes": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "clip-path-svg": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
             "display-contents": {
               "a1a": 1,
               "a1b": 1,
@@ -61738,6 +61873,27 @@
               "v2.0": 1
             },
             "images": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "isolation": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
@@ -62094,7 +62250,70 @@
               "v1.7": 1,
               "v2.0": 1
             },
+            "mask-image": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "mask-layers": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
             "media-dark": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "mix-blend-mode": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
@@ -62221,6 +62440,27 @@
               "v2.0": 1
             },
             "no-background": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "opacity-group": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
@@ -64776,6 +65016,27 @@
               "a4e": 1,
               "ua1": 0,
               "ua2": 0,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "svg-mask": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -115349,8 +115610,8 @@
     "resvg": {
       "features": {
         "svgdraw": {
-          "matched": 241,
-          "mismatched": 5,
+          "matched": 296,
+          "mismatched": 9,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -115367,6 +115628,42 @@
             "masking/clipPath/malformed-path-child.svg": "pass",
             "masking/clipPath/recursive-on-child.svg": "pass",
             "masking/clipPath/with-invalid-child-via-use.svg": "pass",
+            "masking/mask/half-width-region-with-rotation.svg": "pass",
+            "masking/mask/invalid-FuncIRI.svg": "pass",
+            "masking/mask/invalid-child.svg": "pass",
+            "masking/mask/invisible-child-1.svg": "pass",
+            "masking/mask/invisible-child-2.svg": "pass",
+            "masking/mask/mask-on-child.svg": "pass",
+            "masking/mask/mask-on-self-with-mask-type=alpha.svg": "fail",
+            "masking/mask/mask-on-self-with-mixed-mask-type.svg": "fail",
+            "masking/mask/mask-on-self.svg": "fail",
+            "masking/mask/mask-type-in-style.svg": "pass",
+            "masking/mask/mask-type=alpha.svg": "pass",
+            "masking/mask/mask-type=invalid.svg": "pass",
+            "masking/mask/mask-type=luminance.svg": "pass",
+            "masking/mask/maskContentUnits=objectBoundingBox.svg": "pass",
+            "masking/mask/maskUnits=objectBoundingBox-with-percent.svg": "pass",
+            "masking/mask/maskUnits=userSpaceOnUse-with-percent.svg": "pass",
+            "masking/mask/maskUnits=userSpaceOnUse-with-rect.svg": "pass",
+            "masking/mask/maskUnits=userSpaceOnUse-with-width-only.svg": "pass",
+            "masking/mask/maskUnits=userSpaceOnUse-without-rect.svg": "pass",
+            "masking/mask/nested-objectBoundingBox.svg": "pass",
+            "masking/mask/no-children.svg": "pass",
+            "masking/mask/none.svg": "pass",
+            "masking/mask/on-a-horizontal-line.svg": "pass",
+            "masking/mask/on-a-small-object.svg": "pass",
+            "masking/mask/on-group-with-transform.svg": "pass",
+            "masking/mask/recursive-on-self.svg": "pass",
+            "masking/mask/recursive.svg": "pass",
+            "masking/mask/self-recursive.svg": "pass",
+            "masking/mask/shared-with-objectBoundingBox-gradient.svg": "pass",
+            "masking/mask/simple-case.svg": "pass",
+            "masking/mask/transform-has-no-effect.svg": "pass",
+            "masking/mask/transform-on-shape.svg": "pass",
+            "masking/mask/with-clip-path.svg": "pass",
+            "masking/mask/with-opacity-1.svg": "pass",
+            "masking/mask/with-opacity-2.svg": "pass",
+            "masking/mask/with-opacity-3.svg": "pass",
             "paint-servers/linearGradient/attributes-via-xlink-href-only-required.svg": "pass",
             "paint-servers/linearGradient/gradientUnits=objectBoundingBox-with-percent.svg": "pass",
             "paint-servers/linearGradient/href-with-invalid-prefix.svg": "pass",
@@ -115419,6 +115716,29 @@
             "painting/fill/rgba-0-127-0-50percent.svg": "fail",
             "painting/fill/transparent.svg": "pass",
             "painting/fill/valid-FuncIRI-with-a-fallback-ICC-color.svg": "pass",
+            "painting/isolation/as-property.svg": "pass",
+            "painting/isolation/isolate.svg": "pass",
+            "painting/mix-blend-mode/as-property.svg": "pass",
+            "painting/mix-blend-mode/color-burn.svg": "pass",
+            "painting/mix-blend-mode/color-dodge.svg": "fail",
+            "painting/mix-blend-mode/color.svg": "pass",
+            "painting/mix-blend-mode/darken.svg": "pass",
+            "painting/mix-blend-mode/difference.svg": "pass",
+            "painting/mix-blend-mode/exclusion.svg": "pass",
+            "painting/mix-blend-mode/hard-light.svg": "pass",
+            "painting/mix-blend-mode/hue.svg": "pass",
+            "painting/mix-blend-mode/lighten.svg": "pass",
+            "painting/mix-blend-mode/luminosity.svg": "pass",
+            "painting/mix-blend-mode/multiply.svg": "pass",
+            "painting/mix-blend-mode/normal.svg": "pass",
+            "painting/mix-blend-mode/opacity-on-element.svg": "pass",
+            "painting/mix-blend-mode/opacity-on-group.svg": "pass",
+            "painting/mix-blend-mode/overlay.svg": "pass",
+            "painting/mix-blend-mode/plus-lighter.svg": "pass",
+            "painting/mix-blend-mode/saturation.svg": "pass",
+            "painting/mix-blend-mode/screen.svg": "pass",
+            "painting/mix-blend-mode/soft-light.svg": "pass",
+            "painting/mix-blend-mode/xor.svg": "pass",
             "painting/opacity/50percent.svg": "pass",
             "painting/opacity/bBox-impact.svg": "pass",
             "painting/opacity/group-opacity.svg": "pass",
@@ -115986,8 +116306,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 2222,
-          "mismatched": 429,
+          "matched": 2342,
+          "mismatched": 451,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -116288,11 +116608,11 @@
             "css/CSS2/margin-padding-clear/margin-collapse-min-height-001.xht": "pass",
             "css/CSS2/margin-padding-clear/margin-collapse-min-height-002.xht": "pass",
             "css/CSS2/margin-padding-clear/margin-collapse-quirks-mode-001.html": "pass",
-            "css/CSS2/margin-padding-clear/margin-left-applies-to-008.xht": "fail",
+            "css/CSS2/margin-padding-clear/margin-left-applies-to-008.xht": "pass",
             "css/CSS2/margin-padding-clear/margin-right-114.html": "pass",
             "css/CSS2/margin-padding-clear/padding-left-036.xht": "pass",
             "css/CSS2/margin-padding-clear/padding-left-047.xht": "pass",
-            "css/CSS2/margin-padding-clear/padding-left-applies-to-008.xht": "fail",
+            "css/CSS2/margin-padding-clear/padding-left-applies-to-008.xht": "pass",
             "css/CSS2/margin-padding-clear/padding-left-applies-to-010.xht": "fail",
             "css/CSS2/margin-padding-clear/padding-right-036.xht": "pass",
             "css/CSS2/margin-padding-clear/padding-right-047.xht": "pass",
@@ -116349,7 +116669,7 @@
             "css/CSS2/positioning/absolute-replaced-height-002.xht": "pass",
             "css/CSS2/positioning/abspos-027.xht": "pass",
             "css/CSS2/positioning/abspos-block-level-001.html": "pass",
-            "css/CSS2/positioning/abspos-float-with-inline-container.html": "fail",
+            "css/CSS2/positioning/abspos-float-with-inline-container.html": "pass",
             "css/CSS2/positioning/abspos-inline-007.xht": "pass",
             "css/CSS2/positioning/abspos-inline-008.xht": "pass",
             "css/CSS2/positioning/abspos-negative-margin-001.html": "pass",
@@ -116574,7 +116894,7 @@
             "css/CSS2/visuren/emptyspan-3.html": "pass",
             "css/CSS2/visuren/emptyspan-4.html": "pass",
             "css/CSS2/visuren/fixed-pos-stacking-001.xht": "pass",
-            "css/CSS2/visuren/float-inside-inline-between-blocks-1.html": "fail",
+            "css/CSS2/visuren/float-inside-inline-between-blocks-1.html": "pass",
             "css/CSS2/visuren/left-offset-position-fixed-001.xht": "pass",
             "css/CSS2/visuren/percent-height-1.html": "pass",
             "css/CSS2/visuren/right-offset-position-fixed-001.xht": "pass",
@@ -116582,6 +116902,41 @@
             "css/CSS2/visuren/split-inner-inline-2.html": "pass",
             "css/CSS2/visuren/table-pseudo-in-part3-1.html": "pass",
             "css/CSS2/visuren/whitespace-present-1a.html": "pass",
+            "css/compositing/background-blending/background-blend-mode-gradient-image.html": "fail",
+            "css/compositing/mix-blend-mode/mix-blend-mode-animation.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-blended-element-interposed.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-blended-element-overflow-hidden-and-border-radius.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-blended-element-overflow-scroll.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-blended-element-with-transparent-pixels.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-blended-with-3D-transform.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-blended-with-transform-and-perspective.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-blending-with-sibling.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-both-parent-and-blended-with-3D-transform.html": "fail",
+            "css/compositing/mix-blend-mode/mix-blend-mode-filter.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-intermediate-element-overflow-hidden-and-border-radius.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-overflowing-child-of-blended-element.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-overflowing-child.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-paragraph.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-parent-element-overflow-hidden-and-border-radius-2.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-parent-element-overflow-hidden-and-border-radius.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-parent-element-overflow-scroll-blended-position-fixed.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-parent-element-overflow-scroll.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-parent-with-3D-transform.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-parent-with-border-radius.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-parent-with-text.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-plus-lighter-basic.html": "fail",
+            "css/compositing/mix-blend-mode/mix-blend-mode-root-element-group.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-rotated-clip.html": "fail",
+            "css/compositing/mix-blend-mode/mix-blend-mode-sibling-with-3D-transform.html": "fail",
+            "css/compositing/mix-blend-mode/mix-blend-mode-simple.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-stacking-context-001.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-stacking-context-creates-isolation.html": "pass",
+            "css/compositing/mix-blend-mode/mix-blend-mode-with-transform-and-preserve-3D.html": "pass",
+            "css/compositing/root-element-background-margin-opacity.html": "fail",
+            "css/compositing/root-element-background-transparency.html": "pass",
+            "css/compositing/root-element-blend-mode.html": "pass",
+            "css/compositing/root-element-filter.html": "fail",
+            "css/compositing/root-element-opacity.html": "fail",
             "css/css-align/baseline-rules/overflow-hidden-block-in-inline-baseline.html": "fail",
             "css/css-align/self-alignment/self-align-safe-unsafe-flex-001.html": "pass",
             "css/css-align/self-alignment/self-align-safe-unsafe-flex-002.html": "pass",
@@ -116695,10 +117050,10 @@
             "css/css-break/monolithic-content-with-forced-break-002.html": "pass",
             "css/css-break/out-of-flow-in-multicolumn-014.html": "pass",
             "css/css-break/out-of-flow-in-multicolumn-095.html": "pass",
-            "css/css-break/out-of-flow-in-multicolumn-099.html": "fail",
+            "css/css-break/out-of-flow-in-multicolumn-099.html": "pass",
             "css/css-break/overflowed-block-with-no-room-after-000.html": "fail",
             "css/css-break/overflowing-block-002-print.html": "pass",
-            "css/css-break/relpos-inline.html": "fail",
+            "css/css-break/relpos-inline.html": "pass",
             "css/css-break/root-margin-001-print.html": "pass",
             "css/css-break/transform-009.html": "fail",
             "css/css-break/transform-023-print.html": "pass",
@@ -117719,6 +118074,113 @@
             "css/css-lists/outside-marker-in-multicol-relpos-content.html": "pass",
             "css/css-lists/outside-marker-rtl.html": "pass",
             "css/css-lists/outside-marker-with-text-indent.html": "pass",
+            "css/css-masking/clip-path/clip-path-blending-offset.html": "pass",
+            "css/css-masking/clip-path/clip-path-borderBox-1d.html": "pass",
+            "css/css-masking/clip-path/clip-path-borderBox-1e.html": "pass",
+            "css/css-masking/clip-path/clip-path-circle-001.html": "pass",
+            "css/css-masking/clip-path/clip-path-circle-002.html": "pass",
+            "css/css-masking/clip-path/clip-path-circle-003.html": "pass",
+            "css/css-masking/clip-path/clip-path-circle-004.html": "pass",
+            "css/css-masking/clip-path/clip-path-circle-005.html": "pass",
+            "css/css-masking/clip-path/clip-path-circle-006.html": "pass",
+            "css/css-masking/clip-path/clip-path-circle-007.html": "pass",
+            "css/css-masking/clip-path/clip-path-circle-008.html": "pass",
+            "css/css-masking/clip-path/clip-path-circle-009.html": "pass",
+            "css/css-masking/clip-path/clip-path-circle-010.html": "pass",
+            "css/css-masking/clip-path/clip-path-circle-closest-corner.html": "pass",
+            "css/css-masking/clip-path/clip-path-circle-farthest-corner.html": "pass",
+            "css/css-masking/clip-path/clip-path-columns-shape-001.html": "pass",
+            "css/css-masking/clip-path/clip-path-contentBox-1d.html": "pass",
+            "css/css-masking/clip-path/clip-path-contentBox-1e.html": "pass",
+            "css/css-masking/clip-path/clip-path-document-element-will-change.html": "fail",
+            "css/css-masking/clip-path/clip-path-document-element.html": "fail",
+            "css/css-masking/clip-path/clip-path-ellipse-001.html": "pass",
+            "css/css-masking/clip-path/clip-path-ellipse-002.html": "pass",
+            "css/css-masking/clip-path/clip-path-ellipse-003.html": "pass",
+            "css/css-masking/clip-path/clip-path-ellipse-004.html": "pass",
+            "css/css-masking/clip-path/clip-path-ellipse-005.html": "pass",
+            "css/css-masking/clip-path/clip-path-ellipse-006.html": "pass",
+            "css/css-masking/clip-path/clip-path-ellipse-007.html": "pass",
+            "css/css-masking/clip-path/clip-path-ellipse-008.html": "pass",
+            "css/css-masking/clip-path/clip-path-filter-order.html": "pass",
+            "css/css-masking/clip-path/clip-path-filter-radius-clips.html": "fail",
+            "css/css-masking/clip-path/clip-path-fixed-nested.html": "pass",
+            "css/css-masking/clip-path/clip-path-inline-004.html": "pass",
+            "css/css-masking/clip-path/clip-path-inline-005.html": "pass",
+            "css/css-masking/clip-path/clip-path-inline-006.html": "fail",
+            "css/css-masking/clip-path/clip-path-inline-007.html": "pass",
+            "css/css-masking/clip-path/clip-path-inline-008.html": "fail",
+            "css/css-masking/clip-path/clip-path-inline-009.html": "pass",
+            "css/css-masking/clip-path/clip-path-inline-010.html": "fail",
+            "css/css-masking/clip-path/clip-path-inset-round-percent.html": "pass",
+            "css/css-masking/clip-path/clip-path-inset-round-rendering.html": "pass",
+            "css/css-masking/clip-path/clip-path-marginBox-1b.html": "pass",
+            "css/css-masking/clip-path/clip-path-marginBox-1c.html": "fail",
+            "css/css-masking/clip-path/clip-path-marginBox-1d.html": "fail",
+            "css/css-masking/clip-path/clip-path-paddingBox-1d.html": "pass",
+            "css/css-masking/clip-path/clip-path-paddingBox-1e.html": "pass",
+            "css/css-masking/clip-path/clip-path-path-with-zoom-001.html": "fail",
+            "css/css-masking/clip-path/clip-path-polygon-001.html": "pass",
+            "css/css-masking/clip-path/clip-path-polygon-002.html": "pass",
+            "css/css-masking/clip-path/clip-path-polygon-003.html": "pass",
+            "css/css-masking/clip-path/clip-path-polygon-004.html": "pass",
+            "css/css-masking/clip-path/clip-path-polygon-005.html": "pass",
+            "css/css-masking/clip-path/clip-path-polygon-006.html": "pass",
+            "css/css-masking/clip-path/clip-path-polygon-007.html": "pass",
+            "css/css-masking/clip-path/clip-path-polygon-008.html": "fail",
+            "css/css-masking/clip-path/clip-path-polygon-009.html": "pass",
+            "css/css-masking/clip-path/clip-path-polygon-010.html": "pass",
+            "css/css-masking/clip-path/clip-path-polygon-011.html": "pass",
+            "css/css-masking/clip-path/clip-path-polygon-012.html": "pass",
+            "css/css-masking/clip-path/clip-path-polygon-013.html": "pass",
+            "css/css-masking/clip-path/clip-path-polygon-014.html": "fail",
+            "css/css-masking/clip-path/clip-path-rect-001.html": "pass",
+            "css/css-masking/clip-path/clip-path-rect-002.html": "pass",
+            "css/css-masking/clip-path/clip-path-rect-003.html": "pass",
+            "css/css-masking/clip-path/clip-path-rect-004.html": "pass",
+            "css/css-masking/clip-path/clip-path-rotated-will-change-transform.html": "pass",
+            "css/css-masking/clip-path/clip-path-round-zero-size.html": "pass",
+            "css/css-masking/clip-path/clip-path-shape-003.html": "fail",
+            "css/css-masking/clip-path/clip-path-shape-004.html": "fail",
+            "css/css-masking/clip-path/clip-path-shape-011.html": "fail",
+            "css/css-masking/clip-path/clip-path-shape-hline-vline-keywords.html": "fail",
+            "css/css-masking/clip-path/clip-path-xywh-001.html": "pass",
+            "css/css-masking/clip-path/clip-path-xywh-002.html": "pass",
+            "css/css-masking/clip-path/clip-path-xywh-003.html": "pass",
+            "css/css-masking/clip/clip-absolute-positioned-001.html": "pass",
+            "css/css-masking/clip/clip-absolute-positioned-002.html": "pass",
+            "css/css-masking/clip/clip-filter-order.html": "pass",
+            "css/css-masking/clip/clip-fixed-pos-transform-descendant-001.html": "fail",
+            "css/css-masking/clip/clip-negative-values-001.html": "pass",
+            "css/css-masking/clip/clip-negative-values-002.html": "pass",
+            "css/css-masking/clip/clip-negative-values-003.html": "pass",
+            "css/css-masking/clip/clip-negative-values-004.html": "pass",
+            "css/css-masking/clip/clip-no-clipping-001.html": "pass",
+            "css/css-masking/clip/clip-no-clipping-002.html": "pass",
+            "css/css-masking/clip/clip-no-stacking-context.html": "pass",
+            "css/css-masking/clip/clip-not-absolute-positioned-001.html": "pass",
+            "css/css-masking/clip/clip-not-absolute-positioned-002.html": "pass",
+            "css/css-masking/clip/clip-not-absolute-positioned-003.html": "pass",
+            "css/css-masking/clip/clip-not-absolute-positioned-004.html": "pass",
+            "css/css-masking/clip/clip-rect-auto-001.html": "pass",
+            "css/css-masking/clip/clip-rect-auto-002.html": "pass",
+            "css/css-masking/clip/clip-rect-auto-003.html": "pass",
+            "css/css-masking/clip/clip-rect-auto-004.html": "fail",
+            "css/css-masking/clip/clip-rect-auto-005.html": "fail",
+            "css/css-masking/clip/clip-rect-auto-006.html": "pass",
+            "css/css-masking/clip/clip-rect-comma-001.html": "pass",
+            "css/css-masking/clip/clip-rect-comma-002.html": "pass",
+            "css/css-masking/clip/clip-rect-comma-003.html": "pass",
+            "css/css-masking/clip/clip-rect-comma-004.html": "pass",
+            "css/css-masking/clip/clip-transform-order-2.html": "pass",
+            "css/css-masking/clip/clip-transform-order.html": "pass",
+            "css/css-masking/mask-image/mask-clip-7.html": "pass",
+            "css/css-masking/mask-image/mask-image-2.html": "fail",
+            "css/css-masking/mask-image/mask-image-backdrop-filter-with-border-radius.html": "pass",
+            "css/css-masking/mask-image/mask-image-clip-exclude.html": "pass",
+            "css/css-masking/mask-image/mask-image-inline-sliced-1.html": "fail",
+            "css/css-masking/mask-image/mask-opacity-1c.html": "fail",
+            "css/css-masking/mask-image/mask-under-border-radius.html": "fail",
             "css/css-multicol/auto-fill-auto-size-001-print.html": "pass",
             "css/css-multicol/auto-fill-auto-size-002-print.html": "pass",
             "css/css-multicol/balance-break-avoidance-002.html": "fail",
@@ -117738,7 +118200,7 @@
             "css/css-multicol/column-pseudo-background-color.html": "fail",
             "css/css-multicol/column-rule-002.html": "pass",
             "css/css-multicol/float-with-line-after-spanner.html": "pass",
-            "css/css-multicol/moz-multicol3-column-balancing-break-inside-avoid-1.html": "pass",
+            "css/css-multicol/moz-multicol3-column-balancing-break-inside-avoid-1.html": "fail",
             "css/css-multicol/multicol-basic-001.html": "pass",
             "css/css-multicol/multicol-basic-002.html": "pass",
             "css/css-multicol/multicol-basic-004.html": "pass",
@@ -117793,7 +118255,7 @@
             "css/css-multicol/multicol-zero-height-002.html": "pass",
             "css/css-multicol/multicol-zero-height-003.html": "fail",
             "css/css-multicol/nested-oofs-in-relative-multicol.html": "pass",
-            "css/css-multicol/nested-with-too-tall-line.html": "fail",
+            "css/css-multicol/nested-with-too-tall-line.html": "pass",
             "css/css-multicol/overflow-unsplittable-001.html": "pass",
             "css/css-multicol/overflow-unsplittable-002.html": "pass",
             "css/css-multicol/overflow-unsplittable-003.html": "pass",
@@ -117891,7 +118353,7 @@
             "css/css-position/position-absolute-multicol-001.html": "pass",
             "css/css-position/position-absolute-root-element-flex.html": "pass",
             "css/css-position/position-absolute-root-element-grid.html": "pass",
-            "css/css-position/position-fixed-overflow-print.html": "fail",
+            "css/css-position/position-fixed-overflow-print.html": "pass",
             "css/css-position/position-fixed-root-element-flex.html": "pass",
             "css/css-position/position-fixed-root-element-grid.html": "pass",
             "css/css-position/position-relative-008.html": "pass",
@@ -118139,7 +118601,7 @@
             "css/css-tables/table-row-group-color-inheritance-001.html": "pass",
             "css/css-tables/table-row-group-nested-anonymous-001.html": "pass",
             "css/css-tables/table_grid_size_col_colspan.html": "pass",
-            "css/css-tables/th-text-align.html": "fail",
+            "css/css-tables/th-text-align.html": "pass",
             "css/css-tables/visibility-collapse-border-spacing-002.html": "pass",
             "css/css-tables/visibility-collapse-colspan-003.html": "fail",
             "css/css-tables/visibility-collapse-rowspan-005.html": "fail",
