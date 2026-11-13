@@ -76,6 +76,16 @@ func TestSupports_Conditions(t *testing.T) {
 		{"(scroll-snap-type: x)", false},
 		{"(--x: anything)", true},
 		{"(width: var(--w))", true},
+		// CSS Variables 1, 2 and 3: a var() fallback and a custom
+		// property value are <declaration-value>, which holds no
+		// top-level "!" or ";".
+		{"(color: var(--a,!))", false},
+		{"(color: var(--a,;))", false},
+		{"(color: var(--a);)", false},
+		{"(color: var(--a) !important !important)", false},
+		{"(--a: var(--b,!important))", false},
+		{"(--a: var(--b) !important !important)", false},
+		{"(color: var(--a,(!)))", true},
 		{"not (scroll-snap-type: x)", true},
 		{"(color: red) and (width: 1px)", true},
 		{"(color: red) and (scroll-snap-type: x)", false},

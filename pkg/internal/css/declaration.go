@@ -179,6 +179,57 @@ func containsVar(l []token) bool {
 	return false
 }
 
+// declarationValue reports whether l matches <declaration-value>? (CSS
+// Syntax 3, 4.2; CSS Variables 1, 2): no bad string or bad URL token
+// anywhere, no unmatched ")", "]" or "}", and no top-level ";" or "!"
+// (the "!important" of a declaration is already removed). Every var() in
+// l must itself be valid (validVars).
+func declarationValue(l []token) bool {
+	for i := range l {
+		t := &l[i]
+		if t.typ == tSemicolon || t.typ == tRParen || t.typ == tRBracket || t.typ == tRBrace || t.isDelim('!') {
+			return false
+		}
+	}
+	return validVars(l)
+}
+
+// validVars reports whether every var() in l is syntactically valid (CSS
+// Variables 1, 3): a custom property name, then optionally a comma and a
+// fallback that matches <declaration-value>?. A value holding an invalid
+// var() is invalid at parse time; no bad string or bad URL token appears
+// at any depth.
+func validVars(l []token) bool {
+	for i := range l {
+		t := &l[i]
+		if t.typ == tBadString || t.typ == tBadURL {
+			return false
+		}
+		if t.typ != tFunction || !eqFold(t.value, "var") {
+			if len(t.children) > 0 && !validVars(t.children) {
+				return false
+			}
+			continue
+		}
+		args := t.children
+		j := 0
+		for j < len(args) && args[j].typ == tWhitespace {
+			j++
+		}
+		if j >= len(args) || args[j].typ != tIdent || !strings.HasPrefix(args[j].value, "--") {
+			return false
+		}
+		j++
+		for j < len(args) && args[j].typ == tWhitespace {
+			j++
+		}
+		if j < len(args) && (args[j].typ != tComma || !declarationValue(args[j+1:])) {
+			return false
+		}
+	}
+	return true
+}
+
 // containsSubstitution reports whether a value calls attr() or env()
 // anywhere.
 func containsSubstitution(l []token) bool {
@@ -201,6 +252,12 @@ func containsSubstitution(l []token) bool {
 // nothing (CSS Syntax 3, 5.4.6 and CSS 2.1, 4.2).
 func (c *declCtx) declare(name string, value []token, important bool) Declaration {
 	if strings.HasPrefix(name, "--") {
+		if !declarationValue(value) {
+			// CSS Variables 1, 2: a custom property's value is a
+			// <declaration-value>?, else the declaration is invalid.
+			c.warn(warn.CSSInvalid, warn.Approximated, "invalid value for %q was ignored", name)
+			return Declaration{Property: name}
+		}
 		return Declaration{Property: name, Important: important, custom: trimWS(value), isCustom: true}
 	}
 	written := lower(name)
@@ -215,6 +272,13 @@ func (c *declCtx) declare(name string, value []token, important bool) Declaratio
 		return d
 	}
 	if containsVar(value) {
+		if !declarationValue(value) {
+			// CSS Variables 1, 3: a value holding var() is assumed valid
+			// at parse time only when it is a <declaration-value> whose
+			// var() functions are valid.
+			c.warn(warn.CSSInvalid, warn.Approximated, "invalid value for %q was ignored", name)
+			return d
+		}
 		d.pending, d.base = value, c.baseURL
 		return d
 	}

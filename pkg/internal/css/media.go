@@ -479,14 +479,14 @@ func evalSupports(l []token) bool {
 				return false, true
 			}
 			if len(it.name) > 2 && it.name[:2] == "--" {
-				return true, true
+				return declarationValue(it.value), true
 			}
 			name := propertyName(lower(it.name))
 			if !knownProperty(name) {
 				return false, true
 			}
 			if containsVar(it.value) {
-				return true, true
+				return declarationValue(it.value), true
 			}
 			c := &declCtx{quiet: true}
 			_, ok = c.expand(name, it.value)

@@ -301,6 +301,30 @@ func TestVars_Substitution(t *testing.T) {
 	}
 }
 
+func TestVars_DeclarationValueGrammar(t *testing.T) {
+	t.Parallel()
+	// CSS Variables 1, 2 and 3: a custom property value and a var()
+	// fallback are <declaration-value>: a top-level "!" or ";" or an
+	// unmatched ")" makes the declaration invalid at parse time, so the
+	// earlier declaration stays.
+	c := compute(t, `<p id=a>a</p><p id=b>b</p><p id=c>c</p><p id=d>d</p><p id=e>e</p>`, `
+p { --g: rgb(0 128 0); --r: rgb(255 0 0) }
+#a { --x: var(--g); --x: var(--r,!); color: var(--x) }
+#b { --x: var(--g); --x: var(--r,!important); color: var(--x) }
+#c { color: var(--x); --x: var(--g); --x: red) }
+#d { color: var(--g); color: var(--r) !important !important }
+#e { --x: var(--g); --x: var(--r,(!)); color: var(--x) }
+`)
+	for _, id := range []string{"a", "b", "c", "d"} {
+		if got := c.of(id).Color; !colorEq(got, rgb(0, 128, 0)) {
+			t.Errorf("#%s color = %+v, want the earlier declaration's green", id, got)
+		}
+	}
+	if got := c.of("e").Color; !colorEq(got, rgb(255, 0, 0)) {
+		t.Errorf("#e color = %+v: a nested \"!\" is valid", got)
+	}
+}
+
 func TestVars_ExponentialGrowthIsCapped(t *testing.T) {
 	t.Parallel()
 	css := `:root { --a: x x x x x x x x x x; --b: var(--a) var(--a) var(--a) var(--a) var(--a) var(--a) var(--a) var(--a);
