@@ -334,7 +334,7 @@ func (s ShapeStyle) dash() []float64 {
 	out := make([]float64, len(s.CustDash))
 	sum := 0.0
 	for i, v := range s.CustDash {
-		out[i] = v * w
+		out[i] = float64(v * w)
 		sum += out[i]
 	}
 	if !numeric.Positive(sum) {

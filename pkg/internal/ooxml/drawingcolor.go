@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 )
 
 // The gammas of DrawingML's linear RGB (ECMA-376 Part 1, 20.1.2.3.30
@@ -83,10 +84,10 @@ func pct(c *Element, name string) float64 {
 func clamp01(v float64) float64 { return max(0, min(1, v)) }
 
 // gammaIn converts an sRGB component to DrawingML's linear RGB.
-func gammaIn(v float64) float64 { return math.Pow(clamp01(v), decGamma) }
+func gammaIn(v float64) float64 { return detmath.Pow(clamp01(v), decGamma) }
 
 // gammaOut converts a linear RGB component back to sRGB.
-func gammaOut(v float64) float64 { return math.Pow(clamp01(v), incGamma) }
+func gammaOut(v float64) float64 { return detmath.Pow(clamp01(v), incGamma) }
 
 // sysColor returns the colour of a sysClr (ECMA-376 Part 1, 20.1.2.3.33):
 // the system colour its val names, as LibreOffice resolves it on a system
@@ -159,7 +160,7 @@ func transformColor(col css.Color, c *Element) css.Color {
 			s := clamp01(v)
 			col.R, col.G, col.B = gammaOut(gammaIn(col.R)*s), gammaOut(gammaIn(col.G)*s), gammaOut(gammaIn(col.B)*s)
 		case "gray":
-			g := 0.22*col.R + 0.72*col.G + 0.06*col.B
+			g := float64(0.22*col.R) + float64(0.72*col.G) + float64(0.06*col.B)
 			col.R, col.G, col.B = g, g, g
 		case "inv":
 			col.R, col.G, col.B = 1-col.R, 1-col.G, 1-col.B
@@ -172,7 +173,7 @@ func transformColor(col css.Color, c *Element) css.Color {
 // in linear RGB (ECMA-376 Part 1, 20.1.2.3.34 tint).
 func tintComponent(c, t float64) float64 {
 	t = clamp01(t)
-	return gammaOut(1 - (1-gammaIn(c))*t)
+	return gammaOut(1 - float64((1-gammaIn(c))*t))
 }
 
 // linearComponent sets ("" suffix), scales ("Mod") or offsets ("Off") one

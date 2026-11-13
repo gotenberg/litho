@@ -3,6 +3,8 @@ package ooxml
 import (
 	"math"
 	"strconv"
+
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 )
 
 // The algorithms of a layout node (ECMA-376 Part 1, 21.4.2.1 alg and
@@ -336,7 +338,7 @@ func cycle(a *DiagramAtom, s *DiagramShape) {
 	if n == 0 {
 		return
 	}
-	connRadius := trunc(float64(radius) * math.Cos(float64(spanAng/n)*math.Pi/180))
+	connRadius := trunc(float64(radius) * detmath.Cos(float64(spanAng/n)*math.Pi/180))
 	connAngle := 0
 	if spanAng <= 0 {
 		connAngle = 180
@@ -348,8 +350,8 @@ func cycle(a *DiagramAtom, s *DiagramShape) {
 			w, h, r = connW, connH, connRadius
 		}
 		rad := ang * math.Pi / 180
-		k.X = trunc(float64(cw) + float64(r)*math.Sin(rad) - float64(w/2))
-		k.Y = trunc(float64(ch) - float64(r)*math.Cos(rad) - float64(h/2))
+		k.X = trunc(float64(cw) + float64(float64(r)*detmath.Sin(rad)) - float64(w/2))
+		k.Y = trunc(float64(ch) - float64(float64(r)*detmath.Cos(rad)) - float64(h/2))
 		k.W, k.H = w, h
 		if rotPath == "alongPath" {
 			k.Rot = trunc(ang * perDegree)
@@ -416,8 +418,8 @@ func hierarchy(a *DiagramAtom, s *DiagramShape) {
 		horiz = count
 	}
 	vc := float64(s.vcount)
-	cw := trunc(float64(s.W) / (float64(horiz) + float64(horiz-1)*spaceW))
-	chh := trunc(float64(s.H) / (vc + (vc-1)*spaceH))
+	cw := trunc(float64(s.W) / (float64(horiz) + float64(float64(horiz-1)*spaceW)))
+	chh := trunc(float64(s.H) / (vc + float64((vc-1)*spaceH)))
 	connW, connH := int64(1), chh
 	var x, y int64
 	if a.Alg == "hierChild" && horiz == 1 {
@@ -433,17 +435,17 @@ func hierarchy(a *DiagramAtom, s *DiagramShape) {
 			continue
 		}
 		kv := float64(k.vcount)
-		w, h := cw, trunc(float64(chh)*(kv+(kv-1)*spaceH))
+		w, h := cw, trunc(float64(chh)*(kv+float64((kv-1)*spaceH)))
 		k.W, k.H = w, h
 		if dir == "fromT" || dir == "fromB" {
-			y = trunc(float64(y) + float64(h) + float64(chh)*spaceH)
+			y = trunc(float64(y) + float64(h) + float64(float64(chh)*spaceH))
 		} else {
-			x = trunc(float64(x) + float64(w) + float64(w)*spaceW)
+			x = trunc(float64(x) + float64(w) + float64(float64(w)*spaceW))
 		}
 		rowH = max(rowH, h)
 		if sec == "fromT" && i%2 == 1 {
 			x = 0
-			y = trunc(float64(y) + float64(rowH) + float64(chh)*spaceH)
+			y = trunc(float64(y) + float64(rowH) + float64(float64(chh)*spaceH))
 			rowH = 0
 		}
 	}
@@ -591,8 +593,8 @@ func linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint, rules []s
 		totW += w
 		totH += h
 	}
-	totW = trunc(float64(totW) + (count-1)*float64(spaceW))
-	totH = trunc(float64(totH) + (count-1)*float64(spaceH))
+	totW = trunc(float64(totW) + float64((count-1)*float64(spaceW)))
+	totH = trunc(float64(totH) + float64((count-1)*float64(spaceH)))
 	scaleW, scaleH := 1.0, 1.0
 	if incX != 0 && totW > s.W {
 		scaleW = float64(s.W) / float64(totW)
@@ -738,14 +740,14 @@ func snake(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 			}
 		}
 	}
-	width := trunc(float64(s.W) / (float64(cols) + float64(cols-1)*space))
+	width := trunc(float64(s.W) / (float64(cols) + float64(float64(cols-1)*space)))
 	cw, ch := width, trunc(float64(width)*ratio)
 	if cols == 1 && rows > 1 {
 		spaces := float64(-1)
 		if spaceSet {
 			spaces += 4
 		}
-		height := trunc(float64(s.H) / (float64(rows) + (float64(rows)+spaces)*space))
+		height := trunc(float64(s.H) / (float64(rows) + float64((float64(rows)+spaces)*space)))
 		if childAR > 1 {
 			width = min(s.W, trunc(float64(height)*childAR))
 			cw, ch = width, height
@@ -759,7 +761,7 @@ func snake(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 	if incY == -1 {
 		y = s.H - ch
 	} else if spaceSet && !horizontal {
-		y = trunc(float64(ch) * space * 2)
+		y = trunc(float64(float64(ch)*space) * 2)
 	}
 	startX := x
 	var colIdx, index int64
@@ -775,13 +777,13 @@ func snake(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 			}
 			if childAR != 0 {
 				h = trunc(float64(w) / childAR)
-				h = min(h, trunc(float64(s.H)/(float64(rows)+float64(rows-1)*space)))
+				h = min(h, trunc(float64(s.H)/(float64(rows)+float64(float64(rows-1)*space))))
 			}
 			rowH = max(rowH, h)
 			k.W, k.H = w, h
 			index++
 			if index%cols == 0 || index/cols+1 != rows {
-				x = trunc(float64(x) + float64(incX)*(float64(w)+space*float64(w)))
+				x = trunc(float64(x) + float64(float64(incX)*(float64(w)+float64(space*float64(w)))))
 			}
 			colIdx++
 			if colIdx == cols {
@@ -789,29 +791,29 @@ func snake(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 					if fromCons {
 						x = startX
 					} else {
-						x = trunc(float64(startX) + float64(incX)*(float64(w)+space*float64(w))/2)
+						x = trunc(float64(startX) + float64(float64(incX)*(float64(w)+float64(space*float64(w)))/2))
 					}
 				} else {
 					x = startX
 				}
-				y = trunc(float64(y) + float64(incY)*(float64(rowH)+space*float64(rowH)))
+				y = trunc(float64(y) + float64(float64(incY)*(float64(rowH)+float64(space*float64(rowH)))))
 				colIdx, rowH = 0, 0
 			}
 			if index%cols != 0 && index >= 3 && index/cols+1 == rows {
-				x = trunc(float64(x) + float64(incX)*(float64(w)+space*float64(w)))
+				x = trunc(float64(x) + float64(float64(incX)*(float64(w)+float64(space*float64(w)))))
 			}
 		}
 	case "revDir":
-		step := trunc(float64(cw) + space*float64(cw))
+		step := trunc(float64(cw) + float64(space*float64(cw)))
 		for _, k := range s.Kids {
 			k.X, k.Y = x, y
 			k.W, k.H = cw, ch
 			index++
 			switch {
 			case (index%cols == 0 || index/cols+1 != rows) && (index/cols+1)%2 != 0:
-				x = trunc(float64(x) + float64(cw) + space*float64(cw))
+				x = trunc(float64(x) + float64(cw) + float64(space*float64(cw)))
 			case index%cols != 0 && index/cols+1 != rows:
-				x = trunc(float64(x) - (float64(cw) + space*float64(cw)))
+				x = trunc(float64(x) - (float64(cw) + float64(space*float64(cw))))
 			}
 			colIdx++
 			if colIdx == cols {
@@ -824,7 +826,7 @@ func snake(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 				case (index/cols+1)%2 != 0:
 					x = startX
 				}
-				y = trunc(float64(y) + float64(incY)*(float64(ch)+space*float64(ch)))
+				y = trunc(float64(y) + float64(float64(incY)*(float64(ch)+float64(space*float64(ch)))))
 				colIdx = 0
 			}
 			if index%cols != 0 && index >= 3 && index/cols+1 == rows {

@@ -107,7 +107,7 @@ func HexColor(s string) (css.Color, bool) {
 // colour times t plus white times 1-t), t in [0, 1].
 func Tint(c css.Color, t float64) css.Color {
 	t = max(0, min(1, t))
-	return css.Color{R: c.R*t + 1 - t, G: c.G*t + 1 - t, B: c.B*t + 1 - t, A: c.A}
+	return css.Color{R: float64(c.R*t) + 1 - t, G: float64(c.G*t) + 1 - t, B: float64(c.B*t) + 1 - t, A: c.A}
 }
 
 // Shade darkens c towards black, the colour times s (ECMA-376 Part 1,

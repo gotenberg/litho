@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -418,7 +419,7 @@ func (p *chartReader) readView3D(ch *Element) {
 			if !v.RightAngle && v.Perspective > 0 {
 				p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D chart's perspective is drawn as a parallel projection")
 			}
-			if math.Cos(v.RotY*math.Pi/180) < 0 {
+			if detmath.Cos(v.RotY*math.Pi/180) < 0 {
 				p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D chart seen from behind is drawn seen from the front")
 			}
 		case chart.Pie:
@@ -581,7 +582,7 @@ func (p *chartReader) autoLine() *chart.Stroke {
 func linearTint(c css.Color, t float64) css.Color {
 	f := func(v float64) float64 {
 		l := toLinear(v)
-		return fromLinear(1 - (1-l)*t)
+		return fromLinear(1 - float64((1-l)*t))
 	}
 	return css.Color{R: f(c.R), G: f(c.G), B: f(c.B), A: c.A}
 }
@@ -592,14 +593,14 @@ func toLinear(v float64) float64 {
 	if v <= 0.04045 {
 		return v / 12.92
 	}
-	return math.Pow((v+0.055)/1.055, 2.4)
+	return detmath.Pow((v+0.055)/1.055, 2.4)
 }
 
 func fromLinear(v float64) float64 {
 	if v <= 0.0031308 {
 		return v * 12.92
 	}
-	return 1.055*math.Pow(v, 1/2.4) - 0.055
+	return float64(1.055*detmath.Pow(v, 1/2.4)) - 0.055
 }
 
 // frame reads a shape properties element over the automatic frame def.

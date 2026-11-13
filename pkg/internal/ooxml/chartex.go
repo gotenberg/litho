@@ -197,7 +197,7 @@ func (x *chartExReader) read(root *Element) {
 	}
 	if v := parseFloat(attrOr(cxChild(catAx, "catScaling"), "gapWidth")); v >= 0 && v <= 5 {
 		// oox's AxisConverter: the gap as a fraction of a bar's width.
-		g.GapWidth = math.Floor(v*100 + 0.5)
+		g.GapWidth = math.Floor(float64(v*100) + 0.5)
 	}
 	for i, s := range series {
 		g.Series = append(g.Series, x.series(s, i, histogram))
