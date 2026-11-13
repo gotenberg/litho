@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -97,6 +98,12 @@ func testXLSX(t *testing.T) []byte {
 // testPPTX returns a PPTX of one slide holding one text box.
 func testPPTX(t *testing.T) []byte {
 	t.Helper()
+	return slidesPPTX(t, 1)
+}
+
+// slidesPPTX returns a PPTX of n slides, each holding one text box.
+func slidesPPTX(t *testing.T, n int) []byte {
+	t.Helper()
 	ns := `xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"`
 	group := `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>`
 	box := `<p:sp><p:nvSpPr><p:cNvPr id="2" name="Text 1"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>` +
@@ -111,18 +118,27 @@ func testPPTX(t *testing.T) []byte {
 		`<a:fontScheme name="T"><a:majorFont><a:latin typeface="Convert Serif"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>` +
 		`<a:minorFont><a:latin typeface="Convert Serif"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>` +
 		`<a:fmtScheme name="T"><a:fillStyleLst/><a:lnStyleLst/><a:effectStyleLst/><a:bgFillStyleLst/></a:fmtScheme></a:themeElements></a:theme>`
-	return zipParts(t, map[string]string{
+	var slideTypes, slideIDs, slideRels strings.Builder
+	parts := map[string]string{}
+	for i := 1; i <= n; i++ {
+		fmt.Fprintf(&slideTypes, `<Override PartName="/ppt/slides/slide%d.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`, i)
+		fmt.Fprintf(&slideIDs, `<p:sldId id="%d" r:id="rId%d"/>`, 255+i, 100+i)
+		fmt.Fprintf(&slideRels, `<Relationship Id="rId%d" Type="`+relR+`slide" Target="slides/slide%d.xml"/>`, 100+i, i)
+		parts[fmt.Sprintf("ppt/slides/slide%d.xml", i)] = `<p:sld ` + ns + `><p:cSld><p:spTree>` + group + box + `</p:spTree></p:cSld></p:sld>`
+		parts[fmt.Sprintf("ppt/slides/_rels/slide%d.xml.rels", i)] = `<Relationships ` + relsNS + `><Relationship Id="rId1" Type="` + relR + `slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`
+	}
+	for name, part := range map[string]string{
 		"[Content_Types].xml": `<Types ` + ctNS + `>` + ctXML +
 			`<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>` +
-			`<Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>` +
+			slideTypes.String() +
 			`<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>` +
 			`<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>` +
 			`<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/></Types>`,
 		"_rels/.rels": `<Relationships ` + relsNS + `><Relationship Id="rId1" Type="` + relDoc + `" Target="ppt/presentation.xml"/></Relationships>`,
 		"ppt/presentation.xml": `<p:presentation ` + ns + `><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>` +
-			`<p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="9144000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+			`<p:sldIdLst>` + slideIDs.String() + `</p:sldIdLst><p:sldSz cx="9144000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
 		"ppt/_rels/presentation.xml.rels": `<Relationships ` + relsNS + `><Relationship Id="rId1" Type="` + relR + `slideMaster" Target="slideMasters/slideMaster1.xml"/>` +
-			`<Relationship Id="rId2" Type="` + relR + `slide" Target="slides/slide1.xml"/><Relationship Id="rId3" Type="` + relR + `theme" Target="theme/theme1.xml"/></Relationships>`,
+			slideRels.String() + `<Relationship Id="rId3" Type="` + relR + `theme" Target="theme/theme1.xml"/></Relationships>`,
 		"ppt/theme/theme1.xml": theme,
 		"ppt/slideMasters/slideMaster1.xml": `<p:sldMaster ` + ns + `><p:cSld><p:spTree>` + group + `</p:spTree></p:cSld>` + clrMap +
 			`<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst></p:sldMaster>`,
@@ -130,9 +146,10 @@ func testPPTX(t *testing.T) []byte {
 			`<Relationship Id="rId2" Type="` + relR + `theme" Target="../theme/theme1.xml"/></Relationships>`,
 		"ppt/slideLayouts/slideLayout1.xml":            `<p:sldLayout ` + ns + `><p:cSld><p:spTree>` + group + `</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
 		"ppt/slideLayouts/_rels/slideLayout1.xml.rels": `<Relationships ` + relsNS + `><Relationship Id="rId1" Type="` + relR + `slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>`,
-		"ppt/slides/slide1.xml":                        `<p:sld ` + ns + `><p:cSld><p:spTree>` + group + box + `</p:spTree></p:cSld></p:sld>`,
-		"ppt/slides/_rels/slide1.xml.rels":             `<Relationships ` + relsNS + `><Relationship Id="rId1" Type="` + relR + `slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`,
-	})
+	} {
+		parts[name] = part
+	}
+	return zipParts(t, parts)
 }
 
 // targetODT returns an ODT of one paragraph.

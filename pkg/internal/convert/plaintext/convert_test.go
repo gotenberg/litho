@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
 	"github.com/gotenberg/litho/pkg/internal/limits"
@@ -400,5 +401,29 @@ func TestConvert_DefaultsToSerif(t *testing.T) {
 	}
 	if run := p.Content[0].(*typeset.Text); run.Size != 12 || run.Origin.X != 0 {
 		t.Errorf("run size %v at %v", run.Size, run.Origin)
+	}
+}
+
+func TestConvert_ReadsTheSourceInPieces(t *testing.T) {
+	t.Parallel()
+	f := testFonts(t)
+	// A CR LF pair split by the read buffer, then a character of three
+	// bytes and an invalid sequence across the next boundary.
+	src := "\xEF\xBB\xBF" + strings.Repeat("A", 64<<10-4) + "\r\nB" + strings.Repeat("C", 64<<10-3) + "é\xed\xa0D\n"
+	whole := convert(t, f, src, opts())
+	doc, err := plaintext.Convert(context.Background(), iotest.OneByteReader(strings.NewReader(src)), f, opts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(write(t, whole), write(t, doc)) {
+		t.Error("a source read a byte at a time lays out apart from one read whole")
+	}
+	if n := len(paragraphs(t, doc)); n != 2 {
+		t.Errorf("%d paragraphs, want 2: the CR LF pair is one line end", n)
+	}
+	o := opts()
+	o.MaxInputBytes = int64(len(src)) - 1
+	if _, err := plaintext.Convert(context.Background(), strings.NewReader(src), f, o); !errors.Is(err, limits.ErrInputTooLarge) {
+		t.Errorf("one byte past the cap: %v, want limits.ErrInputTooLarge", err)
 	}
 }

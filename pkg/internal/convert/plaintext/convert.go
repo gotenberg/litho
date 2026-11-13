@@ -1,12 +1,13 @@
 package plaintext
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -28,13 +29,43 @@ const maxParagraphRunes = 1 << 16
 // One more warning says the list stops.
 const maxMissingGlyphWarnings = 256
 
+// readBufferBytes is how much of the source the converter holds at once:
+// it reads the source in pieces of this size, and a source line longer
+// than a piece is gathered character by character into the paragraph
+// being built, at most [maxParagraphRunes] of them.
+const readBufferBytes = 64 << 10
+
+// paragraphCost is what the P element of one source line costs the
+// conversion's memory budget: the element and its slot in the Document
+// element, which live until the document is written, and the dictionary
+// the writer builds for it, and copies once, when it writes the structure
+// tree at the end.
+//
+// # Corpus evidence
+//
+//   - probe, text: 1 MiB of 70-character lines, 14,768 P elements of one
+//     marked run each, holds 9.4 MB of live heap in the structure tree as
+//     the writer writes it, about 640 bytes a line.
+//   - probe, text: the 16 MiB cost input, 31,026 P elements and about
+//     191,500 marked runs, holds 24 MB there: the elements, their
+//     dictionaries and their copies.
+const paragraphCost = 640
+
+// markedRunCost is what one glyph run placed on a page costs the
+// conversion's memory budget beyond its glyphs, which the page gives back
+// once handed over: its marked-content sequence, an entry of the page's
+// ParentTree array and one of its element's kids, which live until the
+// document is written. See [paragraphCost] for the measurements.
+const markedRunCost = 64
+
 // bom is the UTF-8 encoding of U+FEFF, the byte order mark.
 var bom = []byte{0xEF, 0xBB, 0xBF}
 
 // Convert lays src out as a Document.
 //
-// It reads src to its end, at most o.MaxInputBytes bytes, and returns an
-// error wrapping [limits.ErrInputTooLarge] past them; src is never closed. It
+// It reads src to its end in pieces, laying each source line out as it
+// arrives, at most o.MaxInputBytes bytes, and returns an error wrapping
+// [limits.ErrInputTooLarge] once it reads past them; src is never closed. It
 // returns an error wrapping [typeset.ErrInvalidOptions] for opts out of range or a
 // nil fonts, [text.ErrNoFonts] when fonts indexed no face, [limits.ErrTooManyPages]
 // when the layout needs more than o.MaxPages pages, and ctx's error when ctx
@@ -62,11 +93,6 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	if fonts == nil {
 		return nil, fmt.Errorf("%w: no font index", typeset.ErrInvalidOptions)
 	}
-	data, err := readCapped(src, o.MaxInputBytes)
-	if err != nil {
-		return nil, err
-	}
-
 	style := text.Style{Families: o.FontFamilies, Size: o.FontSize, Color: typeset.Black, Lang: o.DefaultLang}
 	face := fonts.Match(style)
 	if face == nil {
@@ -86,7 +112,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 		seen:       make(map[rune]bool),
 		mem:        limits.BudgetFrom(ctx),
 	}
-	if err := l.run(ctx, data); err != nil {
+	if err := l.run(ctx, src); err != nil {
 		return nil, err
 	}
 	if l.pages == 0 {
@@ -102,17 +128,73 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	return &l.doc, nil
 }
 
-// readCapped reads src to its end, failing with [limits.ErrInputTooLarge] past max
-// bytes.
-func readCapped(src io.Reader, maxBytes int64) ([]byte, error) {
-	data, err := io.ReadAll(io.LimitReader(src, maxBytes+1))
+// source reads the plain text source a piece at a time, failing with
+// [limits.ErrInputTooLarge] past its cap.
+type source struct {
+	r *bufio.Reader
+	// read counts the bytes consumed, max is the cap.
+	read, max int64
+}
+
+// newSource returns a reader of src that holds [readBufferBytes] of it at
+// once, with the cap maxBytes.
+func newSource(src io.Reader, maxBytes int64) *source {
+	return &source{r: bufio.NewReaderSize(io.LimitReader(src, maxBytes+1), readBufferBytes), max: maxBytes}
+}
+
+// skipBOM drops a leading byte order mark.
+func (s *source) skipBOM() error {
+	head, err := s.r.Peek(len(bom))
+	if err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("reading the plain text source: %w", err)
+	}
+	if bytes.Equal(head, bom) {
+		return s.consume(s.r.Discard(len(bom)))
+	}
+	return nil
+}
+
+// next returns the next character, as [utf8.DecodeRune] reads it from the
+// rest of the source: a lone invalid byte reads as U+FFFD of size 1. ok is
+// false at the end of the source.
+func (s *source) next() (r rune, ok bool, err error) {
+	r, size, err := s.r.ReadRune()
+	if errors.Is(err, io.EOF) {
+		return 0, false, nil
+	}
 	if err != nil {
-		return nil, fmt.Errorf("reading the plain text source: %w", err)
+		return 0, false, fmt.Errorf("reading the plain text source: %w", err)
 	}
-	if int64(len(data)) > maxBytes {
-		return nil, fmt.Errorf("%w: the source is longer than %d bytes", limits.ErrInputTooLarge, maxBytes)
+	return r, true, s.consume(size, nil)
+}
+
+// skipLF drops the next byte when it is a line feed, the second byte of a
+// CR LF pair.
+func (s *source) skipLF() error {
+	b, err := s.r.ReadByte()
+	if errors.Is(err, io.EOF) {
+		return nil
 	}
-	return data, nil
+	if err != nil {
+		return fmt.Errorf("reading the plain text source: %w", err)
+	}
+	if b != '\n' {
+		// A byte just read always goes back.
+		return s.r.UnreadByte()
+	}
+	return s.consume(1, nil)
+}
+
+// consume counts n bytes read, failing past the cap.
+func (s *source) consume(n int, err error) error {
+	if err != nil {
+		return fmt.Errorf("reading the plain text source: %w", err)
+	}
+	s.read += int64(n)
+	if s.read > s.max {
+		return fmt.Errorf("%w: the source is longer than %d bytes", limits.ErrInputTooLarge, s.max)
+	}
+	return nil
 }
 
 // layouter flows paragraphs down pages. It lives for one [Convert] call.
@@ -151,9 +233,12 @@ type layouter struct {
 	truncated   bool
 }
 
-// run walks the decoded source and lays out every source line.
-func (l *layouter) run(ctx context.Context, data []byte) error {
-	data = bytes.TrimPrefix(data, bom)
+// run reads the source and lays out every source line.
+func (l *layouter) run(ctx context.Context, src io.Reader) error {
+	in := newSource(src, l.opts.MaxInputBytes)
+	if err := in.skipBOM(); err != nil {
+		return err
+	}
 	var (
 		buf strings.Builder
 		// runes counts the characters in buf, col the column of the source
@@ -184,15 +269,20 @@ func (l *layouter) run(ctx context.Context, data []byte) error {
 		return err
 	}
 
-	for i := 0; i < len(data); {
-		r, size := utf8.DecodeRune(data[i:])
-		i += size
+	for {
+		r, ok, err := in.next()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
 		// A lone invalid byte decodes as RuneError of size 1; a valid
 		// U+FFFD is three bytes. Both read as U+FFFD.
 		switch r {
 		case '\r':
-			if i < len(data) && data[i] == '\n' {
-				i++
+			if err := in.skipLF(); err != nil {
+				return err
 			}
 			fallthrough
 		case '\n':
@@ -295,8 +385,14 @@ func (l *layouter) place(ctx context.Context, runs []*typeset.Text) error {
 		}
 	}
 	if len(runs) > 0 && l.para == nil {
+		if err := l.mem.ChargeUnits(1, paragraphCost, "the structure tree"); err != nil {
+			return err
+		}
 		l.para = &typeset.StructElem{Role: "P"}
 		l.root.Kids = append(l.root.Kids, l.para)
+	}
+	if err := l.mem.ChargeUnits(int64(len(runs)), markedRunCost, "the structure tree"); err != nil {
+		return err
 	}
 	for _, run := range runs {
 		run.Origin = typeset.Point{X: l.opts.MarginLeft + run.Origin.X, Y: l.next}
