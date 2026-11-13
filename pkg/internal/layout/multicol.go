@@ -553,7 +553,7 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 			// A trial height leaves no body placed or waiting.
 			e.restoreNotes(notes, y)
 		}
-		e.warnings = e.warnings[:warnings]
+		e.rollbackWarnings(warnings)
 		ctx.balanceRow, ctx.balanceH = row, h
 		ctx.frags, ctx.rows = nil, nil
 		end = e.layoutColumns(b, s, cb, ctx)

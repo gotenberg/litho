@@ -830,7 +830,7 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		e.clampRestore(s.clamp)
 		*mc = s.mc.clone()
 		bc.floats = bc.floats[:s.floats]
-		e.warnings = e.warnings[:s.warnings]
+		e.rollbackWarnings(s.warnings)
 		return s.cursor
 	}
 	// On pages whose areas differ in width, a box whose width follows the

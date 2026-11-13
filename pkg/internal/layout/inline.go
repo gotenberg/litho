@@ -529,7 +529,7 @@ func (e *engine) layoutInline(b *box, cb cblock, bc *bfc, cursor float64, mc *ma
 		restore := func() {
 			e.clampRestore(clampSaved)
 			bc.floats = bc.floats[:floats]
-			e.warnings = e.warnings[:warnings]
+			e.rollbackWarnings(warnings)
 			*mc = saved.clone()
 		}
 		e.balanceLines(b, d, cb, bc, cursor, mc, restore)
@@ -547,7 +547,7 @@ func (e *engine) layoutInline(b *box, cb cblock, bc *bfc, cursor float64, mc *ma
 			break
 		}
 		bc.floats = bc.floats[:floats]
-		e.warnings = e.warnings[:warnings]
+		e.rollbackWarnings(warnings)
 		*mc = saved.clone()
 	}
 	if e.opts.release == releaseEagerly && e.clamp == nil {

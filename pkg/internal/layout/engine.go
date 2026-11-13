@@ -26,6 +26,9 @@ type pendingWarning struct {
 	effect warn.Effect
 	msg    string
 	y      float64
+	// once marks a warning recorded once a document ([engine.warnOnce],
+	// a missing glyph), which a layout done again does not record again.
+	once bool
 }
 
 // engine is the state of one [Layout] call. It is never shared between
@@ -198,7 +201,21 @@ func (e *engine) warnOnce(code warn.Code, effect warn.Effect, msg string, y floa
 		return
 	}
 	e.warned[key] = true
-	e.warn(code, effect, msg, y)
+	e.warnings = append(e.warnings, pendingWarning{code: code, effect: effect, msg: msg, y: y, once: true})
+}
+
+// rollbackWarnings drops the warnings recorded since the n-th, which the
+// layout about to be done again records again, and keeps the ones
+// recorded once a document, which it does not: a warning is the same
+// whether its content is laid out once or again.
+func (e *engine) rollbackWarnings(n int) {
+	kept := e.warnings[:n]
+	for _, w := range e.warnings[n:] {
+		if w.once {
+			kept = append(kept, w)
+		}
+	}
+	e.warnings = kept
 }
 
 // relayout reports whether one more layout pass fits the budget, counting

@@ -199,3 +199,39 @@ func TestStructure_ActualText(t *testing.T) {
 		}
 	}
 }
+
+// TestGenerate_MissingGlyphWarnsOnceWhereverLaidOut checks that a code
+// point no font covers is reported once a document, whether its text is
+// laid out once or laid out again: in a block that break-inside: avoid
+// moves to the next page, in a paragraph whose orphans move it, in lines
+// a column set balances, and in text-wrap: balance lines.
+func TestGenerate_MissingGlyphWarnsOnceWhereverLaidOut(t *testing.T) {
+	avoid := func(s *css.Style) { s.BreakInside = css.InsideAvoid; s.Orphans, s.Widows = 1, 1 }
+	balance := func(s *css.Style) { s.TextWrapStyle = css.WrapStyleBalance }
+	cols := func(s *css.Style) { s.Columns.Count = 2 }
+	lines := func(mods ...func(*css.Style)) *Node {
+		st := sty(mods...)
+		return el(st, txt(st, "a 中 a a 中"))
+	}
+	for name, root := range map[string]*Node{
+		"laid out once":         doc(lines()),
+		"moved by break-inside": doc(el(sty(height(10))), lines(avoid)),
+		"moved by orphans":      doc(el(sty(height(20))), lines()),
+		"balanced lines":        doc(lines(balance)),
+		"balanced columns":      doc(el(sty(cols), lines())),
+		"twice in the document": doc(lines(), el(sty(height(10))), lines(avoid)),
+	} {
+		t.Run(name, func(t *testing.T) {
+			res := run(t, root, page(10, 30))
+			var msgs []string
+			for _, w := range res.Warnings {
+				if w.Code == warn.MissingGlyph {
+					msgs = append(msgs, w.Message)
+				}
+			}
+			if len(msgs) != 1 || !strings.Contains(msgs[0], "中") {
+				t.Errorf("missing-glyph warnings %q, want one for 中", msgs)
+			}
+		})
+	}
+}
