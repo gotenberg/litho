@@ -121,6 +121,19 @@
 // and footnote-policy line and block act as auto. leader() fills the rest
 // of its line with copies of its string (CSS Generated Content 3).
 //
+// target-counter(), target-counters() and target-text() read the element a
+// URL fragment names, written in the style sheet or read from an attribute
+// with attr() (CSS Generated Content 3, 6): its counters as counter() reads
+// them there, its text, its ::before or ::after text, or its first letter.
+// The page and pages counters read the page the element lands on, as the
+// page-margin boxes number it: the document is laid out with 0 in their
+// place, then again with the values each layout found, until a layout
+// keeps them, at most 4 times, with a warning past that. A document whose
+// cross-references read no page is laid out once. A URL that names no
+// element of the document, or one that lands on no page, generates
+// nothing, with a warning. In a page-margin box only a URL the style sheet
+// writes names a target; string-set does not take them.
+//
 // position: note(name) turns an element into a note, as WeasyPrint draws
 // notes: its ::note-call stays in the flow, numbered by the note counter,
 // and the element, between its ::note-marker and its ::note-callback,

@@ -505,6 +505,13 @@ func (b *builder) generate(ctx context.Context, n *dom.Node, ps *css.Style) []*l
 				flush()
 				out = append(out, n)
 			}
+		case css.ItemTargetCounter, css.ItemTargetCounters, css.ItemTargetText:
+			// Its own Text node, whose text is written once the target is
+			// built or laid out.
+			if t := b.targetNode(n, ps, it); t != nil {
+				flush()
+				out = append(out, t)
+			}
 		case css.ItemNamedString, css.ItemElement, css.ItemContent:
 			// string() and element() generate content in a page-margin
 			// box alone, content() in string-set alone (CSS GCPM 3, 2).

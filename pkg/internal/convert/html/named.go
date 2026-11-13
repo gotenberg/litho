@@ -133,6 +133,22 @@ func (p *prepared) setupPages(ctx context.Context, r *css.Resolver) {
 		// where their elements landed (CSS GCPM 3, 2).
 		p.layout.Placed = func(a map[string]typeset.Dest) { p.b.gcpm.placed = a }
 	}
+	if p.b != nil && p.b.targets.use.Any {
+		// The cross-references read the pages of the layout: those of the
+		// page-margin boxes the one being painted (CSS Generated Content
+		// 3, 6).
+		placed := p.layout.Placed
+		p.layout.Placed = func(a map[string]typeset.Dest) {
+			if placed != nil {
+				placed(a)
+			}
+			p.b.targets.anchors = a
+		}
+		p.layout.Paginated = func(infos []layout.PageInfo) {
+			t := &p.b.targets
+			t.infos, t.pageNums = infos, nil
+		}
+	}
 	if !boxes && p.o.HeaderTemplate == "" && p.o.FooterTemplate == "" {
 		return
 	}

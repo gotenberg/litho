@@ -74,8 +74,18 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	if e.err != nil {
 		return nil, e.err
 	}
-	if opts.Placed != nil {
-		opts.Placed(e.anchors(rb, e.pageCount(rb, disp)))
+	if opts.Placed != nil || opts.Paginated != nil {
+		n := e.pageCount(rb, disp)
+		if opts.Placed != nil {
+			opts.Placed(e.anchors(rb, n))
+		}
+		if opts.Paginated != nil {
+			infos := make([]PageInfo, n)
+			for k := range infos {
+				infos[k] = e.infoOf(k)
+			}
+			opts.Paginated(infos)
+		}
 	}
 	res := &Result{Structure: e.root, ContentWidth: e.overflowRight(rb)}
 	used := map[*typeset.StructElem]bool{}

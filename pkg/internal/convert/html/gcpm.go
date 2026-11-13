@@ -121,6 +121,7 @@ func (b *builder) runAway(n *dom.Node, node *layout.Node, st *css.Style) *layout
 		return nil
 	}
 	node.ID = ""
+	b.movedTarget(n, id)
 	return &layout.Node{Kind: layout.Element, Style: anonInline(st), ID: id}
 }
 
@@ -180,7 +181,8 @@ func (b *builder) setStrings(n *dom.Node, node *layout.Node, st *css.Style, befo
 					sb.WriteString(collapse(domText(n)))
 				}
 			case css.ItemOpenQuote, css.ItemCloseQuote, css.ItemNoOpenQuote, css.ItemNoCloseQuote,
-				css.ItemImage, css.ItemLeader, css.ItemNamedString, css.ItemElement:
+				css.ItemImage, css.ItemLeader, css.ItemNamedString, css.ItemElement,
+				css.ItemTargetCounter, css.ItemTargetCounters, css.ItemTargetText:
 			}
 			if sb.Len() > maxNamedStringBytes {
 				break

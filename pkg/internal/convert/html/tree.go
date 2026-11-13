@@ -97,6 +97,9 @@ type builder struct {
 	ids map[*dom.Node]string
 	// gcpm holds the named strings and running elements (CSS GCPM 3, 2).
 	gcpm gcpmState
+	// targets holds the cross-references and the elements they read (CSS
+	// Generated Content 3, 6).
+	targets targetState
 	// counterStyles spells the counter styles the layout does not.
 	counterStyles *css.CounterStyles
 	// firstLetters marks the boxes cut for ::first-letter, nil for none.
@@ -153,6 +156,12 @@ func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, s
 		node.ListValue = v
 		node.Marker = b.marker(ctx, n, st, v)
 	}
+	var targetVals [][]int
+	if b.targets.use.Any {
+		// A cross-reference reads the counters as counter() reads them at
+		// the element (CSS Generated Content 3, 6.1).
+		targetVals = b.targetValues()
+	}
 	b.counters.open()
 	defer b.counters.close()
 	before := b.pseudo(ctx, n, css.PseudoBefore)
@@ -177,6 +186,9 @@ func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, s
 	}
 	if len(st.StringSet) > 0 {
 		b.setStrings(n, node, st, before, after)
+	}
+	if b.targets.use.Any {
+		b.markTarget(n, node, before, after, targetVals)
 	}
 	return nil
 }

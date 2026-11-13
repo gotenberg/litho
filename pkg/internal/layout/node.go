@@ -254,6 +254,12 @@ type Options struct {
 	// the named strings and running elements of a page (CSS GCPM 3, 2).
 	// Layout calls it once, from its own goroutine.
 	Placed func(anchors map[string]typeset.Dest)
+	// Paginated, when not nil, receives the info of every page of the
+	// layout, in order, right after Placed, so that page-margin content
+	// can follow the pages an anchored node landed on and those before it
+	// (CSS Generated Content 3, 6: a cross-reference to a later page).
+	// Layout calls it once, from its own goroutine.
+	Paginated func(pages []PageInfo)
 	// Lang is the document language as a BCP 47 tag, used for a node
 	// without one in its ancestry, "" for unknown.
 	Lang string

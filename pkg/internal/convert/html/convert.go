@@ -99,6 +99,9 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 			return nil, err
 		}
 	}
+	if res, err = layOutTargets(ctx, lay, p, res); err != nil {
+		return nil, err
+	}
 	return p.assemble(ctx, res)
 }
 
@@ -329,9 +332,13 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	// The page-margin boxes read these counters of the document as they
 	// stand at the start of each page (CSS Page 3, 6.1).
 	b.gcpm.track = resolver.MarginCounters()
+	b.targets.use = resolver.TargetUse()
 	root, err := b.buildRoot(ctx, scan.root)
 	if err != nil {
 		return nil, err
+	}
+	if len(b.targets.refs) > 0 {
+		b.resolveTargets()
 	}
 	// The cascade shares the styles of elements styled alike; the styles
 	// the builder derives from them, generated content's among them, are

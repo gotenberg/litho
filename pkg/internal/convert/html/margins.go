@@ -682,6 +682,8 @@ func (p *prepared) marginNodes(ctx context.Context, st *css.Style, index, pages 
 			sb.WriteString(it.Fallback)
 		case css.ItemCounter, css.ItemCounters:
 			sb.WriteString(text(it))
+		case css.ItemTargetCounter, css.ItemTargetCounters, css.ItemTargetText:
+			sb.WriteString(p.marginTarget(it))
 		case css.ItemImage:
 			if p.b != nil {
 				if pic := p.b.contentImage(ctx, it.Text); pic != nil {

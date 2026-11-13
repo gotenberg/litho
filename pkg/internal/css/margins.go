@@ -294,10 +294,11 @@ func (r *Resolver) HasNoteArea() bool {
 }
 
 // hasPageAreas reports whether an @page rule holds a margin at-rule, an
-// @footnote rule or an @note-area rule.
+// @footnote rule or an @note-area rule, or a declaration of the page
+// context, such as the counter properties that number the pages.
 func (r *Resolver) hasPageAreas() bool {
 	for i := range r.pages {
-		if len(r.pages[i].rule.margins) > 0 {
+		if len(r.pages[i].rule.margins) > 0 || len(r.pages[i].rule.context) > 0 {
 			return true
 		}
 	}
