@@ -1261,7 +1261,14 @@ const (
 // Initial returns the initial value of every property (CSS 2.1, appendix
 // F), with the root's font size at medium, 16px.
 func Initial() *Style {
-	return &Style{
+	st := InitialValue()
+	return &st
+}
+
+// InitialValue is [Initial] as a value, for a style built on the stack
+// and then shared ([Styles.ShareCopy]).
+func InitialValue() Style {
+	return Style{
 		Opacity:             1,
 		ZIndex:              ZIndex{Auto: true},
 		TransformOrigin:     [2]Dimension{{Kind: Percent, Value: 0.5}, {Kind: Percent, Value: 0.5}},

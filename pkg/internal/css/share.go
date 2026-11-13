@@ -48,51 +48,77 @@ func (t *Styles) Share(st *Style) *Style {
 	return shared
 }
 
+// ShareCopy returns the style t holds equal to st, or adopts a copy of st
+// and returns the copy when t holds none: st stays the caller's, to write
+// again, and costs no copy when t holds its value. The caller writes the
+// result no more. A nil st returns nil; a nil t returns a copy of st.
+func (t *Styles) ShareCopy(st *Style) *Style {
+	shared, _ := t.shareCopy(st)
+	return shared
+}
+
 // share is [Styles.Share], also reporting whether t adopted st, a style
 // its caller then accounts as held.
 func (t *Styles) share(st *Style) (*Style, bool) {
-	return t.adopt(st, false)
-}
-
-// shareCopy is [Styles.share] for a style its caller writes again after
-// the call: t adopts a copy of st, never st, and a nil t returns a copy.
-// A style equal to one t holds costs no copy.
-func (t *Styles) shareCopy(st *Style) (*Style, bool) {
-	return t.adopt(st, true)
-}
-
-// adopt returns the style t holds equal to st, or adopts st, or a copy of
-// it when clone is set, reporting whether it adopted one.
-func (t *Styles) adopt(st *Style, clone bool) (*Style, bool) {
-	if st == nil {
-		return nil, false
-	}
-	if t == nil {
-		if clone {
-			c := *st
-			return &c, false
-		}
+	if st == nil || t == nil {
 		return st, false
 	}
 	h := t.hash(st)
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if old := t.lookup(h, st); old != nil {
+		return old, false
+	}
+	t.hold(h, st)
+	return st, true
+}
+
+// shareCopy is [Styles.ShareCopy], also reporting whether t adopted a
+// copy. It only reads st, so a style the caller keeps on its stack stays
+// there.
+func (t *Styles) shareCopy(st *Style) (*Style, bool) {
+	if st == nil {
+		return nil, false
+	}
+	if t == nil {
+		c := new(Style)
+		*c = *st
+		return c, false
+	}
+	h := t.hash(st)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if old := t.lookup(h, st); old != nil {
+		return old, false
+	}
+	c := new(Style)
+	*c = *st
+	t.hold(h, c)
+	return c, true
+}
+
+// lookup returns the style t holds equal to st, whose hash is h, nil for
+// none. The caller holds t.mu.
+func (t *Styles) lookup(h uint64, st *Style) *Style {
 	old, found := t.byHash[h]
-	if found {
-		if old == st || equalStyle(old, st) {
-			return old, false
-		}
-		for _, o := range t.more[h] {
-			if o == st || equalStyle(o, st) {
-				return o, false
-			}
+	if !found {
+		return nil
+	}
+	if old == st || equalStyle(old, st) {
+		return old
+	}
+	for _, o := range t.more[h] {
+		if o == st || equalStyle(o, st) {
+			return o
 		}
 	}
-	if clone {
-		c := *st
-		st = &c
-	}
-	if found {
+	return nil
+}
+
+// hold adopts st, whose hash is h and which t holds no equal of. The
+// caller holds t.mu.
+func (t *Styles) hold(h uint64, st *Style) {
+	if _, found := t.byHash[h]; found {
 		if t.more == nil {
 			t.more = map[uint64][]*Style{}
 		}
@@ -101,7 +127,31 @@ func (t *Styles) adopt(st *Style, clone bool) (*Style, bool) {
 		t.byHash[h] = st
 	}
 	t.held++
-	return st, true
+}
+
+// Intact reports whether every style t holds still has the value it was
+// adopted with, as far as its hash tells: a style written after it was
+// shared, which every node holding it would see, makes it false. Tests
+// call it on the table of a finished conversion.
+func (t *Styles) Intact() bool {
+	if t == nil {
+		return true
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for h, st := range t.byHash {
+		if t.hash(st) != h {
+			return false
+		}
+	}
+	for h, more := range t.more {
+		for _, st := range more {
+			if t.hash(st) != h {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // Len returns the number of distinct styles t holds.

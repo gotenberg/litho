@@ -156,3 +156,40 @@ func TestStylesShareCopyNeverHoldsItsArgument(t *testing.T) {
 		t.Error("a nil table does not return a copy")
 	}
 }
+
+func TestStylesShareCopyKeepsAStackStyleOnTheStack(t *testing.T) {
+	tb := NewStyles()
+	base := Initial()
+	tb.ShareCopy(base)
+	if allocs := testing.AllocsPerRun(10, func() {
+		st := *base
+		st.FontSize = base.FontSize
+		tb.ShareCopy(&st)
+	}); allocs != 0 {
+		t.Errorf("sharing a copy held on the stack allocates %v times", allocs)
+	}
+}
+
+func TestStylesIntactSeesAWriteToASharedStyle(t *testing.T) {
+	tb := NewStyles()
+	a := tb.ShareCopy(Initial())
+	b := Initial()
+	b.FontSize = 20
+	tb.Share(b)
+	if !tb.Intact() {
+		t.Fatal("a table whose styles nobody wrote is not intact")
+	}
+	b.FontSize = 21
+	if tb.Intact() {
+		t.Error("a write to a shared style goes unseen")
+	}
+	b.FontSize = 20
+	a.Display = Block
+	if tb.Intact() {
+		t.Error("a write to a shared copy goes unseen")
+	}
+	var none *Styles
+	if !none.Intact() {
+		t.Error("the nil table is not intact")
+	}
+}
