@@ -7255,6 +7255,442 @@
     "resources": []
   },
   {
+    "id": "css/compositing/background-blending/background-blend-mode-gradient-image.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/background-blending/reference/background-blend-mode-gradient-image-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": ["css/compositing/background-blending/support/red.png"]
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-animation.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 2, 0, 11000],
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-animation-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-blended-element-interposed.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 10],
+        "path": "css/compositing/mix-blend-mode/reference/green-square.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-blended-element-overflow-hidden-and-border-radius.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 10, 0, 5],
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-blended-element-overflow-hidden-and-border-radius-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-blended-element-overflow-scroll.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-blended-element-overflow-scroll-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-blended-element-with-transparent-pixels.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-blended-element-with-transparent-pixels-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-blended-with-3D-transform.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 255, 0, 350],
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-blended-with-3D-transform-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-blended-with-transform-and-perspective.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-blended-with-transform-and-perspective-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-blending-with-sibling.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/reference/green-square.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-both-parent-and-blended-with-3D-transform.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 180, 0, 1000],
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-both-parent-and-blended-with-3D-transform-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-filter.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-filter-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-intermediate-element-overflow-hidden-and-border-radius.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 10, 0, 50],
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-intermediate-element-overflow-hidden-and-border-radius-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-overflowing-child-of-blended-element.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-blended-element-with-transparent-pixels-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-overflowing-child.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-overflowing-child-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-paragraph.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 8, 0, 974],
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-paragraph-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-parent-element-overflow-hidden-and-border-radius-2.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 128, 0, 400],
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-parent-element-overflow-hidden-and-border-radius-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-parent-element-overflow-hidden-and-border-radius.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 128, 0, 400],
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-parent-element-overflow-hidden-and-border-radius-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-parent-element-overflow-scroll-blended-position-fixed.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-parent-element-overflow-scroll-blended-position-fixed-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-parent-element-overflow-scroll.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-parent-element-overflow-scroll-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-parent-with-3D-transform.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-parent-with-3D-transform-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-parent-with-border-radius.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 5, 0, 200],
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-parent-with-border-radius-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-parent-with-text.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 8, 0, 1284],
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-parent-with-text-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-plus-lighter-basic.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-plus-lighter-basic-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-root-element-group.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/mix-blend-mode-root-element-group-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-rotated-clip.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 30],
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-rotated-clip-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-sibling-with-3D-transform.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-sibling-with-3D-transform-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-simple.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 10],
+        "path": "css/compositing/mix-blend-mode/reference/green-square.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-stacking-context-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-stacking-context-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-stacking-context-creates-isolation.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-stacking-context-creates-isolation-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/mix-blend-mode/mix-blend-mode-with-transform-and-preserve-3D.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 50, 0, 300],
+        "path": "css/compositing/mix-blend-mode/reference/mix-blend-mode-with-transform-and-preserve-3D-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/root-element-background-margin-opacity.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 10000],
+        "path": "css/compositing/root-element-background-margin-opacity-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/root-element-background-transparency.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/root-element-background-transparency-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/root-element-blend-mode.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/root-element-blend-mode-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/root-element-filter.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/compositing/root-element-filter-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/compositing/root-element-opacity.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 480000],
+        "path": "css/compositing/root-element-opacity-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-align/baseline-rules/overflow-hidden-block-in-inline-baseline.html",
     "print": false,
     "refs": [
@@ -21205,6 +21641,1329 @@
     "refs": [
       {
         "path": "css/css-lists/outside-marker-with-text-indent-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-blending-offset.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/clip-path-blending-offset-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-borderBox-1d.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/green-100x100.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-borderBox-1e.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 155, 0, 400],
+        "path": "css/css-masking/clip-path/reference/green-circle-100x100.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-circle-001.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 60, 0, 900],
+        "path": "css/css-masking/clip-path/reference/clip-path-circle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-circle-002.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 60, 0, 900],
+        "path": "css/css-masking/clip-path/reference/clip-path-circle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-circle-003.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 60, 0, 900],
+        "path": "css/css-masking/clip-path/reference/clip-path-circle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-circle-004.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 60, 0, 900],
+        "path": "css/css-masking/clip-path/reference/clip-path-circle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-circle-005.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 60, 0, 900],
+        "path": "css/css-masking/clip-path/reference/clip-path-circle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-circle-006.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 60, 0, 900],
+        "path": "css/css-masking/clip-path/reference/clip-path-circle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-circle-007.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 60, 0, 900],
+        "path": "css/css-masking/clip-path/reference/clip-path-circle-2-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-circle-008.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 60, 0, 900],
+        "path": "css/css-masking/clip-path/reference/clip-path-circle-3-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-circle-009.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 60, 0, 900],
+        "path": "css/css-masking/clip-path/reference/clip-path-circle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-circle-010.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 120, 0, 900],
+        "path": "css/css-masking/clip-path/reference/clip-path-semicircle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-circle-closest-corner.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 545, 0, 2000],
+        "path": "css/css-masking/clip-path/reference/clip-path-circle-4-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-circle-farthest-corner.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 61, 0, 2000],
+        "path": "css/css-masking/clip-path/reference/clip-path-circle-4-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-columns-shape-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-columns-shape-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-contentBox-1d.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/green-100x100.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-contentBox-1e.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 65, 0, 400],
+        "path": "css/css-masking/clip-path/reference/green-circle-100x100.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-document-element-will-change.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-document-element-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-document-element.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-document-element-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-ellipse-001.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 59, 0, 600],
+        "path": "css/css-masking/clip-path/reference/clip-path-ellipse-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-ellipse-002.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 59, 0, 600],
+        "path": "css/css-masking/clip-path/reference/clip-path-ellipse-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-ellipse-003.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 60, 0, 900],
+        "path": "css/css-masking/clip-path/reference/clip-path-circle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-ellipse-004.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 59, 0, 600],
+        "path": "css/css-masking/clip-path/reference/clip-path-ellipse-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-ellipse-005.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 59, 0, 600],
+        "path": "css/css-masking/clip-path/reference/clip-path-ellipse-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-ellipse-006.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 59, 0, 600],
+        "path": "css/css-masking/clip-path/reference/clip-path-ellipse-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-ellipse-007.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 59, 0, 600],
+        "path": "css/css-masking/clip-path/reference/clip-path-ellipse-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-ellipse-008.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 59, 0, 600],
+        "path": "css/css-masking/clip-path/reference/clip-path-ellipse-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-filter-order.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/clip-path-filter-order-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-filter-radius-clips.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-filter-radius-clips-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-fixed-nested.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/clip-path-fixed-nested-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-inline-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/clip-path-inline-004-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-inline-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/clip-path-inline-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-inline-006.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/clip-path-inline-006-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-inline-007.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 62, 0, 332],
+        "path": "css/css-masking/clip-path/clip-path-inline-007-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-inline-008.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 14, 0, 240],
+        "path": "css/css-masking/clip-path/clip-path-inline-008-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-inline-009.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/clip-path-inline-009-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-inline-010.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 43, 0, 319],
+        "path": "css/css-masking/clip-path/clip-path-inline-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-inset-round-percent.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/clip-path-inset-round-percent-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-inset-round-rendering.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 13, 0, 677],
+        "path": "css/css-masking/clip-path/clip-path-inset-round-rendering-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-marginBox-1b.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/green-100x100.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-marginBox-1c.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 98, 0, 424],
+        "path": "css/css-masking/clip-path/reference/green-circle-100x100.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-marginBox-1d.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 224, 0, 500],
+        "path": "css/css-masking/clip-path/clip-path-marginBox-1d-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-paddingBox-1d.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/green-100x100.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-paddingBox-1e.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 70, 0, 400],
+        "path": "css/css-masking/clip-path/reference/green-circle-100x100.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-path-with-zoom-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-path-with-zoom-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-polygon-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-rectangle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-polygon-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-rectangle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-polygon-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-rectangle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-polygon-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-rectangle-border-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-polygon-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-rectangle-border-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-polygon-006.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-square-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-polygon-007.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-stripes-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-polygon-008.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-stripes-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-polygon-009.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-square-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-polygon-010.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-stripes-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-polygon-011.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-stripes-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-polygon-012.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-stripes-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-polygon-013.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-stripes-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-polygon-014.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 100],
+        "path": "css/css-masking/clip-path/reference/clip-path-polygon-014-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-rect-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-rectangle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-rect-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-rectangle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-rect-003.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 50, 0, 250],
+        "path": "css/css-masking/clip-path/reference/clip-path-xywh-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-rect-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/green-100x100.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-rotated-will-change-transform.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/clip-path-rotated-will-change-transform-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-round-zero-size.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 64, 0, 100],
+        "path": "css/css-masking/clip-path/clip-path-round-zero-size-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-shape-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-shape-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-shape-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-shape-004-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-shape-011.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 127, 0, 136],
+        "path": "css/css-masking/clip-path/reference/clip-path-shape-arc-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-shape-hline-vline-keywords.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/green-100x100.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-xywh-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-rectangle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-xywh-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip-path/reference/clip-path-rectangle-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip-path/clip-path-xywh-003.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 62, 0, 250],
+        "path": "css/css-masking/clip-path/reference/clip-path-xywh-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-absolute-positioned-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-absolute-positioned-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-absolute-positioned-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-absolute-positioned-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-filter-order.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/clip-filter-order-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-fixed-pos-transform-descendant-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/clip-fixed-pos-transform-descendant-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-negative-values-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-full-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-negative-values-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-full-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-negative-values-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-vertical-stripe-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-negative-values-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-horizontal-stripe-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-no-clipping-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-no-clipping-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-no-clipping-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-no-clipping-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-no-stacking-context.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/clip-no-stacking-context-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-not-absolute-positioned-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-no-clipping-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-not-absolute-positioned-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-no-clipping-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-not-absolute-positioned-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-no-clipping-no-text-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-not-absolute-positioned-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-no-clipping-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-rect-auto-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-overflow-hidden-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-rect-auto-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-no-clipping-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-rect-auto-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-rect-top-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-rect-auto-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-rect-right-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-rect-auto-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-rect-bottom-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-rect-auto-006.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-rect-left-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-rect-comma-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-absolute-positioned-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-rect-comma-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-no-clipping-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-rect-comma-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-no-clipping-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-rect-comma-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/reference/clip-no-clipping-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-transform-order-2.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/clip-filter-order-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/clip/clip-transform-order.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/clip/clip-filter-order-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/mask-image/mask-clip-7.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-masking/mask-image/mask-clip-7-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/mask-image/mask-image-2.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 3, 0, 14000],
+        "path": "css/css-masking/mask-image/mask-image-2-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/mask-image/mask-image-backdrop-filter-with-border-radius.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 55, 0, 5],
+        "path": "css/css-masking/mask-image/mask-image-backdrop-filter-with-border-radius-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/mask-image/mask-image-clip-exclude.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 2000],
+        "path": "css/css-masking/mask-image/mask-image-clip-exclude-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/mask-image/mask-image-inline-sliced-1.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 1450],
+        "path": "css/css-masking/mask-image/reference/mask-image-inline-sliced-1-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/mask-image/mask-opacity-1c.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [1, 1, 0, 5000],
+        "path": "css/css-masking/mask-image/mask-opacity-1-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-masking/mask-image/mask-under-border-radius.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
         "rel": "match",
         "resources": []
       }

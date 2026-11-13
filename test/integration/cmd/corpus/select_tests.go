@@ -222,7 +222,7 @@ var wptDirs = []string{
 	"css/CSS2/generated-content", "css/CSS2/values", "css/CSS2/selectors", "css/css-tables", "css/css-fonts",
 	"css/css-inline", "css/css-position", "css/css-transforms", "css/css-ruby", "css/css-content",
 	"css/css-counter-styles", "css/css-values", "css/css-variables", "css/selectors", "css/css-color",
-	"css/css-images", "css/css-display", "css/css-pseudo",
+	"css/css-images", "css/css-display", "css/css-pseudo", "css/css-masking", "css/compositing",
 }
 
 // wptAreaCap bounds the tests one area contributes, an area being a CSS2
@@ -239,6 +239,7 @@ var wptAreaCap = map[string]int{
 	"css/css-position": 60, "css/css-transforms": 100, "css/css-ruby": 10, "css/css-content": 40,
 	"css/css-counter-styles": 40, "css/css-values": 60, "css/css-variables": 60, "css/selectors": 100,
 	"css/css-color": 60, "css/css-images": 60, "css/css-display": 60, "css/css-pseudo": 100,
+	"css/css-masking": 120, "css/compositing": 60,
 }
 
 func compileAll(flags string, patterns ...string) []*regexp.Regexp {
@@ -351,6 +352,8 @@ var wptAreas = map[string]wptAreaRules{
 	"css/css-color":              wptFontFaceRules,
 	"css/css-images":             wptFontFaceRules,
 	"css/css-pseudo":             wptFontFaceRules,
+	"css/css-masking":            wptFontFaceRules,
+	"css/compositing":            wptFontFaceRules,
 }
 
 // wptProbe is a part of an area a rule singles out and caps on its own: the
