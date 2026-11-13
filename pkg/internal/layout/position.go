@@ -82,7 +82,10 @@ func (s *inlineState) staticLine(p *ifcPara, start, end int, l *lineBox) {
 }
 
 // staticRest records the static position of the absolutely positioned
-// boxes of p no line placed, at y: those of an empty paragraph.
+// boxes of p no line placed, at y: those of an empty paragraph. A box that
+// was inline-level sits where the empty line at y would put its inline
+// box: beside the floats there, at the point text-align takes an empty
+// line's content to (CSS 2.1, 10.3.7: the hypothetical box).
 func (s *inlineState) staticRest(p *ifcPara, y float64, mc *marginState, pending bool) {
 	if pending {
 		y += mc.strut.sum()
@@ -92,8 +95,39 @@ func (s *inlineState) staticRest(p *ifcPara, y float64, mc *marginState, pending
 			continue
 		}
 		s.placed[a.box] = true
+		if a.box.st.OuterInline {
+			x, rtl := s.emptyLinePoint(y)
+			setStatic(a.box, x, y, rtl)
+			continue
+		}
 		staticBlock(a.box, s.cb, y)
 	}
+}
+
+// emptyLinePoint returns where the content of an empty line at y starts,
+// the space beside the floats there aligned by text-align (CSS Text 3,
+// 6.1), and whether an inline box set there extends leftward from it: in
+// a right-to-left paragraph.
+func (s *inlineState) emptyLinePoint(y float64) (float64, bool) {
+	st := s.root.st
+	rtl := st.Direction == css.RTL
+	l, r := s.band(y, 0)
+	start, end := l, r
+	if rtl {
+		start, end = r, l
+	}
+	switch lineAlign(st, true) {
+	case css.AlignEnd:
+		return end, rtl
+	case css.AlignLeft:
+		return l, rtl
+	case css.AlignRight:
+		return r, rtl
+	case css.AlignCenter:
+		return (l + r) / 2, rtl
+	case css.AlignStart, css.AlignAuto, css.AlignJustify, css.AlignJustifyAll:
+	}
+	return start, rtl
 }
 
 // xAt returns the flow x of the character position pos of p on the line l.

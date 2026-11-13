@@ -228,3 +228,32 @@ func TestPosition_TablePartHoldsAbsolute(t *testing.T) {
 		_BG_
 		_BB_`)
 }
+
+func TestPosition_StaticInlineOnEmptyLine(t *testing.T) {
+	// CSS 2.1, 10.3.7: a box that was inline-level, alone on its line,
+	// sits where the empty line would put its inline box: beside the float
+	// there, at the point text-align takes the line's content to.
+	tests := []struct {
+		name  string
+		align css.TextAlign
+		dir   func(*css.Style)
+		side  css.Float
+		want  string
+	}{
+		{"start beside a left float", css.AlignStart, nil, css.FloatLeft, "RRBB__"},
+		{"centre beside a left float", css.AlignCenter, nil, css.FloatLeft, "RR__BB"},
+		{"rtl start beside a right float", css.AlignStart, rtl, css.FloatRight, "__BBRR"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ms := mods(width(6), func(s *css.Style) { s.TextAlign = tt.align })
+			if tt.dir != nil {
+				ms = append(ms, tt.dir)
+			}
+			inl := square(2, 1, blue, abs(auto), func(s *css.Style) { s.OuterInline = true })
+			sp := func() *Node { return txt(sty(), " ") }
+			root := doc(el(sty(ms...), sp(), square(2, 1, red, float(tt.side)), sp(), inl, sp()))
+			assertPixels(t, run(t, root, page(6, 1)), 1, tt.want)
+		})
+	}
+}
