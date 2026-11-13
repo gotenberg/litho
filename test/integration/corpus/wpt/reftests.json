@@ -10399,6 +10399,678 @@
     "resources": []
   },
   {
+    "id": "css/css-display/display-contents-alignment-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-alignment-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-alignment-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-alignment-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-before-after-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-before-after-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-before-after-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-block-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-no-red-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-block-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-block-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-details-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-details-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-details.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-fieldset-nested-legend.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-fieldset-nested-legend-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-fieldset.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-first-letter-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-green-no-red-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-first-letter-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-green-no-red-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-first-line-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-green-no-red-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-first-line-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-green-no-red-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-flex-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-flex-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-flex-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-flex-002-ref.html",
+        "rel": "match",
+        "resources": ["css/css-display/support/acid.css"]
+      }
+    ],
+    "resources": ["css/css-display/support/acid.css"]
+  },
+  {
+    "id": "css/css-display/display-contents-flex-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-flex-002-ref.html",
+        "rel": "match",
+        "resources": ["css/css-display/support/acid.css"]
+      }
+    ],
+    "resources": ["css/css-display/support/acid.css"]
+  },
+  {
+    "id": "css/css-display/display-contents-float-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-no-red-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-inline-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-no-red-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-inline-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-no-red-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-inline-flex-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-inline-flex-001-ref.html",
+        "rel": "match",
+        "resources": ["css/css-display/support/acid.css"]
+      }
+    ],
+    "resources": ["css/css-display/support/acid.css"]
+  },
+  {
+    "id": "css/css-display/display-contents-line-height.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-line-height-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-list-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-list-001-ref.html",
+        "rel": "match",
+        "resources": ["css/css-display/support/acid.css"]
+      }
+    ],
+    "resources": ["css/css-display/support/acid.css"]
+  },
+  {
+    "id": "css/css-display/display-contents-multicol-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-multicol-001-ref.html",
+        "rel": "match",
+        "resources": ["css/css-display/support/acid.css"]
+      }
+    ],
+    "resources": ["css/css-display/support/acid.css"]
+  },
+  {
+    "id": "css/css-display/display-contents-oof-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-no-red-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-oof-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-no-red-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-replaced-content.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-200px-square.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-sharing-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-sharing-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-table-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-table-001-ref.html",
+        "rel": "match",
+        "resources": ["css/css-display/support/acid.css"]
+      }
+    ],
+    "resources": ["css/css-display/support/acid.css"]
+  },
+  {
+    "id": "css/css-display/display-contents-table-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-table-002-ref.html",
+        "rel": "match",
+        "resources": ["css/css-display/support/acid.css"]
+      }
+    ],
+    "resources": ["css/css-display/support/acid.css"]
+  },
+  {
+    "id": "css/css-display/display-contents-td-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-pass-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-text-inherit.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-text-inherit-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-text-only-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-text-only-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-text-only-content-properties.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-text-only-content-properties-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-tr-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-tr-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-contents-whitespace-inside-inline.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-contents-whitespace-inside-inline-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-flow-root-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-flow-root-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-flow-root-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-flow-root-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-flow-root-list-item-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-flow-root-list-item-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/display-math-on-pseudo-elements-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/display-math-on-pseudo-elements-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/run-in/counter-increment-applies-to-011.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/pass_if_number_5.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/run-in/counter-reset-applies-to-011.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/pass_if_number_5.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/run-in/font-style-applies-to-004.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/pass_if_filler_text_slanted.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/run-in/height-applies-to-011.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/pass_if_square_96px_black.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/run-in/letter-spacing-applies-to-004.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/black_box_ends_when_blue_box_ends_6_boxes_ahem.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/run-in/list-style-applies-to-011.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/single_square_list_marker.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/run-in/list-style-type-applies-to-011.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/single_square_list_marker.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/run-in/max-height-applies-to-011.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/pass_if_square_96px_black.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/run-in/max-width-applies-to-011.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/pass_if_square_96px_black.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/run-in/min-height-applies-to-011.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/pass_if_square_96px_black.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/run-in/min-width-applies-to-011.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/pass_if_square_96px_black.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/run-in/quotes-applies-to-011.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/pass_if_pass_below.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/run-in/text-transform-applies-to-004.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/pass_if_letter_uppercase.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/run-in/width-applies-to-011.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/pass_if_square_96px_black.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-display/table-display-on-fieldset.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-display/table-display-on-fieldset-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-flexbox/abspos/flex-abspos-staticpos-fallback-justify-content-001.html",
     "print": false,
     "refs": [
