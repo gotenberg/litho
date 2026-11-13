@@ -516,6 +516,7 @@ func pathBounds(paths []effect.Path) typeset.Rect {
 		for _, op := range p.Ops {
 			n := 1
 			switch op.Kind {
+			case typeset.MoveTo, typeset.LineTo:
 			case typeset.ClosePath:
 				n = 0
 			case typeset.CurveTo:

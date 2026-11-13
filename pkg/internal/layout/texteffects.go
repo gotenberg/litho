@@ -89,21 +89,7 @@ func (p *painter) runOutlines(it *lineItem, l *lineBox, what string) ([]typeset.
 	if len(ops) == 0 {
 		return nil, 0, 0
 	}
-	// The ink's horizontal extent: the points the outlines pass through
-	// or bend towards.
-	x0, x1 := ops[0].P[0].X, ops[0].P[0].X
-	for _, op := range ops {
-		n := 1
-		switch op.Kind {
-		case typeset.ClosePath:
-			n = 0
-		case typeset.CurveTo:
-			n = 3
-		}
-		for _, q := range op.P[:n] {
-			x0, x1 = min(x0, q.X), max(x1, q.X)
-		}
-	}
+	x0, _, x1, _ := opsBounds(ops)
 	return ops, x0, x1
 }
 
@@ -153,7 +139,7 @@ func (p *painter) textPaint(it *lineItem, l *lineBox, page int, c *typeset.Text,
 			}
 			stops = append(stops, typeset.ColorStop{Offset: s.Pos, Color: col})
 		}
-		y0, y1 := inkRows(ops)
+		_, y0, _, y1 := opsBounds(ops)
 		box := typeset.Rect{X: x0, Y: y0, Width: max(x1-x0, 0), Height: max(y1-y0, 0)}
 		for _, f := range drawshape.Fill(ops, box, drawshape.Paint{Kind: drawshape.PaintGradient, Stops: stops, Angle: tp.Angle}) {
 			p.emit(it.box, true, artifact(f), top, bottom, page)
@@ -187,20 +173,22 @@ func artifact(f typeset.Fragment) typeset.Fragment {
 	return f
 }
 
-// inkRows returns the vertical extent of the points of ops.
-func inkRows(ops []typeset.PathOp) (float64, float64) {
-	y0, y1 := ops[0].P[0].Y, ops[0].P[0].Y
+// opsBounds returns the extent of the points ops pass through or bend
+// towards, ops not empty.
+func opsBounds(ops []typeset.PathOp) (x0, y0, x1, y1 float64) {
+	x0, y0, x1, y1 = ops[0].P[0].X, ops[0].P[0].Y, ops[0].P[0].X, ops[0].P[0].Y
 	for _, op := range ops {
 		n := 1
 		switch op.Kind {
+		case typeset.MoveTo, typeset.LineTo:
 		case typeset.ClosePath:
 			n = 0
 		case typeset.CurveTo:
 			n = 3
 		}
 		for _, q := range op.P[:n] {
-			y0, y1 = min(y0, q.Y), max(y1, q.Y)
+			x0, y0, x1, y1 = min(x0, q.X), min(y0, q.Y), max(x1, q.X), max(y1, q.Y)
 		}
 	}
-	return y0, y1
+	return x0, y0, x1, y1
 }
