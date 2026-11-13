@@ -10,7 +10,7 @@ func TestFirstLine_AppliesItsProperties(t *testing.T) {
 		p { text-align: center; letter-spacing: 2px }
 		p::first-line { color: red; font-size: 30px; margin-left: 10px; padding-left: 5px;
 			text-align: right; text-indent: 9px; white-space: pre; text-transform: uppercase;
-			background-color: blue; vertical-align: 20px }`)
+			background-color: blue; vertical-align: 20px; font-feature-settings: "smcp" }`)
 	p := byID(c.doc, "p")
 	fl := c.c.FirstLine(p, c.of("p"))
 	if fl == nil {
@@ -21,6 +21,9 @@ func TestFirstLine_AppliesItsProperties(t *testing.T) {
 	}
 	if fl.Margin[Left].Value != 0 || fl.Padding[Left].Value != 0 || fl.TextIndent.Value != 0 || fl.WhiteSpace != WhiteSpaceNormal || fl.VerticalAlign.Kind != Baseline {
 		t.Errorf("dropped properties set: margin %v padding %v indent %v white-space %v vertical-align %v", fl.Margin[Left], fl.Padding[Left], fl.TextIndent, fl.WhiteSpace, fl.VerticalAlign)
+	}
+	if len(fl.FontFeatureSettings) != 1 {
+		t.Errorf("font-feature-settings on ::first-line: %+v", fl.FontFeatureSettings)
 	}
 	if fl.TextAlign != AlignCenter || !dimEq(fl.LetterSpacing, pts(2*Pt)) || fl.Display != Inline {
 		t.Errorf("inherited and initial values: text-align %v letter-spacing %v display %v", fl.TextAlign, fl.LetterSpacing, fl.Display)

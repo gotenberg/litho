@@ -459,7 +459,9 @@ func (c *Computed) RestylePseudo(n *html.Node, which PseudoElement, parent *Styl
 //
 //   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 computes on
 //     ::first-line the font properties, color, opacity, visibility, the
-//     background properties, box-shadow, text-shadow, the
+//     background properties (font-feature-settings, font-size-adjust,
+//     font-synthesis and font-variant among the font properties, not
+//     font-language-override), box-shadow, text-shadow, the
 //     text-decoration longhands, text-underline-offset and -position,
 //     text-emphasis-color, word-spacing, letter-spacing, text-transform,
 //     line-height, vertical-align, ruby-position and text-justify, and
@@ -478,6 +480,8 @@ var firstLineProps = func() [numProps]bool {
 		pBoxShadow, pTextShadow, pTextDecoration, pTextDecorationColor, pTextDecorationStyle,
 		pTextDecorationThickness, pTextDecorationSkipInk, pTextUnderlineOffset, pTextUnderlinePosition,
 		pTextEmphasisColor, pTextTransform, pLetterSpacing, pWordSpacing, pRubyPosition, pTextJustify,
+		pFontFeatureSettings, pFontVariantLigatures, pFontVariantNumeric, pFontVariantEastAsian,
+		pFontVariantPosition, pFontVariantAlternates, pFontVariantEmoji, pFontSynthesisSmallCaps, pFontSizeAdjust,
 	} {
 		on[id] = true
 	}
