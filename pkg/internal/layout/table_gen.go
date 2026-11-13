@@ -158,6 +158,10 @@ type cellData struct {
 	// and aligns at the top, as browsers do.
 	natH, base float64
 	hasBase    bool
+	// alignH is the border box height of the content alone, without the
+	// minimum the cell's height property sets: what vertical-align
+	// places in the rows the cell spans.
+	alignH float64
 	// contentEnd is the bottom of the content at the tentative layout,
 	// below its padding, in the coordinates of natH.
 	contentEnd float64

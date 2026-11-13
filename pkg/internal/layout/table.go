@@ -733,9 +733,9 @@ func (e *engine) layoutTableOnce(t *box, cb cblock, y float64) {
 		switch vaKind(c.st) {
 		case css.AlignTop:
 		case css.Middle:
-			off = (h - cd.natH) / 2
+			off = (h - cd.alignH) / 2
 		case css.AlignBottom:
-			off = h - cd.natH
+			off = h - cd.alignH
 		case css.Baseline, css.Sub, css.Super, css.TextTop, css.TextBottom, css.AlignLength:
 			if hasBase[cd.row] && cd.hasBase {
 				off = base[cd.row] - cd.base
@@ -829,8 +829,12 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw, fixedH float64) {
 	end = max(end, own.bottom(), c.contentY())
 	h := end - c.contentY()
 	cd.contentEnd = end
+	cd.alignH = h + vEdges(c)
 	if sh, ok := specHeight(c, c.st.Height, cblock{}); ok {
-		// A cell's height is a minimum (CSS 2.1, 17.5.3).
+		// A cell's height is a minimum of its row's (CSS 2.1, 17.5.3);
+		// vertical-align places the content, not that height, in the
+		// row, so a cell of a 50px height holding one line of text
+		// centres the line under middle.
 		h = max(h, sh)
 	}
 	c.h = h

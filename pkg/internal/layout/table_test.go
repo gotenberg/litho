@@ -182,6 +182,29 @@ func TestTable_RowHeightsAndBaseline(t *testing.T) {
 	}
 }
 
+// TestTable_AlignsContentInACellOfAHeight checks that vertical-align
+// places a cell's content, not the minimum its height property sets, in
+// its row (CSS 2.1, 17.5.3): one 10px line in a cell of height 50px sits
+// 20px down under middle and 40px down under bottom.
+//
+// # Corpus evidence
+//
+//   - wpt: css-tables/rowspan-cell-border-after-color and
+//     css-tables/table-cell-overflow-auto pass with test and reference
+//     drawn alike, their cell content at the top, where Chromium's
+//     screenshots centre it.
+func TestTable_AlignsContentInACellOfAHeight(t *testing.T) {
+	cell := func(k css.AlignKind) *Node { return td(mods(height(50), valign(k)), "a") }
+	tm := tableOf(t, doc(table(nil, tr(nil, cell(css.Middle), cell(css.AlignBottom), cell(css.AlignTop)))), page(200, 100))
+	var tops []float64
+	for _, c := range tm.cells {
+		tops = append(tops, pxOf(c.lines[0].y))
+	}
+	if fmt.Sprint(tops) != "[20 40 0]" {
+		t.Errorf("line tops %v, want [20 40 0]: middle, bottom, top in 50px", tops)
+	}
+}
+
 func TestTable_RowSpanAndTableHeight(t *testing.T) {
 	cell := mods(height(10))
 	tm := tableOf(t, doc(table(nil,
