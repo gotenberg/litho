@@ -1040,7 +1040,7 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 	c.Color.A *= alpha
 	c.Parent = it.box.elem
 	top, bottom := l.y+it.baseline-it.ascent, l.y+it.baseline+it.descent
-	if c.Color.A > 0 {
+	if !p.textPaint(it, l, page, &c, top, bottom) && c.Color.A > 0 {
 		p.emit(it.box, true, &c, top, bottom, page)
 	}
 	p.emphasisMarks(it, l, page, alpha)
