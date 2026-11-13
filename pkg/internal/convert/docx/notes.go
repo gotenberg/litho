@@ -36,7 +36,7 @@ func (d *document) noteCall(s *story, c *ooxml.Element, st *css.Style, sink *inl
 	callID, bodyID := d.newID("nc"), d.newID("n")
 	ns := &story{part: part, note: mark, noteID: bodyID, noteBack: "#" + callID}
 	d.nested++
-	content := finish(d.blocks(ns, nil, body, 1))
+	content := d.finish(d.blocks(ns, nil, body, 1))
 	d.nested--
 	noteBody := &layout.Node{Kind: layout.Element, Style: d.blockStyle(), Role: "Note", Children: content}
 	if !ns.noteRef {

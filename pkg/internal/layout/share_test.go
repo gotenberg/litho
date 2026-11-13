@@ -25,7 +25,7 @@ func paragraphs(n int) *Node {
 func TestShareStylesKeepsTheLayout(t *testing.T) {
 	plain := runWith(t, paragraphs(40), Options{Page: page(100, 200)})
 	tree := paragraphs(40)
-	ShareStyles(context.Background(), tree)
+	ShareStyles(context.Background(), tree, nil)
 	distinct := map[*css.Style]bool{}
 	var walk func(n *Node)
 	walk = func(n *Node) {
@@ -48,16 +48,16 @@ func TestShareStylesStopsWithTheContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	tree := paragraphs(2000)
-	ShareStyles(ctx, tree)
+	ShareStyles(ctx, tree, nil)
 	if tree.Children[len(tree.Children)-1].Style == tree.Children[0].Style {
 		t.Error("a cancelled walk shared the whole tree")
 	}
-	ShareStyles(context.Background(), nil)
+	ShareStyles(context.Background(), nil, nil)
 }
 
 func TestEngineSharesAnonymousStyles(t *testing.T) {
 	tree := paragraphs(10)
-	ShareStyles(context.Background(), tree)
+	ShareStyles(context.Background(), tree, nil)
 	rb := boxes(t, tree, page(100, 2000))
 	anon := map[*css.Style]int{}
 	var walk func(b *box)
@@ -81,7 +81,7 @@ func TestLayoutChargesAStyleOnce(t *testing.T) {
 		defer done()
 		tree := paragraphs(200)
 		if share {
-			ShareStyles(ctx, tree)
+			ShareStyles(ctx, tree, nil)
 		}
 		if _, err := Layout(ctx, tree, ahem(t), Options{Page: page(100, 200)}); err != nil {
 			t.Fatalf("Layout: %v", err)
@@ -91,5 +91,18 @@ func TestLayoutChargesAStyleOnce(t *testing.T) {
 	plain, shared := peak(false), peak(true)
 	if shared >= plain-200*styleCost {
 		t.Errorf("the account peaks at %d bytes with shared styles, %d without", shared, plain)
+	}
+}
+
+func TestShareStylesAdoptsIntoTheTableGiven(t *testing.T) {
+	tb := css.NewStyles()
+	held := tb.ShareCopy(sty())
+	tree := paragraphs(5)
+	ShareStyles(context.Background(), tree, tb)
+	if tree.Children[0].Style != held {
+		t.Error("a node styled like a style the table holds does not take it")
+	}
+	if tb.Len() != 2 {
+		t.Errorf("the table holds %d styles, want 2", tb.Len())
 	}
 }

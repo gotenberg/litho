@@ -17,11 +17,19 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
+
+// TestMain makes every conversion of the tests fail when it writes a
+// style it shared.
+func TestMain(m *testing.M) {
+	checkSharedStyles = true
+	os.Exit(m.Run())
+}
 
 // nsDecl declares the namespaces the test documents use.
 const nsDecl = `xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" ` +
@@ -273,11 +281,16 @@ func newTestBuilder(t testing.TB, d doc) *builder {
 		t.Fatal(err)
 	}
 	b := &builder{
-		ctx: context.Background(), pkg: pkg, styles: odf.NewStyles(pkg), fonts: fixtureFonts(t),
+		ctx: context.Background(), pkg: pkg, styles: odf.NewStyles(pkg), shared: css.NewStyles(), fonts: fixtureFonts(t),
 		metricsCache: map[string][2]float64{}, warned: map[string]bool{}, pics: map[string]picResult{},
 		meta: map[*layout.Node]paraMeta{}, tabsRelative: true,
 	}
 	b.pages = newPageFlow(b, office.Options{})
+	t.Cleanup(func() {
+		if !b.shared.Intact() {
+			t.Error(errSharedStyleWritten)
+		}
+	})
 	return b
 }
 

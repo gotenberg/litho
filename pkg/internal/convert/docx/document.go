@@ -102,7 +102,7 @@ type document struct {
 	pending []pendingAnchor
 	// columnBreaks collects the paragraphs of the section being read
 	// that a column break starts.
-	columnBreaks []*css.Style
+	columnBreaks []*layout.Node
 	inBody       bool
 	nested       int
 	// inCell counts the table cells being built, whose paragraphs'
@@ -128,6 +128,11 @@ type document struct {
 	root *ooxml.Element
 	// revisions rewrites each story part into the tracked-changes view.
 	revisions *revisions
+	// shared holds the styles of the tree's nodes: paragraphs, runs and
+	// table parts share theirs from the moment the node is made
+	// ([document.share]), the other nodes once the tree is finished
+	// ([layout.ShareStyles]). A shared style is written no more.
+	shared *css.Styles
 }
 
 // heading is a paragraph with an outline level, for the outline.
@@ -153,7 +158,7 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	d := &document{
 		ctx: ctx, pkg: pkg, main: main, fonts: fonts, opts: opts, symbols: office.NewSymbolCodes(),
 		warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, lineFactors: map[string][3]float64{}, vmlTypes: map[string]int{}, vmlTypeElems: map[string]*ooxml.Element{},
-		settings:  settings{defaultTab: 36},
+		settings: settings{defaultTab: 36}, shared: css.NewStyles(),
 		revisions: &revisions{view: opts.TrackedChanges, authors: map[string]int{}, marked: map[*ooxml.Element]bool{}, markEnd: map[*ooxml.Element]bool{}, markStart: map[*ooxml.Element]bool{}, moved: map[*ooxml.Element]bool{}},
 	}
 	if d.root, err = d.part(main); err != nil {

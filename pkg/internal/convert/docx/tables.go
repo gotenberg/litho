@@ -616,10 +616,10 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	}
 	tbl := &layout.Node{Kind: layout.Element, Style: tableSt, Role: "Table"}
 	for _, g := range grid {
-		cs := d.blockStyle()
+		cs := d.blockOf()
 		cs.Display = css.TableColumn
 		cs.Width = css.Pts(g)
-		tbl.Children = append(tbl.Children, &layout.Node{Kind: layout.Element, Style: cs})
+		tbl.Children = append(tbl.Children, &layout.Node{Kind: layout.Element, Style: d.share(&cs)})
 	}
 	rowBand, colBand := 1, 1
 	if tp.rowBand != nil {
@@ -634,7 +634,8 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 	inHeader := true
 	nrows := len(placed)
 	for ri, row := range placed {
-		rst := d.blockStyle()
+		rv := d.blockOf()
+		rst := &rv
 		rst.Display = css.TableRow
 		// A height without a rule is a minimum, as Word and LibreOffice
 		// read it; an exact one fixes the row's height.
@@ -649,7 +650,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 		if !isHeader {
 			inHeader = false
 		}
-		rn := &layout.Node{Kind: layout.Element, Style: rst, Role: "TR"}
+		rn := &layout.Node{Kind: layout.Element, Style: d.share(rst), Role: "TR"}
 		for ci, c := range row.cells {
 			if c.col >= ncols {
 				break
@@ -722,7 +723,8 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 				}
 			}
 			cp = cp.merge(&c.props)
-			cst := d.cellStyle(cp, cellMar, tblBorders, shading, cellPlace{first, last, firstCol, lastCol, spaced})
+			cv := d.cellOf(cp, cellMar, tblBorders, shading, cellPlace{first, last, firstCol, lastCol, spaced})
+			cst := &cv
 			if ci == 0 && row.props.gridBefore > 0 {
 				cst.Border[css.Left] = css.Border{}
 			}
@@ -732,7 +734,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 			if n := len(bs); n >= 2 && endsWithTableMark(c.xml) && bs[n-2].node.Role == "Table" && bs[n-1].node.Role == "P" && bs[n-1].node.ID == "" {
 				bs = bs[:n-1]
 			}
-			kids := finish(bs)
+			kids := d.finish(bs)
 			d.inCell--
 			d.nested--
 			role := "TD"
@@ -742,7 +744,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 			if clipsCell(&tp, kids) {
 				cst.Overflow = css.OverflowHidden
 			}
-			cn := &layout.Node{Kind: layout.Element, Style: cst, Role: role, Children: kids}
+			cn := &layout.Node{Kind: layout.Element, Style: d.share(cst), Role: role, Children: kids}
 			if isHeader {
 				// A tblHeader row repeats atop every page as the table's
 				// heading (ECMA-376 Part 1, 17.4.49): its cells head
@@ -762,7 +764,7 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 			}
 			rn.Children = append(rn.Children, cn)
 		}
-		alignRowTops(rn.Children, spaced)
+		d.alignRowTops(rn.Children, spaced)
 		if isHeader {
 			header = append(header, rn)
 		} else {
@@ -770,13 +772,13 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 		}
 	}
 	if len(header) > 0 {
-		hs := d.blockStyle()
+		hs := d.blockOf()
 		hs.Display = css.TableHeaderGroup
-		tbl.Children = append(tbl.Children, &layout.Node{Kind: layout.Element, Style: hs, Children: header})
+		tbl.Children = append(tbl.Children, &layout.Node{Kind: layout.Element, Style: d.share(&hs), Children: header})
 	}
-	bs := d.blockStyle()
+	bs := d.blockOf()
 	bs.Display = css.TableRowGroup
-	tbl.Children = append(tbl.Children, &layout.Node{Kind: layout.Element, Style: bs, Children: body})
+	tbl.Children = append(tbl.Children, &layout.Node{Kind: layout.Element, Style: d.share(&bs), Children: body})
 	return tbl
 }
 
@@ -869,7 +871,10 @@ func holdsAnchored(ns []*layout.Node, depth int) bool {
 //     higher under the thinnest border alone; the text of a row of a
 //     table with cell spacing whose cells have top borders 0.25 to 6 pt
 //     wide on one line too.
-func alignRowTops(cells []*layout.Node, spaced bool) {
+//
+// The cells' styles are shared: a cell whose padding grows takes a
+// changed copy, shared in turn.
+func (d *document) alignRowTops(cells []*layout.Node, spaced bool) {
 	share := 0.5
 	if spaced {
 		share = 1
@@ -885,8 +890,10 @@ func alignRowTops(cells []*layout.Node, spaced bool) {
 		thickest = max(thickest, top(c.Style))
 	}
 	for _, c := range cells {
-		if d := thickest - top(c.Style); d > 0 && c.Style.Padding[css.Top].Kind == css.Points {
-			c.Style.Padding[css.Top] = css.Pts(c.Style.Padding[css.Top].Value + d*share)
+		if gap := thickest - top(c.Style); gap > 0 && c.Style.Padding[css.Top].Kind == css.Points {
+			st := *c.Style
+			st.Padding[css.Top] = css.Pts(st.Padding[css.Top].Value + gap*share)
+			c.Style = d.share(&st)
 		}
 	}
 }
@@ -924,7 +931,7 @@ type cellPlace struct {
 	first, last, firstCol, lastCol, spaced bool
 }
 
-// cellStyle returns the style of a table cell: its margins as padding,
+// cellOf returns the style of a table cell: its margins as padding,
 // its borders (its own, else the table's outer or inside borders by its
 // place), its shading and its vertical alignment. Word measures a cell's
 // left and right margins from the middle of its collapsed border.
@@ -939,8 +946,9 @@ type cellPlace struct {
 //   - libreoffice/docx ooxmlexport/NumberedList.docx: the text of a
 //     nested table with 1.5 pt borders and 4.3 pt margins sits 5.05 pt
 //     right of the table's edge, half the border and the margin.
-func (d *document) cellStyle(cp cellProps, tableMar map[string]float64, tb map[string]*borderSpec, shading *css.Color, at cellPlace) *css.Style {
-	st := d.blockStyle()
+func (d *document) cellOf(cp cellProps, tableMar map[string]float64, tb map[string]*borderSpec, shading *css.Color, at cellPlace) css.Style {
+	sv := d.blockOf()
+	st := &sv
 	st.Display = css.TableCell
 	st.LineHeight = css.Dimension{Kind: css.Normal}
 	for side, name := range map[css.Side]string{css.Top: "top", css.Right: "right", css.Bottom: "bottom", css.Left: "left"} {
@@ -1001,7 +1009,7 @@ func (d *document) cellStyle(cp cellProps, tableMar map[string]float64, tb map[s
 	st.BoxDecorationBreak = css.DecorationCloneAll
 	d.warnTextDirection(cp.textDir)
 	setWritingMode(st, textDirection(cp.textDir))
-	return st
+	return sv
 }
 
 // floatTable floats a table with a w:tblpPr (17.4.58) on the side its

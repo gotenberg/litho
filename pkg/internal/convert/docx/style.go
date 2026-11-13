@@ -22,7 +22,14 @@ const defaultFontSize = 10
 // defaults: preserved spaces that wrap, as Word lays text out, and the
 // default tab interval.
 func (d *document) blockStyle() *css.Style {
-	st := css.Initial()
+	st := d.blockOf()
+	return &st
+}
+
+// blockOf is [document.blockStyle] as a value, for a style built on the
+// stack and then shared ([document.share]).
+func (d *document) blockOf() css.Style {
+	st := css.InitialValue()
 	st.Display = css.Block
 	st.WhiteSpace = css.PreWrap
 	st.FontFamilies = []string{defaultFamily, fallbackSerif, secondFallback[fallbackSerif]}
@@ -261,6 +268,13 @@ func (d *document) lineMetrics(st *css.Style) (float64, float64, float64) {
 // inlineStyle returns a copy of the paragraph style ps as an inline box,
 // for a run.
 func inlineStyle(ps *css.Style) *css.Style {
+	st := inlineOf(ps)
+	return &st
+}
+
+// inlineOf is [inlineStyle] as a value, for a style built on the stack and
+// then shared ([document.share]).
+func inlineOf(ps *css.Style) css.Style {
 	st := *ps
 	st.Display = css.Inline
 	st.Margin = [4]css.Dimension{css.Pts(0), css.Pts(0), css.Pts(0), css.Pts(0)}
@@ -273,7 +287,7 @@ func inlineStyle(ps *css.Style) *css.Style {
 	st.Page = ""
 	st.Float, st.Position = css.FloatNone, css.Static
 	st.Columns = css.Columns{}
-	return &st
+	return st
 }
 
 // hasCJK reports whether s holds a Han, Hiragana, Katakana or Hangul

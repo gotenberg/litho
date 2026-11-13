@@ -669,7 +669,9 @@ func breakAnywhere(n *layout.Node, depth int) {
 //     their frame.
 //   - libreoffice/docx layout/tdf135035.docx: Writer breaks a word longer
 //     than the column inside a frame without a width.
-func (d *document) frame(n *layout.Node, pp paraProps) {
+//
+// st is the style n takes, which frame writes.
+func (d *document) frame(n *layout.Node, st *css.Style, pp paraProps) {
 	f := pp.framePr
 	if f == nil || len(f.Attrs) == 0 {
 		// A frame without properties is a plain paragraph, as LibreOffice
@@ -684,7 +686,6 @@ func (d *document) frame(n *layout.Node, pp paraProps) {
 		// of their frame.
 		return
 	}
-	st := n.Style
 	switch attrOr(f, "wrap") {
 	case "none", "notBeside":
 		if attrOr(f, "dropCap") == "" {
@@ -706,7 +707,10 @@ func (d *document) frame(n *layout.Node, pp paraProps) {
 		// column: Writer breaks a word longer than the column inside it,
 		// which a float's shrink-to-fit width allows only when the word's
 		// letters are break opportunities.
-		breakAnywhere(n, 0)
+		st.OverflowWrap = css.Anywhere
+		for _, k := range n.Children {
+			breakAnywhere(k, 1)
+		}
 	}
 	if v, ok := ooxml.Twips(attrOr(f, "hSpace")); ok && v > 0 {
 		st.Margin[css.Right] = css.Pts(v)

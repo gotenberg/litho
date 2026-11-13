@@ -127,7 +127,10 @@ const maxNesting = 64
 // style (17.3.1.9), and the borders paragraphs with the same borders
 // share (17.3.1.24: the group draws one box, the between border inside
 // it).
-func finish(bs []blockNode) []*layout.Node {
+//
+// The paragraphs' styles are shared: a paragraph whose spacing or borders
+// its neighbours change takes a changed copy, shared in turn.
+func (d *document) finish(bs []blockNode) []*layout.Node {
 	out := make([]*layout.Node, 0, len(bs))
 	var list *layout.Node
 	for i, b := range bs {
@@ -140,7 +143,8 @@ func finish(bs []blockNode) []*layout.Node {
 		case list == nil:
 			// The list's numbering is its first item's ([document.number]
 			// leaves it on the item).
-			list = &layout.Node{Kind: layout.Element, Style: listStyle(b.node.Style), Role: "L", Numbering: b.node.Numbering, Children: []*layout.Node{b.node}}
+			ls := listOf(b.node.Style)
+			list = &layout.Node{Kind: layout.Element, Style: d.share(&ls), Role: "L", Numbering: b.node.Numbering, Children: []*layout.Node{b.node}}
 			out = append(out, list)
 		default:
 			list.Children = append(list.Children, b.node)
@@ -149,7 +153,6 @@ func finish(bs []blockNode) []*layout.Node {
 		if info == nil {
 			continue
 		}
-		st := b.node.Style
 		var prev, next *paraInfo
 		if i > 0 {
 			prev = bs[i-1].info
@@ -164,6 +167,7 @@ func finish(bs []blockNode) []*layout.Node {
 		if info.contextual && next != nil && next.style == info.style {
 			after = 0
 		}
+		st := *b.node.Style
 		st.Margin[css.Top], st.Margin[css.Bottom] = css.Pts(before), css.Pts(after)
 		if len(info.borders) > 0 {
 			if prev != nil && sameBorders(prev, info) {
@@ -178,17 +182,20 @@ func finish(bs []blockNode) []*layout.Node {
 				st.Padding[css.Bottom] = css.Pts(0)
 			}
 		}
+		if st.Margin != b.node.Style.Margin || st.Border != b.node.Style.Border || st.Padding != b.node.Style.Padding {
+			b.node.Style = d.share(&st)
+		}
 	}
 	return out
 }
 
-// listStyle returns the style of the block grouping list items styled
-// like item: their inherited text properties and no box of its own.
-func listStyle(item *css.Style) *css.Style {
-	st := *inlineStyle(item)
+// listOf returns the style of the block grouping list items styled like
+// item: their inherited text properties and no box of its own.
+func listOf(item *css.Style) css.Style {
+	st := inlineOf(item)
 	st.Display = css.Block
 	st.TabStops = nil
-	return &st
+	return st
 }
 
 // sameBorders reports two paragraphs that share their border group: the
@@ -279,7 +286,10 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 		// A hidden paragraph mark on an empty paragraph hides it.
 		return nil
 	}
-	st, lineMult := d.paraStyle(pp, rp.mark)
+	base, lineMult := d.paraStyle(pp, rp.mark)
+	// st is the paragraph's style before what each piece changes: its runs
+	// derive theirs from it.
+	st := d.share(&base)
 	sink := &inlineSink{}
 	d.revisions.bound(p, st, sink, true)
 	d.inlines(s, rp, st, lineMult, p, sink, depth)
@@ -307,10 +317,11 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 				continue
 			}
 		}
+		// The piece's style is built here and shared once the piece is
+		// made: n holds it from then on.
 		bst := *st
 		pst := &bst
-		pst.Margin = st.Margin
-		n := &layout.Node{Kind: layout.Element, Style: pst, Role: "P", ID: seg.id}
+		n := &layout.Node{Kind: layout.Element, Role: "P", ID: seg.id}
 		// A hard page break drops the space before the text it moves, as
 		// LibreOffice lays DOCX documents out.
 		hardBreak := i > 0 || s.breakNext
@@ -320,7 +331,7 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 			// A column break is a page break in a section of one column
 			// (17.18.3 ST_BrType column); the section's properties, at its
 			// end, say which.
-			d.columnBreaks = append(d.columnBreaks, pst)
+			d.columnBreaks = append(d.columnBreaks, n)
 		case hardBreak || boolOf(pp.pageBreakBefore):
 			pst.BreakBefore = css.Page
 		}
@@ -329,7 +340,7 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 		}
 		s.breakNext, s.breakColumn = false, false
 		if i == 0 && rp.num != nil {
-			d.number(n, rp, st)
+			d.number(n, pst, rp, st)
 		}
 		kids := seg.nodes
 		if !hasLine(kids) {
@@ -338,17 +349,17 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 			// reader would extract: a line break in the mark's font. One
 			// holding only floating or positioned drawings keeps its line
 			// too, as Writer gives every paragraph one.
-			ms := inlineStyle(pst)
-			d.applyRun(ms, rp.mark, lineMult)
+			ms := inlineOf(pst)
+			d.applyRun(&ms, rp.mark, lineMult)
 			pst.FontFamilies, pst.FontSize, pst.FontWeight, pst.FontStyle = ms.FontFamilies, ms.FontSize, ms.FontWeight, ms.FontStyle
-			kids = append(kids, &layout.Node{Kind: layout.LineBreak, Style: ms})
+			kids = append(kids, &layout.Node{Kind: layout.LineBreak, Style: d.share(&ms)})
 		} else if i == len(segs)-1 && endsWithBreak(kids) {
 			// A line break ending the paragraph leaves the mark a line of
 			// its own, as Word prints it (17.3.3.1 br), where a CSS line
 			// break ends the last line.
-			ms := inlineStyle(pst)
-			d.applyRun(ms, rp.mark, lineMult)
-			kids = append(kids, &layout.Node{Kind: layout.LineBreak, Style: ms})
+			ms := inlineOf(pst)
+			d.applyRun(&ms, rp.mark, lineMult)
+			kids = append(kids, &layout.Node{Kind: layout.LineBreak, Style: d.share(&ms)})
 		}
 		n.Children = kids
 		if sink.positioned {
@@ -364,12 +375,16 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 			}
 			d.headings = append(d.headings, heading{node: n, level: lvl + 1})
 		}
-		d.frame(n, pp)
+		d.frame(n, pst, pp)
 		info := &paraInfo{style: rp.styleID, contextual: boolOf(pp.contextual), borders: pp.borders}
 		info.before, info.after = spacingOf(pp)
 		if hardBreak {
 			info.before = 0
 		}
+		// The spacing between paragraphs alone, which [document.finish]
+		// changes where its neighbours ask it to.
+		pst.Margin[css.Top], pst.Margin[css.Bottom] = css.Pts(info.before), css.Pts(info.after)
+		n.Style = d.share(pst)
 		if pp.indLeft != nil {
 			info.indLeft = *pp.indLeft
 		}
@@ -466,8 +481,9 @@ func hasLine(nodes []*layout.Node) bool {
 // paraStyle returns the style of a paragraph block from its resolved
 // properties and the run properties of its mark, and the proportional line
 // spacing its runs scale (0 for none).
-func (d *document) paraStyle(pp paraProps, mark runProps) (*css.Style, float64) {
-	st := d.blockStyle()
+func (d *document) paraStyle(pp paraProps, mark runProps) (css.Style, float64) {
+	sv := d.blockOf()
+	st := &sv
 	lineMult := 0.0
 	rule := css.LineRuleCSS
 	if pp.line != nil {
@@ -610,7 +626,7 @@ func (d *document) paraStyle(pp paraProps, mark runProps) (*css.Style, float64) 
 	}
 	sortStops(stops)
 	st.TabStops = stops
-	return st, lineMult
+	return sv, lineMult
 }
 
 // sortStops sorts tab stops by position, insertion sort over a short list.
@@ -632,7 +648,9 @@ func sortStops(s []css.TabStop) {
 // # Corpus evidence
 //
 //   - libreoffice/docx: ooxmlimport/tdf101626.docx, a U+00AD bullet, prints "-".
-func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
+//
+// pst is the style n takes, st the paragraph's: number writes pst.
+func (d *document) number(n *layout.Node, pst *css.Style, rp resolvedPara, st *css.Style) {
 	label, ordinal := rp.num.next(rp.ilvl)
 	lv := rp.num.levelOf(rp.ilvl)
 	if label == "" {
@@ -645,7 +663,8 @@ func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 	mr := rp.mark
 	mr.underline = nil
 	mr = mr.merge(lv.rpr)
-	ms := inlineStyle(st)
+	mv := inlineOf(st)
+	ms := &mv
 	d.applyRun(ms, mr, 0)
 	ms.LineHeight = st.LineHeight
 	if fam := d.families(mr); len(fam) > 0 {
@@ -654,7 +673,7 @@ func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 			ms.FontFamilies = d.families(rp.mark)
 		}
 	}
-	n.Style.Display = css.ListItem
+	pst.Display = css.ListItem
 	n.Role = "LI"
 	n.ListValue = max(ordinal, 1)
 	n.Numbering = numberingSystem(lv.format, label)
@@ -673,8 +692,8 @@ func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 	if hang > 0 && lv.suffix == "tab" {
 		// The marker box spans the hanging indent: the label aligned on the
 		// number position, the text at the indent on every line.
-		n.Style.ListStylePosition = css.Outside
-		n.Style.TextIndent = css.Pts(0)
+		pst.ListStylePosition = css.Outside
+		pst.TextIndent = css.Pts(0)
 		ms.Width = css.Pts(hang)
 		ms.Display = css.Inline
 		if ms.TextAlign == css.AlignStart && st.Margin[css.Left].Kind == css.Points {
@@ -683,10 +702,11 @@ func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 			// one counted from the margin, as LibreOffice sets it.
 			ml := st.Margin[css.Left].Value
 			if end := ml - hang + d.textWidth(label, ms); end > ml+0.01 {
-				n.Style.TextIndent = css.Pts(nextTabStop(st, end) - ml)
+				pst.TextIndent = css.Pts(nextTabStop(st, end) - ml)
 			}
 		}
-		n.Marker = &layout.Node{Kind: layout.Element, Style: ms, Children: []*layout.Node{{Kind: layout.Text, Style: ms, Text: label}}}
+		shared := d.share(ms)
+		n.Marker = &layout.Node{Kind: layout.Element, Style: shared, Children: []*layout.Node{{Kind: layout.Text, Style: shared, Text: label}}}
 		return
 	}
 	suffix := "\t"
@@ -696,8 +716,9 @@ func (d *document) number(n *layout.Node, rp resolvedPara, st *css.Style) {
 	case "nothing":
 		suffix = ""
 	}
-	n.Style.ListStylePosition = css.Inside
-	n.Marker = &layout.Node{Kind: layout.Element, Style: ms, Children: []*layout.Node{{Kind: layout.Text, Style: ms, Text: label + suffix}}}
+	pst.ListStylePosition = css.Inside
+	shared := d.share(ms)
+	n.Marker = &layout.Node{Kind: layout.Element, Style: shared, Children: []*layout.Node{{Kind: layout.Text, Style: shared, Text: label + suffix}}}
 }
 
 // snapLines lays the lines of the paragraph style st on a document grid
@@ -978,8 +999,9 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 	}
 	props = props.merge(direct)
 	hidden := boolOf(props.vanish)
-	st := inlineStyle(ps)
-	d.applyRun(st, props, lineMult)
+	rs := inlineOf(ps)
+	d.applyRun(&rs, props, lineMult)
+	st := d.share(&rs)
 	var lang string
 	if props.lang != nil {
 		lang = *props.lang
@@ -1055,8 +1077,9 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 			emit()
 			ns := st
 			if props.vertAlign == nil && props.position == nil {
-				ns = inlineStyle(st)
-				d.applyRun(ns, props.merge(&runProps{vertAlign: new("superscript")}), lineMult)
+				raised := inlineOf(st)
+				d.applyRun(&raised, props.merge(&runProps{vertAlign: new("superscript")}), lineMult)
+				ns = d.share(&raised)
 			}
 			ref := &layout.Node{Kind: layout.Element, Style: ns, Children: []*layout.Node{{Kind: layout.Text, Style: ns, Text: s.note}}}
 			if s.noteID != "" && !s.noteRef {

@@ -143,7 +143,9 @@ var (
 
 // TestMain removes the directory of the test face once the tests end: the
 // index reads the face's file on first use, so no single test owns it.
+// Every conversion of the tests fails when it writes a style it shared.
 func TestMain(m *testing.M) {
+	checkSharedStyles = true
 	code := m.Run()
 	// Running the Once first orders this read after the write of any test.
 	sharedFontsOnce.Do(func() {})
@@ -276,6 +278,11 @@ func buildWith(t testing.TB, body string, extra map[string]string, opts office.O
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
+	t.Cleanup(func() {
+		if !d.shared.Intact() {
+			t.Error(errSharedStyleWritten)
+		}
+	})
 	b := &built{d: d, secs: d.body(d.root)}
 	b.root = &layout.Node{Kind: layout.Element, Style: d.blockStyle()}
 	for _, s := range b.secs {

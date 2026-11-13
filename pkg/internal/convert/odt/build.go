@@ -40,6 +40,11 @@ type builder struct {
 	ctx    context.Context
 	pkg    *odf.Package
 	styles *odf.Styles
+	// shared holds the styles of the tree's nodes: paragraphs, runs and
+	// table parts share theirs from the moment the node is made
+	// ([builder.share]), the other nodes once the tree is finished
+	// ([layout.ShareStyles]). A shared style is written no more.
+	shared *css.Styles
 	scope  odf.Scope
 	fonts  *text.Fonts
 	// symbols maps what the symbol runs and bullets draw back to their
@@ -245,9 +250,9 @@ func (b *builder) wrapLists(nodes []*layout.Node, depth int) []*layout.Node {
 			}
 			j++
 		}
-		st := baseStyle()
+		st := baseValue()
 		st.Display = css.Block
-		out = append(out, &layout.Node{Kind: layout.Element, Style: st, Role: "L", Numbering: b.listNums[id], Children: b.wrapLists(nodes[i:j], depth+1)})
+		out = append(out, &layout.Node{Kind: layout.Element, Style: b.share(&st), Role: "L", Numbering: b.listNums[id], Children: b.wrapLists(nodes[i:j], depth+1)})
 		i = j
 	}
 	return out
@@ -315,7 +320,7 @@ func (b *builder) spacing(kids []*layout.Node) {
 		}
 		ps.Margin[css.Bottom] = css.Pts(0)
 		cs.Margin[css.Top] = css.Pts(top + bottom)
-		prev.Style, cur.Style = &ps, &cs
+		prev.Style, cur.Style = b.share(&ps), b.share(&cs)
 	}
 }
 
@@ -445,13 +450,16 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	if ctx.indent != nil {
 		p = ctx.indent.indent(p, b.styles.Style(b.scope, odf.FamilyParagraph, name))
 	}
-	st := baseStyle()
+	// The paragraph's style is built here and shared once its children
+	// are made: n and its line breaks hold it from then on.
+	sv := baseValue()
+	st := &sv
 	applyText(st, t, false)
 	b.applyPara(st, p, t)
 	if p.dropCap != nil {
 		b.warn("drop-cap", warn.ContentUnsupported, warn.Approximated, "drop caps are drawn as the paragraph's first letters in line")
 	}
-	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "P", Lang: t.langTag()})
+	n := b.node(&layout.Node{Kind: layout.Element, Role: "P", Lang: t.langTag()})
 	n.ID = b.paragraphID(el)
 	b.meta[n] = paraMeta{style: b.commonStyle(name), contextual: p.contextual, join: p.joinBorder}
 	ws := &wsState{space: true}
@@ -469,16 +477,12 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	if !hasText(kids) && b.floatCount(kids) > 1 {
 		b.pinFloats(kids, p)
 	}
-	if visible(kids) == 0 {
-		kids = append(kids, b.node(&layout.Node{Kind: layout.LineBreak, Style: st}))
-	} else if last := kids[len(kids)-1]; last.Kind == layout.LineBreak {
-		// A line break that ends the paragraph opens an empty last line,
-		// as Writer draws it.
-		kids = append(kids, b.node(&layout.Node{Kind: layout.LineBreak, Style: st}))
-	}
-	n.Children = kids
+	// An empty paragraph keeps a line; a line break that ends the
+	// paragraph opens an empty last line, as Writer draws it. Either
+	// line break takes the paragraph's style.
+	lineBreak := visible(kids) == 0 || kids[len(kids)-1].Kind == layout.LineBreak
 	for _, k := range kids {
-		if k.Style.Position == css.Absolute && k.Kind != layout.Text {
+		if k.Style.Position == css.Absolute && k.Kind != layout.Text || lineBreak && st.Position == css.Absolute {
 			// A run-through frame anchored to the paragraph is placed from
 			// the paragraph's corner: the paragraph is its containing
 			// block.
@@ -486,6 +490,11 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 			break
 		}
 	}
+	n.Style = b.share(st)
+	if lineBreak {
+		kids = append(kids, b.node(&layout.Node{Kind: layout.LineBreak, Style: n.Style}))
+	}
+	n.Children = kids
 	if isHeading {
 		level := b.outlineLevel(el, name)
 		if level > 0 {
@@ -614,16 +623,17 @@ func (b *builder) run(s string, t textState) *layout.Node {
 // runNode returns the inline node of the text s in the text properties t,
 // marked as changed text when changed.
 func (b *builder) runNode(s string, t textState, changed bool) *layout.Node {
-	st := baseStyle()
-	applyText(st, t, true)
-	st.LineBreak = b.lineBreak
+	sv := baseValue()
+	applyText(&sv, t, true)
+	sv.LineBreak = b.lineBreak
 	if t.auto != 0 {
-		st.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(b.raise(t))}
+		sv.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(b.raise(t))}
 		// Automatic escapement keeps the run inside the full-size line:
 		// Writer's line does not grow for it, so its inline box takes no
 		// height.
-		st.LineHeight = css.Pts(0)
+		sv.LineHeight = css.Pts(0)
 	}
+	st := b.share(&sv)
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Lang: t.langTag(), ChangeBar: changed})
 	tn := &layout.Node{Kind: layout.Text, Style: st, Text: s}
 	office.SymbolNode(tn, b.fonts, symbolfont.RuleLibreOffice, b.symbols)
@@ -775,9 +785,9 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 			}
 			ws.space = false
 		case "line-break":
-			st := baseStyle()
-			applyText(st, t, true)
-			*out = append(*out, b.node(&layout.Node{Kind: layout.LineBreak, Style: st}))
+			st := baseValue()
+			applyText(&st, t, true)
+			*out = append(*out, b.node(&layout.Node{Kind: layout.LineBreak, Style: b.share(&st)}))
 			ws.space = true
 		case "a":
 			b.link(c, t, out, ws, depth)

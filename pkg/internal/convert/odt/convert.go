@@ -2,6 +2,7 @@ package odt
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -59,7 +60,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 		return nil, fmt.Errorf("%w: the document has no office:text body", office.ErrMalformed)
 	}
 	b := &builder{
-		ctx: ctx, pkg: pkg, styles: odf.NewStyles(pkg), fonts: fonts, symbols: office.NewSymbolCodes(),
+		ctx: ctx, pkg: pkg, styles: odf.NewStyles(pkg), shared: css.NewStyles(), fonts: fonts, symbols: office.NewSymbolCodes(),
 		metricsCache: map[string][2]float64{}, warned: map[string]bool{}, pics: map[string]picResult{}, meta: map[*layout.Node]paraMeta{},
 		tabsRelative:  configBool(pkg.Settings, "TabsRelativeToIndent", true),
 		absoluteAlign: odf.AbsoluteStartEnd(pkg),
@@ -84,7 +85,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	}
 	// The tree is finished: its paragraphs and spans styled alike share
 	// one style.
-	layout.ShareStyles(ctx, root)
+	layout.ShareStyles(ctx, root, b.shared)
 	lay := func() (*layout.Result, error) {
 		b.pages.reset()
 		return layout.Layout(ctx, root, fonts, layout.Options{
@@ -118,12 +119,33 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if b.err != nil {
 		return nil, b.err
 	}
+	if checkSharedStyles && !b.shared.Intact() {
+		return nil, errSharedStyleWritten
+	}
 	doc, err := b.assemble(res, opts, root.Lang)
 	if err != nil {
 		return nil, err
 	}
 	doc.Warnings = append(doc.Warnings, drawings.Take()...)
 	return doc, nil
+}
+
+// checkSharedStyles makes a conversion fail with errSharedStyleWritten
+// when a style was written after it was shared, which every node holding
+// it would see. The package's tests set it.
+var checkSharedStyles bool
+
+// errSharedStyleWritten reports a style written after it was shared: a
+// converter bug.
+var errSharedStyleWritten = errors.New("a node's style was written after it was shared")
+
+// share returns the style of the conversion equal to st, adopting a copy
+// of st when there is none: st stays the caller's, the result is read
+// and never written. A node holds the result from the moment it is made,
+// and a converter that changes a node's style after copies the shared
+// value, changes the copy and shares it again.
+func (b *builder) share(st *css.Style) *css.Style {
+	return b.shared.ShareCopy(st)
 }
 
 // textBody returns the office:text of office:body (ODF 1.3, Part 3,

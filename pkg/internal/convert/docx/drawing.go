@@ -557,7 +557,7 @@ func (d *document) textBox(s *story, content *ooxml.Element, w, h float64, ss oo
 	if content != nil {
 		ts := &story{part: s.part, fields: s.fields, note: s.note}
 		d.nested++
-		kids = finish(d.blocks(ts, nil, content, depth+1))
+		kids = d.finish(d.blocks(ts, nil, content, depth+1))
 		d.nested--
 	}
 	n := &layout.Node{Kind: layout.Element, Style: bs, Children: kids}

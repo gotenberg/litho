@@ -138,9 +138,9 @@ func (b *builder) tableParts(el *odf.Element, tb *tableBuild, header bool) []*la
 		case "table-columns", "table-header-columns", "table-column-group":
 			out = append(out, b.tableParts(c, tb, header)...)
 		case "table-header-rows":
-			g := baseStyle()
+			g := baseValue()
 			g.Display = css.TableHeaderGroup
-			out = append(out, b.node(&layout.Node{Kind: layout.Element, Style: g, Role: "THead", Children: b.tableParts(c, tb, true)}))
+			out = append(out, b.node(&layout.Node{Kind: layout.Element, Style: b.share(&g), Role: "THead", Children: b.tableParts(c, tb, true)}))
 		case "table-rows", "table-row-group":
 			out = append(out, b.tableParts(c, tb, header)...)
 		case "table-row":
@@ -159,19 +159,20 @@ func (b *builder) tableParts(el *odf.Element, tb *tableBuild, header bool) []*la
 // column builds a table:table-column (9.1.6): a column node of its
 // style's width, spanning its repeat count.
 func (b *builder) column(c *odf.Element) *layout.Node {
-	st := baseStyle()
+	st := baseValue()
 	st.Display = css.TableColumn
 	props := b.styles.Resolve(b.scope, odf.FamilyColumn, c.A(odf.NSTable, "style-name"), odf.ColumnProps)
 	if w, ok := odf.Length(props.Get("style:column-width")); ok && w > 0 {
 		st.Width = css.Pts(w)
 	}
-	return b.node(&layout.Node{Kind: layout.Element, Style: st, Span: repeat(c, "number-columns-repeated")})
+	return b.node(&layout.Node{Kind: layout.Element, Style: b.share(&st), Span: repeat(c, "number-columns-repeated")})
 }
 
 // row builds a table:table-row (9.1.3): its height, minimum height,
 // keep-together and background, and its cells.
 func (b *builder) row(c *odf.Element, tb *tableBuild, header bool) *layout.Node {
-	st := baseStyle()
+	sv := baseValue()
+	st := &sv
 	st.Display = css.TableRow
 	props := b.styles.Resolve(b.scope, odf.FamilyRow, c.A(odf.NSTable, "style-name"), odf.RowProps)
 	if h, ok := odf.Length(props.Get("style:row-height")); ok && h > 0 {
@@ -194,7 +195,7 @@ func (b *builder) row(c *odf.Element, tb *tableBuild, header bool) *layout.Node 
 	if filled {
 		st.BackgroundColor = fill
 	}
-	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: "TR"})
+	n := b.node(&layout.Node{Kind: layout.Element, Style: b.share(st), Role: "TR"})
 	for _, cell := range c.Children {
 		if !cell.Is(odf.NSTable, "table-cell") {
 			// A covered cell is the room a spanning cell takes.
@@ -208,7 +209,9 @@ func (b *builder) row(c *odf.Element, tb *tableBuild, header bool) *layout.Node 
 			k := b.cell(cell, tb, header)
 			if filled {
 				// The marked view's ground covers the cell's own.
-				k.Style.BackgroundColor = css.Transparent
+				ks := *k.Style
+				ks.BackgroundColor = css.Transparent
+				k.Style = b.share(&ks)
 			}
 			n.Children = append(n.Children, k)
 		}
@@ -223,7 +226,8 @@ var cellAligns = map[string]css.AlignKind{"top": css.AlignTop, "middle": css.Mid
 // cell builds a table:table-cell (9.1.4): its spans, borders, padding,
 // background and vertical alignment, and its content.
 func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node {
-	st := baseStyle()
+	sv := baseValue()
+	st := &sv
 	st.Display = css.TableCell
 	props := b.styles.Resolve(b.scope, odf.FamilyCell, c.A(odf.NSTable, "style-name"), odf.CellProps)
 	var pad [4]float64
@@ -249,7 +253,7 @@ func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node
 	if header {
 		role = "TH"
 	}
-	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Role: role})
+	n := b.node(&layout.Node{Kind: layout.Element, Style: b.share(st), Role: role})
 	if header {
 		// The rows of table:table-header-rows repeat atop every page as
 		// the table's heading (ODF 1.3 Part 3, 9.1.12): their cells head

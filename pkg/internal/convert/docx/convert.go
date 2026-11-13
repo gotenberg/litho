@@ -2,6 +2,7 @@ package docx
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -90,7 +91,7 @@ func (d *document) convert() (*typeset.Document, error) {
 	}
 	// The tree is finished: its paragraphs and runs styled alike share
 	// one style.
-	layout.ShareStyles(d.ctx, tree)
+	layout.ShareStyles(d.ctx, tree, d.shared)
 	pg := d.newPages(secs)
 	first := pg.box(layout.PageInfo{Name: secs[0].name})
 	res, err := layout.Layout(d.ctx, tree, d.fonts, layout.Options{
@@ -108,7 +109,28 @@ func (d *document) convert() (*typeset.Document, error) {
 	if d.err != nil {
 		return nil, d.err
 	}
+	if checkSharedStyles && !d.shared.Intact() {
+		return nil, errSharedStyleWritten
+	}
 	return d.assemble(res)
+}
+
+// checkSharedStyles makes a conversion fail with errSharedStyleWritten
+// when a style was written after it was shared, which every node holding
+// it would see. The package's tests set it.
+var checkSharedStyles bool
+
+// errSharedStyleWritten reports a style written after it was shared: a
+// converter bug.
+var errSharedStyleWritten = errors.New("a node's style was written after it was shared")
+
+// share returns the style of the conversion equal to st, adopting a copy
+// of st when there is none: st stays the caller's, the result is read
+// and never written. A node holds the result from the moment it is made,
+// and a converter that changes a node's style after copies the shared
+// value, changes the copy and shares it again.
+func (d *document) share(st *css.Style) *css.Style {
+	return d.shared.ShareCopy(st)
 }
 
 // endnoteBlocks returns the endnote bodies, laid out after the text under a

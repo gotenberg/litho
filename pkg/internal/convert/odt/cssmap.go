@@ -25,7 +25,14 @@ import (
 //     alone, never between two Hangul syllables, where Han text in the
 //     same paragraphs breaks between any two ideographs.
 func baseStyle() *css.Style {
-	st := css.Initial()
+	st := baseValue()
+	return &st
+}
+
+// baseValue is [baseStyle] as a value, for a style built on the stack and
+// then shared ([builder.share]).
+func baseValue() css.Style {
+	st := css.InitialValue()
 	st.WhiteSpace = css.PreWrap
 	st.OverflowWrap = css.BreakWord
 	st.Orphans, st.Widows = 1, 1

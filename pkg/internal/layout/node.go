@@ -70,7 +70,9 @@ type Node struct {
 	// Style is the node's computed style. It is set on every node: a Text or
 	// LineBreak node shares its parent's, a Replaced node carries its own
 	// (its width, display and float are its own). The engine reads it and
-	// never writes it.
+	// never writes it. Nodes styled alike may hold one style ([css.Styles],
+	// [ShareStyles]): code that changes a node's style replaces it by a
+	// changed copy and never writes through it.
 	Style *css.Style
 	// Text is the characters of a Text node.
 	Text string

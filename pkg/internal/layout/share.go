@@ -12,20 +12,23 @@ const shareCheckEvery = 1024
 
 // ShareStyles makes the nodes of the tree under root that hold equal
 // styles hold one: it replaces each Node.Style, a marker's and a
-// footnote body's included, by the first style of the tree equal to it
-// (see [css.Styles]). Equal styles lay out alike, so the layout of the
-// tree does not change, and a converter that builds one style a node, most
-// of them alike, keeps the few distinct ones.
+// footnote body's included, by the style of the table tb equal to it
+// (see [css.Styles]), adopting the styles tb holds no equal of. A nil tb
+// shares through a table of its own. Equal styles lay out alike, so the
+// layout of the tree does not change, and a converter that builds one
+// style a node, most of them alike, keeps the few distinct ones.
 //
 // The caller calls it on a finished tree and writes no node's style
 // afterwards, since many nodes may share one style. It writes nothing
 // else, and stops early, leaving the rest of the tree as it was, when ctx
 // is done.
-func ShareStyles(ctx context.Context, root *Node) {
+func ShareStyles(ctx context.Context, root *Node, tb *css.Styles) {
 	if root == nil {
 		return
 	}
-	tb := css.NewStyles()
+	if tb == nil {
+		tb = css.NewStyles()
+	}
 	done := map[*css.Style]*css.Style{}
 	stack := []*Node{root}
 	for visited := 1; len(stack) > 0; visited++ {

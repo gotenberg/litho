@@ -362,11 +362,13 @@ func (d *document) body(root *ooxml.Element) []*section {
 		// A column break is a page break in a section of one column
 		// (17.18.3 ST_BrType column) and a break to the next column in
 		// one of several.
-		for _, st := range d.columnBreaks {
+		for _, n := range d.columnBreaks {
+			st := *n.Style
 			st.BreakBefore = css.Page
 			if s.cols > 1 {
 				st.BreakBefore = css.Column
 			}
+			n.Style = d.share(&st)
 		}
 		d.columnBreaks = nil
 		secs = append(secs, s)
@@ -508,6 +510,6 @@ func (d *document) sectionNode(s *section, extra []*layout.Node) *layout.Node {
 	case "evenPage":
 		st.BreakBefore = css.LeftPage
 	}
-	kids := append(finish(s.blocks), extra...)
+	kids := append(d.finish(s.blocks), extra...)
 	return &layout.Node{Kind: layout.Element, Style: st, ID: s.id, Children: kids}
 }
