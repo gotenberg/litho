@@ -1,5 +1,7 @@
 package html
 
+//go:generate go run ../../../../cmd/gen-quotes -out quotes_gen.go
+
 import (
 	"context"
 	"fmt"
@@ -453,7 +455,7 @@ func (b *builder) quote(n *dom.Node, ps *css.Style, k css.ContentItemKind) strin
 	if ps.Quotes.None {
 		pairs = nil
 	} else if pairs == nil {
-		pairs = langQuotes(b.langOf(n))
+		pairs = langQuotes(b.quoteLang(n))
 	}
 	pick := func(d, i int) string {
 		if len(pairs) == 0 {
@@ -480,6 +482,25 @@ func (b *builder) quote(n *dom.Node, ps *css.Style, k css.ContentItemKind) strin
 	return ""
 }
 
+// quoteLang returns the language whose marks quotes: auto draws in the
+// generated content of the element n: n's own, but for a q, whose marks
+// are those of its parent's language, so a quotation in another language
+// takes the marks of the text that quotes it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws „ “ around
+//     a q lang=fr in a p lang=de, with or without a ::before of its own,
+//     and « » around a span lang=fr in the same p and around a span inside
+//     the q; css/css-content/quotes-030 and quotes-match-parent-001 hold
+//     the same.
+func (b *builder) quoteLang(n *dom.Node) string {
+	if n != nil && n.Namespace == "" && n.DataAtom == atom.Q && n.Parent != nil && n.Parent.Type == dom.ElementNode {
+		return b.langOf(n.Parent)
+	}
+	return b.langOf(n)
+}
+
 // langOf returns the language of the element n: its own or its nearest
 // ancestor's lang attribute, else the document's.
 func (b *builder) langOf(n *dom.Node) string {
@@ -494,36 +515,29 @@ func (b *builder) langOf(n *dom.Node) string {
 	return b.scan.lang
 }
 
-// quoteTable maps a primary language subtag to its quotes, outer then
-// inner pair, after the Unicode CLDR delimiters data that browsers draw
-// for quotes: auto (CSS Generated Content 3, 2.1). Immutable lookup
-// table.
-var quoteTable = map[string][][2]string{
-	"en": {{"“", "”"}, {"‘", "’"}},
-	"fr": {{"« ", " »"}, {"“", "”"}},
-	"de": {{"„", "“"}, {"‚", "‘"}},
-	"cs": {{"„", "“"}, {"‚", "‘"}},
-	"es": {{"«", "»"}, {"“", "”"}},
-	"it": {{"«", "»"}, {"“", "”"}},
-	"pt": {{"“", "”"}, {"‘", "’"}},
-	"nl": {{"‘", "’"}, {"“", "”"}},
-	"ru": {{"«", "»"}, {"„", "“"}},
-	"pl": {{"„", "”"}, {"«", "»"}},
-	"sv": {{"”", "”"}, {"’", "’"}},
-	"ja": {{"「", "」"}, {"『", "』"}},
-	"zh": {{"“", "”"}, {"‘", "’"}},
-	"ko": {{"“", "”"}, {"‘", "’"}},
+// langQuotes returns the pairs quotes: auto draws for the language tag
+// lang (CSS Generated Content 3, 2.1, which leaves them to the user
+// agent): those of the Unicode CLDR locale of the tag, case and the
+// separator aside, else of the tag with its last subtag cut, as Chromium
+// looks them up in its ICU data, else the basic “ ” and ‘ ’.
+func langQuotes(lang string) [][2]string {
+	tag := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(lang)), "_", "-")
+	for tag != "" {
+		if i, ok := quoteLocales[tag]; ok {
+			return quoteSets[i][:]
+		}
+		cut := strings.LastIndexByte(tag, '-')
+		if cut < 0 {
+			break
+		}
+		tag = tag[:cut]
+	}
+	return quoteSets[basicQuotes][:]
 }
 
-// langQuotes returns the quotes of the language tag lang, English ones for
-// an unknown language.
-func langQuotes(lang string) [][2]string {
-	primary, _, _ := strings.Cut(strings.ToLower(lang), "-")
-	if q, ok := quoteTable[primary]; ok {
-		return q
-	}
-	return quoteTable["en"]
-}
+// basicQuotes is the index in quoteSets of the marks of a language
+// without its own: those of English, which CLDR's root gives.
+const basicQuotes = 0
 
 // anonInline returns the style of the anonymous inline replaced box of an
 // image in generated content: the pseudo-element's inherited properties,

@@ -62,7 +62,27 @@ func TestGenerated_Quotes(t *testing.T) {
 		<p id=en><q>a <q>b</q></q></p><p id=fr lang=fr><q>c</q></p><p id=n class=n><q>d<q>e<q>f</q></q></q></p>
 		<p id=z><span class=c>g</span><span class=c>h</span></p><p id=close><q style="quotes: none">i</q></p>`, Options{})
 	for id, want := range map[string]string{
-		"en": "“a ‘b’”", "fr": "« c »", "n": "<d{e{f}}>", "z": "“g”“h”", "close": "i",
+		"en": "“a ‘b’”", "fr": "«c»", "n": "<d{e{f}}>", "z": "“g”“h”", "close": "i",
+	} {
+		if got := treeText(byID(t, p.root, id)); got != want {
+			t.Errorf("#%s: %q, want %q", id, got, want)
+		}
+	}
+}
+
+// TestGenerated_QuotesByLanguage locks the marks quotes: auto draws: the
+// Unicode CLDR locale of the tag, then of the tag cut a subtag at a time,
+// then the basic ones (CSS Generated Content 3, 2.1, left to the user
+// agent), a q taking its parent's language, as Chromium draws them.
+func TestGenerated_QuotesByLanguage(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<style>.o::before { content: open-quote } .o::after { content: close-quote }</style>
+		<p id=de lang=de><q>a <q>b</q></q></p><p id=chde lang=DE_ch><q>c</q></p><p id=frch lang=fr-CH><q>d <q>e</q></q></p>
+		<p id=zhtw lang=zh-Hant-TW><q>f</q></p><p id=unknown lang=zz-Latn><q>g</q></p><p id=basic lang=ast><q>h</q></p>
+		<p id=qparent lang=de><q lang=fr>i <q>j</q></q></p><p id=span lang=de><span class=o lang=fr>k</span></p>`, Options{})
+	for id, want := range map[string]string{
+		"de": "„a ‚b‘“", "chde": "„c“", "frch": "«d ‹e›»", "zhtw": "「f」", "unknown": "“g”", "basic": "“h”",
+		"qparent": "„i «j»“", "span": "«k»",
 	} {
 		if got := treeText(byID(t, p.root, id)); got != want {
 			t.Errorf("#%s: %q, want %q", id, got, want)
