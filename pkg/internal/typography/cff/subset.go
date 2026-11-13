@@ -551,14 +551,14 @@ func (w *glyphWalker) run(cs []byte, depth int) {
 				w.lose()
 				return
 			}
-			w.push((float64(b)-247)*256 + float64(cs[i+1]) + 108)
+			w.push(float64((float64(b)-247)*256) + float64(cs[i+1]) + 108)
 			i += 2
 		case b >= 251 && b <= 254:
 			if i+1 >= len(cs) {
 				w.lose()
 				return
 			}
-			w.push(-(float64(b)-251)*256 - float64(cs[i+1]) - 108)
+			w.push(float64(-(float64(b)-251)*256) - float64(cs[i+1]) - 108)
 			i += 2
 		case b == csFixed:
 			if i+4 >= len(cs) {

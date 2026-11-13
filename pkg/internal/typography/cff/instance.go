@@ -188,7 +188,7 @@ func blendResolve(stack, scalars []float64) ([]float64, bool) {
 	for i := range n {
 		v := stack[base+i]
 		for j, s := range scalars {
-			v += stack[deltas+i*k+j] * s
+			v += float64(stack[deltas+i*k+j] * s)
 		}
 		stack[base+i] = v
 	}

@@ -820,7 +820,7 @@ done:
 	}
 	// Integer part.
 	for i < n && buf[i] >= '0' && buf[i] <= '9' {
-		val = val*10 + float64(buf[i]-'0')
+		val = float64(val*10) + float64(buf[i]-'0')
 		i++
 	}
 	// Fractional part.
@@ -828,7 +828,7 @@ done:
 		i++
 		frac := 0.1
 		for i < n && buf[i] >= '0' && buf[i] <= '9' {
-			val += float64(buf[i]-'0') * frac
+			val += float64(float64(buf[i]-'0') * frac)
 			frac /= 10
 			i++
 		}
@@ -866,7 +866,7 @@ done:
 		for e := 0; e > exp; e-- {
 			mult /= 10
 		}
-		val *= mult
+		val = float64(val * mult)
 	}
 	if neg {
 		val = -val
@@ -1178,13 +1178,13 @@ func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX float64, subrsO
 			if i+1 >= len(data) {
 				return
 			}
-			operands = append(operands, (float64(b)-247)*256+float64(data[i+1])+108)
+			operands = append(operands, float64((float64(b)-247)*256)+float64(data[i+1])+108)
 			i += 2
 		case b >= 251 && b <= 254:
 			if i+1 >= len(data) {
 				return
 			}
-			operands = append(operands, -(float64(b)-251)*256-float64(data[i+1])-108)
+			operands = append(operands, float64(-(float64(b)-251)*256)-float64(data[i+1])-108)
 			i += 2
 		case b == 28:
 			if i+2 >= len(data) {
@@ -1316,14 +1316,14 @@ func (s *widthScanner) scan(cs []byte, depth int) {
 				s.done = true
 				return
 			}
-			s.push((float64(b)-247)*256 + float64(cs[i+1]) + 108)
+			s.push(float64((float64(b)-247)*256) + float64(cs[i+1]) + 108)
 			i += 2
 		case b >= 251 && b <= 254:
 			if i+1 >= len(cs) {
 				s.done = true
 				return
 			}
-			s.push(-(float64(b)-251)*256 - float64(cs[i+1]) - 108)
+			s.push(float64(-(float64(b)-251)*256) - float64(cs[i+1]) - 108)
 			i += 2
 		case b == 255:
 			// 32-bit fixed point (16.16). The fraction belongs to the advance:

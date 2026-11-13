@@ -165,7 +165,7 @@ func (m *type2Machine) exec(cs []byte, depth int) error {
 			if i+1 >= len(cs) {
 				return errCharstringTruncated
 			}
-			if err := m.push((float64(b)-247)*256 + float64(cs[i+1]) + 108); err != nil {
+			if err := m.push(float64((float64(b)-247)*256) + float64(cs[i+1]) + 108); err != nil {
 				return err
 			}
 			i += 2
@@ -174,7 +174,7 @@ func (m *type2Machine) exec(cs []byte, depth int) error {
 			if i+1 >= len(cs) {
 				return errCharstringTruncated
 			}
-			if err := m.push(-(float64(b)-251)*256 - float64(cs[i+1]) - 108); err != nil {
+			if err := m.push(float64(-(float64(b)-251)*256) - float64(cs[i+1]) - 108); err != nil {
 				return err
 			}
 			i += 2
