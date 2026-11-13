@@ -17,11 +17,46 @@ type OfficeEffects struct {
 	// SoftEdge is the radius of the soft edge (20.1.8.53 softEdge), 0
 	// for none.
 	SoftEdge float64
+	// InnerShadow is the inner shadow (20.1.8.40 innerShdw): its Color,
+	// Blur, Dist and Dir; its other fields are unused.
+	InnerShadow *OfficeShadow
+	// Blur is the blur of what the source paints (20.1.8.15 blur).
+	Blur *OfficeBlur
+	// FillOverlay is a colour blended over what the source paints
+	// (20.1.8.29 fillOverlay).
+	FillOverlay *OfficeOverlay
 	// Rules names the program whose rules draw the effects: the zero
 	// value, [OfficeWord], for a WordprocessingML or SpreadsheetML
 	// document, [OfficePowerPoint] for a PresentationML one.
 	Rules OfficeRules
 }
+
+// OfficeBlur blurs what a source paints over Radius points; Grow lets the
+// blur reach past the source's bounds, which otherwise cut it.
+type OfficeBlur struct {
+	Radius float64
+	Grow   bool
+}
+
+// OfficeOverlay blends Color over what a source paints, where it paints,
+// by Blend.
+type OfficeOverlay struct {
+	Color Color
+	Blend OfficeBlend
+}
+
+// OfficeBlend is how an [OfficeOverlay] blends (ECMA-376 Part 1,
+// 20.1.10.11 ST_BlendMode).
+type OfficeBlend uint8
+
+// The overlay blends.
+const (
+	OfficeOver OfficeBlend = iota
+	OfficeMultiply
+	OfficeScreen
+	OfficeDarken
+	OfficeLighten
+)
 
 // OfficeRules names the Microsoft Office program whose rules draw a
 // document's effects: each program prints its own documents, and Word

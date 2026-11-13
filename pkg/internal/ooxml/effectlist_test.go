@@ -20,7 +20,8 @@ func TestParseEffectList_ReadsTheMembers(t *testing.T) {
 		`<a:glow rad="139700"><a:srgbClr val="FF0000"><a:alpha val="40000"/></a:srgbClr></a:glow>`+
 		`<a:outerShdw blurRad="76200" dist="38100" dir="2700000" sx="90000" sy="-30000" kx="-800400" algn="bl"><a:prstClr val="black"/></a:outerShdw>`+
 		`<a:reflection blurRad="6350" stA="52000" endPos="35000" dist="12700" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/>`+
-		`<a:softEdge rad="63500"/><a:innerShdw blurRad="63500"/><a:prstShdw prst="shdw1"/><a:blur rad="12700"/></a:effectLst></a:spPr>`)
+		`<a:softEdge rad="63500"/><a:innerShdw blurRad="63500" dist="38100" dir="13500000"><a:prstClr val="black"/></a:innerShdw><a:prstShdw prst="shdw1"/><a:blur rad="12700"/>`+
+		`<a:fillOverlay blend="mult"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:fillOverlay></a:effectLst></a:spPr>`)
 	l := ParseEffectList(spPr, nil, nil)
 	fx := l.Effects
 	if g := fx.Glow; g == nil || !near(g.Radius, 11) || g.Color != (css.Color{R: 1, A: 0.4}) {
@@ -35,7 +36,16 @@ func TestParseEffectList_ReadsTheMembers(t *testing.T) {
 	if !near(fx.SoftEdge, 5) {
 		t.Errorf("soft edge %v, want 5", fx.SoftEdge)
 	}
-	if want := []string{"inner shadow", "preset shadow", "blur"}; !slices.Equal(l.Undrawn, want) {
+	if s := fx.InnerShadow; s == nil || !near(s.Blur, 5) || !near(s.Dist, 3) || !near(s.Dir, 225) || s.Color.A != 1 {
+		t.Errorf("inner shadow %+v", fx.InnerShadow)
+	}
+	if b := fx.Blur; b == nil || !near(b.Radius, 1) || !b.Grow {
+		t.Errorf("blur %+v, want 1 point, growing", fx.Blur)
+	}
+	if o := fx.FillOverlay; o == nil || o.Blend != css.OfficeMultiply || o.Color != (css.Color{R: 1, A: 1}) {
+		t.Errorf("fill overlay %+v, want red multiplied", fx.FillOverlay)
+	}
+	if want := []string{"preset shadow"}; !slices.Equal(l.Undrawn, want) {
 		t.Errorf("undrawn %v, want %v", l.Undrawn, want)
 	}
 }

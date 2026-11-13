@@ -290,21 +290,8 @@ type Blur struct {
 type FillOverlay struct {
 	Color   css.Color
 	Opacity float64
-	Mode    OverlayMode
+	Mode    css.OfficeBlend
 }
-
-// OverlayMode is how a [FillOverlay] blends (ECMA-376 Part 1, 20.1.10.11
-// ST_BlendMode).
-type OverlayMode uint8
-
-// The overlay modes.
-const (
-	OverlayOver OverlayMode = iota
-	OverlayMultiply
-	OverlayScreen
-	OverlayDarken
-	OverlayLighten
-)
 
 // Glow is a shape's glow: a blurred halo of Radius points around the
 // shape's silhouette in Color at Opacity (ECMA-376 Part 1, 20.1.8.32 glow;

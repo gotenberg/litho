@@ -1,33 +1,42 @@
-// Package officefx draws the effects of Office drawings and text, the
-// outer shadow, the glow, the reflection and the soft edge, as Microsoft
-// Office prints them: bitmaps drawn by the effect engine (package effect)
-// under a shape, a picture or a run of glyphs that stays vector and text.
+// Package officefx draws the effects of Office drawings and text as
+// Microsoft Office prints them: bitmaps drawn by the effect engine
+// (package effect) under, over or in place of a shape, a picture or a run
+// of glyphs that otherwise stays vector and text.
 //
 // # Rules
 //
-// The falloffs are Microsoft's, one rule for Word, PowerPoint and Excel
-// (ECMA-376 Part 1, 20.1.8):
+// The chains are Microsoft's, one for Word, PowerPoint and Excel
+// (ECMA-376 Part 1, 20.1.8), with the measures they part on in [Rules]:
 //
-//   - outer shadow (20.1.8.45 outerShdw): the silhouette scaled by sx and
-//     sy and skewed by kx and ky about the point algn names, a Gaussian
+//   - outer shadow (20.1.8.45 outerShdw): the silhouette skewed by kx and
+//     ky, then scaled by sx and sy, about the point algn names, a Gaussian
 //     blur of a third of blurRad, moved dist along dir, in its colour;
-//   - glow (20.1.8.32): the silhouette made opaque, grown by half rad, a
-//     Gaussian blur of a sixth of rad, in its colour;
-//   - reflection (20.1.8.50): the content scaled and skewed about algn
+//   - glow (20.1.8.32): the silhouette made opaque, grown by a square then
+//     a disc, a Gaussian blur of a sixth of rad, in its colour
+//     ([Rules.GlowMask]);
+//   - reflection (20.1.8.50): the content skewed and scaled about algn
 //     (sy -100% mirrors it), moved dist along dir, a Gaussian blur of a
 //     third of blurRad, its opacity running from stA at stPos to endA at
 //     endPos of its extent along fadeDir;
 //   - soft edge (20.1.8.53): the content inside the silhouette made
-//     opaque, shrunk by rad and blurred by a third of rad.
+//     opaque, shrunk by a disc and blurred by a third of rad
+//     ([Rules.SoftFade]);
+//   - inner shadow (20.1.8.40 innerShdw): the silhouette's complement
+//     moved against dist along dir, a Gaussian blur of a third of
+//     blurRad, kept inside the silhouette ([InnerMask]);
+//   - blur (20.1.8.15) and fill overlay (20.1.8.29): the content drawn as
+//     one bitmap, blurred by a third of rad, the overlay's colour blended
+//     over it where it paints ([Content]).
 //
-// PowerPoint departs from these where [PowerPoint] says, and draws the
-// effects of a run of text from its glyphs as they paint, by its rules for
-// a shape's; Word draws a run's from its glyph outlines with tighter
-// falloffs ([Source.Text]). An effect list names its program
-// (css.OfficeEffects.Rules).
+// A run of text takes the outer shadow, the glow and the reflection.
+// PowerPoint draws them from its glyphs as they paint, by its rules for a
+// shape's; Word from their outlines, with tighter falloffs ([Source.Text]).
+// An effect list names its program (css.OfficeEffects.Rules).
 //
 // Each bitmap is drawn at the resolution [effect.Plan] chooses for its
-// blur, an RGB picture with a soft mask (ISO 32000-1, 11.6.5.3) in the
-// page model, and an artifact (ISO 14289-1, 7.1): it decorates content
-// that stays in the page as itself.
+// blur ([PlanGrid]), an RGB picture with a soft mask (ISO 32000-1,
+// 11.6.5.3) in the page model, with no structure parent: the caller
+// leaves it an artifact (ISO 14289-1, 7.1), as Word and PowerPoint mark a
+// run's, or hangs it from the element of what it decorates or replaces,
+// as Word tags a shape's.
 package officefx

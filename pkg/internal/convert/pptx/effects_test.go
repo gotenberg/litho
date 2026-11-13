@@ -148,7 +148,7 @@ func TestEffects_ContentEffects(t *testing.T) {
 	if s.Blur == nil || !nearly(s.Blur.Radius, 10) || s.Blur.Grow {
 		t.Errorf("blur %+v, want 10 pt without growing", s.Blur)
 	}
-	if fo := s.FillOverlay; fo == nil || fo.Mode != slides.OverlayMultiply || !colorNear(fo.Color, css.Color{R: 1, A: 1}) || !nearly(fo.Opacity, 0.5) {
+	if fo := s.FillOverlay; fo == nil || fo.Mode != css.OfficeMultiply || !colorNear(fo.Color, css.Color{R: 1, A: 1}) || !nearly(fo.Opacity, 0.5) {
 		t.Errorf("fill overlay %+v, want red at 50%% multiplied", fo)
 	}
 	rf := s.Reflection

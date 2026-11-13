@@ -134,6 +134,9 @@ func underEffects(ctx context.Context, leaves []leaf, rect typeset.Rect, pixels 
 		if l.fx.SoftEdge > 0 {
 			late.add(warn.ContentUnsupported, warn.Omitted, "a drawing's soft edge is not drawn")
 		}
+		if l.fx.InnerShadow != nil || l.fx.Blur != nil || l.fx.FillOverlay != nil {
+			late.add(warn.ContentUnsupported, warn.Omitted, "a drawing's inner shadow, blur or fill overlay is not drawn")
+		}
 		if len(frags) == 0 {
 			continue
 		}

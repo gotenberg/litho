@@ -56,8 +56,9 @@ func threeD(spPr *ooxml.Element) bool {
 
 // withEffects returns the picture pic with the effects fx drawn around
 // it: the reflection, shadow and glow under it, its silhouette the paths
-// it paints, or its box for a raster picture; a soft edge turns it into
-// a bitmap whose edge fades. pic itself when fx is nil.
+// it paints, or its box for a raster picture; a blur, a fill overlay or a
+// soft edge turn it into one bitmap ([officefx.Content]); an inner shadow
+// paints over its fills and under its lines. pic itself when fx is nil.
 func (d *document) withEffects(pic *layout.Picture, fx *css.OfficeEffects) *layout.Picture {
 	if fx == nil || pic == nil {
 		return pic
@@ -76,16 +77,35 @@ func (d *document) withEffects(pic *layout.Picture, fx *css.OfficeEffects) *layo
 		src := &officefx.Source{Paths: silhouette(content, r, pic.Vector == nil), Bounds: r, Content: content}
 		under, notes, err := officefx.Under(ctx, src, fx, &d.effectPixels)
 		d.effectFailed(notes, err)
-		if fx.SoftEdge > 0 {
-			soft, notes, err := officefx.SoftEdge(ctx, src, fx, &d.effectPixels)
-			d.effectFailed(notes, err)
-			if soft != nil {
-				content = []typeset.Fragment{soft}
-			}
+		inner, notes, err := officefx.Inner(ctx, src, fx, &d.effectPixels)
+		d.effectFailed(notes, err)
+		whole, notes, err := officefx.Content(ctx, src, fx, &d.effectPixels)
+		d.effectFailed(notes, err)
+		if whole != nil {
+			content = []typeset.Fragment{whole}
+		}
+		if inner != nil {
+			content = overFills(content, inner)
 		}
 		return append(under, content...)
 	}
 	return out
+}
+
+// overFills returns content with f painted over its fills and under its
+// first stroked path, the lines a shape paints after its fills.
+func overFills(content []typeset.Fragment, f typeset.Fragment) []typeset.Fragment {
+	i := len(content)
+	for k, c := range content {
+		if p, ok := c.(*typeset.Path); ok && p.Stroke != nil {
+			i = k
+			break
+		}
+	}
+	out := make([]typeset.Fragment, 0, len(content)+1)
+	out = append(out, content[:i]...)
+	out = append(out, f)
+	return append(out, content[i:]...)
 }
 
 // effectFailed settles what drawing a drawing's effects noted and its

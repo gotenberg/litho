@@ -14,8 +14,8 @@ import (
 type EffectList struct {
 	Effects css.OfficeEffects
 	// Undrawn names each member left out, in document order, at most once:
-	// "inner shadow", "preset shadow", "blur", "fill overlay", "effect
-	// container".
+	// "preset shadow", "fill overlay" (of a fill other than a solid
+	// colour), "effect container".
 	Undrawn []string
 }
 
@@ -298,14 +298,50 @@ func (l *EffectList) read(e *Element, local string, color func(*Element) (css.Co
 	case "softEdge":
 		l.Effects.SoftEdge = emu("rad")
 	case "innerShdw":
-		l.undrawn("inner shadow")
+		c, ok := color(e)
+		if !ok {
+			return
+		}
+		l.Effects.InnerShadow = &css.OfficeShadow{Color: c, Blur: emu("blurRad"), Dist: emu("dist"), Dir: deg("dir"), SX: 1, SY: 1}
 	case "prstShdw":
 		l.undrawn("preset shadow")
 	case "blur":
-		l.undrawn("blur")
+		if r := emu("rad"); r > 0 {
+			// 20.1.8.15 gives grow the default true.
+			v, ok := attr("grow")
+			l.Effects.Blur = &css.OfficeBlur{Radius: r, Grow: !ok || OnOff(v, true)}
+		}
 	case "fillOverlay":
-		l.undrawn("fill overlay")
+		l.fillOverlay(e, color, attr)
 	}
+}
+
+// fillOverlay reads a fill overlay e (20.1.8.29): its blend (20.1.10.11
+// ST_BlendMode, required) and its fill, of which a solid fill is drawn; a
+// fill of another kind is left undrawn.
+func (l *EffectList) fillOverlay(e *Element, color func(*Element) (css.Color, bool), attr func(string) (string, bool)) {
+	solid := e.Child(NSA, "solidFill")
+	if solid == nil {
+		l.undrawn("fill overlay")
+		return
+	}
+	c, ok := color(solid)
+	if !ok {
+		l.undrawn("fill overlay")
+		return
+	}
+	fo := &css.OfficeOverlay{Color: c}
+	switch v, _ := attr("blend"); v {
+	case "mult":
+		fo.Blend = css.OfficeMultiply
+	case "screen":
+		fo.Blend = css.OfficeScreen
+	case "darken":
+		fo.Blend = css.OfficeDarken
+	case "lighten":
+		fo.Blend = css.OfficeLighten
+	}
+	l.Effects.FillOverlay = fo
 }
 
 // undrawn records the member name once.

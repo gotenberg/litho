@@ -77,7 +77,7 @@ func TestUnder_SameBytesOnEveryArchitecture(t *testing.T) {
 		t.Fatal(err)
 	}
 	src.Content = []typeset.Fragment{&typeset.Path{Ops: src.Paths[0].Ops, Fill: &typeset.Fill{Color: typeset.Color{G: 1, A: 1}}}}
-	soft, _, err := SoftEdge(context.Background(), src, &css.OfficeEffects{SoftEdge: 4}, &px)
+	soft, _, err := Content(context.Background(), src, &css.OfficeEffects{SoftEdge: 4}, &px)
 	if err != nil {
 		t.Fatal(err)
 	}

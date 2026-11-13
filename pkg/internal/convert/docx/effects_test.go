@@ -1,6 +1,9 @@
 package docx
 
 import (
+	"context"
+	"image"
+	"image/color"
 	"math"
 	"testing"
 
@@ -109,5 +112,39 @@ func TestShapeEffectsFollowWord(t *testing.T) {
 				t.Errorf("deviation %.2f points, want %.2f within 15%%", sigma, tc.sigma)
 			}
 		})
+	}
+}
+
+// TestShapeContentEffects checks that an inner shadow paints a bitmap over
+// a shape's fill, which stays, and that a blur and a fill overlay draw the
+// shape as one bitmap in its place, the blur's grown by its radius, the
+// overlay's in the overlay multiplied over the fill.
+func TestShapeContentEffects(t *testing.T) {
+	inner := shapeDoc(t, `<a:effectLst><a:innerShdw blurRad="114300" dist="38100" dir="13500000"><a:prstClr val="black"><a:alpha val="60000"/></a:prstClr></a:innerShdw></a:effectLst>`)
+	if imgs := effectImages(inner); len(imgs) != 1 {
+		t.Errorf("inner shadow: %d images, want 1", len(imgs))
+	} else if sq := firstPath(t, inner); imgs[0].Rect.X > sq.X || imgs[0].Rect.X+imgs[0].Rect.Width < sq.X+sq.Width {
+		t.Errorf("inner shadow over %+v, want it over the square %+v", imgs[0].Rect, sq)
+	}
+	blur := shapeDoc(t, `<a:effectLst><a:blur rad="38100"/></a:effectLst>`)
+	imgs := effectImages(blur)
+	if len(imgs) != 1 {
+		t.Fatalf("blur: %d images, want the shape's bitmap", len(imgs))
+	}
+	if r := imgs[0].Rect; math.Abs(r.Width-78) > 0.5 || math.Abs(r.Height-78) > 0.5 {
+		t.Errorf("blurred bitmap %+v, want the 72 point square grown by 3 points", r)
+	}
+	overlay := shapeDoc(t, `<a:effectLst><a:fillOverlay blend="mult"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:fillOverlay></a:effectLst>`)
+	imgs = effectImages(overlay)
+	if len(imgs) != 1 {
+		t.Fatalf("fill overlay: %d images, want the shape's bitmap", len(imgs))
+	}
+	pix, err := imgs[0].Source.Decode(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := pix.Bounds()
+	if c := pix.(*image.NRGBA).NRGBAAt(b.Dx()/2, b.Dy()/2); c != (color.NRGBA{R: 0x44, A: 255}) {
+		t.Errorf("overlaid colour %v, want blue 4472C4 multiplied by red", c)
 	}
 }

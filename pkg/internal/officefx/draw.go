@@ -295,52 +295,6 @@ func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixel
 	return f, notes, err
 }
 
-// SoftEdge returns src's content as a bitmap whose edge fades inside the
-// silhouette by the soft edge of fx and the rules it names
-// ([Rules.SoftFade]), the content drawn through the fade. The bitmap
-// replaces the content; it takes no structure parent, which the caller
-// sets. It returns nil when the radius draws nothing, and the notes and
-// errors of [Under].
-func SoftEdge(ctx context.Context, src *Source, fx *css.OfficeEffects, pixels *effect.Page) (typeset.Fragment, Notes, error) {
-	r := radius(fx.SoftEdge)
-	if r <= 0 || len(src.Paths) == 0 || src.Content == nil {
-		return nil, Notes{}, nil
-	}
-	rules := rulesOf(fx.Rules)
-	sigma, morph := rules.SoftSize(r)
-	g, notes, ok := take(pathBounds(src.Paths), sigma, morph, pixels)
-	if !ok {
-		return nil, notes, nil
-	}
-	cov, err := g.Coverage(ctx, src.Paths, typeset.Identity)
-	if err != nil {
-		return nil, Notes{}, err
-	}
-	fade, err := rules.SoftFade(ctx, g, cov, r)
-	cov.Release()
-	if err != nil {
-		return nil, Notes{}, err
-	}
-	defer fade.Release()
-	ss, err := effect.Paint(ctx, []effect.Content{{Fragments: src.Content, Grid: g.Place(), W: g.W, H: g.H}})
-	if err != nil {
-		return nil, Notes{}, err
-	}
-	content := ss[0]
-	defer content.Release()
-	// The content's alpha holds the silhouette's coverage: it takes the
-	// fade alone.
-	if err := effect.Mask(ctx, content, fade); err != nil {
-		return nil, Notes{}, err
-	}
-	img, err := Straight(ctx, content)
-	if err != nil {
-		return nil, Notes{}, err
-	}
-	f, err := g.Image(ctx, img)
-	return f, notes, err
-}
-
 // cover returns a coverage surface of paths mapped by m, over area mapped
 // by m and grown by pad points, at the resolution of a blur of sigma; nil
 // when they cover nothing or the page's pixels refuse it, which the notes

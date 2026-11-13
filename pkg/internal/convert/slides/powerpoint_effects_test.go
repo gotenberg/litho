@@ -308,7 +308,7 @@ func TestShape_ContentEffects(t *testing.T) {
 	})
 	t.Run("fill overlay", func(t *testing.T) {
 		fill := Fill{Kind: FillSolid, Color: css.Color{R: 0x44 / 255.0, G: 0x72 / 255.0, B: 0xC4 / 255.0, A: 1}}
-		ps, _ := effectPage(t, EffectsPowerPoint, &Shape{Box: box, Geometry: rect, Fill: fill, FillOverlay: &FillOverlay{Color: css.Color{R: 1, A: 1}, Opacity: 1, Mode: OverlayMultiply}})
+		ps, _ := effectPage(t, EffectsPowerPoint, &Shape{Box: box, Geometry: rect, Fill: fill, FillOverlay: &FillOverlay{Color: css.Color{R: 1, A: 1}, Opacity: 1, Mode: css.OfficeMultiply}})
 		if len(ps) != 1 || ps[0].img == nil {
 			t.Fatalf("%d fragments, want the shape's bitmap alone", len(ps))
 		}

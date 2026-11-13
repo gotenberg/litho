@@ -1098,7 +1098,12 @@ func (b *builder) innerShadow(s *Shape, fills []typeset.Fragment, toSlide typese
 	if !ok {
 		return nil
 	}
-	mask, err := p.innerMask(b.ctx, g, dx, dy, sh.Blur)
+	cov, err := sil.coverage(b.ctx, g, typeset.Identity)
+	if err != nil {
+		return nil
+	}
+	mask, err := officefx.InnerMask(b.ctx, g, cov, dx, dy, sh.Blur)
+	cov.Release()
 	if err != nil {
 		return nil
 	}
@@ -1110,45 +1115,6 @@ func (b *builder) innerShadow(s *Shape, fills []typeset.Fragment, toSlide typese
 		return nil
 	}
 	return group(back, []typeset.Fragment{imageOn(b.ctx, g, img)})
-}
-
-// innerMask returns the coverage of an inner shadow on g: the silhouette's
-// complement moved by (-dx, -dy) points, blurred by a Gaussian of a third
-// of blur points, times the silhouette's coverage. The grid's margin past
-// the silhouette, at least the offset and the blur, reads as complement.
-func (p *effectPlan) innerMask(ctx context.Context, g officefx.Grid, dx, dy, blurRad float64) (*effect.Surface, error) {
-	cov, err := p.sil.coverage(ctx, g, typeset.Identity)
-	if err != nil {
-		return nil, err
-	}
-	defer cov.Release()
-	full, err := g.Surface(ctx, effect.Coverage)
-	if err != nil {
-		return nil, err
-	}
-	defer full.Release()
-	if err := effect.Flood(ctx, full, effect.Color{A: 255}); err != nil {
-		return nil, err
-	}
-	out, err := cov.Clone(ctx)
-	if err != nil {
-		return nil, err
-	}
-	steps := []func() error{
-		// The complement: full where the silhouette is not.
-		func() error { return effect.Composite(ctx, out, full, effect.Out) },
-		func() error { return effect.Offset(ctx, out, -g.Span(dx), -g.Span(dy)) },
-		func() error { return officefx.BlurEdge(ctx, out, effect.GaussianKernel(g.Span(blurRad/3))) },
-		// What the silhouette covers of the moved complement.
-		func() error { return effect.Composite(ctx, out, cov, effect.In) },
-	}
-	for _, step := range steps {
-		if err := step(); err != nil {
-			out.Release()
-			return nil, err
-		}
-	}
-	return out, nil
 }
 
 // reflection returns the bitmap of the shape's reflection in slide
@@ -1273,13 +1239,14 @@ func (p *effectPlan) contentBitmap(ctx context.Context, own []typeset.Fragment, 
 	out := surfaces[0]
 	defer out.Release()
 	if bl := s.Blur; bl != nil {
-		k := effect.GaussianKernel(g.Span(bl.Radius / 3))
-		if err := effect.Blur(ctx, out, k, k, effect.EdgeNone); err != nil {
+		if err := officefx.BlurContent(ctx, g, out, bl.Radius); err != nil {
 			return nil
 		}
 	}
 	if fo := s.FillOverlay; fo != nil {
-		if err := overlay(ctx, g, out, fo); err != nil {
+		col := effect.ColorOf(colorOf(fo.Color))
+		col.A = effect.ColorOf(typeset.Color{A: fo.Opacity}).A
+		if err := officefx.Overlay(ctx, g, out, col, officefx.BlendOf(fo.Mode)); err != nil {
 			return nil
 		}
 	}
@@ -1305,43 +1272,4 @@ func (p *effectPlan) fadeContent(ctx context.Context, g officefx.Grid, c *effect
 	}
 	defer fade.Release()
 	return effect.Mask(ctx, c, fade)
-}
-
-// overlayModes maps an overlay's mode to its blend mode (Compositing 1,
-// 5.3): over is normal, mult multiply.
-var overlayModes = [...]effect.BlendMode{
-	OverlayOver:     effect.Normal,
-	OverlayMultiply: effect.Multiply,
-	OverlayScreen:   effect.Screen,
-	OverlayDarken:   effect.Darken,
-	OverlayLighten:  effect.Lighten,
-}
-
-// overlay blends the colour of fo over the content surface c by fo's
-// mode, in place, and keeps the result where the content paints: the
-// colour blended over c, then c's alpha In it.
-func overlay(ctx context.Context, g officefx.Grid, c *effect.Surface, fo *FillOverlay) error {
-	col := effect.ColorOf(colorOf(fo.Color))
-	col.A = effect.ColorOf(typeset.Color{A: fo.Opacity}).A
-	layer, err := g.Surface(ctx, effect.RGBA)
-	if err != nil {
-		return err
-	}
-	defer layer.Release()
-	if err := effect.Flood(ctx, layer, col); err != nil {
-		return err
-	}
-	blended, err := c.Clone(ctx)
-	if err != nil {
-		return err
-	}
-	defer blended.Release()
-	mode := effect.Normal
-	if int(fo.Mode) < len(overlayModes) {
-		mode = overlayModes[fo.Mode]
-	}
-	if err := effect.Blend(ctx, blended, layer, mode); err != nil {
-		return err
-	}
-	return effect.Composite(ctx, c, blended, effect.In)
 }

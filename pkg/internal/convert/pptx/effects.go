@@ -466,13 +466,13 @@ func (r *reader) fillOverlay(e *ooxml.Element, color func(*ooxml.Element) (css.C
 	fo := &slides.FillOverlay{Color: c, Opacity: a}
 	switch attr(e, "blend") {
 	case "mult":
-		fo.Mode = slides.OverlayMultiply
+		fo.Mode = css.OfficeMultiply
 	case "screen":
-		fo.Mode = slides.OverlayScreen
+		fo.Mode = css.OfficeScreen
 	case "darken":
-		fo.Mode = slides.OverlayDarken
+		fo.Mode = css.OfficeDarken
 	case "lighten":
-		fo.Mode = slides.OverlayLighten
+		fo.Mode = css.OfficeLighten
 	}
 	return fo
 }
