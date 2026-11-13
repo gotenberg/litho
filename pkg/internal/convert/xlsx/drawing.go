@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -175,6 +176,23 @@ type leaf struct {
 	// box the rotation leaves, its width and height swapped for a quarter
 	// turn (ECMA-376 Part 1, 20.5.2.33, as Excel writes rotated shapes).
 	anchored bool
+	// fx are the leaf's effects, nil for none.
+	fx *css.OfficeEffects
+}
+
+// outer returns the box the leaf fills in the anchor's box rect.
+func (l *leaf) outer(rect typeset.Rect) typeset.Rect {
+	return typeset.Rect{X: rect.X + l.x*rect.Width, Y: rect.Y + l.y*rect.Height, Width: l.w * rect.Width, Height: l.h * rect.Height}
+}
+
+// box returns the leaf's own box in the anchor's box rect: its outer box,
+// turned a quarter for an anchored leaf turned a quarter.
+func (l *leaf) box(rect typeset.Rect) typeset.Rect {
+	outer := l.outer(rect)
+	if l.anchored && quarterTurn(l.rot) {
+		return typeset.Rect{X: outer.X + (outer.Width-outer.Height)/2, Y: outer.Y + (outer.Height-outer.Width)/2, Width: outer.Height, Height: outer.Width}
+	}
+	return outer
 }
 
 // content reads the object of anchor a of the drawing part into d: a
@@ -283,7 +301,7 @@ func (w *sheetReader) leaves(part string, obj *ooxml.Element, x, y, bw, bh float
 			r.warn(warn.PictureMissing, warn.Omitted, "a linked picture is left out: linked files are not read")
 		}
 		if pic != nil {
-			*out = append(*out, leaf{x: x, y: y, w: bw, h: bh, rot: ref.Rotation, flipH: ref.FlipH, flipV: ref.FlipV, pic: pic, crop: ref.Crop})
+			*out = append(*out, leaf{x: x, y: y, w: bw, h: bh, rot: ref.Rotation, flipH: ref.FlipH, flipV: ref.FlipV, pic: pic, crop: ref.Crop, fx: r.effectList(obj.Child(nsXDR, "spPr"), obj.Child(nsXDR, "style"))})
 		}
 	case "sp", "cxnSp":
 		spPr := obj.Child(nsXDR, "spPr")
@@ -299,7 +317,7 @@ func (w *sheetReader) leaves(part string, obj *ooxml.Element, x, y, bw, bh float
 				r.warn(warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("a shape's geometry is drawn in part: %v", err))
 			}
 		}
-		l := leaf{x: x, y: y, w: bw, h: bh, geom: g, style: ooxml.ParseShapeStyle(spPr, obj.Child(nsXDR, "style"), r.theme)}
+		l := leaf{x: x, y: y, w: bw, h: bh, geom: g, style: ooxml.ParseShapeStyle(spPr, obj.Child(nsXDR, "style"), r.theme), fx: r.effectList(spPr, obj.Child(nsXDR, "style"))}
 		l.text = r.shapeTextOf(obj.Child(nsXDR, "txBody"), obj.Child(nsXDR, "style"))
 		if xfrm := spPr.Child(ooxml.NSA, "xfrm"); xfrm != nil {
 			l.rot, l.flipH, l.flipV = ooxml.Transform2D(xfrm)
@@ -379,7 +397,7 @@ func emuAttr(e *ooxml.Element, local string) float64 {
 // outline. The picture's natural size is
 // the anchor's when the anchor gives one, else the lone picture's.
 func (r *reader) composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
-	if len(leaves) == 1 && leaves[0].pic != nil && leaves[0].rot == 0 && !leaves[0].flipH && !leaves[0].flipV {
+	if len(leaves) == 1 && leaves[0].pic != nil && leaves[0].rot == 0 && !leaves[0].flipH && !leaves[0].flipV && leaves[0].fx == nil {
 		pic := ooxml.Cropped(leaves[0].pic, leaves[0].crop)
 		if d.To == nil && (d.Width <= 0 || d.Height <= 0) {
 			d.Width, d.Height = pic.Width, pic.Height
@@ -392,14 +410,13 @@ func (r *reader) composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 	}
 	out := &layout.Picture{Width: w, Height: h}
 	fonts := r.fonts
+	fx := slices.ContainsFunc(leaves, func(l leaf) bool { return l.fx != nil })
+	pixels := &r.effectPixels
+	late, _ := r.ctx.Value(lateKey{}).(*lateWarnings) // a type assertion, nil when absent
 	out.Vector = func(ctx context.Context, rect typeset.Rect) []typeset.Fragment {
 		var frags []typeset.Fragment
 		for _, l := range leaves {
-			outer := typeset.Rect{X: rect.X + l.x*rect.Width, Y: rect.Y + l.y*rect.Height, Width: l.w * rect.Width, Height: l.h * rect.Height}
-			box := outer
-			if l.anchored && quarterTurn(l.rot) {
-				box = typeset.Rect{X: outer.X + (outer.Width-outer.Height)/2, Y: outer.Y + (outer.Height-outer.Width)/2, Width: outer.Height, Height: outer.Width}
-			}
+			outer, box := l.outer(rect), l.box(rect)
 			var content, upright []typeset.Fragment
 			if l.pic != nil {
 				pic := ooxml.Cropped(l.pic, l.crop)
@@ -427,7 +444,12 @@ func (r *reader) composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 			}
 			frags = append(frags, upright...)
 		}
-		return []typeset.Fragment{&typeset.Group{Clip: ooxml.RectPath(rect), Content: frags}}
+		clipped := &typeset.Group{Clip: ooxml.RectPath(rect), Content: frags}
+		if !fx {
+			return []typeset.Fragment{clipped}
+		}
+		// The effects reach past the anchor's box, outside its clip.
+		return append(underEffects(ctx, leaves, rect, pixels, late), clipped)
 	}
 	return out
 }

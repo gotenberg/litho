@@ -39,6 +39,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	// The readers add the SVG pictures they parse to the collector; laying
 	// the pages out draws them, which may add warnings the reader never saw.
 	ctx, drawings := svg.WithCollector(ctx)
+	ctx, late := withLateWarnings(ctx)
 	doc, warnings, err := load(ctx, src, fonts, opts)
 	if err != nil {
 		return nil, err
@@ -49,6 +50,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	}
 	out.Warnings = append(warnings, out.Warnings...)
 	out.Warnings = append(out.Warnings, drawings.Take()...)
+	out.Warnings = append(out.Warnings, late.take()...)
 	return out, nil
 }
 

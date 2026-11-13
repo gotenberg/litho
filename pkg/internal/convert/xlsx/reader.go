@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -82,6 +83,9 @@ type reader struct {
 	doc      *sheet.Document
 	warnings []typeset.Warning
 	warned   map[string]bool
+	// effectPixels counts the pixels of the drawings' effects, against
+	// effect.MaxPagePixels.
+	effectPixels effect.Page
 	// pictures caches decoded pictures by part name.
 	pictures map[string]*layout.Picture
 	// systemColors are the theme's scheme colours that name a system
