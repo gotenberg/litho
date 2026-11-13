@@ -790,8 +790,10 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 	l, r := bc.band(top, 0, left, right)
 	for pass := range maxFitPasses {
 		resolveEdges(b, cb.w)
-		e.resolveSizing(b, cblock{w: r - l, h: cb.h, hDefinite: cb.hDefinite}, -1, -1)
+		// The sizing keywords resolve in the space the margin box is laid
+		// out in, a stretch fit included (CSS Sizing 4, 6.1).
 		lo, hi, avail := besideFloats(b, l, r, left, right)
+		e.resolveSizing(b, cblock{w: avail, h: cb.h, hDefinite: cb.hDefinite}, -1, -1)
 		if b.kind == kindReplaced {
 			w, h := e.replacedSize(b, cb)
 			blockWidths(b, avail, rtl, w, true)

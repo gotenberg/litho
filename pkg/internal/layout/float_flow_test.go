@@ -368,3 +368,16 @@ func TestFloats_PendingFloatsMoveTogether(t *testing.T) {
 	}
 }
 
+func TestFormattingContextBesideFloat_StretchFillsMarginBoxSpace(t *testing.T) {
+	// CSS Sizing 4, 6.1: a stretch width fills the space the margin box is
+	// laid out in, which beside a float a positive margin may lie over:
+	// the border box fills the 100 beside the float.
+	stretch := func(s *css.Style) { s.Width = css.Dimension{Kind: css.Stretch} }
+	rb := boxes(t, doc(el(sty(width(200)),
+		el(sty(float(css.FloatLeft), width(100), height(50))),
+		el(sty(hidden, stretch, height(25), margin(0, 0, 0, 10), padding(0, 10, 0, 10))),
+	)), page(300, 300))
+	if got := rect(kid(t, rb, 0, 0, 1)); got[0] != 100 || got[2] != 100 {
+		t.Errorf("box at x %v width %v, want 100 and 100", got[0], got[2])
+	}
+}
