@@ -182,12 +182,12 @@ func (p *pageWriter) groupForm(ctx context.Context, content []Fragment, box [4]f
 // a reader shows. It reports false when nothing of content can show.
 func (p *pageWriter) groupBox(ctx context.Context, content []Fragment, clip *Path) ([4]float64, bool, error) {
 	c := p.ctm
-	det := c.A*c.D - c.B*c.C
+	det := float64(c.A*c.D) - float64(c.B*c.C)
 	if det == 0 || !numeric.Finite(det) {
 		return [4]float64{}, false, nil
 	}
 	inv := Matrix{A: c.D / det, B: -c.B / det, C: -c.C / det, D: c.A / det}
-	inv.E, inv.F = -(c.E*inv.A + c.F*inv.C), -(c.E*inv.B + c.F*inv.D)
+	inv.E, inv.F = -(float64(c.E*inv.A) + float64(c.F*inv.C)), -(float64(c.E*inv.B) + float64(c.F*inv.D))
 	view := newBounds()
 	view.box(inv, 0, 0, p.width, p.height)
 	box := [4]float64{view.x0, view.y0, view.x1, view.y1}
@@ -337,17 +337,17 @@ func (p *pageWriter) textBounds(ctx context.Context, b *bounds, v *Text, t Matri
 	if hs == 0 {
 		hs = 1
 	}
-	size, half := v.Size, v.Stroke/2
+	size, half := v.Size, float64(v.Stroke/2)
 	gx0, gx1 := math.Inf(1), math.Inf(-1)
 	for _, gy := range [2]float64{gb[1], gb[3]} {
 		for _, gx := range [2]float64{gb[0], gb[2]} {
-			x := size*hs*gx + size*v.Skew*gy
+			x := float64(size*hs*gx) + float64(size*v.Skew*gy)
 			gx0, gx1 = min(gx0, x), max(gx1, x)
 		}
 	}
-	gy0, gy1 := -size*gb[3], -size*gb[1]
+	gy0, gy1 := float64(-size*gb[3]), float64(-size*gb[1])
 	for _, g := range v.Glyphs {
-		x, y := v.Origin.X+g.X*hs, v.Origin.Y+g.Y
+		x, y := v.Origin.X+float64(g.X*hs), v.Origin.Y+g.Y
 		b.box(t, x+gx0-half, y+gy0-half, x+gx1+half, y+gy1+half)
 	}
 	return true, nil

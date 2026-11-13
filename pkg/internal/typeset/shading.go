@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
@@ -107,7 +108,7 @@ func (w *docWriter) shading(sh *Shading, domain [4]float64) shadingRefs {
 // functions of an axial shading do.
 func (w *docWriter) conicDict(sh *Shading, domain [4]float64, cs ast.PdfName, comp func(Color) ast.PdfArray) ast.PdfDict {
 	ux, uy := sh.To.X-sh.From.X, sh.To.Y-sh.From.Y
-	n := math.Hypot(ux, uy)
+	n := detmath.Hypot(ux, uy)
 	ux, uy = ux/n, uy/n
 	dom := ast.PdfArray{fine(domain[0]), fine(domain[1]), fine(domain[2]), fine(domain[3])}
 	ncomp := len(comp(Color{}))
@@ -301,12 +302,12 @@ func (p *pageWriter) shadingFill(ctx context.Context, pa *Path, opacity float64)
 // toward To.
 func conicDomain(sh *Shading, box [4]float64) [4]float64 {
 	ux, uy := sh.To.X-sh.From.X, sh.To.Y-sh.From.Y
-	n := math.Hypot(ux, uy)
+	n := detmath.Hypot(ux, uy)
 	ux, uy = ux/n, uy/n
 	out := [4]float64{math.Inf(1), math.Inf(-1), math.Inf(1), math.Inf(-1)}
 	for _, c := range [4][2]float64{{box[0], box[1]}, {box[2], box[1]}, {box[0], box[3]}, {box[2], box[3]}} {
 		dx, dy := c[0]-sh.From.X, c[1]-sh.From.Y
-		x, y := dx*ux+dy*uy, -dx*uy+dy*ux
+		x, y := float64(dx*ux)+float64(dy*uy), float64(-dx*uy)+float64(dy*ux)
 		out = [4]float64{min(out[0], x), max(out[1], x), min(out[2], y), max(out[3], y)}
 	}
 	return out
@@ -378,10 +379,10 @@ func (w *docWriter) maskForm(alpha ast.PdfIndirectRef, bbox [4]float64) ast.PdfI
 // covers the path in the shading's coordinates. Validate has checked m
 // invertible.
 func inverseBBox(ops []PathOp, off Point, m Matrix) [4]float64 {
-	det := m.A*m.D - m.B*m.C
+	det := float64(m.A*m.D) - float64(m.B*m.C)
 	inv := func(pt Point) (float64, float64) {
 		x, y := pt.X+off.X-m.E, pt.Y+off.Y-m.F
-		return (m.D*x - m.C*y) / det, (-m.B*x + m.A*y) / det
+		return (float64(m.D*x) - float64(m.C*y)) / det, (float64(-m.B*x) + float64(m.A*y)) / det
 	}
 	box := [4]float64{math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)}
 	for _, op := range ops {

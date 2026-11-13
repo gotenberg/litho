@@ -79,7 +79,7 @@ func textExtent(t *Text, off Point) float64 {
 	}
 	m := max(math.Abs(t.Size), math.Abs(t.Stroke))
 	for _, g := range t.Glyphs {
-		m = max(m, math.Abs(t.Origin.X+g.X*hs+off.X), math.Abs(t.Origin.Y+g.Y+off.Y))
+		m = max(m, math.Abs(t.Origin.X+float64(g.X*hs)+off.X), math.Abs(t.Origin.Y+g.Y+off.Y))
 	}
 	return m
 }

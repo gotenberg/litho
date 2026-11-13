@@ -182,7 +182,7 @@ type bounds struct{ x0, y0, x1, y1 float64 }
 
 // point adds (x, y) under t.
 func (b *bounds) point(t Matrix, x, y float64) {
-	px, py := t.A*x+t.C*y+t.E, t.B*x+t.D*y+t.F
+	px, py := float64(t.A*x)+float64(t.C*y)+t.E, float64(t.B*x)+float64(t.D*y)+t.F
 	if !numeric.Finite(px) || !numeric.Finite(py) {
 		return
 	}
@@ -258,24 +258,24 @@ func (m *Measurer) text(b *bounds, v *Text, t Matrix) {
 	if hs == 0 {
 		hs = 1
 	}
-	ascent := float64(f.Ascent()) / upem * v.Size
-	descent := -float64(f.Descent()) / upem * v.Size
+	ascent := float64(float64(f.Ascent()) / upem * v.Size)
+	descent := float64(-float64(f.Descent()) / upem * v.Size)
 	for _, g := range v.Glyphs {
 		w, _ := f.Width(g.GID)
-		x := v.Origin.X + g.X*hs
+		x := v.Origin.X + float64(g.X*hs)
 		y := v.Origin.Y + g.Y
-		b.box(t, x, y-ascent, x+float64(w)/upem*v.Size*hs, y+descent)
+		b.box(t, x, y-ascent, x+float64(float64(w)/upem*v.Size*hs), y+descent)
 	}
 }
 
 // multiply returns the transform that applies a, then b.
 func multiply(a, b Matrix) Matrix {
 	return Matrix{
-		A: a.A*b.A + a.B*b.C,
-		B: a.A*b.B + a.B*b.D,
-		C: a.C*b.A + a.D*b.C,
-		D: a.C*b.B + a.D*b.D,
-		E: a.E*b.A + a.F*b.C + b.E,
-		F: a.E*b.B + a.F*b.D + b.F,
+		A: float64(a.A*b.A) + float64(a.B*b.C),
+		B: float64(a.A*b.B) + float64(a.B*b.D),
+		C: float64(a.C*b.A) + float64(a.D*b.C),
+		D: float64(a.C*b.B) + float64(a.D*b.D),
+		E: float64(a.E*b.A) + float64(a.F*b.C) + b.E,
+		F: float64(a.E*b.B) + float64(a.F*b.D) + b.F,
 	}
 }

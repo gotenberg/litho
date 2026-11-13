@@ -314,7 +314,7 @@ func checkShading(sh *Shading) error {
 			return fmt.Errorf("%w: coordinates or transform not finite", ErrInvalidShading)
 		}
 	}
-	if det := m.A*m.D - m.B*m.C; det == 0 || !numeric.Finite(det) {
+	if det := float64(m.A*m.D) - float64(m.B*m.C); det == 0 || !numeric.Finite(det) {
 		return fmt.Errorf("%w: transform %v is not invertible", ErrInvalidShading, m)
 	}
 	switch sh.Kind {

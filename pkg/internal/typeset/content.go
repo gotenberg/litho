@@ -367,7 +367,7 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 		if !ok {
 			return fmt.Errorf("%w: glyph %d not in face %q", ErrInvalidFont, g.GID, t.Face.Key)
 		}
-		x, y := t.Origin.X+g.X*hs, t.Origin.Y+g.Y
+		x, y := t.Origin.X+float64(g.X*hs), t.Origin.Y+g.Y
 		if !started || round(y) != round(baseline) {
 			tj.end()
 			fmt.Fprintf(&p.buf, "%s 0 %s %s %s %s Tm\n", num(size), num(size*t.Skew), num(-size), num(x+p.off.X), num(y+p.off.Y))
@@ -378,10 +378,10 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 			// text matrix scales to size points and the horizontal
 			// scaling by hs.
 			tj.number(adj)
-			penX -= adj / 1000 * size * hs
+			penX -= float64(adj / 1000 * size * hs)
 		}
 		tj.code(fe.subset.Code(g.GID, gt.texts[i]))
-		penX += advance * size * hs
+		penX += float64(advance * size * hs)
 		if len(spans) > 0 && spans[0].end == i+1 {
 			tj.end()
 			p.buf.WriteString("EMC\n")
@@ -637,7 +637,7 @@ func (p *pageWriter) group(ctx context.Context, g *Group, opacity float64) error
 	saved, savedCTM, savedBlend := p.off, p.ctm, p.blend
 	m := g.Transform
 	e, f := m.E+p.off.X, m.F+p.off.Y
-	det := m.A*m.D - m.B*m.C
+	det := float64(m.A*m.D) - float64(m.B*m.C)
 	switch {
 	case m == (Matrix{}) || m == Identity:
 	case m.A == 1 && m.B == 0 && m.C == 0 && m.D == 1 && !p.onPage(e, f):
@@ -648,7 +648,7 @@ func (p *pageWriter) group(ctx context.Context, g *Group, opacity float64) error
 		// its inverse, folds into the content, which writes the numbers
 		// it still cannot hold under a scale of their own.
 		fmt.Fprintf(&p.buf, "%s %s %s %s 0 0 cm\n", num(m.A), num(m.B), num(m.C), num(m.D))
-		p.off = Point{X: (m.D*e - m.C*f) / det, Y: (m.A*f - m.B*e) / det}
+		p.off = Point{X: (float64(m.D*e) - float64(m.C*f)) / det, Y: (float64(m.A*f) - float64(m.B*e)) / det}
 		p.ctm = multiply(Matrix{A: round(m.A), B: round(m.B), C: round(m.C), D: round(m.D)}, p.ctm)
 	default:
 		fmt.Fprintf(&p.buf, "%s %s %s %s %s %s cm\n", num(m.A), num(m.B), num(m.C), num(m.D), num(e), num(f))
