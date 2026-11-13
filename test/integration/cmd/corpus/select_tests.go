@@ -232,6 +232,7 @@ var wptDirs = []string{
 	"css/css-inline", "css/css-position", "css/css-transforms", "css/css-ruby", "css/css-content",
 	"css/css-counter-styles", "css/css-values", "css/css-variables", "css/selectors", "css/css-color",
 	"css/css-images", "css/css-display", "css/css-pseudo", "css/css-masking", "css/compositing",
+	"css/css-logical", "css/css-box",
 }
 
 // wptAreaCap bounds the tests one area contributes, an area being a CSS2
@@ -242,13 +243,13 @@ var wptDirs = []string{
 var wptAreaCap = map[string]int{
 	"css/CSS2": 24, "css/css-backgrounds": 80, "css/css-text": 120, "css/css-lists": 40, "css/css-page": 40,
 	"css/css-break": 40, "css/css-flexbox": 200, "css/css-align": 20, "css/css-grid": 200, "css/css-multicol": 80,
-	"css/css-writing-modes": 60, "css/css-overflow": 40, "css/css-text-decor": 40, "css/css-sizing": 40,
+	"css/css-writing-modes": 60, "css/css-overflow": 40, "css/css-text-decor": 40, "css/css-sizing": 80,
 	"css/CSS2/tables": 100, "css/CSS2/fonts": 40, "css/CSS2/positioning": 40, "css/CSS2/generated-content": 60,
 	"css/CSS2/selectors": 40, "css/css-tables": 80, "css/css-fonts": 300, "css/css-inline": 60,
 	"css/css-position": 60, "css/css-transforms": 100, "css/css-ruby": 10, "css/css-content": 40,
 	"css/css-counter-styles": 40, "css/css-values": 60, "css/css-variables": 60, "css/selectors": 100,
 	"css/css-color": 60, "css/css-images": 60, "css/css-display": 60, "css/css-pseudo": 100,
-	"css/css-masking": 120, "css/compositing": 60,
+	"css/css-masking": 120, "css/compositing": 60, "css/css-logical": 40, "css/css-box": 40,
 }
 
 func compileAll(flags string, patterns ...string) []*regexp.Regexp {
@@ -302,6 +303,16 @@ var wptLayoutForbidden = compileAll("(?i)",
 	`flex-wrap\s*:\s*balance`, `flex-line-count`)
 
 var wptWritingMode = regexp.MustCompile(`(?i)writing-mode\s*:\s*`)
+
+// wptAspectRatio finds the aspect-ratio property, which the sizing area
+// forbids and its probe requires.
+var wptAspectRatio = regexp.MustCompile(`(?i)\baspect-ratio\b`)
+
+// wptRatioForbidden are the rules of wptLayoutForbidden but aspect-ratio,
+// for the probe of the aspect-ratio tests.
+var wptRatioForbidden = slices.DeleteFunc(slices.Clone(wptLayoutForbidden), func(re *regexp.Regexp) bool {
+	return re.String() == wptAspectRatio.String()
+})
 
 // wptOtherWritingMode reports a writing-mode declaration whose value is not
 // horizontal-tb.
@@ -363,17 +374,20 @@ var wptAreas = map[string]wptAreaRules{
 	"css/css-pseudo":             wptFontFaceRules,
 	"css/css-masking":            wptFontFaceRules,
 	"css/compositing":            wptFontFaceRules,
+	"css/css-logical":            {forbidden: wptLayoutForbidden, lift: []*regexp.Regexp{wptVertical, wptSideways}},
+	"css/css-box":                {forbidden: wptLayoutForbidden, writingMode: true},
 }
 
 // wptProbe is a part of an area a rule singles out and caps on its own: the
 // tests of a feature the converter does not lay out, of which a few say as
 // much as many would, or of one the area's cap would leave out. Its tests
 // are not candidates of the area's own rules, which forbid what the probe
-// requires.
+// requires. It walks the area's directory dir, or walk when set: a
+// subdirectory of dir the area itself skips.
 type wptProbe struct {
-	name, dir string
-	rules     wptAreaRules
-	cap       int
+	name, dir, walk string
+	rules           wptAreaRules
+	cap             int
 }
 
 var wptProbes = []wptProbe{
@@ -391,6 +405,10 @@ var wptProbes = []wptProbe{
 	{
 		name: "css/CSS2/selectors first-line", dir: "css/CSS2/selectors", cap: 10,
 		rules: wptAreaRules{lift: wptFontFaceRules.lift, required: wptFirstLine},
+	},
+	{
+		name: "css/css-sizing aspect-ratio", dir: "css/css-sizing", walk: "css/css-sizing/aspect-ratio", cap: 60,
+		rules: wptAreaRules{forbidden: wptRatioForbidden, writingMode: true, required: wptAspectRatio},
 	},
 }
 
@@ -758,7 +776,11 @@ func selectWPT(_ context.Context, checkout, _, dir string, _ map[string]string) 
 	}
 	limits := maps.Clone(wptAreaCap)
 	for _, p := range wptProbes {
-		err := walkWPT(checkout, p.dir, func(rel string) error {
+		dir := p.dir
+		if p.walk != "" {
+			dir = p.walk
+		}
+		err := walkWPT(checkout, dir, func(rel string) error {
 			e, why, err := wptCandidate(checkout, rel, p.rules)
 			if err == nil && why == "" {
 				byArea[p.name] = append(byArea[p.name], e)

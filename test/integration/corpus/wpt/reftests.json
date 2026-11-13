@@ -8746,6 +8746,162 @@
     "resources": []
   },
   {
+    "id": "css/css-box/margin-trim/block-container-block-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-box/margin-trim/block-container-block-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-box/margin-trim/block-container-block-end-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-box/margin-trim/block-container-block-end-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-box/margin-trim/block-container-block-end-collapsed-margins.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-box/margin-trim/block-container-block-end-collapsed-margins-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-box/margin-trim/block-container-block-end-self-collapsing-item-has-larger-block-end.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-box/margin-trim/block-container-block-end-self-collapsing-item-has-larger-block-end-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-box/margin-trim/block-container-block-end-self-collapsing-item-has-larger-block-start.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-box/margin-trim/block-container-block-end-self-collapsing-item-has-larger-block-start-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-box/margin-trim/block-container-block-start-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-box/margin-trim/block-container-block-start-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-box/margin-trim/block-container-block-start-collapsed-margins.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-box/margin-trim/block-container-block-start-collapsed-margins-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-box/margin-trim/block-container-block-start-self-collapsing-item-has-larger-block-end.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-box/margin-trim/block-container-block-start-self-collapsing-item-has-larger-block-end-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-box/margin-trim/block-container-block-start-self-collapsing-item-larger-block-start.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-box/margin-trim/block-container-block-start-self-collapsing-item-larger-block-start-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-box/margin-trim/block-container-non-adjoining-item.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-box/margin-trim/block-container-non-adjoining-item-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-break/abspos-002-print.html",
     "print": true,
     "refs": [
@@ -21648,6 +21804,66 @@
     "resources": []
   },
   {
+    "id": "css/css-logical/cascading-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-logical/cascading-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-logical/logical-values-float-clear-1.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-logical/reference/logical-values-float-clear-1-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-logical/logical-values-float-clear-2.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-logical/reference/logical-values-float-clear-2-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-logical/logical-values-float-clear-3.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-logical/reference/logical-values-float-clear-3-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-logical/logical-values-float-clear-4.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-logical/reference/logical-values-float-clear-4-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-masking/clip-path/clip-path-blending-offset.html",
     "print": false,
     "refs": [
@@ -26744,6 +26960,42 @@
     "resources": []
   },
   {
+    "id": "css/css-sizing/abspos-auto-sizing-fit-content-percentage-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/abspos-auto-sizing-fit-content-percentage-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/abspos-auto-sizing-fit-content-percentage-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-sizing/abspos-auto-sizing-fit-content-percentage-004.html",
     "print": false,
     "refs": [
@@ -26757,6 +27009,18 @@
   },
   {
     "id": "css/css-sizing/abspos-auto-sizing-fit-content-percentage-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/abspos-auto-sizing-fit-content-percentage-006.html",
     "print": false,
     "refs": [
       {
@@ -26790,6 +27054,270 @@
       }
     ],
     "resources": []
+  },
+  {
+    "id": "css/css-sizing/abspos-stretch-indefinite-cb.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/abspos-stretch-indefinite-cb-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/abspos-stretch-replaced-percentage-child.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/abspos-stretch-replaced-percentage-child-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/block-aspect-ratio-011.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/aspect-ratio/reference/ref-square-with-vertical-scrollbar.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/block-aspect-ratio-012.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/aspect-ratio/reference/ref-square-with-scrollbar.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/block-aspect-ratio-056.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/flex-aspect-ratio-025.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-200px-square.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/flex-aspect-ratio-026.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-200px-square.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/flex-aspect-ratio-045.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/flex-aspect-ratio-046.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/flex-aspect-ratio-047.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/flex-aspect-ratio-048.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/flex-aspect-ratio-049.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/flex-aspect-ratio-050.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/flex-aspect-ratio-051.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/flex-aspect-ratio-052.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/flex-aspect-ratio-053.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/flex-aspect-ratio-054.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/flex-aspect-ratio-055.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": ["css/css-sizing/aspect-ratio/support/20x50-green.png"]
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/floats-aspect-ratio-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/aspect-ratio/floats-aspect-ratio-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/intrinsic-size-017.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": ["css/css-sizing/aspect-ratio/support/200x200-green.png"]
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/intrinsic-size-018.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": ["css/css-sizing/aspect-ratio/support/200x200-green.png"]
+  },
+  {
+    "id": "css/css-sizing/aspect-ratio/intrinsic-size-019.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": ["css/css-sizing/aspect-ratio/support/200x200-green.png"]
   },
   {
     "id": "css/css-sizing/auto-scrollbar-inside-stf-abspos.html",
@@ -26828,6 +27356,18 @@
     "resources": []
   },
   {
+    "id": "css/css-sizing/block-size-with-min-or-max-content-4.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-sizing/block-size-with-min-or-max-content-5.html",
     "print": false,
     "refs": [
@@ -26852,6 +27392,18 @@
     "resources": []
   },
   {
+    "id": "css/css-sizing/block-size-with-min-or-max-content-7.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-sizing/border-box-and-max-content-001.html",
     "print": false,
     "refs": [
@@ -26864,11 +27416,77 @@
     "resources": []
   },
   {
+    "id": "css/css-sizing/border-box-and-max-content-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/border-box-and-max-content-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-sizing/box-sizing-replaced-001.xht",
     "print": false,
     "refs": [
       {
         "path": "css/css-sizing/box-sizing-replaced-001-ref.xht",
+        "rel": "match",
+        "resources": [
+          "css/css-sizing/support/replaced-min-max-1.png",
+          "css/css-sizing/support/replaced-min-max-10.png",
+          "css/css-sizing/support/replaced-min-max-11.png",
+          "css/css-sizing/support/replaced-min-max-12.png",
+          "css/css-sizing/support/replaced-min-max-13.png",
+          "css/css-sizing/support/replaced-min-max-14.png",
+          "css/css-sizing/support/replaced-min-max-15.png",
+          "css/css-sizing/support/replaced-min-max-16.png",
+          "css/css-sizing/support/replaced-min-max-17.png",
+          "css/css-sizing/support/replaced-min-max-18.png",
+          "css/css-sizing/support/replaced-min-max-19.png",
+          "css/css-sizing/support/replaced-min-max-2.png",
+          "css/css-sizing/support/replaced-min-max-3.png",
+          "css/css-sizing/support/replaced-min-max-4.png",
+          "css/css-sizing/support/replaced-min-max-5.png",
+          "css/css-sizing/support/replaced-min-max-6.png",
+          "css/css-sizing/support/replaced-min-max-7.png",
+          "css/css-sizing/support/replaced-min-max-8.png",
+          "css/css-sizing/support/replaced-min-max-9.png",
+          "css/css-sizing/support/replaced-min-max.png"
+        ]
+      }
+    ],
+    "resources": [
+      "css/css-sizing/support/replaced-min-max-1.png",
+      "css/css-sizing/support/replaced-min-max-10.png",
+      "css/css-sizing/support/replaced-min-max-11.png",
+      "css/css-sizing/support/replaced-min-max-12.png",
+      "css/css-sizing/support/replaced-min-max-13.png",
+      "css/css-sizing/support/replaced-min-max-14.png",
+      "css/css-sizing/support/replaced-min-max-15.png",
+      "css/css-sizing/support/replaced-min-max-16.png",
+      "css/css-sizing/support/replaced-min-max-17.png",
+      "css/css-sizing/support/replaced-min-max-18.png",
+      "css/css-sizing/support/replaced-min-max-19.png",
+      "css/css-sizing/support/replaced-min-max-2.png",
+      "css/css-sizing/support/replaced-min-max-3.png",
+      "css/css-sizing/support/replaced-min-max-4.png",
+      "css/css-sizing/support/replaced-min-max-5.png",
+      "css/css-sizing/support/replaced-min-max-6.png",
+      "css/css-sizing/support/replaced-min-max-7.png",
+      "css/css-sizing/support/replaced-min-max-8.png",
+      "css/css-sizing/support/replaced-min-max-9.png",
+      "css/css-sizing/support/replaced-min-max.png"
+    ]
+  },
+  {
+    "id": "css/css-sizing/box-sizing-replaced-002.xht",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/box-sizing-replaced-002-ref.xht",
         "rel": "match",
         "resources": [
           "css/css-sizing/support/replaced-min-max-1.png",
@@ -27032,6 +27650,18 @@
     "resources": []
   },
   {
+    "id": "css/css-sizing/clone-nowrap-intrinsic-size-bidi.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/clone-nowrap-intrinsic-size-bidi-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-sizing/clone-nowrap-intrinsic-size.html",
     "print": false,
     "refs": [
@@ -27092,6 +27722,18 @@
     "resources": ["css/css-sizing/support/min-content-max-content.css"]
   },
   {
+    "id": "css/css-sizing/hori-block-size-small-or-larger-than-container-with-min-or-max-content-2a.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/hori-block-size-small-or-larger-than-container-with-min-or-max-content-2-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": ["css/css-sizing/support/min-content-max-content.css"]
+  },
+  {
     "id": "css/css-sizing/hori-block-size-small-or-larger-than-container-with-min-or-max-content-2b.html",
     "print": false,
     "refs": [
@@ -27104,7 +27746,43 @@
     "resources": ["css/css-sizing/support/min-content-max-content.css"]
   },
   {
+    "id": "css/css-sizing/inline-intrinsic-size-calc.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/inline-intrinsic-size-calc-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-sizing/intrinsic-height-abspos-percentage-child-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/intrinsic-height-abspos-percentage-child-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/intrinsic-height-abspos-percentage-child-004.html",
     "print": false,
     "refs": [
       {
@@ -27164,6 +27842,54 @@
     "resources": []
   },
   {
+    "id": "css/css-sizing/intrinsic-percent-non-replaced-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/intrinsic-percent-non-replaced-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/intrinsic-percent-non-replaced-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/intrinsic-percent-non-replaced-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/intrinsic-size-min-content-box-sizing.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/intrinsic-size-min-content-box-sizing-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/replaced-max-width-with-height-fit-content.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/replaced-max-width-with-height-fit-content-ref.html",
+        "rel": "match",
+        "resources": ["css/css-sizing/support/replaced-min-max-2.png"]
+      }
+    ],
+    "resources": ["css/css-sizing/support/replaced-min-max-2.png"]
+  },
+  {
     "id": "css/css-sizing/replaced-max-width-with-height-max-content.html",
     "print": false,
     "refs": [
@@ -27186,6 +27912,18 @@
       }
     ],
     "resources": ["css/css-sizing/support/replaced-min-max-2.png"]
+  },
+  {
+    "id": "css/css-sizing/shrink-to-fit-sizing-max-width-min-content.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
   },
   {
     "id": "css/css-sizing/slice-intrinsic-size.html",
@@ -27229,6 +27967,18 @@
     "refs": [
       {
         "path": "css/css-sizing/stretch/block-height-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/stretch/fixed-table-1.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
         "rel": "match",
         "resources": []
       }
@@ -27296,11 +28046,35 @@
     "resources": []
   },
   {
+    "id": "css/css-sizing/stretch/stretch-float.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/stretch/stretch-float-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-sizing/table-child-percentage-height-with-border-box.html",
     "print": false,
     "refs": [
       {
         "path": "css/css-sizing/table-child-percentage-height-with-border-box-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-sizing/thin-element-render.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-sizing/thin-element-render-ref.html",
         "rel": "match",
         "resources": []
       }
