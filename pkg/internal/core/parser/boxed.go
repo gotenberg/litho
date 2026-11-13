@@ -47,7 +47,7 @@ func (p *Parser) boxedSlot(text string) int {
 		h ^= uint32(text[i])
 		h *= 16777619
 	}
-	return int(h & (boxedSlots - 1))
+	return int(h & (boxedSlots - 1)) // fits int: masked below boxedSlots
 }
 
 // rememberedObject returns the object read from text at slot, if the parser

@@ -225,10 +225,10 @@ func packGlyph(gid uint16, cluster, n int) uint64 {
 func (g *shapedGlyph) gid() uint16 { return uint16(g.packed >> (2 * clusterBits)) }
 
 // cluster returns the first character of the glyph's cluster.
-func (g *shapedGlyph) cluster() int { return int(g.packed & clusterMask) }
+func (g *shapedGlyph) cluster() int { return int(g.packed & clusterMask) } // fits int: masked to clusterBits, 24 bits
 
 // clusterLen returns the number of characters of the glyph's cluster.
-func (g *shapedGlyph) clusterLen() int { return int(g.packed >> clusterBits & clusterMask) }
+func (g *shapedGlyph) clusterLen() int { return int(g.packed >> clusterBits & clusterMask) } // fits int: masked to clusterBits, 24 bits
 
 // Shape shapes runs into one bidirectional paragraph for a caller that
 // breaks lines itself: the HTML layout engine, which needs per-line widths,
