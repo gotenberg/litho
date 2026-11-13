@@ -1316,7 +1316,10 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 	split := func(u rowUnit, force bool) bool {
 		r := u.lo
 		rowTop := y
-		cells := td.splitCells(r)
+		// A row that must break where it is, taller than what is left of
+		// its page, may be cut through a blank height; one that may move
+		// to the next page breaks only at its break points.
+		cells := td.splitCells(r, e.opts.BrowserRules && force)
 		bottom := func() float64 {
 			b := rowH[r]
 			for _, sc := range cells {

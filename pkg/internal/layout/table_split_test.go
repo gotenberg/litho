@@ -336,3 +336,35 @@ func TestTable_ExactHeightRow(t *testing.T) {
 		BB__
 		____`, wpLetters)
 }
+
+func TestTables_PageEdgeCutsABlankHeight(t *testing.T) {
+	// CSS Fragmentation 3, 4.1: in a row that starts its page and is
+	// taller than it, a block of specified height whose lines lie above
+	// the page edge breaks there; as Chromium breaks it, the rest of its
+	// height continues on the next page rather than moving it whole.
+	c := td(mods(valign(css.AlignTop)), "")
+	c.Children = []*Node{el(sty(width(4), height(6), bg(blue))), el(sty(width(4), height(6), bg(red)))}
+	root := doc(table(mods(spacing(0, 0)), tr(nil, c)))
+	res := runWith(t, root, Options{Page: page(4, 10), BrowserRules: true})
+	assertPages(t, res, 10, `
+		BBBB
+		BBBB
+		BBBB
+		BBBB
+		BBBB
+		BBBB
+		RRRR
+		RRRR
+		RRRR
+		RRRR
+		RRRR
+		RRRR
+		____
+		____
+		____
+		____
+		____
+		____
+		____
+		____`, nil)
+}

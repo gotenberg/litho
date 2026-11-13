@@ -56,6 +56,28 @@ func collectBreaks(b *box, out *[]breakCand, depth int) {
 	}
 }
 
+// wholeSpans calls f with the vertical extent of each line box and each
+// box that does not break inside the block container b: a replaced box, a
+// float, a nested table, a block that avoids a break inside it.
+func wholeSpans(b *box, f func(y0, y1 float64), depth int) {
+	if depth > maxTreeDepth {
+		return
+	}
+	for _, l := range b.lines {
+		f(l.y, l.y+l.h)
+	}
+	for _, k := range b.kids {
+		if k.inline || k.abs || !k.laidOut || k.kind != kindBlock && k.kind != kindReplaced {
+			continue
+		}
+		if k.kind == kindReplaced || k.float != css.FloatNone || k.tpart != partNone || avoidsInside(k) {
+			f(k.y, k.y+k.borderH())
+			continue
+		}
+		wholeSpans(k, f, depth+1)
+	}
+}
+
 // insertStrut opens a gap of d in the box b at flow position cut: every
 // line box and box at or below cut moves down by d, and every box that
 // spans cut grows by d (CSS Fragmentation 3, 4.4: the content after a
@@ -144,12 +166,20 @@ type splitCell struct {
 	// break keeps for its bottom border and padding before a cut, and for
 	// its top ones after it.
 	tail, head float64
+	// whole are the spans of the cell's content nothing cuts through: its
+	// line boxes and its monolithic boxes, relative to the row top. When
+	// blank is set, a page edge outside them cuts the blank height of a
+	// block (see [chooseCuts]).
+	whole [][2]float64
+	blank bool
 }
 
 // splitCells returns the cells of row r of td to split, aligned at their
 // top or on the row's baseline: a cell broken across pages does not
-// align in the middle or at the bottom.
-func (td *tableData) splitCells(r int) []*splitCell {
+// align in the middle or at the bottom. blank lets a page edge cut the
+// blank height of a block in a cell, as Chromium cuts a row that must
+// break on its page.
+func (td *tableData) splitCells(r int, blank bool) []*splitCell {
 	var out []*splitCell
 	for _, c := range td.cells {
 		cd := c.cell
@@ -162,7 +192,7 @@ func (td *tableData) splitCells(r int) []*splitCell {
 			off = max(td.rowBase[r]-cd.base, 0)
 		}
 		cd.off = off
-		sc := &splitCell{c: c, end: cd.contentEnd - c.y + off, bottom: cd.natH + off}
+		sc := &splitCell{c: c, end: cd.contentEnd - c.y + off, bottom: cd.natH + off, blank: blank}
 		if c.st.BoxDecorationBreak == css.DecorationCloneAll || td.collapse && td.table.st.BoxDecorationBreak == css.DecorationCloneAll {
 			// Writer draws a split cell's borders whole on every page,
 			// its content clear of them.
@@ -178,6 +208,9 @@ func (td *tableData) splitCells(r int) []*splitCell {
 		for _, k := range cellBreaks(c) {
 			sc.cands = append(sc.cands, breakCand{y: k.y - c.y + off, soft: k.soft})
 		}
+		wholeSpans(c, func(y0, y1 float64) {
+			sc.whole = append(sc.whole, [2]float64{y0 - c.y + off, y1 - c.y + off})
+		}, 0)
 		out = append(out, sc)
 	}
 	return out
@@ -190,7 +223,18 @@ func (td *tableData) splitCells(r int) []*splitCell {
 // with no such break point move its whole content to the next piece;
 // without it, as at the top of a page, the last break point that fits
 // serves even against orphans and widows. It reports whether some cell keeps content
-// in the piece; when none does, no cell breaks.
+// in the piece; when none does, no cell breaks. A cell that lets a page
+// edge cut a blank height breaks at limit when no line and no monolithic
+// box runs through it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (Gotenberg 9.4.1) prints a table cell
+//     holding two 1in blocks, 3px below the top of a 2in page area, with
+//     189px of the second block on that page and its last 3px on the
+//     next, as it prints the same blocks in a div.
+//   - wpt: CSS2/pagination/rowgroup-page-break-inside-avoid-2-print and
+//     -8-print break so in Chromium, test and reference alike.
 func chooseCuts(cells []*splitCell, top, limit float64, moveAll bool) bool {
 	kept := false
 	for _, sc := range cells {
@@ -224,6 +268,12 @@ func chooseCuts(cells []*splitCell, top, limit float64, moveAll bool) bool {
 			}
 		}
 		switch {
+		case sc.blank && limit > sc.cands[first].y+eps && sc.slices(limit):
+			// The page edge runs through the blank height of a block, past
+			// the content above it: the block breaks there and nothing
+			// moves (CSS Fragmentation 3, 4.1), as Chromium breaks it.
+			sc.cut, sc.has = limit, true
+			kept = true
 		case hard >= 0:
 			sc.cut, sc.has = sc.cands[hard].y, true
 			kept = true
@@ -241,6 +291,17 @@ func chooseCuts(cells []*splitCell, top, limit float64, moveAll bool) bool {
 		}
 	}
 	return kept
+}
+
+// slices reports whether y runs through none of the spans of sc that do
+// not break.
+func (sc *splitCell) slices(y float64) bool {
+	for _, w := range sc.whole {
+		if w[0] < y-eps && w[1] > y+eps {
+			return false
+		}
+	}
+	return true
 }
 
 // open opens the strut that moves the content of sc from its cut to at,
