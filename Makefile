@@ -144,6 +144,24 @@ corpus-cost: ## Measure what each conversion and PDF operation costs, one proces
 corpus-cost-compare: ## Compare two cost readings row by row, with the change in each column; fail past MAX_GROWTH. Vars: BEFORE, AFTER, MAX_GROWTH
 	$(CORPUS_CLI) cost --compare $(if $(MAX_GROWTH),--max-growth=$(MAX_GROWTH)) $(BEFORE) $(AFTER)
 
+# The recorded cost reading: the conversion rows under GOGC=10, five runs
+# each, and the growth a new reading may show against it in the columns
+# the machine's load does not move.
+COST_READING := test/integration/cost-reading.json
+COST_READING_ROWS := text-*,html-*,md-*,docx-*,odt-*,xlsx-*,ods-*,csv-*,pptx-*,odp-*
+COST_READING_GROWTH := alloc_bytes:2,alloc_objects:1,heap_peak_bytes:3,budget_peak_bytes:0
+COST_CHECK_OUT = $(or $(COST_OUT),test/integration/testdata/cost-check.json)
+
+.PHONY: corpus-cost-check
+corpus-cost-check: ## Take a new reading of the conversion rows (GOGC=10, five runs) and fail on growth past COST_READING_GROWTH against test/integration/cost-reading.json. Vars: COST_OUT, COST_INPUTS
+	GOGC=10 $(CORPUS_CLI) cost --rows='$(COST_READING_ROWS)' --runs=5 --out=$(COST_CHECK_OUT) $(if $(COST_INPUTS),--inputs=$(COST_INPUTS))
+	$(CORPUS_CLI) cost --compare --max-growth=$(COST_READING_GROWTH) $(COST_READING) $(COST_CHECK_OUT)
+
+.PHONY: corpus-cost-record
+corpus-cost-record: ## Record test/integration/cost-reading.json: the conversion rows, GOGC=10, five runs; on a machine with nothing else running. Vars: COST_INPUTS
+	GOGC=10 $(CORPUS_CLI) cost --rows='$(COST_READING_ROWS)' --runs=5 --out=$(COST_READING) $(if $(COST_INPUTS),--inputs=$(COST_INPUTS))
+	npx prettier --write $(COST_READING)
+
 .PHONY: corpus-tools
 corpus-tools: ## Compare the local verapdf, node, java, qpdf, pdfsig, fontTools and Pillow with the pinned versions
 	$(CORPUS_CLI) tools

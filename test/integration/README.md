@@ -203,14 +203,22 @@ go run ./test/integration/cmd/corpus cost --list # the rows and their inputs
 
 The `heap` column samples the live and the unswept objects: under the default `GOGC=100` it lands anywhere between the live heap and twice it, depending on where a collection falls against the peak, and two runs of one binary differ by a third. Under `GOGC=10` the collector runs often enough that the column reads the live peak within a tenth, and two runs agree within a few percent: compare heaps between readings taken at `GOGC=10`.
 
-`--max-heap-per-budget=R` fails a reading in which a conversion's heap growth at its peak passes R times its budget's peak: the budget is litho's promise to bound what a conversion holds, and the bound checks that what the heap holds follows what the budget accounts. Under `GOGC=10` the heap growth is the live heap the conversion added: the HTML, Markdown, DOCX, ODT, spreadsheet and CSV rows stay at or under 1.2, html-png-10 excepted, whose peak holds a decoded picture beside the previous one the collector has not swept yet. The plain text and slide rows pass 2: their budget does not account for the whole source a plain text conversion holds, nor for the fonts a deck reads.
+`--max-heap-per-budget=R` fails a reading in which a conversion's heap growth at its peak passes R times its budget's peak: the budget is litho's promise to bound what a conversion holds, and the bound checks that what the heap holds follows what the budget accounts. Under `GOGC=10` the heap growth is the live heap the conversion added: the HTML, Markdown, DOCX, ODT, plain text, spreadsheet and CSV rows stay at or under 1.25, html-png-10 excepted, whose sampled peak holds a decoded picture beside the previous one the collector has not swept yet. The slide rows pass it by a fixed cost, not by what grows with the deck: about 6 MiB of installed font programs and parsed faces that enter the process-wide font caches on first use, which a small deck's budget is no measure of.
 
 ```bash
 GOGC=10 go run ./test/integration/cmd/corpus cost --runs=1 --max-heap-per-budget=1.25 \
-  --rows='html-[0-9]*,html-report-*,html-jpeg-10,md-*,docx-*,odt-*,xlsx-*,ods-*,csv-*'
+  --rows='text-*,html-[0-9]*,html-report-*,html-jpeg-10,md-*,docx-*,odt-*,xlsx-*,ods-*,csv-*'
 ```
 
 `--max-growth` (`MAX_GROWTH`) bounds the growth of each column's median, in percent, and fails the comparison past it. The columns the machine's load does not move are the ones to bound: `alloc_bytes` and `alloc_objects` (two runs of one binary agree within half a percent and a tenth of one), `budget_peak_bytes` (the same on every run), and `heap_peak_bytes` between two `GOGC=10` readings (within about two percent). The `pdfa` rows are the exception: their checks run on goroutines, and their allocation count moves by up to 8 % from run to run. A reading taken before a change and one after it each move by less than these: comparing every reading with one recorded earlier shows what a series of changes adds up to.
+
+`test/integration/cost-reading.json` is such a reading: the conversion rows under `GOGC=10`, five runs each. `make corpus-cost-check` takes a new reading of the same rows and compares it with the recorded one, failing past 2 % more allocated bytes, 1 % more allocated objects, 3 % more live heap or any growth of the budget's peak, on any row. The PDF operations are left out: a change to a converter, the layout or the PDF writer shows in the conversion rows. Take both readings on a machine with nothing else running: under a load of 20 to 40 on ten cores, five runs of one binary spread by up to 7 % in allocated bytes on the small slide decks, past the bound, because the collector then runs at other moments. The budget's peak does not move with the load. A change that grows a bounded column on purpose (a document charged what it holds, a feature that keeps more) records a new reading with `make corpus-cost-record`, on a machine with nothing else running, in the same commit, and its pull request names the rows that moved and why.
+
+```bash
+make corpus-cost-check                         # about 15 minutes: every conversion row, five runs
+make corpus-cost-check COST_OUT=/path/new.json # the new reading kept elsewhere
+make corpus-cost-record                        # rewrite test/integration/cost-reading.json
+```
 
 A conversion runs after a one-line text conversion has built the font index, as in a service that converts more than once; the `cold/text-line` row measures a conversion in a process whose index is not built yet. With `COPIES=N`, N copies of the operation run at once on goroutines of one process, the budget's peak summed over them.
 
