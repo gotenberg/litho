@@ -114,3 +114,24 @@ func TestPage_AreaWidthAndHeight(t *testing.T) {
 		t.Errorf("area %+v by %+v", ps.AreaWidth, ps.AreaHeight)
 	}
 }
+
+func TestResolver_TargetUse(t *testing.T) {
+	t.Parallel()
+	u := resolverOf(t, `a::after { content: target-counter(attr(href), page) target-counters(attr(href), section, ".") }
+		b::before { content: target-text("#x") }
+		@page { @bottom-center { content: target-counter("#end", chapter) } }`).TargetUse()
+	if !u.Any || !reflect.DeepEqual(u.Counters, []string{"chapter", "section"}) {
+		t.Errorf("TargetUse %+v, want any and chapter, section", u)
+	}
+	if u := resolverOf(t, `a::after { content: counter(x) }`).TargetUse(); u.Any || u.Counters != nil {
+		t.Errorf("TargetUse %+v without a cross-reference", u)
+	}
+}
+
+func TestStringSet_RefusesCrossReferences(t *testing.T) {
+	t.Parallel()
+	ds := ParseDeclarations(`string-set: t target-text("#x")`, ParseOptions{})
+	if len(ds) != 1 || len(ds[0].entries) != 0 {
+		t.Errorf("string-set with target-text() parsed as %+v, want invalid", ds)
+	}
+}

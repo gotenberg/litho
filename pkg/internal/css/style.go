@@ -847,6 +847,18 @@ const (
 	// naming the part: "text", "before", "after" or "first-letter" (CSS
 	// GCPM 3, 2.1.1.1, content()). It appears in Style.StringSet alone.
 	ItemContent
+	// ItemTargetCounter is the counter named Text, in the counter style
+	// Style, as counter() reads it at the element Target names (CSS
+	// Generated Content 3, 6.1, target-counter()).
+	ItemTargetCounter
+	// ItemTargetCounters is every counter named Text at the element Target
+	// names, joined by Separator, as counters() reads them there (CSS
+	// Generated Content 3, 6.2, target-counters()).
+	ItemTargetCounters
+	// ItemTargetText is the text of the element Target names, Text naming
+	// the part as content() does: "content", "before", "after" or
+	// "first-letter" (CSS Generated Content 3, 6.3, target-text()).
+	ItemTargetText
 )
 
 // ContentItem is one item of a content list.
@@ -868,6 +880,12 @@ type ContentItem struct {
 	// Pick selects the assignment of an ItemNamedString or ItemElement
 	// on the page (CSS GCPM 3, 2.1.2), PickFirst by default.
 	Pick PagePick
+	// Target is the URL of the element an ItemTargetCounter,
+	// ItemTargetCounters or ItemTargetText reads, as written, or, with
+	// TargetAttr, the name of the attribute of the originating element
+	// that holds it (attr()).
+	Target     string
+	TargetAttr bool
 }
 
 // Content is the content property of a pseudo-element (CSS Generated

@@ -1,6 +1,7 @@
 package css
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -42,8 +43,8 @@ var contentKeywords = map[string]ContentItemKind{
 
 // parseContent parses normal, none, or a list of content items with an
 // optional alternative text after a slash (CSS Generated Content 3, 1.1).
-// An item litho does not generate, such as target-counter(), makes the
-// value invalid with a warning.
+// An item litho does not generate, such as an image function it does not
+// draw, makes the value invalid with a warning.
 func parseContent(v []token, c *declCtx) (any, bool) {
 	if k, ok := keyword(v); ok {
 		switch k {
@@ -142,6 +143,9 @@ func contentItem(t token, c *declCtx) (ContentItem, bool) {
 		}
 		return it, true
 	}
+	if it, known, valid := targetItem(name, args, c); known {
+		return it, valid
+	}
 	if it, known, valid := gcpmItem(name, args); known {
 		return it, valid
 	}
@@ -151,6 +155,91 @@ func contentItem(t token, c *declCtx) (ContentItem, bool) {
 	}
 	c.warn(warn.CSSUnsupported, warn.Omitted, "content: %s() is not supported and the declaration was ignored", name)
 	return ContentItem{}, false
+}
+
+// targetParts are the second arguments of target-text() (CSS Generated
+// Content 3, 6.3): those of content() in string-set but marker.
+var targetParts = map[string]bool{"content": true, "before": true, "after": true, "first-letter": true}
+
+// targetItem parses the cross-reference functions of CSS Generated Content
+// 3, 6: target-counter(), target-counters() and target-text(). ok reports
+// a function it knows; valid whether its arguments parse.
+//
+//	target-counter( [ <string> | <url> ] , <custom-ident> , <counter-style>? )
+//	target-counters( [ <string> | <url> ] , <custom-ident> , <string> , <counter-style>? )
+//	target-text( [ <string> | <url> ] , [ content | before | after | first-letter ]? )
+//
+// The URL may be an attr() of the originating element, as the draft's
+// examples write it: attr(href url) or attr(href).
+func targetItem(name string, args [][]token, c *declCtx) (it ContentItem, ok, valid bool) {
+	var lo, hi int
+	switch name {
+	case "target-counter":
+		it.Kind, lo, hi = ItemTargetCounter, 2, 3
+	case "target-counters":
+		it.Kind, lo, hi = ItemTargetCounters, 3, 4
+	case "target-text":
+		it.Kind, lo, hi = ItemTargetText, 1, 2
+	default:
+		return ContentItem{}, false, false
+	}
+	if len(args) < lo || len(args) > hi {
+		return ContentItem{}, true, false
+	}
+	if it.Target, it.TargetAttr, valid = targetURL(args[0], c); !valid {
+		return ContentItem{}, true, false
+	}
+	if it.Kind == ItemTargetText {
+		it.Text = "content"
+		if len(args) == 2 {
+			k, isKw := keyword(args[1])
+			if !isKw || !targetParts[k] {
+				return ContentItem{}, true, false
+			}
+			it.Text = k
+		}
+		return it, true, true
+	}
+	if it.Text, valid = counterName(args[1]); !valid {
+		return ContentItem{}, true, false
+	}
+	it.Style = Decimal
+	rest := args[2:]
+	if it.Kind == ItemTargetCounters {
+		if len(rest[0]) != 1 || rest[0][0].typ != tString {
+			return ContentItem{}, true, false
+		}
+		it.Separator, rest = rest[0][0].value, rest[1:]
+	}
+	if len(rest) == 1 {
+		if it.Style, it.StyleName, valid = counterStyleArg(rest[0], c); !valid {
+			return ContentItem{}, true, false
+		}
+	}
+	return it, true, true
+}
+
+// targetURL parses the first argument of a cross-reference function: a
+// string or a url() naming the target, or attr() of an attribute holding
+// it, read as a URL or a string (CSS Values 5, 7.7). attr reports the
+// attribute form, whose name it returns.
+func targetURL(arg []token, c *declCtx) (u string, attr, ok bool) {
+	if len(arg) != 1 {
+		return "", false, false
+	}
+	t := arg[0]
+	switch {
+	case t.typ == tString:
+		return strings.TrimSpace(t.value), false, true
+	case t.typ == tFunction && eqFold(t.value, "attr"):
+		a := significant(t.children)
+		if len(a) < 1 || len(a) > 2 || a[0].typ != tIdent || len(a) == 2 && !a[1].isIdent("url") && !a[1].isIdent("string") {
+			return "", false, false
+		}
+		return lower(a[0].value), true, true
+	}
+	u, ok = parseURL(t, c.baseURL)
+	return u, false, ok
 }
 
 // attrItem parses the arguments of attr(): a name, an optional type or
@@ -295,4 +384,53 @@ func quotesProp() propDef {
 		},
 		copyFrom: field(func(s *Style) *Quotes { return &s.Quotes }),
 	}
+}
+
+// TargetUse is what the cross-reference functions of a document's
+// stylesheets read (CSS Generated Content 3, 6).
+type TargetUse struct {
+	// Any reports a content value that holds one.
+	Any bool
+	// Counters are the counters target-counter() and target-counters()
+	// read, page and pages aside, sorted.
+	Counters []string
+}
+
+// TargetUse returns what the content values of the style rules and the
+// page-margin boxes read through target-counter(), target-counters() and
+// target-text(). A content value holding var() is parsed only when
+// cascaded, and is not read.
+func (r *Resolver) TargetUse() TargetUse {
+	var u TargetUse
+	scan := func(decls []Declaration) {
+		for _, d := range decls {
+			for _, e := range d.entries {
+				c, ok := e.v.(Content)
+				if !ok || e.id != pContent {
+					continue
+				}
+				for _, it := range c.Items {
+					switch it.Kind { //nolint:exhaustive // the other items read no target
+					case ItemTargetText:
+						u.Any = true
+					case ItemTargetCounter, ItemTargetCounters:
+						u.Any = true
+						if it.Text != "page" && it.Text != "pages" && !slices.Contains(u.Counters, it.Text) {
+							u.Counters = append(u.Counters, it.Text)
+						}
+					}
+				}
+			}
+		}
+	}
+	for i := range r.rules {
+		scan(r.rules[i].rule.decls)
+	}
+	for i := range r.pages {
+		for _, m := range r.pages[i].rule.margins {
+			scan(m.decls)
+		}
+	}
+	slices.Sort(u.Counters)
+	return u
 }

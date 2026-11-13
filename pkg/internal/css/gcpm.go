@@ -1,5 +1,7 @@
 package css
 
+import "github.com/gotenberg/litho/pkg/internal/warn"
+
 // PagePick selects which assignment of a named string or running element
 // a page-margin box shows (CSS GCPM 3, 2.1.2).
 type PagePick uint8
@@ -181,6 +183,12 @@ func parseStringSet(v []token, c *declCtx) (any, bool) {
 			}
 			it, ok := contentItem(t, c)
 			if !ok || it.Kind == ItemImage || it.Kind == ItemElement || it.Kind == ItemNamedString {
+				return nil, false
+			}
+			if it.Kind == ItemTargetCounter || it.Kind == ItemTargetCounters || it.Kind == ItemTargetText {
+				// A named string is set as the builder walks the document,
+				// before the elements a cross-reference reads are laid out.
+				c.warn(warn.CSSUnsupported, warn.Omitted, "string-set: a cross-reference function is not supported there and the declaration was ignored")
 				return nil, false
 			}
 			ns.Items = append(ns.Items, it)
