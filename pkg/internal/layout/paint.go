@@ -1123,17 +1123,15 @@ func (p *painter) compositing(b *box) (typeset.BlendMode, bool) {
 // blendOf returns the blend mode of b, a stacking context or an inline
 // box that composites as a group.
 func (p *painter) blendOf(b *box) typeset.BlendMode {
-	switch m := b.st.MixBlendMode; m {
-	case css.BlendNormal:
-	case css.BlendPlusLighter:
+	m := b.st.MixBlendMode
+	if m == css.BlendPlusLighter {
 		// PDF has no additive blend mode (ISO 32000-1, 11.3.5).
 		p.e.warnOnce(warn.CSSUnsupported, warn.Approximated, "mix-blend-mode plus-lighter is printed as normal, as Chromium prints it", -1)
-	default:
-		// css.BlendMode orders the sixteen modes as typeset does, after
-		// ISO 32000-1, Tables 136 and 137.
-		return typeset.BlendMode(m)
+		return typeset.BlendNormal
 	}
-	return typeset.BlendNormal
+	// css.BlendMode orders the sixteen modes as typeset does, after ISO
+	// 32000-1, Tables 136 and 137.
+	return typeset.BlendMode(m)
 }
 
 // blendsInside reports whether a box inside b blends with b's content: a
