@@ -48,6 +48,8 @@ type Options struct {
 // under that ceiling, failing as html.Convert does. A cap out of range, or
 // an error executing the template, fails with [typeset.ErrInvalidOptions].
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, o Options) (*typeset.Document, error) {
+	// The instances of variable fonts the conversion draws belong to it.
+	fonts = fonts.ForConversion()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

@@ -41,7 +41,7 @@ type layoutFunc func(ctx context.Context, root *layout.Node, fonts *text.Fonts, 
 // bytes of src, opts, the files of opts.Resources it reads and the faces
 // fonts indexed alone. See the package documentation for what is drawn.
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options) (*typeset.Document, error) {
-	return convert(ctx, src, fonts, opts, layout.Layout)
+	return convert(ctx, src, fonts.ForConversion(), opts, layout.Layout)
 }
 
 // convert is [Convert] with the layout engine as a parameter, for tests.

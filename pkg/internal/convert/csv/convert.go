@@ -25,6 +25,8 @@ import (
 // opts.Password is ignored. The output depends on src, fonts' index and
 // opts alone.
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
+	// The instances of variable fonts the conversion draws belong to it.
+	fonts = fonts.ForConversion()
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}

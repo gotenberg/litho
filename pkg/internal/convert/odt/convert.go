@@ -29,6 +29,8 @@ import (
 // fonts' index and opts alone. See the package documentation for what is
 // drawn.
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.Options) (*typeset.Document, error) {
+	// The instances of variable fonts the conversion draws belong to it.
+	fonts = fonts.ForConversion()
 	if err := opts.Validate(); err != nil {
 		return nil, err
 	}

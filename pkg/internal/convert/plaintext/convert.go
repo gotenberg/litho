@@ -50,6 +50,8 @@ var bom = []byte{0xEF, 0xBB, 0xBF}
 // pages in the order they were handed over. An error the sink returns ends
 // the conversion with it.
 func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options) (*typeset.Document, error) {
+	// The instances of variable fonts the conversion draws belong to it.
+	fonts = fonts.ForConversion()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
