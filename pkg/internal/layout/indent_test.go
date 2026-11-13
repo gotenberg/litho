@@ -1,6 +1,8 @@
 package layout
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -56,5 +58,40 @@ func TestTextAlign_PlaintextParagraphDirection(t *testing.T) {
 	}
 	if got := lines[1].items[0].x / css.Pt; !near(got, 80) {
 		t.Errorf("right-to-left line starts at %vpx, want 80", got)
+	}
+}
+
+// CSS Text 4, 6.2: text-wrap: balance breaks a short block's lines at the
+// narrowest width that keeps their count; a block of more lines than
+// Chromium balances breaks greedily.
+func TestTextWrap_Balance(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want []float64
+	}{
+		{"two lines", "aaaa aa aa aa", []float64{70, 50}},
+		{"one line", "aa aa", []float64{50}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := sty(func(s *css.Style) { s.TextWrapStyle = css.WrapStyleBalance })
+			got := lineWidths(t, doc(el(st, txt(st, tt.text))), 105)
+			if len(got) != len(tt.want) {
+				t.Fatalf("lines %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if !near(got[i], tt.want[i]) {
+					t.Errorf("lines %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+	// Seven lines of "aaaa aa aa aa" break as auto breaks them.
+	text := strings.Repeat("aaaa aa aa aa ", 5)
+	auto := lineWidths(t, doc(el(sty(), txt(sty(), text))), 105)
+	st := sty(func(s *css.Style) { s.TextWrapStyle = css.WrapStyleBalance })
+	if got := lineWidths(t, doc(el(st, txt(st, text))), 105); len(auto) != 7 || !slices.Equal(got, auto) {
+		t.Errorf("balanced lines %v, want the %d auto lines %v", got, len(auto), auto)
 	}
 }

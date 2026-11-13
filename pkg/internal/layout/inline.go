@@ -454,6 +454,8 @@ type inlineState struct {
 	// segBottom.
 	seg                     bool
 	segTop, segFrom, segBot float64
+	// unfit counts the lines whose content overflows their band.
+	unfit int
 }
 
 // band returns the left and right edges of the space beside the floats in
@@ -507,6 +509,19 @@ func (e *engine) layoutInline(b *box, cb cblock, bc *bfc, cursor float64, mc *ma
 	saved := mc.clone()
 	clampSaved := e.clampSnapshot()
 	var end float64
+	if b.st.TextWrapStyle == css.WrapStyleBalance && e.foot == nil && e.clamp == nil && e.balance.root == nil {
+		// A line clamp container's lines are not balanced: what it keeps
+		// depends on the lines it counts.
+		restore := func() {
+			e.clampRestore(clampSaved)
+			bc.floats = bc.floats[:floats]
+			e.warnings = e.warnings[:warnings]
+			*mc = saved.clone()
+		}
+		e.balanceLines(b, d, cb, bc, cursor, mc, restore)
+		restore()
+		defer func() { e.balance = balanceState{} }()
+	}
 	for pass := range maxFragmentationPasses {
 		e.clampRestore(clampSaved)
 		end = e.flowLines(b, d, cb, bc, cursor, mc, forced)
@@ -527,6 +542,64 @@ func (e *engine) layoutInline(b *box, cb cblock, bc *bfc, cursor float64, mc *ma
 		e.releaseShaped(b)
 	}
 	return end
+}
+
+// maxBalancedLines is the most lines text-wrap: balance balances: a block
+// of more lines breaks as auto does, as Chromium lays it out (CSS Text 4,
+// 6.2 lets the user agent limit the lines it balances).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (Gotenberg 9.4.1) balances paragraphs of
+//     2 to 6 lines and breaks one of 7 lines or more greedily.
+const maxBalancedLines = 6
+
+// maxWrapBalancePasses bounds the layouts of one block text-wrap: balance
+// tries. Anti-DoS guard, not spec-mandated: each halves the range of the
+// inset searched, and 16 halvings narrow a page-wide block's to a hundredth
+// of a point.
+const maxWrapBalancePasses = 16
+
+// balanceState is the inset text-wrap: balance narrows the lines of root
+// by, and the lines that overflowed in the last layout of a block.
+type balanceState struct {
+	root  *box
+	inset float64
+	unfit int
+}
+
+// balanceLines finds the inset text-wrap: balance lays the lines of b out
+// with (CSS Text 4, 6.2): the widest that keeps as many lines, each
+// fitting as many as did, narrowing the band of every line by it as
+// Chromium does, so a line beside a float keeps the float's room. It
+// lays b out once to count its lines, then halves the range of insets
+// [maxWrapBalancePasses] times at most, calling restore before each layout,
+// and leaves the inset found in e.balance for the layouts that follow.
+func (e *engine) balanceLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float64, mc *marginState, restore func()) {
+	e.balance = balanceState{root: b}
+	forced := map[int]bool{}
+	restore()
+	e.flowLines(b, d, cb, bc, cursor, mc, forced)
+	n, unfit := len(b.lines), e.balance.unfit
+	if e.err != nil || n < 2 || n > maxBalancedLines || e.paginating() && e.pageOf(b.lines[0].y) != e.pageOf(b.lines[n-1].y) {
+		return
+	}
+	lo, hi := 0.0, cb.w
+	for range maxWrapBalancePasses {
+		mid := (lo + hi) / 2
+		e.balance.inset = mid
+		restore()
+		e.flowLines(b, d, cb, bc, cursor, mc, forced)
+		if e.err != nil {
+			return
+		}
+		if len(b.lines) == n && e.balance.unfit <= unfit {
+			lo = mid
+		} else {
+			hi = mid
+		}
+	}
+	e.balance.inset = lo
 }
 
 // pushWordFloats adds the first line of b to forced when a float of
@@ -784,6 +857,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 		y = s.clearBreak(p, y)
 	}
 	b.lines = s.lines
+	e.balance.unfit = s.unfit
 	return y
 }
 
@@ -816,6 +890,7 @@ func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h f
 	var end int
 	var left, right float64
 	var l *lineBox
+	var fits bool
 	tries := len(bc.floats) + 1
 	if bc.hasBoth() {
 		// Each float of css.FrameWrapBoth adds a piece to try.
@@ -828,8 +903,11 @@ func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h f
 			if s.root.st.Direction == css.RTL {
 				org = cb.x + cb.w - right
 			}
-			var fits bool
-			end, fits = e.breakLine(p, w, pos, indent, right-left, s.root, org)
+			avail := right - left
+			if s.root == e.balance.root {
+				avail -= e.balance.inset
+			}
+			end, fits = e.breakLine(p, w, pos, indent, avail, s.root, org)
 			if fits && end < p.p.Len() && !p.allowed(end) && s.nextPiece(top, h, right) {
 				// Word breaks no word in a piece of a line cut by a float
 				// of css.FrameWrapBoth: the word goes to the next piece.
@@ -867,6 +945,9 @@ func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h f
 			break
 		}
 		h = l.h
+	}
+	if !fits {
+		s.unfit++
 	}
 	return top, end, left, right, l
 }

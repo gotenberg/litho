@@ -59,6 +59,9 @@ type engine struct {
 	// hyphens caches the mark a hyphenated line ends with, by the style
 	// and language of its soft hyphen.
 	hyphens map[spaceKey]*hyphenMark
+	// balance is the block whose lines text-wrap: balance narrows, while
+	// it is laid out.
+	balance balanceState
 	missing map[rune]bool
 	root    *typeset.StructElem
 	rootBox *box
