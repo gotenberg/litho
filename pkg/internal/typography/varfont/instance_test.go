@@ -110,7 +110,13 @@ func staticGlyphs(t *testing.T, program []byte) (pts [][]point, h []glyphMetrics
 				ox[i], oy[i] = c.dx, c.dy
 			}
 			in.offsets[gid] = [2][]int32{ox, oy}
+			continue
 		}
+		sg, err := parseSimple(g, int(i16(g, 0)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		in.memo[gid] = sg.pts
 	}
 	for gid := range in.n {
 		p, err := in.points(gid, 0)

@@ -43,6 +43,9 @@ type gvarTable struct {
 	long       bool
 	offsets    []byte
 	array      []byte
+	// tx, ty and touched are scratch buffers of [gvarTable.glyphDeltas].
+	tx, ty  []float64
+	touched []bool
 }
 
 // parseGvar reads the header of a 'gvar' table for a font of axisCount
@@ -78,6 +81,15 @@ func parseGvar(data []byte, axisCount, numGlyphs int) (*gvarTable, error) {
 	g.shared = data[sharedAt:sharedEnd]
 	g.array = data[arrayAt:]
 	return g, nil
+}
+
+// scratch returns three buffers of n entries for one tuple's deltas and
+// the points it names, reused from glyph to glyph.
+func (g *gvarTable) scratch(n int) (tx, ty []float64, touched []bool) {
+	if cap(g.tx) < n {
+		g.tx, g.ty, g.touched = make([]float64, n), make([]float64, n), make([]bool, n)
+	}
+	return g.tx[:n], g.ty[:n], g.touched[:n]
 }
 
 // glyphData returns the GlyphVariationData of glyph gid, nil for a glyph
@@ -136,8 +148,7 @@ func (g *gvarTable) glyphDeltas(gid int, coords []int16, orig []point, ends []in
 	}
 	dx, dy = make([]float64, n), make([]float64, n)
 	hdr := 4
-	tx, ty := make([]float64, n), make([]float64, n)
-	touched := make([]bool, n)
+	tx, ty, touched := g.scratch(n)
 	for range count {
 		if hdr+4 > serial {
 			return nil, nil, fmt.Errorf("%w: tuple headers of glyph %d past their data", ErrInvalid, gid)

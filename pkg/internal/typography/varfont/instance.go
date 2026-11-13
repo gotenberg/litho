@@ -146,7 +146,9 @@ type instancer struct {
 	offsets [][2][]int32
 	// phantom holds each glyph's instance phantom points, unrounded.
 	phantom [][phantomPoints]point
-	// memo holds the instance points of the glyphs composites use.
+	// used marks the glyphs a composite uses; memo holds their instance
+	// points.
+	used map[int]bool
 	memo map[int][]point
 }
 
@@ -164,9 +166,12 @@ type instancer struct {
 // with [ErrInvalid] for tables it cannot read, with [ErrTooComplex] past
 // the work bound, and with ctx's error when ctx ends.
 func (f *Font) Instance(ctx context.Context, user []float64) ([]byte, error) {
-	in := &instancer{f: f, coords: f.Normalize(user), memo: map[int][]point{}}
+	in := &instancer{f: f, coords: f.Normalize(user), memo: map[int][]point{}, used: map[int]bool{}}
 	tables, err := in.read()
 	if err != nil {
+		return nil, err
+	}
+	if err := in.markComponents(); err != nil {
 		return nil, err
 	}
 	for gid := range in.n {
@@ -366,6 +371,13 @@ func (in *instancer) glyph(gid int) error {
 			ys[i] = clampInt16(otRound(orig[i].y + dy[i]))
 		}
 		in.out[gid], in.boxes[gid] = encodeSimple(s, xs, ys)
+		if in.used[gid] {
+			pts := make([]point, m)
+			for i := range m {
+				pts[i] = point{float64(xs[i]), float64(ys[i])}
+			}
+			in.memo[gid] = pts
+		}
 	case in.comps[gid] != nil:
 		ox, oy := make([]int32, m), make([]int32, m)
 		for i, c := range in.comps[gid] {
@@ -379,6 +391,24 @@ func (in *instancer) glyph(gid int) error {
 			}
 		}
 		in.offsets[gid] = [2][]int32{ox, oy}
+	}
+	return nil
+}
+
+// markComponents records the glyphs composites use.
+func (in *instancer) markComponents() error {
+	for gid := range in.n {
+		g := in.glyf[in.loca[gid]:in.loca[gid+1]]
+		if len(g) < glyphHeaderSize || int16(binary.BigEndian.Uint16(g)) >= 0 { //nolint:gosec // reinterprets the signed numberOfContours
+			continue
+		}
+		comps, err := parseComposite(g)
+		if err != nil {
+			return fmt.Errorf("glyph %d: %w", gid, err)
+		}
+		for _, c := range comps {
+			in.used[int(c.gid)] = true
+		}
 	}
 	return nil
 }
@@ -433,43 +463,45 @@ func (in *instancer) points(gid, depth int) ([]point, error) {
 	if gid >= in.n {
 		return nil, fmt.Errorf("%w: component glyph %d of %d", ErrInvalid, gid, in.n)
 	}
-	var pts []point
-	if comps := in.comps[gid]; comps != nil {
-		for i, c := range comps {
-			child, err := in.points(int(c.gid), depth+1)
-			if err != nil {
-				return nil, err
-			}
-			if len(pts)+len(child) > maxGlyphPoints {
-				return nil, fmt.Errorf("%w: composite of more than %d points", ErrInvalid, maxGlyphPoints)
-			}
-			moved := make([]point, len(child))
-			for j, p := range child {
-				moved[j] = point{c.m[0]*p.x + c.m[2]*p.y, c.m[1]*p.x + c.m[3]*p.y}
-			}
-			var ox, oy float64
-			if c.flags&argsAreXY != 0 {
-				ox, oy = float64(in.offsets[gid][0][i]), float64(in.offsets[gid][1][i])
-				if c.flags&scaledOffset != 0 && c.flags&unscaledOffset == 0 {
-					ox, oy = c.m[0]*ox+c.m[2]*oy, c.m[1]*ox+c.m[3]*oy
-				}
-			} else {
-				parent, own := int(c.dx), int(c.dy)
-				if parent >= len(pts) || own >= len(moved) {
-					return nil, fmt.Errorf("%w: component anchored at point %d of %d", ErrInvalid, parent, len(pts))
-				}
-				ox, oy = pts[parent].x-moved[own].x, pts[parent].y-moved[own].y
-			}
-			for _, p := range moved {
-				pts = append(pts, point{p.x + ox, p.y + oy})
-			}
-		}
-	} else if out := in.out[gid]; len(out) > 0 {
-		s, err := parseSimple(out, int(binary.BigEndian.Uint16(out)))
+	comps := in.comps[gid]
+	if comps == nil {
+		// A simple glyph's points are recorded when it is instanced, if a
+		// composite uses it; an empty glyph has none.
+		return nil, nil
+	}
+	children := make([][]point, len(comps))
+	total := 0
+	for i, c := range comps {
+		child, err := in.points(int(c.gid), depth+1)
 		if err != nil {
 			return nil, err
 		}
-		pts = s.pts
+		if total += len(child); total > maxGlyphPoints {
+			return nil, fmt.Errorf("%w: composite of more than %d points", ErrInvalid, maxGlyphPoints)
+		}
+		children[i] = child
+	}
+	pts := make([]point, 0, total)
+	for i, c := range comps {
+		move := func(p point) point { return point{c.m[0]*p.x + c.m[2]*p.y, c.m[1]*p.x + c.m[3]*p.y} }
+		var ox, oy float64
+		if c.flags&argsAreXY != 0 {
+			ox, oy = float64(in.offsets[gid][0][i]), float64(in.offsets[gid][1][i])
+			if c.flags&scaledOffset != 0 && c.flags&unscaledOffset == 0 {
+				ox, oy = c.m[0]*ox+c.m[2]*oy, c.m[1]*ox+c.m[3]*oy
+			}
+		} else {
+			parent, own := int(c.dx), int(c.dy)
+			if parent >= len(pts) || own >= len(children[i]) {
+				return nil, fmt.Errorf("%w: component anchored at point %d of %d", ErrInvalid, parent, len(pts))
+			}
+			anchor := move(children[i][own])
+			ox, oy = pts[parent].x-anchor.x, pts[parent].y-anchor.y
+		}
+		for _, p := range children[i] {
+			p = move(p)
+			pts = append(pts, point{p.x + ox, p.y + oy})
+		}
 	}
 	in.memo[gid] = pts
 	return pts, nil
