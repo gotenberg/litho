@@ -342,7 +342,7 @@ func (s *controlByteStripper) spacedElements(shown ast.PdfArray, info textFontIn
 				run = append(run, b)
 				continue
 			}
-			room := -(info.advance[b]*1000 + s.charSpacing*1000/s.fontSize)
+			room := -(float64(info.advance[b]*1000) + s.charSpacing*1000/s.fontSize)
 			if room == 0 {
 				continue
 			}
