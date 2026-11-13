@@ -338,13 +338,23 @@ func (p *painter) cellFlow(c *box) {
 // border centred on its grid line, and at each crossing the winning
 // border of those that meet there paints the corner (17.6.2.1).
 // Of the borders of a positioned part's cells, owner nil paints none, and
-// a positioned part paints those it is [segmentLayer] of.
+// a positioned part paints those it is [segmentLayer] of. A table box
+// that is not visible paints none, whatever its cells' visibility: the
+// borders belong to the table in this model (CSS 2.1, 17.6.2 and 11.2).
+//
+// # Corpus evidence
+//
+//   - wpt: css-tables/visibility-hidden-collapsed-borders draws its
+//     reference in Chromium 156.
+//   - probe, html: Chromium 156 paints no collapsed border of a hidden
+//     table holding a visible cell, and paints those of a hidden cell
+//     and of a hidden row in a visible table.
 func (p *painter) collapsedBorders(td *tableData, owner *box) {
 	nc, nr := td.nCols, len(td.rows)
-	if nc == 0 || nr == 0 {
+	t := td.table
+	if nc == 0 || nr == 0 || t.st.Visibility != css.Visible {
 		return
 	}
-	t := td.table
 	// A table whose borders clone at a page cut draws the grid line a
 	// split row's piece ends or starts with, as Writer draws a split
 	// cell's borders whole on every page (css.DecorationCloneAll).

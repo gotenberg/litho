@@ -573,3 +573,19 @@ func TestTable_CellNarrowerThanItsEdges(t *testing.T) {
 		}
 	}
 }
+
+// TestTable_HiddenTablePaintsNoCollapsedBorder holds the collapsed
+// borders of a table to CSS 2.1, 17.6.2 and 11.2: they belong to the
+// table, which paints none of them while hidden, a visible cell's
+// included.
+func TestTable_HiddenTablePaintsNoCollapsedBorder(t *testing.T) {
+	t.Parallel()
+	visible := func(s *css.Style) { s.Visibility = css.Visible }
+	hidden := func(s *css.Style) { s.Visibility = css.Hidden }
+	root := doc(table(mods(collapse, hidden, border(1, css.Solid, red)), tr(nil, td(mods(visible, width(2), height(2)), ""))))
+	assertPixels(t, run(t, root, page(4, 4)), 1, `
+		____
+		____
+		____
+		____`)
+}
