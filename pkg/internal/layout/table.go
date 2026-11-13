@@ -843,12 +843,23 @@ func percentKid(c *box) bool {
 // height property, at least its cells' and the room baseline alignment
 // takes, with the excess of spanning cells and of the table's height
 // spread over the rows; and every row's baseline below its top. A
-// percentage height on a row or on a cell resolves, as Chromium does,
-// against the table's content height less the border spacing above the
-// first row and below the last, when the table's height is not auto; the
-// percentages past 100% in all are cut, the later rows first. The table's
-// excess goes to the rows of auto height, else to those of a fixed
-// height, else to all, in proportion to their heights.
+// percentage height on a row or on a cell counts for nothing in a row's
+// minimum (CSS Tables 3, 3.10.1): it resolves, as Chromium does, against
+// the table's content height less the border spacing above the first row
+// and below the last, when the table's height is not auto, and the
+// table's excess over the rows' minimums grows the rows of a percentage
+// up to it first, in row order; the percentages past 100% in all are
+// cut, the later rows first. The rest goes to the rows of auto height,
+// else to those of a fixed height, else to all, in proportion to their
+// heights.
+//
+// # Corpus evidence
+//
+//   - probe, html: in tables 100px tall, Chromium draws rows of a 30%
+//     cell and of 10px content 30px and 70px; of an 80% cell and of 40px
+//     content 60px and 40px; of a 30% cell holding 50px and of 10px
+//     content 50px each; of two 60% cells 60px and 40px; of two 50px rows
+//     whose cells are 100% tall 50px each.
 func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []bool) {
 	nr := len(td.rows)
 	_, vs := td.spacing()
@@ -910,12 +921,10 @@ func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []b
 		}
 	}
 	if tableSet {
-		ref := max(tableH-2*vs, 0)
 		left := 1.0
 		for r := range pct {
 			pct[r] = min(pct[r], max(left, 0))
 			left -= pct[r]
-			rowH[r] = max(rowH[r], pct[r]*ref)
 		}
 	} else {
 		clear(pct)
@@ -945,7 +954,16 @@ func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []b
 		for _, h := range rowH {
 			total += h
 		}
-		if extra := tableH - total; extra > eps {
+		ref := max(tableH-2*vs, 0)
+		extra := tableH - total
+		for r := range rowH {
+			if want := pct[r]*ref - rowH[r]; want > eps && extra > eps && !exact[r] && !td.rowCollapsed(r) {
+				give := min(want, extra)
+				rowH[r] += give
+				extra -= give
+			}
+		}
+		if extra > eps {
 			lo, hi := td.headN, nr-td.footN
 			if lo >= hi {
 				lo, hi = 0, nr

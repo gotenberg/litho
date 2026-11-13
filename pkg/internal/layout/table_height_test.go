@@ -53,6 +53,9 @@ func TestTable_PercentHeights(t *testing.T) {
 		{"auto table", doc(table(mods(nop), tr(mods(pctH(0.5)), cell()), tr(nil, cell()))), "[18 18]"},
 		{"spacing and border", doc(table(mods(spacing(0, 10), border(5, css.Solid, black), height(190)), tr(mods(pctH(0.5)), cell()), tr(nil, cell()))), "[85 75]"},
 		{"past 100%", doc(table(mods(nop, height(100)), tr(mods(pctH(0.8)), cell()), tr(mods(pctH(0.8)), cell()))), "[80 20]"},
+		{"percentage over content takes the excess alone", doc(table(mods(nop, height(100)), tr(nil, td(mods(pctH(0.8)), "")), tr(nil, td(mods(height(40)), "")))), "[60 40]"},
+		{"percentage under content adds nothing", doc(table(mods(nop, height(100)), tr(mods(pctH(0.3)), td(mods(height(50)), "")), tr(nil, td(mods(height(10)), "")))), "[50 50]"},
+		{"fixed rows of 100% cells", doc(table(mods(nop, height(100)), tr(mods(height(50)), td(mods(pctH(1)), "")), tr(mods(height(50)), td(mods(pctH(1)), "")))), "[50 50]"},
 		{"fixed rows share the excess", doc(table(mods(nop, height(300)), tr(nil, td(mods(height(30)), "")), tr(mods(height(50)), cell()))), "[112.5 187.5]"},
 	}
 	for _, tc := range tests {
