@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -979,7 +980,18 @@ func (p *chartReader) readAxes(pa *Element) {
 }
 
 // axis reads one axis element (ECMA-376 Part 1, 21.2.2.25 catAx and its
-// siblings).
+// siblings). A numFmt linked to its source (21.2.2.121, sourceLinked)
+// labels the axis in the source data's format, whatever its formatCode
+// says.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: charts_axes_legends (log axis, formatCode "#,##0") and
+//     real_dashboard (formatCode '#,##0,"k"'), both sourceLinked over
+//     General cells, print 1000 and 1400000 in Excel; real_budget
+//     (formatCode "#,##0" over General caches and cells of
+//     "#,##0;[Red]-#,##0") prints 6,000; real_financial_statement over
+//     cells of the built-in format 37 prints 16,000.
 func (p *chartReader) axis(e *Element, kind chart.AxisKind) *chart.Axis {
 	a := &chart.Axis{Kind: kind, Min: math.NaN(), Max: math.NaN(), MajorUnit: math.NaN(), MinorUnit: math.NaN()}
 	a.Deleted = boolVal(e, "delete", false)
@@ -1008,7 +1020,9 @@ func (p *chartReader) axis(e *Element, kind chart.AxisKind) *chart.Axis {
 		a.Crosses, a.CrossAt = chart.CrossValue, v
 	}
 	if nf := e.Child(NSChart, "numFmt"); nf != nil {
-		if code := attrOr(nf, "formatCode"); code != "" && (attrOr(nf, "sourceLinked") != "1" || !strings.EqualFold(code, "General")) {
+		if attrOr(nf, "sourceLinked") == "1" {
+			a.SourceLinked = true
+		} else if code := attrOr(nf, "formatCode"); code != "" {
 			a.Format = code
 		}
 	}
@@ -1059,8 +1073,59 @@ func (p *chartReader) axis(e *Element, kind chart.AxisKind) *chart.Axis {
 		}
 		a.Title = &chart.Title{Text: text, Style: p.textStyle(own, 10, true, 1), Frame: p.frame(t.Child(NSChart, "spPr"), chart.Frame{})}
 	}
+	p.displayUnits(e.Child(NSChart, "dispUnits"), a)
 	a.BetweenCategories = childVal(e, "crossBetween") != "midCat"
 	return a
+}
+
+// builtInUnits are the divisors of the built-in display units (ECMA-376
+// Part 1, 21.2.3.6 ST_BuiltInUnit).
+var builtInUnits = map[string]float64{
+	"hundreds": 1e2, "thousands": 1e3, "tenThousands": 1e4, "hundredThousands": 1e5,
+	"millions": 1e6, "tenMillions": 1e7, "hundredMillions": 1e8, "billions": 1e9, "trillions": 1e12,
+}
+
+// displayUnits reads a value axis's dispUnits (ECMA-376 Part 1, 21.2.2.47):
+// a built-in unit (21.2.2.17) or a custom one (21.2.2.38) divides the
+// values its labels show, and a dispUnitsLbl (21.2.2.46) states the unit
+// as the axis's title when it has none: its own text, else "Millions" for
+// the millions unit. The label of the other built-in units is the
+// application's and is not drawn.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: chart-labels-axes chart7 (millions, an empty
+//     dispUnitsLbl, values 1,200,000 to 5,600,000) prints 0 to 6 and
+//     "Millions" turned beside the axis in PowerPoint.
+func (p *chartReader) displayUnits(d *Element, a *chart.Axis) {
+	if d == nil {
+		return
+	}
+	unit := floatVal(d, "custUnit")
+	name := childVal(d, "builtInUnit")
+	if v, ok := builtInUnits[name]; ok {
+		unit = v
+	}
+	if !numeric.PositiveFinite(unit) {
+		return
+	}
+	a.DisplayUnit = unit
+	lbl := d.Child(NSChart, "dispUnitsLbl")
+	if lbl == nil || a.Title != nil {
+		return
+	}
+	text := richText(lbl.Child(NSChart, "tx"))
+	if text == "" && name == "millions" {
+		text = "Millions"
+	}
+	if text == "" {
+		return
+	}
+	own := p.textProps(lbl.Child(NSChart, "txPr"))
+	if rich := lbl.Child(NSChart, "tx").Child(NSChart, "rich"); rich != nil {
+		own = p.textProps(rich)
+	}
+	a.Title = &chart.Title{Text: text, Style: p.textStyle(own, 10, false, 1), Frame: p.frame(lbl.Child(NSChart, "spPr"), chart.Frame{})}
 }
 
 // lineOf returns the line of a shape properties element over def, nil

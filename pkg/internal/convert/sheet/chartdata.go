@@ -1,6 +1,10 @@
 package sheet
 
-import "github.com/gotenberg/litho/pkg/internal/chart"
+import (
+	"sort"
+
+	"github.com/gotenberg/litho/pkg/internal/chart"
+)
 
 // ChartValues returns the values of the cells of sh in the range rg, row
 // by row, as the points of a chart series whose file holds no cache: a
@@ -26,6 +30,34 @@ func ChartValues(sh *Sheet, rg Range) []chart.Value {
 		}
 	}
 	return out
+}
+
+// ChartFormat returns the number format of the first cell of rg in sh,
+// the format of the source data a chart's axis linked to its source
+// shows (ECMA-376 Part 1, 21.2.2.121 numFmt, sourceLinked): the cell's
+// own style's, else its row's, else its column's, else def's; "" for
+// General.
+func ChartFormat(sh *Sheet, def *Style, rg Range) string {
+	st := def
+	i := sort.Search(len(sh.Rows), func(i int) bool { return sh.Rows[i].Index >= rg.FirstRow })
+	var row *Row
+	if i < len(sh.Rows) && sh.Rows[i].Index == rg.FirstRow {
+		row = &sh.Rows[i]
+	}
+	cols := sh.Columns
+	j := sort.Search(len(cols), func(j int) bool { return cols[j].Last >= rg.FirstColumn })
+	switch c := rowCell(row, rg.FirstColumn); {
+	case c != nil && c.Style != nil:
+		st = c.Style
+	case row != nil && row.Style != nil:
+		st = row.Style
+	case j < len(cols) && cols[j].First <= rg.FirstColumn && cols[j].Style != nil:
+		st = cols[j].Style
+	}
+	if st == nil {
+		return ""
+	}
+	return st.Format
 }
 
 // rowCell returns the cell of row at column col, nil for none or a nil

@@ -3,6 +3,7 @@ package chart
 import (
 	"math"
 	"slices"
+	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -321,8 +322,20 @@ func (rd *renderer) trendStroke(g *Group, s *Series, t Trendline) *Stroke {
 
 // trendName returns the legend text of trendline t of series s: its name,
 // or its kind's and the series' (chart2's
-// RegressionCurveHelper::getUINameForRegressionCurve).
-func trendName(t Trendline, s *Series) string {
+// RegressionCurveHelper::getUINameForRegressionCurve); under Office's
+// rules, office, the shorter names Excel and PowerPoint print for the
+// exponential, logarithmic, polynomial and moving average kinds.
+// ECMA-376 Part 1, 21.2.2.122 name leaves an unnamed trendline's text to
+// the application.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: charts_labels_trend_errors chart 1 prints "Poly. (y)"
+//     and "3 per. Mov. Avg. (y)" in Excel.
+//   - litho/pptx: chart-labels-axes chart11 prints "Poly. (North)", "2
+//     per. Mov. Avg. (North)" and "Expon. (South)" in PowerPoint, and a
+//     legend entry starting "Log." for the logarithmic trendline of West.
+func trendName(t Trendline, s *Series, office bool) string {
 	if t.Name != "" {
 		return t.Name
 	}
@@ -330,14 +343,26 @@ func trendName(t Trendline, s *Series) string {
 	switch t.Kind {
 	case TrendExponential:
 		kind = "Exponential"
+		if office {
+			kind = "Expon."
+		}
 	case TrendLogarithmic:
 		kind = "Logarithmic"
+		if office {
+			kind = "Log."
+		}
 	case TrendPolynomial:
 		kind = "Polynomial"
+		if office {
+			kind = "Poly."
+		}
 	case TrendPower:
 		kind = "Power"
 	case TrendMovingAverage:
 		kind = "Moving average"
+		if office {
+			kind = strconv.Itoa(t.Period) + " per. Mov. Avg."
+		}
 	case TrendLinear:
 	}
 	return kind + " (" + s.Name + ")"

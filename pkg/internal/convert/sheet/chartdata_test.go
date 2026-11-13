@@ -22,3 +22,30 @@ func TestChartValues_ReadsTheCellsRowByRow(t *testing.T) {
 		}
 	}
 }
+
+// TestChartFormat checks that the source format of a chart range is its
+// first cell's: the cell's style, else its row's, else its column's, else
+// the default.
+func TestChartFormat(t *testing.T) {
+	def := &Style{Format: "0.0"}
+	sh := &Sheet{
+		Columns: []Column{{First: 3, Last: 3, Style: &Style{Format: "0%"}}},
+		Rows: []Row{
+			{Index: 0, Cells: []Cell{{Column: 1, Style: &Style{Format: "#,##0"}}}},
+			{Index: 1, Style: &Style{Format: "0.00"}, Cells: []Cell{{Column: 1}}},
+		},
+	}
+	for _, tc := range []struct {
+		rg   Range
+		want string
+	}{
+		{Range{FirstRow: 0, LastRow: 1, FirstColumn: 1, LastColumn: 1}, "#,##0"},
+		{Range{FirstRow: 1, LastRow: 1, FirstColumn: 1, LastColumn: 1}, "0.00"},
+		{Range{FirstRow: 5, LastRow: 6, FirstColumn: 3, LastColumn: 3}, "0%"},
+		{Range{FirstRow: 5, LastRow: 6, FirstColumn: 2, LastColumn: 2}, "0.0"},
+	} {
+		if got := ChartFormat(sh, def, tc.rg); got != tc.want {
+			t.Errorf("%+v: %q, want %q", tc.rg, got, tc.want)
+		}
+	}
+}

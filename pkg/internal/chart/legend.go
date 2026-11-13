@@ -82,7 +82,7 @@ func (rd *renderer) legendEntries(st TextStyle, maxW float64) []legendEntry {
 				if len(out) >= maxLegendEntries {
 					break
 				}
-				out = append(out, legendEntry{label: rd.measure(trendName(t, s), st, maxW), border: rd.trendStroke(g, s, t), lineKey: true, marker: Marker{Symbol: MarkerNone}})
+				out = append(out, legendEntry{label: rd.measure(trendName(t, s, rd.office()), st, maxW), border: rd.trendStroke(g, s, t), lineKey: true, marker: Marker{Symbol: MarkerNone}})
 			}
 		}
 	}
@@ -160,6 +160,9 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 		rows = (n + cols - 1) / cols
 	} else {
 		maxCols := max(int((rem.Width-2*xPad)/maxEntryW), 1)
+		if office && oneRow(entries, symPlus, xOff, rem.Width-2*xPad) {
+			maxCols = n
+		}
 		rows = (n + maxCols - 1) / maxCols
 		cols = (n + rows - 1) / rows
 	}
@@ -267,6 +270,24 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 	case LegendRight:
 		rem.Width -= w + legendSideMargin
 	}
+}
+
+// oneRow reports entries that fit in one row of width avail, each as wide
+// as its own key and label, xOff apart: Office lays a legend above or
+// below the plot area out in one row when they do, where LibreOffice
+// gives every column the widest entry's width.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: charts_labels_trend_errors chart 1 prints its four
+//     entries, "y", "Linear fit", "Poly. (y)" and "3 per. Mov. Avg. (y)",
+//     in one row below the plot area in Excel, each as wide as its text.
+func oneRow(entries []legendEntry, symPlus, xOff, avail float64) bool {
+	w := float64(len(entries)-1) * xOff
+	for _, e := range entries {
+		w += symPlus + e.label.w
+	}
+	return w <= avail
 }
 
 // key draws an entry's legend key into r.

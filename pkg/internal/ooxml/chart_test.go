@@ -605,3 +605,23 @@ func TestChartFromElement_ErrorBars(t *testing.T) {
 		t.Errorf("second = %+v, want a bar chart's custom bars along its values", b)
 	}
 }
+
+// TestChartFromElement_AxisSourceAndUnits locks two value axis readings:
+// a numFmt linked to its source leaves the format to the source data,
+// whatever its formatCode (ECMA-376 Part 1, 21.2.2.121), and a millions
+// display unit with an empty label divides the labels by a million and
+// titles the axis "Millions" (21.2.2.47); see [chartReader.axis] and
+// [chartReader.displayUnits].
+func TestChartFromElement_AxisSourceAndUnits(t *testing.T) {
+	ax := `<c:catAx><c:axId val="1"/><c:scaling/><c:axPos val="b"/><c:crossAx val="2"/></c:catAx>` +
+		`<c:valAx><c:axId val="2"/><c:scaling/><c:axPos val="l"/><c:numFmt formatCode="#,##0" sourceLinked="1"/><c:crossAx val="1"/>` +
+		`<c:dispUnits><c:builtInUnit val="millions"/><c:dispUnitsLbl/></c:dispUnits></c:valAx>`
+	c := readChart(t, chartXML("", "", `<c:barChart><c:barDir val="col"/>`+ser(0, "A", "", "1")+`<c:axId val="1"/><c:axId val="2"/></c:barChart>`+ax), false)
+	val := c.Axes[1]
+	if !val.SourceLinked || val.Format != "" {
+		t.Errorf("source-linked axis: SourceLinked %v, Format %q", val.SourceLinked, val.Format)
+	}
+	if val.DisplayUnit != 1e6 || val.Title == nil || val.Title.Text != "Millions" {
+		t.Errorf("display unit %v, title %+v; want 1e6 and Millions", val.DisplayUnit, val.Title)
+	}
+}

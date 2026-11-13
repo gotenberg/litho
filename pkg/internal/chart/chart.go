@@ -56,6 +56,10 @@ type Chart struct {
 	// Resolver, when set, supplies the values of a series whose file holds
 	// no cache, from its range reference.
 	Resolver Resolver
+	// FormatResolver, when set, returns the number format code of the
+	// first cell of a range reference, "" for General, and false when it
+	// cannot: the source format of an axis linked to its source.
+	FormatResolver func(ref string) (string, bool)
 	// Locale is the separators the chart's numbers are written with, those
 	// of the document's language, unless a number format names its own
 	// locale; the zero Locale writes en-US's.
@@ -619,6 +623,15 @@ type Axis struct {
 	// Format is the number format code of the labels, "" or "General" for
 	// the source's.
 	Format string
+	// DisplayUnit divides the values the tick labels show, 0 or 1 for none
+	// (ECMA-376 Part 1, 21.2.2.47 dispUnits); a reader states it in
+	// Title when no title is set.
+	DisplayUnit float64
+	// SourceLinked reports labels in the format of the source data
+	// (ECMA-376 Part 1, 21.2.2.121 numFmt, sourceLinked): the format
+	// [Chart.FormatResolver] gives the first series' values, else their
+	// cache's. Format is then empty.
+	SourceLinked bool
 	// Labels says where the tick labels go.
 	Labels LabelPosition
 	// MajorTicks and MinorTicks are the tick marks.

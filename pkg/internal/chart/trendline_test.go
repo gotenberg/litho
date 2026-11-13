@@ -99,3 +99,41 @@ func TestRender_TrendlineAndLegendEntry(t *testing.T) {
 		t.Errorf("trendline %v wide, want two categories", b.Width)
 	}
 }
+
+// TestTrendName checks the legend text of an unnamed trendline: chart2's
+// names under LibreOffice's rules, Excel's and PowerPoint's shorter ones
+// under Office's (see [trendName]).
+func TestTrendName(t *testing.T) {
+	s := &Series{Name: "y"}
+	for _, tc := range []struct {
+		tr           Trendline
+		libre, offic string
+	}{
+		{Trendline{Kind: TrendPolynomial, Order: 2}, "Polynomial (y)", "Poly. (y)"},
+		{Trendline{Kind: TrendMovingAverage, Period: 3}, "Moving average (y)", "3 per. Mov. Avg. (y)"},
+		{Trendline{Kind: TrendExponential}, "Exponential (y)", "Expon. (y)"},
+		{Trendline{Kind: TrendLogarithmic}, "Logarithmic (y)", "Log. (y)"},
+		{Trendline{Kind: TrendLinear}, "Linear (y)", "Linear (y)"},
+		{Trendline{Kind: TrendLinear, Name: "fit"}, "fit", "fit"},
+	} {
+		if got := trendName(tc.tr, s, false); got != tc.libre {
+			t.Errorf("%+v: %q, want %q", tc.tr, got, tc.libre)
+		}
+		if got := trendName(tc.tr, s, true); got != tc.offic {
+			t.Errorf("%+v under Office: %q, want %q", tc.tr, got, tc.offic)
+		}
+	}
+}
+
+// TestOneRow checks that legend entries fit one row when their own widths,
+// keys and gaps do (see [oneRow]).
+func TestOneRow(t *testing.T) {
+	entries := []legendEntry{{label: &block{w: 10}}, {label: &block{w: 40}}, {label: &block{w: 90}}}
+	// 3 keys of 20 and 2 gaps of 5: 60 + 10 + 140 = 210.
+	if !oneRow(entries, 20, 5, 210) {
+		t.Error("entries 210 wide do not fit 210")
+	}
+	if oneRow(entries, 20, 5, 209) {
+		t.Error("entries 210 wide fit 209")
+	}
+}

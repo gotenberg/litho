@@ -60,7 +60,23 @@ func (r *reader) chartOf(part string) *chart.Chart {
 		r.warn(w.Code, w.Effect, w.Message)
 	}
 	c.Resolver = r.rangeValues
+	c.FormatResolver = r.rangeFormat
 	return c
+}
+
+// rangeFormat returns the number format of the first cell the formula ref
+// names, as [reader.rangeValues] reads the range; false when no area
+// names a sheet of the workbook.
+func (r *reader) rangeFormat(ref string) (string, bool) {
+	names, areas := sheetAreas(ref)
+	for i, area := range areas {
+		for _, sh := range r.doc.Sheets {
+			if sh.Name == names[i] && names[i] != "" {
+				return sheet.ChartFormat(sh, &r.doc.Default, area), true
+			}
+		}
+	}
+	return "", false
 }
 
 // rangeValues returns the values of the cells the formula ref names

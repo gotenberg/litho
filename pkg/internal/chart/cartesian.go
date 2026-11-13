@@ -28,6 +28,9 @@ type dim struct {
 	// vertical draws the dimension up the page.
 	vertical bool
 	format   string
+	// sourced reports format read from the source cells of an axis
+	// linked to its source ([Axis.SourceLinked]), "" being General there.
+	sourced bool
 	// zero and border are the automatic scale's rules; lo and hi the
 	// data's range.
 	zero, border bool
@@ -413,8 +416,13 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 		yOf[g] = y
 		for _, s := range g.Series {
 			vals := rd.data(s.Values)
-			if y.format == "" {
+			if y.format == "" && !y.sourced {
 				y.format = vals.Format
+				if y.ax != nil && y.ax.SourceLinked && rd.c.FormatResolver != nil && vals.Ref != "" {
+					if code, ok := rd.c.FormatResolver(vals.Ref); ok {
+						y.format, y.sourced = code, true
+					}
+				}
 			}
 			cats := rd.data(s.Categories)
 			if xy {
@@ -582,8 +590,11 @@ func (d *dim) style() TextStyle {
 	return TextStyle{Size: defaultFontSize, Color: typeset.Black}
 }
 
-// tickText formats a tick value of d.
+// tickText formats a tick value of d, divided by its axis's display unit.
 func (d *dim) tickText(v float64) string {
+	if d.ax != nil && d.ax.DisplayUnit > 0 {
+		v /= d.ax.DisplayUnit
+	}
 	return formatLabel(d.format, v, d.loc)
 }
 

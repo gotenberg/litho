@@ -491,3 +491,41 @@ func TestRender_DeletedPointLabelHidesGroupLabel(t *testing.T) {
 		t.Errorf("texts %q, want the second point's label alone", got)
 	}
 }
+
+// TestRender_SourceLinkedAxisFormat checks that an axis linked to its
+// source labels its ticks in the format [Chart.FormatResolver] gives the
+// first series' cells, General included, and in the values' cache format
+// without a resolver (ECMA-376 Part 1, 21.2.2.121 numFmt, sourceLinked).
+func TestRender_SourceLinkedAxisFormat(t *testing.T) {
+	label := func(resolve func(string) (string, bool)) []string {
+		c := barChart(1000, 3000)
+		c.Groups[0].Series[0].Values.Ref = "S!$B$1:$B$2"
+		c.Groups[0].Series[0].Values.Format = "#,##0"
+		y := c.Axes[1]
+		y.Labels, y.SourceLinked = LabelNextTo, true
+		y.Style = TextStyle{Size: 8, Color: typeset.Black}
+		c.FormatResolver = resolve
+		return texts(Render(context.Background(), ahem(t), c, chartRect))
+	}
+	general := label(func(string) (string, bool) { return "", true })
+	if !slices.Contains(general, "3000") || slices.Contains(general, "3,000") {
+		t.Errorf("General source cells: labels %q, want 3000", general)
+	}
+	cached := label(nil)
+	if !slices.Contains(cached, "3,000") {
+		t.Errorf("no resolver: labels %q, want the cache's 3,000", cached)
+	}
+}
+
+// TestRender_DisplayUnit checks that an axis's display unit divides the
+// values its tick labels show (ECMA-376 Part 1, 21.2.2.47 dispUnits).
+func TestRender_DisplayUnit(t *testing.T) {
+	c := barChart(1.2e6, 5.6e6)
+	y := c.Axes[1]
+	y.Labels, y.DisplayUnit = LabelNextTo, 1e6
+	y.Style = TextStyle{Size: 8, Color: typeset.Black}
+	labels := texts(Render(context.Background(), ahem(t), c, chartRect))
+	if !slices.Contains(labels, "6") || slices.Contains(labels, "6000000") {
+		t.Errorf("labels %q, want them in millions", labels)
+	}
+}
