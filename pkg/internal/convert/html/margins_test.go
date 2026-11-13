@@ -405,3 +405,20 @@ func TestMarginBoxes_OverflowWarns(t *testing.T) {
 		t.Errorf("%d overflow warnings, want 1 in %+v", n, doc.Warnings)
 	}
 }
+
+func TestBodyOverflow_GoesToTheViewportAndCollapsesMargins(t *testing.T) {
+	// CSS Overflow 3, 3.3: the body's overflow, scroll and auto included,
+	// goes to the viewport and its used value is visible, so the body
+	// establishes no formatting context and its margin collapses with its
+	// first child's, which places the paragraph as under overflow visible.
+	at := func(overflow string) float64 {
+		doc := convertDoc(t, `<body style="margin: 8px; overflow: `+overflow+`"><p style="margin: 16px 0">Para</p></body>`, Options{})
+		return find(t, doc.Pages[0], "Para").y
+	}
+	want := at("visible")
+	for _, o := range []string{"hidden", "scroll", "auto"} {
+		if got := at(o); got != want {
+			t.Errorf("overflow %s: text at y %v, want %v as under visible", o, got, want)
+		}
+	}
+}

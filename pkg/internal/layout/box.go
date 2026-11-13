@@ -368,7 +368,7 @@ func (b *box) marginH() float64 { return b.borderH() + b.m[css.Top] + b.m[css.Bo
 // captions and cells (CSS 2.1, 17.4).
 func (b *box) establishesBFC() bool {
 	return b.parent == nil || b.float != css.FloatNone || b.abs || (b.inline && b.kind == kindBlock) ||
-		b.st.Overflow != css.OverflowVisible && !b.st.ClipOnly() && !b.toViewport() || b.st.ScrollContainer() || b.kind == kindReplaced || b.st.Display == css.FlowRoot ||
+		(b.st.Overflow != css.OverflowVisible && !b.st.ClipOnly() || b.st.ScrollContainer()) && !b.toViewport() || b.kind == kindReplaced || b.st.Display == css.FlowRoot ||
 		b.tpart == partWrapper || b.tpart == partCaption || b.tpart == partCell ||
 		b.flex != nil || b.flexItem || b.grid != nil || b.gridItem || b.st.Clamps() || isMulticol(b) || b.ortho
 }
@@ -376,7 +376,14 @@ func (b *box) establishesBFC() bool {
 // toViewport reports a box whose overflow went to the viewport: the
 // root's child [viewportBox] picks, whose used overflow is then visible
 // (CSS Overflow 3, 3.3). The body of an HTML document of overflow hidden
-// thus collapses its margins with its children's, as Chromium lays it.
+// or scroll thus collapses its margins with its children's, as Chromium
+// lays it.
+//
+// # Corpus evidence
+//
+//   - wpt: css/CSS2/positioning/auto-position-rtl-child-viewport-scrollbar
+//     (body of overflow scroll): Chromium draws the paragraph 16px from the
+//     top, its margin collapsed with the body's.
 func (b *box) toViewport() bool {
 	return b.st.Overflow != css.OverflowVisible && b.parent != nil && b.parent.parent == nil && viewportBox(b.parent) == b
 }
