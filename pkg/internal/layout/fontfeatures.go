@@ -2,6 +2,9 @@ package layout
 
 import (
 	"unicode"
+	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -359,10 +362,10 @@ func smallCaps(s string, plan capsPlan) []smallCapsPiece {
 		out = append(out, smallCapsPiece{text: t, small: plan.synthetic(upper), features: plan.features(upper), source: src})
 		cur = cur[:0]
 	}
-	for _, r := range s {
+	for i, r := range s {
 		u := upper
 		if !unicode.Is(unicode.Mn, r) || !started {
-			u = needsUpper(r)
+			u = clusterNeedsUpper(s[i:])
 		}
 		if started && u != upper {
 			flush()
@@ -373,6 +376,34 @@ func smallCaps(s string, plan capsPlan) []smallCapsPiece {
 	flush()
 	return out
 }
+
+// clusterNeedsUpper reports whether the cluster s starts with, a character
+// and the combining marks after it, changes when uppercased: as the one
+// character canonically equivalent to it, when there is one (CSS Fonts 4,
+// 5.4, cluster matching), so j and a combining caron stay as U+01F0 stays,
+// which has no single capital; as its first character otherwise.
+func clusterNeedsUpper(s string) bool {
+	r, n := utf8.DecodeRuneInString(s)
+	end := n
+	for marks := 0; end < len(s) && marks < maxClusterMarks; marks++ {
+		m, k := utf8.DecodeRuneInString(s[end:])
+		if !unicode.Is(unicode.Mn, m) {
+			break
+		}
+		end += k
+	}
+	if end > n {
+		if c := norm.NFC.String(s[:end]); utf8.RuneCountInString(c) == 1 {
+			r, _ = utf8.DecodeRuneInString(c)
+		}
+	}
+	return needsUpper(r)
+}
+
+// maxClusterMarks caps the combining marks clusterNeedsUpper composes
+// with their base: 16. Anti-DoS guard, not spec-mandated: real text stacks
+// two or three, and a longer run is read from its base alone.
+const maxClusterMarks = 16
 
 // mapRunes maps every rune of rs by f, in place.
 func mapRunes(rs []rune, f func(rune) rune) []rune {

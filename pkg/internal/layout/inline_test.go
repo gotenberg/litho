@@ -570,6 +570,9 @@ func TestSmallCaps_Pieces(t *testing.T) {
 		{"He\u0301!", small, []smallCapsPiece{{text: "H"}, {text: "E\u0301", small: true, source: "e\u0301"}, {text: "!"}}},
 		// ß has no one-rune uppercase: it keeps its form and size.
 		{"ß", small, []smallCapsPiece{{text: "ß"}}},
+		// j and a combining caron are canonically U+01F0, which has no
+		// one-rune uppercase either (CSS Fonts 4, 5.4).
+		{"aj\u030C", small, []smallCapsPiece{{text: "A", small: true, source: "a"}, {text: "j\u030C"}}},
 		{"", small, nil},
 		{"aB1", capsPlan{caps: css.AllSmallCaps, support: capsNone, synth: synthBoth, allowed: true},
 			[]smallCapsPiece{{text: "A", small: true, source: "a"}, {text: "B1", small: true}}},
