@@ -711,7 +711,7 @@ func (e *engine) layoutTableOnce(t *box, cb cblock, y float64) {
 		}
 	}
 	h := end - top
-	if sh, ok := specHeight(t, t.st.Height, cb); ok {
+	if sh, ok := tableHeight(t, cb); ok {
 		// The height is a minimum (CSS 2.1, 17.5.3), a table without a
 		// row group's too, as Chromium sizes an empty table.
 		h = max(h, sh)
@@ -765,6 +765,35 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw, fixedH float64) {
 	if by, ok := firstBaseline(c); ok {
 		cd.base, cd.hasBase = by-c.y, true
 	}
+}
+
+// tableHeight returns the content height the table box t asks for, a
+// minimum its rows may exceed (CSS 2.1, 17.5.3; CSS Tables 3, 3.10.1):
+// its height, held by its max-height and min-height, min-height winning
+// (CSS 2.1, 10.7), or its min-height alone when its height is auto;
+// false when it asks for none. CSS Tables 3 names neither min-height nor
+// max-height: this follows Chromium, whose max-height never shrinks the
+// rows.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium draws tables of 10px content, border-box
+//     sized, 100px tall for min-height 100px, 60px for height 150px and
+//     max-height 60px, 120px for height 40px and min-height 120px,
+//     100px for min-height 100px and max-height 60px, and a caption
+//     outside the 100px; one of content-box sizing and min-height 100px
+//     draws its content 100px tall.
+func tableHeight(t *box, cb cblock) (float64, bool) {
+	h, ok := specHeight(t, t.st.Height, cb)
+	if ok {
+		if mx, set := specHeight(t, t.st.MaxHeight, cb); set {
+			h = min(h, mx)
+		}
+	}
+	if mn, set := specHeight(t, t.st.MinHeight, cb); set && (!ok || mn > h) && mn > 0 {
+		h, ok = mn, true
+	}
+	return h, ok
 }
 
 // relayoutPercentCells lays out again, at the height its rows give it, each
@@ -830,7 +859,7 @@ func (e *engine) rowHeights(td *tableData, cb cblock) ([]float64, []float64, []b
 	pct := make([]float64, nr)
 	fixed := make([]bool, nr)
 	exact := make([]bool, nr)
-	tableH, tableSet := specHeight(td.table, td.table.st.Height, cb)
+	tableH, tableSet := tableHeight(td.table, cb)
 	for r, row := range td.rows {
 		st := row.box.st
 		if h, ok := specHeight(row.box, st.Height, cblock{}); ok {

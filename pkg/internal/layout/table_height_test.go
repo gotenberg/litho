@@ -118,6 +118,29 @@ func TestTable_HeightWithoutRowGroups(t *testing.T) {
 	}
 }
 
+func TestTable_MinAndMaxHeight(t *testing.T) {
+	// A table's min-height and max-height hold its height, min-height
+	// winning; neither shrinks its rows (CSS 2.1, 10.7 and 17.5.3).
+	mn := func(v float64) func(*css.Style) { return func(s *css.Style) { s.MinHeight = css.Pts(px(v)) } }
+	mx := func(v float64) func(*css.Style) { return func(s *css.Style) { s.MaxHeight = css.Pts(px(v)) } }
+	for _, tc := range []struct {
+		name string
+		m    []func(*css.Style)
+		want float64
+	}{
+		{"min-height", mods(mn(100)), 100},
+		{"max-height under the height", mods(height(150), mx(60)), 60},
+		{"min-height over the height", mods(height(40), mn(120)), 120},
+		{"min-height over max-height", mods(mn(100), mx(60)), 100},
+		{"max-height under the content", mods(mx(5)), 10},
+	} {
+		tm := tableOf(t, doc(table(append(mods(spacing(0, 0)), tc.m...), tr(nil, td(mods(height(10)), "")))), page(400, 1000))
+		if got := pxOf(tm.table.h); got != tc.want {
+			t.Errorf("%s: table %v tall, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestTable_FlexItems(t *testing.T) {
 	full := func(s *css.Style) { s.Width = pct(1) }
 	// Fixed layout tables of 100% width share a row container equally:
