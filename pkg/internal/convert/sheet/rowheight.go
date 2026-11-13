@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 )
 
 // screenPixel is the length of a pixel of the screen Calc computes a
@@ -112,11 +113,11 @@ func (b *builder) optimalHeights(g *grid) error {
 			}
 			if rot := u.st.Align.Rotation; rot != 0 && !u.st.Align.Stacked {
 				a := math.Abs(rot) * math.Pi / 180
-				h = d.textW*math.Sin(a) + h*math.Cos(a)
+				h = float64(d.textW*detmath.Sin(a)) + float64(h*detmath.Cos(a))
 			}
 			px := pixels(h) + pixels(d.padding[css.Top]) + pixels(d.padding[css.Bottom])
 			// Calc keeps a row height in whole twips.
-			need = max(need, math.Floor(px*screenPixel*20+1e-6)/20)
+			need = max(need, math.Floor(float64(px*screenPixel*20)+1e-6)/20)
 		}
 		if need > base+epsilon {
 			g.heights[ri] = min(need, maxSide)
@@ -164,5 +165,5 @@ const excelPixel = 72.0 / 600
 //     (11.17 points a line), converted by Gotenberg 9.0.0, sets its lines 11.2
 //     points apart.
 func editLine(h float64) float64 {
-	return math.Ceil(h*20-1e-6) / 20
+	return math.Ceil(float64(h*20)-1e-6) / 20
 }

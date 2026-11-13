@@ -10,6 +10,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -842,7 +843,7 @@ func arith(op byte, a, b fval) fval {
 		}
 		r = x / y
 	case '^':
-		r = math.Pow(x, y)
+		r = detmath.Pow(x, y)
 	}
 	if !numeric.Finite(r) {
 		return fval{v: Value{Kind: Error, Text: "#NUM!"}}
@@ -1128,9 +1129,9 @@ func (p *fparser) scalarFunction(fn string, args []fval) (fval, bool) {
 			if y == 0 {
 				return fval{v: Value{Kind: Error, Text: errDiv0}}, true
 			}
-			return val(x - y*math.Floor(x/y))
+			return val(x - float64(y*math.Floor(x/y)))
 		}
-		f := math.Pow(10, math.Trunc(y))
+		f := detmath.Pow(10, math.Trunc(y))
 		return val(math.Round(x*f) / f)
 	case "HOUR", "MINUTE", "SECOND":
 		// The time of day, rounded to the second first, as Calc's

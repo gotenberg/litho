@@ -172,7 +172,7 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 			box.Position = css.Absolute
 			box.Left = css.Pts(left)
 			box.Width = css.Pts(areaW)
-			box.Top = css.Pts(y + max(h-heights[i], 0)/2)
+			box.Top = css.Pts(y + float64(max(h-heights[i], 0)/2))
 			tree.Children = append(tree.Children, &layout.Node{Kind: layout.Element, Style: box, Children: []*layout.Node{n}})
 		}
 	}

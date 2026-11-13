@@ -571,7 +571,7 @@ func (g *pivotAgg) add(v Value, fn PivotFunction) {
 	case PivotStdDev, PivotStdDevP, PivotVar, PivotVarP:
 		d := x - g.mean
 		g.mean += d / float64(g.count)
-		g.m2 += d * (x - g.mean)
+		g.m2 += float64(d * (x - g.mean))
 	case PivotMedian:
 		if len(g.vals) < maxPivotRecords {
 			g.vals = append(g.vals, x)

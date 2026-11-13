@@ -431,19 +431,19 @@ func (b *builder) renderPage(p *pagePlan, first bool, total int) (*typeset.Page,
 	hf := &sp.g.sh.HeaderFooter
 	if z != 1 && !sp.single && !sp.g.doc.ExcelRules {
 		if headerShown(hf, false) && ps.HeaderTop >= 0 && ps.HeaderTop < sp.margin[css.Top] {
-			shrink := (sp.margin[css.Top] - ps.HeaderTop) * (1 - z)
+			shrink := float64((sp.margin[css.Top] - ps.HeaderTop) * (1 - z))
 			oy -= shrink
 			areaH += shrink
 		}
 		if headerShown(hf, true) && ps.FooterBottom >= 0 && ps.FooterBottom < sp.margin[css.Bottom] {
-			areaH += (sp.margin[css.Bottom] - ps.FooterBottom) * (1 - z)
+			areaH += float64((sp.margin[css.Bottom] - ps.FooterBottom) * (1 - z))
 		}
 	}
 	if ps.CenterHorizontally {
-		ox += (areaW - pb.dataW*z) / 2
+		ox += float64((areaW - float64(pb.dataW*z)) / 2)
 	}
 	if ps.CenterVertically {
-		oy += (areaH - pb.dataH*z) / 2
+		oy += float64((areaH - float64(pb.dataH*z)) / 2)
 	}
 	if !sp.single && !sp.g.doc.ExcelRules {
 		ox, oy = calcOrigin(ox, z), calcOrigin(oy, z)
@@ -463,7 +463,7 @@ func (b *builder) renderPage(p *pagePlan, first bool, total int) (*typeset.Page,
 		Content:   frags,
 	})
 	for _, l := range links {
-		l.Rect = typeset.Rect{X: l.Rect.X*z + ox, Y: l.Rect.Y*z + oy, Width: l.Rect.Width * z, Height: l.Rect.Height * z}
+		l.Rect = typeset.Rect{X: float64(l.Rect.X*z) + ox, Y: float64(l.Rect.Y*z) + oy, Width: l.Rect.Width * z, Height: l.Rect.Height * z}
 		pg.Links = append(pg.Links, l)
 	}
 	return pg, st, nil
@@ -488,7 +488,7 @@ func calcOrigin(v, z float64) float64 {
 	if !numeric.Positive(v) || !numeric.Positive(z) {
 		return v
 	}
-	return z * math.Floor(v/z*2540/72+1e-6) * 72 / 2540
+	return float64(z * math.Floor(v/z*2540/72+1e-6) * 72 / 2540)
 }
 
 // borderOverhang returns how far the page's cell borders reach past the

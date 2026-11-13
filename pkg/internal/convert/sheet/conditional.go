@@ -792,7 +792,7 @@ func (g *grid) dataBar(r, c int, cell *Cell) (zero, length float64, col css.Colo
 		case v >= hi:
 			length = maxL
 		default:
-			length = minL + (v-lo)/(hi-lo)*(maxL-minL)
+			length = minL + float64((v-lo)/(hi-lo)*(maxL-minL))
 		}
 	case BarAxisMiddle:
 		zero = 0.5
@@ -864,12 +864,12 @@ func (b *pageBuilder) drawDataBar(u *unit) {
 	if w <= 0 || h <= 0 {
 		return
 	}
-	at := x0 + w*zero
+	at := x0 + float64(w*zero)
 	var a, z float64
 	if length < 0 {
-		a, z = at, at+(at-x0)*length
+		a, z = at, at+float64((at-x0)*length)
 	} else {
-		a, z = at, at+(x0+w-at)*length
+		a, z = at, at+float64((x0+w-at)*length)
 	}
 	if math.Abs(z-a) > epsilon {
 		left, right := min(a, z), max(a, z)
@@ -968,12 +968,12 @@ func Percentile(nums []float64, p float64) float64 {
 		return 0
 	}
 	p = min(max(p, 0), 100) / 100
-	pos := p * float64(len(nums)-1)
+	pos := float64(p * float64(len(nums)-1))
 	i := int(math.Floor(pos))
 	if i >= len(nums)-1 {
 		return nums[len(nums)-1]
 	}
-	return nums[i] + (pos-float64(i))*(nums[i+1]-nums[i])
+	return nums[i] + float64((pos-float64(i))*(nums[i+1]-nums[i]))
 }
 
 // iconAt returns the icon a cell shows by its icon set rule, and whether

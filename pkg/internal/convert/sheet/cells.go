@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -350,7 +351,7 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		boxX = u.x + u.w - right - boxW
 		align = css.AlignRight
 	case HCenter, HCenterContinuous:
-		boxX = u.x + left + (avail-boxW)/2
+		boxX = u.x + left + float64((avail-boxW)/2)
 		align = css.AlignCenter
 	case HJustify:
 		boxX = u.x + left
@@ -413,7 +414,7 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		inner.Width = css.Pts(w)
 		inner.Height = css.Pts(lineH)
 		inner.Padding[css.Top], inner.Padding[css.Bottom] = css.Pts(0), css.Pts(0)
-		inner.Left = css.Pts(u.x + pad[css.Left] + lineH*math.Abs(math.Sin(a)) - cx0)
+		inner.Left = css.Pts(u.x + pad[css.Left] + float64(lineH*math.Abs(detmath.Sin(a))) - cx0)
 		if rot > 0 {
 			inner.Top = css.Pts(u.h - pad[css.Bottom] - lineH)
 			inner.TransformOrigin = [2]css.Dimension{{Kind: css.Percent}, {Kind: css.Percent, Value: 1}}

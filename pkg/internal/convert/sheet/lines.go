@@ -163,9 +163,9 @@ func linePaths(b Border, x1, y1, x2, y2 float64, extend bool) []typeset.Fragment
 	vertical := dx == 0
 	if extend && (horizontal || vertical) {
 		if horizontal {
-			x1, x2 = min(x1, x2)-w/2, max(x1, x2)+w/2
+			x1, x2 = min(x1, x2)-float64(w/2), max(x1, x2)+float64(w/2)
 		} else {
-			y1, y2 = min(y1, y2)-w/2, max(y1, y2)+w/2
+			y1, y2 = min(y1, y2)-float64(w/2), max(y1, y2)+float64(w/2)
 		}
 	}
 	stroke := func(lw, off float64) typeset.Fragment {
@@ -200,7 +200,7 @@ func linePaths(b Border, x1, y1, x2, y2 float64, extend bool) []typeset.Fragment
 		}
 		gap = min(gap, w)
 		lw := max((w-gap)/2, hairline)
-		off := gap/2 + lw/2
+		off := float64(gap/2) + float64(lw/2)
 		return []typeset.Fragment{stroke(lw, -off), stroke(lw, off)}
 	}
 	return []typeset.Fragment{stroke(w, 0)}

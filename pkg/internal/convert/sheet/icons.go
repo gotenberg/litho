@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -127,10 +128,10 @@ func ellipse(cx, cy, rx, ry float64) []typeset.PathOp {
 	pt := func(x, y float64) typeset.Point { return typeset.Point{X: x, Y: y} }
 	return []typeset.PathOp{
 		{Kind: typeset.MoveTo, P: [3]typeset.Point{pt(cx+rx, cy)}},
-		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx+rx, cy+k*ry), pt(cx+k*rx, cy+ry), pt(cx, cy+ry)}},
-		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx-k*rx, cy+ry), pt(cx-rx, cy+k*ry), pt(cx-rx, cy)}},
-		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx-rx, cy-k*ry), pt(cx-k*rx, cy-ry), pt(cx, cy-ry)}},
-		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx+k*rx, cy-ry), pt(cx+rx, cy-k*ry), pt(cx+rx, cy)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx+rx, cy+float64(k*ry)), pt(cx+float64(k*rx), cy+ry), pt(cx, cy+ry)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx-float64(k*rx), cy+ry), pt(cx-rx, cy+float64(k*ry)), pt(cx-rx, cy)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx-rx, cy-float64(k*ry)), pt(cx-float64(k*rx), cy-ry), pt(cx, cy-ry)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx+float64(k*rx), cy-ry), pt(cx+rx, cy-float64(k*ry)), pt(cx+rx, cy)}},
 		{Kind: typeset.ClosePath},
 	}
 }
@@ -169,14 +170,14 @@ func arrow(deg float64, c iconColors) icon {
 	return func() []typeset.Fragment {
 		ops := poly(0.5, 4.5, 8.5, 4.5, 8.5, 0.5, 15.5, 8, 8.5, 15.5, 8.5, 11.5, 0.5, 11.5)
 		rad := deg * math.Pi / 180
-		sin, cos := math.Sincos(rad)
+		sin, cos := detmath.Sincos(rad)
 		k := 1.0
 		if math.Abs(sin) > 0.1 && math.Abs(cos) > 0.1 {
 			// A diagonal arrow runs from corner to corner.
 			k = 1.3
 		}
 		m := typeset.Matrix{A: k * cos, B: k * sin, C: -k * sin, D: k * cos}
-		m.E, m.F = 8-m.A*8-m.C*8, 8-m.B*8-m.D*8
+		m.E, m.F = 8-float64(m.A*8)-float64(m.C*8), 8-float64(m.B*8)-float64(m.D*8)
 		return []typeset.Fragment{&typeset.Group{Transform: m, Opacity: 1, Content: []typeset.Fragment{shapeOf(ops, c.fill, c.line)}}}
 	}
 }
@@ -288,7 +289,7 @@ func star(full float64) icon {
 				r = 3.2
 			}
 			a := -math.Pi/2 + float64(i)*math.Pi/5
-			xy = append(xy, 8+r*math.Cos(a), 8.4+r*math.Sin(a))
+			xy = append(xy, 8+float64(r*detmath.Cos(a)), 8.4+float64(r*detmath.Sin(a)))
 		}
 		ops := poly(xy...)
 		switch {
@@ -315,8 +316,8 @@ func bars(lit int) icon {
 			if i < lit {
 				c = iconBlue
 			}
-			top := 10.5 - 3.5*float64(i)
-			x := 0.5 + 4*float64(i)
+			top := 10.5 - float64(3.5*float64(i))
+			x := 0.5 + float64(4*float64(i))
 			out = append(out, shapeOf(poly(x, top, x+2, top, x+2, 15.5, x, 15.5), c.fill, c.line))
 		}
 		return out

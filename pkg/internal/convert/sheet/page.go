@@ -381,7 +381,7 @@ const (
 //     marked invalid.
 func invalidCircle(u *unit) typeset.Fragment {
 	x0, y0 := u.x-circleGrowX, u.y-circleGrowY
-	rx, ry := u.w/2+circleGrowX, u.h/2+circleGrowY
+	rx, ry := float64(u.w/2)+circleGrowX, float64(u.h/2)+circleGrowY
 	ops := ellipse(x0+rx, y0+ry, rx, ry)
 	return &typeset.Path{Ops: ops, Stroke: &typeset.Stroke{Color: typeset.Color{R: 1, A: 1}, Width: circleWidth, Join: typeset.RoundJoin}}
 }
