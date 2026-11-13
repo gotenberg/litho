@@ -55,6 +55,7 @@ var costColumns = []costColumn{
 	{"cpu_s", "cpu s", 1, "%.2f", func(r costRun) float64 { return r.UserSeconds + r.SysSeconds }},
 	{"rss_peak_bytes", "rss MiB", 1 << 20, "%.0f", func(r costRun) float64 { return float64(r.RSSPeakBytes) }},
 	{"heap_peak_bytes", "heap MiB", 1 << 20, "%.0f", func(r costRun) float64 { return float64(r.HeapPeakBytes) }},
+	{"heap_base_bytes", "heap0 MiB", 1 << 20, "%.0f", func(r costRun) float64 { return float64(r.HeapBaseBytes) }},
 	{"budget_peak_bytes", "budget MiB", 1 << 20, "%.0f", func(r costRun) float64 { return float64(r.BudgetPeakBytes) }},
 	{"alloc_bytes", "alloc MiB", 1 << 20, "%.0f", func(r costRun) float64 { return float64(r.AllocBytes) }},
 	{"alloc_objects", "allocs k", 1000, "%.0f", func(r costRun) float64 { return float64(r.AllocObjects) }},
@@ -79,6 +80,7 @@ var costRatios = []struct {
 	{"rss_per_input", "rss/in", "rss_peak_bytes", "input_bytes"},
 	{"rss_per_budget", "rss/budget", "rss_peak_bytes", "budget_peak_bytes"},
 	{"alloc_per_input", "alloc/in", "alloc_bytes", "input_bytes"},
+	{"heap_per_budget", "heap/budget", "heap_growth_bytes", "budget_peak_bytes"},
 }
 
 // costRowReading is one row of a reading.
@@ -132,6 +134,7 @@ func runCost(ctx context.Context, args []string) int {
 	profile := fs.String("profile", "", "Directory: one more run of each row writes its CPU, heap, mutex and block profiles under DIR/<row>")
 	inputs := fs.String("inputs", "", "Directory of the generated inputs, built there when missing (default: the testdata's "+costDefaultInputs+")")
 	list := fs.Bool("list", false, "List the rows and their inputs, and measure nothing")
+	maxHeap := fs.Float64("max-heap-per-budget", 0, "Fail when a conversion's heap growth at its peak passes this many times its budget's peak (0: no bound)")
 	compare := fs.Bool("compare", false, "Compare two JSON readings, BEFORE and AFTER, row by row")
 	maxGrowth := fs.String("max-growth", "", "With --compare: COLUMN:PERCENT pairs, comma-separated; fail when a row's median grows past them (as alloc_bytes:2,heap_peak_bytes:4)")
 	if err := fs.Parse(args); err != nil {
@@ -157,8 +160,8 @@ func runCost(ctx context.Context, args []string) int {
 		}
 		return 0
 	}
-	if fs.NArg() != 0 || *runs < 1 || *copies < 1 || (*format != "text" && *format != "json") {
-		fmt.Fprintln(os.Stderr, "usage: corpus cost [--rows=GLOBS] [--runs=N] [--copies=N] [--format=text|json] [--out=FILE] [--profile=DIR] [--inputs=DIR] [--list]")
+	if fs.NArg() != 0 || *runs < 1 || *copies < 1 || (*format != "text" && *format != "json") || !(*maxHeap >= 0) {
+		fmt.Fprintln(os.Stderr, "usage: corpus cost [--rows=GLOBS] [--runs=N] [--copies=N] [--format=text|json] [--out=FILE] [--profile=DIR] [--inputs=DIR] [--max-heap-per-budget=R] [--list]")
 		return 2
 	}
 	selected, err := selectCostRows(costRows(), *rows)
@@ -253,10 +256,32 @@ func runCost(ctx context.Context, args []string) int {
 	}
 	if *format == "json" {
 		fmt.Println(string(data))
-		return 0
+	} else {
+		printCost(os.Stdout, reading)
 	}
-	printCost(os.Stdout, reading)
+	if over := heapOverBudget(readings, *maxHeap); len(over) > 0 {
+		fmt.Fprintf(os.Stderr, "cost: %d conversions held more heap than %g times their budget:\n%s\n", len(over), *maxHeap, strings.Join(over, "\n"))
+		return 1
+	}
 	return 0
+}
+
+// heapOverBudget returns a line for each conversion row whose heap growth
+// at its peak is more than bound times its budget's peak, none for a zero
+// bound. The budget is litho's promise to bound what a conversion holds:
+// the bound checks that what the heap holds follows what it accounts.
+func heapOverBudget(rows []costRowReading, bound float64) []string {
+	if bound <= 0 {
+		return nil
+	}
+	var over []string
+	for _, rr := range rows {
+		if r, ok := rr.Median["heap_per_budget"]; ok && r > bound {
+			over = append(over, fmt.Sprintf("%s: %.0f MiB of heap growth, %.2f times its %.0f MiB budget", rr.Row,
+				(rr.Median["heap_peak_bytes"]-rr.Median["heap_base_bytes"])/(1<<20), r, rr.Median["budget_peak_bytes"]/(1<<20)))
+		}
+	}
+	return over
 }
 
 // selectCostRows returns the rows whose name matches one of the patterns,
@@ -395,6 +420,9 @@ func (rr *costRowReading) summarize() {
 	for k, v := range rr.Median {
 		values[k] = v
 	}
+	// What the conversion added to the heap at its peak, which its budget
+	// accounts for: the heap held before it is the process's.
+	values["heap_growth_bytes"] = values["heap_peak_bytes"] - values["heap_base_bytes"]
 	for _, r := range costRatios {
 		if d := values[r.den]; d > 0 {
 			rr.Median[r.key] = values[r.num] / d

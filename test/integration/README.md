@@ -186,21 +186,29 @@ make corpus-cost-compare BEFORE=before.json AFTER=after.json MAX_GROWTH=alloc_by
 go run ./test/integration/cmd/corpus cost --list # the rows and their inputs
 ```
 
-| Column       | What it reads                                                                                                                                    |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `wall s`     | The operation's wall time, call to return, in the child                                                                                          |
-| `cpu s`      | The child's user and system CPU time over the operation, every goroutine and the collector included (`getrusage`)                                |
-| `rss MiB`    | The child process's peak resident memory, start to exit, as the parent reads it                                                                  |
-| `heap MiB`   | The most heap the live and unswept objects held, sampled every millisecond (`/memory/classes/heap/objects:bytes`)                                |
-| `budget MiB` | The most a conversion's memory budget accounted at once, read from the Debug record the conversion logs as it ends; 0 for a PDF operation        |
-| `alloc MiB`  | The bytes the operation allocated in total; `allocs k` counts the objects                                                                        |
-| `gc`         | The collections the operation ran; `pause ms` their stop-the-world pauses; `gc cpu %` the runtime's estimate of the collector's share of the CPU |
-| `base MiB`   | The child's peak resident memory before the operation began: the runtime, and for a conversion the font index                                    |
-| `proc s`     | The child's wall time, start to exit                                                                                                             |
-| `in`, `out`  | The input's bytes (an HTML page's pictures included), the output's pages and bytes (text or pixels for an operation that writes no PDF)          |
-| ratios       | For a conversion: peak resident memory over the input's bytes and over the budget's peak, allocated bytes over the input's bytes                 |
+| Column       | What it reads                                                                                                                                                                                                                |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `wall s`     | The operation's wall time, call to return, in the child                                                                                                                                                                      |
+| `cpu s`      | The child's user and system CPU time over the operation, every goroutine and the collector included (`getrusage`)                                                                                                            |
+| `rss MiB`    | The child process's peak resident memory, start to exit, as the parent reads it                                                                                                                                              |
+| `heap MiB`   | The most heap the live and unswept objects held, sampled every millisecond (`/memory/classes/heap/objects:bytes`)                                                                                                            |
+| `heap0 MiB`  | The heap the live objects held as the operation began, after a collection: the runtime's and the font index's                                                                                                                |
+| `budget MiB` | The most a conversion's memory budget accounted at once, read from the Debug record the conversion logs as it ends; 0 for a PDF operation                                                                                    |
+| `alloc MiB`  | The bytes the operation allocated in total; `allocs k` counts the objects                                                                                                                                                    |
+| `gc`         | The collections the operation ran; `pause ms` their stop-the-world pauses; `gc cpu %` the runtime's estimate of the collector's share of the CPU                                                                             |
+| `base MiB`   | The child's peak resident memory before the operation began: the runtime, and for a conversion the font index                                                                                                                |
+| `proc s`     | The child's wall time, start to exit                                                                                                                                                                                         |
+| `in`, `out`  | The input's bytes (an HTML page's pictures included), the output's pages and bytes (text or pixels for an operation that writes no PDF)                                                                                      |
+| ratios       | For a conversion: peak resident memory over the input's bytes and over the budget's peak, allocated bytes over the input's bytes, and the heap the conversion added at its peak (`heap` less `heap0`) over the budget's peak |
 
 The `heap` column samples the live and the unswept objects: under the default `GOGC=100` it lands anywhere between the live heap and twice it, depending on where a collection falls against the peak, and two runs of one binary differ by a third. Under `GOGC=10` the collector runs often enough that the column reads the live peak within a tenth, and two runs agree within a few percent: compare heaps between readings taken at `GOGC=10`.
+
+`--max-heap-per-budget=R` fails a reading in which a conversion's heap growth at its peak passes R times its budget's peak: the budget is litho's promise to bound what a conversion holds, and the bound checks that what the heap holds follows what the budget accounts. Under `GOGC=10` the heap growth is the live heap the conversion added: the HTML, Markdown, DOCX, ODT, spreadsheet and CSV rows stay at or under 1.2, html-png-10 excepted, whose peak holds a decoded picture beside the previous one the collector has not swept yet. The plain text and slide rows pass 2: their budget does not account for the whole source a plain text conversion holds, nor for the fonts a deck reads.
+
+```bash
+GOGC=10 go run ./test/integration/cmd/corpus cost --runs=1 --max-heap-per-budget=1.25 \
+  --rows='html-[0-9]*,html-report-*,html-jpeg-10,md-*,docx-*,odt-*,xlsx-*,ods-*,csv-*'
+```
 
 `--max-growth` (`MAX_GROWTH`) bounds the growth of each column's median, in percent, and fails the comparison past it. The columns the machine's load does not move are the ones to bound: `alloc_bytes` and `alloc_objects` (two runs of one binary agree within half a percent and a tenth of one), `budget_peak_bytes` (the same on every run), and `heap_peak_bytes` between two `GOGC=10` readings (within about two percent). A reading taken before a change and one after it each move by less than these: comparing every reading with one recorded earlier shows what a series of changes adds up to.
 

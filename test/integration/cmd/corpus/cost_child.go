@@ -43,6 +43,10 @@ type costSample struct {
 	// HeapPeakBytes is the most heap the live and unswept objects held,
 	// sampled every [costSampleEvery].
 	HeapPeakBytes int64 `json:"heap_peak_bytes"`
+	// HeapBaseBytes is the heap the live objects held as the operation
+	// began, after a collection: the runtime's, and for a conversion the
+	// font index's.
+	HeapBaseBytes int64 `json:"heap_base_bytes"`
 	// AllocBytes and AllocObjects count what the operation allocated.
 	AllocBytes   uint64 `json:"alloc_bytes"`
 	AllocObjects uint64 `json:"alloc_objects"`
@@ -110,6 +114,7 @@ type costProbe struct {
 	mem       runtime.MemStats
 	gcCPU     float64
 	heapPeak  atomic.Int64
+	heapBase  int64
 	stop      chan struct{}
 	done      chan struct{}
 	heapProf  []byte
@@ -138,6 +143,7 @@ func startCostProbe(profileDir string) (*costProbe, error) {
 		p.cpu = f
 	}
 	runtime.GC()
+	p.heapBase = readCostHeap()
 	runtime.ReadMemStats(&p.mem)
 	p.gcCPU = readCostMetric(costGCCPUMetric)
 	p.rusage = readCostRusage()
@@ -194,6 +200,7 @@ func (p *costProbe) finish() (costSample, error) {
 		SysSeconds:     ru.sys - p.rusage.sys,
 		RSSBaseBytes:   p.rusage.maxRSS,
 		HeapPeakBytes:  p.heapPeak.Load(),
+		HeapBaseBytes:  p.heapBase,
 		AllocBytes:     mem.TotalAlloc - p.mem.TotalAlloc,
 		AllocObjects:   mem.Mallocs - p.mem.Mallocs,
 		GCCount:        mem.NumGC - p.mem.NumGC,
@@ -232,6 +239,17 @@ func writeCostProfile(name, path string) error {
 		return err
 	}
 	return f.Close()
+}
+
+// readCostHeap returns the bytes of the heap objects, live and unswept,
+// 0 when the runtime does not report them.
+func readCostHeap() int64 {
+	s := []metrics.Sample{{Name: costHeapMetric}}
+	metrics.Read(s)
+	if s[0].Value.Kind() != metrics.KindUint64 {
+		return 0
+	}
+	return int64(min(s[0].Value.Uint64(), math.MaxInt64)) //nolint:gosec // bounded above
 }
 
 // readCostMetric returns the float64 runtime metric name, 0 when the

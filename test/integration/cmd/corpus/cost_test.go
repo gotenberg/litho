@@ -245,6 +245,23 @@ func TestCostReadingSummarizes(t *testing.T) {
 		}
 	}
 
+	// The heap a conversion adds, past the process's, over its budget.
+	held := costRowReading{Row: "h", Op: "convert", InputBytes: 1}
+	held.add(convertOneResult{Result: "pdf", Cost: &costSample{HeapPeakBytes: 70 << 20, HeapBaseBytes: 10 << 20, BudgetPeakBytes: 40 << 20}}, costProcess{}, nil)
+	held.summarize()
+	if r := held.Median["heap_per_budget"]; r != 1.5 {
+		t.Errorf("heap per budget %v, want 1.5", r)
+	}
+	if got := heapOverBudget([]costRowReading{held, rr}, 1.4); len(got) != 1 || !strings.HasPrefix(got[0], "h:") {
+		t.Errorf("over 1.4: %q", got)
+	}
+	if got := heapOverBudget([]costRowReading{held}, 1.5); len(got) != 0 {
+		t.Errorf("over 1.5: %q", got)
+	}
+	if got := heapOverBudget([]costRowReading{held}, 0); got != nil {
+		t.Errorf("no bound: %q", got)
+	}
+
 	failed := costRowReading{Row: "z"}
 	failed.add(convertOneResult{}, costProcess{}, errCostCrash)
 	failed.summarize()
