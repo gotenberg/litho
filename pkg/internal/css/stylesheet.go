@@ -37,7 +37,9 @@ type Stylesheet struct {
 	rules []styleRule
 	pages []pageRule
 	faces []fontFaceRule
-	warns []Warning
+	// counterStyles are the @counter-style rules, in order.
+	counterStyles []*counterStyleRule
+	warns         []Warning
 }
 
 // Warnings returns what parsing dropped or approximated, deduplicated and
@@ -132,7 +134,7 @@ func (sp *sheetParser) flush(c *declCtx) {
 // warning: they style nothing a static page shows.
 var ignoredAtRules = map[string]bool{
 	"keyframes": true, "-webkit-keyframes": true, "-moz-keyframes": true, "-o-keyframes": true,
-	"counter-style": true, "font-feature-values": true, "font-palette-values": true,
+	"font-feature-values": true, "font-palette-values": true,
 	"property": true, "viewport": true, "-ms-viewport": true, "view-transition": true,
 	"namespace": true, "charset": true,
 }
@@ -201,6 +203,14 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 			}
 			ctx, boxes := pageCtxDecls(it.block, c)
 			sp.sheet.pages = append(sp.sheet.pages, pageRule{sels: sels, decls: pageDecls(it.block, c), cond: cond, context: ctx, margins: boxes})
+		case "counter-style":
+			if !it.hasBlock {
+				return
+			}
+			if r, ok := parseCounterStyleRule(it.prelude, it.block, c); ok && sp.count() {
+				r.cond = cond
+				sp.sheet.counterStyles = append(sp.sheet.counterStyles, r)
+			}
 		case "font-face":
 			if !it.hasBlock {
 				return

@@ -113,6 +113,34 @@ func TestGenerated_Markers(t *testing.T) {
 	}
 }
 
+// TestGenerated_CounterStyles locks the markers and counters a counter
+// style the layout does not spell draws (CSS Counter Styles 3): a style
+// of an @counter-style rule with its own suffix, a predefined one, a
+// predefined one a rule redefines, an unknown name drawn as decimal with
+// a warning, and counter() in a predefined style.
+func TestGenerated_CounterStyles(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<style>@counter-style s { system: cyclic; symbols: "◆"; suffix: " " } .a { list-style-type: s }
+		.b { list-style-type: upper-armenian } @counter-style lower-roman { system: fixed; symbols: R } .c { list-style-type: lower-roman }
+		.d::before { content: counter(list-item, bengali) } .u { list-style-type: nowhere }</style>
+		<ol class=a><li id=a>x</ol><ol class=b start=3><li id=b>y</ol><ol class=c><li id=c>z</ol><ol><li id=d class=d>w</ol>
+		<ol class=u><li id=u>v</ol>`, Options{})
+	if b := byID(t, p.root, "b"); b.Marker != nil || layout.MarkerText(b.Style, b.ListValue) != "Գ. " {
+		t.Errorf("#b marker %v, want the layout's Գ. ", b.Marker)
+	}
+	for id, want := range map[string]string{"a": "◆ ", "c": "R. ", "u": "1. "} {
+		if m := byID(t, p.root, id).Marker; m == nil || treeText(m) != want {
+			t.Errorf("#%s marker %v, want %q", id, m, want)
+		}
+	}
+	if got := treeText(byID(t, p.root, "d")); got != "১w" {
+		t.Errorf("#d text %q", got)
+	}
+	if !hasWarning(p.warnings, warn.CSSUnsupported, "nowhere") {
+		t.Errorf("no warning for the unknown counter style: %v", p.warnings)
+	}
+}
+
 func TestGenerated_Images(t *testing.T) {
 	t.Parallel()
 	fsys := fstest.MapFS{"a.png": {Data: pngBytes(t, 3, 3)}}

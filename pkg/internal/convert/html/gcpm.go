@@ -154,13 +154,13 @@ func (b *builder) setStrings(n *dom.Node, node *layout.Node, st *css.Style, befo
 				if in := b.counters.innermost(it.Text); in != nil {
 					v = in.value
 				}
-				sb.WriteString(layout.CounterText(it.Style, v))
+				sb.WriteString(counterText(b.counterStyles, it.Style, it.StyleName, v))
 			case css.ItemCounters:
 				for i, v := range b.counters.values(it.Text) {
 					if i > 0 {
 						sb.WriteString(it.Separator)
 					}
-					sb.WriteString(layout.CounterText(it.Style, v))
+					sb.WriteString(counterText(b.counterStyles, it.Style, it.StyleName, v))
 				}
 			case css.ItemContent:
 				// content() collapses white space as white-space: normal

@@ -69,6 +69,9 @@ type Resolver struct {
 	pages   []resolvedPage
 	faces   []FontFace
 	warns   []Warning
+	// counters holds the counter styles, the predefined ones and those
+	// of the @counter-style rules whose media conditions match.
+	counters *CounterStyles
 }
 
 type resolvedRule struct {
@@ -147,6 +150,7 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 	cache := map[*mediaCond]bool{}
 	var w warnings
 	order := 0
+	var counterRules []*counterStyleRule
 	for _, sh := range sheets {
 		if sh.Sheet == nil {
 			continue
@@ -178,6 +182,11 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 				r.pages = append(r.pages, resolvedPage{rule: pr, origin: sh.Origin, order: order})
 			}
 		}
+		for _, cr := range sh.Sheet.counterStyles {
+			if cr.cond.matches(media, cache) {
+				counterRules = append(counterRules, cr)
+			}
+		}
 		for i := range sh.Sheet.faces {
 			if f := &sh.Sheet.faces[i]; f.cond.matches(media, cache) {
 				r.faces = append(r.faces, f.face)
@@ -185,6 +194,7 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 		}
 	}
 	r.warns = w.result()
+	r.counters = newCounterStyles(counterRules)
 	return r
 }
 
@@ -214,6 +224,11 @@ func (x *selIndex) add(ref selRef) {
 func (x *selIndex) empty() bool {
 	return len(x.byID) == 0 && len(x.byClass) == 0 && len(x.byTag) == 0 && len(x.universal) == 0
 }
+
+// CounterStyles returns the counter styles of the sheets: the predefined
+// ones and those the @counter-style rules whose media conditions match
+// define, the last rule of a name winning.
+func (r *Resolver) CounterStyles() *CounterStyles { return r.counters }
 
 // FontFaces returns the @font-face rules whose media conditions match, in
 // order. The slice is a copy; the faces' slices are shared and must not be

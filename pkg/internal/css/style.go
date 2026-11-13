@@ -655,6 +655,12 @@ const (
 	// ListString draws Style.ListStyleString as the marker, as written,
 	// without a suffix (CSS Lists 3, 3.1, <string>).
 	ListString
+	// ListNamed draws the marker in the counter style
+	// Style.ListStyleString names (CSS Counter Styles 3): a predefined
+	// style the values above do not cover, one an @counter-style rule
+	// defines, or the anonymous style of symbols(), which a
+	// [CounterStyles] spells.
+	ListNamed
 )
 
 // ListStylePosition is the list-style-position property (CSS 2.1, 12.5.1).
@@ -734,8 +740,10 @@ type ContentItem struct {
 	Separator string
 	// Style is the counter style of an ItemCounter or ItemCounters,
 	// decimal by default; ListNone draws nothing and ListString is not
-	// used.
+	// used. ListNamed names the style in StyleName.
 	Style ListStyleType
+	// StyleName is the counter style name of a ListNamed Style.
+	StyleName string
 	// Pick selects the assignment of an ItemNamedString or ItemElement
 	// on the page (CSS GCPM 3, 2.1.2), PickFirst by default.
 	Pick PagePick
@@ -1098,7 +1106,7 @@ type Style struct {
 	// ListStyleImage is the resolved URL of the marker image, "" for none.
 	ListStyleImage string
 	// ListStyleString is the marker string when ListStyleType is
-	// ListString.
+	// ListString, the counter style name when it is ListNamed.
 	ListStyleString string
 
 	// Generated content (CSS Generated Content 3 and CSS Lists 3, 4).

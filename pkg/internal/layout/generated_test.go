@@ -20,7 +20,7 @@ func TestCounterText_Styles(t *testing.T) {
 		{css.Decimal, 3, "3"},
 		{css.UpperRoman, 4, "IV"},
 		{css.Disc, 2, "•"},
-		{css.Square, 2, "▪"},
+		{css.Square, 2, "■"},
 		{css.ListNone, 2, ""},
 		{css.ListString, 2, "2"},
 		{css.LowerAlpha, 0, "0"},

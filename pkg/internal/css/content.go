@@ -121,7 +121,7 @@ func contentItem(t token, c *declCtx) (ContentItem, bool) {
 			return ContentItem{}, false
 		}
 		if len(args) == 2 {
-			if it.Style, ok = counterStyle(args[1], c); !ok {
+			if it.Style, it.StyleName, ok = counterStyleArg(args[1], c); !ok {
 				return ContentItem{}, false
 			}
 		}
@@ -136,7 +136,7 @@ func contentItem(t token, c *declCtx) (ContentItem, bool) {
 			return ContentItem{}, false
 		}
 		if len(args) == 3 {
-			if it.Style, ok = counterStyle(args[2], c); !ok {
+			if it.Style, it.StyleName, ok = counterStyleArg(args[2], c); !ok {
 				return ContentItem{}, false
 			}
 		}
@@ -182,28 +182,31 @@ func counterName(arg []token) (string, bool) {
 	return arg[0].value, true
 }
 
-// counterStyle returns the <counter-style> argument of counter() or
-// counters(): a style name litho draws, decimal for one it lacks (CSS
-// Counter Styles 3, 2), none for no text.
-func counterStyle(arg []token, c *declCtx) (ListStyleType, bool) {
+// counterStyleArg returns the <counter-style> argument of counter() or
+// counters() (CSS Lists 3, 4.8): a style [ListStyleType] covers, or
+// ListNamed and the name of any other, symbols() included.
+func counterStyleArg(arg []token, c *declCtx) (ListStyleType, string, bool) {
 	if len(arg) != 1 {
-		return 0, false
+		return 0, "", false
 	}
 	switch arg[0].typ { //nolint:exhaustive // the other token types are invalid here
 	case tIdent:
 		k := lower(arg[0].value)
 		if lt, ok := listStyleTypes[k]; ok {
-			return lt, true
+			return lt, "", true
 		}
-		c.warn(warn.CSSUnsupported, warn.Approximated, "counter style %s is not supported and computes to decimal", k)
-		return Decimal, true
+		if cssWideKeywords[k] {
+			return 0, "", false
+		}
+		return ListNamed, counterStyleName(arg[0].value), true
 	case tFunction:
 		if eqFold(arg[0].value, "symbols") {
-			c.warn(warn.CSSUnsupported, warn.Approximated, "symbols() is not supported and computes to decimal")
-			return Decimal, true
+			if name, ok := parseSymbolsFunction(arg[0], c); ok {
+				return ListNamed, name, true
+			}
 		}
 	}
-	return 0, false
+	return 0, "", false
 }
 
 // counterProp defines counter-reset, counter-increment or counter-set

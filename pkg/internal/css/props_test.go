@@ -176,7 +176,7 @@ func TestProperties_Longhands(t *testing.T) {
 		{"vertical-align: text-top", func(s *Style) bool { return s.VerticalAlign.Kind == TextTop }},
 		{"direction: rtl; unicode-bidi: plaintext", func(s *Style) bool { return s.Direction == RTL && s.UnicodeBidi == Plaintext }},
 		{"list-style-type: lower-latin", func(s *Style) bool { return s.ListStyleType == LowerAlpha }},
-		{"list-style-type: hebrew", func(s *Style) bool { return s.ListStyleType == Decimal }},
+		{"list-style-type: hebrew", func(s *Style) bool { return s.ListStyleType == ListNamed && s.ListStyleString == "hebrew" }},
 		{"border-collapse: collapse; border-spacing: 1px 2px", func(s *Style) bool {
 			return s.BorderCollapse == CollapseBorders && s.BorderSpacing == [2]float64{0.75, 1.5}
 		}},

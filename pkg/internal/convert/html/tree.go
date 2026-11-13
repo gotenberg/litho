@@ -89,6 +89,8 @@ type builder struct {
 	ids map[*dom.Node]string
 	// gcpm holds the named strings and running elements (CSS GCPM 3, 2).
 	gcpm gcpmState
+	// counterStyles spells the counter styles the layout does not.
+	counterStyles *css.CounterStyles
 	// firstLetters marks the boxes cut for ::first-letter, nil for none.
 	firstLetters map[*layout.Node]bool
 }
@@ -400,7 +402,7 @@ func listNumbering(t css.ListStyleType, ordered bool) typeset.ListNumbering {
 		return typeset.NumberingUpperAlpha
 	case css.ListNone:
 		return typeset.NumberingNone
-	case css.LowerGreek, css.Armenian, css.Georgian, css.ListString:
+	case css.LowerGreek, css.Armenian, css.Georgian, css.ListString, css.ListNamed:
 	}
 	if ordered {
 		return typeset.NumberingOrdered

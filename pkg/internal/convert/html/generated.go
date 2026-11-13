@@ -203,6 +203,38 @@ func (b *builder) applyCounters(n *dom.Node, st *css.Style) int {
 	return 0
 }
 
+// enumStyleNames names the predefined counter styles [css.ListStyleType]
+// covers that a document's @counter-style rule may redefine (CSS Counter
+// Styles 3, 3): decimal, disc, circle, square and none it may not.
+// Immutable lookup table.
+var enumStyleNames = map[css.ListStyleType]string{
+	css.DecimalLeadingZero: "decimal-leading-zero", css.LowerRoman: "lower-roman", css.UpperRoman: "upper-roman",
+	css.LowerAlpha: "lower-alpha", css.UpperAlpha: "upper-alpha", css.LowerGreek: "lower-greek",
+	css.Armenian: "armenian", css.Georgian: "georgian",
+}
+
+// namedStyle returns the name of the counter style that spells the style
+// t, name for ListNamed, when cs spells it rather than the layout: a
+// style t does not cover, or one a document rule redefines; "" otherwise.
+func namedStyle(cs *css.CounterStyles, t css.ListStyleType, name string) string {
+	if t == css.ListNamed {
+		return name
+	}
+	if n := enumStyleNames[t]; n != "" && cs.Defines(n) {
+		return n
+	}
+	return ""
+}
+
+// counterText spells v in the counter style t, name for ListNamed, for
+// counter() and counters() (CSS Lists 3, 4.8).
+func counterText(cs *css.CounterStyles, t css.ListStyleType, name string, v int) string {
+	if n := namedStyle(cs, t, name); n != "" {
+		return cs.Counter(n, v)
+	}
+	return layout.CounterText(t, v)
+}
+
 // pageOp reports counter properties of an element or a pseudo-element
 // that name the page counter: the page counter that numbers the pages
 // lives in the page context (CSS Page 3, 6.1), and such an element
@@ -309,6 +341,9 @@ func (b *builder) pseudo(ctx context.Context, n *dom.Node, which css.PseudoEleme
 // for layout.Node.Marker: nil when the engine's default marker draws it.
 func (b *builder) marker(ctx context.Context, n *dom.Node, st *css.Style, v int) *layout.Node {
 	ms := b.computed.Pseudo(n, css.PseudoMarker)
+	if m := b.namedMarker(st, ms, v); m != nil {
+		return m
+	}
 	if ms == nil {
 		if v != 0 || st.ListStyleImage != "" {
 			return nil
@@ -331,6 +366,33 @@ func (b *builder) marker(ctx context.Context, n *dom.Node, st *css.Style, v int)
 		}
 	}
 	return m
+}
+
+// namedMarker returns the marker of a list item styled st, its ::marker
+// styled ms or nil, numbered v, when a counter style the layout does not
+// spell draws it (see [namedStyle]): the style's prefix, the counter and
+// its suffix (CSS Lists 3, 3.1 and CSS Counter Styles 3, 3.3 and 3.4). It
+// returns nil when a list-style-image or a ::marker's content draws the
+// marker instead.
+func (b *builder) namedMarker(st, ms *css.Style, v int) *layout.Node {
+	mst := st
+	if ms != nil {
+		if ms.Content.Kind != css.ContentNormal {
+			return nil
+		}
+		mst = ms
+	}
+	name := namedStyle(b.counterStyles, mst.ListStyleType, mst.ListStyleString)
+	if name == "" || mst.ListStyleImage != "" {
+		return nil
+	}
+	if !b.counterStyles.Known(name) {
+		b.warnOnce(warn.CSSUnsupported, warn.Approximated, "counter-style:"+name,
+			fmt.Sprintf("the counter style %s is not defined and draws as decimal", name))
+	}
+	return &layout.Node{Kind: layout.Element, Style: mst, Children: []*layout.Node{
+		{Kind: layout.Text, Style: mst, Text: b.counterStyles.Marker(name, v)},
+	}}
 }
 
 // generate builds the nodes of the content list of a pseudo-element of n
@@ -387,7 +449,7 @@ func (b *builder) generate(ctx context.Context, n *dom.Node, ps *css.Style) []*l
 				_ = c.instantiate(it.Text, 0, false)
 			}
 			start := sb.Len()
-			write(layout.CounterText(it.Style, v))
+			write(counterText(b.counterStyles, it.Style, it.StyleName, v))
 			paged(it, start)
 		case css.ItemCounters:
 			vals := c.values(it.Text)
@@ -400,7 +462,7 @@ func (b *builder) generate(ctx context.Context, n *dom.Node, ps *css.Style) []*l
 				if i > 0 {
 					write(it.Separator)
 				}
-				write(layout.CounterText(it.Style, v))
+				write(counterText(b.counterStyles, it.Style, it.StyleName, v))
 			}
 			paged(it, start)
 		case css.ItemOpenQuote, css.ItemCloseQuote, css.ItemNoOpenQuote, css.ItemNoCloseQuote:

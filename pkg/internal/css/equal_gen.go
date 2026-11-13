@@ -1516,6 +1516,9 @@ func equalContentItem(a, b *ContentItem) bool {
 	if a.Style != b.Style {
 		return false
 	}
+	if a.StyleName != b.StyleName {
+		return false
+	}
 	if a.Pick != b.Pick {
 		return false
 	}
@@ -1529,6 +1532,7 @@ func hashContentItem(h uint64, x *ContentItem) uint64 {
 	h = mixString(h, x.Fallback)
 	h = mixString(h, x.Separator)
 	h = mix(h, uint64(x.Style))
+	h = mixString(h, x.StyleName)
 	h = mix(h, uint64(x.Pick))
 	return h
 }

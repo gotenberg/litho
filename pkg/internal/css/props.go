@@ -818,6 +818,8 @@ func init() {
 				st.ListStyleType, st.ListStyleString = t, ""
 			case listString:
 				st.ListStyleType, st.ListStyleString = ListString, string(t)
+			case listName:
+				st.ListStyleType, st.ListStyleString = ListNamed, string(t)
 			}
 		}, copyFrom: func(dst, src *Style) {
 			dst.ListStyleType, dst.ListStyleString = src.ListStyleType, src.ListStyleString
@@ -1121,9 +1123,14 @@ var listStyleTypes = map[string]ListStyleType{
 // listString is a specified list-style-type <string>.
 type listString string
 
-// parseListStyleType parses list-style-type (CSS Lists 3, 3.1). A counter
-// style litho lacks computes to decimal, as CSS Counter Styles 3, 2 asks
-// of an unknown name; a string is the marker as written.
+// listName is a specified list-style-type counter style name that
+// [ListStyleType] does not cover.
+type listName string
+
+// parseListStyleType parses list-style-type (CSS Lists 3, 3.1): none, a
+// counter style name, symbols() or a string. A name litho draws itself
+// computes to its [ListStyleType]; any other is kept by name, and a name
+// no style defines draws as decimal (CSS Counter Styles 3, 2).
 func parseListStyleType(v []token, c *declCtx) (any, bool) {
 	t, ok := single(v)
 	if !ok {
@@ -1135,14 +1142,17 @@ func parseListStyleType(v []token, c *declCtx) (any, bool) {
 		if lt, ok := listStyleTypes[k]; ok {
 			return lt, true
 		}
-		c.warn(warn.CSSUnsupported, warn.Approximated, "list-style-type: %s is not supported and computes to decimal", k)
-		return Decimal, true
+		if cssWideKeywords[k] {
+			return nil, false
+		}
+		return listName(counterStyleName(t.value)), true
 	case tString:
 		return listString(t.value), true
 	case tFunction:
 		if eqFold(t.value, "symbols") {
-			c.warn(warn.CSSUnsupported, warn.Approximated, "list-style-type: symbols() is not supported and computes to disc")
-			return Disc, true
+			if name, ok := parseSymbolsFunction(t, c); ok {
+				return listName(name), true
+			}
 		}
 	}
 	return nil, false

@@ -731,8 +731,10 @@ func (p *prepared) marginNodes(ctx context.Context, st *css.Style, index, pages 
 func (p *prepared) counterText(box *css.Style, index, pages int) func(css.ContentItem) string {
 	pc := p.pageCounters(index)
 	var g *gcpmState
+	var cs *css.CounterStyles
 	if p.b != nil {
 		g = &p.b.gcpm
+		cs = p.b.counterStyles
 	}
 	values := func(name string) []int {
 		if name == pagesCounter {
@@ -773,14 +775,14 @@ func (p *prepared) counterText(box *css.Style, index, pages int) func(css.Conten
 			vals = []int{0}
 		}
 		if it.Kind == css.ItemCounter {
-			return layout.CounterText(it.Style, vals[len(vals)-1])
+			return counterText(cs, it.Style, it.StyleName, vals[len(vals)-1])
 		}
 		var sb strings.Builder
 		for i, v := range vals {
 			if i > 0 {
 				sb.WriteString(it.Separator)
 			}
-			sb.WriteString(layout.CounterText(it.Style, v))
+			sb.WriteString(counterText(cs, it.Style, it.StyleName, v))
 		}
 		return sb.String()
 	}
