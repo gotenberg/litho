@@ -1,0 +1,11 @@
+.n::after {
+  content: counter(page);
+}
+
+.m::after {
+  content: counter(pages);
+}
+
+.t::after {
+  content: string(litho-title);
+}

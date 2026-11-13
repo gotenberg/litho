@@ -1,0 +1,15 @@
+.letterhead {
+  font-family: "Liberation Sans", sans-serif;
+  font-size: 10pt;
+  line-height: 14pt;
+  padding-bottom: 6pt;
+  border-bottom: 1px solid #1d3557;
+}
+
+.n::after {
+  content: counter(page);
+}
+
+.m::after {
+  content: counter(pages);
+}

@@ -1,0 +1,13 @@
+{
+  "reference_of": "bands-page-sets-twin",
+  "bands": [
+    { "edge": "header", "html": "header-every.html" },
+    { "edge": "header", "html": "header-left.html", "pages": ["left"] },
+    { "edge": "header", "pages": ["first"] },
+    { "edge": "footer", "html": "footer-range.html", "pages": ["2-4"] },
+    { "edge": "footer", "html": "footer-right.html", "css": "bands.css", "pages": ["right"] },
+    { "edge": "footer", "html": "footer-appendix.html", "css": "bands.css", "pages": ["page:appendix"] },
+    { "edge": "footer", "html": "footer-last.html", "css": "bands.css", "pages": ["last"] },
+    { "edge": "footer", "html": "footer-first-fourth.html", "pages": ["first", "4-4"] }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "reference_of": "bands-room-content-twin",
+  "bands": [
+    { "edge": "header", "html": "letterhead.html", "css": "letterhead.css", "room": "content" },
+    { "edge": "footer", "html": "footer.html", "css": "footer.css", "room": "content" }
+  ]
+}

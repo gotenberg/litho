@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Isolation</title>
+<style>
+@page {
+  size: A5;
+  margin: 20mm;
+}
+:root { --accent: #b00020; }
+body { font-family: "Liberation Serif", serif; font-size: 12pt; line-height: 1.4; margin: 0; color: #333; }
+div { color: var(--accent); }
+.tag { font-weight: bold; }
+p { font-size: 14pt; }
+section + section { break-before: page; }
+</style>
+</head>
+<body>
+<section>
+<h1>Isolation</h1>
+<p>The header is isolated: the document's rules do not reach it, and its own style sheet sets its font. The footer is not: the document's rules colour it and set it in bold.</p>
+</section>
+<section>
+<h1>Second page</h1>
+<p>Both bands repeat on every page, the header with the page number.</p>
+</section>
+</body>
+</html>

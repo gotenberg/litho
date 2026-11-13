@@ -1,0 +1,7 @@
+{
+  "reference_of": "bands-isolated-twin",
+  "bands": [
+    { "edge": "header", "html": "header.html", "css": "header.css", "isolated": true },
+    { "edge": "footer", "html": "footer.html" }
+  ]
+}
