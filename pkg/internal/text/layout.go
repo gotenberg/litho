@@ -806,6 +806,9 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 			s := st.styles[idx]
 			piece := item
 			piece.RunStart, piece.RunEnd = start, end
+			// The run's own first face draws its leading spaces, which
+			// select no face of their own.
+			piece.Face = st.face(s.primary)
 			piece.Size = s.size
 			if s.lang != "" {
 				piece.Language = s.lang

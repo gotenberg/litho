@@ -349,3 +349,29 @@ func TestShape_EveryRunIndexFits(t *testing.T) {
 		t.Errorf("SetAdvance moved the object to %v and the text to %v", p.Advance(last), p.Advance(0))
 	}
 }
+
+// TestShape_LeadingSpaceTakesItsRunsFace locks that a space opening a run
+// is drawn in that run's face, not in the face of the run before it: a
+// space selects no face of its own, and Chromium draws the space after an
+// element of another family in the family of the text that holds it.
+//
+// # Corpus evidence
+//
+//   - wpt: css/CSS2/fonts/font-family-013 (a space and an em dash after a
+//     span of Ahem) draws its reference in Chromium 156.
+func TestShape_LeadingSpaceTakesItsRunsFace(t *testing.T) {
+	t.Parallel()
+	f := newTestFonts(t, repoFont(t, "Ahem.ttf", ahemPath), repoFont(t, "ab.ttf", dejavuAB))
+	ahem, dejavu := style(), style()
+	ahem.Families, dejavu.Families = []string{"Ahem"}, []string{"DejaVu Sans"}
+	ahem.Size, dejavu.Size = 20, 20
+	width := func(runs ...ParagraphRun) float64 {
+		return shape(t, f, runs, ParagraphOptions{}).Line(0, 3, false).Width
+	}
+	a := width(ParagraphRun{Text: "A", Style: ahem})
+	rest := shape(t, f, []ParagraphRun{{Text: " A", Style: dejavu}}, ParagraphOptions{}).Line(0, 2, false).Width
+	got := width(ParagraphRun{Text: "A", Style: ahem}, ParagraphRun{Text: " A", Style: dejavu})
+	if math.Abs(got-(a+rest)) > 1e-6 {
+		t.Errorf("width %v, want %v: the space after the Ahem run is drawn in DejaVu Sans", got, a+rest)
+	}
+}

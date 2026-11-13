@@ -475,6 +475,10 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 			ss := st.styles[idx]
 			piece := item
 			piece.RunStart, piece.RunEnd = s, e
+			// The run's own first face draws its leading spaces, which
+			// select no face of their own: not the face of the
+			// paragraph's first run.
+			piece.Face = st.face(ss.primary)
 			piece.Size = ss.size
 			if ss.lang != "" {
 				piece.Language = ss.lang
