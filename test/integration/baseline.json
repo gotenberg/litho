@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T19:08:49Z",
+  "captured_at": "2026-11-13T19:15:59Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -59926,12 +59926,12 @@
     "litho/html": {
       "features": {
         "diff": {
-          "matched": 188,
+          "matched": 189,
           "mismatched": 8,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 196,
+            "pages_equal": 197,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -60225,6 +60225,14 @@
             },
             "images": {
               "layout": 0.9841,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "installed-variable-fonts": {
+              "layout": 0.9226,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -69168,12 +69176,12 @@
     "litho/odt": {
       "features": {
         "diff": {
-          "matched": 73,
+          "matched": 74,
           "mismatched": 6,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 79,
+            "pages_equal": 80,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -69241,6 +69249,14 @@
               "pages": 1,
               "strict": 1,
               "text_f1": 0.2759
+            },
+            "installed-variable-fonts": {
+              "layout": 0.9448,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "ja-line-break": {
               "layout": 0.8997,
