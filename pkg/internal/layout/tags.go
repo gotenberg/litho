@@ -185,6 +185,17 @@ func (t *tagWalk) walk(b *box, run int) {
 // the budget left.
 func wrapContent(el *typeset.StructElem, evs []tagEvent, budget int) int {
 	if opaqueRoles[el.Role] {
+		if el.Role != "Figure" && el.Role != "Formula" && el.Role != "Form" {
+			// A list, a table and its parts hold no content (ISO 32005,
+			// Table 5): the white space they hold between their items, a
+			// space an item of display: contents leaves at a line's end,
+			// is a layout artifact (ISO 32000-1, 14.8.2.2.1).
+			for _, ev := range evs {
+				if ev.leaf != nil && isSpace(ev.leaf) {
+					ev.leaf.elem = nil
+				}
+			}
+		}
 		return budget
 	}
 	hasContent, hasKid, blockKid := false, false, false
@@ -281,16 +292,30 @@ var inlineRoles = map[string]bool{
 	"Em": true, "Strong": true, "Sub": true,
 }
 
+// blockRoles are the block-level structure types (ISO 32000-1, 14.8.4.2
+// and 14.8.4.3) a paragraph never holds (ISO 32005, Table 5): the grouping
+// elements, paragraphs, headings, lists and tables. A kid of one of them
+// whose content sits in an inline formatting context, an element of
+// display: contents, stays a kid between the paragraphs of the run.
+// Immutable lookup table.
+var blockRoles = map[string]bool{
+	"Document": true, "DocumentFragment": true, "Part": true, "Art": true, "Sect": true,
+	"Div": true, "BlockQuote": true, "Aside": true, "NonStruct": true, "Index": true,
+	"P": true, "H": true, "H1": true, "H2": true, "H3": true, "H4": true, "H5": true, "H6": true,
+	"L": true, "LI": true, "Table": true, "TOC": true, "TOCI": true,
+}
+
 // segment returns the segment ev belongs to, -1 for a kid that stays a kid:
 // own content groups by its inline formatting context, and with
-// paragraphs so do the inline-level kids of a run, an inline element
+// paragraphs so do the inline-level kids of a run but those of
+// [blockRoles], an inline element
 // standing alone among blocks, a flex or grid item, joining the content
 // outside any run.
 func segment(ev tagEvent, paragraphs bool) int {
 	switch {
 	case ev.kid == nil:
 		return ev.run
-	case !paragraphs:
+	case !paragraphs, blockRoles[ev.kid.Role]:
 		return -1
 	case ev.run != 0:
 		return ev.run

@@ -111,8 +111,9 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 	role := n.Role
 	if b == nil && role == "Link" {
 		// A Link element holds a link annotation (ISO 32000-1, 14.8.4.4.2,
-		// Table 340), which an element without a box does not make.
-		role = "Span"
+		// Table 340), which an element without a box does not make: its
+		// content hangs from the enclosing element.
+		role = ""
 	}
 	if role == "" && n.ActualText != "" {
 		// ActualText is an entry of a structure element (ISO 32000-1,
@@ -373,7 +374,7 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 // inherited properties reach its children through their computed styles.
 // It still starts its structure element and its language; it is no
 // decorating box (CSS Text Decoration 3, 2.1), and it is no link target or
-// link: those need a box to place.
+// link, nor a Link element: those need a box to place.
 //
 // # Corpus evidence
 //

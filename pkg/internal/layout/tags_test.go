@@ -47,6 +47,7 @@ func shape(res *Result, e *typeset.StructElem) string {
 // element, gets an element of its own at its place in document order.
 func TestTags_NoElementOwnsContentAndKids(t *testing.T) {
 	in := inlineSty()
+	contents := sty(display(css.Contents))
 	for name, tc := range map[string]struct {
 		root *Node
 		want string
@@ -88,6 +89,20 @@ func TestTags_NoElementOwnsContentAndKids(t *testing.T) {
 		"paragraph alone": {
 			doc(role("P", el(sty(), txt(in, "aa")))),
 			"Document[P#]",
+		},
+		// A P holds no P (ISO 32005, Table 5): a paragraph of display:
+		// contents, whose text sits in the run of its parent, stays
+		// between the paragraphs of that run.
+		"paragraph of display: contents in a run": {
+			doc(role("Div", el(sty(), txt(in, "aa "), role("P", el(contents, txt(contents, "bb"))), txt(in, " cc")))),
+			"Document[Div[P# P# P#]]",
+		},
+		// An L holds no content (ISO 32005, Table 5): the space after an
+		// item of display: contents ends its line and is an artifact.
+		"space after a list item of display: contents": {
+			doc(role("L", el(sty(), role("LI", el(sty(), txt(in, "aa"))), role("LI", el(contents, txt(contents, "bb"))),
+				txt(in, " "), role("LI", el(sty(), txt(in, "cc")))))),
+			"Document[L[LI[LBody#] LI[LBody#] LI[LBody#]]]",
 		},
 	} {
 		res := run(t, tc.root, page(200, 100))

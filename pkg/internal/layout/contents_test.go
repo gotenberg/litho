@@ -108,9 +108,10 @@ func TestGenerate_DisplayContentsDecoratesNothing(t *testing.T) {
 
 // TestStructure_DisplayContentsKeepsItsRole pins that an element of
 // display: contents still starts its structure element, holding its
-// children's content, and that a link of display: contents makes no link
-// annotation and tags a Span: a Link element holds a link annotation (ISO
-// 32000-1, 14.8.4.4.2, Table 340).
+// children's content, beside the paragraph of the run its text sits in
+// (ISO 32005, Table 5: a P holds no P), and that a link of display:
+// contents makes no link annotation and no Link element, which holds one
+// (ISO 32000-1, 14.8.4.4.2, Table 340).
 func TestStructure_DisplayContentsKeepsItsRole(t *testing.T) {
 	c := contentsSty()
 	p := el(c, txt(c, "para"))
@@ -127,8 +128,8 @@ func TestStructure_DisplayContentsKeepsItsRole(t *testing.T) {
 		}
 	}
 	walk(res.Structure)
-	if got := strings.Join(roles, " "); got != "Document P P Span" {
-		t.Errorf("structure %q, want the P and the Span in the paragraph of the inline run", got)
+	if got := strings.Join(roles, " "); got != "Document P P" {
+		t.Errorf("structure %q, want the P and the paragraph of the link's text", got)
 	}
 	for _, pg := range res.Pages {
 		if len(pg.Links) != 0 {
