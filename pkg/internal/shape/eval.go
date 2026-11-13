@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -63,7 +64,7 @@ func newEvaluator(def *Custom, g *Geometry, r typeset.Rect) *evaluator {
 			// space LibreOffice writes a DrawingML shape's geometry in.
 			w, h = r.Width*hundredthMMPerPoint, r.Height*hundredthMMPerPoint
 		}
-		ev.gx, ev.gy = r.X-l*ratio(r.Width, w), r.Y-t*ratio(r.Height, h)
+		ev.gx, ev.gy = r.X-float64(l*ratio(r.Width, w)), r.Y-float64(t*ratio(r.Height, h))
 		ev.gsx, ev.gsy = ratio(r.Width, w), ratio(r.Height, h)
 	} else {
 		w, h = r.Width*emuPerPoint, r.Height*emuPerPoint
@@ -74,7 +75,7 @@ func newEvaluator(def *Custom, g *Geometry, r typeset.Rect) *evaluator {
 	b := &ev.builtins
 	b[BuiltinL], b[BuiltinT], b[BuiltinR], b[BuiltinB] = l, t, l+w, t+h
 	b[BuiltinW], b[BuiltinH] = w, h
-	b[BuiltinHC], b[BuiltinVC] = l+w/2, t+h/2
+	b[BuiltinHC], b[BuiltinVC] = l+float64(w/2), t+float64(h/2)
 	b[BuiltinSS], b[BuiltinLS] = ss, ls
 	b[BuiltinCD2], b[BuiltinCD4], b[BuiltinCD8] = 10800000, 5400000, 2700000
 	b[Builtin3CD4], b[Builtin3CD8], b[Builtin5CD8], b[Builtin7CD8] = 16200000, 8100000, 13500000, 18900000
@@ -172,7 +173,7 @@ func (ev *evaluator) arg(a Arg) float64 {
 
 // guidePoint maps the guide-space point (x, y) onto the box.
 func (ev *evaluator) guidePoint(x, y Arg) (float64, float64) {
-	return ev.mirror(ev.gx+ev.arg(x)*ev.gsx, ev.gy+ev.arg(y)*ev.gsy)
+	return ev.mirror(ev.gx+float64(ev.arg(x)*ev.gsx), ev.gy+float64(ev.arg(y)*ev.gsy))
 }
 
 // mirror applies the geometry's mirroring to a box point.
@@ -227,7 +228,7 @@ func (pb *pathBuilder) emit(k typeset.OpKind, pts ...float64) {
 	var op typeset.PathOp
 	op.Kind = k
 	for i := 0; i+1 < len(pts) && i/2 < 3; i += 2 {
-		x, y := pb.ev.mirror(pb.ox+pts[i]*pb.sx, pb.oy+pts[i+1]*pb.sy)
+		x, y := pb.ev.mirror(pb.ox+float64(pts[i]*pb.sx), pb.oy+float64(pts[i+1]*pb.sy))
 		op.P[i/2] = typeset.Point{X: x, Y: y}
 	}
 	pb.ops = append(pb.ops, op)
@@ -291,9 +292,9 @@ func (pb *pathBuilder) cmd(c *Cmd) {
 	case CmdQuadrantX, CmdQuadrantY:
 		x0, y0, x, y := pb.cx, pb.cy, a(0), a(1)
 		if c.Kind == CmdQuadrantX {
-			pb.curveTo(x0+kappa*(x-x0), y0, x, y+kappa*(y0-y), x, y)
+			pb.curveTo(x0+float64(kappa*(x-x0)), y0, x, y+float64(kappa*(y0-y)), x, y)
 		} else {
-			pb.curveTo(x0, y0+kappa*(y-y0), x+kappa*(x0-x), y, x, y)
+			pb.curveTo(x0, y0+float64(kappa*(y-y0)), x+float64(kappa*(x0-x)), y, x, y)
 		}
 	}
 }
@@ -313,12 +314,12 @@ func (pb *pathBuilder) arcTo(wR, hR, st, sw float64) {
 	if wR == 0 || hR == 0 || sw == 0 {
 		return
 	}
-	t0 := math.Atan2(wR*math.Sin(st), hR*math.Cos(st))
+	t0 := detmath.Atan2(wR*detmath.Sin(st), hR*detmath.Cos(st))
 	var dt float64
 	if math.Abs(sw) >= 2*math.Pi {
 		dt = math.Copysign(2*math.Pi, sw)
 	} else {
-		t1 := math.Atan2(wR*math.Sin(st+sw), hR*math.Cos(st+sw))
+		t1 := detmath.Atan2(wR*detmath.Sin(st+sw), hR*detmath.Cos(st+sw))
 		dt = t1 - t0
 		if sw > 0 && dt <= 0 {
 			dt += 2 * math.Pi
@@ -326,7 +327,7 @@ func (pb *pathBuilder) arcTo(wR, hR, st, sw float64) {
 			dt -= 2 * math.Pi
 		}
 	}
-	cx, cy := pb.cx-wR*math.Cos(t0), pb.cy-hR*math.Sin(t0)
+	cx, cy := pb.cx-float64(wR*detmath.Cos(t0)), pb.cy-float64(hR*detmath.Sin(t0))
 	pb.ellipse(cx, cy, wR, hR, t0, dt)
 }
 
@@ -337,15 +338,15 @@ func (pb *pathBuilder) ellipse(cx, cy, rx, ry, t0, dt float64) {
 	n := int(math.Ceil(math.Abs(dt)/(math.Pi/2) - 1e-9))
 	n = max(1, min(n, 4))
 	step := dt / float64(n)
-	alpha := 4.0 / 3 * math.Tan(step/4)
+	alpha := 4.0 / 3 * detmath.Tan(step/4)
 	a := t0
 	for range n {
 		b := a + step
-		ca, sa, cb, sb := math.Cos(a), math.Sin(a), math.Cos(b), math.Sin(b)
+		ca, sa, cb, sb := detmath.Cos(a), detmath.Sin(a), detmath.Cos(b), detmath.Sin(b)
 		pb.curveTo(
-			cx+rx*ca-alpha*rx*sa, cy+ry*sa+alpha*ry*ca,
-			cx+rx*cb+alpha*rx*sb, cy+ry*sb-alpha*ry*cb,
-			cx+rx*cb, cy+ry*sb)
+			cx+float64(rx*ca)-float64(alpha*rx*sa), cy+float64(ry*sa)+float64(alpha*ry*ca),
+			cx+float64(rx*cb)+float64(alpha*rx*sb), cy+float64(ry*sb)-float64(alpha*ry*cb),
+			cx+float64(rx*cb), cy+float64(ry*sb))
 		a = b
 	}
 }
@@ -365,7 +366,7 @@ func (pb *pathBuilder) angleEllipse(x, y, w, h, t0, t1 float64, move bool) {
 	}
 	// Counter-clockwise on the y-down page is a falling parametric angle.
 	a0 := -t0 * math.Pi / 180
-	sx, sy := x+w*math.Cos(a0), y+h*math.Sin(a0)
+	sx, sy := x+float64(w*detmath.Cos(a0)), y+float64(h*detmath.Sin(a0))
 	if move || !pb.open {
 		pb.moveTo(sx, sy)
 	} else {
@@ -379,10 +380,10 @@ func (pb *pathBuilder) angleEllipse(x, y, w, h, t0, t1 float64, move bool) {
 // A or a W with no subpath open starts one.
 func (pb *pathBuilder) arcRect(a func(int) float64, move, clockwise bool) {
 	x1, y1, x2, y2 := a(0), a(1), a(2), a(3)
-	cx, cy, rx, ry := (x1+x2)/2, (y1+y2)/2, math.Abs(x2-x1)/2, math.Abs(y2-y1)/2
-	t0 := math.Atan2((a(5)-cy)*rx, (a(4)-cx)*ry)
-	t1 := math.Atan2((a(7)-cy)*rx, (a(6)-cx)*ry)
-	sx, sy := cx+rx*math.Cos(t0), cy+ry*math.Sin(t0)
+	cx, cy, rx, ry := float64((x1+x2)/2), float64((y1+y2)/2), math.Abs(x2-x1)/2, math.Abs(y2-y1)/2
+	t0 := detmath.Atan2((a(5)-cy)*rx, (a(4)-cx)*ry)
+	t1 := detmath.Atan2((a(7)-cy)*rx, (a(6)-cx)*ry)
+	sx, sy := cx+float64(rx*detmath.Cos(t0)), cy+float64(ry*detmath.Sin(t0))
 	if move || !pb.open {
 		pb.moveTo(sx, sy)
 	} else {

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
@@ -294,17 +295,17 @@ func apply(op Op, x, y, z float64) float64 {
 	case OpAbs:
 		return math.Abs(x)
 	case OpAt2:
-		return math.Atan2(y, x) * 180 / math.Pi * 60000
+		return detmath.Atan2(y, x) * 180 / math.Pi * 60000
 	case OpCat2:
-		return x * math.Cos(math.Atan2(z, y))
+		return x * detmath.Cos(detmath.Atan2(z, y))
 	case OpCos:
-		return x * math.Cos(angle60k(y))
+		return x * detmath.Cos(angle60k(y))
 	case OpMax:
 		return math.Max(x, y)
 	case OpMin:
 		return math.Min(x, y)
 	case OpMod:
-		return math.Sqrt(x*x + y*y + z*z)
+		return math.Sqrt(float64(x*x) + float64(y*y) + float64(z*z))
 	case OpPin:
 		if y < x {
 			return x
@@ -314,16 +315,16 @@ func apply(op Op, x, y, z float64) float64 {
 		}
 		return y
 	case OpSat2:
-		return x * math.Sin(math.Atan2(z, y))
+		return x * detmath.Sin(detmath.Atan2(z, y))
 	case OpSin:
-		return x * math.Sin(angle60k(y))
+		return x * detmath.Sin(angle60k(y))
 	case OpSqrt:
 		if x < 0 {
 			return 0
 		}
 		return math.Sqrt(x)
 	case OpTan:
-		return x * math.Tan(angle60k(y))
+		return x * detmath.Tan(angle60k(y))
 	case OpAdd:
 		return x + y
 	case OpSub:
@@ -335,15 +336,15 @@ func apply(op Op, x, y, z float64) float64 {
 	case OpNeg:
 		return -x
 	case OpSinRad:
-		return math.Sin(x)
+		return detmath.Sin(x)
 	case OpCosRad:
-		return math.Cos(x)
+		return detmath.Cos(x)
 	case OpTanRad:
-		return math.Tan(x)
+		return detmath.Tan(x)
 	case OpAtanRad:
-		return math.Atan(x)
+		return detmath.Atan(x)
 	case OpAtan2Rad:
-		return math.Atan2(x, y)
+		return detmath.Atan2(x, y)
 	}
 	return 0
 }

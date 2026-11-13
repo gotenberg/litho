@@ -4,6 +4,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -195,7 +196,7 @@ func gradientShading(box typeset.Rect, stops []typeset.ColorStop, angle float64,
 	if box.Width <= 0 || box.Height <= 0 || !numeric.Finite(angle) {
 		return nil
 	}
-	cx, cy := box.X+box.Width/2, box.Y+box.Height/2
+	cx, cy := box.X+float64(box.Width/2), box.Y+float64(box.Height/2)
 	if radial {
 		// The unit circle scaled to the ellipse through the corners.
 		return &typeset.Shading{
@@ -204,12 +205,12 @@ func gradientShading(box typeset.Rect, stops []typeset.ColorStop, angle float64,
 		}
 	}
 	a := angle * math.Pi / 180
-	dx, dy := math.Cos(a), math.Sin(a)
-	half := (box.Width*math.Abs(dx) + box.Height*math.Abs(dy)) / 2
+	dx, dy := detmath.Cos(a), detmath.Sin(a)
+	half := (float64(box.Width*math.Abs(dx)) + float64(box.Height*math.Abs(dy))) / 2
 	return &typeset.Shading{
 		Kind:  typeset.Axial,
-		From:  typeset.Point{X: cx - dx*half, Y: cy - dy*half},
-		To:    typeset.Point{X: cx + dx*half, Y: cy + dy*half},
+		From:  typeset.Point{X: cx - float64(dx*half), Y: cy - float64(dy*half)},
+		To:    typeset.Point{X: cx + float64(dx*half), Y: cy + float64(dy*half)},
 		Stops: stops,
 	}
 }
@@ -228,7 +229,7 @@ func rectGradient(ops []typeset.PathOp, box typeset.Rect, stops []typeset.ColorS
 	if box.Width <= 0 || box.Height <= 0 {
 		return nil
 	}
-	c := typeset.Point{X: box.X + box.Width/2, Y: box.Y + box.Height/2}
+	c := typeset.Point{X: box.X + float64(box.Width/2), Y: box.Y + float64(box.Height/2)}
 	tl, tr := typeset.Point{X: box.X, Y: box.Y}, typeset.Point{X: box.X + box.Width, Y: box.Y}
 	br, bl := typeset.Point{X: tr.X, Y: box.Y + box.Height}, typeset.Point{X: box.X, Y: box.Y + box.Height}
 	tri := func(a, b typeset.Point, edge typeset.Point) typeset.Fragment {
@@ -394,7 +395,7 @@ func btoi(b bool) float64 {
 // patternLines returns the lines of a line pattern over box, nil past
 // maxPatternLines.
 func patternLines(box typeset.Rect, lp linePattern) []typeset.PathOp {
-	step := lp.pitch * patternPixel
+	step := float64(lp.pitch * patternPixel)
 	if box.Width <= 0 || box.Height <= 0 || (box.Width+box.Height)/step*4 > maxPatternLines {
 		return nil
 	}
@@ -405,7 +406,7 @@ func patternLines(box typeset.Rect, lp linePattern) []typeset.PathOp {
 	}
 	x0, y0, x1, y1 := box.X, box.Y, box.X+box.Width, box.Y+box.Height
 	if lp.horz {
-		for y := y0 + step/2; y < y1; y += step {
+		for y := y0 + float64(step/2); y < y1; y += step {
 			line(x0, y, x1, y)
 			if !moves(y, step) {
 				break
@@ -413,7 +414,7 @@ func patternLines(box typeset.Rect, lp linePattern) []typeset.PathOp {
 		}
 	}
 	if lp.vert {
-		for x := x0 + step/2; x < x1; x += step {
+		for x := x0 + float64(step/2); x < x1; x += step {
 			line(x, y0, x, y1)
 			if !moves(x, step) {
 				break
@@ -440,7 +441,7 @@ func patternLines(box typeset.Rect, lp linePattern) []typeset.PathOp {
 // white); c itself for the other modes.
 func Shade(c typeset.Color, m FillMode) typeset.Color {
 	toward := func(t, f float64) typeset.Color {
-		return typeset.Color{R: c.R + (t-c.R)*f, G: c.G + (t-c.G)*f, B: c.B + (t-c.B)*f, A: c.A}
+		return typeset.Color{R: c.R + float64((t-c.R)*f), G: c.G + float64((t-c.G)*f), B: c.B + float64((t-c.B)*f), A: c.A}
 	}
 	switch m {
 	case FillDarken:

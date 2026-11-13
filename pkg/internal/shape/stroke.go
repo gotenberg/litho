@@ -4,6 +4,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/stroke"
@@ -230,7 +231,7 @@ func endTangent(ops []typeset.PathOp) (typeset.Point, typeset.Point, bool) {
 
 // unit returns (x, y) scaled to length 1, false for a null vector.
 func unit(x, y float64) (typeset.Point, bool) {
-	n := math.Hypot(x, y)
+	n := detmath.Hypot(x, y)
 	if n < 1e-9 || !numeric.Finite(n) {
 		return typeset.Point{}, false
 	}
@@ -251,10 +252,10 @@ func shortenStart(ops []typeset.PathOp, d float64) {
 	if !ok {
 		return
 	}
-	d = math.Min(d, math.Hypot(q[len(q)-1].X-p0.X, q[len(q)-1].Y-p0.Y))
-	ops[0].P[0] = typeset.Point{X: p0.X + dir.X*d, Y: p0.Y + dir.Y*d}
+	d = math.Min(d, detmath.Hypot(q[len(q)-1].X-p0.X, q[len(q)-1].Y-p0.Y))
+	ops[0].P[0] = typeset.Point{X: p0.X + float64(dir.X*d), Y: p0.Y + float64(dir.Y*d)}
 	if ops[1].Kind == typeset.CurveTo {
-		ops[1].P[0] = typeset.Point{X: ops[1].P[0].X + dir.X*d, Y: ops[1].P[0].Y + dir.Y*d}
+		ops[1].P[0] = typeset.Point{X: ops[1].P[0].X + float64(dir.X*d), Y: ops[1].P[0].Y + float64(dir.Y*d)}
 	}
 }
 
@@ -269,11 +270,11 @@ func shortenEnd(ops []typeset.PathOp, d float64) {
 		return
 	}
 	if ops[i].Kind == typeset.CurveTo {
-		ops[i].P[2] = typeset.Point{X: ops[i].P[2].X - dir.X*d, Y: ops[i].P[2].Y - dir.Y*d}
-		ops[i].P[1] = typeset.Point{X: ops[i].P[1].X - dir.X*d, Y: ops[i].P[1].Y - dir.Y*d}
+		ops[i].P[2] = typeset.Point{X: ops[i].P[2].X - float64(dir.X*d), Y: ops[i].P[2].Y - float64(dir.Y*d)}
+		ops[i].P[1] = typeset.Point{X: ops[i].P[1].X - float64(dir.X*d), Y: ops[i].P[1].Y - float64(dir.Y*d)}
 		return
 	}
-	ops[i].P[0] = typeset.Point{X: ops[i].P[0].X - dir.X*d, Y: ops[i].P[0].Y - dir.Y*d}
+	ops[i].P[0] = typeset.Point{X: ops[i].P[0].X - float64(dir.X*d), Y: ops[i].P[0].Y - float64(dir.Y*d)}
 }
 
 // arrowPolygons are LibreOffice's arrowhead outlines in a 100 by 100
@@ -306,14 +307,14 @@ func openArrow(w, aw float64) [][2]float64 {
 	h := math.Max(100*0.5*w/aw, 1)
 	return [][2]float64{
 		{50, 0},
-		{100, 100 - h*1.5},
-		{100 - h*1.5, 100},
+		{100, 100 - float64(h*1.5)},
+		{100 - float64(h*1.5), 100},
 		{50 + h, 5.5 * h},
 		{50 + h, 100},
 		{50 - h, 100},
 		{50 - h, 5.5 * h},
 		{h * 1.5, 100},
-		{0, 100 - h*1.5},
+		{0, 100 - float64(h*1.5)},
 	}
 }
 
@@ -332,13 +333,13 @@ func arrowhead(a Arrowhead, w, base float64, tip, dir typeset.Point, c typeset.C
 	nx, ny := -dir.Y, dir.X
 	shift := 0.0
 	if centred {
-		shift = al / 2
+		shift = float64(al / 2)
 	}
 	ops := make([]typeset.PathOp, 0, len(poly)+1)
 	for i, p := range poly {
 		across := (p[0] - 50) / 100 * aw
-		back := p[1]/100*al - shift
-		pt := typeset.Point{X: tip.X - dir.X*back + nx*across, Y: tip.Y - dir.Y*back + ny*across}
+		back := float64(p[1]/100*al) - shift
+		pt := typeset.Point{X: tip.X - float64(dir.X*back) + float64(nx*across), Y: tip.Y - float64(dir.Y*back) + float64(ny*across)}
 		k := typeset.LineTo
 		if i == 0 {
 			k = typeset.MoveTo
@@ -346,7 +347,7 @@ func arrowhead(a Arrowhead, w, base float64, tip, dir typeset.Point, c typeset.C
 		ops = append(ops, typeset.PathOp{Kind: k, P: [3]typeset.Point{pt}})
 	}
 	ops = append(ops, typeset.PathOp{Kind: typeset.ClosePath})
-	return &typeset.Path{Ops: ops, Fill: &typeset.Fill{Color: c}}, max(0, arrowDock[a.Kind]*al-aw/15)
+	return &typeset.Path{Ops: ops, Fill: &typeset.Fill{Color: c}}, max(0, float64(arrowDock[a.Kind]*al)-float64(aw/15))
 }
 
 // arrowDock is where the line meets an arrowhead, as a share of its
@@ -400,7 +401,7 @@ func GradientStroke(ops []typeset.PathOp, l Line, p Paint, box typeset.Rect) []t
 			path.Close()
 		}
 	}
-	diag := math.Hypot(x1-x0, y1-y0) + l.Width
+	diag := detmath.Hypot(x1-x0, y1-y0) + l.Width
 	if !numeric.PositiveFinite(diag) {
 		return nil
 	}
