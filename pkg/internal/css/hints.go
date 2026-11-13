@@ -25,8 +25,10 @@ import (
 //     table sections, rows and cells.
 //   - bgcolor on table, thead, tbody, tfoot, tr, td, th and marquee.
 //   - table: border (widths and outset style; the cells' 1px inset
-//     borders come from the user agent stylesheet), cellspacing, and
-//     cellpadding applied to its cells.
+//     borders come from the user agent stylesheet), frame, rules (the
+//     table's collapsed hidden border, and the borders of its cells, row
+//     groups, column groups and rows), cellspacing, and cellpadding
+//     applied to its cells.
 //   - td and th: nowrap.
 //   - font: color, face, size (the legacy 1 to 7 and relative +n/-n
 //     scale).
@@ -87,6 +89,10 @@ func HTMLHints(n *html.Node) []Declaration {
 				h.add("margin-right", "auto")
 			}
 		}
+		if tableRules(n) != "" {
+			h.add("border-style", "hidden")
+			h.add("border-collapse", "collapse")
+		}
 		if v, ok := attr(n, "border"); ok {
 			px, ok := nonNegativeInt(v)
 			if !ok {
@@ -95,6 +101,25 @@ func HTMLHints(n *html.Node) []Declaration {
 			if px > 0 {
 				h.add("border-width", fmt.Sprintf("%dpx", px))
 				h.add("border-style", "outset")
+			}
+		}
+		if v, ok := attr(n, "frame"); ok {
+			if sides, ok := frameSides[lower(strings.TrimSpace(v))]; ok {
+				px := 1
+				if b, ok := attr(n, "border"); ok {
+					if px, ok = nonNegativeInt(b); !ok {
+						px = 1
+					}
+				}
+				styles := make([]string, len(sides))
+				for i, framed := range sides {
+					styles[i] = "hidden"
+					if framed {
+						styles[i] = "solid"
+					}
+				}
+				h.add("border-width", fmt.Sprintf("%dpx", px))
+				h.add("border-style", strings.Join(styles, " "))
 			}
 		}
 		if v, ok := attr(n, "cellspacing"); ok {
@@ -113,6 +138,13 @@ func HTMLHints(n *html.Node) []Declaration {
 		}
 		if n.Data == "tr" {
 			h.dimension(n, "height", "height", false)
+			if tableRules(rowTable(n)) == "rows" {
+				h.add("border-block-width", "1px")
+				h.add("border-block-style", "solid")
+			}
+		} else if n.Data != "td" && n.Data != "th" && tableRules(parentTable(n)) == "groups" {
+			h.add("border-block-width", "1px")
+			h.add("border-block-style", "solid")
 		}
 		if n.Data == "td" || n.Data == "th" {
 			h.dimension(n, "width", "width", true)
@@ -127,9 +159,25 @@ func HTMLHints(n *html.Node) []Declaration {
 					}
 				}
 			}
+			switch tableRules(rowTable(n.Parent)) {
+			case "none", "groups", "rows":
+				h.add("border-width", "1px")
+				h.add("border-style", "none")
+			case "cols":
+				h.add("border-width", "1px")
+				h.add("border-block-style", "none")
+				h.add("border-inline-style", "solid")
+			case "all":
+				h.add("border-width", "1px")
+				h.add("border-style", "solid")
+			}
 		}
 	case "col", "colgroup":
 		h.dimension(n, "width", "width", false)
+		if n.Data == "colgroup" && tableRules(parentTable(n)) == "groups" {
+			h.add("border-inline-width", "1px")
+			h.add("border-inline-style", "solid")
+		}
 	case "img", "object", "embed", "iframe", "video", "canvas", "input":
 		h.dimension(n, "width", "width", false)
 		h.dimension(n, "height", "height", false)
@@ -440,6 +488,63 @@ func documentBody(n *html.Node) *html.Node {
 
 // cellTable returns the table a cell belongs to, three levels up at most:
 // the row, the row group and the table.
+// frameSides maps a table's frame attribute to the sides it draws, top,
+// right, bottom and left, the others hidden (HTML Standard, 15.3.8). The Standard draws them
+// outset, as wide as the border attribute or medium; litho follows
+// Chromium, which draws them solid, as wide as the border attribute or 1
+// pixel. Immutable lookup table.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws frame=box
+//     as a 1 pixel solid black border, frame=box border=5 as a 5 pixel
+//     one, frame=hsides as 1 pixel solid top and bottom borders, and no
+//     border for frame=box border=0 or frame=void border=5.
+var frameSides = map[string][4]bool{
+	"void": {}, "above": {true, false, false, false}, "below": {false, false, true, false},
+	"hsides": {true, false, true, false}, "lhs": {false, false, false, true}, "rhs": {false, true, false, false},
+	"vsides": {false, true, false, true}, "box": {true, true, true, true}, "border": {true, true, true, true},
+}
+
+// tableRules returns the rules attribute of the table t, lowered, when it
+// is one of the values the HTML Standard, 15.3.8, styles (none, groups,
+// rows, cols, all), and "" otherwise or for a nil t.
+func tableRules(t *html.Node) string {
+	if t == nil {
+		return ""
+	}
+	v, _ := attr(t, "rules")
+	switch v = lower(strings.TrimSpace(v)); v {
+	case "none", "groups", "rows", "cols", "all":
+		return v
+	}
+	return ""
+}
+
+// parentTable returns the parent of n when it is a table, nil otherwise.
+func parentTable(n *html.Node) *html.Node {
+	if p := n.Parent; p != nil && isHTML(p, "table") {
+		return p
+	}
+	return nil
+}
+
+// rowTable returns the table of the row tr as the rules selectors of the
+// HTML Standard, 15.3.8, reach it: its parent, or the parent of its
+// thead, tbody or tfoot; nil for any other place or a nil tr.
+func rowTable(tr *html.Node) *html.Node {
+	if tr == nil || !isHTML(tr, "tr") {
+		return nil
+	}
+	if t := parentTable(tr); t != nil {
+		return t
+	}
+	if g := tr.Parent; g != nil && (isHTML(g, "thead") || isHTML(g, "tbody") || isHTML(g, "tfoot")) {
+		return parentTable(g)
+	}
+	return nil
+}
+
 func cellTable(n *html.Node) *html.Node {
 	p := n.Parent
 	for i := 0; i < 3 && p != nil; i++ {

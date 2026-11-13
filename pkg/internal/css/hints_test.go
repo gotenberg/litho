@@ -232,3 +232,41 @@ func TestHTMLHints_ListItemValue(t *testing.T) {
 		}
 	}
 }
+
+// TestHTMLHints_TableRulesAndFrame locks the rules and frame attributes
+// of a table (HTML Standard, 15.3.8): rules collapses the table's hidden
+// border and gives its cells, row groups, column groups and rows their
+// borders; frame draws the named sides solid, as wide as the border
+// attribute or 1 pixel, as Chromium draws them.
+func TestHTMLHints_TableRulesAndFrame(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<table id=all rules=all><tr><td id=allc>a</td></tr></table>
+<table id=groups rules=groups><colgroup id=cg><col></colgroup><tbody id=tb><tr id=gr><td id=gc>a</td></tr></tbody></table>
+<table rules=rows><tr id=rr><td>a</td></tr></table>
+<table rules=cols><tr><td id=cc>a</td></tr></table>
+<table id=hs frame=hsides><tr><td>a</td></tr></table>
+<table id=b5 frame=box border=5><tr><td>a</td></tr></table>`, ``)
+	px := 0.75
+	tests := []struct {
+		id    string
+		check func(*Style) bool
+	}{
+		{"all", func(s *Style) bool { return s.BorderCollapse == CollapseBorders && s.Border[Top].Style == BorderHidden }},
+		{"allc", func(s *Style) bool { return s.Border[Left].Style == Solid && s.Border[Left].Width == px }},
+		{"gc", func(s *Style) bool { return s.Border[Top].Style == BorderNone }},
+		{"tb", func(s *Style) bool { return s.Border[Top].Style == Solid && s.Border[Left].Style == BorderNone }},
+		{"cg", func(s *Style) bool { return s.Border[Left].Style == Solid && s.Border[Top].Style == BorderNone }},
+		{"gr", func(s *Style) bool { return s.Border[Top].Style == BorderNone }},
+		{"rr", func(s *Style) bool { return s.Border[Top].Style == Solid && s.Border[Bottom].Width == px }},
+		{"cc", func(s *Style) bool { return s.Border[Left].Style == Solid && s.Border[Top].Style == BorderNone }},
+		{"hs", func(s *Style) bool {
+			return s.Border[Top].Style == Solid && s.Border[Top].Width == px && s.Border[Left].Style == BorderHidden
+		}},
+		{"b5", func(s *Style) bool { return s.Border[Right].Style == Solid && s.Border[Right].Width == 5*px }},
+	}
+	for _, tc := range tests {
+		if !tc.check(c.of(tc.id)) {
+			t.Errorf("#%s: %+v", tc.id, c.of(tc.id).Border)
+		}
+	}
+}
