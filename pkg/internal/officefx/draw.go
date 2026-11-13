@@ -2,8 +2,6 @@ package officefx
 
 import (
 	"context"
-	"image"
-	"image/color"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -291,7 +289,7 @@ func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixel
 	if err := effect.AlphaRamp(ctx, s, x0, y0, x1, y1, unit(r.StartAlpha), unit(r.EndAlpha)); err != nil {
 		return nil, Notes{}, err
 	}
-	f, err := encode(ctx, s)
+	f, err := encodeFrag(ctx, s)
 	return f, notes, err
 }
 
@@ -354,39 +352,7 @@ func tinted(ctx context.Context, cov *effect.Surface, c typeset.Color) (typeset.
 		return nil, err
 	}
 	defer s.Release()
-	return encode(ctx, s)
-}
-
-// encode returns the RGBA surface s as an image placed over its grid,
-// colours straight as the soft mask expects (ISO 32000-1, 11.6.5.3).
-func encode(ctx context.Context, s *effect.Surface) (typeset.Fragment, error) {
-	if err := typeset.ChargeImage(ctx, s.W, s.H, color.NRGBAModel); err != nil {
-		return nil, err
-	}
-	img := image.NewNRGBA(image.Rect(0, 0, s.W, s.H))
-	empty := true
-	for i := 0; i < len(s.Pix); i += 4 {
-		a := s.Pix[i+3]
-		if a == 0 {
-			continue
-		}
-		empty = false
-		p := img.Pix[i : i+4 : i+4]
-		for c := range 3 {
-			p[c] = uint8(min((uint32(s.Pix[i+c])*255+uint32(a)/2)/uint32(a), 255)) //nolint:gosec // at most 255
-		}
-		p[3] = a
-	}
-	if empty {
-		typeset.ReleaseImage(ctx, img)
-		return nil, nil
-	}
-	src, err := typeset.EncodeImage(ctx, img)
-	if err != nil {
-		return nil, err
-	}
-	k := s.Grid.Scale
-	return &typeset.Image{Rect: typeset.Rect{X: s.Grid.X, Y: s.Grid.Y, Width: float64(s.W) / k, Height: float64(s.H) / k}, Source: src}, nil
+	return encodeFrag(ctx, s)
 }
 
 // opaqueEnough returns c as a page colour and whether it paints anything.
@@ -517,4 +483,13 @@ func sincosDeg(deg float64) (float64, float64) {
 		return 0, 1
 	}
 	return effect.Sincos(deg)
+}
+
+// encodeFrag returns [effect.Encode] of s as a fragment, nil for none.
+func encodeFrag(ctx context.Context, s *effect.Surface) (typeset.Fragment, error) {
+	img, err := effect.Encode(ctx, s)
+	if err != nil || img == nil {
+		return nil, err
+	}
+	return img, nil
 }

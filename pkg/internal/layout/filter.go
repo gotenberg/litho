@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"image"
-	"image/color"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -233,7 +231,7 @@ func (e *engine) filterImage(fs []css.Filter, frags []typeset.Fragment, box type
 			s = next
 		}
 	}
-	return encodeSurface(e.ctx, s)
+	return effect.Encode(e.ctx, s)
 }
 
 // cssPixelGrid returns res at a whole number of pixels a CSS pixel, over
@@ -342,39 +340,6 @@ func boxBlur(ctx context.Context, s *effect.Surface, sigma float64) error {
 	}
 	kern := effect.BoxKernel(boxWidth(float64(sigma*s.Grid.Scale)), 3)
 	return effect.Blur(ctx, s, kern, kern, effect.EdgeNone)
-}
-
-// encodeSurface returns the RGBA surface s as an image placed over its
-// grid, an artifact, its colours straight as a soft mask expects (ISO
-// 32000-1, 11.6.5.3); nil when it is wholly transparent.
-func encodeSurface(ctx context.Context, s *effect.Surface) (*typeset.Image, error) {
-	if err := typeset.ChargeImage(ctx, s.W, s.H, color.NRGBAModel); err != nil {
-		return nil, err
-	}
-	img := image.NewNRGBA(image.Rect(0, 0, s.W, s.H))
-	empty := true
-	for i := 0; i < len(s.Pix); i += 4 {
-		a := s.Pix[i+3]
-		if a == 0 {
-			continue
-		}
-		empty = false
-		q := img.Pix[i : i+4 : i+4]
-		for c := range 3 {
-			q[c] = uint8(min((uint32(s.Pix[i+c])*255+uint32(a)/2)/uint32(a), 255)) //nolint:gosec // at most 255
-		}
-		q[3] = a
-	}
-	if empty {
-		typeset.ReleaseImage(ctx, img)
-		return nil, nil
-	}
-	src, err := typeset.EncodeImage(ctx, img)
-	if err != nil {
-		return nil, err
-	}
-	k := s.Grid.Scale
-	return &typeset.Image{Rect: typeset.Rect{X: s.Grid.X, Y: s.Grid.Y, Width: float64(s.W) / k, Height: float64(s.H) / k}, Source: src}, nil
 }
 
 // hiddenTagged returns the fragments of frags that hang from a structure
