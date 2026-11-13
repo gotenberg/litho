@@ -179,6 +179,29 @@ func (c *bfc) below(y, h float64) float64 {
 	return next
 }
 
+// hasOfficeExclusion reports whether c holds the exclusion of a float
+// of css.Office.WordAnchor or of a wrapped page-anchored box. A paragraph
+// such an exclusion pushes down starts where its first line lands, not
+// where CSS would put its block: ECMA-376 Part 1, 17.3.1 and 20.4 say
+// nothing of where a wrapped paragraph's box begins, and Word places the
+// paragraph, its heading bookmark's destination included, at the line.
+//
+// # Corpus evidence
+//
+//   - litho/docx images-wrap: in Word's reference, the outline entry of
+//     the heading "wrapSquare largest", beside a wrapSquare drawing,
+//     points at x 172, y 400 (PDF space), the top of the heading's first
+//     line beside the drawing (text at x 174.6, top 397.4), not the
+//     left margin at x 72.
+func (c *bfc) hasOfficeExclusion() bool {
+	for _, f := range c.floats {
+		if f.word || f.wrap != css.FrameWrapThrough {
+			return true
+		}
+	}
+	return false
+}
+
 // place returns where a float of margin box w by h goes in a containing
 // block whose content spans left to right, no higher than minY, following
 // the rules of CSS 2.1, 9.5.1: no higher than an earlier float, as high as

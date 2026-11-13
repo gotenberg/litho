@@ -187,3 +187,21 @@ func TestFloats_LinePushedPastCutBreaksAgain(t *testing.T) {
 		t.Errorf("line at y %v, %v wide, want 30 and 100", got, p.lines[0].w/css.Pt)
 	}
 }
+
+func TestFloats_PushedFirstLineLeavesBlockTop(t *testing.T) {
+	// CSS 2.1, 9.5: a line too wide to fit beside a float moves below it
+	// inside its block; the block, whose top margin had not resolved yet,
+	// keeps its top. Chromium draws the block from 0, its line at 50.
+	rb := boxes(t, doc(
+		el(sty(width(300), height(100)),
+			el(sty(float(css.FloatLeft), width(100), height(50))),
+			el(sty(display(css.InlineBlock), width(250), height(20)))),
+	), page(400, 300))
+	b := kid(t, rb, 0, 0)
+	if got := rect(b); got[1] != 0 {
+		t.Errorf("block top %v, want 0", got[1])
+	}
+	if len(b.lines) != 1 || !near(b.lines[0].y/css.Pt, 50) {
+		t.Errorf("lines %v, want one at 50", b.lines)
+	}
+}

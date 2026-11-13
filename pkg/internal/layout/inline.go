@@ -866,6 +866,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 					room += b.pd[css.Top]
 				}
 			}
+			fitTop := top
 			top, end, left, right, l := s.fitLine(lp, lw, pos, lineIndent, top, lineStrut)
 			s.rubyRoom(l, room)
 			floatsBefore := len(bc.floats)
@@ -894,7 +895,17 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			}
 			s.align(l, lineIndent, last)
 			if first {
-				mc.commit(top)
+				// The margins resolve where the line would start: a line
+				// CSS floats push down moves inside its block, not the
+				// block (CSS 2.1, 9.5), unless it moves to another page. A
+				// paragraph a Word drawing pushes down starts at its first
+				// line, its bookmark with it, as Word places it
+				// (hasOfficeExclusion).
+				at := top
+				if !bc.hasOfficeExclusion() && (!e.paginating() || e.pageOf(fitTop+eps) == e.pageOf(top+eps)) {
+					at = fitTop
+				}
+				mc.commit(at)
 				first = false
 			}
 			l.y = top
