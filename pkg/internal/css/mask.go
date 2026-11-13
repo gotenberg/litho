@@ -408,8 +408,15 @@ func expandMask(v []token, c *declCtx) ([]entry, bool) {
 	if !anyImage {
 		images = nil
 	}
-	return []entry{
-		{pMaskImage, images}, {pMaskMode, modes}, {pMaskRepeat, repeats}, {pMaskPosition, positions},
-		{pMaskSize, sizes}, {pMaskOrigin, origins}, {pMaskClip, clips}, {pMaskComposite, composites},
-	}, true
+	out := []entry{
+		{pMaskImage, images},
+		{pMaskMode, modes},
+		{pMaskRepeat, repeats},
+		{pMaskPosition, positions},
+		{pMaskSize, sizes},
+		{pMaskOrigin, origins},
+		{pMaskClip, clips},
+		{pMaskComposite, composites},
+	}
+	return out, true
 }
