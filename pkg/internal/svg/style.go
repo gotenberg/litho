@@ -75,9 +75,23 @@ type style struct {
 	// paints its viewport (CSS Backgrounds 3, 3.2); it is not inherited.
 	background typeset.Color
 
-	// mask, filter and marker record the properties the renderer does not
-	// draw, for a warning.
-	mask, filter, marker bool
+	// mask is the id of the mask element the element is masked by, ""
+	// for none; maskBad reports a mask the renderer does not draw, a
+	// reference into another document. maskAlpha is the mask-type alpha
+	// of a mask element (CSS Masking 1, 7.1). None is inherited.
+	mask      string
+	maskBad   bool
+	maskAlpha bool
+	// blend is the mix-blend-mode, plusLighter its plus-lighter value,
+	// which no PDF blend mode is, and isolate an isolation of isolate
+	// (CSS Compositing 1, 3.2 and 3.3). None is inherited.
+	blend       typeset.BlendMode
+	plusLighter bool
+	isolate     bool
+
+	// filter and marker record the properties the renderer does not draw,
+	// for a warning.
+	filter, marker bool
 }
 
 // initialStyle returns the initial values (SVG 1.1, Appendix N), with
@@ -125,7 +139,8 @@ func (p *style) inherit() *style {
 	st.stopColor = paint{kind: paintColor, color: typeset.Black}
 	st.stopAlpha = 1
 	st.overflowOK = false
-	st.mask, st.filter = false, false
+	st.mask, st.maskBad, st.maskAlpha, st.filter = "", false, false, false
+	st.blend, st.plusLighter, st.isolate = typeset.BlendNormal, false, false
 	st.background = typeset.Color{}
 	return &st
 }
@@ -286,7 +301,43 @@ func (st *style) apply(d declaration, parent *style) bool {
 		}
 		return ok
 	case "mask":
-		st.mask = !strings.EqualFold(v, "none")
+		st.mask, st.maskBad = "", false
+		if strings.EqualFold(v, "none") {
+			return true
+		}
+		id, ok := parseURLRef(v)
+		st.mask, st.maskBad = id, !ok
+		return true
+	case "mask-type":
+		switch strings.ToLower(v) {
+		case "alpha":
+			st.maskAlpha = true
+		case "luminance":
+			st.maskAlpha = false
+		default:
+			return false
+		}
+		return true
+	case "mix-blend-mode":
+		k := strings.ToLower(v)
+		if k == "plus-lighter" {
+			st.blend, st.plusLighter = typeset.BlendNormal, true
+			return true
+		}
+		m, ok := blendModes[k]
+		if ok {
+			st.blend, st.plusLighter = m, false
+		}
+		return ok
+	case "isolation":
+		switch strings.ToLower(v) {
+		case "isolate":
+			st.isolate = true
+		case "auto":
+			st.isolate = false
+		default:
+			return false
+		}
 		return true
 	case "filter":
 		st.filter = !strings.EqualFold(v, "none")
@@ -387,6 +438,14 @@ func (st *style) copyFrom(prop string, parent *style) {
 		st.color = parent.color
 	case "clip-path":
 		st.clipPath = parent.clipPath
+	case "mask":
+		st.mask, st.maskBad = parent.mask, parent.maskBad
+	case "mask-type":
+		st.maskAlpha = parent.maskAlpha
+	case "mix-blend-mode":
+		st.blend, st.plusLighter = parent.blend, parent.plusLighter
+	case "isolation":
+		st.isolate = parent.isolate
 	case "font-family":
 		st.families = parent.families
 	case "font-size":
@@ -411,7 +470,19 @@ var presentationAttrs = map[string]bool{
 	"display": true, "color": true, "clip-path": true, "clip-rule": true, "stop-color": true,
 	"stop-opacity": true, "mask": true, "filter": true, "marker-start": true, "marker-mid": true,
 	"marker-end": true, "overflow": true, "font-family": true, "font-size": true,
-	"font-weight": true, "font-style": true, "text-anchor": true,
+	"font-weight": true, "font-style": true, "text-anchor": true, "mask-type": true,
+	"mix-blend-mode": true, "isolation": true,
+}
+
+// blendModes are the <blend-mode> keywords (CSS Compositing 1, 5.3), in
+// the blend modes of ISO 32000-1, 11.3.5 that bear their names.
+var blendModes = map[string]typeset.BlendMode{
+	"normal": typeset.BlendNormal, "multiply": typeset.BlendMultiply, "screen": typeset.BlendScreen,
+	"overlay": typeset.BlendOverlay, "darken": typeset.BlendDarken, "lighten": typeset.BlendLighten,
+	"color-dodge": typeset.BlendColorDodge, "color-burn": typeset.BlendColorBurn,
+	"hard-light": typeset.BlendHardLight, "soft-light": typeset.BlendSoftLight,
+	"difference": typeset.BlendDifference, "exclusion": typeset.BlendExclusion, "hue": typeset.BlendHue,
+	"saturation": typeset.BlendSaturation, "color": typeset.BlendColor, "luminosity": typeset.BlendLuminosity,
 }
 
 // typesetColor converts a CSS colour.
@@ -573,4 +644,11 @@ func parseWeight(v string, parent *style) (int, bool) {
 		return 0, false
 	}
 	return n, true
+}
+
+// grouped reports a style whose mask, blend mode or isolation asks for a
+// group of the element's own, which opacity alone folded into its colours
+// cannot give.
+func (st *style) grouped() bool {
+	return st.mask != "" || st.blend != typeset.BlendNormal || st.isolate
 }

@@ -14,15 +14,15 @@ import (
 func TestCollector_TakesWhatDrawingAddsLater(t *testing.T) {
 	t.Parallel()
 
-	const src = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><mask id="m"/><rect width="10" height="10" mask="url(#m)"/></svg>`
+	const src = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><filter id="f"/><rect width="10" height="10" filter="url(#f)"/></svg>`
 	a, b := parse(t, src), parse(t, src)
 	var c Collector
 	c.Add(a, "in a: ")
 	c.Add(b, "in b: ")
 	first := c.Take()
-	want := "in a: masks are not drawn; the masked content is drawn unmasked"
+	want := "in a: filter effects are not drawn; the filtered content is drawn unfiltered"
 	if len(first) != 2 || first[0].Message != want || first[0].Code != warn.ContentUnsupported || first[0].Effect != warn.Approximated {
-		t.Fatalf("first take: %+v, want the mask warning of a then of b", first)
+		t.Fatalf("first take: %+v, want the filter warning of a then of b", first)
 	}
 	if again := c.Take(); len(again) != 0 {
 		t.Fatalf("a take with nothing new returned %+v", again)
@@ -42,7 +42,7 @@ func TestCollector_TakesWhatDrawingAddsLater(t *testing.T) {
 func TestCollector_DeduplicatesAcrossDrawings(t *testing.T) {
 	t.Parallel()
 
-	const src = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><mask id="m"/><rect width="10" height="10" mask="url(#m)"/></svg>`
+	const src = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><filter id="f"/><rect width="10" height="10" filter="url(#f)"/></svg>`
 	var c Collector
 	c.Add(parse(t, src), "inline: ")
 	c.Add(parse(t, src), "inline: ")

@@ -69,6 +69,11 @@ type renderer struct {
 	// converted to paths.
 	outlines       map[string]*outlineFont
 	glyphsOutlined int
+	// masking holds the mask elements whose content is being drawn, so a
+	// mask reached again from its own content is dropped; blends reports
+	// a group drawn under a blend mode.
+	masking map[*html.Node]bool
+	blends  bool
 }
 
 func newRenderer(ctx context.Context, d *Document, vw, vh float64) *renderer {
@@ -101,6 +106,11 @@ func (r *renderer) root() []typeset.Fragment {
 	inner, done := r.open(s, r.d.root, st, nil)
 	r.children(r.d.root, st, inner, 0)
 	done()
+	if r.blends && len(c.out) > 0 {
+		// What blends inside the drawing blends with the drawing alone:
+		// an SVG root is an isolated group (CSS Compositing 1, 3.3).
+		return []typeset.Fragment{&typeset.Group{Opacity: 1, Transparency: &typeset.TransparencyGroup{Isolated: true}, Content: c.out}}
+	}
 	return c.out
 }
 
@@ -209,10 +219,15 @@ func (r *renderer) element(n *html.Node, parent *style, s sink, depth int) {
 }
 
 // unsupportedProps warns of the properties of st the renderer does not
-// draw: masks, filters and markers (SVG 1.1, 11.6, 14.4 and 15).
+// draw: masks that name no mask element, plus-lighter, filters and
+// markers (SVG 1.1, 11.6, 14.4 and 15).
 func (r *renderer) unsupportedProps(n *html.Node, st *style) {
-	if st.mask {
-		r.d.warn(warn.ContentUnsupported, warn.Approximated, "masks are not drawn; the masked content is drawn unmasked")
+	if st.maskBad {
+		r.d.warn(warn.ContentUnsupported, warn.Approximated, "a mask that is not a reference to a mask element of the drawing is not drawn; the content is drawn unmasked")
+	}
+	if st.plusLighter {
+		// PDF has no additive blend mode (ISO 32000-1, 11.3.5).
+		r.d.warn(warn.ContentUnsupported, warn.Approximated, "mix-blend-mode plus-lighter is drawn as normal")
 	}
 	if st.filter {
 		r.d.warn(warn.ContentUnsupported, warn.Approximated, "filter effects are not drawn; the filtered content is drawn unfiltered")
@@ -244,10 +259,11 @@ func passes(n *html.Node) bool {
 }
 
 // open starts the typeset group of an element styled st, for its
-// opacity and its clip-path, and returns the sink of its content and the
-// function that closes the group. Without opacity or clip it opens
-// nothing. The bounding box, for an objectBoundingBox clip, comes from box
-// when given, else from the element's geometry.
+// opacity, its clip-path, its mask, its blend mode and its isolation, and
+// returns the sink of its content and the function that closes the group.
+// Without any of them it opens nothing. The bounding box, for an
+// objectBoundingBox clip or mask, comes from box when given, else from
+// the element's geometry.
 func (r *renderer) open(s sink, n *html.Node, st *style, box *bbox) (sink, func()) {
 	op := st.opacity
 	var regions []clipRegion
@@ -259,17 +275,34 @@ func (r *renderer) open(s sink, n *html.Node, st *style, box *bbox) (sink, func(
 			op = 0
 		}
 	}
+	fx := effects{blend: st.blend, isolate: st.isolate}
+	if st.mask != "" && op > 0 {
+		m, found := r.mask(n, st, st.mask, box, 0)
+		switch {
+		case !found:
+			// CSS Masking 1, 6.1 makes a mask that names no mask element
+			// a layer of transparent black, which masks everything out;
+			// Chromium draws the element unmasked, and so does litho.
+		case len(m.Content) == 0:
+			op = 0
+		default:
+			fx.mask = m
+		}
+	}
 	if op <= 0 {
 		s.alpha = 0
 		return s, func() {}
 	}
+	if fx.blend != typeset.BlendNormal {
+		r.blends = true
+	}
 	if len(regions) > 1 {
-		if inner, done, ok := r.openUnion(s, op, regions); ok {
+		if inner, done, ok := r.openUnion(s, op, regions, fx); ok {
 			return inner, done
 		}
 		regions = regions[:1]
 	}
-	if op >= 1 && len(regions) == 0 {
+	if op >= 1 && len(regions) == 0 && !fx.any() {
 		return s, func() {}
 	}
 	var first *typeset.Path
@@ -277,15 +310,28 @@ func (r *renderer) open(s sink, n *html.Node, st *style, box *bbox) (sink, func(
 	if len(regions) > 0 {
 		first, clips = regions[0][0], regions[0][1:]
 	}
-	inner, done := r.openGroup(s, op, first)
+	inner, done := r.openGroup(s, op, first, fx)
 	// Clips that intersect, a clip path's own or its child's, nest.
 	for _, c := range clips {
 		var d2 func()
-		inner, d2 = r.openGroup(inner, 1, c)
+		inner, d2 = r.openGroup(inner, 1, c, effects{})
 		outer := done
 		done = func() { d2(); outer() }
 	}
 	return inner, done
+}
+
+// effects are the compositing of an element's group beyond its opacity
+// and its clip: its blend mode, whether it is isolated, and its mask.
+type effects struct {
+	blend   typeset.BlendMode
+	isolate bool
+	mask    *typeset.SoftMask
+}
+
+// any reports effects that need a group.
+func (fx effects) any() bool {
+	return fx.blend != typeset.BlendNormal || fx.isolate || fx.mask != nil
 }
 
 // openUnion opens the groups of content of opacity op clipped to the
@@ -293,12 +339,12 @@ func (r *renderer) open(s sink, n *html.Node, st *style, box *bbox) (sink, func(
 // single clipping path cannot unite. Where regions overlap, translucent
 // content is painted twice. It reports false, opening nothing, with a
 // warning, when the groups would nest past the cap.
-func (r *renderer) openUnion(s sink, op float64, regions []clipRegion) (sink, func(), bool) {
+func (r *renderer) openUnion(s sink, op float64, regions []clipRegion, fx effects) (sink, func(), bool) {
 	depth := 0
 	for _, reg := range regions {
 		depth = max(depth, len(reg))
 	}
-	if op < 1 {
+	if op < 1 || fx.any() {
 		depth++
 	}
 	if s.nest+depth > maxGroupNesting {
@@ -316,15 +362,15 @@ func (r *renderer) openUnion(s sink, op float64, regions []clipRegion) (sink, fu
 			content := c.out
 			for i, r := range slices.Backward(reg) {
 				m := identity
-				if i == 0 && op >= 1 {
+				if i == 0 && op >= 1 && !fx.any() {
 					m = s.pending
 				}
 				content = []typeset.Fragment{&typeset.Group{Transform: m, Clip: r, Opacity: 1, Content: content}}
 			}
 			out = append(out, content...)
 		}
-		if op < 1 {
-			out = []typeset.Fragment{translucent(&typeset.Group{Transform: s.pending, Opacity: op, Content: out})}
+		if op < 1 || fx.any() {
+			out = []typeset.Fragment{composite(&typeset.Group{Transform: s.pending, Opacity: op, Content: out}, fx)}
 		}
 		s.c.out = append(s.c.out, out...)
 		s.c.last = nil
@@ -336,9 +382,9 @@ func (r *renderer) openUnion(s sink, op float64, regions []clipRegion) (sink, fu
 // content and the function that closes it. Past the nesting cap it opens
 // nothing: the opacity folds into the colours and the clip is dropped,
 // with a warning.
-func (r *renderer) openGroup(s sink, op float64, clip *typeset.Path) (sink, func()) {
+func (r *renderer) openGroup(s sink, op float64, clip *typeset.Path, fx effects) (sink, func()) {
 	if s.nest >= maxGroupNesting {
-		r.d.warn(warn.LimitReached, warn.Approximated, fmt.Sprintf("opacity and clipping nested deeper than %d levels are approximated", maxGroupNesting))
+		r.d.warn(warn.LimitReached, warn.Approximated, fmt.Sprintf("opacity, clipping, masks and blending nested deeper than %d levels are approximated", maxGroupNesting))
 		s.alpha *= op
 		return s, func() {}
 	}
@@ -350,20 +396,22 @@ func (r *renderer) openGroup(s sink, op float64, clip *typeset.Path) (sink, func
 			return
 		}
 		g.Content = c.out
-		s.c.out = append(s.c.out, translucent(g))
+		s.c.out = append(s.c.out, composite(g, fx))
 		s.c.last = nil
 	}
 }
 
-// translucent returns g, made one isolated transparency group when its
-// opacity is below 1 and its content paints more than one object: group
-// opacity applies to the group's result as a whole, so overlapping
-// children do not show through each other (SVG 2, 3.2 and CSS Color 4,
-// 4.1). One object composites alike under its own alpha and costs no form
-// XObject.
-func translucent(g *typeset.Group) *typeset.Group {
-	if g.Opacity < 1 && !oneObject(g.Content) {
-		g.Transparency = &typeset.TransparencyGroup{Isolated: true}
+// composite returns g under the effects fx, made one isolated
+// transparency group when it is masked or isolated, or when its opacity
+// is below 1 or it blends and its content paints more than one object:
+// group opacity and blending apply to the group's result as a whole, so
+// overlapping children do not show through each other (SVG 2, 3.2; CSS
+// Color 4, 4.1; CSS Compositing 1, 3.2). One object composites alike
+// under its own alpha and blend mode and costs no form XObject.
+func composite(g *typeset.Group, fx effects) *typeset.Group {
+	g.Blend = fx.blend
+	if fx.isolate || fx.mask != nil || (g.Opacity < 1 || g.Blend != typeset.BlendNormal) && !oneObject(g.Content) {
+		g.Transparency = &typeset.TransparencyGroup{Isolated: true, Mask: fx.mask}
 	}
 	return g
 }
@@ -570,7 +618,7 @@ func (r *renderer) openClip(s sink, n *html.Node, st *style, clip *typeset.Path)
 	if clip == nil || outer.alpha <= 0 {
 		return outer, done
 	}
-	inner, d2 := r.openGroup(outer, 1, clip)
+	inner, d2 := r.openGroup(outer, 1, clip, effects{})
 	return inner, func() { d2(); done() }
 }
 

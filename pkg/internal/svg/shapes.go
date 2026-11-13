@@ -193,7 +193,7 @@ func (r *renderer) shape(n *html.Node, st *style, s sink) {
 	if fill == nil && stroke == nil {
 		return
 	}
-	if fill != nil && stroke != nil || st.clipPath != "" {
+	if fill != nil && stroke != nil || st.clipPath != "" || st.grouped() {
 		inner, done := r.open(s, n, st, &box)
 		defer done()
 		s = inner

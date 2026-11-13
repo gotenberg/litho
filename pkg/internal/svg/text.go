@@ -56,7 +56,7 @@ func (r *renderer) text(n *html.Node, st *style, s sink) {
 		r.d.warn(warn.TextNotLaidOut, warn.Omitted, "text is not drawn: no fonts are available")
 		return
 	}
-	if st.clipPath != "" {
+	if st.clipPath != "" || st.grouped() {
 		inner, done := r.open(s, n, st, nil)
 		defer done()
 		s = inner

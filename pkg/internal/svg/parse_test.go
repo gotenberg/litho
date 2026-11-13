@@ -226,7 +226,7 @@ func TestDraw_Warnings(t *testing.T) {
 		code warn.Code
 	}{
 		{`<svg><filter id="f"/><rect width="1" height="1" filter="url(#f)"/></svg>`, warn.ContentUnsupported},
-		{`<svg><mask id="m"/><rect width="1" height="1" mask="url(#m)"/></svg>`, warn.ContentUnsupported},
+		{`<svg><rect width="1" height="1" mask="url(other.svg#m)"/></svg>`, warn.ContentUnsupported},
 		{`<svg><path d="M0 0L1 1" marker-end="url(#m)"/></svg>`, warn.ContentUnsupported},
 		{`<svg><pattern id="p"/><rect width="1" height="1" fill="url(#p) red"/></svg>`, warn.ContentUnsupported},
 		{`<svg><linearGradient id="g" spreadMethod="repeat"><stop/><stop offset="1"/></linearGradient><rect width="1" height="1" fill="url(#g)"/></svg>`, warn.ContentUnsupported},

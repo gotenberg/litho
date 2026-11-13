@@ -28,6 +28,12 @@
 //     Children of mixed clip rules or with clip paths of their own paint
 //     the clipped content once each, so translucent content is painted
 //     twice where they overlap.
+//   - Masking and compositing: mask naming a mask element, with
+//     maskUnits, maskContentUnits, its region and mask-type, as a soft
+//     mask by luminance or alpha (CSS Masking 1, 7.1); mix-blend-mode, as
+//     the PDF blend mode of the same name, and isolation (CSS Compositing
+//     1, 3.2 and 3.3). plus-lighter is drawn as normal with a warning. A
+//     drawing in which something blends is one isolated group.
 //   - Transforms: the transform attribute grammar (7.6).
 //   - Text: text and tspan with x, y, dx, dy lists, text-anchor and the
 //     font properties, shaped with the text package (10); a stroke unlike
@@ -39,9 +45,9 @@
 //
 // # Not supported
 //
-// Patterns, masks, filters and markers are not drawn, with a warning: a
-// pattern paints its fallback, masked and filtered content is drawn as it
-// is. A gradient spreadMethod of reflect or repeat is drawn as pad, and a
+// Patterns, filters and markers are not drawn, with a warning: a pattern
+// paints its fallback, filtered content is drawn as it is. A mask that
+// names no mask element is not applied. A gradient spreadMethod of reflect or repeat is drawn as pad, and a
 // gradient text fill in the gradient's middle colour, each with a
 // warning. textPath, textLength, rotate, foreignObject, animation,
 // scripting and external style sheets are not supported. Elements
