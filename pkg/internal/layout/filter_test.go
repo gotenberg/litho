@@ -170,3 +170,16 @@ func TestBackdropFilter_PrintsTheElementWithOneWarning(t *testing.T) {
 		t.Errorf("%d backdrop-filter warnings in %+v, want one a document", n, res.Warnings)
 	}
 }
+
+func TestFilter_RootFiltersItsContentNotTheCanvas(t *testing.T) {
+	// Chromium prints the canvas of a root of filter: grayscale(1) in
+	// its colour and the root's content through the filter.
+	root := el(sty(bg(red), filters(css.Filter{Kind: css.FilterGrayscale, Amount: 1})), el(sty(width(10), height(10), bg(blue))))
+	img := render(t, run(t, root, page(30, 30)), 1)
+	if c := at(img, 20, 20); code(c) != 'R' {
+		t.Errorf("the canvas %v, want red", c)
+	}
+	if c := at(img, 5, 5); c.R != c.B || c.B > 30 {
+		t.Errorf("the root's content %v, want blue made a dark grey", c)
+	}
+}
