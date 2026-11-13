@@ -33,7 +33,7 @@ func (s *session) rewriteStreamContent(ctx context.Context, stream ast.PdfStream
 	s.report.KOnlyBlack += cr.kOnly
 	s.report.Streams++
 	s.countBlackPoint(cr)
-	ns, err := newStream(stream.Dict, out)
+	ns, err := s.newStream(stream.Dict, out)
 	if err != nil {
 		return ast.PdfStream{}, nil, false, err
 	}

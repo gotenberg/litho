@@ -1,8 +1,6 @@
 package recolor
 
 import (
-	"bytes"
-	"compress/zlib"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -71,6 +69,8 @@ type session struct {
 	// /Contents names that only a copy defines ([contentRewriter.paintVariant]),
 	// so another page showing the stream defines them too.
 	streamVariants map[int]resourceAdds
+	// deflate compresses the streams the session writes.
+	deflate writer.Deflater
 }
 
 func newSession(doc *document.Document, alloc *writer.ObjAllocator, t targetInfo, opts Options, report *Report) (*session, error) {
@@ -252,15 +252,12 @@ func (s *session) skip(num int, what string, err error) {
 }
 
 // newStream builds a Flate-compressed stream of data whose dictionary is
-// dict without its filters and lengths.
-func newStream(dict ast.PdfDict, data []byte) (ast.PdfStream, error) {
-	var buf bytes.Buffer
-	w := zlib.NewWriter(&buf)
-	if _, err := w.Write(data); err != nil {
-		return ast.PdfStream{}, fmt.Errorf("compressing stream: %w", err)
-	}
-	if err := w.Close(); err != nil {
-		return ast.PdfStream{}, fmt.Errorf("compressing stream: %w", err)
+// dict without its filters and lengths, compressed by the session's
+// [writer.Deflater].
+func (s *session) newStream(dict ast.PdfDict, data []byte) (ast.PdfStream, error) {
+	z, err := s.deflate.Deflate(data)
+	if err != nil {
+		return ast.PdfStream{}, err
 	}
 	out := maps.Clone(dict)
 	if out == nil {
@@ -270,7 +267,7 @@ func newStream(dict ast.PdfDict, data []byte) (ast.PdfStream, error) {
 		delete(out, k)
 	}
 	out["Filter"] = ast.PdfName("FlateDecode")
-	return ast.NewStream(out, buf.Bytes()), nil
+	return ast.NewStream(out, z), nil
 }
 
 // maxSampledEntries bounds the grid points of a sampled function recolouring
@@ -354,7 +351,7 @@ func (s *session) sampledFunction(ctx context.Context, domain []float64, outN in
 	for range outN {
 		rng = append(rng, ast.PdfInt(0), ast.PdfInt(1))
 	}
-	stream, err := newStream(ast.PdfDict{
+	stream, err := s.newStream(ast.PdfDict{
 		"FunctionType":  ast.PdfInt(0),
 		"Domain":        reals(domain),
 		"Range":         rng,

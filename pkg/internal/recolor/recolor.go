@@ -428,7 +428,7 @@ func (s *session) rewriteContentsWith(ctx context.Context, obj ast.PdfObject, re
 		if err != nil || !changed {
 			return false, nil, nil, err
 		}
-		ns, err := newStream(streams[0].stream.Dict, out)
+		ns, err := s.newStream(streams[0].stream.Dict, out)
 		if err != nil {
 			return false, nil, nil, err
 		}
@@ -470,7 +470,7 @@ func (s *session) rewriteContentsWith(ctx context.Context, obj ast.PdfObject, re
 		if !changed {
 			continue
 		}
-		ns, err := newStream(st.stream.Dict, out)
+		ns, err := s.newStream(st.stream.Dict, out)
 		if err != nil {
 			return false, nil, nil, err
 		}

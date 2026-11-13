@@ -119,7 +119,7 @@ func (s *session) convertShading(ctx context.Context, resolved ast.PdfObject) (a
 		return nil, false, fmt.Errorf("%w: shading type %d without the data its colour comes from", ErrUnsupportedSpace, kind)
 	}
 	if data != nil {
-		ns, err := newStream(out, data)
+		ns, err := s.newStream(out, data)
 		if err != nil {
 			return nil, false, err
 		}
