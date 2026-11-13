@@ -148,6 +148,12 @@ func (r reftestRef) equal(d pixelDiff) bool {
 // directory, the one its relative URLs resolve in (the selector keeps
 // only tests whose resources lie under it), and with the fixture fonts plus
 // Ahem, the font most reftests draw with.
+//
+// An XHTML test or reference (.xht) is converted as HTML once the CDATA
+// markers of its style sheets are stripped ([stripStyleCDATA]), the bytes
+// on disk left as WPT holds them. Only the test and its references are
+// read so: the selector keeps out embedded documents, so no other XHTML
+// file is loaded.
 type reftestFeature struct {
 	convert htmlConverter
 
@@ -407,6 +413,11 @@ func (f *reftestFeature) draw(ctx context.Context, root, rel string, paged bool)
 	src, err := os.ReadFile(file) //nolint:gosec // file of the fetched WPT tree, listed in reftests.json
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
+	}
+	if path.Ext(rel) == ".xht" {
+		if stripped, ok := stripStyleCDATA(src); ok {
+			src = stripped
+		}
 	}
 	f.mu.RLock()
 	fonts := f.fontDirs
