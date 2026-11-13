@@ -95,10 +95,7 @@ func TestFontFace_IgnoredDescriptorsWarn(t *testing.T) {
 	if !ok || f.Family != "F" {
 		t.Fatalf("the rule was dropped: %+v", f)
 	}
-	if !hasWarning(warns, warn.CSSUnsupported, "font-variation-settings") {
-		t.Errorf("no warning for font-variation-settings: %v", warns)
-	}
-	for _, name := range []string{"font-display", "font-feature-settings", "size-adjust", "ascent-override"} {
+	for _, name := range []string{"font-display", "font-feature-settings", "font-variation-settings", "size-adjust", "ascent-override"} {
 		if hasWarning(warns, warn.CSSUnsupported, name) {
 			t.Errorf("%s warned: %v", name, warns)
 		}
@@ -106,9 +103,40 @@ func TestFontFace_IgnoredDescriptorsWarn(t *testing.T) {
 	if want := []FeatureSetting{{"liga", 0}}; !reflect.DeepEqual(f.FeatureSettings, want) {
 		t.Errorf("font-feature-settings = %v, want %v", f.FeatureSettings, want)
 	}
+	if want := []VariationSetting{{"wght", 300}}; !reflect.DeepEqual(f.VariationSettings, want) {
+		t.Errorf("font-variation-settings = %v, want %v", f.VariationSettings, want)
+	}
 	// A negative percentage is invalid and keeps normal (CSS Fonts 4,
 	// 4.11).
 	if f.SizeAdjust != 0.9 || f.AscentOverride != 0.9 || f.DescentOverride != -1 || f.LineGapOverride != -1 {
 		t.Errorf("metrics %v %v %v %v", f.SizeAdjust, f.AscentOverride, f.DescentOverride, f.LineGapOverride)
+	}
+}
+
+// TestFontFace_AutoDescriptors pins which of font-weight, font-stretch and
+// font-style a rule leaves at auto (CSS Fonts 4, 4.4): left out, set to
+// auto, or set to a value that does not parse.
+func TestFontFace_AutoDescriptors(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		body                  string
+		weight, stretch, styl bool
+	}{
+		{"", true, true, true},
+		{"font-weight: auto; font-stretch: auto; font-style: auto", true, true, true},
+		{"font-weight: 100 900; font-stretch: 75% 125%; font-style: oblique 0deg 10deg", false, false, false},
+		{"font-weight: 400; font-stretch: normal; font-style: normal", false, false, false},
+		{"font-weight: heavy", true, true, true},
+	} {
+		f, _, ok := faceOf(t, tc.body)
+		if !ok {
+			t.Fatalf("%q: the rule was dropped", tc.body)
+		}
+		if f.WeightAuto != tc.weight || f.StretchAuto != tc.stretch || f.StyleAuto != tc.styl {
+			t.Errorf("%q: auto weight %v, stretch %v, style %v; want %v, %v, %v", tc.body, f.WeightAuto, f.StretchAuto, f.StyleAuto, tc.weight, tc.stretch, tc.styl)
+		}
+		if f.WeightAuto && (f.WeightMin != 400 || f.WeightMax != 400) {
+			t.Errorf("%q: an auto weight selects as %d to %d, want 400", tc.body, f.WeightMin, f.WeightMax)
+		}
 	}
 }

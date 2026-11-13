@@ -1171,6 +1171,12 @@ type Style struct {
 	// FontFeatureSettings is font-feature-settings (CSS Fonts 4, 6.12),
 	// nil for normal; the slice is shared and never modified.
 	FontFeatureSettings []FeatureSetting
+	// FontVariationSettings is font-variation-settings (CSS Fonts 4,
+	// 8.2), nil for normal, each tag once; the slice is shared and never
+	// modified.
+	FontVariationSettings []VariationSetting
+	// FontOpticalSizing is font-optical-sizing (CSS Fonts 4, 8.1).
+	FontOpticalSizing OpticalSizing
 	// FontLanguageOverride is font-language-override (CSS Fonts 4, 6.14),
 	// the OpenType language system tag that shapes the text, "" for
 	// normal.

@@ -266,6 +266,8 @@ const (
 	pContentVisibility
 	pFilter
 	pBackdropFilter
+	pFontVariationSettings
+	pFontOpticalSizing
 	numProps
 )
 
@@ -1022,6 +1024,9 @@ func init() {
 		props[id] = def
 	}
 	for id, def := range fontFeatureProps() {
+		props[id] = def
+	}
+	for id, def := range fontVariationProps() {
 		props[id] = def
 	}
 	for id, def := range textProps() {

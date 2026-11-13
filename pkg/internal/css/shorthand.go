@@ -178,7 +178,7 @@ func initShorthands() {
 		"outline":       {longhands: ids(pOutlineStyle, 3), expand: expandOutline},
 		"background":    {longhands: append(ids(pBgColor, 7), pBgAttachment), expand: expandBackground},
 		"font": {
-			longhands: append([]propID{pFontStyle, pFontWeight, pFontSize, pLineHeight, pFontFamily, pFontStretch, pFontKerning, pFontFeatureSettings, pFontLanguageOverride, pFontSizeAdjust}, variantLonghands...),
+			longhands: append([]propID{pFontStyle, pFontWeight, pFontSize, pLineHeight, pFontFamily, pFontStretch, pFontKerning, pFontFeatureSettings, pFontLanguageOverride, pFontSizeAdjust, pFontVariationSettings, pFontOpticalSizing}, variantLonghands...),
 			expand:    expandFont,
 		},
 		"list-style": {longhands: []propID{pListStyleType, pListStylePosition, pListStyleImage}, expand: expandListStyle},
@@ -361,11 +361,13 @@ func expandFont(v []token, c *declCtx) ([]entry, bool) {
 		{pFontFamily, wideInitial},
 		{pFontStretch, wideInitial},
 		// The shorthand resets font-kerning, font-feature-settings,
-		// font-language-override, font-size-adjust and the font-variant
-		// longhands it
-		// cannot set (CSS Fonts 4, 2.8).
+		// font-language-override, font-size-adjust,
+		// font-variation-settings, font-optical-sizing and the
+		// font-variant longhands it cannot set (CSS Fonts 4, 2.8).
 		{pFontKerning, wideInitial},
 		{pFontFeatureSettings, wideInitial},
+		{pFontVariationSettings, wideInitial},
+		{pFontOpticalSizing, wideInitial},
 		{pFontLanguageOverride, wideInitial},
 		{pFontSizeAdjust, wideInitial},
 		{pFontVariantLigatures, wideInitial},

@@ -43,6 +43,16 @@ type FontFace struct {
 	// features, which apply to text drawn in the face before those of the
 	// font properties (CSS Fonts 4, 4.8 and 7.2); nil for normal.
 	FeatureSettings []FeatureSetting
+	// VariationSettings are the font-variation-settings descriptor's axis
+	// values, which apply to text drawn in the face after the font
+	// properties' and before font-optical-sizing and the property's (CSS
+	// Fonts 4, 4.6 and 7.2); nil for normal.
+	VariationSettings []VariationSetting
+	// WeightAuto, StretchAuto and StyleAuto report a font-weight,
+	// font-stretch or font-style descriptor left out or set to auto:
+	// the face is selected as normal and its variation axes are not
+	// clamped (CSS Fonts 4, 4.4).
+	WeightAuto, StretchAuto, StyleAuto bool
 }
 
 // FontSource is one entry of an @font-face src descriptor (CSS Fonts 4,
@@ -74,13 +84,12 @@ const (
 )
 
 // ignoredFaceDescriptors are @font-face descriptors litho parses and does
-// not apply: the font variation settings, the language override and the
-// named instance (CSS Fonts 4, 4.8 to 4.10). A rule that sets one still loads, without it, and gets a
+// not apply: the language override and the named instance (CSS Fonts 4,
+// 4.8 to 4.10). A rule that sets one still loads, without it, and gets a
 // warning.
 var ignoredFaceDescriptors = map[string]bool{
-	"font-variation-settings": true,
-	"font-named-instance":     true,
-	"font-language-override":  true,
+	"font-named-instance":    true,
+	"font-language-override": true,
 }
 
 // parseFontFace parses an @font-face block, false when it lacks a family
@@ -91,6 +100,7 @@ func parseFontFace(block []token, c *declCtx) (FontFace, bool) {
 		WeightMin: defaultFaceWeight, WeightMax: defaultFaceWeight,
 		StretchMin: defaultFaceStretch, StretchMax: defaultFaceStretch,
 		SizeAdjust: 1, AscentOverride: -1, DescentOverride: -1, LineGapOverride: -1,
+		WeightAuto: true, StretchAuto: true, StyleAuto: true,
 	}
 	newListParser(block).declarations(func(it item) bool {
 		if it.kind != itemDeclaration {
@@ -108,13 +118,19 @@ func parseFontFace(block []token, c *declCtx) (FontFace, bool) {
 			f.Sources = parseFontSources(v, c.baseURL)
 		case "font-weight":
 			f.WeightMin, f.WeightMax = parseFaceWeight(v)
+			f.WeightAuto = f.WeightMin == 0
+			if f.WeightAuto {
+				f.WeightMin, f.WeightMax = defaultFaceWeight, defaultFaceWeight
+			}
 		case "font-style":
 			if st, lo, hi, ok := parseFaceStyle(v); ok {
 				f.Style, f.ObliqueMin, f.ObliqueMax = st, lo, hi
+				f.StyleAuto = len(v) == 1 && v[0].isIdent("auto")
 			}
 		case "font-stretch":
 			if lo, hi, ok := parseFaceStretch(v); ok {
 				f.StretchMin, f.StretchMax = lo, hi
+				f.StretchAuto = len(v) == 1 && v[0].isIdent("auto")
 			}
 		case "unicode-range":
 			f.UnicodeRange = parseUnicodeRanges(it.value)
@@ -137,6 +153,10 @@ func parseFontFace(block []token, c *declCtx) (FontFace, bool) {
 		case "font-feature-settings":
 			if l, ok := parseFeatureSettings(v, c); ok {
 				f.FeatureSettings, _ = l.([]FeatureSetting) // always that type when ok
+			}
+		case "font-variation-settings":
+			if l, ok := parseVariationSettings(v, c); ok {
+				f.VariationSettings, _ = l.([]VariationSetting) // always that type when ok
 			}
 		case "font-display":
 			// Loading is synchronous: every face is there before layout,
@@ -260,8 +280,9 @@ func parseSourceHints(hints []token, s *FontSource) bool {
 }
 
 // parseFaceWeight parses the @font-face font-weight descriptor (CSS Fonts
-// 4, 4.5): auto, normal, bold, or one or two numbers from 1 to 1000; a
-// decreasing range is swapped.
+// 4, 4.4): normal, bold, or one or two numbers from 1 to 1000, a
+// decreasing range swapped; 0 and 0 for auto and for a value that does not
+// parse, which keeps the initial auto (CSS Fonts 4, 4.1).
 func parseFaceWeight(v []token) (lo, hi int) {
 	one := func(t token) (int, bool) {
 		switch {
@@ -273,6 +294,9 @@ func parseFaceWeight(v []token) (lo, hi int) {
 			return int(t.num), true
 		}
 		return 0, false
+	}
+	if len(v) == 1 && v[0].isIdent("auto") {
+		return 0, 0
 	}
 	switch len(v) {
 	case 1:
@@ -286,7 +310,7 @@ func parseFaceWeight(v []token) (lo, hi int) {
 			return min(a, b), max(a, b)
 		}
 	}
-	return defaultFaceWeight, defaultFaceWeight
+	return 0, 0
 }
 
 // parseFaceStyle parses the @font-face font-style descriptor (CSS Fonts 4,

@@ -329,6 +329,19 @@ func equalStyle(a, b *Style) bool {
 			}
 		}
 	}
+	if (a.FontVariationSettings == nil) != (b.FontVariationSettings == nil) || len(a.FontVariationSettings) != len(b.FontVariationSettings) {
+		return false
+	}
+	if len(a.FontVariationSettings) > 0 && &a.FontVariationSettings[0] != &b.FontVariationSettings[0] {
+		for i1 := range a.FontVariationSettings {
+			if !equalVariationSetting(&a.FontVariationSettings[i1], &b.FontVariationSettings[i1]) {
+				return false
+			}
+		}
+	}
+	if a.FontOpticalSizing != b.FontOpticalSizing {
+		return false
+	}
 	if a.FontLanguageOverride != b.FontLanguageOverride {
 		return false
 	}
@@ -893,6 +906,12 @@ func hashStyle(h uint64, x *Style) uint64 {
 	for i1 := range x.FontFeatureSettings {
 		h = hashFeatureSetting(h, &x.FontFeatureSettings[i1])
 	}
+	h = mixBool(h, x.FontVariationSettings == nil)
+	h = mix(h, uint64(len(x.FontVariationSettings)))
+	for i1 := range x.FontVariationSettings {
+		h = hashVariationSetting(h, &x.FontVariationSettings[i1])
+	}
+	h = mix(h, uint64(x.FontOpticalSizing))
 	h = mixString(h, x.FontLanguageOverride)
 	h = hashFontSizeAdjust(h, &x.FontSizeAdjust)
 	h = mixBool(h, x.NoSynthesizeSmallCaps)
@@ -1581,6 +1600,24 @@ func equalFeatureSetting(a, b *FeatureSetting) bool {
 func hashFeatureSetting(h uint64, x *FeatureSetting) uint64 {
 	h = mixString(h, x.Tag)
 	h = mix(h, uint64(x.Value))
+	return h
+}
+
+// equalVariationSetting reports whether a and b hold equal values, field by field.
+func equalVariationSetting(a, b *VariationSetting) bool {
+	if a.Tag != b.Tag {
+		return false
+	}
+	if math.Float64bits(a.Value) != math.Float64bits(b.Value) {
+		return false
+	}
+	return true
+}
+
+// hashVariationSetting folds every field of x into h.
+func hashVariationSetting(h uint64, x *VariationSetting) uint64 {
+	h = mixString(h, x.Tag)
+	h = mix(h, math.Float64bits(x.Value))
 	return h
 }
 

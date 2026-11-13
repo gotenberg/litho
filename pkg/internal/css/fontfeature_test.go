@@ -165,3 +165,36 @@ func TestFontSizeAdjust(t *testing.T) {
 		}
 	}
 }
+
+// TestFontVariationSettings pins font-variation-settings (CSS Fonts 4,
+// 8.2): a list of string tags and numbers, the last value of a repeated
+// tag kept, normal, and the invalid values that keep the inherited one.
+func TestFontVariationSettings(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		value string
+		want  []VariationSetting
+	}{
+		{`"wght" 700`, []VariationSetting{{"wght", 700}}},
+		{`"wght" 700, 'slnt' -10.5, "wght" 300`, []VariationSetting{{"slnt", -10.5}, {"wght", 300}}},
+		{`"opsz" calc(6 * 2)`, []VariationSetting{{"opsz", 12}}},
+		{`normal`, nil},
+		{`"wgh" 300`, []VariationSetting{{"wdth", 80}}},
+		{`"wght"`, []VariationSetting{{"wdth", 80}}},
+		{`wght 300`, []VariationSetting{{"wdth", 80}}},
+		{`"wght" 300px`, []VariationSetting{{"wdth", 80}}},
+	} {
+		c := compute(t, `<body><div id=t></div></body>`, `body { font-variation-settings: "wdth" 80 } #t { font-variation-settings: `+tc.value+` }`)
+		if got := c.of("t").FontVariationSettings; !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("font-variation-settings: %s = %v, want %v", tc.value, got, tc.want)
+		}
+	}
+	c := compute(t, `<body><div id=t></div><div id=u></div></body>`,
+		`body { font-optical-sizing: none; font-variation-settings: "wght" 300 } #t { font: 12px serif } #u { font-optical-sizing: auto }`)
+	if st := c.of("t"); st.FontOpticalSizing != OpticalSizingAuto || st.FontVariationSettings != nil {
+		t.Errorf("the font shorthand left font-optical-sizing %v, font-variation-settings %v", st.FontOpticalSizing, st.FontVariationSettings)
+	}
+	if st := c.of("u"); st.FontOpticalSizing != OpticalSizingAuto || len(st.FontVariationSettings) != 1 {
+		t.Errorf("font-optical-sizing %v, inherited font-variation-settings %v", st.FontOpticalSizing, st.FontVariationSettings)
+	}
+}
