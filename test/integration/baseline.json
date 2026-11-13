@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T05:39:01Z",
+  "captured_at": "2026-11-13T06:41:40Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -55342,7 +55342,7 @@
               "text_f1": 1
             },
             "para-borders-shading": {
-              "layout": 0.3536,
+              "layout": 0.3569,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -59960,7 +59960,7 @@
               "text_f1": 1
             },
             "bidi-letter": {
-              "layout": 0.9431,
+              "layout": 0.9432,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60000,7 +60000,7 @@
               "text_f1": 0.984
             },
             "cjk-spacing": {
-              "layout": 0.8578,
+              "layout": 0.8653,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60048,7 +60048,7 @@
               "text_f1": 1
             },
             "grid-invoice": {
-              "layout": 0.9507,
+              "layout": 0.9508,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60056,7 +60056,7 @@
               "text_f1": 1
             },
             "he-bidi-numbers": {
-              "layout": 0.9457,
+              "layout": 0.9448,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60096,7 +60096,7 @@
               "text_f1": 1
             },
             "ja-line-break": {
-              "layout": 0.8259,
+              "layout": 0.8486,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60136,7 +60136,7 @@
               "text_f1": 1
             },
             "landscape-page-size": {
-              "layout": 0.9382,
+              "layout": 0.9383,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60152,7 +60152,7 @@
               "text_f1": 0.9912
             },
             "long-report": {
-              "layout": 0.9097,
+              "layout": 0.9098,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60160,7 +60160,7 @@
               "text_f1": 0.9967
             },
             "margin-boxes": {
-              "layout": 0.9347,
+              "layout": 0.9348,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61248,7 +61248,7 @@
               "text_f1": 1
             },
             "th-line-break": {
-              "layout": 0.2321,
+              "layout": 0.2356,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61256,7 +61256,7 @@
               "text_f1": 0.4088
             },
             "user-stylesheet": {
-              "layout": 0.9518,
+              "layout": 0.9541,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61264,7 +61264,7 @@
               "text_f1": 1
             },
             "user-stylesheet-twin": {
-              "layout": 0.9518,
+              "layout": 0.9541,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -115957,8 +115957,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 1861,
-          "mismatched": 411,
+          "matched": 1884,
+          "mismatched": 388,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -116225,7 +116225,7 @@
             "css/CSS2/linebox/line-height-applies-to-014.xht": "pass",
             "css/CSS2/linebox/line-height-applies-to-015.xht": "pass",
             "css/CSS2/linebox/line-height-oof-descendants-001.html": "pass",
-            "css/CSS2/linebox/split-inline-borders.html": "fail",
+            "css/CSS2/linebox/split-inline-borders.html": "pass",
             "css/CSS2/linebox/vertical-align-negative-leading-001.html": "pass",
             "css/CSS2/linebox/vertical-align-nested-top-001.html": "pass",
             "css/CSS2/linebox/vertical-align-top-bottom-padding.html": "pass",
@@ -116540,9 +116540,9 @@
             "css/CSS2/visuren/percent-height-1.html": "pass",
             "css/CSS2/visuren/right-offset-position-fixed-001.xht": "pass",
             "css/CSS2/visuren/split-inner-inline-1.html": "pass",
-            "css/CSS2/visuren/split-inner-inline-2.html": "fail",
+            "css/CSS2/visuren/split-inner-inline-2.html": "pass",
             "css/CSS2/visuren/table-pseudo-in-part3-1.html": "pass",
-            "css/CSS2/visuren/whitespace-present-1a.html": "fail",
+            "css/CSS2/visuren/whitespace-present-1a.html": "pass",
             "css/css-align/baseline-rules/overflow-hidden-block-in-inline-baseline.html": "fail",
             "css/css-align/self-alignment/self-align-safe-unsafe-flex-001.html": "pass",
             "css/css-align/self-alignment/self-align-safe-unsafe-flex-002.html": "pass",
@@ -116624,26 +116624,26 @@
             "css/css-backgrounds/box-shadow-overlapping-003.html": "pass",
             "css/css-backgrounds/box-shadow-table-border-collapse-001.html": "pass",
             "css/css-backgrounds/box-shadow/inset-shadow-large-spread-fragmented-inline.html": "pass",
-            "css/css-backgrounds/box-shadow/slice-block-fragmentation-001.html": "fail",
+            "css/css-backgrounds/box-shadow/slice-block-fragmentation-001.html": "pass",
             "css/css-backgrounds/css3-background-clip-padding-box.html": "pass",
             "css/css-backgrounds/css3-background-clip.html": "pass",
             "css/css-backgrounds/css3-box-shadow.html": "pass",
             "css/css-break/abspos-002-print.html": "pass",
             "css/css-break/abspos-in-opacity-001.html": "pass",
-            "css/css-break/avoid-border-break.html": "fail",
+            "css/css-break/avoid-border-break.html": "pass",
             "css/css-break/block-max-height-001.html": "pass",
             "css/css-break/block-max-height-001b.html": "pass",
             "css/css-break/block-max-height-002.html": "pass",
             "css/css-break/block-max-height-002b.html": "pass",
             "css/css-break/block-max-height-003.html": "pass",
             "css/css-break/block-max-height-004.html": "pass",
-            "css/css-break/borders-000.html": "fail",
-            "css/css-break/borders-002.html": "fail",
-            "css/css-break/borders-003.html": "fail",
-            "css/css-break/borders-005.html": "fail",
-            "css/css-break/borders-008.html": "fail",
-            "css/css-break/box-decoration-break-clone-009.html": "fail",
-            "css/css-break/box-decoration-break-clone-split-inline.html": "fail",
+            "css/css-break/borders-000.html": "pass",
+            "css/css-break/borders-002.html": "pass",
+            "css/css-break/borders-003.html": "pass",
+            "css/css-break/borders-005.html": "pass",
+            "css/css-break/borders-008.html": "pass",
+            "css/css-break/box-decoration-break-clone-009.html": "pass",
+            "css/css-break/box-decoration-break-clone-split-inline.html": "pass",
             "css/css-break/break-between-avoid-001.html": "pass",
             "css/css-break/break-between-avoid-002.html": "pass",
             "css/css-break/break-between-avoid-004.html": "pass",
@@ -117700,7 +117700,7 @@
             "css/css-sizing/table-child-percentage-height-with-border-box.html": "pass",
             "css/css-tables/absolute-tables-012.html": "pass",
             "css/css-tables/anonymous-table-ws-001.html": "pass",
-            "css/css-tables/baseline-empty-cell-001.html": "fail",
+            "css/css-tables/baseline-empty-cell-001.html": "pass",
             "css/css-tables/border-collapse-double-border.html": "pass",
             "css/css-tables/border-collapse-empty-cell.html": "pass",
             "css/css-tables/border-collapse-rowspan-cell.html": "pass",
@@ -117720,14 +117720,14 @@
             "css/css-tables/display-contents-002.html": "fail",
             "css/css-tables/display-contents-003.html": "fail",
             "css/css-tables/empty-table-height.html": "pass",
-            "css/css-tables/height-distribution/percentage-sizing-of-table-cell-007.html": "fail",
+            "css/css-tables/height-distribution/percentage-sizing-of-table-cell-007.html": "pass",
             "css/css-tables/height-distribution/percentage-sizing-of-table-cell-children-002.html": "pass",
             "css/css-tables/height-distribution/percentage-sizing-of-table-cell-replaced-children-001.html": "pass",
             "css/css-tables/height-distribution/td-different-subpixel-padding-in-same-row.html": "pass",
             "css/css-tables/html-display-table.html": "fail",
             "css/css-tables/max-height-table.html": "pass",
-            "css/css-tables/min-height-table-2.html": "fail",
-            "css/css-tables/min-height-table.html": "fail",
+            "css/css-tables/min-height-table-2.html": "pass",
+            "css/css-tables/min-height-table.html": "pass",
             "css/css-tables/min-max-size-table-content-box.html": "fail",
             "css/css-tables/out-of-order-elements-collapsed-border.html": "pass",
             "css/css-tables/paint/col-paint-htb-rtl.html": "pass",
@@ -117746,13 +117746,13 @@
             "css/css-tables/subpixel-table-cell-width-002.html": "pass",
             "css/css-tables/subpixel-table-width-001.html": "pass",
             "css/css-tables/table-as-item-cell-percentage-001.html": "pass",
-            "css/css-tables/table-as-item-cell-percentage-002.html": "fail",
-            "css/css-tables/table-as-item-cell-percentage-003.html": "fail",
+            "css/css-tables/table-as-item-cell-percentage-002.html": "pass",
+            "css/css-tables/table-as-item-cell-percentage-003.html": "pass",
             "css/css-tables/table-as-item-cell-percentage-004.html": "pass",
             "css/css-tables/table-cell-baseline-static-position.html": "pass",
-            "css/css-tables/table-cell-child-overflow-measure.html": "fail",
+            "css/css-tables/table-cell-child-overflow-measure.html": "pass",
             "css/css-tables/table-cell-inline-size-box-sizing-quirks.html": "pass",
-            "css/css-tables/table-cell-overflow-auto.html": "fail",
+            "css/css-tables/table-cell-overflow-auto.html": "pass",
             "css/css-tables/table-cell-overflow-explicit-height-001.html": "pass",
             "css/css-tables/table-cell-overflow-explicit-height-002.html": "pass",
             "css/css-tables/table-cell-tiny-width-excess-width-distribution.html": "pass",
@@ -117771,8 +117771,8 @@
             "css/css-tables/visibility-collapse-colspan-003.html": "fail",
             "css/css-tables/visibility-collapse-rowspan-005.html": "fail",
             "css/css-tables/whitespace-001.html": "pass",
-            "css/css-tables/zero-rowspan-001.html": "fail",
-            "css/css-tables/zero-rowspan-002.html": "fail",
+            "css/css-tables/zero-rowspan-001.html": "pass",
+            "css/css-tables/zero-rowspan-002.html": "pass",
             "css/css-text-decor/text-decoration-color.html": "fail",
             "css/css-text-decor/text-decoration-inset-002.html": "fail",
             "css/css-text-decor/text-decoration-inset-007.html": "fail",
@@ -117861,7 +117861,7 @@
             "css/css-text/text-align/text-align-match-parent-01.html": "fail",
             "css/css-text/text-align/text-align-start-002.html": "pass",
             "css/css-text/text-align/text-align-start-009.html": "pass",
-            "css/css-text/text-align/text-align-start-016.html": "fail",
+            "css/css-text/text-align/text-align-start-016.html": "pass",
             "css/css-text/text-autospace/text-autospace-size-001.html": "pass",
             "css/css-text/text-autospace/text-autospace-vs-001.html": "fail",
             "css/css-text/text-fit/grow-per-line.html": "fail",
