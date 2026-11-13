@@ -66,6 +66,7 @@ func TestContent_Parses(t *testing.T) {
 		{`leader(".")`, Content{Kind: ContentList, Items: []ContentItem{{Kind: ItemLeader, Text: "."}}}, true},
 		{`leader(dotted) string(t, last) element(h)`, Content{Kind: ContentList, Items: []ContentItem{{Kind: ItemLeader, Text: "."}, {Kind: ItemNamedString, Text: "t", Pick: PickLast}, {Kind: ItemElement, Text: "h"}}}, true},
 		{`leader(bogus)`, Content{}, false},
+		{`" is not " counter(inherit)`, Content{}, false},
 		{`string(t, middle)`, Content{}, false},
 		{`counter(none)`, Content{}, false},
 		{`counters(x)`, Content{}, false},

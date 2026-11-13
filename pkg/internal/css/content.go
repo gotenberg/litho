@@ -174,9 +174,10 @@ func attrItem(args [][]token) (ContentItem, bool) {
 }
 
 // counterName returns the <counter-name> of a counter() or counters()
-// argument: an ident other than none (CSS Lists 3, 4.8).
+// argument: a <custom-ident> other than none (CSS Lists 3, 4.8), so no
+// CSS-wide keyword (CSS Values 4, 4.2).
 func counterName(arg []token) (string, bool) {
-	if len(arg) != 1 || arg[0].typ != tIdent || arg[0].isIdent("none") {
+	if len(arg) != 1 || arg[0].typ != tIdent || arg[0].isIdent("none") || cssWideKeywords[lower(arg[0].value)] {
 		return "", false
 	}
 	return arg[0].value, true
