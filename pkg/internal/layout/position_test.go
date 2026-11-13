@@ -257,3 +257,29 @@ func TestPosition_StaticInlineOnEmptyLine(t *testing.T) {
 		})
 	}
 }
+
+func TestPosition_TransformedTableParts(t *testing.T) {
+	// CSS Transforms 1, 3: a row group, a row and a cell are transformable;
+	// a column is not.
+	shift := func(s *css.Style) {
+		s.Transform = []css.TransformFunc{{Kind: css.TransformTranslate, X: css.Pts(px(2)), Y: css.Pts(px(1))}}
+	}
+	cell := func(m ...func(*css.Style)) *Node { return td(mods(append(m, width(2), height(1), bg(blue))...), "") }
+	tests := []struct {
+		name string
+		root *Node
+	}{
+		{"row group", table(mods(spacing(0, 0)), tbody(mods(shift), tr(nil, cell())))},
+		{"row", table(mods(spacing(0, 0)), tr(mods(shift), cell()))},
+		{"cell", table(mods(spacing(0, 0)), tr(nil, cell(shift)))},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertPixels(t, run(t, doc(tt.root), page(4, 2)), 1, "____\n__BB")
+		})
+	}
+	t.Run("column", func(t *testing.T) {
+		root := doc(table(mods(spacing(0, 0)), colgroup(nil, col(mods(shift))), tr(nil, cell())))
+		assertPixels(t, run(t, root, page(4, 2)), 1, "BB__\n____")
+	})
+}

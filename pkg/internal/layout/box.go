@@ -361,10 +361,11 @@ func (b *box) layered() bool {
 		return false
 	}
 	if b.tpart.internal() {
-		// A positioned row group, row or cell paints in its stacking
-		// context's layers with the cells it holds (CSS Position 3, 3.3);
-		// position does not apply to a column or a column group.
-		return b.tpart <= partCell && b.st.Position != css.Static
+		// A positioned or transformed row group, row or cell paints in
+		// its stacking context's layers with the cells it holds (CSS
+		// Position 3, 3.3; CSS Transforms 1, 3); neither applies to a
+		// column or a column group.
+		return b.tpart <= partCell && (b.st.Position != css.Static || b.transformed())
 	}
 	return b.st.Position != css.Static || b.st.Opacity < 1 || b.transformed() || b.isItem() && !b.st.ZIndex.Auto
 }
@@ -390,9 +391,10 @@ func (b *box) zLevel() int {
 }
 
 // transformed reports a box its transform applies to: a block-level or
-// atomic box, not a non-replaced inline box (CSS Transforms 1, 3).
+// atomic box, a row group, a row or a cell, not a non-replaced inline box,
+// a column or a column group (CSS Transforms 1, 3).
 func (b *box) transformed() bool {
-	return len(b.st.Transform) > 0 && (b.kind == kindBlock || b.kind == kindReplaced) && !b.tpart.internal()
+	return len(b.st.Transform) > 0 && (b.kind == kindBlock || b.kind == kindReplaced) && b.tpart <= partCell
 }
 
 // shift moves the box and everything laid out inside it by (dx, dy).
