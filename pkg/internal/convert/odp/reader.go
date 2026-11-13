@@ -176,7 +176,8 @@ func (r *reader) tick() bool {
 // and 10.9): the declarations, then each draw:page in order with its
 // master page.
 func (r *reader) document(body *odf.Element) *slides.Document {
-	doc := &slides.Document{Meta: r.metadata()}
+	// Impress wraps Korean at its spaces alone.
+	doc := &slides.Document{Meta: r.metadata(), KeepHangulWords: true}
 	var pages []*odf.Element
 	for _, el := range body.Children {
 		switch {

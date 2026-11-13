@@ -43,6 +43,9 @@ func (b *builder) style() *css.Style {
 	st.FontFamilies = []string{defaultFamily}
 	st.FontSize = defaultFontSize
 	st.FontKerning = css.KerningNone
+	// LibreOffice wraps Korean at its spaces alone; Excel's rules are
+	// not measured.
+	st.KeepHangul = !b.doc.ExcelRules
 	return st
 }
 

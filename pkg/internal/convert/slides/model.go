@@ -59,6 +59,9 @@ type Document struct {
 	// fields and notes pages (ECMA-376 Part 1, 19.2.1.26 presentation
 	// firstSlideNum); 0 numbers from 1.
 	FirstNumber int
+	// KeepHangulWords keeps a word of Hangul syllables on one line, as
+	// Impress wraps Korean at its spaces alone ([css.Office.KeepHangul]).
+	KeepHangulWords bool
 	// Slides lists the slides in show order. A hidden slide is listed and
 	// not printed unless the options ask for it.
 	Slides []*Slide

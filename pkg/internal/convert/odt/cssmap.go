@@ -15,8 +15,15 @@ import (
 // values with the white space the converter already processed kept as it
 // is (pre-wrap: ODF 1.3, Part 3, 6.1.2 collapses white space at import,
 // and the converter does it), orphans and widows off, LibreOffice's
-// default when a style sets neither, and a word wider than its line
-// broken where the line ends, as Writer breaks it.
+// default when a style sets neither, a word wider than its line broken
+// where the line ends, as Writer breaks it, and Korean words kept whole.
+//
+// # Corpus evidence
+//
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, Korean paragraphs
+//     under the Asian languages ko-KR and ja-JP alike wrap at their spaces
+//     alone, never between two Hangul syllables, where Han text in the
+//     same paragraphs breaks between any two ideographs.
 func baseStyle() *css.Style {
 	st := css.Initial()
 	st.WhiteSpace = css.PreWrap
@@ -24,6 +31,7 @@ func baseStyle() *css.Style {
 	st.Orphans, st.Widows = 1, 1
 	st.FontSize = defaultFontSize
 	st.TabSize = css.Pts(defaultTabDistance)
+	st.KeepHangul = true
 	return st
 }
 

@@ -855,6 +855,7 @@ func textColor(c css.Color) css.Color {
 func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 	st := css.Initial()
 	st.Display = css.Inline
+	st.KeepHangul = b.doc != nil && b.doc.KeepHangulWords
 	st.WhiteSpace = ps.WhiteSpace
 	st.OverflowWrap = ps.OverflowWrap
 	st.Direction = ps.Direction
