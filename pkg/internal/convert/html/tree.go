@@ -99,6 +99,9 @@ type builder struct {
 	counterStyles *css.CounterStyles
 	// firstLetters marks the boxes cut for ::first-letter, nil for none.
 	firstLetters map[*layout.Node]bool
+	// lines styles the first formatted lines, nil when no element has a
+	// ::first-line.
+	lines *firstLines
 }
 
 // buildRoot builds the content tree of the root element.
@@ -133,6 +136,12 @@ func (b *builder) buildRoot(ctx context.Context, root *dom.Node) (*layout.Node, 
 // children and its ::after, in the level of n's counters (CSS Lists 3,
 // 4.5 and CSS Pseudo 4, 4.1).
 func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, st *css.Style, v, depth int) error {
+	if st.Display == css.Inline {
+		b.onFirstLine(node, n, 0, false)
+	}
+	if b.enterFirstLine(node, n, st) {
+		defer b.leaveFirstLine()
+	}
 	if isListItem(st.Display) {
 		node.ListValue = v
 		node.Marker = b.marker(ctx, n, st, v)
@@ -141,6 +150,7 @@ func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, s
 	defer b.counters.close()
 	before := b.pseudo(ctx, n, css.PseudoBefore)
 	if before != nil {
+		b.onFirstLine(before, n, css.PseudoBefore, true)
 		node.Children = append(node.Children, before)
 	}
 	kids, err := b.children(ctx, n, st, depth)
@@ -150,6 +160,7 @@ func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, s
 	node.Children = append(node.Children, kids...)
 	after := b.pseudo(ctx, n, css.PseudoAfter)
 	if after != nil {
+		b.onFirstLine(after, n, css.PseudoAfter, true)
 		node.Children = append(node.Children, after)
 	}
 	if takesFirstLetter(st.Display) {

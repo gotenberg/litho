@@ -143,19 +143,12 @@ func (w *firstLetterCut) split(parent *layout.Node, at int, t *layout.Node, pre,
 	if ps == nil {
 		return
 	}
-	st := *ps
-	// A first letter is inline, or a block when it floats (CSS Pseudo 4,
-	// 2.3.1): it is never positioned.
-	if st.Float == css.FloatNone {
-		st.Display = css.Inline
-	} else {
-		st.Display = css.Block
-	}
-	st.Position = css.Static
-	letter := &layout.Node{Kind: layout.Element, Style: &st, Children: []*layout.Node{
-		{Kind: layout.Text, Style: &st, Text: t.Text[pre:end]},
+	st := letterStyle(ps)
+	letter := &layout.Node{Kind: layout.Element, Style: st, Children: []*layout.Node{
+		{Kind: layout.Text, Style: st, Text: t.Text[pre:end]},
 	}}
 	w.b.firstLetters[letter] = true
+	w.b.onFirstLine(letter, w.origin, css.PseudoFirstLetter, true)
 	repl := make([]*layout.Node, 0, 3)
 	if pre > 0 {
 		repl = append(repl, &layout.Node{Kind: layout.Text, Style: t.Style, Text: t.Text[:pre]})
@@ -165,6 +158,20 @@ func (w *firstLetterCut) split(parent *layout.Node, at int, t *layout.Node, pre,
 		repl = append(repl, &layout.Node{Kind: layout.Text, Style: t.Style, Text: t.Text[end:]})
 	}
 	parent.Children = append(parent.Children[:at:at], append(repl, parent.Children[at+1:]...)...)
+}
+
+// letterStyle returns the style of a first letter box from the computed
+// style ps of its ::first-letter: inline, or a block when it floats (CSS
+// Pseudo 4, 2.3.1), and never positioned.
+func letterStyle(ps *css.Style) *css.Style {
+	st := *ps
+	if st.Float == css.FloatNone {
+		st.Display = css.Inline
+	} else {
+		st.Display = css.Block
+	}
+	st.Position = css.Static
+	return &st
 }
 
 // firstLetterSpan returns the bytes of s its first letter takes: the white
