@@ -29,18 +29,20 @@ import (
 // glow (20.1.8.32), none without a colour, and the soft edge (20.1.8.53)
 // fill [slides.Shape.Glow] and [slides.Shape.SoftEdge]; a shape of no
 // geometry with either takes the rectangle preset, whose effects the
-// builder applies as Impress applies a rectangle's. Inner shadows, preset
-// shadows, reflections, blurs and fill overlays (20.1.8.40, 20.1.8.52,
-// 20.1.8.50, 20.1.8.15, 20.1.8.29) print nothing, with a warning, as
-// Impress prints none of them; so does an effect container
-// (20.1.8.25 effectDag), and a shadow's skew (kx, ky) is left out.
+// builder applies as Impress applies a rectangle's. The inner shadow
+// (20.1.8.40 innerShdw), none without a colour, fills
+// [slides.Shape.InnerShadow], the reflection (20.1.8.50) fills
+// [slides.Shape.Reflection], the blur (20.1.8.15) [slides.Shape.Blur] and
+// the fill overlay of a solid fill (20.1.8.29) [slides.Shape.FillOverlay].
+// Preset shadows (20.1.8.52) and fill overlays of other fills print
+// nothing, with a warning; so does an effect container (20.1.8.25 effectDag). A
+// shadow's skew (kx, ky) is left out, with a warning.
 //
 // # Corpus evidence
 //
 //   - probe, pptx: a rectangle referencing effect style 3 of its theme, whose
 //     effect list holds a shadow blurred 4.5 pt, 1.5 pt down at 63%,
-//     prints that shadow; one with an inner shadow and one with a
-//     reflection print without them.
+//     prints that shadow.
 //   - probe, pptx: a rectangle whose outer shadow has no colour prints a white
 //     shadow, opaque; an oval whose glow has none prints no glow.
 //   - libreoffice/pptx: sd-data/n819614 and sd/bnc862510_5's diagram shapes print the
@@ -112,6 +114,9 @@ func (r *reader) effectList(chain []*ooxml.Element, style *ooxml.Element, fc *fi
 		switch e.Local {
 		case "outerShdw":
 			s.Shadow = outerShadow(e, s.Box)
+			if attr(e, "kx") != "" || attr(e, "ky") != "" {
+				r.warn(warn.ContentUnsupported, warn.Approximated, "the skew of shadows is not drawn")
+			}
 			s.Shadow.Color, s.Shadow.Opacity = color(e)
 			if len(e.Kids()) == 0 {
 				// Impress prints a shadow without a colour white.
@@ -125,15 +130,24 @@ func (r *reader) effectList(chain []*ooxml.Element, style *ooxml.Element, fc *fi
 				}
 			}
 		case "softEdge":
-			if rad := emuAttr(e, "rad"); numeric.PositiveFinite(rad) {
+			if rad := emuAttr(e, "rad"); numeric.PositiveFinite(rad) && !beveled(chain) {
 				s.SoftEdge = min(rad, maxEffectRadius)
 			}
-		case "innerShdw", "prstShdw":
-			r.warn(warn.ContentUnsupported, warn.Approximated, "inner and preset shadows are not drawn")
+		case "innerShdw":
+			s.InnerShadow = innerShadow(e)
+			s.InnerShadow.Color, s.InnerShadow.Opacity = color(e)
+		case "prstShdw":
+			r.warn(warn.ContentUnsupported, warn.Approximated, "preset shadows are not drawn")
 		case "reflection":
-			r.warn(warn.ContentUnsupported, warn.Approximated, "reflections are not drawn")
-		case "blur", "fillOverlay":
-			r.warn(warn.ContentUnsupported, warn.Approximated, "blur and fill overlay effects are not drawn")
+			s.Reflection = reflection(e, s.Box)
+		case "blur":
+			if rad := emuAttr(e, "rad"); numeric.PositiveFinite(rad) {
+				s.Blur = &slides.Blur{Radius: min(rad, maxEffectRadius), Grow: ooxml.OnOff(attr(e, "grow"), true)}
+			}
+		case "fillOverlay":
+			if fo := r.fillOverlay(e, color); fo != nil {
+				s.FillOverlay = fo
+			}
 		}
 	}
 }
@@ -204,4 +218,102 @@ func outerShadow(e *ooxml.Element, box typeset.Rect) *slides.Shadow {
 	sh.OffsetX += (ax - 0.5) * box.Width * (1 - sh.ScaleX)
 	sh.OffsetY += (ay - 0.5) * box.Height * (1 - sh.ScaleY)
 	return sh
+}
+
+// innerShadow reads the geometry of an inner shadow (20.1.8.40
+// innerShdw): blurRad, and dist and dir (60,000ths of a degree, clockwise
+// from the x axis, y down) resolved into offsets, the shadow then falling
+// toward the edges on the side dir points to. Its colour is read apart.
+func innerShadow(e *ooxml.Element) *slides.Shadow {
+	sh := &slides.Shadow{ScaleX: 1, ScaleY: 1}
+	if v := emuAttr(e, "blurRad"); numeric.PositiveFinite(v) {
+		sh.Blur = min(v, maxEffectRadius)
+	}
+	dist := emuAttr(e, "dist")
+	if !numeric.PositiveFinite(dist) {
+		dist = 0
+	}
+	dist = min(dist, maxEffectRadius)
+	dir, _ := intAttr(e, "dir")
+	s, c := math.Sincos(float64(dir) / 60000 * math.Pi / 180)
+	sh.OffsetX, sh.OffsetY = dist*c, dist*s
+	return sh
+}
+
+// reflection reads a reflection (20.1.8.50 reflection) of a shape of box:
+// its geometry as [outerShadow] reads a shadow's, with the schema's
+// defaults (CT_ReflectionEffect): no blur, start alpha 100% at 0, end
+// alpha 0% at 100%, faded toward 90 degrees, unscaled, aligned on the
+// bottom. The alphas and positions are 1,000ths of a percent.
+func reflection(e *ooxml.Element, box typeset.Rect) *slides.Reflection {
+	sh := outerShadow(e, box)
+	pct := func(name string, def float64) float64 {
+		v, ok := intAttr(e, name)
+		if !ok {
+			return def
+		}
+		return min(max(float64(v)/100000, 0), 1)
+	}
+	fade := 90.0
+	if v, ok := intAttr(e, "fadeDir"); ok {
+		fade = float64(v) / 60000
+	}
+	return &slides.Reflection{
+		ScaleX: sh.ScaleX, ScaleY: sh.ScaleY, OffsetX: sh.OffsetX, OffsetY: sh.OffsetY, Blur: sh.Blur,
+		StartOpacity: pct("stA", 1), StartPos: pct("stPos", 0),
+		EndOpacity: pct("endA", 0), EndPos: pct("endPos", 1),
+		FadeDir: fade,
+	}
+}
+
+// fillOverlay reads a fill overlay (20.1.8.29 fillOverlay): its blend
+// mode (20.1.10.11 ST_BlendMode, required) and its fill, of which a solid
+// fill is drawn; another fill warns and gives nil. color resolves the
+// colour of the solid fill.
+func (r *reader) fillOverlay(e *ooxml.Element, color func(*ooxml.Element) (css.Color, float64)) *slides.FillOverlay {
+	solid := e.Child(ooxml.NSA, "solidFill")
+	if solid == nil {
+		r.warn(warn.ContentUnsupported, warn.Approximated, "fill overlays of a fill other than a solid colour are not drawn")
+		return nil
+	}
+	c, a := color(solid)
+	if a <= 0 {
+		return nil
+	}
+	fo := &slides.FillOverlay{Color: c, Opacity: a}
+	switch attr(e, "blend") {
+	case "mult":
+		fo.Mode = slides.OverlayMultiply
+	case "screen":
+		fo.Mode = slides.OverlayScreen
+	case "darken":
+		fo.Mode = slides.OverlayDarken
+	case "lighten":
+		fo.Mode = slides.OverlayLighten
+	}
+	return fo
+}
+
+// beveled reports whether the first shape properties of chain that hold a
+// 3-D shape (20.1.5.12 sp3d) give it a top or bottom bevel (20.1.5.3
+// bevelT, bevelB): PowerPoint prints such a shape without its soft edge.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: oox/tdf170095's picture with a soft edge of 25 pt
+//     and a top bevel prints opaque to its edge.
+//   - openxmlsdk/pptx: AutoShapes_3D_Bevel_Circle_Soft_Edges_5_Point_'s
+//     shapes with a soft edge of 5 pt and a top bevel print opaque to
+//     their edges.
+func beveled(chain []*ooxml.Element) bool {
+	for _, el := range chain {
+		pr := spPr(el)
+		if pr == nil {
+			continue
+		}
+		if sp := pr.Child(ooxml.NSA, "sp3d"); sp != nil {
+			return sp.Child(ooxml.NSA, "bevelT") != nil || sp.Child(ooxml.NSA, "bevelB") != nil
+		}
+	}
+	return false
 }

@@ -165,6 +165,20 @@ type Shape struct {
 	Shadow   *Shadow
 	Glow     *Glow
 	SoftEdge float64
+	// InnerShadow is the shadow cast inside the shape's fill, over it and
+	// under its line, nil for none (ECMA-376 Part 1, 20.1.8.40 innerShdw):
+	// its offsets say where the shadow falls, toward the edges it darkens;
+	// its scale is not read. Impress's rules draw none.
+	InnerShadow *Shadow
+	// Reflection is the shape's reflection, painted under it, nil for none
+	// (ECMA-376 Part 1, 20.1.8.50 reflection). Impress's rules draw none.
+	Reflection *Reflection
+	// Blur blurs what the shape paints, nil for none (ECMA-376 Part 1,
+	// 20.1.8.15 blur); FillOverlay blends a colour over it, nil for none
+	// (20.1.8.29 fillOverlay). The shape is then drawn as a bitmap, its
+	// text kept as text above. Impress's rules draw neither.
+	Blur        *Blur
+	FillOverlay *FillOverlay
 	// Geometry is the outline of a KindGeometry shape, nil for a
 	// rectangle.
 	Geometry *shape.Geometry
@@ -232,6 +246,57 @@ type Shadow struct {
 	// (ECMA-376 Part 1, 20.1.8.45 outerShdw rotWithShape).
 	RotateWithShape bool
 }
+
+// Reflection is a mirrored copy of what a shape paints, its fill, line and
+// text, under the shape, faded along a direction (ECMA-376 Part 1,
+// 20.1.8.50 reflection). The reader resolves its scale, alignment,
+// distance and direction into a scale about the shape's centre and
+// offsets, as for a [Shadow].
+type Reflection struct {
+	// ScaleX and ScaleY scale the copy about the shape's centre, -1 on Y
+	// for the usual mirror below; OffsetX and OffsetY then move it, in
+	// slide points.
+	ScaleX, ScaleY   float64
+	OffsetX, OffsetY float64
+	// Blur is the blur radius in points, 0 for none.
+	Blur float64
+	// StartOpacity at StartPos and EndOpacity at EndPos, fractions of 1,
+	// fade the copy linearly along FadeDir, degrees clockwise from the x
+	// axis, the positions fractions of the copy's extent that way.
+	StartOpacity, EndOpacity float64
+	StartPos, EndPos         float64
+	FadeDir                  float64
+}
+
+// Blur is a blur of what a shape paints over Radius points (ECMA-376
+// Part 1, 20.1.8.15 blur); Grow lets the blur reach past the shape's
+// bounds, which otherwise cut it.
+type Blur struct {
+	Radius float64
+	Grow   bool
+}
+
+// FillOverlay is a colour blended over what a shape paints, where it
+// paints (ECMA-376 Part 1, 20.1.8.29 fillOverlay): Color at Opacity by
+// Mode.
+type FillOverlay struct {
+	Color   css.Color
+	Opacity float64
+	Mode    OverlayMode
+}
+
+// OverlayMode is how a [FillOverlay] blends (ECMA-376 Part 1, 20.1.10.11
+// ST_BlendMode).
+type OverlayMode uint8
+
+// The overlay modes.
+const (
+	OverlayOver OverlayMode = iota
+	OverlayMultiply
+	OverlayScreen
+	OverlayDarken
+	OverlayLighten
+)
 
 // Glow is a shape's glow: a blurred halo of Radius points around the
 // shape's silhouette in Color at Opacity (ECMA-376 Part 1, 20.1.8.32 glow;

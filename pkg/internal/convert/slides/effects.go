@@ -403,8 +403,10 @@ func effectsTwice(s *Shape) bool {
 // softEdge; ODF 1.3 Part 3, 20.158 draw:shadow with LibreOffice's
 // loext:shadow-blur, loext:glow-radius and loext:softedge-radius), paths
 // being the shape's paths in its box, m mapping its parent's coordinates
-// to the slide's; and the paths the builder still fills and strokes: none
-// when a soft edge has drawn them already.
+// to the slide's; the paths the builder still fills and strokes: none
+// when a soft edge has drawn them already; and what paints over the
+// shape's fills and under its lines: its inner shadow (ECMA-376 Part 1,
+// 20.1.8.40 innerShdw).
 //
 // Both programs paint, from the bottom: the shadow of everything above it,
 // the glows, then the shape with its soft edge, then its text. A blurred
@@ -420,22 +422,25 @@ func effectsTwice(s *Shape) bool {
 //   - probe, pptx: in Impress, sd/effectOrder's rectangle with a glow and a shadow prints the
 //     shadow (a bitmap of the shape and both glows, at 40% opacity), the
 //     outer glow, the glow, then the rectangle.
-func (b *builder) effects(s *Shape, paths []shape.Path, box typeset.Rect, m typeset.Matrix, txt *textResult) ([]typeset.Fragment, []shape.Path) {
-	if s.Shadow == nil && s.Glow == nil && !numeric.Positive(s.SoftEdge) {
-		return nil, paths
+func (b *builder) effects(s *Shape, paths []shape.Path, box typeset.Rect, m typeset.Matrix, txt *textResult) ([]typeset.Fragment, []shape.Path, []typeset.Fragment) {
+	if s.Shadow == nil && s.Glow == nil && !numeric.Positive(s.SoftEdge) && s.InnerShadow == nil && s.Reflection == nil && s.Blur == nil && s.FillOverlay == nil {
+		return nil, paths, nil
 	}
 	s = turnedShadow(s)
 	sm := skewedAboutCentre(box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
 	toSlide := then(sm, m)
-	var own []typeset.Fragment
+	var own, fills []typeset.Fragment
 	for _, p := range paths {
 		if p.Fill {
-			own = append(own, b.fill(&s.Fill, box, p.Ops, p.Mode)...)
+			f := b.fill(&s.Fill, box, p.Ops, p.Mode)
+			own = append(own, f...)
+			fills = append(fills, f...)
 		}
 		if p.Stroke {
 			own = append(own, b.stroke(&s.Line, p.Ops)...)
 		}
 	}
+	inner := b.innerShadow(s, fills, toSlide)
 	var text []typeset.Fragment
 	if txt != nil {
 		rot := s.Rotation
@@ -446,9 +451,9 @@ func (b *builder) effects(s *Shape, paths []shape.Path, box typeset.Rect, m type
 	}
 	under, drawn := b.paintEffects(s, own, text, toSlide, b.doc.Effects == EffectsImpress && effectsTwice(s))
 	if drawn != nil {
-		return append(under, drawn...), nil
+		return append(append(under, drawn...), inner...), nil, nil
 	}
-	return under, paths
+	return under, paths, inner
 }
 
 // invertOr returns the inverse of m, the identity when m is singular.
@@ -460,11 +465,13 @@ func invertOr(m typeset.Matrix) typeset.Matrix {
 }
 
 // contentEffects returns frags, a picture's or a table's in the shape's
-// box, with what paints under them for s's shadow and glow, m mapping the
-// parent's coordinates to the slide's. A picture's silhouette is its
-// rectangle, a table's its borders and fills, never its text, which a
-// table's shadow leaves out. A soft edge is not drawn on a picture or a
-// table.
+// box, with what paints under them for s's shadow, glow and reflection, m
+// mapping the parent's coordinates to the slide's. A picture's silhouette
+// is its rectangle, a table's its borders and fills, never its text, which
+// a table's shadow leaves out. On PowerPoint's rules a picture with a soft
+// edge, a blur or a fill overlay is drawn as one bitmap in its place,
+// which takes the picture's place in the structure tree; a table's are not
+// drawn, nor a soft edge on Impress's rules.
 //
 // # Corpus evidence
 //
@@ -472,19 +479,47 @@ func invertOr(m typeset.Matrix) typeset.Matrix {
 //     shadow as a bitmap of its box grown by 6 pt, opaque inside.
 //   - libreoffice/pptx: oox/table-shadow prints its table's borders again
 //     10 pt down and right in the shadow's red, its text once.
+//   - litho/pptx: effects-glow-softedge-reflection prints in PowerPoint its
+//     picture with a soft edge of 15 pt as one bitmap, faded at its edges.
 func (b *builder) contentEffects(s *Shape, frags []typeset.Fragment, m typeset.Matrix) []typeset.Fragment {
-	if s.Shadow == nil && s.Glow == nil && !numeric.Positive(s.SoftEdge) {
+	if s.Shadow == nil && s.Glow == nil && !numeric.Positive(s.SoftEdge) && s.Reflection == nil && s.Blur == nil && s.FillOverlay == nil {
 		return frags
 	}
 	s = turnedShadow(s)
-	if s.SoftEdge > 0 {
-		b.warn(warn.ContentUnsupported, warn.Approximated, "the soft edge of "+quote(s.Name)+" is not drawn")
+	t := *s
+	if s.Kind != KindPicture || b.doc.Effects == EffectsImpress {
+		if s.SoftEdge > 0 || (b.doc.Effects == EffectsPowerPoint && (s.Blur != nil || s.FillOverlay != nil)) {
+			b.warn(warn.ContentUnsupported, warn.Approximated, "the soft edge, blur or fill overlay of "+quote(s.Name)+" is not drawn")
+		}
+		t.SoftEdge, t.Blur, t.FillOverlay = 0, nil, nil
 	}
 	sm := skewedAboutCentre(s.Box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
-	t := *s
-	t.SoftEdge = 0
-	under, _ := b.paintEffects(&t, withoutText(frags, 0), nil, then(sm, m), false)
+	under, drawn := b.paintEffects(&t, withoutText(frags, 0), nil, then(sm, m), false)
+	if drawn != nil {
+		adopt(drawn, figureOf(frags, 0))
+		return append(under, drawn...)
+	}
 	return append(under, frags...)
+}
+
+// figureOf returns the structure element the first picture of frags hangs
+// from, nil for none.
+func figureOf(frags []typeset.Fragment, depth int) *typeset.StructElem {
+	for _, f := range frags {
+		switch f := f.(type) {
+		case *typeset.Image:
+			if f.Parent != nil {
+				return f.Parent
+			}
+		case *typeset.Group:
+			if depth < maxRecolorDepth {
+				if p := figureOf(f.Content, depth+1); p != nil {
+					return p
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // withoutText returns frags without their text runs, groups copied.
@@ -538,7 +573,20 @@ func (b *builder) paintEffects(s *Shape, own, text []typeset.Fragment, toSlide t
 	}
 	var top []typeset.Fragment
 	var drawn []typeset.Fragment
-	if s.SoftEdge > 0 {
+	if s.Reflection != nil && !p.impress {
+		content := append(append([]typeset.Fragment(nil), own...), text...)
+		if img := p.reflection(b.ctx, content, toSlide); img != nil {
+			top = append(top, img)
+		}
+	}
+	switch {
+	case !p.impress && (s.Blur != nil || s.FillOverlay != nil || s.SoftEdge > 0 && !sil.flat):
+		if img := p.contentBitmap(b.ctx, own, toSlide); img != nil {
+			drawn = []typeset.Fragment{img}
+		} else {
+			b.warn(warn.ContentUnsupported, warn.Omitted, "the blur, fill overlay or soft edge of "+quote(s.Name)+" is not drawn")
+		}
+	case s.SoftEdge > 0:
 		if img := p.softEdge(b.ctx); img != nil {
 			drawn = []typeset.Fragment{img}
 		} else {
@@ -858,6 +906,13 @@ func (p *effectPlan) glow(ctx context.Context, outer bool) typeset.Fragment {
 // ECMA-376 Part 1, 20.1.8.53 softEdge), the fade squared when Impress
 // applies it twice, times the silhouette's own coverage.
 func (p *effectPlan) softMask(ctx context.Context, g effectGrid, tr typeset.Matrix) (*effect.Surface, error) {
+	return p.softFade(ctx, g, tr, true)
+}
+
+// softFade returns the fade of a soft edge on g, as [effectPlan.softMask]
+// does, times the silhouette's coverage when withCoverage is set: content
+// whose alpha holds the coverage already takes the fade alone.
+func (p *effectPlan) softFade(ctx context.Context, g effectGrid, tr typeset.Matrix, withCoverage bool) (*effect.Surface, error) {
 	r, k := p.softKernel(g)
 	cov, err := p.sil.coverage(ctx, g, tr)
 	if err != nil {
@@ -888,9 +943,11 @@ func (p *effectPlan) softMask(ctx context.Context, g effectGrid, tr typeset.Matr
 			return nil, err
 		}
 	}
-	// The coverage In the fade: the fade times the coverage.
-	if err := effect.Composite(ctx, fade, cov, effect.In); err != nil {
-		return nil, err
+	if withCoverage {
+		// The coverage In the fade: the fade times the coverage.
+		if err := effect.Composite(ctx, fade, cov, effect.In); err != nil {
+			return nil, err
+		}
 	}
 	ok = true
 	return fade, nil
@@ -1151,4 +1208,327 @@ func (p *effectPlan) silhouetteLevel() uint8 {
 		return 1
 	}
 	return 128
+}
+
+// innerShadow returns the bitmap of the inner shadow of s over its fills
+// (ECMA-376 Part 1, 20.1.8.40 innerShdw), in the coordinates of fills,
+// which toSlide maps to the slide: what lies outside the fills' silhouette
+// moved against the shadow's offsets, blurred by a Gaussian of a third of
+// its radius, kept where the silhouette is, in its colour at its opacity.
+// It returns nil for a shape without one or without a fill, and on
+// Impress's rules, which draw none.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: effects-shadow prints in PowerPoint its inner shadow
+//     blurred 5 pt, 4 pt toward 225 degrees, at 50% black as a bitmap over
+//     the rounded rectangle's fill and under its line, darkest along the
+//     top and left edges, half dark 2.9 pt in; its inner shadow blurred
+//     15 pt with no offset fades from 82 of 255 at the outline, at 70%.
+func (b *builder) innerShadow(s *Shape, fills []typeset.Fragment, toSlide typeset.Matrix) []typeset.Fragment {
+	sh := s.InnerShadow
+	if sh == nil || sh.Opacity <= 0 || len(fills) == 0 || b.doc.Effects == EffectsImpress {
+		return nil
+	}
+	back, ok := invert(toSlide)
+	if !ok {
+		return nil
+	}
+	sil := silhouetteOf(fills, toSlide)
+	if sil == nil {
+		return nil
+	}
+	p := &effectPlan{
+		s: s, sil: sil, page: &b.effectPixels,
+		capped: func() {
+			b.warn(warn.LimitReached, warn.Omitted, "effects past the pixels a slide's effect bitmaps may hold are not drawn")
+		},
+		reduced: func() {
+			b.warn(warn.LimitReached, warn.Approximated, "effects past the pixels an effect bitmap may hold are drawn at a lower resolution")
+		},
+	}
+	dx, dy := sh.OffsetX, sh.OffsetY
+	margin := math.Hypot(dx, dy) + max(sh.Blur, 0)
+	if !numeric.Finite(margin) {
+		return nil
+	}
+	g, ok := p.grid(grow(sil.bounds, margin), sh.Blur/3, 0)
+	if !ok {
+		return nil
+	}
+	mask, err := p.innerMask(b.ctx, g, dx, dy, sh.Blur)
+	if err != nil {
+		return nil
+	}
+	defer mask.Release()
+	c := colorOf(sh.Color)
+	c.A = min(sh.Opacity, 1)
+	img, err := tinted(b.ctx, mask, c)
+	if err != nil {
+		return nil
+	}
+	return group(back, []typeset.Fragment{g.image(b.ctx, img)})
+}
+
+// innerMask returns the coverage of an inner shadow on g: the silhouette's
+// complement moved by (-dx, -dy) points, blurred by a Gaussian of a third
+// of blur points, times the silhouette's coverage. The grid's margin past
+// the silhouette, at least the offset and the blur, reads as complement.
+func (p *effectPlan) innerMask(ctx context.Context, g effectGrid, dx, dy, blurRad float64) (*effect.Surface, error) {
+	cov, err := p.sil.coverage(ctx, g, typeset.Identity)
+	if err != nil {
+		return nil, err
+	}
+	defer cov.Release()
+	full, err := g.surface(ctx, effect.Coverage)
+	if err != nil {
+		return nil, err
+	}
+	defer full.Release()
+	if err := effect.Flood(ctx, full, effect.Color{A: 255}); err != nil {
+		return nil, err
+	}
+	out, err := cov.Clone(ctx)
+	if err != nil {
+		return nil, err
+	}
+	steps := []func() error{
+		// The complement: full where the silhouette is not.
+		func() error { return effect.Composite(ctx, out, full, effect.Out) },
+		func() error { return effect.Offset(ctx, out, -g.span(dx), -g.span(dy)) },
+		func() error { return blur(ctx, out, effect.GaussianKernel(g.span(blurRad/3))) },
+		// What the silhouette covers of the moved complement.
+		func() error { return effect.Composite(ctx, out, cov, effect.In) },
+	}
+	for _, step := range steps {
+		if err := step(); err != nil {
+			out.Release()
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// reflection returns the bitmap of the shape's reflection in slide
+// coordinates (ECMA-376 Part 1, 20.1.8.50 reflection): content, what the
+// shape paints with its text, in the coordinates toSlide maps to the
+// slide, drawn by [effect.Paint] through the reflection's scale and
+// offsets, blurred by a Gaussian of a third of its radius, faded from its
+// start opacity to its end opacity between its positions along its fade
+// direction across the copy; nil when it covers nothing.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: effects-glow-softedge-reflection prints in PowerPoint
+//     each reflection as a bitmap of the shape mirrored about its bottom,
+//     at 100 pixels an inch, under the shape and under its shadow and glow.
+func (p *effectPlan) reflection(ctx context.Context, content []typeset.Fragment, toSlide typeset.Matrix) typeset.Fragment {
+	rf := p.s.Reflection
+	if rf.StartOpacity <= 0 && rf.EndOpacity <= 0 {
+		return nil
+	}
+	mirror := shadowMatrix(&Shadow{ScaleX: rf.ScaleX, ScaleY: rf.ScaleY, OffsetX: rf.OffsetX, OffsetY: rf.OffsetY}, p.sil.bounds)
+	copied := transformRect(mirror, p.sil.bounds)
+	blurRad := max(rf.Blur, 0)
+	box, ok := intersect(grow(copied, blurRad), grow(p.area, blurRad))
+	if !ok {
+		return nil
+	}
+	g, ok := p.grid(box, blurRad/3, 0)
+	if !ok {
+		return nil
+	}
+	surfaces, err := effect.Paint(ctx, []effect.Content{{
+		Fragments: content, Transform: then(toSlide, mirror),
+		Grid: g.place(), W: g.w, H: g.h,
+	}})
+	if err != nil {
+		return nil
+	}
+	s := surfaces[0]
+	defer s.Release()
+	if err := blur(ctx, s, effect.GaussianKernel(g.span(blurRad/3))); err != nil {
+		return nil
+	}
+	x0, y0, x1, y1 := fadeLine(copied, rf)
+	px := g.pixels()
+	sx0, sy0 := apply(px, x0, y0)
+	sx1, sy1 := apply(px, x1, y1)
+	if err := effect.AlphaRamp(ctx, s, sx0, sy0, sx1, sy1, rf.StartOpacity, rf.EndOpacity); err != nil {
+		return nil
+	}
+	img, err := straight(ctx, s)
+	if err != nil {
+		return nil
+	}
+	return g.image(ctx, img)
+}
+
+// fadeLine returns where a reflection's fade starts and ends in slide
+// points: along its fade direction across the copy r, at its start and end
+// positions of the copy's extent that way.
+func fadeLine(r typeset.Rect, rf *Reflection) (x0, y0, x1, y1 float64) {
+	sin, cos := math.Sincos(rf.FadeDir * math.Pi / 180)
+	if !numeric.Finite(sin) || !numeric.Finite(cos) {
+		sin, cos = 1, 0
+	}
+	cx, cy := r.X+r.Width/2, r.Y+r.Height/2
+	// The copy's extent along the direction, from its centre.
+	half := (math.Abs(cos)*r.Width + math.Abs(sin)*r.Height) / 2
+	at := func(pos float64) (float64, float64) {
+		t := -half + pos*2*half
+		return cx + t*cos, cy + t*sin
+	}
+	x0, y0 = at(rf.StartPos)
+	x1, y1 = at(rf.EndPos)
+	return x0, y0, x1, y1
+}
+
+// straight returns the premultiplied RGBA surface s as an image of
+// straight colours, charged to the budget for [typeset.EncodeImage] to
+// give back.
+func straight(ctx context.Context, s *effect.Surface) (*image.NRGBA, error) {
+	if err := typeset.ChargeImage(ctx, s.W, s.H, color.NRGBAModel); err != nil {
+		return nil, err
+	}
+	img := image.NewNRGBA(image.Rect(0, 0, s.W, s.H))
+	for i := 0; i < len(s.Pix); i += 4 {
+		px, out := s.Pix[i:i+4:i+4], img.Pix[i:i+4:i+4]
+		if a := px[3]; a != 0 {
+			out[0], out[1], out[2], out[3] = unpremultiply(px[0], a), unpremultiply(px[1], a), unpremultiply(px[2], a), a
+		}
+	}
+	return img, nil
+}
+
+// contentBitmap returns the shape drawn as a bitmap in slide coordinates
+// for the effects that read what it paints (ECMA-376 Part 1, 20.1.8.15
+// blur, 20.1.8.29 fillOverlay, and 20.1.8.53 softEdge over a shading or
+// a picture), applied in the order of the effect list: own, what the
+// shape paints but its text, in the coordinates toSlide maps to the
+// slide, drawn by [effect.Paint], blurred by a Gaussian of a third of the
+// blur's radius, blended with the overlay's colour where it paints, then
+// faded by the soft edge. A blur that grows reaches its radius past the
+// shape's bounds; one that does not is cut there. It returns nil when
+// nothing is drawn.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: effects-glow-softedge-reflection prints in PowerPoint its
+//     blurred rectangle, its rectangle under a multiplied red overlay and
+//     its picture with a soft edge each as one bitmap in place of the
+//     shape, the blurred one over its box grown by the radius.
+func (p *effectPlan) contentBitmap(ctx context.Context, own []typeset.Fragment, toSlide typeset.Matrix) typeset.Fragment {
+	s := p.s
+	var reach, sigma, morph float64
+	if bl := s.Blur; bl != nil {
+		sigma = bl.Radius / 3
+		if bl.Grow {
+			reach = bl.Radius
+		}
+	}
+	if s.SoftEdge > 0 {
+		if sg := s.SoftEdge / 3; sigma == 0 || sg < sigma {
+			sigma = sg
+		}
+		morph = s.SoftEdge * officeSoftShrink
+	}
+	box, ok := intersect(grow(p.sil.bounds, reach), grow(p.area, reach))
+	if !ok {
+		return nil
+	}
+	g, ok := p.grid(box, sigma, morph)
+	if !ok {
+		return nil
+	}
+	surfaces, err := effect.Paint(ctx, []effect.Content{{Fragments: own, Transform: toSlide, Grid: g.place(), W: g.w, H: g.h}})
+	if err != nil {
+		return nil
+	}
+	out := surfaces[0]
+	defer func() { out.Release() }()
+	if bl := s.Blur; bl != nil {
+		k := effect.GaussianKernel(g.span(bl.Radius / 3))
+		if err := effect.Blur(ctx, out, k, k, effect.EdgeNone); err != nil {
+			return nil
+		}
+	}
+	if fo := s.FillOverlay; fo != nil {
+		if err := overlay(ctx, g, out, fo); err != nil {
+			return nil
+		}
+	}
+	if s.SoftEdge > 0 {
+		faded, err := p.fadeContent(ctx, g, out)
+		if err != nil {
+			return nil
+		}
+		out.Release()
+		out = faded
+	}
+	img, err := straight(ctx, out)
+	if err != nil {
+		return nil
+	}
+	return g.image(ctx, img)
+}
+
+// fadeContent returns the content surface c faded by the shape's soft
+// edge: each pixel times the fade, which leaves the content's own
+// coverage to its alpha.
+func (p *effectPlan) fadeContent(ctx context.Context, g effectGrid, c *effect.Surface) (*effect.Surface, error) {
+	fade, err := p.softFade(ctx, g, typeset.Identity, false)
+	if err != nil {
+		return nil, err
+	}
+	defer fade.Release()
+	out, err := effect.Tint(ctx, fade, effect.Color{R: 255, G: 255, B: 255, A: 255})
+	if err != nil {
+		return nil, err
+	}
+	// The content In the fade: the content times the fade's alpha.
+	if err := effect.Composite(ctx, out, c, effect.In); err != nil {
+		out.Release()
+		return nil, err
+	}
+	return out, nil
+}
+
+// overlayModes maps an overlay's mode to its blend mode (Compositing 1,
+// 5.3): over is normal, mult multiply.
+var overlayModes = [...]effect.BlendMode{
+	OverlayOver:     effect.Normal,
+	OverlayMultiply: effect.Multiply,
+	OverlayScreen:   effect.Screen,
+	OverlayDarken:   effect.Darken,
+	OverlayLighten:  effect.Lighten,
+}
+
+// overlay blends the colour of fo over the content surface c by fo's
+// mode, in place, and keeps the result where the content paints: the
+// colour blended over c, then c's alpha In it.
+func overlay(ctx context.Context, g effectGrid, c *effect.Surface, fo *FillOverlay) error {
+	col := effect.ColorOf(colorOf(fo.Color))
+	col.A = effect.ColorOf(typeset.Color{A: fo.Opacity}).A
+	layer, err := g.surface(ctx, effect.RGBA)
+	if err != nil {
+		return err
+	}
+	defer layer.Release()
+	if err := effect.Flood(ctx, layer, col); err != nil {
+		return err
+	}
+	blended, err := c.Clone(ctx)
+	if err != nil {
+		return err
+	}
+	defer blended.Release()
+	mode := effect.Normal
+	if int(fo.Mode) < len(overlayModes) {
+		mode = overlayModes[fo.Mode]
+	}
+	if err := effect.Blend(ctx, blended, layer, mode); err != nil {
+		return err
+	}
+	return effect.Composite(ctx, c, blended, effect.In)
 }

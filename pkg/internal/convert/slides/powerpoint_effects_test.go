@@ -2,12 +2,14 @@ package slides
 
 import (
 	"image"
+	"image/color"
 	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/effect"
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -56,7 +58,8 @@ const (
 //
 //   - litho/pptx: effects-glow-softedge-reflection, the rows of its glows
 //     of 5 and 18 pt and its soft edges of 5 and 25 pt; effects-shadow,
-//     the rows of its shadows blurred 4 and 20 pt, read from the soft
+//     the rows of its shadows blurred 4 and 20 pt and of its inner shadows
+//     blurred 5 and 15 pt, read from the soft
 //     masks of PowerPoint's bitmaps, their positions scaled from the
 //     reference's 959.76 pt page to the 960 pt slide. The fades, fitted on
 //     both sides, sit 0.03 to 0.37 pt off centre one way or the other:
@@ -68,6 +71,9 @@ func TestPowerPointEffects_ReproduceReferenceRows(t *testing.T) {
 	}
 	shadowBox := func(x float64) typeset.Rect {
 		return typeset.Rect{X: emu(x), Y: emu(500000), Width: emu(2158400), Height: emu(1756000)}
+	}
+	innerBox := func(x float64) typeset.Rect {
+		return typeset.Rect{X: emu(x), Y: emu(2586000), Width: emu(2158400), Height: emu(1756000)}
 	}
 	fill := Fill{Kind: FillSolid, Color: css.Color{R: 0.27, G: 0.45, B: 0.77, A: 1}}
 	ellipse := &shape.Geometry{Preset: "ellipse"}
@@ -86,6 +92,8 @@ func TestPowerPointEffects_ReproduceReferenceRows(t *testing.T) {
 		{"soft edge 25 pt", &Shape{Box: box(9376600), Geometry: rect, Fill: fill, SoftEdge: 25}, 108.91, []sample{{737.84, 0}, {738.56, 1}, {739.28, 1}, {740, 1}, {740.72, 1}, {741.44, 2}, {742.16, 3}, {742.88, 4}, {743.59, 5}, {744.31, 6}, {745.03, 7}, {745.75, 8}, {746.47, 10}, {747.19, 11}, {747.91, 14}, {748.63, 17}, {749.35, 20}, {750.06, 23}, {750.78, 27}, {751.5, 31}, {752.22, 36}, {752.94, 41}, {753.66, 46}, {754.38, 52}, {755.1, 59}, {755.81, 66}, {756.53, 73}, {757.25, 81}, {757.97, 89}, {758.69, 97}, {759.41, 106}, {760.13, 115}, {760.85, 123}, {761.57, 132}, {762.28, 141}, {763, 150}, {763.72, 158}, {764.44, 166}, {765.16, 174}, {765.88, 182}, {766.6, 190}, {767.32, 197}, {768.03, 203}, {768.75, 209}, {769.47, 215}, {770.19, 220}, {770.91, 224}, {771.63, 228}, {772.35, 232}, {773.07, 235}, {773.79, 239}, {774.5, 242}, {775.22, 244}, {775.94, 245}, {776.66, 247}, {777.38, 248}, {778.1, 250}, {778.82, 251}, {779.54, 252}, {780.25, 253}, {780.97, 253}, {781.69, 254}, {782.41, 254}, {783.13, 254}, {872.98, 254}, {873.7, 254}, {874.42, 254}, {875.14, 253}, {875.86, 253}, {876.58, 252}, {877.3, 251}, {878.02, 250}, {878.73, 248}, {879.45, 247}, {880.17, 245}, {880.89, 244}, {881.61, 242}, {882.33, 239}, {883.05, 235}, {883.77, 232}, {884.49, 228}, {885.2, 224}, {885.92, 220}, {886.64, 215}, {887.36, 209}, {888.08, 203}, {888.8, 197}, {889.52, 190}, {890.24, 182}, {890.95, 174}, {891.67, 166}, {892.39, 158}, {893.11, 150}, {893.83, 141}, {894.55, 132}, {895.27, 123}, {895.99, 115}, {896.71, 106}, {897.42, 97}, {898.14, 89}, {898.86, 81}, {899.58, 73}, {900.3, 66}, {901.02, 59}, {901.74, 52}, {902.46, 46}, {903.17, 41}, {903.89, 36}, {904.61, 31}, {905.33, 27}, {906.05, 23}, {906.77, 20}, {907.49, 17}, {908.21, 14}, {908.93, 11}, {909.64, 10}, {910.36, 8}, {911.08, 7}, {911.8, 6}, {912.52, 5}, {913.24, 4}, {913.96, 3}, {914.68, 2}, {915.39, 1}, {916.11, 1}, {916.83, 1}, {917.55, 1}, {918.27, 0}}},
 		{"shadow 4 pt", &Shape{Box: shadowBox(300000), Geometry: round, Fill: fill, Line: line, Shadow: &Shadow{Color: css.Color{A: 1}, Opacity: 0.4, OffsetX: 3 * math.Sqrt2 / 2, OffsetY: 3 * math.Sqrt2 / 2, Blur: 4, ScaleX: 1, ScaleY: 1}}, 111.05, []sample{{21.98, 0}, {22.7, 0}, {23.42, 3}, {24.14, 9}, {24.86, 21}, {25.58, 40}, {26.29, 62}, {27.01, 81}, {27.73, 93}, {28.45, 99}, {29.17, 102}, {29.89, 102}, {30.61, 102}, {191.55, 102}, {192.27, 102}, {192.99, 102}, {193.71, 99}, {194.42, 93}, {195.14, 81}, {195.86, 62}, {196.58, 40}, {197.3, 21}, {198.02, 9}, {198.74, 3}, {199.45, 0}, {200.17, 0}}},
 		{"shadow 20 pt", &Shape{Box: shadowBox(2658400), Geometry: round, Fill: fill, Line: line, Shadow: &Shadow{Color: css.Color{A: 1}, Opacity: 0.6, Blur: 20, ScaleX: 1, ScaleY: 1}}, 109.41, []sample{{189.36, 0}, {190.79, 0}, {192.22, 1}, {193.65, 1}, {195.09, 2}, {196.52, 4}, {197.95, 7}, {199.38, 11}, {200.81, 16}, {202.24, 23}, {203.67, 31}, {205.1, 41}, {206.53, 53}, {207.96, 65}, {209.39, 79}, {210.82, 92}, {212.25, 104}, {213.69, 115}, {215.12, 125}, {216.55, 133}, {217.98, 139}, {219.41, 144}, {220.84, 147}, {222.27, 149}, {223.7, 151}, {225.13, 152}, {226.56, 152}, {227.99, 153}, {361.05, 153}, {362.48, 152}, {363.92, 152}, {365.35, 151}, {366.78, 150}, {368.21, 148}, {369.64, 145}, {371.07, 140}, {372.5, 134}, {373.93, 126}, {375.36, 116}, {376.79, 106}, {378.22, 94}, {379.65, 80}, {381.08, 67}, {382.52, 55}, {383.95, 43}, {385.38, 32}, {386.81, 24}, {388.24, 17}, {389.67, 11}, {391.1, 7}, {392.53, 4}, {393.96, 2}, {395.39, 1}, {396.82, 1}, {398.25, 0}, {399.68, 0}}},
+		{"inner shadow 5 pt", &Shape{Box: innerBox(300000), Geometry: round, Fill: fill, Line: line, InnerShadow: &Shadow{Color: css.Color{A: 1}, Opacity: 0.5, OffsetX: -4 * math.Sqrt2 / 2, OffsetY: -4 * math.Sqrt2 / 2, Blur: 5, ScaleX: 1, ScaleY: 1}}, 273.88, []sample{{24.88, 115}, {25.6, 103}, {26.32, 85}, {27.04, 64}, {27.76, 43}, {28.48, 25}, {29.19, 13}, {29.91, 5}, {30.63, 2}, {31.35, 0}, {32.07, 0}, {32.78, 0}, {33.5, 0}, {34.22, 0}, {34.94, 0}, {35.66, 0}, {36.38, 0}, {37.09, 0}, {37.81, 0}, {38.53, 0}, {39.25, 0}, {39.97, 0}, {40.69, 0}, {41.4, 0}, {176.45, 0}, {177.17, 0}, {177.89, 0}, {178.6, 0}, {179.32, 0}, {180.04, 0}, {180.76, 0}, {181.48, 0}, {182.2, 0}, {182.91, 0}, {183.63, 0}, {184.35, 0}, {185.07, 0}, {185.79, 0}, {186.51, 0}, {187.22, 0}, {187.94, 0}, {188.66, 0}, {189.38, 0}, {190.1, 0}, {190.82, 0}, {191.53, 0}, {192.25, 0}, {192.97, 2}}},
+		{"inner shadow 15 pt", &Shape{Box: innerBox(2658400), Geometry: round, Fill: fill, Line: line, InnerShadow: &Shadow{Color: css.Color{B: 0.38, G: 0.13, A: 1}, Opacity: 0.7, Blur: 15, ScaleX: 1, ScaleY: 1}}, 273.88, []sample{{210.63, 79}, {211.35, 69}, {212.07, 59}, {212.79, 50}, {213.51, 42}, {214.22, 35}, {214.94, 28}, {215.66, 22}, {216.38, 17}, {217.1, 13}, {217.82, 10}, {218.54, 7}, {219.26, 5}, {219.97, 4}, {220.69, 3}, {221.41, 2}, {222.13, 1}, {222.85, 1}, {223.57, 0}, {224.29, 0}, {225.01, 0}, {225.72, 0}, {226.44, 0}, {227.16, 0}, {362.29, 0}, {363, 0}, {363.72, 0}, {364.44, 0}, {365.16, 0}, {365.88, 0}, {366.6, 1}, {367.32, 1}, {368.04, 2}, {368.75, 3}, {369.47, 4}, {370.19, 5}, {370.91, 7}, {371.63, 10}, {372.35, 13}, {373.07, 17}, {373.79, 22}, {374.5, 28}, {375.22, 35}, {375.94, 42}, {376.66, 50}, {377.38, 59}, {378.1, 69}, {378.82, 79}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := &Document{Width: 960, Height: 540, Slides: []*Slide{{Shapes: []*Shape{tc.shape}}}}
@@ -170,4 +178,110 @@ func TestPlanGrid(t *testing.T) {
 	if !ok || !reduced || int64(g.w)*int64(g.h) > effect.MaxPixels {
 		t.Errorf("planGrid of a large sharp effect = %d by %d, %v, %v, want reduced within the cap", g.w, g.h, reduced, ok)
 	}
+}
+
+// TestShape_InnerShadowOverFillUnderLine checks that an inner shadow is a
+// bitmap painted over the shape's fill and under its line, on
+// PowerPoint's rules, and nothing on Impress's.
+func TestShape_InnerShadowOverFillUnderLine(t *testing.T) {
+	sh := &Shape{
+		Box: typeset.Rect{X: 100, Y: 100, Width: 120, Height: 80}, Geometry: &shape.Geometry{Preset: "rect"},
+		Fill: Fill{Kind: FillSolid, Color: red}, Line: Line{Width: 2, Color: css.Color{A: 1}},
+		InnerShadow: &Shadow{Color: css.Color{A: 1}, Opacity: 0.5, OffsetX: -3, OffsetY: -3, Blur: 6, ScaleX: 1, ScaleY: 1},
+	}
+	ps, warns := effectPage(t, EffectsPowerPoint, sh)
+	if len(ps) != 3 || ps[0].path == nil || ps[0].path.Fill == nil || ps[1].img == nil || ps[2].path == nil || ps[2].path.Stroke == nil {
+		t.Fatalf("%d fragments, want the fill, the inner shadow's bitmap, then the line", len(ps))
+	}
+	if got := alphaAt(t, ps[1], 101, 140); got < 60 {
+		t.Errorf("inner shadow alpha at the left edge %d, want the shadow there", got)
+	}
+	if got := alphaAt(t, ps[1], 210, 140); got > 2 {
+		t.Errorf("inner shadow alpha 10 pt in from the right edge %d, want none", got)
+	}
+	if len(warns) != 0 {
+		t.Errorf("warnings %v, want none", warns)
+	}
+	ps, _ = effectPage(t, EffectsImpress, sh)
+	for _, p := range ps {
+		if p.img != nil {
+			t.Error("Impress's rules drew an inner shadow")
+		}
+	}
+}
+
+// TestShape_ContentEffects checks the effects PowerPoint draws from what a
+// shape paints: a reflection mirrored under the shape and faded, a blur
+// and a fill overlay that draw the shape as one bitmap, a picture's soft
+// edge whose bitmap keeps the picture's Figure.
+func TestShape_ContentEffects(t *testing.T) {
+	box := typeset.Rect{X: 100, Y: 100, Width: 100, Height: 60}
+	rect := &shape.Geometry{Preset: "rect"}
+	blue := Fill{Kind: FillSolid, Color: css.Color{B: 1, A: 1}}
+	t.Run("reflection", func(t *testing.T) {
+		rf := &Reflection{ScaleX: 1, ScaleY: -1, OffsetY: 60, StartOpacity: 0.5, EndPos: 1, FadeDir: 90}
+		ps, warns := effectPage(t, EffectsPowerPoint, &Shape{Box: box, Geometry: rect, Fill: blue, Reflection: rf})
+		if len(ps) != 2 || ps[0].img == nil || ps[1].path == nil {
+			t.Fatalf("%d fragments, want the reflection's bitmap then the shape", len(ps))
+		}
+		if got := ps[0].bounds(); !rectNear(got, typeset.Rect{X: 100, Y: 160, Width: 100, Height: 60}, 1) {
+			t.Errorf("reflection bounds %+v, want the box mirrored below it", got)
+		}
+		img := decoded(t, ps[0].img.Source)
+		if c := img.NRGBAAt(img.Bounds().Dx()/2, 1); c.B < 250 || c.A < 120 || c.A > 130 {
+			t.Errorf("reflection by the shape %v, want blue at half alpha", c)
+		}
+		if got := alphaAt(t, ps[0], 150, 219.5); got > 3 {
+			t.Errorf("reflection alpha at its end %d, want none", got)
+		}
+		if len(warns) != 0 {
+			t.Errorf("warnings %v, want none", warns)
+		}
+	})
+	t.Run("blur", func(t *testing.T) {
+		ps, _ := effectPage(t, EffectsPowerPoint, &Shape{Box: box, Geometry: rect, Fill: blue, Blur: &Blur{Radius: 6, Grow: true}})
+		if len(ps) != 1 || ps[0].img == nil {
+			t.Fatalf("%d fragments, want the shape's bitmap alone", len(ps))
+		}
+		if got := ps[0].bounds(); !rectNear(got, grow(box, 6), 1) {
+			t.Errorf("blur bounds %+v, want the box grown by 6", got)
+		}
+		if got := alphaAt(t, ps[0], 100, 130); got < 118 || got > 138 {
+			t.Errorf("blur alpha on the outline %d, want half", got)
+		}
+	})
+	t.Run("fill overlay", func(t *testing.T) {
+		fill := Fill{Kind: FillSolid, Color: css.Color{R: 0x44 / 255.0, G: 0x72 / 255.0, B: 0xC4 / 255.0, A: 1}}
+		ps, _ := effectPage(t, EffectsPowerPoint, &Shape{Box: box, Geometry: rect, Fill: fill, FillOverlay: &FillOverlay{Color: css.Color{R: 1, A: 1}, Opacity: 1, Mode: OverlayMultiply}})
+		if len(ps) != 1 || ps[0].img == nil {
+			t.Fatalf("%d fragments, want the shape's bitmap alone", len(ps))
+		}
+		img := decoded(t, ps[0].img.Source)
+		if c := img.NRGBAAt(img.Bounds().Dx()/2, img.Bounds().Dy()/2); c != (color.NRGBA{R: 0x44, A: 255}) {
+			t.Errorf("overlaid colour %v, want blue multiplied by red", c)
+		}
+	})
+	t.Run("picture soft edge", func(t *testing.T) {
+		src := image.NewNRGBA(image.Rect(0, 0, 4, 4))
+		for i := range src.Pix {
+			src.Pix[i] = 255
+		}
+		pic := &layout.Picture{Source: source(t, src), Width: 4, Height: 4}
+		d := deck(&Slide{Shapes: []*Shape{{Kind: KindPicture, Box: box, Picture: pic, SoftEdge: 10, Alt: "a picture"}}})
+		out := convert(t, d, office.Options{})
+		var ps []placed
+		flatten(out.Pages[0].Content, typeset.Identity, 1, &ps)
+		if len(ps) != 1 || ps[0].img == nil {
+			t.Fatalf("%d fragments, want the picture's bitmap alone", len(ps))
+		}
+		if p := ps[0].img.Parent; p == nil || p.Role != "Figure" || p.Alt != "a picture" {
+			t.Errorf("bitmap parent %+v, want the picture's Figure", p)
+		}
+		if got := alphaAt(t, ps[0], 150, 101); got > 10 {
+			t.Errorf("alpha by the edge %d, want faded", got)
+		}
+		if got := alphaAt(t, ps[0], 150, 130); got != 255 {
+			t.Errorf("alpha in the middle %d, want opaque", got)
+		}
+	})
 }

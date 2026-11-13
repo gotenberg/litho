@@ -207,14 +207,29 @@ func (b *builder) geometry(s *Shape, m typeset.Matrix, parent *typeset.StructEle
 	}
 	sm := skewedAboutCentre(box, s.Rotation, s.SkewX, s.FlipH, s.FlipV)
 	paths := shape.Paths(s.Geometry, box)
-	frags, paths := b.effects(s, paths, box, m, txt)
+	frags, paths, inner := b.effects(s, paths, box, m, txt)
 	b.hatchTurn = s.Rotation
-	for _, p := range paths {
-		if p.Fill {
-			frags = append(frags, b.fill(&s.Fill, box, p.Ops, p.Mode)...)
+	if len(inner) > 0 {
+		// An inner shadow paints over every fill and under every line.
+		for _, p := range paths {
+			if p.Fill {
+				frags = append(frags, b.fill(&s.Fill, box, p.Ops, p.Mode)...)
+			}
 		}
-		if p.Stroke {
-			frags = append(frags, b.stroke(&s.Line, p.Ops)...)
+		frags = append(frags, inner...)
+		for _, p := range paths {
+			if p.Stroke {
+				frags = append(frags, b.stroke(&s.Line, p.Ops)...)
+			}
+		}
+	} else {
+		for _, p := range paths {
+			if p.Fill {
+				frags = append(frags, b.fill(&s.Fill, box, p.Ops, p.Mode)...)
+			}
+			if p.Stroke {
+				frags = append(frags, b.stroke(&s.Line, p.Ops)...)
+			}
 		}
 	}
 	b.hatchTurn = 0

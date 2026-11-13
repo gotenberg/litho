@@ -51,13 +51,15 @@ func TestEffects_EffectList(t *testing.T) {
 		},
 		{"a glow without a colour is none", `<a:effectLst><a:glow rad="127000"/></a:effectLst>`, "", nil, nil, 0, false, ""},
 		{"soft edge", `<a:effectLst><a:softEdge rad="63500"/></a:effectLst>`, "", nil, nil, 5, true, ""},
+		{"a bevelled shape prints no soft edge", `<a:effectLst><a:softEdge rad="63500"/></a:effectLst><a:sp3d><a:bevelT/></a:sp3d>`, "", nil, nil, 0, false, ""},
 		{
 			"the theme's effect style", "", style,
 			&slides.Shadow{Color: css.Color{G: 1, A: 1}, Opacity: 1, OffsetX: 2, ScaleX: 1, ScaleY: 1, Blur: 3}, nil, 0, false, "",
 		},
 		{"an empty list overrides the style", `<a:effectLst/>`, style, nil, nil, 0, false, ""},
-		{"inner shadow", `<a:effectLst><a:innerShdw blurRad="12700"><a:prstClr val="black"/></a:innerShdw></a:effectLst>`, "", nil, nil, 0, false, "inner and preset shadows"},
-		{"reflection", `<a:effectLst><a:reflection/></a:effectLst>`, "", nil, nil, 0, false, "reflections"},
+		{"preset shadow", `<a:effectLst><a:prstShdw prst="shdw1"><a:prstClr val="black"/></a:prstShdw></a:effectLst>`, "", nil, nil, 0, false, "preset shadows"},
+		{"skewed shadow", `<a:effectLst><a:outerShdw kx="-800400"><a:prstClr val="black"/></a:outerShdw></a:effectLst>`, "", &slides.Shadow{Color: css.Color{A: 1}, Opacity: 1, ScaleX: 1, ScaleY: 1}, nil, 0, false, "skew of shadows"},
+		{"a fill overlay of a gradient", `<a:effectLst><a:fillOverlay blend="mult"><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs></a:gsLst></a:gradFill></a:fillOverlay></a:effectLst>`, "", nil, nil, 0, false, "fill overlays"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -96,5 +98,68 @@ func TestEffects_EffectList(t *testing.T) {
 				t.Errorf("warnings %v, want one on %q", warnings, tc.warn)
 			}
 		})
+	}
+}
+
+// TestEffects_InnerShadow checks the inner shadow read from an effect
+// list: its blur, its distance and direction as offsets, its colour and
+// alpha; none without a colour.
+func TestEffects_InnerShadow(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, spPr string
+		want       *slides.Shadow
+	}{
+		{
+			"inner shadow", `<a:effectLst><a:innerShdw blurRad="63500" dist="127000" dir="13500000"><a:srgbClr val="000000"><a:alpha val="50000"/></a:srgbClr></a:innerShdw></a:effectLst>`,
+			&slides.Shadow{Color: css.Color{A: 1}, Opacity: 0.5, OffsetX: -10 * math.Sqrt2 / 2, OffsetY: -10 * math.Sqrt2 / 2, Blur: 5, ScaleX: 1, ScaleY: 1},
+		},
+		{"no colour", `<a:effectLst><a:innerShdw blurRad="63500"/></a:effectLst>`, &slides.Shadow{ScaleX: 1, ScaleY: 1, Blur: 5}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, _ := readDeck(t, testDeck{slides: []testSlide{{tree: sp("S", `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>`+tc.spPr, "")}}})
+			s := shapeNamed(doc.Slides[0].Shapes, "S")
+			if s == nil || s.InnerShadow == nil {
+				t.Fatal("no inner shadow on shape S")
+			}
+			got, want := *s.InnerShadow, *tc.want
+			if !colorNear(got.Color, want.Color) || !nearly(got.Opacity, want.Opacity) || !nearly(got.OffsetX, want.OffsetX) || !nearly(got.OffsetY, want.OffsetY) || !nearly(got.Blur, want.Blur) {
+				t.Errorf("inner shadow %+v, want %+v", got, want)
+			}
+		})
+	}
+}
+
+// TestEffects_ContentEffects checks the reflection, blur and fill overlay
+// read from an effect list, the shape being 10 by 20 pt.
+func TestEffects_ContentEffects(t *testing.T) {
+	t.Parallel()
+	lst := `<a:effectLst><a:blur rad="127000" grow="0"/><a:fillOverlay blend="mult"><a:solidFill><a:srgbClr val="FF0000"><a:alpha val="50000"/></a:srgbClr></a:solidFill></a:fillOverlay>` +
+		`<a:reflection blurRad="12700" stA="50000" endPos="90000" dist="50800" dir="5400000" sy="-100000" algn="bl" rotWithShape="0"/></a:effectLst>`
+	doc, warnings := readDeck(t, testDeck{slides: []testSlide{{tree: sp("S", `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="0000FF"/></a:solidFill>`+lst, "")}}})
+	s := shapeNamed(doc.Slides[0].Shapes, "S")
+	if s == nil {
+		t.Fatal("no shape S")
+	}
+	if s.Blur == nil || !nearly(s.Blur.Radius, 10) || s.Blur.Grow {
+		t.Errorf("blur %+v, want 10 pt without growing", s.Blur)
+	}
+	if fo := s.FillOverlay; fo == nil || fo.Mode != slides.OverlayMultiply || !colorNear(fo.Color, css.Color{R: 1, A: 1}) || !nearly(fo.Opacity, 0.5) {
+		t.Errorf("fill overlay %+v, want red at 50%% multiplied", fo)
+	}
+	rf := s.Reflection
+	if rf == nil {
+		t.Fatal("no reflection")
+	}
+	// Mirrored about the bottom of a 20 pt box, then 4 pt down.
+	if !nearly(rf.ScaleY, -1) || !nearly(rf.ScaleX, 1) || !nearly(rf.OffsetY, 24) || !nearly(rf.OffsetX, 0) || !nearly(rf.Blur, 1) {
+		t.Errorf("reflection geometry %+v, want mirrored 24 pt down, blurred 1 pt", *rf)
+	}
+	if !nearly(rf.StartOpacity, 0.5) || !nearly(rf.EndOpacity, 0) || !nearly(rf.StartPos, 0) || !nearly(rf.EndPos, 0.9) || !nearly(rf.FadeDir, 90) {
+		t.Errorf("reflection fade %+v, want 50%% at 0 to 0%% at 90%% toward 90 degrees", *rf)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("warnings %v, want none", warnings)
 	}
 }
