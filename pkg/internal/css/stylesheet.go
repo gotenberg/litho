@@ -160,11 +160,7 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 			}
 			return
 		}
-		if !sp.count() {
-			return
-		}
-		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: parseDeclList(it.block, c), cond: cond})
-		sp.nestedRules(ctx, it, base, cond, depth)
+		sp.styleBlock(ctx, it.prelude, sels, it.block, base, cond, depth, c)
 	case itemAtRule:
 		name := lower(it.name)
 		if name != "import" && name != "charset" && (name != "layer" || it.hasBlock) {
@@ -229,43 +225,127 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 	}
 }
 
-// nestedRules parses the style rules nested in the style rule it (CSS
-// Nesting 1, 2 and 3): each starts with the nesting selector &, which
-// stands for each selector of the parent rule in turn, and follows the
-// parent's declarations in the cascade order.
-func (sp *sheetParser) nestedRules(ctx context.Context, it item, base string, cond *mediaCond, depth int) {
+// styleBlock adds the rules of the block of a style rule whose selector
+// list prelude parses to sels (CSS Nesting 1): the declarations under
+// sels, and the rules nested among them after the declarations before
+// them; declarations after a nested rule form a rule of their own under
+// sels, after it in the cascade order (CSS Nesting 1, 3.3, nested
+// declarations rules). Conditional group rules nest with their contents
+// relative to sels (3.2).
+func (sp *sheetParser) styleBlock(ctx context.Context, prelude []token, sels []*complexSel, block []token, base string, cond *mediaCond, depth int, c *declCtx) {
+	var decls []Declaration
+	first := true
+	flush := func() {
+		if len(decls) == 0 && !first || !sp.count() {
+			return
+		}
+		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: decls, cond: cond})
+		decls, first = nil, false
+	}
 	if sp.nesting >= maxNestingDepth {
+		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: parseDeclList(block, c), cond: cond})
 		return
 	}
 	sp.nesting++
 	defer func() { sp.nesting-- }()
-	parents := splitCommas(trimWS(it.prelude))
-	allowed := false
-	newListParser(it.block).declarations(func(n item) bool {
-		if n.kind != itemQualified {
-			return true
-		}
-		var prelude []token
-		for _, sel := range splitCommas(trimWS(n.prelude)) {
-			for _, par := range parents {
-				if len(prelude) > 0 {
-					prelude = append(prelude, token{typ: tComma})
-				}
-				for _, t := range trimWS(sel) {
-					if t.isDelim('&') {
-						prelude = append(prelude, trimWS(par)...)
-						continue
-					}
-					prelude = append(prelude, t)
-				}
+	p := newListParser(block)
+	p.nested = true
+	p.declarations(func(n item) bool {
+		switch n.kind { //nolint:exhaustive // errors drop out
+		case itemDeclaration:
+			if d := c.declare(n.name, n.value, n.important); d.declares() {
+				decls = append(decls, d)
 			}
-			if len(prelude) > maxNestedPrelude {
-				return true
-			}
+		case itemQualified:
+			flush()
+			sp.nestedRule(ctx, prelude, n, base, cond, depth)
+		case itemAtRule:
+			flush()
+			sp.nestedAtRule(ctx, prelude, sels, n, base, cond, depth, c)
 		}
-		sp.rule(ctx, item{kind: itemQualified, prelude: prelude, block: n.block}, base, cond, depth, &allowed)
 		return sp.err == nil
 	})
+	flush()
+}
+
+// nestedRule adds the style rule n nested in a rule of selector list
+// parent (CSS Nesting 1, 2): the nesting selector & stands for
+// :is(parent), whose specificity is the most specific of the parent's
+// selectors (6); a selector without & is relative to it, a descendant
+// unless it starts with a combinator (2.1).
+func (sp *sheetParser) nestedRule(ctx context.Context, parent []token, n item, base string, cond *mediaCond, depth int) {
+	is := []token{{typ: tColon}, {typ: tFunction, value: "is", children: trimWS(parent)}}
+	var prelude []token
+	for _, sel := range splitCommas(trimWS(n.prelude)) {
+		sel = trimWS(sel)
+		if len(prelude) > 0 {
+			prelude = append(prelude, token{typ: tComma})
+		}
+		if hasNesting(sel) {
+			prelude = append(prelude, nest(sel, is)...)
+		} else {
+			prelude = append(prelude, is...)
+			prelude = append(prelude, token{typ: tWhitespace})
+			prelude = append(prelude, sel...)
+		}
+		if len(prelude) > maxNestedPrelude {
+			return
+		}
+	}
+	allowed := false
+	sp.rule(ctx, item{kind: itemQualified, prelude: prelude, block: n.block}, base, cond, depth, &allowed)
+}
+
+// hasNesting reports a selector that holds the nesting selector &, at
+// any depth.
+func hasNesting(l []token) bool {
+	for _, t := range l {
+		if t.isDelim('&') || len(t.children) > 0 && hasNesting(t.children) {
+			return true
+		}
+	}
+	return false
+}
+
+// nest returns l with each nesting selector replaced by is.
+func nest(l []token, is []token) []token {
+	out := make([]token, 0, len(l))
+	for _, t := range l {
+		switch {
+		case t.isDelim('&'):
+			out = append(out, is...)
+		case len(t.children) > 0:
+			t.children = nest(t.children, is)
+			out = append(out, t)
+		default:
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// nestedAtRule adds the at-rule n nested in a style rule of selector
+// list parent, parsed to sels: @media, @supports and @layer hold
+// declarations under sels and rules relative to them (CSS Nesting 1,
+// 3.2), under their condition.
+func (sp *sheetParser) nestedAtRule(ctx context.Context, parent []token, sels []*complexSel, n item, base string, cond *mediaCond, depth int, c *declCtx) {
+	if !n.hasBlock {
+		return
+	}
+	switch name := lower(n.name); name {
+	case "media":
+		sp.styleBlock(ctx, parent, sels, n.block, base, &mediaCond{list: n.prelude, parent: cond}, depth, c)
+	case "supports":
+		if evalSupports(n.prelude) {
+			sp.styleBlock(ctx, parent, sels, n.block, base, cond, depth, c)
+		}
+	case "layer":
+		sp.styleBlock(ctx, parent, sels, n.block, base, cond, depth, c)
+	default:
+		if !ignoredAtRules[name] && !strings.HasPrefix(name, "-") {
+			c.warn(warn.CSSUnsupported, warn.Approximated, "the @%s rule is not supported and was ignored", name)
+		}
+	}
 }
 
 // maxNestedPrelude caps the tokens of the selector list a nested rule

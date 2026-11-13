@@ -63,6 +63,62 @@ type parser struct {
 	// it went past maxNestingDepth, after which the input reads as ended.
 	depth int
 	deep  bool
+	// nested parses a style rule's block (CSS Syntax 3, 5.4.4, consume a
+	// block's contents): what does not read as a declaration reads as a
+	// nested rule (CSS Nesting 1, 2). It applies to a list parser.
+	nested bool
+}
+
+// mark is a list parser's position, which restore returns to.
+type mark struct {
+	i    int
+	back bool
+	cur  token
+}
+
+func (p *parser) mark() mark { return mark{p.i, p.back, p.cur} }
+
+func (p *parser) restore(m mark) { p.i, p.back, p.cur = m.i, m.back, m.cur }
+
+// nestedRule consumes a qualified rule nested in a style rule's block
+// (CSS Syntax 3, 5.4.3 with nested set): a semicolon before its block
+// ends it as an error, after which the declarations go on.
+func (p *parser) nestedRule() item {
+	it := item{kind: itemQualified, prelude: []token{}}
+	for {
+		t := p.next()
+		switch t.typ { //nolint:exhaustive // the other token types take the default path
+		case tEOF, tSemicolon:
+			return item{kind: itemError, name: "invalid"}
+		case tLBrace:
+			if p.tz != nil {
+				it.block = orEmpty(p.block(t).children)
+				return it
+			}
+			it.block = orEmpty(t.children)
+			return it
+		}
+		it.prelude = append(it.prelude, p.componentValue(t))
+	}
+}
+
+// blockAndMore reports a declaration value that holds a {} block and
+// anything else, which CSS Syntax 3, 5.4.6 refuses as a declaration.
+func blockAndMore(v []token) bool {
+	block, other := false, false
+	for _, t := range v {
+		switch t.typ { //nolint:exhaustive // the other token types count as other values
+		case tWhitespace:
+		case tLBrace:
+			if block {
+				other = true
+			}
+			block = true
+		default:
+			other = true
+		}
+	}
+	return block && other
 }
 
 // newListParser parses an already consumed list of component values.
@@ -247,6 +303,7 @@ func (p *parser) declarations(yield func(item) bool) {
 				return
 			}
 		case tIdent:
+			m := p.mark()
 			tmp := []token{t}
 			for {
 				n := p.next()
@@ -256,28 +313,32 @@ func (p *parser) declarations(yield func(item) bool) {
 				tmp = append(tmp, p.componentValue(n))
 			}
 			it, ok := declaration(tmp)
+			if ok && p.nested && blockAndMore(it.value) {
+				ok = false
+			}
+			if !ok && p.nested {
+				// Not a declaration: a nested style rule (CSS Syntax 3,
+				// 5.4.4, consume a block's contents).
+				p.restore(m)
+				p.reconsume()
+				it, ok = p.nestedRule(), true
+			}
 			if !ok {
 				it = item{kind: itemError, name: "invalid"}
 			}
 			if !yield(it) {
 				return
 			}
-		case tDelim:
-			if t.delim != '&' {
-				p.skipDeclaration()
-				if !yield(item{kind: itemError, name: "invalid"}) {
+		default:
+			if p.nested || t.isDelim('&') {
+				// A nested style rule (CSS Nesting 1, 2; CSS Syntax 3,
+				// 5.4.4, consume a block's contents).
+				p.reconsume()
+				if !yield(p.nestedRule()) {
 					return
 				}
 				continue
 			}
-			// A nested style rule starting with the nesting selector
-			// (CSS Nesting 1, 2; CSS Syntax 3, 5.4.4, consume a block's
-			// contents).
-			p.reconsume()
-			if !yield(p.qualifiedRule()) {
-				return
-			}
-		default:
 			p.skipDeclaration()
 			if !yield(item{kind: itemError, name: "invalid"}) {
 				return
