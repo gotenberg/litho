@@ -94,6 +94,8 @@ func TestTable_ColumnWidths(t *testing.T) {
 			tr(nil, td(nil, "a"), td(nil, "aaa"))), []float64{25, 75}, 100},
 		{"empty auto column dropped", table(w(100), col(nil), col(nil), tr(nil, td(nil, "a"))), []float64{100}, 100},
 		{"column calc() min-width ignored", table(nil, col(mods(func(s *css.Style) { s.MinWidth = css.Dimension{Kind: css.Calc, Value: px(100), Fraction: 0.01} })), tr(nil, td(nil, "a"))), []float64{10}, 10},
+		{"cell max-width caps its content", table(nil, tr(nil, td(mods(func(s *css.Style) { s.MaxWidth = css.Pts(px(30)) }), "aaaaa"))), []float64{30}, 30},
+		{"cell max-width caps its width", table(nil, tr(nil, td(mods(width(50), func(s *css.Style) { s.MaxWidth = css.Pts(px(30)) }), "a"))), []float64{30}, 30},
 		{"empty column of a width kept", table(w(100), col(nil), col(w(20)), tr(nil, td(nil, "a"))), []float64{80, 20}, 100},
 		{"fixed layout", table(mods(width(100), fixedLayout), col(w(20)), tr(nil, td(nil, "aaaaaaaa"), td(nil, ""), td(nil, ""))), []float64{20, 40, 40}, 100},
 		{"fixed layout first row", table(mods(width(100), fixedLayout), tr(nil, td(nil, ""), td(w(10), ""))), []float64{90, 10}, 100},

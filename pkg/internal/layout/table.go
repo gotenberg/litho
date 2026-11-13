@@ -185,7 +185,15 @@ type colMeasure struct {
 
 // cellMeasure returns the outer min- and max-content widths of cell c,
 // borders and padding included (CSS Tables 3, 3.9.1): a fixed width
-// replaces the max-content width, never below the min-content one.
+// replaces the max-content width, never below the min-content one, and a
+// max-width of a length caps both and the width, a min-width floors them.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium draws a lone cell around 120px of content
+//     100px wide for max-width 100px, 60px for max-width 60px, whatever
+//     its overflow and vertical-align, and 120px for width 100px; one of
+//     width 100px and max-width 60px 60px wide, alone or in a table.
 func (e *engine) cellMeasure(td *tableData, c *box) (float64, float64) {
 	cd := c.cell
 	if cd.measured {
@@ -195,6 +203,13 @@ func (e *engine) cellMeasure(td *tableData, c *box) (float64, float64) {
 	lo, hi := formatterFor(c).intrinsic(e, c)
 	td.cellEdges(c, 0)
 	edges := hEdges(c)
+	if c.st.MaxWidth.Kind == css.Points {
+		// A max-width of a length caps the cell below its content and its
+		// width, as Chromium caps it; CSS 2.1, 17.5.2 leaves the effect
+		// of min-width and max-width on cells undefined.
+		mx, _ := specWidth(c, c.st.MaxWidth, 0)
+		lo, hi = min(lo, mx), min(hi, mx)
+	}
 	if k := c.st.MinWidth.Kind; k == css.Points || k == css.Calc {
 		if mn, ok := specWidth(c, c.st.MinWidth, 0); ok {
 			lo, hi = max(lo, mn), max(hi, mn)
@@ -208,12 +223,17 @@ func (e *engine) cellMeasure(td *tableData, c *box) (float64, float64) {
 }
 
 // cellFixed returns the border box width a fixed width property of cell c
-// asks for, its edges resolved.
+// asks for, its edges resolved, capped by a max-width of a length
+// ([engine.cellMeasure]).
 func cellFixed(c *box) (float64, bool) {
 	if c.st.Width.Kind != css.Points {
 		return 0, false
 	}
 	w, _ := specWidth(c, c.st.Width, 0)
+	if c.st.MaxWidth.Kind == css.Points {
+		mx, _ := specWidth(c, c.st.MaxWidth, 0)
+		w = min(w, mx)
+	}
 	return w + hEdges(c), true
 }
 
