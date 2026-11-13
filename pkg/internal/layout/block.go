@@ -128,6 +128,25 @@ func (mc *marginState) floatPlaced(f *box, bc *bfc, idx int, y float64) {
 	mc.floats = append(mc.floats, pendingFloat{box: f, bc: bc, idx: idx, y: y, owner: mc.waiting[len(mc.waiting)-1]})
 }
 
+// pendingClearTo returns the position below the floats placed under the
+// pending margins that the clear value cl clears, were the margins to
+// resolve at y, -Inf when it clears none. Such a float moves down with
+// the margins: a box whose top margin would carry it along cannot get
+// past it without clearance (CSS 2.1, 9.5.2).
+func (mc *marginState) pendingClearTo(cl css.Clear, y float64) float64 {
+	bottom := math.Inf(-1)
+	for _, f := range mc.floats {
+		if f.idx < 0 || f.idx >= len(f.bc.floats) {
+			continue
+		}
+		r := f.bc.floats[f.idx]
+		if cl == css.ClearBoth || (cl == css.ClearLeft && r.side == css.FloatLeft) || (cl == css.ClearRight && r.side == css.FloatRight) {
+			bottom = max(bottom, r.y1+y-f.y)
+		}
+	}
+	return bottom
+}
+
 // floatTop returns where the first float placed under the pending margins
 // sits, false when none is.
 func (mc *marginState) floatTop() (float64, bool) {
@@ -201,6 +220,36 @@ func leadingMargins(b *box, cbw float64) strut {
 		b = first
 	}
 	return s
+}
+
+// collapsingThrough reports whether the in-flow box b, laid out in cb, has
+// top and bottom margins that adjoin (CSS 2.1, 8.3.1: no border, padding,
+// height or line box between them), and returns the margins of its
+// descendants that collapse through it with them. They take part in the
+// hypothetical position clearance is computed from (9.5.2), which needs a
+// layout of b's content: a percentage padding or an intrinsic width
+// decides whether a descendant is empty.
+func (e *engine) collapsingThrough(b *box, cb cblock) (strut, bool) {
+	if b.bd[css.Top] != 0 || b.pd[css.Top] != 0 || b.bd[css.Bottom] != 0 || b.pd[css.Bottom] != 0 || b.st.MinHeight.Value > 0 {
+		return strut{}, false
+	}
+	if h, ok := specHeight(b, b.st.Height, cb); ok && h > eps || b.st.AspectRatio.Ratio() > 0 {
+		return strut{}, false
+	}
+	blockWidths(b, cb.w, cb.rtl(b), 0, false)
+	b.x = cb.x + b.m[css.Left]
+	b.y = 0
+	warnings := len(e.warnings)
+	e.noPaginate++
+	inner := &marginState{kept: true}
+	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w}, cb)
+	end := formatterFor(b).layout(e, b, kcb, &bfc{}, b.contentY(), inner)
+	e.noPaginate--
+	e.warnings = e.warnings[:warnings]
+	if math.Abs(end-b.contentY()) > eps {
+		return strut{}, false
+	}
+	return inner.strut, true
 }
 
 // breakMode is how a box starts with respect to the page cuts.
@@ -549,9 +598,15 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		if b.kind != kindReplaced && !b.establishesBFC() {
 			lead := leadingMargins(b, cb.w)
 			hyp = hyp.add(lead.pos).add(lead.neg)
+			if clearY > cursor+hyp.sum()+eps {
+				if through, ok := e.collapsingThrough(b, cb); ok {
+					hyp = mc.strut.add(mt).add(through.pos).add(through.neg).add(mb)
+				}
+			}
 		}
-		if clearY > cursor+hyp.sum()+eps {
+		if at := cursor + hyp.sum(); clearY > at+eps || mc.pendingClearTo(b.st.Clear, at) > at+eps {
 			mc.commit(cursor + mc.strut.sum())
+			clearY = bc.clearTo(b.st.Clear)
 			cleared = true
 		}
 	}
@@ -637,7 +692,11 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 			mc.collapsedThrough(b)
 			b.y = cursor + mc.strut.sum()
 			b.h = 0
-			mc.strut = mc.strut.add(mb)
+			if !mc.absorb {
+				// Under absorb, the margins of an empty box collapse into
+				// the clearance above it, the bottom one as the top.
+				mc.strut = mc.strut.add(mb)
+			}
 			return cursor
 		}
 		mc.commit(e.pastMargin(cursor, mc.strut, mc.kept))
@@ -674,8 +733,13 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		if cleared && b.h <= eps && b.bd[css.Top] == 0 && b.pd[css.Top] == 0 {
 			// The margins of an empty box with clearance collapse with
 			// the margins after it, which then stay inside its parent
-			// (8.3.1).
-			mc.strut.cleared = true
+			// (8.3.1). Clearance put its top border edge at the floats'
+			// bottom with its own margins above it (9.5.2): the set of
+			// margins starts that far above, so a following margin no
+			// larger than its own moves nothing.
+			own := strut{cleared: true}.add(mt).add(trailing.pos).add(trailing.neg).add(mb)
+			mc.strut = own
+			return bottom - own.sum()
 		}
 		return bottom
 	}

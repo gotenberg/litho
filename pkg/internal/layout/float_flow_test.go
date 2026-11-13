@@ -284,3 +284,55 @@ func TestClearance_MarginsThroughClearedBoxStayInParent(t *testing.T) {
 		}
 	}
 }
+
+func TestClearance_HypotheticalPositionCountsEmptyContent(t *testing.T) {
+	// CSS 2.1, 9.5.2: the hypothetical position counts the margins that
+	// collapse through an empty descendant, which a layout decides (a
+	// percentage padding of a fit-content box is 0): past the float, the
+	// box takes no clearance; short of it, clearance places it at the
+	// float's bottom and the margins are spent.
+	fit := func(s *css.Style) { s.Width = css.Dimension{Kind: css.FitContent} }
+	pct := func(s *css.Style) { s.Padding[css.Top] = css.Dimension{Kind: css.Percent, Value: 1} }
+	for _, m := range []float64{100, 75} {
+		rb := boxes(t, doc(el(sty(display(css.InlineBlock)),
+			el(sty(float(css.FloatLeft), width(100), height(100))),
+			el(sty(clearing(css.ClearBoth)),
+				el(sty(fit), el(sty(pct, margin(0, 0, m, 0))))),
+		)), page(200, 200))
+		if got := rect(kid(t, rb, 0, 0)); got[3] != 100 {
+			t.Errorf("margin %v: inline-block height %v, want 100", m, got[3])
+		}
+	}
+}
+
+func TestClearance_PendingFloatNeedsClearance(t *testing.T) {
+	// CSS 2.1, 9.5.2: a float placed under margins still pending moves
+	// down with them, so a box whose top margin collapses with them
+	// cannot get past it without clearance: the parent and the float
+	// stay at the top and the box goes below the float.
+	rb := boxes(t, doc(el(sty(width(100)),
+		el(sty(float(css.FloatLeft), width(50), height(64))),
+		el(sty(clearing(css.ClearLeft), margin(64, 0, 64, 0), height(64))),
+	)), page(200, 400))
+	if got := rect(kid(t, rb, 0, 0)); got[1] != 0 {
+		t.Errorf("parent at y %v, want 0", got[1])
+	}
+	if got := rect(kid(t, rb, 0, 0, 1)); got[1] != 64 {
+		t.Errorf("cleared box at y %v, want 64: below the float", got[1])
+	}
+}
+
+func TestClearance_EmptyClearedBoxSpendsItsMargins(t *testing.T) {
+	// CSS 2.1, 9.5.2 and 8.3.1: clearance puts the top border edge of an
+	// empty box at the float's bottom with its own margins above it; a
+	// following margin no larger than those moves nothing, and the
+	// margins of empty content under clearance collapse into it.
+	rb := boxes(t, doc(el(sty(width(100)),
+		el(sty(float(css.FloatLeft), width(50), height(64))),
+		el(sty(clearing(css.ClearLeft), margin(32, 0, 32, 0)), el(sty(margin(16, 0, 16, 0)))),
+		el(sty(margin(16, 0, 0, 0), height(10))),
+	)), page(200, 400))
+	if got := rect(kid(t, rb, 0, 0, 2)); got[1] != 64 {
+		t.Errorf("box after the cleared box at y %v, want 64", got[1])
+	}
+}
