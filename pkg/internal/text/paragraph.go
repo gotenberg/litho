@@ -125,6 +125,9 @@ type Span struct {
 	Ascent, Descent float64
 	// LineGap is the face's line gap at its size, 0 for an object.
 	LineGap float64
+	// EmAscent and EmDescent split the face's em box at the baseline
+	// ([Metrics] EmAscent), 0 for an object.
+	EmAscent, EmDescent float64
 	// UnderlinePosition is the distance from the baseline down to the top
 	// of the underline and UnderlineThickness its thickness, from the
 	// face's post table; StrikeoutPosition is the distance from the
@@ -189,6 +192,7 @@ type shapedItem struct {
 	// ascent, descent and gap are the face's line bounds at the size;
 	// underline and strike its decoration metrics.
 	ascent, descent, gap   float64
+	emAscent, emDescent    float64
 	ulPos, ulThick         float64
 	strikePos, strikeThick float64
 	// stroke and skew synthesise the bold and italic the face lacks.
@@ -504,6 +508,8 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 		it.level = int(p.level[it.start])
 	}
 	if fc := st.byFont[out.Face.Font]; fc != nil {
+		m := fc.Metrics(style.Size)
+		it.emAscent, it.emDescent = m.EmAscent, m.EmDescent
 		cf, err := fc.Typeset(ctx)
 		if err != nil {
 			return shapedItem{}, fmt.Errorf("shaping text: %w", err)
@@ -706,6 +712,7 @@ func (p *Paragraph) LineTrimmed(start, end, trim int) ParagraphLine {
 		sp := Span{
 			Run: it.run, Start: pc.start, End: pc.end, X: x,
 			Ascent: it.ascent, Descent: it.descent, LineGap: it.gap,
+			EmAscent: it.emAscent, EmDescent: it.emDescent,
 			UnderlinePosition: it.ulPos, UnderlineThickness: it.ulThick,
 			StrikeoutPosition: it.strikePos, StrikeoutThickness: it.strikeThick,
 			RTL: it.rtl,
