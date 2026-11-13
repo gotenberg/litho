@@ -39,6 +39,9 @@ func equalStyle(a, b *Style) bool {
 	if a.Isolation != b.Isolation {
 		return false
 	}
+	if !equalClipPath(&a.ClipPath, &b.ClipPath) {
+		return false
+	}
 	if !equalZIndex(&a.ZIndex, &b.ZIndex) {
 		return false
 	}
@@ -695,6 +698,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, math.Float64bits(x.Opacity))
 	h = mix(h, uint64(x.MixBlendMode))
 	h = mix(h, uint64(x.Isolation))
+	h = hashClipPath(h, &x.ClipPath)
 	h = hashZIndex(h, &x.ZIndex)
 	h = mixBool(h, x.Transform == nil)
 	h = mix(h, uint64(len(x.Transform)))
@@ -964,6 +968,32 @@ func equalClipMargin(a, b *ClipMargin) bool {
 func hashClipMargin(h uint64, x *ClipMargin) uint64 {
 	h = mix(h, uint64(x.Box))
 	h = mix(h, math.Float64bits(x.Margin))
+	return h
+}
+
+// equalClipPath reports whether a and b hold equal values, field by field.
+func equalClipPath(a, b *ClipPath) bool {
+	if a.URL != b.URL {
+		return false
+	}
+	if a.Shape != b.Shape {
+		return false
+	}
+	if a.Box != b.Box {
+		return false
+	}
+	if a.Boxed != b.Boxed {
+		return false
+	}
+	return true
+}
+
+// hashClipPath folds every field of x into h.
+func hashClipPath(h uint64, x *ClipPath) uint64 {
+	h = mixString(h, x.URL)
+	h = mixBool(h, x.Shape != nil)
+	h = mix(h, uint64(x.Box))
+	h = mixBool(h, x.Boxed)
 	return h
 }
 

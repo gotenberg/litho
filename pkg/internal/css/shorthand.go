@@ -279,12 +279,26 @@ func legacyBreakInside() shorthandDef {
 // expandRadius expands border-radius (CSS Backgrounds 3, 5.1): one to four
 // horizontal radii, optionally a slash and one to four vertical radii.
 func expandRadius(v []token, _ *declCtx) ([]entry, bool) {
+	h, vv, ok := parseRadii(v)
+	if !ok {
+		return nil, false
+	}
+	out := make([]entry, 4)
+	for i := range out {
+		out[i] = entry{pRadiusTopLeft + propID(i), radiusSpec{h: h[i], v: vv[i]}}
+	}
+	return out, true
+}
+
+// parseRadii parses the value of border-radius into the horizontal and
+// vertical radius of each corner (CSS Backgrounds 3, 5.1).
+func parseRadii(v []token) ([4]length, [4]length, bool) {
 	hs, vs := v, []token(nil)
 	for i, t := range v {
 		if t.isDelim('/') {
 			hs, vs = v[:i], v[i+1:]
 			if len(vs) == 0 {
-				return nil, false
+				return [4]length{}, [4]length{}, false
 			}
 			break
 		}
@@ -310,19 +324,15 @@ func expandRadius(v []token, _ *declCtx) ([]entry, bool) {
 	}
 	h, ok := parse4(hs)
 	if !ok {
-		return nil, false
+		return h, h, false
 	}
 	vv := h
 	if vs != nil {
 		if vv, ok = parse4(vs); !ok {
-			return nil, false
+			return h, vv, false
 		}
 	}
-	out := make([]entry, 4)
-	for i := range out {
-		out[i] = entry{pRadiusTopLeft + propID(i), radiusSpec{h: h[i], v: vv[i]}}
-	}
-	return out, true
+	return h, vv, true
 }
 
 // systemFonts are the system font keywords of the font shorthand (CSS

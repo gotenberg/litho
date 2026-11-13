@@ -1,0 +1,78 @@
+package css
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestClipPath_Values(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		decl  string
+		check func(c ClipPath) bool
+	}{
+		{"", func(c ClipPath) bool { return c.None() }},
+		{"clip-path: none", func(c ClipPath) bool { return c.None() }},
+		{"clip-path: url(#c)", func(c ClipPath) bool { return strings.HasSuffix(c.URL, "#c") && c.Shape == nil }},
+		{"clip-path: padding-box", func(c ClipPath) bool { return c.Boxed && c.Shape == nil && c.Box == GeoPadding }},
+		{"clip-path: fill-box", func(c ClipPath) bool { return c.Box == GeoContent }},
+		{"clip-path: view-box", func(c ClipPath) bool { return c.Box == GeoBorder }},
+		{"clip-path: inset(10px 20%)", func(c ClipPath) bool {
+			s := c.Shape
+			return s != nil && s.Kind == ShapeInset && s.Inset[Top] == pts(7.5) && s.Inset[Right] == pct(0.2) && s.Inset[Bottom] == pts(7.5) && c.Box == GeoBorder
+		}},
+		{"clip-path: content-box inset(1px round 4px / 2px)", func(c ClipPath) bool {
+			s := c.Shape
+			return s != nil && c.Box == GeoContent && s.Radii[TopLeft] == Radius{H: pts(3), V: pts(1.5)}
+		}},
+		{"clip-path: circle(50% at right 20%)", func(c ClipPath) bool {
+			s := c.Shape
+			return s != nil && s.Kind == ShapeCircle && s.Radius[0] == ShapeRadius{Side: RadiusLength, Length: pct(0.5)} && s.Center == [2]Dimension{pct(1), pct(0.2)}
+		}},
+		{"clip-path: circle()", func(c ClipPath) bool {
+			s := c.Shape
+			return s != nil && s.Radius[0].Side == RadiusClosest && s.Center == [2]Dimension{pct(0.5), pct(0.5)}
+		}},
+		{"clip-path: ellipse(farthest-side 10px)", func(c ClipPath) bool {
+			s := c.Shape
+			return s != nil && s.Kind == ShapeEllipse && s.Radius[0].Side == RadiusFarthest && s.Radius[1].Length == pts(7.5)
+		}},
+		{"clip-path: polygon(evenodd, 0 0, 100% 0, 50% 4px)", func(c ClipPath) bool {
+			s := c.Shape
+			return s != nil && s.EvenOdd && len(s.Points) == 3 && s.Points[2] == [2]Dimension{pct(0.5), pts(3)}
+		}},
+		{`clip-path: path(nonzero, "M0 0 L10 0 L0 10 Z")`, func(c ClipPath) bool {
+			s := c.Shape
+			return s != nil && s.Kind == ShapePath && !s.EvenOdd && s.Path == "M0 0 L10 0 L0 10 Z"
+		}},
+		// rect() and xywh() compute to an inset of the same rectangle.
+		{"clip-path: rect(10px auto 50% 0)", func(c ClipPath) bool {
+			s := c.Shape
+			return s != nil && s.Kind == ShapeInset && s.Inset[Top] == pts(7.5) && s.Inset[Right] == pct(0) && s.Inset[Bottom] == pct(0.5) && s.Inset[Left] == pts(0)
+		}},
+		{"clip-path: xywh(10px 0 50% 20px)", func(c ClipPath) bool {
+			s := c.Shape
+			return s != nil && s.Inset[Left] == pts(7.5) && s.Inset[Right] == Dimension{Kind: Calc, Value: -7.5, Fraction: 0.5} &&
+				s.Inset[Bottom] == Dimension{Kind: Calc, Value: -15, Fraction: 1}
+		}},
+	}
+	for _, tt := range tests {
+		if c := styleOf(t, tt.decl).ClipPath; !tt.check(c) {
+			t.Errorf("%q: %+v %+v", tt.decl, c, c.Shape)
+		}
+	}
+}
+
+func TestClipPath_Invalid(t *testing.T) {
+	t.Parallel()
+	for _, v := range []string{
+		"circle(1px 2px)", "ellipse(1px)", "inset()", "inset(1px 2px 3px 4px 5px)", "polygon()",
+		"polygon(1px)", "polygon(evenodd)", "polygon(foo, 0 0)", "path(10)", "rect(1px 2px 3px)",
+		"xywh(0 0 -1px 2px)", "border-box padding-box", "circle() circle()", "url(#a) border-box",
+		"circle(-1px)", "inset(1px round)",
+	} {
+		if c := styleOf(t, "clip-path: inset(1px); clip-path: "+v).ClipPath; c.Shape == nil || c.Shape.Kind != ShapeInset {
+			t.Errorf("%q was accepted: %+v", v, c)
+		}
+	}
+}

@@ -986,6 +986,8 @@ type Style struct {
 	// group (CSS Compositing 1, 3.2 and 3.3).
 	MixBlendMode BlendMode
 	Isolation    Isolation
+	// ClipPath clips the element and its content (CSS Masking 1, 5.1).
+	ClipPath ClipPath
 	// ZIndex is the stack level of a positioned box (CSS 2.1, 9.9.1).
 	ZIndex ZIndex
 	// Transform is the 2D transform list, nil for none (CSS Transforms 1,
