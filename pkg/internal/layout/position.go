@@ -478,6 +478,13 @@ func staticRoom(b *box, cb absCB) (float64, bool) {
 // absolutely positioned box b in cb, its width and x set, and lays its
 // content out where it lands (CSS 2.1, 10.6.4; 10.6.5 for a replaced
 // box).
+//
+// # Corpus evidence
+//
+//   - wpt: css-position/position-absolute-center-007 and
+//     css-tables/absolute-tables-016 draw their references in Chromium
+//     156: a table between insets keeps its rows' height, and auto
+//     margins centre it.
 func (e *engine) absHeights(b *box, cb absCB, ccb cblock) {
 	st := b.st
 	edges := vEdges(b)
@@ -495,12 +502,13 @@ func (e *engine) absHeights(b *box, cb absCB, ccb cblock) {
 		h, ratioH = ratioHeight(b)
 		hSet = ratioH
 	}
-	if k := b.sizeSrc().Height.Kind; !hSet && tSet && bSet && (k == css.MinContent || k == css.MaxContent || k == css.FitContent) {
+	if k := b.sizeSrc().Height.Kind; !hSet && tSet && bSet && (k == css.MinContent || k == css.MaxContent || k == css.FitContent || b.tpart == partWrapper) {
 		// An intrinsic height keyword does not stretch between the insets:
 		// a block's min-content and max-content heights are its content's
 		// height, which fit-content keeps over the room the insets leave
 		// (CSS Sizing 3, 3.2 and 5.1), the auto margins sharing what is
-		// left, negative or not.
+		// left, negative or not. Nor does a table, whose auto height is
+		// its rows' (CSS 2.1, 17.5.3).
 		e.noPaginate++
 		b.y = cb.y
 		e.absContent(b, ccb, 0, false, false)

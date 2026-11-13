@@ -490,3 +490,19 @@ func TestAbs_CentredStaticPositionRoom(t *testing.T) {
 		t.Errorf("box at %v, %v wide, want at 0, 60 wide", got[0], got[2])
 	}
 }
+
+// TestAbs_TableBetweenInsetsKeepsItsHeight holds an absolutely positioned
+// table between a top and a bottom inset to CSS 2.1, 17.5.3 and 10.6.4:
+// its height is its rows', and auto margins centre it.
+func TestAbs_TableBetweenInsetsKeepsItsHeight(t *testing.T) {
+	t.Parallel()
+	tb := table(mods(spacing(0, 0), width(10), func(s *css.Style) {
+		s.Position, s.Top, s.Bottom = css.Absolute, css.Pts(0), css.Pts(0)
+		s.Margin[css.Top], s.Margin[css.Bottom] = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
+	}), tr(nil, part(css.TableCell, nil, el(sty(height(10))))))
+	root := doc(el(sty(width(10), height(40), func(s *css.Style) { s.Position = css.Relative }), tb))
+	w := kid(t, boxes(t, root, page(100, 100)), 0, 0, 0)
+	if got := rect(w.tdata.table); got[1] != 15 || got[3] != 10 {
+		t.Errorf("table at y %v, %v tall, want at 15, 10 tall", got[1], got[3])
+	}
+}
