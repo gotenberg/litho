@@ -39334,6 +39334,18 @@
     "resources": []
   },
   {
+    "id": "css/css-inline/br-line-height-inherited-quirks.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/br-line-height-inherited-quirks-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-inline/br-line-height-shrink-quirks.html",
     "print": false,
     "refs": [
@@ -39382,6 +39394,18 @@
     "resources": []
   },
   {
+    "id": "css/css-inline/br-line-height-zero.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/br-line-height-zero-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-inline/br-line-height.html",
     "print": false,
     "refs": [
@@ -39399,6 +39423,18 @@
     "refs": [
       {
         "path": "css/css-inline/empty-span-size-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/firefox-bug-2073465.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/firefox-bug-2073465-ref.html",
         "rel": "match",
         "resources": []
       }
@@ -39435,6 +39471,18 @@
     "refs": [
       {
         "path": "css/css-inline/initial-letter/initial-letter-block-position-drop-over-ruby-tall-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/initial-letter/initial-letter-block-position-drop-over-ruby.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/initial-letter/initial-letter-block-position-drop-over-ruby-ref.html",
         "rel": "match",
         "resources": []
       }
@@ -39538,6 +39586,18 @@
     "resources": []
   },
   {
+    "id": "css/css-inline/initial-letter/initial-letter-block-position-raise-over-ruby.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/initial-letter/initial-letter-block-position-raise-over-ruby-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-inline/initial-letter/initial-letter-block-position-raise-under-ruby-tall.html",
     "print": false,
     "refs": [
@@ -39567,6 +39627,30 @@
     "refs": [
       {
         "path": "css/css-inline/initial-letter/initial-letter-drop-initial-rtl-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/initial-letter/initial-letter-drop-initial.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/initial-letter/initial-letter-drop-initial-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/initial-letter/initial-letter-float-001-rtl.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/initial-letter/initial-letter-float-001-rtl-ref.html",
         "rel": "match",
         "resources": []
       }
@@ -39610,11 +39694,47 @@
     "resources": []
   },
   {
+    "id": "css/css-inline/initial-letter/initial-letter-float-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/initial-letter/initial-letter-float-004-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/initial-letter/initial-letter-float-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/initial-letter/initial-letter-float-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-inline/initial-letter/initial-letter-indentation-rtl.html",
     "print": false,
     "refs": [
       {
         "path": "css/css-inline/initial-letter/initial-letter-indentation-rtl-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/initial-letter/initial-letter-indentation.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/initial-letter/initial-letter-indentation-ref.html",
         "rel": "match",
         "resources": []
       }
@@ -39658,6 +39778,42 @@
     "resources": []
   },
   {
+    "id": "css/css-inline/initial-letter/initial-letter-short-para-initial-letter-clears.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/initial-letter/initial-letter-short-para-initial-letter-clears-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/initial-letter/initial-letter-short-para-initial-letter-wraps.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/initial-letter/initial-letter-short-para-initial-letter-wraps-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/initial-letter/initial-letter-with-first-line.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/initial-letter/initial-letter-with-first-line-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-inline/initial-letter/initial-letter-with-tab-rtl.html",
     "print": false,
     "refs": [
@@ -39694,6 +39850,30 @@
     "resources": []
   },
   {
+    "id": "css/css-inline/inline-block-last-baseline-skips-non-contributing-block-in-inline.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/inline-block-last-baseline-skips-non-contributing-block-in-inline-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/model/phantom-line-boxes-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-200px-square.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-inline/model/phantom-line-boxes-002.html",
     "print": false,
     "refs": [
@@ -39707,6 +39887,30 @@
   },
   {
     "id": "css/css-inline/model/phantom-line-boxes-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-200px-square.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/model/phantom-line-boxes-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-200px-square.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/model/phantom-line-boxes-005.html",
     "print": false,
     "refs": [
       {
@@ -39790,11 +39994,35 @@
     "resources": []
   },
   {
+    "id": "css/css-inline/text-box-trim/not-at-page-edges-001-print.html",
+    "print": true,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/not-at-page-edges-001-print-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-inline/text-box-trim/not-at-page-edges-002-print.html",
     "print": true,
     "refs": [
       {
         "path": "css/css-inline/text-box-trim/not-at-page-edges-002-print-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/not-at-page-edges-003-print.html",
+    "print": true,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/not-at-page-edges-003-print-ref.html",
         "rel": "match",
         "resources": []
       }
@@ -39819,6 +40047,42 @@
     "refs": [
       {
         "path": "css/reference/ref-filled-green-100px-square.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-atomic-inline-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-atomic-inline-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-block-in-inline-end-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-block-in-inline-end-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-block-in-inline-end-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-block-in-inline-end-001-ref.html",
         "rel": "match",
         "resources": []
       }
@@ -39863,6 +40127,18 @@
   },
   {
     "id": "css/css-inline/text-box-trim/text-box-trim-block-in-inline-start-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-block-in-inline-start-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-block-in-inline-start-003.html",
     "print": false,
     "refs": [
       {
@@ -39922,6 +40198,30 @@
     "resources": []
   },
   {
+    "id": "css/css-inline/text-box-trim/text-box-trim-first-line-pseudo-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-first-line-pseudo-004-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-first-line-pseudo-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-first-line-pseudo-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-inline/text-box-trim/text-box-trim-float-clear-br-001.html",
     "print": false,
     "refs": [
@@ -39934,11 +40234,47 @@
     "resources": []
   },
   {
+    "id": "css/css-inline/text-box-trim/text-box-trim-float-start-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-float-start-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-fragmented-last-inline-box-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-fragmented-last-inline-box-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-inline/text-box-trim/text-box-trim-fragmented-last-inline-box-002.html",
     "print": false,
     "refs": [
       {
         "path": "css/css-inline/text-box-trim/text-box-trim-fragmented-last-inline-box-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-half-leading-block-box-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-half-leading-block-box-001-ref.html",
         "rel": "match",
         "resources": []
       }
@@ -39982,6 +40318,30 @@
     "resources": []
   },
   {
+    "id": "css/css-inline/text-box-trim/text-box-trim-half-leading-block-box-006.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-half-leading-block-box-006-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-line-clamp-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-line-clamp-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-inline/text-box-trim/text-box-trim-line-clamp-002.html",
     "print": false,
     "refs": [
@@ -39995,6 +40355,42 @@
   },
   {
     "id": "css/css-inline/text-box-trim/text-box-trim-line-clamp-auto-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-line-clamp-auto-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-line-clamp-auto-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-line-clamp-auto-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-line-clamp-auto-block-in-inline-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-line-clamp-auto-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-line-clamp-auto-block-in-inline-002.html",
     "print": false,
     "refs": [
       {
@@ -40030,11 +40426,47 @@
     "resources": []
   },
   {
+    "id": "css/css-inline/text-box-trim/text-box-trim-multicol-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-multicol-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-inline/text-box-trim/text-box-trim-multicol-003.html",
     "print": false,
     "refs": [
       {
         "path": "css/css-inline/text-box-trim/text-box-trim-multicol-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-multicol-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-multicol-004-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-multicol-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-multicol-005-ref.html",
         "rel": "match",
         "resources": []
       }
@@ -40059,6 +40491,30 @@
     "refs": [
       {
         "path": "css/css-inline/text-box-trim/text-box-trim-multicol-007-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-multicol-008.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-multicol-008-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-multicol-009.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-multicol-009-ref.html",
         "rel": "match",
         "resources": []
       }
@@ -40102,6 +40558,18 @@
     "resources": []
   },
   {
+    "id": "css/css-inline/text-box-trim/text-box-trim-multicol-014.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-multicol-014-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/css-inline/text-box-trim/text-box-trim-pseudo-before-after-001.html",
     "print": false,
     "refs": [
@@ -40119,6 +40587,42 @@
     "refs": [
       {
         "path": "css/css-inline/text-box-trim/text-box-trim-pseudo-before-after-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-ruby-end-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-ruby-start-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-ruby-start-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-ruby-start-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-ruby-start-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-ruby-start-001-ref.html",
         "rel": "match",
         "resources": []
       }
@@ -40155,6 +40659,30 @@
     "refs": [
       {
         "path": "css/reference/ref-filled-green-100px-square.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-tall-line-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-tall-line-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-inline/text-box-trim/text-box-trim-text-emphasis-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-inline/text-box-trim/text-box-trim-text-emphasis-001-ref.html",
         "rel": "match",
         "resources": []
       }
@@ -47429,6 +47957,1953 @@
     "refs": [
       {
         "path": "css/reference/ref-filled-green-100px-square.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/assorted/float-retry-push-circle.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/assorted/reference/float-retry-push-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/assorted/float-retry-push-image.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/assorted/reference/float-retry-push-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/assorted/float-retry-push-inset.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/assorted/reference/float-retry-push-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/assorted/float-retry-push-polygon.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/assorted/reference/float-retry-push-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/assorted/float-retry-push-rect.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/assorted/reference/float-retry-push-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/assorted/float-retry-push-xywh.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/assorted/reference/float-retry-push-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/assorted/float-should-push.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/assorted/reference/float-should-push-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-border-box-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-border-box-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-border-box-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-border-box-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-border-box-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-padding-box-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-border-box-border-radius-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-border-box-border-radius-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-border-box-border-radius-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-border-box-border-radius-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-border-box-border-radius-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-border-box-border-radius-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-border-box-border-radius-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-border-box-border-radius-004-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-border-box-shape-margin-with-margin.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-border-box-shape-margin-with-margin-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-border-box-with-block-start-margin.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-border-box-with-block-start-margin-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-border-box-with-margin-right-float.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-border-box-with-margin-right-float-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-border-box-with-margin.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-border-box-with-margin-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-box-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-box-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-box-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-box-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-box-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-box-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-box-006.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-box-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-box-007.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-box-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-box-008.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-box-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-box-009.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-box-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-content-box-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-content-box-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-content-box-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-content-box-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-content-box-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-padding-box-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-content-box-border-radius-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-content-box-border-radius-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-content-box-border-radius-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-content-box-border-radius-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-content-box-with-margin.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-content-box-with-margin-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-margin-box-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-margin-box-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-margin-box-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-margin-box-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-margin-box-border-radius-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-margin-box-border-radius-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-margin-box-border-radius-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-margin-box-border-radius-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-margin-box-border-radius-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-margin-box-border-radius-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-margin-box-border-radius-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-margin-box-border-radius-004-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-margin-box-border-radius-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-margin-box-border-radius-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-margin-box-border-radius-006.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-margin-box-border-radius-006-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-margin-box-border-radius-007.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-margin-box-border-radius-007-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-margin-box-border-radius-008.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-margin-box-border-radius-008-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-padding-box-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-padding-box-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-padding-box-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-padding-box-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-padding-box-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-padding-box-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-padding-box-border-radius-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-padding-box-border-radius-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-padding-box-border-radius-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-padding-box-border-radius-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-box/shape-outside-padding-box-with-margin.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-box/reference/shape-outside-padding-box-with-margin-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-image/gradients/shape-outside-linear-gradient-001.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 2, 0, 9680],
+        "path": "css/css-shapes/shape-outside/shape-image/gradients/reference/shape-outside-linear-gradient-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-image/gradients/shape-outside-linear-gradient-002.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 2, 0, 9673],
+        "path": "css/css-shapes/shape-outside/shape-image/gradients/reference/shape-outside-linear-gradient-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-image/gradients/shape-outside-linear-gradient-003.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 2, 0, 9673],
+        "path": "css/css-shapes/shape-outside/shape-image/gradients/reference/shape-outside-linear-gradient-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-image/gradients/shape-outside-linear-gradient-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-image/gradients/reference/shape-outside-linear-gradient-004-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-image/gradients/shape-outside-linear-gradient-horizontal-rtl.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-image/gradients/reference/shape-outside-linear-gradient-horizontal-rtl-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-image/shape-image-024.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-image/reference/shape-image-024-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": [
+      "css/css-shapes/shape-outside/shape-image/support/left-half-rectangle.png"
+    ]
+  },
+  {
+    "id": "css/css-shapes/shape-outside/shape-image/shape-image-025.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/shape-image/reference/shape-image-025-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": [
+      "css/css-shapes/shape-outside/shape-image/support/animated.gif"
+    ]
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-013.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-014.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-015.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-016.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-017.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-018.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-019.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-020.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-021.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-022.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-024.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-023-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-025.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-023-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-026.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-023-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-027.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-023-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-028.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-023-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-029.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-023-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-032.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 6, 0, 6],
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-032-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-033.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-033-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-034.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 3, 0, 4],
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-034-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-035.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-035-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-036.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 6, 0, 6],
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-036-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-037.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 6, 0, 6],
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-036-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-038.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 6, 0, 6],
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-036-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-041.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-041-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-042.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 6, 0, 6],
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-042-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-043.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 6, 0, 6],
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-042-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-044.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 6, 0, 6],
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-042-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-047.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-047-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-054.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 6, 0, 6],
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-054-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-055.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 3, 0, 3],
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-055-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/circle/shape-outside-circle-056.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/circle/reference/shape-outside-circle-056-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-013.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-014.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-015.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-016.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-017.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-018.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-019.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-020.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-021.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-021-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-022.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-021-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-023.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-021-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-024.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-021-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-025.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-021-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-032.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 6, 0, 6],
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-032-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-033.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-033-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-034.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 3, 0, 2],
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-034-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-035.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-035-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-036.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 6, 0, 6],
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-036-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-037.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 6, 0, 6],
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-037-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-038.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 6, 0, 6],
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-038-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-039.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 6, 0, 6],
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-039-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-040.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-040-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-041.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-040-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-042.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-042-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-043.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-042-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-044.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-044-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-045.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-045-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-052.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-052-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-053.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-053-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/ellipse/shape-outside-ellipse-054.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/ellipse/reference/shape-outside-ellipse-054-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/inset/shape-outside-inset-010.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/inset/reference/shape-outside-inset-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/inset/shape-outside-inset-011.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/inset/reference/shape-outside-inset-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/inset/shape-outside-inset-012.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/inset/reference/shape-outside-inset-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/inset/shape-outside-inset-013.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/inset/reference/shape-outside-inset-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/inset/shape-outside-inset-014.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/inset/reference/shape-outside-inset-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/inset/shape-outside-inset-015.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/inset/reference/shape-outside-inset-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/inset/shape-outside-inset-016.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/inset/reference/shape-outside-inset-016-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/inset/shape-outside-inset-017.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/inset/reference/shape-outside-inset-017-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/inset/shape-outside-inset-020.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 8, 0, 6],
+        "path": "css/css-shapes/shape-outside/supported-shapes/inset/reference/shape-outside-inset-020-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/inset/shape-outside-inset-021.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 8, 0, 4],
+        "path": "css/css-shapes/shape-outside/supported-shapes/inset/reference/shape-outside-inset-021-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/inset/shape-outside-inset-028.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/inset/reference/shape-outside-inset-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/inset/shape-outside-inset-029.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/inset/reference/shape-outside-inset-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/inset/shape-outside-inset-030.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/inset/reference/shape-outside-inset-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/inset/shape-outside-inset-031.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/inset/reference/shape-outside-inset-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/path/shape-outside-path-000.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/path/reference/shape-outside-path-000-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/path/shape-outside-path-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/path/reference/shape-outside-path-000-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/path/shape-outside-path-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/path/reference/shape-outside-path-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/path/shape-outside-path-003.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [255, 255, 0, 200],
+        "path": "css/css-shapes/shape-outside/supported-shapes/path/reference/shape-outside-path-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-007.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/polygon/reference/shape-outside-polygon-007-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-008.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/polygon/reference/shape-outside-polygon-007-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-009.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/polygon/reference/shape-outside-polygon-007-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-010.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/polygon/reference/shape-outside-polygon-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-011.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/polygon/reference/shape-outside-polygon-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-012.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/polygon/reference/shape-outside-polygon-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-013.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/polygon/reference/shape-outside-polygon-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-014.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/polygon/reference/shape-outside-polygon-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-015.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/polygon/reference/shape-outside-polygon-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-016.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/polygon/reference/shape-outside-polygon-010-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-017.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/polygon/reference/shape-outside-polygon-017-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-018.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/polygon/reference/shape-outside-polygon-018-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-019.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/polygon/reference/shape-outside-polygon-019-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/polygon/shape-outside-polygon-032.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/polygon/reference/shape-outside-polygon-032-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/shape/shape-outside-shape-000.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/shape/reference/shape-outside-shape-000-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/shape/shape-outside-shape-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/shape/reference/shape-outside-shape-000-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/shape/shape-outside-shape-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/shape-outside/supported-shapes/shape/reference/shape-outside-shape-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/supported-shapes/shape/shape-outside-shape-003.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [255, 255, 0, 200],
+        "path": "css/css-shapes/shape-outside/supported-shapes/shape/reference/shape-outside-shape-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/shape-outside/values/shape-outside-inset-0010.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square-only.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/spec-examples/shape-outside-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/spec-examples/reference/shape-outside-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/spec-examples/shape-outside-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/spec-examples/reference/shape-outside-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/spec-examples/shape-outside-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/spec-examples/reference/shape-outside-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/spec-examples/shape-outside-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/spec-examples/reference/shape-outside-004-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/spec-examples/shape-outside-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/spec-examples/reference/shape-outside-004-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/spec-examples/shape-outside-006.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/spec-examples/reference/shape-outside-006-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/spec-examples/shape-outside-007.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/spec-examples/reference/shape-outside-007-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/css-shapes/spec-examples/shape-outside-008.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/css-shapes/spec-examples/reference/shape-outside-008-ref.html",
         "rel": "match",
         "resources": []
       }

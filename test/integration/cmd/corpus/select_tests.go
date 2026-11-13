@@ -232,7 +232,7 @@ var wptDirs = []string{
 	"css/css-inline", "css/css-position", "css/css-transforms", "css/css-ruby", "css/css-content",
 	"css/css-counter-styles", "css/css-values", "css/css-variables", "css/selectors", "css/css-color",
 	"css/css-images", "css/css-display", "css/css-pseudo", "css/css-masking", "css/compositing",
-	"css/css-logical", "css/css-box", "css/css-animations", "css/css-transitions",
+	"css/css-logical", "css/css-box", "css/css-animations", "css/css-transitions", "css/css-shapes",
 }
 
 // wptAreaCap bounds the tests one area contributes, an area being a CSS2
@@ -245,12 +245,12 @@ var wptAreaCap = map[string]int{
 	"css/css-break": 40, "css/css-flexbox": 200, "css/css-align": 20, "css/css-grid": 200, "css/css-multicol": 80,
 	"css/css-writing-modes": 60, "css/css-overflow": 40, "css/css-text-decor": 40, "css/css-sizing": 80,
 	"css/CSS2/tables": 100, "css/CSS2/fonts": 40, "css/CSS2/positioning": 40, "css/CSS2/generated-content": 60,
-	"css/CSS2/selectors": 40, "css/css-tables": 80, "css/css-fonts": 300, "css/css-inline": 60,
+	"css/CSS2/selectors": 40, "css/css-tables": 80, "css/css-fonts": 300, "css/css-inline": 120,
 	"css/css-position": 60, "css/css-transforms": 100, "css/css-ruby": 10, "css/css-content": 40,
 	"css/css-counter-styles": 40, "css/css-values": 60, "css/css-variables": 60, "css/selectors": 100,
 	"css/css-color": 60, "css/css-images": 60, "css/css-display": 60, "css/css-pseudo": 100,
 	"css/css-masking": 120, "css/compositing": 60, "css/css-logical": 40, "css/css-box": 40,
-	"css/css-animations": 40, "css/css-transitions": 40,
+	"css/css-animations": 40, "css/css-transitions": 40, "css/css-shapes": 200,
 }
 
 func compileAll(flags string, patterns ...string) []*regexp.Regexp {
@@ -377,6 +377,7 @@ var wptAreas = map[string]wptAreaRules{
 	"css/compositing":            wptFontFaceRules,
 	"css/css-logical":            {forbidden: wptLayoutForbidden, lift: []*regexp.Regexp{wptVertical, wptSideways}},
 	"css/css-box":                {forbidden: wptLayoutForbidden, writingMode: true},
+	"css/css-shapes":             {forbidden: wptLayoutForbidden, writingMode: true},
 }
 
 // wptProbe is a part of an area a rule singles out and caps on its own: the
