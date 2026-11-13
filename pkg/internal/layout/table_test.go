@@ -497,6 +497,21 @@ func TestTable_BreakProperties(t *testing.T) {
 	}
 }
 
+func TestTable_RowSpanToGroupEnd(t *testing.T) {
+	// A span past its row group ends with the group, and the cell's
+	// structure element counts the rows it covers (HTML Standard, 4.9.11).
+	cell := spans(td(nil, "a"), 1, 65534)
+	cell.Role = "TD"
+	row := tr(nil, cell)
+	row.Role = "TR"
+	tb := table(nil, row, tr(nil, td(nil, "b")), tr(nil, td(nil, "c")))
+	tb.Role = "Table"
+	res := run(t, doc(tb), page(100, 100))
+	if got := res.Structure.Kids[0].Kids[0].Kids[0].RowSpan; got != 3 {
+		t.Errorf("structure row span %d, want 3", got)
+	}
+}
+
 func TestTable_MaxPages(t *testing.T) {
 	_, err := Layout(context.Background(), doc(pagedTable(100, 10, true)), ahem(t), Options{Page: page(20, 50), MaxPages: 3})
 	if !errors.Is(err, limits.ErrTooManyPages) {

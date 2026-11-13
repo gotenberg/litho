@@ -781,6 +781,12 @@ func (e *engine) placeCells(td *tableData, head, foot *box) {
 				continue
 			}
 			area += rs * cs
+			if c.elem != nil && c.node != nil && c.elem.RowSpan > rs && (c.node.Role == "TD" || c.node.Role == "TH") {
+				// The structure element counts the rows the cell covers,
+				// its span clamped to its row group (HTML Standard,
+				// 4.9.11).
+				c.elem.RowSpan = rs
+			}
 			idx := int32(len(td.cells)) //nolint:gosec // fits int32: at most maxTableCells, checked above
 			for r := ri; r < ri+rs; r++ {
 				for len(occ[r]) < col+cs {

@@ -142,8 +142,8 @@ func TestTags_SpansScopeAndNumbering(t *testing.T) {
 		}
 	}
 	walk(res.Structure)
-	if th == nil || th.ColSpan != 2 || th.RowSpan != typeset.MaxCellSpan || th.Scope != typeset.ScopeColumn {
-		t.Errorf("TH %+v, want ColSpan 2, RowSpan clamped to MaxCellSpan, Scope Column", th)
+	if th == nil || th.ColSpan != 2 || th.RowSpan != 1 || th.Scope != typeset.ScopeColumn {
+		t.Errorf("TH %+v, want ColSpan 2, RowSpan clamped to its one-row group, Scope Column", th)
 	}
 	if l == nil || l.Numbering != typeset.NumberingUpperRoman {
 		t.Errorf("L %+v, want the UpperRoman numbering of its markers", l)
