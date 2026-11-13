@@ -393,7 +393,7 @@ func (l *Link) Convert(in, out []float64) {
 		xyz := [3]float64{in[0], in[1], in[2]}
 		if s, o := l.scale, l.offset; s != nil {
 			for i := range xyz {
-				xyz[i] = s[i]*xyz[i] + o[i]
+				xyz[i] = float64(s[i]*xyz[i]) + o[i]
 			}
 		}
 		l.dst.eval(xyz, &v)
@@ -411,7 +411,7 @@ func (l *Link) Convert(in, out []float64) {
 		xyz := l.src.eval(&v)
 		if s, o := l.scale, l.offset; s != nil {
 			for i := range xyz {
-				xyz[i] = s[i]*xyz[i] + o[i]
+				xyz[i] = float64(s[i]*xyz[i]) + o[i]
 			}
 		}
 		l.dst.eval(xyz, &v)
@@ -422,7 +422,7 @@ func (l *Link) Convert(in, out []float64) {
 			copy(v[:l.out], f.to)
 		case w > 0:
 			for i := range l.out {
-				v[i] += w * f.delta[i]
+				v[i] += float64(w * f.delta[i])
 			}
 		}
 	}
@@ -441,7 +441,7 @@ func (p *pipeline) run(v *[maxOutputs]float64) {
 		if m := p.matrix; m != nil {
 			x, y, z := v[0], v[1], v[2]
 			for i := range 3 {
-				v[i] = m[3*i]*x + m[3*i+1]*y + m[3*i+2]*z + m[9+i]
+				v[i] = float64(m[3*i]*x) + float64(m[3*i+1]*y) + float64(m[3*i+2]*z) + m[9+i]
 			}
 		}
 		for i, c := range p.m {
@@ -458,7 +458,7 @@ func (p *pipeline) run(v *[maxOutputs]float64) {
 	if m := p.inMatrix; m != nil {
 		x, y, z := v[0], v[1], v[2]
 		for i := range 3 {
-			v[i] = m[3*i]*x + m[3*i+1]*y + m[3*i+2]*z
+			v[i] = float64(m[3*i]*x) + float64(m[3*i+1]*y) + float64(m[3*i+2]*z)
 		}
 	}
 	for i, c := range p.a {
@@ -585,7 +585,7 @@ func (s *toPCS) eval(v *[maxOutputs]float64) [3]float64 {
 	}
 	r, g, b := eval(s.curves[0], v[0]), eval(s.curves[1], v[1]), eval(s.curves[2], v[2])
 	m := &s.colorant
-	return [3]float64{m[0]*r + m[1]*g + m[2]*b, m[3]*r + m[4]*g + m[5]*b, m[6]*r + m[7]*g + m[8]*b}
+	return [3]float64{float64(m[0]*r) + float64(m[1]*g) + float64(m[2]*b), float64(m[3]*r) + float64(m[4]*g) + float64(m[5]*b), float64(m[6]*r) + float64(m[7]*g) + float64(m[8]*b)}
 }
 
 // eval evaluates c at x, a nil c being the identity.
@@ -687,7 +687,7 @@ func (d *fromPCS) eval(xyz [3]float64, v *[maxOutputs]float64) {
 	default:
 		m := &d.matrix
 		for i := range 3 {
-			v[i] = eval(d.inverse[i], m[3*i]*xyz[0]+m[3*i+1]*xyz[1]+m[3*i+2]*xyz[2])
+			v[i] = eval(d.inverse[i], float64(m[3*i]*xyz[0])+float64(m[3*i+1]*xyz[1])+float64(m[3*i+2]*xyz[2]))
 		}
 	}
 }

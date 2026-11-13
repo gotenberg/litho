@@ -3,8 +3,8 @@ package icc
 import (
 	"encoding/binary"
 	"fmt"
-	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
@@ -28,17 +28,17 @@ func (s sampled) eval(x float64) float64 {
 	case 1:
 		return s[0]
 	}
-	x = clamp01(x) * float64(len(s)-1)
+	x = float64(clamp01(x) * float64(len(s)-1))
 	i := min(int(x), len(s)-2)
 	f := x - float64(i)
-	return s[i] + f*(s[i+1]-s[i])
+	return s[i] + float64(f*(s[i+1]-s[i]))
 }
 
 // gamma is the curve x^g.
 type gamma float64
 
 func (g gamma) eval(x float64) float64 {
-	return math.Pow(clamp01(x), float64(g))
+	return detmath.Pow(clamp01(x), float64(g))
 }
 
 // parametric is a parametricCurveType function (ICC.1:2010, Table 65).
@@ -53,7 +53,7 @@ func (p parametric) eval(x float64) float64 {
 		if v <= 0 {
 			return 0
 		}
-		return math.Pow(v, p.g)
+		return detmath.Pow(v, p.g)
 	}
 	var y float64
 	switch p.kind {
@@ -61,22 +61,22 @@ func (p parametric) eval(x float64) float64 {
 		y = pow(x)
 	case 1:
 		if p.a != 0 && x >= -p.b/p.a {
-			y = pow(p.a*x + p.b)
+			y = pow(float64(p.a*x) + p.b)
 		}
 	case 2:
 		y = p.c
 		if p.a != 0 && x >= -p.b/p.a {
-			y = pow(p.a*x+p.b) + p.c
+			y = pow(float64(p.a*x)+p.b) + p.c
 		}
 	case 3:
 		y = p.c * x
 		if x >= p.d {
-			y = pow(p.a*x + p.b)
+			y = pow(float64(p.a*x) + p.b)
 		}
 	default:
-		y = p.c*x + p.f
+		y = float64(p.c*x) + p.f
 		if x >= p.d {
-			y = pow(p.a*x+p.b) + p.e
+			y = pow(float64(p.a*x)+p.b) + p.e
 		}
 	}
 	return clamp01(y)

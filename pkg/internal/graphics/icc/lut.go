@@ -422,7 +422,7 @@ func (p *pipeline) eval(v *[maxOutputs]float64) {
 	if m := p.matrix; m != nil {
 		x, y, z := v[0], v[1], v[2]
 		for i := range 3 {
-			v[i] = m[3*i]*x + m[3*i+1]*y + m[3*i+2]*z + m[9+i]
+			v[i] = float64(m[3*i]*x) + float64(m[3*i+1]*y) + float64(m[3*i+2]*z) + m[9+i]
 		}
 	}
 	for i, c := range p.b {
@@ -451,7 +451,7 @@ func (c *clut) interp(in []float64, dim, base int, weight float64, out *[maxOutp
 	}
 	if remaining == 0 {
 		for k := range c.out {
-			out[k] += weight * c.data[base+k]
+			out[k] += float64(weight * c.data[base+k])
 		}
 		return
 	}
@@ -486,26 +486,26 @@ func (c *clut) tetrahedral(in []float64, base int, weight float64, out *[maxOutp
 		var v float64
 		switch {
 		case rx >= ry && ry >= rz:
-			v = c000 + rx*(at(1, 0, 0, k)-c000) + ry*(at(1, 1, 0, k)-at(1, 0, 0, k)) + rz*(c111-at(1, 1, 0, k))
+			v = c000 + float64(rx*(at(1, 0, 0, k)-c000)) + float64(ry*(at(1, 1, 0, k)-at(1, 0, 0, k))) + float64(rz*(c111-at(1, 1, 0, k)))
 		case rx >= rz && rz >= ry:
-			v = c000 + rx*(at(1, 0, 0, k)-c000) + rz*(at(1, 0, 1, k)-at(1, 0, 0, k)) + ry*(c111-at(1, 0, 1, k))
+			v = c000 + float64(rx*(at(1, 0, 0, k)-c000)) + float64(rz*(at(1, 0, 1, k)-at(1, 0, 0, k))) + float64(ry*(c111-at(1, 0, 1, k)))
 		case rz >= rx && rx >= ry:
-			v = c000 + rz*(at(0, 0, 1, k)-c000) + rx*(at(1, 0, 1, k)-at(0, 0, 1, k)) + ry*(c111-at(1, 0, 1, k))
+			v = c000 + float64(rz*(at(0, 0, 1, k)-c000)) + float64(rx*(at(1, 0, 1, k)-at(0, 0, 1, k))) + float64(ry*(c111-at(1, 0, 1, k)))
 		case ry >= rx && rx >= rz:
-			v = c000 + ry*(at(0, 1, 0, k)-c000) + rx*(at(1, 1, 0, k)-at(0, 1, 0, k)) + rz*(c111-at(1, 1, 0, k))
+			v = c000 + float64(ry*(at(0, 1, 0, k)-c000)) + float64(rx*(at(1, 1, 0, k)-at(0, 1, 0, k))) + float64(rz*(c111-at(1, 1, 0, k)))
 		case ry >= rz && rz >= rx:
-			v = c000 + ry*(at(0, 1, 0, k)-c000) + rz*(at(0, 1, 1, k)-at(0, 1, 0, k)) + rx*(c111-at(0, 1, 1, k))
+			v = c000 + float64(ry*(at(0, 1, 0, k)-c000)) + float64(rz*(at(0, 1, 1, k)-at(0, 1, 0, k))) + float64(rx*(c111-at(0, 1, 1, k)))
 		default:
-			v = c000 + rz*(at(0, 0, 1, k)-c000) + ry*(at(0, 1, 1, k)-at(0, 0, 1, k)) + rx*(c111-at(0, 1, 1, k))
+			v = c000 + float64(rz*(at(0, 0, 1, k)-c000)) + float64(ry*(at(0, 1, 1, k)-at(0, 0, 1, k))) + float64(rx*(c111-at(0, 1, 1, k)))
 		}
-		out[k] += weight * v
+		out[k] += float64(weight * v)
 	}
 }
 
 // cell returns the grid cell a normalized input falls in and its fraction
 // across the cell, keeping the cell's far corner inside a grid of g points.
 func cell(v float64, g int) (int, float64) {
-	x := clamp01(v) * float64(g-1)
+	x := float64(clamp01(v) * float64(g-1))
 	i := min(int(x), g-2)
 	return i, x - float64(i)
 }

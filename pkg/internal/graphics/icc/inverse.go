@@ -1,8 +1,9 @@
 package icc
 
 import (
-	"math"
 	"sort"
+
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 )
 
 // inverseBisections is how many halvings [numericInverse] takes: 2^-40 is
@@ -68,7 +69,7 @@ func invertParametric(p parametric) (curve, bool) {
 			return nil, false
 		}
 		inv.yd = parametric{kind: p.kind, g: p.g, a: p.a, b: p.b, e: p.e, d: 0}.eval(p.d)
-		inv.yl = p.c*p.d + p.f
+		inv.yl = float64(p.c*p.d) + p.f
 	}
 	return inv, true
 }
@@ -80,7 +81,7 @@ func (q parametricInverse) eval(y float64) float64 {
 		if v <= 0 {
 			return 0
 		}
-		return math.Pow(v, 1/p.g)
+		return detmath.Pow(v, 1/p.g)
 	}
 	var x float64
 	switch p.kind {

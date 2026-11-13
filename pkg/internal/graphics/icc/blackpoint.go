@@ -179,7 +179,7 @@ func (p *Profile) roundTripper(intent Intent) (func(l, a, b float64) [3]float64,
 		xyz := labToXYZ(l, a, b)
 		if scale != nil {
 			for i := range xyz {
-				xyz[i] = scale[i]*xyz[i] + offset[i]
+				xyz[i] = float64(scale[i]*xyz[i]) + offset[i]
 			}
 		}
 		var v [maxOutputs]float64
@@ -237,7 +237,7 @@ func (p *Profile) destinationBlackPoint(intent Intent) [3]float64 {
 		// estimate already is the black point.
 		straight := true
 		for i := range blackRampSteps {
-			if in[i] > lo+0.2*(hi-lo) && math.Abs(in[i]-out[i]) >= 4 {
+			if in[i] > lo+float64(0.2*(hi-lo)) && math.Abs(in[i]-out[i]) >= 4 {
 				straight = false
 				break
 			}
@@ -272,25 +272,25 @@ func (p *Profile) destinationBlackPoint(intent Intent) [3]float64 {
 func quadraticRoot(xs, ys []float64) float64 {
 	var sx, sx2, sx3, sx4, sy, sxy, sx2y float64
 	for i, x := range xs {
-		y, x2 := ys[i], x*x
-		sx, sx2, sx3, sx4 = sx+x, sx2+x2, sx3+x2*x, sx4+x2*x2
-		sy, sxy, sx2y = sy+y, sxy+x*y, sx2y+x2*y
+		y, x2 := ys[i], float64(x*x)
+		sx, sx2, sx3, sx4 = sx+x, sx2+x2, sx3+float64(x2*x), sx4+float64(x2*x2)
+		sy, sxy, sx2y = sy+y, sxy+float64(x*y), sx2y+float64(x2*y)
 	}
 	n := float64(len(xs))
 	inv, ok := invert3([9]float64{n, sx, sx2, sx, sx2, sx3, sx2, sx3, sx4})
 	if !ok {
 		return 0
 	}
-	c := inv[0]*sy + inv[1]*sxy + inv[2]*sx2y
-	b := inv[3]*sy + inv[4]*sxy + inv[5]*sx2y
-	a := inv[6]*sy + inv[7]*sxy + inv[8]*sx2y
+	c := float64(inv[0]*sy) + float64(inv[1]*sxy) + float64(inv[2]*sx2y)
+	b := float64(inv[3]*sy) + float64(inv[4]*sxy) + float64(inv[5]*sx2y)
+	a := float64(inv[6]*sy) + float64(inv[7]*sxy) + float64(inv[8]*sx2y)
 	if math.Abs(a) < 1e-10 {
 		if math.Abs(b) < 1e-10 {
 			return 0
 		}
 		return min(max(-c/b, 0), 50)
 	}
-	d := b*b - 4*a*c
+	d := float64(b*b) - float64(4*a*c)
 	if d <= 0 {
 		return 0
 	}

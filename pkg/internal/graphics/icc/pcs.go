@@ -1,6 +1,8 @@
 package icc
 
-import "math"
+import (
+	"github.com/gotenberg/litho/pkg/internal/detmath"
+)
 
 // xyzToLab converts XYZ relative to D50 to CIELAB (ICC.1:2010, 6.3.4.2 and
 // Annex A, with the PCS illuminant of 7.2.16 as the reference white).
@@ -8,12 +10,12 @@ func xyzToLab(xyz [3]float64) (l, a, b float64) {
 	f := func(t float64) float64 {
 		const e = 6.0 / 29
 		if t > e*e*e {
-			return math.Cbrt(t)
+			return detmath.Cbrt(t)
 		}
 		return t/(3*e*e) + 4.0/29
 	}
 	fx, fy, fz := f(xyz[0]/d50[0]), f(xyz[1]/d50[1]), f(xyz[2]/d50[2])
-	return 116*fy - 16, 500 * (fx - fy), 200 * (fy - fz)
+	return float64(116*fy) - 16, 500 * (fx - fy), 200 * (fy - fz)
 }
 
 // fromXYZ writes XYZ relative to D50 in the table's connection space input
@@ -44,7 +46,7 @@ func labToEncoding(l, a, b float64, encoding int, v *[maxOutputs]float64) {
 // labFromV4 reads CIELAB in the version 4 encoding normalized to 0 to 1, the
 // encoding a [Link] takes and gives Lab data in.
 func labFromV4(v []float64) (l, a, b float64) {
-	return v[0] * 100, v[1]*255 - 128, v[2]*255 - 128
+	return v[0] * 100, float64(v[1]*255) - 128, float64(v[2]*255) - 128
 }
 
 // v4ToLegacy rescales Lab data from the version 4 encoding to the legacy

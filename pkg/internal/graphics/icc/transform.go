@@ -5,6 +5,7 @@ import (
 	"math"
 	"sync"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
@@ -413,12 +414,12 @@ func (t *Transform) Size() int {
 func (t *Transform) Convert(in []byte) (uint8, uint8, uint8) {
 	xyz := t.xyz(in)
 	if sc, off := t.bpcScale, t.bpcOffset; sc != nil {
-		xyz = [3]float64{sc[0]*xyz[0] + off[0], sc[1]*xyz[1] + off[1], sc[2]*xyz[2] + off[2]}
+		xyz = [3]float64{float64(sc[0]*xyz[0]) + off[0], float64(sc[1]*xyz[1]) + off[1], float64(sc[2]*xyz[2]) + off[2]}
 	}
 	m, s := &xyzToSRGB, t.srgb
-	return s.encode(m[0]*xyz[0] + m[1]*xyz[1] + m[2]*xyz[2]),
-		s.encode(m[3]*xyz[0] + m[4]*xyz[1] + m[5]*xyz[2]),
-		s.encode(m[6]*xyz[0] + m[7]*xyz[1] + m[8]*xyz[2])
+	return s.encode(float64(m[0]*xyz[0]) + float64(m[1]*xyz[1]) + float64(m[2]*xyz[2])),
+		s.encode(float64(m[3]*xyz[0]) + float64(m[4]*xyz[1]) + float64(m[5]*xyz[2])),
+		s.encode(float64(m[6]*xyz[0]) + float64(m[7]*xyz[1]) + float64(m[8]*xyz[2]))
 }
 
 // Lab converts one colour, t.Components() bytes, to CIELAB relative to D50,
@@ -451,7 +452,7 @@ func (t *Transform) xyz(in []byte) [3]float64 {
 	default:
 		r, g, b := t.input[0][in[0]], t.input[1][in[1]], t.input[2][in[2]]
 		m := &t.colorant
-		xyz = [3]float64{m[0]*r + m[1]*g + m[2]*b, m[3]*r + m[4]*g + m[5]*b, m[6]*r + m[7]*g + m[8]*b}
+		xyz = [3]float64{float64(m[0]*r) + float64(m[1]*g) + float64(m[2]*b), float64(m[3]*r) + float64(m[4]*g) + float64(m[5]*b), float64(m[6]*r) + float64(m[7]*g) + float64(m[8]*b)}
 	}
 	return xyz
 }
@@ -464,9 +465,9 @@ func (p *pipeline) pcs(v []float64) [3]float64 {
 		s := 65535.0 / 32768
 		return [3]float64{v[0] * s, v[1] * s, v[2] * s}
 	case pcsLab16:
-		return labToXYZ(v[0]*65535/65280*100, v[1]*65535/256-128, v[2]*65535/256-128)
+		return labToXYZ(v[0]*65535/65280*100, float64(v[1]*65535/256)-128, float64(v[2]*65535/256)-128)
 	default:
-		return labToXYZ(v[0]*100, v[1]*255-128, v[2]*255-128)
+		return labToXYZ(v[0]*100, float64(v[1]*255)-128, float64(v[2]*255)-128)
 	}
 }
 
@@ -490,7 +491,7 @@ func encode(v float64) uint8 {
 	if v <= 0.0031308 {
 		v *= 12.92
 	} else {
-		v = 1.055*math.Pow(v, 1/2.4) - 0.055
+		v = float64(1.055*detmath.Pow(v, 1/2.4)) - 0.055
 	}
 	return uint8(math.Round(clamp01(v) * 255))
 }

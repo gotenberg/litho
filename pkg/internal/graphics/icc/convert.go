@@ -312,9 +312,9 @@ func displayWhite(p *Profile) ([3]float64, bool) {
 		return [3]float64{}, false
 	}
 	return [3]float64{
-		inv[0]*d50[0] + inv[1]*d50[1] + inv[2]*d50[2],
-		inv[3]*d50[0] + inv[4]*d50[1] + inv[5]*d50[2],
-		inv[6]*d50[0] + inv[7]*d50[1] + inv[8]*d50[2],
+		float64(inv[0]*d50[0]) + float64(inv[1]*d50[1]) + float64(inv[2]*d50[2]),
+		float64(inv[3]*d50[0]) + float64(inv[4]*d50[1]) + float64(inv[5]*d50[2]),
+		float64(inv[6]*d50[0]) + float64(inv[7]*d50[1]) + float64(inv[8]*d50[2]),
 	}, true
 }
 
@@ -334,13 +334,13 @@ func nearD50(v [3]float64) bool {
 // invert3 inverts a 3x3 matrix in row-major order, reporting false when it
 // is singular.
 func invert3(m [9]float64) ([9]float64, bool) {
-	det := m[0]*(m[4]*m[8]-m[5]*m[7]) - m[1]*(m[3]*m[8]-m[5]*m[6]) + m[2]*(m[3]*m[7]-m[4]*m[6])
+	det := float64(m[0]*(float64(m[4]*m[8])-float64(m[5]*m[7]))) - float64(m[1]*(float64(m[3]*m[8])-float64(m[5]*m[6]))) + float64(m[2]*(float64(m[3]*m[7])-float64(m[4]*m[6])))
 	if math.Abs(det) < 1e-12 {
 		return [9]float64{}, false
 	}
 	return [9]float64{
-		(m[4]*m[8] - m[5]*m[7]) / det, (m[2]*m[7] - m[1]*m[8]) / det, (m[1]*m[5] - m[2]*m[4]) / det,
-		(m[5]*m[6] - m[3]*m[8]) / det, (m[0]*m[8] - m[2]*m[6]) / det, (m[2]*m[3] - m[0]*m[5]) / det,
-		(m[3]*m[7] - m[4]*m[6]) / det, (m[1]*m[6] - m[0]*m[7]) / det, (m[0]*m[4] - m[1]*m[3]) / det,
+		(float64(m[4]*m[8]) - float64(m[5]*m[7])) / det, (float64(m[2]*m[7]) - float64(m[1]*m[8])) / det, (float64(m[1]*m[5]) - float64(m[2]*m[4])) / det,
+		(float64(m[5]*m[6]) - float64(m[3]*m[8])) / det, (float64(m[0]*m[8]) - float64(m[2]*m[6])) / det, (float64(m[2]*m[3]) - float64(m[0]*m[5])) / det,
+		(float64(m[3]*m[7]) - float64(m[4]*m[6])) / det, (float64(m[1]*m[6]) - float64(m[0]*m[7])) / det, (float64(m[0]*m[4]) - float64(m[1]*m[3])) / det,
 	}, true
 }
