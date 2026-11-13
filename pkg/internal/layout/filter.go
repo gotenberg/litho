@@ -328,3 +328,18 @@ func taggedOnly(frags []typeset.Fragment, depth int) []typeset.Fragment {
 	}
 	return out
 }
+
+// backdropFilter settles the backdrop-filter of b (Filter Effects 2, 3)
+// as Chromium prints it: the element is a stacking context and paints as
+// it would without the property, its backdrop unfiltered. One warning a
+// document says so.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium prints an element of backdrop-filter:
+//     blur(10px) and a translucent background over a gradient as the
+//     gradient, then the element's background and text, with no bitmap
+//     and no blur.
+func (p *painter) backdropFilter(b *box) {
+	p.e.warnOnce(warn.CSSUnsupported, warn.Approximated, "backdrop-filter is printed without filtering the backdrop, as Chromium prints it", b.y+p.dy)
+}

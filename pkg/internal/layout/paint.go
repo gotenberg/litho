@@ -526,6 +526,9 @@ func (p *painter) unit(b *box, own bool) {
 			push(&ditem{group: true, opacity: 1, clip: c})
 		}
 	}
+	if len(b.st.BackdropFilter) > 0 {
+		p.backdropFilter(b)
+	}
 	if b.parent != nil && len(b.st.Filter) > 0 {
 		// The filter applies to the element's rendering before its clip,
 		// mask and opacity (Filter Effects 1, 6; CSS Masking 1, 4): the
