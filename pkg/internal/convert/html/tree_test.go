@@ -152,6 +152,58 @@ func TestPrepare_PrunesWhatDrawsNothing(t *testing.T) {
 	}
 }
 
+// TestPrepare_ImageWithoutPictureKeepsItsBox locks that an <img> that
+// draws no picture and has no alt text to show is a replaced box without
+// content, which its style sizes and paints, as Chromium draws it
+// ([emptyImage]); one with alt text shows the text instead.
+func TestPrepare_ImageWithoutPictureKeepsItsBox(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<p><img id=a style="width:60px;height:40px;background:yellow"><img id=b src=""><img id=c alt="">`+
+		`<img id=d src="missing.png"><span id=e><img src="missing.png" alt="gone"></span></p>`, Options{Resources: fstest.MapFS{}})
+	for _, id := range []string{"a", "b", "c", "d"} {
+		n := byID(t, p.root, id)
+		if n.Kind != layout.Replaced || n.Picture != nil || n.Role != "" {
+			t.Errorf("%s: kind %v picture %v role %q, want an empty replaced box", id, n.Kind, n.Picture, n.Role)
+		}
+	}
+	if w := byID(t, p.root, "a").Style.Width; w.Kind != css.Points || w.Value != 45 {
+		t.Errorf("a: width %+v, want its style's 60px", w)
+	}
+	if got := treeText(byID(t, p.root, "e")); got != "gone" {
+		t.Errorf("alt text %q, want gone", got)
+	}
+}
+
+// TestPrepare_FailedImageKeepsItsSizeOnlyWhenFullySized locks the size of
+// an <img> whose source fails to load and that has no alt text to show
+// ([emptyImage]): its style's width and height hold when both are given,
+// when an aspect ratio completes one of them, or when its display is not
+// inline; otherwise both compute to auto. An image naming no source keeps
+// what its style gives.
+func TestPrepare_FailedImageKeepsItsSizeOnlyWhenFullySized(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<style>.w { width: 60px }</style><p>`+
+		`<img id=both src="missing.png" style="width:60px;height:40px">`+
+		`<img id=ratio src="missing.png" alt="" style="width:60px;aspect-ratio:3/2">`+
+		`<img id=block src="missing.png" alt="" class=w style="display:block">`+
+		`<img id=float src="missing.png" alt="" class=w style="float:left">`+
+		`<img id=nosrc alt="" class=w>`+
+		`<img id=width src="missing.png" alt="" class=w>`+
+		`<img id=attr src="missing.png" width=60>`+
+		`<img id=height src="missing.png" alt="" style="height:40px"></p>`, Options{Resources: fstest.MapFS{}})
+	for _, id := range []string{"both", "ratio", "block", "float", "nosrc"} {
+		if w := byID(t, p.root, id).Style.Width; w.Kind != css.Points || w.Value != 45 {
+			t.Errorf("%s: width %+v, want its style's 60px", id, w)
+		}
+	}
+	for _, id := range []string{"width", "attr", "height"} {
+		st := byID(t, p.root, id).Style
+		if st.Width.Kind != css.Auto || st.Height.Kind != css.Auto || st.AspectRatio.Ratio() != 0 {
+			t.Errorf("%s: width %+v, height %+v, ratio %v, want auto", id, st.Width, st.Height, st.AspectRatio.Ratio())
+		}
+	}
+}
+
 func TestPrepare_DecodesImages(t *testing.T) {
 	t.Parallel()
 	fsys := fstest.MapFS{

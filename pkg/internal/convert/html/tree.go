@@ -529,18 +529,19 @@ func (b *builder) linkTarget(href string) string {
 
 // image builds the nodes of an <img> styled st: a replaced node with the
 // picture [builder.imageSource] selects, or, when the picture cannot be
-// drawn, its alt text with a warning.
+// drawn, its alt text with a warning, or an empty replaced box when the
+// alt text is empty or absent (see [emptyImage]).
 func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style) []*layout.Node {
 	alt, hasAlt := attr(n, "alt")
 	src, density := b.imageSource(n)
-	fallback := func() []*layout.Node {
+	fallback := func(failed bool) []*layout.Node {
 		if alt == "" {
-			return nil
+			return emptyImage(n, st, failed)
 		}
 		return []*layout.Node{{Kind: layout.Text, Style: parent, Text: alt}}
 	}
 	if strings.Trim(src, "\t\n\f\r ") == "" {
-		return fallback()
+		return fallback(false)
 	}
 	pic, err := b.res.picture(ctx, resolveRef(b.scan.resourceBase, src))
 	if err != nil {
@@ -549,7 +550,7 @@ func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style)
 		}
 		b.warnings = append(b.warnings, typeset.Warning{Code: warningCode(err), Effect: warn.Omitted, Message: fmt.Sprintf(
 			"the image %s was left out: %v", displayURL(strings.TrimSpace(src)), err)})
-		return fallback()
+		return fallback(true)
 	}
 	if density > 0 && density != 1 {
 		// The density-corrected natural size; the decoded picture is
@@ -573,6 +574,59 @@ func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style)
 		}
 	}
 	return []*layout.Node{node}
+}
+
+// emptyImage returns the box of an <img> styled st that draws no picture
+// and has no alt text to show: a replaced box without content, of the
+// size its style gives it, zero where auto, that paints its background
+// and borders. failed tells an image whose source did not load from one
+// that names no source.
+//
+// HTML Standard, 15.4.1 treats such an element as a replaced element only
+// when its dimensions are given, and as an empty inline otherwise.
+// Chromium makes it a box in every case, on screen and in print, and
+// litho follows Chromium: an image without a source keeps the size its
+// style gives it, and one whose source failed keeps it only when its
+// width and height are both given, or one of them with an aspect ratio,
+// or when its display is not inline. Otherwise its width and height
+// compute to auto and the box is empty.
+//
+// Chromium's broken-image icon, 16 pixels square and drawn when a source
+// fails to load and the element has no alt attribute, is not drawn, and
+// takes no room.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 draws an <img> without src, with an empty
+//     src or with alt="", styled width 60px, height 40px, a background
+//     and a 2px border, as a 64 by 44 box on the baseline; with width
+//     alone, a 64 by 4 box; with neither, a 4 by 4 box.
+//   - probe, html: Chromium 156 draws an <img alt=""> whose source fails
+//     to load, with the same background and border, as a 64 by 44 box
+//     under width 60px and height 40px, or width 60px and aspect-ratio
+//     3/2; as a 4 by 4 box under width 60px alone, the width attribute
+//     alone or height 40px alone; as a 64 by 4 box under width 60px with
+//     display block or inline-block, or floated.
+//   - wpt: css-tables/height-distribution/percentage-sizing-of-table-cell-replaced-children-001
+//     and css-break/block-max-height-004 pass with the image drawn as
+//     nothing in test and reference alike.
+func emptyImage(n *dom.Node, st *css.Style, failed bool) []*layout.Node {
+	if failed && st.Display == css.Inline && !sizedByStyle(st) {
+		// The computed style is shared: the box takes a copy.
+		s := *st
+		s.Width, s.Height, s.AspectRatio = css.Dimension{}, css.Dimension{}, css.AspectRatio{}
+		st = &s
+	}
+	node := &layout.Node{Kind: layout.Replaced, Style: st}
+	node.ID, _ = attr(n, "id")
+	return []*layout.Node{node}
+}
+
+// sizedByStyle reports a style that gives a box both its dimensions: a
+// width and a height, or one of them and an aspect ratio.
+func sizedByStyle(st *css.Style) bool {
+	w, h := st.Width.Kind != css.Auto, st.Height.Kind != css.Auto
+	return w && h || (w || h) && st.AspectRatio.Ratio() != 0
 }
 
 // control builds a form control styled st as an inline-block holding the
