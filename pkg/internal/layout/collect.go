@@ -234,7 +234,7 @@ func (c *collector) breakPara() {
 
 // collapses reports a white-space value whose spaces collapse.
 func collapses(ws css.WhiteSpace) bool {
-	return ws == css.WhiteSpaceNormal || ws == css.Nowrap || ws == css.PreLine
+	return ws == css.WhiteSpaceNormal || ws == css.Nowrap || ws == css.PreLine || ws == css.PreLineNowrap
 }
 
 // wraps reports a white-space value that allows soft wrapping.
@@ -246,7 +246,7 @@ func wraps(ws css.WhiteSpace) bool {
 // end: pre does not wrap, and break-spaces wraps them like any character
 // (CSS Text 3, 4.1.3).
 func keepsSpaces(ws css.WhiteSpace) bool {
-	return ws == css.Pre || ws == css.BreakSpaces
+	return ws == css.Pre || ws == css.BreakSpaces || ws == css.BreakSpacesNowrap
 }
 
 // text collects a text box: its characters after white space processing
@@ -281,7 +281,7 @@ func (c *collector) text(k *box) {
 		r := rs[i]
 		if collapses(ws) {
 			switch {
-			case r == '\n' && ws == css.PreLine:
+			case r == '\n' && (ws == css.PreLine || ws == css.PreLineNowrap):
 				flush()
 				c.trimSpace()
 				c.breakPara()

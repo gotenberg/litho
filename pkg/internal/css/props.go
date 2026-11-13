@@ -192,6 +192,8 @@ const (
 	pTextUnderlinePosition
 	pHyphens
 	pHyphenateCharacter
+	pTextWrapMode
+	pTextWrapStyle
 	numProps
 )
 
@@ -808,10 +810,7 @@ func init() {
 		})},
 		{pLetterSpacing, dimProp("letter-spacing", true, func(s *Style) *Dimension { return &s.LetterSpacing }, 0, kwNormal, false)},
 		{pWordSpacing, dimProp("word-spacing", true, func(s *Style) *Dimension { return &s.WordSpacing }, 0, kwNormal, false)},
-		{pWhiteSpace, enumProp("white-space", true, func(s *Style) *WhiteSpace { return &s.WhiteSpace }, map[string]WhiteSpace{
-			"normal": WhiteSpaceNormal, "pre": Pre, "nowrap": Nowrap, "pre-wrap": PreWrap,
-			"pre-line": PreLine, "break-spaces": BreakSpaces, "-moz-pre-wrap": PreWrap, "-o-pre-wrap": PreWrap,
-		})},
+		{pWhiteSpace, whiteSpaceCollapseProp()},
 		{pWordBreak, enumProp("word-break", true, func(s *Style) *WordBreak { return &s.WordBreak }, map[string]WordBreak{
 			"normal": WordBreakNormal, "break-all": BreakAll, "keep-all": KeepAll, "auto-phrase": KeepAll,
 		})},

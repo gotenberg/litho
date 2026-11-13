@@ -182,6 +182,8 @@ func initShorthands() {
 			longhands: []propID{pTextDecoration, pTextDecorationStyle, pTextDecorationColor, pTextDecorationThickness},
 			expand:    expandTextDecoration,
 		},
+		"white-space": {longhands: []propID{pWhiteSpace, pTextWrapMode}, expand: expandWhiteSpace},
+		"text-wrap":   {longhands: []propID{pTextWrapMode, pTextWrapStyle}, expand: expandTextWrap},
 		"word-break": {
 			longhands: []propID{pWordBreak, pOverflowWrap},
 			expand: func(v []token, c *declCtx) ([]entry, bool) {

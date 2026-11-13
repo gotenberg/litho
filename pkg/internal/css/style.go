@@ -615,6 +615,29 @@ const (
 	// spaces never hang and a soft wrap opportunity follows each one
 	// (CSS Text 3, 3).
 	BreakSpaces
+	// PreLineNowrap is white-space: preserve-breaks nowrap: spaces
+	// collapse, segment breaks are kept, and lines do not wrap (CSS Text
+	// 4, 3.4).
+	PreLineNowrap
+	// BreakSpacesNowrap is white-space: break-spaces nowrap, which lays
+	// out as pre.
+	BreakSpacesNowrap
+)
+
+// TextWrapStyle is the text-wrap-style property (CSS Text 4, 6.2).
+type TextWrapStyle uint8
+
+// The text-wrap-style values.
+const (
+	// WrapStyleAuto breaks each line as late as it fits.
+	WrapStyleAuto TextWrapStyle = iota
+	// WrapStyleBalance balances the lengths of the lines of a short
+	// block.
+	WrapStyleBalance
+	// WrapStyleStable breaks as auto does.
+	WrapStyleStable
+	// WrapStylePretty breaks as auto does.
+	WrapStylePretty
 )
 
 // WordSpaceTransform is the word-space-transform property (CSS Text 4,
@@ -1074,6 +1097,9 @@ type Style struct {
 	// glyphs they cross (CSS Text Decoration 4, 2.7), SkipInkAuto by
 	// default.
 	TextDecorationSkipInk SkipInk
+	// TextWrapStyle is how lines that wrap are broken (CSS Text 4, 6.2),
+	// WrapStyleAuto by default.
+	TextWrapStyle TextWrapStyle
 	// Hyphens says whether a word breaks at its soft hyphens (CSS Text 3,
 	// 5.4), HyphensManual by default.
 	Hyphens Hyphens
