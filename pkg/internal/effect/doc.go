@@ -60,7 +60,8 @@
 //
 //   - blur(s): [Blur] with [GaussianKernel] of s; Chromium draws it as
 //     [BoxKernel] of three passes, which the same call reproduces.
-//   - drop-shadow(x y s c): as feDropShadow, the deviation s/2.
+//   - drop-shadow(x y s c): as feDropShadow, the deviation s itself, as
+//     feDropShadow's stdDeviation takes it and Chromium draws it.
 //   - grayscale, sepia, saturate, hue-rotate: [ColorMatrix] with
 //     [GrayscaleMatrix], [SepiaMatrix], [SaturateMatrix],
 //     [HueRotateMatrix].
