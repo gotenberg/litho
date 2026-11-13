@@ -82,6 +82,29 @@ func TestListMarkers_Inside(t *testing.T) {
 	}
 }
 
+// TestListMarkers_ClippedByTheItemsOverflow locks that the overflow clip
+// of a list item cuts its outside marker, a child box of the item that
+// lies outside it (CSS Lists 3, 3.1; CSS Overflow 3, 3): of two items
+// with square markers, only the first, of overflow visible, shows ink
+// left of the content edge.
+func TestListMarkers_ClippedByTheItemsOverflow(t *testing.T) {
+	ul := list(css.Square, css.Outside, 0, 0)
+	ul.Children[1].Style.Overflow = css.OverflowHidden
+	img := render(t, run(t, doc(ul), page(100, 60)), 1)
+	var inked []int
+	for y := range 60 {
+		for x := range 40 {
+			if code(img.At(x, y)) != '_' {
+				inked = append(inked, y)
+				break
+			}
+		}
+	}
+	if len(inked) == 0 || inked[len(inked)-1] > inked[0]+len(inked)-1 {
+		t.Errorf("rows with marker ink %v, want one band: the first item's marker alone", inked)
+	}
+}
+
 func TestListMarkers_LblLBody(t *testing.T) {
 	res := run(t, doc(list(css.Decimal, css.Outside, 0)), page(200, 100))
 	l := res.Structure.Kids[0]

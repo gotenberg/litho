@@ -1109,7 +1109,20 @@ func (p *painter) linkBox(b *box) {
 	p.links = append(p.links, pendingLink{lk: b.link, rect: p.borderRect(b)})
 }
 
-// marker paints the outside marker of the list item b.
+// marker paints the outside marker of the list item b. The marker box is
+// a child of the item (CSS Lists 3, 3.1) though it sits outside the
+// item's border box, so the item's overflow clip cuts it like the rest of
+// its content (CSS Overflow 3, 3): an outside marker of an item of
+// overflow hidden or clip does not show, as Chromium draws it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 draws no outside disc or decimal marker
+//     of a list item of overflow hidden or clip, with or without columns;
+//     it draws the inside marker of one.
+//   - wpt: css-multicol/multicol-span-all-list-item-002 passes with the
+//     marker of its overflow: hidden item drawn in test and reference
+//     alike.
 func (p *painter) marker(b *box) {
 	m := b.outside
 	if m == nil || !m.placed || b.hidden {
@@ -1118,7 +1131,7 @@ func (p *painter) marker(b *box) {
 	if m.picture != nil {
 		r := typeset.Rect{X: m.x + p.dx, Y: m.baseline - m.picture.Height + p.dy, Width: m.picture.Width, Height: m.picture.Height}
 		if f := p.e.pictureFrag(m.picture, r, m.elem); f != nil {
-			p.emit(b, false, f, r.Y, r.Y+r.Height, p.e.pageOf(m.baseline-m.ascent))
+			p.emit(b, true, f, r.Y, r.Y+r.Height, p.e.pageOf(m.baseline-m.ascent))
 		}
 		return
 	}
@@ -1133,7 +1146,7 @@ func (p *painter) marker(b *box) {
 		c := *t
 		c.Origin = typeset.Point{X: m.x + t.Origin.X + p.dx, Y: m.baseline + p.dy}
 		c.Parent = m.elem
-		p.emit(b, false, &c, m.baseline-m.ascent, m.baseline, p.e.pageOf(m.baseline-m.ascent+eps))
+		p.emit(b, true, &c, m.baseline-m.ascent, m.baseline, p.e.pageOf(m.baseline-m.ascent+eps))
 	}
 }
 
@@ -1164,7 +1177,7 @@ func (p *painter) symbolMarker(b *box, m *markerBox) {
 		path = &typeset.Path{Ops: circleOps(r.X+r.Width/2, r.Y+r.Height/2, r.Width/2), Fill: &typeset.Fill{Color: col}}
 	}
 	path.Parent = m.elem
-	p.emit(b, false, path, r.Y, r.Y+r.Height, p.e.pageOf(m.sym.Y+eps))
+	p.emit(b, true, path, r.Y, r.Y+r.Height, p.e.pageOf(m.sym.Y+eps))
 }
 
 // line paints one line box: the backgrounds and borders of its inline
