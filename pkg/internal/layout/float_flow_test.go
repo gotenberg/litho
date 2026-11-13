@@ -352,3 +352,19 @@ func TestMargins_ZeroHeightBoxCollapsesThrough(t *testing.T) {
 	}
 }
 
+func TestFloats_PendingFloatsMoveTogether(t *testing.T) {
+	// CSS 2.1, 9.5.1 and 9.5.2: floats placed while the parent's top
+	// waits on collapsing margins sit at its top wherever it lands; a
+	// float that clears an earlier one meets it there, so with a
+	// negative margin as tall as that float the two coincide.
+	rb := boxes(t, doc(el(sty(width(200), height(200)),
+		el(sty(float(css.FloatRight), width(50), height(50))),
+		el(sty(margin(50, 0, 50, 0))),
+		el(sty(float(css.FloatRight), clearing(css.ClearRight), width(50), height(50), margin(-50, 0, 0, 0))),
+	)), page(300, 300))
+	a, b := rect(kid(t, rb, 0, 0, 0)), rect(kid(t, rb, 0, 0, 2))
+	if a[1] != 50 || b[1] != 50 {
+		t.Errorf("floats at y %v and %v, want both 50", a[1], b[1])
+	}
+}
+

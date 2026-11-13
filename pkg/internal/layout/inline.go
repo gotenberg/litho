@@ -1186,6 +1186,9 @@ func (s *inlineState) placeFloats(p *ifcPara, from, to int, top float64, mc *mar
 			continue
 		}
 		s.placed[f.box] = true
+		if pending {
+			mc.alignFloats(top)
+		}
 		i := s.e.layoutFloat(f.box, s.cb, s.bc, top)
 		if pending {
 			mc.floatPlaced(f.box, s.bc, i, top)

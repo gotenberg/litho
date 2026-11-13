@@ -128,6 +128,26 @@ func (mc *marginState) floatPlaced(f *box, bc *bfc, idx int, y float64) {
 	mc.floats = append(mc.floats, pendingFloat{box: f, bc: bc, idx: idx, y: y, owner: mc.waiting[len(mc.waiting)-1]})
 }
 
+// alignFloats moves the floats placed under the pending margins to y, the
+// top a float placed now would take: they sit at the top of the box that
+// waits on the margins, wherever those resolve (CSS 2.1, 9.5.1, rule 4),
+// so a later float placed against them meets them where they will be.
+func (mc *marginState) alignFloats(y float64) {
+	for i := range mc.floats {
+		f := &mc.floats[i]
+		dy := y - f.y
+		if math.Abs(dy) <= eps {
+			continue
+		}
+		f.box.shift(0, dy)
+		if f.idx >= 0 && f.idx < len(f.bc.floats) {
+			f.bc.floats[f.idx].y0 += dy
+			f.bc.floats[f.idx].y1 += dy
+		}
+		f.y = y
+	}
+}
+
 // pendingClearTo returns the position below the floats placed under the
 // pending margins that the clear value cl clears, were the margins to
 // resolve at y, -Inf when it clears none. Such a float moves down with
@@ -1048,6 +1068,7 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		}
 		if k.float != css.FloatNone {
 			top := cursor + mc.strut.sum()
+			mc.alignFloats(top)
 			mc.floatPlaced(k, bc, e.layoutFloat(k, cb, bc, top), top)
 			continue
 		}
