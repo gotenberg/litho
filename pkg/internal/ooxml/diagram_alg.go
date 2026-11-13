@@ -25,13 +25,14 @@ func param(a *DiagramAtom, typ, def string) string {
 }
 
 // intParam returns an integer algorithm parameter, def when absent or
-// not an integer.
-func intParam(a *DiagramAtom, typ string, def int) int {
+// not an integer. It reads 64 bits whatever the width of int, so a value
+// past 2^31 means the same on every platform.
+func intParam(a *DiagramAtom, typ string, def int64) int64 {
 	v, ok := a.Params[typ]
 	if !ok {
 		return def
 	}
-	n, err := strconv.Atoi(v)
+	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil {
 		return def
 	}
@@ -338,7 +339,7 @@ func cycle(a *DiagramAtom, s *DiagramShape) {
 	if n == 0 {
 		return
 	}
-	connRadius := trunc(float64(radius) * detmath.Cos(float64(spanAng/n)*math.Pi/180))
+	connRadius := trunc(float64(radius) * detmath.Cos(float64(spanAng/int64(n))*math.Pi/180))
 	connAngle := 0
 	if spanAng <= 0 {
 		connAngle = 180
@@ -910,9 +911,9 @@ func (e *engine) textAlg(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrai
 	for i := range s.Paragraphs {
 		p := &s.Paragraphs[i]
 		p.Level -= base
-		if p.Level >= start {
+		if int64(p.Level) >= start {
 			if _, ok := p.PPr.Attr("marL"); !ok {
-				p.MarL, p.HasMarL = int64(285750*(p.Level-start+1)), true
+				p.MarL, p.HasMarL = 285750*(int64(p.Level)-start+1), true
 			}
 			if _, ok := p.PPr.Attr("indent"); !ok {
 				p.Indent, p.HasIndent = -285750, true

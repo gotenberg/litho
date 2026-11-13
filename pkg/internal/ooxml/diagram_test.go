@@ -155,6 +155,11 @@ func TestDiagramText(t *testing.T) {
 				t.Errorf("paragraph %+v", p)
 			}
 		}},
+		{"a margin past 2^31 EMU from a deep negative start level", `<dgm:alg type="tx"><dgm:param type="stBulletLvl" val="-99999"/></dgm:alg>`, func(t *testing.T, s *DiagramShape) {
+			if p := s.Paragraphs[0]; !p.Bullet || p.MarL != 285750*100001 {
+				t.Errorf("paragraph %+v, want a left margin of %d", p, int64(285750*100001))
+			}
+		}},
 		{"sp drops the text", `<dgm:alg type="sp"/>`, func(t *testing.T, s *DiagramShape) {
 			if s.Paragraphs != nil {
 				t.Errorf("paragraphs %+v", s.Paragraphs)
