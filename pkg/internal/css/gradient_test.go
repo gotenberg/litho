@@ -101,8 +101,9 @@ func exported(g *Gradient) *Gradient {
 }
 
 // TestGradient_InterpolationSpace locks the colour space a gradient
-// interpolates in (CSS Images 4, 3.5.2; CSS Color 4, 13.1): the one its
-// method names, else sRGB for legacy colours and Oklab for any other,
+// interpolates in (CSS Images 4, 3.5.2; CSS Color 4, 13.3): the one its
+// method names, else sRGB for legacy colours and Oklab for any other, a
+// colour with a missing component being no legacy colour (4.1.2),
 // and a hue taken from the other stop where one is missing (13.4).
 func TestGradient_InterpolationSpace(t *testing.T) {
 	t.Parallel()
@@ -117,6 +118,7 @@ func TestGradient_InterpolationSpace(t *testing.T) {
 		{"linear-gradient(red, color(srgb 0 0 1))", true, Color{R: 0.5504, G: 0.3256, B: 0.6365, A: 1}},
 		{"linear-gradient(in oklch, red, blue)", true, Color{R: 0.7299, B: 0.7601, A: 1}},
 		{"linear-gradient(in hsl longer hue, red, blue)", true, Color{G: 1, A: 1}},
+		{"linear-gradient(rgb(none 255 0), rgb(255, 0, 0))", true, Color{R: 0.8163, G: 0.6604, B: 0.0018, A: 1}},
 		{"linear-gradient(in srgb, rgb(none 0 0), rgb(200 100 50))", true, Color{R: 200.0 / 255, G: 50.0 / 255, B: 25.0 / 255, A: 1}},
 	}
 	for _, tt := range tests {

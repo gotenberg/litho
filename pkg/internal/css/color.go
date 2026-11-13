@@ -20,7 +20,7 @@ type colorValue struct {
 	sc      spaceColor
 	current bool
 	// legacy marks a colour of the legacy sRGB formats, which interpolate
-	// in sRGB by default (CSS Color 4, 13.1): a named, system or hex
+	// in sRGB by default (CSS Color 4, 13.3): a named, system or hex
 	// colour, rgb(), hsl() or hwb().
 	legacy bool
 	// expr, when set, is a colour function that refers to currentColor,
@@ -77,12 +77,22 @@ func parseColor(t token) (colorValue, bool) {
 		expr := t
 		return colorValue{expr: &expr}, true
 	}
-	return colorValue{c: sc.paint(), sc: sc, legacy: legacySRGB(t)}, true
+	return colorValue{c: sc.paint(), sc: sc, legacy: legacySRGB(t) && sc.none == [4]bool{}}, true
 }
 
 // legacySRGB reports a colour written in a legacy sRGB format (CSS Color
-// 4, 13.1): a keyword, a hex colour, or rgb(), rgba(), hsl(), hsla() or
-// hwb() without an origin colour.
+// 4, 13.3): a keyword, a hex colour, or rgb(), rgba(), hsl(), hsla() or
+// hwb() without an origin colour. parseColor also takes a colour with a
+// missing component out of the legacy formats, whose syntax has no none
+// (4.1.2): such a colour interpolates in Oklab by default, as Chromium
+// draws it.
+//
+// # Corpus evidence
+//
+//   - wpt: css-images/gradient/gradient-analogous-missing-components-004:
+//     Chromium 156 (gotenberg/gotenberg:9.4.1) draws the middle of
+//     linear-gradient(to right, rgb(none 255 0), rgb(255, 0, 0)) as
+//     rgb(208 167 0), the Oklab midpoint, not the sRGB yellow.
 func legacySRGB(t token) bool {
 	switch t.typ { //nolint:exhaustive // the other token types are no colours
 	case tIdent, tHash:

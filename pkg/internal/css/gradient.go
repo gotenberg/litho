@@ -502,7 +502,7 @@ func (g *gradientSpec) compute(lc lenCtx, color Color) *Gradient {
 	if g.size == RadialExplicit {
 		out.Radius = [2]Dimension{g.radius[0].dim(lc, true), g.radius[1].dim(lc, true)}
 	}
-	// CSS Color 4, 13.1: without a method, legacy sRGB colours
+	// CSS Color 4, 13.3: without a method, legacy sRGB colours
 	// interpolate in sRGB, any other in Oklab.
 	out.space, out.hue = g.space, g.hue
 	if !g.method {
