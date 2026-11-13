@@ -115,13 +115,17 @@ func Fill(ops []typeset.PathOp, box typeset.Rect, p Paint) []typeset.Fragment {
 
 // hasArea reports whether the outline ops encloses any area: the
 // shoelace sum of each subpath over its points, Bézier control points
-// included, is not zero.
+// included, taken from the subpath's first point, is not zero.
 func hasArea(ops []typeset.PathOp) bool {
 	var area, sub float64
 	var first, last typeset.Point
 	open := false
 	add := func(p typeset.Point) {
-		sub += last.X*p.Y - p.X*last.Y
+		// From the subpath's first point: far from the origin, the
+		// products of absolute coordinates cancel to nothing.
+		ax, ay := last.X-first.X, last.Y-first.Y
+		bx, by := p.X-first.X, p.Y-first.Y
+		sub += float64(ax*by) - float64(bx*ay)
 		last = p
 	}
 	closeSub := func() {
