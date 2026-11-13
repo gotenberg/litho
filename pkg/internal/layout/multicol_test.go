@@ -482,3 +482,27 @@ func TestMulticol_RelativeInlineBackgroundInItsColumn(t *testing.T) {
 		____RBB_____
 		____RBB_____`)
 }
+
+func TestMulticol_FirstBaselineIsTheHighestColumns(t *testing.T) {
+	// CSS Align 3, 9.1: the first baseline set of a multi-column container
+	// is that of the column whose baseline is the highest. A first column
+	// that starts with a 10px block and a second that starts with a line
+	// give the second column's baseline; the outside marker of a list
+	// item still sits on the first line of the flow (CSS Lists 3, 3.5).
+	auto := func(s *css.Style) {
+		s.Columns.Fill = css.FillAuto
+		s.Width = css.Pts(px(100))
+		s.Orphans, s.Widows = 1, 1
+	}
+	mc := el(sty(columns(2, 0), auto, height(25)), el(sty(height(10))), txt(sty(), "a"), br(sty()), txt(sty(), "b"), br(sty()), txt(sty(), "c"))
+	b := kid(t, boxes(t, doc(mc), page(200, 100)), 0, 0)
+	first, ok := firstBaseline(b)
+	flow, ok2 := markerBaseline(b)
+	if !ok || !ok2 {
+		t.Fatal("no baseline")
+	}
+	// 10px Ahem lines of line-height 1: baselines 8px below a line's top.
+	if !near((first-b.contentY())/css.Pt, 8) || !near((flow-b.contentY())/css.Pt, 18) {
+		t.Errorf("baselines %v and %v px below the top, want 8 (the second column) and 18 (the first line)", (first-b.contentY())/css.Pt, (flow-b.contentY())/css.Pt)
+	}
+}

@@ -1730,47 +1730,94 @@ func firstBaseline(b *box) (float64, bool) {
 }
 
 // baseline returns the first baseline, or the last when last, of the
-// multi-column container b: that of a line in its column flow, painted
-// where its column puts it, or that of a spanner, laid out across b in
-// b's own flow (CSS Multicol 1, 5.1), the sets taken in order.
+// multi-column container b: the highest baseline of its columns and
+// spanners, or the lowest for the last (CSS Align 3, 9.1). A line of the
+// column flow is placed where its column puts it; a spanner is laid out
+// across b in b's own flow (CSS Multicol 1, 5.1). Each column's first
+// line is the highest of its lines, so the highest of all lines is the
+// highest of the columns' first baselines.
 func (d *mcolData) baseline(b *box, last bool) (float64, bool) {
-	if len(b.lines) > 0 || len(d.sets) == 0 {
-		var y float64
-		var ok bool
-		if last {
-			y, ok = lastBaselineFlow(b)
-		} else {
-			y, ok = firstBaselineFlow(b)
+	var best float64
+	found := false
+	take := func(y float64) {
+		if !found || !last && y < best || last && y > best {
+			best, found = y, true
 		}
-		return d.place(b, y), ok
 	}
-	sets := d.sets
-	if last {
-		sets = slices.Clone(sets)
-		slices.Reverse(sets)
+	placed := func(y float64) { take(d.place(b, y)) }
+	for _, l := range b.lines {
+		placed(l.y + l.baseline)
 	}
-	for _, s := range sets {
+	for _, s := range d.sets {
 		if s.spanner != nil {
 			if y, ok := edgeBaseline(s.spanner, last); ok {
+				take(y)
+			}
+			continue
+		}
+		for _, k := range s.kids {
+			kidBaselines(k, placed)
+		}
+	}
+	return best, found
+}
+
+// markerBaseline returns the baseline of the first line box in flow inside
+// the list item b, in the order of the flow, which its outside marker sits
+// on (CSS Lists 3, 3.5): in a multi-column container, the first line of
+// its column flow or of a spanner, the sets taken in order.
+func markerBaseline(b *box) (float64, bool) {
+	d := b.mc
+	if d == nil {
+		return firstBaselineFlow(b)
+	}
+	if len(b.lines) > 0 || len(d.sets) == 0 {
+		y, ok := firstBaselineFlow(b)
+		return d.place(b, y), ok
+	}
+	for _, s := range d.sets {
+		if s.spanner != nil {
+			if y, ok := firstBaseline(s.spanner); ok {
 				return y, true
 			}
 			continue
 		}
-		kids := s.kids
-		if last {
-			kids = slices.Clone(kids)
-			slices.Reverse(kids)
-		}
-		for _, k := range kids {
+		for _, k := range s.kids {
 			if k.inline || k.float != css.FloatNone || k.abs || k.kind != kindBlock || !k.laidOut {
 				continue
 			}
-			if y, ok := edgeBaseline(k, last); ok {
+			if y, ok := firstBaseline(k); ok {
 				return d.place(b, y), true
 			}
 		}
 	}
 	return 0, false
+}
+
+// kidBaselines calls f with the baseline of every line in flow inside
+// the block-level box k of a column flow, nested blocks included, and
+// with the first and last baselines of a flex, grid, table or
+// multi-column container among them, whose lines are its own. A box out
+// of flow and a spanner, which is not in the column flow, give none.
+func kidBaselines(k *box, f func(float64)) {
+	if k.inline || k.float != css.FloatNone || k.abs || k.kind != kindBlock || !k.laidOut || isSpanner(k) {
+		return
+	}
+	if k.flex != nil || k.grid != nil || k.tdata != nil || k.mc != nil {
+		if y, ok := firstBaseline(k); ok {
+			f(y)
+		}
+		if y, ok := lastBaseline(k); ok {
+			f(y)
+		}
+		return
+	}
+	for _, l := range k.lines {
+		f(l.y + l.baseline)
+	}
+	for _, c := range k.kids {
+		kidBaselines(c, f)
+	}
 }
 
 // edgeBaseline is [lastBaseline] when last, [firstBaseline] otherwise.

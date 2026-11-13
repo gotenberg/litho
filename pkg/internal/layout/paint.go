@@ -2017,7 +2017,7 @@ func (e *engine) markerExtent(b *box) float64 {
 	if b.outside == nil {
 		return 0
 	}
-	if _, ok := firstBaseline(b); ok {
+	if _, ok := markerBaseline(b); ok {
 		return 0
 	}
 	above, below := e.markerLine(b)
@@ -2053,7 +2053,7 @@ func (e *engine) placeMarker(b *box) {
 		return
 	}
 	rtl := b.st.Direction == css.RTL
-	baseline, ok := firstBaseline(b)
+	baseline, ok := markerBaseline(b)
 	if m.picture != nil {
 		gap := e.fontSize(b.st) / 2
 		m.width = m.picture.Width + gap
