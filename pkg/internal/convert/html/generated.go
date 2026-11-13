@@ -322,10 +322,23 @@ func (b *builder) generate(ctx context.Context, n *dom.Node, ps *css.Style) []*l
 		}
 		sb.WriteString(s)
 	}
+	// segs are the page counter items of the text being joined.
+	var segs []pagedText
 	flush := func() {
 		if sb.Len() > 0 {
-			out = append(out, &layout.Node{Kind: layout.Text, Style: ps, Text: strings.ToValidUTF8(sb.String(), "�")})
+			t := sb.String()
+			node := &layout.Node{Kind: layout.Text, Style: ps, Text: strings.ToValidUTF8(t, "�")}
+			if len(segs) > 0 && node.Text == t {
+				b.gcpm.recordPaged(node, segs)
+			}
+			out = append(out, node)
 			sb.Reset()
+		}
+		segs = nil
+	}
+	paged := func(it css.ContentItem, start int) {
+		if (it.Text == pageCounter || it.Text == pagesCounter) && !cut {
+			segs = append(segs, pagedText{start: start, end: sb.Len(), item: it})
 		}
 	}
 	c := &b.counters
@@ -348,19 +361,23 @@ func (b *builder) generate(ctx context.Context, n *dom.Node, ps *css.Style) []*l
 				// on the pseudo-element (CSS Lists 3, 4.5).
 				_ = c.instantiate(it.Text, 0, false)
 			}
+			start := sb.Len()
 			write(layout.CounterText(it.Style, v))
+			paged(it, start)
 		case css.ItemCounters:
 			vals := c.values(it.Text)
 			if len(vals) == 0 {
 				_ = c.instantiate(it.Text, 0, false)
 				vals = []int{0}
 			}
+			start := sb.Len()
 			for i, v := range vals {
 				if i > 0 {
 					write(it.Separator)
 				}
 				write(layout.CounterText(it.Style, v))
 			}
+			paged(it, start)
 		case css.ItemOpenQuote, css.ItemCloseQuote, css.ItemNoOpenQuote, css.ItemNoCloseQuote:
 			write(b.quote(n, ps, it.Kind))
 		case css.ItemImage:

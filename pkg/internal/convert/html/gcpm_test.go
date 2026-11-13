@@ -207,3 +207,27 @@ func TestRunning_ShrinksToFitItsBox(t *testing.T) {
 		t.Errorf("running footer at %v, want at the right edge", foot.x)
 	}
 }
+
+// TestRunning_PageCounters locks the page and pages counters of a running
+// element: shown in a page-margin box, it reads the values of the page it
+// prints on (CSS GCPM 3, 1.2.1, the example of p.rh::before), and the
+// document's counters keep the values of its place in the document.
+func TestRunning_PageCounters(t *testing.T) {
+	src := `<style>
+		@page { size: 400pt 300pt; margin: 40pt; @top-center { content: element(head) } }
+		body { margin: 0; font: 10pt "Test Serif"; counter-reset: ch }
+		h1 { counter-increment: ch; break-before: page; font-size: 10pt; margin: 0 }
+		header { position: running(head) }
+		header .pn::after { content: "p" counter(page) "/" counter(pages, upper-roman) "c" counter(ch) "." counters(page, "-") }
+	</style>
+	<header>H<span class=pn></span></header><p>one</p><h1>A</h1><h1>B</h1>`
+	doc := convertDoc(t, src, Options{PreferCSSPageSize: true})
+	if len(doc.Pages) != 3 {
+		t.Fatalf("%d pages, want 3", len(doc.Pages))
+	}
+	for i, want := range []string{"p1/IIIc0.1", "p2/IIIc0.2", "p3/IIIc0.3"} {
+		if !hasText(doc.Pages[i], want) {
+			t.Errorf("page %d: no %q in %+v", i+1, want, pageTexts(doc.Pages[i]))
+		}
+	}
+}

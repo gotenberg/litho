@@ -35,6 +35,9 @@ type assignment struct {
 	value    string
 	node     *layout.Node
 	lead     float64
+	// paged reports a running element whose generated content reads the
+	// page or pages counter.
+	paged bool
 }
 
 // gcpmState holds the named strings and running elements of a document,
@@ -44,10 +47,22 @@ type gcpmState struct {
 	// placed are the anchors of the last layout, by ID.
 	placed map[string]typeset.Dest
 	ids    int
+	// paged holds the Text nodes of generated content that read the page
+	// or pages counter.
+	paged map[*layout.Node][]pagedText
 }
 
 // active reports a document with named strings or running elements.
 func (g *gcpmState) active() bool { return len(g.strings) > 0 || len(g.running) > 0 }
+
+// pagedText is a counter() or counters() of the page or pages counter that
+// generated content wrote into a Text node, at bytes start to end: shown
+// in a page-margin box, a running element reads the page's values (CSS
+// GCPM 3, 1.2.1; CSS Page 3, 6.1).
+type pagedText struct {
+	start, end int
+	item       css.ContentItem
+}
 
 // gcpmID returns an anchor ID no element of the document carries.
 func (b *builder) gcpmID() string {
@@ -78,7 +93,8 @@ func (b *builder) record(list *[]assignment, a assignment) bool {
 func (b *builder) runAway(n *dom.Node, node *layout.Node, st *css.Style) *layout.Node {
 	id := b.gcpmID()
 	// The empty inline box that stays has no margin of its own.
-	if !b.record(&b.gcpm.running, assignment{name: st.Running, id: id, node: node, lead: b.lead(n, 0)}) {
+	a := assignment{name: st.Running, id: id, node: node, lead: b.lead(n, 0), paged: b.gcpm.pagedIn(node, 0)}
+	if !b.record(&b.gcpm.running, a) {
 		return nil
 	}
 	node.ID = ""
@@ -207,6 +223,64 @@ func (b *builder) opens(c *dom.Node) bool {
 		}
 	}
 	return true
+}
+
+// recordPaged records that generated content wrote the page counter items
+// segs into the Text node n.
+func (g *gcpmState) recordPaged(n *layout.Node, segs []pagedText) {
+	if g.paged == nil {
+		g.paged = map[*layout.Node][]pagedText{}
+	}
+	g.paged[n] = segs
+}
+
+// pagedIn reports whether the subtree of n, at depth, holds a Text node
+// that reads the page or pages counter.
+func (g *gcpmState) pagedIn(n *layout.Node, depth int) bool {
+	if n == nil || len(g.paged) == 0 || depth >= maxTreeDepth {
+		return false
+	}
+	if _, ok := g.paged[n]; ok {
+		return true
+	}
+	if g.pagedIn(n.Marker, depth+1) {
+		return true
+	}
+	for _, k := range n.Children {
+		if g.pagedIn(k, depth+1) {
+			return true
+		}
+	}
+	return false
+}
+
+// atPage returns a copy of the subtree of n, at depth, whose page counter
+// items say what text gives them on the page a page-margin box shows it
+// on.
+func (g *gcpmState) atPage(n *layout.Node, text func(css.ContentItem) string, depth int) *layout.Node {
+	if n == nil || depth >= maxTreeDepth {
+		return n
+	}
+	c := *n
+	if segs, ok := g.paged[n]; ok {
+		var sb strings.Builder
+		at := 0
+		for _, sg := range segs {
+			sb.WriteString(n.Text[at:sg.start])
+			sb.WriteString(text(sg.item))
+			at = sg.end
+		}
+		sb.WriteString(n.Text[at:])
+		c.Text = sb.String()
+	}
+	c.Marker = g.atPage(n.Marker, text, depth+1)
+	if len(n.Children) > 0 {
+		c.Children = make([]*layout.Node, len(n.Children))
+		for i, k := range n.Children {
+			c.Children[i] = g.atPage(k, text, depth+1)
+		}
+	}
+	return &c
 }
 
 // nodeText returns the text of the Text nodes under n.

@@ -266,7 +266,7 @@ func (p *prepared) marginContent(ctx context.Context, info layout.PageInfo, page
 			continue
 		}
 		mb := &marginBox{which: which, st: st, cb: containingBlock(which, pb)}
-		mb.kids = p.marginNodes(ctx, st, info.Index+1, pages, pb)
+		mb.kids = p.marginNodes(ctx, st, info.Index, pages, pb)
 		p.fixedAxes(mb)
 		boxes = append(boxes, mb)
 	}
@@ -608,12 +608,13 @@ func blockStyle(st *css.Style) *css.Style {
 }
 
 // marginNodes returns the content of a page-margin box of style st on
-// page number page of pages, whose page box is pb (CSS Page 3, 5.2; CSS
-// Generated Content 3, 1.1): its strings, its page and pages counters,
-// every other counter at zero, attr() at its fallback since a page-margin
-// box has no element, its images, its leaders, and the named strings and
-// running elements the page shows (CSS GCPM 3, 2).
-func (p *prepared) marginNodes(ctx context.Context, st *css.Style, page, pages int, pb layout.PageBox) []*layout.Node {
+// the page of index, one of pages, whose page box is pb (CSS Page 3, 5.2;
+// CSS Generated Content 3, 1.1): its strings, its page and pages
+// counters, every other counter at zero, attr() at its fallback since a
+// page-margin box has no element, its images, its leaders, and the named
+// strings and running elements the page shows (CSS GCPM 3, 1), a running
+// element's page and pages counters at the page's values.
+func (p *prepared) marginNodes(ctx context.Context, st *css.Style, index, pages int, pb layout.PageBox) []*layout.Node {
 	ts := anonInline(st)
 	var out []*layout.Node
 	var sb strings.Builder
@@ -623,14 +624,15 @@ func (p *prepared) marginNodes(ctx context.Context, st *css.Style, page, pages i
 			sb.Reset()
 		}
 	}
-	value := func(name string) int {
-		switch name {
+	text := func(it css.ContentItem) string {
+		v := 0
+		switch it.Text {
 		case pageCounter:
-			return page
+			v = index + 1
 		case pagesCounter:
-			return pages
+			v = pages
 		}
-		return 0
+		return layout.CounterText(it.Style, v)
 	}
 	for _, it := range st.Content.Items {
 		if sb.Len() > maxGeneratedBytes {
@@ -642,7 +644,7 @@ func (p *prepared) marginNodes(ctx context.Context, st *css.Style, page, pages i
 		case css.ItemAttr:
 			sb.WriteString(it.Fallback)
 		case css.ItemCounter, css.ItemCounters:
-			sb.WriteString(layout.CounterText(it.Style, value(it.Text)))
+			sb.WriteString(text(it))
 		case css.ItemImage:
 			if p.b != nil {
 				if pic := p.b.contentImage(ctx, it.Text); pic != nil {
@@ -662,14 +664,18 @@ func (p *prepared) marginNodes(ctx context.Context, st *css.Style, page, pages i
 			g := &p.b.gcpm
 			top := pb.Bleed + pb.Margin[css.Top]
 			if it.Kind == css.ItemNamedString {
-				if a, ok := g.pick(g.strings, it.Text, it.Pick, page-1, top); ok {
+				if a, ok := g.pick(g.strings, it.Text, it.Pick, index, top); ok {
 					sb.WriteString(a.value)
 				}
 				continue
 			}
-			if a, ok := g.pick(g.running, it.Text, it.Pick, page-1, top); ok && a.node != nil {
+			if a, ok := g.pick(g.running, it.Text, it.Pick, index, top); ok && a.node != nil {
 				flush()
-				out = append(out, runningBox(a.node, st))
+				n := a.node
+				if a.paged {
+					n = g.atPage(n, text, 0)
+				}
+				out = append(out, runningBox(n, st))
 			}
 		case css.ItemOpenQuote, css.ItemCloseQuote, css.ItemNoOpenQuote, css.ItemNoCloseQuote, css.ItemContent:
 		}
