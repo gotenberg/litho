@@ -98,7 +98,9 @@ func TestSelector_Matches(t *testing.T) {
 		{"input:enabled", "cb inleg"},
 		{":root", ""},
 		{"svg rect", "rect"},
-		{"ns|p, *|p", ""},
+		{"ns|p, |p", ""},
+		{"*|span", "s1"},
+		{"[*|title], [|data-x]", "d1"},
 		{"p::before", ""},
 		{"li:nth-child(n+6)", ""},
 	}

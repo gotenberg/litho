@@ -322,6 +322,8 @@ func parseCompound(c *selCursor, depth int) (compound, string, *selectorError) {
 	if t := c.peek(); t != nil && (t.typ == tIdent || t.isDelim('*') || t.isDelim('|')) {
 		empty = false
 		if t.isDelim('|') {
+			// |p names an element in no namespace: every element of an
+			// HTML document is in one (Selectors 4, 5.2).
 			comp.never = true
 			c.i++
 			if nt := c.peek(); nt == nil || nt.typ != tIdent && !nt.isDelim('*') {
@@ -332,6 +334,7 @@ func parseCompound(c *selCursor, depth int) (compound, string, *selectorError) {
 			if t.typ == tIdent {
 				comp.tag = lower(t.value)
 			}
+			anyNS := t.isDelim('*')
 			c.i++
 			if nt := c.peek(); nt != nil && nt.isDelim('|') {
 				c.i++
@@ -339,7 +342,13 @@ func parseCompound(c *selCursor, depth int) (compound, string, *selectorError) {
 				if nn == nil || nn.typ != tIdent && !nn.isDelim('*') {
 					return comp, "", &selectorError{}
 				}
-				comp.never = true
+				// *|p names an element in any namespace; a named prefix
+				// needs an @namespace rule, which litho does not read.
+				comp.tag = ""
+				if nn.typ == tIdent {
+					comp.tag = lower(nn.value)
+				}
+				comp.never = !anyNS
 				c.i++
 			}
 		}
@@ -481,11 +490,14 @@ func parseAttr(list []token) (a attrSel, ok, sensitive bool) {
 			}
 			c.i++
 		}
-		if n := c.peek(); n == nil || n.typ != tIdent {
+		n := c.peek()
+		if n == nil || n.typ != tIdent {
 			return a, false, false
 		}
 		c.i++
-		a.name = ""
+		// |a names an attribute in no namespace and *|a one in any
+		// (Selectors 4, 6.5): an HTML element's attributes are in none.
+		a.name = lower(n.value)
 	default:
 		return a, false, false
 	}
