@@ -821,10 +821,9 @@ func stretchOrder(want, have float64) (int, float64) {
 // 2.4 has a synthetic oblique face generated where no oblique face exists,
 // slanted clockwise for a positive angle and counter-clockwise for a
 // negative one, and leaves the slant to the user agent. Chromium shears
-// by [syntheticItalicSkew] whatever the angle, so the shear is the
-// angle's tangent up to that much, signed as the angle: an angle up to
-// 90 degrees, which the grammar allows, never shears the glyphs flat.
-// italic and oblique without an angle take [syntheticItalicSkew].
+// italic, and oblique by an angle of at least [italicThreshold] degrees,
+// by [syntheticItalicSkew] whatever the angle, and draws a smaller or a
+// negative angle upright; litho follows Chromium.
 //
 // # Corpus evidence
 //
@@ -832,14 +831,19 @@ func stretchOrder(want, have float64) (int, float64) {
 //     @font-face face with no oblique (Ahem) sheared by 0.25 for oblique
 //     14, 15, 20, 30, 45, 60, 80, 89 and 90 degrees and for italic, and
 //     upright for oblique 0.5 to 13.9 degrees and for every negative
-//     angle tried (-1 to -90 degrees).
+//     angle tried (-1 to -90 degrees); again for 10, -10, 20 and -20
+//     degrees in a screenshot: only 20 degrees is sheared.
 func skewOf(req request) float64 {
-	if req.oblique == 0 {
+	if req.oblique == 0 || req.oblique >= italicThreshold {
 		return syntheticItalicSkew
 	}
-	t := math.Tan(math.Abs(req.oblique) * math.Pi / 180)
-	return math.Copysign(min(t, syntheticItalicSkew), req.oblique)
+	return 0
 }
+
+// italicThreshold is the oblique angle, in degrees, from which Chromium
+// counts a style as italic (FontSelectionValue's italic threshold) and
+// synthesises a slant.
+const italicThreshold = 14
 
 // aspectRank orders fc for req: lower is better, compared field by field.
 type aspectRank [6]int

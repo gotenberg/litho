@@ -20,12 +20,15 @@ func TestSynthesis_BoldAndItalic(t *testing.T) {
 		stroke, skew float64
 		mod          func(*Style)
 	}{
-		{"oblique angle", regular, 400, true, 10, 0, math.Tan(10 * math.Pi / 180), func(s *Style) { s.Oblique = 10 }},
-		// Chromium shears by 0.25 at any steeper angle (see skewOf).
+		// Chromium shears by 0.25 from 14 degrees and leaves a smaller or
+		// a negative angle upright (see skewOf).
+		{"oblique angle", regular, 400, true, 10, 0, 0, func(s *Style) { s.Oblique = 10 }},
+		{"oblique 14", regular, 400, true, 10, 0, 0.25, func(s *Style) { s.Oblique = 14 }},
 		{"oblique steep", regular, 400, true, 10, 0, 0.25, func(s *Style) { s.Oblique = 30 }},
 		{"oblique 60", regular, 400, true, 10, 0, 0.25, func(s *Style) { s.Oblique = 60 }},
 		{"oblique 90", regular, 400, true, 10, 0, 0.25, func(s *Style) { s.Oblique = 90 }},
-		{"oblique -90", regular, 400, true, 10, 0, -0.25, func(s *Style) { s.Oblique = -90 }},
+		{"oblique -90", regular, 400, true, 10, 0, 0, func(s *Style) { s.Oblique = -90 }},
+		{"oblique -20", regular, 400, true, 10, 0, 0, func(s *Style) { s.Oblique = -20 }},
 		{"no synthetic bold", regular, 700, false, 10, 0, 0, func(s *Style) { s.NoSyntheticBold = true }},
 		{"no synthetic italic", regular, 700, true, 9, 9.0 / 24, 0, func(s *Style) { s.NoSyntheticItalic = true }},
 		{"regular", regular, 400, false, 10, 0, 0, nil},
