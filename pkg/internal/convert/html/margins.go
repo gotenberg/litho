@@ -656,7 +656,7 @@ func blockStyle(st *css.Style) *css.Style {
 // marginNodes returns the content of a page-margin box of style st on
 // the page of index, one of pages, whose page box is pb (CSS Page 3, 5.2;
 // CSS Generated Content 3, 1.1): its strings, its counters as
-// [prepared.counterValues] gives them, attr() at its fallback since a
+// [prepared.counterText] writes them, attr() at its fallback since a
 // page-margin box has no element, its images, its leaders, and the named
 // strings and running elements the page shows (CSS GCPM 3, 1), a running
 // element's page and pages counters at the page's values.
