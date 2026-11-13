@@ -284,6 +284,15 @@ func equalStyle(a, b *Style) bool {
 	if a.RubyOverhang != b.RubyOverhang {
 		return false
 	}
+	if a.TextEmphasisMark != b.TextEmphasisMark {
+		return false
+	}
+	if !equalColor(&a.TextEmphasisColor, &b.TextEmphasisColor) {
+		return false
+	}
+	if a.TextEmphasisPosition != b.TextEmphasisPosition {
+		return false
+	}
 	if a.TextUnderlinePosition != b.TextUnderlinePosition {
 		return false
 	}
@@ -740,6 +749,9 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.RubyPosition))
 	h = mix(h, uint64(x.RubyAlign))
 	h = mix(h, uint64(x.RubyOverhang))
+	h = mixString(h, x.TextEmphasisMark)
+	h = hashColor(h, &x.TextEmphasisColor)
+	h = mix(h, uint64(x.TextEmphasisPosition))
 	h = mix(h, uint64(x.TextUnderlinePosition))
 	h = hashDimension(h, &x.TextDecorationThickness)
 	h = hashDimension(h, &x.TextUnderlineOffset)

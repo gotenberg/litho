@@ -1121,6 +1121,13 @@ type Style struct {
 	RubyPosition RubyPosition
 	RubyAlign    RubyAlign
 	RubyOverhang RubyOverhang
+	// TextEmphasisMark is the emphasis mark drawn over each character
+	// that takes one, "" for none (CSS Text Decoration 3, 3.1), in
+	// TextEmphasisColor (3.2) on the side TextEmphasisPosition gives
+	// (3.4).
+	TextEmphasisMark     string
+	TextEmphasisColor    Color
+	TextEmphasisPosition EmphasisPosition
 	// TextUnderlinePosition says where underlines lie (CSS Text Decoration
 	// 4, 2.7), zero for auto.
 	TextUnderlinePosition UnderlinePosition
@@ -1415,7 +1422,8 @@ const (
 	slotBorderLeft
 	slotOutline
 	slotTextDecoration
-	numColorSlots = 7
+	slotTextEmphasis
+	numColorSlots = 8
 )
 
 // slotIndex returns the index of the one bit of slot.
@@ -1461,19 +1469,24 @@ func Initial() *Style {
 // and then shared ([Styles.ShareCopy]).
 func InitialValue() Style {
 	return Style{
-		Opacity:             1,
-		ZIndex:              ZIndex{Auto: true},
-		TransformOrigin:     [2]Dimension{{Kind: Percent, Value: 0.5}, {Kind: Percent, Value: 0.5}},
-		MinWidth:            Pts(0),
-		MinHeight:           Pts(0),
-		MaxWidth:            Dimension{Kind: None},
-		MaxHeight:           Dimension{Kind: None},
-		Margin:              [4]Dimension{Pts(0), Pts(0), Pts(0), Pts(0)},
-		Padding:             [4]Dimension{Pts(0), Pts(0), Pts(0), Pts(0)},
-		BackgroundPosition:  [2]Dimension{{Kind: Percent}, {Kind: Percent}},
-		BackgroundOrigin:    PaddingEdge,
-		ObjectPosition:      [2]Dimension{{Kind: Percent, Value: 0.5}, {Kind: Percent, Value: 0.5}},
-		Color:               Color{A: 1},
+		Opacity:            1,
+		ZIndex:             ZIndex{Auto: true},
+		TransformOrigin:    [2]Dimension{{Kind: Percent, Value: 0.5}, {Kind: Percent, Value: 0.5}},
+		MinWidth:           Pts(0),
+		MinHeight:          Pts(0),
+		MaxWidth:           Dimension{Kind: None},
+		MaxHeight:          Dimension{Kind: None},
+		Margin:             [4]Dimension{Pts(0), Pts(0), Pts(0), Pts(0)},
+		Padding:            [4]Dimension{Pts(0), Pts(0), Pts(0), Pts(0)},
+		BackgroundPosition: [2]Dimension{{Kind: Percent}, {Kind: Percent}},
+		BackgroundOrigin:   PaddingEdge,
+		ObjectPosition:     [2]Dimension{{Kind: Percent, Value: 0.5}, {Kind: Percent, Value: 0.5}},
+		Color:              Color{A: 1},
+		// text-emphasis-color is inherited and starts as currentColor,
+		// which an element without a value resolves against its own
+		// color (CSS Text Decoration 3, 3.2).
+		TextEmphasisColor:   Color{A: 1},
+		currentColor:        slotTextEmphasis,
 		FontFamilies:        []string{"serif"},
 		FontSize:            16 * Pt,
 		fontSizeKeyword:     mediumKeyword,

@@ -197,6 +197,9 @@ const (
 	pRubyPosition
 	pRubyAlign
 	pRubyOverhang
+	pTextEmphasisStyle
+	pTextEmphasisColor
+	pTextEmphasisPosition
 	numProps
 )
 
@@ -949,6 +952,9 @@ func init() {
 		props[id] = def
 	}
 	for id, def := range rubyProps() {
+		props[id] = def
+	}
+	for id, def := range emphasisProps() {
 		props[id] = def
 	}
 	gcpmProps()
