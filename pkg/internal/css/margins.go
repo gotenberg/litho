@@ -365,17 +365,17 @@ func (r *Resolver) PageIn(ctx context.Context, sel PageSelector, root *Style) (P
 	if err := ctx.Err(); err != nil {
 		return PageStyle{}, err
 	}
-	pageCtx, vars := cs.cascade(ctxCands, root, nil, false)
+	pageCtx, vars := cs.cascade(ctxCands, root, nil, false, nil)
 	ps.CounterReset, ps.CounterIncrement, ps.CounterSet = pageCtx.CounterReset, pageCtx.CounterIncrement, pageCtx.CounterSet
 	if fc := boxCands[footnoteArea]; len(fc) > 0 {
-		st, _ := cs.cascade(slices.Clone(fc), pageCtx, vars, false)
+		st, _ := cs.cascade(slices.Clone(fc), pageCtx, vars, false, nil)
 		st.Display, st.Float, st.Position = Block, FloatNone, Static
 		ps.Footnote = st
 	}
 	if nc := boxCands[noteArea]; len(nc) > 0 {
 		// The note area keeps its display, float and position: they
 		// place it on the page.
-		ps.NoteArea, _ = cs.cascade(slices.Clone(nc), pageCtx, vars, false)
+		ps.NoteArea, _ = cs.cascade(slices.Clone(nc), pageCtx, vars, false, nil)
 	}
 	for b := range NumMarginBoxes {
 		if len(boxCands[b]) == 0 {
@@ -390,7 +390,7 @@ func (r *Resolver) PageIn(ctx context.Context, sel PageSelector, root *Style) (P
 		for i := range defaults {
 			cands = append(cands, cand{d: &defaults[i], rank: rank(UserAgent, false), ord: -1, idx: i})
 		}
-		st, _ := cs.cascade(cands, pageCtx, vars, false)
+		st, _ := cs.cascade(cands, pageCtx, vars, false, nil)
 		if st.Content.Kind != ContentList {
 			continue
 		}

@@ -135,6 +135,10 @@ const (
 	// unit of the first formatted line of a block container (CSS Pseudo 4,
 	// 2.3). The converter cuts it from the text that holds it.
 	PseudoFirstLetter
+	// PseudoFirstLine is ::first-line, the contents of the first formatted
+	// line of a block container (CSS Pseudo 4, 2.1). Its style holds the
+	// properties that apply to it alone ([Computed.FirstLine]).
+	PseudoFirstLine
 	numPseudos
 )
 
@@ -144,7 +148,7 @@ var pseudoNames = map[string]PseudoElement{
 	"before": PseudoBefore, "after": PseudoAfter, "marker": PseudoMarker,
 	"footnote-call": PseudoFootnoteCall, "footnote-marker": PseudoFootnoteMarker,
 	"note-call": PseudoNoteCall, "note-marker": PseudoNoteMarker, "note-callback": PseudoNoteCallback,
-	"first-letter": PseudoFirstLetter,
+	"first-letter": PseudoFirstLetter, "first-line": PseudoFirstLine,
 }
 
 // NewResolver indexes the rules of sheets, in order, whose media
@@ -297,18 +301,21 @@ type Computed struct {
 	styles map[*html.Node]*Style
 	pseudo map[pseudoKey]*Style
 	warns  []Warning
-	// letters restyles ::first-letter for the inline box that holds the
-	// letter, nil when no element has one.
-	letters *letterStyler
+	// re cascades the typographic pseudo-elements, and the boxes on a
+	// first line, again under another parent style, nil when no element
+	// has a ::first-letter or a ::first-line.
+	re *restyler
 }
 
-// letterStyler cascades the ::first-letter of an element again under
-// another parent style. It keeps the state of the Compute call that made
-// it, which mu guards.
-type letterStyler struct {
-	mu    sync.Mutex
-	cs    *computeState
-	cands map[*html.Node][]cand
+// restyler cascades an element, a pseudo-element of it, its
+// ::first-letter or its ::first-line again under another parent style. It
+// keeps the state of the Compute call that made it, which mu guards.
+type restyler struct {
+	mu sync.Mutex
+	cs *computeState
+	// letters and lines hold the declarations of each ::first-letter and
+	// ::first-line.
+	letters, lines map[*html.Node][]cand
 }
 
 // pseudoKey names one pseudo-element of one element.
@@ -341,22 +348,141 @@ func (c *Computed) Pseudo(n *html.Node, which PseudoElement) *Style {
 // not modify it.
 func (c *Computed) FirstLetter(n *html.Node, parent *Style) *Style {
 	ps := c.pseudo[pseudoKey{n, PseudoFirstLetter}]
-	if ps == nil || parent == nil || parent == c.styles[n] || c.letters == nil {
+	if ps == nil || parent == nil || parent == c.styles[n] || c.re == nil {
 		return ps
 	}
-	l := c.letters
-	cands, ok := l.cands[n]
+	cands, ok := c.re.letters[n]
 	if !ok {
 		return ps
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	c.re.mu.Lock()
+	defer c.re.mu.Unlock()
+	cs := c.re.cs
+	cs.node = n
 	// The letter sits in a block container, whatever contents element
 	// holds its text.
-	l.cs.boxParent = Block
-	st, _ := l.cs.cascade(cands, parent, l.cs.vars[n], false)
+	cs.boxParent = Block
+	st, _ := cs.cascade(cands, parent, cs.vars[n], false, nil)
 	return st
 }
+
+// FirstLine returns the style of the ::first-line of the element n
+// inheriting from parent, the style of the block container whose first
+// formatted line it styles: n's box or a descendant's (CSS Pseudo 4,
+// 2.1.1). A nil parent, or n's own style, gives [Computed.Pseudo]'s style.
+// It holds the declarations of the properties that apply to ::first-line
+// alone (see firstLineProps); the others take their inherited or initial
+// values. It returns nil when no rule targets n's ::first-line. The Style
+// is shared: do not modify it.
+func (c *Computed) FirstLine(n *html.Node, parent *Style) *Style {
+	ps := c.pseudo[pseudoKey{n, PseudoFirstLine}]
+	if ps == nil || parent == nil || parent == c.styles[n] || c.re == nil {
+		return ps
+	}
+	cands, ok := c.re.lines[n]
+	if !ok {
+		return ps
+	}
+	c.re.mu.Lock()
+	defer c.re.mu.Unlock()
+	cs := c.re.cs
+	cs.node = n
+	cs.boxParent = Block
+	st, _ := cs.cascade(cands, parent, cs.vars[n], false, &firstLineProps)
+	return st
+}
+
+// Restyle returns the style the element n computes when it inherits from
+// parent rather than from its parent element's style: the style of the
+// fragment of n on a first formatted line, which inherits from the
+// ::first-line (CSS Pseudo 4, 2.1.3). Its custom properties still inherit
+// from the parent element. A nil parent, or the parent element's own
+// style, gives [Computed.Style]'s; so does a document without a
+// ::first-line. The Style is shared: do not modify it.
+func (c *Computed) Restyle(n *html.Node, parent *Style) *Style {
+	st := c.styles[n]
+	if st == nil || parent == nil || c.re == nil || c.re.lines == nil {
+		return st
+	}
+	p := n.Parent
+	if isElement(p) && c.styles[p] == parent {
+		return st
+	}
+	c.re.mu.Lock()
+	defer c.re.mu.Unlock()
+	cs := c.re.cs
+	var parentVars map[string][]token
+	if isElement(p) {
+		parentVars = cs.vars[p]
+	}
+	out, ok := cs.restyle(n, &cs.r.elems, parent, parentVars, true)
+	if !ok {
+		return st
+	}
+	return out
+}
+
+// RestylePseudo returns the style of the pseudo-element which of the
+// element n when it inherits from parent rather than from n's style: a
+// ::before, ::after or ::marker on a first formatted line, which inherits
+// from the ::first-line (CSS Pseudo 4, 2.1.3). It returns
+// [Computed.Pseudo]'s style when parent is nil or n's own style, or when
+// the document has no ::first-line, and nil when no rule targets the
+// pseudo-element. The Style is shared: do not modify it.
+func (c *Computed) RestylePseudo(n *html.Node, which PseudoElement, parent *Style) *Style {
+	ps := c.pseudo[pseudoKey{n, which}]
+	if ps == nil || parent == nil || parent == c.styles[n] || c.re == nil || c.re.lines == nil {
+		return ps
+	}
+	if which == PseudoFirstLetter {
+		return c.FirstLetter(n, parent)
+	}
+	c.re.mu.Lock()
+	defer c.re.mu.Unlock()
+	cs := c.re.cs
+	out, ok := cs.restyle(n, &cs.r.pseudos[which], parent, cs.vars[n], false)
+	if !ok {
+		return ps
+	}
+	return out
+}
+
+// firstLineProps are the longhands a ::first-line declaration sets: the
+// properties CSS Pseudo 4, 2.1.2 lists as applying to it that Chromium
+// applies, and those Chromium applies beyond the list (opacity,
+// visibility, box-shadow). litho follows Chromium: it drops text-emphasis
+// style and position, which the list's inline typesetting properties
+// include, and vertical-align, which Chromium computes on ::first-line
+// and does not lay out.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 computes on
+//     ::first-line the font properties, color, opacity, visibility, the
+//     background properties, box-shadow, text-shadow, the
+//     text-decoration longhands, text-underline-offset and -position,
+//     text-emphasis-color, word-spacing, letter-spacing, text-transform,
+//     line-height, vertical-align, ruby-position and text-justify, and
+//     drops text-align, text-align-last, text-indent, white-space,
+//     word-break, overflow-wrap, line-break, tab-size, hyphens,
+//     direction, unicode-bidi, writing-mode, the box properties, float,
+//     position, text-emphasis-style and -position, ruby-align,
+//     text-autospace and text-wrap-style; a vertical-align of 20px moves
+//     no glyph.
+var firstLineProps = func() [numProps]bool {
+	var on [numProps]bool
+	for _, id := range []propID{
+		pFontSize, pColor, pVisibility, pOpacity, pFontFamily, pFontWeight, pFontStyle, pFontVariant,
+		pFontStretch, pFontSynthesisWeight, pFontSynthesisStyle, pFontKerning, pLineHeight,
+		pBgColor, pBgImage, pBgRepeat, pBgPosition, pBgSize, pBgOrigin, pBgClip, pBgAttachment,
+		pBoxShadow, pTextShadow, pTextDecoration, pTextDecorationColor, pTextDecorationStyle,
+		pTextDecorationThickness, pTextDecorationSkipInk, pTextUnderlineOffset, pTextUnderlinePosition,
+		pTextEmphasisColor, pTextTransform, pLetterSpacing, pWordSpacing, pRubyPosition, pTextJustify,
+	} {
+		on[id] = true
+	}
+	return on
+}()
 
 // Warnings returns what the cascade and the stylesheets dropped or
 // approximated, deduplicated and capped, in a deterministic order. The
@@ -426,9 +552,10 @@ type computeState struct {
 	cands   []cand
 	matched []int
 	classes []string
-	// letterCands holds the declarations of each ::first-letter, for
-	// [Computed.FirstLetter], nil for none.
-	letterCands map[*html.Node][]cand
+	// letterCands and lineCands hold the declarations of each
+	// ::first-letter and ::first-line, for [Computed.FirstLetter] and
+	// [Computed.FirstLine], nil for none.
+	letterCands, lineCands map[*html.Node][]cand
 }
 
 // fontKey is what selects a font for the ex and ch units.
@@ -550,8 +677,8 @@ func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOpt
 		}
 	}
 	c := &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result()}
-	if cs.letterCands != nil {
-		c.letters = &letterStyler{cs: cs, cands: cs.letterCands}
+	if cs.letterCands != nil || cs.lineCands != nil {
+		c.re = &restyler{cs: cs, letters: cs.letterCands, lines: cs.lineCands}
 	}
 	return c, nil
 }
@@ -566,29 +693,11 @@ func (cs *computeState) element(n, parent *html.Node) {
 		parentStyle = cs.out[parent]
 		parentVars = cs.vars[parent]
 	}
-	cands := cs.match(n, &cs.r.elems)
-	if cs.opts.Hints != nil {
-		hints := cs.opts.Hints(n)
-		for i := range hints {
-			cands = append(cands, cand{d: &hints[i], rank: rank(Author, false), ord: -1, idx: i})
-		}
-	}
-	if v, ok := attr(n, "style"); ok && (n.Namespace == "" || n.Namespace == "svg") {
-		decls := ParseDeclarations(v, ParseOptions{BaseURL: cs.opts.BaseURL})
-		for i := range decls {
-			cands = append(cands, cand{d: &decls[i], rank: rank(Author, decls[i].Important), spec: styleAttrSpec, ord: len(cs.r.rules) + 1, idx: i})
-		}
-	}
+	cands := cs.elementCands(n)
 	cs.node = n
-	cs.boxParent = Block
-	for p := parent; p != nil; p = p.Parent {
-		if ps := cs.out[p]; ps != nil && ps.Display != Contents {
-			cs.boxParent = ps.Display
-			break
-		}
-	}
+	cs.boxParent = cs.boxParentOf(parent)
 	cs.noContents = contentsIsNone(n)
-	st, vars := cs.cascade(cands, parentStyle, parentVars, parent == nil)
+	st, vars := cs.cascade(cands, parentStyle, parentVars, parent == nil, nil)
 	cs.noContents = false
 	cs.cands = cands[:0]
 	cs.out[n] = st
@@ -606,23 +715,100 @@ func (cs *computeState) element(n, parent *html.Node) {
 		if len(pc) == 0 {
 			continue
 		}
-		if pe == PseudoFirstLetter {
+		var only *[numProps]bool
+		switch pe { //nolint:exhaustive // the other pseudo-elements are cascaded once
+		case PseudoFirstLetter:
 			// The buffer match returns is reused by the next element.
 			pc = slices.Clone(pc)
 			if cs.letterCands == nil {
 				cs.letterCands = map[*html.Node][]cand{}
 			}
 			cs.letterCands[n] = pc
+		case PseudoFirstLine:
+			pc = slices.Clone(pc)
+			if cs.lineCands == nil {
+				cs.lineCands = map[*html.Node][]cand{}
+			}
+			cs.lineCands[n] = pc
+			only = &firstLineProps
 		}
-		ps, _ := cs.cascade(pc, st, vars, false)
+		ps, _ := cs.cascade(pc, st, vars, false, only)
 		cs.pseudo[pseudoKey{n, pe}] = ps
 	}
 }
 
+// elementCands returns the declarations competing for the element n: its
+// matching rules, its presentational hints and its style attribute, in a
+// buffer the next match reuses.
+func (cs *computeState) elementCands(n *html.Node) []cand {
+	cands := cs.match(n, &cs.r.elems)
+	if cs.opts.Hints != nil {
+		hints := cs.opts.Hints(n)
+		for i := range hints {
+			cands = append(cands, cand{d: &hints[i], rank: rank(Author, false), ord: -1, idx: i})
+		}
+	}
+	if v, ok := attr(n, "style"); ok && (n.Namespace == "" || n.Namespace == "svg") {
+		decls := ParseDeclarations(v, ParseOptions{BaseURL: cs.opts.BaseURL})
+		for i := range decls {
+			cands = append(cands, cand{d: &decls[i], rank: rank(Author, decls[i].Important), spec: styleAttrSpec, ord: len(cs.r.rules) + 1, idx: i})
+		}
+	}
+	return cands
+}
+
+// restyle matches the element n again against the selectors of x, its
+// element rules with its hints and style attribute when elem is set, and
+// cascades what matches under parent. It reports false when the match
+// ran past the step budget, which leaves the style unknown. It runs after
+// Compute, so it fills the ancestor filter with n's ancestors first.
+func (cs *computeState) restyle(n *html.Node, x *selIndex, parent *Style, parentVars map[string][]token, elem bool) (*Style, bool) {
+	saved := cs.anc
+	cs.anc = &ancestorFilter{}
+	for a := n.Parent; isElement(a); a = a.Parent {
+		cs.anc.push(a)
+	}
+	defer func() { cs.anc = saved }()
+	cs.elem++
+	var cands []cand
+	if elem {
+		cands = cs.elementCands(n)
+	} else {
+		cands = cs.match(n, x)
+	}
+	if cs.m.over {
+		return nil, false
+	}
+	cs.node = n
+	if elem {
+		cs.boxParent = cs.boxParentOf(parentElement(n))
+		cs.noContents = contentsIsNone(n)
+	} else {
+		cs.boxParent = cs.boxParentOf(n)
+	}
+	st, _ := cs.cascade(cands, parent, parentVars, false, nil)
+	cs.noContents = false
+	cs.cands = cands[:0]
+	return st, true
+}
+
+// boxParentOf returns the display of the box the children of the element
+// p sit in: p's own, or the nearest ancestor's past the elements of
+// display contents, Block for none.
+func (cs *computeState) boxParentOf(p *html.Node) Display {
+	for ; p != nil; p = p.Parent {
+		if ps := cs.out[p]; ps != nil && ps.Display != Contents {
+			return ps.Display
+		}
+	}
+	return Block
+}
+
 // cascade sorts the declarations competing for one element or
 // pseudo-element and computes its style from them, and its custom
-// properties.
-func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map[string][]token, isRoot bool) (*Style, map[string][]token) {
+// properties. only, when not nil, names the longhands the declarations
+// may set: the others take their inherited or initial values.
+func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map[string][]token, isRoot bool, only *[numProps]bool) (*Style, map[string][]token) {
 	slices.SortStableFunc(cands, func(a, b cand) int {
 		if c := cmp.Compare(a.rank, b.rank); c != 0 {
 			return c
@@ -692,6 +878,13 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 			}
 			for _, e := range c.d.entries {
 				user[side(c.d, e.id)] = e.v
+			}
+		}
+	}
+	if only != nil {
+		for id := range winners {
+			if !only[id] {
+				winners[id] = nil
 			}
 		}
 	}
