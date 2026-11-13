@@ -21,6 +21,9 @@ type floatRect struct {
 	// border is its border box, left, top, right and bottom.
 	word   bool
 	border [4]float64
+	// initial marks the margin box of an initial letter
+	// (initialletter.go).
+	initial bool
 }
 
 // wordBandTrim is how much of the bottom of a line's band an exclusion of
@@ -184,10 +187,18 @@ func (c *bfc) below(y, h float64) float64 {
 func (c *bfc) place(side css.Float, w, h, minY, left, right float64) (float64, float64) {
 	y := minY
 	for _, f := range c.floats {
-		if f.wrap == css.FrameWrapThrough {
+		if f.wrap == css.FrameWrapThrough && !f.initial {
 			y = max(y, f.y0)
 		}
 	}
+	return c.placeBeside(side, w, h, y, left, right)
+}
+
+// placeBeside returns where a box of margin box w by h goes beside the
+// floats, no higher than y, as [bfc.place] places a float but for the rule
+// that keeps a float no higher than an earlier one: an initial letter is
+// no float (CSS Inline 3, 4.9.3).
+func (c *bfc) placeBeside(side css.Float, w, h, y, left, right float64) (float64, float64) {
 	for range len(c.floats) + 1 {
 		l, r := c.band(y, max(h, eps), left, right)
 		x := l

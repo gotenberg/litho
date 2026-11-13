@@ -5,8 +5,6 @@ import (
 	"math"
 	"slices"
 
-	gofont "github.com/go-text/typesetting/font"
-
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -87,9 +85,6 @@ type painter struct {
 	// shadowPixels counts the raster pixels of the blurred shadows drawn,
 	// against maxShadowBudget.
 	shadowPixels int
-	// outlines caches the parsed faces whose glyph outlines a
-	// background-clip: text clip draws.
-	outlines map[*typeset.Face]*gofont.Face
 	// cuts reports, for each item of the line being painted, inline box
 	// fragments that paint before it, nil for none: a decoration line
 	// spanning several runs does not cross them (decoRun).

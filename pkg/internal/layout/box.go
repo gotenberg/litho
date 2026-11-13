@@ -216,6 +216,9 @@ type box struct {
 	// or image box, whose white space is preserved.
 	text   string
 	marker bool
+	// initial reports an initial letter, a float the converter made of a
+	// ::first-letter (Node.InitialLetter, initialletter.go).
+	initial bool
 	// lang is the language in force.
 	lang string
 	// elem is the structure element the box's fragments hang from, nil for

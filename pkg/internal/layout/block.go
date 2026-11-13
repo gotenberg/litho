@@ -1,12 +1,10 @@
 package layout
 
 import (
-	"fmt"
 	"math"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
-	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // cblock is a containing block: the content box edges a box resolves its
@@ -572,6 +570,12 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 				top = fy
 			}
 		}
+		if y := bc.clearInitial(); y > top+eps {
+			// A box that establishes a formatting context goes below an
+			// initial letter (CSS Inline 3, 4.9.2).
+			mc.commit(top)
+			top = y
+		}
 		mc.commitFloats(top)
 		e.layoutBFCRoot(b, cb, bc, top)
 		mc.commit(b.y)
@@ -1068,6 +1072,9 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 	if f.st.WordAnchor.Set {
 		return e.layoutWordFloat(f, cb, bc, minY)
 	}
+	if f.initial {
+		return e.layoutInitialLetter(f, cb, bc, minY)
+	}
 	f.laidOut = true
 	resolveEdges(f, cb.w)
 	e.resolveSizing(f, cb, -1, -1)
@@ -1114,23 +1121,16 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 	if clampPage >= 0 {
 		e.clampToPage(f, clampPage)
 	}
-	if len(bc.floats) >= maxFloats {
-		e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("more than %d floats in one formatting context: later ones do not push content aside", maxFloats), f.y)
-		return -1
-	}
-	r := floatRect{
-		side: f.float, x0: f.x - f.m[css.Left], y0: f.y - f.m[css.Top],
-		x1: f.x - f.m[css.Left] + f.marginW(), y1: f.y - f.m[css.Top] + f.marginH(),
-	}
-	if clampPage >= 0 {
+	i := e.addFloatRect(f, bc, false)
+	if i >= 0 && clampPage >= 0 {
 		// The text wraps around the part of the float over the page
 		// area, which ends no lower than the page's.
+		r := &bc.floats[i]
 		top := e.pageTop(clampPage)
 		r.y0 = max(f.y-f.m[css.Top], top)
 		r.y1 = max(min(f.y-f.m[css.Top]+f.marginH(), top+e.areaH(clampPage)), r.y0)
 	}
-	bc.floats = append(bc.floats, r)
-	return len(bc.floats) - 1
+	return i
 }
 
 // layoutAtomic lays the inline block or inline replaced box a out in the

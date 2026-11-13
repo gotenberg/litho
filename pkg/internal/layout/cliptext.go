@@ -124,23 +124,27 @@ func descends(a, d *box) bool {
 
 // outlineFace returns the parsed program of the typeset face cf, nil when
 // it does not parse; each face is parsed once per layout.
-func (p *painter) outlineFace(cf *typeset.Face) *gofont.Face {
-	if f, ok := p.outlines[cf]; ok {
+func (p *painter) outlineFace(cf *typeset.Face) *gofont.Face { return p.e.outlineFace(cf) }
+
+// outlineFace returns the parsed program of the typeset face cf, nil when
+// it does not parse; each face is parsed once per layout.
+func (e *engine) outlineFace(cf *typeset.Face) *gofont.Face {
+	if f, ok := e.outlines[cf]; ok {
 		return f
 	}
-	if p.outlines == nil {
-		p.outlines = map[*typeset.Face]*gofont.Face{}
+	if e.outlines == nil {
+		e.outlines = map[*typeset.Face]*gofont.Face{}
 	}
 	f, err := gofont.ParseTTF(bytes.NewReader(cf.Program))
 	if err != nil {
 		// The text stack shaped with this program, so it parses; one that
-		// does not adds no glyph to the clip, as a face without outlines.
-		if lg := p.e.opts.Logger; lg != nil {
-			lg.Debug("layout: face left out of a text clip", slog.Any("error", err))
+		// does not adds no glyph outline, as a face without outlines.
+		if lg := e.opts.Logger; lg != nil {
+			lg.Debug("layout: face without outlines", slog.Any("error", err))
 		}
 		f = nil
 	}
-	p.outlines[cf] = f
+	e.outlines[cf] = f
 	return f
 }
 

@@ -834,9 +834,30 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				}
 				s.placeWordFloats(lp, at)
 			}
+			lettered := false
+			if letter := initialLetterAt(lp, pos); letter != nil && len(s.lines) == 0 && !s.placed[letter] {
+				// A paragraph that starts with an initial letter goes below
+				// the initial letters before it (CSS Inline 3, 4.9.2).
+				top = max(top, bc.clearInitial())
+				for _, f := range lp.floats {
+					// The floats before the letter in the source are placed
+					// first, as their line would place them.
+					if f.box == letter {
+						break
+					}
+					if f.pos == pos && !s.placed[f.box] {
+						s.placed[f.box] = true
+						e.layoutFloat(f.box, cb, bc, top)
+					}
+				}
+				s.placed[letter] = true
+				e.layoutInitialLetter(letter, letterBlock(b, cb, indent), bc, top)
+				top += e.initialDrop(letter)
+				lettered = true
+			}
 			s.placeFloats(lp, pos, pos, top, mc, false)
 			lineIndent := 0.0
-			if indents(b.st, len(s.lines) == 0, paraFirst && prevForced) {
+			if indents(b.st, len(s.lines) == 0, paraFirst && prevForced) && !lettered {
 				lineIndent = indent
 			}
 			if first {
@@ -917,6 +938,43 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 	b.lines = s.lines
 	e.balance.unfit = s.unfit
 	return y
+}
+
+// letterBlock returns the part of the containing block cb of the
+// paragraph b, of text indent indent, an initial letter that starts its
+// first line is placed in. CSS Inline 3, 4.7.2 moves the letter by the
+// indent of its line, which then has no indent of its own; litho follows
+// Chromium, which moves it by twice the indent.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 puts a 3-line
+//     initial letter of a paragraph of text-indent 30px 60px in, and the
+//     text of its first line and of the lines beside it at its end
+//     edge; the reference of css/css-inline/initial-letter/
+//     initial-letter-indentation-rtl draws the letter of a 10px indent
+//     20px in.
+func letterBlock(b *box, cb cblock, indent float64) cblock {
+	if !indents(b.st, true, false) || indent == 0 {
+		return cb
+	}
+	in := min(2*indent, cb.w)
+	if b.st.Direction != css.RTL {
+		cb.x += in
+	}
+	cb.w -= in
+	return cb
+}
+
+// initialLetterAt returns the initial letter anchored at character pos
+// of p, nil for none.
+func initialLetterAt(p *ifcPara, pos int) *box {
+	for _, f := range p.floats {
+		if f.pos == pos && f.box.initial {
+			return f.box
+		}
+	}
+	return nil
 }
 
 // lineWidths returns the width every character of p takes on a line, a

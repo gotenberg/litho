@@ -158,6 +158,15 @@ type Node struct {
 	// block, a float or a positioned box draw none. The bar is an
 	// artifact.
 	ChangeBar bool
+	// InitialLetter, set on a floating Element whose Style has an
+	// InitialLetter, makes it an initial letter (CSS Inline 3, 4): the
+	// first letter of its paragraph, a float of the start side, at the
+	// font size that makes its cap height span InitialLetter.Size lines
+	// of the paragraph, its cap height on the first line's. The line
+	// height and font size of its Style are not used. A block that starts
+	// with an initial letter, or that establishes a formatting context,
+	// goes below the initial letters before it.
+	InitialLetter bool
 	// Footnote, set on an inline Element, makes it a footnote call: the
 	// node is laid out in the flow, and the footnote body Footnote holds
 	// is laid out in the footnote area of the page the call lands on, or

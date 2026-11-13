@@ -343,6 +343,7 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 	b := e.newBox(n, st, kindBlock, ctx)
 	b.float = float
 	b.abs = isAbs(st)
+	b.initial = n.InitialLetter && float != css.FloatNone && st.InitialLetter.Size >= 1
 	cctx := e.enter(n, b, ctx)
 	if float != css.FloatNone || b.abs {
 		cctx.decos = ownDecos(b, b.st)

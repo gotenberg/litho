@@ -6,6 +6,8 @@ import (
 	"math"
 	"sort"
 
+	gofont "github.com/go-text/typesetting/font"
+
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -71,6 +73,12 @@ type engine struct {
 	// until one is built.
 	firstLines map[*box]*firstLine
 	cloneOf    map[*box]*box
+	// outlines caches the parsed faces whose glyph outlines a text clip,
+	// an underline that skips ink or an initial letter reads; letters the
+	// styles of the initial letters, sized for their paragraphs
+	// (initialletter.go).
+	outlines map[*typeset.Face]*gofont.Face
+	letters  map[*box]*css.Style
 
 	root    *typeset.StructElem
 	rootBox *box
