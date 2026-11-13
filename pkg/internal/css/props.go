@@ -10,7 +10,7 @@ import (
 // propID names a longhand. The cascade computes longhands in this order:
 // font-size first, since em units resolve against it, then color, since
 // currentColor resolves to it.
-type propID uint8
+type propID uint16
 
 const (
 	pFontSize propID = iota
