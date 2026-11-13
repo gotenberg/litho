@@ -1,0 +1,16 @@
+# Where the property table and @webref/css differ.
+initial	block-ellipsis	open: CSS Overflow 4 (editor's draft) gives no-ellipsis; litho parses an older draft's none | auto. Chromium 156 has no such property (CSS.supports false), so the standard decides
+initial	border-bottom-left-radius	open: 0 computes to Points 0 where the initial value is held as Auto; both draw a square corner
+initial	border-bottom-right-radius	open: 0 computes to Points 0 where the initial value is held as Auto; both draw a square corner
+initial	border-top-left-radius	open: 0 computes to Points 0 where the initial value is held as Auto; both draw a square corner
+initial	border-top-right-radius	open: 0 computes to Points 0 where the initial value is held as Auto; both draw a square corner
+initial	continue	open: CSS Overflow 4 (editor's draft) gives normal; litho parses an older draft's auto. Chromium 156 has no such property (CSS.supports false), so the standard decides
+initial	font-family	the initial value is prose (depends on user agent), which no declaration parses
+initial	grid-auto-columns	open: auto computes to a one-track list where the initial value is held as an empty one; both size implicit tracks as auto
+initial	grid-auto-rows	open: auto computes to a one-track list where the initial value is held as an empty one; both size implicit tracks as auto
+initial	max-lines	open: CSS Overflow 4 (editor's draft) gives <integer [1,inf]> || auto; litho parses an older draft's none. Chromium 156 has no such property (CSS.supports false), so the standard decides
+initial	outline-color	CSS UI 4 gives auto; Chromium 156 refuses outline-color: auto (CSS.supports false), and litho follows it
+initial	text-autospace	CSS Text 4 gives normal; Chromium 156 computes no-autospace on a plain element, and litho's initial value is that
+unknown	-webkit-box-decoration-break	a legacy name Chromium 156 parses (CSS.supports true) that webref does not list as an alias of box-decoration-break
+unknown	font-smooth	ignored by design, without a warning: a rendering hint with no effect on paper, in no specification webref reads (Chromium 156: CSS.supports false)
+unknown	text-autospace-size	open: a property of an older CSS Text 4 draft, which Chromium 156 does not parse (CSS.supports false)

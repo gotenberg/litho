@@ -1,7 +1,6 @@
 package css
 
 import (
-	"bufio"
 	"html"
 	"os"
 	"regexp"
@@ -184,7 +183,7 @@ func TestUserAgentSheet(t *testing.T) {
 		}
 	}
 	slices.Sort(diffs)
-	listed := readUADifferences(t)
+	listed := readDifferences(t, uaDifferencesFile, 3)
 	for _, d := range diffs {
 		if _, ok := listed[d]; !ok {
 			t.Errorf("not in %s: %s", uaDifferencesFile, d)
@@ -194,33 +193,4 @@ func TestUserAgentSheet(t *testing.T) {
 	for d := range listed {
 		t.Errorf("listed in %s, but the sheets agree: %s", uaDifferencesFile, d)
 	}
-}
-
-// readUADifferences reads the listed differences: lines of a kind, a
-// condition|selector|property key and a reason, tab-separated, and
-// comment lines starting with #.
-func readUADifferences(t *testing.T) map[string]string {
-	t.Helper()
-	f, err := os.Open(uaDifferencesFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close() // read-only file: Close reports nothing a read did not
-	out := map[string]string{}
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := sc.Text()
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.Split(line, "\t")
-		if len(parts) != 3 || strings.TrimSpace(parts[2]) == "" {
-			t.Fatalf("%s: %q is not a kind, a key and a reason", uaDifferencesFile, line)
-		}
-		out[parts[0]+"\t"+parts[1]] = parts[2]
-	}
-	if err := sc.Err(); err != nil {
-		t.Fatal(err)
-	}
-	return out
 }
