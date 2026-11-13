@@ -179,3 +179,17 @@ func TestClipPath_MarginBoxRadii(t *testing.T) {
 		}
 	}
 }
+
+// TestClipPath_MarginBoxOfAnOverConstrainedBlock locks the margin box of
+// a block in normal flow whose right margin CSS 2.1, 10.3.3 stretched: the
+// reference box takes the specified margin, as Chromium does.
+func TestClipPath_MarginBoxOfAnOverConstrainedBlock(t *testing.T) {
+	st := &css.Style{}
+	for s := range st.Margin {
+		st.Margin[s] = css.Pts(25)
+	}
+	b := &box{st: st, parent: &box{st: &css.Style{}}, w: 150, h: 150, m: [4]float64{25, 625, 25, 25}}
+	if r, _ := (&painter{}).referenceBox(b, css.GeoMargin); r.Width != 200 {
+		t.Errorf("margin box %+v, want 200 wide", r)
+	}
+}

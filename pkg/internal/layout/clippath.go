@@ -56,12 +56,36 @@ func (p *painter) referenceBox(b *box, g css.GeometryBox) (typeset.Rect, [4][2]f
 	case css.GeoContent:
 		r, radii = insetRect(r, radii, addSides(b.bd, b.pd))
 	case css.GeoMargin:
-		m := b.m
+		m := shapeMargins(b)
 		r = typeset.Rect{X: r.X - m[css.Left], Y: r.Y - m[css.Top], Width: r.Width + m[css.Left] + m[css.Right], Height: r.Height + m[css.Top] + m[css.Bottom]}
 		// CSS Masking 1, 5.1 takes the margin box of CSS Shapes 1, 5.
 		radii = marginRadii(r, radii, m)
 	}
 	return r, radii
+}
+
+// shapeMargins returns the margins of b's margin box as a reference box:
+// its used margins, except that the horizontal margins of a block in
+// normal flow are the specified ones, not the one CSS 2.1, 10.3.3 stretches
+// to fill an over-constrained line, as Chromium measures the margin box.
+//
+// # Corpus evidence
+//
+//   - wpt: css-masking/clip-path/clip-path-polygon-008: Chromium 156's
+//     screenshot places polygon() percentages of the margin-box of a 200px
+//     wide margin box in an 800px window against 200px, not against the
+//     stretched right margin.
+func shapeMargins(b *box) [4]float64 {
+	m := b.m
+	st := b.st
+	if b.parent == nil || b.inline || b.float != css.FloatNone || b.abs || b.isItem() || b.tpart != partNone ||
+		st.Margin[css.Left].Kind == css.Auto || st.Margin[css.Right].Kind == css.Auto {
+		return m
+	}
+	// The used margins and border box fill the containing block.
+	cbw := b.borderW() + m[css.Left] + m[css.Right]
+	m[css.Left], m[css.Right] = resolve(st.Margin[css.Left], cbw), resolve(st.Margin[css.Right], cbw)
+	return m
 }
 
 // shapePath returns the clipping path of the basic shape s in the
