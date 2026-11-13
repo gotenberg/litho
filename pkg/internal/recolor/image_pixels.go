@@ -484,7 +484,7 @@ func (p *pixelConverter) convertPixel(values []uint32, in, res []float64, i int)
 	}
 	p.conv.Convert(in, res)
 	for c := range res {
-		res[c] = p.matteTarget[c] + a*(res[c]-p.matteTarget[c])
+		res[c] = p.matteTarget[c] + float64(a*(res[c]-p.matteTarget[c]))
 	}
 }
 

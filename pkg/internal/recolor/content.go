@@ -586,5 +586,5 @@ func (s *session) setOperator(stroke bool) string {
 // roundComponent clips a target component to [0, 1] and rounds it to
 // [componentDigits] places.
 func roundComponent(v float64) float64 {
-	return float64(int64(clamp01(v)*componentScale+0.5)) / componentScale
+	return float64(int64(float64(clamp01(v)*componentScale)+0.5)) / componentScale
 }

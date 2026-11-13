@@ -5,12 +5,12 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/function"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
@@ -388,9 +388,9 @@ func (s *session) planCIE(ctx context.Context, family string, arr ast.PdfArray) 
 			a, b, c := pow(clamp01(in[0]), gamma[0]), pow(clamp01(in[1]), gamma[1]), pow(clamp01(in[2]), gamma[2])
 			// 8.6.5.3: X = XA·A^GR + XB·B^GG + XC·C^GB, the Matrix columns.
 			toPCS([3]float64{
-				m[0]*a + m[3]*b + m[6]*c,
-				m[1]*a + m[4]*b + m[7]*c,
-				m[2]*a + m[5]*b + m[8]*c,
+				float64(m[0]*a) + float64(m[3]*b) + float64(m[6]*c),
+				float64(m[1]*a) + float64(m[4]*b) + float64(m[7]*c),
+				float64(m[2]*a) + float64(m[5]*b) + float64(m[8]*c),
 			}, out)
 		}, []float64{0, 0, 0})
 	}
@@ -572,11 +572,11 @@ func (s *session) planIndexed(ctx context.Context, arr ast.PdfArray, depth int) 
 	for i := range hival + 1 {
 		for j := range base.n {
 			// 8.6.6.3: a byte maps linearly onto the base component's range.
-			in[j] = lo[j] + float64(lookup[i*base.n+j])/255*(hi[j]-lo[j])
+			in[j] = lo[j] + float64(float64(lookup[i*base.n+j])/255*(hi[j]-lo[j]))
 		}
 		base.conv.Convert(in, out)
 		for _, v := range out {
-			palette = append(palette, byte(clamp01(v)*255+0.5))
+			palette = append(palette, byte(float64(clamp01(v)*255)+0.5))
 		}
 	}
 	keep.kind = planKeep
@@ -771,5 +771,5 @@ func pow(b, e float64) float64 {
 	if b <= 0 {
 		return 0
 	}
-	return math.Pow(b, e)
+	return detmath.Pow(b, e)
 }

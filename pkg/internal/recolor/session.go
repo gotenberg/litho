@@ -332,7 +332,7 @@ func (s *session) sampledFunction(ctx context.Context, domain []float64, outN in
 		}
 		// 7.10.2: the first input varies fastest.
 		for i := range m {
-			in[i] = domain[2*i] + float64(idx[i])/float64(k-1)*(domain[2*i+1]-domain[2*i])
+			in[i] = domain[2*i] + float64(float64(idx[i])/float64(k-1)*(domain[2*i+1]-domain[2*i]))
 		}
 		eval(in, out)
 		for _, v := range out {
