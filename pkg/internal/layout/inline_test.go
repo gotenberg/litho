@@ -602,3 +602,22 @@ func TestLineHeight_EmptyInline(t *testing.T) {
 		t.Errorf("block height %v, want 0: an empty span alone makes no line", got)
 	}
 }
+
+// TestVerticalAlign_TopAlignsTheSubtree locks CSS 2.1, 10.8.1: a top
+// aligned box aligns the top of its aligned subtree, its descendants'
+// boxes included, with the top of the line box, which grows to hold it.
+func TestVerticalAlign_TopAlignsTheSubtree(t *testing.T) {
+	t.Parallel()
+	top := inlineSty(func(s *css.Style) { s.VerticalAlign = css.VerticalAlign{Kind: css.AlignTop} })
+	big := inlineSty(func(s *css.Style) { s.FontSize = px(20) })
+	rb := boxes(t, doc(el(sty(), txt(sty(), "a"), el(top, el(big, txt(big, "b")), txt(top, "c")))), page(100, 50))
+	l := kid(t, rb, 0, 0).lines[0]
+	if !near(l.h/css.Pt, 20) || !near(l.baseline/css.Pt, 8) {
+		t.Errorf("line height %v baseline %v, want 20 and 8", l.h/css.Pt, l.baseline/css.Pt)
+	}
+	for _, it := range l.items {
+		if it.text != nil && it.box.st == big && !near(it.baseline/css.Pt, 16) {
+			t.Errorf("the 20px text sits on %v, want 16: its top at the line's", it.baseline/css.Pt)
+		}
+	}
+}

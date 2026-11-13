@@ -1482,6 +1482,35 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 	return l
 }
 
+// alignedExtent returns the top and bottom of the aligned subtree of the
+// top or bottom aligned box v (CSS 2.1, 10.8.1: "the top of the aligned
+// subtree is aligned with the top of the line box"): v's own box and those
+// of the inline boxes inside it, with the extents of the atomic boxes
+// inside it, lo and hi of each, in line coordinates.
+func (s *inlineState) alignedExtent(v *vbox, atomics [][2]float64) (float64, float64) {
+	lo, hi := v.shift-v.above, v.shift+v.below
+	for _, w := range s.vboxes {
+		if w == v || w.aligned || !insideVbox(w, v) {
+			continue
+		}
+		lo, hi = min(lo, w.shift-w.above), max(hi, w.shift+w.below)
+	}
+	for _, a := range atomics {
+		lo, hi = min(lo, a[0]), max(hi, a[1])
+	}
+	return lo, hi
+}
+
+// insideVbox reports whether the vertical box w lies inside v.
+func insideVbox(w, v *vbox) bool {
+	for a := w.parent; a != nil; a = a.parent {
+		if a == v {
+			return true
+		}
+	}
+	return false
+}
+
 // emptyStruts gives a vertical box to every inline box that opens on the
 // line of characters [start, end) of p, an empty one included: an empty
 // inline box still has its line-height and font, which grow the line it
@@ -1694,7 +1723,14 @@ func (s *inlineState) vertical(l *lineBox) {
 	slices.SortFunc(aligned, func(a, b *box) int { return s.d.order[a] - s.d.order[b] })
 	for _, k := range aligned {
 		v := s.vboxes[k]
-		h := v.above + v.below
+		var inside [][2]float64
+		for _, av := range atomics {
+			if !av.aligned && (av.v == v || insideVbox(av.v, v)) {
+				inside = append(inside, [2]float64{av.it.baseline - av.above, av.it.baseline + av.below})
+			}
+		}
+		lo, hi := s.alignedExtent(v, inside)
+		h := hi - lo
 		if h > bottom-top {
 			if k.st.VerticalAlign.Kind == css.AlignTop {
 				bottom = top + h
@@ -1704,9 +1740,9 @@ func (s *inlineState) vertical(l *lineBox) {
 		}
 		old := v.shift
 		if k.st.VerticalAlign.Kind == css.AlignTop {
-			v.shift = top + v.above
+			v.shift = top + (old - lo)
 		} else {
-			v.shift = bottom - v.below
+			v.shift = bottom - (hi - old)
 		}
 		for _, w := range s.vboxes {
 			for a := w.parent; a != nil; a = a.parent {
