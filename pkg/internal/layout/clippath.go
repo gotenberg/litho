@@ -94,17 +94,21 @@ func shapePath(s *css.Shape, r typeset.Rect) (*typeset.Path, bool) {
 		ops = roundedRect(in, fitRadii(in, radii))
 	case css.ShapeCircle, css.ShapeEllipse:
 		cx, cy := resolve(s.Center[0], w), resolve(s.Center[1], h)
+		dx0, dx1, dy0, dy1 := math.Abs(cx), math.Abs(w-cx), math.Abs(cy), math.Abs(h-cy)
 		side := func(sr css.ShapeRadius, near, far, ref float64) float64 {
 			switch sr.Side {
 			case css.RadiusFarthest:
 				return far
 			case css.RadiusLength:
 				return max(resolve(sr.Length, ref), 0)
+			case css.RadiusClosestCorner:
+				return math.Hypot(min(dx0, dx1), min(dy0, dy1))
+			case css.RadiusFarthestCorner:
+				return math.Hypot(max(dx0, dx1), max(dy0, dy1))
 			case css.RadiusClosest:
 			}
 			return near
 		}
-		dx0, dx1, dy0, dy1 := math.Abs(cx), math.Abs(w-cx), math.Abs(cy), math.Abs(h-cy)
 		var rx, ry float64
 		if s.Kind == css.ShapeCircle {
 			// A circle's percentage is of the reference box's diagonal

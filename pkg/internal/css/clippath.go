@@ -69,6 +69,11 @@ const (
 	RadiusClosest RadiusSide = iota
 	RadiusFarthest
 	RadiusLength
+	// RadiusClosestCorner and RadiusFarthestCorner reach the nearest and
+	// the farthest corner of the reference box (CSS Shapes 1, 3.1,
+	// <radial-extent>).
+	RadiusClosestCorner
+	RadiusFarthestCorner
 )
 
 // Shape is a computed <basic-shape> (CSS Shapes 1, 3.1).
@@ -313,6 +318,10 @@ func parseEllipse(args []token, circle bool) (*shapeSpec, bool) {
 			s.radius[i] = radiusArg{side: RadiusClosest}
 		case t.isIdent("farthest-side"):
 			s.radius[i] = radiusArg{side: RadiusFarthest}
+		case t.isIdent("closest-corner") && circle:
+			s.radius[i] = radiusArg{side: RadiusClosestCorner}
+		case t.isIdent("farthest-corner") && circle:
+			s.radius[i] = radiusArg{side: RadiusFarthestCorner}
 		default:
 			l, ok := parseLength(t, allowPct|allowMixed|nonNeg)
 			if !ok {

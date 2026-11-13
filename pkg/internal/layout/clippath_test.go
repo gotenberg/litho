@@ -134,3 +134,15 @@ func TestClip_AbsolutelyPositioned(t *testing.T) {
 		})
 	}
 }
+
+// TestClipPath_CircleCorner locks a circle sized to the farthest corner of
+// the reference box: from the centre of a square it covers the square.
+func TestClipPath_CircleCorner(t *testing.T) {
+	half := css.Dimension{Kind: css.Percent, Value: 0.5}
+	clip := css.ClipPath{Boxed: true, Shape: &css.Shape{Kind: css.ShapeCircle, Center: [2]css.Dimension{half, half}, Radius: [2]css.ShapeRadius{{Side: css.RadiusFarthestCorner}}}}
+	root := doc(el(sty(width(20), height(20), bg(red), clipPath(clip))))
+	img := render(t, run(t, root, page(20, 20)), 1)
+	if code(img.At(0, 0)) != 'R' || code(img.At(19, 19)) != 'R' {
+		t.Errorf("corners %v %v, want red", at(img, 0, 0), at(img, 19, 19))
+	}
+}

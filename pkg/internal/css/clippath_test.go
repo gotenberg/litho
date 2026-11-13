@@ -33,6 +33,9 @@ func TestClipPath_Values(t *testing.T) {
 			s := c.Shape
 			return s != nil && s.Radius[0].Side == RadiusClosest && s.Center == [2]Dimension{pct(0.5), pct(0.5)}
 		}},
+		{"clip-path: circle(farthest-corner at 10px 20px)", func(c ClipPath) bool {
+			return c.Shape != nil && c.Shape.Radius[0].Side == RadiusFarthestCorner
+		}},
 		{"clip-path: ellipse(farthest-side 10px)", func(c ClipPath) bool {
 			s := c.Shape
 			return s != nil && s.Kind == ShapeEllipse && s.Radius[0].Side == RadiusFarthest && s.Radius[1].Length == pts(7.5)
@@ -69,7 +72,7 @@ func TestClipPath_Invalid(t *testing.T) {
 		"circle(1px 2px)", "ellipse(1px)", "inset()", "inset(1px 2px 3px 4px 5px)", "polygon()",
 		"polygon(1px)", "polygon(evenodd)", "polygon(foo, 0 0)", "path(10)", "rect(1px 2px 3px)",
 		"xywh(0 0 -1px 2px)", "border-box padding-box", "circle() circle()", "url(#a) border-box",
-		"circle(-1px)", "inset(1px round)",
+		"circle(-1px)", "inset(1px round)", "ellipse(closest-corner 1px)",
 	} {
 		if c := styleOf(t, "clip-path: inset(1px); clip-path: "+v).ClipPath; c.Shape == nil || c.Shape.Kind != ShapeInset {
 			t.Errorf("%q was accepted: %+v", v, c)
