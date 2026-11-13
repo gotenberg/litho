@@ -56,7 +56,7 @@ func reduce(x float64) (uint64, float64) {
 	if x >= reduceThreshold {
 		return trigReduce(x)
 	}
-	j := uint64(x * (4 / math.Pi)) // the octant's integer part: x < 2^29
+	j := uint64(float64(x * (4 / math.Pi))) // the octant's integer part: x < 2^29
 	y := float64(j)
 	if j&1 == 1 {
 		j++
