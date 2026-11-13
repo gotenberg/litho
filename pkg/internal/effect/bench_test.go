@@ -82,6 +82,10 @@ func BenchmarkDilate(b *testing.B) {
 	benchRun(b, Coverage, func(ctx context.Context, s *Surface) error { return Dilate(ctx, s, 8, 8) })
 }
 
+func BenchmarkDilateDisc(b *testing.B) {
+	benchRun(b, Coverage, func(ctx context.Context, s *Surface) error { return DilateDisc(ctx, s, 8) })
+}
+
 func BenchmarkErodeRGBA(b *testing.B) {
 	benchRun(b, RGBA, func(ctx context.Context, s *Surface) error { return Erode(ctx, s, 8, 8) })
 }

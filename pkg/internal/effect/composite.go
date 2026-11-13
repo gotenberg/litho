@@ -2,6 +2,7 @@ package effect
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
@@ -58,6 +59,32 @@ func Composite(ctx context.Context, dst, src *Surface, op Operator) error {
 		}
 		for c := range ch {
 			b[c] = uint8(min(div255(uint32(a[c])*fa+uint32(b[c])*fb), 255)) //nolint:gosec // clamped to a byte
+		}
+	}
+	return nil
+}
+
+// Mask multiplies every channel of every pixel of s by the coverage m at
+// that pixel, in place: s In m, where m is an alpha alone (Compositing 1,
+// 9.1, source-in with the coverage as the destination). s is RGBA or a
+// coverage, m a coverage of s's size.
+func Mask(ctx context.Context, s, m *Surface) error {
+	if err := want("mask", m, Coverage); err != nil {
+		return err
+	}
+	if s.W != m.W || s.H != m.H {
+		return fmt.Errorf("mask: %w", ErrFormat)
+	}
+	ch := int(s.F)
+	for i, a := range m.Pix {
+		if i%(1<<20) == 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
+		p := s.Pix[i*ch : i*ch+ch : i*ch+ch]
+		for c := range p {
+			p[c] = uint8(div255(uint32(p[c]) * uint32(a))) //nolint:gosec // a byte times a fraction of 1
 		}
 	}
 	return nil

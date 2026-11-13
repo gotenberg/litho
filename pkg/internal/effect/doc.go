@@ -21,14 +21,16 @@
 //   - [Blur]: a separable convolution by integer [Kernel]s:
 //     [GaussianKernel], [TentKernel] (a box twice), [BoxKernel] (one to
 //     three boxes); [Edge] says what a blur reads past the edge.
-//   - [Dilate], [Erode]: grow and shrink by a rectangle.
+//   - [Dilate], [Erode]: grow and shrink by a rectangle; [DilateDisc],
+//     [ErodeDisc] by a disc.
 //   - [Offset]: a move by a fraction of a pixel, resampled bilinearly.
 //   - [Transform]: an affine map, resampled bilinearly.
 //   - [ColorMatrix] with [SaturateMatrix], [HueRotateMatrix],
 //     [LuminanceToAlphaMatrix], [GrayscaleMatrix], [SepiaMatrix].
 //   - [Transfer]: a lookup table a channel, from [TransferFunc].
 //   - [Flood], [Tint], [AlphaOf], [Threshold].
-//   - [Composite] by a Porter-Duff [Operator], [Arithmetic], [Merge].
+//   - [Composite] by a Porter-Duff [Operator], [Arithmetic], [Merge];
+//     [Mask], a surface times a coverage.
 //   - [Blend] by the sixteen [BlendMode]s.
 //   - [Tile], [AlphaRamp].
 //   - [Plan] and [Page]: the resolution an effect is drawn at.

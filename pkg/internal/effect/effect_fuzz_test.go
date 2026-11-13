@@ -119,6 +119,8 @@ func FuzzGeometry(f *testing.F) {
 		}
 		_ = Offset(ctx, s, dx, dy)
 		_ = Dilate(ctx, s, int(r), width)
+		_ = DilateDisc(ctx, s, r)
+		_ = ErodeDisc(ctx, s, sigma)
 		_ = AlphaRamp(ctx, s, dx, dy, a, b, c, d)
 		dst, err := New(ctx, RGBA, 11, 13, Grid{})
 		if err != nil {

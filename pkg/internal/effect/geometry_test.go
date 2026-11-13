@@ -2,6 +2,7 @@ package effect
 
 import (
 	"context"
+	"errors"
 	"math"
 	"slices"
 	"testing"
@@ -42,6 +43,131 @@ func TestMorphology_Values(t *testing.T) {
 		if !slices.Equal(tc.got, tc.want) {
 			t.Errorf("%s = %v, want %v", tc.name, tc.got, tc.want)
 		}
+	}
+}
+
+// TestMorphologyDisc_MatchesBruteForce checks that a disc's dilation and
+// erosion equal the extreme over every pixel within the radius, pixels
+// past the edge reading as transparent black, on RGBA and coverage, at
+// whole and fractional radii.
+func TestMorphologyDisc_MatchesBruteForce(t *testing.T) {
+	ctx := context.Background()
+	for _, f := range []Format{Coverage, RGBA} {
+		for _, r := range []float64{1, 1.5, 2.3, 4, 6.75} {
+			for _, grow := range []bool{true, false} {
+				src := detColor(t, 13)
+				in := newSurface(t, f, src.W, src.H)
+				for i := range in.Pix {
+					in.Pix[i] = src.Pix[i*int(RGBA)/int(f)]
+				}
+				got, err := in.Clone(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				op := ErodeDisc
+				if grow {
+					op = DilateDisc
+				}
+				if err := op(ctx, got, r); err != nil {
+					t.Fatal(err)
+				}
+				ch, q := int(f), math.Round(r*256)/256
+				n := int(q)
+				for y := range in.H {
+					for x := range in.W {
+						for c := range ch {
+							want := uint8(255)
+							if grow {
+								want = 0
+							}
+							for dy := -n; dy <= n; dy++ {
+								for dx := -n; dx <= n; dx++ {
+									if float64(dx*dx+dy*dy) > q*q {
+										continue
+									}
+									var v uint8
+									if xx, yy := x+dx, y+dy; xx >= 0 && xx < in.W && yy >= 0 && yy < in.H {
+										v = in.Pix[(yy*in.W+xx)*ch+c]
+									}
+									if grow {
+										want = max(want, v)
+									} else {
+										want = min(want, v)
+									}
+								}
+							}
+							if g := got.Pix[(y*in.W+x)*ch+c]; g != want {
+								t.Fatalf("format %d radius %v grow %v: (%d, %d) channel %d = %d, want %d", f, r, grow, x, y, c, g, want)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestMorphologyDisc_RoundsTheCorner checks that a disc grows a square's
+// corner along the diagonal by the radius, where a square structuring
+// element grows it by the radius times the square root of 2, and that a
+// radius under a pixel leaves the surface alone.
+func TestMorphologyDisc_RoundsTheCorner(t *testing.T) {
+	ctx := context.Background()
+	s := newSurface(t, Coverage, 40, 40)
+	for y := 20; y < 40; y++ {
+		for x := 20; x < 40; x++ {
+			s.Pix[y*40+x] = 255
+		}
+	}
+	sq, err := s.Clone(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := DilateDisc(ctx, s, 10); err != nil {
+		t.Fatal(err)
+	}
+	if err := Dilate(ctx, sq, 10, 10); err != nil {
+		t.Fatal(err)
+	}
+	// Pixel (13, 13) is 7 pixels out of the corner (20, 20) along each
+	// axis, 9.9 along the diagonal: within the disc's reach of 10.
+	for _, tc := range []struct {
+		x, y      int
+		disc, sqr uint8
+	}{{13, 13, 255, 255}, {12, 12, 0, 255}, {10, 20, 255, 255}, {9, 20, 0, 0}} {
+		if got := s.Pix[tc.y*40+tc.x]; got != tc.disc {
+			t.Errorf("disc at (%d, %d) = %d, want %d", tc.x, tc.y, got, tc.disc)
+		}
+		if got := sq.Pix[tc.y*40+tc.x]; got != tc.sqr {
+			t.Errorf("square at (%d, %d) = %d, want %d", tc.x, tc.y, got, tc.sqr)
+		}
+	}
+	before := slices.Clone(s.Pix)
+	if err := ErodeDisc(ctx, s, 0.99); err != nil || !slices.Equal(s.Pix, before) {
+		t.Errorf("ErodeDisc by 0.99 = %v, changed %v, want no change", err, !slices.Equal(s.Pix, before))
+	}
+}
+
+// TestMask_MultipliesByCoverage checks that a mask multiplies every
+// channel of a premultiplied pixel by the coverage, rounded, and refuses
+// a mask that is not a coverage of the surface's size.
+func TestMask_MultipliesByCoverage(t *testing.T) {
+	ctx := context.Background()
+	s := newSurface(t, RGBA, 3, 1)
+	copy(s.Pix, []uint8{200, 100, 50, 200, 255, 255, 255, 255, 10, 20, 30, 40})
+	m := newSurface(t, Coverage, 3, 1)
+	copy(m.Pix, []uint8{128, 0, 255})
+	if err := Mask(ctx, s, m); err != nil {
+		t.Fatal(err)
+	}
+	if want := []uint8{100, 50, 25, 100, 0, 0, 0, 0, 10, 20, 30, 40}; !slices.Equal(s.Pix, want) {
+		t.Errorf("Mask = %v, want %v", s.Pix, want)
+	}
+	if err := Mask(ctx, s, s); !errors.Is(err, ErrFormat) {
+		t.Errorf("Mask by an RGBA surface = %v, want ErrFormat", err)
+	}
+	if err := Mask(ctx, s, newSurface(t, Coverage, 2, 1)); !errors.Is(err, ErrFormat) {
+		t.Errorf("Mask by a coverage of another size = %v, want ErrFormat", err)
 	}
 }
 

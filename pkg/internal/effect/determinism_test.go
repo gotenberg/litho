@@ -23,8 +23,10 @@ var pinnedHashes = map[string]string{
 	"color matrices":       "721b5dd0e279b8d47b0a11cebf6facb2718e5dc3ddd2dd247daa26b0df468b78",
 	"composite":            "aceb8b17d587694466f0e6c64ccdda0e03aef90ed50516ec3406109d44f8a873",
 	"dilate erode":         "9ab04f53d53c22c0052bd37be427d49c7688a1fbbc2ad53737ca726966bfe7e3",
+	"dilate erode disc":    "2a30778c8fb41886deac3c145cad21f7ef08f70931fe6dd0a741916687186bda",
 	"fill":                 "658cc6b892ac43b705a39677f2d06679b48ac39aa829e2fd53099013e118d16f",
 	"gaussian kernels":     "9542430123aede09660a25086c9d8c397d46082c10a3f809d35f5e8e47055868",
+	"mask":                 "1fd4eb725553f03381e54491975e649842dd183c4c45e3a56efb25a1dd397ea0",
 	"luminance to alpha":   "d6cb35da8705798e2a9a613ec3b58a80c61b0fc7efd12f394d9c28b059637c62",
 	"offset":               "1676e9e044ee77a0104dbb6cde34a887c08dc145493cf8e4c74f56088373b59d",
 	"plan":                 "5948c337b35dd18743191ce3d377e51422848ef24a0bb5347b8e75c7ad083075",
@@ -104,6 +106,20 @@ func TestDeterminism_PinnedHashes(t *testing.T) {
 			s := detCoverage(t)
 			must(Dilate(ctx, s, 3, 1))
 			must(Erode(ctx, s, 2, 4))
+			return s.Pix
+		},
+		"dilate erode disc": func() []byte {
+			s := detCoverage(t)
+			must(DilateDisc(ctx, s, 3.4))
+			must(ErodeDisc(ctx, s, 2.25))
+			c := detColor(t, 14)
+			must(DilateDisc(ctx, c, 1.7))
+			return append(s.Pix, c.Pix...)
+		},
+		"mask": func() []byte {
+			pix := pixels(97 * 61)
+			s := surfaceOf2D(t, pix[:97*61*4], 97, 61)
+			must(Mask(ctx, s, detCoverage(t)))
 			return s.Pix
 		},
 		"offset": func() []byte {
