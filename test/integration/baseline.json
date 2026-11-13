@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T14:10:06Z",
+  "captured_at": "2026-11-13T14:30:36Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -59926,12 +59926,12 @@
     "litho/html": {
       "features": {
         "diff": {
-          "matched": 180,
+          "matched": 181,
           "mismatched": 9,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 189,
+            "pages_equal": 190,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -61446,36 +61446,44 @@
               "pages": 1,
               "strict": 1,
               "text_f1": 1
+            },
+            "variable-font": {
+              "layout": 0.9471,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             }
           },
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 187,
+          "matched": 188,
           "mismatched": 2,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 418,
-            "pass_a1a": 189,
-            "pass_a1b": 189,
-            "pass_a2a": 189,
-            "pass_a2a+ua1": 187,
-            "pass_a2b": 189,
-            "pass_a2u": 189,
-            "pass_a3a": 189,
-            "pass_a3b": 189,
-            "pass_a3u": 189,
-            "pass_a4": 189,
-            "pass_a4+ua2": 188,
-            "pass_a4e": 189,
-            "pass_ua1": 187,
-            "pass_ua2": 188,
-            "pass_v1.4": 189,
-            "pass_v1.5": 189,
-            "pass_v1.6": 189,
-            "pass_v1.7": 189,
-            "pass_v2.0": 189,
+            "pass_a1a": 190,
+            "pass_a1b": 190,
+            "pass_a2a": 190,
+            "pass_a2a+ua1": 188,
+            "pass_a2b": 190,
+            "pass_a2u": 190,
+            "pass_a3a": 190,
+            "pass_a3b": 190,
+            "pass_a3u": 190,
+            "pass_a4": 190,
+            "pass_a4+ua2": 189,
+            "pass_a4e": 190,
+            "pass_ua1": 188,
+            "pass_ua2": 189,
+            "pass_v1.4": 190,
+            "pass_v1.5": 190,
+            "pass_v1.6": 190,
+            "pass_v1.7": 190,
+            "pass_v2.0": 190,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -65434,6 +65442,27 @@
               "v2.0": 1
             },
             "user-stylesheet-twin": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "variable-font": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
@@ -116853,8 +116882,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 4344,
-          "mismatched": 849,
+          "matched": 4349,
+          "mismatched": 844,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -119438,11 +119467,11 @@
             "css/css-fonts/font-default-03.html": "pass",
             "css/css-fonts/font-face-stretch-auto-variable.html": "pass",
             "css/css-fonts/font-face-stretch-default-variable.html": "pass",
-            "css/css-fonts/font-face-style-auto-variable.html": "fail",
-            "css/css-fonts/font-face-style-default-variable.html": "fail",
+            "css/css-fonts/font-face-style-auto-variable.html": "pass",
+            "css/css-fonts/font-face-style-default-variable.html": "pass",
             "css/css-fonts/font-face-unicode-range-2.html": "fail",
-            "css/css-fonts/font-face-weight-auto-variable.html": "fail",
-            "css/css-fonts/font-face-weight-default-variable.html": "fail",
+            "css/css-fonts/font-face-weight-auto-variable.html": "pass",
+            "css/css-fonts/font-face-weight-default-variable.html": "pass",
             "css/css-fonts/font-family-name-000.xht": "fail",
             "css/css-fonts/font-family-name-001.xht": "fail",
             "css/css-fonts/font-family-name-002.xht": "fail",
@@ -119672,7 +119701,7 @@
             "css/css-fonts/standard-font-family.html": "pass",
             "css/css-fonts/synthetic-bold-out-of-capabilities-range.html": "fail",
             "css/css-fonts/synthetic-bold-space-width.html": "pass",
-            "css/css-fonts/synthetic-oblique-out-of-capabilities-range.html": "fail",
+            "css/css-fonts/synthetic-oblique-out-of-capabilities-range.html": "pass",
             "css/css-fonts/system-ui-mixed.html": "fail",
             "css/css-fonts/system-ui.html": "pass",
             "css/css-fonts/test-synthetic-bold.html": "pass",
@@ -119683,8 +119712,8 @@
             "css/css-fonts/variations/font-slant-2c.html": "pass",
             "css/css-fonts/variations/font-slant-3.html": "pass",
             "css/css-fonts/variations/font-weight-3.html": "pass",
-            "css/css-fonts/variations/font-weight-metrics.html": "fail",
-            "css/css-fonts/variations/ital-variable.html": "pass",
+            "css/css-fonts/variations/font-weight-metrics.html": "pass",
+            "css/css-fonts/variations/ital-variable.html": "fail",
             "css/css-fonts/variations/slnt-backslant-variable.html": "fail",
             "css/css-fonts/variations/slnt-variable.html": "fail",
             "css/css-grid/abspos/descendant-static-position-001.html": "pass",
@@ -121877,7 +121906,7 @@
             "css/filter-effects/drop-shadow-perspective-rotation.html": "pass",
             "css/filter-effects/drop-shadow-perspective-scale.html": "fail",
             "css/filter-effects/drop-shadow-perspective.html": "pass",
-            "css/filter-effects/drop-shadow-scale.html": "error",
+            "css/filter-effects/drop-shadow-scale.html": "fail",
             "css/filter-effects/drop-shadow-transform-in-opacity-overlap.html": "pass",
             "css/filter-effects/drop-shadow-transform.html": "pass",
             "css/filter-effects/drop-shadow-with-3d-transform.html": "pass",
