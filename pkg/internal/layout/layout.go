@@ -319,7 +319,7 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*typeset.StructEle
 					continue
 				}
 				if e.admit(p) {
-					g := &typeset.Group{Transform: groupTransform(k), Clip: k.clip, Opacity: k.opacity, Content: frags}
+					g := groupOf(k, frags)
 					if depth == 0 && k.transform != nil && len(sub) == 1 {
 						free[g] = true
 					}
@@ -357,6 +357,59 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*typeset.StructEle
 		}
 	}
 	return out
+}
+
+// groupOf returns the group of the display list group it, holding content.
+// A box of opacity below 1 is composited as a whole (CSS Color 4, 4.1):
+// its content is one isolated transparency group (ISO 32000-1, 11.4), as
+// every stacking context is in CSS Compositing 1, 3.3, unless the content
+// is one object, whose own alpha composites alike and costs no form
+// XObject.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium writes every box of opacity 0.5 as an isolated
+//     transparency group form painted under /ca 0.5, one filled rectangle
+//     or one line of text included.
+func groupOf(it *ditem, content []typeset.Fragment) *typeset.Group {
+	g := &typeset.Group{Transform: groupTransform(it), Clip: it.clip, Opacity: it.opacity, Content: content}
+	if it.opacity < 1 && !oneObject(content) {
+		g.Transparency = &typeset.TransparencyGroup{Isolated: true}
+	}
+	return g
+}
+
+// oneObject reports content that paints one object: a path that fills or
+// strokes, or an image, alone or in groups that move or clip it and
+// composite it plainly. Constant alpha applied to it equals that alpha
+// applied to a group of it. A path filled and stroked paints its stroke
+// over its fill, and the glyphs of a text run can overlap: viewers
+// composite each on its own.
+//
+// # Corpus evidence
+//
+//   - probe, html: poppler shows the overlap of the fill and the stroke of
+//     one B operator at alpha 0.5 as (127, 63, 191), blue over red over
+//     white, and two overlapping glyphs of one text object at alpha 0.5
+//     as (63, 63, 255): neither as one object.
+func oneObject(content []typeset.Fragment) bool {
+	for len(content) == 1 {
+		g, ok := content[0].(*typeset.Group)
+		if !ok {
+			switch v := content[0].(type) {
+			case *typeset.Path:
+				return v.Fill == nil || v.Stroke == nil
+			case *typeset.Image:
+				return true
+			}
+			return false
+		}
+		if g.Transparency != nil || g.Blend != typeset.BlendNormal {
+			return false
+		}
+		content = g.Content
+	}
+	return false
 }
 
 // groupTransform returns the transform of the group it.
@@ -421,7 +474,7 @@ func (e *engine) flatten(it *ditem, depth int, artifact bool) []typeset.Fragment
 				out = append(out, e.flatten(k, depth+1, artifact)...)
 				continue
 			}
-			out = append(out, &typeset.Group{Transform: groupTransform(k), Clip: k.clip, Opacity: k.opacity, Content: e.flatten(k, depth+1, artifact)})
+			out = append(out, groupOf(k, e.flatten(k, depth+1, artifact)))
 			continue
 		}
 		f := e.fitLeaf(k.frag, depth)

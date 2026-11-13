@@ -4,9 +4,11 @@ import (
 	"context"
 	"image"
 	"image/color"
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // at returns the colour of pixel (x, y) of img.
@@ -217,6 +219,58 @@ func TestOpacity_Group(t *testing.T) {
 	if got := at(img, 1, 1); !similar(got, color.NRGBA{255, 128, 128, 255}) && !similar(got, color.NRGBA{255, 127, 127, 255}) {
 		t.Errorf("pixel %v, want half-transparent red", got)
 	}
+}
+
+// TestOpacity_CompositesAsWhole locks CSS Color 4, 4.1: an element of
+// opacity 0.5 composites its content as one group, so where its two
+// children overlap the later one shows at half alpha alone, not over the
+// earlier one at half alpha.
+func TestOpacity_CompositesAsWhole(t *testing.T) {
+	half := func(s *css.Style) { s.Opacity = 0.5 }
+	root := doc(el(sty(width(4), height(2), rel(0, 0), half),
+		square(3, 2, red, abs(0, math.NaN(), math.NaN(), 0)),
+		square(3, 2, blue, abs(0, math.NaN(), math.NaN(), 1))))
+	img := render(t, run(t, root, page(4, 2)), 1)
+	for _, c := range []struct {
+		x    int
+		want color.NRGBA
+	}{{0, color.NRGBA{255, 128, 128, 255}}, {2, color.NRGBA{128, 128, 255, 255}}, {3, color.NRGBA{128, 128, 255, 255}}} {
+		if got := at(img, c.x, 1); !similar(got, c.want) {
+			t.Errorf("pixel %d: %v, want %v", c.x, got, c.want)
+		}
+	}
+}
+
+// TestOpacity_OneObjectNoGroup locks that a translucent element painting
+// one object writes no transparency group: its alpha alone composites the
+// same, and the page keeps its bytes.
+func TestOpacity_OneObjectNoGroup(t *testing.T) {
+	half := func(s *css.Style) { s.Opacity = 0.5 }
+	for _, c := range []struct {
+		name  string
+		root  *Node
+		group bool
+	}{
+		{"one background", doc(el(sty(width(2), height(2), bg(red), half))), false},
+		{"two children", doc(el(sty(width(2), half), square(2, 1, red), square(2, 1, blue))), true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			res := run(t, c.root, page(2, 2))
+			if got := hasTransparency(res.Pages[0].Content); got != c.group {
+				t.Errorf("transparency group %v, want %v", got, c.group)
+			}
+		})
+	}
+}
+
+// hasTransparency reports whether frags hold a transparency group.
+func hasTransparency(frags []typeset.Fragment) bool {
+	for _, f := range frags {
+		if g, ok := f.(*typeset.Group); ok && (g.Transparency != nil || hasTransparency(g.Content)) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestOverflowHidden_Clips(t *testing.T) {

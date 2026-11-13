@@ -95,6 +95,16 @@ func TestDraw_Shapes(t *testing.T) {
 			[]probe{{50, 50, [3]uint8{128, 128, 255}}},
 		},
 		{
+			// Group opacity applies to the group as a whole (SVG 2, 3.2):
+			// the later child hides the earlier one where they overlap.
+			"group-opacity-overlap", `<svg width="100" height="100"><g opacity="0.5"><rect width="60" height="100" fill="red"/><rect x="40" width="60" height="100" fill="blue"/></g></svg>`,
+			[]probe{{20, 50, [3]uint8{255, 128, 128}}, {50, 50, [3]uint8{128, 128, 255}}, {80, 50, [3]uint8{128, 128, 255}}},
+		},
+		{
+			"shape-opacity-fill-and-stroke", `<svg width="100" height="100"><rect x="20" y="20" width="60" height="60" fill="red" stroke="blue" stroke-width="20" opacity="0.5"/></svg>`,
+			[]probe{{50, 50, [3]uint8{255, 128, 128}}, {25, 50, [3]uint8{128, 128, 255}}, {15, 50, [3]uint8{128, 128, 255}}},
+		},
+		{
 			"switch", `<svg width="100" height="100"><switch><rect width="100" height="100" fill="red" requiredExtensions="x"/><rect width="100" height="100" fill="lime"/></switch></svg>`,
 			[]probe{{50, 50, lime}},
 		},

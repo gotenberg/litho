@@ -324,7 +324,7 @@ func (r *renderer) openUnion(s sink, op float64, regions []clipRegion) (sink, fu
 			out = append(out, content...)
 		}
 		if op < 1 {
-			out = []typeset.Fragment{&typeset.Group{Transform: s.pending, Opacity: op, Content: out}}
+			out = []typeset.Fragment{translucent(&typeset.Group{Transform: s.pending, Opacity: op, Content: out})}
 		}
 		s.c.out = append(s.c.out, out...)
 		s.c.last = nil
@@ -350,9 +350,55 @@ func (r *renderer) openGroup(s sink, op float64, clip *typeset.Path) (sink, func
 			return
 		}
 		g.Content = c.out
-		s.c.out = append(s.c.out, g)
+		s.c.out = append(s.c.out, translucent(g))
 		s.c.last = nil
 	}
+}
+
+// translucent returns g, made one isolated transparency group when its
+// opacity is below 1 and its content paints more than one object: group
+// opacity applies to the group's result as a whole, so overlapping
+// children do not show through each other (SVG 2, 3.2 and CSS Color 4,
+// 4.1). One object composites alike under its own alpha and costs no form
+// XObject.
+func translucent(g *typeset.Group) *typeset.Group {
+	if g.Opacity < 1 && !oneObject(g.Content) {
+		g.Transparency = &typeset.TransparencyGroup{Isolated: true}
+	}
+	return g
+}
+
+// oneObject reports content that paints one object: a path that fills or
+// strokes, or an image, alone or in groups that move or clip it and
+// composite it plainly. Constant alpha applied to it equals that alpha
+// applied to a group of it. A path filled and stroked paints its stroke
+// over its fill, and the glyphs of a text run can overlap: viewers
+// composite each on its own.
+//
+// # Corpus evidence
+//
+//   - probe, html: poppler shows the overlap of the fill and the stroke of
+//     one B operator at alpha 0.5 as (127, 63, 191), blue over red over
+//     white, and two overlapping glyphs of one text object at alpha 0.5
+//     as (63, 63, 255): neither as one object.
+func oneObject(content []typeset.Fragment) bool {
+	for len(content) == 1 {
+		g, ok := content[0].(*typeset.Group)
+		if !ok {
+			switch v := content[0].(type) {
+			case *typeset.Path:
+				return v.Fill == nil || v.Stroke == nil
+			case *typeset.Image:
+				return true
+			}
+			return false
+		}
+		if g.Transparency != nil || g.Blend != typeset.BlendNormal {
+			return false
+		}
+		content = g.Content
+	}
+	return false
 }
 
 // emit adds a leaf fragment to the sink in its container's coordinates:
