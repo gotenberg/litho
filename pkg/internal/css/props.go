@@ -226,6 +226,8 @@ const (
 	pMaskComposite
 	pMaskType
 	pAspectRatio
+	pContainIntrinsicWidth
+	pContainIntrinsicHeight
 	numProps
 )
 
@@ -1000,6 +1002,9 @@ func init() {
 	for id, def := range aspectRatioProps() {
 		props[id] = def
 	}
+	for id, def := range containIntrinsicProps() {
+		props[id] = def
+	}
 	gcpmProps()
 	for id, def := range overflowClipProps() {
 		props[id] = def
@@ -1031,6 +1036,7 @@ func init() {
 		"inline-size": pWidth, "block-size": pHeight,
 		"min-inline-size": pMinWidth, "min-block-size": pMinHeight,
 		"max-inline-size": pMaxWidth, "max-block-size": pMaxHeight,
+		"contain-intrinsic-inline-size": pContainIntrinsicWidth, "contain-intrinsic-block-size": pContainIntrinsicHeight,
 		"-webkit-box-decoration-break": pBoxDecorationBreak,
 	})
 	maps.Copy(longhandByName, logicalAliases())

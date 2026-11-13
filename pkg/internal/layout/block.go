@@ -637,7 +637,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		}
 		inner.commit(contentBottom)
 	}
-	h := contentBottom - b.contentY()
+	h := containedHeight(b, contentBottom-b.contentY())
 	content := h
 	if hSet {
 		h = specH
@@ -764,7 +764,7 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	end = e.pastMargin(end, mc.strut, false)
 	mc.commit(end)
 	end = max(end, own.bottom(), b.contentY())
-	h := end - b.contentY()
+	h := containedHeight(b, end-b.contentY())
 	content := h
 	if hSet {
 		h = specH

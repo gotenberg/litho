@@ -522,7 +522,7 @@ func (e *engine) absContent(b *box, ccb cblock, h float64, hSet, grow bool) {
 	end += mc.strut.sum()
 	mc.commit(end)
 	end = max(end, own.bottom(), b.contentY())
-	ch := end - b.contentY()
+	ch := containedHeight(b, end-b.contentY())
 	content := ch
 	if hSet {
 		ch = h

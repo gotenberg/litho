@@ -775,6 +775,7 @@ func (e *engine) contentWidths(k *box) (float64, float64) {
 		return e.intrinsic(k)
 	}
 	lo, hi := formatterFor(k).intrinsic(e, k)
+	lo, hi = containedWidths(k, k.sizeSrc(), lo, hi)
 	if r, _ := prefRatio(k); r > 0 {
 		pd, bd, _ := edgesOf(k, 0)
 		lo, hi = ratioIntrinsic(k, autoWidth(k.sizeSrc()), pd, bd, lo, hi)
@@ -1525,7 +1526,7 @@ func (e *engine) layoutItemAt(k *box, x, y, w, h float64, hDef bool, pcb cblock)
 	end = e.pastMargin(end, mc.strut, false)
 	mc.commit(end)
 	end = max(end, own.bottom(), k.contentY())
-	content := end - k.contentY()
+	content := containedHeight(k, end-k.contentY())
 	k.h = content
 	if hDef {
 		k.h = h

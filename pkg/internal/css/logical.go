@@ -83,7 +83,7 @@ func opposite(s Side) Side { return (s + 2) % 4 }
 var sideGroups = []propID{pMarginTop, pPaddingTop, pTop, pBorderTopStyle, pBorderTopWidth, pBorderTopColor}
 
 // sizePairs are the width-like longhands and their height-like partners.
-var sizePairs = [][2]propID{{pWidth, pHeight}, {pMinWidth, pMinHeight}, {pMaxWidth, pMaxHeight}}
+var sizePairs = [][2]propID{{pWidth, pHeight}, {pMinWidth, pMinHeight}, {pMaxWidth, pMaxHeight}, {pContainIntrinsicWidth, pContainIntrinsicHeight}}
 
 // mapID returns the longhand id maps onto under m.
 func (m flowMap) mapID(id propID) propID {

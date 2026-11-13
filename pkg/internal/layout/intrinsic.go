@@ -46,6 +46,7 @@ func (e *engine) intrinsic(b *box) (float64, float64) {
 		lo, hi = w, w
 	} else {
 		lo, hi = formatterFor(b).intrinsic(e, b)
+		lo, hi = containedWidths(b, src, lo, hi)
 		lo, hi = ratioIntrinsic(b, src, pd, bd, lo, hi)
 		clo, chi = lo, hi
 		if src.Width.Kind == css.Points {

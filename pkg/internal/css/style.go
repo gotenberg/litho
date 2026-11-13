@@ -1026,6 +1026,9 @@ type Style struct {
 	// AspectRatio is the box's preferred aspect ratio (CSS Sizing 4,
 	// 4.1), which an automatic width or height follows.
 	AspectRatio AspectRatio
+	// ContainIntrinsic is the size a box under size containment takes in
+	// place of its content's (CSS Sizing 4, 5.1), nil for none.
+	ContainIntrinsic *IntrinsicSize
 
 	// Margin takes Auto, Points or Percent a side; Padding takes Points or
 	// Percent. Both are indexed by [Side].

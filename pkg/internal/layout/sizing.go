@@ -47,6 +47,7 @@ func (e *engine) contentIntrinsic(b *box) (float64, float64) {
 		return w, w
 	}
 	lo, hi := formatterFor(b).intrinsic(e, b)
+	lo, hi = containedWidths(b, b.sizeSrc(), lo, hi)
 	return lo, max(hi, lo)
 }
 
@@ -190,4 +191,32 @@ func keywordIntrinsic(st *css.Style, lo, hi, clo, chi float64) (float64, float64
 		lo, hi = max(lo, clo), max(hi, chi)
 	}
 	return lo, max(hi, lo)
+}
+
+// containedHeight returns the content height h of b, its content's,
+// unless b is under size containment: then the box sizes as if empty, at
+// its contain-intrinsic-height when one is set (CSS Contain 2, 3.2; CSS
+// Sizing 4, 5.1). Its content is laid out and painted all the same.
+func containedHeight(b *box, h float64) float64 {
+	if b.kind == kindReplaced || b.st.Contain&css.ContainSize == 0 {
+		return h
+	}
+	if c := b.st.ContainIntrinsic; c != nil && c.Height >= 0 {
+		return c.Height
+	}
+	return 0
+}
+
+// containedWidths returns the min- and max-content widths lo and hi of
+// b's content, unless b is under size containment in the inline axis: then
+// both are its contain-intrinsic-width, or 0 (CSS Contain 2, 3.2 and 3.3;
+// CSS Sizing 4, 5.1).
+func containedWidths(b *box, st *css.Style, lo, hi float64) (float64, float64) {
+	if b.kind == kindReplaced || st.Contain&(css.ContainSize|css.ContainInlineSize) == 0 {
+		return lo, hi
+	}
+	if c := st.ContainIntrinsic; c != nil && c.Width >= 0 {
+		return c.Width, c.Width
+	}
+	return 0, 0
 }
