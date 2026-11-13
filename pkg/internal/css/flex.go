@@ -26,9 +26,23 @@ const (
 
 // contentPositions are the <content-position> keywords, and
 // selfPositions the <self-position> ones (CSS Box Alignment 3, 4.3).
+// flow-start and flow-end, which only the editor's draft of CSS Box
+// Alignment 3 holds, are content positions as Chromium parses them, where
+// they align as flex-start and flex-end; Chromium takes neither as a self
+// position.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 9.4.1 reports CSS.supports true for
+//     justify-content, align-content and place-content: flow-start and
+//     false for align-items, align-self, justify-items and justify-self;
+//     in a wrapping row-reverse flex container justify-content and
+//     align-content: flow-start place the item as flex-start does, and
+//     flow-end as flex-end.
 var (
 	contentPositions = map[string]BoxAlign{
 		"center": BoxCenter, "start": BoxStart, "end": BoxEnd, "flex-start": BoxFlexStart, "flex-end": BoxFlexEnd,
+		"flow-start": BoxFlexStart, "flow-end": BoxFlexEnd,
 	}
 	selfPositions = map[string]BoxAlign{
 		"center": BoxCenter, "start": BoxStart, "end": BoxEnd, "flex-start": BoxFlexStart, "flex-end": BoxFlexEnd,
