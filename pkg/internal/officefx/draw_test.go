@@ -77,7 +77,7 @@ func TestUnder_SameBytesOnEveryArchitecture(t *testing.T) {
 		t.Fatal(err)
 	}
 	src.Content = []typeset.Fragment{&typeset.Path{Ops: src.Paths[0].Ops, Fill: &typeset.Fill{Color: typeset.Color{G: 1, A: 1}}}}
-	soft, _, err := SoftEdge(context.Background(), src, 4, &px)
+	soft, _, err := SoftEdge(context.Background(), src, &css.OfficeEffects{SoftEdge: 4}, &px)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,8 +85,8 @@ func TestUnder_SameBytesOnEveryArchitecture(t *testing.T) {
 	want := []string{
 		"cb992fc1c4b46fbe",
 		"2d8b3dc335b8c794",
-		"a77695acb87a9e05",
-		"5a6720ee65528e02",
+		"ff2c1c95edc6f100",
+		"a624fda508aac586",
 	}
 	for i, f := range frags {
 		img := f.(*typeset.Image)

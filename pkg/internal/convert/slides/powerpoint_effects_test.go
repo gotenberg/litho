@@ -9,7 +9,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
-	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -234,26 +233,6 @@ func TestShape_PowerPointEffectsApplyOnce(t *testing.T) {
 	// where a fade applied twice would be at a quarter.
 	if got := alphaAt(t, ps[0], 109.2, 130); abs(int(got)-128) > 12 {
 		t.Errorf("alpha 9.2 pt in %d, want about 128", got)
-	}
-}
-
-// TestPlanGrid checks the grid of PowerPoint's effects: the engine's
-// resolution, lowered so a morphology's distance is whole pixels, the box
-// widened to whole pixels, and reported when the surface cap reduces it.
-func TestPlanGrid(t *testing.T) {
-	g, reduced, ok := planGrid(typeset.Rect{X: 10, Y: 20, Width: 100.3, Height: 50}, 3, 7.5)
-	if !ok || reduced {
-		t.Fatalf("planGrid = %v, %v, want a grid unreduced", ok, reduced)
-	}
-	if n := 7.5 * g.unit; math.Abs(n-math.Round(n)) > 1e-9 || g.unit > 5.0/3 {
-		t.Errorf("unit %v puts 7.5 pt on %v pixels, want a whole number at most the rule's", g.unit, n)
-	}
-	if math.Abs(g.box.Width*g.unit-float64(g.w)) > 1e-9 || g.box.Width < 100.3 || g.box.X != 10 {
-		t.Errorf("box %+v of %d pixels, want the box widened to whole pixels", g.box, g.w)
-	}
-	g, reduced, ok = planGrid(typeset.Rect{Width: 1200, Height: 1200}, 0.1, 0)
-	if !ok || !reduced || int64(g.w)*int64(g.h) > effect.MaxPixels {
-		t.Errorf("planGrid of a large sharp effect = %d by %d, %v, %v, want reduced within the cap", g.w, g.h, reduced, ok)
 	}
 }
 

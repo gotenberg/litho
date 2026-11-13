@@ -14,77 +14,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
-// effectGrid is the pixel grid of an effect bitmap: the slide area box it
-// covers, w by h pixels, and how many pixels a point the radii are taken
-// at.
-type effectGrid struct {
-	box  typeset.Rect
-	w, h int
-	// unit is the pixels of a point the radii are measured in, the grid's
-	// scale.
-	unit float64
-}
-
-// planGrid returns the grid the effect engine's rule gives an effect over
-// the slide area box whose blur has standard deviation sigma points
-// ([effect.Plan]), the box widened to whole pixels; reduced reports that
-// the engine's surface cap lowered its resolution. An effect that grows or
-// shrinks its silhouette by morph points before the blur takes the
-// largest resolution at most the rule's at which morph is a whole number
-// of pixels: [effect.Dilate] and [effect.Erode] move by whole pixels, and
-// a rounded distance would move the edge by up to half a pixel. It
-// returns false for an area too small to draw.
-func planGrid(box typeset.Rect, sigma, morph float64) (g effectGrid, reduced, ok bool) {
-	if !usable(box) {
-		return effectGrid{}, false, false
-	}
-	res, ok := effect.Plan(sigma, box.Width, box.Height)
-	if !ok {
-		return effectGrid{}, false, false
-	}
-	if n := math.Floor(morph * res.Scale); n >= 1 && numeric.Finite(n) {
-		res.Scale = n / morph
-		res.W, res.H = int(math.Ceil(box.Width*res.Scale)), int(math.Ceil(box.Height*res.Scale)) // fits int: within the sides Plan returned
-	}
-	box.Width, box.Height = float64(res.W)/res.Scale, float64(res.H)/res.Scale
-	return effectGrid{box: box, w: res.W, h: res.H, unit: res.Scale}, res.Reduced, true
-}
-
-// span returns the length v points spans on the grid, in pixels.
-func (g effectGrid) span(v float64) float64 {
-	return v * g.unit
-}
-
-// whole returns the length v points spans on the grid in whole pixels,
-// rounded.
-func (g effectGrid) whole(v float64) int {
-	return int(min(math.Round(max(g.span(v), 0)), effect.MaxKernelRadius)) // fits int: at most MaxKernelRadius
-}
-
-// pixels returns the transform from slide points to the grid's pixels.
-func (g effectGrid) pixels() typeset.Matrix {
-	sx, sy := float64(g.w)/g.box.Width, float64(g.h)/g.box.Height
-	return typeset.Matrix{A: sx, D: sy, E: -g.box.X * sx, F: -g.box.Y * sy}
-}
-
-// place returns where the grid's surfaces sit on the slide.
-func (g effectGrid) place() effect.Grid {
-	return effect.Grid{X: g.box.X, Y: g.box.Y, Scale: float64(g.w) / g.box.Width}
-}
-
-// surface returns a transparent surface of the grid's size in format f,
-// charged to the conversion's budget.
-func (g effectGrid) surface(ctx context.Context, f effect.Format) (*effect.Surface, error) {
-	return effect.New(ctx, f, g.w, g.h, g.place())
-}
-
-// blur blurs s in place by k along both axes, the pixels past the
-// bitmap's edge repeating the edge's: a mask its caller clipped to the
-// slide keeps its coverage at the cut.
-func blur(ctx context.Context, s *effect.Surface, k effect.Kernel) error {
-	return effect.Blur(ctx, s, k, k, effect.EdgeDuplicate)
-}
-
 // tentSigma returns the standard deviation of a tent of radius r, in r's
 // unit: a triangle of half-width r has variance r^2/6. It sizes the grid
 // of an effect Impress blurs by a tent, as [effect.Plan] takes a blur by
@@ -93,36 +22,15 @@ func tentSigma(r float64) float64 {
 	return r / math.Sqrt(6)
 }
 
-// tinted returns the coverage cov in the one colour c as an image whose
-// alpha is the coverage times c's alpha, colours straight, charged to the
-// budget for [typeset.EncodeImage] to give back.
-func tinted(ctx context.Context, cov *effect.Surface, c typeset.Color) (*image.NRGBA, error) {
-	if err := typeset.ChargeImage(ctx, cov.W, cov.H, color.NRGBAModel); err != nil {
-		return nil, err
-	}
-	return tint(cov.Pix, cov.W, cov.H, effect.ColorOf(c)), nil
-}
-
-// tint returns the w by h alpha samples in the one colour c as an image,
-// each alpha times c's.
-func tint(alpha []uint8, w, h int, c effect.Color) *image.NRGBA {
-	img := image.NewNRGBA(image.Rect(0, 0, w, h))
-	for i, v := range alpha[:w*h] {
-		p := img.Pix[4*i : 4*i+4 : 4*i+4]
-		p[0], p[1], p[2], p[3] = c.R, c.G, c.B, uint8((uint32(v)*uint32(c.A)+127)/255) //nolint:gosec // a byte times a fraction of 1
-	}
-	return img
-}
-
-// image returns the bitmap img placed over the grid's area, in slide
+// imageOn returns the bitmap img placed over g's area, in slide
 // coordinates, encoded at once so the bitmap is dropped; nil when ctx
 // ends first.
-func (g effectGrid) image(ctx context.Context, img image.Image) typeset.Fragment {
-	src, err := typeset.EncodeImage(ctx, img)
+func imageOn(ctx context.Context, g officefx.Grid, img image.Image) typeset.Fragment {
+	f, err := g.Image(ctx, img)
 	if err != nil {
 		return nil
 	}
-	return &typeset.Image{Rect: g.box, Source: src}
+	return f
 }
 
 // silhouette is what a shape paints, as the filters see it: its painted
@@ -230,24 +138,10 @@ func mapOps(ops []typeset.PathOp, m typeset.Matrix) []typeset.PathOp {
 	return out
 }
 
-// coverage returns the coverage on g of paths, moved by tr in slide
-// coordinates first.
-func coverage(ctx context.Context, g effectGrid, paths []effect.Path, tr typeset.Matrix) (*effect.Surface, error) {
-	cov, err := g.surface(ctx, effect.Coverage)
-	if err != nil {
-		return nil, err
-	}
-	if err := effect.Fill(ctx, cov, paths, then(tr, g.pixels())); err != nil {
-		cov.Release()
-		return nil, err
-	}
-	return cov, nil
-}
-
 // coverage returns the silhouette's coverage on g, its paths moved by tr
 // in slide coordinates first.
-func (s *silhouette) coverage(ctx context.Context, g effectGrid, tr typeset.Matrix) (*effect.Surface, error) {
-	return coverage(ctx, g, s.paths, tr)
+func (s *silhouette) coverage(ctx context.Context, g officefx.Grid, tr typeset.Matrix) (*effect.Surface, error) {
+	return g.Coverage(ctx, s.paths, tr)
 }
 
 // grow returns r grown by d on every side.
@@ -306,20 +200,20 @@ type effectPlan struct {
 
 // grid returns the grid of an effect over box whose blur has standard
 // deviation sigma points, after growing or shrinking by morph points, by
-// the engine's rule on both programs' rules ([planGrid]). It returns false
+// the engine's rule on both programs' rules ([officefx.PlanGrid]). It returns false
 // for an area too small to draw or a bitmap past the slide's pixel cap
 // ([effect.MaxPagePixels]), which warns that the effect is left out.
-func (p *effectPlan) grid(box typeset.Rect, sigma, morph float64) (effectGrid, bool) {
-	g, reduced, ok := planGrid(box, sigma, morph)
+func (p *effectPlan) grid(box typeset.Rect, sigma, morph float64) (officefx.Grid, bool) {
+	g, reduced, ok := officefx.PlanGrid(box, sigma, morph)
 	if !ok {
-		return effectGrid{}, false
+		return officefx.Grid{}, false
 	}
 	if reduced {
 		p.reduced()
 	}
-	if !p.page.Take(effect.Resolution{W: g.w, H: g.h}) {
+	if !p.page.Take(effect.Resolution{W: g.W, H: g.H}) {
 		p.capped()
-		return effectGrid{}, false
+		return officefx.Grid{}, false
 	}
 	return g, true
 }
@@ -727,7 +621,7 @@ func retint(ctx context.Context, src *typeset.ImageSource, c typeset.Color) *typ
 	for i := range a {
 		a[i] = img.Pix[4*i+3]
 	}
-	out, err := typeset.EncodeImage(ctx, tint(a, w, h, effect.ColorOf(c)))
+	out, err := typeset.EncodeImage(ctx, officefx.Tint(a, w, h, effect.ColorOf(c)))
 	if err != nil {
 		return nil
 	}
@@ -775,22 +669,26 @@ func recolor(frags []typeset.Fragment, c typeset.Color, depth int) []typeset.Fra
 }
 
 // glowMask returns a glow's coverage on g of the silhouette moved by tr:
-// the silhouette made opaque, grown and blurred by [effectPlan.glowKernel],
-// so it fades to nothing one radius out (LibreOffice's GlowPrimitive2D;
-// ECMA-376 Part 1, 20.1.8.32 glow: "a color blurred outline"). The outer
-// glow of Impress's rectangle grows the outline of the first glow
-// instead.
-func (p *effectPlan) glowMask(ctx context.Context, g effectGrid, tr typeset.Matrix, outer bool) (*effect.Surface, error) {
-	half, k := p.glowKernel(g)
+// on PowerPoint's rules [officefx.Rules.GlowMask]; on Impress's the
+// silhouette made opaque wherever it paints, grown by a square of half the
+// radius and blurred by a tent of that half, so it fades to nothing one
+// radius out (LibreOffice's GlowPrimitive2D). The outer glow of Impress's
+// rectangle grows the outline of the first glow instead.
+func (p *effectPlan) glowMask(ctx context.Context, g officefx.Grid, tr typeset.Matrix, outer bool) (*effect.Surface, error) {
 	base, err := p.sil.coverage(ctx, g, tr)
 	if err != nil {
 		return nil, err
 	}
 	defer base.Release()
-	if err := effect.Threshold(base, p.silhouetteLevel()); err != nil {
+	r := p.s.Glow.Radius
+	if !p.impress {
+		return officefx.PowerPoint.GlowMask(ctx, g, base, r)
+	}
+	half, k := g.Whole(r/2), effect.TentKernel(g.Span(r/2))
+	if err := effect.Threshold(base, 1); err != nil {
 		return nil, err
 	}
-	inner, err := p.grownBlur(ctx, base, half, k)
+	inner, err := impressGrown(ctx, base, half, k)
 	if err != nil || !outer {
 		return inner, err
 	}
@@ -798,62 +696,33 @@ func (p *effectPlan) glowMask(ctx context.Context, g effectGrid, tr typeset.Matr
 	if err := effect.Composite(ctx, base, inner, effect.Over); err != nil {
 		return nil, err
 	}
-	if err := effect.Threshold(base, p.silhouetteLevel()); err != nil {
+	if err := effect.Threshold(base, 1); err != nil {
 		return nil, err
 	}
-	return p.grownBlur(ctx, base, half, k)
-}
-
-// glowKernel returns how far a glow grows its silhouette on g, in
-// pixels, and the kernel that blurs it: Impress's tent over half the
-// radius after growing by that half; PowerPoint's Gaussian of a sixth of
-// the radius after growing by half of it, the glow then fading to nothing
-// one radius out.
-//
-// # Corpus evidence
-//
-//   - litho/pptx: effects-glow-softedge-reflection prints in PowerPoint its
-//     glows of 5 and 18 pt as bitmaps whose alpha along a row through the
-//     middle falls as a Gaussian of deviation 1.1 and 4.1 pixels at 100
-//     pixels an inch, centred half a radius out.
-func (p *effectPlan) glowKernel(g effectGrid) (int, effect.Kernel) {
-	r := p.s.Glow.Radius
-	if p.impress {
-		return g.whole(r / 2), effect.TentKernel(g.span(r / 2))
-	}
-	return g.whole(r * officefx.PowerPoint.GlowGrow), effect.GaussianKernel(g.span(r / 6))
+	return impressGrown(ctx, base, half, k)
 }
 
 // glowSize returns the deviation of a glow's blur and how far it grows
 // the silhouette, in points, for its grid ([effectPlan.grid]), as
-// [effectPlan.glowKernel] draws it.
+// [effectPlan.glowMask] draws it.
 func (p *effectPlan) glowSize() (sigma, morph float64) {
 	r := p.s.Glow.Radius
 	if p.impress {
 		return tentSigma(r / 2), r / 2
 	}
-	return r / 6, r * officefx.PowerPoint.GlowGrow
+	return officefx.PowerPoint.GlowSize(r)
 }
 
-// grownBlur returns a copy of the coverage cov grown by r pixels and
-// blurred by k: grown by a square on Impress's rules; on PowerPoint's by
-// a square of a third of r, then a disc of the rest
-// ([officefx.Rules.GlowSquare]).
-func (p *effectPlan) grownBlur(ctx context.Context, cov *effect.Surface, r int, k effect.Kernel) (*effect.Surface, error) {
+// impressGrown returns a copy of the coverage cov grown by a square of n
+// pixels and blurred by k.
+func impressGrown(ctx context.Context, cov *effect.Surface, n int, k effect.Kernel) (*effect.Surface, error) {
 	out, err := cov.Clone(ctx)
 	if err != nil {
 		return nil, err
 	}
-	sq := r
-	if !p.impress {
-		sq = r / officefx.PowerPoint.GlowSquare
-	}
-	err = effect.Dilate(ctx, out, sq, sq)
-	if err == nil && sq < r {
-		err = effect.DilateDisc(ctx, out, float64(r-sq))
-	}
+	err = effect.Dilate(ctx, out, n, n)
 	if err == nil {
-		err = blur(ctx, out, k)
+		err = officefx.BlurEdge(ctx, out, k)
 	}
 	if err != nil {
 		out.Release()
@@ -894,93 +763,87 @@ func (p *effectPlan) glow(ctx context.Context, outer bool) typeset.Fragment {
 	defer mask.Release()
 	c := colorOf(gl.Color)
 	c.A = min(gl.Opacity, 1)
-	img, err := tinted(ctx, mask, c)
+	img, err := officefx.Tinted(ctx, mask, c)
 	if err != nil {
 		return nil
 	}
-	return g.image(ctx, img)
+	return imageOn(ctx, g, img)
 }
 
-// softMask returns a soft edge's coverage on g: the silhouette made
-// opaque, shrunk and blurred by [effectPlan.softKernel], so it fades from
-// the outline to opaque two radii in (LibreOffice's SoftEdgePrimitive2D;
-// ECMA-376 Part 1, 20.1.8.53 softEdge), the fade squared when Impress
-// applies it twice, times the silhouette's own coverage.
-func (p *effectPlan) softMask(ctx context.Context, g effectGrid, tr typeset.Matrix) (*effect.Surface, error) {
+// softMask returns a soft edge's coverage on g: its fade
+// ([effectPlan.softFade]) times the silhouette's own coverage.
+func (p *effectPlan) softMask(ctx context.Context, g officefx.Grid, tr typeset.Matrix) (*effect.Surface, error) {
 	return p.softFade(ctx, g, tr, true)
 }
 
-// softFade returns the fade of a soft edge on g, as [effectPlan.softMask]
-// does, times the silhouette's coverage when withCoverage is set: content
-// whose alpha holds the coverage already takes the fade alone.
-func (p *effectPlan) softFade(ctx context.Context, g effectGrid, tr typeset.Matrix, withCoverage bool) (*effect.Surface, error) {
-	r, k := p.softKernel(g)
+// softFade returns the fade of a soft edge on g, the silhouette moved by
+// tr: on PowerPoint's rules [officefx.Rules.SoftFade]; on Impress's the
+// silhouette made opaque wherever it paints, shrunk by a square of the
+// radius and blurred by a tent of it, so it fades from the outline to
+// opaque two radii in (LibreOffice's SoftEdgePrimitive2D; ECMA-376 Part 1,
+// 20.1.8.53 softEdge), squared when Impress applies it twice. It is times
+// the silhouette's coverage when withCoverage is set: content whose alpha
+// holds the coverage already takes the fade alone.
+func (p *effectPlan) softFade(ctx context.Context, g officefx.Grid, tr typeset.Matrix, withCoverage bool) (*effect.Surface, error) {
 	cov, err := p.sil.coverage(ctx, g, tr)
 	if err != nil {
 		return nil, err
 	}
 	defer cov.Release()
-	fade, err := cov.Clone(ctx)
+	r := p.s.SoftEdge
+	var fade *effect.Surface
+	if p.impress {
+		fade, err = impressFade(ctx, g, cov, r, p.twice)
+	} else {
+		fade, err = officefx.PowerPoint.SoftFade(ctx, g, cov, r)
+	}
 	if err != nil {
 		return nil, err
-	}
-	ok := false
-	defer func() {
-		if !ok {
-			fade.Release()
-		}
-	}()
-	if err := effect.Threshold(fade, p.silhouetteLevel()); err != nil {
-		return nil, err
-	}
-	if err := effect.Erode(ctx, fade, r, r); err != nil {
-		return nil, err
-	}
-	if err := blur(ctx, fade, k); err != nil {
-		return nil, err
-	}
-	if p.twice {
-		if err := square(ctx, fade); err != nil {
-			return nil, err
-		}
 	}
 	if withCoverage {
 		// The coverage In the fade: the fade times the coverage.
 		if err := effect.Composite(ctx, fade, cov, effect.In); err != nil {
+			fade.Release()
 			return nil, err
 		}
 	}
-	ok = true
 	return fade, nil
 }
 
-// softKernel returns how far a soft edge shrinks the silhouette on g, in
-// pixels, and the kernel that blurs it: by the radius, then Impress's
-// tent of the radius or PowerPoint's Gaussian of a third of it, the edge
-// then fading from nothing on the outline to opaque two radii in.
-//
-// # Corpus evidence
-//
-//   - litho/pptx: effects-glow-softedge-reflection prints in PowerPoint its
-//     soft edges of 5 and 25 pt as bitmaps whose alpha rises from the
-//     outline as a Gaussian of deviation 1.6 and 8.3 pt.
-func (p *effectPlan) softKernel(g effectGrid) (int, effect.Kernel) {
-	r := p.s.SoftEdge
-	if p.impress {
-		return g.whole(r), effect.TentKernel(g.span(r))
+// impressFade returns Impress's fade of a soft edge of radius r on g from
+// the coverage cov, squared when twice is set.
+func impressFade(ctx context.Context, g officefx.Grid, cov *effect.Surface, r float64, twice bool) (*effect.Surface, error) {
+	fade, err := cov.Clone(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return g.whole(r * officefx.PowerPoint.SoftShrink), effect.GaussianKernel(g.span(r / 3))
+	n := g.Whole(r)
+	err = effect.Threshold(fade, 1)
+	if err == nil {
+		err = effect.Erode(ctx, fade, n, n)
+	}
+	if err == nil {
+		err = officefx.BlurEdge(ctx, fade, effect.TentKernel(g.Span(r)))
+	}
+	if err == nil && twice {
+		err = square(ctx, fade)
+	}
+	if err != nil {
+		fade.Release()
+		return nil, err
+	}
+	return fade, nil
 }
 
 // softSize returns the deviation of a soft edge's blur and how far it
 // shrinks the silhouette, in points, for its grid ([effectPlan.grid]), as
-// [effectPlan.softKernel] draws it.
+// [effectPlan.softFade] draws it.
 func (p *effectPlan) softSize() (sigma, morph float64) {
 	r := p.s.SoftEdge
 	if p.impress {
 		return tentSigma(r), r
 	}
-	return r / 3, r * officefx.PowerPoint.SoftShrink
+	return officefx.PowerPoint.SoftSize(r)
 }
 
 // square multiplies the coverage of s by itself, in place.
@@ -1020,20 +883,20 @@ func (p *effectPlan) softEdge(ctx context.Context) typeset.Fragment {
 	if err != nil {
 		return nil
 	}
-	return g.image(ctx, img)
+	return imageOn(ctx, g, img)
 }
 
 // softEdgeImage paints the silhouette's paths in their colours on g, each
 // over the ones before, and gives each painted pixel the soft edge's
 // alpha in place of its own, which the soft edge's coverage already holds.
-func (p *effectPlan) softEdgeImage(ctx context.Context, g effectGrid) (*image.NRGBA, error) {
-	paint, err := g.surface(ctx, effect.RGBA)
+func (p *effectPlan) softEdgeImage(ctx context.Context, g officefx.Grid) (*image.NRGBA, error) {
+	paint, err := g.Surface(ctx, effect.RGBA)
 	if err != nil {
 		return nil, err
 	}
 	defer paint.Release()
 	for i, path := range p.sil.paths {
-		cov, err := coverage(ctx, g, []effect.Path{path}, typeset.Identity)
+		cov, err := g.Coverage(ctx, []effect.Path{path}, typeset.Identity)
 		if err != nil {
 			return nil, err
 		}
@@ -1053,23 +916,17 @@ func (p *effectPlan) softEdgeImage(ctx context.Context, g effectGrid) (*image.NR
 		return nil, err
 	}
 	defer fade.Release()
-	if err := typeset.ChargeImage(ctx, g.w, g.h, color.NRGBAModel); err != nil {
+	if err := typeset.ChargeImage(ctx, g.W, g.H, color.NRGBAModel); err != nil {
 		return nil, err
 	}
-	img := image.NewNRGBA(image.Rect(0, 0, g.w, g.h))
+	img := image.NewNRGBA(image.Rect(0, 0, g.W, g.H))
 	for i, v := range fade.Pix {
 		px, out := paint.Pix[4*i:4*i+4:4*i+4], img.Pix[4*i:4*i+4:4*i+4]
 		if a := px[3]; a != 0 {
-			out[0], out[1], out[2], out[3] = unpremultiply(px[0], a), unpremultiply(px[1], a), unpremultiply(px[2], a), v
+			out[0], out[1], out[2], out[3] = officefx.Unpremultiply(px[0], a), officefx.Unpremultiply(px[1], a), officefx.Unpremultiply(px[2], a), v
 		}
 	}
 	return img, nil
-}
-
-// unpremultiply returns the colour channel c of a pixel premultiplied by
-// its alpha a, not zero, as a straight channel, rounded.
-func unpremultiply(c, a uint8) uint8 {
-	return uint8(min((uint32(c)*255+uint32(a)/2)/uint32(a), 255)) //nolint:gosec // clamped to a byte
 }
 
 // shadow returns the bitmap of the shape's blurred shadow in slide
@@ -1122,17 +979,17 @@ func (p *effectPlan) shadow(ctx context.Context) typeset.Fragment {
 	defer mask.Release()
 	c := colorOf(sh.Color)
 	c.A = min(sh.Opacity, 1)
-	img, err := tinted(ctx, mask, c)
+	img, err := officefx.Tinted(ctx, mask, c)
 	if err != nil {
 		return nil
 	}
-	return g.image(ctx, img)
+	return imageOn(ctx, g, img)
 }
 
 // shadowMask returns the coverage of the shadow on g, the silhouette moved
 // by tr: the soft edge's coverage, or the silhouette's, with the glows at
 // their opacity over it, blurred by the shadow's radius.
-func (p *effectPlan) shadowMask(ctx context.Context, g effectGrid, tr typeset.Matrix) (*effect.Surface, error) {
+func (p *effectPlan) shadowMask(ctx context.Context, g officefx.Grid, tr typeset.Matrix) (*effect.Surface, error) {
 	var mask *effect.Surface
 	var err error
 	if p.s.SoftEdge > 0 && p.sil.flat {
@@ -1167,11 +1024,11 @@ func (p *effectPlan) shadowMask(ctx context.Context, g effectGrid, tr typeset.Ma
 			}
 		}
 	}
-	k := effect.GaussianKernel(g.span(p.s.Shadow.Blur / 3))
+	k := effect.GaussianKernel(g.Span(p.s.Shadow.Blur / 3))
 	if p.impress {
-		k = effect.TentKernel(g.span(p.s.Shadow.Blur))
+		k = effect.TentKernel(g.Span(p.s.Shadow.Blur))
 	}
-	if err := blur(ctx, mask, k); err != nil {
+	if err := officefx.BlurEdge(ctx, mask, k); err != nil {
 		return fail(err)
 	}
 	return mask, nil
@@ -1185,17 +1042,6 @@ func (p *effectPlan) shadowSigma() float64 {
 		return tentSigma(p.s.Shadow.Blur)
 	}
 	return p.s.Shadow.Blur / 3
-}
-
-// silhouetteLevel returns the coverage from which a pixel belongs to the
-// silhouette a glow grows and a soft edge shrinks: any coverage on
-// Impress's rule, as its filters make the silhouette opaque wherever it
-// paints; PowerPoint's own ([officefx.Rules.SilhouetteLevel]).
-func (p *effectPlan) silhouetteLevel() uint8 {
-	if p.impress {
-		return 1
-	}
-	return officefx.PowerPoint.SilhouetteLevel
 }
 
 // innerShadow returns the bitmap of the inner shadow of s over its fills
@@ -1259,24 +1105,24 @@ func (b *builder) innerShadow(s *Shape, fills []typeset.Fragment, toSlide typese
 	defer mask.Release()
 	c := colorOf(sh.Color)
 	c.A = min(sh.Opacity, 1)
-	img, err := tinted(b.ctx, mask, c)
+	img, err := officefx.Tinted(b.ctx, mask, c)
 	if err != nil {
 		return nil
 	}
-	return group(back, []typeset.Fragment{g.image(b.ctx, img)})
+	return group(back, []typeset.Fragment{imageOn(b.ctx, g, img)})
 }
 
 // innerMask returns the coverage of an inner shadow on g: the silhouette's
 // complement moved by (-dx, -dy) points, blurred by a Gaussian of a third
 // of blur points, times the silhouette's coverage. The grid's margin past
 // the silhouette, at least the offset and the blur, reads as complement.
-func (p *effectPlan) innerMask(ctx context.Context, g effectGrid, dx, dy, blurRad float64) (*effect.Surface, error) {
+func (p *effectPlan) innerMask(ctx context.Context, g officefx.Grid, dx, dy, blurRad float64) (*effect.Surface, error) {
 	cov, err := p.sil.coverage(ctx, g, typeset.Identity)
 	if err != nil {
 		return nil, err
 	}
 	defer cov.Release()
-	full, err := g.surface(ctx, effect.Coverage)
+	full, err := g.Surface(ctx, effect.Coverage)
 	if err != nil {
 		return nil, err
 	}
@@ -1291,8 +1137,8 @@ func (p *effectPlan) innerMask(ctx context.Context, g effectGrid, dx, dy, blurRa
 	steps := []func() error{
 		// The complement: full where the silhouette is not.
 		func() error { return effect.Composite(ctx, out, full, effect.Out) },
-		func() error { return effect.Offset(ctx, out, -g.span(dx), -g.span(dy)) },
-		func() error { return blur(ctx, out, effect.GaussianKernel(g.span(blurRad/3))) },
+		func() error { return effect.Offset(ctx, out, -g.Span(dx), -g.Span(dy)) },
+		func() error { return officefx.BlurEdge(ctx, out, effect.GaussianKernel(g.Span(blurRad/3))) },
 		// What the silhouette covers of the moved complement.
 		func() error { return effect.Composite(ctx, out, cov, effect.In) },
 	}
@@ -1336,28 +1182,28 @@ func (p *effectPlan) reflection(ctx context.Context, content []typeset.Fragment,
 	}
 	surfaces, err := effect.Paint(ctx, []effect.Content{{
 		Fragments: content, Transform: then(toSlide, mirror),
-		Grid: g.place(), W: g.w, H: g.h,
+		Grid: g.Place(), W: g.W, H: g.H,
 	}})
 	if err != nil {
 		return nil
 	}
 	s := surfaces[0]
 	defer s.Release()
-	if err := blur(ctx, s, effect.GaussianKernel(g.span(blurRad/3))); err != nil {
+	if err := officefx.BlurEdge(ctx, s, effect.GaussianKernel(g.Span(blurRad/3))); err != nil {
 		return nil
 	}
 	x0, y0, x1, y1 := fadeLine(copied, rf)
-	px := g.pixels()
+	px := g.Pixels()
 	sx0, sy0 := apply(px, x0, y0)
 	sx1, sy1 := apply(px, x1, y1)
 	if err := effect.AlphaRamp(ctx, s, sx0, sy0, sx1, sy1, rf.StartOpacity, rf.EndOpacity); err != nil {
 		return nil
 	}
-	img, err := straight(ctx, s)
+	img, err := officefx.Straight(ctx, s)
 	if err != nil {
 		return nil
 	}
-	return g.image(ctx, img)
+	return imageOn(ctx, g, img)
 }
 
 // fadeLine returns where a reflection's fade starts and ends in slide
@@ -1378,23 +1224,6 @@ func fadeLine(r typeset.Rect, rf *Reflection) (x0, y0, x1, y1 float64) {
 	x0, y0 = at(rf.StartPos)
 	x1, y1 = at(rf.EndPos)
 	return x0, y0, x1, y1
-}
-
-// straight returns the premultiplied RGBA surface s as an image of
-// straight colours, charged to the budget for [typeset.EncodeImage] to
-// give back.
-func straight(ctx context.Context, s *effect.Surface) (*image.NRGBA, error) {
-	if err := typeset.ChargeImage(ctx, s.W, s.H, color.NRGBAModel); err != nil {
-		return nil, err
-	}
-	img := image.NewNRGBA(image.Rect(0, 0, s.W, s.H))
-	for i := 0; i < len(s.Pix); i += 4 {
-		px, out := s.Pix[i:i+4:i+4], img.Pix[i:i+4:i+4]
-		if a := px[3]; a != 0 {
-			out[0], out[1], out[2], out[3] = unpremultiply(px[0], a), unpremultiply(px[1], a), unpremultiply(px[2], a), a
-		}
-	}
-	return img, nil
 }
 
 // contentBitmap returns the shape drawn as a bitmap in slide coordinates
@@ -1427,7 +1256,7 @@ func (p *effectPlan) contentBitmap(ctx context.Context, own []typeset.Fragment, 
 		if sg := s.SoftEdge / 3; sigma == 0 || sg < sigma {
 			sigma = sg
 		}
-		morph = s.SoftEdge * officefx.PowerPoint.SoftShrink
+		_, morph = officefx.PowerPoint.SoftSize(s.SoftEdge)
 	}
 	box, ok := intersect(grow(p.sil.bounds, reach), grow(p.area, reach))
 	if !ok {
@@ -1437,14 +1266,14 @@ func (p *effectPlan) contentBitmap(ctx context.Context, own []typeset.Fragment, 
 	if !ok {
 		return nil
 	}
-	surfaces, err := effect.Paint(ctx, []effect.Content{{Fragments: own, Transform: toSlide, Grid: g.place(), W: g.w, H: g.h}})
+	surfaces, err := effect.Paint(ctx, []effect.Content{{Fragments: own, Transform: toSlide, Grid: g.Place(), W: g.W, H: g.H}})
 	if err != nil {
 		return nil
 	}
 	out := surfaces[0]
 	defer out.Release()
 	if bl := s.Blur; bl != nil {
-		k := effect.GaussianKernel(g.span(bl.Radius / 3))
+		k := effect.GaussianKernel(g.Span(bl.Radius / 3))
 		if err := effect.Blur(ctx, out, k, k, effect.EdgeNone); err != nil {
 			return nil
 		}
@@ -1459,17 +1288,17 @@ func (p *effectPlan) contentBitmap(ctx context.Context, own []typeset.Fragment, 
 			return nil
 		}
 	}
-	img, err := straight(ctx, out)
+	img, err := officefx.Straight(ctx, out)
 	if err != nil {
 		return nil
 	}
-	return g.image(ctx, img)
+	return imageOn(ctx, g, img)
 }
 
 // fadeContent fades the content surface c by the shape's soft edge, in
 // place: each pixel times the fade, which leaves the content's own
 // coverage to its alpha.
-func (p *effectPlan) fadeContent(ctx context.Context, g effectGrid, c *effect.Surface) error {
+func (p *effectPlan) fadeContent(ctx context.Context, g officefx.Grid, c *effect.Surface) error {
 	fade, err := p.softFade(ctx, g, typeset.Identity, false)
 	if err != nil {
 		return err
@@ -1491,10 +1320,10 @@ var overlayModes = [...]effect.BlendMode{
 // overlay blends the colour of fo over the content surface c by fo's
 // mode, in place, and keeps the result where the content paints: the
 // colour blended over c, then c's alpha In it.
-func overlay(ctx context.Context, g effectGrid, c *effect.Surface, fo *FillOverlay) error {
+func overlay(ctx context.Context, g officefx.Grid, c *effect.Surface, fo *FillOverlay) error {
 	col := effect.ColorOf(colorOf(fo.Color))
 	col.A = effect.ColorOf(typeset.Color{A: fo.Opacity}).A
-	layer, err := g.surface(ctx, effect.RGBA)
+	layer, err := g.Surface(ctx, effect.RGBA)
 	if err != nil {
 		return err
 	}

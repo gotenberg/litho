@@ -66,9 +66,11 @@ func shapeDoc(t *testing.T, effects string) *typeset.Document {
 //   - litho/docx shapes-effects-3d: Word leaves the bitmaps of a shape's
 //     effects out of any Artifact sequence, where it marks a run's.
 //   - litho/docx shapes-effects-3d: Word's 11 point glow fits a Gaussian of
-//     1.81 points with its half 5.5 points out of the shape; its 6 point
-//     shadow a Gaussian of 1.88 points centred on the outline; its 5 point
-//     soft edge a Gaussian of 1.66 points.
+//     1.81 points with its half 5.04 points out of the shape's top (4.98,
+//     5.06 and 4.81 out of its right, left and bottom); its 6 point shadow
+//     a Gaussian of 1.88 points centred on the outline; its 5 point soft
+//     edge a Gaussian of 1.66 points with its half 4.49 points inside the
+//     shape's left and top.
 func TestShapeEffectsFollowWord(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -78,9 +80,9 @@ func TestShapeEffectsFollowWord(t *testing.T) {
 		out, sigma float64
 		replaces   bool
 	}{
-		{"glow", `<a:effectLst><a:glow rad="139700"><a:srgbClr val="ED7D31"><a:alpha val="40000"/></a:srgbClr></a:glow></a:effectLst>`, 5.5, 1.81, false},
+		{"glow", `<a:effectLst><a:glow rad="139700"><a:srgbClr val="ED7D31"><a:alpha val="40000"/></a:srgbClr></a:glow></a:effectLst>`, 5.04, 1.81, false},
 		{"shadow", `<a:effectLst><a:outerShdw blurRad="76200" dist="0" algn="ctr"><a:prstClr val="black"><a:alpha val="40000"/></a:prstClr></a:outerShdw></a:effectLst>`, 0, 1.88, false},
-		{"soft edge", `<a:effectLst><a:softEdge rad="63500"/></a:effectLst>`, -5, 1.66, true},
+		{"soft edge", `<a:effectLst><a:softEdge rad="63500"/></a:effectLst>`, -4.49, 1.66, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := shapeDoc(t, tc.effects)

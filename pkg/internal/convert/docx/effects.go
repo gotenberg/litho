@@ -77,7 +77,7 @@ func (d *document) withEffects(pic *layout.Picture, fx *css.OfficeEffects) *layo
 		under, notes, err := officefx.Under(ctx, src, fx, &d.effectPixels)
 		d.effectFailed(notes, err)
 		if fx.SoftEdge > 0 {
-			soft, notes, err := officefx.SoftEdge(ctx, src, fx.SoftEdge, &d.effectPixels)
+			soft, notes, err := officefx.SoftEdge(ctx, src, fx, &d.effectPixels)
 			d.effectFailed(notes, err)
 			if soft != nil {
 				content = []typeset.Fragment{soft}

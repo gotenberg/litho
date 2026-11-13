@@ -136,7 +136,7 @@ func Under(ctx context.Context, src *Source, fx *css.OfficeEffects, pixels *effe
 		}
 	}
 	if g := fx.Glow; g != nil {
-		if err := add(glow(ctx, src, g, pixels)); err != nil {
+		if err := add(glow(ctx, src, g, rulesOf(fx.Rules), pixels)); err != nil {
 			return nil, Notes{}, err
 		}
 	}
@@ -174,27 +174,47 @@ func shadow(ctx context.Context, src *Source, sh *css.OfficeShadow, pixels *effe
 	return f, notes, err
 }
 
-// glow draws a glow: the silhouette made opaque, grown by half the radius
-// and blurred by a Gaussian of a sixth of it, in its colour.
-//
-// # Corpus evidence
-//
-//   - litho/pptx effects-glow-softedge-reflection: PowerPoint's 18 and 5
-//     point glows fit a dilation by half the radius then a Gaussian of a
-//     sixth of it (rms 0.50 and 0.24 levels).
-//   - litho/docx shapes-effects-3d: Word's 11 point glow fits a Gaussian of
-//     1.81 points, a sixth of the radius, centred half the radius out
-//     (rms 0.33 levels).
-func glow(ctx context.Context, src *Source, g *css.OfficeGlow, pixels *effect.Page) (typeset.Fragment, Notes, error) {
+// glow draws a glow: the silhouette made opaque, grown and blurred by
+// rules ([Rules.GlowMask]), in its colour; a run of Word's text by its
+// tighter falloffs ([textGlowGrow]).
+func glow(ctx context.Context, src *Source, g *css.OfficeGlow, rules *Rules, pixels *effect.Page) (typeset.Fragment, Notes, error) {
 	col, ok := opaqueEnough(g.Color)
 	r := radius(g.Radius)
 	if !ok || r <= 0 {
 		return nil, Notes{}, nil
 	}
-	sigma, grow := r/6, r/2
 	if src.Text {
-		sigma, grow = float64(r*textGlowSigma), float64(r*textGlowGrow)
+		return textGlow(ctx, src, col, r, pixels)
 	}
+	sigma, morph := rules.GlowSize(r)
+	gr, notes, ok := take(Grow(pathBounds(src.Paths), r), sigma, morph, pixels)
+	if !ok {
+		return nil, notes, nil
+	}
+	cov, err := gr.Coverage(ctx, src.Paths, typeset.Identity)
+	if err != nil {
+		return nil, Notes{}, err
+	}
+	mask, err := rules.GlowMask(ctx, gr, cov, r)
+	cov.Release()
+	if err != nil {
+		return nil, Notes{}, err
+	}
+	img, err := Tinted(ctx, mask, col)
+	mask.Release()
+	if err != nil {
+		return nil, Notes{}, err
+	}
+	f, err := gr.Image(ctx, img)
+	return f, notes, err
+}
+
+// textGlow draws the glow of radius r of the glyph outlines of a run of
+// Word's text: the outlines made opaque from any coverage, grown by
+// textGlowGrow of the radius and blurred by a Gaussian of textGlowSigma
+// of it, in col.
+func textGlow(ctx context.Context, src *Source, col typeset.Color, r float64, pixels *effect.Page) (typeset.Fragment, Notes, error) {
+	sigma, grow := float64(r*textGlowSigma), float64(r*textGlowGrow)
 	cov, notes, err := cover(ctx, src.Paths, pathBounds(src.Paths), typeset.Identity, sigma, grow+3*sigma, pixels)
 	if err != nil || cov == nil {
 		return nil, notes, err
@@ -276,58 +296,48 @@ func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixel
 }
 
 // SoftEdge returns src's content as a bitmap whose edge fades inside the
-// silhouette: the silhouette made opaque, shrunk by the radius and
-// blurred by a Gaussian of a third of it, the content drawn through it.
-// The bitmap replaces the content; it takes no structure parent, which
-// the caller sets. It returns nil when the radius draws nothing, and the
-// notes and errors of [Under].
-//
-// # Corpus evidence
-//
-//   - litho/pptx effects-glow-softedge-reflection: PowerPoint's 25 and 5
-//     point soft edges fit an erosion by the radius then a Gaussian of a
-//     third of it (rms 0.44 and 0.53 levels); the shape is a bitmap, no
-//     vector path left.
-//   - litho/docx shapes-effects-3d: Word's 5 point soft edge fits a
-//     Gaussian of 1.66 points, a third of the radius (rms 0.35 levels).
-func SoftEdge(ctx context.Context, src *Source, rad float64, pixels *effect.Page) (typeset.Fragment, Notes, error) {
-	r := radius(rad)
+// silhouette by the soft edge of fx and the rules it names
+// ([Rules.SoftFade]), the content drawn through the fade. The bitmap
+// replaces the content; it takes no structure parent, which the caller
+// sets. It returns nil when the radius draws nothing, and the notes and
+// errors of [Under].
+func SoftEdge(ctx context.Context, src *Source, fx *css.OfficeEffects, pixels *effect.Page) (typeset.Fragment, Notes, error) {
+	r := radius(fx.SoftEdge)
 	if r <= 0 || len(src.Paths) == 0 || src.Content == nil {
 		return nil, Notes{}, nil
 	}
-	sigma := r / 3
-	cov, notes, err := cover(ctx, src.Paths, pathBounds(src.Paths), typeset.Identity, sigma, 0, pixels)
-	if err != nil || cov == nil {
-		return nil, notes, err
+	rules := rulesOf(fx.Rules)
+	sigma, morph := rules.SoftSize(r)
+	g, notes, ok := take(pathBounds(src.Paths), sigma, morph, pixels)
+	if !ok {
+		return nil, notes, nil
 	}
-	defer cov.Release()
-	if err := effect.Threshold(cov, 1); err != nil {
+	cov, err := g.Coverage(ctx, src.Paths, typeset.Identity)
+	if err != nil {
 		return nil, Notes{}, err
 	}
-	shrink := pixelsOf(r, cov.Grid.Scale)
-	if err := effect.Erode(ctx, cov, shrink, shrink); err != nil {
+	fade, err := rules.SoftFade(ctx, g, cov, r)
+	cov.Release()
+	if err != nil {
 		return nil, Notes{}, err
 	}
-	if err := blur(ctx, cov, sigma); err != nil {
-		return nil, Notes{}, err
-	}
-	ss, err := effect.Paint(ctx, []effect.Content{{Fragments: src.Content, Grid: cov.Grid, W: cov.W, H: cov.H}})
+	defer fade.Release()
+	ss, err := effect.Paint(ctx, []effect.Content{{Fragments: src.Content, Grid: g.Place(), W: g.W, H: g.H}})
 	if err != nil {
 		return nil, Notes{}, err
 	}
 	content := ss[0]
 	defer content.Release()
-	mask, err := effect.Tint(ctx, cov, effect.Color{R: 255, G: 255, B: 255, A: 255})
+	// The content's alpha holds the silhouette's coverage: it takes the
+	// fade alone.
+	if err := effect.Mask(ctx, content, fade); err != nil {
+		return nil, Notes{}, err
+	}
+	img, err := Straight(ctx, content)
 	if err != nil {
 		return nil, Notes{}, err
 	}
-	defer mask.Release()
-	// The content where the mask is: Porter-Duff In of the content on
-	// the mask.
-	if err := effect.Composite(ctx, mask, content, effect.In); err != nil {
-		return nil, Notes{}, err
-	}
-	f, err := encode(ctx, mask)
+	f, err := g.Image(ctx, img)
 	return f, notes, err
 }
 

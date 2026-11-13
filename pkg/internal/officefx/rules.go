@@ -8,9 +8,11 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
-// Rules are the measures one Microsoft Office program draws its effects
-// by where Word and PowerPoint part ways. [PowerPoint] holds
-// PowerPoint's; Word's are the package's plain rules ([Under]).
+// Rules are the measures a Microsoft Office program draws its shapes'
+// glows, soft edges and shadows by: [Word] holds Word's, which Excel's
+// drawings take, [PowerPoint] PowerPoint's. Both grow a glow by a square
+// then a disc and shrink a soft edge by a disc, from the pixels the
+// silhouette covers at least half; they part on the measures below.
 type Rules struct {
 	// GlowGrow is how far a glow grows the silhouette before its blur, a
 	// share of the radius.
@@ -20,8 +22,8 @@ type Rules struct {
 	// the rest: a square with rounded corners. 1 grows by a square
 	// alone.
 	GlowSquare int
-	// SoftShrink is how far a soft edge shrinks the silhouette before its
-	// blur, a share of the radius.
+	// SoftShrink is how far a soft edge shrinks the silhouette, by a
+	// disc, before its blur, a share of the radius.
 	SoftShrink float64
 	// ShadowLine is the share of a filled shape's line width the
 	// silhouette of its blurred outer shadow takes.
@@ -77,12 +79,62 @@ type Rules struct {
 //   - litho/pptx: effects-glow-softedge-reflection's glow of 18 pt, drawn
 //     from the silhouette of every pixel the outline touches, lies 0.3 pt,
 //     half a pixel, further out on both sides than PowerPoint prints it.
+//   - litho/pptx: effects-glow-softedge-reflection prints its glows of 5
+//     and 18 pt as bitmaps whose alpha along a row through the middle
+//     falls as a Gaussian of deviation 1.1 and 4.1 pixels at 100 pixels an
+//     inch, a sixth of the radius; its soft edges of 5 and 25 pt rise from
+//     the outline as a Gaussian of deviation 1.6 and 8.3 pt, a third.
 var PowerPoint = Rules{
 	GlowGrow:        5.0 / 12,
 	GlowSquare:      3,
 	SoftShrink:      11.0 / 12,
 	ShadowLine:      0.5,
 	SilhouetteLevel: 128,
+}
+
+// Word are Word's rules: PowerPoint's corners and soft edge, a glow grown
+// by 0.45 of its radius, and a shadow drawn from the whole line.
+//
+// GlowGrow is 0.45, where PowerPoint's 5/12 leaves Word's glow a third of
+// a point short on every side. ShadowLine is 1: no Word document with a
+// reference has a blurred shadow under a shape with a solid line, and
+// Word's whole line is not measured. The soft edge shrinks by a disc, as
+// Word's rounded corners and PowerPoint's diamond show; on rectangles a
+// disc and a square shrink alike.
+//
+// # Corpus evidence
+//
+//   - litho/docx: shapes-effects-3d's glow of 11 pt around a rounded
+//     rectangle (corners of 10.8 pt): Word's soft mask has its half 4.98,
+//     5.06, 5.04 and 4.81 pt out of the right, left, top and bottom sides;
+//     along rays out of the four corners every 7.5 degrees and along the
+//     four sides' middles, after the best shift: a square's growth by
+//     half the radius rms 19.14 and 6.40 levels, PowerPoint's rules 1.77
+//     and 4.66, its growth at 0.45 3.19 and 0.39, at 0.43 1.35 and 3.41, a
+//     disc's 5.60 and 4.68, a square's 7.95 and 4.66.
+//   - litho/docx: shapes-effects-3d's soft edge of 5 pt on a rounded
+//     rectangle, over the whole bitmap after the best shift: a square's
+//     shrink by the radius from any coverage rms 14.99 levels (at most
+//     112), PowerPoint's rules with a square 10.32 (88.6), with a disc
+//     2.77 (29.6); a disc's shrink by the whole radius 9.10.
+//   - libreoffice/pptx: sd/shape-soft-edges's diamond with a soft edge of
+//     18 pt, over the whole bitmap after the best shift: PowerPoint's soft
+//     mask against its rules with a square's shrink rms 31.45 levels (at
+//     most 118), with a disc's 7.23 (36).
+var Word = Rules{
+	GlowGrow:        0.45,
+	GlowSquare:      3,
+	SoftShrink:      11.0 / 12,
+	ShadowLine:      1,
+	SilhouetteLevel: 128,
+}
+
+// rulesOf returns the rules of the program r names.
+func rulesOf(r css.OfficeRules) *Rules {
+	if r == css.OfficePowerPoint {
+		return &PowerPoint
+	}
+	return &Word
 }
 
 // GlowSize returns the deviation of the blur of a glow of radius r and
@@ -122,6 +174,52 @@ func (r *Rules) Grown(ctx context.Context, cov *effect.Surface, n int, k effect.
 		return nil, err
 	}
 	return out, nil
+}
+
+// GlowMask returns the coverage of a glow of radius rad on g drawn from
+// cov, the silhouette's coverage on g, which it makes opaque in place
+// from SilhouetteLevel: grown and blurred by [Rules.GrownBlur], so it
+// fades to nothing one radius out (ECMA-376 Part 1, 20.1.8.32 glow: "a
+// color blurred outline").
+func (r *Rules) GlowMask(ctx context.Context, g Grid, cov *effect.Surface, rad float64) (*effect.Surface, error) {
+	if err := effect.Threshold(cov, r.SilhouetteLevel); err != nil {
+		return nil, err
+	}
+	return r.GrownBlur(ctx, g, cov, rad)
+}
+
+// SoftSize returns the deviation of the blur of a soft edge of radius rad
+// and how far it shrinks the silhouette, in points: a Gaussian of a third
+// of the radius after a shrink of SoftShrink of it.
+func (r *Rules) SoftSize(rad float64) (sigma, morph float64) {
+	return rad / 3, rad * r.SoftShrink
+}
+
+// SoftFade returns the fade of a soft edge of radius rad on g, drawn from
+// cov, the silhouette's coverage on g, which it leaves as it is: the
+// silhouette made opaque from SilhouetteLevel, shrunk by a disc and
+// blurred ([Rules.SoftSize]), the pixels past the bitmap's edge repeating
+// the edge's (ECMA-376 Part 1, 20.1.8.53 softEdge). Content whose alpha
+// holds the silhouette's coverage takes the fade as it is; a flat
+// silhouette takes it times its coverage.
+func (r *Rules) SoftFade(ctx context.Context, g Grid, cov *effect.Surface, rad float64) (*effect.Surface, error) {
+	sigma, morph := r.SoftSize(rad)
+	fade, err := cov.Clone(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = effect.Threshold(fade, r.SilhouetteLevel)
+	if n := g.Whole(morph); err == nil && n > 0 {
+		err = effect.ErodeDisc(ctx, fade, float64(n))
+	}
+	if err == nil {
+		err = BlurEdge(ctx, fade, effect.GaussianKernel(g.Span(sigma)))
+	}
+	if err != nil {
+		fade.Release()
+		return nil, err
+	}
+	return fade, nil
 }
 
 // shadowMatrix returns the map of an outer shadow sh of a source whose
