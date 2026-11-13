@@ -279,16 +279,18 @@ func (p *painter) partBackground(b *box, clip typeset.Rect) {
 		return
 	}
 	g := &ditem{group: true, opacity: 1, clip: &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{}}}
-	if st.BackgroundGradient != nil {
-		for _, pa := range p.e.gradientTiles(st, p.borderRect(b), clip, clip.Y) {
-			g.kids = append(g.kids, &ditem{frag: pa, y0: pa.Ops[0].P[0].Y, y1: pa.Ops[2].P[0].Y, page: p.mono})
+	for _, sl := range p.attachedSlices(b, st, p.borderRect(b), clip) {
+		if st.BackgroundGradient != nil {
+			for _, pa := range p.e.gradientTiles(st, sl.area, sl.clip, clip.Y) {
+				g.kids = append(g.kids, &ditem{frag: pa, y0: pa.Ops[0].P[0].Y, y1: pa.Ops[2].P[0].Y, page: p.mono})
+			}
+			continue
 		}
-	} else {
 		pic := p.e.picture(st.BackgroundImage, clip.Y)
 		if pic == nil {
 			return
 		}
-		for _, t := range p.e.tiles(st, pic, p.borderRect(b), clip, clip.Y) {
+		for _, t := range p.e.tiles(st, pic, sl.area, sl.clip, clip.Y) {
 			g.kids = append(g.kids, &ditem{frag: &typeset.Image{Rect: t, Source: pic.Source}, y0: t.Y, y1: t.Y + t.Height, page: p.mono})
 		}
 	}

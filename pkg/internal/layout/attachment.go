@@ -10,8 +10,8 @@ import (
 // its border box r (CSS Backgrounds 3, 3.5): for a scroll container, the
 // area grown to the scrollable overflow, its in-flow content and line
 // boxes and the end padding past them (CSS Overflow 3, 2.2), as though
-// the area scrolled with the content. Any other box keeps area. Fixed
-// needs nothing here: Chromium prints it as scroll.
+// the area scrolled with the content. Any other box keeps area. A fixed
+// image is placed by [painter.attachedSlices].
 func (p *painter) localArea(b *box, area, r typeset.Rect, pd [4]float64) typeset.Rect {
 	if b.kind != kindBlock || b.st.Overflow == css.OverflowVisible || b == p.viewport {
 		return area

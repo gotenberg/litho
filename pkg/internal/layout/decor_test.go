@@ -256,6 +256,29 @@ func TestCanvas_ImagePositionedInRoot(t *testing.T) {
 	}
 }
 
+// TestBackground_FixedRepeatsOnEveryPage locks CSS Backgrounds 3, 3.5:
+// in paged media a fixed image is positioned in the page area and
+// repeated on every page: a box two pages tall shows it 1px down on both
+// pages.
+func TestBackground_FixedRepeatsOnEveryPage(t *testing.T) {
+	fixed := func(s *css.Style) {
+		s.BackgroundImage = "i.png"
+		s.BackgroundAttachment = css.AttachFixed
+		s.BackgroundRepeat = [2]css.Repeat{css.RepeatNoRepeat, css.RepeatNoRepeat}
+		s.BackgroundPosition = [2]css.Dimension{css.Pts(0), css.Pts(px(1))}
+	}
+	root := doc(el(sty(height(8), fixed)))
+	res, err := Layout(context.Background(), root, ahem(t), Options{Page: page(6, 4), Image: imageLoader()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for n := 1; n <= 2; n++ {
+		if c := at(render(t, res, n), 0, 1); c != (color.NRGBA{255, 0, 0, 255}) {
+			t.Errorf("page %d pixel (0, 1) is %v, want the image's red", n, c)
+		}
+	}
+}
+
 func TestOpacity_Group(t *testing.T) {
 	root := doc(el(sty(width(2), height(2), bg(red), func(s *css.Style) { s.Opacity = 0.5 })))
 	img := render(t, run(t, root, page(2, 2)), 1)

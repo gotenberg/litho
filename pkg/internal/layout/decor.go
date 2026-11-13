@@ -156,6 +156,67 @@ func (p *painter) background(b *box, st *css.Style, r typeset.Rect, radii [4][2]
 	p.backgroundInto(into, blend, b, st, r, radii, bd, pd, clipR, clipRadii)
 }
 
+// bgSlice is a background positioning area and the part of the
+// background painting area its image is drawn in.
+type bgSlice struct {
+	area, clip typeset.Rect
+}
+
+// attachedSlices returns where the background image of b, styled st, is
+// positioned and drawn: area and clip for a scrolling or local image;
+// for a fixed one, on each page clip reaches, that page's area, the
+// viewport of paged media, and the part of clip on it, the image repeated
+// on every page (CSS Backgrounds 3, 3.5). A box that is transformed or
+// inside a transformed box scrolls its fixed image (CSS Transforms 1, 3),
+// as does a box laid out where the engine does not paginate. A monolithic
+// unit draws its fixed image on its own page.
+//
+// Chromium's print departs from the clause: it draws a fixed image on a
+// block as scroll and none on a table part, while its screen fixes the
+// image to the viewport. The clause is kept.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 prints a fixed 96px image on a table row
+//     group (CSS2/backgrounds/background-attachment-applies-to-001) as no
+//     image at all, the row group orange alone.
+func (p *painter) attachedSlices(b *box, st *css.Style, area, clip typeset.Rect) []bgSlice {
+	if st.BackgroundAttachment != css.AttachFixed || !p.e.paginating() || transformedFrom(b) {
+		return []bgSlice{{area: area, clip: clip}}
+	}
+	var out []bgSlice
+	first, last := p.e.pageOf(clip.Y), p.e.pageOf(clip.Y+clip.Height-eps)
+	if p.mono >= 0 {
+		// A monolithic unit draws on its page alone.
+		first, last = p.mono, p.mono
+	}
+	for k := first; k <= last && k-first < maxFixedPages; k++ {
+		w, _ := areaOf(p.e.box(k))
+		page := typeset.Rect{Y: p.e.pageTop(k), Width: w, Height: p.e.sliceH(k)}
+		if part, ok := intersect(clip, page); ok {
+			out = append(out, bgSlice{area: page, clip: part})
+		}
+	}
+	return out
+}
+
+// maxFixedPages caps the pages a fixed background image is repeated on
+// for one box. Anti-DoS guard, not spec-mandated: each page draws its
+// own tiles, and a box spanning more pages than this leaves the rest of
+// its background without the image.
+const maxFixedPages = 1024
+
+// transformedFrom reports whether b or one of its ancestors is
+// transformed.
+func transformedFrom(b *box) bool {
+	for a, depth := b, 0; a != nil && depth <= maxTreeDepth; a, depth = a.parent, depth+1 {
+		if a.transformed() {
+			return true
+		}
+	}
+	return false
+}
+
 // blendedBackground returns the group the background of b, styled st,
 // paints into and the blend mode of its image: when the image blends with
 // the colour, an isolated group, since the layers of a background blend
@@ -220,18 +281,20 @@ func (p *painter) backgroundInto(into *ditem, blend typeset.BlendMode, b *box, s
 		area = p.localArea(b, area, r, pd)
 	}
 	g := &ditem{group: true, opacity: 1, blend: blend, clip: &typeset.Path{Ops: roundedRect(clipR, clipRadii), Fill: &typeset.Fill{}}}
-	if st.BackgroundGradient != nil {
-		for _, pa := range p.e.gradientTiles(st, area, clipR, r.Y) {
-			t := pa.Ops[0].P[0]
-			g.kids = append(g.kids, &ditem{frag: pa, y0: t.Y, y1: pa.Ops[2].P[0].Y, page: -1})
+	for _, sl := range p.attachedSlices(b, st, area, clipR) {
+		if st.BackgroundGradient != nil {
+			for _, pa := range p.e.gradientTiles(st, sl.area, sl.clip, r.Y) {
+				t := pa.Ops[0].P[0]
+				g.kids = append(g.kids, &ditem{frag: pa, y0: t.Y, y1: pa.Ops[2].P[0].Y, page: -1})
+			}
+			continue
 		}
-	} else {
 		pic := p.e.picture(st.BackgroundImage, r.Y)
 		if pic == nil {
 			return
 		}
-		pic = naturalPicture(pic, area.Width, area.Height)
-		tiles := p.e.tiles(st, pic, area, clipR, r.Y)
+		pic = naturalPicture(pic, sl.area.Width, sl.area.Height)
+		tiles := p.e.tiles(st, pic, sl.area, sl.clip, r.Y)
 		for i, t := range tiles {
 			f := p.e.pictureFrag(pic, t, nil)
 			if f == nil {
