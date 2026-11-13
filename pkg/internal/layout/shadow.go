@@ -330,7 +330,9 @@ func boxLine(line []float64, stride, n, r int, extend bool, tmp []float64) {
 }
 
 // outline paints the outline of b outside its border box, offset by
-// outline-offset, following its border radius (CSS UI 3, 5).
+// outline-offset, following its border radius (CSS UI 3, 5), around each
+// fragment a box that clones its decorations paints (CSS Fragmentation 3,
+// 5.4), as Chromium draws it.
 func (p *painter) outline(b *box) {
 	o := b.st.Outline
 	w := max(clamp(o.Width), 0)
@@ -340,15 +342,22 @@ func (p *painter) outline(b *box) {
 	if _, ok := colorOf(o.Color); !ok {
 		return
 	}
-	r := p.borderRect(b)
-	radii := radiiOf(b, r.Width, r.Height)
-	outer, oradii := growRect(r, radii, clamp(b.st.OutlineOffset)+w)
-	if outer.Width <= 0 || outer.Height <= 0 {
-		return
-	}
 	st := &css.Style{}
 	for s := range st.Border {
 		st.Border[s] = o
 	}
-	p.border(b, st, outer, oradii, [4]float64{w, w, w, w}, [4]bool{true, true, true, true})
+	frags, columns := p.fragments(b)
+	for _, r := range frags {
+		radii := radiiOf(b, r.Width, r.Height)
+		outer, oradii := growRect(r, radii, clamp(b.st.OutlineOffset)+w)
+		if outer.Width <= 0 || outer.Height <= 0 {
+			continue
+		}
+		paint := func() { p.border(b, st, outer, oradii, [4]float64{w, w, w, w}, [4]bool{true, true, true, true}) }
+		if columns {
+			p.paintWhole(b, paint)
+		} else {
+			paint()
+		}
+	}
 }

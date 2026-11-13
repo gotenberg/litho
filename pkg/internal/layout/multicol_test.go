@@ -189,6 +189,30 @@ func TestMulticol_CloneFillsItsColumns(t *testing.T) {
 	}
 }
 
+// TestMulticol_CloneOutlinesEachFragment locks that a box cloning its
+// decorations draws its outline round each column's fragment, whole past
+// the column's edges (CSS Fragmentation 3, 5.4).
+func TestMulticol_CloneOutlinesEachFragment(t *testing.T) {
+	t.Parallel()
+	cols := func(s *css.Style) {
+		s.Columns.Count, s.Columns.Fill = 2, css.FillAuto
+		s.ColumnGap = css.Pts(px(3))
+		s.Width = css.Pts(px(9))
+	}
+	clone := func(s *css.Style) {
+		s.BoxDecorationBreak = css.DecorationClone
+		s.Outline = css.Border{Width: px(1), Style: css.Solid, Color: red}
+	}
+	res := run(t, doc(el(sty(cols, height(3), margin(1, 0, 0, 1)), el(sty(height(6), bg(blue), clone)))), page(11, 6))
+	assertPixels(t, res, 1, `
+		RRRRR_RRRRR
+		RBBBR_RBBBR
+		RBBBR_RBBBR
+		RBBBR_RBBBR
+		RRRRR_RRRRR
+		___________`)
+}
+
 func TestMulticol_BalancesOverAbsoluteBoxes(t *testing.T) {
 	t.Parallel()
 	abs := el(sty(width(2), func(s *css.Style) { s.Position = css.Absolute; s.Top = css.Pts(0) }), strip(blue), strip(blue), strip(blue), strip(blue))

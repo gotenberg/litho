@@ -352,11 +352,11 @@ func moveItem(it *ditem, dy float64, depth int) *ditem {
 // in: its own, sliced at the breaks, or with box-decoration-break: clone
 // one per column of the column set being painted it crosses, each with
 // all its edges (CSS Fragmentation 3, 5.4); pages slice it, as Chromium
-// prints it.
-func (p *painter) fragments(b *box) []typeset.Rect {
+// prints it. columns reports one border box per column.
+func (p *painter) fragments(b *box) (frags []typeset.Rect, columns bool) {
 	r := p.borderRect(b)
 	if !clones(b.st) || b.parent == nil {
-		return []typeset.Rect{r}
+		return []typeset.Rect{r}, false
 	}
 	var top func(i int) (float64, float64)
 	var at func(y float64) int
@@ -371,13 +371,13 @@ func (p *painter) fragments(b *box) []typeset.Rect {
 	}
 	if at == nil {
 		if b.st.BoxDecorationBreak == css.DecorationCloneAll {
-			return p.pageFragments(r)
+			return p.pageFragments(r), false
 		}
-		return []typeset.Rect{r}
+		return []typeset.Rect{r}, false
 	}
 	i0, i1 := at(r.Y-p.dy+eps), at(r.Y+r.Height-p.dy-eps)
 	if i1 <= i0 || i1-i0 > maxColumns {
-		return []typeset.Rect{r}
+		return []typeset.Rect{r}, false
 	}
 	out := make([]typeset.Rect, 0, i1-i0+1)
 	for i := i0; i <= i1; i++ {
@@ -387,5 +387,35 @@ func (p *painter) fragments(b *box) []typeset.Rect {
 			out = append(out, typeset.Rect{X: r.X, Y: y0, Width: r.Width, Height: y1 - y0})
 		}
 	}
-	return out
+	return out, true
+}
+
+// paintWhole paints one column fragment of box b, whose decorations clone,
+// by paint, and marks what it adds to the display list as lying whole in
+// the column of its extent: the shadow and the outline round a fragment
+// reach past its column's slice and stay with it rather than be cut at
+// the column's edge (CSS Fragmentation 3, 5.4: each fragment is wrapped
+// independently).
+func (p *painter) paintWhole(b *box, paint func()) {
+	c := p.sync(p.chain(b, false))
+	n := len(c.kids)
+	paint()
+	for _, k := range c.kids[n:] {
+		wholeItem(k, 0)
+	}
+}
+
+// wholeItem marks the leaves of the display item it as lying whole in the
+// column their extent's middle is in.
+func wholeItem(it *ditem, depth int) {
+	if !it.group {
+		it.page = pageMono
+		return
+	}
+	if depth >= maxGroupDepth {
+		return
+	}
+	for _, k := range it.kids {
+		wholeItem(k, depth+1)
+	}
 }

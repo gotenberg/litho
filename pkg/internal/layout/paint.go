@@ -616,12 +616,20 @@ func (p *painter) decorations(b *box) {
 	if b.hidden || b.kind == kindInline || b.kind == kindText {
 		return
 	}
-	for _, r := range p.fragments(b) {
-		radii := radiiOf(b, r.Width, r.Height)
-		p.shadows(b, b.st, r, radii, b.bd, false)
-		p.background(b, b.st, r, radii, b.bd, b.pd)
-		p.shadows(b, b.st, r, radii, b.bd, true)
-		p.border(b, b.st, r, radii, b.bd, [4]bool{true, true, true, true})
+	frags, columns := p.fragments(b)
+	for _, r := range frags {
+		paint := func() {
+			radii := radiiOf(b, r.Width, r.Height)
+			p.shadows(b, b.st, r, radii, b.bd, false)
+			p.background(b, b.st, r, radii, b.bd, b.pd)
+			p.shadows(b, b.st, r, radii, b.bd, true)
+			p.border(b, b.st, r, radii, b.bd, [4]bool{true, true, true, true})
+		}
+		if columns {
+			p.paintWhole(b, paint)
+		} else {
+			paint()
+		}
 	}
 }
 
