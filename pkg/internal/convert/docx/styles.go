@@ -34,6 +34,13 @@ type condFormat struct {
 	tr  *rowProps
 }
 
+// unstatedKern is the least font size in points that kerns in a document
+// that states no default run properties: ECMA-376 Part 1, 17.7.5.5 leaves
+// them to the application, and Word and LibreOffice both kern every size
+// there, where a stated w:rPrDefault without w:kern kerns none (17.3.2.19).
+// Half a point is the least size w:sz can say.
+const unstatedKern = 0.5
+
 // styleSheet is the resolved styles part (ECMA-376 Part 1, 17.7).
 type styleSheet struct {
 	byID map[string]*style
@@ -55,6 +62,13 @@ type styleSheet struct {
 //     ooxmlimport/linked-picture.docx, which have no styles part, print in
 //     Carlito 11; the documents whose styles part lacks docDefaults print
 //     in Liberation Serif.
+//   - probe, docx: a 24 pt line of Calibri, with and without w:kern, in
+//     six documents: no styles part, a styles part without docDefaults, an
+//     empty docDefaults, docDefaults with pPrDefault alone, an empty
+//     rPrDefault, and an rPrDefault that names fonts and a size. Word and
+//     LibreOffice kern the line without w:kern in the first four and leave
+//     it unkerned in the last two. At 6 pt, without a styles part, both
+//     kern it too.
 func (d *document) parseStyles(root *ooxml.Element) *styleSheet {
 	s := &styleSheet{byID: map[string]*style{}}
 	if root == nil {
@@ -62,9 +76,14 @@ func (d *document) parseStyles(root *ooxml.Element) *styleSheet {
 		// 2007's defaults, as LibreOffice imports it.
 		s.defRun.fonts = fontSpec{ascii: "Calibri", hAnsi: "Calibri"}
 		s.defRun.size = new(11.0)
+		s.defRun.kern = new(unstatedKern)
 		return s
 	}
-	if dd := root.Child(w, "docDefaults"); dd != nil {
+	dd := root.Child(w, "docDefaults")
+	if dd.Child(w, "rPrDefault") == nil {
+		s.defRun.kern = new(unstatedKern)
+	}
+	if dd != nil {
 		if r := dd.Child(w, "rPrDefault").Child(w, "rPr"); r != nil {
 			s.defRun = *d.parseRunProps(r)
 		}

@@ -264,6 +264,34 @@ func TestRunKerning(t *testing.T) {
 	}
 }
 
+// TestRunKerningWithoutDefaults kerns the runs of a document that states no
+// default run properties, as Word and LibreOffice do, and leaves a stated
+// default and a run's own w:kern in charge.
+func TestRunKerningWithoutDefaults(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, styles, rpr string
+		want              css.FontKerning
+	}{
+		{"no styles part", ``, `<w:sz w:val="12"/>`, css.KerningNormal},
+		{"no docDefaults", `<w:styles ` + nsDecl + `/>`, `<w:sz w:val="48"/>`, css.KerningNormal},
+		{"empty docDefaults", `<w:styles ` + nsDecl + `><w:docDefaults/></w:styles>`, `<w:sz w:val="48"/>`, css.KerningNormal},
+		{"paragraph defaults alone", `<w:styles ` + nsDecl + `><w:docDefaults><w:pPrDefault/></w:docDefaults></w:styles>`, `<w:sz w:val="48"/>`, css.KerningNormal},
+		{"empty rPrDefault", `<w:styles ` + nsDecl + `><w:docDefaults><w:rPrDefault/></w:docDefaults></w:styles>`, `<w:sz w:val="48"/>`, css.KerningNone},
+		{"run turns it off", ``, `<w:kern w:val="0"/><w:sz w:val="48"/>`, css.KerningNone},
+		{"run raises the threshold", ``, `<w:kern w:val="28"/><w:sz w:val="24"/>`, css.KerningNone},
+	} {
+		var extra map[string]string
+		if tc.styles != "" {
+			extra = map[string]string{"word/styles.xml": tc.styles}
+		}
+		b := build(t, `<w:p><w:r><w:rPr>`+tc.rpr+`</w:rPr><w:t>kerned</w:t></w:r></w:p>`, extra)
+		if got := runWith(t, b.root, "kerned").Style.FontKerning; got != tc.want {
+			t.Errorf("%s: kerning %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 // TestJustifyShrink shrinks the spaces of justified lines in Word 2013's
 // compatibility mode and later, as Word lays them out, and not before.
 func TestJustifyShrink(t *testing.T) {
