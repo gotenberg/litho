@@ -120,3 +120,20 @@ func TestBackgroundBlendMode_IsolatedFromBackdrop(t *testing.T) {
 		})
 	}
 }
+
+// TestCompositing_DisplayContents locks that an element of display
+// contents, which has no box, composites nothing: its opacity, blend
+// mode, clip path and mask apply to no group, and its children paint as
+// they would without it, as Chromium prints them.
+func TestCompositing_DisplayContents(t *testing.T) {
+	contents := sty(display(css.Contents), func(s *css.Style) {
+		s.Opacity = 0.3
+		s.MixBlendMode = css.BlendDifference
+		s.ClipPath = css.ClipPath{Boxed: true, Box: css.GeoContent}
+		s.Mask = css.Mask{Images: []css.MaskImage{{Gradient: &css.Gradient{Angle: 180, Stops: gstops(css.Color{}, math.NaN(), css.Color{}, math.NaN())}}}}
+	})
+	root := doc(el(contents, square(2, 2, red)))
+	assertPixels(t, run(t, root, page(2, 2)), 1, `
+		RR
+		RR`)
+}
