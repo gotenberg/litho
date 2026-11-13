@@ -56,6 +56,10 @@ type lineBox struct {
 	// edge a block container already trimmed by text-box-trim: the
 	// innermost one that asks decides (CSS Inline 3, 6.2).
 	trimmedOver, trimmedUnder bool
+	// withEnd reports a last line moved to the next page to keep its
+	// block's end padding and border ([inlineState.endEdges]): the break
+	// before it does not count against orphans and widows.
+	withEnd bool
 }
 
 // lineItem is one piece of a line: a glyph run of a text box, or an
@@ -478,6 +482,11 @@ type inlineState struct {
 	vboxes map[*box]*vbox
 	// rootV is the root inline box.
 	rootV *vbox
+	// tail is the block-end padding and border of the root that follow
+	// the line being placed, its last, 0 for any other line, and moved
+	// reports that they moved it ([inlineState.position]).
+	tail  float64
+	moved bool
 	// glyphs counts the glyphs of the line being built.
 	glyphs int
 	// placed holds the floats already placed.
@@ -689,6 +698,12 @@ func (e *engine) fixOrphans(b *box, forced map[int]bool) bool {
 	segStart := 0
 	for k := 1; k < len(lines); k++ {
 		if e.pageOf(lines[k].y) == e.pageOf(lines[k-1].y) {
+			continue
+		}
+		if lines[k].withEnd {
+			// Chromium breaks before a last line its block's end padding
+			// moves whatever orphans and widows ask.
+			segStart = k
 			continue
 		}
 		next := len(lines)
@@ -908,6 +923,10 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				top, end, left, right, l = s.fitLine(lp, lw, pos, lineIndent, top, lineStrut)
 				s.rubyRoom(l, room)
 			}
+			s.tail, s.moved = 0, false
+			if end == ln && isLastPara(d, p) {
+				s.tail = s.endEdges()
+			}
 			if newTop := s.position(top, l.h-l.slack, forced); newTop != top {
 				top = newTop
 				nl, nr := s.band(top, l.h)
@@ -921,6 +940,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				}
 				l.x, l.w = nl, nr-nl
 			}
+			l.withEnd = s.moved
 			s.cutSlack(l, top)
 			if e.clampOverflows(top, l.h) {
 				return s.discard(d, p, y)
@@ -1198,7 +1218,42 @@ func (s *inlineState) position(top, h float64, forced map[int]bool) float64 {
 	if s.root.st.BoxDecorationBreak == css.DecorationCloneAll {
 		return s.clonedPosition(top, h)
 	}
-	return e.fit(top, h)
+	y := e.fit(top, h)
+	if t := s.tail; t > 0 && y == top && !e.atPageTop(y) && e.pageOf(y) != e.pageOf(y+h+t-metricSlack) && h+t <= e.areaH(e.pageOf(y)+1)+eps {
+		y = e.fit(e.nextPage(y), h)
+		s.moved = true
+	}
+	return y
+}
+
+// endEdges returns the block-end padding and border of the root that its
+// last line keeps with it, under BrowserRules: a page or column cut does
+// not run through them, the line moves to the next fragmentainer with
+// them when they fit there together, as Chromium breaks a block. The
+// edges of a multi-column container lie outside its columns. CSS
+// Fragmentation 3, 4.1 makes no break point inside a box's padding or
+// border; it leaves the break between the last line and the end edge
+// (class C) allowed, and Chromium avoids it.
+//
+// # Corpus evidence
+//
+//   - wpt, css/css-break/break-at-end-container-edge-004.html: Chromium
+//     moves the last 40px line of a block of padding-bottom 60px into the
+//     last 100px column with the padding, rather than leaving the padding
+//     to start that column.
+//   - probe, html: Chromium's PDF route moves the last of two and of three
+//     40px lines of a block of padding-bottom 60px to the next page with
+//     the padding under the default orphans and widows of 2, the lines
+//     before it staying.
+func (s *inlineState) endEdges() float64 {
+	b := s.root
+	if !s.e.opts.BrowserRules || b.kind != kindBlock || isMulticol(b) || b.st.BoxDecorationBreak != css.DecorationSlice {
+		return 0
+	}
+	if b.st.Height.Kind != css.Auto {
+		return 0
+	}
+	return b.pd[css.Bottom] + b.bd[css.Bottom]
 }
 
 // cutSlack ends the line l, placed at top, at the page cut its slack

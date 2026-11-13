@@ -219,3 +219,42 @@ func TestLinks_AndAnchors(t *testing.T) {
 		t.Errorf("warnings %+v, want the unresolved link", res.Warnings)
 	}
 }
+
+// TestFragment_LastLineKeepsTheEndPadding moves a block's last line to the
+// next column with the block-end padding that follows it, under
+// BrowserRules, as Chromium breaks it: no break point lies inside the
+// padding (CSS Fragmentation 3, 4.1), and orphans and widows give way.
+// Office documents keep the cut through the padding.
+func TestFragment_LastLineKeepsTheEndPadding(t *testing.T) {
+	t.Parallel()
+	auto := func(s *css.Style) { s.Columns.Fill = css.FillAuto }
+	small := func(s *css.Style) { s.FontSize = px(1) }
+	ib := func() *Node { return el(sty(display(css.InlineBlock), width(2), height(1), bg(lime))) }
+	root := doc(el(sty(columns(2, 1), height(5), auto), strip(black), el(sty(small, padding(0, 0, 3, 0), bg(blue)), ib(), ib(), ib())))
+	res := runWith(t, root, Options{Page: page(6, 6), BrowserRules: true})
+	assertPixels(t, res, 1, `
+		KK_GG_
+		GG_BB_
+		GG_BB_
+		BB_BB_
+		BB____
+		______`)
+	res = runWith(t, root, Options{Page: page(6, 6)})
+	assertPixels(t, res, 1, `
+		KK_BB_
+		GG_BB_
+		GG_BB_
+		GG____
+		BB____
+		______`)
+	// The break before the moved line does not count against orphans.
+	root = doc(el(sty(columns(2, 1), height(5), auto), strip(black, height(2)), el(sty(small, padding(0, 0, 3, 0), bg(blue)), ib(), ib())))
+	res = runWith(t, root, Options{Page: page(6, 6), BrowserRules: true})
+	assertPixels(t, res, 1, `
+		KK_GG_
+		KK_BB_
+		GG_BB_
+		BB_BB_
+		BB____
+		______`)
+}
