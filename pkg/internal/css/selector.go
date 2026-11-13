@@ -1,6 +1,7 @@
 package css
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -25,10 +26,10 @@ type attrSel struct {
 	name  string
 	op    attrOp
 	value string
-	// fold compares the value ASCII case-insensitively, the i flag;
-	// sensitive compares it exactly, the s flag, even for the HTML
-	// attributes whose values compare case-insensitively by default.
-	fold, sensitive bool
+	// fold compares the value ASCII case-insensitively, the i flag.
+	// Selectors 4, 6.3 adds the s flag, which compares it exactly; litho
+	// refuses it, as Chromium does not parse it.
+	fold bool
 }
 
 // pseudoKind is a pseudo-class litho knows.
@@ -59,6 +60,20 @@ const (
 	// psNever is a user-action or other dynamic pseudo-class: a static
 	// paged document is never hovered, focused, active or visited.
 	psNever
+	psHas
+	psDir
+	psRequired
+	psOptional
+	psReadOnly
+	psReadWrite
+	psPlaceholderShown
+	psDefault
+	psIndeterminate
+	psValid
+	psInvalid
+	psInRange
+	psOutOfRange
+	psOpen
 )
 
 // pseudoSel is a pseudo-class with its arguments.
@@ -68,7 +83,9 @@ type pseudoSel struct {
 	// "of S" list.
 	a, b int
 	of   []*complexSel
-	// args is the argument list of :not(), :is() and :where().
+	// args is the argument list of :not(), :is() and :where(), and the
+	// relative selectors of :has(); a is also the direction of :dir(), 0
+	// for ltr, 1 for rtl, 2 for none.
 	args []*complexSel
 	// langs are the ranges of :lang().
 	langs []string
@@ -94,6 +111,9 @@ type complexSel struct {
 	// combs[i] joins parts[i] and parts[i+1]: ' ', '>', '+' or '~'.
 	combs []byte
 	spec  uint32
+	// lead is the combinator a relative selector of :has() starts with
+	// (Selectors 4, 4.2): ' ', '>', '+' or '~'; 0 for any other selector.
+	lead byte
 	// pseudoElement names the pseudo-element the selector targets, "" for
 	// the element itself.
 	pseudoElement string
@@ -152,7 +172,14 @@ var simplePseudos = map[string]pseudoKind{
 	"only-of-type": psOnlyOfType, "empty": psEmpty, "link": psLink, "any-link": psLink,
 	"checked": psChecked, "disabled": psDisabled, "enabled": psEnabled, "defined": psAlways,
 	"hover": psNever, "focus": psNever, "active": psNever, "visited": psNever,
-	"focus-within": psNever, "focus-visible": psNever, "target": psNever, "target-within": psNever,
+	"focus-within": psNever, "focus-visible": psNever, "target": psNever,
+	"required": psRequired, "optional": psOptional, "read-only": psReadOnly, "read-write": psReadWrite,
+	"placeholder-shown": psPlaceholderShown, "default": psDefault, "indeterminate": psIndeterminate,
+	"valid": psValid, "invalid": psInvalid, "in-range": psInRange, "out-of-range": psOutOfRange, "open": psOpen,
+	// A static document has no user interaction, autofill, top layer or
+	// shadow tree.
+	"user-valid": psNever, "user-invalid": psNever, "autofill": psNever, "popover-open": psNever,
+	"modal": psNever, "fullscreen": psNever, "host": psNever,
 }
 
 // parseSelectorList parses a <selector-list> (Selectors 4, 4.1). A
@@ -267,7 +294,7 @@ func (c *compound) specificity() uint32 {
 		p := &c.pseudos[i]
 		switch p.kind { //nolint:exhaustive // the default covers the other pseudo-classes
 		case psWhere:
-		case psNot, psIs:
+		case psNot, psIs, psHas:
 			spec = addSpec(spec, maxSpec(p.args))
 		case psNthChild, psNthLastChild:
 			spec = addSpec(spec, addSpec(packSpec(0, 1, 0), maxSpec(p.of)))
@@ -345,7 +372,10 @@ func parseCompound(c *selCursor, depth int) (compound, string, *selectorError) {
 			if pseudoElement != "" {
 				return comp, "", &selectorError{}
 			}
-			a, ok := parseAttr(t.children)
+			a, ok, sensitive := parseAttr(t.children)
+			if sensitive {
+				return comp, "", &selectorError{unsupported: "[" + a.name + " s]"}
+			}
 			if !ok {
 				return comp, "", &selectorError{}
 			}
@@ -364,6 +394,17 @@ func parseCompound(c *selCursor, depth int) (compound, string, *selectorError) {
 			if n.typ == tColon {
 				c.i++
 				pe := c.peek()
+				if pe != nil && pe.typ == tFunction && pseudoElement == "" && (eqFold(pe.value, "slotted") || eqFold(pe.value, "part")) {
+					// ::slotted() and ::part() reach into shadow trees,
+					// which a parsed document has none of: the selector
+					// matches nothing (CSS Scoping 1, 3.2.2; CSS Shadow
+					// Parts 1, 4.1).
+					comp.never = true
+					pseudoElement = lower(pe.value)
+					c.i++
+					empty = false
+					continue
+				}
 				if pe == nil || pe.typ != tIdent || pseudoElement != "" {
 					return comp, "", &selectorError{}
 				}
@@ -416,13 +457,13 @@ func parseCompound(c *selCursor, depth int) (compound, string, *selectorError) {
 
 // parseAttr parses the contents of an attribute selector (Selectors 4, 6).
 // A namespace prefix yields an empty name: no element matches it.
-func parseAttr(list []token) (attrSel, bool) {
+// sensitive reports the s flag, which Chromium does not parse.
+func parseAttr(list []token) (a attrSel, ok, sensitive bool) {
 	c := &selCursor{l: list}
 	c.ws()
-	var a attrSel
 	t := c.peek()
 	if t == nil {
-		return a, false
+		return a, false, false
 	}
 	switch {
 	case t.typ == tIdent:
@@ -436,25 +477,25 @@ func parseAttr(list []token) (attrSel, bool) {
 		c.i++
 		if t.isDelim('*') {
 			if n := c.peek(); n == nil || !n.isDelim('|') {
-				return a, false
+				return a, false, false
 			}
 			c.i++
 		}
 		if n := c.peek(); n == nil || n.typ != tIdent {
-			return a, false
+			return a, false, false
 		}
 		c.i++
 		a.name = ""
 	default:
-		return a, false
+		return a, false, false
 	}
 	c.ws()
 	t = c.peek()
 	if t == nil {
-		return a, true
+		return a, true, false
 	}
 	if t.typ != tDelim {
-		return a, false
+		return a, false, false
 	}
 	switch t.delim {
 	case '=':
@@ -463,17 +504,17 @@ func parseAttr(list []token) (attrSel, bool) {
 	case '~', '|', '^', '$', '*':
 		c.i++
 		if n := c.peek(); n == nil || !n.isDelim('=') {
-			return a, false
+			return a, false, false
 		}
 		c.i++
 		a.op = map[rune]attrOp{'~': attrIncludes, '|': attrDash, '^': attrPrefix, '$': attrSuffix, '*': attrSubstring}[t.delim]
 	default:
-		return a, false
+		return a, false, false
 	}
 	c.ws()
 	v := c.peek()
 	if v == nil || (v.typ != tIdent && v.typ != tString) {
-		return a, false
+		return a, false, false
 	}
 	a.value = v.value
 	c.i++
@@ -483,14 +524,14 @@ func parseAttr(list []token) (attrSel, bool) {
 		case f.isIdent("i"):
 			a.fold = true
 		case f.isIdent("s"):
-			a.sensitive = true
+			return a, false, true
 		default:
-			return a, false
+			return a, false, false
 		}
 		c.i++
 		c.ws()
 	}
-	return a, c.peek() == nil
+	return a, c.peek() == nil, false
 }
 
 // parsePseudo parses a pseudo-class after its colon.
@@ -508,7 +549,7 @@ func parsePseudo(t token, depth int) (pseudoSel, *selectorError) {
 			return pseudoSel{}, &selectorError{}
 		}
 		switch name {
-		case "not", "is", "where", "matches", "-webkit-any", "-moz-any":
+		case "not", "is", "where", "-webkit-any":
 			kind := psIs
 			switch name {
 			case "not":
@@ -520,12 +561,45 @@ func parsePseudo(t token, depth int) (pseudoSel, *selectorError) {
 			if err != nil {
 				return pseudoSel{}, err
 			}
+			// A pseudo-element is no selector of an element: a
+			// forgiving list drops it (Selectors 4, 4.3), :not() fails.
+			kept := list[:0]
 			for _, s := range list {
-				if s.pseudoElement != "" {
+				if s.pseudoElement == "" {
+					kept = append(kept, s)
+				} else if kind == psNot {
 					return pseudoSel{}, &selectorError{}
 				}
 			}
-			return pseudoSel{kind: kind, args: list}, nil
+			return pseudoSel{kind: kind, args: kept}, nil
+		case "has":
+			list, err := parseRelativeList(t.children, depth+1)
+			if err != nil {
+				return pseudoSel{}, err
+			}
+			return pseudoSel{kind: psHas, args: list}, nil
+		case "dir":
+			// :dir() takes an identifier; one other than ltr and rtl
+			// is valid and matches nothing (Selectors 4, 7.1).
+			args := significant(t.children)
+			if len(args) != 1 || args[0].typ != tIdent {
+				return pseudoSel{}, &selectorError{}
+			}
+			dir := 2
+			switch lower(args[0].value) {
+			case "ltr":
+				dir = 0
+			case "rtl":
+				dir = 1
+			}
+			return pseudoSel{kind: psDir, a: dir}, nil
+		case "state", "host":
+			// Custom element states and shadow hosts: a parsed
+			// document has neither (CSS Scoping 1, 3.2.1).
+			if len(significant(t.children)) == 0 {
+				return pseudoSel{}, &selectorError{}
+			}
+			return pseudoSel{kind: psNever}, nil
 		case "nth-child", "nth-last-child", "nth-of-type", "nth-last-of-type":
 			kind := map[string]pseudoKind{
 				"nth-child": psNthChild, "nth-last-child": psNthLastChild,
@@ -552,28 +626,66 @@ func parsePseudo(t token, depth int) (pseudoSel, *selectorError) {
 			}
 			return pseudoSel{kind: kind, a: a, b: b, of: of}, nil
 		case "lang":
-			// The argument is a comma-separated list of one or more
-			// language ranges (Selectors 4, 7.2; CSS Values 4, 2.2 #):
-			// an empty item, trailing or not, makes the selector invalid.
+			// Selectors 4, 7.2 takes a comma-separated list of
+			// language ranges, identifiers or strings; litho follows
+			// Chromium, which parses one identifier alone.
 			args := significant(t.children)
-			if n := len(args); n > 0 && args[n-1].typ == tComma {
-				return pseudoSel{}, &selectorError{}
-			}
-			var langs []string
-			for _, part := range splitCommas(args) {
-				if len(part) != 1 || (part[0].typ != tIdent && part[0].typ != tString) {
-					return pseudoSel{}, &selectorError{}
+			if len(args) != 1 || args[0].typ != tIdent {
+				if len(args) > 0 {
+					return pseudoSel{}, &selectorError{unsupported: ":lang() of a string or a list"}
 				}
-				langs = append(langs, lower(part[0].value))
-			}
-			if len(langs) == 0 {
 				return pseudoSel{}, &selectorError{}
 			}
-			return pseudoSel{kind: psLang, langs: langs}, nil
+			return pseudoSel{kind: psLang, langs: []string{lower(args[0].value)}}, nil
 		}
 		return pseudoSel{}, &selectorError{unsupported: ":" + name + "()"}
 	}
 	return pseudoSel{}, &selectorError{}
+}
+
+// parseRelativeList parses the <relative-selector-list> of :has()
+// (Selectors 4, 4.2 and 4.5): each selector may start with a combinator,
+// a descendant one when it has none. As Chromium parses it, the list is
+// not forgiving, and holds no :has() and no pseudo-element.
+func parseRelativeList(list []token, depth int) ([]*complexSel, *selectorError) {
+	var out []*complexSel
+	for _, part := range splitCommas(list) {
+		part = trimWS(part)
+		lead := byte(' ')
+		if len(part) > 0 && (part[0].isDelim('>') || part[0].isDelim('+') || part[0].isDelim('~')) {
+			lead = byte(part[0].delim) //nolint:gosec // one of >, + and ~, all ASCII
+			part = trimWS(part[1:])
+		}
+		s, err := parseComplex(part, depth)
+		if err != nil {
+			return nil, err
+		}
+		if s.pseudoElement != "" || hasHas(s) {
+			return nil, &selectorError{}
+		}
+		if len(out) >= maxSelectorsPerList {
+			return nil, &selectorError{}
+		}
+		s.lead = lead
+		out = append(out, s)
+	}
+	if len(out) == 0 {
+		return nil, &selectorError{}
+	}
+	return out, nil
+}
+
+// hasHas reports a :has() anywhere in s, which a relative selector may
+// not hold.
+func hasHas(s *complexSel) bool {
+	for i := range s.parts {
+		for _, p := range s.parts[i].pseudos {
+			if p.kind == psHas || slices.ContainsFunc(p.args, hasHas) || slices.ContainsFunc(p.of, hasHas) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // splitCommas splits a list at its top-level commas.

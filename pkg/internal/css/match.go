@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"golang.org/x/net/html"
+	"golang.org/x/text/unicode/bidi"
 )
 
 // elemInfo caches what the structural pseudo-classes and :lang() ask of
@@ -18,6 +19,9 @@ type elemInfo struct {
 	typeIndex, typeCount int
 	lang                 string
 	langDone             bool
+	// rtl is the element's directionality (HTML, 3.2.6.4), set once
+	// dirDone.
+	rtl, dirDone bool
 }
 
 // matcher matches selectors against elements, charging each compound test
@@ -28,6 +32,15 @@ type matcher struct {
 	steps    int
 	maxSteps int
 	over     bool
+	// has holds what each :has() found for each element it was tested
+	// on: the subtree it searches is searched once.
+	has map[hasProbe]bool
+}
+
+// hasProbe names one :has() tested on one element.
+type hasProbe struct {
+	p *pseudoSel
+	n *html.Node
 }
 
 func newMatcher(docLang string, maxSteps int) *matcher {
@@ -260,7 +273,7 @@ func matchAttr(a *attrSel, n *html.Node) bool {
 		return false
 	}
 	want := a.value
-	fold := a.fold || (!a.sensitive && n.Namespace == "" && caseInsensitiveAttrs[a.name])
+	fold := a.fold || n.Namespace == "" && caseInsensitiveAttrs[a.name]
 	if fold {
 		v, want = lower(v), lower(want)
 	}
@@ -374,9 +387,12 @@ func (m *matcher) pseudo(p *pseudoSel, n *html.Node) bool {
 	case psLink:
 		return n.Namespace == "" && (n.Data == "a" || n.Data == "area" || n.Data == "link") && hasAttr(n, "href")
 	case psLang:
+		// A range matches the language it names and its subtags, as
+		// CSS 2.1, 5.11.4 and Chromium match it: Selectors 4, 7.2's
+		// extended filtering, wildcards included, is not Chromium's.
 		lang := m.langOf(n)
 		for _, r := range p.langs {
-			if r == "*" && lang != "" || lang == r || strings.HasPrefix(lang, r+"-") {
+			if lang == r || strings.HasPrefix(lang, r+"-") {
 				return true
 			}
 		}
@@ -394,8 +410,207 @@ func (m *matcher) pseudo(p *pseudoSel, n *html.Node) bool {
 		return n.Namespace == "" && formElements[n.Data] && !disabled(n)
 	case psAlways:
 		return true
+	case psHas:
+		return m.hasMatch(p, n)
+	case psDir:
+		return p.a < 2 && m.rtlOf(n) == (p.a == 1)
+	case psRequired, psOptional, psReadOnly, psReadWrite, psPlaceholderShown, psDefault,
+		psIndeterminate, psValid, psInvalid, psInRange, psOutOfRange, psOpen:
+		return formState(p.kind, n)
 	}
 	return false
+}
+
+// hasMatch matches :has() (Selectors 4, 4.5): some element in the relation
+// its relative selector starts with to n, a descendant, a child, the next
+// sibling or a following sibling, matches it. The elements searched are
+// those the relation reaches and their descendants, each tested once per
+// :has() and n; the cascade's step budget bounds the rest, a selector
+// that searches past it failing the cascade.
+func (m *matcher) hasMatch(p *pseudoSel, n *html.Node) bool {
+	k := hasProbe{p, n}
+	if v, ok := m.has[k]; ok {
+		return v
+	}
+	found := false
+	for _, s := range p.args {
+		if found || m.over {
+			break
+		}
+		last := len(s.parts) - 1
+		var visit func(c *html.Node, depth int)
+		visit = func(c *html.Node, depth int) {
+			for ; c != nil && !found && !m.over; c = c.NextSibling {
+				if c.Type != html.ElementNode {
+					continue
+				}
+				if m.matchRel(s, last, c, n) {
+					found = true
+					return
+				}
+				if (last > 0 || s.lead == ' ') && depth < maxHasDepth {
+					visit(c.FirstChild, depth+1)
+				}
+			}
+		}
+		switch s.lead {
+		case '>', ' ':
+			visit(n.FirstChild, 0)
+		default:
+			for c := n.NextSibling; c != nil && !found && !m.over; c = c.NextSibling {
+				if c.Type != html.ElementNode {
+					continue
+				}
+				if m.matchRel(s, last, c, n) {
+					found = true
+				} else if last > 0 {
+					visit(c.FirstChild, 1)
+				}
+				if s.lead == '+' {
+					break
+				}
+			}
+		}
+	}
+	if m.has == nil {
+		m.has = map[hasProbe]bool{}
+	}
+	m.has[k] = found
+	return found
+}
+
+// maxHasDepth bounds the depth below its anchor :has() searches.
+// Anti-DoS guard, not spec-mandated: the tree is no deeper than the
+// parser's own nesting cap allows, far beyond real documents.
+const maxHasDepth = 512
+
+// matchRel matches parts[:i+1] of the relative selector s right to left,
+// n standing for parts[i], its leftmost compound in the relation s.lead
+// to anchor.
+func (m *matcher) matchRel(s *complexSel, i int, n, anchor *html.Node) bool {
+	if !m.compound(&s.parts[i], n) {
+		return false
+	}
+	if i == 0 {
+		switch s.lead {
+		case '>':
+			return n.Parent == anchor
+		case '+':
+			return prevElement(n) == anchor
+		case '~':
+			for p := prevElement(n); p != nil; p = prevElement(p) {
+				if p == anchor {
+					return true
+				}
+			}
+			return false
+		}
+		for p := n.Parent; p != nil; p = p.Parent {
+			if p == anchor {
+				return true
+			}
+		}
+		return false
+	}
+	switch s.combs[i-1] {
+	case '>':
+		p := parentElement(n)
+		return p != nil && p != anchor && m.matchRel(s, i-1, p, anchor)
+	case '+':
+		p := prevElement(n)
+		return p != nil && m.matchRel(s, i-1, p, anchor)
+	case '~':
+		for p := prevElement(n); p != nil && !m.over; p = prevElement(p) {
+			if m.matchRel(s, i-1, p, anchor) {
+				return true
+			}
+		}
+	default:
+		for p := parentElement(n); p != nil && p != anchor && !m.over; p = parentElement(p) {
+			if m.matchRel(s, i-1, p, anchor) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// rtlOf reports whether the directionality of n is rtl (HTML, 3.2.6.4): its
+// dir attribute's, ltr or rtl, the direction of its first strong
+// character for auto, else its parent's; the root's is ltr.
+func (m *matcher) rtlOf(n *html.Node) bool {
+	if i := m.infoOf(n); i.dirDone {
+		return i.rtl
+	}
+	var chain []*html.Node
+	inherited := false
+	for e := n; isElement(e); e = e.Parent {
+		if i := m.infoOf(e); i.dirDone {
+			inherited = i.rtl
+			break
+		}
+		chain = append(chain, e)
+	}
+	m.charge(len(chain))
+	for _, e := range slices.Backward(chain) {
+		rtl := inherited
+		v, ok := attr(e, "dir")
+		switch v = lower(strings.TrimSpace(v)); {
+		case ok && v == "ltr":
+			rtl = false
+		case ok && v == "rtl":
+			rtl = true
+		case ok && v == "auto" || isHTML(e, "bdi") && !ok:
+			rtl = m.autoRTL(e)
+		}
+		i := m.info[e]
+		i.rtl, i.dirDone = rtl, true
+		inherited = rtl
+	}
+	return inherited
+}
+
+// autoRTL reports whether the first character of bidi class L, R or AL in
+// the text of e, past the descendants that set their own direction and
+// those whose text does not count, is R or AL (HTML, 3.2.6.4, the auto
+// directionality); false when there is none.
+func (m *matcher) autoRTL(e *html.Node) bool {
+	rtl, _ := m.strongIn(e, 0)
+	return rtl
+}
+
+// strongIn returns whether the first strong character under e, at depth
+// below the element auto directionality is found for, is right to left,
+// and whether there is one.
+func (m *matcher) strongIn(e *html.Node, depth int) (rtl, found bool) {
+	if depth >= maxHasDepth {
+		return false, false
+	}
+	for c := e.FirstChild; c != nil; c = c.NextSibling {
+		if !m.charge(1) {
+			return false, false
+		}
+		switch c.Type { //nolint:exhaustive // comments and the rest hold no text
+		case html.TextNode:
+			for _, r := range c.Data {
+				props, _ := bidi.LookupRune(r)
+				switch props.Class() { //nolint:exhaustive // the other classes are weak or neutral
+				case bidi.L:
+					return false, true
+				case bidi.R, bidi.AL:
+					return true, true
+				}
+			}
+		case html.ElementNode:
+			if c.Namespace != "" || hasAttr(c, "dir") || c.Data == "bdi" || c.Data == "script" || c.Data == "style" || c.Data == "textarea" {
+				continue
+			}
+			if rtl, ok := m.strongIn(c, depth+1); ok {
+				return rtl, true
+			}
+		}
+	}
+	return false, false
 }
 
 // nthOf matches :nth-child(An+B of S) and :nth-last-child(An+B of S): the

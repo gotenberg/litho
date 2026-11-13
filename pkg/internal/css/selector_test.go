@@ -71,7 +71,6 @@ func TestSelector_Matches(t *testing.T) {
 		{"[title='HELLO WORLD' i]", "d1"},
 		{"[title='HELLO WORLD']", ""},
 		{"input[type=CHECKBOX]", "cb"},
-		{"input[type=CHECKBOX s]", ""},
 		{"li:first-child", "l1"},
 		{"li:last-child", "l5"},
 		{"span:only-of-type", "s1"},
@@ -131,7 +130,7 @@ func TestSelector_Invalid(t *testing.T) {
 	t.Parallel()
 	for _, sel := range []string{
 		"", "p,", ",p", "p >", "> p", "#1a", ".", "p..q", "[", "[a=]", "[a=b c]", "p:unknown",
-		":nth-child(foo)", "::before p", "::before.x", ":not(::before)", "p:has(a)",
+		":nth-child(foo)", "::before p", "::before.x", ":not(::before)", "p:has(a:has(b))", "p:has(::before)",
 		"a || b", "p::unknown", ":not()", ":lang()", ":lang(en,)", ":lang(,en)", ":lang(en,,fr)",
 		strings.Repeat(":not(", 10) + "p" + strings.Repeat(")", 10),
 		strings.Repeat("a ", 40) + "b",
@@ -141,9 +140,9 @@ func TestSelector_Invalid(t *testing.T) {
 			t.Errorf("%q parses", sel)
 		}
 	}
-	l, _ := parseComponentValues("a:has(b)")
-	if _, err := parseSelectorList(l, 0, false); err == nil || err.unsupported != ":has()" {
-		t.Errorf("a:has(b) error = %+v, want unsupported :has()", err)
+	l, _ := parseComponentValues("a:heading")
+	if _, err := parseSelectorList(l, 0, false); err == nil || err.unsupported != ":heading" {
+		t.Errorf("a:heading error = %+v, want unsupported :heading", err)
 	}
 }
 
@@ -179,9 +178,33 @@ func TestSelector_Specificity(t *testing.T) {
 
 func TestSelector_UnsupportedWarned(t *testing.T) {
 	t.Parallel()
-	s := mustParse(t, `p:has(a) { color: red } p { color: blue }`)
-	if len(s.rules) != 1 || !hasWarning(s.Warnings(), warn.CSSUnsupported, ":has()") {
+	s := mustParse(t, `p:heading { color: red } p { color: blue }`)
+	if len(s.rules) != 1 || !hasWarning(s.Warnings(), warn.CSSUnsupported, ":heading") {
 		t.Errorf("rules %d warnings %v", len(s.rules), s.Warnings())
+	}
+}
+
+// TestSelector_ChromiumRefusals checks that the selectors Selectors 4
+// defines and Chromium does not parse drop their rule with a warning.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 keeps no rule of
+//     :lang("en"), :lang(en, fr), :target-within, [a="b" s], :matches(p),
+//     :heading or a || b, and keeps :is(p, :bogus) and :is(p, ::before)
+//     as :is(p).
+func TestSelector_ChromiumRefusals(t *testing.T) {
+	t.Parallel()
+	for _, sel := range []string{`p:lang("en")`, `p:lang(en, fr)`, `p:target-within`, `p[a="b" s]`, `p:matches(a)`} {
+		s := mustParse(t, sel+` { color: red }`)
+		if len(s.rules) != 0 || len(s.Warnings()) == 0 {
+			t.Errorf("%s: rules %d warnings %v", sel, len(s.rules), s.Warnings())
+		}
+	}
+	for _, sel := range []string{`:is(p, ::before)`, `:where(p, :bogus)`} {
+		if s := mustParse(t, sel+` { color: red }`); len(s.rules) != 1 {
+			t.Errorf("%s: rules %d", sel, len(s.rules))
+		}
 	}
 }
 

@@ -82,7 +82,8 @@ func TestSupports_Conditions(t *testing.T) {
 		{"(scroll-snap-type: x) or (color: red)", true},
 		{"((color: red) or (scroll-snap-type: x)) and (width: 0)", true},
 		{"selector(a > b)", true},
-		{"selector(a:has(b))", false},
+		{"selector(a:has(b))", true},
+		{"selector(a:heading)", false},
 		{"(color: red) and (width: 1px) or (scroll-snap-type: x)", false},
 		{"font-tech(color-COLRv1)", false},
 	}
