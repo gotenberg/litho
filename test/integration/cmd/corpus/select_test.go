@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"encoding/binary"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -313,6 +314,14 @@ func TestWPTCandidateReasons(t *testing.T) {
 	write("css/x/flat.html", match+`<div style="transform: rotate(10deg)">`)
 	write("css/x/deep.html", match+`<div style="transform: rotateY(10deg)">`)
 	write("css/x/tall.html", match+`<div style="writing-mode: vertical-rl">`)
+	const xhtMatch = `<link rel="match" href="b-ref.xht"/>`
+	write("css/x/b-ref.xht", `<style><![CDATA[ p { color: green } ]]></style><p>reference</p>`)
+	write("css/x/sheet.xht", xhtMatch+`<style type="text/css"><![CDATA[ p > a { color: green } ]]></style>`)
+	write("css/x/plain.xht", `<link rel="match" href="a-ref.html"/><p>no section</p>`)
+	write("css/x/body-section.xht", xhtMatch+`<p><![CDATA[ a < b ]]></p>`)
+	write("css/x/empty-div.xht", xhtMatch+`<div/>`)
+	write("css/x/c-ref.xht", `<div/>`)
+	write("css/x/empty-div-ref.xht", `<link rel="match" href="c-ref.xht"/>`)
 	transforms := wptAreas["css/css-transforms"]
 	for _, c := range []struct {
 		rel   string
@@ -332,6 +341,11 @@ func TestWPTCandidateReasons(t *testing.T) {
 		{"css/x/flat.html", wptProbes[1].rules, "lacks " + wptTransform3D.String()[len("(?i)"):]},
 		{"css/x/tall.html", wptAreas["css/css-writing-modes"], "vertical-(rl|lr)"},
 		{"css/x/tall.html", wptProbes[0].rules, ""},
+		{"css/x/sheet.xht", wptAreaRules{}, ""},
+		{"css/x/plain.xht", wptAreaRules{}, ""},
+		{"css/x/body-section.xht", wptAreaRules{}, "XHTML with a CDATA section outside a style element"},
+		{"css/x/empty-div.xht", wptAreaRules{}, "XHTML that does not parse as HTML"},
+		{"css/x/empty-div-ref.xht", wptAreaRules{}, "reference: XHTML that does not parse as HTML"},
 	} {
 		e, why, err := wptCandidate(root, c.rel, c.rules)
 		if err != nil {
@@ -342,6 +356,11 @@ func TestWPTCandidateReasons(t *testing.T) {
 		}
 		if why == "" && (e.ID != c.rel || len(e.Refs) != 1) {
 			t.Errorf("%s: entry %+v", c.rel, e)
+		}
+		// A test is grouped with the stripped ones when its file or a
+		// reference had markers.
+		if wantCDATA := c.rel == "css/x/sheet.xht"; why == "" && e.cdata != wantCDATA {
+			t.Errorf("%s: cdata %v, want %v", c.rel, e.cdata, wantCDATA)
 		}
 	}
 	if got := wptTopReasons(map[string]int{"b": 2, "a": 2, "c": 5, "d": 1}, 3); !slices.Equal(got, []string{"c", "a", "b"}) {
@@ -378,6 +397,40 @@ func TestWPTProbesLeaveTheirArea(t *testing.T) {
 	for _, text := range []string{"transform: rotate(1deg)", "transform: translate(1px, 2px) scale(2)", "rotate: 45deg"} {
 		if wptTransform3D.MatchString(text) {
 			t.Errorf("%q read as a 3D transform", text)
+		}
+	}
+}
+
+// TestWPTCDATAGroups pins that a test with stripped markers is capped in a
+// group of its own, so that the choice among an area's other tests stays
+// as it was, and the caps each group takes.
+func TestWPTCDATAGroups(t *testing.T) {
+	t.Parallel()
+
+	limits := maps.Clone(wptAreaCap)
+	for _, p := range wptProbes {
+		limits[p.name] = p.cap
+	}
+	plain, stripped := wptEntry{ID: "css/CSS2/floats/a.xht"}, wptEntry{ID: "css/CSS2/floats/b.xht", cdata: true}
+	if g := wptGroup("css/CSS2/floats", plain); g != "css/CSS2/floats" {
+		t.Errorf("plain test grouped in %q", g)
+	}
+	if g := wptGroup("css/CSS2/floats", stripped); g != "css/CSS2/floats"+wptCDATASuffix {
+		t.Errorf("stripped test grouped in %q", g)
+	}
+	for group, want := range map[string]int{
+		"css/CSS2/floats":                                wptAreaCap["css/CSS2"],
+		"css/CSS2/tables":                                wptAreaCap["css/CSS2/tables"],
+		"css/CSS2/floats" + wptCDATASuffix:               wptCDATACap["css/CSS2"],
+		"css/CSS2/tables" + wptCDATASuffix:               wptCDATACap["css/CSS2"],
+		"css/css-text" + wptCDATASuffix:                  wptAreaCap["css/css-text"],
+		"css/CSS2/selectors first-line":                  10,
+		"css/CSS2/selectors first-line" + wptCDATASuffix: 10,
+		"css/css-sizing aspect-ratio" + wptCDATASuffix:   wptCDATACap["css/css-sizing aspect-ratio"],
+		"css/unknown":                                    0,
+	} {
+		if got := wptLimit(limits, group); got != want {
+			t.Errorf("cap of %q: %d, want %d", group, got, want)
 		}
 	}
 }

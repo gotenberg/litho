@@ -445,6 +445,9 @@ type wptScan struct {
 	pages                  string
 	urls, styles           []string
 	printClass             bool
+	// cdata reports an XHTML file whose style sheets' CDATA markers were
+	// stripped (stripStyleCDATA).
+	cdata bool
 }
 
 func scanWPT(text string) *wptScan {
@@ -533,10 +536,11 @@ func cssURLs(text string) []string {
 	return out
 }
 
+// xhtParsesAsHTML reports whether an XHTML file, its style sheets' CDATA
+// markers stripped (stripStyleCDATA), holds no self-closed element but a
+// void one: an HTML parser reads <div/> as a start tag whose element runs
+// on, where an XML parser reads an empty element.
 func xhtParsesAsHTML(text string) bool {
-	if strings.Contains(text, "<![CDATA[") {
-		return false
-	}
 	for _, m := range wptSelfClosed.FindAllStringSubmatch(text, -1) {
 		if !slices.Contains(wptVoid, strings.ToLower(m[1])) {
 			return false
@@ -600,10 +604,22 @@ func checkWPTFile(root, rel string, rules wptAreaRules) (*wptScan, []string, err
 	if why := wptForbids(text, rules); why != "" {
 		return nil, nil, rejectWPT(why)
 	}
-	if strings.HasSuffix(rel, ".xht") && !xhtParsesAsHTML(text) {
-		return nil, nil, rejectWPT("XHTML that does not parse as HTML")
+	cdata := false
+	if strings.HasSuffix(rel, ".xht") {
+		stripped, ok := stripStyleCDATA([]byte(text))
+		if !ok {
+			return nil, nil, rejectWPT("XHTML with a CDATA section outside a style element")
+		}
+		cdata = len(stripped) != len(text)
+		if text = string(stripped); !xhtParsesAsHTML(text) {
+			return nil, nil, rejectWPT("XHTML that does not parse as HTML")
+		}
+		if why := xhtDeparture(stripped); why != "" {
+			return nil, nil, rejectWPT(why)
+		}
 	}
 	s := scanWPT(text)
+	s.cdata = cdata
 	for _, f := range wptBadFlags {
 		if s.flags[f] {
 			return nil, nil, rejectWPT("flag " + f)
@@ -745,6 +761,9 @@ type wptEntry struct {
 	Print     bool     `json:"print"`
 	Refs      []wptRef `json:"refs"`
 	Resources []string `json:"resources"`
+	// cdata reports a test whose file or a reference's had CDATA markers
+	// stripped: such tests are capped apart (wptCDATACap).
+	cdata bool
 }
 
 // selectWPT selects the WPT reftests the converter can score: a test and its
@@ -772,7 +791,7 @@ func selectWPT(_ context.Context, checkout, _, dir string, _ map[string]string) 
 	}
 	byArea := map[string][]wptEntry{}
 	for _, t := range tests {
-		byArea[wptArea(t.ID)] = append(byArea[wptArea(t.ID)], t)
+		byArea[wptGroup(wptArea(t.ID), t)] = append(byArea[wptGroup(wptArea(t.ID), t)], t)
 	}
 	limits := maps.Clone(wptAreaCap)
 	for _, p := range wptProbes {
@@ -783,7 +802,7 @@ func selectWPT(_ context.Context, checkout, _, dir string, _ map[string]string) 
 		err := walkWPT(checkout, dir, func(rel string) error {
 			e, why, err := wptCandidate(checkout, rel, p.rules)
 			if err == nil && why == "" {
-				byArea[p.name] = append(byArea[p.name], e)
+				byArea[wptGroup(p.name, e)] = append(byArea[wptGroup(p.name, e)], e)
 				tests = append(tests, e)
 			}
 			return err
@@ -795,10 +814,7 @@ func selectWPT(_ context.Context, checkout, _, dir string, _ map[string]string) 
 	}
 	var kept []wptEntry
 	for a, group := range byArea {
-		limit, ok := limits[a]
-		if !ok && strings.HasPrefix(a, "css/CSS2/") {
-			limit = wptAreaCap["css/CSS2"]
-		}
+		limit := wptLimit(limits, a)
 		key := func(t wptEntry) string { s := sha256.Sum256([]byte(t.ID)); return hex.EncodeToString(s[:]) }
 		sort.Slice(group, func(i, j int) bool { return key(group[i]) < key(group[j]) })
 		kept = append(kept, group[:min(limit, len(group))]...)
@@ -821,6 +837,63 @@ func selectWPT(_ context.Context, checkout, _, dir string, _ map[string]string) 
 		return err
 	}
 	return writeHashList(checkout, dir, paths)
+}
+
+// wptCDATASuffix names the group of an area's or a probe's tests whose
+// files had CDATA markers stripped (stripStyleCDATA). Capped apart, these
+// tests leave the choice among the area's others as if none of them
+// existed.
+const wptCDATASuffix = " (CDATA)"
+
+// wptCDATACap bounds the tests with CDATA markers an area or a probe keeps.
+// A CSS 2.1 chapter without a cap of its own here takes the "css/CSS2" cap,
+// whatever its cap of wptAreaCap, and any other area or probe its own cap
+// of wptAreaCap or wptProbes. The aspect-ratio probe keeps every such test:
+// its shared reference has its sheet in a section, so the strip admits
+// nearly the whole directory.
+//
+// # Corpus evidence
+//
+//   - wpt: the strip admits 2558 CSS 2.1 tests, 668 of them in
+//     margin-padding-clear, 410 in positioning and 321 in borders, largely
+//     generated variations; litho draws 94% of them like their reference.
+//     At 100 a chapter, 1074 are kept. With 3 workers the reftest cell ran
+//     the 2854 tests without them in 36 s and the 4899 with them in 56 s.
+//   - wpt: 187 aspect-ratio tests are admitted, 174 of which litho draws
+//     like their reference.
+var wptCDATACap = map[string]int{
+	"css/CSS2": 100, "css/css-sizing aspect-ratio": 300,
+}
+
+// wptGroup returns the group a test of an area or probe is capped in: the
+// area or probe itself, or its CDATA group.
+func wptGroup(area string, t wptEntry) string {
+	if t.cdata {
+		return area + wptCDATASuffix
+	}
+	return area
+}
+
+// wptLimit returns the cap of a group of selectWPT, limits holding the
+// areas' and probes' own caps.
+func wptLimit(limits map[string]int, group string) int {
+	area, cdata := strings.CutSuffix(group, wptCDATASuffix)
+	probe := slices.ContainsFunc(wptProbes, func(p wptProbe) bool { return p.name == area })
+	if cdata {
+		if c, ok := wptCDATACap[area]; ok {
+			return c
+		}
+		if !probe && strings.HasPrefix(area, "css/CSS2/") {
+			return wptCDATACap["css/CSS2"]
+		}
+	}
+	if c, ok := limits[area]; ok {
+		return c
+	}
+	if strings.HasPrefix(area, "css/CSS2/") {
+		return limits["css/CSS2"]
+	}
+	return 0
 }
 
 // wptTopReasons returns the n reasons that rejected the most reftests, the
@@ -883,7 +956,7 @@ func wptCandidate(root, rel string, rules wptAreaRules) (wptEntry, string, error
 	if len(s.match) == 0 && len(s.mismatch) == 0 {
 		return wptEntry{}, wptNotReftest, nil
 	}
-	e := wptEntry{ID: rel, Print: wptIsPrint(rel, s), Resources: resources, Pages: s.pages}
+	e := wptEntry{ID: rel, Print: wptIsPrint(rel, s), Resources: resources, Pages: s.pages, cdata: s.cdata}
 	for _, kind := range []struct {
 		rel   string
 		hrefs []string
@@ -900,6 +973,7 @@ func wptCandidate(root, rel string, rules wptAreaRules) (wptEntry, string, error
 			if len(rs.match) > 0 || len(rs.mismatch) > 0 {
 				return wptEntry{}, "chained reference", nil
 			}
+			e.cdata = e.cdata || rs.cdata
 			fuzzy, ok := parseFuzzy(s.fuzzy, ref)
 			if !ok {
 				return wptEntry{}, "unparsed fuzziness", nil

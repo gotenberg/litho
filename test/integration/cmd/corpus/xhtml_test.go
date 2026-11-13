@@ -81,3 +81,21 @@ func TestReftestFeature_StripsXHTMLCDATA(t *testing.T) {
 		t.Errorf("converted %q, want %q", got, want)
 	}
 }
+
+// TestXHTDeparture pins the two departures of an HTML parse from an XML
+// parse the selection keeps out, and that the text of a style element, the
+// title or a comment in the head is none.
+func TestXHTDeparture(t *testing.T) {
+	t.Parallel()
+
+	for in, want := range map[string]string{
+		"<html><head><title>t</title><style>p {}</style><!-- note --></head><body><p>a</p></body></html>": "",
+		"<html><head><style>p {}</style>\n  /* a note */\n</head><body></body></html>":                    xhtHeadText,
+		"<html><head></head><body><pre>\nline</pre></body></html>":                                        xhtPreBreak,
+		"<html><head></head><body><pre>line\n</pre><listing>a</listing></body></html>":                    "",
+	} {
+		if got := xhtDeparture([]byte(in)); got != want {
+			t.Errorf("%q: %q, want %q", in, got, want)
+		}
+	}
+}

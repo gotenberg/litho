@@ -4,8 +4,8 @@ Reftests from [web-platform-tests](https://github.com/web-platform-tests/wpt) at
 
 | File            | What it holds                                                                                                                                               |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `reftests.json` | The 2854 tests: each test's WPT path, whether it is a print reftest, its pages compared, its resources, and each reference with its relation and fuzziness  |
-| `files.sha256`  | Every file the tests read (tests, references, their stylesheets and images, `LICENSE.md`, `fonts/Ahem.ttf`): 4918 lines of `<sha256>  <WPT path>`           |
+| `reftests.json` | The 4897 tests: each test's WPT path, whether it is a print reftest, its pages compared, its resources, and each reference with its relation and fuzziness  |
+| `files.sha256`  | Every file the tests read (tests, references, their stylesheets and images, `LICENSE.md`, `fonts/Ahem.ttf`): 7673 lines of `<sha256>  <WPT path>`           |
 | `corpus update` | The selection script: reads a WPT checkout and writes `reftests.json`                                                                                       |
 | `corpus fetch`  | Downloads each listed file from `raw.githubusercontent.com` at the pinned commit, refuses one whose hash differs, and records the commit in `versions.json` |
 
@@ -28,69 +28,69 @@ A test qualifies when:
 
 - it links one or more references with `<link rel="match">` or `<link rel="mismatch">`, and no reference links one of its own (a chained reference keeps the test out);
 - neither it nor a reference holds a script, SVG (inline or as an image), MathML, a form control, an embedded document, canvas or media, an `@font-face` rule (outside the areas above that take one), a `data:` or remote URL, an event handler attribute, a vertical writing mode (outside the probe and `css-logical`), a `reftest-wait` class, or a CSS 2.1 `flags` value of `interact`, `userstyle`, `dom`, `font`, `svg`, `animated`, `nonHTML`, `speech` or `scroll`;
-- an XHTML file (`.xht`) parses alike as HTML: no CDATA section, no self-closed element other than a void one. CSS 2.1 tests wrap their style sheets in `<![CDATA[ ]]>`, which an HTML parser hands to CSS as text that swallows the whole sheet; that rule keeps out most of the CSS 2.1 suite;
+- an XHTML file (`.xht`) parses alike as HTML once the markers of the CDATA sections in its style elements are stripped: a section anywhere else (a script, the title, the body), a marker that opens or closes nothing, a self-closed element other than a void one, text in the head (which an HTML parser moves into the body) or a `pre` element that opens on a line feed (which an HTML parser drops) keeps it out. CSS 2.1 tests wrap their style sheets in `<![CDATA[ ]]>`, which an HTML parser hands to CSS as text that swallows the whole sheet; the `reftest` cell strips those markers as it reads a test or a reference, an XML parser's reading of the sheet, and leaves the fetched files as WPT holds them;
 - every stylesheet and image a file names resolves inside that file's own directory and exists. The feature converts each document with the file system rooted there, so a `../support/` image (145 CSS 2.1 tests use `../support/black96x96.png`) cannot be read. The one absolute URL allowed is `/fonts/ahem.css`, whose `@font-face` the converter cannot load: the corpus installs Ahem as a font instead.
 
-That leaves 7602 candidates. Each area and each probe then keeps at most its cap, the candidates whose path hashes lowest (SHA-256), so the choice stays put when WPT adds or removes other tests: 24 per CSS 2.1 chapter but 100 from `tables`, 60 from `generated-content` and 40 each from `fonts`, `positioning` and `selectors`; 80 from `css-backgrounds`, 120 from `css-text`, 40 each from `css-lists`, `css-page` and `css-break`, 200 from `css-flexbox`, 20 from `css-align`, 200 from `css-grid`, 80 from `css-multicol`, 60 from `css-writing-modes`, 40 each from `css-overflow` and `css-text-decor`, 80 from `css-sizing`; 80 from `css-tables`, 100 from `css-transforms`, every candidate of `css-fonts`, 60 each from `css-inline`, `css-position`, `css-values`, `css-variables`, `css-color`, `css-images` and `css-display`, 100 each from `css-pseudo` and `selectors`, 40 each from `css-content`, `css-counter-styles`, `css-logical` and `css-box`, 120 from `css-masking` and 60 from `compositing`, which keep every candidate of theirs, and 10 from `css-ruby` and from each probe but `aspect-ratio`'s, which keeps 60. `corpus update` prints the candidate count and the five rules that kept the most test files out.
+That leaves 12234 candidates. Each area and each probe then keeps at most its cap, the candidates whose path hashes lowest (SHA-256), so the choice stays put when WPT adds or removes other tests: 24 per CSS 2.1 chapter but 100 from `tables`, 60 from `generated-content` and 40 each from `fonts`, `positioning` and `selectors`; 80 from `css-backgrounds`, 120 from `css-text`, 40 each from `css-lists`, `css-page` and `css-break`, 200 from `css-flexbox`, 20 from `css-align`, 200 from `css-grid`, 80 from `css-multicol`, 60 from `css-writing-modes`, 40 each from `css-overflow` and `css-text-decor`, 80 from `css-sizing`; 80 from `css-tables`, 100 from `css-transforms`, every candidate of `css-fonts`, 60 each from `css-inline`, `css-position`, `css-values`, `css-variables`, `css-color`, `css-images` and `css-display`, 100 each from `css-pseudo` and `selectors`, 40 each from `css-content`, `css-counter-styles`, `css-logical` and `css-box`, 120 from `css-masking` and 60 from `compositing`, which keep every candidate of theirs, and 10 from `css-ruby` and from each probe but `aspect-ratio`'s, which keeps 60. A test whose file or a reference's had its markers stripped is capped apart, in a group of its own per area and probe, so that admitting such tests left the choice among the others as it was: 100 per CSS 2.1 chapter, every candidate of the `aspect-ratio` probe, and in any other area or probe as many as its own cap. `corpus update` prints the candidate count and the five rules that kept the most test files out.
 
 | Area                            | Tests | Print reftests |
 | ------------------------------- | ----- | -------------- |
-| `css/CSS2/abspos`               | 19    |                |
-| `css/CSS2/backgrounds`          | 24    |                |
-| `css/CSS2/borders`              | 24    |                |
-| `css/CSS2/box-display`          | 24    |                |
-| `css/CSS2/colors`               | 2     |                |
-| `css/CSS2/floats`               | 24    |                |
-| `css/CSS2/floats-clear`         | 24    |                |
-| `css/CSS2/fonts`                | 40    |                |
-| `css/CSS2/generated-content`    | 60    |                |
-| `css/CSS2/linebox`              | 24    |                |
-| `css/CSS2/lists`                | 24    |                |
-| `css/CSS2/margin-padding-clear` | 14    |                |
-| `css/CSS2/normal-flow`          | 24    |                |
+| `css/CSS2/abspos`               | 25    |                |
+| `css/CSS2/backgrounds`          | 124   |                |
+| `css/CSS2/borders`              | 124   |                |
+| `css/CSS2/box-display`          | 62    |                |
+| `css/CSS2/colors`               | 19    |                |
+| `css/CSS2/floats`               | 40    |                |
+| `css/CSS2/floats-clear`         | 124   |                |
+| `css/CSS2/fonts`                | 76    |                |
+| `css/CSS2/generated-content`    | 105   |                |
+| `css/CSS2/linebox`              | 124   |                |
+| `css/CSS2/lists`                | 30    |                |
+| `css/CSS2/margin-padding-clear` | 114   |                |
+| `css/CSS2/normal-flow`          | 124   |                |
 | `css/CSS2/pagination`           | 24    | 24             |
-| `css/CSS2/positioning`          | 40    |                |
-| `css/CSS2/selectors`            | 50    |                |
-| `css/CSS2/tables`               | 100   |                |
-| `css/CSS2/text`                 | 24    |                |
-| `css/CSS2/values`               | 7     |                |
-| `css/CSS2/visudet`              | 4     |                |
-| `css/CSS2/visuren`              | 13    |                |
-| `css/compositing`               | 35    |                |
-| `css/css-align`                 | 5     |                |
-| `css/css-backgrounds`           | 80    |                |
-| `css/css-box`                   | 13    |                |
-| `css/css-break`                 | 40    | 6              |
-| `css/css-color`                 | 60    |                |
+| `css/CSS2/positioning`          | 140   |                |
+| `css/CSS2/selectors`            | 67    |                |
+| `css/CSS2/tables`               | 200   |                |
+| `css/CSS2/text`                 | 91    |                |
+| `css/CSS2/values`               | 14    |                |
+| `css/CSS2/visudet`              | 19    |                |
+| `css/CSS2/visuren`              | 26    |                |
+| `css/compositing`               | 36    |                |
+| `css/css-align`                 | 7     |                |
+| `css/css-backgrounds`           | 123   |                |
+| `css/css-box`                   | 36    |                |
+| `css/css-break`                 | 80    | 6              |
+| `css/css-color`                 | 107   |                |
 | `css/css-content`               | 40    |                |
 | `css/css-counter-styles`        | 40    |                |
-| `css/css-display`               | 56    |                |
-| `css/css-flexbox`               | 200   | 2              |
-| `css/css-fonts`                 | 256   | 1              |
-| `css/css-grid`                  | 200   |                |
+| `css/css-display`               | 110   |                |
+| `css/css-flexbox`               | 302   | 2              |
+| `css/css-fonts`                 | 260   | 1              |
+| `css/css-grid`                  | 310   |                |
 | `css/css-images`                | 60    |                |
-| `css/css-inline`                | 60    | 1              |
+| `css/css-inline`                | 71    | 1              |
 | `css/css-lists`                 | 40    |                |
 | `css/css-logical`               | 5     |                |
-| `css/css-masking`               | 107   |                |
-| `css/css-multicol`              | 80    | 2              |
-| `css/css-overflow`              | 40    |                |
+| `css/css-masking`               | 108   |                |
+| `css/css-multicol`              | 160   | 2              |
+| `css/css-overflow`              | 65    |                |
 | `css/css-page`                  | 40    | 40             |
-| `css/css-position`              | 60    | 1              |
-| `css/css-pseudo`                | 82    |                |
-| `css/css-ruby`                  | 10    |                |
-| `css/css-sizing`                | 83    |                |
-| `css/css-tables`                | 75    | 2              |
-| `css/css-text`                  | 120   |                |
-| `css/css-text-decor`            | 40    |                |
-| `css/css-transforms`            | 110   |                |
-| `css/css-values`                | 60    |                |
-| `css/css-variables`             | 60    |                |
-| `css/css-writing-modes`         | 13    |                |
-| `css/selectors`                 | 95    |                |
-| Total                           | 2854  | 79             |
+| `css/css-position`              | 84    | 1              |
+| `css/css-pseudo`                | 83    |                |
+| `css/css-ruby`                  | 11    |                |
+| `css/css-sizing`                | 313   |                |
+| `css/css-tables`                | 99    | 2              |
+| `css/css-text`                  | 184   |                |
+| `css/css-text-decor`            | 50    |                |
+| `css/css-transforms`            | 126   |                |
+| `css/css-values`                | 80    |                |
+| `css/css-variables`             | 62    |                |
+| `css/css-writing-modes`         | 23    |                |
+| `css/selectors`                 | 110   |                |
+| Total                           | 4897  | 79             |
 
-93 tests have a mismatch reference, 51 more than one reference, and 137 declare a fuzziness. The cell applies a fuzziness as WPT's runner does, lower bounds included: seven `css-images` gradient tests (`display-p3-linear-gradient`, `gradient-eval-001`, `-003`, `-006` and `-009`, `gradient-none-interpolation`, `gradient-powerless-hue-lch`) and `css-masking/mask-image/mask-opacity-1c` declare a maximum difference from 1, which a drawing within the range must reach; one identical to its reference passes, since their pixel ranges start at 0. Three print tests declare `<meta name="reftest-pages">`: `css/css-page/subpixel-page-size-001-print.html` (page 2) and `css/css-tables/collapsed-border-fragmentation-001-print.html` and `-002-print.html` (pages 1 and 2). `corpus update` writes it as the entry's `pages`, and the cell compares only those pages of the test with the reference, as WPT's runner does. 531 are XHTML files that parse as HTML.
+94 tests have a mismatch reference, 51 more than one reference, and 164 declare a fuzziness. The cell applies a fuzziness as WPT's runner does, lower bounds included: seven `css-images` gradient tests (`display-p3-linear-gradient`, `gradient-eval-001`, `-003`, `-006` and `-009`, `gradient-none-interpolation`, `gradient-powerless-hue-lch`) and `css-masking/mask-image/mask-opacity-1c` declare a maximum difference from 1, which a drawing within the range must reach; one identical to its reference passes, since their pixel ranges start at 0. Three print tests declare `<meta name="reftest-pages">`: `css/css-page/subpixel-page-size-001-print.html` (page 2) and `css/css-tables/collapsed-border-fragmentation-001-print.html` and `-002-print.html` (pages 1 and 2). `corpus update` writes it as the entry's `pages`, and the cell compares only those pages of the test with the reference, as WPT's runner does. 1792 are XHTML files that parse as HTML.
 
 To list the candidates again, at the pinned commit or a new one:
 

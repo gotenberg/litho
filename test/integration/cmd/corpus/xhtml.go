@@ -102,3 +102,53 @@ func stripSections(text []byte) ([]byte, bool) {
 		text = text[end+len(cdataClose):]
 	}
 }
+
+// The departures of an HTML parse from an XML parse that xhtDeparture
+// finds, each the reason a file is kept out.
+const (
+	xhtHeadText = "XHTML with text in its head"
+	xhtPreBreak = "XHTML whose pre element opens on a line feed"
+)
+
+// xhtDeparture returns how an HTML parser reads the XHTML file src
+// otherwise than an XML parser, among two departures a static check finds,
+// or "" for neither. Text in the head that is not white space ends the
+// head in HTML and draws in the body (HTML Standard, 13.2.6.4.4), where an
+// XML document keeps it in the head, which draws nothing. A line feed that
+// opens a pre or listing element is dropped in HTML (13.2.6.4.7) and kept
+// in XML. src is the file once stripStyleCDATA has stripped it.
+func xhtDeparture(src []byte) string {
+	z := html.NewTokenizer(bytes.NewReader(src))
+	inHead, raw, afterPre := false, false, false
+	for {
+		tt := z.Next()
+		opensPre := afterPre
+		afterPre = false
+		switch tt {
+		case html.ErrorToken:
+			return ""
+		case html.TextToken:
+			text := z.Text()
+			if opensPre && (bytes.HasPrefix(text, []byte("\n")) || bytes.HasPrefix(text, []byte("\r\n"))) {
+				return xhtPreBreak
+			}
+			if inHead && !raw && len(bytes.TrimSpace(text)) > 0 {
+				return xhtHeadText
+			}
+		case html.StartTagToken, html.SelfClosingTagToken, html.EndTagToken:
+			name, _ := z.TagName()
+			switch string(name) {
+			case "head":
+				inHead = tt == html.StartTagToken
+			case "body":
+				inHead = false
+			case "style", "title", "script":
+				raw = tt == html.StartTagToken
+			case "pre", "listing":
+				afterPre = tt == html.StartTagToken
+			}
+		case html.CommentToken, html.DoctypeToken:
+			// Neither draws or moves.
+		}
+	}
+}
