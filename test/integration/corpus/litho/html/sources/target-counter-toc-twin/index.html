@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cross-references</title>
+<style>
+@page {
+  size: A5;
+  margin: 20mm;
+}
+@page :first { counter-reset: page 3; }
+body { font-family: "Liberation Serif", serif; font-size: 12pt; line-height: 1.4; margin: 0; counter-reset: chapter; }
+nav ol { list-style: none; margin: 0; padding: 0; }
+nav a { color: black; text-decoration: none; display: block; }
+nav a span { float: right; }
+h1 { counter-increment: chapter; break-before: page; font-size: 16pt; }
+h1::before { content: counter(chapter, upper-roman) ". "; }
+p.long { height: 230mm; }
+</style>
+</head>
+<body>
+<h2>Contents</h2>
+<nav>
+<ol>
+<li><a href="#intro">Introduction<span>4</span></a></li>
+<li><a href="#method">Method<span>5</span></a></li>
+<li><a href="#results">Results<span>7</span></a></li>
+<li><a href="#end">Discussion<span>8</span></a></li>
+</ol>
+</nav>
+<p>The results follow the method: see <a class="see" href="#results">the results (chapter III, Results, page 7)</a>.</p>
+<h1 id="intro">Introduction</h1>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+<h1 id="method">Method</h1>
+<p class="long">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+<h1 id="results">Results</h1>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+<h1 id="end">Discussion</h1>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+</body>
+</html>

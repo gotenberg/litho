@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Page groups</title>
+<style>
+@page {
+  size: A5;
+  margin: 25mm 20mm;
+}
+@page p1 { }
+@page p2 { @top-center { content: "Chapter opening"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; } }
+@page p3 { @top-right { content: "second page of the chapter"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; } }
+@page p4 { @top-left { content: "third page of the chapter"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; } }
+@page p5 { @top-center { content: "Chapter opening"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; } }
+@page p6 { @bottom-center { content: "broadside"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; } }
+@page p7 { @top-left { content: "third page of the chapter"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; } }
+.p1 { page: p1; } .p2 { page: p2; } .p3 { page: p3; } .p4 { page: p4; } .p5 { page: p5; } .p6 { page: p6; } .p7 { page: p7; }
+body { font-family: "Liberation Serif", serif; font-size: 12pt; line-height: 1.4; margin: 0; }
+section, .broadside, .next { break-before: page; }
+.broadside { border: 1pt solid black; padding: 6pt; }
+</style>
+</head>
+<body>
+<p class="p1">The sections are chapters: each makes a page group of its pages. :nth(1 of chapter) selects the first page of each, :nth(3 of chapter) the third, and chapter:nth(2) the second page of a chapter whose page is named chapter: the broadside page inside the second chapter counts in its group, under its own name.</p>
+<section class="p2">
+<h1>One</h1>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+<p class="next p3">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+<p class="next p4">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+</section>
+<section class="p5">
+<h1>Two</h1>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+<div class="broadside p6">A broadside table would sit here.</div>
+<p class="p7">Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+</section>
+</body>
+</html>
