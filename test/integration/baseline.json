@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T12:14:16Z",
+  "captured_at": "2026-11-13T12:19:10Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -10240,7 +10240,7 @@
               "text_f1": 1
             },
             "ooxmlexport/customxml-two-data-stores.docx": {
-              "layout": 0.5121,
+              "layout": 0.5123,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10688,7 +10688,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo60922.docx": {
-              "layout": 0.9103,
+              "layout": 0.9213,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11360,7 +11360,7 @@
               "text_f1": 1
             },
             "ooxmlimport/linked-picture.docx": {
-              "layout": 0.2266,
+              "layout": 0.2259,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11552,7 +11552,7 @@
               "text_f1": 1
             },
             "ooxmlimport/tdf108350.docx": {
-              "layout": 0.8458,
+              "layout": 0.8454,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11560,7 +11560,7 @@
               "text_f1": 1
             },
             "ooxmlimport/tdf108408.docx": {
-              "layout": 0.9672,
+              "layout": 0.9681,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11568,15 +11568,15 @@
               "text_f1": 1
             },
             "ooxmlimport/tdf108714.docx": {
-              "layout": 0.623,
+              "layout": 0.6241,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9286
+              "text_f1": 0.9423
             },
             "ooxmlimport/tdf108806.docx": {
-              "layout": 0.1672,
+              "layout": 0.1659,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11584,7 +11584,7 @@
               "text_f1": 1
             },
             "ooxmlimport/tdf108849.docx": {
-              "layout": 0.837,
+              "layout": 0.8341,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.5,
@@ -97082,7 +97082,7 @@
               "text_f1": 1
             },
             "document/55733.docx": {
-              "layout": 0.9143,
+              "layout": 0.9113,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -97234,7 +97234,7 @@
               "text_f1": 1
             },
             "document/Bug60341.docx": {
-              "layout": 0.8163,
+              "layout": 0.8166,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -97258,7 +97258,7 @@
               "text_f1": 1
             },
             "document/Bug66263-paragraph.docx": {
-              "layout": 0.5732,
+              "layout": 0.5709,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -97266,7 +97266,7 @@
               "text_f1": 0.4286
             },
             "document/Bug66263-table.docx": {
-              "layout": 0.4269,
+              "layout": 0.4259,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
