@@ -285,3 +285,35 @@ func TestCFF2FacesEmbedAsCFF(t *testing.T) {
 		}
 	}
 }
+
+// TestInstalledVariableFaceThatDoesNotInstance pins that an installed
+// variable font litho cannot instance, here one whose 'gvar' does not
+// read, draws its default instance, emboldened, and reports why.
+func TestInstalledVariableFaceThatDoesNotInstance(t *testing.T) {
+	t.Parallel()
+	program := append([]byte(nil), repoFont(t, "var.ttf", varFontPath).data...)
+	records, err := truetype.ParseTableDirectory(program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range records {
+		if r.Tag == "gvar" {
+			// A 'gvar' of another version: the design space reads, the
+			// outline variations do not.
+			program[r.Offset+1] = 9
+		}
+	}
+	fonts := newTestFonts(t, fontFile{"var.ttf", program}, fontFile{"sans.ttf", testSans("Regular", 400, false, 100)}).ForConversion()
+	for range 2 {
+		it, rep := shapeInstalled(t, fonts, Style{Weight: 700, Fallback: FallbackChromium})
+		if strings.Contains(it.face.Key, "@") {
+			t.Errorf("drew %q, want the file's own face", it.face.Key)
+		}
+		if it.stroke == 0 {
+			t.Error("the default instance is not emboldened")
+		}
+		if len(rep.DefaultInstances) != 1 {
+			t.Errorf("report %+v, want one default instance", rep.DefaultInstances)
+		}
+	}
+}

@@ -366,7 +366,7 @@ func (f *Fonts) installedInstance(ctx context.Context, fc *Face, style *Style, m
 	inst, err := file.newInstance(ctx, vf, user, coords, key.coords, mem, f.loadFont)
 	if err != nil {
 		if ctx.Err() == nil && !errors.Is(err, limits.ErrMemoryBudget) {
-			store.errs[file] = err
+			store.fail(file, err)
 		}
 		return file, err
 	}
@@ -379,6 +379,15 @@ func (f *Fonts) installedInstance(ctx context.Context, fc *Face, style *Style, m
 	}
 	store.instances[key] = inst
 	return inst, nil
+}
+
+// fail records that file does not instance, because of err. s.mu is
+// held.
+func (s *instanceStore) fail(file *Face, err error) {
+	if s.errs == nil {
+		s.errs = make(map[*Face]error)
+	}
+	s.errs[file] = err
 }
 
 // design returns the design space of file, a variable face of the index,
@@ -394,13 +403,9 @@ func (s *instanceStore) design(ctx context.Context, file *Face) (*varfont.Font, 
 	}
 	vf, err := varfont.Parse(tf.Program)
 	if err != nil {
-		if ctx.Err() == nil {
-			if s.errs == nil {
-				s.errs = make(map[*Face]error)
-			}
-			s.errs[file] = err
-		}
-		return nil, fmt.Errorf("reading the font variations: %w", err)
+		err = fmt.Errorf("reading the font variations: %w", err)
+		s.fail(file, err)
+		return nil, err
 	}
 	if s.designs == nil {
 		s.designs = make(map[*Face]*varfont.Font)
