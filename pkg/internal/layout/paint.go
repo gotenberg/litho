@@ -113,6 +113,9 @@ type painter struct {
 	// strip is the inline box fragment being painted, laid on the strip
 	// of all its fragments for its border image; nil for none.
 	strip *imageStrip
+	// broken holds the leaders whose word break is painted
+	// ([painter.leaderBreak]).
+	broken map[*box]bool
 }
 
 // paint returns the display list of the box tree rooted at root.
@@ -322,6 +325,11 @@ func (p *painter) emit(b *box, content bool, frag typeset.Fragment, y0, y1 float
 	c := p.sync(p.chain(b, content))
 	if p.mono >= 0 {
 		page = p.mono
+	}
+	if l := leaderAncestor(b); l != nil && !p.artifact {
+		if t, ok := frag.(*typeset.Text); ok {
+			p.leaderBreak(l, t, c, y0, y1, page)
+		}
 	}
 	if p.artifact || inLeader(b) {
 		frag = cloneFragment(frag)

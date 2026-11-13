@@ -74,6 +74,42 @@ func TestLeader_Artifact(t *testing.T) {
 	}
 }
 
+// TestLeader_WordBreak locks the word break a leader stands for in the
+// text (ISO 32000-1, 14.8.2.5): a space in its element between the text
+// on either side of the leader's copies, read in that order, where a
+// leader that draws no copy draws no space either; TestLeader_Draw holds
+// the pixels, which the space leaves alone.
+func TestLeader_WordBreak(t *testing.T) {
+	t.Parallel()
+	red2 := sty(font(2), fg(red))
+	nowrap := sty(font(2), fg(red), func(s *css.Style) { s.WhiteSpace = css.Nowrap })
+	for name, tc := range map[string]struct {
+		p    *Node
+		want string
+	}{
+		"copies drawn":  {el(red2, txt(red2, "A"), leaderNode("X", blue), txt(red2, "B")), "A B"},
+		"no copy drawn": {el(nowrap, txt(nowrap, "AAAAA"), leaderNode("X", blue), txt(red2, "B")), "AAAAAB"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			tc.p.Role = "P"
+			res := run(t, doc(tc.p), page(12, 2))
+			var tagged strings.Builder
+			for _, r := range texts(res, 1) {
+				if r.run.Parent != nil {
+					if r.run.Parent.Role != "P" {
+						t.Errorf("run %q hangs from %s, want the P", r.text, r.run.Parent.Role)
+					}
+					tagged.WriteString(r.text)
+				}
+			}
+			if got := tagged.String(); got != tc.want {
+				t.Errorf("tagged text %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestLeader_NoIntrinsicWidth(t *testing.T) {
 	t.Parallel()
 	red2 := sty(font(2), fg(red))

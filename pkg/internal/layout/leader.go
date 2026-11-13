@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // maxLeaderCopies bounds the copies of its string one leader draws on a
@@ -19,6 +21,11 @@ const maxLeaderCopies = 4096
 type leaderInfo struct {
 	pattern string
 	w       float64
+	// space is a space in the leader's style, shaped once, when spaced
+	// is set: the word break the leader stands for in the text
+	// ([painter.leaderBreak]); nil when the style draws no space.
+	space  *typeset.Text
+	spaced bool
 }
 
 // isLeader reports a leader box: the inline block the converter makes of
@@ -32,13 +39,18 @@ func isLeader(b *box) bool {
 // typographical elements; ISO 14289-1, 7.1): a reader hears the text on
 // either side of it, a title and its page number, not a run of dots.
 func inLeader(b *box) bool {
+	return leaderAncestor(b) != nil
+}
+
+// leaderAncestor returns the leader b is or sits in, nil for none.
+func leaderAncestor(b *box) *box {
 	for depth := 0; b != nil && depth < 3; depth++ {
 		if isLeader(b) {
-			return true
+			return b
 		}
 		b = b.parent
 	}
-	return false
+	return nil
 }
 
 // leaderText returns the text box of the leader b, nil when it has none.
@@ -90,7 +102,60 @@ func (e *engine) layoutLeader(b *box, k int, cbw float64) {
 // itself takes no width on the line until the line is aligned.
 func (e *engine) prepareLeader(b *box, cbw float64) {
 	e.layoutLeader(b, 1, cbw)
-	e.leaderOf(b).w = b.w
+	li := e.leaderOf(b)
+	li.w = b.w
+	if tb := leaderText(b); tb != nil && !li.spaced {
+		li.spaced = true
+		li.space = e.shapedSpace(tb)
+	}
+}
+
+// shapedSpace returns one space shaped in the style of the text box tb, nil
+// when shaping fails or gives no single glyph.
+func (e *engine) shapedSpace(tb *box) *typeset.Text {
+	para, _, err := e.fonts.Shape(e.ctx, []text.ParagraphRun{{Text: " ", Style: e.textStyle(tb.st, tb.lang)}}, text.ParagraphOptions{})
+	if err != nil {
+		e.shapeFailed(err, "leader", -1)
+		return nil
+	}
+	if para.Len() != 1 {
+		return nil
+	}
+	pl := para.Line(0, 1, false)
+	if len(pl.Spans) != 1 || pl.Spans[0].Text == nil || len(pl.Spans[0].Text.Glyphs) != 1 {
+		return nil
+	}
+	return pl.Spans[0].Text
+}
+
+// leaderBreak adds, before the first fragment t of the leader l's copies,
+// a space that draws nothing in the structure element t would hang from:
+// the copies are an artifact, so without it the text on either side of
+// them, a title and its page number, reads as one word. ISO 32000-1,
+// 14.8.2.5 asks a Tagged PDF to state word breaks by space characters
+// rather than by the room between glyphs.
+//
+// # Corpus evidence
+//
+//   - probe, html: a link "Chapter one" whose ::after holds leader('.')
+//     and target-counter(attr(href), page) read "Chapter one" then "2"
+//     under its Link element (pdfinfo -struct-text); Chromium of
+//     gotenberg/gotenberg:9.4.1, which draws no leader(), tags the dots of
+//     its twin, typed as text, as content of the Link, read between the
+//     two.
+func (p *painter) leaderBreak(l *box, t *typeset.Text, c *ditem, y0, y1 float64, page int) {
+	li := p.e.leaders[l]
+	if li == nil || li.space == nil || t.Parent == nil || p.broken[l] {
+		return
+	}
+	if p.broken == nil {
+		p.broken = map[*box]bool{}
+	}
+	p.broken[l] = true
+	sp := *li.space
+	sp.Glyphs = []typeset.Glyph{{GID: li.space.Glyphs[0].GID, Text: " "}}
+	sp.Origin, sp.Color, sp.Parent = t.Origin, t.Color, t.Parent
+	c.kids = append(c.kids, &ditem{frag: &sp, y0: y0, y1: y1, page: page})
 }
 
 // fillLeaders gives the leaders of the line l the room its content leaves,
