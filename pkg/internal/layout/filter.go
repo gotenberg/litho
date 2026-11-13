@@ -112,8 +112,9 @@ func filterReach(fs []css.Filter) (reach, sigma float64) {
 // box has a filter list, as Chromium prints a filtered element: one image
 // of the content at the effect engine's resolution with every function
 // of the list applied in order (Filter Effects 1, 6 and 13.1), an
-// artifact; then the content's tagged fragments again, invisible, so the
-// element's text extracts and its structure keeps its content. band, when
+// artifact; then the content's tagged fragments again, painting nothing,
+// so the element's text extracts and its structure keeps its content
+// (see hiddenTagged). band, when
 // not nil, is the part of the flow page shows: the image covers no more
 // of it than the filter reaches past. A list holding a url() that
 // names no filter element leaves the content unfiltered (see filterRefs);
@@ -154,9 +155,7 @@ func (e *engine) filtered(it *ditem, frags []typeset.Fragment, band *typeset.Rec
 	if img != nil {
 		out = append(out, img)
 	}
-	if tagged := taggedOnly(frags, 0); len(tagged) > 0 {
-		out = append(out, &typeset.Group{Opacity: invisibleOpacity, Transform: typeset.Identity, Content: tagged})
-	}
+	out = append(out, hiddenTagged(frags, 0)...)
 	return out
 }
 
@@ -378,37 +377,54 @@ func encodeSurface(ctx context.Context, s *effect.Surface) (*typeset.Image, erro
 	return &typeset.Image{Rect: typeset.Rect{X: s.Grid.X, Y: s.Grid.Y, Width: float64(s.W) / k, Height: float64(s.H) / k}, Source: src}, nil
 }
 
-// taggedOnly returns the fragments of frags that hang from a structure
-// element, in groups as frags holds them, depth the groups already open:
-// what a filtered element's image does not tag.
-func taggedOnly(frags []typeset.Fragment, depth int) []typeset.Fragment {
+// hiddenTagged returns the fragments of frags that hang from a structure
+// element, painting nothing: a text run as invisible text, in text
+// rendering mode 3, which neither fills nor strokes (ISO 32000-1, 9.3.6);
+// a picture or a path inside an empty clip, a clipping path of no area
+// ("x y m x y l h W n"), which leaves nothing to paint (8.5.4). A group
+// keeps its transform and clip and loses its opacity, blend mode and
+// transparency group: nothing in it paints, and no transparency is
+// written for it. The fragments keep their marked-content sequences and
+// their structure: what the filtered image shows stays real content.
+func hiddenTagged(frags []typeset.Fragment, depth int) []typeset.Fragment {
 	var out []typeset.Fragment
 	for _, f := range frags {
 		switch v := f.(type) {
 		case *typeset.Text:
 			if v.Parent != nil {
-				out = append(out, v)
+				c := *v
+				c.Invisible, c.Stroke = true, 0
+				out = append(out, &c)
 			}
 		case *typeset.Image:
 			if v.Parent != nil {
-				out = append(out, v)
+				out = append(out, unpainted(v))
 			}
 		case *typeset.Path:
 			if v.Parent != nil {
-				out = append(out, v)
+				out = append(out, unpainted(v))
 			}
 		case *typeset.Group:
 			if depth >= maxGroupDepth {
 				continue
 			}
-			if kids := taggedOnly(v.Content, depth+1); len(kids) > 0 {
-				g := *v
-				g.Content = kids
-				out = append(out, &g)
+			if kids := hiddenTagged(v.Content, depth+1); len(kids) > 0 {
+				out = append(out, &typeset.Group{Transform: v.Transform, Clip: v.Clip, Opacity: 1, Content: kids})
 			}
 		}
 	}
 	return out
+}
+
+// unpainted returns f inside an empty clip: a group whose clipping path,
+// one point at the origin, has no area.
+func unpainted(f typeset.Fragment) typeset.Fragment {
+	clip := &typeset.Path{Ops: []typeset.PathOp{
+		{Kind: typeset.MoveTo},
+		{Kind: typeset.LineTo},
+		{Kind: typeset.ClosePath},
+	}, Fill: &typeset.Fill{}}
+	return &typeset.Group{Transform: typeset.Identity, Clip: clip, Opacity: 1, Content: []typeset.Fragment{f}}
 }
 
 // backdropFilter settles the backdrop-filter of b (Filter Effects 2, 3)

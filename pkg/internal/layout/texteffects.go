@@ -106,16 +106,24 @@ func (p *painter) runOutlines(it *lineItem, l *lineBox, what string) ([]typeset.
 
 // textPaint paints the run c of item it of line l as its
 // css.Office.TextPaint says, and reports whether it painted the run: the
-// glyphs' text at invisibleOpacity when they are unfilled or filled with
-// a gradient, then the gradient filling their outlines over their ink's
-// box, then the outlines stroked, both artifacts. It paints nothing and
-// reports false for a run without one, which the caller paints.
+// glyphs' text invisible (typeset.Text.Invisible, text rendering mode 3)
+// when they are unfilled or filled with a gradient, so the text is
+// extracted and tagged once while its outlines show it, then the gradient
+// filling their outlines over their ink's box, then the outlines stroked,
+// both artifacts. It paints nothing and reports false for a run without
+// one, which the caller paints.
 //
 // # Corpus evidence
 //
 //   - litho/docx run-w14-effects: Word draws "Outline only" and "Gradient
 //     fill" as their glyph outlines, stroked or filled with a shading,
 //     marked Artifact, over the text painted at opacity 0.
+//   - litho/docx run-w14-effects and shapes-wordart, libreoffice/docx
+//     ooxmlexport/TextEffects_TextFill: converted to the fourteen PDF/A and
+//     PDF/UA targets, veraPDF passes every one with the text invisible as
+//     with it at opacity 1/1024, and pdftotext reads the same text;
+//     shapes-wordart's PDF/A-1b file falls from 133.7 to 52.7 KB, the
+//     run no longer a transparency to flatten.
 //   - litho/docx run-effects: Word strokes the outlines of a run of
 //     w:outline 0.25 point wide in black, unfilled.
 func (p *painter) textPaint(it *lineItem, l *lineBox, page int, c *typeset.Text, top, bottom float64) bool {
@@ -133,10 +141,8 @@ func (p *painter) textPaint(it *lineItem, l *lineBox, page int, c *typeset.Text,
 	}
 	hidden := tp.NoFill || len(tp.Gradient) >= 2
 	if hidden {
-		if c.Color.A <= 0 {
-			c.Color = typeset.Black
-		}
-		p.emit(it.box, true, &typeset.Group{Opacity: invisibleOpacity, Transform: typeset.Identity, Content: []typeset.Fragment{c}}, top, bottom, page)
+		c.Invisible, c.Stroke = true, 0
+		p.emit(it.box, true, c, top, bottom, page)
 	} else if c.Color.A > 0 {
 		p.emit(it.box, true, c, top, bottom, page)
 	}
@@ -164,12 +170,6 @@ func (p *painter) textPaint(it *lineItem, l *lineBox, page int, c *typeset.Text,
 	}
 	return true
 }
-
-// invisibleOpacity is the opacity of the text of glyphs painted by their
-// outlines: the text stays in the page, extracted and tagged, as Word
-// keeps it at opacity 0, which the page model refuses. Over any backdrop
-// it moves an 8-bit pixel by under a quarter of a level.
-const invisibleOpacity = 1.0 / 1024
 
 // artifact returns f with no structure parent.
 func artifact(f typeset.Fragment) typeset.Fragment {

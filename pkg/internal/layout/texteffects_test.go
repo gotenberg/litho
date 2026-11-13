@@ -73,7 +73,7 @@ func TestTextPaint_KeepsTheTextUnderItsOutline(t *testing.T) {
 		}
 	}
 	walk(res.Pages[0].Content, 1)
-	if text == nil || text.Parent == nil || textOpacity > 1.0/512 {
+	if text == nil || text.Parent == nil || !text.Invisible || textOpacity != 1 {
 		t.Errorf("text %+v at opacity %v, want the tagged text, invisible", text, textOpacity)
 	}
 	if stroke == nil || stroke.Parent != nil || stroke.Stroke.Color.R != 1 || stroke.Stroke.Width != 0.75 {

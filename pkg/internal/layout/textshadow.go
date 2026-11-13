@@ -45,7 +45,11 @@ func (p *painter) textShadows(it *lineItem, l *lineBox, page int) {
 // moved by the shadow's offsets, blurred as a box shadow is (see
 // blurred), in the shadow's colour, an artifact; then c, the run's copy
 // at the shadow's place, invisible, so the text extracts as Chromium's
-// does. A dashed decoration line, which the coverage does not dash, keeps
+// does. Chromium writes its copy at a constant alpha of zero; litho
+// writes it in text rendering mode 3, which neither fills nor strokes
+// (ISO 32000-1, 9.3.6), with no transparency: an extractor reads the copy
+// from its operators either way, a text extractor reading every glyph
+// shown whatever paints it. A dashed decoration line, which the coverage does not dash, keeps
 // its sharp copy. It reports false, painting nothing, for a run whose
 // face has no outlines and for a shadow the page's effect pixels cannot
 // hold.
@@ -107,6 +111,7 @@ func (p *painter) blurredTextShadow(it *lineItem, l *lineBox, page int, ds *deco
 	for _, f := range sharp {
 		p.emit(it.box, true, f, top, bottom, page)
 	}
-	p.emit(it.box, true, &typeset.Group{Opacity: invisibleOpacity, Transform: typeset.Identity, Content: []typeset.Fragment{c}}, top, bottom, page)
+	c.Invisible, c.Stroke = true, 0
+	p.emit(it.box, true, c, top, bottom, page)
 	return true
 }

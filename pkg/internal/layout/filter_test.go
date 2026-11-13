@@ -16,7 +16,8 @@ func filters(fs ...css.Filter) func(*css.Style) {
 }
 
 // paintedKinds returns what the first page of res paints, in order, a
-// fragment inside a group of opacity under 1/100 named invisible.
+// fragment inside a group of opacity under 1/100 and an invisible run
+// named invisible.
 func paintedKinds(res *Result) []string {
 	var kinds []string
 	var walk func([]typeset.Fragment, float64)
@@ -30,6 +31,9 @@ func paintedKinds(res *Result) []string {
 			case *typeset.Image:
 				kinds = append(kinds, prefix+"image")
 			case *typeset.Text:
+				if v.Invisible {
+					prefix = "invisible "
+				}
 				kinds = append(kinds, prefix+"text")
 			case *typeset.Path:
 				kinds = append(kinds, prefix+"path")
@@ -181,5 +185,35 @@ func TestFilter_RootFiltersItsContentNotTheCanvas(t *testing.T) {
 	}
 	if c := at(img, 5, 5); c.R != c.B || c.B > 30 {
 		t.Errorf("the root's content %v, want blue made a dark grey", c)
+	}
+}
+
+// TestFilter_HiddenTaggedPaintsNothing checks the tagged content kept
+// under a filter's image: a run as invisible text, a path inside a clip
+// of no area, a group without its opacity, every fragment keeping its
+// structure element; what hangs from none is left out.
+func TestFilter_HiddenTaggedPaintsNothing(t *testing.T) {
+	elem := &typeset.StructElem{Role: "P"}
+	run1 := &typeset.Text{Size: 10, Parent: elem, Stroke: 1, Glyphs: []typeset.Glyph{{GID: 1}}}
+	path := &typeset.Path{Ops: rectOps(typeset.Rect{Width: 5, Height: 5}), Fill: &typeset.Fill{Color: typeset.Black}, Parent: elem}
+	artifact := &typeset.Path{Ops: rectOps(typeset.Rect{Width: 5, Height: 5}), Fill: &typeset.Fill{Color: typeset.Black}}
+	out := hiddenTagged([]typeset.Fragment{artifact, &typeset.Group{Opacity: 0.5, Transparency: &typeset.TransparencyGroup{}, Content: []typeset.Fragment{run1, path}}}, 0)
+	if len(out) != 1 {
+		t.Fatalf("%d fragments, want the group", len(out))
+	}
+	g := out[0].(*typeset.Group)
+	if g.Opacity != 1 || g.Transparency != nil || len(g.Content) != 2 {
+		t.Fatalf("group %+v, want opaque, no transparency group, two fragments", g)
+	}
+	if txt, ok := g.Content[0].(*typeset.Text); !ok || !txt.Invisible || txt.Stroke != 0 || txt.Parent != elem || run1.Invisible {
+		t.Errorf("run %+v, want an invisible copy with its parent", g.Content[0])
+	}
+	clipped, ok := g.Content[1].(*typeset.Group)
+	if !ok || clipped.Clip == nil || len(clipped.Content) != 1 || clipped.Content[0] != path {
+		t.Fatalf("path kept as %+v, want it inside a clip", g.Content[1])
+	}
+	x0, y0, x1, y1 := opsBounds(clipped.Clip.Ops)
+	if x1 != x0 || y1 != y0 {
+		t.Errorf("clip spans %v,%v to %v,%v, want no area", x0, y0, x1, y1)
 	}
 }

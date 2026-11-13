@@ -48,7 +48,7 @@ func TestTextShadow_BlurredIsABitmapUnderInvisibleText(t *testing.T) {
 				}
 				kinds = append(kinds, "image")
 			case *typeset.Text:
-				if opacity < 1 {
+				if opacity < 1 || v.Invisible {
 					kinds = append(kinds, "invisible text")
 					copyAt = v.Origin
 					if v.Parent != nil {
