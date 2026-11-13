@@ -102,7 +102,7 @@ func (st *layoutState) faceInput(in *shaping.Input, style *Style) {
 	if in.Face == nil {
 		return
 	}
-	fc := st.byFont[in.Face.Font]
+	fc := st.byFace[in.Face]
 	if fc == nil {
 		return
 	}

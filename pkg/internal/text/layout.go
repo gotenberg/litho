@@ -134,6 +134,22 @@ type Report struct {
 	// than as a box, and keep their text for extraction. It is sorted and
 	// bounded as MissingGlyphs is, and MissingGlyphs leaves them out.
 	MissingEmoji []rune
+	// DefaultInstances lists the variable document faces drawn at their
+	// default instance where the text asked for another, by family, with
+	// why: font variations litho does not instance (CFF2 outlines, 'avar'
+	// version 2), tables that do not read, or the bound on instances.
+	DefaultInstances []DefaultInstance
+}
+
+// DefaultInstance is a variable face drawn at its default instance.
+type DefaultInstance struct {
+	// Family is the family of the face's @font-face rule.
+	Family string
+	// Reason says why it was not instanced.
+	Reason string
+	// Limit reports that the document's faces had created as many
+	// instances as litho allows, 128.
+	Limit bool
 }
 
 // Layout lays runs out into lines no wider than width points.
@@ -183,6 +199,21 @@ type Report struct {
 // covers draws blank and is listed in [Report.MissingEmoji]; any other
 // character no face covers draws the matched face's .notdef glyph and is
 // listed in [Report.MissingGlyphs].
+//
+// A variable document face ([LoadFace], [Fonts.LocalFace]) draws the
+// instance its run's style asks for (CSS Fonts 4, 7.2): wght from the
+// weight, wdth from the stretch and slnt from the slant, each clamped to
+// the face's descriptors, then the descriptors' variations, opsz from the
+// size unless [FontSettings.NoOpticalSizing], then
+// [FontSettings.Variations], each clamped to its axis. The run is shaped
+// with the variable font at those coordinates, its glyphs advance by the
+// instance's own rounded advances, and its [typeset.Face] is the static
+// instance, written once per document and coordinates (see
+// [varfont.Font.Instance]). A face whose variations litho does not
+// instance, CFF2 outlines among them, and every face past 128 instances
+// in one document, draw at their default instance, listed in
+// [Report.DefaultInstances]. An indexed variable face draws its default
+// instance.
 //
 // Layout parses the font programs of the faces it draws with on first use
 // and keeps them in the index's bounded cache.
@@ -259,20 +290,24 @@ type layoutState struct {
 
 	// kit holds this call's shaper and the go-text face of every face it
 	// drew with, parsed the parsed font each one loaded, nil for a face
-	// that failed to load, and byFont maps a parsed font back to its face:
-	// the index's cache may evict a font this call still uses.
+	// that failed to load, and byFace maps a go-text face back to its
+	// face: the index's cache may evict a font this call still uses, and
+	// the instances of a variable face share its parsed font.
 	kit *shapingKit
 	// mem is the conversion's memory budget the glyph runs are charged
 	// to, nil for none.
 	mem    *limits.Budget
 	parsed map[*Face]*font.Font
-	byFont map[*font.Font]*Face
+	byFace map[*font.Face]*Face
 	cache  map[resolveKey]*Face
 	// sticky holds the face of last resort each style and script drew
 	// with last, nil until one does.
 	sticky  map[stickyKey]*Face
 	missing map[rune]struct{}
-	emoji   map[rune]struct{}
+	// defaultInstances maps the family of each variable face drawn at its
+	// default instance against the text's request to why.
+	defaultInstances map[string]DefaultInstance
+	emoji            map[rune]struct{}
 
 	seg     shaping.Segmenter
 	wrapper shaping.LineWrapper
@@ -323,7 +358,7 @@ func newLayoutState(f *Fonts, runs []Run) (*layoutState, error) {
 		unit:    unit,
 		kit:     f.takeKit(),
 		parsed:  make(map[*Face]*font.Font),
-		byFont:  make(map[*font.Font]*Face),
+		byFace:  make(map[*font.Face]*Face),
 		cache:   make(map[resolveKey]*Face),
 		missing: make(map[rune]struct{}),
 		emoji:   make(map[rune]struct{}),
@@ -474,9 +509,6 @@ func (st *layoutState) font(fc *Face) *font.Font {
 		ft = nil
 	}
 	st.parsed[fc] = ft
-	if ft != nil {
-		st.byFont[ft] = fc
-	}
 	return ft
 }
 
@@ -484,14 +516,19 @@ func (st *layoutState) font(fc *Face) *font.Font {
 // go-text faces cache glyph lookups and are not safe for concurrent use.
 // The kit's face from an earlier call serves while its font is the one
 // this call loaded; a font the cache evicted and parsed again since takes
-// a new face.
+// a new face. The face of an instance of a variable face is set to its
+// coordinates.
 func (st *layoutState) face(fc *Face) *font.Face {
 	ft := st.font(fc)
-	if face, ok := st.kit.faces[fc]; ok && face.Font == ft {
-		return face
+	face, ok := st.kit.faces[fc]
+	if !ok || face.Font != ft {
+		face = font.NewFace(ft)
+		if fc.coords != nil {
+			face.SetCoords(fc.coords)
+		}
+		st.kit.faces[fc] = face
 	}
-	face := font.NewFace(ft)
-	st.kit.faces[fc] = face
+	st.byFace[face] = fc
 	return face
 }
 
@@ -759,9 +796,13 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 			}
 			piece.FontFeatures = s.style.features()
 			for _, in := range shaping.SplitByFace(piece, styleFontmap{st: st, style: idx, script: piece.Script}) {
+				if err := st.instanceInput(ctx, &in, &s.style); err != nil {
+					return nil, fmt.Errorf("laying out text: %w", err)
+				}
 				st.faceInput(&in, &s.style)
 				out := st.kit.shaper.Shape(in)
 				rescale(&out, in.Size)
+				st.instanceAdvances(&out, in.Size)
 				st.collectMissing(&out, para)
 				outputs = append(outputs, out)
 			}
@@ -910,7 +951,7 @@ func (st *layoutState) line(ctx context.Context, runs shaping.Line, para []rune,
 		if len(out.Glyphs) == 0 {
 			continue
 		}
-		fc := st.byFont[out.Face.Font]
+		fc := st.byFace[out.Face]
 		cf, err := fc.Typeset(ctx)
 		if err != nil {
 			return Line{}, fmt.Errorf("laying out text: %w", err)
@@ -1019,6 +1060,9 @@ func (st *layoutState) report() Report {
 	}
 	if len(st.emoji) > 0 {
 		rep.MissingEmoji = slices.Sorted(maps.Keys(st.emoji))
+	}
+	for _, name := range slices.Sorted(maps.Keys(st.defaultInstances)) {
+		rep.DefaultInstances = append(rep.DefaultInstances, st.defaultInstances[name])
 	}
 	return rep
 }

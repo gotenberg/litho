@@ -430,14 +430,19 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 
 // fontSettings returns the font settings of st for its text style ts,
 // nil when every one is at its default, as for most text: the features
-// of the font properties, font-size-adjust and font-language-override.
+// of the font properties, font-size-adjust, font-language-override,
+// font-variation-settings and font-optical-sizing.
 func (e *engine) fontSettings(st *css.Style, ts *text.Style) *text.FontSettings {
 	features := e.fontFeatures(st, ts)
 	a := st.FontSizeAdjust
-	if features == nil && !a.Set && st.FontLanguageOverride == "" {
+	noOptical := st.FontOpticalSizing == css.OpticalSizingNone
+	if features == nil && !a.Set && st.FontLanguageOverride == "" && st.FontVariationSettings == nil && !noOptical {
 		return nil
 	}
-	fs := &text.FontSettings{Features: features, LanguageSystem: st.FontLanguageOverride}
+	fs := &text.FontSettings{Features: features, LanguageSystem: st.FontLanguageOverride, NoOpticalSizing: noOptical}
+	for _, v := range st.FontVariationSettings {
+		fs.Variations = append(fs.Variations, text.Variation{Tag: v.Tag, Value: v.Value})
+	}
 	if a.Set {
 		fs.SizeAdjust = text.SizeAdjust{Metric: text.AdjustMetric(a.Metric), Value: a.Value}
 		if a.FromFont {

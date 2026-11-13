@@ -146,6 +146,16 @@ type FontSettings struct {
 	// font-language-override (CSS Fonts 4, 6.14): up to four characters
 	// from U+20 to U+7E, padded with spaces. "" keeps Lang's.
 	LanguageSystem string
+	// Variations are the axis values of a variable face set after those
+	// the style's weight, stretch, slant and size imply, in order, a later
+	// value of a tag overriding an earlier one: CSS font-variation-settings
+	// (CSS Fonts 4, 8.2 and 7.2). A face that is not variable ignores
+	// them.
+	Variations []Variation
+	// NoOpticalSizing leaves the opsz axis of a variable face at its
+	// default, CSS font-optical-sizing: none (CSS Fonts 4, 8.1); by
+	// default it follows the size (see [Fonts.Layout]).
+	NoOpticalSizing bool
 }
 
 // settings returns the font settings of s, the zero value for none.
@@ -170,7 +180,8 @@ func equalSettings(a, b *FontSettings) bool {
 	if b == nil {
 		b = &noSettings
 	}
-	return a.SizeAdjust == b.SizeAdjust && a.LanguageSystem == b.LanguageSystem && slices.Equal(a.Features, b.Features)
+	return a.SizeAdjust == b.SizeAdjust && a.LanguageSystem == b.LanguageSystem && slices.Equal(a.Features, b.Features) &&
+		slices.Equal(a.Variations, b.Variations) && a.NoOpticalSizing == b.NoOpticalSizing
 }
 
 // Feature is one OpenType feature setting: its tag and value, 0 for off

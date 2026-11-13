@@ -14,11 +14,13 @@ import (
 	"sync"
 
 	"github.com/go-text/typesetting/font"
+	"github.com/go-text/typesetting/font/opentype/tables"
 	"github.com/go-text/typesetting/shaping"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
+	"github.com/gotenberg/litho/pkg/internal/typography/varfont"
 )
 
 // maxFontFileBytes bounds a file holding one font program, and the tables of
@@ -253,6 +255,24 @@ type Face struct {
 	// features are the shaper's form of the features of doc, nil for
 	// none.
 	features []shaping.FontFeature
+
+	// vf is the design space of a document face whose font is variable,
+	// nil otherwise; vfErr says why a variable font's tables do not read.
+	vf    *varfont.Font
+	vfErr error
+	// instMu guards instances, the faces of vf's instances by their
+	// normalized coordinates, and instErr, why the font does not
+	// instance. instCount counts the instances of the face's set.
+	instMu    sync.Mutex
+	instances map[string]*Face
+	instErr   error
+	instCount *instanceCount
+	// base is the face an instance face is an instance of, nil for any
+	// other face; coords are the instance's normalized coordinates, which
+	// the shaper is handed, and advances its glyph advances.
+	base     *Face
+	coords   []tables.Coord
+	advances truetype.HMetrics
 }
 
 // Metrics are the vertical metrics of a face at a size, in points.

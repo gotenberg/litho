@@ -34,14 +34,19 @@ type FaceDescriptor struct {
 	// Family is the family name the rule defines.
 	Family string
 	// WeightMin and WeightMax bound the weights the face covers, from 1 to
-	// 1000. Zero values mean 400.
+	// 1000. Zero values mean auto (CSS Fonts 4, 4.4): 400, or the range of
+	// the face's wght axis when its font is variable.
 	WeightMin, WeightMax int
 	// Style is the face's style; ObliqueMin and ObliqueMax bound the slant
-	// angles, in degrees, of an oblique face.
+	// angles, in degrees, of an oblique face. AutoStyle is font-style:
+	// auto, which matches as FaceNormal and leaves the slnt axis of a
+	// variable face unclamped.
 	Style                  FaceStyle
 	ObliqueMin, ObliqueMax float64
+	AutoStyle              bool
 	// StretchMin and StretchMax bound the widths the face covers, in
-	// percent of the normal width. Zero values mean 100.
+	// percent of the normal width. Zero values mean auto: 100, or the
+	// range of the face's wdth axis when its font is variable.
 	StretchMin, StretchMax float64
 	// UnicodeRange lists the inclusive character ranges the face is used
 	// for, nil for every character.
@@ -58,6 +63,17 @@ type FaceDescriptor struct {
 	// descriptor sets: text drawn in the face is shaped with them before
 	// the features of its [Style] (CSS Fonts 4, 7.2).
 	Features []Feature
+	// Variations are the axis values the rule's font-variation-settings
+	// descriptor sets: a variable face is drawn with them after the
+	// values its [Style]'s weight, stretch and slant imply and before
+	// those of its optical size and of [FontSettings.Variations] (CSS
+	// Fonts 4, 4.6 and 7.2).
+	Variations []Variation
+
+	// autoWeight and autoStretch record a weight or stretch range left at
+	// auto; slantAxis an auto style on a face with a slnt axis, which
+	// slants by its axis and is never slanted synthetically.
+	autoWeight, autoStretch, slantAxis bool
 }
 
 // MetricOverride is a metric an @font-face rule sets: a fraction of the
@@ -101,16 +117,17 @@ func (d *FaceDescriptor) override(m *Metrics, size float64) {
 // increasing order.
 func (d FaceDescriptor) normalized() FaceDescriptor {
 	if d.WeightMin == 0 && d.WeightMax == 0 {
-		d.WeightMin, d.WeightMax = 400, 400
+		d.WeightMin, d.WeightMax, d.autoWeight = 400, 400, true
 	}
 	d.WeightMin, d.WeightMax = min(d.WeightMin, d.WeightMax), max(d.WeightMin, d.WeightMax)
 	if d.StretchMin == 0 && d.StretchMax == 0 {
-		d.StretchMin, d.StretchMax = 100, 100
+		d.StretchMin, d.StretchMax, d.autoStretch = 100, 100, true
 	}
 	d.StretchMin, d.StretchMax = min(d.StretchMin, d.StretchMax), max(d.StretchMin, d.StretchMax)
 	d.ObliqueMin, d.ObliqueMax = min(d.ObliqueMin, d.ObliqueMax), max(d.ObliqueMin, d.ObliqueMax)
 	d.UnicodeRange = slices.Clone(d.UnicodeRange)
 	d.Features = slices.Clone(d.Features)
+	d.Variations = slices.Clone(d.Variations)
 	return d
 }
 
@@ -151,7 +168,7 @@ func (d *FaceDescriptor) synthesis(req request, size float64) (stroke, skew floa
 		stroke = fakeBoldStroke(size)
 	}
 	upright := d.Style == FaceNormal || (d.Style == FaceOblique && d.ObliqueMax < syntheticItalicMinSlope)
-	if req.slant != slantNormal && upright && !req.noItalic {
+	if req.slant != slantNormal && upright && !req.noItalic && !d.slantAxis {
 		skew = skewOf(req)
 	}
 	return stroke, skew
@@ -209,13 +226,21 @@ func LoadFace(ctx context.Context, program []byte, d FaceDescriptor) (*Face, err
 }
 
 // pinFace parses the font of fc, a face just read, and makes it a document
-// face with the descriptors d.
+// face with the descriptors d. It reads the face's program, which the face
+// keeps, to read its variation tables.
 func pinFace(fc *Face, d FaceDescriptor) (*Face, error) {
 	ft, err := fc.parseFont()
 	if err != nil {
 		return nil, fmt.Errorf("parsing the font: %w", err)
 	}
+	fc.once.Do(func() {
+		fc.typesetFace, fc.err = fc.readTypeset()
+	})
+	if fc.err != nil {
+		return nil, fc.err
+	}
 	nd := d.normalized()
+	fc.readVariations(fc.typesetFace.Program, &nd)
 	fc.pinned, fc.doc = ft, &nd
 	fc.features = Style{Settings: &FontSettings{Features: nd.Features}}.features()
 	// A document face joins its rule's family alone: no installed family
@@ -264,13 +289,16 @@ type FaceSet struct {
 // [Fonts.LocalFace] in the order their rules appear, by the family their
 // descriptors name. Faces of the index are skipped. Every family a face
 // names is declared: a family whose faces all failed to load is declared
-// by the caller with [FaceSet.Declare].
+// by the caller with [FaceSet.Declare]. The variable faces of the set
+// share one bound on the instances they create ([maxDocumentInstances]).
 func NewFaceSet(faces []*Face) *FaceSet {
 	s := &FaceSet{families: make(map[string][]*Face)}
+	count := &instanceCount{}
 	for _, fc := range faces {
 		if fc == nil || fc.doc == nil {
 			continue
 		}
+		fc.instCount = count
 		k := familyKey(fc.doc.Family)
 		if k == "" {
 			continue

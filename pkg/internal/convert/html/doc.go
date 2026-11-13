@@ -63,8 +63,12 @@
 // are chosen by their width, style and weight descriptors, unicode-range
 // sends a character outside a face's ranges to the next family, and bold
 // and italic are synthesised where the rules lack them, as Chromium does.
-// font-feature-settings, font-variation-settings, the metric overrides and
-// size-adjust are ignored with a warning; font-display has no effect.
+// font-feature-settings, the metric overrides and size-adjust apply. A
+// variable font with TrueType outlines draws, and embeds, the instance its
+// text asks for through font-weight, font-stretch, font-style,
+// font-optical-sizing and font-variation-settings and the rule's
+// descriptors; one with CFF2 outlines draws its default instance with a
+// warning. font-display has no effect.
 //
 // # Page
 //

@@ -55,15 +55,20 @@ const maxShownDataURL = 64
 
 // fontFormats are the format() hints litho reads (CSS Fonts 4, 4.3.1,
 // Table 1): TrueType, OpenType with glyf or CFF outlines, collections, WOFF
-// and WOFF2. embedded-opentype and svg are refused, as are the
-// -variations formats of the older syntax, whose axes litho does not
-// apply.
-var fontFormats = []string{"collection", "opentype", "truetype", "woff", "woff2"}
+// and WOFF2, and the -variations forms of the older syntax, which name
+// the same formats holding variations. embedded-opentype and svg are
+// refused.
+var fontFormats = []string{
+	"collection", "opentype", "truetype", "woff", "woff2",
+	"opentype-variations", "truetype-variations", "woff-variations", "woff2-variations",
+}
 
 // fontTechs are the tech() keywords litho supports (CSS Fonts 4, 4.3.1):
-// OpenType layout features, which the shaper applies. Colour fonts,
-// variations, palettes, Graphite and AAT layout are not.
-var fontTechs = []string{"features-opentype"}
+// OpenType layout features, which the shaper applies, and variations,
+// which litho instances for TrueType outlines (a CFF2 face draws its
+// default instance, with a warning). Colour fonts, palettes, Graphite and
+// AAT layout are not.
+var fontTechs = []string{"features-opentype", "variations"}
 
 // fontLoader loads the faces of one conversion's @font-face rules.
 type fontLoader struct {
@@ -241,6 +246,18 @@ func descriptorOf(rule css.FontFace) text.FaceDescriptor {
 		StretchMin:   rule.StretchMin,
 		StretchMax:   rule.StretchMax,
 		UnicodeRange: rule.UnicodeRange,
+		AutoStyle:    rule.StyleAuto,
+	}
+	// An auto weight or stretch is a zero range, which the text stack
+	// reads as the face's own (CSS Fonts 4, 4.4).
+	if rule.WeightAuto {
+		d.WeightMin, d.WeightMax = 0, 0
+	}
+	if rule.StretchAuto {
+		d.StretchMin, d.StretchMax = 0, 0
+	}
+	for _, v := range rule.VariationSettings {
+		d.Variations = append(d.Variations, text.Variation{Tag: v.Tag, Value: v.Value})
 	}
 	if rule.SizeAdjust != 1 {
 		d.SizeAdjust = rule.SizeAdjust

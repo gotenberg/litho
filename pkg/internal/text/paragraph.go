@@ -255,7 +255,8 @@ func (g *shapedGlyph) clusterLen() int { return int(g.packed >> clusterBits & cl
 // with the face fallback [Fonts.Layout] documents, applies word spacing to
 // the word separators and letter spacing after every character cluster (CSS
 // Text 3, 8.2), and records the UAX #14 line break opportunities and the
-// UAX #29 grapheme boundaries of the text.
+// UAX #29 grapheme boundaries of the text. A variable document face draws
+// its instance as [Fonts.Layout] documents.
 //
 // It returns [ErrInvalidStyle], [ErrTooManyRuns], [ErrTextTooLong] and
 // [ErrNoFonts] as [Fonts.Layout] does, an error for an object whose width
@@ -483,9 +484,13 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 				piece.Direction = di.DirectionRTL
 			}
 			for _, in := range shaping.SplitByFace(piece, styleFontmap{st: st, style: idx, script: piece.Script}) {
+				if err := st.instanceInput(ctx, &in, &ss.style); err != nil {
+					return fmt.Errorf("shaping text: %w", err)
+				}
 				st.faceInput(&in, &ss.style)
 				out := st.kit.shaper.Shape(in)
 				rescale(&out, in.Size)
+				st.instanceAdvances(&out, in.Size)
 				st.collectMissing(&out, text)
 				if ss.word != 0 {
 					out.AddWordSpacing(text, ss.word)
@@ -509,7 +514,7 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 // letter spacing after each cluster and recording every cluster's advance
 // on its first character.
 func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.Output, run int, style Style) (shapedItem, error) {
-	fc := st.byFont[out.Face.Font]
+	fc := st.byFace[out.Face]
 	var doc *FaceDescriptor
 	if fc != nil {
 		doc = fc.doc

@@ -538,4 +538,17 @@ func (e *engine) shapePara(b *box, p *ifcPara) {
 	if len(rep.MissingEmoji) > 0 {
 		e.warnOnce(warn.MissingGlyph, warn.Omitted, "colour emoji fonts are not supported: emoji no text font covers are drawn blank", -1)
 	}
+	e.warnDefaultInstances(rep)
+}
+
+// warnDefaultInstances reports the variable faces a shaping report says
+// were drawn at their default instance.
+func (e *engine) warnDefaultInstances(rep text.Report) {
+	for _, d := range rep.DefaultInstances {
+		code := warn.ContentUnsupported
+		if d.Limit {
+			code = warn.LimitReached
+		}
+		e.warnOnce(code, warn.Approximated, fmt.Sprintf("the variable font of %q draws at its default instance: %s", d.Family, d.Reason), -1)
+	}
 }
