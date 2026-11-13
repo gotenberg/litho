@@ -1,11 +1,14 @@
-"""Record fontTools' instances of varfont.ttf into outlines_golden.json.
+"""Record fontTools' instances of varfont.ttf into outlines_golden.json,
+and fontTools' outlines of varfont_cff2.otf into cff2_golden.json.
 
 For each location, in user coordinates: the normalized coordinates fontTools'
 instancer computes (2.14 units), and the full instance it writes: for each
 glyph in glyph order, its resolved points (composites placed), its advance
 and left side bearing, its bounding box and its vertical advance; and the
-font-wide values the instance changes. instance_test.go compares litho's
-instancer against it. Run through `make outline-goldens`, which pins
+font-wide values the instance changes. For the CFF2 font, at each location:
+for each glyph, the pen calls of its outline at that location, unrounded,
+and its advance with the 'HVAR' delta. instance_test.go compares litho's
+instancer against both. Run through `make outline-goldens`, which pins
 fontTools.
 """
 
@@ -14,6 +17,7 @@ import json
 import logging
 import os
 
+from fontTools.pens.recordingPen import RecordingPen
 from fontTools.ttLib import TTFont
 from fontTools.varLib import instancer
 
@@ -87,6 +91,42 @@ def main():
         tables = {t: {f: getattr(inst[t], f) for f in fields} for t, fields in FIELDS.items()}
         golden.append({"location": full, "normalized": normalized, "glyphs": glyphs, "tables": tables})
     with open(os.path.join(HERE, "outlines_golden.json"), "w") as f:
+        json.dump(golden, f)
+        f.write("\n")
+    cff2()
+
+
+CFF2_LOCATIONS = [
+    {},
+    {"wght": 450},
+    {"wght": 600},
+    {"wght": 742.1052703857422},
+    {"wght": 900},
+    {"wdth": 75},
+    {"wght": 333.3, "wdth": 87.5},
+    {"wght": 1000, "wdth": 50},
+]
+
+
+def cff2():
+    """Records the CFF2 golden."""
+    vf = TTFont(os.path.join(HERE, "varfont_cff2.otf"))
+    golden = []
+    for loc in CFF2_LOCATIONS:
+        gs = vf.getGlyphSet(location=loc, normalized=False)
+        glyphs = []
+        for name in vf.getGlyphOrder():
+            pen = RecordingPen()
+            gs[name].draw(pen)
+            glyphs.append(
+                {
+                    "name": name,
+                    "ops": [[op, [list(p) for p in args]] for op, args in pen.value],
+                    "advance": gs[name].width,
+                }
+            )
+        golden.append({"location": loc, "glyphs": glyphs})
+    with open(os.path.join(HERE, "cff2_golden.json"), "w") as f:
         json.dump(golden, f)
         f.write("\n")
 

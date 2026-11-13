@@ -8,8 +8,8 @@ var (
 	// does not know, a value out of its range.
 	ErrInvalid = errors.New("invalid font variation data")
 
-	// ErrUnsupported reports a variable font litho does not instance: CFF2
-	// outlines, 'avar' version 2.
+	// ErrUnsupported reports a variable font litho does not instance:
+	// one without 'glyf' or 'CFF2' outlines, 'avar' version 2.
 	ErrUnsupported = errors.New("unsupported font variations")
 
 	// ErrTooComplex reports a font whose instance would cost more work

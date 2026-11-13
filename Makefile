@@ -69,7 +69,7 @@ outline-goldens: ## Regenerate the TrueType, CFF and variable font instance gold
 	python3 -m venv "$$venv"; \
 	"$$venv/bin/pip" install --quiet --disable-pip-version-check "fonttools==$$version"; \
 	for dir in $(OUTLINE_GOLDENS); do "$$venv/bin/python" -I "$$dir/gen_outlines_golden.py"; done; \
-	npx prettier --write $(addsuffix /outlines_golden.json,$(OUTLINE_GOLDENS))
+	npx prettier --write $(addsuffix /outlines_golden.json,$(OUTLINE_GOLDENS)) pkg/internal/typography/varfont/testdata/cff2_golden.json
 
 ICC_GOLDENS := pkg/internal/graphics/icc/testdata
 

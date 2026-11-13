@@ -113,6 +113,16 @@ func Parse(program []byte) (*Font, error) {
 	return f, nil
 }
 
+// HasCFF2 reports a program with CFF2 outlines and no 'glyf' table, whose
+// default instance a PDF cannot embed as it stands: its instance at the
+// default coordinates is the same font with CFF outlines.
+func (f *Font) HasCFF2() bool {
+	has := func(tag string) bool {
+		return slices.ContainsFunc(f.records, func(r truetype.TableRecord) bool { return r.Tag == tag })
+	}
+	return has("CFF2") && !has("glyf")
+}
+
 // Axes returns the font's design space. The caller must not modify it.
 func (f *Font) Axes() *Axes { return f.axes }
 
@@ -162,13 +172,25 @@ type instancer struct {
 // every delta is summed. The variation, hinting and device tables are
 // dropped; every other table is kept as it is.
 //
-// It fails with [ErrUnsupported] for a program without 'glyf' outlines,
+// A program with CFF2 outlines becomes an OpenType program with CFF
+// outlines at the instance, its blends resolved and its 16.16 values kept
+// (see [cff.InstanceCFF2]); its vertical metrics stay the default
+// instance's.
+//
+// It fails with [ErrUnsupported] for a program with neither 'glyf' nor
+// 'CFF2' outlines,
 // with [ErrInvalid] for tables it cannot read, with [ErrTooComplex] past
 // the work bound, and with ctx's error when ctx ends.
 func (f *Font) Instance(ctx context.Context, user []float64) ([]byte, error) {
 	in := &instancer{f: f, coords: f.Normalize(user), memo: map[int][]point{}, used: map[int]bool{}}
-	tables, err := in.read()
+	tables, err := in.tables()
 	if err != nil {
+		return nil, err
+	}
+	if tables["glyf"] == nil && tables["CFF2"] != nil {
+		return in.instanceCFF2(ctx, tables, user)
+	}
+	if err := in.read(tables); err != nil {
 		return nil, err
 	}
 	if err := in.markComponents(); err != nil {
@@ -200,9 +222,8 @@ func (f *Font) Instance(ctx context.Context, user []float64) ([]byte, error) {
 	return in.assemble(tables, user)
 }
 
-// read checks and reads the tables the instance is built from, and
-// returns every table of the program by tag.
-func (in *instancer) read() (map[string][]byte, error) {
+// tables returns every table of the program by tag.
+func (in *instancer) tables() (map[string][]byte, error) {
 	tables := make(map[string][]byte, len(in.f.records))
 	for _, r := range in.f.records {
 		data, err := truetype.TableData(in.f.program, in.f.records, r.Tag)
@@ -211,41 +232,47 @@ func (in *instancer) read() (map[string][]byte, error) {
 		}
 		tables[r.Tag] = data
 	}
+	return tables, nil
+}
+
+// read checks and reads the 'glyf' tables the instance is built from, of
+// tables, every table of the program by tag.
+func (in *instancer) read(tables map[string][]byte) error {
 	if tables["glyf"] == nil || tables["loca"] == nil {
-		return nil, fmt.Errorf("%w: no glyf outlines", ErrUnsupported)
+		return fmt.Errorf("%w: no glyf outlines", ErrUnsupported)
 	}
 	head, hhea, maxp, hmtx := tables["head"], tables["hhea"], tables["maxp"], tables["hmtx"]
 	if len(head) < headSize || len(hhea) < hheaSize || len(maxp) < maxpMinSize || hmtx == nil {
-		return nil, fmt.Errorf("%w: head, hhea, maxp or hmtx missing or short", ErrInvalid)
+		return fmt.Errorf("%w: head, hhea, maxp or hmtx missing or short", ErrInvalid)
 	}
 	in.n = int(binary.BigEndian.Uint16(maxp[maxpNumGlyphsAt:]))
 	in.glyf = tables["glyf"]
 	var err error
 	if in.loca, err = readLoca(tables["loca"], len(in.glyf), in.n, binary.BigEndian.Uint16(head[headIndexToLocAt:]) != 0); err != nil {
-		return nil, err
+		return err
 	}
 	if in.h, err = readMetrics(hmtx, int(binary.BigEndian.Uint16(hhea[hheaNumberOfMetricsAt:])), in.n); err != nil {
-		return nil, fmt.Errorf("hmtx: %w", err)
+		return fmt.Errorf("hmtx: %w", err)
 	}
 	if vhea, vmtx := tables["vhea"], tables["vmtx"]; len(vhea) >= hheaSize && vmtx != nil {
 		if in.v, err = readMetrics(vmtx, int(binary.BigEndian.Uint16(vhea[hheaNumberOfMetricsAt:])), in.n); err != nil {
-			return nil, fmt.Errorf("vmtx: %w", err)
+			return fmt.Errorf("vmtx: %w", err)
 		}
 	}
 	axisCount := len(in.f.axes.Axes)
 	if data := tables["gvar"]; data != nil {
 		if in.gvar, err = parseGvar(data, axisCount, in.n); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	if data := tables["HVAR"]; data != nil {
 		if in.hvar, err = parseAdvanceVariations(data, in.coords, false); err != nil {
-			return nil, fmt.Errorf("HVAR: %w", err)
+			return fmt.Errorf("HVAR: %w", err)
 		}
 	}
 	if data := tables["VVAR"]; data != nil && in.v != nil {
 		if in.vvar, err = parseAdvanceVariations(data, in.coords, true); err != nil {
-			return nil, fmt.Errorf("VVAR: %w", err)
+			return fmt.Errorf("VVAR: %w", err)
 		}
 	}
 	in.out = make([][]byte, in.n)
@@ -253,7 +280,7 @@ func (in *instancer) read() (map[string][]byte, error) {
 	in.comps = make([][]component, in.n)
 	in.offsets = make([][2][]int32, in.n)
 	in.phantom = make([][phantomPoints]point, in.n)
-	return tables, nil
+	return nil
 }
 
 // readLoca reads the n+1 glyph offsets of a 'loca' table into a glyf table

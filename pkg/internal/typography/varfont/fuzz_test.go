@@ -145,3 +145,24 @@ func FuzzInstance(f *testing.F) {
 		_, _ = font.Instance(context.Background(), user) //nolint:errcheck // the target checks only that malformed data neither panics nor hangs
 	})
 }
+
+// FuzzInstanceCFF2 instances arbitrary bytes as an OpenType program with
+// CFF2 outlines, seeded with testdata/varfont_cff2.otf.
+func FuzzInstanceCFF2(f *testing.F) {
+	font, err := os.ReadFile("testdata/varfont_cff2.otf")
+	if err != nil {
+		f.Fatal(err)
+	}
+	seed(f, font)
+	f.Fuzz(func(t *testing.T, data []byte) {
+		vf, err := Parse(data)
+		if err != nil {
+			return
+		}
+		user := vf.Axes().Defaults()
+		for i := range user {
+			user[i] = vf.Axes().Axes[i].Max
+		}
+		_, _ = vf.Instance(context.Background(), user) //nolint:errcheck // the target checks only that malformed data neither panics nor hangs
+	})
+}
