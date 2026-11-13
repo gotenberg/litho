@@ -15,6 +15,9 @@ func (f *Fonts) loadFont(fc *Face) (*font.Font, error) {
 	if fc.pinned != nil {
 		return fc.pinned, nil
 	}
+	if fc.varBase != nil {
+		return f.loadFont(fc.varBase)
+	}
 	if f.base != nil {
 		return f.base.loadFont(fc)
 	}

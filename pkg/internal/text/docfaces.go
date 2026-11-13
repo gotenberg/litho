@@ -288,16 +288,13 @@ type FaceSet struct {
 // [Fonts.LocalFace] in the order their rules appear, by the family their
 // descriptors name. Faces of the index are skipped. Every family a face
 // names is declared: a family whose faces all failed to load is declared
-// by the caller with [FaceSet.Declare]. The variable faces of the set
-// share one bound on the instances they create ([maxDocumentInstances]).
+// by the caller with [FaceSet.Declare].
 func NewFaceSet(faces []*Face) *FaceSet {
 	s := &FaceSet{families: make(map[string][]*Face)}
-	count := &instanceCount{}
 	for _, fc := range faces {
 		if fc == nil || fc.doc == nil {
 			continue
 		}
-		fc.instCount = count
 		k := familyKey(fc.doc.Family)
 		if k == "" {
 			continue
@@ -344,8 +341,9 @@ func (s *FaceSet) Len() int {
 // alone, as Chromium resolves them against the installed fonts.
 //
 // The result shares f's footprints and cache of parsed fonts without
-// copying them, and is safe for concurrent use. A nil or empty set returns
-// f itself.
+// copying them, and is safe for concurrent use. It keeps the instances of
+// the variable faces the conversion draws as [Fonts.ForConversion] does,
+// with f's when f is such an index. A nil or empty set returns f itself.
 func (f *Fonts) WithFaces(set *FaceSet) *Fonts {
 	if set == nil || len(set.families) == 0 {
 		return f
@@ -353,6 +351,10 @@ func (f *Fonts) WithFaces(set *FaceSet) *Fonts {
 	base := f
 	if f.base != nil {
 		base = f.base
+	}
+	inst := f.inst
+	if inst == nil {
+		inst = &instanceStore{}
 	}
 	return &Fonts{
 		logger:         base.logger,
@@ -363,6 +365,7 @@ func (f *Fonts) WithFaces(set *FaceSet) *Fonts {
 		maxLoadedBytes: base.maxLoadedBytes,
 		base:           base,
 		set:            set,
+		inst:           inst,
 	}
 }
 

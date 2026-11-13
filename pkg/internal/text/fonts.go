@@ -116,6 +116,10 @@ type Fonts struct {
 	// through base.
 	base *Fonts
 	set  *FaceSet
+	// inst holds the instances of the variable faces of the conversion an
+	// overlay [Fonts.ForConversion] or [Fonts.WithFaces] returned serves,
+	// nil for an index of its own.
+	inst *instanceStore
 
 	// maxLoaded and maxLoadedBytes are [maxLoadedFaces] and
 	// [maxLoadedFaceBytes]; tests lower them.
@@ -177,11 +181,18 @@ func (f *Fonts) takeKit() *shapingKit {
 }
 
 // releaseKit hands k back for a later call. The call that held it is
-// over: nothing it returned holds a go-text face.
+// over: nothing it returned holds a go-text face. The faces of a
+// conversion, its document faces and the instances it made, leave the
+// kit, which a later conversion may take.
 func (f *Fonts) releaseKit(k *shapingKit) {
 	if len(k.faces) > maxKitFaces {
 		k.shaper = shaping.HarfbuzzShaper{}
 		clear(k.faces)
+	}
+	for fc := range k.faces {
+		if fc.doc != nil || fc.base != nil {
+			delete(k.faces, fc)
+		}
 	}
 	pool := &f.kits
 	if f.base != nil {
@@ -262,17 +273,27 @@ type Face struct {
 	vfErr error
 	// instMu guards instances, the faces of vf's instances by their
 	// normalized coordinates, and instErr, why the font does not
-	// instance. instCount counts the instances of the face's set.
+	// instance.
 	instMu    sync.Mutex
 	instances map[string]*Face
 	instErr   error
-	instCount *instanceCount
 	// base is the face an instance face is an instance of, nil for any
 	// other face; coords are the instance's normalized coordinates, which
 	// the shaper is handed, and advances its glyph advances.
 	base     *Face
 	coords   []tables.Coord
 	advances truetype.HMetrics
+
+	// axes is the design space of a face of the index whose font is
+	// variable, nil otherwise, read from its 'fvar' table alone;
+	// namedInstances are the named instances of the face of its file. A
+	// face standing for one named instance has its user coordinates in
+	// named and the face of its file, through which it loads and embeds,
+	// in varBase; both are nil for the face of the file itself.
+	axes           *varfont.Axes
+	namedInstances []namedInstance
+	named          []float64
+	varBase        *Face
 }
 
 // Metrics are the vertical metrics of a face at a size, in points.
@@ -425,11 +446,13 @@ func (f *Fonts) indexFile(path string, budget *int64) {
 		return
 	}
 	for _, fc := range faces {
-		if len(f.faces) >= maxIndexFaces {
-			f.logger.Debug("font files: face bound reached, ignoring the faces left", slog.Int("max", maxIndexFaces))
-			return
+		for _, nf := range append([]*Face{fc}, fc.namedFaces()...) {
+			if len(f.faces) >= maxIndexFaces {
+				f.logger.Debug("font files: face bound reached, ignoring the faces left", slog.Int("max", maxIndexFaces))
+				return
+			}
+			f.add(nf)
 		}
-		f.add(fc)
 	}
 }
 
@@ -555,6 +578,9 @@ func (fc *Face) Typeset(ctx context.Context) (*typeset.Face, error) {
 			fc.typesetFace, fc.err = fc.readTypeset()
 		})
 		return fc.typesetFace, fc.err
+	}
+	if fc.varBase != nil {
+		return fc.varBase.Typeset(ctx)
 	}
 	return fc.idx.typesetOf(fc)
 }

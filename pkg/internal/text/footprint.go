@@ -362,6 +362,13 @@ func readFootprint(ld *ot.Loader, records []truetype.TableRecord) (*Face, error)
 	}
 	fc.setNames(names)
 	fc.setAspect(hasOS2, os2, headTable.MacStyle, names.Name(nameSubfamily))
+	rawFvar, err := readTable(ld, records, "fvar", maxFvarTableBytes)
+	if err != nil {
+		return nil, err
+	}
+	if rawFvar != nil {
+		fc.readDesignSpace(rawFvar, names)
+	}
 	hhea, _, hheaErr := tables.ParseHhea(rawHhea)
 	_, hasHmtx := findRecord(records, "hmtx")
 	fc.setMetrics(hasOS2, os2, rawHhea != nil && hheaErr == nil && hasHmtx, hhea)

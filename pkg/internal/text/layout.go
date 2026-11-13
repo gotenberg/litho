@@ -134,21 +134,23 @@ type Report struct {
 	// than as a box, and keep their text for extraction. It is sorted and
 	// bounded as MissingGlyphs is, and MissingGlyphs leaves them out.
 	MissingEmoji []rune
-	// DefaultInstances lists the variable document faces drawn at their
-	// default instance where the text asked for another, by family, with
-	// why: font variations litho does not instance (CFF2 outlines, 'avar'
-	// version 2), tables that do not read, or the bound on instances.
+	// DefaultInstances lists the variable faces drawn at their default
+	// instance where the text asked for another, by family, with why: font
+	// variations litho does not instance (CFF2 outlines, 'avar' version 2),
+	// tables that do not read, the bound on instances, or an installed face
+	// laid out on an index that serves no conversion.
 	DefaultInstances []DefaultInstance
 }
 
 // DefaultInstance is a variable face drawn at its default instance.
 type DefaultInstance struct {
-	// Family is the family of the face's @font-face rule.
+	// Family is the family of the face's @font-face rule, or of the
+	// installed face.
 	Family string
 	// Reason says why it was not instanced.
 	Reason string
-	// Limit reports that the document's faces had created as many
-	// instances as litho allows, 128.
+	// Limit reports that the conversion had created as many instances as
+	// litho allows, 128.
 	Limit bool
 }
 
@@ -209,11 +211,23 @@ type DefaultInstance struct {
 // with the variable font at those coordinates, its glyphs advance by the
 // instance's own rounded advances, and its [typeset.Face] is the static
 // instance, written once per document and coordinates (see
-// [varfont.Font.Instance]). A face whose variations litho does not
-// instance, CFF2 outlines among them, and every face past 128 instances
-// in one document, draw at their default instance, listed in
-// [Report.DefaultInstances]. An indexed variable face draws its default
-// instance.
+// [varfont.Font.Instance]).
+//
+// An installed variable face offers its named instances as faces of its
+// family, which match as static faces do but for weight (see
+// [instanceWeightRank]). Under [FallbackChromium] the run draws the
+// instance matched at its own coordinates, as Chromium draws an installed
+// variable font whatever font-stretch, font-optical-sizing and
+// font-variation-settings say; under the other rules at those
+// coordinates and opsz at the size in points, as LibreOffice does. The
+// instance is made on the conversion's first use, on an index
+// [Fonts.ForConversion] or [Fonts.WithFaces] returned, and belongs to that
+// conversion alone.
+//
+// A face whose variations litho does not instance, CFF2 outlines among
+// them, every face past 128 instances in one conversion, and an installed
+// face laid out on an index that serves no conversion draw at their
+// default instance, listed in [Report.DefaultInstances].
 //
 // Layout parses the font programs of the faces it draws with on first use
 // and keeps them in the index's bounded cache.

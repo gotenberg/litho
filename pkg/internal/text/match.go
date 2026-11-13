@@ -762,11 +762,14 @@ type request struct {
 	oblique float64
 	// noBold and noItalic forbid synthesis.
 	noBold, noItalic bool
+	// rule is the fallback rule of the style, which ranks the instances of
+	// a variable font (see [instanceWeightRank]).
+	rule Fallback
 }
 
 // requestOf returns the aspect style asks for.
 func requestOf(style Style) request {
-	req := request{weight: int(style.weight()), stretch: style.stretch(), noBold: style.NoSyntheticBold, noItalic: style.NoSyntheticItalic}
+	req := request{weight: int(style.weight()), stretch: style.stretch(), noBold: style.NoSyntheticBold, noItalic: style.NoSyntheticItalic, rule: style.Fallback.rule()}
 	if style.Italic {
 		req.slant = slantItalic
 		req.oblique = style.Oblique
@@ -845,7 +848,9 @@ type aspectRank [6]int
 // normal, then oblique, then italic. For a weight between 400 and 500,
 // weights up to 500 come first in ascending order, then the lighter ones in
 // descending order, then the heavier ones. Below 400 lighter weights come
-// first, above 500 heavier ones. Index order breaks ties.
+// first, above 500 heavier ones. The faces of a variable font, its named
+// instances, rank by weight as [instanceWeightRank] says. Index order breaks
+// ties.
 func rankFace(req request, fc *Face) aspectRank {
 	var r aspectRank
 	k, d := stretchOrder(req.width(), widthPercent(fc.width))
@@ -858,6 +863,8 @@ func rankFace(req request, fc *Face) aspectRank {
 	}
 	w, want := fc.weight, req.weight
 	switch {
+	case fc.axes != nil:
+		r[3], r[4] = instanceWeightRank(want, w, req.rule)
 	case want >= 400 && want <= 500:
 		switch {
 		case w >= want && w <= 500:

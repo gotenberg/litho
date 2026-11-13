@@ -128,14 +128,14 @@ func TestVariableFaceDefaultInstance(t *testing.T) {
 			t.Errorf("%+v: drawn with %q, want the face itself", style, got)
 		}
 	}
-	if base.instCount.n != 0 {
-		t.Errorf("%d instances made", base.instCount.n)
+	if n := fonts.inst.count.n; n != 0 {
+		t.Errorf("%d instances made", n)
 	}
 	fonts, base = loadVarFace(t, FaceDescriptor{})
 	shapeVar(t, fonts, Style{Weight: 700, Size: 12})
 	shapeVar(t, fonts, Style{Weight: 700, Size: 12})
-	if base.instCount.n != 1 || len(base.instances) != 1 {
-		t.Errorf("two runs at one instance made %d instances", base.instCount.n)
+	if n := fonts.inst.count.n; n != 1 || len(base.instances) != 1 {
+		t.Errorf("two runs at one instance made %d instances", n)
 	}
 }
 
@@ -211,7 +211,7 @@ func TestVariableFaceSynthesis(t *testing.T) {
 func TestVariableFaceInstanceLimit(t *testing.T) {
 	t.Parallel()
 	fonts, base := loadVarFace(t, FaceDescriptor{})
-	base.instCount.n = maxDocumentInstances
+	fonts.inst.count.n = maxDocumentInstances
 	p, rep := shapeVar(t, fonts, Style{Weight: 700, Size: 12})
 	if got := p.items[0].face.Key; got != base.Key() {
 		t.Errorf("drawn with %q past the bound, want the face itself", got)
@@ -243,8 +243,8 @@ func TestVariableFaceUnsupported(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fc := &Face{src: &fontSource{path: "x"}, doc: &FaceDescriptor{WeightMin: 100, WeightMax: 900}, vf: vf, instCount: &instanceCount{}}
-	got, err := fc.instanceOf(context.Background(), &Style{Weight: 700, Size: 12}, nil)
+	fc := &Face{src: &fontSource{path: "x"}, doc: &FaceDescriptor{WeightMin: 100, WeightMax: 900}, vf: vf}
+	got, err := fc.instanceOf(context.Background(), &Style{Weight: 700, Size: 12}, nil, &instanceCount{})
 	if got != fc || !errors.Is(err, varfont.ErrUnsupported) {
 		t.Errorf("instanceOf = %p, %v; want the face itself and ErrUnsupported", got, err)
 	}

@@ -10,6 +10,7 @@ import (
 	"math"
 	"sync"
 
+	"github.com/go-text/typesetting/font"
 	"github.com/go-text/typesetting/font/opentype/tables"
 	"github.com/go-text/typesetting/shaping"
 	"golang.org/x/image/math/fixed"
@@ -32,13 +33,13 @@ type Variation struct {
 	Value float64
 }
 
-// maxDocumentInstances caps the instances of variable faces one set of
-// document faces creates: 128. Anti-DoS guard, not spec-mandated: every
-// instance is a font program as large as its face's, kept for the
-// conversion and embedded, and a page uses one per weight, width, slant
-// and optical size it sets; nine weights at a handful of sizes stay far
-// below it. Past it, text draws in the face's default instance and the
-// layout reports it.
+// maxDocumentInstances caps the instances of variable faces, document and
+// installed ones, one conversion creates: 128. Anti-DoS guard, not
+// spec-mandated: every instance is a font program as large as its face's,
+// kept for the conversion and embedded, and a page uses one per weight,
+// width, slant and optical size it sets; nine weights at a handful of
+// sizes stay far below it. Past it, text draws in the face's default
+// instance and the layout reports it.
 const maxDocumentInstances = 128
 
 // The registered axes the font properties set (OpenType specification,
@@ -76,6 +77,17 @@ const cssPixelsPerPoint = 4.0 / 3
 type instanceCount struct {
 	mu sync.Mutex
 	n  int
+}
+
+// take counts one more instance and reports whether the bound allowed it.
+func (c *instanceCount) take() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.n >= maxDocumentInstances {
+		return false
+	}
+	c.n++
+	return true
 }
 
 // errInstanceLimit reports a face past [maxDocumentInstances].
@@ -201,12 +213,12 @@ func (fc *Face) userCoordinates(style *Style) []float64 {
 	return user
 }
 
-// instanceOf returns the face that draws fc in style: fc itself for a face
-// that is not variable, an indexed face, or a style at the default
+// instanceOf returns the face that draws fc, a document face, in style: fc
+// itself for a face that is not variable or a style at the default
 // instance; else the instance of fc at the style's coordinates, created on
-// first use. A face whose variations litho cannot apply draws as fc, its
-// default instance, and why is returned with it.
-func (fc *Face) instanceOf(ctx context.Context, style *Style, mem *limits.Budget) (*Face, error) {
+// first use and counted by count. A face whose variations litho cannot
+// apply draws as fc, its default instance, and why is returned with it.
+func (fc *Face) instanceOf(ctx context.Context, style *Style, mem *limits.Budget, count *instanceCount) (*Face, error) {
 	if fc.doc == nil || fc.base != nil {
 		return fc, nil
 	}
@@ -230,18 +242,10 @@ func (fc *Face) instanceOf(ctx context.Context, style *Style, mem *limits.Budget
 	if fc.instErr != nil {
 		return fc, fc.instErr
 	}
-	if c := fc.instCount; c != nil {
-		c.mu.Lock()
-		over := c.n >= maxDocumentInstances
-		if !over {
-			c.n++
-		}
-		c.mu.Unlock()
-		if over {
-			return fc, errInstanceLimit
-		}
+	if !count.take() {
+		return fc, errInstanceLimit
 	}
-	inst, err := fc.newInstance(ctx, user, coords, key, mem)
+	inst, err := fc.newInstance(ctx, fc.vf, user, coords, key, mem, nil)
 	if err != nil {
 		if ctx.Err() == nil && !errors.Is(err, limits.ErrMemoryBudget) {
 			fc.instErr = err
@@ -255,13 +259,21 @@ func (fc *Face) instanceOf(ctx context.Context, style *Style, mem *limits.Budget
 	return inst, nil
 }
 
-// newInstance writes the instance of fc at the user coordinates user,
-// normalized as coords, charges its program to mem and reads it as a face
-// that shapes with the variable font at coords and embeds the instance.
-func (fc *Face) newInstance(ctx context.Context, user []float64, coords []int16, key string, mem *limits.Budget) (*Face, error) {
-	program, err := fc.vf.Instance(ctx, user)
+// newInstance writes the instance of fc, whose design space is vf, at the
+// user coordinates user, normalized as coords, charges its program to mem
+// and reads it as a face that shapes with the variable font at coords and
+// embeds the instance. load parses the font of a face of the index; a
+// document face has its own.
+func (fc *Face) newInstance(ctx context.Context, vf *varfont.Font, user []float64, coords []int16, key string, mem *limits.Budget, load func(*Face) (*font.Font, error)) (*Face, error) {
+	program, err := vf.Instance(ctx, user)
 	if err != nil {
 		return nil, err
+	}
+	parsed := fc.pinned
+	if parsed == nil {
+		if parsed, err = load(fc); err != nil {
+			return nil, err
+		}
 	}
 	if err := mem.Charge(int64(len(program)), "font instances"); err != nil {
 		return nil, err
@@ -290,7 +302,7 @@ func (fc *Face) newInstance(ctx context.Context, user []float64, coords []int16,
 	// tables, which go-text never modifies: the shaper caches one
 	// HarfBuzz font, and the coordinates of the face it was made from, per
 	// parsed font.
-	pinned := *fc.pinned
+	pinned := *parsed
 	inst.pinned, inst.doc, inst.features = &pinned, fc.doc, fc.features
 	inst.base, inst.advances = fc, advances
 	inst.coords = make([]tables.Coord, len(coords))
@@ -336,7 +348,16 @@ func (st *layoutState) instanceInput(ctx context.Context, in *shaping.Input, sty
 	if fc == nil {
 		return nil
 	}
-	inst, err := fc.instanceOf(ctx, style, st.mem)
+	var inst *Face
+	var err error
+	switch {
+	case fc.doc != nil && st.fonts.inst == nil:
+		inst, err = fc, errNoConversion
+	case fc.doc != nil:
+		inst, err = fc.instanceOf(ctx, style, st.mem, &st.fonts.inst.count)
+	default:
+		inst, err = st.fonts.installedInstance(ctx, fc, style, st.mem)
+	}
 	switch {
 	case err == nil:
 	case errors.Is(err, limits.ErrMemoryBudget):
