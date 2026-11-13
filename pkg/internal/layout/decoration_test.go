@@ -65,6 +65,27 @@ func TestTextDecoration_OneUnderlinePerDecoratingBox(t *testing.T) {
 	}
 }
 
+// CSS Text Decoration 3, 4: a text shadow copies the decorations of the
+// text as well as its glyphs, in the shadow's colour.
+func TestTextShadow_ShadowsDecorations(t *testing.T) {
+	lime, blue := css.Color{G: 1, A: 1}, css.Color{B: 1, A: 1}
+	st := sty(func(s *css.Style) {
+		s.TextDecoration = css.Underline | css.LineThrough
+		s.TextDecorationColor = lime
+		s.TextShadow = []css.Shadow{{X: px(2), Y: px(3), Color: blue}}
+	})
+	res := run(t, doc(el(st, txt(st, "a"))), page(100, 100))
+	own, shadow := decoPaths(res, lime), decoPaths(res, blue)
+	if len(own) != 2 || len(shadow) != 2 {
+		t.Fatalf("decorations %+v, shadows %+v: want an underline and a line-through each", own, shadow)
+	}
+	for i := range own {
+		if !near(shadow[i].X-own[i].X, px(2)) || !near(shadow[i].Y-own[i].Y, px(3)) {
+			t.Errorf("shadow %+v of %+v, want it 2px right and 3px down", shadow[i], own[i])
+		}
+	}
+}
+
 // Chromium draws an overline grown up from one pixel below the glyphs' top
 // edge, however thick, a departure from CSS Text Decoration 4, 2.6 that
 // leaves the side it grows to open.
