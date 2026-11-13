@@ -132,6 +132,87 @@ func TestPowerPointEffects_ReproduceReferenceRows(t *testing.T) {
 	}
 }
 
+// alphaBilinear returns the alpha of img, the effect bitmap p decoded, at
+// the slide point (x, y), interpolated bilinearly between the four pixels
+// nearest it.
+func alphaBilinear(img *image.NRGBA, p placed, x, y float64) float64 {
+	r := p.bounds()
+	b := img.Bounds()
+	fx := (x-r.X)/r.Width*float64(b.Dx()) - 0.5
+	fy := (y-r.Y)/r.Height*float64(b.Dy()) - 0.5
+	x0, y0 := int(math.Floor(fx)), int(math.Floor(fy))
+	ax, ay := fx-float64(x0), fy-float64(y0)
+	at := func(px, py int) float64 {
+		if px < 0 || py < 0 || px >= b.Dx() || py >= b.Dy() {
+			return 0
+		}
+		return float64(img.NRGBAAt(px, py).A)
+	}
+	return at(x0, y0)*(1-ax)*(1-ay) + at(x0+1, y0)*ax*(1-ay) + at(x0, y0+1)*(1-ax)*ay + at(x0+1, y0+1)*ax*ay
+}
+
+// TestPowerPointEffects_GlowCorners checks that a glow grows a shape's
+// corners and the diagonals of its curves as PowerPoint prints them: the
+// alpha of the glow's bitmap at points along a diagonal out of the
+// outline, against PowerPoint's soft mask at the same points.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: effects-glow-softedge-reflection, its ellipse with a
+//     glow of 18 pt along the ray out of the outline at 45 degrees;
+//     libreoffice/pptx: sd/effectOrder, its rectangle with a glow of
+//     28 pt along the diagonal out of its top-left corner. The soft
+//     masks are read bilinearly, PowerPoint's bitmaps moved by the shift
+//     that best aligns their fades along the axes (0.01 and 0.21 pt).
+func TestPowerPointEffects_GlowCorners(t *testing.T) {
+	emu := func(v float64) float64 { return v / 12700 }
+	type point struct{ x, y, a float64 }
+	for _, tc := range []struct {
+		name  string
+		shape *Shape
+		at    []point
+	}{
+		{"ellipse 18 pt", &Shape{
+			Box: typeset.Rect{X: emu(3480600), Y: emu(500000), Width: emu(2282800), Height: emu(1756000)}, Geometry: &shape.Geometry{Preset: "ellipse"},
+			Fill: Fill{Kind: FillSolid, Color: css.Color{R: 0.27, G: 0.45, B: 0.77, A: 1}}, Glow: &Glow{Color: css.Color{R: 1, G: 0.75, A: 1}, Opacity: 0.6, Radius: 18},
+		}, []point{{427.49, 157.39, 153}, {428.71, 158.97, 150}, {429.93, 160.56, 142}, {430.54, 161.35, 133}, {431.15, 162.14, 119}, {431.76, 162.94, 102}, {432.37, 163.73, 82}, {432.97, 164.52, 62}, {433.58, 165.32, 43}, {434.19, 166.11, 27}, {434.80, 166.90, 16}, {435.41, 167.69, 9}, {436.02, 168.49, 4}, {437.24, 170.07, 1}, {438.46, 171.66, 0}}},
+		{"rectangle 28 pt", &Shape{
+			Box: typeset.Rect{X: emu(1808018), Y: emu(987136), Width: emu(3345873), Height: emu(1610591)}, Geometry: &shape.Geometry{Preset: "rect"},
+			Fill: Fill{Kind: FillSolid, Color: css.Color{R: 0.27, G: 0.45, B: 0.77, A: 1}}, Glow: &Glow{Color: css.Color{R: 0.27, G: 0.45, B: 0.77, A: 1}, Opacity: 0.4, Radius: 28},
+		}, []point{{142.36, 77.73, 101}, {140.95, 76.31, 98}, {139.54, 74.90, 93}, {138.12, 73.48, 85}, {136.71, 72.07, 73}, {135.29, 70.66, 57}, {133.88, 69.24, 40}, {132.46, 67.83, 25}, {131.05, 66.41, 14}, {129.64, 65.00, 7}, {128.22, 63.59, 3}, {126.81, 62.17, 1}, {125.39, 60.76, 0}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := &Document{Width: 960, Height: 540, Slides: []*Slide{{Shapes: []*Shape{tc.shape}}}}
+			out := convert(t, doc, office.Options{})
+			var ps []placed
+			flatten(out.Pages[0].Content, typeset.Identity, 1, &ps)
+			if len(ps) == 0 || ps[0].img == nil {
+				t.Fatal("no glow bitmap")
+			}
+			pix := decoded(t, ps[0].img.Source)
+			var worst, sq float64
+			for _, p := range tc.at {
+				d := math.Abs(alphaBilinear(pix, ps[0], p.x, p.y) - p.a)
+				worst = max(worst, d)
+				sq += d * d
+			}
+			rms := math.Sqrt(sq / float64(len(tc.at)))
+			t.Logf("%s: largest difference %.2f levels, rms %.2f", tc.name, worst, rms)
+			if worst > maxCornerError || rms > maxCornerRMS {
+				t.Errorf("%s: largest difference %.2f levels, rms %.2f, want at most %v and %v", tc.name, worst, rms, maxCornerError, maxCornerRMS)
+			}
+		})
+	}
+}
+
+// maxCornerError and maxCornerRMS bound how far, in levels of 255, a
+// glow's corner lies from PowerPoint's along a diagonal. A disc alone
+// lies up to 23 levels short of it there, a square alone 48 past it.
+const (
+	maxCornerError = 4
+	maxCornerRMS   = 2
+)
+
 // TestShape_PowerPointEffectsApplyOnce checks that PowerPoint's rules draw
 // the glow of a rectangle once, over its box grown by the radius, and its
 // soft edge once, where Impress's draw both twice.

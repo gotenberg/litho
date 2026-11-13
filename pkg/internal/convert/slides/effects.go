@@ -747,7 +747,7 @@ func (p *effectPlan) glowMask(ctx context.Context, g effectGrid, tr typeset.Matr
 	if err := effect.Threshold(base, p.silhouetteLevel()); err != nil {
 		return nil, err
 	}
-	inner, err := grownBlur(ctx, base, half, k)
+	inner, err := p.grownBlur(ctx, base, half, k)
 	if err != nil || !outer {
 		return inner, err
 	}
@@ -758,7 +758,7 @@ func (p *effectPlan) glowMask(ctx context.Context, g effectGrid, tr typeset.Matr
 	if err := effect.Threshold(base, p.silhouetteLevel()); err != nil {
 		return nil, err
 	}
-	return grownBlur(ctx, base, half, k)
+	return p.grownBlur(ctx, base, half, k)
 }
 
 // glowKernel returns how far a glow grows its silhouette on g, in
@@ -793,22 +793,51 @@ func (p *effectPlan) glowSize() (sigma, morph float64) {
 }
 
 // grownBlur returns a copy of the coverage cov grown by r pixels and
-// blurred by k.
-func grownBlur(ctx context.Context, cov *effect.Surface, r int, k effect.Kernel) (*effect.Surface, error) {
+// blurred by k: grown by a square on Impress's rules; on PowerPoint's by
+// a square of a third of r, then a disc of the rest
+// ([officeGlowSquare]).
+func (p *effectPlan) grownBlur(ctx context.Context, cov *effect.Surface, r int, k effect.Kernel) (*effect.Surface, error) {
 	out, err := cov.Clone(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := effect.Dilate(ctx, out, r, r); err != nil {
-		out.Release()
-		return nil, err
+	sq := r
+	if !p.impress {
+		sq = r / officeGlowSquare
 	}
-	if err := blur(ctx, out, k); err != nil {
+	err = effect.Dilate(ctx, out, sq, sq)
+	if err == nil && sq < r {
+		err = effect.DilateDisc(ctx, out, float64(r-sq))
+	}
+	if err == nil {
+		err = blur(ctx, out, k)
+	}
+	if err != nil {
 		out.Release()
 		return nil, err
 	}
 	return out, nil
 }
+
+// officeGlowSquare divides a Microsoft Office glow's growth into the
+// share it grows by a square, one part in officeGlowSquare, and the share
+// it grows by a disc, the rest: a square with rounded corners. A disc
+// alone draws a glow's corners and the diagonals of a curve short of
+// where PowerPoint prints them, a square alone past them.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: effects-glow-softedge-reflection's ellipse with a glow
+//     of 18 pt, along 16 rays off the axes, from the outline out:
+//     PowerPoint's soft mask against a square's growth rms 15.45 levels
+//     (at most 48.8), a disc's 6.85 (23.6), a third square 1.68 (6.9), a
+//     quarter 1.75 (7.3), a fifth 2.45 (9.8); its rectangle whose
+//     effectDag holds a glow of 8 pt, along its corners' diagonals: 9.56,
+//     8.14, 0.38, 1.71, 2.88.
+//   - libreoffice/pptx: sd/effectOrder's rectangle with a glow of 28 pt,
+//     along its corners' diagonals: square 6.18 (16.0), disc 3.80 (9.7),
+//     a third 0.77 (2.3), a quarter 0.36 (1.4), a fifth 0.84 (2.4).
+const officeGlowSquare = 3
 
 // glow returns the bitmap of the shape's glow in slide coordinates, the
 // outer one of a glow applied twice when outer is set, nil when it covers
