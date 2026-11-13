@@ -749,12 +749,14 @@ const maxClusterMarks = 16
 type clusterFace struct {
 	text []rune
 	face *Face
+	// buf backs text, so that a cluster allocates nothing.
+	buf [maxClusterMarks + 2]rune
 }
 
 // fontmap returns the fontmap of style idx in script, with cluster
 // matching from a fresh cluster.
 func (st *layoutState) fontmap(idx int, script language.Script) styleFontmap {
-	st.cluster.text, st.cluster.face = st.cluster.text[:0], nil
+	st.cluster.text, st.cluster.face = st.cluster.buf[:0], nil
 	return styleFontmap{st: st, style: idx, script: script, cluster: &st.cluster}
 }
 
