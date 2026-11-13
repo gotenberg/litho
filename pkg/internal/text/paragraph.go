@@ -517,7 +517,7 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 		}
 	}
 	if style.LetterSpacing != 0 {
-		// CSS Text 3, 8.2: the spacing goes after every typographic
+		// CSS Text 3, 7.2: the spacing goes after every typographic
 		// character unit, which is the visually last glyph of a cluster in
 		// a left-to-right run and the visually first in a right-to-left one.
 		for k := range it.glyphs {
@@ -527,8 +527,10 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 			}
 			// A default ignorable character, a format control such as a
 			// zero width space or a bidi control, is no typographic
-			// character unit: it takes no spacing.
-			if c := it.glyphs[k].cluster(); last && c < n && !unicode.Is(unicode.Cf, p.text[c]) {
+			// character unit: it takes no spacing. Nor does a letter of a
+			// cursive script, whose joins a gap would break (CSS Text 3,
+			// 7.2.1).
+			if c := it.glyphs[k].cluster(); last && c < n && !unicode.Is(unicode.Cf, p.text[c]) && !cursive(p.text[c]) {
 				it.glyphs[k].advance += style.LetterSpacing
 			}
 		}
@@ -873,4 +875,24 @@ func (p *Paragraph) splitByRun(out *shaping.Output) []shaping.Output {
 		s = e
 	}
 	return subs
+}
+
+// cursiveScripts are the cursive scripts of CSS Text 3, Appendix D, whose
+// letters take no letter-spacing (7.2.1): litho cannot stretch their joins.
+var cursiveScripts = []*unicode.RangeTable{
+	unicode.Arabic, unicode.Hanifi_Rohingya, unicode.Mandaic, unicode.Mongolian,
+	unicode.Nko, unicode.Phags_Pa, unicode.Syriac,
+}
+
+// cursive reports a character of a cursive script.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (Gotenberg 9.4.1) adds no letter-spacing
+//     to Arabic letters and digits, Syriac, N'Ko, Mongolian, Mandaic and
+//     Hanifi Rohingya, and adds it to a space between Arabic words, to
+//     Latin letters before Arabic ones, and to Adlam, Hebrew, Devanagari
+//     and Thai.
+func cursive(r rune) bool {
+	return unicode.In(r, cursiveScripts...)
 }

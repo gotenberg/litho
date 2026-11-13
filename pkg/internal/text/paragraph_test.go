@@ -140,6 +140,22 @@ func TestShape_FormatCharactersTakeNoSpacing(t *testing.T) {
 	}
 }
 
+func TestShape_CursiveLettersTakeNoSpacing(t *testing.T) {
+	f := newTestFonts(t, sansFamily()...)
+	s := style()
+	text := "\u0645\u0631 A\u0710"
+	plain := shape(t, f, []ParagraphRun{{Text: text, Style: s}}, ParagraphOptions{})
+	s.LetterSpacing = 1
+	spaced := shape(t, f, []ParagraphRun{{Text: text, Style: s}}, ParagraphOptions{})
+	// CSS Text 3, 7.2.1: the Arabic and Syriac letters take no spacing,
+	// the space and the Latin letter do.
+	for i, extra := range []float64{0, 0, 1, 1, 0} {
+		if got, want := spaced.Advance(i), plain.Advance(i)+extra; math.Abs(got-want) > 1e-6 {
+			t.Errorf("character %d advance %v, want %v", i, got, want)
+		}
+	}
+}
+
 func TestLineTrimmed_HangingSpacesKeepAdvance(t *testing.T) {
 	f := newTestFonts(t, sansFamily()...)
 	p := shape(t, f, []ParagraphRun{{Text: "A  ", Style: style()}}, ParagraphOptions{})
