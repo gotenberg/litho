@@ -382,6 +382,42 @@ func TestFormattingContextBesideFloat_StretchFillsMarginBoxSpace(t *testing.T) {
 	}
 }
 
+func TestFloats_ForcedPageBreaks(t *testing.T) {
+	// CSS Fragmentation 3, 3.1: user agents should apply break-before and
+	// break-after to a float whose containing block is in the normal flow
+	// of the root; Chromium ignores them on paper (floatBreaks). A float
+	// of break-before: page starts the next page; the block after a float
+	// of break-after: page starts the page after the one it ends on.
+	before := func(s *css.Style) { s.BreakBefore = css.Page }
+	after := func(s *css.Style) { s.BreakAfter = css.Page }
+	rb := boxes(t, doc(
+		el(sty(height(30))),
+		el(sty(float(css.FloatLeft), width(50), height(40), before)),
+		el(sty(float(css.FloatLeft), width(50), height(150), after)),
+		el(sty(height(10))),
+	), page(200, 100))
+	if got := rect(kid(t, rb, 0, 1)); got[1] != 100 {
+		t.Errorf("float of break-before at y %v, want 100: the next page", got[1])
+	}
+	if got := rect(kid(t, rb, 0, 3)); got[1] != 300 {
+		t.Errorf("block after the float of break-after at y %v, want 300: after the float's last page", got[1])
+	}
+}
+
+func TestFloats_ForcedBreaksIgnoredInColumns(t *testing.T) {
+	// In columns Chromium ignores a forced break on a float on screen as
+	// on paper (floatBreaks): the float stays in the first column.
+	col := func(s *css.Style) { s.BreakBefore = css.Column }
+	auto := func(s *css.Style) { s.Columns.Fill = css.FillAuto }
+	rb := boxes(t, doc(el(sty(columns(3, 0), height(4), auto),
+		el(sty(height(1))),
+		el(sty(float(css.FloatLeft), width(1), height(1), col)),
+	)), page(10, 10))
+	if got := rect(kid(t, rb, 0, 0, 1)); got[0] != 0 || got[1] != 1 {
+		t.Errorf("float at %v, want x 0, y 1: in the first column", got[:2])
+	}
+}
+
 func TestFloats_PercentHeightInAnonymousBlock(t *testing.T) {
 	// CSS 2.1, 9.2.1.1: a percentage that would refer to an anonymous
 	// block refers to its closest non-anonymous ancestor. A float among

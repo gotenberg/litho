@@ -1062,6 +1062,9 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 	// filled reports an in-flow child with a border box before the one
 	// being laid out.
 	filled := false
+	// after is the float just placed whose break-after forces a break
+	// before the next box.
+	var after *box
 	release := e.releasing(b)
 	for i, k := range b.kids {
 		if e.err != nil {
@@ -1076,8 +1079,15 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		}
 		if k.float != css.FloatNone {
 			top := cursor + mc.strut.sum()
+			if after != nil {
+				top = max(top, e.floatBreakAfter(after))
+				after = nil
+			}
 			mc.alignFloats(top)
 			mc.floatPlaced(k, bc, e.layoutFloat(k, cb, bc, top), top)
+			if e.floatBreaks(k, k.st.BreakAfter) {
+				after = k
+			}
 			continue
 		}
 		if k.abs {
@@ -1086,12 +1096,25 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		}
 		snap := take(cursor)
 		mode := breakNone
-		if prev != nil && (e.forces(prev.st.BreakAfter) || e.forces(k.st.BreakBefore)) {
+		switch {
+		case after != nil:
+			// The forced break after a float lies between it and the box
+			// in flow next to it (CSS Fragmentation 3, 4.1, class A): that
+			// box starts on the page after the one the float ends on.
+			mode = forcedMode(after.st.BreakAfter, k.st.BreakBefore)
+			if y := e.floatBreakAfter(after); y > cursor+mc.strut.sum()+eps {
+				mc.commit(cursor + mc.strut.sum())
+				cursor = y
+				snap = take(cursor)
+			}
+		case prev != nil && (e.forces(prev.st.BreakAfter) || e.forces(k.st.BreakBefore)):
 			mode = forcedMode(prev.st.BreakAfter, k.st.BreakBefore)
-		} else if prev == nil && e.forces(k.st.BreakBefore) && cursor+mc.strut.sum() > e.flowStart()+eps {
+		case prev == nil && e.forces(k.st.BreakBefore) && cursor+mc.strut.sum() > e.flowStart()+eps:
 			mode = forcedMode(css.BreakAuto, k.st.BreakBefore)
 		}
-		if mode != breakNone && e.cols != nil && (prev != nil && isForced(prev.st.BreakAfter) || isForced(k.st.BreakBefore)) {
+		pageAfter := after != nil && isForced(after.st.BreakAfter)
+		after = nil
+		if mode != breakNone && e.cols != nil && (pageAfter || prev != nil && isForced(prev.st.BreakAfter) || isForced(k.st.BreakBefore)) {
 			// A page break wins over a column break at the same place, and
 			// ends the columns on their page (CSS Fragmentation 3, 3.1).
 			mode = breakColumnsPage
@@ -1165,6 +1188,10 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 			// sibling a break between boxes looks at.
 			prev, prevSnap = k, snap
 			placed = append(placed, k)
+		} else if f := lastFloat(k); f != nil && e.floatBreaks(f, f.st.BreakAfter) {
+			// Floats among that white space are the boxes before the next
+			// one.
+			after = f
 		}
 		filled = filled || k.borderH() > 0
 		if release && last != nil && last != prev {
@@ -1230,6 +1257,56 @@ func forcedMode(after, before css.Break) breakMode {
 		return breakRight
 	}
 	return breakForced
+}
+
+// floatBreaks reports whether the break value v of the float f forces a
+// page break: break-before and break-after apply to a float whose
+// containing block is in the normal flow of the root (CSS Fragmentation 3,
+// 3.1, which says user agents should; CSS 2.1, 13.3.1 allows it), not to
+// one inside an out-of-flow box or an atomic inline, nor in a monolithic
+// layout. Chromium ignores them on a float on paper, where no screen
+// rendering decides, and litho keeps the clause there. In columns Chromium
+// ignores a column or page break on a float on screen as on paper, and
+// litho follows it: such a float breaks nothing.
+//
+// # Corpus evidence
+//
+//   - wpt, css/CSS2/pagination/float-page-break-inside-avoid-5-print.html
+//     and -7-print.html: Chromium 156 (gotenberg/gotenberg:9.4.1) keeps a
+//     float of page-break-before: always on the first page of the
+//     references.
+//   - probe, html: the same Chromium lays a float of break-before: column,
+//     of break-after: column (before an in-flow block and before a float)
+//     and of page-break-before: always in a three-column container in its
+//     first column, as if none were set.
+func (e *engine) floatBreaks(f *box, v css.Break) bool {
+	if !e.paginating() || e.cols != nil || !isForced(v) {
+		return false
+	}
+	for a, depth := f.parent, 0; a != nil && a.parent != nil && depth <= maxTreeDepth; a, depth = a.parent, depth+1 {
+		if a.abs || a.float != css.FloatNone || a.inline {
+			return false
+		}
+	}
+	return true
+}
+
+// lastFloat returns the last float child of b, nil for none.
+func lastFloat(b *box) *box {
+	for i := len(b.kids) - 1; i >= 0; i-- {
+		if b.kids[i].float != css.FloatNone {
+			return b.kids[i]
+		}
+	}
+	return nil
+}
+
+// floatBreakAfter returns the least top of the box after the float f,
+// whose break-after forces a page break: the top of the page after the
+// one f ends on. A left or right page break starts the next page, whatever
+// its side.
+func (e *engine) floatBreakAfter(f *box) float64 {
+	return e.nextPage(f.y - f.m[css.Top] + f.marginH() - eps)
 }
 
 // avoidsInside reports a box that avoids page or column breaks inside it,
@@ -1354,6 +1431,11 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 		// A float's top outer edge goes below the floats it clears (CSS
 		// 2.1, 9.5.2: clear on a floating box adds rule 10 to 9.5.1).
 		minY = max(minY, bc.clearTo(f.st.Clear))
+	}
+	if e.floatBreaks(f, f.st.BreakBefore) && minY > e.flowStart()+eps && !e.atPageTop(minY) {
+		// A left or right page break starts the next page, whatever its
+		// side.
+		minY = e.nextPage(minY)
 	}
 	clampPage := -1
 	if f.st.PageClamp && e.paginating() && e.cols == nil {
