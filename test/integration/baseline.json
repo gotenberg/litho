@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T16:18:59Z",
+  "captured_at": "2026-11-13T16:21:47Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -98313,7 +98313,7 @@
               "text_f1": 1
             },
             "integration/stress001.docx": {
-              "layout": 0.931,
+              "layout": 0.952,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
