@@ -59,10 +59,10 @@ test-unit-386: ## Run unit tests on linux/386, where int is 32 bits
 bench: ## Run all benchmarks
 	go test -run=^$$ -bench=. -benchmem ./...
 
-OUTLINE_GOLDENS := pkg/internal/typography/truetype/testdata pkg/internal/typography/cff/testdata
+OUTLINE_GOLDENS := pkg/internal/typography/truetype/testdata pkg/internal/typography/cff/testdata pkg/internal/typography/varfont/testdata
 
 .PHONY: outline-goldens
-outline-goldens: ## Regenerate the TrueType and CFF outline goldens with the fontTools release test/integration/corpus/versions.env pins (an env var of the same name overrides it)
+outline-goldens: ## Regenerate the TrueType, CFF and variable font instance goldens with the fontTools release test/integration/corpus/versions.env pins (an env var of the same name overrides it)
 	@set -e; \
 	version="$${FONTTOOLS_VERSION:-$$(sed -n 's/^FONTTOOLS_VERSION=//p' test/integration/corpus/versions.env)}"; \
 	venv="$$(mktemp -d)"; trap 'rm -rf "$$venv"' EXIT; \

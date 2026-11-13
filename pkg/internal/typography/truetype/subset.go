@@ -658,6 +658,15 @@ func assembleSfnt(version uint32, tables map[string][]byte) []byte {
 	return assembleTables(version, tags, tables)
 }
 
+// AssembleTables lays out the tables tags names, in that order, under an
+// sfnt header of version: each table on a four-byte boundary with its
+// checksum, and the head table's checkSumAdjustment set (OpenType
+// specification, table directory and head table). Every tag must name a
+// table of tables; there may be at most 65,535 of them.
+func AssembleTables(version uint32, tags []string, tables map[string][]byte) []byte {
+	return assembleTables(version, tags, tables)
+}
+
 // assembleTables lays out the tables tags names, in that order, as
 // [assembleSfnt] does.
 func assembleTables(version uint32, tags []string, tables map[string][]byte) []byte {
