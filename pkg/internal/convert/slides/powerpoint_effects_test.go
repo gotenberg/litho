@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -360,4 +361,90 @@ func TestShape_ContentEffects(t *testing.T) {
 			t.Errorf("alpha in the middle %d, want opaque", got)
 		}
 	})
+}
+
+// TestText_RunEffects checks that a run's shadow, glow and reflection are
+// bitmaps with no structure parent painted under the run's glyphs, which
+// stay text with their parent, the glow around the glyphs' bounds and the
+// reflection below them; that Impress's rules draw none, and a bullet
+// takes none of the first run's.
+func TestText_RunEffects(t *testing.T) {
+	st := arial(40)
+	st.Color = css.Color{G: 0.5, A: 1}
+	st.Effects = &TextEffects{
+		Shadow:     &Shadow{Color: css.Color{A: 1}, Opacity: 0.6, OffsetX: 2, OffsetY: 2, Blur: 3, ScaleX: 1, ScaleY: 1},
+		Glow:       &Glow{Color: css.Color{R: 1, G: 0.75, A: 1}, Opacity: 0.6, Radius: 8},
+		Reflection: &Reflection{ScaleX: 1, ScaleY: -1, StartOpacity: 0.55, EndPos: 0.45, FadeDir: 90}, ReflectionAlignY: 1,
+	}
+	p := para("Glow", st)
+	p.Bullet = &Bullet{Kind: BulletChar, Char: "•"}
+	for _, rules := range []EffectRules{EffectsPowerPoint, EffectsImpress} {
+		d := deck(&Slide{Shapes: []*Shape{box(100, 100, 400, 200, p)}})
+		d.Effects = rules
+		out := convert(t, d, office.Options{})
+		var ps []placed
+		flatten(out.Pages[0].Content, typeset.Identity, 1, &ps)
+		var imgs []placed
+		var glyphs *typeset.Text
+		var texts int
+		var walk func([]typeset.Fragment)
+		walk = func(fs []typeset.Fragment) {
+			for _, f := range fs {
+				switch f := f.(type) {
+				case *typeset.Text:
+					texts++
+					if strings.Contains(textOf(f), "Glow") {
+						glyphs = f
+					}
+				case *typeset.Image:
+					if glyphs != nil {
+						t.Error("an effect bitmap paints over the run's glyphs")
+					}
+				case *typeset.Group:
+					walk(f.Content)
+				}
+			}
+		}
+		walk(out.Pages[0].Content)
+		for _, p := range ps {
+			if p.img != nil {
+				imgs = append(imgs, p)
+				if p.img.Parent != nil {
+					t.Errorf("effect bitmap parent %+v, want none", p.img.Parent)
+				}
+			}
+		}
+		if glyphs == nil || glyphs.Parent == nil || glyphs.Color != (typeset.Color{G: 0.5, A: 1}) {
+			t.Fatalf("run %+v, want the text in its colour with its structure parent", glyphs)
+		}
+		if texts != 2 {
+			t.Errorf("%d texts, want the bullet and the run, no copy", texts)
+		}
+		if rules == EffectsImpress {
+			if len(imgs) != 0 {
+				t.Errorf("Impress's rules drew %d bitmaps, want none", len(imgs))
+			}
+			continue
+		}
+		if len(imgs) != 3 {
+			t.Fatalf("%d bitmaps, want the reflection, the shadow and the glow", len(imgs))
+		}
+		refl, glow := imgs[0].bounds(), imgs[2].bounds()
+		r := find(t, out.Pages[0], "Glow")
+		if refl.Y < r.y-2 || refl.Y+refl.Height < r.y+10 {
+			t.Errorf("reflection over %+v, want it below the baseline %.1f", refl, r.y)
+		}
+		if glow.X > r.x-5 || glow.Y > r.y-28-7 {
+			t.Errorf("glow over %+v, want it 8 pt around the glyphs from %.1f, %.1f", glow, r.x, r.y)
+		}
+	}
+}
+
+// textOf returns the text the glyphs of t stand for.
+func textOf(t *typeset.Text) string {
+	var b strings.Builder
+	for _, g := range t.Glyphs {
+		b.WriteString(g.Text)
+	}
+	return b.String()
 }

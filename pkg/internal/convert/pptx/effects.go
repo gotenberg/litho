@@ -196,7 +196,19 @@ func outerShadow(e *ooxml.Element, box typeset.Rect) *slides.Shadow {
 		return min(max(f, -maxShadowScale), maxShadowScale)
 	}
 	sh.ScaleX, sh.ScaleY = scale("sx"), scale("sy")
-	ax, ay := 0.5, 1.0
+	ax, ay := alignment(e)
+	// Scaling about the alignment point P is scaling about the centre C
+	// and moving by (P - C)(1 - s).
+	sh.OffsetX += (ax - 0.5) * box.Width * (1 - sh.ScaleX)
+	sh.OffsetY += (ay - 0.5) * box.Height * (1 - sh.ScaleY)
+	return sh
+}
+
+// alignment returns the point of a box an effect's scale keeps fixed,
+// its algn (20.1.10.3 ST_RectAlignment, "b" by default) as fractions of
+// the box from the left and the top.
+func alignment(e *ooxml.Element) (ax, ay float64) {
+	ax, ay = 0.5, 1.0
 	algn := attr(e, "algn")
 	if algn == "" {
 		algn = "b"
@@ -213,11 +225,64 @@ func outerShadow(e *ooxml.Element, box typeset.Rect) *slides.Shadow {
 	case "l", "ctr", "r":
 		ay = 0.5
 	}
-	// Scaling about the alignment point P is scaling about the centre C
-	// and moving by (P - C)(1 - s).
-	sh.OffsetX += (ax - 0.5) * box.Width * (1 - sh.ScaleX)
-	sh.OffsetY += (ay - 0.5) * box.Height * (1 - sh.ScaleY)
-	return sh
+	return ax, ay
+}
+
+// textEffects reads the effects of a run (21.1.2.3.9 rPr holding
+// 20.1.8.26 effectLst), sc resolving the colours: the outer shadow, the
+// glow and the reflection, as [reader.effectList] reads a shape's, their
+// scales left about the glyphs' bounds, which the builder knows. The
+// other effects of a run, and an effect container (20.1.8.25 effectDag),
+// print nothing, with a warning. It returns nil for a list of none.
+func (r *reader) textEffects(lst *ooxml.Element, sc scope) *slides.TextEffects {
+	if lst.Is(ooxml.NSA, "effectDag") {
+		if len(lst.Kids()) > 0 {
+			r.warn(warn.ContentUnsupported, warn.Approximated, "effect containers (effectDag) on text are not drawn")
+		}
+		return nil
+	}
+	fx := &slides.TextEffects{}
+	color := func(e *ooxml.Element) (css.Color, float64) {
+		c, ok := sc.color(e, nil)
+		if !ok {
+			return css.Color{}, 0
+		}
+		a := c.A
+		c.A = 1
+		return c, a
+	}
+	for _, e := range lst.Kids() {
+		if e.Space != ooxml.NSA {
+			continue
+		}
+		switch e.Local {
+		case "outerShdw":
+			sh := outerShadow(e, typeset.Rect{})
+			sh.Color, sh.Opacity = color(e)
+			if sh.Opacity > 0 {
+				fx.Shadow = sh
+				fx.ShadowAlignX, fx.ShadowAlignY = alignment(e)
+			}
+			if attr(e, "kx") != "" || attr(e, "ky") != "" {
+				r.warn(warn.ContentUnsupported, warn.Approximated, "the skew of shadows is not drawn")
+			}
+		case "glow":
+			if rad := emuAttr(e, "rad"); numeric.PositiveFinite(rad) {
+				if c, a := color(e); a > 0 {
+					fx.Glow = &slides.Glow{Color: c, Opacity: a, Radius: min(rad, maxEffectRadius)}
+				}
+			}
+		case "reflection":
+			fx.Reflection = reflection(e, typeset.Rect{})
+			fx.ReflectionAlignX, fx.ReflectionAlignY = alignment(e)
+		default:
+			r.warn(warn.ContentUnsupported, warn.Approximated, "the "+e.Local+" effect of text is not drawn")
+		}
+	}
+	if fx.Shadow == nil && fx.Glow == nil && fx.Reflection == nil {
+		return nil
+	}
+	return fx
 }
 
 // innerShadow reads the geometry of an inner shadow (20.1.8.40

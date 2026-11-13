@@ -634,7 +634,8 @@ func hasText(runs []slides.Run) bool {
 
 // runStyle resolves a run's properties along c (21.1.2.3.9 rPr): faces
 // with theme fonts resolved, size, weight, slant, underline, strike,
-// spacing, capitals, baseline, colour and language.
+// spacing, capitals, baseline, colour, language and the effects drawn
+// from its glyphs ([reader.textEffects]).
 //
 // # Corpus evidence
 //
@@ -726,6 +727,9 @@ func (r *reader) runStyle(c chain, sc scope) slides.RunStyle {
 	}
 	if v, ok := c.attr("lang"); ok {
 		s.Lang = v
+	}
+	if lst := c.first("effectLst", "effectDag"); lst != nil {
+		s.Effects = r.textEffects(lst, sc)
 	}
 	return s
 }

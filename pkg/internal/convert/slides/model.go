@@ -720,6 +720,26 @@ type RunStyle struct {
 	Caps Caps
 	// Lang is the run's language as a BCP 47 tag, "" for the document's.
 	Lang string
+	// Effects are the run's effects drawn from its glyphs, nil for none.
+	Effects *TextEffects
+}
+
+// TextEffects are the effects of a run of text that PowerPoint draws from
+// its glyphs (ECMA-376 Part 1, 21.1.2.3.9 rPr holding 20.1.8.26
+// effectLst): bitmaps under the glyphs, which stay text. Each scale keeps
+// the point of the glyphs' bounds that AlignX and AlignY of its effect
+// give fixed, fractions of the bounds from the left and the top.
+type TextEffects struct {
+	// Shadow is the run's outer shadow (20.1.8.45 outerShdw), nil for
+	// none.
+	Shadow                     *Shadow
+	ShadowAlignX, ShadowAlignY float64
+	// Glow is the run's glow (20.1.8.32 glow), nil for none.
+	Glow *Glow
+	// Reflection is the run's reflection (20.1.8.50 reflection), nil for
+	// none.
+	Reflection                         *Reflection
+	ReflectionAlignX, ReflectionAlignY float64
 }
 
 // Script is a vertical text position.

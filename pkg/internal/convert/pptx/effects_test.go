@@ -163,3 +163,69 @@ func TestEffects_ContentEffects(t *testing.T) {
 		t.Errorf("warnings %v, want none", warnings)
 	}
 }
+
+// TestEffects_TextEffects checks the effects of a run read into its
+// style: the shadow, the glow and the reflection, with the points their
+// scales keep fixed; an empty list over the list style's is none; an
+// inner shadow and an effect container warn.
+func TestEffects_TextEffects(t *testing.T) {
+	t.Parallel()
+	run := func(rPr string) string {
+		return textBox("TB", 0, 0, 12700, 12700, `<a:bodyPr/><a:lstStyle><a:lvl1pPr><a:defRPr><a:effectLst><a:glow rad="25400"><a:srgbClr val="00FF00"/></a:glow></a:effectLst></a:defRPr></a:lvl1pPr></a:lstStyle><a:p><a:r><a:rPr>`+rPr+`</a:rPr><a:t>x</a:t></a:r></a:p>`)
+	}
+	for _, tc := range []struct {
+		name, rPr string
+		check     func(t *testing.T, fx *slides.TextEffects)
+		warn      string
+	}{
+		{"shadow, glow and reflection", `<a:effectLst><a:outerShdw blurRad="38100" dist="38100" dir="2700000" algn="tl"><a:srgbClr val="000000"><a:alpha val="60000"/></a:srgbClr></a:outerShdw>` +
+			`<a:glow rad="101600"><a:srgbClr val="FFC000"><a:alpha val="60000"/></a:srgbClr></a:glow><a:reflection blurRad="6350" stA="55000" endPos="45500" dir="5400000" sy="-100000" algn="bl"/></a:effectLst>`,
+			func(t *testing.T, fx *slides.TextEffects) {
+				if fx == nil || fx.Shadow == nil || fx.Glow == nil || fx.Reflection == nil {
+					t.Fatalf("effects %+v, want a shadow, a glow and a reflection", fx)
+				}
+				if sh := fx.Shadow; !nearly(sh.Blur, 3) || !nearly(sh.OffsetX, 3*math.Sqrt2/2) || !nearly(sh.Opacity, 0.6) || fx.ShadowAlignX != 0 || fx.ShadowAlignY != 0 {
+					t.Errorf("shadow %+v aligned %v, %v", *sh, fx.ShadowAlignX, fx.ShadowAlignY)
+				}
+				if g := fx.Glow; !nearly(g.Radius, 8) || !nearly(g.Opacity, 0.6) {
+					t.Errorf("glow %+v", *g)
+				}
+				if r := fx.Reflection; r.ScaleY != -1 || r.OffsetY != 0 || !nearly(r.StartOpacity, 0.55) || fx.ReflectionAlignY != 1 {
+					t.Errorf("reflection %+v aligned %v", *r, fx.ReflectionAlignY)
+				}
+			}, ""},
+		{"the list style's", "", func(t *testing.T, fx *slides.TextEffects) {
+			if fx == nil || fx.Glow == nil || !nearly(fx.Glow.Radius, 2) {
+				t.Errorf("effects %+v, want the list style's glow", fx)
+			}
+		}, ""},
+		{"an empty list is none", `<a:effectLst/>`, func(t *testing.T, fx *slides.TextEffects) {
+			if fx != nil {
+				t.Errorf("effects %+v, want none", fx)
+			}
+		}, ""},
+		{"an inner shadow warns", `<a:effectLst><a:innerShdw blurRad="63500"><a:srgbClr val="000000"/></a:innerShdw></a:effectLst>`, func(t *testing.T, fx *slides.TextEffects) {
+			if fx != nil {
+				t.Errorf("effects %+v, want none", fx)
+			}
+		}, "innerShdw effect of text"},
+		{"an effect container warns", `<a:effectDag><a:cont><a:glow rad="25400"><a:srgbClr val="FF0000"/></a:glow></a:cont></a:effectDag>`, func(t *testing.T, fx *slides.TextEffects) {
+			if fx != nil {
+				t.Errorf("effects %+v, want none", fx)
+			}
+		}, "effect containers"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, warnings := readDeck(t, testDeck{slides: []testSlide{{tree: run(tc.rPr)}}})
+			shapes := doc.Slides[0].Shapes
+			if len(shapes) != 1 || shapes[0].Text == nil || len(shapes[0].Text.Paragraphs[0].Runs) == 0 {
+				t.Fatalf("shapes %+v", shapes)
+			}
+			tc.check(t, shapes[0].Text.Paragraphs[0].Runs[0].Style.Effects)
+			if tc.warn != "" && !strings.Contains(fmt.Sprint(warnings), tc.warn) {
+				t.Errorf("warnings %v, want one on %q", warnings, tc.warn)
+			}
+		})
+	}
+}
