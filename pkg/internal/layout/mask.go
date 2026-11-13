@@ -39,7 +39,13 @@ type maskLayer struct {
 //     gradient and Luminosity for a mask element or mask-mode luminance;
 //     several layers that add as the content drawn once per layer under
 //     each layer's soft mask, and the other operators through soft masks
-//     with a transfer function. It writes an element whose mask image is
+//     with a transfer function. Its alpha intersect, subtract and exclude
+//     depart from CSS Masking 1, 6.11, which litho keeps: two linear
+//     gradient layers over orange (green channel 136 where the mask keeps,
+//     255 where it masks out) read, at (10, 10), (10, 90) and (90, 90) of a
+//     100 pixel box, 160, 153 and 243 for intersect where the clause gives
+//     about 136, 248 and 255; its luminance intersect matches litho's
+//     within 2 levels. It writes an element whose mask image is
 //     a PNG, waiting 3 seconds or not, as an isolated group with no soft
 //     mask: unmasked; so it draws an element whose mask names no element
 //     or an image that does not exist.

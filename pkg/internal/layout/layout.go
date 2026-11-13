@@ -394,6 +394,7 @@ func groupOf(it *ditem, content []typeset.Fragment) *typeset.Group {
 //     white, and two overlapping glyphs of one text object at alpha 0.5
 //     as (63, 63, 255): neither as one object.
 func oneObject(content []typeset.Fragment) bool {
+	// TODO: one copy with oneObject in pkg/internal/svg/render.go; typeset could hold it.
 	for len(content) == 1 {
 		g, ok := content[0].(*typeset.Group)
 		if !ok {
