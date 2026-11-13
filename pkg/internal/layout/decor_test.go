@@ -46,6 +46,27 @@ func TestBorders_SolidWithoutASide(t *testing.T) {
 	}
 }
 
+// TestBorders_SolidOfUnequalWidths locks that solid sides of one colour
+// and unequal widths meet at their corners with no seam, filled as one
+// ring as Chromium fills them: every pixel of the four corner squares is
+// fully covered.
+func TestBorders_SolidOfUnequalWidths(t *testing.T) {
+	root := doc(el(sty(width(4), height(4), border(3, css.Solid, red), func(s *css.Style) {
+		s.Border[css.Top].Width = px(5)
+		s.Border[css.Bottom].Width = px(5)
+	})))
+	img := render(t, run(t, root, page(12, 16)), 1)
+	for y := range 5 {
+		for x := range 3 {
+			for _, p := range [][2]int{{x, y}, {9 - x, y}, {x, 13 - y}, {9 - x, 13 - y}} {
+				if c := at(img, p[0], p[1]); c != (color.NRGBA{255, 0, 0, 255}) {
+					t.Errorf("corner pixel (%d, %d) is %v, want pure red", p[0], p[1], c)
+				}
+			}
+		}
+	}
+}
+
 func TestBorders_Double(t *testing.T) {
 	root := doc(el(sty(width(1), height(1), border(3, css.Double, red))))
 	res := run(t, root, page(7, 7))

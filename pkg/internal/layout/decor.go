@@ -510,6 +510,13 @@ func currentShades(a float64) (typeset.Color, typeset.Color) {
 // outer corner radii and used widths bd, the sides in draw (CSS 2.1, 8.5;
 // CSS Backgrounds 3, 4), or its border image in their place (CSS
 // Backgrounds 3, 6).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 fills a solid border of 10px sides and
+//     15px top and bottom, a double one of 9px and 15px, and a rounded
+//     solid one of 4px top and 10px elsewhere as one even-odd path of the
+//     outer and inner edges.
 func (p *painter) border(b *box, st *css.Style, r typeset.Rect, radii [4][2]float64, bd [4]float64, draw [4]bool) {
 	if p.borderImage(b, st, r, bd, draw) {
 		return
@@ -547,7 +554,9 @@ func (p *painter) border(b *box, st *css.Style, r typeset.Rect, radii [4][2]floa
 	// A side cut away, not drawn and of no width, as the slice of a box a
 	// page break cuts has, does not break the uniformity of the others.
 	// The ring of the solid and double styles also passes over a side of
-	// no width, which paints nothing at the corners it shares.
+	// no width, which paints nothing at the corners it shares, and takes
+	// sides of one style and colour whatever their widths: its inner edge
+	// is inset by each side's own.
 	uniform, ringed := true, true
 	for s := range 4 {
 		if !visible[s] && bd[s] == 0 {
@@ -556,14 +565,18 @@ func (p *painter) border(b *box, st *css.Style, r typeset.Rect, radii [4][2]floa
 			}
 			continue
 		}
-		if !visible[s] || st.Border[s] != st.Border[ref] || bd[s] != bd[ref] {
+		if !visible[s] || st.Border[s].Style != st.Border[ref].Style || st.Border[s].Color != st.Border[ref].Color {
 			uniform, ringed = false, false
+		}
+		if st.Border[s].Width != st.Border[ref].Width || bd[s] != bd[ref] {
+			uniform = false
 		}
 	}
 	if ringed && (st.Border[ref].Style == css.Solid || st.Border[ref].Style == css.Double) {
 		// One colour all round needs no cut at the corners: the sides
 		// meet without the seam two clipped trapezoids leave on their
 		// shared diagonal, as Chromium fills them.
+
 		g := &ditem{}
 		p.side(g, css.Side(ref), st.Border[ref], quirkShades(b, st, css.Side(ref)), r, radii, inner, iradii, bd)
 		for _, k := range g.kids {
