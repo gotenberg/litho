@@ -562,6 +562,13 @@ func ratioOf(k *box) float64 {
 
 // baseSize sets the flex base size, the main size bounds and the
 // hypothetical main size of the item it (CSS Flexbox 1, 9.2, 3 and 4.5).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) sizes an item
+//     of a column of auto height with flex-basis 0% or 50%, height 300px
+//     and min-height 0 at its 100px content, and an empty one of flex: 1
+//     and height 10px 0 tall.
 func (e *engine) baseSize(fd *flexData, it *fitem, ax flexAxes, cb, pcb cblock, innerMain float64, mainDef bool, top float64) {
 	k := it.b
 	st := k.st
@@ -624,12 +631,9 @@ func (e *engine) baseSize(fd *flexData, it *fitem, ax flexAxes, cb, pcb cblock, 
 	base, ok := 0.0, false
 	switch st.FlexBasis.Kind {
 	case css.Points, css.Percent, css.Calc:
+		// A percentage of an indefinite main size leaves ok false: the
+		// used flex basis is then content (CSS Flexbox 1, 7.2.3).
 		base, ok = mainSpec(st.FlexBasis, mcb)
-		if !ok {
-			// A percentage of an indefinite main size acts as auto, as
-			// Chromium resolves it.
-			base, ok = mainSpec(mainProp(sst, ax), pcb)
-		}
 	case css.Auto:
 		base, ok = mainSpec(mainProp(sst, ax), pcb)
 	case css.MinContent, css.FitContent, css.Stretch:

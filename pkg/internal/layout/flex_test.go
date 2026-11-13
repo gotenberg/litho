@@ -216,10 +216,10 @@ func TestFlex_ColumnLayout(t *testing.T) {
 			[][4]float64{{0, 0, 100, 40}, {0, 40, 100, 10}},
 		},
 		{
-			"flex: 1 in an auto height keeps the content height",
+			"flex: 1 in an auto height takes the content height, not the height",
 			[]func(*css.Style){col},
 			[]*Node{item(auto, 10, func(s *css.Style) { s.FlexGrow, s.FlexBasis = 1, css.Dimension{Kind: css.Percent} })},
-			[][4]float64{{0, 0, 100, 10}},
+			[][4]float64{{0, 0, 100, 0}},
 		},
 		{
 			"max-height bounds an auto height column",
@@ -533,6 +533,21 @@ func TestFlex_PercentageHeightDoesNotStretch(t *testing.T) {
 	half := func(s *css.Style) { s.Height = css.Dimension{Kind: css.Percent, Value: 0.5} }
 	got := flexRects(t, doc(el(flexBox(), item(10, 30), item(10, math.NaN(), half))), 0, 0)
 	if want := [][4]float64{{0, 0, 10, 30}, {10, 0, 10, 0}}; !eqRects(got, want) {
+		t.Errorf("rects = %v, want %v", got, want)
+	}
+}
+
+// TestFlex_PercentageBasisOfIndefiniteMain holds a percentage flex-basis
+// in a column of indefinite height to CSS Flexbox 1, 7.2.3: the used flex
+// basis is content, not the item's height.
+func TestFlex_PercentageBasisOfIndefiniteMain(t *testing.T) {
+	t.Parallel()
+	basis := func(s *css.Style) {
+		s.FlexBasis = css.Dimension{Kind: css.Percent, Value: 0}
+		s.FlexGrow, s.FlexShrink = 0, 0
+	}
+	got := flexRects(t, doc(el(flexBox(width(50), dir(css.FlexColumn)), el(sty(height(300), minH(0), basis), item(10, 100)))), 0, 0)
+	if want := [][4]float64{{0, 0, 50, 100}}; !eqRects(got, want) {
 		t.Errorf("rects = %v, want %v", got, want)
 	}
 }
