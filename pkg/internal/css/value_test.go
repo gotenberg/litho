@@ -134,7 +134,6 @@ func TestParseColor_Syntaxes(t *testing.T) {
 		{"hsl(120, 100, 50)", Color{}, false},
 		{"hsl(120 100 50)", rgb(0, 255, 0), true},
 		{"rgb(calc(255) 0 0)", rgb(255, 0, 0), true},
-		{"lab(50 0 0)", Color{}, false},
 	}
 	for _, tt := range tests {
 		v := oneValue(tt.src)

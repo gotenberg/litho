@@ -1,5 +1,7 @@
 package css
 
+import "math/bits"
+
 // This file is the contract between the CSS cascade and the layout engine:
 // every field of [Style] is a computed value (CSS 2.1, 6.1.2) in the units
 // the layout engine works in. A new field never changes the meaning of one
@@ -1248,6 +1250,12 @@ type Style struct {
 	// holds it resolved, and an element that inherits it explicitly
 	// resolves it again against its own color.
 	currentColor colorSlots
+	// colorExprs holds, for each colour longhand of currentColor, the
+	// colour function its value resolves against color, such as
+	// color-mix(in srgb, currentColor, red), nil for the currentColor
+	// keyword itself (CSS Color 5, 3 and 4). It is shared between styles
+	// and copied before a write.
+	colorExprs *[numColorSlots]*token
 	// flexOrGrid records a flex or grid container laid out as a block in
 	// this version, a grid container or a prefixed flex one the layout
 	// does not know: the page property does not apply to its children,
@@ -1268,7 +1276,40 @@ const (
 	slotBorderLeft
 	slotOutline
 	slotTextDecoration
+	numColorSlots = 7
 )
+
+// slotIndex returns the index of the one bit of slot.
+func slotIndex(slot colorSlots) int { return bits.TrailingZeros8(uint8(slot)) }
+
+// slotValue returns the specified value of the colour longhand slot of
+// s, which holds currentColor or a colour function of it.
+func (s *Style) slotValue(slot colorSlots) colorValue {
+	if s.colorExprs != nil {
+		if e := s.colorExprs[slotIndex(slot)]; e != nil {
+			return colorValue{expr: e}
+		}
+	}
+	return colorValue{current: true}
+}
+
+// setColorExpr records e as the colour function of slot, nil for none.
+func (s *Style) setColorExpr(slot colorSlots, e *token) {
+	i := slotIndex(slot)
+	switch {
+	case s.colorExprs == nil && e == nil, s.colorExprs != nil && s.colorExprs[i] == e:
+		return
+	case s.colorExprs == nil:
+		s.colorExprs = new([numColorSlots]*token)
+	default:
+		cp := *s.colorExprs
+		s.colorExprs = &cp
+	}
+	s.colorExprs[i] = e
+	if *s.colorExprs == ([numColorSlots]*token{}) {
+		s.colorExprs = nil
+	}
+}
 
 // Initial returns the initial value of every property (CSS 2.1, appendix
 // F), with the root's font size at medium, 16px.

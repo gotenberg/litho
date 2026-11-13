@@ -337,21 +337,25 @@ func colorProp(name string, f func(*Style) *Color, slot colorSlots, initial any)
 		},
 		compute: func(_ *styler, st *Style, v any) {
 			if c, ok := v.(colorValue); ok {
-				if c.current {
-					*f(st) = st.Color
+				*f(st) = c.resolve(st.Color)
+				if c.dependsOnCurrent() {
 					st.currentColor |= slot
 				} else {
-					*f(st) = c.c
 					st.currentColor &^= slot
 				}
+				st.setColorExpr(slot, c.expr)
 			}
 		},
 		copyFrom: func(dst, src *Style) {
 			*f(dst) = *f(src)
 			dst.currentColor = dst.currentColor&^slot | src.currentColor&slot
-			if dst.currentColor&slot != 0 {
-				*f(dst) = dst.Color
+			if src.currentColor&slot == 0 {
+				dst.setColorExpr(slot, nil)
+				return
 			}
+			v := src.slotValue(slot)
+			dst.setColorExpr(slot, v.expr)
+			*f(dst) = v.resolve(dst.Color)
 		},
 		initial: initial,
 	}
@@ -525,7 +529,7 @@ func parseOpacity(v []token, _ *declCtx) (any, bool) {
 	if !ok {
 		return nil, false
 	}
-	n, _, ok := numberOrPct(t, false)
+	n, ok := numberOrPercent(t)
 	if !ok {
 		return nil, false
 	}
@@ -646,11 +650,7 @@ func init() {
 				if c, ok := v.(colorValue); ok {
 					// CSS Color 4, 4.4: currentColor on color itself
 					// is inherit.
-					if c.current {
-						st.Color = s.parent.Color
-					} else {
-						st.Color = c.c
-					}
+					st.Color = c.resolve(s.parent.Color)
 				}
 			},
 			copyFrom: field(func(s *Style) *Color { return &s.Color }),

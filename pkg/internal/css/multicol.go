@@ -221,10 +221,7 @@ func multicolProps() map[propID]propDef {
 			},
 			compute: func(_ *styler, st *Style, v any) {
 				if c, ok := v.(colorValue); ok {
-					st.Columns.RuleColor, st.Columns.ruleCurrent = c.c, c.current
-					if c.current {
-						st.Columns.RuleColor = st.Color
-					}
+					st.Columns.RuleColor, st.Columns.ruleCurrent = c.resolve(st.Color), c.current
 				}
 			},
 			copyFrom: func(dst, src *Style) {

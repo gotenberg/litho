@@ -145,3 +145,7 @@ func (r *Resolver) pageInOf(t testing.TB, sel PageSelector, root *Style) PageSty
 	}
 	return ps
 }
+
+func rgb8(r, g, b uint8) Color {
+	return Color{R: float64(r) / 255, G: float64(g) / 255, B: float64(b) / 255, A: 1}
+}

@@ -329,10 +329,7 @@ func (g *gradientSpec) compute(lc lenCtx, color Color) *Gradient {
 			st.Position = s.pos.dim(lc, false)
 		}
 		if !s.hint {
-			st.Color = s.color.c
-			if s.color.current {
-				st.Color = color
-			}
+			st.Color = s.color.resolve(color)
 		}
 		out.Stops[i] = st
 	}

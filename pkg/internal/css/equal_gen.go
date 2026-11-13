@@ -552,6 +552,9 @@ func equalStyle(a, b *Style) bool {
 	if a.currentColor != b.currentColor {
 		return false
 	}
+	if a.colorExprs != b.colorExprs {
+		return false
+	}
 	if a.flexOrGrid != b.flexOrGrid {
 		return false
 	}
@@ -773,6 +776,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.FootnotePolicy))
 	h = hashOffice(h, &x.Office)
 	h = mix(h, uint64(x.currentColor))
+	h = mixBool(h, x.colorExprs != nil)
 	h = mixBool(h, x.flexOrGrid)
 	return h
 }

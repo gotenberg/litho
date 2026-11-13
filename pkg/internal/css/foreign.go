@@ -8,10 +8,12 @@ import (
 // converters of foreign content, SVG, whose properties the cascade does
 // not compute.
 
-// ParseColor parses a CSS <color> value (CSS Color 4, 4.1): a named
-// colour, transparent, a hex colour, rgb(), rgba(), hsl() or hsla(). It
+// ParseColor parses a CSS <color> value (CSS Color 4, 4.1 and CSS Color 5,
+// 2): a named or system colour, transparent, a hex colour, or a colour
+// function, the result in sRGB, each channel clipped to its range. It
 // reports current for currentColor, whose colour the caller resolves, and
-// ok false for anything else, surrounding white space allowed.
+// ok false for anything else, surrounding white space allowed. A colour
+// function that refers to currentColor resolves against opaque black.
 func ParseColor(s string) (c Color, current, ok bool) {
 	toks, _ := parseComponentValues(s)
 	toks = significant(toks)
@@ -22,7 +24,10 @@ func ParseColor(s string) (c Color, current, ok bool) {
 	if !ok {
 		return Color{}, false, false
 	}
-	return v.c, v.current, true
+	if v.current {
+		return Color{}, true, true
+	}
+	return v.resolve(Color{A: 1}), false, true
 }
 
 // Selector is a parsed selector list (Selectors 4, 4.1). It is immutable
