@@ -224,3 +224,23 @@ func TestMarginLinks_JoinPagesAndRoot(t *testing.T) {
 		t.Errorf("links %+v, want one to page 7", ls)
 	}
 }
+
+// TestNamedPages_WhiteSpaceBeforeFirstBlock locks the start page value
+// past the white space a source leaves between its blocks: the anonymous
+// block that holds it has no line box (CSS 2.1, 9.4.2), so the first page
+// takes the name of the first block (CSS Page 3, 4.1).
+func TestNamedPages_WhiteSpaceBeforeFirstBlock(t *testing.T) {
+	root := el(sty(),
+		txt(sty(), "\n  "),
+		el(inlineSty()),
+		el(sty(named("wide")), txt(sty(), "a")),
+		txt(sty(), "\n"),
+		el(sty(named("wide")), txt(sty(), "b")))
+	res, seen := namedRun(t, root)
+	if len(res.Pages) != 1 {
+		t.Fatalf("%d pages, want 1: white space between two blocks of one name forces no break", len(res.Pages))
+	}
+	if seen[0].Name != "wide" || !near(res.Pages[0].Width, px(40)) {
+		t.Errorf("first page %+v, %v wide, want the wide page", seen[0], res.Pages[0].Width)
+	}
+}

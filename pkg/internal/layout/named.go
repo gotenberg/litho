@@ -2,6 +2,7 @@ package layout
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 )
@@ -31,10 +32,48 @@ func usedPage(b *box) string {
 
 // pageApplies reports a box the page property applies to: one that creates
 // class A break points, an in-flow block-level box of a block container's
-// flow (CSS Page 3, 4.1; CSS Fragmentation 3, 4.1).
+// flow (CSS Page 3, 4.1; CSS Fragmentation 3, 4.1). An anonymous block of
+// collapsible white space alone is none: its line boxes do not exist
+// (CSS 2.1, 9.4.2), so the white space between the blocks of a source
+// does not end the walk to a start page value.
 func pageApplies(b *box) bool {
 	return !b.inline && !b.abs && b.float == css.FloatNone && b.kind == kindBlock &&
-		(b.parent == nil || b.parent.tpart == partNone || b.parent.tpart == partWrapper)
+		(b.parent == nil || b.parent.tpart == partNone || b.parent.tpart == partWrapper) &&
+		!(b.anon && b.inlineKids && blankInline(b.kids, 0))
+}
+
+// blankInline reports inline content, at depth, that makes no line box
+// exist (CSS 2.1, 9.4.2): text of collapsible white space, and inline
+// boxes without content, margins, borders or paddings.
+func blankInline(kids []*box, depth int) bool {
+	if depth > maxTreeDepth {
+		return false
+	}
+	for _, k := range kids {
+		switch {
+		case k.kind == kindText:
+			if k.marker || k.st == nil || !collapses(k.st.WhiteSpace) || strings.Trim(k.text, " \t\n\r\f") != "" {
+				return false
+			}
+		case k.kind == kindInline:
+			st := k.st
+			if st == nil {
+				return false
+			}
+			for _, side := range [...]css.Side{css.Left, css.Right} {
+				bd := st.Border[side]
+				if st.Margin[side].Value != 0 || st.Padding[side].Value != 0 || bd.Style != css.BorderNone && bd.Style != css.BorderHidden && bd.Width != 0 {
+					return false
+				}
+			}
+			if !blankInline(k.kids, depth+1) {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // flowKids returns the in-flow children of b the page property applies
