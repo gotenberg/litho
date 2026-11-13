@@ -72,8 +72,9 @@ type styleRule struct {
 
 // fontFaceRule is an @font-face rule and its media condition.
 type fontFaceRule struct {
-	face FontFace
-	cond *mediaCond
+	face  FontFace
+	cond  *mediaCond
+	layer int
 }
 
 // featureValuesRule is an @font-feature-values rule's values for one
@@ -245,7 +246,7 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 				return
 			}
 			if f, ok := parseFontFace(it.block, c); ok && sp.count() {
-				sp.sheet.faces = append(sp.sheet.faces, fontFaceRule{face: f, cond: cond})
+				sp.sheet.faces = append(sp.sheet.faces, fontFaceRule{face: f, cond: cond, layer: sp.layer})
 			}
 		case "keyframes", "-webkit-keyframes":
 			// The Compatibility Standard defines @-webkit-keyframes as

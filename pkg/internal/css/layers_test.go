@@ -79,3 +79,35 @@ p.f { color: revert }
 		t.Errorf("#c margin-top = %+v, want the user agent's %+v", got, want)
 	}
 }
+
+// TestLayers_FontFaceOrder locks the order of @font-face rules by cascade
+// layer (CSS Cascade 5, 6.4): [Resolver.FontFaces] lists them in layer
+// order, the rules outside any layer last, so a later layer's face wins a
+// collision (CSS Fonts 4, 4.7) whatever the order of the sheet.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws a family
+//     declared outside any layer, then inside a layer, in the first
+//     rule's face, and a family declared in layer c, then in layer b of
+//     "@layer b, c", in layer c's face.
+func TestLayers_FontFaceOrder(t *testing.T) {
+	t.Parallel()
+	sheet, err := Parse(context.Background(), []byte(`
+@font-face { font-family: X; src: local(one) }
+@layer a { @font-face { font-family: X; src: local(two) } }
+@layer b, c;
+@layer c { @font-face { font-family: X; src: local(three) } }
+@layer b { @font-face { font-family: X; src: local(four) } }
+`), ParseOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range NewResolver(a4, []Sheet{{Sheet: sheet, Origin: Author}}).FontFaces() {
+		got = append(got, f.Sources[0].Local)
+	}
+	if want := []string{"two", "four", "three", "one"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("faces %v, want %v", got, want)
+	}
+}

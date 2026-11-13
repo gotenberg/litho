@@ -173,6 +173,7 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 		pos int
 	}
 	var values []layeredValues
+	var facePos []int
 	lay := orderLayers(sheets)
 	for si, sh := range sheets {
 		if sh.Sheet == nil {
@@ -214,6 +215,7 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 		for i := range sh.Sheet.faces {
 			if f := &sh.Sheet.faces[i]; f.cond.matches(media, cache) {
 				r.faces = append(r.faces, f.face)
+				facePos = append(facePos, lay.of(si, sh.Origin, f.layer))
 			}
 		}
 		for _, k := range sh.Sheet.keyframes {
@@ -242,17 +244,12 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 	for _, v := range values {
 		r.addFeatureValues(v.v)
 	}
-	idx := make([]int, len(counterRules))
-	for i := range idx {
-		idx[i] = i
-	}
-	slices.SortStableFunc(idx, func(a, b int) int { return cmp.Compare(counterPos[a], counterPos[b]) })
-	sorted := make([]*counterStyleRule, len(idx))
-	for i, j := range idx {
-		sorted[i] = counterRules[j]
-	}
+	// A later layer's @font-face rules win over an earlier one's when
+	// their descriptors collide (CSS Cascade 5, 6.4): the faces are
+	// listed in layer order, a later face winning (CSS Fonts 4, 4.7).
+	r.faces = sortedByLayer(r.faces, facePos)
 	r.warns = w.result()
-	r.counters = newCounterStyles(sorted)
+	r.counters = newCounterStyles(sortedByLayer(counterRules, counterPos))
 	return r
 }
 
@@ -317,7 +314,8 @@ func (r *Resolver) FontFeatureValues(family string) *FontFeatureValues {
 }
 
 // FontFaces returns the @font-face rules whose media conditions match, in
-// order. The slice is a copy; the faces' slices are shared and must not be
+// cascade layer order, the rules outside any layer last, and in source
+// order within a layer. The slice is a copy; the faces' slices are shared and must not be
 // modified.
 func (r *Resolver) FontFaces() []FontFace { return append([]FontFace(nil), r.faces...) }
 
@@ -1114,6 +1112,24 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		cs.remember(key, cands, st)
 	}
 	return st, vars
+}
+
+// sortedByLayer returns xs ordered by the layer positions pos, one per
+// element, rules of one position keeping their order.
+func sortedByLayer[T any](xs []T, pos []int) []T {
+	if !slices.IsSorted(pos) {
+		idx := make([]int, len(xs))
+		for i := range idx {
+			idx[i] = i
+		}
+		slices.SortStableFunc(idx, func(a, b int) int { return cmp.Compare(pos[a], pos[b]) })
+		out := make([]T, len(xs))
+		for i, j := range idx {
+			out[i] = xs[j]
+		}
+		return out
+	}
+	return xs
 }
 
 // layerState is the cascade's winners and their importance at the start
