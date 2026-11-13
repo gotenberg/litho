@@ -375,3 +375,25 @@ func TestListItems_GroupDefinitions(t *testing.T) {
 		})
 	}
 }
+
+func TestListMarkers_EmptyItemTakesTheMarkerLine(t *testing.T) {
+	// CSS Lists 3, 3.1 leaves the place of a marker without a line box to
+	// the user agent. As Chromium does, the marker of an empty item sits
+	// in a line of its own at the item's top, and the item is that line
+	// tall: its margins do not collapse through it. An item whose
+	// marker draws nothing stays empty.
+	lh := func(s *css.Style) { s.LineHeight = css.Pts(px(40)) }
+	item := func(lt css.ListStyleType, kids ...*Node) *Node {
+		return el(sty(lh, display(css.ListItem), func(s *css.Style) { s.ListStyleType = lt }), kids...)
+	}
+	ul := el(sty(lh, padding(0, 0, 0, 40)), item(css.Square), item(css.Square, el(sty(height(5)))), item(css.ListNone))
+	rb := boxesWith(t, doc(ul), Options{Page: page(200, 200), BrowserRules: true})
+	for i, want := range []float64{40, 40, 0} {
+		if b := kid(t, rb, 0, 0, i); !near(b.h/css.Pt, want) {
+			t.Errorf("item %d: height %v, want %v", i, b.h/css.Pt, want)
+		}
+	}
+	if m := kid(t, rb, 0, 0, 0).outside; m == nil || !m.placed {
+		t.Errorf("marker %+v, want placed", m)
+	}
+}

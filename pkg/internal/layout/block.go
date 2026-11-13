@@ -797,6 +797,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: kh, hDefinite: kDefinite}, cb)
 	end := formatterFor(b).layout(e, b, kcb, bc, start, inner)
 	end = e.trimTextBox(b, end, nil)
+	marker := e.markerExtent(b)
 	// The last child's bottom margin adjoins b's when b's height is auto
 	// (CSS 2.1, 8.3.1); a min-height that then makes b taller cuts that
 	// margin off instead of moving it into b, as browsers do.
@@ -805,7 +806,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		// No content resolved the margins: b is empty. Its top and bottom
 		// margins adjoin when its height is auto or zero (CSS 2.1, 8.3.1).
 		zero := hSet && specH <= eps && !ratioH
-		if (collapseBottom || zero && b.bd[css.Bottom] == 0 && b.pd[css.Bottom] == 0) && !minHeightSet(b.st.MinHeight) {
+		if (collapseBottom || zero && b.bd[css.Bottom] == 0 && b.pd[css.Bottom] == 0) && !minHeightSet(b.st.MinHeight) && marker <= 0 {
 			mc.waiting = slices.Delete(mc.waiting, i, i+1)
 			mc.collapsedThrough(b)
 			if trim&css.TrimBlockEnd != 0 {
@@ -830,6 +831,9 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		}
 		mc.commit(e.pastMargin(cursor, mc.strut, mc.kept))
 		end = b.contentY()
+	}
+	if marker > 0 {
+		end = max(end, b.contentY()+marker)
 	}
 	trailing := inner.strut
 	if trailing.cleared {
@@ -1077,6 +1081,9 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	end := formatterFor(b).layout(e, b, kcb, own, b.contentY(), mc)
 	e.leaveClamp(saved)
 	end = e.trimTextBox(b, end, own)
+	if marker := e.markerExtent(b); marker > 0 {
+		end = max(end, b.contentY()+marker)
+	}
 	if trim&css.TrimBlockEnd != 0 {
 		mc.strut = strut{}
 	}

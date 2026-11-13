@@ -1996,6 +1996,54 @@ func waveOps(origin, x0, x1, mid, thick float64) []typeset.PathOp {
 // segments draw a wave of one-point thickness 20,000 points long.
 const maxWaveSegments = 10_000
 
+// markerExtent returns the height the outside marker of the list item b
+// takes at the top of its content when b has no line box to put it
+// beside: the line it sets ([engine.markerLine]); 0 when b has a first
+// line or no outside marker. b's content is at least that tall,
+// which keeps its margins from collapsing through it. CSS Lists 3, 3.1
+// leaves the place of a marker without a line to the user agent; this is
+// Chromium's.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (Gotenberg 9.4.1) draws the square of an
+//     empty list item in Ahem 20px/40px centred in a 40px line at the
+//     item's top and makes the item 40px tall; an item holding only a 5px
+//     block is 40px tall too, the block at its top; one of list-style:
+//     none stays 0px tall. A 15px image marker of an empty item stands on
+//     the baseline of the line: at Ahem 40px/80px its bottom is 52px
+//     below the item's top, and the item is 80px tall.
+func (e *engine) markerExtent(b *box) float64 {
+	if b.outside == nil {
+		return 0
+	}
+	if _, ok := firstBaseline(b); ok {
+		return 0
+	}
+	above, below := e.markerLine(b)
+	return above + below
+}
+
+// markerLine returns the heights above and below its baseline of the line
+// the outside marker of b sets when b has no line: the strut of the
+// marker's style, its half-leading split as a line's is, grown above to
+// hold a picture standing on the baseline.
+func (e *engine) markerLine(b *box) (float64, float64) {
+	mst := b.outside.st
+	if mst == nil {
+		mst = b.st
+	}
+	mt := e.faceMetrics(mst)
+	lh := e.lineHeight(mst)
+	up, _ := e.leading(lh - mt.Ascent - mt.Descent)
+	above := mt.Ascent + up
+	below := lh - above
+	if p := b.outside.picture; p != nil {
+		above = max(above, p.Height)
+	}
+	return above, below
+}
+
 // placeMarker lays out the outside marker of the list item b next to its
 // first line box (CSS 2.1, 12.5): its end edge on the item's content edge,
 // its baseline on the first line's.
@@ -2011,7 +2059,8 @@ func (e *engine) placeMarker(b *box) {
 		m.width = m.picture.Width + gap
 		m.ascent = m.picture.Height
 		if !ok {
-			baseline = b.contentY() + m.ascent
+			above, _ := e.markerLine(b)
+			baseline = b.contentY() + above
 		}
 		m.x = b.contentX() - m.width
 		if rtl {
@@ -2052,7 +2101,8 @@ func (e *engine) placeMarker(b *box) {
 	mt := e.faceMetrics(mst)
 	m.ascent = mt.Ascent
 	if !ok {
-		baseline = b.contentY() + mt.Ascent + (e.lineHeight(mst)-mt.Ascent-mt.Descent)/2
+		above, _ := e.markerLine(b)
+		baseline = b.contentY() + above
 	}
 	if m.symbol {
 		m.sym = symbolRect(b, mt.Ascent, baseline)
