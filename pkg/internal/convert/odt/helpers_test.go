@@ -84,6 +84,16 @@ func (d doc) contentXML() string {
 		`<office:body><office:text>` + d.body + `</office:text></office:body></office:document-content>`
 }
 
+// flat returns d as a flat ODT document (ODF 1.3, Part 1, 2.2): the
+// pieces of styles.xml and content.xml under one office:document.
+func (d doc) flat() []byte {
+	styles := d.stylesXML()
+	styles = styles[strings.Index(styles, "<office:font-face-decls>"):strings.LastIndex(styles, "</office:document-styles>")]
+	styles = strings.Replace(styles, "</office:automatic-styles>", d.contentAuto+"</office:automatic-styles>", 1)
+	return []byte(`<?xml version="1.0" encoding="UTF-8"?><office:document ` + nsDecl + ` office:mimetype="application/vnd.oasis.opendocument.text">` +
+		styles + `<office:body><office:text>` + d.body + `</office:text></office:body></office:document>`)
+}
+
 // pack returns d as an ODT package.
 func (d doc) pack(t testing.TB) []byte {
 	t.Helper()

@@ -160,27 +160,45 @@ type scriptText struct {
 	country string
 }
 
-// Writer's font sizes for Asian and complex text when no style sets one:
-// 10.5pt and 12pt, as fo:font-size sets the Western size alone.
+// Writer's font sizes for Asian and complex text when no style sets one,
+// as fo:font-size sets the Western size alone: 12pt each in a package,
+// and 10.5pt for Asian text in a flat document (ODF 1.3, Part 1, 2.2),
+// which Writer reads with the defaults of a new document. ODF 1.3, Part
+// 3, 20.190 gives no initial value; the sizes are Writer's.
 //
 // # Corpus evidence
 //
-//   - probe, odt: through gotenberg/gotenberg:9.4.1, a document without a
-//     default style prints "abc 漢字 عربي" at 12, 10.5 and 12 points, and
-//     at 20, 10.5 and 12 points under a style setting fo:font-size 20pt
-//     alone; style:font-size-asian 200% and style:font-size-complex 150%
-//     print 21 and 18 points.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a package without a
+//     default style, with an empty one, with one setting fo:font-size
+//     12pt alone or an Asian language (zh-CN, zh-TW, ja-JP, ko-KR), with
+//     or without office:master-styles, an automatic style setting the
+//     Asian language, and a meta:generator of LibreOffice or another,
+//     prints "abc 漢字 عربي" at 12, 12 and 12 points; under a style setting
+//     fo:font-size 20pt alone at 20, 12 and 12.
+//   - probe, odt: the same text in a flat document without a default
+//     style, with a Standard style, or with a default style setting
+//     fo:font-size 12pt alone prints at 12, 10.5 and 12 points, the same
+//     bytes under a .odt name too; a default style setting
+//     style:font-size-asian 12pt prints the Han text at 12;
+//     style:font-size-asian 200% and style:font-size-complex 150% print
+//     21 and 18 points.
 const (
-	defaultAsianSize   = 10.5
+	defaultAsianSize   = 12
+	flatAsianSize      = 10.5
 	defaultComplexSize = 12
 )
 
 // newTextState returns the text properties no style has set: Writer's
-// default sizes and the normal weight.
-func newTextState() textState {
+// default sizes, those of a flat document when flat, and the normal
+// weight.
+func newTextState(flat bool) textState {
+	asian := float64(defaultAsianSize)
+	if flat {
+		asian = flatAsianSize
+	}
 	return textState{
 		size: defaultFontSize, weight: 400,
-		scripts: [2]scriptText{{size: defaultAsianSize, weight: 400}, {size: defaultComplexSize, weight: 400}},
+		scripts: [2]scriptText{{size: asian, weight: 400}, {size: defaultComplexSize, weight: 400}},
 	}
 }
 
