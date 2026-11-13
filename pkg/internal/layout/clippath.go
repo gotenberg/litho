@@ -2,6 +2,7 @@ package layout
 
 import (
 	"math"
+	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/svg"
@@ -135,9 +136,9 @@ func shapePath(s *css.Shape, r typeset.Rect) (*typeset.Path, bool) {
 			ops = append(ops, typeset.PathOp{Kind: k, P: [3]typeset.Point{{X: r.X + resolve(pt[0], w), Y: r.Y + resolve(pt[1], h)}}})
 		}
 		ops = append(ops, typeset.PathOp{Kind: typeset.ClosePath})
-	case css.ShapePath:
+	case css.ShapePath, css.ShapeShape:
 		// Path data is in CSS pixels from the reference box's top left.
-		data, _ := svg.PathData(s.Path) // a path cut short by an error clips with what it drew, as SVG 1.1, F.2 asks
+		data, _ := svg.PathData(shapePathData(s, w, h)) // a path cut short by an error clips with what it drew, as SVG 1.1, F.2 asks
 		for _, op := range data {
 			for i := range op.P {
 				op.P[i] = typeset.Point{X: r.X + op.P[i].X*css.Pt, Y: r.Y + op.P[i].Y*css.Pt}
@@ -149,6 +150,43 @@ func shapePath(s *css.Shape, r typeset.Rect) (*typeset.Path, bool) {
 		return nil, false
 	}
 	return &typeset.Path{Ops: ops, Fill: fill}, true
+}
+
+// shapePathData returns the SVG path data of a path() or a shape() in a
+// reference box w by h points, in CSS pixels: a shape()'s commands are
+// the path commands of the same name, its lengths resolved against the
+// box (CSS Shapes 1, 3.2.1).
+func shapePathData(s *css.Shape, w, h float64) string {
+	if s.Kind == css.ShapePath {
+		return s.Path
+	}
+	var b []byte
+	for _, c := range s.Commands {
+		b = append(b, c.Op)
+		for i, a := range c.Args {
+			ref := w
+			if i < len(c.Vertical) && c.Vertical[i] {
+				ref = h
+			}
+			if c.Op|0x20 == 'a' && i == 2 {
+				b = append(b, ' ')
+				b = strconv.AppendFloat(b, c.Rotate, 'g', -1, 64)
+				b = append(b, ' ', boolDigit(c.Large), ' ', boolDigit(c.Sweep))
+			}
+			b = append(b, ' ')
+			b = strconv.AppendFloat(b, resolve(a, ref)/css.Pt, 'g', -1, 64)
+		}
+		b = append(b, ' ')
+	}
+	return string(b)
+}
+
+// boolDigit returns the flag digit of an arc, '1' for set.
+func boolDigit(v bool) byte {
+	if v {
+		return '1'
+	}
+	return '0'
 }
 
 // clipURL returns the clips of the clipPath element url names, for b;

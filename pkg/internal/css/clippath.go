@@ -49,6 +49,9 @@ const (
 	ShapeEllipse
 	ShapePolygon
 	ShapePath
+	// ShapeShape is a shape(), held as the SVG path commands it draws
+	// (CSS Shapes 1, 3.2.1).
+	ShapeShape
 )
 
 // ShapeRadius is the radius of a circle or an ellipse along one axis.
@@ -98,6 +101,9 @@ type Shape struct {
 	// Path is the SVG path data of a path, in pixels from the reference
 	// box's top left.
 	Path string
+	// Commands are the commands of a shape(), the first a move to its
+	// from position.
+	Commands []ShapeCommand
 }
 
 // maxPolygonPoints caps the vertices of a polygon() shape. Anti-DoS guard,
@@ -120,6 +126,7 @@ type shapeSpec struct {
 	evenOdd bool
 	points  [][2]length
 	path    string
+	cmds    []shapeCmdSpec
 }
 
 // radiusArg is a specified <shape-radius>.
@@ -193,6 +200,8 @@ func parseBasicShape(t token) (*shapeSpec, bool) {
 		return parsePolygon(args)
 	case "path":
 		return parsePathShape(args)
+	case "shape":
+		return parseShapeFunction(args)
 	}
 	return nil, false
 }
@@ -393,6 +402,12 @@ func (s *shapeSpec) compute(lc lenCtx) *Shape {
 	}
 	if s.kind == ShapeCircle || s.kind == ShapeEllipse {
 		out.Center = [2]Dimension{s.center[0].dim(lc, false), s.center[1].dim(lc, false)}
+	}
+	if len(s.cmds) > 0 {
+		out.Commands = make([]ShapeCommand, len(s.cmds))
+		for i, c := range s.cmds {
+			out.Commands[i] = c.compute(lc)
+		}
 	}
 	if len(s.points) > 0 {
 		out.Points = make([][2]Dimension, len(s.points))
