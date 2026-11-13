@@ -349,3 +349,54 @@ func TestRelative_InlineMovesItsBlocksAndFloats(t *testing.T) {
 		__RRR_
 		__BB__`)
 }
+
+// TestBrowserRules_PageAreaCutsTheSideMargins locks that under Blink's
+// rules the page area cuts what overflows into the side margins, an
+// absolutely positioned box here, as Chromium prints it, while the Office
+// rules draw it there.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 cuts at the page
+//     area a fixed box and an absolutely positioned box that reach 20 px
+//     into the left and right margins of a 5 by 3 inch page.
+func TestBrowserRules_PageAreaCutsTheSideMargins(t *testing.T) {
+	t.Parallel()
+	abs := el(sty(width(4), height(1), bg(red), func(s *css.Style) {
+		s.Position = css.Absolute
+		s.Left = css.Pts(px(-1))
+		s.Top = css.Pts(0)
+	}))
+	pb := PageBox{Width: px(6), Height: px(2), Margin: [4]float64{0, px(1), 0, px(1)}}
+	for _, tt := range []struct {
+		browser bool
+		want    string
+	}{{true, "_RRR__"}, {false, "RRRR__"}} {
+		res := runWith(t, doc(abs), Options{Page: pb, BrowserRules: tt.browser})
+		if got := grid(render(t, res, 1))[0]; got != tt.want {
+			t.Errorf("browser rules %v: first row %q, want %q", tt.browser, got, tt.want)
+		}
+	}
+}
+
+// TestFixed_WidensNoContent locks that a fixed box past the page area's
+// right edge adds nothing to the content width a converter shrinks the
+// document by: it overflows the viewport, not the document (CSS Overflow
+// 3, 2.2), and Chromium prints such a page at its scale.
+func TestFixed_WidensNoContent(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		pos  css.Position
+		want float64
+	}{{css.Fixed, px(6)}, {css.Absolute, px(9)}} {
+		box := el(sty(width(4), height(1), func(s *css.Style) {
+			s.Position = tt.pos
+			s.Left = css.Pts(px(5))
+			s.Top = css.Pts(0)
+		}))
+		res := run(t, doc(el(sty(width(2), height(1))), box), page(6, 2))
+		if !near(res.ContentWidth, tt.want) {
+			t.Errorf("position %v: content width %v, want %v", tt.pos, res.ContentWidth, tt.want)
+		}
+	}
+}

@@ -280,6 +280,13 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 				j++
 			}
 			clip := typeset.Rect{X: -pb.Margin[css.Left], Y: top, Width: pb.Width, Height: e.sliceH(k)}
+			if e.opts.BrowserRules {
+				// Across the page Blink cuts the slice at the page area
+				// too: content overflowing into the side margins, a fixed
+				// box's or an absolutely positioned one's, is not drawn
+				// there. A word processor draws there.
+				clip.X, clip.Width = 0, max(pb.Width-pb.Margin[css.Left]-pb.Margin[css.Right], 0)
+			}
 			if free[frags[i]] {
 				clip = typeset.Rect{X: -pb.Margin[css.Left], Y: top - pb.Margin[css.Top], Width: pb.Width, Height: pb.Height}
 			}

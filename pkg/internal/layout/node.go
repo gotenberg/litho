@@ -207,10 +207,11 @@ type Options struct {
 	// user agent: the shades of the groove, ridge, inset and outset borders
 	// ([shades]), the shapes of the outside disc, circle and square list
 	// markers ([symbolRect]), the position and thickness of an auto
-	// underline and the decorations of text inside a decorating box of
-	// another size. Off, as the Office converters leave it, the engine's own
+	// underline, the decorations of text inside a decorating box of
+	// another size, and the page area cutting what overflows into the side
+	// margins. Off, as the Office converters leave it, the engine's own
 	// rules apply: a darker shade of every colour, the marker's text, the
-	// face's underline position.
+	// face's underline position, content drawn into the side margins.
 	BrowserRules bool
 	// FeatureValues, when not nil, returns the @font-feature-values of a
 	// family, nil for none: font-variant-alternates resolves its names

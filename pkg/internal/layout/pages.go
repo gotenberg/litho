@@ -176,7 +176,10 @@ func (e *engine) overflowRight(rb *box) float64 {
 	for len(stack) > 0 {
 		b := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		if !b.laidOut {
+		if !b.laidOut || b.fixed {
+			// A fixed box overflows the viewport, not the document: it
+			// widens nothing (CSS Overflow 3, 2.2: its containing block
+			// is the viewport's).
 			continue
 		}
 		if b.kind == kindBlock || b.kind == kindReplaced {
