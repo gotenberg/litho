@@ -40,6 +40,37 @@ type counterState struct {
 	// quoteDepth is the nesting of open-quote and close-quote (CSS
 	// Generated Content 3, 2.2), which the walk carries in document order.
 	quoteDepth int
+	// pushed lists the names the element being styled instantiated anew,
+	// for [counterState.leave].
+	pushed []string
+}
+
+// leave ends the element or pseudo-element that instantiated the counters
+// names anew, once its descendants are done: an instance it created over
+// one of the same name its parent holds leaves with it, so its following
+// siblings see the parent's (CSS Lists 3, 4.4.1, inheriting counters: an
+// element takes from its previous sibling only the counters its parent
+// lacks).
+func (c *counterState) leave(names []string) {
+	lvl := c.level()
+	for _, name := range names {
+		s := c.byName[name]
+		k := len(s)
+		if k < 2 || s[k-1].level != lvl || s[k-2].level >= lvl {
+			continue
+		}
+		c.byName[name] = s[:k-1]
+		c.live--
+		if lvl > 0 {
+			created := c.created[lvl-1]
+			for i := len(created) - 1; i >= 0; i-- {
+				if created[i] == name {
+					c.created[lvl-1] = append(created[:i], created[i+1:]...)
+					break
+				}
+			}
+		}
+	}
 }
 
 // level returns the current level's index.
@@ -91,6 +122,7 @@ func (c *counterState) instantiate(name string, value int, reversed bool) bool {
 	}
 	c.byName[name] = append(c.byName[name], counterInst{value: value, reversed: reversed, level: lvl})
 	c.live++
+	c.pushed = append(c.pushed, name)
 	if lvl > 0 {
 		c.created[lvl-1] = append(c.created[lvl-1], name)
 	}
@@ -121,10 +153,11 @@ func clampCounter(v int) int { return min(max(v, -maxListValue), maxListValue) }
 // counter-increment, with the implicit increment of list-item on a list
 // item, then counter-set. n is the originating element for the HTML
 // attributes that act as counter properties (HTML Standard, 15.3.7: ol
-// start and reversed, li value), nil for a pseudo-element. It returns the
+// start and reversed), nil for a pseudo-element. It returns the
 // value of list-item for a list item, 0 otherwise.
 func (b *builder) applyCounters(n *dom.Node, st *css.Style) int {
 	c := &b.counters
+	c.pushed = c.pushed[:0]
 	if n != nil && len(b.gcpm.track) > 0 {
 		defer b.markCounters(n, st, b.trackedValues())
 	}
@@ -179,15 +212,9 @@ func (b *builder) applyCounters(n *dom.Node, st *css.Style) int {
 		}
 		b.increment(listItem, step, inst)
 	}
-	set := st.CounterSet
-	if n != nil && isItem && n.Namespace == "" && n.DataAtom == atom.Li {
-		if v, ok := attr(n, "value"); ok {
-			if i, ok := parseInteger(v); ok {
-				set = append(append([]css.CounterOp(nil), set...), css.CounterOp{Name: listItem, Value: i})
-			}
-		}
-	}
-	for _, op := range set {
+	// An li's value attribute is a counter-set of list-item the cascade
+	// gives (css.HTMLHints), below the author's.
+	for _, op := range st.CounterSet {
 		if in := c.innermost(op.Name); in != nil {
 			in.value = clampCounter(op.Value)
 		} else {
@@ -334,6 +361,7 @@ func (b *builder) pseudo(ctx context.Context, n *dom.Node, which css.PseudoEleme
 	v := b.applyCounters(nil, ps)
 	node := &layout.Node{Kind: layout.Element, Style: ps, ListValue: v}
 	node.Children = b.generate(ctx, n, ps)
+	b.counters.leave(b.counters.pushed)
 	return node
 }
 

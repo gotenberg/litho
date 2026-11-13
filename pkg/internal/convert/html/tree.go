@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -221,6 +222,8 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 		return nil, nil
 	}
 	v := b.applyCounters(n, st)
+	pushed := slices.Clone(b.counters.pushed)
+	defer b.counters.leave(pushed)
 	if n.Namespace == "" {
 		switch n.DataAtom { //nolint:exhaustive // every other element takes the default path
 		case atom.Br:

@@ -1,6 +1,7 @@
 package css
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -207,6 +208,27 @@ func TestHTMLHints_DirAuto(t *testing.T) {
 	for _, tt := range tests {
 		if got := c.of(tt.id).Direction; got != tt.want {
 			t.Errorf("%s: direction %v, want %v", tt.id, got, tt.want)
+		}
+	}
+}
+
+// TestHTMLHints_ListItemValue locks the value attribute of li as a
+// counter-set of list-item at the author origin, below every author rule
+// (HTML Standard, 4.4.8; CSS Lists 3, appendix A).
+func TestHTMLHints_ListItemValue(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<ol><li id=a value=" +7x"><li id=b value="-3"><li id=c value="99999999999"><li id=d value="x">
+<li id=e value=4 style="counter-set: c 1"><li id=f value=4 class=set></ol>`, `.set { counter-set: list-item 99 }`)
+	for id, want := range map[string][]CounterOp{
+		"a": {{Name: "list-item", Value: 7}},
+		"b": {{Name: "list-item", Value: -3}},
+		"c": {{Name: "list-item", Value: maxInteger - 1}},
+		"d": nil,
+		"e": {{Name: "c", Value: 1}},
+		"f": {{Name: "list-item", Value: 99}},
+	} {
+		if got := c.of(id).CounterSet; !slices.Equal(got, want) {
+			t.Errorf("#%s: counter-set %v, want %v", id, got, want)
 		}
 	}
 }

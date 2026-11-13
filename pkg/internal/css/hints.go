@@ -32,7 +32,8 @@ import (
 //     scale).
 //   - img, object and embed: hspace, vspace, border.
 //   - hr: color, noshade, size.
-//   - br: clear. ol, ul and li: type.
+//   - br: clear. ol, ul and li: type. li: value, as counter-set of the
+//     list-item counter.
 //
 // The dir and hidden attributes are user agent stylesheet rules, as the
 // HTML Standard writes them, except dir=auto, whose direction comes from
@@ -211,6 +212,13 @@ func HTMLHints(n *html.Node) []Declaration {
 				h.add("list-style-type", t)
 			}
 		}
+		// li[value] sets the list-item counter (HTML Standard, 4.4.8;
+		// CSS Lists 3, appendix A): an author's counter-set replaces it.
+		if v, ok := attr(n, "value"); ok && n.Data == "li" {
+			if i, ok := htmlInteger(v); ok {
+				h.add("counter-set", fmt.Sprintf("list-item %d", i))
+			}
+		}
 	}
 	// A bdi element without a valid dir attribute takes its direction from
 	// its text, as dir=auto does (HTML Standard, 4.5.24 and 3.2.6.4).
@@ -220,6 +228,34 @@ func HTMLHints(n *html.Node) []Declaration {
 		}
 	}
 	return h.list
+}
+
+// htmlInteger parses an integer by the HTML Standard's rules for parsing
+// integers (2.3.4.1): leading white space, a sign, digits, anything after
+// them ignored; false for no digit. The magnitude is clamped below
+// maxInteger.
+func htmlInteger(s string) (int, bool) {
+	s = strings.TrimLeft(s, "\t\n\f\r ")
+	neg := false
+	if s != "" && (s[0] == '-' || s[0] == '+') {
+		neg = s[0] == '-'
+		s = s[1:]
+	}
+	v, digits := 0, 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			break
+		}
+		v = min(v*10+int(r-'0'), maxInteger-1)
+		digits++
+	}
+	if digits == 0 {
+		return 0, false
+	}
+	if neg {
+		v = -v
+	}
+	return v, true
 }
 
 // maxDirAutoRunes bounds the characters dir=auto reads looking for a

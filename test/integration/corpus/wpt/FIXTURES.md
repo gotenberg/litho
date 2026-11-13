@@ -107,6 +107,7 @@ Chromium is the reference where a test and Chromium draw differently, so these f
 - `css/CSS2/selectors/first-letter-quote-002`: the test joins the open quote of a `::before` to the letter after it in `::first-letter`; the pinned Chromium takes the quote alone, and so does litho.
 - `css/css-content/quotes-match-parent-001`: the pinned Chromium does not parse `quotes: match-parent`, a value only the editor's draft holds, and draws each level in the marks of its parent's language; so does litho.
 - `css/css-counter-styles/armenian/css3-counter-styles-008` and `lower-armenian/css3-counter-styles-114`: the tests expect decimal past 9999, where CSS Counter Styles 3 ends the Armenian styles; the pinned Chromium spells 10000 to 99999999 with U+0302 marking ten thousands, and so does litho.
+- `css/CSS2/generated-content/content-counter-007`: the test expects a counter an element resets to reach its following siblings, as CSS 2.1, 12.4.1 scopes it; the pinned Chromium inherits counters as CSS Lists 3, 4.4.1 does, where a sibling's counter does not shadow the parent's, and so does litho.
 
 ## Licence
 

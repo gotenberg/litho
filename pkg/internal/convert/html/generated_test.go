@@ -55,6 +55,24 @@ func TestGenerated_CounterScopes(t *testing.T) {
 	}
 }
 
+// TestGenerated_CounterInheritance locks how an element inherits counters
+// (CSS Lists 3, 4.4.1): a counter an element creates over one its parent
+// holds ends with the element, so its next sibling counts on the parent's;
+// one the parent lacks carries over to the next sibling.
+func TestGenerated_CounterInheritance(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<style>#t { counter-reset: c } span { counter-increment: c } span::before { content: counter(c) "," }
+		h3 { counter-increment: h } h3::before { content: counter(h) }</style>
+		<div id=t><span></span><span style="counter-reset: c 48"></span><span></span></div>
+		<div id=u><h3 style="counter-reset: h 5">a</h3><h3>b</h3></div>`, Options{})
+	if got := treeText(byID(t, p.root, "t")); got != "1,49,2," {
+		t.Errorf("#t %q, want 1,49,2,", got)
+	}
+	if got := treeText(byID(t, p.root, "u")); got != "6a7b" {
+		t.Errorf("#u %q, want 6a7b", got)
+	}
+}
+
 func TestGenerated_Quotes(t *testing.T) {
 	t.Parallel()
 	p := prep(t, `<style>.c::before { content: open-quote } .c::after { content: close-quote } .n { quotes: "<" ">" "{" "}" }
