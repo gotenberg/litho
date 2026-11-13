@@ -246,6 +246,14 @@ func (e *engine) newFloatShape(f *box, so *css.ShapeOutside, cbw float64) *float
 	switch {
 	case so.Shape == nil:
 		s.rect, s.radii = ref, radii
+	case so.Shape.Kind == css.ShapePolygon && so.Shape.Round > 0:
+		// The vertices are rounded as clip-path rounds them (CSS Shapes
+		// 1, 3.1, polygon()), and the curves flattened as a path's.
+		pts := make([]typeset.Point, len(so.Shape.Points))
+		for i, pt := range so.Shape.Points {
+			pts[i] = typeset.Point{X: ref.X + resolve(pt[0], ref.Width), Y: ref.Y + resolve(pt[1], ref.Height)}
+		}
+		s.polys = opsRings(roundedPolygon(pts, so.Shape.Round), func(p typeset.Point) wrapPt { return wrapPt{x: p.X, y: p.Y} })
 	case so.Shape.Kind == css.ShapePolygon:
 		ring := make([]wrapPt, 0, len(so.Shape.Points))
 		for _, pt := range so.Shape.Points {
@@ -440,12 +448,18 @@ func pathRings(d string, ref typeset.Rect) [][]wrapPt {
 	// A path cut short by an error keeps what it drew, as SVG 1.1, F.2
 	// asks.
 	ops, _ := svg.PathData(d)
+	return opsRings(ops, func(p typeset.Point) wrapPt {
+		return wrapPt{x: ref.X + float64(p.X*css.Pt), y: ref.Y + float64(p.Y*css.Pt)}
+	})
+}
+
+// opsRings returns the closed rings of the path ops, at mapping each point
+// to the float's coordinates, each curve flattened to [shapeCurveSteps]
+// segments, at most [maxShapeSegments] segments in all.
+func opsRings(ops []typeset.PathOp, at func(typeset.Point) wrapPt) [][]wrapPt {
 	var rings [][]wrapPt
 	var cur []wrapPt
 	n := 0
-	at := func(p typeset.Point) wrapPt {
-		return wrapPt{x: ref.X + float64(p.X*css.Pt), y: ref.Y + float64(p.Y*css.Pt)}
-	}
 	flush := func() {
 		if len(cur) > 1 {
 			rings = append(rings, cur)

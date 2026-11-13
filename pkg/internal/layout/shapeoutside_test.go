@@ -203,3 +203,31 @@ func TestShapeOutside_EachFragmentTakesItsOwnBox(t *testing.T) {
 		}
 	}
 }
+
+func TestShapeOutside_PolygonRoundsItsVertices(t *testing.T) {
+	// CSS Shapes 1, 3.1, polygon(): round <length> rounds each vertex of
+	// the float area as it rounds a clip-path's, a circle tangent to both
+	// sides, clamped to half of each side.
+	//
+	// # Corpus evidence
+	//
+	//   - probe, html: beside a 200px square float of
+	//     polygon(round 100px, ...), Chromium starts 20px lines at 160,
+	//     180, 192, 198 and 200.
+	sq := func(v float64) [2]css.Dimension { return [2]css.Dimension{pxlen(v), pxlen(v)} }
+	shape := &css.Shape{Kind: css.ShapePolygon, Round: px(100), Points: [][2]css.Dimension{
+		sq(0), {pxlen(200), pxlen(0)}, sq(200), {pxlen(0), pxlen(200)},
+	}}
+	kids := []*Node{el(sty(float(css.FloatLeft), width(200), height(200), shapeOutside(css.ShapeOutside{Set: true, Shape: shape, Box: css.GeoMargin})))}
+	for range 10 {
+		kids = append(kids, ib(400, 20))
+	}
+	rb := boxes(t, doc(el(sty(width(800), strutless), kids...)), page(900, 400))
+	got := lineStarts(kid(t, rb, 0, 0))
+	for i, y := range []float64{20, 40, 60, 80, 100} {
+		want := 100 + math.Sqrt(100*100-(100-y)*(100-y))
+		if i >= len(got) || math.Abs(got[i][0]-want) > 0.2 {
+			t.Errorf("line %d starts %v, want %v", i, got, want)
+		}
+	}
+}
