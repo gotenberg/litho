@@ -6,6 +6,7 @@ import (
 	"unicode"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // rubyCol is one column of a ruby container (CSS Ruby 1, 2.3): a base and
@@ -111,15 +112,20 @@ func (e *engine) rubyColumn(rb *box, base []*Node, ann *Node, ctx genCtx) *box {
 	cst.TextIndentHanging, cst.TextIndentEachLine = false, false
 	cst.WhiteSpace = nowrapOf(cst.WhiteSpace)
 	colSt := e.shareStyle(&cst)
+	ctx, tagged := e.rubyElem(base, ann, ctx)
 	col := e.newBox(nil, colSt, kindBlock, ctx)
 	col.inline, col.anon = true, true
 	r := &rubyCol{container: rb, breakAs: firstRune(base)}
 	col.ruby = r
 	bst := cst
 	bst.Display = css.Block
-	b := e.newBox(nil, e.shareStyle(&bst), kindBlock, ctx)
+	bctx := ctx
+	if tagged && !heldByRB(base) {
+		bctx = e.structChild(ctx, "RB")
+	}
+	b := e.newBox(nil, e.shareStyle(&bst), kindBlock, bctx)
 	b.anon, b.rubyLine = true, true
-	e.genChildren(b, base, ctx)
+	e.genChildren(b, base, bctx)
 	b.parent = col
 	r.base = b
 	col.kids = append(col.kids, b)
@@ -130,7 +136,15 @@ func (e *engine) rubyColumn(rb *box, base []*Node, ann *Node, ctx genCtx) *box {
 		ast.WhiteSpace = nowrapOf(ast.WhiteSpace)
 		a := e.newBox(ann, e.shareStyle(&ast), kindBlock, ctx)
 		a.rubyLine, a.rubyAnn = true, true
-		actx := e.enter(ann, a, ctx)
+		an := ann
+		if !tagged && ann.Role == "RT" {
+			// An annotation outside a Ruby element is a Span: ISO 32000-1,
+			// 14.8.4.4.2 puts an RT inside a Ruby alone.
+			own := *ann
+			own.Role = "Span"
+			an = &own
+		}
+		actx := e.enter(an, a, ctx)
 		actx.decos = ownDecos(a, a.st)
 		e.genChildren(a, ann.Children, actx)
 		a.parent = col
@@ -423,4 +437,43 @@ func (s *inlineState) rubyRoom(l *lineBox, room float64) {
 		f.bottom += grow
 		f.base += grow
 	}
+}
+
+// rubyElem returns the context a column of the base nodes base and the
+// annotation ann generates in: in a tagged document, a Ruby structure
+// element of its own when the column has both, since ISO 14289-2,
+// 8.2.5.23 gives a Ruby the children RB, RT or RB, RP, RT, RP alone, and
+// the context unchanged otherwise. tagged reports the Ruby made.
+func (e *engine) rubyElem(base []*Node, ann *Node, ctx genCtx) (genCtx, bool) {
+	if ctx.elem == nil || ann == nil || firstRune(base) == 0 || ctx.structDepth+2 >= maxStructDepth {
+		return ctx, false
+	}
+	return e.structChild(ctx, "Ruby"), true
+}
+
+// structChild returns ctx with a new structure element of role as its
+// element, the last kid of ctx's.
+func (e *engine) structChild(ctx genCtx, role string) genCtx {
+	el := &typeset.StructElem{Role: role}
+	ctx.elem.Kids = append(ctx.elem.Kids, el)
+	ctx.elem = el
+	ctx.structDepth++
+	return ctx
+}
+
+// heldByRB reports a base whose content RB elements hold: the nodes
+// that draw are elements of role RB alone.
+func heldByRB(base []*Node) bool {
+	held := false
+	for _, n := range base {
+		switch {
+		case n.Kind == Element && n.Role == "RB":
+			held = true
+		case n.Kind == Text && strings.Trim(n.Text, " \t\n\r\f") == "",
+			n.Kind == Element && n.Style != nil && n.Style.Display == css.DisplayNone:
+		default:
+			return false
+		}
+	}
+	return held
 }

@@ -229,3 +229,23 @@ func TestRubyNested(t *testing.T) {
 		t.Errorf("block %gpx tall, want 40", rect(b)[3])
 	}
 }
+
+// TestRubyTags locks the structure of a ruby (ISO 32000-1, 14.8.4.4.2):
+// a Ruby element for each base and its annotation, holding an RB, the
+// base's own when the markup gives one, and the RT; the annotation of an
+// empty base, and a base without one, are plain content; a hidden rp
+// makes no element; emphasis marks are artifacts.
+func TestRubyTags(t *testing.T) {
+	t.Parallel()
+	block, ruby, rt := rubyDoc(2)
+	hidden := inlineSty(func(s *css.Style) { s.Display = css.DisplayNone })
+	in := inlineSty()
+	r := el(ruby, txt(ruby, "A"), role("RP", el(hidden, txt(hidden, "("))), role("RT", el(rt, txt(rt, "a"))),
+		role("RB", el(in, txt(in, "B"))), role("RT", el(rt, txt(rt, "b"))),
+		role("RT", el(rt, txt(rt, "c"))), txt(ruby, "C"))
+	res := run(t, doc(role("P", el(block, r))), page(600, 300))
+	want := "Document[P[Ruby[RB# RT#] Ruby[RB# RT#] Span# Span#]]"
+	if got := shape(res, res.Structure); got != want {
+		t.Errorf("structure %s, want %s", got, want)
+	}
+}

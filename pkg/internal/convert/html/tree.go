@@ -47,6 +47,11 @@ var roles = map[atom.Atom]string{
 	atom.Span: "Span", atom.Em: "Span", atom.Strong: "Span", atom.B: "Span", atom.I: "Span",
 	atom.U: "Span", atom.Small: "Span", atom.Sub: "Span", atom.Sup: "Span", atom.Abbr: "Span",
 	atom.Mark: "Span",
+	// ISO 32000-1, 14.8.4.4.2, Table 338: the bases, annotations and
+	// punctuation of a ruby; the layout engine makes a Ruby of each pair
+	// of a base and its annotation, and an RB of a base written without
+	// rb.
+	atom.Rb: "RB", atom.Rt: "RT", atom.Rp: "RP",
 }
 
 // skipped are the elements that draw nothing in a static rendering, with
