@@ -816,8 +816,8 @@ func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int)
 	return pen
 }
 
-// setExtract records the extracted text of the characters from from on,
-// those of the run just added: ex when it has as many characters, else
+// setExtract records the extracted text of the characters starting at
+// from, those of the run just added: ex when it has as many characters, else
 // the characters themselves. total is the paragraph's character count.
 func (p *Paragraph) setExtract(from int, ex string, total int) {
 	valid := ex != "" && utf8.RuneCountInString(ex) == len(p.text)-from

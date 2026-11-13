@@ -24,6 +24,8 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte("p{a:(((((((((("))
 	f.Add([]byte(`@page { --x: "b"; @top-center { content: var(--x, "a") } }`))
 	f.Add([]byte("@page { background: linear-gradient(45deg, red 10%, 40%, blue) 0 0 / 50% auto } p { background: radial-gradient(circle 4px at left, red, blue 2px 3px) }"))
+	f.Add([]byte(fuzzFeatureValues))
+	f.Add([]byte(fuzzFeatureValues[:len(fuzzFeatureValues)/2]))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		fetch := func(context.Context, string) ([]byte, string, error) { return data, "", nil }
 		s, err := Parse(context.Background(), data, ParseOptions{BaseURL: "https://e.com/s.css", Fetch: fetch})
@@ -34,8 +36,16 @@ func FuzzParse(f *testing.F) {
 		r.pageOf(t, PageSelector{First: true, Left: true})
 		r.pageInOf(t, PageSelector{Name: "n", Right: true, Blank: true}, nil)
 		r.FontFaces()
+		r.FontFeatureValues("a b")
 	})
 }
+
+// fuzzFeatureValues seeds the @font-feature-values rule and the font
+// feature descriptors and properties.
+const fuzzFeatureValues = `@font-feature-values "A B", c { @styleset { x: 1 2 99; y: 100 } @character-variant { z: 3 2 } @swash { s: 1 } }
+@font-face { font-family: A; src: local(A); font-feature-settings: "liga" 0, "ss01"; size-adjust: 80%; ascent-override: normal }
+p { font-variant: small-caps styleset(x, y) character-variant(z) historical-forms tabular-nums jis04 ruby super emoji;
+  font-feature-settings: "smcp" 2; font-language-override: "TRK"; font-size-adjust: cap-height from-font }`
 
 func FuzzParseDeclarations(f *testing.F) {
 	f.Add("color: red !important; margin: 1px 2px; --x: { a }; width: var(--x, 3px); background: url(a) 50% / 10px")

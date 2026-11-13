@@ -5,9 +5,8 @@ import (
 	"math"
 	"strings"
 
-	"github.com/go-text/typesetting/language"
-
 	"github.com/go-text/typesetting/font/opentype"
+	"github.com/go-text/typesetting/language"
 	"github.com/go-text/typesetting/shaping"
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"

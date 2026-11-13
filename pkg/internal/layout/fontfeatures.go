@@ -64,6 +64,7 @@ func (e *engine) fontFeatures(st *css.Style, ts *text.Style) []text.Feature {
 		add(f.Tag, f.Value)
 	}
 	switch st.FontVariantPosition {
+	case css.PositionNormal:
 	case css.PositionSub:
 		add("subs", 1)
 	case css.PositionSuper:
@@ -102,10 +103,14 @@ var numericFeatures = []struct {
 	bit css.NumericVariant
 	tag string
 }{
-	{css.NumericLining, "lnum"}, {css.NumericOldstyle, "onum"},
-	{css.NumericProportional, "pnum"}, {css.NumericTabular, "tnum"},
-	{css.NumericStackedFractions, "afrc"}, {css.NumericDiagonalFractions, "frac"},
-	{css.NumericOrdinal, "ordn"}, {css.NumericSlashedZero, "zero"},
+	{css.NumericLining, "lnum"},
+	{css.NumericOldstyle, "onum"},
+	{css.NumericProportional, "pnum"},
+	{css.NumericTabular, "tnum"},
+	{css.NumericStackedFractions, "afrc"},
+	{css.NumericDiagonalFractions, "frac"},
+	{css.NumericOrdinal, "ordn"},
+	{css.NumericSlashedZero, "zero"},
 }
 
 // appendNumeric appends the features of font-variant-numeric v.
@@ -137,9 +142,8 @@ const (
 type capsSynthesis uint8
 
 const (
-	synthNone capsSynthesis = iota
 	// synthLower draws the lowercase letters as small capitals.
-	synthLower
+	synthLower capsSynthesis = iota + 1
 	// synthUpper draws the uppercase letters, and every other character
 	// that does not change case, as small capitals.
 	synthUpper

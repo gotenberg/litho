@@ -4,14 +4,13 @@ import (
 	"math"
 	"slices"
 
-	"golang.org/x/image/math/fixed"
-
-	"github.com/gotenberg/litho/pkg/internal/numeric"
-
 	"github.com/go-text/typesetting/font"
 	"github.com/go-text/typesetting/font/opentype"
 	"github.com/go-text/typesetting/language"
 	"github.com/go-text/typesetting/shaping"
+	"golang.org/x/image/math/fixed"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
 // HasSubstitution reports whether the face style matches first ([Fonts.Match])
@@ -78,7 +77,7 @@ func gsubHasFeature(gsub *font.GSUB, script language.Script, tag opentype.Tag) b
 // the OpenType script tag registry names (hb_ot_old_tag_from_script).
 // Common and inherited text takes Latin's.
 func scriptTag(script language.Script) opentype.Tag {
-	switch script {
+	switch script { //nolint:exhaustive // every other script takes its ISO 15924 code below
 	case 0, language.Common, language.Inherited, language.Unknown:
 		return tagLatn
 	case language.Hiragana:
@@ -172,6 +171,7 @@ func faceAspect(fc *Face, ft *font.Face, metric AdjustMetric) float64 {
 		return 0
 	}
 	switch metric {
+	case AdjustExHeight:
 	case AdjustCapHeight:
 		if fc.capHeight > 0 {
 			return fc.capHeight / fc.upem

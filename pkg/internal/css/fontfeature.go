@@ -668,7 +668,7 @@ func (a *Alternates) Resolve(v *FontFeatureValues) []FeatureSetting {
 // numberedTag returns the tag of prefix and the two digits of n, from 1
 // to 99: ss01 to ss99, cv01 to cv99.
 func numberedTag(prefix string, n int) string {
-	return prefix + string(rune('0'+n/10)) + string(rune('0'+n%10))
+	return prefix + string([]byte{byte('0' + n/10), byte('0' + n%10)}) //nolint:gosec // n is from 1 to 99, checked by the callers
 }
 
 // featureValueBlocks are the feature type blocks of @font-feature-values
