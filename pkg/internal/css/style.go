@@ -981,6 +981,11 @@ type Style struct {
 	OverflowClipMargin ClipMargin
 	// Opacity runs from 0 to 1 (CSS Color 3, 3.2).
 	Opacity float64
+	// MixBlendMode is how the element composites with its stacking
+	// context's backdrop, and Isolation whether it forms an isolated
+	// group (CSS Compositing 1, 3.2 and 3.3).
+	MixBlendMode BlendMode
+	Isolation    Isolation
 	// ZIndex is the stack level of a positioned box (CSS 2.1, 9.9.1).
 	ZIndex ZIndex
 	// Transform is the 2D transform list, nil for none (CSS Transforms 1,
@@ -1044,6 +1049,9 @@ type Style struct {
 	BackgroundSize     BackgroundSize
 	BackgroundOrigin   BoxEdge
 	BackgroundClip     BoxEdge
+	// BackgroundBlendMode is how the image composites with the
+	// background colour (CSS Compositing 1, 3.4).
+	BackgroundBlendMode BlendMode
 	// BackgroundAttachment fixes the background to the viewport, the
 	// element or its contents (CSS Backgrounds 3, 3.5).
 	BackgroundAttachment Attachment

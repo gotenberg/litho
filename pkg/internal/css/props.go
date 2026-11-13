@@ -211,6 +211,9 @@ const (
 	pFontSynthesisSmallCaps
 	pFontSizeAdjust
 	pInitialLetter
+	pMixBlendMode
+	pBgBlendMode
+	pIsolation
 	numProps
 )
 
@@ -977,6 +980,9 @@ func init() {
 		props[id] = def
 	}
 	for id, def := range multicolProps() {
+		props[id] = def
+	}
+	for id, def := range compositingProps() {
 		props[id] = def
 	}
 	longhandByName = map[string]propID{}

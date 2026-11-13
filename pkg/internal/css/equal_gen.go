@@ -33,6 +33,12 @@ func equalStyle(a, b *Style) bool {
 	if math.Float64bits(a.Opacity) != math.Float64bits(b.Opacity) {
 		return false
 	}
+	if a.MixBlendMode != b.MixBlendMode {
+		return false
+	}
+	if a.Isolation != b.Isolation {
+		return false
+	}
 	if !equalZIndex(&a.ZIndex, &b.ZIndex) {
 		return false
 	}
@@ -167,6 +173,9 @@ func equalStyle(a, b *Style) bool {
 		return false
 	}
 	if a.BackgroundClip != b.BackgroundClip {
+		return false
+	}
+	if a.BackgroundBlendMode != b.BackgroundBlendMode {
 		return false
 	}
 	if a.BackgroundAttachment != b.BackgroundAttachment {
@@ -684,6 +693,8 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.BoxSizing))
 	h = hashClipMargin(h, &x.OverflowClipMargin)
 	h = mix(h, math.Float64bits(x.Opacity))
+	h = mix(h, uint64(x.MixBlendMode))
+	h = mix(h, uint64(x.Isolation))
 	h = hashZIndex(h, &x.ZIndex)
 	h = mixBool(h, x.Transform == nil)
 	h = mix(h, uint64(len(x.Transform)))
@@ -746,6 +757,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = hashBackgroundSize(h, &x.BackgroundSize)
 	h = mix(h, uint64(x.BackgroundOrigin))
 	h = mix(h, uint64(x.BackgroundClip))
+	h = mix(h, uint64(x.BackgroundBlendMode))
 	h = mix(h, uint64(x.BackgroundAttachment))
 	h = mixBool(h, x.BoxShadow == nil)
 	h = mix(h, uint64(len(x.BoxShadow)))
