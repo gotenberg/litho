@@ -3,6 +3,7 @@ package css
 import (
 	"context"
 	"math"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -131,6 +132,45 @@ func TestComputeChargesAStyleOnce(t *testing.T) {
 	if one, many := charged(1), charged(500); one != many {
 		t.Errorf("500 paragraphs styled alike hold %d bytes of styles, one %d", many, one)
 	}
+}
+
+func TestComputedReportsTheStylesItCharged(t *testing.T) {
+	c := compute(t, `<p id=a>x</p><p id=b>y</p>`, `#b { color: red }`)
+	for _, id := range []string{"a", "b"} {
+		if st := c.of(id); !c.c.Charged(st) {
+			t.Errorf("the style of #%s is not reported charged", id)
+		}
+	}
+	other := *c.of("a")
+	if c.c.Charged(&other) {
+		t.Error("a copy of a computed style is reported charged")
+	}
+	if c.c.Charged(nil) || (*Computed)(nil).Charged(c.of("a")) {
+		t.Error("a nil style or a nil Computed reports a charge")
+	}
+}
+
+// TestStyleCostCoversAStyle holds [limits.StyleCost] to what a distinct
+// style shared through a table holds on the heap.
+func TestStyleCostCoversAStyle(t *testing.T) {
+	const n = 20_000
+	tb := NewStyles()
+	keep := make([]*Style, 0, n)
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	for i := range n {
+		st := *Initial()
+		st.FontSize = float64(i + 1)
+		keep = append(keep, tb.ShareCopy(&st))
+	}
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	per := (int64(after.HeapAlloc) - int64(before.HeapAlloc)) / n
+	if per > limits.StyleCost {
+		t.Errorf("a distinct style holds %d bytes, past limits.StyleCost, %d", per, limits.StyleCost)
+	}
+	runtime.KeepAlive(keep)
 }
 
 func TestStylesShareCopyNeverHoldsItsArgument(t *testing.T) {

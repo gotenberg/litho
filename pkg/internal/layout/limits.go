@@ -9,11 +9,11 @@ import "github.com/gotenberg/litho/pkg/internal/limits"
 const MaxBoxes = 1 << 20
 
 // boxCost is what one generated box costs the conversion's memory budget:
-// the box, 584 bytes on a 64-bit platform, and its share of what the
+// the box, 632 bytes on a 64-bit platform, and its share of what the
 // layout builds around it, its line boxes and the fragments it paints. The
 // style it holds is charged apart, once whatever the number of boxes
-// holding it ([styleCost]). A layout pass holds its boxes until the next
-// pass or the end of the layout, which then release them.
+// holding it ([limits.StyleCost]). A layout pass holds its boxes until the
+// next pass or the end of the layout, which then release them.
 //
 // # Corpus evidence
 //
@@ -24,12 +24,6 @@ const MaxBoxes = 1 << 20
 //     distinct styles: the Go heap peaks at 2.2 times the account's peak
 //     at this cost, 2.6 times at 1 KiB a box.
 const boxCost = 4 << 10
-
-// styleCost is what one distinct style the boxes of a layout hold costs
-// the conversion's memory budget: the [css.Style], 3,480 bytes on a 64-bit
-// platform, and the entries that share it. Boxes styled alike hold one
-// style, charged once.
-const styleCost = 4 << 10
 
 // paraRuneCost is what one character of a shaped paragraph costs the
 // conversion's memory budget: its shaped glyphs, advances, breaks and

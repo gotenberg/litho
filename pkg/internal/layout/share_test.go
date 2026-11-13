@@ -89,8 +89,24 @@ func TestLayoutChargesAStyleOnce(t *testing.T) {
 		return b.Peak()
 	}
 	plain, shared := peak(false), peak(true)
-	if shared >= plain-200*styleCost {
+	if shared >= plain-200*limits.StyleCost {
 		t.Errorf("the account peaks at %d bytes with shared styles, %d without", shared, plain)
+	}
+}
+
+func TestLayoutChargesNoStyleAnotherStageCharged(t *testing.T) {
+	peak := func(charged func(*css.Style) bool) int64 {
+		ctx, b, done := limits.WithBudget(context.Background(), limits.Limits{})
+		defer done()
+		if _, err := Layout(ctx, paragraphs(200), ahem(t), Options{Page: page(100, 200), ChargedStyle: charged}); err != nil {
+			t.Fatalf("Layout: %v", err)
+		}
+		return b.Peak()
+	}
+	all := peak(nil)
+	none := peak(func(*css.Style) bool { return true })
+	if all-none < 200*limits.StyleCost {
+		t.Errorf("the account peaks at %d bytes charging every style, %d charging none the stage charged", all, none)
 	}
 }
 

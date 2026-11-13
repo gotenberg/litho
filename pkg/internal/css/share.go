@@ -1,6 +1,9 @@
 package css
 
-import "sync"
+import (
+	"slices"
+	"sync"
+)
 
 //go:generate go run ../../../cmd/gen-style-equal
 
@@ -152,6 +155,20 @@ func (t *Styles) Intact() bool {
 		}
 	}
 	return true
+}
+
+// holds reports whether t holds st itself, not only a style equal to it.
+func (t *Styles) holds(st *Style) bool {
+	if t == nil || st == nil {
+		return false
+	}
+	h := t.hash(st)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.byHash[h] == st {
+		return true
+	}
+	return slices.Contains(t.more[h], st)
 }
 
 // Len returns the number of distinct styles t holds.

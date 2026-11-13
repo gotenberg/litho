@@ -316,6 +316,12 @@ type Options struct {
 	// FirstLine styles the first formatted line of the block containers
 	// that have a ::first-line (CSS Pseudo 4, 2.1); nil styles none.
 	FirstLine FirstLineStyler
+	// ChargedStyle, when not nil, reports whether the conversion's memory
+	// budget accounts a style already, for as long as the layout lives:
+	// a box that holds such a style charges nothing for it. nil reports
+	// none, and the layout charges every distinct style its boxes hold
+	// ([limits.StyleCost]). Layout calls it from its own goroutine.
+	ChargedStyle func(st *css.Style) bool
 	// release is when the layout releases the shaped text of its inline
 	// formatting contexts, for a test that compares the policies.
 	release releasePolicy

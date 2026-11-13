@@ -355,6 +355,9 @@ type Computed struct {
 	styles map[*html.Node]*Style
 	pseudo map[pseudoKey]*Style
 	warns  []Warning
+	// table shares the styles the cascade computed, every one of them
+	// charged to the conversion's budget when adopted.
+	table *Styles
 	// re cascades the typographic pseudo-elements, and the boxes on a
 	// first line, again under another parent style, nil when no element
 	// has a ::first-letter or a ::first-line.
@@ -547,6 +550,18 @@ var firstLineProps = func() [numProps]bool {
 // slice is a copy.
 func (c *Computed) Warnings() []Warning { return append([]Warning(nil), c.warns...) }
 
+// Charged reports whether st is a style the cascade computed and charged
+// to the conversion's memory budget ([limits.StyleCost]), restyles
+// included: the code that holds st holds it for less than the document
+// tree lives, so it charges nothing more for it. A nil c or st reports
+// false.
+func (c *Computed) Charged(st *Style) bool {
+	if c == nil {
+		return false
+	}
+	return c.table.holds(st)
+}
+
 // initialStyle is the shared computed initial style.
 var initialStyle = Initial()
 
@@ -700,7 +715,7 @@ func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOpt
 		cs.warns.add(w)
 	}
 	if root == nil {
-		return &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result()}, nil
+		return &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result(), table: cs.styles}, nil
 	}
 	for a := root.Parent; isElement(a); a = a.Parent {
 		cs.anc.push(a)
@@ -749,7 +764,7 @@ func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOpt
 	// The styles a restyle computes inherit from styles the caller
 	// gives, which no shared table holds: none is reused.
 	cs.reuse = reuseCache{}
-	c := &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result()}
+	c := &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result(), table: cs.styles}
 	if cs.letterCands != nil || cs.lineCands != nil {
 		c.re = &restyler{cs: cs, letters: cs.letterCands, lines: cs.lineCands}
 	}
@@ -1105,8 +1120,11 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 	if adopted {
 		// A refusal sticks and cancels the conversion, which the
 		// cascade's next context check stops at: a style has no error
-		// to return. A style equal to one held costs nothing more.
-		cs.mem.Take(1, styleCost, "computed styles")
+		// to return. A style equal to one held costs nothing more. The
+		// style lives as long as the document tree, and the layout
+		// charges nothing more for the boxes that hold it
+		// ([Computed.Charged]).
+		cs.mem.Take(1, limits.StyleCost, "computed styles")
 	}
 	return shared
 }

@@ -404,6 +404,9 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 			MaskSource:       b.maskSource,
 			MaxPages:         o.MaxPages,
 			Logger:           o.Logger,
+			// The cascade charged the styles it computed for as long as
+			// the document tree lives, which outlives the layout.
+			ChargedStyle: computed.Charged,
 		},
 		meta:      scan.meta,
 		headings:  b.headings,

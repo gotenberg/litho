@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // shareCheckEvery is how many nodes [ShareStyles] visits between two
@@ -58,7 +59,8 @@ func ShareStyles(ctx context.Context, root *Node, tb *css.Styles) {
 // sharedStyles is what an engine knows of the styles its boxes hold: the
 // table sharing the styles it makes for boxes of its own, the anonymous
 // block and marker styles it made from each parent style, and the styles
-// it charged the conversion's budget for.
+// its boxes hold whose cost it accounted: charged to the conversion's
+// budget, or charged by another stage.
 type sharedStyles struct {
 	table   *css.Styles
 	anon    map[*css.Style]*css.Style
@@ -67,7 +69,8 @@ type sharedStyles struct {
 }
 
 // holdStyle charges the conversion's budget for st, a style a box of the
-// engine holds, once whatever the number of boxes holding it.
+// engine holds, once whatever the number of boxes holding it, unless
+// [Options.ChargedStyle] reports that another stage charged it.
 func (e *engine) holdStyle(st *css.Style) {
 	if st == nil {
 		return
@@ -79,7 +82,10 @@ func (e *engine) holdStyle(st *css.Style) {
 		e.shared.charged = map[*css.Style]struct{}{}
 	}
 	e.shared.charged[st] = struct{}{}
-	e.charge(styleCost, "computed styles")
+	if e.opts.ChargedStyle != nil && e.opts.ChargedStyle(st) {
+		return
+	}
+	e.charge(limits.StyleCost, "computed styles")
 }
 
 // shareStyle returns the style the engine holds equal to st, a style it

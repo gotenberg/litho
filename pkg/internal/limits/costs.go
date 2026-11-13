@@ -31,6 +31,19 @@ const XMLElementCost = 256
 //     glyphs whose runs hold 45 MiB of live heap, 43 bytes a glyph.
 const GlyphCost = 48
 
+// StyleCost is what one distinct computed style costs: the css.Style,
+// 4,960 bytes on a 64-bit platform in an allocation of 5,376, and the
+// entry of the table that shares it. Elements and boxes styled alike share
+// one style, which is charged once, by the stage that adopts it: the
+// cascade for an HTML or Markdown element's style, the layout for a style
+// a converter or the layout itself builds.
+//
+// # Corpus evidence
+//
+//   - probe, css: 20,000 distinct styles shared through one table hold
+//     5,412 bytes of live heap a style (TestStyleCostCoversAStyle).
+const StyleCost = 5632
+
 // DecodedPixelCost is what one decoded pixel of a picture costs while the
 // picture lives in the layouts most colour models decode to: four bytes,
 // RGBA, NRGBA and CMYK. [PixelCost] gives every model its own.
