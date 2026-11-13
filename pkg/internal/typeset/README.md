@@ -65,8 +65,9 @@ encodes:
 - A `Fragment` is a `Text`, an `Image`, a `Path` or a `Group`. Paint order
   is slice order.
 - A `Path` fills with a flat colour or a `Shading`, axial or radial, whose
-  stops the backend writes as a stitched PDF function; translucent stops
-  paint through a luminosity soft mask.
+  stops the backend writes as a stitched PDF function, or conic, written
+  as a function-based shading whose calculator function takes the angle;
+  translucent stops paint through a luminosity soft mask.
 - A `Group` paints its content under a transform, a clip, an opacity and
   a blend mode (the sixteen of ISO 32000-1, 11.3.5), which apply to each
   fragment on its own. A group with `Transparency` is one transparency
@@ -234,10 +235,10 @@ and the OpenDocument formats keep LibreOffice's.
 `convert/html` parses with x/net/html, styles with `css` and lays out with
 `layout`: CSS 2.1 visual formatting, flexbox, grid (CSS Grid 1 without
 subgrid and masonry), multi-column layout with spanners and fragmentation,
-positioning, transforms, gradients, shadows, generated content, BiDi and
-CJK line breaking, and the paged media of CSS Page 3 and CSS GCPM: named
-pages, page-margin boxes, footnotes, leaders, running elements, string
-sets, bleed and crop marks. It prints as Chromium prints through
+positioning, transforms, linear, radial and conic gradients, shadows,
+generated content, BiDi and CJK line breaking, and the paged media of CSS
+Page 3 and CSS GCPM: named pages, page-margin boxes, footnotes, leaders,
+running elements, string sets, bleed and crop marks. It prints as Chromium prints through
 Gotenberg's route where the two overlap: the paper against the `@page`
 size, the print scale and the shrink-to-fit of wide content, the single
 page measured on a screen, page ranges, headers and footers laid out on
