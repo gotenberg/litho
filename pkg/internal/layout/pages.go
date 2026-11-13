@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // checkPage reports a page box whose size or margins [Layout] cannot lay
@@ -172,14 +173,18 @@ func (e *engine) overflowRight(rb *box) float64 {
 		}
 		right = max(right, clamp(edge))
 	}
-	// Each box counts where its relative offsets and its ancestors' put
-	// it (CSS Overflow 3, 2.2; CSS Position 3, 3.1: a relatively
+	// Each box counts where its relative offsets and transforms and its
+	// ancestors' put it (CSS Overflow 3, 2.2: a transformed box adds its
+	// transformed border box; CSS Position 3, 3.1: a relatively
 	// positioned box moves with its overflow), as Chromium measures it.
 	type entry struct {
-		b  *box
-		dx float64
+		b *box
+		m typeset.Matrix
 	}
-	stack := []entry{{b: rb}}
+	countAt := func(m typeset.Matrix, x, y float64) {
+		count(m.A*x+m.C*y+m.E, m.B*x+m.D*y+m.F)
+	}
+	stack := []entry{{b: rb, m: typeset.Identity}}
 	for len(stack) > 0 {
 		en := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
@@ -190,14 +195,26 @@ func (e *engine) overflowRight(rb *box) float64 {
 			// is the viewport's).
 			continue
 		}
-		dx := en.dx
+		m := en.m
 		if b.abs {
-			dx, _ = ancestorOffset(b)
+			ax, ay := ancestorOffset(b)
+			m = typeset.Matrix{A: 1, D: 1, E: ax, F: ay}
 		}
-		ox, _ := offset(b)
-		dx += ox
-		if b.kind == kindBlock || b.kind == kindReplaced {
-			count(b.x+dx+b.borderW(), b.y)
+		ox, oy := offset(b)
+		m = mul(m, typeset.Matrix{A: 1, D: 1, E: ox, F: oy})
+		if t, ok, _ := transformOf(b, typeset.Rect{X: b.x, Y: b.y, Width: b.borderW(), Height: b.borderH()}); ok {
+			m = mul(m, t)
+		}
+		if (b.kind == kindBlock || b.kind == kindReplaced) && (b.borderW() > 0 && b.borderH() > 0 || m == typeset.Identity) {
+			// An empty border box adds no area where it is moved, as
+			// Chromium unites the overflow rectangles.
+			x1, y1 := b.x+b.borderW(), b.y+b.borderH()
+			countAt(m, x1, b.y)
+			if m.B != 0 || m.C != 0 {
+				countAt(m, b.x, b.y)
+				countAt(m, b.x, y1)
+				countAt(m, x1, y1)
+			}
 		}
 		if b.kind == kindBlock && b.parent != nil && b.st.Overflow == css.OverflowHidden && b != vp {
 			// The box clips its content: its border box alone counts.
@@ -205,14 +222,16 @@ func (e *engine) overflowRight(rb *box) float64 {
 		}
 		for _, l := range b.lines {
 			for _, it := range l.items {
-				count(l.x+dx+it.x+it.w, l.y)
+				countAt(m, l.x+it.x+it.w, l.y)
+				countAt(m, l.x+it.x+it.w, l.y+l.h)
 			}
 			for _, f := range l.frags {
-				count(l.x+dx+f.x1, l.y)
+				countAt(m, l.x+f.x1, l.y)
+				countAt(m, l.x+f.x1, l.y+l.h)
 			}
 		}
 		for _, k := range b.kids {
-			stack = append(stack, entry{b: k, dx: dx})
+			stack = append(stack, entry{b: k, m: m})
 		}
 	}
 	return right

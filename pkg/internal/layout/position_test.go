@@ -520,3 +520,31 @@ func TestAbs_SplitInlineContainingBlockStartsAtItsFirstPiece(t *testing.T) {
 		t.Errorf("box at y %v, want 60, the first piece's line", got[1])
 	}
 }
+
+// TestTransform_OverflowAtThePaintedBox locks that a transformed box
+// widens the content by its transformed border box (CSS Overflow 3, 2.2),
+// and that a moved box of no area widens nothing, as Chromium unites
+// the overflow rectangles.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) prints a full
+//     width block moved 200px right by translate() or by left: 200px at
+//     0.76 of its size; css-display/run-in/run-in-contains-relpos-block-001
+//     (an empty block moved right) at full size.
+func TestTransform_OverflowAtThePaintedBox(t *testing.T) {
+	t.Parallel()
+	moved := func(h float64) *Node {
+		return el(sty(width(6), height(h), func(s *css.Style) {
+			s.Transform = []css.TransformFunc{{Kind: css.TransformTranslate, X: css.Pts(px(3)), Y: css.Pts(0)}}
+		}))
+	}
+	for _, tt := range []struct {
+		h, want float64
+	}{{1, 9}, {0, 6}} {
+		res := run(t, doc(moved(tt.h)), page(6, 2))
+		if !near(res.ContentWidth, px(tt.want)) {
+			t.Errorf("height %v: content width %v, want %v", tt.h, res.ContentWidth, px(tt.want))
+		}
+	}
+}

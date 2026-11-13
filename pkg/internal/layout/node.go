@@ -425,9 +425,11 @@ type Result struct {
 	Warnings []typeset.Warning
 	// ContentWidth is the right edge of the flow's scrollable overflow,
 	// in points from the left edge of the first page's area (CSS Overflow
-	// 3, 2.2): the border boxes and line contents of every box, those
-	// inside a box that clips its overflow left out, what a page of
-	// another width holds scaled to the first page's area width. It is at
+	// 3, 2.2): the border boxes and line contents of every box where its
+	// relative offsets and transforms put them, an empty border box
+	// moved by them adding nothing, those inside a box that clips its
+	// overflow left out, what a page of another width holds scaled to the
+	// first page's area width. It is at
 	// least zero and exceeds the area's width when content overflows its
 	// page, which a converter shrinks to fit as browsers print.
 	ContentWidth float64
