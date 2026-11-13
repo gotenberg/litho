@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T23:16:31Z",
+  "captured_at": "2026-11-13T23:28:11Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -117072,8 +117072,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 4581,
-          "mismatched": 612,
+          "matched": 4587,
+          "mismatched": 606,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -118989,7 +118989,7 @@
             "css/css-break/box-decoration-break-clone-011.html": "fail",
             "css/css-break/box-decoration-break-clone-split-inline.html": "pass",
             "css/css-break/br-clear-all.html": "pass",
-            "css/css-break/break-at-end-container-edge-004.html": "fail",
+            "css/css-break/break-at-end-container-edge-004.html": "pass",
             "css/css-break/break-between-avoid-001.html": "pass",
             "css/css-break/break-between-avoid-002.html": "pass",
             "css/css-break/break-between-avoid-004.html": "pass",
@@ -119036,7 +119036,7 @@
             "css/css-break/overflowing-block-002-print.html": "pass",
             "css/css-break/relpos-inline.html": "pass",
             "css/css-break/root-margin-001-print.html": "pass",
-            "css/css-break/tall-line-in-short-fragmentainer-001.html": "fail",
+            "css/css-break/tall-line-in-short-fragmentainer-001.html": "pass",
             "css/css-break/trailing-child-margin-000.html": "pass",
             "css/css-break/trailing-child-margin-001.html": "pass",
             "css/css-break/transform-009.html": "fail",
@@ -120368,18 +120368,18 @@
             "css/css-inline/text-box-trim/text-box-trim-line-clamp-auto-block-in-inline-001.html": "fail",
             "css/css-inline/text-box-trim/text-box-trim-line-clamp-auto-block-in-inline-002.html": "fail",
             "css/css-inline/text-box-trim/text-box-trim-list-001.html": "pass",
-            "css/css-inline/text-box-trim/text-box-trim-multicol-001.html": "fail",
+            "css/css-inline/text-box-trim/text-box-trim-multicol-001.html": "pass",
             "css/css-inline/text-box-trim/text-box-trim-multicol-002.html": "fail",
             "css/css-inline/text-box-trim/text-box-trim-multicol-003.html": "fail",
             "css/css-inline/text-box-trim/text-box-trim-multicol-004.html": "fail",
             "css/css-inline/text-box-trim/text-box-trim-multicol-005.html": "pass",
             "css/css-inline/text-box-trim/text-box-trim-multicol-006.html": "fail",
-            "css/css-inline/text-box-trim/text-box-trim-multicol-007.html": "fail",
+            "css/css-inline/text-box-trim/text-box-trim-multicol-007.html": "pass",
             "css/css-inline/text-box-trim/text-box-trim-multicol-008.html": "fail",
             "css/css-inline/text-box-trim/text-box-trim-multicol-009.html": "pass",
             "css/css-inline/text-box-trim/text-box-trim-multicol-010.html": "pass",
-            "css/css-inline/text-box-trim/text-box-trim-multicol-011.html": "fail",
-            "css/css-inline/text-box-trim/text-box-trim-multicol-012.html": "fail",
+            "css/css-inline/text-box-trim/text-box-trim-multicol-011.html": "pass",
+            "css/css-inline/text-box-trim/text-box-trim-multicol-012.html": "pass",
             "css/css-inline/text-box-trim/text-box-trim-multicol-014.html": "fail",
             "css/css-inline/text-box-trim/text-box-trim-pseudo-before-after-001.html": "pass",
             "css/css-inline/text-box-trim/text-box-trim-pseudo-before-after-002.html": "pass",
