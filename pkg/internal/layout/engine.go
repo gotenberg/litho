@@ -9,6 +9,7 @@ import (
 	gofont "github.com/go-text/typesetting/font"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -135,6 +136,9 @@ type engine struct {
 	// reshaped counts the inline contents shaped again after their
 	// release (release.go).
 	reshaped int
+	// filterPixels counts the pixels of the filtered elements drawn,
+	// against effect.MaxPagePixels.
+	filterPixels effect.Page
 }
 
 // charge charges the conversion's budget n bytes for what, failing the

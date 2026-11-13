@@ -203,11 +203,7 @@ const boxFactor = 1.8799712059732503
 //     included) and a Gaussian of half the radius within 1.71, 1.53 and
 //     1.74; 4px fits both within 1.3.
 func shadowSigma(blur float64) float64 {
-	d := skiaBoxWidth(float64(blur/2) * chromiumScale)
-	if d < 2 {
-		return 0
-	}
-	return math.Sqrt(boxVariance(d)) / chromiumScale
+	return chromiumSigma(blur / 2)
 }
 
 // skiaBoxWidth returns the width of the three box blurs Filter Effects 1,

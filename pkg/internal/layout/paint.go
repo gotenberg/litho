@@ -34,6 +34,14 @@ type ditem struct {
 	blend   typeset.BlendMode
 	isolate bool
 	mask    *typeset.SoftMask
+	// filter is the filter list the group's content is drawn through as
+	// one image, nil for none; flow reports that no group around it
+	// moves it, so its content is in flow coordinates.
+	filter []css.Filter
+	flow   bool
+	// zoom is how much the groups around a filter group enlarge its
+	// content on the page, 1 for none: its image is drawn that much finer.
+	zoom float64
 	// fixed reports the group of a fixed box: its content is in the
 	// coordinates of the first page and paints on every page (CSS 2.1,
 	// 9.6.1).
@@ -518,6 +526,12 @@ func (p *painter) unit(b *box, own bool) {
 			push(&ditem{group: true, opacity: 1, clip: c})
 		}
 	}
+	if b.parent != nil && len(b.st.Filter) > 0 {
+		// The filter applies to the element's rendering before its clip,
+		// mask and opacity (Filter Effects 1, 6; CSS Masking 1, 4): the
+		// innermost group.
+		push(&ditem{group: true, opacity: 1, filter: b.st.Filter, flow: p.inFlow(), zoom: p.zoom()})
+	}
 	if p.clips(b) && pushed == 0 {
 		// The box's own clip is relative to the frame of its context: a
 		// frame of its own keeps the chains short.
@@ -577,6 +591,32 @@ func (p *painter) unit(b *box, own bool) {
 	for _, c := range pos {
 		p.lifted(c)
 	}
+}
+
+// inFlow reports that no open group moves its content off flow
+// coordinates: none is transformed or fixed.
+func (p *painter) inFlow() bool {
+	for _, f := range p.frames {
+		if c := f.container; c.transform != nil || c.fixed {
+			return false
+		}
+	}
+	return true
+}
+
+// zoom returns how much the open groups' transforms enlarge their
+// content: the product of each one's larger axis scale, within [1/64, 64].
+func (p *painter) zoom() float64 {
+	z := 1.0
+	for _, f := range p.frames {
+		if m := f.container.transform; m != nil {
+			z = float64(z * max(math.Hypot(m.A, m.B), math.Hypot(m.C, m.D)))
+		}
+	}
+	if !(z > 0) {
+		return 1
+	}
+	return min(max(z, 1.0/64), 64)
 }
 
 // stack sorts the layered descendants of a stacking context into its
