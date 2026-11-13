@@ -614,7 +614,27 @@ func (e *engine) baseSize(fd *flexData, it *fitem, ax flexAxes, cb, pcb cblock, 
 		}
 	case css.Auto:
 		base, ok = mainSpec(mainProp(sst, ax), pcb)
-	case css.FlexContent, css.None, css.Normal, css.Number, css.MinContent, css.MaxContent, css.FitContent, css.Stretch:
+	case css.MinContent, css.FitContent, css.Stretch:
+		if ax.row && sized == k {
+			// The sizing keywords of flex-basis size the item's content
+			// box as they would its width (CSS Flexbox 1, 7.2.3; CSS
+			// Sizing 3, 3.1): its min-content width, its fit-content
+			// width in the line's room, or that room.
+			lo, hi := e.contentWidths(k)
+			room := max(innerMain-it.mm[0]-it.mm[1]-it.mEdges, 0)
+			switch st.FlexBasis.Kind { //nolint:exhaustive // the three keywords of the case
+			case css.MinContent:
+				base = lo
+			case css.FitContent:
+				base = min(hi, max(lo, room))
+			default:
+				base = room
+			}
+			ok = true
+		} else if st.FlexBasis.Kind == css.Stretch && mainDef {
+			base, ok = max(innerMain-it.mm[0]-it.mm[1]-it.mEdges, 0), true
+		}
+	case css.FlexContent, css.None, css.Normal, css.Number, css.MaxContent:
 	}
 	if !ok {
 		base = contentSize()

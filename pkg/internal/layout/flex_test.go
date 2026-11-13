@@ -422,3 +422,40 @@ func TestFlexDraw_Stretch(t *testing.T) {
 		GG____R
 		GG_____`)
 }
+
+// TestFlex_BasisKeywords holds the sizing keywords of flex-basis to CSS
+// Flexbox 1, 7.2.3 and CSS Sizing 3, 3.1: min-content, max-content and
+// fit-content size the content box as width would, and stretch takes the
+// line's room.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) gives an item
+//     of flex-shrink 0 its min-content width for min-content, its
+//     max-content width for max-content and for fit-content in a wide
+//     container, the container's width for fit-content in a narrow one
+//     and for stretch.
+func TestFlex_BasisKeywords(t *testing.T) {
+	basis := func(k css.DimKind) func(*css.Style) {
+		return func(s *css.Style) { s.FlexBasis, s.FlexShrink = css.Dimension{Kind: k}, 0 }
+	}
+	tests := []struct {
+		name  string
+		k     css.DimKind
+		cw, w float64
+	}{
+		{"min-content", css.MinContent, 400, 80},
+		{"max-content", css.MaxContent, 400, 160},
+		{"fit-content in room", css.FitContent, 400, 160},
+		{"fit-content narrowed", css.FitContent, 100, 100},
+		{"stretch", css.Stretch, 400, 400},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rb := boxes(t, doc(el(flexBox(width(tt.cw)), el(sty(basis(tt.k)), txt(sty(), "aaaa bbbbbbbb cc")))), page(800, 800))
+			if got := rect(kid(t, rb, 0, 0, 0)); got[2] != tt.w {
+				t.Errorf("item %v wide, want %v", got[2], tt.w)
+			}
+		})
+	}
+}
