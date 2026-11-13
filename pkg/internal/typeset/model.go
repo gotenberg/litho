@@ -149,6 +149,12 @@ type Text struct {
 	// Parent is the structure element the run belongs to, nil for an
 	// artifact or an untagged document.
 	Parent *StructElem
+	// Order places the run among the content of Parent on its page in
+	// logical order, which a converter that paints out of that order
+	// sets: an element's content on a page is read in increasing Order,
+	// in paint order among equals (ISO 32000-1, 14.8.2.3.1). Zero
+	// everywhere keeps paint order.
+	Order int
 	// Stroke, when positive, also strokes the glyph outlines in the run's
 	// colour with a line of this width in points, centred on the outline:
 	// text rendering mode 2, fill then stroke (ISO 32000-1, 9.3.6). A
@@ -233,6 +239,12 @@ type Image struct {
 	// Parent is the structure element the image belongs to, usually a
 	// Figure, nil for an artifact or an untagged document.
 	Parent *StructElem
+	// Order places the image among the content of Parent on its page in
+	// logical order, which a converter that paints out of that order
+	// sets: an element's content on a page is read in increasing Order,
+	// in paint order among equals (ISO 32000-1, 14.8.2.3.1). Zero
+	// everywhere keeps paint order.
+	Order int
 }
 
 // OpKind is the kind of a [PathOp].
@@ -382,6 +394,12 @@ type Path struct {
 	// Parent is the structure element the path belongs to, nil for an
 	// artifact, which is what decoration almost always is.
 	Parent *StructElem
+	// Order places the path among the content of Parent on its page in
+	// logical order, which a converter that paints out of that order
+	// sets: an element's content on a page is read in increasing Order,
+	// in paint order among equals (ISO 32000-1, 14.8.2.3.1). Zero
+	// everywhere keeps paint order.
+	Order int
 }
 
 // Group paints its content under a transform, a clip, a constant opacity
@@ -571,8 +589,9 @@ type Outline struct {
 }
 
 // StructElem is one node of the structure tree. Fragments point at the
-// element they belong to; the element's content on each page is written in
-// paint order as marked-content sequences.
+// element they belong to; the element's content on each page is written as
+// marked-content sequences, listed by the fragments' Order and in paint
+// order among equals.
 type StructElem struct {
 	// Role is a standard structure type (ISO 32000-1, 14.8.4): Document,
 	// Part, Sect, H1 to H6, P, L, LI, Lbl, LBody, Table, TR, TH, TD,

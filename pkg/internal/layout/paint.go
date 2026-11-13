@@ -116,6 +116,11 @@ type painter struct {
 	// broken holds the leaders whose word break is painted
 	// ([painter.leaderBreak]).
 	broken map[*box]bool
+	// inLine reports a line box being painted, lineOrder the place in
+	// document order of the content it paints, its atomic inlines' and
+	// their lines' included (see [painter.orderOf]).
+	inLine    bool
+	lineOrder int
 }
 
 // paint returns the display list of the box tree rooted at root.
@@ -322,6 +327,7 @@ func (p *painter) emit(b *box, content bool, frag typeset.Fragment, y0, y1 float
 		*p.capture = append(*p.capture, frag)
 		return
 	}
+	frag = ordered(frag, p.orderOf(b), 0)
 	c := p.sync(p.chain(b, content))
 	if p.mono >= 0 {
 		page = p.mono
@@ -345,6 +351,69 @@ func (p *painter) emit(b *box, content bool, frag typeset.Fragment, y0, y1 float
 		}
 	}
 	c.kids = append(c.kids, &ditem{frag: frag, y0: y0, y1: y1, page: page})
+}
+
+// orderOf returns the place in document order of what b paints: the
+// place of the first box of the line being painted, in document order,
+// for all the content of that line, so that the order of a line's
+// content as bidirectional text draws it (Unicode Bidirectional
+// Algorithm, L2) is kept; else b's own.
+func (p *painter) orderOf(b *box) int {
+	if p.inLine {
+		return p.lineOrder
+	}
+	return b.seq
+}
+
+// ordered returns frag with the Order of its fragments that hang from a
+// structure element set to seq, the place of what paints it in document
+// order ([painter.orderOf]), copied where it changes: a float, a
+// positioned box and the content of a stacking context paint out of
+// document order (CSS 2.1, Appendix E), and the structure tree reads an
+// element's content in document order, the logical order (ISO 32000-1,
+// 14.8.2.3.1). depth is the group nesting walked so far, bounded by
+// [MaxVectorDepth].
+func ordered(frag typeset.Fragment, seq, depth int) typeset.Fragment {
+	switch v := frag.(type) {
+	case *typeset.Text:
+		if v.Parent != nil && v.Order != seq {
+			c := *v
+			c.Order = seq
+			return &c
+		}
+	case *typeset.Image:
+		if v.Parent != nil && v.Order != seq {
+			c := *v
+			c.Order = seq
+			return &c
+		}
+	case *typeset.Path:
+		if v.Parent != nil && v.Order != seq {
+			c := *v
+			c.Order = seq
+			return &c
+		}
+	case *typeset.Group:
+		if depth >= MaxVectorDepth {
+			return frag
+		}
+		var content []typeset.Fragment
+		for i, k := range v.Content {
+			o := ordered(k, seq, depth+1)
+			if o != k && content == nil {
+				content = slices.Clone(v.Content)
+			}
+			if content != nil {
+				content[i] = o
+			}
+		}
+		if content != nil {
+			c := *v
+			c.Content = content
+			return &c
+		}
+	}
+	return frag
 }
 
 // borderRect returns b's border box with the relative offset in force.
@@ -886,6 +955,7 @@ func (p *painter) replaced(b *box) {
 	if img == nil {
 		return
 	}
+	img = ordered(img, p.orderOf(b), 0)
 	page := p.e.monoPage(box.Y, box.Height)
 	if r == box {
 		p.emit(b, false, img, r.Y, r.Y+r.Height, page)
@@ -1013,6 +1083,16 @@ func (p *painter) symbolMarker(b *box, m *markerBox) {
 // link regions. fl is the first formatted line when l is one, whose
 // atomic inlines sit in the copies of their parents.
 func (p *painter) line(l *lineBox, fl *firstLine) {
+	if !p.inLine {
+		order := 0
+		for _, it := range l.items {
+			if s := it.box.seq; s > 0 && (order == 0 || s < order) {
+				order = s
+			}
+		}
+		p.inLine, p.lineOrder = true, order
+		defer func() { p.inLine, p.lineOrder = false, 0 }()
+	}
 	page := p.e.pageOf(l.y + eps)
 	if l.overflows {
 		page = -1

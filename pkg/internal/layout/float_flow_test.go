@@ -444,3 +444,37 @@ func TestFloats_PercentHeightInAnonymousBlock(t *testing.T) {
 		t.Errorf("float height %v, want 100", got[3])
 	}
 }
+
+// TestFloats_ReadInDocumentOrder pins that a float's text, painted before
+// the line it sits beside (CSS 2.1, Appendix E), takes its place in
+// document order among the content of the element it shares: after the
+// text it follows, before the text it precedes (ISO 32000-1, 14.8.2.3.1).
+func TestFloats_ReadInDocumentOrder(t *testing.T) {
+	t.Parallel()
+	red2 := sty(font(2), fg(red))
+	fl := sty(font(2), fg(red), float(css.FloatRight))
+	for name, p := range map[string]*Node{
+		"float after the text":  el(red2, txt(red2, "AB"), el(fl, txt(fl, "N"))),
+		"float before the text": el(red2, el(fl, txt(fl, "N")), txt(red2, "AB")),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			p.Role = "P"
+			runs := texts(run(t, doc(p), page(12, 2)), 1)
+			order := map[string]int{}
+			for _, r := range runs {
+				if r.run.Parent == nil || r.run.Parent.Role != "P" {
+					t.Fatalf("run %q hangs from %v, want the P", r.text, r.run.Parent)
+				}
+				order[r.text] = r.run.Order
+			}
+			if runs[0].text != "N" {
+				t.Errorf("paint order %q first, want the float", runs[0].text)
+			}
+			after := name == "float after the text"
+			if (order["N"] > order["AB"]) != after {
+				t.Errorf("orders %v: the float does not read where the document puts it", order)
+			}
+		})
+	}
+}

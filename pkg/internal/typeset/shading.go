@@ -267,7 +267,7 @@ func (p *pageWriter) shadingFill(ctx context.Context, pa *Path, opacity float64)
 		domain = conicDomain(sh, inverseBBox(pa.Ops, p.off, m))
 	}
 	refs := p.w.shading(sh, domain)
-	p.mark(pa.Parent)
+	p.mark(pa.Parent, pa.Order)
 	p.buf.WriteString("q\n")
 	p.alpha = append(p.alpha, p.currentAlpha())
 	if err := p.ops(ctx, pa.Ops); err != nil {

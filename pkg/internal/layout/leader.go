@@ -154,7 +154,7 @@ func (p *painter) leaderBreak(l *box, t *typeset.Text, c *ditem, y0, y1 float64,
 	p.broken[l] = true
 	sp := *li.space
 	sp.Glyphs = []typeset.Glyph{{GID: li.space.Glyphs[0].GID, Text: " "}}
-	sp.Origin, sp.Color, sp.Parent = t.Origin, t.Color, t.Parent
+	sp.Origin, sp.Color, sp.Parent, sp.Order = t.Origin, t.Color, t.Parent, t.Order
 	c.kids = append(c.kids, &ditem{frag: &sp, y0: y0, y1: y1, page: page})
 }
 

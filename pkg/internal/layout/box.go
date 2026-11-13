@@ -239,6 +239,11 @@ type box struct {
 	hidden bool
 	// depth is the nesting depth in the box tree.
 	depth int
+	// seq is the box's place among the boxes generated from the content
+	// tree, which generation walks in document order: the logical order
+	// of what the box paints (see [painter.ordered]). A box the engine
+	// makes of its own, such as an anonymous one, keeps 0.
+	seq int
 
 	// Layout results, in flow coordinates: x and y are the border box's
 	// top-left corner, w and h the content box's size.

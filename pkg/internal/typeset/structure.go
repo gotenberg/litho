@@ -19,6 +19,9 @@ type structItem struct {
 	form int
 	// seq is how many sequences the pages recorded before this one.
 	seq int
+	// order is the sequence's place in its element's logical order on
+	// its page (see [Text.Order]).
+	order int
 	// annot is the annotation an object reference names, zero for a
 	// marked-content sequence.
 	annot ast.PdfIndirectRef
@@ -41,8 +44,10 @@ type formMarks struct {
 	// /StructParents once the tree is written.
 	ref  ast.PdfIndirectRef
 	dict ast.PdfDict
-	// parents lists the element of each MCID, in MCID order.
+	// parents lists the element of each MCID, in MCID order, and orders
+	// the [Text.Order] of each.
 	parents []*StructElem
+	orders  []int
 }
 
 // annotItem is an annotation an element owns, and how many marked-content
@@ -84,6 +89,8 @@ type structState struct {
 	// pageParents lists, per page, the element of each MCID in MCID order:
 	// the page's ParentTree entry.
 	pageParents [][]*StructElem
+	// pageOrders lists, per page, the [Text.Order] of each MCID.
+	pageOrders [][]int
 	// annotParents lists the element of each annotation that has one, in
 	// /StructParent key order after the pages' keys.
 	annotParents []*StructElem
@@ -105,12 +112,14 @@ func newStructState() *structState {
 // addPage opens the ParentTree entry of the next page.
 func (st *structState) addPage() {
 	st.pageParents = append(st.pageParents, nil)
+	st.pageOrders = append(st.pageOrders, nil)
 }
 
 // addMCID records that the next marked-content sequence of page
-// belongs to e.
-func (st *structState) addMCID(page int, e *StructElem) {
+// belongs to e, at order among its content (see [Text.Order]).
+func (st *structState) addMCID(page int, e *StructElem, order int) {
 	st.pageParents[page] = append(st.pageParents[page], e)
+	st.pageOrders[page] = append(st.pageOrders[page], order)
 	st.marks++
 }
 
@@ -123,9 +132,10 @@ func (st *structState) openForm(page, parent, at int) int {
 }
 
 // addFormMCID records that the next marked-content sequence of the form at
-// index form belongs to e.
-func (st *structState) addFormMCID(form int, e *StructElem) {
+// index form belongs to e, at order among its content.
+func (st *structState) addFormMCID(form int, e *StructElem, order int) {
 	st.forms[form].parents = append(st.forms[form].parents, e)
+	st.forms[form].orders = append(st.forms[form].orders, order)
 	st.marks++
 }
 
@@ -185,9 +195,11 @@ func (st *structState) index(e *StructElem) (int, bool) {
 }
 
 // marked returns the marked-content sequences of every element: those of
-// the element at index i in order are marks[at[i]:at[i+1]], in the order
-// the pages recorded them. A sequence of an element the tree does not
-// hold is left out.
+// the element at index i in order are marks[at[i]:at[i+1]], page by page,
+// and on each page in logical order (see [Text.Order]), in the order the
+// page recorded them among equals: the order of the structure tree is the
+// logical order of the content (ISO 32000-1, 14.8.2.3.1). A sequence of
+// an element the tree does not hold is left out.
 func (st *structState) marked() (at []int, marks []structItem) {
 	at = make([]int, len(st.order)+1)
 	st.walk(func(e *StructElem, _ structItem) {
@@ -206,6 +218,14 @@ func (st *structState) marked() (at []int, marks []structItem) {
 			next[i]++
 		}
 	})
+	for i := range len(st.order) {
+		slices.SortStableFunc(marks[at[i]:at[i+1]], func(a, b structItem) int {
+			if a.page != b.page {
+				return a.page - b.page
+			}
+			return a.order - b.order
+		})
+	}
 	return at, marks
 }
 
@@ -225,23 +245,23 @@ func (st *structState) walk(fn func(*StructElem, structItem)) {
 		}
 	}
 	seq := 0
-	var stream func(page, form int, parents []*StructElem, forms []int)
-	stream = func(page, form int, parents []*StructElem, forms []int) {
+	var stream func(page, form int, parents []*StructElem, orders []int, forms []int)
+	stream = func(page, form int, parents []*StructElem, orders []int, forms []int) {
 		k := 0
 		for mcid := 0; mcid <= len(parents); mcid++ {
 			// The form nesting is a group nesting, which Validate bounds.
 			for ; k < len(forms) && st.forms[forms[k]].at <= mcid; k++ {
 				f := forms[k]
-				stream(page, f+1, st.forms[f].parents, formForms[f])
+				stream(page, f+1, st.forms[f].parents, st.forms[f].orders, formForms[f])
 			}
 			if mcid < len(parents) {
-				fn(parents[mcid], structItem{page: page, mcid: mcid, form: form, seq: seq})
+				fn(parents[mcid], structItem{page: page, mcid: mcid, form: form, seq: seq, order: orders[mcid]})
 				seq++
 			}
 		}
 	}
 	for page, parents := range st.pageParents {
-		stream(page, 0, parents, pageForms[page])
+		stream(page, 0, parents, st.pageOrders[page], pageForms[page])
 	}
 }
 
@@ -274,8 +294,8 @@ const pdf2Namespace = "http://iso.org/pdf2/ssn"
 // write writes every element, the parent tree and the StructTreeRoot (ISO
 // 32000-1, 14.7.2, Tables 322 and 323) for a file of version v.
 //
-// An element's /K lists its own content first, in paint order page by page,
-// then its child elements: the model orders the kids but does not say where
+// An element's /K lists its own content first, page by page and on each
+// page in logical order (see [structState.marked]), then its child elements: the model orders the kids but does not say where
 // an element's own content falls among them. /Pg names the page of the
 // element's first content, and each item on that page is an MCID integer;
 // an item on another page is a marked-content reference naming its page
@@ -531,7 +551,7 @@ func (r *finalRefs) name(n string) ast.PdfObject {
 // the count of elements, size, is read after.
 func (st *structState) release() {
 	st.order, st.refs, st.parents, st.annots, st.refers = nil, nil, nil, nil, nil
-	st.pageParents, st.annotParents, st.forms = nil, nil, nil
+	st.pageParents, st.pageOrders, st.annotParents, st.forms = nil, nil, nil, nil
 }
 
 // tocKept returns the TOC and TOCI elements a PDF 2.0 file writes as

@@ -63,7 +63,10 @@ encodes:
 
 - Points, top-left origin, y down. The backend flips.
 - A `Fragment` is a `Text`, an `Image`, a `Path` or a `Group`. Paint order
-  is slice order.
+  is slice order. The structure tree reads an element's content on a page
+  by the fragments' `Order`, paint order among equals, so a converter that
+  paints out of document order, as a float paints, keeps the reading
+  order of the document.
 - A `Path` fills with a flat colour or a `Shading`, axial or radial, whose
   stops the backend writes as a stitched PDF function, or conic, written
   as a function-based shading whose calculator function takes the angle;

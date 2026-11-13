@@ -94,11 +94,12 @@ type pageWriter struct {
 	// annotation (see [docWriter.appearance]).
 	bare bool
 
-	// Marked content: whether a sequence is open, and for which element
-	// (nil for an artifact).
-	marked     bool
-	markedElem *StructElem
-	nextMCID   int
+	// Marked content: whether a sequence is open, for which element (nil
+	// for an artifact), and the greatest Order of its content.
+	marked      bool
+	markedElem  *StructElem
+	markedOrder int
+	nextMCID    int
 
 	steps int
 }
@@ -154,21 +155,21 @@ func (p *pageWriter) fragments(ctx context.Context, content []Fragment, opacity 
 		case *Text:
 			if k := p.fitScale(p.extent(f)); k != 1 {
 				c := scaledText(f, p.off, k)
-				err = p.fitted(k, f.Parent, func() error { return p.text(ctx, c, opacity) })
+				err = p.fitted(k, f.Parent, f.Order, func() error { return p.text(ctx, c, opacity) })
 			} else {
 				err = p.text(ctx, f, opacity)
 			}
 		case *Image:
 			if k := p.fitScale(p.extent(f)); k != 1 {
 				c := scaledImage(f, p.off, k)
-				err = p.fitted(k, f.Parent, func() error { return p.image(c, opacity) })
+				err = p.fitted(k, f.Parent, f.Order, func() error { return p.image(c, opacity) })
 			} else {
 				err = p.image(f, opacity)
 			}
 		case *Path:
 			if k := p.fitScale(p.extent(f)); k != 1 {
 				c := scaledPath(f, p.off, k)
-				err = p.fitted(k, f.Parent, func() error { return p.path(ctx, c, opacity) })
+				err = p.fitted(k, f.Parent, f.Order, func() error { return p.path(ctx, c, opacity) })
 			} else {
 				err = p.path(ctx, f, opacity)
 			}
@@ -206,21 +207,25 @@ func (p *pageWriter) extent(f Fragment) float64 {
 	return 0
 }
 
-// mark opens the marked-content sequence a fragment with parent belongs to,
-// reusing the open one when it is the same. In a tagged document (ISO
+// mark opens the marked-content sequence a fragment with parent and order
+// belongs to, reusing the open one when it is the same element's and order
+// does not go back: a fragment painted after content it precedes in
+// logical order starts a sequence of its own, which the structure tree
+// then lists first (see [Text.Order]). In a tagged document (ISO
 // 32000-1, 14.8) content with a parent is a sequence tagged with the
 // element's role and an MCID (14.7.4.2), and content without one is an
 // /Artifact (14.8.2.2). An untagged document marks nothing.
-func (p *pageWriter) mark(parent *StructElem) {
+func (p *pageWriter) mark(parent *StructElem, order int) {
 	st := p.w.st
 	if st == nil || p.bare {
 		return
 	}
-	if p.marked && p.markedElem == parent {
+	if p.marked && p.markedElem == parent && (parent == nil || order >= p.markedOrder) {
+		p.markedOrder = max(p.markedOrder, order)
 		return
 	}
 	p.endMark()
-	p.marked, p.markedElem = true, parent
+	p.marked, p.markedElem, p.markedOrder = true, parent, order
 	if parent == nil {
 		p.buf.WriteString("/Artifact BMC\n")
 		return
@@ -228,9 +233,9 @@ func (p *pageWriter) mark(parent *StructElem) {
 	mcid := p.nextMCID
 	p.nextMCID++
 	if p.form >= 0 {
-		st.addFormMCID(p.form, parent)
+		st.addFormMCID(p.form, parent, order)
 	} else {
-		st.addMCID(p.index, parent)
+		st.addMCID(p.index, parent, order)
 	}
 	// The tag is the element's role (14.7.4.2), escaped as a name.
 	// SerializeName fails only on a NUL byte, which Validate refuses in a
@@ -309,7 +314,7 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 		return err
 	}
 	name := p.fontName(fe)
-	p.mark(t.Parent)
+	p.mark(t.Parent, t.Order)
 	if !t.Invisible {
 		cur := p.currentAlpha()
 		stroke := cur.stroke
@@ -493,7 +498,7 @@ func (p *pageWriter) image(img *Image, opacity float64) error {
 		p.xobjNames[img.Source] = name
 		p.xobjs = append(p.xobjs, xobjUse{name: name, ref: ref})
 	}
-	p.mark(img.Parent)
+	p.mark(img.Parent, img.Order)
 	cur := p.currentAlpha()
 	p.setAlpha(alphaState{fill: opacity, stroke: cur.stroke})
 	fmt.Fprintf(&p.buf, "q %s 0 0 %s %s %s cm /%s Do Q\n",
@@ -515,9 +520,9 @@ func (p *pageWriter) path(ctx context.Context, pa *Path, opacity float64) error 
 		if pa.Stroke == nil {
 			return nil
 		}
-		pa = &Path{Ops: pa.Ops, Stroke: pa.Stroke, Parent: pa.Parent}
+		pa = &Path{Ops: pa.Ops, Stroke: pa.Stroke, Parent: pa.Parent, Order: pa.Order}
 	}
-	p.mark(pa.Parent)
+	p.mark(pa.Parent, pa.Order)
 	a := p.currentAlpha()
 	if pa.Fill != nil {
 		a.fill = pa.Fill.Color.A * opacity

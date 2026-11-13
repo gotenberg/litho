@@ -55,9 +55,10 @@ func (p *pageWriter) fitScale(extent float64) float64 {
 // cm, and Q, opening the fragment's marked-content sequence for parent
 // before q so that no sequence straddles the pair. draw writes the copy
 // of the fragment whose numbers are divided by k, the folded translation
-// included, so it runs with no translation folded.
-func (p *pageWriter) fitted(k float64, parent *StructElem, draw func() error) error {
-	p.mark(parent)
+// included, so it runs with no translation folded. order is the
+// fragment's [Text.Order].
+func (p *pageWriter) fitted(k float64, parent *StructElem, order int, draw func() error) error {
+	p.mark(parent, order)
 	fmt.Fprintf(&p.buf, "q %s 0 0 %s 0 0 cm\n", writer.FormatReal(k), writer.FormatReal(k))
 	p.alpha = append(p.alpha, p.currentAlpha())
 	saved := p.off

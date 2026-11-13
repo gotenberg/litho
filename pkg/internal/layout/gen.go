@@ -84,6 +84,7 @@ func (e *engine) newBox(n *Node, st *css.Style, kind boxKind, ctx genCtx) *box {
 	e.holdStyle(st)
 	b := &box{node: n, st: st, kind: kind, first: true, last: true, lang: ctx.lang, elem: ctx.elem, link: ctx.link, depth: ctx.depth}
 	b.hidden = st.Visibility != css.Visible
+	b.seq = e.boxes
 	if n != nil && n.ID != "" {
 		b.id = n.ID
 	}

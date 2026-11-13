@@ -373,3 +373,34 @@ func TestWritePrintFieldAttributes(t *testing.T) {
 		mustLack(t, writeVersion(t, printFieldDoc(t), v), "/PrintField")
 	}
 }
+
+// TestStructureReadsContentInOrder pins that an element's content on a
+// page is listed in its logical order, the Order of its fragments, and in
+// paint order among equals (ISO 32000-1, 14.8.2.3.1): content painted
+// before the text it follows, as a float is, starts a sequence of its own
+// that the element lists after that text.
+func TestStructureReadsContentInOrder(t *testing.T) {
+	t.Parallel()
+	p := &typeset.StructElem{Role: "P"}
+	root := &typeset.StructElem{Role: "Document", Lang: "en-US", Kids: []*typeset.StructElem{p}}
+	float := run(t, sans, 12, typeset.Point{X: 200, Y: 60}, "2")
+	float.Parent, float.Order = p, 3
+	first := run(t, sans, 12, typeset.Point{X: 40, Y: 60}, "Floated")
+	first.Parent, first.Order = p, 1
+	second := run(t, sans, 12, typeset.Point{X: 100, Y: 60}, "one")
+	second.Parent, second.Order = p, 2
+	doc := &typeset.Document{
+		Metadata:  typeset.Metadata{Title: "Order", Lang: "en-US"},
+		Structure: root,
+		Pages:     []*typeset.Page{letter(float, first, second)},
+	}
+	raw := write(t, doc)
+	if !bytes.Contains(raw, []byte("/K [1 0] /P")) {
+		t.Error("the P does not list the text before the float it follows")
+	}
+	out := string(inflated(t, raw))
+	// The text, in one sequence, comes first in the content stream.
+	if strings.Count(out, "/P <</MCID") != 2 {
+		t.Errorf("want two sequences, the float's and the text's:\n%s", out)
+	}
+}
