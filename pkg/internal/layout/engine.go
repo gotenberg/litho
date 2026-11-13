@@ -384,6 +384,10 @@ func (e *engine) fontSize(st *css.Style) float64 {
 	return s
 }
 
+// serifFamilies is the list LibreOffice's fallback rule reads for the
+// initial font-family, which has none. Read only.
+var serifFamilies = []string{"serif"}
+
 // fallback returns the font fallback rule of a run of style st: the one of
 // [Options.Fallback], which for LibreOffice's carries the generic family
 // of st's own families, read once per style.
@@ -397,7 +401,12 @@ func (e *engine) fallback(st *css.Style) text.Fallback {
 	if e.fallbacks == nil {
 		e.fallbacks = make(map[*css.Style]text.Fallback)
 	}
-	fb := text.LibreOfficeFallback(st.FontFamilies)
+	named := st.FontFamilies
+	if named == nil {
+		// The initial font-family is serif to LibreOffice.
+		named = serifFamilies
+	}
+	fb := text.LibreOfficeFallback(named)
 	e.fallbacks[st] = fb
 	return fb
 }

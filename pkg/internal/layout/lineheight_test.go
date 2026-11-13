@@ -143,3 +143,20 @@ func TestLineHeight_FallbackFace(t *testing.T) {
 		})
 	}
 }
+
+// The initial font-family is the browser's standard font, which Chromium
+// draws in Japanese with Noto Sans CJK JP; an author's serif is Noto Serif
+// CJK JP.
+func TestTextStyle_InitialFamilyIsTheStandardFont(t *testing.T) {
+	pb := page(200, 200)
+	e := newEngine(context.Background(), ahem(t), Options{Page: pb, Fallback: text.FallbackChromium}, pb.Width, pb.Height)
+	initial := css.Initial()
+	serif := css.Initial()
+	serif.FontFamilies = []string{"serif"}
+	if got := e.textStyle(initial, "ja").Families; len(got) == 0 || got[0] != "Noto Sans CJK JP" {
+		t.Errorf("initial family in ja = %q, want Noto Sans CJK JP first", got)
+	}
+	if got := e.textStyle(serif, "ja").Families; len(got) == 0 || got[0] != "Noto Serif CJK JP" {
+		t.Errorf("serif in ja = %q, want Noto Serif CJK JP first", got)
+	}
+}

@@ -342,8 +342,8 @@ func TestVars_ExponentialGrowthIsCapped(t *testing.T) {
 	if !hasWarning(c.Warnings(), warn.LimitReached, "var()") {
 		t.Errorf("warnings = %v", c.Warnings())
 	}
-	if got := c.Style(byID(doc, "p")).FontFamilies; !reflect.DeepEqual(got, []string{"serif"}) {
-		t.Errorf("families = %q", got)
+	if got := c.Style(byID(doc, "p")).FontFamilies; got != nil {
+		t.Errorf("families = %q, want the initial value, no list", got)
 	}
 }
 

@@ -1146,6 +1146,13 @@ type Style struct {
 	// FontFamilies is the family list as written, generic names included;
 	// the text stack resolves them. A quoted name that spells a generic
 	// keyword keeps its double quotes: it names a family, not the generic.
+	//
+	// nil is the initial value, which no declaration set. CSS Fonts 4, 2.1
+	// leaves it to the user agent, and Chromium draws it with its standard
+	// font, which is its serif family in most languages and another in
+	// some ([text.BrowserFamilies]). An author's font-family: serif is the
+	// list of that one name: the two are different values, and styles that
+	// differ in that alone are not shared ([Styles.Share]).
 	FontFamilies []string
 	// FontSize is the computed size in points.
 	FontSize float64
@@ -1614,7 +1621,6 @@ func InitialValue() Style {
 		// color (CSS Text Decoration 3, 3.2).
 		TextEmphasisColor:   Color{A: 1},
 		currentColor:        slotTextEmphasis,
-		FontFamilies:        []string{"serif"},
 		FontSize:            16 * Pt,
 		fontSizeKeyword:     mediumKeyword,
 		FontWeight:          400,
