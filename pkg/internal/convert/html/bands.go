@@ -34,8 +34,11 @@ import (
 //
 // Its counter(page) and counter(pages) show the page's number and the
 // page count, string() the page's named string as a page-margin box shows
-// it (CSS GCPM 3, 1.1.2), and its links keep their annotations. Its
-// content is an artifact.
+// it (CSS GCPM 3, 1.1.2), its cross-references the source's elements (CSS
+// Generated Content 3, 6), a page as the layout being painted places it,
+// and its links keep their annotations. Its content is an artifact, and
+// its headings and bookmark-level add no outline entry: they repeat on
+// every page it shows on.
 type Band struct {
 	// Footer draws the band in the bottom margin, false in the top one.
 	Footer bool
@@ -225,6 +228,11 @@ type bandState struct {
 	// the page counter and string() items of its generated content.
 	node *layout.Node
 	gcpm *gcpmState
+	// use is what the band's cross-references read at their targets, and
+	// refs are those cross-references: their targets are the source's
+	// elements (CSS Generated Content 3, 6).
+	use  css.TargetUse
+	refs []targetRef
 	// need is the tallest the band's box was measured on a page of the
 	// first layout, in points of the page: the margin RoomContent gives
 	// it.
@@ -338,6 +346,7 @@ func (s *bandState) build(ctx context.Context, env bandEnv, base *css.Stylesheet
 	layout.ShareStyles(ctx, root, nil)
 	s.node = findBand(root)
 	s.gcpm = &bb.gcpm
+	s.use, s.refs = r.TargetUse(), bb.targets.refs
 	for _, w := range computed.Warnings() {
 		warns = append(warns, typeset.Warning{Code: w.Code, Effect: w.Effect, Message: displayURL(w.Message)})
 	}
@@ -455,12 +464,67 @@ func (p *prepared) bandBox(s *bandState, edge, index, pages int, pb layout.PageB
 	}
 	st := p.bandBoxes[edge]
 	mb := &marginBox{which: which, st: st, cb: containingBlock(which, pb), band: s}
+	p.bandPages(s)
 	n := s.node
 	if len(s.gcpm.paged) > 0 {
 		n = s.gcpm.atPage(n, p.pageText(st, index, pages, pb.Bleed+pb.Margin[css.Top]), 0)
 	}
 	mb.kids = []*layout.Node{n}
 	return mb
+}
+
+// bandTargetUse returns use with what the cross-references of bands read
+// at their targets, so that the source's builder records it.
+func bandTargetUse(use css.TargetUse, bands []*bandState) css.TargetUse {
+	for _, s := range bands {
+		if !s.use.Any {
+			continue
+		}
+		use.Any = true
+		for _, name := range s.use.Counters {
+			if !slices.Contains(use.Counters, name) {
+				use.Counters = append(use.Counters, name)
+			}
+		}
+	}
+	slices.Sort(use.Counters)
+	return use
+}
+
+// resolveBandTargets writes the value of every cross-reference of the bands
+// that reads no page, at its target in the source built by b, and leaves
+// out, with a warning, one whose target is not in the source; a
+// cross-reference that reads a page is written as each page is painted
+// ([prepared.bandPages]).
+func resolveBandTargets(b *builder, bands []*bandState) {
+	for _, s := range bands {
+		for _, r := range s.refs {
+			t := b.targets.byID[r.id]
+			switch {
+			case t == nil:
+				b.warnOnce(warn.LinkUnresolved, warn.Omitted, "target:"+r.id, fmt.Sprintf(
+					"a cross-reference names %q, which no element of the document carries: it generates nothing", "#"+r.id))
+				r.node.Text = ""
+			case !readsPage(r.item):
+				r.node.Text = strings.ToValidUTF8(b.targetText(t, r.item), "�")
+			}
+		}
+	}
+}
+
+// bandPages writes into the cross-references of the band s that read a
+// page the values of the layout being painted: the band's box is drawn
+// from one tree on every page, and the values are the layout's, the same
+// on each of its pages.
+func (p *prepared) bandPages(s *bandState) {
+	if p.b == nil {
+		return
+	}
+	for _, r := range s.refs {
+		if readsPage(r.item) && p.b.targets.byID[r.id] != nil {
+			r.node.Text, _ = p.pagedText(r.item, r.id, p.b.targets.anchors)
+		}
+	}
 }
 
 // pageText returns what a counter(), counters() or string() item of
@@ -573,13 +637,7 @@ func (p *prepared) pageBox(info layout.PageInfo) layout.PageBox {
 func (p *prepared) growRoom(pages int) {
 	p.room.pages = pages
 	p.layout.PageFor = func(info layout.PageInfo) layout.PageBox { return p.setup.layoutBox(p.pageBox(info)) }
-	p.infos = nil
-	p.pages.counters = nil
-	p.pages.links = nil
-	p.pages.dropOverflow()
-	if p.b != nil {
-		p.b.gcpm.placed, p.b.gcpm.markAt = nil, 0
-	}
+	p.resetPages()
 }
 
 // warnOverflowOnce records the warning of content overflowing its box

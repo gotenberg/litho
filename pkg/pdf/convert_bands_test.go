@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -151,5 +152,23 @@ func TestConvert_BandRoomContentWritesTheTwinOfItsMargin(t *testing.T) {
 	_, rep = convertHTMLTest(t, dir, src, WithMargins(36, 36, 36, 36), WithHeader(PageBand{HTML: band}))
 	if len(rep.Warnings) != 1 || !strings.Contains(rep.Warnings[0].Message, "the header is 120 points tall") {
 		t.Errorf("warnings %+v, want the header's overflow", rep.Warnings)
+	}
+}
+
+func TestConvert_BandCrossReferenceWithFirstPageNumber(t *testing.T) {
+	t.Parallel()
+	src := `<p style="break-after: page">one</p><p style="break-after: page">two</p><p id="end">three</p>`
+	data, rep := convertHTMLTest(t, convertFontDir(t), src,
+		WithMargins(72, 36, 72, 36),
+		WithFirstPageNumber(5),
+		WithFooter(PageBand{HTML: `<span class="r"></span>`, CSS: `.r::after { content: "end at " target-counter(url(#end), page) ", here " counter(page) }`, Room: RoomContent}),
+	)
+	if rep.Pages != 3 || len(rep.Warnings) != 0 {
+		t.Errorf("report %+v, want 3 pages and no warning", rep)
+	}
+	for i, got := range bandTexts(t, data) {
+		if want := fmt.Sprintf("end at 7, here %d", 5+i); !strings.Contains(got, want) {
+			t.Errorf("page %d reads %q, want %q", i+1, got, want)
+		}
 	}
 }

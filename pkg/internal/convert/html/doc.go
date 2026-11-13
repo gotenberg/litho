@@ -162,7 +162,9 @@
 // box @top-center or @bottom-center, made as wide as the page area, of the
 // pages it selects, in the place of the page-margin boxes of its margin.
 // [RoomContent] lays the document out a second time with the margins grown
-// to the bands' heights.
+// to the bands' heights; with cross-references that read a page, the
+// layouts that settle them run before and after it, at most eight
+// layouts in all.
 //
 // # Printing
 //

@@ -27,8 +27,16 @@ import (
 // and counter(pages) are the page's number and the page count,
 // string(name) the named string the page shows as a page-margin box does
 // (CSS GCPM 3, 1.1.2), and string(litho-title) the source's title before
-// any element sets that string. A band has no date and no URL of its own:
-// the caller writes them into HTML.
+// any element sets that string. target-counter(), target-counters() and
+// target-text() read the source's elements (CSS Generated Content 3, 6),
+// a page number as the layout that draws the page places its element; a
+// URL that names no element of the source generates nothing, with a
+// warning. A band has no date and no URL of its own: the caller writes
+// them into HTML.
+//
+// A band adds no outline entry: its headings and its elements with a
+// bookmark-level repeat on every page it is drawn on and have no place in
+// the order of the source's.
 //
 // Not supported in a band: its own @font-face and @page rules, which are
 // read in its document and draw nothing, and ::first-line.
@@ -82,8 +90,11 @@ const (
 	// even where a page then shows another band; a band still taller
 	// than its margin is reported as a warning. It costs a second layout
 	// of the document, about as long as the first, when a band is taller
-	// than its margin, and nothing otherwise. With [WithSinglePage] the
-	// page grows by what its margins grow.
+	// than its margin, and nothing otherwise. A document whose
+	// cross-references read a page lays itself out again until their
+	// numbers stand, at most four times, before the margins grow and again
+	// after: eight layouts at most. With [WithSinglePage] the page grows by
+	// what its margins grow.
 	RoomContent
 )
 

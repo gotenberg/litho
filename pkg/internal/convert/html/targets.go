@@ -214,7 +214,7 @@ func (p *prepared) pageValue(index int) int {
 	t := &p.b.targets
 	if t.pageNums == nil {
 		t.pageNums = make([]int, len(t.infos))
-		cur := map[string]int{pageCounter: 0}
+		cur := map[string]int{pageCounter: p.o.PageCounterStart}
 		for k, info := range t.infos {
 			ps := p.pages.entry(info).style
 			st := css.Style{CounterReset: ps.CounterReset, CounterIncrement: ps.CounterIncrement, CounterSet: ps.CounterSet}
@@ -322,6 +322,10 @@ func layOutTargets(ctx context.Context, lay layoutFunc, p *prepared, res *layout
 func (p *prepared) resetPages() {
 	p.infos = nil
 	p.pages.counters, p.pages.links = nil, nil
+	p.pages.dropOverflow()
+	if p.b == nil {
+		return
+	}
 	p.b.gcpm.placed, p.b.gcpm.markAt = nil, 0
 	t := &p.b.targets
 	t.infos, t.anchors, t.pageNums = nil, nil, nil

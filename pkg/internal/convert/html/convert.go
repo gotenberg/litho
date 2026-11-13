@@ -358,6 +358,13 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 		pageAt = func(i int) layout.PageBox { return setup.layoutBox(at(i)) }
 	}
 
+	// The bands are built first: the source's builder records what their
+	// cross-references read at their targets.
+	env := bandEnv{o: o, scan: scan, sheets: sheets, media: media, res: res, c: c, opts: computeOpts}
+	bands, bandBoxes, bandWarns, err := buildBands(ctx, env, rootStyle)
+	if err != nil {
+		return nil, err
+	}
 	b := &builder{
 		computed: computed, res: res, scan: scan, media: media,
 		warned: map[string]bool{}, omitBackgrounds: o.OmitBackgrounds,
@@ -366,7 +373,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	// The page-margin boxes read these counters of the document as they
 	// stand at the start of each page (CSS Page 3, 6.1).
 	b.gcpm.track = resolver.MarginCounters()
-	b.targets.use = resolver.TargetUse()
+	b.targets.use = bandTargetUse(resolver.TargetUse(), bands)
 	root, err := b.buildRoot(ctx, scan.root)
 	if err != nil {
 		return nil, err
@@ -374,15 +381,11 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	if len(b.targets.refs) > 0 {
 		b.resolveTargets()
 	}
+	resolveBandTargets(b, bands)
 	// The cascade shares the styles of elements styled alike; the styles
 	// the builder derives from them, generated content's among them, are
 	// shared here.
 	layout.ShareStyles(ctx, root, nil)
-	env := bandEnv{o: o, scan: scan, sheets: sheets, media: media, res: res, c: c, opts: computeOpts}
-	bands, bandBoxes, bandWarns, err := buildBands(ctx, env, rootStyle)
-	if err != nil {
-		return nil, err
-	}
 
 	p := &prepared{
 		root: root,

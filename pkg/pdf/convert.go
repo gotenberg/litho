@@ -178,6 +178,12 @@ func FromText(src io.Reader, opts ...TextOption) *Conversion {
 //     page-margin boxes (CSS Paged Media 3), and the footnotes, leaders,
 //     running elements, string sets, cross-references and bookmarks of
 //     CSS Generated Content.
+//   - Headers and footers are the page-margin boxes of the document's
+//     stylesheets, or the bands of [WithHeader] and [WithFooter]: HTML
+//     fragments, each laid out in a document of its own and drawn in the
+//     top or the bottom margin of the pages it selects in the place of
+//     that margin's page-margin boxes, with the page's numbers, named
+//     strings and cross-references (see [PageBand]).
 //   - CSS animations print at time zero, or finished with
 //     [WithFinishedAnimations]. No transition runs.
 //   - Stylesheets, images and fonts are read from [WithResources], or
@@ -197,7 +203,8 @@ func FromText(src io.Reader, opts ...TextOption) *Conversion {
 // lang is the document's language. Links become Link annotations, the
 // elements with a bookmark-level the outline, h1 to h6 unless a stylesheet
 // says otherwise, and <title> and <meta name> author, description and
-// keywords the document information.
+// keywords the document information. Page-margin boxes and bands are
+// artifacts and add no outline entry.
 func FromHTML(src io.Reader, opts ...HTMLOption) *Conversion {
 	var cfg convertConfig
 	for _, o := range opts {
@@ -222,7 +229,9 @@ func FromHTML(src io.Reader, opts ...HTMLOption) *Conversion {
 // relative images and links resolve in [WithResources] or against
 // [WithBaseURL]. The raw HTML a Markdown document holds is kept,
 // unsanitised: no script runs. [Limits.MaxConvertInputBytes] caps the
-// Markdown, not the HTML it renders to.
+// Markdown, not the HTML it renders to. The default template titles the
+// document with its first heading, which a band of [WithHeader] or
+// [WithFooter] shows as string(litho-title).
 func FromMarkdown(src io.Reader, opts ...MarkdownOption) *Conversion {
 	var cfg convertConfig
 	for _, o := range opts {
