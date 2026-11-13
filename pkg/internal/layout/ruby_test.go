@@ -153,7 +153,6 @@ func TestRubyLineRoom(t *testing.T) {
 func TestRubyUnder(t *testing.T) {
 	t.Parallel()
 	block, ruby, rt := rubyDoc(1, func(s *css.Style) { s.RubyPosition = css.RubyUnder })
-	rt.RubyPosition = css.RubyUnder
 	res := run(t, el(block, el(ruby, txt(ruby, "AB"), el(rt, txt(rt, "ab")))), page(600, 300))
 	_, by := placed(t, res, "AB")
 	_, ay := placed(t, res, "ab")
@@ -195,5 +194,38 @@ func TestRubyPairing(t *testing.T) {
 		if cols[i].ruby.ann == nil {
 			t.Errorf("column %d has no annotation", i)
 		}
+	}
+}
+
+// TestRubyNested locks a ruby whose base holds a ruby: its annotation
+// sits over the inner one, on the side its own ruby's ruby-position
+// gives, whatever the annotation sets, and the line makes room for both
+// once, from the margin above it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 puts the annotation "efgh" of a ruby
+//     whose base is a ruby of "AB" over "ab" 40px over the inner one,
+//     over it although the annotation sets ruby-position: under, both in
+//     the 40px margin above the 40px line.
+func TestRubyNested(t *testing.T) {
+	t.Parallel()
+	block, ruby, rt := rubyDoc(1)
+	block.Margin[css.Top] = css.Pts(px(40))
+	under := *rt
+	under.RubyPosition = css.RubyUnder
+	inner := el(ruby, txt(ruby, "AB"), el(rt, txt(rt, "ab")))
+	root := el(sty(), el(block, el(ruby, inner, el(&under, txt(&under, "efgh")))))
+	res := run(t, root, page(600, 300))
+	for _, c := range []struct {
+		s string
+		y float64
+	}{{"AB", 72}, {"ab", 36}, {"efgh", 16}} {
+		if _, y := placed(t, res, c.s); !near(y, c.y) {
+			t.Errorf("%q at y %g, want %g", c.s, y, c.y)
+		}
+	}
+	if b := kid(t, boxes(t, root, page(600, 300)), 0); !near(rect(b)[3], 40) {
+		t.Errorf("block %gpx tall, want 40", rect(b)[3])
 	}
 }

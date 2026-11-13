@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"math"
 	"strings"
 	"unicode"
 
@@ -23,11 +24,12 @@ type rubyCol struct {
 	// inStart and inEnd are the room the base leaves at the column's
 	// left and right edges once aligned, which bounds the overhang.
 	inStart, inEnd float64
-	// over and under report an annotation over or under the base, and
-	// annTop and annBottom its em box's top and bottom below the column's
-	// top, for a ruby nesting this one.
-	over, under       bool
-	annTop, annBottom float64
+	// over and under report annotations over or under the base, its own
+	// or those of a ruby nested in it, overTop the top of the em boxes
+	// of those over it and underBottom the bottom of those under it,
+	// below the column's top.
+	over, under          bool
+	overTop, underBottom float64
 	// baseAbove is the base's extent above its baseline, which the line
 	// grows to hold before the annotation over it (rubyRoom).
 	baseAbove float64
@@ -220,35 +222,46 @@ func (e *engine) layoutRuby(a *box, lcb cblock) {
 	r.inStart, r.inEnd = lineInsets(r.base, w)
 	emTop, emBottom := bl-m.EmAscent, bl+m.EmDescent
 	// A ruby nested in the base sets its own annotations against its
-	// base: this one sits beyond them (CSS Ruby 1, 2.4).
+	// base: this one sits beyond them (CSS Ruby 1, 2.4), and the line
+	// holding this column makes room for them.
+	inTop, inBottom := math.Inf(1), math.Inf(-1)
 	for _, l := range r.base.lines {
 		for _, it := range l.items {
 			if in := it.atomic; in != nil && in.ruby != nil {
 				if in.ruby.over {
-					emTop = min(emTop, in.y+in.ruby.annTop)
+					inTop = min(inTop, in.y+in.ruby.overTop)
 				}
 				if in.ruby.under {
-					emBottom = max(emBottom, in.y+in.ruby.annBottom)
+					inBottom = max(inBottom, in.y+in.ruby.underBottom)
 				}
 			}
 		}
 	}
+	overTop, underBottom := inTop, inBottom
 	if ann := r.ann; ann != nil && len(ann.lines) > 0 {
 		am := e.faceMetrics(ann.st)
 		abl, _ := firstBaseline(ann)
-		if ann.st.RubyPosition == css.RubyUnder {
-			want := emBottom + am.EmAscent
+		// The ruby's ruby-position places its annotations, whatever an
+		// annotation sets, as Chromium reads it (CSS Ruby 1, 4.1 lets
+		// it apply to the annotation).
+		if r.container.st.RubyPosition == css.RubyUnder {
+			want := max(emBottom, inBottom) + am.EmAscent
 			ann.shift(0, want-abl)
-			r.under, r.annTop, r.annBottom = true, emBottom, want+am.EmDescent
-			bottom = max(bottom, r.annBottom)
+			underBottom = want + am.EmDescent
 		} else {
-			want := emTop - am.EmDescent
+			want := min(emTop, inTop) - am.EmDescent
 			ann.shift(0, want-abl)
-			r.over, r.annTop, r.annBottom = true, want-am.EmAscent, emTop
-			top = min(top, r.annTop)
+			overTop = want - am.EmAscent
 		}
 	}
-	r.annTop, r.annBottom = r.annTop-top, r.annBottom-top
+	r.over, r.under = !math.IsInf(overTop, 1), !math.IsInf(underBottom, -1)
+	if r.over {
+		top = min(top, overTop)
+	}
+	if r.under {
+		bottom = max(bottom, underBottom)
+	}
+	r.overTop, r.underBottom = overTop-top, underBottom-top
 	a.y = top
 	a.h = max(bottom-top, 0)
 	a.baseline, a.hasBaseline = bl-top, true
@@ -315,7 +328,8 @@ func (s *inlineState) rubyAlign(l *lineBox, free float64, ltr bool) float64 {
 // column takes none.
 func (e *engine) rubyOverhang(p *ifcPara, i int, a *box) {
 	r := a.ruby
-	if r.ann == nil || len(r.ann.lines) == 0 || a.st.RubyOverhang == css.RubyOverhangNone {
+	if r.ann == nil || len(r.ann.lines) == 0 || len(r.base.lines) == 0 || a.st.RubyOverhang == css.RubyOverhangNone {
+		// An annotation over an empty base hangs over nothing.
 		return
 	}
 	half := e.fontSize(r.ann.st) / 2
@@ -391,6 +405,10 @@ func (p *painter) annotations(l *lineBox, page int) {
 // takes nothing. litho counts the room within one block: the last line
 // of the block before it gives none.
 func (s *inlineState) rubyRoom(l *lineBox, room float64) {
+	if s.root.rubyLine {
+		// A ruby nested in a base: the column holding it makes the room.
+		return
+	}
 	grow := l.annOver - max(room, 0)
 	if grow <= eps {
 		return
