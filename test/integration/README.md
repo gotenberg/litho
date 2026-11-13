@@ -78,7 +78,7 @@ test/integration/
 │   │       └── FIXTURES.md     Per-source options and what each exercises
 │   ├── wpt/                    WPT reftests (fetched, goldens committed: no goldens step)
 │   │   ├── manifest.json
-│   │   ├── reftests.json       The 569 tests, their references and fuzziness
+│   │   ├── reftests.json       The selected tests, their references and fuzziness
 │   │   ├── files.sha256        Every file they read, by WPT path and SHA-256
 │   │   └── FIXTURES.md         How the tests were chosen
 │   ├── resvg/                  resvg SVG tests (fetched, goldens committed: no goldens step)
