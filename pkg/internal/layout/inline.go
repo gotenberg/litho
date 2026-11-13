@@ -477,7 +477,7 @@ func (s *inlineState) band(y, h float64) (float64, float64) {
 	if s.seg && math.Abs(y-s.segTop) <= eps {
 		return s.bc.bandFrom(y, h, cb.x, cb.x+cb.w, s.segFrom)
 	}
-	return s.bc.band(y, h, cb.x, cb.x+cb.w)
+	return s.bc.lineBand(y, h, cb.x, cb.x+cb.w)
 }
 
 // nextPiece reports whether the line at y of height h has a piece of
@@ -1032,7 +1032,7 @@ func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h f
 	var left, right float64
 	var l *lineBox
 	var fits bool
-	tries := len(bc.floats) + 1
+	tries := len(bc.floats) + 1 + bc.shapeTries()
 	if bc.hasBoth() {
 		// Each float of css.FrameWrapBoth adds a piece to try.
 		tries *= 2
@@ -1054,7 +1054,7 @@ func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h f
 				// of css.FrameWrapBoth: the word goes to the next piece.
 				fits = false
 			}
-			if fits || !bc.narrowed(top, h, cb.x, cb.x+cb.w) {
+			if fits || !bc.lineNarrowed(top, h, cb.x, cb.x+cb.w) {
 				break
 			}
 			if s.nextPiece(top, h, right) {
@@ -1072,7 +1072,7 @@ func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h f
 				continue
 			}
 			s.seg = false
-			next := bc.below(top, h)
+			next := bc.lineBelow(top, h)
 			if math.IsInf(next, 1) {
 				break
 			}
@@ -1086,6 +1086,16 @@ func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h f
 			break
 		}
 		h = l.h
+	}
+	if bc.hasArea() {
+		// Beside a float area the line takes the room the area leaves
+		// over its own height, which a band of the strut's height or of
+		// a longer try may not: the area narrows each band its own way
+		// (CSS Shapes 1, 2), and Chromium places the line in its own.
+		if l2, r2 := s.band(top, l.h); l2 < left-eps || r2 > right+eps {
+			left, right = l2, r2
+			l = s.buildLine(p, pos, end, left, right)
+		}
 	}
 	if !fits {
 		s.unfit++
@@ -1132,7 +1142,7 @@ func isLastPara(d *ifcData, p *ifcPara) bool {
 // bandOf returns the left edge and width of the line box space at y, for a
 // line of height h, in cb beside the floats of bc.
 func bandOf(bc *bfc, y, h float64, cb cblock) (float64, float64) {
-	l, r := bc.band(y, h, cb.x, cb.x+cb.w)
+	l, r := bc.lineBand(y, h, cb.x, cb.x+cb.w)
 	return l, r - l
 }
 

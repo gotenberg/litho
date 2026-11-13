@@ -24,6 +24,10 @@ type floatRect struct {
 	// initial marks the margin box of an initial letter
 	// (initialletter.go).
 	initial bool
+	// area, when not nil, is the float area of a float with
+	// shape-outside, from the rectangle's top left: the lines beside the
+	// float wrap around it, clipped to the rectangle (CSS Shapes 1, 2).
+	area *floatShape
 }
 
 // wordBandTrim is how much of the bottom of a line's band an exclusion of
@@ -60,6 +64,21 @@ func (f floatRect) extentOver(y, h float64) (float64, float64, bool) {
 	return f.shape.extent(y, h)
 }
 
+// areaOver returns the left and right edges of the float area of f over
+// the band [y, y+h), within its margin box; false when the area leaves
+// the band free, which leaves the line beside it alone (CSS Shapes 1, 2).
+func (f floatRect) areaOver(y, h float64) (float64, float64, bool) {
+	if f.area == nil {
+		return f.x0, f.x1, true
+	}
+	lo, hi, ok := f.area.extent(y-f.y0, y+max(h, 0)-f.y0)
+	if !ok {
+		return 0, 0, false
+	}
+	w := f.x1 - f.x0
+	return f.x0 + min(max(lo, 0), w), f.x0 + min(max(hi, 0), w), true
+}
+
 // bfc is the state of one block formatting context: the floats placed in
 // it (CSS 2.1, 9.4.1 and 9.5).
 type bfc struct {
@@ -83,22 +102,34 @@ func (f floatRect) overlaps(y, h float64) bool {
 // band returns the left and right edges of the space beside the floats in
 // the band [y, y+h), within the containing block edges left and right.
 func (c *bfc) band(y, h, left, right float64) (float64, float64) {
+	return c.bandFor(y, h, left, right, math.Inf(-1), false)
+}
+
+// lineBand returns the left and right edges of the space beside the
+// floats in the band [y, y+h) a line box takes, within left and right: a
+// float with shape-outside narrows it by its float area alone (CSS Shapes
+// 1, 2), which leaves boxes that are not lines alone.
+func (c *bfc) lineBand(y, h, left, right float64) (float64, float64) {
+	return c.bandFor(y, h, left, right, math.Inf(-1), true)
+}
+
+// bandFor returns the space beside the floats in the band [y, y+h),
+// within left and right, that ends past from, of a line box when lines
+// is set.
+func (c *bfc) bandFor(y, h, left, right, from float64, lines bool) (float64, float64) {
 	if c.cols != nil && c.mcol != nil && len(c.cols.frags) > 0 {
 		f := c.cols.frags[min(c.cols.of(y+eps), len(c.cols.frags)-1)]
 		right = max(right-c.mcol.shrink(f.col), left)
 	}
-	return c.floatBand(y, h, left, right)
+	return c.floatBandFrom(y, h, left, right, from, lines)
 }
 
 // bandFrom returns the left and right edges of the space beside the
-// floats in the band [y, y+h), within left and right, that ends past
-// from: a piece of a band the floats of css.FrameWrapBoth cut.
+// floats in the band [y, y+h) a line box takes, within left and right,
+// that ends past from: a piece of a band the floats of
+// css.FrameWrapBoth cut.
 func (c *bfc) bandFrom(y, h, left, right, from float64) (float64, float64) {
-	if c.cols != nil && c.mcol != nil && len(c.cols.frags) > 0 {
-		f := c.cols.frags[min(c.cols.of(y+eps), len(c.cols.frags)-1)]
-		right = max(right-c.mcol.shrink(f.col), left)
-	}
-	return c.floatBandFrom(y, h, left, right, from)
+	return c.bandFor(y, h, left, right, from, true)
 }
 
 // hasBoth reports whether a float of css.FrameWrapBoth is among c's.
@@ -113,16 +144,17 @@ func (c *bfc) hasBoth() bool {
 
 // floatBand returns the left and right edges of the space beside the
 // floats alone in the band [y, y+h), within left and right.
-func (c *bfc) floatBand(y, h, left, right float64) (float64, float64) {
-	return c.floatBandFrom(y, h, left, right, math.Inf(-1))
+func (c *bfc) floatBand(y, h, left, right float64, lines bool) (float64, float64) {
+	return c.floatBandFrom(y, h, left, right, math.Inf(-1), lines)
 }
 
 // floatBandFrom returns the left and right edges of the space beside the
 // floats in the band [y, y+h), within left and right, that ends past
 // from: the floats of css.FrameWrapBoth cut the band into pieces, the
 // first ending past from taken. Without a piece left, both edges are at
-// the right edge of the band.
-func (c *bfc) floatBandFrom(y, h, left, right, from float64) (float64, float64) {
+// the right edge of the band. With lines set, a float with shape-outside
+// narrows the band by its float area.
+func (c *bfc) floatBandFrom(y, h, left, right, from float64, lines bool) (float64, float64) {
 	l, r := left, right
 	both := false
 	for _, f := range c.floats {
@@ -143,10 +175,17 @@ func (c *bfc) floatBandFrom(y, h, left, right, from float64) (float64, float64) 
 			l, r = g.wrapBand(l, r)
 			continue
 		}
+		x0, x1 := f.x0, f.x1
+		if lines && f.area != nil {
+			var ok bool
+			if x0, x1, ok = f.areaOver(y, h); !ok {
+				continue
+			}
+		}
 		if f.side == css.FloatLeft {
-			l = max(l, f.x1)
+			l = max(l, x1)
 		} else {
-			r = min(r, f.x0)
+			r = min(r, x0)
 		}
 	}
 	r = max(r, l)
@@ -162,8 +201,53 @@ func (c *bfc) floatBandFrom(y, h, left, right, from float64) (float64, float64) 
 // narrowed reports whether a float narrows the band [y, y+h) within left
 // and right.
 func (c *bfc) narrowed(y, h, left, right float64) bool {
-	l, r := c.floatBand(y, h, left, right)
+	l, r := c.floatBand(y, h, left, right, false)
 	return l > left+eps || r < right-eps
+}
+
+// lineNarrowed reports whether a float narrows the band [y, y+h) a line
+// box takes within left and right, by its float area when it has
+// shape-outside.
+func (c *bfc) lineNarrowed(y, h, left, right float64) bool {
+	l, r := c.floatBand(y, h, left, right, true)
+	return l > left+eps || r < right-eps
+}
+
+// lineBelow returns where a line that does not fit in the band [y, y+h)
+// tries next: [shapeStep] lower while a float with shape-outside overlaps
+// the band, else the lowest bottom of the floats overlapping it, +Inf
+// when none does.
+func (c *bfc) lineBelow(y, h float64) float64 {
+	next := c.below(y, h)
+	for _, f := range c.floats {
+		if f.area != nil && f.overlaps(y, h) && f.y1 > y+eps {
+			next = min(next, y+shapeStep)
+		}
+	}
+	return next
+}
+
+// hasArea reports whether a float of c has shape-outside.
+func (c *bfc) hasArea() bool {
+	for _, f := range c.floats {
+		if f.area != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// shapeTries returns how many more places a line may try beside the
+// floats of c with shape-outside, one a [shapeStep] down each float's
+// height, at most [maxShapeTries].
+func (c *bfc) shapeTries() int {
+	n := 0
+	for _, f := range c.floats {
+		if f.area != nil {
+			n += int(min(math.Ceil((f.y1-f.y0)/shapeStep), maxShapeTries)) + 1 // fits int: at most maxShapeTries
+		}
+	}
+	return min(n, maxShapeTries)
 }
 
 // below returns the lowest bottom of the floats overlapping the band

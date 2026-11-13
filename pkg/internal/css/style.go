@@ -988,6 +988,9 @@ type Style struct {
 	Isolation    Isolation
 	// ClipPath clips the element and its content (CSS Masking 1, 5.1).
 	ClipPath ClipPath
+	// ShapeOutside is the float area of a float (CSS Shapes 1, 6), nil for
+	// none with no shape-margin or shape-image-threshold set.
+	ShapeOutside *ShapeOutside
 	// Clip clips an absolutely positioned element and its content (CSS
 	// 2.2, 11.1.2).
 	Clip ClipRect

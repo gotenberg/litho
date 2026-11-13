@@ -24,6 +24,7 @@ func FuzzParse(f *testing.F) {
 	f.Add([]byte("p{a:(((((((((("))
 	f.Add([]byte(`@page { --x: "b"; @top-center { content: var(--x, "a") } }`))
 	f.Add([]byte("@page { background: linear-gradient(45deg, red 10%, 40%, blue) 0 0 / 50% auto } p { background: radial-gradient(circle 4px at left, red, blue 2px 3px) }"))
+	f.Add([]byte("p { float: left; shape-outside: shape(evenodd from 0 0, curve by 5px 5px with 1px 0 / 2px 2px, arc to 10% 10% of 4px cw large rotate 9deg, hline to right, close) border-box; shape-margin: 5%; shape-image-threshold: 40% }"))
 	f.Add([]byte(fuzzFeatureValues))
 	f.Add([]byte(fuzzFeatureValues[:len(fuzzFeatureValues)/2]))
 	f.Fuzz(func(t *testing.T, data []byte) {

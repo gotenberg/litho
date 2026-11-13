@@ -1192,6 +1192,12 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 		e.clampToPage(f, clampPage)
 	}
 	i := e.addFloatRect(f, bc, false)
+	if i >= 0 && f.st.ShapeOutside != nil && f.st.ShapeOutside.Set {
+		r := &bc.floats[i]
+		if r.area = e.fragmentedShape(f, f.st.ShapeOutside, cb.w, r.y0, r.y1); r.area == nil {
+			r.area = e.newFloatShape(f, f.st.ShapeOutside, cb.w)
+		}
+	}
 	if i >= 0 && clampPage >= 0 {
 		// The text wraps around the part of the float over the page
 		// area, which ends no lower than the page's.
@@ -1199,6 +1205,9 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 		top := e.pageTop(clampPage)
 		r.y0 = max(f.y-f.m[css.Top], top)
 		r.y1 = max(min(f.y-f.m[css.Top]+f.marginH(), top+e.areaH(clampPage)), r.y0)
+		if r.area != nil {
+			r.area.moveDown(f.y - f.m[css.Top] - r.y0)
+		}
 	}
 	return i
 }

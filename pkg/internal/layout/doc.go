@@ -4,7 +4,9 @@
 //
 // It implements the visual formatting model of CSS 2.1 for paged media:
 // box generation (section 9.2), block formatting with margin collapsing,
-// floats and clearance (sections 8.3.1, 9.4.1, 9.5, 10.3, 10.6), inline
+// floats and clearance (sections 8.3.1, 9.4.1, 9.5, 10.3, 10.6), the
+// float areas of shape-outside that the lines beside a float wrap around
+// (CSS Shapes 1; shape-outside on an initial letter is not supported), inline
 // formatting with line boxes (sections 9.4.2, 10.8 and CSS Text 3), lists
 // (section 12.5), tables (chapter 17), flexible boxes (CSS Flexbox 1),
 // grids (CSS Grid 1), the sizing keywords (CSS Sizing 3 and 4),

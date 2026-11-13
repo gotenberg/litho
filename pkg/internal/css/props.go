@@ -252,6 +252,9 @@ const (
 	pViewTimelineAxis
 	pViewTimelineInset
 	pTimelineScope
+	pShapeOutside
+	pShapeMargin
+	pShapeImageThreshold
 	numProps
 )
 
@@ -1040,6 +1043,9 @@ func init() {
 		props[id] = def
 	}
 	props[pClipPath] = clipPathProp()
+	for id, def := range shapeOutsideProps() {
+		props[id] = def
+	}
 	props[pClip] = clipProp()
 	for id, def := range maskProps() {
 		props[id] = def
