@@ -135,6 +135,7 @@ func layoutChain(ctx context.Context, links []linkNode, fonts *text.Fonts, opts 
 	st.Margin, st.Padding, st.Border = [4]css.Dimension{}, [4]css.Dimension{}, [4]css.Border{}
 	st.BackgroundColor, st.BackgroundImage, st.BackgroundGradient = css.Color{}, "", nil
 	st.BoxShadow, st.Transform, st.ZIndex = nil, nil, css.ZIndex{}
+	st.Translate, st.Rotate, st.Scale = nil, nil, nil
 	st.PageAnchor, st.AnchorPage, st.PageClamp = false, 0, false
 	end := &Node{Kind: Element, Style: &css.Style{Display: css.Block, Height: css.Pts(0)}, ID: chainEndID}
 	content := &Node{Kind: Element, Style: &st, Children: append(slices.Clone(first.Children), end)}

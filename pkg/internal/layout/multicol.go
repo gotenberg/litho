@@ -730,7 +730,7 @@ func (e *engine) layoutMonolithicAbs(kids []*box, depth int, in bool) {
 // holdsAbs reports a box that is the containing block of its absolutely
 // positioned descendants (CSS 2.1, 10.1; CSS Transforms 1, 2).
 func holdsAbs(k *box) bool {
-	return k.st.Position != css.Static || len(k.st.Transform) > 0 && k.kind == kindBlock
+	return k.st.Position != css.Static || k.st.HasTransform() && k.kind == kindBlock
 }
 
 // consumed returns how much of each column the content of the container

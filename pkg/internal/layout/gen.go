@@ -642,7 +642,7 @@ func markerStyle(item *css.Style) *css.Style {
 	st.Float = css.FloatNone
 	st.Position = css.Static
 	st.ZIndex = css.ZIndex{Auto: true}
-	st.Transform = nil
+	st.Transform, st.Translate, st.Rotate, st.Scale = nil, nil, nil, nil
 	st.Margin = [4]css.Dimension{css.Pts(0), css.Pts(0), css.Pts(0), css.Pts(0)}
 	st.Padding = st.Margin
 	st.Border = [4]css.Border{}

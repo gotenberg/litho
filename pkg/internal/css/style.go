@@ -902,6 +902,10 @@ type Style struct {
 	// Points or Percent of the border box (CSS Transforms 1, 6).
 	Transform       []TransformFunc
 	TransformOrigin [2]Dimension
+	// Translate, Rotate and Scale are the individual transform
+	// properties, each one function or nil for none; they apply before
+	// Transform, in that order (CSS Transforms 2, 5 and 6).
+	Translate, Rotate, Scale []TransformFunc
 	// OuterInline reports a box whose display was inline-level before CSS
 	// 2.1, 9.7 blockified it: an absolutely positioned box's static
 	// position is then where its inline box would have sat on the line

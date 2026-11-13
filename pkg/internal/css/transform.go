@@ -1,6 +1,10 @@
 package css
 
-import "math"
+import (
+	"math"
+
+	"github.com/gotenberg/litho/pkg/internal/numeric"
+)
 
 // maxTransformFuncs bounds the functions of one transform list: 32 is far
 // more than any real stylesheet chains. Anti-DoS guard, not spec-mandated.
@@ -101,6 +105,8 @@ func transformFunc(t token) (tfSpec, bool) {
 	}
 	n := len(args)
 	num := func(i int) (float64, bool) { return parseNumber(args[i][0]) }
+	// A scale takes a number or a percentage (CSS Transforms 2, 12).
+	factor := func(i int) (float64, bool) { return scaleFactor(args[i][0]) }
 	ang := func(i int) (float64, bool) {
 		d, ok := parseAngle(args[i][0])
 		// A bare number is an angle only when it is zero (CSS Values 4,
@@ -147,17 +153,17 @@ func transformFunc(t token) (tfSpec, bool) {
 		if n < 1 || n > 2 {
 			return tfSpec{}, false
 		}
-		sx, ok := num(0)
+		sx, ok := factor(0)
 		sy := sx
 		if n == 2 && ok {
-			sy, ok = num(1)
+			sy, ok = factor(1)
 		}
 		return tfSpec{kind: TransformScale, v: [6]float64{sx, sy}}, ok
 	case "scalex":
-		sx, ok := oneArg(n, func() (float64, bool) { return num(0) })
+		sx, ok := oneArg(n, func() (float64, bool) { return factor(0) })
 		return tfSpec{kind: TransformScale, v: [6]float64{sx, 1}}, ok
 	case "scaley":
-		sy, ok := oneArg(n, func() (float64, bool) { return num(0) })
+		sy, ok := oneArg(n, func() (float64, bool) { return factor(0) })
 		return tfSpec{kind: TransformScale, v: [6]float64{1, sy}}, ok
 	case "rotate":
 		a, ok := oneArg(n, func() (float64, bool) { return ang(0) })
@@ -218,4 +224,182 @@ func transformOriginProp() propDef {
 		},
 		copyFrom: field(func(s *Style) *[2]Dimension { return &s.TransformOrigin }),
 	}
+}
+
+// scaleFactor parses a scale factor: a <number> or a <percentage>, 100%
+// being 1 (CSS Transforms 2, 5.3 and 12).
+func scaleFactor(t token) (float64, bool) {
+	if t.typ == tPercentage {
+		return t.num / 100, numeric.Finite(t.num)
+	}
+	return parseNumber(t)
+}
+
+// individualProp defines one of the individual transform properties:
+// none or the one function parse reads, stored at f (CSS Transforms 2, 5).
+func individualProp(name string, parse func([]token) (tfSpec, bool), f func(*Style) *[]TransformFunc) propDef {
+	return propDef{
+		name: name,
+		parse: func(v []token, _ *declCtx) (any, bool) {
+			if k, ok := keyword(v); ok {
+				return []tfSpec{}, k == "none"
+			}
+			l := significant(v)
+			if len(l) == 0 || len(l) > 4 {
+				return nil, false
+			}
+			sp, ok := parse(l)
+			return []tfSpec{sp}, ok
+		},
+		compute: func(s *styler, st *Style, v any) {
+			specs, ok := v.([]tfSpec)
+			if !ok {
+				return
+			}
+			if len(specs) == 0 {
+				*f(st) = nil
+				return
+			}
+			sp := specs[0]
+			tf := TransformFunc{Kind: sp.kind, V: sp.v}
+			if sp.kind == TransformTranslate {
+				tf.X, tf.Y = sp.x.dim(s.lc, false), sp.y.dim(s.lc, false)
+			}
+			*f(st) = []TransformFunc{tf}
+		},
+		copyFrom: field(f),
+	}
+}
+
+// translateProp defines translate: none | <length-percentage>
+// [<length-percentage> <length>?]? (CSS Transforms 2, 5.1). The z offset
+// moves nothing a flat page shows, and is read and dropped.
+func translateProp() propDef {
+	return individualProp("translate", func(l []token) (tfSpec, bool) {
+		if len(l) > 3 {
+			return tfSpec{}, false
+		}
+		x, ok := parseLength(l[0], allowPct)
+		y := length{hasLen: true}
+		if ok && len(l) > 1 {
+			y, ok = parseLength(l[1], allowPct)
+		}
+		if ok && len(l) > 2 {
+			_, ok = parseLength(l[2], 0)
+		}
+		return tfSpec{kind: TransformTranslate, x: x, y: y}, ok
+	}, func(s *Style) *[]TransformFunc { return &s.Translate })
+}
+
+// scaleProp defines scale: none | [<number> | <percentage>]{1,3} (CSS
+// Transforms 2, 5.3): one factor scales both axes. The z factor scales
+// nothing a flat page shows but a zero one, which makes the matrix not
+// invertible and the box not rendered (CSS Transforms 1, 6).
+func scaleProp() propDef {
+	return individualProp("scale", func(l []token) (tfSpec, bool) {
+		if len(l) > 3 {
+			return tfSpec{}, false
+		}
+		var v [3]float64
+		for i, t := range l {
+			f, ok := scaleFactor(t)
+			if !ok {
+				return tfSpec{}, false
+			}
+			v[i] = f
+		}
+		if len(l) == 1 {
+			v[1] = v[0]
+		}
+		if len(l) == 3 && v[2] == 0 {
+			v[0], v[1] = 0, 0
+		}
+		return tfSpec{kind: TransformScale, v: [6]float64{v[0], v[1]}}, true
+	}, func(s *Style) *[]TransformFunc { return &s.Scale })
+}
+
+// rotateProp defines rotate: none | <angle> | [x | y | z | <number>{3}]
+// && <angle> (CSS Transforms 2, 5.2). A rotation about the z axis is a 2D
+// rotation; one about another axis shows on the page as its orthographic
+// projection, the 2D part of the 3D rotation matrix (CSS Transforms 2,
+// 13.1, rotate3d()), as a box without perspective flattens it.
+func rotateProp() propDef {
+	return individualProp("rotate", parseRotate, func(s *Style) *[]TransformFunc { return &s.Rotate })
+}
+
+// parseRotate parses the value of rotate other than none.
+func parseRotate(l []token) (tfSpec, bool) {
+	angle := func(t token) (float64, bool) {
+		if t.typ == tNumber && t.num != 0 {
+			return 0, false
+		}
+		d, ok := parseAngle(t)
+		return d * math.Pi / 180, ok
+	}
+	var axis []token
+	a, ok := angle(l[0])
+	if ok {
+		axis = l[1:]
+	} else {
+		a, ok = angle(l[len(l)-1])
+		axis = l[:len(l)-1]
+	}
+	if !ok {
+		return tfSpec{}, false
+	}
+	x, y, z := 0.0, 0.0, 1.0
+	switch len(axis) {
+	case 0:
+	case 1:
+		k, isKw := keyword(axis)
+		switch {
+		case !isKw:
+			return tfSpec{}, false
+		case k == "x":
+			x, y, z = 1, 0, 0
+		case k == "y":
+			x, y, z = 0, 1, 0
+		case k == "z":
+		default:
+			return tfSpec{}, false
+		}
+	case 3:
+		var v [3]float64
+		for i, t := range axis {
+			if t.typ != tNumber || !numeric.Finite(t.num) {
+				return tfSpec{}, false
+			}
+			v[i] = t.num
+		}
+		x, y, z = v[0], v[1], v[2]
+	default:
+		return tfSpec{}, false
+	}
+	n := math.Sqrt(x*x + y*y + z*z)
+	if !numeric.Finite(n) || n == 0 {
+		// A zero axis rotates about nothing: the identity.
+		return tfSpec{kind: TransformScale, v: [6]float64{1, 1}}, true
+	}
+	x, y, z = x/n, y/n, z/n
+	if x == 0 && y == 0 {
+		return tfSpec{kind: TransformRotate, v: [6]float64{a * z}}, true
+	}
+	c, s := math.Cos(a), math.Sin(a)
+	return tfSpec{kind: TransformMatrix, v: [6]float64{
+		c + x*x*(1-c), y*x*(1-c) + z*s,
+		x*y*(1-c) - z*s, c + y*y*(1-c),
+	}}, true
+}
+
+// HasTransform reports whether st transforms its box: a transform list or
+// an individual transform property other than none (CSS Transforms 2, 6).
+func (st *Style) HasTransform() bool {
+	return len(st.Transform) > 0 || len(st.Translate) > 0 || len(st.Rotate) > 0 || len(st.Scale) > 0
+}
+
+// TransformLists returns the transform functions of st in the order they
+// apply: translate, rotate, scale, then the transform list (CSS
+// Transforms 2, 6).
+func (st *Style) TransformLists() [4][]TransformFunc {
+	return [4][]TransformFunc{st.Translate, st.Rotate, st.Scale, st.Transform}
 }

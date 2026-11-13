@@ -394,7 +394,7 @@ func (b *box) zLevel() int {
 // atomic box, a row group, a row or a cell, not a non-replaced inline box,
 // a column or a column group (CSS Transforms 1, 3).
 func (b *box) transformed() bool {
-	return len(b.st.Transform) > 0 && (b.kind == kindBlock || b.kind == kindReplaced) && b.tpart <= partCell
+	return b.st.HasTransform() && (b.kind == kindBlock || b.kind == kindReplaced) && b.tpart <= partCell
 }
 
 // shift moves the box and everything laid out inside it by (dx, dy).

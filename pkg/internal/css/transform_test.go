@@ -42,6 +42,7 @@ func TestTransform_Parse(t *testing.T) {
 			{Kind: TransformScale, V: [6]float64{2, 2}}, {Kind: TransformRotate, V: [6]float64{rad(90)}},
 		}},
 		{"transform: scaleX(3)", []TransformFunc{{Kind: TransformScale, V: [6]float64{3, 1}}}},
+		{"transform: scale(50%, 75%)", []TransformFunc{{Kind: TransformScale, V: [6]float64{0.5, 0.75}}}},
 		{"transform: skew(0, 0.5turn)", []TransformFunc{{Kind: TransformSkew, V: [6]float64{0, rad(180)}}}},
 		{"transform: matrix(1, 0, 0, 1, 4, 8)", []TransformFunc{{Kind: TransformMatrix, V: [6]float64{1, 0, 0, 1, 3, 6}}}},
 		{"transform: rotate(90)", nil},
@@ -64,6 +65,53 @@ func TestTransform_Parse(t *testing.T) {
 			}
 			if !same {
 				t.Errorf("%q: function %d is %+v, want %+v", tt.decls, i, g, w)
+			}
+		}
+	}
+}
+
+func TestIndividualTransforms_Parse(t *testing.T) {
+	t.Parallel()
+	// CSS Transforms 2, 5: translate, rotate and scale hold one function
+	// each, none by default.
+	rad := func(deg float64) float64 { return deg * math.Pi / 180 }
+	c := math.Cos(rad(60))
+	tests := []struct {
+		decls string
+		get   func(*Style) []TransformFunc
+		want  []TransformFunc
+	}{
+		{"", func(s *Style) []TransformFunc { return s.Translate }, nil},
+		{"translate: 4px", func(s *Style) []TransformFunc { return s.Translate }, []TransformFunc{{Kind: TransformTranslate, X: pts(3), Y: pts(0)}}},
+		{"translate: 4px 50% 8px", func(s *Style) []TransformFunc { return s.Translate }, []TransformFunc{{Kind: TransformTranslate, X: pts(3), Y: pct(0.5)}}},
+		{"translate: 4px 1px 50%", func(s *Style) []TransformFunc { return s.Translate }, nil},
+		{"translate: 1px; translate: none", func(s *Style) []TransformFunc { return s.Translate }, nil},
+		{"rotate: 90deg", func(s *Style) []TransformFunc { return s.Rotate }, []TransformFunc{{Kind: TransformRotate, V: [6]float64{rad(90)}}}},
+		{"rotate: z 90deg", func(s *Style) []TransformFunc { return s.Rotate }, []TransformFunc{{Kind: TransformRotate, V: [6]float64{rad(90)}}}},
+		{"rotate: 90deg 0 0 -2", func(s *Style) []TransformFunc { return s.Rotate }, []TransformFunc{{Kind: TransformRotate, V: [6]float64{rad(-90)}}}},
+		{"rotate: x 60deg", func(s *Style) []TransformFunc { return s.Rotate }, []TransformFunc{{Kind: TransformMatrix, V: [6]float64{1, 0, 0, c}}}},
+		{"rotate: 60deg y", func(s *Style) []TransformFunc { return s.Rotate }, []TransformFunc{{Kind: TransformMatrix, V: [6]float64{c, 0, 0, 1}}}},
+		{"rotate: 90", func(s *Style) []TransformFunc { return s.Rotate }, nil},
+		{"rotate: w 90deg", func(s *Style) []TransformFunc { return s.Rotate }, nil},
+		{"scale: 2", func(s *Style) []TransformFunc { return s.Scale }, []TransformFunc{{Kind: TransformScale, V: [6]float64{2, 2}}}},
+		{"scale: 2 50%", func(s *Style) []TransformFunc { return s.Scale }, []TransformFunc{{Kind: TransformScale, V: [6]float64{2, 0.5}}}},
+		{"scale: 2 3 0", func(s *Style) []TransformFunc { return s.Scale }, []TransformFunc{{Kind: TransformScale, V: [6]float64{0, 0}}}},
+		{"scale: 1 2 3 4", func(s *Style) []TransformFunc { return s.Scale }, nil},
+	}
+	for _, tt := range tests {
+		got := tt.get(styleOf(t, tt.decls))
+		if len(got) != len(tt.want) {
+			t.Errorf("%q: %+v, want %+v", tt.decls, got, tt.want)
+			continue
+		}
+		for i := range got {
+			g, w := got[i], tt.want[i]
+			same := g.Kind == w.Kind && dimEq(g.X, w.X) && dimEq(g.Y, w.Y)
+			for j := range g.V {
+				same = same && math.Abs(g.V[j]-w.V[j]) < 1e-9
+			}
+			if !same {
+				t.Errorf("%q: %+v, want %+v", tt.decls, g, w)
 			}
 		}
 	}

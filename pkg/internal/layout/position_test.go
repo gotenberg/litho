@@ -293,3 +293,14 @@ func TestPosition_AbsoluteRoot(t *testing.T) {
 		assertPixels(t, run(t, root, page(4, 2)), 1, "____\n__BB")
 	}
 }
+
+func TestPosition_IndividualTransforms(t *testing.T) {
+	// CSS Transforms 2, 6: translate applies before scale, and both before
+	// the transform list, about the origin.
+	sq := square(1, 1, blue, func(s *css.Style) {
+		s.TransformOrigin = [2]css.Dimension{css.Pts(0), css.Pts(0)}
+		s.Translate = []css.TransformFunc{{Kind: css.TransformTranslate, X: css.Pts(px(2)), Y: css.Pts(0)}}
+		s.Scale = []css.TransformFunc{{Kind: css.TransformScale, V: [6]float64{2, 1}}}
+	})
+	assertPixels(t, run(t, doc(sq), page(6, 1)), 1, "__BB__")
+}

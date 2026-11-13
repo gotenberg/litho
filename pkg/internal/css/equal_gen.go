@@ -51,6 +51,36 @@ func equalStyle(a, b *Style) bool {
 			return false
 		}
 	}
+	if (a.Translate == nil) != (b.Translate == nil) || len(a.Translate) != len(b.Translate) {
+		return false
+	}
+	if len(a.Translate) > 0 && &a.Translate[0] != &b.Translate[0] {
+		for i1 := range a.Translate {
+			if !equalTransformFunc(&a.Translate[i1], &b.Translate[i1]) {
+				return false
+			}
+		}
+	}
+	if (a.Rotate == nil) != (b.Rotate == nil) || len(a.Rotate) != len(b.Rotate) {
+		return false
+	}
+	if len(a.Rotate) > 0 && &a.Rotate[0] != &b.Rotate[0] {
+		for i1 := range a.Rotate {
+			if !equalTransformFunc(&a.Rotate[i1], &b.Rotate[i1]) {
+				return false
+			}
+		}
+	}
+	if (a.Scale == nil) != (b.Scale == nil) || len(a.Scale) != len(b.Scale) {
+		return false
+	}
+	if len(a.Scale) > 0 && &a.Scale[0] != &b.Scale[0] {
+		for i1 := range a.Scale {
+			if !equalTransformFunc(&a.Scale[i1], &b.Scale[i1]) {
+				return false
+			}
+		}
+	}
 	if a.OuterInline != b.OuterInline {
 		return false
 	}
@@ -580,6 +610,21 @@ func hashStyle(h uint64, x *Style) uint64 {
 	}
 	for i1 := range x.TransformOrigin {
 		h = hashDimension(h, &x.TransformOrigin[i1])
+	}
+	h = mixBool(h, x.Translate == nil)
+	h = mix(h, uint64(len(x.Translate)))
+	for i1 := range x.Translate {
+		h = hashTransformFunc(h, &x.Translate[i1])
+	}
+	h = mixBool(h, x.Rotate == nil)
+	h = mix(h, uint64(len(x.Rotate)))
+	for i1 := range x.Rotate {
+		h = hashTransformFunc(h, &x.Rotate[i1])
+	}
+	h = mixBool(h, x.Scale == nil)
+	h = mix(h, uint64(len(x.Scale)))
+	for i1 := range x.Scale {
+		h = hashTransformFunc(h, &x.Scale[i1])
 	}
 	h = mixBool(h, x.OuterInline)
 	h = hashDimension(h, &x.Width)

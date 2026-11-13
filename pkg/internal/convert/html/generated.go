@@ -643,6 +643,7 @@ func anonInline(ps *css.Style) *css.Style {
 	st.Margin, st.Padding, st.Border, st.BorderRadius = in.Margin, in.Padding, in.Border, in.BorderRadius
 	st.BackgroundColor, st.BackgroundImage, st.BackgroundGradient = in.BackgroundColor, in.BackgroundImage, in.BackgroundGradient
 	st.BoxShadow, st.Outline, st.Opacity, st.Transform = nil, in.Outline, in.Opacity, nil
+	st.Translate, st.Rotate, st.Scale = nil, nil, nil
 	st.ZIndex, st.VerticalAlign = in.ZIndex, in.VerticalAlign
 	st.CounterReset, st.CounterIncrement, st.CounterSet = nil, nil, nil
 	st.Content = css.Content{}

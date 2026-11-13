@@ -184,6 +184,9 @@ const (
 	pFontKerning
 	pWritingMode
 	pOverflowClipMargin
+	pTranslate
+	pRotate
+	pScale
 	numProps
 )
 
@@ -698,6 +701,9 @@ func init() {
 		{pZIndex, zIndexProp()},
 		{pTransform, transformProp()},
 		{pTransformOrigin, transformOriginProp()},
+		{pTranslate, translateProp()},
+		{pRotate, rotateProp()},
+		{pScale, scaleProp()},
 		{pWidth, sizeProp("width", func(s *Style) *Dimension { return &s.Width }, kwSizing)},
 		{pHeight, sizeProp("height", func(s *Style) *Dimension { return &s.Height }, kwSizing)},
 		{pMinWidth, minSizeProp("min-width", func(s *Style) *Dimension { return &s.MinWidth }, func(s *Style) *bool { return &s.MinWidthAuto })},

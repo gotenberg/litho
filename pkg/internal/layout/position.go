@@ -194,7 +194,7 @@ func (e *engine) containerOf(b *box) absCB {
 		if a.tpart == partColumn || a.tpart == partColGroup {
 			continue
 		}
-		holds := len(a.st.Transform) > 0 && a.kind == kindBlock
+		holds := a.st.HasTransform() && a.kind == kindBlock
 		if !fixed && a.st.Position != css.Static {
 			holds = true
 		}
@@ -538,8 +538,10 @@ func transformOf(b *box, r typeset.Rect) (typeset.Matrix, bool, bool) {
 	ox := r.X + resolve(b.st.TransformOrigin[0], r.Width)
 	oy := r.Y + resolve(b.st.TransformOrigin[1], r.Height)
 	m := typeset.Matrix{A: 1, D: 1, E: ox, F: oy}
-	for _, f := range b.st.Transform {
-		m = mul(m, funcMatrix(f, r))
+	for _, l := range b.st.TransformLists() {
+		for _, f := range l {
+			m = mul(m, funcMatrix(f, r))
+		}
 	}
 	m = mul(m, typeset.Matrix{A: 1, D: 1, E: -ox, F: -oy})
 	for _, v := range []float64{m.A, m.B, m.C, m.D, m.E, m.F} {
