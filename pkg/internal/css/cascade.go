@@ -1010,11 +1010,29 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 	// 7.3.4). The user origin's normal declarations sort before every
 	// author declaration, so it is complete when an author revert is met.
 	var user *[numProps]any
-	for _, c := range cands {
+	// below holds the state of the cascade at the start of each rank and
+	// layer, which a revert-layer rolls back to; kept only when a
+	// declaration needs it.
+	var below []layerState
+	revertsLayer := slices.ContainsFunc(cands, func(c cand) bool { return c.d.revertLayer })
+	for i, c := range cands {
 		for _, w := range c.d.warns {
 			cs.warns.add(w)
 		}
+		if revertsLayer && (i == 0 || c.rank != cands[i-1].rank || c.layer != cands[i-1].layer) {
+			below = append(below, layerState{rank: c.rank, layer: c.layer, winners: winners, imp: imp})
+		}
 		switch {
+		case c.d.revertLayer:
+			s := stateBelow(below, c)
+			for _, e := range c.d.entries {
+				id := side(c.d, e.id)
+				winners[id], imp[id] = s.winners[id], s.imp[id]
+				if user != nil && originOf(c.rank) == User {
+					user[id] = winners[id]
+				}
+			}
+			continue
 		case c.d.revert && originOf(c.rank) == Author && user != nil:
 			for _, e := range c.d.entries {
 				id := side(c.d, e.id)
@@ -1096,6 +1114,35 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		cs.remember(key, cands, st)
 	}
 	return st, vars
+}
+
+// layerState is the cascade's winners and their importance at the start
+// of one rank and cascade layer.
+type layerState struct {
+	rank, layer int
+	winners     [numProps]any
+	imp         [numProps]bool
+}
+
+// stateBelow returns the state a revert-layer declaration c rolls back to
+// (CSS Cascade 5, 7.3.5): the cascade as if no rule of c's layer had been
+// given. below holds the states at the start of each rank and layer up to
+// c's, in cascade order. An important declaration of a layer also drops
+// everything between the normal and the important declarations of its
+// layer, so it rolls back to the start of the layer's normal
+// declarations; one of a style attribute rolls back over the style
+// attribute alone.
+func stateBelow(below []layerState, c cand) *layerState {
+	r, l := c.rank, c.layer
+	if c.d.Important && l != attachedRank {
+		r, l = rank(originOf(r), false), -l
+	}
+	for i := range below {
+		if s := &below[i]; s.rank > r || s.rank == r && s.layer >= l {
+			return s
+		}
+	}
+	return &below[len(below)-1]
 }
 
 // linearClasses is how many distinct classes of an element match tells

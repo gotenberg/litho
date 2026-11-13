@@ -54,3 +54,28 @@ func TestLayers_AtRules(t *testing.T) {
 		t.Errorf("styleset = %v, want %v", got, want)
 	}
 }
+
+// TestLayers_RevertLayer locks revert-layer (CSS Cascade 5, 7.3.5): the
+// value rolls back to what the layers below the declaration's give, the
+// user agent's past the lowest layer; an important one also drops the
+// declarations between its layer's normal and important levels; one in
+// a style attribute rolls back over the attribute alone.
+func TestLayers_RevertLayer(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<div style="color: rgb(0 0 9)"><p id=a class=a>a</p><p id=b class=b>b</p><p id=c class=c>c</p>
+<p id=d class=d>d</p><p id=e class=e style="color: revert-layer !important">e</p><p id=f class=f>f</p></div>`, `
+@layer low, high;
+@layer low { p { color: rgb(0 0 1) } p.c { margin-top: 0; margin-top: revert-layer } p.d { color: revert-layer !important } }
+@layer high { p { color: rgb(0 0 2) } p.a { color: revert-layer } p.e { color: rgb(0 0 6) !important } }
+p.b { color: revert-layer }
+p.f { color: revert }
+`)
+	for id, want := range map[string]uint8{"a": 1, "b": 2, "c": 2, "d": 9, "e": 6, "f": 9} {
+		if got := c.of(id).Color; !colorEq(got, rgb(0, 0, want)) {
+			t.Errorf("#%s color = %+v, want rgb(0 0 %d)", id, got, want)
+		}
+	}
+	if got, want := c.of("c").Margin[Top], c.of("a").Margin[Top]; !dimEq(got, want) || dimEq(got, pts(0)) {
+		t.Errorf("#c margin-top = %+v, want the user agent's %+v", got, want)
+	}
+}

@@ -63,9 +63,10 @@ func (w *warnings) result() []Warning {
 
 // cssWide is a CSS-wide keyword (CSS Cascade 4, 7.3). revert and
 // revert-layer parse as unset; the cascade rolls an author declaration of
-// revert back to the user origin's value (see [Declaration]), and behaves
-// as unset otherwise: litho has no layers, and rolling back to the user
-// agent's value is not supported.
+// revert back to the user origin's value, and a declaration of
+// revert-layer back to the layers below its own (see [Declaration]).
+// revert behaves as unset otherwise: rolling back to the user agent's
+// value is not supported.
 type cssWide uint8
 
 const (
@@ -99,11 +100,15 @@ type Declaration struct {
 	pending []token
 	// base is the URL a pending value's url() resolves against.
 	base string
-	// revert marks a value of revert or revert-layer, whose entries hold
-	// unset: in the author origin it takes the user origin's value for
-	// each longhand that origin sets (CSS Cascade 4, 7.3.4).
+	// revert marks a value of revert, whose entries hold unset: in the
+	// author origin it takes the user origin's value for each longhand
+	// that origin sets (CSS Cascade 4, 7.3.4).
 	revert bool
-	warns  []Warning
+	// revertLayer marks a value of revert-layer, whose entries hold unset:
+	// it takes the value the layers below its own give each longhand
+	// (CSS Cascade 5, 7.3.5).
+	revertLayer bool
+	warns       []Warning
 }
 
 // declCtx carries what parsing a value needs.
@@ -292,7 +297,7 @@ func (c *declCtx) declare(name string, value []token, important bool) Declaratio
 	}
 	if v := significant(value); len(v) == 1 && v[0].typ == tIdent {
 		k := lower(v[0].value)
-		d.revert = k == "revert" || k == "revert-layer"
+		d.revert, d.revertLayer = k == "revert", k == "revert-layer"
 	}
 	if !ok {
 		if mixedCalc(value) {
