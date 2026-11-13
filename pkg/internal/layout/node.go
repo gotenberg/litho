@@ -44,10 +44,15 @@ type Picture struct {
 	Width, Height float64
 	// Vector, when set, draws a vector picture, such as SVG, in place of
 	// Source, which is then nil: it returns the fragments that paint the
-	// picture into the rectangle r, in the caller's coordinates in points,
-	// with nothing outside r. Their group nesting is at most
-	// MaxVectorDepth. The engine copies a fragment before changing it, and
-	// calls Vector from its own goroutine with its context.
+	// picture into the rectangle r, in the caller's coordinates in points.
+	// They may paint past r, as the shadow, glow or reflection of an
+	// Office drawing reaches past its box; the engine places and breaks
+	// the picture by r alone, clips it to its content box only when
+	// object-fit moves r off that box, and tiles a background or a border
+	// image at r's size, whose fragments keep within r. Their group
+	// nesting is at most MaxVectorDepth. The engine copies a fragment
+	// before changing it, and calls Vector from its own goroutine with its
+	// context.
 	Vector func(ctx context.Context, r typeset.Rect) []typeset.Fragment
 	// NoNaturalWidth and NoNaturalHeight mark a vector picture without a
 	// natural width or height (CSS Images 3, 4.1), as an SVG whose width
