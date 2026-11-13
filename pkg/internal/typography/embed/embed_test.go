@@ -104,7 +104,7 @@ func written(t *testing.T, s *Subset, logger *slog.Logger) (*writer.ObjAllocator
 	t.Helper()
 	alloc := writer.NewObjAllocator(0)
 	ref := alloc.Alloc(ast.PdfNull{})
-	s.Write(t.Context(), alloc, logger, ref)
+	s.Write(t.Context(), alloc, nil, logger, ref)
 	font, ok := alloc.Pending()[ref.ObjectNum].(ast.PdfDict)
 	if !ok {
 		t.Fatalf("no Type0 font at %d: %v", ref.ObjectNum, alloc.Pending()[ref.ObjectNum])

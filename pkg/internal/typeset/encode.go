@@ -1,7 +1,6 @@
 package typeset
 
 import (
-	"bytes"
 	"compress/zlib"
 	"fmt"
 	"io"
@@ -58,10 +57,15 @@ func uriString(uri string) ast.PdfString {
 	return ast.PdfString(b.String())
 }
 
-// zlibWriters keeps the zlib writers of finished streams for the next
-// one: a writer's compressor tables weigh about a megabyte, and a document
-// compresses one stream a page and a picture. A writer reset is in the
-// state a new one starts in, so it writes the same bytes.
+// zlibWriters keeps the zlib writers of the pictures [EncodeImage]
+// compresses, its samples and its alpha at once, for the next picture: a
+// writer's state weighs [writer.DeflaterState]. Pictures are encoded on the
+// goroutines of the conversions that hold them, several at a time in one
+// process, which the pool serves alike; it keeps at most a writer for each
+// picture being encoded at once, and the collector frees those it keeps
+// past two collections. A writer reset is in the state a new one starts
+// in, so it writes the same bytes. The streams of a document being written
+// go through its [docWriter]'s own [writer.Deflater] instead.
 var zlibWriters = sync.Pool{New: func() any { return zlib.NewWriter(io.Discard) }}
 
 // newZlib returns a zlib writer at the default level writing to w.
@@ -76,32 +80,6 @@ func newZlib(w io.Writer) *zlib.Writer {
 func releaseZlib(z *zlib.Writer) {
 	z.Reset(io.Discard)
 	zlibWriters.Put(z)
-}
-
-// flate returns data zlib-compressed, the format the FlateDecode filter
-// reads (ISO 32000-1, 7.4.4). Writing to a bytes.Buffer cannot fail, so
-// the errors zlib returns are propagated only for form.
-func flate(data []byte) ([]byte, error) {
-	var buf bytes.Buffer
-	w := newZlib(&buf)
-	defer releaseZlib(w)
-	if _, err := w.Write(data); err != nil {
-		return nil, fmt.Errorf("compressing: %w", err)
-	}
-	if err := w.Close(); err != nil {
-		return nil, fmt.Errorf("compressing: %w", err)
-	}
-	return buf.Bytes(), nil
-}
-
-// flateStream returns data as a FlateDecode stream carrying dict.
-func flateStream(dict ast.PdfDict, data []byte) (ast.PdfStream, error) {
-	z, err := flate(data)
-	if err != nil {
-		return ast.PdfStream{}, err
-	}
-	dict["Filter"] = ast.PdfName("FlateDecode")
-	return ast.NewStream(dict, z), nil
 }
 
 // precision is the number of decimals a content-stream number keeps: a

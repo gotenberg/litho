@@ -133,11 +133,15 @@ func subsetTag(keep []uint16) string {
 // text of each code. A subset that fails leaves the program whole, which
 // logger reports at Debug: the output is then larger, never wrong.
 //
-// A nil logger discards. Write reads s and leaves it unchanged, so calling
-// it twice writes the same objects twice.
-func (s *Subset) Write(ctx context.Context, alloc *writer.ObjAllocator, logger *slog.Logger, ref ast.PdfIndirectRef) {
+// d compresses the program and the CIDToGIDMap; a nil d gives Write one
+// of its own. A nil logger discards. Write reads s and leaves it unchanged,
+// so calling it twice writes the same objects twice.
+func (s *Subset) Write(ctx context.Context, alloc *writer.ObjAllocator, d *writer.Deflater, logger *slog.Logger, ref ast.PdfIndirectRef) {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
+	}
+	if d == nil {
+		d = new(writer.Deflater)
 	}
 	f := s.font
 	gids := make([]uint16, 0, len(s.keep)+1)
@@ -172,7 +176,7 @@ func (s *Subset) Write(ctx context.Context, alloc *writer.ObjAllocator, logger *
 		} else {
 			logger.Debug("text font: subsetting the CFF program failed, embedding it whole", "err", err)
 		}
-		f.writeCFF(alloc, name, program, widths, toUnicode, ref)
+		f.writeCFF(alloc, d, name, program, widths, toUnicode, ref)
 		return
 	}
 
@@ -201,15 +205,15 @@ func (s *Subset) Write(ctx context.Context, alloc *writer.ObjAllocator, logger *
 			toUnicode[cid] = e.text
 		}
 	}
-	f.writeTrueType(alloc, name, program, cidToGID, widths, toUnicode, ref)
+	f.writeTrueType(alloc, d, name, program, cidToGID, widths, toUnicode, ref)
 }
 
 // writeTrueType writes the objects of a CIDFontType2 font named name over
 // program, a TrueType program, and the Type0 font at ref. Codes are the CIDs
 // cidToGID maps to the program's glyphs, so the /W array and the ToUnicode
 // CMap are keyed by code.
-func (f *Font) writeTrueType(alloc *writer.ObjAllocator, name string, program []byte, cidToGID []uint16, widths map[uint16]uint16, toUnicode map[uint16]string, ref ast.PdfIndirectRef) {
-	fontFileRef := alloc.Alloc(flateStream(ast.PdfDict{"Length1": ast.PdfInt(len(program))}, program))
+func (f *Font) writeTrueType(alloc *writer.ObjAllocator, d *writer.Deflater, name string, program []byte, cidToGID []uint16, widths map[uint16]uint16, toUnicode map[uint16]string, ref ast.PdfIndirectRef) {
+	fontFileRef := alloc.Alloc(flateStream(d, ast.PdfDict{"Length1": ast.PdfInt(len(program))}, program))
 	upe, _ := f.scaler()
 	descriptorRef := f.writeDescriptor(alloc, name, "FontFile2", fontFileRef)
 	// A CIDToGIDMap stream holds the glyph of each CID as two bytes, in CID
@@ -218,7 +222,7 @@ func (f *Font) writeTrueType(alloc *writer.ObjAllocator, name string, program []
 	for cid, gid := range cidToGID {
 		binary.BigEndian.PutUint16(mapping[2*cid:], gid)
 	}
-	cidToGIDRef := alloc.Alloc(flateStream(ast.PdfDict{}, mapping))
+	cidToGIDRef := alloc.Alloc(flateStream(d, ast.PdfDict{}, mapping))
 	cidFontRef := alloc.Alloc(ast.PdfDict{
 		"Type":           ast.PdfName("Font"),
 		"Subtype":        ast.PdfName("CIDFontType2"),
@@ -236,8 +240,8 @@ func (f *Font) writeTrueType(alloc *writer.ObjAllocator, name string, program []
 // program, the CFF table of f, and the Type0 font at ref. widths and
 // toUnicode are keyed by code: the CIDs of the charset, or the glyph IDs of
 // a name-keyed program.
-func (f *Font) writeCFF(alloc *writer.ObjAllocator, name string, program []byte, widths map[uint16]uint16, toUnicode map[uint16]string, ref ast.PdfIndirectRef) {
-	fontFileRef := alloc.Alloc(flateStream(ast.PdfDict{"Subtype": ast.PdfName("CIDFontType0C")}, program))
+func (f *Font) writeCFF(alloc *writer.ObjAllocator, d *writer.Deflater, name string, program []byte, widths map[uint16]uint16, toUnicode map[uint16]string, ref ast.PdfIndirectRef) {
+	fontFileRef := alloc.Alloc(flateStream(d, ast.PdfDict{"Subtype": ast.PdfName("CIDFontType0C")}, program))
 	upe, _ := f.scaler()
 	descriptorRef := f.writeDescriptor(alloc, name, "FontFile3", fontFileRef)
 	cidFontRef := alloc.Alloc(ast.PdfDict{

@@ -179,11 +179,12 @@ func (t *textFonts) load(ctx context.Context, doc *document.Document, data []byt
 
 // finish writes every font drawn with, subset to the glyphs recorded.
 func (t *textFonts) finish(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+	var d writer.Deflater
 	for _, s := range t.fonts {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		s.sub.Write(ctx, alloc, textFontLogger(doc), s.ref)
+		s.sub.Write(ctx, alloc, &d, textFontLogger(doc), s.ref)
 	}
 	return nil
 }

@@ -226,6 +226,10 @@ type docWriter struct {
 	// ([Stream.Abort]). held is not that amount once a stream has spooled:
 	// it is set to hold.
 	charged int64
+	// deflate compresses the streams the writer makes; deflated is what
+	// it keeps between streams that charged holds.
+	deflate  writer.Deflater
+	deflated int64
 }
 
 // pageCost is what one page written costs the conversion's memory budget
@@ -374,7 +378,10 @@ func (w *docWriter) finish(ctx context.Context, tail *Document, producer string,
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("writing fonts: %w", err)
 		}
-		fe.subset.Write(ctx, w.alloc, w.logger, fe.ref)
+		fe.subset.Write(ctx, w.alloc, &w.deflate, w.logger, fe.ref)
+		if err := w.chargeDeflate(); err != nil {
+			return nil, fmt.Errorf("writing fonts: %w", err)
+		}
 		if err := w.spill(ctx); err != nil {
 			return nil, err
 		}
@@ -637,7 +644,7 @@ func (w *docWriter) page(ctx context.Context, page *Page, links []Link) error {
 	}
 	w.hashBytes(content)
 
-	stream, err := flateStream(ast.PdfDict{}, content)
+	stream, err := w.flateStream(ast.PdfDict{}, content)
 	if err != nil {
 		return fmt.Errorf("writing page %d: %w", i+1, err)
 	}
@@ -687,6 +694,38 @@ func (w *docWriter) page(ctx context.Context, page *Page, links []Link) error {
 	}
 	w.reserved[pageRef(i).ObjectNum] = dict
 	w.heights = append(w.heights, page.Height)
+	return nil
+}
+
+// flateStream returns data as a FlateDecode stream carrying dict (ISO
+// 32000-1, 7.4.4), in a slice of its own length. What the writer's
+// compressor keeps between streams, its state and its output buffer, is
+// charged as it grows, and given back with the streams' charge when the
+// file is written.
+func (w *docWriter) flateStream(dict ast.PdfDict, data []byte) (ast.PdfStream, error) {
+	z, err := w.deflate.Deflate(data)
+	if err != nil {
+		return ast.PdfStream{}, err
+	}
+	if err := w.chargeDeflate(); err != nil {
+		return ast.PdfStream{}, err
+	}
+	dict["Filter"] = ast.PdfName("FlateDecode")
+	return ast.NewStream(dict, z), nil
+}
+
+// chargeDeflate charges what the writer's compressor keeps between streams
+// past what it was charged.
+func (w *docWriter) chargeDeflate() error {
+	grown := w.deflate.Held() - w.deflated
+	if grown <= 0 {
+		return nil
+	}
+	if err := w.mem.ChargeUnits(grown, 1, "the stream compressor"); err != nil {
+		return err
+	}
+	w.deflated += grown
+	w.charged += grown
 	return nil
 }
 

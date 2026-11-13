@@ -44,7 +44,7 @@ func FuzzLoad(f *testing.F) {
 		for gid := range uint16(4) {
 			sub.Code(gid, "x")
 		}
-		sub.Write(t.Context(), writer.NewObjAllocator(0), nil, ast.PdfIndirectRef{ObjectNum: 1})
+		sub.Write(t.Context(), writer.NewObjAllocator(0), nil, nil, ast.PdfIndirectRef{ObjectNum: 1})
 		font.WriteIdentity(writer.NewObjAllocator(0), nil, ast.PdfIndirectRef{ObjectNum: 1}, []uint16{1})
 	})
 }

@@ -156,7 +156,7 @@ func (p *pageWriter) groupForm(ctx context.Context, content []Fragment, box [4]f
 	p.steps = fw.steps
 	data := fw.buf.Bytes()
 	p.w.hashBytes(data)
-	stream, err := flateStream(ast.PdfDict{
+	stream, err := p.w.flateStream(ast.PdfDict{
 		"Type":      ast.PdfName("XObject"),
 		"Subtype":   ast.PdfName("Form"),
 		"BBox":      ast.PdfArray{fine(box[0]), fine(box[1]), fine(box[2]), fine(box[3])},

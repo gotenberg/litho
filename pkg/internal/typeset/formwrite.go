@@ -382,7 +382,7 @@ func (w *docWriter) appearance(ctx context.Context, page int, rect Rect, frags [
 	binary.BigEndian.PutUint64(box[8:], math.Float64bits(rect.Height))
 	w.hashBytes(box[:])
 	w.hashBytes(data)
-	stream, err := flateStream(ast.PdfDict{
+	stream, err := w.flateStream(ast.PdfDict{
 		"Type":      ast.PdfName("XObject"),
 		"Subtype":   ast.PdfName("Form"),
 		"BBox":      ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), pdfReal(rect.Width), pdfReal(rect.Height)},

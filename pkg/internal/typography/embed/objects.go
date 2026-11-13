@@ -1,8 +1,6 @@
 package embed
 
 import (
-	"bytes"
-	"compress/zlib"
 	"fmt"
 	"sort"
 	"strings"
@@ -99,18 +97,16 @@ func writeType0(alloc *writer.ObjAllocator, ref ast.PdfIndirectRef, name string,
 }
 
 // flateStream returns data as a FlateDecode stream carrying dict (ISO
-// 32000-1, 7.4.4), which the embedded programs and the CIDToGIDMap take: a
-// font program the subset left whole, as a CID-keyed CFF program is, weighs
-// what its subroutines weigh, and Flate takes a fifth to a half off it.
-func flateStream(dict ast.PdfDict, data []byte) ast.PdfStream {
-	var buf bytes.Buffer
-	w := zlib.NewWriter(&buf)
-	// A bytes.Buffer grows without failing, so neither call can.
-	_, _ = w.Write(data)
-	_ = w.Close()
+// 32000-1, 7.4.4), compressed by d, which the embedded programs and the
+// CIDToGIDMap take: a font program the subset left whole, as a CID-keyed
+// CFF program is, weighs what its subroutines weigh, and Flate takes a
+// fifth to a half off it.
+func flateStream(d *writer.Deflater, dict ast.PdfDict, data []byte) ast.PdfStream {
+	// A Deflater writes to a bytes.Buffer, which grows without failing.
+	z, _ := d.Deflate(data)
 	dict["Filter"] = ast.PdfName("FlateDecode")
-	dict["Length"] = ast.PdfInt(buf.Len())
-	return ast.NewStream(dict, buf.Bytes())
+	dict["Length"] = ast.PdfInt(len(z))
+	return ast.NewStream(dict, z)
 }
 
 // cidWidthArray emits the /W array of a CIDFont (ISO 32000-1, 9.7.4.3),
