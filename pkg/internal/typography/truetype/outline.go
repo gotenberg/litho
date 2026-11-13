@@ -651,14 +651,14 @@ func contourPath(p *geom.Path, c []ttPoint) {
 
 // midpoint returns the point halfway between a and b.
 func midpoint(a, b geom.Point) geom.Point {
-	return geom.Point{X: (a.X + b.X) / 2, Y: (a.Y + b.Y) / 2}
+	return geom.Point{X: float64((a.X + b.X) / 2), Y: float64((a.Y + b.Y) / 2)}
 }
 
 // quadTo appends the cubic that draws the quadratic Bézier from p0 with
 // control q to p2.
 func quadTo(p *geom.Path, p0, q, p2 geom.Point) {
 	const twoThirds = 2.0 / 3.0
-	c1 := geom.Point{X: p0.X + twoThirds*(q.X-p0.X), Y: p0.Y + twoThirds*(q.Y-p0.Y)}
-	c2 := geom.Point{X: p2.X + twoThirds*(q.X-p2.X), Y: p2.Y + twoThirds*(q.Y-p2.Y)}
+	c1 := geom.Point{X: p0.X + float64(twoThirds*(q.X-p0.X)), Y: p0.Y + float64(twoThirds*(q.Y-p0.Y))}
+	c2 := geom.Point{X: p2.X + float64(twoThirds*(q.X-p2.X)), Y: p2.Y + float64(twoThirds*(q.Y-p2.Y))}
 	p.CubicTo(c1, c2, p2)
 }
