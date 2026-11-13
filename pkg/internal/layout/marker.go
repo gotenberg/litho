@@ -152,13 +152,32 @@ func markerX(b *box, m *markerBox, w float64) float64 {
 	return anchor
 }
 
+// markerEdges returns the left and right edges an outside marker of the
+// list item b sits beside: under [Options.BrowserRules] its border box's,
+// as the marker box lies outside the principal block box (CSS 2.1,
+// 12.5.1) and Chromium puts it there; else its content box's, which an
+// Office list indents its label from.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (Gotenberg 9.4.1) ends a 20px "X" marker
+//     at the left border edge of a list item whatever its padding-left
+//     and border-left.
+func (e *engine) markerEdges(b *box) (float64, float64) {
+	if e.opts.BrowserRules {
+		return b.x, b.x + b.borderW()
+	}
+	return b.contentX(), b.contentX() + b.w
+}
+
 // symbolRect returns the rectangle, in flow coordinates, of the bullet an
 // outside disc, circle or square marker of the list item b draws, for a
-// font of the given ascent and a first line at baseline. CSS Lists 3 leaves
+// font of the given ascent and a first line at baseline, beside the item's
+// edges left and right ([engine.markerEdges]). CSS Lists 3 leaves
 // the marker's look to the user agent; this is Blink's symbol marker,
 // independent of the font's own bullet: with A the ascent rounded to whole
 // pixels and o = A*2/3, a square of (o+1)/2 pixels, o + 7 pixels of gap
-// and 1 pixel of side bearing from the content edge, 3*(A-o)/2 pixels
+// and 1 pixel of side bearing from the edge, 3*(A-o)/2 pixels
 // below the top of the ascent, in integer arithmetic.
 //
 // # Corpus evidence
@@ -167,13 +186,13 @@ func markerX(b *box, m *markerBox, w float64) float64 {
 //     symbol marker of a list in Liberation Serif at 100px, A 89, as a 30
 //     pixel bullet whose ink spans 66 to 37 pixels left of the content
 //     edge, its top 45 pixels below the ascent's.
-func symbolRect(b *box, ascent, baseline float64) typeset.Rect {
+func symbolRect(b *box, ascent, baseline, left, right float64) typeset.Rect {
 	a := int(math.Round(min(max(ascent/css.Pt, 0), maxSymbolAscent))) // fits int: bounded
 	o := a * 2 / 3
 	w := float64((o+1)/2) * css.Pt
-	x := b.contentX() - float64(o+7+1-1)*css.Pt
+	x := left - float64(o+7+1-1)*css.Pt
 	if b.st.Direction == css.RTL {
-		x = b.contentX() + b.w + float64(o+7+1-1)*css.Pt - w
+		x = right + float64(o+7+1-1)*css.Pt - w
 	}
 	y := baseline - float64(a)*css.Pt + float64(3*(a-o)/2)*css.Pt
 	return typeset.Rect{X: x, Y: y, Width: w, Height: w}

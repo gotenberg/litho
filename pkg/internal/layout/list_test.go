@@ -425,3 +425,18 @@ func TestListMarkers_CascadedMarkerStyle(t *testing.T) {
 		t.Errorf("outside marker %+v, want the text AB CD", m)
 	}
 }
+
+func TestListMarkers_OutsideTheBorderBox(t *testing.T) {
+	// CSS 2.1, 12.5.1: an outside marker box lies outside the principal
+	// block box. Under BrowserRules it ends at the item's border edge, as
+	// Chromium draws it, whatever the item's padding and border.
+	st := sty(display(css.ListItem), padding(0, 0, 0, 30), func(s *css.Style) {
+		s.ListStyleType, s.ListStyleString = css.ListString, "X"
+		s.Border[css.Left] = css.Border{Width: px(10), Style: css.Solid, Color: black}
+	})
+	rb := boxesWith(t, doc(el(sty(padding(0, 0, 0, 50)), el(st, txt(st, "x")))), Options{Page: page(200, 100), BrowserRules: true})
+	li := kid(t, rb, 0, 0, 0)
+	if m := li.outside; m == nil || !near((m.x+m.width-li.x)/css.Pt, 0) {
+		t.Errorf("marker %+v, want its end on the border edge at %v", m, li.x/css.Pt)
+	}
+}

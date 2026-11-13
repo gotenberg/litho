@@ -2062,9 +2062,10 @@ func (e *engine) placeMarker(b *box) {
 			above, _ := e.markerLine(b)
 			baseline = b.contentY() + above
 		}
-		m.x = b.contentX() - m.width
+		left, right := e.markerEdges(b)
+		m.x = left - m.width
 		if rtl {
-			m.x = b.contentX() + b.w + gap
+			m.x = right + gap
 		}
 		if m.boxW > 0 {
 			m.x = markerX(b, m, m.picture.Width)
@@ -2105,13 +2106,15 @@ func (e *engine) placeMarker(b *box) {
 		baseline = b.contentY() + above
 	}
 	if m.symbol {
-		m.sym = symbolRect(b, mt.Ascent, baseline)
+		left, right := e.markerEdges(b)
+		m.sym = symbolRect(b, mt.Ascent, baseline, left, right)
 		m.x, m.baseline, m.placed = m.sym.X, baseline, true
 		return
 	}
-	m.x = b.contentX() - m.width
+	left, right := e.markerEdges(b)
+	m.x = left - m.width
 	if rtl {
-		m.x = b.contentX() + b.w
+		m.x = right
 	}
 	if m.boxW > 0 {
 		m.x = markerX(b, m, m.width)
