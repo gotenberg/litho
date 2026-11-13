@@ -9,8 +9,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 func TestParseOptions_RefusesWhatTheRouteRefuses(t *testing.T) {
@@ -109,7 +107,7 @@ func TestLoad_ReadsTheOptionsAndTemplates(t *testing.T) {
 	if len(s.Bands) != 2 {
 		t.Fatalf("%d bands, want 2", len(s.Bands))
 	}
-	if b := s.Bands[0]; b.Footer || b.Band.HTML != "<b>head</b>" || b.Band.CSS != "b { color: red }" || b.Band.Room != pdf.RoomContent || !b.Band.Isolated {
+	if b := s.Bands[0]; b.Footer || b.Band.HTML != "<b>head</b>" || b.Band.CSS != "b { color: red }" || !b.Band.GrowMargin || !b.Band.IgnoreDocumentStyles {
 		t.Errorf("header band %+v", b)
 	}
 	if b := s.Bands[1]; !b.Footer || b.Band.HTML != "" {

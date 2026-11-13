@@ -23,7 +23,7 @@ func ExampleWithHeader() {
 		pdf.WithHeader(pdf.PageBand{
 			HTML: `<div class="row"><span class="title"></span><span class="page"></span></div>`,
 			CSS: `.row { display: flex; justify-content: space-between; font-size: 9pt }
-			      .title::after { content: string(litho-title) }
+			      .title::after { content: string(document-title) }
 			      .page::after { content: "Page " counter(page) " of " counter(pages) }`,
 		}),
 		pdf.WithHeader(pdf.PageBand{Pages: pdf.FirstPage()}),

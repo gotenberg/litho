@@ -7,5 +7,5 @@
 }
 
 .t::after {
-  content: string(litho-title);
+  content: string(document-title);
 }

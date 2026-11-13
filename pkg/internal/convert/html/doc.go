@@ -108,7 +108,7 @@
 // content and sits where the box's text-align puts a line, as WeasyPrint
 // lays it out; its page and pages counters and the string() of its
 // generated content take the page's values, and its links keep their
-// annotations on every page that shows it. The named string litho-title
+// annotations on every page that shows it. The named string document-title
 // is the document's title until an element sets it.
 //
 // The page counter adds 1 on every page unless the page context's

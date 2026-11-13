@@ -244,7 +244,7 @@ func TestBands_StringsAndTitle(t *testing.T) {
 		`<body><p>intro</p><h2>Alpha</h2><h2>Beta</h2></body></html>`
 	doc := convertDoc(t, src, bandOptions(Band{
 		HTML: `<span class="t"></span>|<span class="c"></span>`,
-		CSS:  `.t::after { content: string(litho-title) } .c::after { content: string(ch) }`,
+		CSS:  `.t::after { content: string(document-title) } .c::after { content: string(ch) }`,
 	}))
 	for i, want := range []string{"The Title|", "The Title|Alpha", "The Title|Beta"} {
 		if got := find(t, doc.Pages[i], "The Title|"); !strings.HasPrefix(got.text, want) || len(got.text) > len(want) && got.text[:len(want)] != want {

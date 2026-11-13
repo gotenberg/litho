@@ -18,7 +18,7 @@ import (
 // and the @page rules that name pages and fill page-margin boxes.
 func FuzzPageDecorations(f *testing.F) {
 	f.Add(`<span class="t"></span> <a href="#x">x</a>`,
-		`.t::after{content:string(litho-title) " " counter(page) "/" counter(pages, upper-roman)} body{font-size:30px}`,
+		`.t::after{content:string(document-title) " " counter(page) "/" counter(pages, upper-roman)} body{font-size:30px}`,
 		`@page{margin:2cm;@top-center{content:"T " counter(page) "/" counter(pages, upper-roman)}@bottom-left{content:attr(x, "f");border:1px solid}}`+
 			`@page wide{size:landscape;@left-middle{content:"L";height:20%}}@page :blank{@top-left-corner{content:"B"}}.w{page:wide}h2{break-before:left}`)
 	f.Add(`<div style="height:500pt">tall</div>`, `div{display:flex}`,

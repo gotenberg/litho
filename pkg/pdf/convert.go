@@ -231,7 +231,7 @@ func FromHTML(src io.Reader, opts ...HTMLOption) *Conversion {
 // unsanitised: no script runs. [Limits.MaxConvertInputBytes] caps the
 // Markdown, not the HTML it renders to. The default template titles the
 // document with its first heading, which a band of [WithHeader] or
-// [WithFooter] shows as string(litho-title).
+// [WithFooter] shows as string(document-title).
 func FromMarkdown(src io.Reader, opts ...MarkdownOption) *Conversion {
 	var cfg convertConfig
 	for _, o := range opts {

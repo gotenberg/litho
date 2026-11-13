@@ -218,8 +218,8 @@ const bandBoxCSS = `@page { @top-center { content: ""; width: 100% } @bottom-cen
 
 // titleString is the named string whose value, before any element of the
 // source sets it, is the source's title: what a band or a page-margin box
-// shows of the title, as string(litho-title).
-const titleString = "litho-title"
+// shows of the title, as string(document-title).
+const titleString = "document-title"
 
 // bandState is a band built for drawing.
 type bandState struct {

@@ -12,7 +12,8 @@ import (
 //
 // HTML is laid out in a document of its own, the band's document: its html
 // and body elements take the language and direction of the source's, and
-// unless Isolated the source's other attributes on them, and its body holds
+// unless IgnoreDocumentStyles the source's other attributes on them, and
+// its body holds
 // one block, as wide as the page area, whose content is HTML. That block
 // sits in the margin as the page-margin box @top-center or @bottom-center
 // would, made as wide as the page area (CSS Paged Media 3, 5.3), centred
@@ -26,7 +27,7 @@ import (
 // In the band's content, generated content shows the page: counter(page)
 // and counter(pages) are the page's number and the page count,
 // string(name) the named string the page shows as a page-margin box does
-// (CSS GCPM 3, 1.1.2), and string(litho-title) the source's title before
+// (CSS GCPM 3, 1.1.2), and string(document-title) the source's title before
 // any element sets that string. target-counter(), target-counters() and
 // target-text() read the source's elements (CSS Generated Content 3, 6),
 // a page number as the layout that draws the page places its element; a
@@ -49,54 +50,44 @@ type PageBand struct {
 	// page-margin boxes put there, which removes a band an earlier option
 	// put on those pages.
 	HTML string
-	// CSS is a style sheet of the band's document. Unless Isolated it
-	// cascades after the source's style sheets, so its rules win over
+	// CSS is a style sheet of the band's document. Unless
+	// IgnoreDocumentStyles it cascades after the source's style sheets, so its rules win over
 	// theirs as a later author style sheet's do; its selectors match the
 	// band's document alone, and nothing of it styles the source.
 	CSS string
 	// Pages selects the pages the band is drawn on. The zero value selects
 	// every page.
 	Pages PageSet
-	// Room is how the band makes room for itself: [RoomMargin], the zero
-	// value, or [RoomContent]. Any other value fails the conversion with
-	// [ErrInvalidConvertOptions].
-	Room Room
-	// Isolated styles the band's document with the engine's default style
-	// sheet, the <style> elements of HTML and CSS alone. false, the
-	// default, applies the source's style sheets first, the user
-	// stylesheets of [WithUserStylesheet] among them, as they apply to
-	// the source: their rules, @counter-style rules and the custom
-	// properties they set on html and body. Isolated or not, the source's
+	// GrowMargin sets what a band taller than its margin does. false, the
+	// default, keeps the page margin the source and the options give: the
+	// band overflows it, over the page area or off the page, and the
+	// conversion reports a warning. true grows the margin of each page to
+	// the band's height when the band is taller, and keeps it otherwise:
+	// the page area of that page starts below the header, or ends above
+	// the footer.
+	//
+	// With true the document is laid out once with its own margins, the
+	// band measured on each page, and once more with the grown margins,
+	// which it keeps even where a page then shows another band; a band
+	// still taller than its margin is reported as a warning. It costs a
+	// second layout of the document, about as long as the first, when a
+	// band is taller than its margin, and nothing otherwise. A document
+	// whose cross-references read a page lays itself out again until
+	// their numbers stand, at most four times, before the margins grow
+	// and again after: eight layouts at most. With [WithSinglePage] the
+	// page grows by what its margins grow.
+	GrowMargin bool
+	// IgnoreDocumentStyles styles the band's document with the engine's
+	// default style sheet, the <style> elements of HTML and CSS alone.
+	// false, the default, applies the source's style sheets first, the
+	// user stylesheets of [WithUserStylesheet] among them, as they apply
+	// to the source: their rules, @counter-style rules and the custom
+	// properties they set on html and body. Either way, the source's
 	// @font-face fonts draw the band's text, its relative URLs load the
 	// source's resources, and the source's @page rules set the page and
 	// its margins.
-	Isolated bool
+	IgnoreDocumentStyles bool
 }
-
-// Room is how a [PageBand] makes room for itself in its margin.
-type Room int
-
-const (
-	// RoomMargin keeps the page margin the source and the options give:
-	// a band taller than its margin overflows it, over the page area or
-	// off the page, and the conversion reports a warning. It is the zero
-	// value and the default.
-	RoomMargin Room = iota
-	// RoomContent grows the margin of each page to the band's height when
-	// the band is taller, and keeps it otherwise: the page area of that
-	// page starts below the header, or ends above the footer. The
-	// document is laid out once with its own margins, the band measured
-	// on each page, and once more with the grown margins, which it keeps
-	// even where a page then shows another band; a band still taller
-	// than its margin is reported as a warning. It costs a second layout
-	// of the document, about as long as the first, when a band is taller
-	// than its margin, and nothing otherwise. A document whose
-	// cross-references read a page lays itself out again until their
-	// numbers stand, at most four times, before the margins grow and again
-	// after: eight layouts at most. With [WithSinglePage] the page grows by
-	// what its margins grow.
-	RoomContent
-)
 
 // PageSet selects pages of an HTML or Markdown source for a [PageBand]. The
 // zero value selects every page; the constructors select one kind of page,
@@ -124,12 +115,24 @@ func RightPages() PageSet { return pageSetOf(htmlconv.PageTerm{Kind: htmlconv.Pa
 // left empty (CSS Paged Media 3, 4.2.3, :blank).
 func BlankPages() PageSet { return pageSetOf(htmlconv.PageTerm{Kind: htmlconv.PageBlank}) }
 
-// PageRange selects the pages from to to, counted from 1 in the document
-// whatever number [WithFirstPageNumber] gives them; to 0 runs to the last
-// page. from below 1, or to neither 0 nor at least from, fails the
-// conversion with [ErrInvalidConvertOptions].
+// PageRange selects the pages from to to, both included, counted from 1 in
+// the document whatever number [WithFirstPageNumber] gives them. from below
+// 1, or to below from, fails the conversion with
+// [ErrInvalidConvertOptions]. [PagesFrom] selects up to the last page.
 func PageRange(from, to int) PageSet {
+	if to < 1 {
+		// Below any page: kept out of range, refused by the converter.
+		to = -1
+	}
 	return pageSetOf(htmlconv.PageTerm{Kind: htmlconv.PageRange, From: from, To: to})
+}
+
+// PagesFrom selects the pages from first to the last one, counted from 1 in
+// the document whatever number [WithFirstPageNumber] gives them:
+// PagesFrom(2) is every page but the first. first below 1 fails the
+// conversion with [ErrInvalidConvertOptions].
+func PagesFrom(first int) PageSet {
+	return pageSetOf(htmlconv.PageTerm{Kind: htmlconv.PageRange, From: first})
 }
 
 // NamedPages selects the pages of the page type name, the value of the page
@@ -148,18 +151,6 @@ func (s PageSet) Or(t PageSet) PageSet {
 	return PageSet{terms: slices.Concat(s.terms, t.terms)}
 }
 
-// html returns r as the HTML converter takes it; a value out of range
-// stays out of range, for the converter to refuse.
-func (r Room) html() htmlconv.Room {
-	switch r {
-	case RoomMargin:
-		return htmlconv.RoomMargin
-	case RoomContent:
-		return htmlconv.RoomContent
-	}
-	return htmlconv.Room(-1)
-}
-
 func pageSetOf(t htmlconv.PageTerm) PageSet { return PageSet{terms: []htmlconv.PageTerm{t}} }
 
 // configBand is a band of [WithHeader] or [WithFooter].
@@ -175,13 +166,17 @@ func (c *convertConfig) htmlBands() []htmlconv.Band {
 	}
 	out := make([]htmlconv.Band, len(c.bands))
 	for i, b := range c.bands {
+		room := htmlconv.RoomMargin
+		if b.band.GrowMargin {
+			room = htmlconv.RoomContent
+		}
 		out[i] = htmlconv.Band{
 			Footer:   b.footer,
 			HTML:     b.band.HTML,
 			CSS:      b.band.CSS,
 			Pages:    htmlconv.PageSet(slices.Clone(b.band.Pages.terms)),
-			Room:     b.band.Room.html(),
-			Isolated: b.band.Isolated,
+			Room:     room,
+			Isolated: b.band.IgnoreDocumentStyles,
 		}
 	}
 	return out

@@ -640,20 +640,19 @@ func WithFinishedAnimations(finished bool) HTMLOption {
 // together, a band whose HTML and CSS pass 1 MiB together, or a band out of
 // range, the conversion fails with [ErrInvalidConvertOptions].
 //
-// A band on every page but the first is two options:
+// A band on every page but the first:
 //
-//	pdf.WithHeader(pdf.PageBand{HTML: header}),
-//	pdf.WithHeader(pdf.PageBand{Pages: pdf.FirstPage()}),
+//	pdf.WithHeader(pdf.PageBand{HTML: header, Pages: pdf.PagesFrom(2)}),
 //
 // In a Markdown source, a band shows the title, its first heading, with
-// string(litho-title), and the current section once a user stylesheet
+// string(document-title), and the current section once a user stylesheet
 // names it:
 //
 //	pdf.FromMarkdown(src,
 //		pdf.WithUserStylesheet(`h2 { string-set: section content(text) }`),
 //		pdf.WithHeader(pdf.PageBand{
 //			HTML: `<span class="t"></span><span class="s"></span>`,
-//			CSS:  `.t::after { content: string(litho-title) } .s::before { content: " | " string(section) }`,
+//			CSS:  `.t::after { content: string(document-title) } .s::before { content: " | " string(section) }`,
 //		}),
 //	)
 func WithHeader(band PageBand) HTMLOption {
@@ -674,8 +673,8 @@ func WithFooter(band PageBand) HTMLOption {
 // (CSS Paged Media 3, 6.1). 1 is the default. The document's @page rules
 // that reset, increment or set the page counter apply on top of it. n lies
 // in [0, 2^30]; any other value fails the conversion with
-// [ErrInvalidConvertOptions]. It numbers nothing else: [WithPageRanges] and
-// [PageRange] count pages from 1 whatever their number.
+// [ErrInvalidConvertOptions]. It numbers nothing else: [WithPageRanges],
+// [PageRange] and [PagesFrom] count pages from 1 whatever their number.
 func WithFirstPageNumber(n int) HTMLOption {
 	return htmlOption(func(c *convertConfig) { c.firstPageNumber, c.firstPageNumberSet = n, true })
 }
@@ -708,8 +707,8 @@ func WithFractionalFontMetrics(fractional bool) HTMLOption {
 // wants of any document without editing it: an @page size or margin, a
 // page-margin box, a font, a rule hiding an element. Several stylesheets
 // apply in the order given. Its relative URLs resolve as the document's do.
-// It styles the bands of [WithHeader] and [WithFooter] too, unless they are
-// isolated.
+// It styles the bands of [WithHeader] and [WithFooter] too, unless they set
+// IgnoreDocumentStyles.
 //
 // A stylesheet counts against the caps of [WithResources], and a construct
 // of it the engine does not support is reported as a warning, as one of the

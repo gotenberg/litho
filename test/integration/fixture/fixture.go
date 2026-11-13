@@ -173,13 +173,14 @@ type BandOptions struct {
 	HTML string `json:"html,omitempty"`
 	CSS  string `json:"css,omitempty"`
 	// Pages are the page set's terms, joined by pdf.PageSet.Or: "first",
-	// "last", "left", "right", "blank", "N-M" and "N-" (pdf.PageRange, M
-	// left out for the last page), "page:NAME" (pdf.NamedPages). Left
-	// out, every page.
+	// "last", "left", "right", "blank", "N-M" (pdf.PageRange), "N-"
+	// (pdf.PagesFrom), "page:NAME" (pdf.NamedPages). Left out, every
+	// page.
 	Pages []string `json:"pages,omitempty"`
-	// Room is "margin", the default, or "content".
+	// Room is "margin", the default, or "content", which sets
+	// pdf.PageBand.GrowMargin.
 	Room string `json:"room,omitempty"`
-	// Isolated sets pdf.PageBand.Isolated.
+	// Isolated sets pdf.PageBand.IgnoreDocumentStyles.
 	Isolated bool `json:"isolated,omitempty"`
 }
 
@@ -211,7 +212,11 @@ func (b BandOptions) pageSet() (pdf.PageSet, error) {
 			if !ok || err != nil || f < 1 || l != 0 && l < f {
 				return pdf.PageSet{}, fmt.Errorf("band pages %q: want first, last, left, right, blank, N-M, N- or page:NAME", term)
 			}
-			t = pdf.PageRange(f, l)
+			if l == 0 {
+				t = pdf.PagesFrom(f)
+			} else {
+				t = pdf.PageRange(f, l)
+			}
 		}
 		if i == 0 {
 			set = t
@@ -293,9 +298,9 @@ func Load(dir string) (*Source, error) {
 		if err != nil {
 			return nil, err
 		}
-		sb := SourceBand{Footer: b.Edge == "footer", Band: pdf.PageBand{Pages: pages, Isolated: b.Isolated}}
+		sb := SourceBand{Footer: b.Edge == "footer", Band: pdf.PageBand{Pages: pages, IgnoreDocumentStyles: b.Isolated}}
 		if b.Room == "content" {
-			sb.Band.Room = pdf.RoomContent
+			sb.Band.GrowMargin = true
 		}
 		if sb.Band.HTML, err = readTemplate(dir, b.HTML); err != nil {
 			return nil, err

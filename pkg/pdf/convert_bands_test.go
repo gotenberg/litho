@@ -42,10 +42,10 @@ func TestConvert_HeaderAndFooterBands(t *testing.T) {
 	t.Parallel()
 	data, rep := convertHTMLTest(t, convertFontDir(t), bandPages,
 		WithMargins(72, 36, 72, 36),
-		WithHeader(PageBand{HTML: `<span class="t"></span>`, CSS: `.t::after { content: string(litho-title) " " counter(page) "/" counter(pages) }`}),
+		WithHeader(PageBand{HTML: `<span class="t"></span>`, CSS: `.t::after { content: string(document-title) " " counter(page) "/" counter(pages) }`}),
 		WithHeader(PageBand{Pages: FirstPage()}),
 		WithFooter(PageBand{HTML: "Last", Pages: LastPage()}),
-		WithFooter(PageBand{HTML: "Left", Pages: LeftPages(), Isolated: true}),
+		WithFooter(PageBand{HTML: "Left", Pages: LeftPages(), IgnoreDocumentStyles: true}),
 		WithFirstPageNumber(7),
 	)
 	if rep.Pages != 3 || len(rep.Warnings) != 0 {
@@ -72,7 +72,7 @@ func TestConvert_BandsInMarkdown(t *testing.T) {
 		WithUserStylesheet(`h2 { string-set: section content(text); break-before: page }`),
 		WithFooter(PageBand{
 			HTML: `<span class="t"></span><span class="s"></span>`,
-			CSS:  `.t::after { content: string(litho-title) } .s::before { content: " | " string(section) }`,
+			CSS:  `.t::after { content: string(document-title) } .s::before { content: " | " string(section) }`,
 		}),
 	).WriteTo(context.Background(), &out)
 	if err != nil {
@@ -101,7 +101,8 @@ func TestConvert_BandsRefuseOptionsOutOfRange(t *testing.T) {
 		"page range from 0":    {WithHeader(PageBand{Pages: PageRange(0, 2)})},
 		"page range backwards": {WithFooter(PageBand{Pages: FirstPage().Or(PageRange(4, 3))})},
 		"empty page name":      {WithHeader(PageBand{Pages: NamedPages("")})},
-		"unknown room":         {WithHeader(PageBand{Room: Room(9)})},
+		"page range to 0":      {WithHeader(PageBand{Pages: PageRange(2, 0)})},
+		"pages from 0":         {WithHeader(PageBand{Pages: PagesFrom(0)})},
 		"too many bands":       many,
 		"negative first page":  {WithFirstPageNumber(-1)},
 		"first page past 2^30": {WithFirstPageNumber(1<<30 + 1)},
@@ -124,7 +125,7 @@ func TestPageSet_OrWithEveryPageSelectsEveryPage(t *testing.T) {
 	data, _ := convertHTMLTest(t, convertFontDir(t), bandPages,
 		WithMargins(72, 36, 72, 36),
 		WithHeader(PageBand{HTML: "Band", Pages: PageSet{}.Or(FirstPage())}),
-		WithFooter(PageBand{HTML: "Foot", Pages: PageRange(2, 0).Or(NamedPages("none"))}),
+		WithFooter(PageBand{HTML: "Foot", Pages: PagesFrom(2).Or(NamedPages("none"))}),
 	)
 	for i, got := range bandTexts(t, data) {
 		if !strings.Contains(got, "Band") {
@@ -136,15 +137,15 @@ func TestPageSet_OrWithEveryPageSelectsEveryPage(t *testing.T) {
 	}
 }
 
-func TestConvert_BandRoomContentWritesTheTwinOfItsMargin(t *testing.T) {
+func TestConvert_BandGrowMarginWritesTheTwinOfItsMargin(t *testing.T) {
 	t.Parallel()
 	dir := convertFontDir(t)
 	band := `<div style="height: 120pt">Letterhead</div>`
 	src := strings.Repeat("<p>line</p>", 60)
-	data, rep := convertHTMLTest(t, dir, src, WithMargins(36, 36, 36, 36), WithHeader(PageBand{HTML: band, Room: RoomContent}))
+	data, rep := convertHTMLTest(t, dir, src, WithMargins(36, 36, 36, 36), WithHeader(PageBand{HTML: band, GrowMargin: true}))
 	twin, _ := convertHTMLTest(t, dir, src, WithMargins(120, 36, 36, 36), WithHeader(PageBand{HTML: band}))
 	if !bytes.Equal(data, twin) {
-		t.Error("RoomContent writes other bytes than the margin it measured, set by hand")
+		t.Error("GrowMargin writes other bytes than the margin it measured, set by hand")
 	}
 	if len(rep.Warnings) != 0 {
 		t.Errorf("warnings %+v, want none", rep.Warnings)
@@ -161,7 +162,7 @@ func TestConvert_BandCrossReferenceWithFirstPageNumber(t *testing.T) {
 	data, rep := convertHTMLTest(t, convertFontDir(t), src,
 		WithMargins(72, 36, 72, 36),
 		WithFirstPageNumber(5),
-		WithFooter(PageBand{HTML: `<span class="r"></span>`, CSS: `.r::after { content: "end at " target-counter(url(#end), page) ", here " counter(page) }`, Room: RoomContent}),
+		WithFooter(PageBand{HTML: `<span class="r"></span>`, CSS: `.r::after { content: "end at " target-counter(url(#end), page) ", here " counter(page) }`, GrowMargin: true}),
 	)
 	if rep.Pages != 3 || len(rep.Warnings) != 0 {
 		t.Errorf("report %+v, want 3 pages and no warning", rep)

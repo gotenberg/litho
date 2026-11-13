@@ -60,7 +60,7 @@ body {
 }
 
 .title::after {
-  content: string(litho-title);
+  content: string(document-title);
 }
 
 .pageNumber::after {
