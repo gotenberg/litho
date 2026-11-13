@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Page counter increment</title>
+<style>
+@page {
+  size: A5;
+  margin: 25mm 20mm;
+  counter-increment: page 2;
+  @bottom-center { content: "Page " counter(page) " of " counter(pages); font-family: "Liberation Sans", sans-serif; font-size: 10pt; }
+  @top-right { counter-reset: page 7; content: "Box " counter(page, upper-roman); font-family: "Liberation Sans", sans-serif; font-size: 9pt; color: #666666; }
+}
+body { font-family: "Liberation Serif", serif; font-size: 12pt; line-height: 1.4; margin: 0; }
+h2 { break-before: page; }
+</style>
+</head>
+<body>
+<h1>Page counter increment</h1>
+<p>The page context increments the page counter by two: the pages are numbered 2, 4, 6. The top-right box resets the page counter for itself alone and always shows VII.</p>
+<h2>Second page</h2>
+<p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</p>
+<h2>Third page</h2>
+<p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.</p>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Running elements</title>
+<style>
+@page {
+  size: A5;
+  margin: 25mm 20mm;
+}
+@page p1 {
+  @top-left { content: "Chapter one"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; font-style: italic; line-height: 1.2; }
+  @top-right { content: "litho, page 1 of 4"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; line-height: 1.2; color: #1d3557; }
+}
+@page p2 {
+  @top-left { content: "Chapter two"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; font-style: italic; line-height: 1.2; }
+  @top-right { content: "litho, page 2 of 4"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; line-height: 1.2; color: #1d3557; }
+}
+@page p3 {
+  @top-left { content: "Chapter two"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; font-style: italic; line-height: 1.2; }
+  @top-right { content: "litho, page 3 of 4"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; line-height: 1.2; color: #1d3557; }
+}
+@page p4 {
+  @top-left { content: "Chapter three"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; font-style: italic; line-height: 1.2; }
+  @top-right { content: "litho, page 4 of 4"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; line-height: 1.2; color: #1d3557; }
+}
+body { font-family: "Liberation Serif", serif; font-size: 12pt; line-height: 1.4; margin: 0; }
+.p1 { page: p1; } .p2 { page: p2; } .p3 { page: p3; } .p4 { page: p4; }
+</style>
+</head>
+<body>
+<section class="p1">
+<h1>Chapter one</h1>
+<p>A running element leaves the flow and shows in a page-margin box: the site line on every page, with its link and the page number, and the chapter that starts the page.</p>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+</section>
+<section class="p2">
+<h1>Chapter two</h1>
+<p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</p>
+<p class="p3">The second page of chapter two starts with no chapter of its own: the start keyword shows the chapter in effect at the end of the previous page.</p>
+</section>
+<section class="p4">
+<h1>Chapter three</h1>
+<p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.</p>
+</section>
+</body>
+</html>

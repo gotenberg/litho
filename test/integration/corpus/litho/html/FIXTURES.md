@@ -4,7 +4,7 @@ HTML and Markdown sources litho authored, converted twice: by Chromium, through 
 
 | Path                | What it holds                                                                                                                   |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `sources/`          | The 58 sources                                                                                                                  |
+| `sources/`          | The 65 sources                                                                                                                  |
 | `corpus references` | Posts each source to the Gotenberg image and writes `testdata/litho/html/references/<name>.pdf` and their `manifest.json`       |
 | `../../../fixture/` | Reads a source directory and its `options.json` for `corpus references` and the `diff` feature (shared with the Office corpora) |
 
@@ -151,6 +151,20 @@ The two sources below lock `pdf.WithUserStylesheet`, litho's own option, which n
 | ---------------------- | ---------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `user-stylesheet`      | 2                | `userStylesheets: ["user.css"]`, `reference_of` the twin | The user origin: normal rules under the document's, important ones over them, a page-margin box |
 | `user-stylesheet-twin` | 2                | none                                                     | The same rules in the document's stylesheet                                                     |
+
+## Page-margin content
+
+The seven sources below lock what the page-margin boxes show beyond fixed text. `page-counter-increment` is judged by Chromium's own conversion: Chromium increments the page counter of the page context and resets a counter in a margin context as litho does. Chromium draws no running element and no named string, ignores `:nth()`, prints a counter of the document as 0 in a margin box, and ends a `counter-reset: page` of `@page :first` with the first page. The three other sources each name, under `reference_of`, a twin that gives every page its margin content as literal text through a named page of its own (`page: p1` to `p5`), which Chromium draws; litho converts the source and its twin to the same text on every page.
+
+| Source                         | Pages | Options                 | Exercises                                                                                                                                                                                                             |
+| ------------------------------ | ----- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `page-counter-increment`       | 3     | none                    | `counter-increment: page 2` in `@page`, the pages numbered 2, 4, 6 of 3; a `counter-reset: page 7` in `@top-right` for that box alone                                                                                 |
+| `running-elements`             | 4     | `reference_of` the twin | `position: running()` and `element()`: a site line with a link and `counter(page)` and `counter(pages)` in its `::before`, a chapter with `element(chapter, start)` on a page that starts it and on one that does not |
+| `running-elements-twin`        | 4     | none                    | The same pages, each margin line written in its named page's `@top-left` and `@top-right`                                                                                                                             |
+| `named-strings`                | 4     | `reference_of` the twin | `string-set` on `h2` and `string()` with `first`, `start`, `last` and `first-except`: two headings on a page, one starting a page after a forced break, none, one opening a bordered section                          |
+| `named-strings-twin`           | 4     | none                    | The same pages, each value written in its named page's boxes                                                                                                                                                          |
+| `page-selectors-counters`      | 5     | `reference_of` the twin | `@page :first { counter-reset: page 5 }` numbering 5 to 9 of 5, `:nth(2n)` and `:nth(3)` selecting sheets by place, a chapter counter of the document read in `@top-left` at the start of each page                   |
+| `page-selectors-counters-twin` | 5     | none                    | The same pages, each number and label written in its named page's boxes                                                                                                                                               |
 
 ## The Chromium references
 

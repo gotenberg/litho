@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Page selectors and counters</title>
+<style>
+@page {
+  size: A5;
+  margin: 25mm 20mm;
+}
+@page p1 {
+  @top-left { content: "Chapter 0"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @bottom-center { content: "Page 5 of 5"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+}
+@page p2 {
+  @top-left { content: "Chapter 1"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @bottom-center { content: "Page 6 of 5"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @top-right { content: "even sheet"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+}
+@page p3 {
+  @top-left { content: "Chapter 2"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @bottom-center { content: "Page 7 of 5"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @top-right { content: "third sheet"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+}
+@page p4 {
+  @top-left { content: "Chapter 2"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @bottom-center { content: "Page 8 of 5"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @top-right { content: "even sheet"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+}
+@page p5 {
+  @top-left { content: "Chapter 3"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @bottom-center { content: "Page 9 of 5"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+}
+body { font-family: "Liberation Serif", serif; font-size: 12pt; line-height: 1.4; margin: 0; counter-reset: chapter; }
+h1 { counter-increment: chapter; }
+h1 + p::before { content: "Chapter " counter(chapter) ". "; font-weight: bold; }
+.p1 { page: p1; } .p2 { page: p2; } .p3 { page: p3; } .p4 { page: p4; } .p5 { page: p5; }
+</style>
+</head>
+<body>
+<div class="p1">
+<p>The first page resets the page counter to 5: the pages are numbered 5 to 9 of 5, the count staying the number of pages. :nth() selects the second, third and fourth sheets by their place in the document, whatever their number. The top-left box shows the chapter counter as the start of each page sees it.</p>
+<h1>One</h1>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+</div>
+<section class="p2">
+<h1>Two</h1>
+<p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</p>
+<p class="p3">Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.</p>
+</section>
+<section class="p4">
+<p>A chapter whose heading comes after an introduction.</p>
+<h1>Three</h1>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+<p class="p5">Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</p>
+</section>
+</body>
+</html>

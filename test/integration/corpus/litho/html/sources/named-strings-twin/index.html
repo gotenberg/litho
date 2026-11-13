@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Named strings</title>
+<style>
+@page {
+  size: A5;
+  margin: 25mm 15mm;
+}
+@page p1 {
+  @top-left { content: "first: Alpha"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @top-center { content: "start: "; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @top-right { content: "last: Beta"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @bottom-left { content: "first-except: "; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+}
+@page p2 {
+  @top-left { content: "first: Gamma"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @top-center { content: "start: Gamma"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @top-right { content: "last: Gamma"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @bottom-left { content: "first-except: "; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+}
+@page p3 {
+  @top-left { content: "first: Gamma"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @top-center { content: "start: Gamma"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @top-right { content: "last: Gamma"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @bottom-left { content: "first-except: Gamma"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+}
+@page p4 {
+  @top-left { content: "first: Delta"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @top-center { content: "start: Delta"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @top-right { content: "last: Delta"; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+  @bottom-left { content: "first-except: "; font-family: "Liberation Sans", sans-serif; font-size: 9pt; }
+}
+body { font-family: "Liberation Serif", serif; font-size: 12pt; line-height: 1.4; margin: 0; }
+.boxed { border-top: 1px solid #1d3557; padding-top: 6pt; }
+.p1 { page: p1; } .p2 { page: p2; } .p3 { page: p3; } .p4 { page: p4; }
+</style>
+</head>
+<body>
+<div class="p1">
+<h1>Named strings</h1>
+<p>Each h2 sets the heading string. The page-margin boxes show it under the four keywords of string(): the first value on the page, the value at its start, the value at its end, and the first value except on the page that sets it.</p>
+<h2>Alpha</h2>
+<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+<h2>Beta</h2>
+<p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</p>
+</div>
+<div class="p2">
+<h2>Gamma</h2>
+<p>The page starts with a heading, its top margin kept after the forced break: start shows Gamma.</p>
+</div>
+<p class="p3">This page sets no heading: every keyword but first-except shows the value in effect at its start, and first-except shows it too.</p>
+<section class="p4 boxed">
+<h2>Delta</h2>
+<p>The heading opens a section with a border and a padding: it still starts the page.</p>
+</section>
+</body>
+</html>
