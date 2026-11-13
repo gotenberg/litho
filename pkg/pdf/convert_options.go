@@ -135,6 +135,7 @@ type convertConfig struct {
 	scale                 float64
 	scaleSet              bool
 	noShrinkToFit         bool
+	finishedAnimations    bool
 	omitCanvasBackground  bool
 	headerTemplate        string
 	footerTemplate        string
@@ -612,6 +613,19 @@ func WithShrinkToFit(shrink bool) HTMLOption {
 // the page is white behind content whose own colours stay exact.
 func WithCanvasBackground(print bool) HTMLOption {
 	return htmlOption(func(c *convertConfig) { c.omitCanvasBackground = !print })
+}
+
+// WithFinishedAnimations sets the moment the CSS animations of an HTML or
+// Markdown source print at. false, the default, prints each at time zero,
+// its first keyframe or its fill before a delay, as a browser prints a
+// page that has just loaded; true prints each as it stands once finished:
+// its last keyframe by direction and iteration count where its fill mode
+// keeps it, the element's own style where it does not, and the end of the
+// first iteration of an animation that repeats forever. A paused
+// animation, and one on a scroll or a view timeline or on none, prints the
+// same either way. No transition runs either way.
+func WithFinishedAnimations(finished bool) HTMLOption {
+	return htmlOption(func(c *convertConfig) { c.finishedAnimations = finished })
 }
 
 // WithHeaderTemplate draws the HTML fragment html in the top margin of

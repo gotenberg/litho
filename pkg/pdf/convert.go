@@ -174,14 +174,18 @@ func FromText(src io.Reader, opts ...TextOption) *Conversion {
 //   - Layout covers the visual formatting model of CSS 2.1, flexbox, grid
 //     without subgrid, multi-column layout, positioning, transforms,
 //     generated content and counters, and bidirectional and CJK text.
-//   - Paged media covers @page rules with named pages and page-margin
-//     boxes (CSS Paged Media 3), and the footnotes, leaders, running
-//     elements and string sets of CSS Generated Content for Paged Media.
+//   - Paged media covers @page rules with named pages, page groups and
+//     page-margin boxes (CSS Paged Media 3), and the footnotes, leaders,
+//     running elements, string sets, cross-references and bookmarks of
+//     CSS Generated Content.
+//   - CSS animations print at time zero, or finished with
+//     [WithFinishedAnimations]. No transition runs.
 //   - Stylesheets, images and fonts are read from [WithResources], or
 //     fetched through [WithHTTPClient] for http and https URLs. PNG, JPEG,
-//     GIF, WebP, BMP, TIFF and SVG images are drawn, a JPEG turned as its
-//     EXIF orientation says; an image that cannot be read is replaced by
-//     its alt text. @font-face reads TrueType, OpenType, WOFF and WOFF2.
+//     GIF, WebP, BMP, TIFF and SVG images are drawn, a JPEG or a PNG turned
+//     as its EXIF orientation says; an image that cannot be read is
+//     replaced by its alt text. @font-face reads TrueType, OpenType, WOFF
+//     and WOFF2.
 //   - Form controls draw as the text they show. Embedded documents and
 //     media are left out.
 //
@@ -190,8 +194,9 @@ func FromText(src io.Reader, opts ...TextOption) *Conversion {
 //
 // Each element maps to the standard structure type of its meaning (ISO
 // 32000-1, 14.8.4), images carry their alt text, and the root element's
-// lang is the document's language. Links become Link annotations, h1 to h6
-// the outline, and <title> and <meta name> author, description and
+// lang is the document's language. Links become Link annotations, the
+// elements with a bookmark-level the outline, h1 to h6 unless a stylesheet
+// says otherwise, and <title> and <meta name> author, description and
 // keywords the document information.
 func FromHTML(src io.Reader, opts ...HTMLOption) *Conversion {
 	var cfg convertConfig
@@ -652,6 +657,7 @@ func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *te
 		OmitBackgrounds:       o.omitCanvasBackground,
 		OmitOutline:           o.omitOutline,
 		NoShrinkToFit:         o.noShrinkToFit,
+		AnimationsAtEnd:       o.finishedAnimations,
 		FractionalFontMetrics: o.fractionalFontMetrics,
 		HeaderTemplate:        o.headerTemplate,
 		FooterTemplate:        o.footerTemplate,
