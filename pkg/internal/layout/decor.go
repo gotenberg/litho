@@ -464,6 +464,35 @@ func veryDark(c typeset.Color) bool {
 // the Office formats do not draw.
 func (p *painter) blink() bool { return p.e.opts.BrowserRules }
 
+// quirkShades reports a border side of box b, of style st, whose two-tone
+// styles take [currentShades]: a colour of currentColor, on a box other
+// than a table box or a cell of a table element, which Blink paints in the
+// shades of their computed colour as it paints any colour.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws an outset
+//     or inset currentColor border at 168 and 84 on a table, an inline
+//     table and a cell of a table element (black text), at 255 and 171 for
+//     red text; at 238 and 154 on a block, a flex container and a lone
+//     display: table-cell box, whatever the colour.
+func quirkShades(b *box, st *css.Style, s css.Side) bool {
+	if !st.BorderColorIsCurrent(s) {
+		return false
+	}
+	switch b.tpart { //nolint:exhaustive // every other box keeps the quirk
+	case partTable:
+		return false
+	case partCell:
+		for t := b.parent; t != nil; t = t.parent {
+			if t.tpart == partTable {
+				return t.anon
+			}
+		}
+	}
+	return true
+}
+
 // currentShades are the dark and light shades of a two-tone border whose
 // colour is currentColor: Blink paints #eeeeee and its darker #9a9a9a
 // whatever the color property, a legacy quirk.
@@ -536,7 +565,7 @@ func (p *painter) border(b *box, st *css.Style, r typeset.Rect, radii [4][2]floa
 		// meet without the seam two clipped trapezoids leave on their
 		// shared diagonal, as Chromium fills them.
 		g := &ditem{}
-		p.side(g, css.Side(ref), st.Border[ref], st.BorderColorIsCurrent(css.Side(ref)), r, radii, inner, iradii, bd)
+		p.side(g, css.Side(ref), st.Border[ref], quirkShades(b, st, css.Side(ref)), r, radii, inner, iradii, bd)
 		for _, k := range g.kids {
 			p.emit(b, false, k.frag, r.Y, r.Y+r.Height, -1)
 		}
@@ -561,7 +590,7 @@ func (p *painter) border(b *box, st *css.Style, r typeset.Rect, radii [4][2]floa
 			// A stroke along the side stays inside it: no clip.
 			g = &ditem{group: true, opacity: 1}
 		}
-		p.side(g, css.Side(s), st.Border[s], st.BorderColorIsCurrent(css.Side(s)), r, radii, inner, iradii, bd)
+		p.side(g, css.Side(s), st.Border[s], quirkShades(b, st, css.Side(s)), r, radii, inner, iradii, bd)
 		if len(g.kids) == 0 {
 			continue
 		}
@@ -688,8 +717,8 @@ func sideClip(s css.Side, r, in typeset.Rect) []typeset.PathOp {
 }
 
 // side draws one border side of style bdr into g, which clips it to the
-// side's trapezoid; current reports a border colour of currentColor,
-// which the two-tone styles paint as [currentShades] say.
+// side's trapezoid; current reports a side whose two-tone styles paint as
+// [currentShades] say ([quirkShades]).
 func (p *painter) side(g *ditem, s css.Side, bdr css.Border, current bool, r typeset.Rect, radii [4][2]float64, inner typeset.Rect, iradii [4][2]float64, bd [4]float64) {
 	c, _ := colorOf(bdr.Color)
 	fill := func(ops []typeset.PathOp, col typeset.Color) {

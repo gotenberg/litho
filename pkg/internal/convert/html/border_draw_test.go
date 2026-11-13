@@ -13,7 +13,9 @@ func TestDraw_TwoToneBorderShades(t *testing.T) {
 	t.Parallel()
 	// A 20px box of 10px ridge borders: the outer half of the top side
 	// draws the light shade, the inner half the dark one. Measured on
-	// Chromium 9.0.0's print.
+	// Chromium 9.0.0's print; the table cases on the pinned Chromium's: a
+	// table box paints the shades of its computed colour, a lone cell the
+	// currentColor ones.
 	tests := []struct {
 		name        string
 		style       string
@@ -24,6 +26,8 @@ func TestDraw_TwoToneBorderShades(t *testing.T) {
 		{"black is too dark to darken", "border:10px ridge black", 168, 84},
 		{"#202020 is too dark to darken", "border:10px ridge #202020", 200, 116},
 		{"#404040 darkens", "border:10px ridge #404040", 148, 0},
+		{"a table box takes its colour's shades", "display:table;border:10px ridge", 168, 84},
+		{"a lone cell keeps the currentColor shades", "display:table-cell;border:10px ridge", 0xee, 0x9a},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
