@@ -113,9 +113,9 @@ func cullGroup(g *typeset.Group, m typeset.Matrix, clip area, depth int) (*types
 // then returns the transform that applies a, then b.
 func then(a, b typeset.Matrix) typeset.Matrix {
 	return typeset.Matrix{
-		A: a.A*b.A + a.B*b.C, B: a.A*b.B + a.B*b.D,
-		C: a.C*b.A + a.D*b.C, D: a.C*b.B + a.D*b.D,
-		E: a.E*b.A + a.F*b.C + b.E, F: a.E*b.B + a.F*b.D + b.F,
+		A: float64(a.A*b.A) + float64(a.B*b.C), B: float64(a.A*b.B) + float64(a.B*b.D),
+		C: float64(a.C*b.A) + float64(a.D*b.C), D: float64(a.C*b.B) + float64(a.D*b.D),
+		E: float64(a.E*b.A) + float64(a.F*b.C) + b.E, F: float64(a.E*b.B) + float64(a.F*b.D) + b.F,
 	}
 }
 
@@ -203,8 +203,8 @@ func pointsArea(pts []typeset.Point, m typeset.Matrix, pad float64) (area, bool)
 	x0, y0, x1, y1 = x0-pad, y0-pad, x1+pad, y1+pad
 	b := area{math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)}
 	for _, c := range [4][2]float64{{x0, y0}, {x1, y0}, {x0, y1}, {x1, y1}} {
-		x := m.A*c[0] + m.C*c[1] + m.E
-		y := m.B*c[0] + m.D*c[1] + m.F
+		x := float64(m.A*c[0]) + float64(m.C*c[1]) + m.E
+		y := float64(m.B*c[0]) + float64(m.D*c[1]) + m.F
 		b.x0, b.x1 = min(b.x0, x), max(b.x1, x)
 		b.y0, b.y1 = min(b.y0, y), max(b.y1, y)
 	}

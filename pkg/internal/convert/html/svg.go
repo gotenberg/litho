@@ -248,7 +248,7 @@ func (b *builder) clipSource(ctx context.Context, url string, box typeset.Rect) 
 			ops := make([]typeset.PathOp, len(p.Ops))
 			for k, op := range p.Ops {
 				for j := range op.P {
-					op.P[j] = typeset.Point{X: box.X + op.P[j].X*css.Pt, Y: box.Y + op.P[j].Y*css.Pt}
+					op.P[j] = typeset.Point{X: box.X + float64(op.P[j].X*css.Pt), Y: box.Y + float64(op.P[j].Y*css.Pt)}
 				}
 				ops[k] = op
 			}
@@ -292,7 +292,7 @@ func (b *builder) filterSource(ctx context.Context, url string, box typeset.Rect
 		return nil, false
 	}
 	return &layout.FilterRef{
-		Region:  typeset.Rect{X: box.X + f.X*css.Pt, Y: box.Y + f.Y*css.Pt, Width: f.W * css.Pt, Height: f.H * css.Pt},
+		Region:  typeset.Rect{X: box.X + float64(f.X*css.Pt), Y: box.Y + float64(f.Y*css.Pt), Width: f.W * css.Pt, Height: f.H * css.Pt},
 		Sigma:   f.Sigma * css.Pt,
 		Skipped: f.Skipped,
 		Apply: func(ctx context.Context, s *effect.Surface) (*effect.Surface, error) {

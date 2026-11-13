@@ -462,7 +462,7 @@ func resolveSides(boxes []*marginBox) {
 			// the start margin absorbs the offset.
 			switch i {
 			case 1:
-				ax.m1 += (avail - ax.outer()) / 2
+				ax.m1 += float64((avail - ax.outer()) / 2)
 			case 2:
 				ax.m1 += avail - ax.outer()
 			}

@@ -136,7 +136,7 @@ func (p *prepared) placement(lp *typeset.Page) placement {
 	if fit > 1-1e-9 {
 		fit = 1
 	}
-	pl := placement{s: fit / f, ox: (tw - sw*fit) / 2, oy: (th - sh*fit) / 2, w: min(tw, maxPageSide), h: min(th, maxPageSide)}
+	pl := placement{s: fit / f, ox: (tw - float64(sw*fit)) / 2, oy: (th - float64(sh*fit)) / 2, w: min(tw, maxPageSide), h: min(th, maxPageSide)}
 	if math.Abs(pl.ox) < 1e-6 {
 		pl.ox = 0
 	}
@@ -190,12 +190,12 @@ func (pl placement) page(lp *typeset.Page) *typeset.Page {
 
 // rect returns r placed.
 func (pl placement) rect(r typeset.Rect) typeset.Rect {
-	return typeset.Rect{X: r.X*pl.s + pl.ox, Y: r.Y*pl.s + pl.oy, Width: r.Width * pl.s, Height: r.Height * pl.s}
+	return typeset.Rect{X: float64(r.X*pl.s) + pl.ox, Y: float64(r.Y*pl.s) + pl.oy, Width: r.Width * pl.s, Height: r.Height * pl.s}
 }
 
 // point returns the position x, y placed.
 func (pl placement) point(x, y float64) (float64, float64) {
-	return x*pl.s + pl.ox, y*pl.s + pl.oy
+	return float64(x*pl.s) + pl.ox, float64(y*pl.s) + pl.oy
 }
 
 // rectPath returns the path of the rectangle r.
