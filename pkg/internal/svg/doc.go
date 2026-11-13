@@ -34,6 +34,18 @@
 //     the PDF blend mode of the same name, and isolation (CSS Compositing
 //     1, 3.2 and 3.3). plus-lighter is drawn as normal with a warning. A
 //     drawing in which something blends is one isolated group.
+//   - Filters: filter naming a filter element, with filterUnits,
+//     primitiveUnits, its region and each primitive's subregion, the
+//     in, in2 and result graph and color-interpolation-filters (Filter
+//     Effects 1, 7 to 9 and 17), drawn by package effect as one image of
+//     the filtered element: feGaussianBlur, feOffset, feFlood,
+//     feColorMatrix, feComponentTransfer, feComposite, feBlend, feMerge,
+//     feMorphology, feTile and feDropShadow. The source graphic is drawn
+//     by litho's PDF renderer at a whole number of pixels a user unit,
+//     at the resolution package effect plans for the smallest blur, a
+//     user unit taken as a CSS pixel. linearRGB is held in eight bits a
+//     channel: a round trip from sRGB moves a colour by up to 6 levels.
+//     An element whose filter names no filter element is not drawn.
 //   - Transforms: the transform attribute grammar (7.6).
 //   - Text: text and tspan with x, y, dx, dy lists, text-anchor and the
 //     font properties, shaped with the text package (10); a stroke unlike
@@ -45,8 +57,13 @@
 //
 // # Not supported
 //
-// Patterns, filters and markers are not drawn, with a warning: a pattern
-// paints its fallback, filtered content is drawn as it is. A mask that
+// Patterns and markers are not drawn, with a warning: a pattern paints
+// its fallback. A filter holding feTurbulence, feConvolveMatrix,
+// feDisplacementMap, feDiffuseLighting, feSpecularLighting or feImage,
+// and a filter of CSS filter functions, are not drawn either, with a
+// warning: the content is drawn unfiltered. BackgroundImage,
+// BackgroundAlpha, FillPaint and StrokePaint read as transparent black.
+// The lighter operator of feComposite composites as over. A mask that
 // names no mask element is not applied. A gradient spreadMethod of reflect or repeat is drawn as pad, and a
 // gradient text fill in the gradient's middle colour, each with a
 // warning. textPath, textLength, rotate, foreignObject, animation,

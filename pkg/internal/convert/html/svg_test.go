@@ -140,7 +140,7 @@ func TestSVG_NestedSVGImageRefused(t *testing.T) {
 }
 
 func TestSVG_UnsupportedFeaturesWarn(t *testing.T) {
-	src := `<svg width="10" height="10"><filter id="f"/><rect width="10" height="10" fill="red" filter="url(#f)"/></svg>`
+	src := `<svg width="10" height="10"><filter id="f"><feTurbulence/></filter><rect width="10" height="10" fill="red" filter="url(#f)"/></svg>`
 	doc := svgPage(t, src, nil)
 	if !hasWarning(doc.Warnings, warn.ContentUnsupported, "filter") {
 		t.Errorf("warnings %+v", doc.Warnings)

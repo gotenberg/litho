@@ -89,9 +89,22 @@ type style struct {
 	plusLighter bool
 	isolate     bool
 
-	// filter and marker record the properties the renderer does not draw,
-	// for a warning.
-	filter, marker bool
+	// filter is the id of the filter element the element is drawn
+	// through, "" for none; filterBad records a filter that names none,
+	// a list of filter functions, for a warning (Filter Effects 1, 6).
+	filter    string
+	filterBad bool
+	// floodColor and floodAlpha are the flood-color and flood-opacity of
+	// a feFlood or feDropShadow, not inherited; sRGBFilters records a
+	// color-interpolation-filters of sRGB or auto, inherited: filter
+	// primitives work in linearRGB by default (Filter Effects 1, 9.4 and
+	// 17).
+	floodColor  paint
+	floodAlpha  float64
+	sRGBFilters bool
+	// marker records the property the renderer does not draw, for a
+	// warning.
+	marker bool
 }
 
 // initialStyle returns the initial values (SVG 1.1, Appendix N), with
@@ -110,6 +123,8 @@ func initialStyle(ctx Context) *style {
 		color:         typeset.Black,
 		stopColor:     paint{kind: paintColor, color: typeset.Black},
 		stopAlpha:     1,
+		floodColor:    paint{kind: paintColor, color: typeset.Black},
+		floodAlpha:    1,
 		families:      ctx.Families,
 		lang:          ctx.Lang,
 		fontSize:      16,
@@ -139,7 +154,8 @@ func (p *style) inherit() *style {
 	st.stopColor = paint{kind: paintColor, color: typeset.Black}
 	st.stopAlpha = 1
 	st.overflowOK = false
-	st.mask, st.maskBad, st.maskAlpha, st.filter = "", false, false, false
+	st.mask, st.maskBad, st.maskAlpha, st.filter, st.filterBad = "", false, false, "", false
+	st.floodColor, st.floodAlpha = paint{kind: paintColor, color: typeset.Black}, 1
 	st.blend, st.plusLighter, st.isolate = typeset.BlendNormal, false, false
 	st.background = typeset.Color{}
 	return &st
@@ -340,7 +356,38 @@ func (st *style) apply(d declaration, parent *style) bool {
 		}
 		return true
 	case "filter":
-		st.filter = !strings.EqualFold(v, "none")
+		st.filter, st.filterBad = "", false
+		if strings.EqualFold(v, "none") {
+			return true
+		}
+		if id, ok := parseURLRef(v); ok {
+			st.filter = id
+		} else {
+			st.filterBad = true
+		}
+		return true
+	case "flood-color":
+		p, ok := parsePaint(v)
+		if !ok || p.kind == paintURL || p.kind == paintNone {
+			return false
+		}
+		st.floodColor = p
+		return true
+	case "flood-opacity":
+		a, ok := parseAlpha(v)
+		if ok {
+			st.floodAlpha = a
+		}
+		return ok
+	case "color-interpolation-filters":
+		switch strings.ToLower(v) {
+		case "linearrgb":
+			st.sRGBFilters = false
+		case "srgb", "auto":
+			st.sRGBFilters = true
+		default:
+			return false
+		}
 		return true
 	case "marker", "marker-start", "marker-mid", "marker-end":
 		if !strings.EqualFold(v, "none") {
@@ -414,6 +461,12 @@ func (st *style) copyFrom(prop string, parent *style) {
 		st.opacity = parent.opacity
 	case "stop-opacity":
 		st.stopAlpha = parent.stopAlpha
+	case "flood-color":
+		st.floodColor = parent.floodColor
+	case "flood-opacity":
+		st.floodAlpha = parent.floodAlpha
+	case "color-interpolation-filters":
+		st.sRGBFilters = parent.sRGBFilters
 	case "stop-color":
 		st.stopColor = parent.stopColor
 	case "fill-rule":
@@ -473,6 +526,7 @@ var presentationAttrs = map[string]bool{
 	"stop-opacity": true, "mask": true, "filter": true, "marker-start": true, "marker-mid": true,
 	"marker-end": true, "overflow": true, "font-family": true, "font-size": true,
 	"font-weight": true, "font-style": true, "text-anchor": true, "mask-type": true,
+	"flood-color": true, "flood-opacity": true, "color-interpolation-filters": true,
 }
 
 // blendModes are the <blend-mode> keywords (CSS Compositing 1, 5.3), in
@@ -647,9 +701,9 @@ func parseWeight(v string, parent *style) (int, bool) {
 	return n, true
 }
 
-// grouped reports a style whose mask, blend mode or isolation asks for a
-// group of the element's own, which opacity alone folded into its colours
-// cannot give.
+// grouped reports a style whose mask, blend mode, isolation or filter
+// asks for a group of the element's own, which opacity alone folded into
+// its colours cannot give.
 func (st *style) grouped() bool {
-	return st.mask != "" || st.blend != typeset.BlendNormal || st.isolate
+	return st.mask != "" || st.blend != typeset.BlendNormal || st.isolate || st.filter != ""
 }

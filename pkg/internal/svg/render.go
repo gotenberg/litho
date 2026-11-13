@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/net/html"
 
+	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -74,6 +75,8 @@ type renderer struct {
 	// a group drawn under a blend mode.
 	masking map[*html.Node]bool
 	blends  bool
+	// filterPixels counts the pixels of the filtered elements drawn.
+	filterPixels effect.Page
 }
 
 func newRenderer(ctx context.Context, d *Document, vw, vh float64) *renderer {
@@ -229,8 +232,8 @@ func (r *renderer) unsupportedProps(n *html.Node, st *style) {
 		// PDF has no additive blend mode (ISO 32000-1, 11.3.5).
 		r.d.warn(warn.ContentUnsupported, warn.Approximated, "mix-blend-mode plus-lighter is drawn as normal")
 	}
-	if st.filter {
-		r.d.warn(warn.ContentUnsupported, warn.Approximated, "filter effects are not drawn; the filtered content is drawn unfiltered")
+	if st.filterBad {
+		r.d.warn(warn.ContentUnsupported, warn.Approximated, "a filter that is not a reference to a filter element is not drawn; the content is drawn unfiltered")
 	}
 	if st.marker && (n.Data == "path" || n.Data == "line" || n.Data == "polyline" || n.Data == "polygon") {
 		r.d.warn(warn.ContentUnsupported, warn.Omitted, "markers are not drawn")
@@ -302,7 +305,7 @@ func (r *renderer) open(s sink, n *html.Node, st *style, box *bbox) (sink, func(
 		}
 		regions = regions[:1]
 	}
-	if op >= 1 && len(regions) == 0 && !fx.any() {
+	if op >= 1 && len(regions) == 0 && !fx.any() && st.filter == "" {
 		return s, func() {}
 	}
 	var first *typeset.Path
@@ -317,6 +320,19 @@ func (r *renderer) open(s sink, n *html.Node, st *style, box *bbox) (sink, func(
 		inner, d2 = r.openGroup(inner, 1, c, effects{})
 		outer := done
 		done = func() { d2(); outer() }
+	}
+	if id := st.filter; id != "" {
+		// The filter applies to the element's rendering before its clip,
+		// mask and opacity (Filter Effects 1, 6; CSS Masking 1, 4): its
+		// content collects apart and becomes the filter's result.
+		fc := &container{}
+		outer, closeOuter := inner, done
+		inner = sink{c: fc, pending: identity, nest: outer.nest, alpha: outer.alpha}
+		done = func() {
+			outer.c.out = append(outer.c.out, r.filtered(n, st, id, box, fc.out)...)
+			outer.c.last = nil
+			closeOuter()
+		}
 	}
 	return inner, done
 }
