@@ -4,6 +4,8 @@ import (
 	"math"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestNamedStrings_RunningHeaders(t *testing.T) {
@@ -230,5 +232,53 @@ func TestRunning_PageCounters(t *testing.T) {
 		if !hasText(doc.Pages[i], want) {
 			t.Errorf("page %d: no %q in %+v", i+1, want, pageTexts(doc.Pages[i]))
 		}
+	}
+}
+
+// TestRunning_LinksOnEveryPage locks the links of a running element: each
+// page that shows it carries its link annotations, an internal one going
+// to the document's element, each tagged in a Link element that holds the
+// annotation alone, its text staying an artifact (ISO 14289-1, 7.18.5).
+func TestRunning_LinksOnEveryPage(t *testing.T) {
+	src := `<style>
+		@page { size: 400pt 300pt; margin: 40pt; @top-center { content: element(head) } }
+		body { margin: 0; font: 10pt "Test Serif" }
+		header { position: running(head) }
+		p { margin: 0 } .b { break-before: page }
+	</style>
+	<header><a href="https://example.com/">Home</a> <a href="#end">End</a></header>
+	<p>one</p><p class=b>two</p><p id=end class=b>end</p>`
+	doc := convertDoc(t, src, Options{PreferCSSPageSize: true})
+	if len(doc.Pages) != 3 {
+		t.Fatalf("%d pages, want 3", len(doc.Pages))
+	}
+	parents := map[*typeset.StructElem]bool{}
+	for i, pg := range doc.Pages {
+		if len(pg.Links) != 2 {
+			t.Fatalf("page %d: %d links, want 2", i+1, len(pg.Links))
+		}
+		home, end := pg.Links[0], pg.Links[1]
+		if home.URI != "https://example.com/" || home.Rect.Y > 40 || home.Contents != "Home" {
+			t.Errorf("page %d: first link %+v, want Home to example.com in the top margin", i+1, home)
+		}
+		if end.Dest == nil || end.Dest.Page != 3 || end.Contents != "End" {
+			t.Errorf("page %d: second link %+v, want End to page 3", i+1, end)
+		}
+		for _, l := range pg.Links {
+			if l.Parent == nil || l.Parent.Role != "Link" || len(l.Parent.Kids) != 0 {
+				t.Errorf("page %d: link parent %+v, want an empty Link element", i+1, l.Parent)
+				continue
+			}
+			parents[l.Parent] = true
+		}
+	}
+	found := 0
+	for _, k := range doc.Structure.Kids {
+		if parents[k] {
+			found++
+		}
+	}
+	if found != 6 {
+		t.Errorf("%d of the 6 Link elements hang from the root", found)
 	}
 }

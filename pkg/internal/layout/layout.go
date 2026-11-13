@@ -256,6 +256,15 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 		if e.opts.MarginContent != nil {
 			pg.Content = append(pg.Content, e.opts.MarginContent(e.infoOf(k), n)...)
 		}
+		if e.opts.MarginLinks != nil {
+			for _, l := range e.opts.MarginLinks(e.infoOf(k)) {
+				if l.Parent != nil {
+					e.root.Kids = append(e.root.Kids, l.Parent)
+					used[l.Parent] = true
+				}
+				pg.Links = append(pg.Links, l)
+			}
+		}
 		top := e.pageTop(k)
 		// The note area at the top of the page area pushes its slice of
 		// the flow down.
@@ -661,6 +670,9 @@ func (e *engine) resolveLink(pl pendingLink) (typeset.Link, bool) {
 	href := pl.lk.href
 	if id, ok := strings.CutPrefix(href, "#"); ok {
 		d, found := e.anchorsFound[id]
+		if !found {
+			d, found = e.opts.Targets[id]
+		}
 		if !found || id == "" {
 			// The text prints; the target the link names is not in the
 			// source either, so nothing of the source is missing.

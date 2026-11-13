@@ -281,11 +281,12 @@ func (p *prepared) marginContent(ctx context.Context, info layout.PageInfo, page
 		p.warnMargins(err)
 		return nil
 	}
-	frags, err := p.paintMargins(ctx, boxes, pb)
+	frags, links, err := p.paintMargins(ctx, boxes, pb)
 	if err != nil {
 		p.warnMargins(err)
 		return nil
 	}
+	p.pages.links = links
 	return frags
 }
 
@@ -503,8 +504,16 @@ func (p *prepared) measure(ctx context.Context, root *layout.Node) (map[string]t
 }
 
 // paintMargins lays the boxes out at their used positions on a page of
-// the size of pb and returns what they paint, as artifacts.
-func (p *prepared) paintMargins(ctx context.Context, boxes []*marginBox, pb layout.PageBox) ([]typeset.Fragment, error) {
+// the size of pb and returns what they paint, as artifacts, and the links
+// of what they paint, an internal one resolved against the document's
+// anchors.
+//
+// A link keeps its annotation on every page it is drawn on. Its content
+// is an artifact, and an artifact holds no structure element (ISO 32000-1,
+// 14.8.2.2.2); the annotation is tagged in a Link element of its own,
+// which holds its object reference alone, as ISO 14289-1, 7.18.1 and
+// 7.18.5 ask of every link annotation of a tagged document.
+func (p *prepared) paintMargins(ctx context.Context, boxes []*marginBox, pb layout.PageBox) ([]typeset.Fragment, []typeset.Link, error) {
 	root := measureRoot()
 	for _, mb := range boxes {
 		st := absStyle(mb.st, mb.cb.X+mb.x.m1, mb.cb.Y+mb.y.m1)
@@ -524,18 +533,29 @@ func (p *prepared) paintMargins(ctx context.Context, boxes []*marginBox, pb layo
 			{Kind: layout.Element, Style: inner, Children: mb.kids},
 		}})
 	}
+	var targets map[string]typeset.Dest
+	if p.b != nil {
+		targets = p.b.gcpm.placed
+	}
 	res, err := layout.Layout(ctx, wrapRoot(root), p.fonts, layout.Options{
 		Page:  layout.PageBox{Width: pb.Width, Height: pb.Height},
 		Lang:  p.layout.Lang,
 		Image: p.layout.Image, MaxPages: maxSubLayoutPages,
+		Targets: targets,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(res.Pages) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
-	return artifacts(res.Pages[0].Content), nil
+	links := res.Pages[0].Links
+	for i, l := range links {
+		if l.Parent != nil {
+			links[i].Parent = &typeset.StructElem{Role: "Link", Lang: l.Parent.Lang, Alt: l.Parent.Alt}
+		}
+	}
+	return artifacts(res.Pages[0].Content), links, nil
 }
 
 // artifacts returns frags with no structure element: page-margin content

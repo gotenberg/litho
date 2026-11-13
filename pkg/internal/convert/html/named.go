@@ -46,8 +46,10 @@ type pageSetup struct {
 	// nth reports :nth() rules, whose pages each key holds by index.
 	nth bool
 	// counters holds the counters of the page context of each page laid
-	// out so far ([prepared.pageCounters]).
+	// out so far ([prepared.pageCounters]); links the links of the
+	// page-margin boxes of the page last painted.
 	counters []map[string]int
+	links    []typeset.Link
 	// err is ctx's error, which stopped a page's resolution. The layout
 	// callbacks that ask for a page return no error: the layout stops at
 	// its own next check of ctx, and [prepared.assemble] reports err.
@@ -142,6 +144,13 @@ func (p *prepared) setupPages(ctx context.Context, r *css.Resolver) {
 			return nil
 		}
 		return p.marginContent(ctx, info, pages)
+	}
+	if boxes {
+		p.layout.MarginLinks = func(layout.PageInfo) []typeset.Link {
+			links := p.pages.links
+			p.pages.links = nil
+			return links
+		}
 	}
 }
 

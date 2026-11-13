@@ -213,6 +213,18 @@ type Options struct {
 	// it once per page, in page order, from its own goroutine; it may call
 	// Layout itself.
 	MarginContent func(page PageInfo, pages int) []typeset.Fragment
+	// MarginLinks, when not nil, returns the link regions of what
+	// MarginContent painted on a page, in page coordinates. Layout calls
+	// it right after MarginContent, for the same page. A link's Parent,
+	// when not nil, is a Link element that holds no content, which Layout
+	// adds to the root of the structure tree: page-margin content is a
+	// pagination artifact, and the link annotation over it is tagged in a
+	// Link element of its own (ISO 14289-1, 7.18.5).
+	MarginLinks func(page PageInfo) []typeset.Link
+	// Targets, when not nil, holds the anchors of another layout that an
+	// internal link resolves against when no box of this one has its ID:
+	// the anchors of the document, for its page-margin content.
+	Targets map[string]typeset.Dest
 	// Placed, when not nil, receives what [Result.Anchors] will hold,
 	// once the flow is laid out and before the first MarginContent call,
 	// so that page-margin content can follow where anchored nodes landed:

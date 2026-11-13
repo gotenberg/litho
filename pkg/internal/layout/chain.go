@@ -140,7 +140,7 @@ func layoutChain(ctx context.Context, links []linkNode, fonts *text.Fonts, opts 
 	content := &Node{Kind: Element, Style: &st, Children: append(slices.Clone(first.Children), end)}
 	sub := opts
 	sub.Page = boxes[0]
-	sub.PageFor, sub.MarginContent, sub.Placed, sub.FitFirstPage = nil, nil, nil, false
+	sub.PageFor, sub.MarginContent, sub.MarginLinks, sub.Placed, sub.FitFirstPage = nil, nil, nil, nil, false
 	sub.PageAt = func(i int) PageBox { return boxes[min(i, len(boxes)-1)] }
 	sub.MaxPages = len(boxes) + 1
 	res, err := Layout(ctx, content, fonts, sub)

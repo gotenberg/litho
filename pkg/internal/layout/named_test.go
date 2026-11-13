@@ -3,6 +3,7 @@ package layout
 import (
 	"context"
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -172,5 +173,54 @@ func TestNamedPages_WidthFollowsTheNamedPage(t *testing.T) {
 	}
 	if math.Abs(res.ContentWidth-w0) > 1e-6 {
 		t.Errorf("content width %v, want %v", res.ContentWidth, w0)
+	}
+}
+
+// TestMarginLinks_JoinPagesAndRoot locks Options.MarginLinks: the links of
+// each page join its links, and each Link element the root of the
+// structure tree; and Options.Targets: an internal link resolves against
+// another layout's anchors when this one has no such ID.
+func TestMarginLinks_JoinPagesAndRoot(t *testing.T) {
+	root := el(sty(), el(sty(), txt(sty(), "a")), el(sty(brk(css.Page)), txt(sty(), "b")))
+	var made []*typeset.StructElem
+	opts := Options{
+		Page:          page(100, 100),
+		MarginContent: func(PageInfo, int) []typeset.Fragment { return nil },
+		MarginLinks: func(info PageInfo) []typeset.Link {
+			e := &typeset.StructElem{Role: "Link"}
+			made = append(made, e)
+			return []typeset.Link{{Rect: typeset.Rect{X: 1, Y: 1, Width: 5, Height: 5}, URI: "https://example.com/", Parent: e, Contents: string(rune('A' + info.Index))}}
+		},
+	}
+	res, err := Layout(context.Background(), root, ahem(t), opts)
+	if err != nil {
+		t.Fatalf("Layout: %v", err)
+	}
+	if err := document(res).Validate(t.Context()); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if len(res.Pages) != 2 || len(made) != 2 {
+		t.Fatalf("%d pages, %d MarginLinks calls, want 2 and 2", len(res.Pages), len(made))
+	}
+	for i, pg := range res.Pages {
+		if len(pg.Links) != 1 || pg.Links[0].Parent != made[i] || pg.Links[0].Contents != string(rune('A'+i)) {
+			t.Errorf("page %d: links %+v", i+1, pg.Links)
+		}
+		if !slices.Contains(res.Structure.Kids, made[i]) {
+			t.Errorf("page %d: the Link element is not a kid of the root", i+1)
+		}
+	}
+
+	link := el(inlineSty(), txt(inlineSty(), "go"))
+	link.Href = "#far"
+	sub, err := Layout(context.Background(), el(sty(), el(sty(), link)), ahem(t), Options{
+		Page:    page(100, 100),
+		Targets: map[string]typeset.Dest{"far": {Page: 7, Y: 3}},
+	})
+	if err != nil {
+		t.Fatalf("Layout: %v", err)
+	}
+	if ls := sub.Pages[0].Links; len(ls) != 1 || ls[0].Dest == nil || ls[0].Dest.Page != 7 {
+		t.Errorf("links %+v, want one to page 7", ls)
 	}
 }
