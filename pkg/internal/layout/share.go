@@ -62,7 +62,7 @@ func ShareStyles(ctx context.Context, root *Node, tb *css.Styles) {
 type sharedStyles struct {
 	table   *css.Styles
 	anon    map[*css.Style]*css.Style
-	markers map[*css.Style]*css.Style
+	markers map[markerKey]*css.Style
 	charged map[*css.Style]struct{}
 }
 
@@ -108,16 +108,23 @@ func (e *engine) anonOf(parent *css.Style) *css.Style {
 	return st
 }
 
-// markerOf returns the style of the marker of a list item of style item
+// markerKey keys the marker styles of [engine.markerOf].
+type markerKey struct {
+	st       *css.Style
+	cascaded bool
+}
+
+// markerOf returns the style of the marker drawn in style item
 // ([markerStyle]), made once an item style and shared.
-func (e *engine) markerOf(item *css.Style) *css.Style {
-	if st, ok := e.shared.markers[item]; ok {
+func (e *engine) markerOf(item *css.Style, cascaded bool) *css.Style {
+	key := markerKey{item, cascaded}
+	if st, ok := e.shared.markers[key]; ok {
 		return st
 	}
-	st := e.shareStyle(markerStyle(item))
+	st := e.shareStyle(markerStyle(item, cascaded))
 	if e.shared.markers == nil {
-		e.shared.markers = map[*css.Style]*css.Style{}
+		e.shared.markers = map[markerKey]*css.Style{}
 	}
-	e.shared.markers[item] = st
+	e.shared.markers[key] = st
 	return st
 }

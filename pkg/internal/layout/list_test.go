@@ -397,3 +397,31 @@ func TestListMarkers_EmptyItemTakesTheMarkerLine(t *testing.T) {
 		t.Errorf("marker %+v, want placed", m)
 	}
 }
+
+func TestListMarkers_CascadedMarkerStyle(t *testing.T) {
+	// CSS Lists 3, 3.1.1: the text of a ::marker takes the inherited
+	// properties of its cascaded style. Its white-space of pre keeps its
+	// spaces and, as Chromium lays it out, wraps; text-transform applies
+	// to an outside marker as to an inside one.
+	marker := func(mods ...func(*css.Style)) *Node {
+		return &Node{Kind: Element, Style: sty(append([]func(*css.Style){func(s *css.Style) {
+			s.WhiteSpace = css.Pre
+			s.ListStyleType, s.ListStyleString = css.ListString, "ab cd"
+		}}, mods...)...)}
+	}
+	item := func(pos css.ListStylePosition, m *Node) *Node {
+		st := sty(display(css.ListItem), width(0), func(s *css.Style) { s.ListStylePosition = pos })
+		li := el(st)
+		li.Marker = m
+		return li
+	}
+	res := runWith(t, doc(item(css.Inside, marker())), Options{Page: page(100, 100), BrowserRules: true})
+	if got, _ := lineTexts(res, 1); len(got) != 2 || got[0] != "ab " || got[1] != "cd" {
+		t.Errorf("inside marker lines %q, want ab |cd", got)
+	}
+	upper := marker(func(s *css.Style) { s.TextTransform = css.Uppercase })
+	rb := boxesWith(t, doc(item(css.Outside, upper)), Options{Page: page(100, 100), BrowserRules: true})
+	if m := kid(t, rb, 0, 0).outside; m == nil || m.text != "AB CD" {
+		t.Errorf("outside marker %+v, want the text AB CD", m)
+	}
+}

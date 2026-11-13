@@ -274,9 +274,6 @@ func (c *collector) text(k *box) {
 		return
 	}
 	ws := k.st.WhiteSpace
-	if k.marker {
-		ws = css.Pre
-	}
 	s := transform(k.text, k.st.TextTransform, k.lang, &c.prev)
 	style := c.e.textStyle(k.st, k.lang)
 	var buf strings.Builder

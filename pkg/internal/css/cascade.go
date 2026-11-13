@@ -780,7 +780,8 @@ func (cs *computeState) element(n, parent *html.Node) {
 	}
 	for pe := range numPseudos {
 		x := &cs.r.pseudos[pe]
-		if x.empty() || st.Display == DisplayNone {
+		if x.empty() || st.Display == DisplayNone || pe == PseudoMarker && st.Display != ListItem && st.Display != InlineListItem {
+			// A ::marker exists on a list item alone (CSS Lists 3, 3.1).
 			continue
 		}
 		cs.elem++

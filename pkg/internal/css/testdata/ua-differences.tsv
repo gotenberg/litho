@@ -75,6 +75,10 @@ own	|::footnote-call|content	CSS GCPM 3, Appendix B: the footnote and note calls
 own	|::footnote-call|font-size	CSS GCPM 3, Appendix B: the footnote and note calls and markers
 own	|::footnote-call|vertical-align	CSS GCPM 3, Appendix B: the footnote and note calls and markers
 own	|::footnote-marker|content	CSS GCPM 3, Appendix B: the footnote and note calls and markers
+own	|::marker|font-variant-numeric	CSS Lists 3, 3.1.1: the user agent sheet the HTML Standard leaves to CSS Lists
+own	|::marker|text-transform	CSS Lists 3, 3.1.1: the user agent sheet the HTML Standard leaves to CSS Lists
+own	|::marker|unicode-bidi	CSS Lists 3, 3.1.1: the user agent sheet the HTML Standard leaves to CSS Lists
+own	|::marker|white-space	CSS Lists 3, 3.1.1: the user agent sheet the HTML Standard leaves to CSS Lists
 own	|::note-call|content	CSS GCPM 3, Appendix B: the footnote and note calls and markers
 own	|::note-call|font-size	CSS GCPM 3, Appendix B: the footnote and note calls and markers
 own	|::note-call|vertical-align	CSS GCPM 3, Appendix B: the footnote and note calls and markers

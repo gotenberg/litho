@@ -665,6 +665,9 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 	// Office marker's box or the engine's own rules draw it as text.
 	symbol := e.opts.BrowserRules && outside && pic == nil && markerBoxWidth(n.Marker) == 0 && (n.Marker == nil || len(n.Marker.Children) == 0) &&
 		(st.ListStyleType == css.Disc || st.ListStyleType == css.Circle || st.ListStyleType == css.Square)
+	// Under [Options.BrowserRules] the converter hands the ::marker's
+	// cascaded style in.
+	cascaded := e.opts.BrowserRules && n.Marker != nil && n.Marker.Style != nil
 	markerElem := ctx.elem
 	if n.Role == "LI" && ctx.item != nil {
 		lbl := &typeset.StructElem{Role: "Lbl"}
@@ -680,6 +683,12 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 		markerElem = lbl
 	}
 	if outside {
+		if cascaded {
+			// The text of an inside marker is transformed as any text
+			// is; an outside marker's is shaped alone.
+			var prev rune
+			label = transform(label, st.TextTransform, b.lang, &prev)
+		}
 		b.outside = &markerBox{text: label, picture: pic, elem: markerElem, st: st, boxW: markerBoxWidth(n.Marker), symbol: symbol}
 		return ctx
 	}
@@ -687,10 +696,10 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 	mctx.elem = markerElem
 	var m *box
 	if pic != nil {
-		m = e.newBox(nil, e.markerOf(st), kindReplaced, mctx)
+		m = e.newBox(nil, e.markerOf(st, cascaded), kindReplaced, mctx)
 		m.picture = pic
 	} else {
-		m = e.newBox(nil, e.markerOf(st), kindText, mctx)
+		m = e.newBox(nil, e.markerOf(st, cascaded), kindText, mctx)
 		m.text = label
 	}
 	m.inline = true
@@ -734,8 +743,11 @@ func listNumbering(st *css.Style, custom bool) typeset.ListNumbering {
 }
 
 // markerStyle returns the style of a list item's marker: the item's, as an
-// inline box with no decoration of its own.
-func markerStyle(item *css.Style) *css.Style {
+// inline box with no decoration of its own. cascaded reports item to be
+// the cascaded style of a ::marker, whose white-space and text-transform
+// the user agent sheet sets and an author may set again (CSS Lists 3,
+// 3.1.1); any other style takes the sheet's values, pre and none.
+func markerStyle(item *css.Style, cascaded bool) *css.Style {
 	st := *item
 	st.Display = css.Inline
 	st.Float = css.FloatNone
@@ -753,8 +765,43 @@ func markerStyle(item *css.Style) *css.Style {
 	st.MaxWidth, st.MaxHeight = css.Dimension{Kind: css.None}, css.Dimension{Kind: css.None}
 	st.Opacity = 1
 	st.TextIndent = css.Pts(0)
-	st.TextTransform = css.TransformNone
+	if !cascaded {
+		st.TextTransform = css.TransformNone
+		st.WhiteSpace = css.Pre
+		return &st
+	}
+	st.WhiteSpace = markerWrap(st.WhiteSpace)
 	return &st
+}
+
+// markerWrap returns the white-space a ::marker's text lays out by: its
+// own, its lines wrapping. CSS Lists 3, 3.1.1 sets pre on ::marker and
+// notes that pre does not quite behave as markers should (CSS WG issues
+// 4448 and 4891); Chromium keeps the spaces of a marker that computes to
+// pre and wraps its text, and litho follows Chromium.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (Gotenberg 9.4.1) computes white-space:
+//     pre on ::marker, and an inside marker "ab cd" of a 0px wide list
+//     item draws on two lines; "abcd" under word-break: break-all or
+//     overflow-wrap: anywhere on four.
+//   - wpt: css-pseudo/marker-word-break, marker-line-break and
+//     marker-overflow-wrap wrap ::marker text that computes to pre, and
+//     Chromium draws them as their references.
+func markerWrap(ws css.WhiteSpace) css.WhiteSpace {
+	switch ws {
+	case css.Pre:
+		return css.PreWrap
+	case css.Nowrap:
+		return css.WhiteSpaceNormal
+	case css.PreLineNowrap:
+		return css.PreLine
+	case css.BreakSpacesNowrap:
+		return css.BreakSpaces
+	case css.WhiteSpaceNormal, css.PreWrap, css.PreLine, css.BreakSpaces:
+	}
+	return ws
 }
 
 // genFlex generates the children of the flex container b (CSS Flexbox 1,

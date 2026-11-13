@@ -143,7 +143,9 @@ func TestGenerated_CounterStyles(t *testing.T) {
 		.d::before { content: counter(list-item, bengali) } .u { list-style-type: nowhere }</style>
 		<ol class=a><li id=a>x</ol><ol class=b start=3><li id=b>y</ol><ol class=c><li id=c>z</ol><ol><li id=d class=d>w</ol>
 		<ol class=u><li id=u>v</ol>`, Options{})
-	if b := byID(t, p.root, "b"); b.Marker != nil || layout.MarkerText(b.Style, b.ListValue) != "Գ. " {
+	// The ::marker of the user agent sheet holds no text of its own: the
+	// layout spells the marker.
+	if b := byID(t, p.root, "b"); b.Marker != nil && len(b.Marker.Children) != 0 || layout.MarkerText(b.Style, b.ListValue) != "Գ. " {
 		t.Errorf("#b marker %v, want the layout's Գ. ", b.Marker)
 	}
 	for id, want := range map[string]string{"a": "◆ ", "c": "R. ", "u": "1. "} {
