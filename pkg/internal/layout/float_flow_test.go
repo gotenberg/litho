@@ -381,3 +381,30 @@ func TestFormattingContextBesideFloat_StretchFillsMarginBoxSpace(t *testing.T) {
 		t.Errorf("box at x %v width %v, want 100 and 100", got[0], got[2])
 	}
 }
+
+func TestFloats_PercentHeightInAnonymousBlock(t *testing.T) {
+	// CSS 2.1, 9.2.1.1: a percentage that would refer to an anonymous
+	// block refers to its closest non-anonymous ancestor. A float among
+	// white space after a block sits in an anonymous block; its 50%
+	// height resolves against the 200 tall parent.
+	half := func(s *css.Style) { s.Height = css.Dimension{Kind: css.Percent, Value: 0.5} }
+	rb := boxes(t, doc(el(sty(width(100), height(200)),
+		el(sty(height(10))),
+		el(sty(float(css.FloatLeft), width(50), half)),
+		txt(sty(), " "),
+	)), page(300, 300))
+	var f *box
+	for _, k := range kid(t, rb, 0, 0).kids {
+		for _, kk := range append([]*box{k}, k.kids...) {
+			if kk.float != css.FloatNone {
+				f = kk
+			}
+		}
+	}
+	if f == nil {
+		t.Fatal("no float")
+	}
+	if got := rect(f); got[3] != 100 {
+		t.Errorf("float height %v, want 100", got[3])
+	}
+}

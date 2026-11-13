@@ -696,7 +696,13 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		specH, ratioH = ratioHeight(b)
 		hSet = ratioH
 	}
-	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: usedSpecH(b, specH, hSet, cb), hDefinite: hSet}, cb)
+	kh, kDefinite := usedSpecH(b, specH, hSet, cb), hSet
+	if b.anon && !hSet {
+		// A percentage that would refer to an anonymous block refers to
+		// its closest non-anonymous ancestor (CSS 2.1, 9.2.1.1).
+		kh, kDefinite = cb.h, cb.hDefinite
+	}
+	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: kh, hDefinite: kDefinite}, cb)
 	end := formatterFor(b).layout(e, b, kcb, bc, start, inner)
 	if b.st.TextBoxTrim != css.TrimNone {
 		end = e.trimTextBox(b, end)
