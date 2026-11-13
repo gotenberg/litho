@@ -820,6 +820,11 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 		// 2.7).
 		st.Display, _ = blockify(st.Display)
 	}
+	if !isRoot && (parent.Display == Ruby || parent.Display == RubyText) && st.Float == FloatNone && st.Position != Absolute && st.Position != Fixed {
+		// CSS Ruby 1, 2.1: the in-flow block-level children of a ruby
+		// container or annotation are inlinified.
+		st.Display = inlinify(st.Display)
+	}
 	shared, adopted := cs.styles.shareCopy(st)
 	if adopted {
 		// A refusal sticks and cancels the conversion, which the

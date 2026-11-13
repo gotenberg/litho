@@ -194,6 +194,9 @@ const (
 	pHyphenateCharacter
 	pTextWrapMode
 	pTextWrapStyle
+	pRubyPosition
+	pRubyAlign
+	pRubyOverhang
 	numProps
 )
 
@@ -400,7 +403,7 @@ var displays = map[string]Display{
 	"table-header-group": TableHeaderGroup, "table-footer-group": TableFooterGroup,
 	"table-row": TableRow, "table-column-group": TableColumnGroup, "table-column": TableColumn,
 	"table-cell": TableCell, "table-caption": TableCaption, "none": DisplayNone,
-	"run-in": Block, "flow-root": FlowRoot,
+	"run-in": Block, "flow-root": FlowRoot, "ruby": Ruby, "ruby-text": RubyText,
 	"flex": Flex, "inline-flex": InlineFlex, "-webkit-flex": Flex, "-ms-flexbox": Flex,
 	"grid": Grid, "inline-grid": InlineGrid, "-ms-grid": Grid, "-ms-inline-grid": InlineGrid,
 	"-webkit-inline-flex": InlineFlex, "-ms-inline-flexbox": InlineFlex,
@@ -410,7 +413,6 @@ var displays = map[string]Display{
 // in this version, with a warning.
 var displays3 = map[string]Display{
 	"contents": Block, "-webkit-box": Block, "-webkit-inline-box": InlineBlock,
-	"ruby": Inline, "ruby-text": Inline, "ruby-base": Inline,
 }
 
 // parseDisplay parses display (CSS Display 3, 2), the one- and two-keyword
@@ -489,6 +491,13 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 			return InlineGrid, true
 		}
 		return Grid, true
+	case words["ruby"]:
+		// CSS Ruby 1, 2.1: block ruby is a block box holding a ruby
+		// container.
+		if inline {
+			return Ruby, true
+		}
+		return BlockRuby, true
 	}
 	return nil, false
 }
@@ -937,6 +946,9 @@ func init() {
 		props[id] = def
 	}
 	for id, def := range textProps() {
+		props[id] = def
+	}
+	for id, def := range rubyProps() {
 		props[id] = def
 	}
 	gcpmProps()

@@ -1,8 +1,8 @@
 /*
  * litho's user agent stylesheet for HTML, after the HTML Standard,
  * section 15 (Rendering): the display, margins and fonts of the elements
- * that matter on paper, and the quotes of q. Interactive widgets and
- * ruby are left out.
+ * that matter on paper, and the quotes of q. Interactive widgets are
+ * left out.
  *
  * The rules taken from the HTML Standard are Copyright (c) WHATWG
  * (Apple, Google, Mozilla, Microsoft). The Standard is licensed under the
@@ -187,6 +187,22 @@ sub,
 sup {
   line-height: normal;
   font-size: smaller;
+}
+ruby {
+  display: ruby;
+}
+/*
+ * The Standard's rt { display: ruby-text; } is Chromium's ruby > rt: an rt
+ * outside a ruby stays inline. Chromium also sets an annotation's size,
+ * alignment and line height.
+ */
+rt {
+  line-height: normal;
+}
+ruby > rt {
+  display: ruby-text;
+  font-size: 50%;
+  text-align: start;
 }
 :link {
   color: #0000ee;

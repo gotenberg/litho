@@ -275,6 +275,15 @@ func equalStyle(a, b *Style) bool {
 	if !equalHyphenateCharacter(&a.HyphenateCharacter, &b.HyphenateCharacter) {
 		return false
 	}
+	if a.RubyPosition != b.RubyPosition {
+		return false
+	}
+	if a.RubyAlign != b.RubyAlign {
+		return false
+	}
+	if a.RubyOverhang != b.RubyOverhang {
+		return false
+	}
 	if a.TextUnderlinePosition != b.TextUnderlinePosition {
 		return false
 	}
@@ -728,6 +737,9 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.TextWrapStyle))
 	h = mix(h, uint64(x.Hyphens))
 	h = hashHyphenateCharacter(h, &x.HyphenateCharacter)
+	h = mix(h, uint64(x.RubyPosition))
+	h = mix(h, uint64(x.RubyAlign))
+	h = mix(h, uint64(x.RubyOverhang))
 	h = mix(h, uint64(x.TextUnderlinePosition))
 	h = hashDimension(h, &x.TextDecorationThickness)
 	h = hashDimension(h, &x.TextUnderlineOffset)

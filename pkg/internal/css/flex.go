@@ -447,11 +447,35 @@ func blockify(d Display) (Display, bool) {
 		return Flex, true
 	case InlineGrid:
 		return Grid, true
+	case Ruby:
+		return BlockRuby, true
 	case TableRowGroup, TableColumn, TableColumnGroup,
-		TableHeaderGroup, TableFooterGroup, TableRow, TableCell, TableCaption:
+		TableHeaderGroup, TableFooterGroup, TableRow, TableCell, TableCaption, RubyText:
 		return Block, false
 	}
 	return d, false
+}
+
+// inlinify returns the inline-level equivalent of a block-level display
+// value (CSS Display 3, 2.7), what an in-flow child of a ruby container or
+// annotation takes (CSS Ruby 1, 2.1): a block container becomes an inline
+// block, as Chromium computes it.
+func inlinify(d Display) Display {
+	switch d { //nolint:exhaustive // the other display values are already inline-level or internal
+	case Block, FlowRoot:
+		return InlineBlock
+	case Table:
+		return InlineTable
+	case ListItem:
+		return InlineListItem
+	case Flex:
+		return InlineFlex
+	case Grid:
+		return InlineGrid
+	case BlockRuby:
+		return Ruby
+	}
+	return d
 }
 
 // isFlexContainer reports a flex container's display value.

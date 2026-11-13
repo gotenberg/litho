@@ -121,6 +121,16 @@ const (
 	// 3, 2.7).
 	Grid
 	InlineGrid
+	// Ruby is an inline-level ruby container, BlockRuby a block box that
+	// holds one, and RubyText a ruby annotation box (CSS Ruby 1, 2.1).
+	// Blockified, Ruby becomes BlockRuby and RubyText Block. The
+	// block-level children of a ruby container or annotation are
+	// inlinified (CSS Display 3, 2.7). Chromium parses no ruby-base and
+	// no container values, and neither does litho: a ruby's runs of other
+	// children are its bases (CSS Ruby 1, 2.2).
+	Ruby
+	BlockRuby
+	RubyText
 )
 
 // Position is the position property (CSS 2.1, 9.3.1). Sticky computes to
@@ -1106,6 +1116,11 @@ type Style struct {
 	// HyphenateCharacter is what a line that ends at a soft hyphen ends
 	// with (CSS Text 4, 5.5).
 	HyphenateCharacter HyphenateCharacter
+	// RubyPosition, RubyAlign and RubyOverhang place a ruby annotation
+	// and the content of a ruby column (CSS Ruby 1, 4.1 to 4.3).
+	RubyPosition RubyPosition
+	RubyAlign    RubyAlign
+	RubyOverhang RubyOverhang
 	// TextUnderlinePosition says where underlines lie (CSS Text Decoration
 	// 4, 2.7), zero for auto.
 	TextUnderlinePosition UnderlinePosition
