@@ -179,9 +179,9 @@ const boldWeight = 600
 
 // foldFont lays the text property layers over f (ODF 1.3, Part 3, 20.x):
 // the Western, Asian and complex font names through the font-face
-// declarations (16.23), in that order, the size in points or percent,
-// the weight, the posture, the underline, the line-through, the colour
-// and the text position.
+// declarations (16.23), in that order, the size in points (see
+// [foldSize]), the weight, the posture, the underline, the line-through,
+// the colour and the text position.
 func (r *reader) foldFont(f sheet.Font, layers []odf.Props) sheet.Font {
 	var fam [3]string
 	for i, n := range f.Families {
@@ -191,11 +191,7 @@ func (r *reader) foldFont(f sheet.Font, layers []odf.Props) sheet.Font {
 	}
 	for _, l := range layers {
 		if v, ok := l.Lookup("fo:font-size"); ok {
-			if pt, ok := odf.Length(v); ok && pt > 0 {
-				f.Size = pt
-			} else if pc, ok := odf.Percent(v); ok && pc > 0 {
-				f.Size *= pc
-			}
+			foldSize(&f.Size, v)
 		}
 		for i, suffix := range []string{"", "-asian", "-complex"} {
 			if name, ok := l.Lookup("style:font-name" + suffix); ok {
@@ -277,15 +273,11 @@ func newFont() sheet.Font {
 
 // foldScriptFont lays the Asian or complex text properties of layer l,
 // the attributes of suffix -asian or -complex, over f (ODF 1.3, Part 3,
-// 20.270 to 20.281): a size in points or percent, the weight, the
+// 20.270 to 20.281): a size in points (see [foldSize]), the weight, the
 // posture.
 func foldScriptFont(f sheet.ScriptFont, l odf.Props, suffix string) sheet.ScriptFont {
 	if v, ok := l.Lookup("style:font-size" + suffix); ok {
-		if pt, ok := odf.Length(v); ok && pt > 0 {
-			f.Size = pt
-		} else if pc, ok := odf.Percent(v); ok && pc > 0 {
-			f.Size *= pc
-		}
+		foldSize(&f.Size, v)
 	}
 	if v, ok := l.Lookup("style:font-weight" + suffix); ok {
 		n, err := strconv.Atoi(v)
@@ -295,6 +287,25 @@ func foldScriptFont(f sheet.ScriptFont, l odf.Props, suffix string) sheet.Script
 		f.Italic = v == "italic" || v == "oblique"
 	}
 	return f
+}
+
+// foldSize sets *size to v, a fo:font-size or its Asian or complex
+// counterpart, when v is a length. A percentage, which ODF 1.3, Part 3,
+// 20.190 lets a common style give relative to its parent, leaves the size
+// below as it is, as Calc reads one in any cell or text style.
+//
+// # Corpus evidence
+//
+//   - probe, ods: through gotenberg/gotenberg:9.4.1, "abc 漢字 עברית" in a
+//     cell of a common style setting 50% in all three scripts under one
+//     of 20pt prints at 20 points, as under an automatic cell style
+//     setting 50%, a common style setting 200% under that one, and an
+//     automatic or common text style setting 50% on a span; a common
+//     style setting 50% under Default prints at Calc's 10 points.
+func foldSize(size *float64, v string) {
+	if pt, ok := odf.Length(v); ok && pt > 0 {
+		*size = pt
+	}
 }
 
 // familyKey returns the font family attribute of a script suffix (ODF

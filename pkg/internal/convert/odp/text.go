@@ -268,15 +268,9 @@ type scriptText struct {
 // applyScriptText lays the Asian or complex text properties of p, the
 // attributes of suffix -asian or -complex, over s.
 func applyScriptText(s *scriptText, p odf.Props, suffix string) {
-	if v := p.Get("style:font-size" + suffix); v != "" {
-		if l, ok := odf.Length(v); ok && l > 0 {
-			s.size = l
-		} else if f, ok := odf.Percent(v); ok && f > 0 {
-			if s.size == 0 {
-				s.size = defaultFontSize
-			}
-			s.size *= f
-		}
+	if l, ok := odf.Length(p.Get("style:font-size" + suffix)); ok && l > 0 {
+		// A percentage leaves the size below (see [reader.applyText]).
+		s.size = l
 	}
 	switch w := p.Get("style:font-weight" + suffix); w {
 	case "":
@@ -311,7 +305,21 @@ func (r *reader) fontFamily(name, family string) string {
 	return name
 }
 
-// applyText lays the text properties p over rs.
+// applyText lays the text properties p over rs. A font size in percent,
+// which ODF 1.3, Part 3, 20.190 lets a common style give relative to its
+// parent, leaves the size below as it is, as Impress reads one in any
+// graphic, paragraph or text style; a bullet's percentage is read apart
+// ([reader.bullet]).
+//
+// # Corpus evidence
+//
+//   - probe, odp: through gotenberg/gotenberg:9.4.1, "abc 漢字 עברית" in a
+//     text box of a common graphic style setting 50% in all three
+//     scripts under one of 20pt prints at 20 points, as under an
+//     automatic graphic style setting 50%, a common one setting 200%
+//     under that one, and in a box of 20pt an automatic or common
+//     paragraph style, an automatic or common text style, or both,
+//     setting 50%.
 func (r *reader) applyText(rs *runState, p odf.Props) {
 	for _, f := range []struct {
 		dst          *string
@@ -325,15 +333,8 @@ func (r *reader) applyText(rs *runState, p odf.Props) {
 			*f.dst = v
 		}
 	}
-	if v := p.Get("fo:font-size"); v != "" {
-		if l, ok := odf.Length(v); ok && l > 0 {
-			rs.style.Size = l
-		} else if f, ok := odf.Percent(v); ok && f > 0 {
-			if rs.style.Size == 0 {
-				rs.style.Size = defaultFontSize
-			}
-			rs.style.Size *= f
-		}
+	if l, ok := odf.Length(p.Get("fo:font-size")); ok && l > 0 {
+		rs.style.Size = l
 	}
 	switch w := p.Get("fo:font-weight"); w {
 	case "":

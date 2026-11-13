@@ -45,7 +45,7 @@ func TestRead_ParagraphStyles(t *testing.T) {
 		level  int
 		size   float64
 		before float64
-	}{{0, 32, cm(0.5)}, {1, 14, cm(0.4)}, {2, 24, cm(0.4)}} {
+	}{{0, 32, cm(0.5)}, {1, 28, cm(0.4)}, {2, 24, cm(0.4)}} {
 		p := ps[i]
 		if p.Level != want.level || !near(p.Style.Size, want.size) || !near(p.SpaceBefore, want.before) || p.Style.Color != green {
 			t.Errorf("paragraph %d = level %d size %v before %v colour %v, want %+v", i, p.Level, p.Style.Size, p.SpaceBefore, p.Style.Color, want)

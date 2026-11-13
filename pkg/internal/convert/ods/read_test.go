@@ -254,7 +254,7 @@ func TestRead_Styles(t *testing.T) {
 		t.Fatal("no style")
 	}
 	fn := st.Font
-	if len(fn.Families) != 2 || fn.Families[0] != "DejaVu Sans" || fn.Families[1] != "Noto Sans CJK JP" || !near(fn.Size, 16.5) || !fn.Bold || !fn.Italic ||
+	if len(fn.Families) != 2 || fn.Families[0] != "DejaVu Sans" || fn.Families[1] != "Noto Sans CJK JP" || !near(fn.Size, 11) || !fn.Bold || !fn.Italic ||
 		fn.Underline != sheet.Double || !fn.Strike || fn.Script != sheet.Superscript || !near(fn.Color.B, 0.6) {
 		t.Errorf("font = %+v", fn)
 	}
