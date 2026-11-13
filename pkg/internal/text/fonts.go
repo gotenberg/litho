@@ -707,7 +707,7 @@ func (fc *Face) Covers(r rune) bool { return fc.covers(r) }
 // the OS/2 x-height and cap height. It answers from the index and reads no
 // file.
 func (fc *Face) Metrics(size float64) Metrics {
-	size *= fc.doc.sizeAdjust()
+	size = float64(size * fc.doc.sizeAdjust())
 	scale := size / fc.upem
 	m := Metrics{
 		Ascent:    fc.ascent * scale,

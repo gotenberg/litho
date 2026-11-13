@@ -49,12 +49,12 @@ func (p *Paragraph) trimAdjacent() {
 			switch {
 			case strings.ContainsRune(fullwidthOpening, c) && i > 0 && trimsBefore(p.text[i-1]):
 				// The glyph moves left over the half it loses.
-				half := g.advance / 2
+				half := float64(g.advance / 2)
 				g.advance -= half
 				g.xoff -= half
 				p.adv[i] -= half
 			case strings.ContainsRune(fullwidthClosing, c) && i+1 < n && trimsAfter(p.text[i+1]):
-				half := g.advance / 2
+				half := float64(g.advance / 2)
 				g.advance -= half
 				p.adv[i] -= half
 			}

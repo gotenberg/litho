@@ -985,7 +985,7 @@ func fakeBoldStroke(size float64) float64 {
 		ratio = fakeBoldLargeRatio
 	case size > fakeBoldSmallSize:
 		t := (size - fakeBoldSmallSize) / (fakeBoldLargeSize - fakeBoldSmallSize)
-		ratio = fakeBoldSmallRatio + t*(fakeBoldLargeRatio-fakeBoldSmallRatio)
+		ratio = fakeBoldSmallRatio + float64(t*(fakeBoldLargeRatio-fakeBoldSmallRatio))
 	}
 	return size * ratio
 }
