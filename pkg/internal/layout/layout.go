@@ -261,7 +261,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 		e.paintPageBackground(pg, pb)
 		e.paintMarks(pg, pb)
 		sheet := len(pg.Content)
-		e.paintCanvas(pg, canvas, pb)
+		e.paintCanvas(pg, canvas, rb, pb, k)
 		e.paintFrame(pg, pb)
 		if e.opts.MarginContent != nil {
 			pg.Content = append(pg.Content, e.opts.MarginContent(e.infoOf(k), n)...)
@@ -603,20 +603,36 @@ func markUsed(f typeset.Fragment, used map[*typeset.StructElem]bool) {
 	}
 }
 
-// paintCanvas paints the canvas background of the page pg, whose page box
+// paintCanvas paints the canvas background of page k, pg, whose page box
 // is pb, from the box canvas (CSS 2.1, 14.2) over the page box's border
-// box, the page area, not its margins (CSS Page 3, 3.1).
-func (e *engine) paintCanvas(pg *typeset.Page, canvas *box, pb PageBox) {
+// box, the page area, not its margins (CSS Page 3, 3.1). Its image is
+// sized and positioned in the background origin box of the root rb, as if
+// painted for the root alone (CSS Backgrounds 3, 2.11.2), the root's
+// slice of the flow on the page moved as its content is. A fixed image is
+// positioned in the viewport, on paper the page area.
+func (e *engine) paintCanvas(pg *typeset.Page, canvas, rb *box, pb PageBox, k int) {
 	if canvas == nil {
 		return
 	}
 	st := canvas.st
 	w, h := areaOf(pb)
-	area := typeset.Rect{X: pb.Margin[css.Left], Y: pb.Margin[css.Top], Width: w, Height: h}
+	whole := typeset.Rect{X: pb.Margin[css.Left], Y: pb.Margin[css.Top], Width: w, Height: h}
 	if c, ok := colorOf(st.BackgroundColor); ok {
-		pg.Content = append(pg.Content, &typeset.Path{Ops: rectOps(area), Fill: &typeset.Fill{Color: c}})
+		pg.Content = append(pg.Content, &typeset.Path{Ops: rectOps(whole), Fill: &typeset.Fill{Color: c}})
 	}
-	e.paintPageLayer(pg, st, area, area)
+	area := whole
+	if rb != nil && rb.laidOut && rb.borderW() > 0 && rb.borderH() > 0 && st.BackgroundAttachment != css.AttachFixed {
+		r := typeset.Rect{X: pb.Margin[css.Left] + rb.x, Y: pb.Margin[css.Top] - e.pageTop(k) + e.noteShift(k) + rb.y, Width: rb.borderW(), Height: rb.borderH()}
+		switch st.BackgroundOrigin {
+		case css.BorderEdge, css.TextEdge:
+			area = r
+		case css.PaddingEdge:
+			area, _ = insetRect(r, [4][2]float64{}, rb.bd)
+		case css.ContentEdge:
+			area, _ = insetRect(r, [4][2]float64{}, addSides(rb.bd, rb.pd))
+		}
+	}
+	e.paintPageLayer(pg, st, area, whole)
 }
 
 // paintPageLayer paints the background image or gradient of st over the

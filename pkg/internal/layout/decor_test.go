@@ -234,6 +234,28 @@ func TestCanvas_FillsPageArea(t *testing.T) {
 		____`)
 }
 
+// TestCanvas_ImagePositionedInRoot locks CSS Backgrounds 3, 2.11.2: the
+// canvas image covers the canvas but is positioned in the root's padding
+// box, as if painted for the root alone: a root of margin 1px and border
+// 1px starts its no-repeat image 2px in.
+func TestCanvas_ImagePositionedInRoot(t *testing.T) {
+	root := el(sty(margin(1), border(1, css.Solid, black), func(s *css.Style) {
+		s.BackgroundImage = "i.png"
+		s.BackgroundRepeat = [2]css.Repeat{css.RepeatNoRepeat, css.RepeatNoRepeat}
+	}), el(sty(height(3))))
+	res, err := Layout(context.Background(), root, ahem(t), Options{Page: page(8, 7), Image: imageLoader()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	img := render(t, res, 1)
+	if c := at(img, 2, 2); c != (color.NRGBA{255, 0, 0, 255}) {
+		t.Errorf("pixel (2, 2) is %v, want the image's red", c)
+	}
+	if c := at(img, 3, 2); c != (color.NRGBA{0, 0, 255, 255}) {
+		t.Errorf("pixel (3, 2) is %v, want the image's blue", c)
+	}
+}
+
 func TestOpacity_Group(t *testing.T) {
 	root := doc(el(sty(width(2), height(2), bg(red), func(s *css.Style) { s.Opacity = 0.5 })))
 	img := render(t, run(t, root, page(2, 2)), 1)
