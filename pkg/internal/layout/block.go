@@ -1195,8 +1195,7 @@ func (e *engine) layoutAtomic(a *box, lcb cblock) {
 // (CSS 2.1, 10.8.1, for inline-block).
 func lastBaseline(b *box) (float64, bool) {
 	if b.mc != nil {
-		y, ok := lastBaselineFlow(b)
-		return b.mc.place(b, y), ok
+		return b.mc.baseline(b, true)
 	}
 	return lastBaselineFlow(b)
 }
@@ -1229,10 +1228,61 @@ func lastBaselineFlow(b *box) (float64, bool) {
 // b, for the outside marker of a list item.
 func firstBaseline(b *box) (float64, bool) {
 	if b.mc != nil {
-		y, ok := firstBaselineFlow(b)
-		return b.mc.place(b, y), ok
+		return b.mc.baseline(b, false)
 	}
 	return firstBaselineFlow(b)
+}
+
+// baseline returns the first baseline, or the last when last, of the
+// multi-column container b: that of a line in its column flow, painted
+// where its column puts it, or that of a spanner, laid out across b in
+// b's own flow (CSS Multicol 1, 5.1), the sets taken in order.
+func (d *mcolData) baseline(b *box, last bool) (float64, bool) {
+	if len(b.lines) > 0 || len(d.sets) == 0 {
+		var y float64
+		var ok bool
+		if last {
+			y, ok = lastBaselineFlow(b)
+		} else {
+			y, ok = firstBaselineFlow(b)
+		}
+		return d.place(b, y), ok
+	}
+	sets := d.sets
+	if last {
+		sets = slices.Clone(sets)
+		slices.Reverse(sets)
+	}
+	for _, s := range sets {
+		if s.spanner != nil {
+			if y, ok := edgeBaseline(s.spanner, last); ok {
+				return y, true
+			}
+			continue
+		}
+		kids := s.kids
+		if last {
+			kids = slices.Clone(kids)
+			slices.Reverse(kids)
+		}
+		for _, k := range kids {
+			if k.inline || k.float != css.FloatNone || k.abs || k.kind != kindBlock || !k.laidOut {
+				continue
+			}
+			if y, ok := edgeBaseline(k, last); ok {
+				return d.place(b, y), true
+			}
+		}
+	}
+	return 0, false
+}
+
+// edgeBaseline is [lastBaseline] when last, [firstBaseline] otherwise.
+func edgeBaseline(b *box, last bool) (float64, bool) {
+	if last {
+		return lastBaseline(b)
+	}
+	return firstBaseline(b)
 }
 
 // firstBaselineFlow is [firstBaseline] in the column flow of a multi-column

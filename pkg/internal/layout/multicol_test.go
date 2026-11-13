@@ -256,3 +256,32 @@ func TestMulticol_ClippedPositionedChildStaysInColumn(t *testing.T) {
 		BB___
 		_____`)
 }
+
+// TestMulticol_MarkerBySpannerLine locks that the outside marker of a
+// multi-column list item sits by its first line box, here in a spanner
+// after a column set of no line (CSS Lists 3, 3.1; CSS Multicol 1, 5.1):
+// the spanner's line is in the item's own flow, which no column moves,
+// and the marker paints once.
+func TestMulticol_MarkerBySpannerLine(t *testing.T) {
+	t.Parallel()
+	item := sty(display(css.ListItem), columns(3, 0), func(s *css.Style) {
+		s.ListStyleType = css.Decimal
+		s.Width = css.Pts(px(90))
+		s.Margin[css.Left] = css.Pts(px(40))
+	})
+	span := sty(func(s *css.Style) { s.Columns.SpanAll = true })
+	res := run(t, doc(el(item, el(sty(height(30))), el(span, txt(span, "x")), txt(item, "y"))), page(200, 100))
+	var marks []placedText
+	var x placedText
+	for _, r := range texts(res, 1) {
+		switch {
+		case strings.HasPrefix(r.text, "1."):
+			marks = append(marks, r)
+		case r.text == "x":
+			x = r
+		}
+	}
+	if len(marks) != 1 || x.run == nil || !near(marks[0].y, x.y) {
+		t.Errorf("markers %+v, want one on the baseline of the spanner's line %v", marks, x.y)
+	}
+}
