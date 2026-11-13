@@ -85,11 +85,11 @@ func Paint(ctx context.Context, contents []Content) ([]*Surface, error) {
 		largest = max(largest, int64(contents[i].W+1)*int64(contents[i].H+1))
 	}
 	budget := limits.BudgetFrom(ctx)
-	data, wrote, err := writeContent(ctx, budget, doc)
+	data, err := writeContent(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
-	held := wrote + largest*canvasBytes
+	held := int64(len(data)) + largest*canvasBytes
 	if err := budget.Charge(held, "effect content renders"); err != nil {
 		return nil, err
 	}
@@ -127,22 +127,17 @@ func Paint(ctx context.Context, contents []Content) ([]*Surface, error) {
 	return out, nil
 }
 
-// writeContent writes doc into memory and returns the file and the most
-// bytes the write held, the file's included. [typeset.Write] keeps the
-// streams it holds in memory charged to the budget it runs under after it
-// returns, so it runs under a budget of its own, as large as what budget
-// has left, whose peak the caller charges to budget for as long as it
-// holds the file.
-func writeContent(ctx context.Context, budget *limits.Budget, doc *typeset.Document) ([]byte, int64, error) {
-	lim := budget.Limits()
-	lim.MaxConvertMemoryBytes = max(1, lim.MaxConvertMemoryBytes-budget.Held())
-	wctx, own, done := limits.WithBudget(ctx, lim)
-	defer done()
+// writeContent writes doc into memory and returns the file. The write
+// runs under ctx's budget: [typeset.Write] charges what it holds as it
+// writes, the budget refusing a write past what it has left, and gives it
+// all back when it returns, so the caller charges the file alone for as
+// long as it holds it.
+func writeContent(ctx context.Context, doc *typeset.Document) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := typeset.Write(wctx, doc, &buf, typeset.Options{}); err != nil {
-		return nil, 0, fmt.Errorf("writing effect content: %w", err)
+	if err := typeset.Write(ctx, doc, &buf, typeset.Options{}); err != nil {
+		return nil, fmt.Errorf("writing effect content: %w", err)
 	}
-	return buf.Bytes(), max(own.Peak(), int64(buf.Len())), nil
+	return buf.Bytes(), nil
 }
 
 // contentPage returns the page c is written as: the region of the grid,

@@ -41,7 +41,7 @@ func BenchmarkPaint(b *testing.B) {
 				b.Fatal(err)
 			}
 			doc := &typeset.Document{Pages: []*typeset.Page{pg}}
-			data, _, err := writeContent(ctx, nil, doc)
+			data, err := writeContent(ctx, doc)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -70,7 +70,7 @@ func BenchmarkPaint(b *testing.B) {
 			b.Run(tag+"/write", func(b *testing.B) {
 				b.ReportAllocs()
 				for b.Loop() {
-					if _, _, err := writeContent(ctx, nil, doc); err != nil {
+					if _, err := writeContent(ctx, doc); err != nil {
 						b.Fatal(err)
 					}
 				}
