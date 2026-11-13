@@ -222,9 +222,16 @@ func (rd *renderer) cartesian(avail typeset.Rect) {
 	all := append([]*dim{x}, ys...)
 	avail = rd.reserveTitles(avail, all...)
 	inner := avail
+	pj := rd.threeD(g0)
 	fit := func() {
+		front := inner
+		if pj != nil {
+			// A three-dimensional plot puts its axes, labels and series
+			// on its front plane, the rest of inner taken by its depth.
+			front = pj.layout(rd, g0, x, inner)
+		}
 		for _, d := range all {
-			d.inner = inner
+			d.inner = front
 		}
 		for _, d := range all {
 			rd.fitScale(d)
@@ -256,27 +263,36 @@ func (rd *renderer) cartesian(avail typeset.Rect) {
 		return
 	}
 	rd.frame(inner, c.PlotArea)
-	for _, d := range all {
-		rd.grids(d, inner)
-	}
-	for _, d := range all {
-		rd.axisLine(d)
-	}
 	var labels []func()
-	for _, g := range c.Groups {
-		if rd.ctx.Err() != nil {
-			return
+	if pj != nil {
+		rd.walls(pj, x.inner, all)
+		for _, d := range all {
+			rd.axisLine(d)
 		}
-		y := yOf[g]
-		if y == nil {
-			continue
+		labels = rd.series3D(pj, x, yOf)
+		rd.rowLabels(pj, g0, x.inner)
+	} else {
+		for _, d := range all {
+			rd.grids(d, inner)
 		}
-		labels = append(labels, rd.series(g, x, y)...)
-	}
-	for _, g := range c.Groups {
-		if y := yOf[g]; y != nil {
-			rd.groupErrorBars(g, x, y)
-			rd.trendlines(g, x, y)
+		for _, d := range all {
+			rd.axisLine(d)
+		}
+		for _, g := range c.Groups {
+			if rd.ctx.Err() != nil {
+				return
+			}
+			y := yOf[g]
+			if y == nil {
+				continue
+			}
+			labels = append(labels, rd.series(g, x, y)...)
+		}
+		for _, g := range c.Groups {
+			if y := yOf[g]; y != nil {
+				rd.groupErrorBars(g, x, y)
+				rd.trendlines(g, x, y)
+			}
 		}
 	}
 	for _, f := range labels {

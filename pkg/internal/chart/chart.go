@@ -37,6 +37,13 @@ type Chart struct {
 	// Area is the chart area's fill and border, PlotArea the plot area's
 	// (the wall of a two-dimensional chart).
 	Area, PlotArea Frame
+	// View3D, when set, draws the groups marked [Group.ThreeD] in three
+	// dimensions, seen as it says; nil draws every group flat.
+	View3D *View3D
+	// Floor, SideWall and BackWall are the fill and border of the floor
+	// and walls of a three-dimensional plot (ECMA-376 Part 1, 21.2.2.69
+	// floor, 21.2.2.171 sideWall, 21.2.2.11 backWall).
+	Floor, SideWall, BackWall Frame
 	// Palette lists the automatic colours of series and, in a group with
 	// VaryColors, of points, used in order for an item with no fill of its
 	// own.
@@ -170,9 +177,25 @@ type Group struct {
 	// Filled draws a radar group's polygons filled (21.2.3.37
 	// ST_RadarStyle filled).
 	Filled bool
-	// ThreeD marks a group the file draws in three dimensions; it is
+	// ThreeD marks a group the file draws in three dimensions. With
+	// [Chart.View3D] set, a bar, line, area or pie group is drawn as a
+	// projection; any other group, or every group without a view, is
 	// drawn as its two-dimensional kind.
 	ThreeD bool
+	// Rows puts a three-dimensional group's series one behind the other,
+	// each in its own row along the depth axis, the first in front
+	// (ECMA-376 Part 1, 21.2.3.17 ST_Grouping standard on a 3-D chart).
+	Rows bool
+	// Shape is the solid a three-dimensional bar group draws its bars as
+	// (21.2.2.162 shape).
+	Shape BarShape
+	// GapDepth is the depth between the rows of a three-dimensional
+	// group, as a percentage of a bar's depth, 150 by default (21.2.2.74
+	// gapDepth).
+	GapDepth float64
+	// ZAxis indexes [Chart.Axes]: the series axis whose labels name a
+	// three-dimensional group's rows, -1 for none.
+	ZAxis int
 	// XAxis and YAxis index [Chart.Axes]: the category (or x value) axis
 	// and the value axis. -1 for none, as a pie has.
 	XAxis, YAxis int

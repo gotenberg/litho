@@ -59,8 +59,8 @@ const (
 // nesting of the result is at most 3. The output depends on c, fonts and r
 // alone.
 //
-// Three-dimensional charts are drawn as their two-dimensional kind;
-// trendline equations are not drawn.
+// A three-dimensional chart with a view is drawn as a parallel
+// projection (see [View3D]); trendline equations are not drawn.
 func Render(ctx context.Context, fonts *text.Fonts, c *Chart, r typeset.Rect) []typeset.Fragment {
 	if c == nil || fonts == nil || !numeric.PositiveFinite(r.Width) || !numeric.PositiveFinite(r.Height) {
 		return nil

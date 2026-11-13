@@ -62,6 +62,9 @@ type pieLabel struct {
 	mid    float64
 	r0, r1 float64
 	cx, cy float64
+	// tilt squeezes the label's offset from the centre vertically on a
+	// three-dimensional pie, 0 on a flat one.
+	tilt float64
 }
 
 // pies draws a pie or doughnut group into plot: the sectors of the first
@@ -105,6 +108,17 @@ func (rd *renderer) pies(plot typeset.Rect) {
 	if outside && rd.fixed == nil {
 		r = math.Min((plot.Width-2*maxW)/2, (plot.Height-2*maxH)/2) - labelSpacing
 	}
+	t := rd.pieView(g)
+	if t != nil && rd.fixed == nil {
+		// A tilted pie is an ellipse on its rim: its height is its
+		// width times the tilt, plus the rim, so the plot's width bounds
+		// it before its height does.
+		w := plot.Width / 2
+		if outside {
+			w = (plot.Width-2*maxW)/2 - labelSpacing
+		}
+		r = math.Min(w, (plot.Height/2-maxH)/(t.tilt+t.rim/2))
+	}
 	r /= 1 + maxExpl
 	if !above(r, 1) {
 		return
@@ -113,7 +127,7 @@ func (rd *renderer) pies(plot typeset.Rect) {
 	if g.Kind == Doughnut {
 		hole = r * math.Max(minHoleSize, math.Min(holeSize(g), maxHoleSize)) / 100
 	}
-	start := (90 - g.FirstSliceAngle) * math.Pi / 180
+	first := g.FirstSliceAngle
 	dir := -1.0
 	if g.CounterClockwise {
 		dir = 1
@@ -122,12 +136,23 @@ func (rd *renderer) pies(plot typeset.Rect) {
 		// A placed pie fills its rectangle, less the room its most
 		// exploded sector takes (chart2's PieChart::getMaxOffset).
 		r = math.Min(plot.Width, plot.Height) / 2 / (1 + maxExpl)
+		if t != nil {
+			r = math.Min(plot.Width/2, plot.Height/2/(t.tilt+t.rim/2)) / (1 + maxExpl)
+		}
 		if g.Kind == Doughnut {
 			hole = r * math.Max(minHoleSize, math.Min(holeSize(g), maxHoleSize)) / 100
 		}
 	}
+	if t != nil {
+		// A three-dimensional pie turns by its view's rotY: its group has
+		// no first slice angle (ECMA-376 Part 1, 21.2.2.140 pie3DChart).
+		first += rd.c.View3D.RotY
+		cy -= t.rim * r / 2
+	}
+	start := (90 - first) * math.Pi / 180
 	ringW := (r - hole) / float64(len(series))
 	var labels []pieLabel
+	var tops []typeset.Fragment
 	for si, s := range series {
 		vals := rd.data(s.Values)
 		n := min(vals.Len(), MaxPoints)
@@ -170,15 +195,18 @@ func (rd *renderer) pies(plot typeset.Rect) {
 				}
 			}
 			fill := rd.fillOf(g, s, j)
-			if fill != nil && !fill.None && fill.Shape != nil {
-				rd.out = append(rd.out, shape.Fill(ops, opsBounds(ops), *fill.Shape)...)
-			}
-			p := paintPath(ops, fill, rd.borderOf(g, s, j))
-			if p != nil {
-				if p.Fill != nil {
-					p.Fill.Rule = typeset.EvenOdd
+			if t != nil {
+				// The rims in front are drawn first, the tops over them.
+				for _, rim := range t.rimOps(pcx, pcy, r1, lo, hi) {
+					rd.add(paintPath(rim, shaded(fill, pieRim), rd.borderOf(g, s, j)))
 				}
-				rd.out = append(rd.out, p)
+				ops = tiltOps(ops, pcy, t.tilt)
+				mark := len(rd.out)
+				rd.pieSector(ops, fill, rd.borderOf(g, s, j))
+				tops = append(tops, rd.out[mark:]...)
+				rd.out = rd.out[:mark]
+			} else {
+				rd.pieSector(ops, fill, rd.borderOf(g, s, j))
 			}
 			lb := rd.labelsAt(g, s, j)
 			if !lb.Any() {
@@ -188,11 +216,30 @@ func (rd *renderer) pies(plot typeset.Rect) {
 			if b == nil {
 				continue
 			}
-			labels = append(labels, pieLabel{b: b, lb: lb, mid: mid, r0: r0, r1: r1, cx: pcx, cy: pcy})
+			l := pieLabel{b: b, lb: lb, mid: mid, r0: r0, r1: r1, cx: pcx, cy: pcy}
+			if t != nil {
+				l.tilt = t.tilt
+			}
+			labels = append(labels, l)
 		}
 	}
+	rd.out = append(rd.out, tops...)
 	for _, l := range labels {
 		rd.placePieLabel(l)
+	}
+}
+
+// pieSector paints a sector's outline ops with fill and border, its
+// holes left empty.
+func (rd *renderer) pieSector(ops []typeset.PathOp, fill *Paint, border *Stroke) {
+	if fill != nil && !fill.None && fill.Shape != nil {
+		rd.out = append(rd.out, shape.Fill(ops, opsBounds(ops), *fill.Shape)...)
+	}
+	if p := paintPath(ops, fill, border); p != nil {
+		if p.Fill != nil {
+			p.Fill.Rule = typeset.EvenOdd
+		}
+		rd.out = append(rd.out, p)
 	}
 }
 
@@ -202,6 +249,9 @@ func (rd *renderer) pies(plot typeset.Rect) {
 func (rd *renderer) placePieLabel(l pieLabel) {
 	w, h := l.b.rotated()
 	c, s := math.Cos(l.mid), math.Sin(l.mid)
+	if l.tilt > 0 {
+		s *= l.tilt
+	}
 	inside := l.lb.Placement != LabelOutsideEnd
 	rm := (l.r0 + l.r1) / 2
 	if l.r0 == 0 {
