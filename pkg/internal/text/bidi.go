@@ -232,7 +232,50 @@ func resolveLevels(ctx context.Context, bidiText []rune, at []int, base Directio
 		}
 		out[i] = int8(min(lv, maxDepth+1)) //nolint:gosec // at most 126
 	}
+	resetSeparators(bidiText, at, out, baseLevel)
 	return out, nil
+}
+
+// resetSeparators applies the first rules of UAX #9, L1 to levels, the
+// level of each character of bidiText at its index in at: a segment
+// separator, a tab among them, takes the paragraph's level baseLevel, and
+// so does the white space before it, so that the text on either side of
+// it orders as separate segments. The white space at the end of a line,
+// which L1 resets too, hangs or is removed as CSS Text 3, 4.1 says.
+func resetSeparators(bidiText []rune, at []int, levels []int8, baseLevel int) {
+	base := int8(baseLevel) //nolint:gosec // 0 or 1
+	for i := len(at) - 1; i >= 0; i-- {
+		k := at[i]
+		if k < 0 || k >= len(bidiText) || !segmentSeparator(bidiText[k]) {
+			continue
+		}
+		levels[i] = base
+		for j := i - 1; j >= 0; j-- {
+			if at[j] < 0 || at[j] >= len(bidiText) || !separatorSpace(bidiText[at[j]]) {
+				break
+			}
+			levels[j] = base
+		}
+	}
+}
+
+// segmentSeparator reports a character of bidi class S (UAX #9, Table 4):
+// the tab, U+000B and U+001F.
+func segmentSeparator(r rune) bool {
+	return r == '\t' || r == '\u000b' || r == '\u001f'
+}
+
+// separatorSpace reports white space L1 resets before a segment
+// separator: a character of class WS, an isolate control or a
+// formatting character of class BN.
+func separatorSpace(r rune) bool {
+	switch r {
+	case LRI, RLI, FSI, PDI:
+		return true
+	}
+	p, _ := bidi.LookupRune(r)
+	cl := p.Class()
+	return cl == bidi.WS || cl == bidi.BN
 }
 
 // explicitLevels applies rules X1 to X8 of UAX #9 to text, a paragraph of

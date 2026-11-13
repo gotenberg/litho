@@ -113,6 +113,23 @@ func TestShape_Directions(t *testing.T) {
 	}
 }
 
+// UAX #9, L1: a tab takes the paragraph's level, inside an isolate too,
+// so the text on either side of it orders as separate segments.
+func TestShape_TabSeparatesSegments(t *testing.T) {
+	f := newTestFonts(t, append(sansFamily(), fontFile{name: "hebrew.ttf", data: testHebrew()})...)
+	runs := []ParagraphRun{
+		{Text: "A ", Style: style()},
+		{Text: "\u05d0\u05d1", Style: style(), Open: []rune{RLI}},
+		{Object: &Object{Width: 5, Tab: true}},
+		{Text: "\u05d2\u05d3", Style: style(), Close: []rune{PDI}},
+		{Text: " D", Style: style()},
+	}
+	p := shape(t, f, runs, ParagraphOptions{Direction: LeftToRight})
+	if got := spanText(p.Line(0, p.Len(), false)); got != "A \u05d1\u05d0[obj]\u05d3\u05d2 D" {
+		t.Errorf("visual order %q, want the tab between the isolate's two segments", got)
+	}
+}
+
 func TestShape_Spacing(t *testing.T) {
 	f := newTestFonts(t, sansFamily()...)
 	s := style()
