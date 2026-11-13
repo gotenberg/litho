@@ -175,7 +175,7 @@ func paperBlend(c graphics.Color, family string, alpha float64) ([]float64, bool
 	}
 	out := make([]float64, len(c.Components))
 	for i, v := range c.Components {
-		out[i] = alpha*v + (1-alpha)*paper
+		out[i] = float64(alpha*v) + float64((1-alpha)*paper)
 	}
 	return out, true
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
@@ -514,8 +515,8 @@ func strokeReach(st *graphics.State, ctm geom.Matrix) float64 {
 	if st.LineJoin == graphics.LineJoinMiter && st.MiterLimit > 1 {
 		factor = st.MiterLimit
 	}
-	scale := max(math.Hypot(ctm[0], ctm[1]), math.Hypot(ctm[2], ctm[3]))
-	reach := lw / 2 * factor * scale
+	scale := max(detmath.Hypot(ctm[0], ctm[1]), detmath.Hypot(ctm[2], ctm[3]))
+	reach := float64(lw / 2 * factor * scale)
 	if math.IsNaN(reach) || math.IsInf(reach, 0) {
 		return 0
 	}

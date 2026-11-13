@@ -323,7 +323,7 @@ func (c *coverage) classify(x, y int) uint8 {
 		switch {
 		case max(abs32(wr-cr), abs32(wg-cg), abs32(wb-cb)) <= coverLevel:
 			cl = pixelHidden
-		case max(abs32(tr+cr*keep-wr), abs32(tg+cg*keep-wg), abs32(tb+cb*keep-wb)) > approxLevel:
+		case max(abs32(tr+float32(cr*keep)-wr), abs32(tg+float32(cg*keep)-wg), abs32(tb+float32(cb*keep)-wb)) > approxLevel:
 			cl = pixelApproximated
 		default:
 			cl = pixelVisible
