@@ -178,8 +178,19 @@ func (fc *Face) fileFace() *Face {
 // OpenType weights and fontconfig's values for them, between which it
 // interpolates linearly (fontconfig, FcWeightFromOpenTypeDouble).
 var fontconfigWeights = [...][2]float64{
-	{0, 0}, {100, 0}, {200, 40}, {300, 50}, {350, 55}, {380, 75}, {400, 80},
-	{500, 100}, {600, 180}, {700, 200}, {800, 205}, {900, 210}, {1000, 215},
+	{0, 0},
+	{100, 0},
+	{200, 40},
+	{300, 50},
+	{350, 55},
+	{380, 75},
+	{400, 80},
+	{500, 100},
+	{600, 180},
+	{700, 200},
+	{800, 205},
+	{900, 210},
+	{1000, 215},
 }
 
 // fontconfigWeight returns fontconfig's weight for the OpenType weight w.
