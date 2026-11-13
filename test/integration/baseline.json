@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T21:05:47Z",
+  "captured_at": "2026-11-13T23:16:31Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -60072,7 +60072,7 @@
               "text_f1": 0.9829
             },
             "cjk-han-variants": {
-              "layout": 0.9163,
+              "layout": 0.9069,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60296,12 +60296,12 @@
               "text_f1": 1
             },
             "lists": {
-              "layout": 0.929,
+              "layout": 0.9365,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9912
+              "text_f1": 1
             },
             "long-report": {
               "layout": 0.9157,
@@ -117072,8 +117072,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 4580,
-          "mismatched": 613,
+          "matched": 4581,
+          "mismatched": 612,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -119190,7 +119190,7 @@
             "css/css-content/quotes-031.html": "pass",
             "css/css-content/quotes-032.html": "pass",
             "css/css-content/quotes-033.html": "pass",
-            "css/css-content/quotes-034.html": "pass",
+            "css/css-content/quotes-034.html": "fail",
             "css/css-content/quotes-035.html": "pass",
             "css/css-content/quotes-first-line.html": "pass",
             "css/css-content/quotes-match-parent-001.html": "fail",
@@ -120952,7 +120952,7 @@
             "css/css-pseudo/marker-hyphens.html": "pass",
             "css/css-pseudo/marker-inherit-line-height.html": "pass",
             "css/css-pseudo/marker-inherit-values.html": "pass",
-            "css/css-pseudo/marker-letter-spacing.html": "fail",
+            "css/css-pseudo/marker-letter-spacing.html": "pass",
             "css/css-pseudo/marker-line-break.html": "pass",
             "css/css-pseudo/marker-line-height.html": "fail",
             "css/css-pseudo/marker-list-style-position.html": "pass",
@@ -120968,7 +120968,7 @@
             "css/css-pseudo/marker-text-transform-uppercase.html": "pass",
             "css/css-pseudo/marker-variable.html": "pass",
             "css/css-pseudo/marker-word-break.html": "pass",
-            "css/css-pseudo/marker-word-spacing.html": "fail",
+            "css/css-pseudo/marker-word-spacing.html": "pass",
             "css/css-pseudo/outside-marker-paint-order.html": "pass",
             "css/css-pseudo/relative-box-order-of-pseudo-elements.html": "fail",
             "css/css-pseudo/slider/slider-fill-002.html": "fail",
