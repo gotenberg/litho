@@ -469,6 +469,15 @@ func (e *engine) layoutRoot(rb *box) {
 	mc := &marginState{}
 	// The root is laid out once a pass.
 	rb.settled = true
+	if rb.abs {
+		// An absolutely positioned root is laid out as any absolutely
+		// positioned box, in the initial containing block or the page
+		// area, its static position their top left corner (CSS 2.1, 10.1,
+		// 10.3.7 and 10.6.4).
+		setStatic(rb, 0, 0, false)
+		e.layoutAbs(rb)
+		return
+	}
 	e.layoutBlock(rb, cb, bc, 0, mc, breakNone)
 }
 

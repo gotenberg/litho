@@ -283,3 +283,13 @@ func TestPosition_TransformedTableParts(t *testing.T) {
 		assertPixels(t, run(t, root, page(4, 2)), 1, "BB__\n____")
 	})
 }
+
+func TestPosition_AbsoluteRoot(t *testing.T) {
+	// CSS 2.1, 10.1: an absolutely positioned root is placed by its
+	// offsets in the initial containing block, a fixed one in the page
+	// area.
+	for _, p := range []css.Position{css.Absolute, css.Fixed} {
+		root := el(sty(abs(1, auto, auto, 2), width(2), func(s *css.Style) { s.Position = p }), el(sty(), square(2, 1, blue)))
+		assertPixels(t, run(t, root, page(4, 2)), 1, "____\n__BB")
+	}
+}

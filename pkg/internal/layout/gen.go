@@ -53,6 +53,10 @@ func (e *engine) generate(root *Node) *box {
 	}
 	cctx := e.enter(root, rb, ctx)
 	rb.elem = cctx.elem
+	// The root is absolutely positioned as any element is (CSS 2.1, 9.3.1;
+	// CSS Position 3, 2), its containing block the initial one, or the
+	// page area for a fixed root (10.1).
+	rb.abs = isAbs(st)
 	if st.Display == css.Flex {
 		e.genFlex(rb, root.Children, cctx)
 		return rb
