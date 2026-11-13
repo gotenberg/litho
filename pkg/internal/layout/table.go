@@ -1446,10 +1446,14 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 			canBreak := onPage > 0 || k == 0 && (headN > 0 || !e.atPageTop(td.table.y))
 			single := u.hi-u.lo == 1
 			fits := y+need <= pb+eps
-			if !fits && single && (!u.forced || k == 0) && canBreak && !td.avoidsSplit(u.lo) && split(u, false) {
+			// A forced break before the first body row is the table's own
+			// unless a header group precedes it: then it falls between
+			// the header group and the body (CSS 2.1, 13.3.1).
+			forced := u.forced && (k > 0 || headN > 0)
+			if !fits && single && !forced && canBreak && !td.avoidsSplit(u.lo) && split(u, false) {
 				continue
 			}
-			brk := u.forced && k > 0 || canBreak && !fits
+			brk := forced || canBreak && !fits
 			if g := td.rows[u.lo].group; canBreak && !brk && td.firstRow(u.lo) && avoidsInside(g) {
 				// A row group that avoids breaks inside it and does not
 				// fit what is left of the page starts the next one, even
@@ -1465,7 +1469,7 @@ func (e *engine) placeRows(td *tableData, rowH []float64, start float64) (float6
 				}
 				brk = y+sumH(u.lo, end+1)+footNeed(u) > pb+eps
 			}
-			if brk && k == 0 && !e.atPageTop(td.table.y) && y-td.table.y+need <= e.pageH+eps {
+			if brk && !forced && k == 0 && !e.atPageTop(td.table.y) && y-td.table.y+need <= e.pageH+eps {
 				return y, true
 			}
 			if brk {

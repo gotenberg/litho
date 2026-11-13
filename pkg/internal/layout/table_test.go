@@ -521,6 +521,23 @@ func TestTable_BreakProperties(t *testing.T) {
 	}
 }
 
+// TestTable_BreakAfterHeaderGroup breaks the page between a header group
+// of break-after: page and the first body row (CSS 2.1, 13.3.1), as
+// Chromium prints it.
+//
+// # Corpus evidence
+//
+//   - wpt, css/CSS2/pagination/rowgroup-page-break-inside-avoid-5-print-ref.html:
+//     Chromium 156 prints the header row alone on the first page.
+func TestTable_BreakAfterHeaderGroup(t *testing.T) {
+	head := thead(nil, tr(nil, td(nil, "h")))
+	head.Style.BreakAfter = css.Page
+	tm := tableOf(t, doc(table(nil, head, tbody(nil, tr(nil, td(nil, "b"))))), page(20, 50))
+	if got := pxOf(tm.rows[1].box.y); got != 60 {
+		t.Errorf("first body row at %v, want 60: on the next page, below the header's copy", got)
+	}
+}
+
 func TestTable_RowSpanToGroupEnd(t *testing.T) {
 	// A span past its row group ends with the group, and the cell's
 	// structure element counts the rows it covers (HTML Standard, 4.9.11).
