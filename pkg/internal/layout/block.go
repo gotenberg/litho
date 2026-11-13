@@ -690,21 +690,22 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 	for pass := range maxFitPasses {
 		resolveEdges(b, cb.w)
 		e.resolveSizing(b, cblock{w: r - l, h: cb.h, hDefinite: cb.hDefinite}, -1, -1)
+		lo, hi, avail := besideFloats(b, l, r, left, right)
 		if b.kind == kindReplaced {
 			w, h := e.replacedSize(b, cb)
-			blockWidths(b, r-l, rtl, w, true)
+			blockWidths(b, avail, rtl, w, true)
 			b.w, b.h = w, h
-			b.x = l + b.m[css.Left]
+			b.x = besideX(b, lo, hi, rtl)
 			b.y = e.fit(top, b.borderH())
 		} else {
 			// A table's width comes from its columns, its auto margins
 			// centre it (CSS 2.1, 17.4).
 			w, wSet := 0.0, false
 			if b.tpart == partWrapper {
-				w, wSet = e.wrapperWidth(b, cb.w, r-l), true
+				w, wSet = e.wrapperWidth(b, cb.w, avail), true
 			}
-			blockWidths(b, r-l, rtl, w, wSet)
-			b.x = l + b.m[css.Left]
+			blockWidths(b, avail, rtl, w, wSet)
+			b.x = besideX(b, lo, hi, rtl)
 			b.y = top
 			top = e.layoutContextIn(b, cb, top)
 		}
@@ -713,7 +714,7 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 			return
 		}
 		l2, r2 := bc.band(top, h, left, right)
-		if b.x >= l2-eps && b.x+b.borderW() <= r2+eps || pass == maxFitPasses-1 {
+		if fitsBeside(b, l2, r2, left, right) || pass == maxFitPasses-1 {
 			return
 		}
 		if l2 > l+eps || r2 < r-eps {
@@ -751,6 +752,69 @@ func usedSpecH(b *box, specH float64, hSet bool, cb cblock) float64 {
 		return specH
 	}
 	return constrainHeight(b, specH, cb)
+}
+
+// besideFloats returns the edges lo and hi the border box of b, a box that
+// establishes a formatting context, lies between in the space l to r the
+// floats leave of its containing block's left to right, and the width its
+// margin box is laid out in. Beside no float its margins offset it from
+// the containing block's edges as in normal flow. Beside a float a margin
+// may lie over the float but never moves the box into it: only a positive
+// margin, counted from the containing block's edge, narrows the space
+// (CSS 2.1, 9.5 leaves the placement beside floats to the user agent;
+// this is Chromium's).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) places 48 boxes
+//     with overflow: hidden beside a 50px left float in a 100px container
+//     (direction ltr and rtl; width auto, 40px, 60px; a left or right
+//     margin of -60, -20, 20, 51px) as this rule and [fitsBeside] say:
+//     an auto-width box with margin-left: -20px fills the 50px beside the
+//     float, one with -60px moves below it.
+func besideFloats(b *box, l, r, left, right float64) (lo, hi, avail float64) {
+	ml, mr := nonAutoMargin(b, css.Left), nonAutoMargin(b, css.Right)
+	if l <= left+eps && r >= right-eps {
+		lo, hi = l+ml, r-mr
+	} else {
+		lo, hi = max(l, left+max(ml, 0)), min(r, right-max(mr, 0))
+	}
+	return lo, hi, max(max(hi-lo, 0)+ml+mr, 0)
+}
+
+// nonAutoMargin returns the used margin of b on side, 0 for an auto one.
+func nonAutoMargin(b *box, side css.Side) float64 {
+	if b.st.Margin[side].Kind == css.Auto {
+		return 0
+	}
+	return b.m[side]
+}
+
+// besideX returns the border box left of b, laid out between the edges lo
+// and hi [besideFloats] returns: against lo, or against hi when its
+// containing block is right to left, offset by what an auto margin takes.
+func besideX(b *box, lo, hi float64, rtl bool) float64 {
+	if rtl {
+		return hi - (b.m[css.Right] - nonAutoMargin(b, css.Right)) - b.borderW()
+	}
+	return lo + b.m[css.Left] - nonAutoMargin(b, css.Left)
+}
+
+// fitsBeside reports whether the border box of b, placed by [besideX],
+// fits in the space l to r the floats leave of its containing block's
+// left to right: it crosses no edge a float makes, and beside a float it
+// is no wider than the space.
+func fitsBeside(b *box, l, r, left, right float64) bool {
+	floatL, floatR := l > left+eps, r < right-eps
+	switch {
+	case floatL && b.x < l-eps:
+		return false
+	case floatR && b.x+b.borderW() > r+eps:
+		return false
+	case (floatL || floatR) && b.borderW() > r-l+eps:
+		return false
+	}
+	return true
 }
 
 // layoutOwnContext lays out the content of a box that establishes a block

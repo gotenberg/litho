@@ -223,3 +223,43 @@ func TestFormattingContextBelowFloat_KeepsParentTop(t *testing.T) {
 		t.Errorf("formatting context at y %v, want 50: below the float", got[1])
 	}
 }
+
+func TestFormattingContextBesideFloat_Margins(t *testing.T) {
+	// CSS 2.1, 9.5 leaves the placement beside floats to the user agent:
+	// a margin may lie over the float, never moves the box into it, and
+	// only a positive one narrows the space beside it.
+	tests := []struct {
+		name   string
+		rtl    bool
+		w      float64
+		margin [4]float64
+		want   [3]float64 // x, y, width of the border box
+	}{
+		{"auto width, negative start margin", false, 0, [4]float64{0, 0, 0, -20}, [3]float64{50, 0, 50}},
+		{"auto width, positive start margin", false, 0, [4]float64{0, 0, 0, 20}, [3]float64{50, 0, 50}},
+		{"auto width, margin wider than the float", false, 0, [4]float64{0, 0, 0, -60}, [3]float64{-60, 40, 160}},
+		{"rtl, negative end margin", true, 0, [4]float64{0, 0, 0, -20}, [3]float64{50, 0, 50}},
+		{"rtl, fixed width, negative start margin", true, 40, [4]float64{0, -20, 0, 0}, [3]float64{60, 0, 40}},
+		{"rtl, start margin past the float", true, 0, [4]float64{0, 51, 0, 0}, [3]float64{0, 40, 49}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := tt.margin
+			mods := []func(*css.Style){hidden, height(30), margin(m[0], m[1], m[2], m[3])}
+			if tt.w > 0 {
+				mods = append(mods, width(tt.w))
+			}
+			outer := []func(*css.Style){width(100)}
+			if tt.rtl {
+				outer = append(outer, rtl)
+			}
+			rb := boxes(t, doc(el(sty(outer...),
+				el(sty(float(css.FloatLeft), width(50), height(40))),
+				el(sty(mods...)))), page(200, 200))
+			got := rect(kid(t, rb, 0, 0, 1))
+			if [3]float64{got[0], got[1], got[2]} != tt.want {
+				t.Errorf("box at %v, want x, y, width %v", got, tt.want)
+			}
+		})
+	}
+}
