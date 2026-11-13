@@ -14,6 +14,10 @@ type Theme struct {
 	Colors map[string]css.Color
 	// Major and Minor are the heading and body fonts.
 	Major, Minor FontScheme
+	// EffectStyles are the a:effectStyle elements of the format scheme's
+	// effect style list (20.1.4.1.12 effectStyleLst), in order: a shape's
+	// effectRef of idx n names the nth.
+	EffectStyles []*Element
 }
 
 // FontScheme is one font collection of a theme (ECMA-376 Part 1,
@@ -37,6 +41,11 @@ func ParseTheme(root *Element) *Theme {
 			if col, ok := SchemeColor(c, nil); ok {
 				t.Colors[c.Local] = col
 			}
+		}
+	}
+	for _, st := range elems.Child(NSA, "fmtScheme").Child(NSA, "effectStyleLst").Kids() {
+		if st.Is(NSA, "effectStyle") {
+			t.EffectStyles = append(t.EffectStyles, st)
 		}
 	}
 	if fs := elems.Child(NSA, "fontScheme"); fs != nil {
