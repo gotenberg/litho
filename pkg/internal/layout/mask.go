@@ -133,9 +133,12 @@ func (p *painter) maskLayer(b *box, l css.MaskLayer) maskLayer {
 	origin, _ := p.referenceBox(b, l.Origin)
 	clip, _ := p.referenceBox(b, l.Clip)
 	if l.NoClip {
-		// The mask painting area is unrestricted; litho restricts it to
-		// the border box, so what paints outside it is masked out.
+		// The mask painting area is unrestricted (CSS Masking 1, 6.8):
+		// it reaches every box b paints, its descendants' included.
 		clip, _ = p.referenceBox(b, css.GeoBorder)
+		if d, ok := p.descendantBounds(b, maxMaskBoundsBoxes); ok {
+			clip = union(clip, d)
+		}
 	}
 	out := maskLayer{clip: clip, op: l.Composite, luminance: l.Mode == css.MaskLuminance}
 	if l.Image != "" && p.e.opts.MaskSource != nil {
@@ -181,4 +184,36 @@ func (p *painter) maskLayer(b *box, l css.MaskLayer) maskLayer {
 	}
 	out.frags = frags
 	return out
+}
+
+// maxMaskBoundsBoxes caps the boxes descendantBounds visits. Anti-DoS
+// guard, not spec-mandated: a masked element holds a handful of boxes;
+// past the cap the bounds of the boxes visited stand for all of them.
+const maxMaskBoundsBoxes = 4096
+
+// descendantBounds returns the union of the border boxes of b's
+// descendants in flow coordinates, b's own relative offset in force,
+// visiting at most n boxes; false for none.
+func (p *painter) descendantBounds(b *box, n int) (typeset.Rect, bool) {
+	var out typeset.Rect
+	set := false
+	stack := slices.Clone(b.kids)
+	for len(stack) > 0 && n > 0 {
+		k := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		n--
+		if k.kind != kindText && k.kind != kindBreak {
+			ox, oy := offset(k)
+			r := typeset.Rect{X: k.x + p.dx + ox, Y: k.y + p.dy + oy, Width: k.borderW(), Height: k.borderH()}
+			if r.Width > 0 && r.Height > 0 {
+				if set {
+					out = union(out, r)
+				} else {
+					out, set = r, true
+				}
+			}
+		}
+		stack = append(stack, k.kids...)
+	}
+	return out, set
 }

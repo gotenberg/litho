@@ -57,3 +57,19 @@ func TestMask_GradientAlpha(t *testing.T) {
 		t.Errorf("left %v, right %v: want white to red", left, right)
 	}
 }
+
+// TestMask_NoClip locks that mask-clip no-clip leaves the mask painting
+// area unrestricted: a positioned child painting past its parent's border
+// box stays visible under an opaque mask.
+func TestMask_NoClip(t *testing.T) {
+	g := &css.Gradient{Angle: 180, Stops: gstops(black, math.NaN(), black, math.NaN())}
+	mask := func(s *css.Style) {
+		s.Mask = css.Mask{Images: []css.MaskImage{{Gradient: g}}, Clips: []css.MaskClip{{None: true}}}
+	}
+	root := doc(el(sty(width(2), height(2), bg(red), rel(0, 0), mask), square(4, 4, blue, abs(0, auto, auto, 0))))
+	assertPixels(t, run(t, root, page(4, 4)), 1, `
+		BBBB
+		BBBB
+		BBBB
+		BBBB`)
+}
