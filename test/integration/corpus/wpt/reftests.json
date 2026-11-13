@@ -61562,6 +61562,977 @@
     ]
   },
   {
+    "id": "css/filter-effects/blur-clip-border-radius.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 4, 0, 30],
+        "path": "css/filter-effects/blur-clip-border-radius-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/blur-clip-stacking-context-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/blur-clip-stacking-context-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/blur-clip-stacking-context-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/blur-clip-stacking-context-ref.html",
+        "rel": "mismatch",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/clip-under-filter-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/clip-under-filter-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/clip-under-filter-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/clip-under-filter-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/clip-under-filter-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/clip-under-filter-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/drop-shadow-clipped-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/drop-shadow-clipped-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/drop-shadow-outsets-sample-composited-child-preserve-3d.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/drop-shadow-outsets-sample-composited-child-preserve-3d-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/drop-shadow-outsets-sample-composited-child.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/drop-shadow-outsets-sample-composited-child-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/drop-shadow-perspective-rotation.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 160, 0, 4000],
+        "path": "css/filter-effects/drop-shadow-perspective-rotation-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/drop-shadow-perspective-scale.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/drop-shadow-perspective-scale-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/drop-shadow-perspective.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/drop-shadow-perspective-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/drop-shadow-scale.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 180, 0, 56000],
+        "path": "css/filter-effects/drop-shadow-scale-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/drop-shadow-transform-in-opacity-overlap.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 64, 0, 84000],
+        "path": "css/filter-effects/drop-shadow-transform-in-opacity-overlap-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/drop-shadow-transform.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/drop-shadow-transform-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/drop-shadow-with-3d-transform.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/drop-shadow-with-3d-transform-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-3d-child-behind-eye-plane.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 160, 0, 8000],
+        "path": "css/filter-effects/filter-3d-child-behind-eye-plane-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-3d-child-in-3d-filtered-layer.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 160, 0, 8000],
+        "path": "css/filter-effects/filter-3d-child-in-3d-filtered-layer-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-3d-child-spanning-eye-plane.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 160, 0, 8000],
+        "path": "css/filter-effects/filter-3d-child-spanning-eye-plane-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-3d-children-crossing-eye-plane.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 160, 0, 8000],
+        "path": "css/filter-effects/filter-3d-children-crossing-eye-plane-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-ancestor-border-radius-overflow-hidden-border.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-ancestor-border-radius-overflow-hidden-border-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-cb-abspos-inline-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-cb-abspos-inline-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-contrast-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-contrast-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-contrast-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-contrast-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-contrast-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-contrast-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-degenerate-layer-plane.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 2, 0, 400],
+        "path": "css/filter-effects/filter-degenerate-layer-plane-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-function/filter-function-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": [
+      "css/filter-effects/filter-function/resources/green-transparent-100x100.png"
+    ]
+  },
+  {
+    "id": "css/filter-effects/filter-function/filter-function-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": [
+      "css/filter-effects/filter-function/resources/green-transparent-200x200.png"
+    ]
+  },
+  {
+    "id": "css/filter-effects/filter-function/filter-function-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": [
+      "css/filter-effects/filter-function/resources/green-transparent-100x100.png"
+    ]
+  },
+  {
+    "id": "css/filter-effects/filter-function/filter-function-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": [
+      "css/filter-effects/filter-function/resources/green-transparent-100x100.png"
+    ]
+  },
+  {
+    "id": "css/filter-effects/filter-function/filter-function-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": [
+      "css/filter-effects/filter-function/resources/green-transparent-20x10.png"
+    ]
+  },
+  {
+    "id": "css/filter-effects/filter-function/filter-function-006.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": [
+      "css/filter-effects/filter-function/resources/green-transparent-80x80.png"
+    ]
+  },
+  {
+    "id": "css/filter-effects/filter-function/filter-function-007.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": [
+      "css/filter-effects/filter-function/resources/green-transparent-20x10.png"
+    ]
+  },
+  {
+    "id": "css/filter-effects/filter-function/filter-function-008.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/reference/ref-filled-green-100px-square.xht",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": [
+      "css/filter-effects/filter-function/resources/green-transparent-20x10.png"
+    ]
+  },
+  {
+    "id": "css/filter-effects/filter-function/filter-function-conic-gradient.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-function/filter-function-conic-gradient-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-function/filter-function-linear-gradient.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-function/filter-function-linear-gradient-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-function/filter-function-radial-gradient.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-function/filter-function-radial-gradient-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-function/filter-function-repeating-conic-gradient.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-function/filter-function-repeating-conic-gradient-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-function/filter-function-repeating-linear-gradient.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-function/filter-function-repeating-linear-gradient-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-function/filter-function-repeating-radial-gradient.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-function/filter-function-repeating-radial-gradient-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-grayscale-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-grayscale-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-grayscale-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-grayscale-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-grayscale-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-grayscale-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-grayscale-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-grayscale-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-grayscale-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-grayscale-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-hue_rotate-001-test.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-hue_rotate-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-hue_rotate-002-test.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-hue_rotate-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-in-3d-transformed-ancestor-child-crossing-eye-plane.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 160, 0, 8000],
+        "path": "css/filter-effects/filter-in-3d-transformed-ancestor-child-crossing-eye-plane-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-in-3d-transformed-ancestor-child-near-eye-plane.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 160, 0, 8000],
+        "path": "css/filter-effects/filter-in-3d-transformed-ancestor-child-near-eye-plane-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-in-3d-transformed-ancestor.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 160, 0, 8000],
+        "path": "css/filter-effects/filter-in-3d-transformed-ancestor-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-invert-001-test.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-invert-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-invert-002-test.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-invert-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-outsets-clipped-by-document-edge.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 4],
+        "path": "css/filter-effects/filter-outsets-clipped-by-document-edge-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-outsets-do-not-escape-ancestor-clip.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-outsets-do-not-escape-ancestor-clip-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-overflow-transformed-child-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/filter-overflow-transformed-child-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-saturate-001-test.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filter-saturate-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-unbounded-child-in-layer-plane.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 2, 0, 300],
+        "path": "css/filter-effects/filter-unbounded-child-in-layer-plane-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-url-to-non-existent-filter-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/filter-url-to-non-existent-filter-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filter-with-mix-blend-mode.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/filter-with-mix-blend-mode-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filtered-inline-applies-to-block.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filtered-inline-applies-to-block-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filtered-inline-applies-to-float.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filtered-inline-applies-to-float-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filtered-inline-is-container-with-block-content.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filtered-inline-is-container-with-block-content-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filters-drop-shadow-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/filters-drop-shadow-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filters-drop-shadow-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/filters-drop-shadow-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filters-drop-shadow-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/filters-drop-shadow-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filters-grayscale-001-test.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 40000],
+        "path": "css/filter-effects/filters-grayscale-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filters-opacity-001-test.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/filters-opacity-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filters-opacity-002-test.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/filters-opacity-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filters-sepia-001-test.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filters-sepia-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filters-test-brightness-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filters-ref-brightness-001.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filters-test-brightness-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filters-ref-brightness-002.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/filters-test-brightness-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/filters-ref-brightness-003.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/fixed-pos-filter-clip-001.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 2, 0, 399],
+        "path": "css/reference/blank.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/fixed-pos-filter-clip-002.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 4],
+        "path": "css/filter-effects/fixed-pos-filter-clip-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/grayscale-clip-border-radius.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 40, 0, 160],
+        "path": "css/filter-effects/grayscale-clip-border-radius-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/invert-scale.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 2, 0, 18500],
+        "path": "css/filter-effects/invert-scale-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/root-element-with-opacity-filter-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/root-element-with-opacity-filter-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/filter-effects/will-change-blur-filter-under-clip.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/filter-effects/reference/green-100x100.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/selectors/child-indexed-no-parent.html",
     "print": false,
     "refs": [
