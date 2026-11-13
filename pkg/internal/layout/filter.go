@@ -114,8 +114,8 @@ func filterReach(fs []css.Filter) (reach, sigma float64) {
 // of the list applied in order (Filter Effects 1, 6 and 13.1), an
 // artifact; then the content's tagged fragments again, invisible, so the
 // element's text extracts and its structure keeps its content. band, when
-// not nil, is the part of the flow the page shows: the image covers no
-// more of it than the filter reaches past. A list holding a url() that
+// not nil, is the part of the flow page shows: the image covers no more
+// of it than the filter reaches past. A list holding a url() that
 // names no filter element leaves the content unfiltered (see filterRefs);
 // one naming a filter of a primitive the engine has not, or one the
 // page's effect pixels cannot hold, too, with a warning.
@@ -126,8 +126,16 @@ func filterReach(fs []css.Filter) (reach, sigma float64) {
 //     identity one such as invert(0) or blur(0) included, as one RGB
 //     image with a soft mask at 300 pixels an inch, its content gone: no
 //     text extracts and no link annotation is left.
-func (e *engine) filtered(it *ditem, frags []typeset.Fragment, band *typeset.Rect) []typeset.Fragment {
-	img, err := e.filterImage(it.filter, frags, it.box, band, max(it.zoom, 1.0/64))
+func (e *engine) filtered(it *ditem, frags []typeset.Fragment, band *typeset.Rect, page int) []typeset.Fragment {
+	if e.filterPixels == nil {
+		e.filterPixels = map[int]*effect.Page{}
+	}
+	pixels := e.filterPixels[page]
+	if pixels == nil {
+		pixels = &effect.Page{}
+		e.filterPixels[page] = pixels
+	}
+	img, err := e.filterImage(it.filter, frags, it.box, band, max(it.zoom, 1.0/64), pixels)
 	switch {
 	case err == nil:
 	case errors.Is(err, errNoFilter):
@@ -153,9 +161,11 @@ func (e *engine) filtered(it *ditem, frags []typeset.Fragment, band *typeset.Rec
 }
 
 // filterImage draws frags filtered by fs as an image, nil when the
-// filter leaves nothing to see. zoom is how much the page enlarges the
-// content: the resolution is chosen for the content as the page shows it.
-func (e *engine) filterImage(fs []css.Filter, frags []typeset.Fragment, box typeset.Rect, band *typeset.Rect, zoom float64) (*typeset.Image, error) {
+// filter leaves nothing to see. box is the element's border box. zoom is
+// how much the page enlarges the content: the resolution is chosen for
+// the content as the page shows it. pixels counts the page's filter
+// pixels.
+func (e *engine) filterImage(fs []css.Filter, frags []typeset.Fragment, box typeset.Rect, band *typeset.Rect, zoom float64, pixels *effect.Page) (*typeset.Image, error) {
 	refs, err := e.filterRefs(fs, box)
 	if err != nil {
 		return nil, err
@@ -198,7 +208,7 @@ func (e *engine) filterImage(fs []css.Filter, frags []typeset.Fragment, box type
 	} else {
 		res = cssPixelGrid(res, x1-x0, y1-y0)
 	}
-	if !e.filterPixels.Take(res) {
+	if !pixels.Take(res) {
 		return nil, fmt.Errorf("%w: past %d pixels of filters", errFilterUnsupported, effect.MaxPagePixels)
 	}
 	grid := effect.Grid{X: x0, Y: y0, Scale: res.Scale}

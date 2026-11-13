@@ -136,9 +136,10 @@ type engine struct {
 	// reshaped counts the inline contents shaped again after their
 	// release (release.go).
 	reshaped int
-	// filterPixels counts the pixels of the filtered elements drawn,
-	// against effect.MaxPagePixels.
-	filterPixels effect.Page
+	// filterPixels counts the pixels of the filtered elements drawn on
+	// each page, against effect.MaxPagePixels; a fixed box's, repeated on
+	// every page, count under -1.
+	filterPixels map[int]*effect.Page
 }
 
 // charge charges the conversion's budget n bytes for what, failing the

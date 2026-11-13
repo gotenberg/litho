@@ -331,7 +331,7 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*typeset.StructEle
 						if k.flow {
 							band = &typeset.Rect{Y: e.pageTop(p), Height: e.sliceH(p)}
 						}
-						frags = e.filtered(k, frags, band)
+						frags = e.filtered(k, frags, band, p)
 					}
 					g := groupOf(k, frags)
 					if depth == 0 && k.transform != nil && len(sub) == 1 {
@@ -492,7 +492,7 @@ func (e *engine) flatten(it *ditem, depth int, artifact bool) []typeset.Fragment
 			}
 			frags := e.flatten(k, depth+1, artifact)
 			if len(k.filter) > 0 {
-				frags = e.filtered(k, frags, nil)
+				frags = e.filtered(k, frags, nil, -1)
 			}
 			out = append(out, groupOf(k, frags))
 			continue
