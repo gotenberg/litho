@@ -1,0 +1,408 @@
+package layout
+
+import (
+	"strings"
+	"unicode"
+
+	"github.com/gotenberg/litho/pkg/internal/css"
+)
+
+// rubyCol is one column of a ruby container (CSS Ruby 1, 2.3): a base and
+// the annotation paired with it, laid out as one atomic inline of its
+// ruby's inline box. The base and the annotation are blocks of one line
+// each, as wide as the wider of the two.
+type rubyCol struct {
+	// container is the inline box of the ruby the column belongs to.
+	container *box
+	// base is the anonymous block of the base's content, ann the
+	// annotation's block, nil for a base without one.
+	base, ann *box
+	// breakAs is the first character of the base, which the column breaks
+	// as in its line (text.Object BreakAs), 0 for a base without one.
+	breakAs rune
+	// inStart and inEnd are the room the base leaves at the column's
+	// left and right edges once aligned, which bounds the overhang.
+	inStart, inEnd float64
+	// over and under report an annotation over or under the base, and
+	// annTop and annBottom its em box's top and bottom below the column's
+	// top, for a ruby nesting this one.
+	over, under       bool
+	annTop, annBottom float64
+	// baseAbove is the base's extent above its baseline, which the line
+	// grows to hold before the annotation over it (rubyRoom).
+	baseAbove float64
+}
+
+// genRuby generates the boxes of a ruby container n of style st (CSS Ruby
+// 1, 2): its inline box, holding one column for each base and the
+// annotation that follows it. A run of children that are not annotations
+// is a base (HTML Standard, 15.3.4); white space alone between an
+// annotation and the next base, and at the container's start and end, is
+// dropped (CSS Ruby 1, 2.5.1); an annotation with no base before it pairs
+// with an empty base. node is the ruby's element, nil for the anonymous
+// ruby a block ruby holds.
+func (e *engine) genRuby(node *Node, st *css.Style, ctx genCtx) []*box {
+	rb := e.newBox(node, st, kindInline, ctx)
+	rb.inline = true
+	cctx := ctx
+	if node != nil {
+		cctx = e.enter(node, rb, ctx)
+	}
+	rb.decos = cctx.decos
+	var children []*Node
+	if node != nil {
+		children = node.Children
+	}
+	return []*box{e.rubyColumns(rb, children, cctx)}
+}
+
+// rubyColumns adds to the ruby inline box rb the columns of children, and
+// returns rb.
+func (e *engine) rubyColumns(rb *box, children []*Node, ctx genCtx) *box {
+	var base []*Node
+	content := false
+	flush := func(ann *Node) {
+		if !content && ann == nil {
+			return
+		}
+		col := e.rubyColumn(rb, base, ann, ctx)
+		col.parent = rb
+		rb.kids = append(rb.kids, col)
+		base, content = nil, false
+	}
+	for _, c := range children {
+		if e.err != nil {
+			break
+		}
+		switch {
+		case isAnnotation(c):
+			flush(c)
+		case c.Kind == Text && strings.Trim(c.Text, " \t\n\r\f") == "" && !content:
+			// Inter-segment and leading white space (CSS Ruby 1, 2.5.1).
+		case c.Kind == Element && c.Style != nil && c.Style.Display == css.DisplayNone:
+			// An rp, hidden, separates nothing.
+			if content {
+				base = append(base, c)
+			}
+		default:
+			base = append(base, c)
+			content = true
+		}
+	}
+	flush(nil)
+	return rb
+}
+
+// isAnnotation reports a child of a ruby container that is a ruby
+// annotation box: an in-flow element of display ruby-text.
+func isAnnotation(n *Node) bool {
+	return n.Kind == Element && n.Style != nil && n.Style.Display == css.RubyText &&
+		n.Style.Float == css.FloatNone && !isAbs(n.Style)
+}
+
+// rubyColumn returns the column of the ruby inline box rb that pairs the
+// base nodes base with the annotation ann, nil for none.
+func (e *engine) rubyColumn(rb *box, base []*Node, ann *Node, ctx genCtx) *box {
+	cst := *e.anonOf(rb.st)
+	cst.Display = css.InlineBlock
+	cst.TextIndent = css.Dimension{}
+	cst.TextIndentHanging, cst.TextIndentEachLine = false, false
+	cst.WhiteSpace = nowrapOf(cst.WhiteSpace)
+	colSt := e.shareStyle(&cst)
+	col := e.newBox(nil, colSt, kindBlock, ctx)
+	col.inline, col.anon = true, true
+	r := &rubyCol{container: rb, breakAs: firstRune(base)}
+	col.ruby = r
+	bst := cst
+	bst.Display = css.Block
+	b := e.newBox(nil, e.shareStyle(&bst), kindBlock, ctx)
+	b.anon, b.rubyLine = true, true
+	e.genChildren(b, base, ctx)
+	b.parent = col
+	r.base = b
+	col.kids = append(col.kids, b)
+	if ann != nil {
+		ast := *ann.Style
+		ast.TextIndent = css.Dimension{}
+		ast.TextIndentHanging, ast.TextIndentEachLine = false, false
+		ast.WhiteSpace = nowrapOf(ast.WhiteSpace)
+		a := e.newBox(ann, e.shareStyle(&ast), kindBlock, ctx)
+		a.rubyLine, a.rubyAnn = true, true
+		actx := e.enter(ann, a, ctx)
+		actx.decos = ownDecos(a, a.st)
+		e.genChildren(a, ann.Children, actx)
+		a.parent = col
+		r.ann = a
+		col.kids = append(col.kids, a)
+	}
+	return col
+}
+
+// nowrapOf returns the white-space value that keeps ws's handling of
+// spaces and does not wrap: a ruby base and its annotation hold one line.
+func nowrapOf(ws css.WhiteSpace) css.WhiteSpace {
+	switch ws { //nolint:exhaustive // the other values do not wrap already
+	case css.WhiteSpaceNormal:
+		return css.Nowrap
+	case css.PreWrap:
+		return css.Pre
+	case css.PreLine:
+		return css.PreLineNowrap
+	case css.BreakSpaces:
+		return css.BreakSpacesNowrap
+	}
+	return ws
+}
+
+// firstRune returns the first character of the text of nodes that is not
+// white space, 0 for none.
+func firstRune(nodes []*Node) rune {
+	for _, n := range nodes {
+		if n.Kind == Element && n.Style != nil && n.Style.Display == css.DisplayNone {
+			continue
+		}
+		if n.Kind == Text {
+			for _, r := range n.Text {
+				if !unicode.IsSpace(r) {
+					return r
+				}
+			}
+		}
+		if r := firstRune(n.Children); r != 0 {
+			return r
+		}
+	}
+	return 0
+}
+
+// layoutRuby lays the ruby column a out (CSS Ruby 1, 3): its base and its
+// annotation each on one line as wide as the wider of the two, the
+// annotation's em box against the base's, over or under it as
+// ruby-position says (4.1). The column's box spans the base's line and
+// the annotation's em box, so that the line holding the column grows to
+// hold the annotation where its half-leading does not, as Chromium lays
+// a ruby out: its annotation's em box sits on the em box of the base's
+// first available font, split as the font's typographic ascender and
+// descender split it, and counts in the line's height for that em box
+// alone.
+func (e *engine) layoutRuby(a *box, lcb cblock) {
+	a.laidOut = true
+	resolveEdges(a, lcb.w)
+	r := a.ruby
+	_, w := e.intrinsic(r.base)
+	if r.ann != nil {
+		_, aw := e.intrinsic(r.ann)
+		w = max(w, aw)
+	}
+	a.w = w
+	a.x, a.y = a.m[css.Left], a.m[css.Top]
+	e.noPaginate++
+	e.layoutOwnContext(a, cblock{w: w})
+	e.noPaginate--
+	m := e.faceMetrics(a.st)
+	var bl float64
+	top, bottom := r.base.y, r.base.y+r.base.h
+	if y, ok := firstBaseline(r.base); ok && len(r.base.lines) > 0 {
+		bl = y
+		l := r.base.lines[0]
+		top, bottom = min(top, l.y), max(bottom, l.y+l.h)
+		if last := r.base.lines[len(r.base.lines)-1]; last != l {
+			bottom = max(bottom, last.y+last.h)
+		}
+	} else {
+		// An empty base takes its ruby's strut.
+		lh := e.lineHeight(a.st)
+		half := (lh - m.Ascent - m.Descent) / 2
+		bl = r.base.y + m.Ascent + half
+		top, bottom = r.base.y, r.base.y+lh
+	}
+	r.baseAbove = bl - top
+	r.inStart, r.inEnd = lineInsets(r.base, w)
+	emTop, emBottom := bl-m.EmAscent, bl+m.EmDescent
+	// A ruby nested in the base sets its own annotations against its
+	// base: this one sits beyond them (CSS Ruby 1, 2.4).
+	for _, l := range r.base.lines {
+		for _, it := range l.items {
+			if in := it.atomic; in != nil && in.ruby != nil {
+				if in.ruby.over {
+					emTop = min(emTop, in.y+in.ruby.annTop)
+				}
+				if in.ruby.under {
+					emBottom = max(emBottom, in.y+in.ruby.annBottom)
+				}
+			}
+		}
+	}
+	if ann := r.ann; ann != nil && len(ann.lines) > 0 {
+		am := e.faceMetrics(ann.st)
+		abl, _ := firstBaseline(ann)
+		if ann.st.RubyPosition == css.RubyUnder {
+			want := emBottom + am.EmAscent
+			ann.shift(0, want-abl)
+			r.under, r.annTop, r.annBottom = true, emBottom, want+am.EmDescent
+			bottom = max(bottom, r.annBottom)
+		} else {
+			want := emTop - am.EmDescent
+			ann.shift(0, want-abl)
+			r.over, r.annTop, r.annBottom = true, want-am.EmAscent, emTop
+			top = min(top, r.annTop)
+		}
+	}
+	r.annTop, r.annBottom = r.annTop-top, r.annBottom-top
+	a.y = top
+	a.h = max(bottom-top, 0)
+	a.baseline, a.hasBaseline = bl-top, true
+}
+
+// lineInsets returns the room the one line of block b leaves at the left
+// and the right of width w, 0 and 0 for a block of another line count.
+func lineInsets(b *box, w float64) (float64, float64) {
+	if len(b.lines) != 1 || len(b.lines[0].items) == 0 {
+		return 0, 0
+	}
+	l := b.lines[0]
+	left, right := l.items[0].x, 0.0
+	for _, it := range l.items {
+		left = min(left, it.x)
+		right = max(right, it.x+it.w)
+	}
+	return max(left, 0), max(w-right, 0)
+}
+
+// rubyAlign returns the offset of the content of l, a line of a ruby
+// base or annotation, free points narrower than its column, after it
+// spreads the room as ruby-align says (CSS Ruby 1, 4.2): start, centre,
+// over the justification opportunities alone (space-between) or with
+// half as much at each end (space-around), centred where the content has
+// no opportunity. Chromium caps the room at each end of space-around at
+// the font size of the content.
+func (s *inlineState) rubyAlign(l *lineBox, free float64, ltr bool) float64 {
+	st := s.root.st
+	center := free / 2
+	switch st.RubyAlign {
+	case css.RubyStart:
+		if ltr {
+			return 0
+		}
+		return free
+	case css.RubyCenter:
+		return center
+	case css.RubySpaceBetween:
+		if s.justifyAs(l, free, css.JustifyAuto) {
+			return 0
+		}
+		return center
+	case css.RubySpaceAround:
+	}
+	n := justifyCount(l, css.JustifyAuto)
+	if n == 0 {
+		return center
+	}
+	inset := min(free/float64(n+1)/2, s.e.fontSize(st))
+	if s.justifyAs(l, free-2*inset, css.JustifyAuto) {
+		return inset
+	}
+	return center
+}
+
+// rubyOverhang sets the overhang of the ruby column a, character i of
+// p: an annotation wider than its base hangs over the text beside the
+// column by up to half the annotation's font size on each side, within
+// the room the base leaves on that side, as Chromium lays it out (CSS
+// Ruby 1, 4.3, ruby-overhang: auto, leaves the amount to the user
+// agent). The text beside it must be a text run at most as large as the
+// ruby's, with no inline box opening or closing in between; another
+// column takes none.
+func (e *engine) rubyOverhang(p *ifcPara, i int, a *box) {
+	r := a.ruby
+	if r.ann == nil || len(r.ann.lines) == 0 || a.st.RubyOverhang == css.RubyOverhangNone {
+		return
+	}
+	half := e.fontSize(r.ann.st) / 2
+	size := e.fontSize(r.container.st)
+	beside := func(j, at int) bool {
+		if j < 0 || j >= p.p.Len() {
+			return false
+		}
+		info := p.infos[p.p.RunOf(j)]
+		if info.kind != runText || e.fontSize(info.box.st) > size+eps {
+			return false
+		}
+		for _, o := range p.opens {
+			if o.pos == at && o.box != r.container {
+				return false
+			}
+		}
+		for _, c := range p.closes {
+			if c.pos == at && c.box != r.container {
+				return false
+			}
+		}
+		return true
+	}
+	start, end := css.Left, css.Right
+	if a.st.Direction == css.RTL {
+		start, end = end, start
+	}
+	room := [4]float64{css.Left: r.inStart, css.Right: r.inEnd}
+	if beside(i-1, i) {
+		a.m[start] = -min(half, room[start])
+	}
+	if beside(i+1, i+1) {
+		a.m[end] = -min(half, room[end])
+	}
+}
+
+// newRubyBox returns the inline box of an anonymous ruby container of
+// style st.
+func (e *engine) newRubyBox(st *css.Style, ctx genCtx) *box {
+	rb := e.newBox(nil, st, kindInline, ctx)
+	rb.inline, rb.anon = true, true
+	rb.decos = ctx.decos
+	return rb
+}
+
+// annotations paints the ruby annotations of the columns on line l after
+// the line's content, as Chromium paints them: the text of a line reads
+// before its annotations.
+func (p *painter) annotations(l *lineBox, page int) {
+	for _, it := range l.items {
+		a := it.atomic
+		if a == nil || a.ruby == nil || a.ruby.ann == nil || !a.ruby.ann.laidOut {
+			continue
+		}
+		ox, oy := inlineOffset(it.box.parent)
+		p.dx += ox
+		p.dy += oy
+		saved := p.mono
+		p.mono = page
+		p.context(a.ruby.ann)
+		p.mono = saved
+		p.dx -= ox
+		p.dy -= oy
+	}
+}
+
+// rubyRoom grows the line l by what the annotations over its ruby
+// columns need past room, the room above it. Chromium lays a line out
+// so: an annotation over a ruby takes the line's own half-leading, the
+// room under the previous line's content, and the margins and padding
+// before a block's first line, and the line grows by the rest; a border
+// takes nothing. litho counts the room within one block: the last line
+// of the block before it gives none.
+func (s *inlineState) rubyRoom(l *lineBox, room float64) {
+	grow := l.annOver - max(room, 0)
+	if grow <= eps {
+		return
+	}
+	l.h += grow
+	l.baseline += grow
+	for _, it := range l.items {
+		it.baseline += grow
+	}
+	for _, f := range l.frags {
+		f.top += grow
+		f.bottom += grow
+		f.base += grow
+	}
+}

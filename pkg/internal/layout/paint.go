@@ -558,6 +558,8 @@ func (p *painter) collect(b *box, blocks, floats, layers *[]*box) {
 			p.collect(k, blocks, floats, layers)
 		case k.inline:
 			// An atomic inline paints with its line.
+		case k.rubyAnn:
+			// A ruby annotation paints after the line of its column.
 		case k.isItem() && !k.layered():
 			// A flex or grid item paints as an inline block does, with
 			// its container's content (CSS Flexbox 1, 4.3; CSS Grid 1,
@@ -905,6 +907,7 @@ func (p *painter) line(l *lineBox) {
 			}
 		}
 	}
+	p.annotations(l, page)
 	for _, lk := range linkOrder {
 		if s := linkRects[lk]; s.rect.Width > 0 && s.rect.Height > 0 {
 			p.links = append(p.links, pendingLink{lk: lk, rect: s.rect})

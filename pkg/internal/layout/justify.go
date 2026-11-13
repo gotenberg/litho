@@ -28,14 +28,19 @@ type jcluster struct {
 // the logical line end take none, wherever the bidi reordering put them,
 // and nothing is added after the line's last unit.
 func (s *inlineState) justify(l *lineBox, free float64) bool {
-	mode := s.root.st.TextJustify
-	if math.Abs(free) <= eps || mode == css.JustifyNone {
-		return false
-	}
-	cls := lineClusters(l)
-	if officeTabs(s.root.st) {
-		cls = afterLastTab(l, cls, s.root.st.Direction == css.RTL)
-	}
+	return s.justifyAs(l, free, s.root.st.TextJustify)
+}
+
+// justifyCount returns the count of the justification opportunities of
+// l under text-justify mode, as [inlineState.justify] finds them.
+func justifyCount(l *lineBox, mode css.TextJustify) int {
+	_, _, count := opportunities(lineClusters(l), mode)
+	return count
+}
+
+// opportunities returns, for each cluster of cls, whether a justification
+// opportunity follows it under text-justify mode, with their count.
+func opportunities(cls []jcluster, mode css.TextJustify) ([]jcluster, []bool, int) {
 	n := len(cls)
 	// opp[k] reports an opportunity between clusters k and k+1.
 	opp := make([]bool, n)
@@ -57,6 +62,20 @@ func (s *inlineState) justify(l *lineBox, free float64) bool {
 			count++
 		}
 	}
+	return cls, opp, count
+}
+
+// justifyAs is [inlineState.justify] under text-justify mode.
+func (s *inlineState) justifyAs(l *lineBox, free float64, mode css.TextJustify) bool {
+	if math.Abs(free) <= eps || mode == css.JustifyNone {
+		return false
+	}
+	cls := lineClusters(l)
+	if officeTabs(s.root.st) {
+		cls = afterLastTab(l, cls, s.root.st.Direction == css.RTL)
+	}
+	cls, opp, count := opportunities(cls, mode)
+	n := len(cls)
 	if count == 0 {
 		return false
 	}

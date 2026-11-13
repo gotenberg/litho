@@ -219,7 +219,11 @@ func hasInlineEdges(b *box) bool {
 
 // object adds an object run for box b.
 func (c *collector) object(kind runKind, b *box) {
-	c.addRun(text.ParagraphRun{Object: &text.Object{Tab: kind == runTab}}, runInfo{kind: kind, box: b, ws: b.st.WhiteSpace})
+	o := &text.Object{Tab: kind == runTab}
+	if b.ruby != nil {
+		o.BreakAs = b.ruby.breakAs
+	}
+	c.addRun(text.ParagraphRun{Object: o}, runInfo{kind: kind, box: b, ws: b.st.WhiteSpace})
 	c.cur.n++
 }
 

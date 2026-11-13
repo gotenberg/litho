@@ -288,7 +288,11 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		return []*box{b}
 	}
 	switch {
-	case float == css.FloatNone && (st.Display == css.Inline || st.Display == css.InlineListItem):
+	case float == css.FloatNone && st.Display == css.Ruby:
+		return e.genRuby(n, st, ctx)
+	case float == css.FloatNone && (st.Display == css.Inline || st.Display == css.InlineListItem || st.Display == css.RubyText):
+		// An annotation outside a ruby is an inline box, as Chromium
+		// lays it out.
 		return e.genInline(n, st, ctx, ordinal)
 	case st.Display == css.Table || st.Display == css.InlineTable:
 		w := e.genTable(n, st, ctx, float)
@@ -332,6 +336,14 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 			*ordinal = n.ListValue
 		}
 		cctx = e.genMarker(n, b, cctx, *ordinal, false)
+	}
+	if st.Display == css.BlockRuby {
+		// A block ruby is a block box holding one ruby container (CSS
+		// Ruby 1, 2.1).
+		rst := *e.anonOf(st)
+		rst.Display = css.Ruby
+		e.adopt(b, []*box{e.rubyColumns(e.newRubyBox(e.shareStyle(&rst), cctx), n.Children, cctx)})
+		return []*box{b}
 	}
 	e.genChildren(b, n.Children, cctx)
 	return []*box{b}
@@ -403,7 +415,8 @@ func isAbs(st *css.Style) bool {
 
 // isInlineLevel reports whether a display value is inline-level.
 func isInlineLevel(d css.Display) bool {
-	return d == css.Inline || d == css.InlineBlock || d == css.InlineTable || d == css.InlineListItem || d == css.InlineFlex || d == css.InlineGrid
+	return d == css.Inline || d == css.InlineBlock || d == css.InlineTable || d == css.InlineListItem || d == css.InlineFlex || d == css.InlineGrid ||
+		d == css.Ruby || d == css.RubyText
 }
 
 // isTablePart reports a display value of a caption or an internal table
@@ -519,6 +532,9 @@ func anonStyle(parent *css.Style) *css.Style {
 	st.EmptyCells = parent.EmptyCells
 	st.Orphans = parent.Orphans
 	st.Widows = parent.Widows
+	st.RubyPosition = parent.RubyPosition
+	st.RubyAlign = parent.RubyAlign
+	st.RubyOverhang = parent.RubyOverhang
 	return st
 }
 

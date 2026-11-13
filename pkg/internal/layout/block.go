@@ -1139,6 +1139,10 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 // replaced box resolves a percentage height against lcb's height when it
 // is definite (CSS 2.1, 10.5).
 func (e *engine) layoutAtomic(a *box, lcb cblock) {
+	if a.ruby != nil {
+		e.layoutRuby(a, lcb)
+		return
+	}
 	a.laidOut = true
 	cbw := lcb.w
 	resolveEdges(a, cbw)

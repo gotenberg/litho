@@ -1,0 +1,199 @@
+package layout
+
+import (
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/css"
+)
+
+// rubyDoc returns a block of 40px Ahem of line height lh holding kids,
+// and the styles of a ruby and of its annotation at half the size, as
+// the user agent sheet gives them.
+func rubyDoc(lh float64, mods ...func(*css.Style)) (*css.Style, *css.Style, *css.Style) {
+	block := sty(func(s *css.Style) {
+		s.FontSize = px(40)
+		s.LineHeight = css.Dimension{Kind: css.Number, Value: lh}
+	})
+	ruby := inlineSty(func(s *css.Style) {
+		s.Display = css.Ruby
+		s.FontSize = px(40)
+		s.LineHeight = block.LineHeight
+	}, func(s *css.Style) {
+		for _, m := range mods {
+			m(s)
+		}
+	})
+	rt := inlineSty(func(s *css.Style) {
+		s.Display = css.RubyText
+		s.FontSize = px(20)
+		s.LineHeight = css.Dimension{Kind: css.Normal}
+		s.RubyPosition, s.RubyAlign, s.RubyOverhang = ruby.RubyPosition, ruby.RubyAlign, ruby.RubyOverhang
+	})
+	return block, ruby, rt
+}
+
+// placed returns the origin of the run of res's first page that reads s,
+// in CSS pixels, and fails when there is none.
+func placed(t *testing.T, res *Result, s string) (float64, float64) {
+	t.Helper()
+	for _, p := range texts(res, 1) {
+		if p.text == s {
+			return p.x / css.Pt, p.y / css.Pt
+		}
+	}
+	t.Fatalf("no run reads %q in %v", s, texts(res, 1))
+	return 0, 0
+}
+
+// TestRubyColumn locks a ruby column as Chromium lays it out: as wide as
+// its annotation, the base centred in it, the annotation's em box on the
+// base's, overhanging the text on each side by half the annotation's
+// font size, and the line grown by the annotation where nothing above it
+// gives it room.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 puts the annotation "abcdefgh" of a 40px
+//     Ahem base "AB" after "xx" at x 70 to 230, y 0 to 20, the base at 110
+//     to 190, and "yy" at 220; the line is 60px tall.
+func TestRubyColumn(t *testing.T) {
+	t.Parallel()
+	block, ruby, rt := rubyDoc(1)
+	root := el(block, txt(block, "xx"), el(ruby, txt(ruby, "AB"), el(rt, txt(rt, "abcdefgh"))), txt(block, "yy"))
+	res := run(t, root, page(600, 300))
+	cases := []struct {
+		s    string
+		x, y float64
+	}{
+		{"xx", 0, 52}, {"AB", 110, 52}, {"abcdefgh", 70, 16}, {"yy", 220, 52},
+	}
+	for _, c := range cases {
+		if x, y := placed(t, res, c.s); !near(x, c.x) || !near(y, c.y) {
+			t.Errorf("%q at (%g, %g), want (%g, %g)", c.s, x, y, c.x, c.y)
+		}
+	}
+}
+
+// TestRubyOverhang locks where an annotation hangs over the text beside
+// its ruby: not with ruby-overhang: none, not at the start of a line, not
+// over another ruby column.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 puts "yy" at 240 after an unhung ruby of
+//     160px, the second of two columns after "xx" at 230 (each hangs on
+//     the text side alone), and a ruby that starts its line at 0, its
+//     base at 40.
+func TestRubyOverhang(t *testing.T) {
+	t.Parallel()
+	block, ruby, rt := rubyDoc(1)
+	_, none, rtNone := rubyDoc(1, func(s *css.Style) { s.RubyOverhang = css.RubyOverhangNone })
+	rtNone.RubyOverhang = css.RubyOverhangNone
+	col := func(st, ann *css.Style, base string) *Node {
+		return el(st, txt(st, base), el(ann, txt(ann, "abcdefgh")))
+	}
+	t.Run("none", func(t *testing.T) {
+		t.Parallel()
+		res := run(t, el(block, txt(block, "xx"), col(none, rtNone, "AB"), txt(block, "yy")), page(600, 300))
+		if x, _ := placed(t, res, "yy"); !near(x, 240) {
+			t.Errorf("yy at %g, want 240", x)
+		}
+	})
+	t.Run("two columns", func(t *testing.T) {
+		t.Parallel()
+		two := el(ruby, txt(ruby, "AB"), el(rt, txt(rt, "abcdefgh")), txt(ruby, "CD"), el(rt, txt(rt, "abcdefgh")))
+		res := run(t, el(block, txt(block, "xx"), two, txt(block, "yy")), page(600, 300))
+		if x, _ := placed(t, res, "CD"); !near(x, 270) {
+			t.Errorf("CD at %g, want 270", x)
+		}
+		if x, _ := placed(t, res, "yy"); !near(x, 380) {
+			t.Errorf("yy at %g, want 380", x)
+		}
+	})
+	t.Run("line start", func(t *testing.T) {
+		t.Parallel()
+		res := run(t, el(block, col(ruby, rt, "AB"), txt(block, "yy")), page(600, 300))
+		if x, _ := placed(t, res, "AB"); !near(x, 40) {
+			t.Errorf("AB at %g, want 40", x)
+		}
+		if x, _ := placed(t, res, "yy"); !near(x, 150) {
+			t.Errorf("yy at %g, want 150", x)
+		}
+	})
+}
+
+// TestRubyLineRoom locks the room a line gives the annotation over it:
+// its own half-leading, then the margins before its block, before the
+// line grows.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 lays a 40px Ahem line of line height 2
+//     with a 20px annotation out 80px tall, one of line height 1.5 70px
+//     tall, and one after a 10px margin 50px tall.
+func TestRubyLineRoom(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		lh, margin, want float64
+	}{
+		{2, 0, 80}, {1.5, 0, 70}, {1, 10, 50}, {1, 30, 40},
+	} {
+		block, ruby, rt := rubyDoc(c.lh)
+		block.Margin[css.Top] = css.Pts(px(c.margin))
+		root := el(sty(), el(block, txt(block, "xx"), el(ruby, txt(ruby, "AB"), el(rt, txt(rt, "abcdefgh")))))
+		b := kid(t, boxes(t, root, page(600, 300)), 0)
+		if got := rect(b)[3]; !near(got, c.want) {
+			t.Errorf("line height %g after a %gpx margin: block %gpx tall, want %g", c.lh, c.margin, got, c.want)
+		}
+	}
+}
+
+// TestRubyUnder locks ruby-position: under, the annotation's em box under
+// the base's.
+func TestRubyUnder(t *testing.T) {
+	t.Parallel()
+	block, ruby, rt := rubyDoc(1, func(s *css.Style) { s.RubyPosition = css.RubyUnder })
+	rt.RubyPosition = css.RubyUnder
+	res := run(t, el(block, el(ruby, txt(ruby, "AB"), el(rt, txt(rt, "ab")))), page(600, 300))
+	_, by := placed(t, res, "AB")
+	_, ay := placed(t, res, "ab")
+	// The base's em box ends 8px under its baseline, the annotation's
+	// starts 16px over its own.
+	if !near(by, 32) || !near(ay, 32+8+16) {
+		t.Errorf("base at %g, annotation at %g; want 32 and 56", by, ay)
+	}
+}
+
+// TestRubyPairing locks how a ruby's children pair (CSS Ruby 1, 2.2 and
+// 2.5.1): a base per run of other children, white space alone between
+// segments dropped, a hidden child separating nothing.
+func TestRubyPairing(t *testing.T) {
+	t.Parallel()
+	block, ruby, rt := rubyDoc(2)
+	hidden := inlineSty(func(s *css.Style) { s.Display = css.DisplayNone })
+	r := el(ruby, txt(ruby, "A"), el(hidden, txt(hidden, "(")), el(rt, txt(rt, "a")), el(hidden, txt(hidden, ")")),
+		txt(ruby, " "), txt(ruby, "B"), el(rt, txt(rt, "b")), txt(ruby, " "))
+	rb := boxes(t, el(block, r), page(600, 300))
+	var cols []*box
+	var walk func(*box)
+	walk = func(b *box) {
+		if b.ruby != nil {
+			cols = append(cols, b)
+		}
+		for _, k := range b.kids {
+			walk(k)
+		}
+	}
+	walk(rb)
+	if len(cols) != 2 {
+		t.Fatalf("%d columns, want 2", len(cols))
+	}
+	for i, want := range []rune{'A', 'B'} {
+		if got := cols[i].ruby.breakAs; got != want {
+			t.Errorf("column %d breaks as %q, want %q", i, got, want)
+		}
+		if cols[i].ruby.ann == nil {
+			t.Errorf("column %d has no annotation", i)
+		}
+	}
+}

@@ -199,6 +199,13 @@ type box struct {
 	// inline-level (or floats), which establishes an inline formatting
 	// context.
 	inlineKids bool
+	// ruby is the ruby column an atomic inline lays out (ruby.go), nil
+	// for any other box. rubyLine reports the base or annotation block of
+	// a column, whose lines take ruby-align, and rubyAnn the annotation,
+	// which paints after the line that holds its column.
+	ruby     *rubyCol
+	rubyLine bool
+	rubyAnn  bool
 	// first and last are false on the pieces of an inline box split
 	// around a block (CSS 2.1, 9.2.1.1) that do not start or end it: they
 	// draw no start or end edge.

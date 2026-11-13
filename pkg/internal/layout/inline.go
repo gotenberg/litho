@@ -47,6 +47,11 @@ type lineBox struct {
 	// line before it in its paragraph draws a bar too.
 	changed    *box
 	changeHead bool
+	// annOver is how far the ruby annotations over the line's columns
+	// reach above its top, which the room left above the line takes
+	// before the line grows; endRoom is the room under the line's content,
+	// which a ruby annotation over the next line may take (ruby.go).
+	annOver, endRoom float64
 }
 
 // lineItem is one piece of a line: a glyph run of a text box, or an
@@ -145,6 +150,9 @@ func (e *engine) prepareInline(d *ifcData, cb cblock) {
 					continue
 				}
 				e.layoutAtomic(info.box, cb)
+				if info.box.ruby != nil {
+					e.rubyOverhang(p, i, info.box)
+				}
 				p.p.SetAdvance(i, max(info.box.marginW(), 0))
 			case runEmpty:
 				p.p.SetAdvance(i, 0)
@@ -698,6 +706,10 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 	s.rootV = s.newVbox(b, nil)
 	y := cursor
 	first := true
+	// room is what lies above the next line that a ruby annotation over
+	// it may take: the margins and padding before the first line, the
+	// room under the previous line's content after it (rubyRoom).
+	room := 0.0
 	indent := resolve(b.st.TextIndent, cb.w)
 	strutH := s.rootV.above + s.rootV.below
 	afterForced := false
@@ -736,6 +748,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				}
 				y = top + l.h
 				s.lines = append(s.lines, l)
+				room = 0
 			}
 			y = s.clearBreak(p, y)
 			continue
@@ -797,7 +810,14 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			if indents(b.st, len(s.lines) == 0, paraFirst && prevForced) {
 				lineIndent = indent
 			}
+			if first {
+				room = top - y
+				if b.bd[css.Top] == 0 {
+					room += b.pd[css.Top]
+				}
+			}
 			top, end, left, right, l := s.fitLine(p, w, pos, lineIndent, top, strutH)
+			s.rubyRoom(l, room)
 			floatsBefore := len(bc.floats)
 			s.placeFloatsBeside(p, pos, end, l, top)
 			if newTop := s.position(top, l.h-l.slack, forced); newTop != top {
@@ -807,6 +827,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 					// The page cut moved the line to where the floats
 					// leave another width: break it again there.
 					top, end, _, _, l = s.fitLine(p, w, pos, lineIndent, top, strutH)
+					s.rubyRoom(l, room)
 					top = s.position(top, l.h-l.slack, forced)
 					nl, nr = s.band(top, l.h)
 				}
@@ -833,6 +854,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				s.lines[len(s.lines)-1].changed = s.root
 			}
 			s.lines = append(s.lines, l)
+			room = l.endRoom
 			s.recordAnchors(l)
 			s.recordEmptyAnchors(p, pos, end, l)
 			e.noteLine(p, pos, end, l)
@@ -1397,6 +1419,7 @@ func (s *inlineState) vertical(l *lineBox) {
 		aligned      bool
 	}
 	var atomics []atomicV
+	annTop := math.Inf(1)
 	for _, it := range l.items {
 		parent := s.vboxOf(s.parentInline(it.box))
 		if it.atomic != nil {
@@ -1406,6 +1429,17 @@ func (s *inlineState) vertical(l *lineBox) {
 				above = a.m[css.Top] + a.baseline
 			}
 			below := a.marginH() - above
+			if r := a.ruby; r != nil && r.over && a.st.VerticalAlign.Kind != css.AlignTop && a.st.VerticalAlign.Kind != css.AlignBottom {
+				// The annotation over a column takes the room above the
+				// line before it grows the line (rubyRoom).
+				shift := alignShift(a.st.VerticalAlign, parent, above, below, s.e.lineHeight(a.st))
+				it.baseline = shift
+				it.ascent, it.descent = above, below
+				annTop = min(annTop, shift-above)
+				include(parent, shift-r.baseAbove, shift+below)
+				atomics = append(atomics, atomicV{it: it, v: parent, above: above, below: below})
+				continue
+			}
 			av := atomicV{it: it, v: parent, above: above, below: below}
 			shift := alignShift(a.st.VerticalAlign, parent, above, below, s.e.lineHeight(a.st))
 			if k := a.st.VerticalAlign.Kind; k == css.AlignTop || k == css.AlignBottom {
@@ -1513,8 +1547,15 @@ func (s *inlineState) vertical(l *lineBox) {
 	}
 	l.h = bottom - top
 	l.baseline = -top
+	l.annOver = max(top-annTop, 0)
+	content := math.Inf(-1)
 	for _, it := range l.items {
 		it.baseline += l.baseline
+		content = max(content, it.baseline+it.descent)
+	}
+	l.endRoom = 0
+	if !math.IsInf(content, -1) {
+		l.endRoom = max(l.h-content, 0)
 	}
 	for _, f := range l.frags {
 		v := s.vboxOf(f.box)
@@ -1567,6 +1608,15 @@ func (s *inlineState) align(l *lineBox, indent float64, last bool) {
 	}
 	off := start
 	align := lineAlign(st, last)
+	if s.root.rubyLine {
+		// A ruby base or annotation takes ruby-align instead (CSS Ruby
+		// 1, 4.2).
+		off = 0
+		if free > eps {
+			off = s.rubyAlign(l, free, ltr)
+		}
+		free = 0
+	}
 	if free > 0 {
 		switch align {
 		case css.AlignStart, css.AlignAuto:
