@@ -250,3 +250,28 @@ func TestBackgroundRound_KeepsRatio(t *testing.T) {
 		t.Errorf("tiles %v, want 8 by 8", tiles)
 	}
 }
+
+func TestOutline_UnderPositionedDescendants(t *testing.T) {
+	// The outline of an in-flow block paints with its stacking context's
+	// content, under the positioned boxes, as Chromium paints it: CSS 2.1,
+	// Appendix E lets an implementation draw outlines before step 10.
+	//
+	// # Corpus evidence
+	//
+	//   - probe, html: Chromium 9.4.1 paints the blue outline of an
+	//     absolutely positioned box over the red outline of the grid item
+	//     holding it where both lie (wpt
+	//     positioned-grid-descendant-containing-block-008).
+	line := func(c css.Color) func(*css.Style) {
+		return func(s *css.Style) { s.Outline = css.Border{Width: px(1), Style: css.Solid, Color: c} }
+	}
+	child := square(2, 2, lime, abs(1, auto, auto, 1), line(blue))
+	root := doc(el(sty(width(4), height(4), margin(1), line(red)), child))
+	assertPixels(t, run(t, root, page(6, 6)), 1, `
+		BBBBRR
+		BGGB_R
+		BGGB_R
+		BBBB_R
+		R____R
+		RRRRRR`)
+}

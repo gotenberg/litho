@@ -482,17 +482,19 @@ func (p *painter) unit(b *box, own bool) {
 	for _, k := range blocks {
 		p.content(k)
 	}
+	// The outlines of the context's own content paint with it, before
+	// its positioned descendants, as Chromium paints them: CSS 2.1,
+	// Appendix E lets an implementation draw them in the steps above step
+	// 10.
+	p.outline(b)
+	for _, k := range blocks {
+		p.outline(k)
+	}
 	for _, c := range zero {
 		p.lifted(c)
 	}
 	for _, c := range pos {
 		p.lifted(c)
-	}
-	// Outlines paint over everything else of the context (CSS 2.1,
-	// Appendix E, step 10).
-	p.outline(b)
-	for _, k := range blocks {
-		p.outline(k)
 	}
 }
 
