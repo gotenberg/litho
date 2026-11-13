@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
@@ -784,8 +785,8 @@ func sampleCentreInZones(box graphics.ImageBox, zones []heuristics.Zone, w, h, p
 	u := (float64(px) + 0.5) / float64(w)
 	v := 1 - (float64(py)+0.5)/float64(h)
 
-	x := box.CTM[0]*u + box.CTM[2]*v + box.CTM[4]
-	y := box.CTM[1]*u + box.CTM[3]*v + box.CTM[5]
+	x := float64(box.CTM[0]*u) + float64(box.CTM[2]*v) + box.CTM[4]
+	y := float64(box.CTM[1]*u) + float64(box.CTM[3]*v) + box.CTM[5]
 
 	point := heuristics.ZoneFromRect([4]float64{x, y, x, y})
 	for _, z := range zones {
@@ -845,7 +846,7 @@ func sampleCellInteriorMeets(quads [][4][2]float64, px, py int) bool {
 		for _, e := range [2][2]float64{{q[1][0] - q[0][0], q[1][1] - q[0][1]}, {q[3][0] - q[0][0], q[3][1] - q[0][1]}} {
 			// A zone of no width has no edge along that side; the other
 			// normal still places it.
-			if n := math.Hypot(e[0], e[1]); n > 0 {
+			if n := detmath.Hypot(e[0], e[1]); n > 0 {
 				axes = append(axes, [2]float64{-e[1] / n, e[0] / n})
 			}
 		}
@@ -870,7 +871,7 @@ func sampleCellInteriorMeets(quads [][4][2]float64, px, py int) bool {
 func projectQuad(q [4][2]float64, a [2]float64) (lo, hi float64) {
 	lo, hi = math.Inf(1), math.Inf(-1)
 	for _, p := range q {
-		d := p[0]*a[0] + p[1]*a[1]
+		d := float64(p[0]*a[0]) + float64(p[1]*a[1])
 		lo, hi = math.Min(lo, d), math.Max(hi, d)
 	}
 	return lo, hi
@@ -1019,8 +1020,8 @@ func sampleCellMeetsZones(box graphics.ImageBox, zones []heuristics.Zone, w, h, 
 	minX, minY := math.Inf(1), math.Inf(1)
 	maxX, maxY := math.Inf(-1), math.Inf(-1)
 	for _, c := range [4][2]float64{{u0, v0}, {u1, v0}, {u0, v1}, {u1, v1}} {
-		x := box.CTM[0]*c[0] + box.CTM[2]*c[1] + box.CTM[4]
-		y := box.CTM[1]*c[0] + box.CTM[3]*c[1] + box.CTM[5]
+		x := float64(box.CTM[0]*c[0]) + float64(box.CTM[2]*c[1]) + box.CTM[4]
+		y := float64(box.CTM[1]*c[0]) + float64(box.CTM[3]*c[1]) + box.CTM[5]
 		minX, maxX = math.Min(minX, x), math.Max(maxX, x)
 		minY, maxY = math.Min(minY, y), math.Max(maxY, y)
 	}
@@ -1058,11 +1059,11 @@ func candidateSamples(box graphics.ImageBox, zones []heuristics.Zone, w, h int) 
 		return 0, 0, 0, 0, false
 	}
 
-	minPx = clampSample(int(math.Floor(minU*float64(w)-0.5)), w)
-	maxPx = clampSample(int(math.Ceil(maxU*float64(w)-0.5)), w)
+	minPx = clampSample(int(math.Floor(float64(minU*float64(w))-0.5)), w)
+	maxPx = clampSample(int(math.Ceil(float64(maxU*float64(w))-0.5)), w)
 	// v runs opposite to the row index, so the largest v gives the first row.
-	minPy = clampSample(int(math.Floor((1-maxV)*float64(h)-0.5)), h)
-	maxPy = clampSample(int(math.Ceil((1-minV)*float64(h)-0.5)), h)
+	minPy = clampSample(int(math.Floor(float64((1-maxV)*float64(h))-0.5)), h)
+	maxPy = clampSample(int(math.Ceil(float64((1-minV)*float64(h))-0.5)), h)
 	return minPx, minPy, maxPx, maxPy, true
 }
 

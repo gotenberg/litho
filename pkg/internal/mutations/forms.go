@@ -1588,11 +1588,11 @@ func textFieldAppearance(
 	}
 	// Sit the baseline so the line is vertically centred in the box, with a
 	// small left inset so the glyphs do not touch the border.
-	baseline := (height - size) / 2
+	baseline := float64((height - size) / 2)
 	if baseline < 0 {
 		baseline = 0
 	}
-	baseline += size * baselineDescenderRatio
+	baseline += float64(size * baselineDescenderRatio)
 
 	var (
 		fontOperand string
@@ -1683,11 +1683,11 @@ func standardFontOf(ctx context.Context, doc *document.Document, alloc *writer.O
 // checkMarkAppearance draws the tick a checked button shows, in strokes rather
 // than glyphs so it needs no font.
 func checkMarkAppearance(boxOps string, width, height float64) ast.PdfStream {
-	inset := math.Min(width, height) * checkMarkInset
+	inset := float64(math.Min(width, height) * checkMarkInset)
 	body := boxOps + fmt.Sprintf("q\n0 g\n%s w\n1 J\n1 j\n%s %s m\n%s %s l\n%s %s l\nS\nQ\n",
 		formatFloat(math.Max(math.Min(width, height)*checkMarkStroke, 0.5)),
 		formatFloat(inset), formatFloat(height/2),
-		formatFloat(width/2-inset/2), formatFloat(inset),
+		formatFloat(float64(width/2)-float64(inset/2)), formatFloat(inset),
 		formatFloat(width-inset), formatFloat(height-inset),
 	)
 	dict := ast.PdfDict{

@@ -11,7 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
-	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -503,8 +503,8 @@ func buildTransformMatrix(tx, ty, sx, sy, rotationDegrees float64) string {
 	}
 	// PDF coordinate matrix: [sx*cos  sx*sin  -sy*sin  sy*cos  tx  ty]
 	rad := rotationDegrees * math.Pi / 180
-	c := math.Cos(rad)
-	s := math.Sin(rad)
+	c := detmath.Cos(rad)
+	s := detmath.Sin(rad)
 	return fmt.Sprintf("%s %s %s %s %s %s cm ",
 		FormatFloat(sx*c), FormatFloat(sx*s),
 		FormatFloat(-sy*s), FormatFloat(sy*c),

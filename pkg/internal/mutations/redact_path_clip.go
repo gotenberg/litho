@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
@@ -283,7 +284,7 @@ func dashArrayDashes(obj ast.PdfObject) (dashed, ok bool) {
 // and the CTM stretches user-space distances by at most its largest singular
 // value.
 func strokeReach(p strokeParams, ctm [6]float64, factor float64) float64 {
-	return math.Abs(p.lineWidth)/2*factor*maxStretch(ctm) + strokeReachSlack
+	return float64(math.Abs(p.lineWidth)/2*factor*maxStretch(ctm)) + strokeReachSlack
 }
 
 // miterCeiling returns the largest join factor p allows whatever the path: a
@@ -332,7 +333,7 @@ func joinFactor(subs []subpath, paintCloses bool, p strokeParams) float64 {
 			if !okIn || !okOut {
 				return ceiling
 			}
-			sinHalf := math.Sqrt(math.Max((1+in.x*out.x+in.y*out.y)/2, 0))
+			sinHalf := math.Sqrt(math.Max((1+float64(in.x*out.x)+float64(in.y*out.y))/2, 0))
 			if sinHalf == 0 {
 				continue // A reversal exceeds every miter limit and is bevelled.
 			}
@@ -372,7 +373,7 @@ func segDirection(seg pathSeg, atStart bool) (bezPt, bool) {
 		}
 	}
 	dx, dy := b.x-a.x, b.y-a.y
-	l := math.Hypot(dx, dy)
+	l := detmath.Hypot(dx, dy)
 	if l == 0 || math.IsNaN(l) || math.IsInf(l, 0) {
 		return bezPt{}, false
 	}
@@ -383,9 +384,9 @@ func segDirection(seg pathSeg, atStart bool) (bezPt, bool) {
 // most it lengthens any user-space distance.
 func maxStretch(ctm [6]float64) float64 {
 	a, b, c, d := ctm[0], ctm[1], ctm[2], ctm[3]
-	sum := a*a + b*b + c*c + d*d
-	det := a*d - b*c
-	disc := math.Max(sum*sum-4*det*det, 0)
+	sum := float64(a*a) + float64(b*b) + float64(c*c) + float64(d*d)
+	det := float64(a*d) - float64(b*c)
+	disc := math.Max(float64(sum*sum)-float64(4*det*det), 0)
 	return math.Sqrt((sum + math.Sqrt(disc)) / 2)
 }
 
@@ -574,7 +575,7 @@ type piece struct {
 
 // apply maps a user-space point into page space through ctm.
 func apply(ctm [6]float64, p bezPt) bezPt {
-	return bezPt{p.x*ctm[0] + p.y*ctm[2] + ctm[4], p.x*ctm[1] + p.y*ctm[3] + ctm[5]}
+	return bezPt{float64(p.x*ctm[0]) + float64(p.y*ctm[2]) + ctm[4], float64(p.x*ctm[1]) + float64(p.y*ctm[3]) + ctm[5]}
 }
 
 // cutPieces splits every segment where it crosses a cut's edge and labels each
@@ -645,16 +646,16 @@ func segmentRoots(q [4]float64, cubic bool) []float64 {
 		return nil
 	}
 	// Power-basis coefficients of the cubic Bernstein polynomial.
-	a := -q[0] + 3*q[1] - 3*q[2] + q[3]
-	b := 3*q[0] - 6*q[1] + 3*q[2]
-	c := 3*q[1] - 3*q[0]
+	a := -q[0] + float64(3*q[1]) - float64(3*q[2]) + q[3]
+	b := float64(3*q[0]) - float64(6*q[1]) + float64(3*q[2])
+	c := float64(3*q[1]) - float64(3*q[0])
 	d := q[0]
-	f := func(t float64) float64 { return ((a*t+b)*t+c)*t + d }
+	f := func(t float64) float64 { return float64((float64((float64(a*t)+b)*t)+c)*t) + d }
 
 	// The turning points split [0, 1] into intervals where f is monotone, so
 	// each holds at most one root, which bisection finds.
 	bounds := []float64{0, 1}
-	for _, t := range quadraticRoots(3*a, 2*b, c) {
+	for _, t := range quadraticRoots(float64(3*a), float64(2*b), c) {
 		if t > 0 && t < 1 {
 			bounds = append(bounds, t)
 		}
@@ -691,7 +692,7 @@ func quadraticRoots(a, b, c float64) []float64 {
 		}
 		return []float64{-c / b}
 	}
-	disc := b*b - 4*a*c
+	disc := float64(b*b) - float64(4*a*c)
 	if disc < 0 {
 		return nil
 	}
@@ -701,7 +702,7 @@ func quadraticRoots(a, b, c float64) []float64 {
 
 // lerp interpolates from a to b at t.
 func lerp(a, b bezPt, t float64) bezPt {
-	return bezPt{a.x + (b.x-a.x)*t, a.y + (b.y-a.y)*t}
+	return bezPt{a.x + float64((b.x-a.x)*t), a.y + float64((b.y-a.y)*t)}
 }
 
 // blossom evaluates a cubic's polar form at (u, v, w): de Casteljau with a
@@ -795,7 +796,7 @@ func clipPathRun(
 	mayCut bool,
 ) (string, bool, error) {
 	ctm := box.CTM
-	det := ctm[0]*ctm[3] - ctm[1]*ctm[2]
+	det := float64(ctm[0]*ctm[3]) - float64(ctm[1]*ctm[2])
 	if det == 0 || math.IsNaN(det) || math.IsInf(det, 0) {
 		return "", false, errors.New("the path's CTM is not invertible")
 	}
@@ -923,11 +924,11 @@ func unadjustedMarker(f cutFrame) string {
 		return ""
 	}
 	c := f.cuts[0]
-	dx, dy := (c.x1-c.x0)/4, (c.y1-c.y0)/4
+	dx, dy := float64((c.x1-c.x0)/4), float64((c.y1-c.y0)/4)
 	if dx <= axisAlignEpsilon || dy <= axisAlignEpsilon {
 		return ""
 	}
-	cx, cy := (c.x0+c.x1)/2, (c.y0+c.y1)/2
+	cx, cy := float64((c.x0+c.x1)/2), float64((c.y0+c.y1)/2)
 	var e pathEmitter
 	e.nums("m", f.toUser(bezPt{cx, cy}))
 	e.nums("l", f.toUser(bezPt{cx + dx, cy + dy}))
@@ -1027,7 +1028,7 @@ type cutFrame struct {
 // toUser maps a page-space point into user space.
 func (f cutFrame) toUser(p bezPt) bezPt {
 	dx, dy := p.x-f.ctm[4], p.y-f.ctm[5]
-	return bezPt{(dx*f.ctm[3] - dy*f.ctm[2]) / f.det, (dy*f.ctm[0] - dx*f.ctm[1]) / f.det}
+	return bezPt{(float64(dx*f.ctm[3]) - float64(dy*f.ctm[2])) / f.det, (float64(dy*f.ctm[0]) - float64(dx*f.ctm[1])) / f.det}
 }
 
 // inside reports the cut a user-space point lies strictly inside, or -1.
@@ -1051,7 +1052,7 @@ func (f cutFrame) transitionPoint(from, to int) (bezPt, error) {
 	if x0 > x1 || y0 > y1 {
 		return bezPt{}, fmt.Errorf("the path passes between regions %d and %d, which do not meet", from, to)
 	}
-	return f.toUser(bezPt{(x0 + x1) / 2, (y0 + y1) / 2}), nil
+	return f.toUser(bezPt{float64((x0 + x1) / 2), float64((y0 + y1) / 2)}), nil
 }
 
 // rewriteSubpath returns sp with the geometry inside the cuts removed, and

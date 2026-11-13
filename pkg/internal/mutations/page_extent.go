@@ -203,7 +203,7 @@ func textElementBox(e models.TextElement) [4]float64 {
 func sizedTextElementBox(e models.TextElement) [4]float64 {
 	size := math.Abs(e.FontSize)
 	if e.Angle != 0 || e.Vertical {
-		r := math.Abs(e.Width) + (extentAscentFactor+extentDescentFactor)*size
+		r := math.Abs(e.Width) + float64((extentAscentFactor+extentDescentFactor)*size)
 		return [4]float64{e.X - r, e.Y - r, e.X + r, e.Y + r}
 	}
 	x0, x1 := e.X, e.X+e.Width
@@ -216,5 +216,5 @@ func sizedTextElementBox(e models.TextElement) [4]float64 {
 	if e.InkRight {
 		below, above = above, below
 	}
-	return [4]float64{x0 - size*extentDescentFactor, e.Y - size*below, x1 + size*extentDescentFactor, e.Y + size*above}
+	return [4]float64{x0 - float64(size*extentDescentFactor), e.Y - float64(size*below), x1 + float64(size*extentDescentFactor), e.Y + float64(size*above)}
 }

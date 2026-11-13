@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
@@ -96,7 +97,7 @@ type stampPlacement struct {
 // llx, lly, urx and ury in the stamp's frame.
 func (p stampPlacement) rotatedBounds() [4]float64 {
 	rad := p.rotation * math.Pi / 180
-	c, s := math.Cos(rad), math.Sin(rad)
+	c, s := detmath.Cos(rad), detmath.Sin(rad)
 	out := [4]float64{math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)}
 	for _, corner := range [4][2]float64{
 		{p.box[0], p.box[1]},
@@ -104,8 +105,8 @@ func (p stampPlacement) rotatedBounds() [4]float64 {
 		{p.box[0], p.box[3]},
 		{p.box[2], p.box[3]},
 	} {
-		x := corner[0]*c - corner[1]*s
-		y := corner[0]*s + corner[1]*c
+		x := float64(corner[0]*c) - float64(corner[1]*s)
+		y := float64(corner[0]*s) + float64(corner[1]*c)
 		out[0], out[1] = min(out[0], x), min(out[1], y)
 		out[2], out[3] = max(out[2], x), max(out[3], y)
 	}
@@ -130,8 +131,8 @@ func (p stampPlacement) matrix(page *document.Page, rotate int) [6]float64 {
 
 	fx, fy := p.position.anchor()
 	b := p.rotatedBounds()
-	tx := fx*w - (b[0] + fx*(b[2]-b[0])) + p.dx
-	ty := fy*h - (b[1] + fy*(b[3]-b[1])) + p.dy
+	tx := float64(fx*w) - (b[0] + float64(fx*(b[2]-b[0]))) + p.dx
+	ty := float64(fy*h) - (b[1] + float64(fy*(b[3]-b[1]))) + p.dy
 
 	// The inverse of [viewedPageMatrix]: from the page as viewed, its
 	// lower-left corner at the origin, to user space.
@@ -146,8 +147,8 @@ func (p stampPlacement) matrix(page *document.Page, rotate int) [6]float64 {
 	default:
 		m = [6]float64{1, 0, 0, 1, llx, lly}
 	}
-	m[4] += tx*m[0] + ty*m[2]
-	m[5] += tx*m[1] + ty*m[3]
+	m[4] += float64(tx*m[0]) + float64(ty*m[2])
+	m[5] += float64(tx*m[1]) + float64(ty*m[3])
 	return m
 }
 
