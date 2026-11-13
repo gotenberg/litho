@@ -96,6 +96,9 @@ type engine struct {
 	// marks are the page names and blank pages the forced breaks decided,
 	// by page index (CSS Page 3, 4.1 and 4.2.3).
 	marks []pageMark
+	// groups are the page groups the layout has started, in the order
+	// their boxes were laid out (CSS GCPM 3, 3.2).
+	groups []pageGroup
 	// clamp counts the lines of the line clamp container being laid out,
 	// nil outside one (CSS Overflow 4, 6).
 	clamp *clampState

@@ -532,6 +532,11 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		}
 		e.reach(y)
 	}
+	if e.opts.PageGroups && e.paginating() && e.cols == nil && startsGroup(b) {
+		// A page group holds the pages of its box (CSS GCPM 3, 3.2).
+		e.startGroup(b, e.pageOf(max(cursor, 0)))
+		defer e.endGroup(b)
+	}
 	cleared := false
 	clearY := math.Inf(-1)
 	if b.st.Clear != css.ClearNone {

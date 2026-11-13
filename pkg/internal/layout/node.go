@@ -3,6 +3,7 @@ package layout
 import (
 	"context"
 	"log/slog"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
@@ -254,6 +255,10 @@ type Options struct {
 	// the named strings and running elements of a page (CSS GCPM 3, 2).
 	// Layout calls it once, from its own goroutine.
 	Placed func(anchors map[string]typeset.Dest)
+	// PageGroups tracks the page groups of [PageInfo.Groups], which
+	// [Options.PageFor] and [Options.MarginContent] then receive; off,
+	// every page belongs to none.
+	PageGroups bool
 	// Paginated, when not nil, receives the info of every page of the
 	// layout, in order, right after Placed, so that page-margin content
 	// can follow the pages an anchored node landed on and those before it
@@ -338,6 +343,17 @@ type PageInfo struct {
 	// Blank reports a page that a forced break to a left or a right page
 	// left empty (CSS Page 3, 4.2.3; CSS Fragmentation 3, 3.1).
 	Blank bool
+	// Groups are the page groups the page belongs to, outermost first
+	// (CSS GCPM 3, 3.2): those of the in-flow block-level boxes whose page
+	// property names a page and whose break-before forces a page break.
+	// A group holds the pages from the one its box starts on to the one
+	// it ends on, and stops at a forced break before a box outside it.
+	Groups []css.PageGroup
+}
+
+// sameInfo reports whether a and b name a page alike.
+func sameInfo(a, b PageInfo) bool {
+	return a.Index == b.Index && a.Name == b.Name && a.Blank == b.Blank && slices.Equal(a.Groups, b.Groups)
 }
 
 // PageBox is a page's size and margins in points.

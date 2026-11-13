@@ -74,9 +74,13 @@
 // page being a right page unless the root's direction is right to left;
 // :blank rules to the pages a break to a left or a right page leaves
 // empty, :nth(An+B) rules to the pages at those places in the document
-// (CSS GCPM 3, 3.1). :nth() on a named page and :nth(An+B of name) select
-// inside page groups, which are not supported: their rule is dropped with
-// a warning. An element's page property puts it on pages of that name, with a
+// (CSS GCPM 3, 3.1). An element whose page property names a page and
+// whose break-before forces a page break makes a page group of the pages
+// its box spans, up to a forced break before a box outside it (CSS GCPM 3,
+// 3.2): :nth(An+B of name) selects the pages at those places in the
+// innermost group of that name, and :nth() on a named page counts in the
+// innermost group of the page's name, in the document outside one. An
+// element's page property puts it on pages of that name, with a
 // forced break where the name changes (CSS Page 3, 4.1); each page takes
 // the size and margins of its named rules, and the content after such a
 // break is laid out at that page's width.

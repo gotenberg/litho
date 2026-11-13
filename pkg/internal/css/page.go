@@ -22,14 +22,34 @@ type PageSelector struct {
 	// Index is the page's 1-based place in the document, which :nth()
 	// matches (CSS GCPM 3, 3.1).
 	Index int
+	// Groups are the page groups the page belongs to, outermost first
+	// (CSS GCPM 3, 3.2), which :nth() of a named page and :nth(An+B of
+	// name) match.
+	Groups []PageGroup
 }
 
-// pageSel is a parsed page selector. nth holds the An+B of its :nth()
-// pseudo-classes, each of which the page's index must match.
+// PageGroup is a page group a page belongs to (CSS GCPM 3, 3.2): the
+// pages of one element whose page property names a page and whose
+// break-before forces a page break. Name is the element's page type name,
+// Index the page's 1-based place in the group.
+type PageGroup struct {
+	Name  string
+	Index int
+}
+
+// nthSel is one :nth() pseudo-class of a page selector: An+B, and the name
+// of the page groups it counts in, "" for none (CSS GCPM 3, 3.1).
+type nthSel struct {
+	a, b int
+	of   string
+}
+
+// pageSel is a parsed page selector. nth holds its :nth() pseudo-classes,
+// each of which the page must match.
 type pageSel struct {
 	name                      string
 	first, left, right, blank bool
-	nth                       [][2]int
+	nth                       []nthSel
 	spec                      uint32
 }
 
@@ -92,12 +112,8 @@ func parsePageSelectors(prelude []token) ([]pageSel, string, bool) {
 
 // parsePageSelector parses one page selector: an optional page type name
 // and its pseudo-classes, :first, :left, :right, :blank (CSS Page 3, 4.2)
-// and :nth(An+B) (CSS GCPM 3, 3.1).
-//
-// :nth() of a named page, and :nth(An+B of name), select pages inside a
-// page group (CSS GCPM 3, 3.2), which the layout does not track: they are
-// not supported, and neither is a pseudo-class the drafts do not define:
-// the second result names it.
+// and :nth(An+B [of name]) (CSS GCPM 3, 3.1). A pseudo-class the drafts do
+// not define is not supported: the second result names it.
 func parsePageSelector(part []token) (pageSel, string, bool) {
 	var s pageSel
 	i := 0
@@ -115,20 +131,11 @@ func parsePageSelector(part []token) (pageSel, string, bool) {
 			if lower(t.value) != "nth" {
 				return pageSel{}, ":" + lower(t.value) + "()", false
 			}
-			if s.name != "" {
-				return pageSel{}, s.name + ":nth()", false
-			}
-			a, b, ok := parseAnB(t.children)
-			if !ok {
-				if pageGroup(t.children) {
-					return pageSel{}, ":nth(of)", false
-				}
+			n, ok := parseNth(t.children)
+			if !ok || len(s.nth) == maxPageNth {
 				return pageSel{}, "", false
 			}
-			if len(s.nth) == maxPageNth {
-				return pageSel{}, "", false
-			}
-			s.nth = append(s.nth, [2]int{a, b})
+			s.nth = append(s.nth, n)
 			continue
 		}
 		if t.typ != tIdent {
@@ -171,15 +178,22 @@ func parsePageSelector(part []token) (pageSel, string, bool) {
 	return s, "", true
 }
 
-// pageGroup reports an :nth() argument that names a page group, An+B of
-// name (CSS GCPM 3, 3.2).
-func pageGroup(args []token) bool {
-	for _, t := range args {
-		if t.isIdent("of") {
-			return true
+// parseNth parses the argument of a page :nth(): An+B, optionally followed
+// by of and a page type name (CSS GCPM 3, 3.1).
+func parseNth(args []token) (nthSel, bool) {
+	for i, t := range args {
+		if !t.isIdent("of") {
+			continue
 		}
+		rest := significant(args[i+1:])
+		if len(rest) != 1 || rest[0].typ != tIdent {
+			return nthSel{}, false
+		}
+		a, b, ok := parseAnB(args[:i])
+		return nthSel{a: a, b: b, of: rest[0].value}, ok
 	}
-	return false
+	a, b, ok := parseAnB(args)
+	return nthSel{a: a, b: b}, ok
 }
 
 // maxPageNth bounds the :nth() pseudo-classes of one page selector: 8.
@@ -192,12 +206,52 @@ func (s *pageSel) matches(sel PageSelector) bool {
 	if s.name != "" && s.name != sel.Name {
 		return false
 	}
-	for _, ab := range s.nth {
-		if !nthMatches(ab[0], ab[1], sel.Index) {
+	for _, n := range s.nth {
+		if !n.matches(s.name, sel) {
 			return false
 		}
 	}
 	return (!s.first || sel.First) && (!s.left || sel.Left) && (!s.right || sel.Right) && (!s.blank || sel.Blank)
+}
+
+// matches reports whether the page sel names matches the :nth() n of a
+// selector naming the page type name (CSS GCPM 3, 3.1): with of, its
+// index in the innermost page group of that name it belongs to, none
+// matching outside one; on a named page, its index in the innermost page
+// group of the page's name, its index in the document outside one; on any
+// other, its index in the document.
+func (n nthSel) matches(name string, sel PageSelector) bool {
+	group := n.of
+	if group == "" {
+		group = name
+	}
+	if group != "" {
+		for _, g := range slices.Backward(sel.Groups) {
+			if g.Name == group {
+				return nthMatches(n.a, n.b, g.Index)
+			}
+		}
+		if n.of != "" {
+			return false
+		}
+	}
+	return nthMatches(n.a, n.b, sel.Index)
+}
+
+// HasPageGroups reports whether an @page rule selects pages by their place
+// in a page group (CSS GCPM 3, 3.2): :nth() of a named page, or :nth(An+B
+// of name).
+func (r *Resolver) HasPageGroups() bool {
+	for i := range r.pages {
+		for _, s := range r.pages[i].rule.sels {
+			for _, n := range s.nth {
+				if n.of != "" || s.name != "" {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // pageSizes are the <page-size> keywords in points (CSS Page 3, 5.1,

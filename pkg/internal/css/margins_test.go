@@ -227,11 +227,53 @@ func TestPage_NthSelector(t *testing.T) {
 	}
 }
 
+// TestPage_PageGroups locks :nth() in page groups (CSS GCPM 3, 3.1 and
+// 3.2): :nth(An+B of name) counts in the innermost group of that name and
+// matches no page outside one; :nth() of a named page counts in the
+// innermost group of the page's name, in the document outside one.
+func TestPage_PageGroups(t *testing.T) {
+	t.Parallel()
+	r := resolverOf(t, `
+		@page :nth(1 of chapter) { margin-top: 1pt }
+		@page :nth(2n of chapter) { margin-right: 2pt }
+		@page chapter:nth(3) { margin-bottom: 3pt }
+		@page :nth(1 of) { margin-left: 9pt }`)
+	if !r.HasPageGroups() {
+		t.Error("HasPageGroups false")
+	}
+	for _, tc := range []struct {
+		sel                PageSelector
+		top, right, bottom bool
+	}{
+		{sel: PageSelector{Index: 1, Name: "chapter", Groups: []PageGroup{{Name: "chapter", Index: 1}}}, top: true},
+		{sel: PageSelector{Index: 5, Name: "chapter", Groups: []PageGroup{{Name: "chapter", Index: 2}}}, right: true},
+		{sel: PageSelector{Index: 6, Name: "chapter", Groups: []PageGroup{{Name: "chapter", Index: 7}, {Name: "chapter", Index: 3}}}, bottom: true},
+		{sel: PageSelector{Index: 3, Name: "chapter"}, bottom: true},
+		{sel: PageSelector{Index: 1, Name: "broadside", Groups: []PageGroup{{Name: "chapter", Index: 1}, {Name: "broadside", Index: 3}}}, top: true},
+		{sel: PageSelector{Index: 2}},
+	} {
+		ps := r.pageOf(t, tc.sel)
+		if got := ps.Margin[Top].Kind == Points; got != tc.top {
+			t.Errorf("%+v: top margin %+v", tc.sel, ps.Margin[Top])
+		}
+		if got := ps.Margin[Right].Kind == Points; got != tc.right {
+			t.Errorf("%+v: right margin %+v", tc.sel, ps.Margin[Right])
+		}
+		if got := ps.Margin[Bottom].Kind == Points; got != tc.bottom {
+			t.Errorf("%+v: bottom margin %+v", tc.sel, ps.Margin[Bottom])
+		}
+		if ps.Margin[Left].Kind == Points {
+			t.Errorf("%+v: :nth(1 of) without a name matched", tc.sel)
+		}
+	}
+	if resolverOf(t, `@page :nth(2) { margin: 1pt }`).HasPageGroups() {
+		t.Error("HasPageGroups true for :nth() of the document")
+	}
+}
+
 func TestPage_UnsupportedSelectorsWarn(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ src, code, part string }{
-		{`@page chapter:nth(2) { margin: 1pt }`, "unsupported", "chapter:nth()"},
-		{`@page :nth(1 of chapter) { margin: 1pt }`, "unsupported", ":nth(of)"},
 		{`@page :recto { margin: 1pt }`, "unsupported", ":recto"},
 		{`@page :nth(x) { margin: 1pt }`, "invalid", "invalid selector"},
 	} {

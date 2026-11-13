@@ -101,7 +101,7 @@ func (g *geometry) resync() {
 		return
 	}
 	for i := 1; i < len(g.infos); i++ {
-		if g.e.infoOf(i) != g.infos[i] {
+		if !sameInfo(g.e.infoOf(i), g.infos[i]) {
 			g.boxes, g.infos, g.tops = g.boxes[:i], g.infos[:i], g.tops[:i+1]
 			return
 		}

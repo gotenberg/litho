@@ -160,9 +160,9 @@ func (e *engine) mark(p int, name string, blank bool, owner *box) {
 
 // infoOf returns the page p as the forced breaks decided it: the name of
 // the closest mark at or before it, the root's start page value for the
-// first page, and its blankness.
+// first page, its blankness, and the page groups it belongs to.
 func (e *engine) infoOf(p int) PageInfo {
-	info := PageInfo{Index: p}
+	info := PageInfo{Index: p, Groups: e.groupsOf(p)}
 	for i := min(p, len(e.marks)-1); i >= 0; i-- {
 		if m := e.marks[i]; m.set {
 			info.Name = m.name
@@ -171,6 +171,91 @@ func (e *engine) infoOf(p int) PageInfo {
 		}
 	}
 	return info
+}
+
+// pageGroup is a page group (CSS GCPM 3, 3.2): the box that makes it, its
+// page type name, and the pages its box starts and ends on, end -1 while
+// the box is being laid out.
+type pageGroup struct {
+	owner     *box
+	name      string
+	page, end int
+}
+
+// maxPageGroups bounds the page groups of a layout: 4,096. Anti-DoS guard,
+// not spec-mandated: a group starts a page, a book has a few hundred
+// chapters, and every page's info scans the groups.
+const maxPageGroups = 4096
+
+// startsGroup reports a box that makes a page group (CSS GCPM 3, 3.2): an
+// in-flow block-level box whose page property names a page and whose
+// break-before forces a page break.
+func startsGroup(b *box) bool {
+	return b.st != nil && b.st.Page != "" && isForced(b.st.BreakBefore) && pageApplies(b)
+}
+
+// startGroup records the page group of b, whose box starts on page p. It
+// forgets the group b made before and every group past p, which the layout
+// makes again as it reaches them, as [engine.mark] forgets marks.
+func (e *engine) startGroup(b *box, p int) {
+	kept := e.groups[:0]
+	for _, g := range e.groups {
+		if g.owner != b && g.page <= p {
+			kept = append(kept, g)
+		}
+	}
+	e.groups = kept
+	if len(e.groups) < maxPageGroups {
+		e.groups = append(e.groups, pageGroup{owner: b, name: b.st.Page, page: p, end: -1})
+	}
+	e.geom.resync()
+}
+
+// endGroup records the page the box of b's page group ends on.
+func (e *engine) endGroup(b *box) {
+	for i := range e.groups {
+		if g := &e.groups[i]; g.owner == b {
+			g.end = max(e.pageOf(max(b.y+b.borderH()-1e-3, b.y, 0)), g.page)
+			e.geom.resync()
+			return
+		}
+	}
+}
+
+// groupsOf returns the page groups page p belongs to: those whose box
+// spans it, unless a forced break before a box outside the group's box
+// starts a page after the group's first and at or before p.
+func (e *engine) groupsOf(p int) []css.PageGroup {
+	var out []css.PageGroup
+	for _, g := range e.groups {
+		if g.page > p || g.end >= 0 && p > g.end || e.leftGroup(g, p) {
+			continue
+		}
+		out = append(out, css.PageGroup{Name: g.name, Index: p - g.page + 1})
+	}
+	return out
+}
+
+// leftGroup reports a forced break before a box outside g's box that
+// starts a page after g's first and at or before p.
+func (e *engine) leftGroup(g pageGroup, p int) bool {
+	for i := g.page + 1; i <= p && i < len(e.marks); i++ {
+		if m := e.marks[i]; m.set && !inSubtree(m.owner, g.owner) {
+			return true
+		}
+	}
+	return false
+}
+
+// inSubtree reports whether b is anc or one of its descendants.
+func inSubtree(b, anc *box) bool {
+	for depth := 0; b != nil && depth <= maxTreeDepth; depth++ {
+		if b == anc {
+			return true
+		}
+		b = b.parent
+	}
+	return false
 }
 
 // widthDelta returns how much wider the area of page p is than the first

@@ -2,6 +2,7 @@ package html
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	dom "golang.org/x/net/html"
@@ -12,13 +13,15 @@ import (
 )
 
 // pageKey is what selects the @page rules of a page: its name, whether it
-// is the first, its side and whether it is blank (CSS Page 3, 4.2), and
-// its 1-based index when an :nth() rule tells pages apart by it (CSS GCPM
-// 3, 3.1), 0 otherwise.
+// is the first, its side and whether it is blank (CSS Page 3, 4.2), its
+// 1-based index when an :nth() rule tells pages apart by it (CSS GCPM 3,
+// 3.1), 0 otherwise, and its page groups when an :nth() rule counts in
+// them (CSS GCPM 3, 3.2), each name and index, "" otherwise.
 type pageKey struct {
 	name                string
 	first, right, blank bool
 	index               int
+	groups              string
 }
 
 // pageEntry is the box and style of the pages of one key.
@@ -43,8 +46,10 @@ type pageSetup struct {
 	cache    map[pageKey]*pageEntry
 	seen     map[string]bool
 	warnings []typeset.Warning
-	// nth reports :nth() rules, whose pages each key holds by index.
-	nth bool
+	// nth reports :nth() rules, whose pages each key holds by index;
+	// groups those that count in page groups, whose pages each key holds
+	// by group.
+	nth, groups bool
 	// counters holds the counters of the page context of each page laid
 	// out so far ([prepared.pageCounters]); links the links of the
 	// page-margin boxes of the page last painted.
@@ -60,7 +65,7 @@ type pageSetup struct {
 // root element's style is root and direction rtl, on the paper of o,
 // resolved under ctx.
 func newPageSetup(ctx context.Context, r *css.Resolver, o Options, rtl bool, root *css.Style) *pageSetup {
-	return &pageSetup{ctx: ctx, r: r, o: o, rtl: rtl, root: root, cache: map[pageKey]*pageEntry{}, seen: map[string]bool{}, nth: r.HasNthPages()}
+	return &pageSetup{ctx: ctx, r: r, o: o, rtl: rtl, root: root, cache: map[pageKey]*pageEntry{}, seen: map[string]bool{}, nth: r.HasNthPages(), groups: r.HasPageGroups()}
 }
 
 // key returns the key of the page info names: the first page is a right
@@ -71,6 +76,13 @@ func (s *pageSetup) key(info layout.PageInfo) pageKey {
 	k := pageKey{name: info.Name, first: info.Index == 0, right: right, blank: info.Blank}
 	if s.nth {
 		k.index = info.Index + 1
+	}
+	if s.groups {
+		var sb strings.Builder
+		for _, g := range info.Groups {
+			fmt.Fprintf(&sb, "%s\x00%d\x00", g.Name, g.Index)
+		}
+		k.groups = sb.String()
 	}
 	return k
 }
@@ -83,7 +95,7 @@ func (s *pageSetup) entry(info layout.PageInfo) *pageEntry {
 	if e, ok := s.cache[k]; ok {
 		return e
 	}
-	sel := css.PageSelector{Name: k.name, First: k.first, Right: k.right, Left: !k.right, Blank: k.blank, Index: info.Index + 1}
+	sel := css.PageSelector{Name: k.name, First: k.first, Right: k.right, Left: !k.right, Blank: k.blank, Index: info.Index + 1, Groups: info.Groups}
 	b, ws, err := pageBox(s.ctx, s.r, s.o, sel)
 	if err != nil {
 		return s.stopped(err)
@@ -126,6 +138,9 @@ func (s *pageSetup) box(info layout.PageInfo) layout.PageBox { return s.entry(in
 func (p *prepared) setupPages(ctx context.Context, r *css.Resolver) {
 	if r.HasNamedPages() {
 		p.layout.PageFor = func(info layout.PageInfo) layout.PageBox { return p.setup.layoutBox(p.pages.box(info)) }
+		// :nth() counts in the page groups the layout tracks (CSS GCPM 3,
+		// 3.2).
+		p.layout.PageGroups = r.HasPageGroups()
 	}
 	boxes := r.HasMarginBoxes()
 	if boxes && p.b != nil && p.b.gcpm.active() {
