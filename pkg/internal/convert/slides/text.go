@@ -200,7 +200,7 @@ func insetRect(r typeset.Rect, in [4]float64) typeset.Rect {
 	y, h := axis(r.Y, r.Height, side(in[css.Top]), side(in[css.Bottom]))
 	out := typeset.Rect{X: x, Y: y, Width: w, Height: h}
 	if out.Width < 1 {
-		out.X, out.Width = out.X+out.Width/2-0.5, 1
+		out.X, out.Width = out.X+float64(out.Width/2)-0.5, 1
 	}
 	return out
 }
@@ -278,7 +278,7 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box typeset.Rect)
 		case AnchorBottom:
 			box.Y -= grow
 		case AnchorMiddle:
-			box.Y -= grow / 2
+			box.Y -= float64(grow / 2)
 		case AnchorTop:
 		}
 		box.Height += grow
@@ -526,10 +526,10 @@ func (b *builder) fitBody(body *TextBody, w, h float64) fit {
 	cols := max(body.Columns, 1)
 	colW := w
 	if cols > 1 {
-		colW = (w - float64(cols-1)*max(body.ColumnGap, 0)) / float64(cols)
+		colW = (w - float64(float64(cols-1)*max(body.ColumnGap, 0))) / float64(cols)
 		colW = max(colW, 1)
 	}
-	room := h * float64(cols)
+	room := float64(h * float64(cols))
 	// The empty paragraphs that end the body take no room in the fit, the
 	// first paragraph excepted (ImpEditEngine::FormatParagraphs and
 	// isInEmptyClusterAtTheEnd).
@@ -741,7 +741,7 @@ type lineBox struct {
 // difference.
 func (b *builder) lines(p *Paragraph, ts text.Style, f fit, fontLines bool) lineBox {
 	s := ts.Size
-	a, n := s, s*fixedLineFactor
+	a, n := s, float64(s*fixedLineFactor)
 	if fontLines {
 		m := b.faceMetrics(ts)
 		a, n = m.Ascent, m.Ascent+m.Descent
@@ -750,18 +750,18 @@ func (b *builder) lines(p *Paragraph, ts text.Style, f fit, fontLines bool) line
 	lb := lineBox{height: n, ascent: a, text: n}
 	switch prop := p.LineSpacing; {
 	case numeric.PositiveFinite(p.LineSpacingPoints):
-		lb.height = min(p.LineSpacingPoints, maxCoordinate) * sf
+		lb.height = float64(min(p.LineSpacingPoints, maxCoordinate) * sf)
 		lb.ascent = a + lb.height - n
 	case !numeric.PositiveFinite(prop) || prop == 1:
 		if sf < 1 {
-			lb.height = n * sf
+			lb.height = float64(n * sf)
 			lb.ascent = min(a, n*sf)
 		}
 	case prop < 1:
-		lb.height = n * prop * sf
+		lb.height = float64(n * prop * sf)
 		lb.ascent = min(a, n*sf*prop*0.8)
 	default:
-		lb.height = n * min(prop, maxLineSpacing) * sf
+		lb.height = float64(n * min(prop, maxLineSpacing) * sf)
 		lb.ascent = a - (n - lb.height)
 	}
 	if least := p.LineSpacingAtLeast; least > lb.height && !math.IsInf(least, 0) {
@@ -1002,7 +1002,7 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	// The exact rule puts the baseline at four fifths of the line; the
 	// paragraph moves down by what Impress's ascent adds to that.
 	st.Position = css.Relative
-	st.Top = css.Pts(lb.ascent - 0.8*lb.height)
+	st.Top = css.Pts(lb.ascent - float64(0.8*lb.height))
 	st.TabSize = css.Pts(defaultTab)
 	if body.FontLineSpacing {
 		st.TabSize = css.Pts(odfDefaultTab)
@@ -1258,7 +1258,7 @@ func (b *builder) groupFits(shapes []*Shape) map[int]fit {
 					}
 					kk := *k
 					kk.Box = typeset.Rect{
-						X: s.Box.X + (k.Box.X-child.X)*sx, Y: s.Box.Y + (k.Box.Y-child.Y)*sy,
+						X: s.Box.X + float64((k.Box.X-child.X)*sx), Y: s.Box.Y + float64((k.Box.Y-child.Y)*sy),
 						Width: k.Box.Width * sx, Height: k.Box.Height * sy,
 					}
 					kids = append(kids, &kk)

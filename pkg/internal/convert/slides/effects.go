@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/officefx"
@@ -63,8 +64,8 @@ func silhouetteLined(frags []typeset.Fragment, m typeset.Matrix, share float64) 
 	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
 	add := func(ops []typeset.PathOp, width float64, c typeset.Color, tr typeset.Matrix) {
 		ops = mapOps(ops, tr)
-		width *= math.Sqrt(math.Abs(tr.A*tr.D - tr.B*tr.C))
-		hw := width / 2
+		width *= math.Sqrt(math.Abs(float64(tr.A*tr.D) - float64(tr.B*tr.C)))
+		hw := float64(width / 2)
 		for _, op := range ops {
 			n := 1
 			if op.Kind == typeset.CurveTo {
@@ -518,7 +519,7 @@ func shadowMatrix(sh *Shadow, bounds typeset.Rect) typeset.Matrix {
 	if sy == 0 || !numeric.Finite(sy) {
 		sy = 1
 	}
-	cx, cy := bounds.X+bounds.Width/2, bounds.Y+bounds.Height/2
+	cx, cy := bounds.X+float64(bounds.Width/2), bounds.Y+float64(bounds.Height/2)
 	m := translate(-cx, -cy)
 	if kx, ky := skewTan(sh.SkewX), skewTan(sh.SkewY); kx != 0 || ky != 0 {
 		m = then(m, typeset.Matrix{A: 1, B: ky, C: kx, D: 1})
@@ -533,7 +534,7 @@ func skewTan(deg float64) float64 {
 	if !numeric.Finite(deg) || deg == 0 {
 		return 0
 	}
-	return math.Tan(min(max(deg, -maxSkew), maxSkew) * math.Pi / 180)
+	return detmath.Tan(min(max(deg, -maxSkew), maxSkew) * math.Pi / 180)
 }
 
 // turnedShadow returns s with its shadow's offsets turned clockwise by
@@ -553,9 +554,9 @@ func turnedShadow(s *Shape) *Shape {
 	if sh == nil || !sh.RotateWithShape || s.Rotation == 0 || !numeric.Finite(s.Rotation) {
 		return s
 	}
-	sin, cos := math.Sincos(s.Rotation * math.Pi / 180)
+	sin, cos := detmath.Sincos(s.Rotation * math.Pi / 180)
 	t := *sh
-	t.OffsetX, t.OffsetY = sh.OffsetX*cos-sh.OffsetY*sin, sh.OffsetX*sin+sh.OffsetY*cos
+	t.OffsetX, t.OffsetY = float64(sh.OffsetX*cos)-float64(sh.OffsetY*sin), float64(sh.OffsetX*sin)+float64(sh.OffsetY*cos)
 	c := *s
 	c.Shadow = &t
 	return &c
@@ -1062,7 +1063,7 @@ func (b *builder) innerShadow(s *Shape, fills []typeset.Fragment, toSlide typese
 		},
 	}
 	dx, dy := sh.OffsetX, sh.OffsetY
-	margin := math.Hypot(dx, dy) + max(sh.Blur, 0)
+	margin := detmath.Hypot(dx, dy) + max(sh.Blur, 0)
 	if !numeric.Finite(margin) {
 		return nil
 	}
@@ -1148,16 +1149,16 @@ func (p *effectPlan) reflection(ctx context.Context, content []typeset.Fragment,
 // points: along its fade direction across the copy r, at its start and end
 // positions of the copy's extent that way.
 func fadeLine(r typeset.Rect, rf *Reflection) (x0, y0, x1, y1 float64) {
-	sin, cos := math.Sincos(rf.FadeDir * math.Pi / 180)
+	sin, cos := detmath.Sincos(rf.FadeDir * math.Pi / 180)
 	if !numeric.Finite(sin) || !numeric.Finite(cos) {
 		sin, cos = 1, 0
 	}
-	cx, cy := r.X+r.Width/2, r.Y+r.Height/2
+	cx, cy := r.X+float64(r.Width/2), r.Y+float64(r.Height/2)
 	// The copy's extent along the direction, from its centre.
-	half := (math.Abs(cos)*r.Width + math.Abs(sin)*r.Height) / 2
+	half := float64((float64(math.Abs(cos)*r.Width) + float64(math.Abs(sin)*r.Height)) / 2)
 	at := func(pos float64) (float64, float64) {
-		t := -half + pos*2*half
-		return cx + t*cos, cy + t*sin
+		t := -half + float64(pos*2*half)
+		return cx + float64(t*cos), cy + float64(t*sin)
 	}
 	x0, y0 = at(rf.StartPos)
 	x1, y1 = at(rf.EndPos)

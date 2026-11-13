@@ -3,6 +3,7 @@ package slides
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -60,7 +61,7 @@ func skewedAboutCentre(r typeset.Rect, deg, skew float64, flipH, flipV bool) typ
 	if deg == 0 && skew == 0 && !flipH && !flipV {
 		return typeset.Identity
 	}
-	cx, cy := r.X+r.Width/2, r.Y+r.Height/2
+	cx, cy := r.X+float64(r.Width/2), r.Y+float64(r.Height/2)
 	f := typeset.Identity
 	if flipH {
 		f.A = -1
@@ -70,10 +71,10 @@ func skewedAboutCentre(r typeset.Rect, deg, skew float64, flipH, flipV bool) typ
 	}
 	// With y down, a point above the centre has a negative y: the shear
 	// moves it right for a positive angle.
-	sh := typeset.Matrix{A: 1, C: -math.Tan(skew * math.Pi / 180), D: 1}
+	sh := typeset.Matrix{A: 1, C: -detmath.Tan(skew * math.Pi / 180), D: 1}
 	// In page coordinates, y down, a clockwise turn maps the x axis onto
 	// (cos, sin).
-	s, c := math.Sincos(deg * math.Pi / 180)
+	s, c := detmath.Sincos(deg * math.Pi / 180)
 	rot := typeset.Matrix{A: c, B: s, C: -s, D: c}
 	return then(then(then(then(translate(-cx, -cy), f), sh), rot), translate(cx, cy))
 }

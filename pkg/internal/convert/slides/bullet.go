@@ -115,7 +115,7 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 			m := b.faceMetrics(b.textStyle(&rs, 1))
 			bh, bd = m.Ascent+m.Descent, m.Descent
 		}
-		base := lb.height - lb.text + lb.text/2 + bh/2 - bd
+		base := lb.height - lb.text + float64(lb.text/2) + float64(bh/2) - bd
 		if r := lb.ascent - base; numeric.Finite(r) {
 			raise = r
 		}

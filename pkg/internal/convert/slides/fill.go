@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
@@ -51,7 +52,7 @@ func (b *builder) fill(f *Fill, box typeset.Rect, ops []typeset.PathOp, mode sha
 			p.Stops = append(p.Stops, typeset.ColorStop{Offset: 0, Color: colorOf(g.Stops[0].Color)})
 		}
 		for _, st := range g.Stops {
-			p.Stops = append(p.Stops, typeset.ColorStop{Offset: border + st.Position*(1-border), Color: colorOf(st.Color)})
+			p.Stops = append(p.Stops, typeset.ColorStop{Offset: border + float64(st.Position*(1-border)), Color: colorOf(st.Color)})
 		}
 		out := shape.Fill(ops, box, p)
 		if g.Radial {
@@ -83,8 +84,8 @@ func centreRadial(frags []typeset.Fragment, box typeset.Rect, cx, cy float64) {
 	cx, cy = min(max(cx, -1), 2), min(max(cy, -1), 2)
 	for _, f := range frags {
 		if p, ok := f.(*typeset.Path); ok && p.Fill != nil && p.Fill.Shading != nil && p.Fill.Shading.Kind == typeset.Radial {
-			p.Fill.Shading.Transform.E = box.X + cx*box.Width
-			p.Fill.Shading.Transform.F = box.Y + cy*box.Height
+			p.Fill.Shading.Transform.E = box.X + float64(cx*box.Width)
+			p.Fill.Shading.Transform.F = box.Y + float64(cy*box.Height)
 		}
 	}
 }
@@ -109,7 +110,7 @@ func (b *builder) pictureFill(pic *layout.Picture, tile bool, box typeset.Rect) 
 	var out []typeset.Fragment
 	for j := 0.0; j < ny; j++ {
 		for i := 0.0; i < nx; i++ {
-			r := typeset.Rect{X: box.X + i*pic.Width, Y: box.Y + j*pic.Height, Width: pic.Width, Height: pic.Height}
+			r := typeset.Rect{X: box.X + float64(i*pic.Width), Y: box.Y + float64(j*pic.Height), Width: pic.Width, Height: pic.Height}
 			out = append(out, b.picture(pic, r)...)
 		}
 	}
@@ -163,7 +164,7 @@ func (b *builder) patternFill(f *Fill, box typeset.Rect, ops []typeset.PathOp) [
 	h, ok := presetHatches[f.Pattern]
 	// The hatch keeps its angle on the page: the shape's clockwise turn
 	// turns it back.
-	h.angle += 10 * b.hatchTurn
+	h.angle += float64(10 * b.hatchTurn)
 	lines := hatchOps(h, box)
 	if !ok || lines == nil {
 		b.warn(warn.ContentUnsupported, warn.Approximated, "the pattern "+quote(f.Pattern)+" is drawn as its foreground at half opacity")
@@ -223,27 +224,27 @@ func hatchOps(h hatch, box typeset.Rect) []typeset.PathOp {
 		angles = append(angles, h.angle/10+90, h.angle/10+45)
 	case hatchSingle:
 	}
-	cx, cy := box.X+box.Width/2, box.Y+box.Height/2
-	r := math.Hypot(box.Width, box.Height) / 2
+	cx, cy := box.X+float64(box.Width/2), box.Y+float64(box.Height/2)
+	r := float64(detmath.Hypot(box.Width, box.Height) / 2)
 	var ops []typeset.PathOp
 	for _, a := range angles {
 		// With y down, a counter-clockwise angle runs up the page.
-		s, c := math.Sincos(a * math.Pi / 180)
+		s, c := detmath.Sincos(a * math.Pi / 180)
 		dx, dy := c, -s
 		nx, ny := s, c
 		// The lines pass through the top-left corner: the offsets along
 		// the normal of the lines that cross the box.
-		o := (box.X-cx)*nx + (box.Y-cy)*ny
+		o := float64((box.X-cx)*nx) + float64((box.Y-cy)*ny)
 		lo := math.Ceil((-r - o) / d)
 		hi := math.Floor((r - o) / d)
 		if hi-lo+1 > maxHatchLines || len(ops)/2+int(hi-lo+1) > maxHatchLines {
 			return nil
 		}
 		for k := lo; k <= hi; k++ {
-			px, py := cx+(o+k*d)*nx, cy+(o+k*d)*ny
+			px, py := cx+float64((o+float64(k*d))*nx), cy+float64((o+float64(k*d))*ny)
 			ops = append(ops,
-				typeset.PathOp{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: px - r*dx, Y: py - r*dy}}},
-				typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: px + r*dx, Y: py + r*dy}}})
+				typeset.PathOp{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: px - float64(r*dx), Y: py - float64(r*dy)}}},
+				typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: px + float64(r*dx), Y: py + float64(r*dy)}}})
 		}
 	}
 	return ops

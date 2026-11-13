@@ -113,7 +113,7 @@ func (b *builder) notesPage(s *Slide, n int) (*typeset.Page, *typeset.StructElem
 		area = b.doc.NotesSlideBox
 	}
 	k := min(area.Width/sw, area.Height/sh)
-	img := typeset.Rect{X: area.X + (area.Width-sw*k)/2, Y: area.Y + (area.Height-sh*k)/2, Width: sw * k, Height: sh * k}
+	img := typeset.Rect{X: area.X + float64((area.Width-float64(sw*k))/2), Y: area.Y + float64((area.Height-float64(sh*k))/2), Width: sw * k, Height: sh * k}
 	frame := img
 	if master {
 		frame = area

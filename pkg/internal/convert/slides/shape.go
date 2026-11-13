@@ -95,7 +95,7 @@ func (b *builder) shape(s *Shape, m typeset.Matrix, depth int, parent *typeset.S
 			// box; the kid keeps its own turn and flips.
 			kk := *k
 			kk.Box = typeset.Rect{
-				X: box.X + (k.Box.X-child.X)*sx, Y: box.Y + (k.Box.Y-child.Y)*sy,
+				X: box.X + float64((k.Box.X-child.X)*sx), Y: box.Y + float64((k.Box.Y-child.Y)*sy),
 				Width: k.Box.Width * sx, Height: k.Box.Height * sy,
 			}
 			frags = append(frags, b.shape(&kk, inner, depth+1, parent)...)

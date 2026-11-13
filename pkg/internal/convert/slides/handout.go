@@ -99,23 +99,23 @@ func handoutGrid(per int, landscape bool) (cols, rows int, cells, ruled []int) {
 //     (InitHandoutTemplate in sd's DocumentRenderer), not measured.
 func handoutAreas(w, h float64, m [4]float64, sw, sh float64, per int) (slides, ruled []typeset.Rect) {
 	cols, rows, cells, ruledCells := handoutGrid(per, w > h)
-	band := (h - m[css.Top] - m[css.Left]) * handoutBand
+	band := float64((h - m[css.Top] - m[css.Left]) * handoutBand)
 	top, bottom := m[css.Top]+band, m[css.Bottom]+band
 	aw := w - 2*handoutGap - m[css.Left] - m[css.Right]
 	ah := h - 2*handoutGap - top - bottom
-	partW := (aw - float64(cols-1)*handoutGap) / float64(cols)
-	partH := (ah - float64(rows-1)*handoutGap) / float64(rows)
+	partW := (aw - float64(float64(cols-1)*handoutGap)) / float64(cols)
+	partH := (ah - float64(float64(rows-1)*handoutGap)) / float64(rows)
 	slides, ruled = make([]typeset.Rect, len(cells)), make([]typeset.Rect, len(ruledCells))
 	if !numeric.Positive(partW) || !numeric.Positive(partH) || !numeric.Positive(sw) || !numeric.Positive(sh) {
 		return slides, ruled
 	}
 	k := min(partW/sw, partH/sh)
-	tw, th := sw*k, sh*k
-	x0 := handoutGap + m[css.Left] + (partW-tw)/2
-	y0 := handoutGap + top + (partH-th)/2
+	tw, th := float64(sw*k), float64(sh*k)
+	x0 := handoutGap + m[css.Left] + float64((partW-tw)/2)
+	y0 := handoutGap + top + float64((partH-th)/2)
 	at := func(c int) typeset.Rect {
 		col, row := c%cols, c/cols
-		return typeset.Rect{X: x0 + float64(col)*(partW+handoutGap), Y: y0 + float64(row)*(partH+handoutGap), Width: tw, Height: th}
+		return typeset.Rect{X: x0 + float64(float64(col)*(partW+handoutGap)), Y: y0 + float64(float64(row)*(partH+handoutGap)), Width: tw, Height: th}
 	}
 	for i, c := range cells {
 		slides[i] = at(c)
@@ -191,13 +191,13 @@ func turnBox(r typeset.Rect, flexible bool, w, h float64, m [4]float64) typeset.
 	fx, fy := tw/cw, th/ch
 	if flexible {
 		return typeset.Rect{
-			X: m[css.Left] + (r.X-m[css.Left])*fx, Y: m[css.Top] + (r.Y-m[css.Top])*fy,
+			X: m[css.Left] + float64((r.X-m[css.Left])*fx), Y: m[css.Top] + float64((r.Y-m[css.Top])*fy),
 			Width: r.Width * fx, Height: r.Height * fy,
 		}
 	}
-	cx := m[css.Left] + (r.X+r.Width/2-m[css.Left])*fx
-	cy := m[css.Top] + (r.Y+r.Height/2-m[css.Top])*fy
-	return typeset.Rect{X: cx - r.Width/2, Y: cy - r.Height/2, Width: r.Width, Height: r.Height}
+	cx := m[css.Left] + float64((r.X+float64(r.Width/2)-m[css.Left])*fx)
+	cy := m[css.Top] + float64((r.Y+float64(r.Height/2)-m[css.Top])*fy)
+	return typeset.Rect{X: cx - float64(r.Width/2), Y: cy - float64(r.Height/2), Width: r.Width, Height: r.Height}
 }
 
 // handoutPage draws the handout page numbered n holding the slides group,

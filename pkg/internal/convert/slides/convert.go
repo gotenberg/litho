@@ -519,7 +519,7 @@ func (b *builder) pageSize(w, h float64) (float64, float64) {
 // page of size pw by ph: scaled down to fit, never up, and centred.
 func fitMatrix(w, h, pw, ph float64) typeset.Matrix {
 	s := min(pw/w, ph/h, 1)
-	return typeset.Matrix{A: s, D: s, E: (pw - w*s) / 2, F: (ph - h*s) / 2}
+	return typeset.Matrix{A: s, D: s, E: (pw - float64(w*s)) / 2, F: (ph - float64(h*s)) / 2}
 }
 
 // slidePage draws the slide s, numbered n, on its page, and returns
