@@ -581,9 +581,12 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 			mc.commit(top)
 			top = y
 		}
-		mc.commitFloats(top)
+		// The margins resolve at top: a box moved below the floats it does
+		// not fit beside is placed there without clearance, so the boxes
+		// whose top waits on its margin stay beside the floats (CSS 2.1,
+		// 9.5).
+		mc.commit(top)
 		e.layoutBFCRoot(b, cb, bc, top)
-		mc.commit(b.y)
 		mc.strut = strut{}.add(mb)
 		return b.y + b.borderH()
 	}

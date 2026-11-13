@@ -205,3 +205,21 @@ func TestFloats_PushedFirstLineLeavesBlockTop(t *testing.T) {
 		t.Errorf("lines %v, want one at 50", b.lines)
 	}
 }
+
+func TestFormattingContextBelowFloat_KeepsParentTop(t *testing.T) {
+	// CSS 2.1, 9.5: a box that establishes a formatting context and does
+	// not fit beside a float moves below it; that is no clearance, so the
+	// parent whose top margin collapses with the box's keeps its top
+	// where the margins resolve, beside the float.
+	rb := boxes(t, doc(el(sty(width(100)),
+		el(sty(),
+			el(sty(float(css.FloatLeft), width(50), height(50))),
+			el(sty(hidden, width(70), height(30)))),
+	)), page(200, 200))
+	if got := rect(kid(t, rb, 0, 0, 0)); got[1] != 0 || got[3] != 80 {
+		t.Errorf("parent at y %v height %v, want 0 and 80", got[1], got[3])
+	}
+	if got := rect(kid(t, rb, 0, 0, 0, 1)); got[1] != 50 {
+		t.Errorf("formatting context at y %v, want 50: below the float", got[1])
+	}
+}
