@@ -1004,6 +1004,9 @@ type Style struct {
 	// PrintColorAdjust lets a converter that drops backgrounds to save
 	// ink drop the element's (CSS Color Adjust 1, 3.1).
 	PrintColorAdjust PrintColorAdjust
+	// ContentVisibility hidden skips the element's contents (CSS Contain
+	// 2, 4).
+	ContentVisibility ContentVisibility
 	// Clip clips an absolutely positioned element and its content (CSS
 	// 2.2, 11.1.2).
 	Clip ClipRect

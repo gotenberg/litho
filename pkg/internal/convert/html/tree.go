@@ -268,6 +268,11 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 			return b.children(ctx, n, parent, depth)
 		}
 	}
+	if st.ContentVisibility == css.VisibilityHidden {
+		node := hiddenContents(st)
+		b.semantics(node, n)
+		return []*layout.Node{node}, nil
+	}
 	node := &layout.Node{Kind: layout.Element, Style: st}
 	b.semantics(node, n)
 	if err := b.content(ctx, node, n, st, v, depth+1); err != nil {

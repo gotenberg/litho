@@ -260,6 +260,7 @@ const (
 	pTextBoxEdge
 	pObjectViewBox
 	pPrintColorAdjust
+	pContentVisibility
 	numProps
 )
 
@@ -1050,6 +1051,7 @@ func init() {
 	props[pClipPath] = clipPathProp()
 	props[pObjectViewBox] = objectViewBoxProp()
 	props[pPrintColorAdjust] = printColorAdjustProp()
+	props[pContentVisibility] = contentVisibilityProp()
 	for id, def := range textBoxProps() {
 		props[id] = def
 	}
