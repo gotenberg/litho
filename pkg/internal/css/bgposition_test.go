@@ -105,3 +105,30 @@ func TestBackgroundPosition_ShorthandInheritsBothAxes(t *testing.T) {
 		t.Errorf("inherited position = %+v, want 36pt 36pt", got)
 	}
 }
+
+// TestPosition_MixedCalc locks CSS Values 4, 10.9: a calc() mixing a
+// length and a percentage is a <length-percentage> wherever the grammar
+// takes one, resolved against the basis at used-value time: positions,
+// transform-origin and corner radii. A function of percentages in a
+// background position keeps its tree, since the basis (the area less the
+// image) can be negative (CSS Backgrounds 3, 3.6).
+func TestPosition_MixedCalc(t *testing.T) {
+	t.Parallel()
+	s := styleOf(t, `background-position: calc(10px + 50%) min(0%, 100%); transform-origin: calc(10px + 20%) 0;
+		border-radius: calc(5px + 10%) / 3px; background-image: radial-gradient(at calc(4px + 50%) 0, red, blue)`)
+	if got := s.BackgroundPosition[0].Resolve(100); got != 57.5 {
+		t.Errorf("background-position x against 100pt = %v, want 57.5", got)
+	}
+	if got := s.BackgroundPosition[1].Resolve(-100); got != -100 {
+		t.Errorf("min(0%%, 100%%) against -100pt = %v, want -100", got)
+	}
+	if got := s.TransformOrigin[0].Resolve(100); got != 27.5 {
+		t.Errorf("transform-origin x = %v, want 27.5", got)
+	}
+	if got := s.BorderRadius[TopLeft].H.Resolve(100); got != 13.75 {
+		t.Errorf("border-radius = %v, want 13.75", got)
+	}
+	if g := s.BackgroundGradient; g == nil || g.Center[0].Resolve(100) != 53 {
+		t.Errorf("gradient centre = %+v", g)
+	}
+}

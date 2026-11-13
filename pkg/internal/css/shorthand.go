@@ -316,7 +316,7 @@ func parseRadii(v []token) ([4]length, [4]length, bool) {
 		}
 		vals := make([]length, len(l))
 		for i, t := range l {
-			x, ok := parseLength(t, allowPct|nonNeg)
+			x, ok := parseLength(t, allowPct|nonNeg|allowMixed)
 			if !ok {
 				return out, false
 			}

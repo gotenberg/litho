@@ -688,13 +688,13 @@ func parseRadius(v []token, _ *declCtx) (any, bool) {
 	if len(v) < 1 || len(v) > 2 {
 		return nil, false
 	}
-	h, ok := parseLength(v[0], allowPct|nonNeg)
+	h, ok := parseLength(v[0], allowPct|nonNeg|allowMixed)
 	if !ok {
 		return nil, false
 	}
 	r := radiusSpec{h: h, v: h}
 	if len(v) == 2 {
-		if r.v, ok = parseLength(v[1], allowPct|nonNeg); !ok {
+		if r.v, ok = parseLength(v[1], allowPct|nonNeg|allowMixed); !ok {
 			return nil, false
 		}
 	}

@@ -741,6 +741,24 @@ func (n *calcNode) hasPct() bool {
 	return false
 }
 
+// pctFunction reports a math function other than a sum, a product or a
+// negation that holds a percentage: its value depends on the sign of the
+// percentage basis, not on the percentages alone.
+func (n *calcNode) pctFunction() bool {
+	switch n.op { //nolint:exhaustive // the other operators are functions
+	case opNum, opVar, opLen, opPct:
+		return false
+	case opSum, opNeg, opProduct, opInvert:
+		for _, k := range n.kids {
+			if k.pctFunction() {
+				return true
+			}
+		}
+		return false
+	}
+	return n.hasPct()
+}
+
 // linear folds the tree into a linear combination of the length units
 // and of the percentage, a [length], when it is one: sums and products
 // by a constant of such combinations, and functions of constants. ok is
@@ -799,8 +817,10 @@ func (n *calcNode) linear(vars *channelVars) (l length, ok bool) {
 	}
 	// A function of constants is a constant. A function of percentages
 	// alone is a percentage: its type is that of a length, so it scales
-	// with the basis, which is never negative, and its value is that of
-	// its percentages (sign() and atan2() of them a number).
+	// with the basis, and its value is that of its percentages (sign()
+	// and atan2() of them a number). That holds for a basis that is never
+	// negative; a property whose basis can be negative keeps the tree
+	// (signedBasis).
 	args := make([]float64, len(n.kids))
 	consts, pcts := true, true
 	for i, k := range n.kids {

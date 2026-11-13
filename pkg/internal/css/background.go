@@ -147,7 +147,7 @@ func isPositionToken(t token) bool {
 		}
 		return false
 	}
-	_, ok := parseLength(t, allowPct)
+	_, ok := parseLength(t, allowPct|allowMixed|signedBasis)
 	return ok
 }
 
@@ -177,7 +177,7 @@ func parseBgPos(v []token) ([2]length, bool) {
 	case 1:
 		switch k := kw(v[0]); k {
 		case "":
-			l, ok := parseLength(v[0], allowPct)
+			l, ok := parseLength(v[0], allowPct|allowMixed|signedBasis)
 			return [2]length{l, pctLength(50)}, ok
 		case "top", "bottom":
 			return [2]length{pctLength(50), pctLength(edge[k])}, true
@@ -196,7 +196,7 @@ func parseBgPos(v []token) ([2]length, bool) {
 					out[i] = pctLength(edge[k])
 					continue
 				}
-				l, ok := parseLength(v[i], allowPct)
+				l, ok := parseLength(v[i], allowPct|allowMixed|signedBasis)
 				if !ok {
 					return out, false
 				}
@@ -233,7 +233,7 @@ func parseBgPos(v []token) ([2]length, bool) {
 			}
 			off := pctLength(0)
 			if i < len(v) && kw(v[i]) == "" {
-				l, ok := parseLength(v[i], allowPct)
+				l, ok := parseLength(v[i], allowPct|allowMixed|signedBasis)
 				if !ok {
 					return out, false
 				}
@@ -308,7 +308,7 @@ func bgPositionAxis(axis int) propDef {
 			case k != "" && k != near && k != far, len(l) > 1:
 				return nil, false
 			case len(l) == 1:
-				if off, ok = parseLength(l[0], allowPct); !ok {
+				if off, ok = parseLength(l[0], allowPct|allowMixed|signedBasis); !ok {
 					return nil, false
 				}
 			case k == "":

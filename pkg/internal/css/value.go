@@ -25,6 +25,9 @@ type length struct {
 	// its units are known; the coefficients are then zero. It is shared
 	// and never mutated.
 	expr *calcNode
+	// signed marks a value whose percentage basis can be negative: a
+	// math function of its percentages keeps its tree (signedBasis).
+	signed bool
 }
 
 // constant reports a value of no unit and no percentage: a number.
@@ -258,6 +261,9 @@ func (l length) dim(c lenCtx, nonNeg bool) Dimension {
 func (l length) exprDim(c lenCtx, nonNeg bool) Dimension {
 	sizes := c.unitSizes()
 	n := l.expr.resolveUnits(&sizes)
+	if l.signed && n.pctFunction() {
+		return Dimension{Kind: Calc, expr: n}
+	}
 	if lin, ok := n.linear(nil); ok {
 		v := lin.u[uPt]
 		if !lin.hasLen {
@@ -315,8 +321,14 @@ const (
 	// properties whose percentages resolve at computed-value time
 	// (font-size, the decoration thickness and offset), and those the
 	// layout engine resolves as a [Calc] (the box sizes, margins,
-	// paddings, insets, gaps and flex-basis).
+	// paddings, insets, gaps, flex-basis and corner radii).
 	allowMixed
+	// signedBasis marks a property whose percentage basis can be
+	// negative, the positions of CSS Backgrounds 3, 3.6 (the area less
+	// the image): min(), max() and the other functions of percentages
+	// resolve against the basis at used-value time (CSS Values 4, 10.9),
+	// never folded to one percentage.
+	signedBasis
 )
 
 // parseLength parses a <length> or <length-percentage> component value
@@ -342,7 +354,7 @@ func parseLength(t token, f lengthFlags) (length, bool) {
 		if !isCalc(&t) {
 			return length{}, false
 		}
-		l, ok := calcLength(&t)
+		l, ok := calcLength(&t, f&signedBasis != 0)
 		if !ok {
 			return length{}, false
 		}
@@ -366,11 +378,14 @@ func parseLength(t token, f lengthFlags) (length, bool) {
 // calcLength parses the math function t as a <length-percentage>: a
 // linear combination when the tree folds to one, else the tree, which a
 // percentage makes a mix of a length and a percentage.
-func calcLength(t *token) (length, bool) {
+func calcLength(t *token, signed bool) (length, bool) {
 	p := &calcParser{pctLength: true}
 	n, ty, ok := p.fn(t, 0)
 	if !ok || ty != typeLength {
 		return length{}, false
+	}
+	if signed && n.pctFunction() {
+		return length{expr: n, hasLen: true, hasPct: true, signed: true}, true
 	}
 	if !n.relative() {
 		var l length
