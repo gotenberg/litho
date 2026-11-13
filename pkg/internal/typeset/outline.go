@@ -7,8 +7,9 @@ import (
 )
 
 // outlines writes the outline tree (ISO 32000-1, 12.3.3, Tables 152 and
-// 153) and returns its root. Every entry is open, so each /Count is the
-// number of its descendants. The entries have passed [Document.Validate]:
+// 153) and returns its root. The /Count of an entry with children is the
+// number of its descendants shown when it is open, negated for a closed
+// one, and the root's the number of entries shown. The entries have passed [Document.Validate]:
 // the recursion is bounded by [maxTreeDepth], the entries by
 // [maxOutlineEntries]. ctx's error stops it before each level.
 func (w *docWriter) outlines(ctx context.Context, entries []Outline) (ast.PdfIndirectRef, error) {
@@ -28,7 +29,8 @@ func (w *docWriter) outlines(ctx context.Context, entries []Outline) (ast.PdfInd
 
 // outlineLevel writes entries as the children of parent, linked through
 // /Prev and /Next, and returns the first, the last and the number of
-// entries written, descendants included.
+// entries shown when parent is open: each entry, and the descendants an
+// open one shows.
 func (w *docWriter) outlineLevel(ctx context.Context, entries []Outline, parent ast.PdfIndirectRef) (first, last ast.PdfIndirectRef, count int, err error) {
 	if err := ctx.Err(); err != nil {
 		return first, last, 0, err
@@ -57,7 +59,11 @@ func (w *docWriter) outlineLevel(ctx context.Context, entries []Outline, parent 
 				return first, last, 0, err
 			}
 			dict["First"], dict["Last"], dict["Count"] = f, l, ast.PdfInt(c)
-			count += c
+			if e.Closed {
+				dict["Count"] = ast.PdfInt(-c)
+			} else {
+				count += c
+			}
 		}
 		w.alloc.AllocAt(refs[i].ObjectNum, dict)
 	}

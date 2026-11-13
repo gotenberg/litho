@@ -559,6 +559,9 @@ type Outline struct {
 	Title string
 	Dest  Dest
 	Kids  []Outline
+	// Closed starts the entry with its children hidden; the zero value
+	// shows them.
+	Closed bool
 }
 
 // StructElem is one node of the structure tree. Fragments point at the

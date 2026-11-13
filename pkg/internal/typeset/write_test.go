@@ -398,6 +398,34 @@ func TestWriteOutline(t *testing.T) {
 	}
 }
 
+// TestWriteOutline_Closed locks the /Count of a closed entry (ISO
+// 32000-1, 12.3.3, Table 153): negative, its descendants left out of the
+// count of the entries shown.
+func TestWriteOutline_Closed(t *testing.T) {
+	t.Parallel()
+	doc := &typeset.Document{
+		Pages: []*typeset.Page{letter(), letter()},
+		Outline: []typeset.Outline{
+			{Title: "Chapter 1", Dest: typeset.Dest{Page: 1}, Closed: true, Kids: []typeset.Outline{
+				{Title: "Section 1.1", Dest: typeset.Dest{Page: 1}},
+				{Title: "Section 1.2", Dest: typeset.Dest{Page: 2}},
+			}},
+			{Title: "Chapter 2", Dest: typeset.Dest{Page: 2}},
+		},
+	}
+	data := string(write(t, doc))
+	if !strings.Contains(data, "/Count -2") {
+		t.Errorf("no /Count -2 for the closed entry")
+	}
+	if !strings.Contains(data, "/Count 2") {
+		t.Errorf("the root does not count the two entries shown")
+	}
+	got, err := open(t, []byte(data)).Bookmarks(context.Background())
+	if err != nil || len(got) != 2 || len(got[0].Children) != 2 {
+		t.Errorf("Bookmarks = %+v, %v", got, err)
+	}
+}
+
 func equalBookmarks(a, b []models.Bookmark) bool {
 	if len(a) != len(b) {
 		return false
