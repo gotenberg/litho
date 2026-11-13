@@ -280,3 +280,38 @@ func parseContain(v []token, _ *declCtx) (any, bool) {
 	}
 	return out, len(v) > 0
 }
+
+// parseUnderlinePosition parses text-underline-position (CSS Text
+// Decoration 4, 2.7): auto | from-font | [ under || [ left | right ] ].
+func parseUnderlinePosition(v []token, _ *declCtx) (any, bool) {
+	if k, ok := keyword(v); ok {
+		switch k {
+		case "auto":
+			return UnderlinePosition(0), true
+		case "from-font":
+			return UnderFromFont, true
+		}
+	}
+	var u UnderlinePosition
+	for _, t := range v {
+		if t.typ != tIdent {
+			return nil, false
+		}
+		var bit UnderlinePosition
+		switch lower(t.value) {
+		case "under":
+			bit = UnderUnder
+		case "left":
+			bit = UnderLeft
+		case "right":
+			bit = UnderRight
+		default:
+			return nil, false
+		}
+		if u&bit != 0 || bit != UnderUnder && u&(UnderLeft|UnderRight) != 0 {
+			return nil, false
+		}
+		u |= bit
+	}
+	return u, len(v) > 0 && len(v) <= 2
+}

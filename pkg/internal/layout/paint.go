@@ -1177,17 +1177,39 @@ func (p *painter) decoGeom(it *lineItem, l *lineBox, d deco, alpha float64, sh *
 		pos = it.ulPos * k
 	}
 	pos = roundPx(pos)
-	if p.blink() {
-		// Blink's gap for a face without an underline position, whatever
-		// the face's.
-		t := thick / css.Pt
-		if auto {
-			t = size / 10 / css.Pt
+	switch {
+	case d.under&css.UnderUnder != 0:
+		// Under the decorating box's descent, a pixel below it as
+		// Chromium draws it, the offset counted from there (CSS Text
+		// Decoration 4, 2.7 and 2.8.1).
+		pos = it.descent * k
+		if d.origin != nil {
+			pos = p.e.faceMetrics(d.origin.st).Descent
 		}
-		pos = max(math.Ceil(t/2-1e-9), 1) * css.Pt
-	}
-	if d.hasOffset {
-		pos = d.offset
+		if p.blink() {
+			pos += css.Pt
+		}
+		if d.hasOffset {
+			pos += d.offset
+		}
+	case d.under&css.UnderFromFont != 0:
+		// The face's underline position, the offset counted from there.
+		if d.hasOffset {
+			pos += d.offset
+		}
+	default:
+		if p.blink() {
+			// Blink's gap for a face without an underline position,
+			// whatever the face's.
+			t := thick / css.Pt
+			if auto {
+				t = size / 10 / css.Pt
+			}
+			pos = max(math.Ceil(t/2-1e-9), 1) * css.Pt
+		}
+		if d.hasOffset {
+			pos = d.offset
+		}
 	}
 	g.y[0] = it.baseline + pos
 	if p.blink() {

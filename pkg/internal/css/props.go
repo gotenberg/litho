@@ -189,6 +189,7 @@ const (
 	pScale
 	pTransformBox
 	pTextDecorationSkipInk
+	pTextUnderlinePosition
 	numProps
 )
 
@@ -786,6 +787,11 @@ func init() {
 		{pTextDecorationSkipInk, enumProp("text-decoration-skip-ink", true, func(s *Style) *SkipInk { return &s.TextDecorationSkipInk }, map[string]SkipInk{
 			"auto": SkipInkAuto, "none": SkipInkNone, "all": SkipInkAll,
 		})},
+		{pTextUnderlinePosition, propDef{name: "text-underline-position", inherited: true, parse: parseUnderlinePosition, compute: func(_ *styler, st *Style, v any) {
+			if u, ok := v.(UnderlinePosition); ok {
+				st.TextUnderlinePosition = u
+			}
+		}, copyFrom: field(func(s *Style) *UnderlinePosition { return &s.TextUnderlinePosition })}},
 		{pTextUnderlineOffset, dimProp("text-underline-offset", true, func(s *Style) *Dimension { return &s.TextUnderlineOffset }, allowPct|allowMixed, kwAuto, false)},
 		{pTextIndent, propDef{name: "text-indent", inherited: true, parse: parseTextIndent, compute: func(s *styler, st *Style, v any) {
 			if l, ok := v.(length); ok {

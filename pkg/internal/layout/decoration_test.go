@@ -173,3 +173,40 @@ func TestIdeographic(t *testing.T) {
 		}
 	}
 }
+
+// CSS Text Decoration 4, 2.7 and 2.8.1: text-underline-position: under
+// sets the underline under the decorating box's descent, one pixel below
+// it as Chromium draws it, and from-font at the face's underline
+// position; text-underline-offset counts from either.
+func TestTextDecoration_UnderlinePosition(t *testing.T) {
+	lime := css.Color{G: 1, A: 1}
+	tests := []struct {
+		name   string
+		pos    css.UnderlinePosition
+		offset float64
+		top    float64
+	}{
+		// Ahem 10px, line height 1: baseline 8px, descent 2px.
+		{"auto", 0, 0, 9},
+		{"under", css.UnderUnder, 0, 11},
+		{"under with offset", css.UnderUnder, 2, 13},
+		{"auto with offset", 0, 2, 10},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := sty(func(s *css.Style) {
+				s.TextDecoration = css.Underline
+				s.TextDecorationColor = lime
+				s.TextDecorationSkipInk = css.SkipInkNone
+				s.TextUnderlinePosition = tt.pos
+				if tt.offset != 0 {
+					s.TextUnderlineOffset = css.Pts(px(tt.offset))
+				}
+			})
+			res := runWith(t, doc(el(st, txt(st, "a"))), Options{Page: page(100, 20), BrowserRules: true})
+			if got := decoPaths(res, lime); len(got) != 1 || !near(got[0].Y, px(tt.top)) {
+				t.Errorf("underline %+v, want its top at %vpx", got, tt.top)
+			}
+		})
+	}
+}

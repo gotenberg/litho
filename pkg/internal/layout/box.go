@@ -119,6 +119,8 @@ type deco struct {
 	style  css.DecorationStyle
 	// thick is the thickness in points, autoThickness or fromFont.
 	thick float64
+	// under is the decorating box's text-underline-position.
+	under css.UnderlinePosition
 	// offset is the underline offset below the baseline in points, valid
 	// when hasOffset.
 	offset    float64
@@ -135,7 +137,7 @@ const (
 // text.
 func newDeco(origin *box, st *css.Style) deco {
 	size := min(max(clamp(st.FontSize), 0), maxFontSize)
-	d := deco{origin: origin, size: size, lines: st.TextDecoration, color: st.TextDecorationColor, style: st.TextDecorationStyle, thick: autoThickness}
+	d := deco{origin: origin, size: size, lines: st.TextDecoration, color: st.TextDecorationColor, style: st.TextDecorationStyle, thick: autoThickness, under: st.TextUnderlinePosition}
 	switch t := st.TextDecorationThickness; t.Kind {
 	case css.Points, css.Percent, css.Calc:
 		d.thick = max(resolve(t, size), 0)

@@ -574,6 +574,22 @@ const (
 	SkipInkAll
 )
 
+// UnderlinePosition is the text-underline-position property (CSS Text
+// Decoration 4, 2.7): zero for auto, else a set of the bits below.
+type UnderlinePosition uint8
+
+// The text-underline-position bits.
+const (
+	// UnderFromFont places the underline at the face's underline position.
+	UnderFromFont UnderlinePosition = 1 << iota
+	// UnderUnder places it under the text's descent.
+	UnderUnder
+	// UnderLeft and UnderRight place it on the left or right of vertical
+	// text; horizontal text takes them as auto.
+	UnderLeft
+	UnderRight
+)
+
 // TextTransform is the text-transform property (CSS Text 3, 2.1).
 type TextTransform uint8
 
@@ -1058,6 +1074,9 @@ type Style struct {
 	// glyphs they cross (CSS Text Decoration 4, 2.7), SkipInkAuto by
 	// default.
 	TextDecorationSkipInk SkipInk
+	// TextUnderlinePosition says where underlines lie (CSS Text Decoration
+	// 4, 2.7), zero for auto.
+	TextUnderlinePosition UnderlinePosition
 	// TextDecorationThickness takes Auto, Normal for from-font, Points or
 	// Percent of the font size (CSS Text Decoration 4, 2.6).
 	TextDecorationThickness Dimension
