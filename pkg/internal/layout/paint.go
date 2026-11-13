@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -89,6 +90,9 @@ type painter struct {
 	// fragments that paint before it, nil for none: a decoration line
 	// spanning several runs does not cross them (decoRun).
 	cuts []bool
+	// effectPixels counts the pixels of the Office text effects drawn,
+	// against effect.MaxPagePixels.
+	effectPixels effect.Page
 	// crops caches the parts of raster images border images cut out.
 	crops map[cropKey]*typeset.ImageSource
 	// strip is the inline box fragment being painted, laid on the strip
@@ -1028,6 +1032,7 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 	if t.Face == nil {
 		return
 	}
+	p.textEffects(it, l, page, alpha)
 	p.textShadows(it, l, page, alpha)
 	p.textDecorations(it, l, page, alpha, css.Underline|css.Overline, nil)
 	c := *t
