@@ -605,9 +605,11 @@ func WithShrinkToFit(shrink bool) HTMLOption {
 // WithCanvasBackground sets whether the canvas background of an HTML or
 // Markdown source prints. true, the default, prints every background; false
 // drops the background colours and images of the html and body elements,
-// which paint the canvas (CSS Backgrounds 3, 2.11.1), and keeps every other
-// element's, so the page is white behind content whose own colours stay
-// exact.
+// which paint the canvas (CSS Backgrounds 3, 2.11.1), and of every element
+// whose print-color-adjust computes to economy because it or an ancestor
+// below the root says so (CSS Color Adjust 1, 3.1); those elements keep
+// their borders and shadows. Every other element keeps its background, so
+// the page is white behind content whose own colours stay exact.
 func WithCanvasBackground(print bool) HTMLOption {
 	return htmlOption(func(c *convertConfig) { c.omitCanvasBackground = !print })
 }

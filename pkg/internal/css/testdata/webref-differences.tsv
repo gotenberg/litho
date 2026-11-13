@@ -14,5 +14,6 @@ initial	outline-color	CSS UI 4 gives auto; Chromium 156 refuses outline-color: a
 initial	ruby-position	Chromium 156 parses over and under alone and computes the initial value to over; CSS Ruby 1, 4.1 gives alternate
 initial	text-autospace	CSS Text 4 gives normal; Chromium 156 computes no-autospace on a plain element, and litho's initial value is that
 unknown	-webkit-box-decoration-break	a legacy name Chromium 156 parses (CSS.supports true) that webref does not list as an alias of box-decoration-break
+unknown	-webkit-print-color-adjust	a legacy name Chromium 156 reads as print-color-adjust (an element of -webkit-print-color-adjust: economy loses its background as one of print-color-adjust: economy) that webref does not list as an alias
 unknown	font-smooth	ignored by design, without a warning: a rendering hint with no effect on paper, in no specification webref reads (Chromium 156: CSS.supports false)
 unknown	text-autospace-size	open: a property of an older CSS Text 4 draft, which Chromium 156 does not parse (CSS.supports false)

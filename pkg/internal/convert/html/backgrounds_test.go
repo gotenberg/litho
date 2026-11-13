@@ -74,3 +74,28 @@ func bodyNode(root *layout.Node) *layout.Node {
 	}
 	return nil
 }
+
+func TestOmitBackgrounds_DropsEconomyElements(t *testing.T) {
+	t.Parallel()
+	// CSS Color Adjust 1, 3.1: an element of print-color-adjust: economy
+	// loses its background when backgrounds are not printed; the root's
+	// exact, which Gotenberg's route forces, reaches every other element.
+	src := `<html style="print-color-adjust: economy"><body>
+	<div id=plain style="background: lime">a</div>
+	<div id=eco style="print-color-adjust: economy; background: lime">b</div>
+	<section style="-webkit-print-color-adjust: economy"><div id=inner style="background: lime">c</div></section></body>`
+	for _, tt := range []struct {
+		omit bool
+		kept map[string]bool
+	}{
+		{false, map[string]bool{"plain": true, "eco": true, "inner": true}},
+		{true, map[string]bool{"plain": true, "eco": false, "inner": false}},
+	} {
+		p := prep(t, src, Options{OmitBackgrounds: tt.omit})
+		for id, want := range tt.kept {
+			if got := byID(t, p.root, id).Style.BackgroundColor.A > 0; got != want {
+				t.Errorf("omit %v: %s background kept %v, want %v", tt.omit, id, got, want)
+			}
+		}
+	}
+}

@@ -137,7 +137,7 @@ var silentProperties = map[string]bool{
 	"cursor": true, "pointer-events": true, "user-select": true, "touch-action": true,
 	"will-change": true, "resize": true, "scroll-behavior": true, "caret-color": true, "accent-color": true,
 	"overscroll-behavior": true, "scrollbar-width": true, "scrollbar-color": true,
-	"scrollbar-gutter": true, "print-color-adjust": true, "color-adjust": true,
+	"scrollbar-gutter": true, "color-adjust": true,
 	"text-rendering": true, "font-smooth": true, "speak": true, "zoom": true,
 	"font-palette": true,
 	// Chromium applies these to SVG text alone (baselineProps).

@@ -259,6 +259,7 @@ const (
 	pTextBoxTrim
 	pTextBoxEdge
 	pObjectViewBox
+	pPrintColorAdjust
 	numProps
 )
 
@@ -1048,6 +1049,7 @@ func init() {
 	}
 	props[pClipPath] = clipPathProp()
 	props[pObjectViewBox] = objectViewBoxProp()
+	props[pPrintColorAdjust] = printColorAdjustProp()
 	for id, def := range textBoxProps() {
 		props[id] = def
 	}
@@ -1088,6 +1090,7 @@ func init() {
 		"max-inline-size": pMaxWidth, "max-block-size": pMaxHeight,
 		"contain-intrinsic-inline-size": pContainIntrinsicWidth, "contain-intrinsic-block-size": pContainIntrinsicHeight,
 		"-webkit-box-decoration-break": pBoxDecorationBreak,
+		"-webkit-print-color-adjust":   pPrintColorAdjust,
 	})
 	maps.Copy(longhandByName, logicalAliases())
 	maps.Copy(longhandByName, logicalRadii)

@@ -237,7 +237,7 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 	if st == nil || st.Display == css.DisplayNone {
 		return nil, nil
 	}
-	if b.omitBackgrounds && n.Namespace == "" && n.DataAtom == atom.Body {
+	if b.omitBackgrounds && (n.Namespace == "" && n.DataAtom == atom.Body || st.PrintColorAdjust == css.ColorEconomy) {
 		st = withoutBackground(st)
 	}
 	if depth >= maxTreeDepth {

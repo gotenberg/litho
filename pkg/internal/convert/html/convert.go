@@ -234,6 +234,9 @@ func prepareTagged(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fo
 	res.client = o.HTTPClient
 	c := &collector{res: res, base: scan.resourceBase, logger: o.Logger}
 	sheets := c.stylesheets(ctx, o.UserStylesheets, scan.sheets)
+	if o.OmitBackgrounds {
+		sheets = append(sheets, exactColorsSheet(ctx))
+	}
 
 	media := css.Media{Type: o.Media, Features: o.MediaFeatures}
 	media.Width, media.Height = paperArea(o)
