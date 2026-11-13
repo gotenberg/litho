@@ -145,8 +145,8 @@ func (p *pages) box(info layout.PageInfo) layout.PageBox {
 	if m[css.Bottom] >= 0 && fh > 0 {
 		bottom = max(bottom, s.footer+fh)
 	}
-	top = min(top, s.height/2-minPageArea/2)
-	bottom = min(bottom, s.height/2-minPageArea/2)
+	top = min(top, float64(s.height/2)-minPageArea/2)
+	bottom = min(bottom, float64(s.height/2)-minPageArea/2)
 	left, right := m[css.Left]+s.gutter, m[css.Right]
 	if p.d.settings.mirrorMargins && info.Index%2 == 1 {
 		// An even page of mirrored margins has its inside margin, and

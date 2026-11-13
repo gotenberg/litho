@@ -381,7 +381,7 @@ func (a pendingAnchor) resolve(s *section) {
 		case "left", "inside":
 			x = left
 		case "center":
-			x = left + (s.contentWidth()-p.w)/2
+			x = left + float64((s.contentWidth()-p.w)/2)
 		case "right", "outside":
 			x = left + s.contentWidth() - p.w
 		}
@@ -429,12 +429,12 @@ func hPos(s *section, p placement) float64 {
 	case "left", "inside":
 		return x0
 	case "center":
-		return x0 + (aw-p.w)/2
+		return x0 + float64((aw-p.w)/2)
 	case "right", "outside":
 		return x0 + aw - p.w
 	}
 	if p.hasPctH {
-		return x0 + p.pctH*aw
+		return x0 + float64(p.pctH*aw)
 	}
 	return x0 + p.posH
 }
@@ -448,12 +448,12 @@ func vPos(s *section, p placement) float64 {
 	case "top", "inside":
 		return y0
 	case "center":
-		return y0 + (ah-p.h)/2
+		return y0 + float64((ah-p.h)/2)
 	case "bottom", "outside":
 		return y0 + ah - p.h
 	}
 	if p.hasPctV {
-		return y0 + p.pctV*ah
+		return y0 + float64(p.pctV*ah)
 	}
 	return y0 + p.posV
 }
@@ -516,7 +516,7 @@ func (s *section) columnWidth() float64 {
 	if len(s.colTracks) > 0 {
 		return max(minPageArea, s.colTracks[0].w)
 	}
-	return max(minPageArea, (s.contentWidth()-float64(s.cols-1)*s.colSpace)/float64(s.cols))
+	return max(minPageArea, (s.contentWidth()-float64(float64(s.cols-1)*s.colSpace))/float64(s.cols))
 }
 
 // vArea returns the top edge and the height of the area a vertical

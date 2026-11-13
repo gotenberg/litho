@@ -110,10 +110,10 @@ func (d *document) vmlTextPath(k *ooxml.Element, st *css.Style, w, h float64) *l
 			return nil
 		}
 		// The outlines are at the baseline origin, y downward.
-		m := typeset.Matrix{A: r.Width / lines[0].Width, D: 1, E: r.X, F: r.Y + textPathBaseline*r.Height}
+		m := typeset.Matrix{A: r.Width / lines[0].Width, D: 1, E: r.X, F: r.Y + float64(textPathBaseline*r.Height)}
 		if trim && x1 > x0 && y1 > y0 {
 			m = typeset.Matrix{A: r.Width / (x1 - x0), D: r.Height / (y1 - y0)}
-			m.E, m.F = r.X-x0*m.A, r.Y-y0*m.D
+			m.E, m.F = r.X-float64(x0*m.A), r.Y-float64(y0*m.D)
 		}
 		ops = transformOps(ops, m)
 		var out []typeset.Fragment
@@ -177,7 +177,7 @@ func glyphOutlines(runs []*typeset.Text) []typeset.PathOp {
 			hs = 1
 		}
 		for _, g := range t.Glyphs {
-			ops = appendOutline(ops, f, g.GID, t.Origin.X+g.X*hs, t.Origin.Y+g.Y, k, hs)
+			ops = appendOutline(ops, f, g.GID, t.Origin.X+float64(g.X*hs), t.Origin.Y+g.Y, k, hs)
 		}
 	}
 	return ops
@@ -192,7 +192,7 @@ func appendOutline(ops []typeset.PathOp, f *gofont.Face, gid uint16, x, y, k, hs
 		return ops
 	}
 	pt := func(s opentype.SegmentPoint) typeset.Point {
-		return typeset.Point{X: x + hs*float64(s.X)*k, Y: y - float64(s.Y)*k}
+		return typeset.Point{X: x + float64(hs*float64(s.X)*k), Y: y - float64(float64(s.Y)*k)}
 	}
 	var last typeset.Point
 	open := false
@@ -252,7 +252,7 @@ func transformOps(ops []typeset.PathOp, m typeset.Matrix) []typeset.PathOp {
 	for i, op := range ops {
 		out[i].Kind = op.Kind
 		for j, p := range op.P {
-			out[i].P[j] = typeset.Point{X: m.A*p.X + m.C*p.Y + m.E, Y: m.B*p.X + m.D*p.Y + m.F}
+			out[i].P[j] = typeset.Point{X: float64(m.A*p.X) + float64(m.C*p.Y) + m.E, Y: float64(m.B*p.X) + float64(m.D*p.Y) + m.F}
 		}
 	}
 	return out

@@ -161,7 +161,7 @@ func (d *document) parseBorders(e *ooxml.Element) map[string]*borderSpec {
 		}
 		bs := d.parseBorder(b)
 		if v, ok := ooxml.Int(attrOr(b, "sz")); ok && bs.Width > 0 {
-			if w := tableBorderWidth(attrOr(b, "val"), float64(max(2, min(96, v)))/8); w > 0 {
+			if w := tableBorderWidth(attrOr(b, "val"), float64(float64(max(2, min(96, v)))/8)); w > 0 {
 				bs.Width = w
 			}
 		}
@@ -194,7 +194,7 @@ func tableBorderWidth(val string, w float64) float64 {
 	case "thinThickSmallGap", "thickThinSmallGap":
 		return w + 1.5
 	case "thinThickMediumGap", "thickThinMediumGap":
-		return w + 2*math.Floor(w/2*4)/4
+		return w + float64(2*math.Floor(w/2*4)/4)
 	case "thinThickLargeGap", "thickThinLargeGap":
 		return w + 2.25
 	case "threeDEmboss", "threeDEngrave":
@@ -892,7 +892,7 @@ func (d *document) alignRowTops(cells []*layout.Node, spaced bool) {
 	for _, c := range cells {
 		if gap := thickest - top(c.Style); gap > 0 && c.Style.Padding[css.Top].Kind == css.Points {
 			st := *c.Style
-			st.Padding[css.Top] = css.Pts(st.Padding[css.Top].Value + gap*share)
+			st.Padding[css.Top] = css.Pts(st.Padding[css.Top].Value + float64(gap*share))
 			c.Style = d.share(&st)
 		}
 	}
@@ -982,7 +982,7 @@ func (d *document) cellOf(cp cellProps, tableMar map[string]float64, tb map[stri
 	// its whole border.
 	for _, side := range []css.Side{css.Left, css.Right} {
 		if b := st.Border[side]; !at.spaced && b.Style != css.BorderNone && b.Width > 0 && st.Padding[side].Kind == css.Points {
-			st.Padding[side] = css.Pts(max(0, st.Padding[side].Value-b.Width/2))
+			st.Padding[side] = css.Pts(max(0, st.Padding[side].Value-float64(b.Width/2)))
 		}
 	}
 	if shading != nil {

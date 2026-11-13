@@ -252,7 +252,9 @@ func runBackground(r runProps) *css.Color {
 }
 
 // luminance returns the relative luminance of c, roughly.
-func luminance(c css.Color) float64 { return 0.299*c.R + 0.587*c.G + 0.114*c.B }
+func luminance(c css.Color) float64 {
+	return float64(0.299*c.R) + float64(0.587*c.G) + float64(0.114*c.B)
+}
 
 // proportionalLine returns the height of a line of text in st under a
 // proportional line spacing mult (17.3.1.33, lineRule auto): the face's

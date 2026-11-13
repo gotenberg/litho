@@ -46,7 +46,7 @@ func (d *document) adjustLum(pic *layout.Picture, bright, contrast float64) *lay
 	}
 	var table [256]uint8
 	for v := range table {
-		f := (1+contrast)*(float64(v)/255-0.5) + 0.5 + brightGain*bright
+		f := float64((1+contrast)*(float64(v)/255-0.5)) + 0.5 + float64(brightGain*bright)
 		table[v] = uint8(math.Round(max(0, min(1, f)) * 255))
 	}
 	b := src.Bounds()

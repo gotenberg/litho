@@ -426,7 +426,7 @@ func shadingColor(e *ooxml.Element) (css.Color, bool) {
 			fill = css.Color{R: 1, G: 1, B: 1, A: 1}
 		}
 		f := float64(p) / 100
-		return css.Color{R: fill.R*(1-f) + pat.R*f, G: fill.G*(1-f) + pat.G*f, B: fill.B*(1-f) + pat.B*f, A: 1}, true
+		return css.Color{R: float64(fill.R*(1-f)) + float64(pat.R*f), G: float64(fill.G*(1-f)) + float64(pat.G*f), B: float64(fill.B*(1-f)) + float64(pat.B*f), A: 1}, true
 	}
 	return fill, okFill
 }
