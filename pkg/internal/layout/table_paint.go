@@ -257,7 +257,11 @@ func (p *painter) cellBackgrounds(td *tableData, c *box, pr placedRow) {
 	if !bottom {
 		bd[css.Bottom], pd[css.Bottom] = 0, 0
 	}
+	// A cell casts its box shadows as any box does (CSS Backgrounds 3,
+	// 7.1): the outer ones under its background, the inset ones over it.
+	p.shadows(c, c.st, r, radii, bd, false)
 	p.background(c, c.st, r, radii, bd, pd)
+	p.shadows(c, c.st, r, radii, bd, true)
 }
 
 // partBackground paints the background of the row, row group, column or

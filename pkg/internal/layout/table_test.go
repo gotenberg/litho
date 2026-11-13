@@ -605,3 +605,22 @@ func TestTable_CollapsedBordersPaintOverBlockBackgrounds(t *testing.T) {
 		____
 		____`)
 }
+
+// TestTable_CellBoxShadow holds a cell's box shadows to CSS Backgrounds
+// 3, 7.1: a cell casts them as any box, an inset one over its background.
+//
+// # Corpus evidence
+//
+//   - wpt: css-tables/box-shadow-001 (an inset shadow covering a red cell
+//     background) draws its reference in Chromium 156.
+func TestTable_CellBoxShadow(t *testing.T) {
+	t.Parallel()
+	shadow := func(s *css.Style) { s.BoxShadow = []css.Shadow{{X: px(4), Color: blue, Inset: true}} }
+	cell := part(css.TableCell, mods(width(4), height(2), bg(red), shadow))
+	root := doc(table(mods(spacing(0, 0)), tr(nil, cell)))
+	assertPixels(t, run(t, root, page(4, 4)), 1, `
+		BBBB
+		BBBB
+		____
+		____`)
+}
