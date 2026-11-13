@@ -17,6 +17,10 @@ type tableFormatter struct{}
 func (tableFormatter) layout(e *engine, w *box, cb cblock, bc *bfc, cursor float64, mc *marginState) float64 {
 	td := w.tdata
 	t := td.table
+	td.hasBoxH = false
+	if td.hasItemH {
+		td.boxH, td.hasBoxH = max(td.itemH-e.captionsHeight(w, cb, cursor), 0), true
+	}
 	y := cursor
 	for _, k := range w.kids {
 		if e.err != nil {
@@ -32,6 +36,33 @@ func (tableFormatter) layout(e *engine, w *box, cb cblock, bc *bfc, cursor float
 		y = t.y + t.borderH()
 	}
 	return y
+}
+
+// captionsHeight returns the height the captions of the table wrapper w
+// take, margins included, laid out off the page cuts in its content box
+// cb from y: a flex or grid item's size counts them as the table box's
+// padding (CSS Flexbox 1, 4).
+//
+// # Corpus evidence
+//
+//   - wpt: css-flexbox/table-as-item-stretch-cross-size and -2 and
+//     table-as-item-flex-cross-size (captions of 10px and 20px around a
+//     table stretched or flexed to 100px) draw a 100px square in
+//     Chromium 156.
+func (e *engine) captionsHeight(w *box, cb cblock, y float64) float64 {
+	sum := 0.0
+	e.noPaginate++
+	defer func() { e.noPaginate-- }()
+	for _, k := range w.kids {
+		if k == w.tdata.table || e.err != nil {
+			continue
+		}
+		mc := &marginState{kept: true}
+		end := e.layoutBlock(k, cb, &bfc{}, y, mc, breakNone)
+		end = e.pastMargin(end, mc.strut, false)
+		sum += max(end-y, 0)
+	}
+	return sum
 }
 
 // wrapperCB returns the containing block kcb the box b gives its content,
@@ -827,6 +858,11 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw, fixedH float64) {
 //     content's height.
 func tableHeight(t *box, cb cblock) (float64, bool) {
 	h, ok := specHeight(t, t.st.Height, cb)
+	if td := t.tdata; td != nil && td.hasBoxH {
+		// A flex or grid container sizes the item: the table box takes
+		// that size, its height property aside (CSS Flexbox 1, 4).
+		h, ok = max(td.boxH-vEdges(t), 0), true
+	}
 	if !ok {
 		// A preferred aspect ratio gives the height of the table box
 		// from its width (CSS Sizing 4, 4.2), as Chromium sizes it.
@@ -851,6 +887,7 @@ func tableHeight(t *box, cb cblock) (float64, bool) {
 // out again.
 func (e *engine) relayoutPercentCells(td *tableData, rowH []float64, cb cblock) bool {
 	_, tableSet := specHeight(td.table, td.table.st.Height, cb)
+	tableSet = tableSet || td.hasBoxH
 	_, vs := td.spacing()
 	again := false
 	e.noPaginate++

@@ -585,6 +585,11 @@ func (e *engine) baseSize(fd *flexData, it *fitem, ax flexAxes, cb, pcb cblock, 
 		if ok && sized != k && sized.st.BoxSizing != css.BorderBox {
 			v += extra
 		}
+		if ok && sized != k && !ax.row && len(k.kids) > 1 {
+			// The captions count as the table box's padding (CSS
+			// Flexbox 1, 4).
+			v += e.captionsHeight(k, cblock{x: cb.x, w: it.cross}, top)
+		}
 		return v, ok
 	}
 	content := -1.0
@@ -1430,21 +1435,6 @@ func (p *placement) columns(lines []*flexLine) float64 {
 // returns how much the page cuts made it grow.
 func (p *placement) columnItem(it *fitem, x, y float64) float64 {
 	k := it.b
-	if k.tpart == partWrapper && k.tdata != nil {
-		// A table takes its main size from the flex layout, its height
-		// property aside, as Chromium sizes table flex items: the table
-		// box, the wrapper's content, gets the item's main size.
-		t := k.tdata.table
-		pd, bd, _ := edgesOf(t, p.cb.w)
-		h := it.target
-		if t.st.BoxSizing != css.BorderBox {
-			h -= pd[css.Top] + pd[css.Bottom] + bd[css.Top] + bd[css.Bottom]
-		}
-		st := *t.st
-		st.Height = css.Pts(max(h, 0))
-		st.MinHeight, st.MaxHeight = css.Pts(0), css.Dimension{Kind: css.None}
-		t.st = &st
-	}
 	if k.kind == kindReplaced || dependsOnHeight(k) {
 		p.put(k, x, y, it.cross, it.target, true)
 		k.h = it.target
@@ -1523,6 +1513,9 @@ func (e *engine) layoutItemAt(k *box, x, y, w, h float64, hDef bool, pcb cblock)
 	if k.kind == kindReplaced {
 		k.h = h
 		return h
+	}
+	if k.tpart == partWrapper && k.tdata != nil {
+		k.tdata.itemH, k.tdata.hasItemH = h, hDef
 	}
 	own := &bfc{}
 	mc := &marginState{kept: true}

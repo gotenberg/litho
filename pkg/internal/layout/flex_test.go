@@ -459,3 +459,45 @@ func TestFlex_BasisKeywords(t *testing.T) {
 		})
 	}
 }
+
+// TestFlex_TableItemCaptions holds a table flex item to CSS Flexbox 1, 4:
+// the table wrapper is the item, its captions count as the table box's
+// padding, so the table box takes the item's size less the captions, in
+// a row stretched and in a column flexed or sized by its height.
+//
+// # Corpus evidence
+//
+//   - wpt: css-flexbox/table-as-item-stretch-cross-size, -2 and -3 and
+//     table-as-item-flex-cross-size draw a 100px square in Chromium 156.
+func TestFlex_TableItemCaptions(t *testing.T) {
+	t.Parallel()
+	tbl := func(m ...func(*css.Style)) *Node {
+		return table(mods(append([]func(*css.Style){spacing(0, 0)}, m...)...),
+			caption(mods(height(10))),
+			caption(mods(height(20), func(s *css.Style) { s.CaptionSide = css.CaptionBottom })),
+			tr(nil, td(nil, "")))
+	}
+	tests := []struct {
+		name string
+		cont *css.Style
+		item *Node
+		want float64
+	}{
+		{"row: stretched", flexBox(width(100), height(100)), tbl(flexF(1, 1, -1)), 70},
+		{"column: flexed", flexBox(width(100), height(100), dir(css.FlexColumn)), tbl(flexF(1, 1, -1)), 70},
+		{"column: a height of its own", flexBox(width(100), dir(css.FlexColumn)), tbl(height(90)), 90},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			w := kid(t, boxes(t, doc(el(tt.cont, tt.item)), page(200, 200)), 0, 0, 0)
+			if w.tdata == nil {
+				t.Fatalf("item of part %v, want a table wrapper", w.tpart)
+			}
+			tb := w.tdata.table
+			if got := tb.borderH() / css.Pt; !near(got, tt.want) {
+				t.Errorf("table box %v tall, want %v", got, tt.want)
+			}
+		})
+	}
+}

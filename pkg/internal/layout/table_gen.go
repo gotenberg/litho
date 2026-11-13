@@ -251,6 +251,13 @@ type tableData struct {
 	// baseline is the first row's baseline below the table box top.
 	baseline    float64
 	hasBaseline bool
+
+	// itemH is the content height, captions included, that a flex or grid
+	// container gives the wrapper as its item, when hasItemH. boxH is the
+	// border box height the table box takes from it, less the captions,
+	// when hasBoxH (CSS Flexbox 1, 4).
+	itemH, boxH       float64
+	hasItemH, hasBoxH bool
 }
 
 // cellAt returns the cell covering slot (r, c), nil for none.
