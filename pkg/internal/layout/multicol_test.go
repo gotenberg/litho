@@ -303,3 +303,21 @@ func TestMulticol_OutlineUnderSpannerOutline(t *testing.T) {
 		BGGGGGB
 		BBBBBBB`)
 }
+
+// TestMulticol_BalancesToTheLayoutUnit locks that a balanced column height
+// is the least that fits on the grid of Chromium's layout unit, a 64th of
+// a CSS pixel: 250 and 5 pixels of content in three columns of a container
+// 100 pixels tall balance to 85 pixels exactly, not to where the search
+// stops above it (CSS Multicol 1, 7.1 balances "as far as possible").
+func TestMulticol_BalancesToTheLayoutUnit(t *testing.T) {
+	t.Parallel()
+	mc := el(sty(columns(3, 0), height(100), func(s *css.Style) { s.Width = css.Pts(px(300)) }), el(sty(height(250))), el(sty(height(5))))
+	rb := boxes(t, doc(mc), page(400, 300))
+	b := kid(t, rb, 0, 0)
+	if b.mc == nil || len(b.mc.sets) == 0 || len(b.mc.sets[0].rows) == 0 {
+		t.Fatal("no column row")
+	}
+	if h := b.mc.sets[0].rows[0].h; h != px(85) {
+		t.Errorf("column height %v pt, want %v", h, px(85))
+	}
+}

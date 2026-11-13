@@ -650,6 +650,15 @@ func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64,
 			}
 			lo = mid
 		}
+		if g := math.Ceil((lo+eps)/balanceSlack) * balanceSlack; bestFits && g < best-eps && e.relayout(y) && e.balanceBudget(y) {
+			// The least height that fits lies above lo, which does not, and
+			// at most balanceSlack below best. Chromium balances in its
+			// layout unit: its height is the first unit past lo when that
+			// one fits.
+			if cons = pass(r, g); fits() {
+				best = g
+			}
+		}
 		if !bestFits || ctx.rows[r].h != best || !fits() {
 			cons = pass(r, best)
 		}
