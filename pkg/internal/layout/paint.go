@@ -757,11 +757,9 @@ func (p *painter) unit(b *box, own bool) {
 	// The outlines of the context's own content paint with it, before
 	// its positioned descendants, as Chromium paints them: CSS 2.1,
 	// Appendix E lets an implementation draw them in the steps above step
-	// 10.
+	// 10. Each box's outline comes after those of its descendants.
+	p.outlines(blocks)
 	p.outline(b)
-	for _, k := range blocks {
-		p.outline(k)
-	}
 	for _, c := range zero {
 		p.lifted(c)
 	}
@@ -839,6 +837,57 @@ func (p *painter) lifted(c *box) {
 	p.dx, p.dy = ancestorOffset(c)
 	p.unit(c, c.isStackingContext())
 	p.dx, p.dy = sdx, sdy
+}
+
+// outlines paints the outlines of blocks, the in-flow blocks inside a box
+// listed in tree order: each after those of its descendants, siblings in
+// tree order. The box itself paints its own after them.
+//
+// CSS 2.1, Appendix E, step 10, and CSS UI 4, 5 leave the order of
+// outlines open. Chromium paints a box's descendants' outlines before its
+// own, on screen and in print, so where outlines overlap the ancestor's
+// shows.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 draws a 4px black outline over the 4px
+//     blue outline of a child of the same width, in a block and in a
+//     multi-column container, the spanner's included.
+//   - wpt: css-multicol/multicol-span-all-004, -007, -008, -009, -011 and
+//     multicol-span-all-list-item-001 and -002 draw the container's
+//     outline under its spanners' in test and reference alike when the
+//     order is reversed, so they pass either way.
+func (p *painter) outlines(blocks []*box) {
+	if !slices.ContainsFunc(blocks, hasOutline) {
+		return
+	}
+	var open []*box
+	for _, k := range blocks {
+		for len(open) > 0 && !insideOf(k, open[len(open)-1]) {
+			p.outline(open[len(open)-1])
+			open = open[:len(open)-1]
+		}
+		open = append(open, k)
+	}
+	for i := len(open) - 1; i >= 0; i-- {
+		p.outline(open[i])
+	}
+}
+
+// hasOutline reports a box whose style asks for an outline.
+func hasOutline(b *box) bool {
+	o := b.st.Outline
+	return o.Width > 0 && o.Style != css.BorderNone && o.Style != css.BorderHidden
+}
+
+// insideOf reports that k is a descendant of a.
+func insideOf(k, a *box) bool {
+	for c := k.parent; c != nil; c = c.parent {
+		if c == a {
+			return true
+		}
+	}
+	return false
 }
 
 // collect lists, in tree order, the in-flow block-level descendants of b,

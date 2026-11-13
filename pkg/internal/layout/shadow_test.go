@@ -292,6 +292,34 @@ func TestOutline_UnderPositionedDescendants(t *testing.T) {
 		RRRRRR`)
 }
 
+func TestOutline_AfterDescendantOutlines(t *testing.T) {
+	// A box's outline paints after the outlines of the blocks inside it
+	// ([painter.outlines]): the red outline of the outer box covers the
+	// blue one of its child and the black one of the child's sibling where
+	// they lie, the sibling's covers the child's top edge, and the child's
+	// bottom edge covers the sibling's box; the lime outline of the
+	// child's own child shows nowhere.
+	line := func(c css.Color) func(*css.Style) {
+		return func(s *css.Style) { s.Outline = css.Border{Width: px(1), Style: css.Solid, Color: c} }
+	}
+	inner := el(sty(height(1), line(lime)))
+	child := el(sty(line(blue)), inner)
+	sib := el(sty(height(1), line(black)))
+	root := doc(el(sty(width(4), margin(1), line(red)), child, sib))
+	assertPixels(t, run(t, root, page(6, 5)), 1, `
+		RRRRRR
+		RKKKKR
+		RBBBBR
+		RRRRRR
+		______`)
+	root = doc(el(sty(width(4), margin(1)), el(sty(line(blue)), el(sty(height(2), line(lime))))))
+	assertPixels(t, run(t, root, page(6, 4)), 1, `
+		BBBBBB
+		B____B
+		B____B
+		BBBBBB`)
+}
+
 func TestShadowSigma_ChromiumBoxes(t *testing.T) {
 	// A 10px blur is a deviation of 5px, 15.625 pixels at 300 pixels an
 	// inch: three boxes of 29 pixels, as Chromium draws it.
