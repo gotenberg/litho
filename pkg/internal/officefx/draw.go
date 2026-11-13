@@ -245,7 +245,7 @@ func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixel
 	var s *effect.Surface
 	var notes Notes
 	if src.Content != nil {
-		res, grid, n := plan(mapRect(src.Bounds, m), sigma, 3*sigma, pixels)
+		res, grid, n := planArea(mapRect(src.Bounds, m), sigma, 3*sigma, pixels)
 		notes = n
 		if res.W == 0 {
 			return nil, notes, nil
@@ -301,7 +301,7 @@ func reflection(ctx context.Context, src *Source, r *css.OfficeReflection, pixel
 // say.
 func cover(ctx context.Context, paths []effect.Path, area typeset.Rect, m typeset.Matrix, sigma, pad float64, pixels *effect.Page) (*effect.Surface, Notes, error) {
 	b := mapRect(area, m)
-	res, grid, notes := plan(b, sigma, pad, pixels)
+	res, grid, notes := planArea(b, sigma, pad, pixels)
 	if res.W == 0 {
 		return nil, notes, nil
 	}
@@ -319,16 +319,16 @@ func cover(ctx context.Context, paths []effect.Path, area typeset.Rect, m typese
 	return s, notes, nil
 }
 
-// plan returns the resolution and grid of an effect over b grown by pad
+// planArea returns the resolution and grid of an effect over b grown by pad
 // points, blurred by sigma. A zero resolution draws nothing: an empty
 // effect, or one the page's pixels refuse, which the notes say with a
 // resolution the engine's cap lowered.
-func plan(b typeset.Rect, sigma, pad float64, pixels *effect.Page) (effect.Resolution, effect.Grid, Notes) {
+func planArea(b typeset.Rect, sigma, pad float64, pixels *effect.Page) (effect.Resolution, effect.Grid, Notes) {
 	if !numeric.Finite(b.X) || !numeric.Finite(b.Y) || !(b.Width >= 0) || !(b.Height >= 0) {
 		return effect.Resolution{}, effect.Grid{}, Notes{}
 	}
 	b = typeset.Rect{X: b.X - pad, Y: b.Y - pad, Width: b.Width + 2*pad, Height: b.Height + 2*pad}
-	res, ok := effect.Plan(sigma, b.Width, b.Height)
+	res, ok := plan(sigma, b.Width, b.Height)
 	if !ok {
 		return effect.Resolution{}, effect.Grid{}, Notes{}
 	}

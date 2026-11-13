@@ -32,16 +32,45 @@ func PlanGrid(box typeset.Rect, sigma, morph float64) (g Grid, reduced, ok bool)
 	if !usable(box) {
 		return Grid{}, false, false
 	}
-	res, ok := effect.Plan(sigma, box.Width, box.Height)
+	res, ok := plan(sigma, box.Width, box.Height)
 	if !ok {
 		return Grid{}, false, false
 	}
 	if n := math.Floor(morph * res.Scale); n >= 1 && numeric.Finite(n) {
 		res.Scale = n / morph
-		res.W, res.H = int(math.Ceil(box.Width*res.Scale)), int(math.Ceil(box.Height*res.Scale)) // fits int: within the sides Plan returned
+		res.W, res.H = wholePixels(float64(box.Width*res.Scale)), wholePixels(float64(box.Height*res.Scale))
 	}
 	box.Width, box.Height = float64(res.W)/res.Scale, float64(res.H)/res.Scale
 	return Grid{Box: box, W: res.W, H: res.H, Unit: res.Scale}, res.Reduced, true
+}
+
+// pixelSlack is how far past a whole number of pixels a side may reach and
+// still round down to it. The sides of a box a converter computes differ
+// in their last bits from one machine to another, where Go fuses a product
+// with the sum after it and where it does not; a side within a few of
+// those bits of a whole number of pixels would then round up on one and
+// not on the other. The bitmap falls short of such a box by under 1/4096
+// of a pixel.
+const pixelSlack = 1.0 / 4096
+
+// wholePixels returns the side of v pixels rounded up to a whole pixel,
+// at least 1, a side within pixelSlack past a whole number rounded down
+// to it.
+func wholePixels(v float64) int {
+	return max(int(math.Ceil(v-pixelSlack)), 1) // fits int: v is within the sides effect.Plan bounds
+}
+
+// plan returns [effect.Plan]'s grid for an effect over w by h points
+// blurred by sigma, its sides rounded by [wholePixels], so that a box
+// whose sides differ in their last bits between machines takes the same
+// number of pixels on each.
+func plan(sigma, w, h float64) (effect.Resolution, bool) {
+	res, ok := effect.Plan(sigma, w, h)
+	if !ok {
+		return res, false
+	}
+	res.W, res.H = wholePixels(float64(w*res.Scale)), wholePixels(float64(h*res.Scale))
+	return res, true
 }
 
 // usable reports a rectangle of finite coordinates and positive sides.

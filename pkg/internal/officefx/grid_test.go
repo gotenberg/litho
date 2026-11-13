@@ -27,3 +27,22 @@ func TestPlanGrid(t *testing.T) {
 		t.Errorf("PlanGrid of a large sharp effect = %d by %d, %v, %v, want reduced within the cap", g.W, g.H, reduced, ok)
 	}
 }
+
+// TestPlanGrid_LastBitsTakeTheSamePixels checks that boxes whose sides
+// differ in their last bits, as two machines compute one box, take the
+// same pixels: a 99.6 point side at 300 pixels an inch is 415 pixels,
+// which one bit more must not round up to 416.
+//
+// # Corpus evidence
+//
+//   - litho/docx: shapes-effects-3d's blurred rounded rectangle, 99.6 pt
+//     wide with its blur, drew a bitmap 415 pixels wide on linux/amd64 and
+//     416 on linux/arm64 and darwin/arm64.
+func TestPlanGrid_LastBitsTakeTheSamePixels(t *testing.T) {
+	for _, w := range []float64{99.6, math.Nextafter(99.6, 100), math.Nextafter(math.Nextafter(99.6, 100), 100), math.Nextafter(99.6, 99)} {
+		g, _, ok := PlanGrid(typeset.Rect{Width: w, Height: 70.8}, 1, 0)
+		if !ok || g.W != 415 {
+			t.Errorf("PlanGrid of a side of %v points = %d pixels, %v, want 415", w, g.W, ok)
+		}
+	}
+}
