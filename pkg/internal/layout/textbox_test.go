@@ -60,3 +60,26 @@ func TestTextBoxTrim_TrimsFormattingContextRoots(t *testing.T) {
 		}
 	}
 }
+
+func TestTextBoxTrim_MovesTheFloatAfterTheLastLine(t *testing.T) {
+	// CSS Inline 3, 6.2: trim-end moves the block-end edge of the last
+	// line up; a float placed after that line goes up with it, and the
+	// formatting context root that contains the float ends at it.
+	lh := func(s *css.Style) { s.LineHeight = css.Pts(px(60)) }
+	trim := func(s *css.Style) { s.TextBoxTrim = css.TrimBoth; s.Display = css.FlowRoot }
+	fl := el(sty(float(css.FloatRight), width(10), height(10)))
+	b := boxes(t, doc(el(sty(lh, trim), txt(sty(lh), "a"), br(sty(lh)), fl)), page(200, 200))
+	c := kid(t, b, 0, 0)
+	f := c.kids[len(c.kids)-1]
+	for f.float == css.FloatNone && len(f.kids) > 0 {
+		f = f.kids[len(f.kids)-1]
+	}
+	if f.float == css.FloatNone {
+		t.Fatal("no float box")
+	}
+	// The 60px line keeps its 10px glyph box: the float sits under it
+	// and ends the root 10px lower.
+	if !near((f.y-c.y)/css.Pt, 10) || !near(c.h/css.Pt, 20) {
+		t.Errorf("float at %v, root %v high; want 10 and 20", (f.y-c.y)/css.Pt, c.h/css.Pt)
+	}
+}

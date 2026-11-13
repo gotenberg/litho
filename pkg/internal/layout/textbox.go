@@ -41,11 +41,31 @@ func (e *engine) trimTextBox(b *box, end float64, own *bfc) float64 {
 		if l, owner := edgeLine(b, true); l != nil && math.Abs(l.y+l.h-end) <= eps {
 			_, under := e.trimEdges(owner.st)
 			if d := l.h - l.baseline - under; d > 0 {
+				// A float after the last line is placed at the line's
+				// end, which the trim moves up, as Chromium places it.
+				y := l.y + l.h
+				shiftFloatsAfter(owner, y, -d)
+				own.shiftFloats(y, -d)
 				end -= d
 			}
 		}
 	}
 	return end
+}
+
+// shiftFloatsAfter moves by dy the floats of the inline content of b
+// whose margin box starts at y or below.
+func shiftFloatsAfter(b *box, y, dy float64) {
+	for _, k := range b.kids {
+		switch {
+		case k.float != css.FloatNone:
+			if k.y-k.m[css.Top] >= y-eps {
+				k.shift(0, dy)
+			}
+		case k.kind == kindInline:
+			shiftFloatsAfter(k, y, dy)
+		}
+	}
 }
 
 // shiftFloats moves by dy the float rectangles of c whose top is at y or
