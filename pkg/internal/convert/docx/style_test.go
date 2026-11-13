@@ -436,3 +436,16 @@ func TestStyles_BuiltinHeadingOutlineLevel(t *testing.T) {
 		t.Errorf("heading levels %v, want [2 6]", got)
 	}
 }
+
+// TestRunLigatures checks that no run asks for the font's common
+// ligatures, whatever w14:ligatures says, as Word prints none (see
+// [runLigatures]).
+func TestRunLigatures(t *testing.T) {
+	t.Parallel()
+	for _, rpr := range []string{``, `<w14:ligatures w14:val="none"/>`, `<w14:ligatures w14:val="standard"/>`, `<w14:ligatures w14:val="all"/>`} {
+		b := build(t, `<w:p><w:r><w:rPr>`+rpr+`</w:rPr><w:t>office</w:t></w:r></w:p>`, nil)
+		if got := runWith(t, b.root, "office").Style.FontVariantLigatures; got&css.LigaturesCommonOff == 0 {
+			t.Errorf("%q: ligatures %v, want the common ones off", rpr, got)
+		}
+	}
+}

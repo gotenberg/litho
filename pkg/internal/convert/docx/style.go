@@ -107,6 +107,27 @@ func (d *document) families(r runProps) []string {
 	return out
 }
 
+// runLigatures is the font-variant-ligatures of every run: no common
+// ligatures, as Word prints none, whatever w14:ligatures ([MS-DOCX],
+// CT_Ligatures), which names the ligatures a run asks for, says: Word
+// leaves the font's standard ligatures out at standard and
+// standardContextual too, where LibreOffice draws them at every value,
+// none included.
+//
+// # Corpus evidence
+//
+//   - litho/docx, libreoffice/docx, poi/docx, openxmlsdk/docx: none of
+//     the 870 Word references draws a ligature glyph (no ToUnicode entry
+//     of two letters or more), 185 of their documents holding "fi" or
+//     "fl" without w14:ligatures; litho/docx run-w14-effects and
+//     libreoffice/docx ooxmlexport/TextEffects_Props3d_Ligatures_NumForm_NumSpacing.docx
+//     set standard ligatures and print "fi" as two glyphs.
+//   - probe, docx: Word draws "office affinity" in Calibri with
+//     w14:ligatures standard as separate f, f and i glyphs; LibreOffice
+//     of gotenberg/gotenberg:9.4.1 draws the ffi and fl ligatures of
+//     Carlito at none, standard, all and without the element.
+const runLigatures = css.LigaturesCommonOff
+
 // applyRun sets the character properties of r on st (ECMA-376 Part 1,
 // 17.3.2), which already holds the paragraph's inherited properties.
 // lineMult is the paragraph's proportional line spacing, 0 for none.
@@ -172,6 +193,7 @@ func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
 	if boolOf(r.smallCaps) && !boolOf(r.caps) {
 		st.FontVariant = css.SmallCaps
 	}
+	st.FontVariantLigatures = runLigatures
 	st.LetterSpacing = css.Dimension{Kind: css.Normal}
 	if r.spacing != nil && *r.spacing != 0 {
 		st.LetterSpacing = css.Pts(*r.spacing)
