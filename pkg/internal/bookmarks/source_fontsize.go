@@ -172,8 +172,8 @@ func extractPageHeadings(ctx context.Context, page pageTextElements, maxTitleLen
 		}
 	}
 	pageHeight := maxY - minY
-	headerCutoff := maxY - pageHeight*0.10
-	footerCutoff := minY + pageHeight*0.10
+	headerCutoff := maxY - float64(pageHeight*0.10)
+	footerCutoff := minY + float64(pageHeight*0.10)
 
 	var candidates []headingCandidate
 	var currentLine []models.TextElement
