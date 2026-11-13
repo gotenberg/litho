@@ -1173,7 +1173,7 @@ func (b *builder) columnTracks(kids []*odf.Element, width float64) (tracks []col
 		ends[i], _ = odf.Length(k.A(odf.NSFO, "end-indent"))
 	}
 	for i := range kids {
-		t := columnTrack{Width: max(rel[i]/sum*width-starts[i]-ends[i], 0)}
+		t := columnTrack{Width: max(float64(rel[i]/sum*width)-starts[i]-ends[i], 0)}
 		if i+1 < len(kids) {
 			t.Gap = ends[i] + starts[i+1]
 		}

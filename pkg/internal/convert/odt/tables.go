@@ -115,7 +115,7 @@ func columnsWidth(kids []*layout.Node) float64 {
 	sum := 0.0
 	for _, k := range kids {
 		if k.Style.Display == css.TableColumn && k.Style.Width.Kind == css.Points {
-			sum += k.Style.Width.Value * float64(max(k.Span, 1))
+			sum += float64(k.Style.Width.Value * float64(max(k.Span, 1)))
 		}
 	}
 	return sum

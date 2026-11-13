@@ -447,7 +447,7 @@ func (item *itemCtx) attach(b *builder, n *layout.Node, t textState) {
 				if st.TabSize.Kind == css.Points && st.TabSize.Value > 0 {
 					dist = st.TabSize.Value
 				}
-				stop = ml + dist*math.Ceil((end-ml)/dist+1e-9)
+				stop = ml + float64(dist*math.Ceil((end-ml)/dist+1e-9))
 			}
 			if stop > ml {
 				st.TextIndent = css.Pts(stop - ml)

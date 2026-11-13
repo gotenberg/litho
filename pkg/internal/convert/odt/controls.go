@@ -373,7 +373,7 @@ func (b *builder) controlLine(s string, g frameGeom, family string, size, line f
 	st.LineHeight = css.Pts(size * line)
 	st.Padding[css.Left] = css.Pts(controlPad)
 	st.Padding[css.Right] = css.Pts(controlPad)
-	st.Padding[css.Top] = css.Pts(max(0, (g.h-size*line)/2))
+	st.Padding[css.Top] = css.Pts(max(0, (g.h-float64(size*line))/2))
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st})
 	n.Children = []*layout.Node{b.run(s, t)}
 	return []*layout.Node{n}
@@ -429,7 +429,7 @@ func markVector(kind typeset.FieldKind) func(on bool) func(r typeset.Rect) []typ
 	const line = 0.6
 	return func(on bool) func(r typeset.Rect) []typeset.Fragment {
 		return func(r typeset.Rect) []typeset.Fragment {
-			s := min(r.Width, r.Height) * markScale
+			s := float64(min(r.Width, r.Height) * markScale)
 			x0, y0 := r.X, r.Y
 			black, white := typeset.Black, typeset.Color{R: 1, G: 1, B: 1, A: 1}
 			if kind == typeset.FieldRadio {
@@ -438,7 +438,7 @@ func markVector(kind typeset.FieldKind) func(on bool) func(r typeset.Rect) []typ
 					&typeset.Path{Ops: ellipse(x0+line, y0+line, x0+s-line, y0+s-line), Fill: &typeset.Fill{Color: white}},
 				}
 				if on {
-					d := s * 0.15
+					d := float64(s * 0.15)
 					out = append(out, &typeset.Path{Ops: ellipse(x0+d, y0+d, x0+s-d, y0+s-d), Fill: &typeset.Fill{Color: black}})
 				}
 				return out
@@ -476,15 +476,15 @@ func box(x, y, w, h float64) []typeset.PathOp {
 // (x0, y0) to (x1, y1), four Bézier arcs.
 func ellipse(x0, y0, x1, y1 float64) []typeset.PathOp {
 	const k = 0.5522847498 // the control distance of a quarter circle, per radius
-	cx, cy := (x0+x1)/2, (y0+y1)/2
-	rx, ry := (x1-x0)/2, (y1-y0)/2
+	cx, cy := float64((x0+x1)/2), float64((y0+y1)/2)
+	rx, ry := float64((x1-x0)/2), float64((y1-y0)/2)
 	pt := func(x, y float64) typeset.Point { return typeset.Point{X: x, Y: y} }
 	return []typeset.PathOp{
 		{Kind: typeset.MoveTo, P: [3]typeset.Point{pt(cx+rx, cy)}},
-		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx+rx, cy+k*ry), pt(cx+k*rx, cy+ry), pt(cx, cy+ry)}},
-		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx-k*rx, cy+ry), pt(cx-rx, cy+k*ry), pt(cx-rx, cy)}},
-		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx-rx, cy-k*ry), pt(cx-k*rx, cy-ry), pt(cx, cy-ry)}},
-		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx+k*rx, cy-ry), pt(cx+rx, cy-k*ry), pt(cx+rx, cy)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx+rx, cy+float64(k*ry)), pt(cx+float64(k*rx), cy+ry), pt(cx, cy+ry)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx-float64(k*rx), cy+ry), pt(cx-rx, cy+float64(k*ry)), pt(cx-rx, cy)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx-rx, cy-float64(k*ry)), pt(cx-float64(k*rx), cy-ry), pt(cx, cy-ry)}},
+		{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(cx+float64(k*rx), cy-ry), pt(cx+rx, cy-float64(k*ry)), pt(cx+rx, cy)}},
 		{Kind: typeset.ClosePath},
 	}
 }

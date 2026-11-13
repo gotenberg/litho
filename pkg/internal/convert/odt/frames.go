@@ -613,7 +613,7 @@ func (b *builder) pagePosition(g frameGeom) (float64, float64) {
 	case "left", "inside":
 		x = x0
 	case "center":
-		x = x0 + (x1-x0-w)/2
+		x = x0 + float64((x1-x0-w)/2)
 	case "right", "outside":
 		x = x1 - w
 	}
@@ -626,7 +626,7 @@ func (b *builder) pagePosition(g frameGeom) (float64, float64) {
 	case "top":
 		y = y0
 	case "middle", "center":
-		y = y0 + (y1-y0-h)/2
+		y = y0 + float64((y1-y0-h)/2)
 	case "bottom":
 		y = y1 - h
 	}
@@ -892,7 +892,7 @@ func cropped(pic *layout.Picture, clip string) *layout.Picture {
 	out := &layout.Picture{Width: w, Height: h}
 	out.Vector = func(ctx context.Context, r typeset.Rect) []typeset.Fragment {
 		sx, sy := r.Width/w, r.Height/h
-		full := typeset.Rect{X: r.X - in[css.Left]*sx, Y: r.Y - in[css.Top]*sy, Width: src.Width * sx, Height: src.Height * sy}
+		full := typeset.Rect{X: r.X - float64(in[css.Left]*sx), Y: r.Y - float64(in[css.Top]*sy), Width: src.Width * sx, Height: src.Height * sy}
 		var content []typeset.Fragment
 		if src.Vector != nil {
 			content = src.Vector(ctx, full)
