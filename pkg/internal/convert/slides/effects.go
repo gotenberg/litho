@@ -33,21 +33,58 @@ const effectScale = 10
 //
 // # Corpus evidence
 //
-//   - libreoffice/pptx: sd/shape-blur-effect's oval prints its 171.9 by 169.1 pt
+//   - probe, pptx: in Impress, sd/shape-blur-effect's oval prints its 171.9 by 169.1 pt
 //     shadow as a bitmap of 504 by 496 pixels, sd/effectOrder's glows as
 //     626 by 399 and 660 by 379, sd-data/n819614's 56 shadows each within
 //     a few hundred pixels of 250,000.
 const effectPixels = 250000
 
 // effectGrid is the pixel grid of an effect bitmap: the slide area box it
-// covers, w by h pixels, and how many pixels a point Impress's filters
-// take their radii at.
+// covers, w by h pixels, and how many pixels a point the radii are taken
+// at.
 type effectGrid struct {
 	box  typeset.Rect
 	w, h int
-	// unit is the pixels of a point the radii are measured in, the
-	// unreduced resolution times the budget's reduction.
+	// unit is the pixels of a point the radii are measured in: on
+	// Impress's grid the unreduced resolution times the budget's
+	// reduction, on the engine's its scale.
 	unit float64
+}
+
+// planGrid returns the grid the effect engine's rule gives an effect over
+// the slide area box whose blur has standard deviation sigma points
+// ([effect.Plan]), the box widened to whole pixels; reduced reports that
+// the engine's surface cap lowered its resolution. An effect that grows or
+// shrinks its silhouette by morph points before the blur takes the
+// largest resolution at most the rule's at which morph is a whole number
+// of pixels: [effect.Dilate] and [effect.Erode] move by whole pixels, and
+// a rounded distance would move the edge by up to half a pixel. It
+// returns false for an area too small to draw.
+func planGrid(box typeset.Rect, sigma, morph float64) (g effectGrid, reduced, ok bool) {
+	if !usable(box) {
+		return effectGrid{}, false, false
+	}
+	res, ok := effect.Plan(sigma, box.Width, box.Height)
+	if !ok {
+		return effectGrid{}, false, false
+	}
+	if n := math.Floor(morph * res.Scale); n >= 1 && numeric.Finite(n) {
+		res.Scale = n / morph
+		res.W, res.H = int(math.Ceil(box.Width*res.Scale)), int(math.Ceil(box.Height*res.Scale)) // fits int: within the sides Plan returned
+	}
+	box.Width, box.Height = float64(res.W)/res.Scale, float64(res.H)/res.Scale
+	return effectGrid{box: box, w: res.W, h: res.H, unit: res.Scale}, res.Reduced, true
+}
+
+// span returns the length v points spans on the grid, in pixels.
+func (g effectGrid) span(v float64) float64 {
+	return v * g.unit
+}
+
+// whole returns the length v points spans on the grid in whole pixels,
+// rounded.
+func (g effectGrid) whole(v float64) int {
+	return int(min(math.Round(max(g.span(v), 0)), effect.MaxKernelRadius)) // fits int: at most MaxKernelRadius
 }
 
 // newGrid returns the grid of an effect over the slide area box: each side
@@ -99,12 +136,16 @@ func (g effectGrid) radius(r float64) int {
 	return int(min(v, effect.MaxKernelRadius)) // fits int: at most MaxKernelRadius
 }
 
-// tent blurs s in place by the tent of radius r pixels, Impress's stack
-// blur, the pixels past the bitmap's edge repeating the edge's: a mask
-// its caller clipped keeps its coverage at the cut.
-func tent(ctx context.Context, s *effect.Surface, r int) error {
-	k := effect.TentKernel(float64(r))
+// blur blurs s in place by k along both axes, the pixels past the
+// bitmap's edge repeating the edge's: a mask its caller clipped to the
+// slide keeps its coverage at the cut.
+func blur(ctx context.Context, s *effect.Surface, k effect.Kernel) error {
 	return effect.Blur(ctx, s, k, k, effect.EdgeDuplicate)
+}
+
+// tent returns the tent of radius r pixels, Impress's stack blur.
+func tent(r int) effect.Kernel {
+	return effect.TentKernel(float64(r))
 }
 
 // tinted returns the coverage cov in the one colour c as an image whose
@@ -288,23 +329,39 @@ func invert(m typeset.Matrix) (typeset.Matrix, bool) {
 }
 
 // effectPlan is the effects of one shape: what paints them, in slide
-// coordinates, and how many times its glow and soft edge apply.
+// coordinates, whose rules draw them and how many times its glow and soft
+// edge apply.
 type effectPlan struct {
-	s     *Shape
-	sil   *silhouette
-	area  typeset.Rect
-	twice bool
+	s       *Shape
+	sil     *silhouette
+	area    typeset.Rect
+	impress bool
+	twice   bool
 	// page counts the pixels of the slide's effect bitmaps; capped warns
-	// once it refuses one.
-	page   *effect.Page
-	capped func()
+	// once it refuses one, reduced once the engine draws one coarser than
+	// its rule.
+	page    *effect.Page
+	capped  func()
+	reduced func()
 }
 
-// grid returns the grid of an effect over box, as [newGrid] does; false
+// grid returns the grid of an effect over box whose blur has standard
+// deviation sigma points, after growing or shrinking by morph points:
+// Impress's ([newGrid]) or the engine's ([planGrid]). It returns false
 // for an area too small to draw or a bitmap past the slide's pixel cap
 // ([effect.MaxPagePixels]), which warns that the effect is left out.
-func (p *effectPlan) grid(box typeset.Rect) (effectGrid, bool) {
-	g, ok := newGrid(box)
+func (p *effectPlan) grid(box typeset.Rect, sigma, morph float64) (effectGrid, bool) {
+	var g effectGrid
+	var ok bool
+	if p.impress {
+		g, ok = newGrid(box)
+	} else {
+		var reduced bool
+		g, reduced, ok = planGrid(box, sigma, morph)
+		if ok && reduced {
+			p.reduced()
+		}
+	}
 	if !ok {
 		return effectGrid{}, false
 	}
@@ -326,12 +383,12 @@ func (p *effectPlan) grid(box typeset.Rect) (effectGrid, bool) {
 //
 // # Corpus evidence
 //
-//   - libreoffice/pptx: sd/effectOrder's rectangle prints two glow bitmaps, over its
+//   - probe, pptx: in Impress, sd/effectOrder's rectangle prints two glow bitmaps, over its
 //     box grown by one and by two glow radii, the outer one opaque from
 //     one radius out; a rectangle, a text box and a turned rectangle with
 //     a glow print two, the presets roundRect, flowChartProcess,
 //     snip1Rect, triangle, ellipse, diamond and a custom rectangle one.
-//   - libreoffice/pptx: sd/shape-soft-edges's rectangle fades as the square of a
+//   - probe, pptx: in Impress, sd/shape-soft-edges's rectangle fades as the square of a
 //     single soft edge: 64 of 255 at the radius, 128 a quarter radius
 //     further in; its diamond fades once.
 //   - probe, odp: a draw:custom-shape of type rectangle with a glow prints two
@@ -349,16 +406,18 @@ func effectsTwice(s *Shape) bool {
 // to the slide's; and the paths the builder still fills and strokes: none
 // when a soft edge has drawn them already.
 //
-// Impress paints, from the bottom: the shadow of everything above it, the
-// glows, then the shape with its soft edge, then its text. A blurred
+// Both programs paint, from the bottom: the shadow of everything above it,
+// the glows, then the shape with its soft edge, then its text. A blurred
 // shadow, a glow and a soft edge are bitmaps over the slide area they
-// reach, clipped to the slide grown by their radius, of effectScale
-// pixels a point up to effectPixels; a hard shadow is a copy of the
-// shape's fill, line and text in the shadow's colour.
+// reach, clipped to the slide grown by their radius; a hard shadow is a
+// copy of the shape's fill, line and text in the shadow's colour. Impress
+// draws the bitmaps at effectScale pixels a point up to effectPixels and
+// blurs them by a tent, PowerPoint by a Gaussian; litho draws PowerPoint's
+// at the resolution of [effect.Plan].
 //
 // # Corpus evidence
 //
-//   - libreoffice/pptx: sd/effectOrder's rectangle with a glow and a shadow prints the
+//   - probe, pptx: in Impress, sd/effectOrder's rectangle with a glow and a shadow prints the
 //     shadow (a bitmap of the shape and both glows, at 40% opacity), the
 //     outer glow, the glow, then the rectangle.
 func (b *builder) effects(s *Shape, paths []shape.Path, box typeset.Rect, m typeset.Matrix, txt *textResult) ([]typeset.Fragment, []shape.Path) {
@@ -385,7 +444,7 @@ func (b *builder) effects(s *Shape, paths []shape.Path, box typeset.Rect, m type
 		}
 		text = group(then(skewedAboutCentre(box, rot, s.SkewX, false, false), invertOr(sm)), txt.frags)
 	}
-	under, drawn := b.paintEffects(s, own, text, toSlide, effectsTwice(s))
+	under, drawn := b.paintEffects(s, own, text, toSlide, b.doc.Effects == EffectsImpress && effectsTwice(s))
 	if drawn != nil {
 		return append(under, drawn...), nil
 	}
@@ -467,9 +526,16 @@ func (b *builder) paintEffects(s *Shape, own, text []typeset.Fragment, toSlide t
 		return nil, nil
 	}
 	sw, sh := b.slideSize()
-	p := &effectPlan{s: s, sil: sil, area: typeset.Rect{Width: sw, Height: sh}, twice: twice, page: &b.effectPixels, capped: func() {
-		b.warn(warn.LimitReached, warn.Omitted, "effects past the pixels a slide's effect bitmaps may hold are not drawn")
-	}}
+	p := &effectPlan{
+		s: s, sil: sil, area: typeset.Rect{Width: sw, Height: sh},
+		impress: b.doc.Effects == EffectsImpress, twice: twice, page: &b.effectPixels,
+		capped: func() {
+			b.warn(warn.LimitReached, warn.Omitted, "effects past the pixels a slide's effect bitmaps may hold are not drawn")
+		},
+		reduced: func() {
+			b.warn(warn.LimitReached, warn.Approximated, "effects past the pixels an effect bitmap may hold are drawn at a lower resolution")
+		},
+	}
 	var top []typeset.Fragment
 	var drawn []typeset.Fragment
 	if s.SoftEdge > 0 {
@@ -680,21 +746,22 @@ func recolor(frags []typeset.Fragment, c typeset.Color, depth int) []typeset.Fra
 }
 
 // glowMask returns a glow's coverage on g of the silhouette moved by tr:
-// the silhouette made opaque wherever it paints, grown by half the radius
-// and blurred over the other half, so it fades from the outline to
-// nothing one radius out (LibreOffice's GlowPrimitive2D). The outer glow
-// grows the outline of the first glow instead.
+// the silhouette made opaque, grown and blurred by [effectPlan.glowKernel],
+// so it fades to nothing one radius out (LibreOffice's GlowPrimitive2D;
+// ECMA-376 Part 1, 20.1.8.32 glow: "a color blurred outline"). The outer
+// glow of Impress's rectangle grows the outline of the first glow
+// instead.
 func (p *effectPlan) glowMask(ctx context.Context, g effectGrid, tr typeset.Matrix, outer bool) (*effect.Surface, error) {
-	half := g.radius(p.s.Glow.Radius) / 2
+	half, k := p.glowKernel(g)
 	base, err := p.sil.coverage(ctx, g, tr)
 	if err != nil {
 		return nil, err
 	}
 	defer base.Release()
-	if err := effect.Threshold(base, 1); err != nil {
+	if err := effect.Threshold(base, p.silhouetteLevel()); err != nil {
 		return nil, err
 	}
-	inner, err := grownBlur(ctx, base, half)
+	inner, err := grownBlur(ctx, base, half, k)
 	if err != nil || !outer {
 		return inner, err
 	}
@@ -702,15 +769,36 @@ func (p *effectPlan) glowMask(ctx context.Context, g effectGrid, tr typeset.Matr
 	if err := effect.Composite(ctx, base, inner, effect.Over); err != nil {
 		return nil, err
 	}
-	if err := effect.Threshold(base, 1); err != nil {
+	if err := effect.Threshold(base, p.silhouetteLevel()); err != nil {
 		return nil, err
 	}
-	return grownBlur(ctx, base, half)
+	return grownBlur(ctx, base, half, k)
+}
+
+// glowKernel returns how far a glow grows its silhouette on g, in
+// pixels, and the kernel that blurs it: Impress's tent over half the
+// radius after growing by that half; PowerPoint's Gaussian of a sixth of
+// the radius after growing by half of it, the glow then fading to nothing
+// one radius out.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: effects-glow-softedge-reflection prints in PowerPoint its
+//     glows of 5 and 18 pt as bitmaps whose alpha along a row through the
+//     middle falls as a Gaussian of deviation 1.1 and 4.1 pixels at 100
+//     pixels an inch, centred half a radius out.
+func (p *effectPlan) glowKernel(g effectGrid) (int, effect.Kernel) {
+	r := p.s.Glow.Radius
+	if p.impress {
+		half := g.radius(r) / 2
+		return half, tent(half)
+	}
+	return g.whole(r * officeGlowGrow), effect.GaussianKernel(g.span(r / 6))
 }
 
 // grownBlur returns a copy of the coverage cov grown by r pixels and
-// blurred by the tent of radius r.
-func grownBlur(ctx context.Context, cov *effect.Surface, r int) (*effect.Surface, error) {
+// blurred by k.
+func grownBlur(ctx context.Context, cov *effect.Surface, r int, k effect.Kernel) (*effect.Surface, error) {
 	out, err := cov.Clone(ctx)
 	if err != nil {
 		return nil, err
@@ -719,7 +807,7 @@ func grownBlur(ctx context.Context, cov *effect.Surface, r int) (*effect.Surface
 		out.Release()
 		return nil, err
 	}
-	if err := tent(ctx, out, r); err != nil {
+	if err := blur(ctx, out, k); err != nil {
 		out.Release()
 		return nil, err
 	}
@@ -732,7 +820,7 @@ func grownBlur(ctx context.Context, cov *effect.Surface, r int) (*effect.Surface
 //
 // # Corpus evidence
 //
-//   - libreoffice/pptx: sd/shape-glow-effect's oval with a glow of 11 pt at 40% prints
+//   - probe, pptx: in Impress, sd/shape-glow-effect's oval with a glow of 11 pt at 40% prints
 //     a bitmap over its outline grown by 11 pt, at 102 of 255 inside the
 //     outline, fading to 0 at the bitmap's edge over 30 pixels at 2.7
 //     pixels a point.
@@ -746,7 +834,7 @@ func (p *effectPlan) glow(ctx context.Context, outer bool) typeset.Fragment {
 	if !ok {
 		return nil
 	}
-	g, ok := p.grid(box)
+	g, ok := p.grid(box, gl.Radius/6, gl.Radius*officeGlowGrow)
 	if !ok {
 		return nil
 	}
@@ -765,12 +853,12 @@ func (p *effectPlan) glow(ctx context.Context, outer bool) typeset.Fragment {
 }
 
 // softMask returns a soft edge's coverage on g: the silhouette made
-// opaque, shrunk by the radius and blurred over it, so it fades from the
-// outline to opaque two radii in (LibreOffice's SoftEdgePrimitive2D), the
-// fade squared when the soft edge applies twice, times the silhouette's
-// own coverage.
+// opaque, shrunk and blurred by [effectPlan.softKernel], so it fades from
+// the outline to opaque two radii in (LibreOffice's SoftEdgePrimitive2D;
+// ECMA-376 Part 1, 20.1.8.53 softEdge), the fade squared when Impress
+// applies it twice, times the silhouette's own coverage.
 func (p *effectPlan) softMask(ctx context.Context, g effectGrid, tr typeset.Matrix) (*effect.Surface, error) {
-	r := g.radius(p.s.SoftEdge)
+	r, k := p.softKernel(g)
 	cov, err := p.sil.coverage(ctx, g, tr)
 	if err != nil {
 		return nil, err
@@ -786,13 +874,13 @@ func (p *effectPlan) softMask(ctx context.Context, g effectGrid, tr typeset.Matr
 			fade.Release()
 		}
 	}()
-	if err := effect.Threshold(fade, 1); err != nil {
+	if err := effect.Threshold(fade, p.silhouetteLevel()); err != nil {
 		return nil, err
 	}
 	if err := effect.Erode(ctx, fade, r, r); err != nil {
 		return nil, err
 	}
-	if err := tent(ctx, fade, r); err != nil {
+	if err := blur(ctx, fade, k); err != nil {
 		return nil, err
 	}
 	if p.twice {
@@ -806,6 +894,25 @@ func (p *effectPlan) softMask(ctx context.Context, g effectGrid, tr typeset.Matr
 	}
 	ok = true
 	return fade, nil
+}
+
+// softKernel returns how far a soft edge shrinks the silhouette on g, in
+// pixels, and the kernel that blurs it: by the radius, then Impress's
+// tent of the radius or PowerPoint's Gaussian of a third of it, the edge
+// then fading from nothing on the outline to opaque two radii in.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: effects-glow-softedge-reflection prints in PowerPoint its
+//     soft edges of 5 and 25 pt as bitmaps whose alpha rises from the
+//     outline as a Gaussian of deviation 1.6 and 8.3 pt.
+func (p *effectPlan) softKernel(g effectGrid) (int, effect.Kernel) {
+	r := p.s.SoftEdge
+	if p.impress {
+		n := g.radius(r)
+		return n, tent(n)
+	}
+	return g.whole(r * officeSoftShrink), effect.GaussianKernel(g.span(r / 3))
 }
 
 // square multiplies the coverage of s by itself, in place.
@@ -825,7 +932,7 @@ func square(ctx context.Context, s *effect.Surface) error {
 //
 // # Corpus evidence
 //
-//   - libreoffice/pptx: sd/shape-soft-edges's diamond and rectangle print as bitmaps
+//   - probe, pptx: in Impress, sd/shape-soft-edges's diamond and rectangle print as bitmaps
 //     of their outlines' bounds, the line inside, the text on top; the
 //     rectangle, 10 pt soft, is transparent 3 pt in and opaque 20 pt in.
 func (p *effectPlan) softEdge(ctx context.Context) typeset.Fragment {
@@ -836,7 +943,7 @@ func (p *effectPlan) softEdge(ctx context.Context) typeset.Fragment {
 	if !ok {
 		return nil
 	}
-	g, ok := p.grid(box)
+	g, ok := p.grid(box, p.s.SoftEdge/3, p.s.SoftEdge*officeSoftShrink)
 	if !ok {
 		return nil
 	}
@@ -901,16 +1008,25 @@ func unpremultiply(c, a uint8) uint8 {
 // edge included, moved by the shadow's transform, blurred over its
 // radius, in its colour at its opacity (LibreOffice's ShadowPrimitive2D:
 // the content's own alpha, not made opaque, blurred by a stack blur of
-// the radius); nil when it covers nothing.
+// the radius; ECMA-376 Part 1, 20.1.8.45 outerShdw, which PowerPoint
+// blurs by a Gaussian of a third of the radius); nil when it covers
+// nothing.
 //
 // # Corpus evidence
 //
-//   - libreoffice/pptx: sd/shape-blur-effect's oval prints its shadow, blurred 11 pt,
+//   - probe, pptx: in Impress, sd/shape-blur-effect's oval prints its shadow, blurred 11 pt,
 //     as a bitmap over the oval's outline moved by the shadow's 34 pt and
 //     grown by 11 pt, ramping from 0 to opaque over 22 pt about the
 //     outline, 32 of 255 a quarter of the way.
 //   - probe, pptx: a rectangle reaching past the slide's right edge prints its
 //     shadow's bitmap cut 6 pt, its blur, past the edge.
+//   - litho/pptx: effects-shadow prints in PowerPoint its shadows blurred
+//     4 and 20 pt as bitmaps whose alpha along a row through the middle
+//     rises as a Gaussian of deviation 1.31 and 6.6 pt, a third of the
+//     radius, centred on the outline.
+//   - libreoffice/pptx: sd/effectOrder prints in PowerPoint the shadow of
+//     its rectangle with a glow over the glow too: 40 of 255 where the glow
+//     is, the glow's 40% of the shadow's 102.
 func (p *effectPlan) shadow(ctx context.Context) typeset.Fragment {
 	sh := p.s.Shadow
 	tr := shadowMatrix(sh, p.sil.bounds)
@@ -926,7 +1042,7 @@ func (p *effectPlan) shadow(ctx context.Context) typeset.Fragment {
 	if !ok {
 		return nil
 	}
-	g, ok := p.grid(box)
+	g, ok := p.grid(box, sh.Blur/3, 0)
 	if !ok {
 		return nil
 	}
@@ -982,8 +1098,57 @@ func (p *effectPlan) shadowMask(ctx context.Context, g effectGrid, tr typeset.Ma
 			}
 		}
 	}
-	if err := tent(ctx, mask, g.radius(p.s.Shadow.Blur)); err != nil {
+	k := effect.GaussianKernel(g.span(p.s.Shadow.Blur / 3))
+	if p.impress {
+		k = tent(g.radius(p.s.Shadow.Blur))
+	}
+	if err := blur(ctx, mask, k); err != nil {
 		return fail(err)
 	}
 	return mask, nil
+}
+
+// officeGlowGrow is how far a Microsoft Office glow grows the silhouette
+// before its blur, as a share of the radius: 5/12, half the radius less
+// half the blur's deviation of a sixth of it.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: effects-glow-softedge-reflection prints glows of 5 and
+//     18 pt whose fades, fitted on both sides of a row through the middle,
+//     are centred 0.43 and 0.42 radii out of the outline.
+//   - libreoffice/pptx: sd/effectOrder's glow of 28 pt is centred 0.43
+//     radii out; sd/shape-glow-effect's of 11 pt 0.46 out of the fill,
+//     0.42 out of a line of 0.75 pt.
+const officeGlowGrow = 5.0 / 12
+
+// officeSoftShrink is how far a Microsoft Office soft edge shrinks the
+// silhouette before its blur, as a share of the radius: 11/12, the radius
+// less a quarter of the blur's deviation of a third of it.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: effects-glow-softedge-reflection prints soft edges of 5
+//     and 25 pt whose fades, fitted on both sides of a row through the
+//     middle, are centred 0.94 and 0.92 radii in from the outline.
+//   - libreoffice/pptx: sd/shape-soft-edges's soft edge of 10 pt, on a
+//     rectangle with a hairline, is centred 0.85 radii in.
+const officeSoftShrink = 11.0 / 12
+
+// silhouetteLevel returns the coverage from which a pixel belongs to the
+// silhouette a glow grows and a soft edge shrinks: any coverage on
+// Impress's rule, as its filters make the silhouette opaque wherever it
+// paints; half on PowerPoint's, whose glows and soft edges sit where the
+// outline is, not half a pixel out of it.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: effects-glow-softedge-reflection's glow of 18 pt, drawn
+//     from the silhouette of every pixel the outline touches, lies 0.3 pt,
+//     half a pixel, further out on both sides than PowerPoint prints it.
+func (p *effectPlan) silhouetteLevel() uint8 {
+	if p.impress {
+		return 1
+	}
+	return 128
 }

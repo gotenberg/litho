@@ -1,0 +1,173 @@
+package slides
+
+import (
+	"image"
+	"math"
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/effect"
+	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
+)
+
+// sample is the alpha of a soft mask at x points along a row of the
+// slide.
+type sample struct {
+	x float64
+	a float64
+}
+
+// alphaAlong returns the alpha of img, the effect bitmap p decoded, at the
+// slide point (x, y), interpolated linearly between the two pixels
+// nearest x on the row of y.
+func alphaAlong(img *image.NRGBA, p placed, x, y float64) float64 {
+	r := p.bounds()
+	b := img.Bounds()
+	fx := (x-r.X)/r.Width*float64(b.Dx()) - 0.5
+	py := int((y - r.Y) / r.Height * float64(b.Dy()))
+	x0 := int(math.Floor(fx))
+	f := fx - float64(x0)
+	at := func(px int) float64 {
+		if px < 0 || px >= b.Dx() {
+			return 0
+		}
+		return float64(img.NRGBAAt(px, py).A)
+	}
+	return at(x0)*(1-f) + at(x0+1)*f
+}
+
+// maxReferenceError and maxReferenceRMS bound how far, in levels of 255,
+// an effect bitmap's row lies from PowerPoint's, after the best shift
+// within 0.4 pt: PowerPoint places each bitmap on a grid of 100 pixels an
+// inch of its own, which moves it by up to that much.
+const (
+	maxReferenceError = 12
+	maxReferenceRMS   = 6
+)
+
+// TestPowerPointEffects_ReproduceReferenceRows checks that the shadows,
+// glows and soft edges a PresentationML deck draws fall off as PowerPoint
+// prints them: along a row through the middle of each shape, the alpha
+// of the effect bitmap at each pixel centre of PowerPoint's own bitmap.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: effects-glow-softedge-reflection, the rows of its glows
+//     of 5 and 18 pt and its soft edges of 5 and 25 pt; effects-shadow,
+//     the rows of its shadows blurred 4 and 20 pt, read from the soft
+//     masks of PowerPoint's bitmaps, their positions scaled from the
+//     reference's 959.76 pt page to the 960 pt slide. The fades, fitted on
+//     both sides, sit 0.03 to 0.37 pt off centre one way or the other:
+//     the placement of PowerPoint's bitmap, which the shift absorbs.
+func TestPowerPointEffects_ReproduceReferenceRows(t *testing.T) {
+	emu := func(v float64) float64 { return v / 12700 }
+	box := func(x float64) typeset.Rect {
+		return typeset.Rect{X: emu(x), Y: emu(500000), Width: emu(2282800), Height: emu(1756000)}
+	}
+	shadowBox := func(x float64) typeset.Rect {
+		return typeset.Rect{X: emu(x), Y: emu(500000), Width: emu(2158400), Height: emu(1756000)}
+	}
+	fill := Fill{Kind: FillSolid, Color: css.Color{R: 0.27, G: 0.45, B: 0.77, A: 1}}
+	ellipse := &shape.Geometry{Preset: "ellipse"}
+	rect := &shape.Geometry{Preset: "rect"}
+	round := &shape.Geometry{Preset: "roundRect"}
+	line := Line{Width: 1, Color: css.Color{R: 0.12, G: 0.31, B: 0.47, A: 1}}
+	for _, tc := range []struct {
+		name  string
+		shape *Shape
+		y     float64
+		row   []sample
+	}{
+		{"glow 5 pt", &Shape{Box: box(532600), Geometry: ellipse, Fill: fill, Glow: &Glow{Color: css.Color{A: 1}, Opacity: 0.4, Radius: 5}}, 108.91, []sample{{36.39, 0}, {37.11, 0}, {37.82, 1}, {38.54, 9}, {39.26, 33}, {39.98, 69}, {40.7, 93}, {41.42, 101}, {42.14, 102}, {42.86, 102}, {220.41, 102}, {221.13, 102}, {221.85, 101}, {222.57, 93}, {223.28, 69}, {224, 33}, {224.72, 9}, {225.44, 1}, {226.16, 0}, {226.88, 0}}},
+		{"glow 18 pt", &Shape{Box: box(3480600), Geometry: ellipse, Fill: fill, Glow: &Glow{Color: css.Color{R: 1, G: 0.75, A: 1}, Opacity: 0.6, Radius: 18}}, 108.91, []sample{{257.48, 0}, {258.2, 0}, {258.92, 1}, {259.64, 2}, {260.36, 3}, {261.08, 5}, {261.79, 9}, {262.51, 14}, {263.23, 20}, {263.95, 30}, {264.67, 41}, {265.39, 54}, {266.11, 68}, {266.83, 83}, {267.55, 98}, {268.27, 110}, {268.98, 122}, {269.7, 131}, {270.42, 139}, {271.14, 144}, {271.86, 148}, {272.58, 150}, {273.3, 151}, {274.02, 152}, {274.74, 153}, {275.46, 153}, {452.33, 153}, {453.05, 153}, {453.76, 152}, {454.48, 151}, {455.2, 150}, {455.92, 148}, {456.64, 144}, {457.36, 139}, {458.08, 131}, {458.8, 122}, {459.52, 110}, {460.24, 98}, {460.95, 83}, {461.67, 68}, {462.39, 54}, {463.11, 41}, {463.83, 30}, {464.55, 20}, {465.27, 14}, {465.99, 9}, {466.71, 5}, {467.43, 3}, {468.14, 2}, {468.86, 1}, {469.58, 0}, {470.3, 0}}},
+		{"soft edge 5 pt", &Shape{Box: box(6428600), Geometry: rect, Fill: fill, SoftEdge: 5}, 108.91, []sample{{505.89, 0}, {506.6, 2}, {507.32, 6}, {508.04, 16}, {508.76, 35}, {509.48, 65}, {510.2, 105}, {510.92, 150}, {511.64, 190}, {512.36, 220}, {513.07, 239}, {513.79, 249}, {514.51, 253}, {515.23, 255}, {515.95, 255}, {516.67, 255}, {674.83, 255}, {675.55, 255}, {676.27, 255}, {676.99, 253}, {677.7, 249}, {678.42, 239}, {679.14, 220}, {679.86, 190}, {680.58, 150}, {681.3, 105}, {682.02, 65}, {682.74, 35}, {683.46, 16}, {684.17, 6}, {684.89, 2}, {685.61, 0}}},
+		{"soft edge 25 pt", &Shape{Box: box(9376600), Geometry: rect, Fill: fill, SoftEdge: 25}, 108.91, []sample{{737.84, 0}, {738.56, 1}, {739.28, 1}, {740, 1}, {740.72, 1}, {741.44, 2}, {742.16, 3}, {742.88, 4}, {743.59, 5}, {744.31, 6}, {745.03, 7}, {745.75, 8}, {746.47, 10}, {747.19, 11}, {747.91, 14}, {748.63, 17}, {749.35, 20}, {750.06, 23}, {750.78, 27}, {751.5, 31}, {752.22, 36}, {752.94, 41}, {753.66, 46}, {754.38, 52}, {755.1, 59}, {755.81, 66}, {756.53, 73}, {757.25, 81}, {757.97, 89}, {758.69, 97}, {759.41, 106}, {760.13, 115}, {760.85, 123}, {761.57, 132}, {762.28, 141}, {763, 150}, {763.72, 158}, {764.44, 166}, {765.16, 174}, {765.88, 182}, {766.6, 190}, {767.32, 197}, {768.03, 203}, {768.75, 209}, {769.47, 215}, {770.19, 220}, {770.91, 224}, {771.63, 228}, {772.35, 232}, {773.07, 235}, {773.79, 239}, {774.5, 242}, {775.22, 244}, {775.94, 245}, {776.66, 247}, {777.38, 248}, {778.1, 250}, {778.82, 251}, {779.54, 252}, {780.25, 253}, {780.97, 253}, {781.69, 254}, {782.41, 254}, {783.13, 254}, {872.98, 254}, {873.7, 254}, {874.42, 254}, {875.14, 253}, {875.86, 253}, {876.58, 252}, {877.3, 251}, {878.02, 250}, {878.73, 248}, {879.45, 247}, {880.17, 245}, {880.89, 244}, {881.61, 242}, {882.33, 239}, {883.05, 235}, {883.77, 232}, {884.49, 228}, {885.2, 224}, {885.92, 220}, {886.64, 215}, {887.36, 209}, {888.08, 203}, {888.8, 197}, {889.52, 190}, {890.24, 182}, {890.95, 174}, {891.67, 166}, {892.39, 158}, {893.11, 150}, {893.83, 141}, {894.55, 132}, {895.27, 123}, {895.99, 115}, {896.71, 106}, {897.42, 97}, {898.14, 89}, {898.86, 81}, {899.58, 73}, {900.3, 66}, {901.02, 59}, {901.74, 52}, {902.46, 46}, {903.17, 41}, {903.89, 36}, {904.61, 31}, {905.33, 27}, {906.05, 23}, {906.77, 20}, {907.49, 17}, {908.21, 14}, {908.93, 11}, {909.64, 10}, {910.36, 8}, {911.08, 7}, {911.8, 6}, {912.52, 5}, {913.24, 4}, {913.96, 3}, {914.68, 2}, {915.39, 1}, {916.11, 1}, {916.83, 1}, {917.55, 1}, {918.27, 0}}},
+		{"shadow 4 pt", &Shape{Box: shadowBox(300000), Geometry: round, Fill: fill, Line: line, Shadow: &Shadow{Color: css.Color{A: 1}, Opacity: 0.4, OffsetX: 3 * math.Sqrt2 / 2, OffsetY: 3 * math.Sqrt2 / 2, Blur: 4, ScaleX: 1, ScaleY: 1}}, 111.05, []sample{{21.98, 0}, {22.7, 0}, {23.42, 3}, {24.14, 9}, {24.86, 21}, {25.58, 40}, {26.29, 62}, {27.01, 81}, {27.73, 93}, {28.45, 99}, {29.17, 102}, {29.89, 102}, {30.61, 102}, {191.55, 102}, {192.27, 102}, {192.99, 102}, {193.71, 99}, {194.42, 93}, {195.14, 81}, {195.86, 62}, {196.58, 40}, {197.3, 21}, {198.02, 9}, {198.74, 3}, {199.45, 0}, {200.17, 0}}},
+		{"shadow 20 pt", &Shape{Box: shadowBox(2658400), Geometry: round, Fill: fill, Line: line, Shadow: &Shadow{Color: css.Color{A: 1}, Opacity: 0.6, Blur: 20, ScaleX: 1, ScaleY: 1}}, 109.41, []sample{{189.36, 0}, {190.79, 0}, {192.22, 1}, {193.65, 1}, {195.09, 2}, {196.52, 4}, {197.95, 7}, {199.38, 11}, {200.81, 16}, {202.24, 23}, {203.67, 31}, {205.1, 41}, {206.53, 53}, {207.96, 65}, {209.39, 79}, {210.82, 92}, {212.25, 104}, {213.69, 115}, {215.12, 125}, {216.55, 133}, {217.98, 139}, {219.41, 144}, {220.84, 147}, {222.27, 149}, {223.7, 151}, {225.13, 152}, {226.56, 152}, {227.99, 153}, {361.05, 153}, {362.48, 152}, {363.92, 152}, {365.35, 151}, {366.78, 150}, {368.21, 148}, {369.64, 145}, {371.07, 140}, {372.5, 134}, {373.93, 126}, {375.36, 116}, {376.79, 106}, {378.22, 94}, {379.65, 80}, {381.08, 67}, {382.52, 55}, {383.95, 43}, {385.38, 32}, {386.81, 24}, {388.24, 17}, {389.67, 11}, {391.1, 7}, {392.53, 4}, {393.96, 2}, {395.39, 1}, {396.82, 1}, {398.25, 0}, {399.68, 0}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := &Document{Width: 960, Height: 540, Slides: []*Slide{{Shapes: []*Shape{tc.shape}}}}
+			out := convert(t, doc, office.Options{})
+			var ps []placed
+			flatten(out.Pages[0].Content, typeset.Identity, 1, &ps)
+			var img *placed
+			for i := range ps {
+				if ps[i].img != nil {
+					img = &ps[i]
+					break
+				}
+			}
+			if img == nil {
+				t.Fatal("no effect bitmap")
+			}
+			pix := decoded(t, img.img.Source)
+			best := struct{ shift, worst, rms float64 }{rms: math.Inf(1)}
+			for k := -40; k <= 40; k++ {
+				shift := float64(k) / 100
+				var worst, sq float64
+				for _, sm := range tc.row {
+					d := math.Abs(alphaAlong(pix, *img, sm.x+shift, tc.y) - sm.a)
+					worst = max(worst, d)
+					sq += d * d
+				}
+				if rms := math.Sqrt(sq / float64(len(tc.row))); rms < best.rms {
+					best.shift, best.worst, best.rms = shift, worst, rms
+				}
+			}
+			t.Logf("%s: shift %.2f pt, largest difference %.2f levels, rms %.2f", tc.name, best.shift, best.worst, best.rms)
+			if best.worst > maxReferenceError || best.rms > maxReferenceRMS {
+				t.Errorf("%s: largest difference %.2f levels, rms %.2f, want at most %v and %v", tc.name, best.worst, best.rms, maxReferenceError, maxReferenceRMS)
+			}
+		})
+	}
+}
+
+// TestShape_PowerPointEffectsApplyOnce checks that PowerPoint's rules draw
+// the glow of a rectangle once, over its box grown by the radius, and its
+// soft edge once, where Impress's draw both twice.
+func TestShape_PowerPointEffectsApplyOnce(t *testing.T) {
+	box := typeset.Rect{X: 100, Y: 100, Width: 100, Height: 60}
+	rect := &shape.Geometry{Preset: "rect"}
+	fill := Fill{Kind: FillSolid, Color: red}
+	ps, warns := effectPage(t, EffectsPowerPoint, &Shape{Box: box, Geometry: rect, Fill: fill, Glow: &Glow{Color: css.Color{G: 1, A: 1}, Opacity: 0.4, Radius: 10}})
+	if len(ps) != 2 || ps[0].img == nil || ps[1].path == nil {
+		t.Fatalf("%d fragments, want one glow then the shape", len(ps))
+	}
+	if got := ps[0].bounds(); !rectNear(got, grow(box, 10), 1) {
+		t.Errorf("glow bounds %+v, want the box grown by 10 within a pixel", got)
+	}
+	if len(warns) != 0 {
+		t.Errorf("warnings %v, want none", warns)
+	}
+	ps, _ = effectPage(t, EffectsPowerPoint, &Shape{Box: box, Geometry: rect, Fill: fill, SoftEdge: 10})
+	if len(ps) != 1 || ps[0].img == nil {
+		t.Fatalf("%d fragments, want the shape's bitmap alone", len(ps))
+	}
+	// One Gaussian fade centred 11/12 of the radius in: half at 9.2 pt,
+	// where a fade applied twice would be at a quarter.
+	if got := alphaAt(t, ps[0], 109.2, 130); abs(int(got)-128) > 12 {
+		t.Errorf("alpha 9.2 pt in %d, want about 128", got)
+	}
+}
+
+// TestPlanGrid checks the grid of PowerPoint's effects: the engine's
+// resolution, lowered so a morphology's distance is whole pixels, the box
+// widened to whole pixels, and reported when the surface cap reduces it.
+func TestPlanGrid(t *testing.T) {
+	g, reduced, ok := planGrid(typeset.Rect{X: 10, Y: 20, Width: 100.3, Height: 50}, 3, 7.5)
+	if !ok || reduced {
+		t.Fatalf("planGrid = %v, %v, want a grid unreduced", ok, reduced)
+	}
+	if n := 7.5 * g.unit; math.Abs(n-math.Round(n)) > 1e-9 || g.unit > 5.0/3 {
+		t.Errorf("unit %v puts 7.5 pt on %v pixels, want a whole number at most the rule's", g.unit, n)
+	}
+	if math.Abs(g.box.Width*g.unit-float64(g.w)) > 1e-9 || g.box.Width < 100.3 || g.box.X != 10 {
+		t.Errorf("box %+v of %d pixels, want the box widened to whole pixels", g.box, g.w)
+	}
+	g, reduced, ok = planGrid(typeset.Rect{Width: 1200, Height: 1200}, 0.1, 0)
+	if !ok || !reduced || int64(g.w)*int64(g.h) > effect.MaxPixels {
+		t.Errorf("planGrid of a large sharp effect = %d by %d, %v, %v, want reduced within the cap", g.w, g.h, reduced, ok)
+	}
+}

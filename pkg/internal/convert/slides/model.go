@@ -20,6 +20,9 @@ type Document struct {
 	// is printed as: the zero value, fontconfig's, for PowerPoint;
 	// LibreOffice's for Impress.
 	Fallback text.Fallback
+	// Effects says whose rules draw the shapes' shadows, glows and soft
+	// edges: the zero value, PowerPoint's; Impress's.
+	Effects EffectRules
 	// Width and Height are the slide size in points (ECMA-376 Part 1,
 	// 19.2.1.36 sldSz; ODF fo:page-width and fo:page-height of the master
 	// pages' page layout), both positive.
@@ -71,6 +74,21 @@ type Document struct {
 	// not printed unless the options ask for it.
 	Slides []*Slide
 }
+
+// EffectRules names the program whose rules draw the shadows, glows and
+// soft edges of a presentation's shapes.
+type EffectRules uint8
+
+const (
+	// EffectsPowerPoint draws them as PowerPoint prints a PresentationML
+	// presentation: each effect once, blurred by a Gaussian, at the
+	// resolution the effect engine's rule gives the blur.
+	EffectsPowerPoint EffectRules = iota
+	// EffectsImpress draws them as Impress prints a presentation: the glow
+	// and the soft edge of a rectangle twice, blurred by a tent, at 720
+	// pixels an inch within 250,000 pixels a bitmap.
+	EffectsImpress
+)
 
 // Slide is one slide (ECMA-376 Part 1, 19.3.1.38 sld; ODF 1.3 Part 3, 10.2.4
 // draw:page).

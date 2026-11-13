@@ -47,9 +47,13 @@ func flatten(frags []typeset.Fragment, m typeset.Matrix, opacity float64, out *[
 	}
 }
 
-func effectPage(t *testing.T, shapes ...*Shape) ([]placed, []typeset.Warning) {
+// effectPage converts a deck of one slide of shapes, its effects drawn by
+// rules, and lists what its page paints.
+func effectPage(t *testing.T, rules EffectRules, shapes ...*Shape) ([]placed, []typeset.Warning) {
 	t.Helper()
-	doc := convert(t, deck(&Slide{Shapes: shapes}), office.Options{})
+	d := deck(&Slide{Shapes: shapes})
+	d.Effects = rules
+	doc := convert(t, d, office.Options{})
 	var ps []placed
 	flatten(doc.Pages[0].Content, typeset.Identity, 1, &ps)
 	return ps, doc.Warnings
@@ -84,7 +88,7 @@ func TestShape_HardShadow(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sh := &Shape{Box: box, Rotation: tc.rot, Fill: Fill{Kind: FillSolid, Color: red}, Shadow: &tc.shadow}
-			ps, warns := effectPage(t, sh)
+			ps, warns := effectPage(t, EffectsPowerPoint, sh)
 			if len(ps) != 2 || ps[0].path == nil || ps[1].path == nil {
 				t.Fatalf("%d fragments, want the shadow's path then the shape's", len(ps))
 			}
@@ -101,20 +105,20 @@ func TestShape_HardShadow(t *testing.T) {
 	}
 	t.Run("none", func(t *testing.T) {
 		sh := &Shape{Box: box, Fill: Fill{Kind: FillSolid, Color: red}, Shadow: &Shadow{Color: css.Color{A: 1}}}
-		ps, _ := effectPage(t, sh)
+		ps, _ := effectPage(t, EffectsPowerPoint, sh)
 		if len(ps) != 1 {
 			t.Fatalf("%d fragments, want the shape alone for a shadow of opacity 0", len(ps))
 		}
 	})
 }
 
-// TestShape_BlurredShadow checks that a blurred shadow is one bitmap under
-// the shape over its box moved by the offsets and grown by the blur, in
+// TestShape_BlurredShadow checks that a blurred shadow drawn by Impress's
+// rules is one bitmap under the shape over its box moved by the offsets and grown by the blur, in
 // the shadow's colour, opaque inside and half covered on the outline.
 func TestShape_BlurredShadow(t *testing.T) {
 	box := typeset.Rect{X: 100, Y: 100, Width: 200, Height: 100}
 	sh := &Shape{Box: box, Fill: Fill{Kind: FillSolid, Color: red}, Shadow: &Shadow{Color: css.Color{B: 1, A: 1}, Opacity: 0.5, OffsetX: 10, OffsetY: 20, Blur: 8}}
-	ps, warns := effectPage(t, sh)
+	ps, warns := effectPage(t, EffectsImpress, sh)
 	if len(ps) != 2 || ps[0].img == nil || ps[1].path == nil {
 		t.Fatalf("%d fragments, want the shadow's bitmap then the shape", len(ps))
 	}
@@ -149,7 +153,7 @@ func abs(v int) int {
 	return v
 }
 
-// TestShape_Glow checks that a glow is a bitmap over the shape grown by its
+// TestShape_Glow checks that a glow drawn by Impress's rules is a bitmap over the shape grown by its
 // radius, opaque at its opacity on the outline and fading out, painted
 // under the shape; a rectangle glows twice, an ellipse once.
 func TestShape_Glow(t *testing.T) {
@@ -166,7 +170,7 @@ func TestShape_Glow(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sh := &Shape{Box: box, Geometry: tc.geom, Fill: Fill{Kind: FillSolid, Color: red}, Glow: glow}
-			ps, _ := effectPage(t, sh)
+			ps, _ := effectPage(t, EffectsImpress, sh)
 			if len(ps) != len(tc.grown)+1 || ps[len(ps)-1].path == nil {
 				t.Fatalf("%d fragments, want %d glows then the shape", len(ps), len(tc.grown))
 			}
@@ -189,7 +193,8 @@ func TestShape_Glow(t *testing.T) {
 	}
 }
 
-// TestShape_SoftEdge checks that a soft edge draws the shape as a bitmap in
+// TestShape_SoftEdge checks that a soft edge drawn by Impress's rules draws
+// the shape as a bitmap in
 // its fill's colour whose alpha fades from the outline inwards, in place of
 // its paths.
 func TestShape_SoftEdge(t *testing.T) {
@@ -205,7 +210,7 @@ func TestShape_SoftEdge(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sh := &Shape{Box: box, Geometry: tc.geom, Fill: Fill{Kind: FillSolid, Color: red}, SoftEdge: 10}
-			ps, warns := effectPage(t, sh)
+			ps, warns := effectPage(t, EffectsImpress, sh)
 			if len(ps) != 1 || ps[0].img == nil {
 				t.Fatalf("%d fragments, want the shape's bitmap alone", len(ps))
 			}
@@ -235,7 +240,7 @@ func TestShape_PictureShadow(t *testing.T) {
 	src := image.NewNRGBA(image.Rect(0, 0, 4, 4))
 	pic := &layout.Picture{Source: source(t, src), Width: 4, Height: 4}
 	sh := &Shape{Kind: KindPicture, Box: typeset.Rect{X: 50, Y: 50, Width: 80, Height: 40}, Picture: pic, Shadow: &Shadow{Color: css.Color{A: 1}, Opacity: 1, OffsetX: 5, Blur: 4}}
-	ps, _ := effectPage(t, sh)
+	ps, _ := effectPage(t, EffectsImpress, sh)
 	if len(ps) != 2 || ps[0].img == nil || ps[1].img == nil {
 		t.Fatalf("%d fragments, want the shadow's bitmap then the picture", len(ps))
 	}
