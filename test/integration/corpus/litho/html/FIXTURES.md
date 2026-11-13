@@ -4,7 +4,7 @@ HTML and Markdown sources litho authored, converted twice: by Chromium, through 
 
 | Path                | What it holds                                                                                                                   |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `sources/`          | The 66 sources                                                                                                                  |
+| `sources/`          | The 75 sources                                                                                                                  |
 | `corpus references` | Posts each source to the Gotenberg image and writes `testdata/litho/html/references/<name>.pdf` and their `manifest.json`       |
 | `../../../fixture/` | Reads a source directory and its `options.json` for `corpus references` and the `diff` feature (shared with the Office corpora) |
 
@@ -166,6 +166,22 @@ The seven sources below lock what the page-margin boxes show beyond fixed text. 
 | `named-strings-twin`           | 4     | none                    | The same pages, each value written in its named page's boxes                                                                                                                                                          |
 | `page-selectors-counters`      | 5     | `reference_of` the twin | `@page :first { counter-reset: page 5 }` numbering 5 to 9 of 5, `:nth(2n)` and `:nth(3)` selecting sheets by place, a chapter counter of the document read in `@top-left` at the start of each page                   |
 | `page-selectors-counters-twin` | 5     | none                    | The same pages, each number and label written in its named page's boxes                                                                                                                                               |
+
+## Paint effects
+
+The nine sources below lock the paint effects Chromium prints as PDF constructs, without a bitmap: group opacity, blend modes and isolation as transparency groups, clip paths as clipping paths, masks as soft masks. Each sets text over the effect, so the text score says the text stayed text. Chromium prints a mask image that is a raster picture unmasked, and composites two alpha mask layers by `intersect`, `subtract` or `exclude` other than CSS Masking 1, 6.11 asks; `mask-image` and `mask-layers` leave both out.
+
+| Source                  | Pages | Options | Exercises                                                                                                                                                                    |
+| ----------------------- | ----- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `opacity-group`         | 1     | none    | `opacity: 0.5` on a box of two overlapping children, on a bordered card with text, on an inline span with a background, and on each of two overlapping boxes                 |
+| `mix-blend-mode`        | 1     | none    | The fifteen blend modes besides normal, each on a box of text over a gradient                                                                                                |
+| `isolation`             | 1     | none    | A multiply box inside a box with a background, inside `isolation: isolate`, and inside stacking contexts made by `z-index`, a transform and opacity                          |
+| `background-blend-mode` | 1     | none    | A gradient over a background colour under six blend modes, and over no colour                                                                                                |
+| `clip-path-shapes`      | 1     | none    | `clip-path` by `inset`, `circle`, `ellipse`, `polygon` with even-odd, `path`, `rect`, `xywh`, reference boxes alone and with a shape; `clip` on an absolutely positioned box |
+| `clip-path-svg`         | 1     | none    | `clip-path: url()` naming SVG clipPath elements in user space, in `objectBoundingBox` units, by `evenodd` and by text; one naming no element                                 |
+| `mask-image`            | 1     | none    | `mask-image` gradients by alpha and by luminance, sized, positioned, repeated, by content box, and through `-webkit-mask-image`                                              |
+| `mask-layers`           | 1     | none    | Two mask layers added by alpha, by luminance and alpha, and intersected through the `mask` shorthand                                                                         |
+| `svg-mask`              | 1     | none    | `mask: url()` naming SVG mask elements by luminance and by alpha; in an SVG drawing, masks, `mix-blend-mode`, `isolation` and group opacity                                  |
 
 ## The Chromium references
 

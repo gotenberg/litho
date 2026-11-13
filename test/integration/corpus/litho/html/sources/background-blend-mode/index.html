@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Background blend modes</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; }
+h1 { font-size: 16pt; }
+.row::after { content: ""; display: block; clear: both; }
+.cell { float: left; width: 150px; height: 110px; margin: 0 16px 16px 0; position: relative; }
+.cell p { margin: 4px; }
+.b { float: left; width: 150px; height: 90px; margin: 0 16px 16px 0; padding: 6px; box-sizing: border-box; color: white; background: linear-gradient(90deg, #ffbe0b, #3a86ff), #8338ec; }
+</style>
+</head>
+<body>
+<h1>background-blend-mode</h1>
+<div class="row">
+<div class="b" style="background-blend-mode:normal">normal</div>
+<div class="b" style="background-blend-mode:multiply">multiply</div>
+<div class="b" style="background-blend-mode:screen">screen</div>
+<div class="b" style="background-blend-mode:overlay">overlay</div>
+<div class="b" style="background-blend-mode:difference">difference</div>
+<div class="b" style="background-blend-mode:luminosity">luminosity</div>
+<div class="b" style="background:linear-gradient(90deg,#ffbe0b,#3a86ff);background-blend-mode:multiply">No colour</div>
+</div>
+<p>The gradient blends with the purple background colour of its own box and not with the page beneath it.</p>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blend modes</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; }
+h1 { font-size: 16pt; }
+.row::after { content: ""; display: block; clear: both; }
+.cell { float: left; width: 150px; height: 110px; margin: 0 16px 16px 0; position: relative; }
+.cell p { margin: 4px; }
+.back { position: absolute; inset: 0; background: linear-gradient(90deg, #f77f00, #003049); }
+.top { position: absolute; left: 25px; top: 20px; width: 100px; height: 70px; background: #2a9d8f; color: white; font-weight: bold; }
+.cell span { position: absolute; bottom: -18px; left: 0; font-size: 9pt; }
+</style>
+</head>
+<body>
+<h1>mix-blend-mode</h1>
+<div class="row">
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:multiply">Text</div><span>multiply</span></div>
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:screen">Text</div><span>screen</span></div>
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:overlay">Text</div><span>overlay</span></div>
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:darken">Text</div><span>darken</span></div>
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:lighten">Text</div><span>lighten</span></div>
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:color-dodge">Text</div><span>color-dodge</span></div>
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:color-burn">Text</div><span>color-burn</span></div>
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:hard-light">Text</div><span>hard-light</span></div>
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:soft-light">Text</div><span>soft-light</span></div>
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:difference">Text</div><span>difference</span></div>
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:exclusion">Text</div><span>exclusion</span></div>
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:hue">Text</div><span>hue</span></div>
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:saturation">Text</div><span>saturation</span></div>
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:color">Text</div><span>color</span></div>
+<div class="cell"><div class="back"></div><div class="top" style="mix-blend-mode:luminosity">Text</div><span>luminosity</span></div>
+</div>
+<p>Each green box blends with the gradient beneath it, the text inside it blending as part of the box.</p>
+</body>
+</html>

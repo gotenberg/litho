@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mask images</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; }
+h1 { font-size: 16pt; }
+.row::after { content: ""; display: block; clear: both; }
+.cell { float: left; width: 150px; height: 110px; margin: 0 16px 16px 0; position: relative; }
+.cell p { margin: 4px; }
+.m { float: left; width: 150px; height: 100px; margin: 0 16px 16px 0; padding: 6px; box-sizing: border-box; background: #8338ec; color: white; border: 4px solid #ffbe0b; }
+</style>
+</head>
+<body>
+<h1>mask-image</h1>
+<div class="row">
+<div class="m" style="mask-image:linear-gradient(90deg, transparent, black)">Alpha gradient</div>
+<div class="m" style="mask-image:linear-gradient(white, black);mask-mode:luminance">Luminance</div>
+<div class="m" style="mask-image:radial-gradient(black 50%, transparent 52%);mask-size:60px 60px;mask-position:center;mask-repeat:no-repeat">Sized</div>
+<div class="m" style="mask-image:radial-gradient(black 45%, transparent 50%);mask-size:30px 30px">Repeated</div>
+<div class="m" style="mask-image:linear-gradient(black, transparent);mask-origin:content-box;mask-clip:content-box;padding:12px">Content box</div>
+<div class="m" style="-webkit-mask-image:linear-gradient(45deg, black 40%, transparent 60%)">Prefixed</div>
+</div>
+<p>Each box shows where its mask image is opaque, the text with it.</p>
+</body>
+</html>

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clip paths</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; }
+h1 { font-size: 16pt; }
+.row::after { content: ""; display: block; clear: both; }
+.cell { float: left; width: 150px; height: 110px; margin: 0 16px 16px 0; position: relative; }
+.cell p { margin: 4px; }
+.s { float: left; width: 130px; height: 90px; margin: 0 16px 16px 0; padding: 6px; border: 5px solid #1d3557; background: #e63946; color: white; }
+</style>
+</head>
+<body>
+<h1>clip-path basic shapes</h1>
+<div class="row">
+<div class="s" style="clip-path:inset(10px 20px 10% 5% round 12px)">inset</div>
+<div class="s" style="clip-path:circle(40% at 40% 50%)">circle</div>
+<div class="s" style="clip-path:ellipse(closest-side farthest-side)">ellipse</div>
+<div class="s" style="clip-path:polygon(evenodd, 0 0, 100% 0, 0 100%, 100% 100%)">polygon</div>
+<div class="s" style="clip-path:path('M10 10 L120 20 L60 100 Z')">path</div>
+<div class="s" style="clip-path:rect(10px 100px 80px 10px round 6px)">rect</div>
+<div class="s" style="clip-path:xywh(5px 5px 70% 60px)">xywh</div>
+<div class="s" style="clip-path:content-box circle(50%)">content-box</div>
+<div class="s" style="clip-path:padding-box">padding-box</div>
+<div class="s" style="clip-path:margin-box ellipse()">margin-box</div>
+<div class="s" style="position:absolute;top:470px;left:200px;clip:rect(5px, 100px, 60px, 20px)">clip rect</div>
+</div>
+<p style="margin-top:90px">Each box is clipped by a basic shape in its reference box; the last one, absolutely positioned, by clip.</p>
+</body>
+</html>

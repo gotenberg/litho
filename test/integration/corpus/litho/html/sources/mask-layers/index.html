@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mask layers</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; }
+h1 { font-size: 16pt; }
+.row::after { content: ""; display: block; clear: both; }
+.cell { float: left; width: 150px; height: 110px; margin: 0 16px 16px 0; position: relative; }
+.cell p { margin: 4px; }
+.m { float: left; width: 150px; height: 100px; margin: 0 16px 16px 0; padding: 6px; box-sizing: border-box; background: #e76f51; color: white; mask-image: linear-gradient(black, transparent), linear-gradient(90deg, black, transparent); }
+</style>
+</head>
+<body>
+<h1>Mask layers and mask-composite</h1>
+<div class="row">
+<div class="m" style="mask-composite:add">add</div>
+<div class="m" style="mask-mode:luminance, alpha;mask-image:linear-gradient(white, black), linear-gradient(90deg, black, transparent)">Luminance and alpha</div>
+<div class="m" style="mask:linear-gradient(black, black) center / 50% 50% no-repeat, linear-gradient(90deg, transparent, black) intersect">Shorthand</div>
+</div>
+<p>Two gradient layers composite into one mask, the top layer onto the one beneath it: added by alpha, added by luminance and alpha, intersected in the shorthand.</p>
+</body>
+</html>

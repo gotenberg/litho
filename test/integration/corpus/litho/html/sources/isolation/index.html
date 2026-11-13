@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Isolation</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; }
+h1 { font-size: 16pt; }
+.row::after { content: ""; display: block; clear: both; }
+.cell { float: left; width: 150px; height: 110px; margin: 0 16px 16px 0; position: relative; }
+.cell p { margin: 4px; }
+.back { position: absolute; inset: 0; background: #e9c46a; }
+.grp { position: absolute; left: 10px; top: 10px; width: 130px; height: 90px; }
+.grp.bg { background: #457b9d; }
+.blend { position: absolute; left: 30px; top: 20px; width: 70px; height: 50px; background: #e76f51; mix-blend-mode: multiply; color: white; }
+</style>
+</head>
+<body>
+<h1>isolation and stacking contexts</h1>
+<div class="row">
+<div class="cell"><div class="back"></div><div class="grp bg"><div class="blend">Blends</div></div></div>
+<div class="cell"><div class="back"></div><div class="grp" style="isolation:isolate"><div class="blend">Isolated</div></div></div>
+<div class="cell"><div class="back"></div><div class="grp" style="z-index:1"><div class="blend">z-index</div></div></div>
+<div class="cell"><div class="back"></div><div class="grp" style="transform:translateX(4px)"><div class="blend">Transform</div></div></div>
+<div class="cell"><div class="back"></div><div class="grp" style="opacity:0.99"><div class="blend">Opacity</div></div></div>
+<div class="cell"><div class="back"></div><div class="grp"><div class="blend">Page</div></div></div>
+</div>
+<p>A multiply box blends with what its stacking context paints beneath it. An isolated group, or any stacking context, keeps it from the yellow background.</p>
+</body>
+</html>

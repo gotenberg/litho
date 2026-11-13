@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clip paths from SVG</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; }
+h1 { font-size: 16pt; }
+.row::after { content: ""; display: block; clear: both; }
+.cell { float: left; width: 150px; height: 110px; margin: 0 16px 16px 0; position: relative; }
+.cell p { margin: 4px; }
+.s { float: left; width: 140px; height: 100px; margin: 0 16px 16px 0; background: linear-gradient(#2a9d8f, #264653); color: white; padding: 6px; box-sizing: border-box; }
+</style>
+</head>
+<body>
+<h1>clip-path naming a clipPath element</h1>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<clipPath id="user"><circle cx="50" cy="50" r="45"/><rect x="80" y="10" width="50" height="80"/></clipPath>
+<clipPath id="box" clipPathUnits="objectBoundingBox"><polygon points="0 0, 1 0, 0.5 1"/></clipPath>
+<clipPath id="odd"><path d="M0 0 H140 V100 H0 Z M30 20 H110 V80 H30 Z" clip-rule="evenodd"/></clipPath>
+<clipPath id="text"><text x="4" y="70" font-size="60" font-family="Liberation Sans" font-weight="bold">Clip</text></clipPath>
+</svg>
+<div class="row">
+<div class="s" style="clip-path:url(#user)">User space</div>
+<div class="s" style="clip-path:url(#box)">Bounding box</div>
+<div class="s" style="clip-path:url(#odd)">Even-odd</div>
+<div class="s" style="clip-path:url(#text)">Text</div>
+<div class="s" style="clip-path:url(#missing)">No such clip</div>
+</div>
+<p>Each box is clipped by an SVG clipPath element of the page; a reference to no element leaves the box unclipped.</p>
+</body>
+</html>

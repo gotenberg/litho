@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Group opacity</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; }
+h1 { font-size: 16pt; }
+.row::after { content: ""; display: block; clear: both; }
+.cell { float: left; width: 150px; height: 110px; margin: 0 16px 16px 0; position: relative; }
+.cell p { margin: 4px; }
+.half { opacity: 0.5; }
+.sq { position: absolute; width: 90px; height: 70px; }
+.a { left: 0; top: 0; background: #d62828; }
+.b { left: 50px; top: 35px; background: #1d3557; color: white; }
+.card { background: #2a9d8f; color: white; padding: 8px; width: 130px; border: 4px solid #264653; }
+span.half { background: #f4a261; }
+</style>
+</head>
+<body>
+<h1>Opacity composites a whole element</h1>
+<div class="row">
+<div class="cell half"><div class="sq a"></div><div class="sq b">Overlap</div></div>
+<div class="cell"><div class="card half">A translucent card with a border and text over its background.</div></div>
+<div class="cell"><p>Text with <span class="half">a translucent span over a background</span> in a line.</p></div>
+<div class="cell"><div class="sq a half"></div><div class="sq b half">Each half</div></div>
+</div>
+<p>The first box is one group at half opacity: the blue square hides the red one where they overlap. In the last box each square is translucent on its own and the overlap shows both.</p>
+</body>
+</html>
