@@ -2,6 +2,7 @@ package html
 
 import (
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -47,6 +48,61 @@ func TestNamedStrings_RunningHeaders(t *testing.T) {
 	}
 	if hasText(doc.Pages[0], "Running two") {
 		t.Error("the second running element shows on the first page")
+	}
+}
+
+// TestPagePicks_FirstStartLastFirstExcept locks the four keywords of
+// string() and element() (CSS GCPM 3, 1.1.2 and 1.2.2) on pages where the
+// assignment starts the page behind its kept top margin (3, 4), behind the
+// border and padding of the section it opens (5), sits in the middle (1,
+// 6), is absent (2), and is made twice (4). The running element of page 3
+// starts its page; those of pages 1, 4 and 6 do not.
+func TestPagePicks_FirstStartLastFirstExcept(t *testing.T) {
+	const body = `
+	<p>Intro</p><div class=r>rMid1</div><h2>Mid1</h2>
+	<p class=brk>None</p>
+	<section class=brk><div class=r>rTop3</div><h2>Top3</h2><p>text</p></section>
+	<h2 class=brk>Top4a</h2><p>p</p><div class=r>r4b</div><h2>Twice4b</h2>
+	<section class="brk boxed"><h2>Nested5</h2><p>x</p></section>
+	<p class=brk>Text</p><div class=r>r6</div><h2>Mid6</h2>`
+	for _, tc := range []struct {
+		content string
+		want    [6]string
+	}{
+		{`string(h, first)`, [6]string{"Mid1", "Mid1", "Top3", "Top4a", "Nested5", "Mid6"}},
+		{`string(h, start)`, [6]string{"", "Mid1", "Top3", "Top4a", "Nested5", "Nested5"}},
+		{`string(h, last)`, [6]string{"Mid1", "Mid1", "Top3", "Twice4b", "Nested5", "Mid6"}},
+		{`string(h, first-except)`, [6]string{"", "Mid1", "", "", "", ""}},
+		{`element(r, first)`, [6]string{"rMid1", "rMid1", "rTop3", "r4b", "r4b", "r6"}},
+		{`element(r, start)`, [6]string{"", "rMid1", "rTop3", "rTop3", "r4b", "r4b"}},
+		{`element(r, last)`, [6]string{"rMid1", "rMid1", "rTop3", "r4b", "r4b", "r6"}},
+		{`element(r, first-except)`, [6]string{"", "rMid1", "", "", "r4b", ""}},
+	} {
+		t.Run(tc.content, func(t *testing.T) {
+			src := `<style>
+				@page { size: 400pt 300pt; margin: 60pt; font: 10pt "Test Serif"; @top-center { content: ` + tc.content + ` } }
+				body { font: 10pt "Test Serif" }
+				h2 { string-set: h content(); font-size: 12pt; margin: 10pt 0 }
+				.r { position: running(r) }
+				.brk { break-before: page }
+				.boxed { padding-top: 10pt; border-top: 1pt solid; margin-top: 15pt }
+			</style>` + body
+			doc := convertDoc(t, src, Options{PreferCSSPageSize: true})
+			if len(doc.Pages) != 6 {
+				t.Fatalf("%d pages, want 6", len(doc.Pages))
+			}
+			for i, want := range tc.want {
+				var got strings.Builder
+				for _, r := range pageTexts(doc.Pages[i]) {
+					if r.y < 60 {
+						got.WriteString(r.text)
+					}
+				}
+				if got.String() != want {
+					t.Errorf("page %d: top margin shows %q, want %q", i+1, got.String(), want)
+				}
+			}
+		})
 	}
 }
 

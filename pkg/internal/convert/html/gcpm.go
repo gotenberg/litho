@@ -27,12 +27,14 @@ const maxNamedStringBytes = 4 << 10
 const maxAssignments = 1 << 16
 
 // assignment is one value a named string or a running element takes in
-// document order (CSS GCPM 3, 2): its name, the anchor that says where it
-// landed, and its text or its content.
+// document order (CSS GCPM 3, 1): its name, the anchor that says where it
+// landed, its text or its content, and its lead, how far below the page
+// area's top its anchor lands when its element starts the page.
 type assignment struct {
 	name, id string
 	value    string
 	node     *layout.Node
+	lead     float64
 }
 
 // gcpmState holds the named strings and running elements of a document,
@@ -68,13 +70,15 @@ func (b *builder) record(list *[]assignment, a assignment) bool {
 	return true
 }
 
-// runAway takes the element node styled st out of the flow as a running
-// element (CSS GCPM 3, 2.2.1): element() shows it in the page-margin boxes
-// of the pages from the one where it would have been. It returns the empty
-// inline box that keeps its place in the flow, anchored to tell its page.
-func (b *builder) runAway(node *layout.Node, st *css.Style) *layout.Node {
+// runAway takes the element n, built as node and styled st, out of the
+// flow as a running element (CSS GCPM 3, 1.2.1): element() shows it in the
+// page-margin boxes of the pages from the one where it would have been. It
+// returns the empty inline box that keeps its place in the flow, anchored
+// to tell its page.
+func (b *builder) runAway(n *dom.Node, node *layout.Node, st *css.Style) *layout.Node {
 	id := b.gcpmID()
-	if !b.record(&b.gcpm.running, assignment{name: st.Running, id: id, node: node}) {
+	// The empty inline box that stays has no margin of its own.
+	if !b.record(&b.gcpm.running, assignment{name: st.Running, id: id, node: node, lead: b.lead(n, 0)}) {
 		return nil
 	}
 	node.ID = ""
@@ -89,6 +93,11 @@ func (b *builder) setStrings(n *dom.Node, node *layout.Node, st *css.Style, befo
 	if node.ID == "" {
 		node.ID = b.gcpmID()
 	}
+	own := 0.0
+	if st.Display != css.Inline && st.Display != css.InlineBlock {
+		own = max(resolveDim(st.Margin[css.Top], 0), 0)
+	}
+	lead := b.lead(n, own)
 	for _, ns := range st.StringSet {
 		var sb strings.Builder
 		for _, it := range ns.Items {
@@ -142,10 +151,62 @@ func (b *builder) setStrings(n *dom.Node, node *layout.Node, st *css.Style, befo
 		if len(v) > maxNamedStringBytes {
 			v = strings.ToValidUTF8(v[:maxNamedStringBytes], "")
 		}
-		if !b.record(&b.gcpm.strings, assignment{name: ns.Name, id: node.ID, value: v}) {
+		if !b.record(&b.gcpm.strings, assignment{name: ns.Name, id: node.ID, value: v, lead: lead}) {
 			return
 		}
 	}
+}
+
+// lead returns how far below the page area's top the box of the element n
+// starts when it is the first element on its page, own being its own top
+// margin: the top margins, borders and paddings of the ancestors whose
+// first in-flow content it is lie above it too. Adjoining top margins
+// collapse into the largest, a border or a padding keeps them apart, and
+// the root element's margin collapses with none (CSS 2.1, 8.3.1); a forced
+// break keeps the margins after it (CSS Fragmentation 3, 5.5).
+func (b *builder) lead(n *dom.Node, own float64) float64 {
+	total, adjoining := 0.0, own
+	c := n
+	for depth := 0; depth < maxTreeDepth && c.Parent != nil && b.opens(c); depth++ {
+		p := c.Parent
+		ps := b.computed.Style(p)
+		if ps == nil {
+			break
+		}
+		bp := usedBorder(ps.Border[css.Top]) + max(resolveDim(ps.Padding[css.Top], 0), 0)
+		if bp > 0 || p.Parent == nil || p.Parent.Type == dom.DocumentNode {
+			total += adjoining + bp
+			adjoining = 0
+		}
+		adjoining = max(adjoining, resolveDim(ps.Margin[css.Top], 0))
+		c = p
+	}
+	return total + adjoining
+}
+
+// opens reports whether the element c is the first in-flow content of its
+// parent: no text but white space, no in-flow element and no ::before
+// box comes before it (CSS 2.1, 9.3).
+func (b *builder) opens(c *dom.Node) bool {
+	if ps := b.computed.Pseudo(c.Parent, css.PseudoBefore); ps != nil && ps.Display != css.DisplayNone && ps.Content.Kind == css.ContentList {
+		return false
+	}
+	for s := c.PrevSibling; s != nil; s = s.PrevSibling {
+		switch s.Type { //nolint:exhaustive // comments and the rest make no box
+		case dom.TextNode:
+			if strings.TrimSpace(s.Data) != "" {
+				return false
+			}
+		case dom.ElementNode:
+			st := b.computed.Style(s)
+			if st == nil || st.Display == css.DisplayNone || st.Float != css.FloatNone ||
+				st.Position == css.Absolute || st.Position == css.Fixed || st.Running != "" || st.Footnote || st.Note != "" {
+				continue
+			}
+			return false
+		}
+	}
+	return true
 }
 
 // nodeText returns the text of the Text nodes under n.
@@ -202,8 +263,19 @@ func firstLetter(s string) string {
 }
 
 // pick returns the assignment of name in list that a page-margin box of
-// page index shows under pick (CSS GCPM 3, 2.1.2): top is the page area's
-// top on the page, for start. ok is false when nothing applies.
+// page index shows under p (CSS GCPM 3, 1.1.2 for string(), 1.2.2 for
+// element()), and false when nothing applies:
+//
+//   - first: the first assignment on the page, else the entry value, the
+//     one in effect at the end of the previous page;
+//   - start: the first assignment when its element is the first element on
+//     the page, else the entry value;
+//   - last: the exit value, the one in effect at the end of the page;
+//   - first-except: the empty string on a page that assigns, else the
+//     entry value.
+//
+// top is the page area's top on the page: an element is the first on its
+// page when its anchor lands no lower than its lead below it.
 func (g *gcpmState) pick(list []assignment, name string, p css.PagePick, index int, top float64) (assignment, bool) {
 	var entry, first, last assignment
 	hasEntry, onPage, firstAtTop := false, false, false
@@ -220,7 +292,7 @@ func (g *gcpmState) pick(list []assignment, name string, p css.PagePick, index i
 			entry, hasEntry = a, true
 		case page == index:
 			if !onPage {
-				first, firstAtTop = a, d.Y <= top+pageTopSlack
+				first, firstAtTop = a, d.Y <= top+a.lead+pageTopSlack
 			}
 			last, onPage = a, true
 		}

@@ -244,7 +244,7 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 		return []*layout.Node{b.note(ctx, n, node, st)}, nil
 	}
 	if st.Running != "" {
-		if keep := b.runAway(node, st); keep != nil {
+		if keep := b.runAway(n, node, st); keep != nil {
 			return []*layout.Node{keep}, nil
 		}
 		return nil, nil
