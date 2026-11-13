@@ -68,3 +68,32 @@ func TestUserAgent_TableBorderColors(t *testing.T) {
 		t.Errorf("form in a table: display %v", s.Display)
 	}
 }
+
+// TestUserAgent_FormControlText locks the text properties a form control
+// sets apart from its ancestors (HTML Standard, 15.3.10): spacing, line
+// height, transform, indent, shadow and alignment back to their initial
+// values, a button's text centred, a button sized by its border box, a
+// textarea's white space kept.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium in gotenberg/gotenberg:9.4.1, under a body
+//     with line-height 3, letter-spacing 2px, text-transform uppercase,
+//     text-indent 7px and text-align right, computes an input's as
+//     normal, normal, none, 0px and start, a button's text-align as center
+//     and box-sizing as border-box, a textarea's white-space as pre-wrap.
+func TestUserAgent_FormControlText(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<body><input id=i value=x><button id=b>b</button><textarea id=t>t</textarea></body>`,
+		`body { line-height: 3; letter-spacing: 2px; text-transform: uppercase; text-indent: 7px; text-align: right }`)
+	i := c.of("i")
+	if i.LineHeight.Kind != Normal || i.LetterSpacing.Kind != Normal || i.TextTransform != TransformNone || i.TextAlign != AlignStart {
+		t.Errorf("input: line-height %v, letter-spacing %v, text-align %v", i.LineHeight, i.LetterSpacing, i.TextAlign)
+	}
+	if b := c.of("b"); b.TextAlign != AlignCenter || b.BoxSizing != BorderBox {
+		t.Errorf("button: text-align %v, box-sizing %v", b.TextAlign, b.BoxSizing)
+	}
+	if ta := c.of("t"); ta.WhiteSpace != PreWrap || ta.TextIndent != Pts(0) {
+		t.Errorf("textarea: white-space %v, text-indent %v", ta.WhiteSpace, ta.TextIndent)
+	}
+}
