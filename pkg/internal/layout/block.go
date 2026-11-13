@@ -890,12 +890,13 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 					cursor = e.layoutBlock(prev, cbFor(e.pageOf(prev.y)+1), bc, restore(prevSnap), mc, breakPush)
 					cursor = e.layoutBlock(k, cbFor(e.pageOf(cursor)), bc, cursor, mc, breakNone)
 				}
-			case avoidsInside(k) && e.straddles(k) && !e.atPageTop(k.y) && (k.borderH() <= e.areaH(e.pageOf(k.y)+1) || filled):
+			case avoidsInside(k) && e.straddles(k) && !e.atPageTop(k.y) && (k.borderH() <= e.areaH(e.pageOf(k.y)+1) || filled || e.followsOnPage(b, k.y)):
 				// The break before k violates no rule, the one inside it
 				// does: k moves to the next page. One taller than a page
 				// breaks inside there anyway, so it moves only past a
-				// sibling with content, a class A break point, rather than
-				// leave its page empty (CSS Fragmentation 3, 4.3 and 4.4).
+				// sibling with content, its own or an ancestor's, a class A
+				// break point, rather than leave its page empty (CSS
+				// Fragmentation 3, 4.3 and 4.4).
 				if e.relayout(k.y) {
 					cursor = e.layoutBlock(k, cbFor(e.pageOf(k.y)+1), bc, restore(snap), mc, breakPush)
 				}
@@ -935,6 +936,39 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		}
 	}
 	return cursor
+}
+
+// followsOnPage reports a class A break point above the child of b at y
+// on y's page (CSS Fragmentation 3, 4.1): b or a block ancestor of b, in
+// the same block flow, follows an in-flow sibling whose border box ends
+// on that page below its top. A child that moves to the next page breaks
+// there and leaves content on the page it leaves, as Chromium moves a box
+// that avoids breaks inside it however tall it is.
+func (e *engine) followsOnPage(b *box, y float64) bool {
+	p := e.pageOf(y)
+	top := e.pageTop(p)
+	for a, depth := b, 0; a.parent != nil && depth <= maxTreeDepth; a, depth = a.parent, depth+1 {
+		up := a.parent
+		if a.abs || a.float != css.FloatNone || a.inline || a.tpart != partNone || up.flex != nil || up.grid != nil {
+			return false
+		}
+		for _, s := range up.kids {
+			if s == a {
+				break
+			}
+			if s.abs || s.float != css.FloatNone || !s.laidOut || s.borderH() <= 0 {
+				continue
+			}
+			if bot := s.y + s.borderH(); bot > top+eps && e.pageOf(bot-eps) == p {
+				return true
+			}
+		}
+		if up.mc != nil {
+			// The columns' flow starts in the multi-column container.
+			return false
+		}
+	}
+	return false
 }
 
 // isForced reports a break value that forces a page break (CSS

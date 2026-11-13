@@ -209,3 +209,28 @@ func TestFragmentation_ViewportClipsOverflow(t *testing.T) {
 		t.Errorf("%d pages, want 3: visible overflow takes its pages", len(res.Pages))
 	}
 }
+
+// TestFragmentation_AvoidInsideMovesPastAncestorSibling locks that a box
+// too tall for a page that avoids breaks inside it moves to the next page
+// past its ancestor's sibling, a class A break point on its page, and
+// stays where only its ancestor's padding precedes it (CSS Fragmentation
+// 3, 4.1 and 4.4).
+//
+// # Corpus evidence
+//
+//   - probe, html: on a 2 in page area, Chromium prints a 250 px avoid box
+//     inside a wrapper after a 100 px block from the second page on (3
+//     pages); under its parent's 20 px top padding alone it stays (2
+//     pages).
+func TestFragmentation_AvoidInsideMovesPastAncestorSibling(t *testing.T) {
+	root := doc(el(sty(height(10))), el(sty(), el(sty(avoid, height(40)))))
+	rb := boxes(t, root, page(10, 30))
+	if got := rect(kid(t, rb, 0, 1, 0))[1]; got != 30 {
+		t.Errorf("avoid box top %v, want 30, on the next page", got)
+	}
+	root = doc(el(sty(padding(5, 0)), el(sty(avoid, height(40)))))
+	rb = boxes(t, root, page(10, 30))
+	if got := rect(kid(t, rb, 0, 0, 0))[1]; got != 5 {
+		t.Errorf("avoid box under padding alone at %v, want 5", got)
+	}
+}
