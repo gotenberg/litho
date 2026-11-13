@@ -232,7 +232,7 @@ var wptDirs = []string{
 	"css/css-inline", "css/css-position", "css/css-transforms", "css/css-ruby", "css/css-content",
 	"css/css-counter-styles", "css/css-values", "css/css-variables", "css/selectors", "css/css-color",
 	"css/css-images", "css/css-display", "css/css-pseudo", "css/css-masking", "css/compositing",
-	"css/css-logical", "css/css-box",
+	"css/css-logical", "css/css-box", "css/css-animations", "css/css-transitions",
 }
 
 // wptAreaCap bounds the tests one area contributes, an area being a CSS2
@@ -250,6 +250,7 @@ var wptAreaCap = map[string]int{
 	"css/css-counter-styles": 40, "css/css-values": 60, "css/css-variables": 60, "css/selectors": 100,
 	"css/css-color": 60, "css/css-images": 60, "css/css-display": 60, "css/css-pseudo": 100,
 	"css/css-masking": 120, "css/compositing": 60, "css/css-logical": 40, "css/css-box": 40,
+	"css/css-animations": 40, "css/css-transitions": 40,
 }
 
 func compileAll(flags string, patterns ...string) []*regexp.Regexp {
