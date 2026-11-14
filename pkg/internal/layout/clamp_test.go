@@ -50,6 +50,20 @@ func TestLineClamp_SizesTheBox(t *testing.T) {
 	}
 }
 
+// TestLineClamp_FloatsDoNotGrowTheBox checks that a float in a line-clamp
+// container makes it no taller (CSS Overflow 4, 5.3): its height ends
+// with its lines, clamped or not.
+func TestLineClamp_FloatsDoNotGrowTheBox(t *testing.T) {
+	for _, n := range []int{2, 3} {
+		st := sty(func(s *css.Style) { s.LineClamp.MaxLines, s.LineClamp.Continue = n, css.ContinueDiscard })
+		fl := el(sty(float(css.FloatLeft), width(1), height(100)))
+		b := boxes(t, doc(el(st, fl, txt(sty(), "a b"))), page(20, 200))
+		if got := kid(t, b, 0).h; !near(got, px(20)) {
+			t.Errorf("max-lines %d: height %vpx, want the two lines' 20px", n, got/px(1))
+		}
+	}
+}
+
 func TestLineClamp_AutoStopsAtMaxHeight(t *testing.T) {
 	st := sty(func(s *css.Style) {
 		s.LineClamp.Auto, s.LineClamp.Continue = true, css.ContinueDiscard

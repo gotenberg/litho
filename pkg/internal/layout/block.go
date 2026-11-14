@@ -1093,7 +1093,10 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	}
 	end = e.pastMargin(end, mc.strut, false)
 	mc.commit(end)
-	end = max(end, own.bottom(), b.contentY())
+	if !lineClampContainer(b) {
+		end = max(end, own.bottom())
+	}
+	end = max(end, b.contentY())
 	h := containedHeight(b, end-b.contentY())
 	content := h
 	if hSet {
@@ -1106,6 +1109,20 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	e.cloneEdges(b, hSet)
 	e.placeMarker(b)
 	e.reach(b.y + b.borderH())
+}
+
+// lineClampContainer reports a box of the line-clamp property, whose
+// floats introduce no clearance that would make it taller (CSS Overflow
+// 4, 5.3): its automatic height ends with its in-flow content. The legacy
+// -webkit-line-clamp keeps the floats a block formatting context holds.
+//
+// # Corpus evidence
+//
+//   - wpt, css/css-overflow/line-clamp/line-clamp-with-floats-016.html
+//     and -017.html: Chromium draws a line-clamp container of two 50px
+//     lines and a 200px float 100px tall, the lines clamped or not.
+func lineClampContainer(b *box) bool {
+	return b.st.LineClamp.MaxLines > 0 || b.st.LineClamp.Auto
 }
 
 // layoutBlockKids lays out the block-level children of b in flow, honouring
