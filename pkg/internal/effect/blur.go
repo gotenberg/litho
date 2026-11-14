@@ -149,8 +149,10 @@ const (
 // pixels and divides once, rounded; the result of the row pass keeps
 // eight more bits for the column pass. A Kernel's zero value skips its
 // pass. Premultiplied colour blurs as Filter Effects 1, 9.14 requires.
-// The work memory, two bytes a channel of every pixel, is charged to the
-// budget ctx carries for the length of the call.
+// A pass of a [BoxKernel] takes a few operations a value whatever the
+// kernel's width; a pass of another kernel one a weight. The work memory,
+// two bytes a channel of every pixel, is charged to the budget ctx
+// carries for the length of the call.
 func Blur(ctx context.Context, s *Surface, kx, ky Kernel, edge Edge) error {
 	if len(kx.W) == 0 && len(ky.W) == 0 {
 		return nil
