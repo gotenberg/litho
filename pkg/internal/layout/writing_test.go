@@ -151,3 +151,22 @@ func TestWritingMode_PicturesStandUpright(t *testing.T) {
 		______
 		______`)
 }
+
+// TestWritingMode_BlockSizeOfItsContent sizes a vertical block of width
+// auto in a horizontal flow by its content: its width is its block size,
+// its content's (CSS 2.1, 10.6.3, read in its writing mode; CSS Writing
+// Modes 4, 7.3), and it sits at the start of its containing block.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (Gotenberg 9.4.1) draws a vertical-rl div
+//     of width auto holding one 20px Ahem column 20px wide at the left of
+//     the body.
+func TestWritingMode_BlockSizeOfItsContent(t *testing.T) {
+	t.Parallel()
+	wm := func(s *css.Style) { s.WritingMode = css.VerticalRL }
+	root := doc(el(sty(wm, height(2), bg(lime)), el(sty(wm, width(3), bg(blue)))))
+	assertPixels(t, runWith(t, root, Options{Page: page(6, 2), BrowserRules: true}), 1, `
+		BBB___
+		BBB___`)
+}

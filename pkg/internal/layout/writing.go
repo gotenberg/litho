@@ -67,8 +67,9 @@ func (orthoFormatter) layout(e *engine, b *box, cb cblock, _ *bfc, cursor float6
 	l := e.orthoInline(b, cb)
 	hc := e.layoutOrtho(b, in, cb, cursor, l)
 	w := cb.w
-	if w <= 0 {
+	if w <= 0 || e.contentBlockSize(b) {
 		w = hc
+		b.w = hc
 	}
 	in.st.TransformOrigin = [2]css.Dimension{css.Pts(0), css.Pts(0)}
 	if b.st.WritingMode == css.SidewaysLR {
@@ -83,6 +84,16 @@ func (orthoFormatter) layout(e *engine, b *box, cb cblock, _ *bfc, cursor float6
 		}
 	}
 	return cursor + l
+}
+
+// contentBlockSize reports an orthogonal flow root b whose width, its
+// block size, is its content's under the browser rules: an in-flow block
+// of width auto, whose block size is its content's height turned (CSS 2.1,
+// 10.6.3, read in the root's writing mode; CSS Writing Modes 4, 7.3),
+// where the Office converters fill the containing block.
+func (e *engine) contentBlockSize(b *box) bool {
+	return e.opts.BrowserRules && b.st.Width.Kind == css.Auto && b.float == css.FloatNone && !b.abs && !b.inline &&
+		b.tpart == partNone && !b.flexItem && !b.gridItem
 }
 
 // intrinsic returns the width the content takes turned: its height laid
