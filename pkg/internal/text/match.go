@@ -159,9 +159,8 @@ var genericFamilies = map[generic][]string{
 // # Corpus evidence
 //
 //   - probe, html: in the gotenberg/gotenberg:9.4.1 image, fc-match math
-//     gives DejaVu Math TeX Gyre, fc-list :lang=und-zmth lists it alone
-//     (not Noto Sans Math), and Chromium prints a MathML formula and a
-//     paragraph of font-family: math in it.
+//     gives DejaVu Math TeX Gyre, and fc-list :lang=und-zmth lists it
+//     alone (not Noto Sans Math).
 var mathFamilies = []string{
 	"XITS Math", "STIX Two Math", "Cambria Math", "Latin Modern Math", "Minion Math",
 	"Lucida Math", "Asana Math", "DejaVu Math TeX Gyre",
@@ -478,12 +477,12 @@ func resolvedFamilies(style Style) familyLists {
 // other language, the list is the one above. Only a style under
 // [FallbackChromium] passes a language.
 //
-// The math generic family resolves to no face in Chromium on Linux: its
-// settings name none in its place, and Chromium does not ask fontconfig
-// for it. BrowserFamilies leaves it out, so a list of it alone draws with
-// the standard font, Liberation Serif in the reference image, and a
-// formula takes that font's metrics and no MATH table (see
-// [chromiumNoMath]).
+// For the math generic family Chromium asks for the family its settings
+// name, [chromiumMathFamily], and never for fontconfig's own math list.
+// BrowserFamilies puts that family in the generic's place, so where it is
+// not installed a list of math alone draws with the standard font,
+// Liberation Serif in the reference image, and a formula takes that
+// font's metrics and no MATH table.
 func BrowserFamilies(families []string, lang string) []string {
 	region := chromiumHanRegion(lang)
 	n := len(families) + 2
@@ -494,7 +493,8 @@ func BrowserFamilies(families []string, lang string) []string {
 	hasGeneric := false
 	for _, name := range families {
 		g := genericOf(name)
-		if g == chromiumNoMath {
+		if g == genericMath {
+			out = append(out, chromiumMathFamily)
 			continue
 		}
 		if g != genericNone {
@@ -517,9 +517,10 @@ func BrowserFamilies(families []string, lang string) []string {
 	return out
 }
 
-// chromiumNoMath records why [BrowserFamilies] leaves the math generic
-// family out: Chromium draws text of font-family: math, MathML included,
-// in its standard font.
+// chromiumMathFamily is the family Chromium on Linux asks for in place of
+// the math generic family, MathML included: the one its settings name.
+// It does not ask fontconfig for a math font, so a math font of another
+// name stays unused except for the characters the standard font lacks.
 //
 // # Corpus evidence
 //
@@ -530,7 +531,11 @@ func BrowserFamilies(families []string, lang string) []string {
 //     the characters Liberation Serif lacks, the mathematical italic
 //     letters and √, in DejaVu Math TeX Gyre; its display ∑ keeps the
 //     size of its text, as a font without a MATH table lays it out.
-const chromiumNoMath = genericMath
+//   - probe, html: with a copy of DejaVu Math TeX Gyre installed in that
+//     image under the family name Latin Modern Math, Chromium's PDF of
+//     the same paragraph and of a formula embeds that font alone, and its
+//     display ∑ is the large variant with its limits above and below.
+const chromiumMathFamily = "Latin Modern Math"
 
 // chromiumCJKFamily returns the Noto CJK family Chromium draws the generic
 // family g with in the Han variant region (JP, SC, TC or KR; "" for none),

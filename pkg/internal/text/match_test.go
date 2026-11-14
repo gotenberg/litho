@@ -599,8 +599,9 @@ func TestMatch_GenericMath(t *testing.T) {
 	if got := g.Match(Style{Families: []string{"math"}, Size: 10}).Family(); got != "DejaVu Sans" {
 		t.Errorf("Match(math) without a math face = %s, want the sans-serif DejaVu Sans", got)
 	}
-	// Chromium resolves no face for math: its standard font draws it.
-	if got := BrowserFamilies([]string{"math"}, ""); !slices.Equal(got, []string{"Times New Roman", "serif"}) {
+	// Chromium asks for the family its settings name for math, then for
+	// its standard font.
+	if got := BrowserFamilies([]string{"math"}, ""); !slices.Equal(got, []string{"Latin Modern Math", "Times New Roman", "serif"}) {
 		t.Errorf("BrowserFamilies(math) = %q", got)
 	}
 }
