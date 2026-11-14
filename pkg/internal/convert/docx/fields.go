@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/formfield"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/internal/omml"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
@@ -115,6 +116,13 @@ func (d *document) startResult(s *story, f *field, st *css.Style, sink *inlineSi
 		return
 	}
 	if d.legacyResult(f, st, sink) {
+		return
+	}
+	if q := omml.ReadField(instr, st.FontFamilies, omml.RunStyle{Size: st.FontSize, Color: colorOf(st.Color)}); q != nil {
+		// An EQ field (17.16.5.20) draws its equation in place of a
+		// result, as Word does, which stores none.
+		f.computed = true
+		d.equation(q, st, st, sink)
 		return
 	}
 	if v, ok := d.computeField(s, instr, f.locked); ok {

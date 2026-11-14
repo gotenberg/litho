@@ -43,6 +43,14 @@ func (d *document) math(rp resolvedPara, ps *css.Style, lineMult float64, e *oox
 	if q == nil {
 		return
 	}
+	first := styleOf(e.Find(ooxml.NSM, "r"))
+	d.equation(q, d.share(&first), ps, sink)
+}
+
+// equation adds the equation q, its root styled inner, to the inline
+// content of a paragraph styled ps: an inline equation on its line by its
+// baseline, a display one as a line of its own.
+func (d *document) equation(q *omml.Equation, inner, ps *css.Style, sink *inlineSink) {
 	if d.formulas == nil {
 		d.formulas = formula.NewSetter(d.fonts, d.opts.Logger)
 	}
@@ -57,8 +65,6 @@ func (d *document) math(rp resolvedPara, ps *css.Style, lineMult float64, e *oox
 	for _, w := range box.Warnings {
 		d.warn(w.Code, w.Effect, w.Message)
 	}
-	first := styleOf(e.Find(ooxml.NSM, "r"))
-	inner := d.share(&first)
 	node := &layout.Node{Kind: layout.Replaced, Style: inner, Role: "Formula", Alt: q.AltText()}
 	if box.Width > 0 && box.Ascent+box.Descent > 0 {
 		node.Picture = &layout.Picture{

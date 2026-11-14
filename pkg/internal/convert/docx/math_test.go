@@ -41,3 +41,20 @@ func TestMath_InlineAndDisplay(t *testing.T) {
 		t.Errorf("alt text %q", formulas[1].Alt)
 	}
 }
+
+// TestMath_EquationField draws an EQ field (17.16.5.20) as a formula in
+// the run's own font in place of its result, which Word does not store.
+func TestMath_EquationField(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:rPr><w:rFonts w:ascii="Test Sans" w:hAnsi="Test Sans"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>` +
+		`<w:r><w:instrText xml:space="preserve"> EQ \a \al (Milk,Eggs) </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>` +
+		`<w:r><w:t>cached</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`
+	b := build(t, body, nil)
+	formulas := role(b.root, "Formula")
+	if len(formulas) != 1 || formulas[0].Alt != "Milk Eggs" || formulas[0].Picture == nil {
+		t.Fatalf("formulas %+v", formulas)
+	}
+	if got := textOf(b.root); got != "" {
+		t.Errorf("text %q: the cached result shows", got)
+	}
+}

@@ -38,10 +38,13 @@ type Equation struct {
 	root *formula.Element
 	// base is the style of the equation's first run, which the formula
 	// root takes; the other runs state their size and colour against it.
-	base    RunStyle
-	font    string
-	display bool
-	justify Justify
+	base RunStyle
+	font string
+	// families, when not nil, set the equation in place of the math
+	// font: an EQ field is set in its run's families.
+	families []string
+	display  bool
+	justify  Justify
 	// margins are the left and right margins of a math paragraph.
 	margins [2]float64
 	// fixups are what the layout measures and sizes before it lays
@@ -177,8 +180,12 @@ func (q *Equation) Style() formula.Style {
 	if size <= 0 {
 		size = defaultSize
 	}
+	families := q.families
+	if families == nil {
+		families = []string{q.font, "math"}
+	}
 	return formula.Style{
-		Families: []string{q.font, "math"},
+		Families: families,
 		Size:     size,
 		Weight:   400,
 		Color:    q.base.Color,
