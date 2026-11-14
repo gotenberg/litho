@@ -370,6 +370,14 @@ func (c *Chart) axisAt(i int) *Axis {
 //     to 200 by 50 by Excel, the count of officeIntervals.
 //   - litho/pptx: chart-3d's 3-D column chart with a depth axis is
 //     labelled 0 to 6 by 2 by PowerPoint, the count of officeIntervals.
+//   - litho/pptx: chart-3d's clustered 3-D columns, 3-D bar cones and
+//     3-D line, whose data reach 5, run from 0 to 5 in PowerPoint, where
+//     chart-bar's 2-D columns and bars over the same data run from 0 to
+//     6. No document measures the low end of an axis of negative data,
+//     where the rule drops the interval as well.
+//   - probe, xlsx: Excel's 3-D clustered columns over data up to 4.8,
+//     9.5, 47, 95 and 170 run to 6, 10, 60, 100 and 200, each the first
+//     multiple of the major unit the data reach.
 func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 	c := rd.c
 	xy := g0.Kind == Scatter || g0.Kind == Bubble
@@ -495,6 +503,12 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 		// (officeHorizontalIntervals).
 		for _, y := range ys {
 			y.officeScale = true
+			// Office's three-dimensional value axis ends at the multiple
+			// of its major unit the data reach, without the interval
+			// LibreOffice adds for data at the end.
+			if rd.threeD(g0) != nil {
+				y.border = false
+			}
 		}
 		x.officeScale = xy
 	}

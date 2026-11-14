@@ -3,6 +3,7 @@ package chart
 import (
 	"context"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -136,5 +137,20 @@ func TestHull(t *testing.T) {
 	h := hull(pts)
 	if len(h) != 4 {
 		t.Errorf("hull %v, want the 4 corners", h)
+	}
+}
+
+// TestRender_Office3DValueAxisEnd holds a three-dimensional value axis
+// under OfficeRules to the multiple of its major unit the data reach,
+// without LibreOffice's interval for data at the end: data up to 4 run
+// to 4.
+func TestRender_Office3DValueAxisEnd(t *testing.T) {
+	c := column3D()
+	c.Rules = OfficeRules
+	c.Axes[0].Labels, c.Axes[1].Labels = LabelNextTo, LabelNextTo
+	frags := Render(context.Background(), ahem(t), c, typeset.Rect{Width: 361.2, Height: 300})
+	got := " " + strings.Join(texts(frags), " ") + " "
+	if !strings.Contains(got, " 3.5 ") || strings.Contains(got, " 4.5 ") {
+		t.Errorf("labels = %q, want the axis to end at 4", got)
 	}
 }
