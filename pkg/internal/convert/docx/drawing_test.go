@@ -321,6 +321,32 @@ func TestTextBox_ShapeAndAnchor(t *testing.T) {
 	}
 }
 
+// TestTextBox_DashedOutline checks that a rectangular text box with a
+// dashed outline (ECMA-376 Part 1, 20.1.8.48 prstDash) draws its outline
+// as a path behind its text, which no border can dash, and that a solid
+// outline stays the box's border.
+func TestTextBox_DashedOutline(t *testing.T) {
+	t.Parallel()
+	box := func(dash string) *layout.Node {
+		t.Helper()
+		body := `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="2540000" cy="1270000"/><wp:docPr id="4" name="t"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">` +
+			`<wps:wsp><wps:spPr><a:prstGeom prst="rect"/><a:ln w="57150"><a:solidFill><a:srgbClr val="C00000"/></a:solidFill><a:prstDash val="` + dash + `"/></a:ln></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>boxed</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp>` +
+			`</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+		figs := role(build(t, body, nil).root, "Figure")
+		if len(figs) != 1 {
+			t.Fatalf("%d figures, want 1", len(figs))
+		}
+		return figs[0]
+	}
+	dashed := box("lgDashDotDot")
+	if dashed.Style.Border[css.Top].Width != 0 || len(dashed.Children) != 2 || dashed.Children[0].Kind != layout.Replaced || dashed.Children[0].Picture.Vector == nil {
+		t.Errorf("dashed box border %v, %d children, want no border and the outline drawn first", dashed.Style.Border[css.Top], len(dashed.Children))
+	}
+	if solid := box("solid"); solid.Style.Border[css.Top].Width != 4.5 || solid.Children[0].Kind == layout.Replaced {
+		t.Errorf("solid box border %v, want its 4.5-point border", solid.Style.Border[css.Top])
+	}
+}
+
 // TestTextBox_AnchorInGroup checks that a centred text box inside a group,
 // an absolutely positioned box, gives its text area a height in points:
 // the box's height less its insets, which a percentage would leave

@@ -338,6 +338,19 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 	return n
 }
 
+// pathOutline reports whether the outline of ss is one a box's border
+// cannot draw: a dashed line (20.1.8.48 prstDash, 20.1.8.21 custDash) or a
+// gradient line (20.1.8.33 gradFill in 20.1.2.2.24 ln).
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/LineStyle_DashType.docx: Word strokes
+//     the outlines of its seven text boxes with their dashes, 4.5 points
+//     in lgDashDotDot as 36 13.5 4.5 13.5 4.5 13.5.
+func pathOutline(ss ooxml.ShapeStyle) bool {
+	return ss.Line != nil && (ss.Dash != "" || len(ss.CustDash) > 0 || ss.LineGradient != nil)
+}
+
 // turnTextBox turns the text box n by its shape's rotation (ECMA-376
 // Part 1, 20.1.7.6 xfrm rot), its text with it, unless its body keeps the
 // text upright (21.1.2.1.1 bodyPr upright); the flips of xfrm leave the
@@ -503,9 +516,9 @@ func (d *document) textBoxEffectsOmitted(fx *css.OfficeEffects) {
 // h points, the geometry g of its shape and the vertical anchor of its
 // text (ECMA-376 Part 1, 20.1.2.1.1 bodyPr anchor; 20.1.10.59
 // ST_TextAnchoringType t, ctr, b): a shape other than a rectangle, or one
-// with the effects fx (20.1.8.26 effectLst), draws behind the text with
-// the fill and outline ss and its effects around it, which the box then
-// leaves unpainted, and the text sits at the top, the middle or the
+// with the effects fx (20.1.8.26 effectLst) or an outline no border draws
+// ([pathOutline]), draws behind the text with the fill and outline ss and
+// its effects around it, which the box then leaves unpainted, and the text sits at the top, the middle or the
 // bottom of the box's inset area, as Word places it. A box that grows to
 // fit its text (a:spAutoFit) keeps its text at the top; the shape behind
 // it keeps the size the file gives.
@@ -521,9 +534,9 @@ func (d *document) shapeTextBox(n *layout.Node, g *shape.Geometry, ss ooxml.Shap
 	if autoFit || (anchor != "ctr" && anchor != "b") {
 		anchor = ""
 	}
-	if fx != nil && (rect || !shape.Known(g)) {
+	if (fx != nil || pathOutline(ss)) && (rect || !shape.Known(g)) {
 		// The box's own fill and outline give way to a rectangle drawn
-		// behind the text, which carries the effects.
+		// behind the text, which carries the effects and the outline.
 		g, rect = &shape.Geometry{Preset: "rect"}, false
 	}
 	if (rect || !shape.Known(g)) && anchor == "" {
