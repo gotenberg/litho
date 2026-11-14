@@ -69,6 +69,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 		}
 		seeds = found
 	}
+	e.placeSticky(rb, viewportBox(rb))
 	disp, links, canvas := e.paint(rb)
 	e.paintNotes()
 	if e.err != nil {

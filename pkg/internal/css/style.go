@@ -138,8 +138,9 @@ const (
 	Contents
 )
 
-// Position is the position property (CSS 2.1, 9.3.1). Sticky computes to
-// Relative: paged output never scrolls.
+// Position is the position property (CSS 2.1, 9.3.1; CSS Position 3,
+// 2). A sticky box is laid out as a relative one and offset at the
+// initial scroll position, which is the one paged output prints.
 type Position uint8
 
 // The position values.
@@ -148,6 +149,7 @@ const (
 	Relative
 	Absolute
 	Fixed
+	Sticky
 )
 
 // ZIndex is the z-index property (CSS 2.1, 9.9.1): auto, or the integer

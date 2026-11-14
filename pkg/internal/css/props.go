@@ -790,7 +790,7 @@ func init() {
 			dst.Display, dst.flexOrGrid, dst.LineClamp.webkitBox = src.Display, src.flexOrGrid, src.LineClamp.webkitBox
 		}}},
 		{pPosition, enumProp("position", false, func(s *Style) *Position { return &s.Position }, map[string]Position{
-			"static": Static, "relative": Relative, "absolute": Absolute, "fixed": Fixed, "sticky": Relative, "-webkit-sticky": Relative,
+			"static": Static, "relative": Relative, "absolute": Absolute, "fixed": Fixed, "sticky": Sticky, "-webkit-sticky": Sticky,
 		})},
 		{pFloat, flowRelative(enumProp("float", false, func(s *Style) *Float { return &s.Float }, map[string]Float{
 			"none": FloatNone, "left": FloatLeft, "right": FloatRight,

@@ -554,6 +554,9 @@ func offset(b *box) (float64, float64) {
 // originate in it; a column or a column group, to which position does not
 // apply, does not move (CSS Position 3, 3.3).
 func ownOffset(b *box) (float64, float64) {
+	if b.st.Position == css.Sticky {
+		return b.stickyX, b.stickyY
+	}
 	if b.st.Position != css.Relative || b.kind == kindText || b.kind == kindBreak || b.tpart == partColumn || b.tpart == partColGroup {
 		return 0, 0
 	}

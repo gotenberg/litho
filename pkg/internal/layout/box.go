@@ -300,6 +300,9 @@ type box struct {
 	// already applied to the content height it returns.
 	orig                                   *css.Style
 	minHContent, maxHContent, heightCalced bool
+	// stickyX and stickyY are the offset of a sticky box at the initial
+	// scroll position ([engine.placeSticky]).
+	stickyX, stickyY float64
 	// fnBody is the footnote body of a footnote call, laid out in the
 	// footnote area of a page rather than in the flow (CSS GCPM 3, 3.2).
 	fnBody *box
@@ -441,7 +444,7 @@ func effectInline(b *box) bool {
 // offset (CSS 2.1, 9.2.1.1).
 func (b *box) hostMoves() bool {
 	for a := b.host; a != nil && a.kind == kindInline; a = a.parent {
-		if a.st.Position == css.Relative {
+		if a.st.Position == css.Relative || a.st.Position == css.Sticky {
 			return true
 		}
 	}
