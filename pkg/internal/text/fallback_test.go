@@ -247,3 +247,33 @@ func TestShape_SpaceTakesTheFirstFaceThatHoldsIt(t *testing.T) {
 		}
 	}
 }
+
+// TestLayout_PrivateUseTakesNamedFamiliesAlone locks CSS Fonts 4, 5.4
+// under [FallbackChromium]: a Private Use Area character takes a face of
+// a family the list names that is not generic, and no installed font
+// fallback; without one the matched face draws its missing glyph.
+func TestLayout_PrivateUseTakesNamedFamiliesAlone(t *testing.T) {
+	t.Parallel()
+	const pua = ''
+	f := newTestFonts(t,
+		fontFile{name: "a_liberation_sans.ttf", data: familyFace("Liberation Sans", "Regular", 400, false)},
+		fontFile{name: "b_symbols.ttf", data: familyFace("Symbols", "Regular", 400, false, pua)},
+	)
+	for _, tc := range []struct {
+		name  string
+		named []string
+		rule  Fallback
+		want  string
+	}{
+		{"Chromium, unnamed", []string{"Liberation Sans"}, FallbackChromium, "a_liberation_sans"},
+		{"Chromium, named", []string{"Liberation Sans", "Symbols"}, FallbackChromium, "b_symbols"},
+		{"fontconfig, unnamed", []string{"Liberation Sans"}, FallbackFontconfig, "b_symbols"},
+	} {
+		s := Style{Families: BrowserFamilies(tc.named, ""), Fallback: tc.rule, Size: 10}
+		lines, _ := layout(t, f, "A"+string(pua), s, 1000, Collapse)
+		runs := lines[0].Runs
+		if got := runs[len(runs)-1].Face.Key; !strings.Contains(got, tc.want) {
+			t.Errorf("%s: drawn with %s, want %s", tc.name, got, tc.want)
+		}
+	}
+}

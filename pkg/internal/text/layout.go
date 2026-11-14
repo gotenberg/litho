@@ -624,6 +624,34 @@ func (st *layoutState) covers(fc *Face, r rune) bool {
 	return ok && gid != 0
 }
 
+// isPrivateUse reports a character of a Private Use Area (Unicode 16.0,
+// 23.5): U+E000 to U+F8FF and planes 15 and 16.
+func isPrivateUse(r rune) bool {
+	return r >= 0xE000 && r <= 0xF8FF || r >= 0xF0000 && r <= 0x10FFFD
+}
+
+// namedFamilies returns the keys of the families an author's list names
+// that are not generic families, with their metric aliases: the only
+// families a Private Use Area character may take, under
+// [FallbackChromium] (CSS Fonts 4, 5.4: no installed font fallback for
+// such a character; the matched face draws its missing glyph instead).
+// families is the list [BrowserFamilies] rewrote.
+//
+// # Corpus evidence
+//
+//   - wpt: css/css-fonts/matching/font-unicode-PUA-primary-font: Chromium
+//     156 draws ten missing glyph boxes for Private Use Area characters
+//     under font-family: Arial, which another installed font covers.
+func namedFamilies(families []string) []string {
+	var l familyList
+	for _, name := range withoutBrowserDefaults(families) {
+		if genericOf(name) == genericNone {
+			l.addWithAliases(name)
+		}
+	}
+	return l.keys
+}
+
 // placeholderFamily is the family key of Apple's LastResort font, which maps
 // every character to a placeholder glyph showing its Unicode block: it draws
 // a character only when no other face covers it.
@@ -662,6 +690,14 @@ func (st *layoutState) fallback(s *styleState, script language.Script, r rune) *
 			return true
 		}
 		return false
+	}
+	if s.style.Fallback.rule() == FallbackChromium && isPrivateUse(r) {
+		for _, key := range namedFamilies(s.style.Families) {
+			if try(f.bestInFamily(key, s.req, r)) {
+				return found
+			}
+		}
+		return nil
 	}
 	g := p.generic
 	if isCJKScript(script) {
