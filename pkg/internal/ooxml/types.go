@@ -102,19 +102,40 @@ func HexColor(s string) (css.Color, bool) {
 	return css.Color{R: float64(v>>16&0xff) / 255, G: float64(v>>8&0xff) / 255, B: float64(v&0xff) / 255, A: 1}, true
 }
 
-// Tint lightens c towards white by the fraction 1-t of the way, as an
-// ST_UcharHexNumber themeTint does (ECMA-376 Part 1, 17.3.2.41: the
-// colour times t plus white times 1-t), t in [0, 1].
+// Tint lightens c towards white as Word computes a themeTint (ECMA-376
+// Part 1, 17.3.2.41): the lightness of c in HSL taken to l·t + 1 - t, each
+// component then cut down to a whole 255th; t in [0, 1].
+//
+// # Corpus evidence
+//
+//   - litho/docx run-theme-fonts-colors: Word paints the eleven theme
+//     colours of the Office theme under themeTint 99 and themeShade BF and
+//     80; the rule gives 22 of the 27 colours exactly and the others within
+//     one level (156,195,229 for Word's 156,194,229), where a blend of the
+//     components towards white or black is off by up to 33.
+//   - libreoffice/docx, litho/docx, openxmlsdk/docx, poi/docx: of the 106
+//     w:color and w:shd values Word stored beside a theme colour and a tint
+//     or a shade, the rule gives 80 exactly, the blend 23.
 func Tint(c css.Color, t float64) css.Color {
-	t = max(0, min(1, t))
-	return css.Color{R: float64(c.R*t) + 1 - t, G: float64(c.G*t) + 1 - t, B: float64(c.B*t) + 1 - t, A: c.A}
+	t = clamp01(t)
+	h, s, l := toHSL(c)
+	return wordLevels(fromHSL(h, s, clamp01(float64(l*t)+1-t), c.A))
 }
 
-// Shade darkens c towards black, the colour times s (ECMA-376 Part 1,
-// 17.3.2.41, themeShade), s in [0, 1].
+// Shade darkens c towards black as Word computes a themeShade (ECMA-376
+// Part 1, 17.3.2.41): the lightness of c in HSL scaled by s, each
+// component then cut down to a whole 255th; s in [0, 1]. The evidence is
+// [Tint]'s.
 func Shade(c css.Color, s float64) css.Color {
-	s = max(0, min(1, s))
-	return css.Color{R: c.R * s, G: c.G * s, B: c.B * s, A: c.A}
+	s = clamp01(s)
+	h, sat, l := toHSL(c)
+	return wordLevels(fromHSL(h, sat, float64(l*s), c.A))
+}
+
+// wordLevels cuts each component of c down to a whole 255th.
+func wordLevels(c css.Color) css.Color {
+	f := func(v float64) float64 { return math.Floor(clamp01(v)*255) / 255 }
+	return css.Color{R: f(c.R), G: f(c.G), B: f(c.B), A: c.A}
 }
 
 // HexByte parses a two-digit hexadecimal byte ("BF") into a fraction of

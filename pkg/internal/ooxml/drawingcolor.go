@@ -172,8 +172,7 @@ func transformColor(col css.Color, c *Element) css.Color {
 		case "tint":
 			col.R, col.G, col.B = tintComponent(col.R, v), tintComponent(col.G, v), tintComponent(col.B, v)
 		case "shade":
-			s := clamp01(v)
-			col.R, col.G, col.B = gammaOut(gammaIn(col.R)*s), gammaOut(gammaIn(col.G)*s), gammaOut(gammaIn(col.B)*s)
+			col = shadeColor(col, v)
 		case "gray":
 			g := grayLevel(col)
 			col.R, col.G, col.B = g, g, g
@@ -223,6 +222,14 @@ func invComponent(c float64) float64 { return gammaOut(1 - gammaIn(c)) }
 //     141,178,227 and under invGamma with 15,43,141: the sRGB encoding and
 //     decoding of the components give both exactly.
 func gammaShift(c float64) float64 { return gammaOut(c) }
+
+// shadeColor darkens c towards black by the fraction s of its linear RGB
+// it keeps (ECMA-376 Part 1, 20.1.2.3.31 shade).
+func shadeColor(c css.Color, s float64) css.Color {
+	s = clamp01(s)
+	c.R, c.G, c.B = gammaOut(gammaIn(c.R)*s), gammaOut(gammaIn(c.G)*s), gammaOut(gammaIn(c.B)*s)
+	return c
+}
 
 // tintComponent tints one sRGB component towards white by 1-t of the way
 // in linear RGB (ECMA-376 Part 1, 20.1.2.3.34 tint).

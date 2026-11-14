@@ -51,8 +51,59 @@ func TestOnOffAndColors(t *testing.T) {
 	if _, ok := HexColor("auto"); ok {
 		t.Error("HexColor(auto) parsed")
 	}
-	if got := Tint(css.Color{A: 1}, 0.5); got != (css.Color{R: 0.5, G: 0.5, B: 0.5, A: 1}) {
+	if got := Tint(css.Color{A: 1}, 0.5); got != (css.Color{R: 127.0 / 255, G: 127.0 / 255, B: 127.0 / 255, A: 1}) {
 		t.Errorf("Tint = %+v", got)
+	}
+}
+
+// TestTintShade_WordThemeColours holds Word's colours of litho/docx
+// run-theme-fonts-colors: each theme colour of the Office theme under
+// themeTint 99, themeShade BF and themeShade 80.
+func TestTintShade_WordThemeColours(t *testing.T) {
+	t.Parallel()
+	type row struct{ base, tint, shadeBF, shade80 [3]int }
+	rows := []row{
+		{[3]int{0, 0, 0}, [3]int{102, 102, 102}, [3]int{-1}, [3]int{-1}},
+		{[3]int{255, 255, 255}, [3]int{-1}, [3]int{191, 191, 191}, [3]int{128, 128, 128}},
+		{[3]int{68, 84, 106}, [3]int{132, 150, 176}, [3]int{50, 62, 79}, [3]int{34, 42, 53}},
+		{[3]int{231, 230, 230}, [3]int{-1}, [3]int{174, 170, 170}, [3]int{118, 113, 113}},
+		{[3]int{68, 114, 196}, [3]int{142, 170, 219}, [3]int{47, 84, 150}, [3]int{31, 56, 100}},
+		{[3]int{237, 125, 49}, [3]int{244, 176, 131}, [3]int{196, 89, 17}, [3]int{131, 60, 11}},
+		{[3]int{165, 165, 165}, [3]int{201, 201, 201}, [3]int{123, 123, 123}, [3]int{82, 82, 82}},
+		{[3]int{255, 192, 0}, [3]int{255, 217, 102}, [3]int{191, 143, 0}, [3]int{128, 96, 0}},
+		{[3]int{91, 155, 213}, [3]int{156, 194, 229}, [3]int{46, 116, 181}, [3]int{31, 78, 121}},
+		{[3]int{112, 173, 71}, [3]int{168, 208, 141}, [3]int{83, 129, 53}, [3]int{56, 86, 35}},
+		{[3]int{5, 99, 193}, [3]int{72, 160, 250}, [3]int{-1}, [3]int{-1}},
+	}
+	rgb := func(v [3]int) css.Color {
+		return css.Color{R: float64(v[0]) / 255, G: float64(v[1]) / 255, B: float64(v[2]) / 255, A: 1}
+	}
+	exact, total := 0, 0
+	check := func(name string, got css.Color, want [3]int) {
+		if want[0] < 0 {
+			return
+		}
+		total++
+		g := [3]int{int(math.Round(got.R * 255)), int(math.Round(got.G * 255)), int(math.Round(got.B * 255))}
+		if g == want {
+			exact++
+			return
+		}
+		for i := range g {
+			if d := g[i] - want[i]; d < -1 || d > 1 {
+				t.Errorf("%s: %v, want %v", name, g, want)
+				return
+			}
+		}
+	}
+	for _, r := range rows {
+		check("tint 99", Tint(rgb(r.base), 0x99/255.0), r.tint)
+		check("shade BF", Shade(rgb(r.base), 0xBF/255.0), r.shadeBF)
+		check("shade 80", Shade(rgb(r.base), 0x80/255.0), r.shade80)
+	}
+	t.Logf("%d of %d exact", exact, total)
+	if exact < 22 {
+		t.Errorf("%d of %d exact, want at least 22", exact, total)
 	}
 }
 
