@@ -83,3 +83,36 @@ func TestDrawingColor_Transforms(t *testing.T) {
 		})
 	}
 }
+
+func TestSchemeColor_AppliesTheDrawingTransforms(t *testing.T) {
+	t.Parallel()
+	theme := &Theme{Colors: map[string]css.Color{"accent1": {R: 0x44 / 255.0, G: 0x72 / 255.0, B: 0xC4 / 255.0, A: 1}}}
+	for _, tc := range []struct {
+		name, xml string
+		want      [4]int
+	}{
+		// The transforms DrawingColorChoice applies, in Word's and Excel's
+		// shapes and charts too.
+		{"shade", `<a:schemeClr val="accent1"><a:shade val="50000"/></a:schemeClr>`, [4]int{47, 82, 143, 255}},
+		{"tint", `<a:schemeClr val="accent1"><a:tint val="40000"/></a:schemeClr>`, [4]int{207, 213, 234, 255}},
+		{"lumMod lumOff", `<a:schemeClr val="accent1"><a:lumMod val="20000"/><a:lumOff val="80000"/></a:schemeClr>`, [4]int{218, 227, 243, 255}},
+		{"inv", `<a:schemeClr val="accent1"><a:inv/></a:schemeClr>`, [4]int{248, 235, 179, 255}},
+		{"alpha", `<a:schemeClr val="accent1"><a:alpha val="50000"/></a:schemeClr>`, [4]int{68, 114, 196, 128}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root, err := Parse(context.Background(), []byte(`<a:solidFill xmlns:a="`+NSA+`">`+tc.xml+`</a:solidFill>`), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			c, ok := SchemeColor(root, theme)
+			if !ok {
+				t.Fatal("no colour")
+			}
+			got := [4]int{int(math.Round(c.R * 255)), int(math.Round(c.G * 255)), int(math.Round(c.B * 255)), int(math.Round(c.A * 255))}
+			if got != tc.want {
+				t.Fatalf("colour %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

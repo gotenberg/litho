@@ -77,7 +77,15 @@ func parseFontScheme(e *Element) FontScheme {
 // SchemeColor returns the colour a colour container element holds (a
 // scheme entry such as a:dk1, or a fill's colour choice): its a:srgbClr,
 // a:sysClr's system colour, a:hslClr, a:scrgbClr, or a:schemeClr resolved
-// in theme, with lumMod and lumOff applied (ECMA-376 Part 1, 20.1.2.3).
+// in theme, with its colour transforms applied as [DrawingColorChoice]
+// applies them (ECMA-376 Part 1, 20.1.2.3).
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx, litho/docx, openxmlsdk/docx, poi/docx: Word
+//     paints the shade of 32 DrawingML colour choices of its shapes,
+//     charts and themes on the sRGB curve, none as a product of the sRGB
+//     components; libreoffice/xlsx, openxmlsdk/xlsx: Excel 17, none.
 func SchemeColor(e *Element, theme *Theme) (css.Color, bool) {
 	if e == nil {
 		return css.Color{}, false
@@ -100,7 +108,7 @@ func SchemeColor(e *Element, theme *Theme) (css.Color, bool) {
 			col, ok = presetColor(attrOr(c, "val"))
 		}
 		if ok {
-			return applyColorMods(col, c), true
+			return transformColor(col, c), true
 		}
 	}
 	return css.Color{}, false
@@ -124,36 +132,6 @@ func presetColor(name string) (css.Color, bool) {
 		return css.Color{R: 1, G: 1, A: 1}, true
 	}
 	return css.Color{}, false
-}
-
-// applyColorMods applies the colour transforms of c the converters honour:
-// lumMod and lumOff in HSL space, tint and shade, and alpha (ECMA-376 Part
-// 1, 20.1.2.3).
-func applyColorMods(col css.Color, c *Element) css.Color {
-	for _, m := range c.Children {
-		v, ok := Int(attrOr(m, "val"))
-		if !ok || m.Space != NSA {
-			continue
-		}
-		f := float64(v) / 100000
-		switch m.Local {
-		case "lumMod", "lumOff":
-			h, s, l := toHSL(col)
-			if m.Local == "lumMod" {
-				l *= f
-			} else {
-				l += f
-			}
-			col = fromHSL(h, s, max(0, min(1, l)), col.A)
-		case "tint":
-			col = Tint(col, f)
-		case "shade":
-			col = Shade(col, f)
-		case "alpha":
-			col.A = max(0, min(1, f))
-		}
-	}
-	return col
 }
 
 // Color returns the theme colour of a WordprocessingML ST_ThemeColor name
