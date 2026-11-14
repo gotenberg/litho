@@ -12,15 +12,19 @@ import "hash/maphash"
 const maxReusedCascades = 1 << 12
 
 // reuseKey is what decides an element's computed style besides its
-// declarations: the computed style of its parent, the root's, and the
-// element's place among display: contents boxes. hash sums the
-// declarations in cascade order.
+// declarations: the computed style of its parent, the root's, the
+// element's place among display: contents boxes, and the languages its
+// font-relative units are measured in. hash sums the declarations in
+// cascade order.
 type reuseKey struct {
 	parent, root *Style
 	isRoot       bool
 	noContents   bool
 	boxParent    Display
 	hash         uint64
+	// lang and parentLang are the languages the font units of the
+	// element and of its parent are measured in.
+	lang, parentLang string
 }
 
 // reuseDecl is one declaration of a remembered cascade and the origin
@@ -93,7 +97,7 @@ func (cs *computeState) reuseKeyOf(cands []cand, parent *Style, isRoot bool) reu
 		maphash.WriteComparable(&h, x.d)
 		maphash.WriteComparable(&h, x.rank)
 	}
-	return reuseKey{parent: parent, root: cs.root, isRoot: isRoot, noContents: cs.noContents, boxParent: cs.boxParent, hash: h.Sum64()}
+	return reuseKey{parent: parent, root: cs.root, isRoot: isRoot, noContents: cs.noContents, boxParent: cs.boxParent, hash: h.Sum64(), lang: cs.lang, parentLang: cs.parentLang}
 }
 
 // reused returns the style a remembered cascade of cands under k

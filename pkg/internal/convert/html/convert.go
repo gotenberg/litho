@@ -753,15 +753,17 @@ func collapse(s string) string {
 const fontUnitSize = 100
 
 // fontUnits returns the [css.ComputeOptions.FontUnits] of fonts: the
-// x-height, cap height and ascent of the face a style selects, the
-// advance of its "0", and the advance of its "水" when it maps one (CSS
-// Values 4, 6.1.1), nil without fonts.
-func fontUnits(ctx context.Context, fonts *text.Fonts) func(*css.Style) css.FontUnits {
+// x-height, cap height and ascent of the face a style selects in a
+// language, the advance of its "0", and the advance of its "水" when it
+// maps one (CSS Values 4, 6.1.1), nil without fonts. The language picks
+// the face of a generic family as the layout picks it, so the units
+// measure the face the text is drawn in.
+func fontUnits(ctx context.Context, fonts *text.Fonts) func(*css.Style, string) css.FontUnits {
 	if fonts == nil {
 		return nil
 	}
-	return func(st *css.Style) css.FontUnits {
-		ts := text.Style{Families: text.BrowserFamilies(st.FontFamilies, ""), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: fontUnitSize}
+	return func(st *css.Style, lang string) css.FontUnits {
+		ts := text.Style{Families: text.BrowserFamilies(st.FontFamilies, lang), Weight: st.FontWeight, Italic: st.FontStyle != css.FontNormal, Size: fontUnitSize, Lang: lang, Fallback: text.FallbackChromium}
 		fc := fonts.Match(ts)
 		if fc == nil {
 			return css.FontUnits{}

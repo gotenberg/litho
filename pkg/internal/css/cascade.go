@@ -333,11 +333,13 @@ type ComputeOptions struct {
 	// document's URL. Empty keeps them as written.
 	BaseURL string
 	// FontUnits returns the measures of the first font a style's
-	// families, weight and style select, as fractions of the font size,
-	// for the ex, ch, cap and ic units and their root forms (CSS Values 4,
-	// 6.1.1). nil, or a measure that is not positive, takes the fallback
-	// [FontUnits] names.
-	FontUnits func(st *Style) FontUnits
+	// families, weight and style select in the language lang of the
+	// element styled (its lang or xml:lang attribute, inherited, "" for
+	// unknown), as fractions of the font size, for the ex, ch, cap and ic
+	// units and their root forms (CSS Values 4, 6.1.1): the language picks
+	// the face of a generic family. nil, or a measure that is not
+	// positive, takes the fallback [FontUnits] names.
+	FontUnits func(st *Style, lang string) FontUnits
 	// AnimationTime is the moment the animations are computed at,
 	// [AnimationsAtStart] by default.
 	AnimationTime AnimationTime
@@ -416,6 +418,8 @@ func (c *Computed) FirstLetter(n *html.Node, parent *Style) *Style {
 	defer c.re.mu.Unlock()
 	cs := c.re.cs
 	cs.node = n
+	cs.lang = cs.unitLang(n)
+	cs.parentLang = cs.lang
 	// The letter sits in a block container, whatever contents element
 	// holds its text.
 	cs.boxParent = Block
@@ -444,6 +448,8 @@ func (c *Computed) FirstLine(n *html.Node, parent *Style) *Style {
 	defer c.re.mu.Unlock()
 	cs := c.re.cs
 	cs.node = n
+	cs.lang = cs.unitLang(n)
+	cs.parentLang = cs.lang
 	cs.boxParent = Block
 	st, _ := cs.cascade(cands, parent, cs.vars[n], false, &firstLineProps)
 	return st
@@ -611,6 +617,10 @@ type computeState struct {
 	noContents bool
 	// units caches FontUnits by font selection.
 	units map[fontKey]FontUnits
+	// lang is the language of node, parentLang the language of the
+	// element its parent style comes from and rootLang the root
+	// element's, which the font units are measured in.
+	lang, parentLang, rootLang string
 	// mem is the conversion's memory budget each distinct computed style
 	// is charged to, nil for none.
 	mem *limits.Budget
@@ -642,23 +652,39 @@ type computeState struct {
 	reuse reuseCache
 }
 
+// unitLang returns the language the font units of the element n are
+// measured in: its lang or xml:lang attribute, inherited, the document's
+// for nil, and "" without [ComputeOptions.FontUnits], which then reads
+// none.
+func (cs *computeState) unitLang(n *html.Node) string {
+	switch {
+	case cs.opts.FontUnits == nil:
+		return ""
+	case n == nil:
+		return cs.m.docLang
+	}
+	return cs.m.langOf(n)
+}
+
 // fontKey is what selects a font for the ex and ch units.
 type fontKey struct {
 	families string
 	weight   int
 	style    FontStyle
+	lang     string
 }
 
-// fontUnits returns the font measures of st, zero for the fallbacks.
-func (cs *computeState) fontUnits(st *Style) FontUnits {
+// fontUnits returns the font measures of st in language lang, zero for
+// the fallbacks.
+func (cs *computeState) fontUnits(st *Style, lang string) FontUnits {
 	if cs.opts.FontUnits == nil || st == nil {
 		return FontUnits{}
 	}
-	k := fontKey{families: strings.Join(st.FontFamilies, "\x00"), weight: st.FontWeight, style: st.FontStyle}
+	k := fontKey{families: strings.Join(st.FontFamilies, "\x00"), weight: st.FontWeight, style: st.FontStyle, lang: lang}
 	if u, ok := cs.units[k]; ok {
 		return u
 	}
-	u := cs.opts.FontUnits(st)
+	u := cs.opts.FontUnits(st, lang)
 	if cs.units == nil {
 		cs.units = map[fontKey]FontUnits{}
 	}
@@ -783,6 +809,10 @@ func (cs *computeState) element(n, parent *html.Node) {
 	}
 	cands := cs.elementCands(n)
 	cs.node = n
+	cs.lang, cs.parentLang = cs.unitLang(n), cs.unitLang(parent)
+	if parent == nil {
+		cs.rootLang = cs.lang
+	}
 	cs.boxParent = cs.boxParentOf(parent)
 	cs.noContents = contentsIsNone(n)
 	st, vars := cs.cascade(cands, parentStyle, parentVars, parent == nil, nil)
@@ -793,6 +823,8 @@ func (cs *computeState) element(n, parent *html.Node) {
 	if parent == nil {
 		cs.root = st
 	}
+	// A pseudo-element inherits from n, in n's language.
+	cs.parentLang = cs.lang
 	for pe := range numPseudos {
 		x := &cs.r.pseudos[pe]
 		if x.empty() || st.Display == DisplayNone || pe == PseudoMarker && st.Display != ListItem && st.Display != InlineListItem {
@@ -871,9 +903,12 @@ func (cs *computeState) restyle(n *html.Node, x *selIndex, parent *Style, parent
 		return nil, false
 	}
 	cs.node = n
+	cs.lang = cs.unitLang(n)
+	cs.parentLang = cs.lang
 	if elem {
 		cs.boxParent = cs.boxParentOf(parentElement(n))
 		cs.noContents = contentsIsNone(n)
+		cs.parentLang = cs.unitLang(parentElement(n))
 	} else {
 		cs.boxParent = cs.boxParentOf(n)
 	}
@@ -1142,9 +1177,9 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 	}
 	vw, vh := cs.r.media.viewport()
 	s.lc = lenCtx{fontSize: parent.FontSize, rootFontSize: rootFS, width: vw, height: vh}
-	s.lc.font = cs.fontUnits(parent)
+	s.lc.font = cs.fontUnits(parent, cs.parentLang)
 	s.lc.adjust = parent.FontSizeAdjust
-	s.lc.rootFont = cs.fontUnits(cs.root)
+	s.lc.rootFont = cs.fontUnits(cs.root, cs.rootLang)
 	if cs.root != nil {
 		s.lc.rootAdjust = cs.root.FontSizeAdjust
 	}
@@ -1200,7 +1235,7 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 				s.lc.rootFontSize = st.FontSize
 			}
 		case pFontStyle:
-			s.lc.font = cs.fontUnits(st)
+			s.lc.font = cs.fontUnits(st, cs.lang)
 			if isRoot {
 				s.lc.rootFont = s.lc.font
 			}

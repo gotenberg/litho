@@ -351,7 +351,7 @@ func TestFontUnits_ResolveExAndCh(t *testing.T) {
 	t.Parallel()
 	root := parseHTML(t, `<body><div id=t style="font-family: f; width: 2ch; height: 2ex; font-size: 2ex"></div></body>`)
 	r := NewResolver(a4, []Sheet{{Sheet: HTMLUserAgent(), Origin: UserAgent}, {Sheet: mustParse(t, `body { font-size: 20px }`), Origin: Author}})
-	units := func(st *Style) FontUnits {
+	units := func(st *Style, _ string) FontUnits {
 		if len(st.FontFamilies) > 0 && st.FontFamilies[0] == "f" {
 			return FontUnits{XHeight: 0.25, Zero: 0.75}
 		}
@@ -369,6 +369,43 @@ func TestFontUnits_ResolveExAndCh(t *testing.T) {
 	}
 }
 
+// TestFontUnits_MeasureInTheElementLanguage locks that ex and ch measure
+// the face the element's language picks (CSS Values 4, 6.1.1: the first
+// available font, whose generic family CSS Fonts 4, 2.1.5 lets depend on
+// the language): an element's lengths in its own language, its font-size
+// in its parent's, and two elements alike but for their language apart.
+func TestFontUnits_MeasureInTheElementLanguage(t *testing.T) {
+	t.Parallel()
+	root := parseHTML(t, `<body><p id=a lang=ja></p><p id=b lang=en></p><div lang=ja><p id=c class=s lang=en></p></div><div lang=en><p id=d class=s lang=en></p></div></body>`)
+	sheet := `p { font-size: 20px; width: 2ex } .s { font-size: 2ex }`
+	r := NewResolver(a4, []Sheet{{Sheet: mustParse(t, sheet), Origin: Author}})
+	units := func(_ *Style, lang string) FontUnits {
+		if lang == "ja" {
+			return FontUnits{XHeight: 0.5}
+		}
+		return FontUnits{XHeight: 0.25}
+	}
+	c, err := r.Compute(context.Background(), root, ComputeOptions{Lang: "en", FontUnits: units})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	for _, tt := range []struct {
+		id          string
+		size, width float64
+	}{
+		{"a", 15, 15},
+		{"b", 15, 7.5},
+		// 2ex of the 16px parent in Japanese: 16px, then 2ex in English.
+		{"c", 12, 6},
+		{"d", 6, 3},
+	} {
+		s := c.Style(byID(root, tt.id))
+		if s.FontSize != tt.size || s.Width != pts(tt.width) {
+			t.Errorf("#%s font-size %v width %+v, want %v and %vpt", tt.id, s.FontSize, s.Width, tt.size, tt.width)
+		}
+	}
+}
+
 // TestFontUnits_FollowFontSizeAdjust locks CSS Values 4, 6.1.1 with CSS
 // Fonts 5, 2.6: ex and ch measure the used font, which font-size-adjust
 // scales, whatever the order of the declarations; em does not.
@@ -378,7 +415,7 @@ func TestFontUnits_FollowFontSizeAdjust(t *testing.T) {
 	sheet := `div { font-size: 20px; width: 4ch; height: 2ex; margin-left: 1em; font-size-adjust: 0.25 }
 #b { font-size-adjust: ch-width 1 } #c { font-size-adjust: from-font }`
 	r := NewResolver(a4, []Sheet{{Sheet: mustParse(t, sheet), Origin: Author}})
-	units := func(*Style) FontUnits { return FontUnits{XHeight: 0.5, Zero: 0.5} }
+	units := func(*Style, string) FontUnits { return FontUnits{XHeight: 0.5, Zero: 0.5} }
 	c, err := r.Compute(context.Background(), root, ComputeOptions{FontUnits: units})
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
