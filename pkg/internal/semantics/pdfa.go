@@ -2,9 +2,9 @@ package semantics
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // pdfaIDNamespace is the namespace URI of the PDF/A identification schema,
@@ -21,7 +21,7 @@ const pdfaIDNamespace = "http://www.aiim.org/pdfa/ns/id/"
 // first value that is a part number wins.
 func DeclaredPDFAPart(ctx context.Context, doc *document.Document) int {
 	for _, value := range xmpSimpleValues(ctx, catalogPacket(ctx, doc, "the PDF/A identifier"), pdfaIDNamespace, "part") {
-		if part, err := strconv.Atoi(value); err == nil && part >= 1 && part <= 4 {
+		if part, err := intconv.Atoi(value); err == nil && part >= 1 && part <= 4 {
 			return part
 		}
 	}
