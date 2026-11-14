@@ -475,3 +475,33 @@ func TestText_RunPaint(t *testing.T) {
 		}
 	}
 }
+
+// TestText_RunPaintTransparentGradient checks that a run filled with a
+// gradient whose first stop, the run's colour, is transparent paints its
+// glyphs invisible in an opaque colour, which a PDF writer accepts, under
+// the gradient.
+func TestText_RunPaintTransparentGradient(t *testing.T) {
+	st := arial(40)
+	st.Color = css.Color{R: 0.27, G: 0.45, B: 0.77}
+	st.Paint = &css.OfficeTextPaint{Gradient: []css.OfficeStop{{Pos: 0, Color: st.Color}, {Pos: 1, Color: css.Color{R: 1, A: 1}}}}
+	d := deck(&Slide{Shapes: []*Shape{box(100, 100, 400, 200, para("Fade", st))}})
+	out := convert(t, d, office.Options{})
+	var glyphs *typeset.Text
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
+		for _, f := range fs {
+			switch f := f.(type) {
+			case *typeset.Text:
+				if strings.Contains(textOf(f), "Fade") {
+					glyphs = f
+				}
+			case *typeset.Group:
+				walk(f.Content)
+			}
+		}
+	}
+	walk(out.Pages[0].Content)
+	if glyphs == nil || !glyphs.Invisible || !(glyphs.Color.A > 0) {
+		t.Errorf("run %+v, want the text invisible in an opaque colour", glyphs)
+	}
+}
