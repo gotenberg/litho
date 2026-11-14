@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -321,7 +320,8 @@ func parseOID(s string) (asn1.ObjectIdentifier, bool) {
 	var oid asn1.ObjectIdentifier
 	if parts := strings.Split(s, "."); len(parts) >= 2 {
 		for _, p := range parts {
-			n, err := strconv.Atoi(p)
+			// encoding/asn1 holds an arc to 32 bits on every platform.
+			n, err := intconv.Atoi32(p)
 			if err != nil || n < 0 {
 				oid = nil
 				break
