@@ -196,8 +196,14 @@ func ratioIntrinsic(b *box, st *css.Style, pd, bd [4]float64, lo, hi float64) (f
 	if st.MaxHeight.Kind == css.Points {
 		mx = max(height(st.MaxHeight), mn)
 	}
-	if st.Height.Kind == css.Points {
-		h := max(height(st.Height), mn)
+	fixed := st.Height
+	if fixed.Kind == css.Percent {
+		if ch, ok := styledHeight(b.parent, 0); ok && !b.abs && b.float == css.FloatNone {
+			fixed = css.Pts(ch * fixed.Value)
+		}
+	}
+	if fixed.Kind == css.Points {
+		h := max(height(fixed), mn)
 		if mx >= 0 {
 			h = min(h, mx)
 		}
@@ -218,6 +224,63 @@ func ratioIntrinsic(b *box, st *css.Style, pd, bd [4]float64, lo, hi float64) (f
 		lo, hi = max(lo, w), max(hi, w)
 	}
 	return lo, hi
+}
+
+// maxStyledDepth bounds the ancestors [styledHeight] climbs. Anti-DoS
+// guard, not spec-mandated: a chain of percentage heights is a few
+// levels deep, and past the bound the height counts as indefinite.
+const maxStyledDepth = 32
+
+// styledHeight returns the content height of the block container b when
+// its style alone makes it definite (CSS Sizing 3, 5.2.1, and CSS 2.1,
+// 10.5): a fixed height, or a percentage of a parent's styled height for
+// a box in flow, within its fixed minimum and maximum heights. It lets a
+// percentage height resolve while the widths are measured, before any
+// height is laid out.
+//
+// # Corpus evidence
+//
+//   - wpt: css-sizing/aspect-ratio/intrinsic-size-006 sizes a min-content
+//     box by a grandchild of height 100% and aspect-ratio 1 under a child
+//     of height 100% of its 100px.
+func styledHeight(b *box, depth int) (float64, bool) {
+	if b == nil || depth > maxStyledDepth || b.kind != kindBlock || b.anon {
+		return 0, false
+	}
+	switch b.st.Display { //nolint:exhaustive // a table, flex or grid sizes its children's containing blocks itself
+	case css.Block, css.ListItem, css.FlowRoot, css.InlineBlock:
+	default:
+		return 0, false
+	}
+	st := b.sizeSrc()
+	pd, bd, _ := edgesOf(b, 0)
+	ve := pd[css.Top] + pd[css.Bottom] + bd[css.Top] + bd[css.Bottom]
+	content := func(v float64) float64 {
+		if st.BoxSizing == css.BorderBox {
+			v -= ve
+		}
+		return max(v, 0)
+	}
+	var h float64
+	switch st.Height.Kind { //nolint:exhaustive // every other height is indefinite here
+	case css.Points:
+		h = content(st.Height.Value)
+	case css.Percent:
+		ph, ok := styledHeight(b.parent, depth+1)
+		if !ok || b.abs || b.float != css.FloatNone {
+			return 0, false
+		}
+		h = content(float64(ph * st.Height.Value))
+	default:
+		return 0, false
+	}
+	if st.MaxHeight.Kind == css.Points {
+		h = min(h, content(st.MaxHeight.Value))
+	}
+	if st.MinHeight.Kind == css.Points {
+		h = max(h, content(st.MinHeight.Value))
+	}
+	return h, true
 }
 
 // replacedRatio returns the aspect ratio that sizes the replaced box b,

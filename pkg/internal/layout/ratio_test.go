@@ -201,3 +201,26 @@ func TestAspectRatio_Table(t *testing.T) {
 		t.Errorf("cell %v by %v, want 100 by 50: the ratio does not apply", got[2], got[3])
 	}
 }
+
+// TestAspectRatio_PercentHeightInIntrinsicWidth locks that a percentage
+// height resolves while the widths are measured when the styles of the
+// ancestors make it definite (CSS Sizing 3, 5.2.1; CSS 2.1, 10.5), so a
+// box with an aspect ratio gives its min-content width through it; an
+// indefinite chain counts as auto.
+func TestAspectRatio_PercentHeightInIntrinsicWidth(t *testing.T) {
+	pct := func(s *css.Style) { s.Height = css.Dimension{Kind: css.Percent, Value: 1} }
+	minContent := func(s *css.Style) { s.Width = css.Dimension{Kind: css.MinContent} }
+	for _, tt := range []struct {
+		name  string
+		outer func(*css.Style)
+		want  float64
+	}{
+		{"definite", height(100), 100},
+		{"indefinite", func(*css.Style) {}, 0},
+	} {
+		rb := boxes(t, doc(el(sty(minContent, tt.outer), el(sty(pct), el(sty(pct, ratio(1, 1)))))), page(400, 400))
+		if got := rect(kid(t, rb, 0, 0))[2]; got != tt.want {
+			t.Errorf("%s: width %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
