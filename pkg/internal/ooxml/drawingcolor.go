@@ -5,16 +5,6 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
-	"github.com/gotenberg/litho/pkg/internal/detmath"
-)
-
-// The gammas of DrawingML's linear RGB (ECMA-376 Part 1, 20.1.2.3.30
-// scrgbClr): LibreOffice converts between sRGB and the linear space a
-// tint, a shade and the component transforms work in with a plain power
-// of 2.3, not the sRGB curve (oox's Color::toCrgb and toRgb).
-const (
-	decGamma = 2.3
-	incGamma = 1 / decGamma
 )
 
 // SchemeResolver returns the colour a scheme colour name stands for
@@ -38,7 +28,7 @@ func DrawingColor(e *Element, scheme SchemeResolver) (css.Color, bool) {
 // DrawingColorChoice returns the colour of a colour choice element
 // (ECMA-376 Part 1, 20.1.2.3: srgbClr, scrgbClr, hslClr, sysClr,
 // schemeClr resolved through scheme, prstClr) with its colour transforms
-// applied in document order, as LibreOffice applies them: alpha, alphaMod
+// applied in document order, as Office applies them: alpha, alphaMod
 // and alphaOff; red, green and blue with their Mod and Off in linear RGB;
 // hue, sat and lum with their Mod and Off in HSL; tint and shade in linear
 // RGB; gray, comp and inv. gamma and invGamma are ignored. false when c
@@ -83,11 +73,36 @@ func pct(c *Element, name string) float64 {
 // clamp01 clamps v to [0, 1].
 func clamp01(v float64) float64 { return max(0, min(1, v)) }
 
-// gammaIn converts an sRGB component to DrawingML's linear RGB.
-func gammaIn(v float64) float64 { return detmath.Pow(clamp01(v), decGamma) }
+// gammaIn converts an sRGB component to DrawingML's linear RGB
+// (ECMA-376 Part 1, 20.1.2.3.30 scrgbClr) on the sRGB transfer curve
+// (IEC 61966-2-1), as Office converts it for a tint, a shade, an scrgbClr
+// and the red, green and blue transforms.
+//
+// # Corpus evidence
+//
+//   - litho/pptx fill-solid: PowerPoint fills 4472C4 under shade 50% with
+//     47,82,143, scrgbClr 100%, 50%, 0 with 255,188,0, 404040 under
+//     blueOff 50% with 64,64,196 and under greenMod 200% with 64,90,64:
+//     the sRGB curve gives each exactly, a power of 2.3 50,84,145,
+//     255,189,0, 64,64,195 and 64,87,64.
+//   - libreoffice/pptx, litho/pptx, openxmlsdk/pptx, poi/pptx: of the
+//     tint and shade colours of every DrawingML colour choice, resolved
+//     against its theme, 232 of PowerPoint's fills, strokes and gradient
+//     stops are the sRGB curve's exactly, 76 the power of 2.3's. Of the
+//     14 tints the curve does not give, nine are 000000 at 75%, whose
+//     64,64,64 the slides paint as text, four are table-style tints of
+//     three Office 2007 templates (openxmlsdk/pptx 2007MoCal_MonSun,
+//     2007calendar, 2008calendar) that PowerPoint paints as a plain blend
+//     towards white, one is a colour of the slide.
+//   - libreoffice/docx, litho/docx, openxmlsdk/docx, poi/docx: Word paints
+//     the sRGB curve's colour for 32 shades of DrawingML shapes, the power
+//     of 2.3's for none; libreoffice/xlsx, openxmlsdk/xlsx: Excel for 17,
+//     none.
+func gammaIn(v float64) float64 { return toLinear(clamp01(v)) }
 
-// gammaOut converts a linear RGB component back to sRGB.
-func gammaOut(v float64) float64 { return detmath.Pow(clamp01(v), incGamma) }
+// gammaOut converts a linear RGB component back to sRGB, as [gammaIn]
+// reads it.
+func gammaOut(v float64) float64 { return fromLinear(clamp01(v)) }
 
 // sysColor returns the colour of a sysClr (ECMA-376 Part 1, 20.1.2.3.33):
 // the system colour its val names, as LibreOffice resolves it on a system
