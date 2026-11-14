@@ -266,7 +266,8 @@ func TestEffects_PresetShadowCopies(t *testing.T) {
 // TestEffects_PresetShadowGeometry checks the near copy of preset shadows
 // on a shape 10 by 20 pt: the scale and the skew of the preset folded
 // into the offsets about the box, grown by half the line when there is
-// one, and the text left out of all but shdw1, shdw2, shdw5 and shdw6.
+// one, every part's alpha kept, and the text left out of all but shdw1,
+// shdw2, shdw5 and shdw6.
 func TestEffects_PresetShadowGeometry(t *testing.T) {
 	t.Parallel()
 	lean := 10 * math.Sqrt(3) / 2
@@ -291,7 +292,7 @@ func TestEffects_PresetShadowGeometry(t *testing.T) {
 			}
 			got, want := *s.Shadow, tc.want
 			if !nearly(got.OffsetX, want.OffsetX) || !nearly(got.OffsetY, want.OffsetY) || !nearly(got.ScaleX, want.ScaleX) || !nearly(got.ScaleY, want.ScaleY) ||
-				!nearly(got.SkewX, want.SkewX) || got.ShapeOnly != want.ShapeOnly || got.Blur != 0 || got.RotateWithShape {
+				!nearly(got.SkewX, want.SkewX) || got.ShapeOnly != want.ShapeOnly || got.Blur != 0 || got.RotateWithShape || !got.KeepAlpha {
 				t.Errorf("shadow %+v, want %+v", got, want)
 			}
 		})

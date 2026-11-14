@@ -127,6 +127,31 @@ func TestPresetCopies_FarCopyAddsToEachChannel(t *testing.T) {
 	}
 }
 
+// TestRecolor_KeepsAlpha checks that a copy in one colour keeps the alpha
+// of each fill, stroke and text it copies when asked, and takes the
+// colour's otherwise.
+func TestRecolor_KeepsAlpha(t *testing.T) {
+	half := typeset.Color{B: 1, A: 0.5}
+	frags := []typeset.Fragment{
+		&typeset.Path{Fill: &typeset.Fill{Color: half}, Stroke: &typeset.Stroke{Width: 1, Color: typeset.Color{A: 0.25}}},
+		&typeset.Text{Color: typeset.Color{G: 1, A: 0.75}},
+	}
+	red := typeset.Color{R: 1, A: 1}
+	kept := Recolor(frags, red, true)
+	p, tx := kept[0].(*typeset.Path), kept[1].(*typeset.Text)
+	if p.Fill.Color != (typeset.Color{R: 1, A: 0.5}) || p.Stroke.Color != (typeset.Color{R: 1, A: 0.25}) || tx.Color != (typeset.Color{R: 1, A: 0.75}) {
+		t.Errorf("kept alpha: fill %+v, stroke %+v, text %+v", p.Fill.Color, p.Stroke.Color, tx.Color)
+	}
+	flat := Recolor(frags, red, false)
+	p, tx = flat[0].(*typeset.Path), flat[1].(*typeset.Text)
+	if p.Fill.Color != red || p.Stroke.Color != red || tx.Color != red {
+		t.Errorf("flat: fill %+v, stroke %+v, text %+v, want %+v", p.Fill.Color, p.Stroke.Color, tx.Color, red)
+	}
+	if frags[0].(*typeset.Path).Fill.Color != half {
+		t.Error("Recolor changed its argument")
+	}
+}
+
 // TestPresetUnder_PaintsVectorCopies checks the copies of a source: its
 // content recoloured, opaque fills of the copy's colour, a picture as its
 // rectangle, the group at the colour's opacity, moved by the offset and

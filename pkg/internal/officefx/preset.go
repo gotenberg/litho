@@ -183,7 +183,7 @@ func PresetUnder(src *Source, p *css.OfficePreset) (copies []typeset.Fragment, o
 	for i := range shadows {
 		sh := &shadows[i]
 		c := typeset.Color{R: sh.Color.R, G: sh.Color.G, B: sh.Color.B, A: 1}
-		copies = append(copies, &typeset.Group{Transform: shadowMatrix(sh, b), Opacity: min(sh.Color.A, 1), Content: Recolor(src.Content, c)})
+		copies = append(copies, &typeset.Group{Transform: shadowMatrix(sh, b), Opacity: min(sh.Color.A, 1), Content: Recolor(src.Content, c, false)})
 	}
 	return copies, true
 }
@@ -195,30 +195,38 @@ const maxRecolorDepth = limits.MaxSourceGroupDepth + 8
 
 // Recolor returns a copy of frags painted in the one colour c, a hard
 // shadow's: fills, strokes and text in c, pictures as their rectangles
-// filled with c. A copy of a text keeps no structure parent.
-func Recolor(frags []typeset.Fragment, c typeset.Color) []typeset.Fragment {
-	return recolor(frags, c, 0)
+// filled with c, groups at their own opacity. keepAlpha keeps the alpha
+// of each fill, stroke and text it copies in place of c's. A copy of a
+// text keeps no structure parent.
+func Recolor(frags []typeset.Fragment, c typeset.Color, keepAlpha bool) []typeset.Fragment {
+	return recolor(frags, c, keepAlpha, 0)
 }
 
 // recolor is [Recolor] at the group depth depth.
-func recolor(frags []typeset.Fragment, c typeset.Color, depth int) []typeset.Fragment {
+func recolor(frags []typeset.Fragment, c typeset.Color, keepAlpha bool, depth int) []typeset.Fragment {
+	paint := func(own typeset.Color) typeset.Color {
+		if keepAlpha {
+			return typeset.Color{R: c.R, G: c.G, B: c.B, A: own.A}
+		}
+		return c
+	}
 	var out []typeset.Fragment
 	for _, f := range frags {
 		switch f := f.(type) {
 		case *typeset.Path:
 			p := &typeset.Path{Ops: f.Ops}
 			if f.Fill != nil {
-				p.Fill = &typeset.Fill{Color: c, Rule: f.Fill.Rule}
+				p.Fill = &typeset.Fill{Color: paint(f.Fill.Color), Rule: f.Fill.Rule}
 			}
 			if f.Stroke != nil {
 				st := *f.Stroke
-				st.Color = c
+				st.Color = paint(f.Stroke.Color)
 				p.Stroke = &st
 			}
 			out = append(out, p)
 		case *typeset.Text:
 			t := *f
-			t.Color = c
+			t.Color = paint(f.Color)
 			t.Parent = nil
 			out = append(out, &t)
 		case *typeset.Image:
@@ -234,7 +242,7 @@ func recolor(frags []typeset.Fragment, c typeset.Color, depth int) []typeset.Fra
 		case *typeset.Group:
 			if depth < maxRecolorDepth {
 				g := *f
-				g.Content = recolor(f.Content, c, depth+1)
+				g.Content = recolor(f.Content, c, keepAlpha, depth+1)
 				out = append(out, &g)
 			}
 		}

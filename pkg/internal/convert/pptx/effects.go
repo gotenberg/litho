@@ -369,10 +369,13 @@ func fadeDir(e *ooxml.Element) float64 {
 // s, its box and line read, as the copies [officefx.PresetCopies] gives:
 // the near copy, and for shdw13, shdw17 and shdw18 the far one painted
 // under it. color resolves the colour. It returns false for a name that
-// is not a preset, and nils for a shadow of no colour. The copies scale and skew about the box grown by half the
-// line, and keep the slide's directions whatever the shape's turn.
-// PowerPoint clips the copies to what lies outside the shape, which an
-// opaque shape hides anyway; the copies here are not clipped.
+// is not a preset, and nils for a shadow of no colour. The copies scale
+// and skew about the box grown by half the line, and keep the slide's
+// directions whatever the shape's turn. Each copy of a fill, a line or a
+// text keeps that part's alpha under the shadow's. PowerPoint clips the
+// copies to what lies outside the shape; the copies here are not
+// clipped, which an opaque shape hides and a translucent one shows as
+// PowerPoint prints it.
 //
 // # Corpus evidence
 //
@@ -380,6 +383,11 @@ func fadeDir(e *ooxml.Element) float64 {
 //     rectangles with a 1 point line scaled and skewed about the box
 //     grown by half a point: shdw20, mirrored about the bottom, starts 1
 //     point below the line's outer edge plus the offset.
+//   - probe, pptx: rectangles filled at alpha 50% under a C00000 preset at
+//     alpha 50% print their copies as 100 pixels an inch bitmaps at alpha
+//     64 of 255 (a quarter: the shadow's half of the fill's half), their
+//     text copies at 128 (the shadow's half of the opaque text), neither
+//     clipped by the shape.
 func presetShadow(e *ooxml.Element, s *slides.Shape, color func(*ooxml.Element) (css.Color, float64)) (near, far *slides.Shadow, ok bool) {
 	c, a := color(e)
 	dist := emuAttr(e, "dist")
@@ -403,7 +411,7 @@ func presetShadow(e *ooxml.Element, s *slides.Shape, color func(*ooxml.Element) 
 		sh := &slides.Shadow{
 			Color: css.Color{R: cp.Color.R, G: cp.Color.G, B: cp.Color.B, A: 1}, Opacity: cp.Color.A,
 			OffsetX: cp.Dist * cos, OffsetY: cp.Dist * sin,
-			ScaleX: cp.SX, ScaleY: cp.SY, SkewX: cp.KX, ShapeOnly: !text,
+			ScaleX: cp.SX, ScaleY: cp.SY, SkewX: cp.KX, ShapeOnly: !text, KeepAlpha: true,
 		}
 		aligned(sh, cp.Align.X, cp.Align.Y, box)
 		shadows[i] = sh

@@ -257,6 +257,10 @@ type Shadow struct {
 	// copies the fill, the line and the pictures alone: the copies of
 	// most preset shadows (20.1.8.49 prstShdw).
 	ShapeOnly bool
+	// KeepAlpha gives a hard shadow's copy of each fill, line and text
+	// that part's own alpha under Opacity, where a copy is otherwise
+	// opaque under it: the copies of a preset shadow.
+	KeepAlpha bool
 }
 
 // Reflection is a mirrored copy of what a shape paints, its fill, line and

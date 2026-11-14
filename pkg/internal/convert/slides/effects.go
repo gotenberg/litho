@@ -580,7 +580,7 @@ func (b *builder) hardShadow(ctx context.Context, sh *Shadow, glows, frags []typ
 			}
 		}
 	}
-	content = append(content, group(toSlide, officefx.Recolor(frags, c))...)
+	content = append(content, group(toSlide, officefx.Recolor(frags, c, sh.KeepAlpha))...)
 	if len(content) == 0 {
 		return nil
 	}
