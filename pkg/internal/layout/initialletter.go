@@ -93,7 +93,10 @@ func (e *engine) layoutInitialLetter(f *box, cb cblock, bc *bfc, lineTop float64
 	dx := 0.0
 	ltr := f.float != css.FloatRight
 	if inked && f.st.Width.Kind == css.Auto {
-		left, right := ink.left-cx, cx+f.w-ink.right
+		// The tabs before the glyphs stay in the box: the side bearing is
+		// what lies between them and the glyphs.
+		tabs := letterTabs(f)
+		left, right := ink.left-cx-tabs, cx+f.w-ink.right-tabs
 		if ltr {
 			inset := 0.0
 			if f.pd[css.Left]+f.bd[css.Left] == 0 {
@@ -126,6 +129,45 @@ func (e *engine) layoutInitialLetter(f *box, cb cblock, bc *bfc, lineTop float64
 	x, y := bc.placeBeside(f.float, f.marginW(), f.marginH(), max(minY, bc.clearInitial()), cb.x, cb.x+cb.w)
 	f.shift(x+f.m[css.Left]-f.x, y+f.m[css.Top]-f.y)
 	return e.addFloatRect(f, bc, true)
+}
+
+// tabBox returns the box whose font measures a tab of the text box
+// b: the paragraph of the initial letter that holds b, b itself outside
+// one. CSS Text 3, 4.2 measures tab-size in the space of the nearest
+// block container ancestor of the tab, which for a ::first-letter is its
+// paragraph; the letter is laid out as a float of its own.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws the
+//     background of an initial-letter ::first-letter of 20px Ahem text
+//     under white-space: pre that starts with a tab 160px wide before its
+//     glyph, eight spaces of the paragraph's font
+//     (css-inline/initial-letter/initial-letter-with-tab).
+func tabBox(b *box) *box {
+	for k := b; k != nil; k = k.parent {
+		if k.initial {
+			return paragraphOf(k)
+		}
+		if k.kind != kindText && k.kind != kindInline {
+			break
+		}
+	}
+	return b
+}
+
+// letterTabs returns the advance of the tabs on the first line of the
+// initial letter f, which its box holds before its glyphs.
+func letterTabs(f *box) float64 {
+	w := 0.0
+	if len(f.lines) > 0 {
+		for _, it := range f.lines[0].items {
+			if it.tab {
+				w += it.w
+			}
+		}
+	}
+	return w
 }
 
 // paragraphOf returns the block container whose inline formatting context

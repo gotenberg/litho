@@ -336,8 +336,10 @@ const defaultTabSize = 8
 // next tab stop, a multiple of tab-size (CSS Text 3, 4.2), the next one
 // when closer than half a space. A number of spaces counts the space's
 // advance with its letter-spacing and word-spacing, which the shaped space
-// already carries.
+// already carries. A tab in an initial letter measures in its paragraph's
+// space ([tabBox]).
 func (e *engine) tabWidth(b *box, x float64) float64 {
+	b = tabBox(b)
 	space := e.spaceWidth(b.st, b.lang)
 	step := float64(defaultTabSize * space)
 	switch b.st.TabSize.Kind {

@@ -184,3 +184,33 @@ func TestInitialLetter_FloatsBeside(t *testing.T) {
 		})
 	}
 }
+
+// TestInitialLetter_Tab checks a preserved tab that starts an initial
+// letter: it advances to the tab stop of its paragraph's font, eight
+// spaces of 10px (CSS Text 3, 4.2, the space of the nearest block
+// container), and stays in the letter's box before its glyph.
+//
+// # Corpus evidence
+//
+//   - wpt: css-inline/initial-letter/initial-letter-with-tab and
+//     initial-letter-with-tab-rtl.
+func TestInitialLetter_Tab(t *testing.T) {
+	pre := func(s *css.Style) { s.WhiteSpace = css.Pre }
+	l := letter("\tA", 3, 3)
+	l.Style.WhiteSpace = css.Pre
+	l.Children[0].Style = l.Style
+	p := el(sty(pre), l, txt(sty(pre), "bb"))
+	res := runWith(t, doc(p), Options{Page: page(300, 200)})
+	for _, r := range texts(res, 1) {
+		switch strings.TrimLeft(r.text, "\t") {
+		case "A":
+			if !near(r.x/css.Pt, 80) {
+				t.Errorf("letter at %v px, want 80", r.x/css.Pt)
+			}
+		case "bb":
+			if !near(r.x/css.Pt, 115) {
+				t.Errorf("text beside the letter at %v px, want 115", r.x/css.Pt)
+			}
+		}
+	}
+}
