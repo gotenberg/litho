@@ -458,13 +458,14 @@ func ClampInteger(v int64) int {
 
 // parseInteger parses an <integer> (CSS Values 4, 5.2), clamped to
 // [MinInteger, MaxInteger]. A math function resolving to a number rounds
-// to the nearest integer (CSS Values 4, 10.12).
+// to the nearest integer (CSS Values 4, 10.12), an infinite one to the
+// bound of its sign (CSS Values 4, 10.9).
 func parseInteger(t token) (int, bool) {
 	if t.typ == tNumber && t.integer && numeric.Finite(t.num) {
 		return clampIntegerFloat(t.num), true
 	}
 	if t.typ == tFunction && isCalc(&t) {
-		if v, ok := calcNumber(&t, nil); ok {
+		if v, ty, ok := calcInfinite(&t, nil); ok && ty == typeNumber {
 			return clampIntegerFloat(math.Floor(v + 0.5)), true
 		}
 	}

@@ -892,6 +892,18 @@ func calcNumber(t *token, vars *channelVars) (float64, bool) {
 // returns the value in the canonical unit of its type, a percentage as
 // its number of percent.
 func calcConst(t *token, vars *channelVars) (float64, calcType, bool) {
+	v, ty, ok := calcInfinite(t, vars)
+	if math.IsInf(v, 0) {
+		v = math.Copysign(maxLength, v)
+	}
+	return v, ty, ok
+}
+
+// calcInfinite is [calcConst] with an infinite value kept, for a caller
+// that clamps to a range of its own: CSS Values 4, 10.9 clamps infinity
+// to the largest value the type supports, which for an <integer> is not
+// the bound of a length. NaN censors to 0.
+func calcInfinite(t *token, vars *channelVars) (float64, calcType, bool) {
 	p := &calcParser{vars: vars}
 	n, ty, ok := p.fn(t, 0)
 	if !ok {
@@ -901,11 +913,7 @@ func calcConst(t *token, vars *channelVars) (float64, calcType, bool) {
 	if !ok || !l.constant() {
 		return 0, calcType{}, false
 	}
-	v := censor(l.num)
-	if math.IsInf(v, 0) {
-		v = math.Copysign(maxLength, v)
-	}
-	return v, ty, true
+	return censor(l.num), ty, true
 }
 
 // calcAnglePercent parses a math function of type <angle-percentage>, a
