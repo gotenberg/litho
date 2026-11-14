@@ -74,3 +74,23 @@ func TestWritingMode_Orthogonal(t *testing.T) {
 		})
 	}
 }
+
+// TestWritingMode_MarginsStayInTheOrthogonalRoot keeps the margins of the
+// content of an orthogonal flow root inside the root (CSS Writing Modes
+// 4, 7.3): a block's margins collapse through no anonymous block, so the
+// content turns about the root's content box and the block lands one
+// margin in from its right and top edges.
+func TestWritingMode_MarginsStayInTheOrthogonalRoot(t *testing.T) {
+	t.Parallel()
+	wm := func(s *css.Style) { s.WritingMode = css.VerticalRL }
+	kid := sty(wm, margin(1, 1, 1, 1), width(1), height(1), bg(lime))
+	root := doc(el(sty(wm, width(6), height(6)), el(kid)))
+	assertPixels(t, runWith(t, root, Options{Page: page(6, 7), BrowserRules: true}), 1, `
+		______
+		____G_
+		______
+		______
+		______
+		______
+		______`)
+}

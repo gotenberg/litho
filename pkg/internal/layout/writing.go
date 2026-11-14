@@ -25,6 +25,13 @@ func orthoEligible(b *box) bool {
 func (e *engine) wrapOrtho(b *box) {
 	st := anonStyle(b.st)
 	st.WritingMode = css.HorizontalTB
+	if e.opts.BrowserRules {
+		// The content of an orthogonal flow root is laid out in the
+		// root's own block formatting context (CSS Writing Modes 4, 7.3):
+		// no margin of it collapses through the anonymous block, whose
+		// top-left corner the content turns about.
+		st.Display = css.FlowRoot
+	}
 	in := &box{
 		st: st, kind: kindBlock, anon: true, first: true, last: true, parent: b,
 		lang: b.lang, elem: b.elem, link: b.link, depth: b.depth + 1,
