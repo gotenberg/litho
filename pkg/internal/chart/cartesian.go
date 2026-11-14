@@ -41,6 +41,10 @@ type dim struct {
 	trimEnds bool
 	// percent formats the ticks as percentages of a percent-stacked group.
 	percent bool
+	// time lays a date axis out in time, nil for evenly spaced
+	// categories; timeFormat formats its labels.
+	time       *timeAxis
+	timeFormat string
 	// officeScale counts the automatic major intervals by Office's rule
 	// (officeIntervals up the chart, officeHorizontalIntervals across it)
 	// rather than LibreOffice's.
@@ -80,6 +84,9 @@ type tickLabel struct {
 	// turned marks a label Office turned (officeTurnedCentre), whose box
 	// may run into the chart's edge pad up to officeTurnedEdge.
 	turned bool
+	// spill marks a label that takes no room right of the plot area
+	// (officeTimeSpills).
+	spill bool
 }
 
 // draw returns the drawing of l.
@@ -106,6 +113,8 @@ func (d *dim) labelled() bool {
 func (d *dim) catFrac(i float64) float64 {
 	var f float64
 	switch {
+	case d.time != nil:
+		f = d.time.frac(i, d.between)
 	case d.between:
 		f = (i + 0.5) / float64(max(d.n, 1))
 	case d.n <= 1:
@@ -218,6 +227,15 @@ func (d *dim) atHighEnd() bool {
 // tickPositions returns the fractions along d of its major ticks.
 func (d *dim) tickPositions() []float64 {
 	var out []float64
+	if d.category && d.time != nil {
+		for _, f := range d.time.ticks(d.between) {
+			if d.ax != nil && d.ax.Reverse {
+				f = 1 - f
+			}
+			out = append(out, f)
+		}
+		return out
+	}
 	if d.category {
 		if d.between {
 			for i := 0; i <= d.n; i++ {
@@ -353,6 +371,9 @@ func labelBounds(inner typeset.Rect, dims []*dim) typeset.Rect {
 				r.X += officePad - officeTurnedEdge
 				r.Width -= officePad - officeTurnedEdge
 			}
+			if right := inner.X + inner.Width; l.spill && r.X+r.Width > right {
+				r.Width = math.Max(0, right-r.X)
+			}
 			bb = union(bb, r)
 		}
 	}
@@ -427,6 +448,8 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 		x.format = x.ax.Format
 	}
 	var ys []*dim
+	var xCats Data
+	timed := rd.office() && !xy && !horizontal && x.ax != nil && x.ax.Kind == DateAxis
 	byAxis := map[int]*dim{}
 	yOf := map[*Group]*dim{}
 	for _, g := range c.Groups {
@@ -452,6 +475,9 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 			byAxis[key] = y
 		}
 		yOf[g] = y
+		// Office lays a date axis out in time under line charts
+		// (timeAxis); the probes hold no other kind.
+		timed = timed && g.Kind == Line
 		for _, s := range g.Series {
 			vals := rd.data(s.Values)
 			if y.format == "" && !y.sourced {
@@ -476,6 +502,7 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 			} else {
 				x.n = min(max(x.n, vals.Len(), cats.Len()), MaxPoints)
 				if x.names == nil && cats.Len() > 0 {
+					xCats = cats
 					for i := range min(cats.Len(), MaxPoints) {
 						x.names = append(x.names, cats.labelAs(i, x.format, c.Locale))
 					}
@@ -533,6 +560,19 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 	}
 	if xy && (math.IsInf(x.lo, 0) || math.IsInf(x.hi, 0)) {
 		x.lo, x.hi = 0, 0
+	}
+	if timed {
+		if x.time = newTimeAxis(x.ax, xCats); x.time != nil {
+			// A source-linked axis takes its cells' format, as a value
+			// axis does, else its cache's.
+			x.timeFormat = x.format
+			if x.timeFormat == "" && x.ax.SourceLinked && c.FormatResolver != nil && xCats.Ref != "" {
+				x.timeFormat, _ = c.FormatResolver(xCats.Ref)
+			}
+			if x.timeFormat == "" {
+				x.timeFormat = xCats.Format
+			}
+		}
 	}
 	if !xy {
 		for len(x.names) < x.n {
@@ -630,6 +670,9 @@ func trimScale(sc scale, ax *Axis, lo, hi float64) scale {
 // intervals as its labels leave room for.
 func (rd *renderer) fitScale(d *dim) {
 	if d.category {
+		if d.time != nil {
+			d.time.fit(d.length())
+		}
 		return
 	}
 	opt := scaleOptions{zero: d.zero, border: d.border, maxCount: maxAutoTicks}
@@ -747,7 +790,10 @@ func (rd *renderer) placeLabels(d *dim) {
 	}
 	var items []item
 	maxW := 0.0
-	if d.category {
+	switch {
+	case d.time != nil:
+		items = d.timeItems()
+	case d.category:
 		for i := 0; i < d.n && i < len(d.names); i++ {
 			items = append(items, item{d.names[i], d.catFrac(float64(i))})
 		}
@@ -770,7 +816,7 @@ func (rd *renderer) placeLabels(d *dim) {
 				maxW = math.Max(d.inner.X-rd.page.X-labelSpacing, maxW)
 			}
 		}
-	} else {
+	default:
 		for _, v := range d.sc.ticks() {
 			items = append(items, item{d.tickText(v), d.sc.frac(v)})
 		}
@@ -822,7 +868,7 @@ func (rd *renderer) placeLabels(d *dim) {
 			}
 			w, h := b.rotated()
 			p := d.pixel(it.f)
-			l := tickLabel{b: b, pos: p}
+			l := tickLabel{b: b, pos: p, spill: rd.officeTimeSpills(d, b)}
 			if drawn != nil {
 				l.drawn = drawn[i]
 			}
@@ -854,7 +900,8 @@ func (rd *renderer) placeLabels(d *dim) {
 	// Labels kept whole that still overlap turn by 45 degrees, on a
 	// horizontal axis whose labels are not turned already (chart2's
 	// canAutoAdjustLabelPlacement and autoRotate45).
-	if d.category && !d.vertical && !breakable && !overlap && st.Rotation == 0 && overlapping(d.labels) {
+	crowded := overlapping(d.labels) || d.time != nil && rd.officeLayout() && officeTimeCrowded(d.labels)
+	if d.category && !d.vertical && !breakable && !overlap && st.Rotation == 0 && crowded {
 		st.Rotation = 45
 		blocks = measure(st, 0)
 		if rd.officeLayout() && d.outside < 0 {
@@ -862,6 +909,12 @@ func (rd *renderer) placeLabels(d *dim) {
 			drawn = rd.officeCut(d, items, blocks, st, gap)
 		}
 		place(blocks)
+		if d.time != nil && rd.officeLayout() && !officeTimeTurns45(d.labels) {
+			st.Rotation = 90
+			drawn = nil
+			blocks = measure(st, 0)
+			place(blocks)
+		}
 		if rd.officeLayout() && officeKeepsTurned(d.labels) {
 			return
 		}

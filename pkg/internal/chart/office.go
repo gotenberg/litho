@@ -279,6 +279,9 @@ func (rd *renderer) officeRoom(bb, inner typeset.Rect, dims []*dim) typeset.Rect
 			continue
 		}
 		for _, l := range d.labels {
+			if l.spill {
+				continue
+			}
 			w, _ := l.b.rotated()
 			right = math.Max(right, l.cx+float64(w/2))
 		}

@@ -660,3 +660,27 @@ func TestChartFromElement_UprightAxisTitle(t *testing.T) {
 		})
 	}
 }
+
+// TestChartFromElement_DateAxisTimeUnits reads a date axis's base and
+// major time units, an absent one being automatic.
+func TestChartFromElement_DateAxisTimeUnits(t *testing.T) {
+	date := func(kids string) *chart.Axis {
+		plot := `<c:lineChart><c:axId val="1"/><c:axId val="2"/></c:lineChart>` +
+			`<c:dateAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/>` + kids + `</c:dateAx>` +
+			`<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="1"/></c:valAx>`
+		c := readChart(t, chartXML("", "", plot), false)
+		for _, a := range c.Axes {
+			if a.Kind == chart.DateAxis {
+				return a
+			}
+		}
+		t.Fatal("no date axis")
+		return nil
+	}
+	if a := date(`<c:baseTimeUnit val="days"/><c:majorUnit val="2"/><c:majorTimeUnit val="months"/>`); a.BaseTimeUnit != chart.TimeDays || a.MajorTimeUnit != chart.TimeMonths || a.MajorUnit != 2 {
+		t.Errorf("base %v, major %v %v, want days, 2 months", a.BaseTimeUnit, a.MajorUnit, a.MajorTimeUnit)
+	}
+	if a := date(``); a.BaseTimeUnit != chart.TimeAuto || a.MajorTimeUnit != chart.TimeAuto {
+		t.Errorf("base %v, major %v, want automatic", a.BaseTimeUnit, a.MajorTimeUnit)
+	}
+}

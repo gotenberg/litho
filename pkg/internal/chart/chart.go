@@ -658,7 +658,25 @@ type Axis struct {
 	// BetweenCategories puts a category axis's categories between its tick
 	// marks rather than on them (ECMA-376 Part 1, 21.2.2.32 crossBetween).
 	BetweenCategories bool
+	// BaseTimeUnit and MajorTimeUnit are a date axis's unit of its
+	// categories and of its major unit, TimeAuto for the application's
+	// choice (ECMA-376 Part 1, 21.2.2.39 dateAx: baseTimeUnit and
+	// majorTimeUnit).
+	BaseTimeUnit, MajorTimeUnit TimeUnit
 }
+
+// TimeUnit is a unit of time of a date axis (ECMA-376 Part 1, 21.2.3.49
+// ST_TimeUnit).
+type TimeUnit uint8
+
+// The time units.
+const (
+	// TimeAuto leaves the unit to the application.
+	TimeAuto TimeUnit = iota
+	TimeDays
+	TimeMonths
+	TimeYears
+)
 
 // LabelPlacement is where a data label sits relative to its point
 // (ECMA-376 Part 1, 21.2.3.13 ST_DLblPos).

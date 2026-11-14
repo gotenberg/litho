@@ -948,6 +948,20 @@ func (p *chartReader) readLegend(lg *Element) {
 	p.c.Legend = l
 }
 
+// timeUnit maps an ST_TimeUnit value (ECMA-376 Part 1, 21.2.3.49) to its
+// unit, TimeAuto for none or an unknown one.
+func timeUnit(v string) chart.TimeUnit {
+	switch v {
+	case "days":
+		return chart.TimeDays
+	case "months":
+		return chart.TimeMonths
+	case "years":
+		return chart.TimeYears
+	}
+	return chart.TimeAuto
+}
+
 // readAxes reads the plot area's axes and indexes them by ID.
 func (p *chartReader) readAxes(pa *Element) {
 	p.axes = map[string]int{}
@@ -1051,6 +1065,8 @@ func (p *chartReader) axis(e *Element, kind chart.AxisKind) *chart.Axis {
 	case chart.DateAxis:
 		// A date axis keeps chart2's defaults: no line breaks.
 		a.NoBreak = true
+		a.BaseTimeUnit = timeUnit(childVal(e, "baseTimeUnit"))
+		a.MajorTimeUnit = timeUnit(childVal(e, "majorTimeUnit"))
 	case chart.CategoryAxis:
 		// oox's AxisConverter: labels turned by the file never overlap and
 		// break only when upright or turned a quarter beside a plot area
