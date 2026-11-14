@@ -133,3 +133,19 @@ func TestInitialLetter_MarginMovesTheLetter(t *testing.T) {
 		}
 	}
 }
+
+// TestInitialLetter_InheritsFromFirstLine locks CSS Pseudo 4, 2.1.3: an
+// initial letter, though laid out as a float, inherits from the
+// ::first-line of its paragraph, here its colour.
+func TestInitialLetter_InheritsFromFirstLine(t *testing.T) {
+	l := letter("A", 3, 3)
+	p := el(sty(), l, txt(sty(), "bb cc dd ee"))
+	o := Options{Page: page(60, 200), FirstLine: lineStyler{
+		pseudo:  map[*Node]func(*css.Style){p: fg(blue)},
+		restyle: map[*Node]func(*css.Style){l: func(*css.Style) {}},
+	}}
+	img := render(t, runWith(t, doc(p), o), 1)
+	if got := code(img.At(10, 20)); got != 'B' {
+		t.Errorf("letter %c, want blue", got)
+	}
+}

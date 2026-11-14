@@ -159,11 +159,20 @@ func (e *engine) initialDrop(f *box) float64 {
 // the font size that makes its cap height capL, and a line height of its
 // font's ascent and descent, so its line holds its glyphs and nothing
 // more (CSS Inline 3, 4.5.1: font-size and line-height do not apply to
-// it). Its text takes that style too.
+// it). Its text takes that style too. A letter whose paragraph has a
+// ::first-line inherits from it, as the first letter on the first line
+// does (CSS Pseudo 4, 2.1.3), though it is laid out as a float.
 func (e *engine) sizeInitialLetter(f *box, capL float64) {
 	orig := f.st
 	if f.node != nil && f.node.Style != nil {
 		orig = f.node.Style
+	}
+	if root := paragraphOf(f); f.node != nil && f.parent == root {
+		if fls := e.firstLineStyle(root); fls != nil {
+			if r := e.opts.FirstLine.Restyle(f.node, fls); r != nil {
+				orig = r
+			}
+		}
 	}
 	size := e.fontSize(orig)
 	ratio := 0.0
