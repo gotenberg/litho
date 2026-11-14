@@ -318,3 +318,76 @@ func TestTurnedBounds(t *testing.T) {
 		}
 	}
 }
+
+// TestEffects_RunPaint checks how a run's properties paint its glyphs,
+// read into its style: no fill under a line, none without one, a linear
+// gradient and its angle, a path
+// gradient drawn top to bottom with a warning, a line at its width
+// rounded to whole pixels at 100 an inch in its colour, a dashed one with
+// a warning, and none for a solid fill.
+func TestEffects_RunPaint(t *testing.T) {
+	t.Parallel()
+	run := func(rPr string) string {
+		return textBox("TB", 0, 0, 12700, 12700, `<a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr>`+rPr+`</a:rPr><a:t>x</a:t></a:r></a:p>`)
+	}
+	red := `<a:solidFill><a:srgbClr val="FF0000"/></a:solidFill>`
+	for _, tc := range []struct {
+		name, rPr string
+		check     func(t *testing.T, p *css.OfficeTextPaint)
+		warn      string
+	}{
+		{"solid", red, func(t *testing.T, p *css.OfficeTextPaint) {
+			if p != nil {
+				t.Errorf("paint %+v, want none", p)
+			}
+		}, ""},
+		{"line of no fill", `<a:ln w="19050">` + red + `</a:ln><a:noFill/>`, func(t *testing.T, p *css.OfficeTextPaint) {
+			if p == nil || !p.NoFill || p.Outline == nil || !nearly(p.Outline.Width, 1.44) || p.Outline.Color.R != 1 {
+				t.Errorf("paint %+v, want no fill and a red line 1.44 points wide", p)
+			}
+		}, ""},
+		{"thin line", `<a:ln w="3175">` + red + `</a:ln>` + red, func(t *testing.T, p *css.OfficeTextPaint) {
+			if p == nil || p.NoFill || p.Outline == nil || !nearly(p.Outline.Width, 0.72) {
+				t.Errorf("paint %+v, want a line a pixel wide", p)
+			}
+		}, ""},
+		{"dashed line", `<a:ln w="28575"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:prstDash val="dash"/></a:ln>` + red, func(t *testing.T, p *css.OfficeTextPaint) {
+			if p == nil || p.Outline == nil || !nearly(p.Outline.Width, 2.16) {
+				t.Errorf("paint %+v, want a line 2.16 points wide", p)
+			}
+		}, "dashed line around text"},
+		{"no fill alone is none", `<a:noFill/>`, func(t *testing.T, p *css.OfficeTextPaint) {
+			if p != nil {
+				t.Errorf("paint %+v, want none", p)
+			}
+		}, ""},
+		{"line of no fill is none", `<a:ln w="12700"><a:noFill/></a:ln>`, func(t *testing.T, p *css.OfficeTextPaint) {
+			if p != nil {
+				t.Errorf("paint %+v, want none", p)
+			}
+		}, ""},
+		{"linear gradient", `<a:gradFill><a:gsLst><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs></a:gsLst><a:lin ang="2700000"/></a:gradFill>`, func(t *testing.T, p *css.OfficeTextPaint) {
+			if p == nil || len(p.Gradient) != 2 || p.Gradient[0].Color.R != 1 || p.Gradient[1].Pos != 1 || p.Angle != 45 {
+				t.Errorf("paint %+v, want red to blue at 45 degrees", p)
+			}
+		}, ""},
+		{"path gradient", `<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FFFFFF"/></a:gs><a:gs pos="100000"><a:srgbClr val="C00000"/></a:gs></a:gsLst><a:path path="circle"/></a:gradFill>`, func(t *testing.T, p *css.OfficeTextPaint) {
+			if p == nil || len(p.Gradient) != 2 || p.Angle != 90 {
+				t.Errorf("paint %+v, want a gradient top to bottom", p)
+			}
+		}, "path gradient"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, warnings := readDeck(t, testDeck{slides: []testSlide{{tree: run(tc.rPr)}}})
+			shapes := doc.Slides[0].Shapes
+			if len(shapes) != 1 || shapes[0].Text == nil || len(shapes[0].Text.Paragraphs[0].Runs) == 0 {
+				t.Fatalf("shapes %+v", shapes)
+			}
+			tc.check(t, shapes[0].Text.Paragraphs[0].Runs[0].Style.Paint)
+			if tc.warn != "" && !strings.Contains(fmt.Sprint(warnings), tc.warn) {
+				t.Errorf("warnings %v, want one on %q", warnings, tc.warn)
+			}
+		})
+	}
+}

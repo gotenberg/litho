@@ -428,3 +428,50 @@ func textOf(t *typeset.Text) string {
 	}
 	return b.String()
 }
+
+// TestText_RunPaint checks that a run of no fill with a line paints by
+// PowerPoint's rules its glyphs invisible, with their structure parent,
+// under their outlines stroked in the line's colour and width as an
+// artifact, and that Impress's rules paint neither.
+func TestText_RunPaint(t *testing.T) {
+	st := arial(40)
+	st.Color = css.Color{R: 1, G: 1, B: 1}
+	st.Paint = &css.OfficeTextPaint{NoFill: true, Outline: &css.OfficeOutline{Color: css.Color{R: 1, A: 1}, Width: 1.44}}
+	for _, rules := range []EffectRules{EffectsPowerPoint, EffectsImpress} {
+		d := deck(&Slide{Shapes: []*Shape{box(100, 100, 400, 200, para("Line", st))}})
+		d.Effects = rules
+		out := convert(t, d, office.Options{})
+		var glyphs *typeset.Text
+		var strokes []*typeset.Path
+		var walk func([]typeset.Fragment)
+		walk = func(fs []typeset.Fragment) {
+			for _, f := range fs {
+				switch f := f.(type) {
+				case *typeset.Text:
+					if strings.Contains(textOf(f), "Line") {
+						glyphs = f
+					}
+				case *typeset.Path:
+					if f.Stroke != nil {
+						strokes = append(strokes, f)
+					}
+				case *typeset.Group:
+					walk(f.Content)
+				}
+			}
+		}
+		walk(out.Pages[0].Content)
+		if rules == EffectsImpress {
+			if glyphs != nil || len(strokes) != 0 {
+				t.Errorf("Impress's rules painted text %+v and %d strokes, want neither", glyphs, len(strokes))
+			}
+			continue
+		}
+		if glyphs == nil || !glyphs.Invisible || glyphs.Parent == nil {
+			t.Fatalf("run %+v, want the text invisible with its structure parent", glyphs)
+		}
+		if len(strokes) != 1 || strokes[0].Parent != nil || strokes[0].Stroke.Width != 1.44 || strokes[0].Stroke.Color.R != 1 {
+			t.Errorf("strokes %+v, want the outlines stroked red 1.44 points wide as an artifact", strokes)
+		}
+	}
+}

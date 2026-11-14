@@ -891,6 +891,12 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 	st.Color = textColor(rs.Color)
 	st.TextDecorationColor = st.Color
 	st.TextEffects = b.textEffects(rs)
+	st.TextPaint = b.textPaint(rs)
+	if st.TextPaint != nil && st.TextPaint.NoFill && !(st.Color.A > 0) {
+		// The glyphs are painted invisible under their line: a text of
+		// no fill keeps an opaque colour for the line's opacity.
+		st.Color.A = 1
+	}
 	if rs.Underline {
 		st.TextDecoration |= css.Underline
 		st.TextDecorationStyle = rs.UnderlineStyle

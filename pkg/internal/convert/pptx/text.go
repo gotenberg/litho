@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -731,8 +732,74 @@ func (r *reader) runStyle(c chain, sc scope) slides.RunStyle {
 	if lst := c.first("effectLst", "effectDag"); lst != nil {
 		s.Effects = r.textEffects(lst, sc)
 	}
+	s.Paint = r.runPaint(c, sc)
 	return s
 }
+
+// runPaint reads how a run's properties paint its glyphs otherwise than
+// filled in one colour, along c (21.1.2.3.9 rPr): unfilled (20.1.8.44
+// noFill) under a line, a gradient (20.1.8.33 gradFill) along its linear
+// angle (20.1.8.41 lin), and the run's line (20.1.2.2.24 ln) in its
+// colour, a gradient line in its first stop's, at its width rounded to
+// whole pixels at 100 an inch, one at least. It returns nil for a run of
+// a solid fill or of no fill, and no line. A path gradient is drawn
+// linear, top to bottom, and a dashed line solid, each with a warning.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/tdf118776 prints in PowerPoint its run of no
+//     fill and no line as nothing, no text either.
+//   - litho/pptx: text-fill-effects prints in PowerPoint lines of 1.5 and
+//     2.25 points around 40 point runs as strokes 1.4404 and 2.1605 points
+//     wide, two and three pixels at 100 an inch; the second dashed 4 and 3
+//     widths, the gradient line as the stroke's outline filled with a
+//     shading.
+//   - openxmlsdk/pptx: presentation/Text_withEffects_100chars prints a
+//     title's line of a point as a stroke 0.72 points wide, one pixel.
+func (r *reader) runPaint(c chain, sc scope) *css.OfficeTextPaint {
+	var p css.OfficeTextPaint
+	set := false
+	switch fill := c.first("solidFill", "gradFill", "noFill", "pattFill", "blipFill", "grpFill"); {
+	case fill == nil:
+	case fill.Local == "noFill":
+		// Text of no fill and no line prints nothing, no text either: its
+		// transparent colour paints it so (see [reader.runStyle]).
+		p.NoFill = true
+	case fill.Local == "gradFill":
+		if g := r.gradient(&fillCtx{sc: sc}, fill); g != nil {
+			p.Angle = g.Angle
+			if g.Radial {
+				p.Angle = 90
+				r.warn(warn.ContentUnsupported, warn.Approximated, "a path gradient filling text is drawn linear, top to bottom")
+			}
+			for _, st := range g.Stops {
+				p.Gradient = append(p.Gradient, css.OfficeStop{Pos: st.Position, Color: st.Color})
+			}
+			set = true
+		}
+	}
+	var srcs []lineSource
+	for _, e := range c {
+		if ln := e.Child(ooxml.NSA, "ln"); ln != nil {
+			srcs = append(srcs, lineSource{ln, &fillCtx{sc: sc}})
+		}
+	}
+	if l := r.lineOf(srcs); l.Color.A > 0 && !l.Hairline && numeric.PositiveFinite(l.Width) {
+		p.Outline, set = &css.OfficeOutline{Color: l.Color, Width: max(math.Round(l.Width/runLinePixel), 1) * runLinePixel}, true
+		if l.Dash != nil {
+			r.warn(warn.ContentUnsupported, warn.Approximated, "a dashed line around text is drawn solid")
+		}
+	}
+	if !set {
+		return nil
+	}
+	return &p
+}
+
+// runLinePixel is a pixel at 100 pixels an inch, in points: PowerPoint
+// strokes a run's line at its width rounded to whole ones (see
+// [reader.runPaint]).
+const runLinePixel = 0.72
 
 // linkStyle gives a hyperlink run the theme's hyperlink colour over the
 // run's own, and an underline, as Impress imports a run with a

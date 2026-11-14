@@ -728,6 +728,12 @@ type RunStyle struct {
 	// builder draws them by the rules of [Document.Effects], whatever
 	// their Rules say, and Impress's draw none.
 	Effects *css.OfficeEffects
+	// Paint paints the run's glyphs otherwise than filled in Color, nil
+	// for none: unfilled, a gradient, an outline (ECMA-376 Part 1,
+	// 21.1.2.3.9 rPr holding 20.1.8.44 noFill, 20.1.8.33 gradFill or
+	// 20.1.2.2.24 ln). The builder paints it by PowerPoint's rules alone,
+	// as it draws Effects.
+	Paint *css.OfficeTextPaint
 }
 
 // Script is a vertical text position.
