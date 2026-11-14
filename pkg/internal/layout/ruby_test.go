@@ -290,3 +290,25 @@ func TestRubyTags(t *testing.T) {
 		t.Errorf("structure %s, want %s", got, want)
 	}
 }
+
+// TestRubyLineBesideFloat locks the width of a line a ruby annotation
+// under the line before moves down: the floats beside its content, not
+// beside where it would start, shorten it.
+//
+// # Corpus evidence
+//
+//   - wpt: css-inline/initial-letter/initial-letter-block-position-drop-under-ruby-tall.
+func TestRubyLineBesideFloat(t *testing.T) {
+	t.Parallel()
+	// 48px lines of 40px Ahem: the line after the ruby moves 12px down,
+	// its content past the 60px float.
+	block, ruby, rt := rubyDoc(1.2, func(s *css.Style) { s.RubyPosition = css.RubyUnder })
+	fl := sty(func(s *css.Style) {
+		s.Float = css.FloatLeft
+		s.Width, s.Height = css.Pts(px(100)), css.Pts(px(60))
+	})
+	res := run(t, el(block, el(fl), el(ruby, txt(ruby, "AB"), el(rt, txt(rt, "ab"))), br(block), txt(block, "yy")), page(600, 300))
+	if x, y := placed(t, res, "yy"); !near(x, 0) || !near(y, 48+12+36) {
+		t.Errorf("next line at (%g, %g), want (0, %g)", x, y, 48+12+36.0)
+	}
+}

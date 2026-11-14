@@ -928,8 +928,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				}
 			}
 			fitTop := top
-			top, end, left, right, l := s.fitLine(lp, lw, pos, lineIndent, top, lineStrut)
-			s.rubyRoom(l, room, under)
+			top, end, left, right, l := s.fitRubyLine(lp, lw, pos, lineIndent, top, lineStrut, room, under)
 			floatsBefore := len(bc.floats)
 			for range len(lp.floats) {
 				if !s.placeFloatsBeside(lp, pos, end, l, top) {
@@ -937,8 +936,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				}
 				// A float placed beside the content before it narrows the
 				// line, which is broken again beside it.
-				top, end, left, right, l = s.fitLine(lp, lw, pos, lineIndent, top, lineStrut)
-				s.rubyRoom(l, room, under)
+				top, end, left, right, l = s.fitRubyLine(lp, lw, pos, lineIndent, top, lineStrut, room, under)
 			}
 			s.tail, s.moved = 0, false
 			if end == ln && isLastPara(d, p) {
@@ -1130,6 +1128,31 @@ func pendingTop(y float64, mc *marginState, pending bool) float64 {
 		return y + mc.strut.sum()
 	}
 	return y
+}
+
+// fitRubyLine fits the line of p starting at pos as fitLine does, and
+// grows it for its ruby annotations and those under the line before it,
+// room and under (rubyRoom). The content of a line so grown sits lower:
+// where the floats leave another width there, the line is broken again
+// in that band, as Chromium places a line its annotations move beside an
+// initial letter.
+//
+// # Corpus evidence
+//
+//   - wpt: css-inline/initial-letter/initial-letter-block-position-drop-under-ruby-tall,
+//     the line after a 20px line holding an 80px annotation under its
+//     base starts under the letter, not beside it.
+func (s *inlineState) fitRubyLine(p *ifcPara, w []float64, pos int, indent, top, h, room, under float64) (float64, int, float64, float64, *lineBox) {
+	top, end, left, right, l := s.fitLine(p, w, pos, indent, top, h)
+	g := s.rubyRoom(l, room, under)
+	if g <= eps {
+		return top, end, left, right, l
+	}
+	if nl, nr := s.band(top+g, l.h-g); math.Abs(nl-left) <= eps && math.Abs(nr-right) <= eps {
+		return top, end, left, right, l
+	}
+	top, end, left, right, l = s.fitLine(p, w, pos, indent, top+g, h)
+	return top - s.rubyRoom(l, room, under), end, left, right, l
 }
 
 // fitLine breaks the line of p starting at pos beside the floats, from

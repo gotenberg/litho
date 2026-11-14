@@ -435,7 +435,7 @@ func (p *painter) annotations(l *lineBox, page int) {
 	}
 }
 
-// rubyRoom grows the line l by what the annotations over its ruby
+// rubyRoom grows the line l, and returns by how much, by what the annotations over its ruby
 // columns need past room, the room above it, and by what the annotations
 // under the line before it, reaching under past it, need past the room
 // above l's content. CSS Ruby 1, 3.6 leaves the amount to the user agent
@@ -460,14 +460,14 @@ func (p *painter) annotations(l *lineBox, page int) {
 //     line with an annotation under it followed by a line with one over
 //     it is 40px from it; an annotation over a line takes the half-leading
 //     under the line before it, ruby or not.
-func (s *inlineState) rubyRoom(l *lineBox, room, under float64) {
+func (s *inlineState) rubyRoom(l *lineBox, room, under float64) float64 {
 	if s.root.rubyLine {
 		// A ruby nested in a base: the column holding it makes the room.
-		return
+		return 0
 	}
 	grow := max(l.annOver-max(room, 0), 0) + max(under-l.startRoom, 0)
 	if grow <= eps {
-		return
+		return 0
 	}
 	l.h += grow
 	l.baseline += grow
@@ -479,6 +479,7 @@ func (s *inlineState) rubyRoom(l *lineBox, room, under float64) {
 		f.bottom += grow
 		f.base += grow
 	}
+	return grow
 }
 
 // rubyEnd returns how much the block of the inline formatting context
