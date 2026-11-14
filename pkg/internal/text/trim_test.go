@@ -141,3 +141,38 @@ func TestShape_Autospace(t *testing.T) {
 		t.Errorf("advance without ideograph-alpha %v, want 10", p.Advance(0))
 	}
 }
+
+// TestShape_SeparatorsAsSpaces locks that under the Chromium fallback rule
+// U+2028 and U+2029 are drawn as the face's space and offer no line
+// break, though the face holds a glyph of its own for each and UAX #14
+// makes them mandatory breaks; under the other rules they break.
+func TestShape_SeparatorsAsSpaces(t *testing.T) {
+	data := fontbuild.TrueType{
+		PostScriptName: "TestSep",
+		Family:         "Test Sep",
+		Subfamily:      "Regular",
+		NotdefAdvance:  1000,
+		Glyphs: []fontbuild.Glyph{
+			{Name: "V", Unicode: 'V', Advance: 600},
+			{Name: "space", Unicode: ' ', Advance: 250, Empty: true},
+			{Name: "ls", Unicode: ' ', Advance: 900},
+			{Name: "ps", Unicode: ' ', Advance: 900},
+		},
+	}.Build()
+	f := newTestFonts(t, fontFile{name: "sep.ttf", data: data})
+	for _, fb := range []Fallback{FallbackChromium, 0} {
+		s := Style{Families: []string{"Test Sep"}, Size: 10, Fallback: fb}
+		p := shape(t, f, []ParagraphRun{{Text: "V V V", Style: s}}, ParagraphOptions{})
+		for _, i := range []int{1, 3} {
+			wantBrk := Break(NoBreak)
+			if fb != FallbackChromium {
+				wantBrk = BreakMandatory
+			} else if got := p.Advance(i); math.Abs(got-2.5) > 1e-6 {
+				t.Errorf("separator %d advance %v, want the space's 2.5", i, got)
+			}
+			if got := p.Break(i + 1); got != wantBrk {
+				t.Errorf("fallback %v: break after separator %d is %v, want %v", fb, i, got, wantBrk)
+			}
+		}
+	}
+}

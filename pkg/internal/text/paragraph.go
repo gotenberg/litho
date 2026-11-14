@@ -346,10 +346,14 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 			continue
 		}
 		from := len(p.text)
+		chromium := r.Style.Fallback.rule() == FallbackChromium
 		for _, c := range r.Text {
 			p.text = append(p.text, c)
-			if unicode.IsControl(c) {
+			switch {
+			case unicode.IsControl(c):
 				c = wordJoiner
+			case chromium && isSeparator(c):
+				c = ' '
 			}
 			shapeText = append(shapeText, c)
 			p.runOf = append(p.runOf, run)
@@ -376,7 +380,7 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 		return nil, Report{}, fmt.Errorf("shaping text: %w", err)
 	}
 	p.level = level
-	p.segment(st, segmentText(runs, shapeText, p.runOf))
+	p.segment(st, segmentText(runs, p.text, shapeText, p.runOf))
 	if err := p.shape(ctx, st, shapeText); err != nil {
 		return nil, Report{}, err
 	}
@@ -385,12 +389,21 @@ func (f *Fonts) Shape(ctx context.Context, runs []ParagraphRun, opts ParagraphOp
 	return p, st.report(), nil
 }
 
-// segmentText returns the text the line breaks are found in: text, with
-// the character an object breaks as (Object.BreakAs) in its place. It
-// copies text only when an object sets one.
-func segmentText(runs []ParagraphRun, text []rune, runOf []uint16) []rune {
+// segmentText returns the text the line breaks are found in: text, the
+// shaped form of the paragraph's characters orig, with the character an
+// object breaks as (Object.BreakAs) in its place, and a no-break space in
+// place of a separator shaped as a space. It copies text only when it
+// changes a character.
+func segmentText(runs []ParagraphRun, orig, text []rune, runOf []uint16) []rune {
 	out := text
 	for i, r := range text {
+		if r == ' ' && isSeparator(orig[i]) {
+			if &out[0] == &text[0] {
+				out = slices.Clone(text)
+			}
+			out[i] = noBreakSpace
+			continue
+		}
 		if r != objectReplacement {
 			continue
 		}
@@ -425,6 +438,28 @@ func (p *Paragraph) segment(st *layoutState, text []rune) {
 			p.graph[g.Offset] = true
 		}
 	}
+}
+
+// noBreakSpace is U+00A0, which breaks as UAX #14 class GL.
+const noBreakSpace = '\u00a0'
+
+// isSeparator reports U+2028 LINE SEPARATOR and U+2029 PARAGRAPH
+// SEPARATOR. Under the Chromium fallback rule each is shaped as a space
+// of its run's face and offers no line break, and no white space
+// processing folds it: UAX #14 makes them mandatory breaks (class BK),
+// which Chromium does not honour, and CSS Text 3, 4 counts neither as
+// white space.
+//
+// # Corpus evidence
+//
+//   - wpt: css-fonts/separators draws each as the space of a font that
+//     holds glyphs for both.
+//   - probe, html: Chromium 156 draws "VV", U+2028 and "OO" in Ahem at
+//     20px on one line in a 70px wide box, under white-space normal, pre,
+//     pre-wrap and nowrap alike; two of them in a row and the spaces
+//     beside one keep their width.
+func isSeparator(r rune) bool {
+	return r == '\u2028' || r == '\u2029'
 }
 
 // shape shapes the text between objects, item by item.
