@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-14T23:00:34Z",
+  "captured_at": "2026-11-14T23:17:33Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -59947,12 +59947,12 @@
     "litho/html": {
       "features": {
         "diff": {
-          "matched": 191,
-          "mismatched": 7,
+          "matched": 198,
+          "mismatched": 2,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 198,
+            "pages_equal": 200,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -59978,7 +59978,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.2994
+              "text_f1": 0.859
             },
             "article": {
               "layout": 0.9454,
@@ -60074,7 +60074,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.3194
+              "text_f1": 0.9219
             },
             "borders": {
               "layout": 0.9318,
@@ -60146,7 +60146,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.785
+              "text_f1": 0.972
             },
             "filter-blur": {
               "layout": 0.9766,
@@ -60204,6 +60204,14 @@
               "strict": 1,
               "text_f1": 1
             },
+            "forms-fieldsets-details": {
+              "layout": 0.9255,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "grid-dashboard": {
               "layout": 0.9156,
               "link_recall": 1,
@@ -60226,7 +60234,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.848
+              "text_f1": 0.9189
             },
             "header-default-classes": {
               "layout": 0.955,
@@ -60250,7 +60258,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.6866
+              "text_f1": 0.8452
             },
             "images": {
               "layout": 0.9841,
@@ -60410,7 +60418,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.7907
+              "text_f1": 1
             },
             "mask-layers": {
               "layout": 0.9746,
@@ -60419,6 +60427,14 @@
               "pages": 1,
               "strict": 1,
               "text_f1": 0.9189
+            },
+            "mathml-formulas": {
+              "layout": 0.932,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9208
             },
             "media-dark": {
               "layout": 0.9983,
@@ -61514,7 +61530,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.4088
+              "text_f1": 0.9804
             },
             "user-stylesheet": {
               "layout": 0.9382,
@@ -61544,31 +61560,31 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 196,
+          "matched": 198,
           "mismatched": 2,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 456,
-            "pass_a1a": 198,
-            "pass_a1b": 198,
-            "pass_a2a": 198,
-            "pass_a2a+ua1": 196,
-            "pass_a2b": 198,
-            "pass_a2u": 198,
-            "pass_a3a": 198,
-            "pass_a3b": 198,
-            "pass_a3u": 198,
-            "pass_a4": 198,
-            "pass_a4+ua2": 197,
-            "pass_a4e": 198,
-            "pass_ua1": 196,
-            "pass_ua2": 197,
-            "pass_v1.4": 198,
-            "pass_v1.5": 198,
-            "pass_v1.6": 198,
-            "pass_v1.7": 198,
-            "pass_v2.0": 198,
+            "pass_a1a": 200,
+            "pass_a1b": 200,
+            "pass_a2a": 200,
+            "pass_a2a+ua1": 198,
+            "pass_a2b": 200,
+            "pass_a2u": 200,
+            "pass_a3a": 200,
+            "pass_a3b": 200,
+            "pass_a3u": 200,
+            "pass_a4": 200,
+            "pass_a4+ua2": 199,
+            "pass_a4e": 200,
+            "pass_ua1": 198,
+            "pass_ua2": 199,
+            "pass_v1.4": 200,
+            "pass_v1.5": 200,
+            "pass_v1.6": 200,
+            "pass_v1.7": 200,
+            "pass_v2.0": 200,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -62229,6 +62245,27 @@
               "v1.7": 1,
               "v2.0": 1
             },
+            "forms-fieldsets-details": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
             "grid-dashboard": {
               "a1a": 1,
               "a1b": 1,
@@ -62776,6 +62813,27 @@
               "v2.0": 1
             },
             "mask-layers": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "mathml-formulas": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
@@ -117164,8 +117222,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 4719,
-          "mismatched": 474,
+          "matched": 4830,
+          "mismatched": 502,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -122363,7 +122421,146 @@
             "css/selectors/text-emphasis-visited-inheritance.html": "pass",
             "css/selectors/text-fill-color-visited-inheritance.html": "pass",
             "css/selectors/text-stroke-color-visited-inheritance.html": "pass",
-            "css/selectors/visited-nested.html": "pass"
+            "css/selectors/visited-nested.html": "pass",
+            "mathml/presentation-markup/direction/direction-overall-002.html": "fail",
+            "mathml/presentation-markup/direction/direction-overall-003.html": "pass",
+            "mathml/presentation-markup/fractions/frac-color-001.html": "pass",
+            "mathml/presentation-markup/fractions/frac-invalid-2.html": "pass",
+            "mathml/presentation-markup/fractions/frac-invalid-3.html": "pass",
+            "mathml/presentation-markup/fractions/frac-invalid.html": "pass",
+            "mathml/presentation-markup/fractions/frac-linethickness-003.html": "pass",
+            "mathml/presentation-markup/mpadded/mpadded-010.html": "pass",
+            "mathml/presentation-markup/mpadded/mpadded-011.html": "pass",
+            "mathml/presentation-markup/mpadded/mpadded-012.html": "pass",
+            "mathml/presentation-markup/mpadded/mpadded-013.html": "pass",
+            "mathml/presentation-markup/mpadded/mpadded-percentage-001.html": "pass",
+            "mathml/presentation-markup/mrow/mrow-painting-order.html": "fail",
+            "mathml/presentation-markup/mrow/semantics-001.html": "pass",
+            "mathml/presentation-markup/mrow/semantics-002.html": "pass",
+            "mathml/presentation-markup/mrow/semantics-004.html": "pass",
+            "mathml/presentation-markup/mrow/semantics-005.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-1-2.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-1-3.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-1-4.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-1-5.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-2-1.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-2-2.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-2-3.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-2-4.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-3-2.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-3-3.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-3-4.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-3-5.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-4-1.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-4-2.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-4-3.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-5-1.html": "pass",
+            "mathml/presentation-markup/operators/embellished-op-5-2.html": "pass",
+            "mathml/presentation-markup/operators/mo-invisibleoperators.html": "pass",
+            "mathml/presentation-markup/operators/mo-lspace-rspace-2.html": "fail",
+            "mathml/presentation-markup/operators/mo-lspace-rspace-4.html": "pass",
+            "mathml/presentation-markup/operators/mo-lspace-rspace.html": "fail",
+            "mathml/presentation-markup/operators/op-dict-1.html": "pass",
+            "mathml/presentation-markup/operators/op-dict-12.html": "pass",
+            "mathml/presentation-markup/operators/op-dict-13.html": "pass",
+            "mathml/presentation-markup/operators/op-dict-2.html": "pass",
+            "mathml/presentation-markup/operators/op-dict-3.html": "fail",
+            "mathml/presentation-markup/operators/op-dict-4.html": "pass",
+            "mathml/presentation-markup/operators/op-dict-5.html": "fail",
+            "mathml/presentation-markup/operators/op-dict-6.html": "pass",
+            "mathml/presentation-markup/operators/op-dict-7.html": "fail",
+            "mathml/presentation-markup/operators/op-dict-8.html": "pass",
+            "mathml/presentation-markup/operators/op-dict-9.html": "pass",
+            "mathml/presentation-markup/scripts/mmultiscript-001.html": "pass",
+            "mathml/presentation-markup/scripts/mmultiscript-002.html": "pass",
+            "mathml/presentation-markup/scripts/mmultiscript-003.html": "pass",
+            "mathml/presentation-markup/scripts/munder-mover-align-accent-false.html": "pass",
+            "mathml/presentation-markup/scripts/munder-mover-align-accent-true.html": "pass",
+            "mathml/presentation-markup/scripts/munderover-align-accent-false.html": "fail",
+            "mathml/presentation-markup/scripts/munderover-align-accent-true.html": "fail",
+            "mathml/presentation-markup/scripts/none-002.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-mover-1a.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-mover-1b.html": "fail",
+            "mathml/presentation-markup/scripts/stretchy-mover-2a.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-mover-2b.html": "fail",
+            "mathml/presentation-markup/scripts/stretchy-mover-3.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-msup-1a.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-msup-1b.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-msup-1c.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-msup-1d.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-munderover-1a.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-munderover-1b.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-munderover-1c.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-munderover-1d.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-munderover-1e.html": "fail",
+            "mathml/presentation-markup/scripts/stretchy-munderover-2a.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-munderover-2b.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-munderover-2c.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-munderover-2d.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-munderover-2e.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-munderover-2f.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-munderover-2g.html": "fail",
+            "mathml/presentation-markup/scripts/stretchy-munderover-3a.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-munderover-3b.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-munderover-3c.html": "pass",
+            "mathml/presentation-markup/scripts/stretchy-munderover-3d.html": "pass",
+            "mathml/presentation-markup/spaces/mspace-children.html": "pass",
+            "mathml/presentation-markup/spaces/mspace-percentage-001.html": "pass",
+            "mathml/presentation-markup/spaces/space-2.html": "pass",
+            "mathml/presentation-markup/spaces/space-3.html": "pass",
+            "mathml/presentation-markup/tables/columnspan-rowspan-001.html": "pass",
+            "mathml/presentation-markup/tables/columnspan-rowspan-002.html": "pass",
+            "mathml/presentation-markup/tables/columnspan-rowspan-003.html": "pass",
+            "mathml/presentation-markup/tables/columnspan-rowspan-004.html": "pass",
+            "mathml/presentation-markup/tables/columnspan-rowspan-005.html": "pass",
+            "mathml/presentation-markup/tables/columnspan-rowspan-006.html": "pass",
+            "mathml/relations/css-styling/anchor-mathbackground-001.html": "pass",
+            "mathml/relations/css-styling/anchor-mathcolor-001.html": "pass",
+            "mathml/relations/css-styling/anchor-mathsize-001.html": "pass",
+            "mathml/relations/css-styling/display-with-overflow.html": "pass",
+            "mathml/relations/css-styling/first-line-first-letter-pseudo-elements-001.html": "pass",
+            "mathml/relations/css-styling/first-line-first-letter-pseudo-elements-002.html": "fail",
+            "mathml/relations/css-styling/first-line-first-letter-pseudo-elements-003.html": "fail",
+            "mathml/relations/css-styling/first-line-first-letter-pseudo-elements-004.html": "pass",
+            "mathml/relations/css-styling/legacy-scriptminsize-attribute.html": "pass",
+            "mathml/relations/css-styling/legacy-scriptsizemultiplier-attribute.html": "pass",
+            "mathml/relations/css-styling/lengths-1.html": "fail",
+            "mathml/relations/css-styling/mathbackground-001.html": "pass",
+            "mathml/relations/css-styling/mathbackground-002.html": "pass",
+            "mathml/relations/css-styling/mathbackground-003.html": "pass",
+            "mathml/relations/css-styling/mathbackground-004.html": "pass",
+            "mathml/relations/css-styling/mathcolor-001.html": "pass",
+            "mathml/relations/css-styling/mathcolor-002.html": "pass",
+            "mathml/relations/css-styling/mathcolor-003.html": "pass",
+            "mathml/relations/css-styling/mathcolor-004.html": "pass",
+            "mathml/relations/css-styling/mathcolor-mathbackground-css.html": "pass",
+            "mathml/relations/css-styling/mathsize-attribute.html": "pass",
+            "mathml/relations/css-styling/mathvariant-auto.html": "pass",
+            "mathml/relations/css-styling/mathvariant-font-style-font-weight.html": "pass",
+            "mathml/relations/css-styling/mi-fontstyle-fontweight.html": "pass",
+            "mathml/relations/css-styling/out-of-flow/absolutely-positioned-001.html": "fail",
+            "mathml/relations/css-styling/padding-border-margin/padding-border-margin-001.html": "fail",
+            "mathml/relations/css-styling/padding-border-margin/padding-border-margin-002.html": "fail",
+            "mathml/relations/css-styling/padding-border-margin/padding-border-margin-003.html": "fail",
+            "mathml/relations/css-styling/padding-border-margin/padding-border-margin-004.html": "pass",
+            "mathml/relations/css-styling/padding-border-margin/padding-border-margin-005.html": "fail",
+            "mathml/relations/css-styling/padding-border-margin/padding-border-margin-006.html": "fail",
+            "mathml/relations/css-styling/padding-border-margin/padding-border-margin-007.html": "fail",
+            "mathml/relations/css-styling/presentational-hints-001.html": "pass",
+            "mathml/relations/css-styling/table-width-2.html": "pass",
+            "mathml/relations/css-styling/table-width-3.html": "fail",
+            "mathml/relations/css-styling/table-width-4.html": "pass",
+            "mathml/relations/css-styling/width-height-002.html": "fail",
+            "mathml/relations/css-styling/width-height-003.html": "fail",
+            "mathml/relations/html5-tree/class-1.html": "pass",
+            "mathml/relations/html5-tree/color-attributes-1.html": "pass",
+            "mathml/relations/html5-tree/integration-point-2.html": "pass",
+            "mathml/relations/html5-tree/integration-point-3.html": "fail",
+            "mathml/relations/html5-tree/link-color-001.html": "fail",
+            "mathml/relations/html5-tree/link-color-002.html": "pass",
+            "mathml/relations/html5-tree/unique-identifier-3.html": "pass",
+            "mathml/relations/text-and-math/mi-automatic-italic-with-default-font.html": "pass",
+            "mathml/relations/text-and-math/use-typo-metrics-1.html": "pass"
           }
         }
       }
