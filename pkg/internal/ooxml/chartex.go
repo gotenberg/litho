@@ -197,7 +197,7 @@ func (x *chartExReader) read(root *Element) {
 		}
 	}
 	g := &chart.Group{Kind: x.kindOf(series), GapWidth: 150, XAxis: 0, YAxis: 1}
-	histogram := g.Kind == chart.Bar
+	histogram := g.Kind == chart.Bar && binned(series)
 	drawn := g.Kind != chart.Unsupported
 	if v := parseFloat(attrOr(cxChild(catAx, "catScaling"), "gapWidth")); v >= 0 && v <= 5 {
 		// oox's AxisConverter: the gap as a fraction of a bar's width.
@@ -207,6 +207,11 @@ func (x *chartExReader) read(root *Element) {
 		g.Series = append(g.Series, x.series(s, i, histogram))
 		if g.Kind == chart.Waterfall {
 			x.waterfall(s, g.Series[i])
+		}
+		if g.Kind == chart.Bar {
+			g.Series[i].Arrange = chart.Arrangement{
+				Aggregate: !histogram && cxChild(cxChild(s, "layoutPr"), "aggregation") != nil,
+			}
 		}
 	}
 	x.styleSeries(g.Series)
@@ -613,9 +618,9 @@ func (x *chartExReader) dataLabels(e *Element) chart.Labels {
 }
 
 // kindOf returns the kind a chart of the cx:series series is drawn as
-// (MS-ODRAWXML, 2.24.4.21 ST_SeriesLayout): bars for a histogram, every
-// series a clusteredColumn with cx:binning; a waterfall when every series
-// is one; [chart.Unsupported] for the other kinds and their mixes.
+// (MS-ODRAWXML, 2.24.4.21 ST_SeriesLayout): bars when every series is a
+// clusteredColumn, binned or not; a waterfall when every series is one;
+// [chart.Unsupported] for the other kinds and their mixes.
 func (x *chartExReader) kindOf(series []*Element) chart.Kind {
 	if len(series) == 0 {
 		return chart.Unsupported
@@ -623,7 +628,7 @@ func (x *chartExReader) kindOf(series []*Element) chart.Kind {
 	columns, waterfall := true, true
 	for _, s := range series {
 		id := attrOr(s, "layoutId")
-		columns = columns && id == "clusteredColumn" && cxChild(cxChild(s, "layoutPr"), "binning") != nil
+		columns = columns && id == "clusteredColumn"
 		waterfall = waterfall && id == "waterfall"
 	}
 	switch {
@@ -633,6 +638,17 @@ func (x *chartExReader) kindOf(series []*Element) chart.Kind {
 		return chart.Waterfall
 	}
 	return chart.Unsupported
+}
+
+// binned reports column series that are all histograms, counted in bins
+// (MS-ODRAWXML, 2.24.3.11 CT_Binning).
+func binned(series []*Element) bool {
+	for _, s := range series {
+		if cxChild(cxChild(s, "layoutPr"), "binning") == nil {
+			return false
+		}
+	}
+	return true
 }
 
 // maxSubtotals caps the subtotal indices read from a waterfall series.

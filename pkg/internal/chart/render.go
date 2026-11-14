@@ -65,7 +65,7 @@ func Render(ctx context.Context, fonts *text.Fonts, c *Chart, r typeset.Rect) []
 	if c == nil || fonts == nil || !numeric.PositiveFinite(r.Width) || !numeric.PositiveFinite(r.Height) {
 		return nil
 	}
-	rd := &renderer{ctx: ctx, fonts: fonts, c: binned(c), page: r}
+	rd := &renderer{ctx: ctx, fonts: fonts, c: arranged(binned(c)), page: r}
 	rd.render(r)
 	if len(rd.out) == 0 {
 		return nil

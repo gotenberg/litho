@@ -285,6 +285,8 @@ type Series struct {
 	// counted into bins, which become the series' categories and values
 	// (MS-ODRAWXML, 2.24.3.5 CT_Binning).
 	Bins *Binning
+	// Arrange gathers and orders the points before they are drawn.
+	Arrange Arrangement
 	// Subtotals are the indices of a waterfall series' points that are
 	// totals: their columns stand on the axis and the running total
 	// restarts from their value (MS-ODRAWXML, 2.24.3.90 CT_Subtotals).

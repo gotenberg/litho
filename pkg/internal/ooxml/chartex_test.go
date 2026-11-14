@@ -122,15 +122,15 @@ func TestChartExFromElement_Histogram(t *testing.T) {
 	}
 }
 
-func TestChartExFromElement_ParetoAndBareClusteredColumn(t *testing.T) {
-	for _, region := range []string{
-		`<cx:series layoutId="clusteredColumn"><cx:dataId val="0"/><cx:layoutPr><cx:binning/></cx:layoutPr></cx:series><cx:series layoutId="paretoLine" ownerIdx="0"/>`,
-		`<cx:series layoutId="clusteredColumn"><cx:dataId val="0"/></cx:series>`,
-	} {
-		c := readChartEx(t, chartExXML(cxData("0", "", nil, "1", "2"), `<cx:plotArea><cx:plotAreaRegion>`+region+`</cx:plotAreaRegion>`+cxAxes+`</cx:plotArea>`), nil)
-		if c.Groups[0].Kind != chart.Unsupported || c.Notice == nil {
-			t.Errorf("%s: kind %v, notice %v, want the notice", region, c.Groups[0].Kind, c.Notice)
-		}
+func TestChartExFromElement_ClusteredColumn(t *testing.T) {
+	region := `<cx:series layoutId="clusteredColumn"><cx:dataId val="0"/><cx:layoutPr><cx:aggregation/></cx:layoutPr></cx:series>`
+	c := readChartEx(t, chartExXML(cxData("0", "", []string{"a", "b", "a"}, "1", "2", "3"), `<cx:plotArea><cx:plotAreaRegion>`+region+`</cx:plotAreaRegion>`+cxAxes+`</cx:plotArea>`), nil)
+	g := c.Groups[0]
+	if g.Kind != chart.Bar || c.Notice != nil || len(c.Groups) != 1 {
+		t.Fatalf("groups %+v, notice %v: want one column group without a notice", c.Groups, c.Notice)
+	}
+	if s := g.Series[0]; s.Bins != nil || s.Arrange != (chart.Arrangement{Aggregate: true}) {
+		t.Errorf("series %+v, want its categories aggregated, unsorted and not binned", s)
 	}
 }
 
