@@ -156,6 +156,10 @@ var silentProperties = map[string]bool{
 	// origin serves, as every file of a conversion is, and applies the
 	// EXIF orientation.
 	"image-rendering": true, "image-orientation": true,
+	// interpolate-size decides whether a sizing keyword interpolates
+	// with a length (CSS Sizing 4, 7.3): an animation prints at its start
+	// or its end, where no keyword and length are ever between.
+	"interpolate-size": true,
 }
 
 // knownProperty reports whether litho parses the property name.
