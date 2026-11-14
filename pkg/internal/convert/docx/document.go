@@ -8,8 +8,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/effect"
+	"github.com/gotenberg/litho/pkg/internal/formula"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/omml"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -47,6 +49,8 @@ type settings struct {
 	// (MS-DOCX, 2.3.4 compatibilityMode): 15 for Word 2013 and later, 0
 	// when unset, which reads as an earlier version.
 	compat int
+	// math are the math settings (22.1.2.62 mathPr).
+	math omml.Settings
 }
 
 // document is one conversion's state: the package, its resolved parts
@@ -76,6 +80,8 @@ type document struct {
 	linePitch float64
 
 	warnings []typeset.Warning
+	// formulas lays the equations out, nil until the first one.
+	formulas *formula.Setter
 	// effectPixels counts the pixels of the drawings' effects, against
 	// effect.MaxPagePixels.
 	effectPixels effect.Page
@@ -165,7 +171,7 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	d := &document{
 		ctx: ctx, pkg: pkg, main: main, fonts: fonts, opts: opts, symbols: office.NewSymbolCodes(),
 		warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, lineFactors: map[string][3]float64{}, vmlTypes: map[string]int{}, vmlTypeElems: map[string]*ooxml.Element{},
-		settings: settings{defaultTab: 36}, shared: css.NewStyles(),
+		settings: settings{defaultTab: 36, math: omml.DefaultSettings()}, shared: css.NewStyles(),
 		revisions: &revisions{view: opts.TrackedChanges, authors: map[string]int{}, marked: map[*ooxml.Element]bool{}, markEnd: map[*ooxml.Element]bool{}, markStart: map[*ooxml.Element]bool{}, moved: map[*ooxml.Element]bool{}},
 	}
 	if d.root, err = d.part(main); err != nil {
@@ -267,6 +273,7 @@ func isSoft(err error) bool {
 
 // readSettings reads the settings part's root, w:settings.
 func (d *document) readSettings(root *ooxml.Element) {
+	d.settings.math = omml.ReadSettings(root.Child(ooxml.NSM, "mathPr"))
 	if root == nil {
 		return
 	}

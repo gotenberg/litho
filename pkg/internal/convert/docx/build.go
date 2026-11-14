@@ -929,7 +929,7 @@ func (d *document) inlines(s *story, rp resolvedPara, ps *css.Style, lineMult fl
 				sink.add(&layout.Node{Kind: layout.Element, Style: inlineStyle(ps), ID: name})
 			}
 		case e.Is(ooxml.NSM, "oMath"), e.Is(ooxml.NSM, "oMathPara"):
-			d.math(ps, e, sink)
+			d.math(rp, ps, lineMult, e, sink)
 		}
 	}
 }
@@ -950,32 +950,6 @@ func (d *document) hyperlink(s *story, e *ooxml.Element) string {
 		return "#" + a
 	}
 	return ""
-}
-
-// math writes an Office Math zone as its text, with a warning.
-func (d *document) math(ps *css.Style, e *ooxml.Element, sink *inlineSink) {
-	var b strings.Builder
-	var walk func(*ooxml.Element, int)
-	walk = func(x *ooxml.Element, depth int) {
-		if depth > maxNesting {
-			return
-		}
-		if x.Is(ooxml.NSM, "t") {
-			b.WriteString(x.Text)
-		}
-		for _, c := range x.Kids() {
-			walk(c, depth+1)
-		}
-	}
-	walk(e, 0)
-	if b.Len() == 0 {
-		return
-	}
-	d.warn(warn.ContentUnsupported, warn.Approximated, "an equation is drawn as its plain text")
-	st := inlineStyle(ps)
-	st.FontStyle = css.FontItalic
-	st.FontFamilies = append([]string{"Cambria Math", "DejaVu Serif"}, st.FontFamilies...)
-	sink.add(&layout.Node{Kind: layout.Element, Style: st, Children: []*layout.Node{{Kind: layout.Text, Style: st, Text: b.String()}}})
 }
 
 // run builds a w:r (17.3.2.25): its text, tabs, breaks, symbols, fields,

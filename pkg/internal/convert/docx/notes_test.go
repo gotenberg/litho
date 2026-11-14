@@ -91,18 +91,14 @@ func TestFields(t *testing.T) {
 
 func TestSymbolsAndBreaks(t *testing.T) {
 	t.Parallel()
-	body := `<w:p><w:r><w:t>a</w:t><w:tab/><w:t>b</w:t><w:br/><w:t>c</w:t><w:cr/><w:sym w:font="Symbol" w:char="F0B7"/><w:noBreakHyphen/><w:softHyphen/></w:r>` +
-		`<m:oMath><m:r><m:t>x=1</m:t></m:r></m:oMath></w:p>`
+	body := `<w:p><w:r><w:t>a</w:t><w:tab/><w:t>b</w:t><w:br/><w:t>c</w:t><w:cr/><w:sym w:font="Symbol" w:char="F0B7"/><w:noBreakHyphen/><w:softHyphen/></w:r></w:p>`
 	b := build(t, body, nil)
 	p := role(b.root, "P")[0]
-	if got := textOf(p); got != "a\tbc•\u2011\u00adx=1" {
+	if got := textOf(p); got != "a\tbc•\u2011\u00ad" {
 		t.Errorf("text %q", got)
 	}
 	if n := len(find(p, func(n *layout.Node) bool { return n.Kind == layout.LineBreak })); n != 2 {
 		t.Errorf("%d line breaks", n)
-	}
-	if len(b.d.warnings) == 0 {
-		t.Error("no warning for the equation")
 	}
 }
 
