@@ -251,12 +251,15 @@ func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
 
 // monochromeEmoji reports whether Word draws the emoji of a run of the
 // properties r as text, one glyph in the run's colour, where it draws
-// those of other runs in colour: a run of a stated colour other than auto
-// (ECMA-376 Part 1, 17.3.2.6 color), or a shaded one (17.3.2.32 shd). A
-// highlight keeps the colour. litho draws such an emoji in the text
-// presentation (CSS Fonts 4, 6.12, font-variant-emoji: text): in a face
-// that holds its outline, else, as no face of the image does for most
-// emoji, in colour.
+// those of other runs in colour: a run whose resolved colour is stated
+// other than auto (ECMA-376 Part 1, 17.3.2.6 color), directly or by its
+// character or paragraph style, or a run shaded with a fill other than
+// auto (17.3.2.32 shd). A highlight, a paragraph's shading and a run
+// shading of fill auto keep the colour; bold changes nothing. litho draws
+// such an emoji in the text presentation (CSS Fonts 4, 6.12,
+// font-variant-emoji: text), a variation selector 16 included (see
+// text.Style.OfficeEmoji): in a face that holds its outline, else, as no
+// face of the image does for most emoji, in colour.
 //
 // # Corpus evidence
 //
@@ -265,6 +268,13 @@ func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
 //     C00000, 000000, 4472C4 with themeColor accent1 and FFFFFF over a
 //     shading, and of a w:shd of fill 3060C0 without a colour; in colour
 //     layers in runs of w:color auto and of w:highlight yellow.
+//   - probe, docx: in the run's colour as one glyph in a run of a
+//     character style of w:color C00000, in a run of no colour in a
+//     paragraph of a style of w:color C00000, in a run of the Hyperlink
+//     style (0563C1), in a bold run of w:color C00000 (stroked, render
+//     mode 2), and U+2764 and U+263A followed by U+FE0F in a run of
+//     w:color C00000; in colour layers in a run of no colour in a
+//     paragraph shaded 3060C0 and in a run of w:shd fill auto.
 func monochromeEmoji(r runProps) bool {
 	return r.color != nil && !r.color.auto || r.shading != nil
 }

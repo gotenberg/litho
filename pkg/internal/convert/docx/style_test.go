@@ -479,10 +479,31 @@ func TestRunEmojiPresentation(t *testing.T) {
 		{`<w:color w:val="C00000"/>`, css.EmojiText},
 		{`<w:color w:val="000000"/>`, css.EmojiText},
 		{`<w:shd w:val="clear" w:color="auto" w:fill="3060C0"/>`, css.EmojiText},
+		{`<w:shd w:val="clear" w:color="auto" w:fill="auto"/>`, css.EmojiNormal},
+		{`<w:b/><w:color w:val="C00000"/>`, css.EmojiText},
 	} {
 		b := build(t, `<w:p><w:r><w:rPr>`+tc.rpr+`</w:rPr><w:t>smile</w:t></w:r></w:p>`, nil)
 		if got := runWith(t, b.root, "smile").Style.FontVariantEmoji; got != tc.want {
 			t.Errorf("%q: font-variant-emoji %v, want %v", tc.rpr, got, tc.want)
+		}
+	}
+}
+
+// TestRunEmojiPresentation_FromStyles checks that a colour a character or
+// paragraph style states makes a run's emoji ask for the text
+// presentation, as a direct colour does, and that a paragraph's shading
+// does not (see [monochromeEmoji]).
+func TestRunEmojiPresentation_FromStyles(t *testing.T) {
+	t.Parallel()
+	styles := stylesPart(`<w:style w:type="character" w:styleId="RedChar"><w:rPr><w:color w:val="C00000"/></w:rPr></w:style>` +
+		`<w:style w:type="paragraph" w:styleId="RedPara"><w:rPr><w:color w:val="C00000"/></w:rPr></w:style>`)
+	body := `<w:p><w:r><w:rPr><w:rStyle w:val="RedChar"/></w:rPr><w:t>char</w:t></w:r></w:p>` +
+		`<w:p><w:pPr><w:pStyle w:val="RedPara"/></w:pPr><w:r><w:t>para</w:t></w:r></w:p>` +
+		`<w:p><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="3060C0"/></w:pPr><w:r><w:t>shaded</w:t></w:r></w:p>`
+	b := build(t, body, map[string]string{"word/styles.xml": styles})
+	for text, want := range map[string]css.VariantEmoji{"char": css.EmojiText, "para": css.EmojiText, "shaded": css.EmojiNormal} {
+		if got := runWith(t, b.root, text).Style.FontVariantEmoji; got != want {
+			t.Errorf("%s: font-variant-emoji %v, want %v", text, got, want)
 		}
 	}
 }
