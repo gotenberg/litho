@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/formfield"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -278,7 +279,7 @@ func legacyField(instr string, ff *ooxml.Element) (typeset.Field, bool) {
 	switch strings.ToUpper(firstWord(instr)) {
 	case "FORMTEXT":
 		f.Kind = typeset.FieldText
-		if v, err := strconv.Atoi(attrOr(ff.Child(w, "textInput").Child(w, "maxLength"), "val")); err == nil && v > 0 && v <= typeset.MaxFieldText {
+		if v, err := intconv.Atoi(attrOr(ff.Child(w, "textInput").Child(w, "maxLength"), "val")); err == nil && v > 0 && v <= typeset.MaxFieldText {
 			f.MaxLen = v
 		}
 	case "FORMDROPDOWN":
@@ -289,7 +290,7 @@ func legacyField(instr string, ff *ooxml.Element) (typeset.Field, bool) {
 				f.Options = append(f.Options, attrOr(e, "val"))
 			}
 		}
-		if i, err := strconv.Atoi(attrOr(dd.Child(w, "result"), "val")); err == nil && i >= 0 && i < len(f.Options) {
+		if i, err := intconv.Atoi(attrOr(dd.Child(w, "result"), "val")); err == nil && i >= 0 && i < len(f.Options) {
 			f.Value = f.Options[i]
 		} else if len(f.Options) > 0 {
 			f.Value = f.Options[0]

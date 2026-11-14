@@ -3,11 +3,11 @@ package docx
 import (
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
@@ -345,7 +345,7 @@ const (
 func (d *document) drawingRunProps(rPr *ooxml.Element, face string, color css.Color, scale float64) runProps {
 	var rp runProps
 	size := 18.0
-	if v, err := strconv.Atoi(attrOr(rPr, "sz")); err == nil && v >= 100 && v <= 400000 {
+	if v, err := intconv.Atoi(attrOr(rPr, "sz")); err == nil && v >= 100 && v <= 400000 {
 		size = float64(v) / 100
 	}
 	size *= scale
