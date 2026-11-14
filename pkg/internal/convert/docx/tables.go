@@ -250,7 +250,7 @@ func (d *document) parseTableProps(e *ooxml.Element) *tableProps {
 		case "tblBorders":
 			t.borders = d.parseBorders(c)
 		case "shd":
-			if col, ok := shadingColor(c); ok {
+			if col, ok := d.shadingColor(c); ok {
 				t.shading = &col
 			}
 		case "tblLayout":
@@ -373,7 +373,7 @@ func (d *document) parseCellProps(e *ooxml.Element) *cellProps {
 		case "tcBorders":
 			c.borders = d.parseBorders(x)
 		case "shd":
-			if col, ok := shadingColor(x); ok {
+			if col, ok := d.shadingColor(x); ok {
 				c.shading = &col
 			}
 		case "tcMar":

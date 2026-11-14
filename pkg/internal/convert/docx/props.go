@@ -209,7 +209,7 @@ func (d *document) parseRunProps(e *ooxml.Element) *runProps {
 				r.noHighlight = true
 			}
 		case "shd":
-			if col, ok := shadingColor(c); ok {
+			if col, ok := d.shadingColor(c); ok {
 				r.shading = &col
 			} else {
 				r.noShading = true
@@ -375,27 +375,51 @@ func (d *document) parseFonts(e *ooxml.Element) fontSpec {
 }
 
 // parseColor reads the colour of a w:color element (attr val), or of a
-// w:u or border element (attr color): the attribute as
-// written (what Word last computed from the theme colour), else the theme
-// colour with its tint or shade, else auto (ECMA-376 Part 1, 17.3.2.6).
+// w:u, border or w:background element (attr color): its theme colour with
+// its tint or shade when it names one the theme holds, else the attribute
+// as written, else auto (ECMA-376 Part 1, 17.3.2.6).
 func (d *document) parseColor(e *ooxml.Element, attr string) *colorSpec {
+	if c, ok := d.themed(e, "themeColor", "themeTint", "themeShade"); ok {
+		return &colorSpec{c: c}
+	}
 	if v, ok := e.Attr(attr); ok {
 		if c, ok := ooxml.HexColor(v); ok {
 			return &colorSpec{c: c}
 		}
 	}
-	if t, ok := e.Attr("themeColor"); ok {
-		if c, ok := d.theme.Color(t); ok {
-			if v, ok := ooxml.HexByte(attrOr(e, "themeTint")); ok {
-				c = ooxml.Tint(c, v)
-			}
-			if v, ok := ooxml.HexByte(attrOr(e, "themeShade")); ok {
-				c = ooxml.Shade(c, v)
-			}
-			return &colorSpec{c: c}
-		}
-	}
 	return &colorSpec{auto: true}
+}
+
+// themed returns the theme colour e's attribute name names, with the tint
+// or the shade its attributes tint and shade give, false when e names none
+// the theme holds (ECMA-376 Part 1, 17.3.2.6, 17.3.5). Word paints the
+// theme colour over the colour stored beside it, which records what Word
+// last computed.
+//
+// # Corpus evidence
+//
+//   - litho/docx run-theme-fonts-colors: every run stores w:val 000000
+//     beside a theme colour; Word paints each in its theme colour, tinted
+//     or shaded.
+//   - litho/docx styles-custom-theme: runs shaded w:fill 000000 beside
+//     w:themeFill accent1 to accent6 are painted in the accents, a run
+//     coloured 000000 beside accent2 tinted 66 in 214,227,188.
+func (d *document) themed(e *ooxml.Element, name, tint, shade string) (css.Color, bool) {
+	t, ok := e.Attr(name)
+	if !ok {
+		return css.Color{}, false
+	}
+	c, ok := d.theme.Color(t)
+	if !ok {
+		return css.Color{}, false
+	}
+	if v, ok := ooxml.HexByte(attrOr(e, tint)); ok {
+		c = ooxml.Tint(c, v)
+	}
+	if v, ok := ooxml.HexByte(attrOr(e, shade)); ok {
+		c = ooxml.Shade(c, v)
+	}
+	return c, true
 }
 
 // attrOr returns e's attribute local, "" when absent.
@@ -406,11 +430,18 @@ func attrOr(e *ooxml.Element, local string) string {
 
 // shadingColor returns the colour a w:shd paints (ECMA-376 Part 1,
 // 17.3.5): its fill, the pattern colour for a solid pattern, and the
-// colour pct patterns mix of the two; false for none or auto.
-func shadingColor(e *ooxml.Element) (css.Color, bool) {
+// colour pct patterns mix of the two; false for none or auto. A theme
+// fill or pattern colour wins over the one stored beside it ([document.themed]).
+func (d *document) shadingColor(e *ooxml.Element) (css.Color, bool) {
 	val := attrOr(e, "val")
-	fill, okFill := ooxml.HexColor(attrOr(e, "fill"))
-	pat, okPat := ooxml.HexColor(attrOr(e, "color"))
+	fill, okFill := d.themed(e, "themeFill", "themeFillTint", "themeFillShade")
+	if !okFill {
+		fill, okFill = ooxml.HexColor(attrOr(e, "fill"))
+	}
+	pat, okPat := d.themed(e, "themeColor", "themeTint", "themeShade")
+	if !okPat {
+		pat, okPat = ooxml.HexColor(attrOr(e, "color"))
+	}
 	if !okPat {
 		pat = css.Color{A: 1}
 	}
@@ -659,7 +690,7 @@ func (d *document) parseParaProps(e *ooxml.Element) *paraProps {
 				p.borders[name] = d.parseBorder(b)
 			}
 		case "shd":
-			if col, ok := shadingColor(c); ok {
+			if col, ok := d.shadingColor(c); ok {
 				p.shading = &col
 			} else {
 				p.noShading = true

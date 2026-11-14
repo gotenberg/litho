@@ -26,6 +26,8 @@ func TestRunProperties(t *testing.T) {
 		run(`<w:b/><w:i/><w:sz w:val="28"/><w:color w:val="FF0000"/>`, "direct") +
 		run(`<w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia"/>`, "theme") +
 		run(`<w:color w:val="auto" w:themeColor="accent1"/>`, "themecolor") +
+		run(`<w:color w:val="000000" w:themeColor="accent1" w:themeShade="BF"/>`, "storedblack") +
+		run(`<w:shd w:val="clear" w:color="auto" w:fill="000000" w:themeFill="accent1"/>`, "themefill") +
 		run(`<w:u w:val="double" w:color="0000FF"/><w:dstrike/>`, "lines") +
 		run(`<w:caps/><w:highlight w:val="yellow"/>`, "caps") +
 		run(`<w:smallCaps/><w:spacing w:val="40"/><w:w w:val="150"/>`, "small") +
@@ -56,6 +58,13 @@ func TestRunProperties(t *testing.T) {
 			return strings.Join(s.FontFamilies, "|") == "Minor Face|Test Sans|Noto Sans|DejaVu Sans|EA Face"
 		}},
 		{"themecolor", func(s *css.Style) bool { return s.Color.B > 0.7 && s.Color.R < 0.4 }},
+		// Word paints the theme colour, not the value stored beside it.
+		{"storedblack", func(s *css.Style) bool {
+			return s.Color == css.Color{R: 54.0 / 255, G: 96.0 / 255, B: 145.0 / 255, A: 1}
+		}},
+		{"themefill", func(s *css.Style) bool {
+			return s.BackgroundColor == css.Color{R: 0x4F / 255.0, G: 0x81 / 255.0, B: 0xBD / 255.0, A: 1}
+		}},
 		{"lines", func(s *css.Style) bool {
 			return s.TextDecoration == css.Underline|css.LineThrough && s.TextDecorationStyle == css.DecorationDouble && s.TextDecorationColor == css.Color{B: 1, A: 1}
 		}},
