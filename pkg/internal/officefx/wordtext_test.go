@@ -203,7 +203,7 @@ func TestUnder_WordRunSameBytesOnEveryArchitecture(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		"ef1f425a99ce1612",
+		"d15968df28428d3f",
 		"d659e7682fde971c",
 		"82af86481e0395ab",
 	}
@@ -218,5 +218,25 @@ func TestUnder_WordRunSameBytesOnEveryArchitecture(t *testing.T) {
 		if got := hex.EncodeToString(h.Sum(nil))[:16]; got != want[i] {
 			t.Errorf("effect %d: %s, want %s", i, got, want[i])
 		}
+	}
+}
+
+// TestUnder_WordReflectionEndsWithItsFade checks that a reflection of a
+// run of Word's text fading down draws nothing past the end of its fade,
+// where its end alpha would otherwise reach to the end of the copy.
+func TestUnder_WordReflectionEndsWithItsFade(t *testing.T) {
+	refl := &css.OfficeReflection{StartAlpha: 0.55, EndAlpha: 0.003, EndPos: 0.45, FadeDir: 90, Dist: 8, Dir: 90, SX: 1, SY: -1, Align: css.RectAlign{Y: 1}}
+	var px effect.Page
+	frags, _, err := Under(context.Background(), wordSquare(24), &css.OfficeEffects{Reflection: refl}, &px)
+	if err != nil || len(frags) != 1 {
+		t.Fatalf("%d fragments, error %v, want the reflection", len(frags), err)
+	}
+	r := frags[0].(*typeset.Image).Rect
+	half := 8.0 * 24 / wordReflectionDist / 2
+	// The fade runs over the run's box grown down to the mirror line,
+	// from the line down; it ends 0.45 of that box below the line.
+	end := 30 + half + 0.45*(wordRunBox*24+half)
+	if bottom := r.Y + r.Height; bottom > end+0.5 || bottom < end-0.5 {
+		t.Errorf("reflection ends at %.2f, want the fade's end %.2f", bottom, end)
 	}
 }

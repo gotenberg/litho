@@ -314,6 +314,10 @@ func wordRun(ctx context.Context, src *Source, fx *css.OfficeEffects, pixels *ef
 //     where the reflection at no distance falls 6.2.
 //   - probe, docx: the reflections at no distance start at the baseline,
 //     the mirrored descenders cut off.
+//   - probe, docx: reflections fading down to 45.5% at 12 to 72 points,
+//     2 to 16 points away, end where the fade ends (the last alpha 6.33 to
+//     89.20 points below the baseline, the fade's end 6.34 to 89.83): no
+//     alpha past it, where the end alpha of 0.3% would leave a level of 1.
 func wordReflection(ctx context.Context, src *Source, rf *css.OfficeReflection, pixels *effect.Page) (typeset.Fragment, Notes, error) {
 	shift := wordReflectionShift(rf, src.Size)
 	b := src.Bounds
@@ -344,6 +348,12 @@ func wordReflection(ctx context.Context, src *Source, rf *css.OfficeReflection, 
 		if top := fade.Y; area.Y < top {
 			area.Height -= top - area.Y
 			area.Y = top
+		}
+	}
+	if rf.FadeDir == 90 {
+		// Word draws nothing past the end of a downward fade.
+		if end := fade.Y + float64(unit(rf.EndPos)*fade.Height); area.Y+area.Height > end {
+			area.Height = max(end-area.Y, 0)
 		}
 	}
 	return reflect(ctx, src, rf, m, area, fade, pixels)
