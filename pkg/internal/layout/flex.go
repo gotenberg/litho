@@ -803,15 +803,30 @@ func (e *engine) contentMain(fd *flexData, it *fitem, ax flexAxes, cb, pcb cbloc
 // content's height when its automatic minimum is (CSS Sizing 4, 4.2 and
 // 4.3; CSS Flexbox 1, 9.2, 3B), and false when k has no ratio. Its own
 // height is not read: the content size of an item ignores it. k's
-// content must be laid out at w.
+// content must be laid out at w. The content height counts within the
+// fixed minimum and maximum widths converted through the ratio, as the
+// content size suggestion of an item with a ratio does (CSS Flexbox 1,
+// 4.5).
 func itemRatioHeight(k *box, w float64) (float64, bool) {
 	r, content := prefRatio(k)
 	if r == 0 {
 		return 0, false
 	}
-	h := heightOfWidth(w, r, edgesFor(k, content))
+	ed := edgesFor(k, content)
+	h := heightOfWidth(w, r, ed)
 	if contentMinimum(k) {
-		h = max(h, contentMinHeight(k, k.h, cblock{}))
+		c := k.h
+		if k.st.MaxWidth.Kind == css.Points {
+			if mx, ok := specWidth(k, k.st.MaxWidth, 0); ok {
+				c = min(c, heightOfWidth(mx, r, ed))
+			}
+		}
+		if k.st.MinWidth.Kind == css.Points && !k.st.MinWidthAuto {
+			if mn, ok := specWidth(k, k.st.MinWidth, 0); ok {
+				c = max(c, heightOfWidth(mn, r, ed))
+			}
+		}
+		h = max(h, contentMinHeight(k, c, cblock{}))
 	}
 	return h, true
 }

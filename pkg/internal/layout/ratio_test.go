@@ -278,3 +278,31 @@ func TestAspectRatio_FormattingContextBesideFloats(t *testing.T) {
 		____________________
 		____________________`)
 }
+
+// TestAspectRatio_ContentSuggestionWithinTransferredMaximum locks CSS
+// Flexbox 1, 4.5: the content size suggestion of a column item with a
+// ratio is clamped by its maximum width converted through the ratio, so
+// an item of max-width 2px and ratio 1/4 holding 20px of content is 8px
+// tall, not 20px.
+//
+// # Corpus evidence
+//
+//   - wpt: css-sizing/aspect-ratio/flex-aspect-ratio-026 (items of
+//     max-width 25px and ratio 1/8 or auto 1/19 holding 500px) draws
+//     200px items in Chromium 156, as its reference does.
+func TestAspectRatio_ContentSuggestionWithinTransferredMaximum(t *testing.T) {
+	t.Parallel()
+	item := el(sty(width(8), ratio(1, 4), bg(blue), func(s *css.Style) { s.MaxWidth = css.Pts(px(2)) }), el(sty(height(20))))
+	root := doc(el(sty(display(css.Flex), float(css.FloatLeft), height(1), func(s *css.Style) { s.FlexDirection = css.FlexColumn }), item))
+	assertPixels(t, run(t, root, PageBox{Width: px(3), Height: px(10)}), 1, `
+		BB_
+		BB_
+		BB_
+		BB_
+		BB_
+		BB_
+		BB_
+		BB_
+		___
+		___`)
+}
