@@ -272,6 +272,9 @@ const (
 	pFontPalette
 	pTextOrientation
 	pTextCombineUpright
+	pMathStyle
+	pMathShift
+	pMathDepth
 	numProps
 )
 
@@ -507,6 +510,9 @@ var displays = map[string]Display{
 	"flex": Flex, "inline-flex": InlineFlex, "-webkit-flex": Flex, "-ms-flexbox": Flex,
 	"grid": Grid, "inline-grid": InlineGrid, "-ms-grid": Grid, "-ms-inline-grid": InlineGrid,
 	"-webkit-inline-flex": InlineFlex, "-ms-inline-flexbox": InlineFlex,
+	// math alone is inline math (MathML Core, 4.1), which computes to
+	// inline flow on an element outside MathML.
+	"math": Inline,
 }
 
 // displays3 are the CSS Display 3 values laid out as Block or InlineBlock
@@ -591,6 +597,15 @@ func parseDisplay(v []token, c *declCtx) (any, bool) {
 			return InlineGrid, true
 		}
 		return Grid, true
+	case words["math"]:
+		// MathML Core, 4.1: block math and inline math compute to block
+		// flow and inline flow on an element outside MathML; the HTML
+		// converter lays a MathML element out as math whatever its
+		// display but none.
+		if inline {
+			return Inline, true
+		}
+		return Block, true
 	case words["ruby"]:
 		// CSS Ruby 1, 2.1: block ruby is a block box holding a ruby
 		// container.
@@ -914,6 +929,7 @@ func init() {
 		}}},
 		{pTextTransform, enumProp("text-transform", true, func(s *Style) *TextTransform { return &s.TextTransform }, map[string]TextTransform{
 			"none": TransformNone, "capitalize": Capitalize, "uppercase": Uppercase, "lowercase": Lowercase,
+			"math-auto": MathAuto,
 		})},
 		{pLetterSpacing, dimProp("letter-spacing", true, func(s *Style) *Dimension { return &s.LetterSpacing }, 0, kwNormal, false)},
 		{pWordSpacing, dimProp("word-spacing", true, func(s *Style) *Dimension { return &s.WordSpacing }, 0, kwNormal, false)},
@@ -1053,6 +1069,9 @@ func init() {
 		props[id] = def
 	}
 	for id, def := range rubyProps() {
+		props[id] = def
+	}
+	for id, def := range mathProps() {
 		props[id] = def
 	}
 	for id, def := range emphasisProps() {

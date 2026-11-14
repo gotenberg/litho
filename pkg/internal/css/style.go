@@ -620,6 +620,10 @@ const (
 	Capitalize
 	Uppercase
 	Lowercase
+	// MathAuto draws a text of one character found in the italic
+	// mappings of MathML Core, C.1 as its mathematical italic form
+	// (MathML Core, 4.2).
+	MathAuto
 )
 
 // WhiteSpace is the white-space property (CSS Text 3, 3).
@@ -1293,6 +1297,11 @@ type Style struct {
 	TextIndentHanging  bool
 	TextIndentEachLine bool
 	TextTransform      TextTransform
+	// MathStyle, MathShift and MathDepth are math-style, math-shift and
+	// the computed math-depth (MathML Core, 4.3 to 4.5).
+	MathStyle MathStyle
+	MathShift MathShift
+	MathDepth int32
 	// LetterSpacing and WordSpacing take Normal or Points.
 	LetterSpacing Dimension
 	WordSpacing   Dimension

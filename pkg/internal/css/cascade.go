@@ -766,7 +766,7 @@ func usedLineHeight(st *Style) float64 {
 // and font-size-adjust, which the ex and ch units of every other length
 // resolve against, then the rest in propID order.
 var computeOrder = func() []propID {
-	first := []propID{pFontSize, pColor, pFontFamily, pFontWeight, pFontStyle, pFontSizeAdjust, pLineHeight}
+	first := []propID{pMathDepth, pFontSize, pColor, pFontFamily, pFontWeight, pFontStyle, pFontSizeAdjust, pLineHeight}
 	out := slices.Clone(first)
 	for id := range numProps {
 		if !slices.Contains(first, id) {

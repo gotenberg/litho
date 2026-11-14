@@ -58,6 +58,8 @@ type fontSizeSpec struct {
 	l        length
 	isLen    bool
 	relative bool
+	// math is the math keyword (MathML Core, 4.5).
+	math bool
 }
 
 func parseFontSize(v []token, _ *declCtx) (any, bool) {
@@ -68,6 +70,8 @@ func parseFontSize(v []token, _ *declCtx) (any, bool) {
 	if t.typ == tIdent {
 		k := lower(t.value)
 		switch k {
+		case "math":
+			return fontSizeSpec{math: true}, true
 		case "larger":
 			return fontSizeSpec{step: 1}, true
 		case "smaller":
@@ -101,6 +105,11 @@ func computeFontSize(s *styler, st *Style, v any) {
 	var size float64
 	st.fontSizeKeyword, st.fontSizeAbsolute = 0, s.parent.fontSizeAbsolute
 	switch {
+	case f.math:
+		// The inherited size scaled from the inherited math-depth to the
+		// computed one, by the inherited first available font's MATH
+		// table (MathML Core, 4.5); math-depth computes first.
+		size = float64(parent * mathFontScale(int(s.parent.MathDepth), int(st.MathDepth), s.lc.font))
 	case f.isLen:
 		lc := s.lc
 		lc.fontSize = parent

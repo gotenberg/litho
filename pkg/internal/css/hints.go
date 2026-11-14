@@ -43,6 +43,9 @@ import (
 // :visited and :active never match. The background attribute is not
 // covered.
 func HTMLHints(n *html.Node) []Declaration {
+	if n != nil && n.Type == html.ElementNode && n.Namespace == "math" {
+		return mathHints(n)
+	}
 	if n == nil || n.Type != html.ElementNode || n.Namespace != "" {
 		return nil
 	}

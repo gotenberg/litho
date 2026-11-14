@@ -133,6 +133,12 @@ type FontUnits struct {
 	// glyph: its advance counts even when it is 0 (CSS Values 4, 6.1.1:
 	// the fallback stands for a measure that cannot be determined).
 	ZeroMeasured, IdeographMeasured bool
+	// Math reports a font with an OpenType MATH table, whose
+	// ScriptPercentScaleDown and ScriptScriptPercentScaleDown, as
+	// fractions, font-size: math reads (MathML Core, 4.5); a value of 0
+	// takes its fallback, 0.71 and 0.5041 (MathML Core, 5.1).
+	Math                                                 bool
+	ScriptPercentScaleDown, ScriptScriptPercentScaleDown float64
 }
 
 // fallbackCap is the cap height, in ems, of a font that records neither a

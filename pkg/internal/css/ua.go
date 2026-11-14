@@ -20,3 +20,19 @@ var uaSheet = sync.OnceValue(func() *Stylesheet {
 	s, _ := Parse(context.Background(), uaCSS, ParseOptions{userAgent: true})
 	return s
 })
+
+//go:embed ua-mathml.css
+var uaMathCSS []byte
+
+// MathMLUserAgent returns litho's user agent stylesheet for MathML, the
+// user agent stylesheet of MathML Core, Appendix A, which a cascade holds
+// after [HTMLUserAgent] for a document with MathML. It is parsed once and
+// shared.
+func MathMLUserAgent() *Stylesheet { return uaMathSheet() }
+
+var uaMathSheet = sync.OnceValue(func() *Stylesheet {
+	// The embedded sheet is far below every cap and fetches nothing, so
+	// Parse cannot fail on it; TestMathMLUserAgent_ParsesClean checks it.
+	s, _ := Parse(context.Background(), uaMathCSS, ParseOptions{userAgent: true})
+	return s
+})
