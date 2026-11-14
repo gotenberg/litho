@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-14T15:02:12Z",
+  "captured_at": "2026-11-14T15:54:09Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -59926,8 +59926,8 @@
     "litho/html": {
       "features": {
         "diff": {
-          "matched": 190,
-          "mismatched": 8,
+          "matched": 191,
+          "mismatched": 7,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -60272,12 +60272,12 @@
               "text_f1": 0.9783
             },
             "ja-vertical": {
-              "layout": 0,
+              "layout": 0.8816,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.0101
+              "strict": 1,
+              "text_f1": 1
             },
             "ko-word-break": {
               "layout": 0.8757,
@@ -117122,8 +117122,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 4704,
-          "mismatched": 489,
+          "matched": 4710,
+          "mismatched": 483,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -122120,20 +122120,20 @@
             "css/css-writing-modes/bidi-plaintext-br-001.html": "pass",
             "css/css-writing-modes/block-plaintext-paragraph-after-block-level-box.html": "fail",
             "css/css-writing-modes/border-conflict-element-vrl-006.xht": "fail",
-            "css/css-writing-modes/clip-rect-vlr-015.xht": "fail",
+            "css/css-writing-modes/clip-rect-vlr-015.xht": "pass",
             "css/css-writing-modes/contiguous-floated-table-vrl-004.xht": "fail",
-            "css/css-writing-modes/line-box-direction-vrl-019.xht": "fail",
-            "css/css-writing-modes/logical-physical-mapping-001.html": "fail",
+            "css/css-writing-modes/line-box-direction-vrl-019.xht": "pass",
+            "css/css-writing-modes/logical-physical-mapping-001.html": "pass",
             "css/css-writing-modes/logical-props-001.html": "pass",
             "css/css-writing-modes/mongolian-span-001.html": "pass",
-            "css/css-writing-modes/orthogonal-cell-001.html": "fail",
+            "css/css-writing-modes/orthogonal-cell-001.html": "pass",
             "css/css-writing-modes/sizing-orthog-prct-htb-in-vlr-005.xht": "fail",
             "css/css-writing-modes/table-cell-align-005.html": "pass",
             "css/css-writing-modes/table-progression-htb-001.html": "pass",
             "css/css-writing-modes/table-progression-slr-001.html": "fail",
-            "css/css-writing-modes/text-indent-vrl-010.xht": "fail",
+            "css/css-writing-modes/text-indent-vrl-010.xht": "pass",
             "css/css-writing-modes/wm-propagation-002.html": "fail",
-            "css/css-writing-modes/wm-propagation-body-051.html": "fail",
+            "css/css-writing-modes/wm-propagation-body-051.html": "pass",
             "css/filter-effects/blur-clip-border-radius.html": "pass",
             "css/filter-effects/blur-clip-stacking-context-001.html": "pass",
             "css/filter-effects/blur-clip-stacking-context-002.html": "pass",
