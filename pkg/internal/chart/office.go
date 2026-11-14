@@ -157,11 +157,15 @@ func (rd *renderer) officePlot(r typeset.Rect) typeset.Rect {
 	}
 	left, right, bottom := officePad, officePad, officePad
 	dx := layoutDistance * r.Width
+	if !top && (rd.officeSideLegend() || rd.officeLegend() && c.Legend.Position == LegendTop) {
+		// What comes first under an untitled chart's top, a legend above
+		// the plot area or the room a legend beside it is centred in,
+		// starts officeTopPad under it.
+		rem.Y += officeTopPad
+		rem.Height -= officeTopPad
+		top = true
+	}
 	if lg := c.Legend; lg != nil {
-		if !top && rd.officeLegend() && lg.Position == LegendTop {
-			rem.Y += officeTopPad
-			rem.Height -= officeTopPad
-		}
 		side := rd.officeSideLegend()
 		rd.legend(r, &rem)
 		if !lg.Overlay {

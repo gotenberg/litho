@@ -162,11 +162,18 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 	maxEntryH := yOff + entryH
 	n := len(entries)
 	var cols, rows int
-	if side {
+	switch {
+	case officeSide:
+		// Office keeps a legend beside the plot area in one column and
+		// drops the entries its height does not hold (officeSideRows).
+		n = officeSideRows(page, *rem, n, maxEntryH, yPad, yOff)
+		entries = entries[:n]
+		cols, rows = 1, n
+	case side:
 		maxRows := max(int((rem.Height-2*yPad)/maxEntryH), 1)
 		cols = (n + maxRows - 1) / maxRows
 		rows = (n + cols - 1) / cols
-	} else {
+	default:
 		maxCols := max(int((rem.Width-2*xPad)/maxEntryW), 1)
 		if office && oneRow(entries, symPlus, xOff, rem.Width-2*xPad) {
 			maxCols = n
@@ -305,8 +312,8 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 
 // officeSideLegendTop returns the top of a legend h points high that
 // Office puts beside the plot area: centred between rem's top, under the
-// chart's title, and officePad over the bottom of the chart's rectangle
-// page.
+// chart's title or officeTopPad under an untitled chart's top, and
+// officePad over the bottom of the chart's rectangle page.
 //
 // # Corpus evidence
 //
@@ -317,9 +324,33 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 //     edge, its longest text ends 10.06 to 10.18 pt from the right edge,
 //     and the plot area ends 16.0 pt left of the keys at the right, with
 //     entries 6.5 to 84.2 pt wide.
+//   - libreoffice/xlsx: in untitled charts 203.28 and 209.16 pt high,
+//     chart-area-style-border's and fdo54361-1's one-entry right legends
+//     and auto_marker_excel10's ten entries have their middle key centred
+//     half the chart's height under its top, to 0.05 pt: centred between
+//     officeTopPad under the top and officePad over the bottom, 0.2 pt
+//     lower than this rule puts them, as under a title.
 func officeSideLegendTop(page, rem typeset.Rect, h float64) float64 {
 	bottom := page.Y + page.Height - officePad
 	return rem.Y + float64((bottom-rem.Y)/2) - float64(h/2)
+}
+
+// officeSideRows returns how many of n entries, each pitch points apart
+// with yOff between them and yPad above and below them all, a legend
+// beside the plot area holds: as many as fit between rem's top and
+// officePad over the bottom of the chart's rectangle page, at least one.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: auto_marker_excel10's right legend of twelve
+//     10 pt entries 18.08 pt apart, in an untitled chart 209.16 pt high,
+//     prints its first ten in one column and drops the last two, where
+//     eleven would take 199.0 pt of the 197.66 pt between officeTopPad
+//     under the top and officePad over the bottom.
+func officeSideRows(page, rem typeset.Rect, n int, pitch, yPad, yOff float64) int {
+	avail := page.Y + page.Height - officePad - rem.Y
+	fit := int(math.Floor((avail - float64(2*yPad) + yOff) / pitch))
+	return max(1, min(n, fit))
 }
 
 // oneRow reports entries that fit in one row of width avail, each as wide

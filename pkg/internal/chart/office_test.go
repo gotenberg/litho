@@ -429,3 +429,46 @@ func TestRender_OfficeSideLegend(t *testing.T) {
 		t.Errorf("plot area ends at %v, want %v", b.X+b.Width, want)
 	}
 }
+
+// TestRender_OfficeSideLegendDropsEntries holds a legend right of the plot
+// area of an untitled chart under OfficeRules to one column of the entries
+// that fit between officeTopPad under the top and officePad over the
+// bottom, centred there, the others dropped.
+func TestRender_OfficeSideLegendDropsEntries(t *testing.T) {
+	c := officeChart(1)
+	names := "ABCDEFGHIJKL"
+	c.Groups[0].Series = nil
+	for i := range names {
+		c.Groups[0].Series = append(c.Groups[0].Series, &Series{Index: i, Name: names[i : i+1], Values: Data{Values: nums(float64(i + 1)), Cached: true}, Fill: &Paint{Color: red}})
+	}
+	c.Legend = &Legend{Position: LegendRight, Style: TextStyle{Size: 10, Color: typeset.Black}}
+	// Ten 10 pt Ahem entries take 10*10 + 9*2*officeLegendPad + 2*
+	// officeLegendPad = 158.8 pt of the 168.5 pt left; eleven do not fit.
+	r := typeset.Rect{Width: 361.2, Height: 180}
+	frags := Render(context.Background(), ahem(t), c, r)
+	var got []string
+	for _, s := range texts(frags) {
+		if len(s) == 1 && s[0] >= 'A' && s[0] <= 'L' {
+			got = append(got, s)
+		}
+	}
+	if strings.Join(got, "") != names[:10] {
+		t.Errorf("legend entries = %q, want %q", got, names[:10])
+	}
+	var keys []typeset.Rect
+	for _, p := range paths(frags, red) {
+		if b := bounds(p); math.Abs(b.Width-officeKeySize*10) < 1e-6 {
+			keys = append(keys, b)
+		}
+	}
+	if len(keys) != 10 {
+		t.Fatalf("%d legend keys, want 10", len(keys))
+	}
+	if x := keys[0].X; keys[9].X != x {
+		t.Errorf("keys at x %v and %v, want one column", x, keys[9].X)
+	}
+	mid := (keys[0].Y + keys[9].Y + keys[9].Height) / 2
+	if want := (officeTopPad + r.Height - officePad) / 2; math.Abs(mid-want) > 0.5 {
+		t.Errorf("keys centred at %v, want about %v", mid, want)
+	}
+}
