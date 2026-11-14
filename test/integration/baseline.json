@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-14T00:46:59Z",
+  "captured_at": "2026-11-14T07:19:32Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -59992,7 +59992,7 @@
               "text_f1": 1
             },
             "bands-isolated": {
-              "layout": 0.9662,
+              "layout": 0.969,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60000,7 +60000,7 @@
               "text_f1": 1
             },
             "bands-isolated-twin": {
-              "layout": 0.9662,
+              "layout": 0.969,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60008,7 +60008,7 @@
               "text_f1": 1
             },
             "bands-page-sets": {
-              "layout": 0.9509,
+              "layout": 0.9518,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60016,7 +60016,7 @@
               "text_f1": 1
             },
             "bands-page-sets-twin": {
-              "layout": 0.9509,
+              "layout": 0.9518,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60024,7 +60024,7 @@
               "text_f1": 1
             },
             "bands-room-content": {
-              "layout": 0.9348,
+              "layout": 0.94,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60032,7 +60032,7 @@
               "text_f1": 1
             },
             "bands-room-content-twin": {
-              "layout": 0.9348,
+              "layout": 0.94,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60200,7 +60200,7 @@
               "text_f1": 0.848
             },
             "header-default-classes": {
-              "layout": 0.9461,
+              "layout": 0.955,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60208,7 +60208,7 @@
               "text_f1": 1
             },
             "header-footer": {
-              "layout": 0.9516,
+              "layout": 0.9518,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60312,7 +60312,7 @@
               "text_f1": 0.9967
             },
             "margin-boxes": {
-              "layout": 0.9184,
+              "layout": 0.9186,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60432,7 +60432,7 @@
               "text_f1": 1
             },
             "named-strings": {
-              "layout": 0.9318,
+              "layout": 0.9335,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60440,7 +60440,7 @@
               "text_f1": 1
             },
             "named-strings-twin": {
-              "layout": 0.9318,
+              "layout": 0.9335,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60480,7 +60480,7 @@
               "text_f1": 1
             },
             "page-counter-increment": {
-              "layout": 0.9401,
+              "layout": 0.9406,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60488,7 +60488,7 @@
               "text_f1": 1
             },
             "page-groups": {
-              "layout": 0.9225,
+              "layout": 0.9236,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60496,7 +60496,7 @@
               "text_f1": 1
             },
             "page-groups-twin": {
-              "layout": 0.9225,
+              "layout": 0.9236,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60520,7 +60520,7 @@
               "text_f1": 1
             },
             "page-selectors-counters": {
-              "layout": 0.9292,
+              "layout": 0.9299,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60528,7 +60528,7 @@
               "text_f1": 1
             },
             "page-selectors-counters-twin": {
-              "layout": 0.9292,
+              "layout": 0.9299,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61392,7 +61392,7 @@
               "text_f1": 1
             },
             "running-elements": {
-              "layout": 0.9355,
+              "layout": 0.9363,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61400,7 +61400,7 @@
               "text_f1": 1
             },
             "running-elements-twin": {
-              "layout": 0.9461,
+              "layout": 0.9488,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61424,7 +61424,7 @@
               "text_f1": 1
             },
             "single-page-header": {
-              "layout": 0.9449,
+              "layout": 0.9427,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61488,7 +61488,7 @@
               "text_f1": 0.4088
             },
             "user-stylesheet": {
-              "layout": 0.9386,
+              "layout": 0.9387,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61496,7 +61496,7 @@
               "text_f1": 1
             },
             "user-stylesheet-twin": {
-              "layout": 0.9386,
+              "layout": 0.9387,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -117072,8 +117072,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 4589,
-          "mismatched": 604,
+          "matched": 4604,
+          "mismatched": 589,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -118404,7 +118404,7 @@
             "css/CSS2/tables/anonymous-table-box-width-001.xht": "pass",
             "css/CSS2/tables/border-collapse-006.html": "fail",
             "css/CSS2/tables/border-collapse-applies-to-016.xht": "pass",
-            "css/CSS2/tables/border-collapse-empty-row.html": "fail",
+            "css/CSS2/tables/border-collapse-empty-row.html": "pass",
             "css/CSS2/tables/border-collapse-offset-001.xht": "pass",
             "css/CSS2/tables/border-collapse-offset-002.xht": "pass",
             "css/CSS2/tables/border-conflict-element-001a.xht": "pass",
@@ -118984,9 +118984,9 @@
             "css/css-break/borders-005.html": "pass",
             "css/css-break/borders-008.html": "pass",
             "css/css-break/box-decoration-break-clone-007.html": "pass",
-            "css/css-break/box-decoration-break-clone-008.html": "fail",
+            "css/css-break/box-decoration-break-clone-008.html": "pass",
             "css/css-break/box-decoration-break-clone-009.html": "pass",
-            "css/css-break/box-decoration-break-clone-011.html": "fail",
+            "css/css-break/box-decoration-break-clone-011.html": "pass",
             "css/css-break/box-decoration-break-clone-split-inline.html": "pass",
             "css/css-break/br-clear-all.html": "pass",
             "css/css-break/break-at-end-container-edge-004.html": "pass",
@@ -120549,7 +120549,7 @@
             "css/css-multicol/abspos-multicol-in-second-outer-clipped.html": "pass",
             "css/css-multicol/auto-fill-auto-size-001-print.html": "pass",
             "css/css-multicol/auto-fill-auto-size-002-print.html": "pass",
-            "css/css-multicol/balance-break-avoidance-002.html": "fail",
+            "css/css-multicol/balance-break-avoidance-002.html": "pass",
             "css/css-multicol/balance-grid-container.html": "pass",
             "css/css-multicol/baseline-000.html": "pass",
             "css/css-multicol/baseline-001.html": "pass",
@@ -120671,7 +120671,7 @@
             "css/css-multicol/multicol-span-all-children-height-004a.html": "pass",
             "css/css-multicol/multicol-span-all-children-height-004b.html": "pass",
             "css/css-multicol/multicol-span-all-children-height-005.html": "pass",
-            "css/css-multicol/multicol-span-all-children-height-006.html": "fail",
+            "css/css-multicol/multicol-span-all-children-height-006.html": "pass",
             "css/css-multicol/multicol-span-all-children-height-009.html": "pass",
             "css/css-multicol/multicol-span-all-children-height-010.html": "pass",
             "css/css-multicol/multicol-span-all-children-height-013.html": "pass",
@@ -120739,9 +120739,9 @@
             "css/css-overflow/line-clamp/line-clamp-with-floats-008.html": "fail",
             "css/css-overflow/line-clamp/line-clamp-with-floats-011.html": "fail",
             "css/css-overflow/line-clamp/line-clamp-with-floats-012.html": "fail",
-            "css/css-overflow/line-clamp/line-clamp-with-floats-015.html": "fail",
-            "css/css-overflow/line-clamp/line-clamp-with-floats-016.html": "fail",
-            "css/css-overflow/line-clamp/line-clamp-with-floats-017.html": "fail",
+            "css/css-overflow/line-clamp/line-clamp-with-floats-015.html": "pass",
+            "css/css-overflow/line-clamp/line-clamp-with-floats-016.html": "pass",
+            "css/css-overflow/line-clamp/line-clamp-with-floats-017.html": "pass",
             "css/css-overflow/line-clamp/webkit-line-clamp-002.html": "pass",
             "css/css-overflow/line-clamp/webkit-line-clamp-010.html": "pass",
             "css/css-overflow/line-clamp/webkit-line-clamp-016.html": "pass",
@@ -120773,11 +120773,11 @@
             "css/css-page/fixedpos-003-print.html": "pass",
             "css/css-page/fixedpos-004-print.html": "pass",
             "css/css-page/layers-004-print.html": "pass",
-            "css/css-page/margin-boxes/alignment-001-print.html": "fail",
-            "css/css-page/margin-boxes/content-005-print.html": "fail",
+            "css/css-page/margin-boxes/alignment-001-print.html": "pass",
+            "css/css-page/margin-boxes/content-005-print.html": "pass",
             "css/css-page/margin-boxes/dimensions-001-print.html": "fail",
-            "css/css-page/margin-boxes/dimensions-003-print.html": "fail",
-            "css/css-page/margin-boxes/dimensions-005-print.html": "fail",
+            "css/css-page/margin-boxes/dimensions-003-print.html": "pass",
+            "css/css-page/margin-boxes/dimensions-005-print.html": "pass",
             "css/css-page/margin-boxes/dimensions-010-print.html": "fail",
             "css/css-page/monolithic-overflow-003-print.html": "pass",
             "css/css-page/monolithic-overflow-010-print.html": "pass",
@@ -120797,13 +120797,13 @@
             "css/css-page/page-name-flex-004-print.html": "pass",
             "css/css-page/page-name-inline-block-003-print.html": "pass",
             "css/css-page/page-name-propagated-004-print.html": "pass",
-            "css/css-page/page-name-propagated-006-print.html": "fail",
+            "css/css-page/page-name-propagated-006-print.html": "pass",
             "css/css-page/page-name-propagated-007-print.html": "pass",
             "css/css-page/page-name-siblings-004-print.html": "pass",
             "css/css-page/page-name-table-001-print.html": "pass",
             "css/css-page/page-name-zero-height-001-print.html": "pass",
             "css/css-page/page-size-007-print.html": "pass",
-            "css/css-page/page-size-008-print.html": "fail",
+            "css/css-page/page-size-008-print.html": "pass",
             "css/css-page/page-size-009-print.html": "pass",
             "css/css-page/page-size-011-print.html": "pass",
             "css/css-page/page-size-013-print.html": "pass",
@@ -121551,7 +121551,7 @@
             "css/css-tables/table-row-group-nested-anonymous-001.html": "pass",
             "css/css-tables/table_grid_size_col_colspan.html": "pass",
             "css/css-tables/th-text-align.html": "pass",
-            "css/css-tables/visibility-collapse-border-spacing-001.html": "fail",
+            "css/css-tables/visibility-collapse-border-spacing-001.html": "pass",
             "css/css-tables/visibility-collapse-border-spacing-002.html": "pass",
             "css/css-tables/visibility-collapse-colspan-003.html": "fail",
             "css/css-tables/visibility-collapse-rowspan-005.html": "fail",
