@@ -1,8 +1,11 @@
 package slides
 
 import (
+	"context"
+
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/formula"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -705,6 +708,23 @@ type Run struct {
 	// reads for a shape.
 	Href string
 	Jump int
+	// Formula, when not nil, is the formula the run draws in place of
+	// its text, Text then holding the formula's text for the fit of the
+	// body; Style is the style of its first run.
+	Formula Formula
+}
+
+// Formula is a formula a run draws: an Office equation (ECMA-376 Part 1,
+// 22.1).
+type Formula interface {
+	// Style returns the style of the formula's root.
+	Style() formula.Style
+	// Layout lays the formula out with s in st, its Style or one the
+	// builder scales. It may size parts of the formula it measures, so
+	// two calls do not run at once.
+	Layout(ctx context.Context, s *formula.Setter, st formula.Style) (*formula.Box, error)
+	// AltText returns the formula's alternate description.
+	AltText() string
 }
 
 // RunStyle is the style of a run (ECMA-376 Part 1, 21.1.2.3.9 rPr; ODF

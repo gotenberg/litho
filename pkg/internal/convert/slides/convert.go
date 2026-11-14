@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/effect"
+	"github.com/gotenberg/litho/pkg/internal/formula"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
@@ -61,6 +62,8 @@ type builder struct {
 	lang     string
 	warnings []typeset.Warning
 	warned   map[string]bool
+	// formulas lays the formulas out, nil until the first one.
+	formulas *formula.Setter
 	// metrics caches the font metrics of the faces the text matched.
 	metrics map[string]text.Metrics
 	// slide is the slide being drawn, number its number in the show,

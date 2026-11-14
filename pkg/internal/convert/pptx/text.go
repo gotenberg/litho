@@ -12,7 +12,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/omml"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
@@ -439,13 +441,21 @@ func (r *reader) paragraph(p *ooxml.Element, ts *textStyles) slides.Paragraph {
 			run.Break = true
 			run.Style = r.runStyle(runChain(k.Child(ooxml.NSA, "rPr"), pc), ts.sc)
 		case k.Is(nsA14, "m"):
+			zone := k.Child(ooxml.NSM, "oMathPara")
+			if zone == nil {
+				zone = k.Child(ooxml.NSM, "oMath")
+			}
 			run.Text = mathText(k)
-			if run.Text == "" {
+			if run.Text == "" || zone == nil {
 				continue
 			}
 			run.Style = r.runStyle(runChain(k.Find(ooxml.NSA, "rPr"), pc), ts.sc)
-			run.Style.Italic = true
-			r.warn(warn.ContentUnsupported, warn.Approximated, "an equation is drawn as its plain text")
+			if q := r.equation(zone, pc, ts); q != nil {
+				run.Formula = q
+				if q.Display() {
+					out.Align = displayAlign(q.Justify())
+				}
+			}
 		default:
 			continue
 		}
@@ -951,6 +961,44 @@ func attrs(kv ...string) []xml.Attr {
 // nsA14 is the namespace of the DrawingML extensions of Office 2010, whose
 // a14:m holds an Office Math zone in a text paragraph.
 const nsA14 = "http://schemas.microsoft.com/office/drawing/2010/main"
+
+// equation reads the Office Math zone of a paragraph, an m:oMathPara or
+// m:oMath (ECMA-376 Part 1, 22.1.2.78 and 22.1.2.77), whose math runs
+// take their DrawingML run properties (a:rPr) over the paragraph's chain
+// pc as text runs do; nil when it holds nothing to draw. A presentation
+// has no math settings: Word's defaults apply (22.1.2.62).
+func (r *reader) equation(zone *ooxml.Element, pc chain, ts *textStyles) *omml.Equation {
+	q := omml.Read(zone, omml.Options{Settings: omml.DefaultSettings(), Run: func(mr *ooxml.Element) omml.RunStyle {
+		st := r.runStyle(runChain(mr.Child(ooxml.NSA, "rPr"), pc), ts.sc)
+		c := st.Color
+		if c == (css.Color{}) {
+			c = css.Color{A: 1}
+		}
+		cl := func(v float64) float64 { return min(max(v, 0), 1) }
+		return omml.RunStyle{Size: st.Size, Color: typeset.Color{R: cl(c.R), G: cl(c.G), B: cl(c.B), A: cl(c.A)}}
+	}})
+	if q == nil {
+		return nil
+	}
+	for _, w := range q.Warnings() {
+		r.warn(w.Code, w.Effect, w.Message)
+	}
+	return q
+}
+
+// displayAlign returns the alignment of a paragraph holding a display
+// equation of justification j (22.1.2.51 jc): centred, the default for
+// centerGroup, else left or right.
+func displayAlign(j omml.Justify) css.TextAlign {
+	switch j {
+	case omml.Left:
+		return css.AlignLeft
+	case omml.Right:
+		return css.AlignRight
+	case omml.Center, omml.CenterGroup:
+	}
+	return css.AlignCenter
+}
 
 // maxMathDepth bounds the nesting of an Office Math zone that mathText
 // walks. Anti-DoS guard, not spec-mandated: an equation nests a few

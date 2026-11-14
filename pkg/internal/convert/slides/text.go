@@ -1,6 +1,7 @@
 package slides
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/formula"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
@@ -1038,6 +1040,16 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 		lf = emptyFit
 	}
 	lb := b.lines(p, bigTS, lf, body.FontLineSpacing)
+	boxes := b.formulaBoxes(runs, f.font)
+	for _, fb := range boxes {
+		// A line grows to hold its formulas: its ascent to the tallest
+		// formula's, its descent to the deepest one's.
+		if fb != nil {
+			below := max(float64(lb.height-lb.ascent), fb.Descent)
+			lb.ascent = max(lb.ascent, fb.Ascent)
+			lb.height = float64(lb.ascent + below)
+		}
+	}
 	size := bigTS.Size
 
 	st := css.Initial()
@@ -1061,6 +1073,7 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	// paragraph moves down by what Impress's ascent adds to that.
 	st.Position = css.Relative
 	st.Top = css.Pts(lb.ascent - float64(0.8*lb.height))
+
 	st.TabSize = css.Pts(defaultTab)
 	if body.FontLineSpacing {
 		st.TabSize = css.Pts(odfDefaultTab)
@@ -1156,6 +1169,11 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 		}
 		*budget -= utf8.RuneCountInString(s)
 		is := b.inline(st, &r.Style, f.font)
+		if k < len(boxes) && boxes[k] != nil {
+			fb := boxes[k]
+			node.Children = append(node.Children, formulaNode(r, is, fb))
+			continue
+		}
 		href := r.Href
 		if href == "" && r.Jump > 0 {
 			href = jumpPrefix + strconv.Itoa(r.Jump)
@@ -1344,4 +1362,56 @@ func (b *builder) groupFits(shapes []*Shape) map[int]fit {
 	}
 	walk(shapes, 0)
 	return out
+}
+
+// formulaBoxes returns the formulas of runs laid out at the font scale
+// k, by run, nil for a run that draws no formula; nil when no run does.
+// A formula that does not lay out is drawn as its text.
+func (b *builder) formulaBoxes(runs []Run, k float64) []*formula.Box {
+	var out []*formula.Box
+	for i := range runs {
+		r := &runs[i]
+		if r.Formula == nil {
+			continue
+		}
+		if b.formulas == nil {
+			b.formulas = formula.NewSetter(b.fonts, b.opts.Logger)
+		}
+		st := r.Formula.Style()
+		st.Size = scaledSize(st.Size, k)
+		st.Lang = b.textStyle(&r.Style, k).Lang
+		box, err := r.Formula.Layout(b.ctx, b.formulas, st)
+		if err != nil {
+			if b.ctx.Err() == nil {
+				b.warn(warn.ContentUnsupported, warn.Approximated, "an equation is drawn as its plain text: "+err.Error())
+			}
+			continue
+		}
+		for _, w := range box.Warnings {
+			b.warn(w.Code, w.Effect, w.Message)
+		}
+		if out == nil {
+			out = make([]*formula.Box, len(runs))
+		}
+		out[i] = box
+	}
+	return out
+}
+
+// formulaNode returns the replaced box of the formula run r, styled is,
+// laid out as box: on its line by its own baseline, a Formula structure
+// element whose alternate description is the formula's (ISO 32000-1,
+// 14.8.4.5).
+func formulaNode(r *Run, is *css.Style, box *formula.Box) *layout.Node {
+	node := &layout.Node{Kind: layout.Replaced, Style: is, Lang: r.Style.Lang, Role: "Formula", Alt: r.Formula.AltText()}
+	if box.Width > 0 && box.Ascent+box.Descent > 0 {
+		node.Picture = &layout.Picture{
+			Width: box.Width, Height: box.Ascent + box.Descent, NoRatio: true,
+			HasBaseline: true, Baseline: box.Ascent,
+			Vector: func(_ context.Context, rect typeset.Rect) []typeset.Fragment {
+				return box.Draw(rect.X, float64(rect.Y+box.Ascent))
+			},
+		}
+	}
+	return node
 }
