@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // ErrSyntax reports a format code Calc refuses: an unclosed quote or
@@ -364,7 +365,7 @@ func (s *section) bracket(b string, lit func(string)) error {
 	case u[0] == '<' || u[0] == '>' || u[0] == '=':
 		return s.condition(u)
 	case strings.HasPrefix(u, "COLOR"):
-		n, err := strconv.Atoi(strings.TrimSpace(u[len("COLOR"):]))
+		n, err := intconv.Atoi(strings.TrimSpace(u[len("COLOR"):]))
 		if err != nil || n < 1 || n > len(palette) {
 			return fmt.Errorf("%w: colour %q", ErrSyntax, b)
 		}

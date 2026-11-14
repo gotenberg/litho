@@ -4,6 +4,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // floatFormat is a notation of [formatFloat], after rtl_math_StringFormat
@@ -31,7 +33,7 @@ const maxDecimals = math.MaxInt32
 func decimalParts(v float64) (digits []byte, exp int) {
 	s := strconv.FormatFloat(v, 'e', -1, 64)
 	mant, e, _ := strings.Cut(s, "e")
-	ex, _ := strconv.Atoi(e)
+	ex, _ := intconv.Atoi(e)
 	for i := 0; i < len(mant); i++ {
 		if c := mant[i]; c >= '0' && c <= '9' {
 			digits = append(digits, c)
