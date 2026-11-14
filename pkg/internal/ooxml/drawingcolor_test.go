@@ -37,6 +37,11 @@ func TestDrawingColor_Transforms(t *testing.T) {
 		{"preset dk", `<a:prstClr val="dkBlue"/>`, [4]int{0, 0, 139, 255}, true},
 		{"hsl", `<a:hslClr hue="0" sat="100000" lum="50000"/>`, [4]int{255, 0, 0, 255}, true},
 		{"comp", `<a:srgbClr val="FF0000"><a:comp/></a:srgbClr>`, [4]int{0, 255, 255, 255}, true},
+		// PowerPoint's colours: a saturation scaled past 1 is not clamped,
+		// its components are cut to the gamut.
+		{"satMod past 1", `<a:srgbClr val="F79646"><a:satMod val="180000"/></a:srgbClr>`, [4]int{255, 143, 0, 255}, true},
+		{"tint satMod past 1", `<a:schemeClr val="accent1"><a:tint val="52000"/><a:satMod val="300000"/></a:schemeClr>`, [4]int{158, 193, 255, 255}, true},
+		{"satMod within 1", `<a:schemeClr val="accent1"><a:satMod val="110000"/></a:schemeClr>`, [4]int{74, 128, 195, 255}, true},
 		{"gray", `<a:srgbClr val="FFFFFF"><a:gray/></a:srgbClr>`, [4]int{255, 255, 255, 255}, true},
 		{"unknown scheme", `<a:schemeClr val="accent9"/>`, [4]int{}, false},
 		{"not a colour", `<a:noFill/>`, [4]int{}, false},

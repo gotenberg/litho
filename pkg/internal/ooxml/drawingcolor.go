@@ -193,7 +193,8 @@ func linearComponent(c float64, op string, v float64) float64 {
 
 // hslTransform applies a hue, saturation or luminance transform, or the
 // complement, in HSL space. A hue value is in 60,000ths of a degree, the
-// percentage scale of v read as such.
+// percentage scale of v read as such. A saturation scaled past 1 stays
+// past it ([freeSaturation]).
 func hslTransform(col css.Color, op string, v float64) css.Color {
 	h, s, l := toHSL(col)
 	deg := v * 100000 / 60000 / 360
@@ -223,5 +224,32 @@ func hslTransform(col css.Color, op string, v float64) css.Color {
 	if h < 0 {
 		h++
 	}
+	if op == "satMod" && s > 1 {
+		return freeSaturation(h, s, clamp01(l), col.A)
+	}
 	return fromHSL(h, clamp01(s), clamp01(l), col.A)
+}
+
+// freeSaturation returns the colour of hue h, saturation s past 1 and
+// lightness l in HSL, each component cut to [0, 1], as Office converts a
+// saturation a satMod scales past 1 (ECMA-376 Part 1, 20.1.2.3.27
+// satMod): HSL's arithmetic at s, not at 1, so the components move past
+// the gamut and the cut changes their lightness.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx sd/tdf114848: PowerPoint writes the stops of
+//     4F81BD under tint 52% satMod 300%, shade 20% satMod 300% and tint
+//     40% satMod 250% as 158,193,255, 0,54,146 and 190,211,249: the
+//     saturation free gives 158,193,255, 0,54,146 and 190,211,249 (with
+//     the sRGB curve for the tint and the shade), clamped to 1
+//     160,193,255, 0,56,123 and 190,211,249.
+//   - openxmlsdk/pptx Text_withEffects_100chars: PowerPoint's glow of
+//     F79646 under satMod 180% is premultiplied 76,42,0 at alpha 77,
+//     about 253,139,0: the saturation free gives 255,143,0, clamped to 1
+//     255,149,62.
+func freeSaturation(h, s, l, a float64) css.Color {
+	c := fromHSL(h, s, l, a)
+	c.R, c.G, c.B = clamp01(c.R), clamp01(c.G), clamp01(c.B)
+	return c
 }
