@@ -4,6 +4,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -161,6 +163,9 @@ type capsPlan struct {
 	synth   capsSynthesis
 	// allowed is font-synthesis-small-caps: auto.
 	allowed bool
+	// full cases characters by Unicode's full case mapping, as Chromium
+	// does; off, by the simple mapping, one character for one.
+	full bool
 }
 
 // planCaps decides how the caps value of st draws in the face of ts, by
@@ -174,7 +179,7 @@ type capsPlan struct {
 // none. With BrowserRules off, small capitals are always synthesised,
 // as the Office formats draw them.
 func (e *engine) planCaps(st *css.Style, ts text.Style, sample rune) capsPlan {
-	p := capsPlan{caps: st.FontVariant, allowed: !st.NoSynthesizeSmallCaps}
+	p := capsPlan{caps: st.FontVariant, allowed: !st.NoSynthesizeSmallCaps, full: e.opts.BrowserRules}
 	if p.caps == css.VariantNormal {
 		return p
 	}
@@ -311,11 +316,30 @@ type smallCapsPiece struct {
 	source string
 }
 
-// needsUpper reports whether r changes when uppercased, Unicode's
-// Changes_When_Uppercased as Chromium's SmallCapsIterator reads it,
-// approximated by the simple case mapping.
-func needsUpper(r rune) bool {
-	return unicode.ToUpper(r) != r && unicode.IsLower(r)
+// needsUpper reports whether r changes when uppercased: under full,
+// Unicode's Changes_When_Uppercased, by the full case mapping, as
+// Chromium's SmallCapsIterator reads it, so U+01F0, whose capital is J
+// and a combining caron, changes; otherwise a lowercase letter the simple
+// case mapping changes.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws ß under
+//     synthesised small-caps as a small SS, U+01F0 as a small J and caron.
+//   - wpt: css-fonts/cluster-matching-canonical-equivalence-003, Chromium
+//     draws the five letters as small two-character capitals.
+func needsUpper(r rune, full bool) bool {
+	if !full {
+		return unicode.ToUpper(r) != r && unicode.IsLower(r)
+	}
+	if unicode.ToUpper(r) != r {
+		return true
+	}
+	if r < utf8.RuneSelf {
+		return false
+	}
+	s := string(r)
+	return cases.Upper(language.Und).String(s) != s
 }
 
 // smallCaps cuts s into the pieces plan draws it as: one piece when no
@@ -352,7 +376,11 @@ func smallCaps(s string, plan capsPlan) []smallCapsPiece {
 		t := src
 		switch plan.caseMap(upper) {
 		case 'U':
-			t = string(mapRunes(cur, unicode.ToUpper))
+			if plan.full {
+				t = cases.Upper(language.Und).String(src)
+			} else {
+				t = string(mapRunes(cur, unicode.ToUpper))
+			}
 		case 'L':
 			t = string(mapRunes(cur, unicode.ToLower))
 		}
@@ -365,7 +393,7 @@ func smallCaps(s string, plan capsPlan) []smallCapsPiece {
 	for i, r := range s {
 		u := upper
 		if !unicode.Is(unicode.Mn, r) || !started {
-			u = clusterNeedsUpper(s[i:])
+			u = clusterNeedsUpper(s[i:], plan.full)
 		}
 		if started && u != upper {
 			flush()
@@ -380,9 +408,9 @@ func smallCaps(s string, plan capsPlan) []smallCapsPiece {
 // clusterNeedsUpper reports whether the cluster s starts with, a character
 // and the combining marks after it, changes when uppercased: as the one
 // character canonically equivalent to it, when there is one (CSS Fonts 4,
-// 5.4, cluster matching), so j and a combining caron stay as U+01F0 stays,
-// which has no single capital; as its first character otherwise.
-func clusterNeedsUpper(s string) bool {
+// 5.4, cluster matching), so j and a combining caron case as U+01F0 does;
+// as its first character otherwise. full is [needsUpper]'s.
+func clusterNeedsUpper(s string, full bool) bool {
 	r, n := utf8.DecodeRuneInString(s)
 	end := n
 	for marks := 0; end < len(s) && marks < maxClusterMarks; marks++ {
@@ -397,7 +425,7 @@ func clusterNeedsUpper(s string) bool {
 			r, _ = utf8.DecodeRuneInString(c)
 		}
 	}
-	return needsUpper(r)
+	return needsUpper(r, full)
 }
 
 // maxClusterMarks caps the combining marks clusterNeedsUpper composes

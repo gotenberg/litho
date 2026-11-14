@@ -663,8 +663,12 @@ func TestSmallCaps_Synthesised(t *testing.T) {
 // combining mark goes with its base, all-small-caps shrinks every
 // character, unicase in a face with smcp lowercases the capitals and
 // shapes them with smcp, and a face with the features shapes them.
+// Under the full case mapping, as Chromium cases them, a letter whose
+// capital is two characters is uppercased too.
 func TestSmallCaps_Pieces(t *testing.T) {
 	small := capsPlan{caps: css.SmallCaps, support: capsNone, synth: synthLower, allowed: true}
+	full := small
+	full.full = true
 	smcp := []text.Feature{{Tag: "smcp", Value: 1}}
 	for _, tc := range []struct {
 		in   string
@@ -675,11 +679,15 @@ func TestSmallCaps_Pieces(t *testing.T) {
 		{"abc", small, []smallCapsPiece{{text: "ABC", small: true, source: "abc"}}},
 		{"Hé 2", small, []smallCapsPiece{{text: "H"}, {text: "É", small: true, source: "é"}, {text: " 2"}}},
 		{"He\u0301!", small, []smallCapsPiece{{text: "H"}, {text: "E\u0301", small: true, source: "e\u0301"}, {text: "!"}}},
-		// ß has no one-rune uppercase: it keeps its form and size.
+		// ß has no one-rune uppercase: under the simple mapping it keeps
+		// its form and size.
 		{"ß", small, []smallCapsPiece{{text: "ß"}}},
 		// j and a combining caron are canonically U+01F0, which has no
 		// one-rune uppercase either (CSS Fonts 4, 5.4).
 		{"aj\u030C", small, []smallCapsPiece{{text: "A", small: true, source: "a"}, {text: "j\u030C"}}},
+		{"ß", full, []smallCapsPiece{{text: "SS", small: true, source: "ß"}}},
+		{"aj\u030C", full, []smallCapsPiece{{text: "AJ\u030C", small: true, source: "aj\u030C"}}},
+		{"\u01F0H\u1E96", full, []smallCapsPiece{{text: "J\u030C", small: true, source: "\u01F0"}, {text: "H"}, {text: "H\u0331", small: true, source: "\u1E96"}}},
 		{"", small, nil},
 		{"aB1", capsPlan{caps: css.AllSmallCaps, support: capsNone, synth: synthBoth, allowed: true},
 			[]smallCapsPiece{{text: "A", small: true, source: "a"}, {text: "B1", small: true}}},
