@@ -170,7 +170,9 @@ func sampleExtent(a, b wrapPt, y0, y1, m float64) (float64, float64, bool) {
 			}
 			continue
 		}
-		if d <= m {
+		if d < m || y0 == y1 && d == m {
+			// A disc that touches a band of some height at its edge
+			// alone leaves it free.
 			r := math.Sqrt(m*m - d*d)
 			lo, hi = min(lo, x-r), max(hi, x+r)
 		}
@@ -229,5 +231,33 @@ func TestShapeOutside_PolygonRoundsItsVertices(t *testing.T) {
 		if i >= len(got) || math.Abs(got[i][0]-want) > 0.2 {
 			t.Errorf("line %d starts %v, want %v", i, got, want)
 		}
+	}
+}
+
+// TestSegmentExtent_MarginTouchLeavesBandFree locks the band of some
+// height that the shape-margin of an edge reaches only at its top or
+// bottom: it stays free, as a band an edge without a margin touches does,
+// so a line whose bottom meets the grown shape of a polygon sits beside it
+// (CSS Shapes 1, 6.3).
+//
+// # Corpus evidence
+//
+//   - wpt: css-shapes/shape-outside/supported-shapes/polygon/
+//     shape-outside-polygon-012 to -015 and -032 draw a 20px line of
+//     Ahem whose bottom meets a polygon grown by its shape-margin across
+//     the whole float, as their references have it.
+func TestSegmentExtent_MarginTouchLeavesBandFree(t *testing.T) {
+	a, b := wrapPt{0, 10}, wrapPt{10, 10}
+	if _, _, ok := segmentExtent(a, b, 0, 5, 5); ok {
+		t.Error("a band touched at its bottom by the margin is taken")
+	}
+	if _, _, ok := segmentExtent(a, b, 15, 20, 5); ok {
+		t.Error("a band touched at its top by the margin is taken")
+	}
+	if _, _, ok := segmentExtent(a, b, 0, 5.01, 5); !ok {
+		t.Error("a band the margin reaches into is free")
+	}
+	if _, _, ok := segmentExtent(a, b, 5, 5, 5); !ok {
+		t.Error("the line at the margin's edge is free")
 	}
 }

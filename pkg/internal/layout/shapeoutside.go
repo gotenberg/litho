@@ -651,9 +651,15 @@ func segmentExtent(a, b wrapPt, y0, y1, m float64) (float64, float64, bool) {
 		return lo, hi, true
 	}
 	// The parts above and below the band reach into it by the discs of
-	// radius m around their points.
+	// radius m around their points. A band of some height that a disc
+	// only touches at its top or bottom stays free, as it does beside an
+	// edge without a margin.
+	reach := m
+	if y1 > y0 {
+		reach = m - eps
+	}
 	for _, edge := range [2]float64{y0, y1} {
-		l, h, ok := capReach(a, b, edge, m, edge == y1)
+		l, h, ok := capReach(a, b, edge, reach, edge == y1)
 		if ok {
 			add(l, h)
 		}
