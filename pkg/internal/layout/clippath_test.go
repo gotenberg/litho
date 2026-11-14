@@ -123,6 +123,14 @@ func TestClip_AbsolutelyPositioned(t *testing.T) {
 			RRRR__
 			______
 			______`},
+		// CSS Masking 1, 6.1: clip cuts a fixed descendant too, whose
+		// containing block lies outside the clipped box.
+		{"fixed", doc(el(sty(abs(0, auto, auto, 0), width(4), height(4), clip(pxd(1), pxd(3), pxd(3), pxd(1))),
+			square(6, 4, blue, abs(0, auto, auto, 0), func(s *css.Style) { s.Position = css.Fixed }))), `
+			______
+			_BB___
+			_BB___
+			______`},
 		{"in flow", doc(el(sty(width(4), height(4), bg(red), clip(pxd(1), pxd(3), pxd(3), pxd(1))))), `
 			RRRR__
 			RRRR__

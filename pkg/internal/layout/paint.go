@@ -278,6 +278,7 @@ func (p *painter) chain(b *box, content bool) []*box {
 		if b.abs {
 			// An overflow clip applies to the descendants whose containing
 			// block is the box or lies inside it (CSS 2.1, 11.1.1).
+			out = rectClipsBetween(out, b.parent, b.cbBox, root)
 			start = b.cbBox
 		}
 	}
@@ -289,6 +290,7 @@ func (p *painter) chain(b *box, content bool) []*box {
 			break
 		}
 		if a.abs {
+			out = rectClipsBetween(out, a.parent, a.cbBox, root)
 			a = a.cbBox
 		} else {
 			a = a.parent
@@ -296,6 +298,31 @@ func (p *painter) chain(b *box, content bool) []*box {
 	}
 	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
 		out[i], out[j] = out[j], out[i]
+	}
+	return out
+}
+
+// rectClipsBetween appends to out the boxes that clip clips among the
+// ancestors of an absolutely positioned box its containing block cb
+// skips, innermost first: from its parent, from, up to cb, cb and root
+// excluded. Unlike an overflow
+// clip, clip cuts every descendant of its box, fixed ones included, as
+// clip-path does (CSS Masking 1, 6.1). The walk stops at root, the
+// stacking context's, when cb lies above it, as the initial containing
+// block of a fixed box does.
+//
+// # Corpus evidence
+//
+//   - wpt: css-masking/clip/clip-fixed-pos-transform-descendant-001.
+//   - probe, html: Chromium 156 cuts a fixed box, and an absolute box
+//     inside a static child, at the clip: rect() of an absolute ancestor,
+//     and does not cut a fixed box at an absolute ancestor's overflow:
+//     hidden.
+func rectClipsBetween(out []*box, from, cb, root *box) []*box {
+	for c := from; c != cb && c != nil && c != root; c = c.parent {
+		if clipsRect(c) {
+			out = append(out, c)
+		}
 	}
 	return out
 }
