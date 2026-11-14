@@ -307,3 +307,21 @@ func TestBrowserRules_ScriptFallbacks(t *testing.T) {
 		t.Fatalf("superscript %g up, want the x-height %g", -y, xh)
 	}
 }
+
+// TestEdges_NoItalicCorrectionFromMargins grows a box by its padding,
+// border and margin without giving it an italic correction it has none
+// of, so a row places the next child right after its margin box
+// (MathML Core, 3.1.2).
+func TestEdges_NoItalicCorrectionFromMargins(t *testing.T) {
+	s := dejavu(t)
+	st := mathStyle("DejaVu Math TeX Gyre", 10)
+	a := space("10pt", "1pt", "0")
+	as := st
+	as.Margin = [4]float64{2, 3, 2, 3}
+	as.Padding = [4]float64{0, 4, 0, 4}
+	a.Style = &as
+	b := lay(t, s, el("math", a, space("10pt", "1pt", "0")), st)
+	if x, _, _ := childAt(b, 1); !near(x, 24) {
+		t.Fatalf("second child at %g, want 24 (3 + 4 + 10 + 4 + 3)", x)
+	}
+}

@@ -117,10 +117,15 @@ func edges(c *box, st *Style) *box {
 		w:      float64(m[left]+startPB) + c.w + float64(endPB+m[right]),
 		asc:    float64(m[top]+bd[top]) + float64(p[top]+c.asc),
 		desc:   float64(m[bottom]+bd[bottom]) + float64(p[bottom]+c.desc),
-		inkAsc: c.inkAsc, inkDesc: c.inkDesc,
-		italic: float64(c.italic+endPB) + m[right],
-		accent: float64(c.accent+startPB) + m[left], hasAccent: c.hasAccent,
-		op: c.op,
+		inkAsc: c.inkAsc, inkDesc: c.inkDesc, hasAccent: c.hasAccent, op: c.op,
+	}
+	// A box without an italic correction or a top accent attachment
+	// keeps none: only one it has grows by the edges.
+	if c.italic != 0 {
+		b.italic = float64(c.italic+endPB) + m[right]
+	}
+	if c.hasAccent {
+		b.accent = float64(c.accent+startPB) + m[left]
 	}
 	if bd[top] > 0 {
 		b.inkAsc = float64(c.asc+p[top]) + bd[top]
