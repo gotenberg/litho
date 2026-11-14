@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // DecryptFunc is a callback used to decrypt raw string or stream data during parsing.
@@ -454,6 +455,23 @@ func (p *Parser) ParseObject(ctx context.Context) (ast.PdfObject, error) {
 	return obj, err
 }
 
+// referenceNumbers reads the object and generation numbers of an indirect
+// reference, at 32 bits on every platform. named is false when either passes
+// the 32-bit range: ISO 32000-1, Annex C, Table C.1 holds an integer to 32
+// bits and an object number to 8,388,607, so such a reference names no object
+// that can exist, and 7.3.10 reads a reference to an undefined object as null.
+func referenceNumbers(obj, gen string) (objNum, genNum int, named bool, err error) {
+	objNum, objErr := intconv.Atoi32(obj)
+	if objErr != nil && !errors.Is(objErr, strconv.ErrRange) {
+		return 0, 0, false, fmt.Errorf("invalid object number %q: %w", obj, objErr)
+	}
+	genNum, genErr := intconv.Atoi32(gen)
+	if genErr != nil && !errors.Is(genErr, strconv.ErrRange) {
+		return 0, 0, false, fmt.Errorf("invalid generation number %q: %w", gen, genErr)
+	}
+	return objNum, genNum, objErr == nil && genErr == nil, nil
+}
+
 // parseObject holds the body of [Parser.ParseObject], which wraps it to keep
 // the nesting count correct on every return path.
 func (p *Parser) parseObject(ctx context.Context) (ast.PdfObject, error) {
@@ -490,13 +508,12 @@ func (p *Parser) parseObject(ctx context.Context) (ast.PdfObject, error) {
 				if _, err := p.Expect(lexer.TokenKeyword); err != nil {
 					return nil, err
 				}
-				objNum, err := strconv.Atoi(t0.Value)
+				objNum, genNum, named, err := referenceNumbers(t0.Value, t1.Value)
 				if err != nil {
-					return nil, fmt.Errorf("invalid object number %q: %w", t0.Value, err)
+					return nil, err
 				}
-				genNum, err := strconv.Atoi(t1.Value)
-				if err != nil {
-					return nil, fmt.Errorf("invalid generation number %q: %w", t1.Value, err)
+				if !named {
+					return ast.PdfNull{}, nil
 				}
 				return ast.PdfIndirectRef{ObjectNum: objNum, GenNum: genNum}, nil
 			}
