@@ -277,3 +277,60 @@ func TestLayout_PrivateUseTakesNamedFamiliesAlone(t *testing.T) {
 		}
 	}
 }
+
+// TestLayout_SpaceThePrimaryLacksTakesAFallbackFace locks CSS Fonts 4,
+// 5.4 under [FallbackChromium]: a space between letters of a face that
+// maps no space is drawn by a face that holds one, not by the letters'
+// face's .notdef glyph. Only a document face may lack a space: an
+// installed one matches only when it holds one.
+func TestLayout_SpaceThePrimaryLacksTakesAFallbackFace(t *testing.T) {
+	t.Parallel()
+	noSpace := withAspect(fontbuild.TrueType{
+		PostScriptName: "NoSpace-Regular",
+		Family:         "NoSpace",
+		Subfamily:      "Regular",
+		NotdefAdvance:  500,
+		Glyphs:         []fontbuild.Glyph{{Name: "A", Unicode: 'A', Advance: aAdvance}},
+	}.Build(), 400, false)
+	base := newTestFonts(t, fontFile{name: "b_liberation_sans.ttf", data: familyFace("Liberation Sans", "Regular", 400, false)})
+	f := base.WithFaces(NewFaceSet([]*Face{docFace(t, noSpace, "NoSpace", FaceDescriptor{})}))
+	s := Style{Families: BrowserFamilies([]string{"NoSpace"}, ""), Fallback: FallbackChromium, Size: 10}
+	lines, rep := layout(t, f, "A A", s, 1000, Collapse)
+	if len(rep.MissingGlyphs) != 0 {
+		t.Errorf("missing glyphs %q, want none", rep.MissingGlyphs)
+	}
+	var faces []string
+	for _, r := range lines[0].Runs {
+		faces = append(faces, r.Face.Key)
+	}
+	if len(faces) != 3 || !strings.Contains(faces[1], "b_liberation_sans") {
+		t.Errorf("runs drawn with %q, want the space in b_liberation_sans", faces)
+	}
+}
+
+// TestLayout_SpaceThePrimaryLacksAtTheEdgeStays locks that a space the
+// primary face lacks at the edge of its text, beside a fallback stretch,
+// stays where face splitting puts it.
+func TestLayout_SpaceThePrimaryLacksAtTheEdgeStays(t *testing.T) {
+	t.Parallel()
+	const han = '日'
+	noSpace := withAspect(fontbuild.TrueType{
+		PostScriptName: "NoSpace-Regular",
+		Family:         "NoSpace",
+		Subfamily:      "Regular",
+		NotdefAdvance:  500,
+		Glyphs:         []fontbuild.Glyph{{Name: "A", Unicode: 'A', Advance: aAdvance}},
+	}.Build(), 400, false)
+	base := newTestFonts(t,
+		fontFile{name: "b_liberation_sans.ttf", data: familyFace("Liberation Sans", "Regular", 400, false)},
+		fontFile{name: "c_sans_jp.ttf", data: familyFace("Noto Sans CJK JP", "Regular", 400, false, han)},
+	)
+	f := base.WithFaces(NewFaceSet([]*Face{docFace(t, noSpace, "NoSpace", FaceDescriptor{})}))
+	s := Style{Families: BrowserFamilies([]string{"NoSpace"}, ""), Fallback: FallbackChromium, Size: 10}
+	lines, _ := layout(t, f, "A "+string(han), s, 1000, Collapse)
+	for _, r := range lines[0].Runs {
+		if strings.Contains(r.Face.Key, "b_liberation_sans") {
+			t.Errorf("a run drawn with %s, want the space beside 日 left in the text's faces", r.Face.Key)
+		}
+	}
+}

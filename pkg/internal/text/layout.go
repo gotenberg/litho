@@ -987,15 +987,18 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 	return lines, nil
 }
 
-// spacesOwnFace returns inputs with each space separator that the face of
-// other characters draws, and that the primary face of style idx holds,
-// moved to an input of the primary face, for the runes para. Face
-// splitting keeps a space in the face of the text before it; Blink shapes
-// a run in its first available font and reshapes with a fallback font
-// only the stretches that font lacks, so a space the primary face holds
-// stays in it (CSS Fonts 4, 5.4: each character matches the first font
-// that supports it), and one it lacks takes the fallback face of the
-// stretch around it.
+// spacesOwnFace returns inputs with each space separator moved to the face
+// that holds it, for the runes para: one the primary face of style idx
+// holds and the face of other characters draws goes to the primary face,
+// one the primary face lacks and draws between two characters it draws
+// goes to the face its fallback gives. Face splitting keeps a space in the
+// face of the text before it; Blink shapes a run in its first available
+// font and reshapes with a fallback font only the stretches that font
+// lacks, so a space the primary face holds stays in it, and one it lacks
+// alone between its characters takes a fallback face (CSS Fonts 4, 5.4:
+// each character matches the first font that supports it). A space the
+// primary face lacks at the edge of its text stays there: which face
+// Chromium gives it beside a fallback stretch is not settled.
 //
 // # Corpus evidence
 //
@@ -1007,15 +1010,33 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 //     Ahem lacks between two Han characters of
 //     trailing-other-space-separators-break-spaces-009 is the Noto CJK
 //     face's.
+//   - wpt: css/css-fonts/font-synthesis-06: Chromium draws nothing for the
+//     space of "JJJ J" in a web font that maps no space, where the face's
+//     .notdef glyph is a box.
 func (st *layoutState) spacesOwnFace(inputs []shaping.Input, para []rune, idx int) []shaping.Input {
 	primary := st.styles[idx].primary
-	moves := func(in shaping.Input, r rune) bool {
-		return r != '\u1680' && unicode.Is(unicode.Zs, r) && st.covers(primary, r) && st.face(primary) != in.Face
+	pf := st.face(primary)
+	target := func(in shaping.Input, k int) *font.Face {
+		r := para[k]
+		if r == '\u1680' || !unicode.Is(unicode.Zs, r) {
+			return nil
+		}
+		switch {
+		case st.covers(primary, r):
+			if pf != in.Face {
+				return pf
+			}
+		case pf == in.Face && k > in.RunStart && k+1 < in.RunEnd && !unicode.Is(unicode.Zs, para[k-1]) && !unicode.Is(unicode.Zs, para[k+1]):
+			if fc := st.resolve(idx, in.Script, r); fc != primary {
+				return st.face(fc)
+			}
+		}
+		return nil
 	}
 	split := false
 	for _, in := range inputs {
 		for i := in.RunStart; i < in.RunEnd && !split; i++ {
-			split = moves(in, para[i])
+			split = target(in, i) != nil
 		}
 	}
 	if !split {
@@ -1024,15 +1045,15 @@ func (st *layoutState) spacesOwnFace(inputs []shaping.Input, para []rune, idx in
 	out := make([]shaping.Input, 0, len(inputs)+2)
 	for _, in := range inputs {
 		for start := in.RunStart; start < in.RunEnd; {
-			own := moves(in, para[start])
+			to := target(in, start)
 			end := start + 1
-			for end < in.RunEnd && moves(in, para[end]) == own {
+			for end < in.RunEnd && target(in, end) == to {
 				end++
 			}
 			piece := in
 			piece.RunStart, piece.RunEnd = start, end
-			if own {
-				piece.Face = st.face(primary)
+			if to != nil {
+				piece.Face = to
 			}
 			out = append(out, piece)
 			start = end
