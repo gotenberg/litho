@@ -1,0 +1,8 @@
+mask-image
+Alpha gradient
+Luminance
+Sized
+Repeated
+Content box
+Prefixed
+Each box shows where its mask image is opaque, the text with it.
