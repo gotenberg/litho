@@ -540,8 +540,12 @@ func (e *engine) fontSettings(st *css.Style, ts *text.Style) *text.FontSettings 
 	features := e.fontFeatures(st, ts)
 	a := st.FontSizeAdjust
 	noOptical := st.FontOpticalSizing == css.OpticalSizingNone
-	if features == nil && !a.Set && st.FontLanguageOverride == "" && st.FontVariationSettings == nil && !noOptical && st.FontVariantEmoji == css.EmojiNormal && st.FontPalette == nil {
-		return nil
+	if features == nil && !a.Set && st.FontLanguageOverride == "" && st.FontVariationSettings == nil && !noOptical && st.FontPalette == nil {
+		// The font-variant-emoji alone, which a run of a spreadsheet or of
+		// a Word document may set, takes a shared settings value.
+		if int(st.FontVariantEmoji) < len(emojiSettings) {
+			return emojiSettings[st.FontVariantEmoji]
+		}
 	}
 	fs := &text.FontSettings{
 		Features: features, LanguageSystem: st.FontLanguageOverride, NoOpticalSizing: noOptical,
@@ -559,6 +563,16 @@ func (e *engine) fontSettings(st *css.Style, ts *text.Style) *text.FontSettings 
 		}
 	}
 	return fs
+}
+
+// emojiSettings are the font settings of a style whose only setting off
+// its default is font-variant-emoji, by its value: nil for normal. They
+// are shared, never modified.
+var emojiSettings = [...]*text.FontSettings{
+	css.EmojiNormal:  nil,
+	css.EmojiText:    {Emoji: text.EmojiText},
+	css.EmojiEmoji:   {Emoji: text.EmojiEmoji},
+	css.EmojiUnicode: {Emoji: text.EmojiUnicode},
 }
 
 // emojiVariant returns the text stack's form of font-variant-emoji.
