@@ -889,7 +889,7 @@ func (d *Document) ValidateXRefTableFormat(offset int64) []error {
 		if pos == countStart {
 			break
 		}
-		count, err := strconv.Atoi(string(buf[countStart:pos]))
+		count, err := intconv.Atoi(string(buf[countStart:pos]))
 		if err != nil || count < 0 {
 			break
 		}
@@ -907,11 +907,14 @@ func (d *Document) ValidateXRefTableFormat(offset int64) []error {
 		// Skip past the entries (each is 20 bytes).
 		// Validate individual entries would be ideal but keeping it simple.
 		// the subsection header format check catches the most common violations.
-		entryBytes := count * 20 // 20 bytes per xref entry
-		if pos+entryBytes > len(buf) {
+		// Each entry is 20 bytes (ISO 32000-1, 7.5.4). The count is checked
+		// against the bytes left before it is multiplied, so the product
+		// cannot wrap: from 107,374,183 entries where int is 32 bits, from
+		// 461,168,601,842,738,791 where it is 64.
+		if count > (len(buf)-pos)/20 {
 			break // Not enough data to skip all entries.
 		}
-		pos += entryBytes
+		pos += count * 20
 	}
 
 	return violations
