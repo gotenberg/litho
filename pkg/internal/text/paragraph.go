@@ -12,6 +12,7 @@ import (
 	gofont "github.com/go-text/typesetting/font"
 	"github.com/go-text/typesetting/shaping"
 
+	"github.com/gotenberg/litho/pkg/internal/dictbreak"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -442,6 +443,34 @@ func (p *Paragraph) segment(st *layoutState, text []rune) {
 		if g := gi.Grapheme(); g.Offset < len(text) {
 			p.graph[g.Offset] = true
 		}
+	}
+	p.dictionaryBreaks(text)
+}
+
+// dictionaryBreaks opens a break opportunity at each word boundary
+// inside a run of Thai letters, where a grapheme cluster starts (UAX #29)
+// and nothing else closes the boundary. UAX #14 gives Thai class SA and
+// leaves its breaks to a language-specific analysis outside its rules
+// (LB1); the boundaries are those [dictbreak.Thai] finds, ICU's, which
+// Chromium breaks Thai lines at.
+func (p *Paragraph) dictionaryBreaks(text []rune) {
+	var ends []int
+	for i := 0; i < len(text); {
+		if !dictbreak.IsThai(text[i]) {
+			i++
+			continue
+		}
+		j := i + 1
+		for j < len(text) && dictbreak.IsThai(text[j]) {
+			j++
+		}
+		ends = dictbreak.Thai(text[i:j], ends[:0])
+		for _, e := range ends {
+			if k := i + e; p.brk[k] == NoBreak && p.graph[k] {
+				p.brk[k] = BreakAllowed
+			}
+		}
+		i = j
 	}
 }
 
