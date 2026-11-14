@@ -34,6 +34,7 @@ func TestRunProperties(t *testing.T) {
 		run(`<w:vertAlign w:val="superscript"/>`, "sup") +
 		run(`<w:position w:val="6"/>`, "raised") +
 		run(`<w:shd w:val="clear" w:color="auto" w:fill="000000"/>`, "dark") +
+		run(`<w:shd w:val="clear" w:color="auto" w:fill="3060C0"/>`, "midblue") +
 		run(`<w:shadow/>`, "shadow") +
 		run(`<w:lang w:val="fr-FR"/>`, "langue") +
 		run(`<w:vanish/>`, "HIDDEN") +
@@ -81,6 +82,8 @@ func TestRunProperties(t *testing.T) {
 			return s.VerticalAlign == css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(3)}
 		}},
 		{"dark", func(s *css.Style) bool { return s.Color == css.Color{R: 1, G: 1, B: 1, A: 1} }},
+		// Word keeps automatic text black on 3060C0.
+		{"midblue", func(s *css.Style) bool { return s.Color == css.Color{A: 1} }},
 		{"shadow", func(s *css.Style) bool { return len(s.TextShadow) == 1 }},
 		{"styled", func(s *css.Style) bool { return s.FontSize == 20 && s.Color == css.Color{G: 1, A: 1} }},
 		{"unbold", func(s *css.Style) bool { return s.FontWeight == 400 && s.FontSize == 10 }},

@@ -148,7 +148,7 @@ func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
 	st.Color = css.Color{A: 1}
 	if r.color != nil && !r.color.auto {
 		st.Color = r.color.c
-	} else if bg := runBackground(r); bg != nil && luminance(*bg) < 0.4 {
+	} else if bg := runBackground(r); bg != nil && luminance(*bg) < autoWhiteBelow {
 		// Automatic colour turns white on a dark background (17.3.2.6).
 		st.Color = css.Color{R: 1, G: 1, B: 1, A: 1}
 	}
@@ -277,6 +277,23 @@ func runBackground(r runProps) *css.Color {
 	}
 	return r.shading
 }
+
+// autoWhiteBelow is the [luminance] of a run's background below which
+// Word paints the run's automatic text white (ECMA-376 Part 1, 17.3.2.6
+// leaves the choice to the consumer). Word's switch lies between the
+// lightest background it was measured to paint white text on and the
+// darkest it paints black text on; the bound is a quarter, between them.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word paints automatic text white on a run shaded
+//     202020 (0.125), black on runs shaded 606060 (0.376), 808080 and
+//     A0A0A0, and on a run and a paragraph shaded 3060C0 (0.363).
+//   - litho/docx run-highlight-shading: Word paints automatic text black
+//     on a solid shading of 2F5496 (0.316) and on its pct75 and pct90
+//     mixes with FFF2CC, and on highlights yellow, green, cyan, magenta
+//     (0.413) and light grey.
+const autoWhiteBelow = 0.25
 
 // luminance returns the relative luminance of c, roughly.
 func luminance(c css.Color) float64 {
