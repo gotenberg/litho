@@ -1,10 +1,10 @@
 package svg
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -694,7 +694,7 @@ func parseWeight(v string, parent *style) (int, bool) {
 		}
 		return 700, true
 	}
-	n, err := strconv.Atoi(strings.TrimSpace(v))
+	n, err := intconv.Atoi(strings.TrimSpace(v))
 	if err != nil || n < 1 || n > 1000 {
 		return 0, false
 	}
