@@ -236,13 +236,42 @@ func presentationOf(r, vs rune, kind int, multi bool, v EmojiVariant) presentati
 	return presentNone
 }
 
-// EmojiJoins reports whether an emoji character b continues an emoji
-// whose last character is a, as Word keeps them on one line: b is
-// Extended_Pictographic (UTS #51, Annex A) and a is one too, or the
-// emoji presentation selector or a skin tone modifier ending one.
+// EmojiJoins reports whether Word and PowerPoint keep a and b, two
+// characters next to each other, on one line where an emoji meets an
+// emoji or a letter: b is Extended_Pictographic (UTS #51, Annex A) and a
+// is one too, the emoji presentation selector or a skin tone modifier
+// ending one, or a letter or digit ([officeLetter]); or a ends an emoji
+// so and b is a letter or digit. A line breaks next to an emoji at a
+// space, or inside a word no line holds, where UAX #14 breaks before
+// and after any emoji (classes ID, EB and EM, LB30b, LB31).
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word sets "Abcdef" and ten 36 point emoji on a line
+//     468 points wide as "Abcdef" and seven emoji, then three and " Z",
+//     and "A ", ten emoji, "abc" and ten emoji as "A", nine emoji, then
+//     an emoji, "abc" and seven emoji, then three and " Z": no break
+//     between a letter and an emoji either way, the word broken where the
+//     line ends.
+//   - probe, pptx: PowerPoint sets "A " and ten 36 point emoji in a box
+//     285.6 points wide as "A", five emoji, then five and " Z", where a
+//     break between two emoji would have set "A " and five; "Abcdef" and
+//     ten emoji as "Abcdef" and three emoji, five, then two and " Z".
 func EmojiJoins(a, b rune) bool {
-	if !unicode.Is(extendedPictographic, b) {
+	endsEmoji := a == variationEmoji || unicode.Is(extendedPictographic, a) || unicode.Is(emojiModifier, a)
+	if unicode.Is(extendedPictographic, b) {
+		return endsEmoji || officeLetter(a)
+	}
+	return endsEmoji && officeLetter(b)
+}
+
+// officeLetter reports whether r is a letter or digit of a script UAX #14
+// breaks only at spaces: not Han, kana or Hangul, whose characters break
+// between any two (classes ID, H2, H3), next to which an emoji keeps the
+// opportunity UAX #14 gives it.
+func officeLetter(r rune) bool {
+	if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
 		return false
 	}
-	return a == variationEmoji || unicode.Is(extendedPictographic, a) || unicode.Is(emojiModifier, a)
+	return !unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul)
 }

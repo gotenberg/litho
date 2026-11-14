@@ -147,15 +147,18 @@ func TestLineBreak_KeepHangul(t *testing.T) {
 }
 
 // TestLineBreak_KeepEmoji checks that css.Office.KeepEmoji keeps two
-// emoji on one line, a skin tone modifier ending the first, the run of
-// them moving whole to the next line, while a space still breaks.
+// emoji on one line, a skin tone modifier ending the first, and an emoji
+// with the letters before and after it, the run of them moving whole to
+// the next line, while a space still breaks.
 //
 // # Corpus evidence
 //
 //   - probe, docx: Word sets "A " and ten 36 point emoji, 49.43 points
 //     each, on a line 468 points wide as "A" alone, then nine emoji, then
 //     the tenth before " Z": no break between two emoji, where UAX #14
-//     fills the first line with emoji.
+//     fills the first line with emoji. It sets "Abcdef" and ten emoji
+//     as "Abcdef" and seven emoji, and an emoji before "abc" on the line
+//     of the letters (see text.EmojiJoins).
 func TestLineBreak_KeepEmoji(t *testing.T) {
 	keep := func(s *css.Style) { s.KeepEmoji = true }
 	tests := []struct {
@@ -167,6 +170,9 @@ func TestLineBreak_KeepEmoji(t *testing.T) {
 		{"breaks between emoji", sty(), "A \U0001F600\U0001F602\U0001F970", []string{"A \U0001F600\U0001F602", "\U0001F970"}},
 		{"keeps emoji together", sty(keep), "A \U0001F600\U0001F602\U0001F970", []string{"A ", "\U0001F600\U0001F602\U0001F970"}},
 		{"after a modifier", sty(keep), "A \U0001F44D\U0001F3FD\U0001F602", []string{"A ", "\U0001F44D\U0001F3FD\U0001F602"}},
+		{"breaks after letters", sty(), "A ab\U0001F600\U0001F602", []string{"A ab", "\U0001F600\U0001F602"}},
+		{"keeps letters and emoji", sty(keep), "A ab\U0001F600\U0001F602", []string{"A ", "ab\U0001F600\U0001F602"}},
+		{"keeps emoji and letters", sty(keep), "A \U0001F600\U0001F602ab", []string{"A ", "\U0001F600\U0001F602ab"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
