@@ -312,7 +312,7 @@ func (f *reftestFeature) drawTest(ctx context.Context, root string, t *reftestEn
 	if !t.Print {
 		return f.drawScreen(ctx, root, t)
 	}
-	testPages, _, err := f.draw(ctx, root, t.ID, reftestPrint)
+	testPages, _, err := f.draw(ctx, root, t.document(), reftestPrint)
 	if err != nil {
 		return nil, nil, fmt.Errorf("test: %w", err)
 	}
@@ -325,7 +325,7 @@ func (f *reftestFeature) drawTest(ctx context.Context, root string, t *reftestEn
 	}
 	refPages := make([][]image.Image, len(t.Refs))
 	for i, ref := range t.Refs {
-		if refPages[i], _, err = f.draw(ctx, root, ref.Path, reftestPrint); err != nil {
+		if refPages[i], _, err = f.draw(ctx, root, ref.document(), reftestPrint); err != nil {
 			return nil, nil, fmt.Errorf("reference %s: %w", ref.Path, err)
 		}
 	}
@@ -363,26 +363,26 @@ const maxReftestViewports = 32
 //     fail, 21 of them documents that fit the viewport: the viewport units
 //     and the initial containing block measure the page, not 600 pixels.
 func (f *reftestFeature) drawScreen(ctx context.Context, root string, t *reftestEntry) ([]image.Image, [][]image.Image, error) {
-	paths := make([]string, 0, 1+len(t.Refs))
-	paths = append(paths, t.ID)
+	docs := make([]reftestDocument, 0, 1+len(t.Refs))
+	docs = append(docs, t.document())
 	for _, ref := range t.Refs {
-		paths = append(paths, ref.Path)
+		docs = append(docs, ref.document())
 	}
-	drawn := make([][]image.Image, len(paths))
+	drawn := make([][]image.Image, len(docs))
 	most := 1
-	for i, p := range paths {
-		pages, n, err := f.draw(ctx, root, p, reftestScreen(1))
+	for i, d := range docs {
+		pages, n, err := f.draw(ctx, root, d, reftestScreen(1))
 		if err != nil {
-			return nil, nil, documentError(i, p, err)
+			return nil, nil, documentError(i, d.path, err)
 		}
 		drawn[i], most = pages, max(most, n)
 	}
 	if most > 1 {
 		tall := reftestScreen(min(most, maxReftestViewports))
-		for i, p := range paths {
-			pages, _, err := f.draw(ctx, root, p, tall)
+		for i, d := range docs {
+			pages, _, err := f.draw(ctx, root, d, tall)
 			if err != nil {
-				return nil, nil, documentError(i, p, err)
+				return nil, nil, documentError(i, d.path, err)
 			}
 			drawn[i] = pages
 		}
@@ -525,10 +525,11 @@ func reftestScreen(n int) reftestLayout { return reftestLayout{viewports: n} }
 //     left corner where Chromium's screenshot has it.
 const reftestScreenSheet = "@page { size: auto !important; margin: 0 !important }"
 
-// draw converts the document at rel under root and draws its pages as l
+// draw converts the document doc under root and draws its pages as l
 // says: every page for print, the top viewport of the first for the
 // screen. It returns the conversion's page count beside them.
-func (f *reftestFeature) draw(ctx context.Context, root, rel string, l reftestLayout) ([]image.Image, int, error) {
+func (f *reftestFeature) draw(ctx context.Context, root string, doc reftestDocument, l reftestLayout) ([]image.Image, int, error) {
+	rel := doc.path
 	file := filepath.Join(filepath.FromSlash(root), filepath.FromSlash(rel))
 	src, err := os.ReadFile(file) //nolint:gosec // file of the fetched WPT tree, listed in reftests.json
 	if err != nil {
@@ -559,6 +560,10 @@ func (f *reftestFeature) draw(ctx context.Context, root, rel string, l reftestLa
 		// document wider than the page is not shrunk to fit it, as a
 		// browser shrinks one only when it prints.
 		s.Print = []pdf.HTMLOption{pdf.WithShrinkToFit(false), pdf.WithUserStylesheet(reftestScreenSheet)}
+	}
+	if doc.namesOutside() {
+		s.Resources = nil
+		s.Print = append(s.Print, pdf.WithBaseURL(reftestOrigin+rel), pdf.WithHTTPClient(doc.client(root)))
 	}
 	data, err := f.convert(ctx, src, s)
 	if err != nil {
