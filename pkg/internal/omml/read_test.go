@@ -402,3 +402,30 @@ func FuzzRead(f *testing.F) {
 		}
 	})
 }
+
+// TestLayout_RowSpacing sets the rows of an equation array exactly rSp
+// twips apart under rSpRule 3 (22.1.2.92, 22.1.2.93).
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/docx O14ISOStrict/Word/rSp-Row_Spacing_Equation-Array_Function_-val-1080:
+//     Word sets the rows a, b and c 54 points apart.
+func TestLayout_RowSpacing(t *testing.T) {
+	s := setter(t)
+	q := read(t, `<m:eqArr><m:eqArrPr><m:rSpRule m:val="3"/><m:rSp m:val="1080"/></m:eqArrPr><m:e>`+r("a")+`</m:e><m:e>`+r("b")+`</m:e><m:e>`+r("c")+`</m:e></m:eqArr>`)
+	st := q.Style()
+	st.Families = []string{"DejaVu Math TeX Gyre"}
+	b, err := q.Layout(context.Background(), s, st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ys []float64
+	for _, f := range b.Draw(0, 0) {
+		if tx, ok := f.(*typeset.Text); ok {
+			ys = append(ys, tx.Origin.Y)
+		}
+	}
+	if len(ys) != 3 || math.Abs(ys[1]-ys[0]-54) > 0.01 || math.Abs(ys[2]-ys[1]-54) > 0.01 {
+		t.Fatalf("baselines at %v, want 54 points apart", ys)
+	}
+}

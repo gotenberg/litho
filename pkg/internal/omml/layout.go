@@ -32,6 +32,34 @@ type rule struct {
 	color typeset.Color
 }
 
+// rowSpacing spaces the rows of a table at the root's size other than
+// single: the struts of each row but the last ([rowAscent]) take the depth
+// that sets the next row's baseline lines times the single pitch, or
+// exact points, below theirs.
+type rowSpacing struct {
+	rows  [][]*formula.Element
+	lines float64
+	exact float64
+}
+
+func (r *rowSpacing) fix(_ context.Context, _ *formula.Setter, st formula.Style) error {
+	pitch := float64(r.lines*(rowAscent+rowDescent)) * st.Size
+	if r.exact > 0 {
+		pitch = r.exact
+	}
+	depth := max(float64(pitch-float64(rowAscent*st.Size)), 0)
+	for _, struts := range r.rows {
+		for _, s := range struts {
+			for i := range s.Attrs {
+				if s.Attrs[i].Name == "depth" {
+					s.Attrs[i].Value = strconv.FormatFloat(depth, 'f', 3, 64) + "pt"
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // ruleThickness is the thickness of an m:bar's rule, in em.
 const ruleThickness = 0.04
 

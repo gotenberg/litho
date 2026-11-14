@@ -727,7 +727,43 @@ func (b *reader) eqArr(o *ooxml.Element, depth int) *formula.Element {
 		table.Children = append(table.Children, el("mtr", b.cell(cell)))
 	}
 	b.fixups = append(b.fixups, a)
+	b.spaceRows(table, o.Child(ooxml.NSM, "eqArrPr"))
 	return table
+}
+
+// spaceRows sets the row spacing of table, an equation array or a matrix
+// whose properties pr state its rSpRule and rSp (22.1.2.93, 22.1.2.92):
+// single spacing by default, one and a half or double lines, or exactly
+// rSp twips between baselines. The multiple rule (4) is read as single.
+// A table set smaller than the root keeps MathML Core's spacing.
+func (b *reader) spaceRows(table *formula.Element, pr *ooxml.Element) {
+	if b.scaled > 0 || len(table.Children) < 2 {
+		return
+	}
+	rs := &rowSpacing{}
+	switch v, _ := prop(pr, "rSpRule"); v {
+	case "1":
+		rs.lines = 1.5
+	case "2":
+		rs.lines = 2
+	case "3":
+		if t, ok := ooxml.Twips(attrOf(pr.Child(ooxml.NSM, "rSp"))); ok && t > 0 {
+			rs.exact = min(t, maxMargin)
+		}
+	}
+	if rs.lines == 0 && rs.exact == 0 {
+		return
+	}
+	for _, tr := range table.Children[:len(table.Children)-1] {
+		var struts []*formula.Element
+		for _, td := range tr.Children {
+			if len(td.Children) > 0 && td.Children[0].Name == "mspace" {
+				struts = append(struts, td.Children[0])
+			}
+		}
+		rs.rows = append(rs.rows, struts)
+	}
+	b.fixups = append(b.fixups, rs)
 }
 
 // cell returns the mtd of a matrix or equation array that holds
@@ -738,7 +774,7 @@ func (b *reader) cell(content *formula.Element) *formula.Element {
 	if b.scaled > 0 {
 		return el("mtd", content)
 	}
-	strut := &formula.Element{Name: "mspace", Attrs: []formula.Attr{{Name: "height", Value: rowAscent}, {Name: "depth", Value: rowDescent}}}
+	strut := &formula.Element{Name: "mspace", Attrs: []formula.Attr{{Name: "height", Value: emOf(rowAscent)}, {Name: "depth", Value: emOf(rowDescent)}}}
 	td := el("mtd", strut, content)
 	b.cells = append(b.cells, td)
 	return td
@@ -758,8 +794,8 @@ func (b *reader) cell(content *formula.Element) *formula.Element {
 //   - poi/docx integration/stress007: at 12 points, the rows of the
 //     covariance matrix stand 14 to 14.25 points apart.
 const (
-	rowAscent  = "0.85em"
-	rowDescent = "0.32em"
+	rowAscent  = 0.85
+	rowDescent = 0.32
 	cellSpace  = 0.5
 )
 
@@ -829,6 +865,7 @@ func (b *reader) matrix(o, pr *ooxml.Element, depth int) *formula.Element {
 			break
 		}
 	}
+	b.spaceRows(table, pr)
 	for _, a := range cols {
 		if a != nil {
 			b.fixups = append(b.fixups, a)
@@ -995,3 +1032,6 @@ func hexColor(c typeset.Color) string {
 	hex := func(v float64) int { return int(math.Round(float64(min(max(v, 0), 1) * 255))) } // fits int: 0 to 255
 	return fmt.Sprintf("#%02x%02x%02x", hex(c.R), hex(c.G), hex(c.B))
 }
+
+// emOf returns v ems as a CSS length.
+func emOf(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) + "em" }
