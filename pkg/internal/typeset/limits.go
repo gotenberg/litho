@@ -16,6 +16,11 @@ const maxPages = limits.MaxConvertPagesCeiling
 // drawn one glyph per run still fits ten times over.
 const maxFragmentsPerPage = 1_000_000
 
+// maxPaletteEntries caps the colours of a [Text.Palette]: a CPAL palette
+// counts its entries in 16 bits (OpenType, CPAL), so no font indexes
+// past it.
+const maxPaletteEntries = 1 << 16
+
 // maxGlyphsPerRun caps the glyphs of one [Text] run. Anti-DoS guard, not
 // spec-mandated. A run is a line or a paragraph in practice; a page of 100k
 // glyphs written as a single run still fits ten times over.

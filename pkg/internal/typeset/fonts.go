@@ -11,11 +11,14 @@ import (
 )
 
 // fontEntry is one embedded font: the program of a [Face.Key], the subset
-// every page draws into, and the Type0 font object they share.
+// every page draws into, and the Type0 font object they share; and, for a
+// program with colour glyphs, the Type 3 fonts that draw them, the Type 0
+// font then allocated when a page first draws through it.
 type fontEntry struct {
 	font   *embed.Font
 	subset *embed.Subset
 	ref    ast.PdfIndirectRef
+	color  *colorFace
 	// unitsPerEm is the program's, 1000 when it leaves it unset, as embed
 	// writes it.
 	unitsPerEm float64
@@ -68,6 +71,16 @@ func (fe *fontEntry) advance(gid uint16) (float64, bool) {
 	return float64(int(float64(w)*1000/fe.unitsPerEm)) / 1000, true
 }
 
+// type0Ref returns the object of fe's Type 0 font, allocating it on first
+// use for a colour face: one whose every glyph a Type 3 font draws writes
+// none.
+func (w *docWriter) type0Ref(fe *fontEntry) ast.PdfIndirectRef {
+	if fe.ref.ObjectNum == 0 {
+		fe.ref = w.alloc.Alloc(ast.PdfNull{})
+	}
+	return fe.ref
+}
+
 // font returns the entry of face, loading its program on first use. Two
 // faces with one Key share the entry of the first: the model makes the key
 // the identity of the program. The Type0 font is written once per entry,
@@ -90,8 +103,13 @@ func (w *docWriter) font(ctx context.Context, face *Face) (*fontEntry, error) {
 	fe := &fontEntry{
 		font:       f,
 		subset:     f.NewSubset(),
-		ref:        w.alloc.Alloc(ast.PdfNull{}),
 		unitsPerEm: upem,
+		color:      newColorFace(face.Program, upem, f.PostScriptName(), w.logger),
+	}
+	if fe.color == nil {
+		// A face without colour glyphs draws every glyph through its Type 0
+		// font, allocated with the entry as the file's object order has it.
+		fe.ref = w.alloc.Alloc(ast.PdfNull{})
 	}
 	w.fonts[face.Key] = fe
 	w.fontOrder = append(w.fontOrder, fe)

@@ -61,8 +61,8 @@ type pageWriter struct {
 	height float64
 	buf    bytes.Buffer
 
-	fonts     []*fontEntry
-	fontNames map[*fontEntry]string
+	fonts     []ast.PdfIndirectRef
+	fontNames map[ast.PdfIndirectRef]string
 	xobjs     []xobjUse
 	xobjNames map[*ImageSource]string
 	gstates   []gsUse
@@ -110,7 +110,7 @@ func newPageWriter(w *docWriter, index int, page *Page) *pageWriter {
 		index:     index,
 		width:     page.Width,
 		height:    page.Height,
-		fontNames: make(map[*fontEntry]string),
+		fontNames: make(map[ast.PdfIndirectRef]string),
 		xobjNames: make(map[*ImageSource]string),
 		gsNames:   make(map[gsKey]string),
 		alpha:     []alphaState{{fill: 1, stroke: 1}},
@@ -304,7 +304,10 @@ func (p *pageWriter) color(c Color, op string) {
 // Glyphs on one baseline share TJ arrays, a glyph away from where the
 // previous one's advance leaves the pen taking a TJ adjustment in
 // thousandths of text space (9.4.3); a change of baseline sets a new text
-// matrix.
+// matrix. A run in a colour font switches to the Type 3 font of its
+// colour glyphs and back (see [docWriter.colorCode]), filling those
+// glyphs in mode 0: their descriptions paint, they have no outline to
+// stroke.
 func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 	if len(t.Glyphs) == 0 {
 		return nil
@@ -313,7 +316,6 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 	if err != nil {
 		return err
 	}
-	name := p.fontName(fe)
 	p.mark(t.Parent, t.Order)
 	if !t.Invisible {
 		cur := p.currentAlpha()
@@ -330,31 +332,74 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 		p.color(t.Color, "RG")
 		fmt.Fprintf(&p.buf, "%s w 1 j\n", num(t.Stroke))
 	}
-	fmt.Fprintf(&p.buf, "BT\n/%s 1 Tf\n", name)
+	p.buf.WriteString("BT\n")
+	mode := 0
 	switch {
 	case t.Invisible:
-		p.buf.WriteString("3 Tr\n")
+		mode = 3
 	case t.Stroke > 0:
-		p.buf.WriteString("2 Tr\n")
+		mode = 2
 	}
 	hs := 1.0
 	if t.HScale > 0 && t.HScale != 1 {
 		// Horizontal scaling (9.3.4) scales the glyphs and every advance
 		// and adjustment along the baseline, so the pen moves by hs times
-		// the unscaled positions the run records.
+		// the unscaled positions the run records. It is set after the
+		// first font and rendering mode.
 		hs = t.HScale
-		fmt.Fprintf(&p.buf, "%s Tz\n", num(hs*100))
+	}
+	var set *type3Set
+	if fe.color != nil {
+		set = fe.color.set(t.Palette, t.Invisible)
 	}
 
 	size := t.Size
 	tj := tjWriter{buf: &p.buf}
 	var started bool
 	var penX, baseline float64
+	curFont, curMode := "", 0
 	gt := clusterTexts(fe.font, t.Glyphs)
 	spans := gt.spans
 	for i, g := range t.Glyphs {
 		if err := p.step(ctx); err != nil {
 			return err
+		}
+		var tc type3Code
+		colour := false
+		if set != nil {
+			if tc, colour, err = p.w.colorCode(ctx, fe, set, g.GID, size, gt.texts[i]); err != nil {
+				return err
+			}
+		}
+		var advance float64
+		var name string
+		glyphMode := mode
+		if colour {
+			name = p.fontName(tc.font.ref)
+			advance = tc.font.procs[tc.code].width / fe.color.upem
+			if mode == 2 {
+				glyphMode = 0
+			}
+		} else {
+			a, ok := fe.advance(g.GID)
+			if !ok {
+				return fmt.Errorf("%w: glyph %d not in face %q", ErrInvalidFont, g.GID, t.Face.Key)
+			}
+			advance = a
+			name = p.fontName(p.w.type0Ref(fe))
+		}
+		if name != curFont || glyphMode != curMode {
+			tj.end()
+			if name != curFont {
+				fmt.Fprintf(&p.buf, "/%s 1 Tf\n", name)
+			}
+			if glyphMode != curMode {
+				fmt.Fprintf(&p.buf, "%d Tr\n", glyphMode)
+			}
+			if !started && hs != 1 {
+				fmt.Fprintf(&p.buf, "%s Tz\n", num(hs*100))
+			}
+			curFont, curMode = name, glyphMode
 		}
 		if len(spans) > 0 && spans[0].start == i {
 			// Marked content may sit inside a text object (ISO 32000-1,
@@ -362,10 +407,6 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 			// ends and the next continues where it left the pen.
 			tj.end()
 			writeActualText(&p.buf, spans[0].text)
-		}
-		advance, ok := fe.advance(g.GID)
-		if !ok {
-			return fmt.Errorf("%w: glyph %d not in face %q", ErrInvalidFont, g.GID, t.Face.Key)
 		}
 		x, y := t.Origin.X+float64(g.X*hs), t.Origin.Y+g.Y
 		if !started || round(y) != round(baseline) {
@@ -380,7 +421,11 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 			tj.number(adj)
 			penX -= float64(adj / 1000 * size * hs)
 		}
-		tj.code(fe.subset.Code(g.GID, gt.texts[i]))
+		if colour {
+			tj.code(uint16(tc.code), 1)
+		} else {
+			tj.code(fe.subset.Code(g.GID, gt.texts[i]), 2)
+		}
 		penX += float64(advance * size * hs)
 		if len(spans) > 0 && spans[0].end == i+1 {
 			tj.end()
@@ -389,7 +434,7 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 		}
 	}
 	tj.end()
-	if t.Stroke > 0 || t.Invisible {
+	if curMode != 0 {
 		// The rendering mode is graphics state that outlives the text
 		// object (9.3.1): later runs fill only.
 		p.buf.WriteString("0 Tr\n")
@@ -427,13 +472,19 @@ func (t *tjWriter) closeString() {
 	}
 }
 
-func (t *tjWriter) code(c uint16) {
+// code writes c as a code of width bytes: 2 for a Type 0 font's
+// Identity-H codes, 1 for a simple font's.
+func (t *tjWriter) code(c uint16, width int) {
 	t.begin()
 	if !t.inString {
 		t.buf.WriteByte('<')
 		t.inString, t.glyphs = true, 0
 	}
-	fmt.Fprintf(t.buf, "%04X", c)
+	if width == 1 {
+		fmt.Fprintf(t.buf, "%02X", c)
+	} else {
+		fmt.Fprintf(t.buf, "%04X", c)
+	}
 	t.glyphs++
 	if t.glyphs >= maxStringGlyphs {
 		t.closeString()
@@ -466,13 +517,15 @@ func (t *tjWriter) end() {
 	t.open = false
 }
 
-func (p *pageWriter) fontName(fe *fontEntry) string {
-	if name, ok := p.fontNames[fe]; ok {
+// fontName returns the page's resource name of the font object at ref,
+// naming it on first use.
+func (p *pageWriter) fontName(ref ast.PdfIndirectRef) string {
+	if name, ok := p.fontNames[ref]; ok {
 		return name
 	}
 	name := fmt.Sprintf("F%d", len(p.fonts)+1)
-	p.fontNames[fe] = name
-	p.fonts = append(p.fonts, fe)
+	p.fontNames[ref] = name
+	p.fonts = append(p.fonts, ref)
 	return name
 }
 
@@ -694,8 +747,8 @@ func (p *pageWriter) resources() ast.PdfDict {
 	res := ast.PdfDict{}
 	if len(p.fonts) > 0 {
 		fonts := ast.PdfDict{}
-		for _, fe := range p.fonts {
-			fonts[ast.PdfName(p.fontNames[fe])] = fe.ref
+		for _, ref := range p.fonts {
+			fonts[ast.PdfName(p.fontNames[ref])] = ref
 		}
 		res["Font"] = fonts
 	}

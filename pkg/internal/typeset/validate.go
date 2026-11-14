@@ -191,6 +191,16 @@ func (v *validator) text(t *Text) error {
 	if err := checkColor(t.Color); err != nil {
 		return err
 	}
+	if len(t.Palette) > maxPaletteEntries {
+		return fmt.Errorf("%w: palette of %d colours, at most %d", ErrLimitExceeded, len(t.Palette), maxPaletteEntries)
+	}
+	for _, c := range t.Palette {
+		for _, ch := range []float64{c.R, c.G, c.B, c.A} {
+			if math.IsNaN(ch) || ch < 0 || ch > 1 {
+				return fmt.Errorf("%w: palette colour %v", ErrInvalidColor, c)
+			}
+		}
+	}
 	return v.parent(t.Parent)
 }
 

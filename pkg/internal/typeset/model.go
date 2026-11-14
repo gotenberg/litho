@@ -181,6 +181,12 @@ type Text struct {
 	// positions. 1 and 0 draw at the natural width. It lies in [MinHScale,
 	// MaxHScale].
 	HScale float64
+	// Palette, for a run whose face draws layered colour glyphs (OpenType,
+	// COLR and CPAL), fills each layer with the entry of its palette
+	// index; nil fills them with the face's first palette. A layer whose
+	// index lies past the slice is drawn in Color, as the face's text
+	// colour entry is. A face without layered glyphs ignores it.
+	Palette []Color
 }
 
 // The bounds of [Text.HScale] (ISO 32000-1, 9.3.4 puts no bound on Tz; the

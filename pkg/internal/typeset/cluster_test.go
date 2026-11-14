@@ -295,3 +295,17 @@ func utf16Hex(t *testing.T, hex string) string {
 	}
 	return b.String()
 }
+
+// TestWriteSpanOpeningARunFollowsTheFont locks the order of a text object
+// whose first cluster takes an ActualText span: the font is selected
+// first, then the span opens (ISO 32000-1, 8.2, Figure 9, marked content
+// inside a text object).
+func TestWriteSpanOpeningARunFollowsTheFont(t *testing.T) {
+	t.Parallel()
+	face, gids := markFace(t)
+	run := shapedRun(face, gids, []shaped{{"c", 5, "bc"}, {"b", 5, ""}, {"a", 5, "a"}})
+	out := write(t, &typeset.Document{Pages: []*typeset.Page{{Width: 200, Height: 100, Content: []typeset.Fragment{run}}}})
+	if content := inflated(t, out); !bytes.Contains(content, []byte("BT\n/F1 1 Tf\n/Span <</ActualText")) {
+		t.Errorf("the span does not open after the font:\n%s", content)
+	}
+}

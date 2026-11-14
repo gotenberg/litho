@@ -382,7 +382,14 @@ func (w *docWriter) finish(ctx context.Context, tail *Document, producer string,
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("writing fonts: %w", err)
 		}
-		fe.subset.Write(ctx, w.alloc, &w.deflate, w.logger, fe.ref)
+		if fe.ref.ObjectNum != 0 {
+			fe.subset.Write(ctx, w.alloc, &w.deflate, w.logger, fe.ref)
+		}
+		if fe.color != nil {
+			if err := w.writeType3(fe.color); err != nil {
+				return nil, fmt.Errorf("writing fonts: %w", err)
+			}
+		}
 		if err := w.chargeDeflate(); err != nil {
 			return nil, fmt.Errorf("writing fonts: %w", err)
 		}
