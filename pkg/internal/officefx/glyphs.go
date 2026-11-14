@@ -106,18 +106,9 @@ const pptGlowSize = 66
 // a run of text by at font size size, (size/full)^(2/3), full the size
 // at which it draws the length it states: [pptShadowSize] for a shadow's
 // distance, [pptGlowSize] for a glow's radius. A size that is not
-// positive and finite scales nothing. A shadow's blur and a reflection
-// are not scaled.
-//
-// # Corpus evidence
-//
-//   - probe, pptx: the reflection of runs 4 points away at 12.27, 23.79,
-//     48.31 and 72.12 points mirrors the copy about a line 1.84, 3.22,
-//     6.73 and 9.46 points below the baseline, its baseline 3.25, 6.79,
-//     12.46 and 18.07 points down, where the reflection drawn about the
-//     ink's bottom lies 8.6, 12.5, 20.6 and 29.3 points down: PowerPoint
-//     scales it with the size, about the baseline as Word does, by a rule
-//     one distance does not settle.
+// positive and finite scales nothing. A shadow's blur is not scaled; a
+// reflection moves by a rule of its own ([pptReflectionDist]), its blur
+// not scaled.
 func pptScale(size, full float64) float64 {
 	if !numeric.PositiveFinite(size) {
 		return 1
@@ -299,17 +290,61 @@ func glyphGlow(ctx context.Context, t *typeset.Text, gl *css.OfficeGlow, ink typ
 	return f, notes, err
 }
 
+// pptReflectionDist is what a run's reflection distance times its font
+// size is divided by: PowerPoint moves the copy of a run of size s whose
+// reflection lies d points away d s/15.2 points along its direction,
+// mirrored about a line half the downward part of that below the
+// baseline, as Word does at its own divisor ([wordReflectionDist]). See
+// [glyphReflection].
+//
+// # Corpus evidence
+//
+//   - probe, pptx: reflections 0, 4, 8 and 16 points away down of Calibri
+//     at 12, 24, 48 and 72 points put the top of the mirrored H's stems
+//     (the copy's baseline) 0.37, 3.23, 6.09, 11.82; 0.29, 6.74, 13.19,
+//     26.11; 0.15, 13.08, 26.01, 51.89; -0.02, 17.95, 37.36 and 74.76
+//     points below the baseline. Less the reading at no distance, which a
+//     blur of half a point moves, the shift is linear in the distance at
+//     each size, 0.715, 1.613, 3.233 and 4.67 points a point: d s/15.2
+//     within 1.35 points at 16 points away, 0.08 a point of distance.
+//   - probe, pptx: the fade along those stems runs from half the shift
+//     below the baseline (0.47 of it, 3.04 to 34.82 points down) to 0.455
+//     of the run's box, 0.95 sizes up from the baseline, grown down by
+//     half the shift: 10.2, 20.4 and 31.0 points long at no distance at
+//     24, 48 and 72 points, the rule 10.4, 20.8 and 31.2; 50.4 points at
+//     16 points away at 72 points, the rule 48.3.
+const pptReflectionDist = 15.2
+
 // glyphReflection returns the reflection of t, the glyphs in their
-// colour, as PowerPoint draws a shape's: drawn by [effect.Paint] through
-// the reflection's map about ink, blurred by a Gaussian of a third of its
-// radius, faded from its start opacity to its end opacity between its
-// positions along its fade direction across the copy.
+// colour, as PowerPoint draws a run's: the run's box, [wordRunBox] sizes
+// up from the baseline across the glyphs' ink, grown down to a line half
+// the copy's shift below the baseline ([pptReflectionDist]), mirrored
+// about that line by the reflection's map, so the copy lies the whole
+// shift down, cut off above the line; what is left of the distance along
+// the direction moves it as a shape's reflection moves. The copy is drawn
+// by [effect.Paint], blurred by a Gaussian of a third of its radius and
+// faded from its start opacity to its end opacity between its positions
+// across the grown box.
 func glyphReflection(ctx context.Context, t *typeset.Text, rf *css.OfficeReflection, ink typeset.Rect, pixels *effect.Page) (typeset.Fragment, Notes, error) {
 	if !(rf.StartAlpha > 0) && !(rf.EndAlpha > 0) {
 		return nil, Notes{}, nil
 	}
-	mirror := glyphMatrix(ink, rf.Align, rf.SX, rf.SY, rf.KX, rf.KY, rf.Dist, rf.Dir)
-	copied := MapRect(ink, mirror)
+	shift := reflectionShift(rf, t.Size, pptReflectionDist)
+	b := ink
+	if h := float64(wordRunBox * t.Size); numeric.PositiveFinite(h) {
+		b.Y, b.Height = t.Origin.Y-h, h
+	}
+	b.Height += float64(shift / 2)
+	sin, cos := sincosDeg(rf.Dir)
+	dist := float64(radius(rf.Dist)*min(t.Size, maxFontSize)) / pptReflectionDist
+	dx, dy := float64(dist*cos), float64(dist*sin)-shift
+	mirror := mul(translate(dx, dy), skewScale(b, rf.Align, rf.SX, rf.SY, rf.KX, rf.KY))
+	fade := mapRect(b, mirror)
+	copied := mapRect(ink, mirror)
+	if top := fade.Y; copied.Y < top {
+		copied.Height = max(copied.Height-(top-copied.Y), 0)
+		copied.Y = top
+	}
 	blurRad := radius(rf.Blur)
 	g, notes, ok := take(Grow(copied, blurRad), blurRad/3, 0, pixels)
 	if !ok {
@@ -327,7 +362,7 @@ func glyphReflection(ctx context.Context, t *typeset.Text, rf *css.OfficeReflect
 	if err := BlurEdge(ctx, s, effect.GaussianKernel(g.Span(blurRad/3))); err != nil {
 		return nil, Notes{}, err
 	}
-	x0, y0, x1, y1 := FadeLine(copied, rf)
+	x0, y0, x1, y1 := FadeLine(fade, rf)
 	px := g.Pixels()
 	sx0, sy0 := apply(px, x0, y0)
 	sx1, sy1 := apply(px, x1, y1)

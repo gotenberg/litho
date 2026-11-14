@@ -196,8 +196,15 @@ func WordRunReach(fx *css.OfficeEffects, size, descent float64) (above, below fl
 // size over [wordReflectionDist], the part of it along rf's direction
 // that points down.
 func wordReflectionShift(rf *css.OfficeReflection, size float64) float64 {
+	return reflectionShift(rf, size, wordReflectionDist)
+}
+
+// reflectionShift returns how far down a run's reflection rf moves the
+// mirrored copy of a run of size points: its distance times the size over
+// per, the part of it along rf's direction that points down.
+func reflectionShift(rf *css.OfficeReflection, size, per float64) float64 {
 	s, _ := sincosDeg(rf.Dir)
-	return max(float64(s*float64(radius(rf.Dist)*min(size, maxFontSize)))/wordReflectionDist, 0)
+	return max(float64(s*float64(radius(rf.Dist)*min(size, maxFontSize)))/per, 0)
 }
 
 // wordEffects returns the effects of a run of Word's text of the given
