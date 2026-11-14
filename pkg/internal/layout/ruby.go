@@ -526,11 +526,7 @@ func (p *painter) annotations(l *lineBox, page int) {
 //     it is 40px from it; an annotation over a line takes the half-leading
 //     under the line before it, ruby or not.
 func (s *inlineState) rubyRoom(l *lineBox, room, under float64) float64 {
-	if s.root.rubyLine {
-		// A ruby nested in a base: the column holding it makes the room.
-		return 0
-	}
-	grow := max(l.annOver-max(room, 0), 0) + max(under-l.startRoom, 0)
+	grow := s.rubyGrowth(l, room, under)
 	if grow <= eps {
 		return 0
 	}
@@ -545,6 +541,38 @@ func (s *inlineState) rubyRoom(l *lineBox, room, under float64) float64 {
 		f.base += grow
 	}
 	return grow
+}
+
+// rubyGrowth returns how much rubyRoom grows the line l, given room and
+// under.
+func (s *inlineState) rubyGrowth(l *lineBox, room, under float64) float64 {
+	if s.root.rubyLine {
+		// A ruby nested in a base: the column holding it makes the room.
+		return 0
+	}
+	return max(l.annOver-max(room, 0), 0) + max(under-l.startRoom, 0)
+}
+
+// lowerLetter moves the initial letter f, float at of the formatting
+// context, down by grow, the room its first line grows by for the ruby
+// annotations over it: the letter's cap height sits on the line's, which
+// moves down with its content (CSS Inline 3, 4.5.4), as Chromium places
+// it.
+//
+// # Corpus evidence
+//
+//   - wpt: css-inline/initial-letter/initial-letter-block-position-drop-over-ruby,
+//     a 3-line letter beside a first line of 24px that a 10px annotation
+//     over its ruby grows by 8px starts 8px lower.
+func (s *inlineState) lowerLetter(f *box, at int, grow float64) {
+	if f == nil || grow <= eps {
+		return
+	}
+	f.shift(0, grow)
+	if at >= 0 && at < len(s.bc.floats) {
+		s.bc.floats[at].y0 += grow
+		s.bc.floats[at].y1 += grow
+	}
 }
 
 // rubyEnd returns how much the block of the inline formatting context

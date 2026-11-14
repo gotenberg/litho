@@ -214,3 +214,23 @@ func TestInitialLetter_Tab(t *testing.T) {
 		}
 	}
 }
+
+// TestInitialLetter_OverRuby checks an initial letter beside a first line
+// that the ruby annotation over it grows: the letter moves down with the
+// line's cap height (CSS Inline 3, 4.5.4), by the 10px the annotation
+// needs above a 10px line of 10px Ahem.
+//
+// # Corpus evidence
+//
+//   - wpt: css-inline/initial-letter/initial-letter-block-position-drop-over-ruby.
+func TestInitialLetter_OverRuby(t *testing.T) {
+	ruby := inlineSty(func(s *css.Style) { s.Display = css.Ruby })
+	rt := inlineSty(func(s *css.Style) { s.Display = css.RubyText })
+	p := el(sty(), letter("A", 3, 3), el(ruby, txt(ruby, "bb"), el(rt, txt(rt, "x"))), txt(sty(), " cc dd ee ff gg hh"))
+	res := runWith(t, doc(p), Options{Page: page(60, 200)})
+	for _, r := range texts(res, 1) {
+		if r.text == "A" && !near(r.y/css.Pt, 38) {
+			t.Errorf("letter's baseline at %v px, want 38", r.y/css.Pt)
+		}
+	}
+}

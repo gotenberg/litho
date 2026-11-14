@@ -897,7 +897,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				}
 				s.placeWordFloats(lp, at)
 			}
-			lettered := false
+			lettered, letterAt, letterBox := false, -1, (*box)(nil)
 			if letter := initialLetterAt(lp, pos); letter != nil && len(s.lines) == 0 && !s.placed[letter] {
 				// A paragraph that starts with an initial letter goes below
 				// the initial letters before it (CSS Inline 3, 4.9.2).
@@ -914,9 +914,9 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 					}
 				}
 				s.placed[letter] = true
-				e.layoutInitialLetter(letter, letterBlock(b, cb, indent), bc, top)
+				letterAt = e.layoutInitialLetter(letter, letterBlock(b, cb, indent), bc, top)
 				top += e.initialDrop(letter)
-				lettered = true
+				lettered, letterBox = true, letter
 			}
 			s.placeFloats(lp, pos, pos, top, mc, false)
 			lineIndent := 0.0
@@ -939,6 +939,9 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				// A float placed beside the content before it narrows the
 				// line, which is broken again beside it.
 				top, end, left, right, l = s.fitRubyLine(lp, lw, pos, lineIndent, top, lineStrut, room, under)
+			}
+			if lettered {
+				s.lowerLetter(letterBox, letterAt, s.rubyGrowth(l, room, under))
 			}
 			s.tail, s.moved = 0, false
 			if end == ln && isLastPara(d, p) {
