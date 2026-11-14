@@ -314,13 +314,20 @@ func (bg *bgPaint) layer(i int, l *css.BackgroundLayer, r typeset.Rect, radii [4
 	if !l.HasImage() || clipR.Width <= 0 || clipR.Height <= 0 {
 		return
 	}
-	area := r
+	area, abd, apd := r, bd, pd
+	if s := p.strip; s != nil && s.box == b && !clones(b.st) {
+		// CSS Backgrounds 3, 3.7 and 5.4 with box-decoration-break:
+		// slice: the image is positioned in the inline box's fragments
+		// laid end to end, and this fragment shows its part of it.
+		area = typeset.Rect{X: r.X - s.before, Y: r.Y, Width: s.total, Height: r.Height}
+		abd, apd = b.bd, b.pd
+	}
 	switch l.Origin {
 	case css.BorderEdge, css.TextEdge:
 	case css.PaddingEdge:
-		area, _ = insetRect(r, radii, bd)
+		area, _ = insetRect(area, radii, abd)
 	case css.ContentEdge:
-		area, _ = insetRect(r, radii, addSides(bd, pd))
+		area, _ = insetRect(area, radii, addSides(abd, apd))
 	}
 	if l.Attachment == css.AttachLocal {
 		area = p.localArea(b, area, r, pd)

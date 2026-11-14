@@ -40,3 +40,31 @@ func TestBackgroundLayers_PaintBottomUp(t *testing.T) {
 		_RRRR_
 		______`)
 }
+
+// TestBackgroundLayers_InlineSlicedAsOneStrip locks CSS Backgrounds 3,
+// 3.7 and CSS Fragmentation 3, 5.4: under box-decoration-break: slice
+// the background of an inline box broken over lines is positioned in its
+// fragments laid end to end, a 4px gradient red then blue showing its red
+// half on the first line and its blue half on the second; a cloned box
+// positions it in each fragment.
+func TestBackgroundLayers_InlineSlicedAsOneStrip(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		brk   css.BoxDecorationBreak
+		lines string
+	}{
+		{"slice", css.DecorationSlice, "RR\nRR\nBB\nBB"},
+		{"clone", css.DecorationClone, "RR\nRR\nRR\nRR"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			sp := inlineSty(func(s *css.Style) {
+				s.FontSize = px(2)
+				s.BoxDecorationBreak = tt.brk
+				s.Color = css.Color{}
+				s.BackgroundGradient = &css.Gradient{Angle: 90, Stops: gstops(red, 2.0, blue, 2.0)}
+			})
+			root := doc(el(sty(width(2), func(s *css.Style) { s.FontSize = px(2) }), el(sp, txt(sp, "X X"))))
+			assertPixels(t, run(t, root, page(2, 4)), 1, tt.lines)
+		})
+	}
+}

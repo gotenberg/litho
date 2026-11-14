@@ -1538,8 +1538,10 @@ func (p *painter) lineFrag(l *lineBox, f *inlineFrag, page int) {
 		bd[css.Right], pd[css.Right] = 0, 0
 		radii[css.TopRight], radii[css.BottomRight] = [2]float64{}, [2]float64{}
 	}
-	if f.box.st.BorderImage.HasImage() && (!f.left || !f.right) {
-		// A border image spans the inline box's fragments as one strip.
+	if (f.box.st.BorderImage.HasImage() || f.box.st.HasBackgroundImage() && !clones(f.box.st)) && (!f.left || !f.right) {
+		// A border image, and the background images under
+		// box-decoration-break: slice, span the inline box's fragments
+		// as one strip.
 		p.strip = p.imageStrip(f, r)
 		defer func() { p.strip = nil }()
 	}
