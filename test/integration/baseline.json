@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-14T21:26:52Z",
+  "captured_at": "2026-11-14T21:44:52Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9326,8 +9326,8 @@
     "libreoffice/docx": {
       "features": {
         "diff": {
-          "matched": 185,
-          "mismatched": 98,
+          "matched": 189,
+          "mismatched": 94,
           "skipped": 58,
           "metrics": {
             "convert_error": 0,
@@ -9744,11 +9744,11 @@
               "text_f1": 0.996
             },
             "ooxmlexport/FDO74774.docx": {
-              "layout": 0.5544,
+              "layout": 0.8411,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 0.9032
             },
             "ooxmlexport/FDO76248.docx": {
@@ -9768,7 +9768,7 @@
               "text_f1": 0.878
             },
             "ooxmlexport/FDO78590.docx": {
-              "layout": 0,
+              "layout": 0.5597,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10944,11 +10944,11 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo73247.docx": {
-              "layout": 0.6795,
+              "layout": 0.9334,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 0
             },
             "ooxmlexport/fdo73389.docx": {
@@ -11304,7 +11304,7 @@
               "text_f1": 1
             },
             "ooxmlimport/groupshape-fontname.docx": {
-              "layout": 0.682,
+              "layout": 0.9255,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11344,7 +11344,7 @@
               "text_f1": 1
             },
             "ooxmlimport/ink.docx": {
-              "layout": 0,
+              "layout": 0.9309,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11512,7 +11512,7 @@
               "text_f1": 1
             },
             "ooxmlimport/tdf105127.docx": {
-              "layout": 0,
+              "layout": 0.8557,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -11520,7 +11520,7 @@
               "text_f1": 1
             },
             "ooxmlimport/tdf105143.docx": {
-              "layout": 0,
+              "layout": 0.5063,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -23980,8 +23980,8 @@
     "libreoffice/ods": {
       "features": {
         "diff": {
-          "matched": 194,
-          "mismatched": 62,
+          "matched": 195,
+          "mismatched": 61,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -24366,7 +24366,7 @@
               "text_f1": 1
             },
             "sc/Sparklines.fods": {
-              "layout": 0.4894,
+              "layout": 0.9389,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -32184,7 +32184,7 @@
               "text_f1": 1
             },
             "odfexport/page-content-top.odt": {
-              "layout": 0.6819,
+              "layout": 0.6884,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -32825,7 +32825,7 @@
               "text_f1": 1
             },
             "odfimport/fdo75872_aoo40.odt": {
-              "layout": 0.3029,
+              "layout": 0.2942,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -32833,7 +32833,7 @@
               "text_f1": 1
             },
             "odfimport/fdo75872_ooo33.odt": {
-              "layout": 0.616,
+              "layout": 0.6101,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46501,11 +46501,11 @@
               "text_f1": 1
             },
             "sc/Sparklines.xlsx": {
-              "layout": 0.35,
+              "layout": 0.8847,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.2,
+              "strict": 0.6,
               "text_f1": 0.6644
             },
             "sc/Spill.xlsx": {
@@ -47789,7 +47789,7 @@
               "text_f1": 0.9492
             },
             "sc/tdf161365.xlsx": {
-              "layout": 0.9192,
+              "layout": 0.9422,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54478,12 +54478,12 @@
           },
           "scores": {
             "altchunks": {
-              "layout": 0,
+              "layout": 0.0866,
               "link_recall": 0,
-              "outline_recall": 0.3333,
+              "outline_recall": 0.6667,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.4235
+              "text_f1": 0.7238
             },
             "bibliography-citations": {
               "layout": 0.9466,
@@ -55550,7 +55550,7 @@
               "text_f1": 1
             },
             "shapes-vml": {
-              "layout": 0.8037,
+              "layout": 0.8269,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -69837,7 +69837,7 @@
               "text_f1": 1
             },
             "tracked-changes-bars-ref": {
-              "layout": 0.9391,
+              "layout": 0.9387,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -69853,7 +69853,7 @@
               "text_f1": 1
             },
             "tracked-changes-marked-ref": {
-              "layout": 0.947,
+              "layout": 0.9484,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -77252,7 +77252,7 @@
               "text_f1": 1
             },
             "real_dashboard": {
-              "layout": 0.9225,
+              "layout": 0.9232,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -77340,7 +77340,7 @@
               "text_f1": 1
             },
             "sparklines": {
-              "layout": 0.1371,
+              "layout": 0.481,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -98403,7 +98403,7 @@
               "text_f1": 0.995
             },
             "integration/stress017.docx": {
-              "layout": 0.2191,
+              "layout": 0.2189,
               "link_recall": 0,
               "outline_recall": 1,
               "pages": 0.5,
@@ -117122,8 +117122,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 4718,
-          "mismatched": 475,
+          "matched": 4719,
+          "mismatched": 474,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -119324,7 +119324,7 @@
             "css/css-display/display-flow-root-001.html": "pass",
             "css/css-display/display-flow-root-002.html": "pass",
             "css/css-display/display-flow-root-list-item-001.html": "fail",
-            "css/css-display/display-math-on-pseudo-elements-002.html": "fail",
+            "css/css-display/display-math-on-pseudo-elements-002.html": "pass",
             "css/css-display/run-in/counter-increment-applies-to-011.xht": "pass",
             "css/css-display/run-in/counter-reset-applies-to-011.xht": "pass",
             "css/css-display/run-in/font-style-applies-to-004.xht": "pass",
