@@ -581,3 +581,28 @@ func TestGrid_RowMovesPastCollapsedWhiteSpace(t *testing.T) {
 		_________
 		_________`)
 }
+
+// TestGrid_TableItemStretches holds a table grid item of auto width to CSS
+// Grid 1, 6.2: justify-self normal stretches it to its area, within its
+// max-width, and start keeps its fit-content width.
+func TestGrid_TableItemStretches(t *testing.T) {
+	t.Parallel()
+	cell := func() *Node { return tr(nil, part(css.TableCell, nil, el(sty(width(10), height(10))))) }
+	maxW := func(s *css.Style) { s.MaxWidth = css.Pts(px(50)) }
+	start := func(s *css.Style) { s.JustifyItems = css.BoxStart }
+	for _, tt := range []struct {
+		name string
+		grid *css.Style
+		tb   *Node
+		want float64
+	}{
+		{"stretched", gridBox(width(150)), table(nil, cell()), 150},
+		{"max-width", gridBox(width(150)), table(mods(maxW), cell()), 50},
+		{"start", gridBox(width(150), start), table(nil, cell()), 10},
+	} {
+		w := kid(t, boxes(t, doc(el(tt.grid, tt.tb)), page(200, 200)), 0, 0, 0)
+		if got := rect(w); got[2] != tt.want {
+			t.Errorf("%s: table item %v wide, want %v", tt.name, got[2], tt.want)
+		}
+	}
+}

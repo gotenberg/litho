@@ -551,6 +551,9 @@ func (l *gridLayout) itemWidth(it *gitem, aw float64) float64 {
 	switch {
 	case k.tpart == partWrapper:
 		w = e.wrapperWidth(k, aw, aw)
+		if k.tdata != nil && stretches(justifySelf(st, l.b.st), false) && !autoMargin {
+			w = max(w, e.stretchedTableWidth(k.tdata, aw, room))
+		}
 	case k.kind == kindReplaced:
 		if !set && stretches(justifySelf(st, l.b.st), true) && !autoMargin {
 			w = constrainWidth(k, room, aw)

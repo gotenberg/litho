@@ -521,6 +521,34 @@ func (e *engine) tableWidth(td *tableData, cbw, avail float64) float64 {
 	return max(used, lo)
 }
 
+// stretchedTableWidth returns the border box width of the table of td
+// stretched to room points, the width of its grid area less its margins,
+// in a containing block of width cbw: room within its max-width, when its
+// width is auto; 0 when its width is set, which [engine.tableWidth] then
+// decides. CSS Grid 1, 6.2 stretches a grid item with no preferred aspect
+// ratio under justify-self: normal, and CSS Tables 3 leaves a table no
+// exception: Chromium stretches it, never below its min-content width
+// (CSS 2.1, 17.5.2), which [engine.tableWidth] keeps.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) draws a table
+//     of auto width in a 150 pixel grid area 150 pixels wide, one of
+//     max-width 50px 50 pixels wide plus its borders, one of width 40px
+//     40 pixels wide, and under justify-items: start its max-content
+//     width.
+func (e *engine) stretchedTableWidth(td *tableData, cbw, room float64) float64 {
+	t := td.table
+	if t.st.Width.Kind != css.Auto {
+		return 0
+	}
+	w := room
+	if mx, ok := specWidth(t, t.st.MaxWidth, cbw); ok {
+		w = min(w, mx+hEdges(t))
+	}
+	return w
+}
+
 // wrapperWidth returns the width of the table wrapper w laid out in a
 // containing block of width cbw with avail points for its margin box: the
 // table box's border box width.
