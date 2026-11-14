@@ -1772,6 +1772,10 @@ func (e *engine) layoutAtomic(a *box, lcb cblock) {
 	e.noPaginate--
 	a.hasBaseline = false
 	switch td := a.tdata; {
+	case a.ortho && e.opts.BrowserRules:
+		// The lines of an orthogonal flow root give no baseline in its
+		// parent's writing mode: its baselines are synthesised from its
+		// margin box (CSS Writing Modes 4, 4.3; CSS Inline 3, 4.2.1).
 	case td != nil:
 		// An inline table's baseline is its first row's (CSS 2.1, 10.8.1).
 		if td.hasBaseline {

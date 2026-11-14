@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	"image/color"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -203,4 +204,27 @@ func TestWritingMode_HorizontalInsideVertical(t *testing.T) {
 		___BBB
 		______
 		______`)
+}
+
+// TestWritingMode_OrthogonalInlineBlockBaseline aligns an inline-block of
+// a vertical writing mode in a horizontal line by the bottom of its margin
+// box: its lines give no baseline in the line's writing mode (CSS Writing
+// Modes 4, 4.3).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (Gotenberg 9.4.1) sets the bottom of a
+//     vertical-rl inline-block 64px high on the baseline of the 16px Ahem
+//     text around it.
+func TestWritingMode_OrthogonalInlineBlockBaseline(t *testing.T) {
+	t.Parallel()
+	wm := func(s *css.Style) { s.WritingMode = css.VerticalRL }
+	ib := el(sty(wm, func(s *css.Style) { s.Display = css.InlineBlock }, height(20), bg(lime)), txt(inlineSty(wm), "X"))
+	root := doc(el(sty(), txt(inlineSty(), "X"), ib))
+	g := grid(render(t, runWith(t, root, Options{Page: page(40, 30), BrowserRules: true}), 1))
+	// The inline-block, one 10px column 20px high, stands on the baseline
+	// of the X before it, 8px below the top of its glyph.
+	if g[19][15] != 'G' || g[20][15] == 'G' || g[12][5] != 'K' || g[11][5] == 'K' {
+		t.Errorf("the inline-block does not end on the baseline:\n%s", strings.Join(g, "\n"))
+	}
 }
