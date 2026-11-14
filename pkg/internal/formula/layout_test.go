@@ -370,3 +370,27 @@ func TestRTL_MirrorsTheRow(t *testing.T) {
 		t.Fatalf("operator at %g in %g, want 20 in %g", x, b.Width, 35+plus.w)
 	}
 }
+
+// TestTable_ColumnSpan lets a cell of columnspan="2" span both columns
+// and centres it across them (MathML Core, 3.5.3; HTML Standard, the
+// algorithm for processing rows).
+func TestTable_ColumnSpan(t *testing.T) {
+	s := wpt(t, "fraction-axisheight7000-rulethickness1000")
+	st := mathStyle("fraction-axisheight7000-rulethickness1000", 10)
+	cell := func(w string) *Element { return el("mtd", space(w, "1em", "0")) }
+	wide := attrs(cell("1em"), "columnspan", "2")
+	root := el("math", el("mtable", el("mtr", cell("2em"), cell("3em")), el("mtr", wide)))
+	b := lay(t, s, el("math", root), st)
+	_, _, tab := childAt(b, 0, 0)
+	var xs []float64
+	for _, it := range tab.items {
+		if it.child != nil {
+			xs = append(xs, it.x)
+		}
+	}
+	// Columns 28 and 38 points wide: the spanning cell's 10-point content
+	// is centred in 66.
+	if len(xs) != 3 || !near(xs[2], 28) || !near(b.Width, 66) {
+		t.Fatalf("cell contents at %v in %g, want the third at 28 in 66", xs, b.Width)
+	}
+}
