@@ -2,6 +2,7 @@ package intconv
 
 import (
 	"errors"
+	"fmt"
 	goast "go/ast"
 	"go/build"
 	"go/importer"
@@ -14,6 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -42,60 +44,16 @@ var fitsMarker = regexp.MustCompile(`//.*\bfits u?int:`)
 func TestNarrowingConversionsAreClampedOrBounded(t *testing.T) {
 	t.Parallel()
 
-	fset := token.NewFileSet()
-	imp := importer.ForCompiler(fset, "source", nil)
-	var packages, covered int
+	mod := checkedModule(t)
+	var covered int
 	var offenders []string
-	for _, top := range []string{"pkg"} {
-		root := filepath.Join(moduleRoot, top)
-		err := filepath.WalkDir(root, func(dir string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if !d.IsDir() {
-				return nil
-			}
-			if name := d.Name(); dir != root && (name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")) {
-				return filepath.SkipDir
-			}
-			bp, err := build.Default.ImportDir(dir, 0)
-			if _, ok := errors.AsType[*build.NoGoError](err); ok {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			rel, err := filepath.Rel(moduleRoot, dir)
-			if err != nil {
-				return err
-			}
-			importPath := path.Join(modulePath, filepath.ToSlash(rel))
-
-			var files []*goast.File
-			for _, name := range bp.GoFiles {
-				f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.ParseComments)
-				if err != nil {
-					return err
-				}
-				files = append(files, f)
-			}
-			info := &types.Info{Types: map[goast.Expr]types.TypeAndValue{}}
-			conf := types.Config{Importer: imp}
-			if _, err := conf.Check(importPath, fset, files, info); err != nil {
-				t.Fatalf("type-check %s: %v", importPath, err)
-			}
-			packages++
-			if bp.Name == "intconv" {
-				return nil
-			}
-			n, found := narrowingConversions(fset, files, info)
-			covered += n
-			offenders = append(offenders, found...)
-			return nil
-		})
-		if err != nil {
-			t.Fatalf("walking %s: %v", root, err)
+	for _, pkg := range mod.packages {
+		if pkg.name == "intconv" {
+			continue
 		}
+		n, found := narrowingConversions(mod.fset, pkg.files, pkg.info)
+		covered += n
+		offenders = append(offenders, found...)
 	}
 
 	slices.Sort(offenders)
@@ -105,9 +63,97 @@ func TestNarrowingConversionsAreClampedOrBounded(t *testing.T) {
 
 	// Lower bounds under what pkg/ holds, so a guard that stopped seeing
 	// packages or conversions fails instead of passing.
-	if packages < 60 || covered < 300 {
-		t.Fatalf("guard saw %d packages and %d clamped or narrowing conversions; it no longer inspects the module", packages, covered)
+	if len(mod.packages) < 60 || covered < 300 {
+		t.Fatalf("guard saw %d packages and %d clamped or narrowing conversions; it no longer inspects the module", len(mod.packages), covered)
 	}
+}
+
+// checkedPackage is one package of the shipped code under pkg/, parsed with
+// its comments and type-checked from source.
+type checkedPackage struct {
+	name  string
+	files []*goast.File
+	info  *types.Info
+}
+
+// module is every package under pkg/, type-checked once for the guards of
+// this package.
+type module struct {
+	fset     *token.FileSet
+	packages []checkedPackage
+	err      error
+}
+
+var (
+	moduleOnce sync.Once
+	moduleMemo module
+)
+
+// checkedModule type-checks the non-test files of every package under pkg/,
+// once for all the guards that read them. The cmd/gen-* generators run on a
+// developer's machine only, and cannot import this package.
+//
+// A failed type check fails the guard: it would leave every operand untyped
+// and let the guards pass silently.
+func checkedModule(t *testing.T) *module {
+	t.Helper()
+	moduleOnce.Do(func() {
+		moduleMemo.fset = token.NewFileSet()
+		moduleMemo.err = typeCheckModule(&moduleMemo)
+	})
+	if moduleMemo.err != nil {
+		t.Fatal(moduleMemo.err)
+	}
+	return &moduleMemo
+}
+
+// typeCheckModule fills m with the packages under pkg/.
+func typeCheckModule(m *module) error {
+	imp := importer.ForCompiler(m.fset, "source", nil)
+	root := filepath.Join(moduleRoot, "pkg")
+	return filepath.WalkDir(root, func(dir string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		if name := d.Name(); dir != root && (name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")) {
+			return filepath.SkipDir
+		}
+		bp, err := build.Default.ImportDir(dir, 0)
+		if _, ok := errors.AsType[*build.NoGoError](err); ok {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(moduleRoot, dir)
+		if err != nil {
+			return err
+		}
+		importPath := path.Join(modulePath, filepath.ToSlash(rel))
+
+		var files []*goast.File
+		for _, name := range bp.GoFiles {
+			f, err := parser.ParseFile(m.fset, filepath.Join(dir, name), nil, parser.ParseComments)
+			if err != nil {
+				return err
+			}
+			files = append(files, f)
+		}
+		info := &types.Info{
+			Types:      map[goast.Expr]types.TypeAndValue{},
+			Uses:       map[*goast.Ident]types.Object{},
+			Selections: map[*goast.SelectorExpr]*types.Selection{},
+		}
+		conf := types.Config{Importer: imp}
+		if _, err := conf.Check(importPath, m.fset, files, info); err != nil {
+			return fmt.Errorf("type-check %s: %w", importPath, err)
+		}
+		m.packages = append(m.packages, checkedPackage{name: bp.Name, files: files, info: info})
+		return nil
+	})
 }
 
 // narrowingConversions returns how many narrowing conversions and
