@@ -7,9 +7,10 @@ import (
 	"regexp"
 	"regexp/syntax"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxPatternNesting bounds how deeply [translatePattern] descends into
@@ -237,7 +238,7 @@ func (t *patternTranslator) quantExact() (int, error) {
 	if t.pos == start {
 		return 0, fmt.Errorf("%w: quantifier without a count", errPatternSyntax)
 	}
-	n, err := strconv.Atoi(string(t.src[start:t.pos]))
+	n, err := intconv.Atoi(string(t.src[start:t.pos]))
 	if err != nil {
 		return 0, fmt.Errorf("%w: quantifier count: %w", errPatternTooLarge, err)
 	}

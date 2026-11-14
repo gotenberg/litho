@@ -12,8 +12,9 @@ import (
 	"maps"
 	"path"
 	"slices"
-	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // Load reads the XSD at rootPath from fsys, follows every xs:import
@@ -1802,7 +1803,7 @@ func occursOrDefault(raw string) int {
 	if raw == "unbounded" {
 		return MaxUnbounded
 	}
-	n, err := strconv.Atoi(raw)
+	n, err := intconv.Atoi(raw)
 	if err != nil {
 		return 1
 	}
@@ -1810,6 +1811,6 @@ func occursOrDefault(raw string) int {
 }
 
 func atoiSafe(raw string) int {
-	n, _ := strconv.Atoi(raw)
+	n, _ := intconv.Atoi(raw)
 	return n
 }
