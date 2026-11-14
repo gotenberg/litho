@@ -48,6 +48,13 @@ func (rd *renderer) stack(g *Group) stackedValues {
 			}
 		}
 	}
+	if g.Kind == Waterfall {
+		for i, raw := range sv.raw {
+			lo, hi := waterfallSpans(raw, g.Series[i].Subtotals)
+			sv.lo, sv.hi = append(sv.lo, lo), append(sv.hi, hi)
+		}
+		return sv
+	}
 	pos, neg := make([]float64, sv.n), make([]float64, sv.n)
 	separate := g.Kind == Bar
 	for _, raw := range sv.raw {
@@ -134,6 +141,10 @@ func (rd *renderer) series(g *Group, x, y *dim) []func() {
 		return rd.scatter(g, x, y)
 	case Bar:
 		return rd.bars(g, x, y)
+	case Waterfall:
+		labels := rd.bars(g, x, y)
+		rd.connectors(g, x, y)
+		return labels
 	case Area:
 		return rd.areas(g, x, y)
 	case Unsupported:

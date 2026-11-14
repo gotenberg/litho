@@ -134,6 +134,11 @@ const (
 	// series alone, its categories on the ticks, and no series; its
 	// legend keys are circles.
 	Unsupported
+	// Waterfall draws the points of a series as floating columns, each
+	// starting where the running total of the points before it ends, and
+	// its subtotal points as columns from the axis (MS-ODRAWXML, 2.24.4.21
+	// ST_SeriesLayout waterfall).
+	Waterfall
 )
 
 // String returns the kind's name, as warnings spell it.
@@ -157,6 +162,8 @@ func (k Kind) String() string {
 		return "radar"
 	case Unsupported:
 		return "unsupported"
+	case Waterfall:
+		return "waterfall"
 	}
 	return "unknown"
 }
@@ -278,6 +285,14 @@ type Series struct {
 	// counted into bins, which become the series' categories and values
 	// (MS-ODRAWXML, 2.24.3.5 CT_Binning).
 	Bins *Binning
+	// Subtotals are the indices of a waterfall series' points that are
+	// totals: their columns stand on the axis and the running total
+	// restarts from their value (MS-ODRAWXML, 2.24.3.90 CT_Subtotals).
+	Subtotals []int
+	// Connector, when set, joins the end of each column of a waterfall
+	// series to the start of the next (MS-ODRAWXML, 2.24.3.83
+	// CT_SeriesElementVisibilities connectorLines).
+	Connector *Stroke
 }
 
 // TrendKind is the regression a [Trendline] fits (ECMA-376 Part 1,

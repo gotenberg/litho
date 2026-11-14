@@ -36,6 +36,18 @@ func (rd *renderer) legendEntries(st TextStyle, maxW float64) []legendEntry {
 	n := 0
 	swapped := len(rd.c.Groups) > 0 && rd.c.Groups[0].Kind == Bar && rd.c.Groups[0].Horizontal
 	for _, g := range rd.c.Groups {
+		if g.Kind == Waterfall {
+			// A waterfall lists the kinds of its points.
+			for _, s := range g.Series {
+				for k, name := range waterfallNames {
+					if len(out) < maxLegendEntries && !s.NoLegend && !hidden[n] {
+						out = append(out, legendEntry{label: rd.measure(name, st, maxW), fill: rd.waterfallFill(s, k), border: s.Border})
+					}
+					n++
+				}
+			}
+			continue
+		}
 		// A pie lists its categories; another group whose points vary in
 		// colour does too.
 		vary := (g.Kind == Pie || g.Kind == Doughnut || g.VaryColors && len(g.Series) == 1) && len(g.Series) > 0

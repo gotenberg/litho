@@ -195,3 +195,30 @@ func hasWarning(c *chart.Chart, code warn.Code) bool {
 	}
 	return false
 }
+
+func TestChartExFromElement_Waterfall(t *testing.T) {
+	series := func(layoutPr string) string {
+		return chartExXML(cxData("0", "Sheet1!$B$2:$B$4", []string{"a", "b", "c"}, "4", "-1", "3"),
+			`<cx:plotArea><cx:plotAreaRegion><cx:series layoutId="waterfall"><cx:dataLabels pos="outEnd"><cx:visibility seriesName="0" categoryName="0" value="1"/></cx:dataLabels><cx:dataId val="0"/>`+
+				layoutPr+`</cx:series></cx:plotAreaRegion>`+cxAxes+`</cx:plotArea>`)
+	}
+	c := readChartEx(t, series(`<cx:layoutPr><cx:subtotals><cx:idx val="0"/><cx:idx val="2"/></cx:subtotals></cx:layoutPr>`), nil)
+	g := c.Groups[0]
+	if g.Kind != chart.Waterfall || c.Notice != nil || !c.Axes[0].BetweenCategories {
+		t.Fatalf("group %+v, notice %v: want a waterfall drawn without a notice", g, c.Notice)
+	}
+	s := g.Series[0]
+	if len(s.Subtotals) != 2 || s.Subtotals[1] != 2 {
+		t.Errorf("subtotals %v, want [0 2]", s.Subtotals)
+	}
+	if s.Connector == nil || s.Connector.Width != 0.75 {
+		t.Errorf("connector %+v, want a 0.75 pt line by default", s.Connector)
+	}
+	if !s.Labels.ShowValue || s.Labels.ShowCategory || s.Labels.Placement != chart.LabelOutsideEnd || !s.Labels.Flush {
+		t.Errorf("labels %+v, want values outside the end, flush", s.Labels)
+	}
+	c = readChartEx(t, series(`<cx:layoutPr><cx:visibility connectorLines="0"/></cx:layoutPr>`), nil)
+	if c.Groups[0].Series[0].Connector != nil {
+		t.Errorf("connector %+v, want none when the series hides them", c.Groups[0].Series[0].Connector)
+	}
+}

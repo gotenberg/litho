@@ -71,6 +71,9 @@ func (rd *renderer) fillOf(g *Group, s *Series, j int) *Paint {
 	if p := rd.point(s, j); p != nil && p.Fill != nil {
 		return p.Fill
 	}
+	if g.Kind == Waterfall && j >= 0 {
+		return rd.waterfallFill(s, rd.waterfallKind(s, j))
+	}
 	// A pie varies its colours over the series' fill; another kind only
 	// when the series has none (oox's SeriesConverter::createDataSeries).
 	if g.VaryColors && j >= 0 && (g.Kind == Pie || g.Kind == Doughnut || len(g.Series) == 1 && s.Fill == nil) {

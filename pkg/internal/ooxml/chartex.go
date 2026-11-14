@@ -205,6 +205,9 @@ func (x *chartExReader) read(root *Element) {
 	}
 	for i, s := range series {
 		g.Series = append(g.Series, x.series(s, i, histogram))
+		if g.Kind == chart.Waterfall {
+			x.waterfall(s, g.Series[i])
+		}
 	}
 	x.styleSeries(g.Series)
 	if len(series) > 0 {
@@ -225,7 +228,7 @@ func (x *chartExReader) read(root *Element) {
 			Style: chart.TextStyle{Families: []string{"Liberation Serif"}, Size: 10, Color: typeset.Black},
 			Frame: chart.Frame{Fill: &chart.Paint{Color: white}, Border: &chart.Stroke{Color: white}},
 		}
-		x.warn(warn.ContentUnsupported, warn.Omitted, "an Office 2016 chart of a kind other than a histogram is drawn without its series")
+		x.warn(warn.ContentUnsupported, warn.Omitted, "an Office 2016 chart of a kind the reader does not draw is drawn without its series")
 	}
 	x.readTitle(cxChild(ch, "title"))
 	for _, s := range g.Series {
@@ -611,19 +614,70 @@ func (x *chartExReader) dataLabels(e *Element) chart.Labels {
 
 // kindOf returns the kind a chart of the cx:series series is drawn as
 // (MS-ODRAWXML, 2.24.4.21 ST_SeriesLayout): bars for a histogram, every
-// series a clusteredColumn with cx:binning; [chart.Unsupported] for the
-// other kinds and their mixes.
+// series a clusteredColumn with cx:binning; a waterfall when every series
+// is one; [chart.Unsupported] for the other kinds and their mixes.
 func (x *chartExReader) kindOf(series []*Element) chart.Kind {
 	if len(series) == 0 {
 		return chart.Unsupported
 	}
-	columns := true
+	columns, waterfall := true, true
 	for _, s := range series {
 		id := attrOr(s, "layoutId")
 		columns = columns && id == "clusteredColumn" && cxChild(cxChild(s, "layoutPr"), "binning") != nil
+		waterfall = waterfall && id == "waterfall"
 	}
-	if columns {
+	switch {
+	case columns:
 		return chart.Bar
+	case waterfall:
+		return chart.Waterfall
 	}
 	return chart.Unsupported
+}
+
+// maxSubtotals caps the subtotal indices read from a waterfall series.
+// Anti-DoS guard, not spec-mandated: a subtotal names a point, and a
+// series keeps at most chart.MaxPoints.
+const maxSubtotals = chart.MaxPoints
+
+// waterfall reads the waterfall properties of the cx:series e into s: its
+// subtotal points (MS-ODRAWXML, 2.24.3.90 CT_Subtotals) and its connector
+// lines, shown unless its cx:visibility hides them (2.24.3.83
+// CT_SeriesElementVisibilities connectorLines).
+func (x *chartExReader) waterfall(e *Element, s *chart.Series) {
+	lp := cxChild(e, "layoutPr")
+	for _, idx := range cxChild(lp, "subtotals").Kids() {
+		if len(s.Subtotals) >= maxSubtotals {
+			break
+		}
+		if idx.Is(NSChartEx, "idx") {
+			if v, ok := Int(attrOr(idx, "val")); ok && v >= 0 && v < chart.MaxPoints {
+				s.Subtotals = append(s.Subtotals, v)
+			}
+		}
+	}
+	if v, ok := cxChild(lp, "visibility").Attr("connectorLines"); !ok || v == "1" || v == "true" {
+		s.Connector = x.connectorLine()
+	}
+}
+
+// connectorLine returns the line of a waterfall's connectors: the chart
+// style's series line, else a theme line in the text colour.
+//
+// # Corpus evidence
+//
+//   - litho/docx: Word draws charts-chartex's connectors 0.75 pt wide in
+//     black, its chart style giving the series line no line.
+//   - litho/xlsx: Excel draws charts_chartex's 0.38 pt wide at the
+//     sheet's 51 per cent print scale.
+func (x *chartExReader) connectorLine() *chart.Stroke {
+	tx, _ := x.theme.Color("tx1")
+	def := &chart.Stroke{Color: toTypeset(tx), Width: themeLineWidth}
+	if x.style == nil {
+		return def
+	}
+	if l, ok := x.styleLine("seriesLine", tx); ok && l != nil {
+		return l
+	}
+	return def
 }
