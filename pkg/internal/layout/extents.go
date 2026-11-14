@@ -16,13 +16,17 @@ func (e *engine) extents(rb *box, n int) map[string]typeset.Rect {
 		if b.id != "" && b.laidOut && b.kind != kindInline && b.kind != kindText && b.kind != kindBreak {
 			if _, ok := out[b.id]; !ok {
 				x, y := toFlow(b, b.x, b.y)
-				d := e.dest(clamp(x), max(clamp(y), 0))
+				d := e.flowDest(clamp(x), max(clamp(y), 0))
 				if d.Page <= n {
-					out[b.id] = typeset.Rect{
+					r := typeset.Rect{
 						X: d.X + b.pd[css.Left], Y: d.Y + b.pd[css.Top],
 						Width:  max(b.borderW()-b.pd[css.Left]-b.pd[css.Right], 0),
 						Height: max(b.borderH()-b.pd[css.Top]-b.pd[css.Bottom], 0),
 					}
+					if e.turn != css.HorizontalTB {
+						r = turnRect(e.box(d.Page-1), e.turn, r)
+					}
+					out[b.id] = r
 				}
 			}
 		}

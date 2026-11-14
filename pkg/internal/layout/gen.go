@@ -37,7 +37,7 @@ type genCtx struct {
 // generate builds the box tree of root (CSS 2.1, 9.2). The root box is a
 // block box whatever the root's display (CSS 2.1, 9.7).
 func (e *engine) generate(root *Node) *box {
-	ctx := genCtx{elem: e.root, structDepth: 1, lang: e.opts.Lang}
+	ctx := genCtx{elem: e.root, structDepth: 1, lang: e.opts.Lang, vertical: e.turn != css.HorizontalTB, frame: e.turn}
 	st := root.Style
 	if st == nil {
 		st = css.Initial()

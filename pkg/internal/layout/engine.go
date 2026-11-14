@@ -93,6 +93,10 @@ type engine struct {
 	pageFrags []int
 	// geom is where the pages cut the flow.
 	geom geometry
+	// turn is the vertical principal writing mode of a document whose
+	// flow is laid out on turned pages (turn.go), HorizontalTB for one
+	// laid out on the paper.
+	turn css.WritingMode
 	// rtlRoot reports a root laid out right to left, whose first page is
 	// a left page.
 	rtlRoot bool

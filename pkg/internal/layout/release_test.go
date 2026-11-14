@@ -46,7 +46,7 @@ func assertReleaseKeepsOutput(t testing.TB, root *Node, o Options, res *Result) 
 // the engine and the root box.
 func layoutEngine(t testing.TB, root *Node, pb PageBox, p releasePolicy) (*engine, *box) {
 	t.Helper()
-	e, rb, err := layoutFlow(context.Background(), root, ahem(t), Options{Page: pb, release: p}, pb, nil, nil)
+	e, rb, err := layoutFlow(context.Background(), root, ahem(t), Options{Page: pb, release: p}, pb, nil, nil, css.HorizontalTB)
 	if err != nil {
 		t.Fatalf("layoutFlow: %v", err)
 	}

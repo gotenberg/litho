@@ -28,6 +28,10 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	if err := checkPage(opts.Page); err != nil {
 		return nil, err
 	}
+	turn := principalMode(root, opts)
+	if turn.Vertical() {
+		opts = turnedOptions(opts, turn)
+	}
 	if opts.PageAt != nil {
 		// A pass after the first asks for the same pages again: each
 		// index is asked once.
@@ -54,7 +58,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	for pass := 0; ; pass++ {
 		var err error
 		prev := e
-		e, rb, err = layoutFlow(ctx, root, fonts, opts, first, seeds, chains)
+		e, rb, err = layoutFlow(ctx, root, fonts, opts, first, seeds, chains, turn)
 		prev.release()
 		if err != nil {
 			return nil, err
@@ -89,6 +93,11 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 		}
 	}
 	res := &Result{Structure: e.root, ContentWidth: e.overflowRight(rb)}
+	if e.turn != css.HorizontalTB {
+		// A turned flow overflows along the paper's height, which no
+		// shrink to fit the paper's width answers.
+		res.ContentWidth = 0
+	}
 	used := map[*typeset.StructElem]bool{}
 	res.Pages = e.assemble(disp, canvas, rb, used)
 	if len(res.Pages) > e.maxPages {
@@ -265,8 +274,16 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 		e.paintCanvas(pg, canvas, rb, pb, k)
 		canvasEnd := len(pg.Content)
 		e.paintFrame(pg, pb)
+		var paper map[typeset.Fragment]bool
 		if e.opts.MarginContent != nil {
-			pg.Content = append(pg.Content, e.opts.MarginContent(e.infoOf(k), n)...)
+			mc := e.opts.MarginContent(e.infoOf(k), n)
+			if e.turn != css.HorizontalTB {
+				paper = make(map[typeset.Fragment]bool, len(mc))
+				for _, f := range mc {
+					paper[f] = true
+				}
+			}
+			pg.Content = append(pg.Content, mc...)
 		}
 		if e.opts.MarginLinks != nil {
 			for _, l := range e.opts.MarginLinks(e.infoOf(k)) {
@@ -318,6 +335,10 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 			pg.Content = append(append(pg.Content[:sheet], e.rootGroupOf(rb, content, flow, k)), rest...)
 		}
 		e.assembleNotes(pg, k, pb, used)
+		if e.turn != css.HorizontalTB {
+			e.turnPage(pg, pb, sheet, paper)
+			pb = paperBox(pb, e.turn)
+		}
 		trim(pg, pb, sheet)
 		pages[k] = pg
 	}
@@ -741,8 +762,19 @@ func (e *engine) paintPageBackground(pg *typeset.Page, pb PageBox) {
 	})
 }
 
-// dest converts a flow position to a destination.
+// dest converts a flow position to a destination, on the paper of a
+// turned flow.
 func (e *engine) dest(x, y float64) typeset.Dest {
+	d := e.flowDest(x, y)
+	if e.turn != css.HorizontalTB {
+		d.X, d.Y = turnPoint(e.box(d.Page-1), e.turn, d.X, d.Y)
+	}
+	return d
+}
+
+// flowDest converts a flow position to a destination on the sheet the
+// flow is laid out on.
+func (e *engine) flowDest(x, y float64) typeset.Dest {
 	p := e.pageOf(y)
 	pb := e.box(p)
 	return typeset.Dest{Page: p + 1, X: pb.Bleed + pb.Margin[css.Left] + x, Y: pb.Bleed + pb.Margin[css.Top] + y - e.pageTop(p)}
@@ -801,6 +833,9 @@ func (e *engine) links(res *Result, links []pendingLink, used map[*typeset.Struc
 				continue
 			}
 			l.Rect = typeset.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + y0 - top, Width: r.Width, Height: y1 - y0}
+			if e.turn != css.HorizontalTB {
+				l.Rect = turnRect(pb, e.turn, l.Rect)
+			}
 			if l.Parent != nil {
 				used[l.Parent] = true
 			}
@@ -867,10 +902,12 @@ func dropPrunedDests(root *typeset.StructElem, res *Result) {
 // layoutFlow lays the tree rooted at root out on pages whose first is first,
 // the rectangles of seeds kept clear as the wrapped boxes of the previous
 // pass ask (framewrap.go), the links of chains painting what chains
-// holds for them (chain.go), and returns the engine and the root box.
-func layoutFlow(ctx context.Context, root *Node, fonts *text.Fonts, opts Options, first PageBox, seeds []wrapSeed, chains map[*Node]*chainLink) (*engine, *box, error) {
+// holds for them (chain.go), its flow turned onto the paper when turn is
+// vertical (turn.go), and returns the engine and the root box.
+func layoutFlow(ctx context.Context, root *Node, fonts *text.Fonts, opts Options, first PageBox, seeds []wrapSeed, chains map[*Node]*chainLink, turn css.WritingMode) (*engine, *box, error) {
 	areaW, areaH := areaOf(first)
 	e := newEngine(ctx, fonts, opts, areaW, areaH)
+	e.turn = turn
 	e.wraps, e.chains = seeds, chains
 	for _, s := range seeds {
 		if s.node != nil {
