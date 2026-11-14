@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/gotenberg/litho/pkg/internal/annotation"
 	"github.com/gotenberg/litho/pkg/internal/bookmarks"
@@ -234,16 +235,17 @@ func checkCMYKProfile(profile []byte) error {
 // concurrently on the same Reader. [Reader.Close] and [Reader.ClearCache]
 // must not be called concurrently with other Reader methods.
 type Reader struct {
-	doc         *document.Document
-	ocr         models.OCREngine
-	closer      io.Closer // non-nil when opened via OpenFile
-	pagesOnce   sync.Once
-	cachedPages []*document.Page
-	pagesErr    error
-	ciiSchema   *xsd.Schema        // non-nil when WithCIISchemas was set
-	schSchema   *schematron.Schema // non-nil when WithSchematron was set
-	schPhase    string             // phase argument to WithSchematron
-	lenient     bool               // relax Factur-X consumer-path tolerances (WithLenient)
+	doc    *document.Document
+	ocr    models.OCREngine
+	closer io.Closer // non-nil when opened via OpenFile
+	// pagesMu serializes the walks of the page tree; pages holds the result
+	// of the first one that ran to its end (see [Reader.resolvePages]).
+	pagesMu   sync.Mutex
+	pages     atomic.Pointer[resolvedPages]
+	ciiSchema *xsd.Schema        // non-nil when WithCIISchemas was set
+	schSchema *schematron.Schema // non-nil when WithSchematron was set
+	schPhase  string             // phase argument to WithSchematron
+	lenient   bool               // relax Factur-X consumer-path tolerances (WithLenient)
 	// encryptedOrigin is set on a Reader a [Pipeline] opened over an
 	// intermediate file it wrote from an encrypted document, directly or
 	// through earlier intermediate files (see [Reader.derivesFromEncrypted]).
@@ -269,9 +271,7 @@ func (r *Reader) Close() error {
 //
 // ClearCache must not be called concurrently with other Reader methods.
 func (r *Reader) ClearCache() {
-	r.pagesOnce = sync.Once{} // zero value is a valid, unlocked Once
-	r.cachedPages = nil
-	r.pagesErr = nil
+	r.pages.Store(nil)
 	r.doc.ClearCaches()
 }
 
@@ -2166,19 +2166,40 @@ func (r *Reader) SalvagedStreams(ctx context.Context) (_ []models.StreamDiagnost
 	return out, nil
 }
 
-// resolvePages retrieves the catalog and resolves all pages. The result is
-// memoized after the first successful call since the document is read-only
-// after Open. Safe for concurrent use.
+// resolvedPages is what a walk of a document's page tree found: its pages,
+// or the error that says the document has no page tree to walk.
+type resolvedPages struct {
+	pages []*document.Page
+	err   error
+}
+
+// resolvePages retrieves the catalog and resolves all pages. The result of
+// the first walk that ran to its end is kept, the document being read-only
+// after Open, its error included: a malformed page tree stays malformed. An
+// error under a context that ended is not kept, being the context's doing
+// or impossible to tell from it, and the next caller's context may live.
+// Safe for concurrent use.
 func (r *Reader) resolvePages(ctx context.Context) ([]*document.Page, error) {
-	r.pagesOnce.Do(func() {
-		catalog, err := document.ResolveCatalog(ctx, r.doc)
-		if err != nil {
-			r.pagesErr = err
-			return
-		}
-		r.cachedPages, r.pagesErr = document.ResolvePages(ctx, r.doc, catalog)
-	})
-	return r.cachedPages, r.pagesErr
+	if found := r.pages.Load(); found != nil {
+		return found.pages, found.err
+	}
+	r.pagesMu.Lock()
+	defer r.pagesMu.Unlock()
+	if found := r.pages.Load(); found != nil {
+		return found.pages, found.err
+	}
+	var found resolvedPages
+	catalog, err := document.ResolveCatalog(ctx, r.doc)
+	if err != nil {
+		found.err = err
+	} else {
+		found.pages, found.err = document.ResolvePages(ctx, r.doc, catalog)
+	}
+	if found.err != nil && ctx.Err() != nil {
+		return nil, found.err
+	}
+	r.pages.Store(&found)
+	return found.pages, found.err
 }
 
 // resolvePage resolves the page tree and returns the page at the given
