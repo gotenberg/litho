@@ -52,14 +52,23 @@ var roles = map[atom.Atom]string{
 	atom.Rb: "RB", atom.Rt: "RT", atom.Rp: "RP",
 }
 
-// skipped are the elements that draw nothing in a static rendering, with
-// their content: metadata, scripts, inert templates, and noscript, which a
-// browser running scripts hides (HTML Standard, 4.12.2). Immutable lookup
-// table.
+// skipped are the elements that draw nothing in a static rendering
+// whatever their style, with their content: void metadata, inert
+// templates, and noscript, which a browser running scripts hides (HTML
+// Standard, 4.12.2). head, title, style, script and datalist are not
+// among them: the user agent sheet hides them with display: none (HTML
+// Standard, 15.3.1), and an author who displays them sees their text, as
+// Chromium draws it. Immutable lookup table.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws the text of
+//     head, title, style and script under display: block, and of
+//     datalist under display: contents; template and noscript stay
+//     hidden.
 var skipped = map[atom.Atom]bool{
-	atom.Head: true, atom.Script: true, atom.Style: true, atom.Template: true, atom.Noscript: true,
-	atom.Title: true, atom.Meta: true, atom.Link: true, atom.Base: true,
-	atom.Source: true, atom.Track: true, atom.Param: true, atom.Datalist: true, atom.Area: true,
+	atom.Template: true, atom.Noscript: true, atom.Meta: true, atom.Link: true, atom.Base: true,
+	atom.Source: true, atom.Track: true, atom.Param: true, atom.Area: true,
 }
 
 // unsupported are the elements whose content is not drawn, with a
