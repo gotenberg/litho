@@ -1591,10 +1591,17 @@ func (e *engine) layoutItemAt(k *box, x, y, w, h float64, hDef bool, pcb cblock)
 
 // flexBaselines sets the first and last main-axis baselines of the flex
 // container b (CSS Flexbox 1, 8.5): in a row, the shared baseline of the
-// first line's baseline-aligned items, else the baseline of its
-// startmost item, the last line's alike; in a column, the first item's
-// first baseline and the last item's last one. An item without a
+// startmost line's baseline-aligned items, else the baseline of its
+// startmost item, the endmost line's alike, startmost meaning nearest the
+// block start, the last line under wrap-reverse; in a column, the first
+// item's first baseline and the last item's last one. An item without a
 // baseline lends its border box's bottom edge.
+//
+// # Corpus evidence
+//
+//   - wpt: css-flexbox/flexbox-baseline-multi-line-horiz-004 and
+//     flex-order-wrap-reverse-baseline: the pinned Chromium aligns the
+//     text beside an inline-flex wrap-reverse container with its top line.
 func (e *engine) flexBaselines(b *box, lines []*flexLine, ax flexAxes) {
 	fd := b.flex
 	if len(lines) == 0 || len(lines[0].items) == 0 {
@@ -1625,8 +1632,15 @@ func (e *engine) flexBaselines(b *box, lines []*flexLine, ax flexAxes) {
 		}
 		return of(it, last)
 	}
-	fd.first, fd.hasFirst = pick(lines[0], false)-b.y, true
-	lastLine := lines[len(lines)-1]
+	firstLine, lastLine := lines[0], lines[len(lines)-1]
+	if ax.row && !ax.crossStartIsStart() {
+		// The startmost line is the one nearest the block start: the
+		// last one under wrap-reverse.
+		firstLine, lastLine = lastLine, firstLine
+	}
+	if len(firstLine.items) > 0 {
+		fd.first, fd.hasFirst = pick(firstLine, false)-b.y, true
+	}
 	if len(lastLine.items) > 0 {
 		fd.last, fd.hasLast = pick(lastLine, true)-b.y, true
 	}
