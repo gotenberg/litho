@@ -31,8 +31,8 @@ func DrawingColor(e *Element, scheme SchemeResolver) (css.Color, bool) {
 // applied in document order, as Office applies them: alpha, alphaMod
 // and alphaOff; red, green and blue with their Mod and Off in linear RGB;
 // hue, sat and lum with their Mod and Off in HSL; tint and shade in linear
-// RGB; gray and comp; inv in linear RGB. gamma and invGamma are ignored.
-// false when c is no colour choice or names no colour.
+// RGB; gray and comp; inv in linear RGB; gamma and invGamma on the sRGB
+// curve. false when c is no colour choice or names no colour.
 func DrawingColorChoice(c *Element, scheme SchemeResolver) (css.Color, bool) {
 	if c == nil || c.Space != NSA {
 		return css.Color{}, false
@@ -179,6 +179,10 @@ func transformColor(col css.Color, c *Element) css.Color {
 			col.R, col.G, col.B = g, g, g
 		case "inv":
 			col.R, col.G, col.B = invComponent(col.R), invComponent(col.G), invComponent(col.B)
+		case "gamma":
+			col.R, col.G, col.B = gammaShift(col.R), gammaShift(col.G), gammaShift(col.B)
+		case "invGamma":
+			col.R, col.G, col.B = gammaIn(col.R), gammaIn(col.G), gammaIn(col.B)
 		}
 	}
 	return col
@@ -193,6 +197,18 @@ func transformColor(col css.Color, c *Element) css.Color {
 //     248,235,179; the inverse in linear light is 248,235,179, the
 //     inverse of the sRGB components 187,141,59.
 func invComponent(c float64) float64 { return gammaOut(1 - gammaIn(c)) }
+
+// gammaShift applies the sRGB gamma shift of a gamma transform (ECMA-376
+// Part 1, 20.1.2.3.8 gamma) to one component: the component read as
+// linear light and encoded on the sRGB curve. invGamma (20.1.2.3.18)
+// decodes it, as [gammaIn] does.
+//
+// # Corpus evidence
+//
+//   - litho/pptx fill-solid: PowerPoint fills 4472C4 under gamma with
+//     141,178,227 and under invGamma with 15,43,141: the sRGB encoding and
+//     decoding of the components give both exactly.
+func gammaShift(c float64) float64 { return gammaOut(c) }
 
 // tintComponent tints one sRGB component towards white by 1-t of the way
 // in linear RGB (ECMA-376 Part 1, 20.1.2.3.34 tint).
