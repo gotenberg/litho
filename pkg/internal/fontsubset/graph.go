@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxDirectDepth caps how deep the census descends through direct
@@ -209,7 +210,7 @@ func (g *graph) child(n node, key string) (node, bool) {
 	var v ast.PdfObject
 	switch c := n.val.(type) {
 	case ast.PdfArray:
-		i, err := strconv.Atoi(key)
+		i, err := intconv.Atoi(key)
 		if err != nil || i < 0 || i >= len(c) {
 			return node{}, false
 		}

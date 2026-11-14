@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -314,7 +313,7 @@ func numberedGlyph(name string) (int, bool) {
 		if !ok || rest == "" {
 			continue
 		}
-		n, err := strconv.Atoi(rest)
+		n, err := intconv.Atoi(rest)
 		if err == nil && n >= 0 {
 			return n, true
 		}

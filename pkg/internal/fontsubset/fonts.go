@@ -2,10 +2,10 @@ package fontsubset
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // programKeys are the font descriptor entries that hold an embedded font
@@ -67,7 +67,7 @@ func (w *walk) programUsers(num int) ([]programUser, string) {
 func (w *walk) descendantOf(font node) ([]node, string) {
 	var tops []node
 	for _, h := range w.g.holders(font.at) {
-		if _, err := strconv.Atoi(h.key); err != nil {
+		if _, err := intconv.Atoi(h.key); err != nil {
 			return nil, fmt.Sprintf("a CIDFont is held by /%s", h.key)
 		}
 		for _, ah := range w.g.holders(h.container) {
