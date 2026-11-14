@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // matchEmbeddedCompliance matches the two rules requiring an embedded file to
@@ -58,7 +58,7 @@ func parseEmbeddedObjectContext(s string) (objNum int, path string, ok bool) {
 	}
 	label := s[len(prefix):end]
 	num, path, _ := strings.Cut(label, " ")
-	objNum, err := strconv.Atoi(num)
+	objNum, err := intconv.Atoi(num)
 	if err != nil || objNum <= 0 {
 		return 0, "", false
 	}

@@ -7,13 +7,13 @@ import (
 	"maps"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // streamFileKeys are the three keys every part of ISO 19005 forbids on a stream
@@ -56,7 +56,7 @@ func parseStreamKeysContext(s string) (int, []ast.PdfName, bool) {
 	if m == nil {
 		return 0, nil, false
 	}
-	objNum, err := strconv.Atoi(m[1])
+	objNum, err := intconv.Atoi(m[1])
 	if err != nil || objNum <= 0 {
 		return 0, nil, false
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxDerivedHeadingLevel is the deepest level the heading repair writes. ISO
@@ -366,7 +367,7 @@ func isNumberedHeading(s ast.PdfName) bool {
 	if len(s) < 2 || s[0] != 'H' || s[1] == '0' {
 		return false
 	}
-	n, err := strconv.Atoi(string(s[1:]))
+	n, err := intconv.Atoi(string(s[1:]))
 	return err == nil && n > 0
 }
 

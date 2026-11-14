@@ -8,13 +8,13 @@ import (
 	"maps"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/xmp"
 )
 
@@ -934,7 +934,7 @@ func claimedPDFAPart(buf []byte) int {
 		if n.NS != pdfaidNS || n.Name != "part" || n.Kind != compliance.XMPSimple {
 			continue
 		}
-		if part, err := strconv.Atoi(strings.TrimSpace(n.Value)); err == nil && part >= 1 && part <= 4 {
+		if part, err := intconv.Atoi(strings.TrimSpace(n.Value)); err == nil && part >= 1 && part <= 4 {
 			return part
 		}
 	}
@@ -1430,7 +1430,7 @@ func identificationValueType(n *compliance.XMPNode) (string, bool) {
 		return "", false
 	}
 	if vt == "Integer" {
-		if _, err := strconv.Atoi(strings.TrimSpace(n.Value)); err != nil {
+		if _, err := intconv.Atoi(strings.TrimSpace(n.Value)); err != nil {
 			return "Text", true
 		}
 	}

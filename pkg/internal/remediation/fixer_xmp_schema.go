@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // matchXMPSchema matches XMP predefined-schema validation violations:
@@ -436,7 +436,7 @@ func xmpPropertyValues(xmp []byte, nsURI, localName string) map[xmpPropertyValue
 func parseXMPSchemaTarget(s string) (objNum int, prop xmpSchemaProperty, ok bool) {
 	if rest, found := strings.CutPrefix(s, "object "); found {
 		num, tail, cut := strings.Cut(rest, ": ")
-		n, err := strconv.Atoi(num)
+		n, err := intconv.Atoi(num)
 		if !cut || err != nil || n <= 0 {
 			return 0, xmpSchemaProperty{}, false
 		}
@@ -477,7 +477,7 @@ func namesComponentPacket(v compliance.Violation) bool {
 		return false
 	}
 	num, _, cut := strings.Cut(rest, ": ")
-	n, err := strconv.Atoi(num)
+	n, err := intconv.Atoi(num)
 	return cut && err == nil && n > 0
 }
 

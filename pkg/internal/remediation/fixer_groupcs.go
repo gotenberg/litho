@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // groupCSIsDevice reports whether a transparency group's /CS object is a device
@@ -87,7 +87,7 @@ func flaggedPages(violations []compliance.Violation, flags func(compliance.Viola
 			continue
 		}
 		num, _, _ = strings.Cut(num, ":")
-		if n, err := strconv.Atoi(num); err == nil && n > 0 {
+		if n, err := intconv.Atoi(num); err == nil && n > 0 {
 			pages[n] = true
 		}
 	}
