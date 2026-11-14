@@ -935,7 +935,7 @@ func init() {
 		{pWordSpacing, dimProp("word-spacing", true, func(s *Style) *Dimension { return &s.WordSpacing }, 0, kwNormal, false)},
 		{pWhiteSpace, whiteSpaceCollapseProp()},
 		{pWordBreak, enumProp("word-break", true, func(s *Style) *WordBreak { return &s.WordBreak }, map[string]WordBreak{
-			"normal": WordBreakNormal, "break-all": BreakAll, "keep-all": KeepAll, "auto-phrase": KeepAll,
+			"normal": WordBreakNormal, "break-all": BreakAll, "keep-all": KeepAll, "auto-phrase": KeepAll, "manual": WordBreakManual,
 		})},
 		{pOverflowWrap, enumProp("overflow-wrap", true, func(s *Style) *OverflowWrap { return &s.OverflowWrap }, map[string]OverflowWrap{
 			"normal": OverflowWrapNormal, "break-word": BreakWord, "anywhere": Anywhere,

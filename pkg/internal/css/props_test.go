@@ -137,6 +137,7 @@ func TestProperties_Longhands(t *testing.T) {
 		{"font-size: 150%", func(s *Style) bool { return s.FontSize == 22.5 }},
 		{"white-space: break-spaces", func(s *Style) bool { return s.WhiteSpace == BreakSpaces }},
 		{"line-break: anywhere", func(s *Style) bool { return s.LineBreak == LineBreakAnywhere }},
+		{"word-break: manual", func(s *Style) bool { return s.WordBreak == WordBreakManual }},
 		{"word-space-transform: ideographic-space auto-phrase", func(s *Style) bool { return s.WordSpaceTransform == WordSpaceIdeographic }},
 		{"word-space-transform: space space", func(s *Style) bool { return s.WordSpaceTransform == WordSpaceNone }},
 		{"text-align: justify-all", func(s *Style) bool { return s.TextAlign == AlignJustifyAll && s.TextAlignLast == AlignAuto }},

@@ -266,6 +266,11 @@ func (p *ifcPara) allowed(i int) bool {
 	if p.strictBreak(i) {
 		return false
 	}
+	if p.p.Break(i) == text.BreakWord && p.styleAt(i).WordBreak == css.WordBreakManual {
+		// word-break: manual detects no word boundary in text written
+		// without spaces (CSS Text 4, 5.2).
+		return false
+	}
 	return !p.keptTogether(i, a, b)
 }
 

@@ -702,6 +702,11 @@ const (
 	WordBreakNormal WordBreak = iota
 	BreakAll
 	KeepAll
+	// WordBreakManual finds no word boundary in text written without
+	// spaces between its words, where breaks come from a word list (CSS
+	// Text 4, 5.2): such text breaks only where it shows a break, as at
+	// a zero width space.
+	WordBreakManual
 )
 
 // OverflowWrap is the overflow-wrap property (CSS Text 3, 5.5). word-wrap

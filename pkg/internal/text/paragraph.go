@@ -73,6 +73,9 @@ const (
 	BreakAllowed
 	// BreakMandatory is a forced break, after a line separator.
 	BreakMandatory
+	// BreakWord is a soft wrap opportunity at a word boundary a word list
+	// finds inside text written without spaces between its words.
+	BreakWord
 )
 
 // ParagraphRun is one piece of a [Paragraph] in logical order: text in one
@@ -447,7 +450,7 @@ func (p *Paragraph) segment(st *layoutState, text []rune) {
 	p.dictionaryBreaks(text)
 }
 
-// dictionaryBreaks opens a break opportunity at each word boundary
+// dictionaryBreaks opens a [BreakWord] opportunity at each word boundary
 // inside a run of Thai letters, where a grapheme cluster starts (UAX #29)
 // and nothing else closes the boundary. UAX #14 gives Thai class SA and
 // leaves its breaks to a language-specific analysis outside its rules
@@ -467,7 +470,7 @@ func (p *Paragraph) dictionaryBreaks(text []rune) {
 		ends = dictbreak.Thai(text[i:j], ends[:0])
 		for _, e := range ends {
 			if k := i + e; p.brk[k] == NoBreak && p.graph[k] {
-				p.brk[k] = BreakAllowed
+				p.brk[k] = BreakWord
 			}
 		}
 		i = j
