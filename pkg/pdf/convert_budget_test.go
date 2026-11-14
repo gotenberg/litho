@@ -46,9 +46,14 @@ func TestConvert_MemoryBudget(t *testing.T) {
 		src       string
 		resources fstest.MapFS
 		holds     string
+		// limit is the lowered budget, 2 MiB when zero.
+		limit int64
 	}{
-		"text shaping":    {format: formatText, src: text, holds: "text being shaped"},
-		"html styles":     {format: formatHTML, src: styled.String(), holds: "computed styles"},
+		"text shaping": {format: formatText, src: text, holds: "text being shaped"},
+		// The document tree of the 2,000 paragraphs, about 2.4 MiB, is
+		// charged before their styles: 4 MiB holds it and not the styles.
+		"html styles":     {format: formatHTML, src: styled.String(), holds: "computed styles", limit: 4 << 20},
+		"html tree":       {format: formatHTML, src: strings.Repeat("<p>a paragraph of words</p>", 4000), holds: "the document tree"},
 		"csv cells":       {format: formatCSV, src: cells.String(), holds: "cells"},
 		"docx paragraphs": {format: formatDOCX, src: docx, holds: "XML trees"},
 		"html picture": {
@@ -65,10 +70,14 @@ func TestConvert_MemoryBudget(t *testing.T) {
 				}
 				return fromFormat(tc.format, strings.NewReader(tc.src), opts...)
 			}
+			limit := tc.limit
+			if limit == 0 {
+				limit = 2 << 20
+			}
 			var out bytes.Buffer
-			rep, err := conversion(WithConvertLimits(Limits{MaxConvertMemoryBytes: 2 << 20})).WriteTo(context.Background(), &out)
+			rep, err := conversion(WithConvertLimits(Limits{MaxConvertMemoryBytes: limit})).WriteTo(context.Background(), &out)
 			if !errors.Is(err, ErrConvertInputTooLarge) || rep != nil || !strings.Contains(err.Error(), tc.holds) {
-				t.Fatalf("under 2 MiB: %v, %+v, want ErrConvertInputTooLarge naming %s", err, rep, tc.holds)
+				t.Fatalf("under %d bytes: %v, %+v, want ErrConvertInputTooLarge naming %s", limit, err, rep, tc.holds)
 			}
 			if out.Len() != 0 {
 				t.Errorf("wrote %d bytes, want none", out.Len())
@@ -157,6 +166,10 @@ func TestConvert_JustOverTheBudget(t *testing.T) {
 		"odp slides": {
 			format: formatODP, limit: 1 << 20, max: 1 << 11,
 			src: func(n int) string { return budgetODP(n) },
+		},
+		"html paragraphs": {
+			format: formatHTML, limit: 1 << 20, max: 1 << 12,
+			src: func(n int) string { return strings.Repeat("<p>a paragraph of words</p>", n) },
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

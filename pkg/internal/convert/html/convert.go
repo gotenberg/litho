@@ -67,6 +67,13 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	if err != nil {
 		return nil, err
 	}
+	// Every layout pass prepares the tree again, so it lives until the
+	// document is assembled: its charge is given back as Convert returns.
+	charged, err := chargeTree(ctx, doc, len(data))
+	if err != nil {
+		return nil, err
+	}
+	defer limits.BudgetFrom(ctx).Release(charged)
 	if o.SinglePage {
 		// The route sizes the paper to the content it measures on screen,
 		// then prints it (see [measureSinglePage]).
