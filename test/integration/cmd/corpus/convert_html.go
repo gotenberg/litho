@@ -51,6 +51,11 @@ type htmlSettings struct {
 	// Extra are options every format takes, after all the others: the
 	// version an output target asks for.
 	Extra []pdf.ConvertOption
+	// ExpectedText is no conversion setting: the text the source's options
+	// name under expectedText (fixture.Source.ExpectedText), which the diff
+	// feature scores litho's text against in place of the reference's; ""
+	// scores against the reference.
+	ExpectedText string
 }
 
 // htmlConverter converts an HTML source to a PDF. It is [convertHTML]
@@ -164,6 +169,7 @@ func sourceSettings(srcPath string, office bool, fonts []string) ([]byte, htmlSe
 		Format:            source.Format,
 		MarkdownTemplate:  source.MarkdownTemplate,
 		Print:             source.PrintOptions(),
+		ExpectedText:      source.ExpectedText,
 	}, nil
 }
 

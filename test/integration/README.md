@@ -358,6 +358,8 @@ A fixture that sets litho's own options and names no twin is converted by `targe
 
 A fixture that needs fonts no directory of the Gotenberg image holds names fixture font directories under `installedFonts` in its `options.json`: litho converts it with them, and `corpus references` converts it in a container that has them installed (see [Installed fonts](FEATURES.md#installed-fonts)). `go run ./test/integration/cmd/corpus fetch --corpus=fonts/<directory>` installs one such directory alone.
 
+A source whose reference engine writes the page's text wrong names, under `expectedText` in its `options.json`, a text file beside it holding the page's text in reading order, written by hand: `diff` then scores litho's text against that file and never reads the reference's (see [Expected text](FEATURES.md#expected-text)).
+
 ## Manifest schema
 
 ```json

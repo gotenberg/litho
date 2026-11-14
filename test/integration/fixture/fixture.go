@@ -167,6 +167,13 @@ type Options struct {
 	// installs them in the Gotenberg container before Chromium starts. It
 	// is no route field. Default none.
 	InstalledFonts []string `json:"installedFonts,omitempty"`
+	// ExpectedText names a text file of the source directory holding the
+	// page's text in reading order, written by hand from the source, line
+	// breaks counting as spaces: the diff feature scores litho's text
+	// against it and never reads the reference's text, for a page whose
+	// reference engine writes its text wrong. It is no route field and no
+	// litho option: no reference depends on it. Default none.
+	ExpectedText string `json:"expectedText,omitempty"`
 }
 
 // BandOptions are one band of [Options.Bands].
@@ -260,6 +267,9 @@ type Source struct {
 	// MarkdownTemplate is the content of the file Options.MarkdownTemplate
 	// names, "" for litho's template.
 	MarkdownTemplate string
+	// ExpectedText is the content of the file Options.ExpectedText names,
+	// "" when it names none.
+	ExpectedText string
 }
 
 // ErrNoDocument reports a source directory with neither index.html nor
@@ -326,6 +336,12 @@ func Load(dir string) (*Source, error) {
 	if s.MarkdownTemplate, err = readTemplate(dir, opts.MarkdownTemplate); err != nil {
 		return nil, err
 	}
+	if s.ExpectedText, err = readTemplate(dir, opts.ExpectedText); err != nil {
+		return nil, err
+	}
+	if opts.ExpectedText != "" && strings.TrimSpace(s.ExpectedText) == "" {
+		return nil, fmt.Errorf("%s %s: the file holds no text", ExpectedTextName, opts.ExpectedText)
+	}
 	return s, nil
 }
 
@@ -335,7 +351,7 @@ func Load(dir string) (*Source, error) {
 func ParseOptions(data []byte) (Options, error) {
 	var o Options
 	names := append(slices.Clone(OptionNames), LithoOptionNames...)
-	if err := decodeStrict(data, append(names, ReferenceOfName, InstalledFontsName), &o); err != nil {
+	if err := decodeStrict(data, append(names, ReferenceOfName, InstalledFontsName, ExpectedTextName), &o); err != nil {
 		return Options{}, err
 	}
 	return o, o.validate()
@@ -427,11 +443,21 @@ func (o Options) validate() error {
 	if slices.Contains(o.UserStylesheets, "") {
 		return errors.New("userStylesheets: want file names of the source directory")
 	}
+	if name := o.ExpectedText; name != "" && (name != filepath.Base(name) || strings.ContainsAny(name, `/\`) || name == "." || name == ".." ||
+		name == OptionsFile || name == HTMLDocument || name == MarkdownDocument) {
+		return fmt.Errorf("%s %q: want a text file of the source directory", ExpectedTextName, name)
+	}
 	if o.ReferenceOf != strings.TrimSpace(o.ReferenceOf) || strings.Contains(o.ReferenceOf, "\x00") {
 		return fmt.Errorf("%s %q: want a fixture ID", ReferenceOfName, o.ReferenceOf)
 	}
 	return validateInstalledFonts(o.InstalledFonts)
 }
+
+// ExpectedTextName is the key of an options file that names the text file
+// the diff feature judges a source's text against ([Options.ExpectedText]).
+// It is no route field and no litho option: the rig alone reads it, and a
+// reference is built and checked without it, the file it names included.
+const ExpectedTextName = "expectedText"
 
 // InstalledFontsName is the key of an options file, HTML or Office, that
 // names the fixture font directories a source is converted with as

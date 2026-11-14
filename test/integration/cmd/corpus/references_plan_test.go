@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
 // planSources writes one source directory per entry of sources under a new
@@ -406,4 +408,50 @@ func lithoOnlyKeys(t *testing.T, m *Manifest) []string {
 		t.Fatal(err)
 	}
 	return p.lithoOnly["styled"]
+}
+
+// TestSourceSums_LeaveTheExpectedTextOut pins that naming an expected text
+// moves no digest a reference records: a source given an expectedText key
+// and its file keeps the source and options digests it had without them,
+// and its file is not posted to Chromium; the other keys of an options
+// file still count.
+func TestSourceSums_LeaveTheExpectedTextOut(t *testing.T) {
+	t.Parallel()
+
+	fx := planSources(t, map[string]map[string]string{
+		"plain":      {"index.html": "<p>Text</p>", "a.png": "png"},
+		"judged":     {"index.html": "<p>Text</p>", "a.png": "png", "expected-text.txt": "Text", "options.json": `{"expectedText": "expected-text.txt"}`},
+		"scaled":     {"index.html": "<p>Text</p>", "a.png": "png", "options.json": `{"scale": 0.5}`},
+		"scaledText": {"index.html": "<p>Text</p>", "a.png": "png", "expected-text.txt": "Text", "options.json": `{"scale": 0.5, "expectedText": "expected-text.txt"}`},
+	})
+	sums := map[string][2]string{}
+	for _, f := range fx {
+		src, opt, err := sourceSums(engineChromium, f.PDFPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sums[f.ID] = [2]string{src, opt}
+	}
+	if sums["judged"] != sums["plain"] || sums["plain"][1] != "" {
+		t.Errorf("an expected text moved the digests: %v against %v", sums["judged"], sums["plain"])
+	}
+	if sums["scaledText"][0] != sums["scaled"][0] || sums["scaledText"][1] == "" {
+		t.Errorf("an options file with another key: %v, %v", sums["scaledText"], sums["scaled"])
+	}
+	for _, f := range fx {
+		if f.ID != "judged" {
+			continue
+		}
+		files, err := chromiumFiles(f.PDFPath, fixture.Options{ExpectedText: "expected-text.txt"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, file := range files {
+			names = append(names, file.name)
+		}
+		if !slices.Equal(names, []string{"a.png", "index.html"}) {
+			t.Errorf("posted %q, want the page and its picture", names)
+		}
+	}
 }

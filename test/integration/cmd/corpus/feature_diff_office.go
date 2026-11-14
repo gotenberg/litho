@@ -231,11 +231,12 @@ func recordsLithoOptions(man referenceManifest, engine, name string, fx Fixture,
 }
 
 // sourceSums returns the digests a reference records of the source at path:
-// the source's (see [sourceDigest]) and its options.json's, "" without one.
+// the source's (see [sourceDigest]) and its options.json's (see
+// [optionsDigest]), "" without one.
 func sourceSums(engine, path string) (srcSum, optSum string, srcErr error) {
 	srcSum, srcErr = sourceDigest(engine, path)
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
-		if got, err := fileSHA256(filepath.Join(path, fixture.OptionsFile)); err == nil {
+		if got, err := optionsDigest(filepath.Join(path, fixture.OptionsFile)); err == nil {
 			optSum = got
 		}
 	}

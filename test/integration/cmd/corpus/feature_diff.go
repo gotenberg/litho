@@ -231,7 +231,10 @@ func flattenOutline(marks []models.Bookmark) []diffOutlineItem {
 //     the reference's: 1 when the counts and every size agree.
 //   - text_f1: the token F1 of each page's text, litho's extraction of its
 //     PDF against PDF.js's of Chromium's, NFKC-normalised and split at
-//     whitespace, averaged over the pages either has.
+//     whitespace, averaged over the pages either has. A source whose
+//     options name an expected text (fixture.ExpectedTextName) scores the
+//     token F1 of litho's text, every page in order, against that file
+//     instead, and the reference's text is not read.
 //   - link_recall: the share of Chromium's links, by page and target, litho
 //     writes too; 1 when Chromium writes none.
 //   - layout: how much of the ink of the two pages lies in the same place,
@@ -506,6 +509,9 @@ type diffOutput struct {
 	MissingFonts []string `json:"reference_fonts_missing,omitempty"`
 	// PDFSHA256 is the SHA-256 of litho's PDF, in hexadecimal.
 	PDFSHA256 string `json:"pdf_sha256,omitempty"`
+	// ExpectedText reports a text score against the source's expected
+	// text, not the reference's: its page results carry no text score.
+	ExpectedText bool `json:"expected_text,omitempty"`
 }
 
 // diffPageResult is the comparison of one page.
@@ -559,7 +565,7 @@ func (f *diffFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]byt
 	f.mu.RLock()
 	borrowed := f.borrowed[fixtureID]
 	f.mu.RUnlock()
-	out := scoreDiff(g, doc, renderDir, settings.Format == fixture.FormatCSV, func(page int, got, want image.Image, d pixelDiff) {
+	out := scoreDiff(g, doc, renderDir, settings.Format == fixture.FormatCSV, settings.ExpectedText, func(page int, got, want image.Image, d pixelDiff) {
 		if reportDir == "" {
 			return
 		}
@@ -673,9 +679,11 @@ func readDiffPages(ctx context.Context, data []byte, hideAnnotations bool) (diff
 
 // scoreDiff scores litho's pages against the goldens. outlineByPage
 // matches the outline items by page alone, for a reference whose titles
-// no converter can know. report is called for each page the strict rule
-// fails, with litho's drawing, Chromium's and their comparison.
-func scoreDiff(g *diffGolden, doc diffLithoDoc, renderDir string, outlineByPage bool, report func(page int, got, want image.Image, d pixelDiff)) diffOutput {
+// no converter can know. expected, when not "", is the text the source's
+// options name, which litho's text is scored against whole in place of the
+// reference's page by page. report is called for each page the strict
+// rule fails, with litho's drawing, Chromium's and their comparison.
+func scoreDiff(g *diffGolden, doc diffLithoDoc, renderDir string, outlineByPage bool, expected string, report func(page int, got, want image.Image, d pixelDiff)) diffOutput {
 	pages := doc.pages
 	out := diffOutput{Pages: len(pages), GoldenPages: g.text.NumPages}
 	n := max(len(pages), g.text.NumPages)
@@ -702,7 +710,9 @@ func scoreDiff(g *diffGolden, doc diffLithoDoc, renderDir string, outlineByPage 
 		}
 		if p <= len(pages) && p <= g.text.NumPages {
 			lp := pages[p-1]
-			res.TextF1 = tokenF1(goldenText[p], lp.text)
+			if expected == "" {
+				res.TextF1 = tokenF1(goldenText[p], lp.text)
+			}
 			if file := goldenPNG[p]; file != "" {
 				want, err := readPNG(filepath.Join(renderDir, file))
 				if err != nil {
@@ -733,9 +743,17 @@ func scoreDiff(g *diffGolden, doc diffLithoDoc, renderDir string, outlineByPage 
 	if sizesCompared > 0 {
 		pagesScore *= float64(sizesMatched) / float64(sizesCompared)
 	}
+	text := meanOver(textSum, n)
+	if expected != "" {
+		texts := make([]string, len(pages))
+		for i, p := range pages {
+			texts[i] = p.text
+		}
+		text, out.ExpectedText = tokenF1(expected, strings.Join(texts, "\n")), true
+	}
 	out.Scores = map[string]float64{
 		scorePages:   pagesScore,
-		scoreText:    meanOver(textSum, n),
+		scoreText:    text,
 		scoreLinks:   linkRecall(g.links.Links, pages),
 		scoreLayout:  meanOver(layoutSum, n),
 		scoreStrict:  meanOver(strictSum, n),

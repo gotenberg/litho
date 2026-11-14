@@ -144,10 +144,16 @@ func TestLoad_Refuses(t *testing.T) {
 		`{"bands": [{"edge": "header", "pages": ["page:"]}]}`,
 		`{"bands": [{"edge": "header", "isolate": true}]}`,
 		`{"bands": [{"edge": "header", "html": "../h.html"}]}`,
+		`{"expectedText": "../text.txt"}`,
+		`{"expectedText": "index.html"}`,
+		`{"expectedText": "options.json"}`,
+		`{"expectedText": "absent.txt"}`,
+		`{"expectedText": "blank.txt"}`,
 	} {
 		dir := t.TempDir()
 		write(t, dir, HTMLDocument, "<p>")
 		write(t, dir, "h.html", "<p>")
+		write(t, dir, "blank.txt", " \n\t\n")
 		write(t, dir, OptionsFile, opts)
 		if _, err := Load(dir); err == nil {
 			t.Errorf("%s loaded", opts)
@@ -179,10 +185,11 @@ func TestOptionNames_AreTheJSONNamesOfOptions(t *testing.T) {
 		tags = append(tags, name)
 	}
 	// The route's fields, then litho's own options, then the key that
-	// borrows a reference and the one that installs fixture fonts: the
-	// last three are no fields of the route's.
+	// borrows a reference, the one that installs fixture fonts and the one
+	// that names the expected text: the last four are no fields of the
+	// route's.
 	want := append(slices.Clone(OptionNames), LithoOptionNames...)
-	if want = append(want, ReferenceOfName, InstalledFontsName); !slices.Equal(tags, want) {
+	if want = append(want, ReferenceOfName, InstalledFontsName, ExpectedTextName); !slices.Equal(tags, want) {
 		t.Errorf("json names %v, want %v", tags, want)
 	}
 }
@@ -243,5 +250,39 @@ func TestChromiumMargin_MeasuredOnChromium(t *testing.T) {
 		if got := chromiumMargin(tt.inches); got != tt.points {
 			t.Errorf("chromiumMargin(%v) = %v, want %v", tt.inches, got, tt.points)
 		}
+	}
+}
+
+// TestLoad_ReadsTheExpectedText pins the expectedText key: the file it names
+// is read whole, and the key is no route field, no litho option and no
+// reason to borrow or lack a reference.
+func TestLoad_ReadsTheExpectedText(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	write(t, dir, HTMLDocument, "<h1 style=\"text-transform: uppercase\">Title</h1><p>Text</p>")
+	write(t, dir, "expected-text.txt", "TITLE\nText\n")
+	write(t, dir, OptionsFile, `{"expectedText": "expected-text.txt"}`)
+	s, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Options.ExpectedText != "expected-text.txt" || s.ExpectedText != "TITLE\nText\n" {
+		t.Errorf("expected text %q from %q", s.ExpectedText, s.Options.ExpectedText)
+	}
+	if keys := s.LithoOptions(); len(keys) != 0 {
+		t.Errorf("litho options %q, want none", keys)
+	}
+	ref, err := LoadReference(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref.Unreferenced() || ref.Of != "" {
+		t.Errorf("reference %+v, want the source's own", ref)
+	}
+	none := t.TempDir()
+	write(t, none, HTMLDocument, "<p>")
+	if s, err := Load(none); err != nil || s.ExpectedText != "" {
+		t.Errorf("no options: expected text %q, %v", s.ExpectedText, err)
 	}
 }

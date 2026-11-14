@@ -448,8 +448,9 @@ var chromiumOptional = []string{
 }
 
 // chromiumFiles returns the files of a source directory posted with its
-// document, sorted: every file but options.json and the header and footer
-// templates, which go under their route names.
+// document, sorted: every file but options.json, the header and footer
+// templates, which go under their route names, and the expected text,
+// which only the diff feature reads.
 func chromiumFiles(dir string, opts fixture.Options) ([]formFile, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -458,7 +459,7 @@ func chromiumFiles(dir string, opts fixture.Options) ([]formFile, error) {
 	var files []formFile
 	for _, e := range entries {
 		name := e.Name()
-		if e.IsDir() || name == fixture.OptionsFile || name == opts.Header || name == opts.Footer {
+		if e.IsDir() || name == fixture.OptionsFile || name == opts.Header || name == opts.Footer || name == opts.ExpectedText {
 			continue
 		}
 		files = append(files, formFile{filepath.Join(dir, name), name})
@@ -481,7 +482,8 @@ type referenceJob struct {
 
 // sourceDigest returns the SHA-256 a reference records for the source at
 // path: an Office source's document, or, for Chromium, every file of the
-// source directory but options.json, by name, since a page draws its
+// source directory but options.json and the expected text its options name
+// ([fixture.ExpectedTextName]), by name, since a page draws its
 // stylesheets and images too.
 func sourceDigest(engine, path string) (string, error) {
 	if engine != engineChromium {
@@ -495,9 +497,10 @@ func sourceDigest(engine, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	expected := expectedTextFile(path)
 	h := sha256.New()
 	for _, e := range entries {
-		if e.IsDir() || e.Name() == fixture.OptionsFile {
+		if e.IsDir() || e.Name() == fixture.OptionsFile || e.Name() == expected {
 			continue
 		}
 		sum, err := fileSHA256(filepath.Join(path, e.Name()))
@@ -507,6 +510,50 @@ func sourceDigest(engine, path string) (string, error) {
 		fmt.Fprintf(h, "%s\x00%s\n", e.Name(), sum)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// expectedTextFile returns the file the options of the source directory dir
+// name under [fixture.ExpectedTextName], "" when they name none or do not
+// load, which the source's load then reports.
+func expectedTextFile(dir string) string {
+	data, err := os.ReadFile(filepath.Join(dir, fixture.OptionsFile)) //nolint:gosec // a committed source's options
+	if err != nil {
+		return ""
+	}
+	opts, err := fixture.ParseOptions(data)
+	if err != nil {
+		return ""
+	}
+	return opts.ExpectedText
+}
+
+// optionsDigest returns the SHA-256 a reference records for the options
+// file at path: the file's own, or, for one that names the expected text
+// ([fixture.ExpectedTextName]), which no reference depends on, the digest
+// of its other keys as compact JSON with sorted keys, "" when it holds no
+// other, as for a source without options.
+func optionsDigest(path string) (string, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // a committed source's options
+	if err != nil {
+		return "", err
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(data, &fields) != nil {
+		return fileDigest(path)
+	}
+	if _, ok := fields[fixture.ExpectedTextName]; !ok {
+		return fileDigest(path)
+	}
+	delete(fields, fixture.ExpectedTextName)
+	if len(fields) == 0 {
+		return "", nil
+	}
+	rest, err := json.Marshal(fields)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(rest)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // convert posts one source to the route of engine and returns the status
@@ -664,7 +711,7 @@ func buildReferences(ctx context.Context, open func(ctx context.Context, fonts [
 		}
 		optSum := ""
 		if j.options != "" {
-			if optSum, err = fileDigest(j.options); err != nil {
+			if optSum, err = optionsDigest(j.options); err != nil {
 				return err
 			}
 		}
