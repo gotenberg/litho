@@ -404,7 +404,10 @@ func (b *box) toViewport() bool {
 // E, steps 2, 8 and 9), a flex item with a z-index among them (CSS
 // Flexbox 1, 4.3).
 func (b *box) layered() bool {
-	if b.parent == nil || b.kind == kindText || b.kind == kindInline || b.kind == kindBreak {
+	if b.kind == kindInline {
+		return effectInline(b)
+	}
+	if b.parent == nil || b.kind == kindText || b.kind == kindBreak {
 		return false
 	}
 	if b.tpart.internal() {
@@ -415,6 +418,21 @@ func (b *box) layered() bool {
 		return b.tpart <= partCell && (b.st.Position != css.Static || b.transformed())
 	}
 	return b.st.Position != css.Static || b.st.Opacity < 1 || b.transformed() || b.composited() || b.isItem() && !b.st.ZIndex.Auto || b.hostMoves()
+}
+
+// effectInline reports a non-atomic inline box of an element that draws
+// through a group effect: an opacity below 1 (CSS Color 4, 15), a blend
+// mode or isolation (CSS Compositing 1, 3.2 and 3.3), a clip-path (CSS
+// Masking 1, 5.1), a mask (6.1) or a filter (Filter Effects 1, 6). Each
+// makes the element a stacking context that paints in its parent's layer
+// of z-index 0, all its fragments and the blocks and floats it holds as
+// one unit ([painter.inlineUnit]). litho draws no backdrop filter on an
+// inline box.
+func effectInline(b *box) bool {
+	st := b.st
+	return b.kind == kindInline && b.node != nil && b.parent != nil &&
+		(st.Opacity < 1 || st.MixBlendMode != css.BlendNormal || st.Isolation == css.IsolationIsolate ||
+			!st.ClipPath.None() || len(st.Mask.Images) > 0 || len(st.Filter) > 0)
 }
 
 // hostMoves reports a block-level box split out of a relatively

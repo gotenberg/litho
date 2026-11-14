@@ -132,10 +132,17 @@ func maskValue(l maskLayer) []typeset.Fragment {
 func (p *painter) maskLayer(b *box, l css.MaskLayer) maskLayer {
 	origin, _ := p.referenceBox(b, l.Origin)
 	clip, _ := p.referenceBox(b, l.Clip)
+	if m := p.maskRef; m != nil {
+		origin, _ = fragReference(m.origin, l.Origin)
+		clip, _ = fragReference(m.clip, l.Clip)
+	}
 	if l.NoClip {
 		// The mask painting area is unrestricted (CSS Masking 1, 6.8):
 		// it reaches every box b paints, its descendants' included.
 		clip, _ = p.referenceBox(b, css.GeoBorder)
+		if m := p.maskRef; m != nil {
+			clip = m.clip.r
+		}
 		if d, ok := p.descendantBounds(b, maxMaskBoundsBoxes); ok {
 			clip = union(clip, d)
 		}

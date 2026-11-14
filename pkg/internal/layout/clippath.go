@@ -48,6 +48,10 @@ func (p *painter) clipPathOf(b *box) ([]*typeset.Path, bool) {
 // relative offset in force, and the radii of its corners (CSS Masking 1,
 // 5.1: a box alone clips with its corner shaping).
 func (p *painter) referenceBox(b *box, g css.GeometryBox) (typeset.Rect, [4][2]float64) {
+	if b.kind == kindInline {
+		r, radii, _ := p.inlineReference(b, g) // an element on no line has an empty reference box
+		return r, radii
+	}
 	r := p.borderRect(b)
 	radii := radiiOf(b, r.Width, r.Height)
 	switch g {

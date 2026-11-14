@@ -171,6 +171,15 @@ type painter struct {
 	// their lines' included (see [painter.orderOf]).
 	inLine    bool
 	lineOrder int
+	// only is the inline element of a group effect whose content the
+	// line painter paints alone, nil for the content of no such element
+	// ([painter.inlineUnit]). leads maps each such element to its first
+	// inline box, which paints it.
+	only  *box
+	leads map[*Node]*box
+	// maskRef is the inline box fragment whose mask layers are being
+	// drawn ([painter.inlineMask]), nil for a box's own boxes.
+	maskRef *maskRef
 }
 
 // paint returns the display list of the box tree rooted at root.
@@ -693,9 +702,31 @@ func (p *painter) unit(b *box, own bool) {
 		return
 	}
 	dx, dy := offset(b)
+	if b.kind == kindInline {
+		// The line painter moves an inline box's fragments and content by
+		// the offsets of the inline boxes around it: the unit starts from
+		// the offsets of its block container.
+		c := b.parent
+		for c != nil && c.kind == kindInline {
+			c = c.parent
+		}
+		if c != nil {
+			ax, ay := ancestorOffset(c)
+			ox, oy := offset(c)
+			dx, dy = float64(ax+ox)-p.dx, float64(ay+oy)-p.dy
+		}
+	}
+	udx, udy := p.dx, p.dy
 	p.dx += dx
 	p.dy += dy
-	defer func() { p.dx -= dx; p.dy -= dy }()
+	defer func() {
+		if b.kind == kindInline {
+			p.dx, p.dy = udx, udy
+			return
+		}
+		p.dx -= dx
+		p.dy -= dy
+	}()
 	pushed := 0
 	push := func(g *ditem) {
 		c := p.sync(p.chain(b, false))
@@ -759,7 +790,11 @@ func (p *painter) unit(b *box, own bool) {
 		if clips, visible = p.clipPathOf(b); !visible {
 			return
 		}
-		mask = p.maskOf(b)
+		if b.kind == kindInline {
+			mask = p.inlineMask(b)
+		} else {
+			mask = p.maskOf(b)
+		}
 	}
 	if clipsRect(b) {
 		c := clipRectOf(b, p.borderRect(b))
@@ -782,14 +817,22 @@ func (p *painter) unit(b *box, own bool) {
 			push(&ditem{group: true, fx: &groupFx{opacity: 1, clip: c}})
 		}
 	}
-	if len(b.st.BackdropFilter) > 0 {
+	if len(b.st.BackdropFilter) > 0 && b.kind != kindInline {
 		p.backdropFilter(b)
 	}
 	if len(b.st.Filter) > 0 {
 		// The filter applies to the element's rendering before its clip,
 		// mask and opacity (Filter Effects 1, 6; CSS Masking 1, 4): the
 		// innermost group.
-		push(&ditem{group: true, fx: &groupFx{opacity: 1, filter: b.st.Filter, box: p.borderRect(b), flow: p.inFlow(), zoom: p.zoom()}})
+		box := p.borderRect(b)
+		if b.kind == kindInline {
+			box, _ = p.inlineBounds(b) // an element on no line filters what its floats and blocks paint
+		}
+		push(&ditem{group: true, fx: &groupFx{opacity: 1, filter: b.st.Filter, box: box, flow: p.inFlow(), zoom: p.zoom()}})
+	}
+	if b.kind == kindInline {
+		p.inlineUnit(b)
+		return
 	}
 	if p.clips(b) && pushed == 0 {
 		// The box's own clip is relative to the frame of its context: a
@@ -1018,6 +1061,14 @@ func (p *painter) collect(b *box, blocks, floats, layers *[]*box) {
 	for _, k := range b.kids {
 		switch {
 		case !k.laidOut && k.kind != kindText && k.kind != kindInline && k.kind != kindBreak:
+		case k.kind == kindInline && k.layered():
+			// The first piece of an inline element of a group effect paints
+			// the element; its other pieces and the blocks split out of it
+			// paint with it.
+			if p.lead(k) == k {
+				*layers = append(*layers, k)
+			}
+		case k.kind != kindInline && effectHost(k) != nil:
 		case k.kind == kindInline:
 			p.collect(k, blocks, floats, layers)
 		case k.inline:
@@ -1388,14 +1439,15 @@ func (p *painter) line(l *lineBox, fl *firstLine) {
 	}
 	var linkOrder []*link
 	linkRects := map[*link]*span{}
-	p.barRules(l, page)
-	p.changeBar(l, page)
-	var groups []*box
-	defer func() { p.enterInlines(&groups, nil) }()
+	if p.only == nil {
+		p.barRules(l, page)
+		p.changeBar(l, page)
+	}
 	paintFrags = func(fs []*inlineFrag) {
 		for _, f := range fs {
-			p.enterInlines(&groups, compositedInlines(f.box))
-			p.lineFrag(l, f, page)
+			if p.paints(effectOwner(f.box, parent)) {
+				p.lineFrag(l, f, page)
+			}
 		}
 	}
 	paintFrags(before[0])
@@ -1403,10 +1455,9 @@ func (p *painter) line(l *lineBox, fl *firstLine) {
 		if i > 0 {
 			paintFrags(before[i])
 		}
-		if it.box == nil {
+		if it.box == nil || !p.paints(effectOwner(it.box, parent)) {
 			continue
 		}
-		p.enterInlines(&groups, compositedInlines(it.box))
 		ox, oy := inlineOffset(it.box.parent)
 		p.dx += ox
 		p.dy += oy
@@ -1443,65 +1494,6 @@ func (p *painter) line(l *lineBox, fl *firstLine) {
 		if s := linkRects[lk]; s.rect.Width > 0 && s.rect.Height > 0 {
 			p.links = append(p.links, pendingLink{lk: lk, rect: s.rect})
 		}
-	}
-}
-
-// compositedInlines returns the inline boxes b sits in, b included, up to
-// its block container, that composite their content as a group: an
-// opacity below 1 or a blend mode (CSS Color 4, 4.1; CSS Compositing 1,
-// 3.2), outermost first. Each fragment of such a box on a line is one
-// group: what Chromium composites once per box, litho composites once per
-// line, which differs only where its lines overlap.
-func compositedInlines(b *box) []*box {
-	var out []*box
-	for k := b; k != nil; k = k.parent {
-		if k.kind != kindInline {
-			if k != b {
-				break
-			}
-			continue
-		}
-		if inlineGroup(k) {
-			out = append(out, k)
-		}
-	}
-	slices.Reverse(out)
-	return out
-}
-
-// inlineGroup reports an inline box that composites as a group.
-func inlineGroup(b *box) bool {
-	return b.kind == kindInline && (b.st.Opacity < 1 || b.st.MixBlendMode != css.BlendNormal)
-}
-
-// innerComposited returns the innermost inline box b sits in, b included,
-// that composites as a group, nil for none.
-func innerComposited(b *box) *box {
-	if c := compositedInlines(b); len(c) > 0 {
-		return c[len(c)-1]
-	}
-	return nil
-}
-
-// enterInlines closes the groups of open that want does not hold and opens
-// those of want that are not open, so what paints next paints in the
-// groups of want, outermost first. Each group is a frame whose root is its
-// inline box: the clips outside it apply to the group.
-func (p *painter) enterInlines(open *[]*box, want []*box) {
-	k := 0
-	for k < len(*open) && k < len(want) && (*open)[k] == want[k] {
-		k++
-	}
-	p.frames = p.frames[:len(p.frames)-(len(*open)-k)]
-	*open = (*open)[:k]
-	for _, b := range want[k:] {
-		c := p.sync(p.chain(b, false))
-		op := min(max(clamp(b.st.Opacity), 0), 1)
-		blend, isolate := p.blendOf(b), blendsInside(b)
-		g := &ditem{group: true, fx: &groupFx{opacity: op, blend: blend, isolate: isolate}}
-		c.kids = append(c.kids, g)
-		p.frames = append(p.frames, &frame{container: g, root: b})
-		*open = append(*open, b)
 	}
 }
 
@@ -1631,7 +1623,7 @@ func (p *painter) blendOf(b *box) typeset.BlendMode {
 // them.
 func blendsInside(b *box) bool {
 	for _, k := range b.kids {
-		group := k.isStackingContext() || inlineGroup(k)
+		group := k.isStackingContext()
 		if m := k.st.MixBlendMode; group && m != css.BlendNormal && m != css.BlendPlusLighter {
 			return true
 		}
@@ -1909,7 +1901,7 @@ func (p *painter) decoRun(it *lineItem, l *lineBox, d deco, k int, last bool) (i
 			return false
 		}
 		bx, by := inlineOffset(b.box.parent)
-		if bx != ox || by != oy || innerComposited(b.box) != innerComposited(it.box) {
+		if bx != ox || by != oy || effectOwner(b.box, parentBox) != effectOwner(it.box, parentBox) {
 			return false
 		}
 		for _, bd := range b.box.decos {

@@ -396,7 +396,7 @@ func (e *engine) newRubyBox(st *css.Style, ctx genCtx) *box {
 func (p *painter) annotations(l *lineBox, page int) {
 	for _, it := range l.items {
 		a := it.atomic
-		if a == nil || a.ruby == nil || a.ruby.ann == nil || !a.ruby.ann.laidOut {
+		if a == nil || a.ruby == nil || a.ruby.ann == nil || !a.ruby.ann.laidOut || !p.paints(effectOwner(it.box, parentBox)) {
 			continue
 		}
 		ox, oy := inlineOffset(it.box.parent)
