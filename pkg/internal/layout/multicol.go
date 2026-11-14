@@ -227,6 +227,10 @@ type colCtx struct {
 	// 6.2).
 	trim  css.TextBoxTrim
 	owner *box
+	// cloneTop and cloneBottom are the top and bottom borders and padding
+	// of a container of a specified height that clones its decorations,
+	// which each fragment of it holds around its columns.
+	cloneTop, cloneBottom float64
 }
 
 // target returns the columns a row holds before the next row starts.
@@ -252,7 +256,13 @@ func (c *colCtx) newRow(top float64) {
 	paged := false
 	c.outer(func() {
 		if c.e.paginating() {
-			if space := c.e.nextPage(top) - top; space < h {
+			// The fragment of a container of a specified height that
+			// clones its decorations holds its bottom border and padding
+			// below its columns (CSS Fragmentation 3, 5.4); one of auto
+			// height leaves that room in the outer columns
+			// ([engine.enterClone]).
+			space := c.e.nextPage(top) - top - c.cloneBottom
+			if space < h {
 				h, paged = space, true
 			}
 		}
@@ -303,6 +313,7 @@ func (c *colCtx) grow() bool {
 	top := row.top + row.h + c.gap
 	if !c.wrap || c.colH <= 0 {
 		c.outer(func() { top = c.e.nextPage(row.top) })
+		top += c.cloneTop
 	}
 	c.newRow(top)
 	return true
@@ -659,6 +670,9 @@ func (e *engine) placeOutOfFlow(kids []*box, cb cblock, y float64) {
 func (e *engine) layoutColumnSet(b *box, s *colSet, cb cblock, y, limit float64, spanned bool) (float64, bool) {
 	st := &b.st.Columns
 	ctx := &colCtx{e: e, parent: e.cols, noPag: e.noPaginate, n: b.mc.n, limit: limit, start: y, balanceRow: -1, capped: !cb.hDefinite, trim: b.st.TextBoxTrim, owner: b}
+	if clones(b.st) && cb.hDefinite {
+		ctx.cloneTop, ctx.cloneBottom = b.bd[css.Top]+b.pd[css.Top], b.bd[css.Bottom]+b.pd[css.Bottom]
+	}
 	if st.Height.Kind == css.Points {
 		ctx.colH = max(clamp(st.Height.Value), minColumnHeight)
 		ctx.wrap = st.Wrap()

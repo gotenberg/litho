@@ -813,3 +813,27 @@ func TestMulticol_AvoidingBoxMovesToTheNextOuterColumn(t *testing.T) {
 		_______
 		_______`)
 }
+
+func TestMulticol_ClonedContainerKeepsItsEdgesInEachOuterColumn(t *testing.T) {
+	t.Parallel()
+	// A container of a specified height that clones its decorations
+	// holds its bottom border in each outer column that cuts it, below
+	// its columns (CSS Fragmentation 3, 5.4).
+	//
+	// # Corpus evidence
+	//
+	//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) lays such
+	//     a container 120 pixels tall with a 20 pixel bottom border in 100
+	//     pixel outer columns as columns of 80 pixels, then 20.
+	clone := func(s *css.Style) {
+		s.BoxDecorationBreak = css.DecorationClone
+		s.Border[css.Bottom] = css.Border{Width: px(1), Style: css.Solid, Color: lime}
+	}
+	inner := el(sty(columns(2, 1), width(3), height(4), fillAuto, clone), strip(blue), strip(blue), strip(blue), strip(blue), strip(blue), strip(blue))
+	outer := el(sty(columns(2, 1), width(7), height(3), fillAuto), inner)
+	assertPixels(t, run(t, doc(outer), page(7, 4)), 1, `
+		B_B_B_B
+		B_B____
+		GGG_GGG
+		_______`)
+}

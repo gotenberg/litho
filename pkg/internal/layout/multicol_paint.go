@@ -466,7 +466,12 @@ func (p *painter) columnRules(b *box) {
 				if uncut(p.e, b, top, bottom) {
 					h = bottom - top
 				} else {
-					h = max(min(bottom, fragmentEnd(p.e, b, top))-top, h)
+					end := fragmentEnd(p.e, b, top)
+					if clones(b.st) {
+						// The fragment holds b's cloned bottom edges.
+						end -= b.bd[css.Bottom] + b.pd[css.Bottom]
+					}
+					h = max(min(bottom, end)-top, h)
 				}
 			}
 			for j := 0; j+1 < r.cols; j++ {
