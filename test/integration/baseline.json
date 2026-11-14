@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-02T17:22:42Z",
+  "captured_at": "2026-11-14T20:21:54Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -201,7 +201,7 @@
     "litho": {
       "features": {
         "compliance": {
-          "matched": 3341,
+          "matched": 3354,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -240,7 +240,7 @@
           }
         },
         "mutate-autotag": {
-          "matched": 3337,
+          "matched": 3350,
           "mismatched": 4,
           "skipped": 0,
           "metrics": {
@@ -254,7 +254,7 @@
           }
         },
         "mutate-encrypt": {
-          "matched": 3341,
+          "matched": 3354,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -268,7 +268,7 @@
           }
         },
         "mutate-flatten": {
-          "matched": 3341,
+          "matched": 3354,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -282,7 +282,7 @@
           }
         },
         "mutate-pages": {
-          "matched": 3341,
+          "matched": 3354,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -296,7 +296,7 @@
           }
         },
         "mutate-redact": {
-          "matched": 2600,
+          "matched": 2613,
           "mismatched": 0,
           "skipped": 741,
           "metrics": {
@@ -309,7 +309,7 @@
           }
         },
         "mutate-sign": {
-          "matched": 3315,
+          "matched": 3328,
           "mismatched": 0,
           "skipped": 26,
           "metrics": {
@@ -326,7 +326,7 @@
           }
         },
         "mutate-stamp": {
-          "matched": 3341,
+          "matched": 3354,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -365,7 +365,7 @@
           }
         },
         "redact-render": {
-          "matched": 257,
+          "matched": 258,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
@@ -393,7 +393,7 @@
             "redaction_incomplete": 2,
             "redaction_refused": 126,
             "render_failed": 0,
-            "scenarios_run": 725
+            "scenarios_run": 728
           }
         },
         "remediation": {
@@ -446,22 +446,22 @@
           }
         },
         "render": {
-          "matched": 225,
+          "matched": 226,
           "mismatched": 31,
           "skipped": 1,
           "metrics": {
-            "pages_match": 349,
+            "pages_match": 350,
             "render_failed": 0,
             "render_size_mismatch": 6
           }
         },
         "text": {
-          "matched": 249,
+          "matched": 250,
           "mismatched": 0,
           "skipped": 8,
           "metrics": {
-            "chars_match": 249,
-            "words_match": 249
+            "chars_match": 250,
+            "words_match": 250
           }
         }
       }

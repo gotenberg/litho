@@ -263,6 +263,7 @@ What each fixture plants, the rules each must and must not fire, and the diverge
 | `noteicons_2b.pdf`     | PDF/A-2b     | Text annotations with no `/AP`, one for each predefined icon     |
 | `structsplit_ua1.pdf`  | PDF/UA-1     | Structure elements whose marked content a redaction cuts         |
 | `annotstraddle_2b.pdf` | PDF/A-2b     | An annotation across the regions; a removed one's pop-up, reply  |
+| `symbolenc_2b.pdf`     | PDF/A-2b     | Symbolic TrueType fonts that state a base encoding               |
 
 ### Must-not-fire controls
 
@@ -769,6 +770,7 @@ measured on veraPDF 1.30.2 lists them without it.
 | `structkinds_ua2.pdf`  | 6    | 5    | 7    | 6    | 6    | 7    | 6    | 6    | 3   | 3    | 4    | 5    | 7    |
 | `structnest_ua1.pdf`   | 5    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 36   | 31   |
 | `structsplit_ua1.pdf`  | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 1    | 5    |
+| `symbolenc_2b.pdf`     | 7    | 5    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 8    |
 | `symbolname_2u.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 4   | 4    | 5    | 8    | 9    |
 | `syntax_1b.pdf`        | 11   | 9    | 11   | 9    | 9    | 11   | 9    | 9    | 9   | 9    | 10   | 12   | 9    |
 | `t3extent_2b.pdf`      | 5    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 7    |
@@ -10349,6 +10351,43 @@ OutputIntent, so DeviceGray fails `6.2.4.3/4` at PDF/A-2 and later and
 (ISO 19005-1 exempts no type) and the part-2 claim `6.7.11/2`. veraPDF 1.30.2 and litho
 report the same rule set in all thirteen cells, on the source and on the
 outputs of the fallback's quarter of page 1 and the default quarter of page 2.
+
+### `symbolenc_2b.pdf`
+
+ISO 19005-2, 6.2.11.6 t3 forbids a symbolic TrueType font an `/Encoding` entry,
+which veraPDF reads as the name the entry holds or the `/BaseEncoding` of its
+dictionary. Reporting tools write Wingdings and barcode fonts as symbolic
+TrueType under `/WinAnsiEncoding`, over a program whose only `cmap` subtable is
+the Microsoft Symbol (3,0). ISO 32000-1, 9.6.6.4 reads a code of such a font
+through its glyph name and the (3,1) or (1,0) subtable while it states a base
+encoding, and through the (3,0) subtable once it states none, so with neither
+(3,1) nor (1,0) in the program both readings draw the same glyph. Remediation
+left the rule on every such font. Fourteen govdocs files hold such fonts, and
+govdocs runs no remediation cell, so this fixture gates the repair. Every font
+shows `41 42`:
+
+| Font | Flags       | `/Encoding`                                         | `cmap` subtables |
+| ---- | ----------- | --------------------------------------------------- | ---------------- |
+| `S1` | symbolic    | `/WinAnsiEncoding`                                  | (3,0)            |
+| `S2` | symbolic    | indirect, `/BaseEncoding /WinAnsiEncoding`, `66 /B` | (3,0)            |
+| `N1` | nonsymbolic | the same object as `S2`                             | (3,1), (1,0)     |
+| `S3` | symbolic    | `/WinAnsiEncoding`                                  | (3,0), (3,1)     |
+
+veraPDF 1.30.3 and litho report the same rule set and the same counts in all
+thirteen cells: t3 three times at PDF/A-2 and 3, `6.3.7/2`, `6.2.10.6/3`,
+`7.21.6/3` and `8.4.5.7/3` three times at the other parts. At PDF/A-1 `N1`'s
+`/Differences` also fail `6.3.7/1` and `S3`'s two subtables `6.3.7/3`.
+
+Remediation removes `S1`'s `/Encoding` and `S2`'s `/BaseEncoding`, copying the
+rest of `S2`'s dictionary onto the font so `N1` keeps the shared object, and
+writes each a `/ToUnicode` holding the reading its encoding gave, so text
+extraction reads `AB` on every line before and after. `S3` keeps its encoding:
+dropping it could select another glyph through (3,1). In the outputs of the
+eight profiles `manifest.json` lists, default and aggressive, both tools report
+`S3`'s t3 alone, plus `6.3.7/1` and `6.3.7/3` at PDF/A-1b. litho reported a
+`.notdef` glyph for `S2`'s code `41` in those outputs: a `/Differences`-only
+dictionary names the codes it lists alone, and veraPDF reads the others from the
+program.
 
 ## Scope
 
