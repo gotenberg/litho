@@ -31,9 +31,15 @@ type rubyCol struct {
 	// below the column's top.
 	over, under          bool
 	overTop, underBottom float64
-	// baseAbove is the base's extent above its baseline, which the line
-	// grows to hold before the annotation over it (rubyRoom).
-	baseAbove float64
+	// baseAbove and baseBelow are the base's line extent above and below
+	// its baseline, which the line holding the column grows to hold
+	// before the annotations over and under it (rubyRoom).
+	baseAbove, baseBelow float64
+	// textAbove and textBelow are the extent of the base's content, the em
+	// boxes of its text, above and below its baseline: the room above and
+	// under them is room an annotation of the line before or after may
+	// take.
+	textAbove, textBelow float64
 }
 
 // genRuby generates the boxes of a ruby container n of style st (CSS Ruby
@@ -232,7 +238,8 @@ func (e *engine) layoutRuby(a *box, lcb cblock) {
 		bl = r.base.y + m.Ascent + up
 		top, bottom = r.base.y, r.base.y+lh
 	}
-	r.baseAbove = bl - top
+	r.baseAbove, r.baseBelow = bl-top, bottom-bl
+	r.textAbove, r.textBelow = baseText(r.base, bl, m.Ascent, m.Descent)
 	r.inStart, r.inEnd = lineInsets(r.base, w)
 	emTop, emBottom := bl-m.EmAscent, bl+m.EmDescent
 	// A ruby nested in the base sets its own annotations against its
@@ -279,6 +286,23 @@ func (e *engine) layoutRuby(a *box, lcb cblock) {
 	a.y = top
 	a.h = max(bottom-top, 0)
 	a.baseline, a.hasBaseline = bl-top, true
+}
+
+// baseText returns the extent of the content of the ruby base b above and
+// below its baseline bl: the em boxes of the items of its lines, ascent
+// and descent, the strut of its ruby, for a base without any.
+func baseText(b *box, bl, ascent, descent float64) (float64, float64) {
+	above, below := math.Inf(-1), math.Inf(-1)
+	for _, l := range b.lines {
+		for _, it := range l.items {
+			above = max(above, bl-(l.y+it.baseline-it.ascent))
+			below = max(below, l.y+it.baseline+it.descent-bl)
+		}
+	}
+	if math.IsInf(above, -1) {
+		return ascent, descent
+	}
+	return above, below
 }
 
 // lineInsets returns the room the one line of block b leaves at the left
@@ -412,18 +436,36 @@ func (p *painter) annotations(l *lineBox, page int) {
 }
 
 // rubyRoom grows the line l by what the annotations over its ruby
-// columns need past room, the room above it. Chromium lays a line out
-// so: an annotation over a ruby takes the line's own half-leading, the
-// room under the previous line's content, and the margins and padding
-// before a block's first line, and the line grows by the rest; a border
-// takes nothing. litho counts the room within one block: the last line
-// of the block before it gives none.
-func (s *inlineState) rubyRoom(l *lineBox, room float64) {
+// columns need past room, the room above it, and by what the annotations
+// under the line before it, reaching under past it, need past the room
+// above l's content. CSS Ruby 1, 3.6 leaves the amount to the user agent
+// so long as lines of the same ruby do not overlap; litho lays the line
+// out as Chromium does, on screen and in print: an annotation over a
+// ruby takes the line's own half-leading, the room under the previous
+// line's content and annotations, and the margins and padding before a
+// block's first line, and the line grows by the rest; an annotation under
+// a ruby takes its line's half-leading, then the room above the next
+// line's content and annotations, and the next line moves down by the
+// rest; a border takes nothing. litho counts the room within one block:
+// the last line of the block before it gives none.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1, 20px Ahem at
+//     line heights of 20, 24, 30 and 40px with 10px and 16px annotations,
+//     on screen and through its PDF route: a line of 24px holding a 10px
+//     annotation under its base is followed 30px lower by the next line
+//     (the annotation reaches 8px under the line, the next line's
+//     half-leading takes 2px); two such lines in a row are 30px apart; a
+//     line with an annotation under it followed by a line with one over
+//     it is 40px from it; an annotation over a line takes the half-leading
+//     under the line before it, ruby or not.
+func (s *inlineState) rubyRoom(l *lineBox, room, under float64) {
 	if s.root.rubyLine {
 		// A ruby nested in a base: the column holding it makes the room.
 		return
 	}
-	grow := l.annOver - max(room, 0)
+	grow := max(l.annOver-max(room, 0), 0) + max(under-l.startRoom, 0)
 	if grow <= eps {
 		return
 	}
@@ -437,6 +479,25 @@ func (s *inlineState) rubyRoom(l *lineBox, room float64) {
 		f.bottom += grow
 		f.base += grow
 	}
+}
+
+// rubyEnd returns how much the block of the inline formatting context
+// grows past its last line for the annotations under that line, which
+// reach under past it by under: they take the block's end padding, not
+// its border, as Chromium lays a block out (rubyRoom).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 grows a block of
+//     24px lines of 20px Ahem whose last line holds a 10px annotation
+//     under its base by 8px with no end padding, by 4px with 4px, by none
+//     with 8px or 20px, and by 8px with a 10px end border and no padding;
+//     a margin under the block takes nothing.
+func (s *inlineState) rubyEnd(under float64) float64 {
+	if s.root.rubyLine || under <= eps {
+		return 0
+	}
+	return max(under-s.root.pd[css.Bottom], 0)
 }
 
 // rubyElem returns the context a column of the base nodes base and the

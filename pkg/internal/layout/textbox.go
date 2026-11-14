@@ -46,7 +46,9 @@ func (e *engine) trimTextBox(b *box, end float64, own *bfc) float64 {
 		if l, owner := edgeLine(b, true); l != nil && !l.trimmedUnder {
 			l.trimmedUnder = true
 			_, under := e.trimEdges(owner.st, owner.lang)
-			if d := l.h - l.baseline - under; d > 0 {
+			// The block's growth for the annotations under the line is
+			// trimmed with it.
+			if d := l.h + l.annEnd - l.baseline - under; d > 0 {
 				// A float after the last line is placed at the line's
 				// end, which the trim moves up, as Chromium places it.
 				y := l.y + l.h

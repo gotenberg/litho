@@ -47,11 +47,15 @@ type lineBox struct {
 	// line before it in its paragraph draws a bar too.
 	changed    *box
 	changeHead bool
-	// annOver is how far the ruby annotations over the line's columns
-	// reach above its top, which the room left above the line takes
-	// before the line grows; endRoom is the room under the line's content,
-	// which a ruby annotation over the next line may take (ruby.go).
-	annOver, endRoom float64
+	// annOver and annUnder are how far the ruby annotations over and
+	// under the line's columns reach above its top and below its bottom;
+	// startRoom and endRoom are the room above and under the line's
+	// content and annotations, which the annotations of the lines beside
+	// it take before a line grows (rubyRoom).
+	annOver, annUnder, startRoom, endRoom float64
+	// annEnd is how far the block grows under the line, its last, for
+	// the annotations under the line (rubyEnd).
+	annEnd float64
 	// trimmedOver and trimmedUnder report a line whose over or under
 	// edge a block container already trimmed by text-box-trim: the
 	// innermost one that asks decides (CSS Inline 3, 6.2).
@@ -775,8 +779,9 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 	first := true
 	// room is what lies above the next line that a ruby annotation over
 	// it may take: the margins and padding before the first line, the
-	// room under the previous line's content after it (rubyRoom).
-	room := 0.0
+	// room under the previous line's content after it; under is how far
+	// the annotations under the previous line reach below it (rubyRoom).
+	room, under := 0.0, 0.0
 	indent := resolve(b.st.TextIndent, cb.w)
 	after := afterBlock(b)
 	strutH := s.rootV.above + s.rootV.below
@@ -829,7 +834,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				}
 				y = top + l.h
 				s.lines = append(s.lines, l)
-				room = 0
+				room, under = 0, 0
 			}
 			y = s.clearBreak(p, y)
 			continue
@@ -924,7 +929,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 			}
 			fitTop := top
 			top, end, left, right, l := s.fitLine(lp, lw, pos, lineIndent, top, lineStrut)
-			s.rubyRoom(l, room)
+			s.rubyRoom(l, room, under)
 			floatsBefore := len(bc.floats)
 			for range len(lp.floats) {
 				if !s.placeFloatsBeside(lp, pos, end, l, top) {
@@ -933,7 +938,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				// A float placed beside the content before it narrows the
 				// line, which is broken again beside it.
 				top, end, left, right, l = s.fitLine(lp, lw, pos, lineIndent, top, lineStrut)
-				s.rubyRoom(l, room)
+				s.rubyRoom(l, room, under)
 			}
 			s.tail, s.moved = 0, false
 			if end == ln && isLastPara(d, p) {
@@ -947,7 +952,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 					// The page cut moved the line to where the floats
 					// leave another width: break it again there.
 					top, end, _, _, l = s.fitLine(lp, lw, pos, lineIndent, top, lineStrut)
-					s.rubyRoom(l, room)
+					s.rubyRoom(l, room, under)
 					top = s.position(top, l.h-l.slack, forced)
 					nl, nr = s.band(top, l.h)
 				}
@@ -961,7 +966,9 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				l.trimmedOver, l.colTrimmed = true, true
 			}
 			s.cutSlack(l, top)
-			if e.clampOverflows(top, l.h) {
+			// A line fits the clamp with the annotations under it, as
+			// Chromium clamps a line whose annotation would overflow.
+			if e.clampOverflows(top, l.h+l.annUnder) {
 				return s.discard(d, p, y)
 			}
 			l = s.overflowMark(lp, l, pos, end, lineIndent)
@@ -991,7 +998,7 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				s.lines[len(s.lines)-1].changed = s.root
 			}
 			s.lines = append(s.lines, l)
-			room = l.endRoom
+			room, under = l.endRoom, l.annUnder
 			s.recordAnchors(l)
 			s.recordEmptyAnchors(lp, pos, end, l)
 			e.noteLine(lp, pos, end, l)
@@ -1030,6 +1037,10 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 	}
 	b.lines = s.lines
 	e.balance.unfit = s.unfit
+	if g := s.rubyEnd(under); g > 0 {
+		s.lines[len(s.lines)-1].annEnd = g
+		y += g
+	}
 	return y
 }
 
@@ -1914,7 +1925,7 @@ func (s *inlineState) vertical(l *lineBox) {
 		aligned      bool
 	}
 	var atomics []atomicV
-	annTop := math.Inf(1)
+	annTop, annBottom := math.Inf(1), math.Inf(-1)
 	for _, it := range l.items {
 		parent := s.vboxOf(s.parentInline(it.box))
 		if it.atomic != nil {
@@ -1924,14 +1935,22 @@ func (s *inlineState) vertical(l *lineBox) {
 				above = a.m[css.Top] + a.baseline
 			}
 			below := a.marginH() - above
-			if r := a.ruby; r != nil && r.over && a.st.VerticalAlign.Kind != css.AlignTop && a.st.VerticalAlign.Kind != css.AlignBottom {
-				// The annotation over a column takes the room above the
-				// line before it grows the line (rubyRoom).
+			if r := a.ruby; r != nil && (r.over || r.under) && a.st.VerticalAlign.Kind != css.AlignTop && a.st.VerticalAlign.Kind != css.AlignBottom {
+				// The annotations over and under a column take the room
+				// above and under the line before they grow it (rubyRoom).
 				shift := s.e.alignShift(a.st.VerticalAlign, parent, above, below, s.e.lineHeight(a.st, a.lang))
 				it.baseline = shift
 				it.ascent, it.descent = above, below
-				annTop = min(annTop, shift-above)
-				include(parent, shift-r.baseAbove, shift+below)
+				lineAbove, lineBelow := above, below
+				if r.over {
+					annTop = min(annTop, shift-above)
+					lineAbove = r.baseAbove
+				}
+				if r.under {
+					annBottom = max(annBottom, shift+below)
+					lineBelow = r.baseBelow
+				}
+				include(parent, shift-lineAbove, shift+lineBelow)
 				atomics = append(atomics, atomicV{it: it, v: parent, above: above, below: below})
 				continue
 			}
@@ -2060,12 +2079,23 @@ func (s *inlineState) vertical(l *lineBox) {
 	l.h = bottom - top
 	l.baseline = -top
 	l.annOver = max(top-annTop, 0)
-	content := math.Inf(-1)
+	l.annUnder = max(annBottom-bottom, 0)
+	contentTop, content := annTop-top, annBottom-top
 	for _, it := range l.items {
 		it.baseline += l.baseline
-		content = max(content, it.baseline+it.descent)
+		above, below := it.ascent, it.descent
+		if a := it.atomic; a != nil && a.ruby != nil {
+			// A ruby column's content is its base's text: the room above
+			// and under it is room the annotations beside it may take.
+			above, below = a.ruby.textAbove, a.ruby.textBelow
+		}
+		contentTop = min(contentTop, it.baseline-above)
+		content = max(content, it.baseline+below)
 	}
-	l.endRoom = 0
+	l.startRoom, l.endRoom = 0, 0
+	if !math.IsInf(contentTop, 1) {
+		l.startRoom = max(contentTop, 0)
+	}
 	if !math.IsInf(content, -1) {
 		l.endRoom = max(l.h-content, 0)
 	}

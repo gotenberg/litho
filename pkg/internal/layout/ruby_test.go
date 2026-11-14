@@ -163,6 +163,47 @@ func TestRubyUnder(t *testing.T) {
 	}
 }
 
+// TestRubyRoomBetweenLines locks the room an annotation under a line
+// takes before the next line moves: its line's half-leading, then the
+// room above the next line's content; at the end of a block, its end
+// padding. An annotation over a line takes the room under the content of
+// the line before, a line of ruby included.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 sets the line
+//     after a 24px line of 20px Ahem holding a 10px annotation under its
+//     base 30px lower, and grows the block by 8px less its end padding
+//     when that line is its last; two such lines with the annotation over
+//     their bases are 30px apart.
+func TestRubyRoomBetweenLines(t *testing.T) {
+	t.Parallel()
+	// 48px lines of 40px Ahem: the annotation's em box ends 8 + 20px under
+	// the baseline, 16px under the line, and the next line's half-leading
+	// takes 4px of it.
+	block, ruby, rt := rubyDoc(1.2, func(s *css.Style) { s.RubyPosition = css.RubyUnder })
+	res := run(t, el(block, el(ruby, txt(ruby, "AB"), el(rt, txt(rt, "ab"))), br(block), txt(block, "yy")), page(600, 300))
+	if _, y := placed(t, res, "yy"); !near(y, 48+12+36) {
+		t.Errorf("next line's baseline at %g, want %g", y, 48+12+36.0)
+	}
+	for _, c := range []struct{ pad, want float64 }{{0, 64}, {6, 64}, {20, 68}} {
+		block, ruby, rt := rubyDoc(1.2, func(s *css.Style) { s.RubyPosition = css.RubyUnder })
+		block.Padding[css.Bottom] = css.Pts(px(c.pad))
+		root := el(sty(), el(block, el(ruby, txt(ruby, "AB"), el(rt, txt(rt, "ab")))))
+		b := kid(t, boxes(t, root, page(600, 300)), 0)
+		if got := rect(b)[3]; !near(got, c.want) {
+			t.Errorf("end padding %gpx: block %gpx tall, want %g", c.pad, got, c.want)
+		}
+	}
+	// Annotations over: the first line grows by 16px, the second by 16px
+	// less the 4px of half-leading under the first line's base.
+	block, ruby, rt = rubyDoc(1.2)
+	res = run(t, el(block, el(ruby, txt(ruby, "AB"), el(rt, txt(rt, "ab"))), br(block), el(ruby, txt(ruby, "CD"), el(rt, txt(rt, "cd")))), page(600, 300))
+	if _, y := placed(t, res, "CD"); !near(y, 64+12+36) {
+		t.Errorf("second line's baseline at %g, want %g", y, 64+12+36.0)
+	}
+}
+
 // TestRubyPairing locks how a ruby's children pair (CSS Ruby 1, 2.2 and
 // 2.5.1): a base per run of other children, white space alone between
 // segments dropped, a hidden child separating nothing.
