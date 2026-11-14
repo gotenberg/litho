@@ -162,7 +162,7 @@ func TestBorderRadius_Clamped(t *testing.T) {
 
 func TestBackground_Clip(t *testing.T) {
 	root := doc(el(sty(width(2), height(2), bg(red), padding(1), border(1, css.Solid, blue), func(s *css.Style) {
-		s.BackgroundClip = css.ContentEdge
+		s.BackgroundClip, s.BackgroundColorClip = css.ContentEdge, css.ContentEdge
 	})))
 	res := run(t, root, page(6, 6))
 	assertPixels(t, res, 1, `
@@ -358,4 +358,19 @@ func TestVisibilityHidden_LaidOutNotPainted(t *testing.T) {
 		__
 		BB
 		BB`)
+}
+
+// TestBackground_ColorClippedByTheBottomLayer locks that background-color
+// paints within the clip of the bottom layer (CSS Backgrounds 3, 3.10),
+// not within the first layer's.
+func TestBackground_ColorClippedByTheBottomLayer(t *testing.T) {
+	root := doc(el(sty(width(2), height(2), bg(blue), border(1, css.Solid, css.Color{}), func(s *css.Style) {
+		s.BackgroundClip, s.BackgroundColorClip = css.BorderEdge, css.ContentEdge
+	})))
+	res := run(t, root, page(4, 4))
+	assertPixels(t, res, 1, `
+		____
+		_BB_
+		_BB_
+		____`)
 }

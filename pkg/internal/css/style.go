@@ -1113,7 +1113,18 @@ type Style struct {
 	BackgroundPosition [2]Dimension
 	BackgroundSize     BackgroundSize
 	BackgroundOrigin   BoxEdge
-	BackgroundClip     BoxEdge
+	// BackgroundClip is the background-clip of the first layer, the one
+	// whose image litho draws.
+	BackgroundClip BoxEdge
+	// BackgroundColorClip clips background-color: the background-clip of
+	// the bottom layer (CSS Backgrounds 3, 3.10), the entry of the
+	// background-clip list for the last background-image layer once the
+	// list is repeated or truncated to the layer count (CSS Backgrounds
+	// 3, 2.2).
+	BackgroundColorClip BoxEdge
+	// BackgroundLayers is the number of background layers, the length
+	// of the background-image list (CSS Backgrounds 3, 2.2): 1 or more.
+	BackgroundLayers int
 	// BackgroundBlendMode is how the image composites with the
 	// background colour (CSS Compositing 1, 3.4).
 	BackgroundBlendMode BlendMode
@@ -1617,6 +1628,7 @@ func InitialValue() Style {
 		Padding:            [4]Dimension{Pts(0), Pts(0), Pts(0), Pts(0)},
 		BackgroundPosition: [2]Dimension{{Kind: Percent}, {Kind: Percent}},
 		BackgroundOrigin:   PaddingEdge,
+		BackgroundLayers:   1,
 		ObjectPosition:     [2]Dimension{{Kind: Percent, Value: 0.5}, {Kind: Percent, Value: 0.5}},
 		Color:              Color{A: 1},
 		// text-emphasis-color is inherited and starts as currentColor,

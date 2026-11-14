@@ -104,7 +104,7 @@ func (g *treeGen) style() *css.Style {
 			st.BackgroundImage = "img"
 			st.BackgroundRepeat = [2]css.Repeat{css.Repeat(g.next() % 4), css.Repeat(g.next() % 4)}
 			st.BackgroundSize = css.BackgroundSize{Kind: css.SizeKind(g.next() % 3), Width: g.length(true), Height: g.length(true)}
-			st.BackgroundClip, st.BackgroundOrigin = css.BoxEdge(g.next()%3), css.BoxEdge(g.next()%3)
+			st.BackgroundClip, st.BackgroundColorClip, st.BackgroundOrigin = css.BoxEdge(g.next()%3), css.BoxEdge(g.next()%3), css.BoxEdge(g.next()%3)
 		}
 	}
 	if flags&16 != 0 {

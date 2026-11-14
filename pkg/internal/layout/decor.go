@@ -128,16 +128,11 @@ func ring(outer typeset.Rect, oradii [4][2]float64, inner typeset.Rect, iradii [
 // r with outer corner radii: the colour over the background-clip area, then
 // the image (CSS Backgrounds 3, 3).
 func (p *painter) background(b *box, st *css.Style, r typeset.Rect, radii [4][2]float64, bd, pd [4]float64) {
-	clipR, clipRadii := r, radii
-	switch st.BackgroundClip {
-	case css.BorderEdge, css.TextEdge:
-	case css.PaddingEdge:
-		clipR, clipRadii = insetRect(r, radii, bd)
-	case css.ContentEdge:
-		clipR, clipRadii = insetRect(r, radii, addSides(bd, pd))
-	}
+	clipR, clipRadii := clipArea(st.BackgroundClip, r, radii, bd, pd)
 	if clipR.Width <= 0 || clipR.Height <= 0 {
-		return
+		if colR, _ := clipArea(st.BackgroundColorClip, r, radii, bd, pd); colR.Width <= 0 || colR.Height <= 0 {
+			return
+		}
 	}
 	if clipToText(st) {
 		// CSS Backgrounds 4, 2.4: the background paints under the glyphs
@@ -155,6 +150,20 @@ func (p *painter) background(b *box, st *css.Style, r typeset.Rect, radii [4][2]
 	}
 	into, blend := p.blendedBackground(nil, b, st)
 	p.backgroundInto(into, blend, b, st, r, radii, bd, pd, clipR, clipRadii)
+}
+
+// clipArea returns the background painting area that edge names on the
+// border box r with outer corner radii, its borders bd and paddings pd
+// (CSS Backgrounds 3, 3.8); text paints within the border box.
+func clipArea(edge css.BoxEdge, r typeset.Rect, radii [4][2]float64, bd, pd [4]float64) (typeset.Rect, [4][2]float64) {
+	switch edge {
+	case css.BorderEdge, css.TextEdge:
+	case css.PaddingEdge:
+		return insetRect(r, radii, bd)
+	case css.ContentEdge:
+		return insetRect(r, radii, addSides(bd, pd))
+	}
+	return r, radii
 }
 
 // bgSlice is a background positioning area and the part of the
@@ -255,19 +264,23 @@ func (p *painter) blendedBackground(into *ditem, b *box, st *css.Style) (*ditem,
 // clipped to clipR with clipRadii, into the group into, or into the
 // display list when into is nil, the image under the blend mode blend.
 func (p *painter) backgroundInto(into *ditem, blend typeset.BlendMode, b *box, st *css.Style, r typeset.Rect, radii [4][2]float64, bd, pd [4]float64, clipR typeset.Rect, clipRadii [4][2]float64) {
-	if c, ok := colorOf(st.BackgroundColor); ok {
-		path := &typeset.Path{Ops: roundedRect(clipR, clipRadii), Fill: &typeset.Fill{Color: c}}
+	colR, colRadii := clipR, clipRadii
+	if !clipToText(st) {
+		colR, colRadii = clipArea(st.BackgroundColorClip, r, radii, bd, pd)
+	}
+	if c, ok := colorOf(st.BackgroundColor); ok && colR.Width > 0 && colR.Height > 0 {
+		path := &typeset.Path{Ops: roundedRect(colR, colRadii), Fill: &typeset.Fill{Color: c}}
 		if into == nil {
-			p.emit(b, false, path, clipR.Y, clipR.Y+clipR.Height, -1)
+			p.emit(b, false, path, colR.Y, colR.Y+colR.Height, -1)
 		} else {
 			page := -1
 			if p.mono >= 0 {
 				page = p.mono
 			}
-			into.kids = append(into.kids, &ditem{frag: path, y0: clipR.Y, y1: clipR.Y + clipR.Height, page: page})
+			into.kids = append(into.kids, &ditem{frag: path, y0: colR.Y, y1: colR.Y + colR.Height, page: page})
 		}
 	}
-	if st.BackgroundImage == "" && st.BackgroundGradient == nil {
+	if (st.BackgroundImage == "" && st.BackgroundGradient == nil) || clipR.Width <= 0 || clipR.Height <= 0 {
 		return
 	}
 	area := r

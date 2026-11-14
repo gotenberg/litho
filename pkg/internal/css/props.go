@@ -833,14 +833,14 @@ func init() {
 		{pLeft, dimProp("left", false, func(s *Style) *Dimension { return &s.Left }, allowPct|allowMixed, kwAuto, false)},
 		{pBgColor, colorProp("background-color", func(s *Style) *Color { return &s.BackgroundColor }, slotBackground, nil)},
 		{pBgImage, propDef{name: "background-image", parse: parseBgImage, compute: func(s *styler, st *Style, v any) {
-			if im, ok := v.(imageSpec); ok {
-				st.BackgroundImage, st.BackgroundGradient = im.url, nil
-				if im.grad != nil {
-					st.BackgroundGradient = im.grad.compute(s.lc, st.Color)
+			if l, ok := v.(bgImageList); ok {
+				st.BackgroundImage, st.BackgroundGradient, st.BackgroundLayers = l.first.url, nil, l.layers
+				if l.first.grad != nil {
+					st.BackgroundGradient = l.first.grad.compute(s.lc, st.Color)
 				}
 			}
 		}, copyFrom: func(dst, src *Style) {
-			dst.BackgroundImage, dst.BackgroundGradient = src.BackgroundImage, src.BackgroundGradient
+			dst.BackgroundImage, dst.BackgroundGradient, dst.BackgroundLayers = src.BackgroundImage, src.BackgroundGradient, src.BackgroundLayers
 		}}},
 		{pBgRepeat, propDef{name: "background-repeat", parse: parseBgRepeat, compute: func(_ *styler, st *Style, v any) {
 			if r, ok := v.([2]Repeat); ok {
@@ -855,10 +855,13 @@ func init() {
 		}, copyFrom: field(func(s *Style) *BackgroundSize { return &s.BackgroundSize })}},
 		{pBgOrigin, originProp()},
 		{pBgClip, propDef{name: "background-clip", parse: parseBgClip, compute: func(_ *styler, st *Style, v any) {
-			if e, ok := v.(BoxEdge); ok {
-				st.BackgroundClip = e
+			if l, ok := v.([]BoxEdge); ok && len(l) > 0 {
+				st.BackgroundClip = l[0]
+				st.BackgroundColorClip = l[(max(st.BackgroundLayers, 1)-1)%len(l)]
 			}
-		}, copyFrom: field(func(s *Style) *BoxEdge { return &s.BackgroundClip })}},
+		}, copyFrom: func(dst, src *Style) {
+			dst.BackgroundClip, dst.BackgroundColorClip = src.BackgroundClip, src.BackgroundColorClip
+		}}},
 		{pFontFamily, propDef{name: "font-family", inherited: true, parse: parseFontFamily, compute: func(_ *styler, st *Style, v any) {
 			if f, ok := v.([]string); ok {
 				st.FontFamilies = f
@@ -1154,10 +1157,28 @@ var breakValues = map[string]Break{
 
 var boxEdges = map[string]BoxEdge{"border-box": BorderEdge, "padding-box": PaddingEdge, "content-box": ContentEdge}
 
-func parseBgClip(v []token, c *declCtx) (any, bool) {
+func parseBgClip(v []token, _ *declCtx) (any, bool) {
+	layers := splitCommas(v)
+	if len(layers) == 0 {
+		return nil, false
+	}
+	out := make([]BoxEdge, 0, len(layers))
+	for _, l := range layers {
+		e, ok := bgClipValue(l)
+		if !ok {
+			return nil, false
+		}
+		out = append(out, e)
+	}
+	return out, true
+}
+
+// bgClipValue parses one layer of background-clip: a <visual-box> or
+// text (CSS Backgrounds 4, 2.1).
+func bgClipValue(v []token) (BoxEdge, bool) {
 	k, ok := keyword(v)
 	if !ok {
-		return nil, false
+		return 0, false
 	}
 	if k == "text" || k == "-webkit-text" {
 		return TextEdge, true

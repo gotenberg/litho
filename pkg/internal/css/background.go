@@ -75,17 +75,36 @@ func firstLayer(v []token, c *declCtx, prop string) ([]token, bool) {
 	return layers[0], true
 }
 
+// bgImageList is a specified background-image: the first layer's image,
+// the one litho draws, and the number of layers, which sizes the other
+// background lists (CSS Backgrounds 3, 2.2).
+type bgImageList struct {
+	first  imageSpec
+	layers int
+}
+
+// parseBgImage parses background-image (CSS Backgrounds 3, 2.2): a list
+// of <bg-image>, each layer valid or the declaration is.
 func parseBgImage(v []token, c *declCtx) (any, bool) {
-	l, ok := firstLayer(v, c, "background-image")
-	if !ok {
+	if _, ok := firstLayer(v, c, "background-image"); !ok {
 		return nil, false
 	}
-	t, ok := single(l)
-	if !ok {
-		return nil, false
+	layers := splitCommas(v)
+	out := bgImageList{layers: len(layers)}
+	for i, l := range layers {
+		t, ok := single(l)
+		if !ok {
+			return nil, false
+		}
+		u, ok := bgImageValue(t, c, "background-image")
+		if !ok {
+			return nil, false
+		}
+		if i == 0 {
+			out.first = u
+		}
 	}
-	u, ok := bgImageValue(t, c, "background-image")
-	return u, ok
+	return out, true
 }
 
 var repeatKeywords = map[string]Repeat{
@@ -374,7 +393,8 @@ func parseBgSize(v []token, c *declCtx) (any, bool) {
 
 // expandBackground expands the background shorthand (CSS Backgrounds 3,
 // 3.10). The first layer gives the image, position, size, repeat and
-// boxes; the colour comes from the final layer.
+// origin; every layer gives its clip and counts in the number of layers;
+// the colour comes from the final layer.
 func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 	layers := splitCommas(v)
 	if len(layers) == 0 {
@@ -394,6 +414,8 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 		{pBgClip, wideInitial},
 		{pBgAttachment, wideInitial},
 	}
+	images := bgImageList{layers: len(layers)}
+	clips := make([]BoxEdge, len(layers))
 	for li, layer := range layers {
 		final := li == len(layers)-1
 		var color, image, repeat, attach, pos bool
@@ -415,7 +437,7 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 				if u, ok := bgImageValue(t, c, "background"); ok {
 					image = true
 					if li == 0 {
-						out[1].v = u
+						images.first = u
 					}
 					i++
 					continue
@@ -488,15 +510,17 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 			}
 			return nil, false
 		}
-		if li == 0 {
-			switch len(boxes) {
-			case 1:
-				out[6].v, out[7].v = boxes[0], boxes[0]
-			case 2:
-				out[6].v, out[7].v = boxes[0], boxes[1]
-			}
+		switch len(boxes) {
+		case 1:
+			clips[li] = boxes[0]
+		case 2:
+			clips[li] = boxes[1]
+		}
+		if li == 0 && len(boxes) > 0 {
+			out[6].v = boxes[0]
 		}
 	}
+	out[1].v, out[7].v = images, clips
 	return out, true
 }
 
