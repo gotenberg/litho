@@ -237,6 +237,11 @@ func (x *chartExReader) read(root *Element) {
 	c.Axes = []*chart.Axis{x.axis(catAx, chart.CategoryAxis, grid), x.axis(valAx, chart.ValueAxis, grid)}
 	c.Axes[0].BetweenCategories = drawn
 	c.Axes[1].Position = chart.AxisLeft
+	if g.Kind == chart.Funnel {
+		// A funnel's categories run down the plot area, its first at the
+		// top, on an axis at its left.
+		c.Axes[0].Reverse, c.Axes[0].Position = true, chart.AxisLeft
+	}
 	if len(lines) > 0 {
 		c.Axes = append(c.Axes, x.percentAxis(pctAx))
 	}
@@ -635,20 +640,21 @@ func (x *chartExReader) dataLabels(e *Element) chart.Labels {
 
 // kindOf returns the kind a chart of the cx:series series is drawn as
 // (MS-ODRAWXML, 2.24.4.21 ST_SeriesLayout): bars when every series is a
-// clusteredColumn, binned or not, or the paretoLine of one; a waterfall
-// or boxes and whiskers when every series is one; [chart.Unsupported] for
-// the other kinds and their mixes.
+// clusteredColumn, binned or not, or the paretoLine of one; a waterfall,
+// boxes and whiskers or a funnel when every series is one;
+// [chart.Unsupported] for the other kinds and their mixes.
 func (x *chartExReader) kindOf(series []*Element) chart.Kind {
 	if len(series) == 0 {
 		return chart.Unsupported
 	}
-	columns, waterfall, boxes, owner := true, true, true, false
+	columns, waterfall, boxes, funnel, owner := true, true, true, true, false
 	for _, s := range series {
 		id := attrOr(s, "layoutId")
 		columns = columns && (id == "clusteredColumn" || id == "paretoLine")
 		owner = owner || id == "clusteredColumn"
 		waterfall = waterfall && id == "waterfall"
 		boxes = boxes && id == "boxWhisker"
+		funnel = funnel && id == "funnel"
 	}
 	switch {
 	case columns && owner:
@@ -657,6 +663,8 @@ func (x *chartExReader) kindOf(series []*Element) chart.Kind {
 		return chart.Waterfall
 	case boxes:
 		return chart.BoxWhisker
+	case funnel:
+		return chart.Funnel
 	}
 	return chart.Unsupported
 }

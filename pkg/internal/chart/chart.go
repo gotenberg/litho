@@ -144,6 +144,10 @@ const (
 	// extremes ([Series.Box]; MS-ODRAWXML, 2.24.4.21 ST_SeriesLayout
 	// boxWhisker).
 	BoxWhisker
+	// Funnel draws the points of its first series as bars from the top
+	// down, each centred across the plot area and as wide as its value is
+	// of the greatest (MS-ODRAWXML, 2.24.4.21 ST_SeriesLayout funnel).
+	Funnel
 )
 
 // String returns the kind's name, as warnings spell it.
@@ -171,6 +175,8 @@ func (k Kind) String() string {
 		return "waterfall"
 	case BoxWhisker:
 		return "box and whisker"
+	case Funnel:
+		return "funnel"
 	}
 	return "unknown"
 }

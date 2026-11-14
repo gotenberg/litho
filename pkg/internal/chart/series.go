@@ -152,6 +152,8 @@ func (rd *renderer) series(g *Group, x, y *dim) []func() {
 	case BoxWhisker:
 		rd.boxes(g, x, y)
 		return nil
+	case Funnel:
+		return rd.funnel(g, x, y)
 	case Area:
 		return rd.areas(g, x, y)
 	case Unsupported:

@@ -424,7 +424,7 @@ func (p *chartReader) readView3D(ch *Element) {
 				p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D chart seen from behind is drawn seen from the front")
 			}
 		case chart.Pie:
-		case chart.Doughnut, chart.Scatter, chart.Bubble, chart.Radar, chart.Unsupported, chart.Waterfall, chart.BoxWhisker:
+		case chart.Doughnut, chart.Scatter, chart.Bubble, chart.Radar, chart.Unsupported, chart.Waterfall, chart.BoxWhisker, chart.Funnel:
 			p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D "+g.Kind.String()+" chart is drawn flat")
 		}
 		p.warn(warn.ContentUnsupported, warn.Approximated, "a 3D chart's faces are shaded flat, without its lighting")

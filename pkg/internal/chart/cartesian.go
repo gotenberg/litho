@@ -432,7 +432,7 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 		}
 	}
 	x := &dim{ax: c.axisAt(xAxis), loc: c.Locale}
-	horizontal := g0.Kind == Bar && g0.Horizontal
+	horizontal := g0.Kind == Bar && g0.Horizontal || g0.Kind == Funnel
 	x.vertical = horizontal
 	if xy {
 		x.border = true

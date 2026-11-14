@@ -63,8 +63,8 @@ func TestChartExFromElement_Unsupported(t *testing.T) {
 	title := `<cx:title pos="t" align="ctr" overlay="0"><cx:txPr><a:bodyPr/><a:p><a:pPr><a:defRPr/></a:pPr><a:r><a:rPr sz="1400" b="0"/><a:t>Funnel!</a:t></a:r></a:p></cx:txPr></cx:title>`
 	xml := chartExXML(cxData("0", "Sheet1!$B$2:$B$4", []string{"a", "b", "c"}, "4", "5", "7")+cxData("1", "Sheet1!$C$2:$C$4", nil, "1", "2", "3"),
 		title+`<cx:plotArea><cx:plotAreaRegion>`+
-			`<cx:series layoutId="funnel"><cx:tx><cx:txData><cx:f>Sheet1!$B$1</cx:f><cx:v>Stages</cx:v></cx:txData></cx:tx><cx:dataId val="0"/></cx:series>`+
-			`<cx:series layoutId="funnel" hidden="1"><cx:dataId val="1"/></cx:series>`+
+			`<cx:series layoutId="regionMap"><cx:tx><cx:txData><cx:f>Sheet1!$B$1</cx:f><cx:v>Stages</cx:v></cx:txData></cx:tx><cx:dataId val="0"/></cx:series>`+
+			`<cx:series layoutId="regionMap"><cx:dataId val="1"/></cx:series>`+
 			`</cx:plotAreaRegion>`+cxAxes+`</cx:plotArea><cx:legend pos="t" align="ctr" overlay="0"/>`)
 	c := readChartEx(t, xml, nil)
 	if len(c.Groups) != 1 || c.Groups[0].Kind != chart.Unsupported || len(c.Groups[0].Series) != 2 {
@@ -273,5 +273,17 @@ func TestChartExFromElement_BoxWhisker(t *testing.T) {
 	want := typeset.Color{R: 0.8, A: 1}
 	if s.Box.Line == nil || math.Abs(s.Box.Line.Color.R-want.R) > 1e-9 || s.Border == nil || s.Border.Color != s.Box.Line.Color {
 		t.Errorf("line %+v, outline %+v: want both 0.8 of the series' red", s.Box.Line, s.Border)
+	}
+}
+
+func TestChartExFromElement_Funnel(t *testing.T) {
+	region := `<cx:series layoutId="funnel"><cx:dataId val="0"/></cx:series>`
+	c := readChartEx(t, chartExXML(cxData("0", "", []string{"a", "b"}, "4", "2"), `<cx:plotArea><cx:plotAreaRegion>`+region+`</cx:plotAreaRegion><cx:axis id="0"><cx:catScaling gapWidth="0.06"/><cx:tickLabels/></cx:axis></cx:plotArea>`), nil)
+	g := c.Groups[0]
+	if g.Kind != chart.Funnel || c.Notice != nil || g.GapWidth != 6 {
+		t.Fatalf("group %+v, notice %v: want a funnel without a notice", g, c.Notice)
+	}
+	if x, y := c.Axes[g.XAxis], c.Axes[g.YAxis]; !x.Reverse || x.Position != chart.AxisLeft || !y.Deleted {
+		t.Errorf("axes %+v %+v, want the categories down the left and no value axis", x, y)
 	}
 }
