@@ -412,3 +412,26 @@ func TestDrawings_WordAnchor(t *testing.T) {
 		})
 	}
 }
+
+// TestTextBox_Rotation locks a text box turned by its shape's rotation
+// (ECMA-376 Part 1, 20.1.7.6 xfrm rot) with its text, and one whose body
+// keeps the text upright (21.1.2.1.1 bodyPr upright) left unturned.
+func TestTextBox_Rotation(t *testing.T) {
+	t.Parallel()
+	box := func(bodyPr string) string {
+		return `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="2540000" cy="1270000"/><wp:docPr id="4" name="t"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">` +
+			`<wps:wsp><wps:spPr><a:xfrm rot="1800000"><a:off x="0" y="0"/><a:ext cx="2540000" cy="1270000"/></a:xfrm><a:prstGeom prst="rect"/></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>Turned</w:t></w:r></w:p></w:txbxContent></wps:txbx>` + bodyPr + `</wps:wsp>` +
+			`</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	}
+	b := build(t, box(`<wps:bodyPr/>`)+box(`<wps:bodyPr upright="1"/>`), nil)
+	figs := role(b.root, "Figure")
+	if len(figs) != 2 {
+		t.Fatalf("%d text boxes", len(figs))
+	}
+	if tr := figs[0].Style.Transform; len(tr) != 1 || tr[0].Kind != css.TransformRotate || math.Abs(tr[0].V[0]-math.Pi/6) > 1e-9 {
+		t.Errorf("turned box transform %+v, want a 30 degree rotation", tr)
+	}
+	if tr := figs[1].Style.Transform; len(tr) != 0 {
+		t.Errorf("upright box transform %+v", tr)
+	}
+}

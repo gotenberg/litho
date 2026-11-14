@@ -298,7 +298,8 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 	if tb := sp.Child(ooxml.NSWPS, "txbx"); tb != nil {
 		bodyPr := sp.Child(ooxml.NSWPS, "bodyPr")
 		n := d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, bodyInsets(bodyPr), alt, depth)
-		if id := attrOr(tb, "id"); id != "" {
+		id := attrOr(tb, "id")
+		if id != "" {
 			setChain(n.Style, id, 0, h)
 			d.textBoxEffectsOmitted(fx)
 		} else if vert := bodyVert(attrOr(bodyPr, "vert")); vert == "" {
@@ -309,6 +310,7 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 			d.textBoxEffectsOmitted(fx)
 		}
 		d.turn(n, bodyVert(attrOr(bodyPr, "vert")))
+		turnTextBox(n, spPr, bodyPr, id == "")
 		return n
 	}
 	if l := sp.Child(ooxml.NSWPS, "linkedTxbx"); l != nil && attrOr(l, "id") != "" {
@@ -331,6 +333,26 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 		setTransform(n.Style, rot, fh, fv)
 	}
 	return n
+}
+
+// turnTextBox turns the text box n by its shape's rotation (ECMA-376
+// Part 1, 20.1.7.6 xfrm rot), its text with it, unless its body keeps the
+// text upright (21.1.2.1.1 bodyPr upright); the flips of xfrm leave the
+// text as it reads. A box of a chain of linked boxes stays unturned, its
+// text flowing from box to box.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx: ooxmlexport/fdo73247.docx prints its text box of
+//     rot 1969698 (32.8 degrees) turned clockwise with its text.
+func turnTextBox(n *layout.Node, spPr, bodyPr *ooxml.Element, single bool) {
+	xfrm := spPr.Child(ooxml.NSA, "xfrm")
+	if n == nil || xfrm == nil || !single || hasAttr(bodyPr, "upright") && ooxml.OnOff(attrOr(bodyPr, "upright"), true) {
+		return
+	}
+	if rot, _, _ := ooxml.Transform2D(xfrm); rot != 0 {
+		setTransform(n.Style, rot, false, false)
+	}
 }
 
 // pictureShape reports whether a shape filled with a picture draws as the
