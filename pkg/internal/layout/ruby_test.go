@@ -422,3 +422,25 @@ func runX(t *testing.T, res *Result, s string) float64 {
 	t.Fatalf("no glyph %q in %v", s, texts(res, 1))
 	return 0
 }
+
+// TestRubyOverhangTabs locks [engine.tabOverhang]: under ruby-overhang:
+// spaces an annotation hangs over the preserved tabs beside its column,
+// whose stops are set as if it did not, so the text after the second tab
+// starts where the column's annotation ends.
+func TestRubyOverhangTabs(t *testing.T) {
+	t.Parallel()
+	pre := func(s *css.Style) {
+		s.WhiteSpace = css.Pre
+		s.TabSize = css.Dimension{Kind: css.Points, Value: px(40)}
+	}
+	block, ruby, rt := rubyDoc(1, func(s *css.Style) { s.RubyOverhang = css.RubyOverhangSpaces })
+	pre(block)
+	pre(ruby)
+	res := run(t, el(block, txt(block, "x\t"), el(ruby, txt(ruby, "A"), el(rt, txt(rt, "abcdef"))), txt(block, "\ty")), page(600, 300))
+	if x, _ := placed(t, res, "abcdef"); !near(x, 40) {
+		t.Errorf("annotation at %g, want 40, over the first tab", x)
+	}
+	if x, _ := placed(t, res, "y"); !near(x, 160) {
+		t.Errorf("y at %g, want 160, where the annotation ends", x)
+	}
+}

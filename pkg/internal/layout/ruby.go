@@ -434,6 +434,56 @@ func (e *engine) rubyOverhang(p *ifcPara, i int, a *box) {
 	}
 }
 
+// tabOverhang returns how much of the advance w of the preserved tab i
+// of p the annotations of the ruby columns beside it hang over under
+// ruby-overhang: spaces, and none, which Chromium lays out alike: as far
+// as the room the base leaves on that side, at most the tab's advance.
+// Chromium sets the tab stops as if no annotation hung over a tab, then
+// hangs it: the caller measures the next tab stops past the advance this
+// takes away.
+//
+// # Corpus evidence
+//
+//   - wpt: css-ruby/ruby-overhang-spaces-013 and
+//     ruby-overhang-spaces-align-002, Chromium 156 lays a 60px annotation
+//     over a 20px base between two tabs of tab-size 1ic out as the base
+//     between two ideographic spaces, the tab after the column ending
+//     where it would without the overhang.
+func (e *engine) tabOverhang(p *ifcPara, i int, w float64) float64 {
+	room := 0.0
+	for _, j := range [2]int{i - 1, i + 1} {
+		if j < 0 || j >= p.p.Len() {
+			continue
+		}
+		info := p.infos[p.p.RunOf(j)]
+		a := info.box
+		if info.kind != runAtomic || a.ruby == nil || a.ruby.ann == nil || len(a.ruby.ann.lines) == 0 || len(a.ruby.base.lines) == 0 || a.st.RubyOverhang == css.RubyOverhangAuto {
+			continue
+		}
+		at := max(i, j)
+		touches := true
+		for _, list := range [2][]posBox{p.opens, p.closes} {
+			for _, o := range list {
+				if o.pos == at && o.box != a.ruby.container {
+					touches = false
+				}
+			}
+		}
+		if !touches {
+			continue
+		}
+		// The tab lies after the column when j is before it, on the
+		// column's end side.
+		after := j < i
+		if (a.st.Direction == css.RTL) != after {
+			room += a.ruby.inEnd
+		} else {
+			room += a.ruby.inStart
+		}
+	}
+	return min(room, w)
+}
+
 // overhangSpace returns the share of the advance of r, a character beside
 // a ruby column, an annotation under ruby-overhang: spaces hangs over,
 // and whether the annotation may hang on past it; after reports a

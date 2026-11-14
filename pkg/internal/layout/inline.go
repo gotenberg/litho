@@ -390,6 +390,9 @@ func (e *engine) breakLineIn(p *ifcPara, w []float64, start int, x0, avail float
 	x := x0
 	last, over := -1, -1
 	office := root != nil && officeTabs(root.st)
+	// hung is the advance the annotations of ruby columns took from the
+	// tabs before, which the next tab stops are measured past.
+	hung := 0.0
 	for i := start; i < n; i++ {
 		// A break at a soft hyphen fits when the hyphen it adds does; one
 		// that does not still ends a line nothing else ends.
@@ -406,7 +409,10 @@ func (e *engine) breakLineIn(p *ifcPara, w []float64, start int, x0, avail float
 			if office {
 				wi, brk = e.officeTab(root, p, w, i, org+x, org+avail)
 			} else {
-				wi = e.tabWidth(info.box, x)
+				wi = e.tabWidth(info.box, x+hung)
+				h := e.tabOverhang(p, i, wi)
+				wi -= h
+				hung += h
 			}
 			p.p.SetAdvance(i, wi)
 			w[i] = wi
@@ -2453,14 +2459,17 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 		if indents(b.st, pi == 0 && !afterBlock(b), pi > 0 && d.paras[pi-1].forced) {
 			x = indent
 		}
-		trail := 0.0
+		trail, hung := 0.0, 0.0
 		for i := range mp.p.Len() {
 			wi := maxW[i]
 			if info := mp.infos[mp.p.RunOf(i)]; info.kind == runTab {
 				if officeTabs(b.st) {
 					wi, _ = e.officeTab(b, mp, maxW, i, x, math.Inf(1))
 				} else {
-					wi = e.tabWidth(info.box, x)
+					wi = e.tabWidth(info.box, x+hung)
+					h := e.tabOverhang(mp, i, wi)
+					wi -= h
+					hung += h
 				}
 			}
 			x += wi
@@ -2471,12 +2480,13 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 			}
 		}
 		hi = max(hi, x-trail+floats)
-		seg, trail := 0.0, 0.0
+		seg := 0.0
+		trail, hung = 0, 0
 		anywhere := false
 		for i := range n {
 			if i > 0 && (p.allowed(i) || anywhere && p.p.GraphemeStart(i)) {
 				lo = max(lo, seg-trail)
-				seg, trail = 0, 0
+				seg, trail, hung = 0, 0, 0
 			}
 			st := p.styleAt(i)
 			anywhere = (st.OverflowWrap == css.Anywhere || st.LineBreak == css.LineBreakAnywhere) && wraps(st.WhiteSpace)
@@ -2485,7 +2495,10 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 				if officeTabs(b.st) {
 					wi, _ = e.officeTab(b, p, minW, i, seg, math.Inf(1))
 				} else {
-					wi = e.tabWidth(info.box, seg)
+					wi = e.tabWidth(info.box, seg+hung)
+					h := e.tabOverhang(p, i, wi)
+					wi -= h
+					hung += h
 				}
 			}
 			seg += wi
