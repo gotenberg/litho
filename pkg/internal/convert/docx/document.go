@@ -93,6 +93,9 @@ type document struct {
 	lineFactors map[string][3]float64
 	// fontClass maps a lower-cased family to its fallback face.
 	fontClass map[string]string
+	// fontAlt maps a lower-cased family to the alternate name its font
+	// table entry gives it (ECMA-376 Part 1, 17.8.3.1 altName).
+	fontAlt map[string]string
 	// footnoteNumber and endnoteNumber count the footnotes and endnotes
 	// numbered so far.
 	footnoteNumber, endnoteNumber int
