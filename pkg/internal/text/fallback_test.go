@@ -98,6 +98,32 @@ func TestLayout_FallbackFollowsTheJudgingEngine(t *testing.T) {
 	}
 }
 
+// TestLayout_PunctuationInTheFaceOfTheLanguage locks that under Chromium's
+// rule a fullwidth punctuation, of no CJK script, no family list covers
+// takes the Noto CJK face of the language, and the first in index order
+// without one.
+//
+// # Corpus evidence
+//
+//   - probe, html: in the gotenberg/gotenberg:9.4.1 image, Chromium prints
+//     the fullwidth punctuation of a monospace line under lang="zh-Hans"
+//     in Noto Sans CJK SC.
+func TestLayout_PunctuationInTheFaceOfTheLanguage(t *testing.T) {
+	t.Parallel()
+	const colon = '：'
+	f := newTestFonts(t,
+		fontFile{name: "a_mono.ttf", data: familyFace("DejaVu Sans Mono", "Regular", 400, false)},
+		fontFile{name: "f_sans_jp.ttf", data: familyFace("Noto Sans CJK JP", "Regular", 400, false, colon)},
+		fontFile{name: "g_sans_sc.ttf", data: familyFace("Noto Sans CJK SC", "Regular", 400, false, colon)},
+	)
+	for _, tc := range []struct{ lang, want string }{{"zh-Hans", "g_sans_sc"}, {"", "f_sans_jp"}} {
+		s := Style{Families: BrowserFamilies([]string{"monospace"}, tc.lang), Fallback: FallbackChromium, Lang: tc.lang, Size: 10}
+		if got := drawnBy(t, f, "A"+string(colon), s); !strings.Contains(got, tc.want) {
+			t.Errorf("lang %q: drawn with %s, want %s", tc.lang, got, tc.want)
+		}
+	}
+}
+
 // TestLayout_LastResortRanksByRevision locks that a character no family
 // list names takes the face of the higher font revision, as fontconfig's
 // fontversion ranks it.

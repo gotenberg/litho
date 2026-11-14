@@ -455,6 +455,11 @@ type fallbackPlan struct {
 	fallback, system    []string
 	generic, cjkGeneric generic
 	region              string
+	// languageCJK, under Chromium's rule and in a language written in Han,
+	// are the Noto CJK families of the language, which draw a character of
+	// no CJK script, a fullwidth punctuation, no other list covers
+	// (setFallback).
+	languageCJK []string
 }
 
 // setFallback sets the plan of the fallback of s, after the rule
@@ -468,6 +473,9 @@ type fallbackPlan struct {
 //     Sans CJK, JP without a language and the variant of lang="ja",
 //     "zh-CN", "zh-TW" or "ko" with one, whether the body is serif or
 //     sans-serif.
+//   - probe, html: Chromium of the same image prints the fullwidth
+//     punctuation of a monospace line under lang="zh-Hans", which neither
+//     DejaVu Sans Mono nor the sans-serif list covers, in Noto Sans CJK SC.
 //   - probe, odt: LibreOffice in the same image prints Armenian in DejaVu
 //     Serif under Liberation Serif and in DejaVu Sans under Liberation
 //     Sans, Carlito, Noto Serif and a family the image lacks; Han under an
@@ -486,6 +494,9 @@ func (f *Fonts) setFallback(s *styleState, style Style) {
 	case FallbackChromium:
 		p.fallback = f.chromiumFamilies(style.Families)
 		p.generic, p.cjkGeneric = genericSansSerif, genericSansSerif
+		if p.region != "" {
+			p.languageCJK = scriptFamilies(language.Han, p.cjkGeneric, p.region)
+		}
 	case FallbackLibreOffice:
 		p.fallback, p.generic = libreOfficeFamilies(withoutBrowserDefaults(style.Families))
 		if g := style.Fallback.generic(); g != genericNone {
@@ -656,7 +667,11 @@ func (st *layoutState) fallback(s *styleState, script language.Script, r rune) *
 	if isCJKScript(script) {
 		g = p.cjkGeneric
 	}
-	for _, keys := range [][]string{s.primary.keys, p.fallback, scriptFamilies(script, g, p.region), p.system, fallbackFamilies} {
+	lists := [...][]string{s.primary.keys, p.fallback, scriptFamilies(script, g, p.region), p.system, fallbackFamilies, nil}
+	if !isCJKScript(script) {
+		lists[len(lists)-1] = p.languageCJK
+	}
+	for _, keys := range lists {
 		for _, key := range keys {
 			if try(f.bestInFamily(key, s.req, r)) {
 				return found
