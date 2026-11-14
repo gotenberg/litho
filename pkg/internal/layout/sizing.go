@@ -24,10 +24,12 @@ func (b *box) sizeSrc() *css.Style {
 	return b.st
 }
 
-// hasSizing reports a style with a sizing keyword on a size property.
+// hasSizing reports a style with a sizing keyword on a size property, or
+// a calc-size() on width, whose auto basis resolves here too.
 func hasSizing(st *css.Style) bool {
 	return st.Width.IsSizingKeyword() || st.MinWidth.IsSizingKeyword() || st.MaxWidth.IsSizingKeyword() ||
-		st.Height.IsSizingKeyword() || st.MinHeight.IsSizingKeyword() || st.MaxHeight.IsSizingKeyword()
+		st.Height.IsSizingKeyword() || st.MinHeight.IsSizingKeyword() || st.MaxHeight.IsSizingKeyword() ||
+		st.Width.SizeCalc()
 }
 
 // contentKeyword reports the min-content, max-content or fit-content
@@ -117,10 +119,17 @@ func (e *engine) resolveSizing(b *box, cb cblock, availW, availH float64) {
 			}
 		case css.Stretch:
 			v = roomW
+		case css.Auto:
+			if !d.SizeCalc() {
+				return d
+			}
+			v = e.autoBasisWidth(b, roomW)
 		default:
 			return d
 		}
-		if src.BoxSizing == css.BorderBox && b.kind != kindInline {
+		borderBox := src.BoxSizing == css.BorderBox && b.kind != kindInline
+		v = throughCalc(d, v, he, borderBox, cb.w)
+		if borderBox {
 			v += he
 		}
 		return css.Pts(v)
@@ -133,11 +142,11 @@ func (e *engine) resolveSizing(b *box, cb cblock, availW, availH float64) {
 		top, bottom := stretchMargins(b, src)
 		roomH, defH = cb.h-top-bottom-ve, true
 	}
-	stretchH := func(fallback css.Dimension) css.Dimension {
+	stretchH := func(d, fallback css.Dimension) css.Dimension {
 		if !defH {
 			return fallback
 		}
-		v := max(roomH, 0)
+		v := throughCalc(d, max(roomH, 0), ve, src.BoxSizing == css.BorderBox, heightRef(cb))
 		if src.BoxSizing == css.BorderBox {
 			v += ve
 		}
@@ -147,7 +156,7 @@ func (e *engine) resolveSizing(b *box, cb cblock, availW, availH float64) {
 	case contentKeyword(src.Height):
 		st.Height = css.Dimension{Kind: css.Auto}
 	case src.Height.Kind == css.Stretch:
-		st.Height = stretchH(css.Dimension{Kind: css.Auto})
+		st.Height = stretchH(src.Height, css.Dimension{Kind: css.Auto})
 	}
 	// A box whose ratio and definite width give its height takes that
 	// height as its min- and max-content block sizes (CSS Sizing 4, 4.1).
@@ -166,7 +175,7 @@ func (e *engine) resolveSizing(b *box, cb cblock, availW, availH float64) {
 	case contentKeyword(src.MinHeight):
 		st.MinHeight, b.minHContent = css.Pts(0), true
 	case src.MinHeight.Kind == css.Stretch:
-		st.MinHeight = stretchH(css.Pts(0))
+		st.MinHeight = stretchH(src.MinHeight, css.Pts(0))
 	}
 	switch {
 	case contentKeyword(src.MaxHeight) && ratioHOK:
@@ -174,7 +183,7 @@ func (e *engine) resolveSizing(b *box, cb cblock, availW, availH float64) {
 	case contentKeyword(src.MaxHeight):
 		st.MaxHeight, b.maxHContent = css.Dimension{Kind: css.None}, true
 	case src.MaxHeight.Kind == css.Stretch:
-		st.MaxHeight = stretchH(css.Dimension{Kind: css.None})
+		st.MaxHeight = stretchH(src.MaxHeight, css.Dimension{Kind: css.None})
 	}
 	b.st = &st
 	e.applyRatio(b, &st, cb, availH)
@@ -217,13 +226,16 @@ func stretchMargins(b *box, src *css.Style) (float64, float64) {
 // contentHeightBounds applies a min-height or max-height of min-content,
 // max-content or fit-content to the content height h of b, whose content
 // laid out takes content: in the block axis each is the content height
-// (CSS Sizing 3, 3.2).
-func contentHeightBounds(b *box, h, content float64) float64 {
+// (CSS Sizing 3, 3.2), through the calculation of a calc-size() over
+// that keyword (CSS Sizing 4, 7.1), whose percentages resolve in cb.
+func contentHeightBounds(b *box, h, content float64, cb cblock) float64 {
+	src := b.sizeSrc()
+	edges, borderBox, ref := vEdges(b), src.BoxSizing == css.BorderBox, heightRef(cb)
 	if b.maxHContent {
-		h = min(h, content)
+		h = min(h, throughCalc(src.MaxHeight, content, edges, borderBox, ref))
 	}
 	if b.minHContent {
-		h = max(h, content)
+		h = max(h, throughCalc(src.MinHeight, content, edges, borderBox, ref))
 	}
 	return h
 }
@@ -247,21 +259,25 @@ func keywordWidth(st *css.Style, lo, hi, clo, chi float64) (float64, float64) {
 
 // keywordIntrinsic applies the sizing keywords of the computed min-width
 // and max-width of st to the min- and max-content widths lo and hi of a
-// content box, whose content alone takes clo and chi (CSS Sizing 3, 5.2).
-func keywordIntrinsic(st *css.Style, lo, hi, clo, chi float64) (float64, float64) {
-	switch st.MaxWidth.Kind { //nolint:exhaustive // the other kinds are handled by the caller
+// content box of padding and borders edges, whose content alone takes clo
+// and chi (CSS Sizing 3, 5.2), each through the calculation of a
+// calc-size() over it (CSS Sizing 4, 7.1).
+func keywordIntrinsic(st *css.Style, lo, hi, clo, chi, edges float64) (float64, float64) {
+	borderBox := st.BoxSizing == css.BorderBox
+	through := func(d css.Dimension, v float64) float64 { return throughCalc(d, v, edges, borderBox, 0) }
+	switch d := st.MaxWidth; d.Kind { //nolint:exhaustive // the other kinds are handled by the caller
 	case css.MinContent:
-		lo, hi = min(lo, clo), min(hi, clo)
+		lo, hi = min(lo, through(d, clo)), min(hi, through(d, clo))
 	case css.MaxContent:
-		lo, hi = min(lo, chi), min(hi, chi)
+		lo, hi = min(lo, through(d, chi)), min(hi, through(d, chi))
 	}
-	switch st.MinWidth.Kind { //nolint:exhaustive // the other kinds are handled by the caller
+	switch d := st.MinWidth; d.Kind { //nolint:exhaustive // the other kinds are handled by the caller
 	case css.MinContent:
-		lo, hi = max(lo, clo), max(hi, clo)
+		lo, hi = max(lo, through(d, clo)), max(hi, through(d, clo))
 	case css.MaxContent:
-		lo, hi = max(lo, chi), max(hi, chi)
+		lo, hi = max(lo, through(d, chi)), max(hi, through(d, chi))
 	case css.FitContent:
-		lo, hi = max(lo, clo), max(hi, chi)
+		lo, hi = max(lo, through(d, clo)), max(hi, through(d, chi))
 	}
 	return lo, max(hi, lo)
 }
@@ -292,4 +308,64 @@ func containedWidths(b *box, st *css.Style, lo, hi float64) (float64, float64) {
 		return c.Width, c.Width
 	}
 	return 0, 0
+}
+
+// throughCalc applies the calc-size() of d, if any, to v, the used content
+// size of its basis in a box of padding and borders edges in that axis:
+// the calculation reads the size in the box that box-sizing names, and
+// its percentages resolve against ref, 0 when indefinite (CSS Sizing 4,
+// 7.1). A size never falls below 0 (CSS Values 4, 10.12).
+func throughCalc(d css.Dimension, v, edges float64, borderBox bool, ref float64) float64 {
+	if !d.SizeCalc() {
+		return v
+	}
+	if borderBox {
+		return max(d.OfSize(v+edges, ref)-edges, 0)
+	}
+	return max(d.OfSize(v, ref), 0)
+}
+
+// heightRef returns the height percentages resolve against in cb, 0 when
+// it is not definite.
+func heightRef(cb cblock) float64 {
+	if cb.hDefinite {
+		return cb.h
+	}
+	return 0
+}
+
+// usedHeight returns the content height of b, whose height h its own
+// properties give and whose content takes content, in the containing
+// block cb: an auto height of calc-size() is the calculation of the
+// content height (CSS Sizing 4, 7.1), then min-height and max-height
+// apply, their sizing keywords and calculations included.
+func usedHeight(b *box, h, content float64, hSet bool, cb cblock) float64 {
+	src := b.sizeSrc()
+	if b.heightCalced {
+		b.heightCalced = false
+	} else if !hSet && src.Height.SizeCalc() && b.st.Height.Kind == css.Auto {
+		h = throughCalc(src.Height, h, vEdges(b), src.BoxSizing == css.BorderBox, heightRef(cb))
+	}
+	return contentHeightBounds(b, constrainHeight(b, h, cb), content, cb)
+}
+
+// contentMinHeight returns the automatic minimum height of b, whose
+// content takes content, in the containing block cb: the content height,
+// through a calc-size() over auto on min-height (CSS Sizing 4, 4.3 and
+// 7.1).
+func contentMinHeight(b *box, content float64, cb cblock) float64 {
+	return throughCalc(b.st.MinHeight, content, vEdges(b), b.st.BoxSizing == css.BorderBox, heightRef(cb))
+}
+
+// autoBasisWidth returns the content width an auto width gives b, for the
+// basis of a calc-size(): the room of its containing block, roomW, for a
+// block-level box in normal flow, which stretches (CSS 2.1, 10.3.3), and
+// the fit-content width in that room for every other box, which shrinks
+// to fit (CSS 2.1, 10.3.5, 10.3.7 and 10.3.9; CSS Flexbox 1, 9.2).
+func (e *engine) autoBasisWidth(b *box, roomW float64) float64 {
+	if b.kind == kindBlock && !b.inline && !b.abs && b.float == css.FloatNone && !b.flexItem && !b.gridItem && b.tpart == partNone {
+		return roomW
+	}
+	lo, hi := e.contentIntrinsic(b)
+	return min(hi, max(lo, roomW))
 }

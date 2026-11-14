@@ -657,10 +657,10 @@ func (e *engine) absContent(b *box, ccb cblock, h float64, hSet, grow bool) {
 	if hSet {
 		ch = h
 		if grow {
-			ch = max(ch, content)
+			ch = max(ch, contentMinHeight(b, content, ccb))
 		}
 	}
-	b.h = contentHeightBounds(b, constrainHeight(b, ch, ccb), content)
+	b.h = usedHeight(b, ch, content, hSet, ccb)
 	e.placeMarker(b)
 	e.reach(b.y + b.borderH())
 }

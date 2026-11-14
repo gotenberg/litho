@@ -413,6 +413,12 @@ func (e *engine) layoutFlex(b *box, cb cblock, top float64) float64 {
 			}
 			widest = max(widest, s+float64(mainGap*float64(len(ln.items)-1)))
 		}
+		// A calc-size() height applies to that content height before
+		// the items flex (CSS Sizing 4, 7.1), the lines kept.
+		if src := b.sizeSrc(); src.Height.SizeCalc() && b.st.Height.Kind == css.Auto {
+			widest = throughCalc(src.Height, widest, vEdges(b), src.BoxSizing == css.BorderBox, 0)
+			b.heightCalced = true
+		}
 		innerMain = clampH(widest)
 	}
 	for _, ln := range lines {
@@ -661,6 +667,23 @@ func (e *engine) baseSize(fd *flexData, it *fitem, ax flexAxes, cb, pcb cblock, 
 	if !ok {
 		base = contentSize()
 	}
+	mainRef := 0.0
+	if mainDef {
+		mainRef = innerMain
+	}
+	through := func(d css.Dimension, v float64) float64 {
+		return throughCalc(d, v, it.mEdges, sized.st.BoxSizing == css.BorderBox, mainRef)
+	}
+	switch {
+	case st.FlexBasis.SizeCalc():
+		// A calc-size() flex basis is its calculation of the basis
+		// its keyword gives (CSS Sizing 4, 7.1).
+		base = through(st.FlexBasis, base)
+	case st.FlexBasis.Kind == css.Auto && !ok && mainProp(sized.sizeSrc(), ax).SizeCalc():
+		// An auto flex basis takes the main size property, and the
+		// content size where that is auto (CSS Flexbox 1, 7.2.3).
+		base = through(mainProp(sized.sizeSrc(), ax), base)
+	}
 	it.base = max(base, 0)
 	it.minM, it.maxM = 0, math.Inf(1)
 	if mx, ok := mainSpec(maxProp(sst, ax), pcb); ok {
@@ -679,7 +702,12 @@ func (e *engine) baseSize(fd *flexData, it *fitem, ax flexAxes, cb, pcb cblock, 
 		if spec, ok := mainSpec(mainProp(sst, ax), pcb); ok {
 			auto = min(auto, spec)
 		}
-		it.minM = min(auto, it.maxM)
+		// A calc-size() over auto takes the automatic minimum size as
+		// its size (CSS Sizing 4, 7.1).
+		it.minM = min(through(minProp(sst, ax), auto), it.maxM)
+	default:
+		// A scroll container's automatic minimum size is 0.
+		it.minM = min(through(minProp(sst, ax), 0), it.maxM)
 	}
 	if k.tpart == partWrapper && ax.row {
 		// A table is never narrower than its min-content width (CSS
@@ -783,7 +811,7 @@ func itemRatioHeight(k *box, w float64) (float64, bool) {
 	}
 	h := heightOfWidth(w, r, edgesFor(k, content))
 	if contentMinimum(k) {
-		h = max(h, k.h)
+		h = max(h, contentMinHeight(k, k.h, cblock{}))
 	}
 	return h, true
 }

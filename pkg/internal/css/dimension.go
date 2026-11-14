@@ -16,10 +16,16 @@ func (d Dimension) HasPercent() bool {
 // Resolve returns the length d stands for against ref, the size its
 // percentage is of: Value for Points, Value times ref for Percent, and
 // the calculation of a Calc, clamped to the largest length litho lays
-// out. It returns 0 for the other kinds.
+// out. A min-width or min-height of calc-size() over auto holds Points
+// and resolves to its calculation of 0, the automatic minimum size of a
+// box that takes none from its content (CSS Sizing 4, 7.1). It returns 0
+// for the other kinds.
 func (d Dimension) Resolve(ref float64) float64 {
 	switch d.Kind { //nolint:exhaustive // the keywords resolve to no length
 	case Points:
+		if d.expr != nil {
+			return d.OfSize(0, ref)
+		}
 		return clampLen(d.Value)
 	case Percent:
 		return clampLen(d.Value * clampLen(ref))

@@ -384,21 +384,29 @@ func calcLength(t *token, signed bool) (length, bool) {
 	if !ok || ty != typeLength {
 		return length{}, false
 	}
+	return treeLength(n, signed), true
+}
+
+// treeLength returns the <length-percentage> the calculation tree n of
+// type length stands for: a linear combination when the tree folds to
+// one, else the tree, which a percentage makes a mix of a length and a
+// percentage.
+func treeLength(n *calcNode, signed bool) length {
 	if signed && n.pctFunction() {
-		return length{expr: n, hasLen: true, hasPct: true, signed: true}, true
+		return length{expr: n, hasLen: true, hasPct: true, signed: true}
 	}
 	if !n.relative() {
 		var l length
 		l.u[uPt] = n.eval(&calcScope{})
 		l.hasLen = true
-		return l, true
+		return l
 	}
 	if l, ok := n.linear(nil); ok {
 		l.num = 0
-		return l, true
+		return l
 	}
 	pct := n.hasPct()
-	return length{expr: n, hasLen: true, hasPct: pct}, true
+	return length{expr: n, hasLen: true, hasPct: pct}
 }
 
 // usesUnit reports whether the tree holds one of units.

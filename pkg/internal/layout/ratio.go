@@ -90,7 +90,7 @@ func borderBoxed(b *box, w float64, st *css.Style) float64 {
 //     min-content with a ratio and a height).
 func (e *engine) applyRatio(b *box, st *css.Style, cb cblock, availH float64) bool {
 	r, content := prefRatio(b)
-	if k := b.sizeSrc().Width.Kind; r == 0 || k != css.Auto && !contentKeyword(b.sizeSrc().Width) {
+	if w := b.sizeSrc().Width; r == 0 || w.Kind != css.Auto && !contentKeyword(w) || w.Kind == css.Auto && w.SizeCalc() {
 		return false
 	}
 	ed := edgesFor(b, content)

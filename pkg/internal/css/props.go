@@ -351,6 +351,9 @@ type dimSpec struct {
 	kind DimKind
 	l    length
 	num  float64
+	// size is the calculation of a calc-size() over the keyword basis
+	// kind, nil otherwise.
+	size *calcNode
 }
 
 // parseDim parses a length-percentage, one of the keywords kws, or, with
@@ -388,6 +391,10 @@ func (s *styler) computeDim(d dimSpec, nonNegative bool) Dimension {
 		return d.l.dim(s.lc, nonNegative)
 	case Number:
 		return Dimension{Kind: Number, Value: clampLen(d.num)}
+	}
+	if d.size != nil {
+		sizes := s.lc.unitSizes()
+		return Dimension{Kind: d.kind, expr: d.size.resolveUnits(&sizes)}
 	}
 	return Dimension{Kind: d.kind}
 }
@@ -468,9 +475,24 @@ var (
 )
 
 // sizeProp defines width, height, max-width or max-height: the keywords
-// kws, or a non-negative length or percentage.
+// kws, a non-negative length or percentage, or a calc-size() over one of
+// them.
 func sizeProp(name string, f func(*Style) *Dimension, kws map[string]DimKind) propDef {
-	return dimProp(name, false, f, allowPct|nonNeg|allowMixed, kws, false)
+	return withCalcSize(dimProp(name, false, f, allowPct|nonNeg|allowMixed, kws, false), kws)
+}
+
+// withCalcSize returns def with calc-size() parsed (CSS Sizing 4, 7), its
+// keyword bases those of bases but none.
+func withCalcSize(def propDef, bases map[string]DimKind) propDef {
+	parse := def.parse
+	def.parse = func(v []token, c *declCtx) (any, bool) {
+		if t, ok := single(v); ok && isCalcSize(&t) {
+			d, ok := parseCalcSize(&t, bases)
+			return d, ok
+		}
+		return parse(v, c)
+	}
+	return def
 }
 
 var displays = map[string]Display{

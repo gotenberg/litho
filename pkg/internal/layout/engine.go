@@ -377,6 +377,9 @@ func clamp(v float64) float64 {
 func resolve(d css.Dimension, ref float64) float64 {
 	switch d.Kind { //nolint:exhaustive // the other kinds have no length
 	case css.Points:
+		if d.SizeCalc() {
+			return clamp(d.Resolve(clamp(ref)))
+		}
 		return clamp(d.Value)
 	case css.Percent:
 		return clamp(d.Value * ref)

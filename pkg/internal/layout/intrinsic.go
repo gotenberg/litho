@@ -57,6 +57,12 @@ func (e *engine) intrinsic(b *box) (float64, float64) {
 			lo, hi = w, w
 		}
 		lo, hi = keywordWidth(src, lo, hi, clo, chi)
+		if src.Width.SizeCalc() {
+			// A calc-size() width contributes its calculation of the
+			// contribution its basis makes (CSS Sizing 4, 7.1).
+			borderBox := src.BoxSizing == css.BorderBox
+			lo, hi = throughCalc(src.Width, lo, edges, borderBox, 0), throughCalc(src.Width, hi, edges, borderBox, 0)
+		}
 	}
 	if src.MaxWidth.Kind == css.Points {
 		mx := clamp(src.MaxWidth.Value)
@@ -75,7 +81,7 @@ func (e *engine) intrinsic(b *box) (float64, float64) {
 		lo, hi = max(lo, mn), max(hi, mn)
 	}
 	if hasSizing(src) && b.kind != kindReplaced {
-		lo, hi = keywordIntrinsic(src, lo, hi, clo, chi)
+		lo, hi = keywordIntrinsic(src, lo, hi, clo, chi, edges)
 	}
 	hi = max(hi, lo)
 	b.minW, b.maxW = lo, hi

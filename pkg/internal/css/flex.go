@@ -191,7 +191,7 @@ var kwFlexBasis = map[string]DimKind{
 // flexBasisProp defines flex-basis: auto, content, or a non-negative
 // length or percentage.
 func flexBasisProp() propDef {
-	return dimProp("flex-basis", false, func(s *Style) *Dimension { return &s.FlexBasis }, allowPct|nonNeg|allowMixed, kwFlexBasis, false)
+	return withCalcSize(dimProp("flex-basis", false, func(s *Style) *Dimension { return &s.FlexBasis }, allowPct|nonNeg|allowMixed, kwFlexBasis, false), kwFlexBasis)
 }
 
 // gapProp defines row-gap or column-gap: normal, or a non-negative length
@@ -229,7 +229,7 @@ type minAuto struct{}
 // (CSS Sizing 3, 4.4; CSS Flexbox 1, 4.5); the intrinsic sizing keywords
 // compute to 0.
 func minSizeProp(name string, f func(*Style) *Dimension, autoF func(*Style) *bool) propDef {
-	def := dimProp(name, false, f, allowPct|nonNeg|allowMixed, kwMinSizing, false)
+	def := withCalcSize(dimProp(name, false, f, allowPct|nonNeg|allowMixed, kwMinSizing, false), kwSizing)
 	parse, compute := def.parse, def.compute
 	def.parse = func(v []token, c *declCtx) (any, bool) {
 		if k, ok := keyword(v); ok && k == "auto" {
@@ -240,6 +240,14 @@ func minSizeProp(name string, f func(*Style) *Dimension, autoF func(*Style) *boo
 	def.compute = func(s *styler, st *Style, v any) {
 		if _, ok := v.(minAuto); ok {
 			*f(st) = Pts(0)
+			*autoF(st) = true
+			return
+		}
+		if d, ok := v.(dimSpec); ok && d.kind == Auto && d.size != nil {
+			// calc-size() over auto is the automatic minimum size
+			// through the calculation (CSS Sizing 4, 7.1).
+			sizes := s.lc.unitSizes()
+			*f(st) = Dimension{Kind: Points, expr: d.size.resolveUnits(&sizes)}
 			*autoF(st) = true
 			return
 		}

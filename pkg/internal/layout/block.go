@@ -541,7 +541,7 @@ func specMinHeight(b *box, d css.Dimension, cb cblock) (float64, bool) {
 func minHeightSet(d css.Dimension) bool {
 	switch d.Kind { //nolint:exhaustive // the keywords compute to auto or none
 	case css.Points, css.Percent:
-		return d.Value > 0
+		return d.Value > 0 || d.SizeCalc() && d.Resolve(1) != 0
 	case css.Calc:
 		return d.Resolve(1) != 0 || d.Value != 0
 	}
@@ -910,10 +910,10 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 	if hSet {
 		h = specH
 		if ratioH && contentMinimum(b) {
-			h = max(h, content)
+			h = max(h, contentMinHeight(b, content, cb))
 		}
 	}
-	b.h = contentHeightBounds(b, constrainHeight(b, max(h, 0), cb), max(content, 0))
+	b.h = usedHeight(b, max(h, 0), max(content, 0), hSet, cb)
 	e.cloneEdges(b, hSet)
 	e.placeMarker(b)
 	bottom := b.y + b.borderH()
@@ -1152,10 +1152,10 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	if hSet {
 		h = specH
 		if ratioH && contentMinimum(b) {
-			h = max(h, content)
+			h = max(h, contentMinHeight(b, content, cb))
 		}
 	}
-	b.h = contentHeightBounds(b, constrainHeight(b, h, cb), content)
+	b.h = usedHeight(b, h, content, hSet, cb)
 	e.cloneEdges(b, hSet)
 	e.placeMarker(b)
 	e.reach(b.y + b.borderH())

@@ -47,6 +47,9 @@ const (
 	opExp
 	opAbs
 	opSign
+	// opSize is the size keyword of calc-size(), the used size of its
+	// basis (CSS Sizing 4, 7.1).
+	opSize
 )
 
 // roundStrategy is a <rounding-strategy> of round() (CSS Values 4, 10.3).
@@ -178,7 +181,10 @@ type calcParser struct {
 	// percentages resolve against a full turn: a conic gradient's stops
 	// (CSS Images 4, 3.3.2).
 	pctAngle bool
-	nodes    int
+	// size accepts the size keyword, in the calculation of a
+	// calc-size() whose basis is not any (CSS Sizing 4, 7).
+	size  bool
+	nodes int
 }
 
 // isCalc reports whether t is a math function (CSS Values 4, 10): calc(),
@@ -477,6 +483,9 @@ func (p *calcParser) value(c *calcCursor, depth int) (*calcNode, calcType, bool)
 		case "nan":
 			return &calcNode{op: opNum, v: math.NaN()}, typeNumber, true
 		}
+		if p.size && eqFold(t.value, "size") {
+			return &calcNode{op: opSize}, typeLength, true
+		}
 		if p.vars != nil {
 			for i, n := range p.vars.names {
 				if n != "" && eqFold(t.value, n) {
@@ -517,6 +526,8 @@ type calcScope struct {
 	units *[numLenUnits]float64
 	basis float64
 	vars  *channelVars
+	// size is the value of the size keyword of a calc-size().
+	size float64
 }
 
 // eval evaluates the tree in IEEE-754 arithmetic, as CSS Values 4, 10.9.2
@@ -533,6 +544,8 @@ func (n *calcNode) eval(s *calcScope) float64 {
 		return n.v * s.units[n.unit]
 	case opPct:
 		return n.v / 100 * s.basis
+	case opSize:
+		return s.size
 	case opVar:
 		if s.vars == nil {
 			return 0
@@ -718,7 +731,7 @@ func (n *calcNode) relative() bool {
 		return false
 	case opLen:
 		return n.unit != uPt
-	case opPct, opVar:
+	case opPct, opVar, opSize:
 		return true
 	}
 	for _, k := range n.kids {
@@ -747,7 +760,7 @@ func (n *calcNode) hasPct() bool {
 // percentage basis, not on the percentages alone.
 func (n *calcNode) pctFunction() bool {
 	switch n.op { //nolint:exhaustive // the other operators are functions
-	case opNum, opVar, opLen, opPct:
+	case opNum, opVar, opLen, opPct, opSize:
 		return false
 	case opSum, opNeg, opProduct, opInvert:
 		for _, k := range n.kids {
@@ -779,6 +792,8 @@ func (n *calcNode) linear(vars *channelVars) (l length, ok bool) {
 		return l, true
 	case opPct:
 		return length{pct: n.v, hasPct: true}, true
+	case opSize:
+		return length{}, false
 	case opSum:
 		for _, k := range n.kids {
 			x, ok := k.linear(vars)

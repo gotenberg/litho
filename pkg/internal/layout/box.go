@@ -296,9 +296,10 @@ type box struct {
 	// orig is the computed style whose sizing keywords st resolves, nil
 	// when st is the computed style; minHContent and maxHContent report a
 	// min-height or max-height bound to the content height (CSS Sizing 3,
-	// 3.2).
-	orig                     *css.Style
-	minHContent, maxHContent bool
+	// 3.2); heightCalced reports a calc-size() height its formatter
+	// already applied to the content height it returns.
+	orig                                   *css.Style
+	minHContent, maxHContent, heightCalced bool
 	// fnBody is the footnote body of a footnote call, laid out in the
 	// footnote area of a page rather than in the flow (CSS GCPM 3, 3.2).
 	fnBody *box
