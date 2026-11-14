@@ -169,18 +169,24 @@ func TestTable_CellChildPercentHeight(t *testing.T) {
 	pctKid := func() *Node {
 		return el(sty(func(s *css.Style) { s.Height = css.Dimension{Kind: css.Percent, Value: 1} }), el(sty(height(5))))
 	}
-	cell := func() *Node { return part(css.TableCell, nil, pctKid()) }
+	full := func(s *css.Style) { s.Height = css.Dimension{Kind: css.Percent, Value: 1} }
 	tests := []struct {
-		name string
-		tm   []func(*css.Style)
-		want float64
+		name   string
+		tm     []func(*css.Style)
+		rm, cm []func(*css.Style)
+		want   float64
 	}{
-		{"definite table", mods(height(60), width(20)), 60},
-		{"auto table", mods(width(20)), 5},
+		{name: "definite table", tm: mods(height(60), width(20)), want: 60},
+		{name: "auto table", tm: mods(width(20)), want: 5},
+		{name: "fixed cell", tm: mods(width(20)), cm: mods(height(20)), want: 60},
+		// A percentage of a table of auto height resolves to nothing.
+		{name: "percentage cell", tm: mods(width(20)), cm: mods(full), want: 5},
+		{name: "percentage row", tm: mods(width(20)), rm: mods(full), want: 5},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rb := boxes(t, doc(table(tt.tm, tr(nil, cell()))), page(100, 100))
+			row := tr(tt.rm, part(css.TableCell, tt.cm, pctKid()), part(css.TableCell, mods(height(60))))
+			rb := boxes(t, doc(table(tt.tm, row)), page(100, 100))
 			var find func(b *box) *box
 			find = func(b *box) *box {
 				if b.tpart == partCell {

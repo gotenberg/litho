@@ -1015,8 +1015,22 @@ func tableHeight(t *box, cb cblock) (float64, bool) {
 // cell of td with a child of a percentage height, when the table, the
 // cell's row or the cell has a height of its own: the children's
 // percentages then resolve against the cell's height, as Chromium lays
-// them out (CSS Tables 3 leaves it open). It reports whether it laid one
-// out again.
+// them out (CSS Tables 3 leaves it open). A percentage height on the row
+// or the cell of a table of auto height resolves to nothing and counts as
+// none. It reports whether it laid one out again.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) draws a child
+//     of height 100% and min-height 30px, scroll container or not, 30
+//     pixels tall in a cell of height 100% or 50% beside a 60 pixel cell,
+//     and in a row of height 100%, of a table of auto height; 60 pixels in
+//     a cell of height 20px, in a table of height 80px whatever the row's
+//     or the cell's height, and in a table of height 100% of a 100 pixel
+//     block.
+//   - wpt, css/css-tables/height-distribution/percentage-sizing-of-table-cell-children-006.html:
+//     Chromium draws the 100% scroll container of a cell of height 100% at
+//     its min-height.
 func (e *engine) relayoutPercentCells(td *tableData, rowH []float64, cb cblock) bool {
 	_, tableSet := specHeight(td.table, td.table.st.Height, cb)
 	tableSet = tableSet || td.hasBoxH
@@ -1031,7 +1045,7 @@ func (e *engine) relayoutPercentCells(td *tableData, rowH []float64, cb cblock) 
 		}
 		_, rowSet := specHeight(td.rows[cd.row].box, td.rows[cd.row].box.st.Height, cb)
 		_, cellSet := specHeight(c, c.st.Height, cblock{})
-		if !tableSet && !rowSet && !cellSet && !td.rows[cd.row].box.st.Height.HasPercent() && !c.st.Height.HasPercent() {
+		if !tableSet && !rowSet && !cellSet {
 			continue
 		}
 		h := 0.0
