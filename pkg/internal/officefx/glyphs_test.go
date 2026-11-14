@@ -79,6 +79,40 @@ func TestGlyphEffects_PowerPointReflectionScalesAboutTheBaseline(t *testing.T) {
 	}
 }
 
+// TestGlyphEffects_PowerPointReflectionAlignsOnTheRunBox checks that
+// the alignment of a run's reflection on PowerPoint's rules names a point
+// of a box pptRunBox sizes tall standing on the baseline: aligned at the
+// top, the mirror turns the glyphs about the box's top edge, at the
+// middle about its middle.
+func TestGlyphEffects_PowerPointReflectionAlignsOnTheRunBox(t *testing.T) {
+	size := 30.0
+	shift := 8 * size / pptReflectionDist
+	for _, tc := range []struct {
+		name  string
+		align float64
+	}{
+		{"top", 0},
+		{"middle", 0.5},
+	} {
+		refl := &css.OfficeReflection{StartAlpha: 0.5, EndPos: 1, FadeDir: 90, Dist: 8, Dir: 90, SX: 1, SY: -1, Align: css.RectAlign{Y: tc.align}}
+		var px effect.Page
+		frags, _, err := glyphEffects(context.Background(), blockRun(size), &css.OfficeEffects{Reflection: refl}, &px)
+		if err != nil || len(frags) != 1 {
+			t.Fatalf("%s: %d fragments, error %v, want the reflection", tc.name, len(frags), err)
+		}
+		r := frags[0].(*typeset.Image).Rect
+		// The block, half a size tall on the baseline at y 100, mirrored
+		// about the line at y m, spans 2m - 100 to 2m - 100 + size/2.
+		m := 100 - (1-tc.align)*pptRunBox*size
+		if want := 2*m - 100 + shift; math.Abs(r.Y-want) > 0.5 {
+			t.Errorf("%s: reflection starts at %.2f, want %.2f", tc.name, r.Y, want)
+		}
+		if want := 2*m - 100 + shift + size/2; math.Abs(r.Y+r.Height-want) > 0.5 {
+			t.Errorf("%s: reflection ends at %.2f, want %.2f", tc.name, r.Y+r.Height, want)
+		}
+	}
+}
+
 // TestGlyphEffects_PowerPointShadowBlursByTheSize checks that the blur of
 // a run's shadow on PowerPoint's rules scales as its distance does: the
 // bitmap reaches the scaled radius past the glyphs on each side.

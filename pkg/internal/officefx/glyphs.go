@@ -318,13 +318,44 @@ func glyphGlow(ctx context.Context, t *typeset.Text, gl *css.OfficeGlow, ink typ
 //     8.91 and 18.27 left and 8.95 and 18.19 down; d s/15.2 along the
 //     direction is 12.52 and 25.44 points, 8.85 and 17.99 each way at 45
 //     degrees.
+//   - probe, pptx: reflections 8 points away of Calibri at 24 and 48
+//     points toward 270 and 90 degrees start their fades 19.41 and 38.98
+//     points above, 6.51 and 12.98 below the baseline, 1.5 L and L/2 for
+//     a shift L of d s/14.8 (19.46, 38.92, 6.49, 12.97), as the copies'
+//     baselines read in the first probe at 24 and 48 points (d s/14.87
+//     and 14.85). There d s/16.8 fits 12 points and d s/15.5 72: no one
+//     ratio fits the four sizes, and 15.2 errs least across them, 7.6
+//     points summed over the twelve copies, 9.3 at 14.8.
 const pptReflectionDist = 15.2
+
+// pptRunBox is the height of the box of a run of PowerPoint's text that a
+// reflection aligns on, mirrors and fades over, a share of the font size,
+// from the baseline up: alignment t names its top, ctr its middle, b and
+// bl the baseline.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: reflections 8 points away down of Calibri at 24 and 48
+//     points, aligned ctr and t, start their fades (where the alpha fitted
+//     along the copy's first stem reaches the start opacity) 15.81 and
+//     31.78, 38.13 and 76.39 points above the baseline. Mirrored about a
+//     line h s up, moved L down, the box grown by L/2, a fade starts L/2
+//     less h s (ctr) or 2 h s (t) below the baseline: h is 0.929 and
+//     0.932 for ctr, 0.929 and 0.931 for t with L of d s/14.8, which
+//     these sizes take, 0.922 to 0.927 with that of [pptReflectionDist].
+//   - probe, pptx: at no distance the fades of Calibri at 23.81 and
+//     48.31 points run 10.06 and 20.18 points, 45.5% of 0.921 and 0.924
+//     sizes. 8 points away at 24 and 48 points they run 12.80 and 25.80
+//     points in every direction and alignment: 45.5% of 0.93 sizes and
+//     0.47 of the shift. A box of 0.95 sizes gives 13.25 and 26.47.
+const pptRunBox = 0.93
 
 // glyphReflection returns the reflection of t, the glyphs in their
 // colour, as PowerPoint draws a run's: the glyphs scaled and skewed by the
 // reflection's map about the point its alignment names on the run's box,
-// [wordRunBox] sizes up from the baseline across the glyphs' ink, so a
-// mirror turns them about the baseline, then moved d s/15.2 points along
+// [pptRunBox] sizes up from the baseline across the glyphs' ink, so a
+// mirror aligned at the bottom turns them about the baseline, then moved
+// d s/15.2 points along
 // its direction ([pptReflectionDist]). The run's box grown down by half
 // that distance, mapped the same way, cuts the copy above it and carries
 // the fade, which therefore starts half the distance above the copy's
@@ -349,12 +380,22 @@ const pptReflectionDist = 15.2
 //     baseline, before the move, and shrinks the fade with the copy.
 //   - probe, pptx: alignment b and bl draw the same copy at a horizontal
 //     scale of 100%.
+//   - probe, pptx: toward 270 degrees the copy lies above the text,
+//     mirrored and faded as one toward 90 degrees: its fade ends 5.71 and
+//     11.46 points from the copy's baseline either way, at 24 and 48
+//     points. A skew kx of 20 degrees leans the copy about its baseline:
+//     the left edge of its first stem moves left 0.364 and 0.376 points a
+//     point down (tan 20 degrees is 0.364), from where the unskewed stem
+//     stands at the copy's baseline, within 0.2 points of litho's. A
+//     vertical scale of -150% keeps the copy's baseline where -100% puts
+//     it and stretches the fade by 1.5, from 3.44 to 22.54 and 6.33 to
+//     45.35 points below the baseline.
 func glyphReflection(ctx context.Context, t *typeset.Text, rf *css.OfficeReflection, ink typeset.Rect, pixels *effect.Page) (typeset.Fragment, Notes, error) {
 	if !(rf.StartAlpha > 0) && !(rf.EndAlpha > 0) {
 		return nil, Notes{}, nil
 	}
 	run := ink
-	if h := float64(wordRunBox * t.Size); numeric.PositiveFinite(h) {
+	if h := float64(pptRunBox * t.Size); numeric.PositiveFinite(h) {
 		run.Y, run.Height = t.Origin.Y-h, h
 	}
 	dist := float64(radius(rf.Dist)*min(t.Size, maxFontSize)) / pptReflectionDist
