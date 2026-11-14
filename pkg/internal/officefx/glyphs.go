@@ -49,7 +49,8 @@ func glyphEffects(ctx context.Context, t *typeset.Text, fx *css.OfficeEffects, p
 	}
 	if sh := fx.Shadow; sh != nil {
 		scaled := *sh
-		scaled.Dist = float64(pptScale(t.Size, pptShadowSize) * radius(sh.Dist))
+		k := pptScale(t.Size, pptShadowSize)
+		scaled.Dist, scaled.Blur = float64(k*radius(sh.Dist)), float64(k*radius(sh.Blur))
 		if err := add(glyphShadow(ctx, &glyphs, &scaled, ink, pixels)); err != nil {
 			return nil, Notes{}, err
 		}
@@ -65,11 +66,18 @@ func glyphEffects(ctx context.Context, t *typeset.Text, fx *css.OfficeEffects, p
 }
 
 // pptShadowSize is the font size, in points, at which PowerPoint moves
-// the outer shadow of a run of text the distance it states: see
-// [pptScale].
+// the outer shadow of a run of text the distance it states and blurs it
+// by the radius it states: see [pptScale].
 //
 // # Corpus evidence
 //
+//   - probe, pptx: runs of Calibri printed at 12.27, 23.81, 48.31 and
+//     72.12 points, each with a shadow blurred 8 points at no distance:
+//     PowerPoint's soft masks fit the glyphs blurred by Gaussians of 0.70,
+//     1.10, 1.80 and 2.60 points (least squares at 100 pixels an inch,
+//     steps of 0.05), where a third of the stated radius is 2.67 at every
+//     size; a third of the radius scaled by (size/80)^(2/3) gives 0.77,
+//     1.19, 1.91 and 2.49.
 //   - probe, pptx: runs of Calibri printed at 12.27, 23.79, 48.31 and
 //     72.12 points, each with a shadow 10 points down and no blur:
 //     PowerPoint draws the shadow as the glyphs moved 2.89, 4.49, 7.04 and
@@ -105,10 +113,9 @@ const pptGlowSize = 66
 // pptScale returns the factor PowerPoint scales a length of an effect of
 // a run of text by at font size size, (size/full)^(2/3), full the size
 // at which it draws the length it states: [pptShadowSize] for a shadow's
-// distance, [pptGlowSize] for a glow's radius. A size that is not
-// positive and finite scales nothing. A shadow's blur is not scaled; a
-// reflection moves by a rule of its own ([pptReflectionDist]), its blur
-// not scaled.
+// distance and blur, [pptGlowSize] for a glow's radius. A size that is
+// not positive and finite scales nothing. A reflection moves by a rule of
+// its own ([pptReflectionDist]); its blur is not scaled.
 func pptScale(size, full float64) float64 {
 	if !numeric.PositiveFinite(size) {
 		return 1

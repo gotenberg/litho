@@ -43,3 +43,22 @@ func TestGlyphEffects_PowerPointReflectionMovesByTheSize(t *testing.T) {
 		}
 	}
 }
+
+// TestGlyphEffects_PowerPointShadowBlursByTheSize checks that the blur of
+// a run's shadow on PowerPoint's rules scales as its distance does: the
+// bitmap reaches the scaled radius past the glyphs on each side.
+func TestGlyphEffects_PowerPointShadowBlursByTheSize(t *testing.T) {
+	sh := &css.OfficeShadow{Color: css.Color{A: 0.4}, Blur: 8, SX: 1, SY: 1}
+	for _, size := range []float64{12, 80} {
+		var px effect.Page
+		frags, _, err := glyphEffects(context.Background(), blockRun(size), &css.OfficeEffects{Shadow: sh}, &px)
+		if err != nil || len(frags) != 1 {
+			t.Fatalf("%v points: %d fragments, error %v, want the shadow", size, len(frags), err)
+		}
+		r := frags[0].(*typeset.Image).Rect
+		want := 0.6*size + 2*8*pptScale(size, pptShadowSize)
+		if math.Abs(r.Width-want) > 1 {
+			t.Errorf("%v points: shadow %.2f points wide, want %.2f", size, r.Width, want)
+		}
+	}
+}
