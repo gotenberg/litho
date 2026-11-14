@@ -51,6 +51,9 @@ type TrueType struct {
 	// GID 0 with the advance of NotdefAdvance.
 	Glyphs        []Glyph
 	NotdefAdvance uint16
+	// Extra holds tables added to the program as they are, by tag: the
+	// colour tables [ColorBitmaps] and [ColorLayers] build, for instance.
+	Extra map[string][]byte
 }
 
 // Build returns the program's bytes.
@@ -132,6 +135,9 @@ func (t TrueType) Build() []byte {
 	}
 	if !t.NoOS2 {
 		tables["OS/2"] = os2Table(t.FSType, upem)
+	}
+	for tag, data := range t.Extra {
+		tables[tag] = data
 	}
 	return sfnt(0x00010000, tables)
 }
