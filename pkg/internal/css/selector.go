@@ -2,9 +2,9 @@ package css
 
 import (
 	"slices"
-	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
@@ -881,7 +881,7 @@ func intOf(v float64) (int, bool) {
 }
 
 func atoiCapped(s string) (int, bool) {
-	n, err := strconv.Atoi(s)
+	n, err := intconv.Atoi(s)
 	if err != nil || n > maxAnB {
 		return 0, false
 	}

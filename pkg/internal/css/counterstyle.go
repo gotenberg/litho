@@ -7,6 +7,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
@@ -752,7 +753,7 @@ func symbolsRule(name string) *counterStyleRule {
 	if len(parts) < 2 {
 		return nil
 	}
-	sys, err := strconv.Atoi(parts[0])
+	sys, err := intconv.Atoi(parts[0])
 	if err != nil || sys < 0 || sys > int(systemFixed) {
 		return nil
 	}
