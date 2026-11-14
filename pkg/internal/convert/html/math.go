@@ -89,7 +89,10 @@ func (b *builder) mathElement(ctx context.Context, n *dom.Node, st *css.Style) [
 // [formula.MaxDepth] and [formula.MaxElements].
 func (b *builder) formulaTree(ctx context.Context, n *dom.Node, lang string, depth int, count *int) *formula.Element {
 	st := b.computed.Style(n)
-	if st == nil || st.Display == css.DisplayNone {
+	if st == nil || st.Display == css.DisplayNone || depth > 0 && (st.Position == css.Absolute || st.Position == css.Fixed) {
+		// A child CSS displays none, or positions out of the flow, is no
+		// in-flow child of its parent (MathML Core, 3.1.2); litho draws
+		// the absolutely positioned children of a formula nowhere.
 		return nil
 	}
 	*count++

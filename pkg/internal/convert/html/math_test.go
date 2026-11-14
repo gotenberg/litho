@@ -105,3 +105,17 @@ func TestMath_DrawsAFormulaTagged(t *testing.T) {
 		t.Errorf("warning: %s", w.Message)
 	}
 }
+
+// TestMath_PositionedChildrenOutOfFlow leaves a child positioned
+// absolutely, or displayed none, out of the formula: neither is an
+// in-flow child (MathML Core, 3.1.2).
+func TestMath_PositionedChildrenOutOfFlow(t *testing.T) {
+	src := `<math id=m><mfrac><mi style="position:absolute">p</mi><mn>1</mn><mi style="display:none">q</mi><mn>2</mn></mfrac></math>`
+	p, err := prepare(context.Background(), []byte(src), Options{}, testFonts(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := byID(t, p.root, "m").Alt; got != "1 2" {
+		t.Fatalf("formula reads %q, want the in-flow children alone", got)
+	}
+}
