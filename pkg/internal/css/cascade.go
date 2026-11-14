@@ -663,8 +663,34 @@ func (cs *computeState) unitLang(n *html.Node) string {
 	case n == nil:
 		return cs.m.docLang
 	}
+	// A short walk up to the attribute that states the language, or to
+	// an element whose language the matcher knows, records nothing; a
+	// longer one asks the matcher, which remembers each element's.
+	e := n
+	for range unitLangWalk {
+		if !isElement(e) {
+			return cs.m.docLang
+		}
+		if i, ok := cs.m.info[e]; ok && i.langDone {
+			return i.lang
+		}
+		if v, ok := attr(e, "xml:lang"); ok {
+			return lower(strings.TrimSpace(v))
+		}
+		if v, ok := attr(e, "lang"); ok {
+			return lower(strings.TrimSpace(v))
+		}
+		e = e.Parent
+	}
 	return cs.m.langOf(n)
 }
+
+// unitLangWalk is how many elements [computeState.unitLang] reads up the
+// tree before it asks the matcher, which remembers the language of each
+// element it reaches at the cost of a record an element. A performance
+// bound, not spec-mandated: most documents state their language within a
+// few levels of any element.
+const unitLangWalk = 16
 
 // fontKey is what selects a font for the ex and ch units.
 type fontKey struct {
