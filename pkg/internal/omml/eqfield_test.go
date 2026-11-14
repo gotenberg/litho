@@ -18,6 +18,7 @@ func TestReadField(t *testing.T) {
 		{`EQ \r(3,x)`, "(math (mroot (mrow (mtext 'x')) (mrow (mtext '3'))))"},
 		{`EQ \s\up8(2)`, "(math (msup (mrow) (mrow (mtext '2'))))"},
 		{`EQ \b \bc\{ (a\,b)`, "(math (mrow (mo form=prefix fence=true stretchy=true '{') (mrow (mtext 'a,b')) (mo form=postfix fence=true stretchy=true '}')))"},
+		{`eq \o\ac(○,印)`, "(math (mrow (mpadded width=0 (mrow (mtext '○'))) (mpadded width=0 (mrow (mtext '印'))) (mspace)))"},
 		{`EQ \l(a,b)`, "(math (mrow (mrow (mtext 'a')) (mo ',') (mrow (mtext 'b'))))"},
 		{`EQ \i \su(k=1,n,k)`, "(math (mrow (munderover (mo largeop=true movablelimits=false '∑') (mrow (mtext 'k=1')) (mrow (mtext 'n'))) (mrow (mtext 'k'))))"},
 		{`EQ \a \co2 (a,b,c,d)`, "(math (mtable (mtr (mtd (mspace height=0.85em depth=0.32em) (mrow (mtext 'a'))) (mtd (mspace height=0.85em depth=0.32em) (mrow (mtext 'b')))) " +

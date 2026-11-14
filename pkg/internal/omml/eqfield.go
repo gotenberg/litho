@@ -16,9 +16,10 @@ import (
 // when instr is no EQ field or draws nothing. The field's switches map to
 // the elements Office Math's objects map to: \a an array (\al, \ac, \ar,
 // \co), \b brackets (\lc, \rc, \bc), \f a fraction, \i an integral, sum
-// (\su) or product (\pr) with its limits, \l a list, \r a radical, \s a
-// superscript (\up) or subscript (\do), \d a space (\fo); \o draws its
-// first argument alone, \x its argument without its box, and the spacing
+// (\su) or product (\pr) with its limits, \l a list, \o its arguments
+// drawn over each other (\al, \ac, \ar), \r a radical, \s a superscript
+// (\up) or subscript (\do), \d a space (\fo); \x draws its argument
+// without its box, and the spacing
 // options (\vs, \hs, \ba, \li, \ai, \di) are not read. Text is set
 // upright, as Word sets a field's text.
 func ReadField(instr string, families []string, style RunStyle) *Equation {
@@ -262,7 +263,7 @@ func (p *eqParser) build(name string, opts []eqOption, args [][]*formula.Element
 		}
 		return el("mrow", kids...)
 	case "o":
-		return row(0)
+		return p.overstrike(opts, args)
 	case "r":
 		if len(args) > 1 {
 			return el("mroot", row(1), row(0))
@@ -345,4 +346,34 @@ func (p *eqParser) array(opts []eqOption, args [][]*formula.Element) *formula.El
 		p.r.fixups = append(p.r.fixups, a)
 	}
 	return table
+}
+
+// overstrike maps the \o switch: its arguments drawn over each other,
+// centred on the widest (\ac, the default), or flush left (\al) or right
+// (\ar), which Word uses for enclosed characters.
+//
+// # Corpus evidence
+//
+//   - poi/docx integration/stress019: Word draws "eq \o\ac(○,印)" as the
+//     circle and the character over each other, both in its text.
+func (p *eqParser) overstrike(opts []eqOption, args [][]*formula.Element) *formula.Element {
+	o := &overstrike{justify: Center}
+	if _, ok := option(opts, "al"); ok {
+		o.justify = Left
+	}
+	if _, ok := option(opts, "ar"); ok {
+		o.justify = Right
+	}
+	row := el("mrow")
+	for _, a := range args {
+		content := el("mrow", a...)
+		pad := &formula.Element{Name: "mpadded", Attrs: []formula.Attr{{Name: "width", Value: "0"}}, Children: []*formula.Element{content}}
+		o.parts = append(o.parts, content)
+		o.pads = append(o.pads, pad)
+		row.Children = append(row.Children, pad)
+	}
+	o.space = &formula.Element{Name: "mspace"}
+	row.Children = append(row.Children, o.space)
+	p.r.fixups = append(p.r.fixups, o)
+	return row
 }

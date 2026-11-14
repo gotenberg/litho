@@ -32,6 +32,43 @@ type rule struct {
 	color typeset.Color
 }
 
+// overstrike sets the parts of an EQ field's \o switch over each other:
+// each part in an mpadded of no width, moved right by its share of the
+// widest part's width as the justification says, and a space as wide as
+// the widest part after them.
+type overstrike struct {
+	parts, pads []*formula.Element
+	space       *formula.Element
+	justify     Justify
+}
+
+func (o *overstrike) fix(ctx context.Context, s *formula.Setter, st formula.Style) error {
+	widths := make([]float64, len(o.parts))
+	widest := 0.0
+	for i, part := range o.parts {
+		b, err := s.Layout(ctx, &formula.Element{Name: "mrow", Children: []*formula.Element{part}}, st)
+		if err != nil {
+			return err
+		}
+		widths[i] = b.Width
+		widest = max(widest, b.Width)
+	}
+	em := func(v float64) string { return strconv.FormatFloat(v/st.Size, 'f', 4, 64) + "em" }
+	for i, pad := range o.pads {
+		shift := 0.0
+		switch o.justify {
+		case Right:
+			shift = float64(widest - widths[i])
+		case Center, CenterGroup:
+			shift = float64(widest-widths[i]) / 2
+		case Left:
+		}
+		pad.Attrs = []formula.Attr{{Name: "width", Value: "0"}, {Name: "lspace", Value: em(shift)}}
+	}
+	o.space.Attrs = []formula.Attr{{Name: "width", Value: em(widest)}}
+	return nil
+}
+
 // rowSpacing spaces the rows of a table at the root's size other than
 // single: the struts of each row but the last ([rowAscent]) take the depth
 // that sets the next row's baseline lines times the single pitch, or
