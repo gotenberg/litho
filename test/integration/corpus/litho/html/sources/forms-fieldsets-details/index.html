@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Membership application and FAQ</title>
+<style>
+  body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; margin: 0; color: #222; }
+  h1 { font-size: 18pt; margin: 0 0 8pt; }
+  h2 { font-size: 14pt; margin: 18pt 0 6pt; }
+  fieldset { margin: 0 0 10pt; }
+  fieldset.contact { border: 2px solid #3a5a8c; border-radius: 6px; background: #f4f7fb; }
+  fieldset.contact > legend { font-weight: bold; color: #3a5a8c; padding: 0 6px; }
+  fieldset.prefs { display: grid; grid-template-columns: 1fr 1fr; gap: 4pt 16pt; }
+  fieldset.prefs > legend { font-size: 13pt; }
+  fieldset.plan { border: 1px dashed #888; }
+  fieldset.plan > legend { margin-left: auto; margin-right: auto; background: #fff3c4; border: 1px solid #c9a400; padding: 2px 8px; }
+  fieldset.note { border: none; padding: 0; }
+  label { display: block; margin: 2pt 0; }
+  .row { display: flex; gap: 12pt; }
+  .row label { flex: 1; }
+  .field { display: block; border: 1px solid #999; padding: 1px 3px; background: #fff; }
+  details { border: 1px solid #ccc; border-radius: 4px; margin: 4pt 0; padding: 4pt 8pt; }
+  details[open] { background: #fafafa; }
+  details > summary { font-weight: bold; }
+  details.plain > summary { list-style: none; color: #3a5a8c; }
+  details.marker > summary::marker { color: #c00; }
+</style>
+</head>
+<body>
+<h1>Membership application</h1>
+<form>
+  <fieldset class="contact">
+    <legend>Contact details</legend>
+    <div class="row">
+      <label>First name <span class="field">Ada</span></label>
+      <label>Last name <span class="field">Lovelace</span></label>
+    </div>
+    <label>Email <span class="field">ada@example.org</span></label>
+    <label>Postal address <span class="field">12 Analytical Row, London</span></label>
+  </fieldset>
+  <fieldset class="prefs">
+    <legend>Preferences</legend>
+    <label>Monthly newsletter</label>
+    <label>Event invitations</label>
+    <label>Email</label>
+    <label>Post</label>
+  </fieldset>
+  <fieldset class="plan">
+    <legend align="center">Membership plan</legend>
+    <label>Student, 20 a year</label>
+    <label>Standard, 60 a year</label>
+    <label>Patron, 250 a year</label>
+  </fieldset>
+  <fieldset class="note">
+    <legend>Declaration</legend>
+    <p>I confirm that the details above are correct.</p>
+  </fieldset>
+</form>
+
+<h2>Frequently asked questions</h2>
+<details open>
+  <summary>How do I renew my membership?</summary>
+  <p>Renewals open a month before your plan ends. We send a reminder by email with a link to the form.</p>
+</details>
+<details>
+  <summary>Can I change my plan during the year?</summary>
+  <p>This answer is hidden on paper while the question is closed.</p>
+</details>
+<details class="marker" open>
+  <summary>Which payment methods are accepted?</summary>
+  <ul><li>Card</li><li>Bank transfer</li><li>Cheque</li></ul>
+</details>
+<details class="plain" open>
+  <summary>Is my data shared?</summary>
+  <p>No. Your details stay with the membership office.</p>
+</details>
+<details open>
+  <p>A details element without a summary prints the browser's own summary text.</p>
+</details>
+<details name="faq" open><summary>First of an exclusive group</summary><p>Shown.</p></details>
+<details name="faq" open><summary>Second of the same group</summary><p>Closed by the parser.</p></details>
+</body>
+</html>
