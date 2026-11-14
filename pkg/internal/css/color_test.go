@@ -237,3 +237,20 @@ func TestColor_CurrentColorInFunctions(t *testing.T) {
 func nearColor(a, b Color) bool {
 	return math.Abs(a.R-b.R) < 0.002 && math.Abs(a.G-b.G) < 0.002 && math.Abs(a.B-b.B) < 0.002 && math.Abs(a.A-b.A) < 0.002
 }
+
+// TestFixHues_LongerBetweenEqualHuesTurnsUpward locks CSS Color 4,
+// 13.6.2: when θ₂ - θ₁ is in (-180, 0], the second hue gains 360, so
+// equal hues turn a full circle upward.
+func TestFixHues_LongerBetweenEqualHuesTurnsUpward(t *testing.T) {
+	for _, tc := range []struct{ a, b, wantA, wantB float64 }{
+		{90, 90, 90, 450},
+		{30, 90, 390, 90},
+		{90, 30, 90, 390},
+		{0, 180, 0, 180},
+	} {
+		a, b := fixHues(tc.a, tc.b, hueLonger)
+		if a != tc.wantA || b != tc.wantB {
+			t.Errorf("fixHues(%v, %v, longer) = %v, %v; want %v, %v", tc.a, tc.b, a, b, tc.wantA, tc.wantB)
+		}
+	}
+}

@@ -1218,6 +1218,18 @@ func setComponent(c spaceColor, i int, o spaceColor) spaceColor {
 
 // fixHues adjusts two hues for the interpolation method (CSS Color 4,
 // 13.6), both first reduced to [0, 360).
+//
+// Under longer, two equal hues turn a full circle upward: the clause
+// adds 360 to the second hue when θ₂ - θ₁ is in (-180, 0] (13.6.2).
+// Chromium's screen turns downward there and its print draws no turn at
+// all; the two disagree with each other, so litho keeps the clause.
+//
+// # Corpus evidence
+//
+//   - wpt: css-images/gradient/gradient-none-interpolation, row
+//     noneHueLonger (oklch 90 to a none hue): Chromium's screenshot
+//     passes red, purple, blue, then green; its PDF route keeps an olive
+//     ramp with no hue change.
 func fixHues(a, b float64, m hueMethod) (float64, float64) {
 	norm := func(h float64) float64 {
 		h = math.Mod(h, 360)
