@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	"image/draw"
 	"os"
 	"path"
 	"path/filepath"
@@ -137,9 +138,11 @@ func (r reftestRef) equal(d pixelDiff) bool {
 // drawn by litho at 96 dpi, and the drawings compared pixel for pixel by
 // WPT's rule, the test's fuzziness included, past litho's own rendering
 // noise (see [reftestRef.equal]). A screen reftest is converted for the
-// screen media on an 800 by 600 pixel page with no margin, and its first
-// page compared; a print reftest for print on WPT's 5 by 3 inch page, page
-// by page, a differing page count failing a match and passing a mismatch.
+// screen media on an 800 by 600 pixel page with no margin, its @page rules
+// overridden, and the viewport compared, from a taller page when its
+// content reaches past the viewport (see [reftestFeature.drawScreen]); a
+// print reftest for print on WPT's 5 by 3 inch page, page by page, a
+// differing page count failing a match and passing a mismatch.
 //
 // A test passes when it matches one of its match references, if it has any,
 // and differs from every mismatch reference (WPT's multiple-reference rule).
@@ -257,32 +260,18 @@ func (f *reftestFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]
 		return json.Marshal(reftestOutput{Outcome: outcomeError, Reason: "not in reftests.json"})
 	}
 	root := strings.TrimSuffix(filepath.ToSlash(srcPath), t.ID)
-	testPages, err := f.draw(ctx, root, t.ID, t.Print)
+	testPages, refPages, err := f.drawTest(ctx, root, t)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return json.Marshal(reftestOutput{Outcome: outcomeError, Reason: "test: " + err.Error()})
-	}
-	if t.Print && t.Pages != "" {
-		ranges, err := parseReftestPages(t.Pages)
-		if err != nil {
-			return json.Marshal(reftestOutput{Outcome: outcomeError, Reason: "test: " + err.Error()})
-		}
-		testPages = selectReftestPages(testPages, ranges)
+		return json.Marshal(reftestOutput{Outcome: outcomeError, Reason: err.Error()})
 	}
 	out := reftestOutput{}
 	hasMatch, matched, mismatchOK := false, false, true
 	var failure *reftestFailure
-	for _, ref := range t.Refs {
-		refPages, err := f.draw(ctx, root, ref.Path, t.Print)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			return json.Marshal(reftestOutput{Outcome: outcomeError, Reason: "reference " + ref.Path + ": " + err.Error()})
-		}
-		same, worst := comparePageSets(testPages, refPages, ref)
+	for i, ref := range t.Refs {
+		same, worst := comparePageSets(testPages, refPages[i], ref)
 		out.Refs = append(out.Refs, reftestRefCheck{Path: ref.Path, Rel: ref.Rel, Same: same, Detail: worst.detail})
 		switch ref.Rel {
 		case "match":
@@ -313,6 +302,101 @@ func (f *reftestFeature) Run(ctx context.Context, srcPath, fixtureID string) ([]
 		f.report(fixtureID, failure)
 	}
 	return json.Marshal(out)
+}
+
+// drawTest draws the test t and each of its references, in order: every
+// page of a print reftest, the pages its reftest-pages names of the test;
+// the viewport of a screen reftest (see [reftestFeature.drawScreen]). The
+// error names the document that failed.
+func (f *reftestFeature) drawTest(ctx context.Context, root string, t *reftestEntry) ([]image.Image, [][]image.Image, error) {
+	if !t.Print {
+		return f.drawScreen(ctx, root, t)
+	}
+	testPages, _, err := f.draw(ctx, root, t.ID, reftestPrint)
+	if err != nil {
+		return nil, nil, fmt.Errorf("test: %w", err)
+	}
+	if t.Pages != "" {
+		ranges, err := parseReftestPages(t.Pages)
+		if err != nil {
+			return nil, nil, fmt.Errorf("test: %w", err)
+		}
+		testPages = selectReftestPages(testPages, ranges)
+	}
+	refPages := make([][]image.Image, len(t.Refs))
+	for i, ref := range t.Refs {
+		if refPages[i], _, err = f.draw(ctx, root, ref.Path, reftestPrint); err != nil {
+			return nil, nil, fmt.Errorf("reference %s: %w", ref.Path, err)
+		}
+	}
+	return testPages, refPages, nil
+}
+
+// maxReftestViewports bounds the height of the page a screen reftest is
+// drawn on, in viewports: 32 viewports of 450 points are 14,400 points,
+// the largest page side a PDF may have (ISO 32000-2, Annex C.2).
+const maxReftestViewports = 32
+
+// drawScreen draws the viewport of the screen reftest t and of each of its
+// references, in order, as a screenshot shows it. Every document is first
+// converted on a page the size of the viewport, which the viewport units
+// and the initial containing block then measure exactly. When one of them
+// lays out to more than one page, its content reaches past the viewport
+// and was fragmented there, which a screen never does: every document of
+// the test is then converted again on one page as many viewports tall as
+// the most pages one took, at most [maxReftestViewports], and the top
+// viewport of that page compared. The initial containing block then is
+// that page's area, not the viewport: the conversion options set no
+// viewport apart from the page.
+//
+// # Corpus evidence
+//
+//   - wpt: 50 of the 5112 screen tests have a document that lays out to
+//     more than one page of the viewport. Drawn on the tall page, two pass
+//     that fail on pages: css-tables/row-group-order (its footer group
+//     repeated at the foot of the first page) and css-text-decor/
+//     text-decoration-overline-wavy-covers-whole-line-length-001 (a 400 px
+//     line moved whole to the second page). None that passes on pages
+//     fails.
+//   - wpt: drawn instead with the single page option, sized to its
+//     content and at least 437.12 pixels tall, 23 tests that pass on pages
+//     fail, 21 of them documents that fit the viewport: the viewport units
+//     and the initial containing block measure the page, not 600 pixels.
+func (f *reftestFeature) drawScreen(ctx context.Context, root string, t *reftestEntry) ([]image.Image, [][]image.Image, error) {
+	paths := make([]string, 0, 1+len(t.Refs))
+	paths = append(paths, t.ID)
+	for _, ref := range t.Refs {
+		paths = append(paths, ref.Path)
+	}
+	drawn := make([][]image.Image, len(paths))
+	most := 1
+	for i, p := range paths {
+		pages, n, err := f.draw(ctx, root, p, reftestScreen(1))
+		if err != nil {
+			return nil, nil, documentError(i, p, err)
+		}
+		drawn[i], most = pages, max(most, n)
+	}
+	if most > 1 {
+		tall := reftestScreen(min(most, maxReftestViewports))
+		for i, p := range paths {
+			pages, _, err := f.draw(ctx, root, p, tall)
+			if err != nil {
+				return nil, nil, documentError(i, p, err)
+			}
+			drawn[i] = pages
+		}
+	}
+	return drawn[0], drawn[1:], nil
+}
+
+// documentError names the document at index i of a test's drawings, the
+// test first, in err.
+func documentError(i int, path string, err error) error {
+	if i == 0 {
+		return fmt.Errorf("test: %w", err)
+	}
+	return fmt.Errorf("reference %s: %w", path, err)
 }
 
 // maxReftestPage bounds a page number of a reftest-pages range. Anti-DoS
@@ -409,13 +493,46 @@ func (f *reftestFeature) report(id string, fail *reftestFailure) {
 	}
 }
 
-// draw converts the document at rel under root and draws its pages: the
-// first for a screen reftest, every one for a print reftest.
-func (f *reftestFeature) draw(ctx context.Context, root, rel string, paged bool) ([]image.Image, error) {
+// reftestLayout is how a document of a reftest is converted and drawn.
+type reftestLayout struct {
+	// print converts for print on WPT's print page and draws every page.
+	print bool
+	// viewports is, for a screen reftest, the page's height in viewports:
+	// the page is 800 pixels wide and 600 times viewports tall, and its
+	// top 800 by 600 pixels are drawn.
+	viewports int
+}
+
+// reftestPrint is the layout of a print reftest.
+var reftestPrint = reftestLayout{print: true}
+
+// reftestScreen is the layout of a screen reftest on a page n viewports
+// tall.
+func reftestScreen(n int) reftestLayout { return reftestLayout{viewports: n} }
+
+// reftestScreenSheet is the user stylesheet a screen reftest is converted
+// with: a screen has no page box, so the page size and margins the
+// document's @page rules set give way to the viewport's, as user
+// declarations marked important override the author's (CSS Cascading 4,
+// 6.2). The page-margin boxes are left: no screen test of the selection
+// declares one.
+//
+// # Corpus evidence
+//
+//   - wpt: css-multicol/moz-multicol3-column-balancing-break-inside-avoid-1,
+//     a screen test with @page { size: 5in 3in; margin: 0.5in }, laid out
+//     on two pages of that size; with the sheet on one viewport, its top
+//     left corner where Chromium's screenshot has it.
+const reftestScreenSheet = "@page { size: auto !important; margin: 0 !important }"
+
+// draw converts the document at rel under root and draws its pages as l
+// says: every page for print, the top viewport of the first for the
+// screen. It returns the conversion's page count beside them.
+func (f *reftestFeature) draw(ctx context.Context, root, rel string, l reftestLayout) ([]image.Image, int, error) {
 	file := filepath.Join(filepath.FromSlash(root), filepath.FromSlash(rel))
 	src, err := os.ReadFile(file) //nolint:gosec // file of the fetched WPT tree, listed in reftests.json
 	if err != nil {
-		return nil, fmt.Errorf("read: %w", err)
+		return nil, 0, fmt.Errorf("read: %w", err)
 	}
 	if path.Ext(rel) == ".xht" {
 		if stripped, ok := stripStyleCDATA(src); ok {
@@ -426,41 +543,48 @@ func (f *reftestFeature) draw(ctx context.Context, root, rel string, paged bool)
 	fonts := f.fontDirs
 	f.mu.RUnlock()
 	s := htmlSettings{
-		Media:     "screen",
-		Width:     reftestScreenWidth,
-		Height:    reftestScreenHeight,
-		Top:       0,
-		Right:     0,
-		Bottom:    0,
-		Left:      0,
 		Resources: os.DirFS(filepath.Join(filepath.FromSlash(root), filepath.FromSlash(path.Dir(rel)))),
 		FontDirs:  fonts,
 	}
 	maxPages := 1
-	if !paged {
-		// A screenshot shows the viewport and what overflows it is cut: a
-		// document wider than the page is not shrunk to fit it, as a
-		// browser shrinks one only when it prints.
-		s.Print = []pdf.HTMLOption{pdf.WithShrinkToFit(false)}
-	}
-	if paged {
+	if l.print {
 		s.Media = "print"
 		s.Width, s.Height = reftestPrintWidth, reftestPrintHeight
 		s.Top, s.Right, s.Bottom, s.Left = reftestPrintMargin, reftestPrintMargin, reftestPrintMargin, reftestPrintMargin
 		maxPages = 0
+	} else {
+		s.Media = "screen"
+		s.Width, s.Height = reftestScreenWidth, float64(reftestScreenHeight*max(l.viewports, 1))
+		// A screenshot shows the viewport and what overflows it is cut: a
+		// document wider than the page is not shrunk to fit it, as a
+		// browser shrinks one only when it prints.
+		s.Print = []pdf.HTMLOption{pdf.WithShrinkToFit(false), pdf.WithUserStylesheet(reftestScreenSheet)}
 	}
 	data, err := f.convert(ctx, src, s)
 	if err != nil {
-		return nil, fmt.Errorf("convert: %w", err)
+		return nil, 0, fmt.Errorf("convert: %w", err)
 	}
-	pages, err := renderPDF(ctx, data, reftestDPI, maxPages)
+	pages, n, err := renderPDF(ctx, data, reftestDPI, maxPages)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if len(pages) == 0 {
-		return nil, fmt.Errorf("the conversion has no page")
+		return nil, 0, fmt.Errorf("the conversion has no page")
 	}
-	return pages, nil
+	if !l.print && l.viewports > 1 {
+		pages[0] = topViewport(pages[0])
+	}
+	return pages, n, nil
+}
+
+// topViewport returns the top 800 by 600 pixels of img, the viewport of
+// a screen reftest, or as much of it as img holds.
+func topViewport(img image.Image) image.Image {
+	b := img.Bounds()
+	vp := image.Rect(b.Min.X, b.Min.Y, b.Min.X+reftestScreenWidth*reftestDPI/72, b.Min.Y+reftestScreenHeight*reftestDPI/72).Intersect(b)
+	out := image.NewRGBA(image.Rect(0, 0, vp.Dx(), vp.Dy()))
+	draw.Draw(out, out.Bounds(), img, vp.Min, draw.Src)
+	return out
 }
 
 // comparePageSets reports whether two drawings are equal for ref: the same

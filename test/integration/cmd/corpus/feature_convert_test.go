@@ -281,6 +281,59 @@ func TestReftestFeature_ScreenPagesAreNotShrunk(t *testing.T) {
 	}
 }
 
+// TestReftestFeature_ScreenDrawsTheViewport pins how a screen reftest is
+// drawn, with litho's converter: content that reaches past the viewport is
+// not fragmented at its edge, the @page rules of the document do not apply,
+// and the viewport units measure the 600 pixel viewport of a document that
+// fits it.
+func TestReftestFeature_ScreenDrawsTheViewport(t *testing.T) {
+	t.Parallel()
+
+	const body = `<body style="margin:0">`
+	files := map[string]string{
+		// On pages of the viewport the blue box, which avoids a break
+		// inside, moves to the second page; on a screen it starts at 550.
+		"a/avoid.html":     body + `<div style="height:550px"></div><div style="height:100px;break-inside:avoid;background:#00f"></div>`,
+		"a/avoid-ref.html": body + `<div style="height:550px"></div><div style="height:50px;background:#00f"></div>`,
+		"a/page.html":      `<style>@page { size: 100px 100px; margin: 20px }</style>` + body + `<div style="width:50px;height:50px;background:#00f"></div>`,
+		"a/page-ref.html":  body + `<div style="width:50px;height:50px;background:#00f"></div>`,
+		"a/vh.html":        body + `<div style="height:50vh;background:#00f"></div>`,
+		"a/vh-ref.html":    body + `<div style="height:300px;background:#00f"></div>`,
+	}
+	match := func(id, ref string) *reftestEntry {
+		return &reftestEntry{ID: id, Refs: []reftestRef{{Rel: "match", Path: ref}}}
+	}
+	entries := []*reftestEntry{match("a/avoid.html", "a/avoid-ref.html"), match("a/page.html", "a/page-ref.html"), match("a/vh.html", "a/vh-ref.html")}
+	f, root := newTestReftest(t, convertHTML, files, entries...)
+	for _, e := range entries {
+		t.Run(e.ID, func(t *testing.T) {
+			t.Parallel()
+			out, err := f.Run(t.Context(), filepath.Join(root, filepath.FromSlash(e.ID)), e.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if v := f.Compare(e.ID, out); v.Outcome != outcomePass {
+				t.Errorf("outcome %q (%s), want pass", v.Outcome, v.Reason)
+			}
+		})
+	}
+}
+
+func TestTopViewport_CropsToTheViewport(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct{ w, h, wantW, wantH int }{{800, 1200, 800, 600}, {800, 600, 800, 600}, {900, 500, 800, 500}} {
+		img := image.NewRGBA(image.Rect(0, 0, tt.w, tt.h))
+		img.Set(0, 0, color.RGBA{R: 255, A: 255})
+		got := topViewport(img)
+		if b := got.Bounds(); b.Dx() != tt.wantW || b.Dy() != tt.wantH {
+			t.Errorf("%dx%d: viewport %v, want %dx%d", tt.w, tt.h, b, tt.wantW, tt.wantH)
+		}
+		if r, _, _, _ := got.At(got.Bounds().Min.X, got.Bounds().Min.Y).RGBA(); r != 0xffff {
+			t.Errorf("%dx%d: the top left pixel moved", tt.w, tt.h)
+		}
+	}
+}
+
 func TestDrawFeature_ComparesStackedPagesWithTheGrid(t *testing.T) {
 	t.Parallel()
 

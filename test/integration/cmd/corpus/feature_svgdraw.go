@@ -174,7 +174,7 @@ func (f *svgDrawFeature) draw(ctx context.Context, root string, t *svgTest) (ima
 	if err != nil {
 		return nil, fmt.Errorf("convert: %w", err)
 	}
-	pages, err := renderPDF(ctx, data, svgDrawDPI, 1)
+	pages, _, err := renderPDF(ctx, data, svgDrawDPI, 1)
 	if err != nil {
 		return nil, err
 	}
