@@ -358,6 +358,24 @@ func officeOrigin(sc scale) float64 {
 	return sc.min
 }
 
+// categoryWrap returns the share of the distance between ticks at which a
+// category label under or over the plot area breaks: 5% short of it under
+// LibreOffice's rules, to keep a gap between labels (chart2's
+// createTextShapes), and the whole distance in a chart Office lays out.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: Excel breaks "Category number three" into its three
+//     words under ticks 36.85 pt apart, "Category" 36.52 pt wide on a line
+//     of its own, and keeps "number one", 49.9 pt, on one line under
+//     ticks 54.05 pt apart while it breaks "number three", 56.4 pt.
+func (rd *renderer) categoryWrap() float64 {
+	if rd.officeLayout() {
+		return 1
+	}
+	return 0.95
+}
+
 // officeIntervals returns the most major intervals Office's automatic
 // scale gives a value axis length points long whose labels are lineH
 // points high: as many labels as fit end to end along it, one interval

@@ -682,9 +682,7 @@ func (rd *renderer) placeLabels(d *dim) {
 			if !d.between && d.n > 1 {
 				maxW = d.length() / float64(d.n-1)
 			}
-			// A label breaks 5% short of the distance between ticks, to
-			// keep a gap between labels (chart2's createTextShapes).
-			maxW *= 0.95
+			maxW *= rd.categoryWrap()
 			if s := math.Abs(detmath.Sin(st.Rotation * math.Pi / 180)); s > 0.5 {
 				// A turned label breaks at a share of the chart's height.
 				maxW = rd.page.Height * 0.4 / s

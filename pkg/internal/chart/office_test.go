@@ -498,3 +498,22 @@ func TestRender_OfficeLongValueAxisTitle(t *testing.T) {
 		t.Errorf("title centre = %v, want %v", cy[0], want)
 	}
 }
+
+// TestRender_OfficeCategoryWrap holds category labels under OfficeRules to
+// Office's break: a word as wide as the distance between ticks less 2.5%
+// keeps its line, where LibreOffice's break 5% short of the distance
+// would split it and turn the labels.
+func TestRender_OfficeCategoryWrap(t *testing.T) {
+	c := officeChart(1, 2, 3)
+	c.Groups[0].Series[0].Categories = Data{Values: strs("AAA AAA", "BBB BBB", "CCC CCC")}
+	// The plot area is 92.22 pt wide: ticks 30.74 pt apart, words 30 pt.
+	b, frags := plotBounds(t, c, typeset.Rect{Width: 149, Height: 145.2})
+	if slot := b.Width / 3; slot < 30 || slot > 30/0.95 {
+		t.Fatalf("ticks %v pt apart, want between 30 and %v", slot, 30/0.95)
+	}
+	walk(frags, 0, func(fr typeset.Fragment, _ int) {
+		if g, ok := fr.(*typeset.Group); ok && g.Transform.B != 0 {
+			t.Errorf("a turned label: the words did not wrap at the tick distance")
+		}
+	})
+}
