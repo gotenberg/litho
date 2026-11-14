@@ -613,3 +613,44 @@ func TestFlex_PercentageOfAnIndefiniteColumnItem(t *testing.T) {
 		})
 	}
 }
+
+// TestFlex_ColumnWrapWidthFromFlexedLines locks CSS Flexbox 1, 9.9.2: an
+// inline multi-line column of a definite height is as wide as its lines
+// once its items flex: three 60px items in a 100px column take three
+// lines.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 makes such a
+//     column of three 50 by 60px items 150px wide.
+func TestFlex_ColumnWrapWidthFromFlexedLines(t *testing.T) {
+	t.Parallel()
+	col := func(kids ...*Node) *Node {
+		return el(flexBox(func(s *css.Style) { s.Display = css.InlineFlex }, dir(css.FlexColumn), wrapMode(css.Wrap), height(100)), kids...)
+	}
+	for _, tc := range []struct {
+		name string
+		root *Node
+		want float64
+	}{
+		{"three lines", col(item(50, 60, flexF(0, 0, -1)), item(50, 60, flexF(0, 0, -1)), item(50, 60, flexF(0, 0, -1))), 150},
+	} {
+		var fb *box
+		var walk func(b *box)
+		walk = func(b *box) {
+			if b.flex != nil && fb == nil {
+				fb = b
+			}
+			for _, k := range b.kids {
+				walk(k)
+			}
+		}
+		walk(boxes(t, doc(el(sty(), tc.root)), page(300, 300)))
+		if fb == nil {
+			t.Fatalf("%s: no flex container", tc.name)
+		}
+		if got := rect(fb)[2]; got != tc.want {
+			t.Errorf("%s: container %vpx wide, want %v", tc.name, got, tc.want)
+		}
+	}
+}

@@ -228,7 +228,9 @@ func (flexFormatter) layout(e *engine, b *box, cb cblock, _ *bfc, cursor float64
 // (CSS Flexbox 1, 9.9.1): a row lays its items side by side, so its
 // max-content width sums their max-content contributions, and so does its
 // min-content width unless it wraps; a column stacks them, so it takes
-// the largest. The gaps between items count in a row.
+// the largest, and a multi-line column of a definite height sums its
+// lines ([engine.columnLinesWidth]). The gaps between items count in a
+// row.
 func (flexFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 	ax := axesOf(b.st)
 	gap := 0.0
@@ -262,7 +264,145 @@ func (flexFormatter) intrinsic(e *engine, b *box) (float64, float64) {
 			lo += float64(gap * float64(n-1))
 		}
 	}
+	if !ax.row && ax.wrap && n > 0 && e.err == nil {
+		if h, ok := specHeight(b, b.st.Height, cblock{}); ok {
+			// A multi-line column of a definite height is as wide as its
+			// lines once its items flex, under each constraint (CSS
+			// Flexbox 1, 9.9.2): an item's width can follow its flexed
+			// height through its ratio.
+			lo, hi = e.columnLinesWidth(b, ax, h, lo, gap), e.columnLinesWidth(b, ax, h, hi, gap)
+		}
+	}
 	return lo, max(hi, lo)
+}
+
+// columnLinesWidth returns the sum of the cross sizes of the lines of the
+// multi-line column container b of content height h, its items fitted in
+// a width of w, the gaps of gap between them.
+func (e *engine) columnLinesWidth(b *box, ax flexAxes, h, w, gap float64) float64 {
+	minH, maxH := heightBounds(b)
+	h = max(min(h, maxH), minH)
+	fd := b.flex
+	if fd.measured == nil {
+		fd.measured = map[measureKey]itemMeasure{}
+		fd.current = map[*box]measureKey{}
+	}
+	cb := cblock{w: w, h: h, hDefinite: true}
+	_, lines, _ := e.flexLines(b, fd, ax, cb, cb, h, w, true, true, gapOf(b.st.RowGap, h, true), 0)
+	total := float64(gap * float64(max(len(lines)-1, 0)))
+	for _, ln := range lines {
+		lineCross(ln, false)
+		total += ln.cross
+	}
+	return total
+}
+
+// flexLines makes the items of the flex container b, of content box cb,
+// heights resolved in pcb, breaks them into lines and flexes them in the
+// main size innerMain, definite when mainDef, the cross size innerCross,
+// definite when crossDef, stretching a single row's ratio items to,
+// resolving the cross size a
+// column item's ratio gives it (CSS Flexbox 1, 9.2 to 9.4, step 7). top
+// is where the content starts, for the absolutely positioned children's
+// static position. It returns no line for a container of no item, with
+// the main size the lines are flexed in.
+func (e *engine) flexLines(b *box, fd *flexData, ax flexAxes, cb, pcb cblock, innerMain, innerCross float64, mainDef, crossDef bool, mainGap, top float64) ([]*fitem, []*flexLine, float64) {
+	ms, me, cs, ce := ax.sides()
+	minH, maxH := heightBounds(b)
+	clampH := func(h float64) float64 { return max(min(h, maxH), minH) }
+	var items []*fitem
+	for _, k := range b.kids {
+		if e.err != nil {
+			return nil, nil, innerMain
+		}
+		if k.abs {
+			// The static position of an absolutely positioned child is
+			// the content box's corner, aligned once its size is known
+			// (CSS Flexbox 1, 4.1; see flexStaticShift).
+			setStatic(k, cb.x, top, false)
+			continue
+		}
+		if !k.flexItem {
+			continue
+		}
+		k.laidOut = true
+		resolveEdges(k, cb.w)
+		e.resolveSizing(k, pcb, -1, -1)
+		st := k.st
+		it := &fitem{b: k, grow: st.FlexGrow, shrink: st.FlexShrink, align: usedAlign(st, b.st)}
+		it.mm = [2]float64{k.m[ms], k.m[me]}
+		it.cm = [2]float64{k.m[cs], k.m[ce]}
+		it.mAuto = [2]bool{st.Margin[ms].Kind == css.Auto, st.Margin[me].Kind == css.Auto}
+		it.cAuto = [2]bool{st.Margin[cs].Kind == css.Auto, st.Margin[ce].Kind == css.Auto}
+		it.mEdges, it.cEdges = hEdges(k), vEdges(k)
+		if !ax.row {
+			it.mEdges, it.cEdges = it.cEdges, it.mEdges
+		}
+		items = append(items, it)
+	}
+	if len(items) == 0 {
+		return nil, nil, innerMain
+	}
+	single := !ax.wrap
+	for _, it := range items {
+		it.stretchTo = -1
+		k := it.b
+		if r, _ := prefRatio(k); ax.row && single && crossDef && (k.kind == kindReplaced || r > 0) && it.align.Keyword() == css.BoxStretch &&
+			k.st.Height.Kind == css.Auto && !it.cAuto[0] && !it.cAuto[1] {
+			it.stretchTo = constrainHeight(k, max(innerCross-it.cm[0]-it.cm[1]-it.cEdges, 0), pcb)
+		}
+		if !ax.row {
+			e.columnCross(it, cb, single)
+		}
+		e.baseSize(fd, it, ax, cb, pcb, innerMain, mainDef, top)
+	}
+	if e.err != nil {
+		return nil, nil, innerMain
+	}
+
+	// Lines (CSS Flexbox 1, 9.3), at the main size available: an
+	// indefinite column height wraps at its max-height alone.
+	avail := innerMain
+	if !mainDef {
+		avail = maxH
+	}
+	lines := collectLines(items, avail, mainGap, ax.wrap)
+	if !mainDef {
+		// The main size of an auto-height column is its content's,
+		// within its min-height and max-height (9.3, as Chromium
+		// resolves it).
+		widest := 0.0
+		for _, ln := range lines {
+			s := 0.0
+			for _, it := range ln.items {
+				s += it.outerHypo()
+			}
+			widest = max(widest, s+float64(mainGap*float64(len(ln.items)-1)))
+		}
+		// A calc-size() height applies to that content height before
+		// the items flex (CSS Sizing 4, 7.1), the lines kept.
+		if src := b.sizeSrc(); src.Height.SizeCalc() && b.st.Height.Kind == css.Auto {
+			widest = throughCalc(src.Height, widest, vEdges(b), src.BoxSizing == css.BorderBox, 0)
+			b.heightCalced = true
+		}
+		innerMain = clampH(widest)
+	}
+	for _, ln := range lines {
+		resolveFlexible(ln.items, innerMain, mainGap)
+	}
+	if !ax.row {
+		for _, it := range items {
+			k := it.b
+			if r, content := prefRatio(k); r > 0 && !it.stretch && !it.crossSet && k.sizeSrc().Width.Kind == css.Auto {
+				// The cross size follows the used main size through the
+				// ratio (CSS Flexbox 1, 9.4, 7; CSS Sizing 4, 4.2), as
+				// Chromium sizes a column item.
+				it.cross = constrainWidth(k, widthOfHeight(it.target, r, edgesFor(k, content)), cb.w)
+			}
+		}
+	}
+
+	return items, lines, innerMain
 }
 
 // heightBounds returns the min-height and max-height of b that a flex
@@ -340,35 +480,9 @@ func (e *engine) layoutFlex(b *box, cb cblock, top float64) float64 {
 		innerCross, crossDef = cb.w, true
 	}
 
-	var items []*fitem
-	for _, k := range b.kids {
-		if e.err != nil {
-			return top
-		}
-		if k.abs {
-			// The static position of an absolutely positioned child is
-			// the content box's corner, aligned once its size is known
-			// (CSS Flexbox 1, 4.1; see flexStaticShift).
-			setStatic(k, cb.x, top, false)
-			continue
-		}
-		if !k.flexItem {
-			continue
-		}
-		k.laidOut = true
-		resolveEdges(k, cb.w)
-		e.resolveSizing(k, pcb, -1, -1)
-		st := k.st
-		it := &fitem{b: k, grow: st.FlexGrow, shrink: st.FlexShrink, align: usedAlign(st, b.st)}
-		it.mm = [2]float64{k.m[ms], k.m[me]}
-		it.cm = [2]float64{k.m[cs], k.m[ce]}
-		it.mAuto = [2]bool{st.Margin[ms].Kind == css.Auto, st.Margin[me].Kind == css.Auto}
-		it.cAuto = [2]bool{st.Margin[cs].Kind == css.Auto, st.Margin[ce].Kind == css.Auto}
-		it.mEdges, it.cEdges = hEdges(k), vEdges(k)
-		if !ax.row {
-			it.mEdges, it.cEdges = it.cEdges, it.mEdges
-		}
-		items = append(items, it)
+	items, lines, innerMain := e.flexLines(b, fd, ax, cb, pcb, innerMain, innerCross, mainDef, crossDef, mainGap, top)
+	if e.err != nil {
+		return top
 	}
 	if len(items) == 0 {
 		h := 0.0
@@ -378,64 +492,6 @@ func (e *engine) layoutFlex(b *box, cb cblock, top float64) float64 {
 		return top + clampH(h)
 	}
 	single := !ax.wrap
-	for _, it := range items {
-		it.stretchTo = -1
-		k := it.b
-		if r, _ := prefRatio(k); ax.row && single && crossDef && (k.kind == kindReplaced || r > 0) && it.align.Keyword() == css.BoxStretch &&
-			k.st.Height.Kind == css.Auto && !it.cAuto[0] && !it.cAuto[1] {
-			it.stretchTo = constrainHeight(k, max(innerCross-it.cm[0]-it.cm[1]-it.cEdges, 0), pcb)
-		}
-		if !ax.row {
-			e.columnCross(it, cb, single)
-		}
-		e.baseSize(fd, it, ax, cb, pcb, innerMain, mainDef, top)
-	}
-	if e.err != nil {
-		return top
-	}
-
-	// Lines (CSS Flexbox 1, 9.3), at the main size available: an
-	// indefinite column height wraps at its max-height alone.
-	avail := innerMain
-	if !mainDef {
-		avail = maxH
-	}
-	lines := collectLines(items, avail, mainGap, ax.wrap)
-	if !mainDef {
-		// The main size of an auto-height column is its content's,
-		// within its min-height and max-height (9.3, as Chromium
-		// resolves it).
-		widest := 0.0
-		for _, ln := range lines {
-			s := 0.0
-			for _, it := range ln.items {
-				s += it.outerHypo()
-			}
-			widest = max(widest, s+float64(mainGap*float64(len(ln.items)-1)))
-		}
-		// A calc-size() height applies to that content height before
-		// the items flex (CSS Sizing 4, 7.1), the lines kept.
-		if src := b.sizeSrc(); src.Height.SizeCalc() && b.st.Height.Kind == css.Auto {
-			widest = throughCalc(src.Height, widest, vEdges(b), src.BoxSizing == css.BorderBox, 0)
-			b.heightCalced = true
-		}
-		innerMain = clampH(widest)
-	}
-	for _, ln := range lines {
-		resolveFlexible(ln.items, innerMain, mainGap)
-	}
-	if !ax.row {
-		for _, it := range items {
-			k := it.b
-			if r, content := prefRatio(k); r > 0 && !it.stretch && !it.crossSet && k.sizeSrc().Width.Kind == css.Auto {
-				// The cross size follows the used main size through the
-				// ratio (CSS Flexbox 1, 9.4, 7; CSS Sizing 4, 4.2), as
-				// Chromium sizes a column item.
-				it.cross = constrainWidth(k, widthOfHeight(it.target, r, edgesFor(k, content)), cb.w)
-			}
-		}
-	}
-
 	// Cross sizes (9.4).
 	for _, it := range items {
 		if ax.row {
