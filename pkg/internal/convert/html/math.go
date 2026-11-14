@@ -150,6 +150,7 @@ func formulaStyle(st *css.Style, lang string) *formula.Style {
 		Depth:    int(st.MathDepth),
 		MathAuto: st.TextTransform == css.MathAuto,
 		Hidden:   st.Visibility != css.Visible,
+		RTL:      st.Direction == css.RTL,
 	}
 	if bg := color(st.BackgroundColor); bg.A > 0 {
 		fs.Background = bg

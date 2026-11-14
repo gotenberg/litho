@@ -351,3 +351,22 @@ func TestContentSize_WidthAndHeight(t *testing.T) {
 		t.Fatalf("mrow %g by %g, content at %g; want 30 by 20 at 0", b.Width, b.Ascent+b.Descent, x)
 	}
 }
+
+// TestRTL_MirrorsTheRow places the children of a right-to-left row from
+// the right, the operator's lspace on its right (MathML Core, 3.1.1).
+func TestRTL_MirrorsTheRow(t *testing.T) {
+	s := dejavu(t)
+	st := mathStyle("DejaVu Math TeX Gyre", 10)
+	st.RTL = true
+	b := lay(t, s, el("math", space("10pt", "1pt", "0"), attrs(tok("mo", "+"), "lspace", "5pt", "rspace", "0"), space("20pt", "1pt", "0")), st)
+	_, _, plus := childAt(b, 1)
+	if x, _, _ := childAt(b, 0); !near(x, b.Width-10) {
+		t.Fatalf("first child at %g, want at the right end %g", x, b.Width-10)
+	}
+	if x, _, _ := childAt(b, 2); !near(x, 0) {
+		t.Fatalf("last child at %g, want 0", x)
+	}
+	if x, _, _ := childAt(b, 1); !near(x, 20) || !near(b.Width, 35+plus.w) {
+		t.Fatalf("operator at %g in %g, want 20 in %g", x, b.Width, 35+plus.w)
+	}
+}

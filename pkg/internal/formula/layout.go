@@ -67,7 +67,27 @@ func (l *layouter) layout(e *Element, st *Style, c lctx, depth int) *box {
 	default:
 		b = l.row(e, st, c, depth)
 	}
+	if st.RTL && !isToken(e.Name) && e.Name != "mo" {
+		mirror(b)
+	}
 	return edges(b, st, centred(e.Name))
+}
+
+// mirror places the items of b, laid out from the left, from the right:
+// the inline offset of an item in a right-to-left box is the box's inline
+// size less the item's line-left offset and inline size (MathML Core,
+// 3.1.1). Only the boxes of tokens hold glyph runs, and a token keeps the
+// order its shaping gave its text.
+func mirror(b *box) {
+	for i := range b.items {
+		it := &b.items[i]
+		switch {
+		case it.child != nil:
+			it.x = b.w - it.x - it.child.w
+		case it.rect != nil:
+			it.x = b.w - it.x - it.rect.w
+		}
+	}
 }
 
 // centred reports the elements whose math content box sits in the

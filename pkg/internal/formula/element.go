@@ -101,6 +101,9 @@ type Style struct {
 	// Hidden is visibility: hidden: the element keeps its box and paints
 	// nothing.
 	Hidden bool
+	// RTL is direction: rtl: the element's children are placed from the
+	// right (MathML Core, 3.1.1, the inline offset of a child box).
+	RTL bool
 	// Padding, Border and Margin are the widths of each side, indexed
 	// top, right, bottom, left (MathML Core, 3.1.2).
 	Padding, Border, Margin [4]float64
