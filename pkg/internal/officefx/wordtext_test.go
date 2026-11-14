@@ -74,7 +74,7 @@ func TestWordRunReach(t *testing.T) {
 			Shadow: &css.OfficeShadow{Color: black, Blur: 4, Dist: 3, Dir: 90},
 		}, wordGlowReach*8*k + k, wordGlowReach*8*k + 7*k, 6, 24},
 		{"reflection", css.OfficeEffects{Reflection: &css.OfficeReflection{StartAlpha: 0.5, EndPos: 0.5, Dir: 90, SY: -1}}, 0, 0.5*wordRunBox*24 - 6, 6, 24},
-		{"reflection away", css.OfficeEffects{Reflection: &css.OfficeReflection{StartAlpha: 0.5, EndPos: 0.5, Dist: 7, Dir: 90, SY: -1}}, 0, 0.5*wordRunBox*24 + 12 - 6, 6, 24},
+		{"reflection away", css.OfficeEffects{Reflection: &css.OfficeReflection{StartAlpha: 0.5, EndPos: 0.5, Dist: 7, Dir: 90, SY: -1}}, 0, 0.5*wordRunBox*24 + 7*24/wordReflectionDist - 6, 6, 24},
 		{"invisible", css.OfficeEffects{Glow: &css.OfficeGlow{Radius: 8}}, 0, 0, 6, 24},
 		{"powerpoint", css.OfficeEffects{Glow: &css.OfficeGlow{Color: black, Radius: 8}, Rules: css.OfficePowerPoint}, 0, 0, 6, 24},
 		{"no size", css.OfficeEffects{Glow: &css.OfficeGlow{Color: black, Radius: 8}}, 0, 0, 6, 0},
@@ -168,7 +168,7 @@ func TestUnder_WordRunCastsShadowOverGlow(t *testing.T) {
 }
 
 // TestUnder_WordReflectionMovesByTheSize checks that a reflection of a run
-// of Word's text lies its distance times the size over 14 below the
+// of Word's text lies its distance times the size over 14.2 below the
 // baseline, cut off at half that.
 func TestUnder_WordReflectionMovesByTheSize(t *testing.T) {
 	refl := &css.OfficeReflection{StartAlpha: 0.5, EndPos: 1, FadeDir: 90, Dist: 8, Dir: 90, SX: 1, SY: -1, Align: css.RectAlign{Y: 1}}
@@ -203,7 +203,7 @@ func TestUnder_WordRunSameBytesOnEveryArchitecture(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		"a2678f35a4615417",
+		"ef1f425a99ce1612",
 		"d659e7682fde971c",
 		"82af86481e0395ab",
 	}

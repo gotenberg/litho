@@ -81,11 +81,32 @@ func wordScale(size float64) float64 {
 	return detmath.Pow(min(size, maxFontSize)/wordScaleSize, wordScalePower)
 }
 
-// wordReflectionDist is the font size, in points, a w14 reflection's
-// distance is scaled by: Word mirrors a run of size s whose reflection
-// lies d points away about a line d s/28 points below its baseline, the
-// copy d s/14 points down. See [wordReflection].
-const wordReflectionDist = 14
+// wordReflectionDist is what a w14 reflection's distance times the font
+// size is divided by: Word moves the copy of a run of size s whose
+// reflection lies d points away d s/14.2 points along its direction,
+// mirrored about a line half the downward part of that below the
+// baseline. See [wordReflection].
+//
+// # Corpus evidence
+//
+//   - probe, docx: reflections 2, 4, 8 and 16 points away down at 12, 24,
+//     48 and 72 points put the top of the mirrored H's stems (the copy's
+//     baseline) 1.58, 3.31, 6.80, 13.50; 3.31, 6.78, 13.55, 27.25; 6.81,
+//     13.51, 27.05, 54.48; 9.81, 19.76, 40.30 and 80.71 points below the
+//     baseline: d s/14.2 within 0.52 points, 0.22 rms, d s/14 within 1.58
+//     (0.53 rms, every one at 72 points 0.48 to 1.58 short). The mirrored
+//     descenders are cut half that shift below the baseline wherever they
+//     reach it.
+//   - probe, docx: the same reflections grow their lines below by 4.00,
+//     5.77, 9.50, 16.75; 8.00, 11.50, 18.75, 33.52; 16.25, 23.50, 38.25,
+//     67.49; 24.28, 35.55, 57.55 and 101.05 points: the rules of
+//     [WordRunReach] give them within 0.50 points, 0.24 rms, at 14.2, 0.39
+//     rms and 1.00 at most at 14.
+//   - probe, docx: a reflection 8 points away at 24 points toward 0
+//     degrees moves the copy 13.75 points right, its baseline on the
+//     run's; toward 45 degrees 9.75 points right and 9.52 down. The rule
+//     gives 13.52, 9.56 and 9.56.
+const wordReflectionDist = 14.2
 
 // wordRunBox is the height of the box of a run of Word's text that a
 // reflection mirrors and fades over, a share of the font size, from the
