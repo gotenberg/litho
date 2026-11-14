@@ -185,7 +185,7 @@ func (l *layouter) core(e *Element, depth int) *Element {
 			c = l.core(kids[0], depth+1)
 		}
 	case isGrouping(e.Name) || e.Name == "mpadded":
-		if _, k := l.embellishingChild(e, depth); k != nil {
+		if k := l.embellishingChild(e, depth); k != nil {
 			c = l.core(k, depth+1)
 		}
 	}
@@ -196,23 +196,23 @@ func (l *layouter) core(e *Element, depth int) *Element {
 	return c
 }
 
-// embellishingChild returns the in-flow child, and its position among
-// them, through which e, a grouping element or an mpadded, is an
-// embellished operator: its one embellished operator child, the others
-// space-like; nil when there is none.
-func (l *layouter) embellishingChild(e *Element, depth int) (int, *Element) {
+// embellishingChild returns the in-flow child through which e, a
+// grouping element or an mpadded, is an embellished operator: its one
+// embellished operator child, the others space-like; nil when there is
+// none.
+func (l *layouter) embellishingChild(e *Element, depth int) *Element {
 	kids, _ := inFlow(e)
-	at, found := -1, (*Element)(nil)
-	for i, k := range kids {
+	var found *Element
+	for _, k := range kids {
 		if l.spaceLike(k, depth+1) {
 			continue
 		}
 		if found != nil || l.core(k, depth+1) == nil {
-			return -1, nil
+			return nil
 		}
-		at, found = i, k
+		found = k
 	}
-	return at, found
+	return found
 }
 
 // spaceLike reports a space-like element (MathML Core, 3.2.5.1): an mtext

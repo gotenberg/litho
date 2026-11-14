@@ -61,7 +61,7 @@ func (l *layouter) rowOf(e *Element, kids []*Element, index []int, st *Style, c 
 	switch {
 	case !embellished:
 	case isGrouping(e.Name) || e.Name == "mpadded":
-		_, through = l.embellishingChild(e, depth)
+		through = l.embellishingChild(e, depth)
 	case len(kids) > 0:
 		// A scripted element or an mfrac laid out as an mrow is
 		// embellished through its first child.

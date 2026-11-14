@@ -72,9 +72,6 @@ func (b *Box) Draw(x, y float64) []typeset.Fragment {
 	return out
 }
 
-// errNoFace reports a style whose families match no face.
-var errNoFace = errors.New("no font face for the formula")
-
 // Layout lays root out, its style being st when root.Style is nil. The
 // box depends on the tree, st and the setter's fonts alone. It returns
 // ctx's error when ctx ends first, and an error when the fonts hold no
@@ -211,18 +208,18 @@ func (l *layouter) loadFace(tf *text.Face) *face {
 		// OS/2: ySubscriptYOffset at 12, ySuperscriptYOffset at 20, and
 		// sxHeight at 86 from version 2 (OpenType 1.9.1, OS/2 table).
 		if len(os2) >= 22 {
-			f.subOffset = float64(int16(binary.BigEndian.Uint16(os2[12:])))
-			f.superOffset = float64(int16(binary.BigEndian.Uint16(os2[20:])))
+			f.subOffset = fword(os2[12:])
+			f.superOffset = fword(os2[20:])
 		}
 		if len(os2) >= 88 && binary.BigEndian.Uint16(os2) >= 2 {
-			if xh := int16(binary.BigEndian.Uint16(os2[86:])); xh > 0 {
-				f.xHeight = float64(xh)
+			if xh := fword(os2[86:]); xh > 0 {
+				f.xHeight = xh
 			}
 		}
 	}
 	if post, err := truetype.TableData(ts.Program, records, "post"); err == nil && len(post) >= 12 {
 		// post: underlineThickness at 10 (OpenType 1.9.1, post table).
-		f.ruleThickness = float64(int16(binary.BigEndian.Uint16(post[10:])))
+		f.ruleThickness = fword(post[10:])
 	}
 	return f
 }
@@ -251,4 +248,14 @@ func (s *Setter) program(ts *typeset.Face) *gofont.Face {
 	}
 	s.programs[ts.Key] = g
 	return g
+}
+
+// fword reads the big-endian FWORD, a signed 16-bit count of font units,
+// at the start of b.
+func fword(b []byte) float64 {
+	v := int(binary.BigEndian.Uint16(b))
+	if v >= 1<<15 {
+		v -= 1 << 16
+	}
+	return float64(v)
 }

@@ -50,8 +50,10 @@ func mathProps() map[propID]propDef {
 		pMathShift: enumProp("math-shift", true, func(s *Style) *MathShift { return &s.MathShift }, map[string]MathShift{
 			"normal": MathShiftNormal, "compact": MathShiftCompact,
 		}),
-		pMathDepth: {name: "math-depth", inherited: true, parse: parseMathDepth, compute: computeMathDepth,
-			copyFrom: field(func(s *Style) *int32 { return &s.MathDepth })},
+		pMathDepth: {
+			name: "math-depth", inherited: true, parse: parseMathDepth, compute: computeMathDepth,
+			copyFrom: field(func(s *Style) *int32 { return &s.MathDepth }),
+		},
 	}
 }
 
@@ -90,12 +92,12 @@ func computeMathDepth(s *styler, st *Style, v any) {
 	case d.autoAdd:
 		st.MathDepth = s.parent.MathDepth
 		if s.parent.MathStyle == MathCompact {
-			st.MathDepth = int32(AddIntegers(inherited, 1)) // fits int32: AddIntegers clamps to it
+			st.MathDepth = int32(AddIntegers(inherited, 1)) //nolint:gosec // AddIntegers keeps the int32 range
 		}
 	case d.add:
-		st.MathDepth = int32(AddIntegers(inherited, d.n)) // fits int32: AddIntegers clamps to it
+		st.MathDepth = int32(AddIntegers(inherited, d.n)) //nolint:gosec // AddIntegers keeps the int32 range
 	default:
-		st.MathDepth = int32(ClampInteger(int64(d.n))) // fits int32: ClampInteger clamps to it
+		st.MathDepth = int32(ClampInteger(int64(d.n))) //nolint:gosec // ClampInteger keeps the int32 range
 	}
 }
 

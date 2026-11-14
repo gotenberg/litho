@@ -108,8 +108,10 @@ func contentSize(c *box, st *Style, centred bool) *box {
 	if !st.HasWidth && !st.HasHeight {
 		return c
 	}
-	b := &box{w: c.w, asc: c.asc, desc: c.desc, inkAsc: c.inkAsc, inkDesc: c.inkDesc, italic: c.italic,
-		accent: c.accent, hasAccent: c.hasAccent, op: c.op}
+	b := &box{
+		w: c.w, asc: c.asc, desc: c.desc, inkAsc: c.inkAsc, inkDesc: c.inkDesc, italic: c.italic,
+		accent: c.accent, hasAccent: c.hasAccent, op: c.op,
+	}
 	x := 0.0
 	if st.HasWidth {
 		b.w = max(st.Width, 0)

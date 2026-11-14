@@ -178,22 +178,22 @@ func ParseTable(data []byte) (*Table, error) {
 		return nil, fmt.Errorf("%w: major version %d", ErrInvalidTable, v)
 	}
 	t := &Table{data: data}
-	if c := sub(data, 0, u16(data, 4)); len(c) >= constantsLength {
+	if c := sub(data, u16(data, 4)); len(c) >= constantsLength {
 		t.constants = c
 	}
-	if info := sub(data, 0, u16(data, 6)); len(info) >= 8 {
+	if info := sub(data, u16(data, 6)); len(info) >= 8 {
 		t.italics = readValueList(info, u16(info, 0))
 		t.accents = readValueList(info, u16(info, 2))
-		t.extended = coverage(sub(info, 0, u16(info, 4)))
+		t.extended = coverage(sub(info, u16(info, 4)))
 		t.kerns = readValueList(info, u16(info, 6))
 	}
-	if v := sub(data, 0, u16(data, 8)); len(v) >= 10 {
+	if v := sub(data, u16(data, 8)); len(v) >= 10 {
 		t.minOverlap = int(u16(v, 0))
 		vertCount, horizCount := int(u16(v, 6)), int(u16(v, 8))
 		if 10+2*(vertCount+horizCount) <= len(v) {
 			t.variants = v
-			t.vert, t.vertCount = coverage(sub(v, 0, u16(v, 2))), vertCount
-			t.horiz, t.horizCount = coverage(sub(v, 0, u16(v, 4))), horizCount
+			t.vert, t.vertCount = coverage(sub(v, u16(v, 2))), vertCount
+			t.horiz, t.horizCount = coverage(sub(v, u16(v, 4))), horizCount
 		}
 	}
 	return t, nil
@@ -204,11 +204,11 @@ func ParseTable(data []byte) (*Table, error) {
 // MathItalicsCorrectionInfo, MathTopAccentAttachment and MathKernInfo
 // tables share that head). A subtable that does not fit reads as empty.
 func readValueList(info []byte, off uint16) valueList {
-	d := sub(info, 0, off)
+	d := sub(info, off)
 	if len(d) < 4 {
 		return valueList{}
 	}
-	return valueList{data: d, coverage: coverage(sub(d, 0, u16(d, 0))), count: int(u16(d, 2))}
+	return valueList{data: d, coverage: coverage(sub(d, u16(d, 0))), count: int(u16(d, 2))}
 }
 
 // Constant returns the value c of the MathConstants table: font units, or
@@ -220,13 +220,13 @@ func (t *Table) Constant(c Constant) (v int, ok bool) {
 	}
 	switch c { //nolint:exhaustive // the MathValueRecords share the default
 	case ScriptPercentScaleDown, ScriptScriptPercentScaleDown:
-		return int(int16(u16(t.constants, 2*int(c)))), true
+		return s16(t.constants, 2*int(c)), true
 	case DelimitedSubFormulaMinHeight, DisplayOperatorMinHeight:
 		return int(u16(t.constants, 2*int(c))), true
 	case RadicalDegreeBottomRaisePercent:
-		return int(int16(u16(t.constants, constantsLength-2))), true
+		return s16(t.constants, constantsLength-2), true
 	}
-	return int(int16(u16(t.constants, firstRecord+4*int(c-MathLeading)))), true
+	return s16(t.constants, firstRecord+4*int(c-MathLeading)), true
 }
 
 // ItalicsCorrection returns the italics correction of glyph gid in font
@@ -258,7 +258,7 @@ func (l valueList) value(gid uint16) (int, bool) {
 	if off+2 > len(l.data) {
 		return 0, false
 	}
-	return int(int16(u16(l.data, off))), true
+	return s16(l.data, off), true
 }
 
 // IsExtendedShape reports whether the ExtendedShapes coverage table holds
@@ -287,7 +287,7 @@ func (t *Table) Kern(gid uint16, corner Corner, height int) int {
 	if rec+2 > len(t.kerns.data) {
 		return 0
 	}
-	k := sub(t.kerns.data, 0, u16(t.kerns.data, rec))
+	k := sub(t.kerns.data, u16(t.kerns.data, rec))
 	if len(k) < 2 {
 		return 0
 	}
@@ -299,10 +299,10 @@ func (t *Table) Kern(gid uint16, corner Corner, height int) int {
 	// The kern of the first height the value lies under: below the first
 	// height the first kern, at or past the last the last kern.
 	j := 0
-	for j < n && height >= int(int16(u16(k, 2+4*j))) {
+	for j < n && height >= s16(k, 2+4*j) {
 		j++
 	}
-	return int(int16(u16(k, 2+4*(n+j))))
+	return s16(k, 2+4*(n+j))
 }
 
 // MinConnectorOverlap returns the minimum overlap of the connectors of
@@ -362,7 +362,7 @@ func (t *Table) Construction(gid uint16, vertical bool) (variants []Variant, asm
 	if !found || i >= count {
 		return nil, nil, false
 	}
-	c := sub(t.variants, 0, u16(t.variants, base+2*i))
+	c := sub(t.variants, u16(t.variants, base+2*i))
 	if len(c) < 4 {
 		return nil, nil, false
 	}
@@ -371,7 +371,7 @@ func (t *Table) Construction(gid uint16, vertical bool) (variants []Variant, asm
 	for k := range n {
 		variants[k] = Variant{GID: u16(c, 4+4*k), Advance: int(u16(c, 6+4*k))}
 	}
-	return variants, readAssembly(sub(c, 0, u16(c, 0))), true
+	return variants, readAssembly(sub(c, u16(c, 0))), true
 }
 
 // readAssembly reads a GlyphAssembly table: a MathValueRecord, partCount
@@ -384,7 +384,7 @@ func readAssembly(a []byte) *Assembly {
 	if n == 0 || n > maxParts || 6+10*n > len(a) {
 		return nil
 	}
-	asm := &Assembly{ItalicsCorrection: int(int16(u16(a, 0))), Parts: make([]Part, n)}
+	asm := &Assembly{ItalicsCorrection: s16(a, 0), Parts: make([]Part, n)}
 	for k := range n {
 		p := a[6+10*k:]
 		asm.Parts[k] = Part{
@@ -440,14 +440,24 @@ func coverageIndex(c []byte, gid uint16) (int, bool) {
 	return int(u16(c, 4+6*i+4)) + int(gid-u16(c, 4+6*i)), true
 }
 
-// sub returns the part of d from base+off to its end, nil for a null or
+// sub returns the part of d from off to its end, nil for a null or
 // out-of-range offset.
-func sub(d []byte, base int, off uint16) []byte {
-	start := base + int(off)
+func sub(d []byte, off uint16) []byte {
+	start := int(off)
 	if off == 0 || start >= len(d) {
 		return nil
 	}
 	return d[start:]
+}
+
+// s16 reads the big-endian int16 at off of d, 0 past its end: an FWORD
+// or the value of a MathValueRecord.
+func s16(d []byte, off int) int {
+	v := int(u16(d, off))
+	if v >= 1<<15 {
+		v -= 1 << 16
+	}
+	return v
 }
 
 // u16 reads the big-endian uint16 at off of d, 0 past its end.
