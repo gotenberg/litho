@@ -596,3 +596,49 @@ func TestRender_OfficeCornerLegend(t *testing.T) {
 		}
 	}
 }
+
+// TestRender_OfficeTurnedLabels holds category labels Office turns by 45
+// degrees to its rules: cut after their first word, with an ellipsis,
+// when whole they would leave the plot area less than a third of the
+// chart's height, whole when they leave it more; every label printed;
+// the value axis counted at its length under one line of labels.
+func TestRender_OfficeTurnedLabels(t *testing.T) {
+	render := func(h float64, names ...string) ([]string, []string, typeset.Rect) {
+		c := officeChart(15.6667, 23.5, 47, 30, 20, 10)
+		c.Title = &Title{Text: "T", Style: TextStyle{Size: 10, Color: typeset.Black}}
+		c.Groups[0].Series[0].Categories = Data{Values: strs(names...)}
+		r := typeset.Rect{Width: 154.8, Height: h}
+		b, frags := plotBounds(t, c, r)
+		var cats, vals []string
+		for _, s := range texts(frags) {
+			switch {
+			case s == "":
+			case s[0] >= '0' && s[0] <= '9':
+				vals = append(vals, s)
+			case s != "T":
+				cats = append(cats, s)
+			}
+		}
+		return cats, vals, b
+	}
+	long := []string{"AAA AAA", "BBB BBB", "CCC CCC", "DDD DDD", "EEE EEE", "FFF FFF"}
+	cats, _, b := render(290.4, long...)
+	if strings.Join(cats, " ") != strings.Join(long, " ") {
+		t.Errorf("tall chart labels = %q, want them whole", cats)
+	}
+	if b.Height < 290.4/3 {
+		t.Errorf("tall chart plot height %v, under a third", b.Height)
+	}
+	cats, vals, b := render(145.2, long...)
+	want := []string{"AAA…", "BBB…", "CCC…", "DDD…", "EEE…", "FFF…"}
+	if strings.Join(cats, " ") != strings.Join(want, " ") {
+		t.Errorf("short chart labels = %q, want %q", cats, want)
+	}
+	if b.Height < 145.2/3 {
+		t.Errorf("short chart plot height %v, under a third", b.Height)
+	}
+	_, one, _ := render(145.2, "A", "B", "C", "D", "E", "F")
+	if strings.Join(vals, " ") != strings.Join(one, " ") {
+		t.Errorf("value labels = %q under turned labels, want %q", vals, one)
+	}
+}

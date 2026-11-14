@@ -74,6 +74,24 @@ type tickLabel struct {
 	pos float64
 	// cx and cy centre the label.
 	cx, cy float64
+	// drawn, when set, is drawn in b's place from b's start: b's text
+	// with an ellipsis that b's room leaves out (officeCut).
+	drawn *block
+	// turned marks a label Office turned (officeTurnedCentre), whose box
+	// may run into the chart's edge pad up to officeTurnedEdge.
+	turned bool
+}
+
+// draw returns the drawing of l.
+func (l tickLabel) draw() []typeset.Fragment {
+	if l.drawn == nil {
+		return l.b.draw(l.cx, l.cy, alignCenter)
+	}
+	// The drawn block starts where b starts: its centre lies half the
+	// difference of their widths further along the text.
+	r := l.b.style.Rotation * math.Pi / 180
+	d := float64((l.drawn.w - l.b.w) / 2)
+	return l.drawn.draw(l.cx+float64(d*detmath.Cos(r)), l.cy-float64(d*detmath.Sin(r)), alignCenter)
 }
 
 // visible reports a drawn axis.
@@ -311,7 +329,7 @@ func (rd *renderer) cartesian(avail typeset.Rect) {
 	}
 	for _, d := range all {
 		for _, l := range d.labels {
-			rd.out = append(rd.out, l.b.draw(l.cx, l.cy, alignCenter)...)
+			rd.out = append(rd.out, l.draw()...)
 		}
 		if d.table != nil {
 			rd.drawDataTable(d, d.table)
@@ -330,7 +348,12 @@ func labelBounds(inner typeset.Rect, dims []*dim) typeset.Rect {
 	for _, d := range dims {
 		for _, l := range d.labels {
 			w, h := l.b.rotated()
-			bb = union(bb, typeset.Rect{X: l.cx - float64(w/2), Y: l.cy - float64(h/2), Width: w, Height: h})
+			r := typeset.Rect{X: l.cx - float64(w/2), Y: l.cy - float64(h/2), Width: w, Height: h}
+			if l.turned {
+				r.X += officePad - officeTurnedEdge
+				r.Width -= officePad - officeTurnedEdge
+			}
+			bb = union(bb, r)
 		}
 	}
 	return bb
@@ -788,6 +811,8 @@ func (rd *renderer) placeLabels(d *dim) {
 		breakable = false
 		blocks = measure(st, 0)
 	}
+	var drawn []*block
+	officeTurn := false
 	place := func(blocks []*block) {
 		d.labels = d.labels[:0]
 		for i, it := range items {
@@ -798,6 +823,9 @@ func (rd *renderer) placeLabels(d *dim) {
 			w, h := b.rotated()
 			p := d.pixel(it.f)
 			l := tickLabel{b: b, pos: p}
+			if drawn != nil {
+				l.drawn = drawn[i]
+			}
 			// A vertical axis's labels sit beside the line, a horizontal
 			// one's under or over it (LibreOffice's
 			// AXIS2D_TICKLABELSPACING).
@@ -813,6 +841,10 @@ func (rd *renderer) placeLabels(d *dim) {
 					a := math.Abs(r) * math.Pi / 180
 					l.cx = p - math.Copysign(w/2, r)
 					l.cy = d.lineAt + gap + float64(b.h/2) + float64(b.w*detmath.Sin(a)/2)
+					if officeTurn {
+						l.cx, l.cy = officeTurnedCentre(b, p, d.lineAt+gap)
+						l.turned = true
+					}
 				}
 			}
 			d.labels = append(d.labels, l)
@@ -824,10 +856,163 @@ func (rd *renderer) placeLabels(d *dim) {
 	// canAutoAdjustLabelPlacement and autoRotate45).
 	if d.category && !d.vertical && !breakable && !overlap && st.Rotation == 0 && overlapping(d.labels) {
 		st.Rotation = 45
-		place(measure(st, 0))
+		blocks = measure(st, 0)
+		if rd.officeLayout() && d.outside < 0 {
+			officeTurn = true
+			drawn = rd.officeCut(d, items, blocks, st, gap)
+		}
+		place(blocks)
+		if rd.officeLayout() && officeKeepsTurned(d.labels) {
+			return
+		}
+	}
+	if d.officeScale && !d.category && rd.officeLabelExcess(d.other) > 0 {
+		// Office counts this axis at the length it would have under one
+		// line of category labels and prints every label of that count
+		// (officeLabelExcess).
+		return
 	}
 	d.labels = thin(d.labels, d.vertical)
 }
+
+// officeCut shortens the labels of d, a category axis under the plot
+// area whose labels Office turns by 45 degrees, so that the plot area
+// keeps officeTurnedPlot of the chart's height over them: each label
+// longer than that leaves room keeps its longest run of whole words that
+// fits, or its longest run of characters when its first word does not
+// fit, and an ellipsis after it that takes no room. items and blocks are
+// the labels' texts and layouts, the blocks replaced in place by the
+// shortened runs; gap separates the labels from the axis. It returns the
+// blocks drawn in their place, the runs with their ellipsis, nil for a
+// label kept whole.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: Excel turns the six labels "Category number one" to
+//     "six" under ticks 19.65 pt apart by 45 degrees and prints them
+//     whole in charts 203.28 and 290.4 pt high, plot areas 82.17 and
+//     169.29 pt high; "Category..." at 145.2 pt, a plot area of 65.65 pt
+//     where "Category number..." would leave 41.3 pt; "Categor..." at
+//     116.16 pt, a plot area of 39.81 pt where "Category..." would leave
+//     36.61 pt. The plot area keeps between 0.3152 and 0.3427 of the
+//     chart's height, whatever its width (154.8 and 206.4 pt). The room
+//     under the plot area, 44.04 and 47.24 pt, is that of "Categor" and
+//     "Category" turned, the ellipsis left out; its dots run past the
+//     place of a whole label's end by their own length.
+func (rd *renderer) officeCut(d *dim, items []item, blocks []*block, st TextStyle, gap float64) []*block {
+	room := rd.page.Y + rd.page.Height - officePad - gap - d.inner.Y - float64(rd.page.Height*officeTurnedPlot)
+	fits := func(b *block) bool {
+		_, h := b.rotated()
+		return b == nil || h <= room
+	}
+	var drawn []*block
+	for i, b := range blocks {
+		if fits(b) {
+			continue
+		}
+		words := strings.Fields(items[i].text)
+		if len(words) == 0 {
+			continue
+		}
+		var cut *block
+		cutText := ""
+		for n := len(words) - 1; n >= 1 && cut == nil; n-- {
+			t := strings.Join(words[:n], " ")
+			if c := rd.measure(t, st, 0); fits(c) {
+				cut, cutText = c, t
+			}
+		}
+		if r := []rune(words[0]); cut == nil {
+			for n := len(r) - 1; n >= 1; n-- {
+				t := string(r[:n])
+				if c := rd.measure(t, st, 0); fits(c) || n == 1 {
+					cut, cutText = c, t
+					break
+				}
+			}
+		}
+		if cut == nil {
+			continue
+		}
+		if drawn == nil {
+			drawn = make([]*block, len(blocks))
+		}
+		blocks[i], drawn[i] = cut, rd.measure(cutText+officeEllipsis, st, 0)
+	}
+	return drawn
+}
+
+// officeTurnedCentre returns the centre of the box of b, a label turned
+// under a horizontal axis, that Office puts with the middle of the
+// label's end over the tick at x = p and its highest corner at y = top.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: Excel's six labels turned by 45 degrees under a
+//     column chart 203.28 pt high, the longest 95.2 pt long, take
+//     88.80 pt under the plot area: 6.34 pt of gap, their turned line box
+//     and officePad. The baseline of each ends 2.7 to 3.5 pt right of its
+//     tick, read from the outlines Excel draws, where the middle of a
+//     12.2 pt line's end lies 2.4 pt left of it.
+func officeTurnedCentre(b *block, p, top float64) (float64, float64) {
+	w, h := b.rotated()
+	a := b.style.Rotation * math.Pi / 180
+	half := float64(b.h / 2)
+	// The middle of the end lies half a line inside the box's corner
+	// beside the tick.
+	right := p + float64(half*math.Abs(detmath.Sin(a)))
+	return right - math.Copysign(w/2, b.style.Rotation), top + float64(h/2)
+}
+
+// officeTurnedEdge is the least distance, in points, from the chart's
+// left edge to the box of a label Office turns (officeTurnedCentre),
+// which runs into the edge pad that keeps other labels officePad from
+// it.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: Excel moves the plot area of a column chart 154.8 pt
+//     wide 61.64 pt right of the chart's edge for the first of six labels
+//     turned by 45 degrees, "Category number one", whose turned box,
+//     placed by officeTurnedCentre, then starts 1.7 pt from the edge, its
+//     outline 5.16 pt.
+const officeTurnedEdge = 1.7
+
+// officeTurnedPlot is the least share of the chart's height the plot area
+// keeps over category labels Office turns (officeCut): a third, inside
+// the measured bounds of 0.3152 and 0.3427.
+const officeTurnedPlot = 1.0 / 3
+
+// officeEllipsis ends a label Office cuts short.
+const officeEllipsis = "\u2026"
+
+// officeKeepsTurned reports labels turned by 45 degrees that Office
+// prints every one of: labels whose neighbours lie at least
+// officeTurnedPitch of their line apart across the text.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: Excel prints all six labels turned by 45 degrees
+//     under ticks 13.69 and 19.65 pt apart, 9.68 and 13.89 pt apart
+//     across their 12.2 pt lines. No document shows a label it leaves
+//     out; closer labels are thinned as LibreOffice thins them.
+func officeKeepsTurned(ls []tickLabel) bool {
+	for i := 1; i < len(ls); i++ {
+		a, b := ls[i-1], ls[i]
+		r := a.b.style.Rotation * math.Pi / 180
+		across := math.Abs(float64((b.cx-a.cx)*detmath.Sin(r)) + float64((b.cy-a.cy)*detmath.Cos(r)))
+		line := a.b.h / float64(max(1, len(a.b.lines)))
+		if across < float64(officeTurnedPitch*line)-0.01 {
+			return false
+		}
+	}
+	return true
+}
+
+// officeTurnedPitch is the least distance across the text, in lines,
+// between neighbouring turned labels that Office prints all of
+// (officeKeepsTurned).
+const officeTurnedPitch = 0.79
 
 // truncateLabel shortens s, w points wide, by excess points as chart2
 // does: as many characters of the average width as cover the excess, and
