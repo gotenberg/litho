@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -817,11 +816,14 @@ func parseObjStmHeader(ctx context.Context, decoded []byte, n int) (objNums, off
 		if numTok.Type == lexer.TokenEOF || offTok.Type == lexer.TokenEOF {
 			break // no more header pairs in the decoded data
 		}
-		num, err := strconv.Atoi(numTok.Value)
+		// ISO 32000-1, Annex C, Table C.1 holds an object number to 32
+		// bits, and an offset past the 32-bit range lies past every
+		// decoded object stream.
+		num, err := intconv.Atoi32(numTok.Value)
 		if err != nil {
 			num = -1 // malformed object number: never matches a lookup
 		}
-		off, err := strconv.Atoi(offTok.Value)
+		off, err := intconv.Atoi32(offTok.Value)
 		if err != nil {
 			off = -1 // malformed offset: extracting this slot will error
 		}

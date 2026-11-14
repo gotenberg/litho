@@ -8,7 +8,6 @@ import (
 	"io"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -16,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // rebuildChunkSize is the read buffer size used when scanning the file
@@ -68,11 +68,14 @@ func (d *Document) rebuildXRef(ctx context.Context) error {
 			// m[0]:m[1] is the full match, m[2]:m[3] is obj num, m[4]:m[5] is gen num.
 			absOffset := filePos + int64(m[0])
 
-			objNum, err := strconv.Atoi(string(chunk[m[2]:m[3]]))
+			// ISO 32000-1, Annex C, Table C.1 holds an object and a
+			// generation number to 32 bits: a header past it is skipped
+			// on every platform.
+			objNum, err := intconv.Atoi32(string(chunk[m[2]:m[3]]))
 			if err != nil {
 				continue
 			}
-			genNum, err := strconv.Atoi(string(chunk[m[4]:m[5]]))
+			genNum, err := intconv.Atoi32(string(chunk[m[4]:m[5]]))
 			if err != nil {
 				continue
 			}
