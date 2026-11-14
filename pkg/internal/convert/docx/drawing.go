@@ -294,24 +294,25 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 		}
 		return n
 	}
-	if fx != nil && (sp.Child(ooxml.NSWPS, "txbx") != nil || sp.Child(ooxml.NSWPS, "linkedTxbx") != nil) {
-		d.warn(warn.ContentUnsupported, warn.Omitted, "the effects of a text box are not drawn")
-	}
 	d.resolveBlip(s, &ss)
 	if tb := sp.Child(ooxml.NSWPS, "txbx"); tb != nil {
 		bodyPr := sp.Child(ooxml.NSWPS, "bodyPr")
 		n := d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, bodyInsets(bodyPr), alt, depth)
 		if id := attrOr(tb, "id"); id != "" {
 			setChain(n.Style, id, 0, h)
+			d.textBoxEffectsOmitted(fx)
 		} else if vert := bodyVert(attrOr(bodyPr, "vert")); vert == "" {
 			g := ooxml.ParseGeometry(spPr)
 			d.checkGeometry(g)
-			d.shapeTextBox(n, g, ss, w, h, attrOr(bodyPr, "anchor"), bodyPr.Child(ooxml.NSA, "spAutoFit") != nil)
+			d.shapeTextBox(n, g, ss, fx, w, h, attrOr(bodyPr, "anchor"), bodyPr.Child(ooxml.NSA, "spAutoFit") != nil)
+		} else {
+			d.textBoxEffectsOmitted(fx)
 		}
 		d.turn(n, bodyVert(attrOr(bodyPr, "vert")))
 		return n
 	}
 	if l := sp.Child(ooxml.NSWPS, "linkedTxbx"); l != nil && attrOr(l, "id") != "" {
+		d.textBoxEffectsOmitted(fx)
 		// A later link of a chain of text boxes holds none of the
 		// chain's content, which flows into it from the link before.
 		bodyPr := sp.Child(ooxml.NSWPS, "bodyPr")
@@ -464,14 +465,25 @@ func bodyInsets(bodyPr *ooxml.Element) [4]float64 {
 	return insets
 }
 
+// textBoxEffectsOmitted warns that the effects fx of a text box are not
+// drawn: those of a box of a chain of linked boxes or of vertical text,
+// whose layout leaves no shape behind the text to draw them around.
+func (d *document) textBoxEffectsOmitted(fx *css.OfficeEffects) {
+	if fx != nil {
+		d.warn(warn.ContentUnsupported, warn.Omitted, "the effects of a linked or vertical text box are not drawn")
+	}
+}
+
 // shapeTextBox gives the text box n, built by [document.textBox] at w by
 // h points, the geometry g of its shape and the vertical anchor of its
 // text (ECMA-376 Part 1, 20.1.2.1.1 bodyPr anchor; 20.1.10.59
-// ST_TextAnchoringType t, ctr, b): a shape other than a rectangle draws
-// behind the text with the fill and outline ss, which the box then leaves
-// unpainted, and the text sits at the top, the middle or the bottom of the
-// box's inset area, as Word places it. A box that grows to fit its text
-// (a:spAutoFit) keeps its text at the top.
+// ST_TextAnchoringType t, ctr, b): a shape other than a rectangle, or one
+// with the effects fx (20.1.8.26 effectLst), draws behind the text with
+// the fill and outline ss and its effects around it, which the box then
+// leaves unpainted, and the text sits at the top, the middle or the
+// bottom of the box's inset area, as Word places it. A box that grows to
+// fit its text (a:spAutoFit) keeps its text at the top; the shape behind
+// it keeps the size the file gives.
 //
 // # Corpus evidence
 //
@@ -479,10 +491,15 @@ func bodyInsets(bodyPr *ooxml.Element) [4]float64 {
 //     of preset rightArrow as the arrow, its text centred in it; drawn so,
 //     layout rises from 0.55 to 0.78.
 //   - libreoffice/docx ooxmlexport/fdo77719: layout rises from 0.26 to 0.75.
-func (d *document) shapeTextBox(n *layout.Node, g *shape.Geometry, ss ooxml.ShapeStyle, w, h float64, anchor string, autoFit bool) {
+func (d *document) shapeTextBox(n *layout.Node, g *shape.Geometry, ss ooxml.ShapeStyle, fx *css.OfficeEffects, w, h float64, anchor string, autoFit bool) {
 	rect := g == nil || (g.Custom == nil && (g.Preset == "" || g.Preset == "rect"))
 	if autoFit || (anchor != "ctr" && anchor != "b") {
 		anchor = ""
+	}
+	if fx != nil && (rect || !shape.Known(g)) {
+		// The box's own fill and outline give way to a rectangle drawn
+		// behind the text, which carries the effects.
+		g, rect = &shape.Geometry{Preset: "rect"}, false
 	}
 	if (rect || !shape.Known(g)) && anchor == "" {
 		return
@@ -519,6 +536,7 @@ func (d *document) shapeTextBox(n *layout.Node, g *shape.Geometry, ss ooxml.Shap
 		}
 		bs.StrokeBorders = false
 		pic := vectorShape(bs, g, ss, w, h)
+		pic.Picture = d.withEffects(pic.Picture, fx)
 		ps := pic.Style
 		ps.Position = css.Absolute
 		ps.Display = css.Block
