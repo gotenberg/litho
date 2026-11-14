@@ -95,6 +95,9 @@ func figureOf(d *Drawing) *typeset.StructElem {
 	if alt == "" && d.Chart != nil && d.Chart.Title != nil {
 		alt = strings.Join(strings.Fields(d.Chart.Title.Text), " ")
 	}
+	if d.Formula {
+		return &typeset.StructElem{Role: "Formula", Alt: alt}
+	}
 	return &typeset.StructElem{Role: "Figure", Alt: alt}
 }
 

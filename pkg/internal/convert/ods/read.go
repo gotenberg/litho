@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/formula"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
@@ -94,6 +95,10 @@ type reader struct {
 	// compute; off, under office.RecalculateNever, a cell shows the value
 	// the file stores.
 	keepFormulas bool
+
+	// mathSetter lays the document's formula objects out, made at the
+	// first.
+	mathSetter *formula.Setter
 
 	warned   map[string]bool
 	warnings []typeset.Warning

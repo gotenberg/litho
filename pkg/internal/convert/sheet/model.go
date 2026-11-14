@@ -732,6 +732,9 @@ type Drawing struct {
 	// decorative flag of Office 2019, adec:decorative): it is drawn as an
 	// artifact, outside the structure tree.
 	Decorative bool
+	// Formula marks a Picture that draws a formula: its structure element
+	// is a Formula carrying Alt (ISO 32000-1, 14.8.4.5).
+	Formula bool
 	// Shape marks a drawing of shapes alone, geometry, lines and text
 	// boxes with no picture or chart among them (ECMA-376 Part 1, 20.5.2.29
 	// sp, 20.5.2.13 cxnSp, 20.5.2.17 grpSp; ODF 1.3 Part 3, 10.3 drawing

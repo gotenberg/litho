@@ -74,9 +74,16 @@ func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor, dept
 	}
 	d := sheet.Drawing{Name: el.A(odf.NSDraw, "name"), Alt: odf.Describe(el), Decorative: r.decorative(el), Unbounded: true}
 	if obj := el.Child(odf.NSDraw, "object"); obj != nil {
-		d.Chart = r.object(obj)
+		if pic, alt, ok := r.formula(obj); ok {
+			d.Picture, d.Formula = pic, pic != nil
+			if d.Alt == "" {
+				d.Alt = alt
+			}
+		} else {
+			d.Chart = r.object(obj)
+		}
 	}
-	if d.Chart == nil {
+	if d.Chart == nil && !d.Formula {
 		img := el.Child(odf.NSDraw, "image")
 		if img == nil {
 			if tb := el.Child(odf.NSDraw, "text-box"); tb != nil {
