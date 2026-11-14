@@ -145,7 +145,7 @@ func (v *validator) fragment(ctx context.Context, f Fragment, depth int) error {
 		if f == nil {
 			return ErrInvalidFragment
 		}
-		return v.path(f)
+		return v.path(ctx, f, depth)
 	case *Group:
 		if f == nil {
 			return ErrInvalidFragment
@@ -253,17 +253,26 @@ func checkSource(src *ImageSource) error {
 	return nil
 }
 
-func (v *validator) path(p *Path) error {
+func (v *validator) path(ctx context.Context, p *Path, depth int) error {
 	if err := checkOps(p.Ops); err != nil {
 		return err
 	}
 	if p.Fill != nil {
-		if p.Fill.Shading != nil {
+		switch {
+		case p.Fill.Shading != nil && p.Fill.Tiling != nil:
+			return fmt.Errorf("%w: a fill with both a shading and a tiling pattern", ErrInvalidPath)
+		case p.Fill.Shading != nil:
 			if err := checkShading(p.Fill.Shading); err != nil {
 				return err
 			}
-		} else if err := checkColor(p.Fill.Color); err != nil {
-			return err
+		case p.Fill.Tiling != nil:
+			if err := v.tiling(ctx, p.Fill.Tiling, depth); err != nil {
+				return err
+			}
+		default:
+			if err := checkColor(p.Fill.Color); err != nil {
+				return err
+			}
 		}
 		if p.Fill.Rule > EvenOdd {
 			return fmt.Errorf("%w: fill rule %d", ErrInvalidPath, p.Fill.Rule)
@@ -275,6 +284,47 @@ func (v *validator) path(p *Path) error {
 		}
 	}
 	return v.parent(p.Parent)
+}
+
+// tiling checks the tiling pattern t of a fill at group depth depth:
+// positive finite cell size and steps (ISO 32000-1, 8.7.3.1, Table 75:
+// XStep and YStep are non-zero; litho draws cells forward alone), an
+// invertible finite matrix, and content that hangs from no structure
+// element, nested one level deeper.
+func (v *validator) tiling(ctx context.Context, t *Tiling, depth int) error {
+	for _, c := range []float64{t.Width, t.Height, t.XStep, t.YStep} {
+		if !numeric.PositiveFinite(c) {
+			return fmt.Errorf("%w: tiling cell %v by %v, steps %v and %v", ErrInvalidPath, t.Width, t.Height, t.XStep, t.YStep)
+		}
+	}
+	m := tilingMatrix(t)
+	for _, c := range []float64{m.A, m.B, m.C, m.D, m.E, m.F} {
+		if !numeric.Finite(c) {
+			return fmt.Errorf("%w: tiling transform %v", ErrInvalidPath, m)
+		}
+	}
+	if det := float64(m.A*m.D) - float64(m.B*m.C); det == 0 || !numeric.Finite(det) {
+		return fmt.Errorf("%w: tiling transform %v is not invertible", ErrInvalidPath, m)
+	}
+	if depth >= maxGroupDepth {
+		return fmt.Errorf("%w: groups nested deeper than %d", ErrLimitExceeded, maxGroupDepth)
+	}
+	v.masks++
+	err := v.fragments(ctx, t.Content, depth+1)
+	v.masks--
+	if err != nil {
+		return fmt.Errorf("tiling: %w", err)
+	}
+	return nil
+}
+
+// tilingMatrix returns the transform of t, the zero value read as
+// [Identity].
+func tilingMatrix(t *Tiling) Matrix {
+	if t.Transform == (Matrix{}) {
+		return Identity
+	}
+	return t.Transform
 }
 
 // checkOps checks a path's construction operators. ISO 32000-1, 8.5.2.1
@@ -526,9 +576,10 @@ func (v *validator) outline(ctx context.Context, entries []Outline, depth int, t
 
 func (v *validator) parent(e *StructElem) error {
 	if e != nil && v.masks > 0 {
-		// A soft mask's content is never shown (ISO 32000-1, 11.6.5.2), so
-		// it is no content of the structure tree.
-		return fmt.Errorf("%w: mask content hangs from a %q element", ErrInvalidGroup, e.Role)
+		// A soft mask's content is never shown (ISO 32000-1, 11.6.5.2), and
+		// a pattern cell's is painted once for many places (8.7.3.1), so
+		// neither is content of the structure tree.
+		return fmt.Errorf("%w: mask or pattern content hangs from a %q element", ErrInvalidGroup, e.Role)
 	}
 	if e != nil && v.elems == nil {
 		if !v.parents[e] {

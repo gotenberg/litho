@@ -144,6 +144,8 @@ func (p *pageWriter) softMask(ctx context.Context, m *SoftMask, box [4]float64) 
 func (p *pageWriter) groupForm(ctx context.Context, content []Fragment, box [4]float64, attrs ast.PdfDict, mask bool) (ast.PdfIndirectRef, error) {
 	fw := newPageWriter(p.w, p.index, &Page{Width: p.width, Height: p.height})
 	fw.off, fw.ctm, fw.steps = p.off, p.ctm, p.steps
+	// The form's default coordinates are the ones written here as it is
+	// painted (ISO 32000-1, 8.10.1).
 	fw.bare = p.bare || mask
 	st := p.w.st
 	if st != nil && !fw.bare {

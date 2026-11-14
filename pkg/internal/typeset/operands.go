@@ -61,10 +61,11 @@ func (p *pageWriter) fitted(k float64, parent *StructElem, order int, draw func(
 	p.mark(parent, order)
 	fmt.Fprintf(&p.buf, "q %s 0 0 %s 0 0 cm\n", writer.FormatReal(k), writer.FormatReal(k))
 	p.alpha = append(p.alpha, p.currentAlpha())
-	saved := p.off
+	saved, savedLocal := p.off, p.local
 	p.off = Point{}
+	p.local = multiply(Matrix{A: k, D: k}, p.local)
 	err := draw()
-	p.off = saved
+	p.off, p.local = saved, savedLocal
 	p.buf.WriteString("Q\n")
 	p.alpha = p.alpha[:len(p.alpha)-1]
 	return err
@@ -187,6 +188,18 @@ func scaledPath(pa *Path, off Point, k float64) *Path {
 			s.Dash[i] = d / k
 		}
 		c.Stroke = &s
+	}
+	if pa.Fill != nil && pa.Fill.Tiling != nil {
+		// The cell keeps its own coordinates: the matrix that places it
+		// takes the translation and the scale.
+		f := *pa.Fill
+		t := *pa.Fill.Tiling
+		m := tilingMatrix(&t)
+		m.E += off.X
+		m.F += off.Y
+		t.Transform = Matrix{A: m.A / k, B: m.B / k, C: m.C / k, D: m.D / k, E: m.E / k, F: m.F / k}
+		f.Tiling = &t
+		c.Fill = &f
 	}
 	if pa.Fill != nil && pa.Fill.Shading != nil {
 		f := *pa.Fill

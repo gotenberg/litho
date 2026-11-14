@@ -29,7 +29,10 @@ var (
 	ErrInvalidImage = errors.New("invalid image")
 	// ErrInvalidPath is returned for a path or a clip whose operators hold a
 	// point that is not finite, whose first operator is not a MoveTo, whose
-	// operator kind is unknown, or whose stroke parameters are out of range.
+	// operator kind is unknown, or whose stroke parameters are out of range,
+	// and for a fill holding both a shading and a tiling pattern, or a
+	// tiling pattern whose cell size or steps are not positive and finite
+	// or whose transform is not finite and invertible.
 	ErrInvalidPath = errors.New("invalid path")
 	// ErrInvalidGroup is returned for a group whose opacity falls outside
 	// [0, 1], whose transform is not finite, whose blend mode, colour space

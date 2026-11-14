@@ -78,6 +78,13 @@ type pageWriter struct {
 	// model's page coordinates, so a transparency group knows what of it
 	// lies on the page (see [pageWriter.groupBox]).
 	ctm Matrix
+	// local maps the coordinates written at the current level to the
+	// default coordinates of the stream being written, which a pattern's
+	// matrix maps its space to (ISO 32000-1, 8.7.2): the page's, or a
+	// form's at the moment it is painted.
+	local Matrix
+	// patterns are the patterns the stream names.
+	patterns []xobjUse
 	// forms counts the form XObjects the stream names.
 	forms int
 	// form is the index of the transparency group form whose content the
@@ -115,6 +122,7 @@ func newPageWriter(w *docWriter, index int, page *Page) *pageWriter {
 		gsNames:   make(map[gsKey]string),
 		alpha:     []alphaState{{fill: 1, stroke: 1}},
 		ctm:       Identity,
+		local:     Identity,
 		form:      -1,
 	}
 }
@@ -138,6 +146,7 @@ func (p *pageWriter) content(ctx context.Context, content []Fragment) error {
 	// has it bottom-left with y up (ISO 32000-1, 8.3.2.3). One cm maps the
 	// first onto the second for the whole stream.
 	fmt.Fprintf(&p.buf, "1 0 0 -1 0 %s cm\n", num(p.height))
+	p.local = Matrix{A: 1, D: -1, F: round(p.height)}
 	if err := p.fragments(ctx, content, 1); err != nil {
 		return err
 	}
@@ -581,8 +590,14 @@ func (p *pageWriter) path(ctx context.Context, pa *Path, opacity float64) error 
 	if len(pa.Ops) == 0 || (pa.Fill == nil && pa.Stroke == nil) {
 		return nil
 	}
-	if pa.Fill != nil && pa.Fill.Shading != nil {
-		if err := p.shadingFill(ctx, pa, opacity); err != nil {
+	if pa.Fill != nil && (pa.Fill.Shading != nil || pa.Fill.Tiling != nil) {
+		var err error
+		if pa.Fill.Shading != nil {
+			err = p.shadingFill(ctx, pa, opacity)
+		} else {
+			err = p.tilingFill(ctx, pa, opacity)
+		}
+		if err != nil {
 			return err
 		}
 		if pa.Stroke == nil {
@@ -702,7 +717,7 @@ func (p *pageWriter) group(ctx context.Context, g *Group, opacity float64) error
 	p.endMark()
 	p.buf.WriteString("q\n")
 	p.alpha = append(p.alpha, p.currentAlpha())
-	saved, savedCTM, savedBlend := p.off, p.ctm, p.blend
+	saved, savedCTM, savedLocal, savedBlend := p.off, p.ctm, p.local, p.blend
 	m := g.Transform
 	e, f := m.E+p.off.X, m.F+p.off.Y
 	det := float64(m.A*m.D) - float64(m.B*m.C)
@@ -718,10 +733,12 @@ func (p *pageWriter) group(ctx context.Context, g *Group, opacity float64) error
 		fmt.Fprintf(&p.buf, "%s %s %s %s 0 0 cm\n", num(m.A), num(m.B), num(m.C), num(m.D))
 		p.off = Point{X: (float64(m.D*e) - float64(m.C*f)) / det, Y: (float64(m.A*f) - float64(m.B*e)) / det}
 		p.ctm = multiply(Matrix{A: round(m.A), B: round(m.B), C: round(m.C), D: round(m.D)}, p.ctm)
+		p.local = multiply(Matrix{A: round(m.A), B: round(m.B), C: round(m.C), D: round(m.D)}, p.local)
 	default:
 		fmt.Fprintf(&p.buf, "%s %s %s %s %s %s cm\n", num(m.A), num(m.B), num(m.C), num(m.D), num(e), num(f))
 		p.off = Point{}
 		p.ctm = multiply(Matrix{A: round(m.A), B: round(m.B), C: round(m.C), D: round(m.D), E: round(e), F: round(f)}, p.ctm)
+		p.local = multiply(Matrix{A: round(m.A), B: round(m.B), C: round(m.C), D: round(m.D), E: round(e), F: round(f)}, p.local)
 	}
 	if g.Clip != nil {
 		if err := p.clip(ctx, g.Clip); err != nil {
@@ -753,7 +770,7 @@ func (p *pageWriter) group(ctx context.Context, g *Group, opacity float64) error
 	p.endMark()
 	p.buf.WriteString("Q\n")
 	p.alpha = p.alpha[:len(p.alpha)-1]
-	p.off, p.ctm, p.blend = saved, savedCTM, savedBlend
+	p.off, p.ctm, p.local, p.blend = saved, savedCTM, savedLocal, savedBlend
 	return nil
 }
 
@@ -807,6 +824,13 @@ func (p *pageWriter) resources() ast.PdfDict {
 			sh[ast.PdfName(s.name)] = s.ref
 		}
 		res["Shading"] = sh
+	}
+	if len(p.patterns) > 0 {
+		pats := ast.PdfDict{}
+		for _, pt := range p.patterns {
+			pats[ast.PdfName(pt.name)] = pt.ref
+		}
+		res["Pattern"] = pats
 	}
 	return res
 }

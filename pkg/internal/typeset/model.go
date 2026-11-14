@@ -300,14 +300,47 @@ const (
 )
 
 // Fill paints a path's interior with a flat colour or, when Shading is set,
-// a smooth colour transition.
+// a smooth colour transition, or, when Tiling is set, a tiling pattern. At
+// most one of Shading and Tiling is set.
 type Fill struct {
 	// Color is the flat colour. It is ignored, and may be the zero value,
-	// when Shading is set.
+	// when Shading or Tiling is set.
 	Color Color
 	Rule  FillRule
 	// Shading, when set, paints the interior instead of Color.
 	Shading *Shading
+	// Tiling, when set, paints the interior instead of Color.
+	Tiling *Tiling
+}
+
+// Tiling is a coloured tiling pattern of constant spacing (ISO 32000-1,
+// 8.7.3.1, PatternType 1, PaintType 1, TilingType 1): the content of one
+// cell, painted once in the file and repeated in rows and columns by the
+// reader over the interior it fills, as a background image or gradient
+// repeated over a box is.
+//
+// The cell paints as one isolated transparency group, whose result the
+// path's opacity and blend mode composite as a whole (11.6.7): a cell whose
+// fragments overlap shows the overlap as a cell drawn alone does. A reader
+// paints the cells at the device's resolution, so a cell much smaller than
+// a device pixel shows its average colour or nothing.
+type Tiling struct {
+	// Content draws one cell, in the cell's coordinates: its top-left
+	// corner at the origin, y down. What it paints outside the cell's
+	// Width by Height is clipped. Its fragments hang from no structure
+	// element: the pattern is an artifact.
+	Content []Fragment
+	// Width and Height are the size of the cell, positive.
+	Width, Height float64
+	// XStep and YStep are the distances between the origins of two
+	// neighbouring cells across and down, positive: a step past the cell's
+	// size leaves a gap between cells, a smaller one overlaps them.
+	XStep, YStep float64
+	// Transform maps the cell's coordinates to the coordinates the path
+	// is in: one cell lands where it maps the origin, the others at
+	// multiples of the steps from it. It is invertible. The zero value is
+	// replaced by [Identity].
+	Transform Matrix
 }
 
 // ShadingKind is the geometry of a [Shading].

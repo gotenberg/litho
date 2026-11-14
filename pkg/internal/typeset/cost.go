@@ -45,10 +45,13 @@ const (
 	// transparencyCost is a [TransparencyGroup] and its [SoftMask], 16
 	// and 32 bytes.
 	transparencyCost = 48
+	// tilingCost is a [Tiling], 104 bytes in an allocation of 112, its
+	// content aside.
+	tilingCost = 112
 )
 
-// ContentCost returns what content holds on the heap, nested groups and
-// soft masks included, the glyphs of its runs aside ([limits.GlyphCost]),
+// ContentCost returns what content holds on the heap, nested groups, soft
+// masks and pattern cells included, the glyphs of its runs aside ([limits.GlyphCost]),
 // as the costs above count it. A converter that keeps pages charges it to
 // the conversion's budget while it holds them. Groups nested past
 // [maxGroupDepth] are not counted: Validate refuses them.
@@ -67,6 +70,9 @@ func ContentCost(content []Fragment) int64 {
 			g, ok := f.(*Group)
 			if !ok {
 				n += leafHeld(f)
+				if t := tilingOf(f); t != nil && it.depth < maxGroupDepth {
+					stack = append(stack, item{frags: t.Content, depth: it.depth + 1})
+				}
 				continue
 			}
 			if g == nil {
@@ -91,10 +97,18 @@ func ContentCost(content []Fragment) int64 {
 // FragmentCost returns what the fragment f holds on the heap, its slot in
 // the content that holds it included, as [ContentCost] counts it.
 func FragmentCost(f Fragment) int64 {
-	if g, ok := f.(*Group); ok && g != nil {
-		return ContentCost([]Fragment{g})
+	if g, ok := f.(*Group); ok && g != nil || tilingOf(f) != nil {
+		return ContentCost([]Fragment{f})
 	}
 	return fragmentSlotCost + leafHeld(f)
+}
+
+// tilingOf returns the tiling pattern f fills with, nil for none.
+func tilingOf(f Fragment) *Tiling {
+	if p, ok := f.(*Path); ok && p != nil && p.Fill != nil {
+		return p.Fill.Tiling
+	}
+	return nil
 }
 
 // leafHeld returns what the fragment f, not a group, holds besides its
@@ -123,6 +137,9 @@ func pathHeld(p *Path) int64 {
 	n := pathCost + int64(len(p.Ops))*pathOpCost
 	if p.Fill != nil && p.Fill.Shading != nil {
 		n += shadingCost + int64(len(p.Fill.Shading.Stops))*stopCost
+	}
+	if p.Fill != nil && p.Fill.Tiling != nil {
+		n += tilingCost
 	}
 	if p.Stroke != nil {
 		n += strokeCost + int64(len(p.Stroke.Dash))*dashCost
