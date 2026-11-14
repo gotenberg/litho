@@ -300,9 +300,6 @@ type box struct {
 	// already applied to the content height it returns.
 	orig                                   *css.Style
 	minHContent, maxHContent, heightCalced bool
-	// stickyX and stickyY are the offset of a sticky box at the initial
-	// scroll position ([engine.placeSticky]).
-	stickyX, stickyY float64
 	// fnBody is the footnote body of a footnote call, laid out in the
 	// footnote area of a page rather than in the flow (CSS GCPM 3, 3.2).
 	fnBody *box
@@ -315,17 +312,69 @@ type box struct {
 	// monoCol reports a box laid out whole in one column, a scroll
 	// container (CSS Fragmentation 3, 4.1): it paints in that column.
 	monoCol bool
+	// moved holds what moves the box off the place its flow gave it, nil
+	// for nearly every box: a pin to a later column, the offset of a
+	// sticky box. It is apart from the box so that a box stays within its
+	// size class of the allocator (TestBox_FitsItsSizeClass).
+	moved *boxMove
+}
+
+// boxMove is what moves a box off the place its flow gave it.
+type boxMove struct {
 	// colPin, when above 0, is how far below the box's top the column it
 	// paints in starts: the box lies in an earlier column's slice of the
 	// column flow than content before it reached, and paints as a unit in
 	// that later column, above its top ([engine.pinToColumn]).
 	colPin float64
+	// stickyX and stickyY are the offset of a sticky box at the initial
+	// scroll position ([engine.placeSticky]).
+	stickyX, stickyY float64
+}
+
+// colPin returns the box's pin to a later column, 0 for none
+// ([boxMove]).
+func (b *box) colPin() float64 {
+	if b.moved == nil {
+		return 0
+	}
+	return b.moved.colPin
+}
+
+// setColPin pins the box to a later column, or frees it with 0.
+func (b *box) setColPin(pin float64) {
+	if b.moved == nil {
+		if pin == 0 {
+			return
+		}
+		b.moved = &boxMove{}
+	}
+	b.moved.colPin = pin
+}
+
+// sticky returns the offset of a sticky box, 0 and 0 for none
+// ([boxMove]).
+func (b *box) sticky() (float64, float64) {
+	if b.moved == nil {
+		return 0, 0
+	}
+	return b.moved.stickyX, b.moved.stickyY
+}
+
+// setSticky sets the offset of a sticky box.
+func (b *box) setSticky(x, y float64) {
+	if b.moved == nil {
+		if x == 0 && y == 0 {
+			return
+		}
+		b.moved = &boxMove{}
+	}
+	b.moved.stickyX, b.moved.stickyY = x, y
 }
 
 // inColumn reports a box that paints as a unit in one column of the
 // multi-column container around it: a monolithic box, or one pinned to a
 // column ([engine.pinToColumn]).
-func (b *box) inColumn() bool { return b.monoCol || b.colPin > 0 }
+func (b *box) inColumn() bool { return b.monoCol || b.colPin() > 0 }
 
 // markerBox is the outside marker of a list item (CSS 2.1, 12.5).
 type markerBox struct {

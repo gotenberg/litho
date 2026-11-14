@@ -1565,7 +1565,7 @@ func (e *engine) pinToColumn(k *box, reached int) int {
 	if top := e.pageOf(k.y + eps); reached > top {
 		start := e.pageTop(reached)
 		if k.y+k.borderH()-start <= e.areaH(reached)+eps {
-			k.colPin = start - k.y
+			k.setColPin(start - k.y)
 			return reached
 		}
 	}

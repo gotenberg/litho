@@ -376,7 +376,7 @@ func (p *painter) sync(chain []*box) *ditem {
 			// The positioned boxes a monolithic box in columns clips move
 			// to its column with it, inside its clip.
 			ay, oy := ancestorOffsetY(b)
-			g.page, g.y0 = pageMono, b.y+ay+oy+b.colPin
+			g.page, g.y0 = pageMono, b.y+ay+oy+b.colPin()
 		}
 		parent.kids = append(parent.kids, g)
 		f.open = append(f.open, openClip{box: b, item: g})
@@ -555,7 +555,7 @@ func offset(b *box) (float64, float64) {
 // apply, does not move (CSS Position 3, 3.3).
 func ownOffset(b *box) (float64, float64) {
 	if b.st.Position == css.Sticky {
-		return b.stickyX, b.stickyY
+		return b.sticky()
 	}
 	if b.st.Position != css.Relative || b.kind == kindText || b.kind == kindBreak || b.tpart == partColumn || b.tpart == partColGroup {
 		return 0, 0
@@ -755,7 +755,7 @@ func (p *painter) unit(b *box, own bool) {
 		// A monolithic or pinned box in columns moves to its column
 		// whole; the positioned boxes it holds paint from its stacking
 		// context.
-		push(&ditem{group: true, page: pageMono, y0: b.y + p.dy + b.colPin})
+		push(&ditem{group: true, page: pageMono, y0: b.y + p.dy + b.colPin()})
 		own = own && b.isStackingContext()
 	}
 	if b.fixed {

@@ -700,7 +700,8 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		return cursor
 	}
 	e.tick()
-	b.laidOut, b.colPin = true, 0
+	b.laidOut = true
+	b.setColPin(0)
 	resolveEdges(b, cb.w)
 	e.resolveSizing(b, cb, -1, -1)
 	if mc.absorb || mc.trimStart {

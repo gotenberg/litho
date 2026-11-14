@@ -25,7 +25,7 @@ import (
 func (e *engine) placeSticky(b, viewport *box) {
 	for _, k := range b.kids {
 		if k.st.Position == css.Sticky && k.kind != kindText && k.kind != kindBreak && k.kind != kindInline && !k.tpart.internal() {
-			k.stickyX, k.stickyY = e.stickyOffset(k, viewport)
+			k.setSticky(e.stickyOffset(k, viewport))
 		}
 		e.placeSticky(k, viewport)
 	}
