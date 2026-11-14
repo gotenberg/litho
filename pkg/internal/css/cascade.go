@@ -933,7 +933,9 @@ func (cs *computeState) elementCands(n *html.Node) []cand {
 			cands = append(cands, cand{d: &hints[i], rank: rank(Author, false), layer: -attachedRank, ord: -1, idx: i})
 		}
 	}
-	if v, ok := attr(n, "style"); ok && (n.Namespace == "" || n.Namespace == "svg") {
+	// The style attribute of an HTML, SVG and MathML element (MathML Core,
+	// 2.1.4: the same syntax and semantics as on an HTML element).
+	if v, ok := attr(n, "style"); ok && (n.Namespace == "" || n.Namespace == "svg" || n.Namespace == "math") {
 		decls := ParseDeclarations(v, ParseOptions{BaseURL: cs.opts.BaseURL})
 		for i := range decls {
 			cands = append(cands, cand{d: &decls[i], rank: rank(Author, decls[i].Important), layer: attachedRank, spec: styleAttrSpec, ord: len(cs.r.rules) + 1, idx: i})

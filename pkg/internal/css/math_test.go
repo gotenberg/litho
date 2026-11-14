@@ -119,3 +119,12 @@ func TestMathFontScale_WithoutMathTable(t *testing.T) {
 		t.Fatalf("two levels up: %g", s)
 	}
 }
+
+// TestMathStyleAttribute applies the style attribute of a MathML element
+// as an HTML one's (MathML Core, 2.1.4).
+func TestMathStyleAttribute(t *testing.T) {
+	c := computeMath(t, `<math><mspace id=s style="background:green;color:red"/></math>`, "", 0.8, 0.6)
+	if st := c.of("s"); st.BackgroundColor.G == 0 || st.Color.R != 1 {
+		t.Fatalf("background %v, colour %v", st.BackgroundColor, st.Color)
+	}
+}
