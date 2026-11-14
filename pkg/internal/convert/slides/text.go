@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
@@ -355,7 +356,7 @@ func (b *builder) resolveJump(l *typeset.Link) bool {
 	if !ok {
 		return true
 	}
-	i, err := strconv.Atoi(n)
+	i, err := intconv.Atoi(n)
 	if err != nil || i < 1 || i > len(b.doc.Slides) {
 		return false
 	}
