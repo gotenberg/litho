@@ -280,10 +280,55 @@ func officeOrigin(sc scale) float64 {
 //     The rounded height (12.0 pt at 10 pt, 17.25 pt at 14 pt) fits all
 //     92.
 func officeIntervals(length, lineH float64) int {
-	px := math.Round(lineH * 96 / 72)
-	if !numeric.Positive(px) {
+	h := officeLabelLine(lineH)
+	if !numeric.Positive(h) {
 		return maxAutoTicks
 	}
-	n := math.Floor(length/(px*72/96)) - 1
+	return officeClampIntervals(math.Floor(length/h) - 1)
+}
+
+// officeHorizontalIntervals returns the most major intervals Office's
+// automatic scale gives a value axis drawn across the chart, length points
+// long, whose labels are lineH points high: one interval for every
+// officeLabelPitch label lines along it, at least one and at most
+// maxAutoTicks. The labels' widths do not count.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: on 34 bar charts of one series, axes 110 to 688 pt
+//     long, labels of 8, 10 and 14 pt Calibri from 5 to 25 pt wide,
+//     Excel's choice is the smallest step of 1, 2 and 5 times a power of
+//     ten whose intervals are each at least three label lines long, on
+//     every chart. At 10 pt the intervals bound the length of three lines
+//     to (35.73, 36.70] pt whatever the labels' width: 9 intervals of
+//     35.73 pt refused under labels 15 pt wide, 3 of 36.70 pt kept under
+//     labels 25 pt wide. At 8 pt intervals of 32.5 pt are kept, at 14 pt
+//     intervals of 35.4 pt refused, which a fixed length misses and three
+//     rounded lines (29.25 pt and 51.75 pt) fit.
+//   - probe, xlsx: on 15 scatter charts, frames 4 to 10 columns wide, the
+//     horizontal axis follows the same count, and the vertical one the
+//     count of officeIntervals.
+func officeHorizontalIntervals(length, lineH float64) int {
+	h := officeLabelLine(lineH)
+	if !numeric.Positive(h) {
+		return maxAutoTicks
+	}
+	return officeClampIntervals(math.Floor(length / float64(officeLabelPitch*h)))
+}
+
+// officeLabelPitch is the length of a major interval of a value axis drawn
+// across the chart, in label lines (officeHorizontalIntervals).
+const officeLabelPitch = 3
+
+// officeLabelLine returns the line height lineH rounded to a whole pixel
+// at 96 pixels an inch, the height Office's automatic scale counts a label
+// as.
+func officeLabelLine(lineH float64) float64 {
+	return math.Round(lineH*96/72) * 72 / 96
+}
+
+// officeClampIntervals returns n intervals, at least one and at most
+// maxAutoTicks.
+func officeClampIntervals(n float64) int {
 	return int(math.Max(1, math.Min(n, maxAutoTicks)))
 }

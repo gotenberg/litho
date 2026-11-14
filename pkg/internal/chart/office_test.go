@@ -186,3 +186,168 @@ func TestRender_OfficeLayout(t *testing.T) {
 		t.Errorf("labels = %q, want 0 to 8 by 1", got)
 	}
 }
+
+// TestOfficeHorizontalIntervals_ProbeCharts holds Office's automatic scale
+// across the chart to the charts Excel printed: a bar chart's value axis
+// or a scatter chart's horizontal one, its data range, the axis length
+// and the size of its Calibri labels in, the minimum, maximum and major
+// unit Excel printed out. A chart cut by the page edge has its length
+// from the distance between its labels.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: 34 bar charts of three literal values, frames 3 to 14
+//     columns wide, labels of 8, 10 and 14 pt; 9 scatter charts of four
+//     points, frames 4 to 10 columns wide, labels of 10 pt; Excel's
+//     labels.
+func TestOfficeHorizontalIntervals_ProbeCharts(t *testing.T) {
+	const calibriLine = 1.2207
+	tests := []struct {
+		name            string
+		lo, hi          float64
+		zero            bool
+		length, size    float64
+		min, max, major float64
+	}{
+		{"bar K01", 2.3333, 7, true, 117.72, 10, 0, 10, 5},
+		{"bar K02", 2.3333, 7, true, 171.87, 10, 0, 8, 2},
+		{"bar K03", 2.3333, 7, true, 223.49, 10, 0, 8, 2},
+		{"bar K04", 2.3333, 7, true, 326.72, 10, 0, 8, 1},
+		{"bar K05", 2.3333, 7, true, 481.5, 10, 0, 8, 1},
+		{"bar K06", 2.3333, 7, true, 688.0, 10, 0, 8, 1},
+		{"bar K07", 15.6667, 47, true, 117.72, 10, 0, 60, 20},
+		{"bar K08", 15.6667, 47, true, 169.32, 10, 0, 60, 20},
+		{"bar K09", 15.6667, 47, true, 220.93, 10, 0, 50, 10},
+		{"bar K10", 15.6667, 47, true, 324.15, 10, 0, 50, 10},
+		{"bar K11", 15.6667, 47, true, 479.0, 10, 0, 50, 5},
+		{"bar K12", 15.6667, 47, true, 685.4, 10, 0, 50, 5},
+		{"bar K13", 56.6667, 170, true, 115.21, 10, 0, 200, 100},
+		{"bar K14", 56.6667, 170, true, 166.83, 10, 0, 200, 50},
+		{"bar K15", 56.6667, 170, true, 218.43, 10, 0, 200, 50},
+		{"bar K16", 56.6667, 170, true, 321.65, 10, 0, 200, 50},
+		{"bar K17", 56.6667, 170, true, 476.5, 10, 0, 180, 20},
+		{"bar K18", 56.6667, 170, true, 682.9, 10, 0, 180, 20},
+		{"bar K19", 316.667, 950, true, 112.67, 10, 0, 1000, 500},
+		{"bar K20", 316.667, 950, true, 164.29, 10, 0, 1000, 500},
+		{"bar K21", 316.667, 950, true, 215.90, 10, 0, 1000, 200},
+		{"bar K22", 316.667, 950, true, 319.12, 10, 0, 1000, 200},
+		{"bar K23", 316.667, 950, true, 474.0, 10, 0, 1000, 100},
+		{"bar K24", 316.667, 950, true, 680.4, 10, 0, 1000, 100},
+		{"bar K25", 4115, 12345, true, 110.13, 10, 0, 15000, 5000},
+		{"bar K26", 4115, 12345, true, 161.73, 10, 0, 15000, 5000},
+		{"bar K27", 4115, 12345, true, 213.35, 10, 0, 15000, 5000},
+		{"bar K28", 4115, 12345, true, 316.55, 10, 0, 14000, 2000},
+		{"bar K29", 4115, 12345, true, 471.4, 10, 0, 14000, 2000},
+		{"bar K30", 4115, 12345, true, 677.9, 10, 0, 14000, 2000},
+		{"bar K31", 15.6667, 47, true, 325.20, 8, 0, 50, 5},
+		{"bar K32", 15.6667, 47, true, 322.14, 14, 0, 50, 10},
+		{"bar K33", 56.6667, 170, true, 323.18, 8, 0, 180, 20},
+		{"bar K34", 56.6667, 170, true, 318.57, 14, 0, 200, 50},
+		{"scatter K01", 1.0556, 9.5, false, 164.42, 10, 0, 10, 5},
+		{"scatter K02", 1.0556, 9.5, false, 319.25, 10, 0, 10, 2},
+		{"scatter K03", 1.0556, 9.5, false, 474.0, 10, 0, 10, 1},
+		{"scatter K06", 5.2222, 47, false, 164.42, 10, 0, 60, 20},
+		{"scatter K07", 5.2222, 47, false, 319.25, 10, 0, 50, 10},
+		{"scatter K08", 5.2222, 47, false, 474.0, 10, 0, 50, 5},
+		{"scatter K11", 18.8889, 170, false, 156.87, 10, 0, 200, 50},
+		{"scatter K12", 18.8889, 170, false, 311.69, 10, 0, 200, 50},
+		{"scatter K13", 18.8889, 170, false, 466.4, 10, 0, 180, 20},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := officeHorizontalIntervals(tt.length, calibriLine*tt.size)
+			s := autoScale(nil, tt.lo, tt.hi, scaleOptions{zero: tt.zero, border: true, maxCount: n})
+			if math.Abs(s.min-tt.min) > 1e-9 || math.Abs(s.max-tt.max) > 1e-9 || math.Abs(s.major-tt.major) > 1e-9 {
+				t.Errorf("scale = [%v, %v] by %v, want [%v, %v] by %v", s.min, s.max, s.major, tt.min, tt.max, tt.major)
+			}
+		})
+	}
+}
+
+func TestOfficeHorizontalIntervals_Bounds(t *testing.T) {
+	tests := []struct {
+		name          string
+		length, lineH float64
+		want          int
+	}{
+		{"short axis keeps one interval", 20, 12.2, 1},
+		{"long axis stops at the automatic cap", 1000, 12.2, maxAutoTicks},
+		{"no line height leaves the cap", 100, 0, maxAutoTicks},
+		{"NaN line height leaves the cap", 100, math.NaN(), maxAutoTicks},
+		{"three 10 pt Calibri lines take 36 points", 108, 12.207, 3},
+		{"just short of three intervals", 107.99, 12.207, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := officeHorizontalIntervals(tt.length, tt.lineH); got != tt.want {
+				t.Errorf("officeHorizontalIntervals(%v, %v) = %d, want %d", tt.length, tt.lineH, got, tt.want)
+			}
+		})
+	}
+}
+
+// officeChart returns barChart(values...) under OfficeRules with labelled
+// axes, its plot area filled blue.
+func officeChart(values ...float64) *Chart {
+	c := barChart(values...)
+	c.Rules = OfficeRules
+	c.Axes[0].Labels, c.Axes[1].Labels = LabelNextTo, LabelNextTo
+	c.PlotArea = Frame{Fill: &Paint{Color: blue}}
+	return c
+}
+
+// plotBounds renders c into r and returns its plot area.
+func plotBounds(t *testing.T, c *Chart, r typeset.Rect) (typeset.Rect, []typeset.Fragment) {
+	t.Helper()
+	frags := Render(context.Background(), ahem(t), c, r)
+	ps := paths(frags, blue)
+	if len(ps) != 1 {
+		t.Fatalf("%d plot area paths", len(ps))
+	}
+	return bounds(ps[0]), frags
+}
+
+// TestRender_OfficeScaleOnEveryValueAxis holds the axes LibreOffice's
+// rules count otherwise to Office's count: a percent-stacked axis, a
+// horizontal bar chart's value axis and a secondary axis.
+func TestRender_OfficeScaleOnEveryValueAxis(t *testing.T) {
+	t.Run("percent-stacked", func(t *testing.T) {
+		// 20.16 pt hold two labels of 9.75 pt: one interval, where
+		// LibreOffice's count draws two.
+		c := officeChart(1, 2)
+		c.Groups[0].Grouping = PercentStacked
+		frags := Render(context.Background(), ahem(t), c, typeset.Rect{Width: 361.2, Height: 54})
+		got := strings.Join(texts(frags), " ")
+		if !strings.Contains(got, "100%") || strings.Contains(got, "50%") {
+			t.Errorf("labels = %q, want 0%% and 100%% alone", got)
+		}
+	})
+	t.Run("horizontal bar", func(t *testing.T) {
+		// About 108 pt across hold three intervals of three 9.75 pt
+		// lines: 0 to 10 by 5, where LibreOffice's count steps by 1.
+		c := officeChart(2.3333, 3.5, 7)
+		c.Groups[0].Horizontal = true
+		frags := Render(context.Background(), ahem(t), c, typeset.Rect{Width: 150, Height: 145.2})
+		got := strings.Join(texts(frags), " ")
+		if !strings.Contains(got, "10") || strings.Contains(got, "4") {
+			t.Errorf("labels = %q, want 0 to 10 by 5", got)
+		}
+	})
+	t.Run("secondary", func(t *testing.T) {
+		// The secondary axis counts as the primary one: about 41 pt hold
+		// four labels, three intervals: 0 to 200 by 100.
+		c := officeChart(15.6667, 23.5, 47)
+		nan := math.NaN()
+		c.Axes = append(c.Axes,
+			&Axis{Kind: CategoryAxis, Deleted: true, Labels: LabelNextTo, Min: nan, Max: nan, MajorUnit: nan, MinorUnit: nan},
+			&Axis{Kind: ValueAxis, Labels: LabelNextTo, Position: AxisRight, Crosses: CrossMax, Min: nan, Max: nan, MajorUnit: nan, MinorUnit: nan})
+		c.Groups = append(c.Groups, &Group{Kind: Line, XAxis: 2, YAxis: 3, Series: []*Series{
+			{Name: "T", Values: Data{Values: nums(56.6667, 85, 170), Cached: true}, Border: &Stroke{Width: 1, Color: red}},
+		}})
+		frags := Render(context.Background(), ahem(t), c, typeset.Rect{Width: 361.2, Height: 75})
+		got := strings.Join(texts(frags), " ")
+		if !strings.Contains(got, "200") || strings.Contains(got, "150") || strings.Contains(got, "50 ") {
+			t.Errorf("labels = %q, want the secondary axis 0 to 200 by 100", got)
+		}
+	})
+}

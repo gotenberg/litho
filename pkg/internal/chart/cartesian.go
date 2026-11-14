@@ -39,7 +39,8 @@ type dim struct {
 	// percent formats the ticks as percentages of a percent-stacked group.
 	percent bool
 	// officeScale counts the automatic major intervals by Office's rule
-	// (officeIntervals) rather than LibreOffice's.
+	// (officeIntervals up the chart, officeHorizontalIntervals across it)
+	// rather than LibreOffice's.
 	officeScale bool
 	// loc is the separators of the chart's locale.
 	loc numfmt.Locale
@@ -359,6 +360,16 @@ func (c *Chart) axisAt(i int) *Axis {
 // dims builds the dimensions of g0's plot area: the category (or x)
 // dimension, and a value dimension per value axis the groups drawn in it
 // name, the first g0's, with the value ranges of their groups.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: on 5 column charts with a line on a secondary axis and
+//     7 percent-stacked column charts, frames 5 to 14 rows high, Excel
+//     labels each value axis by officeIntervals.
+//   - litho/xlsx: charts_bar_column's 3-D clustered column is labelled 0
+//     to 200 by 50 by Excel, the count of officeIntervals.
+//   - litho/pptx: chart-3d's 3-D column chart with a depth axis is
+//     labelled 0 to 6 by 2 by PowerPoint, the count of officeIntervals.
 func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 	c := rd.c
 	xy := g0.Kind == Scatter || g0.Kind == Bubble
@@ -477,11 +488,15 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 			}
 		}
 	}
-	if rd.office() && !horizontal && rd.threeD(g0) == nil && g0.Kind != Unsupported {
-		// Office's count holds for the vertical primary value axis
-		// (officeIntervals); a horizontal one, a secondary one and a
-		// percent-stacked one keep LibreOffice's.
-		ys[0].officeScale = !ys[0].percent
+	if rd.office() && g0.Kind != Unsupported {
+		// Office counts the labels of every value axis, primary or
+		// secondary, percent-stacked or not, two- or three-dimensional,
+		// up the chart (officeIntervals) or across it
+		// (officeHorizontalIntervals).
+		for _, y := range ys {
+			y.officeScale = true
+		}
+		x.officeScale = xy
 	}
 	if xy && (math.IsInf(x.lo, 0) || math.IsInf(x.hi, 0)) {
 		x.lo, x.hi = 0, 0
@@ -563,7 +578,12 @@ func (rd *renderer) fitScale(d *dim) {
 	}
 	if d.officeScale {
 		if b := rd.measure(d.tickText(ticks[0]), d.style(), 0); b != nil {
-			opt.maxCount = officeIntervals(d.length(), faceLineHeight(b.lines[0], b.style.Size))
+			lineH := faceLineHeight(b.lines[0], b.style.Size)
+			if d.vertical {
+				opt.maxCount = officeIntervals(d.length(), lineH)
+			} else {
+				opt.maxCount = officeHorizontalIntervals(d.length(), lineH)
+			}
 			if same > 0 {
 				opt.maxCount = max(1, min(opt.maxCount, len(ticks)/(same+1)))
 			}
