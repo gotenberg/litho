@@ -1094,9 +1094,78 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 		case c.Is(w, "pict"), c.Is(w, "object"):
 			emit()
 			d.vml(s, c, st, sink, depth)
+		case c.Is(w, "ruby"):
+			emit()
+			d.ruby(s, rp, ps, lineMult, c, sink, depth)
 		}
 	}
 	emit()
+}
+
+// ruby builds a w:ruby (ECMA-376 Part 1, 17.3.3.25): the runs of its
+// w:rubyBase in line, those of its w:rt as their annotation over them,
+// laid out as a CSS ruby (CSS Ruby 1, 2) whose annotation sits on the
+// em box of the base's first run. The annotation spreads over its base as w:rubyAlign
+// says (17.3.3.26, 17.18.73 ST_RubyAlign): centred by default and under
+// center, its gaps spread under distributeLetter, its gaps and half a
+// gap at each end under distributeSpace, from the start under left; right
+// and rightVertical are centred. The runs keep their own sizes: w:hps and
+// w:hpsBaseText repeat them, and w:hpsRaise, the annotation's distance
+// above the base, is not applied.
+//
+// # Corpus evidence
+//
+//   - litho/docx: intl-ruby prints its annotations over their bases,
+//     centred under center and distributeSpace, spread under
+//     distributeLetter, from the start under left.
+//   - poi/docx: document/61470.docx prints a ruby nested in a run.
+func (d *document) ruby(s *story, rp resolvedPara, ps *css.Style, lineMult float64, c *ooxml.Element, sink *inlineSink, depth int) {
+	collect := func(e *ooxml.Element) []*layout.Node {
+		if e == nil {
+			return nil
+		}
+		sub := &inlineSink{}
+		d.inlines(s, rp, ps, lineMult, e, sub, depth+1)
+		var out []*layout.Node
+		for _, seg := range sub.finish() {
+			out = append(out, seg.nodes...)
+		}
+		return out
+	}
+	base := collect(c.Child(w, "rubyBase"))
+	if len(base) == 0 {
+		return
+	}
+	annot := collect(c.Child(w, "rt"))
+	if len(annot) == 0 {
+		for _, n := range base {
+			sink.add(n)
+		}
+		return
+	}
+	align := css.RubyCenter
+	switch attrOr(c.Child(w, "rubyPr").Child(w, "rubyAlign"), "val") {
+	case "distributeLetter":
+		align = css.RubySpaceBetween
+	case "distributeSpace":
+		align = css.RubySpaceAround
+	case "left":
+		align = css.RubyStart
+	}
+	// The ruby takes its base's first run's font, whose em box the
+	// annotation sits on.
+	rs := inlineOf(ps)
+	if base[0].Style != nil {
+		rs = inlineOf(base[0].Style)
+	}
+	rs.Display = css.Ruby
+	rs.RubyAlign = align
+	ts := rs
+	ts.Display = css.RubyText
+	// The annotation is an RT, so that its runs tag inside it and not as
+	// Spans of the Ruby (ISO 32005, Table 5).
+	base = append(base, &layout.Node{Kind: layout.Element, Style: d.share(&ts), Role: "RT", Children: annot})
+	sink.add(&layout.Node{Kind: layout.Element, Style: d.share(&rs), Children: base})
 }
 
 // symbol returns the character of a w:sym (17.3.3.30): its char in its
