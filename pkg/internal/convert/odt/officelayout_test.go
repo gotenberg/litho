@@ -3,6 +3,7 @@ package odt
 import (
 	"context"
 	"encoding/xml"
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -300,7 +301,13 @@ func TestConvert_ShapeText(t *testing.T) {
 			case *typeset.Path:
 				if v.Fill != nil {
 					order = append(order, "fill")
-					fillTop = dy
+					top := math.Inf(1)
+					for _, op := range v.Ops {
+						if op.Kind != typeset.ClosePath {
+							top = math.Min(top, op.P[0].Y)
+						}
+					}
+					fillTop = dy + top
 				}
 			case *typeset.Text:
 				var sb strings.Builder
@@ -611,5 +618,49 @@ func TestColumnTracks_NaNShare(t *testing.T) {
 	}
 	if _, _, _, ok := b.columnTracks([]*odf.Element{col("1*"), col("1*")}, 400); !ok {
 		t.Error("equal shares refused")
+	}
+}
+
+// TestConvert_ShapeOutlineWhole draws a rectangle's and an ellipse's
+// outline whole, half the line outside their box (ODF 1.3, Part 3,
+// 10.3.2 and 10.3.4; svg:stroke-width), as LibreOffice prints them: no
+// clip at the box cuts the right and bottom halves of the line.
+func TestConvert_ShapeOutlineWhole(t *testing.T) {
+	auto := `<style:style style:name="gr" style:family="graphic"><style:graphic-properties draw:stroke="solid" svg:stroke-color="#ff0000" svg:stroke-width="2pt" draw:fill="solid" draw:fill-color="#ffff00" style:wrap="none" style:vertical-pos="from-top" style:vertical-rel="page" style:horizontal-pos="from-left" style:horizontal-rel="page"/></style:style>`
+	body := `<draw:rect text:anchor-type="page" text:anchor-page-number="1" draw:style-name="gr" svg:width="5cm" svg:height="2cm" svg:x="3cm" svg:y="3cm"/>` +
+		`<draw:ellipse text:anchor-type="page" text:anchor-page-number="1" draw:style-name="gr" svg:width="5cm" svg:height="2cm" svg:x="3cm" svg:y="8cm"/><text:p>x</text:p>`
+	res := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{})
+	// A clip of the shape's own width, 5 cm, would cut its outline.
+	const boxW = 5 / 2.54 * 72
+	strokes, clipped := 0, 0
+	var walk func(fs []typeset.Fragment, clip bool)
+	walk = func(fs []typeset.Fragment, clip bool) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *typeset.Path:
+				if v.Stroke != nil {
+					strokes++
+					if clip {
+						clipped++
+					}
+				}
+			case *typeset.Group:
+				own := false
+				if v.Clip != nil {
+					x0, x1 := math.Inf(1), math.Inf(-1)
+					for _, op := range v.Clip.Ops {
+						if op.Kind != typeset.ClosePath {
+							x0, x1 = math.Min(x0, op.P[0].X), math.Max(x1, op.P[0].X)
+						}
+					}
+					own = near(x1-x0, boxW, 0.5)
+				}
+				walk(v.Content, clip || own)
+			}
+		}
+	}
+	walk(res.Pages[0].Content, false)
+	if strokes != 2 || clipped != 0 {
+		t.Errorf("%d outlines, %d of them clipped at their box; want 2, none", strokes, clipped)
 	}
 }

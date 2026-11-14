@@ -1133,6 +1133,41 @@ func (b *builder) customShape(c *odf.Element, g frameGeom) *layout.Picture {
 	if err := shape.Check(geom); err != nil {
 		b.warn("shape-custom-shape", warn.ContentUnsupported, warn.Approximated, fmt.Sprintf("a custom shape's geometry is drawn in part: %v", err))
 	}
+	return geometryPicture(geom, g)
+}
+
+// basicGeometry returns the geometry of a draw:rect without rounded
+// corners, a draw:ellipse or a draw:circle drawn whole (ODF 1.3, Part
+// 3, 10.3.2 to 10.3.5), nil for any other shape: the engine strokes its
+// outline on the edge of its box, half the line outside it, as
+// LibreOffice draws it.
+//
+// # Corpus evidence
+//
+//   - probe, odt: on gotenberg/gotenberg:9.4.1 a page-anchored draw:rect
+//     of a red 0.75 point line prints the line whole on its four sides,
+//     centred on the edge of its box.
+//   - litho/odt: tracked-changes-bars-ref draws its change bars as
+//     draw:rect of no width, which LibreOffice prints as lines.
+func basicGeometry(c *odf.Element) *shape.Geometry {
+	switch c.Name.Local {
+	case "rect":
+		if r, _ := odf.Length(c.A(odf.NSDraw, "corner-radius")); r == 0 {
+			return &shape.Geometry{Preset: "rect"}
+		}
+	case "ellipse", "circle":
+		if k := c.A(odf.NSDraw, "kind"); k == "" || k == "full" {
+			return &shape.Geometry{Preset: "ellipse"}
+		}
+	}
+	return nil
+}
+
+// geometryPicture returns the picture of the geometry geom drawn with the
+// fill (draw:fill, draw:fill-color) and stroke (draw:stroke,
+// svg:stroke-color, svg:stroke-width) of g, LibreOffice's default blue
+// fill and darker blue line where the style says none.
+func geometryPicture(geom *shape.Geometry, g frameGeom) *layout.Picture {
 	fill := &typeset.Color{R: 0x72 / 255.0, G: 0x9f / 255.0, B: 0xcf / 255.0, A: 1}
 	if g.props.Get("draw:fill") == "none" {
 		fill = nil
@@ -1153,6 +1188,11 @@ func (b *builder) customShape(c *odf.Element, g frameGeom) *layout.Picture {
 	w, h := math.Max(g.w, 1), math.Max(g.h, 1)
 	pic := &layout.Picture{Width: w, Height: h}
 	pic.Vector = func(_ context.Context, r typeset.Rect) []typeset.Fragment {
+		// A shape narrower or shorter than a point keeps a point of room
+		// in the layout and draws at its own size: a rectangle of no
+		// width is the line of its outline.
+		r.Width = float64(r.Width * math.Max(g.w, 0) / w)
+		r.Height = float64(r.Height * math.Max(g.h, 0) / h)
 		var out, strokes []typeset.Fragment
 		for _, p := range shape.Paths(geom, r) {
 			if p.Fill && fill != nil {
@@ -1173,6 +1213,9 @@ func (b *builder) shapeBody(c *odf.Element, g frameGeom) *layout.Node {
 		if pic := b.customShape(c, g); pic != nil {
 			return b.shapeNode(c, pic)
 		}
+	}
+	if geom := basicGeometry(c); geom != nil {
+		return b.shapeNode(c, geometryPicture(geom, g))
 	}
 	src := shapeSVG(c, g)
 	if src == "" {
