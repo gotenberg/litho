@@ -1038,11 +1038,14 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		}
 		return id
 	}
-	// user holds, per longhand, the value the user origin's declarations
-	// give it, which an author revert rolls back to (CSS Cascade 4,
-	// 7.3.4). The user origin's normal declarations sort before every
-	// author declaration, so it is complete when an author revert is met.
-	var user *[numProps]any
+	// belowUser and belowAuthor hold the state of the cascade before the
+	// first declaration of the user origin and of the author origin, which
+	// a revert of that origin rolls back to (CSS Cascade 4, 7.3.4): the
+	// normal declarations of the origins below sort before it, and the
+	// important ones after, where they win anyway. Kept only when a
+	// declaration needs them.
+	var belowUser, belowAuthor *[numProps]any
+	reverts := slices.ContainsFunc(cands, func(c cand) bool { return c.d.revert })
 	// below holds the state of the cascade at the start of each rank and
 	// layer, which a revert-layer rolls back to; kept only when a
 	// declaration needs it.
@@ -1055,22 +1058,38 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		if revertsLayer && (i == 0 || c.rank != cands[i-1].rank || c.layer != cands[i-1].layer) {
 			below = append(below, layerState{rank: c.rank, layer: c.layer, winners: winners, imp: imp})
 		}
+		if reverts && belowAuthor == nil && c.rank >= rank(User, false) {
+			snap := winners
+			if belowUser == nil {
+				belowUser = &snap
+			}
+			if c.rank >= rank(Author, false) {
+				belowAuthor = &snap
+			}
+		}
 		switch {
 		case c.d.revertLayer:
 			s := stateBelow(below, c)
 			for _, e := range c.d.entries {
 				id := side(c.d, e.id)
 				winners[id], imp[id] = s.winners[id], s.imp[id]
-				if user != nil && originOf(c.rank) == User {
-					user[id] = winners[id]
-				}
 			}
 			continue
-		case c.d.revert && originOf(c.rank) == Author && user != nil:
+		case c.d.revert:
+			// A revert of the user agent origin acts as unset, the value
+			// its entries hold.
+			var s *[numProps]any
+			switch originOf(c.rank) {
+			case Author:
+				s = belowAuthor
+			case User:
+				s = belowUser
+			case UserAgent:
+			}
 			for _, e := range c.d.entries {
 				id := side(c.d, e.id)
-				if v := user[id]; v != nil {
-					winners[id] = v
+				if s != nil && s[id] != nil {
+					winners[id] = s[id]
 				} else {
 					winners[id] = e.v
 				}
@@ -1090,19 +1109,6 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 			for _, e := range c.d.entries {
 				winners[side(c.d, e.id)] = e.v
 				imp[side(c.d, e.id)] = c.d.Important
-			}
-		}
-		if originOf(c.rank) == User && !c.d.isCustom {
-			if user == nil {
-				user = new([numProps]any)
-			}
-			if len(c.d.pending) > 0 {
-				for _, id := range longhandsOf(c.d.Property) {
-					user[side(c.d, id)] = pendingRef{c.d}
-				}
-			}
-			for _, e := range c.d.entries {
-				user[side(c.d, e.id)] = e.v
 			}
 		}
 	}

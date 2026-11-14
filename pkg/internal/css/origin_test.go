@@ -168,6 +168,35 @@ func TestCascade_AuthorRevert(t *testing.T) {
 	}
 }
 
+// TestCascade_RevertRollsBackToTheOriginsBelow locks revert where the
+// origins below its own set the longhand: an author revert takes the user
+// agent's value where the user origin sets none, and a user revert the
+// user agent's (CSS Cascade 4, 7.3.4).
+func TestCascade_RevertRollsBackToTheOriginsBelow(t *testing.T) {
+	t.Parallel()
+	root := parseHTML(t, `<details><summary id="s">x</summary></details><p id="p">y</p>`)
+	r := NewResolver(a4, []Sheet{
+		{Sheet: HTMLUserAgent(), Origin: UserAgent},
+		{Sheet: mustParse(t, "p { display: inline; margin-top: 7px; margin-top: revert }"), Origin: User},
+		{Sheet: mustParse(t, "summary { display: block; display: revert; list-style: none; list-style: revert } p { display: revert }"), Origin: Author},
+	})
+	c, err := r.Compute(context.Background(), root, ComputeOptions{})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	s := c.Style(byID(root, "s"))
+	if s.Display != ListItem || s.ListStyleType != DisclosureClosed || s.ListStylePosition != Inside {
+		t.Errorf("summary display %v, list style %v %v; want the user agent's list item, disclosure-closed inside", s.Display, s.ListStyleType, s.ListStylePosition)
+	}
+	p := c.Style(byID(root, "p"))
+	if p.Display != Inline {
+		t.Errorf("p display %v, want the user's inline", p.Display)
+	}
+	if !dimEq(p.Margin[Top], pts(12)) {
+		t.Errorf("p margin-top %+v, want the user agent's 1em", p.Margin[Top])
+	}
+}
+
 // TestPage_UserOrigin locks the user origin in the cascade of @page rules
 // and their margin boxes: a normal user declaration loses to the
 // author's, an important one wins over the author's important one.

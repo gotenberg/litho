@@ -62,11 +62,9 @@ func (w *warnings) result() []Warning {
 }
 
 // cssWide is a CSS-wide keyword (CSS Cascade 4, 7.3). revert and
-// revert-layer parse as unset; the cascade rolls an author declaration of
-// revert back to the user origin's value, and a declaration of
+// revert-layer parse as unset; the cascade rolls a declaration of revert
+// back to the value the origins below its own give, and a declaration of
 // revert-layer back to the layers below its own (see [Declaration]).
-// revert behaves as unset otherwise: rolling back to the user agent's
-// value is not supported.
 type cssWide uint8
 
 const (
@@ -100,9 +98,10 @@ type Declaration struct {
 	pending []token
 	// base is the URL a pending value's url() resolves against.
 	base string
-	// revert marks a value of revert, whose entries hold unset: in the
-	// author origin it takes the user origin's value for each longhand
-	// that origin sets (CSS Cascade 4, 7.3.4).
+	// revert marks a value of revert, whose entries hold unset: it takes
+	// the value the origins below its own give each longhand, the user
+	// and user agent origins' below the author origin, the user agent
+	// origin's below the user origin (CSS Cascade 4, 7.3.4).
 	revert bool
 	// revertLayer marks a value of revert-layer, whose entries hold unset:
 	// it takes the value the layers below its own give each longhand
