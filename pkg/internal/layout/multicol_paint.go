@@ -44,7 +44,13 @@ func (p *painter) multicol(b *box) {
 		}
 		if s.spanner != nil {
 			if s.spanner.layered() {
-				p.lifted(s.spanner)
+				// A positioned spanner paints the positioned boxes inside
+				// it too: no column set and no stacking context around the
+				// container lists them (CSS 2.1, Appendix E).
+				sdx, sdy := p.dx, p.dy
+				p.dx, p.dy = ancestorOffset(s.spanner)
+				p.unit(s.spanner, true)
+				p.dx, p.dy = sdx, sdy
 			} else {
 				p.context(s.spanner)
 			}

@@ -732,3 +732,16 @@ func TestMulticol_NegativeLayerOutsideColumnsPaintsUnder(t *testing.T) {
 		_____
 		_____`)
 }
+
+func TestMulticol_PositionedSpannerPaintsItsPositionedBoxes(t *testing.T) {
+	t.Parallel()
+	// A box held by a relatively positioned spanner paints (CSS 2.1,
+	// Appendix E), over the spanner and past its end.
+	box := square(1, 2, blue, abs(0, auto, auto, 3))
+	span := el(sty(height(1), bg(red), positioned, func(s *css.Style) { s.Columns.SpanAll = true }), box)
+	mc := el(sty(columns(2, 1)), span)
+	assertPixels(t, run(t, doc(mc), page(5, 3)), 1, `
+		RRRBR
+		___B_
+		_____`)
+}
