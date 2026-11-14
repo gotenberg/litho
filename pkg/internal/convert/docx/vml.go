@@ -168,7 +168,15 @@ func vmlPlacement(k *ooxml.Element, vs ooxml.VMLStyle, w, h float64) placement {
 // vmlShape builds the VML shape k of w by h points: a group, a text box,
 // a picture, or a preset geometry drawn with the shape's fill and stroke;
 // a shape of another geometry is left out, with a warning, and keeps its
-// room in the line when inLine.
+// room in the line when inLine. A text box turned by its rotation turns
+// with its text, laid out left to right whatever its layout-flow says.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx: ooxmlexport/TextFrameRotation.docx prints the text
+//     of its text box of rotation:-90 and layout-flow vertical
+//     bottom-to-top reading from the bottom up, a left-to-right line
+//     turned a quarter counter-clockwise, not the flow turned again.
 func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *css.Style, w, h float64, inLine bool, depth int) *layout.Node {
 	if depth > maxNesting {
 		return nil
@@ -180,7 +188,11 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 	if tb := k.Child(ooxml.NSV, "textbox"); tb != nil {
 		if content := tb.Child(ooxml.NSW, "txbxContent"); content != nil {
 			n := d.textBox(s, content, w, h, ss, vmlInsets(attrOr(tb, "inset")), attrOr(k, "alt"), depth)
-			d.turn(n, vmlFlow(ooxml.ParseVMLStyle(attrOr(tb, "style"))))
+			if rot := vmlRotation(vs); rot != 0 {
+				setTransform(n.Style, rot, false, false)
+			} else {
+				d.turn(n, vmlFlow(ooxml.ParseVMLStyle(attrOr(tb, "style"))))
+			}
 			return n
 		}
 	}

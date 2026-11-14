@@ -121,3 +121,33 @@ func TestVML_PictureAlt(t *testing.T) {
 		t.Errorf("pictures %q", got)
 	}
 }
+
+// TestVML_RotatedTextBox locks that a turned VML text box turns with its
+// text, laid out left to right whatever its layout-flow, and that an
+// unturned one keeps its flow.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx: ooxmlexport/TextFrameRotation.docx prints the text
+//     of its text box turned by rotation:-90 and of layout-flow vertical
+//     bottom-to-top reading from the bottom up, as a left-to-right line
+//     turned a quarter counter-clockwise.
+func TestVML_RotatedTextBox(t *testing.T) {
+	t.Parallel()
+	box := func(rot string) string {
+		return `<w:p><w:r><w:pict><v:rect style="position:absolute;margin-left:0;margin-top:0;width:200pt;height:40pt` + rot + `">` +
+			`<v:textbox style="layout-flow:vertical;mso-layout-flow-alt:bottom-to-top"><w:txbxContent><w:p><w:r><w:t>turned</w:t></w:r></w:p></w:txbxContent></v:textbox></v:rect></w:pict></w:r></w:p>`
+	}
+	b := build(t, box(";rotation:-90")+box(""), nil)
+	paras := b.root.Children[0].Children
+	turned, flat := paras[0].Children[0], paras[1].Children[0]
+	if tr := turned.Style.Transform; len(tr) != 1 || tr[0].Kind != css.TransformRotate || !near(css.Pts(tr[0].V[0]*180/math.Pi), -90) {
+		t.Errorf("turned box transform %+v, want one rotation of -90 degrees", tr)
+	}
+	if turned.Style.WritingMode != (css.Style{}).WritingMode {
+		t.Errorf("turned box writing mode %v, want horizontal", turned.Style.WritingMode)
+	}
+	if flat.Style.WritingMode == (css.Style{}).WritingMode || len(flat.Style.Transform) != 0 {
+		t.Errorf("unturned box writing mode %v, transform %+v, want its vertical flow and no turn", flat.Style.WritingMode, flat.Style.Transform)
+	}
+}
