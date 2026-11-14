@@ -1,8 +1,9 @@
 package blend
 
 import (
-	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // Edition is the edition of ISO 32000 whose blend functions a [Mode]
@@ -28,7 +29,7 @@ const (
 // that does not read as one.
 func EditionFor(version string) Edition {
 	major, _, _ := strings.Cut(version, ".")
-	if n, err := strconv.Atoi(major); err == nil && n >= 2 {
+	if n, err := intconv.Atoi(major); err == nil && n >= 2 {
 		return ISO32000v2
 	}
 	return ISO32000v1
