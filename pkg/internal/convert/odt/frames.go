@@ -1083,7 +1083,14 @@ func (b *builder) shapeText(c *odf.Element, depth int) *layout.Node {
 // withText lays a shape's text over its drawing n: a box of the shape's
 // size, its padding the text area's insets (fo:padding), the drawing
 // behind at its corner and the text placed in the text area as
-// draw:textarea-vertical-align says (20.137), at the top when absent.
+// draw:textarea-vertical-align says (20.137), at the top when absent, and
+// across it as draw:textarea-horizontal-align says (20.136).
+//
+// # Corpus evidence
+//
+//   - probe, odt: on gotenberg/gotenberg:9.4.1 a page-anchored draw:rect
+//     of textarea-horizontal-align center and vertical-align middle
+//     prints its one line centred both ways in the rectangle.
 func (b *builder) withText(n, text *layout.Node, g frameGeom) *layout.Node {
 	st := baseStyle()
 	st.Display = css.InlineBlock
@@ -1108,6 +1115,14 @@ func (b *builder) withText(n, text *layout.Node, g frameGeom) *layout.Node {
 		area.JustifyContent = css.BoxCenter
 	case "bottom":
 		area.JustifyContent = css.BoxFlexEnd
+	}
+	// draw:textarea-horizontal-align (20.136) places the text, as wide as
+	// its longest line, across the text area.
+	switch g.props.Get("draw:textarea-horizontal-align") {
+	case "center":
+		area.AlignItems = css.BoxCenter
+	case "right":
+		area.AlignItems = css.BoxFlexEnd
 	}
 	pic := *n.Style
 	pic.Position = css.Absolute

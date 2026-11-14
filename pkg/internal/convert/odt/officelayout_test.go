@@ -664,3 +664,27 @@ func TestConvert_ShapeOutlineWhole(t *testing.T) {
 		t.Errorf("%d outlines, %d of them clipped at their box; want 2, none", strokes, clipped)
 	}
 }
+
+// TestConvert_ShapeTextCentred places a shape's text across its text area
+// as draw:textarea-horizontal-align center says (ODF 1.3, Part 3,
+// 20.136): the line's middle on the rectangle's.
+func TestConvert_ShapeTextCentred(t *testing.T) {
+	auto := `<style:style style:name="gm" style:family="graphic"><style:graphic-properties draw:fill="solid" draw:fill-color="#dddddd" draw:stroke="none" draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle" fo:padding="0cm" style:wrap="run-through" style:vertical-pos="from-top" style:vertical-rel="page" style:horizontal-pos="from-left" style:horizontal-rel="page"/></style:style>`
+	body := `<draw:rect draw:style-name="gm" text:anchor-type="page" text:anchor-page-number="1" svg:x="3cm" svg:y="3cm" svg:width="6cm" svg:height="3cm"><text:p>Mid</text:p></draw:rect><text:p>x</text:p>`
+	res := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{})
+	// The 6 cm rectangle is 170 points wide and "Mid" some 20: centred,
+	// the line starts some 75 points in, left-aligned at the edge.
+	left := 3 / 2.54 * 72
+	found := false
+	for _, l := range lines(res.Pages[0]) {
+		if l.text == "Mid" {
+			found = true
+			if l.x < left+50 || l.x > left+110 {
+				t.Errorf("Mid starts at %.1f, %.1f into the rectangle, want it centred", l.x, l.x-left)
+			}
+		}
+	}
+	if !found {
+		t.Error("no line Mid")
+	}
+}
