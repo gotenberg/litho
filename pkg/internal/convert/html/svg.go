@@ -45,7 +45,8 @@ func (r *resources) decodeSVG(ctx context.Context, u string, data []byte) (*layo
 	}
 	ctx = context.WithValue(ctx, svgCtxKey{}, true)
 	doc, err := svg.Parse(ctx, data, svg.Options{
-		Fonts: r.svg.fonts,
+		Fonts:    r.svg.fonts,
+		Fallback: text.FallbackChromium,
 		Image: func(ctx context.Context, href string) (*svg.Raster, error) {
 			return r.svgRaster(ctx, resolveRef(u, href))
 		},
@@ -125,7 +126,7 @@ func (b *builder) inlineSVG(ctx context.Context, n *dom.Node, st *css.Style) []*
 	if st == nil || st.Display == css.DisplayNone {
 		return nil
 	}
-	doc, err := svg.FromNode(ctx, n, b.svgOptions(st))
+	doc, err := svg.FromNode(ctx, n, b.svgOptions(n, st))
 	if err != nil {
 		if ctx.Err() == nil {
 			b.warnings = append(b.warnings, typeset.Warning{Code: warningCode(pictureDataError{err}), Effect: warn.Omitted, Message: fmt.Sprintf("an inline SVG was left out: %v", err)})
@@ -160,10 +161,11 @@ func (b *builder) inlineSVG(ctx context.Context, n *dom.Node, st *css.Style) []*
 	return []*layout.Node{node}
 }
 
-// svgOptions returns the options an svg element of the document styled
-// st draws with: the document's style elements apply to its content, and
-// it inherits the element's colour and font.
-func (b *builder) svgOptions(st *css.Style) svg.Options {
+// svgOptions returns the options the svg element n of the document,
+// styled st, draws with: the document's style elements apply to its
+// content, it inherits the element's colour, font and language, and its
+// text falls back as Chromium's does.
+func (b *builder) svgOptions(n *dom.Node, st *css.Style) svg.Options {
 	var sheets []string
 	for _, s := range b.scan.sheets {
 		if s.Namespace == "" && s.Data == "style" {
@@ -171,7 +173,8 @@ func (b *builder) svgOptions(st *css.Style) svg.Options {
 		}
 	}
 	return svg.Options{
-		Fonts: b.res.svg.fonts,
+		Fonts:    b.res.svg.fonts,
+		Fallback: text.FallbackChromium,
 		Image: func(ctx context.Context, href string) (*svg.Raster, error) {
 			return b.res.svgRaster(ctx, resolveRef(b.scan.resourceBase, href))
 		},
@@ -181,7 +184,7 @@ func (b *builder) svgOptions(st *css.Style) svg.Options {
 			FontSize: st.FontSize / css.Pt,
 			Weight:   st.FontWeight,
 			Italic:   st.FontStyle != css.FontNormal,
-			Lang:     b.scan.lang,
+			Lang:     b.langOf(n),
 		},
 		Sheets: sheets,
 	}
@@ -219,7 +222,7 @@ func (b *builder) definition(ctx context.Context, url, kind string) (*svg.Docume
 	if st == nil {
 		st = css.Initial()
 	}
-	doc, err := svg.FromNode(ctx, owner, b.svgOptions(st))
+	doc, err := svg.FromNode(ctx, owner, b.svgOptions(owner, st))
 	if err != nil {
 		// The drawing that holds the definition does not parse, which its
 		// own placement reports: the url names nothing, as one that names

@@ -58,6 +58,11 @@ type Context struct {
 type Options struct {
 	// Fonts shapes the text elements; nil leaves text out with a warning.
 	Fonts *text.Fonts
+	// Fallback is the font fallback rule the text follows, fontconfig's
+	// by default. Under [text.FallbackChromium] a generic family also
+	// resolves in the language of the text ([text.BrowserFamilies]), as
+	// Chromium draws it.
+	Fallback text.Fallback
 	// Image loads the raster picture an image element names by its href,
 	// as written in the document: the caller resolves it against the
 	// document's URL. nil leaves every image element out with a warning.

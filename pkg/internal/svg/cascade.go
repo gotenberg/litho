@@ -3,6 +3,7 @@ package svg
 import (
 	"cmp"
 	"slices"
+	"strings"
 
 	"golang.org/x/net/html"
 
@@ -93,10 +94,29 @@ func (d *Document) computeStyle(n *html.Node, parent *style) *style {
 	decls := d.declsOf(n)
 	d.mu.Unlock()
 	st := parent.inherit()
+	if lang, ok := langAttr(n); ok {
+		st.lang = lang
+	}
 	for _, dc := range decls {
 		st.apply(dc, parent)
 	}
 	return st
+}
+
+// langAttr returns the language the element n states: its xml:lang
+// attribute, else its lang attribute, trimmed, and whether it states one
+// (SVG 2, the lang and xml:lang attributes, the second taking precedence
+// as HTML, 3.2.6.2 has it). An empty value states an unknown language.
+func langAttr(n *html.Node) (string, bool) {
+	for _, a := range n.Attr {
+		if a.Namespace == "xml" && a.Key == "lang" {
+			return strings.TrimSpace(a.Val), true
+		}
+	}
+	if v, ok := attrOK(n, "lang"); ok {
+		return strings.TrimSpace(v), true
+	}
+	return "", false
 }
 
 // styleOf returns the computed style of n in the document tree, its

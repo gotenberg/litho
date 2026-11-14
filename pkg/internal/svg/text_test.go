@@ -1,6 +1,13 @@
 package svg
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"golang.org/x/net/html"
+
+	"github.com/gotenberg/litho/pkg/internal/text"
+)
 
 func TestDraw_Text(t *testing.T) {
 	tests := []struct {
@@ -71,4 +78,57 @@ func TestText_TspansShapeTogether(t *testing.T) {
 	if sameText(same, &other) {
 		t.Errorf("different sizes shape together")
 	}
+}
+
+// TestTextStyle_LanguagePicksTheGenericFace locks the language of SVG
+// text: the embedding document's, overridden by a lang attribute and then
+// by an xml:lang one (SVG 2, the lang and xml:lang attributes), which
+// under Chromium's fallback rule picks the face of a generic family as
+// Chromium does (CSS Fonts 4, 2.1.5: a generic family may depend on the
+// language). Under fontconfig's rule the language picks no family.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 measures
+//     "Hxg0" in sans-serif at 40 px as 93.8125 px (Noto Sans CJK JP) in an
+//     inline svg under a div lang="ja", on a text lang="ja", on a text
+//     xml:lang="ja" and under an svg lang="ja", and as 93.390625 px
+//     (Liberation Sans) in English.
+func TestTextStyle_LanguagePicksTheGenericFace(t *testing.T) {
+	t.Parallel()
+	src := `<svg><text id="a" font-family="sans-serif">x</text><g lang="en"><text id="b" font-family="sans-serif" lang="ko" xml:lang="ja">x</text><text id="c" font-family="sans-serif">x</text></g></svg>`
+	for _, tt := range []struct {
+		fb   text.Fallback
+		want map[string]string
+	}{
+		{text.FallbackChromium, map[string]string{"a": "Noto Sans CJK JP", "b": "Noto Sans CJK JP", "c": "Arial"}},
+		{text.FallbackFontconfig, map[string]string{"a": "Arial", "b": "Arial", "c": "Arial"}},
+	} {
+		d, err := Parse(context.Background(), []byte(src), Options{Fonts: ahem(t), Fallback: tt.fb, Context: Context{Lang: "ja"}})
+		if err != nil {
+			t.Fatalf("Parse: %v", err)
+		}
+		for id, want := range tt.want {
+			n := elementByID(d.root, id)
+			if n == nil {
+				t.Fatalf("no element %s", id)
+			}
+			if got := textStyle(d.styleOf(n, 0), tt.fb).Families; len(got) == 0 || got[0] != want {
+				t.Errorf("fallback %v, %s: families %q, want %s first", tt.fb, id, got, want)
+			}
+		}
+	}
+}
+
+// elementByID returns the element under n whose id is id, nil for none.
+func elementByID(n *html.Node, id string) *html.Node {
+	if n.Type == html.ElementNode && attrOf(n, "id") == id {
+		return n
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if e := elementByID(c, id); e != nil {
+			return e
+		}
+	}
+	return nil
 }

@@ -312,14 +312,20 @@ func (r *renderer) anchor(pieces []*piece) {
 	}
 }
 
-// textStyle returns the text package style of an element styled st.
-func textStyle(st *style) text.Style {
+// textStyle returns the text package style of an element styled st,
+// drawn under the fallback rule fb.
+func textStyle(st *style, fb text.Fallback) text.Style {
+	familyLang := ""
+	if fb == text.FallbackChromium {
+		familyLang = st.lang
+	}
 	return text.Style{
-		Families: text.BrowserFamilies(st.families, ""),
+		Families: text.BrowserFamilies(st.families, familyLang),
 		Weight:   st.weight,
 		Italic:   st.italic,
 		Size:     min(st.fontSize, maxFontSize),
 		Lang:     st.lang,
+		Fallback: fb,
 		Color:    typeset.Black,
 	}
 }
@@ -334,7 +340,7 @@ func (r *renderer) shapePiece(p *piece) {
 	if !utf8.ValidString(str) {
 		str = strings.ToValidUTF8(str, "�")
 	}
-	para, _, err := r.d.opts.Fonts.Shape(r.ctx, []text.ParagraphRun{{Text: str, Style: textStyle(p.st)}}, text.ParagraphOptions{})
+	para, _, err := r.d.opts.Fonts.Shape(r.ctx, []text.ParagraphRun{{Text: str, Style: textStyle(p.st, r.d.opts.Fallback)}}, text.ParagraphOptions{})
 	if err != nil {
 		r.d.warn(warn.TextNotLaidOut, warn.Omitted, fmt.Sprintf("text was left out: %v", err))
 		return
