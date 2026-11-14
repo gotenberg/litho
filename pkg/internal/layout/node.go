@@ -209,9 +209,11 @@ type Options struct {
 	// Gotenberg prints it).
 	FitFirstPage bool
 	// PixelFontMetrics rounds the ascent, descent and line gap of every
-	// face to whole CSS pixels before the line boxes use them, as Blink
-	// does for document text (see pixelMetrics); off, the faces' fractional
-	// metrics apply, as WeasyPrint uses them.
+	// face to whole CSS pixels before the line boxes use them, and lays a
+	// line-height length or number out on Blink's layout unit of 1/64 px,
+	// as Blink does for document text (see pixelMetrics and
+	// blinkLineHeight); off, the faces' fractional metrics and the
+	// computed line-height apply, as WeasyPrint uses them.
 	PixelFontMetrics bool
 	// BrowserRules applies the rendering rules of the browser engine the
 	// HTML converter follows, Blink, where CSS leaves the drawing to the

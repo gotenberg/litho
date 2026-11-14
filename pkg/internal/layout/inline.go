@@ -1446,16 +1446,13 @@ func (s *inlineState) newVbox(b *box, parent *vbox) *vbox {
 	return v
 }
 
-// leadingSlack absorbs the rounding of a leading that falls on a whole
-// pixel, half of Blink's layout unit of 1/64 px, so floating-point error
-// does not floor it a pixel down.
-const leadingSlack = 1.0 / 128
-
 // leading splits the leading lead of an inline box, its line height less
 // its content area, into the half-leading above its content and the one
-// below (CSS 2.1, 10.8.1: half each). With pixel font metrics the part
-// above is the half floored to a whole CSS pixel and the part below the
-// rest, as Blink splits it (CalculateLeadingSpace).
+// below (CSS 2.1, 10.8.1: half each). With pixel font metrics the leading
+// is a whole number of Blink's layout units of 1/64 px, and the part
+// above is half of it, truncated to a unit, then floored to a whole CSS
+// pixel, the part below the rest, as Blink splits it
+// (CalculateLeadingSpace).
 //
 // # Corpus evidence
 //
@@ -1464,11 +1461,15 @@ const leadingSlack = 1.0 / 128
 //     at line-height: normal (a leading of 1 px), 1 px below it at
 //     line-height: 20px (3 px), 2 px below it at 21px (4 px); a 20 px
 //     DejaVu Sans line (1 px) starts it at the top.
+//   - probe, html: a 15.33 px Liberation Sans line at line-height 1.5
+//     (a leading of 383/64 px) puts 2 px above its content, so a span
+//     lowered by 4 px under it ends the line 25 px tall.
 func (e *engine) leading(lead float64) (float64, float64) {
 	if !e.opts.PixelFontMetrics {
 		return lead / 2, lead / 2
 	}
-	up := float64(math.Floor(lead/2/css.Pt+leadingSlack) * css.Pt)
+	half := math.Trunc(math.Round(lead/css.Pt*64) / 2)
+	up := float64(math.Floor(half/64) * css.Pt)
 	return up, lead - up
 }
 
@@ -1504,8 +1505,10 @@ func (e *engine) alignShift(va css.VerticalAlign, parent *vbox, above, below, lh
 // blinkScriptShift returns how far Blink lowers a baseline under
 // vertical-align: sub (part 5) or raises it under super (part 3) in a
 // parent of font size size: that part of the size floored to Blink's
-// layout unit of 1/64 px, plus one pixel. CSS 2.1, 10.8.1 leaves "the proper position" of both to the user agent; outside
-// BrowserRules the shift is the part of the size alone.
+// layout unit of 1/64 px, plus one pixel. CSS 2.1, 10.8.1 leaves "the
+// proper position" of both to the user agent; outside BrowserRules the
+// shift is the part of the size alone. Each product is rounded on its own,
+// so every machine computes the same shift.
 //
 // # Corpus evidence
 //
@@ -1515,7 +1518,7 @@ func (e *engine) alignShift(va css.VerticalAlign, parent *vbox, above, below, lh
 //     17 px one by 6.65625 px; a smaller sub under a 16 px parent moves as
 //     far as one of the parent's size.
 func blinkScriptShift(size, part float64) float64 {
-	return float64(math.Floor(size/css.Pt/part*64)/64+1) * css.Pt
+	return float64((float64(math.Floor(size/css.Pt/part*64)/64) + 1) * css.Pt)
 }
 
 // vboxOf returns the vertical alignment record of inline box b, creating

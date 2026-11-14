@@ -555,12 +555,21 @@ func (e *engine) faceMetrics(st *css.Style, lang string) text.Metrics {
 }
 
 // lineHeight returns the used line-height of st in language lang (CSS
-// 2.1, 10.8.1): normal is the font's ascent, descent and line gap.
+// 2.1, 10.8.1): normal is the font's ascent, descent and line gap. With
+// pixel font metrics a length or a number lands on Blink's layout unit
+// ([blinkLength], [blinkLineHeight]).
 func (e *engine) lineHeight(st *css.Style, lang string) float64 {
 	if st.LineHeight.Kind == css.Points {
-		return max(clamp(st.LineHeight.Value), 0)
+		v := max(clamp(st.LineHeight.Value), 0)
+		if e.opts.PixelFontMetrics {
+			return blinkLength(v)
+		}
+		return v
 	}
 	if st.LineHeight.Kind == css.Number {
+		if e.opts.PixelFontMetrics {
+			return blinkLineHeight(e.fontSize(st), max(clamp(st.LineHeight.Value), 0))
+		}
 		return max(clamp(st.LineHeight.Value)*e.fontSize(st), 0)
 	}
 	m := e.faceMetrics(st, lang)

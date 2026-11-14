@@ -395,8 +395,9 @@ func TestMarginBoxes_OverflowWarns(t *testing.T) {
 	for _, w := range doc.Warnings {
 		if strings.Contains(w.Message, "overflows") {
 			n++
+			// Five lines of 10pt, 853/64 px each on Blink's layout unit.
 			if w.Code != warn.PageSetupUnsupported || w.Effect != warn.Approximated ||
-				!strings.Contains(w.Message, "@top-center") || !strings.Contains(w.Message, "50 points tall and the box 26 points") {
+				!strings.Contains(w.Message, "@top-center") || !strings.Contains(w.Message, "49.98 points tall and the box 26 points") {
 				t.Errorf("warning %+v", w)
 			}
 		}
