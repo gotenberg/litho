@@ -1965,6 +1965,10 @@ func (s *inlineState) vertical(l *lineBox) {
 			above := a.marginH()
 			if a.hasBaseline {
 				above = a.m[css.Top] + a.baseline
+			} else if c, ok := s.e.centralBaseline(parent.b); ok {
+				// The central baseline of a box without one is the middle
+				// of its margin box (CSS Inline 3, 4.2.1).
+				above = float64(a.marginH()/2) + c
 			}
 			below := a.marginH() - above
 			if r := a.ruby; r != nil && (r.over || r.under) && a.st.VerticalAlign.Kind != css.AlignTop && a.st.VerticalAlign.Kind != css.AlignBottom {

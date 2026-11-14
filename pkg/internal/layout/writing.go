@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -333,4 +334,29 @@ func turnedRect(wm css.WritingMode, cx, cy float64, r typeset.Rect) typeset.Rect
 		return typeset.Rect{X: cx + cy - r.Y - r.Height, Y: r.X - cx + cy, Width: r.Height, Height: r.Width}
 	}
 	return typeset.Rect{X: r.Y - cy + cx, Y: cy + cx - r.X - r.Width, Width: r.Height, Height: r.Width}
+}
+
+// centralBaseline reports whether the inline box b aligns its content on
+// the central baseline, the dominant baseline of a vertical line whose
+// text stands upright (CSS Inline 3, 4.2.1, dominant-baseline: auto, in
+// vertical typographic mode with text-orientation mixed or upright), and
+// returns how far that baseline lies above the alphabetic one of its
+// first available font, which a turned flow lays its lines out on: half
+// the difference of the font's em box ascent and descent.
+func (e *engine) centralBaseline(b *box) (float64, bool) {
+	if b == nil {
+		return 0, false
+	}
+	st := b.st
+	if b.anon && b.parent != nil && b.parent.ortho {
+		// The anonymous block an orthogonal flow root lays its content
+		// out in is horizontal in the turned flow: its lines are the
+		// root's.
+		st = b.parent.st
+	}
+	if e.orientation(st) == text.OrientNone {
+		return 0, false
+	}
+	m := e.faceMetrics(b.st, b.lang)
+	return float64((m.EmAscent - m.EmDescent) / 2), true
 }

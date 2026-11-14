@@ -170,3 +170,20 @@ func TestWritingMode_BlockSizeOfItsContent(t *testing.T) {
 		BBB___
 		BBB___`)
 }
+
+// TestWritingMode_CentralBaseline aligns an image in a vertical line of
+// upright text on the central baseline, the dominant one there (CSS
+// Inline 3, 4.2.1): its middle on the middle of the strut's em box, so a
+// picture wider than the strut is the whole line box, where the
+// alphabetic baseline would add the strut's descent beside it.
+func TestWritingMode_CentralBaseline(t *testing.T) {
+	t.Parallel()
+	wm := func(s *css.Style) { s.WritingMode = css.VerticalRL }
+	img := &Node{Kind: Replaced, Style: inlineSty(wm), Picture: pic(color.NRGBA{R: 255, A: 255}, 20, 2)}
+	root := doc(el(sty(wm, height(4), bg(lime)), img))
+	assertPixels(t, runWith(t, root, Options{Page: page(24, 4), BrowserRules: true}), 1, `
+		RRRRRRRRRRRRRRRRRRRR____
+		RRRRRRRRRRRRRRRRRRRR____
+		GGGGGGGGGGGGGGGGGGGG____
+		GGGGGGGGGGGGGGGGGGGG____`)
+}
