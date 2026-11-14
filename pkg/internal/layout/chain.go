@@ -133,7 +133,8 @@ func layoutChain(ctx context.Context, links []linkNode, fonts *text.Fonts, opts 
 	st.Width, st.Height = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
 	st.MinHeight, st.MaxHeight = css.Pts(0), css.Dimension{Kind: css.None}
 	st.Margin, st.Padding, st.Border = [4]css.Dimension{}, [4]css.Dimension{}, [4]css.Border{}
-	st.BackgroundColor, st.BackgroundImage, st.BackgroundGradient = css.Color{}, "", nil
+	st.BackgroundColor = css.Color{}
+	st.ClearBackgroundImages()
 	st.BoxShadow, st.Transform, st.ZIndex = nil, nil, css.ZIndex{}
 	st.Translate, st.Rotate, st.Scale = nil, nil, nil
 	st.PageAnchor, st.AnchorPage, st.PageClamp = false, 0, false

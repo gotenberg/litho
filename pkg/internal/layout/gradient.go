@@ -524,16 +524,16 @@ func (e *engine) gradientRect(g *css.Gradient, r typeset.Rect) typeset.Fragment 
 	return &typeset.Path{Ops: rectOps(r), Fill: fill}
 }
 
-// gradientTiles returns the paths painting the background gradient of st
-// over the positioning area within the painting area clip: the gradient
+// gradientTiles returns the paths painting the gradient of the
+// background layer l over the positioning area within the painting area clip: the gradient
 // is an image without intrinsic size or ratio, so its size is the area's
 // (CSS Backgrounds 3, 3.9), placed and repeated as an image is.
-func (e *engine) gradientTiles(st *css.Style, area, clip typeset.Rect, y float64) []*typeset.Path {
+func (e *engine) gradientTiles(l *css.BackgroundLayer, area, clip typeset.Rect, y float64) []*typeset.Path {
 	if !numeric.Positive(area.Width) || !numeric.Positive(area.Height) {
 		return nil
 	}
-	sized := *st
-	if bs := &sized.BackgroundSize; bs.Kind == css.SizeExplicit {
+	sized := *l
+	if bs := &sized.Size; bs.Kind == css.SizeExplicit {
 		// CSS Backgrounds 3, 3.9: an auto dimension of an image with
 		// neither intrinsic size nor ratio is 100%.
 		if !bs.Width.IsLength() {
@@ -551,13 +551,13 @@ func (e *engine) gradientTiles(st *css.Style, area, clip typeset.Rect, y float64
 		// Tiles too small to count, a fraction of a pixel, blend into the
 		// gradient's average colour, which fills the painting area: a
 		// gradient of one colour stays that colour, as browsers draw it.
-		c := gradientAverage(st.BackgroundGradient, tiles[0].Width, tiles[0].Height)
+		c := gradientAverage(l.Gradient, tiles[0].Width, tiles[0].Height)
 		if c.A <= 0 {
 			return nil
 		}
 		return []*typeset.Path{{Ops: rectOps(clip), Fill: &typeset.Fill{Color: c}}}
 	}
-	fill, ok := e.gradientFill(st.BackgroundGradient, tiles[0].Width, tiles[0].Height, y)
+	fill, ok := e.gradientFill(l.Gradient, tiles[0].Width, tiles[0].Height, y)
 	if !ok {
 		return nil
 	}

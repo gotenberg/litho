@@ -1103,7 +1103,10 @@ type Style struct {
 	// MaskBorder is the mask-border (CSS Masking 1, 7).
 	MaskBorder BorderImage
 
-	// Background (CSS Backgrounds 3). A single layer.
+	// Background (CSS Backgrounds 3). The fields from BackgroundImage
+	// to BackgroundAttachment hold the first entry of each longhand's
+	// list, the top layer of a background of one; BackgroundRest holds
+	// the rest. Read the layers with [Style.BackgroundLayer].
 
 	BackgroundColor Color
 	// BackgroundImage is the resolved URL of the image, "" for none. A
@@ -1121,24 +1124,17 @@ type Style struct {
 	BackgroundPosition [2]Dimension
 	BackgroundSize     BackgroundSize
 	BackgroundOrigin   BoxEdge
-	// BackgroundClip is the background-clip of the first layer, the one
-	// whose image litho draws.
-	BackgroundClip BoxEdge
-	// BackgroundColorClip clips background-color: the background-clip of
-	// the bottom layer (CSS Backgrounds 3, 3.10), the entry of the
-	// background-clip list for the last background-image layer once the
-	// list is repeated or truncated to the layer count (CSS Backgrounds
-	// 3, 2.2).
-	BackgroundColorClip BoxEdge
-	// BackgroundLayers is the number of background layers, the length
-	// of the background-image list (CSS Backgrounds 3, 2.2): 1 or more.
-	BackgroundLayers int
-	// BackgroundBlendMode is how the image composites with the
-	// background colour (CSS Compositing 1, 3.4).
+	BackgroundClip     BoxEdge
+	// BackgroundBlendMode is how the image composites with the layers
+	// and the colour beneath it (CSS Compositing 1, 9.1).
 	BackgroundBlendMode BlendMode
 	// BackgroundAttachment fixes the background to the viewport, the
 	// element or its contents (CSS Backgrounds 3, 3.5).
 	BackgroundAttachment Attachment
+	// BackgroundRest holds the entries after the first of each
+	// background list, nil when each list holds one: the value of almost
+	// every style. Shared and never modified.
+	BackgroundRest *BackgroundLists
 
 	// BoxShadow lists the shadows in the order written, the first painted
 	// on top; nil for none (CSS Backgrounds 3, 7.1).
@@ -1636,7 +1632,6 @@ func InitialValue() Style {
 		Padding:            [4]Dimension{Pts(0), Pts(0), Pts(0), Pts(0)},
 		BackgroundPosition: [2]Dimension{{Kind: Percent}, {Kind: Percent}},
 		BackgroundOrigin:   PaddingEdge,
-		BackgroundLayers:   1,
 		ObjectPosition:     [2]Dimension{{Kind: Percent, Value: 0.5}, {Kind: Percent, Value: 0.5}},
 		Color:              Color{A: 1},
 		// text-emphasis-color is inherited and starts as currentColor,

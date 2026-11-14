@@ -832,36 +832,18 @@ func init() {
 		{pBottom, dimProp("bottom", false, func(s *Style) *Dimension { return &s.Bottom }, allowPct|allowMixed, kwAuto, false)},
 		{pLeft, dimProp("left", false, func(s *Style) *Dimension { return &s.Left }, allowPct|allowMixed, kwAuto, false)},
 		{pBgColor, colorProp("background-color", func(s *Style) *Color { return &s.BackgroundColor }, slotBackground, nil)},
-		{pBgImage, propDef{name: "background-image", parse: parseBgImage, compute: func(s *styler, st *Style, v any) {
-			if l, ok := v.(bgImageList); ok {
-				st.BackgroundImage, st.BackgroundGradient, st.BackgroundLayers = l.first.url, nil, l.layers
-				if l.first.grad != nil {
-					st.BackgroundGradient = l.first.grad.compute(s.lc, st.Color)
-				}
-			}
-		}, copyFrom: func(dst, src *Style) {
-			dst.BackgroundImage, dst.BackgroundGradient, dst.BackgroundLayers = src.BackgroundImage, src.BackgroundGradient, src.BackgroundLayers
-		}}},
-		{pBgRepeat, propDef{name: "background-repeat", parse: parseBgRepeat, compute: func(_ *styler, st *Style, v any) {
-			if r, ok := v.([2]Repeat); ok {
-				st.BackgroundRepeat = r
-			}
-		}, copyFrom: field(func(s *Style) *[2]Repeat { return &s.BackgroundRepeat })}},
+		{pBgImage, bgImageProp()},
+		{pBgRepeat, bgListProp("background-repeat", parseBgRepeat, func(s *Style) *[2]Repeat { return &s.BackgroundRepeat },
+			func(r *BackgroundLists) *[][2]Repeat { return &r.Repeats }, same[[2]Repeat])},
 		{pBgPosition, bgPositionAxis(0)},
-		{pBgSize, propDef{name: "background-size", parse: parseBgSize, compute: func(s *styler, st *Style, v any) {
-			if b, ok := v.(bgSizeSpec); ok {
-				st.BackgroundSize = BackgroundSize{Kind: b.kind, Width: s.computeDim(b.w, true), Height: s.computeDim(b.h, true)}
-			}
-		}, copyFrom: field(func(s *Style) *BackgroundSize { return &s.BackgroundSize })}},
+		{pBgSize, bgListProp("background-size", parseBgSize, func(s *Style) *BackgroundSize { return &s.BackgroundSize },
+			func(r *BackgroundLists) *[]BackgroundSize { return &r.Sizes },
+			func(s *styler, b bgSizeSpec) BackgroundSize {
+				return BackgroundSize{Kind: b.kind, Width: s.computeDim(b.w, true), Height: s.computeDim(b.h, true)}
+			})},
 		{pBgOrigin, originProp()},
-		{pBgClip, propDef{name: "background-clip", parse: parseBgClip, compute: func(_ *styler, st *Style, v any) {
-			if l, ok := v.([]BoxEdge); ok && len(l) > 0 {
-				st.BackgroundClip = l[0]
-				st.BackgroundColorClip = l[(max(st.BackgroundLayers, 1)-1)%len(l)]
-			}
-		}, copyFrom: func(dst, src *Style) {
-			dst.BackgroundClip, dst.BackgroundColorClip = src.BackgroundClip, src.BackgroundColorClip
-		}}},
+		{pBgClip, bgListProp("background-clip", parseBgClip, func(s *Style) *BoxEdge { return &s.BackgroundClip },
+			func(r *BackgroundLists) *[]BoxEdge { return &r.Clips }, same[BoxEdge])},
 		{pFontFamily, propDef{name: "font-family", inherited: true, parse: parseFontFamily, compute: func(_ *styler, st *Style, v any) {
 			if f, ok := v.([]string); ok {
 				st.FontFamilies = f
@@ -1157,21 +1139,8 @@ var breakValues = map[string]Break{
 
 var boxEdges = map[string]BoxEdge{"border-box": BorderEdge, "padding-box": PaddingEdge, "content-box": ContentEdge}
 
-func parseBgClip(v []token, _ *declCtx) (any, bool) {
-	layers := splitCommas(v)
-	if len(layers) == 0 {
-		return nil, false
-	}
-	out := make([]BoxEdge, 0, len(layers))
-	for _, l := range layers {
-		e, ok := bgClipValue(l)
-		if !ok {
-			return nil, false
-		}
-		out = append(out, e)
-	}
-	return out, true
-}
+// parseBgClip parses background-clip, a box or text a layer.
+func parseBgClip(v []token, _ *declCtx) (any, bool) { return bgList(v, bgClipValue) }
 
 // bgClipValue parses one layer of background-clip: a <visual-box> or
 // text (CSS Backgrounds 4, 2.1).
@@ -1447,7 +1416,13 @@ func textAlignLastProp() propDef {
 // (CSS Backgrounds 3, 3.8), not the zero BoxEdge, border-box: the initial
 // keyword computes to it.
 func originProp() propDef {
-	def := enumProp("background-origin", false, func(s *Style) *BoxEdge { return &s.BackgroundOrigin }, boxEdges)
-	def.initial = PaddingEdge
+	def := bgListProp("background-origin", func(v []token, _ *declCtx) (any, bool) {
+		return bgList(v, func(p []token) (BoxEdge, bool) {
+			k, ok := keyword(p)
+			e, known := boxEdges[k]
+			return e, ok && known
+		})
+	}, func(s *Style) *BoxEdge { return &s.BackgroundOrigin }, func(r *BackgroundLists) *[]BoxEdge { return &r.Origins }, same[BoxEdge])
+	def.initial = []BoxEdge{PaddingEdge}
 	return def
 }

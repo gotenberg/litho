@@ -125,31 +125,233 @@ func ring(outer typeset.Rect, oradii [4][2]float64, inner typeset.Rect, iradii [
 }
 
 // background paints the background of box b of style st on the border box
-// r with outer corner radii: the colour over the background-clip area, then
-// the image (CSS Backgrounds 3, 3).
+// r with outer corner radii: the colour over the background-clip area of
+// the bottom layer, then the layers from the bottom one up, each over its
+// own background-clip area (CSS Backgrounds 3, 2.2 and 3). A colour or a
+// layer clipped to text paints under the glyphs alone, within the border
+// box (CSS Backgrounds 4, 2.4): consecutive ones share one clip.
 func (p *painter) background(b *box, st *css.Style, r typeset.Rect, radii [4][2]float64, bd, pd [4]float64) {
-	clipR, clipRadii := clipArea(st.BackgroundClip, r, radii, bd, pd)
-	if clipR.Width <= 0 || clipR.Height <= 0 {
-		if colR, _ := clipArea(st.BackgroundColorClip, r, radii, bd, pd); colR.Width <= 0 || colR.Height <= 0 {
-			return
+	var one [1]css.BackgroundLayer
+	layers := one[:]
+	if n := st.BackgroundLayerCount(); n > 1 {
+		layers = make([]css.BackgroundLayer, n)
+	}
+	visible := false
+	for i := range layers {
+		layers[i] = st.BackgroundLayer(i)
+		if c, _ := clipArea(layers[i].Clip, r, radii, bd, pd); c.Width > 0 && c.Height > 0 {
+			visible = true
 		}
 	}
-	if clipToText(st) {
-		// CSS Backgrounds 4, 2.4: the background paints under the glyphs
-		// alone, within the border box.
-		tc := p.textClip(b)
-		if tc == nil || !hasBackground(st) {
-			return
-		}
-		g := &ditem{group: true, fx: &groupFx{opacity: 1, clip: tc}}
-		c := p.sync(p.chain(b, false))
-		c.kids = append(c.kids, g)
-		into, blend := p.blendedBackground(g, b, st)
-		p.backgroundInto(into, blend, b, st, r, radii, bd, pd, clipR, clipRadii)
+	colEdge := st.BackgroundColorClip()
+	colR, colRadii := clipArea(colEdge, r, radii, bd, pd)
+	if !visible && (colR.Width <= 0 || colR.Height <= 0) {
 		return
 	}
-	into, blend := p.blendedBackground(nil, b, st)
-	p.backgroundInto(into, blend, b, st, r, radii, bd, pd, clipR, clipRadii)
+	_, hasColor := colorOf(st.BackgroundColor)
+	allText, anyText := !hasColor || colEdge == css.TextEdge, hasColor && colEdge == css.TextEdge
+	for i := range layers {
+		if layers[i].HasImage() {
+			text := layers[i].Clip == css.TextEdge
+			allText, anyText = allText && text, anyText || text
+		}
+	}
+	bg := bgPaint{p: p, b: b}
+	if allText && anyText {
+		tc := p.textClip(b)
+		if tc == nil {
+			return
+		}
+		bg.into = &ditem{group: true, fx: &groupFx{opacity: 1, clip: tc}}
+		bg.addTo(nil, bg.into)
+		bg.blended(st, layers)
+		bg.color(st, colR, colRadii)
+		for i := len(layers) - 1; i >= 0; i-- {
+			bg.layer(i, &layers[i], r, radii, bd, pd)
+		}
+		return
+	}
+	bg.blended(st, layers)
+	parent := bg.into
+	var run *ditem
+	use := func(text bool) {
+		bg.into = parent
+		if !text {
+			run = nil
+			return
+		}
+		if run == nil {
+			bg.text(parent)
+			run = bg.into
+		}
+		bg.into = run
+	}
+	use(hasColor && colEdge == css.TextEdge)
+	bg.color(st, colR, colRadii)
+	for i := len(layers) - 1; i >= 0; i-- {
+		if l := &layers[i]; l.HasImage() {
+			use(l.Clip == css.TextEdge)
+			bg.layer(i, l, r, radii, bd, pd)
+		}
+	}
+}
+
+// bgPaint paints the colour and the layers of one background of the box
+// b into the group into, or into the display list when into is nil. It
+// does not outlive the call that paints them.
+type bgPaint struct {
+	p    *painter
+	b    *box
+	into *ditem
+	// blend is how each layer composites, indexed as the layers; nil
+	// when nothing blends.
+	blend []typeset.BlendMode
+	// tc is the text clip of b, computed once; textDone is whether it was.
+	tc       *typeset.Path
+	textDone bool
+}
+
+// addTo adds d to the group into, or to the display list when into is nil.
+func (bg *bgPaint) addTo(into, d *ditem) {
+	if into != nil {
+		into.kids = append(into.kids, d)
+		return
+	}
+	c := bg.p.sync(bg.p.chain(bg.b, false))
+	c.kids = append(c.kids, d)
+}
+
+// text points into at a new group clipped to the glyphs of b, added to
+// parent, when b draws glyphs; else at a group that paints nothing.
+func (bg *bgPaint) text(parent *ditem) {
+	if !bg.textDone {
+		bg.tc, bg.textDone = bg.p.textClip(bg.b), true
+	}
+	if bg.tc == nil {
+		bg.into = &ditem{group: true}
+		return
+	}
+	bg.into = &ditem{group: true, fx: &groupFx{opacity: 1, clip: bg.tc}}
+	bg.addTo(parent, bg.into)
+}
+
+// blended opens, when a layer of the background of style st blends with
+// what lies beneath it in the background, an isolated group, since the
+// layers of a background blend with each other and its colour and not
+// with what lies beneath the element (CSS Compositing 1, 9.1), and sets
+// each layer's blend mode. A layer over nothing blends with nothing, and
+// nothing blends when no layer blends with something.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium writes a background of a gradient and a
+//     colour, background-blend-mode multiply, screen or luminosity, as an
+//     isolated transparency group holding the colour and the gradient
+//     under /BM of the mode.
+func (bg *bgPaint) blended(st *css.Style, layers []css.BackgroundLayer) {
+	_, under := colorOf(st.BackgroundColor)
+	var modes []typeset.BlendMode
+	for i := len(layers) - 1; i >= 0; i-- {
+		l := &layers[i]
+		if !l.HasImage() {
+			continue
+		}
+		if under && l.Blend != css.BlendNormal {
+			if modes == nil {
+				modes = make([]typeset.BlendMode, len(layers))
+			}
+			// css.BlendMode orders the sixteen modes as typeset does; a
+			// background takes no plus-lighter.
+			modes[i] = typeset.BlendMode(l.Blend)
+		}
+		under = true
+	}
+	if modes == nil {
+		return
+	}
+	g := &ditem{group: true, fx: &groupFx{opacity: 1, isolate: true}}
+	bg.addTo(bg.into, g)
+	bg.into, bg.blend = g, modes
+}
+
+// color paints the background colour of st over colR with colRadii.
+func (bg *bgPaint) color(st *css.Style, colR typeset.Rect, colRadii [4][2]float64) {
+	c, ok := colorOf(st.BackgroundColor)
+	if !ok || colR.Width <= 0 || colR.Height <= 0 {
+		return
+	}
+	path := &typeset.Path{Ops: roundedRect(colR, colRadii), Fill: &typeset.Fill{Color: c}}
+	if bg.into == nil {
+		bg.p.emit(bg.b, false, path, colR.Y, colR.Y+colR.Height, -1)
+		return
+	}
+	page := -1
+	if bg.p.mono >= 0 {
+		page = bg.p.mono
+	}
+	bg.into.kids = append(bg.into.kids, &ditem{frag: path, y0: colR.Y, y1: colR.Y + colR.Height, page: page})
+}
+
+// layer paints the image of the background layer l, layer i, over its clip area on
+// the border box r with outer corner radii, its borders bd and paddings
+// pd: placed in its positioning area (CSS Backgrounds 3, 3.7), attached
+// (3.5), sized, positioned and repeated (3.4 to 3.9).
+func (bg *bgPaint) layer(i int, l *css.BackgroundLayer, r typeset.Rect, radii [4][2]float64, bd, pd [4]float64) {
+	p, b := bg.p, bg.b
+	blend := typeset.BlendNormal
+	if bg.blend != nil {
+		blend = bg.blend[i]
+	}
+	clipR, clipRadii := clipArea(l.Clip, r, radii, bd, pd)
+	if !l.HasImage() || clipR.Width <= 0 || clipR.Height <= 0 {
+		return
+	}
+	area := r
+	switch l.Origin {
+	case css.BorderEdge, css.TextEdge:
+	case css.PaddingEdge:
+		area, _ = insetRect(r, radii, bd)
+	case css.ContentEdge:
+		area, _ = insetRect(r, radii, addSides(bd, pd))
+	}
+	if l.Attachment == css.AttachLocal {
+		area = p.localArea(b, area, r, pd)
+	}
+	g := &ditem{group: true, fx: &groupFx{opacity: 1, blend: blend, clip: &typeset.Path{Ops: roundedRect(clipR, clipRadii), Fill: &typeset.Fill{}}}}
+	for _, sl := range p.attachedSlices(b, l.Attachment, area, clipR) {
+		if l.Gradient != nil {
+			for _, pa := range p.e.gradientTiles(l, sl.area, sl.clip, r.Y) {
+				t := pa.Ops[0].P[0]
+				g.kids = append(g.kids, &ditem{frag: pa, y0: t.Y, y1: pa.Ops[2].P[0].Y, page: -1})
+			}
+			continue
+		}
+		pic := p.e.picture(l.Image, r.Y)
+		if pic == nil {
+			return
+		}
+		pic = naturalPicture(pic, sl.area.Width, sl.area.Height)
+		tiles := p.e.tiles(l, pic, sl.area, sl.clip, r.Y)
+		for i, t := range tiles {
+			f := p.e.pictureFrag(pic, t, nil)
+			if f == nil {
+				break
+			}
+			if i == 0 && pic.Vector != nil {
+				tiles = p.e.vectorTiles(tiles, fragNodes(f), r.Y)
+			}
+			g.kids = append(g.kids, &ditem{frag: f, y0: t.Y, y1: t.Y + t.Height, page: -1})
+		}
+	}
+	if len(g.kids) == 0 {
+		return
+	}
+	if p.mono >= 0 {
+		for _, k := range g.kids {
+			k.page = p.mono
+		}
+	}
+	bg.addTo(bg.into, g)
 }
 
 // clipArea returns the background painting area that edge names on the
@@ -172,8 +374,8 @@ type bgSlice struct {
 	area, clip typeset.Rect
 }
 
-// attachedSlices returns where the background image of b, styled st, is
-// positioned and drawn: area and clip for a scrolling or local image;
+// attachedSlices returns where a background image of b, attached as
+// attach, is positioned and drawn: area and clip for a scrolling or local image;
 // for a fixed one, on each page clip reaches, that page's area, the
 // viewport of paged media, and the part of clip on it, the image repeated
 // on every page (CSS Backgrounds 3, 3.5). A box that is transformed or
@@ -190,8 +392,8 @@ type bgSlice struct {
 //   - probe, html: Chromium 156 prints a fixed 96px image on a table row
 //     group (CSS2/backgrounds/background-attachment-applies-to-001) as no
 //     image at all, the row group orange alone.
-func (p *painter) attachedSlices(b *box, st *css.Style, area, clip typeset.Rect) []bgSlice {
-	if st.BackgroundAttachment != css.AttachFixed || !p.e.paginating() || transformedFrom(b) {
+func (p *painter) attachedSlices(b *box, attach css.Attachment, area, clip typeset.Rect) []bgSlice {
+	if attach != css.AttachFixed || !p.e.paginating() || transformedFrom(b) {
 		return []bgSlice{{area: area, clip: clip}}
 	}
 	var out []bgSlice
@@ -227,115 +429,6 @@ func transformedFrom(b *box) bool {
 	return false
 }
 
-// blendedBackground returns the group the background of b, styled st,
-// paints into and the blend mode of its image: when the image blends with
-// the colour, an isolated group, since the layers of a background blend
-// with each other and its colour and not with what lies beneath the
-// element (CSS Compositing 1, 3.4), added to into, or to the display list
-// when into is nil. It returns into and normal when nothing blends: an
-// image over no colour blends with nothing.
-//
-// # Corpus evidence
-//
-//   - probe, html: Chromium writes a background of a gradient and a
-//     colour, background-blend-mode multiply, screen or luminosity, as an
-//     isolated transparency group holding the colour and the gradient
-//     under /BM of the mode.
-func (p *painter) blendedBackground(into *ditem, b *box, st *css.Style) (*ditem, typeset.BlendMode) {
-	if st.BackgroundBlendMode == css.BlendNormal || st.BackgroundImage == "" && st.BackgroundGradient == nil {
-		return into, typeset.BlendNormal
-	}
-	if _, ok := colorOf(st.BackgroundColor); !ok {
-		return into, typeset.BlendNormal
-	}
-	g := &ditem{group: true, fx: &groupFx{opacity: 1, isolate: true}}
-	if into != nil {
-		into.kids = append(into.kids, g)
-	} else {
-		c := p.sync(p.chain(b, false))
-		c.kids = append(c.kids, g)
-	}
-	// css.BlendMode orders the sixteen modes as typeset does; a
-	// background takes no plus-lighter.
-	return g, typeset.BlendMode(st.BackgroundBlendMode)
-}
-
-// backgroundInto paints the colour and the image of the background of b
-// clipped to clipR with clipRadii, into the group into, or into the
-// display list when into is nil, the image under the blend mode blend.
-func (p *painter) backgroundInto(into *ditem, blend typeset.BlendMode, b *box, st *css.Style, r typeset.Rect, radii [4][2]float64, bd, pd [4]float64, clipR typeset.Rect, clipRadii [4][2]float64) {
-	colR, colRadii := clipR, clipRadii
-	if !clipToText(st) {
-		colR, colRadii = clipArea(st.BackgroundColorClip, r, radii, bd, pd)
-	}
-	if c, ok := colorOf(st.BackgroundColor); ok && colR.Width > 0 && colR.Height > 0 {
-		path := &typeset.Path{Ops: roundedRect(colR, colRadii), Fill: &typeset.Fill{Color: c}}
-		if into == nil {
-			p.emit(b, false, path, colR.Y, colR.Y+colR.Height, -1)
-		} else {
-			page := -1
-			if p.mono >= 0 {
-				page = p.mono
-			}
-			into.kids = append(into.kids, &ditem{frag: path, y0: colR.Y, y1: colR.Y + colR.Height, page: page})
-		}
-	}
-	if (st.BackgroundImage == "" && st.BackgroundGradient == nil) || clipR.Width <= 0 || clipR.Height <= 0 {
-		return
-	}
-	area := r
-	switch st.BackgroundOrigin {
-	case css.BorderEdge, css.TextEdge:
-	case css.PaddingEdge:
-		area, _ = insetRect(r, radii, bd)
-	case css.ContentEdge:
-		area, _ = insetRect(r, radii, addSides(bd, pd))
-	}
-	if st.BackgroundAttachment == css.AttachLocal {
-		area = p.localArea(b, area, r, pd)
-	}
-	g := &ditem{group: true, fx: &groupFx{opacity: 1, blend: blend, clip: &typeset.Path{Ops: roundedRect(clipR, clipRadii), Fill: &typeset.Fill{}}}}
-	for _, sl := range p.attachedSlices(b, st, area, clipR) {
-		if st.BackgroundGradient != nil {
-			for _, pa := range p.e.gradientTiles(st, sl.area, sl.clip, r.Y) {
-				t := pa.Ops[0].P[0]
-				g.kids = append(g.kids, &ditem{frag: pa, y0: t.Y, y1: pa.Ops[2].P[0].Y, page: -1})
-			}
-			continue
-		}
-		pic := p.e.picture(st.BackgroundImage, r.Y)
-		if pic == nil {
-			return
-		}
-		pic = naturalPicture(pic, sl.area.Width, sl.area.Height)
-		tiles := p.e.tiles(st, pic, sl.area, sl.clip, r.Y)
-		for i, t := range tiles {
-			f := p.e.pictureFrag(pic, t, nil)
-			if f == nil {
-				break
-			}
-			if i == 0 && pic.Vector != nil {
-				tiles = p.e.vectorTiles(tiles, fragNodes(f), r.Y)
-			}
-			g.kids = append(g.kids, &ditem{frag: f, y0: t.Y, y1: t.Y + t.Height, page: -1})
-		}
-	}
-	if len(g.kids) == 0 {
-		return
-	}
-	if p.mono >= 0 {
-		for _, k := range g.kids {
-			k.page = p.mono
-		}
-	}
-	if into != nil {
-		into.kids = append(into.kids, g)
-		return
-	}
-	c := p.sync(p.chain(b, false))
-	c.kids = append(c.kids, g)
-}
-
 // addSides returns a + b per side.
 func addSides(a, b [4]float64) [4]float64 {
 	for i := range a {
@@ -344,11 +437,11 @@ func addSides(a, b [4]float64) [4]float64 {
 	return a
 }
 
-// tiles returns the placements of the background image pic over the
-// positioning area, within the painting area clip: its size (CSS
+// tiles returns the placements of the image pic of the background layer
+// l over the positioning area, within the painting area clip: its size (CSS
 // Backgrounds 3, 3.9), position (3.6) and repetition (3.4).
-func (e *engine) tiles(st *css.Style, pic *Picture, area, clip typeset.Rect, y float64) []typeset.Rect {
-	out, over := tileRects(st, pic, area, clip)
+func (e *engine) tiles(l *css.BackgroundLayer, pic *Picture, area, clip typeset.Rect, y float64) []typeset.Rect {
+	out, over := tileRects(l, pic, area, clip)
 	if over {
 		e.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("a background repeated more than %d times was drawn once", maxBackgroundTiles), y)
 	}
@@ -357,10 +450,10 @@ func (e *engine) tiles(st *css.Style, pic *Picture, area, clip typeset.Rect, y f
 
 // tileRects returns what [engine.tiles] does, and true with the first
 // tile alone when more than maxBackgroundTiles would cover the clip.
-func tileRects(st *css.Style, pic *Picture, area, clip typeset.Rect) ([]typeset.Rect, bool) {
+func tileRects(l *css.BackgroundLayer, pic *Picture, area, clip typeset.Rect) ([]typeset.Rect, bool) {
 	iw, ih := pic.Width, pic.Height
 	w, h := iw, ih
-	bs := st.BackgroundSize
+	bs := l.Size
 	switch bs.Kind {
 	case css.SizeCover, css.SizeContain:
 		k := max(area.Width/iw, area.Height/ih)
@@ -380,7 +473,7 @@ func tileRects(st *css.Style, pic *Picture, area, clip typeset.Rect) ([]typeset.
 			w, h = hs*iw/ih, hs
 		}
 	}
-	rep := st.BackgroundRepeat
+	rep := l.Repeat
 	w0, h0 := w, h
 	if rep[0] == css.RepeatRound && w > 0 {
 		w = area.Width / max(math.Round(area.Width/w), 1)
@@ -401,8 +494,8 @@ func tileRects(st *css.Style, pic *Picture, area, clip typeset.Rect) ([]typeset.
 	if !numeric.PositiveFinite(w) || !numeric.PositiveFinite(h) {
 		return nil, false
 	}
-	x0 := area.X + resolve(st.BackgroundPosition[0], area.Width-w)
-	y0 := area.Y + resolve(st.BackgroundPosition[1], area.Height-h)
+	x0 := area.X + resolve(l.Position[0], area.Width-w)
+	y0 := area.Y + resolve(l.Position[1], area.Height-h)
 	xs := positions(rep[0], x0, w, area.X, area.Width, clip.X, clip.Width)
 	ys := positions(rep[1], y0, h, area.Y, area.Height, clip.Y, clip.Height)
 	if len(xs)*len(ys) > maxBackgroundTiles || len(xs) > maxBackgroundTiles || len(ys) > maxBackgroundTiles {

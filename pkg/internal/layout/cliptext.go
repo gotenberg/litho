@@ -8,7 +8,6 @@ import (
 	gofont "github.com/go-text/typesetting/font"
 	"github.com/go-text/typesetting/font/opentype"
 
-	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -190,6 +189,3 @@ func appendGlyph(ops []typeset.PathOp, f *gofont.Face, gid uint16, x, y, k, hs, 
 	}
 	return ops
 }
-
-// clipToText reports whether st clips its background to text.
-func clipToText(st *css.Style) bool { return st.BackgroundClip == css.TextEdge }

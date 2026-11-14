@@ -57,54 +57,55 @@ func parseImage(v []token, c *declCtx) (any, bool) {
 	return u, ok
 }
 
-// firstLayer returns the first layer of a comma-separated background
-// list, warning when there are more: [Style] holds one layer.
-func firstLayer(v []token, c *declCtx, prop string) ([]token, bool) {
-	layers := splitCommas(v)
-	for _, l := range layers {
-		if len(l) == 0 {
-			return nil, false
-		}
-	}
-	if len(layers) > 1 {
-		c.warn(warn.CSSUnsupported, warn.Omitted, "%s: only the first of several background layers is drawn", prop)
-	}
-	if len(layers) == 0 {
-		return nil, false
-	}
-	return layers[0], true
-}
-
-// bgImageList is a specified background-image: the first layer's image,
-// the one litho draws, and the number of layers, which sizes the other
-// background lists (CSS Backgrounds 3, 2.2).
-type bgImageList struct {
-	first  imageSpec
-	layers int
-}
+// bgImages is a specified background-image: one <bg-image> a layer.
+type bgImages []imageSpec
 
 // parseBgImage parses background-image (CSS Backgrounds 3, 2.2): a list
 // of <bg-image>, each layer valid or the declaration is.
 func parseBgImage(v []token, c *declCtx) (any, bool) {
-	if _, ok := firstLayer(v, c, "background-image"); !ok {
-		return nil, false
-	}
-	layers := splitCommas(v)
-	out := bgImageList{layers: len(layers)}
-	for i, l := range layers {
-		t, ok := single(l)
+	l, ok := bgList(v, func(p []token) (imageSpec, bool) {
+		t, ok := single(p)
 		if !ok {
-			return nil, false
+			return imageSpec{}, false
 		}
-		u, ok := bgImageValue(t, c, "background-image")
-		if !ok {
-			return nil, false
+		return bgImageValue(t, c, "background-image")
+	})
+	return bgImages(l), ok
+}
+
+// bgImageProp defines background-image, whose layers count the layers
+// of the background.
+func bgImageProp() propDef {
+	return propDef{name: "background-image", parse: parseBgImage, compute: func(s *styler, st *Style, v any) {
+		l, ok := v.(bgImages)
+		if !ok || len(l) == 0 {
+			return
 		}
-		if i == 0 {
-			out.first = u
+		layer := func(im imageSpec) LayerImage {
+			out := LayerImage{URL: im.url}
+			if im.grad != nil {
+				out.Gradient = im.grad.compute(s.lc, st.Color)
+			}
+			return out
 		}
-	}
-	return out, true
+		first := layer(l[0])
+		st.BackgroundImage, st.BackgroundGradient = first.URL, first.Gradient
+		var more []LayerImage
+		if len(l) > 1 {
+			more = make([]LayerImage, len(l)-1)
+			for i, im := range l[1:] {
+				more[i] = layer(im)
+			}
+		}
+		st.setBackgroundRest(len(more) == 0, func(r *BackgroundLists) { r.Images = more })
+	}, copyFrom: func(dst, src *Style) {
+		dst.BackgroundImage, dst.BackgroundGradient = src.BackgroundImage, src.BackgroundGradient
+		var from []LayerImage
+		if src.BackgroundRest != nil {
+			from = src.BackgroundRest.Images
+		}
+		dst.setBackgroundRest(len(from) == 0, func(r *BackgroundLists) { r.Images = from })
+	}}
 }
 
 var repeatKeywords = map[string]Repeat{
@@ -136,13 +137,12 @@ func repeatValue(v []token) ([2]Repeat, int) {
 	return [2]Repeat{x, x}, 1
 }
 
-func parseBgRepeat(v []token, c *declCtx) (any, bool) {
-	l, ok := firstLayer(v, c, "background-repeat")
-	if !ok {
-		return nil, false
-	}
-	r, n := repeatValue(l)
-	return r, n > 0 && n == len(l)
+// parseBgRepeat parses background-repeat, a <repeat-style> a layer.
+func parseBgRepeat(v []token, _ *declCtx) (any, bool) {
+	return bgList(v, func(p []token) ([2]Repeat, bool) {
+		r, n := repeatValue(p)
+		return r, n > 0 && n == len(p)
+	})
 }
 
 func pctLength(p float64) length { return length{pct: p, hasPct: true} }
@@ -281,70 +281,67 @@ func parseBgPos(v []token) ([2]length, bool) {
 
 // bgPositionShorthand is background-position, the shorthand of
 // background-position-x and background-position-y (CSS Backgrounds 4,
-// 2.4): a <bg-position> of the first layer gives both.
+// 2.4): the <bg-position> of each layer gives both.
 func bgPositionShorthand() shorthandDef {
 	return shorthandDef{
 		longhands: []propID{pBgPosition, pBgPositionY},
-		expand: func(v []token, c *declCtx) ([]entry, bool) {
-			l, ok := firstLayer(v, c, "background-position")
+		expand: func(v []token, _ *declCtx) ([]entry, bool) {
+			l, ok := bgList(v, parseBgPos)
 			if !ok {
 				return nil, false
 			}
-			p, ok := parseBgPos(l)
-			if !ok {
-				return nil, false
+			xs, ys := make([]length, len(l)), make([]length, len(l))
+			for i, p := range l {
+				xs[i], ys[i] = p[0], p[1]
 			}
-			return []entry{{pBgPosition, p[0]}, {pBgPositionY, p[1]}}, true
+			return []entry{{pBgPosition, xs}, {pBgPositionY, ys}}, true
 		},
 	}
 }
 
 // bgPositionAxis defines background-position-x (axis 0) or
-// background-position-y (axis 1) (CSS Backgrounds 4, 2.4): center, or an
-// offset from the start edge, or from left or right (top or bottom), as
-// Chromium parses them; it does not parse x-start and its kin.
+// background-position-y (axis 1) (CSS Backgrounds 4, 2.4): a layer is
+// center, or an offset from the start edge, or from left or right (top
+// or bottom), as Chromium parses them; it does not parse x-start and its
+// kin.
 func bgPositionAxis(axis int) propDef {
 	near, far, name := "left", "right", "background-position-x"
+	list := func(r *BackgroundLists) *[]Dimension { return &r.PositionsX }
 	if axis == 1 {
 		near, far, name = "top", "bottom", "background-position-y"
+		list = func(r *BackgroundLists) *[]Dimension { return &r.PositionsY }
 	}
-	return propDef{
-		name: name,
-		parse: func(v []token, c *declCtx) (any, bool) {
-			l, ok := firstLayer(v, c, name)
-			if !ok || len(l) > 2 {
-				return nil, false
+	item := func(l []token) (length, bool) {
+		if len(l) == 0 || len(l) > 2 {
+			return length{}, false
+		}
+		k := ""
+		if l[0].typ == tIdent {
+			k = lower(l[0].value)
+			l = l[1:]
+		}
+		off := pctLength(0)
+		switch {
+		case k == "center" && len(l) == 0:
+			return pctLength(50), true
+		case k != "" && k != near && k != far, len(l) > 1:
+			return length{}, false
+		case len(l) == 1:
+			var ok bool
+			if off, ok = parseLength(l[0], allowPct|allowMixed|signedBasis); !ok {
+				return length{}, false
 			}
-			k := ""
-			if l[0].typ == tIdent {
-				k = lower(l[0].value)
-				l = l[1:]
-			}
-			off := pctLength(0)
-			switch {
-			case k == "center" && len(l) == 0:
-				return pctLength(50), true
-			case k != "" && k != near && k != far, len(l) > 1:
-				return nil, false
-			case len(l) == 1:
-				if off, ok = parseLength(l[0], allowPct|allowMixed|signedBasis); !ok {
-					return nil, false
-				}
-			case k == "":
-				return nil, false
-			}
-			if k == far {
-				return fromFarEdge(off)
-			}
-			return off, true
-		},
-		compute: func(s *styler, st *Style, v any) {
-			if l, ok := v.(length); ok {
-				st.BackgroundPosition[axis] = l.dim(s.lc, false)
-			}
-		},
-		copyFrom: func(dst, src *Style) { dst.BackgroundPosition[axis] = src.BackgroundPosition[axis] },
+		case k == "":
+			return length{}, false
+		}
+		if k == far {
+			return fromFarEdge(off)
+		}
+		return off, true
 	}
+	return bgListProp(name, func(v []token, _ *declCtx) (any, bool) { return bgList(v, item) },
+		func(s *Style) *Dimension { return &s.BackgroundPosition[axis] }, list,
+		func(s *styler, l length) Dimension { return l.dim(s.lc, false) })
 }
 
 // bgSizeSpec is a specified background-size.
@@ -382,82 +379,67 @@ func sizeValue(v []token) (bgSizeSpec, bool) {
 	return out, true
 }
 
-func parseBgSize(v []token, c *declCtx) (any, bool) {
-	l, ok := firstLayer(v, c, "background-size")
-	if !ok {
-		return nil, false
-	}
-	s, ok := sizeValue(l)
-	return s, ok
-}
+// parseBgSize parses background-size, a <bg-size> a layer.
+func parseBgSize(v []token, _ *declCtx) (any, bool) { return bgList(v, sizeValue) }
 
 // expandBackground expands the background shorthand (CSS Backgrounds 3,
-// 3.10). The first layer gives the image, position, size, repeat and
-// origin; every layer gives its clip and counts in the number of layers;
-// the colour comes from the final layer.
+// 3.10): per layer, an image, a position with an optional size after a
+// slash, a repeat style, an attachment and one or two boxes, the origin
+// then the clip, in any order; the final layer may also name the colour.
+// Each longhand's list holds one entry a layer, the initial value where
+// the layer leaves it out; a longhand no layer names is reset as the
+// initial keyword resets it.
 func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 	layers := splitCommas(v)
-	if len(layers) == 0 {
+	n := len(layers)
+	if n == 0 || n > maxBackgroundLayers {
 		return nil, false
 	}
-	if len(layers) > 1 {
-		c.warn(warn.CSSUnsupported, warn.Omitted, "background: only the first of several background layers is drawn")
-	}
-	out := []entry{
-		{pBgColor, wideInitial},
-		{pBgImage, wideInitial},
-		{pBgRepeat, wideInitial},
-		{pBgPosition, wideInitial},
-		{pBgPositionY, wideInitial},
-		{pBgSize, wideInitial},
-		{pBgOrigin, wideInitial},
-		{pBgClip, wideInitial},
-		{pBgAttachment, wideInitial},
-	}
-	images := bgImageList{layers: len(layers)}
-	clips := make([]BoxEdge, len(layers))
+	var color any = wideInitial
+	images := make(bgImages, n)
+	repeats := make([][2]Repeat, n)
+	xs, ys := make([]length, n), make([]length, n)
+	sizes := make([]bgSizeSpec, n)
+	origins := make([]BoxEdge, n)
+	clips := make([]BoxEdge, n)
+	attaches := make([]Attachment, n)
+	var anyRepeat, anyPos, anySize, anyOrigin, anyAttach bool
 	for li, layer := range layers {
-		final := li == len(layers)-1
-		var color, image, repeat, attach, pos bool
+		final := li == n-1
+		var hasColor, image, repeat, attach, pos bool
 		var boxes []BoxEdge
 		if len(layer) == 0 {
 			return nil, false
 		}
+		repeats[li] = [2]Repeat{RepeatRepeat, RepeatRepeat}
+		xs[li], ys[li] = pctLength(0), pctLength(0)
+		sizes[li] = bgSizeSpec{kind: SizeExplicit, w: dimSpec{kind: Auto}, h: dimSpec{kind: Auto}}
+		origins[li] = PaddingEdge
 		for i := 0; i < len(layer); {
 			t := layer[i]
-			if final && !color {
+			if final && !hasColor {
 				if col, ok := parseColor(t); ok {
-					color = true
-					out[0].v = col
+					hasColor, color = true, col
 					i++
 					continue
 				}
 			}
 			if !image {
 				if u, ok := bgImageValue(t, c, "background"); ok {
-					image = true
-					if li == 0 {
-						images.first = u
-					}
+					image, images[li] = true, u
 					i++
 					continue
 				}
 			}
 			if !repeat {
-				if r, n := repeatValue(layer[i:]); n > 0 {
-					repeat = true
-					if li == 0 {
-						out[2].v = r
-					}
-					i += n
+				if r, k := repeatValue(layer[i:]); k > 0 {
+					repeat, repeats[li], anyRepeat = true, r, true
+					i += k
 					continue
 				}
 			}
 			if a, ok := attachments[lower(t.value)]; ok && !attach && t.typ == tIdent {
-				attach = true
-				if li == 0 {
-					out[8].v = a
-				}
+				attach, attaches[li], anyAttach = true, a, true
 				i++
 				continue
 			}
@@ -483,11 +465,9 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 				if !ok {
 					return nil, false
 				}
-				pos = true
+				pos, anyPos = true, true
+				xs[li], ys[li] = p[0], p[1]
 				i = j
-				if li == 0 {
-					out[3].v, out[4].v = p[0], p[1]
-				}
 				if i < len(layer) && layer[i].isDelim('/') {
 					i++
 					k := i
@@ -500,10 +480,8 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 					if k == i {
 						return nil, false
 					}
-					s, _ := sizeValue(layer[i:k])
-					if li == 0 {
-						out[5].v = s
-					}
+					sizes[li], _ = sizeValue(layer[i:k])
+					anySize = true
 					i = k
 				}
 				continue
@@ -512,16 +490,29 @@ func expandBackground(v []token, c *declCtx) ([]entry, bool) {
 		}
 		switch len(boxes) {
 		case 1:
-			clips[li] = boxes[0]
+			origins[li], clips[li] = boxes[0], boxes[0]
 		case 2:
-			clips[li] = boxes[1]
+			origins[li], clips[li] = boxes[0], boxes[1]
 		}
-		if li == 0 && len(boxes) > 0 {
-			out[6].v = boxes[0]
-		}
+		anyOrigin = anyOrigin || len(boxes) > 0
 	}
-	out[1].v, out[7].v = images, clips
-	return out, true
+	named := func(set bool, l any) any {
+		if !set {
+			return wideInitial
+		}
+		return l
+	}
+	return []entry{
+		{pBgColor, color},
+		{pBgImage, images},
+		{pBgRepeat, named(anyRepeat, repeats)},
+		{pBgPosition, named(anyPos, xs)},
+		{pBgPositionY, named(anyPos, ys)},
+		{pBgSize, named(anySize, sizes)},
+		{pBgOrigin, named(anyOrigin, origins)},
+		{pBgClip, clips},
+		{pBgAttachment, named(anyAttach, attaches)},
+	}, true
 }
 
 // maxImageSetOptions caps the options of one image-set(): 64. Real sets

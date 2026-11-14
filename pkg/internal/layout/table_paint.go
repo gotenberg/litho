@@ -270,47 +270,75 @@ func (p *painter) cellBackgrounds(td *tableData, c *box, pr placedRow) {
 
 // partBackground paints the background of the row, row group, column or
 // column group b where the rectangle clip of the cell c shows it: its
-// image placed on b's own box (CSS 2.1, 17.5.1). Under background-clip:
-// text it paints under the glyphs of c alone (CSS Backgrounds 4, 2.1).
+// layers placed on b's own box (CSS 2.1, 17.5.1). The colour or a layer
+// under background-clip: text paints under the glyphs of c alone (CSS
+// Backgrounds 4, 2.1).
 func (p *painter) partBackground(b, c *box, clip typeset.Rect) {
 	st := b.st
 	if !hasBackground(st) || clip.Width <= 0 || clip.Height <= 0 {
 		return
 	}
-	clipPath := &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{}}
-	if clipToText(st) {
-		if clipPath = p.textClip(c); clipPath == nil {
-			return
+	var tc *typeset.Path
+	textDone := false
+	var g *ditem
+	gText := false
+	flush := func() {
+		if g != nil && len(g.kids) > 0 {
+			into := p.sync(p.chain(b, false))
+			into.kids = append(into.kids, g)
 		}
+		g = nil
 	}
-	g := &ditem{group: true, fx: &groupFx{opacity: 1, clip: clipPath}}
+	// open makes g the group a colour or layer clipped to text, or not,
+	// paints into, false when the cell draws no glyph to clip to.
+	open := func(text bool) bool {
+		if g != nil && gText == text {
+			return true
+		}
+		flush()
+		clipPath := &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{}}
+		if text {
+			if !textDone {
+				tc, textDone = p.textClip(c), true
+			}
+			if clipPath = tc; clipPath == nil {
+				return false
+			}
+		}
+		g, gText = &ditem{group: true, fx: &groupFx{opacity: 1, clip: clipPath}}, text
+		return true
+	}
 	if col, ok := colorOf(st.BackgroundColor); ok {
-		if clipToText(st) {
-			g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{Color: col}}, y0: clip.Y, y1: clip.Y + clip.Height, page: p.mono})
+		if st.BackgroundColorClip() == css.TextEdge {
+			if open(true) {
+				g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{Color: col}}, y0: clip.Y, y1: clip.Y + clip.Height, page: p.mono})
+			}
 		} else {
 			p.emit(b, false, &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{Color: col}}, clip.Y, clip.Y+clip.Height, -1)
 		}
 	}
-	for _, sl := range p.attachedSlices(b, st, p.borderRect(b), clip) {
-		if st.BackgroundGradient != nil {
-			for _, pa := range p.e.gradientTiles(st, sl.area, sl.clip, clip.Y) {
-				g.kids = append(g.kids, &ditem{frag: pa, y0: pa.Ops[0].P[0].Y, y1: pa.Ops[2].P[0].Y, page: p.mono})
-			}
+	for i := st.BackgroundLayerCount() - 1; i >= 0; i-- {
+		l := st.BackgroundLayer(i)
+		if !l.HasImage() || !open(l.Clip == css.TextEdge) {
 			continue
 		}
-		pic := p.e.picture(st.BackgroundImage, clip.Y)
-		if pic == nil {
-			break
-		}
-		for _, t := range p.e.tiles(st, pic, sl.area, sl.clip, clip.Y) {
-			g.kids = append(g.kids, &ditem{frag: &typeset.Image{Rect: t, Source: pic.Source}, y0: t.Y, y1: t.Y + t.Height, page: p.mono})
+		for _, sl := range p.attachedSlices(b, l.Attachment, p.borderRect(b), clip) {
+			if l.Gradient != nil {
+				for _, pa := range p.e.gradientTiles(&l, sl.area, sl.clip, clip.Y) {
+					g.kids = append(g.kids, &ditem{frag: pa, y0: pa.Ops[0].P[0].Y, y1: pa.Ops[2].P[0].Y, page: p.mono})
+				}
+				continue
+			}
+			pic := p.e.picture(l.Image, clip.Y)
+			if pic == nil {
+				break
+			}
+			for _, t := range p.e.tiles(&l, pic, sl.area, sl.clip, clip.Y) {
+				g.kids = append(g.kids, &ditem{frag: &typeset.Image{Rect: t, Source: pic.Source}, y0: t.Y, y1: t.Y + t.Height, page: p.mono})
+			}
 		}
 	}
-	if len(g.kids) == 0 {
-		return
-	}
-	into := p.sync(p.chain(b, false))
-	into.kids = append(into.kids, g)
+	flush()
 }
 
 // tableContent paints the content of every cell of the table box t, row

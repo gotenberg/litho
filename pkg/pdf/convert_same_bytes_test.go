@@ -27,7 +27,7 @@ var sameBytesCases = []struct {
 	want   string
 }{
 	{formatHTML, "html/sources/grid-invoice", "bbeeb8f26e10a8824d8bbfed9c2219b76caa0ac1b2e5a4373f97b822e23c232b"},
-	{formatHTML, "html/sources/backgrounds", "fcf7344290db71856ff67b898c692e6dbcbb7fc637ebc69f1d1fb3b6724ace46"},
+	{formatHTML, "html/sources/backgrounds", "e46a2a7dffbd30ed6224d1a4ff3df9843bc6161f46f53c70e5dd8111482b9232"},
 	{formatHTML, "html/sources/images", "7043ac87a76f1bc2fdf788bf362d438d974ea8f16290b9c69a3259806b5d39fc"},
 	{formatHTML, "html/sources/svg", "b6f7e33b535a9f6978b8a749430112d5ef7e1069753cb7c8ce84209c310f5a56"},
 	{formatHTML, "html/sources/filter-drop-shadow", "5a632d25f3458a092129aa162c9ce41de53546388e32ddc57b190270fce26f01"},

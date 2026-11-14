@@ -18,28 +18,13 @@ const (
 // attachments are the background-attachment keywords.
 var attachments = map[string]Attachment{"scroll": AttachScroll, "fixed": AttachFixed, "local": AttachLocal}
 
-// attachmentProp defines background-attachment, of which [Style] keeps
-// the first layer's value.
+// attachmentProp defines background-attachment, an attachment a layer.
 func attachmentProp() propDef {
-	return propDef{
-		name: "background-attachment",
-		parse: func(v []token, c *declCtx) (any, bool) {
-			l, ok := firstLayer(v, c, "background-attachment")
-			if !ok {
-				return nil, false
-			}
-			k, ok := keyword(l)
-			if !ok {
-				return nil, false
-			}
-			a, ok := attachments[k]
-			return a, ok
-		},
-		compute: func(_ *styler, st *Style, v any) {
-			if a, ok := v.(Attachment); ok {
-				st.BackgroundAttachment = a
-			}
-		},
-		copyFrom: field(func(s *Style) *Attachment { return &s.BackgroundAttachment }),
-	}
+	return bgListProp("background-attachment", func(v []token, _ *declCtx) (any, bool) {
+		return bgList(v, func(p []token) (Attachment, bool) {
+			k, ok := keyword(p)
+			a, known := attachments[k]
+			return a, ok && known
+		})
+	}, func(s *Style) *Attachment { return &s.BackgroundAttachment }, func(r *BackgroundLists) *[]Attachment { return &r.Attachments }, same[Attachment])
 }

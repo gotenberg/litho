@@ -47,8 +47,8 @@ func TestBackgroundClip_ColorTakesTheBottomLayer(t *testing.T) {
 		t.Run(tt.decls, func(t *testing.T) {
 			t.Parallel()
 			st := styleOf(t, tt.decls)
-			if st.BackgroundClip != tt.first || st.BackgroundColorClip != tt.colr {
-				t.Errorf("clips %v and %v, want %v and %v", st.BackgroundClip, st.BackgroundColorClip, tt.first, tt.colr)
+			if st.BackgroundClip != tt.first || st.BackgroundColorClip() != tt.colr {
+				t.Errorf("clips %v and %v, want %v and %v", st.BackgroundClip, st.BackgroundColorClip(), tt.first, tt.colr)
 			}
 		})
 	}
@@ -59,7 +59,7 @@ func TestBackgroundClip_ColorTakesTheBottomLayer(t *testing.T) {
 func TestBackgroundImage_RefusesAnInvalidLayer(t *testing.T) {
 	t.Parallel()
 	st := styleOf(t, "background-image: linear-gradient(red, red); background-image: none, 12px")
-	if st.BackgroundGradient == nil || st.BackgroundLayers != 1 {
-		t.Errorf("gradient %v, %d layers: the invalid list replaced the valid one", st.BackgroundGradient, st.BackgroundLayers)
+	if st.BackgroundGradient == nil || st.BackgroundLayerCount() != 1 {
+		t.Errorf("gradient %v, %d layers: the invalid list replaced the valid one", st.BackgroundGradient, st.BackgroundLayerCount())
 	}
 }

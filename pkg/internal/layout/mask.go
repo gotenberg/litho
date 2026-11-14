@@ -150,9 +150,7 @@ func (p *painter) maskLayer(b *box, l css.MaskLayer) maskLayer {
 			return out
 		}
 	}
-	st := css.Initial()
-	st.BackgroundImage, st.BackgroundGradient = l.Image, l.Gradient
-	st.BackgroundRepeat, st.BackgroundPosition, st.BackgroundSize = l.Repeat, l.Position, l.Size
+	st := &css.BackgroundLayer{Image: l.Image, Gradient: l.Gradient, Repeat: l.Repeat, Position: l.Position, Size: l.Size}
 	var frags []typeset.Fragment
 	if l.Gradient != nil {
 		for _, pa := range p.e.gradientTiles(st, origin, clip, origin.Y) {

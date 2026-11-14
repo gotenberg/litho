@@ -54,26 +54,14 @@ func parseMixBlendMode(v []token, _ *declCtx) (any, bool) {
 	return m, ok
 }
 
-// parseBgBlendMode parses background-blend-mode, a list of <blend-mode>
-// one per background layer (CSS Compositing 1, 3.4), and keeps the first:
-// [Style] holds one background layer.
+// parseBgBlendMode parses background-blend-mode, a <blend-mode> a
+// background layer (CSS Compositing 1, 9.1).
 func parseBgBlendMode(v []token, _ *declCtx) (any, bool) {
-	var first BlendMode
-	layers := splitCommas(v)
-	for i, l := range layers {
-		k, ok := keyword(l)
-		if !ok {
-			return nil, false
-		}
-		m, ok := blendModes[k]
-		if !ok {
-			return nil, false
-		}
-		if i == 0 {
-			first = m
-		}
-	}
-	return first, len(layers) > 0
+	return bgList(v, func(p []token) (BlendMode, bool) {
+		k, ok := keyword(p)
+		m, known := blendModes[k]
+		return m, ok && known
+	})
 }
 
 // compositingProps are the properties of CSS Compositing 1, 3.
@@ -87,7 +75,8 @@ func compositingProps() map[propID]propDef {
 	}
 	return map[propID]propDef{
 		pMixBlendMode: blend("mix-blend-mode", parseMixBlendMode, func(s *Style) *BlendMode { return &s.MixBlendMode }),
-		pBgBlendMode:  blend("background-blend-mode", parseBgBlendMode, func(s *Style) *BlendMode { return &s.BackgroundBlendMode }),
+		pBgBlendMode: bgListProp("background-blend-mode", parseBgBlendMode, func(s *Style) *BlendMode { return &s.BackgroundBlendMode },
+			func(r *BackgroundLists) *[]BlendMode { return &r.BlendModes }, same[BlendMode]),
 		pIsolation: enumProp("isolation", false, func(s *Style) *Isolation { return &s.Isolation }, map[string]Isolation{
 			"auto": IsolationAuto, "isolate": IsolationIsolate,
 		}),

@@ -615,55 +615,70 @@ func (e *engine) paintCanvas(pg *typeset.Page, canvas, rb *box, pb PageBox, k in
 	if canvas == nil {
 		return
 	}
-	st := canvas.st
 	w, h := areaOf(pb)
 	whole := typeset.Rect{X: pb.Margin[css.Left], Y: pb.Margin[css.Top], Width: w, Height: h}
+	e.paintPageLayers(pg, canvas.st, whole, func(l *css.BackgroundLayer) typeset.Rect {
+		if rb == nil || !rb.laidOut || rb.borderW() <= 0 || rb.borderH() <= 0 || l.Attachment == css.AttachFixed {
+			return whole
+		}
+		r := typeset.Rect{X: pb.Margin[css.Left] + rb.x, Y: pb.Margin[css.Top] - e.pageTop(k) + e.noteShift(k) + rb.y, Width: rb.borderW(), Height: rb.borderH()}
+		switch l.Origin {
+		case css.BorderEdge, css.TextEdge:
+		case css.PaddingEdge:
+			r, _ = insetRect(r, [4][2]float64{}, rb.bd)
+		case css.ContentEdge:
+			r, _ = insetRect(r, [4][2]float64{}, addSides(rb.bd, rb.pd))
+		}
+		return r
+	})
+}
+
+// paintPageLayers paints the background of st over the rectangle whole
+// of the page pg: its colour, then its layers from the bottom one up,
+// each positioned in the area areaOf returns for it.
+func (e *engine) paintPageLayers(pg *typeset.Page, st *css.Style, whole typeset.Rect, areaOf func(*css.BackgroundLayer) typeset.Rect) {
 	if c, ok := colorOf(st.BackgroundColor); ok {
 		pg.Content = append(pg.Content, &typeset.Path{Ops: rectOps(whole), Fill: &typeset.Fill{Color: c}})
 	}
-	area := whole
-	if rb != nil && rb.laidOut && rb.borderW() > 0 && rb.borderH() > 0 && st.BackgroundAttachment != css.AttachFixed {
-		r := typeset.Rect{X: pb.Margin[css.Left] + rb.x, Y: pb.Margin[css.Top] - e.pageTop(k) + e.noteShift(k) + rb.y, Width: rb.borderW(), Height: rb.borderH()}
-		switch st.BackgroundOrigin {
-		case css.BorderEdge, css.TextEdge:
-			area = r
-		case css.PaddingEdge:
-			area, _ = insetRect(r, [4][2]float64{}, rb.bd)
-		case css.ContentEdge:
-			area, _ = insetRect(r, [4][2]float64{}, addSides(rb.bd, rb.pd))
+	for i := st.BackgroundLayerCount() - 1; i >= 0; i-- {
+		if l := st.BackgroundLayer(i); l.HasImage() {
+			if g := e.pageLayer(&l, areaOf(&l), whole); g != nil {
+				pg.Content = append(pg.Content, g)
+			}
 		}
 	}
-	e.paintPageLayer(pg, st, area, whole)
 }
 
-// paintPageLayer paints the background image or gradient of st over the
-// rectangle whole of the page pg, positioned in area.
-func (e *engine) paintPageLayer(pg *typeset.Page, st *css.Style, area, whole typeset.Rect) {
+// pageLayer returns the group painting the image or gradient of the
+// background layer l over the rectangle whole, positioned in area; nil
+// when it paints nothing.
+func (e *engine) pageLayer(l *css.BackgroundLayer, area, whole typeset.Rect) *typeset.Group {
 	g := &typeset.Group{Transform: typeset.Identity, Opacity: 1, Clip: &typeset.Path{Ops: rectOps(whole), Fill: &typeset.Fill{}}}
 	switch {
-	case st.BackgroundGradient != nil:
-		for _, pa := range e.gradientTiles(st, area, whole, -1) {
+	case l.Gradient != nil:
+		for _, pa := range e.gradientTiles(l, area, whole, -1) {
 			g.Content = append(g.Content, pa)
 		}
-	case st.BackgroundImage != "":
-		pic := e.picture(st.BackgroundImage, -1)
+	case l.Image != "":
+		pic := e.picture(l.Image, -1)
 		if pic == nil {
-			return
+			return nil
 		}
-		for _, t := range e.tiles(st, pic, area, whole, -1) {
+		for _, t := range e.tiles(l, pic, area, whole, -1) {
 			g.Content = append(g.Content, &typeset.Image{Rect: t, Source: pic.Source})
 		}
 	}
-	if len(g.Content) > 0 {
-		pg.Content = append(pg.Content, g)
+	if len(g.Content) == 0 {
+		return nil
 	}
+	return g
 }
 
 // paintPageBackground paints the page box's own background on pg, under
 // the canvas (CSS Page 3, page backgrounds and painting order): its colour
-// over the whole page, its image or gradient positioned in the page box's
-// area, the page inside its margins, which has no border or padding. A
-// root element that generates no box leaves the page blank, background
+// over the whole page, its layers positioned in the page box's area, the
+// page inside its margins, which has no border or padding. A root
+// element that generates no box leaves the page blank, background
 // included, as browsers print it.
 //
 // # Corpus evidence
@@ -677,17 +692,17 @@ func (e *engine) paintPageBackground(pg *typeset.Page, pb PageBox) {
 		return
 	}
 	whole := typeset.Rect{Width: pg.Width, Height: pg.Height}
-	if c, ok := colorOf(st.BackgroundColor); ok {
-		pg.Content = append(pg.Content, &typeset.Path{Ops: rectOps(whole), Fill: &typeset.Fill{Color: c}})
-	}
 	w, h := areaOf(pb)
 	area := typeset.Rect{X: pb.Bleed + pb.Margin[css.Left], Y: pb.Bleed + pb.Margin[css.Top], Width: w, Height: h}
-	if st.BackgroundAttachment == css.AttachFixed {
-		// A fixed background is positioned in the viewport, which on
-		// paper is the page box (CSS Backgrounds 3, 3.5; CSS Page 3, 3.3).
-		area = typeset.Rect{X: pb.Bleed, Y: pb.Bleed, Width: pb.Width, Height: pb.Height}
-	}
-	e.paintPageLayer(pg, st, area, whole)
+	e.paintPageLayers(pg, st, whole, func(l *css.BackgroundLayer) typeset.Rect {
+		if l.Attachment == css.AttachFixed {
+			// A fixed background is positioned in the viewport, which on
+			// paper is the page box (CSS Backgrounds 3, 3.5; CSS Page 3,
+			// 3.3).
+			return typeset.Rect{X: pb.Bleed, Y: pb.Bleed, Width: pb.Width, Height: pb.Height}
+		}
+		return area
+	})
 }
 
 // dest converts a flow position to a destination.

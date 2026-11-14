@@ -323,7 +323,8 @@ func TestBackgroundRound_KeepsRatio(t *testing.T) {
 	})
 	e := &engine{}
 	area := typeset.Rect{Width: 8, Height: 12}
-	tiles := e.tiles(st, pic(color.NRGBA{B: 255, A: 255}, 4, 4), area, area, 0)
+	l := st.BackgroundLayer(0)
+	tiles := e.tiles(&l, pic(color.NRGBA{B: 255, A: 255}, 4, 4), area, area, 0)
 	if len(tiles) == 0 || tiles[0].Width != 8 || tiles[0].Height != 8 {
 		t.Errorf("tiles %v, want 8 by 8", tiles)
 	}

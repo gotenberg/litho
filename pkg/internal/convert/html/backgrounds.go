@@ -32,13 +32,12 @@ import (
 //     or gradient, with its border and box shadow; with
 //     printBackground=true it prints the background.
 func withoutBackground(st *css.Style) *css.Style {
-	if st == nil || st.BackgroundColor.A == 0 && st.BackgroundImage == "" && st.BackgroundGradient == nil {
+	if st == nil || st.BackgroundColor.A == 0 && !st.HasBackgroundImage() {
 		return st
 	}
 	c := *st
 	c.BackgroundColor = css.Color{}
-	c.BackgroundImage = ""
-	c.BackgroundGradient = nil
+	c.ClearBackgroundImages()
 	return &c
 }
 

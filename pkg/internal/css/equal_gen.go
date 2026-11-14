@@ -237,16 +237,13 @@ func equalStyle(a, b *Style) bool {
 	if a.BackgroundClip != b.BackgroundClip {
 		return false
 	}
-	if a.BackgroundColorClip != b.BackgroundColorClip {
-		return false
-	}
-	if a.BackgroundLayers != b.BackgroundLayers {
-		return false
-	}
 	if a.BackgroundBlendMode != b.BackgroundBlendMode {
 		return false
 	}
 	if a.BackgroundAttachment != b.BackgroundAttachment {
+		return false
+	}
+	if a.BackgroundRest != b.BackgroundRest {
 		return false
 	}
 	if (a.BoxShadow == nil) != (b.BoxShadow == nil) || len(a.BoxShadow) != len(b.BoxShadow) {
@@ -881,10 +878,9 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = hashBackgroundSize(h, &x.BackgroundSize)
 	h = mix(h, uint64(x.BackgroundOrigin))
 	h = mix(h, uint64(x.BackgroundClip))
-	h = mix(h, uint64(x.BackgroundColorClip))
-	h = mix(h, uint64(x.BackgroundLayers))
 	h = mix(h, uint64(x.BackgroundBlendMode))
 	h = mix(h, uint64(x.BackgroundAttachment))
+	h = mixBool(h, x.BackgroundRest != nil)
 	h = mixBool(h, x.BoxShadow == nil)
 	h = mix(h, uint64(len(x.BoxShadow)))
 	for i1 := range x.BoxShadow {
