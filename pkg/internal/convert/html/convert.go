@@ -320,6 +320,9 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	if err != nil {
 		return nil, fmt.Errorf("computing styles: %w", err)
 	}
+	// namedFirst is the box of a first page the root's start page value
+	// names, nil for none.
+	var namedFirst *layout.PageBox
 	if name := startPage(computed, scan.root); name != "" && resolver.HasNamedPages() && !setup.measure {
 		// The first page takes the root's start page value (CSS Page 3,
 		// 4.1), and the viewport units its page area: compute again when
@@ -328,6 +331,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 		if err != nil {
 			return nil, err
 		}
+		namedFirst = &named
 		vw, vh := media.ViewportWidth, media.ViewportHeight
 		if vw == 0 && vh == 0 {
 			vw, vh = media.Width, media.Height
@@ -353,6 +357,13 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	setup, fitWarns := unfit.fitFactor(append(boxes, first)...)
 	pageWarns = append(pageWarns, fitWarns...)
 	sourceFirst := page
+	if namedFirst != nil {
+		// A document wider than its first page shrinks to fit that page's
+		// area, the one its initial containing block takes (CSS Page 3,
+		// 4.1 and 5.1), as Chromium shrinks it
+		// (blink::CalculateOverflowShrinkForPrinting).
+		sourceFirst = *namedFirst
+	}
 	page = setup.layoutBox(page)
 	if at := pageAt; at != nil {
 		pageAt = func(i int) layout.PageBox { return setup.layoutBox(at(i)) }

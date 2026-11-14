@@ -222,6 +222,7 @@ func TestConvert_ShrinksWideContentToFit(t *testing.T) {
 		{"refused", `<div style="width:800pt;height:5pt"></div>`, Options{NoShrinkToFit: true}, 1},
 		{"with a scale", `<div style="width:2000pt;height:5pt"></div>`, Options{Scale: 0.5}, 1 / 3.0},
 		{"clipped overflow", `<div style="width:100pt;overflow:hidden"><div style="width:2000pt;height:5pt"></div></div>`, Options{}, 1},
+		{"wider than the default page, not than the first", `<style>@page { size: 200pt 200pt; margin: 0 } @page big { size: 400pt 600pt }</style><div style="page:big;width:380pt;height:5pt"></div>`, Options{}, 1},
 		{"unbreakable text", `<p style="white-space:nowrap;margin:0">` + strings.Repeat("x", 120) + `</p>`, Options{}, w / (120 * 6)},
 	}
 	for _, tt := range tests {
