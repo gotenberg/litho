@@ -312,3 +312,49 @@ func TestRubyLineBesideFloat(t *testing.T) {
 		t.Errorf("next line at (%g, %g), want (0, %g)", x, y, 48+12+36.0)
 	}
 }
+
+// TestRubyOverhangSpaces locks ruby-overhang: spaces (CSS Ruby 1, 5.1 of
+// the editor's draft): the annotation hangs over the spaces beside its
+// column as far as they reach, and over nothing else.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 lays a 60px
+//     annotation over a 20px base between two no-break spaces out as wide
+//     as the annotation, and between two letters 40px wider.
+func TestRubyOverhangSpaces(t *testing.T) {
+	t.Parallel()
+	spaces := func(s *css.Style) { s.RubyOverhang = css.RubyOverhangSpaces }
+	for _, c := range []struct {
+		sep   string
+		after float64
+	}{
+		// The 120px annotation reaches 40px past its base on each side:
+		// over the 40px no-break spaces, whose run after the column then
+		// starts where the base ends, or over nothing.
+		{"\u00a0", 160}, {"", 200},
+	} {
+		block, ruby, rt := rubyDoc(1, spaces)
+		res := run(t, el(block, txt(block, "xx"+c.sep), el(ruby, txt(ruby, "A"), el(rt, txt(rt, "abcdef"))), txt(block, c.sep+"yy")), page(600, 300))
+		if x, _ := placed(t, res, "abcdef"); !near(x, 80) {
+			t.Errorf("separator %q: annotation at %g, want 80", c.sep, x)
+		}
+		if x, _ := placed(t, res, c.sep+"yy"); !near(x, c.after) {
+			t.Errorf("separator %q: text after at %g, want %g", c.sep, x, c.after)
+		}
+	}
+	for _, c := range []struct {
+		r            rune
+		after        bool
+		share        float64
+		hangsOnAfter bool
+	}{
+		{' ', false, 1, true}, {'　', true, 1, true}, {'\t', true, 1, true},
+		{'（', true, 0.5, false}, {'（', false, 0, false},
+		{'）', false, 0.5, false}, {'・', true, 0.25, false}, {'a', true, 0, false},
+	} {
+		if share, on := overhangSpace(c.r, c.after); share != c.share || on != c.hangsOnAfter {
+			t.Errorf("%U after %t: %g, %t; want %g, %t", c.r, c.after, share, on, c.share, c.hangsOnAfter)
+		}
+	}
+}

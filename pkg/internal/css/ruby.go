@@ -39,14 +39,19 @@ const (
 // over the text beside it.
 type RubyOverhang uint8
 
-// The ruby-overhang values Chromium parses. The draft's spaces value is
-// refused, as Chromium refuses it.
+// The ruby-overhang values Chromium parses: the draft's auto and spaces
+// (5.1 of the editor's draft), and none, which the draft no longer
+// holds.
 const (
 	// RubyOverhangAuto lets an annotation hang over the text beside its
 	// ruby, the initial value.
 	RubyOverhangAuto RubyOverhang = iota
-	// RubyOverhangNone keeps an annotation inside its ruby.
+	// RubyOverhangNone lets an annotation hang over the spaces beside its
+	// ruby alone, as RubyOverhangSpaces does: Chromium lays none out so.
 	RubyOverhangNone
+	// RubyOverhangSpaces lets an annotation hang over the spaces beside
+	// its ruby alone.
+	RubyOverhangSpaces
 )
 
 // rubyProps returns the properties of CSS Ruby 1: ruby-position,
@@ -60,7 +65,7 @@ func rubyProps() map[propID]propDef {
 			"space-around": RubySpaceAround, "start": RubyStart, "center": RubyCenter, "space-between": RubySpaceBetween,
 		}),
 		pRubyOverhang: enumProp("ruby-overhang", true, func(s *Style) *RubyOverhang { return &s.RubyOverhang }, map[string]RubyOverhang{
-			"auto": RubyOverhangAuto, "none": RubyOverhangNone,
+			"auto": RubyOverhangAuto, "none": RubyOverhangNone, "spaces": RubyOverhangSpaces,
 		}),
 	}
 }

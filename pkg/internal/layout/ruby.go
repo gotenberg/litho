@@ -364,9 +364,15 @@ func (s *inlineState) rubyAlign(l *lineBox, free float64, ltr bool) float64 {
 // agent). The text beside it must be a text run at most as large as the
 // ruby's, with no inline box opening or closing in between; another
 // column takes none.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 lays a 60px
+//     annotation over a 20px base out alike under ruby-overhang: none and
+//     spaces, beside spaces, brackets, middle dots and letters.
 func (e *engine) rubyOverhang(p *ifcPara, i int, a *box) {
 	r := a.ruby
-	if r.ann == nil || len(r.ann.lines) == 0 || len(r.base.lines) == 0 || a.st.RubyOverhang == css.RubyOverhangNone {
+	if r.ann == nil || len(r.ann.lines) == 0 || len(r.base.lines) == 0 {
 		// An annotation over an empty base hangs over nothing.
 		return
 	}
@@ -397,12 +403,71 @@ func (e *engine) rubyOverhang(p *ifcPara, i int, a *box) {
 		start, end = end, start
 	}
 	room := [4]float64{css.Left: r.inStart, css.Right: r.inEnd}
+	if a.st.RubyOverhang != css.RubyOverhangAuto {
+		// The annotation hangs over the spaces beside the column alone,
+		// as far as they reach: under none as under spaces, as Chromium
+		// lays none out.
+		var before, after float64
+		for j := i - 1; beside(j, j+1); j-- {
+			w, whole := overhangSpace(p.p.Rune(j), false)
+			before += float64(w * p.p.Advance(j))
+			if !whole {
+				break
+			}
+		}
+		for j := i + 1; beside(j, j); j++ {
+			w, whole := overhangSpace(p.p.Rune(j), true)
+			after += float64(w * p.p.Advance(j))
+			if !whole {
+				break
+			}
+		}
+		a.m[start] = -min(before, room[start])
+		a.m[end] = -min(after, room[end])
+		return
+	}
 	if beside(i-1, i) {
 		a.m[start] = -min(half, room[start])
 	}
 	if beside(i+1, i+1) {
 		a.m[end] = -min(half, room[end])
 	}
+}
+
+// overhangSpace returns the share of the advance of r, a character beside
+// a ruby column, an annotation under ruby-overhang: spaces hangs over,
+// and whether the annotation may hang on past it; after reports a
+// character after the column. The draft of CSS Ruby 1, 5.1 lets it hang
+// over preserved white space, the no-break space and the other space
+// separators, half of a fullwidth opening punctuation after the column
+// and of a closing one before it, the halves its glyph leaves blank, and
+// a quarter of a fullwidth middle dot on either side.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 lays a 60px
+//     annotation over a 20px base between two characters and two spaces,
+//     no-break spaces, ideographic spaces or thin spaces out as wide as
+//     the annotation and the two characters, two no-break spaces on a
+//     side alike; with U+FF08 after the column or U+FF09 before it, 10px
+//     wider than without it; with U+30FB on each side, 20px wider.
+func overhangSpace(r rune, after bool) (float64, bool) {
+	switch {
+	case r == '\t' || r == '\u00A0' || unicode.Is(unicode.Zs, r):
+		return 1, true
+	case r == '\u30FB' || r == '\uFF65':
+		return 0.25, false
+	case after && unicode.Is(unicode.Ps, r) && fullwidth(r), !after && unicode.Is(unicode.Pe, r) && fullwidth(r):
+		return 0.5, false
+	}
+	return 0, false
+}
+
+// fullwidth reports a character of the CJK Symbols and Punctuation block
+// or of the fullwidth forms of the Halfwidth and Fullwidth Forms block,
+// whose punctuation takes a whole em.
+func fullwidth(r rune) bool {
+	return r >= 0x3000 && r <= 0x303F || r >= 0xFF00 && r <= 0xFF60
 }
 
 // newRubyBox returns the inline box of an anonymous ruby container of

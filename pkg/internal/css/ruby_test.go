@@ -47,7 +47,8 @@ func TestRuby_Properties(t *testing.T) {
 			return s.RubyAlign == RubySpaceAround && s.RubyPosition == RubyOver && s.RubyOverhang == RubyOverhangAuto
 		}},
 		{"ruby-overhang: none", func(s *Style) bool { return s.RubyOverhang == RubyOverhangNone }},
-		{"ruby-overhang: none; ruby-overhang: spaces", func(s *Style) bool { return s.RubyOverhang == RubyOverhangNone }},
+		{"ruby-overhang: none; ruby-overhang: spaces", func(s *Style) bool { return s.RubyOverhang == RubyOverhangSpaces }},
+		{"ruby-overhang: spaces; ruby-overhang: all", func(s *Style) bool { return s.RubyOverhang == RubyOverhangSpaces }},
 		{"display: ruby", func(s *Style) bool { return s.Display == Ruby }},
 		{"display: inline ruby", func(s *Style) bool { return s.Display == Ruby }},
 		{"display: block ruby", func(s *Style) bool { return s.Display == BlockRuby }},
