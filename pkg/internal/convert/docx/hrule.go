@@ -54,7 +54,7 @@ func (d *document) vmlHorizontalRule(k *ooxml.Element, st *css.Style, w, h float
 		ps.Width = css.Dimension{Kind: css.Percent, Value: pct}
 	}
 	fill := typeset.Color{R: 0xA0 / 255.0, G: 0xA0 / 255.0, B: 0xA0 / 255.0, A: 1}
-	if ss := vmlShapeStyle(k); ss.Fill != nil {
+	if ss := vmlShapeStyle(k, d.vmlTypeOf(k)); ss.Fill != nil {
 		fill = typeset.Color{R: ss.Fill.R, G: ss.Fill.G, B: ss.Fill.B, A: ss.Fill.A}
 	}
 	noShade, _ := k.AttrNS(ooxml.NSO, "hrnoshade")

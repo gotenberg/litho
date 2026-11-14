@@ -184,7 +184,7 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 	if k.Local == "group" {
 		return d.vmlGroup(s, k, st, w, h, depth)
 	}
-	ss := vmlShapeStyle(k)
+	ss := vmlShapeStyle(k, d.vmlTypeOf(k))
 	if tb := k.Child(ooxml.NSV, "textbox"); tb != nil {
 		if content := tb.Child(ooxml.NSW, "txbxContent"); content != nil {
 			n := d.textBox(s, content, w, h, ss, vmlInsets(attrOr(tb, "inset")), attrOr(k, "alt"), depth)
@@ -306,18 +306,28 @@ func (d *document) vmlType(k *ooxml.Element) int {
 // it uses, a few dozen at most.
 const maxVMLTypes = 4096
 
-// vmlShapeStyle returns the fill and stroke of a VML shape (Part 4,
-// 14.1.2.19 filled, fillcolor, stroked, strokecolor, strokeweight, and
-// the v:fill and v:stroke children): a white fill and a black stroke of
-// 0.75 point by default, a fill's opacity as its colour's alpha.
-func vmlShapeStyle(k *ooxml.Element) ooxml.ShapeStyle {
+// vmlShapeStyle returns the fill and stroke of a VML shape k of shape
+// type typ (nil for none) (Part 4, 14.1.2.19 filled, fillcolor, stroked,
+// strokecolor, strokeweight, and the v:fill and v:stroke children): a
+// white fill and a black stroke of 0.75 point by default, a fill's
+// opacity as its colour's alpha. What k leaves unsaid its type says
+// (14.1.2.20 shapetype: a shape takes the attributes and children of the
+// type it names).
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx: ooxmlimport/groupshape-fontname.docx prints no
+//     outline and no fill for its canvas shape of type _x0000_t75, whose
+//     shape type alone says filled="f" stroked="f".
+func vmlShapeStyle(k, typ *ooxml.Element) ooxml.ShapeStyle {
+	in := vmlInherit{k, typ}
 	var ss ooxml.ShapeStyle
-	if vmlOn(k, "filled") {
+	if vmlOn(in.holder("filled"), "filled") {
 		c := css.Color{R: 1, G: 1, B: 1, A: 1}
-		if v, ok := ooxml.VMLColor(attrOr(k, "fillcolor")); ok {
+		if v, ok := ooxml.VMLColor(in.attr("fillcolor")); ok {
 			c = v
 		}
-		fill := k.Child(ooxml.NSV, "fill")
+		fill := in.child("fill")
 		if fill != nil {
 			if v, ok := ooxml.VMLColor(attrOr(fill, "color")); ok {
 				c = v
@@ -331,16 +341,16 @@ func vmlShapeStyle(k *ooxml.Element) ooxml.ShapeStyle {
 			ss.Gradient = vmlGradient(fill, c)
 		}
 	}
-	if vmlOn(k, "stroked") {
+	if vmlOn(in.holder("stroked"), "stroked") {
 		c := css.Color{A: 1}
-		if v, ok := ooxml.VMLColor(attrOr(k, "strokecolor")); ok {
+		if v, ok := ooxml.VMLColor(in.attr("strokecolor")); ok {
 			c = v
 		}
 		ss.LineWidth = pxPt
-		if v, ok := ooxml.Measure(strings.TrimSuffix(attrOr(k, "strokeweight"), "px"), 1); ok {
+		if v, ok := ooxml.Measure(strings.TrimSuffix(in.attr("strokeweight"), "px"), 1); ok {
 			ss.LineWidth = max(0, v)
 		}
-		stroke := k.Child(ooxml.NSV, "stroke")
+		stroke := in.child("stroke")
 		if stroke != nil {
 			if v, ok := ooxml.VMLColor(attrOr(stroke, "color")); ok {
 				c = v
@@ -354,6 +364,45 @@ func vmlShapeStyle(k *ooxml.Element) ooxml.ShapeStyle {
 		}
 	}
 	return ss
+}
+
+// vmlInherit reads a VML shape's attributes and children, its shape
+// type's where the shape has none (Part 4, 14.1.2.20).
+type vmlInherit struct{ k, typ *ooxml.Element }
+
+// holder returns the element that sets the attribute name: the shape,
+// else its type, else nil.
+func (in vmlInherit) holder(name string) *ooxml.Element {
+	if _, ok := in.k.Attr(name); ok {
+		return in.k
+	}
+	if _, ok := in.typ.Attr(name); ok {
+		return in.typ
+	}
+	return nil
+}
+
+// attr returns the attribute name of the shape, else of its type.
+func (in vmlInherit) attr(name string) string {
+	return attrOr(in.holder(name), name)
+}
+
+// child returns the VML child local of the shape, else of its type.
+func (in vmlInherit) child(local string) *ooxml.Element {
+	if c := in.k.Child(ooxml.NSV, local); c != nil {
+		return c
+	}
+	return in.typ.Child(ooxml.NSV, local)
+}
+
+// vmlTypeOf returns the v:shapetype a VML shape names by its type
+// attribute, nil for none.
+func (d *document) vmlTypeOf(k *ooxml.Element) *ooxml.Element {
+	id, ok := k.Attr("type")
+	if !ok {
+		return nil
+	}
+	return d.vmlTypeElems[strings.TrimPrefix(id, "#")]
 }
 
 // vmlGradient returns the linear gradient of a v:fill of type gradient

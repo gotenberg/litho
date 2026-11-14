@@ -89,7 +89,7 @@ func (d *document) vmlTextPath(k *ooxml.Element, st *css.Style, w, h float64) *l
 		ts.Weight = 700
 	}
 	trim := on("trim")
-	ss := vmlShapeStyle(k)
+	ss := vmlShapeStyle(k, typ)
 	shadow, shadowDX, shadowDY := vmlShadow(k)
 	fonts := d.fonts
 	ps := inlineStyle(st)

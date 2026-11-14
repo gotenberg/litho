@@ -62,24 +62,33 @@ func TestVML_Shapes(t *testing.T) {
 	}
 }
 
+// TestVMLShapeStyle locks the fill and stroke of a VML shape, which takes
+// what it leaves unsaid from its shape type (ECMA-376 Part 4, 14.1.2.20).
 func TestVMLShapeStyle(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name         string
-		xml          string
+		xml, typ     string
 		fill, stroke bool
 		width        float64
 	}{
-		{"defaults", `<v:rect/>`, true, true, 0.75},
-		{"none", `<v:rect filled="f" stroked="false"/>`, false, false, 0},
-		{"children off", `<v:rect><v:fill on="f"/><v:stroke on="f"/></v:rect>`, false, false, 0.75},
-		{"weight", `<v:rect strokeweight="2pt" strokecolor="red"/>`, true, true, 2},
+		{"defaults", `<v:rect/>`, "", true, true, 0.75},
+		{"none", `<v:rect filled="f" stroked="false"/>`, "", false, false, 0},
+		{"children off", `<v:rect><v:fill on="f"/><v:stroke on="f"/></v:rect>`, "", false, false, 0.75},
+		{"weight", `<v:rect strokeweight="2pt" strokecolor="red"/>`, "", true, true, 2},
+		{"type off", `<v:shape/>`, `<v:shapetype filled="f" stroked="f"/>`, false, false, 0},
+		{"shape over type", `<v:shape filled="t"/>`, `<v:shapetype filled="f" strokeweight="3pt"/>`, true, true, 3},
+		{"type child", `<v:shape/>`, `<v:shapetype><v:stroke on="f"/></v:shapetype>`, true, false, 0},
 	} {
-		root, err := ooxml.Parse(t.Context(), []byte(`<w:pict `+nsDecl+`>`+tc.xml+`</w:pict>`), nil)
+		root, err := ooxml.Parse(t.Context(), []byte(`<w:pict `+nsDecl+`>`+tc.xml+tc.typ+`</w:pict>`), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		ss := vmlShapeStyle(root.Kids()[0])
+		var typ *ooxml.Element
+		if tc.typ != "" {
+			typ = root.Kids()[1]
+		}
+		ss := vmlShapeStyle(root.Kids()[0], typ)
 		if (ss.Fill != nil) != tc.fill || (ss.Line != nil) != tc.stroke || (tc.stroke && ss.LineWidth != tc.width) {
 			t.Errorf("%s: fill %v stroke %v width %v", tc.name, ss.Fill, ss.Line, ss.LineWidth)
 		}
