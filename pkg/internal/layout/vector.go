@@ -37,6 +37,9 @@ func (e *engine) pictureFrag(pic *Picture, r typeset.Rect, parent *typeset.Struc
 		}
 		return &typeset.Group{Opacity: 1, Transform: typeset.Identity, Clip: &typeset.Path{Ops: rectOps(r), Fill: &typeset.Fill{}}, Content: []typeset.Fragment{f}}
 	}
+	if pic.Gradient != nil {
+		return e.gradientRect(pic.Gradient, r)
+	}
 	if pic.Vector == nil {
 		return &typeset.Image{Rect: r, Source: pic.Source, Parent: parent}
 	}
@@ -123,7 +126,7 @@ func (e *engine) fitLeaf(f typeset.Fragment, depth int) typeset.Fragment {
 // the default sizing algorithm against the area). Any other picture is
 // returned as it is.
 func naturalPicture(pic *Picture, w, h float64) *Picture {
-	if pic.Vector == nil || !pic.NoNaturalWidth && !pic.NoNaturalHeight || !numeric.Positive(w) || !numeric.Positive(h) {
+	if !pic.scalable() || !pic.NoNaturalWidth && !pic.NoNaturalHeight || !numeric.Positive(w) || !numeric.Positive(h) {
 		return pic
 	}
 	p := *pic
@@ -154,6 +157,10 @@ func naturalPicture(pic *Picture, w, h float64) *Picture {
 	return &p
 }
 
+// scalable reports a picture drawn at any size, a vector or a gradient,
+// which may lack a natural size.
+func (p *Picture) scalable() bool { return p.Vector != nil || p.Gradient != nil }
+
 // vectorTiles trims the tiles of a vector background to the
 // [maxVectorNodes] budget, one fragment per tile counted at least.
 func (e *engine) vectorTiles(tiles []typeset.Rect, nodes int, y float64) []typeset.Rect {
@@ -178,7 +185,7 @@ func pictureRatio(pic *Picture) float64 {
 // has the box's, through its ratio for contain, cover, none and
 // scale-down.
 func objectPicture(st *css.Style, pic *Picture, w, h float64) *Picture {
-	if pic.Vector == nil || !pic.NoNaturalWidth && !pic.NoNaturalHeight {
+	if !pic.scalable() || !pic.NoNaturalWidth && !pic.NoNaturalHeight {
 		return pic
 	}
 	if st.ObjectFit == css.FitFill {

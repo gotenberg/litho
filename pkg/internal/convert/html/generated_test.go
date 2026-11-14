@@ -5,6 +5,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -225,5 +226,35 @@ func TestGenerated_CountersSaturateAtTheIntegerRange(t *testing.T) {
 		if got := byID(t, p.root, id).ListValue; got != want {
 			t.Errorf("#%s: list value %d, want %d", id, got, want)
 		}
+	}
+}
+
+// TestGenerated_ContentReplacement locks that an element whose content is
+// one image is replaced by it (CSS Generated Content 3, 1.1,
+// <content-replacement>), its children dropped, a gradient included, and
+// that a pseudo-element's gradient fills the pseudo-element, as Chromium
+// draws it; a content list of more than an image replaces nothing.
+func TestGenerated_ContentReplacement(t *testing.T) {
+	t.Parallel()
+	fsys := fstest.MapFS{"a.png": {Data: pngBytes(t, 3, 3)}}
+	p := prep(t, `<style>
+		#u { content: url(a.png) / "Logo" }
+		#g { content: linear-gradient(red, blue) }
+		#l { content: url(a.png) "x" }
+		#p::before { content: linear-gradient(red, blue); display: block }
+		</style><div id=u>gone</div><div id=g>gone</div><div id=l>kept</div><div id=p></div>`, Options{Resources: fsys})
+	if u := byID(t, p.root, "u"); u.Kind != layout.Replaced || u.Picture == nil || u.Picture.Source == nil || len(u.Children) != 0 || u.Alt != "Logo" {
+		t.Errorf("#u %+v, want the image in place of the text, alt Logo", u)
+	}
+	if g := byID(t, p.root, "g"); g.Kind != layout.Replaced || g.Picture == nil || g.Picture.Gradient == nil || !g.Picture.NoRatio {
+		t.Errorf("#g %+v, want the gradient in place of the text", g)
+	}
+	if l := byID(t, p.root, "l"); l.Kind == layout.Replaced || treeText(l) != "kept" {
+		t.Errorf("#l %+v, want its text", l)
+	}
+	before := byID(t, p.root, "p").Children[0]
+	if len(before.Children) != 1 || before.Children[0].Picture == nil || before.Children[0].Picture.Gradient == nil ||
+		before.Children[0].Style.Width != (css.Dimension{Kind: css.Percent, Value: 1}) {
+		t.Errorf("::before %+v, want the gradient filling it", before.Children)
 	}
 }

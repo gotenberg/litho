@@ -64,6 +64,12 @@ type Picture struct {
 	// it unset the ratio is Width over Height. A raster picture leaves all
 	// three unset.
 	NoNaturalWidth, NoNaturalHeight, NoRatio bool
+	// Gradient, when set, makes the picture a CSS gradient the engine
+	// paints over r (CSS Images 3, 3), Source and Vector being nil: an
+	// image with no natural size or ratio, which sets the three flags
+	// above and holds in Width and Height the size it takes when nothing
+	// else sizes it.
+	Gradient *css.Gradient
 	// view, when set, is the part of the picture an object-view-box makes
 	// its whole: Width and Height are then the part's size.
 	view *viewBox

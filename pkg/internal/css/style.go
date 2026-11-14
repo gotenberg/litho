@@ -830,7 +830,8 @@ const (
 	ItemCloseQuote
 	ItemNoOpenQuote
 	ItemNoCloseQuote
-	// ItemImage is the image at the resolved URL Text (url()).
+	// ItemImage is the image at the resolved URL Text (url()), or the
+	// gradient Gradient, an image with no natural size or ratio.
 	ItemImage
 	// ItemLeader is a leader, Text its string repeated to fill the line
 	// (CSS Generated Content 3, leader(); CSS GCPM 3, 5 moved it there).
@@ -886,11 +887,18 @@ type ContentItem struct {
 	// that holds it (attr()).
 	Target     string
 	TargetAttr bool
+	// Gradient is the gradient an ItemImage paints, nil for a url(). It
+	// is shared and never mutated.
+	Gradient *Gradient
+	// gradient is the specified gradient of an ItemImage, which the
+	// cascade computes into Gradient.
+	gradient *gradientSpec
 }
 
-// Content is the content property of a pseudo-element (CSS Generated
-// Content 3, 1.1). It is not inherited; litho reads it on ::before,
-// ::after and ::marker alone.
+// Content is the content property (CSS Generated Content 3, 1.1). It is
+// not inherited; litho reads a content list on ::before, ::after and
+// ::marker, and one image alone on an element, which it replaces (CSS
+// Generated Content 3, 1.1, <content-replacement>).
 type Content struct {
 	Kind ContentKind
 	// Items are the items of a ContentList, at least one.

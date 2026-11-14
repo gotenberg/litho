@@ -26,13 +26,28 @@ const maxQuoteDepth = 32
 func contentProp() propDef {
 	return propDef{
 		name: "content", parse: parseContent,
-		compute: func(_ *styler, st *Style, v any) {
+		compute: func(s *styler, st *Style, v any) {
 			if c, ok := v.(Content); ok {
-				st.Content = c
+				st.Content = computeContent(s, st, c)
 			}
 		},
 		copyFrom: field(func(s *Style) *Content { return &s.Content }),
 	}
+}
+
+// computeContent computes the gradients of c's image items against the
+// element's lengths and colour, on a copy of the items.
+func computeContent(s *styler, st *Style, c Content) Content {
+	if !slices.ContainsFunc(c.Items, func(it ContentItem) bool { return it.gradient != nil }) {
+		return c
+	}
+	c.Items = slices.Clone(c.Items)
+	for i := range c.Items {
+		if g := c.Items[i].gradient; g != nil {
+			c.Items[i].Gradient, c.Items[i].gradient = g.compute(s.lc, st.Color), nil
+		}
+	}
+	return c
 }
 
 // contentKeywords are the quote items of a content list.
@@ -148,6 +163,15 @@ func contentItem(t token, c *declCtx) (ContentItem, bool) {
 	}
 	if it, known, valid := gcpmItem(name, args); known {
 		return it, valid
+	}
+	// CSS Generated Content 3, 1.1: an item may be any <image>; the
+	// gradients and image(<color>) are painted.
+	if f, ok := gradientFunctions[name]; ok {
+		g, ok := parseGradient(significant(t.children), f.kind, f.repeating)
+		return ContentItem{Kind: ItemImage, gradient: g}, ok
+	}
+	if g, ok := colorImage(t); ok {
+		return ContentItem{Kind: ItemImage, gradient: g}, true
 	}
 	if unsupportedImages[name] {
 		c.warn(warn.CSSUnsupported, warn.Omitted, "content: %s() is not generated", name)

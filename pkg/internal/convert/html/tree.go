@@ -263,6 +263,9 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 	v := b.applyCounters(n, st)
 	pushed := slices.Clone(b.counters.pushed)
 	defer b.counters.leave(pushed)
+	if node := b.replacedByContent(ctx, n, st); node != nil {
+		return []*layout.Node{node}, nil
+	}
 	if n.Namespace == "" {
 		switch n.DataAtom { //nolint:exhaustive // every other element takes the default path
 		case atom.Br:
@@ -570,6 +573,36 @@ func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style)
 		}
 	}
 	return []*layout.Node{node}
+}
+
+// replacedByContent returns the replaced box of an element styled st
+// whose content is one image (CSS Generated Content 3, 1.1,
+// <content-replacement>): the element draws the image in place of its
+// children. It returns nil for any other content, for an element that
+// generates no box of its own, and for an image that cannot be drawn,
+// whose element keeps its children.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 draws a div of 50 by 40 pixels whose
+//     content is a url() image of 20 by 10 as that image stretched over
+//     the box, its text and background hidden; without a size, the image
+//     at its natural size.
+func (b *builder) replacedByContent(ctx context.Context, n *dom.Node, st *css.Style) *layout.Node {
+	c := &st.Content
+	if c.Kind != css.ContentList || len(c.Items) != 1 || c.Items[0].Kind != css.ItemImage || st.Display == css.Contents {
+		return nil
+	}
+	pic := b.contentPicture(ctx, c.Items[0])
+	if pic == nil {
+		return nil
+	}
+	node := &layout.Node{Kind: layout.Replaced, Style: st, Picture: pic}
+	node.ID, _ = attr(n, "id")
+	if c.Alt != "" {
+		node.Role, node.Alt = "Figure", c.Alt
+	}
+	return node
 }
 
 // emptyImage returns the box of an <img> styled st that draws no picture

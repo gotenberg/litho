@@ -497,9 +497,9 @@ func (b *builder) generate(ctx context.Context, n *dom.Node, ps *css.Style) []*l
 		case css.ItemOpenQuote, css.ItemCloseQuote, css.ItemNoOpenQuote, css.ItemNoCloseQuote:
 			write(b.quote(n, ps, it.Kind))
 		case css.ItemImage:
-			if pic := b.contentImage(ctx, it.Text); pic != nil {
+			if pic := b.contentPicture(ctx, it); pic != nil {
 				flush()
-				out = append(out, &layout.Node{Kind: layout.Replaced, Style: anonInline(ps), Picture: pic})
+				out = append(out, &layout.Node{Kind: layout.Replaced, Style: generatedImageStyle(ps, pic), Picture: pic})
 			}
 		case css.ItemLeader:
 			if n := leaderNode(ps, it.Text); n != nil {
@@ -530,6 +530,55 @@ func (b *builder) generate(ctx context.Context, n *dom.Node, ps *css.Style) []*l
 		b.warnOnce(warn.LimitReached, warn.Omitted, "text", fmt.Sprintf("generated content past %d bytes was left out", maxGeneratedBytes))
 	}
 	return out
+}
+
+// contentPicture returns the picture of an image content item: its
+// gradient, or the picture its url() loads, nil with a warning when that
+// cannot be drawn.
+func (b *builder) contentPicture(ctx context.Context, it css.ContentItem) *layout.Picture {
+	if it.Gradient != nil {
+		return gradientPicture(it.Gradient)
+	}
+	return b.contentImage(ctx, it.Text)
+}
+
+// gradientPicture returns the picture of the gradient g: an image with no
+// natural size or ratio, 300 by 150 pixels when nothing else sizes it
+// (CSS Images 3, 4.3 and 5.2). Chromium's screen draws an element replaced
+// by a gradient at 0 in each auto dimension instead; its print is not
+// measured, and litho keeps the clause.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 draws a div replaced by a gradient as the
+//     gradient over 80 by 30 pixels under width 80px and height 30px, and
+//     shows nothing of it, its background included, under width 80px
+//     alone, height 30px alone, or neither as an inline-block.
+func gradientPicture(g *css.Gradient) *layout.Picture {
+	return &layout.Picture{
+		Gradient: g, Width: 300 * css.Pt, Height: 150 * css.Pt,
+		NoNaturalWidth: true, NoNaturalHeight: true, NoRatio: true,
+	}
+}
+
+// generatedImageStyle returns the style of the anonymous replaced box
+// that draws the image pic of a pseudo-element styled ps: an inline box,
+// which fills the pseudo-element when pic has no natural size.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 draws a ::before whose content is a
+//     gradient alone, displayed as a block of 100 by 50 pixels or as an
+//     inline-block of 60 by 20, as the gradient over that whole box, and
+//     a url() image of 20 by 10 pixels in the same block at its natural
+//     size; a block of auto height shows no gradient.
+func generatedImageStyle(ps *css.Style, pic *layout.Picture) *css.Style {
+	st := anonInline(ps)
+	if pic.NoNaturalWidth && pic.NoNaturalHeight {
+		full := css.Dimension{Kind: css.Percent, Value: 1}
+		st.Width, st.Height = full, full
+	}
+	return st
 }
 
 // contentImage loads the picture of a url() content item, nil with a

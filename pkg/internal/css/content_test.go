@@ -169,3 +169,26 @@ func TestContent_AltTextLinear(t *testing.T) {
 		t.Errorf("%v allocations for 4096 strings, want the alt text built in one buffer", allocs)
 	}
 }
+
+// TestContent_Gradients locks that a content item may be a gradient or
+// image(<color>) (CSS Generated Content 3, 1.1: any <image>), computed
+// against the element's colour, and that an invalid gradient makes the
+// value invalid.
+func TestContent_Gradients(t *testing.T) {
+	t.Parallel()
+	st := styleOf(t, "color: lime; content: linear-gradient(currentColor, red) image(blue)")
+	if len(st.Content.Items) != 2 {
+		t.Fatalf("items %+v, want two images", st.Content.Items)
+	}
+	for i, it := range st.Content.Items {
+		if it.Kind != ItemImage || it.Gradient == nil || it.gradient != nil {
+			t.Errorf("item %d %+v, want a computed gradient", i, it)
+		}
+	}
+	if c := st.Content.Items[0].Gradient.Stops[0].Color; c != (Color{G: 1, A: 1}) {
+		t.Errorf("first stop %+v, want the element's lime", c)
+	}
+	if st := styleOf(t, `content: "a"; content: linear-gradient(bogus)`); len(st.Content.Items) != 1 || st.Content.Items[0].Kind != ItemString {
+		t.Errorf("an invalid gradient replaced the valid content: %+v", st.Content)
+	}
+}

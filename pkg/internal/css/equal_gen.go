@@ -2115,6 +2115,12 @@ func equalContentItem(a, b *ContentItem) bool {
 	if a.TargetAttr != b.TargetAttr {
 		return false
 	}
+	if a.Gradient != b.Gradient {
+		return false
+	}
+	if a.gradient != b.gradient {
+		return false
+	}
 	return true
 }
 
@@ -2129,6 +2135,8 @@ func hashContentItem(h uint64, x *ContentItem) uint64 {
 	h = mix(h, uint64(x.Pick))
 	h = mixString(h, x.Target)
 	h = mixBool(h, x.TargetAttr)
+	h = mixBool(h, x.Gradient != nil)
+	h = mixBool(h, x.gradient != nil)
 	return h
 }
 

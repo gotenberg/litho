@@ -189,3 +189,19 @@ func TestGradient_ColorStops(t *testing.T) {
 		t.Errorf("Validate: %v", err)
 	}
 }
+
+// TestGradient_ReplacedPicture locks that a gradient picture fills the
+// content box of its replaced box, sized there as an image without a
+// natural size (CSS Images 3, 5.2).
+func TestGradient_ReplacedPicture(t *testing.T) {
+	t.Parallel()
+	g := &css.Gradient{Angle: 90, Stops: gstops(lime, 2.0, blue, 0.0, blue, 4.0, red, 0.0)}
+	pic := &Picture{Gradient: g, Width: px(300), Height: px(150), NoNaturalWidth: true, NoNaturalHeight: true, NoRatio: true}
+	root := doc(&Node{Kind: Replaced, Style: sty(width(6), height(2), margin(1), func(s *css.Style) { s.Display = css.Block }), Picture: pic})
+	res := run(t, root, page(8, 4))
+	assertPixels(t, res, 1, `
+		________
+		_GGBBRR_
+		_GGBBRR_
+		________`)
+}

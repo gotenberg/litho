@@ -503,6 +503,27 @@ func (e *engine) conicFill(g *css.Gradient, w, h, y float64) (*typeset.Fill, boo
 	}}, true
 }
 
+// gradientRect returns the path painting the gradient g over r, sized as
+// r, nil when it paints nothing.
+func (e *engine) gradientRect(g *css.Gradient, r typeset.Rect) typeset.Fragment {
+	fill, ok := e.gradientFill(g, r.Width, r.Height, r.Y)
+	if !ok {
+		return nil
+	}
+	if fill.Shading != nil {
+		sh := *fill.Shading
+		m := sh.Transform
+		if m == (typeset.Matrix{}) {
+			m = typeset.Identity
+		}
+		m.E += r.X
+		m.F += r.Y
+		sh.Transform = m
+		fill = &typeset.Fill{Shading: &sh}
+	}
+	return &typeset.Path{Ops: rectOps(r), Fill: fill}
+}
+
 // gradientTiles returns the paths painting the background gradient of st
 // over the positioning area within the painting area clip: the gradient
 // is an image without intrinsic size or ratio, so its size is the area's
