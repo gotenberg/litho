@@ -36,7 +36,7 @@ func TestEmojiSequences(t *testing.T) {
 		{"abc", EmojiNormal, nil},
 	}
 	for _, c := range cases {
-		got := emojiSequences([]rune(c.text), func(int) EmojiVariant { return c.v }, nil, nil)
+		got := emojiSequences([]rune(c.text), func(int) EmojiVariant { return c.v }, nil)
 		if !slices.Equal(got, c.want) {
 			t.Errorf("%q under %d: %v, want %v", c.text, c.v, got, c.want)
 		}
@@ -153,10 +153,10 @@ func TestLayout_FiguresAsTextSplitAsPlainText(t *testing.T) {
 	asText := plain
 	asText.Settings = &FontSettings{Emoji: EmojiText}
 	text := func(int) EmojiVariant { return EmojiText }
-	if seqs := emojiSequences([]rune(figures), text, func(int) bool { return true }, nil); len(seqs) != 0 {
+	if seqs := emojiSequences([]rune(figures), text, func(int) bool { return true }); len(seqs) != 0 {
 		t.Errorf("%d sequences for figures their face draws as text, want none", len(seqs))
 	}
-	if seqs := emojiSequences([]rune(figures), text, nil, nil); len(seqs) == 0 {
+	if seqs := emojiSequences([]rune(figures), text, nil); len(seqs) == 0 {
 		t.Error("no sequence for figures asked as text with no face to ask: the case is not exercised")
 	}
 	want, _ := layout(t, f, figures, plain, 1000, Collapse)

@@ -321,6 +321,11 @@ func (f *Fonts) Layout(ctx context.Context, runs []Run, width float64, opts Opti
 // layoutState is the state of one [Fonts.Layout] call. It is never shared
 // between goroutines: go-text's shaper, segmenter, line wrapper and faces
 // keep caches that are not safe for concurrent use.
+//
+// A call allocates one state, and a spreadsheet lays out a cell a call:
+// the state stays within 1024 bytes, a size class of the allocator, since
+// a field that takes it past costs every call the next class, 1152
+// (TestLayoutState_FitsItsSizeClass).
 type layoutState struct {
 	fonts  *Fonts
 	styles []styleState
@@ -342,9 +347,6 @@ type layoutState struct {
 	parsed map[*Face]*font.Font
 	byFace map[*font.Face]*Face
 	cache  map[resolveKey]*Face
-	// seqs backs the emoji sequences of the paragraph being split by
-	// face, reused from one paragraph to the next.
-	seqs []emojiSeq
 	// seqCache holds the faces of the emoji sequences resolved so far.
 	seqCache map[seqKey]*Face
 	// colorTables holds the colour tables of the programs a palette was
@@ -954,8 +956,7 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 
 	seqs := emojiSequences(para,
 		func(i int) EmojiVariant { return st.styles[styleOf[i]].style.settings().Emoji },
-		func(i int) bool { return st.primaryDrawsAsText(styleOf[i], para[i]) }, st.seqs[:0])
-	st.seqs = seqs
+		func(i int) bool { return st.primaryDrawsAsText(styleOf[i], para[i]) })
 	var outputs []shaping.Output
 	for _, item := range items {
 		for start := item.RunStart; start < item.RunEnd; {

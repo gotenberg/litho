@@ -110,8 +110,8 @@ type emojiSeq struct {
 // rune. A sequence whose presentation is none is left out, and so is one
 // plain reports: a single character asked to draw as text, without a
 // selector, that its run draws so already (see [layoutState.plainText]);
-// plain may be nil. The sequences are appended to buf, which the caller
-// may reuse from one paragraph to the next.
+// plain may be nil. A paragraph without a sequence, which is nearly every
+// paragraph, allocates nothing.
 //
 // The presentation follows CSS Fonts 4, 6.12: a variation selector wins
 // (VS16 emoji, VS15 text); else font-variant-emoji emoji takes emoji for
@@ -121,8 +121,8 @@ type emojiSeq struct {
 // font-variant-emoji asks for emoji; a flag, a modifier sequence, a tag
 // sequence and a ZWJ sequence take the presentation of their first
 // character, emoji by default.
-func emojiSequences(para []rune, variant func(i int) EmojiVariant, plain func(i int) bool, buf []emojiSeq) []emojiSeq {
-	seqs := buf
+func emojiSequences(para []rune, variant func(i int) EmojiVariant, plain func(i int) bool) []emojiSeq {
+	var seqs []emojiSeq
 	for i := 0; i < len(para); {
 		end, vs, kind := emojiElement(para, i)
 		if kind == elementNone {
