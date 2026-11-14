@@ -1,15 +1,26 @@
 package chart
 
 import (
+	"math"
+	"sort"
+
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 )
 
-// Arrangement is how a series' points are gathered before they are drawn
-// (MS-ODRAWXML, 2.24.3.2 CT_Aggregation).
+// Arrangement is how a series' points are gathered and ordered before they
+// are drawn (MS-ODRAWXML, 2.24.3.2 CT_Aggregation; 2.24.4.21
+// ST_SeriesLayout paretoLine).
 type Arrangement struct {
 	// Aggregate sums the values of the points of one category into one
 	// point, the categories in the order they first appear.
 	Aggregate bool
+	// Descending orders the points by value, the greatest first, points
+	// of equal value in their order.
+	Descending bool
+	// Cumulative replaces each point's value, once ordered, by the share
+	// of the series' total its value and those before it reach, from 0
+	// to 1: a Pareto line.
+	Cumulative bool
 }
 
 // arranged returns c with the series that ask for an [Arrangement]
@@ -77,7 +88,27 @@ func arrange(cats, vals Data, a Arrangement) (Data, Data) {
 		}
 		pts = append(pts, point{cat, v})
 	}
+	if a.Descending {
+		sort.SliceStable(pts, func(i, j int) bool { return pts[i].v > pts[j].v })
+	}
+	if a.Cumulative {
+		total := 0.0
+		for _, p := range pts {
+			total += p.v
+		}
+		run := 0.0
+		for i := range pts {
+			run += pts[i].v
+			pts[i].v = 0
+			if total != 0 && !math.IsInf(total, 0) {
+				pts[i].v = run / total
+			}
+		}
+	}
 	oc, ov := Data{Cached: true, Format: cats.Format}, Data{Cached: true, Format: vals.Format}
+	if a.Cumulative {
+		ov.Format = ""
+	}
 	for _, p := range pts {
 		oc.Values = append(oc.Values, p.cat)
 		ov.Values = append(ov.Values, Num(p.v))

@@ -184,7 +184,7 @@ func (x *chartExReader) read(root *Element) {
 			series = append(series, s)
 		}
 	}
-	var catAx, valAx *Element
+	var catAx, valAx, pctAx *Element
 	for _, a := range pa.Kids() {
 		if !a.Is(NSChartEx, "axis") {
 			continue
@@ -192,11 +192,17 @@ func (x *chartExReader) read(root *Element) {
 		switch {
 		case catAx == nil && cxChild(a, "catScaling") != nil:
 			catAx = a
+		case pctAx == nil && cxChild(a, "valScaling") != nil && attrOr(cxChild(a, "units"), "unit") == "percentage":
+			pctAx = a
 		case valAx == nil && cxChild(a, "valScaling") != nil:
 			valAx = a
 		}
 	}
 	g := &chart.Group{Kind: x.kindOf(series), GapWidth: 150, XAxis: 0, YAxis: 1}
+	var lines []*Element
+	if g.Kind == chart.Bar {
+		series, lines = splitPareto(series)
+	}
 	histogram := g.Kind == chart.Bar && binned(series)
 	drawn := g.Kind != chart.Unsupported
 	if v := parseFloat(attrOr(cxChild(catAx, "catScaling"), "gapWidth")); v >= 0 && v <= 5 {
@@ -210,7 +216,8 @@ func (x *chartExReader) read(root *Element) {
 		}
 		if g.Kind == chart.Bar {
 			g.Series[i].Arrange = chart.Arrangement{
-				Aggregate: !histogram && cxChild(cxChild(s, "layoutPr"), "aggregation") != nil,
+				Aggregate:  !histogram && cxChild(cxChild(s, "layoutPr"), "aggregation") != nil,
+				Descending: len(lines) > 0,
 			}
 		}
 	}
@@ -218,12 +225,18 @@ func (x *chartExReader) read(root *Element) {
 	if len(series) > 0 {
 		c.Groups = append(c.Groups, g)
 	}
+	if len(lines) > 0 {
+		c.Groups = append(c.Groups, x.paretoLines(lines, g.Series))
+	}
 	// The axes belong to the last series; a chart of several series draws
 	// them as secondary axes, whose gridlines LibreOffice does not draw.
 	grid := len(series) <= 1 || drawn
 	c.Axes = []*chart.Axis{x.axis(catAx, chart.CategoryAxis, grid), x.axis(valAx, chart.ValueAxis, grid)}
 	c.Axes[0].BetweenCategories = drawn
 	c.Axes[1].Position = chart.AxisLeft
+	if len(lines) > 0 {
+		c.Axes = append(c.Axes, x.percentAxis(pctAx))
+	}
 	if !drawn && len(series) > 0 {
 		// chart2's UnsupportedChart: 10-point text in the default face, in
 		// a white box with a white hairline.
@@ -619,20 +632,22 @@ func (x *chartExReader) dataLabels(e *Element) chart.Labels {
 
 // kindOf returns the kind a chart of the cx:series series is drawn as
 // (MS-ODRAWXML, 2.24.4.21 ST_SeriesLayout): bars when every series is a
-// clusteredColumn, binned or not; a waterfall when every series is one;
-// [chart.Unsupported] for the other kinds and their mixes.
+// clusteredColumn, binned or not, or the paretoLine of one; a waterfall
+// when every series is one; [chart.Unsupported] for the other kinds and
+// their mixes.
 func (x *chartExReader) kindOf(series []*Element) chart.Kind {
 	if len(series) == 0 {
 		return chart.Unsupported
 	}
-	columns, waterfall := true, true
+	columns, waterfall, owner := true, true, false
 	for _, s := range series {
 		id := attrOr(s, "layoutId")
-		columns = columns && id == "clusteredColumn"
+		columns = columns && (id == "clusteredColumn" || id == "paretoLine")
+		owner = owner || id == "clusteredColumn"
 		waterfall = waterfall && id == "waterfall"
 	}
 	switch {
-	case columns:
+	case columns && owner:
 		return chart.Bar
 	case waterfall:
 		return chart.Waterfall
@@ -649,6 +664,20 @@ func binned(series []*Element) bool {
 		}
 	}
 	return true
+}
+
+// splitPareto returns the columns of a chart of clusteredColumn series and
+// its paretoLine series apart.
+func splitPareto(series []*Element) ([]*Element, []*Element) {
+	var cols, lines []*Element
+	for _, s := range series {
+		if attrOr(s, "layoutId") == "paretoLine" {
+			lines = append(lines, s)
+		} else {
+			cols = append(cols, s)
+		}
+	}
+	return cols, lines
 }
 
 // maxSubtotals caps the subtotal indices read from a waterfall series.
@@ -696,4 +725,62 @@ func (x *chartExReader) connectorLine() *chart.Stroke {
 		return l
 	}
 	return def
+}
+
+// paretoLines returns the line group of a Pareto chart's paretoLine series
+// (MS-ODRAWXML, 2.24.4.21 ST_SeriesLayout paretoLine): each the running
+// share of the column series its ownerIdx names, ordered as the columns
+// are, on the percentage axis, the third of the chart's axes. Its line is
+// the chart style's line of a line series, else a theme line in the text
+// colour.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: Excel draws charts_chartex's Pareto line 0.38 pt wide
+//     in black at the sheet's 51 per cent print scale, its chart style
+//     giving no line, and lists the columns' series alone in the legend.
+func (x *chartExReader) paretoLines(lines []*Element, cols []*chart.Series) *chart.Group {
+	g := &chart.Group{Kind: chart.Line, XAxis: 0, YAxis: 2}
+	tx, _ := x.theme.Color("tx1")
+	ln := &chart.Stroke{Color: toTypeset(tx), Width: themeLineWidth}
+	if x.style != nil {
+		if l, ok := x.styleLine("dataPointLine", tx); ok && l != nil {
+			ln = l
+		}
+	}
+	for i, e := range lines {
+		owner, ok := Int(attrOr(e, "ownerIdx"))
+		if !ok || owner < 0 || owner >= len(cols) {
+			owner = 0
+		}
+		o := cols[owner]
+		s := &chart.Series{Index: len(cols) + i, Name: txData(cxChild(e, "tx")), Categories: o.Categories, Values: o.Values, Bins: o.Bins}
+		s.Arrange = chart.Arrangement{Aggregate: o.Arrange.Aggregate, Descending: true, Cumulative: true}
+		s.Border = x.lineOf(cxChild(e, "spPr"), ln)
+		s.Marker = chart.Marker{Symbol: chart.MarkerNone}
+		s.NoLegend = true
+		g.Series = append(g.Series, s)
+	}
+	return g
+}
+
+// percentAxis reads the percentage axis of a Pareto chart, e, on the
+// right of the plot area from 0 to 1, its labels as percentages unless it
+// states a format.
+func (x *chartExReader) percentAxis(e *Element) *chart.Axis {
+	a := x.axis(e, chart.ValueAxis, false)
+	if e == nil {
+		a.Deleted = false
+	}
+	a.Position = chart.AxisRight
+	if math.IsNaN(a.Min) {
+		a.Min = 0
+	}
+	if math.IsNaN(a.Max) {
+		a.Max = 1
+	}
+	if a.Format == "" {
+		a.Format = "0%"
+	}
+	return a
 }

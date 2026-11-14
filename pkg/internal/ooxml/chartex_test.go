@@ -134,6 +134,31 @@ func TestChartExFromElement_ClusteredColumn(t *testing.T) {
 	}
 }
 
+func TestChartExFromElement_Pareto(t *testing.T) {
+	region := `<cx:series layoutId="clusteredColumn"><cx:dataId val="0"/><cx:layoutPr><cx:aggregation/></cx:layoutPr></cx:series>` +
+		`<cx:series layoutId="paretoLine" ownerIdx="0"><cx:tx><cx:txData><cx:v>Cumulative</cx:v></cx:txData></cx:tx><cx:dataId val="0"/><cx:axisId val="2"/></cx:series>`
+	axes := cxAxes + `<cx:axis id="2"><cx:valScaling max="1" min="0"/><cx:units unit="percentage"/><cx:tickLabels/></cx:axis>`
+	c := readChartEx(t, chartExXML(cxData("0", "", []string{"a", "b", "c"}, "1", "5", "3"), `<cx:plotArea><cx:plotAreaRegion>`+region+`</cx:plotAreaRegion>`+axes+`</cx:plotArea>`), nil)
+	if len(c.Groups) != 2 || c.Notice != nil {
+		t.Fatalf("groups %+v, notice %v: want columns and a line, no notice", c.Groups, c.Notice)
+	}
+	cols, line := c.Groups[0], c.Groups[1]
+	if cols.Kind != chart.Bar || len(cols.Series) != 1 || cols.Series[0].Arrange != (chart.Arrangement{Aggregate: true, Descending: true}) {
+		t.Errorf("columns %+v, want one series aggregated and sorted", cols)
+	}
+	s := line.Series[0]
+	if line.Kind != chart.Line || line.YAxis != 2 || s.Arrange != (chart.Arrangement{Aggregate: true, Descending: true, Cumulative: true}) || !s.NoLegend || s.Values.Len() != 3 || s.Name != "Cumulative" {
+		t.Errorf("line %+v, series %+v: want the cumulative share on the third axis, out of the legend", line, s)
+	}
+	if s.Border == nil || s.Border.Width != 0.75 || s.Marker.Symbol != chart.MarkerNone {
+		t.Errorf("line %+v, marker %+v: want a 0.75 pt line without markers", s.Border, s.Marker)
+	}
+	a := c.Axes[2]
+	if a.Position != chart.AxisRight || a.Min != 0 || a.Max != 1 || a.Format != "0%" || a.MajorGrid != nil {
+		t.Errorf("percentage axis %+v, want 0 to 100%% at the right, no gridlines", a)
+	}
+}
+
 func TestChartExFromElement_MissingAxesAndNotChartEx(t *testing.T) {
 	c := readChartEx(t, chartExXML(cxData("0", "", nil, "1"), `<cx:plotArea><cx:plotAreaRegion><cx:series layoutId="treemap"><cx:dataId val="0"/></cx:series></cx:plotAreaRegion></cx:plotArea>`), nil)
 	if !c.Axes[0].Deleted || !c.Axes[1].Deleted {
