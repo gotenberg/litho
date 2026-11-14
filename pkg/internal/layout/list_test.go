@@ -465,3 +465,26 @@ func TestListMarkers_OutsideTheBorderBox(t *testing.T) {
 		t.Errorf("marker %+v, want its end on the border edge at %v", m, li.x/css.Pt)
 	}
 }
+
+// TestListMarkers_MarkerWidthSizesNothing locks that under BrowserRules a
+// ::marker's width does not make a marker box: CSS Pseudo 4, 3.2 lists no
+// box property among those a ::marker takes, and the outside marker ends
+// on the item's border edge.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 ends an outside
+//     ::marker of width 100px, or of display inline-block and width
+//     100px, at the item's border edge, and paints no background, margin,
+//     padding or border of it.
+func TestListMarkers_MarkerWidthSizesNothing(t *testing.T) {
+	st := sty(display(css.ListItem), func(s *css.Style) { s.ListStylePosition = css.Outside })
+	mst := sty(func(s *css.Style) { s.Width = css.Pts(px(100)) })
+	li := el(st, txt(st, "x"))
+	li.Marker = el(mst, txt(mst, "X"))
+	rb := boxesWith(t, doc(el(sty(padding(0, 0, 0, 150)), li)), Options{Page: page(300, 100), BrowserRules: true})
+	item := kid(t, rb, 0, 0, 0)
+	if m := item.outside; m == nil || !near((m.x+m.width-item.x)/css.Pt, 0) {
+		t.Errorf("marker %+v, want its end on the border edge at %v", m, item.x/css.Pt)
+	}
+}

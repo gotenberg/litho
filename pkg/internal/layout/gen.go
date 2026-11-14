@@ -716,11 +716,18 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 		return ctx
 	}
 	outside := b.st.ListStylePosition == css.Outside && !inside
+	// A ::marker takes no box properties (CSS Pseudo 4, 3.2): under
+	// [Options.BrowserRules] its width sizes nothing, and only an Office
+	// marker's width makes a marker box.
+	boxW := 0.0
+	if !e.opts.BrowserRules {
+		boxW = markerBoxWidth(n.Marker)
+	}
 	// Under [Options.BrowserRules], a bullet of disc, circle or square
 	// paints as a shape ([symbolRect], [engine.symbolMarkerOf]); a
 	// ::marker's content, an Office marker's box or the engine's own rules
 	// draw it as text.
-	symbol := e.opts.BrowserRules && pic == nil && markerBoxWidth(n.Marker) == 0 && (n.Marker == nil || len(n.Marker.Children) == 0) &&
+	symbol := e.opts.BrowserRules && pic == nil && (n.Marker == nil || len(n.Marker.Children) == 0) &&
 		(st.ListStyleType == css.Disc || st.ListStyleType == css.Circle || st.ListStyleType == css.Square)
 	// Under [Options.BrowserRules] the converter hands the ::marker's
 	// cascaded style in.
@@ -746,7 +753,7 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 			var prev rune
 			label = transform(label, st.TextTransform, b.lang, &prev)
 		}
-		b.outside = &markerBox{text: label, picture: pic, elem: markerElem, st: st, boxW: markerBoxWidth(n.Marker), symbol: symbol}
+		b.outside = &markerBox{text: label, picture: pic, elem: markerElem, st: st, boxW: boxW, symbol: symbol}
 		return ctx
 	}
 	mctx := ctx
