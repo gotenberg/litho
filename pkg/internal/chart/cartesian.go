@@ -889,7 +889,9 @@ func (rd *renderer) placeLabels(d *dim) {
 					l.cy = d.lineAt + gap + float64(b.h/2) + float64(b.w*detmath.Sin(a)/2)
 					if officeTurn {
 						l.cx, l.cy = officeTurnedCentre(b, p, d.lineAt+gap)
-						l.turned = true
+						// A date axis's turned labels keep officePad
+						// from the edge (officeTimeReserve).
+						l.turned = d.time == nil
 					}
 				}
 			}

@@ -319,3 +319,42 @@ func (d *dim) timeItems() []item {
 	}
 	return items
 }
+
+// officeTimeReserve returns how far right Office keeps room for the labels
+// of d, a date axis laid out in time whose labels it turns by less than a
+// quarter turn: a turned line's width, the line's height times the sine of the turn, right of
+// the centre of the last slot, whether a label stands there or not; zero
+// for any other axis. Its turned labels keep officePad from the chart's
+// left edge, where a category axis's run into it (officeTurnedEdge).
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: on nine line charts over dates whose labels Excel
+//     turns by 45 degrees, slots 0.42 to 10.8 pt wide, the plot area ends
+//     11.0 pt plus 2.08 to 8.39 pt from the chart's right edge, the
+//     centre of the last slot 8.44 to 8.60 pt inside that room (7.48 pt
+//     with slots of 10.8 pt), a 12.2 pt line turned being 8.63 pt wide;
+//     and its left edge lies 18.34 pt further from the left edge than its
+//     right from the right on all nine, the first label's turned box 6.5
+//     pt from the edge to 0.2 pt on seven of them (5.54 and 6.29 pt with
+//     slots of 10.8 and 10.2 pt).
+func officeTimeReserve(d *dim) float64 {
+	if d.time == nil || d.vertical || len(d.labels) == 0 {
+		return 0
+	}
+	b := d.labels[0].b
+	r := b.style.Rotation * math.Pi / 180
+	if r == 0 || math.Abs(b.style.Rotation) >= 90 {
+		return 0
+	}
+	n := float64(d.time.slots)
+	if !d.between {
+		n = float64(max(d.time.slots-1, 1))
+	}
+	last := float64(d.time.slots) - 0.5
+	if !d.between {
+		last = float64(d.time.slots - 1)
+	}
+	line := b.h / float64(max(1, len(b.lines)))
+	return d.pixel(last/n) + float64(line*math.Abs(detmath.Sin(r)))
+}

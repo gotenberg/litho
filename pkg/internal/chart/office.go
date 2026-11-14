@@ -285,6 +285,7 @@ func (rd *renderer) officeRoom(bb, inner typeset.Rect, dims []*dim) typeset.Rect
 			w, _ := l.b.rotated()
 			right = math.Max(right, l.cx+float64(w/2))
 		}
+		right = math.Max(right, officeTimeReserve(d))
 	}
 	if lg := rd.c.Legend; lg != nil && !lg.Overlay && (lg.Position == LegendTopRight || lg.Position == LegendRight) && !rd.officeSideLegend() {
 		// A legend the file places keeps LibreOffice's distance to the

@@ -93,3 +93,37 @@ func TestRender_OfficeTimeAxis(t *testing.T) {
 		}
 	}
 }
+
+// TestRender_OfficeTimeReserve holds a date axis whose labels Office turns
+// by 45 degrees to the room it keeps right of its last slot: a turned
+// line's width before officeRightRoom and officePad.
+func TestRender_OfficeTimeReserve(t *testing.T) {
+	// 1/1/2024 to 4/30/2024 on a chart 600 pt wide: one-day slots of
+	// about 4.5 pt, half of which is less than the room kept, and 10 pt
+	// Ahem labels 80 pt wide a week apart that turn by 45 degrees.
+	c := timeChart(45292, 45294, 45412)
+	const width = 600.0
+	frags := Render(context.Background(), ahem(t), c, typeset.Rect{Width: width, Height: 300})
+	var line *typeset.Path
+	walk(frags, 0, func(fr typeset.Fragment, _ int) {
+		if p, ok := fr.(*typeset.Path); ok && p.Stroke != nil && near(p.Stroke.Color, blue) && line == nil {
+			line = p
+		}
+	})
+	if line == nil || len(line.Ops) < 3 {
+		t.Fatal("no series line")
+	}
+	turned := false
+	walk(frags, 0, func(fr typeset.Fragment, _ int) {
+		if g, ok := fr.(*typeset.Group); ok && g.Transform.B != 0 {
+			turned = true
+		}
+	})
+	if !turned {
+		t.Fatal("the labels are not turned")
+	}
+	last := line.Ops[2].P[0].X
+	if want := width - officePad - officeRightRoom - 10*math.Sin(math.Pi/4); math.Abs(last-want) > 0.01 {
+		t.Errorf("last point at %v, want %v", last, want)
+	}
+}
