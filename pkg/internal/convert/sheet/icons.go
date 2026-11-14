@@ -2,10 +2,10 @@ package sheet
 
 import (
 	"math"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/detmath"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -77,7 +77,7 @@ func iconOf(rule *Rule, i int) icon {
 	}
 	if i < len(rule.IconsCustom) && rule.IconsCustom[i] != "" {
 		name, idx, _ := strings.Cut(rule.IconsCustom[i], ":")
-		k, err := strconv.Atoi(idx)
+		k, err := intconv.Atoi(idx)
 		if other := iconSets[name]; err == nil && k >= 0 && k < len(other) {
 			return other[k]
 		}
