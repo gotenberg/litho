@@ -1,10 +1,10 @@
 package officefx
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -127,7 +127,7 @@ func presetIndex(name string) (int, bool) {
 	if !ok || digits == "" || digits[0] == '0' {
 		return 0, false
 	}
-	n, err := strconv.Atoi(digits)
+	n, err := intconv.Atoi(digits)
 	if err != nil || n < 1 || n > len(presetShadows) {
 		return 0, false
 	}
