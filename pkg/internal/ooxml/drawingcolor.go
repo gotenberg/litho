@@ -175,7 +175,7 @@ func transformColor(col css.Color, c *Element) css.Color {
 			s := clamp01(v)
 			col.R, col.G, col.B = gammaOut(gammaIn(col.R)*s), gammaOut(gammaIn(col.G)*s), gammaOut(gammaIn(col.B)*s)
 		case "gray":
-			g := float64(0.22*col.R) + float64(0.72*col.G) + float64(0.06*col.B)
+			g := grayLevel(col)
 			col.R, col.G, col.B = g, g, g
 		case "inv":
 			col.R, col.G, col.B = invComponent(col.R), invComponent(col.G), invComponent(col.B)
@@ -186,6 +186,20 @@ func transformColor(col css.Color, c *Element) css.Color {
 		}
 	}
 	return col
+}
+
+// grayLevel returns the grey of a gray transform (ECMA-376 Part 1,
+// 20.1.2.3.9 gray): the luma of the sRGB components weighted as ITU-R
+// BT.709 weighs them.
+//
+// # Corpus evidence
+//
+//   - litho/pptx fill-solid: PowerPoint fills ED7D31 under gray with
+//     143,143,143; the BT.709 weights give 143, LibreOffice's 0.22, 0.72
+//     and 0.06 give 145, the BT.601 weights 150, the luminance in linear
+//     light 155. One case: the weights are those that fit it.
+func grayLevel(c css.Color) float64 {
+	return float64(0.2126*c.R) + float64(0.7152*c.G) + float64(0.0722*c.B)
 }
 
 // invComponent inverts one sRGB component in linear light (ECMA-376

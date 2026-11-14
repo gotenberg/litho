@@ -59,6 +59,7 @@ func TestDrawingColor_Transforms(t *testing.T) {
 		{"tint satMod 250", `<a:schemeClr val="accent1"><a:tint val="40000"/><a:satMod val="250000"/></a:schemeClr>`, [4]int{190, 211, 249, 255}, true},
 		{"satMod within 1", `<a:schemeClr val="accent1"><a:satMod val="110000"/></a:schemeClr>`, [4]int{74, 128, 195, 255}, true},
 		{"gray", `<a:srgbClr val="FFFFFF"><a:gray/></a:srgbClr>`, [4]int{255, 255, 255, 255}, true},
+		{"gray ED7D31", `<a:srgbClr val="ED7D31"><a:gray/></a:srgbClr>`, [4]int{143, 143, 143, 255}, true},
 		{"unknown scheme", `<a:schemeClr val="accent9"/>`, [4]int{}, false},
 		{"not a colour", `<a:noFill/>`, [4]int{}, false},
 	} {
