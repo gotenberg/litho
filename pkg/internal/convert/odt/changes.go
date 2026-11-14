@@ -5,11 +5,11 @@ import (
 	"encoding/xml"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
@@ -919,7 +919,7 @@ func flatText(el *odf.Element, depth int) string {
 // spaces returns the spaces a text:s stands for (ODF 1.3, Part 3, 6.1.3):
 // its text:c, 1 when absent, at most [maxMoveText].
 func spaces(el *odf.Element) int {
-	n, err := strconv.Atoi(el.A(odf.NSText, "c"))
+	n, err := intconv.Atoi(el.A(odf.NSText, "c"))
 	if err != nil || n < 1 {
 		return 1
 	}

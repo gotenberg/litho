@@ -1,10 +1,10 @@
 package odt
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
 
@@ -393,7 +393,7 @@ func fontWeight(v string, cur int) int {
 	case "bold":
 		return 700
 	}
-	if n, err := strconv.Atoi(v); err == nil && n >= 100 && n <= 900 {
+	if n, err := intconv.Atoi(v); err == nil && n >= 100 && n <= 900 {
 		return n
 	}
 	return cur
@@ -637,11 +637,11 @@ func foldPara(p paraState, layer odf.Props) paraState {
 	if v, ok := layer.Lookup("fo:widows"); ok {
 		// A value that does not read leaves Atoi's 0, which applyPara
 		// raises to 1; one out of range its saturated bound.
-		p.widows, _ = strconv.Atoi(v)
+		p.widows, _ = intconv.Atoi(v)
 	}
 	if v, ok := layer.Lookup("fo:orphans"); ok {
 		// As fo:widows.
-		p.orphans, _ = strconv.Atoi(v)
+		p.orphans, _ = intconv.Atoi(v)
 	}
 	if v, ok := layer.Lookup("fo:break-before"); ok {
 		p.breakBefore = v

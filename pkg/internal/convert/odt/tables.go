@@ -1,10 +1,10 @@
 package odt
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -24,7 +24,7 @@ const (
 // repeat returns the count of a number-*-repeated attribute, at least 1
 // and at most [maxRepeat].
 func repeat(el *odf.Element, attr string) int {
-	n, err := strconv.Atoi(el.A(odf.NSTable, attr))
+	n, err := intconv.Atoi(el.A(odf.NSTable, attr))
 	if err != nil || n < 1 {
 		return 1
 	}
@@ -261,10 +261,10 @@ func (b *builder) cell(c *odf.Element, tb *tableBuild, header bool) *layout.Node
 		// 7.5).
 		n.Scope = typeset.ScopeColumn
 	}
-	if v, err := strconv.Atoi(c.A(odf.NSTable, "number-columns-spanned")); err == nil && v > 1 {
+	if v, err := intconv.Atoi(c.A(odf.NSTable, "number-columns-spanned")); err == nil && v > 1 {
 		n.ColSpan = min(v, maxRepeat)
 	}
-	if v, err := strconv.Atoi(c.A(odf.NSTable, "number-rows-spanned")); err == nil && v > 1 {
+	if v, err := intconv.Atoi(c.A(odf.NSTable, "number-rows-spanned")); err == nil && v > 1 {
 		n.RowSpan = min(v, maxRepeat)
 	}
 	content := c

@@ -3,11 +3,11 @@ package odt
 import (
 	"encoding/xml"
 	"math"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/symbolfont"
@@ -188,7 +188,7 @@ func listNumbering(ls *odf.ListStyle, level int) typeset.ListNumbering {
 // paragraph style's list style gives, as the same paragraph nested in
 // that many lists would be.
 func (b *builder) numberedParagraph(c *odf.Element, ctx *blockCtx) []*layout.Node {
-	level, err := strconv.Atoi(c.A(odf.NSText, "level"))
+	level, err := intconv.Atoi(c.A(odf.NSText, "level"))
 	if err != nil || level < 1 {
 		level = 1
 	}
@@ -223,8 +223,8 @@ func (b *builder) number(item *itemCtx, lc *listCtx, it *odf.Element) {
 	cnt := lc.counter
 	l := lc.level - 1
 	start := levelStart(lvl)
-	if v, err := strconv.Atoi(it.A(odf.NSText, "start-value")); err == nil && v >= 0 {
-		cnt.n[l] = v
+	if v, err := intconv.Atoi(it.A(odf.NSText, "start-value")); err == nil && v >= 0 {
+		cnt.n[l] = min(v, intconv.MaxCountStart)
 	} else if !cnt.used[l] {
 		cnt.n[l] = start
 	} else {
@@ -259,8 +259,8 @@ func levelStart(lvl *odf.ListLevel) int {
 	if lvl == nil {
 		return 1
 	}
-	if v, err := strconv.Atoi(lvl.El.A(odf.NSText, "start-value")); err == nil && v >= 0 {
-		return v
+	if v, err := intconv.Atoi(lvl.El.A(odf.NSText, "start-value")); err == nil && v >= 0 {
+		return min(v, intconv.MaxCountStart)
 	}
 	return 1
 }
@@ -269,7 +269,7 @@ func levelStart(lvl *odf.ListLevel) int {
 func (b *builder) levelLabel(lc *listCtx, l int) string {
 	lvl := lc.style.Levels[l]
 	show := 1
-	if v, err := strconv.Atoi(lvl.El.A(odf.NSText, "display-levels")); err == nil && v > 1 {
+	if v, err := intconv.Atoi(lvl.El.A(odf.NSText, "display-levels")); err == nil && v > 1 {
 		show = min(v, l+1)
 	}
 	var parts []string

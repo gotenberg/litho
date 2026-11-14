@@ -1,10 +1,10 @@
 package odt
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
@@ -47,7 +47,8 @@ func (b *builder) note(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 	if label == "" {
 		// An absent or unreadable text:start-value counts from 0, Atoi's
 		// result on an error.
-		start, _ := strconv.Atoi(cfg.A(odf.NSText, "start-value"))
+		start, _ := intconv.Atoi(cfg.A(odf.NSText, "start-value"))
+		start = max(-intconv.MaxCountStart, min(start, intconv.MaxCountStart))
 		format := cfg.A(odf.NSStyle, "num-format")
 		if format == "" {
 			// Writer numbers footnotes in arabic and endnotes in lower-case

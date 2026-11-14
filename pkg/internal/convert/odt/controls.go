@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/formfield"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -256,7 +257,7 @@ func controlField(el *odf.Element, n int) (typeset.Field, bool) {
 		f.Kind = typeset.FieldText
 		f.Value = controlText(el)
 		f.Multiline = el.Name.Local == "textarea"
-		if v, err := strconv.Atoi(el.A(odf.NSForm, "max-length")); err == nil && v > 0 && v <= typeset.MaxFieldText {
+		if v, err := intconv.Atoi(el.A(odf.NSForm, "max-length")); err == nil && v > 0 && v <= typeset.MaxFieldText {
 			// form:max-length is a non-negative integer (ODF 1.3, Part 3,
 			// 19.243); a count past what a field holds is no limit.
 			f.MaxLen = v

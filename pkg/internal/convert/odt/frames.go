@@ -11,7 +11,6 @@ import (
 	_ "image/jpeg" // registers JPEG with image.Decode
 	_ "image/png"  // registers PNG with image.Decode
 	"math"
-	"strconv"
 	"strings"
 
 	_ "golang.org/x/image/bmp"  // registers BMP with image.Decode
@@ -19,6 +18,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
@@ -217,7 +217,7 @@ type frameGeom struct {
 // geometry reads a drawing element's geometry and graphic style.
 func (b *builder) geometry(c *odf.Element) frameGeom {
 	g := frameGeom{anchor: c.A(odf.NSText, "anchor-type")}
-	if n, err := strconv.Atoi(c.A(odf.NSText, "anchor-page-number")); err == nil && n > 0 && g.anchor == "page" {
+	if n, err := intconv.Atoi(c.A(odf.NSText, "anchor-page-number")); err == nil && n > 0 && g.anchor == "page" {
 		g.page = n
 	}
 	g.w, g.hasW = odf.Length(c.A(odf.NSSVG, "width"))

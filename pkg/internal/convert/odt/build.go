@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/formfield"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
@@ -542,7 +543,7 @@ func (b *builder) paragraphID(el *odf.Element) string {
 // else its style's style:default-outline-level, else 1 (ODF 1.3, Part 3,
 // 19.844.4: a text:h without a level is at level 1).
 func (b *builder) outlineLevel(el *odf.Element, style string) int {
-	if lv, err := strconv.Atoi(el.A(odf.NSText, "outline-level")); err == nil {
+	if lv, err := intconv.Atoi(el.A(odf.NSText, "outline-level")); err == nil {
 		return max(min(lv, odf.MaxListLevels), 0)
 	}
 	v := b.styles.Inherited(b.scope, odf.FamilyParagraph, style, func(s *odf.Style) (string, bool) {
@@ -551,7 +552,7 @@ func (b *builder) outlineLevel(el *odf.Element, style string) int {
 		}
 		return "", false
 	})
-	if lv, err := strconv.Atoi(v); err == nil {
+	if lv, err := intconv.Atoi(v); err == nil {
 		return lv
 	}
 	return 1
@@ -785,7 +786,7 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 			b.inline(c, b.spanText(t, c.A(odf.NSText, "style-name")), out, ws, depth)
 		case "s":
 			count := 1
-			if v, err := strconv.Atoi(c.A(odf.NSText, "c")); err == nil && v > 1 {
+			if v, err := intconv.Atoi(c.A(odf.NSText, "c")); err == nil && v > 1 {
 				count = min(v, maxSpaces)
 			}
 			if !t.hidden {
@@ -1045,8 +1046,8 @@ func (b *builder) pageField(c *odf.Element, t textState, out *[]*layout.Node, ws
 	n := b.hf.number
 	if c.Name.Local == "page-count" {
 		n = b.hf.count
-	} else if adj, err := strconv.Atoi(c.A(odf.NSText, "page-adjust")); err == nil {
-		n += adj
+	} else if adj, err := intconv.Atoi(c.A(odf.NSText, "page-adjust")); err == nil {
+		n += max(-intconv.MaxCountStart, min(adj, intconv.MaxCountStart))
 	}
 	format := c.A(odf.NSStyle, "num-format")
 	if format == "" {
@@ -1092,7 +1093,7 @@ func (b *builder) columns(st *css.Style, cols *odf.Element, width float64) {
 	if cols == nil {
 		return
 	}
-	count, err := strconv.Atoi(cols.A(odf.NSFO, "column-count"))
+	count, err := intconv.Atoi(cols.A(odf.NSFO, "column-count"))
 	if err != nil || count < 2 {
 		return
 	}

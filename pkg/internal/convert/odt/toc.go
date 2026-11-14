@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 )
@@ -116,7 +117,7 @@ func (b *builder) updateTOCs(res *layout.Result) bool {
 // tocBody returns the paragraphs of the table t and their signature.
 func (b *builder) tocBody(t *toc, pages []string) ([]*layout.Node, string) {
 	maxLevel := odf.MaxListLevels
-	if lv, err := strconv.Atoi(t.src.A(odf.NSText, "outline-level")); err == nil && lv > 0 {
+	if lv, err := intconv.Atoi(t.src.A(odf.NSText, "outline-level")); err == nil && lv > 0 {
 		maxLevel = lv
 	}
 	var sig strings.Builder
@@ -133,7 +134,7 @@ func (b *builder) tocBody(t *toc, pages []string) ([]*layout.Node, string) {
 	}
 	templates := map[int]*odf.Element{}
 	for _, tm := range t.src.All(odf.NSText, "table-of-content-entry-template") {
-		if lv, err := strconv.Atoi(tm.A(odf.NSText, "outline-level")); err == nil {
+		if lv, err := intconv.Atoi(tm.A(odf.NSText, "outline-level")); err == nil {
 			templates[lv] = tm
 		}
 	}

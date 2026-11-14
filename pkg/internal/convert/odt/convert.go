@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/svg"
@@ -346,8 +346,8 @@ func (b *builder) masterOf(c *odf.Element) (string, int, bool) {
 			return "", 0, false
 		}
 		restart := 0
-		if n, err := strconv.Atoi(st.Props(kind).Get("style:page-number")); err == nil && n > 0 {
-			restart = n
+		if n, err := intconv.Atoi(st.Props(kind).Get("style:page-number")); err == nil && n > 0 {
+			restart = min(n, intconv.MaxCountStart)
 		}
 		return st.MasterPage, restart, true
 	}
