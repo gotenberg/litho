@@ -2000,7 +2000,7 @@ func extractType1Encoding(ctx context.Context, doc *document.Document, fontDict 
 
 	// Parse "dup <code> /<name> put" entries.
 	for _, match := range type1EncodingRe.FindAllSubmatch(encSection, -1) {
-		code, err := strconv.Atoi(string(match[1]))
+		code, err := intconv.Atoi(string(match[1]))
 		if err != nil || code < 0 || code > 255 {
 			continue
 		}
@@ -2088,7 +2088,7 @@ func ExtractType1EncodingNames(fontData []byte) map[byte]string {
 
 	result := make(map[byte]string)
 	for _, match := range type1EncodingRe.FindAllSubmatch(encSection, -1) {
-		code, err := strconv.Atoi(string(match[1]))
+		code, err := intconv.Atoi(string(match[1]))
 		if err != nil || code < 0 || code > 255 { // A simple font addresses one byte of character codes, 0-255 (ISO 32000-1, 9.6.6.2).
 			continue
 		}

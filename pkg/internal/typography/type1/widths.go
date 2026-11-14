@@ -3,6 +3,8 @@ package type1
 import (
 	"regexp"
 	"strconv"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // charStringKey is the initial value of the RC4-like cipher that
@@ -65,7 +67,7 @@ func decryptCharString(data []byte, lenIV int) []byte {
 // [defaultLenIV] spec default of 4.
 func parseLenIV(plain []byte) int {
 	if m := lenIVRe.FindSubmatch(plain); m != nil {
-		if v, err := strconv.Atoi(string(m[1])); err == nil && v >= 0 {
+		if v, err := intconv.Atoi(string(m[1])); err == nil && v >= 0 {
 			return v
 		}
 	}

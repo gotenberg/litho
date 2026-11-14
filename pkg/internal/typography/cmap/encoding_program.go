@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxCMapCodeBytes is the widest character code a CMap program may declare:
@@ -110,7 +111,7 @@ func collectionCMapCIDSystemInfo(name string) (string, string, int, bool) {
 	if !ok || ordering == "" {
 		return "", "", 0, false
 	}
-	supplement, err := strconv.Atoi(supplementText)
+	supplement, err := intconv.Atoi(supplementText)
 	if err != nil || supplement < 0 {
 		return "", "", 0, false
 	}

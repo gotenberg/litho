@@ -31,9 +31,9 @@ var dupPutRadixRe = regexp.MustCompile(`dup\s+(\d+(?:#[0-9A-Za-z]+)?)\s+/(\S+)\s
 func parseCode(tok string) (int, error) {
 	base, digits, radix := strings.Cut(tok, "#")
 	if !radix {
-		return strconv.Atoi(tok)
+		return intconv.Atoi(tok)
 	}
-	b, err := strconv.Atoi(base)
+	b, err := intconv.Atoi(base)
 	if err != nil || b < 2 || b > 36 {
 		return 0, fmt.Errorf("type1: radix %q out of range", base)
 	}

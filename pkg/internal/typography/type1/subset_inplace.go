@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
 
@@ -85,7 +86,7 @@ func SubsetInPlace(ctx context.Context, data []byte, keep []string) ([]byte, Len
 	body := src.plain[eexecSalt:]
 	lenIV := parseLenIV(body)
 	if m := lenIVRe.FindSubmatch(body); m != nil {
-		if v, err := strconv.Atoi(string(m[1])); err == nil && v < 0 {
+		if v, err := intconv.Atoi(string(m[1])); err == nil && v < 0 {
 			return nil, Lengths{}, fmt.Errorf("%w: a /lenIV of %d leaves the charstrings unencrypted", ErrSubsetUnsupported, v)
 		}
 	}
@@ -409,7 +410,7 @@ func checkSubrs(ctx context.Context, body []byte, lenIV int) error {
 	if loc == nil {
 		return nil
 	}
-	count, err := strconv.Atoi(string(body[loc[2]:loc[3]]))
+	count, err := intconv.Atoi(string(body[loc[2]:loc[3]]))
 	if err != nil {
 		return fmt.Errorf("%w: a /Subrs count that does not read", ErrSubsetUnsupported)
 	}

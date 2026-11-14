@@ -2,7 +2,8 @@ package type1
 
 import (
 	"bytes"
-	"strconv"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // charStringsMarker is the PostScript token that opens the
@@ -172,7 +173,7 @@ func readInt(data []byte, start int) (int, int) {
 	if end == start {
 		return 0, start
 	}
-	v, err := strconv.Atoi(string(data[start:end]))
+	v, err := intconv.Atoi(string(data[start:end]))
 	if err != nil {
 		return 0, start
 	}

@@ -154,7 +154,7 @@ func (f *Font) readSubrs(ctx context.Context) error {
 	if loc == nil {
 		return nil
 	}
-	count, err := strconv.Atoi(string(f.plain[loc[2]:loc[3]]))
+	count, err := intconv.Atoi(string(f.plain[loc[2]:loc[3]]))
 	if err != nil {
 		// The pattern admits only digits, so the count overflows an int:
 		// read entries until the definition closes.
@@ -699,7 +699,7 @@ func outlineLenIV(plain []byte) int {
 	if m == nil {
 		return defaultLenIV
 	}
-	v, err := strconv.Atoi(string(m[1]))
+	v, err := intconv.Atoi(string(m[1]))
 	switch {
 	case err != nil:
 		return defaultLenIV

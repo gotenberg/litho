@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	"golang.org/x/text/unicode/norm"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // GlyphToRune maps Adobe standard glyph names to UTF-8 runes.
@@ -566,7 +568,7 @@ func numericGlyphNameRune(name string) (rune, bool) {
 	// Reject C0/C1 control ranges (1-31, 127-159) since those are never
 	// valid glyph Unicode values and would override real base encodings.
 	if len(name) >= 3 && len(name) <= 4 && (name[0] == 'C' || name[0] == 'c') {
-		if r, err := strconv.Atoi(name[1:]); err == nil && r > 0 && r <= 0xFFFF {
+		if r, err := intconv.Atoi(name[1:]); err == nil && r > 0 && r <= 0xFFFF {
 			if r >= 0x20 && r != 0x7F && (r < 0x80 || r > 0x9F) {
 				return rune(r), true
 			}
