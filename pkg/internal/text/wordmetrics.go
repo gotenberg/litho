@@ -157,10 +157,11 @@ func segoeAdvances(glyphs []shapedGlyph, text []rune, w float64) {
 
 // segoeTextAdvances sets the advance of every glyph of glyphs whose
 // cluster in text starts with a character of the Emoji_Presentation
-// property (UTS #51, Annex A) to w, its drawing moved by half the change,
-// and reports whether it set one: the glyphs of a face drawing an Office
-// run's emoji as text, which Word draws as Segoe UI Emoji's outlines at
-// Segoe's advances ([segoeEmojiAdvance]) and line.
+// property (UTS #51, Annex A), or with one the emoji presentation
+// selector follows (VS16, U+FE0F), to w, its drawing moved by half the
+// change, and reports whether it set one: the glyphs of a face drawing
+// an Office run's emoji as text, which Word draws as Segoe UI Emoji's
+// outlines at Segoe's advances ([segoeEmojiAdvance]) and line.
 //
 // # Corpus evidence
 //
@@ -171,11 +172,16 @@ func segoeAdvances(glyphs []shapedGlyph, text []rune, w float64) {
 //     colour layers of a run of automatic colour lie 33.02 apart: 1.373
 //     ems. The baselines of the six paragraphs lie 42.77 and 43.00 points
 //     apart, as Segoe's line spaces them, whichever way the emoji draw.
+//   - probe, docx: in a run of w:color C00000 Word draws U+2764 and
+//     U+263A, text by default, each followed by U+FE0F, as Segoe UI Emoji
+//     glyphs 33.02 points apart at 24 points, on a baseline 43.00 points
+//     below the paragraph before, as the smiles of the paragraphs around.
 func segoeTextAdvances(glyphs []shapedGlyph, text []rune, w float64) bool {
 	set := false
 	for k := range glyphs {
 		g := &glyphs[k]
-		if c := g.cluster(); g.advance > 0 && c < len(text) && unicode.Is(emojiPresentation, text[c]) {
+		c := g.cluster()
+		if g.advance > 0 && c < len(text) && (unicode.Is(emojiPresentation, text[c]) || c+1 < len(text) && text[c+1] == variationEmoji) {
 			g.xoff += float64((w - g.advance) / 2)
 			g.advance = w
 			set = true

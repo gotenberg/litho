@@ -116,8 +116,9 @@ func TestOfficeEmoji(t *testing.T) {
 // TestOfficeEmoji_AsText checks that an emoji of the Emoji_Presentation
 // property that a text face draws, in a run that asks for Office's emoji
 // and for the text presentation, advances as Segoe UI Emoji's do, its
-// drawing centred, its piece taking Segoe's line with Word's metrics,
-// while a character of text presentation by default keeps its advance.
+// drawing centred, its piece taking Segoe's line with Word's metrics, as
+// does a character of text presentation by default that VS16 follows,
+// while one alone keeps its advance.
 func TestOfficeEmoji_AsText(t *testing.T) {
 	f := emojiFonts(t)
 	asText := &FontSettings{Emoji: EmojiText}
@@ -128,6 +129,10 @@ func TestOfficeEmoji_AsText(t *testing.T) {
 	}
 	if got := p.Advance(2); math.Abs(got-8) > 0.01 {
 		t.Errorf("smile advance %.3f, want the face's 8", got)
+	}
+	selected := shape(t, f, []ParagraphRun{{Text: "A\u263a\ufe0fB", Style: s}}, ParagraphOptions{})
+	if got := selected.Advance(1) + selected.Advance(2); math.Abs(got-13.73) > 0.01 {
+		t.Errorf("smile and VS16 advance %.3f, want 13.73", got)
 	}
 	plain := s
 	plain.OfficeEmoji = false
