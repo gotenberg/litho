@@ -56,6 +56,10 @@ func CounterText(t css.ListStyleType, n int) string {
 		// CSS Counter Styles 3, 6.3 gives square U+25AA; Chromium writes
 		// U+25A0, and litho follows Chromium.
 		return "■"
+	case css.DisclosureOpen:
+		return "▾"
+	case css.DisclosureClosed:
+		return "▸"
 	case css.ListString, css.ListNamed:
 		return strconv.Itoa(n)
 	case css.Decimal, css.DecimalLeadingZero, css.LowerRoman, css.UpperRoman, css.LowerAlpha, css.UpperAlpha,
@@ -80,6 +84,10 @@ func markerText(t css.ListStyleType, n int) string {
 		return "◦ "
 	case css.Square:
 		return "▪ "
+	case css.DisclosureOpen:
+		return "▾ "
+	case css.DisclosureClosed:
+		return "▸ "
 	case css.Decimal, css.DecimalLeadingZero, css.LowerRoman, css.UpperRoman, css.LowerAlpha, css.UpperAlpha,
 		css.LowerGreek, css.Armenian, css.Georgian, css.ListNamed:
 	}
@@ -170,15 +178,68 @@ func (e *engine) markerEdges(b *box) (float64, float64) {
 	return b.contentX(), b.contentX() + b.w
 }
 
+// symbolType reports whether the list-style-type t draws as a symbol
+// marker under [Options.BrowserRules]: disc, circle, square and the two
+// disclosure triangles.
+func symbolType(t css.ListStyleType) bool {
+	switch t { //nolint:exhaustive // the other styles draw text
+	case css.Disc, css.Circle, css.Square, css.DisclosureOpen, css.DisclosureClosed:
+		return true
+	}
+	return false
+}
+
+// disclosureSize returns the side of the square a disclosure triangle of
+// a marker in style st fills: 0.66 times its font size, cut to Blink's
+// layout unit, a 64th of a pixel. CSS Counter Styles 3, 6.2 leaves the
+// triangle's look to the user agent; this is Blink's.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws the
+//     disclosure triangle of a list item in Liberation Serif at 20 and
+//     100px in a square of 13 and 66 pixels whose bottom is on the
+//     baseline, the outside marker ending 8 pixels before the item's
+//     border edge, the inside one followed by 0.4em.
+func (e *engine) disclosureSize(st *css.Style) float64 {
+	px := e.fontSize(st) / css.Pt
+	return float64(math.Floor(float64(px*0.66)*64) / 64 * css.Pt)
+}
+
+// disclosureOps returns the path of the disclosure triangle of style st in
+// the square r, as Blink draws it: disclosure-open points down between
+// 7 and 93 per cent of the square's height, disclosure-closed toward the
+// inline end over 86 per cent of its width.
+func disclosureOps(st *css.Style, r typeset.Rect) []typeset.PathOp {
+	pts := [3][2]float64{{0, 0.07}, {0.5, 0.93}, {1, 0.07}}
+	if st.ListStyleType == css.DisclosureClosed {
+		pts = [3][2]float64{{0, 0}, {0.86, 0.5}, {0, 1}}
+		if st.Direction == css.RTL {
+			pts = [3][2]float64{{1, 0}, {0.14, 0.5}, {1, 1}}
+		}
+	}
+	ops := make([]typeset.PathOp, 0, 4)
+	for i, p := range pts {
+		kind := typeset.LineTo
+		if i == 0 {
+			kind = typeset.MoveTo
+		}
+		ops = append(ops, typeset.PathOp{Kind: kind, P: [3]typeset.Point{{X: r.X + float64(p[0]*r.Width), Y: r.Y + float64(p[1]*r.Height)}}})
+	}
+	return append(ops, typeset.PathOp{Kind: typeset.ClosePath})
+}
+
 // symbolRect returns the rectangle, in flow coordinates, of the bullet an
-// outside disc, circle or square marker of the list item b draws, for a
-// font of the given ascent and a first line at baseline, beside the item's
+// outside symbol marker of style mst of the list item b draws, for a font
+// of the given ascent and a first line at baseline, beside the item's
 // edges left and right ([engine.markerEdges]). CSS Lists 3 leaves
 // the marker's look to the user agent; this is Blink's symbol marker,
 // independent of the font's own bullet: with A the ascent rounded to whole
 // pixels and o = A*2/3, a square of (o+1)/2 pixels, o + 7 pixels of gap
 // and 1 pixel of side bearing from the edge, 3*(A-o)/2 pixels
-// below the top of the ascent, in integer arithmetic.
+// below the top of the ascent, in integer arithmetic. A disclosure
+// triangle's square ([engine.disclosureSize]) sits on the baseline, 8
+// pixels from the edge.
 //
 // # Corpus evidence
 //
@@ -186,7 +247,15 @@ func (e *engine) markerEdges(b *box) (float64, float64) {
 //     symbol marker of a list in Liberation Serif at 100px, A 89, as a 30
 //     pixel bullet whose ink spans 66 to 37 pixels left of the content
 //     edge, its top 45 pixels below the ascent's.
-func symbolRect(b *box, ascent, baseline, left, right float64) typeset.Rect {
+func (e *engine) symbolRect(b *box, mst *css.Style, ascent, baseline, left, right float64) typeset.Rect {
+	if t := mst.ListStyleType; t == css.DisclosureOpen || t == css.DisclosureClosed {
+		w := e.disclosureSize(mst)
+		x := left - float64(8*css.Pt) - w
+		if b.st.Direction == css.RTL {
+			x = right + float64(8*css.Pt)
+		}
+		return typeset.Rect{X: x, Y: baseline - w, Width: w, Height: w}
+	}
 	a := int(math.Round(min(max(ascent/css.Pt, 0), maxSymbolAscent))) // fits int: bounded
 	o := a * 2 / 3
 	w := float64(float64((o+1)/2) * css.Pt)

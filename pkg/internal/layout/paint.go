@@ -1365,14 +1365,16 @@ func (p *painter) symbolMarker(b *box, m *markerBox) {
 // symbolPath returns the bullet of the symbol marker of style st in the
 // square r, in the marker's colour: a disc fills its square's inscribed
 // circle, a circle strokes it one pixel wide inside the square, a square
-// fills the square, as Blink paints them; nil when the colour paints
-// nothing.
+// fills the square, a disclosure triangle fills [disclosureOps], as Blink
+// paints them; nil when the colour paints nothing.
 func symbolPath(st *css.Style, r typeset.Rect) *typeset.Path {
 	col, ok := colorOf(st.Color)
 	if !ok {
 		return nil
 	}
-	switch st.ListStyleType { //nolint:exhaustive // a symbol marker is a disc, a circle or a square
+	switch st.ListStyleType { //nolint:exhaustive // a symbol marker is a disc, a circle, a square or a disclosure triangle
+	case css.DisclosureOpen, css.DisclosureClosed:
+		return &typeset.Path{Ops: disclosureOps(st, r), Fill: &typeset.Fill{Color: col}}
 	case css.Square:
 		return &typeset.Path{Ops: rectOps(r), Fill: &typeset.Fill{Color: col}}
 	case css.Circle:
@@ -2369,7 +2371,7 @@ func (e *engine) placeMarker(b *box) {
 	}
 	if m.symbol {
 		left, right := e.markerEdges(b)
-		m.sym = symbolRect(b, mt.Ascent, baseline, left, right)
+		m.sym = e.symbolRect(b, mst, mt.Ascent, baseline, left, right)
 		m.x, m.baseline, m.placed = m.sym.X, baseline, true
 		return
 	}

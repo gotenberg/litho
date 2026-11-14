@@ -258,3 +258,18 @@ func TestGenerated_ContentReplacement(t *testing.T) {
 		t.Errorf("::before %+v, want the gradient filling it", before.Children)
 	}
 }
+
+func TestMarker_SummaryLeavesItsTriangleToTheEngine(t *testing.T) {
+	t.Parallel()
+	// HTML Standard, 15.5.5: a details element's summary is a list item
+	// of number 0 whose marker is a disclosure triangle (CSS Counter
+	// Styles 3, 6.2); the triangle does not depend on the number, so the
+	// engine draws it as a symbol, not the converter as text.
+	p := prep(t, `<details open><summary id=s>S</summary>x</details><details><summary id=c>C</summary></details>`, Options{})
+	for id, want := range map[string]css.ListStyleType{"s": css.DisclosureOpen, "c": css.DisclosureClosed} {
+		n := byID(t, p.root, id)
+		if n.Style.ListStyleType != want || n.Marker != nil && len(n.Marker.Children) > 0 {
+			t.Errorf("%s: type %v, marker %+v; want %v drawn by the engine", id, n.Style.ListStyleType, n.Marker, want)
+		}
+	}
+}

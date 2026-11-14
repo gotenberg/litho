@@ -724,11 +724,11 @@ func (e *engine) genMarker(n *Node, b *box, ctx genCtx, ordinal int, inside bool
 		boxW = markerBoxWidth(n.Marker)
 	}
 	// Under [Options.BrowserRules], a bullet of disc, circle or square
-	// paints as a shape ([symbolRect], [engine.symbolMarkerOf]); a
+	// and a disclosure triangle paint as a shape ([symbolRect], [engine.symbolMarkerOf]); a
 	// ::marker's content, an Office marker's box or the engine's own rules
 	// draw it as text.
 	symbol := e.opts.BrowserRules && pic == nil && (n.Marker == nil || len(n.Marker.Children) == 0) &&
-		(st.ListStyleType == css.Disc || st.ListStyleType == css.Circle || st.ListStyleType == css.Square)
+		symbolType(st.ListStyleType)
 	// Under [Options.BrowserRules] the converter hands the ::marker's
 	// cascaded style in.
 	cascaded := e.opts.BrowserRules && n.Marker != nil && n.Marker.Style != nil
@@ -805,7 +805,7 @@ func listNumbering(st *css.Style, custom bool) typeset.ListNumbering {
 		return typeset.NumberingUpperAlpha
 	case css.DecimalLeadingZero, css.LowerGreek, css.Armenian, css.Georgian:
 		return typeset.NumberingOrdered
-	case css.ListNone, css.ListString, css.ListNamed:
+	case css.ListNone, css.ListString, css.ListNamed, css.DisclosureOpen, css.DisclosureClosed:
 	}
 	return typeset.NumberingUnordered
 }

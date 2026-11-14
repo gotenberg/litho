@@ -1331,7 +1331,7 @@ var listStyleTypes = map[string]ListStyleType{
 	"lower-alpha": LowerAlpha, "upper-alpha": UpperAlpha, "lower-latin": LowerAlpha,
 	"upper-latin": UpperAlpha, "lower-greek": LowerGreek, "armenian": Armenian,
 	"upper-armenian": Armenian, "georgian": Georgian, "none": ListNone,
-	"disclosure-open": Disc, "disclosure-closed": Disc,
+	"disclosure-open": DisclosureOpen, "disclosure-closed": DisclosureClosed,
 }
 
 // listString is a specified list-style-type <string>.

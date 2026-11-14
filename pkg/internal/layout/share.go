@@ -138,17 +138,26 @@ func (e *engine) symbolMarkerOf(mst *css.Style, lang string) *css.Style {
 	if st, ok := e.shared.symbols[key]; ok {
 		return st
 	}
-	a := int(math.Round(min(max(e.faceMetrics(mst, lang).Ascent/css.Pt, 0), maxSymbolAscent))) // fits int: bounded
-	o := a * 2 / 3
-	w := (o + 1) / 2
 	st := *mst
-	st.Width, st.Height = css.Pts(float64(w)*css.Pt), css.Pts(float64(w)*css.Pt)
 	gap := css.Right
 	if mst.Direction == css.RTL {
 		gap = css.Left
 	}
-	st.Margin[gap] = css.Pts(e.fontSize(mst) + css.Pt)
-	st.Margin[css.Bottom] = css.Pts(float64(a-3*(a-o)/2-w) * css.Pt)
+	if t := mst.ListStyleType; t == css.DisclosureOpen || t == css.DisclosureClosed {
+		// A disclosure triangle's square sits on the baseline, 0.4em
+		// before the content ([engine.disclosureSize]).
+		w := e.disclosureSize(mst)
+		st.Width, st.Height = css.Pts(w), css.Pts(w)
+		st.Margin[gap] = css.Pts(float64(math.Floor(float64(e.fontSize(mst)/css.Pt*0.4)*64) / 64 * css.Pt))
+		st.Margin[css.Bottom] = css.Pts(0)
+	} else {
+		a := int(math.Round(min(max(e.faceMetrics(mst, lang).Ascent/css.Pt, 0), maxSymbolAscent))) // fits int: bounded
+		o := a * 2 / 3
+		w := (o + 1) / 2
+		st.Width, st.Height = css.Pts(float64(w)*css.Pt), css.Pts(float64(w)*css.Pt)
+		st.Margin[gap] = css.Pts(e.fontSize(mst) + css.Pt)
+		st.Margin[css.Bottom] = css.Pts(float64(a-3*(a-o)/2-w) * css.Pt)
+	}
 	st.VerticalAlign = css.VerticalAlign{Kind: css.Baseline}
 	shared := e.shareStyle(&st)
 	if e.shared.symbols == nil {

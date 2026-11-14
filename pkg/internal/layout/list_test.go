@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"image/color"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -486,5 +487,31 @@ func TestListMarkers_MarkerWidthSizesNothing(t *testing.T) {
 	item := kid(t, rb, 0, 0, 0)
 	if m := item.outside; m == nil || !near((m.x+m.width-item.x)/css.Pt, 0) {
 		t.Errorf("marker %+v, want its end on the border edge at %v", m, item.x/css.Pt)
+	}
+}
+
+// TestListMarkers_DisclosureGeometry locks Blink's disclosure triangles
+// (CSS Counter Styles 3, 6.2 leaves their look to the user agent): a
+// square of 0.66em on the baseline, an outside one ending 8px before the
+// item's border edge, an inside one followed by 0.4em. At 100px: a 66px
+// square from -34px, and inside text at 40 + 66 + 40 = 146px.
+func TestListMarkers_DisclosureGeometry(t *testing.T) {
+	for _, lt := range []css.ListStyleType{css.DisclosureOpen, css.DisclosureClosed} {
+		ul := list(lt, css.Outside, 0)
+		ul.Children[0].Style.FontSize = px(100)
+		rb := boxesWith(t, doc(ul), Options{Page: page(300, 200), BrowserRules: true})
+		m := kid(t, rb, 0, 0, 0).outside
+		if m == nil || !m.symbol {
+			t.Fatalf("type %v: marker %+v, want a symbol", lt, m)
+		}
+		r := [4]float64{m.sym.X / css.Pt, (m.baseline - m.sym.Y) / css.Pt, m.sym.Width / css.Pt, m.sym.Height / css.Pt}
+		if r != [4]float64{-34, 66, 66, 66} {
+			t.Errorf("type %v: triangle square %v px (x, height above the baseline, size), want [-34 66 66 66]", lt, r)
+		}
+		in := list(lt, css.Inside, 0)
+		in.Children[0].Style.FontSize = px(100)
+		if got := glyphLayout(runWith(t, doc(in), Options{Page: page(300, 200), BrowserRules: true}), 1); !strings.HasPrefix(got, "x@146,") {
+			t.Errorf("type %v: inside glyphs %s, want x at 146px", lt, got)
+		}
 	}
 }

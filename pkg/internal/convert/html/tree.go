@@ -456,7 +456,7 @@ func listNumbering(t css.ListStyleType, ordered bool) typeset.ListNumbering {
 		return typeset.NumberingUpperAlpha
 	case css.ListNone:
 		return typeset.NumberingNone
-	case css.LowerGreek, css.Armenian, css.Georgian, css.ListString, css.ListNamed:
+	case css.LowerGreek, css.Armenian, css.Georgian, css.ListString, css.ListNamed, css.DisclosureOpen, css.DisclosureClosed:
 	}
 	if ordered {
 		return typeset.NumberingOrdered

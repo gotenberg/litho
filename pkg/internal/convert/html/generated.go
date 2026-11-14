@@ -374,7 +374,7 @@ func (b *builder) marker(ctx context.Context, n *dom.Node, st *css.Style, v int)
 		return m
 	}
 	if ms == nil {
-		if v != 0 || st.ListStyleImage != "" {
+		if v != 0 || st.ListStyleImage != "" || numberless(st.ListStyleType) {
 			return nil
 		}
 		// The engine numbers a 0 ListValue after the previous item.
@@ -390,11 +390,21 @@ func (b *builder) marker(ctx context.Context, n *dom.Node, st *css.Style, v int)
 			m.Children = []*layout.Node{{Kind: layout.Text, Style: ms}}
 		}
 	case css.ContentNormal:
-		if v == 0 && ms.ListStyleImage == "" {
+		if v == 0 && ms.ListStyleImage == "" && !numberless(ms.ListStyleType) {
 			m.Children = []*layout.Node{{Kind: layout.Text, Style: ms, Text: layout.MarkerText(ms, 0)}}
 		}
 	}
 	return m
+}
+
+// numberless reports whether the list-style-type t draws the same marker
+// whatever the item's number: the engine draws it for a 0 ListValue too.
+func numberless(t css.ListStyleType) bool {
+	switch t { //nolint:exhaustive // the other styles spell the number
+	case css.Disc, css.Circle, css.Square, css.DisclosureOpen, css.DisclosureClosed:
+		return true
+	}
+	return false
 }
 
 // namedMarker returns the marker of a list item styled st, its ::marker

@@ -784,6 +784,10 @@ const (
 	// defines, or the anonymous style of symbols(), which a
 	// [CounterStyles] spells.
 	ListNamed
+	// DisclosureOpen and DisclosureClosed are the disclosure triangles of
+	// CSS Counter Styles 3, 6.2, pointing down and toward the inline end.
+	DisclosureOpen
+	DisclosureClosed
 )
 
 // ListStylePosition is the list-style-position property (CSS 2.1, 12.5.1).
