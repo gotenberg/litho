@@ -244,7 +244,7 @@ func (p *painter) cellBackgrounds(td *tableData, c *box, pr placedRow) {
 	row := td.rows[cd.row]
 	for _, b := range []*box{col.group, col.col, row.group, row.box} {
 		if b != nil && !b.hidden {
-			p.partBackground(b, r)
+			p.partBackground(b, c, r)
 		}
 	}
 	if c.hidden {
@@ -269,20 +269,28 @@ func (p *painter) cellBackgrounds(td *tableData, c *box, pr placedRow) {
 }
 
 // partBackground paints the background of the row, row group, column or
-// column group b where the cell rectangle clip shows it: its image placed
-// on b's own box (CSS 2.1, 17.5.1).
-func (p *painter) partBackground(b *box, clip typeset.Rect) {
+// column group b where the rectangle clip of the cell c shows it: its
+// image placed on b's own box (CSS 2.1, 17.5.1). Under background-clip:
+// text it paints under the glyphs of c alone (CSS Backgrounds 4, 2.1).
+func (p *painter) partBackground(b, c *box, clip typeset.Rect) {
 	st := b.st
 	if !hasBackground(st) || clip.Width <= 0 || clip.Height <= 0 {
 		return
 	}
-	if c, ok := colorOf(st.BackgroundColor); ok {
-		p.emit(b, false, &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{Color: c}}, clip.Y, clip.Y+clip.Height, -1)
+	clipPath := &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{}}
+	if clipToText(st) {
+		if clipPath = p.textClip(c); clipPath == nil {
+			return
+		}
 	}
-	if st.BackgroundImage == "" && st.BackgroundGradient == nil {
-		return
+	g := &ditem{group: true, fx: &groupFx{opacity: 1, clip: clipPath}}
+	if col, ok := colorOf(st.BackgroundColor); ok {
+		if clipToText(st) {
+			g.kids = append(g.kids, &ditem{frag: &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{Color: col}}, y0: clip.Y, y1: clip.Y + clip.Height, page: p.mono})
+		} else {
+			p.emit(b, false, &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{Color: col}}, clip.Y, clip.Y+clip.Height, -1)
+		}
 	}
-	g := &ditem{group: true, fx: &groupFx{opacity: 1, clip: &typeset.Path{Ops: rectOps(clip), Fill: &typeset.Fill{}}}}
 	for _, sl := range p.attachedSlices(b, st, p.borderRect(b), clip) {
 		if st.BackgroundGradient != nil {
 			for _, pa := range p.e.gradientTiles(st, sl.area, sl.clip, clip.Y) {
@@ -292,7 +300,7 @@ func (p *painter) partBackground(b *box, clip typeset.Rect) {
 		}
 		pic := p.e.picture(st.BackgroundImage, clip.Y)
 		if pic == nil {
-			return
+			break
 		}
 		for _, t := range p.e.tiles(st, pic, sl.area, sl.clip, clip.Y) {
 			g.kids = append(g.kids, &ditem{frag: &typeset.Image{Rect: t, Source: pic.Source}, y0: t.Y, y1: t.Y + t.Height, page: p.mono})
@@ -301,8 +309,8 @@ func (p *painter) partBackground(b *box, clip typeset.Rect) {
 	if len(g.kids) == 0 {
 		return
 	}
-	c := p.sync(p.chain(b, false))
-	c.kids = append(c.kids, g)
+	into := p.sync(p.chain(b, false))
+	into.kids = append(into.kids, g)
 }
 
 // tableContent paints the content of every cell of the table box t, row

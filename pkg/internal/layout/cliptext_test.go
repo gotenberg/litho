@@ -50,3 +50,11 @@ func TestBackgroundClip_Text(t *testing.T) {
 		})
 	}
 }
+
+// TestBackgroundClip_TextOnATableRow locks that the background of a table
+// row under background-clip: text paints under the glyphs of its cells
+// alone (CSS Backgrounds 4, 2.1), not over the cells' rectangles.
+func TestBackgroundClip_TextOnATableRow(t *testing.T) {
+	root := doc(table(nil, tr(mods(bg(lime), clipText), td(mods(transparent), "X X"))))
+	assertPixels(t, run(t, root, page(30, 20)), 1, rowsOf("GGGGGGGGGG__________GGGGGGGGGG", 10, 10))
+}
