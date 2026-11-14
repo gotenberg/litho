@@ -851,7 +851,7 @@ func (p *painter) border(b *box, st *css.Style, r typeset.Rect, radii [4][2]floa
 				k.page = p.mono
 			}
 		}
-		c := p.sync(p.chain(b, false))
+		c := p.holder(b, false)
 		c.kids = append(c.kids, g)
 	}
 }

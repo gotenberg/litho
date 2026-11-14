@@ -437,6 +437,13 @@ func (flowFormatter) layout(e *engine, b *box, cb cblock, bc *bfc, cursor float6
 	if b.inlineKids {
 		return e.layoutInline(b, cb, bc, cursor, mc)
 	}
+	if lg := renderedLegend(b); lg != nil {
+		// The legend takes room above the content, which a definite
+		// height leaves less of (HTML Standard, 15.3.13).
+		room := e.placeLegend(b, lg)
+		cursor += room
+		cb.h = max(cb.h-room, 0)
+	}
 	return e.layoutBlockKids(b, cb, bc, cursor, mc)
 }
 
@@ -481,6 +488,7 @@ func resolveEdges(b *box, cbw float64) {
 		// Vertical margins of an inline box have no effect (CSS 2.1, 10.6.1).
 		b.m[css.Top], b.m[css.Bottom] = 0, 0
 	}
+	mirrorFieldsetPadding(b)
 }
 
 // hEdges returns the horizontal padding and borders of b.
@@ -1160,6 +1168,7 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	}
 	b.h = usedHeight(b, h, content, hSet, cb)
 	e.cloneEdges(b, hSet)
+	fillFieldset(b)
 	e.placeMarker(b)
 	e.reach(b.y + b.borderH())
 }
@@ -1263,6 +1272,10 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 	for i, k := range b.kids {
 		if e.err != nil {
 			return cursor
+		}
+		if fieldsetPart(k) == FieldsetLegend && k == renderedLegend(b) {
+			// The fieldset placed its legend before its content.
+			continue
 		}
 		if e.clamp != nil && e.clamp.done && !k.abs {
 			// A line clamp container discards what follows its last line
@@ -1792,6 +1805,18 @@ func (e *engine) layoutAtomic(a *box, lcb cblock) {
 		// An inline grid container's baseline is its first one (CSS
 		// Grid 1, 10.7), or its last under baseline-source: last.
 		if y, ok := gridBaseline(a, a.st.BaselineSource == css.BaselineLast); ok {
+			a.baseline, a.hasBaseline = y-a.y, true
+		}
+	case flexOrGridContent(a) != nil:
+		// An inline fieldset whose content box is a flex or a grid
+		// container takes that container's baseline, as an inline flex
+		// or grid container would.
+		c, last := flexOrGridContent(a), a.st.BaselineSource == css.BaselineLast
+		baseline := gridBaseline
+		if c.flex != nil {
+			baseline = flexBaseline
+		}
+		if y, ok := baseline(c, last); ok {
 			a.baseline, a.hasBaseline = y-a.y, true
 		}
 	case a.st.Overflow == css.OverflowVisible && a.st.BaselineSource == css.BaselineFirst:

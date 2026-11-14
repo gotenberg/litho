@@ -915,6 +915,9 @@ func (cs *computeState) element(n, parent *html.Node) {
 	if st.Display != DisplayNone && n.Namespace == "" && n.DataAtom == atom.Details && DetailsSummary(n) == nil {
 		cs.defaultSummary(n, st, vars)
 	}
+	if st.Display != DisplayNone && st.Display != Contents && isFieldset(n) {
+		cs.fieldsetStyles(n, st, vars)
+	}
 }
 
 // elementCands returns the declarations competing for the element n: its

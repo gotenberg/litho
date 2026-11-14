@@ -229,13 +229,22 @@ func (e *engine) containerOf(b *box) absCB {
 
 // holderOf returns the box whose containing block holds the absolutely
 // positioned box b ([engine.containerOf]), nil for the initial containing
-// block, the page area or the page.
+// block, the page area or the page. The content box of a fieldset holds
+// what the fieldset would hold.
+//
+// # Corpus evidence
+//
+//   - wpt: html/rendering/non-replaced-elements/the-fieldset-and-legend-elements/fieldset-containing-block
+//     (a box of top: 0 in a relatively positioned fieldset sits below
+//     the legend; a fixed box in a fieldset of filter and overflow:
+//     hidden is clipped) draws its reference in Chromium 156.
 func holderOf(b *box) *box {
 	if b.st.PageAnchor && b.st.Position == css.Absolute {
 		return nil
 	}
 	fixed := b.st.Position == css.Fixed
-	for a := b.parent; a != nil; a = a.parent {
+	var prev *box
+	for a := b.parent; a != nil; prev, a = a, a.parent {
 		if a.tpart == partColumn || a.tpart == partColGroup {
 			continue
 		}
@@ -247,6 +256,11 @@ func holderOf(b *box) *box {
 			holds = true
 		}
 		if holds {
+			if fieldsetPart(a) == FieldsetBox && fieldsetPart(prev) == FieldsetContent {
+				// A fieldset's content box holds what the fieldset would,
+				// under its overflow clip, as Chromium lays it out.
+				return prev
+			}
 			return a
 		}
 	}
@@ -661,6 +675,7 @@ func (e *engine) absContent(b *box, ccb cblock, h float64, hSet, grow bool) {
 		}
 	}
 	b.h = usedHeight(b, ch, content, hSet, ccb)
+	fillFieldset(b)
 	e.placeMarker(b)
 	e.reach(b.y + b.borderH())
 }

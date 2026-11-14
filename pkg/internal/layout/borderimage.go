@@ -123,7 +123,7 @@ cut:
 		}
 		g.setEffects().clip = &typeset.Path{Ops: rectOps(typeset.Rect{X: x0, Y: area.Y, Width: x1 - x0, Height: area.Height}), Fill: &typeset.Fill{}}
 	}
-	c := p.sync(p.chain(b, false))
+	c := p.holder(b, false)
 	c.kids = append(c.kids, g)
 	return true
 }

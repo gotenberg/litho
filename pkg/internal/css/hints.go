@@ -20,9 +20,9 @@ import (
 //     document's :link elements.
 //   - width and height on img, table, td, th, col, colgroup, tr (height),
 //     hr (width), iframe, embed, object, video, canvas and input.
-//   - align on div, p, h1 to h6, caption, table, thead, tbody, tfoot, tr,
-//     td, th, hr, img, object, embed, iframe and input; valign on the
-//     table sections, rows and cells.
+//   - align on div, p, h1 to h6, legend, caption, table, thead, tbody,
+//     tfoot, tr, td, th, hr, img, object, embed, iframe and input; valign
+//     on the table sections, rows and cells.
 //   - bgcolor on table, thead, tbody, tfoot, tr, td, th and marquee.
 //   - table: border (widths and outset style; the cells' 1px inset
 //     borders come from the user agent stylesheet), frame, rules (the
@@ -65,6 +65,8 @@ func HTMLHints(n *html.Node) []Declaration {
 		}
 	case "div", "p", "h1", "h2", "h3", "h4", "h5", "h6":
 		h.textAlign(n)
+	case "legend":
+		h.legendAlign(n)
 	case "caption":
 		if v, ok := attr(n, "align"); ok {
 			switch lower(strings.TrimSpace(v)) {
@@ -434,6 +436,22 @@ func (h *hints) textAlign(n *html.Node) {
 	case "middle":
 		h.add("text-align", "center")
 	}
+}
+
+// legendAlign maps align on a legend to text-align, which places a
+// rendered legend in its fieldset's border as Chromium places it. The
+// HTML Standard maps the attribute to justify-self (15.3.13), which
+// Chromium does not lay out on a legend; an author's text-align overrides
+// the attribute, as it overrides a presentational hint.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 places a legend
+//     of align=center in the middle of its fieldset's border, one of
+//     align=right with text-align: left at the start, one of
+//     justify-self: center or end at the start, on screen.
+func (h *hints) legendAlign(n *html.Node) {
+	h.textAlign(n)
 }
 
 // cellAlign maps align on table parts (HTML, 15.3.10).

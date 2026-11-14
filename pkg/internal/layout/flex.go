@@ -1688,6 +1688,7 @@ func (e *engine) layoutItemAt(k *box, x, y, w, h float64, hDef bool, pcb cblock)
 	if hDef {
 		k.h = h
 	}
+	fillFieldset(k)
 	e.placeMarker(k)
 	e.reach(k.y + k.borderH())
 	return content

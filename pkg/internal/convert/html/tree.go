@@ -112,6 +112,9 @@ type builder struct {
 	// lines styles the first formatted lines, nil when no element has a
 	// ::first-line.
 	lines *firstLines
+	// legend is the rendered legend of the fieldset whose children are
+	// being built.
+	legend renderedLegend
 	// defDocs holds the drawing of each svg element a clip-path or a mask
 	// reached, nil for one that does not parse; the layout reads it
 	// through defsMu.
@@ -179,10 +182,18 @@ func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, s
 		node.Children = append(node.Children, before)
 	}
 	var kids []*layout.Node
+	var legend *layout.Node
 	var err error
-	if isDetails(n) {
+	switch {
+	case isDetails(n):
 		kids, err = b.detailsChildren(ctx, n, st, depth)
-	} else {
+	case b.computed.RenderedLegend(n) != nil:
+		outer := b.legend
+		b.legend = renderedLegend{dom: b.computed.RenderedLegend(n)}
+		kids, err = b.children(ctx, n, st, depth)
+		legend = b.legend.node
+		b.legend = outer
+	default:
 		kids, err = b.children(ctx, n, st, depth)
 	}
 	if err != nil {
@@ -208,6 +219,9 @@ func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, s
 	if bookmark >= 0 && st.BookmarkLabel != nil {
 		b.headings[bookmark].label = b.contentText(n, node, st.BookmarkLabel, before, after)
 		b.headings[bookmark].labelled = true
+	}
+	if fs, cs := b.computed.Fieldset(n); fs != nil && cs != nil {
+		fieldsetBoxes(node, fs, cs, legend)
 	}
 	return nil
 }
@@ -311,6 +325,9 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 	b.semantics(node, n)
 	if err := b.content(ctx, node, n, st, v, depth+1); err != nil {
 		return nil, err
+	}
+	if n == b.legend.dom && b.legend.node == nil {
+		b.legend.node = legendNode(node)
 	}
 	if st.Footnote {
 		return []*layout.Node{b.footnote(ctx, n, node, st)}, nil

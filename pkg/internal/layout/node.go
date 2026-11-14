@@ -191,7 +191,42 @@ type Node struct {
 	// whose Style has a Note is a note: it goes to the page's note area
 	// ([PageBox.NoteArea]) by the same rule.
 	Footnote *Node
+	// Fieldset says which part of a fieldset element's boxes an Element
+	// is (HTML Standard, 15.3.13), FieldsetNone for none. See
+	// [FieldsetPart].
+	Fieldset FieldsetPart
 }
+
+// FieldsetPart is the part a node plays in the boxes of a fieldset
+// element (HTML Standard, 15.3.13).
+type FieldsetPart uint8
+
+// The fieldset parts.
+const (
+	// FieldsetNone is a node of no fieldset part.
+	FieldsetNone FieldsetPart = iota
+	// FieldsetBox is the box of a fieldset: a block container that
+	// establishes a block formatting context, of children its rendered
+	// legend, when it has one, then its content box. The engine centres
+	// the legend's border box on the block-start border and gives the
+	// content box the room below the legend's margin box; the border is
+	// drawn that much lower when the legend is taller than it, its
+	// background with it, and not behind the legend. Its padding is laid
+	// out on its content box.
+	FieldsetBox
+	// FieldsetLegend is the rendered legend of a FieldsetBox, its first
+	// child, a block-level Element. Its width is the fit-content width
+	// in the fieldset's content box when its Style gives none; auto
+	// margins place it in that box as they place a block, and its
+	// text-align otherwise: start, end, left, right or centre. Its
+	// block-start margin is not laid out.
+	FieldsetLegend
+	// FieldsetContent is the anonymous fieldset content box of a
+	// FieldsetBox, its last child: it takes the fieldset's padding as its
+	// own and its negation as its margins, so its padding box covers the
+	// fieldset's below the legend.
+	FieldsetContent
+)
 
 // Options parametrises one [Layout] call.
 type Options struct {

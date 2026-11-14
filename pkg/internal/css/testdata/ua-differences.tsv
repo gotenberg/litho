@@ -63,9 +63,9 @@ missing	|input[type=image i]|appearance	no effect on paper: the property styles 
 missing	|input[type=image i]|overflow-clip-margin	overflow-clip-margin is not supported (CSS Overflow 4); litho clips at the padding box
 missing	|input[type=tel i]:dir(ltr)|direction	written as [dir=ltr i] and [dir=rtl i]: litho does not match :dir(); the direction of bdi and of an input of type tel follows its dir attribute
 missing	|input|appearance	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
-missing	|legend[align=center i]|justify-self	justify-self on a block-level box (CSS Align 3, 6.1) is not laid out: a legend sits at the start
-missing	|legend[align=left i]|justify-self	justify-self on a block-level box (CSS Align 3, 6.1) is not laid out: a legend sits at the start
-missing	|legend[align=right i]|justify-self	justify-self on a block-level box (CSS Align 3, 6.1) is not laid out: a legend sits at the start
+missing	|legend[align=center i]|justify-self	justify-self on a block-level box (CSS Align 3, 6.1) is not laid out, as in Chromium: the align attribute of a legend is a text-align hint, which places a rendered legend as Chromium places it
+missing	|legend[align=left i]|justify-self	justify-self on a block-level box (CSS Align 3, 6.1) is not laid out, as in Chromium: the align attribute of a legend is a text-align hint, which places a rendered legend as Chromium places it
+missing	|legend[align=right i]|justify-self	justify-self on a block-level box (CSS Align 3, 6.1) is not laid out, as in Chromium: the align attribute of a legend is a text-align hint, which places a rendered legend as Chromium places it
 missing	|nobr wbr|white-space	a wbr is a break opportunity litho inserts as U+200B, whatever its white-space
 missing	|rt|display	Chromium 156: an rt outside a ruby stays inline, and an annotation is half its ruby's size, aligned at the start, at the normal line height
 missing	|select|appearance	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)

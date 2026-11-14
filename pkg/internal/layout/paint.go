@@ -151,6 +151,10 @@ type painter struct {
 	// display list instead: a blurred text shadow draws its decorations'
 	// copies into its bitmap.
 	capture *[]typeset.Fragment
+	// into, when not nil, is the group the borders being painted go
+	// into instead of the box's own container: the clip that keeps a
+	// fieldset's border from behind its legend.
+	into *ditem
 	// cuts reports, for each item of the line being painted, inline box
 	// fragments that paint before it, nil for none: a decoration line
 	// spanning several runs does not cross them (decoRun).
@@ -443,7 +447,7 @@ func (p *painter) emit(b *box, content bool, frag typeset.Fragment, y0, y1 float
 		return
 	}
 	frag = ordered(frag, p.orderOf(b), 0)
-	c := p.sync(p.chain(b, content))
+	c := p.holder(b, content)
 	if p.mono >= 0 {
 		page = p.mono
 	}
@@ -466,6 +470,17 @@ func (p *painter) emit(b *box, content bool, frag typeset.Fragment, y0, y1 float
 		}
 	}
 	c.kids = append(c.kids, &ditem{frag: frag, y0: y0, y1: y1, page: page})
+}
+
+// holder returns the container a fragment of box b goes into: the group
+// [painter.into] names, else b's container under the clips that apply to
+// it. content reports a fragment of b's content, which b's own clip
+// covers.
+func (p *painter) holder(b *box, content bool) *ditem {
+	if p.into != nil {
+		return p.into
+	}
+	return p.sync(p.chain(b, content))
 }
 
 // orderOf returns the place in document order of what b paints: the
@@ -1147,12 +1162,28 @@ func (p *painter) decorations(b *box) {
 		return
 	}
 	frags, columns := p.fragments(b)
+	lg := renderedLegend(b)
+	top := p.borderRect(b).Y
 	for _, r := range frags {
+		var cut *typeset.Rect
+		if lg != nil && lg.laidOut && math.Abs(r.Y-top) < eps {
+			// A fieldset draws its block-start border, its background
+			// with it, centred on its legend, and no border behind the
+			// legend (HTML Standard, 15.3.13).
+			off, c := legendBorder(b, lg)
+			r.Y, r.Height = r.Y+off, max(r.Height-off, 0)
+			c.X, c.Y = c.X+p.dx, c.Y+p.dy
+			cut = &c
+		}
 		paint := func() {
 			radii := radiiOf(b, r.Width, r.Height)
 			p.shadows(b, b.st, r, radii, b.bd, false)
 			p.background(b, b.st, r, radii, b.bd, b.pd)
 			p.shadows(b, b.st, r, radii, b.bd, true)
+			if cut != nil {
+				p.cutBorder(b, r, *cut, func() { p.border(b, b.st, r, radii, b.bd, [4]bool{true, true, true, true}) })
+				return
+			}
 			p.border(b, b.st, r, radii, b.bd, [4]bool{true, true, true, true})
 		}
 		if columns {
