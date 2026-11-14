@@ -625,3 +625,29 @@ func TestChartFromElement_AxisSourceAndUnits(t *testing.T) {
 		t.Errorf("display unit %v, title %+v; want 1e6 and Millions", val.DisplayUnit, val.Title)
 	}
 }
+
+func TestChartFromElement_UprightAxisTitle(t *testing.T) {
+	tests := []struct {
+		name    string
+		bodyPr  string
+		upright bool
+	}{
+		{"no rotation stated", `<a:bodyPr/>`, false},
+		{"zero rotation", `<a:bodyPr rot="0"/>`, true},
+		{"quarter turn", `<a:bodyPr rot="-5400000"/>`, false},
+		{"automatic", `<a:bodyPr rot="-60000000"/>`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			axis := `<c:valAx><c:axId val="2"/><c:axPos val="l"/><c:title><c:tx><c:rich>` + tt.bodyPr +
+				`<a:p><a:r><a:t>y</a:t></a:r></a:p></c:rich></c:tx></c:title></c:valAx>`
+			c := readChart(t, chartXML("", "", axis), false)
+			if len(c.Axes) != 1 || c.Axes[0].Title == nil {
+				t.Fatalf("axes = %+v", c.Axes)
+			}
+			if got := c.Axes[0].Title.Upright; got != tt.upright {
+				t.Errorf("Upright = %v, want %v", got, tt.upright)
+			}
+		})
+	}
+}

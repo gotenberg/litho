@@ -363,15 +363,36 @@ func TestRender_OfficeLayoutUntitled(t *testing.T) {
 }
 
 // TestRender_OfficeValueAxisTitle holds the title of a value axis beside
-// the plot area to Office's room: its line and three officeAxisTitlePad.
+// the plot area to Office's room: its line and three officeAxisTitlePad,
+// unturned titles 1.5 pt more on each side, centred on the plot area.
 func TestRender_OfficeValueAxisTitle(t *testing.T) {
 	r := typeset.Rect{Width: 361.2, Height: 145.2}
 	base, _ := plotBounds(t, officeChart(2.3333, 3.5, 7), r)
-	c := officeChart(2.3333, 3.5, 7)
-	c.Axes[1].Title = &Title{Text: "UU", Style: TextStyle{Size: 10, Color: typeset.Black}}
-	b, _ := plotBounds(t, c, r)
-	if got, want := b.X-base.X, 10+3*officeAxisTitlePad; math.Abs(got-want) > 1e-6 {
-		t.Errorf("title room = %v, want %v", got, want)
+	for _, tt := range []struct {
+		name    string
+		upright bool
+		room    float64
+	}{
+		{"turned", false, 10 + 3*officeAxisTitlePad},
+		{"upright", true, 20 + 2*officeUprightTitleInset + 3*officeAxisTitlePad},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c := officeChart(2.3333, 3.5, 7)
+			c.Axes[1].Title = &Title{Text: "UU", Style: TextStyle{Size: 10, Color: typeset.Black}, Upright: tt.upright}
+			b, frags := plotBounds(t, c, r)
+			if got := b.X - base.X; math.Abs(got-tt.room) > 1e-6 {
+				t.Errorf("title room = %v, want %v", got, tt.room)
+			}
+			turned := false
+			walk(frags, 0, func(fr typeset.Fragment, _ int) {
+				if g, ok := fr.(*typeset.Group); ok && g.Transform.B != 0 {
+					turned = true
+				}
+			})
+			if turned == tt.upright {
+				t.Errorf("title turned = %v, want %v", turned, !tt.upright)
+			}
+		})
 	}
 }
 

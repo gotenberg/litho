@@ -299,11 +299,25 @@ func (rd *renderer) officeRoom(bb, inner typeset.Rect, dims []*dim) typeset.Rect
 //     title of the category axis is centred on the plot area's width.
 func officeTitleRoom(d *dim, b *block) float64 {
 	w, h := b.rotated()
-	if d.vertical {
-		return w
+	if !d.vertical {
+		return h
 	}
-	return h
+	if b.style.Rotation == 0 {
+		return w + 2*officeUprightTitleInset
+	}
+	return w
 }
+
+// officeUprightTitleInset pads each side of the unturned title of an axis
+// beside the plot area, in points.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: charts_scatter_bubble's 10 pt bold "y", unturned by
+//     its file, takes 16.73 pt beside the plot area for 4.72 pt of text,
+//     7.50 pt from the chart's edge pad and 4.55 pt from the value
+//     labels: 1.5 pt more on each side than a turned title's line.
+const officeUprightTitleInset = 1.5
 
 // officeOrigin returns the value Office counts the ticks of the linear
 // scale sc from: its minimum, so that a minimum the file fixes off the

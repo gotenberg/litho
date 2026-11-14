@@ -462,6 +462,10 @@ type Title struct {
 	// says; its size stays automatic, and it still takes its space from
 	// the plot area.
 	Layout *ManualLayout
+	// Upright keeps the title of an axis drawn up the chart unturned, as
+	// a file that states a rotation of zero asks; such a title otherwise
+	// turns 90 degrees.
+	Upright bool
 }
 
 // DataTable is the table of the series' values a chart draws under its

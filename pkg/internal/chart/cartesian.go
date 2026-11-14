@@ -953,7 +953,7 @@ func (rd *renderer) titleBlock(d *dim) *block {
 		return nil
 	}
 	st := d.ax.Title.Style
-	if d.vertical && st.Rotation == 0 {
+	if d.vertical && st.Rotation == 0 && !d.ax.Title.Upright {
 		st.Rotation = 90
 	}
 	maxW := rd.page.Width * 0.8

@@ -1073,7 +1073,11 @@ func (p *chartReader) axis(e *Element, kind chart.AxisKind) *chart.Axis {
 		if text == "" {
 			text = "Axis Title"
 		}
-		a.Title = &chart.Title{Text: text, Style: p.textStyle(own, 10, true, 1), Frame: p.frame(t.Child(NSChart, "spPr"), chart.Frame{})}
+		// A body rotation of zero keeps the title of a vertical axis
+		// unturned, where a title that states none turns (ECMA-376 Part 1,
+		// 21.1.2.1.1 bodyPr rot).
+		upright := own.hasRotation && own.rotation == 0
+		a.Title = &chart.Title{Text: text, Style: p.textStyle(own, 10, true, 1), Frame: p.frame(t.Child(NSChart, "spPr"), chart.Frame{}), Upright: upright}
 	}
 	p.displayUnits(e.Child(NSChart, "dispUnits"), a)
 	a.BetweenCategories = childVal(e, "crossBetween") != "midCat"
