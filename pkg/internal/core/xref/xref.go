@@ -3,6 +3,7 @@ package xref
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -309,13 +310,19 @@ func ParseXRefTable(ctx context.Context, lex *lexer.Lexer, indexMap map[int]XRef
 			return nil, 0, nil, fmt.Errorf("%w: expected count, got %v", ErrMalformedXRef, tok2.Type)
 		}
 
-		startObj, err := strconv.Atoi(tok1.Value)
+		// ISO 32000-1, Annex C, Table C.1 holds an integer to 32 bits and
+		// an object number to 8,388,607: a subsection that starts or ends
+		// past the 32-bit range is malformed on every platform.
+		startObj, err := intconv.Atoi32(tok1.Value)
 		if err != nil {
 			return nil, 0, nil, fmt.Errorf("%w: invalid start object number %q: %v", ErrMalformedXRef, tok1.Value, err)
 		}
-		count, err := strconv.Atoi(tok2.Value)
+		count, err := intconv.Atoi32(tok2.Value)
 		if err != nil {
 			return nil, 0, nil, fmt.Errorf("%w: invalid entry count %q: %v", ErrMalformedXRef, tok2.Value, err)
+		}
+		if count > 0 && startObj > math.MaxInt32-(count-1) {
+			return nil, 0, nil, fmt.Errorf("%w: subsection %d %d ends past object number %d", ErrMalformedXRef, startObj, count, math.MaxInt32)
 		}
 
 		for i := range count {
@@ -347,7 +354,7 @@ func ParseXRefTable(ctx context.Context, lex *lexer.Lexer, indexMap map[int]XRef
 			if err != nil {
 				return nil, 0, nil, fmt.Errorf("%w: invalid offset %q: %v", ErrMalformedXRef, tokOff.Value, err)
 			}
-			gen, err := strconv.Atoi(tokGen.Value)
+			gen, err := intconv.Atoi32(tokGen.Value)
 			if err != nil {
 				return nil, 0, nil, fmt.Errorf("%w: invalid generation %q: %v", ErrMalformedXRef, tokGen.Value, err)
 			}
