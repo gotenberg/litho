@@ -431,7 +431,8 @@ func cutLinks(links []pendingLink, b *box, s *colSet, oy float64) []pendingLink 
 // row's columns (CSS Multicol 1, 4.2 to 4.5). The columns of the last row
 // of the last column set, after every spanner, reach down to b's content
 // edge when b is taller than its content, as Chromium makes them: the
-// rule follows, unless a page or an outer column cuts b before that edge.
+// rule follows, to the end of the page or the outer column that cuts b
+// before that edge.
 //
 // # Corpus evidence
 //
@@ -440,6 +441,11 @@ func cutLinks(links []pendingLink, b *box, s *colSet, oy float64) []pendingLink 
 //     the least, holding 100 pixels of content, 300 pixels long; after a
 //     spanner, the last row's rule runs to the content edge and the rows
 //     before keep their balanced height.
+//   - probe, html: Chromium 156 prints the rule of such a container that a
+//     page cuts to the end of the page area.
+//   - wpt, css/css-multicol/multicol-breaking-000.html and -001: Chromium
+//     draws the rule of an inner container 300 pixels tall, balanced to 60
+//     pixels, to the end of the 100 pixel outer column.
 func (p *painter) columnRules(b *box) {
 	c := &b.st.Columns
 	w := c.RuleWidth
@@ -456,8 +462,12 @@ func (p *painter) columnRules(b *box) {
 		}
 		for ri, r := range s.rows {
 			h := r.used
-			if top, bottom := b.y+r.top, b.contentY()+b.h; si == len(d.sets)-1 && ri == len(s.rows)-1 && bottom > top+r.used && uncut(p.e, b, top, bottom) {
-				h = bottom - top
+			if top, bottom := b.y+r.top, b.contentY()+b.h; si == len(d.sets)-1 && ri == len(s.rows)-1 && bottom > top+r.used {
+				if uncut(p.e, b, top, bottom) {
+					h = bottom - top
+				} else {
+					h = max(min(bottom, fragmentEnd(p.e, b, top))-top, h)
+				}
 			}
 			for j := 0; j+1 < r.cols; j++ {
 				mid := d.ruleX(j)
@@ -484,6 +494,23 @@ func uncut(e *engine, b *box, y0, y1 float64) bool {
 		break
 	}
 	return e.pageOf(y0+eps) == e.pageOf(y1-eps)
+}
+
+// fragmentEnd returns the flow position the fragmentainer y lies in
+// ends at: the column of the nearest multi-column ancestor of b, or the
+// page.
+func fragmentEnd(e *engine, b *box, y float64) float64 {
+	for a := b.parent; a != nil; a = a.parent {
+		if a.mc == nil {
+			continue
+		}
+		if s := setOf(a, b); s != nil && len(s.frags) > 0 {
+			_, end := s.band(a, s.fragOf(a, y+eps))
+			return end
+		}
+		break
+	}
+	return e.nextPage(y + eps)
 }
 
 // ruleX returns the offset from the first column's left edge of the

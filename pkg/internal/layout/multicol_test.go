@@ -775,3 +775,25 @@ func TestMulticol_RuleOfEveryRowContentRunsThrough(t *testing.T) {
 		_R___R_
 		_______`)
 }
+
+func TestMulticol_RuleRunsToTheCut(t *testing.T) {
+	t.Parallel()
+	// A container taller than its balanced columns draws its last rule to
+	// its content edge, or to the end of the page that cuts it before.
+	rule := func(s *css.Style) {
+		s.Columns.RuleWidth, s.Columns.RuleStyle, s.Columns.RuleColor = px(1), css.Solid, red
+	}
+	mc := el(sty(columns(2, 1), height(4), rule), strip(blue), strip(blue))
+	assertPixels(t, run(t, doc(mc), page(5, 3)), 1, `
+		BBRBB
+		__R__
+		__R__`)
+	// An outer column cuts it the same way.
+	inner := el(sty(columns(2, 1), width(5), height(6), rule), strip(blue), strip(blue))
+	outer := el(sty(columns(2, 1), width(11), height(3), fillAuto), inner)
+	assertPixels(t, run(t, doc(outer), page(11, 4)), 1, `
+		BBRBB______
+		__R________
+		__R________
+		___________`)
+}
