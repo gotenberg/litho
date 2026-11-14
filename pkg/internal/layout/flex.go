@@ -393,10 +393,12 @@ func (e *engine) flexLines(b *box, fd *flexData, ax flexAxes, cb, pcb cblock, in
 	if !ax.row {
 		for _, it := range items {
 			k := it.b
-			if r, content := prefRatio(k); r > 0 && !it.stretch && !it.crossSet && k.sizeSrc().Width.Kind == css.Auto {
+			if r, content := prefRatio(k); r > 0 && (!it.stretch || ax.wrap) && !it.crossSet && k.sizeSrc().Width.Kind == css.Auto {
 				// The cross size follows the used main size through the
 				// ratio (CSS Flexbox 1, 9.4, 7; CSS Sizing 4, 4.2), as
-				// Chromium sizes a column item.
+				// Chromium sizes a column item: in a multi-line column a
+				// stretched item's hypothetical cross size too, which
+				// sizes its line before the item stretches to it.
 				it.cross = constrainWidth(k, widthOfHeight(it.target, r, edgesFor(k, content)), cb.w)
 			}
 		}
@@ -585,7 +587,10 @@ func (e *engine) columnCross(it *fitem, cb cblock, single bool) {
 		if k.kind == kindReplaced {
 			w, _ = e.replacedSize(k, cb)
 		}
-		it.cross, it.crossSet = constrainWidth(k, w, cb.w), true
+		// A width the ratio transfers from a height is the item's until it
+		// flexes: then its used height gives it (layoutFlex).
+		r, _ := prefRatio(k)
+		it.cross, it.crossSet = constrainWidth(k, w, cb.w), k.sizeSrc().Width.Kind != css.Auto || r <= 0
 	case canStretch:
 		it.stretch = true
 		if single {

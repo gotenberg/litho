@@ -616,11 +616,14 @@ func TestFlex_PercentageOfAnIndefiniteColumnItem(t *testing.T) {
 
 // TestFlex_ColumnWrapWidthFromFlexedLines locks CSS Flexbox 1, 9.9.2: an
 // inline multi-line column of a definite height is as wide as its lines
-// once its items flex: three 60px items in a 100px column take three
-// lines.
+// once its items flex, three 60px items in a 100px column take three
+// lines, and an item's width follows its flexed height through its
+// ratio, a height that the ratio would turn into a width included.
 //
 // # Corpus evidence
 //
+//   - wpt: css-sizing/aspect-ratio/flex-aspect-ratio-013 and -014,
+//     Chromium 156 draws the square item of flex: 1 100px wide.
 //   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 makes such a
 //     column of three 50 by 60px items 150px wide.
 func TestFlex_ColumnWrapWidthFromFlexedLines(t *testing.T) {
@@ -628,12 +631,15 @@ func TestFlex_ColumnWrapWidthFromFlexedLines(t *testing.T) {
 	col := func(kids ...*Node) *Node {
 		return el(flexBox(func(s *css.Style) { s.Display = css.InlineFlex }, dir(css.FlexColumn), wrapMode(css.Wrap), height(100)), kids...)
 	}
+	ratio := func(s *css.Style) { s.AspectRatio = css.Ratio(1, 1, false); s.MinHeight = css.Pts(0) }
 	for _, tc := range []struct {
 		name string
 		root *Node
 		want float64
 	}{
 		{"three lines", col(item(50, 60, flexF(0, 0, -1)), item(50, 60, flexF(0, 0, -1)), item(50, 60, flexF(0, 0, -1))), 150},
+		{"ratio, flex 1", col(el(sty(flexF(1, 1, 0), ratio))), 100},
+		{"ratio, flex 1, height 50", col(el(sty(flexF(1, 1, 0), ratio, height(50)))), 100},
 	} {
 		var fb *box
 		var walk func(b *box)
