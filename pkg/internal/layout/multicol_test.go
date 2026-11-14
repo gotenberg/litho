@@ -585,3 +585,21 @@ func TestMulticol_MonolithicOverflowsItsColumnWhole(t *testing.T) {
 		_________
 		_________`)
 }
+
+// TestMulticol_BalanceKeepsAnAvoidedEmptyBlockWhole locks that balancing
+// does not cut the blank height of an empty block whose break-before is
+// avoid: the cut would separate it from the block before as the avoided
+// break does (CSS Fragmentation 3, 3.1 and 4.4), so the columns grow to
+// hold both, as Chromium balances them.
+func TestMulticol_BalanceKeepsAnAvoidedEmptyBlockWhole(t *testing.T) {
+	t.Parallel()
+	avoid := func(s *css.Style) { s.BreakBefore = css.BreakAvoid }
+	res := run(t, doc(el(sty(columns(2, 1)),
+		strip(red), strip(blue), strip(blue), strip(lime, avoid), strip(black), strip(black))), page(5, 5))
+	assertPixels(t, res, 1, `
+		RR_KK
+		BB_KK
+		BB___
+		GG___
+		_____`)
+}

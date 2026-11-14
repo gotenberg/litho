@@ -1282,8 +1282,12 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 				if e.relayout(k.y) {
 					cursor = e.layoutBlock(k, cbFor(e.pageOf(k.y)+1), bc, restore(snap), mc, breakPush)
 				}
-			case prev != nil && avoidsBetween(prev, k) && e.pageOf(prev.y+prev.borderH()-1e-3) < e.pageOf(firstContent(k)) &&
+			case prev != nil && avoidsBetween(prev, k) && (e.pageOf(prev.y+prev.borderH()-1e-3) < e.pageOf(firstContent(k)) || blankSliced(e, k)) &&
 				!e.atPageTop(prev.y) && prev.borderH()+k.borderH() <= e.areaH(e.pageOf(prev.y)) && !chainFromTop():
+				// The break moves before prev: one through k's first
+				// content, or through the blank height of a k with none,
+				// separates prev from what follows it in k, as the break
+				// before k would (CSS Fragmentation 3, 3.1 and 4.4).
 				if e.relayout(k.y) {
 					cursor = e.layoutBlock(prev, cbFor(e.pageOf(prev.y)+1), bc, restore(prevSnap), mc, breakPush)
 					cursor = e.layoutBlock(k, cbFor(e.pageOf(cursor)), bc, cursor, mc, breakNone)
@@ -1480,6 +1484,24 @@ const maxAvoidDepth = 64
 // straddles reports whether b's border box crosses a page cut.
 func (e *engine) straddles(b *box) bool {
 	return e.pageOf(b.y) != e.pageOf(b.y+b.borderH()-1e-3)
+}
+
+// blankSliced reports a block k with no content whose blank height a page
+// or column cut runs through. Slicing it puts nothing of k before the cut
+// that a break before k would not: under an avoided break before k, k
+// moves with the box before it, as Chromium balances columns over such a
+// block rather than cut it.
+//
+// # Corpus evidence
+//
+//   - wpt, css/css-multicol/balance-break-avoidance-002.html: Chromium
+//     balances blocks of 25, 50, 25 (break-before: avoid, empty) and 50px
+//     into columns of 100 and 50px.
+//   - probe, html: Chromium balances the same blocks without the avoid,
+//     or with break-after: avoid on the 50px block instead, as 75 and
+//     75px and 100 and 50px.
+func blankSliced(e *engine, k *box) bool {
+	return !hasContent(k) && e.straddles(k)
 }
 
 // firstContent returns the top of b's first line box, or of its content
