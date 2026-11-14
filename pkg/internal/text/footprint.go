@@ -258,45 +258,51 @@ func readHead(ld *ot.Loader, records []truetype.TableRecord) ([]byte, error) {
 	return head, err
 }
 
+// The colour glyph tables a face holds (OpenType 1.9.1, CBDT, sbix, COLR):
+// bitmaps, or layers over outlines.
+const (
+	colourBitmaps uint8 = 1 << iota
+	colourLayers
+)
+
 // checkProgram refuses a face go-text could not load or litho could not
-// embed: one without outlines, a colour bitmap face, a face listing a table
+// embed: one without outlines or colour bitmaps, a face listing a table
 // twice, and a face whose tables sum past [maxFontFileBytes], which a
 // collection face extracted on [Face.Typeset] would exceed. It returns the
-// sum of the face's table lengths.
-func checkProgram(records []truetype.TableRecord) (int64, error) {
+// sum of the face's table lengths and the colour glyph tables it holds.
+func checkProgram(records []truetype.TableRecord) (int64, uint8, error) {
 	var total int64
-	outlines, bitmap := false, false
+	outlines := false
+	var colour uint8
 	seen := make(map[string]bool, len(records))
 	for _, rec := range records {
 		if seen[rec.Tag] {
-			return 0, fmt.Errorf("%w: table %q listed twice", truetype.ErrInvalidFont, rec.Tag)
+			return 0, 0, fmt.Errorf("%w: table %q listed twice", truetype.ErrInvalidFont, rec.Tag)
 		}
 		seen[rec.Tag] = true
 		switch rec.Tag {
 		case "glyf", "CFF ", "CFF2":
 			outlines = true
 		case "CBDT", "sbix":
-			bitmap = true
+			colour |= colourBitmaps
+		case "COLR":
+			colour |= colourLayers
 		}
 		total += int64(rec.Length)
 	}
 	switch {
-	case bitmap:
-		// Noto Color Emoji and Apple Color Emoji draw with colour bitmaps,
-		// which the backend cannot embed as outlines.
-		return 0, errors.New("colour bitmap face, not embeddable as outlines")
-	case !outlines:
-		return 0, errors.New("face without glyf, CFF or CFF2 outlines")
+	case !outlines && colour&colourBitmaps == 0:
+		return 0, 0, errors.New("face without glyf, CFF or CFF2 outlines or colour bitmaps")
 	case total > maxFontFileBytes:
-		return 0, fmt.Errorf("face of %d bytes past the %d-byte bound", total, maxFontFileBytes)
+		return 0, 0, fmt.Errorf("face of %d bytes past the %d-byte bound", total, maxFontFileBytes)
 	}
-	return total, nil
+	return total, colour, nil
 }
 
 // readFootprint reads what matching and layout need of the face ld loads,
 // whose table directory is records.
 func readFootprint(ld *ot.Loader, records []truetype.TableRecord) (*Face, error) {
-	total, err := checkProgram(records)
+	total, colour, err := checkProgram(records)
 	if err != nil {
 		return nil, err
 	}
@@ -359,6 +365,7 @@ func readFootprint(ld *ot.Loader, records []truetype.TableRecord) (*Face, error)
 		revision: binary.BigEndian.Uint32(head[4:8]), // ParseHead read 54 bytes or more
 		coverage: coverage,
 		size:     total,
+		colour:   colour,
 	}
 	fc.setNames(names)
 	fc.setAspect(hasOS2, os2, headTable.MacStyle, names.Name(nameSubfamily))

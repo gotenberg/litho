@@ -489,15 +489,15 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 // fontSettings returns the font settings of st for its text style ts,
 // nil when every one is at its default, as for most text: the features
 // of the font properties, font-size-adjust, font-language-override,
-// font-variation-settings and font-optical-sizing.
+// font-variation-settings, font-optical-sizing and font-variant-emoji.
 func (e *engine) fontSettings(st *css.Style, ts *text.Style) *text.FontSettings {
 	features := e.fontFeatures(st, ts)
 	a := st.FontSizeAdjust
 	noOptical := st.FontOpticalSizing == css.OpticalSizingNone
-	if features == nil && !a.Set && st.FontLanguageOverride == "" && st.FontVariationSettings == nil && !noOptical {
+	if features == nil && !a.Set && st.FontLanguageOverride == "" && st.FontVariationSettings == nil && !noOptical && st.FontVariantEmoji == css.EmojiNormal {
 		return nil
 	}
-	fs := &text.FontSettings{Features: features, LanguageSystem: st.FontLanguageOverride, NoOpticalSizing: noOptical}
+	fs := &text.FontSettings{Features: features, LanguageSystem: st.FontLanguageOverride, NoOpticalSizing: noOptical, Emoji: emojiVariant(st.FontVariantEmoji)}
 	for _, v := range st.FontVariationSettings {
 		fs.Variations = append(fs.Variations, text.Variation{Tag: v.Tag, Value: v.Value})
 	}
@@ -510,6 +510,19 @@ func (e *engine) fontSettings(st *css.Style, ts *text.Style) *text.FontSettings 
 		}
 	}
 	return fs
+}
+
+// emojiVariant returns the text stack's form of font-variant-emoji.
+func emojiVariant(v css.VariantEmoji) text.EmojiVariant {
+	switch v {
+	case css.EmojiText:
+		return text.EmojiText
+	case css.EmojiEmoji:
+		return text.EmojiEmoji
+	case css.EmojiUnicode:
+		return text.EmojiUnicode
+	}
+	return text.EmojiNormal
 }
 
 // textScale returns the horizontal scale of the text stack for an Office

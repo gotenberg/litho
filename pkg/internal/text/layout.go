@@ -144,9 +144,9 @@ type Report struct {
 	// once and keeps at most the first 256 distinct characters met.
 	MissingGlyphs []rune
 	// MissingEmoji lists the emoji no indexed face covers: pictographs,
-	// which a colour emoji font draws and [NewFonts] does not index. They
-	// draw blank, the advance of the matched face's .notdef glyph, rather
-	// than as a box, and keep their text for extraction. It is sorted and
+	// which a colour emoji font draws when one is indexed. They draw
+	// blank, the advance of the matched face's .notdef glyph, rather than
+	// as a box, and keep their text for extraction. It is sorted and
 	// bounded as MissingGlyphs is, and MissingGlyphs leaves them out.
 	MissingEmoji []rune
 	// DefaultInstances lists the variable faces drawn at their default
@@ -211,8 +211,10 @@ type DefaultInstance struct {
 //     revision, then in index order, with Apple's LastResort placeholder
 //     font last.
 //
-// Colour emoji faces are not indexed, so emoji fall to an outline face that
-// covers them, if any, which draws their text presentation. An emoji no face
+// An emoji sequence (UTS #51, ED-17) is drawn by one face, picked by its
+// presentation: a colour face first for an emoji drawn as emoji, and a
+// colour face last for a character drawn as text (see
+// [layoutState.resolveSeq] and [FontSettings.Emoji]). An emoji no face
 // covers draws blank and is listed in [Report.MissingEmoji]; any other
 // character no face covers draws the matched face's .notdef glyph and is
 // listed in [Report.MissingGlyphs].
@@ -339,6 +341,8 @@ type layoutState struct {
 	parsed map[*Face]*font.Font
 	byFace map[*font.Face]*Face
 	cache  map[resolveKey]*Face
+	// seqCache holds the faces of the emoji sequences resolved so far.
+	seqCache map[seqKey]*Face
 	// sticky holds the face of last resort each style and script drew
 	// with last, nil until one does.
 	sticky  map[stickyKey]*Face
@@ -526,7 +530,7 @@ func (st *layoutState) usablePrimary(s *styleState, matched *Face) (*Face, error
 		return matched, nil
 	}
 	s.primary = matched
-	if fc := st.fallback(s, language.Latin, ' '); fc != nil {
+	if fc := st.fallback(s, language.Latin, ' ', need{}); fc != nil {
 		return fc, nil
 	}
 	for _, fc := range st.fonts.faces {
@@ -596,7 +600,7 @@ func (st *layoutState) resolve(style int, script language.Script, r rune) *Face 
 	}
 	s := &st.styles[style]
 	if s.refs != nil {
-		if fc := st.resolveRefs(s, r); fc != nil {
+		if fc := st.resolveRefs(s, r, need{}); fc != nil {
 			st.cache[key] = fc
 			return fc
 		}
@@ -606,7 +610,7 @@ func (st *layoutState) resolve(style int, script language.Script, r rune) *Face 
 		if sc := language.LookupScript(r); sc != language.Common && sc != language.Inherited && sc != language.Unknown {
 			script = sc
 		}
-		if alt := st.fallback(s, script, r); alt != nil {
+		if alt := st.fallback(s, script, r, need{}); alt != nil {
 			fc = alt
 		}
 	}
@@ -667,7 +671,7 @@ func isPlaceholderFace(fc *Face) bool {
 // it, in the order [Fonts.Layout] documents, nil when no face does. A
 // candidate is chosen by its footprint, then loaded to check its cmap, at
 // most [maxFallbackLoads] times.
-func (st *layoutState) fallback(s *styleState, script language.Script, r rune) *Face {
+func (st *layoutState) fallback(s *styleState, script language.Script, r rune, n need) *Face {
 	f := st.fonts
 	if s.plan == nil {
 		f.setFallback(s, s.style)
@@ -685,7 +689,7 @@ func (st *layoutState) fallback(s *styleState, script language.Script, r rune) *
 			return true
 		}
 		loads++
-		if st.covers(fc, r) {
+		if st.covers(fc, r) && st.draws(fc, n) {
 			found = fc
 			return true
 		}
@@ -707,7 +711,18 @@ func (st *layoutState) fallback(s *styleState, script language.Script, r rune) *
 	if !isCJKScript(script) {
 		lists[len(lists)-1] = p.languageCJK
 	}
-	for _, keys := range lists {
+	emoji := n.pres == presentEmoji || n.pres == presentDefaultEmoji
+	for i, keys := range lists {
+		if i == 2 && emoji {
+			// The family list has no face for the emoji: the colour
+			// faces come before the installed fonts' script and generic
+			// lists.
+			for _, fc := range f.faces {
+				if fc.colourTables() != 0 && fc.covers(r) && try(fc) {
+					return found
+				}
+			}
+		}
 		for _, key := range keys {
 			if try(f.bestInFamily(key, s.req, r)) {
 				return found
@@ -725,10 +740,18 @@ func (st *layoutState) fallback(s *styleState, script language.Script, r rune) *
 		}
 	}
 	slices.SortFunc(rest, func(a, b *Face) int {
+		// A colour face draws a character of text presentation only when
+		// no other face covers it.
+		if ca, cb := a.colourTables() != 0, b.colourTables() != 0; ca != cb && !emoji {
+			if ca {
+				return 1
+			}
+			return -1
+		}
 		return compareLastResort(s.req, a, b)
 	})
 	if slices.ContainsFunc(rest, try) {
-		if found != nil {
+		if found != nil && found.colourTables() == 0 {
 			if st.sticky == nil {
 				st.sticky = make(map[stickyKey]*Face)
 			}
@@ -917,6 +940,7 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 		return nil, fmt.Errorf("laying out text: %w", err)
 	}
 
+	seqs := emojiSequences(para, func(i int) EmojiVariant { return st.styles[styleOf[i]].style.settings().Emoji })
 	var outputs []shaping.Output
 	for _, item := range items {
 		for start := item.RunStart; start < item.RunEnd; {
@@ -936,7 +960,7 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 				piece.Language = s.lang
 			}
 			piece.FontFeatures = s.style.features()
-			inputs := shaping.SplitByFace(piece, st.fontmap(idx, piece.Script))
+			inputs := st.splitByFace(piece, idx, seqs)
 			if s.style.Fallback.rule() == FallbackChromium {
 				inputs = st.spacesOwnFace(inputs, para, idx)
 			}

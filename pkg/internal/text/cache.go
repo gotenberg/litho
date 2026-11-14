@@ -122,7 +122,7 @@ func (fc *Face) parseFont() (*font.Font, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := checkProgram(records); err != nil {
+	if _, _, err := checkProgram(records); err != nil {
 		return nil, err
 	}
 	loaders, err := ot.NewLoaders(file)

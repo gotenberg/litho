@@ -242,6 +242,9 @@ type Face struct {
 	coverage []runeRange
 	// size is the sum of the face's table lengths.
 	size int64
+	// colour holds the colour glyph tables of the face, [colourBitmaps]
+	// and [colourLayers], 0 for a face that draws in one colour.
+	colour uint8
 
 	// font, loadErr, prev and next are guarded by the index's mutex.
 	font       *font.Font

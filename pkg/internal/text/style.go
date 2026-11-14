@@ -156,6 +156,9 @@ type FontSettings struct {
 	// earlier one: CSS font-variation-settings (CSS Fonts 4, 8.2 and 7.2).
 	// A face that is not variable ignores them.
 	Variations []Variation
+	// Emoji is the presentation emoji characters take when no variation
+	// selector follows them, CSS font-variant-emoji (CSS Fonts 4, 6.12).
+	Emoji EmojiVariant
 	// NoOpticalSizing leaves the opsz axis of a variable face at its
 	// default, CSS font-optical-sizing: none (CSS Fonts 4, 8.1); by
 	// default it follows the size (see [Fonts.Layout]).
@@ -185,7 +188,7 @@ func equalSettings(a, b *FontSettings) bool {
 		b = &noSettings
 	}
 	return a.SizeAdjust == b.SizeAdjust && a.LanguageSystem == b.LanguageSystem && slices.Equal(a.Features, b.Features) &&
-		slices.Equal(a.Variations, b.Variations) && a.NoOpticalSizing == b.NoOpticalSizing
+		slices.Equal(a.Variations, b.Variations) && a.NoOpticalSizing == b.NoOpticalSizing && a.Emoji == b.Emoji
 }
 
 // Feature is one OpenType feature setting: its tag and value, 0 for off

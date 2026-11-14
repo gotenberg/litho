@@ -472,6 +472,11 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 	if err != nil {
 		return fmt.Errorf("shaping text: %w", err)
 	}
+	seqs := emojiSequences(text[start:end], func(i int) EmojiVariant { return st.styles[p.runOf[start+i]].style.settings().Emoji })
+	for i := range seqs {
+		seqs[i].start += start
+		seqs[i].end += start
+	}
 	for _, item := range items {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("shaping text: %w", err)
@@ -500,7 +505,7 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 			if p.level[s]%2 == 1 {
 				piece.Direction = di.DirectionRTL
 			}
-			inputs := shaping.SplitByFace(piece, st.fontmap(idx, piece.Script))
+			inputs := st.splitByFace(piece, idx, seqs)
 			if ss.style.Fallback.rule() == FallbackChromium {
 				inputs = st.spacesOwnFace(inputs, text, idx)
 			}

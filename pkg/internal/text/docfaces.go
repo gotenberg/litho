@@ -492,12 +492,12 @@ func (f *Fonts) matchRefs(style Style, refs []familyRef) *Face {
 // font maps it (CSS Fonts 4, 4.7 and 5.2, step 6), or the installed face of
 // a family closest in aspect that maps it. It loads at most
 // [maxFallbackLoads] installed faces; nil means none draws r.
-func (st *layoutState) resolveRefs(s *styleState, r rune) *Face {
+func (st *layoutState) resolveRefs(s *styleState, r rune, n need) *Face {
 	loads := 0
 	for _, ref := range s.refs {
 		if ref.doc {
 			for _, fc := range ref.selected {
-				if fc.doc.inRange(r) && st.covers(fc, r) {
+				if fc.doc.inRange(r) && st.covers(fc, r) && st.draws(fc, n) {
 					return fc
 				}
 			}
@@ -511,7 +511,7 @@ func (st *layoutState) resolveRefs(s *styleState, r rune) *Face {
 			return nil
 		}
 		loads++
-		if st.covers(fc, r) {
+		if st.covers(fc, r) && st.draws(fc, n) {
 			return fc
 		}
 	}

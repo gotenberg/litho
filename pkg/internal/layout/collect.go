@@ -555,7 +555,7 @@ func (e *engine) shapePara(b *box, p *ifcPara) {
 		e.warnings = append(e.warnings, pendingWarning{code: warn.MissingGlyph, effect: warn.Omitted, msg: fmt.Sprintf("no font covers %q: drawn as the font's missing-glyph box", string(fresh)), y: -1, once: true})
 	}
 	if len(rep.MissingEmoji) > 0 {
-		e.warnOnce(warn.MissingGlyph, warn.Omitted, "colour emoji fonts are not supported: emoji no text font covers are drawn blank", -1)
+		e.warnOnce(warn.MissingGlyph, warn.Omitted, "no font covers some emoji: drawn blank", -1)
 	}
 	e.warnDefaultInstances(rep)
 }

@@ -363,7 +363,7 @@ func (l *layouter) paragraph(ctx context.Context, s string) error {
 		l.doc.Warnings = append(l.doc.Warnings, typeset.Warning{
 			Code:    warn.MissingGlyph,
 			Effect:  warn.Omitted,
-			Message: "colour emoji fonts are not supported: emoji no text font covers are drawn blank",
+			Message: "no font covers some emoji: drawn blank",
 			Page:    first,
 		})
 	}
