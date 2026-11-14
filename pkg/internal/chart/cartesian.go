@@ -973,6 +973,9 @@ func (rd *renderer) titleBlock(d *dim) *block {
 	maxW := rd.page.Width * 0.8
 	if d.vertical {
 		maxW = rd.page.Height * 0.8
+		if rd.officeLayout() {
+			maxW = rd.page.Height * officeSideTitleWrap
+		}
 	}
 	return rd.measure(d.ax.Title.Text, st, maxW)
 }
@@ -1063,6 +1066,12 @@ func (rd *renderer) axisTitle(d *dim, ext typeset.Rect) {
 	}
 	cx = math.Max(rd.page.X+float64(w/2), math.Min(cx, rd.page.X+rd.page.Width-float64(w/2)))
 	cy = math.Max(rd.page.Y+float64(h/2), math.Min(cy, rd.page.Y+rd.page.Height-float64(h/2)))
+	if office && d.vertical {
+		// Office keeps the title's top officeSideTitleInset under the
+		// plot area's, out of the chart's bottom if it must.
+		_, th := b.rotated()
+		cy = math.Max(along.Y+float64(along.Height/2), along.Y+officeSideTitleInset+float64(th/2))
+	}
 	rd.frame(typeset.Rect{X: cx - float64(w/2), Y: cy - float64(h/2), Width: w, Height: h}, d.ax.Title.Frame)
 	rd.out = append(rd.out, b.draw(cx, cy, alignCenter)...)
 }

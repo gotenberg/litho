@@ -472,3 +472,29 @@ func TestRender_OfficeSideLegendDropsEntries(t *testing.T) {
 		t.Errorf("keys centred at %v, want about %v", mid, want)
 	}
 }
+
+// TestRender_OfficeLongValueAxisTitle holds a value-axis title longer than
+// the plot area is high to Office's place: its top officeSideTitleInset
+// under the plot area's top, on one line while it is shorter than
+// officeSideTitleWrap of the chart's height.
+func TestRender_OfficeLongValueAxisTitle(t *testing.T) {
+	r := typeset.Rect{Width: 361.2, Height: 145.2}
+	c := officeChart(2.3333, 3.5, 7)
+	// Eleven 10 pt Ahem squares: 110 pt, under 0.76 of 145.2 pt.
+	c.Axes[1].Title = &Title{Text: "UUUUUUUUUUU", Style: TextStyle{Size: 10, Color: typeset.Black}}
+	b, frags := plotBounds(t, c, r)
+	var cy []float64
+	walk(frags, 0, func(fr typeset.Fragment, _ int) {
+		if g, ok := fr.(*typeset.Group); ok && g.Transform.B != 0 {
+			// The 90 degree turn about (cx, cy) has E = cx - cy and
+			// F = cx + cy.
+			cy = append(cy, (g.Transform.F-g.Transform.E)/2)
+		}
+	})
+	if len(cy) != 1 {
+		t.Fatalf("%d turned titles, want 1", len(cy))
+	}
+	if want := b.Y + officeSideTitleInset + 55; math.Abs(cy[0]-want) > 1e-6 {
+		t.Errorf("title centre = %v, want %v", cy[0], want)
+	}
+}

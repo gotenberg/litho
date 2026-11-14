@@ -312,6 +312,26 @@ func officeTitleRoom(d *dim, b *block) float64 {
 	return w
 }
 
+// officeSideTitleWrap is the length a line of the title of an axis
+// beside the plot area wraps at, in heights of the chart, and
+// officeSideTitleInset the least distance from the plot area's top to the
+// title's top: a title centred on the plot area that would rise higher
+// starts there and runs down past the centre, out of the chart if it must.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: Excel's 10 pt bold value-axis titles of 24 and 38
+//     characters, 97.4 and 153.8 pt long, are centred on the plot area
+//     when they fit its height and otherwise start 3.07 to 3.22 pt under
+//     its top, in charts 101.64, 145.2 and 203.28 pt high, one, two and
+//     three lines long; the lines wrap within 0.757 to 0.769 of the
+//     chart's height (153.8 pt kept on one line at 203.28 pt, 78.2 pt
+//     broken at 101.64 pt).
+const (
+	officeSideTitleWrap  = 0.76
+	officeSideTitleInset = 3.2
+)
+
 // officeUprightTitleInset pads each side of the unturned title of an axis
 // beside the plot area, in points.
 //
