@@ -142,10 +142,9 @@ type namedRef struct {
 // type3Font is one Type 3 font: its object, and the description and text
 // of each code, in code order.
 type type3Font struct {
-	ref    ast.PdfIndirectRef
-	procs  []*type3Proc
-	texts  []string
-	alphas []float64
+	ref   ast.PdfIndirectRef
+	procs []*type3Proc
+	texts []string
 }
 
 // newColorFace returns the colour data of program, nil when it holds
@@ -543,7 +542,8 @@ func (w *docWriter) writeType3(c *colorFace) error {
 func (w *docWriter) writeType3Font(c *colorFace, s *type3Set, f *type3Font, index int) error {
 	procs := ast.PdfDict{}
 	xobjs := ast.PdfDict{}
-	diffs := ast.PdfArray{ast.PdfInt(0)}
+	diffs := make(ast.PdfArray, 1, 1+len(f.procs))
+	diffs[0] = ast.PdfInt(0)
 	widths := make(ast.PdfArray, len(f.procs))
 	var box [4]float64
 	boxOK := false
@@ -645,6 +645,7 @@ func type3ToUnicode(texts []string) []byte {
 		}
 		b.WriteString("endbfchar\n")
 	}
-	b.WriteString("endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n")
+	b.WriteString("endcmap\nCMapName currentdict /CMap defineresource pop\nend\n")
+	b.WriteString("end\n")
 	return []byte(b.String())
 }

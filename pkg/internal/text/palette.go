@@ -70,8 +70,8 @@ type PaletteColor struct {
 // or two.
 const maxPaletteMixDepth = 16
 
-// colors returns the colours of p for a face of declared family family
-// and colour tables cf, entry by entry, nil when p draws the face's first
+// colors returns the colours of p for a face whose declared family is
+// family and whose colour tables are cf, entry by entry, nil when p draws the face's first
 // palette unchanged.
 func (p *Palette) colors(cf *colorfont.Font, family string) []typeset.Color {
 	return p.resolve(cf, family, 0)
@@ -111,6 +111,7 @@ func (p *Palette) resolve(cf *colorfont.Font, family string, depth int) []typese
 	}
 	base := 0
 	switch r.Base {
+	case PaletteNormal:
 	case PaletteLight:
 		base, _ = cf.PaletteForLight()
 	case PaletteDark:

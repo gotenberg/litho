@@ -32,6 +32,8 @@ const maxPaletteDepth = 16
 
 func (e *engine) paletteOf(p css.FontPalette, depth int) *text.Palette {
 	switch p.Kind {
+	case css.PaletteNormal:
+		return nil
 	case css.PaletteLight:
 		return &text.Palette{PaletteRule: text.PaletteRule{Base: text.PaletteLight}}
 	case css.PaletteDark:
@@ -47,7 +49,7 @@ func (e *engine) paletteOf(p css.FontPalette, depth int) *text.Palette {
 		tp := &text.Palette{}
 		for _, v := range rules {
 			r := text.PaletteRule{Families: v.Families}
-			switch v.Base {
+			switch v.Base { //nolint:exhaustive // a base palette is the default, light, dark or an index, never a mix
 			case css.PaletteLight:
 				r.Base = text.PaletteLight
 			case css.PaletteDark:

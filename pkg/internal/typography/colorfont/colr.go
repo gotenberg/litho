@@ -53,12 +53,12 @@ func readCOLR(b []byte) (*colr, error) {
 		numLayers: int(header[12])<<8 | int(header[13]),
 	}
 	if c.numBase > 0 {
-		if _, ok := span(b, c.baseOff, uint64(c.numBase)*6); !ok {
+		if _, ok := span(b, c.baseOff, uint64(c.numBase)*6); !ok { //nolint:gosec // G115: numBase is a uint16 count
 			return nil, fmt.Errorf("%w: COLR base glyph records", ErrInvalidFont)
 		}
 	}
 	if c.numLayers > 0 {
-		if _, ok := span(b, c.layerOff, uint64(c.numLayers)*4); !ok {
+		if _, ok := span(b, c.layerOff, uint64(c.numLayers)*4); !ok { //nolint:gosec // G115: numLayers is a uint16 count
 			return nil, fmt.Errorf("%w: COLR layer records", ErrInvalidFont)
 		}
 	}
@@ -76,14 +76,14 @@ func (f *Font) Layers(gid uint16) ([]Layer, bool, error) {
 	}
 	// The base glyph records are sorted by glyph ID (OpenType, COLR).
 	glyphAt := func(i int) uint16 {
-		off := c.baseOff + uint64(i)*6
+		off := c.baseOff + uint64(i)*6 //nolint:gosec // G115: i is a record index, in 0 to numBase
 		return uint16(c.data[off])<<8 | uint16(c.data[off+1])
 	}
 	i := sort.Search(c.numBase, func(i int) bool { return glyphAt(i) >= gid })
 	if i == c.numBase || glyphAt(i) != gid {
 		return nil, false, nil
 	}
-	rec := c.baseOff + uint64(i)*6
+	rec := c.baseOff + uint64(i)*6 //nolint:gosec // G115: i is a record index from sort.Search, in 0 to numBase
 	first := int(c.data[rec+2])<<8 | int(c.data[rec+3])
 	n := int(c.data[rec+4])<<8 | int(c.data[rec+5])
 	if n == 0 {
@@ -97,7 +97,7 @@ func (f *Font) Layers(gid uint16) ([]Layer, bool, error) {
 	}
 	layers := make([]Layer, n)
 	for k := range layers {
-		off := c.layerOff + uint64(first+k)*4
+		off := c.layerOff + uint64(first+k)*4 //nolint:gosec // G115: first and k are 16-bit record indices, non-negative
 		layers[k] = Layer{
 			GID:     uint16(c.data[off])<<8 | uint16(c.data[off+1]),
 			Palette: uint16(c.data[off+2])<<8 | uint16(c.data[off+3]),
@@ -135,10 +135,10 @@ func readCPAL(b []byte) (*cpal, error) {
 	if numPalettes == 0 {
 		return nil, fmt.Errorf("%w: CPAL without a palette", ErrInvalidFont)
 	}
-	if _, ok := span(b, p.records, uint64(numRecords)*4); !ok {
+	if _, ok := span(b, p.records, uint64(numRecords)*4); !ok { //nolint:gosec // G115: numRecords is a uint16 count
 		return nil, fmt.Errorf("%w: CPAL colour records", ErrInvalidFont)
 	}
-	indices, ok := span(b, 12, uint64(numPalettes)*2)
+	indices, ok := span(b, 12, uint64(numPalettes)*2) //nolint:gosec // G115: numPalettes is a uint16 count
 	if !ok {
 		return nil, fmt.Errorf("%w: CPAL palette indices", ErrInvalidFont)
 	}
@@ -150,12 +150,12 @@ func readCPAL(b []byte) (*cpal, error) {
 		}
 	}
 	if version >= 1 {
-		typesOff, ok := u32(b, 12+uint64(numPalettes)*2)
+		typesOff, ok := u32(b, 12+uint64(numPalettes)*2) //nolint:gosec // G115: numPalettes is a uint16 count
 		if !ok {
 			return nil, fmt.Errorf("%w: CPAL version 1 header", ErrInvalidFont)
 		}
 		if typesOff != 0 {
-			raw, ok := span(b, uint64(typesOff), uint64(numPalettes)*4)
+			raw, ok := span(b, uint64(typesOff), uint64(numPalettes)*4) //nolint:gosec // G115: numPalettes is a uint16 count
 			if !ok {
 				return nil, fmt.Errorf("%w: CPAL palette types", ErrInvalidFont)
 			}
@@ -188,7 +188,7 @@ func (f *Font) Palette(i int) []Color {
 	out := make([]Color, p.entries)
 	for k := range out {
 		// A ColorRecord is blue, green, red, alpha (OpenType, CPAL).
-		off := p.records + uint64(p.first[i]+k)*4
+		off := p.records + uint64(p.first[i]+k)*4 //nolint:gosec // G115: a palette's first record and k are 16-bit indices, non-negative
 		out[k] = Color{B: p.data[off], G: p.data[off+1], R: p.data[off+2], A: p.data[off+3]}
 	}
 	return out

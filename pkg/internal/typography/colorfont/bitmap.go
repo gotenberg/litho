@@ -122,7 +122,7 @@ func readSbix(sbix []byte, numGlyphs int) ([]sbixStrike, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: sbix strike %d", ErrInvalidFont, i)
 		}
-		if _, ok := span(sbix, uint64(off)+4, uint64(numGlyphs+1)*4); !ok {
+		if _, ok := span(sbix, uint64(off)+4, uint64(numGlyphs+1)*4); !ok { //nolint:gosec // G115: numGlyphs is maxp's uint16 count, from 0 to 65535
 			return nil, fmt.Errorf("%w: sbix strike %d glyph offsets", ErrInvalidFont, i)
 		}
 		if ppem == 0 {
@@ -201,7 +201,7 @@ func (s cbStrike) glyph(cbdt []byte, gid uint16) (Bitmap, bool, error) {
 	bad := func(what string) (Bitmap, bool, error) {
 		return Bitmap{}, false, fmt.Errorf("%w: CBLC strike %d ppem: %s", ErrInvalidFont, s.ppem, what)
 	}
-	for k := range uint64(s.count) {
+	for k := range uint64(s.count) { //nolint:gosec // G115: count lies in 1 to maxIndexSubTables, checked by readCBLC
 		rec := s.array + 8*k
 		first, _ := u16(s.cblc, rec)
 		last, _ := u16(s.cblc, rec+2)
@@ -238,7 +238,9 @@ func (s cbStrike) glyph(cbdt []byte, gid uint16) (Bitmap, bool, error) {
 				end = uint64(offs[2])<<8 | uint64(offs[3])
 			}
 		case 2:
-			size, ok := u32(s.cblc, sub+8)
+			// A size past the table reads as 0, refused with the metrics.
+			size, _ := u32(s.cblc, sub+8)
+			var ok bool
 			if big, ok = span(s.cblc, sub+12, 8); !ok || size == 0 {
 				return bad("index format 2 metrics")
 			}
@@ -266,7 +268,9 @@ func (s cbStrike) glyph(cbdt []byte, gid uint16) (Bitmap, bool, error) {
 				return Bitmap{}, false, nil
 			}
 		case 5:
-			size, ok := u32(s.cblc, sub+8)
+			// A size past the table reads as 0, refused with the metrics.
+			size, _ := u32(s.cblc, sub+8)
+			var ok bool
 			if big, ok = span(s.cblc, sub+12, 8); !ok || size == 0 {
 				return bad("index format 5 metrics")
 			}

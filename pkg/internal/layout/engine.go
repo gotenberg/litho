@@ -522,6 +522,8 @@ func (e *engine) fontSettings(st *css.Style, ts *text.Style) *text.FontSettings 
 // emojiVariant returns the text stack's form of font-variant-emoji.
 func emojiVariant(v css.VariantEmoji) text.EmojiVariant {
 	switch v {
+	case css.EmojiNormal:
+		return text.EmojiNormal
 	case css.EmojiText:
 		return text.EmojiText
 	case css.EmojiEmoji:

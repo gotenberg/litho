@@ -130,7 +130,7 @@ func parse(data []byte) (map[string][]span, error) {
 				return nil, fmt.Errorf("code point %q: %w", hiText, err)
 			}
 		}
-		props[prop] = append(props[prop], span{rune(lo), rune(hi)})
+		props[prop] = append(props[prop], span{rune(lo), rune(hi)}) //nolint:gosec // G115: ParseUint with bit size 32 keeps both under 2^32, and the file's code points under 0x110000
 	}
 	if err := sc.Err(); err != nil {
 		return nil, err

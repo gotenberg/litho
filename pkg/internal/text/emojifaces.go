@@ -37,7 +37,7 @@ func (st *layoutState) draws(fc *Face, n need) bool {
 			return false
 		}
 	}
-	switch n.pres {
+	switch n.pres { //nolint:exhaustive // a sequence of no presentation, or of emoji by default, takes any face
 	case presentEmoji:
 		return fc.colourTables() != 0 || st.mapsVariation(fc, n.chars[0], variationEmoji)
 	case presentText:

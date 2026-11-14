@@ -20,7 +20,7 @@ type BitmapGlyph struct {
 // spanning the lowest to the highest GID; a GID between them without an
 // image has none (OpenType, CBLC and CBDT).
 func ColorBitmaps(ppem int, images map[uint16]BitmapGlyph) (cblc, cbdt []byte) {
-	var gids []uint16
+	gids := make([]uint16, 0, len(images))
 	for gid := range images {
 		gids = append(gids, gid)
 	}
@@ -77,7 +77,7 @@ type Layer struct {
 // holding palettes, each a list of RGBA colours of one length (OpenType,
 // COLR and CPAL).
 func ColorLayers(layers map[uint16][]Layer, palettes [][][4]uint8) (colr, cpal []byte) {
-	var bases []uint16
+	bases := make([]uint16, 0, len(layers))
 	for gid := range layers {
 		bases = append(bases, gid)
 	}

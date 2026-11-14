@@ -201,13 +201,13 @@ func emojiElement(para []rune, i int) (int, rune, int) {
 // of element kind, joined with others when multi, in a run of
 // font-variant-emoji v.
 func presentationOf(r, vs rune, kind int, multi bool, v EmojiVariant) presentation {
-	switch {
-	case vs == variationEmoji:
+	switch vs {
+	case variationEmoji:
 		return presentEmoji
-	case vs == variationText:
+	case variationText:
 		return presentText
 	}
-	switch v {
+	switch v { //nolint:exhaustive // normal and unicode follow the Emoji_Presentation property below
 	case EmojiEmoji:
 		return presentEmoji
 	case EmojiText:
