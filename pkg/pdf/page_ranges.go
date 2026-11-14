@@ -2,8 +2,9 @@ package pdf
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // ParsePageRanges parses a page range specification into 1-based page
@@ -241,7 +242,9 @@ func parsePagePart(part string, pageCount int) (first, last, step int, err error
 		return nil
 	}
 	number := func(s string) (int, error) {
-		n, err := strconv.Atoi(s)
+		// A number past 32 bits is invalid on every platform, which
+		// names no page and quotes the text as given.
+		n, err := intconv.Atoi32(s)
 		if err != nil {
 			return 0, fmt.Errorf("%w: invalid page number %q", ErrInvalidPageRange, s)
 		}
