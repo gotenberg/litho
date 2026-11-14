@@ -36,6 +36,9 @@ type dim struct {
 	// data's range.
 	zero, border bool
 	lo, hi       float64
+	// trimEnds drops from the automatic scale the major interval no value
+	// reaches at an end ([trimScale]).
+	trimEnds bool
 	// percent formats the ticks as percentages of a percent-stacked group.
 	percent bool
 	// officeScale counts the automatic major intervals by Office's rule
@@ -370,14 +373,6 @@ func (c *Chart) axisAt(i int) *Axis {
 //     to 200 by 50 by Excel, the count of officeIntervals.
 //   - litho/pptx: chart-3d's 3-D column chart with a depth axis is
 //     labelled 0 to 6 by 2 by PowerPoint, the count of officeIntervals.
-//   - litho/pptx: chart-3d's clustered 3-D columns, 3-D bar cones and
-//     3-D line, whose data reach 5, run from 0 to 5 in PowerPoint, where
-//     chart-bar's 2-D columns and bars over the same data run from 0 to
-//     6. No document measures the low end of an axis of negative data,
-//     where the rule drops the interval as well.
-//   - probe, xlsx: Excel's 3-D clustered columns over data up to 4.8,
-//     9.5, 47, 95 and 170 run to 6, 10, 60, 100 and 200, each the first
-//     multiple of the major unit the data reach.
 func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 	c := rd.c
 	xy := g0.Kind == Scatter || g0.Kind == Bubble
@@ -504,10 +499,11 @@ func (rd *renderer) dims(g0 *Group) (*dim, []*dim, map[*Group]*dim) {
 		for _, y := range ys {
 			y.officeScale = true
 			// Office's three-dimensional value axis ends at the multiple
-			// of its major unit the data reach, without the interval
-			// LibreOffice adds for data at the end.
+			// of its major unit the data reach: the unit is the one the
+			// axis takes with the interval LibreOffice adds for data at
+			// the end, and the interval goes ([trimScale]).
 			if rd.threeD(g0) != nil {
-				y.border = false
+				y.trimEnds = true
 			}
 		}
 		x.officeScale = xy
@@ -552,6 +548,61 @@ func (rd *renderer) data(d Data) Data {
 	return d
 }
 
+// auto returns d's automatic scale under opt, its ends trimmed where d
+// trims them.
+func (d *dim) auto(opt scaleOptions) scale {
+	sc := autoScale(d.ax, d.lo, d.hi, opt)
+	if d.trimEnds {
+		sc = trimScale(sc, d.ax, d.lo, d.hi)
+	}
+	return sc
+}
+
+// trimScale returns the linear scale sc, resolved for the values [lo, hi],
+// without the major interval at an automatic end that no value reaches:
+// the one the border rule adds ([scaleOptions]). The major unit stays the
+// one chosen with that interval, so the axis ends at the first of its
+// multiples the data reach. An end at zero stays, and so does an end the
+// axis fixes.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: chart-3d's clustered 3-D columns and 3-D bar cones,
+//     whose data reach 5, run from 0 to 5 by 1 in PowerPoint, where
+//     chart-bar's 2-D columns and bars over the same data run from 0 to
+//     6; its 3-D column chart with a depth axis, over the same data, runs
+//     from 0 to 6 by 2, 6 being the first multiple of 2 the data reach.
+//     Its 3-D line, on a slide of its own, runs from 0 to 5 by 0.5: the
+//     end is this rule's, the unit is not, the axis from 0 to 6 taking
+//     twelve intervals of 0.5 where the automatic scale stops at ten.
+//   - openxmlsdk/pptx: Chart_3D_Column_.pptx's 3-D columns, whose data
+//     reach 5, are labelled 0 to 5 by 1 by PowerPoint, the unit of the
+//     axis from 0 to 6.
+//   - probe, xlsx: Excel's 3-D clustered columns over data up to 4.8,
+//     9.5, 47, 95 and 170 run to 6, 10, 60, 100 and 200 by 2, 5, 20, 50
+//     and 50, each the first multiple of the major unit the data reach.
+//     No document measures the low end of an axis of negative data,
+//     where the rule drops the interval as well.
+func trimScale(sc scale, ax *Axis, lo, hi float64) scale {
+	if sc.log > 0 || !(sc.major > 0) {
+		return sc
+	}
+	autoMin, autoMax := true, true
+	if ax != nil {
+		autoMin, autoMax = math.IsNaN(finite(ax.Min)), math.IsNaN(finite(ax.Max))
+	}
+	// A difference of two ends a rounding away from a value still
+	// reaches it.
+	eps := float64(1e-9 * sc.major)
+	if autoMax && sc.max != 0 && sc.max-sc.major > sc.min && sc.max-sc.major >= hi-eps {
+		sc.max -= sc.major
+	}
+	if autoMin && sc.min != 0 && sc.min+sc.major < sc.max && sc.min+sc.major <= lo+eps {
+		sc.min += sc.major
+	}
+	return sc
+}
+
 // fitScale resolves d's scale for its current length, with as many major
 // intervals as its labels leave room for.
 func (rd *renderer) fitScale(d *dim) {
@@ -559,7 +610,7 @@ func (rd *renderer) fitScale(d *dim) {
 		return
 	}
 	opt := scaleOptions{zero: d.zero, border: d.border, maxCount: maxAutoTicks}
-	d.sc = autoScale(d.ax, d.lo, d.hi, opt)
+	d.sc = d.auto(opt)
 	if !d.labelled() {
 		return
 	}
@@ -601,7 +652,7 @@ func (rd *renderer) fitScale(d *dim) {
 			if same > 0 {
 				opt.maxCount = max(1, min(opt.maxCount, len(ticks)/(same+1)))
 			}
-			d.sc = autoScale(d.ax, d.lo, d.hi, opt)
+			d.sc = d.auto(opt)
 			d.sc.origin = officeOrigin(d.sc)
 			return
 		}
@@ -613,7 +664,7 @@ func (rd *renderer) fitScale(d *dim) {
 		if same > 0 {
 			opt.maxCount = max(2, min(opt.maxCount, len(ticks)/(same+1)))
 		}
-		d.sc = autoScale(d.ax, d.lo, d.hi, opt)
+		d.sc = d.auto(opt)
 	}
 }
 

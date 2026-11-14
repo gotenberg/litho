@@ -143,14 +143,59 @@ func TestHull(t *testing.T) {
 // TestRender_Office3DValueAxisEnd holds a three-dimensional value axis
 // under OfficeRules to the multiple of its major unit the data reach,
 // without LibreOffice's interval for data at the end: data up to 4 run
-// to 4.
+// to 4, and data up to 5 run to 5 by the unit of the axis from 0 to 6, 1,
+// not by the half unit the axis from 0 to 5 has room for.
 func TestRender_Office3DValueAxisEnd(t *testing.T) {
-	c := column3D()
-	c.Rules = OfficeRules
-	c.Axes[0].Labels, c.Axes[1].Labels = LabelNextTo, LabelNextTo
-	frags := Render(context.Background(), ahem(t), c, typeset.Rect{Width: 361.2, Height: 300})
-	got := " " + strings.Join(texts(frags), " ") + " "
-	if !strings.Contains(got, " 3.5 ") || strings.Contains(got, " 4.5 ") {
-		t.Errorf("labels = %q, want the axis to end at 4", got)
+	for _, tc := range []struct {
+		top           float64
+		want, refused []string
+	}{
+		{4, []string{" 3.5 ", " 4 "}, []string{" 4.5 "}},
+		{5, []string{" 4 ", " 5 "}, []string{" 0.5 ", " 4.5 ", " 6 "}},
+	} {
+		c := column3D()
+		c.Rules = OfficeRules
+		c.Groups[0].Series[0].Values = Data{Values: nums(tc.top, 2, 3, 4), Cached: true}
+		c.Axes[0].Labels, c.Axes[1].Labels = LabelNextTo, LabelNextTo
+		frags := Render(context.Background(), ahem(t), c, typeset.Rect{Width: 361.2, Height: 300})
+		// The category labels come first: the value axis's follow them.
+		got := " " + strings.Join(texts(frags)[4:], " ") + " "
+		for _, w := range tc.want {
+			if !strings.Contains(got, w) {
+				t.Errorf("data up to %v: labels = %q, want %q among them", tc.top, got, w)
+			}
+		}
+		for _, r := range tc.refused {
+			if strings.Contains(got, r) {
+				t.Errorf("data up to %v: labels = %q, want no %q", tc.top, got, r)
+			}
+		}
+	}
+}
+
+// TestTrimScale_DropsTheIntervalNoValueReaches pins which end interval a
+// trimmed scale loses: the one past the first multiple of the major unit
+// the data reach, at an automatic end that is not zero.
+func TestTrimScale_DropsTheIntervalNoValueReaches(t *testing.T) {
+	fixed := &Axis{Min: math.NaN(), Max: 6, MajorUnit: math.NaN(), MinorUnit: math.NaN()}
+	for _, tc := range []struct {
+		name             string
+		sc               scale
+		ax               *Axis
+		lo, hi           float64
+		wantMin, wantMax float64
+	}{
+		{"data at the multiple below the end", scale{min: 0, max: 6, major: 1}, nil, 1, 5, 0, 5},
+		{"data past the multiple below the end", scale{min: 0, max: 6, major: 2}, nil, 1, 4.8, 0, 6},
+		{"a rounding short of the multiple", scale{min: 0, max: 0.6, major: 0.1}, nil, 0.1, 0.6 - 0.1, 0, 0.5},
+		{"negative data", scale{min: -6, max: 0, major: 1}, nil, -5, -1, -5, 0},
+		{"an end the axis fixes", scale{min: 0, max: 6, major: 1}, fixed, 1, 5, 0, 6},
+		{"one interval", scale{min: 0, max: 1, major: 1}, nil, 0, 0, 0, 1},
+		{"a logarithmic scale", scale{min: 1, max: 1000, major: 1, log: 10}, nil, 1, 10, 1, 1000},
+	} {
+		got := trimScale(tc.sc, tc.ax, tc.lo, tc.hi)
+		if got.min != tc.wantMin || math.Abs(got.max-tc.wantMax) > 1e-12 || got.major != tc.sc.major {
+			t.Errorf("%s: from %v to %v by %v, want from %v to %v by %v", tc.name, got.min, got.max, got.major, tc.wantMin, tc.wantMax, tc.sc.major)
+		}
 	}
 }
