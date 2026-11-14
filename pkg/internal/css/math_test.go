@@ -128,3 +128,12 @@ func TestMathStyleAttribute(t *testing.T) {
 		t.Fatalf("background %v, colour %v", st.BackgroundColor, st.Color)
 	}
 }
+
+// TestMathHints_MathsizeTakesLengths maps a mathsize length or
+// percentage onto font-size and ignores keywords (MathML Core, 2.1.5).
+func TestMathHints_MathsizeTakesLengths(t *testing.T) {
+	c := computeMath(t, `<p style="font-size:20px"><math><mtext id=k mathsize="small">A</mtext><mtext id=b mathsize="big">A</mtext><mtext id=l mathsize="2em">A</mtext></math></p>`, "", 0.8, 0.6)
+	if c.of("k").FontSize != 15 || c.of("b").FontSize != 15 || c.of("l").FontSize != 30 {
+		t.Fatalf("sizes %g, %g, %g; want 15, 15, 30", c.of("k").FontSize, c.of("b").FontSize, c.of("l").FontSize)
+	}
+}

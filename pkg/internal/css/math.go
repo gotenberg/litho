@@ -172,7 +172,7 @@ func mathHints(n *html.Node) []Declaration {
 	if v, ok := attr(n, "mathbackground"); ok {
 		h.add("background-color", v)
 	}
-	if v, ok := attr(n, "mathsize"); ok {
+	if v, ok := attr(n, "mathsize"); ok && lengthPercentage(v) {
 		h.add("font-size", v)
 	}
 	if v, ok := attr(n, "displaystyle"); ok {
@@ -216,4 +216,24 @@ func scriptLevel(v string) (string, bool) {
 		return "", false
 	}
 	return "add(" + sign + v + ")", true
+}
+
+// lengthPercentage reports whether v is a single <length-percentage>
+// token, as a mathsize attribute must be (MathML Core, 2.1.5): the
+// font-size keywords and MathML 3's small, normal and big are not.
+func lengthPercentage(v string) bool {
+	toks, _ := parseComponentValues(v)
+	toks = significant(toks)
+	if len(toks) != 1 {
+		return false
+	}
+	switch t := toks[0]; t.typ { //nolint:exhaustive // the other token types are not lengths
+	case tDimension, tPercentage:
+		return true
+	case tNumber:
+		return t.num == 0
+	case tFunction:
+		return isCalc(&t)
+	}
+	return false
 }
