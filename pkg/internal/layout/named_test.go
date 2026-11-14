@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -259,5 +260,23 @@ func TestNamedPages_NotOutOfFlexOrGrid(t *testing.T) {
 		if len(res.Pages) != 1 || seen[0].Name != "" {
 			t.Errorf("display %v: %d pages, the first %+v, want one unnamed page", d, len(res.Pages), seen[0])
 		}
+	}
+}
+
+// TestNamedPages_AbsoluteBoxAmongWhiteSpace locks that an absolutely
+// positioned box among white space after the last block of a named page
+// makes no line box exist (CSS 2.1, 9.4.2): no break comes before it, and
+// it starts on that block's page.
+func TestNamedPages_AbsoluteBoxAmongWhiteSpace(t *testing.T) {
+	abs := el(sty(width(2), height(2), bg(red), func(s *css.Style) { s.Position = css.Absolute }))
+	root := el(sty(),
+		el(sty(named("wide")), txt(sty(), "\n"), el(sty(height(5), named("x"))), txt(sty(), "\n"), abs, txt(sty(), "\n")),
+		el(sty(height(5))))
+	res, seen := namedRun(t, root)
+	if len(res.Pages) != 2 || seen[0].Name != "x" {
+		t.Fatalf("%d pages, the first named %q, want 2, the first x", len(res.Pages), seen[0].Name)
+	}
+	if rows := grid(render(t, res, 1)); !strings.Contains(strings.Join(rows, ""), "R") {
+		t.Errorf("first page:\n%s\nwant the absolute box on it", strings.Join(rows, "\n"))
 	}
 }

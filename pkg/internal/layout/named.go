@@ -43,13 +43,23 @@ func pageApplies(b *box) bool {
 }
 
 // blankInline reports inline content, at depth, that makes no line box
-// exist (CSS 2.1, 9.4.2): text of collapsible white space, and inline
-// boxes without content, margins, borders or paddings.
+// exist (CSS 2.1, 9.4.2): text of collapsible white space, inline boxes
+// without content, margins, borders or paddings, and boxes out of flow,
+// floats and absolutely positioned boxes, which are no in-flow content.
+//
+// # Corpus evidence
+//
+//   - wpt, css/css-page/page-name-propagated-006-print.html: Chromium
+//     prints an absolutely positioned box that follows the last block of
+//     a named page, among white space, on that block's page.
 func blankInline(kids []*box, depth int) bool {
 	if depth > maxTreeDepth {
 		return false
 	}
 	for _, k := range kids {
+		if k.abs || k.float != css.FloatNone {
+			continue
+		}
 		switch k.kind { //nolint:exhaustive // any other kind of box makes a line box exist
 		case kindText:
 			if k.marker || k.st == nil || !collapses(k.st.WhiteSpace) || strings.Trim(k.text, " \t\n\r\f") != "" {
