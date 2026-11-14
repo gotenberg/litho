@@ -437,6 +437,14 @@ func (r *reader) paragraph(p *ooxml.Element, ts *textStyles) slides.Paragraph {
 		case k.Is(ooxml.NSA, "br"):
 			run.Break = true
 			run.Style = r.runStyle(runChain(k.Child(ooxml.NSA, "rPr"), pc), ts.sc)
+		case k.Is(nsA14, "m"):
+			run.Text = mathText(k)
+			if run.Text == "" {
+				continue
+			}
+			run.Style = r.runStyle(runChain(k.Find(ooxml.NSA, "rPr"), pc), ts.sc)
+			run.Style.Italic = true
+			r.warn(warn.ContentUnsupported, warn.Approximated, "an equation is drawn as its plain text")
 		default:
 			continue
 		}
@@ -938,3 +946,37 @@ func attrs(kv ...string) []xml.Attr {
 	}
 	return out
 }
+
+// nsA14 is the namespace of the DrawingML extensions of Office 2010, whose
+// a14:m holds an Office Math zone in a text paragraph.
+const nsA14 = "http://schemas.microsoft.com/office/drawing/2010/main"
+
+// maxMathDepth bounds the nesting of an Office Math zone that mathText
+// walks. Anti-DoS guard, not spec-mandated: an equation nests a few
+// levels of fractions, scripts and radicals.
+const maxMathDepth = 64
+
+// mathText returns the text of the m:t elements of an Office Math zone
+// (ECMA-376 Part 1, 22.1.2.116 t), in document order: the equation as its
+// plain text, as a Word document's equation is drawn.
+func mathText(e *ooxml.Element) string {
+	var b strings.Builder
+	var walk func(x *ooxml.Element, depth int)
+	walk = func(x *ooxml.Element, depth int) {
+		if depth > maxMathDepth || b.Len() > maxMathBytes {
+			return
+		}
+		if x.Is(ooxml.NSM, "t") {
+			b.WriteString(x.Text)
+		}
+		for _, c := range x.Kids() {
+			walk(c, depth+1)
+		}
+	}
+	walk(e, 0)
+	return b.String()
+}
+
+// maxMathBytes bounds the bytes of one equation's text. Anti-DoS guard,
+// not spec-mandated: an equation holds a few dozen characters.
+const maxMathBytes = 8192
