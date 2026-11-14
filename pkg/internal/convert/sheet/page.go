@@ -2,6 +2,7 @@ package sheet
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -29,6 +30,9 @@ type pageBuilder struct {
 	// dataW and dataH are the size of the page's cells, headings
 	// included, in sheet points.
 	dataW, dataH float64
+	// textBottom is the lowest a cell's text box may reach on the page,
+	// which runs past the bottom of its row when its text is taller.
+	textBottom float64
 	// cellKeys maps each TD node to the row and column of the cell or
 	// merge whose content it holds.
 	cellKeys map[*layout.Node][2]int
@@ -109,7 +113,7 @@ func (b *pageBuilder) build() ([]typeset.Fragment, []typeset.Link, *typeset.Stru
 		b.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("a page of sheet %s holds more than %d cells; the rest are left out", quote(b.g.sh.Name), maxPageCells))
 	}
 	res, err := layout.Layout(b.ctx, table, b.fonts, layout.Options{
-		Page:     layout.PageBox{Width: max(b.dataW, 1), Height: max(b.dataH, 1)},
+		Page:     layout.PageBox{Width: max(b.dataW, 1), Height: b.layoutHeight()},
 		Lang:     b.lang,
 		Fallback: b.fallback(),
 		MaxPages: maxSubPages,
@@ -141,6 +145,22 @@ func (b *pageBuilder) build() ([]typeset.Fragment, []typeset.Link, *typeset.Stru
 		st.Kids = append(st.Kids, figs...)
 	}
 	return frags, links, st, nil
+}
+
+// layoutHeight returns the height of the page the cells are laid out on:
+// the data area, or more when a cell's text box runs past it. The text of
+// the last row may be taller than the row, and the layout moves a line
+// that crosses its page's bottom to a page of its own, which the cells'
+// page leaves out; each region's box clips what runs past it, so the room
+// draws nothing more. A page that needs no room is the data area, and
+// so is its page-area clip. Wrapped and rotated text is not measured. The
+// height stops at maxSide, the largest the layout takes.
+func (b *pageBuilder) layoutHeight() float64 {
+	h := max(b.dataH, 1)
+	if b.textBottom > h+epsilon {
+		h = min(math.Ceil(b.textBottom)+1, maxSide)
+	}
+	return h
 }
 
 // maxSubPages caps the pages of a layout call that lays out one page.

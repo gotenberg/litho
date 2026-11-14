@@ -394,6 +394,11 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 		}
 	}
 	rotated := st.Align.Rotation != 0 && !st.Align.Stacked
+	if !d.wrap && !rotated {
+		// A line taller than its row runs past the row's bottom.
+		ext := float64(lineH * float64(1+strings.Count(d.text, "\n")))
+		b.textBottom = max(b.textBottom, u.y+max(u.h, ext+pad[css.Top]))
+	}
 	para := b.paragraph(&d, f, lineH, align, paraTurn{rotated: rotated, rtl: st.Align.RightToLeft})
 	ik := innerKey{left: boxX - cx0, width: math.Max(boxW, 0.01), height: u.h, top: pad[css.Top], bottom: pad[css.Bottom], vertical: st.Align.Vertical}
 	var inner *css.Style
