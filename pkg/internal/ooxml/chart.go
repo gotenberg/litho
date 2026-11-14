@@ -336,12 +336,8 @@ func (p *chartReader) read(root *Element) {
 	p.readTitle(ch)
 	for _, g := range c.Groups {
 		for _, s := range g.Series {
-			if s.Name == "" && !p.impress {
-				s.Name = rangeName(s.Values.Ref)
-			}
 			if s.Name == "" {
-				// The name LibreOffice gives a series without one.
-				s.Name = "Series" + strconv.Itoa(s.Index+1)
+				s.Name = unnamedSeries(s.Index)
 			}
 		}
 	}
@@ -1181,6 +1177,20 @@ func textOf(e *Element) string {
 		return ""
 	}
 	return e.Text
+}
+
+// unnamedSeries returns the name Office gives a series whose file names it
+// not (no c:tx, ECMA-376 Part 1, 21.2.2.215): "Series" and its index plus
+// one, whatever its values' range.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx, openxmlsdk/xlsx, poi/xlsx: in the 17 workbooks
+//     whose legend lists a series without c:tx, Excel prints "Series1",
+//     "Series2" and on; none prints a name after the range, such as
+//     "Column B" for chart-area-style-border's series over $B$1:$B$4.
+func unnamedSeries(index int) string {
+	return "Series" + strconv.Itoa(index+1)
 }
 
 // rangeName returns the name a spreadsheet gives a series without one,

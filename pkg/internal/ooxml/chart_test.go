@@ -125,7 +125,7 @@ func TestChartFromElement_Kinds(t *testing.T) {
 		}},
 		{"scatter", `<c:scatterChart><c:scatterStyle val="marker"/><c:ser><c:idx val="0"/><c:order val="0"/><c:xVal><c:numLit><c:ptCount val="2"/><c:pt idx="0"><c:v>1.5</c:v></c:pt><c:pt idx="1"><c:v>2.5</c:v></c:pt></c:numLit></c:xVal><c:yVal><c:numRef><c:f>Sheet1!$B$2:$B$3</c:f></c:numRef></c:yVal></c:ser>` + ids + `</c:scatterChart>` + axes, func(t *testing.T, g *chart.Group) {
 			s := g.Series[0]
-			if g.Kind != chart.Scatter || s.Categories.Len() != 2 || s.Categories.Values[1].Number != 2.5 || s.Values.Cached || s.Values.Ref != "Sheet1!$B$2:$B$3" || s.Border == nil || !s.Border.None || s.Name != "Column B" {
+			if g.Kind != chart.Scatter || s.Categories.Len() != 2 || s.Categories.Values[1].Number != 2.5 || s.Values.Cached || s.Values.Ref != "Sheet1!$B$2:$B$3" || s.Border == nil || !s.Border.None || s.Name != "Series1" {
 				t.Errorf("series = %+v", s)
 			}
 		}},
@@ -363,6 +363,15 @@ func TestChartFromElement_PointTakesSeriesFill(t *testing.T) {
 	s := readChart(t, chartXML("", "", plot), false).Groups[0].Series[0]
 	if len(s.Points) != 2 || s.Points[0].Fill == nil || s.Points[0].Fill.Color.R != 1 || s.Points[1].Fill == nil || s.Points[1].Fill.Color.B != 1 {
 		t.Errorf("points = %+v", s.Points)
+	}
+}
+
+// TestChartFromElement_UnnamedSeries holds a series without c:tx to the
+// name Office prints for it, after its index, whatever its range.
+func TestChartFromElement_UnnamedSeries(t *testing.T) {
+	plot := `<c:barChart><c:barDir val="col"/><c:ser><c:idx val="2"/><c:order val="0"/><c:val><c:numRef><c:f>Sheet1!$B$1:$B$4</c:f></c:numRef></c:val></c:ser></c:barChart>`
+	if got := readChart(t, chartXML("", "", plot), false).Groups[0].Series[0].Name; got != "Series3" {
+		t.Errorf("name = %q, want Series3", got)
 	}
 }
 
