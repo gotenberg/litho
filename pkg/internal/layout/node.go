@@ -239,6 +239,11 @@ type Options struct {
 	// against those of the family of the face a run is drawn in (CSS
 	// Fonts 4, 6.9).
 	FeatureValues func(family string) *css.FontFeatureValues
+	// PaletteValues, when not nil, returns the @font-palette-values rules
+	// of a name in cascade order, nil for none: font-palette resolves a
+	// named palette against the last that lists the family of the face a
+	// run is drawn in (CSS Fonts 4, 9.2).
+	PaletteValues func(name string) []*css.PaletteValues
 	// PageFor, when not nil, returns the page box of a page from its index,
 	// its page type name and whether it is blank (CSS Page 3, 4.1 and
 	// 4.2.3): the name is the start page value of the box a forced break

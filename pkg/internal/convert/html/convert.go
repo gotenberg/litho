@@ -414,6 +414,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 			PixelFontMetrics: !o.FractionalFontMetrics,
 			BrowserRules:     true,
 			FeatureValues:    resolver.FontFeatureValues,
+			PaletteValues:    resolver.FontPaletteValues,
 			Lang:             scan.lang,
 			Fallback:         text.FallbackChromium,
 			Image:            res.picture,

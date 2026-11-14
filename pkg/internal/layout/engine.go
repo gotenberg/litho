@@ -82,6 +82,9 @@ type engine struct {
 	// styles of the initial letters, sized for their paragraphs
 	// (initialletter.go).
 	outlines map[*typeset.Face]*gofont.Face
+	// palettes holds the text stack's form of each font-palette met, so
+	// the runs of one value share one palette.
+	palettes map[*css.FontPalette]*text.Palette
 	letters  map[*box]*css.Style
 
 	root    *typeset.StructElem
@@ -489,15 +492,19 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 // fontSettings returns the font settings of st for its text style ts,
 // nil when every one is at its default, as for most text: the features
 // of the font properties, font-size-adjust, font-language-override,
-// font-variation-settings, font-optical-sizing and font-variant-emoji.
+// font-variation-settings, font-optical-sizing, font-variant-emoji and
+// font-palette.
 func (e *engine) fontSettings(st *css.Style, ts *text.Style) *text.FontSettings {
 	features := e.fontFeatures(st, ts)
 	a := st.FontSizeAdjust
 	noOptical := st.FontOpticalSizing == css.OpticalSizingNone
-	if features == nil && !a.Set && st.FontLanguageOverride == "" && st.FontVariationSettings == nil && !noOptical && st.FontVariantEmoji == css.EmojiNormal {
+	if features == nil && !a.Set && st.FontLanguageOverride == "" && st.FontVariationSettings == nil && !noOptical && st.FontVariantEmoji == css.EmojiNormal && st.FontPalette == nil {
 		return nil
 	}
-	fs := &text.FontSettings{Features: features, LanguageSystem: st.FontLanguageOverride, NoOpticalSizing: noOptical, Emoji: emojiVariant(st.FontVariantEmoji)}
+	fs := &text.FontSettings{
+		Features: features, LanguageSystem: st.FontLanguageOverride, NoOpticalSizing: noOptical,
+		Emoji: emojiVariant(st.FontVariantEmoji), Palette: e.palette(st.FontPalette),
+	}
 	for _, v := range st.FontVariationSettings {
 		fs.Variations = append(fs.Variations, text.Variation{Tag: v.Tag, Value: v.Value})
 	}

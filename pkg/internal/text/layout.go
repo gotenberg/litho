@@ -22,6 +22,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/typography/colorfont"
 )
 
 // MaxLayoutRunes bounds the characters of one [Fonts.Layout] call, counted
@@ -343,6 +344,9 @@ type layoutState struct {
 	cache  map[resolveKey]*Face
 	// seqCache holds the faces of the emoji sequences resolved so far.
 	seqCache map[seqKey]*Face
+	// colorTables holds the colour tables of the programs a palette was
+	// resolved for, by key, nil for one whose tables do not read.
+	colorTables map[string]*colorfont.Font
 	// sticky holds the face of last resort each style and script drew
 	// with last, nil until one does.
 	sticky  map[stickyKey]*Face
@@ -1213,6 +1217,7 @@ func (st *layoutState) line(ctx context.Context, runs shaping.Line, para []rune,
 			Glyphs: make([]typeset.Glyph, len(out.Glyphs)),
 		}
 		t.Stroke, t.Skew = synthesis(ss.req, fc, s.Size)
+		t.Palette = st.palette(fc, cf, &s)
 		pen := 0.0
 		cluster := -1
 		for k, g := range out.Glyphs {

@@ -200,8 +200,11 @@ type shapedItem struct {
 	level      int
 	rtl        bool
 	face       *typeset.Face
-	style      Style
-	glyphs     []shapedGlyph
+	// palette is the palette of the face's layered glyphs, nil for its
+	// first (see [layoutState.palette]).
+	palette []typeset.Color
+	style   Style
+	glyphs  []shapedGlyph
 	// ascent, descent and gap are the face's line bounds at the size;
 	// underline and strike its decoration metrics.
 	ascent, descent, gap   float64
@@ -571,6 +574,7 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 			return shapedItem{}, fmt.Errorf("shaping text: %w", err)
 		}
 		it.face = cf
+		it.palette = st.palette(fc, cf, &style)
 		it.stroke, it.skew = synthesis(requestOf(style), fc, style.Size)
 		if m, ok := fc.wordMetrics(style, style.Size); ok {
 			it.ascent, it.descent, it.gap = m.Ascent, m.Descent, m.LineGap
@@ -807,7 +811,7 @@ func (p *Paragraph) LineTrimmed(start, end, trim int) ParagraphLine {
 // their advance. The run's glyph slice is allocated at its length: the
 // run lives as long as the page that draws it.
 func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int) float64 {
-	t := &typeset.Text{Face: it.face, Size: it.style.Size, Color: it.style.Color, Origin: typeset.Point{X: sp.X}, Stroke: it.stroke, Skew: it.skew}
+	t := &typeset.Text{Face: it.face, Size: it.style.Size, Color: it.style.Color, Origin: typeset.Point{X: sp.X}, Stroke: it.stroke, Skew: it.skew, Palette: it.palette}
 	hs := it.style.scale()
 	if hs != 1 {
 		t.HScale = hs
