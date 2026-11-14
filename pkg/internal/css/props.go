@@ -270,6 +270,8 @@ const (
 	pFontOpticalSizing
 	pMarginTrim
 	pFontPalette
+	pTextOrientation
+	pTextCombineUpright
 	numProps
 )
 

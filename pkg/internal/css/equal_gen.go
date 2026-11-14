@@ -536,6 +536,12 @@ func equalStyle(a, b *Style) bool {
 	if a.WritingMode != b.WritingMode {
 		return false
 	}
+	if a.TextOrientation != b.TextOrientation {
+		return false
+	}
+	if a.TextCombineUpright != b.TextCombineUpright {
+		return false
+	}
 	if !equalOverflowMark(&a.TextOverflow, &b.TextOverflow) {
 		return false
 	}
@@ -989,6 +995,8 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.Direction))
 	h = mix(h, uint64(x.UnicodeBidi))
 	h = mix(h, uint64(x.WritingMode))
+	h = mix(h, uint64(x.TextOrientation))
+	h = mix(h, uint64(x.TextCombineUpright))
 	h = hashOverflowMark(h, &x.TextOverflow)
 	h = hashLineClamp(h, &x.LineClamp)
 	h = mix(h, uint64(x.ListStyleType))

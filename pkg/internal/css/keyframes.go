@@ -39,8 +39,9 @@ const maxKeyframeOffsets = 1000
 // notAnimatable holds the longhands whose definitions say they are not
 // animatable (Web Animations 1, 5.2), which a keyframe does not set:
 // the animation, transition and timeline longhands but view-timeline-inset,
-// direction, unicode-bidi and writing-mode (CSS Writing Modes 4, 2.1, 2.2
-// and 3.1) and contain (CSS Containment 2, 3). Immutable lookup table.
+// direction, unicode-bidi, writing-mode, text-orientation and
+// text-combine-upright (CSS Writing Modes 4, 2.1, 2.2, 3.1, 5.1 and 9.1)
+// and contain (CSS Containment 2, 3). Immutable lookup table.
 //
 // # Corpus evidence
 //
@@ -51,7 +52,7 @@ const maxKeyframeOffsets = 1000
 var notAnimatable = func() [numProps]bool {
 	var on [numProps]bool
 	for _, id := range []propID{
-		pDirection, pUnicodeBidi, pWritingMode, pContain,
+		pDirection, pUnicodeBidi, pWritingMode, pTextOrientation, pTextCombineUpright, pContain,
 		pAnimationName, pAnimationDuration, pAnimationTimingFunction, pAnimationIterationCount,
 		pAnimationDirection, pAnimationFillMode, pAnimationPlayState, pAnimationDelay,
 		pAnimationComposition, pAnimationTimeline, pAnimationRangeStart, pAnimationRangeEnd,

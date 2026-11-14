@@ -58,6 +58,16 @@ func textFontProps() map[propID]propDef {
 			"lr": HorizontalTB, "lr-tb": HorizontalTB, "rl": HorizontalTB, "rl-tb": HorizontalTB,
 			"tb": VerticalRL, "tb-rl": VerticalRL,
 		}),
+		// text-orientation (CSS Writing Modes 4, 5.1). sideways-right is
+		// the alias Chromium parses, from an earlier draft.
+		pTextOrientation: enumProp("text-orientation", true, func(s *Style) *TextOrientation { return &s.TextOrientation }, map[string]TextOrientation{
+			"mixed": OrientMixed, "upright": OrientUpright, "sideways": OrientSideways, "sideways-right": OrientSideways,
+		}),
+		// text-combine-upright (CSS Writing Modes 4, 9.1). The digits
+		// value is refused, as Chromium refuses it.
+		pTextCombineUpright: enumProp("text-combine-upright", true, func(s *Style) *TextCombine { return &s.TextCombineUpright }, map[string]TextCombine{
+			"none": CombineNone, "all": CombineAll,
+		}),
 		pTextJustify: enumProp("text-justify", true, func(s *Style) *TextJustify { return &s.TextJustify }, map[string]TextJustify{
 			"auto": JustifyAuto, "none": JustifyNone, "inter-word": JustifyInterWord,
 			"inter-character": JustifyInterCharacter, "distribute": JustifyInterCharacter,

@@ -1388,6 +1388,12 @@ type Style struct {
 	// WritingMode is the writing-mode property (CSS Writing Modes 4, 3.1,
 	// writing.go).
 	WritingMode WritingMode
+	// TextOrientation is the text-orientation property (CSS Writing
+	// Modes 4, 5.1, writing.go).
+	TextOrientation TextOrientation
+	// TextCombineUpright is the text-combine-upright property (CSS
+	// Writing Modes 4, 9.1, writing.go).
+	TextCombineUpright TextCombine
 	// TextOverflow is the mark a line of a block container whose overflow
 	// is not visible shows where its content overflows the end edge (CSS
 	// Overflow 4, 5.1).
