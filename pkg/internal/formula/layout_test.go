@@ -325,3 +325,29 @@ func TestEdges_NoItalicCorrectionFromMargins(t *testing.T) {
 		t.Fatalf("second child at %g, want 24 (3 + 4 + 10 + 4 + 3)", x)
 	}
 }
+
+// TestContentSize_WidthAndHeight sizes a content box by CSS width and
+// height: a fraction's bar spans it with its children centred, an mrow
+// keeps its content at the inline-start edge (MathML Core, 3.1.2 and
+// 3.3.2.1).
+func TestContentSize_WidthAndHeight(t *testing.T) {
+	s := wpt(t, "fraction-rulethickness10000")
+	st := mathStyle("fraction-rulethickness10000", 1)
+	st.Display = true
+	frac := el("mfrac", space("10pt", "1pt", "0"), space("10pt", "1pt", "0"))
+	fs := st
+	fs.Width, fs.HasWidth = 50, true
+	frac.Style = &fs
+	rs := rects(lay(t, s, el("math", frac), st))
+	if len(rs) != 1 || !near(rs[0].Ops[1].P[0].X-rs[0].Ops[0].P[0].X, 50) {
+		t.Fatalf("bar %v, want 50 wide", rs)
+	}
+	row := el("mrow", space("10pt", "1pt", "0"))
+	rst := st
+	rst.Width, rst.HasWidth, rst.Height, rst.HasHeight = 30, true, 20, true
+	row.Style = &rst
+	b := lay(t, s, el("math", row), st)
+	if x, _, _ := childAt(b, 0, 0); !near(b.Width, 30) || !near(b.Ascent+b.Descent, 20) || !near(x, 0) {
+		t.Fatalf("mrow %g by %g, content at %g; want 30 by 20 at 0", b.Width, b.Ascent+b.Descent, x)
+	}
+}

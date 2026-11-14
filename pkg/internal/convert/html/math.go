@@ -40,6 +40,7 @@ func (b *builder) mathElement(ctx context.Context, n *dom.Node, st *css.Style) [
 	rootStyle := *root.Style
 	rootStyle.Padding, rootStyle.Border, rootStyle.Margin = [4]float64{}, [4]float64{}, [4]float64{}
 	rootStyle.Background = typeset.Color{}
+	rootStyle.HasWidth, rootStyle.HasHeight = false, false
 	root.Style = &rootStyle
 	box, err := b.res.formulas.Layout(ctx, root, rootStyle)
 	if err != nil {
@@ -153,6 +154,18 @@ func formulaStyle(st *css.Style, lang string) *formula.Style {
 	if bg := color(st.BackgroundColor); bg.A > 0 {
 		fs.Background = bg
 	}
+	if d := st.Width; d.Kind == css.Points {
+		fs.Width, fs.HasWidth = max(d.Value, 0), true
+		if st.BoxSizing == css.BorderBox {
+			fs.Width = max(float64(fs.Width-edgeSum(st, css.Left, css.Right)), 0)
+		}
+	}
+	if d := st.Height; d.Kind == css.Points {
+		fs.Height, fs.HasHeight = max(d.Value, 0), true
+		if st.BoxSizing == css.BorderBox {
+			fs.Height = max(float64(fs.Height-edgeSum(st, css.Top, css.Bottom)), 0)
+		}
+	}
 	for side := range 4 {
 		if d := st.Padding[side]; d.Kind == css.Points {
 			fs.Padding[side] = max(d.Value, 0)
@@ -183,4 +196,19 @@ func mathScaleDowns(ctx context.Context, fc *text.Face) (has bool, script, scrip
 	a, _ := t.Constant(mathtable.ScriptPercentScaleDown)       // 0 without MathConstants: the fallback
 	c, _ := t.Constant(mathtable.ScriptScriptPercentScaleDown) // likewise
 	return true, float64(a) / 100, float64(c) / 100
+}
+
+// edgeSum returns the padding and border widths of sides a and b of st,
+// for a border-box size.
+func edgeSum(st *css.Style, a, b css.Side) float64 {
+	sum := 0.0
+	for _, side := range [2]css.Side{a, b} {
+		if d := st.Padding[side]; d.Kind == css.Points {
+			sum += d.Value
+		}
+		if bd := st.Border[side]; bd.Style != css.BorderNone && bd.Style != css.BorderHidden {
+			sum += bd.Width
+		}
+	}
+	return sum
 }

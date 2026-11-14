@@ -67,7 +67,19 @@ func (l *layouter) layout(e *Element, st *Style, c lctx, depth int) *box {
 	default:
 		b = l.row(e, st, c, depth)
 	}
-	return edges(b, st)
+	return edges(b, st, centred(e.Name))
+}
+
+// centred reports the elements whose math content box sits in the
+// middle of a content box CSS sizes, block-start edges aligned (MathML
+// Core, 3.3.2.1, 3.3.2.2, 3.4.2.3 to 3.4.2.5); the others sit at its
+// inline-start edge (3.1.2).
+func centred(name string) bool {
+	switch name {
+	case "mfrac", "munder", "mover", "munderover":
+		return true
+	}
+	return false
 }
 
 // admit counts one more element laid out depth levels below the root,

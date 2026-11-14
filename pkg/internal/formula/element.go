@@ -106,6 +106,11 @@ type Style struct {
 	Padding, Border, Margin [4]float64
 	// BorderColor paints each side's border.
 	BorderColor [4]typeset.Color
+	// Width and Height, when HasWidth and HasHeight are set, size the
+	// element's content box in place of its math content box (MathML
+	// Core, 3.1.2): the CSS width and height of the element.
+	Width, Height       float64
+	HasWidth, HasHeight bool
 }
 
 // Sides of the [Style] edge arrays.

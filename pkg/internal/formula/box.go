@@ -99,6 +99,32 @@ func (b *box) draw(x, y float64, out *[]typeset.Fragment) {
 	}
 }
 
+// contentSize returns the content box of the math content box c of an
+// element of style st: c itself, or a box of the width and height st
+// gives, c's inline-start and block-start edges on the content box's,
+// or, when centred, c's block-start edge on the content box's and their
+// middles aligned (MathML Core, 3.1.2, 3.3.2.1 and 3.4.2.3).
+func contentSize(c *box, st *Style, centred bool) *box {
+	if !st.HasWidth && !st.HasHeight {
+		return c
+	}
+	b := &box{w: c.w, asc: c.asc, desc: c.desc, inkAsc: c.inkAsc, inkDesc: c.inkDesc, italic: c.italic,
+		accent: c.accent, hasAccent: c.hasAccent, op: c.op}
+	x := 0.0
+	if st.HasWidth {
+		b.w = max(st.Width, 0)
+		if centred {
+			x = float64((b.w - c.w) / 2)
+		}
+	}
+	if st.HasHeight {
+		b.desc = max(st.Height, 0) - c.asc
+		b.inkAsc, b.inkDesc = b.asc, b.desc
+	}
+	b.add(c, x, 0)
+	return b
+}
+
 // edges wraps the math content box c of an element of style st in its
 // padding, border and margin, painting its background and borders
 // (MathML Core, 3.1.2): the inline offsets grow by the inline-start
@@ -106,7 +132,8 @@ func (b *box) draw(x, y float64, out *[]typeset.Fragment) {
 // is wider than 0, and the italic correction and top accent attachment
 // grow by the inline-end and inline-start sides. The math content box
 // keeps its baseline.
-func edges(c *box, st *Style) *box {
+func edges(c *box, st *Style, centred bool) *box {
+	c = contentSize(c, st, centred)
 	p, bd, m := st.Padding, st.Border, st.Margin
 	if p == [4]float64{} && bd == [4]float64{} && m == [4]float64{} && st.Background.A == 0 {
 		return c

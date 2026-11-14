@@ -63,6 +63,11 @@ func (l *layouter) mfrac(e *Element, st *Style, c lctx, depth int) *box {
 		b.op = nil
 	}
 	b.w = max(num.w, den.w)
+	if st.HasWidth {
+		// The bar spans the content box CSS sizes, the numerator and the
+		// denominator centred in it (3.3.2.1).
+		b.w = max(st.Width, 0)
+	}
 	axis := f.constant(mt.AxisHeight, size)
 	var numShift, denShift float64
 	if thickness > 0 {
