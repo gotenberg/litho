@@ -344,9 +344,10 @@ func TestShape_ContentEffects(t *testing.T) {
 
 // TestText_RunEffects checks that a run's shadow, glow and reflection are
 // bitmaps with no structure parent painted under the run's glyphs, which
-// stay text with their parent, the glow around the glyphs' bounds and the
-// reflection below them; that Impress's rules draw none, and a bullet
-// takes none of the first run's.
+// stay text with their parent, the glow around the glyphs' bounds, its
+// 8 pt radius scaled to 5.8 pt at 40 pt, and the reflection below them;
+// that Impress's rules draw none, and a bullet takes none of the first
+// run's.
 func TestText_RunEffects(t *testing.T) {
 	st := arial(40)
 	st.Color = css.Color{G: 0.5, A: 1}
@@ -413,8 +414,8 @@ func TestText_RunEffects(t *testing.T) {
 		if refl.Y < r.y-2 || refl.Y+refl.Height < r.y+10 {
 			t.Errorf("reflection over %+v, want it below the baseline %.1f", refl, r.y)
 		}
-		if glow.X > r.x-5 || glow.Y > r.y-28-7 {
-			t.Errorf("glow over %+v, want it 8 pt around the glyphs from %.1f, %.1f", glow, r.x, r.y)
+		if glow.X > r.x-2.5 || glow.X < r.x-4.9 || glow.Y > r.y-28-5 {
+			t.Errorf("glow over %+v, want it 5.8 pt around the glyphs from %.1f, %.1f", glow, r.x, r.y)
 		}
 	}
 }

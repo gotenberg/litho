@@ -240,3 +240,28 @@ func TestUnder_WordReflectionEndsWithItsFade(t *testing.T) {
 		t.Errorf("reflection ends at %.2f, want the fade's end %.2f", bottom, end)
 	}
 }
+
+// TestPPTScale checks PowerPoint's scale of a run's effects: the 2/3
+// power of the size over the size that draws the stated length, nothing
+// for a size that is not positive and finite, the same bits on every
+// machine.
+func TestPPTScale(t *testing.T) {
+	for _, full := range []float64{pptShadowSize, pptGlowSize} {
+		if got := pptScale(full, full); got != 1 {
+			t.Errorf("scale at %v points over %v: %v, want 1", full, full, got)
+		}
+		for _, size := range []float64{12, 24, 48, 72} {
+			if got, want := pptScale(size, full), math.Pow(size/full, 2.0/3); math.Abs(got-want) > 1e-12 {
+				t.Errorf("scale at %v points over %v: %v, want %v", size, full, got, want)
+			}
+		}
+		for _, size := range []float64{0, -12, math.NaN(), math.Inf(1)} {
+			if got := pptScale(size, full); got != 1 {
+				t.Errorf("scale at %v points: %v, want 1", size, got)
+			}
+		}
+	}
+	if got := math.Float64bits(pptScale(24, pptShadowSize)); got != 0x3fdcae5562aa4109 {
+		t.Errorf("shadow scale at 24 points %#x", got)
+	}
+}

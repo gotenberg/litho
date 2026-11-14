@@ -43,7 +43,7 @@ var sameBytesCases = []struct {
 	{formatPPTX, "pptx/parts/chart-pie", "176168b9aa2840baf904072c8afe2b7950cd873a654822cbb8d4fb0fae65bc9b"},
 	{formatPPTX, "pptx/parts/chart-3d", "ffde85123b9f605a29d3f22c44ce5aa617285117713f8dbd4bcf420bd5e6b166"},
 	{formatPPTX, "pptx/parts/fill-gradient", "9a5c1b3bc781fa3a7260e61877b8b7b279efe210f29c84625a3e9413590541a8"},
-	{formatPPTX, "pptx/parts/effects-glow-softedge-reflection", "5f65a9c482a857a0ec3628d936f21776848215d58aa896fb9661c464b024de76"},
+	{formatPPTX, "pptx/parts/effects-glow-softedge-reflection", "f0c161c8358b4cd94bda69ab7fd87a67a2a80428fb9560d0f0c43d9ceacac20c"},
 	{formatODT, "odt/sources/mixed-sections", "a0d798280a169ffd5893ec47d4c5856f170ae674044058b085cc132498f3dea8"},
 	{formatODS, "ods/sources/mixed-sheets", "dda900462838cc6e366ba8a2a51fd3131ad6b9e12fc2cb7ebe2fba3a911fd596"},
 	{formatODP, "odp/sources/wide-deck", "daab83de9e768130c87af5631420319d1554f6d195d1f103347eceabc06f6c67"},

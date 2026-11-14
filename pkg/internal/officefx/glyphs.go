@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -47,16 +48,81 @@ func glyphEffects(ctx context.Context, t *typeset.Text, fx *css.OfficeEffects, p
 		}
 	}
 	if sh := fx.Shadow; sh != nil {
-		if err := add(glyphShadow(ctx, &glyphs, sh, ink, pixels)); err != nil {
+		scaled := *sh
+		scaled.Dist = float64(pptScale(t.Size, pptShadowSize) * radius(sh.Dist))
+		if err := add(glyphShadow(ctx, &glyphs, &scaled, ink, pixels)); err != nil {
 			return nil, Notes{}, err
 		}
 	}
 	if g := fx.Glow; g != nil {
-		if err := add(glyphGlow(ctx, &glyphs, g, ink, pixels)); err != nil {
+		scaled := *g
+		scaled.Radius = float64(pptScale(t.Size, pptGlowSize) * radius(g.Radius))
+		if err := add(glyphGlow(ctx, &glyphs, &scaled, ink, pixels)); err != nil {
 			return nil, Notes{}, err
 		}
 	}
 	return out, notes, nil
+}
+
+// pptShadowSize is the font size, in points, at which PowerPoint moves
+// the outer shadow of a run of text the distance it states: see
+// [pptScale].
+//
+// # Corpus evidence
+//
+//   - probe, pptx: runs of Calibri printed at 12.27, 23.79, 48.31 and
+//     72.12 points, each with a shadow 10 points down and no blur:
+//     PowerPoint draws the shadow as the glyphs moved 2.89, 4.49, 7.04 and
+//     9.36 points (the centroid of its soft mask against the centroid of
+//     the glyphs' ink); 10 (size/80)^(2/3) gives 2.87, 4.46, 7.14 and
+//     9.33, within 0.11 points. Word's scale gives 2.95, 4.66, 7.59 and
+//     10.01.
+//   - litho/pptx: text-fill-effects prints a 40 point run's shadow 3
+//     points toward 45 degrees 1.29 points down, the rule 1.35.
+const pptShadowSize = 80
+
+// pptGlowSize is the font size, in points, at which PowerPoint draws the
+// glow of a run of text at the radius it states: see [pptScale].
+//
+// # Corpus evidence
+//
+//   - probe, pptx: glows of 8 points on runs of Calibri printed at
+//     23.79, 48.31 and 72.12 points fit the shape's rule ([PowerPoint])
+//     best at radii scaled by 0.55, 0.89 and 1.04 (rms 5.1, 3.5 and 2.4
+//     levels at 100 pixels an inch); (size/66)^(2/3) gives 0.51, 0.81 and
+//     1.06. Over the four sizes with 12.27 points, the full radius at 64
+//     to 68 points fits best, at 80 points (the shadow's) the levels rise
+//     by 0.5 to 2.9 at 48 and 72 points, unscaled by 10 to 25 at 12 and
+//     24.
+//   - litho/pptx: text-fill-effects prints a 40 point run's glow of 8
+//     points best at a radius scaled by 0.70, the rule 0.72.
+//   - litho/pptx: effects-glow-softedge-reflection prints a 40 point bold
+//     run's glow of 11 points with its half alpha across the middle of
+//     the glyphs from 319.25 to 408.31 points; the rule's reaches from
+//     318.57 to 408.84, the unscaled radius 1.28 points further each way.
+const pptGlowSize = 66
+
+// pptScale returns the factor PowerPoint scales a length of an effect of
+// a run of text by at font size size, (size/full)^(2/3), full the size
+// at which it draws the length it states: [pptShadowSize] for a shadow's
+// distance, [pptGlowSize] for a glow's radius. A size that is not
+// positive and finite scales nothing. A shadow's blur and a reflection
+// are not scaled.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: the reflection of runs 4 points away at 12.27, 23.79,
+//     48.31 and 72.12 points mirrors the copy about a line 1.84, 3.22,
+//     6.73 and 9.46 points below the baseline, its baseline 3.25, 6.79,
+//     12.46 and 18.07 points down, where the reflection drawn about the
+//     ink's bottom lies 8.6, 12.5, 20.6 and 29.3 points down: PowerPoint
+//     scales it with the size, about the baseline as Word does, by a rule
+//     one distance does not settle.
+func pptScale(size, full float64) float64 {
+	if !numeric.PositiveFinite(size) {
+		return 1
+	}
+	return detmath.Pow(min(size, maxFontSize)/full, 2.0/3)
 }
 
 // take returns the grid of an effect over box blurred by sigma after a
