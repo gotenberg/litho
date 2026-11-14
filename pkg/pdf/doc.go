@@ -205,10 +205,8 @@
 // losslessly, and the first three decline on an encrypted output.
 // [WithCompactionSkipped] reports a write that applied none of them because
 // it appended an incremental update. [WithImageRecompression] costs far more
-// time than the other two, so the CLI keeps it behind its own
-// --recompress-images flag rather than in --compact, and
-// [WithFontSubsetting] leaves later edits no glyph the document does not
-// show, so the CLI keeps it behind --subset-fonts.
+// time than the other two, and [WithFontSubsetting] leaves later edits no
+// glyph the document does not show: ask for each on its own.
 //
 // # Resource limits
 //

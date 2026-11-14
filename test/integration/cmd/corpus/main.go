@@ -77,8 +77,8 @@ func dispatch(ctx context.Context, cmd string, args []string) int {
 // printUsage writes the usage block to w.
 //
 // Takes a writer rather than addressing os.Stderr directly so a test can read
-// the real text instead of a rebuilt copy of it, the way cmd/litho's printUsage
-// does. See [TestUsageNamesEveryDispatchableSubcommand].
+// the real text instead of a rebuilt copy of it. See
+// [TestUsageNamesEveryDispatchableSubcommand].
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: corpus <init|run|baseline|check|scan-claims|versions|tools> [flags]")
 	fmt.Fprintln(w, "")

@@ -81,9 +81,9 @@ type determinismOp struct {
 // The operations are the remediation at the PDF's home profile, the one its
 // file name ends with (see [lithoHomeProfile]), in the default and the
 // aggressive mode, the mutate-* Writer mutations that draw no randomness, and
-// two bookmark generations: [pdf.Writer.GenerateBookmarks] with the CLI's
-// options in replace mode, and a [pdf.Split] of every page that reconstructs
-// the outline. mutate-sign and mutate-encrypt are left out, since a signature
+// two bookmark generations: [pdf.Writer.GenerateBookmarks] with
+// [determinismBookmarkOptions] in replace mode, and a [pdf.Split] of every
+// page that reconstructs the outline. mutate-sign and mutate-encrypt are left out, since a signature
 // and an encryption carry the random nonces, keys, salts and IVs their
 // cryptography requires. The bookmark generations come last, so they take
 // fixture slots that skipped before them and move no other assignment.
@@ -454,9 +454,10 @@ func mutateForDeterminism(ctx context.Context, mf *mutationFeature, data []byte)
 	return output, nil
 }
 
-// determinismBookmarkOptions are the options `litho bookmarks` and
-// `litho set-bookmarks --generate` generate with (defaultBookmarkGenOptions
-// in cmd/litho), so the cell holds the CLI's generation to its bytes.
+// determinismBookmarkOptions are the options the cell generates an outline
+// with through [pdf.Writer.GenerateBookmarks]: a depth of 3, headings from
+// the structure tree first, numbering detected and running headers and
+// footers skipped, so the cell holds a typical generation to its bytes.
 func determinismBookmarkOptions() pdf.BookmarkGenerationOptions {
 	return pdf.BookmarkGenerationOptions{
 		MaxDepth:              3,

@@ -18,9 +18,9 @@ import (
 // can only come from the catalog keys and not from a difference in the file
 // shape.
 //
-// The xref offsets are computed rather than guessed, for the reason
-// xfaFormFixturePDF gives in cmd/litho: a stale offset makes the file
-// unopenable and fails the test for a reason unrelated to what it asserts.
+// The xref offsets are computed rather than guessed: a stale offset makes the
+// file unopenable and fails the test for a reason unrelated to what it
+// asserts.
 func catalogFactsPDF(withCollection, withLexicon bool) []byte {
 	const pls = `<?xml version="1.0"?><lexicon version="1.0"><lexeme>` +
 		`<grapheme>tomato</grapheme><phoneme>t&#x259;ˈmɑːtoʊ</phoneme></lexeme></lexicon>`

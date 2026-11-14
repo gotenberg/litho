@@ -364,8 +364,7 @@ func WithImageRecompression() WriteOption {
 //
 // A subset font holds only the glyphs the document shows. Text added to the
 // document later in that font, by an editor or a form, finds no glyph to draw.
-// That is why the CLI keeps it behind its own --subset-fonts flag rather than
-// in --compact.
+// Ask for it only for a document that is final.
 func WithFontSubsetting() WriteOption {
 	return func(o *writeOpts) {
 		o.subsetFonts = true

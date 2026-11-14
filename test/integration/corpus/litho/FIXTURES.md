@@ -7552,8 +7552,8 @@ broke in the iteration order of a Go map until `5688d5c6`, and the outline came
 out with `AABB` or without it from run to run. The tie now breaks to the smaller
 size, and both generations find the one heading `AABB`.
 
-The `determinism` feature runs `generate-bookmarks` (a Writer generation with
-the CLI's options, replacing the outline) at PDF/UA-2 and `split-reconstruct` (a
+The `determinism` feature runs `generate-bookmarks` (a Writer generation,
+replacing the outline) at PDF/UA-2 and `split-reconstruct` (a
 split of every page that reconstructs the outline) at PDF/A-4e, eight times
 each. With the tie broken in map order again, the feature counted one or both
 cells nondeterministic in 10 of 10 runs.
@@ -8922,7 +8922,7 @@ page reached the refusal. This file holds one beside a page that flattens:
 Flattening composites page 2 with two page-sized planes for each open isolated
 knockout group, which no renderer can elide, and eight of them pass the 50
 million pixel render budget at every resolution it tries, down to 72 dpi:
-`litho flatten-transparency` refuses the file. Its PDF/A-1a and PDF/A-1b
+`Writer.FlattenTransparency` refuses the file. Its PDF/A-1a and PDF/A-1b
 remediations, default and aggressive, flatten page 1 and set page 2's
 transparency opaque, and veraPDF 1.30.2 and litho report nothing on the
 outputs. Page 1 of the output draws like its source; page 2 draws its square
@@ -8994,7 +8994,7 @@ lower-left corner and a red border, so a drawing moved, unturned or unscaled
 shows. `reversed` names its corners in the other order (7.9.5), and
 `collapsed` has no area, so Algorithm 8.1 scales it to nothing.
 
-`litho flatten-form` draws the six visible appearances where litho and poppler
+`Writer.FlattenForm` draws the six visible appearances where litho and poppler
 26.09.0 draw them in the source: litho's and poppler's renderings of the output
 match the source's to the pixel at 72 dpi, and `collapsed` leaves drawing
 nothing. The translation drew every case but `control` elsewhere, 21,996
@@ -9042,7 +9042,7 @@ shape:
 The page's own content draws nothing. The file has no `/StructTreeRoot` and no
 `/MarkInfo`, claims PDF/UA-1 in its XMP, and declares an RGB OutputIntent.
 
-`litho flatten-form` draws the three appearances where litho and poppler
+`Writer.FlattenForm` draws the three appearances where litho and poppler
 26.09.0 draw them in the source, to the pixel at 72 dpi, each inside an
 `/Artifact` sequence. The output fails a subset of what the source fails at
 all thirteen levels, on litho and veraPDF 1.30.2 alike: with the widgets gone
@@ -9189,7 +9189,7 @@ The page's own content draws nothing. Every glyph is a Type 3 glyph with a
 `/ToUnicode` map. The file has no `/StructTreeRoot` and no `/MarkInfo`, claims
 PDF/UA-1 in its XMP, and declares an RGB OutputIntent.
 
-`litho flatten-transparency` draws both annotations into the page, each inside
+`Writer.FlattenTransparency` draws both annotations into the page, each inside
 an `/Artifact` sequence, and composites the two regions. The output fails a
 subset of what the source fails at all thirteen levels, on litho and veraPDF
 1.30.2 alike: with the transparency gone it passes `6.4/6` and `6.5.3/1` at
@@ -9235,7 +9235,7 @@ apart from poppler 26.09.0 at 72 dpi under the render cell's tolerances. Before,
 749,500 pixels per million apart from poppler, and page 2 an opaque red square,
 250,000 apart. Flattening composites page 1 at the last resolution it tries,
 127 dpi, with the mask drawn coarse (`CoarseMasks` 1), and refuses page 2,
-whose group it cannot composite, so `litho flatten-transparency` refuses the
+whose group it cannot composite, so `Writer.FlattenTransparency` refuses the
 file. The PDF/A-1b remediation flattens page 1, 375 pixels per million apart
 from the source in poppler's rendering, and sets page 2's transparency opaque;
 veraPDF 1.30.2 and litho report nothing on that output. Before, it set both
@@ -10511,11 +10511,11 @@ divergences, which would add two cells to `ruleset_mismatch`.
 
 The thirteen-level figures are measured by hand against a live veraPDF. The
 thirteen flavours are `1a 1b 2a 2b 2u 3a 3b 3u 4 4e 4f ua1 ua2` on the veraPDF
-side and the matching `PDF/A-*` and `PDF/UA-*` names on litho's:
+side and the matching `PDF/A-*` and `PDF/UA-*` names on litho's, where
+`Reader.ValidatePDFAReport` and `Reader.ValidatePDFUAReport` judge each file
+against the veraPDF run:
 
 ```bash
-go build -o /tmp/litho ./cmd/litho
-/tmp/litho validate pdfs/complex_2b.pdf -profile "PDF/A-2b" -f json
 verapdf -f 2b --format json --maxfailuresdisplayed -1 pdfs/complex_2b.pdf
 ```
 

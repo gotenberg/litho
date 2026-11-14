@@ -14,9 +14,7 @@ import (
 // has to name them.
 var helpAliases = map[string]bool{"-h": true, "--help": true, "help": true}
 
-// TestUsageNamesEveryDispatchableSubcommand keeps the usage block honest, the
-// rule cmd/litho's TestUsageListsEveryDispatchableCommand states for litho
-// itself and TestPipeUsage_AdvertisesEveryStage states for a pipe stage.
+// TestUsageNamesEveryDispatchableSubcommand keeps the usage block honest.
 //
 // This tool prints its subcommands TWICE: a one-line synopsis and a
 // "Subcommands:" block under it. Both are hand-written, the dispatch switch is
