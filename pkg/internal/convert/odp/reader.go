@@ -3,10 +3,10 @@ package odp
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -382,7 +382,7 @@ func slideName(name string, n int) string {
 		return name
 	}
 	// A number past int's range names no position.
-	if v, err := strconv.Atoi(digits); err == nil && v == n {
+	if v, err := intconv.Atoi(digits); err == nil && v == n {
 		return shown
 	}
 	return name

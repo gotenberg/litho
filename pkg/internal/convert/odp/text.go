@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/detmath"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -779,7 +779,7 @@ func (r *reader) inline(el *odf.Element, tc *textCtx, rs runState, href string, 
 		case "a":
 			r.inline(k, tc, rs, k.A(odf.NSXLink, "href"), w, depth+1)
 		case "s":
-			n, err := strconv.Atoi(k.A(odf.NSText, "c"))
+			n, err := intconv.Atoi(k.A(odf.NSText, "c"))
 			if err != nil || n < 1 {
 				n = 1
 			}

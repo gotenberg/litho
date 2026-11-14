@@ -4,11 +4,11 @@ import (
 	"context"
 	"math"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
@@ -407,7 +407,7 @@ func (r *reader) textBodyProps(tb *slides.TextBody, p odf.Props, frame bool) {
 	// the loext namespace and reads in the style one too, cuts the text
 	// at the shape's text area.
 	tb.Clip = p.Get("loext:overflow-behavior") == "clip" || p.Get("style:overflow-behavior") == "clip"
-	if n, err := strconv.Atoi(p.Get("fo:column-count")); err == nil && n > 1 {
+	if n, err := intconv.Atoi(p.Get("fo:column-count")); err == nil && n > 1 {
 		tb.Columns = min(n, maxColumns)
 		tb.ColumnGap, _ = odf.Length(p.Get("fo:column-gap"))
 	}

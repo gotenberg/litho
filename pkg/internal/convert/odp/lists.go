@@ -1,10 +1,10 @@
 package odp
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/symbolfont"
 )
@@ -101,11 +101,11 @@ func (r *reader) bullet(ls *odf.ListStyle, lv int, item *odf.Element, listStart 
 		// An item's text:start-value restarts the count (19.868); the
 		// level's restarts it where a list starts, when it is not 1, the
 		// count every run of numbered paragraphs starts at.
-		if n, err := strconv.Atoi(l.El.A(odf.NSText, "start-value")); err == nil && n > 1 && listStart {
-			b.StartAt = n
+		if n, err := intconv.Atoi(l.El.A(odf.NSText, "start-value")); err == nil && n > 1 && listStart {
+			b.StartAt = min(n, intconv.MaxCountStart)
 		}
-		if n, err := strconv.Atoi(item.A(odf.NSText, "start-value")); err == nil && n >= 1 {
-			b.StartAt = n
+		if n, err := intconv.Atoi(item.A(odf.NSText, "start-value")); err == nil && n >= 1 {
+			b.StartAt = min(n, intconv.MaxCountStart)
 		}
 	case "image":
 		pic := r.picture(l.El)

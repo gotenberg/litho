@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/shape"
@@ -21,8 +22,11 @@ import (
 // one, by document order otherwise. On a master page, the presentation
 // placeholders a slide does not show are left out.
 func (r *reader) shapeList(els []*odf.Element, pc *pageCtx, depth int) []*slides.Shape {
+	// The key is read in 64 bits: a draw:z-index is an unbounded
+	// nonNegativeInteger, and two indices past 2^31 order alike where
+	// int is 32 or 64 bits.
 	type entry struct {
-		key   int
+		key   int64
 		shape *slides.Shape
 	}
 	var list []entry
@@ -33,8 +37,8 @@ func (r *reader) shapeList(els []*odf.Element, pc *pageCtx, depth int) []*slides
 		if pc.master && depth == 0 && !pc.masterShows(el.A(odf.NSPresentation, "class")) {
 			continue
 		}
-		key := i
-		if z, err := strconv.Atoi(el.A(odf.NSDraw, "z-index")); err == nil && z >= 0 {
+		key := int64(i)
+		if z, err := strconv.ParseInt(el.A(odf.NSDraw, "z-index"), 10, 64); err == nil && z >= 0 {
 			key = z
 		}
 		for _, s := range r.shape(el, pc, depth, "") {
@@ -518,7 +522,7 @@ func (r *reader) outline(el *odf.Element) *shape.Geometry {
 	case "polygon", "polyline":
 		c = odf.Points(el.A(odf.NSDraw, "points"), view, el.Name.Local == "polygon")
 	case "regular-polygon":
-		n, _ := strconv.Atoi(el.A(odf.NSDraw, "corners"))
+		n, _ := intconv.Atoi(el.A(odf.NSDraw, "corners"))
 		sharp, _ := strconv.ParseFloat(strings.TrimSuffix(el.A(odf.NSDraw, "sharpness"), "%"), 64)
 		c = odf.RegularPolygon(n, el.A(odf.NSDraw, "concave") == "true", sharp)
 	}

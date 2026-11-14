@@ -2,11 +2,11 @@ package odp
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -111,13 +111,15 @@ func (r *reader) table(t *odf.Element, box typeset.Rect, pc *pageCtx) *slides.Ta
 	return out
 }
 
-// repeatCount returns a repetition attribute of el, at least 1.
+// repeatCount returns a repetition or span attribute of el, at least 1 and
+// at most [maxTableCells], past which a span reaches beyond every grid
+// alike: the cap keeps a cell's index plus its span within 32 bits.
 func repeatCount(el *odf.Element, local string) int {
-	n, err := strconv.Atoi(el.A(odf.NSTable, local))
+	n, err := intconv.Atoi(el.A(odf.NSTable, local))
 	if err != nil || n < 1 {
 		return 1
 	}
-	return n
+	return min(n, maxTableCells)
 }
 
 // fillSizes shares what total leaves of the sizes set among those at 0.
