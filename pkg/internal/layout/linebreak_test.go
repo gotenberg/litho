@@ -147,9 +147,10 @@ func TestLineBreak_KeepHangul(t *testing.T) {
 }
 
 // TestLineBreak_KeepEmoji checks that css.Office.KeepEmoji keeps two
-// emoji on one line, a skin tone modifier ending the first, and an emoji
-// with the letters before and after it, the run of them moving whole to
-// the next line, while a space still breaks.
+// emoji on one line, a skin tone modifier ending the first, two flags,
+// an emoji with the letters before and after it and an emoji after a
+// closing parenthesis, the run of them moving whole to the next line,
+// while a space and a Han character before an emoji still break.
 //
 // # Corpus evidence
 //
@@ -159,6 +160,8 @@ func TestLineBreak_KeepHangul(t *testing.T) {
 //     fills the first line with emoji. It sets "Abcdef" and ten emoji
 //     as "Abcdef" and seven emoji, and an emoji before "abc" on the line
 //     of the letters (see text.EmojiJoins).
+//   - probe, docx: Word breaks no line between two flags nor after ")"
+//     before an emoji, and breaks between a Han character and an emoji.
 func TestLineBreak_KeepEmoji(t *testing.T) {
 	keep := func(s *css.Style) { s.KeepEmoji = true }
 	tests := []struct {
@@ -173,6 +176,11 @@ func TestLineBreak_KeepEmoji(t *testing.T) {
 		{"breaks after letters", sty(), "A ab\U0001F600\U0001F602", []string{"A ab", "\U0001F600\U0001F602"}},
 		{"keeps letters and emoji", sty(keep), "A ab\U0001F600\U0001F602", []string{"A ", "ab\U0001F600\U0001F602"}},
 		{"keeps emoji and letters", sty(keep), "A \U0001F600\U0001F602ab", []string{"A ", "\U0001F600\U0001F602ab"}},
+		{"breaks between flags", sty(), "A \U0001F1EB\U0001F1F7\U0001F1EF\U0001F1F5", []string{"A \U0001F1EB\U0001F1F7", "\U0001F1EF\U0001F1F5"}},
+		{"keeps flags together", sty(keep), "A \U0001F1EB\U0001F1F7\U0001F1EF\U0001F1F5", []string{"A ", "\U0001F1EB\U0001F1F7\U0001F1EF\U0001F1F5"}},
+		{"breaks after a parenthesis", sty(), "A ()\U0001F600", []string{"A ()", "\U0001F600"}},
+		{"keeps a parenthesis and an emoji", sty(keep), "A ()\U0001F600", []string{"A ", "()\U0001F600"}},
+		{"breaks after Han", sty(keep), "A \u6F22\U0001F600\U0001F602", []string{"A \u6F22", "\U0001F600\U0001F602"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

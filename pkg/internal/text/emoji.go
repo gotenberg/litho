@@ -243,13 +243,21 @@ func presentationOf(r, vs rune, kind int, multi bool, v EmojiVariant) presentati
 }
 
 // EmojiJoins reports whether Word and PowerPoint keep a and b, two
-// characters next to each other, on one line where an emoji meets an
-// emoji or a letter: b is Extended_Pictographic (UTS #51, Annex A) and a
-// is one too, the emoji presentation selector or a skin tone modifier
-// ending one, or a letter or digit ([officeLetter]); or a ends an emoji
-// so and b is a letter or digit. A line breaks next to an emoji at a
-// space, or inside a word no line holds, where UAX #14 breaks before
-// and after any emoji (classes ID, EB and EM, LB30b, LB31).
+// characters next to each other, on one line where an emoji is involved.
+// Office reads an emoji as UAX #14 reads a letter, class AL, where UAX
+// #14 gives it class ID, EB, EM or RI: an emoji is an
+// Extended_Pictographic character (UTS #51, Annex A) or a regional
+// indicator, and a skin tone modifier or the emoji presentation selector
+// ends one. So no line breaks between two emoji, two flags among them
+// (LB28, AL × AL, where LB30a breaks between flags and LB30b and LB31
+// between pictographs), between an emoji and a letter or digit either
+// way (LB28 and LB23, AL × NU, NU × AL), nor after a closing parenthesis
+// or bracket before an emoji (LB30, CP × AL). Han, kana and Hangul (ID,
+// H2, H3) keep their break beside an emoji, as beside a letter (LB31).
+// A line still breaks next to an emoji at a space, or inside a word no
+// line holds. The pairs UAX #14 sets apart for AL and ID that no probe
+// shows, an emoji before an opening bracket (LB30, AL × OP) or next to a
+// prefix or postfix sign (LB24, LB23a), keep UAX #14's emoji classes.
 //
 // # Corpus evidence
 //
@@ -263,13 +271,26 @@ func presentationOf(r, vs rune, kind int, multi bool, v EmojiVariant) presentati
 //     285.6 points wide as "A", five emoji, then five and " Z", where a
 //     break between two emoji would have set "A " and five; "Abcdef" and
 //     ten emoji as "Abcdef" and three emoji, five, then two and " Z".
+//   - probe, docx: Word sets "A ", twenty flags and " Z" as "A", then
+//     the flags' forty regional indicators broken where the lines end:
+//     no break between two flags. It sets "A (", ten emoji, ")", ten
+//     emoji and " Z" as "A", "(" and nine emoji, an emoji, ")" and eight
+//     emoji, then two and " Z": no break after "(" nor after ")". It sets
+//     "A ", two Han characters, ten emoji, two Han characters and " Z" as
+//     "A " and the two Han characters, nine emoji, then an emoji, the two
+//     Han characters and " Z": a break between Han and an emoji.
+//     PowerPoint was not probed on flags nor brackets.
 func EmojiJoins(a, b rune) bool {
-	endsEmoji := a == variationEmoji || unicode.Is(extendedPictographic, a) || unicode.Is(emojiModifier, a)
-	if unicode.Is(extendedPictographic, b) {
-		return endsEmoji || officeLetter(a)
+	endsEmoji := a == variationEmoji || unicode.Is(extendedPictographic, a) || unicode.Is(emojiModifier, a) || isRegionalIndicator(a)
+	if unicode.Is(extendedPictographic, b) || isRegionalIndicator(b) {
+		return endsEmoji || officeLetter(a) || closingPunct(a)
 	}
 	return endsEmoji && officeLetter(b)
 }
+
+// closingPunct reports whether r is of line break class CP (UAX #14,
+// LineBreak.txt): the right parenthesis and the right square bracket.
+func closingPunct(r rune) bool { return r == ')' || r == ']' }
 
 // officeLetter reports whether r is a letter or digit of a script UAX #14
 // breaks only at spaces: not Han, kana or Hangul, whose characters break
