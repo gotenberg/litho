@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/formula"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
@@ -77,6 +78,8 @@ type reader struct {
 	// it, to its 1-based position; pageCount is the number of pages read.
 	pageNames map[string]int
 	pageCount int
+	// formulas lays the presentation's formulas out, made at the first.
+	formulas *formula.Setter
 }
 
 // nameShapes maps the draw:name of every drawing shape el holds, groups

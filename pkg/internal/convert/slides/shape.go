@@ -49,6 +49,10 @@ func (b *builder) shape(s *Shape, m typeset.Matrix, depth int, parent *typeset.S
 		}
 		fig := &typeset.StructElem{Role: "Figure", Alt: s.Alt}
 		frags := b.picture(s.Picture, box)
+		if s.Formula {
+			fig.Role = "Formula"
+			adopt(frags, fig)
+		}
 		for _, f := range frags {
 			if img, ok := f.(*typeset.Image); ok {
 				img.Parent = fig

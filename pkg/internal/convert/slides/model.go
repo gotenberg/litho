@@ -220,6 +220,10 @@ type Shape struct {
 	// carries it; one without stays a Figure without a description, which
 	// only the source's author can give.
 	Alt string
+	// Formula marks a KindPicture shape that draws a formula: its
+	// structure element is a Formula over every fragment it draws, with
+	// Alt as its alternate description (ISO 32000-1, 14.8.4.5).
+	Formula bool
 	// Decorative marks a shape the source says carries no meaning (the
 	// decorative flag of Office 2019, adec:decorative): it is drawn as an
 	// artifact, outside the structure tree.

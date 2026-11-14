@@ -281,6 +281,16 @@ func (r *reader) frame(el *odf.Element, pc *pageCtx) *slides.Shape {
 			}
 			return s
 		case k.Is(odf.NSDraw, "object"):
+			if pic, alt, ok := r.formula(k); ok {
+				if pic == nil {
+					continue
+				}
+				s.Kind, s.Picture, s.Formula = slides.KindPicture, pic, true
+				if s.Alt == "" {
+					s.Alt = alt
+				}
+				return s
+			}
 			if c := r.object(k); c != nil {
 				s.Kind = slides.KindChart
 				s.Chart = c
