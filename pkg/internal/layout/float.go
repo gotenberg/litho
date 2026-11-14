@@ -355,6 +355,44 @@ func (c *bfc) clearTo(cl css.Clear) float64 {
 	return y
 }
 
+// clearFloatTo returns the position below the floats the clear value of
+// a float clears, as [bfc.clearTo] does but for the initial letters: they
+// are no floats, and the clear of a float ignores them (CSS Inline 3,
+// 7.9.3).
+func (c *bfc) clearFloatTo(cl css.Clear) float64 {
+	y := math.Inf(-1)
+	for _, f := range c.floats {
+		if f.initial || f.wrap != css.FrameWrapThrough {
+			continue
+		}
+		if cl == css.ClearBoth || (cl == css.ClearLeft && f.side == css.FloatLeft) || (cl == css.ClearRight && f.side == css.FloatRight) {
+			y = max(y, f.y1)
+		}
+	}
+	return y
+}
+
+// besideInitial returns the bottom of the initial letters of side that a
+// float of that side starting at y would sit beside, -Inf for none: such
+// a float clears the letter (CSS Inline 3, 7.9.3). Chromium clears the
+// letters of the float's own side alone.
+//
+// # Corpus evidence
+//
+//   - wpt: css-inline/initial-letter/initial-letter-float-004 (a left
+//     float on the second line of a 3-line left letter goes below it) and
+//     -005 (a right float of clear: left stays on the second line beside
+//     it) draw their references in Chromium 156's screenshots.
+func (c *bfc) besideInitial(side css.Float, y float64) float64 {
+	out := math.Inf(-1)
+	for _, f := range c.floats {
+		if f.initial && f.side == side && f.y0 <= y+eps && f.y1 > y+eps {
+			out = max(out, f.y1)
+		}
+	}
+	return out
+}
+
 // bottom returns the lowest float margin edge, -Inf without floats.
 func (c *bfc) bottom() float64 {
 	return c.clearTo(css.ClearBoth)

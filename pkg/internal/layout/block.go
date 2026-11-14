@@ -1659,8 +1659,9 @@ func (e *engine) layoutFloat(f *box, cb cblock, bc *bfc, minY float64) int {
 	if f.st.Clear != css.ClearNone {
 		// A float's top outer edge goes below the floats it clears (CSS
 		// 2.1, 9.5.2: clear on a floating box adds rule 10 to 9.5.1).
-		minY = max(minY, bc.clearTo(f.st.Clear))
+		minY = max(minY, bc.clearFloatTo(f.st.Clear))
 	}
+	minY = max(minY, bc.besideInitial(f.float, minY))
 	if e.floatBreaks(f, f.st.BreakBefore) && minY > e.flowStart()+eps && !e.atPageTop(minY) {
 		// A left or right page break starts the next page, whatever its
 		// side.

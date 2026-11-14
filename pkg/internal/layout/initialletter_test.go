@@ -149,3 +149,38 @@ func TestInitialLetter_InheritsFromFirstLine(t *testing.T) {
 		t.Errorf("letter %c, want blue", got)
 	}
 }
+
+// TestInitialLetter_FloatsBeside locks CSS Inline 3, 7.9.3: a left float
+// that starts on a line beside a left initial letter clears it, and the
+// clear of a float ignores the letter, a right float of clear: left
+// staying on the line it starts on.
+func TestInitialLetter_FloatsBeside(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		mod  func(*css.Style)
+		y    float64
+	}{
+		{"left", float(css.FloatLeft), 35},
+		{"right clear left", func(s *css.Style) { s.Float, s.Clear = css.FloatRight, css.ClearLeft }, 10},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			fl := el(sty(width(5), height(5), c.mod))
+			p := el(sty(width(60)), letter("A", 3, 3), txt(sty(), "bb"), br(sty()), fl, txt(sty(), "cc dd ee"))
+			b := boxes(t, doc(p), page(60, 200))
+			var got *box
+			var walk func(*box)
+			walk = func(k *box) {
+				for _, x := range k.kids {
+					if x.node == fl {
+						got = x
+					}
+					walk(x)
+				}
+			}
+			walk(b)
+			if got == nil || !near(got.y/css.Pt, c.y) {
+				t.Errorf("float %v, want its top at %v px", got, c.y)
+			}
+		})
+	}
+}
