@@ -297,11 +297,11 @@ func (p *painter) sync(chain []*box) *ditem {
 			parent = f.open[len(f.open)-1].item
 		}
 		g := &ditem{group: true, fx: &groupFx{opacity: 1, clip: p.clipPath(b)}}
-		if b.monoCol {
+		if b.inColumn() {
 			// The positioned boxes a monolithic box in columns clips move
 			// to its column with it, inside its clip.
 			ay, oy := ancestorOffsetY(b)
-			g.page, g.y0 = pageMono, b.y+ay+oy
+			g.page, g.y0 = pageMono, b.y+ay+oy+b.colPin
 		}
 		parent.kids = append(parent.kids, g)
 		f.open = append(f.open, openClip{box: b, item: g})
@@ -641,10 +641,11 @@ func (p *painter) unit(b *box, own bool) {
 		pushed++
 	}
 	defer func() { p.frames = p.frames[:len(p.frames)-pushed] }()
-	if b.monoCol {
-		// A monolithic box in columns moves to its column whole; the
-		// positioned boxes it holds paint from its stacking context.
-		push(&ditem{group: true, page: pageMono, y0: b.y + p.dy})
+	if b.inColumn() {
+		// A monolithic or pinned box in columns moves to its column
+		// whole; the positioned boxes it holds paint from its stacking
+		// context.
+		push(&ditem{group: true, page: pageMono, y0: b.y + p.dy + b.colPin})
 		own = own && b.isStackingContext()
 	}
 	if b.fixed {
@@ -963,10 +964,10 @@ func (p *painter) collect(b *box, blocks, floats, layers *[]*box) {
 		case k.float != css.FloatNone || k.mc != nil:
 			// A multi-column container paints its columns as a unit.
 			*floats = append(*floats, k)
-		case k.monoCol:
-			// A monolithic box in columns paints as a unit in its column;
-			// its positioned descendants stay in the stacking context's
-			// layers, and follow the columns on their own.
+		case k.inColumn():
+			// A monolithic or pinned box in columns paints as a unit in
+			// its column; its positioned descendants stay in the stacking
+			// context's layers, and follow the columns on their own.
 			*floats = append(*floats, k)
 			var bl, fl []*box
 			p.collect(k, &bl, &fl, layers)

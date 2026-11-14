@@ -632,3 +632,20 @@ func TestMulticol_BalanceKeepsAnAvoidedEmptyBlockWhole(t *testing.T) {
 		GG___
 		_____`)
 }
+
+func TestMulticol_NegativeMarginKeepsTheColumnReached(t *testing.T) {
+	t.Parallel()
+	// The lime block ends 1 pixel into the second column; the blue block,
+	// pulled back 2 pixels by its top margin, stays in that column above
+	// its top, as Chromium lays it out (CSS Fragmentation 3, 2 does not
+	// say), rather than in the first column's slice.
+	auto := func(s *css.Style) { s.Columns.Fill = css.FillAuto }
+	res := run(t, doc(el(sty(columns(2, 1), height(3), margin(2, 0, 0, 0), auto),
+		strip(lime, height(4)), strip(blue, margin(-2, 0, 0, 0)))), page(5, 5))
+	assertPixels(t, res, 1, `
+		_____
+		___BB
+		GG_GG
+		GG___
+		GG___`)
+}

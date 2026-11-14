@@ -1416,6 +1416,45 @@ func (e *engine) cloneEdges(b *box, hSet bool) {
 	}
 }
 
+// pinToColumn pins the in-flow block k, laid out in columns after
+// siblings whose content reached column reached (-1 for none), to that
+// column when a negative margin pulled k's top back into an earlier
+// column's slice of the column flow: k paints as a unit in column
+// reached, as far above its top as k's top lies above that column's
+// slice, when k ends within the column ([box.colPin]). It returns the
+// column the content reached once k is placed.
+//
+// CSS Fragmentation 3, 2 lays the flow out in order, each fragmentainer
+// taking up where the one before it stopped, and does not say where a box
+// a negative margin pulls back across a break lies. Chromium keeps it in
+// the fragmentainer the content before it reached, above that
+// fragmentainer's top, on screen as in print.
+//
+// # Corpus evidence
+//
+//   - wpt, css/css-break/overflowed-block-with-no-room-after-000.html:
+//     Chromium draws the block 30 pixels above the top of the second
+//     column.
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) draws a block
+//     pulled 40 pixels back by its top margin, a run of blocks after it,
+//     and a block pulled back 30 pixels after a sliced 80 pixel block in
+//     70 pixel columns in the second column, above its top, in the order
+//     of the flow.
+func (e *engine) pinToColumn(k *box, reached int) int {
+	if e.cols == nil || !e.paginating() {
+		return reached
+	}
+	bottom := max(k.y, k.y+k.borderH()-1e-3)
+	if top := e.pageOf(k.y + eps); reached > top {
+		start := e.pageTop(reached)
+		if k.y+k.borderH()-start <= e.areaH(reached)+eps {
+			k.colPin = start - k.y
+			return reached
+		}
+	}
+	return max(reached, e.pageOf(bottom))
+}
+
 // shortage returns how much taller the columns of row r, h tall, must grow
 // for the content laid out in them, cons taken of each, to move: the least
 // a column overflows by, or the room the first piece past the row's

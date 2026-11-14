@@ -311,7 +311,17 @@ type box struct {
 	// monoCol reports a box laid out whole in one column, a scroll
 	// container (CSS Fragmentation 3, 4.1): it paints in that column.
 	monoCol bool
+	// colPin, when above 0, is how far below the box's top the column it
+	// paints in starts: the box lies in an earlier column's slice of the
+	// column flow than content before it reached, and paints as a unit in
+	// that later column, above its top ([engine.pinToColumn]).
+	colPin float64
 }
+
+// inColumn reports a box that paints as a unit in one column of the
+// multi-column container around it: a monolithic box, or one pinned to a
+// column ([engine.pinToColumn]).
+func (b *box) inColumn() bool { return b.monoCol || b.colPin > 0 }
 
 // markerBox is the outside marker of a list item (CSS 2.1, 12.5).
 type markerBox struct {

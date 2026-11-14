@@ -659,7 +659,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		return cursor
 	}
 	e.tick()
-	b.laidOut = true
+	b.laidOut, b.colPin = true, 0
 	resolveEdges(b, cb.w)
 	e.resolveSizing(b, cb, -1, -1)
 	if mc.absorb || mc.trimStart {
@@ -1212,6 +1212,9 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 	// after is the float just placed whose break-after forces a break
 	// before the next box.
 	var after *box
+	// reached is the column the children laid out so far reached, -1 for
+	// none ([engine.pinToColumn]).
+	reached := -1
 	release := e.releasing(b)
 	for i, k := range b.kids {
 		if e.err != nil {
@@ -1337,6 +1340,7 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		if !k.anon || k.borderH() > 0 || len(k.lines) > 0 {
 			// An anonymous block of collapsed white space alone is no
 			// sibling a break between boxes looks at.
+			reached = e.pinToColumn(k, reached)
 			prev, prevSnap = k, snap
 			placed = append(placed, k)
 		} else if f := lastFloat(k); f != nil && e.floatBreaks(f, f.st.BreakAfter) {
