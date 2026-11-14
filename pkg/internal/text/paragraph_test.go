@@ -100,6 +100,22 @@ func TestShape_ObjectsAndRuns(t *testing.T) {
 // TestShape_ObjectBreaksAs locks Object.BreakAs: an object that breaks as
 // a letter keeps to the letters beside it, where U+FFFC breaks on both
 // sides (UAX #14, LB20 and LB28).
+// TestShape_BreaksThaiBetweenWords: a run of Thai, class SA, whose
+// breaks UAX #14 leaves to a language-specific analysis (LB1), offers a
+// break at each boundary of the Thai word list, ICU's, and none inside a
+// word or before a mark.
+func TestShape_BreaksThaiBetweenWords(t *testing.T) {
+	f := newTestFonts(t, sansFamily()...)
+	// มนุษย์|ทั้ง|หลาย, then a space and เกิด|มา.
+	p := shape(t, f, []ParagraphRun{{Text: "มนุษย์ทั้งหลาย เกิดมา", Style: style()}}, ParagraphOptions{})
+	want := map[int]Break{6: BreakWord, 10: BreakWord, 15: BreakAllowed, 19: BreakWord}
+	for i := range p.Len() {
+		if got := p.Break(i); got != want[i] {
+			t.Errorf("break before %d (%q) = %d, want %d", i, p.Rune(i), got, want[i])
+		}
+	}
+}
+
 func TestShape_ObjectBreaksAs(t *testing.T) {
 	f := newTestFonts(t, sansFamily()...)
 	runs := []ParagraphRun{

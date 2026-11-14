@@ -1,5 +1,7 @@
 package dictbreak
 
+//go:generate go run ../../../cmd/gen-thai-dictionary -out thai_gen.go
+
 // thaiWords is the Thai word list, nil when the build carries none.
 var thaiWords *Dictionary
 

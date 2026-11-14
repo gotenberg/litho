@@ -323,6 +323,21 @@ func TestWordBreak_BreakAllAtSpanEdge(t *testing.T) {
 	}
 }
 
+func TestWordBreak_ManualKeepsThaiWords(t *testing.T) {
+	// Thai breaks between the words of its word list (UAX #14, class SA,
+	// LB1); word-break: manual finds no such boundary (CSS Text 4, 5.2),
+	// and a zero width space still breaks.
+	res := run(t, doc(el(sty(width(0)), txt(sty(), "กรุงเทพคือสวยงาม"))), page(100, 100))
+	if got, _ := lineTexts(res, 1); strings.Join(got, "|") != "กรุงเทพ|คือ|สวยงาม" {
+		t.Errorf("word-break: normal: lines %q, want กรุงเทพ|คือ|สวยงาม", got)
+	}
+	manual := func(s *css.Style) { s.WordBreak = css.WordBreakManual }
+	res = run(t, doc(el(sty(manual, width(0)), txt(sty(manual), "กรุงเทพคือ\u200bสวยงาม"))), page(100, 100))
+	if got, _ := lineTexts(res, 1); strings.Join(got, "|") != "กรุงเทพคือ\u200b|สวยงาม" {
+		t.Errorf("word-break: manual: lines %q, want กรุงเทพคือ\u200b|สวยงาม", got)
+	}
+}
+
 func TestWordSpaceTransform_ZeroWidthSpaces(t *testing.T) {
 	wst := func(s *css.Style) { s.WordSpaceTransform = css.WordSpaceSpace }
 	res := run(t, doc(el(sty(wst), txt(sty(wst), "\u200baa\u200bbb\u200b"))), page(200, 50))
