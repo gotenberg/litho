@@ -252,8 +252,14 @@ func listGroup(l *typeset.StructElem, role string) *typeset.StructElem {
 // anonymous blocks.
 func (e *engine) genChildren(b *box, children []*Node, ctx genCtx) {
 	ortho := !ctx.vertical && b.st.WritingMode.Vertical() && orthoEligible(b)
+	if ctx.vertical && e.opts.BrowserRules && b.st.WritingMode == css.HorizontalTB && orthoEligible(b) {
+		// A horizontal box inside a vertical flow roots an orthogonal flow
+		// too (CSS Writing Modes 4, 7.3): its content is laid out on the
+		// page as it is.
+		ortho = true
+	}
 	if ortho {
-		ctx.vertical, ctx.frame = true, b.st.WritingMode
+		ctx.vertical, ctx.frame = b.st.WritingMode.Vertical(), b.st.WritingMode
 	}
 	e.adopt(b, e.genRaw(b, children, ctx))
 	if ortho {

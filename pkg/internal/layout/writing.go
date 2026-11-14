@@ -73,13 +73,27 @@ func (orthoFormatter) layout(e *engine, b *box, cb cblock, _ *bfc, cursor float6
 		b.w = hc
 	}
 	in.st.TransformOrigin = [2]css.Dimension{css.Pts(0), css.Pts(0)}
+	mode := b.st.WritingMode
+	if mode == css.HorizontalTB {
+		// A horizontal root inside a vertical flow turns its content back
+		// the way the flow turned: a vertical-lr flow is its own
+		// reflection; a flow turned one way is turned back the other.
+		switch e.frameOf(b) { //nolint:exhaustive // the flows that turn other ways than clockwise alone
+		case css.VerticalLR:
+			mode = css.VerticalLR
+		case css.SidewaysLR:
+			mode = css.VerticalRL
+		default:
+			mode = css.SidewaysLR
+		}
+	}
 	switch {
-	case b.st.WritingMode == css.VerticalLR && e.opts.BrowserRules:
+	case mode == css.VerticalLR && e.opts.BrowserRules:
 		// Lines stacking left to right with text reading top to bottom
 		// are the horizontal layout reflected across its diagonal: its
 		// top on the left, its left on the top (see [transposed]).
 		in.st.Transform = []css.TransformFunc{{Kind: css.TransformMatrix, V: [6]float64{0, 1, 1, 0, 0, 0}}}
-	case b.st.WritingMode == css.SidewaysLR:
+	case mode == css.SidewaysLR:
 		in.st.Transform = []css.TransformFunc{
 			{Kind: css.TransformTranslate, X: css.Pts(0), Y: css.Pts(l)},
 			{Kind: css.TransformRotate, V: [6]float64{-math.Pi / 2}},

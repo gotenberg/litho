@@ -187,3 +187,20 @@ func TestWritingMode_CentralBaseline(t *testing.T) {
 		GGGGGGGGGGGGGGGGGGGG____
 		GGGGGGGGGGGGGGGGGGGG____`)
 }
+
+// TestWritingMode_HorizontalInsideVertical lays a horizontal-tb block
+// inside a vertical-rl flow out as an orthogonal flow root (CSS Writing
+// Modes 4, 7.3): its content runs on the page as in a horizontal flow,
+// its blocks stacking downwards, at the block-start (right) edge of its
+// container, its width given, its height its content's.
+func TestWritingMode_HorizontalInsideVertical(t *testing.T) {
+	t.Parallel()
+	wm := func(s *css.Style) { s.WritingMode = css.VerticalRL }
+	h := el(sty(width(3)), el(sty(height(1), bg(red))), el(sty(height(1), bg(blue))))
+	root := doc(el(sty(wm, width(6), height(4)), h))
+	assertPixels(t, runWith(t, root, Options{Page: page(6, 4), BrowserRules: true}), 1, `
+		___RRR
+		___BBB
+		______
+		______`)
+}
