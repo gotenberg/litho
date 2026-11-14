@@ -300,9 +300,7 @@ func glyphGlow(ctx context.Context, t *typeset.Text, gl *css.OfficeGlow, ink typ
 // pptReflectionDist is what a run's reflection distance times its font
 // size is divided by: PowerPoint moves the copy of a run of size s whose
 // reflection lies d points away d s/15.2 points along its direction,
-// mirrored about a line half the downward part of that below the
-// baseline, as Word does at its own divisor ([wordReflectionDist]). See
-// [glyphReflection].
+// whatever the direction. See [glyphReflection].
 //
 // # Corpus evidence
 //
@@ -314,39 +312,57 @@ func glyphGlow(ctx context.Context, t *typeset.Text, gl *css.OfficeGlow, ink typ
 //     blur of half a point moves, the shift is linear in the distance at
 //     each size, 0.715, 1.613, 3.233 and 4.67 points a point: d s/15.2
 //     within 1.35 points at 16 points away, 0.08 a point of distance.
-//   - probe, pptx: the fade along those stems runs from half the shift
-//     below the baseline (0.47 of it, 3.04 to 34.82 points down) to 0.455
-//     of the run's box, 0.95 sizes up from the baseline, grown down by
-//     half the shift: 10.2, 20.4 and 31.0 points long at no distance at
-//     24, 48 and 72 points, the rule 10.4, 20.8 and 31.2; 50.4 points at
-//     16 points away at 72 points, the rule 48.3.
+//   - probe, pptx: reflections 8 points away toward 0, 45 and 135 degrees
+//     of Calibri at 23.79 and 48.34 points move the copy's ink 13.29 and
+//     26.25 points right, 9.39 and 18.75 right and 8.95 and 18.19 down,
+//     8.91 and 18.27 left and 8.95 and 18.19 down; d s/15.2 along the
+//     direction is 12.52 and 25.44 points, 8.85 and 17.99 each way at 45
+//     degrees.
 const pptReflectionDist = 15.2
 
 // glyphReflection returns the reflection of t, the glyphs in their
-// colour, as PowerPoint draws a run's: the run's box, [wordRunBox] sizes
-// up from the baseline across the glyphs' ink, grown down to a line half
-// the copy's shift below the baseline ([pptReflectionDist]), mirrored
-// about that line by the reflection's map, so the copy lies the whole
-// shift down, cut off above the line; what is left of the distance along
-// the direction moves it as a shape's reflection moves. The copy is drawn
-// by [effect.Paint], blurred by a Gaussian of a third of its radius and
-// faded from its start opacity to its end opacity between its positions
-// across the grown box.
+// colour, as PowerPoint draws a run's: the glyphs scaled and skewed by the
+// reflection's map about the point its alignment names on the run's box,
+// [wordRunBox] sizes up from the baseline across the glyphs' ink, so a
+// mirror turns them about the baseline, then moved d s/15.2 points along
+// its direction ([pptReflectionDist]). The run's box grown down by half
+// that distance, mapped the same way, cuts the copy above it and carries
+// the fade, which therefore starts half the distance above the copy's
+// baseline in every direction. The copy is drawn by [effect.Paint],
+// blurred by a Gaussian of a third of its radius and faded from its
+// start opacity to its end opacity between its positions across the
+// mapped box.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: the fade along the copy's first stem of a reflection
+//     8 points away of Calibri at 23.79 points falls from 0.259 at the
+//     copy's baseline by 0.042 a point toward 0 degrees and toward 90
+//     alike, the alpha ending 5.71 points below the copy's baseline both
+//     ways: the fade follows the copy, its box grown by half the whole
+//     distance. Toward 0 degrees the copy turns about the baseline
+//     itself, 0.30 and 0.19 points below it at 23.79 and 48.34 points.
+//   - probe, pptx: at a vertical scale of -50% toward 90 degrees the
+//     copy's baseline lies 13.25 and 26.10 points down at 23.79 and 48.34
+//     points, as at -100% (13.26, 26.11), and its fade ends 2.12 and 5.71
+//     points below it, at -100% 5.71 and 11.46: the scale is about the
+//     baseline, before the move, and shrinks the fade with the copy.
+//   - probe, pptx: alignment b and bl draw the same copy at a horizontal
+//     scale of 100%.
 func glyphReflection(ctx context.Context, t *typeset.Text, rf *css.OfficeReflection, ink typeset.Rect, pixels *effect.Page) (typeset.Fragment, Notes, error) {
 	if !(rf.StartAlpha > 0) && !(rf.EndAlpha > 0) {
 		return nil, Notes{}, nil
 	}
-	shift := reflectionShift(rf, t.Size, pptReflectionDist)
-	b := ink
+	run := ink
 	if h := float64(wordRunBox * t.Size); numeric.PositiveFinite(h) {
-		b.Y, b.Height = t.Origin.Y-h, h
+		run.Y, run.Height = t.Origin.Y-h, h
 	}
-	b.Height += float64(shift / 2)
-	sin, cos := sincosDeg(rf.Dir)
 	dist := float64(radius(rf.Dist)*min(t.Size, maxFontSize)) / pptReflectionDist
-	dx, dy := float64(dist*cos), float64(dist*sin)-shift
-	mirror := mul(translate(dx, dy), skewScale(b, rf.Align, rf.SX, rf.SY, rf.KX, rf.KY))
-	fade := mapRect(b, mirror)
+	grown := run
+	grown.Height += float64(dist / 2)
+	sin, cos := sincosDeg(rf.Dir)
+	mirror := mul(translate(float64(dist*cos), float64(dist*sin)), skewScale(run, rf.Align, rf.SX, rf.SY, rf.KX, rf.KY))
+	fade := mapRect(grown, mirror)
 	copied := mapRect(ink, mirror)
 	if top := fade.Y; copied.Y < top {
 		copied.Height = max(copied.Height-(top-copied.Y), 0)

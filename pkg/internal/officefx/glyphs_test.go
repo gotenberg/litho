@@ -44,6 +44,41 @@ func TestGlyphEffects_PowerPointReflectionMovesByTheSize(t *testing.T) {
 	}
 }
 
+// TestGlyphEffects_PowerPointReflectionScalesAboutTheBaseline checks that
+// the vertical scale of a run's reflection on PowerPoint's rules turns
+// the glyphs about the baseline before the copy moves: at -50% the copy
+// still starts the whole shift down, half as tall, and toward 0 degrees
+// it moves right by the shift and stays on the baseline.
+func TestGlyphEffects_PowerPointReflectionScalesAboutTheBaseline(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		dir, sy       float64
+		x, top, depth float64
+	}{
+		{"half height down", 90, -0.5, 0, 1, 0.25},
+		{"right", 0, -1, 1, 0, 0.5},
+	} {
+		refl := &css.OfficeReflection{StartAlpha: 0.5, EndPos: 1, FadeDir: 90, Dist: 8, Dir: tc.dir, SX: 1, SY: tc.sy, Align: css.RectAlign{Y: 1}}
+		size := 30.0
+		var px effect.Page
+		frags, _, err := glyphEffects(context.Background(), blockRun(size), &css.OfficeEffects{Reflection: refl}, &px)
+		if err != nil || len(frags) != 1 {
+			t.Fatalf("%s: %d fragments, error %v, want the reflection", tc.name, len(frags), err)
+		}
+		r := frags[0].(*typeset.Image).Rect
+		shift := 8 * size / pptReflectionDist
+		if want := 100 + tc.top*shift; math.Abs(r.Y-want) > 0.5 {
+			t.Errorf("%s: reflection starts at %.2f, want %.2f", tc.name, r.Y, want)
+		}
+		if want := 100 + tc.top*shift + tc.depth*size; math.Abs(r.Y+r.Height-want) > 0.5 {
+			t.Errorf("%s: reflection ends at %.2f, want %.2f", tc.name, r.Y+r.Height, want)
+		}
+		if want := 10 + tc.x*shift; math.Abs(r.X-want) > 0.5 {
+			t.Errorf("%s: reflection's left edge at %.2f, want %.2f", tc.name, r.X, want)
+		}
+	}
+}
+
 // TestGlyphEffects_PowerPointShadowBlursByTheSize checks that the blur of
 // a run's shadow on PowerPoint's rules scales as its distance does: the
 // bitmap reaches the scaled radius past the glyphs on each side.
