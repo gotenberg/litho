@@ -68,7 +68,8 @@ type Line struct {
 
 // presetDashes are the dash and gap lengths of the preset dashes of
 // ECMA-376 Part 1, 20.1.10.48 ST_PresetLineDashVal, in line widths, as
-// LibreOffice reads them (oox lineproperties.cxx, lclConvertPresetDash).
+// LibreOffice reads them (oox lineproperties.cxx, lclConvertPresetDash)
+// and Word, Excel and PowerPoint print them.
 var presetDashes = map[string][]float64{ // a read-only spec table, ECMA-376 Part 1, 20.1.10.48.
 	"dot": {1, 3}, "dash": {4, 3}, "dashDot": {4, 3, 1, 3},
 	"lgDash": {8, 3}, "lgDashDot": {8, 3, 1, 3}, "lgDashDotDot": {8, 3, 1, 3, 1, 3},
@@ -76,12 +77,10 @@ var presetDashes = map[string][]float64{ // a read-only spec table, ECMA-376 Par
 }
 
 // PresetDash returns the dash array in points of the preset dash name
-// (ECMA-376 Part 1, 20.1.10.48) for a line width wide with the cap c, as
-// LibreOffice draws it: each length a multiple of the width, and with a
-// round or square cap each dash 0.99 width shorter and each gap as much
-// longer, since the caps lengthen the dashes. It returns nil for "solid"
-// and an unknown name; a zero width dashes at 1 point.
-func PresetDash(name string, width float64, c typeset.LineCap) []float64 {
+// (ECMA-376 Part 1, 20.1.10.48) for a line width wide: each length a
+// multiple of the width. It returns nil for "solid" and an unknown name; a
+// zero width dashes at 1 point.
+func PresetDash(name string, width float64) []float64 {
 	rel, ok := presetDashes[name]
 	if !ok {
 		return nil
@@ -91,13 +90,6 @@ func PresetDash(name string, width float64, c typeset.LineCap) []float64 {
 	}
 	out := make([]float64, len(rel))
 	for i, v := range rel {
-		if c != typeset.ButtCap {
-			if i%2 == 0 {
-				v -= 0.99
-			} else {
-				v += 0.99
-			}
-		}
 		out[i] = v * width
 	}
 	return out

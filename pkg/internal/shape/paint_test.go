@@ -13,18 +13,17 @@ func TestPresetDash(t *testing.T) {
 	tests := []struct {
 		name  string
 		width float64
-		cap   typeset.LineCap
 		want  []float64
 	}{
-		{"dot", 2, typeset.ButtCap, []float64{2, 6}},
-		{"lgDashDotDot", 1, typeset.ButtCap, []float64{8, 3, 1, 3, 1, 3}},
-		{"sysDash", 3, typeset.ButtCap, []float64{9, 3}},
-		{"dash", 1, typeset.RoundCap, []float64{3.01, 3.99}},
-		{"solid", 1, typeset.ButtCap, nil},
-		{"nonsense", 1, typeset.ButtCap, nil},
+		{"dot", 2, []float64{2, 6}},
+		{"lgDashDotDot", 1, []float64{8, 3, 1, 3, 1, 3}},
+		{"sysDash", 3, []float64{9, 3}},
+		{"dash", 0, []float64{4, 3}},
+		{"solid", 1, nil},
+		{"nonsense", 1, nil},
 	}
 	for _, tt := range tests {
-		got := PresetDash(tt.name, tt.width, tt.cap)
+		got := PresetDash(tt.name, tt.width)
 		if len(got) != len(tt.want) {
 			t.Fatalf("%s: %v, want %v", tt.name, got, tt.want)
 		}

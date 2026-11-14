@@ -2,6 +2,7 @@ package ooxml
 
 import (
 	"math"
+	"strconv"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -71,9 +72,44 @@ func TestParseShapeStyle_CustomDash(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			sp := spPrOf(t, `<a:ln w="25400"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill><a:custDash>`+tt.ds+`</a:custDash></a:ln>`)
 			s := ParseShapeStyle(sp, nil, nil)
-			got := s.dash()
+			got, _ := s.dash()
 			if len(got) != len(tt.want) {
 				t.Fatalf("dash %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if math.Abs(got[i]-tt.want[i]) > 1e-9 {
+					t.Errorf("dash %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+// TestOfficeDash locks how Office strokes a dashed line under its cap
+// (ECMA-376 Part 1, 20.1.10.31 ST_LineCap, 20.1.10.48): a round cap takes
+// one width from each dash and gives it to each gap, a square cap strokes
+// the lengths with butt caps, a solid line keeps its cap.
+func TestOfficeDash(t *testing.T) {
+	tests := []struct {
+		name    string
+		dash    string
+		width   float64
+		cap     string
+		want    []float64
+		wantCap typeset.LineCap
+	}{
+		{"round sysDash", "sysDash", 2.5, "rnd", []float64{5, 5}, typeset.RoundCap},
+		{"round dot", "dot", 4, "rnd", []float64{0, 16}, typeset.RoundCap},
+		{"square lgDashDot", "lgDashDot", 3.5, "sq", []float64{28, 10.5, 3.5, 10.5}, typeset.ButtCap},
+		{"flat dash", "dash", 2, "flat", []float64{8, 6}, typeset.ButtCap},
+		{"square solid", "solid", 3.5, "sq", nil, typeset.SquareCap},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := ParseShapeStyle(spPrOf(t, `<a:ln w="`+strconv.Itoa(int(tt.width*12700))+`" cap="`+tt.cap+`"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:prstDash val="`+tt.dash+`"/></a:ln>`), nil, nil)
+			got, c := s.dash()
+			if c != tt.wantCap || len(got) != len(tt.want) {
+				t.Fatalf("dash %v cap %v, want %v cap %v", got, c, tt.want, tt.wantCap)
 			}
 			for i := range got {
 				if math.Abs(got[i]-tt.want[i]) > 1e-9 {

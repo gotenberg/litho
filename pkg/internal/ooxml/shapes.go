@@ -388,9 +388,10 @@ func (s ShapeStyle) Paint(g *shape.Geometry, r typeset.Rect) []typeset.Fragment 
 		}
 		if p.Stroke && s.Line != nil && s.LineWidth > 0 {
 			c := typeset.Color{R: s.Line.R, G: s.Line.G, B: s.Line.B, A: s.Line.A}
+			dash, lc := s.dash()
 			l := shape.Line{
-				Width: s.LineWidth, Color: c, Cap: s.Cap, Join: s.Join,
-				Dash: s.dash(), Head: s.Head, Tail: s.Tail,
+				Width: s.LineWidth, Color: c, Cap: lc, Join: s.Join,
+				Dash: dash, Head: s.Head, Tail: s.Tail,
 			}
 			if g := s.LineGradient; g != nil {
 				if frags := shape.GradientStroke(p.Ops, l, shape.Paint{Kind: shape.PaintGradient, Stops: g.Stops, Angle: g.Angle, Radial: g.Radial}, r); frags != nil {
@@ -411,7 +412,8 @@ func (s ShapeStyle) PaintOps(ops []typeset.PathOp, r typeset.Rect) []typeset.Fra
 	out := shape.Fill(ops, r, s.paint(shape.FillNorm))
 	if s.Line != nil && s.LineWidth > 0 {
 		c := typeset.Color{R: s.Line.R, G: s.Line.G, B: s.Line.B, A: s.Line.A}
-		out = append(out, shape.Stroke(ops, shape.Line{Width: s.LineWidth, Color: c, Cap: s.Cap, Join: s.Join, Dash: s.dash()})...)
+		dash, lc := s.dash()
+		out = append(out, shape.Stroke(ops, shape.Line{Width: s.LineWidth, Color: c, Cap: lc, Join: s.Join, Dash: dash})...)
 	}
 	return out
 }
@@ -422,27 +424,69 @@ func (s ShapeStyle) PaintOps(ops []typeset.PathOp, r typeset.Rect) []typeset.Fra
 // and each pair adds to every stroke's dash array.
 const maxCustDashes = 64
 
-// dash returns the dash array in points of the line: the custom dash in
-// line widths when there is one, else the preset's. A dash array whose
-// lengths are all zero draws solid.
-func (s ShapeStyle) dash() []float64 {
+// dash returns the dash array in points of the line and the cap it is
+// stroked with: the custom dash in line widths when there is one, else the
+// preset's, as [officeDash] draws it under the line's cap. A dash array
+// whose lengths are all zero draws solid.
+func (s ShapeStyle) dash() ([]float64, typeset.LineCap) {
+	var out []float64
 	if len(s.CustDash) == 0 {
-		return shape.PresetDash(s.Dash, s.LineWidth, s.Cap)
+		out = shape.PresetDash(s.Dash, s.LineWidth)
+	} else {
+		w := s.LineWidth
+		if w <= 0 {
+			w = 1
+		}
+		out = make([]float64, len(s.CustDash))
+		sum := 0.0
+		for i, v := range s.CustDash {
+			out[i] = float64(v * w)
+			sum += out[i]
+		}
+		if !numeric.Positive(sum) {
+			return nil, s.Cap
+		}
 	}
-	w := s.LineWidth
-	if w <= 0 {
-		w = 1
+	return officeDash(out, s.LineWidth, s.Cap)
+}
+
+// officeDash returns the dash array dash of a line width wide as Office
+// strokes it under the cap c, and the cap it strokes with: a round cap
+// shortens each dash by one width and lengthens each gap by as much, so
+// that the caps end where the dash and the gap meet; a square cap strokes
+// the lengths as they are with butt caps. A solid line keeps its cap.
+//
+// # Corpus evidence
+//
+//   - litho/docx shapes-fills-lines: Word strokes sysDash and
+//     sysDashDotDot at 2.5 points under round caps as 5 5 and 5 5 0 5 0 5,
+//     and sysDot and lgDashDot at 3.5 points under square caps as 3.5 3.5
+//     and 28 10.5 3.5 10.5 with butt caps; its solid square-capped line
+//     keeps the square cap.
+//   - poi/xlsx: spreadsheet/56514.xlsx, Excel strokes a 10-point round
+//     dot as 0 20.
+//   - litho/pptx line-dashes: PowerPoint strokes the dot, dash, lgDash,
+//     dashDot and their long and system forms at 4 points under round caps
+//     the same way (dot as 0 16, sysDash as 8 8).
+func officeDash(dash []float64, width float64, c typeset.LineCap) ([]float64, typeset.LineCap) {
+	if len(dash) == 0 {
+		return nil, c
 	}
-	out := make([]float64, len(s.CustDash))
-	sum := 0.0
-	for i, v := range s.CustDash {
-		out[i] = float64(v * w)
-		sum += out[i]
+	switch c {
+	case typeset.RoundCap:
+		w := max(width, 0)
+		for i := range dash {
+			if i%2 == 0 {
+				dash[i] = max(dash[i]-w, 0)
+			} else {
+				dash[i] += w
+			}
+		}
+	case typeset.SquareCap:
+		c = typeset.ButtCap
+	case typeset.ButtCap:
 	}
-	if !numeric.Positive(sum) {
-		return nil
-	}
-	return out
+	return dash, c
 }
 
 // paint returns the fill of a path of fill mode m.
