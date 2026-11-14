@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-14T17:32:42Z",
+  "captured_at": "2026-11-14T18:05:38Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9326,8 +9326,8 @@
     "libreoffice/docx": {
       "features": {
         "diff": {
-          "matched": 184,
-          "mismatched": 99,
+          "matched": 185,
+          "mismatched": 98,
           "skipped": 58,
           "metrics": {
             "convert_error": 0,
@@ -10824,7 +10824,7 @@
               "text_f1": 0.8127
             },
             "ooxmlexport/fdo68787.docx": {
-              "layout": 0.657,
+              "layout": 0.8143,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10944,7 +10944,7 @@
               "text_f1": 1
             },
             "ooxmlexport/fdo73247.docx": {
-              "layout": 0.4483,
+              "layout": 0.6471,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -37183,7 +37183,7 @@
           },
           "scores": {
             "chart2/CustomDataLabel_tdf115107.pptx": {
-              "layout": 0.9801,
+              "layout": 0.983,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -39087,7 +39087,7 @@
               "text_f1": 1
             },
             "sd/tdf114821.pptx": {
-              "layout": 0.9844,
+              "layout": 0.9854,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46933,12 +46933,12 @@
               "text_f1": 0.5
             },
             "sc/invalid_ext_data_validation.xlsx": {
-              "layout": 0.4731,
+              "layout": 0.4781,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.7143,
               "strict": 0.7143,
-              "text_f1": 0.374
+              "text_f1": 0.3766
             },
             "sc/matrix-multiplication.xlsx": {
               "layout": 0.9374,
@@ -76524,7 +76524,7 @@
               "text_f1": 0.9889
             },
             "merged_cells": {
-              "layout": 0.4494,
+              "layout": 0.4563,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.5,
@@ -81190,8 +81190,8 @@
     "openxmlsdk/docx": {
       "features": {
         "diff": {
-          "matched": 156,
-          "mismatched": 43,
+          "matched": 157,
+          "mismatched": 42,
           "skipped": 50,
           "metrics": {
             "convert_error": 0,
@@ -82368,20 +82368,20 @@
               "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/complexDocx/complex_table3.docx": {
-              "layout": 0.9404,
+              "layout": 0.9551,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.973
+              "strict": 1,
+              "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/complexDocx/complex_tables.docx": {
-              "layout": 0.6527,
+              "layout": 0.9555,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.8163
+              "text_f1": 1
             },
             "v2FxTestFiles/wordprocessing/complexDocx/complexity_-_part_2.docx": {
               "layout": 0.7033,
@@ -88087,8 +88087,8 @@
     "openxmlsdk/pptx": {
       "features": {
         "diff": {
-          "matched": 100,
-          "mismatched": 48,
+          "matched": 101,
+          "mismatched": 47,
           "skipped": 34,
           "metrics": {
             "convert_error": 0,
@@ -88097,28 +88097,28 @@
           },
           "scores": {
             "O14ISOStrict/Graphics/2D_Area-O12-PPT-Charts.pptx": {
-              "layout": 0,
+              "layout": 0.6767,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.8473
             },
             "O14ISOStrict/Graphics/3D_Pie-O12-PPT-Charts.pptx": {
-              "layout": 0,
+              "layout": 0.7315,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 1
             },
             "O14ISOStrict/Graphics/5.9.3.7_unfinished_.pptx": {
-              "layout": 0,
+              "layout": 0.1798,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0
+              "text_f1": 0.5909
             },
             "O14ISOStrict/Graphics/Accent1sysClr.pptx": {
               "layout": 0.9389,
@@ -88337,12 +88337,12 @@
               "text_f1": 1
             },
             "O14ISOStrict/PowerPoint/bldlst-Build_Graphics-bldgraphic-uiexpand.pptx": {
-              "layout": 0,
+              "layout": 0.9529,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0
+              "strict": 1,
+              "text_f1": 1
             },
             "O14ISOStrict/PowerPoint/browse-BrowseSlideShowMode-showScrollBar-0.pptx": {
               "layout": 0.9419,
@@ -93149,12 +93149,12 @@
       "features": {
         "diff": {
           "matched": 24,
-          "mismatched": 25,
-          "skipped": 5,
+          "mismatched": 26,
+          "skipped": 4,
           "metrics": {
             "convert_error": 0,
             "pages_equal": 42,
-            "reference_fonts_missing": 5
+            "reference_fonts_missing": 4
           },
           "scores": {
             "O14ISOStrict/Excel/Contrast-O12-XL-PictureProperties.xlsx": {
@@ -93182,12 +93182,12 @@
               "text_f1": 0.9741
             },
             "O14ISOStrict/Excel/xl8galry.xlsx": {
-              "layout": 0,
+              "layout": 0.6689,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.05,
-              "strict": 0,
-              "text_f1": 0
+              "pages": 1,
+              "strict": 0.05,
+              "text_f1": 0.8479
             },
             "O14ISOStrict/Graphics/3DRotation-O12-XL-OartTextEffects.xlsx": {
               "layout": 0,
@@ -93198,12 +93198,12 @@
               "text_f1": 0.1333
             },
             "O14ISOStrict/Graphics/3D_Bar-O12-XL-Charts.xlsx": {
-              "layout": 0,
+              "layout": 0.5309,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.25,
-              "strict": 0,
-              "text_f1": 0.1607
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 0.482
             },
             "O14ISOStrict/Graphics/3D_Rotation_Parallel_-O12-XL-OartEffects.xlsx": {
               "layout": 0.194,
@@ -93214,12 +93214,12 @@
               "text_f1": 0.5
             },
             "O14ISOStrict/Graphics/Axis_Title-O12-XL-ChartProperties.xlsx": {
-              "layout": 0,
+              "layout": 0.1727,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.1667,
-              "strict": 0,
-              "text_f1": 0.0128
+              "pages": 1,
+              "strict": 0.5,
+              "text_f1": 0.2979
             },
             "O14ISOStrict/Graphics/Bevel-O12-XL-OartEffects.xlsx": {
               "layout": 0.92,
@@ -93350,6 +93350,7 @@
               "strict": 1,
               "text_f1": 1
             },
+            "v2FxTestFiles/spreadsheet/NoExtDataB1.xlsx": {},
             "v2FxTestFiles/spreadsheet/NoExtDataE6.xlsx": {
               "layout": 0.9492,
               "link_recall": 1,
@@ -93462,22 +93463,8 @@
               "strict": 1,
               "text_f1": 1
             },
-            "v2FxTestFiles/spreadsheet/RelationalPivotA1.xlsx": {
-              "layout": 0.1362,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9542
-            },
-            "v2FxTestFiles/spreadsheet/RelationalPivotA2.xlsx": {
-              "layout": 0.0972,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.025,
-              "text_f1": 0.9331
-            },
+            "v2FxTestFiles/spreadsheet/RelationalPivotA1.xlsx": {},
+            "v2FxTestFiles/spreadsheet/RelationalPivotA2.xlsx": {},
             "v2FxTestFiles/spreadsheet/RelationalPivotA3.xlsx": {
               "layout": 0.1165,
               "link_recall": 1,
@@ -93494,14 +93481,7 @@
               "strict": 0,
               "text_f1": 0.8848
             },
-            "v2FxTestFiles/spreadsheet/RelationalPivotA5.xlsx": {
-              "layout": 0.0871,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0,
-              "text_f1": 0.9423
-            },
+            "v2FxTestFiles/spreadsheet/RelationalPivotA5.xlsx": {},
             "v2FxTestFiles/spreadsheet/Row.xlsx": {
               "layout": 0.9388,
               "link_recall": 1,
@@ -97803,11 +97783,11 @@
               "text_f1": 1
             },
             "document/65099.docx": {
-              "layout": 0.9444,
+              "layout": 0.9854,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "document/Bug54771a.docx": {
@@ -111006,12 +110986,12 @@
               "text_f1": 1
             },
             "spreadsheet/52348.xlsx": {
-              "layout": 0.4598,
+              "layout": 0.4626,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 0.5,
               "strict": 0.5,
-              "text_f1": 0.4327
+              "text_f1": 0.4299
             },
             "spreadsheet/52716.xlsx": {
               "layout": 0.9205,
@@ -111070,12 +111050,12 @@
               "text_f1": 1
             },
             "spreadsheet/54071.xlsx": {
-              "layout": 0.5124,
+              "layout": 0.5498,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9737
+              "text_f1": 1
             },
             "spreadsheet/54288-ref.xlsx": {
               "layout": 0.9805,
@@ -111398,12 +111378,12 @@
               "text_f1": 1
             },
             "spreadsheet/57482-OnlyNumeric.xlsx": {
-              "layout": 0.4408,
+              "layout": 0.4884,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9524
+              "text_f1": 1
             },
             "spreadsheet/57523.xlsx": {
               "layout": 0,
@@ -111542,12 +111522,12 @@
               "text_f1": 0.8611
             },
             "spreadsheet/59388.xlsx": {
-              "layout": 0,
+              "layout": 0.1974,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 1
             },
             "spreadsheet/59687.xlsx": {
               "layout": 0.9565,
