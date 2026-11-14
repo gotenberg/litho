@@ -544,3 +544,55 @@ func TestRender_OfficeCategoryWrap(t *testing.T) {
 		}
 	})
 }
+
+// TestRender_OfficeCornerLegend holds a legend at the top right under
+// OfficeRules to Office's place: beside the plot area as a right legend,
+// the plot area under it when the legend is shorter than a third of the
+// chart, beside it and officeLegendGap lower otherwise.
+func TestRender_OfficeCornerLegend(t *testing.T) {
+	r := typeset.Rect{Width: 361.2, Height: 145.2}
+	chart := func(entries int) *Chart {
+		c := officeChart(1)
+		c.Title = &Title{Text: "T", Style: TextStyle{Size: 10, Color: typeset.Black}}
+		if entries == 0 {
+			return c
+		}
+		c.Groups[0].Series = nil
+		for i := range entries {
+			c.Groups[0].Series = append(c.Groups[0].Series, &Series{Index: i, Name: "S", Values: Data{Values: nums(1), Cached: true}, Fill: &Paint{Color: red}})
+		}
+		c.Legend = &Legend{Position: LegendTopRight, Style: TextStyle{Size: 10, Color: typeset.Black}}
+		return c
+	}
+	plain, _ := plotBounds(t, chart(0), r)
+	// A 10 pt Ahem entry is 10 pt high and 2*officeLegendPad apart.
+	pitch := 10 + 2*officeLegendPad
+	for _, tc := range []struct {
+		entries int
+		under   bool
+	}{{1, true}, {3, true}, {4, false}} {
+		b, frags := plotBounds(t, chart(tc.entries), r)
+		dy, dBottom := officeLegendGap, 0.0
+		if tc.under {
+			dy, dBottom = float64(tc.entries)*pitch, officeLegendGap
+		}
+		if math.Abs(b.Y-plain.Y-dy) > 1e-6 {
+			t.Errorf("%d entries: plot top %v, want %v", tc.entries, b.Y, plain.Y+dy)
+		}
+		if got, want := b.Y+b.Height, plain.Y+plain.Height-dBottom; math.Abs(got-want) > 1e-6 {
+			t.Errorf("%d entries: plot bottom %v, want %v", tc.entries, got, want)
+		}
+		var key *typeset.Rect
+		for _, p := range paths(frags, red) {
+			if kb := bounds(p); kb.X > b.X+b.Width && (key == nil || kb.Y < key.Y) {
+				key = &kb
+			}
+		}
+		if key == nil {
+			t.Fatalf("%d entries: no legend key right of the plot area", tc.entries)
+		}
+		if want := key.X - officeSideKeyPad - officeSideLegendGap - officeRightRoom; math.Abs(b.X+b.Width-want) > 1e-6 {
+			t.Errorf("%d entries: plot area ends at %v, want %v", tc.entries, b.X+b.Width, want)
+		}
+	}
+}

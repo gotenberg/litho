@@ -196,6 +196,7 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 		h += v
 	}
 	var x, y float64
+	corner := false
 	switch lg.Position {
 	case LegendLeft:
 		x, y = page.X+legendSideMargin, page.Y+float64(page.Height/2)-float64(h/2)
@@ -214,6 +215,19 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 		}
 	case LegendTopRight:
 		x, y = page.X+page.Width-legendSideMargin-w, rem.Y+legendTopMargin
+		if officeSide {
+			// The first key stands officeCornerKeyTop under rem's top,
+			// officeLegendGap lower when the plot area stays beside the
+			// legend.
+			l := entries[0].label
+			ln := l.lines[0]
+			keyTop := yPad + float64((l.lineH[0]-ln.Ascent-ln.Descent)/2) + ln.Ascent - float64(fs*officeKeyRaise) - float64(symH/2)
+			corner = officeCornerUnder(page, h)
+			x, y = page.X+page.Width-officePad-w, rem.Y+officeCornerKeyTop-keyTop
+			if !corner {
+				y += officeLegendGap
+			}
+		}
 	case LegendRight:
 		x, y = page.X+page.Width-legendSideMargin-w, page.Y+float64(page.Height/2)-float64(h/2)
 		if officeSide {
@@ -280,6 +294,19 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 		} else {
 			rem.Width = x - officeSideLegendGap - rem.X
 		}
+		if lg.Position == LegendTopRight {
+			// A legend in the top right corner moves the plot area down
+			// by officeLegendGap beside it; one the plot area goes under
+			// moves it down by the legend's height and keeps
+			// officeLegendGap more over the chart's bottom.
+			d := officeLegendGap
+			if corner {
+				d = h
+				rem.Height -= officeLegendGap
+			}
+			rem.Y += d
+			rem.Height -= d
+		}
 		return
 	}
 	if office {
@@ -333,6 +360,41 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 func officeSideLegendTop(page, rem typeset.Rect, h float64) float64 {
 	bottom := page.Y + page.Height - officePad
 	return rem.Y + float64((bottom-rem.Y)/2) - float64(h/2)
+}
+
+// officeCornerKeyTop is the distance from the top of the room under a
+// chart's title to the first key of a legend in its top right corner
+// that the plot area goes under ([officeCornerUnder]).
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: legends of 10 pt entries at the top right of charts
+//     361.2 pt wide under a 10 pt title have their first key 33.50 pt
+//     under the chart's top when the plot area goes under them, 39.50 pt
+//     when it stays beside them, the plot area's top 32.31 plus the
+//     legend's height or 38.31 pt under it, and 31.05 or 25.05 pt over
+//     its bottom; the keys stand 319.39 pt from the left and the plot
+//     area ends 57.80 pt from the right edge, as beside a right legend.
+const officeCornerKeyTop = 7.29
+
+// officeCornerUnder reports a legend h points high at the top right of
+// the chart's rectangle page that Office puts the plot area under rather
+// than beside: one shorter than a third of the chart.
+//
+// A third is a value inside the bounds the charts give; the rule that
+// the plot area under the legend keep at least the legend's height fits
+// the same charts.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: one entry in a chart 145.2 pt high and two in charts
+//     145.2 and 203.28 pt high go over the plot area, legends of 0.12 to
+//     0.25 of the chart's height; two entries in a chart 101.64 pt high,
+//     three, four, five and six at 145.2 pt and four at 203.28 pt stand
+//     beside it, legends of 0.36 to 0.75 of the chart's height, each
+//     entry 18.08 pt high.
+func officeCornerUnder(page typeset.Rect, h float64) bool {
+	return h < float64(page.Height/3)
 }
 
 // officeSideRows returns how many of n entries, each pitch points apart

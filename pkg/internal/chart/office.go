@@ -110,16 +110,15 @@ func (rd *renderer) officeLegend() bool {
 
 // officeSideLegend reports a legend Office's rules place left or right of
 // the plot area of a chart [renderer.officeLayout] places, at no position
-// the file fixes. A legend at the top right keeps LibreOffice's placement.
+// the file fixes: at the left, at the right or at the top right.
 func (rd *renderer) officeSideLegend() bool {
 	lg := rd.c.Legend
-	return lg != nil && lg.Layout == nil && (lg.Position == LegendLeft || lg.Position == LegendRight) && rd.officeLayout()
+	return lg != nil && lg.Layout == nil && (lg.Position == LegendLeft || lg.Position == LegendRight || lg.Position == LegendTopRight) && rd.officeLayout()
 }
 
 // officePlot draws the title and legend of r's chart where Office puts
 // them and returns the rectangle left for the plot area and its axis
-// labels. A legend at the top right keeps LibreOffice's placement and the
-// layout distance on its side.
+// labels.
 //
 // # Corpus evidence
 //
@@ -182,6 +181,9 @@ func (rd *renderer) officePlot(r typeset.Rect) typeset.Rect {
 				}
 			case LegendTopRight:
 				right = dx
+				if side {
+					right = 0
+				}
 				top = true
 			case LegendTop:
 				top = true
@@ -281,8 +283,8 @@ func (rd *renderer) officeRoom(bb, inner typeset.Rect, dims []*dim) typeset.Rect
 			right = math.Max(right, l.cx+float64(w/2))
 		}
 	}
-	if lg := rd.c.Legend; lg != nil && !lg.Overlay && (lg.Position == LegendTopRight || (lg.Position == LegendRight && !rd.officeSideLegend())) {
-		// A legend at the top right keeps LibreOffice's distance to the
+	if lg := rd.c.Legend; lg != nil && !lg.Overlay && (lg.Position == LegendTopRight || lg.Position == LegendRight) && !rd.officeSideLegend() {
+		// A legend the file places keeps LibreOffice's distance to the
 		// plot area (officePlot).
 		return bb
 	}
