@@ -263,7 +263,11 @@ func (b *builder) element(ctx context.Context, n *dom.Node, parent *css.Style, d
 			}
 			return b.inlineSVG(ctx, n, b.computed.Style(n)), nil
 		}
-		// MathML draws as its text, which is what a reader needs most.
+		if n.Namespace == "math" && n.Data == "math" && b.res.formulas != nil {
+			return b.mathElement(ctx, n, b.computed.Style(n)), nil
+		}
+		// A MathML element outside a math element, or one laid out with
+		// no fonts, draws as its text.
 		return b.styled(ctx, n, parent, depth)
 	}
 	if skipped[n.DataAtom] {

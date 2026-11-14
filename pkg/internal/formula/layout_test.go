@@ -203,7 +203,7 @@ func TestRadical_GapAndBar(t *testing.T) {
 	if top, bottom := rs[0].Ops[0].P[0].Y, rs[0].Ops[2].P[0].Y; !near(bottom, -(10+60)) || !near(top, -(10+60+10)) {
 		t.Fatalf("overbar from %g to %g, want -80 to -70", top, bottom)
 	}
-	_, _, surd := childAt(b, 0, 1)
+	_, _, surd := childAt(b, 0, 0)
 	if surd.asc+surd.desc < 80-0.01 {
 		t.Fatalf("surd %g tall, want at least 80", surd.asc+surd.desc)
 	}

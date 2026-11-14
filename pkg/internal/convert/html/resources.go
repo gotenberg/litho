@@ -23,6 +23,7 @@ import (
 	_ "golang.org/x/image/webp" // registers WebP with image.Decode
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/formula"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/svg"
@@ -120,6 +121,9 @@ type resources struct {
 	pictures map[string]pictureResult
 	// svg is what the SVG pictures share.
 	svg svgState
+	// formulas lays the formulas of a document holding MathML out, nil
+	// for a document without.
+	formulas *formula.Setter
 	// requests counts the HTTP requests sent; network caches their
 	// results by URL.
 	requests int

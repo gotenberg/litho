@@ -64,7 +64,7 @@ func TestFontUnits_MeasureTheFaceOfTheLanguage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	units := fontUnits(context.Background(), fonts)
+	units := fontUnits(context.Background(), fonts, false)
 	for _, tt := range []struct {
 		family, lang string
 		zero         float64

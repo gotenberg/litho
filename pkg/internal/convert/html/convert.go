@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -15,6 +16,7 @@ import (
 	"golang.org/x/text/encoding"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/formula"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -287,6 +289,11 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	res.client = o.HTTPClient
 	c := &collector{res: res, base: scan.resourceBase, logger: o.Logger}
 	sheets := c.stylesheets(ctx, o.UserStylesheets, scan.sheets)
+	if scan.math {
+		// MathML Core, 2.2.2: a document holding MathML holds the rules of
+		// its user agent stylesheet, after HTML's.
+		sheets = slices.Insert(sheets, 1, css.Sheet{Sheet: css.MathMLUserAgent(), Origin: css.UserAgent})
+	}
 	if o.OmitBackgrounds {
 		sheets = append(sheets, exactColorsSheet(ctx))
 	}
@@ -327,8 +334,11 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	faceSet, fontWarns := loadFontFaces(ctx, resolver.FontFaces(), res, fonts, o.Logger)
 	if fonts != nil {
 		fonts = fonts.WithFaces(faceSet)
+		if scan.math {
+			res.formulas = formula.NewSetter(fonts, o.Logger)
+		}
 	}
-	computeOpts := css.ComputeOptions{Hints: css.HTMLHints, Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts)}
+	computeOpts := css.ComputeOptions{Hints: css.HTMLHints, Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts, scan.math)}
 	if o.AnimationsAtEnd {
 		computeOpts.AnimationTime = css.AnimationsAtEnd
 	}
@@ -576,6 +586,8 @@ type scan struct {
 	// docURL is the document's own URL: [Options.BaseURL] when it is an
 	// http or https URL, else [documentURL].
 	docURL string
+	// math reports a MathML element in the document.
+	math bool
 }
 
 // scanDocument walks doc once, counting its elements against maxElements,
@@ -611,6 +623,9 @@ func scanDocument(ctx context.Context, doc *dom.Node, docURL string, maxElements
 			if _, seen := s.defs[id]; !seen && n.Namespace == "svg" && (n.Data == "clipPath" || n.Data == "mask" || n.Data == "filter") {
 				s.defs[id] = n
 			}
+		}
+		if n.Namespace == "math" {
+			s.math = true
 		}
 		if n.Namespace != "" {
 			return true
@@ -775,13 +790,15 @@ func collapse(s string) string {
 // depend on it.
 const fontUnitSize = 100
 
-// fontUnits returns the [css.ComputeOptions.FontUnits] of fonts: the
+// fontUnits returns the [css.ComputeOptions.FontUnits] of fonts, with the
+// scale-downs of the MATH table of each face when math is set, for a
+// document holding MathML: the
 // x-height, cap height and ascent of the face a style selects in a
 // language, the advance of its "0", and the advance of its "水" when it
 // maps one (CSS Values 4, 6.1.1), nil without fonts. The language picks
 // the face of a generic family as the layout picks it, so the units
 // measure the face the text is drawn in.
-func fontUnits(ctx context.Context, fonts *text.Fonts) func(*css.Style, string) css.FontUnits {
+func fontUnits(ctx context.Context, fonts *text.Fonts, math bool) func(*css.Style, string) css.FontUnits {
 	if fonts == nil {
 		return nil
 	}
@@ -797,6 +814,9 @@ func fontUnits(ctx context.Context, fonts *text.Fonts) func(*css.Style, string) 
 		u.ZeroMeasured = u.ZeroMeasured && fc.Covers('0')
 		if fc.Covers('水') {
 			u.Ideograph, u.IdeographMeasured = advance(ctx, fonts, ts, "水")
+		}
+		if math {
+			u.Math, u.ScriptPercentScaleDown, u.ScriptScriptPercentScaleDown = mathScaleDowns(ctx, fc)
 		}
 		return u
 	}

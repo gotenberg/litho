@@ -133,12 +133,14 @@ func (l *layouter) sqrtBox(base *box, st *Style) *box {
 	b.asc = max(base.asc, base.inkAsc+gap+rule+extra)
 	b.desc = max(base.desc, surd.asc+surd.desc+extra-b.asc)
 	b.inkAsc, b.inkDesc = b.asc, b.desc
-	b.add(base, surd.w, 0)
 	barTop := b.asc - extra
+	// The surd comes first, so the text read from the page is the
+	// radical's character, then its base.
+	b.add(surd, 0, -(barTop - surd.asc))
 	if !st.Hidden {
 		b.fill(surd.w, -barTop, base.w, rule, st.Color)
 	}
-	b.add(surd, 0, -(barTop - surd.asc))
+	b.add(base, surd.w, 0)
 	return b
 }
 
