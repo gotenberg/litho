@@ -103,7 +103,7 @@ func (d *document) blocksInto(s *story, c *cond, parent *ooxml.Element, depth in
 		case "customXml", "ins", "moveTo", "smartTag":
 			d.blocksInto(s, c, e, depth+1, out)
 		case "altChunk":
-			d.warn(warn.ContentUnsupported, warn.Omitted, "an imported chunk (altChunk) is left out")
+			d.altChunk(s, c, e, depth, out)
 		case "br":
 			// A break outside a run, which the schema does not allow and
 			// LibreOffice reads: a page or column break moves the next
