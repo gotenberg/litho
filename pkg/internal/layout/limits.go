@@ -9,21 +9,24 @@ import "github.com/gotenberg/litho/pkg/internal/limits"
 const MaxBoxes = 1 << 20
 
 // boxCost is what one generated box costs the conversion's memory budget:
-// the box, 632 bytes on a 64-bit platform, and its share of what the
-// layout builds around it, its line boxes and the fragments it paints. The
-// style it holds is charged apart, once whatever the number of boxes
-// holding it ([limits.StyleCost]). A layout pass holds its boxes until the
-// next pass or the end of the layout, which then release them.
+// the box, 640 bytes on a 64-bit platform, and what the layout builds
+// around it, its line boxes and its inline formatting state. The style it
+// holds is charged apart, once whatever the number of boxes holding it
+// ([limits.StyleCost]), and so are its shaped text ([paraRuneCost]), its
+// glyphs ([limits.GlyphCost]) and what it paints ([ditemCost]). A layout
+// pass holds its boxes until the next pass or the end of the layout, which
+// then release them.
 //
 // # Corpus evidence
 //
-//   - probe, html: at the peak of the layout of 1 MiB of paragraphs, the
-//     boxes and the styles the engine copies for them hold 11 MiB of live
-//     heap, the shaped paragraphs 64 MiB and the glyph runs 52 MiB.
-//   - probe, html: 1 MiB of paragraphs, whose 7,672 boxes hold four
-//     distinct styles: the Go heap peaks at 2.2 times the account's peak
-//     at this cost, 2.6 times at 1 KiB a box.
-const boxCost = 4 << 10
+//   - probe, html: after block flow, 10,000 empty blocks hold 714 bytes
+//     of live heap a box, 20,000 paragraphs of a word and their text
+//     boxes 1,609, 22,500 bordered table cells, rows and text boxes 2,017
+//     with 150 of it charged apart (TestBoxCostCoversABox).
+//   - probe, html: 104,000 boxes of a 174-page table hold 2.2 KB of live
+//     heap a box at the end of block flow, their glyphs and shaped text
+//     included.
+const boxCost = 2 << 10
 
 // paraRuneCost is what one character of a shaped paragraph costs the
 // conversion's memory budget: its shaped glyphs, advances, breaks and

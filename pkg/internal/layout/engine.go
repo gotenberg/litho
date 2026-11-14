@@ -146,6 +146,9 @@ type engine struct {
 	// this engine charged it, released when the layout drops the engine.
 	mem  *limits.Budget
 	held int64
+	// drawn is the part of held charged for the display list
+	// (drawcost.go).
+	drawn int64
 	// shared holds the styles of the boxes the engine makes of its own
 	// and what it charged for the styles its boxes hold (share.go).
 	shared sharedStyles

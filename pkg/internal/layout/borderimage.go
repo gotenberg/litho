@@ -100,6 +100,9 @@ cut:
 				break cut
 			}
 			if k := p.nineTile(src, pc, t); k != nil {
+				if p.e.chargeDrawn(displayCost(k)); p.e.err != nil {
+					return true
+				}
 				g.kids = append(g.kids, k)
 				tiles++
 			}

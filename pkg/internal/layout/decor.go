@@ -337,7 +337,11 @@ func (bg *bgPaint) layer(i int, l *css.BackgroundLayer, r typeset.Rect, radii [4
 		if l.Gradient != nil {
 			for _, pa := range p.e.gradientTiles(l, sl.area, sl.clip, r.Y) {
 				t := pa.Ops[0].P[0]
-				g.kids = append(g.kids, &ditem{frag: pa, y0: t.Y, y1: pa.Ops[2].P[0].Y, page: -1})
+				k := &ditem{frag: pa, y0: t.Y, y1: pa.Ops[2].P[0].Y, page: -1}
+				if p.e.chargeDrawn(itemCost(k)); p.e.err != nil {
+					return
+				}
+				g.kids = append(g.kids, k)
 			}
 			continue
 		}
@@ -361,7 +365,11 @@ func (bg *bgPaint) layer(i int, l *css.BackgroundLayer, r typeset.Rect, radii [4
 			if i == 0 && pic.Vector != nil {
 				tiles = p.e.vectorTiles(tiles, fragNodes(f), r.Y)
 			}
-			g.kids = append(g.kids, &ditem{frag: f, y0: t.Y, y1: t.Y + t.Height, page: -1})
+			k := &ditem{frag: f, y0: t.Y, y1: t.Y + t.Height, page: -1}
+			if p.e.chargeDrawn(itemCost(k)); p.e.err != nil {
+				return
+			}
+			g.kids = append(g.kids, k)
 		}
 	}
 	if len(g.kids) == 0 {

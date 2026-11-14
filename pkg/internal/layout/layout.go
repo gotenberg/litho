@@ -76,6 +76,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	e.placeSticky(rb, viewportBox(rb))
 	disp, links, canvas := e.paint(rb)
 	e.paintNotes()
+	e.settleDrawn(disp)
 	if e.err != nil {
 		return nil, e.err
 	}
