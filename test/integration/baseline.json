@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-14T15:54:09Z",
+  "captured_at": "2026-11-14T17:32:42Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -59984,15 +59984,15 @@
               "text_f1": 1
             },
             "backgrounds": {
-              "layout": 0.9777,
+              "layout": 0.9772,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 1,
+              "strict": 0,
               "text_f1": 1
             },
             "backgrounds-layers": {
-              "layout": 0.9778,
+              "layout": 0.9806,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60456,11 +60456,11 @@
               "text_f1": 1
             },
             "no-background": {
-              "layout": 0.9777,
+              "layout": 0.9772,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 1,
+              "strict": 0,
               "text_f1": 1
             },
             "opacity-group": {
@@ -61448,7 +61448,7 @@
               "text_f1": 1
             },
             "svg": {
-              "layout": 0.9752,
+              "layout": 0.9739,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -117122,8 +117122,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 4710,
-          "mismatched": 483,
+          "matched": 4716,
+          "mismatched": 477,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -119918,7 +119918,7 @@
             "css/css-fonts/rlh-in-monospace.html": "pass",
             "css/css-fonts/rtl-glyph-extents.html": "pass",
             "css/css-fonts/separators.html": "pass",
-            "css/css-fonts/small-caps-letter-spacing-001.html": "fail",
+            "css/css-fonts/small-caps-letter-spacing-001.html": "pass",
             "css/css-fonts/standard-font-family-10.html": "pass",
             "css/css-fonts/standard-font-family-11.html": "fail",
             "css/css-fonts/standard-font-family-12.html": "fail",
@@ -120870,7 +120870,7 @@
             "css/css-position/position-absolute-fieldset.html": "pass",
             "css/css-position/position-absolute-fit-content.html": "pass",
             "css/css-position/position-absolute-in-inline-003.html": "pass",
-            "css/css-position/position-absolute-in-inline-004.html": "fail",
+            "css/css-position/position-absolute-in-inline-004.html": "pass",
             "css/css-position/position-absolute-in-inline-005.html": "fail",
             "css/css-position/position-absolute-in-inline-007a.html": "fail",
             "css/css-position/position-absolute-in-inline-007b.html": "fail",
@@ -121033,8 +121033,8 @@
             "css/css-ruby/ruby-box-model-001.html": "fail",
             "css/css-ruby/ruby-overhang-spaces-003.html": "pass",
             "css/css-ruby/ruby-overhang-spaces-008.html": "pass",
-            "css/css-ruby/ruby-overhang-spaces-013.html": "fail",
-            "css/css-ruby/ruby-overhang-spaces-align-002.html": "fail",
+            "css/css-ruby/ruby-overhang-spaces-013.html": "pass",
+            "css/css-ruby/ruby-overhang-spaces-align-002.html": "pass",
             "css/css-ruby/ruby-overhang-spaces-align-005.html": "pass",
             "css/css-ruby/whitespace-ruby-beside-float.html": "pass",
             "css/css-shapes/shape-outside/assorted/float-retry-push-circle.html": "pass",
@@ -121287,8 +121287,8 @@
             "css/css-sizing/aspect-ratio/flex-aspect-ratio-010.html": "pass",
             "css/css-sizing/aspect-ratio/flex-aspect-ratio-011.html": "pass",
             "css/css-sizing/aspect-ratio/flex-aspect-ratio-012.html": "pass",
-            "css/css-sizing/aspect-ratio/flex-aspect-ratio-013.html": "fail",
-            "css/css-sizing/aspect-ratio/flex-aspect-ratio-014.html": "fail",
+            "css/css-sizing/aspect-ratio/flex-aspect-ratio-013.html": "pass",
+            "css/css-sizing/aspect-ratio/flex-aspect-ratio-014.html": "pass",
             "css/css-sizing/aspect-ratio/flex-aspect-ratio-015.html": "pass",
             "css/css-sizing/aspect-ratio/flex-aspect-ratio-016.html": "pass",
             "css/css-sizing/aspect-ratio/flex-aspect-ratio-017.html": "pass",
