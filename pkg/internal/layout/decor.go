@@ -164,14 +164,14 @@ func (p *painter) background(b *box, st *css.Style, r typeset.Rect, radii [4][2]
 		}
 		bg.into = &ditem{group: true, fx: &groupFx{opacity: 1, clip: tc}}
 		bg.addTo(nil, bg.into)
-		bg.blended(st, layers)
+		bg.blended(st)
 		bg.color(st, colR, colRadii)
 		for i := len(layers) - 1; i >= 0; i-- {
 			bg.layer(i, &layers[i], r, radii, bd, pd)
 		}
 		return
 	}
-	bg.blended(st, layers)
+	bg.blended(st)
 	parent := bg.into
 	var run *ditem
 	use := func(text bool) {
@@ -248,17 +248,30 @@ func (bg *bgPaint) text(parent *ditem) {
 //     colour, background-blend-mode multiply, screen or luminosity, as an
 //     isolated transparency group holding the colour and the gradient
 //     under /BM of the mode.
-func (bg *bgPaint) blended(st *css.Style, layers []css.BackgroundLayer) {
+func (bg *bgPaint) blended(st *css.Style) {
+	modes := layerBlends(st)
+	if modes == nil {
+		return
+	}
+	g := &ditem{group: true, fx: &groupFx{opacity: 1, isolate: true}}
+	bg.addTo(bg.into, g)
+	bg.into, bg.blend = g, modes
+}
+
+// layerBlends returns the blend mode of each layer of the background of
+// st, nil when no layer blends with a layer or a colour beneath it: a
+// layer over nothing blends with nothing.
+func layerBlends(st *css.Style) []typeset.BlendMode {
 	_, under := colorOf(st.BackgroundColor)
 	var modes []typeset.BlendMode
-	for i := len(layers) - 1; i >= 0; i-- {
-		l := &layers[i]
+	for i := st.BackgroundLayerCount() - 1; i >= 0; i-- {
+		l := st.BackgroundLayer(i)
 		if !l.HasImage() {
 			continue
 		}
 		if under && l.Blend != css.BlendNormal {
 			if modes == nil {
-				modes = make([]typeset.BlendMode, len(layers))
+				modes = make([]typeset.BlendMode, st.BackgroundLayerCount())
 			}
 			// css.BlendMode orders the sixteen modes as typeset does; a
 			// background takes no plus-lighter.
@@ -266,12 +279,7 @@ func (bg *bgPaint) blended(st *css.Style, layers []css.BackgroundLayer) {
 		}
 		under = true
 	}
-	if modes == nil {
-		return
-	}
-	g := &ditem{group: true, fx: &groupFx{opacity: 1, isolate: true}}
-	bg.addTo(bg.into, g)
-	bg.into, bg.blend = g, modes
+	return modes
 }
 
 // color paints the background colour of st over colR with colRadii.

@@ -137,3 +137,22 @@ func TestCompositing_DisplayContents(t *testing.T) {
 		RR
 		RR`)
 }
+
+// TestBackgroundBlendMode_CanvasAndTableParts locks CSS Compositing 1,
+// 9.1 on the backgrounds that do not paint through a box's own
+// decorations: the canvas the root's background propagates to and a
+// table row painted in its cells. Cyan multiplied by yellow gives lime.
+func TestBackgroundBlendMode_CanvasAndTableParts(t *testing.T) {
+	cyanImage := grad(&css.Gradient{Angle: 180, Stops: gstops(cyan, math.NaN(), cyan, math.NaN())})
+	multiply := func(s *css.Style) { s.BackgroundBlendMode = css.BlendMultiply }
+	lime := color.NRGBA{0, 255, 0, 255}
+	root := el(sty(bg(yellow), cyanImage, multiply), el(sty(height(1))))
+	if got := at(render(t, run(t, root, page(2, 2)), 1), 1, 1); !similar(got, lime) {
+		t.Errorf("canvas pixel %v, want %v", got, lime)
+	}
+	cell := []func(*css.Style){width(2), height(2)}
+	root = doc(table(nil, tr(mods(bg(yellow), cyanImage, multiply), td(cell, ""))))
+	if got := at(render(t, run(t, root, page(2, 2)), 1), 1, 1); !similar(got, lime) {
+		t.Errorf("table row pixel %v, want %v", got, lime)
+	}
+}

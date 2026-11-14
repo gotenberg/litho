@@ -635,25 +635,49 @@ func (e *engine) paintCanvas(pg *typeset.Page, canvas, rb *box, pb PageBox, k in
 
 // paintPageLayers paints the background of st over the rectangle whole
 // of the page pg: its colour, then its layers from the bottom one up,
-// each positioned in the area areaOf returns for it.
+// each positioned in the area areaOf returns for it. A layer that blends
+// with the layers or the colour beneath it blends inside one isolated
+// group holding the background (CSS Compositing 1, 9.1).
+//
+// Chromium's print departs from the clause on the canvas: it prints the
+// root's layers unblended, while its screen blends them. The clause is
+// kept.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 draws html { background:
+//     linear-gradient(90deg, #f00, #00f), #0f0; background-blend-mode:
+//     multiply } black on screen and as the unblended gradient in print.
 func (e *engine) paintPageLayers(pg *typeset.Page, st *css.Style, whole typeset.Rect, areaOf func(*css.BackgroundLayer) typeset.Rect) {
+	modes := layerBlends(st)
+	var out []typeset.Fragment
 	if c, ok := colorOf(st.BackgroundColor); ok {
-		pg.Content = append(pg.Content, &typeset.Path{Ops: rectOps(whole), Fill: &typeset.Fill{Color: c}})
+		out = append(out, &typeset.Path{Ops: rectOps(whole), Fill: &typeset.Fill{Color: c}})
 	}
 	for i := st.BackgroundLayerCount() - 1; i >= 0; i-- {
-		if l := st.BackgroundLayer(i); l.HasImage() {
-			if g := e.pageLayer(&l, areaOf(&l), whole); g != nil {
-				pg.Content = append(pg.Content, g)
-			}
+		l := st.BackgroundLayer(i)
+		if !l.HasImage() {
+			continue
+		}
+		blend := typeset.BlendNormal
+		if modes != nil {
+			blend = modes[i]
+		}
+		if g := e.pageLayer(&l, areaOf(&l), whole, blend); g != nil {
+			out = append(out, g)
 		}
 	}
+	if modes != nil && len(out) > 0 {
+		out = []typeset.Fragment{&typeset.Group{Transform: typeset.Identity, Opacity: 1, Transparency: &typeset.TransparencyGroup{Isolated: true}, Content: out}}
+	}
+	pg.Content = append(pg.Content, out...)
 }
 
 // pageLayer returns the group painting the image or gradient of the
-// background layer l over the rectangle whole, positioned in area; nil
-// when it paints nothing.
-func (e *engine) pageLayer(l *css.BackgroundLayer, area, whole typeset.Rect) *typeset.Group {
-	g := &typeset.Group{Transform: typeset.Identity, Opacity: 1, Clip: &typeset.Path{Ops: rectOps(whole), Fill: &typeset.Fill{}}}
+// background layer l over the rectangle whole, positioned in area and
+// composited under blend; nil when it paints nothing.
+func (e *engine) pageLayer(l *css.BackgroundLayer, area, whole typeset.Rect, blend typeset.BlendMode) *typeset.Group {
+	g := &typeset.Group{Transform: typeset.Identity, Opacity: 1, Blend: blend, Clip: &typeset.Path{Ops: rectOps(whole), Fill: &typeset.Fill{}}}
 	switch {
 	case l.Gradient != nil:
 		for _, pa := range e.gradientTiles(l, area, whole, -1) {
@@ -670,6 +694,9 @@ func (e *engine) pageLayer(l *css.BackgroundLayer, area, whole typeset.Rect) *ty
 	}
 	if len(g.Content) == 0 {
 		return nil
+	}
+	if blend != typeset.BlendNormal && !oneObject(g.Content) {
+		g.Transparency = &typeset.TransparencyGroup{Isolated: true}
 	}
 	return g
 }
