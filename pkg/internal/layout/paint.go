@@ -108,6 +108,10 @@ type frame struct {
 	// that column set.
 	columns bool
 	set     *colSet
+	// escaped are the positioned boxes painted inside the column set
+	// whose containing block lies outside root: root paints them outside
+	// its columns.
+	escaped []*box
 }
 
 // pendingLink is a link region in flow coordinates.

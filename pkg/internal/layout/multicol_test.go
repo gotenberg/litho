@@ -662,3 +662,73 @@ func TestMulticol_PositionedBoxesAloneAreLaidOut(t *testing.T) {
 		_____
 		_____`)
 }
+
+// fillAuto makes a multi-column container fill its columns in turn.
+func fillAuto(s *css.Style) { s.Columns.Fill = css.FillAuto }
+
+// positioned makes a style relatively positioned in place.
+func positioned(s *css.Style) { s.Position = css.Relative }
+
+func TestMulticol_ContainerHoldsPositionedBoxOutsideItsColumns(t *testing.T) {
+	t.Parallel()
+	// A box fragments in the flow of its containing block (CSS Position
+	// 3, 3.5.3; CSS Fragmentation 3, 5.5). The container's columns
+	// fragment its content, not the container: a box it holds overflows
+	// it whole.
+	box := square(1, 4, blue, abs(0, auto, auto, 0))
+	mc := el(sty(columns(2, 1), height(2), fillAuto, positioned), strip(red), strip(red), strip(red), box)
+	assertPixels(t, run(t, doc(mc), page(5, 5)), 1, `
+		BR_RR
+		BR___
+		B____
+		B____
+		_____`)
+	// Its static position lies in the second column, after the first
+	// column's content, and the box overflows that column whole.
+	box = square(1, 3, blue, abs(auto, auto, auto, auto))
+	mc = el(sty(columns(2, 1), height(2), fillAuto, positioned), strip(red), strip(red), strip(red), box)
+	assertPixels(t, run(t, doc(mc), page(5, 5)), 1, `
+		RR_RR
+		RR_B_
+		___B_
+		___B_
+		_____`)
+}
+
+func TestMulticol_FixedBoxAtItsColumn(t *testing.T) {
+	t.Parallel()
+	// A fixed box at its static position sits where its column paints it
+	// (CSS 2.1, 10.3.7 and 10.6.4).
+	fixed := square(1, 1, blue, func(s *css.Style) { s.Position = css.Fixed })
+	mc := el(sty(columns(2, 1), height(2), fillAuto), strip(red), strip(red), strip(red), fixed)
+	assertPixels(t, run(t, doc(mc), page(5, 3)), 1, `
+		RR_RR
+		RR_B_
+		_____`)
+}
+
+func TestMulticol_NestedContainerHoldsBoxCutByOuterColumns(t *testing.T) {
+	t.Parallel()
+	// A box whose containing block is a container nested in another is
+	// cut by the outer container's columns, as the inner container is
+	// (CSS Fragmentation 3, 5.5).
+	box := square(1, 4, blue, abs(0, auto, auto, 0))
+	inner := el(sty(columns(2, 0), width(2), positioned), box)
+	outer := el(sty(columns(2, 1), height(2), fillAuto), inner)
+	assertPixels(t, run(t, doc(outer), page(5, 3)), 1, `
+		B__B_
+		B__B_
+		_____`)
+}
+
+func TestMulticol_NegativeLayerOutsideColumnsPaintsUnder(t *testing.T) {
+	t.Parallel()
+	// A box of a negative layer outside the columns paints under the
+	// content of the columns (CSS 2.1, Appendix E, step 3).
+	under := square(2, 1, red, abs(0, auto, auto, 0), zIndex(-1))
+	mc := el(sty(columns(2, 1), height(2), fillAuto, positioned), under, strip(blue))
+	assertPixels(t, run(t, doc(mc), page(5, 3)), 1, `
+		BB___
+		_____
+		_____`)
+}

@@ -1175,14 +1175,15 @@ func (e *engine) layoutPositionedInColumns(b *box) {
 		}
 		if s.spanner != nil || len(s.frags) == 0 {
 			for _, k := range s.kids {
-				if k.abs && k.staticSet {
-					e.layoutAbs(k)
+				if k.abs && !k.staticSet {
+					e.layoutPositioned(k)
+					continue
 				}
-				e.layoutPositioned(k)
+				e.layoutPositionedBox(k)
 			}
 			continue
 		}
-		ctx := &colCtx{e: e, parent: e.cols, noPag: e.noPaginate, n: b.mc.n, limit: math.Inf(1), balanceRow: -1}
+		ctx := &colCtx{e: e, parent: e.cols, noPag: e.noPaginate, n: b.mc.n, limit: math.Inf(1), balanceRow: -1, owner: b}
 		for _, f := range s.frags {
 			f.vtop += b.y
 			ctx.frags = append(ctx.frags, f)
@@ -1199,21 +1200,63 @@ func (e *engine) layoutPositionedInColumns(b *box) {
 			if e.err != nil {
 				break
 			}
-			if k.abs {
-				if !k.staticSet {
-					k.laidOut = false
-					continue
-				}
-				e.layoutAbs(k)
-			}
-			if k.mc != nil {
-				e.layoutPositionedInColumns(k)
+			if k.abs && !k.staticSet {
+				k.laidOut = false
 				continue
 			}
-			e.layoutPositioned(k)
+			e.layoutPositionedBox(k)
 		}
 		e.cols, e.noPaginate = saved, savedN
+		// The columns the positioned boxes reach past the content's are
+		// overflow columns of the set (CSS Multicol 1, 8.1), which
+		// painting cuts them at.
+		for _, f := range ctx.frags[len(s.frags):] {
+			f.vtop -= b.y
+			s.frags = append(s.frags, f)
+		}
 	}
+}
+
+// escapeColumns lays out the absolutely positioned box k, whose
+// containing block lies outside the column flow of c's container, and the
+// positioned boxes inside it, in the fragmentation context around that
+// container: a box is positioned as though the flow were continuous, then
+// fragments in the flow of its containing block (CSS Position 3, 3.5.3;
+// CSS Fragmentation 3, 5.5), and the container's columns fragment its
+// content, not the container (CSS Multicol 1, 2). Its static position
+// moves to the place its column paints at. A containing block outside
+// several nested containers takes the box out of each.
+//
+// The containing block the container itself generates holds the box
+// outside the columns too: Chromium lays the box out against the
+// container, overflowing it, on screen and in print.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) draws a box
+//     200 pixels tall in a relatively positioned two-column container 100
+//     pixels tall at its offsets, overflowing the container, uncut, and a
+//     fixed box at its static position in the second column, in a
+//     screenshot and through its PDF route alike.
+//   - probe, html: Chromium 156 cuts a box whose containing block is a
+//     multi-column container nested in another by the outer columns, at
+//     the inner column its static position lies in.
+func (e *engine) escapeColumns(k *box, c *colCtx) {
+	if len(c.frags) > 0 {
+		// The columns of c, the positioned boxes' included, place the
+		// static position: one at a column's end stays there, after the
+		// content before it, rather than at the top of the next column.
+		f := c.frags[c.index(k.sy-eps)]
+		k.sx += c.owner.mc.columnX(f.col)
+		k.sy += c.rows[f.row].top + f.lead - f.vtop
+	}
+	c.outer(func() { e.layoutPositionedBox(k) })
+}
+
+// holdsInside reports a containing block box h strictly inside the box
+// m: nil, the initial containing block, is inside none.
+func holdsInside(h, m *box) bool {
+	return h != nil && insideOf(h, m)
 }
 
 // layoutContextIn lays out the content of the block b, which establishes

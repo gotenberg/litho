@@ -52,7 +52,8 @@ func (p *painter) multicol(b *box) {
 		}
 		g := &ditem{group: true}
 		nl := len(p.links)
-		p.frames = append(p.frames, &frame{container: g, root: b, columns: true, set: s})
+		fr := &frame{container: g, root: b, columns: true, set: s}
+		p.frames = append(p.frames, fr)
 		kids := b.kids
 		b.kids = s.kids
 		// The columns cut what the set paints by its extent: a page an
@@ -64,6 +65,18 @@ func (p *painter) multicol(b *box) {
 		p.mono = mono
 		b.kids = kids
 		p.frames = p.frames[:len(p.frames)-1]
+		outer = append(outer, fr.escaped...)
+		// The boxes outside the columns of a negative layer paint under
+		// the columns, the others over them (CSS 2.1, Appendix E).
+		var neg, rest []*box
+		for _, o := range outer {
+			if o.isStackingContext() && o.zLevel() < 0 {
+				neg = append(neg, o)
+				continue
+			}
+			rest = append(rest, o)
+		}
+		p.paintOuter(neg)
 		c := p.sync(p.chain(b, true))
 		cut := p.e.cutColumns(g, b, s, p.dy)
 		if mono >= 0 {
@@ -72,33 +85,64 @@ func (p *painter) multicol(b *box) {
 		c.kids = append(c.kids, cut...)
 		moved := cutLinks(slices.Clone(p.links[nl:]), b, s, p.dy)
 		p.links = append(p.links[:nl], moved...)
-		for _, o := range outer {
-			sdx, sdy := p.dx, p.dy
-			p.dx, p.dy = ancestorOffset(o)
-			p.unit(o, true)
-			p.dx, p.dy = sdx, sdy
-		}
+		p.paintOuter(rest)
 	}
 	p.outline(b)
 }
 
+// paintOuter paints the positioned boxes of a column set whose place does
+// not follow its columns, with the relative offsets their ancestors give
+// them.
+//
+// A box whose containing block lies outside a multi-column container
+// around too paints outside that container's columns as well.
+func (p *painter) paintOuter(boxes []*box) {
+	for _, o := range boxes {
+		if f := p.cur(); f.columns && leavesColumns(o, f.root) {
+			f.escaped = append(f.escaped, o)
+			continue
+		}
+		sdx, sdy := p.dx, p.dy
+		p.dx, p.dy = ancestorOffset(o)
+		p.unit(o, o.isStackingContext())
+		p.dx, p.dy = sdx, sdy
+	}
+}
+
+// leavesColumns reports a positioned box l inside the multi-column
+// container b laid out outside its columns ([engine.escapeColumns]): an
+// absolutely positioned box whose containing block lies outside b's
+// column flow, or a box inside such a box.
+func leavesColumns(l, b *box) bool {
+	for a := l; a != nil && a != b; a = a.parent {
+		if a.abs && !holdsInside(a.cbBox, b) {
+			return true
+		}
+	}
+	return false
+}
+
 // setBody paints the content of the column set whose boxes are the kids of
 // b, in the painting order of CSS 2.1, Appendix E, and returns the
-// positioned boxes it holds whose place does not follow the columns: the
-// fixed ones, and those with a vertical offset from a containing block
-// outside b.
+// positioned boxes it holds whose place does not follow the columns, in
+// painting order ([leavesColumns]).
 func (p *painter) setBody(b *box) []*box {
 	var blocks, floats, layers []*box
 	p.collect(b, &blocks, &floats, &layers)
-	var inner, outer []*box
-	for _, l := range layers {
-		if l.fixed || l.abs && outsideOf(l, b) && (l.st.Top.Kind != css.Auto || l.st.Bottom.Kind != css.Auto) {
-			outer = append(outer, l)
-			continue
+	var outer []*box
+	keep := func(ls []*box) []*box {
+		out := ls[:0]
+		for _, l := range ls {
+			if leavesColumns(l, b) {
+				outer = append(outer, l)
+				continue
+			}
+			out = append(out, l)
 		}
-		inner = append(inner, l)
+		return out
 	}
-	neg, zero, pos := p.stack(inner)
+	neg, zero, pos := p.stack(layers)
+	neg, zero, pos = keep(neg), keep(zero), keep(pos)
 	for _, c := range neg {
 		p.lifted(c)
 	}
@@ -121,17 +165,6 @@ func (p *painter) setBody(b *box) []*box {
 	}
 	p.outlines(blocks)
 	return outer
-}
-
-// outsideOf reports an absolutely positioned box whose containing block
-// lies outside the box b.
-func outsideOf(a, b *box) bool {
-	for c := a.cbBox; c != nil; c = c.parent {
-		if c == b {
-			return false
-		}
-	}
-	return true
 }
 
 // piece is a display item cut for one column, and whether it reaches past

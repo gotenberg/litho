@@ -170,19 +170,29 @@ func (e *engine) layoutPositioned(b *box) {
 		if e.err != nil {
 			return
 		}
-		if k.abs {
-			if !k.staticSet {
-				k.laidOut = false
-				continue
-			}
-			e.layoutAbs(k)
-		}
-		if k.mc != nil {
-			e.layoutPositionedInColumns(k)
+		if k.abs && !k.staticSet {
+			k.laidOut = false
 			continue
 		}
-		e.layoutPositioned(k)
+		e.layoutPositionedBox(k)
 	}
+}
+
+// layoutPositionedBox lays out k, when it is absolutely positioned, and the
+// absolutely positioned boxes inside it.
+func (e *engine) layoutPositionedBox(k *box) {
+	if k.abs {
+		if c := e.cols; c != nil && c.owner != nil && !holdsInside(holderOf(k), c.owner) {
+			e.escapeColumns(k, c)
+			return
+		}
+		e.layoutAbs(k)
+	}
+	if k.mc != nil {
+		e.layoutPositionedInColumns(k)
+		return
+	}
+	e.layoutPositioned(k)
 }
 
 // containerOf returns the containing block of the absolutely positioned box
@@ -197,6 +207,33 @@ func (e *engine) containerOf(b *box) absCB {
 	if b.st.PageAnchor && b.st.Position == css.Absolute {
 		return e.pageCB(b)
 	}
+	a := holderOf(b)
+	if a == nil {
+		return absCB{w: e.pageW, h: e.icbHeight(), page: b.st.Position == css.Fixed}
+	}
+	if a.kind == kindInline {
+		return inlineCB(a)
+	}
+	pad := absCB{
+		x: a.x + a.bd[css.Left], y: a.y + a.bd[css.Top],
+		w: a.w + a.pd[css.Left] + a.pd[css.Right], h: a.h + a.pd[css.Top] + a.pd[css.Bottom],
+		box: a,
+	}
+	if a.grid != nil {
+		// A box whose containing block a grid container generates
+		// takes the grid area its placement names (CSS Grid 1, 9).
+		return gridAbsCB(a, b, pad)
+	}
+	return pad
+}
+
+// holderOf returns the box whose containing block holds the absolutely
+// positioned box b ([engine.containerOf]), nil for the initial containing
+// block, the page area or the page.
+func holderOf(b *box) *box {
+	if b.st.PageAnchor && b.st.Position == css.Absolute {
+		return nil
+	}
 	fixed := b.st.Position == css.Fixed
 	for a := b.parent; a != nil; a = a.parent {
 		if a.tpart == partColumn || a.tpart == partColGroup {
@@ -206,25 +243,11 @@ func (e *engine) containerOf(b *box) absCB {
 		if !fixed && a.st.Position != css.Static {
 			holds = true
 		}
-		if !holds {
-			continue
+		if holds {
+			return a
 		}
-		if a.kind == kindInline {
-			return inlineCB(a)
-		}
-		pad := absCB{
-			x: a.x + a.bd[css.Left], y: a.y + a.bd[css.Top],
-			w: a.w + a.pd[css.Left] + a.pd[css.Right], h: a.h + a.pd[css.Top] + a.pd[css.Bottom],
-			box: a,
-		}
-		if a.grid != nil {
-			// A box whose containing block a grid container generates
-			// takes the grid area its placement names (CSS Grid 1, 9).
-			return gridAbsCB(a, b, pad)
-		}
-		return pad
 	}
-	return absCB{w: e.pageW, h: e.icbHeight(), page: fixed}
+	return nil
 }
 
 // inlineCB returns the containing block an inline box a establishes (CSS
