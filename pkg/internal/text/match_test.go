@@ -577,8 +577,8 @@ func TestMatch_StaticWeightUnderChromium(t *testing.T) {
 }
 
 // TestMatch_GenericMath resolves the math family to the math faces of
-// fontconfig's lists, then to sans-serif, and keeps it as Chromium
-// resolves it.
+// fontconfig's lists, then to sans-serif; Chromium resolves it to its
+// standard font.
 func TestMatch_GenericMath(t *testing.T) {
 	t.Parallel()
 	f := newTestFonts(t,
@@ -599,7 +599,8 @@ func TestMatch_GenericMath(t *testing.T) {
 	if got := g.Match(Style{Families: []string{"math"}, Size: 10}).Family(); got != "DejaVu Sans" {
 		t.Errorf("Match(math) without a math face = %s, want the sans-serif DejaVu Sans", got)
 	}
-	if got := BrowserFamilies([]string{"math"}, ""); !slices.Equal(got, []string{"math"}) {
+	// Chromium resolves no face for math: its standard font draws it.
+	if got := BrowserFamilies([]string{"math"}, ""); !slices.Equal(got, []string{"Times New Roman", "serif"}) {
 		t.Errorf("BrowserFamilies(math) = %q", got)
 	}
 }

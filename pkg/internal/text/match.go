@@ -477,6 +477,13 @@ func resolvedFamilies(style Style) familyLists {
 // ([chromiumCJKFamily]), which comes before it; with lang empty, or in any
 // other language, the list is the one above. Only a style under
 // [FallbackChromium] passes a language.
+//
+// The math generic family resolves to no face in Chromium on Linux: its
+// settings name none in its place, and Chromium does not ask fontconfig
+// for it. BrowserFamilies leaves it out, so a list of it alone draws with
+// the standard font, Liberation Serif in the reference image, and a
+// formula takes that font's metrics and no MATH table (see
+// [chromiumNoMath]).
 func BrowserFamilies(families []string, lang string) []string {
 	region := chromiumHanRegion(lang)
 	n := len(families) + 2
@@ -486,7 +493,11 @@ func BrowserFamilies(families []string, lang string) []string {
 	out := make([]string, 0, n)
 	hasGeneric := false
 	for _, name := range families {
-		if g := genericOf(name); g != genericNone {
+		g := genericOf(name)
+		if g == chromiumNoMath {
+			continue
+		}
+		if g != genericNone {
 			hasGeneric = true
 			if c := chromiumCJKFamily(g, region); c != "" {
 				out = append(out, c)
@@ -505,6 +516,21 @@ func BrowserFamilies(families []string, lang string) []string {
 	}
 	return out
 }
+
+// chromiumNoMath records why [BrowserFamilies] leaves the math generic
+// family out: Chromium draws text of font-family: math, MathML included,
+// in its standard font.
+//
+// # Corpus evidence
+//
+//   - probe, html: in the gotenberg/gotenberg:9.4.1 image, where fc-match
+//     math gives DejaVu Math TeX Gyre, Chromium's PDF of a paragraph of
+//     font-family: math and of two MathML formulas draws the paragraph,
+//     the digits, the operators, ∑ and ∞ in Liberation Serif, and only
+//     the characters Liberation Serif lacks, the mathematical italic
+//     letters and √, in DejaVu Math TeX Gyre; its display ∑ keeps the
+//     size of its text, as a font without a MATH table lays it out.
+const chromiumNoMath = genericMath
 
 // chromiumCJKFamily returns the Noto CJK family Chromium draws the generic
 // family g with in the Han variant region (JP, SC, TC or KR; "" for none),
