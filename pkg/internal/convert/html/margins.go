@@ -552,6 +552,8 @@ func (p *prepared) measure(ctx context.Context, root *layout.Node) (map[string]t
 		Page: layout.PageBox{Width: measureSide, Height: measureSide},
 		Lang: p.layout.Lang, Fallback: p.layout.Fallback,
 		Image: p.layout.Image, MaxPages: maxSubLayoutPages,
+		PixelFontMetrics: p.layout.PixelFontMetrics, BrowserRules: p.layout.BrowserRules,
+		FeatureValues: p.layout.FeatureValues,
 	})
 	if err != nil {
 		return nil, err
@@ -597,7 +599,9 @@ func (p *prepared) paintMargins(ctx context.Context, boxes []*marginBox, pb layo
 		Page: layout.PageBox{Width: pb.Width, Height: pb.Height},
 		Lang: p.layout.Lang, Fallback: p.layout.Fallback,
 		Image: p.layout.Image, MaxPages: maxSubLayoutPages,
-		Targets: targets,
+		PixelFontMetrics: p.layout.PixelFontMetrics, BrowserRules: p.layout.BrowserRules,
+		FeatureValues: p.layout.FeatureValues,
+		Targets:       targets,
 	})
 	if err != nil {
 		return nil, nil, err

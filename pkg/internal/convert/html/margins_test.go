@@ -422,3 +422,22 @@ func TestBodyOverflow_GoesToTheViewportAndCollapsesMargins(t *testing.T) {
 		}
 	}
 }
+
+// TestMarginBoxes_LaidOutByTheDocumentRules checks that the content of a
+// page-margin box is laid out by the rules of the document's own lines
+// (CSS Page 3, 5: a margin box is a box of the page's formatting
+// structure): a top-aligned line in the top margin sits as far below its
+// box's top as the same line of the body below the page area's.
+func TestMarginBoxes_LaidOutByTheDocumentRules(t *testing.T) {
+	src := `<style>
+		@page { size: 400pt 300pt; margin: 60pt 0;
+			@top-left { content: "TL"; vertical-align: top; font: 16px "Test Serif"; line-height: 21px }
+		}
+		body { margin: 0 } p { margin: 0; font: 16px "Test Serif"; line-height: 21px }
+	</style><p>BB</p>`
+	doc := convertDoc(t, src, Options{PreferCSSPageSize: true})
+	tl, body := find(t, doc.Pages[0], "TL"), find(t, doc.Pages[0], "BB")
+	if !approx(tl.y, body.y-60, 1e-6) {
+		t.Errorf("margin box baseline %v below its top, want %v as the body's", tl.y, body.y-60)
+	}
+}
