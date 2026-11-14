@@ -224,3 +224,21 @@ func TestAspectRatio_PercentHeightInIntrinsicWidth(t *testing.T) {
 		}
 	}
 }
+
+// TestAspectRatio_ContentKeywordsOfMinAndMax locks that the min- and
+// max-content sizes of a box whose ratio and definite size in the other
+// axis give its size are that size (CSS Sizing 4, 4.1), so min-width and
+// min-height of min-content do not floor it at its content.
+func TestAspectRatio_ContentKeywordsOfMinAndMax(t *testing.T) {
+	minContent := css.Dimension{Kind: css.MinContent}
+	rb := boxes(t, doc(
+		el(sty(height(25), ratio(4, 1), func(s *css.Style) { s.MinWidth, s.MinWidthAuto = minContent, false }), el(sty(width(150)))),
+		el(sty(width(100), ratio(4, 1), func(s *css.Style) { s.MinHeight, s.MinHeightAuto = minContent, false }), el(sty(height(50)))),
+	), page(400, 400))
+	if got := rect(kid(t, rb, 0, 0)); got[2] != 100 {
+		t.Errorf("min-width: min-content: width %v, want 100", got[2])
+	}
+	if got := rect(kid(t, rb, 0, 1)); got[3] != 25 {
+		t.Errorf("min-height: min-content: height %v, want 25", got[3])
+	}
+}

@@ -84,10 +84,25 @@ func (e *engine) resolveSizing(b *box, cb cblock, availW, availH float64) {
 	roomW = max(roomW, 0)
 	measured := false
 	var lo, hi float64
-	width := func(d css.Dimension) css.Dimension {
+	r, content := prefRatio(b)
+	ratioW, ratioOK := 0.0, false
+	if r > 0 {
+		if h, ok := specHeight(b, src.Height, cb); ok {
+			ratioW, ratioOK = widthOfHeight(h, r, edgesFor(b, content)), true
+		}
+	}
+	width := func(d css.Dimension, limit bool) css.Dimension {
 		var v float64
 		switch d.Kind { //nolint:exhaustive // the other kinds stay as they are
 		case css.MinContent, css.MaxContent, css.FitContent:
+			if limit && ratioOK {
+				// A box whose ratio and definite height give its width
+				// takes that width as its min- and max-content sizes
+				// (CSS Sizing 4, 4.1 and 4.2); the width property itself
+				// goes to applyRatio, which adds the automatic minimum.
+				v = ratioW
+				break
+			}
 			if !measured {
 				lo, hi = e.contentIntrinsic(b)
 				measured = true
@@ -110,9 +125,9 @@ func (e *engine) resolveSizing(b *box, cb cblock, availW, availH float64) {
 		}
 		return css.Pts(v)
 	}
-	st.Width = width(src.Width)
-	st.MinWidth = width(src.MinWidth)
-	st.MaxWidth = width(src.MaxWidth)
+	st.Width = width(src.Width, false)
+	st.MinWidth = width(src.MinWidth, true)
+	st.MaxWidth = width(src.MaxWidth, true)
 	roomH, defH := availH, availH >= 0
 	if !defH && cb.hDefinite {
 		top, bottom := stretchMargins(b, src)
@@ -134,13 +149,28 @@ func (e *engine) resolveSizing(b *box, cb cblock, availW, availH float64) {
 	case src.Height.Kind == css.Stretch:
 		st.Height = stretchH(css.Dimension{Kind: css.Auto})
 	}
+	// A box whose ratio and definite width give its height takes that
+	// height as its min- and max-content block sizes (CSS Sizing 4, 4.1).
+	ratioH, ratioHOK := 0.0, false
+	if r > 0 && src.Width.Kind != css.Auto {
+		if w, ok := specWidth(b, st.Width, cb.w); ok {
+			ratioH, ratioHOK = heightOfWidth(w, r, edgesFor(b, content)), true
+			if src.BoxSizing == css.BorderBox {
+				ratioH += ve
+			}
+		}
+	}
 	switch {
+	case contentKeyword(src.MinHeight) && ratioHOK:
+		st.MinHeight = css.Pts(ratioH)
 	case contentKeyword(src.MinHeight):
 		st.MinHeight, b.minHContent = css.Pts(0), true
 	case src.MinHeight.Kind == css.Stretch:
 		st.MinHeight = stretchH(css.Pts(0))
 	}
 	switch {
+	case contentKeyword(src.MaxHeight) && ratioHOK:
+		st.MaxHeight = css.Pts(ratioH)
 	case contentKeyword(src.MaxHeight):
 		st.MaxHeight, b.maxHContent = css.Dimension{Kind: css.None}, true
 	case src.MaxHeight.Kind == css.Stretch:
