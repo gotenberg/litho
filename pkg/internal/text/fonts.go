@@ -162,9 +162,14 @@ const maxKitFaces = 32
 // The kit goes whole, since the shaper's fonts wrap the kit's own faces,
 // and to one call at a time, since neither is safe for concurrent use.
 // Their caches only memoise, so a kit shapes as a new one does.
+//
+// The kit also carries the call's itemizer, which the call empties when
+// it hands the kit back, so that no text or face outlives the call in it:
+// it sits here to keep a [layoutState] within its size class.
 type shapingKit struct {
 	shaper shaping.HarfbuzzShaper
 	faces  map[*Face]*font.Face
+	seg    shaping.Segmenter
 }
 
 // takeKit returns a kit for one layout call: one a finished call handed
@@ -185,6 +190,7 @@ func (f *Fonts) takeKit() *shapingKit {
 // variable faces the call drew leave the kit, which a later conversion may
 // take: an instance belongs to its conversion.
 func (f *Fonts) releaseKit(k *shapingKit) {
+	k.seg = shaping.Segmenter{}
 	if len(k.faces) > maxKitFaces {
 		k.shaper = shaping.HarfbuzzShaper{}
 		clear(k.faces)

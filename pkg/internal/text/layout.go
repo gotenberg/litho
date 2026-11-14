@@ -361,7 +361,6 @@ type layoutState struct {
 	defaultInstances map[string]DefaultInstance
 	emoji            map[rune]struct{}
 
-	seg     shaping.Segmenter
 	wrapper shaping.LineWrapper
 	lineSeg segmenter.Segmenter
 }
@@ -921,7 +920,7 @@ func (st *layoutState) split(ctx context.Context, in shaping.Input, faces shapin
 		}
 		piece := in
 		piece.RunStart, piece.RunEnd = start, bidiCut(in.Text, start, end)
-		items = append(items, st.seg.Split(piece, faces)...)
+		items = append(items, st.kit.seg.Split(piece, faces)...)
 		start = piece.RunEnd
 	}
 	return items, nil
