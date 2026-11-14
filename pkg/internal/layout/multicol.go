@@ -436,6 +436,54 @@ func (c *colCtx) reach(y float64) {
 	c.outer(func() { c.e.reach(oy) })
 }
 
+// rowAfter returns the top of the first column of the row after the one
+// the column flow position y lies in, when a piece h tall that avoids
+// breaks inside it does not fit its column, and that column's row is cut
+// by an outer fragmentainer it does not start at the top of: the next
+// row starts at the top of the next outer fragmentainer, with taller
+// columns. It returns y otherwise.
+//
+// CSS Fragmentation 3, 4.4 lets a piece that avoids breaks overflow a
+// fragmentainer it starts at the top of. A column of a container nested
+// below other content of an outer fragmentainer is no such start:
+// Chromium moves the piece to the next outer fragmentainer.
+//
+// # Corpus evidence
+//
+//   - wpt, css/css-multicol/multicol-nested-022.html and -023: Chromium
+//     draws a 100 pixel box that avoids breaks, in an inner container
+//     50 pixels above the end of its outer column, at the top of the next
+//     outer column.
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) prints such a
+//     box, in a container 42 pixels above the end of the page area, at the
+//     top of the next page.
+func (c *colCtx) rowAfter(y, h float64) float64 {
+	i := c.of(y)
+	if i >= len(c.frags) {
+		return y
+	}
+	f := c.frags[i]
+	r := c.rows[f.row]
+	if !r.next || h <= f.room()+eps {
+		return y
+	}
+	fresh := true
+	c.outer(func() { fresh = !c.e.paginating() || c.e.atPageTop(r.top) })
+	if fresh {
+		return y
+	}
+	n := c.target()
+	if r.stop > 0 {
+		n = r.stop
+	}
+	j := r.first + n
+	top := c.top(j)
+	if j >= len(c.frags) || c.frags[j].row == f.row || c.height(j) <= f.room()+eps {
+		return y
+	}
+	return top
+}
+
 // index returns the column y lies in without adding columns, the first
 // or the last one outside them.
 func (c *colCtx) index(y float64) int {

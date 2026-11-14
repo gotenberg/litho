@@ -1353,6 +1353,15 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 				if e.relayout(k.y) {
 					cursor = e.layoutBlock(k, cbFor(e.pageOf(k.y)+1), bc, restore(snap), mc, breakPush)
 				}
+			case avoidsInside(k) && e.straddles(k) && e.cols != nil && e.atPageTop(k.y) && e.cols.rowAfter(k.y, k.borderH()) > k.y:
+				// k avoids breaks and does not fit the columns of a row an
+				// outer fragmentainer cuts below its own top: it moves to
+				// the next row of columns, which starts on the next outer
+				// fragmentainer ([colCtx.rowAfter]).
+				if y := e.cols.rowAfter(k.y, k.borderH()); e.relayout(k.y) {
+					restore(snap)
+					cursor = e.layoutBlock(k, cbFor(e.pageOf(y)), bc, y, mc, breakNone)
+				}
 			case prev != nil && avoidsBetween(prev, k) && (e.pageOf(prev.y+prev.borderH()-1e-3) < e.pageOf(firstContent(k)) || blankSliced(e, k)) &&
 				!e.atPageTop(prev.y) && prev.borderH()+k.borderH() <= e.areaH(e.pageOf(prev.y)) && !chainFromTop():
 				// The break moves before prev: one through k's first

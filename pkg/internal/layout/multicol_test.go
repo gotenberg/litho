@@ -797,3 +797,19 @@ func TestMulticol_RuleRunsToTheCut(t *testing.T) {
 		__R________
 		___________`)
 }
+
+func TestMulticol_AvoidingBoxMovesToTheNextOuterColumn(t *testing.T) {
+	t.Parallel()
+	// A box that avoids breaks inside it and does not fit the room an
+	// outer column leaves an inner container below other content moves to
+	// the next outer column, where the inner columns start at its top (CSS
+	// Fragmentation 3, 4.4).
+	avoid := square(1, 2, blue, func(s *css.Style) { s.BreakInside = css.InsideAvoid })
+	inner := el(sty(columns(2, 1), width(3), fillAuto), avoid)
+	outer := el(sty(columns(2, 1), width(7), height(3), fillAuto), strip(red, height(2)), inner)
+	assertPixels(t, run(t, doc(outer), page(7, 4)), 1, `
+		RRR_B__
+		RRR_B__
+		_______
+		_______`)
+}
