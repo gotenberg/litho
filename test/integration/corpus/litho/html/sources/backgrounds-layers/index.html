@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Background layers</title>
+<style>
+html { background: linear-gradient(#dbe9f6, rgba(219, 233, 246, 0)) 0 0 / 100% 120px no-repeat, #fff; }
+body { font-family: "Liberation Sans", sans-serif; font-size: 10pt; }
+.grid::after { content: ""; display: block; clear: both; }
+.cell { float: left; width: 200px; height: 110px; margin: 0 14px 14px 0; padding: 8px; border: 1px solid #333; }
+.cover { background: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0) 70%), url(photo.png) center / cover; color: #fff; }
+.two-gradients { background: linear-gradient(90deg, rgba(255, 0, 0, 0.5) 50%, transparent 50%) 0 0 / 40px 40px, linear-gradient(#219ebc, #ffb703) 0 0 / 100% 50% no-repeat; }
+.pattern { background: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.2) 0 10px, transparent 10px 20px), linear-gradient(to right, #fb8500, #8ecae6); }
+.tiles { background: url(tile.png), linear-gradient(#fffbe6, #8ecae6); }
+.positions { background: url(tile.png) no-repeat right 10px bottom 20px, url(tile.png) no-repeat calc(50% - 15px) calc(100% - 5px), url(tile.png) no-repeat left top, #ddd; }
+.clips { border: 12px dashed rgba(2, 48, 71, 0.5); padding: 14px; width: 166px; height: 76px; background: url(tile.png) no-repeat content-box, linear-gradient(#e63946, #457b9d) padding-box border-box, #ffb703 content-box; }
+.origins { background-image: url(tile.png), linear-gradient(#2a9d8f, #fff); background-repeat: no-repeat; background-clip: padding-box, content-box; background-origin: border-box, content-box; background-color: #f4a261; padding: 14px; height: 82px; width: 172px; }
+.multiply { background: linear-gradient(90deg, #ffbe0b, #3a86ff), url(photo.png) center / cover, #8338ec; background-blend-mode: multiply; }
+.screen { background: linear-gradient(90deg, #ffbe0b, #3a86ff), url(photo.png) center / cover, #8338ec; background-blend-mode: screen, normal; }
+table { border-spacing: 4px; margin-bottom: 14px; }
+td { width: 110px; height: 40px; padding: 4px; }
+tr.layered { background: url(tile.png) no-repeat 10px 10px, linear-gradient(90deg, #ffd166, #06d6a0); }
+p.wrap { width: 300px; line-height: 2; }
+.wrap span { background: url(tile.png) no-repeat 0 0 / 12px 12px, linear-gradient(90deg, #f60, #06f); color: #fff; }
+</style>
+</head>
+<body>
+<h1>Background layers LAYERS-MARKER</h1>
+<div class="grid">
+  <div class="cell cover">a gradient over a photo, cover</div>
+  <div class="cell two-gradients">two gradients, two sizes</div>
+  <div class="cell pattern">stripes over a gradient</div>
+  <div class="cell tiles">tiles over a gradient</div>
+  <div class="cell positions">no-repeat by keywords and calc()</div>
+  <div class="cell clips">clips per layer</div>
+  <div class="cell origins">origins per layer</div>
+  <div class="cell multiply">multiply</div>
+  <div class="cell screen">screen, normal</div>
+</div>
+<table>
+  <tr class="layered"><td>row</td><td>of two</td><td>layers</td></tr>
+  <tr class="layered"><td>second</td><td>row</td><td>again</td></tr>
+</table>
+<p class="wrap"><span>An inline box of two layers that wraps over several lines, its background sliced as one strip.</span></p>
+</body>
+</html>
