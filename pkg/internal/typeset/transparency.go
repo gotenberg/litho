@@ -352,6 +352,10 @@ func (p *pageWriter) textBounds(ctx context.Context, b *bounds, v *Text, t Matri
 		gx0, gx1 = gy0, gy1
 		gy0, gy1 = float64(-size*hs*gb[2]), float64(-size*hs*gb[0])
 	}
+	if v.Mirror {
+		// A mirrored run reflects y about each glyph's origin.
+		gy0, gy1 = -gy1, -gy0
+	}
 	for _, g := range v.Glyphs {
 		x, y := v.Origin.X+float64(g.X*hs), v.Origin.Y+g.Y
 		if v.Upright {

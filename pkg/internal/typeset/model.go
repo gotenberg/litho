@@ -190,6 +190,12 @@ type Text struct {
 	// along its own width alone, X and Y placing it unscaled, as a
 	// combined run of CSS text-combine-upright asks (9.1).
 	Upright bool
+	// Mirror reflects each glyph across the x axis of the run's space
+	// through its origin, y to -y: the run belongs to a vertical-lr line
+	// laid out across the content of a group the page reflects across its
+	// diagonal (CSS Writing Modes 4, 3.1), and its glyphs read unreflected
+	// on the page.
+	Mirror bool
 	// Palette, for a run whose face draws layered colour glyphs (OpenType,
 	// COLR and CPAL), fills each layer with the entry of its palette
 	// index; nil fills them with the face's first palette. A layer whose

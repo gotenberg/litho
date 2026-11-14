@@ -1673,6 +1673,9 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 	c := *t
 	c.Origin = typeset.Point{X: l.x + t.Origin.X + p.dx, Y: l.y + t.Origin.Y + p.dy}
 	c.Parent = it.box.elem
+	if transposed(p.e.frameOf(it.box)) {
+		p.e.mirrorRun(&c, it.box)
+	}
 	top, bottom := l.y+it.baseline-it.ascent, l.y+it.baseline+it.descent
 	if !p.textPaint(it, l, page, &c, top, bottom) && c.Color.A > 0 {
 		p.emit(it.box, true, &c, top, bottom, page)

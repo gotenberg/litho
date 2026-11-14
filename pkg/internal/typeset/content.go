@@ -354,6 +354,11 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 	}
 
 	size := t.Size
+	// A mirrored run negates the y components of its text matrices.
+	mirror := 1.0
+	if t.Mirror {
+		mirror = -1
+	}
 	tj := tjWriter{buf: &p.buf}
 	var started bool
 	var penX, baseline float64
@@ -417,11 +422,11 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 			// its position is unscaled.
 			x = t.Origin.X + g.X
 			tj.end()
-			fmt.Fprintf(&p.buf, "0 %s %s 0 %s %s Tm\n", num(-size), num(-size), num(x+p.off.X), num(y+p.off.Y))
+			fmt.Fprintf(&p.buf, "0 %s %s 0 %s %s Tm\n", num(-size*mirror), num(-size), num(x+p.off.X), num(y+p.off.Y))
 			started, penX, baseline = true, x, y
 		} else if !started || round(y) != round(baseline) {
 			tj.end()
-			fmt.Fprintf(&p.buf, "%s 0 %s %s %s %s Tm\n", num(size), num(size*t.Skew), num(-size), num(x+p.off.X), num(y+p.off.Y))
+			fmt.Fprintf(&p.buf, "%s 0 %s %s %s %s Tm\n", num(size), num(size*t.Skew), num(-size*mirror), num(x+p.off.X), num(y+p.off.Y))
 			started, penX, baseline = true, x, y
 		} else if adj := round((penX - x) / (size * hs) * 1000); adj != 0 {
 			// A positive adjustment moves the next glyph left (9.4.3, the

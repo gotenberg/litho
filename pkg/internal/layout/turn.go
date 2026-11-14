@@ -76,8 +76,12 @@ func paperBox(pb PageBox, wm css.WritingMode) PageBox {
 
 // turnMatrix maps the page box pb as a turned flow lays it out onto the
 // paper: a quarter turn clockwise, which puts the top of the flow on the
-// right of the paper, or counter-clockwise in sideways-lr.
+// right of the paper, counter-clockwise in sideways-lr, or reflected
+// across the diagonal in vertical-lr ([transposed]).
 func turnMatrix(pb PageBox, wm css.WritingMode) typeset.Matrix {
+	if transposed(wm) {
+		return typeset.Matrix{B: 1, C: 1}
+	}
 	if wm == css.SidewaysLR {
 		return typeset.Matrix{B: -1, C: 1, F: pb.Width}
 	}
@@ -87,6 +91,9 @@ func turnMatrix(pb PageBox, wm css.WritingMode) typeset.Matrix {
 // turnPoint returns the point (x, y) of the sheet of the turned page box
 // pb, bleed included, on the paper's sheet.
 func turnPoint(pb PageBox, wm css.WritingMode, x, y float64) (float64, float64) {
+	if transposed(wm) {
+		return y, x
+	}
 	if wm == css.SidewaysLR {
 		return y, pb.Width + float64(2*pb.Bleed) - x
 	}

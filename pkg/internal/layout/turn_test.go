@@ -40,3 +40,40 @@ func TestTurn_VerticalRoot(t *testing.T) {
 		____BB
 		____BB`)
 }
+
+// TestTurn_VerticalLRRoot lays a vertical-lr root out on pages reflected
+// across their diagonal: its block flow runs from the left edge of the
+// paper to the right one, the lines of vertical-lr stacking left to right
+// (CSS Writing Modes 4, 3.1), and its glyph runs are reflected back so
+// that they read as text set top to bottom.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (Gotenberg 9.4.1) draws the first column
+//     of a vertical-lr root at the left margin, 8px from the left and top
+//     edges of an 800 by 600 window.
+func TestTurn_VerticalLRRoot(t *testing.T) {
+	t.Parallel()
+	wm := func(s *css.Style) { s.WritingMode = css.VerticalLR }
+	kid := func(c css.Color) *Node { return el(sty(wm, width(2), bg(c))) }
+	root := el(sty(wm), el(sty(wm), kid(lime), kid(blue), kid(lime), kid(blue)))
+	res := runWith(t, root, Options{Page: page(6, 4), BrowserRules: true})
+	if len(res.Pages) != 2 {
+		t.Fatalf("%d pages, want 2", len(res.Pages))
+	}
+	assertPixels(t, res, 1, `
+		GGBBGG
+		GGBBGG
+		GGBBGG
+		GGBBGG`)
+	assertPixels(t, res, 2, `
+		BB____
+		BB____
+		BB____
+		BB____`)
+	text := el(sty(wm), el(sty(wm), txt(sty(wm), "X")))
+	runs := texts(runWith(t, text, Options{Page: page(20, 20), BrowserRules: true}), 1)
+	if len(runs) != 1 || !runs[0].run.Mirror {
+		t.Errorf("%d runs, want one reflected", len(runs))
+	}
+}

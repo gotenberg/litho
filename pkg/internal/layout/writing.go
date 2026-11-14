@@ -73,12 +73,18 @@ func (orthoFormatter) layout(e *engine, b *box, cb cblock, _ *bfc, cursor float6
 		b.w = hc
 	}
 	in.st.TransformOrigin = [2]css.Dimension{css.Pts(0), css.Pts(0)}
-	if b.st.WritingMode == css.SidewaysLR {
+	switch {
+	case b.st.WritingMode == css.VerticalLR && e.opts.BrowserRules:
+		// Lines stacking left to right with text reading top to bottom
+		// are the horizontal layout reflected across its diagonal: its
+		// top on the left, its left on the top (see [transposed]).
+		in.st.Transform = []css.TransformFunc{{Kind: css.TransformMatrix, V: [6]float64{0, 1, 1, 0, 0, 0}}}
+	case b.st.WritingMode == css.SidewaysLR:
 		in.st.Transform = []css.TransformFunc{
 			{Kind: css.TransformTranslate, X: css.Pts(0), Y: css.Pts(l)},
 			{Kind: css.TransformRotate, V: [6]float64{-math.Pi / 2}},
 		}
-	} else {
+	default:
 		in.st.Transform = []css.TransformFunc{
 			{Kind: css.TransformTranslate, X: css.Pts(w), Y: css.Pts(0)},
 			{Kind: css.TransformRotate, V: [6]float64{math.Pi / 2}},
@@ -186,6 +192,13 @@ func (e *engine) turnedStyle(st *css.Style, frame css.WritingMode) *css.Style {
 	t.MinWidth, t.MinHeight = st.MinHeight, st.MinWidth
 	t.MaxWidth, t.MaxHeight = st.MaxHeight, st.MaxWidth
 	t.MinWidthAuto, t.MinHeightAuto = st.MinHeightAuto, st.MinWidthAuto
+	if c := st.Clip.Edges; st.Clip.Set && transposed(frame) {
+		// clip: rect() offsets its edges from the top and left of the box
+		// (CSS 2.1, 11.1.2), which a reflection across the diagonal
+		// swaps: its top and left offsets name the flow's left and top,
+		// its bottom and right ones the flow's right and bottom.
+		t.Clip.Edges = [4]css.Dimension{c[css.Left], c[css.Bottom], c[css.Right], c[css.Top]}
+	}
 	if len(st.BoxShadow) > 0 {
 		t.BoxShadow = make([]css.Shadow, len(st.BoxShadow))
 		for i, sh := range st.BoxShadow {
@@ -202,13 +215,25 @@ func (e *engine) turnedStyle(st *css.Style, frame css.WritingMode) *css.Style {
 // mode frame, the side of the page it lies on: the flow turned a quarter
 // turn clockwise puts its top on the right of the page, its left on the
 // top; turned counter-clockwise, in sideways-lr, its top on the left and
-// its left on the bottom.
+// its left on the bottom; reflected across its diagonal, in vertical-lr
+// ([transposed]), its top on the left and its left on the top.
 func turnSides(frame css.WritingMode) [4]css.Side {
-	if frame == css.SidewaysLR {
+	switch frame { //nolint:exhaustive // the flows that turn other ways than clockwise alone
+	case css.SidewaysLR:
 		return [4]css.Side{css.Left, css.Top, css.Right, css.Bottom}
+	case css.VerticalLR:
+		return [4]css.Side{css.Left, css.Bottom, css.Right, css.Top}
 	}
 	return [4]css.Side{css.Right, css.Bottom, css.Left, css.Top}
 }
+
+// transposed reports a flow of the writing mode frame laid out under the
+// browser rules as a horizontal layout reflected across its diagonal onto
+// the page: vertical-lr, whose lines stack left to right while its text
+// reads top to bottom, which no turn of a horizontal layout gives. Its
+// glyphs are reflected back ([typeset.Text.Mirror]) and its pictures
+// stand upright.
+func transposed(frame css.WritingMode) bool { return frame == css.VerticalLR }
 
 // cornerFrom returns the corner of the page the corner c of a flow whose
 // sides lie on the page sides from lies on.
@@ -227,8 +252,11 @@ func cornerFrom(from [4]css.Side, c css.Corner) css.Corner {
 // turnOffset returns the page offset (x, y) in the coordinates of an
 // orthogonal flow of the writing mode frame.
 func turnOffset(frame css.WritingMode, x, y float64) (float64, float64) {
-	if frame == css.SidewaysLR {
+	switch frame { //nolint:exhaustive // the flows that turn other ways than clockwise alone
+	case css.SidewaysLR:
 		return -y, x
+	case css.VerticalLR:
+		return y, x
 	}
 	return y, -x
 }
@@ -283,6 +311,9 @@ func (e *engine) frameOf(b *box) css.WritingMode {
 // page turns a quarter turn clockwise, or counter-clockwise in
 // sideways-lr: the other way.
 func uprightTurn(wm css.WritingMode, cx, cy float64) typeset.Matrix {
+	if transposed(wm) {
+		return typeset.Matrix{B: 1, C: 1, E: cx - cy, F: cy - cx}
+	}
 	if wm == css.SidewaysLR {
 		return typeset.Matrix{B: 1, C: -1, E: cx + cy, F: cy - cx}
 	}
@@ -292,6 +323,9 @@ func uprightTurn(wm css.WritingMode, cx, cy float64) typeset.Matrix {
 // uprightRect returns the rectangle r of a flow of the writing mode wm in
 // the coordinates [uprightTurn] turns from, about (cx, cy).
 func uprightRect(wm css.WritingMode, cx, cy float64, r typeset.Rect) typeset.Rect {
+	if transposed(wm) {
+		return typeset.Rect{X: cx - cy + r.Y, Y: cy - cx + r.X, Width: r.Height, Height: r.Width}
+	}
 	if wm == css.SidewaysLR {
 		return typeset.Rect{X: cx - cy + r.Y, Y: cy + cx - r.X - r.Width, Width: r.Height, Height: r.Width}
 	}
@@ -330,6 +364,9 @@ func (e *engine) uprightLayer(l *css.BackgroundLayer, pic *Picture, sl bgSlice, 
 // [uprightTurn] places it in a flow of the writing mode wm: the inverse
 // of [uprightRect].
 func turnedRect(wm css.WritingMode, cx, cy float64, r typeset.Rect) typeset.Rect {
+	if transposed(wm) {
+		return uprightRect(wm, cx, cy, r)
+	}
 	if wm == css.SidewaysLR {
 		return typeset.Rect{X: cx + cy - r.Y - r.Height, Y: r.X - cx + cy, Width: r.Height, Height: r.Width}
 	}
@@ -359,4 +396,22 @@ func (e *engine) centralBaseline(b *box) (float64, bool) {
 	}
 	m := e.faceMetrics(b.st, b.lang)
 	return float64((m.EmAscent - m.EmDescent) / 2), true
+}
+
+// mirrorRun reflects the glyph run t of the box b, laid out in a
+// transposed flow ([transposed]), across its central baseline: each glyph
+// is reflected about it, and drawn reflected, so that the page's
+// reflection draws it as the vertical-lr line sets it, its top on the
+// line's over side, the right (CSS Writing Modes 4, 4.2), its em box
+// where it was. The glyph slice is copied: the run is shared with the
+// line.
+func (e *engine) mirrorRun(t *typeset.Text, b *box) {
+	m := e.faceMetrics(b.st, b.lang)
+	twice := m.EmDescent - m.EmAscent
+	glyphs := make([]typeset.Glyph, len(t.Glyphs))
+	for i, g := range t.Glyphs {
+		g.Y = twice - g.Y
+		glyphs[i] = g
+	}
+	t.Glyphs, t.Mirror = glyphs, true
 }

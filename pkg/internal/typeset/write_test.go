@@ -662,6 +662,27 @@ func TestWriteUprightRun(t *testing.T) {
 	}
 }
 
+// TestWriteMirroredRun reflects the glyphs of a mirrored run across its
+// baseline: the y components of its text matrix are negated, so a glyph
+// reaches below its origin.
+func TestWriteMirroredRun(t *testing.T) {
+	t.Parallel()
+	txt := run(t, sans, 40, typeset.Point{X: 50, Y: 100}, "H")
+	txt.Mirror = true
+	page := &typeset.Page{Width: 200, Height: 200, Content: []typeset.Fragment{txt}}
+	out := write(t, &typeset.Document{Pages: []*typeset.Page{page}})
+	if content := inflated(t, out); !bytes.Contains(content, []byte("40 0 0 40 50 100 Tm")) {
+		t.Errorf("content lacks the mirrored text matrix:\n%s", content)
+	}
+	img := render(t, open(t, out), 1)
+	if n := inkIn(img, 0, 0, 200, 99); n != 0 {
+		t.Errorf("%d pixels of ink above the origin", n)
+	}
+	if n := inkIn(img, 50, 101, 100, 140); n == 0 {
+		t.Error("no ink below the origin")
+	}
+}
+
 // TestWriteSyntheticBoldAndItalic draws a glyph stroked and skewed, as a
 // converter synthesises bold and italic, and checks the operators and the
 // ink: the stroke widens the glyph, the skew moves its top right.
