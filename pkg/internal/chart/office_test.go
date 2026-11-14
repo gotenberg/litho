@@ -499,6 +499,33 @@ func TestRender_OfficeLongValueAxisTitle(t *testing.T) {
 	}
 }
 
+// TestRender_OfficeCountBeforeLabelsWrap holds the value axis of a chart
+// whose category labels wrap under OfficeRules to the count of the chart
+// whose labels take one line: Office counts before they wrap.
+func TestRender_OfficeCountBeforeLabelsWrap(t *testing.T) {
+	r := typeset.Rect{Width: 150, Height: 104}
+	labels := func(names ...string) (string, typeset.Rect) {
+		c := officeChart(15.6667, 23.5, 47)
+		c.Groups[0].Series[0].Categories = Data{Values: strs(names...)}
+		b, frags := plotBounds(t, c, r)
+		var vals []string
+		for _, s := range texts(frags) {
+			if s != "" && s[0] >= '0' && s[0] <= '9' {
+				vals = append(vals, s)
+			}
+		}
+		return strings.Join(vals, " "), b
+	}
+	one, b1 := labels("A", "B", "C")
+	wrapped, b3 := labels("AA AA AA", "BB BB BB", "CC CC CC")
+	if !(b3.Height < b1.Height-15) {
+		t.Fatalf("plot heights %v and %v: the labels do not wrap", b1.Height, b3.Height)
+	}
+	if one != wrapped {
+		t.Errorf("value labels = %q under wrapped category labels, want %q", wrapped, one)
+	}
+}
+
 // TestRender_OfficeCategoryWrap holds category labels under OfficeRules to
 // Office's break: a word as wide as the distance between ticks less 2.5%
 // keeps its line, where LibreOffice's break 5% short of the distance

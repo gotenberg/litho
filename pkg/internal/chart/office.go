@@ -376,6 +376,46 @@ func (rd *renderer) categoryWrap() float64 {
 	return 0.95
 }
 
+// officeLabelExcess returns how much more room the unturned labels of x,
+// a category axis under the plot area, took at the last layout pass than
+// one line of them: the length Office adds back to a value axis beside the
+// plot area before it counts its labels (officeIntervals), as if the
+// category labels had not wrapped. Turned labels add nothing.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: column charts 145.2 pt high whose six long category
+//     labels wrap to two or three lines, or turn by 45 degrees, have plot
+//     areas 63.43 and 65.65 pt high, too short for 0 to 50 by 10 by
+//     officeIntervals, and Excel labels them 0 to 50 by 10, the count at
+//     87.84 pt, the height with labels of one line; line charts over dates
+//     whose labels turn have 60.86 pt and 0 to 10 by 2, the count at
+//     87.84 pt as well. Excel's turned labels end in an ellipsis
+//     ("Category...") where litho turns them whole, so the turned case is
+//     left out.
+func (rd *renderer) officeLabelExcess(x *dim) float64 {
+	if x == nil || !x.category || x.vertical || x.outside > 0 || !rd.officeLayout() {
+		return 0
+	}
+	ext, line := 0.0, 0.0
+	for _, l := range x.labels {
+		if l.b.style.Rotation != 0 {
+			// Office cuts a turned label short with an ellipsis, which
+			// these labels are not: their room is no measure of its.
+			return 0
+		}
+		_, h := l.b.rotated()
+		ext = math.Max(ext, l.cy+float64(h/2)-x.lineAt)
+		if len(l.b.lines) > 0 {
+			line = math.Max(line, faceLineHeight(l.b.lines[0], l.b.style.Size))
+		}
+	}
+	if line == 0 {
+		return 0
+	}
+	return math.Max(0, ext-officeLabelGap(x, fontSize(x.style().Size))-line)
+}
+
 // officeIntervals returns the most major intervals Office's automatic
 // scale gives a value axis length points long whose labels are lineH
 // points high: as many labels as fit end to end along it, one interval

@@ -594,7 +594,7 @@ func (rd *renderer) fitScale(d *dim) {
 		if b := rd.measure(d.tickText(ticks[0]), d.style(), 0); b != nil {
 			lineH := faceLineHeight(b.lines[0], b.style.Size)
 			if d.vertical {
-				opt.maxCount = officeIntervals(d.length(), lineH)
+				opt.maxCount = officeIntervals(d.length()+rd.officeLabelExcess(d.other), lineH)
 			} else {
 				opt.maxCount = officeHorizontalIntervals(d.length(), lineH)
 			}
