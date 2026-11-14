@@ -2,6 +2,7 @@ package layout
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -62,6 +63,8 @@ func TestFitFirstPage_TrimsToContent(t *testing.T) {
 		{"taller than the box keeps the box", doc(el(sty(height(150)))), page(20, 100), px(100), 2},
 		{"empty document takes a point", doc(), page(20, 100), 1, 1},
 		{"body margin counts", doc(el(sty(height(12), margin(0, 0, 6, 0)))), page(20, 100), px(18), 1},
+		{"overflow of a box that fits counts", doc(el(sty(height(12)), el(sty(height(40))))), page(20, 100), px(40), 1},
+		{"content a box clips takes no room", doc(el(sty(height(12), func(s *css.Style) { s.Overflow = css.OverflowHidden }), el(sty(height(40))))), page(20, 100), px(12), 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -96,6 +99,7 @@ func TestViewportHeight_SizesTheInitialContainingBlock(t *testing.T) {
 		root *Node
 	}{
 		{"root percentage height", el(sty(full))},
+		{"box positioned in it", doc(el(sty(abs(0, math.NaN(), 0, math.NaN()), width(3))))},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

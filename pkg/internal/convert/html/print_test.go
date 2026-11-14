@@ -280,6 +280,21 @@ func TestConvert_SinglePage(t *testing.T) {
 			DefaultPageWidth, screenHeight, 1,
 		},
 		{
+			"a box positioned in the viewport measures the screen", `<div style="position:absolute;top:0;bottom:0;width:10pt"></div>`,
+			Options{},
+			DefaultPageWidth, screenHeight, 1,
+		},
+		{
+			"overflow of a box that fits counts", `<div style="height:100pt"><div style="height:600pt"></div></div>`,
+			Options{},
+			DefaultPageWidth, 600, 1,
+		},
+		{
+			"content a box clips takes no room", `<div style="height:100pt;overflow:hidden"><div style="height:600pt"></div></div>`,
+			Options{},
+			DefaultPageWidth, screenHeight, 1,
+		},
+		{
 			"capped at the PDF limit", `<div style="height:20000pt"></div>`,
 			Options{},
 			DefaultPageWidth, maxPageSide, 1,

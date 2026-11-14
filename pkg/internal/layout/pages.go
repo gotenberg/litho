@@ -259,6 +259,11 @@ func (e *engine) fittedHeight(rb *box, d *ditem) float64 {
 		}
 		if y := b.y + b.borderH() + max(b.m[css.Bottom], 0); y <= end {
 			bottom = max(bottom, y)
+			if !clipsContent(b) {
+				// Content that overflows a box that fits is content the
+				// page shows too (CSS Overflow 3, 2.2).
+				stack = append(stack, b.kids...)
+			}
 			continue
 		}
 		if b.mc != nil || !continues(b, end) {
@@ -339,4 +344,11 @@ func continues(b *box, end float64) bool {
 		}
 	}
 	return false
+}
+
+// clipsContent reports whether the block b clips what overflows it: an
+// overflow other than visible that does not pass to the viewport (CSS
+// Overflow 3, 3.1).
+func clipsContent(b *box) bool {
+	return b.kind == kindBlock && b.st.Overflow != css.OverflowVisible && !b.toViewport()
 }
