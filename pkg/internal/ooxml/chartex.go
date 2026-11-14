@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -85,6 +87,7 @@ func ParseChartEx(ctx context.Context, pkg *Package, part string) (*chart.Chart,
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	opts.ChartStyle, opts.ColorStyle = readChartStyles(ctx, pkg, part)
 	c, err := ChartExFromElement(root, chartTheme(ctx, pkg, part, theme), opts, names)
 	if err != nil {
 		return nil, fmt.Errorf("reading the chart %s: %w", part, err)
@@ -134,9 +137,9 @@ func ChartExFromElement(root *Element, theme *Theme, opts ChartOptions, names ma
 	if theme == nil || len(theme.Colors) == 0 {
 		theme = officeTheme
 	}
-	p := &chartReader{theme: theme, style: defaultChartStyle, c: &chart.Chart{}, impress: opts.Presentation}
+	p := &chartReader{theme: theme, style: defaultChartStyle, c: &chart.Chart{Rules: chart.OfficeRules, Office2016: true}, impress: opts.Presentation}
 	p.global = p.textProps(cxChild(root, "txPr"))
-	x := &chartExReader{chartReader: p, names: names, data: map[string]*Element{}}
+	x := &chartExReader{chartReader: p, names: names, data: map[string]*Element{}, style: newChartStyle(opts.ChartStyle, opts.ColorStyle, theme)}
 	x.read(root)
 	return p.c, nil
 }
@@ -147,6 +150,8 @@ type chartExReader struct {
 	names map[string]string
 	// data maps a cx:data id to its element.
 	data map[string]*Element
+	// style is the chart's style parts, nil for none.
+	style *chartStyle
 }
 
 // read fills the chart from the chart space root.
@@ -162,17 +167,22 @@ func (x *chartExReader) read(root *Element) {
 		}
 	}
 	ch := cxChild(root, "chart")
-	c.Area = x.frame(cxChild(root, "spPr"), x.autoFrame(true))
+	c.Area = x.frame(cxChild(root, "spPr"), x.styleFrame("chartArea", x.autoFrame(true)))
 	accents := []string{"accent1", "accent2", "accent3", "accent4", "accent5", "accent6"}
 	c.Palette, c.PaletteCycleTint = x.palette(accents), true
+	if x.style != nil && len(x.style.colors) > 0 {
+		c.Palette = make([]typeset.Color, len(x.style.colors))
+		for i, col := range x.style.colors {
+			c.Palette[i] = toTypeset(col)
+		}
+		c.PaletteCycleTint = false
+	}
 	pa := cxChild(ch, "plotArea")
-	c.PlotArea = x.frame(cxChild(pa, "spPr"), x.autoFrame(false))
+	c.PlotArea = x.frame(cxChild(pa, "spPr"), x.styleFrame("plotArea", x.autoFrame(false)))
 	var series []*Element
-	pareto := false
 	for _, s := range cxChild(pa, "plotAreaRegion").Kids() {
 		if s.Is(NSChartEx, "series") && len(series) < chart.MaxSeries {
 			series = append(series, s)
-			pareto = pareto || attrOr(s, "layoutId") == "paretoLine"
 		}
 	}
 	var catAx, valAx *Element
@@ -187,14 +197,9 @@ func (x *chartExReader) read(root *Element) {
 			valAx = a
 		}
 	}
-	g := &chart.Group{Kind: chart.Unsupported, GapWidth: 150, XAxis: 0, YAxis: 1}
-	histogram := !pareto && len(series) > 0
-	for _, s := range series {
-		histogram = histogram && attrOr(s, "layoutId") == "clusteredColumn" && cxChild(cxChild(s, "layoutPr"), "binning") != nil
-	}
-	if histogram {
-		g.Kind = chart.Bar
-	}
+	g := &chart.Group{Kind: x.kindOf(series), GapWidth: 150, XAxis: 0, YAxis: 1}
+	histogram := g.Kind == chart.Bar
+	drawn := g.Kind != chart.Unsupported
 	if v := parseFloat(attrOr(cxChild(catAx, "catScaling"), "gapWidth")); v >= 0 && v <= 5 {
 		// oox's AxisConverter: the gap as a fraction of a bar's width.
 		g.GapWidth = math.Floor(float64(v*100) + 0.5)
@@ -202,16 +207,17 @@ func (x *chartExReader) read(root *Element) {
 	for i, s := range series {
 		g.Series = append(g.Series, x.series(s, i, histogram))
 	}
+	x.styleSeries(g.Series)
 	if len(series) > 0 {
 		c.Groups = append(c.Groups, g)
 	}
 	// The axes belong to the last series; a chart of several series draws
 	// them as secondary axes, whose gridlines LibreOffice does not draw.
-	grid := len(series) <= 1 || histogram
+	grid := len(series) <= 1 || drawn
 	c.Axes = []*chart.Axis{x.axis(catAx, chart.CategoryAxis, grid), x.axis(valAx, chart.ValueAxis, grid)}
-	c.Axes[0].BetweenCategories = histogram
+	c.Axes[0].BetweenCategories = drawn
 	c.Axes[1].Position = chart.AxisLeft
-	if !histogram && len(series) > 0 {
+	if !drawn && len(series) > 0 {
 		// chart2's UnsupportedChart: 10-point text in the default face, in
 		// a white box with a white hairline.
 		white := typeset.Color{R: 1, G: 1, B: 1, A: 1}
@@ -245,6 +251,9 @@ func (x *chartExReader) series(e *Element, i int, histogram bool) *chart.Series 
 	}
 	if ln := cxChild(e, "spPr").Child(NSA, "ln"); ln != nil {
 		s.Border = x.stroke(ln, nil)
+	}
+	if dl := cxChild(e, "dataLabels"); dl != nil {
+		s.Labels = x.dataLabels(dl)
 	}
 	if d := x.data[attrOr(cxChild(e, "dataId"), "val")]; d != nil {
 		for _, dim := range d.Kids() {
@@ -399,9 +408,13 @@ func (x *chartExReader) readTitle(t *Element) {
 	if rich := cxChild(cxChild(t, "tx"), "rich"); rich != nil {
 		own = x.textProps(rich)
 	}
+	style := x.textStyle(own, 18, true, 1.2)
+	if x.style != nil {
+		style = x.styleTextOf("title", own, 14, 18, true)
+	}
 	x.c.Title = &chart.Title{
 		Text:    text,
-		Style:   x.textStyle(own, 18, true, 1.2),
+		Style:   style,
 		Frame:   x.frame(cxChild(t, "spPr"), chart.Frame{}),
 		Overlay: boolAttr(t, "overlay"),
 	}
@@ -424,17 +437,24 @@ func (x *chartExReader) readLegend(lg *Element) {
 	case "b":
 		l.Position = chart.LegendBottom
 	}
-	l.Style = x.textStyle(x.textProps(cxChild(lg, "txPr")), 10, false, 1)
+	l.Style = x.styleTextOf("legend", x.textProps(cxChild(lg, "txPr")), 9, 10, false)
 	l.Frame = x.frame(cxChild(lg, "spPr"), chart.Frame{})
 	x.c.Legend = l
 }
 
-// axis reads a cx:axis (MS-ODRAWXML, 2.24.3.6 CT_Axis) as oox's
-// CxAxisContext does: its scaling, tick marks (crossing by default),
-// labels, number format, gridlines, line and text. A nil e is a missing
-// axis, which is not drawn. grid false leaves the gridlines out.
+// axis reads a cx:axis (MS-ODRAWXML, 2.24.3.6 CT_Axis): its scaling,
+// tick marks (none when the axis states none, as Office draws it; a
+// cx:majorTickMarks without a type crosses, as oox's CxAxisContext reads
+// it), labels, number format, gridlines, line and text. A nil e is a
+// missing axis, which is not drawn. grid false leaves the gridlines out.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx, libreoffice/xlsx: PowerPoint draws funnel-pp1's
+//     category axis line and Excel SimpleHistogram's axes without tick
+//     marks, their axes stating none.
 func (x *chartExReader) axis(e *Element, kind chart.AxisKind, grid bool) *chart.Axis {
-	a := &chart.Axis{Kind: kind, Min: math.NaN(), Max: math.NaN(), MajorUnit: math.NaN(), MinorUnit: math.NaN(), MajorTicks: chart.TickCross, MinorTicks: chart.TickCross}
+	a := &chart.Axis{Kind: kind, Min: math.NaN(), Max: math.NaN(), MajorUnit: math.NaN(), MinorUnit: math.NaN(), MajorTicks: chart.TickNone, MinorTicks: chart.TickNone}
 	if e == nil {
 		a.Deleted = true
 		return a
@@ -455,20 +475,159 @@ func (x *chartExReader) axis(e *Element, kind chart.AxisKind, grid bool) *chart.
 		}
 	}
 	auto := &chart.Stroke{Color: x.autoLine().Color, Width: chartExLineWidth}
+	styleName := "valueAxis"
+	if kind == chart.CategoryAxis {
+		styleName = "categoryAxis"
+	}
+	line, major, minor := auto, auto, auto
+	if x.style != nil {
+		line, _ = x.styleLine(styleName, css.Color{})
+		major, _ = x.styleLine("gridlineMajor", css.Color{})
+		minor, _ = x.styleLine("gridlineMinor", css.Color{})
+	}
 	if g := cxChild(e, "majorGridlines"); g != nil && grid {
-		a.MajorGrid = x.lineOf(cxChild(g, "spPr"), auto)
+		a.MajorGrid = x.lineOf(cxChild(g, "spPr"), major)
 	}
 	if g := cxChild(e, "minorGridlines"); g != nil && grid {
-		a.MinorGrid = x.lineOf(cxChild(g, "spPr"), auto)
+		a.MinorGrid = x.lineOf(cxChild(g, "spPr"), minor)
 	}
-	a.Line = x.lineOf(cxChild(e, "spPr"), auto)
-	a.Style = x.textStyle(x.textProps(cxChild(e, "txPr")), 10, false, 1)
+	a.Line = x.lineOf(cxChild(e, "spPr"), line)
+	a.Style = x.styleTextOf(styleName, x.textProps(cxChild(e, "txPr")), 8, 10, false)
 	if t := cxChild(e, "title"); t != nil {
 		text := txData(cxChild(t, "tx"))
 		if text == "" {
 			text = "Axis Title"
 		}
-		a.Title = &chart.Title{Text: text, Style: x.textStyle(x.textProps(cxChild(t, "txPr")), 10, true, 1), Frame: x.frame(cxChild(t, "spPr"), chart.Frame{})}
+		a.Title = &chart.Title{Text: text, Style: x.styleTextOf("axisTitle", x.textProps(cxChild(t, "txPr")), 10, 10, true), Frame: x.frame(cxChild(t, "spPr"), chart.Frame{})}
 	}
 	return a
+}
+
+// styleFrame returns the frame the chart style's entry name gives, def
+// without a chart style.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: PowerPoint draws funnel-pp1's chart area neither
+//     filled nor framed, where its chart style fills it in bg1 and frames
+//     it, allowing the no-fill and no-line overrides; libreoffice/xlsx:
+//     Excel frames boxWhisker's chart area as its style says.
+func (x *chartExReader) styleFrame(name string, def chart.Frame) chart.Frame {
+	if x.style == nil {
+		return def
+	}
+	var f chart.Frame
+	if fill, ok := x.styleFill(name, css.Color{}); ok && !fill.None {
+		f.Fill = fill
+	}
+	f.Border, _ = x.styleLine(name, css.Color{})
+	if x.impress {
+		// PowerPoint takes the overrides the entry allows: no fill, no
+		// line (MS-ODRAWXML, 2.8.4.7 ST_StyleEntryModifier).
+		mods := strings.Fields(attrOr(x.style.entries[name], "mods"))
+		if slices.Contains(mods, "allowNoFillOverride") {
+			f.Fill = nil
+		}
+		if slices.Contains(mods, "allowNoLineOverride") {
+			f.Border = nil
+		}
+	}
+	return f
+}
+
+// styleSeries gives the series whose file states no fill the chart
+// style's data point fill: none, or an explicit fill; a fill of the
+// series' own colour stays automatic.
+func (x *chartExReader) styleSeries(series []*chart.Series) {
+	if x.style == nil {
+		return
+	}
+	for _, s := range series {
+		if s.Fill != nil {
+			continue
+		}
+		auto := toCSS(x.c.AutoColor(s.Index, len(series)))
+		if f, ok := x.styleFill("dataPoint", auto); ok && (f.None || f.Shape != nil || toCSS(f.Color) != auto) {
+			s.Fill = f
+		}
+	}
+}
+
+// styleTextOf returns the text style of a chart text: the chart style's
+// entry name under own, of def points when neither states a size;
+// without a chart style, LibreOffice's automatic text of def0 points,
+// bold when bold0.
+//
+// # Corpus evidence
+//
+//   - litho/docx, litho/xlsx, litho/pptx: in charts-chartex and chartex,
+//     whose chart style parts state no size, Word, Excel and PowerPoint
+//     print the title in 14 pt regular, the legend in 9 pt, the axis and
+//     data labels in 8 pt, all in tx1.
+func (x *chartExReader) styleTextOf(name string, own textProps, def, def0 float64, bold0 bool) chart.TextStyle {
+	if x.style == nil {
+		return x.textStyle(own, def0, bold0, 1)
+	}
+	return x.textStyle(x.styleText(name).over(own), def, false, 1)
+}
+
+// dataLabels reads a series' cx:dataLabels (MS-ODRAWXML, 2.24.3.24
+// CT_DataLabels): the parts its cx:visibility shows (2.24.3.25), its
+// position (2.24.4.6 ST_DataLabelPos), number format, separator and text.
+func (x *chartExReader) dataLabels(e *Element) chart.Labels {
+	var l chart.Labels
+	vis := cxChild(e, "visibility")
+	l.ShowValue = boolAttr(vis, "value")
+	l.ShowCategory = boolAttr(vis, "categoryName")
+	l.ShowSeries = boolAttr(vis, "seriesName")
+	if sep := cxChild(e, "separator"); sep != nil {
+		l.Separator = sep.Text
+	}
+	switch attrOr(e, "pos") {
+	case "ctr":
+		l.Placement = chart.LabelCenter
+	case "inEnd":
+		l.Placement = chart.LabelInsideEnd
+	case "inBase":
+		l.Placement = chart.LabelInsideBase
+	case "outEnd":
+		l.Placement = chart.LabelOutsideEnd
+	case "t":
+		l.Placement = chart.LabelAbove
+	case "b":
+		l.Placement = chart.LabelBelow
+	case "l":
+		l.Placement = chart.LabelLeft
+	case "r":
+		l.Placement = chart.LabelRight
+	case "bestFit":
+		l.Placement = chart.LabelBestFit
+	}
+	if nf := cxChild(e, "numFmt"); nf != nil && attrOr(nf, "sourceLinked") != "1" {
+		l.Format = attrOr(nf, "formatCode")
+	}
+	l.Style = x.styleTextOf("dataLabel", x.textProps(cxChild(e, "txPr")), 8, 10, false)
+	l.Frame = x.frame(cxChild(e, "spPr"), chart.Frame{})
+	// Office sets a label outside a column's end against it.
+	l.Flush = true
+	return l
+}
+
+// kindOf returns the kind a chart of the cx:series series is drawn as
+// (MS-ODRAWXML, 2.24.4.21 ST_SeriesLayout): bars for a histogram, every
+// series a clusteredColumn with cx:binning; [chart.Unsupported] for the
+// other kinds and their mixes.
+func (x *chartExReader) kindOf(series []*Element) chart.Kind {
+	if len(series) == 0 {
+		return chart.Unsupported
+	}
+	columns := true
+	for _, s := range series {
+		id := attrOr(s, "layoutId")
+		columns = columns && id == "clusteredColumn" && cxChild(cxChild(s, "layoutPr"), "binning") != nil
+	}
+	if columns {
+		return chart.Bar
+	}
+	return chart.Unsupported
 }

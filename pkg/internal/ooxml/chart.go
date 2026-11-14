@@ -165,6 +165,11 @@ type ChartOptions struct {
 	// PptGraphicHelper's default chart area fill, ObjectFormatter's
 	// chart space line).
 	Presentation bool
+	// ChartStyle and ColorStyle are the cs:chartStyle and cs:colorStyle
+	// roots of an Office 2016 chart's style parts, nil for none
+	// (MS-ODRAWXML, 2.8): the formats of what the chart part leaves
+	// automatic.
+	ChartStyle, ColorStyle *Element
 }
 
 // ChartFromElement reads a parsed c:chartSpace element as [ParseChart]

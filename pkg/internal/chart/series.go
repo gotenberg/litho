@@ -271,6 +271,9 @@ func (rd *renderer) barLabel(g *Group, s *Series, j int, v float64, lb Labels, r
 	cx, cy := r.X+float64(r.Width/2), r.Y+float64(r.Height/2)
 	end := func(inside bool) {
 		d := labelSpacing
+		if lb.Flush && !inside {
+			d = 0
+		}
 		if inside {
 			d = -d
 		}

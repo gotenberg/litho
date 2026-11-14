@@ -31,6 +31,9 @@ const (
 	// officeSideLabelGap separates the plot area from the labels of an
 	// axis beside it, in ems of their font size.
 	officeSideLabelGap = 0.928
+	// office2016SideLabelGap, in points whatever the labels' size,
+	// replaces officeSideLabelGap in an Office 2016 chart.
+	office2016SideLabelGap = 6.6
 	// officeUnderLabelGap separates the plot area from the labels of an
 	// axis under or over it, in ems of their font size.
 	officeUnderLabelGap = 0.634
@@ -233,7 +236,18 @@ func (rd *renderer) officeTitle(t *Title, r typeset.Rect) (float64, bool) {
 //   - litho/xlsx: 9.28 pt for 10 pt value labels without tick marks.
 //   - litho/docx: Word keeps 8.35 pt beside 9 pt value labels and 5.71 pt
 //     over 9 pt category labels.
-func officeLabelGap(d *dim, size float64) float64 {
+//   - litho/docx: Word keeps 6.53 and 6.36 pt beside the 8 pt value
+//     labels of charts-chartex's waterfall and histogram, Office 2016
+//     charts (office2016SideLabelGap), and 7.0 pt beside its funnel's
+//     8 pt category labels.
+//   - litho/pptx: PowerPoint keeps 6.68 pt beside the 7.92 pt value
+//     labels of chartex's histogram and 6.84 pt beside its funnel's
+//     category labels; libreoffice/pptx: 6.47 pt beside funnel-pp1's
+//     12 pt ones, where a gap in ems would give 9.8.
+func (rd *renderer) officeLabelGap(d *dim, size float64) float64 {
+	if d.vertical && rd.c.Office2016 {
+		return office2016SideLabelGap
+	}
 	if d.vertical {
 		return float64(officeSideLabelGap * size)
 	}
@@ -263,6 +277,9 @@ func officeLabelGap(d *dim, size float64) float64 {
 //     the plot area's right edge, and 16.07 pt for a scatter chart's
 //     10.1 pt one; 30.98 pt with value labels 15.2 pt wide right of the
 //     plot area, 6.5 pt from the edge.
+//   - litho/docx: Word ends the plot areas of charts-chartex's waterfall
+//     and histogram, Office 2016 charts, 5.96 and 6.22 pt from the right
+//     edge; litho/pptx: PowerPoint chartex's histogram 6.98 pt from it.
 func (rd *renderer) officeRoom(bb, inner typeset.Rect, dims []*dim) typeset.Rect {
 	if !rd.officeLayout() {
 		return bb
@@ -290,6 +307,10 @@ func (rd *renderer) officeRoom(bb, inner typeset.Rect, dims []*dim) typeset.Rect
 	if lg := rd.c.Legend; lg != nil && !lg.Overlay && (lg.Position == LegendTopRight || lg.Position == LegendRight) && !rd.officeSideLegend() {
 		// A legend the file places keeps LibreOffice's distance to the
 		// plot area (officePlot).
+		return bb
+	}
+	if rd.c.Office2016 {
+		// An Office 2016 chart keeps no room past officePad.
 		return bb
 	}
 	return union(bb, typeset.Rect{X: right, Y: inner.Y, Width: officeRightRoom})
@@ -416,7 +437,7 @@ func (rd *renderer) officeLabelExcess(x *dim) float64 {
 	if line == 0 {
 		return 0
 	}
-	return math.Max(0, ext-officeLabelGap(x, fontSize(x.style().Size))-line)
+	return math.Max(0, ext-rd.officeLabelGap(x, fontSize(x.style().Size))-line)
 }
 
 // officeIntervals returns the most major intervals Office's automatic

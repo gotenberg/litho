@@ -74,6 +74,10 @@ type Chart struct {
 	// Rules names the application whose automatic layout and value-axis
 	// scale [Render] follows where the file leaves them to it.
 	Rules Rules
+	// Office2016 marks a chart of the kinds Office 2016 added
+	// (MS-ODRAWXML, 2.24.3 chartex), which under [OfficeRules] keep their
+	// own distances beside the value axis and right of the plot area.
+	Office2016 bool
 	// Word marks a chart of a Word document, which under [OfficeRules]
 	// takes Word's legend keys where Excel's and PowerPoint's differ.
 	Word bool
@@ -719,6 +723,10 @@ type Labels struct {
 	PercentFormat string
 	Style         TextStyle
 	Frame         Frame
+	// Flush sets a label outside a column's end with its line against
+	// the end, no space between, as Office places the labels of its 2016
+	// chart kinds.
+	Flush bool
 	// Custom, when not empty, is the label's own text, which replaces the
 	// parts the flags choose (ECMA-376 Part 1, 21.2.2.47 dLbl's tx; ODF
 	// 1.3 Part 3, loext:data-label's text:p).

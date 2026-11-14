@@ -86,7 +86,7 @@ func TestChartExFromElement_Unsupported(t *testing.T) {
 		t.Errorf("legend = %+v", c.Legend)
 	}
 	x, y := c.Axes[g.XAxis], c.Axes[g.YAxis]
-	if x.Deleted || x.BetweenCategories || x.MajorTicks != chart.TickIn || x.MinorTicks != chart.TickCross {
+	if x.Deleted || x.BetweenCategories || x.MajorTicks != chart.TickIn || x.MinorTicks != chart.TickNone {
 		t.Errorf("category axis = %+v", x)
 	}
 	if y.Deleted || y.Max != 10 || !math.IsNaN(y.Min) || y.Format != "0.0" || y.MajorGrid != nil || y.Position != chart.AxisLeft {

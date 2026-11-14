@@ -786,7 +786,7 @@ func (rd *renderer) placeLabels(d *dim) {
 	}
 	st := d.style()
 	if rd.officeLayout() {
-		gap = officeLabelGap(d, fontSize(st.Size))
+		gap = rd.officeLabelGap(d, fontSize(st.Size))
 	}
 	var items []item
 	maxW := 0.0
