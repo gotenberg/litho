@@ -46,6 +46,11 @@ func (b *builder) style() *css.Style {
 	// LibreOffice wraps Korean at its spaces alone; Excel's rules are
 	// not measured.
 	st.KeepHangul = !b.doc.ExcelRules
+	if b.doc.ExcelRules {
+		// Drawn as measured: Excel's text asks for the text presentation
+		// of emoji (see [excelEmoji]).
+		st.FontVariantEmoji = css.EmojiText
+	}
 	return st
 }
 
