@@ -144,6 +144,35 @@ func (st *layoutState) resolveSeq(style int, script language.Script, seq []rune,
 	return fc
 }
 
+// plainText reports an emoji sequence the plain split already draws as it
+// asks: one character asked to draw as text for which the face found for
+// the character alone is no colour face. [layoutState.resolveSeq] tries
+// the same faces in the same order and takes the first that covers the
+// character and is no colour face, which is that face, so the sequence
+// needs no input of its own. Every digit, # and * of a run under
+// font-variant-emoji: text is such a sequence (they are Emoji characters,
+// the bases of keycaps): a line of figures then splits as it does
+// without the property.
+func (st *layoutState) plainText(idx int, script language.Script, text []rune, sq emojiSeq) bool {
+	if sq.pres != presentText || sq.end-sq.start != 1 {
+		return false
+	}
+	fc := st.resolve(idx, script, text[sq.start])
+	return fc != nil && fc.colourTables() == 0
+}
+
+// primaryDrawsAsText reports whether the first face of style idx draws r
+// as text: it covers r and is no colour face, and the style lists no
+// @font-face faces to try before it. A character asked to draw as text
+// then takes that face whatever [layoutState.resolveSeq] would try, so it
+// is no sequence at all: the figures of a spreadsheet cell, laid out under
+// Excel's text presentation, are found here before a sequence is made for
+// each digit.
+func (st *layoutState) primaryDrawsAsText(idx int, r rune) bool {
+	s := &st.styles[idx]
+	return s.refs == nil && s.primary != nil && s.primary.colourTables() == 0 && st.covers(s.primary, r)
+}
+
 // splitByFace splits in by face as [shaping.SplitByFace] does with the
 // fontmap of style index idx, but gives each emoji sequence of seqs that
 // in holds the one face [layoutState.resolveSeq] picks for it. Without
@@ -159,7 +188,7 @@ func (st *layoutState) splitByFace(in shaping.Input, idx int, seqs []emojiSeq) [
 	}
 	pos := in.RunStart
 	for _, sq := range seqs {
-		if sq.end <= in.RunStart || sq.start >= in.RunEnd {
+		if sq.end <= in.RunStart || sq.start >= in.RunEnd || st.plainText(idx, in.Script, in.Text, sq) {
 			continue
 		}
 		start, end := max(sq.start, in.RunStart), min(sq.end, in.RunEnd)

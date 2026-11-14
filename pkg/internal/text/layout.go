@@ -342,6 +342,9 @@ type layoutState struct {
 	parsed map[*Face]*font.Font
 	byFace map[*font.Face]*Face
 	cache  map[resolveKey]*Face
+	// seqs backs the emoji sequences of the paragraph being split by
+	// face, reused from one paragraph to the next.
+	seqs []emojiSeq
 	// seqCache holds the faces of the emoji sequences resolved so far.
 	seqCache map[seqKey]*Face
 	// colorTables holds the colour tables of the programs a palette was
@@ -949,7 +952,10 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 		return nil, fmt.Errorf("laying out text: %w", err)
 	}
 
-	seqs := emojiSequences(para, func(i int) EmojiVariant { return st.styles[styleOf[i]].style.settings().Emoji })
+	seqs := emojiSequences(para,
+		func(i int) EmojiVariant { return st.styles[styleOf[i]].style.settings().Emoji },
+		func(i int) bool { return st.primaryDrawsAsText(styleOf[i], para[i]) }, st.seqs[:0])
+	st.seqs = seqs
 	var outputs []shaping.Output
 	for _, item := range items {
 		for start := item.RunStart; start < item.RunEnd; {

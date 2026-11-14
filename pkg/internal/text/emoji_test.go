@@ -2,6 +2,7 @@ package text
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/png"
 	"slices"
@@ -35,7 +36,7 @@ func TestEmojiSequences(t *testing.T) {
 		{"abc", EmojiNormal, nil},
 	}
 	for _, c := range cases {
-		got := emojiSequences([]rune(c.text), func(int) EmojiVariant { return c.v })
+		got := emojiSequences([]rune(c.text), func(int) EmojiVariant { return c.v }, nil, nil)
 		if !slices.Equal(got, c.want) {
 			t.Errorf("%q under %d: %v, want %v", c.text, c.v, got, c.want)
 		}
@@ -133,5 +134,35 @@ func TestLayout_EmojiPresentationPicksTheFace(t *testing.T) {
 				t.Errorf("face %q, want %s", got, c.want)
 			}
 		})
+	}
+}
+
+// TestLayout_FiguresAsTextSplitAsPlainText locks that a line of figures
+// under font-variant-emoji: text, as every cell of an Excel sheet is laid
+// out, costs what it costs without the property: the digits, # and * are
+// Emoji characters asked to draw as text, which the face of the line
+// already does ([layoutState.plainText]), so none takes an input of its
+// own. The lines are equal and the layout allocates no more.
+func TestLayout_FiguresAsTextSplitAsPlainText(t *testing.T) {
+	f := newTestFonts(t, fontFile{name: "serif.ttf", data: familyFace("Liberation Serif", "Regular", 400, false, '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '#', '*')})
+	const figures = "1234567.89 #5*0 31.4159 2718.28 1024"
+	plain := Style{Families: []string{"Liberation Serif"}, Size: 10}
+	asText := plain
+	asText.Settings = &FontSettings{Emoji: EmojiText}
+	want, _ := layout(t, f, figures, plain, 1000, Collapse)
+	got, _ := layout(t, f, figures, asText, 1000, Collapse)
+	if len(got) != len(want) || got[0].Width != want[0].Width || len(got[0].Runs) != len(want[0].Runs) {
+		t.Fatalf("as text: %d lines, width %v, %d runs; plain: %d lines, width %v, %d runs",
+			len(got), got[0].Width, len(got[0].Runs), len(want), want[0].Width, len(want[0].Runs))
+	}
+	allocs := func(s Style) float64 {
+		return testing.AllocsPerRun(50, func() {
+			if _, _, err := f.Layout(context.Background(), []Run{{Text: figures, Style: s}}, 1000, Options{Whitespace: Collapse}); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	if base, text := allocs(plain), allocs(asText); text > base {
+		t.Errorf("figures as text allocate %v a layout, plain %v", text, base)
 	}
 }

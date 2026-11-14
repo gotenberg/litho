@@ -107,7 +107,11 @@ type emojiSeq struct {
 // single emoji character, a presentation sequence, a modifier sequence, a
 // flag, a keycap or a tag sequence, or a ZWJ sequence of them (UTS #51,
 // ED-14 to ED-17), with the presentation variant gives the run of each
-// rune. A sequence whose presentation is none is left out.
+// rune. A sequence whose presentation is none is left out, and so is one
+// plain reports: a single character asked to draw as text, without a
+// selector, that its run draws so already (see [layoutState.plainText]);
+// plain may be nil. The sequences are appended to buf, which the caller
+// may reuse from one paragraph to the next.
 //
 // The presentation follows CSS Fonts 4, 6.12: a variation selector wins
 // (VS16 emoji, VS15 text); else font-variant-emoji emoji takes emoji for
@@ -117,8 +121,8 @@ type emojiSeq struct {
 // font-variant-emoji asks for emoji; a flag, a modifier sequence, a tag
 // sequence and a ZWJ sequence take the presentation of their first
 // character, emoji by default.
-func emojiSequences(para []rune, variant func(i int) EmojiVariant) []emojiSeq {
-	var seqs []emojiSeq
+func emojiSequences(para []rune, variant func(i int) EmojiVariant, plain func(i int) bool, buf []emojiSeq) []emojiSeq {
+	seqs := buf
 	for i := 0; i < len(para); {
 		end, vs, kind := emojiElement(para, i)
 		if kind == elementNone {
@@ -133,7 +137,11 @@ func emojiSequences(para []rune, variant func(i int) EmojiVariant) []emojiSeq {
 			}
 			end, multi = next, true
 		}
-		if p := presentationOf(para[i], vs, kind, multi, variant(i)); p != presentNone {
+		p := presentationOf(para[i], vs, kind, multi, variant(i))
+		if p == presentText && end == i+1 && plain != nil && plain(i) {
+			p = presentNone
+		}
+		if p != presentNone {
 			seqs = append(seqs, emojiSeq{start: i, end: end, pres: p})
 		}
 		i = end
