@@ -1592,14 +1592,29 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 			l.hangW += p.p.Advance(end - 1)
 		}
 	}
+	// A box has one fragment on the line, or one a visual run of its spans
+	// on a reordered line.
+	var vis *visualEdges
+	if reorderedLine(pl.Spans) {
+		vis = s.newVisualEdges(p, pl.Spans, start, end)
+	}
+	type fragKey struct {
+		b   *box
+		run int
+	}
 	type extent struct{ x0, x1 float64 }
-	ext := map[*box]*extent{}
+	ext := map[fragKey]*extent{}
+	cur := 0
 	widen := func(b *box, x0, x1 float64) {
-		if g, ok := ext[b]; ok {
+		k := fragKey{b: b}
+		if vis != nil {
+			k.run = vis.run(b, cur)
+		}
+		if g, ok := ext[k]; ok {
 			g.x0, g.x1 = min(g.x0, x0), max(g.x1, x1)
 			return
 		}
-		ext[b] = &extent{x0, x1}
+		ext[k] = &extent{x0, x1}
 	}
 	s.glyphs = 0
 	x := 0.0
@@ -1633,13 +1648,18 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		}
 		x += hyMark.width
 	}
-	for _, sp := range pl.Spans {
+	for i, sp := range pl.Spans {
 		info := p.infos[sp.Run]
+		cur = i
 		// A left-to-right box draws its start edge on the left of its
 		// content and its end edge on the right; a right-to-left box the
 		// other way round, whatever the direction of the text inside.
-		s.closeEdges(p, sp.End, true, closed, &x, widen)
-		s.openEdges(p, sp.Start, true, opened, &x, widen)
+		if vis != nil {
+			s.edges(p, vis, i, true, start, end, &x, widen)
+		} else {
+			s.closeEdges(p, sp.End, true, closed, &x, widen)
+			s.openEdges(p, sp.Start, true, opened, &x, widen)
+		}
 		ascent, descent, gap := sp.Ascent, sp.Descent, sp.LineGap
 		if s.e.opts.PixelFontMetrics {
 			ascent, descent, gap = pixelMetrics(ascent, descent, gap)
@@ -1682,8 +1702,12 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		if info.kind == runEmpty {
 			widen(info.box, it.x, it.x)
 		}
-		s.openEdges(p, sp.Start, false, opened, &x, widen)
-		s.closeEdges(p, sp.End, false, closed, &x, widen)
+		if vis != nil {
+			s.edges(p, vis, i, false, start, end, &x, widen)
+		} else {
+			s.openEdges(p, sp.Start, false, opened, &x, widen)
+			s.closeEdges(p, sp.End, false, closed, &x, widen)
+		}
 	}
 	if officeTabs(s.root.st) {
 		l.bars = barRules(s.root, s.cb, left)
@@ -1693,7 +1717,7 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 	for k := range ext {
 		// Any box on the line will do: the loop only finds whether one is
 		// changed.
-		if k.node != nil && k.node.ChangeBar {
+		if k.b.node != nil && k.b.node.ChangeBar {
 			l.changed = s.root
 		}
 	}
@@ -1704,17 +1728,28 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		}
 	}
 	l.frags = nil
-	present := make([]*box, 0, len(ext))
+	present := make([]fragKey, 0, len(ext))
 	for k := range ext {
-		if k.kind == kindInline {
+		if k.b.kind == kindInline {
 			present = append(present, k)
 		}
 	}
-	slices.SortFunc(present, func(a, b *box) int { return s.d.order[a] - s.d.order[b] })
+	slices.SortFunc(present, func(a, b fragKey) int {
+		if d := s.d.order[a.b] - s.d.order[b.b]; d != 0 {
+			return d
+		}
+		return a.run - b.run
+	})
 	for _, k := range present {
 		g := ext[k]
-		f := &inlineFrag{box: k, x0: g.x0, x1: g.x1}
-		f.left, f.right = edgeSides(k, p.opensIn(k, start, end), p.closesIn(k, start, end))
+		f := &inlineFrag{box: k.b, x0: g.x0, x1: g.x1}
+		f.left, f.right = edgeSides(k.b, p.opensIn(k.b, start, end), p.closesIn(k.b, start, end))
+		if vis != nil {
+			// The edges go to the outer fragments (CSS Writing Modes 3,
+			// 2.4.5).
+			f.left = f.left && k.run == 0
+			f.right = f.right && k.run == vis.lastRun(k.b)
+		}
 		l.frags = append(l.frags, f)
 	}
 	s.emptyStruts(p, start, end)
