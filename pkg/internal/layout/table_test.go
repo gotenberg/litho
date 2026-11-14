@@ -698,3 +698,33 @@ func TestSpreadMinByPercent(t *testing.T) {
 		}
 	}
 }
+
+// TestTable_BaselineOfARowWithoutBaselineCells checks that a first row
+// with no cell aligned on the baseline puts the table's baseline at the
+// bottom content edge of its lowest cell (CSS Tables 3, 3.10.2): the
+// cell's bottom padding and border, collapsed or not, move it not at
+// all, and a cell that spans rows counts for nothing.
+func TestTable_BaselineOfARowWithoutBaselineCells(t *testing.T) {
+	mid := valign(css.Middle)
+	base := func(tm []func(*css.Style), cm ...func(*css.Style)) float64 {
+		td := tableOf(t, doc(table(tm, tr(nil, td(append(mods(mid, border(4, css.Solid, black)), cm...), "a")))), page(200, 100))
+		return pxOf(td.baseline)
+	}
+	want := base(nil)
+	for name, got := range map[string]float64{
+		"bottom border":           base(nil, side(css.Bottom, 20, css.Solid, black)),
+		"bottom padding":          base(nil, func(s *css.Style) { s.Padding[css.Bottom] = css.Pts(px(12)) }),
+		"collapsed bottom border": base(mods(collapse), side(css.Bottom, 20, css.Solid, black)),
+	} {
+		if got != want {
+			t.Errorf("%s: baseline %v, want %v", name, got, want)
+		}
+	}
+	tm := tableOf(t, doc(table(nil,
+		tr(nil, spans(td(mods(mid, height(80)), "a"), 1, 2), td(mods(mid, border(4, css.Solid, black)), "a")),
+		tr(nil, td(mods(mid), "a")))), page(200, 200))
+	r0 := tm.rows[0].box
+	if got, want := pxOf(tm.baseline), pxOf(r0.y+r0.h-tm.table.y)-4; got != want {
+		t.Errorf("baseline %v, want %v: the other cell's content edge, the spanning cell counting for nothing", got, want)
+	}
+}

@@ -836,12 +836,44 @@ func (e *engine) layoutTableOnce(t *box, cb cblock, y float64) {
 	td.hasBaseline = nr > 0
 	if nr > 0 {
 		r0 := td.rows[0].box
-		td.baseline = r0.y + r0.h - t.y
+		td.baseline = firstRowBaseline(td) - t.y
 		if hasBase[0] {
 			td.baseline = r0.y + base[0] - t.y
 		}
 	}
 	e.reach(t.y + t.borderH())
+}
+
+// firstRowBaseline returns the baseline of the first row of td when no
+// cell of it is aligned on the baseline: the bottom content edge of the
+// lowest cell in the row (CSS Tables 3, 3.10.2), its padding and its
+// border, a collapsed half included, left out. A cell that spans rows
+// counts for nothing, as Chromium aligns it; the bottom of the row
+// stands when no other cell is in it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium aligns inline tables of one middle-aligned
+//     cell holding a 10px box by the cell's content, whatever its bottom
+//     border (10px or 20px, separate or collapsed) or padding; a row of
+//     a 10px and a 30px cell by the lower content edge, a top-aligned
+//     cell of height 40px by its stretched content edge; a row whose
+//     40px cell spans two rows by its other, 10px cell.
+func firstRowBaseline(td *tableData) float64 {
+	r0 := td.rows[0].box
+	y, found := 0.0, false
+	for _, c := range td.cells {
+		if c.cell.row != 0 || c.cell.rowSpan > 1 {
+			continue
+		}
+		if b := c.contentY() + c.h; !found || b > y {
+			y, found = b, true
+		}
+	}
+	if !found {
+		return r0.y + r0.h
+	}
+	return y
 }
 
 // layoutCell lays out the content of cell c of td at its column, below the
