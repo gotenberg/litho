@@ -140,6 +140,12 @@ func (w *sheetReader) read(root *ooxml.Element) error {
 			return err
 		}
 	}
+	if d := root.Child(nsMain, "legacyDrawing"); d != nil && w.printed {
+		id, _ := d.AttrNS(ooxml.NSR, "id")
+		if err := w.controls(id); err != nil {
+			return err
+		}
+	}
 	if w.printed {
 		w.conditionalFormats(root)
 	}

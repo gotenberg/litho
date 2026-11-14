@@ -102,8 +102,8 @@ func (r *reader) rangeValues(ref string) []chart.Value {
 
 // drawing reads the drawing part the sheet's relationship id names
 // (ECMA-376 Part 1, 20.5.2.35 wsDr): each anchor in drawing order, its
-// pictures and shapes as one picture, its chart as a chart. Legacy VML
-// drawings, which hold comments, are not read: comments do not print.
+// pictures and shapes as one picture, its chart as a chart. The form
+// controls of the legacy VML drawing are read by [sheetReader.controls].
 func (w *sheetReader) drawing(id string) error {
 	r := w.r
 	rel, ok := r.pkg.RelationshipByID(w.r.ctx, w.part, id)
