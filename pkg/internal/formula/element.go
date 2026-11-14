@@ -98,6 +98,23 @@ type Style struct {
 	// of one character found in the italic mappings is drawn as its
 	// mathematical italic form.
 	MathAuto bool
+	// FontVariants reads mathvariant as a font style, the reading of
+	// MathML 3, 3.2.2 and 3.3.4.2, in place of MathML Core's 4.2:
+	// normal, italic, bold and bold-italic on any element set the weight
+	// and slant of its text and its descendants', and a token math-auto
+	// would draw as a Mathematical Alphanumeric Symbol is drawn in the
+	// italic face of its families. The other values change nothing.
+	// LibreOffice Math draws formulas so; MathML Core and Chromium do
+	// not, and the HTML converter leaves it off.
+	FontVariants bool
+	// OperatorFamilies, when not empty, are the families an mo element's
+	// text is drawn in, before Families, which take the characters they
+	// lack. LibreOffice Math draws its operators in a font of their own.
+	OperatorFamilies []string
+	// ScriptScale is the factor one step of math-depth scales the font
+	// size by when the first available font has no MATH table, in (0, 1];
+	// 0 takes MathML Core's 0.71 (4.5).
+	ScriptScale float64
 	// Hidden is visibility: hidden: the element keeps its box and paints
 	// nothing.
 	Hidden bool

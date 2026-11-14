@@ -24,7 +24,13 @@ func (l *layouter) token(e *Element, st *Style) *box {
 	if st.MathAuto {
 		if rs := []rune(s); len(rs) == 1 {
 			if r, ok := ItalicForm(rs[0]); ok {
-				s = string(r)
+				if st.FontVariants {
+					it := *st
+					it.Italic = true
+					st = &it
+				} else {
+					s = string(r)
+				}
 			}
 		}
 	}

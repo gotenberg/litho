@@ -33,6 +33,8 @@ func (l *layouter) derive(e *Element, p *Element, i int, pst *Style) *Style {
 		Lang: pst.Lang, Fallback: pst.Fallback, Color: pst.Color,
 		Display: pst.Display, Cramped: pst.Cramped, Depth: pst.Depth,
 		MathAuto: pst.MathAuto, Hidden: pst.Hidden,
+		FontVariants: pst.FontVariants, ScriptScale: pst.ScriptScale,
+		OperatorFamilies: pst.OperatorFamilies,
 	}
 	nth := i + 1
 	inheritSize := false
@@ -79,6 +81,10 @@ func (l *layouter) derive(e *Element, p *Element, i int, pst *Style) *Style {
 		st.Cramped = true
 	case "mi":
 		st.MathAuto = !e.attrIs("mathvariant", "normal")
+	case "mo":
+		if len(pst.OperatorFamilies) > 0 {
+			st.Families = append(append(make([]string, 0, len(pst.OperatorFamilies)+len(pst.Families)), pst.OperatorFamilies...), pst.Families...)
+		}
 	case "mphantom":
 		st.Hidden = true
 	case "merror":
@@ -107,6 +113,9 @@ func (l *layouter) derive(e *Element, p *Element, i int, pst *Style) *Style {
 				st.Depth = n
 			}
 		}
+	}
+	if st.FontVariants {
+		fontVariant(e, st)
 	}
 	if c, ok := attrColor(e, "mathcolor"); ok {
 		st.Color = c
@@ -187,7 +196,11 @@ func (l *layouter) depthScale(pst *Style, a, b int) float64 {
 			e--
 		}
 	}
-	s *= detmath.Pow(0.71, float64(min(e, maxDepthSteps)))
+	step := 0.71
+	if pst.ScriptScale > 0 && pst.ScriptScale <= 1 && (f == nil || f.math == nil) {
+		step = pst.ScriptScale
+	}
+	s *= detmath.Pow(step, float64(min(e, maxDepthSteps)))
 	if invert {
 		return 1 / s
 	}
@@ -219,4 +232,26 @@ func parseScriptLevel(v string) (n int, rel, ok bool) {
 		return 0, false, false
 	}
 	return sign * int(min(u, maxDepthSteps)), rel, true // fits int: at most maxDepthSteps
+}
+
+// fontVariant sets the weight and slant the mathvariant attribute of e
+// names on st, its style, under [Style.FontVariants] (MathML 3, 3.2.2):
+// normal is upright and of normal weight, italic and bold-italic are
+// italic, bold and bold-italic bold. An explicit variant replaces the
+// italic of math-auto.
+func fontVariant(e *Element, st *Style) {
+	v, ok := e.Attr("mathvariant")
+	if !ok {
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "normal":
+		st.Weight, st.Italic, st.MathAuto = 400, false, false
+	case "italic":
+		st.Weight, st.Italic, st.MathAuto = 400, true, false
+	case "bold":
+		st.Weight, st.Italic, st.MathAuto = 700, false, false
+	case "bold-italic":
+		st.Weight, st.Italic, st.MathAuto = 700, true, false
+	}
 }
