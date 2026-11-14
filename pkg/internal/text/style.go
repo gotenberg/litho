@@ -138,6 +138,10 @@ type Style struct {
 	// box. The glyphs keep the colour face's drawing. [Fonts.Layout]
 	// ignores it.
 	OfficeEmoji bool
+	// Orientation sets the run's characters upright or sideways in a
+	// vertical line (see [Orientation]); the zero value sets the run as
+	// horizontal text. [Fonts.Layout] ignores it.
+	Orientation Orientation
 }
 
 // FontSettings are the font settings of a [Style] that most text leaves

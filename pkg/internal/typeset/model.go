@@ -181,6 +181,13 @@ type Text struct {
 	// positions. 1 and 0 draw at the natural width. It lies in [MinHScale,
 	// MaxHScale].
 	HScale float64
+	// Upright turns each glyph a quarter turn counter-clockwise about its
+	// origin, which X and Y still place: the run belongs to a vertical
+	// line laid out across the content of a group the page turns a
+	// quarter turn clockwise (CSS Writing Modes 4, 7.3), and its glyphs
+	// stand upright on the page (5.1). Each glyph is then placed by its
+	// own text matrix; Skew and HScale do not apply.
+	Upright bool
 	// Palette, for a run whose face draws layered colour glyphs (OpenType,
 	// COLR and CPAL), fills each layer with the entry of its palette
 	// index; nil fills them with the face's first palette. A layer whose

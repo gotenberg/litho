@@ -488,9 +488,31 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 		NoKerning:         st.FontKerning == css.KerningNone,
 		WordMetrics:       st.WordRules > 0,
 		OfficeEmoji:       st.OfficeEmoji,
+		Orientation:       e.orientation(st),
 	}
 	ts.Settings = e.fontSettings(st, &ts)
 	return ts
+}
+
+// orientation returns how the text of st stands in its line: in
+// vertical-rl and vertical-lr, by text-orientation (CSS Writing Modes 4,
+// 5.1); in the sideways and horizontal writing modes, every character
+// as in a horizontal line. The Office converters draw vertical text
+// sideways, so the orientation applies under [Options.BrowserRules]
+// alone.
+func (e *engine) orientation(st *css.Style) text.Orientation {
+	if !e.opts.BrowserRules || (st.WritingMode != css.VerticalRL && st.WritingMode != css.VerticalLR) {
+		return text.OrientNone
+	}
+	switch st.TextOrientation {
+	case css.OrientUpright:
+		return text.OrientUpright
+	case css.OrientSideways:
+		return text.OrientNone
+	case css.OrientMixed:
+		return text.OrientMixed
+	}
+	return text.OrientMixed
 }
 
 // fontSettings returns the font settings of st for its text style ts,

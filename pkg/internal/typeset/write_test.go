@@ -636,6 +636,32 @@ func TestWriteInvisibleText(t *testing.T) {
 	}
 }
 
+// TestWriteUprightRun turns each glyph of an upright run a quarter turn
+// counter-clockwise about its origin, by a text matrix of its own (ISO
+// 32000-1, 9.4.2): a glyph of a vertical line set upright (CSS Writing
+// Modes 4, 5.1) reaches up and left of its origin.
+func TestWriteUprightRun(t *testing.T) {
+	t.Parallel()
+	txt := run(t, sans, 40, typeset.Point{X: 100, Y: 100}, "HH")
+	txt.Glyphs[1].X, txt.Glyphs[1].Y = 40, 0
+	txt.Upright = true
+	page := &typeset.Page{Width: 200, Height: 200, Content: []typeset.Fragment{txt}}
+	out := write(t, &typeset.Document{Pages: []*typeset.Page{page}})
+	content := inflated(t, out)
+	for _, tm := range []string{"0 -40 -40 0 100 100 Tm", "0 -40 -40 0 140 100 Tm"} {
+		if !bytes.Contains(content, []byte(tm)) {
+			t.Errorf("content lacks %q:\n%s", tm, content)
+		}
+	}
+	img := render(t, open(t, out), 1)
+	if n := inkIn(img, 60, 60, 100, 100); n == 0 {
+		t.Error("no ink up and left of the first glyph's origin")
+	}
+	if n := inkIn(img, 0, 101, 200, 200); n != 0 {
+		t.Errorf("%d pixels of ink below the origins", n)
+	}
+}
+
 // TestWriteSyntheticBoldAndItalic draws a glyph stroked and skewed, as a
 // converter synthesises bold and italic, and checks the operators and the
 // ink: the stroke widens the glyph, the skew moves its top right.

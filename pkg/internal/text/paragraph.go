@@ -214,6 +214,9 @@ type shapedItem struct {
 	// stroke and skew synthesise the bold and italic the face lacks.
 	stroke, skew float64
 	object       bool
+	// upright reports glyphs shaped top to bottom, set upright in a
+	// vertical line ([Style.Orientation]).
+	upright bool
 	// fullQuotes reports a face that draws “ one em wide, read when the
 	// item holds a CJK punctuation: its fullwidth punctuation takes a
 	// quotation mark next to it as fullwidth, whatever face draws the mark
@@ -549,6 +552,13 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 			if ss.style.Fallback.rule() == FallbackChromium {
 				inputs = st.spacesOwnFace(inputs, text, idx)
 			}
+			if o := ss.style.Orientation; o != OrientNone {
+				var oriented []shaping.Input
+				for _, in := range inputs {
+					oriented = append(oriented, splitByOrientation(in, o)...)
+				}
+				inputs = oriented
+			}
 			for _, in := range inputs {
 				if err := st.instanceInput(ctx, &in, &ss.style); err != nil {
 					return fmt.Errorf("shaping text: %w", err)
@@ -617,6 +627,18 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 			it.ascent, it.descent, it.gap = m.Ascent, m.Descent, m.LineGap
 		}
 	}
+	if it.upright = out.Direction.IsVertical() && !out.Direction.IsSideways(); it.upright && fc != nil {
+		// The line box of upright glyphs is the face's horizontal one: the
+		// vertical font extents HarfBuzz reports measure across the
+		// column.
+		m := fc.Metrics(style.Size / doc.sizeAdjust())
+		it.ascent, it.descent, it.gap = m.Ascent, m.Descent, m.LineGap
+	}
+	// center is the distance from the alphabetic baseline down to the
+	// central one, the middle of the em box, on which an upright glyph is
+	// centred (CSS Inline 3, 4.1, the central baseline; CSS Writing Modes
+	// 4, 4.2).
+	center := float64((it.emDescent - it.emAscent) / 2)
 	if upem := float64(out.Face.Upem()); upem > 0 {
 		k := style.Size / upem
 		it.ulPos = -float64(out.Face.LineMetric(gofont.UnderlinePosition)) * k
@@ -643,6 +665,18 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 			yoff:    st.toPoints(-g.YOffset),
 			advance: st.toPoints(g.Advance) * style.scale(),
 			packed:  packGlyph(gid, start, end-start),
+		}
+		if it.upright {
+			// HarfBuzz places a glyph shaped top to bottom by its
+			// horizontal origin, offset from the pen at its vertical
+			// origin, and moves the pen down by the vertical advance, both
+			// with y up. Along the line, which runs down the page, the
+			// glyph sits that far below the pen; across it, the vertical
+			// origin is on the central baseline.
+			it.glyphs[k].xoff = st.toPoints(-g.YOffset)
+			it.glyphs[k].yoff = center + st.toPoints(-g.XOffset)
+			it.glyphs[k].advance = st.toPoints(-g.Advance)
+			continue
 		}
 		if end-start == 1 && cjkPunctuation(p.text[start]) {
 			punctuated = true
@@ -851,7 +885,7 @@ func (p *Paragraph) LineTrimmed(start, end, trim int) ParagraphLine {
 // their advance. The run's glyph slice is allocated at its length: the
 // run lives as long as the page that draws it.
 func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int) float64 {
-	t := &typeset.Text{Face: it.face, Size: it.style.Size, Color: it.style.Color, Origin: typeset.Point{X: sp.X}, Stroke: it.stroke, Skew: it.skew, Palette: it.palette}
+	t := &typeset.Text{Face: it.face, Size: it.style.Size, Color: it.style.Color, Origin: typeset.Point{X: sp.X}, Stroke: it.stroke, Skew: it.skew, Palette: it.palette, Upright: it.upright}
 	hs := it.style.scale()
 	if hs != 1 {
 		t.HScale = hs
@@ -1012,7 +1046,7 @@ func shapesTogether(a, b Style) bool {
 		a.NoSpacingTrim == b.NoSpacingTrim && a.Size == b.Size && a.Lang == b.Lang &&
 		a.LetterSpacing == b.LetterSpacing && a.WordSpacing == b.WordSpacing && a.Scale == b.Scale &&
 		a.NoKerning == b.NoKerning && a.WordMetrics == b.WordMetrics && a.OfficeEmoji == b.OfficeEmoji &&
-		equalSettings(a.Settings, b.Settings)
+		a.Orientation == b.Orientation && equalSettings(a.Settings, b.Settings)
 }
 
 // splitByRun cuts out into one output per run of its characters, each

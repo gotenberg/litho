@@ -409,7 +409,13 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 			writeActualText(&p.buf, spans[0].text)
 		}
 		x, y := t.Origin.X+float64(g.X*hs), t.Origin.Y+g.Y
-		if !started || round(y) != round(baseline) {
+		if t.Upright {
+			// The glyph's space turned a quarter turn counter-clockwise:
+			// its x axis points up the page and its y axis left (9.4.2).
+			tj.end()
+			fmt.Fprintf(&p.buf, "0 %s %s 0 %s %s Tm\n", num(-size), num(-size), num(x+p.off.X), num(y+p.off.Y))
+			started, penX, baseline = true, x, y
+		} else if !started || round(y) != round(baseline) {
 			tj.end()
 			fmt.Fprintf(&p.buf, "%s 0 %s %s %s %s Tm\n", num(size), num(size*t.Skew), num(-size), num(x+p.off.X), num(y+p.off.Y))
 			started, penX, baseline = true, x, y
