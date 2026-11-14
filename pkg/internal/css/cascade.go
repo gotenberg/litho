@@ -72,6 +72,9 @@ type Resolver struct {
 	// featureValues holds the merged @font-feature-values rules whose
 	// media conditions match, by lowercased family name.
 	featureValues map[string]*FontFeatureValues
+	// paletteValues holds the @font-palette-values rules whose media
+	// conditions match, by name, in cascade order.
+	paletteValues map[string][]*PaletteValues
 	warns         []Warning
 	// counters holds the counter styles, the predefined ones and those
 	// of the @counter-style rules whose media conditions match.
@@ -173,6 +176,11 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 		pos int
 	}
 	var values []layeredValues
+	type layeredPalette struct {
+		v   *PaletteValues
+		pos int
+	}
+	var palettes []layeredPalette
 	var facePos []int
 	lay := orderLayers(sheets)
 	for si, sh := range sheets {
@@ -232,6 +240,12 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 				}
 			}
 		}
+		for i := range sh.Sheet.paletteValues {
+			pr := &sh.Sheet.paletteValues[i]
+			if pr.cond.matches(media, cache) {
+				palettes = append(palettes, layeredPalette{&pr.values, lay.of(si, sh.Origin, pr.layer)})
+			}
+		}
 		for i := range sh.Sheet.featureValues {
 			if f := &sh.Sheet.featureValues[i]; f.cond.matches(media, cache) {
 				values = append(values, layeredValues{f.values, lay.of(si, sh.Origin, f.layer)})
@@ -243,6 +257,15 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 	slices.SortStableFunc(values, func(a, b layeredValues) int { return cmp.Compare(a.pos, b.pos) })
 	for _, v := range values {
 		r.addFeatureValues(v.v)
+	}
+	// A later layer's palettes win over an earlier one's (CSS Cascade 5,
+	// 6.4.3), and a later rule over an earlier one of its layer.
+	slices.SortStableFunc(palettes, func(a, b layeredPalette) int { return cmp.Compare(a.pos, b.pos) })
+	for _, p := range palettes {
+		if r.paletteValues == nil {
+			r.paletteValues = map[string][]*PaletteValues{}
+		}
+		r.paletteValues[p.v.Name] = append(r.paletteValues[p.v.Name], p.v)
 	}
 	// A later layer's @font-face rules win over an earlier one's when
 	// their descriptors collide (CSS Cascade 5, 6.4): the faces are

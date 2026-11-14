@@ -133,9 +133,7 @@ func (c *declCtx) warn(code warn.Code, effect warn.Effect, format string, args .
 }
 
 // silentProperties are properties with no effect on a static paged
-// rendering, ignored without a warning. font-palette picks the palette of
-// a colour font (CSS Fonts 4, 9.1), and litho draws no colour glyphs: an
-// outline face draws them, in the text's colour, whatever the palette.
+// rendering, ignored without a warning.
 //
 // # Corpus evidence
 //
@@ -150,7 +148,6 @@ var silentProperties = map[string]bool{
 	"overscroll-behavior": true, "scrollbar-width": true, "scrollbar-color": true,
 	"scrollbar-gutter": true, "color-adjust": true,
 	"text-rendering": true, "font-smooth": true, "speak": true, "zoom": true,
-	"font-palette": true,
 	// Chromium applies these to SVG text alone (baselineProps).
 	"alignment-baseline": true, "dominant-baseline": true, "baseline-shift": true,
 	// image-rendering picks a scaling filter (CSS Images 3, 5.4) and a PDF

@@ -47,6 +47,8 @@ type Stylesheet struct {
 	// featureValues are the @font-feature-values rules, one entry per
 	// family each names, in order.
 	featureValues []featureValuesRule
+	// paletteValues are the @font-palette-values rules, in order.
+	paletteValues []paletteValuesRule
 	// counterStyles are the @counter-style rules, in order.
 	counterStyles []*counterStyleRule
 	// keyframes are the @keyframes rules, in order.
@@ -168,8 +170,7 @@ func (sp *sheetParser) flush(c *declCtx) {
 // Transitions 2, 3.3), and a converted document runs no transition.
 var ignoredAtRules = map[string]bool{
 	"-moz-keyframes": true, "-o-keyframes": true, "starting-style": true,
-	"font-palette-values": true,
-	"property":            true, "viewport": true, "-ms-viewport": true, "view-transition": true,
+	"property": true, "viewport": true, "-ms-viewport": true, "view-transition": true,
 	"namespace": true, "charset": true,
 }
 
@@ -257,6 +258,13 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 			if r, ok := parseKeyframesRule(it.prelude, it.block, c); ok && sp.count() {
 				r.cond, r.layer = cond, sp.layer
 				sp.sheet.keyframes = append(sp.sheet.keyframes, r)
+			}
+		case "font-palette-values":
+			if !it.hasBlock || !sp.count() {
+				return
+			}
+			if v, ok := parsePaletteValues(it.prelude, it.block); ok {
+				sp.sheet.paletteValues = append(sp.sheet.paletteValues, paletteValuesRule{values: v, cond: cond, layer: sp.layer})
 			}
 		case "font-feature-values":
 			if !it.hasBlock || !sp.count() {

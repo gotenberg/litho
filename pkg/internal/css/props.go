@@ -269,6 +269,7 @@ const (
 	pFontVariationSettings
 	pFontOpticalSizing
 	pMarginTrim
+	pFontPalette
 	numProps
 )
 

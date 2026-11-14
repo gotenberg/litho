@@ -1179,6 +1179,9 @@ type Style struct {
 	FontVariantPosition   VariantPosition
 	FontVariantAlternates *Alternates
 	FontVariantEmoji      VariantEmoji
+	// FontPalette is font-palette (CSS Fonts 4, 9.1), nil for normal;
+	// shared and never modified.
+	FontPalette *FontPalette
 	// FontFeatureSettings is font-feature-settings (CSS Fonts 4, 6.12),
 	// nil for normal; the slice is shared and never modified.
 	FontFeatureSettings []FeatureSetting

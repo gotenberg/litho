@@ -493,6 +493,15 @@ func fontFeatureProps() map[propID]propDef {
 			copyFrom: field(func(s *Style) *FontSizeAdjust { return &s.FontSizeAdjust }),
 		},
 		pFontSynthesisSmallCaps: synthesisProp("font-synthesis-small-caps", func(s *Style) *bool { return &s.NoSynthesizeSmallCaps }),
+		pFontPalette: {
+			name: "font-palette", inherited: true, parse: parseFontPalette,
+			compute: func(_ *styler, st *Style, v any) {
+				if p, ok := v.(*FontPalette); ok {
+					st.FontPalette = p
+				}
+			},
+			copyFrom: field(func(s *Style) **FontPalette { return &s.FontPalette }),
+		},
 	}
 }
 

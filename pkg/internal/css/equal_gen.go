@@ -322,6 +322,9 @@ func equalStyle(a, b *Style) bool {
 	if a.FontVariantEmoji != b.FontVariantEmoji {
 		return false
 	}
+	if a.FontPalette != b.FontPalette {
+		return false
+	}
 	if (a.FontFeatureSettings == nil) != (b.FontFeatureSettings == nil) || len(a.FontFeatureSettings) != len(b.FontFeatureSettings) {
 		return false
 	}
@@ -905,6 +908,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = mix(h, uint64(x.FontVariantPosition))
 	h = mixBool(h, x.FontVariantAlternates != nil)
 	h = mix(h, uint64(x.FontVariantEmoji))
+	h = mixBool(h, x.FontPalette != nil)
 	h = mixBool(h, x.FontFeatureSettings == nil)
 	h = mix(h, uint64(len(x.FontFeatureSettings)))
 	for i1 := range x.FontFeatureSettings {
