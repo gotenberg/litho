@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 
@@ -180,6 +181,10 @@ type Paragraph struct {
 	// mem is the conversion's memory budget the glyph runs of its lines
 	// are charged to, nil for none.
 	mem *limits.Budget
+	// ink is the class the glyph of each fullwidth ink-classed punctuation
+	// gives it ([inkClass]), punctNone for the other characters; nil when
+	// the paragraph holds none.
+	ink []punct
 }
 
 // The largest run index of a [Paragraph] fits the 16 bits a character's
@@ -206,6 +211,11 @@ type shapedItem struct {
 	// stroke and skew synthesise the bold and italic the face lacks.
 	stroke, skew float64
 	object       bool
+	// fullQuotes reports a face that draws “ one em wide, read when the
+	// item holds a CJK punctuation: its fullwidth punctuation takes a
+	// quotation mark next to it as fullwidth, whatever face draws the mark
+	// (trimAdjacent).
+	fullQuotes bool
 }
 
 // shapedGlyph is one glyph of a [shapedItem], in points. A paragraph
@@ -575,6 +585,7 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 	}
 	it.glyphs = make([]shapedGlyph, len(out.Glyphs))
 	n := len(p.text)
+	punctuated := false
 	for k, g := range out.Glyphs {
 		start, end := clusterRange(g, n)
 		gid := glyphID(g.GlyphID)
@@ -586,6 +597,20 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 			yoff:    st.toPoints(-g.YOffset),
 			advance: st.toPoints(g.Advance) * style.scale(),
 			packed:  packGlyph(gid, start, end-start),
+		}
+		if end-start == 1 && cjkPunctuation(p.text[start]) {
+			punctuated = true
+			if strings.ContainsRune(inkClassed, p.text[start]) {
+				if p.ink == nil {
+					p.ink = make([]punct, n)
+				}
+				p.ink[start] = inkClass(float64(g.XOffset+g.XBearing+g.Width/2), float64(g.Advance))
+			}
+		}
+	}
+	if punctuated {
+		if gid, ok := out.Face.NominalGlyph('“'); ok {
+			it.fullQuotes = fullwidthGlyph(float64(out.Face.HorizontalAdvance(gid)), float64(out.Face.Upem()))
 		}
 	}
 	if style.LetterSpacing != 0 {
