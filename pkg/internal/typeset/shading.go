@@ -284,6 +284,10 @@ func (p *pageWriter) shadingFill(ctx context.Context, pa *Path, opacity float64)
 	}
 	cur := p.currentAlpha()
 	if refs.translucent {
+		if err := p.w.mem.ChargeUnits(1, maskCost, "soft masks"); err != nil {
+			return fmt.Errorf("writing a translucent shading: %w", err)
+		}
+		p.w.charged += maskCost
 		form := p.w.maskForm(refs.alpha, inverseBBox(pa.Ops, p.off, m))
 		name := fmt.Sprintf("GM%d", len(p.masks)+1)
 		p.masks = append(p.masks, maskUse{name: name, alpha: alphaState{fill: round(opacity), stroke: cur.stroke}, smask: form})
@@ -347,6 +351,20 @@ func (p *pageWriter) shadingName(ref ast.PdfIndirectRef) string {
 	p.shadings = append(p.shadings, shUse{name: name, ref: ref})
 	return name
 }
+
+// maskCost is what the soft mask of one translucent shading fill costs the
+// conversion's memory budget until the file is written: the mask's form
+// XObject and soft mask dictionary, which wait for the end of the file
+// with the other objects, and the graphics state dictionary and name that
+// select it in its page's resources. The form's content stream is
+// charged apart, as a stream kept in memory.
+//
+// # Corpus evidence
+//
+//   - probe, html: a page of 16,000 tiles of a gradient with a
+//     translucent stop holds 2,568 bytes of live heap a tile in the
+//     writer once the page is written, 87 of them in the content stream.
+const maskCost = 2560
 
 // maskForm writes the transparency group of a luminosity soft mask that
 // paints the grey shading alpha over bbox (ISO 32000-1, 11.6.5.2: the group
