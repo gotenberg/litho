@@ -120,7 +120,14 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 			return nil, err
 		}
 	}
-	return p.assemble(res)
+	out, err := p.assemble(res)
+	if err != nil {
+		return nil, err
+	}
+	if err := chargePages(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // makeRoom readies the second layout of [RoomContent] after a first one

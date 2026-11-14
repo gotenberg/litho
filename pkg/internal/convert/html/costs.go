@@ -6,6 +6,7 @@ import (
 	dom "golang.org/x/net/html"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // elementCost is what one element of the parsed document costs the
@@ -83,4 +84,19 @@ func chargeTree(ctx context.Context, doc *dom.Node, src int) (int64, error) {
 		return 0, err
 	}
 	return cost, nil
+}
+
+// chargePages charges the conversion's budget what the pages of doc hold
+// ([typeset.ContentCost]): the caller writes them all once Convert
+// returns, and they live until the document is written, as their glyphs,
+// which the layout charged, do. The charge ends with the conversion's
+// budget.
+func chargePages(ctx context.Context, doc *typeset.Document) error {
+	mem := limits.BudgetFrom(ctx)
+	for _, pg := range doc.Pages {
+		if err := mem.Charge(typeset.ContentCost(pg.Content), "the pages"); err != nil {
+			return err
+		}
+	}
+	return nil
 }

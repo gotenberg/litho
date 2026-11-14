@@ -176,6 +176,16 @@ func TestConvert_JustOverTheBudget(t *testing.T) {
 			format: formatMarkdown, limit: 1 << 20, max: 1 << 12,
 			src: func(n int) string { return strings.Repeat("- an item of words\n", n) },
 		},
+		// Each box paints 100 tiles of a gradient with a translucent stop:
+		// the display list and the soft masks the writer keeps for them
+		// are charged, not the boxes alone. Under 2 MiB: the writer's
+		// compressor, 768 KiB, and one box's soft masks pass 1 MiB.
+		"html tiled backgrounds": {
+			format: formatHTML, limit: 2 << 20, max: 1 << 10,
+			src: func(n int) string {
+				return strings.Repeat(`<div style="width:50px;height:50px;background:linear-gradient(rgba(255,0,0,.5),transparent) 0 0/5px 5px"></div>`, n)
+			},
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

@@ -5,6 +5,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // liveHeap returns the bytes the live objects hold, after a collection.
@@ -72,5 +75,25 @@ func TestChargeTree_ChargesWhatDecodingGrows(t *testing.T) {
 	}
 	if text <= 4 || got != cost+text-4 {
 		t.Errorf("chargeTree = %d for %d bytes of text from 4 source bytes, want %d", got, text, cost+text-4)
+	}
+}
+
+// TestConvert_ChargesThePagesItReturns checks that the pages Convert
+// returns stay charged once it returns: the caller writes them all
+// afterwards.
+func TestConvert_ChargesThePagesItReturns(t *testing.T) {
+	ctx, mem, done := limits.WithBudget(context.Background(), limits.Limits{})
+	defer done()
+	src := strings.Repeat(`<p style="border:1px solid">a word</p>`, 200)
+	doc, err := Convert(ctx, strings.NewReader(src), testFonts(t), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pages int64
+	for _, pg := range doc.Pages {
+		pages += typeset.ContentCost(pg.Content)
+	}
+	if held := mem.Held(); held < pages {
+		t.Errorf("the budget holds %d bytes once Convert returns, under the %d its pages hold", held, pages)
 	}
 }
