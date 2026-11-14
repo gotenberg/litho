@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // dataStyleKinds are the local names of the data style elements of ODF
@@ -266,7 +268,7 @@ func sectionCode(el *Element) string {
 			b.WriteString(pick(long, "mm", "m"))
 		case "seconds":
 			b.WriteString(pick(long, "ss", "s"))
-			if n, err := strconv.Atoi(c.A(NSNumber, "decimal-places")); err == nil && n > 0 {
+			if n, err := intconv.Atoi(c.A(NSNumber, "decimal-places")); err == nil && n > 0 {
 				b.WriteString("." + strings.Repeat("0", min(n, maxSecondDecimals)))
 			}
 		case "am-pm":
@@ -340,7 +342,7 @@ const maxDigits = 30
 // attrInt returns the non-negative integer attribute space:local of el,
 // at most maxDigits, and whether it is present.
 func attrInt(el *Element, space, local string) (int, bool) {
-	n, err := strconv.Atoi(el.A(space, local))
+	n, err := intconv.Atoi(el.A(space, local))
 	if err != nil || n < 0 {
 		return 0, false
 	}

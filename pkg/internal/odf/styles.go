@@ -3,8 +3,9 @@ package odf
 import (
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // Scope says which document's automatic styles a style name resolves in
@@ -309,7 +310,7 @@ func (s *Styles) addSection(sec *Element, auto bool, scope Scope) {
 				Class: el.A(NSStyle, "class"), Auto: auto, El: el,
 			}
 			st.MasterPage, st.HasMasterPage = el.Lookup(NSStyle, "master-page-name")
-			if lv, err := strconv.Atoi(el.A(NSStyle, "default-outline-level")); err == nil && lv > 0 {
+			if lv, err := intconv.Atoi(el.A(NSStyle, "default-outline-level")); err == nil && lv > 0 {
 				st.OutlineLevel = min(lv, MaxListLevels)
 			}
 			if st.Name == "" {
@@ -377,7 +378,7 @@ func parseList(el *Element) *ListStyle {
 		default:
 			continue
 		}
-		n, err := strconv.Atoi(lv.A(NSText, "level"))
+		n, err := intconv.Atoi(lv.A(NSText, "level"))
 		if err != nil || n < 1 || n > MaxListLevels || ls.Levels[n-1] != nil {
 			continue
 		}

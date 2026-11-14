@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -742,7 +743,7 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 	idx := 0
 	for _, dp := range se.All(NSChart, "data-point") {
 		rep := 1
-		if v, err := strconv.Atoi(dp.A(NSChart, "repeated")); err == nil && v > 1 {
+		if v, err := intconv.Atoi(dp.A(NSChart, "repeated")); err == nil && v > 1 {
 			rep = min(v, chart.MaxPoints)
 		}
 		dName := dp.A(NSChart, "style-name")

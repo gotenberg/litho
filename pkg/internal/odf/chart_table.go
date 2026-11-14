@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 )
 
@@ -68,7 +69,7 @@ func readLocalTable(t *Element) *localTable {
 // repeat reads a repetition count, 1 when absent or invalid, capped by
 // chart.MaxPoints.
 func repeat(s string) int {
-	n, err := strconv.Atoi(s)
+	n, err := intconv.Atoi(s)
 	if err != nil || n < 1 {
 		return 1
 	}
@@ -201,7 +202,7 @@ func cellRef(s string) []int {
 			return nil
 		}
 	}
-	row, err := strconv.Atoi(s[i:])
+	row, err := intconv.Atoi(s[i:])
 	if i == 0 || err != nil || row < 1 {
 		return nil
 	}

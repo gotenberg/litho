@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -237,7 +238,7 @@ func (e *enhanced) param(tok string) shape.Arg {
 			return shape.Arg{Kind: shape.ArgGuide, Ref: i}
 		}
 	} else if n, ok := strings.CutPrefix(tok, "$"); ok {
-		if i, err := strconv.Atoi(n); err == nil && i >= 0 && i < e.nAdj {
+		if i, err := intconv.Atoi(n); err == nil && i >= 0 && i < e.nAdj {
 			return shape.Arg{Kind: shape.ArgGuide, Ref: i}
 		}
 	} else if b, ok := identifiers[tok]; ok {

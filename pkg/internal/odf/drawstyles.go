@@ -4,6 +4,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // DrawStyles indexes the drawing styles of a document (ODF 1.3, Part 3,
@@ -260,7 +262,7 @@ func intensity(c Color, v float64) Color {
 func parseDash(el *Element) *StrokeDash {
 	s := &StrokeDash{Style: el.A(NSDraw, "style")}
 	count := func(local string) int {
-		n, err := strconv.Atoi(strings.TrimSpace(el.A(NSDraw, local)))
+		n, err := intconv.Atoi(strings.TrimSpace(el.A(NSDraw, local)))
 		if err != nil || n < 0 {
 			return 0
 		}
@@ -354,7 +356,7 @@ func LegacyAngles(p *Package) bool {
 	case strings.HasPrefix(gen, "LibreOffice/"), strings.HasPrefix(gen, "LibreOfficeDev/"):
 		_, ver, _ := strings.Cut(gen, "/")
 		major, _, _ := strings.Cut(ver, ".")
-		n, err := strconv.Atoi(major)
+		n, err := intconv.Atoi(major)
 		return err == nil && n < 7
 	}
 	return false
