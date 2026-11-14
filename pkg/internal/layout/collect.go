@@ -11,6 +11,7 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/formula"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -571,6 +572,14 @@ func transform(s string, t css.TextTransform, lang string, prev *rune) string {
 	case css.Lowercase:
 		s = cases.Lower(tag).String(s)
 	case css.TransformNone:
+	case css.MathAuto:
+		// A text of one character found in the italic mappings is drawn as
+		// its mathematical italic form (MathML Core, 4.2).
+		if r, size := utf8.DecodeRuneInString(s); size == len(s) && size > 0 {
+			if it, ok := formula.ItalicForm(r); ok {
+				s = string(it)
+			}
+		}
 	case css.Capitalize:
 		// The first typographic letter unit of each word is titlecased;
 		// letters, digits and apostrophes continue a word (CSS Text 3,

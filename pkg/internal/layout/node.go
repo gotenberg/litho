@@ -70,6 +70,14 @@ type Picture struct {
 	// above and holds in Width and Height the size it takes when nothing
 	// else sizes it.
 	Gradient *css.Gradient
+	// HasBaseline gives the picture a baseline of its own, Baseline
+	// points below its top edge, as a formula has one (MathML Core,
+	// 3.1.1): an inline-level replaced box of the picture sits on its
+	// line by that baseline, below its top border and padding, rather
+	// than by its bottom margin edge (CSS 2.1, 10.8.1). The picture is
+	// drawn unscaled from the top of the box's content edge.
+	HasBaseline bool
+	Baseline    float64
 	// view, when set, is the part of the picture an object-view-box makes
 	// its whole: Width and Height are then the part's size.
 	view *viewBox

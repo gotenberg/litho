@@ -62,13 +62,13 @@ func TestStretchAxis_AndItalics(t *testing.T) {
 	if !stretchesInline('→') || !stretchesInline('=') || stretchesInline('(') {
 		t.Error("intrinsic stretch axis misread")
 	}
-	if r, ok := italicForm('h'); !ok || r != 0x210E {
+	if r, ok := ItalicForm('h'); !ok || r != 0x210E {
 		t.Errorf("italic h = %U, %v; want U+210E", r, ok)
 	}
-	if r, ok := italicForm('x'); !ok || r != 0x1D465 {
+	if r, ok := ItalicForm('x'); !ok || r != 0x1D465 {
 		t.Errorf("italic x = %U, %v", r, ok)
 	}
-	if _, ok := italicForm('∞'); ok {
+	if _, ok := ItalicForm('∞'); ok {
 		t.Error("∞ has an italic form")
 	}
 }

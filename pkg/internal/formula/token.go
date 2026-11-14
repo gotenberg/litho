@@ -23,7 +23,7 @@ func (l *layouter) token(e *Element, st *Style) *box {
 	s := strings.Join(strings.Fields(e.Text), " ")
 	if st.MathAuto {
 		if rs := []rune(s); len(rs) == 1 {
-			if r, ok := italicForm(rs[0]); ok {
+			if r, ok := ItalicForm(rs[0]); ok {
 				s = string(r)
 			}
 		}

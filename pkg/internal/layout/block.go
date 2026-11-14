@@ -1769,6 +1769,10 @@ func (e *engine) layoutAtomic(a *box, lcb cblock) {
 	if a.kind == kindReplaced {
 		a.w, a.h = e.replacedSize(a, cblock{w: cbw, h: lcb.h, hDefinite: lcb.hDefinite})
 		a.x, a.y = a.m[css.Left], a.m[css.Top]
+		a.hasBaseline = false
+		if p := a.picture; p != nil && p.HasBaseline {
+			a.baseline, a.hasBaseline = a.bd[css.Top]+a.pd[css.Top]+p.Baseline, true
+		}
 		return
 	}
 	switch w, ok := specWidth(a, a.st.Width, cbw); {

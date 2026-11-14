@@ -184,9 +184,10 @@ func stretchesInline(c rune) bool {
 	return i < len(inlineStretchAxis) && inlineStretchAxis[i] == c
 }
 
-// italicForm returns the mathematical italic form of c (MathML Core, 4.2
-// and C.1), and whether it has one.
-func italicForm(c rune) (rune, bool) {
+// ItalicForm returns the mathematical italic form of c (MathML Core, 4.2
+// and C.1), and whether it has one: what text-transform: math-auto draws
+// a text of the one character c as.
+func ItalicForm(c rune) (rune, bool) {
 	i := sort.Search(len(italicMappings), func(i int) bool { return italicMappings[i][0] >= c })
 	if i < len(italicMappings) && italicMappings[i][0] == c {
 		return italicMappings[i][1], true
