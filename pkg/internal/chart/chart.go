@@ -74,6 +74,9 @@ type Chart struct {
 	// Rules names the application whose automatic layout and value-axis
 	// scale [Render] follows where the file leaves them to it.
 	Rules Rules
+	// Word marks a chart of a Word document, which under [OfficeRules]
+	// takes Word's legend keys where Excel's and PowerPoint's differ.
+	Word bool
 }
 
 // Rules is the application whose automatic chart layout a [Chart] follows.

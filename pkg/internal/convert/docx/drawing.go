@@ -73,6 +73,9 @@ func (d *document) chart(s *story, ref *ooxml.Element, st *css.Style, w, h float
 	for _, cw := range c.Warnings {
 		d.warn(cw.Code, cw.Effect, cw.Message)
 	}
+	// Word draws some parts of a chart otherwise than Excel and
+	// PowerPoint (chart.Chart.Word).
+	c.Word = true
 	ps := inlineStyle(st)
 	ps.Display = css.Inline
 	ps.Width, ps.Height = css.Pts(w), css.Pts(h)

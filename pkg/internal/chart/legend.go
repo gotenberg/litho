@@ -137,9 +137,16 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 		maxText = rem.Width
 	}
 	entries := rd.legendEntries(lg.Style, maxText)
+	lineKey := lineKeyWidth
+	if office || officeSide {
+		lineKey = officeLineKey
+		if rd.c.Word {
+			lineKey = officeWordLineKey
+		}
+	}
 	for _, e := range entries {
 		if e.lineKey {
-			symW = max(symW, lineKeyWidth)
+			symW = max(symW, lineKey)
 		}
 	}
 	var live []legendEntry
@@ -361,6 +368,23 @@ func officeSideLegendTop(page, rem typeset.Rect, h float64) float64 {
 	bottom := page.Y + page.Height - officePad
 	return rem.Y + float64((bottom-rem.Y)/2) - float64(h/2)
 }
+
+// officeLineKey and officeWordLineKey are the widths, in points, of the
+// key of a line series in a legend Office places: Excel's and
+// PowerPoint's, and Word's.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: auto_marker_excel10's right legend draws its line
+//     keys 19.20 pt wide at 10 pt, whatever the marker; litho/xlsx
+//     charts_line_area and charts_combo_secondary, 19.2 pt unscaled.
+//   - litho/pptx: chart-line's keys are 18.72 to 19.44 pt wide at
+//     11.97 pt.
+//   - litho/docx: charts-line-area's keys are 25.20 pt wide at 9 pt.
+const (
+	officeLineKey     = 19.2
+	officeWordLineKey = 25.2
+)
 
 // officeCornerKeyTop is the distance from the top of the room under a
 // chart's title to the first key of a legend in its top right corner

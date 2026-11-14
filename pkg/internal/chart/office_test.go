@@ -642,3 +642,32 @@ func TestRender_OfficeTurnedLabels(t *testing.T) {
 		t.Errorf("value labels = %q under turned labels, want %q", vals, one)
 	}
 }
+
+// TestRender_OfficeLineKey holds the key of a line series in a legend
+// under OfficeRules to Office's width: Excel's and PowerPoint's, or
+// Word's in a chart of a Word document.
+func TestRender_OfficeLineKey(t *testing.T) {
+	for _, tc := range []struct {
+		word bool
+		want float64
+	}{{false, officeLineKey}, {true, officeWordLineKey}} {
+		c := officeChart(1, 2, 3)
+		c.Groups[0].Kind = Line
+		c.Groups[0].Series[0].Fill = nil
+		c.Groups[0].Series[0].Border = &Stroke{Color: red, Width: 1}
+		c.Legend = &Legend{Position: LegendBottom, Style: TextStyle{Size: 10, Color: typeset.Black}}
+		c.Word = tc.word
+		b, frags := plotBounds(t, c, typeset.Rect{Width: 361.2, Height: 145.2})
+		var keys []float64
+		walk(frags, 0, func(fr typeset.Fragment, _ int) {
+			if p, ok := fr.(*typeset.Path); ok && p.Stroke != nil && near(p.Stroke.Color, red) {
+				if kb := bounds(p); kb.Y > b.Y+b.Height && kb.Height == 0 {
+					keys = append(keys, kb.Width)
+				}
+			}
+		})
+		if len(keys) != 1 || math.Abs(keys[0]-tc.want) > 1e-6 {
+			t.Errorf("word %v: line keys %v pt wide, want one of %v", tc.word, keys, tc.want)
+		}
+	}
+}
