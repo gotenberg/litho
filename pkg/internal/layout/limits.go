@@ -95,10 +95,13 @@ const maxFitPasses = 16
 // every real paragraph.
 const maxFragmentationPasses = 4
 
-// maxBackgroundTiles bounds the tiles of one repeated background image:
-// past it the image is drawn once, with a warning. Anti-DoS guard, not
-// spec-mandated: a page-sized box tiled with a 4 by 4 point image takes
-// some 6000 tiles.
+// maxBackgroundTiles bounds the tiles of a border image and of a
+// background drawn one by one: past it a border image is cut short with a
+// warning and a gradient, whose tiles are then a fraction of a pixel
+// each, draws as its average colour. A repeated background image draws as
+// one tiling pattern whatever its count ([engine.patternTiles]).
+// Anti-DoS guard, not spec-mandated: a page-sized box tiled with a 4 by 4
+// point image takes some 6000 tiles.
 const maxBackgroundTiles = 10_000
 
 // maxGroupDepth bounds the groups, for opacity and clipping, nested on a

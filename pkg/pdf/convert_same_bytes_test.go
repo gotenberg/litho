@@ -27,9 +27,9 @@ var sameBytesCases = []struct {
 	want   string
 }{
 	{formatHTML, "html/sources/grid-invoice", "bbeeb8f26e10a8824d8bbfed9c2219b76caa0ac1b2e5a4373f97b822e23c232b"},
-	{formatHTML, "html/sources/backgrounds", "e46a2a7dffbd30ed6224d1a4ff3df9843bc6161f46f53c70e5dd8111482b9232"},
+	{formatHTML, "html/sources/backgrounds", "b6cc1c4be02415a013d5a2a521d18ea98aedb687663b8788e3ce14c6fc0ca217"},
 	{formatHTML, "html/sources/images", "7043ac87a76f1bc2fdf788bf362d438d974ea8f16290b9c69a3259806b5d39fc"},
-	{formatHTML, "html/sources/svg", "b6f7e33b535a9f6978b8a749430112d5ef7e1069753cb7c8ce84209c310f5a56"},
+	{formatHTML, "html/sources/svg", "dba91ada09b643922f086223f32fd2c5ec062db6aeb806f6f1d9e2cd9a63f7eb"},
 	{formatHTML, "html/sources/filter-drop-shadow", "5a632d25f3458a092129aa162c9ce41de53546388e32ddc57b190270fce26f01"},
 	{formatHTML, "html/sources/text-shadow-blur", "1cfa09825f827f5eda0701a3d8d03742e50a8b093e7a506287b2f8f5907ca37f"},
 	{formatMarkdown, "html/sources/markdown-table-align", "0e74cf4ef240afde5f34cd448ff7c201ee8e93471e6426ddbdb2ab9d8c5eddce"},

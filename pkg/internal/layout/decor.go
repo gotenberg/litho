@@ -356,6 +356,12 @@ func (bg *bgPaint) layer(i int, l *css.BackgroundLayer, r typeset.Rect, radii [4
 			continue
 		}
 		pic = naturalPicture(pic, sl.area.Width, sl.area.Height)
+		if pa := p.e.patternTiles(l, pic, sl.area, sl.clip); pa != nil {
+			if !p.addTiles(g, pa) {
+				return
+			}
+			continue
+		}
 		tiles := p.e.tiles(l, pic, sl.area, sl.clip, r.Y)
 		for i, t := range tiles {
 			f := p.e.pictureFrag(pic, t, nil)
@@ -381,6 +387,19 @@ func (bg *bgPaint) layer(i int, l *css.BackgroundLayer, r typeset.Rect, radii [4
 		}
 	}
 	bg.addTo(bg.into, g)
+}
+
+// addTiles adds to the layer group g the path pa that paints its tiles
+// through a tiling pattern, charging it, and reports false when the budget
+// refuses it.
+func (p *painter) addTiles(g *ditem, pa *typeset.Path) bool {
+	top, bottom := pa.Ops[0].P[0].Y, pa.Ops[2].P[0].Y
+	k := &ditem{frag: pa, y0: top, y1: bottom, page: -1}
+	if p.e.chargeDrawn(itemCost(k)); p.e.err != nil {
+		return false
+	}
+	g.kids = append(g.kids, k)
+	return true
 }
 
 // clipArea returns the background painting area that edge names on the
@@ -480,8 +499,33 @@ func (e *engine) tiles(l *css.BackgroundLayer, pic *Picture, area, clip typeset.
 // tileRects returns what [engine.tiles] does, and true with the first
 // tile alone when more than maxBackgroundTiles would cover the clip.
 func tileRects(l *css.BackgroundLayer, pic *Picture, area, clip typeset.Rect) ([]typeset.Rect, bool) {
+	w, h, x0, y0, ok := tileSize(l, pic, area)
+	if !ok {
+		return nil, false
+	}
+	rep := l.Repeat
+	xs := positions(rep[0], x0, w, area.X, area.Width, clip.X, clip.Width)
+	ys := positions(rep[1], y0, h, area.Y, area.Height, clip.Y, clip.Height)
+	if len(xs)*len(ys) > maxBackgroundTiles || len(xs) > maxBackgroundTiles || len(ys) > maxBackgroundTiles {
+		return []typeset.Rect{{X: x0, Y: y0, Width: w, Height: h}}, true
+	}
+	var out []typeset.Rect
+	for _, ty := range ys {
+		for _, tx := range xs {
+			out = append(out, typeset.Rect{X: tx, Y: ty, Width: w, Height: h})
+		}
+	}
+	return out, false
+}
+
+// tileSize returns the size w by h of a tile of the image pic of the
+// background layer l over the positioning area (CSS Backgrounds 3, 3.9,
+// with round's rescaling, 3.4) and the position x0, y0 of the tile its
+// background-position places (3.6); false for a size that is not
+// positive.
+func tileSize(l *css.BackgroundLayer, pic *Picture, area typeset.Rect) (w, h, x0, y0 float64, ok bool) {
 	iw, ih := pic.Width, pic.Height
-	w, h := iw, ih
+	w, h = iw, ih
 	bs := l.Size
 	switch bs.Kind {
 	case css.SizeCover, css.SizeContain:
@@ -521,22 +565,11 @@ func tileRects(l *css.BackgroundLayer, pic *Picture, area, clip typeset.Rect) ([
 		w = w0 * h / h0
 	}
 	if !numeric.PositiveFinite(w) || !numeric.PositiveFinite(h) {
-		return nil, false
+		return 0, 0, 0, 0, false
 	}
-	x0 := area.X + resolve(l.Position[0], area.Width-w)
-	y0 := area.Y + resolve(l.Position[1], area.Height-h)
-	xs := positions(rep[0], x0, w, area.X, area.Width, clip.X, clip.Width)
-	ys := positions(rep[1], y0, h, area.Y, area.Height, clip.Y, clip.Height)
-	if len(xs)*len(ys) > maxBackgroundTiles || len(xs) > maxBackgroundTiles || len(ys) > maxBackgroundTiles {
-		return []typeset.Rect{{X: x0, Y: y0, Width: w, Height: h}}, true
-	}
-	var out []typeset.Rect
-	for _, ty := range ys {
-		for _, tx := range xs {
-			out = append(out, typeset.Rect{X: tx, Y: ty, Width: w, Height: h})
-		}
-	}
-	return out, false
+	x0 = area.X + resolve(l.Position[0], area.Width-w)
+	y0 = area.Y + resolve(l.Position[1], area.Height-h)
+	return w, h, x0, y0, true
 }
 
 // sizeOf resolves one background-size dimension against ref, false for
