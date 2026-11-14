@@ -649,3 +649,16 @@ func TestMulticol_NegativeMarginKeepsTheColumnReached(t *testing.T) {
 		GG___
 		GG___`)
 }
+
+func TestMulticol_PositionedBoxesAloneAreLaidOut(t *testing.T) {
+	t.Parallel()
+	// A column set of absolutely positioned boxes alone lays them out and
+	// paints them (CSS 2.1, 10.1): the container is their containing
+	// block, and they take no room in its columns.
+	box := square(1, 1, blue, abs(0, auto, auto, 3))
+	mc := el(sty(columns(2, 1), height(2), func(s *css.Style) { s.Position = css.Relative }), box)
+	assertPixels(t, run(t, doc(mc), page(5, 3)), 1, `
+		___B_
+		_____
+		_____`)
+}

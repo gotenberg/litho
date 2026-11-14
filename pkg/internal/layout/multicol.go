@@ -527,14 +527,18 @@ func (multicolFormatter) layout(e *engine, b *box, cb cblock, bc *bfc, cursor fl
 			if smc == nil {
 				// A spanner before any column content adjoins the
 				// container's block-start edge (CSS Box 4, 3.3).
-				smc = &marginState{kept: true, trimStart: mc.trimStart && len(d.sets) == 0}
+				smc = &marginState{kept: true, trimStart: mc.trimStart && !slices.ContainsFunc(d.sets, laysOut)}
 			}
 			y = e.layoutBlock(s.spanner, cb, bc, y, smc, breakNone)
 			d.sets = append(d.sets, s)
 			continue
 		}
 		if !hasFlow(s.kids, b.inlineKids) {
+			// The set keeps its absolutely positioned boxes, which
+			// [engine.layoutPositionedInColumns] lays out with no column
+			// to break at.
 			e.placeOutOfFlow(s.kids, kcb, y)
+			d.sets = append(d.sets, s)
 			continue
 		}
 		top := y
@@ -569,6 +573,10 @@ func (multicolFormatter) layout(e *engine, b *box, cb cblock, bc *bfc, cursor fl
 	}
 	return y
 }
+
+// laysOut reports a column set or a spanner that took room in its
+// container: a set of absolutely positioned boxes alone takes none.
+func laysOut(s *colSet) bool { return s.spanner != nil || len(s.frags) > 0 }
 
 // hasFlow reports kids with content to lay out in columns: in-flow boxes,
 // floats, or inline content.
