@@ -859,6 +859,16 @@ func (p *painter) lifted(c *box) {
 //     outline under its spanners' in test and reference alike when the
 //     order is reversed, so they pass either way.
 func (p *painter) outlines(blocks []*box) {
+	if slices.ContainsFunc(blocks, func(k *box) bool { return k.tpart == partTable }) {
+		var all []*box
+		for _, k := range blocks {
+			all = append(all, k)
+			if k.tpart == partTable {
+				all = tableOutlines(k, all, 0)
+			}
+		}
+		blocks = all
+	}
 	if !slices.ContainsFunc(blocks, hasOutline) {
 		return
 	}
@@ -873,6 +883,35 @@ func (p *painter) outlines(blocks []*box) {
 	for i := len(open) - 1; i >= 0; i-- {
 		p.outline(open[i])
 	}
+}
+
+// tableOutlines appends to out, in tree order, the row groups, rows and
+// cells of the table part b that draw an outline and are not positioned,
+// which paint their own: the outline applies to every element (CSS UI 4,
+// 5.1), a table's parts included, as Chromium draws them.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 draws a 10px outline round a row group
+//     and round a row of a table of separated borders, and a 6px one
+//     round a cell, a relatively positioned cell and a row of a
+//     collapsed table.
+func tableOutlines(b *box, out []*box, depth int) []*box {
+	if depth > maxTreeDepth {
+		return out
+	}
+	for _, k := range b.kids {
+		if !k.tpart.internal() || k.layered() || !k.laidOut {
+			continue
+		}
+		if hasOutline(k) {
+			out = append(out, k)
+		}
+		if k.tpart < partCell {
+			out = tableOutlines(k, out, depth+1)
+		}
+	}
+	return out
 }
 
 // hasOutline reports a box whose style asks for an outline.

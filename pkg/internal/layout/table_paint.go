@@ -213,6 +213,10 @@ func (p *painter) tablePart(b *box) {
 		})
 	}
 	each(false, func(c *box, pr placedRow) { p.cellBackgrounds(td, c, pr) })
+	// The part's outline and those of the parts it paints inside it come
+	// after its content, as a block's do ([painter.outlines]).
+	defer p.outline(b)
+	defer p.outlines(tableOutlines(b, nil, 0))
 	if td.collapse {
 		each(true, func(c *box, _ placedRow) { p.cellBlocks(c) })
 		p.collapsedBorders(td, b)

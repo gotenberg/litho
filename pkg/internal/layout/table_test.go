@@ -728,3 +728,28 @@ func TestTable_BaselineOfARowWithoutBaselineCells(t *testing.T) {
 		t.Errorf("baseline %v, want %v: the other cell's content edge, the spanning cell counting for nothing", got, want)
 	}
 }
+
+// TestTable_PartsDrawTheirOutlines checks that a row group, a row and a
+// cell, positioned or not, draw their outlines (CSS UI 4, 5.1: outlines
+// apply to all elements).
+func TestTable_PartsDrawTheirOutlines(t *testing.T) {
+	outline := func(s *css.Style) { s.Outline = css.Border{Width: px(1), Style: css.Solid, Color: red} }
+	rel := func(s *css.Style) { s.Position = css.Relative }
+	cell := func(m ...func(*css.Style)) *Node { return td(append(mods(width(1), height(1)), m...), "") }
+	for name, root := range map[string]*Node{
+		"row group":       doc(table(mods(spacing(2, 2)), tbody(mods(outline), tr(nil, cell())))),
+		"row":             doc(table(mods(spacing(2, 2)), tr(mods(outline), cell()))),
+		"cell":            doc(table(mods(spacing(2, 2)), tr(nil, cell(outline)))),
+		"positioned cell": doc(table(mods(spacing(2, 2)), tr(nil, cell(outline, rel)))),
+	} {
+		t.Run(name, func(t *testing.T) {
+			res := run(t, root, page(5, 5))
+			assertPixels(t, res, 1, `
+				_____
+				_RRR_
+				_R_R_
+				_RRR_
+				_____`)
+		})
+	}
+}
