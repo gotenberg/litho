@@ -10,6 +10,7 @@ import (
 	"golang.org/x/net/html/atom"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // maxSrcsetCandidates caps the image candidates read from one srcset
@@ -378,7 +379,7 @@ func htmlInteger(s string) (int, bool) {
 			return 0, false
 		}
 	}
-	v, err := strconv.Atoi(s)
+	v, err := intconv.Atoi(s)
 	return v, err == nil
 }
 
