@@ -52,7 +52,7 @@ func TestParseShapeStyle_CustomDash(t *testing.T) {
 func TestParseShapeStyle_Gradient(t *testing.T) {
 	sp := spPrOf(t, `<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>`)
 	s := ParseShapeStyle(sp, nil, nil)
-	if s.Gradient == nil || len(s.Gradient.Stops) != 2 || s.Gradient.Angle != 90 || s.Fill == nil || s.Fill.R != 1 {
+	if s.Gradient == nil || len(s.Gradient.Stops) < 3 || s.Gradient.Stops[0].Color.R != 1 || s.Gradient.Stops[len(s.Gradient.Stops)-1].Color.B != 1 || s.Gradient.Angle != 90 || s.Fill == nil || s.Fill.R != 1 {
 		t.Fatalf("%+v", s.Gradient)
 	}
 	frags := s.Paint(nil, typeset.Rect{Width: 10, Height: 10})

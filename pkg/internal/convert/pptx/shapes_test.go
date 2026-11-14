@@ -92,7 +92,7 @@ func TestShapes_FillsAndLines(t *testing.T) {
 		}},
 		{"gradient", `<a:gradFill><a:gsLst><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs></a:gsLst><a:lin ang="5400000"/></a:gradFill>`, "", func(t *testing.T, s *slides.Shape) {
 			g := s.Fill.Gradient
-			if s.Fill.Kind != slides.FillGradient || g.Angle != 90 || g.Radial || len(g.Stops) != 2 || !sameColor(g.Stops[0].Color, rgb(0xFF0000)) {
+			if s.Fill.Kind != slides.FillGradient || g.Angle != 90 || g.Radial || len(g.Stops) != 2 || len(g.Blend) < 3 || !sameColor(g.Blend[0].Color, rgb(0xFF0000)) || !sameColor(g.Blend[len(g.Blend)-1].Color, rgb(0x0000FF)) {
 				t.Errorf("fill %+v %+v", s.Fill, g)
 			}
 		}},

@@ -373,8 +373,14 @@ const (
 // Gradient is a gradient fill (ECMA-376 Part 1, 20.1.8.33 gradFill; ODF
 // 1.3 Part 3, 16.40.1 draw:gradient).
 type Gradient struct {
-	// Stops are the colour stops by rising Position, at least two.
+	// Stops are the colour stops by rising Position, at least two, as the
+	// document gives them.
 	Stops []Stop
+	// Blend, when not nil, holds the stops that paint the gradient: Stops
+	// blended as the document's application blends them, by rising
+	// Position. A table's background and a fill's first colour read
+	// Stops.
+	Blend []Stop
 	// Angle is the direction of a linear gradient in degrees, clockwise,
 	// 0 pointing right (20.1.8.41 lin ang); Radial makes it a radial
 	// gradient instead, Angle ignored.

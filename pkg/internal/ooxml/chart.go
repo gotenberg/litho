@@ -613,8 +613,9 @@ func (p *chartReader) frame(spPr *Element, def chart.Frame) chart.Frame {
 }
 
 // fill reads the fill of a shape properties element and whether it sets
-// one: a:noFill, a:solidFill, a:gradFill (its middle stop), a:pattFill
-// (its foreground colour) (ECMA-376 Part 1, 20.1.8).
+// one: a:noFill, a:solidFill, a:gradFill (its middle stop, and the
+// gradient blended as Office blends it, [Ramp]), a:pattFill (its
+// foreground colour) (ECMA-376 Part 1, 20.1.8).
 func (p *chartReader) fill(spPr *Element) (*chart.Paint, bool) {
 	for _, e := range spPr.Kids() {
 		if e.Space != NSA {
@@ -629,13 +630,13 @@ func (p *chartReader) fill(spPr *Element) (*chart.Paint, bool) {
 			}
 			return nil, true
 		case "gradFill":
-			g := parseGradient(e, p.theme)
+			g := parseGradientStops(e, p.theme)
 			if g == nil {
 				return nil, true
 			}
 			return &chart.Paint{
 				Color: g.Stops[len(g.Stops)/2].Color,
-				Shape: &shape.Paint{Kind: shape.PaintGradient, Stops: g.Stops, Angle: g.Angle, Radial: g.Radial},
+				Shape: &shape.Paint{Kind: shape.PaintGradient, Stops: rampStops(g.Stops), Angle: g.Angle, Radial: g.Radial},
 			}, true
 		case "pattFill":
 			// A pattern without colours draws black on white (20.1.8.47

@@ -127,7 +127,8 @@ func fillRectCrop(fr *ooxml.Element) [4]float64 {
 	return [4]float64{css.Top: -in[css.Top] / fh, css.Right: -in[css.Right] / fw, css.Bottom: -in[css.Bottom] / fh, css.Left: -in[css.Left] / fw}
 }
 
-// gradient reads a gradFill (20.1.8.33): its stops by position, its
+// gradient reads a gradFill (20.1.8.33): its stops by position, and
+// blended as PowerPoint blends them ([officeRamp]), its
 // linear angle (20.1.8.41 lin ang, 60,000ths of a degree clockwise from
 // pointing right) or its path, drawn radial (20.1.8.46 path). A gradient
 // of one stop is that colour at both ends; nil for none.
@@ -154,6 +155,7 @@ func (r *reader) gradient(fc *fillCtx, k *ooxml.Element) *slides.Gradient {
 	if len(g.Stops) == 1 {
 		g.Stops = []slides.Stop{{Position: 0, Color: g.Stops[0].Color}, {Position: 1, Color: g.Stops[0].Color}}
 	}
+	g.Blend = officeRamp(g.Stops)
 	if lin := k.Child(ooxml.NSA, "lin"); lin != nil {
 		a, _ := intAttr(lin, "ang")
 		g.Angle = float64(a) / 60000
@@ -172,6 +174,21 @@ func (r *reader) gradient(fc *fillCtx, k *ooxml.Element) *slides.Gradient {
 		}
 	}
 	return g
+}
+
+// officeRamp returns stops that paint a gradient as PowerPoint blends
+// its stops ([ooxml.Ramp]).
+func officeRamp(stops []slides.Stop) []slides.Stop {
+	in := make([]ooxml.RampStop, len(stops))
+	for i, st := range stops {
+		in[i] = ooxml.RampStop{Pos: st.Position, Color: st.Color}
+	}
+	out := ooxml.Ramp(in)
+	res := make([]slides.Stop, len(out))
+	for i, st := range out {
+		res[i] = slides.Stop{Position: st.Pos, Color: st.Color}
+	}
+	return res
 }
 
 // maxGradientStops caps the stops of a gradient. Anti-DoS guard, not

@@ -420,7 +420,7 @@ func TestChartFromElement_GradientAndPatternFills(t *testing.T) {
 	plot := `<c:barChart><c:barDir val="col"/>` + ser(0, "A", spPr, "1") + `</c:barChart><c:spPr><a:pattFill prst="dkDnDiag"><a:fgClr><a:srgbClr val="00FF00"/></a:fgClr></a:pattFill></c:spPr>`
 	c := readChart(t, chartXML("", "", plot), false)
 	f := c.Groups[0].Series[0].Fill
-	if f == nil || f.Shape == nil || f.Shape.Kind != shape.PaintGradient || len(f.Shape.Stops) != 2 || f.Shape.Angle != 90 {
+	if f == nil || f.Shape == nil || f.Shape.Kind != shape.PaintGradient || len(f.Shape.Stops) < 3 || f.Shape.Angle != 90 || f.Color.B != 1 {
 		t.Errorf("series fill = %+v", f)
 	}
 	pf := c.PlotArea.Fill

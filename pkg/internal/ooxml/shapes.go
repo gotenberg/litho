@@ -219,10 +219,21 @@ func arrowhead(e *Element) shape.Arrowhead {
 const maxGradientStops = 256
 
 // parseGradient reads a gradient fill (20.1.8.33 gradFill): its stops
-// (20.1.8.36 gs, pos in 1/1000 of a percent), a linear one's angle
+// (20.1.8.36 gs, pos in 1/1000 of a percent), blended as Office blends
+// them ([Ramp]), a linear one's angle
 // (20.1.8.41 lin ang, 60,000ths of a degree), or a path one (20.1.8.46
 // path) drawn as radial. nil without a stop.
 func parseGradient(g *Element, theme *Theme) *Gradient {
+	out := parseGradientStops(g, theme)
+	if out != nil {
+		out.Stops = rampStops(out.Stops)
+	}
+	return out
+}
+
+// parseGradientStops reads a gradient fill as [parseGradient] does, its
+// stops as the document gives them.
+func parseGradientStops(g *Element, theme *Theme) *Gradient {
 	out := &Gradient{}
 	for _, gs := range g.Child(NSA, "gsLst").Kids() {
 		if !gs.Is(NSA, "gs") || len(out.Stops) >= maxGradientStops {

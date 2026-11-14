@@ -51,7 +51,11 @@ func (b *builder) fill(f *Fill, box typeset.Rect, ops []typeset.PathOp, mode sha
 			border = g.Border
 			p.Stops = append(p.Stops, typeset.ColorStop{Offset: 0, Color: colorOf(g.Stops[0].Color)})
 		}
-		for _, st := range g.Stops {
+		stops := g.Stops
+		if g.Blend != nil {
+			stops = g.Blend
+		}
+		for _, st := range stops {
 			p.Stops = append(p.Stops, typeset.ColorStop{Offset: border + float64(st.Position*(1-border)), Color: colorOf(st.Color)})
 		}
 		out := shape.Fill(ops, box, p)

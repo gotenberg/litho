@@ -367,12 +367,12 @@ func TestEffects_RunPaint(t *testing.T) {
 			}
 		}, ""},
 		{"linear gradient", `<a:gradFill><a:gsLst><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs></a:gsLst><a:lin ang="2700000"/></a:gradFill>`, func(t *testing.T, p *css.OfficeTextPaint) {
-			if p == nil || len(p.Gradient) != 2 || p.Gradient[0].Color.R != 1 || p.Gradient[1].Pos != 1 || p.Angle != 45 {
+			if p == nil || len(p.Gradient) < 3 || p.Gradient[0].Color.R != 1 || p.Gradient[len(p.Gradient)-1].Pos != 1 || p.Angle != 45 {
 				t.Errorf("paint %+v, want red to blue at 45 degrees", p)
 			}
 		}, ""},
 		{"path gradient", `<a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FFFFFF"/></a:gs><a:gs pos="100000"><a:srgbClr val="C00000"/></a:gs></a:gsLst><a:path path="circle"/></a:gradFill>`, func(t *testing.T, p *css.OfficeTextPaint) {
-			if p == nil || len(p.Gradient) != 2 || p.Angle != 90 {
+			if p == nil || len(p.Gradient) < 3 || p.Angle != 90 {
 				t.Errorf("paint %+v, want a gradient top to bottom", p)
 			}
 		}, "path gradient"},

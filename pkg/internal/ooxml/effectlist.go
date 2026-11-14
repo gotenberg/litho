@@ -160,6 +160,7 @@ func ParseTextPaint(rPr *Element, theme *Theme) (paint *css.OfficeTextPaint, sol
 				}
 			}
 			if len(p.Gradient) >= 2 {
+				p.Gradient = rampTextStops(p.Gradient)
 				set = true
 			} else {
 				p.Gradient = nil
