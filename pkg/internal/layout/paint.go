@@ -820,10 +820,11 @@ func (p *painter) unit(b *box, own bool) {
 	if len(b.st.BackdropFilter) > 0 && b.kind != kindInline {
 		p.backdropFilter(b)
 	}
-	if len(b.st.Filter) > 0 {
+	if len(b.st.Filter) > 0 && b.parent != nil {
 		// The filter applies to the element's rendering before its clip,
 		// mask and opacity (Filter Effects 1, 6; CSS Masking 1, 4): the
-		// innermost group.
+		// innermost group. The root's applies to the root group, canvas
+		// included ([rootGroup]).
 		box := p.borderRect(b)
 		if b.kind == kindInline {
 			box, _ = p.inlineBounds(b) // an element on no line filters what its floats and blocks paint

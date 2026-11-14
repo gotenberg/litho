@@ -175,13 +175,15 @@ func TestBackdropFilter_PrintsTheElementWithOneWarning(t *testing.T) {
 	}
 }
 
-func TestFilter_RootFiltersItsContentNotTheCanvas(t *testing.T) {
-	// Chromium prints the canvas of a root of filter: grayscale(1) in
-	// its colour and the root's content through the filter.
+// TestFilter_RootFiltersTheCanvas locks CSS Compositing 1, 9.1 with
+// Filter Effects 1, 6: the root's filter applies to the root group, which
+// holds the root's background on the canvas, as Chromium shows it on
+// screen.
+func TestFilter_RootFiltersTheCanvas(t *testing.T) {
 	root := el(sty(bg(red), filters(css.Filter{Kind: css.FilterGrayscale, Amount: 1})), el(sty(width(10), height(10), bg(blue))))
 	img := render(t, run(t, root, page(30, 30)), 1)
-	if c := at(img, 20, 20); code(c) != 'R' {
-		t.Errorf("the canvas %v, want red", c)
+	if c := at(img, 20, 20); c.R != c.G || c.G != c.B || c.R > 90 {
+		t.Errorf("the canvas %v, want red made a dark grey", c)
 	}
 	if c := at(img, 5, 5); c.R != c.B || c.B > 30 {
 		t.Errorf("the root's content %v, want blue made a dark grey", c)

@@ -262,6 +262,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 		e.paintMarks(pg, pb)
 		sheet := len(pg.Content)
 		e.paintCanvas(pg, canvas, rb, pb, k)
+		canvasEnd := len(pg.Content)
 		e.paintFrame(pg, pb)
 		if e.opts.MarginContent != nil {
 			pg.Content = append(pg.Content, e.opts.MarginContent(e.infoOf(k), n)...)
@@ -280,6 +281,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 		// the flow down.
 		shift := e.noteShift(k)
 		frags := perPage[k]
+		flowStart := len(pg.Content)
 		for i := 0; i < len(frags); {
 			// A run of fragments is clipped to the page area, the slice of
 			// the flow the page shows; a transformed box that lands on one
@@ -307,6 +309,12 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 				Content:   frags[i:j],
 			})
 			i = j
+		}
+		if rootGroup(rb) {
+			flow := typeset.Matrix{A: 1, D: 1, E: pb.Margin[css.Left], F: pb.Margin[css.Top] - top + shift}
+			content := append(slices.Clone(pg.Content[sheet:canvasEnd]), pg.Content[flowStart:]...)
+			rest := slices.Clone(pg.Content[canvasEnd:flowStart])
+			pg.Content = append(append(pg.Content[:sheet], e.rootGroupOf(rb, content, flow, k)), rest...)
 		}
 		e.assembleNotes(pg, k, pb, used)
 		trim(pg, pb, sheet)
