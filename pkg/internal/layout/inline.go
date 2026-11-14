@@ -2325,6 +2325,33 @@ func (s *inlineState) recordEmptyAnchors(p *ifcPara, start, end int, l *lineBox)
 	}
 }
 
+// rubyOverhangs lays the ruby columns of p out and sets their overhang,
+// which the min- and max-content widths of their line count, as Chromium
+// counts it: a column whose annotation hangs over the text beside it
+// takes the room its base and annotation leave.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 makes a
+//     max-content box of a 60px annotation over a 20px base between two
+//     20px characters 90px wide, 100px under ruby-overhang: none.
+func (e *engine) rubyOverhangs(p *ifcPara) {
+	if p.p == nil {
+		return
+	}
+	for i := range p.p.Len() {
+		info := p.infos[p.p.RunOf(i)]
+		if info.kind != runAtomic || info.box.ruby == nil {
+			continue
+		}
+		e.layoutAtomic(info.box, cblock{})
+		e.rubyOverhang(p, i, info.box)
+		if e.err != nil {
+			return
+		}
+	}
+}
+
 // inlineIntrinsic returns the min- and max-content widths of the inline
 // formatting context of b (CSS Sizing 3, 5.1): its widest unbreakable
 // piece and its widest paragraph.
@@ -2361,16 +2388,30 @@ func (e *engine) inlineIntrinsic(b *box) (float64, float64) {
 		if p.p == nil {
 			continue
 		}
-		minOf := func(a *box) float64 { l, _ := e.contribution(a); return l }
+		e.rubyOverhangs(p)
+		minOf := func(a *box) float64 {
+			if a.ruby != nil {
+				return a.marginW()
+			}
+			l, _ := e.contribution(a)
+			return l
+		}
 		minW := p.paraWidths(minOf)
 		// The max-content line of the first paragraph is its first
 		// formatted line, which a ::first-line styles.
 		mp := p
 		if f := e.firstLines[b]; pi == 0 && f != nil && f.para().p != nil {
 			mp = f.para()
+			e.rubyOverhangs(mp)
 			lo = max(lo, firstSegment(mp, mp.paraWidths(minOf)))
 		}
-		maxW := mp.paraWidths(func(a *box) float64 { _, h := e.contribution(a); return h })
+		maxW := mp.paraWidths(func(a *box) float64 {
+			if a.ruby != nil {
+				return a.marginW()
+			}
+			_, h := e.contribution(a)
+			return h
+		})
 		n := p.p.Len()
 		x := 0.0
 		if indents(b.st, pi == 0 && !afterBlock(b), pi > 0 && d.paras[pi-1].forced) {

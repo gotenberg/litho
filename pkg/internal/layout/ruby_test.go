@@ -358,3 +358,31 @@ func TestRubyOverhangSpaces(t *testing.T) {
 		}
 	}
 }
+
+// TestRubyOverhangIntrinsic locks the max-content width of a line whose
+// annotation hangs over the text beside its ruby: the overhang counts.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 makes a
+//     max-content box of a 60px annotation over a 20px base between two
+//     20px characters 90px wide.
+func TestRubyOverhangIntrinsic(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		overhang css.RubyOverhang
+		want     float64
+	}{
+		// A 120px annotation over a 40px base between two 40px letters:
+		// it hangs 10px over each, or over neither.
+		{css.RubyOverhangAuto, 180}, {css.RubyOverhangSpaces, 200},
+	} {
+		block, ruby, rt := rubyDoc(1, func(s *css.Style) { s.RubyOverhang = c.overhang })
+		block.Float = css.FloatLeft
+		root := el(sty(), el(block, txt(block, "x"), el(ruby, txt(ruby, "A"), el(rt, txt(rt, "abcdef"))), txt(block, "y")))
+		b := kid(t, boxes(t, root, page(600, 300)), 0)
+		if got := rect(b)[2]; !near(got, c.want) {
+			t.Errorf("overhang %d: %gpx wide, want %g", c.overhang, got, c.want)
+		}
+	}
+}
