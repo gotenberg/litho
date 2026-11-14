@@ -116,6 +116,12 @@ func (s *mergePipelinesStage) apply(ctx context.Context, ex *executor) error {
 // first failure cancels the others through their context, and no pipeline
 // starts after it. Every worker has exited when runAll returns.
 //
+// A pipeline that fails once the context has ended is recorded as cancelled,
+// whatever error it returned: a reading cut off mid-way can report a document
+// it never finished reading as a faulty one, and nothing tells that error
+// from one the pipeline would have met anyway. The failure that ended the
+// context is the one to report.
+//
 // # Corpus evidence
 //
 //   - litho/stress html-1mib: eight conversions of it merged, 2,056 pages,
@@ -131,10 +137,19 @@ func (s *mergePipelinesStage) runAll(ctx context.Context, ex *executor, outs []m
 	for range min(ex.concurrency, len(outs)) {
 		wg.Go(func() {
 			for i := range next {
-				if err := ex.runMerged(runCtx, i, s.pipelines[i], &outs[i]); err != nil {
-					errs[i] = err
-					cancel()
+				err := ex.runMerged(runCtx, i, s.pipelines[i], &outs[i])
+				if err == nil {
+					continue
 				}
+				if ended := context.Cause(runCtx); ended != nil {
+					ex.logger.Debug("merged pipeline failed after the stage stopped",
+						slog.Int("pipeline", i),
+						slog.Any("err", err),
+					)
+					err = ended
+				}
+				errs[i] = err
+				cancel()
 			}
 		})
 	}
@@ -154,12 +169,12 @@ feed:
 	return mergedFailure(ctx, errs, outs)
 }
 
-// mergedFailure returns the error of the pipeline that failed at the lowest
-// position for a reason of its own, rather than the cancellation the first
-// failure sent the others, naming it by its position. When every failure is a
-// cancellation, the caller's context was cancelled: it returns the lowest
-// one, or the context's error when no pipeline reported one. It returns nil
-// when every pipeline wrote its output.
+// mergedFailure returns the error of the pipeline that stopped the others,
+// rather than the cancellation its failure sent them, naming it by its
+// position: the lowest one when several failed before any stopped the rest.
+// When every failure is a cancellation, the caller's context was cancelled:
+// it returns the lowest one, or the context's error when no pipeline reported
+// one. It returns nil when every pipeline wrote its output.
 func mergedFailure(ctx context.Context, errs []error, outs []mergedOutput) error {
 	first := -1
 	for i, err := range errs {

@@ -84,9 +84,9 @@ func (s *convertStage) apply(ctx context.Context, ex *executor) error {
 //
 // When one fails, those still running are cancelled through their context,
 // none starts after it, and the stage fails naming the pipeline by its
-// position and wrapping its error. When several fail, the stage reports the
-// lowest position that failed for a reason other than that cancellation. A
-// panic in a pipeline, an Apply closure's included, fails the stage with an
+// position and wrapping its error: the one that stopped the others, a
+// failure that follows it counting as that cancellation whatever it reports.
+// A panic in a pipeline, an Apply closure's included, fails the stage with an
 // error wrapping [ErrInternalPanic]. The result of each is the stage's
 // [StageReport.Pipelines], and the signatures each drops, and those of its
 // output the merge drops, reach [PipelineResult.DroppedSignatures].

@@ -235,41 +235,63 @@ func TestMergePipelinesFailsWithTheFailingPipeline(t *testing.T) {
 	}
 }
 
-// TestMergePipelinesReportsTheLowestFailure pins which failure the stage
-// reports when several pipelines fail for their own reasons: the one at the
-// lowest position, whichever failed first. At concurrency 4 both failing
-// pipelines wait for each other, so both fail on their own, and the higher
-// one fails first.
-func TestMergePipelinesReportsTheLowestFailure(t *testing.T) {
+// TestMergePipelinesReportsTheFailureThatStoppedTheOthers pins which failure
+// the stage reports when a pipeline fails after another one stopped it: the
+// one that stopped it. The lower pipeline waits for its context to end, then
+// fails with an error of its own, as a reading the cancellation cut off
+// reports a faulty document, and the stage records it as the cancellation it
+// follows. Under a context the caller cancels, the same error is the
+// cancellation's too.
+func TestMergePipelinesReportsTheFailureThatStoppedTheOthers(t *testing.T) {
 	t.Parallel()
 	r := openThreePage(t)
 	defer r.Close()
-	errLow, errHigh := errors.New("low"), errors.New("high")
-	for _, n := range []int{1, 4} {
-		var arrived sync.WaitGroup
-		highFailed := make(chan struct{})
-		if n > 1 {
-			arrived.Add(2)
-		}
-		low := NewPipeline().Open(r).Apply(func(context.Context, *Writer) error {
-			if n > 1 {
-				arrived.Done()
-				arrived.Wait()
-				<-highFailed
+	errFirst, errAfter := errors.New("first"), errors.New("after")
+	failsAfter := func(started chan<- struct{}) *Pipeline {
+		return NewPipeline().Open(r).Apply(func(ctx context.Context, _ *Writer) error {
+			if started != nil {
+				close(started)
 			}
-			return errLow
+			<-ctx.Done()
+			return errAfter
 		})
-		high := NewPipeline().Open(r).Apply(func(context.Context, *Writer) error {
-			arrived.Done()
-			arrived.Wait()
-			close(highFailed)
-			return errHigh
-		})
-		_, err := NewPipeline().MergePipelines([]*Pipeline{mergedPages(r, 1), low, mergedPages(r, 2), high}).
-			WriteTo(context.Background(), &bytes.Buffer{}, WithPipelineConcurrency(n))
-		if !errors.Is(err, errLow) || !strings.Contains(err.Error(), "pipeline 1: ") {
-			t.Errorf("concurrency %d: err = %v, want pipeline 1's", n, err)
-		}
+	}
+
+	first := NewPipeline().Open(r).Apply(func(context.Context, *Writer) error { return errFirst })
+	_, err := NewPipeline().MergePipelines([]*Pipeline{mergedPages(r, 1), failsAfter(nil), mergedPages(r, 2), first}).
+		WriteTo(context.Background(), &bytes.Buffer{}, WithPipelineConcurrency(4))
+	if !errors.Is(err, errFirst) || errors.Is(err, errAfter) || !strings.Contains(err.Error(), "pipeline 3: ") {
+		t.Errorf("a sibling failed first: err = %v, want pipeline 3's alone", err)
+	}
+
+	started := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		<-started
+		cancel()
+	}()
+	_, err = NewPipeline().MergePipelines([]*Pipeline{mergedPages(r, 1), failsAfter(started)}).
+		WriteTo(ctx, &bytes.Buffer{}, WithPipelineConcurrency(2))
+	if !errors.Is(err, context.Canceled) || errors.Is(err, errAfter) {
+		t.Errorf("the caller cancelled: err = %v, want the cancellation alone", err)
+	}
+}
+
+// TestMergedFailureReportsTheLowestPosition pins the failure reported when
+// several pipelines failed before any stopped the rest, and when all were
+// cancelled: the one at the lowest position.
+func TestMergedFailureReportsTheLowestPosition(t *testing.T) {
+	t.Parallel()
+	errLow, errHigh := errors.New("low"), errors.New("high")
+	outs := make([]mergedOutput, 4)
+	err := mergedFailure(context.Background(), []error{nil, context.Canceled, errLow, errHigh}, outs)
+	if !errors.Is(err, errLow) || !strings.Contains(err.Error(), "pipeline 2: ") {
+		t.Errorf("two failures of their own: err = %v, want pipeline 2's", err)
+	}
+	err = mergedFailure(context.Background(), []error{nil, context.Canceled, context.Canceled, nil}, outs)
+	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "pipeline 1: ") {
+		t.Errorf("cancellations alone: err = %v, want pipeline 1's", err)
 	}
 }
 
