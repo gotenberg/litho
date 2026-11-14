@@ -388,3 +388,33 @@ func TestPage_Background(t *testing.T) {
 		t.Error("background without rules")
 	}
 }
+
+// TestPage_BackgroundPositionAndLayers locks that the page box takes
+// every background longhand (CSS Page 3, 3.3): background-position sets
+// both axes, background-position-y alone sets the vertical one, and a
+// list of layers keeps each layer.
+func TestPage_BackgroundPositionAndLayers(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		css  string
+		x, y Dimension
+	}{
+		{`@page { background: url(a.png) no-repeat right bottom }`, Dimension{Kind: Percent, Value: 1}, Dimension{Kind: Percent, Value: 1}},
+		{`@page { background-image: url(a.png); background-position-y: 10px; background-position-x: center }`, Dimension{Kind: Percent, Value: 0.5}, pts(7.5)},
+	} {
+		bg := NewResolver(a4, []Sheet{{Sheet: mustParse(t, tt.css), Origin: Author}}).pageOf(t, PageSelector{}).Background
+		if bg == nil {
+			t.Fatalf("%s: no page background", tt.css)
+		}
+		if !dimEq(bg.BackgroundPosition[0], tt.x) || !dimEq(bg.BackgroundPosition[1], tt.y) {
+			t.Errorf("%s: position %+v, want %+v %+v", tt.css, bg.BackgroundPosition, tt.x, tt.y)
+		}
+	}
+	bg := NewResolver(a4, []Sheet{{Sheet: mustParse(t, `@page { background: url(a.png) 0 5px, url(b.png) 0 10px }`), Origin: Author}}).pageOf(t, PageSelector{}).Background
+	if bg == nil || bg.BackgroundLayerCount() != 2 {
+		t.Fatal("page background of two layers not kept")
+	}
+	if l := bg.BackgroundLayer(1); !dimEq(l.Position[1], pts(7.5)) {
+		t.Errorf("second layer position %+v, want 0 10px", l.Position)
+	}
+}

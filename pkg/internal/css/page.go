@@ -375,8 +375,8 @@ func pageDecls(block []token, c *declCtx) []pageDecl {
 			d.important = it.important
 			out = append(out, d)
 		case "background", "background-color", "background-image", "background-repeat",
-			"background-position", "background-size", "background-origin", "background-clip",
-			"background-attachment":
+			"background-position", "background-position-x", "background-position-y",
+			"background-size", "background-origin", "background-clip", "background-attachment":
 			// CSS Page 3 gives the page box the background properties.
 			if containsVar(it.value) {
 				c.warn(warn.CSSUnsupported, warn.Approximated, "@page %s: var() is not supported in page descriptors", name)
@@ -497,7 +497,7 @@ const pageRulesPerCheck = 1024
 // whose other properties keep their initial values: the page box has no
 // parent to inherit from, and currentColor is the initial colour, black.
 func pageBackground(st *Style, e entry, lc lenCtx) {
-	if (e.id < pBgColor || e.id > pBgClip) && e.id != pBgAttachment {
+	if (e.id < pBgColor || e.id > pBgClip) && e.id != pBgAttachment && e.id != pBgPositionY {
 		return
 	}
 	def := &props[e.id]
