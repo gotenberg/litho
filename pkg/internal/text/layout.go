@@ -885,7 +885,11 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 				piece.Language = s.lang
 			}
 			piece.FontFeatures = s.style.features()
-			for _, in := range shaping.SplitByFace(piece, st.fontmap(idx, piece.Script)) {
+			inputs := shaping.SplitByFace(piece, st.fontmap(idx, piece.Script))
+			if s.style.Fallback.rule() == FallbackChromium {
+				inputs = st.spacesOwnFace(inputs, para, idx)
+			}
+			for _, in := range inputs {
 				if err := st.instanceInput(ctx, &in, &s.style); err != nil {
 					return nil, fmt.Errorf("laying out text: %w", err)
 				}
@@ -930,6 +934,60 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 		}
 	}
 	return lines, nil
+}
+
+// spacesOwnFace returns inputs with each space separator that the face of
+// other characters draws, and that the primary face of style idx holds,
+// moved to an input of the primary face, for the runes para. Face
+// splitting keeps a space in the face of the text before it; Blink shapes
+// a run in its first available font and reshapes with a fallback font
+// only the stretches that font lacks, so a space the primary face holds
+// stays in it (CSS Fonts 4, 5.4: each character matches the first font
+// that supports it), and one it lacks takes the fallback face of the
+// stretch around it.
+//
+// # Corpus evidence
+//
+//   - probe, html: the pinned Chromium draws the space between two Han
+//     words at 100px 25px wide under serif (Liberation Serif) and 60px
+//     under monospace (DejaVu Sans Mono), not in the Noto CJK face of the
+//     words; the space of css-text segment-break-transformation-rules-011
+//     and -012, -020, -021, -031, -034 is Ahem's 1em; the figure space
+//     Ahem lacks between two Han characters of
+//     trailing-other-space-separators-break-spaces-009 is the Noto CJK
+//     face's.
+func (st *layoutState) spacesOwnFace(inputs []shaping.Input, para []rune, idx int) []shaping.Input {
+	primary := st.styles[idx].primary
+	moves := func(in shaping.Input, r rune) bool {
+		return r != '\u1680' && unicode.Is(unicode.Zs, r) && st.covers(primary, r) && st.face(primary) != in.Face
+	}
+	split := false
+	for _, in := range inputs {
+		for i := in.RunStart; i < in.RunEnd && !split; i++ {
+			split = moves(in, para[i])
+		}
+	}
+	if !split {
+		return inputs
+	}
+	out := make([]shaping.Input, 0, len(inputs)+2)
+	for _, in := range inputs {
+		for start := in.RunStart; start < in.RunEnd; {
+			own := moves(in, para[start])
+			end := start + 1
+			for end < in.RunEnd && moves(in, para[end]) == own {
+				end++
+			}
+			piece := in
+			piece.RunStart, piece.RunEnd = start, end
+			if own {
+				piece.Face = st.face(primary)
+			}
+			out = append(out, piece)
+			start = end
+		}
+	}
+	return out
 }
 
 // continuesGrapheme reports whether r extends the grapheme before it: a

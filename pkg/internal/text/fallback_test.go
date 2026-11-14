@@ -2,9 +2,12 @@ package text
 
 import (
 	"encoding/binary"
+	"math"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 )
 
 // withRevision sets the head fontRevision of prog to rev, a 16.16
@@ -168,5 +171,53 @@ func TestFonts_CoversByFamilyAndAliases(t *testing.T) {
 	}
 	if f.Covers("Standard Symbols PS", true, 'Z') {
 		t.Error("Standard Symbols PS covers Z, which it lacks")
+	}
+}
+
+// TestShape_SpaceTakesTheFirstFaceThatHoldsIt locks that, under
+// [FallbackChromium], a space between two words of a fallback face is
+// drawn by the primary face when it holds a space, as each character takes
+// the first font that supports it (CSS Fonts 4, 5.4); under the other
+// rules it stays in the face of the text before it.
+//
+// # Corpus evidence
+//
+//   - probe, html: the pinned Chromium draws the space between two Han
+//     words at 100px 25px wide under serif (Liberation Serif's space) and
+//     60px under monospace (DejaVu Sans Mono's), not the Noto CJK face's.
+func TestShape_SpaceTakesTheFirstFaceThatHoldsIt(t *testing.T) {
+	t.Parallel()
+	const han = '日'
+	cjk := fontbuild.TrueType{
+		PostScriptName: "NotoSansCJKJP-Regular",
+		Family:         "Noto Sans CJK JP",
+		Subfamily:      "Regular",
+		NotdefAdvance:  500,
+		Glyphs: []fontbuild.Glyph{
+			{Name: "space", Unicode: ' ', Advance: 3 * spaceAdvance, Empty: true},
+			{Name: "uni65E5", Unicode: han, Advance: 1000},
+		},
+	}.Build()
+	f := newTestFonts(t,
+		fontFile{name: "a_liberation_serif.ttf", data: familyFace("Liberation Serif", "Regular", 400, false)},
+		fontFile{name: "b_sans_jp.ttf", data: withAspect(cjk, 400, false)},
+	)
+	for _, tc := range []struct {
+		name     string
+		fallback Fallback
+		want     float64
+	}{
+		{"Chromium", FallbackChromium, spaceAdvance},
+		{"fontconfig", FallbackFontconfig, 3 * spaceAdvance},
+	} {
+		s := Style{Families: BrowserFamilies([]string{"serif"}, ""), Fallback: tc.fallback, Size: 10}
+		p := shape(t, f, []ParagraphRun{{Text: "日 日", Style: s}}, ParagraphOptions{})
+		if got, want := p.Advance(1), tc.want*10/1000; math.Abs(got-want) > 1e-6 {
+			t.Errorf("%s: space advance %v, want %v", tc.name, got, want)
+		}
+		lines, _ := layout(t, f, "日 日", s, 1000, Collapse)
+		if got, want := lines[0].Width, 20+tc.want*10/1000; math.Abs(got-want) > 1e-6 {
+			t.Errorf("%s: line width %v, want %v", tc.name, got, want)
+		}
 	}
 }
