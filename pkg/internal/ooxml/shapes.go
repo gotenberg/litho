@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -160,9 +161,9 @@ func parseLineStyle(s *ShapeStyle, ln *Element) {
 				continue
 			}
 			// 20.1.10.44 ST_PositivePercentage: thousandths of a percent
-			// of the line width.
-			dv, _ := strconv.Atoi(attrOr(ds, "d"))
-			sv, _ := strconv.Atoi(attrOr(ds, "sp"))
+			// of the line width, an int, which a value past saturates.
+			dv, _ := intconv.Atoi32(attrOr(ds, "d"))
+			sv, _ := intconv.Atoi32(attrOr(ds, "sp"))
 			s.CustDash = append(s.CustDash, max(float64(dv), 0)/100000, max(float64(sv), 0)/100000)
 		}
 	}

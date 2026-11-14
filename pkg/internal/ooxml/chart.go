@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/detmath"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -1214,7 +1215,10 @@ func splitCell(s string) (string, int, bool) {
 	if i == 0 || i > 3 {
 		return "", 0, false
 	}
-	row, err := strconv.Atoi(s[i:])
+	// A row index is an xsd:unsignedInt (ECMA-376 Part 1, 18.3.1.73), and
+	// one past 2^31 - 1 names no row a sheet holds: it reads as no cell on
+	// every platform.
+	row, err := intconv.Atoi32(s[i:])
 	if err != nil || row < 1 {
 		return "", 0, false
 	}
