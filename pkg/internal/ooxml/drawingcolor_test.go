@@ -47,6 +47,7 @@ func TestDrawingColor_Transforms(t *testing.T) {
 		{"preset dk", `<a:prstClr val="dkBlue"/>`, [4]int{0, 0, 139, 255}, true},
 		{"hsl", `<a:hslClr hue="0" sat="100000" lum="50000"/>`, [4]int{255, 0, 0, 255}, true},
 		{"comp", `<a:srgbClr val="FF0000"><a:comp/></a:srgbClr>`, [4]int{0, 255, 255, 255}, true},
+		{"inv", `<a:srgbClr val="4472C4"><a:inv/></a:srgbClr>`, [4]int{248, 235, 179, 255}, true},
 		{"comp 4472C4", `<a:srgbClr val="4472C4"><a:comp/></a:srgbClr>`, [4]int{196, 150, 68, 255}, true},
 		// PowerPoint's colours: a saturation scaled past 1 is not clamped,
 		// its components are cut to the gamut.
