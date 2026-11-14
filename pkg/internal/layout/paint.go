@@ -2345,9 +2345,12 @@ func (e *engine) placeMarker(b *box) {
 		style := e.textStyle(mst, b.lang)
 		// The marker text runs in the item's direction: a right-to-left
 		// item's suffix and its space come left of the number, between it
-		// and the content, as Chromium draws them.
+		// and the content, as Chromium draws them. Under
+		// [Options.BrowserRules] the style is the ::marker's, whose own
+		// direction sets the base direction of its isolated text (CSS
+		// Pseudo 4, 3.2; CSS Lists 3, 3.1.1).
 		dir := text.LeftToRight
-		if rtl {
+		if rtl && !e.opts.BrowserRules || e.opts.BrowserRules && mst.Direction == css.RTL {
 			dir = text.RightToLeft
 		}
 		para, _, err := e.fonts.Shape(e.ctx, []text.ParagraphRun{{Text: m.text, Style: style}}, text.ParagraphOptions{Direction: dir})

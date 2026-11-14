@@ -515,3 +515,28 @@ func TestListMarkers_DisclosureGeometry(t *testing.T) {
 		}
 	}
 }
+
+// TestListMarkers_MarkerDirectionOrdersItsText locks that under
+// BrowserRules an outside marker's text is ordered in the ::marker's own
+// direction (CSS Pseudo 4, 3.2 lists direction among the properties a
+// ::marker takes): "2. " in a right-to-left ::marker of a left-to-right
+// item reads " .2", the full stop left of the number.
+//
+// # Corpus evidence
+//
+//   - wpt: css/css-pseudo/marker-content-023 and marker-text-align-001,
+//     in the screenshot of the Chromium of gotenberg/gotenberg:9.4.1,
+//     draw the decimal marker of a left-to-right item whose ::marker is
+//     direction: rtl as " .2", ending at the item's edge.
+func TestListMarkers_MarkerDirectionOrdersItsText(t *testing.T) {
+	st := sty(display(css.ListItem), func(s *css.Style) { s.ListStylePosition = css.Outside })
+	mst := sty(func(s *css.Style) { s.Direction = css.RTL; s.WhiteSpace = css.Pre })
+	li := el(st, txt(st, "x"))
+	li.Marker = el(mst, txt(mst, "2."))
+	res := runWith(t, doc(el(sty(padding(0, 0, 0, 50)), li)), Options{Page: page(200, 50), BrowserRules: true})
+	got := glyphLayout(res, 1)
+	dot, two := strings.Index(got, ".@"), strings.Index(got, "2@")
+	if dot < 0 || two < 0 || dot > two {
+		t.Errorf("glyphs %s, want the full stop before the 2", got)
+	}
+}
