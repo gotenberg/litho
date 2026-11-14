@@ -374,3 +374,37 @@ func TestRender_OfficeValueAxisTitle(t *testing.T) {
 		t.Errorf("title room = %v, want %v", got, want)
 	}
 }
+
+// TestRender_OfficeSideLegend holds a legend right of the plot area under
+// OfficeRules to Office's distances: its text ends officePad and
+// officeSideTextPad from the chart's edge, its key officeKeyGap before the
+// text, and the plot area ends officeRightRoom, officeSideLegendGap and
+// officeSideKeyPad left of the key.
+func TestRender_OfficeSideLegend(t *testing.T) {
+	c := officeChart(2.3333, 3.5, 7)
+	c.Title = &Title{Text: "T", Style: TextStyle{Size: 10, Color: typeset.Black}}
+	c.Legend = &Legend{Position: LegendRight, Style: TextStyle{Size: 10, Color: typeset.Black}}
+	r := typeset.Rect{Width: 361.2, Height: 145.2}
+	b, frags := plotBounds(t, c, r)
+	keys := paths(frags, red)
+	var key *typeset.Rect
+	for _, p := range keys {
+		if kb := bounds(p); kb.X > b.X+b.Width {
+			key = &kb
+		}
+	}
+	if key == nil {
+		t.Fatal("no legend key right of the plot area")
+	}
+	if math.Abs(key.Width-officeKeySize*10) > 1e-6 {
+		t.Errorf("key width = %v, want %v", key.Width, officeKeySize*10)
+	}
+	// The entry "S" is one 10 pt Ahem square.
+	textEnd := key.X + key.Width + officeKeyGap*10 + 10
+	if want := r.Width - officePad - officeSideTextPad; math.Abs(textEnd-want) > 1e-6 {
+		t.Errorf("legend text ends at %v, want %v", textEnd, want)
+	}
+	if want := key.X - officeSideKeyPad - officeSideLegendGap - officeRightRoom; math.Abs(b.X+b.Width-want) > 1e-6 {
+		t.Errorf("plot area ends at %v, want %v", b.X+b.Width, want)
+	}
+}

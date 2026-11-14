@@ -116,12 +116,20 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 	xOff := max(minLegendSpacing, fs*0.66)
 	yPad := max(minLegendSpacing, fs*0.2)
 	yOff := max(minLegendSpacing, fs*0.2)
-	office := rd.officeLegend()
-	if office {
+	office, officeSide := rd.officeLegend(), rd.officeSideLegend()
+	if office || officeSide {
 		yPad, yOff = officeLegendPad, 2*officeLegendPad
+	}
+	// leftPad and rightPad pad the entries from the legend's edges.
+	leftPad, rightPad := xPad, xPad
+	if officeSide {
+		leftPad, rightPad = officeSideKeyPad, officeSideTextPad
 	}
 	symDist := max(minLegendSpacing, fs*0.22)
 	symH := float64(fs * 0.6)
+	if office || officeSide {
+		symDist, symH = float64(fs*officeKeyGap), float64(fs*officeKeySize)
+	}
 	symW := symH
 	side := lg.Position == LegendLeft || lg.Position == LegendRight || lg.Position == LegendTopRight
 	maxText := rem.Width * 3 / 10
@@ -173,7 +181,7 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 		colW[c] = max(colW[c], e.label.w+symPlus)
 		rowH[r] = max(rowH[r], e.label.h)
 	}
-	w, h := float64(2*xPad)+float64(float64(cols-1)*xOff), float64(2*yPad)+float64(float64(rows-1)*yOff)
+	w, h := leftPad+rightPad+float64(float64(cols-1)*xOff), float64(2*yPad)+float64(float64(rows-1)*yOff)
 	for _, v := range colW {
 		w += v
 	}
@@ -184,6 +192,9 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 	switch lg.Position {
 	case LegendLeft:
 		x, y = page.X+legendSideMargin, page.Y+float64(page.Height/2)-float64(h/2)
+		if officeSide {
+			x, y = page.X+officePad, officeSideLegendTop(page, *rem, h)
+		}
 	case LegendTop:
 		x, y = page.X+float64(page.Width/2)-float64(w/2), rem.Y+legendTopMargin
 		if office {
@@ -198,6 +209,9 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 		x, y = page.X+page.Width-legendSideMargin-w, rem.Y+legendTopMargin
 	case LegendRight:
 		x, y = page.X+page.Width-legendSideMargin-w, page.Y+float64(page.Height/2)-float64(h/2)
+		if officeSide {
+			x, y = page.X+page.Width-officePad-w, officeSideLegendTop(page, *rem, h)
+		}
 	}
 	if l := lg.Layout; l != nil {
 		// A placed legend keeps its corner, and its size when the file
@@ -224,7 +238,7 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 	x = max(page.X, min(x, page.X+page.Width-w))
 	y = max(page.Y, min(y, page.Y+page.Height-h))
 	rd.frame(typeset.Rect{X: x, Y: y, Width: w, Height: h}, lg.Frame)
-	cx := x + xPad
+	cx := x + leftPad
 	for c := 0; c < cols; c++ {
 		cy := y + yPad
 		for r := 0; r < rows; r++ {
@@ -235,6 +249,11 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 			e := entries[i]
 			lineH := e.label.lineH[0]
 			sy := cy + float64((lineH-symH)/2)
+			if office || officeSide {
+				l := e.label.lines[0]
+				base := cy + float64((lineH-l.Ascent-l.Descent)/2) + l.Ascent
+				sy = base - float64(fs*officeKeyRaise) - float64(symH/2)
+			}
 			rd.key(e, typeset.Rect{X: cx, Y: sy, Width: symW, Height: symH})
 			rd.out = append(rd.out, e.label.draw(cx+symPlus+float64(e.label.w/2), cy+float64(e.label.h/2), alignLeft)...)
 			cy += rowH[r] + yOff
@@ -242,6 +261,18 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 		cx += colW[c] + xOff
 	}
 	if lg.Overlay {
+		return
+	}
+	if officeSide {
+		// An Office legend beside the plot area keeps officeSideLegendGap
+		// from the room of the plot area and its axis labels.
+		if lg.Position == LegendLeft {
+			d := x + w + officeSideLegendGap - rem.X
+			rem.X += d
+			rem.Width -= d
+		} else {
+			rem.Width = x - officeSideLegendGap - rem.X
+		}
 		return
 	}
 	if office {
@@ -270,6 +301,25 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 	case LegendRight:
 		rem.Width -= w + legendSideMargin
 	}
+}
+
+// officeSideLegendTop returns the top of a legend h points high that
+// Office puts beside the plot area: centred between rem's top, under the
+// chart's title, and officePad over the bottom of the chart's rectangle
+// page.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: a legend of two 10 pt entries left or right of the
+//     plot area of a chart 145.2 pt high under a 10 pt title has its
+//     first key 71.42 pt under the chart's top, both sides alike, its
+//     keys 18.08 pt apart; its first key starts 11.0 pt from the left
+//     edge, its longest text ends 10.06 to 10.18 pt from the right edge,
+//     and the plot area ends 16.0 pt left of the keys at the right, with
+//     entries 6.5 to 84.2 pt wide.
+func officeSideLegendTop(page, rem typeset.Rect, h float64) float64 {
+	bottom := page.Y + page.Height - officePad
+	return rem.Y + float64((bottom-rem.Y)/2) - float64(h/2)
 }
 
 // oneRow reports entries that fit in one row of width avail, each as wide

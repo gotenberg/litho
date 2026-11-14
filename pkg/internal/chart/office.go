@@ -53,6 +53,32 @@ const (
 	// comes first under it when no title stands there: a legend above the
 	// plot area, or the room of the axis labels.
 	officeTopPad = 5.0
+	// officeSideKeyPad is the distance from the edge of a legend beside
+	// the plot area to its keys, and officeSideTextPad from its longest
+	// text to its other edge; the legend stands officePad from the
+	// chart's edge.
+	officeSideKeyPad  = 4.5
+	officeSideTextPad = 3.6
+	// officeSideLegendGap separates a legend beside the plot area from the
+	// room of the plot area and its axis labels.
+	officeSideLegendGap = 7.0
+)
+
+// The key of an entry of a legend Office places, in ems of the legend's
+// font size: a square officeKeySize wide whose centre stands
+// officeKeyRaise over the text's baseline, officeKeyGap before the text.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: Excel's keys are 5.49 pt squares at 10 pt, centred
+//     2.86 pt over the baseline, 2.38 to 2.44 pt before the text, in
+//     legends above, below and beside the plot area.
+//   - litho/docx: Word's are 4.94 pt squares at 9 pt, centred 2.61 pt
+//     over the baseline, 2.21 to 2.31 pt before the text.
+const (
+	officeKeySize  = 0.549
+	officeKeyRaise = 0.2875
+	officeKeyGap   = 0.245
 )
 
 // office reports a chart drawn by Office's rules.
@@ -82,9 +108,17 @@ func (rd *renderer) officeLegend() bool {
 	return lg != nil && lg.Layout == nil && (lg.Position == LegendTop || lg.Position == LegendBottom) && rd.officeLayout()
 }
 
+// officeSideLegend reports a legend Office's rules place left or right of
+// the plot area of a chart [renderer.officeLayout] places, at no position
+// the file fixes. A legend at the top right keeps LibreOffice's placement.
+func (rd *renderer) officeSideLegend() bool {
+	lg := rd.c.Legend
+	return lg != nil && lg.Layout == nil && (lg.Position == LegendLeft || lg.Position == LegendRight) && rd.officeLayout()
+}
+
 // officePlot draws the title and legend of r's chart where Office puts
 // them and returns the rectangle left for the plot area and its axis
-// labels. A legend at the side keeps LibreOffice's placement and the
+// labels. A legend at the top right keeps LibreOffice's placement and the
 // layout distance on its side.
 //
 // # Corpus evidence
@@ -128,13 +162,20 @@ func (rd *renderer) officePlot(r typeset.Rect) typeset.Rect {
 			rem.Y += officeTopPad
 			rem.Height -= officeTopPad
 		}
+		side := rd.officeSideLegend()
 		rd.legend(r, &rem)
 		if !lg.Overlay {
 			switch lg.Position {
 			case LegendLeft:
 				left = dx
+				if side {
+					left = 0
+				}
 			case LegendRight:
 				right = dx
+				if side {
+					right = 0
+				}
 			case LegendTopRight:
 				right = dx
 				top = true
@@ -197,7 +238,7 @@ func officeLabelGap(d *dim, size float64) float64 {
 // as Office's layout grows it: to hold half of officeMinLabelRoom above
 // inner when an axis beside the plot area draws labels, and
 // officeRightRoom right of inner and of the labels under or over it unless
-// a legend stands at the right.
+// a legend stands at the top right.
 //
 // # Corpus evidence
 //
@@ -236,9 +277,9 @@ func (rd *renderer) officeRoom(bb, inner typeset.Rect, dims []*dim) typeset.Rect
 			right = math.Max(right, l.cx+float64(w/2))
 		}
 	}
-	if lg := rd.c.Legend; lg != nil && !lg.Overlay && (lg.Position == LegendRight || lg.Position == LegendTopRight) {
-		// A legend at the side keeps LibreOffice's distance to the plot
-		// area (officePlot).
+	if lg := rd.c.Legend; lg != nil && !lg.Overlay && (lg.Position == LegendTopRight || (lg.Position == LegendRight && !rd.officeSideLegend())) {
+		// A legend at the top right keeps LibreOffice's distance to the
+		// plot area (officePlot).
 		return bb
 	}
 	return union(bb, typeset.Rect{X: right, Y: inner.Y, Width: officeRightRoom})
