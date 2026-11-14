@@ -1800,7 +1800,7 @@ func nonSymbolicCmapViolation(profile string, subs []truetype.CmapSubtable) bool
 	return len(subs) == 0
 }
 
-// symbolicEncodingNamed reports whether enc, the /Encoding entry of a symbolic
+// SymbolicEncodingNamed reports whether enc, the /Encoding entry of a symbolic
 // TrueType font, fails ISO 14289-1, 7.21.6 t3 and its restatements (ISO
 // 19005-1, 6.3.7 t2; ISO 19005-2 and -3, 6.2.11.6 t3; ISO 19005-4, 6.2.10.6
 // t3; ISO 14289-2, 8.4.5.7 t3), which forbid a symbolic TrueType font an
@@ -1826,7 +1826,7 @@ func nonSymbolicCmapViolation(profile string, subs []truetype.CmapSubtable) bool
 // /BaseEncoding is a name or a string, fail; a /Differences-only dictionary,
 // direct or indirect, an empty dictionary, a /BaseEncoding integer, null and no
 // entry pass; an integer /Encoding stops the validation.
-func symbolicEncodingNamed(ctx context.Context, doc *document.Document, enc ast.PdfObject) bool {
+func SymbolicEncodingNamed(ctx context.Context, doc *document.Document, enc ast.PdfObject) bool {
 	if enc == nil {
 		return false
 	}
@@ -1876,7 +1876,7 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 	if symbolic {
 		// Symbolic TrueType must not specify /Encoding.
 		rule := trueTypeEncodingSymbolicNoEncodingRule(profile)
-		if rule.Specification != "" && symbolicEncodingNamed(ctx, doc, fontDict["Encoding"]) {
+		if rule.Specification != "" && SymbolicEncodingNamed(ctx, doc, fontDict["Encoding"]) {
 			results = append(results, failf(rule, "font %s on page %d", fontName, pageNum)...)
 		}
 

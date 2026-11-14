@@ -2316,7 +2316,14 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 					// reported every code a font shows. A declared encoding that
 					// leaves a code undefined still fires, which is the
 					// MacExpertEncoding case above.
-					declaresEncoding := len(enc) > 0
+					//
+					// A symbolic font whose encoding names no base table, a
+					// /Differences-only dictionary, names only the codes it lists,
+					// and veraPDF reads the others from the program, which ISO
+					// 32000-1, 9.6.6.4 draws through its (3,0) or (1,0) subtable.
+					// Such a code is declined, as the no-encoding case is.
+					declaresEncoding := len(enc) > 0 &&
+						(!isSymbolicFont(ctx, doc, fd) || SymbolicEncodingNamed(ctx, doc, fontDict["Encoding"]))
 					for _, code := range sortedByteKeys(usage.charCodes) {
 						glyphName := enc[code]
 						if glyphName == ".notdef" || (glyphName == "" && declaresEncoding) {
