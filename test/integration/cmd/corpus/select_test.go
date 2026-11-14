@@ -277,6 +277,16 @@ func TestWPTRules(t *testing.T) {
 		!slices.Equal(s.urls, []string{"s.css", "b.png"}) || len(s.styles) != 2 {
 		t.Errorf("scan %+v", s)
 	}
+	for id, want := range map[string]string{
+		"css/CSS2/floats/float-001.xht":                                 "css/CSS2/floats",
+		"css/css-text/white-space/a.html":                               "css/css-text",
+		"mathml/presentation-markup/fractions/frac-1.html":              "mathml/presentation-markup/fractions",
+		"mathml/relations/css-styling/padding-border-margin/pbm-1.html": "mathml/relations/css-styling",
+	} {
+		if got := wptArea(id); got != want {
+			t.Errorf("area of %s: %q, want %q", id, got, want)
+		}
+	}
 	if xhtParsesAsHTML(`<div/>`) || !xhtParsesAsHTML(`<br/><img src="a"/>`) {
 		t.Error("the XHTML self-closing rule")
 	}
@@ -329,6 +339,20 @@ func TestWPTCandidateReasons(t *testing.T) {
 	write("css/css-box/shared.html", `<link rel="match" href="/css/reference/shared-ref.html">`)
 	write("css/css-box/far.html", `<link rel="match" href="/css/elsewhere/far-ref.html">`)
 	write("css/css-box/gone.html", `<link rel="match" href="/css/elsewhere/gone-ref.html">`)
+	// A MathML area takes MathML and the math fonts named by absolute URLs,
+	// and nothing else absolute.
+	const mathDir = "mathml/presentation-markup/fractions/"
+	const mathFace = `<link rel="match" href="m-ref.html"><style>@font-face { font-family: F; src: url(`
+	write("fonts/math/f.woff", "font")
+	write("fonts/other.woff", "font")
+	write(mathDir+"m-ref.html", `<math><mn>1</mn></math>`)
+	write(mathDir+"frac.html", `<link rel="match" href="m-ref.html"><math><mfrac><mn>1</mn><mn>2</mn></mfrac></math>`)
+	write(mathDir+"face.html", mathFace+`/fonts/math/f.woff) }</style><math><mn>1</mn></math>`)
+	write(mathDir+"face-gone.html", mathFace+`/fonts/math/g.woff) }</style><math><mn>1</mn></math>`)
+	write(mathDir+"face-up.html", mathFace+`/fonts/math/../other.woff) }</style><math><mn>1</mn></math>`)
+	write(mathDir+"face-other.html", mathFace+`/fonts/other.woff) }</style><math><mn>1</mn></math>`)
+	write(mathDir+"script.html", `<link rel="match" href="m-ref.html"><script src="/mathml/support/feature-detection.js"></script><math></math>`)
+	math := wptRules(wptArea(mathDir + "frac.html"))
 	transforms := wptAreas["css/css-transforms"]
 	for _, c := range []struct {
 		rel   string
@@ -356,6 +380,14 @@ func TestWPTCandidateReasons(t *testing.T) {
 		{"css/css-box/shared.html", wptAreaRules{}, ""},
 		{"css/css-box/far.html", wptAreaRules{}, "reference outside the directories read"},
 		{"css/css-box/gone.html", wptAreaRules{}, "reference outside the directories read"},
+		{mathDir + "frac.html", wptFontFaceRules, wptMath.String()},
+		{mathDir + "frac.html", math, ""},
+		{mathDir + "face.html", math, ""},
+		{mathDir + "face.html", wptFontFaceRules, wptMath.String()},
+		{mathDir + "face-gone.html", math, "missing resource"},
+		{mathDir + "face-up.html", math, "missing resource"},
+		{mathDir + "face-other.html", math, "absolute or remote URL"},
+		{mathDir + "script.html", math, `<script\b`},
 	} {
 		e, why, err := wptCandidate(root, c.rel, c.rules)
 		if err != nil {
@@ -366,6 +398,9 @@ func TestWPTCandidateReasons(t *testing.T) {
 		}
 		if why == "" && (e.ID != c.rel || len(e.Refs) != 1) {
 			t.Errorf("%s: entry %+v", c.rel, e)
+		}
+		if c.rel == mathDir+"face.html" && why == "" && !slices.Equal(e.Resources, []string{"fonts/math/f.woff"}) {
+			t.Errorf("%s: resources %q, want the math font at its WPT path", c.rel, e.Resources)
 		}
 		// A test is grouped with the stripped ones when its file or a
 		// reference had markers.
@@ -438,9 +473,34 @@ func TestWPTCDATAGroups(t *testing.T) {
 		"css/CSS2/selectors first-line" + wptCDATASuffix: 10,
 		"css/css-sizing aspect-ratio" + wptCDATASuffix:   wptCDATACap["css/css-sizing aspect-ratio"],
 		"css/unknown":                                    0,
+		"mathml/presentation-markup/fractions":           wptAreaCap["mathml"],
+		"mathml/relations/css-styling":                   wptAreaCap["mathml"],
 	} {
 		if got := wptLimit(limits, group); got != want {
 			t.Errorf("cap of %q: %d, want %d", group, got, want)
+		}
+	}
+}
+
+// TestSelectWPT_NeedsTheSharedDirectories pins that a checkout without a
+// shared reference directory or the math fonts fails, rather than dropping
+// the tests that read them.
+func TestSelectWPT_NeedsTheSharedDirectories(t *testing.T) {
+	t.Parallel()
+
+	for _, missing := range []string{"css/reference", "css/CSS2/reference", "fonts/math"} {
+		root := t.TempDir()
+		for _, d := range []string{"css/reference", "css/CSS2/reference", "fonts/math"} {
+			if d == missing {
+				continue
+			}
+			if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(d)), 0o750); err != nil {
+				t.Fatal(err)
+			}
+		}
+		err := selectWPT(t.Context(), root, "", t.TempDir(), nil)
+		if err == nil || !strings.Contains(err.Error(), missing) {
+			t.Errorf("checkout without %s: error %v, want one naming it", missing, err)
 		}
 	}
 }

@@ -245,13 +245,20 @@ var wptDirs = []string{
 	"css/css-images", "css/css-display", "css/css-pseudo", "css/css-masking", "css/compositing",
 	"css/css-logical", "css/css-box", "css/css-animations", "css/css-transitions", "css/css-shapes",
 	"css/filter-effects",
+	"mathml/presentation-markup/direction", "mathml/presentation-markup/fractions",
+	"mathml/presentation-markup/menclose", "mathml/presentation-markup/mpadded", "mathml/presentation-markup/mrow",
+	"mathml/presentation-markup/operators", "mathml/presentation-markup/radicals",
+	"mathml/presentation-markup/scripts", "mathml/presentation-markup/spaces", "mathml/presentation-markup/tables",
+	"mathml/presentation-markup/tokens", "mathml/relations",
 }
 
 // wptAreaCap bounds the tests one area contributes, an area being a CSS2
 // chapter directory or a whole CSS module, so the large ones do not crowd out
 // the others; a CSS2 chapter without a cap of its own takes the "css/CSS2"
-// cap. An area of a feature the converter does not lay out (ruby) keeps a
-// few tests: they say the feature is missing as well as many would.
+// cap, and a MathML area, a sub-directory of mathml/presentation-markup or
+// of mathml/relations, the "mathml" cap. An area of a feature the converter
+// does not lay out (ruby) keeps a few tests: they say the feature is missing
+// as well as many would.
 var wptAreaCap = map[string]int{
 	"css/CSS2": 24, "css/css-backgrounds": 80, "css/css-text": 120, "css/css-lists": 40, "css/css-page": 40,
 	"css/css-break": 40, "css/css-flexbox": 200, "css/css-align": 20, "css/css-grid": 200, "css/css-multicol": 80,
@@ -263,7 +270,7 @@ var wptAreaCap = map[string]int{
 	"css/css-color": 60, "css/css-images": 60, "css/css-display": 60, "css/css-pseudo": 100,
 	"css/css-masking": 120, "css/compositing": 60, "css/css-logical": 40, "css/css-box": 40,
 	"css/css-animations": 40, "css/css-transitions": 40, "css/css-shapes": 200,
-	"css/filter-effects": 400,
+	"css/filter-effects": 400, "mathml": 100,
 }
 
 func compileAll(flags string, patterns ...string) []*regexp.Regexp {
@@ -276,6 +283,7 @@ func compileAll(flags string, patterns ...string) []*regexp.Regexp {
 
 // The forbidden patterns an area may lift (wptAreaRules.lift).
 var (
+	wptMath     = regexp.MustCompile(`(?i)<math\b`)
 	wptFontFace = regexp.MustCompile(`(?i)@font-face`)
 	wptVertical = regexp.MustCompile(`(?i)vertical-(rl|lr)`)
 	wptSideways = regexp.MustCompile(`(?i)sideways`)
@@ -289,9 +297,9 @@ var wptFirstLine = regexp.MustCompile(`(?i):first-line\b`)
 // embedded documents and media, @font-face, data: and javascript: URLs, a
 // reftest-wait class, vertical writing and event handlers.
 var wptForbidden = append(compileAll("(?i)",
-	`<script\b`, `<svg\b`, `<math\b`, `<iframe\b`, `<object\b`, `<embed\b`, `<canvas\b`, `<video\b`, `<audio\b`,
+	`<script\b`, `<svg\b`, `<iframe\b`, `<object\b`, `<embed\b`, `<canvas\b`, `<video\b`, `<audio\b`,
 	`<input\b`, `<button\b`, `<select\b`, `<textarea\b`, `<frameset\b`, `\bdata:`, `\bjavascript:`,
-	`\.svg\b`, `reftest-wait`, `\bon[a-z]+\s*=`), wptFontFace, wptVertical, wptSideways)
+	`\.svg\b`, `reftest-wait`, `\bon[a-z]+\s*=`), wptMath, wptFontFace, wptVertical, wptSideways)
 
 // wptTransform3D finds a 3D transform: a perspective, a 3D rendering
 // context, a back face, or a 3D transform function (CSS Transforms 2).
@@ -340,13 +348,15 @@ func wptOtherWritingMode(text string) bool {
 }
 
 // wptAreaRules are an area's extra forbidden patterns, the patterns of
-// wptForbidden it lifts, whether it forbids another writing mode, and what
-// every test of it must hold.
+// wptForbidden it lifts, whether it forbids another writing mode, what
+// every test of it must hold, and whether its files may name the math
+// fonts of web-platform-tests by their absolute URLs (wptMathFonts).
 type wptAreaRules struct {
 	forbidden   []*regexp.Regexp
 	lift        []*regexp.Regexp
 	writingMode bool
 	required    *regexp.Regexp
+	mathFonts   bool
 }
 
 // wptFontFaceRules are the rules of the areas that take a test with an
@@ -392,6 +402,20 @@ var wptAreas = map[string]wptAreaRules{
 	"css/css-box":                {forbidden: wptLayoutForbidden, writingMode: true},
 	"css/css-shapes":             {forbidden: wptLayoutForbidden, writingMode: true},
 	"css/filter-effects":         {forbidden: []*regexp.Regexp{wptBackdropFilter}, lift: wptFontFaceRules.lift},
+}
+
+// wptMathRules are the rules of the MathML areas: a test may hold MathML,
+// @font-face rules, and the absolute URLs of the fonts under wptMathFonts,
+// which its @font-face rules name.
+var wptMathRules = wptAreaRules{lift: []*regexp.Regexp{wptMath, wptFontFace}, mathFonts: true}
+
+// wptRules returns the rules of an area: its entry of wptAreas, or
+// wptMathRules for a MathML area.
+func wptRules(area string) wptAreaRules {
+	if strings.HasPrefix(area, "mathml/") {
+		return wptMathRules
+	}
+	return wptAreas[area]
 }
 
 // wptBackdropFilter marks a test of backdrop-filter, which Chromium prints
@@ -447,9 +471,16 @@ var (
 	wptVoid     = []string{"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
 )
 
-// wptAhemCSS is the one absolute URL a test may name: the corpus installs Ahem
-// as a font instead.
+// wptAhemCSS is an absolute URL any test may name: the corpus installs Ahem
+// as a font instead, and the reftest cell leaves the stylesheet unread.
 const wptAhemCSS = "/fonts/ahem.css"
+
+// wptMathFonts is the directory of the fonts the MathML tests name by
+// absolute URLs in their @font-face rules: a file of an area whose rules
+// allow it (wptAreaRules.mathFonts) may name a file of it that exists,
+// which is then a resource of that file at its WPT path, and the reftest
+// cell serves it at that URL.
+const wptMathFonts = "/fonts/math/"
 
 var (
 	wptCSSURL     = regexp.MustCompile(`(?i)url\(\s*'([^'")]+)'\s*\)|url\(\s*"([^'")]+)"\s*\)|url\(\s*([^'")]+)\s*\)|@import\s+'([^'"]+)'|@import\s+"([^'"]+)"`)
@@ -666,6 +697,14 @@ func checkWPTFile(root, rel string, rules wptAreaRules) (*wptScan, []string, err
 		if u == wptAhemCSS {
 			continue
 		}
+		if rules.mathFonts && strings.HasPrefix(u, wptMathFonts) {
+			target, ok := wptMathFont(root, u)
+			if !ok {
+				return nil, nil, rejectWPT("missing resource")
+			}
+			resources[target] = true
+			continue
+		}
 		if strings.HasPrefix(u, "/") || wptScheme.MatchString(u) {
 			return nil, nil, rejectWPT("absolute or remote URL")
 		}
@@ -709,10 +748,26 @@ func checkWPTFile(root, rel string, rules wptAreaRules) (*wptScan, []string, err
 	return s, out, nil
 }
 
-// wptArea returns the area of a test: css/CSS2/<chapter> or css/<module>.
+// wptMathFont returns the WPT path of the math font the absolute URL u
+// names, and whether it is a file of wptMathFonts itself in the checkout
+// at root.
+func wptMathFont(root, u string) (string, bool) {
+	u, _, _ = strings.Cut(u, "#")
+	u, _, _ = strings.Cut(u, "?")
+	name := strings.TrimPrefix(u, wptMathFonts)
+	if name == "" || strings.Contains(name, "/") || path.Clean(name) != name {
+		return "", false
+	}
+	target := strings.TrimPrefix(wptMathFonts, "/") + name
+	info, err := os.Stat(filepath.Join(root, filepath.FromSlash(target)))
+	return target, err == nil && info.Mode().IsRegular()
+}
+
+// wptArea returns the area of a test: css/CSS2/<chapter>, css/<module>,
+// or mathml/presentation-markup/<directory> or mathml/relations/<directory>.
 func wptArea(id string) string {
 	parts := strings.Split(id, "/")
-	if parts[1] == "CSS2" {
+	if parts[0] == "mathml" || parts[1] == "CSS2" {
 		return strings.Join(parts[:3], "/")
 	}
 	return strings.Join(parts[:2], "/")
@@ -793,9 +848,9 @@ type wptEntry struct {
 // the test's path.
 func selectWPT(_ context.Context, checkout, _, dir string, _ map[string]string) error {
 	// A walked directory the checkout lacks fails its walk below; a shared
-	// reference directory it lacks would only drop the tests that link into
-	// it, silently.
-	for _, d := range wptRefDirs {
+	// reference directory or the math fonts it lacks would only drop the
+	// tests that read them, silently.
+	for _, d := range append(slices.Clone(wptRefDirs), strings.Trim(wptMathFonts, "/")) {
 		info, err := os.Stat(filepath.Join(checkout, filepath.FromSlash(d)))
 		if err != nil {
 			return fmt.Errorf("reading the checkout's %s: %w", d, err)
@@ -808,7 +863,7 @@ func selectWPT(_ context.Context, checkout, _, dir string, _ map[string]string) 
 	rejected := map[string]int{}
 	for _, top := range wptDirs {
 		err := walkWPT(checkout, top, func(rel string) error {
-			e, why, err := wptCandidate(checkout, rel, wptAreas[wptArea(rel)])
+			e, why, err := wptCandidate(checkout, rel, wptRules(wptArea(rel)))
 			switch {
 			case err != nil, why == wptNotReftest:
 			case why == "":
@@ -925,6 +980,9 @@ func wptLimit(limits map[string]int, group string) int {
 	}
 	if strings.HasPrefix(area, "css/CSS2/") {
 		return limits["css/CSS2"]
+	}
+	if strings.HasPrefix(area, "mathml/") {
+		return limits["mathml"]
 	}
 	return 0
 }
