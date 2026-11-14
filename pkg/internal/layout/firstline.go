@@ -73,21 +73,29 @@ func (e *engine) firstLineStyle(b *box) *css.Style {
 // 4, 2.1.1). An anonymous block of collapsible white space alone holds no
 // line and is skipped, as a float or a positioned box is.
 func opensParentLine(c *box) bool {
-	p := c.parent
-	if p == nil || p.kind != kindBlock || c.kind != kindBlock || c.inline || c.float != css.FloatNone || c.abs ||
-		c.tpart != partNone || c.flexItem || c.gridItem || c.ruby != nil || c.rubyLine || p.flex != nil || p.grid != nil || p.ortho {
+	if !inParentFlow(c) {
 		return false
 	}
-	if p.tpart != partNone && p.tpart != partCell && p.tpart != partCaption {
-		return false
-	}
-	for _, k := range p.kids {
+	for _, k := range c.parent.kids {
 		if k.float != css.FloatNone || k.abs || blankAnon(k) {
 			continue
 		}
 		return k == c
 	}
 	return false
+}
+
+// inParentFlow reports whether the block container c takes part in its
+// parent's block formatting context, a block container that is no table
+// wrapper, flex or grid container: c is an in-flow block-level box, no
+// table part, flex or grid item, ruby part or orthogonal flow root.
+func inParentFlow(c *box) bool {
+	p := c.parent
+	if p == nil || p.kind != kindBlock || c.kind != kindBlock || c.inline || c.float != css.FloatNone || c.abs ||
+		c.tpart != partNone || c.flexItem || c.gridItem || c.ruby != nil || c.rubyLine || p.flex != nil || p.grid != nil || p.ortho {
+		return false
+	}
+	return p.tpart == partNone || p.tpart == partCell || p.tpart == partCaption
 }
 
 // blankAnon reports an anonymous block whose in-flow inline content is

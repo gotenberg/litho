@@ -303,9 +303,31 @@ func (s *inlineState) markerRoom() (float64, bool) {
 			above, _ := e.markerLine(c)
 			return above, true
 		}
-		if !opensParentLine(c) {
+		if !opensItemLine(c) {
 			break
 		}
 	}
 	return 0, false
+}
+
+// opensItemLine reports whether the first line of the block container c
+// is the first line of its parent's flow, the one [markerBaseline] sets
+// an outside marker on: c takes part in its parent's block formatting
+// context ([inParentFlow]) and no in-flow block before it holds a line.
+func opensItemLine(c *box) bool {
+	if !inParentFlow(c) {
+		return false
+	}
+	for _, k := range c.parent.kids {
+		if k == c {
+			return true
+		}
+		if k.inline || k.float != css.FloatNone || k.abs || k.kind != kindBlock || !k.laidOut {
+			continue
+		}
+		if _, ok := firstBaseline(k); ok {
+			return false
+		}
+	}
+	return false
 }

@@ -551,18 +551,22 @@ func TestListMarkers_OutsideMarkerKeepsRoomAbove(t *testing.T) {
 	big := func(s *css.Style) { s.FontSize = px(40) }
 	for _, tc := range []struct {
 		name    string
-		nested  bool
+		nested  int
 		browser bool
 		want    float64
 	}{
-		{"own line", false, true, 34},
-		{"nested block", true, true, 34},
-		{"office rules", false, false, 10},
+		{"own line", 0, true, 34},
+		{"nested block", 1, true, 34},
+		{"nested block after an empty one", 2, true, 34},
+		{"office rules", 0, false, 10},
 	} {
 		st := sty(display(css.ListItem), func(s *css.Style) { s.ListStylePosition = css.Outside })
 		li := el(st, txt(st, "x"))
-		if tc.nested {
+		switch tc.nested {
+		case 1:
 			li = el(st, el(sty(), txt(sty(), "x")))
+		case 2:
+			li = el(st, el(sty()), el(sty(), txt(sty(), "x")))
 		}
 		li.Marker = el(sty(big, display(css.ListItem), func(s *css.Style) { s.ListStylePosition = css.Outside }))
 		rb := boxesWith(t, doc(el(sty(padding(0, 0, 0, 50)), li)), Options{Page: page(200, 100), BrowserRules: tc.browser})
