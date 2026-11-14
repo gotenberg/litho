@@ -516,7 +516,7 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 		return fmt.Errorf("shaping text: %w", err)
 	}
 	seqs := emojiSequences(text[start:end],
-		func(i int) EmojiVariant { return st.styles[p.runOf[start+i]].style.settings().Emoji },
+		func(i int) EmojiVariant { return st.styles[p.runOf[start+i]].style.emojiVariant() },
 		func(i int) bool { return st.primaryDrawsAsText(int(p.runOf[start+i]), text[start+i]) })
 	for i := range seqs {
 		seqs[i].start += start

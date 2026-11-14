@@ -137,6 +137,37 @@ func TestLayout_EmojiPresentationPicksTheFace(t *testing.T) {
 	}
 }
 
+// TestLayout_OfficeTextEmojiIgnoresTheSelector checks that an Office run
+// asking for text presentation draws an emoji followed by VS16 in a text
+// face, as Word draws the emoji of a coloured run, where any other run,
+// a web page's under font-variant-emoji: text among them, lets the
+// selector pick the colour face (CSS Fonts 4, 6.12).
+func TestLayout_OfficeTextEmojiIgnoresTheSelector(t *testing.T) {
+	f := emojiFonts(t)
+	for _, c := range []struct {
+		name   string
+		office bool
+		want   string
+	}{
+		{"office", true, "mono.ttf"},
+		{"web", false, "colour.ttf"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := Style{Families: []string{"Test Sans"}, Size: 10, Fallback: FallbackFontconfig, OfficeEmoji: c.office, Settings: &FontSettings{Emoji: EmojiText}}
+			p := shape(t, f, []ParagraphRun{{Text: "A\u263A\uFE0F", Style: s}}, ParagraphOptions{})
+			var got string
+			for _, sp := range p.Line(0, 3, false).Spans {
+				if sp.Start == 1 && sp.Text != nil {
+					got = sp.Text.Face.Key
+				}
+			}
+			if !strings.Contains(got, c.want) {
+				t.Errorf("face %q, want %s", got, c.want)
+			}
+		})
+	}
+}
+
 // TestLayout_FiguresAsTextSplitAsPlainText locks that a line of figures
 // under font-variant-emoji: text, as every cell of an Excel sheet is laid
 // out, costs what it costs without the property: the digits, # and * are

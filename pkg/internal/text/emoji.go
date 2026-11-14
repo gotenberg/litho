@@ -72,6 +72,9 @@ const (
 	// EmojiUnicode asks for the presentation the Emoji_Presentation
 	// property gives.
 	EmojiUnicode
+	// emojiTextOnly asks for text presentation whatever selector follows
+	// the character: see [Style.emojiVariant]. No CSS value maps to it.
+	emojiTextOnly
 )
 
 // presentation is how an emoji sequence is drawn, which decides the face
@@ -209,13 +212,16 @@ func emojiElement(para []rune, i int) (int, rune, int) {
 // of element kind, joined with others when multi, in a run of
 // font-variant-emoji v.
 func presentationOf(r, vs rune, kind int, multi bool, v EmojiVariant) presentation {
+	if v == emojiTextOnly {
+		return presentText
+	}
 	switch vs {
 	case variationEmoji:
 		return presentEmoji
 	case variationText:
 		return presentText
 	}
-	switch v { //nolint:exhaustive // normal and unicode follow the Emoji_Presentation property below
+	switch v { //nolint:exhaustive // normal and unicode follow the Emoji_Presentation property below, emojiTextOnly returned above
 	case EmojiEmoji:
 		return presentEmoji
 	case EmojiText:

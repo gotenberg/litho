@@ -189,6 +189,26 @@ func (s *Style) settings() *FontSettings {
 	return s.Settings
 }
 
+// emojiVariant returns the presentation variant of the emoji of a run of
+// s: its font-variant-emoji, except that an Office run asking for text
+// presentation ([Style.OfficeEmoji]) draws every emoji as text, the
+// emoji presentation selector (VS16, U+FE0F) included, where CSS Fonts
+// 4, 6.12 lets the selector win.
+//
+// # Corpus evidence
+//
+//   - probe, docx: in a run of w:color C00000, Word draws U+2764 and
+//     U+263A, each followed by U+FE0F, as one Segoe UI Emoji glyph in the
+//     run's colour, as it draws the smile and the party popper of runs so
+//     coloured (see monochromeEmoji in the DOCX converter).
+func (s *Style) emojiVariant() EmojiVariant {
+	v := s.settings().Emoji
+	if v == EmojiText && s.OfficeEmoji {
+		return emojiTextOnly
+	}
+	return v
+}
+
 // noSettings is the zero [FontSettings], never modified.
 var noSettings FontSettings
 
