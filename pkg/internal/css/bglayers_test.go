@@ -136,3 +136,24 @@ func TestBackgroundLayers_Inherit(t *testing.T) {
 		t.Errorf("second layer clip %v, want padding-box", l.Clip)
 	}
 }
+
+// TestBackgroundLayers_BlendModeTakesNoPlusModes locks that
+// background-blend-mode is a list of <blend-mode> (CSS Compositing 1,
+// 9.1): plus-lighter and plus-darker, which Compositing 2 gives
+// mix-blend-mode alone and which no PDF blend mode draws (ISO 32000-1,
+// 11.3.5), make the list invalid.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 answers @supports (background-blend-mode:
+//     plus-lighter) and (background-blend-mode: plus-darker) false,
+//     (background-blend-mode: multiply, screen) and (mix-blend-mode:
+//     plus-lighter) true.
+func TestBackgroundLayers_BlendModeTakesNoPlusModes(t *testing.T) {
+	t.Parallel()
+	for _, m := range []string{"plus-lighter", "plus-darker", "multiply, plus-lighter"} {
+		if st := styleOf(t, "background-blend-mode: screen; background-blend-mode: "+m); st.BackgroundBlendMode != BlendScreen || st.BackgroundRest != nil {
+			t.Errorf("%s: blend mode %v, want the earlier screen", m, st.BackgroundBlendMode)
+		}
+	}
+}
