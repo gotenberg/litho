@@ -135,7 +135,7 @@ func (e *engine) buildFirstLine(b *box, st *css.Style) *firstLine {
 	wrap.kids = e.copyKids(f, b.kids, wrap, 0)
 	f.wrap = wrap
 	c := &collector{e: e, root: b, d: &ifcData{}, space: true, firstOnly: true}
-	c.cur = &ifcPara{}
+	c.cur = &ifcPara{browser: e.opts.BrowserRules}
 	c.walk(wrap)
 	if !c.done {
 		c.d.paras = append(c.d.paras, c.cur)

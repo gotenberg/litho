@@ -257,7 +257,7 @@ func (p *ifcPara) allowed(i int) bool {
 		if breakAll && p.p.GraphemeStart(i) && !unicode.IsSpace(b) && !unicode.IsPunct(b) && !unicode.IsSpace(a) {
 			return true
 		}
-		return p.tailoredBreak(i) && !p.keptTogether(i, a, b)
+		return (p.tailoredBreak(i) || p.hyphenBeforeDigit(i)) && !p.keptTogether(i, a, b)
 	}
 	if p.strictBreak(i) {
 		return false

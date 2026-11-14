@@ -145,3 +145,34 @@ func TestLineBreak_KeepHangul(t *testing.T) {
 		})
 	}
 }
+
+// TestLineBreak_HyphenBeforeDigit checks the opportunity Chromium opens
+// after a hyphen-minus between an ASCII letter or digit and a digit, where
+// UAX #14, LB25 keeps the hyphen with the number, under
+// [Options.BrowserRules] alone.
+func TestLineBreak_HyphenBeforeDigit(t *testing.T) {
+	keepAll := sty(func(s *css.Style) { s.WordBreak = css.KeepAll })
+	tests := []struct {
+		name    string
+		st      *css.Style
+		text    string
+		browser bool
+		want    []string
+	}{
+		{"digits", sty(), "12-34-56", true, []string{"12-", "34-", "56"}},
+		{"keep-all", keepAll, "12-34-56", true, []string{"12-", "34-", "56"}},
+		{"after a letter", sty(), "a-12", true, []string{"a-", "12"}},
+		{"minus sign", sty(), "%-12", true, []string{"%-12"}},
+		{"office", sty(), "12-34-56", false, []string{"12-34-56"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Three Ahem letters a line.
+			res := runWith(t, doc(el(tt.st, txt(tt.st, tt.text))), Options{Page: page(30, 100), BrowserRules: tt.browser})
+			got, _ := lineTexts(res, 1)
+			if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+				t.Errorf("lines %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

@@ -77,6 +77,8 @@ type ifcPara struct {
 	// closePos by box.
 	openAt, closeAt   map[int][]*box
 	openPos, closePos map[*box]int
+	// browser reports a paragraph laid out under [Options.BrowserRules].
+	browser bool
 }
 
 // index builds the position indexes of p.
@@ -138,7 +140,7 @@ func (e *engine) ifcOf(b *box) *ifcData {
 		return b.ifc
 	}
 	c := &collector{e: e, root: b, d: &ifcData{}, space: true}
-	c.cur = &ifcPara{}
+	c.cur = &ifcPara{browser: e.opts.BrowserRules}
 	for _, k := range b.kids {
 		c.walk(k)
 	}
@@ -260,7 +262,7 @@ func (c *collector) breakPara() {
 	c.cur.forced = true
 	c.d.paras = append(c.d.paras, c.cur)
 	c.done = c.firstOnly
-	c.cur = &ifcPara{}
+	c.cur = &ifcPara{browser: c.e.opts.BrowserRules}
 	c.reopenBidi()
 	c.space = true
 }

@@ -52,6 +52,32 @@ func (p *ifcPara) tailoredBreak(i int) bool {
 	return false
 }
 
+// hyphenBeforeDigit reports an opportunity after a hyphen-minus that
+// stands between an ASCII letter or digit and an ASCII digit, under
+// [Options.BrowserRules]. UAX #14, LB25 keeps a hyphen with the number
+// after it, as a minus sign; Chromium breaks there on screen and in print
+// when the character before the hyphen is an ASCII letter or digit, as in
+// a long URL or "1234-5678", and follows LB25 otherwise.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 breaks "12-34-56", "a1-34-56",
+//     "1a-2b-3c", "$1-34", "1.2-3.4" and "(1-2)-3" after each hyphen before
+//     a digit at 2 and 3ch, with or without word-break: keep-all, and keeps
+//     "(-12", "%-12", ".-12", ")-12", "$-12", "é-12" and ",-12" whole; its
+//     PDF breaks "a-12" and "12-34" and keeps "%-12".
+//   - wpt: css/css-text/word-break/word-break-keep-all-u002d.
+func (p *ifcPara) hyphenBeforeDigit(i int) bool {
+	if !p.browser || i < 2 || p.p.Rune(i-1) != '-' || !isASCIIDigit(p.p.Rune(i)) {
+		return false
+	}
+	c := p.p.Rune(i - 2)
+	return isASCIIDigit(c) || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+// isASCIIDigit reports an ASCII digit.
+func isASCIIDigit(r rune) bool { return r >= '0' && r <= '9' }
+
 // strictBreak reports an opportunity before character i of p that
 // line-break: strict removes: before a small kana or a prolonged sound
 // mark, which UAX #14 resolves to NS then (class CJ, LB1), the text stack
