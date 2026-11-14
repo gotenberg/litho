@@ -79,8 +79,9 @@ type logicBox struct {
 
 // shape reads a drawing shape (ODF 1.3, Part 3, 10.3 and 10.6) into a
 // drawing whose picture paints its geometry with its fill and stroke, under
-// its draw:transform, as Calc's drawing layer prints it; at is its anchor
-// cell, nil for a shape of the sheet. The text of a shape is not drawn.
+// its draw:transform, as Calc's drawing layer prints it, its text over it
+// ([reader.shapeTextOf]); at is its anchor cell, nil for a shape of the
+// sheet. The text of a line or a connector is not drawn.
 //
 // # Corpus evidence
 //
@@ -122,7 +123,11 @@ func (r *reader) shape(ts *tableState, el *odf.Element, at *sheet.Anchor) {
 		return
 	}
 	if hasText(el) && el.Name.Local != "measure" {
-		r.warn("shape-text", warn.ContentUnsupported, warn.Omitted, "the text of drawing shapes is not drawn")
+		if art.logic == nil {
+			r.warn("shape-text", warn.ContentUnsupported, warn.Omitted, "the text of lines and connectors is not drawn")
+		} else {
+			art = r.withText(art, r.shapeTextOf(el, el.A(odf.NSDraw, "style-name"), p, el.Name.Local == "custom-shape"))
+		}
 	}
 	r.place(ts, el, at, art)
 }

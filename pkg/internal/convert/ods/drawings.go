@@ -38,7 +38,8 @@ type picResult struct {
 // drawing reads a shape of a table:shapes element (at nil: placed from
 // the sheet's origin) or of a cell (ODF 1.3, Part 3, 9.2.4 and 10.4): a
 // draw:frame with a picture or a chart becomes a drawing, a drawing shape
-// a drawing of its geometry ([reader.shape]). A cell's frame is anchored
+// a drawing of its geometry ([reader.shape]), a text box its text
+// ([reader.textBox]). A cell's frame is anchored
 // to its cell, its svg:x and svg:y being from the cell's corner as Calc
 // reads them, and its table:end-cell-address, end-x and end-y anchor its
 // bottom-right corner; a picture under a draw:transform is drawn turned
@@ -78,8 +79,8 @@ func (r *reader) drawing(ts *tableState, el *odf.Element, at *sheet.Anchor, dept
 	if d.Chart == nil {
 		img := el.Child(odf.NSDraw, "image")
 		if img == nil {
-			if el.Child(odf.NSDraw, "text-box") != nil {
-				r.warn("text-boxes", warn.ContentUnsupported, warn.Omitted, "text boxes are not drawn")
+			if tb := el.Child(odf.NSDraw, "text-box"); tb != nil {
+				r.textBox(ts, el, tb, at)
 			} else if el.Child(odf.NSDraw, "object") == nil && el.Child(odf.NSDraw, "object-ole") != nil {
 				r.warn("ole-objects", warn.ContentUnsupported, warn.Omitted, "embedded OLE objects are not drawn")
 			}
