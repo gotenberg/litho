@@ -196,6 +196,36 @@ func TestText_DefaultTab(t *testing.T) {
 	}
 }
 
+// TestText_PowerPointKeepsEmoji checks that a line of a PowerPoint
+// presentation breaks at the space before a run of emoji, not between two
+// of them, as PowerPoint sets "A " and ten emoji in a narrow box, where
+// under Impress's fallback the emoji fill the first line.
+func TestText_PowerPointKeepsEmoji(t *testing.T) {
+	first := func(fallback text.Fallback) int {
+		d := deck(&Slide{Shapes: []*Shape{box(100, 100, 120, 300, para("A \U0001F600\U0001F602\U0001F970\U0001F60D", arial(20)))}})
+		d.Fallback = fallback
+		out := convert(t, d, office.Options{})
+		a := find(t, out.Pages[0], "A")
+		n := 0
+		for _, r := range runs(out.Pages[0]) {
+			if near(r.y, a.y, 0.5) {
+				for _, c := range r.text {
+					if c >= 0x1F300 {
+						n++
+					}
+				}
+			}
+		}
+		return n
+	}
+	if got := first(text.FallbackFontconfig); got != 0 {
+		t.Errorf("%d emoji on the line of A under PowerPoint's rules, want 0", got)
+	}
+	if got := first(text.FallbackLibreOffice); got == 0 {
+		t.Errorf("no emoji on the line of A under Impress's fallback, want some")
+	}
+}
+
 // TestText_OfficeEmoji checks that an emoji of a PowerPoint presentation
 // advances as Segoe UI Emoji's do, 2812 units of 2048, the text after it
 // moving with it, where under Impress's fallback it keeps Noto Color

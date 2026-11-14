@@ -892,8 +892,10 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 	st.TextDecorationColor = st.Color
 	st.TextEffects = b.textEffects(rs)
 	st.TextPaint = b.textPaint(rs)
-	// PowerPoint draws emoji in Segoe UI Emoji, at its advances.
+	// PowerPoint draws emoji in Segoe UI Emoji, at its advances, and
+	// breaks no line between an emoji and an emoji or a letter.
 	st.OfficeEmoji = b.doc != nil && b.doc.Fallback != text.FallbackLibreOffice
+	st.KeepEmoji = st.OfficeEmoji
 	if tp := st.TextPaint; tp != nil && (tp.NoFill || len(tp.Gradient) >= 2) && !(st.Color.A > 0) {
 		// The glyphs are painted invisible under their paint: a text of
 		// no fill, or of a gradient whose first stop is transparent,
