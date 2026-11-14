@@ -93,35 +93,38 @@ func faceOf(t *testing.T, lines []Line, r rune) string {
 }
 
 // TestLayout_EmojiPresentationPicksTheFace locks how an emoji sequence
-// picks its face (CSS Fonts 4, 6.12, and UTS #51, 4): a character drawn
-// as emoji by default takes a face of the family list that covers it,
-// else a colour face before any other installed face; VS16 and
-// font-variant-emoji: emoji skip the faces of the list that are not
-// colour faces; VS15 and font-variant-emoji: text skip the colour faces
-// while another face covers the character.
+// picks its face (CSS Fonts 4, 6.12, and UTS #51, 4): under Chromium's
+// rule a character drawn as emoji by default takes a face of the family
+// list that covers it, else a colour face before any other installed
+// face, and under the other rules a colour face right after the primary
+// face's family; VS16 and font-variant-emoji: emoji skip the faces of the
+// list that are not colour faces; VS15 and font-variant-emoji: text skip
+// the colour faces while another face covers the character.
 func TestLayout_EmojiPresentationPicksTheFace(t *testing.T) {
 	f := emojiFonts(t)
 	cases := []struct {
 		name     string
 		families []string
 		v        EmojiVariant
+		rule     Fallback
 		text     string
 		r        rune
 		want     string
 	}{
-		{"default emoji, fallback", []string{"Test Sans"}, EmojiNormal, "A⌚", 0x231A, "colour.ttf"},
-		{"text by default, fallback", []string{"Test Sans"}, EmojiNormal, "A☺", 0x263A, "mono.ttf"},
-		{"VS16", []string{"Test Sans"}, EmojiNormal, "A☺️", 0x263A, "colour.ttf"},
-		{"default emoji, named face", []string{"Test Sans", "Test Mono Emoji"}, EmojiNormal, "A⌚", 0x231A, "mono.ttf"},
-		{"VS16 skips the named text face", []string{"Test Sans", "Test Mono Emoji"}, EmojiNormal, "A⌚️", 0x231A, "colour.ttf"},
-		{"VS15 skips the named colour face", []string{"Test Colour Emoji", "Test Mono Emoji"}, EmojiNormal, "⌚︎", 0x231A, "mono.ttf"},
-		{"font-variant-emoji: text", []string{"Test Sans"}, EmojiText, "A⌚", 0x231A, "mono.ttf"},
-		{"font-variant-emoji: emoji", []string{"Test Sans", "Test Mono Emoji"}, EmojiEmoji, "A☺", 0x263A, "colour.ttf"},
-		{"text asked, only a colour face covers", []string{"Test Sans"}, EmojiText, "A⚽", 0x26BD, "colour.ttf"},
+		{"default emoji, fallback", []string{"Test Sans"}, EmojiNormal, FallbackChromium, "A⌚", 0x231A, "colour.ttf"},
+		{"text by default, fallback", []string{"Test Sans"}, EmojiNormal, FallbackChromium, "A☺", 0x263A, "mono.ttf"},
+		{"VS16", []string{"Test Sans"}, EmojiNormal, FallbackChromium, "A☺️", 0x263A, "colour.ttf"},
+		{"default emoji, named face", []string{"Test Sans", "Test Mono Emoji"}, EmojiNormal, FallbackChromium, "A⌚", 0x231A, "mono.ttf"},
+		{"default emoji, second family under an Office rule", []string{"Test Sans", "Test Mono Emoji"}, EmojiNormal, FallbackFontconfig, "A⌚", 0x231A, "colour.ttf"},
+		{"VS16 skips the named text face", []string{"Test Sans", "Test Mono Emoji"}, EmojiNormal, FallbackChromium, "A⌚️", 0x231A, "colour.ttf"},
+		{"VS15 skips the named colour face", []string{"Test Colour Emoji", "Test Mono Emoji"}, EmojiNormal, FallbackChromium, "⌚︎", 0x231A, "mono.ttf"},
+		{"font-variant-emoji: text", []string{"Test Sans"}, EmojiText, FallbackChromium, "A⌚", 0x231A, "mono.ttf"},
+		{"font-variant-emoji: emoji", []string{"Test Sans", "Test Mono Emoji"}, EmojiEmoji, FallbackChromium, "A☺", 0x263A, "colour.ttf"},
+		{"text asked, only a colour face covers", []string{"Test Sans"}, EmojiText, FallbackChromium, "A⚽", 0x26BD, "colour.ttf"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			s := Style{Families: c.families, Size: 10}
+			s := Style{Families: c.families, Size: 10, Fallback: c.rule}
 			if c.v != EmojiNormal {
 				s.Settings = &FontSettings{Emoji: c.v}
 			}

@@ -716,11 +716,16 @@ func (st *layoutState) fallback(s *styleState, script language.Script, r rune, n
 		lists[len(lists)-1] = p.languageCJK
 	}
 	emoji := n.pres == presentEmoji || n.pres == presentDefaultEmoji
+	// The colour faces come before the installed fonts' script and
+	// generic lists: under Chromium's rule after the families the style
+	// names, under the others right after the primary face's family,
+	// before the stand-ins an Office converter lists after a run's font.
+	colourAt := 1
+	if s.style.Fallback.rule() == FallbackChromium {
+		colourAt = 2
+	}
 	for i, keys := range lists {
-		if i == 2 && emoji {
-			// The family list has no face for the emoji: the colour
-			// faces come before the installed fonts' script and generic
-			// lists.
+		if i == colourAt && emoji {
 			for _, fc := range f.faces {
 				if fc.colourTables() != 0 && fc.covers(r) && try(fc) {
 					return found

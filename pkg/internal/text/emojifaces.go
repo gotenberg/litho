@@ -102,6 +102,12 @@ func drawnChars(seq []rune) []rune {
 //   - probe, html: the same Chromium draws U+1F600 and U+1F44D followed by
 //     VS15, and under font-variant-emoji: text, in a text face, and
 //     U+26BD and U+1F680, which no text face covers, in Noto Color Emoji.
+//   - litho/docx: intl-scripts: Word draws the emoji of a run in Calibri
+//     and of one in Segoe UI Emoji in colour, in Segoe UI Emoji; litho
+//     lists DejaVu Sans after a run's font as the stand-in of a missing
+//     face, which drew them as outlines before the colour faces.
+//   - litho/pptx: text-complex-scripts and litho/xlsx: intl_scripts:
+//     PowerPoint and Excel draw the emoji in colour, in Segoe UI Emoji.
 func (st *layoutState) resolveSeq(style int, script language.Script, seq []rune, pres presentation) *Face {
 	chars := drawnChars(seq)
 	if len(chars) == 0 {
