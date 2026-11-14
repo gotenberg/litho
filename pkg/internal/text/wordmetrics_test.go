@@ -158,6 +158,40 @@ func TestOfficeEmoji_AsText(t *testing.T) {
 	}
 }
 
+// TestOfficeEmoji_BoldStrokes checks that an emoji of a bold Office run
+// drawn as text is stroked a 35th of the size wide, as Word strokes Segoe
+// UI Emoji, which has no bold face, while the letters of the run and the
+// emoji of a regular run are not.
+func TestOfficeEmoji_BoldStrokes(t *testing.T) {
+	f := emojiFonts(t)
+	asText := &FontSettings{Emoji: EmojiText}
+	for _, tc := range []struct {
+		name   string
+		weight int
+		want   float64
+	}{
+		{"bold", 700, 10.0 / 35},
+		{"regular", 400, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := Style{Families: []string{"Test Sans"}, Size: 10, Weight: tc.weight, Fallback: FallbackFontconfig, OfficeEmoji: true, WordMetrics: true, Settings: asText}
+			p := shape(t, f, []ParagraphRun{{Text: "A\u231aB", Style: s}}, ParagraphOptions{})
+			for _, sp := range p.Line(0, 3, false).Spans {
+				if sp.Text == nil {
+					continue
+				}
+				want := 0.0
+				if sp.Start == 1 {
+					want = tc.want
+				}
+				if math.Abs(sp.Text.Stroke-want) > 1e-9 {
+					t.Errorf("piece at %d stroked %.4f, want %.4f", sp.Start, sp.Text.Stroke, want)
+				}
+			}
+		})
+	}
+}
+
 // TestOfficeEmoji_FlagKeepsItsAdvance checks that a flag of a colour face
 // in a run that asks for Office's emoji keeps the face's advance, where
 // another emoji of the face takes Segoe UI Emoji's.

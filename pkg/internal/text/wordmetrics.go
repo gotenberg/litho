@@ -107,6 +107,23 @@ func (fc *Face) MetricsFor(style Style) Metrics {
 //     to 41.53 of 44.82.
 const segoeEmojiAdvance = 2812.0 / 2048
 
+// wordEmojiBold is what the font size is divided by for the width of
+// the line Word strokes an emoji of a bold run with, in its fill colour:
+// Segoe UI Emoji has no bold face. An Office run's emoji drawn as text in
+// another face, whose emoji outlines rarely have a bold design, is
+// stroked so.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word draws the smile and the party popper of a bold
+//     run of w:color C00000 at 24 points in text rendering mode 2 with a
+//     line 0.68571 points wide, 24/35, the smile inking 27.72 points
+//     across where the regular run's inks 26.88; it strokes the colour
+//     layers of a bold 12 point run at 0.343 points.
+//   - probe, docx: DejaVu Sans Bold's smile, which draws the bold run's
+//     smile, inks 21.00 points across at 24 points, as DejaVu Sans's.
+const wordEmojiBold = 35.0
+
 // segoeEmojiAscent and segoeEmojiDescent are the ascent and descent, in
 // em, of Segoe UI Emoji's lines in Word: its OS/2 usWinAscent and
 // usWinDescent, 2210 and 514 units of 2048 ([Style.OfficeEmoji]).

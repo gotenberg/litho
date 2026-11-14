@@ -699,8 +699,14 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 		case fc.colourTables() != 0:
 			segoeAdvances(it.glyphs, p.text, w)
 		case style.settings().Emoji == EmojiText && fc != st.styles[run].primary:
-			if segoeTextAdvances(it.glyphs, p.text, w) && style.WordMetrics {
+			if !segoeTextAdvances(it.glyphs, p.text, w) {
+				break
+			}
+			if style.WordMetrics {
 				it.ascent, it.descent, it.gap = float64(segoeEmojiAscent*style.Size), float64(segoeEmojiDescent*style.Size), 0
+			}
+			if style.weight() >= syntheticBoldThreshold {
+				it.stroke = min(style.Size/wordEmojiBold, style.Size)
 			}
 		}
 	}
