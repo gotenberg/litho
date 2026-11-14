@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-14T07:46:58Z",
+  "captured_at": "2026-11-14T08:27:17Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -117072,8 +117072,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 4604,
-          "mismatched": 589,
+          "matched": 4611,
+          "mismatched": 582,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -118299,7 +118299,7 @@
             "css/CSS2/positioning/position-relative-005.xht": "pass",
             "css/CSS2/positioning/position-relative-007.xht": "pass",
             "css/CSS2/positioning/position-relative-009.xht": "pass",
-            "css/CSS2/positioning/position-relative-010.xht": "fail",
+            "css/CSS2/positioning/position-relative-010.xht": "pass",
             "css/CSS2/positioning/position-relative-027.xht": "pass",
             "css/CSS2/positioning/position-relative-028.xht": "pass",
             "css/CSS2/positioning/position-relative-029.xht": "pass",
@@ -118644,7 +118644,7 @@
             "css/CSS2/text/text-decoration-va-length-001.xht": "fail",
             "css/CSS2/text/text-decoration-va-length-002.xht": "pass",
             "css/CSS2/text/text-indent-012.xht": "pass",
-            "css/CSS2/text/text-indent-014.xht": "fail",
+            "css/CSS2/text/text-indent-014.xht": "pass",
             "css/CSS2/text/text-indent-029.xht": "pass",
             "css/CSS2/text/text-indent-054.xht": "pass",
             "css/CSS2/text/text-indent-055.xht": "pass",
@@ -119225,7 +119225,7 @@
             "css/css-counter-styles/persian/css3-counter-styles-104.html": "pass",
             "css/css-counter-styles/simp-chinese-formal/counter-simp-chinese-formal.html": "pass",
             "css/css-counter-styles/simp-chinese-formal/css3-counter-styles-078.html": "pass",
-            "css/css-counter-styles/simp-chinese-informal/counter-simp-chinese-informal-extended-range.optional.html": "fail",
+            "css/css-counter-styles/simp-chinese-informal/counter-simp-chinese-informal-extended-range.optional.html": "pass",
             "css/css-counter-styles/simp-chinese-informal/css3-counter-styles-073.html": "pass",
             "css/css-counter-styles/tamil/css3-counter-styles-148.html": "pass",
             "css/css-counter-styles/thai/css3-counter-styles-153.html": "pass",
@@ -119755,7 +119755,7 @@
             "css/css-fonts/font-size-adjust-zero-1.html": "pass",
             "css/css-fonts/font-size-adjust-zero-2.html": "pass",
             "css/css-fonts/font-size-xxx-large.html": "pass",
-            "css/css-fonts/font-size-zero-2.html": "fail",
+            "css/css-fonts/font-size-zero-2.html": "pass",
             "css/css-fonts/font-size-zero-3.html": "pass",
             "css/css-fonts/font-stretch-01.html": "pass",
             "css/css-fonts/font-stretch-02.html": "pass",
@@ -121428,7 +121428,7 @@
             "css/css-sizing/intrinsic-percent-non-replaced-001.html": "pass",
             "css/css-sizing/intrinsic-percent-non-replaced-002.html": "pass",
             "css/css-sizing/intrinsic-percent-non-replaced-003.html": "pass",
-            "css/css-sizing/intrinsic-size-min-content-box-sizing.html": "fail",
+            "css/css-sizing/intrinsic-size-min-content-box-sizing.html": "pass",
             "css/css-sizing/margin-collapse-with-indefinite-block-size-001.html": "pass",
             "css/css-sizing/margin-collapse-with-indefinite-block-size-002.html": "pass",
             "css/css-sizing/margin-collapse-with-indefinite-block-size-003.html": "pass",
@@ -121517,7 +121517,7 @@
             "css/css-tables/percentages-grandchildren-quirks-mode-001.html": "pass",
             "css/css-tables/percentages-grandchildren-quirks-mode-002.html": "pass",
             "css/css-tables/row-group-margin-border-padding.html": "pass",
-            "css/css-tables/row-group-order.html": "fail",
+            "css/css-tables/row-group-order.html": "pass",
             "css/css-tables/row-margin-border-padding.html": "pass",
             "css/css-tables/rowspan-cell-border-after-color.html": "pass",
             "css/css-tables/rules-groups.html": "pass",
@@ -121572,7 +121572,7 @@
             "css/css-text-decor/text-decoration-inset-zero.html": "pass",
             "css/css-text-decor/text-decoration-line-grammar-error-color-001.html": "pass",
             "css/css-text-decor/text-decoration-line-spelling-error-color-001.html": "pass",
-            "css/css-text-decor/text-decoration-overline-wavy-covers-whole-line-length-001.html": "fail",
+            "css/css-text-decor/text-decoration-overline-wavy-covers-whole-line-length-001.html": "pass",
             "css/css-text-decor/text-decoration-propagation-05.html": "pass",
             "css/css-text-decor/text-decoration-shorthands-001.html": "pass",
             "css/css-text-decor/text-decoration-shorthands-002.html": "pass",
