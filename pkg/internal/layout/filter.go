@@ -203,9 +203,8 @@ func (e *engine) filterImage(fs []css.Filter, frags []typeset.Fragment, box type
 	res.Scale = float64(res.Scale * zoom)
 	if res.Reduced {
 		e.warnOnce(warn.LimitReached, warn.Approximated, fmt.Sprintf("a filtered element past %d pixels is drawn at a lower resolution", effect.MaxPixels), -1)
-	} else {
-		res = cssPixelGrid(res, x1-x0, y1-y0)
 	}
+	res = cssPixelGrid(res, x1-x0, y1-y0)
 	if !pixels.Take(res) {
 		return nil, fmt.Errorf("%w: past %d pixels of filters", errFilterUnsupported, effect.MaxPagePixels)
 	}
@@ -241,7 +240,9 @@ func (e *engine) filterImage(fs []css.Filter, frags []typeset.Fragment, box type
 // image's pixels, so the image paints nothing past it, as the element's
 // own vector edge would not, and two contents that differ only past such
 // an edge draw the same pixels. A grid that would pass the surface cap
-// stays as res.
+// stays as res. A grid the surface cap lowered snaps too, down to one
+// pixel a CSS pixel: a lower whole number keeps the edges sharp where a
+// fraction blurs them all.
 func cssPixelGrid(res effect.Resolution, w, h float64) effect.Resolution {
 	n := max(math.Floor(float64(res.Scale*css.Pt)), 1)
 	k := n / css.Pt

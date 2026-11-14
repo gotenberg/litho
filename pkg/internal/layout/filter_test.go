@@ -243,3 +243,20 @@ func TestFilter_HoldsAbsolute(t *testing.T) {
 		t.Errorf("x = %v px, want 20 px", found.x/css.Pt)
 	}
 }
+
+// TestFilter_ReducedGridOnWholePixels locks that a filtered element past
+// the surface cap is drawn at a whole number of pixels a CSS pixel: a
+// 1,500 pixel square takes 2 pixels a CSS pixel, under the 2.7 the cap
+// allows, so its edges on whole CSS pixels stay sharp.
+func TestFilter_ReducedGridOnWholePixels(t *testing.T) {
+	e := &engine{ctx: context.Background(), warned: map[string]bool{}}
+	sq := typeset.Rect{Width: px(1500), Height: px(1500)}
+	frags := []typeset.Fragment{&typeset.Path{Ops: rectOps(sq), Fill: &typeset.Fill{Color: typeset.Black}}}
+	img, err := e.filterImage([]css.Filter{{Kind: css.FilterInvert, Amount: 1}}, frags, sq, nil, 1, &effect.Page{})
+	if err != nil || img == nil {
+		t.Fatalf("filterImage: %v, %v", img, err)
+	}
+	if w := img.Source.Width; w%2 != 0 || w < 3000 || w > 3010 {
+		t.Errorf("image %d pixels wide, want 2 a CSS pixel over the region", w)
+	}
+}
