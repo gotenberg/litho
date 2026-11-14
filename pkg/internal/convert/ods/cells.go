@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -377,7 +378,7 @@ func (tb *textBuilder) inline(el *odf.Element, f *sheet.Font, depth int) {
 			tb.inline(c, f, depth+1)
 		case c.Is(odf.NSText, "s"):
 			n := 1
-			if v, err := strconv.Atoi(c.A(odf.NSText, "c")); err == nil && v > 1 {
+			if v, err := intconv.Atoi(c.A(odf.NSText, "c")); err == nil && v > 1 {
 				n = min(v, maxSpaces)
 			}
 			tb.add(strings.Repeat(" ", n), f)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/detmath"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
@@ -603,7 +604,7 @@ func outline(el *odf.Element) *shape.Geometry {
 		// A count that does not parse reads as 0, which RegularPolygon
 		// refuses; a sharpness that does not parse reads as 0, a concave
 		// polygon's inner corners left on its outer circle.
-		n, _ := strconv.Atoi(el.A(odf.NSDraw, "corners"))
+		n, _ := intconv.Atoi(el.A(odf.NSDraw, "corners"))
 		sharp, _ := strconv.ParseFloat(strings.TrimSuffix(el.A(odf.NSDraw, "sharpness"), "%"), 64)
 		c = odf.RegularPolygon(n, el.A(odf.NSDraw, "concave") == "true", sharp)
 	}
@@ -784,7 +785,7 @@ func spacedText(el *odf.Element, sb *strings.Builder, value string, depth int) {
 		case c.IsText():
 			sb.WriteString(c.Text)
 		case c.Is(odf.NSText, "s"):
-			n, err := strconv.Atoi(c.A(odf.NSText, "c"))
+			n, err := intconv.Atoi(c.A(odf.NSText, "c"))
 			if err != nil || n < 1 {
 				n = 1
 			}

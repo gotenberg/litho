@@ -2,11 +2,11 @@ package ods
 
 import (
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -137,8 +137,8 @@ func (r *reader) readPage(mp *odf.MasterPage) pageResult {
 	if pp.Get("style:print-page-order") == "ltr" {
 		pg.Order = sheet.OverThenDown
 	}
-	if n, err := strconv.Atoi(pp.Get("style:first-page-number")); err == nil && n > 0 {
-		pg.FirstPageNumber = n
+	if n, err := intconv.Atoi(pp.Get("style:first-page-number")); err == nil && n > 0 {
+		pg.FirstPageNumber = min(n, intconv.MaxCountStart)
 	}
 	r.scale(&pg, pp)
 	switch pp.Get("style:table-centering") {
@@ -262,7 +262,7 @@ func (r *reader) scale(pg *sheet.PageSetup, pp odf.Props) {
 		if !ok {
 			v, ok = pp.Lookup("loext:" + strings.TrimPrefix(key, "style:"))
 		}
-		n, err := strconv.Atoi(v)
+		n, err := intconv.Atoi(v)
 		if !ok || err != nil || n < 0 {
 			return 0, false
 		}
@@ -370,7 +370,7 @@ func (r *reader) spans(el *odf.Element) []sheet.Span {
 				walk(c, g, depth+1)
 			case "s":
 				n := 1
-				if v, err := strconv.Atoi(c.A(odf.NSText, "c")); err == nil && v > 1 {
+				if v, err := intconv.Atoi(c.A(odf.NSText, "c")); err == nil && v > 1 {
 					n = min(v, maxSpaces)
 				}
 				add(sheet.Span{Text: strings.Repeat(" ", n), Font: f})

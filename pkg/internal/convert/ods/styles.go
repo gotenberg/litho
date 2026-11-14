@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/odf"
@@ -205,7 +206,7 @@ func (r *reader) foldFont(f sheet.Font, layers []odf.Props) sheet.Font {
 			}
 		}
 		if v, ok := l.Lookup("fo:font-weight"); ok {
-			n, err := strconv.Atoi(v)
+			n, err := intconv.Atoi(v)
 			f.Bold = v == "bold" || err == nil && n >= boldWeight
 		}
 		if v, ok := l.Lookup("fo:font-style"); ok {
@@ -280,7 +281,7 @@ func foldScriptFont(f sheet.ScriptFont, l odf.Props, suffix string) sheet.Script
 		foldSize(&f.Size, v)
 	}
 	if v, ok := l.Lookup("style:font-weight" + suffix); ok {
-		n, err := strconv.Atoi(v)
+		n, err := intconv.Atoi(v)
 		f.Bold = v == "bold" || err == nil && n >= boldWeight
 	}
 	if v, ok := l.Lookup("style:font-style" + suffix); ok {

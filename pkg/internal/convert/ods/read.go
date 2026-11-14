@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -361,7 +361,7 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 // repeat returns the repetition count of the attribute local of el
 // (ODF 1.3, Part 3, 19.677 and 19.678): at least 1, at most limit.
 func repeat(el *odf.Element, local string, limit int) int {
-	n, err := strconv.Atoi(el.A(odf.NSTable, local))
+	n, err := intconv.Atoi(el.A(odf.NSTable, local))
 	if err != nil || n < 1 {
 		return 1
 	}
