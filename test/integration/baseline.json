@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-14T07:19:32Z",
+  "captured_at": "2026-11-14T07:46:58Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -59952,7 +59952,7 @@
               "text_f1": 1
             },
             "ar-shaping": {
-              "layout": 0.9517,
+              "layout": 0.9522,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -59960,7 +59960,7 @@
               "text_f1": 0.2994
             },
             "article": {
-              "layout": 0.9451,
+              "layout": 0.9454,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -59992,7 +59992,7 @@
               "text_f1": 1
             },
             "bands-isolated": {
-              "layout": 0.969,
+              "layout": 0.9689,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60000,7 +60000,7 @@
               "text_f1": 1
             },
             "bands-isolated-twin": {
-              "layout": 0.969,
+              "layout": 0.9689,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60024,7 +60024,7 @@
               "text_f1": 1
             },
             "bands-room-content": {
-              "layout": 0.94,
+              "layout": 0.9396,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60032,7 +60032,7 @@
               "text_f1": 1
             },
             "bands-room-content-twin": {
-              "layout": 0.94,
+              "layout": 0.9402,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60040,7 +60040,7 @@
               "text_f1": 1
             },
             "bidi-letter": {
-              "layout": 0.9556,
+              "layout": 0.9562,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60072,7 +60072,7 @@
               "text_f1": 0.9829
             },
             "cjk-han-variants": {
-              "layout": 0.9069,
+              "layout": 0.9072,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60104,7 +60104,7 @@
               "text_f1": 0.9706
             },
             "display-contents": {
-              "layout": 0.9637,
+              "layout": 0.9642,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60112,7 +60112,7 @@
               "text_f1": 1
             },
             "emoji": {
-              "layout": 0.3516,
+              "layout": 0.3517,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60160,7 +60160,7 @@
               "text_f1": 1
             },
             "floats": {
-              "layout": 0.9541,
+              "layout": 0.9549,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60192,7 +60192,7 @@
               "text_f1": 1
             },
             "he-bidi-numbers": {
-              "layout": 0.9468,
+              "layout": 0.9489,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60216,7 +60216,7 @@
               "text_f1": 1
             },
             "hi-devanagari": {
-              "layout": 0.9549,
+              "layout": 0.9551,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60248,7 +60248,7 @@
               "text_f1": 0.8955
             },
             "ja-line-break": {
-              "layout": 0.8494,
+              "layout": 0.8486,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60256,7 +60256,7 @@
               "text_f1": 0.9167
             },
             "ja-ruby": {
-              "layout": 0.8929,
+              "layout": 0.8994,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60272,7 +60272,7 @@
               "text_f1": 0.0101
             },
             "ko-word-break": {
-              "layout": 0.8755,
+              "layout": 0.8757,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60296,7 +60296,7 @@
               "text_f1": 1
             },
             "lists": {
-              "layout": 0.9365,
+              "layout": 0.9389,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60304,11 +60304,11 @@
               "text_f1": 1
             },
             "long-report": {
-              "layout": 0.9157,
+              "layout": 0.917,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5918,
+              "strict": 0.6531,
               "text_f1": 0.9967
             },
             "margin-boxes": {
@@ -60360,7 +60360,7 @@
               "text_f1": 1
             },
             "markdown-template": {
-              "layout": 0.9579,
+              "layout": 0.9588,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60368,7 +60368,7 @@
               "text_f1": 1
             },
             "markdown-template-html": {
-              "layout": 0.9579,
+              "layout": 0.9588,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60408,7 +60408,7 @@
               "text_f1": 1
             },
             "multicol-article": {
-              "layout": 0.8472,
+              "layout": 0.8478,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60416,7 +60416,7 @@
               "text_f1": 1
             },
             "multicol-newsletter": {
-              "layout": 0.9248,
+              "layout": 0.925,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60424,7 +60424,7 @@
               "text_f1": 1
             },
             "named-pages": {
-              "layout": 0.9529,
+              "layout": 0.9533,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60432,7 +60432,7 @@
               "text_f1": 1
             },
             "named-strings": {
-              "layout": 0.9335,
+              "layout": 0.9337,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60440,7 +60440,7 @@
               "text_f1": 1
             },
             "named-strings-twin": {
-              "layout": 0.9335,
+              "layout": 0.9337,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60480,7 +60480,7 @@
               "text_f1": 1
             },
             "page-counter-increment": {
-              "layout": 0.9406,
+              "layout": 0.9407,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60520,7 +60520,7 @@
               "text_f1": 1
             },
             "page-selectors-counters": {
-              "layout": 0.9299,
+              "layout": 0.9297,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60528,7 +60528,7 @@
               "text_f1": 1
             },
             "page-selectors-counters-twin": {
-              "layout": 0.9299,
+              "layout": 0.9297,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60536,7 +60536,7 @@
               "text_f1": 1
             },
             "paper-base": {
-              "layout": 0.9412,
+              "layout": 0.944,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60544,7 +60544,7 @@
               "text_f1": 1
             },
             "paper-css-a3-landscape-paper": {
-              "layout": 0.9708,
+              "layout": 0.9713,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60552,7 +60552,7 @@
               "text_f1": 1
             },
             "paper-css-a3-landscape-prefer": {
-              "layout": 0.9503,
+              "layout": 0.9523,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60560,7 +60560,7 @@
               "text_f1": 1
             },
             "paper-css-a3-portrait-paper": {
-              "layout": 0.943,
+              "layout": 0.9447,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60568,15 +60568,15 @@
               "text_f1": 1
             },
             "paper-css-a3-portrait-prefer": {
-              "layout": 0.9642,
+              "layout": 0.9653,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-css-a4-landscape-paper": {
-              "layout": 0.9682,
+              "layout": 0.969,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60584,7 +60584,7 @@
               "text_f1": 1
             },
             "paper-css-a4-landscape-prefer": {
-              "layout": 0.9548,
+              "layout": 0.9566,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60592,7 +60592,7 @@
               "text_f1": 1
             },
             "paper-css-a4-portrait-paper": {
-              "layout": 0.942,
+              "layout": 0.9443,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60600,7 +60600,7 @@
               "text_f1": 1
             },
             "paper-css-a4-portrait-prefer": {
-              "layout": 0.9469,
+              "layout": 0.9494,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60608,7 +60608,7 @@
               "text_f1": 1
             },
             "paper-css-a5-landscape-paper": {
-              "layout": 0.9556,
+              "layout": 0.9571,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60616,7 +60616,7 @@
               "text_f1": 1
             },
             "paper-css-a5-landscape-prefer": {
-              "layout": 0.9515,
+              "layout": 0.954,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60624,7 +60624,7 @@
               "text_f1": 1
             },
             "paper-css-a5-portrait-paper": {
-              "layout": 0.9704,
+              "layout": 0.9715,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60632,7 +60632,7 @@
               "text_f1": 1
             },
             "paper-css-a5-portrait-prefer": {
-              "layout": 0.9557,
+              "layout": 0.9572,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60640,7 +60640,7 @@
               "text_f1": 1
             },
             "paper-css-b4-landscape-paper": {
-              "layout": 0.9599,
+              "layout": 0.9615,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60648,7 +60648,7 @@
               "text_f1": 1
             },
             "paper-css-b4-landscape-prefer": {
-              "layout": 0.9579,
+              "layout": 0.9616,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60656,7 +60656,7 @@
               "text_f1": 1
             },
             "paper-css-b4-portrait-paper": {
-              "layout": 0.9671,
+              "layout": 0.9665,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60664,7 +60664,7 @@
               "text_f1": 1
             },
             "paper-css-b4-portrait-prefer": {
-              "layout": 0.9574,
+              "layout": 0.9615,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60672,7 +60672,7 @@
               "text_f1": 1
             },
             "paper-css-b5-landscape-paper": {
-              "layout": 0.9624,
+              "layout": 0.9633,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60680,7 +60680,7 @@
               "text_f1": 1
             },
             "paper-css-b5-landscape-prefer": {
-              "layout": 0.959,
+              "layout": 0.9604,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60688,7 +60688,7 @@
               "text_f1": 1
             },
             "paper-css-b5-portrait-paper": {
-              "layout": 0.9595,
+              "layout": 0.9615,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60696,7 +60696,7 @@
               "text_f1": 1
             },
             "paper-css-b5-portrait-prefer": {
-              "layout": 0.9562,
+              "layout": 0.9571,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60704,7 +60704,7 @@
               "text_f1": 1
             },
             "paper-css-jis-b4-landscape-paper": {
-              "layout": 0.9478,
+              "layout": 0.9537,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60712,7 +60712,7 @@
               "text_f1": 1
             },
             "paper-css-jis-b4-landscape-prefer": {
-              "layout": 0.9541,
+              "layout": 0.9574,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60720,7 +60720,7 @@
               "text_f1": 1
             },
             "paper-css-jis-b4-portrait-paper": {
-              "layout": 0.9459,
+              "layout": 0.9482,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60728,7 +60728,7 @@
               "text_f1": 1
             },
             "paper-css-jis-b4-portrait-prefer": {
-              "layout": 0.9538,
+              "layout": 0.9577,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60744,7 +60744,7 @@
               "text_f1": 1
             },
             "paper-css-jis-b5-landscape-prefer": {
-              "layout": 0.9591,
+              "layout": 0.9611,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60752,7 +60752,7 @@
               "text_f1": 1
             },
             "paper-css-jis-b5-portrait-paper": {
-              "layout": 0.9602,
+              "layout": 0.9632,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60760,7 +60760,7 @@
               "text_f1": 1
             },
             "paper-css-jis-b5-portrait-prefer": {
-              "layout": 0.9586,
+              "layout": 0.96,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60768,7 +60768,7 @@
               "text_f1": 1
             },
             "paper-css-ledger-landscape-paper": {
-              "layout": 0.9672,
+              "layout": 0.9663,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60776,7 +60776,7 @@
               "text_f1": 1
             },
             "paper-css-ledger-landscape-prefer": {
-              "layout": 0.9521,
+              "layout": 0.9541,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60784,7 +60784,7 @@
               "text_f1": 1
             },
             "paper-css-ledger-portrait-paper": {
-              "layout": 0.9707,
+              "layout": 0.9713,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60792,7 +60792,7 @@
               "text_f1": 1
             },
             "paper-css-ledger-portrait-prefer": {
-              "layout": 0.9553,
+              "layout": 0.9565,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60800,7 +60800,7 @@
               "text_f1": 1
             },
             "paper-css-legal-landscape-paper": {
-              "layout": 0.9688,
+              "layout": 0.9695,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60808,7 +60808,7 @@
               "text_f1": 1
             },
             "paper-css-legal-landscape-prefer": {
-              "layout": 0.9562,
+              "layout": 0.9603,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60816,7 +60816,7 @@
               "text_f1": 1
             },
             "paper-css-legal-portrait-paper": {
-              "layout": 0.9632,
+              "layout": 0.9656,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60824,7 +60824,7 @@
               "text_f1": 1
             },
             "paper-css-legal-portrait-prefer": {
-              "layout": 0.9554,
+              "layout": 0.9574,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60832,7 +60832,7 @@
               "text_f1": 1
             },
             "paper-css-lengths-narrow-paper": {
-              "layout": 0.9648,
+              "layout": 0.9654,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60840,7 +60840,7 @@
               "text_f1": 1
             },
             "paper-css-lengths-narrow-prefer": {
-              "layout": 0.9519,
+              "layout": 0.9539,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60848,7 +60848,7 @@
               "text_f1": 1
             },
             "paper-css-lengths-wide-paper": {
-              "layout": 0.9642,
+              "layout": 0.9657,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60856,22 +60856,6 @@
               "text_f1": 1
             },
             "paper-css-lengths-wide-prefer": {
-              "layout": 0.9575,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-css-letter-landscape-paper": {
-              "layout": 0.9562,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-css-letter-landscape-prefer": {
               "layout": 0.9587,
               "link_recall": 1,
               "outline_recall": 1,
@@ -60879,8 +60863,24 @@
               "strict": 1,
               "text_f1": 1
             },
+            "paper-css-letter-landscape-paper": {
+              "layout": 0.9585,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "paper-css-letter-landscape-prefer": {
+              "layout": 0.9607,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "paper-css-letter-portrait-paper": {
-              "layout": 0.9491,
+              "layout": 0.9505,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60888,7 +60888,7 @@
               "text_f1": 1
             },
             "paper-css-letter-portrait-prefer": {
-              "layout": 0.9537,
+              "layout": 0.957,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60896,7 +60896,7 @@
               "text_f1": 1
             },
             "paper-default-landscape": {
-              "layout": 0.9541,
+              "layout": 0.9559,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60912,7 +60912,7 @@
               "text_f1": 1
             },
             "paper-margins-narrow-a3-landscape": {
-              "layout": 0.9546,
+              "layout": 0.957,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60920,7 +60920,7 @@
               "text_f1": 1
             },
             "paper-margins-narrow-a3-portrait": {
-              "layout": 0.9599,
+              "layout": 0.9617,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60928,7 +60928,7 @@
               "text_f1": 1
             },
             "paper-margins-narrow-a4-landscape": {
-              "layout": 0.9577,
+              "layout": 0.9569,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60936,7 +60936,7 @@
               "text_f1": 1
             },
             "paper-margins-narrow-a4-portrait": {
-              "layout": 0.9564,
+              "layout": 0.9616,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60944,7 +60944,7 @@
               "text_f1": 1
             },
             "paper-margins-narrow-a5-landscape": {
-              "layout": 0.955,
+              "layout": 0.9563,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60952,7 +60952,7 @@
               "text_f1": 1
             },
             "paper-margins-narrow-a5-portrait": {
-              "layout": 0.9566,
+              "layout": 0.9577,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60960,7 +60960,7 @@
               "text_f1": 1
             },
             "paper-margins-none-a3-landscape": {
-              "layout": 0.9356,
+              "layout": 0.9366,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60968,7 +60968,7 @@
               "text_f1": 1
             },
             "paper-margins-none-a3-portrait": {
-              "layout": 0.9535,
+              "layout": 0.9575,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60976,14 +60976,6 @@
               "text_f1": 1
             },
             "paper-margins-none-a4-landscape": {
-              "layout": 0.9574,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 1,
-              "text_f1": 1
-            },
-            "paper-margins-none-a4-portrait": {
               "layout": 0.961,
               "link_recall": 1,
               "outline_recall": 1,
@@ -60991,8 +60983,16 @@
               "strict": 1,
               "text_f1": 1
             },
+            "paper-margins-none-a4-portrait": {
+              "layout": 0.9625,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "paper-margins-none-a5-landscape": {
-              "layout": 0.953,
+              "layout": 0.9536,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61000,15 +61000,15 @@
               "text_f1": 1
             },
             "paper-margins-none-a5-portrait": {
-              "layout": 0.9557,
+              "layout": 0.9567,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.6667,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-margins-uneven-a3-landscape": {
-              "layout": 0.947,
+              "layout": 0.9497,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61016,7 +61016,7 @@
               "text_f1": 1
             },
             "paper-margins-uneven-a3-portrait": {
-              "layout": 0.9524,
+              "layout": 0.9546,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61024,7 +61024,7 @@
               "text_f1": 1
             },
             "paper-margins-uneven-a4-landscape": {
-              "layout": 0.9433,
+              "layout": 0.9449,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61032,7 +61032,7 @@
               "text_f1": 1
             },
             "paper-margins-uneven-a4-portrait": {
-              "layout": 0.9529,
+              "layout": 0.9579,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61040,15 +61040,15 @@
               "text_f1": 1
             },
             "paper-margins-uneven-a5-landscape": {
-              "layout": 0.9508,
+              "layout": 0.9518,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.8,
+              "strict": 1,
               "text_f1": 1
             },
             "paper-margins-uneven-a5-portrait": {
-              "layout": 0.9593,
+              "layout": 0.9618,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61248,7 +61248,7 @@
               "text_f1": 1
             },
             "paper-option-a3-landscape": {
-              "layout": 0.9529,
+              "layout": 0.9548,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61256,7 +61256,7 @@
               "text_f1": 1
             },
             "paper-option-a3-portrait": {
-              "layout": 0.9649,
+              "layout": 0.966,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61264,7 +61264,7 @@
               "text_f1": 1
             },
             "paper-option-a4-landscape": {
-              "layout": 0.954,
+              "layout": 0.9558,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61272,7 +61272,7 @@
               "text_f1": 1
             },
             "paper-option-a4-portrait": {
-              "layout": 0.9333,
+              "layout": 0.9358,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61280,7 +61280,7 @@
               "text_f1": 1
             },
             "paper-option-a5-landscape": {
-              "layout": 0.9364,
+              "layout": 0.9385,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61288,7 +61288,7 @@
               "text_f1": 1
             },
             "paper-option-a5-portrait": {
-              "layout": 0.9505,
+              "layout": 0.9521,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61296,7 +61296,7 @@
               "text_f1": 1
             },
             "paper-option-b5-landscape": {
-              "layout": 0.9607,
+              "layout": 0.9621,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61304,7 +61304,7 @@
               "text_f1": 1
             },
             "paper-option-b5-portrait": {
-              "layout": 0.957,
+              "layout": 0.9579,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61312,7 +61312,7 @@
               "text_f1": 1
             },
             "paper-option-executive-landscape": {
-              "layout": 0.9613,
+              "layout": 0.9634,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61320,7 +61320,7 @@
               "text_f1": 1
             },
             "paper-option-executive-portrait": {
-              "layout": 0.9644,
+              "layout": 0.9655,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61328,7 +61328,7 @@
               "text_f1": 1
             },
             "paper-option-legal-landscape": {
-              "layout": 0.9562,
+              "layout": 0.9603,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61336,7 +61336,7 @@
               "text_f1": 1
             },
             "paper-option-legal-portrait": {
-              "layout": 0.9554,
+              "layout": 0.9574,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61344,7 +61344,7 @@
               "text_f1": 1
             },
             "paper-option-letter-landscape": {
-              "layout": 0.9587,
+              "layout": 0.9607,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61352,7 +61352,7 @@
               "text_f1": 1
             },
             "paper-option-letter-portrait": {
-              "layout": 0.9537,
+              "layout": 0.957,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61360,7 +61360,7 @@
               "text_f1": 1
             },
             "paper-option-tabloid-landscape": {
-              "layout": 0.9521,
+              "layout": 0.9541,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61368,7 +61368,7 @@
               "text_f1": 1
             },
             "paper-option-tabloid-portrait": {
-              "layout": 0.9553,
+              "layout": 0.9565,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61392,7 +61392,7 @@
               "text_f1": 1
             },
             "running-elements": {
-              "layout": 0.9363,
+              "layout": 0.9362,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61400,7 +61400,7 @@
               "text_f1": 1
             },
             "running-elements-twin": {
-              "layout": 0.9488,
+              "layout": 0.9487,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61408,7 +61408,7 @@
               "text_f1": 1
             },
             "scale": {
-              "layout": 0.9397,
+              "layout": 0.9398,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61456,7 +61456,7 @@
               "text_f1": 0.9296
             },
             "target-counter-toc": {
-              "layout": 0.9645,
+              "layout": 0.9642,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61464,7 +61464,7 @@
               "text_f1": 1
             },
             "target-counter-toc-twin": {
-              "layout": 0.9645,
+              "layout": 0.9642,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61488,7 +61488,7 @@
               "text_f1": 0.4088
             },
             "user-stylesheet": {
-              "layout": 0.9387,
+              "layout": 0.9382,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61496,7 +61496,7 @@
               "text_f1": 1
             },
             "user-stylesheet-twin": {
-              "layout": 0.9387,
+              "layout": 0.9382,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61504,7 +61504,7 @@
               "text_f1": 1
             },
             "variable-font": {
-              "layout": 0.9507,
+              "layout": 0.9521,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
