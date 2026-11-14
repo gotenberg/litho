@@ -61,6 +61,7 @@ const (
 	genericCursive
 	genericFantasy
 	genericSystemUI
+	genericMath
 )
 
 // genericNames are the names of the generic families, lower case.
@@ -74,6 +75,7 @@ var genericNames = [...]struct {
 	{"cursive", genericCursive},
 	{"fantasy", genericFantasy},
 	{"system-ui", genericSystemUI},
+	{"math", genericMath},
 }
 
 // genericOf returns the generic family name stands for, genericNone for a
@@ -144,6 +146,25 @@ var genericFamilies = map[generic][]string{
 	genericSystemUI: {
 		"Cantarell", "Noto Sans UI", "Segoe UI",
 	},
+	genericMath: mathFamilies,
+}
+
+// mathFamilies is the preference list of the generic math family (CSS
+// Fonts 4, 2.1.1): the prefer list of the math alias of fontconfig's
+// conf.d/60-generic.conf, then DejaVu Math TeX Gyre, the face whose
+// characters fontconfig counts as covering the und-zmth orthography that
+// 45-generic.conf gives a math request; the sans-serif list follows, as
+// fontconfig falls back for a math request.
+//
+// # Corpus evidence
+//
+//   - probe, html: in the gotenberg/gotenberg:9.4.1 image, fc-match math
+//     gives DejaVu Math TeX Gyre, fc-list :lang=und-zmth lists it alone
+//     (not Noto Sans Math), and Chromium prints a MathML formula and a
+//     paragraph of font-family: math in it.
+var mathFamilies = []string{
+	"XITS Math", "STIX Two Math", "Cambria Math", "Latin Modern Math", "Minion Math",
+	"Lucida Math", "Asana Math", "DejaVu Math TeX Gyre",
 }
 
 // browserDefaults are the families Chromium asks fontconfig for in place of
@@ -306,13 +327,13 @@ func (l *familyList) addWithAliases(name string) {
 // CJK family of the region comes first, as conf.d/70-noto-cjk.conf prepends
 // it to the generic family of a pattern in that language.
 func (l *familyList) addGeneric(g generic, region string) {
-	if region != "" && g != genericNone {
+	if region != "" && g != genericNone && g != genericMath {
 		l.add(familyKey(cjkFamily(g, region)))
 	}
 	for _, name := range genericFamilies[g] {
 		l.addWithAliases(name)
 	}
-	if g == genericSystemUI {
+	if g == genericSystemUI || g == genericMath {
 		l.addGeneric(genericSansSerif, "")
 	}
 }
@@ -511,7 +532,7 @@ func BrowserFamilies(families []string, lang string) []string {
 //     and quotes-032 set serif under lang="ja" or "zh-Hans".
 func chromiumCJKFamily(g generic, region string) string {
 	switch {
-	case region == "", g == genericSystemUI:
+	case region == "", g == genericSystemUI, g == genericMath:
 		return ""
 	case g == genericMonospace:
 		if region == "JP" {

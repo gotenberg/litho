@@ -575,3 +575,31 @@ func TestMatch_StaticWeightUnderChromium(t *testing.T) {
 		}
 	}
 }
+
+// TestMatch_GenericMath resolves the math family to the math faces of
+// fontconfig's lists, then to sans-serif, and keeps it as Chromium
+// resolves it.
+func TestMatch_GenericMath(t *testing.T) {
+	t.Parallel()
+	f := newTestFonts(t,
+		fontFile{name: "a_liberation_serif.ttf", data: familyFace("Liberation Serif", "Regular", 400, false)},
+		fontFile{name: "b_dejavu_sans.ttf", data: familyFace("DejaVu Sans", "Regular", 400, false)},
+		fontFile{name: "c_dejavu_math.ttf", data: familyFace("DejaVu Math TeX Gyre", "Regular", 400, false)},
+	)
+	if got := f.Match(Style{Families: []string{"math"}, Size: 10}).Family(); got != "DejaVu Math TeX Gyre" {
+		t.Errorf("Match(math) = %s, want DejaVu Math TeX Gyre", got)
+	}
+	if got := f.Match(Style{Families: []string{"math"}, Size: 10, Lang: "ja"}).Family(); got != "DejaVu Math TeX Gyre" {
+		t.Errorf("Match(math) in Japanese = %s, want DejaVu Math TeX Gyre", got)
+	}
+	g := newTestFonts(t,
+		fontFile{name: "a_liberation_serif.ttf", data: familyFace("Liberation Serif", "Regular", 400, false)},
+		fontFile{name: "b_dejavu_sans.ttf", data: familyFace("DejaVu Sans", "Regular", 400, false)},
+	)
+	if got := g.Match(Style{Families: []string{"math"}, Size: 10}).Family(); got != "DejaVu Sans" {
+		t.Errorf("Match(math) without a math face = %s, want the sans-serif DejaVu Sans", got)
+	}
+	if got := BrowserFamilies([]string{"math"}, ""); !slices.Equal(got, []string{"math"}) {
+		t.Errorf("BrowserFamilies(math) = %q", got)
+	}
+}
