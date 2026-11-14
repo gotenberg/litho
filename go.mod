@@ -7,7 +7,7 @@ require (
 	github.com/antchfx/xmlquery v1.5.2
 	github.com/antchfx/xpath v1.3.9
 	github.com/dop251/goja v0.0.0-20261105002551-2413f2132ac8
-	golang.org/x/text v0.43.0
+	golang.org/x/text v0.44.0
 )
 
 require (
