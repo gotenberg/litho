@@ -49,12 +49,16 @@ import (
 //     3 2 and 3 1 with the first line 30 and 60px lower; 2 at 45px on
 //     lines of normal height; text beside it at its right edge, 10 + 95,
 //     and 10 + 76.25 rounded up to 87; a 3px padding and a 4px margin
-//     widen the room it takes and leave its glyph in place; font-size
-//     and line-height on the letter change nothing. A DejaVu Sans 'H'
-//     starts 5, 9, 13 and 17px left of its box at 58.85 to 182.42px, its
-//     side bearing floored to whole pixels; a 'T', whose bearing is
-//     negative, sits on its box's edge, and the text beside it starts
-//     where its glyph ends, rounded up.
+//     widen the room it takes; the padding leaves its glyph in place and
+//     the margin moves it 4px right and down, as a 10px margin-top moves
+//     it 10px down and a 10px padding-top or a 3px border-top none;
+//     font-size and line-height on the letter change nothing. A DejaVu
+//     Sans 'H' starts 5, 9, 13 and 17px left of its box at 58.85 to
+//     182.42px, its side bearing floored to whole pixels; a 'T', whose
+//     bearing is negative, sits on its box's edge, and the text beside it
+//     starts where its glyph ends, rounded up.
+//   - wpt: css-inline/initial-letter/initial-letter-block-position-margins
+//     and -margins-rtl.
 func (e *engine) layoutInitialLetter(f *box, cb cblock, bc *bfc, lineTop float64) int {
 	root := paragraphOf(f)
 	il := f.st.InitialLetter
@@ -116,7 +120,9 @@ func (e *engine) layoutInitialLetter(f *box, cb cblock, bc *bfc, lineTop float64
 		l.y += dy
 	}
 	f.h = bottom - top
-	minY := capTop + top - f.pd[css.Top] - f.bd[css.Top] - f.m[css.Top]
+	// The letter's border box starts where its glyphs' alignment puts it,
+	// so a block-start margin moves the letter down by its length.
+	minY := capTop + top - f.pd[css.Top] - f.bd[css.Top]
 	x, y := bc.placeBeside(f.float, f.marginW(), f.marginH(), max(minY, bc.clearInitial()), cb.x, cb.x+cb.w)
 	f.shift(x+f.m[css.Left]-f.x, y+f.m[css.Top]-f.y)
 	return e.addFloatRect(f, bc, true)

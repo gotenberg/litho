@@ -117,3 +117,19 @@ func TestInitialLetter_Indent(t *testing.T) {
 		t.Fatal("nothing drawn")
 	}
 }
+
+// TestInitialLetter_MarginMovesTheLetter locks that the margins of an
+// initial letter move it, its glyphs with its border box, by its
+// block-start and inline-start margins, as Chromium draws it (CSS Inline
+// 3, 4.6).
+func TestInitialLetter_MarginMovesTheLetter(t *testing.T) {
+	l := letter("A", 3, 3)
+	l.Style.Margin = dims(4, 0, 0, 3)
+	p := el(sty(), l, txt(sty(), "bb cc dd ee"))
+	res := runWith(t, doc(p), Options{Page: page(60, 200)})
+	for _, r := range texts(res, 1) {
+		if r.text == "A" && (!near(r.x/css.Pt, 3) || !near(r.y/css.Pt, 28+4)) {
+			t.Errorf("letter at %v, %v px, want 3, 32", r.x/css.Pt, r.y/css.Pt)
+		}
+	}
+}
