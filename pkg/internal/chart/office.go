@@ -49,6 +49,10 @@ const (
 	//     with or without a legend below, its line 2.99 pt under the
 	//     labels' line.
 	officeAxisTitlePad = 2.99
+	// officeTopPad is the distance from the chart's top edge to what
+	// comes first under it when no title stands there: a legend above the
+	// plot area, or the room of the axis labels.
+	officeTopPad = 5.0
 )
 
 // office reports a chart drawn by Office's rules.
@@ -81,9 +85,7 @@ func (rd *renderer) officeLegend() bool {
 // officePlot draws the title and legend of r's chart where Office puts
 // them and returns the rectangle left for the plot area and its axis
 // labels. A legend at the side keeps LibreOffice's placement and the
-// layout distance on its side; so does the top of a chart with neither a
-// title nor a legend above the plot area. The title of an axis beside the
-// plot area keeps LibreOffice's room.
+// layout distance on its side.
 //
 // # Corpus evidence
 //
@@ -104,6 +106,10 @@ func (rd *renderer) officeLegend() bool {
 //     at 9 pt, their line and 5.9 pt.
 //   - probe, pptx: PowerPoint's value axis is 57.2 pt shorter than the
 //     chart, where Excel's is 57.36 pt shorter.
+//   - probe, xlsx: without a title, Excel puts the plot area 11.10 pt
+//     under the chart's top in frames 87, 145 and 203 pt high, half a
+//     10 pt label line under officeTopPad, and a legend above it 5.0 pt
+//     under the top.
 func (rd *renderer) officePlot(r typeset.Rect) typeset.Rect {
 	c := rd.c
 	rem := r
@@ -116,11 +122,11 @@ func (rd *renderer) officePlot(r typeset.Rect) typeset.Rect {
 		}
 	}
 	left, right, bottom := officePad, officePad, officePad
-	dx, dy := layoutDistance*r.Width, float64(layoutDistance*r.Height)
+	dx := layoutDistance * r.Width
 	if lg := c.Legend; lg != nil {
 		if !top && rd.officeLegend() && lg.Position == LegendTop {
-			rem.Y += dy
-			rem.Height -= dy
+			rem.Y += officeTopPad
+			rem.Height -= officeTopPad
 		}
 		rd.legend(r, &rem)
 		if !lg.Overlay {
@@ -142,8 +148,8 @@ func (rd *renderer) officePlot(r typeset.Rect) typeset.Rect {
 		}
 	}
 	if !top {
-		rem.Y += dy
-		rem.Height -= dy
+		rem.Y += officeTopPad
+		rem.Height -= officeTopPad
 	}
 	return typeset.Rect{X: rem.X + left, Y: rem.Y, Width: rem.Width - left - right, Height: rem.Height - bottom}
 }
@@ -236,6 +242,26 @@ func (rd *renderer) officeRoom(bb, inner typeset.Rect, dims []*dim) typeset.Rect
 		return bb
 	}
 	return union(bb, typeset.Rect{X: right, Y: inner.Y, Width: officeRightRoom})
+}
+
+// officeTitleRoom returns the room the title b of d's axis takes across
+// the axis: its height for an axis under or over the plot area, its width
+// for one beside it.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: a 10 pt bold title of a value axis beside the plot
+//     area moves the plot area 21.20 pt right, a 14 pt one 26.09 pt,
+//     their line and 8.99 pt, however long the title; the title's line
+//     ends 3.04 pt left of the value labels and starts 5.97 pt right of
+//     the chart's edge pad, centred on the plot area's height. A 14 pt
+//     title of the category axis is centred on the plot area's width.
+func officeTitleRoom(d *dim, b *block) float64 {
+	w, h := b.rotated()
+	if d.vertical {
+		return w
+	}
+	return h
 }
 
 // officeOrigin returns the value Office counts the ticks of the linear

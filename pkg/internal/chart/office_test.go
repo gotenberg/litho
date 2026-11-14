@@ -351,3 +351,26 @@ func TestRender_OfficeScaleOnEveryValueAxis(t *testing.T) {
 		}
 	})
 }
+
+// TestRender_OfficeLayoutUntitled holds a chart without a title under
+// OfficeRules to Office's distances: the room of the axis labels starts
+// officeTopPad under the chart's top.
+func TestRender_OfficeLayoutUntitled(t *testing.T) {
+	b, _ := plotBounds(t, officeChart(2.3333, 3.5, 7), typeset.Rect{Width: 361.2, Height: 145.2})
+	if want := officeTopPad + officeMinLabelRoom/2; math.Abs(b.Y-want) > 1e-6 {
+		t.Errorf("plot area top = %v, want %v", b.Y, want)
+	}
+}
+
+// TestRender_OfficeValueAxisTitle holds the title of a value axis beside
+// the plot area to Office's room: its line and three officeAxisTitlePad.
+func TestRender_OfficeValueAxisTitle(t *testing.T) {
+	r := typeset.Rect{Width: 361.2, Height: 145.2}
+	base, _ := plotBounds(t, officeChart(2.3333, 3.5, 7), r)
+	c := officeChart(2.3333, 3.5, 7)
+	c.Axes[1].Title = &Title{Text: "UU", Style: TextStyle{Size: 10, Color: typeset.Black}}
+	b, _ := plotBounds(t, c, r)
+	if got, want := b.X-base.X, 10+3*officeAxisTitlePad; math.Abs(got-want) > 1e-6 {
+		t.Errorf("title room = %v, want %v", got, want)
+	}
+}

@@ -975,12 +975,18 @@ func (rd *renderer) reserveTitles(avail typeset.Rect, dims ...*dim) typeset.Rect
 		w += float64(2 * titleHPad * b.style.Size)
 		h += float64(2 * titleVPad * b.style.Size)
 		high := d.atHighEnd()
-		if !d.vertical && rd.officeLayout() {
-			_, th := b.rotated()
-			room := th + 3*officeAxisTitlePad
-			avail.Height -= room
-			if high {
-				avail.Y += room
+		if rd.officeLayout() {
+			room := officeTitleRoom(d, b) + 3*officeAxisTitlePad
+			if d.vertical {
+				avail.Width -= room
+				if !high {
+					avail.X += room
+				}
+			} else {
+				avail.Height -= room
+				if high {
+					avail.Y += room
+				}
 			}
 			continue
 		}
@@ -1010,20 +1016,30 @@ func (rd *renderer) axisTitle(d *dim, ext typeset.Rect) {
 	w += float64(2 * titleHPad * b.style.Size)
 	h += float64(2 * titleVPad * b.style.Size)
 	dx, dy := float64(layoutDistance*rd.page.Width), float64(layoutDistance*rd.page.Height)
+	// along spans the title's axis; Office centres the title on the plot
+	// area, LibreOffice on the plot area with its axis labels.
+	along := ext
+	office := rd.officeLayout()
+	if office {
+		along = d.inner
+	}
 	var cx, cy float64
 	if d.vertical {
-		cy = ext.Y + float64(ext.Height/2)
+		cy = along.Y + float64(along.Height/2)
+		gap := dx + float64(w/2)
+		if office {
+			gap = officeAxisTitlePad + float64(officeTitleRoom(d, b)/2)
+		}
 		if d.outside > 0 {
-			cx = ext.X + ext.Width + dx + float64(w/2)
+			cx = ext.X + ext.Width + gap
 		} else {
-			cx = ext.X - dx - float64(w/2)
+			cx = ext.X - gap
 		}
 	} else {
-		cx = ext.X + float64(ext.Width/2)
+		cx = along.X + float64(along.Width/2)
 		gap := dy + float64(h/2)
-		if rd.officeLayout() {
-			_, th := b.rotated()
-			gap = officeAxisTitlePad + float64(th/2)
+		if office {
+			gap = officeAxisTitlePad + float64(officeTitleRoom(d, b)/2)
 		}
 		if d.outside > 0 {
 			cy = ext.Y - gap
