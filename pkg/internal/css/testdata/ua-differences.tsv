@@ -69,6 +69,8 @@ missing	|legend[align=right i]|justify-self	justify-self on a block-level box (C
 missing	|nobr wbr|white-space	a wbr is a break opportunity litho inserts as U+200B, whatever its white-space
 missing	|rt|display	Chromium 156: an rt outside a ruby stays inline, and an annotation is half its ruby's size, aligned at the start, at the normal line height
 missing	|select|appearance	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
+missing	|sub|line-height	Chromium 156: sub and sup inherit their line height, and a line set at a number or a length grows by a script box laid out at that height
+missing	|sup|line-height	Chromium 156: sub and sup inherit their line height, and a line set at a number or a length grows by a script box laid out at that height
 missing	|textarea|appearance	no effect on paper: the property styles interaction or a native widget (cursor, focus, :active, appearance, autofill, field-sizing)
 missing	|wbr|display-outside	display-outside is a draft property litho does not parse; br and wbr are line breaks litho makes itself
 own	|::footnote-call|content	CSS GCPM 3, Appendix B: the footnote and note calls and markers

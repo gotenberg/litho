@@ -40,6 +40,26 @@ func TestUserAgent_RenderingRules(t *testing.T) {
 	}
 }
 
+// TestUserAgent_ScriptsInheritLineHeight locks the line height of sub and
+// sup: inherited, as Chromium computes it, where the HTML Standard's
+// Rendering section sets normal (15.3.4). A line set at a number or a
+// length then grows by a script box laid out at that height.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium in gotenberg/gotenberg:9.4.1 computes the
+//     line height of a sub and of a sup under a 16 px paragraph at
+//     line-height 1.8 as 24px, 1.8 times their 13.3333px.
+func TestUserAgent_ScriptsInheritLineHeight(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<body><p>a<sub id=b>2</sub><sup id=p>2</sup></p></body>`, `p { line-height: 1.8 }`)
+	for _, id := range []string{"b", "p"} {
+		if s := c.of(id); s.LineHeight.Kind != Number || s.LineHeight.Value != 1.8 {
+			t.Errorf("%s: line-height %+v, want the number 1.8", id, s.LineHeight)
+		}
+	}
+}
+
 // TestUserAgent_TableBorderColors locks the border colours of tables and
 // cells: currentColor, as the HTML Standard's Rendering section leaves
 // them (15.3.8), black for the cells of a table with a rules attribute,

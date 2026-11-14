@@ -186,9 +186,13 @@ q::before {
 q::after {
   content: close-quote;
 }
+/*
+ * The Standard also sets line-height: normal on sub and sup. Chromium 156
+ * sets none: they inherit the line height, and a line set at a number or a
+ * length grows by a script box laid out at that height.
+ */
 sub,
 sup {
-  line-height: normal;
   font-size: smaller;
 }
 ruby {
