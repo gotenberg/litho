@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-14T14:03:22Z",
+  "captured_at": "2026-11-14T14:53:44Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -117122,8 +117122,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 4673,
-          "mismatched": 520,
+          "matched": 4684,
+          "mismatched": 509,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -120339,19 +120339,19 @@
             "css/css-inline/firefox-bug-2073465.html": "pass",
             "css/css-inline/initial-letter/Initial-letter-breaking-rtl.html": "pass",
             "css/css-inline/initial-letter/Initial-letter-breaking.html": "pass",
-            "css/css-inline/initial-letter/initial-letter-block-position-drop-over-ruby-tall.html": "fail",
-            "css/css-inline/initial-letter/initial-letter-block-position-drop-over-ruby.html": "fail",
-            "css/css-inline/initial-letter/initial-letter-block-position-drop-under-ruby-tall.html": "fail",
+            "css/css-inline/initial-letter/initial-letter-block-position-drop-over-ruby-tall.html": "pass",
+            "css/css-inline/initial-letter/initial-letter-block-position-drop-over-ruby.html": "pass",
+            "css/css-inline/initial-letter/initial-letter-block-position-drop-under-ruby-tall.html": "pass",
             "css/css-inline/initial-letter/initial-letter-block-position-drop-under-ruby.html": "pass",
             "css/css-inline/initial-letter/initial-letter-block-position-fractional-drop.html": "fail",
             "css/css-inline/initial-letter/initial-letter-block-position-fractional-size.html": "fail",
             "css/css-inline/initial-letter/initial-letter-block-position-margins-rtl.html": "pass",
             "css/css-inline/initial-letter/initial-letter-block-position-margins.html": "pass",
             "css/css-inline/initial-letter/initial-letter-block-position-over-sunk.html": "fail",
-            "css/css-inline/initial-letter/initial-letter-block-position-raise-over-ruby-tall.html": "fail",
+            "css/css-inline/initial-letter/initial-letter-block-position-raise-over-ruby-tall.html": "pass",
             "css/css-inline/initial-letter/initial-letter-block-position-raise-over-ruby.html": "pass",
-            "css/css-inline/initial-letter/initial-letter-block-position-raise-under-ruby-tall.html": "fail",
-            "css/css-inline/initial-letter/initial-letter-block-position-raise-under-ruby.html": "fail",
+            "css/css-inline/initial-letter/initial-letter-block-position-raise-under-ruby-tall.html": "pass",
+            "css/css-inline/initial-letter/initial-letter-block-position-raise-under-ruby.html": "pass",
             "css/css-inline/initial-letter/initial-letter-drop-initial-rtl.html": "pass",
             "css/css-inline/initial-letter/initial-letter-drop-initial.html": "pass",
             "css/css-inline/initial-letter/initial-letter-float-001-rtl.html": "pass",
@@ -120368,8 +120368,8 @@
             "css/css-inline/initial-letter/initial-letter-short-para-initial-letter-clears.html": "pass",
             "css/css-inline/initial-letter/initial-letter-short-para-initial-letter-wraps.html": "pass",
             "css/css-inline/initial-letter/initial-letter-with-first-line.html": "pass",
-            "css/css-inline/initial-letter/initial-letter-with-tab-rtl.html": "fail",
-            "css/css-inline/initial-letter/initial-letter-with-tab.html": "fail",
+            "css/css-inline/initial-letter/initial-letter-with-tab-rtl.html": "pass",
+            "css/css-inline/initial-letter/initial-letter-with-tab.html": "pass",
             "css/css-inline/inline-block-baseline-with-block-in-inline.html": "pass",
             "css/css-inline/inline-block-last-baseline-skips-non-contributing-block-in-inline.html": "pass",
             "css/css-inline/model/phantom-line-boxes-001.html": "pass",
@@ -121031,11 +121031,11 @@
             "css/css-ruby/intra-base-white-space-001.html": "fail",
             "css/css-ruby/ruby-base-container-float.html": "pass",
             "css/css-ruby/ruby-box-model-001.html": "fail",
-            "css/css-ruby/ruby-overhang-spaces-003.html": "fail",
-            "css/css-ruby/ruby-overhang-spaces-008.html": "fail",
+            "css/css-ruby/ruby-overhang-spaces-003.html": "pass",
+            "css/css-ruby/ruby-overhang-spaces-008.html": "pass",
             "css/css-ruby/ruby-overhang-spaces-013.html": "fail",
             "css/css-ruby/ruby-overhang-spaces-align-002.html": "fail",
-            "css/css-ruby/ruby-overhang-spaces-align-005.html": "fail",
+            "css/css-ruby/ruby-overhang-spaces-align-005.html": "pass",
             "css/css-ruby/whitespace-ruby-beside-float.html": "pass",
             "css/css-shapes/shape-outside/assorted/float-retry-push-circle.html": "pass",
             "css/css-shapes/shape-outside/assorted/float-retry-push-image.html": "pass",
