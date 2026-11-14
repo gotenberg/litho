@@ -661,6 +661,7 @@ func featureNames(filter []string) []string {
 func runVersions(args []string) int {
 	fs := flag.NewFlagSet("versions", flag.ExitOnError)
 	asBuildArgs := fs.Bool("build-args", false, "Print the docker build arguments instead of KEY=VALUE lines")
+	asImage := fs.Bool("image", false, "Print the corpus image provisioning builds and runs, tagged by what it is built from")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
 		return 1
@@ -675,6 +676,15 @@ func runVersions(args []string) int {
 	}
 	if *asBuildArgs {
 		fmt.Println(strings.Join(pins.buildArgs(), " "))
+		return 0
+	}
+	if *asImage {
+		image, err := corpusImage()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			return 1
+		}
+		fmt.Println(image)
 		return 0
 	}
 	for _, e := range pins.Entries {

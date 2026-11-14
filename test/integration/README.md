@@ -234,8 +234,10 @@ The PDF operations are `text` (every page's text), `rewrite` (a full rewrite wit
 
 ```bash
 docker build $(go run ./test/integration/cmd/corpus versions --build-args) \
-  -t litho-corpus-builder test/integration/corpus
+  -t $(go run ./test/integration/cmd/corpus versions --image) test/integration/corpus
 ```
+
+The image is `litho-corpus-builder:<tag>`, the tag the first 16 hexadecimal digits of the SHA-256 of the Dockerfile, of every file of `corpus/` its `COPY` and `ADD` instructions read, and of the build arguments (`corpusImageTag` in `cmd/corpus/image.go`). Two trees whose provisioning files or pins differ name two images, so neither runs the other's; `corpus goldens` builds the image only when no image of its tag exists, and `flatten`, `redact-render` and `targets` run the image of their own tree.
 
 An environment variable of the same name overrides a pin for one invocation, and every command that reads the pins announces the override before anything else:
 

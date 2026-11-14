@@ -47,10 +47,6 @@ func runGoldens(ctx context.Context, args []string) int {
 	return 0
 }
 
-// corpusImage is the tag of the image provisioning builds and runs, and the one
-// the redact-render feature renders with poppler in (see [renderWithPoppler]).
-const corpusImage = "litho-corpus-builder"
-
 // goldensCorpus builds the corpus Docker image at the pinned versions and
 // runs it with the testdata directory bind-mounted at /output.
 //
@@ -124,14 +120,24 @@ func goldensCorpus(ctx context.Context, m *Manifest, pins *resolvedPins) error {
 	if dockerCtx == "" || !hasDockerfile(dockerCtx) {
 		return fmt.Errorf("docker context not found at %q", dockerCtx)
 	}
-	image := corpusImage
+	tag, err := corpusImageTag(dockerCtx, pins.buildArgs())
+	if err != nil {
+		return fmt.Errorf("name the corpus image: %w", err)
+	}
+	image := corpusImageRepository + ":" + tag
 
-	fmt.Printf("%s: building shared corpus image (%s)...\n", m.Name, image)
-	build := exec.Command("docker", dockerBuildArgs(image, dockerCtx, pins)...) //nolint:gosec // build context is the fixed corpus directory, pins are validated by parsePins
-	build.Stdout = os.Stdout
-	build.Stderr = os.Stderr
-	if err := build.Run(); err != nil {
-		return fmt.Errorf("docker build: %w", err)
+	// The tag is the content the image is built from: an image of that tag
+	// is this tree's, built already.
+	if exec.Command("docker", "image", "inspect", image).Run() == nil { //nolint:gosec // image is named by the corpus directory's content
+		fmt.Printf("%s: corpus image %s already built\n", m.Name, image)
+	} else {
+		fmt.Printf("%s: building corpus image (%s)...\n", m.Name, image)
+		build := exec.Command("docker", dockerBuildArgs(image, dockerCtx, pins)...) //nolint:gosec // build context is the fixed corpus directory, pins are validated by parsePins
+		build.Stdout = os.Stdout
+		build.Stderr = os.Stderr
+		if err := build.Run(); err != nil {
+			return fmt.Errorf("docker build: %w", err)
+		}
 	}
 
 	// The image runs this CLI's provision subcommand, cross-compiled on the
@@ -186,7 +192,7 @@ func dockerBuildArgs(image, dockerCtx string, pins *resolvedPins) []string {
 // than the host keeps the two in step when a caller builds for another
 // platform.
 func imageGOARCH(image string) (string, error) {
-	out, err := exec.Command("docker", "image", "inspect", "--format", "{{.Architecture}}", image).Output() //nolint:gosec // image is the fixed builder name
+	out, err := exec.Command("docker", "image", "inspect", "--format", "{{.Architecture}}", image).Output() //nolint:gosec // image is named by the corpus directory's content
 	if err != nil {
 		return "", fmt.Errorf("docker image inspect %s: %w", image, err)
 	}
@@ -403,9 +409,13 @@ func renderWithPoppler(ctx context.Context, dir string, jobs []popplerJob) (stri
 	if err != nil {
 		return "", fmt.Errorf("%w: docker not on PATH", errPopplerUnavailable)
 	}
-	inspect := exec.CommandContext(ctx, docker, "image", "inspect", "--format", "{{.Id}}", corpusImage) //nolint:gosec // docker from LookPath, fixed arguments
+	image, err := corpusImage()
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", errPopplerUnavailable, err)
+	}
+	inspect := exec.CommandContext(ctx, docker, "image", "inspect", "--format", "{{.Id}}", image) //nolint:gosec // docker from LookPath, fixed arguments
 	if err := inspect.Run(); err != nil {
-		return "", fmt.Errorf("%w: image %s not built (make corpus-goldens): %w", errPopplerUnavailable, corpusImage, err)
+		return "", fmt.Errorf("%w: image %s not built (make corpus-goldens): %w", errPopplerUnavailable, image, err)
 	}
 	var list strings.Builder
 	for _, j := range jobs {
@@ -423,7 +433,7 @@ func renderWithPoppler(ctx context.Context, dir string, jobs []popplerJob) (stri
 	if uid, gid := os.Getuid(), os.Getgid(); uid >= 0 && gid >= 0 {
 		args = append(args, "--user", fmt.Sprintf("%d:%d", uid, gid))
 	}
-	args = append(args, "-v", dir+":/rr", "--entrypoint", "/bin/bash", corpusImage, "/rr/render.sh")
+	args = append(args, "-v", dir+":/rr", "--entrypoint", "/bin/bash", image, "/rr/render.sh")
 	run := exec.CommandContext(ctx, docker, args...) //nolint:gosec // docker from LookPath, dir is our staging directory
 	if out, err := run.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("%w: docker run: %w: %s", errPopplerUnavailable, err, firstLine(out))

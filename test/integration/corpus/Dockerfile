@@ -15,10 +15,10 @@
 # platform of the veraPDF stage. To build and run by hand:
 #
 #   docker build $(go run ./test/integration/cmd/corpus versions --build-args) \
-#     -t litho-corpus-builder test/integration/corpus
+#     -t $(go run ./test/integration/cmd/corpus versions --image) test/integration/corpus
 #   GOOS=linux CGO_ENABLED=0 go build -o /tmp/corpus ./test/integration/cmd/corpus
 #   docker run --rm -v $(pwd)/test/integration/testdata/<name>:/output \
-#     -v /tmp/corpus:/work/bin/corpus:ro litho-corpus-builder <name> <profiles_csv>
+#     -v /tmp/corpus:/work/bin/corpus:ro $(go run ./test/integration/cmd/corpus versions --image) <name> <profiles_csv>
 
 ARG VERAPDF_VERSION
 ARG VERAPDF_IMAGE_DIGEST

@@ -295,9 +295,13 @@ func validateWithPdfcpu(ctx context.Context, dir string, files []string) (map[st
 	if err != nil {
 		return nil, "", fmt.Errorf("%w: docker not on PATH", errPdfcpuUnavailable)
 	}
-	inspect := exec.CommandContext(ctx, docker, "image", "inspect", "--format", "{{.Id}}", corpusImage) //nolint:gosec // docker from LookPath, fixed arguments
+	image, err := corpusImage()
+	if err != nil {
+		return nil, "", fmt.Errorf("%w: %w", errPdfcpuUnavailable, err)
+	}
+	inspect := exec.CommandContext(ctx, docker, "image", "inspect", "--format", "{{.Id}}", image) //nolint:gosec // docker from LookPath, fixed arguments
 	if err := inspect.Run(); err != nil {
-		return nil, "", fmt.Errorf("%w: image %s not built (make corpus-goldens): %w", errPdfcpuUnavailable, corpusImage, err)
+		return nil, "", fmt.Errorf("%w: image %s not built (make corpus-goldens): %w", errPdfcpuUnavailable, image, err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "pdfcpu-files.txt"), []byte(strings.Join(files, "\n")+"\n"), 0o600); err != nil {
 		return nil, "", fmt.Errorf("write pdfcpu files: %w", err)
@@ -311,7 +315,7 @@ func validateWithPdfcpu(ctx context.Context, dir string, files []string) (map[st
 	if uid, gid := os.Getuid(), os.Getgid(); uid >= 0 && gid >= 0 {
 		args = append(args, "--user", fmt.Sprintf("%d:%d", uid, gid))
 	}
-	args = append(args, "-v", dir+":/rr", "--entrypoint", "/bin/bash", corpusImage, "/rr/pdfcpu.sh")
+	args = append(args, "-v", dir+":/rr", "--entrypoint", "/bin/bash", image, "/rr/pdfcpu.sh")
 	run := exec.CommandContext(ctx, docker, args...) //nolint:gosec // docker from LookPath, dir is our staging directory
 	if out, err := run.CombinedOutput(); err != nil {
 		return nil, "", fmt.Errorf("%w: docker run: %w: %s", errPdfcpuUnavailable, err, firstLine(out))
