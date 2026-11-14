@@ -106,8 +106,8 @@ func drawnChars(seq []rune) []rune {
 //     and of one in Segoe UI Emoji in colour, in Segoe UI Emoji; litho
 //     lists DejaVu Sans after a run's font as the stand-in of a missing
 //     face, which drew them as outlines before the colour faces.
-//   - litho/pptx: text-complex-scripts and litho/xlsx: intl_scripts:
-//     PowerPoint and Excel draw the emoji in colour, in Segoe UI Emoji.
+//   - litho/pptx: text-complex-scripts: PowerPoint draws the emoji in
+//     colour, in Segoe UI Emoji.
 func (st *layoutState) resolveSeq(style int, script language.Script, seq []rune, pres presentation) *Face {
 	chars := drawnChars(seq)
 	if len(chars) == 0 {

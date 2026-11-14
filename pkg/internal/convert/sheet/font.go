@@ -166,7 +166,20 @@ func (f font) apply(st *css.Style) {
 	}
 }
 
-// textStyle returns the text stack's style of f.
+// excelEmoji is the font setting of cell text under Excel's rules: emoji
+// drawn as text, in a face of outlines where one covers them, as
+// font-variant-emoji: text draws them (CSS Fonts 4, 6.12). Shared, never
+// modified.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: intl_scripts: Excel prints the emoji of a cell in Segoe
+//     UI Emoji outlines, in the text colour, where Word and PowerPoint
+//     print the same font's colour layers.
+var excelEmoji = &text.FontSettings{Emoji: text.EmojiText}
+
+// textStyle returns the text stack's style of f under fallback, Excel's
+// rules for [text.FallbackFontconfig] (see [builder.fallback]).
 func (f font) textStyle(lang string, fallback text.Fallback) text.Style {
 	w := 400
 	if f.bold {
@@ -176,7 +189,7 @@ func (f font) textStyle(lang string, fallback text.Fallback) text.Style {
 	if f.script != Baseline {
 		size *= scriptScale
 	}
-	return text.Style{
+	ts := text.Style{
 		Families: text.BrowserFamilies(f.cssFamilies(), ""),
 		Weight:   w,
 		Italic:   f.italic,
@@ -187,6 +200,10 @@ func (f font) textStyle(lang string, fallback text.Fallback) text.Style {
 		// Calc draws cell text without the font's kerning.
 		NoKerning: true,
 	}
+	if fallback == text.FallbackFontconfig {
+		ts.Settings = excelEmoji
+	}
+	return ts
 }
 
 // measurer measures strings in cell fonts, caching the widths.
