@@ -985,7 +985,10 @@ func (c *colCtx) finish(b *box, s *colSet, cons []float64, balanced bool) float6
 		}
 		lastCol := row.first
 		for i := row.first; i < len(c.frags) && c.frags[i].row == r && i <= last; i++ {
-			if cons[i] > eps {
+			// The flow runs through every column of a row content follows:
+			// a box cut at a column holds content in the columns it
+			// crosses, though it counts in the one it ends in alone.
+			if cons[i] > eps || r < lr {
 				lastCol = i
 			}
 		}

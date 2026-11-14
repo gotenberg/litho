@@ -759,3 +759,19 @@ func TestMulticol_RelativeOffsetMovesFragments(t *testing.T) {
 		BB_BB
 		_____`)
 }
+
+func TestMulticol_RuleOfEveryRowContentRunsThrough(t *testing.T) {
+	t.Parallel()
+	// A block cut over every column of an inner container's first row
+	// holds content in each: the row draws its rule (CSS Multicol 1, 4.5),
+	// as the last row does.
+	rule := func(s *css.Style) {
+		s.Columns.RuleWidth, s.Columns.RuleStyle, s.Columns.RuleColor = px(1), css.Solid, red
+	}
+	inner := el(sty(columns(2, 1), width(3), rule), el(sty(height(8))))
+	outer := el(sty(columns(2, 1), width(7), height(2), fillAuto), inner)
+	assertPixels(t, run(t, doc(outer), page(7, 3)), 1, `
+		_R___R_
+		_R___R_
+		_______`)
+}
