@@ -729,30 +729,56 @@ func (l *gridLayout) ascent(it *gitem) float64 {
 	return k.m[css.Top] + l.usedHeight(it, 0, false) + vEdges(k)
 }
 
-// baselineShims sets the shims of the items aligned on the first baseline
-// of the row they start in: each moves down by the largest ascent of the
-// group less its own (CSS Grid 1, 10.6; CSS Box Alignment 3, 9.3).
-func (l *gridLayout) baselineShims() {
-	groups := map[int][]*gitem{}
-	var rows []int
-	for _, it := range l.p.items {
-		if ok, last := l.baselineAligned(it); ok && !last {
-			r := it.start[rowAxis]
-			if _, seen := groups[r]; !seen {
-				rows = append(rows, r)
-			}
-			groups[r] = append(groups[r], it)
-		}
+// descent returns the distance from the item's last baseline to its
+// margin box bottom, its bottom margin when it has none.
+func (l *gridLayout) descent(it *gitem) float64 {
+	k := it.b
+	m := l.ms[it]
+	if m.hasLast {
+		return l.usedHeight(it, 0, false) + vEdges(k) - m.last + k.m[css.Bottom]
 	}
-	slices.Sort(rows)
-	for _, r := range rows {
-		g := groups[r]
-		asc := 0.0
+	return k.m[css.Bottom]
+}
+
+// baselineShims sets the shims of the baseline-aligned items (CSS Grid 1,
+// 10.6; CSS Box Alignment 3, 9.3). An item aligned on the first baseline
+// of the row it starts in moves down by the largest ascent of its group
+// less its own; one aligned on the last baseline of the row it ends in
+// sits at the row's end, its fallback alignment, and moves up by the
+// largest descent of its group less its own.
+func (l *gridLayout) baselineShims() {
+	type group struct {
+		row  int
+		last bool
+	}
+	groups := map[group][]*gitem{}
+	var keys []group
+	for _, it := range l.p.items {
+		ok, last := l.baselineAligned(it)
+		if !ok {
+			continue
+		}
+		g := group{row: it.start[rowAxis], last: last}
+		if last {
+			g.row = it.end[rowAxis]
+		}
+		if _, seen := groups[g]; !seen {
+			keys = append(keys, g)
+		}
+		groups[g] = append(groups[g], it)
+	}
+	for _, key := range keys {
+		g := groups[key]
+		measure := l.ascent
+		if key.last {
+			measure = l.descent
+		}
+		most := 0.0
 		for _, it := range g {
-			asc = max(asc, l.ascent(it))
+			most = max(most, measure(it))
 		}
 		for _, it := range g {
-			l.shims[it] = asc - l.ascent(it)
+			l.shims[it] = most - measure(it)
 		}
 	}
 }
@@ -1027,9 +1053,12 @@ func (l *gridLayout) put(it *gitem, rowTop float64) float64 {
 		}
 	case tAuto || bAuto:
 	default:
-		if bl, last := l.baselineAligned(it); bl && !last {
+		switch bl, last := l.baselineAligned(it); {
+		case bl && !last:
 			voff = l.shims[it]
-		} else {
+		case bl:
+			voff = vfree - l.shims[it]
+		default:
 			voff = selfOffset(a, vfree, false, false, false)
 		}
 	}

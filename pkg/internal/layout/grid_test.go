@@ -606,3 +606,32 @@ func TestGrid_TableItemStretches(t *testing.T) {
 		}
 	}
 }
+
+// TestGrid_LastBaselineAlignment checks CSS Box Alignment 3, 9.3: items
+// aligned on the last baseline of their row share it, the one with the
+// largest descent below it at the row's end.
+//
+// # Corpus evidence
+//
+//   - wpt: css/css-grid/alignment/grid-self-alignment-baseline-with-grid-001
+//     to -004: Chromium 156 lines a 16px Ahem item up with the last
+//     baseline of a grid item that is a grid under align-items: last
+//     baseline.
+func TestGrid_LastBaselineAlignment(t *testing.T) {
+	last := css.BoxAlign(css.BoxLastBaseline)
+	padded := el(sty(func(s *css.Style) { s.Padding[css.Bottom] = css.Pts(px(20)) }), txt(sty(), "a"))
+	big := el(sty(font(20)), txt(sty(font(20)), "b"))
+	rb := boxes(t, doc(el(gridBox(cols(tauto(), tauto()), alignItems(last)), padded, big)), page(100, 100))
+	c := kid(t, rb, 0, 0)
+	// Ahem: the 10px item's baseline is 8px down, 22px above its bottom;
+	// the 20px item's 16px down, 4px above its bottom.
+	if got := rect(c.kids[0]); got[1] != 8 {
+		t.Errorf("padded item at %v, want y 8: at the row's end", got)
+	}
+	if got := rect(c.kids[1]); got[1] != 0 {
+		t.Errorf("20px item at %v, want y 0: its baseline on the other's", got)
+	}
+	if got := rect(c); got[3] != 38 {
+		t.Errorf("grid %v, want 38px tall", got)
+	}
+}
