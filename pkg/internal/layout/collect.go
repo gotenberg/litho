@@ -79,6 +79,36 @@ type ifcPara struct {
 	openPos, closePos map[*box]int
 	// browser reports a paragraph laid out under [Options.BrowserRules].
 	browser bool
+	// trails lists the inline boxes that open before a text of white
+	// space alone that collapses away and an absolutely positioned box
+	// after it, nil for none: at a soft wrap after a collapsible space
+	// such a box opens on the line the wrap ends ([ifcPara.trailsAt]).
+	trails map[*box]bool
+}
+
+// trailsAt reports whether inline box b, opening at pos, opens on the line
+// that a soft wrap at pos ends rather than on the next. Under
+// BrowserRules, Blink keeps the start of an inline box on the line a wrap
+// after a collapsible space ends when white space that collapses away and
+// then an absolutely positioned box follow it there and its start takes
+// no room; one followed by content, or by the absolute box alone, or one
+// with a start margin, border or padding, opens on the next line. CSS
+// Text 3, 5 leaves to the user agent the line an inline box boundary at
+// a wrap goes to.
+//
+// # Corpus evidence
+//
+//   - wpt: css-position/position-absolute-in-inline-004, Chromium 156
+//     takes the containing block of a relative span that opens after
+//     "BBBB " with a collapsed space and an absolute box from the end of
+//     the first line.
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 starts such a
+//     span on the first line when a space or a newline separates its
+//     start from an absolute box, also inside a nested inline, and on the
+//     second when its first content is the absolute box, text, or a
+//     collapsed space then an inline box, or when it has a start border.
+func (p *ifcPara) trailsAt(b *box, pos int) bool {
+	return p.trails[b] && pos > 0 && pos < p.n && p.collapsibleSpace(pos-1)
 }
 
 // index builds the position indexes of p.
@@ -128,6 +158,13 @@ type collector struct {
 	// firstOnly stops the walk at the first forced break, done once it
 	// is met: the first line's paragraph is all a first line needs.
 	firstOnly, done bool
+	// collapsed is where a text of white space alone last collapsed
+	// away, with the count of the paragraph's opens before it, for
+	// [ifcPara.trails].
+	collapsed struct {
+		para     *ifcPara
+		n, opens int
+	}
 }
 
 // ifcOf returns the inline content of b, collected and shaped on first
@@ -182,9 +219,24 @@ func (c *collector) walk(k *box) {
 	case k.float != css.FloatNone:
 		c.cur.floats = append(c.cur.floats, posBox{pos: c.cur.n, box: k})
 	case k.abs:
+		if cl := c.collapsed; cl.para == c.cur && cl.n == c.cur.n {
+			for i := cl.opens - 1; i >= 0 && c.cur.opens[i].pos == cl.n; i-- {
+				if hasStartEdge(c.cur.opens[i].box) {
+					break
+				}
+				if c.cur.trails == nil {
+					c.cur.trails = map[*box]bool{}
+				}
+				c.cur.trails[c.cur.opens[i].box] = true
+			}
+		}
 		c.cur.abs = append(c.cur.abs, posBox{pos: c.cur.n, box: k})
 	case k.kind == kindText:
+		n, para := c.cur.n, c.cur
 		c.text(k)
+		if c.cur == para && c.cur.n == n && n > 0 && c.e.opts.BrowserRules && collapses(k.st.WhiteSpace) && k.text != "" && strings.Trim(k.text, " \t\n\r\f") == "" {
+			c.collapsed.para, c.collapsed.n, c.collapsed.opens = para, n, len(para.opens)
+		}
 	case k.kind == kindBreak:
 		c.cur.clear = k.st.Clear
 		c.breakPara()
@@ -222,6 +274,26 @@ func (c *collector) walk(k *box) {
 	}
 }
 
+// hasStartEdge reports whether the inline box b takes room at its start:
+// a margin, border or padding on its start edge.
+func hasStartEdge(b *box) bool {
+	s := css.Left
+	if b.st.Direction == css.RTL {
+		s = css.Right
+	}
+	return edgeTakesRoom(b.st, s)
+}
+
+// edgeTakesRoom reports whether side s of style st has a margin, border
+// or padding.
+func edgeTakesRoom(st *css.Style, s css.Side) bool {
+	if st.Margin[s].Kind != css.Auto && st.Margin[s].Value != 0 || st.Padding[s].Value != 0 {
+		return true
+	}
+	bs := st.Border[s].Style
+	return bs != css.BorderNone && bs != css.BorderHidden && st.Border[s].Width > 0
+}
+
 // hasInlineEdges reports whether the inline box b takes room at its
 // start or end: a margin, border or padding on an edge it draws. A piece
 // of an inline box split around a block draws its start edge only when
@@ -237,10 +309,7 @@ func hasInlineEdges(b *box) bool {
 		if s == start && !b.first || s == end && !b.last {
 			continue
 		}
-		if st.Margin[s].Kind != css.Auto && st.Margin[s].Value != 0 || st.Padding[s].Value != 0 {
-			return true
-		}
-		if bs := st.Border[s].Style; bs != css.BorderNone && bs != css.BorderHidden && st.Border[s].Width > 0 {
+		if edgeTakesRoom(st, s) {
 			return true
 		}
 	}

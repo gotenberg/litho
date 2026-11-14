@@ -1664,6 +1664,11 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 	s.glyphs = 0
 	x := 0.0
 	opened, closed := map[*box]bool{}, map[*box]bool{}
+	for _, o := range p.openAt[start] {
+		// A box whose start the line before holds has its start edge
+		// there.
+		opened[o] = opened[o] || p.trailsAt(o, start)
+	}
 	// A line broken at a soft hyphen ends with the hyphenate-character,
 	// drawn after the soft hyphen in its inline box (CSS Text 3, 5.4).
 	var hyMark *hyphenMark
@@ -1752,6 +1757,16 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		} else {
 			s.openEdges(p, sp.Start, false, opened, &x, widen)
 			s.closeEdges(p, sp.End, false, closed, &x, widen)
+		}
+	}
+	if vis == nil && end > start && !l.hangLeft {
+		for _, o := range p.openAt[end] {
+			if p.trailsAt(o, end) && o.st.Direction != css.RTL {
+				// Its start takes no room: the fragment is empty.
+				opened[o] = true
+				widen(o, x, x)
+				s.vboxOf(o)
+			}
 		}
 	}
 	if officeTabs(s.root.st) {
@@ -1873,7 +1888,15 @@ func (s *inlineState) parentInline(b *box) *box {
 // end) of p.
 func (p *ifcPara) opensIn(b *box, start, end int) bool {
 	pos, ok := p.openPos[b]
-	return ok && pos >= start && (pos < end || pos == end && end == p.n)
+	switch {
+	case !ok:
+		return false
+	case pos == start && p.trailsAt(b, pos):
+		return false
+	case pos == end && end > start && p.trailsAt(b, pos):
+		return true
+	}
+	return pos >= start && (pos < end || pos == end && end == p.n)
 }
 
 // closesIn reports whether inline box b closes in the characters [start,

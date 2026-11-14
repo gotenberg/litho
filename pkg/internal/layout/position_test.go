@@ -627,3 +627,50 @@ func TestAbs_StaticPositionBeforeEndMargins(t *testing.T) {
 		t.Errorf("absolute box %v, want y 10: above the bottom margin that ends the flow", got)
 	}
 }
+
+// TestAbs_InlineOpenedBeforeAWrapHoldsItsBox locks [ifcPara.trailsAt]:
+// under BrowserRules an inline box that opens at a wrap after a space,
+// with a collapsed space and then an absolutely positioned box as its
+// first content, opens on the line the wrap ends, where the containing
+// block of the box starts. With the absolute box first, or under
+// Office rules, it opens on the next line.
+func TestAbs_InlineOpenedBeforeAWrapHoldsItsBox(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		space   bool
+		browser bool
+		x, y    float64
+	}{
+		{"space then box", true, true, 40, 0},
+		{"box first", false, true, 0, 10},
+		{"office rules", true, false, 0, 10},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			absBox := el(sty(width(5), height(5), func(s *css.Style) { s.Position, s.Top, s.Left = css.Absolute, css.Pts(0), css.Pts(0) }))
+			kids := []*Node{absBox, txt(sty(), "AA")}
+			if tc.space {
+				kids = append([]*Node{txt(sty(), "\n  ")}, kids...)
+			}
+			span := el(inlineSty(func(s *css.Style) { s.Position = css.Relative }), kids...)
+			rb := boxesWith(t, doc(el(sty(width(50)), txt(sty(), "BBBB "), span)), Options{Page: page(200, 200), BrowserRules: tc.browser})
+			var found *box
+			var walk func(b *box)
+			walk = func(b *box) {
+				if b.abs {
+					found = b
+				}
+				for _, k := range b.kids {
+					walk(k)
+				}
+			}
+			walk(rb)
+			if found == nil {
+				t.Fatal("no absolute box")
+			}
+			if got := rect(found); got[0] != tc.x || got[1] != tc.y {
+				t.Errorf("box at %v, %v, want %v, %v", got[0], got[1], tc.x, tc.y)
+			}
+		})
+	}
+}
