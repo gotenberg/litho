@@ -217,3 +217,29 @@ func TestFilter_HiddenTaggedPaintsNothing(t *testing.T) {
 		t.Errorf("clip spans %v,%v to %v,%v, want no area", x0, y0, x1, y1)
 	}
 }
+
+// TestFilter_HoldsAbsolute locks Filter Effects 1, 3: an
+// inline box with a filter is the containing block of its absolutely
+// positioned child, placed from the inline's fragment, not from the page.
+func TestFilter_HoldsAbsolute(t *testing.T) {
+	sp := inlineSty(filters(css.Filter{Kind: css.FilterBlur}))
+	root := doc(el(sty(width(20)), txt(sty(), "XX"), el(sp, txt(sp, "X"), square(1, 1, blue, abs(0, auto, auto, 0)))))
+	b := boxes(t, root, page(20, 20))
+	var found *box
+	var walk func(*box)
+	walk = func(k *box) {
+		for _, c := range k.kids {
+			if c.abs {
+				found = c
+			}
+			walk(c)
+		}
+	}
+	walk(b)
+	if found == nil {
+		t.Fatal("no absolutely positioned box")
+	}
+	if !near(found.x, px(20)) {
+		t.Errorf("x = %v px, want 20 px", found.x/css.Pt)
+	}
+}

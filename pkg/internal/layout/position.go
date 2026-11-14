@@ -197,9 +197,9 @@ func (e *engine) layoutPositionedBox(k *box) {
 
 // containerOf returns the containing block of the absolutely positioned box
 // b (CSS 2.1, 10.1): the padding box of its nearest positioned ancestor, or
-// one with a transform (CSS Transforms 1, 6), the initial containing block
-// when it has none; for a fixed box the page area, unless a transformed
-// ancestor holds it. Both are as tall as [Options.ViewportHeight] when it
+// one with a transform (CSS Transforms 1, 6) or a filter (Filter Effects 1,
+// 3), the initial containing block when it has none; for a fixed box the
+// page area, unless a transformed or filtered ancestor holds it. Both are as tall as [Options.ViewportHeight] when it
 // is set, the viewport a screen positions fixed boxes in. A positioned row group, row or cell holds it as any
 // positioned box does (CSS Position 3, 2); a column or a column group,
 // to which position does not apply, never does.
@@ -239,7 +239,10 @@ func holderOf(b *box) *box {
 		if a.tpart == partColumn || a.tpart == partColGroup {
 			continue
 		}
-		holds := a.st.HasTransform() && a.kind == kindBlock
+		// A filter makes its element, the root excepted, the containing
+		// block of its absolute and fixed descendants, an inline box
+		// among them (Filter Effects 1, 3).
+		holds := a.st.HasTransform() && a.kind == kindBlock || len(a.st.Filter) > 0 && a.parent != nil
 		if !fixed && a.st.Position != css.Static {
 			holds = true
 		}
