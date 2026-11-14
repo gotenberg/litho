@@ -7,7 +7,7 @@ require (
 	github.com/antchfx/xmlquery v1.5.2
 	github.com/antchfx/xpath v1.3.9
 	github.com/dop251/goja v0.0.0-20261124141918-d9d211bc2d23
-	github.com/go-text/typesetting v0.3.5
+	github.com/go-text/typesetting v0.3.6-0.20261110181507-bafa8730d77e
 	github.com/gomarkdown/markdown v0.0.0-20261105214116-27ca101938a9
 	golang.org/x/crypto v0.59.0
 	golang.org/x/image v0.23.0
