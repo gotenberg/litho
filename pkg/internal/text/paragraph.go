@@ -1051,7 +1051,10 @@ func visualOrder(n int, level func(int) int) []int {
 // shapesTogether reports whether runs of the styles a and b shape as one
 // piece, kerning and contextual forms across their boundary: they differ
 // in colour alone, a change that does not affect shaping, across which
-// CSS Text 3, 7.3 does not break shaping.
+// CSS Text 3, 7.3 does not break shaping; or, in Office runs
+// ([Style.OfficeEmoji]), in colour and emoji presentation, which a Word
+// run's colour sets and which picks only the face of an emoji, each
+// character's from its own run.
 //
 // # Corpus evidence
 //
@@ -1068,7 +1071,8 @@ func shapesTogether(a, b Style) bool {
 		a.NoSpacingTrim == b.NoSpacingTrim && a.Size == b.Size && a.Lang == b.Lang &&
 		a.LetterSpacing == b.LetterSpacing && a.WordSpacing == b.WordSpacing && a.Scale == b.Scale &&
 		a.NoKerning == b.NoKerning && a.WordMetrics == b.WordMetrics && a.OfficeEmoji == b.OfficeEmoji &&
-		a.Orientation == b.Orientation && a.Orientation != OrientCombine && equalSettings(a.Settings, b.Settings)
+		a.Orientation == b.Orientation && a.Orientation != OrientCombine && sameShaping(a.Settings, b.Settings) &&
+		(a.OfficeEmoji || a.Settings.emoji() == b.Settings.emoji())
 }
 
 // splitByRun cuts out into one output per run of its characters, each

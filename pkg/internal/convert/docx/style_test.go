@@ -449,3 +449,28 @@ func TestRunLigatures(t *testing.T) {
 		}
 	}
 }
+
+// TestRunEmojiPresentation checks that the emoji of a run of a stated
+// colour or of a shading ask for the text presentation, as Word draws
+// them in one glyph of the run's colour, while those of a run of
+// automatic colour, of a highlight or of no colour keep the emoji
+// presentation (see [monochromeEmoji]).
+func TestRunEmojiPresentation(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		rpr  string
+		want css.VariantEmoji
+	}{
+		{``, css.EmojiNormal},
+		{`<w:color w:val="auto"/>`, css.EmojiNormal},
+		{`<w:highlight w:val="yellow"/>`, css.EmojiNormal},
+		{`<w:color w:val="C00000"/>`, css.EmojiText},
+		{`<w:color w:val="000000"/>`, css.EmojiText},
+		{`<w:shd w:val="clear" w:color="auto" w:fill="3060C0"/>`, css.EmojiText},
+	} {
+		b := build(t, `<w:p><w:r><w:rPr>`+tc.rpr+`</w:rPr><w:t>smile</w:t></w:r></w:p>`, nil)
+		if got := runWith(t, b.root, "smile").Style.FontVariantEmoji; got != tc.want {
+			t.Errorf("%q: font-variant-emoji %v, want %v", tc.rpr, got, tc.want)
+		}
+	}
+}

@@ -238,11 +238,35 @@ func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
 		st.TextPaint = &css.OfficeTextPaint{NoFill: true, Outline: &css.OfficeOutline{Color: st.Color, Width: legacyOutline}}
 	}
 	// Word draws emoji in Segoe UI Emoji, at its advances and line, and
-	// breaks no line between two of them.
+	// breaks no line between two of them or an emoji and a letter.
 	st.OfficeEmoji, st.KeepEmoji = true, true
+	st.FontVariantEmoji = css.EmojiNormal
+	if monochromeEmoji(r) {
+		st.FontVariantEmoji = css.EmojiText
+	}
 	if lineMult > 0 {
 		st.LineHeight = css.Pts(d.proportionalLine(st, lineMult))
 	}
+}
+
+// monochromeEmoji reports whether Word draws the emoji of a run of the
+// properties r as text, one glyph in the run's colour, where it draws
+// those of other runs in colour: a run of a stated colour other than auto
+// (ECMA-376 Part 1, 17.3.2.6 color), or a shaded one (17.3.2.32 shd). A
+// highlight keeps the colour. litho draws such an emoji in the text
+// presentation (CSS Fonts 4, 6.12, font-variant-emoji: text): in a face
+// that holds its outline, else, as no face of the image does for most
+// emoji, in colour.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word draws the smile and the party popper as one
+//     Segoe UI Emoji glyph each in the run's colour in runs of w:color
+//     C00000, 000000, 4472C4 with themeColor accent1 and FFFFFF over a
+//     shading, and of a w:shd of fill 3060C0 without a colour; in colour
+//     layers in runs of w:color auto and of w:highlight yellow.
+func monochromeEmoji(r runProps) bool {
+	return r.color != nil && !r.color.auto || r.shading != nil
 }
 
 // runBackground returns the background of a run: its highlight, else its

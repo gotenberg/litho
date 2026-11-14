@@ -192,8 +192,10 @@ func (s *Style) settings() *FontSettings {
 // noSettings is the zero [FontSettings], never modified.
 var noSettings FontSettings
 
-// equalSettings reports whether a and b hold the same font settings.
-func equalSettings(a, b *FontSettings) bool {
+// sameShaping reports whether a and b hold the same font settings but
+// for the emoji presentation, which picks the face of an emoji and does
+// not change how a face shapes.
+func sameShaping(a, b *FontSettings) bool {
 	if a == b {
 		return true
 	}
@@ -204,7 +206,15 @@ func equalSettings(a, b *FontSettings) bool {
 		b = &noSettings
 	}
 	return a.SizeAdjust == b.SizeAdjust && a.LanguageSystem == b.LanguageSystem && slices.Equal(a.Features, b.Features) &&
-		slices.Equal(a.Variations, b.Variations) && a.NoOpticalSizing == b.NoOpticalSizing && a.Emoji == b.Emoji && a.Palette == b.Palette
+		slices.Equal(a.Variations, b.Variations) && a.NoOpticalSizing == b.NoOpticalSizing && a.Palette == b.Palette
+}
+
+// emoji returns the emoji presentation of s, normal for nil.
+func (s *FontSettings) emoji() EmojiVariant {
+	if s == nil {
+		return EmojiNormal
+	}
+	return s.Emoji
 }
 
 // Feature is one OpenType feature setting: its tag and value, 0 for off

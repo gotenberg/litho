@@ -7,6 +7,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 )
 
@@ -182,5 +183,27 @@ func TestOfficeEmoji_FlagKeepsItsAdvance(t *testing.T) {
 	}
 	if got := p.Advance(2); math.Abs(got-13.73) > 0.01 {
 		t.Errorf("watch advance %.3f, want 13.73", got)
+	}
+}
+
+// TestShapesTogether_OfficeEmojiPresentation checks that two Office runs
+// that differ in colour and emoji presentation, as a Word run of a stated
+// colour beside one of automatic colour, shape as one piece, while two
+// other runs that differ in emoji presentation do not.
+func TestShapesTogether_OfficeEmojiPresentation(t *testing.T) {
+	asText := &FontSettings{Emoji: EmojiText}
+	a := Style{Families: []string{"Test Sans"}, Size: 10, OfficeEmoji: true, Settings: asText, Color: typeset.Color{R: 1, A: 1}}
+	b := Style{Families: []string{"Test Sans"}, Size: 10, OfficeEmoji: true, Color: typeset.Color{A: 1}}
+	if !shapesTogether(a, b) {
+		t.Error("Office runs of two emoji presentations shape apart, want together")
+	}
+	a.OfficeEmoji, b.OfficeEmoji = false, false
+	if shapesTogether(a, b) {
+		t.Error("runs of two emoji presentations shape together, want apart")
+	}
+	b.Settings = &FontSettings{Emoji: EmojiText, Features: []Feature{{Tag: "smcp", Value: 1}}}
+	a.OfficeEmoji, b.OfficeEmoji = true, true
+	if shapesTogether(a, b) {
+		t.Error("Office runs of two feature sets shape together, want apart")
 	}
 }
