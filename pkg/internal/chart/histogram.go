@@ -43,6 +43,9 @@ func binned(c *Chart) *Chart {
 				}
 			}
 			labels, counts := histogram(vals, *s.Bins)
+			if c.Office2016 {
+				labels, counts = officeHistogram(vals, *s.Bins)
+			}
 			ss.Categories = Data{Cached: true}
 			ss.Values = Data{Cached: true}
 			for k := range labels {
@@ -143,3 +146,117 @@ func histogram(vals []float64, b Binning) ([]string, []float64) {
 // a bin is a bar and a label, and a histogram of more bars than a page has
 // points is unreadable; it matches the points a series keeps.
 const maxBins = MaxPoints
+
+// officeHistogram counts vals into bins as Office's histogram does: from
+// the underflow bound, else the least value, to the overflow bound, else
+// the greatest, bins of the fixed width, of the width that makes the
+// fixed count, or of Scott's rule's width, as many as cover the range,
+// each closed on its right, or its left, the first, or the last, closed
+// on both sides; the values past the underflow and overflow bounds in a
+// bin of their own at each end. A bin's label is its interval, "[a, b]",
+// "(a, b]" or "[a, b)", an underflow bin's "< u" or "≤ u", an overflow
+// bin's "> o" or "≥ o", the bounds rounded as [histogram] rounds them.
+//
+// # Corpus evidence
+//
+//   - litho/docx: Word labels charts-chartex's bins of width 2 over 1 to
+//     13 "[1, 3]", "(3, 5]" to "(11, 13]".
+//   - litho/pptx: PowerPoint labels chartex's five bins over 3 to 44
+//     "[3, 11.2]" to "(35.8, 44]", and its bins of width 10 closed on the
+//     left with an underflow at 5 "< 5", "[5, 15)", "[15, 25)",
+//     "[25, 35)", "[35, 45]", counting 1, 5, 7, 4 and 3 of its 20 values.
+func officeHistogram(vals []float64, b Binning) ([]string, []float64) {
+	if len(vals) == 0 {
+		return nil, nil
+	}
+	lo, hi, sum, sq := vals[0], vals[0], 0.0, 0.0
+	for _, v := range vals {
+		lo, hi = math.Min(lo, v), math.Max(hi, v)
+		sum += v
+		sq += float64(v * v)
+	}
+	start, end := lo, hi
+	if b.HasUnderflow && numeric.Finite(b.Underflow) {
+		start = b.Underflow
+	}
+	if b.HasOverflow && numeric.Finite(b.Overflow) {
+		end = b.Overflow
+	}
+	if end < start {
+		end = start
+	}
+	n := float64(len(vals))
+	width := 0.0
+	switch {
+	case b.Width > 0:
+		width = b.Width
+	case b.Count > 0:
+		width = (end - start) / float64(b.Count)
+	case len(vals) > 1:
+		mean := sum / n
+		sd := math.Sqrt(math.Max(0, (sq-float64(sum*mean))/(n-1)))
+		width = 3.5 * sd / detmath.Cbrt(n)
+	}
+	count := 1.0
+	if numeric.Positive(width) && end > start {
+		count = math.Ceil((end - start) / width)
+	}
+	if !numeric.Positive(width) {
+		width = math.Max(end-start, 1)
+	}
+	count = math.Max(1, math.Min(count, maxBins))
+	k := int(count) // fits int: at most maxBins
+	digits := max(1, 2-int(math.Floor(detmath.Log10(width))))
+	scale := detmath.Pow(10, float64(digits))
+	bound := func(v float64) string {
+		return strconv.FormatFloat(math.Round(v*scale)/scale, 'f', -1, 64)
+	}
+	var labels []string
+	var counts []float64
+	under, over := b.HasUnderflow && numeric.Finite(b.Underflow), b.HasOverflow && numeric.Finite(b.Overflow)
+	if under {
+		mark := "≤ "
+		if b.ClosedLeft {
+			mark = "< "
+		}
+		labels, counts = append(labels, mark+bound(start)), append(counts, 0)
+	}
+	first := len(labels)
+	for i := range k {
+		a, z := start+float64(float64(i)*width), start+float64(float64(i+1)*width)
+		open, shut := "(", "]"
+		if b.ClosedLeft {
+			open, shut = "[", ")"
+		}
+		if !b.ClosedLeft && i == 0 {
+			open = "["
+		}
+		if b.ClosedLeft && i == k-1 {
+			shut = "]"
+		}
+		labels, counts = append(labels, open+bound(a)+", "+bound(z)+shut), append(counts, 0)
+	}
+	if over {
+		mark := "> "
+		if b.ClosedLeft {
+			mark = "≥ "
+		}
+		labels, counts = append(labels, mark+bound(end)), append(counts, 0)
+	}
+	for _, v := range vals {
+		switch {
+		case under && (v < start || !b.ClosedLeft && v == start):
+			counts[0]++
+		case over && (v > end || b.ClosedLeft && v == end):
+			counts[len(counts)-1]++
+		default:
+			i := (v - start) / width
+			j := int(math.Floor(math.Max(0, math.Min(i, count)))) // fits int: at most maxBins
+			if !b.ClosedLeft && i == math.Floor(i) && j > 0 {
+				j--
+			}
+			counts[first+min(j, k-1)]++
+		}
+	}
+	return labels, counts
+}

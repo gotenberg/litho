@@ -131,3 +131,22 @@ func TestRender_NoticeBreaksAtTwoThirds(t *testing.T) {
 		t.Errorf("notice lines %q, want 8 of five words", lines)
 	}
 }
+
+func TestOfficeHistogram(t *testing.T) {
+	vals := []float64{3, 7, 8, 12, 13, 14, 15, 15, 16, 18, 21, 22, 22, 25, 27, 30, 31, 35, 38, 44}
+	for _, tc := range []struct {
+		b      Binning
+		labels []string
+		counts []float64
+	}{
+		{Binning{Width: 10, ClosedLeft: true, Underflow: 5, HasUnderflow: true},
+			[]string{"< 5", "[5, 15)", "[15, 25)", "[25, 35)", "[35, 45]"}, []float64{1, 5, 7, 4, 3}},
+		{Binning{Count: 5},
+			[]string{"[3, 11.2]", "(11.2, 19.4]", "(19.4, 27.6]", "(27.6, 35.8]", "(35.8, 44]"}, []float64{3, 7, 5, 3, 2}},
+	} {
+		labels, counts := officeHistogram(vals, tc.b)
+		if strings.Join(labels, "|") != strings.Join(tc.labels, "|") || !slices.Equal(counts, tc.counts) {
+			t.Errorf("%+v: %q %v, want %q %v", tc.b, labels, counts, tc.labels, tc.counts)
+		}
+	}
+}

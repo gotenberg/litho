@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -303,6 +304,15 @@ func (x *chartExReader) series(e *Element, i int, histogram bool) *chart.Series 
 			b.Width = v
 		} else if v, ok := Int(childText(bin, "binCount")); ok && v > 0 {
 			b.Count = v
+		}
+		// MS-ODRAWXML, 2.24.4.14 ST_IntervalClosedSide and 2.24.4.7
+		// ST_DoubleOrAutomatic: "auto" or no value sets no bound.
+		b.ClosedLeft = attrOr(bin, "intervalClosed") == "l"
+		if v := parseFloat(attrOr(bin, "underflow")); numeric.Finite(v) {
+			b.Underflow, b.HasUnderflow = v, true
+		}
+		if v := parseFloat(attrOr(bin, "overflow")); numeric.Finite(v) {
+			b.Overflow, b.HasOverflow = v, true
 		}
 		s.Bins = b
 	}

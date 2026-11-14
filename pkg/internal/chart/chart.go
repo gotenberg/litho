@@ -421,6 +421,15 @@ type Binning struct {
 	// over the cube root of the count of values.
 	Width float64
 	Count int
+	// ClosedLeft closes each bin on its left, [a, b), the last on both
+	// sides, where bins close on their right, (a, b], the first on both
+	// (MS-ODRAWXML, 2.24.4.14 ST_IntervalClosedSide).
+	ClosedLeft bool
+	// Underflow and Overflow, when their Has flag is set, gather the
+	// values under and over them into a bin of their own at each end
+	// (2.24.4.7 ST_DoubleOrAutomatic).
+	Underflow, Overflow       float64
+	HasUnderflow, HasOverflow bool
 }
 
 // Point is the format of one data point that differs from its series

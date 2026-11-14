@@ -302,3 +302,12 @@ func TestChartExFromElement_HiddenSeries(t *testing.T) {
 		t.Errorf("reads %d series, want the one shown", n)
 	}
 }
+
+func TestChartExFromElement_BinningBounds(t *testing.T) {
+	region := `<cx:series layoutId="clusteredColumn"><cx:dataId val="0"/><cx:layoutPr><cx:binning intervalClosed="l" underflow="5" overflow="auto"><cx:binSize val="10"/></cx:binning></cx:layoutPr></cx:series>`
+	c := readChartEx(t, chartExXML(cxData("0", "", nil, "1", "2"), `<cx:plotArea><cx:plotAreaRegion>`+region+`</cx:plotAreaRegion>`+cxAxes+`</cx:plotArea>`), nil)
+	b := c.Groups[0].Series[0].Bins
+	if b == nil || !b.ClosedLeft || !b.HasUnderflow || b.Underflow != 5 || b.HasOverflow || b.Width != 10 {
+		t.Errorf("bins %+v, want closed on the left, an underflow at 5, no overflow", b)
+	}
+}
