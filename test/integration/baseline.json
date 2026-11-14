@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-14T08:27:17Z",
+  "captured_at": "2026-11-14T10:53:29Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9952,7 +9952,7 @@
               "text_f1": 0
             },
             "ooxmlexport/TextEffects_Glow_Shadow_Reflection.docx": {
-              "layout": 0.9174,
+              "layout": 0.9239,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -39103,7 +39103,7 @@
               "text_f1": 1
             },
             "sd/tdf114848.pptx": {
-              "layout": 0.7418,
+              "layout": 0.7417,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -55430,7 +55430,7 @@
               "text_f1": 1
             },
             "run-w14-effects": {
-              "layout": 0.9111,
+              "layout": 0.9125,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -71913,7 +71913,7 @@
               "text_f1": 0.925
             },
             "chart-pie": {
-              "layout": 0.5111,
+              "layout": 0.511,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -72017,7 +72017,7 @@
               "text_f1": 0.9915
             },
             "effects-glow-softedge-reflection": {
-              "layout": 0.862,
+              "layout": 0.8624,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -72025,7 +72025,7 @@
               "text_f1": 1
             },
             "effects-shadow": {
-              "layout": 0.9847,
+              "layout": 0.985,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -72721,7 +72721,7 @@
               "text_f1": 0.7909
             },
             "text-fill-effects": {
-              "layout": 0.513,
+              "layout": 0.5044,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -72761,7 +72761,7 @@
               "text_f1": 1
             },
             "text-warp-wordart": {
-              "layout": 0.088,
+              "layout": 0.0864,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -88671,7 +88671,7 @@
               "text_f1": 0
             },
             "v2FxTestFiles/asSources/presentation/Text_withShadow_100chars.pptx": {
-              "layout": 0.9278,
+              "layout": 0.9295,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -88679,7 +88679,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/asSources/presentation/Text_withShadow_100chars_Animation_Fly_In_all_at_once_.pptx": {
-              "layout": 0.9278,
+              "layout": 0.9295,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -88687,7 +88687,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/asSources/presentation/Text_withShadow_100chars_Animation_Fly_In_by_letter_.pptx": {
-              "layout": 0.9278,
+              "layout": 0.9295,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -88695,7 +88695,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/asSources/presentation/Text_withShadow_200chars.pptx": {
-              "layout": 0.915,
+              "layout": 0.9194,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -88703,7 +88703,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/asSources/presentation/Text_withShadow_200chars_Animation_Fly_In_all_at_once_.pptx": {
-              "layout": 0.915,
+              "layout": 0.9194,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -88967,7 +88967,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/O12_templates/CertExcEmp_TP10164190.potx": {
-              "layout": 0.9581,
+              "layout": 0.9584,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -89135,7 +89135,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/presentation/Text_withEffects_100chars.pptx": {
-              "layout": 0.6334,
+              "layout": 0.624,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -89143,7 +89143,7 @@
               "text_f1": 0.2609
             },
             "v2FxTestFiles/presentation/Text_withEffects_100chars_Animation_Fly_In_all_at_once_.pptx": {
-              "layout": 0.6334,
+              "layout": 0.624,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -89151,7 +89151,7 @@
               "text_f1": 0.2609
             },
             "v2FxTestFiles/presentation/Text_withEffects_100chars_Animation_Fly_In_by_letter_.pptx": {
-              "layout": 0.6334,
+              "layout": 0.624,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -89159,7 +89159,7 @@
               "text_f1": 0.2609
             },
             "v2FxTestFiles/presentation/Text_withEffects_200chars.pptx": {
-              "layout": 0.6028,
+              "layout": 0.5983,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -89191,7 +89191,7 @@
               "text_f1": 0
             },
             "v2FxTestFiles/presentation/Text_withShadow_200chars_Animation_Fly_In_by_letter_.pptx": {
-              "layout": 0.915,
+              "layout": 0.9194,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
