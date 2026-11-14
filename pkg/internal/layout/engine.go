@@ -484,6 +484,7 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 		Scale:             textScale(st.TextScale),
 		NoKerning:         st.FontKerning == css.KerningNone,
 		WordMetrics:       st.WordRules > 0,
+		OfficeEmoji:       st.OfficeEmoji,
 	}
 	ts.Settings = e.fontSettings(st, &ts)
 	return ts

@@ -270,6 +270,12 @@ type Office struct {
 	// breaks between any two syllables (class H2, H3, LB31). It applies
 	// to the characters of the inline box that sets it.
 	KeepHangul bool
+	// OfficeEmoji lays out the emoji a colour face draws in the inline
+	// box that sets it as Word and PowerPoint lay out Segoe UI Emoji, the
+	// face they draw emoji in: at its advance, and, under
+	// [Style.WordRules], with its ascent and descent for the line (see
+	// text.Style.OfficeEmoji). No CSS property sets it.
+	OfficeEmoji bool
 	// TextEffects are the effects drawn around the glyphs of the inline
 	// box that sets it, nil for none: the glow, shadow and reflection of
 	// a WordprocessingML run (MS-DOCX, 2.6.1 rPr extensions w14:glow,

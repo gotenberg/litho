@@ -1,8 +1,13 @@
 package text
 
 import (
+	"bytes"
+	"image"
+	"image/png"
 	"math"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 )
 
 // TestWordMetrics gives the line box of a stand-in for a Microsoft face
@@ -54,5 +59,88 @@ func TestWordMetrics(t *testing.T) {
 				t.Errorf("span ascent %v descent %v, want %v and %v", sp.Ascent, sp.Descent, want.Ascent, want.Descent)
 			}
 		})
+	}
+}
+
+// TestOfficeEmoji checks that a glyph of a colour face in a run that asks
+// for Office's emoji advances as Segoe UI Emoji does, its drawing centred,
+// and takes Segoe UI Emoji's ascent and descent with Word's metrics alone;
+// a glyph of another face, and every glyph of a run that does not ask,
+// keep their own.
+func TestOfficeEmoji(t *testing.T) {
+	f := emojiFonts(t)
+	for _, tc := range []struct {
+		name         string
+		office, word bool
+		adv, ascent  float64
+	}{
+		{"not asked", false, true, 10, 0},
+		{"PowerPoint", true, false, 13.73, 0},
+		{"Word", true, true, 13.73, 10.79},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := Style{Families: []string{"Test Sans"}, Size: 10, Fallback: FallbackFontconfig, OfficeEmoji: tc.office, WordMetrics: tc.word}
+			p := shape(t, f, []ParagraphRun{{Text: "A⌚B", Style: s}}, ParagraphOptions{})
+			if got := p.Advance(1); math.Abs(got-tc.adv) > 0.01 {
+				t.Errorf("emoji advance %.3f, want %.3f", got, tc.adv)
+			}
+			plain := shape(t, f, []ParagraphRun{{Text: "A⌚B", Style: Style{Families: s.Families, Size: 10, Fallback: FallbackFontconfig}}}, ParagraphOptions{})
+			if p.Advance(0) != plain.Advance(0) || p.Advance(2) != plain.Advance(2) {
+				t.Errorf("letters advance %v and %v, want %v and %v", p.Advance(0), p.Advance(2), plain.Advance(0), plain.Advance(2))
+			}
+			found := false
+			for _, sp := range p.Line(0, 3, false).Spans {
+				if sp.Start != 1 || sp.Text == nil {
+					continue
+				}
+				found = true
+				// The drawing starts half the added advance in.
+				if x := sp.Text.Glyphs[0].X; math.Abs(x-(tc.adv-10)/2) > 0.01 {
+					t.Errorf("emoji drawn at %.3f in its piece, want %.3f", x, (tc.adv-10)/2)
+				}
+				if tc.ascent > 0 && (math.Abs(sp.Ascent-tc.ascent) > 0.01 || math.Abs(sp.Descent-2.51) > 0.01) {
+					t.Errorf("emoji ascent %.2f descent %.2f, want %.2f and 2.51", sp.Ascent, sp.Descent, tc.ascent)
+				}
+				if tc.ascent == 0 && math.Abs(sp.Ascent-10.79) < 0.01 {
+					t.Errorf("emoji ascent %.2f, want the face's own", sp.Ascent)
+				}
+			}
+			if !found {
+				t.Error("no piece holds the emoji alone")
+			}
+		})
+	}
+}
+
+// TestOfficeEmoji_FlagKeepsItsAdvance checks that a flag of a colour face
+// in a run that asks for Office's emoji keeps the face's advance, where
+// another emoji of the face takes Segoe UI Emoji's.
+func TestOfficeEmoji_FlagKeepsItsAdvance(t *testing.T) {
+	var png1 bytes.Buffer
+	if err := png.Encode(&png1, image.NewNRGBA(image.Rect(0, 0, 4, 4))); err != nil {
+		t.Fatal(err)
+	}
+	bitmap := fontbuild.BitmapGlyph{PNG: png1.Bytes(), Width: 4, Height: 4, Top: 4, Advance: 4}
+	cblc, cbdt := fontbuild.ColorBitmaps(4, map[uint16]fontbuild.BitmapGlyph{1: bitmap, 2: bitmap, 3: bitmap})
+	colour := fontbuild.TrueType{
+		PostScriptName: "TestFlagEmoji", Family: "Test Flag Emoji", Subfamily: "Regular", NotdefAdvance: 1000,
+		Glyphs: []fontbuild.Glyph{
+			{Name: "F", Unicode: 0x1F1EB, Advance: 1000, Empty: true},
+			{Name: "R", Unicode: 0x1F1F7, Advance: 1000, Empty: true},
+			{Name: "watch", Unicode: 0x231A, Advance: 1000, Empty: true},
+		},
+		Extra: map[string][]byte{"CBLC": cblc, "CBDT": cbdt},
+	}.Build()
+	f := newTestFonts(t, append(sansFamily(), fontFile{name: "flag.ttf", data: colour})...)
+	s := Style{Families: []string{"Test Flag Emoji"}, Size: 10, Fallback: FallbackFontconfig, OfficeEmoji: true}
+	p := shape(t, f, []ParagraphRun{{Text: "\U0001F1EB\U0001F1F7\u231a", Style: s}}, ParagraphOptions{})
+	plain := s
+	plain.OfficeEmoji = false
+	own := shape(t, f, []ParagraphRun{{Text: "\U0001F1EB\U0001F1F7", Style: plain}}, ParagraphOptions{})
+	if flag, want := p.Advance(0)+p.Advance(1), own.Advance(0)+own.Advance(1); flag != want || flag == 0 {
+		t.Errorf("flag advance %.3f, want the face's %.3f", flag, want)
+	}
+	if got := p.Advance(2); math.Abs(got-13.73) > 0.01 {
+		t.Errorf("watch advance %.3f, want 13.73", got)
 	}
 }

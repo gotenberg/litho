@@ -655,6 +655,9 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 			}
 		}
 	}
+	if style.OfficeEmoji && fc != nil && fc.colourTables() != 0 {
+		segoeAdvances(it.glyphs, p.text, float64(float64(segoeEmojiAdvance*style.Size)*style.scale()))
+	}
 	if punctuated {
 		if gid, ok := out.Face.NominalGlyph('“'); ok {
 			it.fullQuotes = fullwidthGlyph(float64(out.Face.HorizontalAdvance(gid)), float64(out.Face.Upem()))
@@ -1009,7 +1012,7 @@ func shapesTogether(a, b Style) bool {
 		a.Autospace == b.Autospace && a.AutospaceAlpha == b.AutospaceAlpha && a.AutospaceNumeric == b.AutospaceNumeric &&
 		a.NoSpacingTrim == b.NoSpacingTrim && a.Size == b.Size && a.Lang == b.Lang &&
 		a.LetterSpacing == b.LetterSpacing && a.WordSpacing == b.WordSpacing && a.Scale == b.Scale &&
-		a.NoKerning == b.NoKerning && a.WordMetrics == b.WordMetrics &&
+		a.NoKerning == b.NoKerning && a.WordMetrics == b.WordMetrics && a.OfficeEmoji == b.OfficeEmoji &&
 		equalSettings(a.Settings, b.Settings)
 }
 

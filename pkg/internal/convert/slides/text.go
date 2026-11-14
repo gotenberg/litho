@@ -892,6 +892,8 @@ func (b *builder) inline(ps *css.Style, rs *RunStyle, k float64) *css.Style {
 	st.TextDecorationColor = st.Color
 	st.TextEffects = b.textEffects(rs)
 	st.TextPaint = b.textPaint(rs)
+	// PowerPoint draws emoji in Segoe UI Emoji, at its advances.
+	st.OfficeEmoji = b.doc != nil && b.doc.Fallback != text.FallbackLibreOffice
 	if st.TextPaint != nil && st.TextPaint.NoFill && !(st.Color.A > 0) {
 		// The glyphs are painted invisible under their line: a text of
 		// no fill keeps an opaque colour for the line's opacity.

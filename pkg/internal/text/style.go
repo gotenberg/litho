@@ -130,6 +130,14 @@ type Style struct {
 	// stand-in records Word's metrics keeps them, and when the index
 	// holds the named face itself, it draws the run and nothing changes.
 	WordMetrics bool
+	// OfficeEmoji lays out the emoji a colour face draws as Word and
+	// PowerPoint lay out Segoe UI Emoji, the face they draw emoji in, which
+	// the index does not hold: each glyph of a colour face advances
+	// [segoeEmojiAdvance] ems, its drawing centred in it, and, with
+	// WordMetrics, takes Segoe UI Emoji's ascent and descent for its line
+	// box. The glyphs keep the colour face's drawing. [Fonts.Layout]
+	// ignores it.
+	OfficeEmoji bool
 }
 
 // FontSettings are the font settings of a [Style] that most text leaves

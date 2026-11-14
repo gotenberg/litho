@@ -42,6 +42,11 @@ func (fc *Face) wordMetrics(style Style, size float64) (m Metrics, ok bool) {
 	if !style.WordMetrics || fc == nil {
 		return Metrics{}, false
 	}
+	if style.OfficeEmoji && fc.colourTables() != 0 {
+		m = fc.Metrics(size)
+		m.Ascent, m.Descent, m.LineGap = segoeEmojiAscent*size, segoeEmojiDescent*size, 0
+		return m, true
+	}
 	for _, f := range style.Families {
 		key := familyKey(f)
 		if slices.Contains(fc.keys, key) {
@@ -74,4 +79,75 @@ func (fc *Face) MetricsFor(style Style) Metrics {
 		return fc.Metrics(style.Size * adjustFactor(&style, fc, fc.parsedFace()))
 	}
 	return fc.Metrics(style.Size)
+}
+
+// segoeEmojiAdvance is the advance, in em, of most glyphs of Segoe UI
+// Emoji, the face Word and PowerPoint draw emoji in: 2812 units of 2048.
+// A colour face stands in for it in an Office run ([Style.OfficeEmoji]).
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word draws twenty emoji at 9, 12 and 36 points in
+//     Segoe UI Emoji, fifteen of them advancing 1.373 ems (12.36, 16.48
+//     and 49.43 points), the thumb, the fire, the globe, the pizza and the
+//     bulb 1.233, 1.092, 1.303, 1.092 and 1.022; the keycaps and the
+//     coloured heart and smile 1.373 at 24 points. The embedded program's
+//     hmtx gives 2812 units to 87 glyphs, the most of any advance. Noto
+//     Color Emoji advances 2550 units, 1.245 ems: the line of twenty ends
+//     12.7 points short at 9 points, 17.3 at 12, where 1.373 ems ends it
+//     10.3 and 13.4 points long, and each of the fifteen falls in place.
+//   - probe, pptx: PowerPoint lays out the same lines at the same
+//     advances, 316.22 points for the twenty at 12 points where Word's
+//     take 316.15, and draws each emoji as a bitmap.
+//   - probe, docx: Word centres the drawing in the advance: a 36 point
+//     smile inks from 4.47 to 44.72 points of its 49.43; Noto's from 2.53
+//     to 41.53 of 44.82.
+const segoeEmojiAdvance = 2812.0 / 2048
+
+// segoeEmojiAscent and segoeEmojiDescent are the ascent and descent, in
+// em, of Segoe UI Emoji's lines in Word: its OS/2 usWinAscent and
+// usWinDescent, 2210 and 514 units of 2048 ([Style.OfficeEmoji]).
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word's PDF embeds Segoe UI Emoji with winAscent 2210
+//     and winDescent 514. Its first line, of 9 point emoji, sets the
+//     baseline 9.78 points below the top margin, where Calibri's ascent
+//     sets 8.57; lines of emoji at 12 points are 25.25 points apart with
+//     8 points after each paragraph and lines of 1.0792, 17.25 points,
+//     1.332 ems; 36 point lines of emoji 51.25 apart, 1.319 ems. Segoe's
+//     2724 units give 1.330.
+//   - probe, pptx: PowerPoint keeps its lines of emoji 1.2 sizes apart,
+//     28.84 points at 24 points, 14.42 at 12, as it spaces text alone.
+const (
+	segoeEmojiAscent  = 2210.0 / 2048
+	segoeEmojiDescent = 514.0 / 2048
+)
+
+// segoeAdvances sets the advance of every glyph of glyphs that advances
+// to w, its drawing moved by half the change so it stays centred: a
+// colour face's glyphs standing in for Segoe UI Emoji's
+// ([segoeEmojiAdvance]). A flag, a glyph whose cluster in text starts
+// with a regional indicator, keeps its own advance: Segoe UI Emoji draws
+// no flag, but the two letters it stands for.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word draws the flags of France and Japan at 24 points
+//     as the letters F, R, J and P, 0.30 to 0.46 ems each, 0.82 ems a
+//     flag; Noto Color Emoji's flags advance 1.245 ems.
+//   - litho/pptx: text-complex-scripts prints in PowerPoint the flag of
+//     France at 24 points 20.99 points wide, 0.88 ems.
+func segoeAdvances(glyphs []shapedGlyph, text []rune, w float64) {
+	for k := range glyphs {
+		g := &glyphs[k]
+		if g.advance <= 0 {
+			continue
+		}
+		if c := g.cluster(); c < len(text) && isRegionalIndicator(text[c]) {
+			continue
+		}
+		g.xoff += float64((w - g.advance) / 2)
+		g.advance = w
+	}
 }

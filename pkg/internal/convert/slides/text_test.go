@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -192,5 +193,21 @@ func TestText_DefaultTab(t *testing.T) {
 		if !near(x1, 100+tc.want, 0.2) {
 			t.Errorf("font lines %v: second digit at %.2f, want %.2f; runs %v", tc.fontLines, x1, 100+tc.want, runs(pg))
 		}
+	}
+}
+
+// TestText_OfficeEmoji checks that an emoji of a PowerPoint presentation
+// advances as Segoe UI Emoji's do, 2812 units of 2048, the text after it
+// moving with it, where under Impress's fallback it keeps Noto Color
+// Emoji's 2550.
+func TestText_OfficeEmoji(t *testing.T) {
+	span := func(fallback text.Fallback) float64 {
+		d := deck(&Slide{Shapes: []*Shape{box(100, 100, 400, 200, para("A\U0001F600B", arial(20)))}})
+		d.Fallback = fallback
+		out := convert(t, d, office.Options{})
+		return find(t, out.Pages[0], "B").x - find(t, out.Pages[0], "A").x
+	}
+	if got, want := span(text.FallbackFontconfig)-span(text.FallbackLibreOffice), 20*(2812.0-2550)/2048; !near(got, want, 0.05) {
+		t.Errorf("B moves %.2f points further under PowerPoint's rules, want %.2f", got, want)
 	}
 }
