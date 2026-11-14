@@ -98,6 +98,42 @@ func TestLayout_FallbackFollowsTheJudgingEngine(t *testing.T) {
 	}
 }
 
+// TestLayout_ChromiumFallsBackThroughNotoSansFirst locks that under
+// Chromium's rule a character the primary face lacks takes Noto Sans
+// before DejaVu Sans, as fontconfig 2.15's sans-serif list orders them,
+// and DejaVu Sans when Noto Sans lacks it too; system-ui text is drawn in
+// Noto Sans.
+//
+// # Corpus evidence
+//
+//   - probe, html: in the gotenberg/gotenberg:9.4.1 image, Chromium prints
+//     U+20B9 under Liberation Serif and system-ui text in Noto Sans, and
+//     U+2713, which Noto Sans lacks, in DejaVu Sans.
+func TestLayout_ChromiumFallsBackThroughNotoSansFirst(t *testing.T) {
+	t.Parallel()
+	const rupee, check = '\u20B9', '\u2713'
+	f := newTestFonts(t,
+		fontFile{name: "a_liberation_serif.ttf", data: familyFace("Liberation Serif", "Regular", 400, false)},
+		fontFile{name: "b_dejavu_sans.ttf", data: familyFace("DejaVu Sans", "Regular", 400, false, rupee, check)},
+		fontFile{name: "c_noto_sans.ttf", data: familyFace("Noto Sans", "Regular", 400, false, rupee)},
+	)
+	for _, tc := range []struct {
+		name  string
+		named []string
+		text  string
+		want  string
+	}{
+		{"rupee sign under serif", []string{"serif"}, "A" + string(rupee), "c_noto_sans"},
+		{"check mark under serif", []string{"serif"}, "A" + string(check), "b_dejavu_sans"},
+		{"system-ui", []string{"system-ui"}, "A", "c_noto_sans"},
+	} {
+		s := Style{Families: BrowserFamilies(tc.named, ""), Fallback: FallbackChromium, Size: 10}
+		if got := drawnBy(t, f, tc.text, s); !strings.Contains(got, tc.want) {
+			t.Errorf("%s: drawn with %s, want %s", tc.name, got, tc.want)
+		}
+	}
+}
+
 // TestLayout_PunctuationInTheFaceOfTheLanguage locks that under Chromium's
 // rule a fullwidth punctuation, of no CJK script, no family list covers
 // takes the Noto CJK face of the language, and the first in index order

@@ -101,20 +101,33 @@ func genericOf(name string) generic {
 // genericFamilies are the preference lists of the generic families.
 //
 // The serif, sans-serif and monospace lists mirror the prefer lists of
-// fontconfig's conf.d/60-latin.conf, and each ends with the Noto family of
-// the generic as a last resort. The cursive, fantasy and system-ui lists
-// mirror the shorter lists of the same file; system-ui then takes the
-// sans-serif list. Every family a list names brings its metric-compatible
-// aliases ([metricAliases]) right after it.
+// fontconfig's conf.d/60-latin.conf. The sans-serif list is that of
+// fontconfig 2.15, Noto Sans first, which the Chromium and LibreOffice of
+// the reference image fall back through; the serif and monospace lists
+// end with the Noto family of the generic as a last resort. The cursive,
+// fantasy and system-ui lists mirror the shorter lists of the same file;
+// system-ui then takes the sans-serif list. Every family a list names
+// brings its metric-compatible aliases ([metricAliases]) right after it.
+//
+// # Corpus evidence
+//
+//   - probe, html: in the gotenberg/gotenberg:9.4.1 image, whose
+//     fontconfig 2.15 prefers Noto Sans then DejaVu Sans for sans-serif,
+//     Chromium prints U+20B9, U+2024 and U+2047 under Liberation Serif
+//     and system-ui text in Noto Sans, and U+2190 and U+2713, which Noto
+//     Sans lacks, in DejaVu Sans.
+//   - probe, odt: LibreOffice of the same image prints U+20B9 and U+2024
+//     under Liberation Sans, and text in Aptos or Arial Black, which the
+//     image lacks, in Noto Sans.
 var genericFamilies = map[generic][]string{
 	genericSerif: {
 		"DejaVu Serif", "Times New Roman", "Thorndale AMT", "Luxi Serif",
 		"Nimbus Roman No9 L", "Nimbus Roman", "Times", "Noto Serif",
 	},
 	genericSansSerif: {
-		"DejaVu Sans", "Verdana", "Arial", "Albany AMT", "Luxi Sans",
+		"Noto Sans", "DejaVu Sans", "Verdana", "Arial", "Albany AMT", "Luxi Sans",
 		"Nimbus Sans L", "Nimbus Sans", "Helvetica", "Lucida Sans Unicode",
-		"BPG Glaho International", "Tahoma", "Noto Sans",
+		"BPG Glaho International", "Tahoma",
 	},
 	genericMonospace: {
 		"DejaVu Sans Mono", "Inconsolata", "Andale Mono", "Courier New",
