@@ -345,6 +345,12 @@ func (bg *bgPaint) layer(i int, l *css.BackgroundLayer, r typeset.Rect, radii [4
 		if pic == nil {
 			return
 		}
+		if wm := p.e.frameOf(b); wm != css.HorizontalTB {
+			if f := p.e.uprightLayer(l, pic, sl, wm, r.Y); f != nil {
+				g.kids = append(g.kids, &ditem{frag: f, y0: sl.clip.Y, y1: sl.clip.Y + sl.clip.Height, page: -1})
+			}
+			continue
+		}
 		pic = naturalPicture(pic, sl.area.Width, sl.area.Height)
 		tiles := p.e.tiles(l, pic, sl.area, sl.clip, r.Y)
 		for i, t := range tiles {

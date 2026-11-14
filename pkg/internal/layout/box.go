@@ -223,6 +223,10 @@ type box struct {
 	// a replaced box without a picture that paints the bullet's shape
 	// ([engine.symbolMarkerOf]).
 	symbol bool
+	// turn is the writing mode of the turned flow a replaced box sits in
+	// under the browser rules, whose picture stands upright on the page
+	// (writing.go); HorizontalTB elsewhere.
+	turn css.WritingMode
 	// initial reports an initial letter, a float the converter made of a
 	// ::first-letter (Node.InitialLetter, initialletter.go).
 	initial bool

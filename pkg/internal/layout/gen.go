@@ -305,6 +305,10 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 		b.inline = b.float == css.FloatNone && isInlineLevel(st.Display)
 		if validPicture(n.Picture) {
 			b.picture = viewBoxPicture(n.Picture, st.ObjectViewBox)
+			if ctx.vertical && e.opts.BrowserRules && b.picture.view == nil {
+				b.turn = ctx.frame
+				b.picture = turnedPicture(b.picture)
+			}
 		}
 		return []*box{b}
 	case Element:

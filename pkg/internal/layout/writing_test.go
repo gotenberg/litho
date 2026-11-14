@@ -1,6 +1,9 @@
 package layout
 
 import (
+	"context"
+	"image"
+	"image/color"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -112,6 +115,39 @@ func TestWritingMode_PhysicalSidesInATurnedFlow(t *testing.T) {
 		___G__
 		______
 		______
+		______
+		______`)
+}
+
+// TestWritingMode_PicturesStandUpright draws the pictures of a vertical
+// flow upright: a writing mode turns text, not the content of a replaced
+// element (CSS Writing Modes 4, 7), and a background image keeps its
+// physical position and size (CSS Backgrounds 3, 3.6 to 3.9). A 2 by 1 px
+// picture, red then blue, reads red then blue on the page, as a block at
+// the block-start (right) edge of a vertical-rl box and as its background
+// at the top left.
+func TestWritingMode_PicturesStandUpright(t *testing.T) {
+	t.Parallel()
+	wm := func(s *css.Style) { s.WritingMode = css.VerticalRL }
+	img := image.NewNRGBA(image.Rect(0, 0, 2, 1))
+	img.Set(0, 0, color.NRGBA{R: 255, A: 255})
+	img.Set(1, 0, color.NRGBA{B: 255, A: 255})
+	picture := &Picture{Source: source(img), Width: px(2), Height: px(1)}
+	replaced := doc(el(sty(wm, width(6), height(3)), &Node{Kind: Replaced, Style: sty(wm), Picture: picture}))
+	assertPixels(t, runWith(t, replaced, Options{Page: page(6, 3), BrowserRules: true}), 1, `
+		____RB
+		______
+		______`)
+	background := doc(el(sty(wm, width(6), height(3), func(s *css.Style) {
+		s.BackgroundImage = "i.png"
+		s.BackgroundRepeat = [2]css.Repeat{css.RepeatNoRepeat, css.RepeatNoRepeat}
+	})))
+	res, err := Layout(context.Background(), background, ahem(t), Options{Page: page(6, 3), BrowserRules: true, Image: imageLoader()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPixels(t, res, 1, `
+		RB____
 		______
 		______`)
 }

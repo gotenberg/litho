@@ -1223,8 +1223,14 @@ func (p *painter) replaced(b *box) {
 		return
 	}
 	box := typeset.Rect{X: b.contentX() + p.dx, Y: b.contentY() + p.dy, Width: b.w, Height: b.h}
-	r := objectRect(b.st, objectPicture(b.st, b.picture, b.w, b.h), box)
-	img := p.e.pictureFrag(b.picture, r, b.elem)
+	var img typeset.Fragment
+	var r typeset.Rect
+	if b.turn != css.HorizontalTB {
+		img, r = p.e.uprightPicture(b, box)
+	} else {
+		r = objectRect(b.st, objectPicture(b.st, b.picture, b.w, b.h), box)
+		img = p.e.pictureFrag(b.picture, r, b.elem)
+	}
 	if img == nil {
 		return
 	}

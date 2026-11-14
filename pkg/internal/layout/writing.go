@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // orthoEligible reports a box that may root an orthogonal flow: a block
@@ -218,4 +219,107 @@ func turnOffset(frame css.WritingMode, x, y float64) (float64, float64) {
 		return -y, x
 	}
 	return y, -x
+}
+
+// turnedPicture returns pic as a box of a turned flow sizes it: its
+// natural width is the height it stands on the page.
+func turnedPicture(pic *Picture) *Picture {
+	t := *pic
+	t.Width, t.Height = pic.Height, pic.Width
+	t.NoNaturalWidth, t.NoNaturalHeight = pic.NoNaturalHeight, pic.NoNaturalWidth
+	return &t
+}
+
+// uprightPicture returns the fragment that paints the picture of the
+// replaced box b of a turned flow, whose content box is box, standing
+// upright on the page (CSS Writing Modes 4, 7: a writing mode turns the
+// text, not a replaced element's content), and where it lands: the
+// picture is placed by object-fit and object-position in the content box
+// as the page shows it, then turned the other way about its centre.
+func (e *engine) uprightPicture(b *box, box typeset.Rect) (typeset.Fragment, typeset.Rect) {
+	pic := turnedPicture(b.picture)
+	cx, cy := box.X+float64(box.Width/2), box.Y+float64(box.Height/2)
+	page := typeset.Rect{X: cx - float64(box.Height/2), Y: cy - float64(box.Width/2), Width: box.Height, Height: box.Width}
+	r := objectRect(b.st, objectPicture(b.st, pic, page.Width, page.Height), page)
+	f := e.pictureFrag(pic, r, b.elem)
+	if f == nil {
+		return nil, box
+	}
+	// The flow turns a quarter turn clockwise onto the page, or
+	// counter-clockwise in sideways-lr: the picture turns the other way.
+	g := &typeset.Group{Transform: uprightTurn(b.turn, cx, cy), Opacity: 1, Content: []typeset.Fragment{f}}
+	return g, turnedRect(b.turn, cx, cy, r)
+}
+
+// frameOf returns the writing mode of the turned flow the box b is laid
+// out in under the browser rules, HorizontalTB for a box on the page as
+// it is.
+func (e *engine) frameOf(b *box) css.WritingMode {
+	if !e.opts.BrowserRules {
+		return css.HorizontalTB
+	}
+	for a, depth := b.parent, 0; a != nil && depth <= maxTreeDepth; a, depth = a.parent, depth+1 {
+		if a.ortho {
+			return a.st.WritingMode
+		}
+	}
+	return e.turn
+}
+
+// uprightTurn returns the transform that turns content drawn upright
+// about the point (cx, cy) into a flow of the writing mode wm, which the
+// page turns a quarter turn clockwise, or counter-clockwise in
+// sideways-lr: the other way.
+func uprightTurn(wm css.WritingMode, cx, cy float64) typeset.Matrix {
+	if wm == css.SidewaysLR {
+		return typeset.Matrix{B: 1, C: -1, E: cx + cy, F: cy - cx}
+	}
+	return typeset.Matrix{B: -1, C: 1, E: cx - cy, F: cy + cx}
+}
+
+// uprightRect returns the rectangle r of a flow of the writing mode wm in
+// the coordinates [uprightTurn] turns from, about (cx, cy).
+func uprightRect(wm css.WritingMode, cx, cy float64, r typeset.Rect) typeset.Rect {
+	if wm == css.SidewaysLR {
+		return typeset.Rect{X: cx - cy + r.Y, Y: cy + cx - r.X - r.Width, Width: r.Height, Height: r.Width}
+	}
+	return typeset.Rect{X: cx + cy - r.Y - r.Height, Y: r.X - cx + cy, Width: r.Height, Height: r.Width}
+}
+
+// uprightLayer returns the fragment that paints the image pic of the
+// background layer l over the slice sl of a box in a flow of the writing
+// mode wm, standing upright on the page: the background's positioning
+// area, size, position and repetition are physical (CSS Backgrounds 3,
+// 3.6 to 3.9), so its tiles are placed in the area as the page shows it
+// and turned the other way about the area's centre.
+func (e *engine) uprightLayer(l *css.BackgroundLayer, pic *Picture, sl bgSlice, wm css.WritingMode, y float64) typeset.Fragment {
+	cx, cy := sl.area.X+float64(sl.area.Width/2), sl.area.Y+float64(sl.area.Height/2)
+	area, clip := uprightRect(wm, cx, cy, sl.area), uprightRect(wm, cx, cy, sl.clip)
+	pic = naturalPicture(pic, area.Width, area.Height)
+	tiles := e.tiles(l, pic, area, clip, y)
+	var frags []typeset.Fragment
+	for i, t := range tiles {
+		f := e.pictureFrag(pic, t, nil)
+		if f == nil {
+			break
+		}
+		if i == 0 && pic.Vector != nil {
+			tiles = e.vectorTiles(tiles, fragNodes(f), y)
+		}
+		frags = append(frags, f)
+	}
+	if len(frags) == 0 {
+		return nil
+	}
+	return &typeset.Group{Transform: uprightTurn(wm, cx, cy), Opacity: 1, Content: frags}
+}
+
+// turnedRect returns the rectangle r drawn upright about (cx, cy) as
+// [uprightTurn] places it in a flow of the writing mode wm: the inverse
+// of [uprightRect].
+func turnedRect(wm css.WritingMode, cx, cy float64, r typeset.Rect) typeset.Rect {
+	if wm == css.SidewaysLR {
+		return typeset.Rect{X: cx + cy - r.Y - r.Height, Y: r.X - cx + cy, Width: r.Height, Height: r.Width}
+	}
+	return typeset.Rect{X: r.Y - cy + cx, Y: cy + cx - r.X - r.Width, Width: r.Height, Height: r.Width}
 }
