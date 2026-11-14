@@ -141,6 +141,9 @@ func TestOpenOOXML_Refusals(t *testing.T) {
 		return []byte(strings.Replace(string(agileInfo), old, repl, 1))
 	}
 	spin := replace(`spinCount="1"`, `spinCount="10000001"`)
+	// Past 2^31 the count reads alike where int is 32 or 64 bits, and
+	// meets the cap rather than failing the descriptor.
+	wideSpin := replace(`spinCount="1"`, `spinCount="3000000000"`)
 	md5 := []byte(strings.ReplaceAll(string(agileInfo), `hashAlgorithm="SHA1"`, `hashAlgorithm="MD5"`))
 	cert := replace(`uri="http://schemas.microsoft.com/office/2006/keyEncryptor/password"`, `uri="http://schemas.microsoft.com/office/2006/keyEncryptor/certificate"`)
 	cfb := replace(`ChainingModeCBC`, `ChainingModeCFB`)
@@ -163,6 +166,7 @@ func TestOpenOOXML_Refusals(t *testing.T) {
 		{"agile reserved", encryptedOOXML(t, append([]byte{4, 0, 4, 0, 0, 0, 0, 0}, agileInfo[8:]...), agileEnc), office.ErrMalformed, "reserved"},
 		{"agile xml", encryptedOOXML(t, append(bytes.Clone(agileInfo[:8]), "<encryption"...), agileEnc), office.ErrMalformed, "descriptor"},
 		{"spin count", encryptedOOXML(t, spin, agileEnc), office.ErrEncrypted, "spin count"},
+		{"spin count past 2^31", encryptedOOXML(t, wideSpin, agileEnc), office.ErrEncrypted, "spin count 3000000000"},
 		{"md5", encryptedOOXML(t, md5, agileEnc), office.ErrEncrypted, "MD5"},
 		{"certificate", encryptedOOXML(t, cert, agileEnc), office.ErrEncrypted, "certificate"},
 		{"chaining", encryptedOOXML(t, cfb, agileEnc), office.ErrEncrypted, "ChainingModeCFB"},

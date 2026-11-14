@@ -51,12 +51,14 @@ var (
 const passwordKeyEncryptor = "http://schemas.microsoft.com/office/2006/keyEncryptor/password" //nolint:gosec // a namespace URI, not a credential
 
 // agileParams are the cipher attributes keyData and p:encryptedKey share
-// (MS-OFFCRYPTO, 2.3.4.10, CT_KeyData and CT_PasswordKeyEncryptor).
+// (MS-OFFCRYPTO, 2.3.4.10, CT_KeyData and CT_PasswordKeyEncryptor). The
+// sizes are read in 64 bits, so a value the schema's unsignedInt refuses
+// fails the checks that follow alike on every platform.
 type agileParams struct {
-	SaltSize        int    `xml:"saltSize,attr"`
-	BlockSize       int    `xml:"blockSize,attr"`
-	KeyBits         int    `xml:"keyBits,attr"`
-	HashSize        int    `xml:"hashSize,attr"`
+	SaltSize        int64  `xml:"saltSize,attr"`
+	BlockSize       int64  `xml:"blockSize,attr"`
+	KeyBits         int64  `xml:"keyBits,attr"`
+	HashSize        int64  `xml:"hashSize,attr"`
 	CipherAlgorithm string `xml:"cipherAlgorithm,attr"`
 	CipherChaining  string `xml:"cipherChaining,attr"`
 	HashAlgorithm   string `xml:"hashAlgorithm,attr"`
@@ -73,7 +75,7 @@ type agileXML struct {
 		URI          string `xml:"uri,attr"`
 		EncryptedKey struct {
 			agileParams
-			SpinCount                  int    `xml:"spinCount,attr"`
+			SpinCount                  int64  `xml:"spinCount,attr"`
 			EncryptedVerifierHashInput string `xml:"encryptedVerifierHashInput,attr"`
 			EncryptedVerifierHashValue string `xml:"encryptedVerifierHashValue,attr"`
 			EncryptedKeyValue          string `xml:"encryptedKeyValue,attr"`
@@ -123,7 +125,7 @@ func parseAgile(b []byte) (packageScheme, error) {
 		if ek.SpinCount < 0 || ek.SpinCount > maxAgileSpinCount {
 			return nil, fmt.Errorf("%w: Agile spin count %d is past the cap of %d", office.ErrEncrypted, ek.SpinCount, maxAgileSpinCount)
 		}
-		s := &agileScheme{data: data, pw: pw, spinCount: ek.SpinCount}
+		s := &agileScheme{data: data, pw: pw, spinCount: int(ek.SpinCount)} // fits int: at most maxAgileSpinCount, checked above
 		for _, f := range []struct {
 			dst  *[]byte
 			attr string
@@ -172,15 +174,15 @@ func checkAgileParams(elem string, p agileParams) (agileCipher, error) {
 		return agileCipher{}, fmt.Errorf("%w: Agile %s hash %q is not read", office.ErrEncrypted, elem, p.HashAlgorithm)
 	}
 	c.hashSize = c.newHash().Size()
-	if p.HashSize != c.hashSize {
+	if p.HashSize != int64(c.hashSize) {
 		return agileCipher{}, fmt.Errorf("%w: Agile %s hash size %d for %s", office.ErrMalformed, elem, p.HashSize, p.HashAlgorithm)
 	}
 	salt, err := base64.StdEncoding.DecodeString(p.SaltValue)
-	if err != nil || p.SaltSize < 1 || p.SaltSize > maxAgileSaltBytes || len(salt) != p.SaltSize {
+	if err != nil || p.SaltSize < 1 || p.SaltSize > maxAgileSaltBytes || int64(len(salt)) != p.SaltSize {
 		return agileCipher{}, fmt.Errorf("%w: Agile %s salt of %d bytes, saltSize %d", office.ErrMalformed, elem, len(salt), p.SaltSize)
 	}
 	c.salt = salt
-	c.keyBytes = p.KeyBits / 8
+	c.keyBytes = int(p.KeyBits / 8) // fits int: 128, 192 or 256 bits, checked above
 	return c, nil
 }
 

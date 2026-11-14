@@ -217,7 +217,7 @@ type agileOptions struct {
 func agileHash(name string) func() hash.Hash {
 	c, err := checkAgileParams("test", agileParams{
 		SaltSize: 1, BlockSize: 16, KeyBits: 128, CipherAlgorithm: "AES", CipherChaining: "ChainingModeCBC",
-		HashAlgorithm: name, SaltValue: "AA==", HashSize: map[string]int{"SHA1": 20, "SHA256": 32, "SHA384": 48, "SHA512": 64}[name],
+		HashAlgorithm: name, SaltValue: "AA==", HashSize: map[string]int64{"SHA1": 20, "SHA256": 32, "SHA384": 48, "SHA512": 64}[name],
 	})
 	if err != nil {
 		panic(err)
