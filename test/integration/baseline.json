@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-14T18:05:38Z",
+  "captured_at": "2026-11-14T18:09:52Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -60272,7 +60272,7 @@
               "text_f1": 0.9783
             },
             "ja-vertical": {
-              "layout": 0.8816,
+              "layout": 0.8829,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
