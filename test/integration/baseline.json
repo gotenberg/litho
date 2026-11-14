@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-14T22:48:23Z",
+  "captured_at": "2026-11-14T23:00:34Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -18995,8 +18995,8 @@
     "libreoffice/odp": {
       "features": {
         "diff": {
-          "matched": 143,
-          "mismatched": 27,
+          "matched": 144,
+          "mismatched": 26,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -19197,12 +19197,12 @@
               "text_f1": 1
             },
             "sd/Math.fodp": {
-              "layout": 0,
+              "layout": 0.8219,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 1
             },
             "sd/SvgImageTest.odp": {
               "layout": 0.999,
@@ -19333,12 +19333,12 @@
               "text_f1": 1
             },
             "sd/formula.fodp": {
-              "layout": 0,
+              "layout": 0.9526,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 0.5714
             },
             "sd/group_rotation.odp": {
               "layout": 0.9917,
@@ -37263,7 +37263,7 @@
               "text_f1": 1
             },
             "chart2/tdf106217.pptx": {
-              "layout": 0.7509,
+              "layout": 0.7619,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -37271,7 +37271,7 @@
               "text_f1": 0.6364
             },
             "chart2/tdf115107-2.pptx": {
-              "layout": 0.9801,
+              "layout": 0.9809,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -37319,7 +37319,7 @@
               "text_f1": 1
             },
             "chart2/tdf127393.pptx": {
-              "layout": 0.936,
+              "layout": 0.9318,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46005,7 +46005,7 @@
           },
           "scores": {
             "chart2/ChartDataTable.xlsx": {
-              "layout": 0.541,
+              "layout": 0.5351,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46021,7 +46021,7 @@
               "text_f1": 0.2692
             },
             "chart2/add_series_secondary_axis.xlsx": {
-              "layout": 0.9089,
+              "layout": 0.9086,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46029,7 +46029,7 @@
               "text_f1": 1
             },
             "chart2/auto_marker_excel10.xlsx": {
-              "layout": 0.8865,
+              "layout": 0.8907,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46061,7 +46061,7 @@
               "text_f1": 1
             },
             "chart2/axis_character_properties.xlsx": {
-              "layout": 0.7989,
+              "layout": 0.8076,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46069,7 +46069,7 @@
               "text_f1": 1
             },
             "chart2/axis_title_default_rotation.xlsx": {
-              "layout": 0.6836,
+              "layout": 0.6813,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46077,7 +46077,7 @@
               "text_f1": 0.7975
             },
             "chart2/axis_title_rotated.xlsx": {
-              "layout": 0.7192,
+              "layout": 0.7311,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46277,7 +46277,7 @@
               "text_f1": 1
             },
             "chart2/deleted_data_labels.xlsx": {
-              "layout": 0.9115,
+              "layout": 0.9309,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46301,7 +46301,7 @@
               "text_f1": 0.99
             },
             "chart2/dispBlanksAs_2007.xlsx": {
-              "layout": 0.8152,
+              "layout": 0.8207,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46309,7 +46309,7 @@
               "text_f1": 1
             },
             "chart2/dispBlanksAs_2013.xlsx": {
-              "layout": 0.7498,
+              "layout": 0.7515,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46421,7 +46421,7 @@
               "text_f1": 1
             },
             "chart2/majorTickMark.xlsx": {
-              "layout": 0.7851,
+              "layout": 0.7931,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46437,7 +46437,7 @@
               "text_f1": 0.9905
             },
             "chart2/minorTickMark.xlsx": {
-              "layout": 0.7803,
+              "layout": 0.7876,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -46445,7 +46445,7 @@
               "text_f1": 1
             },
             "chart2/no_marker.xlsx": {
-              "layout": 0.768,
+              "layout": 0.767,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -47141,7 +47141,7 @@
               "text_f1": 1
             },
             "sc/shape-macro-ext-ref.xlsx": {
-              "layout": 0.4067,
+              "layout": 0.4066,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54518,7 +54518,7 @@
               "text_f1": 0.4967
             },
             "charts-line-area": {
-              "layout": 0.8195,
+              "layout": 0.8221,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54534,7 +54534,7 @@
               "text_f1": 0.878
             },
             "charts-scatter-bubble-radar": {
-              "layout": 0.7815,
+              "layout": 0.7808,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54542,7 +54542,7 @@
               "text_f1": 0.9231
             },
             "charts-stock-combo": {
-              "layout": 0.8585,
+              "layout": 0.8581,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -54550,7 +54550,7 @@
               "text_f1": 1
             },
             "charts-trendlines-errorbars": {
-              "layout": 0.7655,
+              "layout": 0.8826,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -71981,7 +71981,7 @@
               "text_f1": 0.9068
             },
             "chart-combo": {
-              "layout": 0.9607,
+              "layout": 0.963,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -71989,15 +71989,15 @@
               "text_f1": 0.942
             },
             "chart-labels-axes": {
-              "layout": 0.8462,
+              "layout": 0.8905,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.914
+              "text_f1": 0.92
             },
             "chart-line": {
-              "layout": 0.793,
+              "layout": 0.7975,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -72021,7 +72021,7 @@
               "text_f1": 0.8776
             },
             "chart-scatter-bubble": {
-              "layout": 0.3951,
+              "layout": 0.3968,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -72093,7 +72093,7 @@
               "text_f1": 1
             },
             "deck-quarterly-report": {
-              "layout": 0.9043,
+              "layout": 0.9045,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -76334,7 +76334,7 @@
               "text_f1": 0.6362
             },
             "charts_combo_secondary": {
-              "layout": 0.7606,
+              "layout": 0.7804,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -76342,7 +76342,7 @@
               "text_f1": 0.9753
             },
             "charts_labels_trend_errors": {
-              "layout": 0.819,
+              "layout": 0.8178,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -76350,7 +76350,7 @@
               "text_f1": 0.9187
             },
             "charts_line_area": {
-              "layout": 0.8019,
+              "layout": 0.8083,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -76374,7 +76374,7 @@
               "text_f1": 0.9258
             },
             "charts_scatter_bubble": {
-              "layout": 0.5881,
+              "layout": 0.5883,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -77294,7 +77294,7 @@
               "text_f1": 1
             },
             "real_dashboard": {
-              "layout": 0.9232,
+              "layout": 0.9228,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -77302,7 +77302,7 @@
               "text_f1": 0.9931
             },
             "real_financial_statement": {
-              "layout": 0.9257,
+              "layout": 0.9255,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -93457,7 +93457,7 @@
               "text_f1": 1
             },
             "v2FxTestFiles/spreadsheet/O12_templates/VendorScorecardReport_TP10194032.xltx": {
-              "layout": 0.8739,
+              "layout": 0.8788,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -103645,7 +103645,7 @@
               "text_f1": 0.9882
             },
             "slideshow/line-chart.pptx": {
-              "layout": 0.9234,
+              "layout": 0.9324,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -111424,7 +111424,7 @@
               "text_f1": 1
             },
             "spreadsheet/57362.xlsx": {
-              "layout": 0.6358,
+              "layout": 0.6353,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
