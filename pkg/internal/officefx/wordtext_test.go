@@ -19,7 +19,7 @@ func TestWordScale(t *testing.T) {
 	prev := 0.0
 	for _, size := range []float64{1, 8, 11, 24, 48, 72, 96, 400} {
 		got := wordScale(size)
-		want := math.Pow(size/wordScaleSize, 2.0/3)
+		want := math.Pow(size/wordScaleSize, wordScalePower)
 		if math.Abs(got-want) > 1e-12 {
 			t.Errorf("scale at %v points %v, want %v", size, got, want)
 		}
@@ -39,17 +39,16 @@ func TestWordScale(t *testing.T) {
 }
 
 // TestWordScale_SameBitsOnEveryArchitecture pins the bits of the scale:
-// its cube root rounds every product on its own, so amd64 and arm64
-// compute the same.
+// its power comes from detmath, so amd64 and arm64 compute the same.
 func TestWordScale_SameBitsOnEveryArchitecture(t *testing.T) {
 	for _, tc := range []struct {
 		size float64
 		bits uint64
 	}{
-		{8, 0x3fcd0c466b6cb54b},
-		{11, 0x3fd1f58eefdf4103},
-		{24, 0x3fde3609a9ae44e5},
-		{72, 0x3fef6bb930c6a173},
+		{8, 0x3fcc1add3e9f2432},
+		{11, 0x3fd1817ae5f7235c},
+		{24, 0x3fddfd42ac0aed50},
+		{72, 0x3ff0000000000000},
 	} {
 		if got := math.Float64bits(wordScale(tc.size)); got != tc.bits {
 			t.Errorf("scale at %v points %#x, want %#x", tc.size, got, tc.bits)
@@ -204,9 +203,9 @@ func TestUnder_WordRunSameBytesOnEveryArchitecture(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		"46ca5d4701c40a63",
-		"9f731ffd9b9c0237",
-		"4c98cd9f7fa33d01",
+		"a2678f35a4615417",
+		"d659e7682fde971c",
+		"82af86481e0395ab",
 	}
 	if len(frags) != len(want) {
 		t.Fatalf("%d fragments, want %d", len(frags), len(want))

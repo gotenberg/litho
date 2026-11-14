@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -12,7 +13,11 @@ import (
 // wordScaleSize is the font size, in points, at which Word draws the glow
 // and the outer shadow of a run of text at the lengths they state: see
 // [wordScale].
-const wordScaleSize = 74
+const wordScaleSize = 72
+
+// wordScalePower is the power of the font size Word scales the effects of
+// a run of text by: see [wordScale].
+const wordScalePower = 0.69
 
 // maxFontSize caps the font size the effects of a run of Word's text are
 // scaled by, in points. Anti-DoS guard, not spec-mandated: Word sets no
@@ -22,69 +27,58 @@ const maxFontSize = 1638
 
 // wordScale returns the factor Word scales the lengths of a run's w14
 // glow and outer shadow by (MS-DOCX 2.6.1.4, 2.6.1.27) at font size size,
-// (size/74)^(2/3): the glow's radius, the shadow's distance and its blur
+// (size/72)^0.69: the glow's radius, the shadow's distance and its blur
 // radius, which the shapes' rules then draw. A size that is not positive
 // and finite scales nothing.
 //
 // # Corpus evidence
 //
-//   - probe, docx: Calibri runs at 8, 10, 12, 14, 16, 18, 20, 24, 28, 32,
-//     36, 40, 48, 60 and 72 points, each with a shadow 10 points down and
-//     no blur: Word draws the shadow as the glyphs moved 2.26, 2.56, 2.90,
-//     3.21, 3.53, 3.82, 4.13, 4.70, 5.18, 5.70, 6.04, 6.62, 7.51, 8.79 and
-//     9.84 points (the centroid of its soft mask against the centroid of
-//     the glyphs' ink), unscaled; 10 (size/74)^(2/3) gives 2.27, 2.63,
-//     2.97, 3.30, 3.60, 3.90, 4.18, 4.72, 5.23, 5.72, 6.19, 6.64, 7.49,
-//     8.70 and 9.82, within 0.15 points, under a pixel at Word's 288
-//     pixels an inch. A power of the size fitted on the fifteen gives the
-//     exponent 0.669; the 2/3 power puts the full lengths at 74.4 points,
-//     at 72 points (an inch) every offset is drawn 2% long. A factor
-//     linear in the size, the em or the line height, would move the
-//     shadow 9 times as far at 72 points as at 8; Word moves it 4.35
-//     times. The square root of the size gives 3; a logarithm of it
-//     misses 24 points by 0.14 of the distance. The offsets are not whole
+//   - probe, docx: Calibri runs at 4, 6, 8, 10, 12, 14, 16, 18, 20, 24,
+//     28, 32, 36, 40, 48, 60, 72, 96, 120, 144 and 200 points, each with a
+//     shadow 10 points down and no blur: Word draws the shadow as the
+//     glyphs moved 1.45, 1.81, 2.26, 2.56, 2.90, 3.21, 3.53, 3.82, 4.13,
+//     4.70, 5.18, 5.70, 6.04, 6.62, 7.51, 8.79, 9.84, 12.17, 14.23, 16.17
+//     and 15.92 (two runs), 20.32 and 20.21 points (the centroid of its
+//     soft mask against the centroid of the glyphs' ink), unscaled; 10
+//     (size/72)^0.69 puts every one within 0.21 points, 0.074 rms. A
+//     power of the size fitted on the twenty-three gives 0.693, the full
+//     length at 72.4 points. The 2/3 power with the full length at 74
+//     points, fitted on 8 to 72 points alone, draws 4 and 6 points within
+//     0.06 points but falls 0.28, 0.43, 0.58 and 0.92 points short at 96,
+//     120, 144 and 200 points: the scale goes on growing past an inch, a
+//     little faster than the 2/3 power. A factor linear in the size, the
+//     em or the line height, would move the shadow 9 times as far at 72
+//     points as at 8; Word moves it 4.35 times. The offsets are not whole
 //     pixels at 288 pixels an inch.
 //   - probe, docx: at 24 points, shadows 2, 5, 20 and 40 points down are
-//     moved 0.94, 2.34, 9.17 and 18.56 points, the rule 0.94, 2.36, 9.44
-//     and 18.88: linear in the distance.
-//   - probe, docx: glows of 8 points at the fifteen sizes, of 4, 8 and 16
+//     moved 0.94, 2.34, 9.17 and 18.56 points, the rule 0.94, 2.34, 9.37
+//     and 18.74: linear in the distance.
+//   - probe, docx: glows of 8 points at 8 to 72 points, of 4, 8 and 16
 //     points at 12, 24 and 48 points and of 2, 5, 11 and 18 points at 24
 //     points, against the glyphs' ink grown by a third of a square then a
 //     disc and blurred, on Word's grid: the best growth and deviation are
 //     0.45 and a sixth of the scaled radius within a quarter point at
-//     every size (8 points at 24: 1.75 and 0.64 for 1.70 and 0.63; at 72:
-//     3.50 and 1.36 for 3.53 and 1.31), rms 1.2 to 3.3 levels of 255; a
+//     every size (8 points at 24: 1.75 and 0.64 for 1.69 and 0.62; at 72:
+//     3.50 and 1.36 for 3.60 and 1.33), rms 1.2 to 3.3 levels of 255; a
 //     glow of 2 to 5 points at 24 or less draws its blur a pixel wider
 //     than a sixth.
+//   - probe, docx: glows of 8 points at 96, 120, 144 and 200 points fit
+//     that rule best at factors 1.20, 1.35, 1.48 and 2.01 (rms 0.86, 0.97,
+//     1.20 and 0.99 levels), this scale's 1.22, 1.42, 1.61 and 2.02 (rms
+//     2.34, 1.17, 1.88 and 0.99, a growth a pixel wider at 96 and two at
+//     144); at 4 and 6 points no factor fits better than 7 and 3 levels.
 //   - probe, docx: shadows blurred 8 points at 12, 24 and 48 points fit a
 //     Gaussian of 0.80, 1.25 and 2.05 points (a third of the scaled
-//     radius: 0.79, 1.26, 2.00), one blurred 4 points at 24 points 0.65
-//     (0.63), rms 0.5 to 1.6 levels.
+//     radius: 0.77, 1.25, 2.02), one blurred 4 points at 24 points 0.65
+//     (0.62), rms 0.5 to 1.6 levels.
 //   - probe, docx: Times New Roman at 24 points draws the shadow and the
 //     glow as Calibri does. Runs of one size whose text is three times as
 //     long draw them alike: the factor follows the size alone.
-//   - probe, docx: the sizes above 72 points and below 8 are not measured.
 func wordScale(size float64) float64 {
 	if !numeric.PositiveFinite(size) {
 		return 1
 	}
-	q := min(size, maxFontSize) / wordScaleSize
-	return cbrt(float64(q * q))
-}
-
-// cbrt returns the cube root of a > 0 by Newton's iteration from above,
-// every product rounded on its own, so every machine computes the same
-// bits.
-func cbrt(a float64) float64 {
-	y := max(a, 1)
-	for range 200 {
-		next := (float64(2*y) + a/float64(y*y)) / 3
-		if next >= y {
-			break
-		}
-		y = next
-	}
-	return y
+	return detmath.Pow(min(size, maxFontSize)/wordScaleSize, wordScalePower)
 }
 
 // wordReflectionDist is the font size, in points, a w14 reflection's
