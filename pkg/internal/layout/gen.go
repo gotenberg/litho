@@ -384,6 +384,8 @@ func (e *engine) genNode(n *Node, parent *box, ctx genCtx, ordinal *int) []*box 
 	cctx := e.enter(n, b, ctx)
 	if float != css.FloatNone || b.abs {
 		cctx.decos = ownDecos(b, b.st)
+	} else {
+		cctx.decos = propagatedDecos(cctx.decos, b)
 	}
 	if st.Display == css.ListItem {
 		*ordinal++
@@ -481,6 +483,37 @@ func (e *engine) genInline(n *Node, st *css.Style, ctx genCtx, ordinal *int) []*
 		piece.id, piece.fnBody = "", nil
 		out = append(out, piece)
 		cur = piece
+	}
+	return out
+}
+
+// propagatedDecos returns the decorations ds that reach the in-flow block
+// container b from an ancestor, drawn on b's text by the anonymous inline
+// box that wraps it: CSS Text Decoration 3, 2 propagates them to that box,
+// so they take b's font size, and an underline under the text b's face,
+// keeping their colour, style and lines (2.3). Its own decorations, last in
+// ds, stay as they are.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 draws the blue underline of a 16px Ahem
+//     block 10px thick under a 100px block child and 5px thick under a
+//     50px grid item, and an underline of 40px DejaVu Sans twice as thick
+//     under an 80px grid item.
+func propagatedDecos(ds []deco, b *box) []deco {
+	var out []deco
+	for i, d := range ds {
+		if d.origin == b {
+			continue
+		}
+		if out == nil {
+			out = slices.Clone(ds)
+		}
+		d.origin, d.size = b, min(max(clamp(b.st.FontSize), 0), maxFontSize)
+		out[i] = d
+	}
+	if out == nil {
+		return ds
 	}
 	return out
 }

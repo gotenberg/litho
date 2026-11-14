@@ -66,6 +66,30 @@ func TestTextDecoration_OneUnderlinePerDecoratingBox(t *testing.T) {
 	}
 }
 
+// CSS Text Decoration 3, 2: a decoration propagated to a block container
+// is drawn by the anonymous inline box that wraps the block's text, at the
+// block's font size: the underline of a 10px block is 4px thick under its
+// 40px block child, a tenth of 40px as Blink floors it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 draws the underline of a 16px Ahem block
+//     10px thick under its 100px block child.
+func TestTextDecoration_PropagatedToBlockTakesItsSize(t *testing.T) {
+	lime := css.Color{G: 1, A: 1}
+	outer := sty(func(s *css.Style) {
+		s.TextDecoration = css.Underline
+		s.TextDecorationColor = lime
+		s.TextDecorationSkipInk = css.SkipInkNone
+	})
+	inner := sty(func(s *css.Style) { s.FontSize = px(40); s.TextDecorationSkipInk = css.SkipInkNone })
+	res := runWith(t, doc(el(outer, el(inner, txt(inner, "a")))), Options{Page: page(200, 60), BrowserRules: true})
+	got := decoPaths(res, lime)
+	if len(got) != 1 || !near(got[0].Height, px(4)) || !near(got[0].Width, px(40)) {
+		t.Fatalf("underline %+v, want one 40px wide and 4px thick", got)
+	}
+}
+
 // CSS Text Decoration 3, 4: a text shadow copies the decorations of the
 // text as well as its glyphs, in the shadow's colour.
 func TestTextShadow_ShadowsDecorations(t *testing.T) {
