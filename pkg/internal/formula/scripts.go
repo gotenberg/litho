@@ -229,6 +229,14 @@ func (l *layouter) stretchInline(e *Element, kids []*Element, index []int, st *S
 // placed by its top accent attachment, as the inline size 3.4.2.4 gives
 // counts it.
 //
+// Where the base is neither a large operator nor stretched, an underscript
+// that is not an accent keeps UnderbarVerticalGap between its ink top and
+// the base's ink bottom, and an overscript that is not an accent
+// OverbarVerticalGap between its ink bottom and the base's ink top: the
+// gap the other cases keep, where 3.4.2.3 and 3.4.2.4 shift the script's
+// baseline by the gap alone, which sets a limit under a function name
+// over the name.
+//
 // Under a base that stretches along the inline axis the underscript keeps
 // StretchStackGapBelowMin from it and the overscript
 // StretchStackGapAboveMin, the gaps the OpenType MATH table defines
@@ -266,7 +274,10 @@ func (l *layouter) attachUnderOver(e *Element, base, under, over *box, st *Style
 			shift = max(f.constant(mt.StretchStackBottomShiftDown, size), f.constant(mt.StretchStackGapBelowMin, size)+under.asc)
 		default:
 			if !e.attrIs("accentunder", "true") {
-				shift = f.constant(mt.UnderbarVerticalGap, size)
+				// UnderbarVerticalGap is a gap between inks, as the
+				// gaps of the two cases above are: the underscript's
+				// ink top keeps it below the base's ink.
+				shift = float64(f.constant(mt.UnderbarVerticalGap, size) + under.inkAsc)
 			}
 			extra = f.constant(mt.UnderbarExtraDescender, size)
 		}
@@ -286,7 +297,10 @@ func (l *layouter) attachUnderOver(e *Element, base, under, over *box, st *Style
 			if e.attrIs("accent", "true") {
 				shift = max(0, f.constant(mt.AccentBaseHeight, size)-base.asc)
 			} else {
-				shift = f.constant(mt.OverbarVerticalGap, size)
+				// OverbarVerticalGap is a gap between inks: the
+				// overscript's ink bottom keeps it above the base's
+				// ink.
+				shift = float64(f.constant(mt.OverbarVerticalGap, size) + over.inkDesc)
 			}
 			extra = f.constant(mt.OverbarExtraAscender, size)
 		}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	mt "github.com/gotenberg/litho/pkg/internal/typography/mathtable"
 )
 
 // TestFraction_BarOnTheAxis centres the bar of a fraction on the math
@@ -188,6 +189,33 @@ func TestUnderOver_UpperLimit(t *testing.T) {
 	x0, _, _ := childAt(b, 0)
 	if x, _, _ := childAt(b, 0, 1); !near(x-x0, base.w) {
 		t.Fatalf("compact limit at x %g, want a superscript at %g", x-x0, base.w)
+	}
+}
+
+// TestUnderOver_ScriptsKeepTheirGaps keeps UnderbarVerticalGap between
+// the ink of a base that is no operator and the ink top of its
+// underscript, and OverbarVerticalGap between its ink top and the ink
+// bottom of its overscript, as a limit under a function name sits in an
+// Office equation.
+func TestUnderOver_ScriptsKeepTheirGaps(t *testing.T) {
+	s := dejavu(t)
+	st := mathStyle("DejaVu Math TeX Gyre", 20)
+	under := el("munder", tok("mi", "lim"), el("mrow", tok("mi", "n")))
+	b := lay(t, s, el("math", under), st)
+	_, _, base := childAt(b, 0, 0)
+	_, y, script := childAt(b, 0, 1)
+	f := s.faces[s.fonts.Match(textStyle(&st))]
+	gap := f.constant(mt.UnderbarVerticalGap, st.Size)
+	if got := y - script.inkAsc - base.inkDesc; !near(got, gap) || gap <= 0 {
+		t.Fatalf("underscript ink %g below the base's ink, want UnderbarVerticalGap %g", got, gap)
+	}
+	over := el("mover", tok("mi", "x"), el("mrow", tok("mi", "y")))
+	b = lay(t, s, el("math", over), st)
+	_, _, base = childAt(b, 0, 0)
+	_, y, script = childAt(b, 0, 1)
+	gap = f.constant(mt.OverbarVerticalGap, st.Size)
+	if got := -y - script.inkDesc - base.inkAsc; !near(got, gap) || gap <= 0 {
+		t.Fatalf("overscript ink %g above the base's ink, want OverbarVerticalGap %g", got, gap)
 	}
 }
 
