@@ -283,12 +283,12 @@ func DeviceColorPage(v Violation, family string) (int, bool) {
 	if v.Rule != rules(1) && v.Rule != rules(2) && v.Rule != rules(3) && v.Rule != rules(4) {
 		return 0, false
 	}
-	var page int
+	var page int32
 	var name string
 	if n, err := fmt.Sscanf(v.Context, "page %d: %s used without", &page, &name); err != nil || n != 2 || name != family || page < 1 {
 		return 0, false
 	}
-	return page, true
+	return int(page), true
 }
 
 // intentPhrase names the output intent that covers a device family whose

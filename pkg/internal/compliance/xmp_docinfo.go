@@ -14,6 +14,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
 
 // xmpCheckDocInfoSync verifies that document info dict entries are consistent
@@ -341,7 +342,7 @@ func javaDoubleString(f float64) string {
 	if !strings.Contains(mantissa, ".") {
 		mantissa += ".0"
 	}
-	exp, err := strconv.Atoi(exponent)
+	exp, err := intconv.Atoi(exponent)
 	if err != nil {
 		return mantissa + "E" + exponent
 	}
