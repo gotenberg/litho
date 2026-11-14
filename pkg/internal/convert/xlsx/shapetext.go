@@ -2,11 +2,11 @@ package xlsx
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -137,7 +137,7 @@ func (r *reader) runStyle(pr *ooxml.Element, base text.Style) text.Style {
 	if pr == nil {
 		return s
 	}
-	if v, err := strconv.Atoi(strings.TrimSpace(attr(pr, "sz"))); err == nil && v > 0 {
+	if v, err := intconv.Atoi(strings.TrimSpace(attr(pr, "sz"))); err == nil && v > 0 {
 		s.Size = min(float64(v)/100, maxShapeTextPt)
 	}
 	if v, ok := pr.Attr("b"); ok {

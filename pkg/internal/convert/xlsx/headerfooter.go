@@ -2,12 +2,12 @@ package xlsx
 
 import (
 	"math"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 )
 
@@ -158,7 +158,7 @@ func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) [3][]sheet
 				for j < len(s) && s[j] >= '0' && s[j] <= '9' {
 					j++
 				}
-				if n, err := strconv.Atoi(s[i:j]); err == nil && j-i <= 4 && n > 0 && n <= maxFontSize {
+				if n, err := intconv.Atoi(s[i:j]); err == nil && j-i <= 4 && n > 0 && n <= maxFontSize {
 					p.flush()
 					p.font.Size = float64(n)
 				}
@@ -231,8 +231,8 @@ func (p *hfParser) fontName(spec string) {
 // colour index with a signed tint percent.
 func (p *hfParser) color(code string) {
 	if code[2] == '+' || code[2] == '-' {
-		idx, err1 := strconv.Atoi(code[:2])
-		pct, err2 := strconv.Atoi(code[2:])
+		idx, err1 := intconv.Atoi(code[:2])
+		pct, err2 := intconv.Atoi(code[2:])
 		if err1 != nil || err2 != nil || idx < 0 || idx >= len(themeColorNames) {
 			return
 		}
