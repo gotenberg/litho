@@ -149,6 +149,10 @@ const (
 	// line of a block container (CSS Pseudo 4, 2.1). Its style holds the
 	// properties that apply to it alone ([Computed.FirstLine]).
 	PseudoFirstLine
+	// PseudoDetailsContent is ::details-content, the slot of a details
+	// element that holds its content but its summary (HTML Standard,
+	// 15.5.5; CSS Pseudo 4, 3.4).
+	PseudoDetailsContent
 	numPseudos
 )
 
@@ -159,6 +163,7 @@ var pseudoNames = map[string]PseudoElement{
 	"footnote-call": PseudoFootnoteCall, "footnote-marker": PseudoFootnoteMarker,
 	"note-call": PseudoNoteCall, "note-marker": PseudoNoteMarker, "note-callback": PseudoNoteCallback,
 	"first-letter": PseudoFirstLetter, "first-line": PseudoFirstLine,
+	"details-content": PseudoDetailsContent,
 }
 
 // NewResolver indexes the rules of sheets, in order, whose media
@@ -878,6 +883,10 @@ func (cs *computeState) element(n, parent *html.Node) {
 			// A ::marker exists on a list item alone (CSS Lists 3, 3.1).
 			continue
 		}
+		if pe == PseudoDetailsContent && (n.Namespace != "" || n.DataAtom != atom.Details) {
+			// A ::details-content exists on a details element alone.
+			continue
+		}
 		cs.elem++
 		pc := cs.match(n, x)
 		if len(pc) == 0 {
@@ -902,6 +911,9 @@ func (cs *computeState) element(n, parent *html.Node) {
 		}
 		ps, _ := cs.cascade(pc, st, vars, false, only)
 		cs.pseudo[pseudoKey{n, pe}] = ps
+	}
+	if st.Display != DisplayNone && n.Namespace == "" && n.DataAtom == atom.Details && DetailsSummary(n) == nil {
+		cs.defaultSummary(n, st, vars)
 	}
 }
 

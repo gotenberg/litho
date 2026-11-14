@@ -178,7 +178,13 @@ func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, s
 		b.onFirstLine(before, n, css.PseudoBefore, true)
 		node.Children = append(node.Children, before)
 	}
-	kids, err := b.children(ctx, n, st, depth)
+	var kids []*layout.Node
+	var err error
+	if isDetails(n) {
+		kids, err = b.detailsChildren(ctx, n, st, depth)
+	} else {
+		kids, err = b.children(ctx, n, st, depth)
+	}
 	if err != nil {
 		return err
 	}

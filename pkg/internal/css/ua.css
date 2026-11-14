@@ -751,6 +751,15 @@ details > summary:first-of-type {
 details[open] > summary:first-of-type {
   list-style-type: disclosure-open;
 }
+/* The second slot of a details element's shadow tree, which the Standard
+ * styles by its style attribute, as Chromium styles it at the user agent
+ * origin: an author's ::details-content rule overrides both. */
+details::details-content {
+  display: block;
+}
+details:not([open])::details-content {
+  content-visibility: hidden;
+}
 
 /* 15.5.13 The marquee element, a block: the Standard's inline-block
  * without a width shrinks it to its content, where Chromium fills the

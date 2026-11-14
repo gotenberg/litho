@@ -90,6 +90,8 @@ own	|[dir=rtl i]|direction	written as [dir=ltr i] and [dir=rtl i]: litho does no
 own	|[popover]:not(dialog[open])|display	a popover is never open on paper, opening one needs a script or a click: written as [popover]:not(dialog[open]) { display: none }, as :popover-open never matches
 own	|body|margin	the margin of the body's presentational hints when no attribute sets it, which Chromium computes
 own	|center|text-align	center aligns its content, as Chromium computes (-webkit-center); the Standard leaves it to the presentational hints
+own	|details::details-content|display	HTML Standard, 15.5.5: the style attribute of the second slot of a details element's shadow tree, at the user agent origin as Chromium applies it, so an author's ::details-content rule overrides it
+own	|details:not([open])::details-content|content-visibility	HTML Standard, 15.5.5: the style attribute of the second slot of a details element's shadow tree, at the user agent origin as Chromium applies it, so an author's ::details-content rule overrides it
 own	|dir|counter-reset	dir numbers its items as a list, as Chromium does
 own	|h1|display	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)
 own	|h1|font-size	written as h1 to h6, which :heading matches without a headingoffset attribute; litho does not match :heading, and Chromium does not follow headingoffset (an h1 with headingoffset=2 computes to 32px)

@@ -257,7 +257,8 @@ type heading struct {
 	closed   bool
 }
 
-// parse parses the HTML source data.
+// parse parses the HTML source data, running the insertion steps of the
+// elements it inserts that change the tree.
 func parse(data []byte) (*dom.Node, error) {
 	doc, err := dom.Parse(strings.NewReader(decode(data)))
 	if err != nil {
@@ -265,6 +266,7 @@ func parse(data []byte) (*dom.Node, error) {
 		// own nesting cap.
 		return nil, fmt.Errorf("%w: %w", ErrTooDeep, err)
 	}
+	closeExclusiveDetails(doc)
 	return doc, nil
 }
 

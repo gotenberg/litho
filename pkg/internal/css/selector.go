@@ -155,8 +155,9 @@ func addSpec(x, y uint32) uint32 {
 }
 
 // knownPseudoElements are the pseudo-elements that parse (CSS Pseudo 4).
-// Rules targeting ::before, ::after and ::marker give the styles
-// [Computed.Pseudo] returns; those targeting the others produce nothing.
+// Rules targeting ::before, ::after, ::marker and ::details-content give
+// the styles [Computed.Pseudo] returns; those targeting the others
+// produce nothing.
 // ::column (CSS Multicol 2, 4.8, which Chromium parses) takes the scroll
 // snap properties alone, which print nothing.
 var knownPseudoElements = map[string]bool{
@@ -164,7 +165,7 @@ var knownPseudoElements = map[string]bool{
 	"placeholder": true, "selection": true, "backdrop": true, "file-selector-button": true,
 	"target-text": true, "spelling-error": true, "grammar-error": true, "cue": true,
 	"footnote-call": true, "footnote-marker": true, "note-call": true, "note-marker": true,
-	"note-callback": true, "column": true,
+	"note-callback": true, "column": true, "details-content": true,
 }
 
 // simplePseudos maps the argument-less pseudo-classes to their kind.
