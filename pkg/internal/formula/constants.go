@@ -46,6 +46,11 @@ func (f *face) fallback(c mt.Constant, size float64) float64 {
 		subOffset = f.units(f.subOffset, size)
 		superOffset = f.units(f.superOffset, size)
 	}
+	if f != nil && f.browser {
+		if v, ok := chromiumFallback(c, xHeight); ok {
+			return v
+		}
+	}
 	switch c { //nolint:exhaustive // the rest fall back to the default fallback constant, 0
 	case mt.ScriptPercentScaleDown:
 		return 0.71
@@ -86,4 +91,37 @@ func (f *face) fallback(c mt.Constant, size float64) float64 {
 		return 0.6
 	}
 	return 0
+}
+
+// chromiumFallback returns the fallback Chromium lays a constant out with
+// for a font without a MATH table where it departs from MathML Core, 5.1,
+// from the font's x-height: a third of it for SubscriptShiftDown (5.1:
+// OS/2.ySubscriptYOffset), half of it for SubscriptBaselineDropMin and
+// SuperscriptBaselineDropMax (5.1: 0) and for AccentBaseHeight (5.1: the
+// x-height), and the x-height for SuperscriptShiftUp and
+// SuperscriptShiftUpCramped (5.1: OS/2.ySuperscriptYOffset and 0).
+// Chromium's screen and print share the layout, so they agree against the
+// clause, and litho follows Chromium.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 lays out MathML
+//     at 100px in Liberation Serif, whose x-height is 45.898px, with a
+//     subscript 15.297px below an operator whose ink sits above the
+//     baseline, 22.938px plus the ink descent below any other base, a
+//     superscript 45.891px above a base with or without a cramped style,
+//     177.062px above a base 200px tall, and an accent 22.937px above a
+//     base whose ink is 10px tall: on Blink's 1/64px grid, a third, half,
+//     the whole and half of the x-height. Its fractions, radicals, stacks
+//     and limits keep the fallbacks of 5.1.
+func chromiumFallback(c mt.Constant, xHeight float64) (float64, bool) {
+	switch c { //nolint:exhaustive // the other constants keep the fallbacks of 5.1
+	case mt.SubscriptShiftDown:
+		return xHeight / 3, true
+	case mt.SubscriptBaselineDropMin, mt.SuperscriptBaselineDropMax, mt.AccentBaseHeight:
+		return xHeight / 2, true
+	case mt.SuperscriptShiftUp, mt.SuperscriptShiftUpCramped:
+		return xHeight, true
+	}
+	return 0, false
 }

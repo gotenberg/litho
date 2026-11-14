@@ -24,6 +24,12 @@ import (
 //
 // A Setter is not safe for concurrent use.
 type Setter struct {
+	// BrowserRules lays a formula whose first available font has no MATH
+	// table out with the fallback constants Chromium uses, where they
+	// depart from MathML Core, 5.1 ([chromiumFallback]); off, the
+	// fallbacks of 5.1 apply. The HTML converter sets it.
+	BrowserRules bool
+
 	fonts *text.Fonts
 	// logger receives diagnostics, nil for none.
 	logger *slog.Logger
@@ -144,6 +150,8 @@ type face struct {
 	// records none), subOffset and superOffset ySubscriptYOffset and
 	// ySuperscriptYOffset, ruleThickness post.underlineThickness.
 	xHeight, subOffset, superOffset, ruleThickness float64
+	// browser takes Chromium's fallback constants ([Setter.BrowserRules]).
+	browser bool
 }
 
 // textStyle returns the text style a token of st is shaped in.
@@ -183,7 +191,7 @@ func (l *layouter) loadFace(tf *text.Face) *face {
 	if g == nil {
 		return nil
 	}
-	f := &face{text: tf, ts: ts, glyphs: g, upem: float64(g.Upem())}
+	f := &face{text: tf, ts: ts, glyphs: g, upem: float64(g.Upem()), browser: l.s.BrowserRules}
 	if f.upem <= 0 {
 		f.upem = 1000
 	}

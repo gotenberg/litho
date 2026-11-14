@@ -1,8 +1,10 @@
 package formula
 
 import (
+	"os"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -271,5 +273,37 @@ func TestBounds_DepthAndElements(t *testing.T) {
 	}
 	if b := lay(t, s, wide, st); len(b.Warnings) != 1 {
 		t.Fatalf("%d elements: warnings %v", MaxElements+11, b.Warnings)
+	}
+}
+
+// TestBrowserRules_ScriptFallbacks shifts scripts on a font without a
+// MATH table, Liberation Serif, by Chromium's fallbacks under
+// BrowserRules, by those of MathML Core, 5.1 without.
+func TestBrowserRules_ScriptFallbacks(t *testing.T) {
+	dir := "../../../test/integration/testdata/fonts/gotenberg/truetype/liberation"
+	if _, err := os.Stat(dir); err != nil {
+		t.Skipf("fixture fonts absent: %v", err)
+	}
+	fonts, err := text.NewFonts(t.Context(), nil, []string{dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := mathStyle("Liberation Serif", 100)
+	root := el("math", el("msup", space("10px", "0", "0"), space("10px", "0", "0")))
+	s := NewSetter(fonts, nil)
+	f := (&layouter{ctx: t.Context(), s: s}).faceOf(&st)
+	if f == nil || f.math != nil {
+		t.Fatal("Liberation Serif does not load, or has a MATH table")
+	}
+	xh := f.units(f.xHeight, 100)
+	b := lay(t, s, root, st)
+	if _, y, _ := childAt(b, 0, 1); !near(-y, f.units(f.superOffset, 100)) {
+		t.Fatalf("superscript %g up without BrowserRules, want ySuperscriptYOffset", -y)
+	}
+	s = NewSetter(fonts, nil)
+	s.BrowserRules = true
+	b = lay(t, s, root, st)
+	if _, y, _ := childAt(b, 0, 1); !near(-y, xh) {
+		t.Fatalf("superscript %g up, want the x-height %g", -y, xh)
 	}
 }
