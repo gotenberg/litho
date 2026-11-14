@@ -14,6 +14,12 @@ import (
 // identity.
 type Kernel struct {
 	W []uint32
+	// boxes are the widths of the box blurs W is the convolution of, in
+	// the order [BoxKernel] convolved them, nil for a kernel of another
+	// shape. [Blur] then sums each box over a running window, the same
+	// integers the weights of W sum to, in work that does not grow with
+	// the kernel's width.
+	boxes []int
 }
 
 // MaxKernelRadius caps a kernel's radius in pixels. Anti-DoS guard, not
@@ -93,7 +99,9 @@ func BoxKernel(width, passes int) Kernel {
 	width = min(width, MaxKernelRadius)
 	passes = min(passes, 3)
 	full := []uint64{1}
+	boxes := make([]int, 0, passes)
 	conv := func(box int) {
+		boxes = append(boxes, box)
 		next := make([]uint64, len(full)+box-1)
 		for i, v := range full {
 			for j := range box {
@@ -117,7 +125,10 @@ func BoxKernel(width, passes int) Kernel {
 	for i := range w {
 		w[i] = uint32(full[c+i]) //nolint:gosec // at most 1025^3, under 2^31
 	}
-	return trim(w)
+	// The weights at either end are 1, so trim keeps them all.
+	k := trim(w)
+	k.boxes = boxes
+	return k
 }
 
 // Edge says what a blur reads past the surface's edge (Filter Effects 1,
@@ -148,15 +159,56 @@ func Blur(ctx context.Context, s *Surface, kx, ky Kernel, edge Edge) error {
 	w, h := s.W, s.H
 	n := w * ch
 	nx, ny := max(len(kx.W)-1, 0), max(len(ky.W)-1, 0)
+	// work is the scratch a pass takes beside the plane: a padded line and
+	// the column sums of a direct convolution, or two padded lines of
+	// running sums for a kernel of boxes.
+	var work int64
+	if nx > 0 {
+		work = int64(w+2*nx) * 4
+		if kx.boxes != nil {
+			work = int64(w+2*nx) * 16
+		}
+	}
+	if ny > 0 {
+		col := int64(n) * 8
+		if ky.boxes != nil {
+			col = int64(h+2*ny) * 16
+		}
+		work = max(work, col)
+	}
 	var sc scratch
 	defer sc.release()
-	if err := sc.take(ctx, int64(n)*int64(h)*2+int64(w+2*nx)*4+int64(n)*8); err != nil {
+	if err := sc.take(ctx, int64(n)*int64(h)*2+work); err != nil {
 		return err
 	}
 	plane := make([]uint16, n*h)
-	line := make([]uint32, w+2*nx)
-	acc := make([]uint64, n)
-	sx := kx.sum()
+	if err := blurRows(ctx, s, plane, kx, edge); err != nil {
+		return err
+	}
+	return blurColumns(ctx, s, plane, ky, edge)
+}
+
+// blurRows convolves every row of s with k into plane, in 1/256 of a
+// level, every channel alone (see [Blur]).
+func blurRows(ctx context.Context, s *Surface, plane []uint16, k Kernel, edge Edge) error {
+	ch := int(s.F)
+	w, h := s.W, s.H
+	n := w * ch
+	r := max(len(k.W)-1, 0)
+	if r == 0 {
+		for i, v := range s.Pix[:n*h] {
+			plane[i] = uint16(v) << 8
+		}
+		return nil
+	}
+	sum := k.sum()
+	var line []uint32
+	var wide, tmp []uint64
+	if k.boxes != nil {
+		wide, tmp = make([]uint64, w+2*r), make([]uint64, w+2*r)
+	} else {
+		line = make([]uint32, w+2*r)
+	}
 	for y := range h {
 		if y%64 == 0 {
 			if err := ctx.Err(); err != nil {
@@ -165,18 +217,61 @@ func Blur(ctx context.Context, s *Surface, kx, ky Kernel, edge Edge) error {
 		}
 		row := s.Pix[y*n : (y+1)*n]
 		out := plane[y*n : (y+1)*n]
-		if nx == 0 {
-			for i, v := range row {
-				out[i] = uint16(v) << 8
-			}
-			continue
-		}
 		for c := range ch {
-			pad(line, row, c, ch, w, nx, edge)
-			convolve(line, out, c, ch, w, nx, kx.W, sx)
+			if k.boxes == nil {
+				pad(line, row, c, ch, w, r, edge)
+				convolve(line, out, c, ch, w, r, k.W, sum)
+				continue
+			}
+			for i := range wide {
+				wide[i] = 0
+				if x, ok := edgeIndex(i-r, w, edge); ok {
+					wide[i] = uint64(row[x*ch+c])
+				}
+			}
+			for x, v := range boxSums(wide, tmp, k.boxes) {
+				out[x*ch+c] = uint16(min((v*256+sum/2)/sum, 65535)) //nolint:gosec // clamped to 16 bits
+			}
 		}
 	}
-	sy := ky.sum()
+	return nil
+}
+
+// blurColumns convolves every column of plane with k into s, rounded
+// back to a level (see [Blur]).
+func blurColumns(ctx context.Context, s *Surface, plane []uint16, k Kernel, edge Edge) error {
+	ch := int(s.F)
+	w, h := s.W, s.H
+	n := w * ch
+	r := max(len(k.W)-1, 0)
+	if r == 0 {
+		for i, v := range plane[:n*h] {
+			s.Pix[i] = uint8((uint32(v) + 128) >> 8) //nolint:gosec // at most 255 by 256, shifted back
+		}
+		return nil
+	}
+	d := 256 * k.sum()
+	if k.boxes != nil {
+		wide, tmp := make([]uint64, h+2*r), make([]uint64, h+2*r)
+		for x := range n {
+			if x%64 == 0 {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+			}
+			for i := range wide {
+				wide[i] = 0
+				if y, ok := edgeIndex(i-r, h, edge); ok {
+					wide[i] = uint64(plane[y*n+x])
+				}
+			}
+			for y, v := range boxSums(wide, tmp, k.boxes) {
+				s.Pix[y*n+x] = uint8(min((v+d/2)/d, 255)) //nolint:gosec // clamped to a byte
+			}
+		}
+		return nil
+	}
+	acc := make([]uint64, n)
 	for y := range h {
 		if y%64 == 0 {
 			if err := ctx.Err(); err != nil {
@@ -184,29 +279,47 @@ func Blur(ctx context.Context, s *Surface, kx, ky Kernel, edge Edge) error {
 			}
 		}
 		dst := s.Pix[y*n : (y+1)*n]
-		if ny == 0 {
-			for i, v := range plane[y*n : (y+1)*n] {
-				dst[i] = uint8((uint32(v) + 128) >> 8) //nolint:gosec // at most 255 by 256, shifted back
-			}
-			continue
-		}
 		clear(acc)
-		for i := -ny; i <= ny; i++ {
-			r, ok := edgeIndex(y+i, h, edge)
+		for i := -r; i <= r; i++ {
+			row, ok := edgeIndex(y+i, h, edge)
 			if !ok {
 				continue
 			}
-			k := uint64(ky.W[abs(i)])
-			for x, v := range plane[r*n : (r+1)*n] {
-				acc[x] += k * uint64(v)
+			kv := uint64(k.W[abs(i)])
+			for x, v := range plane[row*n : (row+1)*n] {
+				acc[x] += kv * uint64(v)
 			}
 		}
-		d := 256 * sy
 		for x, v := range acc {
 			dst[x] = uint8(min((v+d/2)/d, 255)) //nolint:gosec // clamped to a byte
 		}
 	}
 	return nil
+}
+
+// boxSums sums v over a window of each width of boxes in turn, each
+// sum the next one's input, and returns the last: len(v) less the width
+// of every box plus one for each, the values the kernel the boxes
+// convolve into weighs v by at each of its positions. The integers are
+// exact, so the result is the direct convolution's to the last bit.
+// tmp, as long as v, holds the sums between boxes; v is overwritten.
+func boxSums(v, tmp []uint64, boxes []int) []uint64 {
+	in, out := v, tmp
+	for _, b := range boxes {
+		m := len(in) - b + 1
+		var sum uint64
+		for _, x := range in[:b] {
+			sum += x
+		}
+		out[0] = sum
+		for t := 1; t < m; t++ {
+			// The window holds in[t-1], so the sum never goes below zero.
+			sum = sum - in[t-1] + in[t+b-1]
+			out[t] = sum
+		}
+		in, out = out[:m], in[:cap(in)]
+	}
+	return in
 }
 
 // sum returns the sum of the kernel's weights over both sides.

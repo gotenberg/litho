@@ -3,6 +3,7 @@ package effect
 import (
 	"context"
 	"math"
+	"math/rand/v2"
 	"slices"
 	"testing"
 
@@ -222,4 +223,37 @@ func fitEdge(t *testing.T, row []uint8, k Kernel) (float64, float64) {
 		s.Release()
 	}
 	return best, at
+}
+
+// TestBlur_BoxesSumAsTheirKernel blurs surfaces of random pixels with box
+// kernels, by the running sums of their boxes, and with the same weights
+// convolved directly: every byte is equal, at every width, pass count,
+// channel count and edge.
+func TestBlur_BoxesSumAsTheirKernel(t *testing.T) {
+	rng := rand.New(rand.NewPCG(1, 2))
+	for _, f := range []Format{Coverage, RGBA} {
+		for _, edge := range []Edge{EdgeNone, EdgeDuplicate, EdgeWrap} {
+			for _, tc := range []struct{ wx, px, wy, py int }{
+				{2, 1, 2, 1}, {2, 3, 3, 3}, {3, 2, 0, 0}, {0, 0, 4, 3},
+				{7, 3, 4, 2}, {29, 3, 29, 3}, {64, 3, 5, 1},
+			} {
+				s := newSurface(t, f, 37, 23)
+				for i := range s.Pix {
+					s.Pix[i] = uint8(rng.UintN(256))
+				}
+				want := newSurface(t, f, s.W, s.H)
+				copy(want.Pix, s.Pix)
+				kx, ky := BoxKernel(tc.wx, tc.px), BoxKernel(tc.wy, tc.py)
+				if err := Blur(context.Background(), s, kx, ky, edge); err != nil {
+					t.Fatal(err)
+				}
+				if err := Blur(context.Background(), want, Kernel{W: kx.W}, Kernel{W: ky.W}, edge); err != nil {
+					t.Fatal(err)
+				}
+				if !slices.Equal(s.Pix, want.Pix) {
+					t.Errorf("format %d, edge %d, boxes %+v: the running sums differ from the convolution", f, edge, tc)
+				}
+			}
+		}
+	}
 }
