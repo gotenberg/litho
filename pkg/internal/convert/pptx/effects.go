@@ -366,11 +366,10 @@ func fadeDir(e *ooxml.Element) float64 {
 }
 
 // presetShadow reads a preset shadow (20.1.8.49 prstShdw) of the shape
-// s, its box and line read, as the copies [officefx.PresetCopies] gives on
-// PowerPoint's rules: the near copy, and for shdw13, shdw17 and shdw18
-// the far one painted under it. color resolves the colour. It returns
-// false for a name that is not a preset, and nils for a shadow of no
-// colour. The copies scale and skew about the box grown by half the
+// s, its box and line read, as the copies [officefx.PresetCopies] gives:
+// the near copy, and for shdw13, shdw17 and shdw18 the far one painted
+// under it. color resolves the colour. It returns false for a name that
+// is not a preset, and nils for a shadow of no colour. The copies scale and skew about the box grown by half the
 // line, and keep the slide's directions whatever the shape's turn.
 // PowerPoint clips the copies to what lies outside the shape, which an
 // opaque shape hides anyway; the copies here are not clipped.
@@ -390,7 +389,7 @@ func presetShadow(e *ooxml.Element, s *slides.Shape, color func(*ooxml.Element) 
 	dir, _ := intAttr(e, "dir")
 	c.A = a
 	p := &css.OfficePreset{Name: attr(e, "prst"), Color: c, Dist: min(dist, maxEffectRadius), Dir: float64(dir) / 60000}
-	copies, text, ok := officefx.PresetCopies(p, css.OfficePowerPoint)
+	copies, text, ok := officefx.PresetCopies(p)
 	if !ok || len(copies) == 0 {
 		return nil, nil, ok
 	}

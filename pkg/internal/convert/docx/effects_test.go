@@ -152,8 +152,9 @@ func TestShapeContentEffects(t *testing.T) {
 
 // TestShapePresetShadow checks that Word's preset shadow shdw17 paints two
 // vector copies of the square under it, the lightened one moved against
-// the distance first, the shadow's colour moved along it next, and that a
-// preset no Word reference shows warns and paints no copy.
+// the distance first, the shadow's colour moved along it next; that shdw3
+// paints one; and that a name that is not a preset warns and paints no
+// copy.
 func TestShapePresetShadow(t *testing.T) {
 	doc := shapeDoc(t, `<a:effectLst><a:prstShdw prst="shdw17" dist="127000"><a:srgbClr val="808080"/></a:prstShdw></a:effectLst>`)
 	type fill struct {
@@ -190,7 +191,16 @@ func TestShapePresetShadow(t *testing.T) {
 		t.Errorf("warnings %v, want none", doc.Warnings)
 	}
 	doc = shapeDoc(t, `<a:effectLst><a:prstShdw prst="shdw3" dist="127000"><a:srgbClr val="808080"/></a:prstShdw></a:effectLst>`)
-	if len(doc.Warnings) != 1 || !strings.Contains(doc.Warnings[0].Message, "preset shadow shdw3") {
-		t.Errorf("warnings %v, want one on shdw3", doc.Warnings)
+	if len(doc.Warnings) != 0 {
+		t.Errorf("shdw3: warnings %v, want none", doc.Warnings)
+	}
+	fills = nil
+	walk(doc.Pages[0].Content, 0)
+	if len(fills) != 2 || math.Abs(fills[0].gray-dark) > 1e-6 {
+		t.Errorf("shdw3: fills %+v, want one copy in gray %.3f and the square", fills, dark)
+	}
+	doc = shapeDoc(t, `<a:effectLst><a:prstShdw prst="shdw21" dist="127000"><a:srgbClr val="808080"/></a:prstShdw></a:effectLst>`)
+	if len(doc.Warnings) != 1 || !strings.Contains(doc.Warnings[0].Message, "preset shadow shdw21") {
+		t.Errorf("warnings %v, want one on shdw21", doc.Warnings)
 	}
 }

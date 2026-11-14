@@ -17,13 +17,12 @@ import (
 // of the shape's bounds, its line included, that align names; the near
 // copy then moves dist along dir in the shadow's colour, the far copy,
 // painted first, moves far times as far in that colour lightened by
-// [presetLighten]. text says whether the copies hold
-// the shape's text; word whether Word's rules draw the preset.
+// [presetLighten]. text says whether the copies hold the shape's text.
 type presetShadow struct {
 	sx, sy, kx float64
 	align      css.RectAlign
 	far        float64
-	text, word bool
+	text       bool
 }
 
 // presetLean is the skew, in degrees, of the perspective presets
@@ -66,55 +65,67 @@ const presetLighten = 0.4
 //     height. The text is copied in shdw1, shdw2, shdw5 and shdw6 alone.
 //     shdw11, shdw12, shdw15 and shdw16 print as shdw3, shdw4, shdw7 and
 //     shdw8, shdw18 as shdw17, at both settings.
+//   - probe, pptx: the twenty presets 20 points toward 135 degrees on a 1
+//     point line and 6 points toward 45 degrees on an 8 point line put
+//     every fill copy within 0.02 point of these rows, the bounds grown
+//     by half the line (4 points for the 8 point line; half a point
+//     misses by up to 7 points): the offset is linear in dist in any
+//     direction.
+//   - probe, pptx: isosceles triangles under the twenty presets copy their
+//     own outline, within 0.015 point of these rows about their bounds
+//     grown by half the line. Shapes without a fill or a line copy their
+//     text in shdw1, shdw2, shdw5 and shdw6 and print nothing in the
+//     other sixteen.
+//   - probe, docx; probe, xlsx: Word and Excel print the twenty presets on
+//     their shapes as PowerPoint prints them, every fill copy within 0.01
+//     point of these rows, the far copies in gray 0.902; Word copies the
+//     text of shdw1, shdw2, shdw5 and shdw6 as bitmaps under the shape,
+//     Excel as vector paths.
 //   - litho/pptx: effects-shadow prints shdw1, shdw13 and shdw18 on
 //     rounded rectangles 6 points toward 45 degrees as these rows give.
 //   - litho/docx: shapes-effects-3d prints its rounded rectangle without
 //     a line under shdw17 1.41 points toward 45 degrees in Word as two
 //     vector copies, gray 0.902 one point left and up, then gray 0.502 one
-//     point right and down: shdw17's row. No reference shows another
-//     preset in Word.
+//     point right and down: shdw17's row.
 var presetShadows = [20]presetShadow{
-	{sx: 1, sy: 1, align: alignBottom, text: true},          // shdw1
-	{sx: 1, sy: 1, align: alignBottom, text: true},          // shdw2
-	{sx: 1, sy: 0.5, kx: presetLean, align: alignBottom},    // shdw3
-	{sx: 1, sy: 0.5, kx: -presetLean, align: alignBottom},   // shdw4
-	{sx: 1, sy: 1, align: alignBottom, text: true},          // shdw5
-	{sx: 1, sy: 1, align: alignBottom, text: true},          // shdw6
-	{sx: 1, sy: -0.5, kx: presetLean, align: alignBottom},   // shdw7
-	{sx: 1, sy: -0.5, kx: -presetLean, align: alignBottom},  // shdw8
-	{sx: 0.75, sy: 0.75, align: css.RectAlign{}},            // shdw9
-	{sx: 1.25, sy: 1.25, align: css.RectAlign{X: 1, Y: 1}},  // shdw10
-	{sx: 1, sy: 0.5, kx: presetLean, align: alignBottom},    // shdw11
-	{sx: 1, sy: 0.5, kx: -presetLean, align: alignBottom},   // shdw12
-	{sx: 1, sy: 1, align: alignBottom, far: 2},              // shdw13
-	{sx: 1, sy: 1, align: alignBottom},                      // shdw14
-	{sx: 1, sy: -0.5, kx: presetLean, align: alignBottom},   // shdw15
-	{sx: 1, sy: -0.5, kx: -presetLean, align: alignBottom},  // shdw16
-	{sx: 1, sy: 1, align: alignBottom, far: -1, word: true}, // shdw17
-	{sx: 1, sy: 1, align: alignBottom, far: -1},             // shdw18
-	{sx: 1, sy: 0.5, align: alignBottom},                    // shdw19
-	{sx: 1, sy: -1, align: alignBottom},                     // shdw20
+	{sx: 1, sy: 1, align: alignBottom, text: true},         // shdw1
+	{sx: 1, sy: 1, align: alignBottom, text: true},         // shdw2
+	{sx: 1, sy: 0.5, kx: presetLean, align: alignBottom},   // shdw3
+	{sx: 1, sy: 0.5, kx: -presetLean, align: alignBottom},  // shdw4
+	{sx: 1, sy: 1, align: alignBottom, text: true},         // shdw5
+	{sx: 1, sy: 1, align: alignBottom, text: true},         // shdw6
+	{sx: 1, sy: -0.5, kx: presetLean, align: alignBottom},  // shdw7
+	{sx: 1, sy: -0.5, kx: -presetLean, align: alignBottom}, // shdw8
+	{sx: 0.75, sy: 0.75, align: css.RectAlign{}},           // shdw9
+	{sx: 1.25, sy: 1.25, align: css.RectAlign{X: 1, Y: 1}}, // shdw10
+	{sx: 1, sy: 0.5, kx: presetLean, align: alignBottom},   // shdw11
+	{sx: 1, sy: 0.5, kx: -presetLean, align: alignBottom},  // shdw12
+	{sx: 1, sy: 1, align: alignBottom, far: 2},             // shdw13
+	{sx: 1, sy: 1, align: alignBottom},                     // shdw14
+	{sx: 1, sy: -0.5, kx: presetLean, align: alignBottom},  // shdw15
+	{sx: 1, sy: -0.5, kx: -presetLean, align: alignBottom}, // shdw16
+	{sx: 1, sy: 1, align: alignBottom, far: -1},            // shdw17
+	{sx: 1, sy: 1, align: alignBottom, far: -1},            // shdw18
+	{sx: 1, sy: 0.5, align: alignBottom},                   // shdw19
+	{sx: 1, sy: -1, align: alignBottom},                    // shdw20
 }
 
 // alignBottom is the middle of a box's bottom edge.
 var alignBottom = css.RectAlign{X: 0.5, Y: 1}
 
-// PresetCopies returns the copies of the preset shadow p that rules
-// draw, in paint order, as outer shadows without blur (their Color, Dist,
-// Dir, SX, SY, KX and Align set) whose alignment refers to the bounds of
-// what the shape paints, its line included; and whether the copies hold
-// the shape's text. ok is false for a name that is not one of the twenty
-// presets and for a preset no reference shows on rules; the caller warns.
-// A preset of a transparent colour has no copy.
-func PresetCopies(p *css.OfficePreset, rules css.OfficeRules) (copies []css.OfficeShadow, text, ok bool) {
+// PresetCopies returns the copies of the preset shadow p, in paint order,
+// as outer shadows without blur (their Color, Dist, Dir, SX, SY, KX and
+// Align set) whose alignment refers to the bounds of what the shape
+// paints, its line included; and whether the copies hold the shape's
+// text. Word, Excel and PowerPoint draw the presets alike. ok is false
+// for a name that is not one of the twenty presets; the caller warns. A
+// preset of a transparent colour has no copy.
+func PresetCopies(p *css.OfficePreset) (copies []css.OfficeShadow, text, ok bool) {
 	n, ok := presetIndex(p.Name)
 	if !ok {
 		return nil, false, false
 	}
 	row := presetShadows[n]
-	if rules != css.OfficePowerPoint && !row.word {
-		return nil, false, false
-	}
 	if !(p.Color.A > 0) {
 		return nil, row.text, true
 	}
@@ -154,14 +165,14 @@ func lighten(c css.Color) css.Color {
 	return css.Color{R: l(c.R), G: l(c.G), B: l(c.B), A: c.A}
 }
 
-// PresetUnder returns the copies of the preset shadow p of src that rules
-// draw ([PresetCopies]), in paint order, as vector groups to paint under
-// it: src.Content in each copy's colour ([Recolor]), mapped by the copy's
+// PresetUnder returns the copies of the preset shadow p of src
+// ([PresetCopies]), in paint order, as vector groups to paint under it:
+// src.Content in each copy's colour ([Recolor]), mapped by the copy's
 // skew, scale and offset about the bounds of src.Paths, strokes grown by
 // half their width, at the colour's opacity. ok is false where
 // [PresetCopies] gives false. A source of no silhouette has no copy.
-func PresetUnder(src *Source, p *css.OfficePreset, rules css.OfficeRules) (copies []typeset.Fragment, ok bool) {
-	shadows, _, ok := PresetCopies(p, rules)
+func PresetUnder(src *Source, p *css.OfficePreset) (copies []typeset.Fragment, ok bool) {
+	shadows, _, ok := PresetCopies(p)
 	if !ok || len(src.Paths) == 0 {
 		return nil, ok
 	}

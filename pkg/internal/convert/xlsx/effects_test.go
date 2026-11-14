@@ -2,6 +2,8 @@ package xlsx
 
 import (
 	"context"
+	"math"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -58,5 +60,48 @@ func TestDrawing_ShapeShadowUnderTheShape(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestDrawing_ShapePresetShadow reads a shape with the preset shadow
+// shdw13: two vector copies of its fill under it, the far one first in
+// the colour with 0.4 added, then the shape's own group, and no warning.
+func TestDrawing_ShapePresetShadow(t *testing.T) {
+	t.Parallel()
+	drawing := `<xdr:wsDr ` + drawingNS + `><xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="914400" cy="914400"/>` +
+		`<xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="Box"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>` +
+		`<a:effectLst><a:prstShdw prst="shdw13" dist="76200" dir="0"><a:srgbClr val="808080"/></a:prstShdw></a:effectLst></xdr:spPr></xdr:sp>` +
+		`<xdr:clientData/></xdr:absoluteAnchor></xdr:wsDr>`
+	files := workbookFiles([]testSheet{{
+		name: "S", xml: `<sheetData/><drawing r:id="rIdD"/>`,
+		rels: `<Relationship Id="rIdD" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>`,
+	}},
+		minimalStyles, "", "", map[string]string{"xl/drawings/drawing1.xml": drawing})
+	doc, warnings := readBytes(t, zipFiles(t, files))
+	for _, w := range warnings {
+		if strings.Contains(w.Message, "preset shadow") {
+			t.Errorf("warning %q, want none", w.Message)
+		}
+	}
+	ds := doc.Sheets[0].Drawings
+	if len(ds) != 1 || ds[0].Picture == nil || ds[0].Picture.Vector == nil {
+		t.Fatalf("drawings %+v", ds)
+	}
+	frags := ds[0].Picture.Vector(context.Background(), typeset.Rect{X: 10, Y: 10, Width: 72, Height: 72})
+	var grays []float64
+	var moves []float64
+	for _, f := range frags {
+		g, ok := f.(*typeset.Group)
+		if !ok || len(g.Content) == 0 {
+			continue
+		}
+		if p, ok := g.Content[0].(*typeset.Path); ok && p.Fill != nil && p.Fill.Color.R == p.Fill.Color.B {
+			grays = append(grays, p.Fill.Color.R)
+			moves = append(moves, g.Transform.E)
+		}
+	}
+	if len(grays) != 2 || math.Abs(grays[0]-(0x80/255.0+0.4)) > 1e-9 || math.Abs(grays[1]-0x80/255.0) > 1e-9 ||
+		math.Abs(moves[0]-12) > 1e-9 || math.Abs(moves[1]-6) > 1e-9 {
+		t.Errorf("copies in grays %v moved %v, want the far one at 0.902 12 points right, then 0.502 6 points right", grays, moves)
 	}
 }

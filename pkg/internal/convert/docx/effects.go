@@ -25,7 +25,7 @@ func (d *document) effectList(spPr, style *ooxml.Element) *css.OfficeEffects {
 		d.warn(warn.ContentUnsupported, warn.Omitted, fmt.Sprintf("a drawing's %s is not drawn", n))
 	}
 	if p := l.Effects.Preset; p != nil {
-		if _, _, ok := officefx.PresetCopies(p, l.Effects.Rules); !ok {
+		if _, _, ok := officefx.PresetCopies(p); !ok {
 			d.warn(warn.ContentUnsupported, warn.Omitted, "a drawing's preset shadow "+p.Name+" is not drawn")
 			l.Effects.Preset = nil
 		}
@@ -85,7 +85,7 @@ func (d *document) withEffects(pic *layout.Picture, fx *css.OfficeEffects) *layo
 		under, notes, err := officefx.Under(ctx, src, fx, &d.effectPixels)
 		d.effectFailed(notes, err)
 		if fx.Preset != nil {
-			copies, _ := officefx.PresetUnder(src, fx.Preset, fx.Rules)
+			copies, _ := officefx.PresetUnder(src, fx.Preset)
 			under = append(under, copies...)
 		}
 		inner, notes, err := officefx.Inner(ctx, src, fx, &d.effectPixels)

@@ -55,7 +55,7 @@ func TestPresetCopies_MatchPowerPoint(t *testing.T) {
 			if tc.setB {
 				p.Dist, p.Dir = 12, 0
 			}
-			copies, _, ok := PresetCopies(p, css.OfficePowerPoint)
+			copies, _, ok := PresetCopies(p)
 			if !ok || len(copies) != len(tc.quads) {
 				t.Fatalf("%d copies, ok %v, want %d", len(copies), ok, len(tc.quads))
 			}
@@ -84,26 +84,23 @@ func TestPresetCopies_MatchPowerPoint(t *testing.T) {
 	}
 }
 
-// TestPresetCopies_Names checks the presets each program's rules draw:
-// all twenty on PowerPoint's, shdw17 alone on Word's; a name outside the
-// twenty draws on neither; a transparent preset draws no copy.
+// TestPresetCopies_Names checks the presets drawn: all twenty, the text
+// copied by shdw1, shdw2, shdw5 and shdw6; a name outside the twenty draws
+// nothing; a transparent preset draws no copy.
 func TestPresetCopies_Names(t *testing.T) {
 	gray := css.Color{R: 0.5, G: 0.5, B: 0.5, A: 1}
 	for n := 1; n <= 20; n++ {
 		p := &css.OfficePreset{Name: "shdw" + strconv.Itoa(n), Color: gray, Dist: 6}
-		if _, text, ok := PresetCopies(p, css.OfficePowerPoint); !ok || text != (n == 1 || n == 2 || n == 5 || n == 6) {
-			t.Errorf("shdw%d on PowerPoint's rules: ok %v, text %v", n, ok, text)
-		}
-		if _, _, ok := PresetCopies(p, css.OfficeWord); ok != (n == 17) {
-			t.Errorf("shdw%d on Word's rules: ok %v, want %v", n, ok, n == 17)
+		if _, text, ok := PresetCopies(p); !ok || text != (n == 1 || n == 2 || n == 5 || n == 6) {
+			t.Errorf("shdw%d: ok %v, text %v", n, ok, text)
 		}
 	}
 	for _, name := range []string{"", "shdw", "shdw0", "shdw01", "shdw21", "shdw-1", "SHDW1", "shdw1 "} {
-		if _, _, ok := PresetCopies(&css.OfficePreset{Name: name, Color: gray}, css.OfficePowerPoint); ok {
+		if _, _, ok := PresetCopies(&css.OfficePreset{Name: name, Color: gray}); ok {
 			t.Errorf("%q drawn, want no preset", name)
 		}
 	}
-	if copies, _, ok := PresetCopies(&css.OfficePreset{Name: "shdw13", Color: css.Color{R: 1}}, css.OfficePowerPoint); !ok || len(copies) != 0 {
+	if copies, _, ok := PresetCopies(&css.OfficePreset{Name: "shdw13", Color: css.Color{R: 1}}); !ok || len(copies) != 0 {
 		t.Errorf("transparent shdw13: %d copies, ok %v, want none, ok", len(copies), ok)
 	}
 }
@@ -117,7 +114,7 @@ func TestPresetCopies_Names(t *testing.T) {
 //     FF6464 within the rounding of its alpha, of 808080 as E6E6E6.
 func TestPresetCopies_FarCopyAddsToEachChannel(t *testing.T) {
 	red := css.Color{R: 0xC0 / 255.0, A: 0.5}
-	copies, _, ok := PresetCopies(&css.OfficePreset{Name: "shdw13", Color: red, Dist: 6}, css.OfficePowerPoint)
+	copies, _, ok := PresetCopies(&css.OfficePreset{Name: "shdw13", Color: red, Dist: 6})
 	if !ok || len(copies) != 2 {
 		t.Fatalf("%d copies, ok %v, want two", len(copies), ok)
 	}
@@ -149,7 +146,7 @@ func TestPresetUnder_PaintsVectorCopies(t *testing.T) {
 	}
 	src := &Source{Paths: []effect.Path{{Ops: rect}, {Ops: rect, Width: 2}}, Bounds: box, Content: content}
 	red := css.Color{R: 1, A: 0.5}
-	copies, ok := PresetUnder(src, &css.OfficePreset{Name: "shdw20", Color: red}, css.OfficePowerPoint)
+	copies, ok := PresetUnder(src, &css.OfficePreset{Name: "shdw20", Color: red})
 	if !ok || len(copies) != 1 {
 		t.Fatalf("%d copies, ok %v, want one", len(copies), ok)
 	}
@@ -171,7 +168,7 @@ func TestPresetUnder_PaintsVectorCopies(t *testing.T) {
 	if p, isPath := g.Content[1].(*typeset.Path); !isPath || p.Fill.Color != opaque || len(p.Ops) != 5 {
 		t.Errorf("second fragment %+v, want the picture's rectangle in opaque red", g.Content[1])
 	}
-	if copies, ok := PresetUnder(&Source{Content: content}, &css.OfficePreset{Name: "shdw20", Color: red}, css.OfficePowerPoint); !ok || len(copies) != 0 {
+	if copies, ok := PresetUnder(&Source{Content: content}, &css.OfficePreset{Name: "shdw20", Color: red}); !ok || len(copies) != 0 {
 		t.Errorf("no silhouette: %d copies, ok %v, want none, ok", len(copies), ok)
 	}
 }

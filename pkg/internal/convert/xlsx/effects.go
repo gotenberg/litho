@@ -28,16 +28,19 @@ import (
 //     an inch bitmap under the vector shape.
 //   - libreoffice/xlsx sc/tdf165655: Excel prints no shadow for the outer
 //     shadows its shapes keep in a14:hiddenEffects.
+//   - probe, xlsx: Excel prints the twenty preset shadows (20.1.8.49
+//     prstShdw) of absolutely anchored shapes as vector copies under them,
+//     as PowerPoint prints them ([officefx.PresetCopies]).
 func (r *reader) effectList(spPr, style *ooxml.Element) *css.OfficeEffects {
 	l := ooxml.ParseEffectList(spPr, style, r.theme)
 	for _, n := range l.Undrawn {
 		r.warn(warn.ContentUnsupported, warn.Omitted, fmt.Sprintf("a drawing's %s is not drawn", n))
 	}
-	if l.Effects.Preset != nil {
-		// No reference shows a preset shadow (20.1.8.49 prstShdw) in
-		// Excel.
-		r.warn(warn.ContentUnsupported, warn.Omitted, "a drawing's preset shadow "+l.Effects.Preset.Name+" is not drawn")
-		l.Effects.Preset = nil
+	if p := l.Effects.Preset; p != nil {
+		if _, _, ok := officefx.PresetCopies(p); !ok {
+			r.warn(warn.ContentUnsupported, warn.Omitted, "a drawing's preset shadow "+p.Name+" is not drawn")
+			l.Effects.Preset = nil
+		}
 	}
 	if l.Effects == (css.OfficeEffects{}) {
 		return nil
@@ -88,7 +91,8 @@ func (l *lateWarnings) take() []typeset.Warning {
 
 // underEffects returns the bitmaps of the effects of the leaves, drawn
 // under them, for the anchor's box at rect: each leaf's reflection,
-// shadow and glow, in the leaf's own transform. An effect left out is
+// shadow and glow, then the vector copies of its preset shadow
+// ([officefx.PresetUnder]), in the leaf's own transform. An effect left out is
 // reported to late; an error that ends the conversion leaves every
 // effect out, which the layout's own check of ctx then reports.
 func underEffects(ctx context.Context, leaves []leaf, rect typeset.Rect, pixels *effect.Page, late *lateWarnings) []typeset.Fragment {
@@ -124,7 +128,12 @@ func underEffects(ctx context.Context, leaves []leaf, rect typeset.Rect, pixels 
 				}
 			}
 		}
-		frags, notes, err := officefx.Under(ctx, &officefx.Source{Paths: paths, Bounds: box, Content: content}, l.fx, pixels)
+		src := &officefx.Source{Paths: paths, Bounds: box, Content: content}
+		frags, notes, err := officefx.Under(ctx, src, l.fx, pixels)
+		if l.fx.Preset != nil && err == nil {
+			copies, _ := officefx.PresetUnder(src, l.fx.Preset)
+			frags = append(frags, copies...)
+		}
 		if notes.Skipped {
 			late.add(warn.LimitReached, warn.Omitted, fmt.Sprintf("drawing effects past %d pixels are not drawn", effect.MaxPagePixels))
 		}
