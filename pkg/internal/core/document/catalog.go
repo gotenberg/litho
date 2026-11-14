@@ -408,6 +408,12 @@ func findPagesRoot(ctx context.Context, doc *Document) ast.PdfIndirectRef {
 }
 
 // ResolvePages extracts all [Page] entries from the [Catalog] by traversing the page tree.
+//
+// It returns the context's error when ctx ends before the walk does, and
+// never the pages gathered until then: the tolerant readings of the walk each
+// take a read that fails for a damaged entry, so a kid the context cut off
+// reads as a branch pruned and the list comes back short, or empty, with
+// nothing to say so.
 func ResolvePages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page, error) {
 	// ISO 32000-1, 7.7.2, Table 28 requires the catalog /Pages, the root of
 	// the page tree (7.7.3): a document without one, or whose tree cannot be
@@ -490,6 +496,11 @@ func ResolvePages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page
 		}
 	}
 
+	// See the function's comment: what a walk gathered under a context that
+	// ended is not the document's page list.
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("resolving pages: %w", err)
+	}
 	return pages, nil
 }
 
@@ -685,6 +696,9 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			}
 			kidDict, err := resolveKidDict(ctx, doc, kidObj)
 			if err != nil || kidDict == nil {
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return fmt.Errorf("resolving page tree kid: %w", ctxErr)
+				}
 				doc.Logger.Debug("pruning unresolvable page tree kid",
 					slog.Int("object", kidRef.ObjectNum),
 					slog.Any("err", err),
