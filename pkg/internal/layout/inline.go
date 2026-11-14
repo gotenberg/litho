@@ -930,10 +930,8 @@ func (e *engine) flowLines(b *box, d *ifcData, cb cblock, bc *bfc, cursor float6
 				lineIndent = indent
 			}
 			if first {
-				room = top - y
-				if b.bd[css.Top] == 0 {
-					room += b.pd[css.Top]
-				}
+				// The top padding is room behind a top border too.
+				room = top - y + b.pd[css.Top]
 			}
 			fitTop := top
 			top, end, left, right, l := s.fitRubyLine(lp, lw, pos, lineIndent, top, lineStrut, room, under)

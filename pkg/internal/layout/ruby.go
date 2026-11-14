@@ -575,6 +575,9 @@ func (p *painter) annotations(l *lineBox, page int) {
 //     line with an annotation under it followed by a line with one over
 //     it is 40px from it; an annotation over a line takes the half-leading
 //     under the line before it, ruby or not.
+//   - probe, html: the same Chromium screen grows the first line of a
+//     block of 24px lines under a 10px annotation by 8px less its top
+//     padding, with a top border of 2px as without one.
 func (s *inlineState) rubyRoom(l *lineBox, room, under float64) float64 {
 	grow := s.rubyGrowth(l, room, under)
 	if grow <= eps {

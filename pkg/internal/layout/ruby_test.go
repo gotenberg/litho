@@ -148,6 +148,26 @@ func TestRubyLineRoom(t *testing.T) {
 	}
 }
 
+// TestRubyLineRoomTakesPaddingBehindABorder locks that the top padding of
+// a block gives room to the annotation over its first line with a top
+// border as without one: a 20px annotation over a 40px line after 6px of
+// padding grows the line by 14px.
+func TestRubyLineRoomTakesPaddingBehindABorder(t *testing.T) {
+	t.Parallel()
+	for _, border := range []float64{0, 2} {
+		block, ruby, rt := rubyDoc(1)
+		block.Padding[css.Top] = css.Pts(px(6))
+		if border > 0 {
+			block.Border[css.Top] = css.Border{Width: px(border), Style: css.Solid, Color: red}
+		}
+		root := el(sty(), el(block, txt(block, "xx"), el(ruby, txt(ruby, "AB"), el(rt, txt(rt, "abcdefgh")))))
+		b := kid(t, boxes(t, root, page(600, 300)), 0)
+		if got, want := rect(b)[3], border+6+40+14; !near(got, want) {
+			t.Errorf("top border %gpx: block %gpx tall, want %g", border, got, want)
+		}
+	}
+}
+
 // TestRubyUnder locks ruby-position: under, the annotation's em box under
 // the base's.
 func TestRubyUnder(t *testing.T) {
