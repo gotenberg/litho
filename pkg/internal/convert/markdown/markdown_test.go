@@ -55,7 +55,7 @@ func toHTML(t testing.TB, src []byte) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, title := render(src)
+	body, title := mustRender(t, src)
 	page, _, err := tmpl.render(context.Background(), body, title, 1<<30)
 	if err != nil {
 		t.Fatal(err)

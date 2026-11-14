@@ -54,6 +54,7 @@ func TestConvert_MemoryBudget(t *testing.T) {
 		// charged before their styles: 4 MiB holds it and not the styles.
 		"html styles":     {format: formatHTML, src: styled.String(), holds: "computed styles", limit: 4 << 20},
 		"html tree":       {format: formatHTML, src: strings.Repeat("<p>a paragraph of words</p>", 4000), holds: "the document tree"},
+		"markdown tree":   {format: formatMarkdown, src: strings.Repeat("- an item\n", 12000), holds: "the Markdown tree"},
 		"csv cells":       {format: formatCSV, src: cells.String(), holds: "cells"},
 		"docx paragraphs": {format: formatDOCX, src: docx, holds: "XML trees"},
 		"html picture": {
@@ -170,6 +171,10 @@ func TestConvert_JustOverTheBudget(t *testing.T) {
 		"html paragraphs": {
 			format: formatHTML, limit: 1 << 20, max: 1 << 12,
 			src: func(n int) string { return strings.Repeat("<p>a paragraph of words</p>", n) },
+		},
+		"markdown items": {
+			format: formatMarkdown, limit: 1 << 20, max: 1 << 12,
+			src: func(n int) string { return strings.Repeat("- an item of words\n", n) },
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

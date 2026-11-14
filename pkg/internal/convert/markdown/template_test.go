@@ -71,7 +71,7 @@ func TestParseTemplate_ExpansionBound(t *testing.T) {
 func TestRender(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	body, title := render([]byte("# A <b>&\n\ntext\n"))
+	body, title := mustRender(t, []byte("# A <b>&\n\ntext\n"))
 	for name, tc := range map[string]struct{ tmpl, want string }{
 		"title escaped":      {"<title>{{ .Title }}</title>{{ toHTML }}", "<title>A &amp;</title><h1>A <b>&amp;</h1>\n\n<p>text</p>\n"},
 		"twice":              {"{{ toHTML }}|{{ toHTML }}", "<h1>A <b>&amp;</h1>\n\n<p>text</p>\n|<h1>A <b>&amp;</h1>\n\n<p>text</p>\n"},
@@ -92,7 +92,7 @@ func TestRender(t *testing.T) {
 func TestRender_Fails(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	body, title := render([]byte(strings.Repeat("word ", 100)))
+	body, title := mustRender(t, []byte(strings.Repeat("word ", 100)))
 	tmpl, err := parseTemplate("{{ toHTML }}{{ toHTML }}")
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +119,7 @@ func TestRender_ChargesTheBudget(t *testing.T) {
 	t.Parallel()
 	ctx, budget, done := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 64})
 	defer done()
-	body, title := render([]byte(strings.Repeat("word ", 100)))
+	body, title := mustRender(t, []byte(strings.Repeat("word ", 100)))
 	tmpl, err := parseTemplate("")
 	if err != nil {
 		t.Fatal(err)
@@ -163,7 +163,7 @@ func (failingReader) Read([]byte) (int, error) { return 0, errors.New("read") }
 func FuzzTemplate(f *testing.F) {
 	f.Add(DefaultTemplate)
 	f.Add(DefaultTemplate[:len(DefaultTemplate)/2])
-	body, title := render([]byte("# T\n\ntext\n"))
+	body, title := mustRender(f, []byte("# T\n\ntext\n"))
 	f.Fuzz(func(t *testing.T, text string) {
 		tmpl, err := parseTemplate(text)
 		if err != nil {
