@@ -276,6 +276,12 @@ type Office struct {
 	// [Style.WordRules], with its ascent and descent for the line (see
 	// text.Style.OfficeEmoji). No CSS property sets it.
 	OfficeEmoji bool
+	// KeepEmoji keeps two emoji next to each other on one line, as Word
+	// breaks a run, where UAX #14 breaks between any two (classes ID, EB
+	// and EM, LB31): a line breaks before an emoji only after a character
+	// that is no emoji (see text.EmojiJoins). It applies to the characters
+	// of the inline box that sets it.
+	KeepEmoji bool
 	// TextEffects are the effects drawn around the glyphs of the inline
 	// box that sets it, nil for none: the glow, shadow and reflection of
 	// a WordprocessingML run (MS-DOCX, 2.6.1 rPr extensions w14:glow,

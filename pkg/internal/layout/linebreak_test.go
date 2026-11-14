@@ -146,6 +146,39 @@ func TestLineBreak_KeepHangul(t *testing.T) {
 	}
 }
 
+// TestLineBreak_KeepEmoji checks that css.Office.KeepEmoji keeps two
+// emoji on one line, a skin tone modifier ending the first, the run of
+// them moving whole to the next line, while a space still breaks.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word sets "A " and ten 36 point emoji, 49.43 points
+//     each, on a line 468 points wide as "A" alone, then nine emoji, then
+//     the tenth before " Z": no break between two emoji, where UAX #14
+//     fills the first line with emoji.
+func TestLineBreak_KeepEmoji(t *testing.T) {
+	keep := func(s *css.Style) { s.KeepEmoji = true }
+	tests := []struct {
+		name string
+		st   *css.Style
+		text string
+		want []string
+	}{
+		{"breaks between emoji", sty(), "A \U0001F600\U0001F602\U0001F970", []string{"A \U0001F600\U0001F602", "\U0001F970"}},
+		{"keeps emoji together", sty(keep), "A \U0001F600\U0001F602\U0001F970", []string{"A ", "\U0001F600\U0001F602\U0001F970"}},
+		{"after a modifier", sty(keep), "A \U0001F44D\U0001F3FD\U0001F602", []string{"A ", "\U0001F44D\U0001F3FD\U0001F602"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := run(t, doc(el(tt.st, txt(tt.st, tt.text))), page(40, 100))
+			got, _ := lineTexts(res, 1)
+			if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+				t.Errorf("lines %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestLineBreak_HyphenBeforeDigit checks the opportunity Chromium opens
 // after a hyphen-minus between an ASCII letter or digit and a digit, where
 // UAX #14, LB25 keeps the hyphen with the number, under

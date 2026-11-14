@@ -237,8 +237,9 @@ func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
 	if st.TextPaint == nil && boolOf(r.outline) {
 		st.TextPaint = &css.OfficeTextPaint{NoFill: true, Outline: &css.OfficeOutline{Color: st.Color, Width: legacyOutline}}
 	}
-	// Word draws emoji in Segoe UI Emoji, at its advances and line.
-	st.OfficeEmoji = true
+	// Word draws emoji in Segoe UI Emoji, at its advances and line, and
+	// breaks no line between two of them.
+	st.OfficeEmoji, st.KeepEmoji = true, true
 	if lineMult > 0 {
 		st.LineHeight = css.Pts(d.proportionalLine(st, lineMult))
 	}

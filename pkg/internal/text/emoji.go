@@ -235,3 +235,14 @@ func presentationOf(r, vs rune, kind int, multi bool, v EmojiVariant) presentati
 	}
 	return presentNone
 }
+
+// EmojiJoins reports whether an emoji character b continues an emoji
+// whose last character is a, as Word keeps them on one line: b is
+// Extended_Pictographic (UTS #51, Annex A) and a is one too, or the
+// emoji presentation selector or a skin tone modifier ending one.
+func EmojiJoins(a, b rune) bool {
+	if !unicode.Is(extendedPictographic, b) {
+		return false
+	}
+	return a == variationEmoji || unicode.Is(extendedPictographic, a) || unicode.Is(emojiModifier, a)
+}
