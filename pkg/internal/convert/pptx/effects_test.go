@@ -238,8 +238,7 @@ func TestEffects_TextEffects(t *testing.T) {
 
 // TestEffects_PresetShadowCopies checks the far copy of a preset shadow:
 // twice the distance for shdw13, the distance the other way for shdw18,
-// in the colour lightened four fifths of the way to white, and none for
-// shdw1.
+// in the colour with 0.4 added to each channel, and none for shdw1.
 func TestEffects_PresetShadowCopies(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -257,7 +256,7 @@ func TestEffects_PresetShadowCopies(t *testing.T) {
 			switch {
 			case tc.far == 0 && s.ShadowUnder != nil:
 				t.Errorf("far copy %+v, want none", *s.ShadowUnder)
-			case tc.far != 0 && (s.ShadowUnder == nil || !nearly(s.ShadowUnder.OffsetX, tc.far) || !nearly(s.ShadowUnder.Color.R, 0x80/255.0+(1-0x80/255.0)*0.8)):
+			case tc.far != 0 && (s.ShadowUnder == nil || !nearly(s.ShadowUnder.OffsetX, tc.far) || !nearly(s.ShadowUnder.Color.R, 0x80/255.0+0.4)):
 				t.Errorf("far copy %+v, want %v pt right, lightened", s.ShadowUnder, tc.far)
 			}
 		})

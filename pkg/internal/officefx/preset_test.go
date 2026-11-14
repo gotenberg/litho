@@ -13,7 +13,7 @@ import (
 // TestPresetCopies_MatchPowerPoint maps a shape's box by each copy of its
 // preset shadow, about the box grown by half its 1 point line, and checks
 // every corner against the corners of the fill copies PowerPoint prints,
-// in paint order, the far copy in the colour lightened four fifths.
+// in paint order, the far copy in the colour with 0.4 added.
 //
 // # Corpus evidence
 //
@@ -74,7 +74,7 @@ func TestPresetCopies_MatchPowerPoint(t *testing.T) {
 				}
 				want := 0x80 / 255.0
 				if i == 0 && len(copies) == 2 {
-					want = 0x80/255.0 + (1-0x80/255.0)*0.8
+					want = 0x80/255.0 + 0.4
 				}
 				if math.Abs(cp.Color.R-want) > 1e-9 || cp.Blur != 0 {
 					t.Errorf("copy %d: colour %v, blur %v, want gray %.3f, none", i, cp.Color, cp.Blur, want)
@@ -105,6 +105,28 @@ func TestPresetCopies_Names(t *testing.T) {
 	}
 	if copies, _, ok := PresetCopies(&css.OfficePreset{Name: "shdw13", Color: css.Color{R: 1}}, css.OfficePowerPoint); !ok || len(copies) != 0 {
 		t.Errorf("transparent shdw13: %d copies, ok %v, want none, ok", len(copies), ok)
+	}
+}
+
+// TestPresetCopies_FarCopyAddsToEachChannel checks the far copy's colour:
+// 0.4 added to each channel, none past full, the alpha kept.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: PowerPoint prints the far copy of C00000 at alpha 50% as
+//     FF6464 within the rounding of its alpha, of 808080 as E6E6E6.
+func TestPresetCopies_FarCopyAddsToEachChannel(t *testing.T) {
+	red := css.Color{R: 0xC0 / 255.0, A: 0.5}
+	copies, _, ok := PresetCopies(&css.OfficePreset{Name: "shdw13", Color: red, Dist: 6}, css.OfficePowerPoint)
+	if !ok || len(copies) != 2 {
+		t.Fatalf("%d copies, ok %v, want two", len(copies), ok)
+	}
+	want := css.Color{R: 1, G: 0.4, B: 0.4, A: 0.5}
+	if far := copies[0].Color; math.Abs(far.R-want.R) > 1e-12 || math.Abs(far.G-want.G) > 1e-12 || math.Abs(far.B-want.B) > 1e-12 || far.A != want.A {
+		t.Errorf("far copy %+v, want %+v", far, want)
+	}
+	if near := copies[1].Color; near != red {
+		t.Errorf("near copy %+v, want the shadow's colour %+v", near, red)
 	}
 }
 

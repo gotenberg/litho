@@ -37,7 +37,7 @@ var sameBytesCases = []struct {
 	{formatCSV, "csv/sources/paper-table", "f73035983761a56c117b0c5a008bfb073d396f7b7f2318e5580dc49e8df98c0d"},
 	{formatDOCX, "docx/parts/charts-line-area", "110ecd48625d50d59458933e0fbcf8865805e5b1132b7c98708c5e77343a1668"},
 	{formatDOCX, "docx/parts/sink-report", "79767a75505748446f3058cfe16554898eb5d481977ee8c8a64d5ca442edd1eb"},
-	{formatDOCX, "docx/parts/shapes-effects-3d", "a40f2fcbc9dfee899b9f2d4f1581ae1c8f9b0dc46e3fbe0a20bc0e13063e4337"},
+	{formatDOCX, "docx/parts/shapes-effects-3d", "521b61b3032d1134589ef5b724d373ea295d0aaf2df717c2c53aff658a05801b"},
 	{formatXLSX, "xlsx/parts/real_dashboard", "63f2ffe66bba4aab421ddf90dfba9cc5cad836df3c59b0c1ed2abac29e9396c0"},
 	{formatXLSX, "xlsx/parts/charts_pie_doughnut", "4d0a8cb72acfd7e8c491966d35080567867e3841b38c06d4b04601aaab464b1f"},
 	{formatPPTX, "pptx/parts/chart-pie", "176168b9aa2840baf904072c8afe2b7950cd873a654822cbb8d4fb0fae65bc9b"},

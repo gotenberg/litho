@@ -178,7 +178,7 @@ func TestShapePresetShadow(t *testing.T) {
 	if len(fills) != 3 {
 		t.Fatalf("fills %+v, want two copies and the square", fills)
 	}
-	light, dark := 0x80/255.0+(1-0x80/255.0)*0.8, 0x80/255.0
+	light, dark := 0x80/255.0+0.4, 0x80/255.0
 	sq := fills[2]
 	if math.Abs(fills[0].gray-light) > 1e-6 || math.Abs(fills[0].x-(sq.x-10)) > 1e-6 {
 		t.Errorf("first copy %+v, want gray %.3f 10 points left of the square at %.2f", fills[0], light, sq.x)

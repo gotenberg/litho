@@ -16,8 +16,8 @@ import (
 // (skew then scale, as an outer shadow's kx and sx, sy) about the point
 // of the shape's bounds, its line included, that align names; the near
 // copy then moves dist along dir in the shadow's colour, the far copy,
-// painted first, moves far times as far in that colour lightened
-// presetLighten of the way to white. text says whether the copies hold
+// painted first, moves far times as far in that colour lightened by
+// [presetLighten]. text says whether the copies hold
 // the shape's text; word whether Word's rules draw the preset.
 type presetShadow struct {
 	sx, sy, kx float64
@@ -32,9 +32,22 @@ type presetShadow struct {
 // the vertical; its tangent is the square root of 3 over 2.
 const presetLean = 40.893394649130904
 
-// presetLighten is how far toward white the far copy of a preset shadow
-// lightens the shadow's colour: four fifths, 808080 to E6E6E6.
-const presetLighten = 0.8
+// presetLighten is what the far copy of a preset shadow adds to each
+// channel of the shadow's colour, a share of full intensity, the sum held
+// at full.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: PowerPoint prints the far copies of 808080 in gray
+//     0.902 (E6E6E6), 0.4 added to 0.502; of C00000 at alpha 50% under a
+//     fill at alpha 50% as a bitmap whose colour, over a Matte of black,
+//     is FF6464 within the rounding of its 8 bit alpha of 64 (98 to 102
+//     in green and blue), C00000 with 0.4 added and red held at FF. Four
+//     fifths of the way to white gives E6E6E6 for the gray and F3CCCC
+//     for the red; a lightness raised in HSL by 0.4 gives FF8D8D.
+//   - probe, docx; probe, xlsx: Word and Excel print the far copies of
+//     808080 in gray 0.902.
+const presetLighten = 0.4
 
 // presetShadows holds the twenty presets, shdw1 first.
 //
@@ -134,10 +147,10 @@ func presetIndex(name string) (int, bool) {
 	return n - 1, true
 }
 
-// lighten returns c moved presetLighten of the way to white, its alpha
-// kept.
+// lighten returns c with [presetLighten] added to each channel, none
+// past full, its alpha kept.
 func lighten(c css.Color) css.Color {
-	l := func(v float64) float64 { return v + float64((1-v)*presetLighten) }
+	l := func(v float64) float64 { return min(v+presetLighten, 1) }
 	return css.Color{R: l(c.R), G: l(c.G), B: l(c.B), A: c.A}
 }
 
