@@ -370,12 +370,13 @@ func fadeDir(e *ooxml.Element) float64 {
 // the near copy, and for shdw13, shdw17 and shdw18 the far one painted
 // under it. color resolves the colour. It returns false for a name that
 // is not a preset, and nils for a shadow of no colour. The copies scale
-// and skew about the box grown by half the line, and keep the slide's
-// directions whatever the shape's turn. Each copy of a fill, a line or a
-// text keeps that part's alpha under the shadow's. PowerPoint clips the
-// copies to what lies outside the shape; the copies here are not
-// clipped, which an opaque shape hides and a translucent one shows as
-// PowerPoint prints it.
+// and skew in the slide's directions about the bounds of the shape as it
+// is turned on the slide, grown by half the line, and move in the
+// slide's directions whatever the shape's turn ([turnedBounds]). Each
+// copy of a fill, a line or a text keeps that part's alpha under the
+// shadow's. PowerPoint clips the copies to what lies outside the shape;
+// the copies here are not clipped, which an opaque shape hides and a
+// translucent one shows as PowerPoint prints it.
 //
 // # Corpus evidence
 //
@@ -383,6 +384,12 @@ func fadeDir(e *ooxml.Element) float64 {
 //     rectangles with a 1 point line scaled and skewed about the box
 //     grown by half a point: shdw20, mirrored about the bottom, starts 1
 //     point below the line's outer edge plus the offset.
+//   - probe, pptx: rectangles turned 30 degrees print every copy within
+//     0.02 point of the presets' rows applied in the slide's directions
+//     about the bounds of the turned fill grown by half the line; the
+//     same rows applied in the shape's own directions miss shdw3 by 16
+//     points and shdw20 by 32; the bounds of the turned outline grown by
+//     half the line on each side (0.68 point across) miss shdw20 by 0.36.
 //   - probe, pptx: rectangles filled at alpha 50% under a C00000 preset at
 //     alpha 50% print their copies as 100 pixels an inch bitmaps at alpha
 //     64 of 255 (a quarter: the shadow's half of the fill's half), their
@@ -401,7 +408,7 @@ func presetShadow(e *ooxml.Element, s *slides.Shape, color func(*ooxml.Element) 
 	if !ok || len(copies) == 0 {
 		return nil, nil, ok
 	}
-	box := s.Box
+	box := turnedBounds(s.Box, s.Rotation)
 	if s.Line.Width > 0 {
 		box = officefx.Grow(box, float64(s.Line.Width/2))
 	}
@@ -421,6 +428,21 @@ func presetShadow(e *ooxml.Element, s *slides.Shape, color func(*ooxml.Element) 
 		far = shadows[0]
 	}
 	return near, far, true
+}
+
+// turnedBounds returns the bounds on the slide of box turned clockwise
+// by turn degrees about its centre (20.1.7.6 xfrm rot): the same centre,
+// as wide as the turned corners reach.
+func turnedBounds(box typeset.Rect, turn float64) typeset.Rect {
+	if turn == 0 || !numeric.Finite(turn) {
+		return box
+	}
+	sin, cos := detmath.Sincos(turn * math.Pi / 180)
+	sin, cos = math.Abs(sin), math.Abs(cos)
+	w := float64(box.Width*cos) + float64(box.Height*sin)
+	h := float64(box.Width*sin) + float64(box.Height*cos)
+	cx, cy := box.X+float64(box.Width/2), box.Y+float64(box.Height/2)
+	return typeset.Rect{X: cx - float64(w/2), Y: cy - float64(h/2), Width: w, Height: h}
 }
 
 // innerShadow reads the geometry of an inner shadow (20.1.8.40

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func nearly(a, b float64) bool { return math.Abs(a-b) < 1e-6 }
@@ -264,23 +265,24 @@ func TestEffects_PresetShadowCopies(t *testing.T) {
 }
 
 // TestEffects_PresetShadowGeometry checks the near copy of preset shadows
-// on a shape 10 by 20 pt: the scale and the skew of the preset folded
-// into the offsets about the box, grown by half the line when there is
-// one, every part's alpha kept, and the text left out of all but shdw1,
-// shdw2, shdw5 and shdw6.
+// on a shape 10 by 20 pt turned a quarter turn, 20 by 10 pt on the slide:
+// the scale and the skew of the preset folded into the offsets about the
+// turned shape's bounds on the slide, grown by half the line when there
+// is one, every part's alpha kept, and the text left out of all but
+// shdw1, shdw2, shdw5 and shdw6.
 func TestEffects_PresetShadowGeometry(t *testing.T) {
 	t.Parallel()
-	lean := 10 * math.Sqrt(3) / 2
+	lean := 5 * math.Sqrt(3) / 2
 	for _, tc := range []struct {
 		name, prst, line string
 		want             slides.Shadow
 	}{
 		{"offset", "shdw2", "", slides.Shadow{OffsetX: 10, ScaleX: 1, ScaleY: 1}},
-		{"half height, leaning left", "shdw3", "", slides.Shadow{OffsetX: 10 - lean, OffsetY: 5, ScaleX: 1, ScaleY: 0.5, SkewX: 40.893394649130904, ShapeOnly: true}},
-		{"mirrored below", "shdw20", "", slides.Shadow{OffsetX: 10, OffsetY: 20, ScaleX: 1, ScaleY: -1, ShapeOnly: true}},
-		{"mirrored below the line", "shdw20", `<a:ln w="25400"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln>`, slides.Shadow{OffsetX: 10, OffsetY: 22, ScaleX: 1, ScaleY: -1, ShapeOnly: true}},
-		{"three quarters about the top left", "shdw9", "", slides.Shadow{OffsetX: 10 - 1.25, OffsetY: -2.5, ScaleX: 0.75, ScaleY: 0.75, ShapeOnly: true}},
-		{"five quarters about the bottom right", "shdw10", "", slides.Shadow{OffsetX: 10 - 1.25, OffsetY: -2.5, ScaleX: 1.25, ScaleY: 1.25, ShapeOnly: true}},
+		{"half height, leaning left", "shdw3", "", slides.Shadow{OffsetX: 10 - lean, OffsetY: 2.5, ScaleX: 1, ScaleY: 0.5, SkewX: 40.893394649130904, ShapeOnly: true}},
+		{"mirrored below", "shdw20", "", slides.Shadow{OffsetX: 10, OffsetY: 10, ScaleX: 1, ScaleY: -1, ShapeOnly: true}},
+		{"mirrored below the line", "shdw20", `<a:ln w="25400"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln>`, slides.Shadow{OffsetX: 10, OffsetY: 12, ScaleX: 1, ScaleY: -1, ShapeOnly: true}},
+		{"three quarters about the top left", "shdw9", "", slides.Shadow{OffsetX: 10 - 2.5, OffsetY: -1.25, ScaleX: 0.75, ScaleY: 0.75, ShapeOnly: true}},
+		{"five quarters about the bottom right", "shdw10", "", slides.Shadow{OffsetX: 10 - 2.5, OffsetY: -1.25, ScaleX: 1.25, ScaleY: 1.25, ShapeOnly: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -296,5 +298,23 @@ func TestEffects_PresetShadowGeometry(t *testing.T) {
 				t.Errorf("shadow %+v, want %+v", got, want)
 			}
 		})
+	}
+}
+
+// TestTurnedBounds checks the bounds on the slide of a box turned about
+// its centre: the same centre, as wide and as tall as the turned corners
+// reach, the box itself unturned or for an angle that is not finite.
+func TestTurnedBounds(t *testing.T) {
+	t.Parallel()
+	box := typeset.Rect{X: 10, Y: 20, Width: 10, Height: 20}
+	got := turnedBounds(box, 30)
+	w, h := 10*math.Sqrt(3)/2+10, 5+20*math.Sqrt(3)/2
+	if !nearly(got.Width, w) || !nearly(got.Height, h) || !nearly(got.X+got.Width/2, 15) || !nearly(got.Y+got.Height/2, 30) {
+		t.Errorf("turned 30 degrees: %+v, want %.3f by %.3f about (15, 30)", got, w, h)
+	}
+	for _, turn := range []float64{0, math.NaN(), math.Inf(1)} {
+		if got := turnedBounds(box, turn); got != box {
+			t.Errorf("turned %v: %+v, want the box", turn, got)
+		}
 	}
 }
