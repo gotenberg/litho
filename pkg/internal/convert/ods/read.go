@@ -88,6 +88,8 @@ type reader struct {
 	rows     int
 	merges   int
 	drawings int
+	// sparks counts the sparklines placed, against maxSparklines.
+	sparks int
 	// keepFormulas keeps the formulas of the cells for the builder to
 	// compute; off, under office.RecalculateNever, a cell shows the value
 	// the file stores.
@@ -344,6 +346,8 @@ func (r *reader) table(el *odf.Element) *sheet.Sheet {
 		case c.Is(nsCalcExt, "conditional-formats"):
 			r.conditionalFormats(sh, c)
 			calcext = true
+		case c.Is(nsCalcExt, "sparkline-groups"):
+			r.sparklines(ts, c)
 		case c.Is(odf.NSOffice, "forms"):
 			if len(c.Children) > 0 {
 				r.warn("form-controls", warn.FormWidgetOmitted, warn.Omitted, "form controls are not drawn")

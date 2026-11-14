@@ -140,6 +140,9 @@ func (w *sheetReader) read(root *ooxml.Element) error {
 			return err
 		}
 	}
+	if w.printed {
+		w.sparklines(root)
+	}
 	if d := root.Child(nsMain, "legacyDrawing"); d != nil && w.printed {
 		id, _ := d.AttrNS(ooxml.NSR, "id")
 		if err := w.controls(id); err != nil {
