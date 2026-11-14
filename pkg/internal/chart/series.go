@@ -107,6 +107,10 @@ func (rd *renderer) valueRange(g *Group) (float64, float64, bool) {
 		}
 		return lo, hi, false
 	}
+	if g.Kind == BoxWhisker {
+		lo, hi := boxRange(g)
+		return lo, hi, false
+	}
 	if g.Kind == Scatter || g.Kind == Bubble {
 		for _, s := range g.Series {
 			vals := rd.data(s.Values)
@@ -145,6 +149,9 @@ func (rd *renderer) series(g *Group, x, y *dim) []func() {
 		labels := rd.bars(g, x, y)
 		rd.connectors(g, x, y)
 		return labels
+	case BoxWhisker:
+		rd.boxes(g, x, y)
+		return nil
 	case Area:
 		return rd.areas(g, x, y)
 	case Unsupported:

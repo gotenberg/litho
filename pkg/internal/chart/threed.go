@@ -383,7 +383,7 @@ func (rd *renderer) series3D(p *projection, x *dim, yOf map[*Group]*dim) []func(
 			s = rd.areas3D(p, g, x, y)
 		case Line:
 			s = rd.lines3D(p, g, x, y)
-		case Pie, Doughnut, Scatter, Bubble, Radar, Unsupported, Waterfall:
+		case Pie, Doughnut, Scatter, Bubble, Radar, Unsupported, Waterfall, BoxWhisker:
 		}
 		ss = append(ss, s...)
 		labels = append(labels, l...)

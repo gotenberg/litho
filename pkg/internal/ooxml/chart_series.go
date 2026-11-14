@@ -308,7 +308,7 @@ func (p *chartReader) series(e *Element, g *chart.Group, scatterLines, lineMarke
 		s.Categories = p.data(e.Child(NSChart, "xVal"), "x values")
 		s.Values = p.data(e.Child(NSChart, "yVal"), "y values")
 		s.Sizes = p.data(e.Child(NSChart, "bubbleSize"), "bubble sizes")
-	case chart.Bar, chart.Line, chart.Area, chart.Pie, chart.Doughnut, chart.Radar, chart.Unsupported, chart.Waterfall:
+	case chart.Bar, chart.Line, chart.Area, chart.Pie, chart.Doughnut, chart.Radar, chart.Unsupported, chart.Waterfall, chart.BoxWhisker:
 		s.Categories = p.data(e.Child(NSChart, "cat"), "categories")
 		s.Values = p.data(e.Child(NSChart, "val"), "values")
 	}
@@ -397,29 +397,8 @@ func (p *chartReader) marker(e *Element, show bool) chart.Marker {
 	if e == nil {
 		return m
 	}
-	switch childVal(e, "symbol") {
-	case "none":
-		m.Symbol = chart.MarkerNone
-	case "square":
-		m.Symbol = chart.MarkerSquare
-	case "diamond":
-		m.Symbol = chart.MarkerDiamond
-	case "triangle":
-		m.Symbol = chart.MarkerArrowUp
-	case "x":
-		m.Symbol = chart.MarkerX
-	case "star":
-		m.Symbol = chart.MarkerAsterisk
-	case "dot":
-		m.Symbol = chart.MarkerArrowRight
-	case "dash":
-		m.Symbol = chart.MarkerHorizontalBar
-	case "circle":
-		m.Symbol = chart.MarkerCircle
-	case "plus":
-		m.Symbol = chart.MarkerPlus
-	case "auto":
-		m.Symbol = chart.MarkerAuto
+	if sym, ok := markerSymbol(childVal(e, "symbol")); ok {
+		m.Symbol = sym
 	}
 	if v, ok := Int(childVal(e, "size")); ok && v >= 2 && v <= 72 {
 		m.Size = float64(v)
@@ -743,4 +722,35 @@ func labelFields(rich, dLbl *Element) []chart.LabelField {
 		}
 	}
 	return out
+}
+
+// markerSymbol maps an ST_MarkerStyle name (ECMA-376 Part 1, 21.2.3.27;
+// MS-ODRAWXML, 2.8.4.4 ST_MarkerStyle) to its symbol, as LibreOffice maps
+// it, and false for a name it does not know.
+func markerSymbol(name string) (chart.MarkerSymbol, bool) {
+	switch name {
+	case "none":
+		return chart.MarkerNone, true
+	case "square":
+		return chart.MarkerSquare, true
+	case "diamond":
+		return chart.MarkerDiamond, true
+	case "triangle":
+		return chart.MarkerArrowUp, true
+	case "x":
+		return chart.MarkerX, true
+	case "star":
+		return chart.MarkerAsterisk, true
+	case "dot":
+		return chart.MarkerArrowRight, true
+	case "dash":
+		return chart.MarkerHorizontalBar, true
+	case "circle":
+		return chart.MarkerCircle, true
+	case "plus":
+		return chart.MarkerPlus, true
+	case "auto":
+		return chart.MarkerAuto, true
+	}
+	return chart.MarkerAuto, false
 }

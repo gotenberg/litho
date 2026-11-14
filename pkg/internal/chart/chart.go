@@ -139,6 +139,11 @@ const (
 	// its subtotal points as columns from the axis (MS-ODRAWXML, 2.24.4.21
 	// ST_SeriesLayout waterfall).
 	Waterfall
+	// BoxWhisker draws the values of each category of a series as a box
+	// from their low to their high quartile with whiskers to their
+	// extremes ([Series.Box]; MS-ODRAWXML, 2.24.4.21 ST_SeriesLayout
+	// boxWhisker).
+	BoxWhisker
 )
 
 // String returns the kind's name, as warnings spell it.
@@ -164,6 +169,8 @@ func (k Kind) String() string {
 		return "unsupported"
 	case Waterfall:
 		return "waterfall"
+	case BoxWhisker:
+		return "box and whisker"
 	}
 	return "unknown"
 }
@@ -295,6 +302,13 @@ type Series struct {
 	// series to the start of the next (MS-ODRAWXML, 2.24.3.83
 	// CT_SeriesElementVisibilities connectorLines).
 	Connector *Stroke
+	// Box is how a box and whisker series draws its boxes, nil for the
+	// defaults: inclusive quartiles, nothing but the boxes and whiskers.
+	Box *Box
+
+	// samples are the sorted values of each category of a box and
+	// whisker series, which [Render] gathers before it draws.
+	samples [][]float64
 }
 
 // TrendKind is the regression a [Trendline] fits (ECMA-376 Part 1,

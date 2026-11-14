@@ -214,6 +214,9 @@ func (x *chartExReader) read(root *Element) {
 		if g.Kind == chart.Waterfall {
 			x.waterfall(s, g.Series[i])
 		}
+		if g.Kind == chart.BoxWhisker {
+			x.boxWhisker(s, g.Series[i])
+		}
 		if g.Kind == chart.Bar {
 			g.Series[i].Arrange = chart.Arrangement{
 				Aggregate:  !histogram && cxChild(cxChild(s, "layoutPr"), "aggregation") != nil,
@@ -633,24 +636,27 @@ func (x *chartExReader) dataLabels(e *Element) chart.Labels {
 // kindOf returns the kind a chart of the cx:series series is drawn as
 // (MS-ODRAWXML, 2.24.4.21 ST_SeriesLayout): bars when every series is a
 // clusteredColumn, binned or not, or the paretoLine of one; a waterfall
-// when every series is one; [chart.Unsupported] for the other kinds and
-// their mixes.
+// or boxes and whiskers when every series is one; [chart.Unsupported] for
+// the other kinds and their mixes.
 func (x *chartExReader) kindOf(series []*Element) chart.Kind {
 	if len(series) == 0 {
 		return chart.Unsupported
 	}
-	columns, waterfall, owner := true, true, false
+	columns, waterfall, boxes, owner := true, true, true, false
 	for _, s := range series {
 		id := attrOr(s, "layoutId")
 		columns = columns && (id == "clusteredColumn" || id == "paretoLine")
 		owner = owner || id == "clusteredColumn"
 		waterfall = waterfall && id == "waterfall"
+		boxes = boxes && id == "boxWhisker"
 	}
 	switch {
 	case columns && owner:
 		return chart.Bar
 	case waterfall:
 		return chart.Waterfall
+	case boxes:
+		return chart.BoxWhisker
 	}
 	return chart.Unsupported
 }
@@ -783,4 +789,103 @@ func (x *chartExReader) percentAxis(e *Element) *chart.Axis {
 		a.Format = "0%"
 	}
 	return a
+}
+
+// boxWhisker reads the box and whisker properties of the cx:series e into
+// s: its quartile method (MS-ODRAWXML, 2.24.3.85 CT_Statistics, inclusive
+// when absent) and what its cx:visibility shows (2.24.3.83
+// CT_SeriesElementVisibilities: the mean's marker and the outliers when
+// absent, as Excel shows them); its box outline and lines from the chart
+// style's data point, and its markers from the style's marker layout.
+func (x *chartExReader) boxWhisker(e *Element, s *chart.Series) {
+	lp := cxChild(e, "layoutPr")
+	vis := cxChild(lp, "visibility")
+	shown := func(name string, def bool) bool {
+		v, ok := vis.Attr(name)
+		if !ok {
+			return def
+		}
+		return v == "1" || v == "true"
+	}
+	b := &chart.Box{
+		Exclusive: attrOr(cxChild(lp, "statistics"), "quartileMethod") == "exclusive",
+		Mean:      shown("meanMarker", true),
+		MeanLine:  shown("meanLine", false),
+		Outliers:  shown("outliers", true),
+		Inner:     shown("nonoutliers", false),
+	}
+	auto := toCSS(x.c.AutoColor(s.Index, 1))
+	b.Line, s.Border = x.boxLine(auto)
+	if s.Border == nil && s.Fill == nil {
+		// A box the style neither fills nor outlines stays empty.
+		s.Border = &chart.Stroke{None: true}
+	}
+	s.Box = b
+	s.Marker = x.styleMarker(auto)
+}
+
+// boxLineShade is the factor Office multiplies each sRGB channel of a
+// box's line colour by, from the chart style, for its outline, whiskers
+// and median, quartile and mean marks.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: Excel draws boxWhisker's boxes, filled in
+//     68,114,196 and 237,125,49 by their style's phClr, with lines of
+//     54,91,157 and 190,100,39, 0.80 of each channel, 0.75 pt wide.
+const boxLineShade = 0.8
+
+// boxLine returns the line of a box's whiskers and marks and its outline,
+// for a series of automatic colour auto: the chart style's data point
+// line, shaded by boxLineShade, for both; without one, a theme line in the
+// text colour for the marks and no outline.
+//
+// # Corpus evidence
+//
+//   - litho/docx, litho/pptx: Word and PowerPoint draw charts-chartex's
+//     and chartex's whiskers, caps, quartile and median lines and mean
+//     crosses 0.75 pt wide in black, and no box outline, their chart
+//     style giving the data point no line.
+func (x *chartExReader) boxLine(auto css.Color) (*chart.Stroke, *chart.Stroke) {
+	tx, _ := x.theme.Color("tx1")
+	marks := &chart.Stroke{Color: toTypeset(tx), Width: themeLineWidth}
+	if x.style == nil {
+		return marks, nil
+	}
+	l, _ := x.styleLine("dataPoint", auto)
+	if l == nil {
+		return marks, nil
+	}
+	shaded := *l
+	shaded.Color.R, shaded.Color.G, shaded.Color.B = float64(l.Color.R*boxLineShade), float64(l.Color.G*boxLineShade), float64(l.Color.B*boxLineShade)
+	return &shaded, &shaded
+}
+
+// styleMarker returns the marker the chart style gives the points of a
+// series of automatic colour auto: the symbol and size of its
+// dataPointMarkerLayout (MS-ODRAWXML, 2.8.3.5 CT_MarkerLayout), filled
+// and outlined by its dataPointMarker entry, which may leave it unpainted.
+func (x *chartExReader) styleMarker(auto css.Color) chart.Marker {
+	m := chart.Marker{Symbol: chart.MarkerCircle, Size: 5}
+	if x.style == nil {
+		return m
+	}
+	if l := x.style.entries["dataPointMarkerLayout"]; l != nil {
+		if sym, ok := markerSymbol(attrOr(l, "symbol")); ok && sym != chart.MarkerAuto {
+			m.Symbol = sym
+		}
+		if v, ok := Int(attrOr(l, "size")); ok && v >= 2 && v <= 72 {
+			m.Size = float64(v)
+		}
+	}
+	if f, ok := x.styleFill("dataPointMarker", auto); ok {
+		m.Fill = f
+	}
+	if l, ok := x.styleLine("dataPointMarker", auto); ok {
+		m.Border = l
+		if l == nil {
+			m.Border = &chart.Stroke{None: true}
+		}
+	}
+	return m
 }

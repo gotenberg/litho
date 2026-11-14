@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
@@ -245,5 +246,32 @@ func TestChartExFromElement_Waterfall(t *testing.T) {
 	c = readChartEx(t, series(`<cx:layoutPr><cx:visibility connectorLines="0"/></cx:layoutPr>`), nil)
 	if c.Groups[0].Series[0].Connector != nil {
 		t.Errorf("connector %+v, want none when the series hides them", c.Groups[0].Series[0].Connector)
+	}
+}
+
+func TestChartExFromElement_BoxWhisker(t *testing.T) {
+	region := `<cx:series layoutId="boxWhisker"><cx:dataId val="0"/><cx:layoutPr><cx:visibility meanLine="1" meanMarker="0" nonoutliers="1" outliers="0"/><cx:statistics quartileMethod="exclusive"/></cx:layoutPr></cx:series>`
+	xml := chartExXML(cxData("0", "Sheet1!$B$2:$B$4", []string{"a", "a", "b"}, "4", "5", "7"), `<cx:plotArea><cx:plotAreaRegion>`+region+`</cx:plotAreaRegion>`+cxAxes+`</cx:plotArea>`)
+	c := readChartEx(t, xml, nil)
+	g := c.Groups[0]
+	if g.Kind != chart.BoxWhisker || c.Notice != nil {
+		t.Fatalf("group %+v, notice %v: want boxes without a notice", g, c.Notice)
+	}
+	b := g.Series[0].Box
+	if b == nil || !b.Exclusive || b.Mean || !b.MeanLine || b.Outliers || !b.Inner {
+		t.Errorf("box %+v, want the file's method and visibilities", b)
+	}
+	if b.Line == nil || b.Line.Width != 0.75 || b.Line.Color != typeset.Black {
+		t.Errorf("box line %+v, want a 0.75 pt black line without a chart style", b.Line)
+	}
+	// With a chart style whose data points are outlined in their colour,
+	// the lines take that colour at 0.8 of each channel.
+	ph := `<cs:lnRef idx="0"><cs:styleClr val="auto"/></cs:lnRef><cs:fillRef idx="0"><cs:styleClr val="auto"/></cs:fillRef><cs:effectRef idx="0"/><cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>` +
+		`<cs:spPr><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:ln w="9525"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></cs:spPr>`
+	c = readStyledChartEx(t, xml, cxStyleXML("dataPoint", ph), cxColorStyle)
+	s := c.Groups[0].Series[0]
+	want := typeset.Color{R: 0.8, A: 1}
+	if s.Box.Line == nil || math.Abs(s.Box.Line.Color.R-want.R) > 1e-9 || s.Border == nil || s.Border.Color != s.Box.Line.Color {
+		t.Errorf("line %+v, outline %+v: want both 0.8 of the series' red", s.Box.Line, s.Border)
 	}
 }
