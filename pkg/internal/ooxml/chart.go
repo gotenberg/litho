@@ -12,7 +12,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/detmath"
-	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -1202,8 +1201,9 @@ func textOf(e *Element) string {
 }
 
 // unnamedSeries returns the name Office gives a series whose file names it
-// not (no c:tx, ECMA-376 Part 1, 21.2.2.215): "Series" and its index plus
-// one, whatever its values' range.
+// not (no c:tx, ECMA-376 Part 1, 21.2.2.215; no cx:tx, MS-ODRAWXML,
+// 2.24.3.82 CT_Series): "Series" and its index plus one, whatever its
+// values' range.
 //
 // # Corpus evidence
 //
@@ -1211,54 +1211,10 @@ func textOf(e *Element) string {
 //     whose legend lists a series without c:tx, Excel prints "Series1",
 //     "Series2" and on; none prints a name after the range, such as
 //     "Column B" for chart-area-style-border's series over $B$1:$B$4.
+//   - libreoffice/xlsx: Excel's legend of clusteredColumn.xlsx, an
+//     Office 2016 chart whose series has no cx:tx, reads "Series1".
 func unnamedSeries(index int) string {
 	return "Series" + strconv.Itoa(index+1)
-}
-
-// rangeName returns the name a spreadsheet gives a series without one,
-// after its values' range: "Column B" for a range down one column, "Row 3"
-// for a range across one row, "" for another reference (LibreOffice
-// Calc's ScChart2DataSequence::generateLabel).
-func rangeName(ref string) string {
-	ref = strings.ReplaceAll(ref, "$", "")
-	from, to, isRange := strings.Cut(ref, ":")
-	if i := strings.LastIndexByte(from, '!'); i >= 0 {
-		from = from[i+1:]
-	}
-	c1, r1, ok := splitCell(from)
-	if !ok {
-		return ""
-	}
-	c2, r2 := c1, r1
-	if isRange {
-		if c2, r2, ok = splitCell(to); !ok {
-			return ""
-		}
-	}
-	if r1 == r2 && c1 != c2 {
-		return "Row " + strconv.Itoa(r1)
-	}
-	return "Column " + c1
-}
-
-// splitCell splits an A1 cell reference into its column letters and its
-// row number.
-func splitCell(s string) (string, int, bool) {
-	i := 0
-	for i < len(s) && s[i] >= 'A' && s[i] <= 'Z' {
-		i++
-	}
-	if i == 0 || i > 3 {
-		return "", 0, false
-	}
-	// A row index is an xsd:unsignedInt (ECMA-376 Part 1, 18.3.1.73), and
-	// one past 2^31 - 1 names no row a sheet holds: it reads as no cell on
-	// every platform.
-	row, err := intconv.Atoi32(s[i:])
-	if err != nil || row < 1 {
-		return "", 0, false
-	}
-	return s[:i], row, true
 }
 
 // date1904Shift is the days a chart of a 1904 workbook adds to its date

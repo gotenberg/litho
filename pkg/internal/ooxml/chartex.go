@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
@@ -230,11 +229,8 @@ func (x *chartExReader) read(root *Element) {
 	}
 	x.readTitle(cxChild(ch, "title"))
 	for _, s := range g.Series {
-		if s.Name == "" && !x.impress {
-			s.Name = rangeName(s.Values.Ref)
-		}
 		if s.Name == "" {
-			s.Name = "Series" + strconv.Itoa(s.Index+1)
+			s.Name = unnamedSeries(s.Index)
 		}
 	}
 	if lg := cxChild(ch, "legend"); lg != nil {

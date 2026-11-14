@@ -375,23 +375,6 @@ func TestChartFromElement_UnnamedSeries(t *testing.T) {
 	}
 }
 
-func TestRangeName(t *testing.T) {
-	for ref, want := range map[string]string{
-		"Sheet1!$B$6:$B$16":      "Column B",
-		"'My sheet'!$D$7:$I$7":   "Row 7",
-		"Sheet1!$F$7":            "Column F",
-		"Sheet1!$AA$2:$AB$9":     "Column AA",
-		"":                       "",
-		"Sheet1!$B$2:$B$x":       "",
-		"[1]Sheet1!$C$1:$E$1":    "Row 1",
-		"(Sheet1!$A$1,Sheet1!B)": "",
-	} {
-		if got := rangeName(ref); got != want {
-			t.Errorf("rangeName(%q) = %q, want %q", ref, got, want)
-		}
-	}
-}
-
 func TestChartFromElement_AxisLabelBreaks(t *testing.T) {
 	tests := []struct {
 		name             string

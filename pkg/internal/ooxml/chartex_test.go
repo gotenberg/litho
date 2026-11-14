@@ -73,8 +73,8 @@ func TestChartExFromElement_Unsupported(t *testing.T) {
 	if s := g.Series[0]; s.Name != "Stages" || s.Values.Len() != 3 || s.Categories.Len() != 3 || s.Categories.Values[1].Text != "b" {
 		t.Errorf("first series = %+v", s)
 	}
-	if s := g.Series[1]; s.Name != "Column C" {
-		t.Errorf("second series named %q, want its range's name", s.Name)
+	if s := g.Series[1]; s.Name != "Series2" {
+		t.Errorf("second series named %q, want Series2, as Office names it", s.Name)
 	}
 	if c.Notice == nil || c.Notice.Text != NoticeUnsupported || c.Notice.Style.Families[0] != "Liberation Serif" || c.Notice.Style.Size != 10 {
 		t.Errorf("notice = %+v", c.Notice)
@@ -111,7 +111,7 @@ func TestChartExFromElement_Histogram(t *testing.T) {
 		t.Errorf("group = %+v, notice %v: want bars without a notice", g, c.Notice)
 	}
 	s := g.Series[0]
-	if s.Bins == nil || s.Bins.Width != 2.5 || s.Values.Ref != "Sheet1!$A$1:$A$5" || s.Name != "Column A" {
+	if s.Bins == nil || s.Bins.Width != 2.5 || s.Values.Ref != "Sheet1!$A$1:$A$5" || s.Name != "Series1" {
 		t.Errorf("series = %+v, want bins 2.5 wide over the defined name's range", s)
 	}
 	if !c.Axes[0].BetweenCategories || c.Axes[1].MajorGrid == nil {
