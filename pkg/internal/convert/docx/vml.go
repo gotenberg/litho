@@ -219,14 +219,17 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 		}
 	}
 	geom := d.vmlGeometry(k)
+	g := &shape.Geometry{Preset: geom}
 	if geom == "" {
+		g = d.vmlCustom(k)
+	}
+	if g == nil {
 		d.warn(warn.ContentUnsupported, warn.Omitted, "a VML shape of a custom geometry is left out")
 		if !inLine || w <= 0 && h <= 0 {
 			return nil
 		}
 		return box(st, w, h)
 	}
-	g := &shape.Geometry{Preset: geom}
 	d.checkGeometry(g)
 	n := vectorShape(st, g, ss, w, h)
 	setTransform(n.Style, vmlRotation(vs), strings.Contains(vs["flip"], "x"), strings.Contains(vs["flip"], "y"))
@@ -282,6 +285,32 @@ func (d *document) vmlGeometry(k *ooxml.Element) string {
 	}
 	p, _ := ooxml.VMLPreset(spt)
 	return p
+}
+
+// vmlCustom returns the geometry a v:shape spells out with its own path
+// or its shape type's, its formulas and adjustments (ECMA-376 Part 4,
+// 14.1.2.19 path, 14.1.2.6 formulas), nil for a shape of no path or one
+// that draws a text path; what the path's grammar refuses is warned of.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx: ooxmlexport/FDO74774.docx prints its chart markers,
+//     freeforms of relative curves (v) and lines, where Word draws them;
+//     ooxmlimport/ink.docx prints its ink strokes, open curves unfilled
+//     by filled="f"; ooxmlimport/tdf105127.docx its freeform triangle.
+func (d *document) vmlCustom(k *ooxml.Element) *shape.Geometry {
+	if !k.Is(ooxml.NSV, "shape") {
+		return nil
+	}
+	src, ok := ooxml.VMLPath(k, d.vmlTypeOf(k))
+	if !ok {
+		return nil
+	}
+	c, problems := shape.VML(src)
+	if len(problems) > 0 {
+		d.warn(warn.ContentUnsupported, warn.Approximated, "a VML shape's path is drawn in part: "+strings.Join(problems, "; "))
+	}
+	return &shape.Geometry{Custom: c}
 }
 
 // vmlType returns the shape type number of a v:shape: its own o:spt, else

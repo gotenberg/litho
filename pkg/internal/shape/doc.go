@@ -4,7 +4,9 @@
 // OpenDocument's enhanced geometry (ODF 1.3 Part 3, 19.145 draw:type), with
 // its adjustment values, or a custom geometry of guide formulas and path
 // commands (20.1.9.8 custGeom; ODF draw:enhanced-geometry with its
-// draw:equation and draw:enhanced-path), fitted to a shape's box. A
+// draw:equation and draw:enhanced-path; a VML shape's path, formulas and
+// adjustments, ECMA-376 Part 4, 14.1.2.19, through [VML]), fitted to a
+// shape's box. A
 // [Geometry] is what a reader hands over; [Paths] returns the outlines to
 // fill and stroke and [TextRect] the box the shape's text is laid out in.
 //

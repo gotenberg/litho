@@ -54,8 +54,15 @@ func TestVML_Shapes(t *testing.T) {
 	if rr := paras[2].Children[0].Style; rr.Float == css.FloatNone || !rr.WordAnchor.Set || !near(css.Pts(rr.WordAnchor.X), 468-30) {
 		t.Errorf("square-wrapped shape floats %v at %+v", rr.Float, rr.WordAnchor)
 	}
-	if kids := paras[4].Children; len(kids) != 2 || kids[0].Style.Position != css.Static || !near(kids[0].Style.Height, 40) {
-		t.Errorf("custom shapes: %d boxes, want the room of the one in the line", len(kids)-1)
+	// Both shapes of their own path (ECMA-376 Part 4, 14.1.2.19 path) are
+	// drawn: the floating one placed, the other in the line.
+	if kids := paras[4].Children; len(kids) != 3 || kids[0].Style.Position != css.Absolute || kids[1].Kind != layout.Replaced || !near(kids[1].Style.Height, 40) {
+		t.Errorf("custom shapes: %d boxes", len(kids)-1)
+	} else if frags := kids[1].Picture.Vector(t.Context(), typeset.Rect{Width: 30, Height: 40}); len(frags) == 0 {
+		t.Error("a shape of its own path paints nothing")
+	}
+	if len(b.d.warnings) > 0 {
+		t.Errorf("warnings %+v", b.d.warnings)
 	}
 	if contains(textOf(b.root), "HIDDEN") {
 		t.Error("a hidden shape is drawn")
