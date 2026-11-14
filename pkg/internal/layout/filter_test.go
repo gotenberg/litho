@@ -262,3 +262,24 @@ func TestFilter_ReducedGridOnWholePixels(t *testing.T) {
 		t.Errorf("image %d pixels wide, want 2 a CSS pixel over the region", w)
 	}
 }
+
+// TestFilter_InlineInColumns locks that a filtered inline in a column
+// past the first is filtered whole: the column cut moves the column's
+// content to its place on the page, so the filter does not cut what lies
+// past the page's height in the column flow as content in flow
+// coordinates.
+func TestFilter_InlineInColumns(t *testing.T) {
+	cols := sty(width(100), height(20), func(s *css.Style) {
+		s.Columns.Count = 2
+		s.ColumnGap = css.Pts(0)
+	})
+	span := inlineSty(fg(blue), filters(css.Filter{Kind: css.FilterGrayscale, Amount: 1}))
+	res := run(t, doc(el(cols, txt(cols, "aaaa aaaa "), el(span, txt(span, "bbbb bbbb")))), page(120, 30))
+	img := render(t, res, 1)
+	// Grayscale weighs blue by 0.0722 (Filter Effects 1, 13.1).
+	for _, p := range [][2]int{{70, 5}, {70, 15}} {
+		if c := at(img, p[0], p[1]); c.R != c.G || c.G != c.B || c.R > 30 {
+			t.Errorf("filtered blue at %v: %v, want a grey of 18", p, c)
+		}
+	}
+}

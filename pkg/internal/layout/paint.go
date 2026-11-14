@@ -898,10 +898,12 @@ func (p *painter) unit(b *box, own bool) {
 }
 
 // inFlow reports that no open group moves its content off flow
-// coordinates: none is transformed or fixed.
+// coordinates: none is transformed or fixed, and no column set paints it
+// in its column flow, which the column cut moves to the columns'
+// places, each on one page ([engine.cutColumns]).
 func (p *painter) inFlow() bool {
 	for _, f := range p.frames {
-		if fx := f.container.effects(); fx.transform != nil || fx.fixed {
+		if fx := f.container.effects(); fx.transform != nil || fx.fixed || f.columns {
 			return false
 		}
 	}
