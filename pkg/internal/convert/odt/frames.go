@@ -834,9 +834,17 @@ func (b *builder) frame(c *odf.Element, g frameGeom, depth int) *layout.Node {
 				applyChain(n.Style, l)
 			}
 			return n
-		case k.Is(odf.NSDraw, "object"), k.Is(odf.NSDraw, "object-ole"):
+		case k.Is(odf.NSDraw, "object"):
+			if n, ok := b.formula(k, g, alt); ok {
+				if n == nil {
+					continue
+				}
+				return n
+			}
 			// The replacement picture, a draw:image after the object, is
 			// tried next.
+			b.warn("object", warn.ContentUnsupported, warn.Approximated, "embedded objects are drawn as their replacement picture")
+		case k.Is(odf.NSDraw, "object-ole"):
 			b.warn("object", warn.ContentUnsupported, warn.Approximated, "embedded objects are drawn as their replacement picture")
 		}
 	}

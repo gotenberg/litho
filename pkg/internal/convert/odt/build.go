@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/formfield"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/formula"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
@@ -82,6 +83,8 @@ type builder struct {
 	lists *listState
 	notes *noteState
 	pics  map[string]picResult
+	// formulas lays the document's formulas out, made at the first.
+	formulas *formula.Setter
 	// pageOrigin is the first page body's top-left corner on its page,
 	// which the offsets of a header's or footer's page-relative frames
 	// are moved by.
