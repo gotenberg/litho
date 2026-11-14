@@ -99,6 +99,35 @@ func TestMulticol_Spanner(t *testing.T) {
 		KKKKK
 		GG_GG
 		_____`)
+	// The height is a content height: the borders of the pieces take
+	// none of it (CSS 2.1, 10.5).
+	edge := func(s *css.Style) {
+		s.Border[css.Top] = css.Border{Width: px(1), Style: css.Solid, Color: blue}
+		s.Border[css.Bottom] = s.Border[css.Top]
+	}
+	rb := boxes(t, doc(el(sty(columns(2, 1)), el(sty(height(4), bg(lime), edge), strip(red), strip(red), strip(black, span)))), page(5, 6))
+	sum := 0.0
+	var walk func(b *box)
+	walk = func(b *box) {
+		if b.st.BackgroundColor == lime {
+			sum += b.h
+		}
+		if b.mc == nil {
+			for _, k := range b.kids {
+				walk(k)
+			}
+			return
+		}
+		for _, set := range b.mc.sets {
+			for _, k := range set.kids {
+				walk(k)
+			}
+		}
+	}
+	walk(rb)
+	if !near(sum, px(4)) {
+		t.Errorf("pieces' content heights sum to %vpx, want 4px", sum/px(1))
+	}
 }
 
 func TestMulticol_ForcedBreak(t *testing.T) {

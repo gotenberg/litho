@@ -1339,8 +1339,16 @@ func splitBlock(w *box, depth int, pieces map[*box]*spanPiece) []*box {
 
 // sizePieces sets the heights of the pieces among kids, about to be laid
 // out: a piece of a block of specified height takes what the pieces
-// before it left of it, at most when another follows, exactly when it is
-// the last.
+// before it left of its content height, at most when another follows,
+// exactly when it is the last. The borders and padding of a piece take
+// none of it: the height is the block's content height (CSS 2.1, 10.5).
+//
+// # Corpus evidence
+//
+//   - wpt, css/css-multicol/multicol-span-all-children-height-006.html:
+//     Chromium ends a 250px block with 20px borders that a spanner splits
+//     after 200px of content 50px below the spanner, before its bottom
+//     border.
 func sizePieces(kids []*box, pieces map[*box]*spanPiece, cb cblock) {
 	for _, k := range kids {
 		pc := pieces[k]
@@ -1352,7 +1360,7 @@ func sizePieces(kids []*box, pieces map[*box]*spanPiece, cb cblock) {
 			continue
 		}
 		for _, p := range pc.prev {
-			h -= p.borderH()
+			h -= p.h
 		}
 		h = max(h, 0)
 		if pc.last {
