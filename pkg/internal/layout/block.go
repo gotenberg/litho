@@ -795,7 +795,9 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		kh, kDefinite = cb.h, cb.hDefinite
 	}
 	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: kh, hDefinite: kDefinite}, cb)
+	cloned := e.enterClone(b, b.y, hSet)
 	end := formatterFor(b).layout(e, b, kcb, bc, start, inner)
+	e.leaveClone(cloned, end)
 	end = e.trimTextBox(b, end, nil)
 	marker := e.markerExtent(b)
 	// The last child's bottom margin adjoins b's when b's height is auto
@@ -1078,7 +1080,9 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 	mc := &marginState{kept: true, trimStart: trim&css.TrimBlockStart != 0}
 	kcb := wrapperCB(b, cblock{x: b.contentX(), w: b.w, h: usedSpecH(b, specH, hSet, cb), hDefinite: hSet}, cb)
 	saved := e.enterClamp(b, cb, b.contentY())
+	cloned := e.enterClone(b, b.y, hSet)
 	end := formatterFor(b).layout(e, b, kcb, own, b.contentY(), mc)
+	e.leaveClone(cloned, end)
 	e.leaveClamp(saved)
 	end = e.trimTextBox(b, end, own)
 	if marker := e.markerExtent(b); marker > 0 {
@@ -1865,7 +1869,7 @@ func (d *mcolData) place(b *box, y float64) float64 {
 	for _, s := range d.sets {
 		for _, f := range s.frags {
 			if rel >= f.vtop-eps && rel < f.end()-eps && f.row < len(s.rows) {
-				return b.y + s.rows[f.row].top + rel - f.vtop
+				return b.y + s.rows[f.row].top + f.lead + rel - f.vtop
 			}
 		}
 	}

@@ -109,16 +109,23 @@ type colSet struct {
 // height, the row it sits in and its index in the row. over is the column
 // flow the slice holds past the column's height: a monolithic piece taller
 // than what the column has left from its top, which overflows the column
-// ([colCtx.overflow]).
+// ([colCtx.overflow]). lead and tail are the room the cloned edges of
+// the boxes crossing the column take at its top and at its end, which
+// holds no column flow ([engine.enterClone]).
 type colFrag struct {
-	vtop, h  float64
-	over     float64
-	row, col int
+	vtop, h    float64
+	over       float64
+	lead, tail float64
+	row, col   int
 }
+
+// room returns the column flow the slice of f holds below its column's
+// lead and above its tail, its overflow aside.
+func (f colFrag) room() float64 { return max(f.h-f.lead-f.tail, 0) }
 
 // end returns the column flow position the slice of f ends at, where the
 // next column's starts.
-func (f colFrag) end() float64 { return f.vtop + f.h + f.over }
+func (f colFrag) end() float64 { return f.vtop + f.room() + f.over }
 
 // colRow is a row of columns: its top, its columns' height, the height
 // it takes in the container, how many columns hold content, and whether a
@@ -274,7 +281,7 @@ func (c *colCtx) newRow(top float64) {
 		vtop = c.frags[n-1].end()
 	}
 	c.rows = append(c.rows, colRow{top: top, h: h, next: next, first: len(c.frags)})
-	c.frags = append(c.frags, colFrag{vtop: vtop, h: h, row: r})
+	c.frags = append(c.frags, c.cloned(colFrag{vtop: vtop, h: h, row: r}))
 }
 
 // grow appends the next column, reporting false past [maxColumns].
@@ -290,7 +297,7 @@ func (c *colCtx) grow() bool {
 	last := c.frags[n-1]
 	row := c.rows[last.row]
 	if (last.col+1 < c.target() && (row.stop == 0 || last.col+1 < row.stop)) || !row.next {
-		c.frags = append(c.frags, colFrag{vtop: last.end(), h: last.h, row: last.row, col: last.col + 1})
+		c.frags = append(c.frags, c.cloned(colFrag{vtop: last.end(), h: last.h, row: last.row, col: last.col + 1}))
 		return true
 	}
 	top := row.top + row.h + c.gap
@@ -376,7 +383,7 @@ func (c *colCtx) height(i int) float64 {
 	if len(c.frags) == 0 {
 		return minColumnHeight
 	}
-	return c.frags[min(max(i, 0), len(c.frags)-1)].h
+	return c.frags[min(max(i, 0), len(c.frags)-1)].room()
 }
 
 // overflow records that a monolithic piece whose top is at y ends at
@@ -411,7 +418,7 @@ func (c *colCtx) overflow(y, bottom float64) {
 	if bottom <= f.end()+eps {
 		return
 	}
-	f.over = bottom - f.vtop - f.h
+	f.over = bottom - f.vtop - f.room()
 	row := f.row
 	c.frags = c.frags[:i+1]
 	c.rows = c.rows[:row+1]
@@ -425,7 +432,7 @@ func (c *colCtx) reach(y float64) {
 		return
 	}
 	f := c.frags[i]
-	oy := c.rows[f.row].top + min(max(y-f.vtop, 0), f.h)
+	oy := c.rows[f.row].top + f.lead + min(max(y-f.vtop, 0), f.room())
 	c.outer(func() { c.e.reach(oy) })
 }
 
@@ -845,7 +852,8 @@ func (c *colCtx) consumed(b *box, kids []*box, end float64, abs bool) []float64 
 	out := make([]float64, len(c.frags))
 	add := func(i int, bottom float64) {
 		if i >= 0 && i < len(out) {
-			out[i] = max(out[i], bottom-c.frags[i].vtop)
+			f := c.frags[i]
+			out[i] = max(out[i], bottom-f.vtop+f.lead+f.tail)
 		}
 	}
 	lines := func(k *box) {
@@ -876,9 +884,9 @@ func (c *colCtx) consumed(b *box, kids []*box, end float64, abs bool) []float64 
 			// through.
 			top, bot := k.y, k.y+k.borderH()
 			for i := c.index(top + eps); i < len(out) && c.frags[i].vtop < bot-eps; i++ {
-				add(i, min(bot, c.frags[i].vtop+c.frags[i].h))
+				add(i, min(bot, c.frags[i].vtop+c.frags[i].room()))
 			}
-			if last := len(c.frags) - 1; last >= 0 && bot > c.frags[last].vtop+c.frags[last].h+eps {
+			if last := len(c.frags) - 1; last >= 0 && bot > c.frags[last].vtop+c.frags[last].room()+eps {
 				// Past the last column the box overflows the row.
 				add(last, bot)
 			}
@@ -1075,7 +1083,7 @@ func columnTracks(tracks []css.ColumnTrack, u float64) (xs, ws, gaps []float64) 
 func (d *mcolData) shiftOf(s *colSet, i int) (float64, float64) {
 	f := s.frags[min(max(i, 0), len(s.frags)-1)]
 	r := s.rows[min(f.row, len(s.rows)-1)]
-	return d.columnX(f.col), r.top - f.vtop
+	return d.columnX(f.col), r.top + f.lead - f.vtop
 }
 
 // fragOf returns the column of s the column flow position y of the

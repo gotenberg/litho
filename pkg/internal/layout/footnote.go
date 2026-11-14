@@ -574,8 +574,8 @@ func (e *engine) inPages(top, bottom float64, f func(top, bottom float64)) {
 		return
 	}
 	r := c.rows[fr.row]
-	ot := r.top + min(max(top-fr.vtop, 0), fr.h)
-	ob := r.top + min(max(bottom-fr.vtop, 0), fr.h)
+	ot := r.top + fr.lead + min(max(top-fr.vtop, 0), fr.room())
+	ob := r.top + fr.lead + min(max(bottom-fr.vtop, 0), fr.room())
 	c.outer(func() {
 		if e.paginating() {
 			f(ot, ob)

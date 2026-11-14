@@ -53,3 +53,100 @@ func (p *painter) pageFragments(r typeset.Rect) []typeset.Rect {
 // sliced box, and a paragraph crossing ten thousand pages is no document
 // a reader prints.
 const maxCloneFragments = 10_000
+
+// cloneClip is the room the cloned edges of a box laid out in the column
+// set cols take: bottom at the end of each column from first on, top at
+// the start of each column after first.
+type cloneClip struct {
+	cols        *colCtx
+	first       int
+	top, bottom float64
+}
+
+// enterClone makes the content of the block b, whose border box starts at
+// y, leave room in each column it crosses for b's bottom padding and
+// border at the column's end, and start below b's top border and padding
+// in each column after its first: under box-decoration-break: clone each
+// fragment holds them whole (CSS Fragmentation 3, 5.4). The margins are
+// not cloned: they are truncated at the break (5.2), as Chromium lays the
+// box out. It reports whether it made room, which [engine.leaveClone]
+// gives back. A box of a specified height grows instead
+// ([engine.cloneEdges]); pages slice the box, as Chromium prints it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) lays a cloned
+//     box of 10px margins, 10px padding and 5px borders holding 100px in
+//     100px columns as fragments of 100 and 70px, the first below its top
+//     margin, the second at its column's top; one of 180px content and no
+//     margins as fragments of 100, 100 and 70px.
+func (e *engine) enterClone(b *box, y float64, hSet bool) bool {
+	c := e.cols
+	if hSet || !clones(b.st) || !e.paginating() || c == nil {
+		return false
+	}
+	top, bottom := b.bd[css.Top]+b.pd[css.Top], b.bd[css.Bottom]+b.pd[css.Bottom]
+	if top <= 0 && bottom <= 0 {
+		return false
+	}
+	first := c.of(y + eps)
+	e.clips = append(e.clips, cloneClip{cols: c, first: first, top: top, bottom: bottom})
+	for k := first; k < len(c.frags); k++ {
+		f := &c.frags[k]
+		f.tail += bottom
+		if k > first {
+			f.lead += top
+		}
+	}
+	c.reflow(first)
+	return true
+}
+
+// leaveClone gives back the room [engine.enterClone] made, entered, for
+// the block whose content ends at y: the column y lies in keeps its lead
+// and ends at its full height, where the block's own bottom edges follow
+// its content; the columns after it lose both.
+func (e *engine) leaveClone(entered bool, y float64) {
+	if !entered {
+		return
+	}
+	cl := e.clips[len(e.clips)-1]
+	e.clips = e.clips[:len(e.clips)-1]
+	c := cl.cols
+	if len(c.frags) == 0 {
+		return
+	}
+	last := max(c.index(y-eps), cl.first)
+	for k := last; k < len(c.frags); k++ {
+		f := &c.frags[k]
+		f.tail = max(f.tail-cl.bottom, 0)
+		if k > last {
+			f.lead = max(f.lead-cl.top, 0)
+		}
+	}
+	c.reflow(last)
+}
+
+// cloned returns the column f with the room the cloned edges of the boxes
+// being laid out in c take in it.
+func (c *colCtx) cloned(f colFrag) colFrag {
+	i := len(c.frags)
+	for _, cl := range c.e.clips {
+		if cl.cols != c {
+			continue
+		}
+		f.tail += cl.bottom
+		if i > cl.first {
+			f.lead += cl.top
+		}
+	}
+	return f
+}
+
+// reflow moves the slices of the columns after column i to follow the
+// slice before each, once the room of the cloned edges changed.
+func (c *colCtx) reflow(i int) {
+	for k := max(i, 0) + 1; k < len(c.frags); k++ {
+		c.frags[k].vtop = c.frags[k-1].end()
+	}
+}

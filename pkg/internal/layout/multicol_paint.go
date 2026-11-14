@@ -135,10 +135,59 @@ func outsideOf(a, b *box) bool {
 }
 
 // piece is a display item cut for one column, and whether it reaches past
-// the column's slice, which then clips it.
+// the column's slice, which then clips it. up and down are how far the
+// clip reaches over the room the column keeps at its top and its end for
+// the cloned edges of the boxes inside the item's box ([clonedSpans]).
 type piece struct {
-	it   *ditem
-	clip bool
+	it       *ditem
+	clip     bool
+	up, down float64
+}
+
+// clonedSpan is the column flow extent of a box whose cloned edges take
+// room in the columns it crosses ([engine.enterClone]), and those edges.
+type clonedSpan struct {
+	y0, y1      float64
+	top, bottom float64
+}
+
+// clonedSpans returns the boxes among kids and their descendants whose
+// cloned edges take room in the columns they cross.
+func clonedSpans(kids []*box, out []clonedSpan, depth int) []clonedSpan {
+	if depth > maxTreeDepth {
+		return out
+	}
+	for _, k := range kids {
+		if !k.laidOut || k.abs || k.fixed || k.kind != kindBlock || k.mc != nil {
+			continue
+		}
+		if clones(k.st) && k.st.Height.Kind == css.Auto && vEdges(k) > 0 {
+			out = append(out, clonedSpan{y0: k.y, y1: k.y + k.borderH(), top: k.bd[css.Top] + k.pd[css.Top], bottom: k.bd[css.Bottom] + k.pd[css.Bottom]})
+		}
+		out = clonedSpans(k.kids, out, depth+1)
+	}
+	return out
+}
+
+// cloneReach returns how far a slice of an item whose column flow extent is
+// y0 to y1, cut at the column flow position at, fills the room the cut
+// keeps for cloned edges: that of the cloned boxes the cut crosses which
+// lie inside the item, whose top is not above y0, nor their bottom below
+// y1. The item is then the background of a box around them, which fills
+// its column, and not content inside them.
+func cloneReach(spans []clonedSpan, at, y0, y1 float64, top bool) float64 {
+	r := 0.0
+	for _, c := range spans {
+		if c.y0 >= at-eps || c.y1 <= at+eps || c.y0 < y0-eps || c.y1 > y1+eps {
+			continue
+		}
+		if top {
+			r += c.top
+		} else {
+			r += c.bottom
+		}
+	}
+	return r
 }
 
 // cutColumns cuts the display list g of the column set s of b, painted in
@@ -150,7 +199,7 @@ func (e *engine) cutColumns(g *ditem, b *box, s *colSet, oy float64) []*ditem {
 	if len(s.frags) == 0 {
 		return g.kids
 	}
-	per, pass := e.cutItem(g, b, s, oy, 0)
+	per, pass := e.cutItem(g, b, s, oy, clonedSpans(s.kids, nil, 0), 0)
 	var out []*ditem
 	for _, i := range slices.Sorted(maps.Keys(per)) {
 		items := per[i]
@@ -170,7 +219,7 @@ func (e *engine) cutColumns(g *ditem, b *box, s *colSet, oy float64) []*ditem {
 		band := &typeset.Path{Ops: rectOps(typeset.Rect{X: -farEdge, Y: y0, Width: 2 * farEdge, Height: y1 - y0}), Fill: &typeset.Fill{}}
 		for j := 0; j < len(items); {
 			k := j + 1
-			for k < len(items) && items[k].clip == items[j].clip {
+			for k < len(items) && items[k].clip == items[j].clip && items[k].up == items[j].up && items[k].down == items[j].down {
 				k++
 			}
 			run := make([]*ditem, 0, k-j)
@@ -179,7 +228,11 @@ func (e *engine) cutColumns(g *ditem, b *box, s *colSet, oy float64) []*ditem {
 			}
 			moved := &ditem{group: true, kids: run, fx: &groupFx{opacity: 1, transform: m}}
 			if items[j].clip {
-				moved = &ditem{group: true, kids: []*ditem{moved}, fx: &groupFx{opacity: 1, clip: band}}
+				clip := band
+				if up, down := items[j].up, items[j].down; up > 0 || down > 0 {
+					clip = &typeset.Path{Ops: rectOps(typeset.Rect{X: -farEdge, Y: y0 - up, Width: 2 * farEdge, Height: y1 - y0 + up + down}), Fill: &typeset.Fill{}}
+				}
+				moved = &ditem{group: true, kids: []*ditem{moved}, fx: &groupFx{opacity: 1, clip: clip}}
 			}
 			out = append(out, moved)
 			j = k
@@ -213,7 +266,7 @@ func (s *colSet) band(b *box, i int) (float64, float64) {
 // rebuilt in each column they reach, and the fixed groups, which follow
 // no column. The extents of the items move to their column's place; oy is
 // the relative offset the container paints at.
-func (e *engine) cutItem(it *ditem, b *box, s *colSet, oy float64, depth int) (map[int][]piece, []*ditem) {
+func (e *engine) cutItem(it *ditem, b *box, s *colSet, oy float64, spans []clonedSpan, depth int) (map[int][]piece, []*ditem) {
 	out := map[int][]piece{}
 	var pass []*ditem
 	last := len(s.frags) - 1
@@ -234,17 +287,18 @@ func (e *engine) cutItem(it *ditem, b *box, s *colSet, oy float64, depth int) (m
 			if depth >= maxGroupDepth {
 				continue
 			}
-			sub, sp := e.cutItem(k, b, s, oy, depth+1)
+			sub, sp := e.cutItem(k, b, s, oy, spans, depth+1)
 			pass = append(pass, sp...)
 			for _, i := range slices.Sorted(maps.Keys(sub)) {
 				cp := *k
 				cp.kids, cp.page = nil, 0
-				clip := false
+				clip, up, down := false, 0.0, 0.0
 				for _, pc := range sub[i] {
 					cp.kids = append(cp.kids, pc.it)
 					clip = clip || pc.clip
+					up, down = max(up, pc.up), max(down, pc.down)
 				}
-				out[i] = append(out[i], piece{it: &cp, clip: clip})
+				out[i] = append(out[i], piece{it: &cp, clip: clip, up: up, down: down})
 			}
 			continue
 		}
@@ -274,7 +328,14 @@ func (e *engine) cutItem(it *ditem, b *box, s *colSet, oy float64, depth int) (m
 				leaf.frag = cloneFragment(k.frag)
 			}
 			leaf.y0, leaf.y1, leaf.page = max(k.y0, top)+dy, min(k.y1, bottom)+dy, -1
-			out[i] = append(out[i], piece{it: &leaf, clip: k.y0 < top-eps || k.y1 > bottom+eps})
+			pc := piece{it: &leaf, clip: k.y0 < top-eps || k.y1 > bottom+eps}
+			if len(spans) > 0 && i > i0 {
+				pc.up = cloneReach(spans, top-oy, k.y0-oy, k.y1-oy, true)
+			}
+			if len(spans) > 0 && i < i1 {
+				pc.down = cloneReach(spans, bottom-oy, k.y0-oy, k.y1-oy, false)
+			}
+			out[i] = append(out[i], pc)
 		}
 	}
 	return out, pass
@@ -422,6 +483,8 @@ func (p *painter) fragments(b *box) (frags []typeset.Rect, columns bool) {
 	}
 	var top func(i int) (float64, float64)
 	var at func(y float64) int
+	var frag func(i int) colFrag
+	var root *box
 	for _, f := range slices.Backward(p.frames) {
 		if !f.columns || f.set == nil || len(f.set.frags) == 0 {
 			continue
@@ -429,6 +492,8 @@ func (p *painter) fragments(b *box) (frags []typeset.Rect, columns bool) {
 		c, s := f.root, f.set
 		at = func(y float64) int { return s.fragOf(c, y) }
 		top = func(i int) (float64, float64) { return s.band(c, i) }
+		frag = func(i int) colFrag { return s.frags[min(max(i, 0), len(s.frags)-1)] }
+		root = c
 		break
 	}
 	if at == nil {
@@ -442,14 +507,37 @@ func (p *painter) fragments(b *box) (frags []typeset.Rect, columns bool) {
 		return []typeset.Rect{r}, false
 	}
 	out := make([]typeset.Rect, 0, i1-i0+1)
+	outerTop, outerBottom := outerClones(b, root)
 	for i := i0; i <= i1; i++ {
 		y0, y1 := top(i)
 		y0, y1 = max(y0+p.dy, r.Y), min(y1+p.dy, r.Y+r.Height)
+		// A fragment reaches over the room its column keeps for the
+		// cloned edges of b and of the boxes inside it, not over the
+		// room of the boxes around b ([engine.enterClone]).
+		if f := frag(i); i > i0 {
+			y0 -= max(f.lead-outerTop, 0)
+		}
+		if f := frag(i); i < i1 {
+			y1 += max(f.tail-outerBottom, 0)
+		}
 		if y1 > y0 {
 			out = append(out, typeset.Rect{X: r.X, Y: y0, Width: r.Width, Height: y1 - y0})
 		}
 	}
 	return out, true
+}
+
+// outerClones returns the top and bottom borders and padding of the
+// boxes between b and the multi-column container root whose cloned edges
+// take room in the columns they cross ([engine.enterClone]).
+func outerClones(b, root *box) (top, bottom float64) {
+	for a, n := b.parent, 0; a != nil && a != root && n < maxTreeDepth; a, n = a.parent, n+1 {
+		if clones(a.st) && a.st.Height.Kind == css.Auto {
+			top += a.bd[css.Top] + a.pd[css.Top]
+			bottom += a.bd[css.Bottom] + a.pd[css.Bottom]
+		}
+	}
+	return top, bottom
 }
 
 // paintWhole paints one column fragment of box b, whose decorations clone,

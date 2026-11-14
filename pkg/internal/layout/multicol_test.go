@@ -254,6 +254,40 @@ func TestMulticol_CloneFillsItsColumns(t *testing.T) {
 	}
 }
 
+// TestMulticol_CloneOfAutoHeightKeepsRoomForItsEdges locks that the
+// content of a cloned box of auto height leaves room at each column's end
+// for the box's bottom border, and starts below its top border in the
+// next column (CSS Fragmentation 3, 5.4), while the box around it fills
+// its columns: the 3px child of a box of 1px borders in columns 3px tall
+// takes 1px of each column.
+func TestMulticol_CloneOfAutoHeightKeepsRoomForItsEdges(t *testing.T) {
+	t.Parallel()
+	auto := func(s *css.Style) { s.Columns.Fill = css.FillAuto }
+	clone := func(s *css.Style) {
+		s.BoxDecorationBreak = css.DecorationClone
+		s.Border[css.Top] = css.Border{Width: px(1), Style: css.Solid, Color: red}
+		s.Border[css.Bottom] = css.Border{Width: px(1), Style: css.Solid, Color: red}
+	}
+	res := run(t, doc(el(sty(columns(3, 1), width(8), height(3), auto), el(sty(bg(lime)), el(sty(clone), el(sty(height(3), bg(blue))))))), page(8, 4))
+	assertPixels(t, res, 1, `
+		RR_RR_RR
+		BB_BB_BB
+		RR_RR_RR
+		________`)
+	// The box around a cloned box of padding alone fills the room its
+	// padding keeps in each column.
+	pad := func(s *css.Style) {
+		s.BoxDecorationBreak = css.DecorationClone
+		s.Padding = dims(1, 0, 1, 0)
+	}
+	res = run(t, doc(el(sty(columns(3, 1), width(8), height(3), auto), el(sty(bg(lime)), el(sty(pad), el(sty(height(3), bg(blue))))))), page(8, 4))
+	assertPixels(t, res, 1, `
+		GG_GG_GG
+		BB_BB_BB
+		GG_GG_GG
+		________`)
+}
+
 // TestMulticol_CloneOutlinesEachFragment locks that a box cloning its
 // decorations draws its outline round each column's fragment, whole past
 // the column's edges (CSS Fragmentation 3, 5.4).
