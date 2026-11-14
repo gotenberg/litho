@@ -287,3 +287,18 @@ func TestChartExFromElement_Funnel(t *testing.T) {
 		t.Errorf("axes %+v %+v, want the categories down the left and no value axis", x, y)
 	}
 }
+
+// TestChartExFromElement_HiddenSeries locks a hidden series out of the
+// chart.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: PowerPoint draws funnel-pp1's first series alone
+//     and lists it alone in the legend, its two others hidden.
+func TestChartExFromElement_HiddenSeries(t *testing.T) {
+	region := `<cx:series layoutId="funnel"><cx:dataId val="0"/></cx:series><cx:series layoutId="funnel" hidden="1"><cx:dataId val="0"/></cx:series>`
+	c := readChartEx(t, chartExXML(cxData("0", "", []string{"a", "b"}, "4", "2"), `<cx:plotArea><cx:plotAreaRegion>`+region+`</cx:plotAreaRegion></cx:plotArea>`), nil)
+	if n := len(c.Groups[0].Series); n != 1 {
+		t.Errorf("reads %d series, want the one shown", n)
+	}
+}

@@ -180,7 +180,9 @@ func (x *chartExReader) read(root *Element) {
 	c.PlotArea = x.frame(cxChild(pa, "spPr"), x.styleFrame("plotArea", x.autoFrame(false)))
 	var series []*Element
 	for _, s := range cxChild(pa, "plotAreaRegion").Kids() {
-		if s.Is(NSChartEx, "series") && len(series) < chart.MaxSeries {
+		// A hidden series is left out of the layout (MS-ODRAWXML,
+		// 2.24.3.82 CT_Series hidden).
+		if s.Is(NSChartEx, "series") && !boolAttr(s, "hidden") && len(series) < chart.MaxSeries {
 			series = append(series, s)
 		}
 	}
