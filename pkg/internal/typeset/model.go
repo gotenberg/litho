@@ -186,7 +186,9 @@ type Text struct {
 	// line laid out across the content of a group the page turns a
 	// quarter turn clockwise (CSS Writing Modes 4, 7.3), and its glyphs
 	// stand upright on the page (5.1). Each glyph is then placed by its
-	// own text matrix; Skew and HScale do not apply.
+	// own text matrix; Skew does not apply, and HScale narrows each glyph
+	// along its own width alone, X and Y placing it unscaled, as a
+	// combined run of CSS text-combine-upright asks (9.1).
 	Upright bool
 	// Palette, for a run whose face draws layered colour glyphs (OpenType,
 	// COLR and CPAL), fills each layer with the entry of its palette

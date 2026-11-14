@@ -347,13 +347,16 @@ func (p *pageWriter) textBounds(ctx context.Context, b *bounds, v *Text, t Matri
 	}
 	gy0, gy1 := float64(-size*gb[3]), float64(-size*gb[1])
 	if v.Upright {
-		// The text matrix [0 -size -size 0 x y] maps (gx, gy) to (x -
-		// size*gy, y - size*gx).
+		// The text matrix [0 -size -size 0 x y] maps (gx, gy), the
+		// horizontal scaling applied, to (x - size*gy, y - size*hs*gx).
 		gx0, gx1 = gy0, gy1
-		gy0, gy1 = float64(-size*gb[2]), float64(-size*gb[0])
+		gy0, gy1 = float64(-size*hs*gb[2]), float64(-size*hs*gb[0])
 	}
 	for _, g := range v.Glyphs {
 		x, y := v.Origin.X+float64(g.X*hs), v.Origin.Y+g.Y
+		if v.Upright {
+			x = v.Origin.X + g.X
+		}
 		b.box(t, x+gx0-half, y+gy0-half, x+gx1+half, y+gy1+half)
 	}
 	return true, nil

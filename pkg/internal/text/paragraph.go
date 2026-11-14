@@ -214,9 +214,11 @@ type shapedItem struct {
 	// stroke and skew synthesise the bold and italic the face lacks.
 	stroke, skew float64
 	object       bool
-	// upright reports glyphs shaped top to bottom, set upright in a
-	// vertical line ([Style.Orientation]).
+	// upright reports glyphs set upright in a vertical line
+	// ([Style.Orientation]); squeeze, in (0, 1), the scale that narrows
+	// the glyphs of a combined run, 0 for none.
 	upright bool
+	squeeze float64
 	// fullQuotes reports a face that draws “ one em wide, read when the
 	// item holds a CJK punctuation: its fullwidth punctuation takes a
 	// quotation mark next to it as fullwidth, whatever face draws the mark
@@ -567,6 +569,9 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 				out := st.kit.shaper.Shape(in)
 				rescale(&out, in.Size)
 				st.instanceAdvances(&out, in.Size)
+				if ss.style.Orientation == OrientCombine {
+					out = st.combineWidth(in, out)
+				}
 				st.collectMissing(&out, text)
 				if ss.word != 0 {
 					out.AddWordSpacing(text, ss.word)
@@ -695,6 +700,10 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 		if gid, ok := out.Face.NominalGlyph('“'); ok {
 			it.fullQuotes = fullwidthGlyph(float64(out.Face.HorizontalAdvance(gid)), float64(out.Face.Upem()))
 		}
+	}
+	if style.Orientation == OrientCombine {
+		p.combine(&it, style.Size)
+		return it, nil
 	}
 	if style.LetterSpacing != 0 {
 		// CSS Text 3, 7.2: the spacing goes after every typographic
@@ -890,6 +899,11 @@ func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int)
 	if hs != 1 {
 		t.HScale = hs
 	}
+	if it.squeeze > 0 && it.squeeze < 1 {
+		// An upright run's positions are its own: the scale narrows each
+		// glyph alone.
+		t.HScale, hs = it.squeeze, 1
+	}
 	// first and last bound the glyphs of the range, which the second pass
 	// alone visits.
 	drawn, first, last := 0, len(it.glyphs), -1
@@ -1046,7 +1060,7 @@ func shapesTogether(a, b Style) bool {
 		a.NoSpacingTrim == b.NoSpacingTrim && a.Size == b.Size && a.Lang == b.Lang &&
 		a.LetterSpacing == b.LetterSpacing && a.WordSpacing == b.WordSpacing && a.Scale == b.Scale &&
 		a.NoKerning == b.NoKerning && a.WordMetrics == b.WordMetrics && a.OfficeEmoji == b.OfficeEmoji &&
-		a.Orientation == b.Orientation && equalSettings(a.Settings, b.Settings)
+		a.Orientation == b.Orientation && a.Orientation != OrientCombine && equalSettings(a.Settings, b.Settings)
 }
 
 // splitByRun cuts out into one output per run of its characters, each

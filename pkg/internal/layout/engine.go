@@ -503,14 +503,19 @@ func (e *engine) textStyle(st *css.Style, lang string) text.Style {
 }
 
 // orientation returns how the text of st stands in its line: in
-// vertical-rl and vertical-lr, by text-orientation (CSS Writing Modes 4,
-// 5.1); in the sideways and horizontal writing modes, every character
+// vertical-rl and vertical-lr, by text-combine-upright and
+// text-orientation (CSS Writing Modes 4, 9.1 and 5.1); in the sideways and horizontal writing modes, every character
 // as in a horizontal line. The Office converters draw vertical text
 // sideways, so the orientation applies under [Options.BrowserRules]
 // alone.
 func (e *engine) orientation(st *css.Style) text.Orientation {
 	if !e.opts.BrowserRules || (st.WritingMode != css.VerticalRL && st.WritingMode != css.VerticalLR) {
 		return text.OrientNone
+	}
+	if st.TextCombineUpright == css.CombineAll {
+		// text-combine-upright applies in vertical-rl and vertical-lr
+		// whatever the text-orientation (CSS Writing Modes 4, 9.1).
+		return text.OrientCombine
 	}
 	switch st.TextOrientation {
 	case css.OrientUpright:

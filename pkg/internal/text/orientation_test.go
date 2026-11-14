@@ -93,3 +93,39 @@ func TestSplitByOrientation(t *testing.T) {
 		}
 	}
 }
+
+// TestShape_CombineUpright sets a run of text-combine-upright as one
+// upright character an em high (CSS Writing Modes 4, 9.1): its digits
+// side by side across the line, within the em, with no break between
+// them, the run advancing one em along the line whatever its length.
+func TestShape_CombineUpright(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(fixtureNotoSansJP)
+	if err != nil {
+		t.Skipf("fixture fonts absent: %v", err)
+	}
+	f := newTestFonts(t, fontFile{name: filepath.Base(fixtureNotoSansJP), data: data})
+	st := style()
+	st.Families = []string{"Noto Sans JP"}
+	st.Size = 20
+	st.Orientation = OrientCombine
+	for _, s := range []string{"12", "2026"} {
+		p := shape(t, f, []ParagraphRun{{Text: s, Style: st}}, ParagraphOptions{})
+		l := p.Line(0, p.Len(), false)
+		if math.Abs(l.Width-20) > 1e-6 || len(l.Spans) != 1 || !l.Spans[0].Text.Upright {
+			t.Errorf("%s: line of %v in %d spans, want one upright span of 20", s, l.Width, len(l.Spans))
+			continue
+		}
+		for i := 1; i < p.Len(); i++ {
+			if p.Break(i) != NoBreak {
+				t.Errorf("%s: a break before character %d", s, i)
+			}
+		}
+		g := l.Spans[0].Text.Glyphs
+		// Across the line the first glyph sits nearer the far side of
+		// the central baseline, and the glyphs span at most the em.
+		if first, last := g[0].Y, g[len(g)-1].Y; first <= last || first-last > 20 {
+			t.Errorf("%s: glyphs across the line from %v to %v", s, first, last)
+		}
+	}
+}

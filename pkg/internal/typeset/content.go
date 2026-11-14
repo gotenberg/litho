@@ -412,6 +412,10 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 		if t.Upright {
 			// The glyph's space turned a quarter turn counter-clockwise:
 			// its x axis points up the page and its y axis left (9.4.2).
+			// The horizontal scaling, which applies in text space before
+			// the text matrix (9.4.4), narrows the glyph along its x axis;
+			// its position is unscaled.
+			x = t.Origin.X + g.X
 			tj.end()
 			fmt.Fprintf(&p.buf, "0 %s %s 0 %s %s Tm\n", num(-size), num(-size), num(x+p.off.X), num(y+p.off.Y))
 			started, penX, baseline = true, x, y
