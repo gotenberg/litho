@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
@@ -21,6 +22,40 @@ func TestParseShapeStyle_Line(t *testing.T) {
 	// The line, its oval at the start and its open arrow at the end.
 	if got := s.Paint(&shape.Geometry{Preset: "line"}, typeset.Rect{Width: 100}); len(got) != 3 {
 		t.Errorf("%d fragments", len(got))
+	}
+}
+
+// TestParseShapeStyle_ThemeLine locks ECMA-376 Part 1, 20.1.4.2.19 lnRef:
+// each line property the shape's spPr leaves unset comes from the theme
+// line style the reference's idx names, its fill painted with phClr
+// standing for the reference's colour.
+func TestParseShapeStyle_ThemeLine(t *testing.T) {
+	theme := ParseTheme(mustParse(t, `<a:theme `+effectNS+`><a:themeElements><a:clrScheme name="c"><a:accent1><a:srgbClr val="4F81BD"/></a:accent1></a:clrScheme>`+
+		`<a:fmtScheme name="f"><a:lnStyleLst>`+
+		`<a:ln w="9525"><a:solidFill><a:schemeClr val="phClr"><a:shade val="50000"/></a:schemeClr></a:solidFill></a:ln>`+
+		`<a:ln w="25400" cap="sq"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="dash"/><a:miter lim="800000"/></a:ln>`+
+		`<a:ln w="38100"><a:noFill/></a:ln>`+
+		`</a:lnStyleLst></a:fmtScheme></a:themeElements></a:theme>`))
+	style := func(idx string) *Element {
+		return mustParse(t, `<wps:style `+effectNS+` xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><a:lnRef idx="`+idx+`"><a:srgbClr val="FF0000"/></a:lnRef></wps:style>`)
+	}
+	s := ParseShapeStyle(spPrOf(t, ``), style("2"), theme)
+	if s.Line == nil || *s.Line != (css.Color{R: 1, A: 1}) || s.LineWidth != 2 || s.Cap != typeset.SquareCap || s.Join != typeset.MiterJoin || s.Dash != "dash" {
+		t.Errorf("idx 2: %+v, want the theme's 2-point square-capped mitred dash in the reference's red", s)
+	}
+	s = ParseShapeStyle(spPrOf(t, `<a:ln w="12700"><a:round/><a:prstDash val="solid"/></a:ln>`), style("2"), theme)
+	if s.LineWidth != 1 || s.Join != typeset.RoundJoin || s.Dash != "" || s.Cap != typeset.SquareCap {
+		t.Errorf("own width, join and dash: %+v, want 1 point, round, solid, the theme's cap", s)
+	}
+	s = ParseShapeStyle(spPrOf(t, ``), style("1"), theme)
+	if s.Line == nil || s.LineWidth != 0.75 || s.Line.G != 0 || s.Line.R <= 0 || s.Line.R >= 1 {
+		t.Errorf("idx 1: %+v, want the reference's red shaded by the theme line", s.Line)
+	}
+	if s = ParseShapeStyle(spPrOf(t, ``), style("3"), theme); s.Line != nil {
+		t.Errorf("idx 3: %+v, want no line: the theme line has none", s.Line)
+	}
+	if s = ParseShapeStyle(spPrOf(t, ``), style("4"), theme); s.Line == nil || s.LineWidth != 0.75 || s.Join != typeset.RoundJoin {
+		t.Errorf("idx past the list: %+v, want the reference's colour at 0.75 point, round", s)
 	}
 }
 

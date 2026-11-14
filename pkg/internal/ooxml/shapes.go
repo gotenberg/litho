@@ -37,7 +37,8 @@ type ShapeStyle struct {
 	// lengths in line widths, nil for none; it takes over Dash.
 	CustDash []float64
 	// Cap and Join are the line's cap and join (20.1.10.31 ST_LineCap,
-	// 20.1.8.52 to 20.1.8.54): flat and round unless the file says.
+	// 20.1.8.52 to 20.1.8.54): flat and round unless the shape or its
+	// theme line says.
 	Cap  typeset.LineCap
 	Join typeset.LineJoin
 	// Head and Tail are the arrowheads (20.1.8.38 headEnd, 20.1.8.57
@@ -71,11 +72,12 @@ type BlipFill struct {
 }
 
 // ParseShapeStyle reads a shape's properties spPr and its style reference
-// (wps:style or p:style: the theme colours fillRef and lnRef name, used
-// when spPr sets none), colours resolved in theme.
+// (wps:style or p:style): the theme colour fillRef names when spPr sets no
+// fill, and each line property spPr's a:ln leaves unset from the theme
+// line lnRef names, colours resolved in theme.
 func ParseShapeStyle(spPr, style *Element, theme *Theme) ShapeStyle {
 	var s ShapeStyle
-	fillSet, lineSet := false, false
+	fillSet := false
 	if fill := spPr.Child(NSA, "solidFill"); fill != nil {
 		if c, ok := SchemeColor(fill, theme); ok {
 			s.Fill = &c
@@ -111,76 +113,164 @@ func ParseShapeStyle(spPr, style *Element, theme *Theme) ShapeStyle {
 		}
 		fillSet = true
 	}
+	ln := spPr.Child(NSA, "ln")
+	themeLn, ph := themeLine(style, theme)
+	lns := []*Element{ln, themeLn}
 	s.LineWidth = 0.75
-	s.Join = typeset.RoundJoin
-	if ln := spPr.Child(NSA, "ln"); ln != nil {
-		if v, ok := EMU(attrOr(ln, "w")); ok && v >= 0 {
+	for _, l := range lns {
+		if v, ok := EMU(attrOr(l, "w")); ok && v >= 0 {
 			s.LineWidth = v
+			break
 		}
-		if ln.Child(NSA, "noFill") != nil {
-			lineSet = true
-		} else if fill := ln.Child(NSA, "solidFill"); fill != nil {
+	}
+	switch {
+	case lineFill(ln) != nil:
+		switch fill := lineFill(ln); fill.Local {
+		case "solidFill":
 			if c, ok := SchemeColor(fill, theme); ok {
 				s.Line = &c
 			}
-			lineSet = true
-		} else if g := ln.Child(NSA, "gradFill"); g != nil {
-			if s.LineGradient = parseGradient(g, theme); s.LineGradient != nil {
+		case "gradFill":
+			if s.LineGradient = parseGradient(fill, theme); s.LineGradient != nil {
 				first := s.LineGradient.Stops[0].Color
 				s.Line = &css.Color{R: first.R, G: first.G, B: first.B, A: first.A}
 			}
-			lineSet = true
-		}
-		parseLineStyle(&s, ln)
-	}
-	if style != nil {
-		if !fillSet {
-			if c, ok := SchemeColor(style.Child(NSA, "fillRef"), theme); ok {
-				s.Fill = &c
-			}
-		}
-		if !lineSet {
-			if c, ok := SchemeColor(style.Child(NSA, "lnRef"), theme); ok {
+		case "pattFill":
+			if c, ok := SchemeColor(fill.Child(NSA, "fgClr"), theme); ok {
 				s.Line = &c
 			}
+		}
+	case themeLn != nil:
+		// The theme's line paints its own solid fill, phClr standing for
+		// the reference's colour (20.1.4.2.19 lnRef), and the reference's
+		// colour for any other fill or none.
+		switch fill := lineFill(themeLn); {
+		case fill == nil || fill.Local == "gradFill" || fill.Local == "pattFill":
+			s.Line = ph
+		case fill.Local == "solidFill":
+			if c, ok := DrawingColor(fill, themeResolver(theme, ph)); ok {
+				s.Line = &c
+			}
+		}
+	case style != nil:
+		if c, ok := SchemeColor(style.Child(NSA, "lnRef"), theme); ok {
+			s.Line = &c
+		}
+	}
+	parseLineStyle(&s, lns)
+	if style != nil && !fillSet {
+		if c, ok := SchemeColor(style.Child(NSA, "fillRef"), theme); ok {
+			s.Fill = &c
 		}
 	}
 	return s
 }
 
-// parseLineStyle reads a line's dash, cap, join and arrowheads (20.1.2.2.24
-// ln).
-func parseLineStyle(s *ShapeStyle, ln *Element) {
-	if d := ln.Child(NSA, "prstDash"); d != nil {
-		if v := attrOr(d, "val"); v != "solid" {
-			s.Dash = v
+// themeLine returns the theme line style a shape's style reference names
+// (ECMA-376 Part 1, 20.1.4.2.19 lnRef, idx 1 or more into 20.1.4.1.21
+// lnStyleLst) and the reference's colour, which phClr stands for in it;
+// nil when it names none.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx: ooxmlexport/dml-shape-title.docx, Shape.docx,
+//     fdo70942.docx and five more print the outline of lnRef idx 2 at the
+//     theme's 25,400 EMU, 2 points, where the shape's spPr gives no width;
+//     layout/tdf138782.docx at 12,700 EMU with the theme's miter join.
+//   - libreoffice/docx: ooxmlexport/dml-gradientfill-theme.docx and
+//     fdo77117.docx paint lnRef idx 1 of accent1 4F81BD as 74,126,187,
+//     the theme line's phClr under its shade 95% and satMod 105%.
+//   - litho/docx shapes-presets: 74 outlines of idx 2 at 1 point with miter
+//     joins, the theme's 12,700 EMU and a:miter.
+//   - libreoffice/xlsx: sc/groupShape.xlsx, tdf142881.xlsx,
+//     tdf135828_Shape_Rect.xlsx and two more, litho/xlsx
+//     groups_connectors and shapes_textboxes, poi/xlsx 50299.xlsx: Excel
+//     prints the theme's width and join likewise.
+func themeLine(style *Element, theme *Theme) (*Element, *css.Color) {
+	ref := style.Child(NSA, "lnRef")
+	idx, ok := Int(attrOr(ref, "idx"))
+	if !ok || theme == nil || idx < 1 || idx > len(theme.LineStyles) {
+		return nil, nil
+	}
+	if c, ok := SchemeColor(ref, theme); ok {
+		return theme.LineStyles[idx-1], &c
+	}
+	return theme.LineStyles[idx-1], nil
+}
+
+// lineFill returns the fill of a line (20.1.2.2.24 ln: noFill, solidFill,
+// gradFill or pattFill), nil when it sets none.
+func lineFill(ln *Element) *Element {
+	for _, k := range ln.Kids() {
+		if k.Space == NSA && (k.Local == "noFill" || k.Local == "solidFill" || k.Local == "gradFill" || k.Local == "pattFill") {
+			return k
 		}
-	} else if d := ln.Child(NSA, "custDash"); d != nil {
-		for _, ds := range d.Children {
-			if !ds.Is(NSA, "ds") || len(s.CustDash) >= maxCustDashes {
-				continue
+	}
+	return nil
+}
+
+// parseLineStyle reads a line's dash, cap, join and arrowheads
+// (20.1.2.2.24 ln), each from the first line of lns that sets it: the
+// shape's own, then the theme's its style names. A line that sets no join
+// is round.
+func parseLineStyle(s *ShapeStyle, lns []*Element) {
+	s.Join = typeset.RoundJoin
+	for _, ln := range lns {
+		if d := ln.Child(NSA, "prstDash"); d != nil {
+			if v := attrOr(d, "val"); v != "solid" {
+				s.Dash = v
 			}
-			// 20.1.10.44 ST_PositivePercentage: thousandths of a percent
-			// of the line width, an int, which a value past saturates.
-			dv, _ := intconv.Atoi32(attrOr(ds, "d"))
-			sv, _ := intconv.Atoi32(attrOr(ds, "sp"))
-			s.CustDash = append(s.CustDash, max(float64(dv), 0)/100000, max(float64(sv), 0)/100000)
+			break
+		}
+		if d := ln.Child(NSA, "custDash"); d != nil {
+			for _, ds := range d.Children {
+				if !ds.Is(NSA, "ds") || len(s.CustDash) >= maxCustDashes {
+					continue
+				}
+				// 20.1.10.44 ST_PositivePercentage: thousandths of a percent
+				// of the line width, an int, which a value past saturates.
+				dv, _ := intconv.Atoi32(attrOr(ds, "d"))
+				sv, _ := intconv.Atoi32(attrOr(ds, "sp"))
+				s.CustDash = append(s.CustDash, max(float64(dv), 0)/100000, max(float64(sv), 0)/100000)
+			}
+			break
 		}
 	}
-	switch attrOr(ln, "cap") {
-	case "rnd":
-		s.Cap = typeset.RoundCap
-	case "sq":
-		s.Cap = typeset.SquareCap
+	for _, ln := range lns {
+		if v, ok := ln.Attr("cap"); ok {
+			switch v {
+			case "rnd":
+				s.Cap = typeset.RoundCap
+			case "sq":
+				s.Cap = typeset.SquareCap
+			}
+			break
+		}
 	}
-	switch {
-	case ln.Child(NSA, "bevel") != nil:
-		s.Join = typeset.BevelJoin
-	case ln.Child(NSA, "miter") != nil:
-		s.Join = typeset.MiterJoin
+	for _, ln := range lns {
+		switch {
+		case ln.Child(NSA, "round") != nil:
+		case ln.Child(NSA, "bevel") != nil:
+			s.Join = typeset.BevelJoin
+		case ln.Child(NSA, "miter") != nil:
+			s.Join = typeset.MiterJoin
+		default:
+			continue
+		}
+		break
 	}
-	s.Head = arrowhead(ln.Child(NSA, "headEnd"))
-	s.Tail = arrowhead(ln.Child(NSA, "tailEnd"))
+	for _, ln := range lns {
+		if e := ln.Child(NSA, "headEnd"); e != nil {
+			s.Head = arrowhead(e)
+			break
+		}
+	}
+	for _, ln := range lns {
+		if e := ln.Child(NSA, "tailEnd"); e != nil {
+			s.Tail = arrowhead(e)
+			break
+		}
+	}
 }
 
 // arrowhead reads a headEnd or tailEnd (20.1.8.38, 20.1.10.33

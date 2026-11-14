@@ -18,6 +18,10 @@ type Theme struct {
 	// effect style list (20.1.4.1.12 effectStyleLst), in order: a shape's
 	// effectRef of idx n names the nth.
 	EffectStyles []*Element
+	// LineStyles are the a:ln elements of the format scheme's line style
+	// list (20.1.4.1.21 lnStyleLst), in order: a shape's lnRef of idx n
+	// names the nth.
+	LineStyles []*Element
 }
 
 // FontScheme is one font collection of a theme (ECMA-376 Part 1,
@@ -46,6 +50,11 @@ func ParseTheme(root *Element) *Theme {
 	for _, st := range elems.Child(NSA, "fmtScheme").Child(NSA, "effectStyleLst").Kids() {
 		if st.Is(NSA, "effectStyle") {
 			t.EffectStyles = append(t.EffectStyles, st)
+		}
+	}
+	for _, ln := range elems.Child(NSA, "fmtScheme").Child(NSA, "lnStyleLst").Kids() {
+		if ln.Is(NSA, "ln") {
+			t.LineStyles = append(t.LineStyles, ln)
 		}
 	}
 	if fs := elems.Child(NSA, "fontScheme"); fs != nil {
