@@ -208,6 +208,14 @@ type Options struct {
 	// document out on one page this way (Chromium's single page, as
 	// Gotenberg prints it).
 	FitFirstPage bool
+	// ViewportHeight, when positive, is the height in points of the initial
+	// containing block, which otherwise is the page area (CSS 2.1, 10.1):
+	// the root's percentage heights and the boxes positioned in the
+	// initial containing block measure it, while the flow is still cut
+	// at the page area. A converter that measures a document on a screen
+	// taller than any document sets the screen's height here. Its width
+	// stays the page area's.
+	ViewportHeight float64
 	// PixelFontMetrics rounds the ascent, descent and line gap of every
 	// face to whole CSS pixels before the line boxes use them, and lays a
 	// line-height length or number out on Blink's layout unit of 1/64 px,

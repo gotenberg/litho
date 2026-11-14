@@ -88,6 +88,29 @@ func TestFitFirstPage_TrimsToContent(t *testing.T) {
 	}
 }
 
+func TestViewportHeight_SizesTheInitialContainingBlock(t *testing.T) {
+	t.Parallel()
+	full := func(s *css.Style) { s.Height = css.Dimension{Kind: css.Percent, Value: 1} }
+	tests := []struct {
+		name string
+		root *Node
+	}{
+		{"root percentage height", el(sty(full))},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			res, err := Layout(context.Background(), tt.root, ahem(t), Options{Page: page(20, 100), FitFirstPage: true, ViewportHeight: px(30)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := res.Pages[0].Height; !near(got, px(30)) {
+				t.Errorf("first page height %v, want the viewport's %v", got, px(30))
+			}
+		})
+	}
+}
+
 func TestFitFirstPage_PaintsTheTrimmedPage(t *testing.T) {
 	t.Parallel()
 	root := el(sty(bg(lime)), el(sty(), el(sty(height(2), width(3), bg(red)))))

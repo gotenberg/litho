@@ -275,6 +275,11 @@ func TestConvert_SinglePage(t *testing.T) {
 			DefaultPageWidth, screenHeight, 1 / 1.5,
 		},
 		{
+			"root percentage heights measure the screen", `<style>html,body{height:100%}</style><p style="margin:0">a</p>`,
+			Options{},
+			DefaultPageWidth, screenHeight, 1,
+		},
+		{
 			"capped at the PDF limit", `<div style="height:20000pt"></div>`,
 			Options{},
 			DefaultPageWidth, maxPageSide, 1,

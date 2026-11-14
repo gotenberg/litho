@@ -32,7 +32,17 @@ const (
 // column [screenWidth] wide, without margins, page box or forced breaks,
 // at the print media type the route emulates; the width at least
 // [screenWidth] and the height at least [screenHeight], the screen's
-// viewport, which the content size never falls below.
+// viewport, which the content size never falls below. The viewport is the
+// initial containing block (CSS 2.1, 10.1): the root's percentage heights
+// and the boxes positioned in it measure the screen, not the page the
+// column is laid out on.
+//
+// # Corpus evidence
+//
+//   - probe, html: html and body at height: 100% with a paragraph print
+//     on a page 340.08 points tall through the route, a box positioned at
+//     top: 0 and bottom: 0 on one 328.08 points tall: the screen's viewport,
+//     not the content laid out past it.
 func measureSinglePage(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, lay layoutFunc) (float64, float64, error) {
 	m := o
 	m.Scale, m.MarginTop, m.MarginRight, m.MarginBottom, m.MarginLeft = 1, 0, 0, 0, 0

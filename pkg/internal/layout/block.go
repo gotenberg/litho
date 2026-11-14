@@ -622,9 +622,9 @@ func (e *engine) shrinkToFit(b *box, avail float64) float64 {
 }
 
 // layoutRoot lays out the root box in the initial containing block, the
-// page area (CSS 2.1, 10.1).
+// page area (CSS 2.1, 10.1), as tall as [Options.ViewportHeight] when set.
 func (e *engine) layoutRoot(rb *box) {
-	cb := cblock{x: 0, w: e.pageW, h: e.pageH, hDefinite: true}
+	cb := cblock{x: 0, w: e.pageW, h: e.icbHeight(), hDefinite: true}
 	bc := &bfc{}
 	mc := &marginState{}
 	// The root is laid out once a pass.
@@ -639,6 +639,15 @@ func (e *engine) layoutRoot(rb *box) {
 		return
 	}
 	e.layoutBlock(rb, cb, bc, 0, mc, breakNone)
+}
+
+// icbHeight returns the height of the initial containing block:
+// [Options.ViewportHeight] when set, else the page area's.
+func (e *engine) icbHeight() float64 {
+	if e.opts.ViewportHeight > 0 {
+		return e.opts.ViewportHeight
+	}
+	return e.pageH
 }
 
 // layoutBlock lays out the in-flow block-level box b whose margin top

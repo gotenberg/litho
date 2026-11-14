@@ -183,7 +183,8 @@ func (e *engine) layoutPositioned(b *box) {
 // b (CSS 2.1, 10.1): the padding box of its nearest positioned ancestor, or
 // one with a transform (CSS Transforms 1, 6), the initial containing block
 // when it has none; for a fixed box the page area, unless a transformed
-// ancestor holds it. A positioned row group, row or cell holds it as any
+// ancestor holds it. Both are as tall as [Options.ViewportHeight] when it
+// is set, the viewport a screen positions fixed boxes in. A positioned row group, row or cell holds it as any
 // positioned box does (CSS Position 3, 2); a column or a column group,
 // to which position does not apply, never does.
 func (e *engine) containerOf(b *box) absCB {
@@ -217,7 +218,7 @@ func (e *engine) containerOf(b *box) absCB {
 		}
 		return pad
 	}
-	return absCB{w: e.pageW, h: e.pageH, page: fixed}
+	return absCB{w: e.pageW, h: e.icbHeight(), page: fixed}
 }
 
 // inlineCB returns the containing block an inline box a establishes (CSS
