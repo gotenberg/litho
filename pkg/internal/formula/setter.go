@@ -227,10 +227,18 @@ func (l *layouter) loadFace(tf *text.Face) *face {
 	return f
 }
 
-// program returns the parsed program of ts, nil when it does not parse.
+// program returns the parsed program of ts, nil when it does not parse:
+// the font the index keeps parsed for the face of that key, else the
+// program parsed here.
 func (s *Setter) program(ts *typeset.Face) *gofont.Face {
 	if g, ok := s.programs[ts.Key]; ok {
 		return g
+	}
+	if fc := s.fonts.FaceByKey(ts.Key); fc != nil {
+		if g := fc.GlyphFace(); g != nil {
+			s.programs[ts.Key] = g
+			return g
+		}
 	}
 	g, err := gofont.ParseTTF(bytes.NewReader(ts.Program))
 	if err != nil {
