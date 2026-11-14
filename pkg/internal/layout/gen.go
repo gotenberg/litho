@@ -54,6 +54,15 @@ func (e *engine) generate(root *Node) *box {
 	if st.Display == css.DisplayNone {
 		return rb
 	}
+	if st.Display == css.Table || st.Display == css.InlineTable {
+		// A root table is a table wrapper box in the initial containing
+		// block, as any block-level table is; inline-table computes to
+		// table on the root (CSS 2.1, 9.7 and 17.4).
+		w := e.genTable(root, st, ctx, css.FloatNone)
+		w.first, w.last, w.inline = true, true, false
+		w.abs = isAbs(st)
+		return w
+	}
 	cctx := e.enter(root, rb, ctx)
 	rb.elem = cctx.elem
 	// The root is absolutely positioned as any element is (CSS 2.1, 9.3.1;

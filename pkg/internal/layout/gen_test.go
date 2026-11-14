@@ -235,3 +235,34 @@ func TestGenerate_MissingGlyphWarnsOnceWhereverLaidOut(t *testing.T) {
 		})
 	}
 }
+
+// TestGenerate_RootTable holds a root of display table to CSS 2.1, 17.4:
+// it is a table wrapper box, as wide as its content, not the page.
+func TestGenerate_RootTable(t *testing.T) {
+	t.Parallel()
+	for _, d := range []css.Display{css.Table, css.InlineTable} {
+		root := el(sty(display(d)), el(sty(), el(sty(width(20), height(10)))))
+		rb := boxes(t, root, page(100, 50))
+		if rb.tpart != partWrapper {
+			t.Fatalf("display %v: root is no table wrapper", d)
+		}
+		if got := rect(rb); got[2] != 20 {
+			t.Errorf("display %v: root %v wide, want 20", d, got[2])
+		}
+	}
+}
+
+// TestGenerate_RootTableCanvas holds the canvas of a root table to CSS 2.1,
+// 14.2: the root's background, on its table box, or else its first child
+// element's.
+func TestGenerate_RootTableCanvas(t *testing.T) {
+	t.Parallel()
+	rb := boxes(t, el(sty(display(css.Table), bg(red)), el(sty(height(10)))), page(100, 50))
+	if c := canvasBox(rb); c == nil || c != rb.tdata.table {
+		t.Errorf("canvas box %v, want the root's table box", c)
+	}
+	rb = boxes(t, el(sty(display(css.Table)), el(sty(height(10), bg(red)))), page(100, 50))
+	if c := canvasBox(rb); c == nil || c.node == nil || !hasBackground(c.st) {
+		t.Errorf("canvas box %v, want the first child element's", c)
+	}
+}

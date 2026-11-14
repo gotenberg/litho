@@ -181,13 +181,31 @@ func canvasBox(root *box) *box {
 	if root.node != nil && root.st.Display == css.DisplayNone {
 		return nil
 	}
+	kids := root.kids
+	if root.tpart == partWrapper && root.tdata != nil {
+		// A root table's background is on its table box, the wrapper
+		// taking none (CSS 2.1, 17.4), and its first child element sits
+		// in the anonymous row, row group and cell boxes around it
+		// (17.2.1).
+		t := root.tdata.table
+		if hasBackground(t.st) {
+			return t
+		}
+		if t.st.Contain&css.ContainPaint != 0 {
+			return nil
+		}
+		kids = t.kids
+		for n := 0; len(kids) > 0 && kids[0].anon && kids[0].tpart != partNone && n < maxTreeDepth; n++ {
+			kids = kids[0].kids
+		}
+	}
 	if hasBackground(root.st) {
 		return root
 	}
 	if root.st.Contain&css.ContainPaint != 0 {
 		return nil
 	}
-	for _, k := range root.kids {
+	for _, k := range kids {
 		if k.anon || k.node == nil || k.inline || k.float != css.FloatNone {
 			continue
 		}
