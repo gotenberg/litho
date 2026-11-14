@@ -693,8 +693,16 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 			}
 		}
 	}
-	if style.OfficeEmoji && fc != nil && fc.colourTables() != 0 {
-		segoeAdvances(it.glyphs, p.text, float64(float64(segoeEmojiAdvance*style.Size)*style.scale()))
+	if style.OfficeEmoji && fc != nil {
+		w := float64(float64(segoeEmojiAdvance*style.Size) * style.scale())
+		switch {
+		case fc.colourTables() != 0:
+			segoeAdvances(it.glyphs, p.text, w)
+		case style.settings().Emoji == EmojiText && fc != st.styles[run].primary:
+			if segoeTextAdvances(it.glyphs, p.text, w) && style.WordMetrics {
+				it.ascent, it.descent, it.gap = float64(segoeEmojiAscent*style.Size), float64(segoeEmojiDescent*style.Size), 0
+			}
+		}
 	}
 	if punctuated {
 		if gid, ok := out.Face.NominalGlyph('“'); ok {

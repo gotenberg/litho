@@ -1,6 +1,9 @@
 package text
 
-import "slices"
+import (
+	"slices"
+	"unicode"
+)
 
 // wordFace is the vertical metrics, in em, Word lays the lines of a
 // Microsoft face out with.
@@ -150,4 +153,33 @@ func segoeAdvances(glyphs []shapedGlyph, text []rune, w float64) {
 		g.xoff += float64((w - g.advance) / 2)
 		g.advance = w
 	}
+}
+
+// segoeTextAdvances sets the advance of every glyph of glyphs whose
+// cluster in text starts with a character of the Emoji_Presentation
+// property (UTS #51, Annex A) to w, its drawing moved by half the change,
+// and reports whether it set one: the glyphs of a face drawing an Office
+// run's emoji as text, which Word draws as Segoe UI Emoji's outlines at
+// Segoe's advances ([segoeEmojiAdvance]) and line.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word draws the smile and the party popper of runs of
+//     stated colours C00000, 000000 and accent1 4472C4, and of a run
+//     shaded 3060C0, as one Segoe UI Emoji glyph each in the run's colour,
+//     33.02, 32.90, 33.02 and 32.89 points apart at 24 points, where the
+//     colour layers of a run of automatic colour lie 33.02 apart: 1.373
+//     ems. The baselines of the six paragraphs lie 42.77 and 43.00 points
+//     apart, as Segoe's line spaces them, whichever way the emoji draw.
+func segoeTextAdvances(glyphs []shapedGlyph, text []rune, w float64) bool {
+	set := false
+	for k := range glyphs {
+		g := &glyphs[k]
+		if c := g.cluster(); g.advance > 0 && c < len(text) && unicode.Is(emojiPresentation, text[c]) {
+			g.xoff += float64((w - g.advance) / 2)
+			g.advance = w
+			set = true
+		}
+	}
+	return set
 }

@@ -112,6 +112,46 @@ func TestOfficeEmoji(t *testing.T) {
 	}
 }
 
+// TestOfficeEmoji_AsText checks that an emoji of the Emoji_Presentation
+// property that a text face draws, in a run that asks for Office's emoji
+// and for the text presentation, advances as Segoe UI Emoji's do, its
+// drawing centred, its piece taking Segoe's line with Word's metrics,
+// while a character of text presentation by default keeps its advance.
+func TestOfficeEmoji_AsText(t *testing.T) {
+	f := emojiFonts(t)
+	asText := &FontSettings{Emoji: EmojiText}
+	s := Style{Families: []string{"Test Sans"}, Size: 10, Fallback: FallbackFontconfig, OfficeEmoji: true, WordMetrics: true, Settings: asText}
+	p := shape(t, f, []ParagraphRun{{Text: "A\u231a\u263aB", Style: s}}, ParagraphOptions{})
+	if got := p.Advance(1); math.Abs(got-13.73) > 0.01 {
+		t.Errorf("watch advance %.3f, want 13.73", got)
+	}
+	if got := p.Advance(2); math.Abs(got-8) > 0.01 {
+		t.Errorf("smile advance %.3f, want the face's 8", got)
+	}
+	plain := s
+	plain.OfficeEmoji = false
+	q := shape(t, f, []ParagraphRun{{Text: "A\u231a\u263aB", Style: plain}}, ParagraphOptions{})
+	if got := q.Advance(1); math.Abs(got-8) > 0.01 {
+		t.Errorf("watch advance %.3f outside Office's emoji, want the face's 8", got)
+	}
+	found := false
+	for _, sp := range p.Line(0, 4, false).Spans {
+		if sp.Start != 1 || sp.Text == nil {
+			continue
+		}
+		found = true
+		if x := sp.Text.Glyphs[0].X; math.Abs(x-(13.73-8)/2) > 0.01 {
+			t.Errorf("watch drawn at %.3f in its piece, want %.3f", x, (13.73-8)/2)
+		}
+		if math.Abs(sp.Ascent-10.79) > 0.01 || math.Abs(sp.Descent-2.51) > 0.01 {
+			t.Errorf("watch ascent %.2f descent %.2f, want 10.79 and 2.51", sp.Ascent, sp.Descent)
+		}
+	}
+	if !found {
+		t.Error("no piece holds the watch")
+	}
+}
+
 // TestOfficeEmoji_FlagKeepsItsAdvance checks that a flag of a colour face
 // in a run that asks for Office's emoji keeps the face's advance, where
 // another emoji of the face takes Segoe UI Emoji's.
