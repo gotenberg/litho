@@ -9,32 +9,47 @@ import (
 )
 
 // decoPaths returns the paths of res's first page filled or stroked in c,
-// with their bounds.
+// with their bounds: the points they pass through, cut by the clips of
+// the groups around them.
 func decoPaths(res *Result, c css.Color) []typeset.Rect {
 	want := typeset.Color{R: c.R, G: c.G, B: c.B, A: c.A}
+	bounds := func(ops []typeset.PathOp) (x0, y0, x1, y1 float64) {
+		x0, y0, x1, y1 = math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
+		for _, op := range ops {
+			p := op.P[0]
+			switch op.Kind {
+			case typeset.MoveTo, typeset.LineTo:
+			case typeset.CurveTo:
+				p = op.P[2]
+			default:
+				continue
+			}
+			x0, y0, x1, y1 = min(x0, p.X), min(y0, p.Y), max(x1, p.X), max(y1, p.Y)
+		}
+		return x0, y0, x1, y1
+	}
 	var out []typeset.Rect
-	var walk func([]typeset.Fragment)
-	walk = func(fs []typeset.Fragment) {
+	var walk func([]typeset.Fragment, [4]float64)
+	walk = func(fs []typeset.Fragment, clip [4]float64) {
 		for _, f := range fs {
 			switch v := f.(type) {
 			case *typeset.Path:
 				if v.Fill != nil && v.Fill.Color == want || v.Stroke != nil && v.Stroke.Color == want {
-					x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
-					for _, op := range v.Ops {
-						if op.Kind != typeset.MoveTo && op.Kind != typeset.LineTo {
-							continue
-						}
-						p := op.P[0]
-						x0, y0, x1, y1 = min(x0, p.X), min(y0, p.Y), max(x1, p.X), max(y1, p.Y)
-					}
+					x0, y0, x1, y1 := bounds(v.Ops)
+					x0, y0, x1, y1 = max(x0, clip[0]), max(y0, clip[1]), min(x1, clip[2]), min(y1, clip[3])
 					out = append(out, typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0})
 				}
 			case *typeset.Group:
-				walk(v.Content)
+				in := clip
+				if v.Clip != nil {
+					x0, y0, x1, y1 := bounds(v.Clip.Ops)
+					in = [4]float64{max(x0, clip[0]), max(y0, clip[1]), min(x1, clip[2]), min(y1, clip[3])}
+				}
+				walk(v.Content, in)
 			}
 		}
 	}
-	walk(res.Pages[0].Content)
+	walk(res.Pages[0].Content, [4]float64{math.Inf(-1), math.Inf(-1), math.Inf(1), math.Inf(1)})
 	return out
 }
 
@@ -232,5 +247,73 @@ func TestTextDecoration_UnderlinePosition(t *testing.T) {
 				t.Errorf("underline %+v, want its top at %vpx", got, tt.top)
 			}
 		})
+	}
+}
+
+// CSS Text Decoration 3, 2.3 leaves the dash pattern to the user agent:
+// under BrowserRules a dashed line takes Blink's, dashes of two
+// thicknesses from 3px up with the gap fitted so the line ends on a dash,
+// and a line too short for two dashes is solid.
+func TestBlinkDashes(t *testing.T) {
+	for _, tc := range []struct {
+		w, thick  float64
+		dash, gap float64
+	}{
+		{200, 1, 3, 80.0 / 39},
+		{200, 4, 8, 4},
+		{200, 6, 12, 6.8},
+		{200, 8, 16, 7},
+		{20, 4, 20.0 / 20 * 8, 20.0 / 20 * 4},
+	} {
+		got := blinkDashes(px(tc.w), px(tc.thick))
+		if len(got) != 2 || !near(got[0], px(tc.dash)) || !near(got[1], px(tc.gap)) {
+			t.Errorf("blinkDashes(%vpx, %vpx) = %v, want %vpx and %vpx", tc.w, tc.thick, got, tc.dash, tc.gap)
+		}
+	}
+	if got := blinkDashes(px(10), px(4)); got != nil {
+		t.Errorf("blinkDashes(10px, 4px) = %v, want a solid line", got)
+	}
+}
+
+// Under BrowserRules a wavy underline is Blink's wave: one cubic a
+// wavelength of 1 + 2·round(2t + 0.5) pixels, its axis a thickness and a
+// pixel and a half below the line's top.
+func TestTextDecoration_WavyIsBlinksWave(t *testing.T) {
+	lime := css.Color{G: 1, A: 1}
+	st := sty(func(s *css.Style) {
+		s.TextDecoration = css.Underline
+		s.TextDecorationStyle = css.DecorationWavy
+		s.TextDecorationColor = lime
+		s.TextDecorationThickness = css.Pts(px(4))
+		s.TextDecorationSkipInk = css.SkipInkNone
+	})
+	res := runWith(t, doc(el(st, txt(st, "aaaaaaaaaa"))), Options{Page: page(200, 60), BrowserRules: true})
+	var curves []typeset.PathOp
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *typeset.Path:
+				if v.Stroke != nil && v.Stroke.Color == (typeset.Color{G: 1, A: 1}) {
+					for _, op := range v.Ops {
+						if op.Kind == typeset.CurveTo {
+							curves = append(curves, op)
+						}
+					}
+				}
+			case *typeset.Group:
+				walk(v.Content)
+			}
+		}
+	}
+	walk(res.Pages[0].Content)
+	if len(curves) < 2 {
+		t.Fatalf("%d curves, want a wave of cubics", len(curves))
+	}
+	if got := curves[1].P[2].X - curves[0].P[2].X; !near(got, px(19)) {
+		t.Errorf("wavelength %v, want 19px", got)
+	}
+	if got := curves[0].P[0].Y - curves[0].P[2].Y; !near(got, px(13.5)) {
+		t.Errorf("control distance %v, want 13.5px", got)
 	}
 }

@@ -1761,7 +1761,7 @@ func (p *painter) textDecorations(it *lineItem, l *lineBox, page int, which css.
 				}
 				dl.x, dl.w = lo, hi-lo
 			}
-			dl.y, dl.under = g.y[k], line == css.Underline
+			dl.y, dl.under, dl.through = g.y[k], line == css.Underline, line == css.LineThrough
 			dl.skip = nil
 			if line != css.LineThrough {
 				// Only underlines and overlines skip ink (CSS Text
@@ -2000,6 +2000,7 @@ type decoLine struct {
 	x, w       float64
 	dx, dy, x0 float64
 	under      bool
+	through    bool
 	// skip are the glyph runs whose ink the line skips, nil for none.
 	skip []*lineItem
 }
@@ -2008,7 +2009,9 @@ type decoLine struct {
 // double line adds a second one a thickness below (above for an overline
 // or line-through, away from the glyphs for an underline), dotted and
 // dashed lines are dashes of one and three thicknesses, a wavy line
-// zigzags over twice the thickness.
+// zigzags over twice the thickness. The clause leaves the patterns to the
+// user agent: under BrowserRules dashed and wavy lines take Blink's
+// ([blinkDashes], [blinkWave]).
 func (p *painter) decoLine(dl decoLine) {
 	it, l, thick, col := dl.it, dl.l, dl.thick, dl.color
 	x0 := l.x + dl.x + p.dx + dl.dx
@@ -2029,6 +2032,11 @@ func (p *painter) decoLine(dl decoLine) {
 		}
 	case css.DecorationWavy:
 		b0, b1 = top-thick, top+2*thick
+		if p.blink() {
+			w := blinkWave(thick, dl.under, dl.through)
+			reach := float64(waveCrest*w.control) + float64(thick/2)
+			b0, b1 = top+w.offset-reach, top+w.offset+reach
+		}
 	case css.DecorationSolid, css.DecorationDotted, css.DecorationDashed:
 	}
 	var keep [][2]float64
@@ -2088,6 +2096,9 @@ func (p *painter) decoLine(dl decoLine) {
 		dash := []float64{thick, thick}
 		if dl.style == css.DecorationDashed {
 			dash = []float64{3 * thick, 3 * thick}
+			if p.blink() {
+				dash = blinkDashes(w, thick)
+			}
 		}
 		mid := top + float64(thick/2)
 		stroke([]typeset.PathOp{
@@ -2095,10 +2106,113 @@ func (p *painter) decoLine(dl decoLine) {
 			{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x0 + w, Y: mid}}},
 		}, &typeset.Stroke{Color: col, Width: thick, Dash: dash})
 	case css.DecorationWavy:
+		if p.blink() {
+			bw := blinkWave(thick, dl.under, dl.through)
+			ops := bw.ops(l.x+dl.x0+p.dx+dl.dx, x0, x0+w, top+bw.offset)
+			if keep == nil {
+				keep = [][2]float64{{x0, x0 + w}}
+			}
+			stroke(ops, &typeset.Stroke{Color: col, Width: thick})
+			return
+		}
 		stroke(waveOps(l.x+dl.x0+p.dx+dl.dx, x0, x0+w, top+float64(thick/2), thick), &typeset.Stroke{Color: col, Width: thick})
 	case css.DecorationSolid:
 		rect(top, thick)
 	}
+}
+
+// blinkDashes returns the dash array of a dashed decoration line w long
+// and thick thick, as Blink strokes it (StyledStrokeData): dashes of three
+// thicknesses and gaps of two, or of two and one from 3px up; the gap
+// stretched or shrunk so the line starts and ends on a whole dash; two
+// dashes scaled to fit a line too short for more, and a solid line for one
+// too short for two.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws 200px
+//     dashed underlines of 1, 2, 3, 4, 6 and 8px as 40, 20, 23, 17, 11 and
+//     9 dashes of 3, 6, 6, 8, 12 and 16px, the first and last at the ends.
+func blinkDashes(w, thick float64) []float64 {
+	t := thick / css.Pt
+	length, gap := 3*t, 2*t
+	if t >= 3 {
+		length, gap = 2*t, t
+	}
+	n := w / css.Pt
+	switch {
+	case n <= 2*length:
+		return nil
+	case n <= float64(2*length)+gap:
+		k := n / (float64(2*length) + gap)
+		return []float64{float64(length*k) * css.Pt, float64(gap*k) * css.Pt}
+	}
+	fewer := math.Floor((n + gap) / (length + gap))
+	shortGap := (n - float64(fewer*length)) / (fewer - 1)
+	longGap := (n - float64((fewer+1)*length)) / fewer
+	g := longGap
+	if longGap <= 0 || math.Abs(shortGap-gap) < math.Abs(longGap-gap) {
+		g = shortGap
+	}
+	return []float64{length * css.Pt, g * css.Pt}
+}
+
+// wave is the curve of a wavy decoration line: one cubic Bézier a
+// wavelength, both control points at its middle, control above and below
+// its axis, the axis offset from the line's top.
+type wave struct {
+	length, control, offset float64
+}
+
+// waveCrest is how far a [wave] reaches from its axis, as a fraction of
+// its control distance: the extremum of 3t(1-t)(1-2t), at t = (3-√3)/6.
+const waveCrest = 0.28867513459481287
+
+// blinkWave returns the wave of a decoration line thick thick, as Blink
+// draws it (MakeWave): a wavelength of 1 + 2·round(2t + 0.5) pixels and a
+// control distance of 0.5 + round(3t + 0.5) for a thickness of t pixels,
+// at least 1; the axis half a pixel below the line's top, moved a
+// thickness and a pixel down for an underline and up for an overline.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws wavy
+//     underlines of 1, 2, 3, 4 and 6px with wavelengths of 7, 11, 15, 19
+//     and 27px and crests 2.4, 4.2, 5.8, 7.7 and 11.1px apart, the first
+//     half wave below its axis.
+func blinkWave(thick float64, under, through bool) wave {
+	t := max(1, thick/css.Pt)
+	w := wave{
+		length:  (1 + float64(2*math.Round(float64(2*t)+0.5))) * css.Pt,
+		control: (0.5 + math.Round(float64(3*t)+0.5)) * css.Pt,
+		offset:  0.5 * css.Pt,
+	}
+	switch {
+	case through:
+	case under:
+		w.offset += thick + css.Pt
+	default:
+		w.offset -= thick + css.Pt
+	}
+	return w
+}
+
+// ops returns the curves of w from x0 to x1 about the axis at mid, whole
+// wavelengths counted from origin, where a wave starts on its axis bound
+// down: the caller clips them to x0 and x1.
+func (w wave) ops(origin, x0, x1, mid float64) []typeset.PathOp {
+	first := 0
+	if x0 > origin {
+		first = min(int((x0-origin)/w.length), maxWaveSegments) // fits int: capped
+	}
+	x := origin + float64(float64(first)*w.length)
+	ops := []typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x, Y: mid}}}}
+	for n := 0; n < maxWaveSegments && x < x1; n++ {
+		c := x + float64(w.length/2)
+		ops = append(ops, typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{{X: c, Y: mid + w.control}, {X: c, Y: mid - w.control}, {X: x + w.length, Y: mid}}})
+		x += w.length
+	}
+	return ops
 }
 
 // waveOps returns the zigzag of a wavy line from x0 to x1 about mid, its
