@@ -344,6 +344,23 @@ func TestFlex_WrapReverseBaselineFromTheTopLine(t *testing.T) {
 	}
 }
 
+func TestFlex_ColumnReverseBaselineFromTheTopItem(t *testing.T) {
+	// CSS Flexbox 1, 8.5: a column container takes its first baseline
+	// from its startmost item, the one nearest the block start: under
+	// column-reverse the last item, drawn at the top.
+	item := func(size float64) *Node { return el(sty(font(size)), txt(sty(font(size)), "a")) }
+	rb := boxes(t, doc(el(flexBox(dir(css.FlexColumnReverse)), item(10), item(20))), page(100, 100))
+	c := kid(t, rb, 0, 0)
+	top := c.kids[1]
+	if top.y >= c.kids[0].y {
+		t.Fatalf("second item at %v, first at %v: want the second on top", top.y, c.kids[0].y)
+	}
+	want, _ := firstBaseline(top)
+	if fy, ok := flexBaseline(c, false); !ok || !near(fy, want) {
+		t.Errorf("container baseline %v, want the top item's %v", fy, want)
+	}
+}
+
 func TestFlex_StaticPosition(t *testing.T) {
 	abs := el(sty(width(10), height(10), func(s *css.Style) { s.Position = css.Absolute }))
 	rb := boxes(t, doc(el(flexBox(height(40), justify(css.BoxCenter), alignItems(css.BoxFlexEnd), func(s *css.Style) { s.Position = css.Relative }), abs)), page(100, 100))
