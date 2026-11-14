@@ -89,6 +89,10 @@ type groupFx struct {
 	// coordinates of the first page and paints on every page (CSS 2.1,
 	// 9.6.1).
 	fixed bool
+	// shift reports the group of a relatively positioned box in columns:
+	// transform is its offset, which moves each of its fragments after
+	// the columns cut it, so the cut clips them inside it.
+	shift bool
 }
 
 // openClip is a clip group open in the painter, for an overflow: hidden
@@ -112,6 +116,8 @@ type frame struct {
 	// whose containing block lies outside root: root paints them outside
 	// its columns.
 	escaped []*box
+	// dx and dy are the relative offset the column set paints at.
+	dx, dy float64
 }
 
 // pendingLink is a link region in flow coordinates.
@@ -255,6 +261,17 @@ func hasBackground(st *css.Style) bool {
 
 // cur returns the current frame.
 func (p *painter) cur() *frame { return p.frames[len(p.frames)-1] }
+
+// columnFrame returns the frame of the innermost column set being painted,
+// nil outside columns.
+func (p *painter) columnFrame() *frame {
+	for _, f := range slices.Backward(p.frames) {
+		if f.columns {
+			return f
+		}
+	}
+	return nil
+}
 
 // inColumns reports painting inside a column set, whose display list the
 // columns cut by the extent of its items.
@@ -690,6 +707,16 @@ func (p *painter) unit(b *box, own bool) {
 		pushed++
 	}
 	defer func() { p.frames = p.frames[:len(p.frames)-pushed] }()
+	if f := p.columnFrame(); f != nil && b != f.root && (p.dx != f.dx || p.dy != f.dy) {
+		// Relative offsets apply to the fragments of a box after
+		// fragmentation (CSS Fragmentation 3, 5.5): the box paints where
+		// its column set does, and a group moves what the columns cut.
+		m := typeset.Matrix{A: 1, D: 1, E: p.dx - f.dx, F: p.dy - f.dy}
+		sdx, sdy := p.dx, p.dy
+		p.dx, p.dy = f.dx, f.dy
+		defer func() { p.dx, p.dy = sdx, sdy }()
+		push(&ditem{group: true, fx: &groupFx{opacity: 1, transform: &m, shift: true}})
+	}
 	if b.inColumn() {
 		// A monolithic or pinned box in columns moves to its column
 		// whole; the positioned boxes it holds paint from its stacking

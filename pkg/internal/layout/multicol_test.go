@@ -745,3 +745,17 @@ func TestMulticol_PositionedSpannerPaintsItsPositionedBoxes(t *testing.T) {
 		___B_
 		_____`)
 }
+
+func TestMulticol_RelativeOffsetMovesFragments(t *testing.T) {
+	t.Parallel()
+	// Relative positioning applies to each fragment after fragmentation
+	// (CSS Fragmentation 3, 5.5): a block cut over two columns moves down
+	// in both, each piece cut at its column first.
+	block := square(2, 4, blue, rel(0, 1))
+	mc := el(sty(columns(2, 1), height(2), fillAuto), block)
+	assertPixels(t, run(t, doc(mc), page(5, 4)), 1, `
+		_____
+		BB_BB
+		BB_BB
+		_____`)
+}

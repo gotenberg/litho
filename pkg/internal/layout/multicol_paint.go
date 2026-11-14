@@ -58,7 +58,7 @@ func (p *painter) multicol(b *box) {
 		}
 		g := &ditem{group: true}
 		nl := len(p.links)
-		fr := &frame{container: g, root: b, columns: true, set: s}
+		fr := &frame{container: g, root: b, columns: true, set: s, dx: p.dx, dy: p.dy}
 		p.frames = append(p.frames, fr)
 		kids := b.kids
 		b.kids = s.kids
@@ -336,6 +336,21 @@ func (e *engine) cutItem(it *ditem, b *box, s *colSet, oy float64, spans []clone
 					cp.kids = append(cp.kids, pc.it)
 					clip = clip || pc.clip
 					up, down = max(up, pc.up), max(down, pc.down)
+				}
+				if clip && k.fx != nil && k.fx.shift {
+					// The fragment is cut at its column before its
+					// relative offset moves it.
+					top, bottom := s.band(b, i)
+					top, bottom = top+oy-up, bottom+oy+down
+					if i == 0 {
+						top = -farEdge
+					}
+					if i == last {
+						bottom = farEdge
+					}
+					band := &typeset.Path{Ops: rectOps(typeset.Rect{X: -farEdge, Y: top, Width: 2 * farEdge, Height: bottom - top}), Fill: &typeset.Fill{}}
+					cp.kids = []*ditem{{group: true, kids: cp.kids, fx: &groupFx{opacity: 1, clip: band}}}
+					clip, up, down = false, 0, 0
 				}
 				out[i] = append(out[i], piece{it: &cp, clip: clip, up: up, down: down})
 			}
