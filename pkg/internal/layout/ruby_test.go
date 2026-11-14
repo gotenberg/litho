@@ -386,3 +386,39 @@ func TestRubyOverhangIntrinsic(t *testing.T) {
 		}
 	}
 }
+
+// TestRubyBaseKeepsEndSpaces locks the spaces other than collapsible ones
+// at the end of a ruby base: they stay in its content, which its column
+// aligns, as Chromium lays them out (an ideographic space after the base's
+// text keeps it where it would be with any other character).
+//
+// # Corpus evidence
+//
+//   - wpt: css-ruby/ruby-overhang-spaces-003-ref and its tests, whose
+//     reference centres "　あ　" under a 60px annotation.
+func TestRubyBaseKeepsEndSpaces(t *testing.T) {
+	t.Parallel()
+	_, ruby, rt := rubyDoc(1, func(s *css.Style) { s.RubyAlign = css.RubyCenter })
+	block, _, _ := rubyDoc(1)
+	spaced := run(t, el(block, el(ruby, txt(ruby, "　A　"), el(rt, txt(rt, "abcdefghijklmnop")))), page(800, 300))
+	lettered := run(t, el(block, el(ruby, txt(ruby, "　AB"), el(rt, txt(rt, "abcdefghijklmnop")))), page(800, 300))
+	if a, b := runX(t, spaced, "A"), runX(t, lettered, "A"); !near(a, b) {
+		t.Errorf("base text at %g with an ideographic space after it, at %g with a letter", a, b)
+	}
+}
+
+// runX returns the x of the first glyph s of res's first page, in CSS
+// pixels.
+func runX(t *testing.T, res *Result, s string) float64 {
+	t.Helper()
+	for _, p := range texts(res, 1) {
+		x := p.x
+		for _, g := range p.run.Glyphs {
+			if g.Text == s {
+				return float64(x+g.X) / css.Pt
+			}
+		}
+	}
+	t.Fatalf("no glyph %q in %v", s, texts(res, 1))
+	return 0
+}

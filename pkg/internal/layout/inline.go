@@ -1607,7 +1607,11 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 	// removed instead (4.1.2) and draw nothing.
 	hang := !s.keep && end > start && !keepsSpaces(p.wsAt(end-1))
 	hangFrom := end
-	for hang && hangFrom > start && text.IsHangingSpace(p.p.Rune(hangFrom-1)) {
+	// A ruby base or annotation is an inline box of its ruby, which litho
+	// lays out on a line of its own: other spaces at its end stay in its
+	// content, as Chromium lays them out, and only the collapsible ones go
+	// (CSS Ruby 1, 2.5.1).
+	for hang && hangFrom > start && text.IsHangingSpace(p.p.Rune(hangFrom-1)) && (!s.root.rubyLine || p.collapsibleSpace(hangFrom-1)) {
 		hangFrom--
 	}
 	trim := end
