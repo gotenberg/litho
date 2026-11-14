@@ -412,15 +412,16 @@ func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd
 			continue
 		}
 
-		// Extract the object and generation numbers from the match.
-		var objNum, genNum int
+		// Extract the object and generation numbers from the match, at
+		// the 32 bits ISO 32000-1, Annex C, Table C.1 holds them to.
+		var objNum, genNum int32
 		if _, err := fmt.Sscanf(string(data[loc[0]:loc[1]]), "%d %d", &objNum, &genNum); err != nil {
 			doc.Logger.Debug("reading appended object header", slog.Any("err", err))
 		}
 
-		described := []appendedObject{describeAppended(objNum, obj)}
+		described := []appendedObject{describeAppended(int(objNum), obj)}
 		if stream, ok := obj.(ast.PdfStream); ok && dictName(stream.Dict, "Type") == "ObjStm" {
-			described = appendedObjectStream(ctx, doc, stream, offset, fileEnd, objNum, genNum)
+			described = appendedObjectStream(ctx, doc, stream, offset, fileEnd, int(objNum), int(genNum))
 		}
 		end := updateEnd(updateEnds, offset)
 		for _, ao := range described {
