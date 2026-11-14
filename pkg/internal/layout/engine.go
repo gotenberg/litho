@@ -145,6 +145,10 @@ type engine struct {
 	// shared holds the styles of the boxes the engine makes of its own
 	// and what it charged for the styles its boxes hold (share.go).
 	shared sharedStyles
+	// turned maps a style to the copy of it the boxes inside an
+	// orthogonal flow hold, its physical sides turned into the flow's
+	// (writing.go), and each copy to itself.
+	turned map[turnKey]*css.Style
 	// reshaped counts the inline contents shaped again after their
 	// release (release.go).
 	reshaped int

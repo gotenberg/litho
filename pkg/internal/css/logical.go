@@ -12,12 +12,10 @@ import "strings"
 // (see [cascade]). A later declaration of the same physical side wins,
 // logical or physical (4).
 //
-// The layout engine lays a box of a vertical writing mode out as an
-// orthogonal flow: its content is a horizontal layout turned a quarter
-// turn (see [WritingMode]). The vertical mapping applies to the root of
-// that flow alone, whose box sits in its horizontal parent; inside it the
-// horizontal mapping draws the flow-relative sides where they belong once
-// turned.
+// Every element maps by its own writing mode, inside a vertical flow as
+// at its root: the layout engine, which lays a vertical flow out as a
+// horizontal layout turned a quarter turn (see [WritingMode]), turns the
+// physical sides of the boxes inside it the other way.
 
 // isFlowRelative reports a flow-relative property name, one of CSS
 // Logical Properties 1, 4 and 5.
@@ -209,9 +207,7 @@ func logicalShorthands() map[string]shorthandDef {
 // cascadedFlow returns the flowMap of the element whose declarations
 // cands holds, sorted in cascade order, and whose parent's style is
 // parent: the direction and writing mode the cascade gives it, which the
-// flow-relative properties among cands map their sides by. An element
-// whose parent is of a vertical writing mode maps as a horizontal one, as
-// the layout draws it inside a turned flow.
+// flow-relative properties among cands map their sides by.
 func cascadedFlow(cands []cand, parent *Style) flowMap {
 	rtl := parent != nil && parent.Direction == RTL
 	wm := HorizontalTB
@@ -240,9 +236,6 @@ func cascadedFlow(cands []cand, parent *Style) flowMap {
 				}
 			}
 		}
-	}
-	if parent != nil && parent.WritingMode.Vertical() {
-		wm = HorizontalTB
 	}
 	return newFlowMap(wm, rtl)
 }

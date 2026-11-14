@@ -126,3 +126,96 @@ func (e *engine) orthoInline(b *box, cb cblock) float64 {
 	_, hi := formatterFor(b.kids[0]).intrinsic(e, b.kids[0])
 	return min(hi, e.areaH(0))
 }
+
+// turnKey names the copy of a style turned into an orthogonal flow of a
+// writing mode.
+type turnKey struct {
+	st    *css.Style
+	frame css.WritingMode
+}
+
+// turnedStyle returns st as a box inside an orthogonal flow of the
+// writing mode frame holds it, under [Options.BrowserRules]: the flow is
+// laid out horizontally and turned onto the page, so the physical sides
+// and axes of st are turned the other way. The physical properties keep
+// their physical meaning (CSS Writing Modes 4, 6): margin-left stays on
+// the left of the page whatever the writing mode. The flow-relative
+// properties were mapped to physical ones by the cascade, and text-align,
+// float and clear, whose left and right mean line-left and line-right
+// (6.4), need no turn. The Office converters write the sides of turned
+// text as the text's own, and keep st. A copy is made once a style and
+// charged as a computed style.
+func (e *engine) turnedStyle(st *css.Style, frame css.WritingMode) *css.Style {
+	if !e.opts.BrowserRules || st == nil {
+		return st
+	}
+	if t, ok := e.turned[turnKey{st, frame}]; ok {
+		return t
+	}
+	if e.turned == nil {
+		e.turned = map[turnKey]*css.Style{}
+	}
+	t := *st
+	from := turnSides(frame)
+	for i := css.Top; i <= css.Left; i++ {
+		t.Margin[i] = st.Margin[from[i]]
+		t.Padding[i] = st.Padding[from[i]]
+		t.Border[i] = st.Border[from[i]]
+		// A corner of the flow lies between two of its sides, the corner
+		// of the page between the sides they come from; its radii swap
+		// axes.
+		r := st.BorderRadius[cornerFrom(from, css.Corner(i))]
+		t.BorderRadius[i] = css.Radius{H: r.V, V: r.H}
+	}
+	phys := [4]css.Dimension{st.Top, st.Right, st.Bottom, st.Left}
+	t.Top, t.Right, t.Bottom, t.Left = phys[from[css.Top]], phys[from[css.Right]], phys[from[css.Bottom]], phys[from[css.Left]]
+	t.Width, t.Height = st.Height, st.Width
+	t.MinWidth, t.MinHeight = st.MinHeight, st.MinWidth
+	t.MaxWidth, t.MaxHeight = st.MaxHeight, st.MaxWidth
+	t.MinWidthAuto, t.MinHeightAuto = st.MinHeightAuto, st.MinWidthAuto
+	if len(st.BoxShadow) > 0 {
+		t.BoxShadow = make([]css.Shadow, len(st.BoxShadow))
+		for i, sh := range st.BoxShadow {
+			sh.X, sh.Y = turnOffset(frame, sh.X, sh.Y)
+			t.BoxShadow[i] = sh
+		}
+	}
+	e.turned[turnKey{st, frame}] = &t
+	e.turned[turnKey{&t, frame}] = &t
+	return &t
+}
+
+// turnSides returns, for each side of an orthogonal flow of the writing
+// mode frame, the side of the page it lies on: the flow turned a quarter
+// turn clockwise puts its top on the right of the page, its left on the
+// top; turned counter-clockwise, in sideways-lr, its top on the left and
+// its left on the bottom.
+func turnSides(frame css.WritingMode) [4]css.Side {
+	if frame == css.SidewaysLR {
+		return [4]css.Side{css.Left, css.Top, css.Right, css.Bottom}
+	}
+	return [4]css.Side{css.Right, css.Bottom, css.Left, css.Top}
+}
+
+// cornerFrom returns the corner of the page the corner c of a flow whose
+// sides lie on the page sides from lies on.
+func cornerFrom(from [4]css.Side, c css.Corner) css.Corner {
+	// The corners in order follow the sides: corner c lies between side c
+	// (top, right, bottom, left) and the side before it.
+	a, b := from[c], from[(c+3)%4]
+	for k := css.TopLeft; k <= css.BottomLeft; k++ {
+		if s, before := css.Side(k), css.Side((k+3)%4); s == a && before == b || s == b && before == a {
+			return k
+		}
+	}
+	return c
+}
+
+// turnOffset returns the page offset (x, y) in the coordinates of an
+// orthogonal flow of the writing mode frame.
+func turnOffset(frame css.WritingMode, x, y float64) (float64, float64) {
+	if frame == css.SidewaysLR {
+		return -y, x
+	}
+	return y, -x
+}

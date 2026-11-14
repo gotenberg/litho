@@ -94,3 +94,24 @@ func TestWritingMode_MarginsStayInTheOrthogonalRoot(t *testing.T) {
 		______
 		______`)
 }
+
+// TestWritingMode_PhysicalSidesInATurnedFlow keeps the physical sides of
+// a box inside a vertical flow on the sides of the page they name (CSS
+// Writing Modes 4, 6): in vertical-rl a block's margin-right is its
+// block-start margin and its margin-top its inline-start one, and its
+// width its block size, however the layout turns the flow onto the page.
+// Its margins stay inside the flow root (7.3).
+func TestWritingMode_PhysicalSidesInATurnedFlow(t *testing.T) {
+	t.Parallel()
+	wm := func(s *css.Style) { s.WritingMode = css.VerticalRL }
+	kid := sty(wm, margin(1, 2, 0, 0), width(1), height(2), bg(lime))
+	root := doc(el(sty(wm, width(6), height(6)), el(kid)))
+	assertPixels(t, runWith(t, root, Options{Page: page(6, 7), BrowserRules: true}), 1, `
+		______
+		___G__
+		___G__
+		______
+		______
+		______
+		______`)
+}

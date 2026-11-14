@@ -95,15 +95,13 @@ func TestCascade_InlineLogicalFollowsDirection(t *testing.T) {
 // TestLogical_WritingModes holds the flow-relative properties to CSS
 // Logical Properties 1, 4 in each writing mode and direction (CSS Writing
 // Modes 4, 6.1 and 6.2): the sides, the sizes and the corners they map
-// onto. A box inside a vertical one maps as a horizontal one, as the
-// layout draws it inside a turned flow.
+// onto. A box inside a vertical one maps by its own writing mode.
 //
 // # Corpus evidence
 //
 //   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) computes the
-//     same margins, sizes and radii for every box but the inner one, which
-//     it maps as vertical-rl; litho's turned flow draws the inner box's
-//     horizontal sides where Chromium draws those vertical ones.
+//     same margins, sizes and radii for every box, the inner one mapped as
+//     vertical-rl.
 func TestLogical_WritingModes(t *testing.T) {
 	t.Parallel()
 	const decls = `margin-block-start: 1px; margin-inline-start: 2px; inline-size: 30px; min-block-size: 40px;
@@ -126,7 +124,7 @@ func TestLogical_WritingModes(t *testing.T) {
 		{"vlr", Left, Top, false, BottomLeft, TopRight},
 		{"slr", Left, Bottom, false, TopLeft, BottomRight},
 		{"srl", Right, Top, false, BottomRight, TopLeft},
-		{"inner", Top, Left, true, TopRight, BottomLeft},
+		{"inner", Right, Top, false, BottomRight, TopLeft},
 	}
 	for _, tt := range tests {
 		s := c.of(tt.id)

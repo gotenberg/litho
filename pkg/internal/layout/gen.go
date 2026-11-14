@@ -29,8 +29,9 @@ type genCtx struct {
 	decos []deco
 	depth int
 	// vertical reports content inside an orthogonal flow, which keeps
-	// the writing mode of its root.
+	// the writing mode of its root, frame.
 	vertical bool
+	frame    css.WritingMode
 }
 
 // generate builds the box tree of root (CSS 2.1, 9.2). The root box is a
@@ -90,6 +91,9 @@ func (e *engine) newBox(n *Node, st *css.Style, kind boxKind, ctx genCtx) *box {
 		e.fail(fmt.Errorf("%w: more than %d", ErrTooManyBoxes, MaxBoxes))
 	}
 	e.charge(boxCost, "boxes")
+	if ctx.vertical {
+		st = e.turnedStyle(st, ctx.frame)
+	}
 	e.holdStyle(st)
 	b := &box{node: n, st: st, kind: kind, first: true, last: true, lang: ctx.lang, elem: ctx.elem, link: ctx.link, depth: ctx.depth}
 	b.hidden = st.Visibility != css.Visible
@@ -249,7 +253,7 @@ func listGroup(l *typeset.StructElem, role string) *typeset.StructElem {
 func (e *engine) genChildren(b *box, children []*Node, ctx genCtx) {
 	ortho := !ctx.vertical && b.st.WritingMode.Vertical() && orthoEligible(b)
 	if ortho {
-		ctx.vertical = true
+		ctx.vertical, ctx.frame = true, b.st.WritingMode
 	}
 	e.adopt(b, e.genRaw(b, children, ctx))
 	if ortho {
