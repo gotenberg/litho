@@ -226,7 +226,7 @@ func (w *sheetReader) content(part string, a *ooxml.Element, d *sheet.Drawing) b
 			d.Name = attr(nv, "name")
 			d.Alt, d.Decorative = ooxml.Describe(nv)
 			data := obj.Find(ooxml.NSA, "graphicData")
-			switch attr(data, "uri") {
+			switch ooxml.GraphicURI(data) {
 			case uriChart:
 				id, _ := data.Child(nsC, "chart").AttrNS(ooxml.NSR, "id")
 				rel, ok := w.r.pkg.RelationshipByID(w.r.ctx, part, id)

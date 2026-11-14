@@ -348,6 +348,17 @@ func resolvePrefix(ns map[string]string, prefix string, element bool) string {
 	return prefix
 }
 
+// GraphicURI returns the uri of a graphicData element (ECMA-376 Part 1,
+// 20.1.2.2.17), which names the kind of its graphic as a namespace, in its
+// Transitional form: a Strict document names it by the Strict namespace
+// (ISO/IEC 29500-1:2016, 20.1.2.2.17 and Annex A), which the parser maps
+// for element names and not for attribute values. "" for a nil element or
+// one without a uri.
+func GraphicURI(data *Element) string {
+	v, _ := data.Attr("uri")
+	return normalizeNS(v)
+}
+
 // normalizeNS maps an ISO/IEC 29500 Strict namespace to its Transitional
 // form: http://purl.oclc.org/ooxml/<area>/<name> is
 // http://schemas.openxmlformats.org/<area>/2006/<name>.

@@ -123,7 +123,7 @@ func (d *document) graphic(s *story, data *ooxml.Element, st *css.Style, w, h fl
 	if data == nil {
 		return nil
 	}
-	switch attrOr(data, "uri") {
+	switch ooxml.GraphicURI(data) {
 	case uriPicture:
 		if pic := data.Child(ooxml.NSPic, "pic"); pic != nil {
 			n := d.picture(s, ooxml.ParsePicture(pic), st, w, h, alt)
