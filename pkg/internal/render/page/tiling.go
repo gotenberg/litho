@@ -274,10 +274,15 @@ func (r *renderer) tilingSource(s *scope, tp *tilingPattern, resources ast.PdfDi
 
 	if w, h, ok := axisPeriods(u, v); ok {
 		// Round each period to whole device pixels and scale the cell to it
-		// about the pattern's origin: the constant spacing of /TilingType 1.
+		// about the pattern's origin, the origin itself moved to the
+		// nearest pixel corner: the constant spacing of /TilingType 1, and
+		// cell edges on pixel edges, where two cells that fill their /BBox
+		// meet without a seam.
 		wi, hi := max(1, math.Round(w)), max(1, math.Round(h))
 		o := p.Apply(geom.Point{})
-		p = p.Mul(geom.Matrix{1, 0, 0, 1, -o.X, -o.Y}).Mul(geom.Matrix{wi / w, 0, 0, hi / h, o.X, o.Y})
+		ro := geom.Point{X: math.Round(o.X), Y: math.Round(o.Y)}
+		p = p.Mul(geom.Matrix{1, 0, 0, 1, -o.X, -o.Y}).Mul(geom.Matrix{wi / w, 0, 0, hi / h, ro.X, ro.Y})
+		o = ro
 		tw, th := int64(wi), int64(hi)
 		if tw*th < area && tw*th <= cacheCap {
 			ox, oy := math.Floor(o.X), math.Floor(o.Y)

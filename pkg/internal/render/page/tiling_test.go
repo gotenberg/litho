@@ -277,3 +277,26 @@ func BenchmarkTilingFill(b *testing.B) {
 		}
 	}
 }
+
+// TestTilingFractionalOriginHasNoSeams pins that cells which fill their
+// /BBox meet without a seam when the pattern's origin falls between device
+// pixels: the tile is laid on whole pixels, as its period is, so no two
+// cells share an edge pixel each covers in part. poppler 26.09.0 draws
+// such a pattern seamless; a seam lets the paper show through every cell
+// edge.
+func TestTilingFractionalOriginHasNoSeams(t *testing.T) {
+	t.Parallel()
+	img, _ := draw(t, fixture{
+		page:    "/Resources << /Pattern << /P 5 0 R >> >>",
+		content: "/Pattern cs /P scn 0 0 100 100 re f",
+		objs: []string{tilePattern("/PaintType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 /Matrix [1 0 0 1 0.4 0.3] /Resources << >>",
+			"0 0 1 rg 0 0 10 10 re f")},
+	})
+	want := map[[2]int]rgb{}
+	for i := 1; i < 9; i++ {
+		want[[2]int{10 * i, 50}] = blue
+		want[[2]int{50, 10 * i}] = blue
+		want[[2]int{10*i + 1, 10*i - 1}] = blue
+	}
+	expect(t, img, 8, want)
+}
