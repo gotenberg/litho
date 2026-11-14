@@ -1,6 +1,7 @@
 package xlsx
 
 import (
+	"math"
 	"strconv"
 	"strings"
 
@@ -91,76 +92,113 @@ func argb(s string) (css.Color, bool) {
 	return ooxml.HexColor(s)
 }
 
-// tint lightens or darkens c by t in [-1, 1] in the HLS space
-// (ECMA-376 Part 1, 18.8.19 tint): a negative tint scales the luminance
-// down by 1+t, a positive one moves it the fraction t towards white.
+// The scales of Excel's HLS: hue, lightness and saturation run from 0 to
+// hlsMax, a component from 0 to rgbMax.
+const (
+	hlsMax = 240
+	rgbMax = 255
+)
+
+// tint lightens or darkens c by t in [-1, 1] as Excel computes a CT_Color
+// tint (ECMA-376 Part 1, 18.8.19 tint): in whole-number HLS of 240 levels
+// (hlsMax), its lightness L taken to the whole part of L·(1+t) for a
+// negative tint, of L·(1-t) + 240 - the whole part of 240·(1-t) for a
+// positive one, and back to whole components.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx, litho/xlsx, openxmlsdk/xlsx, poi/xlsx: of the 180
+//     distinct theme colours and tints whose colour under one candidate
+//     rule Excel's PDF paints, this rule gives 179, the lightness in
+//     floating-point HSL 77; litho/xlsx theme_custom paints 7B2D8E under
+//     tint 0.4 as 188,106,208, the floating-point HSL giving 189,108,208.
+//     The one it misses (E0E9F4 at 0.4, openxmlsdk/xlsx
+//     VendorRatingCriteriaWorkbook) is one level from the 235,240,248
+//     Excel paints there.
 func tint(c css.Color, t float64) css.Color {
 	t = max(-1, min(1, t))
-	h, s, l := toHSL(c)
+	h, l, s := toHLS(level(c.R), level(c.G), level(c.B))
 	if t < 0 {
-		l *= 1 + t
+		l = int(float64(l) * (1 + t)) // fits int: at most hlsMax
 	} else {
-		l = float64(l*(1-t)) + t
+		keep := int(hlsMax * (1 - t))                             // fits int: at most hlsMax
+		l = int(float64(float64(l)*(1-t)) + float64(hlsMax-keep)) // fits int: at most 2 hlsMax
 	}
-	return fromHSL(h, s, max(0, min(1, l)), c.A)
+	l = max(0, min(hlsMax, l))
+	r, g, b := fromHLS(h, l, s)
+	return css.Color{R: float64(r) / rgbMax, G: float64(g) / rgbMax, B: float64(b) / rgbMax, A: c.A}
 }
 
-// toHSL converts c to hue, saturation and lightness, each in [0, 1].
-func toHSL(c css.Color) (h, s, l float64) {
-	hi, lo := max(c.R, c.G, c.B), min(c.R, c.G, c.B)
-	l = (hi + lo) / 2
+// level returns a component in [0, 1] as a whole number to rgbMax.
+func level(v float64) int {
+	return int(math.Round(max(0, min(1, v)) * rgbMax)) // fits int: at most rgbMax
+}
+
+// toHLS converts whole components to whole hue, lightness and saturation
+// as Windows' RGB-to-HLS conversion rounds them (Microsoft Knowledge Base
+// 29240); a grey has saturation 0 and the hue 2/3 of hlsMax.
+func toHLS(r, g, b int) (h, l, s int) {
+	hi, lo := max(r, g, b), min(r, g, b)
+	l = ((hi+lo)*hlsMax + rgbMax) / (2 * rgbMax)
 	if hi == lo {
-		return 0, 0, l
+		return hlsMax * 2 / 3, l, 0
 	}
-	d := hi - lo
-	if l > 0.5 {
-		s = d / (2 - hi - lo)
+	d, sum := hi-lo, hi+lo
+	if l <= hlsMax/2 {
+		s = (d*hlsMax + sum/2) / sum
 	} else {
-		s = d / (hi + lo)
+		s = (d*hlsMax + (2*rgbMax-sum)/2) / (2*rgbMax - sum)
 	}
+	part := func(v int) int { return ((hi-v)*(hlsMax/6) + d/2) / d }
 	switch hi {
-	case c.R:
-		h = (c.G - c.B) / d
-		if c.G < c.B {
-			h += 6
-		}
-	case c.G:
-		h = (c.B-c.R)/d + 2
+	case r:
+		h = part(b) - part(g)
+	case g:
+		h = hlsMax/3 + part(r) - part(b)
 	default:
-		h = (c.R-c.G)/d + 4
+		h = 2*hlsMax/3 + part(g) - part(r)
 	}
-	return h / 6, s, l
+	return ((h % hlsMax) + hlsMax) % hlsMax, l, s
 }
 
-// fromHSL converts hue, saturation and lightness back to a colour of
-// alpha a.
-func fromHSL(h, s, l, a float64) css.Color {
+// fromHLS converts whole hue, lightness and saturation back to whole
+// components, as Windows' HLS-to-RGB conversion rounds them; a grey
+// rounds its lightness to the nearest component.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx, openxmlsdk/xlsx: Excel paints 000000 under tint
+//     0.05 as 13,13,13, 12.75 rounded, and FFFFFF under tint -0.15 as
+//     217,217,217, 216.75 rounded, where the conversion's truncation
+//     gives 12 and 216.
+func fromHLS(h, l, s int) (r, g, b int) {
 	if s == 0 {
-		return css.Color{R: l, G: l, B: l, A: a}
+		v := (l*rgbMax + hlsMax/2) / hlsMax
+		return v, v, v
 	}
-	q := float64(l * (1 + s))
-	if l >= 0.5 {
-		q = l + s - float64(l*s)
+	var m2 int
+	if l <= hlsMax/2 {
+		m2 = (l*(hlsMax+s) + hlsMax/2) / hlsMax
+	} else {
+		m2 = l + s - (l*s+hlsMax/2)/hlsMax
 	}
-	p := float64(2*l) - q
-	hue := func(t float64) float64 {
+	m1 := 2*l - m2
+	comp := func(hue int) int {
+		hue = ((hue % hlsMax) + hlsMax) % hlsMax
+		var v int
 		switch {
-		case t < 0:
-			t++
-		case t > 1:
-			t--
+		case hue < hlsMax/6:
+			v = m1 + ((m2-m1)*hue+hlsMax/12)/(hlsMax/6)
+		case hue < hlsMax/2:
+			v = m2
+		case hue < hlsMax*2/3:
+			v = m1 + ((m2-m1)*(hlsMax*2/3-hue)+hlsMax/12)/(hlsMax/6)
+		default:
+			v = m1
 		}
-		switch {
-		case t < 1.0/6:
-			return p + float64((q-p)*6*t)
-		case t < 0.5:
-			return q
-		case t < 2.0/3:
-			return p + float64((q-p)*(2.0/3-t)*6)
-		}
-		return p
+		return max(0, min(rgbMax, (v*rgbMax+hlsMax/2)/hlsMax))
 	}
-	return css.Color{R: hue(h + 1.0/3), G: hue(h), B: hue(h - 1.0/3), A: a}
+	return comp(h + hlsMax/3), comp(h), comp(h - hlsMax/3)
 }
 
 // systemColors returns the scheme colours of the theme root that name a

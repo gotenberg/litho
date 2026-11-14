@@ -248,3 +248,32 @@ func TestRead_NoStyles(t *testing.T) {
 		t.Errorf("default font %+v", f)
 	}
 }
+
+// TestTint_ExcelColours holds colours Excel paints for a theme colour and a
+// tint (litho/xlsx theme_custom; libreoffice/xlsx and openxmlsdk/xlsx for
+// the greys).
+func TestTint_ExcelColours(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		base uint32
+		tint float64
+		want uint32
+	}{
+		{0x7B2D8E, 0.3999755851924192, 0xBC6AD0},
+		{0x7B2D8E, -0.249977111117893, 0x5B226A},
+		{0x954F72, -0.499984740745262, 0x492738},
+		{0x954F72, 0.3999755851924192, 0xC58FAA},
+		{0xD2691E, -0.249977111117893, 0x9C5016},
+		{0xD2691E, 0.7999816888943144, 0xF8E0CF},
+		{0xB22222, 0.5999938962981048, 0xEC9B9B},
+		{0x008080, 0.3999755851924192, 0x1AFFFF},
+		{0x000000, 0.0499893185216834, 0x0D0D0D},
+		{0x000000, 0.7999816888943144, 0xCCCCCC},
+		{0xFFFFFF, -0.1499984740745262, 0xD9D9D9},
+	} {
+		got := tint(rgb(tc.base), tc.tint)
+		if want := rgb(tc.want); got != want {
+			t.Errorf("tint(%06X, %v) = %v, want %06X", tc.base, tc.tint, got, tc.want)
+		}
+	}
+}
