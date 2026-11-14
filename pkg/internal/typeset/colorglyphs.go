@@ -579,29 +579,29 @@ func (w *docWriter) writeType3Font(c *colorFace, s *type3Set, f *type3Font, inde
 	if s.invisible {
 		name = c.name + "-Text" + strconv.Itoa(index)
 	}
-	// ISO 32000-1, Table 112: a Type 3 font in a tagged document has a
-	// font descriptor, whose FontName, Flags and ItalicAngle are required
-	// (Table 122); flag 3, Symbolic, as its glyphs stand outside the
-	// standard Latin set.
-	desc := w.alloc.Alloc(ast.PdfDict{
-		"Type":        ast.PdfName("FontDescriptor"),
-		"FontName":    ast.PdfName(name),
-		"Flags":       ast.PdfInt(4),
-		"ItalicAngle": ast.PdfInt(0),
-	})
 	dict := ast.PdfDict{
-		"Type":           ast.PdfName("Font"),
-		"Subtype":        ast.PdfName("Type3"),
-		"Name":           ast.PdfName(name),
-		"FontBBox":       bbox,
-		"FontMatrix":     ast.PdfArray{ast.PdfReal(k), ast.PdfInt(0), ast.PdfInt(0), ast.PdfReal(k), ast.PdfInt(0), ast.PdfInt(0)},
-		"CharProcs":      procs,
-		"Encoding":       ast.PdfDict{"Type": ast.PdfName("Encoding"), "Differences": diffs},
-		"FirstChar":      ast.PdfInt(0),
-		"LastChar":       ast.PdfInt(len(f.procs) - 1),
-		"Widths":         widths,
-		"Resources":      res,
-		"FontDescriptor": desc,
+		"Type":       ast.PdfName("Font"),
+		"Subtype":    ast.PdfName("Type3"),
+		"Name":       ast.PdfName(name),
+		"FontBBox":   bbox,
+		"FontMatrix": ast.PdfArray{ast.PdfReal(k), ast.PdfInt(0), ast.PdfInt(0), ast.PdfReal(k), ast.PdfInt(0), ast.PdfInt(0)},
+		"CharProcs":  procs,
+		"Encoding":   ast.PdfDict{"Type": ast.PdfName("Encoding"), "Differences": diffs},
+		"FirstChar":  ast.PdfInt(0),
+		"LastChar":   ast.PdfInt(len(f.procs) - 1),
+		"Widths":     widths,
+		"Resources":  res,
+	}
+	if w.type3Descriptor() {
+		// Its FontName, Flags and ItalicAngle are required (ISO 32000-1,
+		// Table 122); flag 3, Symbolic, as its glyphs stand outside the
+		// standard Latin set.
+		dict["FontDescriptor"] = w.alloc.Alloc(ast.PdfDict{
+			"Type":        ast.PdfName("FontDescriptor"),
+			"FontName":    ast.PdfName(name),
+			"Flags":       ast.PdfInt(4),
+			"ItalicAngle": ast.PdfInt(0),
+		})
 	}
 	cmap, err := w.flateStream(ast.PdfDict{}, type3ToUnicode(f.texts))
 	if err != nil {
@@ -610,6 +610,24 @@ func (w *docWriter) writeType3Font(c *colorFace, s *type3Set, f *type3Font, inde
 	dict["ToUnicode"] = w.alloc.Alloc(cmap)
 	w.alloc.AllocAt(f.ref.ObjectNum, dict)
 	return nil
+}
+
+// type3Descriptor reports whether a Type 3 font of the document carries a
+// font descriptor: at every version but PDF 1.4. ISO 32000-1, Table 112
+// requires one in a tagged document; the entry came with PDF 1.5, the
+// Type 3 font dictionary of PDF 1.4 having none, and a file written for
+// PDF 1.4 holds no construct a later version defines, tagged or not.
+//
+// # Corpus evidence
+//
+//   - litho/pptx: text-complex-scripts, whose emoji are a Type 3 font,
+//     written tagged for PDF 1.4 with the descriptor, is refused by
+//     pdfcpu's strict validation: "dict=type3FontDict
+//     entry=FontDescriptor: unsupported in version 1.4"; written without
+//     it, the file passes, and so do its PDF/A-1a and PDF/A-1b outputs
+//     under veraPDF.
+func (w *docWriter) type3Descriptor() bool {
+	return w.version != Version14
 }
 
 // type3ToUnicode returns the ToUnicode CMap of a Type 3 font's single-byte

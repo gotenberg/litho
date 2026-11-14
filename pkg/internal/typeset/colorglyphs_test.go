@@ -100,6 +100,41 @@ func TestColourGlyphs_BitmapsAsType3Images(t *testing.T) {
 	}
 }
 
+// TestColourGlyphs_FontDescriptorByVersion locks which files give a Type
+// 3 font its font descriptor (ISO 32000-1, Table 112): all but a PDF 1.4
+// file, tagged or not, whose Type 3 font dictionary has no such entry.
+func TestColourGlyphs_FontDescriptorByVersion(t *testing.T) {
+	bitmaps, _ := colourFaces(t)
+	for _, tc := range []struct {
+		name    string
+		version typeset.Version
+		tagged  bool
+		want    int
+	}{
+		{"PDF 1.4", typeset.Version14, false, 0},
+		{"PDF 1.4, tagged", typeset.Version14, true, 0},
+		{"PDF 1.7, tagged", typeset.Version17, true, 1},
+		{"PDF 1.7", typeset.Version17, false, 1},
+		{"PDF 2.0", typeset.Version20, false, 1},
+	} {
+		txt := run(t, bitmaps, 72, typeset.Point{X: 72, Y: 144}, "AB")
+		doc := &typeset.Document{Pages: []*typeset.Page{letter(txt)}}
+		if tc.tagged {
+			p := &typeset.StructElem{Role: "P"}
+			txt.Parent = p
+			doc.Metadata = typeset.Metadata{Title: "Tagged", Lang: "en-US"}
+			doc.Structure = &typeset.StructElem{Role: "Document", Lang: "en-US", Kids: []*typeset.StructElem{p}}
+		}
+		out := writeVersion(t, doc, tc.version)
+		if n := bytes.Count(out, []byte("/Subtype /Type3")); n != 1 {
+			t.Fatalf("%s: %d Type 3 fonts, want 1", tc.name, n)
+		}
+		if n := bytes.Count(out, []byte("/Type /FontDescriptor")); n != tc.want {
+			t.Errorf("%s: %d font descriptors, want %d", tc.name, n, tc.want)
+		}
+	}
+}
+
 // TestColourGlyphs_GlyphWithoutBitmapAdvances locks that a glyph of a
 // bitmap face without a bitmap draws nothing and keeps its advance and its
 // text.
