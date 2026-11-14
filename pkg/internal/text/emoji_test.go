@@ -142,18 +142,31 @@ func TestLayout_EmojiPresentationPicksTheFace(t *testing.T) {
 // out, costs what it costs without the property: the digits, # and * are
 // Emoji characters asked to draw as text, which the face of the line
 // already does ([layoutState.plainText]), so none takes an input of its
-// own. The lines are equal and the layout allocates no more.
+// own: no sequence is recorded for them, the lines are equal and the
+// layout allocates no more. The allocations are not compared under the
+// race detector, where sync.Pool drops a share of what it is given at
+// random and two runs of one layout allocate differently.
 func TestLayout_FiguresAsTextSplitAsPlainText(t *testing.T) {
 	f := newTestFonts(t, fontFile{name: "serif.ttf", data: familyFace("Liberation Serif", "Regular", 400, false, '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '#', '*')})
 	const figures = "1234567.89 #5*0 31.4159 2718.28 1024"
 	plain := Style{Families: []string{"Liberation Serif"}, Size: 10}
 	asText := plain
 	asText.Settings = &FontSettings{Emoji: EmojiText}
+	text := func(int) EmojiVariant { return EmojiText }
+	if seqs := emojiSequences([]rune(figures), text, func(int) bool { return true }, nil); len(seqs) != 0 {
+		t.Errorf("%d sequences for figures their face draws as text, want none", len(seqs))
+	}
+	if seqs := emojiSequences([]rune(figures), text, nil, nil); len(seqs) == 0 {
+		t.Error("no sequence for figures asked as text with no face to ask: the case is not exercised")
+	}
 	want, _ := layout(t, f, figures, plain, 1000, Collapse)
 	got, _ := layout(t, f, figures, asText, 1000, Collapse)
 	if len(got) != len(want) || got[0].Width != want[0].Width || len(got[0].Runs) != len(want[0].Runs) {
 		t.Fatalf("as text: %d lines, width %v, %d runs; plain: %d lines, width %v, %d runs",
 			len(got), got[0].Width, len(got[0].Runs), len(want), want[0].Width, len(want[0].Runs))
+	}
+	if raceEnabled {
+		return
 	}
 	allocs := func(s Style) float64 {
 		return testing.AllocsPerRun(50, func() {
@@ -162,7 +175,9 @@ func TestLayout_FiguresAsTextSplitAsPlainText(t *testing.T) {
 			}
 		})
 	}
-	if base, text := allocs(plain), allocs(asText); text > base {
+	// A sequence a digit costs some fifty allocations on this line; two
+	// leave room for a collection that empties a pool during one batch.
+	if base, text := allocs(plain), allocs(asText); text > base+2 {
 		t.Errorf("figures as text allocate %v a layout, plain %v", text, base)
 	}
 }
