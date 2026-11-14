@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -154,7 +155,7 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 	}
 	if p := e.Child(w, "pgNumType"); p != nil {
 		if v, ok := ooxml.Int(attrOr(p, "start")); ok {
-			s.pageStart = new(v)
+			s.pageStart = new(max(-intconv.MaxCountStart, min(v, intconv.MaxCountStart)))
 		}
 		s.pageFormat = attrOr(p, "fmt")
 		d.checkNumberFormat(s.pageFormat)

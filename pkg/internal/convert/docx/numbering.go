@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -116,7 +117,7 @@ func (d *document) parseNumbering(root *ooxml.Element) *numbering {
 func (d *document) parseLevel(l *ooxml.Element) level {
 	lv := level{start: 1, format: "decimal", suffix: "tab", restart: -1, set: true}
 	if v, ok := ooxml.Int(attrOr(l.Child(w, "start"), "val")); ok {
-		lv.start = v
+		lv.start = max(-intconv.MaxCountStart, min(v, intconv.MaxCountStart))
 	}
 	if f := l.Child(w, "numFmt"); f != nil {
 		lv.format = attrOr(f, "val")
