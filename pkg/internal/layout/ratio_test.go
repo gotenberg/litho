@@ -242,3 +242,39 @@ func TestAspectRatio_ContentKeywordsOfMinAndMax(t *testing.T) {
 		t.Errorf("min-height: min-content: height %v, want 25", got[3])
 	}
 }
+
+// TestAspectRatio_FormattingContextBesideFloats locks CSS 2.1, 9.5 for a
+// box whose height its width gives: where the floats at its top leave
+// room that its grown height crosses into floats that leave none, it
+// moves down to the next room, 4px beside the floats, and takes a 4px
+// square there.
+//
+// # Corpus evidence
+//
+//   - wpt: css-sizing/aspect-ratio/floats-aspect-ratio-001 (a flow-root
+//     of aspect-ratio 1/1 after floats of 50px, 50px and 160px in 200px)
+//     draws a 40px square at the right of the third float in Chromium
+//     156, as its reference does.
+//   - wpt: css-display/display-flow-root-002 (a flow-root of width 0 and
+//     height 200px after a right and a left float of 250px in 400px)
+//     sits below the right float, beside the left one, in Chromium 156.
+func TestAspectRatio_FormattingContextBesideFloats(t *testing.T) {
+	t.Parallel()
+	fl := func(f css.Float, w float64) *Node { return el(sty(float(f), width(w), height(5))) }
+	root := doc(el(sty(width(20), display(css.FlowRoot)),
+		fl(css.FloatLeft, 5), fl(css.FloatRight, 5), fl(css.FloatLeft, 16),
+		el(sty(display(css.FlowRoot), ratio(1, 1), bg(blue)))))
+	assertPixels(t, run(t, root, PageBox{Width: px(20), Height: px(12)}), 1, `
+		____________________
+		____________________
+		____________________
+		____________________
+		____________________
+		________________BBBB
+		________________BBBB
+		________________BBBB
+		________________BBBB
+		____________________
+		____________________
+		____________________`)
+}

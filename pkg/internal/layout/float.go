@@ -155,8 +155,22 @@ func (c *bfc) floatBand(y, h, left, right float64, lines bool) (float64, float64
 // the right edge of the band. With lines set, a float with shape-outside
 // narrows the band by its float area.
 func (c *bfc) floatBandFrom(y, h, left, right, from float64, lines bool) (float64, float64) {
-	l, r := left, right
-	both := false
+	l, r, both := c.floatEdges(y, h, left, right, lines)
+	r = max(r, l)
+	if both {
+		if pl, pr, ok := c.split(y, h, l, r, from); ok {
+			return pl, pr
+		}
+		return r, r
+	}
+	return l, r
+}
+
+// floatEdges returns the edges the floats in the band [y, y+h) leave of
+// left and right, l past r where they leave no space at all, and whether
+// a float of css.FrameWrapBoth is among them, which they leave out.
+func (c *bfc) floatEdges(y, h, left, right float64, lines bool) (l, r float64, both bool) {
+	l, r = left, right
 	for _, f := range c.floats {
 		if by, bh := f.wordBand(y, h); !f.overlaps(by, bh) {
 			continue
@@ -188,14 +202,14 @@ func (c *bfc) floatBandFrom(y, h, left, right, from float64, lines bool) (float6
 			r = min(r, x0)
 		}
 	}
-	r = max(r, l)
-	if both {
-		if pl, pr, ok := c.split(y, h, l, r, from); ok {
-			return pl, pr
-		}
-		return r, r
-	}
-	return l, r
+	return l, r, both
+}
+
+// crossed reports whether the floats in the band [y, y+h) leave no space
+// at all within left and right: a left float's edge past a right one's.
+func (c *bfc) crossed(y, h, left, right float64) bool {
+	l, r, _ := c.floatEdges(y, h, left, right, false)
+	return l > r+eps
 }
 
 // narrowed reports whether a float narrows the band [y, y+h) within left

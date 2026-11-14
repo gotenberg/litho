@@ -987,11 +987,13 @@ func (e *engine) layoutBFCRoot(b *box, cb cblock, bc *bfc, top float64) {
 		if fitsBeside(b, l2, r2, left, right) || pass == maxFitPasses-1 {
 			return
 		}
-		if l2 > l+eps || r2 < r-eps {
+		if (l2 > l+eps || r2 < r-eps) && !bc.crossed(top, h, left, right) {
 			// Laid out in the space beside the floats at its top, the box
 			// grows down beside a float that narrows it further: try the
 			// narrower space at the same top before moving down, as a box
-			// whose width depends on it may then fit.
+			// whose width depends on it may then fit. Floats whose edges
+			// cross leave no space to try: even a box of no width would
+			// overlap one of them (CSS 2.1, 9.5).
 			if !e.relayout(top) {
 				return
 			}
