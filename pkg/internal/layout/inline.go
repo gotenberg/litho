@@ -2139,6 +2139,9 @@ func (s *inlineState) vertical(l *lineBox) {
 			it.baseline = v.shift
 		}
 	}
+	if above, ok := s.markerRoom(); ok {
+		top = min(top, -above)
+	}
 	l.h = bottom - top
 	l.baseline = -top
 	l.annOver = max(top-annTop, 0)

@@ -271,3 +271,41 @@ func (e *engine) symbolRect(b *box, mst *css.Style, ascent, baseline, left, righ
 // from. Anti-DoS guard, not spec-mandated: it keeps the integer arithmetic
 // of [symbolRect] in range whatever the font size.
 const maxSymbolAscent = 1 << 20
+
+// markerRoom returns the room above its baseline the line being built
+// keeps for an outside marker set on it, under [Options.BrowserRules]:
+// when it is the first line of its inline formatting context and the
+// first formatted line of a list item with an outside marker, the height
+// above the baseline of the marker's own line, its strut or its picture
+// ([engine.markerLine]). CSS Lists 3, 3.1 leaves the marker's effect on
+// the line to the user agent; Chromium moves the item's content down so
+// the marker's line fits above the baseline, and lets it hang below.
+//
+// # Corpus evidence
+//
+//   - wpt: css/CSS2/selectors/universal-selector-005 and
+//     css/css-pseudo/marker-content-010 draw their references in
+//     Chromium 156.
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws items of
+//     20px Ahem text with line-height 1 54px tall under a 50px picture
+//     marker, 36px under a 40px ::marker, 50px under a ::marker of
+//     line-height 80px, 36px when the first line is a nested block's,
+//     and 56px under a 40px ::marker at line-height 50px: the baseline
+//     moves down to the marker line's ascent, the room under it does not
+//     grow.
+func (s *inlineState) markerRoom() (float64, bool) {
+	e := s.e
+	if !e.opts.BrowserRules || len(s.lines) > 0 {
+		return 0, false
+	}
+	for c, depth := s.root, 0; c != nil && depth < maxTreeDepth; c, depth = c.parent, depth+1 {
+		if c.outside != nil {
+			above, _ := e.markerLine(c)
+			return above, true
+		}
+		if !opensParentLine(c) {
+			break
+		}
+	}
+	return 0, false
+}

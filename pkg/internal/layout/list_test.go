@@ -540,3 +540,35 @@ func TestListMarkers_MarkerDirectionOrdersItsText(t *testing.T) {
 		t.Errorf("glyphs %s, want the full stop before the 2", got)
 	}
 }
+
+// TestListMarkers_OutsideMarkerKeepsRoomAbove locks that under
+// BrowserRules the first line of a list item, its own or a nested
+// block's, keeps above its baseline the height an outside marker's line
+// takes there, and nothing more below it (CSS Lists 3, 3.1 leaves it to
+// the user agent; this is Chromium's), while the Office rules leave the
+// line as its content sets it.
+func TestListMarkers_OutsideMarkerKeepsRoomAbove(t *testing.T) {
+	big := func(s *css.Style) { s.FontSize = px(40) }
+	for _, tc := range []struct {
+		name    string
+		nested  bool
+		browser bool
+		want    float64
+	}{
+		{"own line", false, true, 34},
+		{"nested block", true, true, 34},
+		{"office rules", false, false, 10},
+	} {
+		st := sty(display(css.ListItem), func(s *css.Style) { s.ListStylePosition = css.Outside })
+		li := el(st, txt(st, "x"))
+		if tc.nested {
+			li = el(st, el(sty(), txt(sty(), "x")))
+		}
+		li.Marker = el(sty(big, display(css.ListItem), func(s *css.Style) { s.ListStylePosition = css.Outside }))
+		rb := boxesWith(t, doc(el(sty(padding(0, 0, 0, 50)), li)), Options{Page: page(200, 100), BrowserRules: tc.browser})
+		item := kid(t, rb, 0, 0, 0)
+		if got := item.borderH() / css.Pt; !near(got, tc.want) {
+			t.Errorf("%s: item %vpx tall, want %v", tc.name, got, tc.want)
+		}
+	}
+}
