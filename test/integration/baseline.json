@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-13T23:28:11Z",
+  "captured_at": "2026-11-14T00:46:59Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -60048,7 +60048,7 @@
               "text_f1": 0.3194
             },
             "borders": {
-              "layout": 0.9315,
+              "layout": 0.9318,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -60112,7 +60112,7 @@
               "text_f1": 1
             },
             "emoji": {
-              "layout": 0.3416,
+              "layout": 0.3516,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61504,7 +61504,7 @@
               "text_f1": 1
             },
             "variable-font": {
-              "layout": 0.9471,
+              "layout": 0.9507,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -117072,8 +117072,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 4587,
-          "mismatched": 606,
+          "matched": 4589,
+          "mismatched": 604,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -119659,7 +119659,7 @@
             "css/css-fonts/font-face-stretch-default-variable.html": "pass",
             "css/css-fonts/font-face-style-auto-variable.html": "pass",
             "css/css-fonts/font-face-style-default-variable.html": "pass",
-            "css/css-fonts/font-face-unicode-range-2.html": "fail",
+            "css/css-fonts/font-face-unicode-range-2.html": "pass",
             "css/css-fonts/font-face-weight-auto-variable.html": "pass",
             "css/css-fonts/font-face-weight-default-variable.html": "pass",
             "css/css-fonts/font-family-name-000.xht": "fail",
@@ -121613,7 +121613,7 @@
             "css/css-text/hanging-punctuation/hanging-punctuation-force-end-001.xht": "fail",
             "css/css-text/hanging-punctuation/hanging-punctuation-inline-bound-001.html": "fail",
             "css/css-text/hanging-punctuation/hanging-punctuation-last-001.xht": "fail",
-            "css/css-text/hyphens/hyphenate-character-005.html": "fail",
+            "css/css-text/hyphens/hyphenate-character-005.html": "pass",
             "css/css-text/hyphens/hyphens-auto-001.html": "pass",
             "css/css-text/hyphens/hyphens-manual-inline-011.html": "pass",
             "css/css-text/hyphens/hyphens-overflow-001.html": "pass",
