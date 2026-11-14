@@ -774,7 +774,7 @@ func (e *engine) layoutColumns(b *box, s *colSet, cb cblock, ctx *colCtx) float6
 		b.kids = kids
 	}
 	end = e.pastMargin(end, mc.strut, false)
-	mc.commit(end)
+	mc.commitEnd(end)
 	end = max(end, own.bottom())
 	e.reach(end)
 	e.noPaginate++

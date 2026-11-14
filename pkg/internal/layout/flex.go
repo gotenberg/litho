@@ -1577,7 +1577,7 @@ func (e *engine) layoutItemAt(k *box, x, y, w, h float64, hDef bool, pcb cblock)
 	e.leaveClamp(saved)
 	end = e.trimTextBox(k, end, own)
 	end = e.pastMargin(end, mc.strut, false)
-	mc.commit(end)
+	mc.commitEnd(end)
 	end = max(end, own.bottom(), k.contentY())
 	content := containedHeight(k, end-k.contentY())
 	k.h = content

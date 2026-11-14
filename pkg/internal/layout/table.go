@@ -949,7 +949,7 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw, fixedH float64) {
 	end := formatterFor(c).layout(e, c, kcb, own, c.contentY(), mc)
 	e.leaveClamp(saved)
 	end += mc.strut.sum()
-	mc.commit(end)
+	mc.commitEnd(end)
 	end = max(end, own.bottom(), c.contentY())
 	h := end - c.contentY()
 	cd.contentEnd = end

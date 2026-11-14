@@ -102,6 +102,12 @@ func (s *inlineState) staticRest(p *ifcPara, y float64, mc *marginState, pending
 			continue
 		}
 		staticBlock(a.box, s.cb, y)
+		if pending {
+			// A box around this paragraph that waits on the margins places
+			// the box ([marginState.commit]); the paragraph's own block,
+			// which holds no line, does not.
+			mc.absPending(a.box, s.root)
+		}
 	}
 }
 
@@ -618,7 +624,7 @@ func (e *engine) absContent(b *box, ccb cblock, h float64, hSet, grow bool) {
 	e.leaveClamp(saved)
 	end = e.trimTextBox(b, end, own)
 	end += mc.strut.sum()
-	mc.commit(end)
+	mc.commitEnd(end)
 	end = max(end, own.bottom(), b.contentY())
 	ch := containedHeight(b, end-b.contentY())
 	content := ch

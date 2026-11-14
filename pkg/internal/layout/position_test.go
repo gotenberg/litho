@@ -548,3 +548,82 @@ func TestTransform_OverflowAtThePaintedBox(t *testing.T) {
 		}
 	}
 }
+
+// TestAbs_StaticPositionUnderCollapsingMargins checks CSS 2.1, 10.6.4: an
+// absolutely positioned box first in a block whose top margin collapses
+// with its first child's takes the block's content top, where the
+// collapsed margin puts it, as its static position, whether it stands
+// alone, among collapsible spaces or in an empty block. Margins that only
+// end the flow do not move it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 draws an absolute box in an empty div,
+//     before a sibling of margin-top 20px, at that sibling's top.
+//   - wpt: css/css-flexbox/reference/flex-item-z-ordering-001-ref: Chromium
+//     draws absolute boxes in empty relative divs last in the body above
+//     the body's bottom margin.
+func TestAbs_StaticPositionUnderCollapsingMargins(t *testing.T) {
+	abs := func() *Node {
+		return el(sty(width(10), height(10), func(s *css.Style) { s.Position = css.Absolute }))
+	}
+	for _, tc := range []struct {
+		name string
+		kids func() []*Node
+	}{
+		{"alone", func() []*Node { return []*Node{abs()} }},
+		{"among spaces", func() []*Node { return []*Node{txt(sty(), " "), abs(), txt(sty(), " ")} }},
+		{"in an empty block", func() []*Node { return []*Node{el(sty(), abs())} }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			kids := append(tc.kids(), el(sty(margin(20, 0, 0, 0), height(10))))
+			rb := boxes(t, doc(el(sty(margin(5, 0, 0, 0)), kids...)), page(100, 100))
+			outer := kid(t, rb, 0)
+			if got := rect(outer); got[1] != 20 {
+				t.Fatalf("outer box %v, want y 20: its margin collapsed with its child's", got)
+			}
+			var a *box
+			var walk func(*box)
+			walk = func(b *box) {
+				for _, k := range b.kids {
+					if k.abs {
+						a = k
+					}
+					walk(k)
+				}
+			}
+			walk(outer)
+			if a == nil {
+				t.Fatal("no absolutely positioned box")
+			}
+			if got := rect(a); got[1] != 20 {
+				t.Errorf("absolute box %v, want y 20: the outer box's content top", got)
+			}
+		})
+	}
+}
+
+// TestAbs_StaticPositionBeforeEndMargins checks that the bottom margins
+// that end a flow leave the static position of an absolutely positioned
+// box in an empty block where the margins before it put it.
+func TestAbs_StaticPositionBeforeEndMargins(t *testing.T) {
+	abs := el(sty(width(10), height(10), func(s *css.Style) { s.Position = css.Absolute }))
+	rb := boxes(t, doc(el(sty(height(10))), el(sty(margin(0, 0, 30, 0)), el(sty(), abs))), page(100, 100))
+	var a *box
+	var walk func(*box)
+	walk = func(b *box) {
+		for _, k := range b.kids {
+			if k.abs {
+				a = k
+			}
+			walk(k)
+		}
+	}
+	walk(rb)
+	if a == nil {
+		t.Fatal("no absolutely positioned box")
+	}
+	if got := rect(a); got[1] != 10 {
+		t.Errorf("absolute box %v, want y 10: above the bottom margin that ends the flow", got)
+	}
+}

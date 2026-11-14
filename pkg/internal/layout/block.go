@@ -84,6 +84,28 @@ type marginState struct {
 	kept bool
 	// floats are the floats placed while the margins were pending.
 	floats []pendingFloat
+	// abs are the absolutely positioned boxes met in the flow while a
+	// box's top waited on the margins: their static position is that
+	// box's top, wherever the margins resolve.
+	abs []*box
+}
+
+// absPending records the absolutely positioned box a met in the flow
+// while margins are pending and a box other than skip waits on them.
+func (mc *marginState) absPending(a, skip *box) {
+	if slices.ContainsFunc(mc.waiting, func(w *box) bool { return w != skip }) {
+		mc.abs = append(mc.abs, a)
+	}
+}
+
+// commitEnd resolves the pending margins at the end of a formatting
+// context's flow, at y: the absolutely positioned boxes met under them
+// keep their static position, where the margins before them put it, as
+// Chromium draws them; only content that follows moves them
+// ([marginState.commit]).
+func (mc *marginState) commitEnd(y float64) {
+	mc.abs = nil
+	mc.commit(y)
 }
 
 // pendingFloat is a float placed at y while margins were pending: idx is
@@ -119,6 +141,7 @@ func (mc *marginState) clone() marginState {
 	c := *mc
 	c.waiting = slices.Clone(mc.waiting)
 	c.floats = slices.Clone(mc.floats)
+	c.abs = slices.Clone(mc.abs)
 	return c
 }
 
@@ -188,11 +211,29 @@ func (mc *marginState) floatTop() (float64, bool) {
 // box's top, wherever the margins resolve (CSS 2.1, 8.3.1 and 9.5.1, as
 // browsers place floats once the position of their formatting context's
 // content is known): it moves down with them.
+//
+// An absolutely positioned box met while a box's top waited on the margins
+// takes that top as its static position (CSS 2.1, 10.6.4: the hypothetical
+// box starts at the content edge of its parent, which the collapsed
+// margins place), as Chromium draws it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 puts the static position of an absolute
+//     box first in a div of margin-top 10px whose first child has
+//     margin-top 40px 40px below the div's margin edge, at the child's top,
+//     and one between two siblings after the margin before it alone.
+//   - wpt: css/css-transforms/css-scale-nested-001 (body margin 8px, a p of
+//     margin-top 16px): Chromium draws the absolute box at 16px.
 func (mc *marginState) commit(y float64) {
 	mc.commitFloats(y)
 	for _, b := range mc.waiting {
 		b.y = y
 	}
+	for _, a := range mc.abs {
+		a.sy = y
+	}
+	mc.abs = nil
 	mc.waiting = nil
 	mc.strut = strut{}
 	mc.absorb = false
@@ -862,7 +903,7 @@ func (e *engine) layoutBlock(b *box, cb cblock, bc *bfc, cursor float64, mc *mar
 		if contentBottom < b.contentY() {
 			contentBottom = b.contentY()
 		}
-		inner.commit(contentBottom)
+		inner.commitEnd(contentBottom)
 	}
 	h := containedHeight(b, contentBottom-b.contentY())
 	content := h
@@ -1101,7 +1142,7 @@ func (e *engine) layoutOwnContext(b *box, cb cblock) {
 		mc.strut = strut{}
 	}
 	end = e.pastMargin(end, mc.strut, false)
-	mc.commit(end)
+	mc.commitEnd(end)
 	if !lineClampContainer(b) {
 		end = max(end, own.bottom())
 	}
@@ -1242,6 +1283,7 @@ func (e *engine) layoutBlockKids(b *box, cb cblock, bc *bfc, cursor float64, mc 
 		}
 		if k.abs {
 			staticBlock(k, cb, cursor+mc.strut.sum())
+			mc.absPending(k, nil)
 			continue
 		}
 		snap := take(cursor)
