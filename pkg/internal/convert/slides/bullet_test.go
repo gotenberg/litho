@@ -166,7 +166,10 @@ func TestText_SymbolBulletText(t *testing.T) {
 		{false, "\uf071", "Wingdings", "\u2751", "\u2751"},
 		{true, "q", "Wingdings", "\uf071", ""},
 		{false, "q", "Wingdings 2", "\uf071", ""},
-		{false, "n", "Wingdings", "\uf06e", ""},
+		{false, "n", "Wingdings", "\u25fc", "\u25fc"},
+		{false, "\uf0fc", "Wingdings", "\u2713", "\u2713"},
+		{false, "\u00d8", "Wingdings", "\u27a2", "\u27a2"},
+		{false, "\uf0a8", "Wingdings", "\uf0a8", ""},
 	} {
 		p := para("aaa", arial(18))
 		p.MarginLeft, p.Indent = 18, -18

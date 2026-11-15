@@ -228,11 +228,13 @@ func officeAdvance(c string, fams []string) (float64, bool) {
 //     write Wingdings "q" as U+2751, sd/n83889.pptx Wingdings 0xA7 as
 //     U+25AA, sd/rightToLeftParagraph.pptx Wingdings "v" as U+2756,
 //     oox/outliner-list-style.pptx and sd/bullet-indent.pptx Wingdings "l"
-//     as U+26AB.
+//     as U+26AB, sd/tdf123090.pptx Wingdings "n" as U+25FC.
+//   - litho/pptx: bullets-character writes Wingdings 0xD8 as U+27A2 and
+//     0xFC as U+2713.
 //   - openxmlsdk/pptx: v2FxTestFiles/presentation/O12_templates
 //     EdStudPres_TP10167125.potx writes Wingdings 0xA8 as U+F0A8, and
 //     Stafftrain_TP10167128.potx Wingdings 2 0x97 as U+F097.
-var wingdingsBullets = map[rune]rune{0x6C: '\u26ab', 0x71: '\u2751', 0x76: '\u2756', 0xA7: '\u25aa'}
+var wingdingsBullets = map[rune]rune{0x6C: '\u26ab', 0x6E: '\u25fc', 0x71: '\u2751', 0x76: '\u2756', 0xA7: '\u25aa', 0xD8: '\u27a2', 0xFC: '\u2713'}
 
 // maxRecode caps the recoded bullet characters a text body remembers.
 // Anti-DoS guard, not spec-mandated: a body's bullets use a few
