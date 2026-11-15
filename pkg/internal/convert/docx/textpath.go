@@ -1,13 +1,9 @@
 package docx
 
 import (
-	"bytes"
 	"context"
 	"math"
 	"strings"
-
-	gofont "github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/font/opentype"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -104,7 +100,13 @@ func (d *document) vmlTextPath(k *ooxml.Element, st *css.Style, w, h float64) *l
 		if err != nil || len(lines) == 0 || !numeric.Positive(lines[0].Width) {
 			return nil
 		}
-		ops := glyphOutlines(lines[0].Runs)
+		var outlines text.Outlines
+		var ops []typeset.PathOp
+		for _, t := range lines[0].Runs {
+			if t != nil {
+				ops = outlines.Run(ops, t)
+			}
+		}
 		x0, y0, x1, y1, ok := opsBounds(ops)
 		if !ok {
 			return nil
@@ -149,80 +151,6 @@ func vmlShadow(k *ooxml.Element) (*typeset.Color, float64, float64) {
 		}
 	}
 	return &typeset.Color{R: c.R, G: c.G, B: c.B, A: c.A}, dx, dy
-}
-
-// glyphOutlines returns the outlines of the glyphs of runs laid out on one
-// line, in points from the line's left baseline point, y downward. A run
-// whose face does not parse adds nothing.
-func glyphOutlines(runs []*typeset.Text) []typeset.PathOp {
-	var ops []typeset.PathOp
-	faces := map[*typeset.Face]*gofont.Face{}
-	for _, t := range runs {
-		if t == nil || t.Face == nil {
-			continue
-		}
-		f, ok := faces[t.Face]
-		if !ok {
-			// The text stack shaped the run with this program, so it
-			// parses; one that does not adds no outline.
-			f, _ = gofont.ParseTTF(bytes.NewReader(t.Face.Program)) //nolint:errcheck // a face without outlines draws nothing, see above.
-			faces[t.Face] = f
-		}
-		if f == nil || f.Upem() == 0 {
-			continue
-		}
-		k := t.Size / float64(f.Upem())
-		hs := t.HScale
-		if hs == 0 {
-			hs = 1
-		}
-		for _, g := range t.Glyphs {
-			ops = appendOutline(ops, f, g.GID, t.Origin.X+float64(g.X*hs), t.Origin.Y+g.Y, k, hs)
-		}
-	}
-	return ops
-}
-
-// appendOutline appends the outline of glyph gid of f at k points per font
-// unit, its origin at x, y, scaled horizontally by hs, to ops. Quadratic
-// segments become the cubic Béziers they equal.
-func appendOutline(ops []typeset.PathOp, f *gofont.Face, gid uint16, x, y, k, hs float64) []typeset.PathOp {
-	data, ok := f.GlyphData(gofont.GID(gid)).(gofont.GlyphOutline)
-	if !ok {
-		return ops
-	}
-	pt := func(s opentype.SegmentPoint) typeset.Point {
-		return typeset.Point{X: x + float64(hs*float64(s.X)*k), Y: y - float64(float64(s.Y)*k)}
-	}
-	var last typeset.Point
-	open := false
-	for _, s := range data.Segments {
-		switch s.Op {
-		case opentype.SegmentOpMoveTo:
-			if open {
-				ops = append(ops, typeset.PathOp{Kind: typeset.ClosePath})
-			}
-			last = pt(s.Args[0])
-			ops = append(ops, typeset.PathOp{Kind: typeset.MoveTo, P: [3]typeset.Point{last}})
-			open = true
-		case opentype.SegmentOpLineTo:
-			last = pt(s.Args[0])
-			ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{last}})
-		case opentype.SegmentOpQuadTo:
-			c, to := pt(s.Args[0]), pt(s.Args[1])
-			c1 := typeset.Point{X: last.X + 2*(c.X-last.X)/3, Y: last.Y + 2*(c.Y-last.Y)/3}
-			c2 := typeset.Point{X: to.X + 2*(c.X-to.X)/3, Y: to.Y + 2*(c.Y-to.Y)/3}
-			ops = append(ops, typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{c1, c2, to}})
-			last = to
-		case opentype.SegmentOpCubeTo:
-			last = pt(s.Args[2])
-			ops = append(ops, typeset.PathOp{Kind: typeset.CurveTo, P: [3]typeset.Point{pt(s.Args[0]), pt(s.Args[1]), last}})
-		}
-	}
-	if open {
-		ops = append(ops, typeset.PathOp{Kind: typeset.ClosePath})
-	}
-	return ops
 }
 
 // opsBounds returns the box of the points of ops, control points
