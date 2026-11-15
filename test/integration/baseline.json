@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-15T02:14:16Z",
+  "captured_at": "2026-11-15T05:56:16Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -81290,8 +81290,8 @@
     "openxmlsdk/docx": {
       "features": {
         "diff": {
-          "matched": 158,
-          "mismatched": 41,
+          "matched": 159,
+          "mismatched": 40,
           "skipped": 50,
           "metrics": {
             "convert_error": 0,
@@ -81460,12 +81460,12 @@
               "text_f1": 1
             },
             "O14ISOStrict/Word/instrText-Field_Definitions-EQ-Array-AlignLeft.docx": {
-              "layout": 0,
+              "layout": 0.8822,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0
+              "text_f1": 1
             },
             "O14ISOStrict/Word/instrText-Field_Definitions-NextIf.docx": {
               "layout": 1,
