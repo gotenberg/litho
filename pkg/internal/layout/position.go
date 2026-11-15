@@ -251,8 +251,9 @@ func holderOf(b *box) *box {
 		// A filter or a backdrop filter makes its element, the root
 		// excepted, the containing block of its absolute and fixed
 		// descendants, an inline box among them (Filter Effects 1, 3;
-		// Filter Effects 2, 2.1).
-		holds := a.st.HasTransform() && a.kind == kindBlock || filterHolds(a)
+		// Filter Effects 2, 2.1), and so does a will-change that names a
+		// property that would (CSS Will Change 1, 3).
+		holds := a.st.HasTransform() && a.kind == kindBlock || filterHolds(a) || willHold(a, fixed)
 		if !fixed && a.st.Position != css.Static {
 			holds = true
 		}
@@ -807,6 +808,18 @@ func (e *engine) clampToPage(b *box, p int) {
 	ny := max(min(b.y, top+pb.Height-b.borderH()), top)
 	b.shift(0, ny-b.y)
 	b.pageAnchored, b.anchorPage = true, p
+}
+
+// willHold reports a box whose will-change names a property that would
+// make it the containing block of its fixed descendants, or of its
+// absolute ones when fixed is not set (CSS Will Change 1, 3), the root
+// excepted.
+func willHold(a *box, fixed bool) bool {
+	w := css.WillHoldAbsolute
+	if fixed {
+		w = css.WillHoldFixed
+	}
+	return a.st.WillChange&w != 0 && a.parent != nil
 }
 
 // filterHolds reports a box whose filter or backdrop filter makes it the

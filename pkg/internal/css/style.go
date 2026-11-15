@@ -1171,6 +1171,9 @@ type Style struct {
 	// ContainerNames is the container-name property (CSS Conditional 5,
 	// 5.2), nil for none.
 	ContainerNames []string
+	// WillChange is what the will-change property makes of the box (CSS
+	// Will Change 1, 3), zero for auto.
+	WillChange WillChange
 	// DarkScheme reports a dark used colour scheme, the one color-scheme
 	// selects (CSS Color Adjustment 1, 2.1): light-dark() and the system
 	// colours resolve under it, and the canvas of a dark root is painted

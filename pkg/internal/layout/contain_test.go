@@ -65,3 +65,39 @@ func TestContainer_IndependentFormattingContext(t *testing.T) {
 		t.Errorf("absolute child at %v,%v, want the page's corner", got[0], got[1])
 	}
 }
+
+// TestWillChange_MakesWhatItsPropertiesWould holds will-change to CSS
+// Will Change 1, 3: transform makes the containing block of absolute and
+// fixed descendants, position of absolute ones alone, opacity of neither.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 places the
+//     children of each box as this test wants.
+func TestWillChange_MakesWhatItsPropertiesWould(t *testing.T) {
+	tests := []struct {
+		w            css.WillChange
+		fixed, holds bool
+	}{
+		{css.WillStack | css.WillHoldAbsolute | css.WillHoldFixed, true, true},
+		{css.WillStack | css.WillHoldAbsolute, false, true},
+		{css.WillStack | css.WillHoldAbsolute, true, false},
+		{css.WillStack | css.WillBackdropRoot, false, false},
+	}
+	for _, tt := range tests {
+		pos := css.Absolute
+		if tt.fixed {
+			pos = css.Fixed
+		}
+		host := sty(func(s *css.Style) { s.WillChange = tt.w }, margin(20))
+		child := sty(func(s *css.Style) { s.Position = pos; s.Top, s.Left = css.Pts(0), css.Pts(0) }, width(10), height(10))
+		rb := boxes(t, doc(el(sty(height(30))), el(host, el(child))), page(400, 400))
+		got := rect(kid(t, rb, 0, 1, 0))
+		if held := got[1] != 0; held != tt.holds {
+			t.Errorf("will-change %b, fixed %v: child at %v,%v, held %v, want %v", tt.w, tt.fixed, got[0], got[1], held, tt.holds)
+		}
+		if b := kid(t, rb, 0, 1); !b.isStackingContext() {
+			t.Errorf("will-change %b makes no stacking context", tt.w)
+		}
+	}
+}

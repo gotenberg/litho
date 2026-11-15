@@ -475,7 +475,8 @@ func (b *box) layered() bool {
 		// column or a column group.
 		return b.tpart <= partCell && (b.st.Position != css.Static || b.transformed())
 	}
-	return b.st.Position != css.Static || b.st.Opacity < 1 || b.transformed() || b.composited() || b.isItem() && !b.st.ZIndex.Auto || b.hostMoves()
+	return b.st.Position != css.Static || b.st.Opacity < 1 || b.transformed() || b.composited() || b.isItem() && !b.st.ZIndex.Auto || b.hostMoves() ||
+		b.st.WillChange&css.WillStack != 0
 }
 
 // effectInline reports a non-atomic inline box of an element that draws
@@ -509,13 +510,15 @@ func (b *box) hostMoves() bool {
 // isStackingContext reports whether the box creates a stacking context: a
 // positioned box with an integer z-index (CSS 2.1, 9.9.1), a fixed box
 // (CSS Position 3, 3.4), an opacity below 1 (CSS Color 3, 3.2), a
-// transform (CSS Transforms 1, 6), or a blend mode or isolation (CSS
-// Compositing 1, 3.2 and 3.3).
+// transform (CSS Transforms 1, 6), a blend mode or isolation (CSS
+// Compositing 1, 3.2 and 3.3), or a will-change that names a property
+// that would make one (CSS Will Change 1, 3).
 func (b *box) isStackingContext() bool {
 	if !b.layered() {
 		return false
 	}
-	return (b.st.Position != css.Static || b.isItem()) && !b.st.ZIndex.Auto || b.st.Position == css.Fixed || b.st.Opacity < 1 || b.transformed() || b.composited()
+	return (b.st.Position != css.Static || b.isItem()) && !b.st.ZIndex.Auto || b.st.Position == css.Fixed || b.st.Opacity < 1 || b.transformed() || b.composited() ||
+		b.st.WillChange&css.WillStack != 0
 }
 
 // composited reports a box whose blend mode is not normal, whose

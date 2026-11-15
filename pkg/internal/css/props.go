@@ -278,6 +278,7 @@ const (
 	pContainerType
 	pContainerName
 	pColorScheme
+	pWillChange
 	numProps
 )
 
@@ -1144,6 +1145,7 @@ func init() {
 		props[id] = def
 	}
 	props[pColorScheme] = colorSchemeProp()
+	props[pWillChange] = willChangeProp()
 	longhandByName = map[string]propID{}
 	for i := range props {
 		longhandByName[props[i].name] = propID(i)

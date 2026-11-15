@@ -74,13 +74,13 @@ func (l *backdropLevel) content(p int) []typeset.Fragment {
 
 // backdropRoot reports whether b forms a Backdrop Root (Filter Effects 2,
 // 3): a filter, an opacity below 1, a mask, a clip-path, a backdrop
-// filter or a blend mode. Transforms, z-index and fixed or sticky
-// positions do not. The root element forms one too: it is the bottom of
+// filter or a blend mode, or a will-change that names one of them.
+// Transforms, z-index and fixed or sticky positions do not. The root element forms one too: it is the bottom of
 // every walk ([engine.backdropImage]).
 func (b *box) backdropRoot() bool {
 	st := b.st
 	return len(st.Filter) > 0 || st.Opacity < 1 || len(st.Mask.Images) > 0 || !st.ClipPath.None() ||
-		len(st.BackdropFilter) > 0 || st.MixBlendMode != css.BlendNormal
+		len(st.BackdropFilter) > 0 || st.MixBlendMode != css.BlendNormal || st.WillChange&css.WillBackdropRoot != 0
 }
 
 // backdropOf returns the backdrop filter of b to draw, nil for none. An

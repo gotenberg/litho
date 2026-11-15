@@ -910,7 +910,7 @@ func tallestAvoid(kids []*box, depth int, in bool) float64 {
 // positioned descendants (CSS 2.1, 10.1; CSS Transforms 1, 2; Filter
 // Effects 1, 3; Filter Effects 2, 2.1).
 func holdsAbs(k *box) bool {
-	return k.st.Position != css.Static || k.st.HasTransform() && k.kind == kindBlock || filterHolds(k)
+	return k.st.Position != css.Static || k.st.HasTransform() && k.kind == kindBlock || filterHolds(k) || willHold(k, false)
 }
 
 // consumed returns how much of each column the content of the container
