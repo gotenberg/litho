@@ -6,6 +6,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // fillCtx is where a fill or line is resolved: the colour scope, the part
@@ -285,21 +287,6 @@ func (r *reader) shapeLine(fc *fillCtx, chain []*ooxml.Element, style *ooxml.Ele
 	return r.lineOf(srcs)
 }
 
-// The dash presets of 20.1.10.48 ST_PresetLineDashVal, dash and gap
-// lengths in line widths, as LibreOffice draws them.
-var presetDashes = map[string][]float64{
-	"dot":           {1, 3},
-	"dash":          {4, 3},
-	"dashDot":       {4, 3, 1, 3},
-	"lgDash":        {8, 3},
-	"lgDashDot":     {8, 3, 1, 3},
-	"lgDashDotDot":  {8, 3, 1, 3, 1, 3},
-	"sysDot":        {1, 1},
-	"sysDash":       {3, 1},
-	"sysDashDot":    {3, 1, 1, 1},
-	"sysDashDotDot": {3, 1, 1, 1, 1, 1},
-}
-
 // defaultLineWidth is the width of a line whose a:ln sets none: 9525 EMU,
 // three quarters of a point, what PowerPoint writes for its thinnest line.
 const defaultLineWidth = 0.75
@@ -345,9 +332,7 @@ func (r *reader) lineOf(srcs []lineSource) slides.Line {
 	unit := max(l.Width, 0.25)
 	for _, s := range srcs {
 		if d := s.ln.Child(ooxml.NSA, "prstDash"); d != nil {
-			for _, v := range presetDashes[attr(d, "val")] {
-				l.Dash = append(l.Dash, v*unit)
-			}
+			l.Dash = shape.PresetDash(attr(d, "val"), unit)
 			break
 		}
 		if d := s.ln.Child(ooxml.NSA, "custDash"); d != nil {
@@ -386,9 +371,38 @@ func (r *reader) lineOf(srcs []lineSource) slides.Line {
 		}
 		break
 	}
+	l.Dash, l.Cap = officeDash(l.Dash, unit, l.Cap)
 	l.Head = arrowOf(srcs, "headEnd")
 	l.Tail = arrowOf(srcs, "tailEnd")
 	return l
+}
+
+// officeDash returns the dash array dash of a line width wide and the cap
+// c as PowerPoint strokes them, by the rule Word and Excel share
+// ([ooxml.OfficeDash]): under a round cap each dash a width shorter and
+// each gap a width longer, under a square cap the lengths as they are
+// with flat caps.
+func officeDash(dash []float64, width float64, c slides.Cap) ([]float64, slides.Cap) {
+	if len(dash) == 0 {
+		return dash, c
+	}
+	tc := typeset.ButtCap
+	switch c {
+	case slides.CapRound:
+		tc = typeset.RoundCap
+	case slides.CapSquare:
+		tc = typeset.SquareCap
+	case slides.CapFlat:
+	}
+	dash, tc = ooxml.OfficeDash(dash, width, tc)
+	switch tc {
+	case typeset.RoundCap:
+		return dash, slides.CapRound
+	case typeset.SquareCap:
+		return dash, slides.CapSquare
+	case typeset.ButtCap:
+	}
+	return dash, slides.CapFlat
 }
 
 // arrowOf reads the first headEnd or tailEnd of the sources (20.1.8.37,

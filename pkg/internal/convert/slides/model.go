@@ -423,8 +423,10 @@ type Line struct {
 	// Color is the stroke colour.
 	Color css.Color
 	// Dash is the dash pattern in points, dash then gap, repeated; nil for
-	// a solid line. The reader resolves a preset dash (20.1.10.48
-	// ST_PresetLineDashVal) to the lengths Impress draws at Width.
+	// a solid line. The reader resolves a dash to the lengths its judging
+	// engine strokes at Width under Cap: Impress for ODP, PowerPoint for
+	// PPTX (a preset of 20.1.10.48 ST_PresetLineDashVal, with the change a
+	// round cap makes).
 	Dash []float64
 	// Cap is the line cap; Join the join.
 	Cap  Cap

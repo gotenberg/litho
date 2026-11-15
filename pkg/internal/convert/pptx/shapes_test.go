@@ -40,6 +40,34 @@ func sp(name, spPr, style string) string {
 		spPr + `</p:spPr>` + style + `</p:sp>`
 }
 
+// TestShapes_DashesAsPowerPointStrokesThem checks the dashes of a 4-point
+// line as PowerPoint strokes them in litho/pptx line-dashes: under a round
+// cap each dash a width shorter and each gap a width longer, the rule of
+// Word and Excel; under a flat cap the preset's lengths.
+func TestShapes_DashesAsPowerPointStrokesThem(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		dash, cap string
+		want      []float64
+		wantCap   slides.Cap
+	}{
+		{"dot", "rnd", []float64{0, 16}, slides.CapRound},
+		{"sysDot", "rnd", []float64{0, 8}, slides.CapRound},
+		{"dash", "rnd", []float64{12, 16}, slides.CapRound},
+		{"sysDash", "rnd", []float64{8, 8}, slides.CapRound},
+		{"lgDashDotDot", "rnd", []float64{28, 16, 0, 16, 0, 16}, slides.CapRound},
+		{"dash", "flat", []float64{16, 12}, slides.CapFlat},
+		{"dashDot", "flat", []float64{16, 12, 4, 12}, slides.CapFlat},
+		{"dash", "sq", []float64{16, 12}, slides.CapFlat},
+	} {
+		ln := `<a:ln w="50800" cap="` + tc.cap + `"><a:solidFill><a:srgbClr val="1F4E79"/></a:solidFill><a:prstDash val="` + tc.dash + `"/></a:ln>`
+		doc, _ := readDeck(t, testDeck{slides: []testSlide{{tree: sp("line", `<a:prstGeom prst="line"/>`+ln, "")}}})
+		if l := doc.Slides[0].Shapes[0].Line; !slices.Equal(l.Dash, tc.want) || l.Cap != tc.wantCap {
+			t.Errorf("%s under %s: dash %v cap %v, want %v cap %v", tc.dash, tc.cap, l.Dash, l.Cap, tc.want, tc.wantCap)
+		}
+	}
+}
+
 func TestShapes_FillsAndLines(t *testing.T) {
 	t.Parallel()
 	style := `<p:style><a:lnRef idx="2"><a:schemeClr val="accent2"/></a:lnRef><a:fillRef idx="3"><a:schemeClr val="accent1"/></a:fillRef><a:effectRef idx="0"><a:schemeClr val="accent1"/></a:effectRef><a:fontRef idx="minor"/></p:style>`
@@ -66,7 +94,8 @@ func TestShapes_FillsAndLines(t *testing.T) {
 				t.Errorf("fill %+v", s.Fill)
 			}
 			l := s.Line
-			if l.Width != 2 || !slices.Equal(l.Dash, []float64{8, 6}) || l.Cap != slides.CapRound || l.Join != slides.JoinBevel {
+			// A round cap shortens the dash by a width, lengthens the gap.
+			if l.Width != 2 || !slices.Equal(l.Dash, []float64{6, 8}) || l.Cap != slides.CapRound || l.Join != slides.JoinBevel {
 				t.Errorf("line %+v", l)
 			}
 			if l.Head != (slides.Arrow{Kind: slides.ArrowTriangle, Width: 2, Length: 0.5}) || l.Tail.Kind != slides.ArrowOval {

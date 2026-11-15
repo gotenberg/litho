@@ -426,7 +426,7 @@ const maxCustDashes = 64
 
 // dash returns the dash array in points of the line and the cap it is
 // stroked with: the custom dash in line widths when there is one, else the
-// preset's, as [officeDash] draws it under the line's cap. A dash array
+// preset's, as [OfficeDash] draws it under the line's cap. A dash array
 // whose lengths are all zero draws solid.
 func (s ShapeStyle) dash() ([]float64, typeset.LineCap) {
 	var out []float64
@@ -447,11 +447,12 @@ func (s ShapeStyle) dash() ([]float64, typeset.LineCap) {
 			return nil, s.Cap
 		}
 	}
-	return officeDash(out, s.LineWidth, s.Cap)
+	return OfficeDash(out, s.LineWidth, s.Cap)
 }
 
-// officeDash returns the dash array dash of a line width wide as Office
-// strokes it under the cap c, and the cap it strokes with: a round cap
+// OfficeDash returns the dash array dash of a line width wide as Word,
+// Excel and PowerPoint stroke it under the cap c, and the cap they stroke
+// it with: a round cap
 // shortens each dash by one width and lengthens each gap by as much, so
 // that the caps end where the dash and the gap meet; a square cap strokes
 // the lengths as they are with butt caps. A solid line keeps its cap.
@@ -465,10 +466,12 @@ func (s ShapeStyle) dash() ([]float64, typeset.LineCap) {
 //     keeps the square cap.
 //   - poi/xlsx: spreadsheet/56514.xlsx, Excel strokes a 10-point round
 //     dot as 0 20.
-//   - litho/pptx line-dashes: PowerPoint strokes the dot, dash, lgDash,
-//     dashDot and their long and system forms at 4 points under round caps
-//     the same way (dot as 0 16, sysDash as 8 8).
-func officeDash(dash []float64, width float64, c typeset.LineCap) ([]float64, typeset.LineCap) {
+//   - litho/pptx line-dashes: PowerPoint strokes dot, sysDot, dash,
+//     dashDot, lgDash, lgDashDot, lgDashDotDot and sysDash at 4 points
+//     under round caps as 0 16, 0 8, 12 16, 12 16 0 16, 28 16, 28 16 0 16,
+//     28 16 0 16 0 16 and 8 8, and its flat-capped dashes at their
+//     lengths. No PowerPoint drawing shows a dash under a square cap.
+func OfficeDash(dash []float64, width float64, c typeset.LineCap) ([]float64, typeset.LineCap) {
 	if len(dash) == 0 {
 		return nil, c
 	}
