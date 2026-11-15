@@ -103,6 +103,9 @@ func (d *document) drawing(s *story, c *ooxml.Element, st *css.Style, sink *inli
 			wpt, _ = ooxml.EMU(attrOr(ext, "cx"))
 			hpt, _ = ooxml.EMU(attrOr(ext, "cy"))
 		}
+		if !inline {
+			wpt, hpt = d.relativeSize(k, wpt, hpt)
+		}
 		alt, decorative := ooxml.Describe(k.Child(ooxml.NSWP, "docPr"))
 		data := k.Child(ooxml.NSA, "graphic").Child(ooxml.NSA, "graphicData")
 		n := d.graphic(s, data, st, max(wpt, 0), max(hpt, 0), alt, depth)
@@ -119,6 +122,48 @@ func (d *document) drawing(s *story, c *ooxml.Element, st *css.Style, sink *inli
 		}
 		sink.add(n)
 	}
+}
+
+// relativeSize returns the size of the anchored drawing k whose extent is
+// w by h points: a wp14:sizeRelH or wp14:sizeRelV whose wp14:pctWidth or
+// wp14:pctHeight is positive sizes that side as that share, in
+// thousandths of a percent, of the area its relativeFrom names: the page,
+// the area inside the margins, or a margin (MS-ODRAWXML, 2.3.1.2 and
+// 2.3.1.3; ST_SizeRelFromH and ST_SizeRelFromV). A share of 0 keeps the
+// extent, as does a drawing outside the body, whose page is not known
+// when it is built.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/dml-shape-relsize.docx: Word draws a
+//     shape of extent 88 by 63 points, pctWidth 40000 and pctHeight 20000
+//     of the margin, 189 by 130 points, its outline included, on a Letter
+//     page of 1417-twip margins: 40 and 20 per cent of 470 by 650.
+//   - libreoffice/docx ooxmlexport/dml-groupshape-relsize.docx: a group
+//     sized so scales its shapes with it.
+//   - libreoffice/docx ooxmlexport/dml-rectangle-relsize.docx: a shape of
+//     pctHeight 0 keeps its extent's height; one of pctHeight 70000 of the
+//     page is 70 per cent of the page tall.
+//   - libreoffice/docx ooxmlexport/effectextent-margin.docx departs: its
+//     text box of extent 159.5 points, pctWidth 40000 of a 415.3-point
+//     margin, prints 147 points wide, neither size; not explained.
+func (d *document) relativeSize(k *ooxml.Element, w, h float64) (float64, float64) {
+	if d.page == nil {
+		return w, h
+	}
+	if rel := k.Child(ooxml.NSWP14, "sizeRelH"); rel != nil {
+		if pct, ok := pctPosition(rel, "pctWidth"); ok && pct > 0 {
+			_, aw := hArea(d.page, attrOr(rel, "relativeFrom"))
+			w = float64(pct * aw)
+		}
+	}
+	if rel := k.Child(ooxml.NSWP14, "sizeRelV"); rel != nil {
+		if pct, ok := pctPosition(rel, "pctHeight"); ok && pct > 0 {
+			_, ah := vArea(d.page, attrOr(rel, "relativeFrom"))
+			h = float64(pct * ah)
+		}
+	}
+	return w, h
 }
 
 // graphic builds the content of a graphic frame of size w by h points.

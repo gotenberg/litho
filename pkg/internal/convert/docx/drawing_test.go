@@ -501,3 +501,33 @@ func TestDrawings_BreakClear(t *testing.T) {
 		})
 	}
 }
+
+// TestDrawings_RelativeSize sizes an anchored shape as a share of the area
+// its wp14:sizeRelH and wp14:sizeRelV name (MS-ODRAWXML, 2.3.1.2 and
+// 2.3.1.3), in thousandths of a percent, a share of 0 keeping the extent.
+func TestDrawings_RelativeSize(t *testing.T) {
+	t.Parallel()
+	const sect = `<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="2880" w:left="1440" w:header="720" w:footer="720"/></w:sectPr>`
+	shape := func(rel string) string {
+		return `<w:p><w:r><w:drawing><wp:anchor behindDoc="0" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing"><wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH>` +
+			`<wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:extent cx="1270000" cy="635000"/><wp:wrapNone/><wp:docPr id="3" name="s"/>` +
+			`<a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:spPr><a:prstGeom prst="rect"/></wps:spPr><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic>` +
+			rel + `</wp:anchor></w:drawing></w:r></w:p>`
+	}
+	body := shape(`<wp14:sizeRelH relativeFrom="margin"><wp14:pctWidth>50000</wp14:pctWidth></wp14:sizeRelH><wp14:sizeRelV relativeFrom="page"><wp14:pctHeight>25000</wp14:pctHeight></wp14:sizeRelV>`) +
+		shape(`<wp14:sizeRelH relativeFrom="leftMargin"><wp14:pctWidth>100000</wp14:pctWidth></wp14:sizeRelH><wp14:sizeRelV relativeFrom="margin"><wp14:pctHeight>0</wp14:pctHeight></wp14:sizeRelV>`) +
+		shape(``) + sect
+	b := build(t, body, nil)
+	shapes := find(b.root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+	if len(shapes) != 3 {
+		t.Fatalf("%d shapes, want 3", len(shapes))
+	}
+	// Half of the 468 points between the margins by a quarter of the 792
+	// point page; the left margin's 72 points by the extent's 50; the
+	// extent's 100 by 50.
+	for i, want := range [][2]float64{{234, 198}, {72, 50}, {100, 50}} {
+		if st := shapes[i].Style; math.Abs(st.Width.Value-want[0]) > 1e-6 || math.Abs(st.Height.Value-want[1]) > 1e-6 {
+			t.Errorf("shape %d is %v by %v, want %v by %v", i, st.Width.Value, st.Height.Value, want[0], want[1])
+		}
+	}
+}

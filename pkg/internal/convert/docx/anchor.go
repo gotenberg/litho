@@ -553,10 +553,10 @@ func position(e *ooxml.Element) (float64, string, string) {
 	return off, "", rel
 }
 
-// pctPosition reads the wp14 percentage offset child name of a
-// wp:positionH or wp:positionV (MS-ODRAWXML, 2.3.2.3, 2.3.2.4): a
-// fraction of the area the position is relative to, the element holding
-// thousandths of a percent.
+// pctPosition reads the wp14 percentage child name of e: the offset of a
+// wp:positionH or wp:positionV (MS-ODRAWXML, 2.3.2.3, 2.3.2.4), or the
+// width or height of a wp14:sizeRelH or wp14:sizeRelV, a fraction of the
+// area it is relative to, the element holding thousandths of a percent.
 func pctPosition(e *ooxml.Element, name string) (float64, bool) {
 	c := e.Child(ooxml.NSWP14, name)
 	if c == nil {

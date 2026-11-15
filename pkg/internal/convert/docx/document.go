@@ -113,6 +113,10 @@ type document struct {
 	// nested counts the table cells, text boxes and notes being built,
 	// whose drawings are not anchored to the page.
 	pending []pendingAnchor
+	// page holds the page size and margins of the body section being
+	// read, nil outside the body: what a drawing sized relative to the
+	// page or its margins is sized from ([document.relativeSize]).
+	page *section
 	// columnBreaks collects the paragraphs of the section being read
 	// that a column break starts.
 	columnBreaks []*layout.Node

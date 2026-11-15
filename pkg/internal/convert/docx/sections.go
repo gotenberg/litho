@@ -72,26 +72,9 @@ type section struct {
 	balance bool
 }
 
-// parseSection reads a w:sectPr (17.6.17), headers and footers it does not
-// name inherited from prev (17.10.5).
-func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
-	pw, ph := d.opts.DefaultPage(defaultPageWidth, defaultPageHeight)
-	s := &section{
-		width: pw, height: ph,
-		margin: [4]float64{defaultMargin, defaultMargin, defaultMargin, defaultMargin},
-		header: defaultHFDistance, footer: defaultHFDistance,
-		cols: 1, colSpace: 36, breakType: "nextPage",
-		headers: map[string]string{}, footers: map[string]string{},
-		headerH: map[string]float64{}, footerH: map[string]float64{},
-		shared: map[string]bool{},
-	}
-	if prev != nil {
-		maps.Copy(s.headers, prev.headers)
-		maps.Copy(s.footers, prev.footers)
-	}
-	if e == nil {
-		return s
-	}
+// readPage reads the page size and margins of the sectPr e (17.6.13
+// pgSz, 17.6.11 pgMar) over those s holds.
+func (s *section) readPage(e *ooxml.Element) {
 	if sz := e.Child(w, "pgSz"); sz != nil {
 		// A side past the longest a PDF page may have (ISO 32000-1,
 		// Annex C.2) keeps the default, as a side of zero does: the page
@@ -122,6 +105,46 @@ func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
 			s.gutter = max(0, v)
 		}
 	}
+}
+
+// pageOf returns a section holding the page size and margins of the
+// sectPr e alone, as [document.parseSection] reads them: what the
+// drawings of the section use before the section is read whole.
+func (d *document) pageOf(e *ooxml.Element) *section {
+	pw, ph := d.opts.DefaultPage(defaultPageWidth, defaultPageHeight)
+	s := &section{
+		width: pw, height: ph,
+		margin: [4]float64{defaultMargin, defaultMargin, defaultMargin, defaultMargin},
+		cols:   1, colSpace: 36,
+	}
+	if e != nil {
+		s.readPage(e)
+	}
+	s.applyOptions(d.opts)
+	return s
+}
+
+// parseSection reads a w:sectPr (17.6.17), headers and footers it does not
+// name inherited from prev (17.10.5).
+func (d *document) parseSection(e *ooxml.Element, prev *section) *section {
+	pw, ph := d.opts.DefaultPage(defaultPageWidth, defaultPageHeight)
+	s := &section{
+		width: pw, height: ph,
+		margin: [4]float64{defaultMargin, defaultMargin, defaultMargin, defaultMargin},
+		header: defaultHFDistance, footer: defaultHFDistance,
+		cols: 1, colSpace: 36, breakType: "nextPage",
+		headers: map[string]string{}, footers: map[string]string{},
+		headerH: map[string]float64{}, footerH: map[string]float64{},
+		shared: map[string]bool{},
+	}
+	if prev != nil {
+		maps.Copy(s.headers, prev.headers)
+		maps.Copy(s.footers, prev.footers)
+	}
+	if e == nil {
+		return s
+	}
+	s.readPage(e)
 	if c := e.Child(w, "cols"); c != nil {
 		if v, ok := ooxml.Int(attrOr(c, "num")); ok && v > 1 {
 			s.cols = min(v, maxColumns)
@@ -380,16 +403,20 @@ func (d *document) body(root *ooxml.Element) []*section {
 		// Each paragraph lays its lines on the document grid of the
 		// section it belongs to, whose sectPr closes the section after it.
 		var grids []float64
+		var sects []*ooxml.Element
 		for _, e := range mergeDeleted(body.Kids()) {
 			if sp := e.Child(w, "pPr").Child(w, "sectPr"); sp != nil && e.Is(w, "p") {
 				grids = append(grids, linePitch(sp))
+				sects = append(sects, sp)
 			}
 		}
 		grids = append(grids, linePitch(body.Child(w, "sectPr")))
+		sects = append(sects, body.Child(w, "sectPr"))
 		next := func() {
-			d.linePitch = 0
+			d.linePitch, d.page = 0, nil
 			if len(secs) < len(grids) {
 				d.linePitch = grids[len(secs)]
+				d.page = d.pageOf(sects[len(secs)])
 			}
 		}
 		next()
@@ -418,7 +445,7 @@ func (d *document) body(root *ooxml.Element) []*section {
 	}
 	closeSection(body.Child(w, "sectPr"))
 	d.inBody = false
-	d.linePitch = 0
+	d.linePitch, d.page = 0, nil
 	// Name the pages: a continuous break keeps the page when its size
 	// does not change; any other break starts a page, where the first
 	// paragraph keeps only the part of its space before that the last
