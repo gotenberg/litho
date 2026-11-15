@@ -46,3 +46,14 @@ func countBreaks(n *layout.Node) int {
 	}
 	return c
 }
+
+// TestBuild_TextEdgeSpaces locks the white space at the edges of a w:t:
+// dropped unless the element keeps it with xml:space "preserve", as Word
+// reads it (see [wordText]).
+func TestBuild_TextEdgeSpaces(t *testing.T) {
+	b := build(t, `<w:p><w:r><w:t>SDT </w:t></w:r><w:r><w:t> Run</w:t></w:r>`+
+		`<w:r><w:t xml:space="preserve"> kept </w:t></w:r><w:r><w:t>end</w:t></w:r></w:p>`, nil)
+	if got, want := textOf(b.root), "SDTRun kept end"; got != want {
+		t.Errorf("text %q, want %q", got, want)
+	}
+}

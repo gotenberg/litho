@@ -1058,7 +1058,7 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 		}
 		switch {
 		case c.Is(w, "t"):
-			buf.WriteString(c.Text)
+			buf.WriteString(wordText(c))
 		case c.Is(w, "tab"), c.Is(w, "ptab"):
 			buf.WriteByte('\t')
 		case c.Is(w, "br"):
@@ -1189,3 +1189,23 @@ func symbol(c *ooxml.Element) string {
 	s, _ := mapSymbolText(string(rune(v)), attrOr(c, "font")) //nolint:gosec // at most 21 bits, parsed above
 	return s
 }
+
+// wordText returns the text of a w:t element t as Word reads it: without
+// the white space at its edges unless t keeps it with xml:space
+// "preserve" (ECMA-376 Part 1, 17.3.3.31 t; XML 1.0, 2.10).
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/docx: v2FxTestFiles/wordprocessing/SDT/SDT.docx prints the
+//     runs "SDT " and " Run", which keep no white space, as "SDTRun".
+//   - poi/docx: document/Bug60341.docx prints the footer runs "Page " and
+//     "of " as "Page1of1".
+func wordText(t *ooxml.Element) string {
+	if v, ok := t.AttrNS(xmlNS, "space"); ok && v == "preserve" {
+		return t.Text
+	}
+	return strings.Trim(t.Text, " \t\r\n")
+}
+
+// xmlNS is the namespace of the xml prefix (Namespaces in XML 1.0, 3).
+const xmlNS = "http://www.w3.org/XML/1998/namespace"
