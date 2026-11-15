@@ -21,9 +21,14 @@ func ParseGeometry(spPr *Element) *shape.Geometry {
 	if p == nil {
 		return nil
 	}
-	g := &shape.Geometry{Preset: attrOr(p, "prst")}
+	return &shape.Geometry{Preset: attrOr(p, "prst"), Adjust: adjustValues(p)}
+}
+
+// adjustValues reads the adjustment values of a preset's avLst (20.1.9.5).
+func adjustValues(p *Element) []shape.Adjust {
+	var out []shape.Adjust
 	for _, gd := range p.Child(NSA, "avLst").Kids() {
-		if !gd.Is(NSA, "gd") || len(g.Adjust) >= shape.MaxGuides {
+		if !gd.Is(NSA, "gd") || len(out) >= shape.MaxGuides {
 			continue
 		}
 		// An adjustment value is "val n" (20.1.9.5 avLst); a formula
@@ -33,9 +38,26 @@ func ParseGeometry(spPr *Element) *shape.Geometry {
 		if !ok || op != shape.OpVal || args[0].Kind != shape.ArgConst {
 			continue
 		}
-		g.Adjust = append(g.Adjust, shape.Adjust{Name: attrOr(gd, "name"), Value: args[0].Value})
+		out = append(out, shape.Adjust{Name: attrOr(gd, "name"), Value: args[0].Value})
 	}
-	return g
+	return out
+}
+
+// ParseTextWarp reads the preset text warp of a body's properties bodyPr
+// (ECMA-376 Part 1, 20.1.9.19 prstTxWarp) with the adjustment values of
+// its avLst; nil when it names none or textNoShape, which warps nothing.
+func ParseTextWarp(bodyPr *Element) *shape.TextWarp {
+	return TextWarpOf(bodyPr.Child(NSA, "prstTxWarp"))
+}
+
+// TextWarpOf reads a prstTxWarp element (20.1.9.19); nil for a nil
+// element, no name or textNoShape.
+func TextWarpOf(w *Element) *shape.TextWarp {
+	name := attrOr(w, "prst")
+	if w == nil || name == "" || name == "textNoShape" {
+		return nil
+	}
+	return &shape.TextWarp{Preset: name, Adjust: adjustValues(w)}
 }
 
 // ParseCustomGeometry reads a custom geometry (ECMA-376 Part 1, 20.1.9.8

@@ -94,3 +94,15 @@ func TestParseGeometry_Unresolved(t *testing.T) {
 		t.Error("an unknown name passed")
 	}
 }
+
+func TestParseTextWarp(t *testing.T) {
+	w := ParseTextWarp(spPrOf(t, `<a:prstTxWarp prst="textArchUp"><a:avLst><a:gd name="adj" fmla="val 12795000"/><a:gd name="x" fmla="*/ w 1 2"/></a:avLst></a:prstTxWarp>`))
+	if w == nil || w.Preset != "textArchUp" || len(w.Adjust) != 1 || w.Adjust[0] != (shape.Adjust{Name: "adj", Value: 12795000}) {
+		t.Errorf("warp = %+v", w)
+	}
+	for _, body := range []string{``, `<a:prstTxWarp prst="textNoShape"/>`, `<a:prstTxWarp/>`} {
+		if w := ParseTextWarp(spPrOf(t, body)); w != nil {
+			t.Errorf("%q: warp %+v, want none", body, w)
+		}
+	}
+}
