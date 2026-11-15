@@ -265,9 +265,25 @@ func levelStart(lvl *odf.ListLevel) int {
 	return 1
 }
 
-// levelLabel formats the label of level l of the list lc.
+// levelLabel formats the label of level l of the list lc. A level of
+// loext:is-legal true, LibreOffice's extension for Word's legal
+// numbering (ECMA-376 Part 1, 17.9.4 isLgl), writes every number its
+// label shows in Arabic numerals, its own included: a format of other
+// numerals becomes "1", and the Arabic ones, zero-padded or not, stay
+// ([arabicFormat]).
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt odfexport/IsLegal.fodt: Writer labels the legal
+//     second outline level, of format "01, 02, 03, ...", "Sect 1.01" under
+//     a first level of format I.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, a legal outline level
+//     of format I under a level of format A prints "S 2.1", the level
+//     below it "B.II.a", and a legal list level of format i under one of
+//     format A "2.1".
 func (b *builder) levelLabel(lc *listCtx, l int) string {
 	lvl := lc.style.Levels[l]
+	legal := lvl.El.A(odf.NSLOExt, "is-legal") == "true"
 	show := 1
 	if v, err := intconv.Atoi(lvl.El.A(odf.NSText, "display-levels")); err == nil && v > 1 {
 		show = min(v, l+1)
@@ -278,6 +294,9 @@ func (b *builder) levelLabel(lc *listCtx, l int) string {
 		format := "1"
 		if dl != nil {
 			format = dl.El.A(odf.NSStyle, "num-format")
+		}
+		if legal && !arabicFormat(format) {
+			format = "1"
 		}
 		n := lc.counter.n[d]
 		if !lc.counter.used[d] {
@@ -299,6 +318,13 @@ func (b *builder) levelLabel(lc *listCtx, l int) string {
 		return ""
 	}
 	return lvl.El.A(odf.NSStyle, "num-prefix") + label + lvl.El.A(odf.NSStyle, "num-suffix")
+}
+
+// arabicFormat reports a style:num-format that writes Arabic numerals:
+// "1" and LibreOffice's zero-padded "01, 02, 03, ..." family.
+func arabicFormat(format string) bool {
+	first, _, _ := strings.Cut(format, ", ")
+	return format == "1" || strings.Trim(first, "0") == "1" && strings.HasPrefix(first, "0")
 }
 
 // outlineLabel returns the label of a heading at level from the outline

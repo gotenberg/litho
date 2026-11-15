@@ -21,7 +21,10 @@ const listStyles = `<text:list-style style:name="LN">` +
 	`<text:list-level-style-number text:level="1" style:num-suffix="." style:num-format="1"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.27cm" fo:text-indent="-0.635cm" fo:margin-left="1.27cm"/></style:list-level-properties></text:list-level-style-number>` +
 	`<text:list-level-style-number text:level="2" style:num-suffix=")" style:num-format="a" text:display-levels="2"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.905cm" fo:text-indent="-0.635cm" fo:margin-left="1.905cm"/></style:list-level-properties></text:list-level-style-number></text:list-style>` +
 	`<text:list-style style:name="LB"><text:list-level-style-bullet text:level="1" text:bullet-char="•"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="space" fo:text-indent="-0.635cm" fo:margin-left="1.27cm"/></style:list-level-properties></text:list-level-style-bullet></text:list-style>` +
-	`<text:list-style style:name="LR"><text:list-level-style-number text:level="1" style:num-suffix="." style:num-format="I"><style:list-level-properties text:space-before="0.5cm" text:min-label-width="1cm"/></text:list-level-style-number></text:list-style>`
+	`<text:list-style style:name="LR"><text:list-level-style-number text:level="1" style:num-suffix="." style:num-format="I"><style:list-level-properties text:space-before="0.5cm" text:min-label-width="1cm"/></text:list-level-style-number></text:list-style>` +
+	`<text:list-style style:name="LG"><text:list-level-style-number text:level="1" style:num-suffix="." style:num-format="A"/>` +
+	`<text:list-level-style-number text:level="2" loext:is-legal="true" style:num-suffix="." style:num-format="i" text:display-levels="2"/>` +
+	`<text:list-level-style-number text:level="3" loext:is-legal="true" style:num-suffix="." style:num-format="01, 02, 03, ..." text:display-levels="3"/></text:list-style>`
 
 func TestConvert_Lists(t *testing.T) {
 	item := func(s string) string { return `<text:list-item><text:p>` + s + `</text:p></text:list-item>` }
@@ -56,6 +59,14 @@ func TestConvert_Lists(t *testing.T) {
 		{
 			"roman label width mode", `<text:list text:style-name="LR">` + item("a") + item("b") + `</text:list>`,
 			[]string{"I.a", "II.b"},
+		},
+		{
+			// LibreOffice's loext:is-legal, Word's legal numbering
+			// (ECMA-376 Part 1, 17.9.4 isLgl): Arabic numerals at every
+			// level the label shows, zero-padded ones kept.
+			"legal level", `<text:list text:style-name="LG">` + item("a") + `<text:list-item><text:p>b</text:p><text:list>` + item("b1") +
+				`<text:list-item><text:p>b2</text:p><text:list>` + item("c") + `</text:list></text:list-item></text:list></text:list-item></text:list>`,
+			[]string{"A.a", "B.b", "2.1.b1", "2.2.b2", "2.2.01.c"},
 		},
 	}
 	for _, tc := range cases {
