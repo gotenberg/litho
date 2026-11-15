@@ -18,7 +18,9 @@ const hashText = "###"
 // or error that fits is too; a number in the General format is written
 // with fewer decimals, then in scientific notation, to fit; any other
 // value that does not fit is "###", with [Result.Hash] set. A fill is
-// left out of the measure.
+// left out of the measure. Under Excel's rules ([Format.Excel]) a General
+// number keeps as many characters as digits of the widest width fit the
+// cell, a point, sign or exponent counted as a digit (see excelGeneral).
 func (f *Format) Fit(v Value, width float64, measure func(string) float64) Result {
 	r := f.Apply(v)
 	if v.Kind == Text || measure == nil {
@@ -40,6 +42,9 @@ func (f *Format) Fit(v Value, width float64, measure func(string) float64) Resul
 	}
 	w := width
 	s := narrowGeneral(x, digitCount(w, maxDigit))
+	if f.excel {
+		return f.excelGeneral(r, s, w, measure)
+	}
 	signs, dots, exps := strings.Count(s, "-"), strings.Count(s, "."), strings.Count(s, "E")
 	// A small value narrowed to "0" may still fit with the point counted
 	// at its own width (output2.cxx, #i112250).
@@ -52,6 +57,26 @@ func (f *Format) Fit(v Value, width float64, measure func(string) float64) Resul
 	if signs+dots+exps > 0 {
 		s = narrowGeneral(x, digitCount(w, maxDigit))
 	}
+	if loc := f.sections[0].loc; loc != nil && loc.Decimal != "" {
+		s = strings.Replace(s, ".", loc.Decimal, 1)
+	}
+	if measure(s) > w {
+		return f.hash(r)
+	}
+	r.Text = s
+	return r
+}
+
+// excelGeneral returns r showing s, a General number narrowed to as many
+// characters as digits fit the cell, "###" when s does not fit width:
+// Excel counts each character of a narrowed General number as a digit,
+// where Calc counts a point, a sign and an exponent at their own widths.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/escape-unicode prints 1161014163 as 1.16E+09 in
+//     a column of the default width, where Calc fits 1.161E+09.
+func (f *Format) excelGeneral(r Result, s string, w float64, measure func(string) float64) Result {
 	if loc := f.sections[0].loc; loc != nil && loc.Decimal != "" {
 		s = strings.Replace(s, ".", loc.Decimal, 1)
 	}

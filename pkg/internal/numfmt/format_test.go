@@ -214,6 +214,42 @@ func TestFit_General(t *testing.T) {
 	}
 }
 
+// TestFit_ExcelGeneral checks that under Excel's rules a General number
+// is narrowed to as many characters as digits fit, a point, sign or
+// exponent counted as a digit.
+func TestFit_ExcelGeneral(t *testing.T) {
+	w := map[rune]float64{'.': 2.78, '-': 3.33, 'E': 6.67, '+': 5.84}
+	measure := func(s string) float64 {
+		sum := 0.0
+		for _, c := range s {
+			if v, ok := w[c]; ok {
+				sum += v
+			} else {
+				sum += 5.56
+			}
+		}
+		return sum
+	}
+	tests := []struct {
+		v     float64
+		width float64
+		want  string
+	}{
+		{1161014163, 45, "1.16E+09"},
+		{123456789, 48, "1.23E+08"},
+		{1234.5678, 38, "1234.6"},
+		{-98765.4321, 48, "-98765.4"},
+		// Excel fills a cell it cannot fit with "#" (Result.Fill).
+		{123456789, 28, ""},
+	}
+	for _, tt := range tests {
+		got := General.Excel().Fit(Value{Kind: Number, Number: tt.v}, tt.width, measure).Text
+		if got != tt.want {
+			t.Errorf("Fit(%v, %v) = %q, want %q", tt.v, tt.width, got, tt.want)
+		}
+	}
+}
+
 func TestFormat_WithLocale(t *testing.T) {
 	tests := []struct {
 		lang, code string
