@@ -19,3 +19,16 @@ func TestBox_FitsItsSizeClass(t *testing.T) {
 		t.Errorf("box is %d bytes, past its size class of %d: move a field behind a pointer or shrink one", size, boxClass)
 	}
 }
+
+// TestGroupFx_FitsItsCost locks a [groupFx] within [groupFxCost] bytes,
+// a size class of the allocator: the next class is 128, and the budget
+// charges every group with effects that much.
+func TestGroupFx_FitsItsCost(t *testing.T) {
+	t.Parallel()
+	if size := unsafe.Sizeof(groupFx{}); size > groupFxCost {
+		t.Errorf("groupFx is %d bytes, past its cost of %d", size, groupFxCost)
+	}
+	if size := unsafe.Sizeof(backdropFx{}); size > backdropCost {
+		t.Errorf("backdropFx is %d bytes, past its cost of %d", size, backdropCost)
+	}
+}

@@ -8,7 +8,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/effect"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
-	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 func filters(fs ...css.Filter) func(*css.Style) {
@@ -150,28 +149,6 @@ func TestFilter_SameBytesOnEveryArchitecture(t *testing.T) {
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("filter images:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
-	}
-}
-
-func TestBackdropFilter_PrintsTheElementWithOneWarning(t *testing.T) {
-	glass := sty(width(20), height(20), bg(css.Color{R: 1, G: 1, B: 1, A: 0.5}), func(s *css.Style) {
-		s.BackdropFilter = []css.Filter{{Kind: css.FilterBlur, Amount: px(10)}}
-	})
-	res := run(t, doc(el(sty(bg(blue)), el(glass), el(glass))), page(40, 60))
-	if got := strings.Join(paintedKinds(res), ", "); got != "path, path, path" {
-		t.Errorf("painted %s, want the backdrop and the two boxes as paths", got)
-	}
-	n := 0
-	for _, w := range res.Warnings {
-		if strings.Contains(w.Message, "backdrop-filter") {
-			n++
-			if w.Effect != warn.Approximated {
-				t.Errorf("warning effect %v, want approximated", w.Effect)
-			}
-		}
-	}
-	if n != 1 {
-		t.Errorf("%d backdrop-filter warnings in %+v, want one a document", n, res.Warnings)
 	}
 }
 

@@ -70,6 +70,9 @@
 //     [OpacityTransfer].
 //   - box-shadow and text-shadow blurs (CSS Backgrounds 3, 7.1): [Fill],
 //     [Blur] with [GaussianKernel] of half the blur radius, [Tint].
+//   - backdrop-filter (Filter Effects 2, 2.1): what lies behind the
+//     element drawn by [Paint] over its border box, then the functions
+//     above, a blur reading past the box by [EdgeMirror].
 //
 // Office effects (ECMA-376 Part 1, 20.1.8), with the falloffs Microsoft
 // Office and LibreOffice print:

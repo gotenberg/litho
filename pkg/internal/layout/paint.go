@@ -75,6 +75,9 @@ type groupFx struct {
 	// one image, nil for none, box its element's border box.
 	filter []css.Filter
 	box    typeset.Rect
+	// backdrop is the backdrop filter drawn under the group's content,
+	// nil for none.
+	backdrop *backdropFx
 	// zoom is how much the groups around a filter group enlarge its
 	// content on the page, 1 for none: its image is drawn that much finer.
 	zoom float64
@@ -93,6 +96,9 @@ type groupFx struct {
 	// transform is its offset, which moves each of its fragments after
 	// the columns cut it, so the cut clips them inside it.
 	shift bool
+	// root reports the innermost group of an element that forms a
+	// Backdrop Root (Filter Effects 2, 3).
+	root bool
 }
 
 // openClip is a clip group open in the painter, for an overflow: hidden
@@ -801,6 +807,17 @@ func (p *painter) unit(b *box, own bool) {
 		}
 	}
 	blend, isolate := p.compositing(b)
+	// effects reports that b pushed a group of its own effects.
+	effects := false
+	var bd *backdropFx
+	if len(b.st.BackdropFilter) > 0 {
+		if bd = p.backdropOf(b); bd != nil && blend != typeset.BlendNormal {
+			// The element blends with its filtered backdrop inside the
+			// group the backdrop starts, which composites with the page
+			// by source-over (Filter Effects 2, 2.1).
+			bd.blend, blend, isolate = blend, typeset.BlendNormal, true
+		}
+	}
 	var clips []*typeset.Path
 	var mask *typeset.SoftMask
 	if b.parent != nil && b.isStackingContext() {
@@ -834,9 +851,7 @@ func (p *painter) unit(b *box, own bool) {
 		for _, c := range clips[min(len(clips), 1):] {
 			push(&ditem{group: true, fx: &groupFx{opacity: 1, clip: c}})
 		}
-	}
-	if len(b.st.BackdropFilter) > 0 && b.kind != kindInline {
-		p.backdropFilter(b)
+		effects = true
 	}
 	if len(b.st.Filter) > 0 && b.parent != nil {
 		// The filter applies to the element's rendering before its clip,
@@ -848,6 +863,24 @@ func (p *painter) unit(b *box, own bool) {
 			box, _ = p.inlineBounds(b) // an element on no line filters what its floats and blocks paint
 		}
 		push(&ditem{group: true, fx: &groupFx{opacity: 1, filter: b.st.Filter, box: box, flow: p.inFlow(), zoom: p.zoom()}})
+		effects = true
+	}
+	if bd != nil {
+		// The filtered backdrop is drawn inside the element's transform,
+		// effects and clips, under its background (Filter Effects 2, 2.1):
+		// the innermost group, which an empty mark opens so it reaches
+		// every page the box does.
+		bd.zoom, bd.flow = p.zoom(), p.inFlow()
+		p.e.backdrops = true
+		push(&ditem{group: true, fx: &groupFx{opacity: 1, backdrop: bd}})
+		effects = true
+		p.emit(b, false, &typeset.Group{}, bd.box.Y, bd.box.Y+bd.box.Height, -1)
+	}
+	if effects && b.backdropRoot() {
+		// The element is a Backdrop Root (Filter Effects 2, 3): what its
+		// innermost group holds is the backdrop of the backdrop filters
+		// inside it.
+		p.cur().container.setEffects().root = true
 	}
 	if b.kind == kindInline {
 		p.inlineUnit(b)

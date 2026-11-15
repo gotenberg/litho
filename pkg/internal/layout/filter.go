@@ -221,7 +221,7 @@ func (e *engine) filterImage(fs []css.Filter, frags []typeset.Fragment, box type
 		if f.Kind == css.FilterURL {
 			next, err = refs[i].Apply(e.ctx, s)
 		} else {
-			next, err = applyFilter(e.ctx, s, f)
+			next, err = applyFilter(e.ctx, s, f, effect.EdgeNone)
 		}
 		if err != nil {
 			return nil, err
@@ -259,8 +259,9 @@ func cssPixelGrid(res effect.Resolution, w, h float64) effect.Resolution {
 const maxFilterSide = 1 << 16
 
 // applyFilter applies the filter function f to the RGBA surface s, in
-// place or into a new surface it returns (Filter Effects 1, 13.1).
-func applyFilter(ctx context.Context, s *effect.Surface, f css.Filter) (*effect.Surface, error) {
+// place or into a new surface it returns (Filter Effects 1, 13.1); a
+// blur reads past s's edge by edge.
+func applyFilter(ctx context.Context, s *effect.Surface, f css.Filter, edge effect.Edge) (*effect.Surface, error) {
 	a := max(clamp(f.Amount), 0)
 	k := s.Grid.Scale
 	lut := func(t effect.TransferFunc, alpha bool) error {
@@ -272,7 +273,7 @@ func applyFilter(ctx context.Context, s *effect.Surface, f css.Filter) (*effect.
 	}
 	switch f.Kind {
 	case css.FilterBlur:
-		return s, boxBlur(ctx, s, chromiumSigma(a))
+		return s, boxBlur(ctx, s, chromiumSigma(a), edge)
 	case css.FilterBrightness:
 		return s, lut(effect.BrightnessTransfer(a), false)
 	case css.FilterContrast:
@@ -320,7 +321,7 @@ func dropShadow(ctx context.Context, s *effect.Surface, sh css.Shadow, k float64
 	if err := effect.Offset(ctx, cov, float64(clamp(sh.X)*k), float64(clamp(sh.Y)*k)); err != nil {
 		return nil, err
 	}
-	if err := boxBlur(ctx, cov, chromiumSigma(max(clamp(sh.Blur), 0))); err != nil {
+	if err := boxBlur(ctx, cov, chromiumSigma(max(clamp(sh.Blur), 0)), effect.EdgeNone); err != nil {
 		return nil, err
 	}
 	out, err := effect.Tint(ctx, cov, effect.ColorOf(col))
@@ -335,13 +336,13 @@ func dropShadow(ctx context.Context, s *effect.Surface, sh css.Shadow, k float64
 }
 
 // boxBlur blurs s by the three box blurs whose deviation is nearest sigma
-// points at s's scale, transparent past its edge; nothing for 0.
-func boxBlur(ctx context.Context, s *effect.Surface, sigma float64) error {
+// points at s's scale, reading past its edge by edge; nothing for 0.
+func boxBlur(ctx context.Context, s *effect.Surface, sigma float64, edge effect.Edge) error {
 	if !(sigma > 0) {
 		return nil
 	}
 	kern := effect.BoxKernel(boxWidth(float64(sigma*s.Grid.Scale)), 3)
-	return effect.Blur(ctx, s, kern, kern, effect.EdgeNone)
+	return effect.Blur(ctx, s, kern, kern, edge)
 }
 
 // hiddenTagged returns the fragments of frags that hang from a structure
@@ -392,19 +393,4 @@ func unpainted(f typeset.Fragment) typeset.Fragment {
 		{Kind: typeset.ClosePath},
 	}, Fill: &typeset.Fill{}}
 	return &typeset.Group{Transform: typeset.Identity, Clip: clip, Opacity: 1, Content: []typeset.Fragment{f}}
-}
-
-// backdropFilter settles the backdrop-filter of b (Filter Effects 2, 3)
-// as Chromium prints it: the element is a stacking context and paints as
-// it would without the property, its backdrop unfiltered. One warning a
-// document says so.
-//
-// # Corpus evidence
-//
-//   - probe, html: Chromium prints an element of backdrop-filter:
-//     blur(10px) and a translucent background over a gradient as the
-//     gradient, then the element's background and text, with no bitmap
-//     and no blur.
-func (p *painter) backdropFilter(b *box) {
-	p.e.warnOnce(warn.CSSUnsupported, warn.Approximated, "backdrop-filter is printed without filtering the backdrop, as Chromium prints it", b.y+p.dy)
 }

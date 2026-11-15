@@ -480,16 +480,17 @@ func (b *box) layered() bool {
 // effectInline reports a non-atomic inline box of an element that draws
 // through a group effect: an opacity below 1 (CSS Color 4, 15), a blend
 // mode or isolation (CSS Compositing 1, 3.2 and 3.3), a clip-path (CSS
-// Masking 1, 5.1), a mask (6.1) or a filter (Filter Effects 1, 6). Each
-// makes the element a stacking context that paints in its parent's layer
-// of z-index 0, all its fragments and the blocks and floats it holds as
-// one unit ([painter.inlineUnit]). litho draws no backdrop filter on an
-// inline box.
+// Masking 1, 5.1), a mask (6.1), a filter (Filter Effects 1, 6) or a
+// backdrop filter (Filter Effects 2, 2.1). Each makes the element a
+// stacking context that paints in its parent's layer of z-index 0, all
+// its fragments and the blocks and floats it holds as one unit
+// ([painter.inlineUnit]). litho draws no backdrop filter on an inline box
+// ([painter.backdropOf]).
 func effectInline(b *box) bool {
 	st := b.st
 	return b.kind == kindInline && b.node != nil && b.parent != nil &&
 		(st.Opacity < 1 || st.MixBlendMode != css.BlendNormal || st.Isolation == css.IsolationIsolate ||
-			!st.ClipPath.None() || len(st.Mask.Images) > 0 || len(st.Filter) > 0)
+			!st.ClipPath.None() || len(st.Mask.Images) > 0 || len(st.Filter) > 0 || len(st.BackdropFilter) > 0)
 }
 
 // hostMoves reports a block-level box split out of a relatively

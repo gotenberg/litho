@@ -7,8 +7,8 @@ import "github.com/gotenberg/litho/pkg/internal/typeset"
 // its group's kids.
 const ditemCost = 96
 
-// groupFxCost is the effects of a group that has some, a [groupFx] of 104
-// bytes in an allocation of 112, its transform and its clip's path aside.
+// groupFxCost is the effects of a group that has some, a [groupFx] of 112
+// bytes, its transform and its clip's path aside.
 const groupFxCost = 112
 
 // matrixCost is a group's transform, a [typeset.Matrix] of 48 bytes.
@@ -31,6 +31,9 @@ func itemCost(d *ditem) int64 {
 		}
 		if fx.mask != nil {
 			n += typeset.ContentCost(fx.mask.Content)
+		}
+		if bd := fx.backdrop; bd != nil {
+			n += backdropCost + typeset.FragmentCost(bd.edge)
 		}
 	}
 	return n

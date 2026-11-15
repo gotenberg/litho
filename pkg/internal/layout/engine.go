@@ -163,6 +163,17 @@ type engine struct {
 	// each page, against effect.MaxPagePixels; a fixed box's, repeated on
 	// every page, count under -1.
 	filterPixels map[int]*effect.Page
+	// backdrops reports a document with a backdrop filter to draw; then
+	// backdropLevels are the groups the display list is distributed or
+	// flattened through, backdropPage the page a fixed box is repeated
+	// on, backdropGround the canvas of a page in flow coordinates and
+	// backdropCount the backdrop filters drawn on each page
+	// (backdrop.go).
+	backdrops      bool
+	backdropLevels []backdropLevel
+	backdropPage   int
+	backdropGround func(page int) []typeset.Fragment
+	backdropCount  map[int]int
 }
 
 // charge charges the conversion's budget n bytes for what, failing the

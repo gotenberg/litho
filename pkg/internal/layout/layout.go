@@ -134,7 +134,8 @@ func newEngine(ctx context.Context, fonts *text.Fonts, opts Options, w, h float6
 		ctx: ctx, fonts: fonts, opts: opts, pageW: w, pageH: h, maxPages: maxPages, mem: limits.BudgetFrom(ctx),
 		warned: map[string]bool{}, images: map[string]*Picture{},
 		metrics: map[spaceKey]text.Metrics{}, spaces: map[spaceKey]float64{}, hyphens: map[spaceKey]*hyphenMark{}, emMarks: map[spaceKey]*emphasisMark{}, missing: map[rune]bool{},
-		root: &typeset.StructElem{Role: "Document", Lang: opts.Lang},
+		root:         &typeset.StructElem{Role: "Document", Lang: opts.Lang},
+		backdropPage: -1,
 	}
 }
 
@@ -261,11 +262,15 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 	pages := make([]*typeset.Page, n)
 	e.pageFrags = make([]int, n)
 	free := map[typeset.Fragment]bool{}
-	perPage := e.distribute(d, 0, n, used, free)
 	fitH := 0.0
 	if e.opts.FitFirstPage {
 		fitH = e.fittedHeight(rb, d)
 	}
+	if e.backdrops {
+		e.backdropGround = e.groundOf(canvas, rb, fitH)
+		defer func() { e.backdropGround = nil }()
+	}
+	perPage := e.distribute(d, 0, n, used, free)
 	for k := range n {
 		pb := e.assembledBox(k, fitH)
 		pg := &typeset.Page{Width: pb.Width + 2*pb.Bleed, Height: pb.Height + 2*pb.Bleed}
@@ -352,6 +357,8 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 // and the top-level fragments placed on one page.
 func (e *engine) distribute(it *ditem, depth, n int, used map[*typeset.StructElem]bool, free map[typeset.Fragment]bool) map[int][]typeset.Fragment {
 	out := map[int][]typeset.Fragment{}
+	e.pushBackdropLevel(backdropLevel{it: it, pages: out, flow: depth == 0})
+	defer e.popBackdropLevel()
 	for _, k := range it.kids {
 		if k.group && k.fixedGroup() {
 			e.repeat(k, depth, n, used, out)
@@ -367,6 +374,13 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*typeset.StructEle
 					continue
 				}
 				if e.admit(p) {
+					if fx := k.effects(); fx.backdrop != nil {
+						var band *typeset.Rect
+						if fx.backdrop.flow {
+							band = &typeset.Rect{Y: e.pageTop(p), Height: e.sliceH(p)}
+						}
+						frags = e.backdropped(k, frags, p, band)
+					}
 					if fx := k.effects(); len(fx.filter) > 0 {
 						var band *typeset.Rect
 						if fx.flow {
@@ -493,7 +507,12 @@ func (e *engine) repeat(it *ditem, depth, n int, used map[*typeset.StructElem]bo
 			continue
 		}
 		e.pageFrags[p] += leaves
+		e.pushBackdropLevel(backdropLevel{move: typeset.Matrix{A: 1, D: 1, F: e.pageTop(p)}})
+		saved := e.backdropPage
+		e.backdropPage = p
 		frags := e.flatten(it, depth+1, p > 0)
+		e.backdropPage = saved
+		e.popBackdropLevel()
 		if p == 0 {
 			for _, f := range frags {
 				markTree(f, used)
@@ -526,6 +545,8 @@ func countLeaves(it *ditem) int {
 // element.
 func (e *engine) flatten(it *ditem, depth int, artifact bool) []typeset.Fragment {
 	var out []typeset.Fragment
+	e.pushBackdropLevel(backdropLevel{it: it, flat: &out})
+	defer e.popBackdropLevel()
 	for _, k := range it.kids {
 		if k.group {
 			if depth+1 >= maxGroupDepth {
@@ -533,6 +554,9 @@ func (e *engine) flatten(it *ditem, depth int, artifact bool) []typeset.Fragment
 				continue
 			}
 			frags := e.flatten(k, depth+1, artifact)
+			if k.effects().backdrop != nil {
+				frags = e.backdropped(k, frags, e.backdropPage, nil)
+			}
 			if len(k.effects().filter) > 0 {
 				frags = e.filtered(k, frags, nil, -1)
 			}
