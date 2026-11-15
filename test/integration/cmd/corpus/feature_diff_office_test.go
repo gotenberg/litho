@@ -100,26 +100,20 @@ func officeCorpusFeature(t *testing.T, corpus string) (*diffFeature, []Fixture) 
 // The references are Microsoft's (Office for the web through Graph); the
 // fixtures Microsoft refused have none and are skipped.
 //
-//   - litho/docx: of the 119 references, 115 clear both bars; text F1 is
-//     under 0.85 on intl-rtl-arabic (0.368), intl-rtl-hebrew (0.241),
+//   - litho/docx: of the 126 references, 122 clear both bars; text F1 is
+//     under 0.85 on intl-rtl-arabic (0.346), intl-rtl-hebrew (0.240),
 //     para-alignment (0.826) and tables-rtl (0.713).
-//   - litho/xlsx: of the 88 references, 81 clear both bars; text F1 is under
-//     0.85 on chartex_region_map (0.737), defined_names (0.729), fonts
-//     (0.498), paper_sizes (0.821), rtl_sheet (0.526), sheet_background
-//     (0.656) and wide_columns (0.596).
-//   - litho/pptx: of the 109 references, 106 clear both bars; text F1 is under
-//     0.85 on text-fill-effects (0.769), text-rtl (0.392) and
-//     text-warp-wordart (0.826).
+//   - litho/xlsx: of the 97 references, 94 clear both bars; text F1 is under
+//     0.85 on fonts (0.750), rtl_sheet (0.407) and wide_columns (0.611).
+//   - litho/pptx: of the 116 references, 115 clear both bars; text F1 is under
+//     0.85 on text-rtl (0.384).
 func TestDiffFeature_OfficeReferencesScoreOneAgainstTheirGoldens(t *testing.T) {
 	t.Parallel()
 
 	underBars := map[string]map[string]bool{
 		"docx": {"intl-rtl-arabic": true, "intl-rtl-hebrew": true, "para-alignment": true, "tables-rtl": true},
-		"xlsx": {
-			"chartex_region_map": true, "defined_names": true, "fonts": true,
-			"paper_sizes": true, "rtl_sheet": true, "sheet_background": true, "wide_columns": true,
-		},
-		"pptx": {"text-fill-effects": true, "text-rtl": true, "text-warp-wordart": true},
+		"xlsx": {"fonts": true, "rtl_sheet": true, "wide_columns": true},
+		"pptx": {"text-rtl": true},
 	}
 	for _, format := range []string{"docx", "xlsx", "pptx"} {
 		corpus := "litho/" + format
