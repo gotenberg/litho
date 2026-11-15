@@ -103,6 +103,11 @@ func TestPlaceholders_Inheritance(t *testing.T) {
 			deck:  testDeck{slides: []testSlide{{tree: phShape("N", "sldNum", 12, 0, 0, 0, 0, para("3"))}}},
 			shape: "N", absent: true,
 		},
+		{
+			name:  "a slide number that places itself prints without the layout's",
+			deck:  testDeck{slides: []testSlide{{tree: phShape("N", "sldNum", 4294967295, 127000, 254000, 254000, 127000, para("3"))}}},
+			shape: "N", want: typeset.Rect{X: 10, Y: 20, Width: 20, Height: 10},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

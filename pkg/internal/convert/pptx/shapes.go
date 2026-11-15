@@ -290,8 +290,9 @@ func footerKind(p placeholder) bool {
 // placeholders as far as the slide leaves them unset. A placeholder
 // without text is an empty prompt whose text never prints, its fill and
 // outline only; a date, footer or slide number
-// placeholder prints only when the slide's layout has one of its type,
-// as Impress turns them into its master page's header and footer fields.
+// placeholder prints when the slide's layout has one of its type, or when
+// it places itself (its own spPr xfrm), as PowerPoint prints a slide's
+// shapes.
 //
 // # Corpus evidence
 //
@@ -299,6 +300,10 @@ func footerKind(p placeholder) bool {
 //     at the slide's own place when its layout holds one, and nothing when
 //     only the master does, whatever the master's p:hf says; a placeholder
 //     no layer places prints nothing.
+//   - libreoffice/pptx: sd/n778859's slide number placeholder, of idx
+//     4294967295 and its own xfrm, whose layout holds none, prints "1";
+//     no other slide of the PPTX corpora holds a date, footer or slide
+//     number placeholder its layout lacks.
 //   - libreoffice/pptx: sd/tdf104015's empty title placeholder prints its red fill and
 //     blue outline.
 //   - libreoffice/pptx: sd/tdf127964's rectangle filled with the background
@@ -308,7 +313,7 @@ func (r *reader) autoShape(c *shapeCtx, el *ooxml.Element) *slides.Shape {
 	chain := inherited(c.layer, el)
 	p, isPh := phOf(el)
 	nv := nvProps(el)
-	if isPh && footerKind(p) && c.layer.parent.find(p) == nil {
+	if isPh && footerKind(p) && c.layer.parent.find(p) == nil && spPr(el).Child(ooxml.NSA, "xfrm") == nil {
 		return nil
 	}
 	s := &slides.Shape{Kind: slides.KindGeometry, Name: attr(nv, "name"), Href: r.href(c.part, nv.Child(ooxml.NSA, "hlinkClick")), Jump: r.jump(c.part, nv.Child(ooxml.NSA, "hlinkClick"))}
