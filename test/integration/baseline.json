@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-15T00:34:30Z",
+  "captured_at": "2026-11-15T02:14:16Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9326,8 +9326,8 @@
     "libreoffice/docx": {
       "features": {
         "diff": {
-          "matched": 189,
-          "mismatched": 94,
+          "matched": 190,
+          "mismatched": 93,
           "skipped": 58,
           "metrics": {
             "convert_error": 0,
@@ -9768,7 +9768,7 @@
               "text_f1": 0.878
             },
             "ooxmlexport/FDO78590.docx": {
-              "layout": 0.5597,
+              "layout": 0.6413,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -10992,11 +10992,11 @@
               "text_f1": 0.9041
             },
             "ooxmlexport/fdo74110.docx": {
-              "layout": 0,
+              "layout": 0.9326,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "ooxmlexport/fdo74153.docx": {
@@ -19101,7 +19101,7 @@
               "text_f1": 1
             },
             "sd-data/fit-to-size.fodp": {
-              "layout": 0.8117,
+              "layout": 0.8194,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19365,11 +19365,11 @@
               "text_f1": 1
             },
             "sd/invalidAudio.odp": {
-              "layout": 0.9896,
+              "layout": 0.991,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 0.8571
             },
             "sd/invalidBuAutoNumEnumValue.odp": {
@@ -19589,7 +19589,7 @@
               "text_f1": 1
             },
             "sd/tdf100348_Fontwork2TextWarp.odp": {
-              "layout": 0,
+              "layout": 0.5198,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19597,7 +19597,7 @@
               "text_f1": 0
             },
             "sd/tdf100348_FontworkBitmapFill.odp": {
-              "layout": 0,
+              "layout": 0.4487,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19605,7 +19605,7 @@
               "text_f1": 0
             },
             "sd/tdf100348_FontworkGradientGlow.odp": {
-              "layout": 0,
+              "layout": 0.6413,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -37173,8 +37173,8 @@
     "libreoffice/pptx": {
       "features": {
         "diff": {
-          "matched": 177,
-          "mismatched": 92,
+          "matched": 181,
+          "mismatched": 88,
           "skipped": 42,
           "metrics": {
             "convert_error": 0,
@@ -37676,7 +37676,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.2
+              "text_f1": 0.5333
             },
             "oox/tdf131082.pptx": {
               "layout": 0.9871,
@@ -37687,7 +37687,7 @@
               "text_f1": 1
             },
             "oox/tdf139618_ImportWordArtGradient.pptx": {
-              "layout": 0.0332,
+              "layout": 0.8409,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -37767,11 +37767,11 @@
               "text_f1": 1
             },
             "oox/tdf155327_WordArtDefaultColor.pptx": {
-              "layout": 0.6837,
+              "layout": 0.9743,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "oox/tdf155412_typeface.pptx": {
@@ -37975,19 +37975,19 @@
               "text_f1": 1
             },
             "sd/ShapePlusImage.pptx": {
-              "layout": 0.6823,
+              "layout": 0.9345,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sd/ShapeTextInflateTop.pptx": {
-              "layout": 0.6299,
+              "layout": 0.945,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
+              "strict": 1,
               "text_f1": 1
             },
             "sd/arc-validiert.pptx": {
@@ -39103,7 +39103,7 @@
               "text_f1": 1
             },
             "sd/tdf114848.pptx": {
-              "layout": 0.7924,
+              "layout": 0.8203,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -39119,12 +39119,12 @@
               "text_f1": 1
             },
             "sd/tdf116350-texteffects.pptx": {
-              "layout": 0,
+              "layout": 0.5397,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.1129
+              "text_f1": 0.2647
             },
             "sd/tdf118776.pptx": {
               "layout": 1,
@@ -39247,12 +39247,12 @@
               "text_f1": 1
             },
             "sd/tdf125573_FontWorkScaleX.pptx": {
-              "layout": 0,
+              "layout": 0.6411,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.5222
+              "strict": 0.5,
+              "text_f1": 0.8065
             },
             "sd/tdf126234.pptx": {
               "layout": 0.3745,
@@ -55558,7 +55558,7 @@
               "text_f1": 1
             },
             "shapes-wordart": {
-              "layout": 0.4207,
+              "layout": 0.4698,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -71949,8 +71949,8 @@
     "litho/pptx": {
       "features": {
         "diff": {
-          "matched": 111,
-          "mismatched": 12,
+          "matched": 112,
+          "mismatched": 11,
           "skipped": 14,
           "metrics": {
             "convert_error": 0,
@@ -72911,12 +72911,12 @@
               "text_f1": 1
             },
             "text-warp-wordart": {
-              "layout": 0.1498,
+              "layout": 0.931,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.7931
+              "strict": 0.3333,
+              "text_f1": 0.9082
             },
             "theme-dark-color-map": {
               "layout": 0.9706,
