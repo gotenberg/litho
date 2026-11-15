@@ -62,7 +62,7 @@ func TestConvertWarnings_Families(t *testing.T) {
 		{"links", html(`<p><a href="#nowhere">x</a>`), WarningLinkUnresolved, "nowhere"},
 		{"value formats", func() *Conversion { return FromXLSX(bytes.NewReader(brokenSheetXLSX(t)), fonts) }, WarningValueFormatUnsupported, "[Bogus]"},
 		{"page setup", html(`<style>@page { size: 20000in }</style><p>x`), WarningPageSetupUnsupported, "@page size"},
-		{"other content", html(`<p>a<video>v</video>`), WarningContentUnsupported, "<video>"},
+		{"other content", html(`<p>a<iframe src="x.html">i</iframe>`), WarningContentUnsupported, "<iframe>"},
 		{"limits", func() *Conversion { return FromText(strings.NewReader(strings.Repeat("a", 1<<16+1)), fonts) }, WarningLimitReached, ""},
 	} {
 		var out bytes.Buffer

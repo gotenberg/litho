@@ -75,6 +75,7 @@ func TestWithRequiredResources_FailsEveryLoadThatFails(t *testing.T) {
 		{"@import", `<style>@import url(gone.css);</style><p>x`, []HTMLOption{WithResources(files)}, WarningResourceFailed, "gone.css", true},
 		{"data URL that does not decode", `<img src="data:image/png;base64,%%%" alt=x>`, nil, WarningResourceFailed, "base64,%%%", true},
 		{"CSS image", `<div style="background-image: url(gone.png); height: 10px"></div>`, []HTMLOption{WithResources(files)}, WarningPictureUnreadable, "gone.png", true},
+		{"video poster", `<video poster="gone.png"></video>`, []HTMLOption{WithResources(files)}, WarningResourceFailed, "gone.png", true},
 		{"image of an SVG drawing", `<svg width=10 height=10><image href="gone.png" width=10 height=10 /></svg>`, []HTMLOption{WithResources(files)}, WarningPictureUnreadable, "gone.png", true},
 		{"font whose file does not arrive", `<style>@font-face { font-family: F; src: url(gone.ttf) } p { font-family: F }</style><p>x`, []HTMLOption{WithResources(files)}, WarningFontNotLoaded, "gone.ttf", true},
 		{"font no text uses", `<style>@font-face { font-family: F; src: url(gone.ttf) }</style><p>x`, []HTMLOption{WithResources(files)}, WarningFontNotLoaded, "gone.ttf", true},

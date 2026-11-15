@@ -194,7 +194,8 @@ func FromText(src io.Reader, opts ...TextOption) *Conversion {
 //     replaced by its alt text. @font-face reads TrueType, OpenType, WOFF
 //     and WOFF2.
 //   - Form controls draw as the text they show. Embedded documents and
-//     media are left out.
+//     audio are left out; a video draws its poster, which loads as an
+//     image does, and neither its frames nor its controls.
 //
 // A construct that is not drawn as the document means it is reported in
 // [ConvertReport.Warnings].

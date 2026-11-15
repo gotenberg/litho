@@ -218,8 +218,10 @@
 //     (100vw without one, calc() not read).
 //   - <input>, <button>, <select> and <textarea> draw as inline blocks
 //     holding the text they show, without their widgets, with a warning.
-//   - <iframe>, <embed>, <video> and <audio> are left out with a warning;
-//     <object> and <canvas> draw their fallback content.
+//   - <iframe>, <embed> and <audio> are left out with a warning; <object>
+//     and <canvas> draw their fallback content. A <video> is a replaced box
+//     showing its poster, sized by it, or 300 by 150 CSS pixels showing
+//     nothing without one; its frames and controls are not drawn.
 //   - Elements whose display is none, and their content, generate nothing.
 //
 // # Tagging

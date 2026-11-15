@@ -74,9 +74,10 @@ var skipped = map[atom.Atom]bool{
 }
 
 // unsupported are the elements whose content is not drawn, with a
-// warning: embedded documents and media. Immutable lookup table.
+// warning: embedded documents and audio. A video draws its poster
+// ([builder.video]). Immutable lookup table.
 var unsupported = map[atom.Atom]bool{
-	atom.Iframe: true, atom.Embed: true, atom.Video: true, atom.Audio: true, atom.Frame: true, atom.Frameset: true,
+	atom.Iframe: true, atom.Embed: true, atom.Audio: true, atom.Frame: true, atom.Frameset: true,
 }
 
 // builder turns the styled DOM into the layout's content tree. It lives
@@ -312,6 +313,8 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 			return []*layout.Node{{Kind: layout.Text, Style: parent, Text: "\u200b"}}, nil
 		case atom.Img:
 			return b.image(ctx, n, st, parent), nil
+		case atom.Video:
+			return b.video(ctx, n, st), nil
 		case atom.Input, atom.Select, atom.Textarea:
 			return b.control(n, st), nil
 		case atom.Button:
@@ -617,6 +620,87 @@ func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style)
 		}
 	}
 	return []*layout.Node{node}
+}
+
+// video builds the replaced box of a video element styled st (HTML
+// Standard, 15.4.1): its poster frame, the picture its poster attribute
+// names (4.8.8), drawn as an img draws its picture, which the user agent
+// sheet's object-fit: contain fits and centres in the box as 15.4.1 asks.
+// The poster's natural size is the box's (4.8.8, the natural width of the
+// playback area). Without a poster, or with one that does not load, the
+// box has no natural size and takes the default object size, 300 by 150
+// CSS pixels (CSS Images 3, 4.3), and draws nothing.
+//
+// A frame of the video and the controls are not drawn: litho decodes no
+// video, and draws no user interface. Chromium draws its controls over the
+// box of a video with the controls attribute, on a black ground when no
+// poster shows, and the first frame of a video whose resource loads and
+// that has no poster; both are reported. The source and track children
+// and the fallback content draw nothing, as in a browser that plays video
+// (4.8.8).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints a video
+//     whose poster is a 200 by 100 picture as a 200 by 100 box showing the
+//     poster, with or without a src that does not load and with source
+//     children and fallback text, which it does not show; at width 400
+//     and height 100 the poster 200 by 100 centred, under object-fit
+//     cover 400 by 200 cut to the box, under fill stretched to it, inside
+//     its padding and border over its background; at width 100px alone a
+//     100 by 50 box. Without a poster, or with one that does not load, a
+//     300 by 150 box drawing nothing, 100 by 150 at width 100px alone and
+//     300 by 50 at height 50px alone. With controls, the same box, black
+//     under its controls without a poster, the poster darkened under them
+//     with one.
+//   - probe, html: an audio element prints nothing and takes no room
+//     without controls, and a 300 by 54 box of controls with them.
+func (b *builder) video(ctx context.Context, n *dom.Node, st *css.Style) []*layout.Node {
+	var pic *layout.Picture
+	if poster, ok := attr(n, "poster"); ok && strings.Trim(poster, "\t\n\f\r ") != "" {
+		p, err := b.res.picture(ctx, resolveRef(b.scan.resourceBase, poster))
+		switch {
+		case ctx.Err() != nil:
+			return nil
+		case err != nil:
+			b.warnings = append(b.warnings, typeset.Warning{Code: warningCode(err), Effect: warn.Omitted, Message: fmt.Sprintf(
+				"the poster %s of a video was left out: %v", displayURL(strings.TrimSpace(poster)), err)})
+		default:
+			pic = p
+		}
+	}
+	if _, ok := attr(n, "controls"); ok {
+		b.warnOnce(warn.ContentUnsupported, warn.Omitted, "video controls", "the controls of <video> are not drawn")
+	}
+	if pic == nil {
+		if hasVideoSource(n) {
+			b.warnOnce(warn.ContentUnsupported, warn.Omitted, "video frames", "the frames of <video> are not drawn; its poster is")
+		}
+		pic = &layout.Picture{
+			Width: 300 * css.Pt, Height: 150 * css.Pt,
+			Vector:         func(context.Context, typeset.Rect) []typeset.Fragment { return nil },
+			NoNaturalWidth: true, NoNaturalHeight: true, NoRatio: true,
+		}
+	}
+	node := &layout.Node{Kind: layout.Replaced, Style: st, Picture: pic}
+	node.ID, _ = attr(n, "id")
+	return []*layout.Node{node}
+}
+
+// hasVideoSource reports a video element that names a media resource: a
+// src attribute or a source child with one (HTML Standard, 4.8.11.5).
+func hasVideoSource(n *dom.Node) bool {
+	if src, ok := attr(n, "src"); ok && strings.TrimSpace(src) != "" {
+		return true
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == dom.ElementNode && c.DataAtom == atom.Source && c.Namespace == "" {
+			if src, ok := attr(c, "src"); ok && strings.TrimSpace(src) != "" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // replacedByContent returns the replaced box of an element styled st

@@ -411,14 +411,14 @@ func TestPrepare_DrawsFormControlsAsText(t *testing.T) {
 
 func TestPrepare_LeavesEmbeddedContentOut(t *testing.T) {
 	t.Parallel()
-	p := prep(t, `<p id=x>a<iframe src="x.html">i</iframe><video>v</video><math><mi>m</mi></math>`+
-		`<object data="x.swf">fallback</object><canvas>canvas-fallback</canvas><video>v2</video></p>`, Options{})
+	p := prep(t, `<p id=x>a<iframe src="x.html">i</iframe><audio>v</audio><math><mi>m</mi></math>`+
+		`<object data="x.swf">fallback</object><canvas>canvas-fallback</canvas><audio>v2</audio><video>v3</video></p>`, Options{})
 	if got := treeText(byID(t, p.root, "x")); got != "amfallbackcanvas-fallback" {
 		t.Errorf("text %q", got)
 	}
 	want := []string{"content-unsupported", "content-unsupported", "content-unsupported"}
 	if got := codes(p.warnings); strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("warnings %v, want three unsupported-element (video once)", got)
+		t.Errorf("warnings %v, want three unsupported-element (audio once)", got)
 	}
 }
 
