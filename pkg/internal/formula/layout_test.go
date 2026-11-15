@@ -493,3 +493,29 @@ func TestDerive_Direction(t *testing.T) {
 		}
 	}
 }
+
+// TestEdges_BorderOfOneColourIsARing fills a border of one colour all
+// round as one ring between the border box and the padding box, as the
+// HTML layout fills it, and a border of several colours a side at a time
+// (MathML Core, 3.1.2; CSS Backgrounds 3, 4).
+func TestEdges_BorderOfOneColourIsARing(t *testing.T) {
+	s := dejavu(t)
+	st := mathStyle("DejaVu Math TeX Gyre", 10)
+	blue, red := typeset.Color{B: 1, A: 1}, typeset.Color{R: 1, A: 1}
+	for _, c := range []struct {
+		colors [4]typeset.Color
+		paths  int
+	}{{[4]typeset.Color{blue, blue, blue, blue}, 1}, {[4]typeset.Color{blue, red, blue, blue}, 4}} {
+		sp := space("10pt", "5pt", "0")
+		sst := st
+		sst.Border, sst.BorderColor = [4]float64{1, 2, 1, 2}, c.colors
+		sp.Style = &sst
+		rs := rects(lay(t, s, el("math", sp), st))
+		if len(rs) != c.paths {
+			t.Fatalf("%d paths, want %d", len(rs), c.paths)
+		}
+		if c.paths == 1 && (len(rs[0].Ops) != 10 || rs[0].Fill.Rule != typeset.EvenOdd || !near(rs[0].Ops[5].P[0].X-rs[0].Ops[0].P[0].X, 2)) {
+			t.Fatalf("ring %+v, want two rectangles filled even-odd, the inner one 2pt in", rs[0])
+		}
+	}
+}

@@ -38,10 +38,14 @@ type item struct {
 }
 
 // rect is a filled rectangle: a fraction bar, a radical's overbar, a
-// background or a border side. x and y are its top-left corner.
+// background or a border side. x and y are its top-left corner. A ring,
+// the border of one colour all round, is the rectangle less the one
+// inset from it by the widths of its sides, indexed top, right, bottom,
+// left.
 type rect struct {
 	w, h  float64
 	color typeset.Color
+	ring  *[4]float64
 }
 
 // operator holds the properties of an embellished operator (MathML Core,
@@ -71,6 +75,39 @@ func (b *box) fill(x, y, w, h float64, c typeset.Color) {
 	b.items = append(b.items, item{x: x, y: y, rect: &rect{w: w, h: h, color: c}})
 }
 
+// borders paints the borders of st on the border box of top-left
+// corner x, y, w wide and h tall: one ring when every side that has a
+// width has the same colour, as the HTML layout fills a border of one
+// colour, else a rectangle a side.
+func (b *box) borders(x, y, w, h float64, st *Style) {
+	bd := st.Border
+	if bd == [4]float64{} {
+		return
+	}
+	var c typeset.Color
+	ringed, seen := true, false
+	for s, v := range bd {
+		switch {
+		case v <= 0:
+		case !seen:
+			c, seen = st.BorderColor[s], true
+		case st.BorderColor[s] != c:
+			ringed = false
+		}
+	}
+	if ringed {
+		if w > 0 && h > 0 && c.A > 0 {
+			in := bd
+			b.items = append(b.items, item{x: x, y: y, rect: &rect{w: w, h: h, color: c, ring: &in}})
+		}
+		return
+	}
+	b.fill(x, y, w, bd[top], st.BorderColor[top])
+	b.fill(x, float64(y+h)-bd[bottom], w, bd[bottom], st.BorderColor[bottom])
+	b.fill(x, y, bd[left], h, st.BorderColor[left])
+	b.fill(float64(x+w)-bd[right], y, bd[right], h, st.BorderColor[right])
+}
+
 // draw appends the fragments of b drawn with its left baseline point at
 // x, y to out.
 func (b *box) draw(x, y float64, out *[]typeset.Fragment) {
@@ -85,16 +122,14 @@ func (b *box) draw(x, y float64, out *[]typeset.Fragment) {
 		case it.rect != nil:
 			r := it.rect
 			x0, y0 := float64(x+it.x), float64(y+it.y)
-			*out = append(*out, &typeset.Path{
-				Ops: []typeset.PathOp{
-					{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x0, Y: y0}}},
-					{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x0 + r.w, Y: y0}}},
-					{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x0 + r.w, Y: y0 + r.h}}},
-					{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x0, Y: y0 + r.h}}},
-					{Kind: typeset.ClosePath},
-				},
-				Fill: &typeset.Fill{Color: r.color},
-			})
+			p := &typeset.Path{Ops: rectOps(x0, y0, r.w, r.h), Fill: &typeset.Fill{Color: r.color}}
+			if in := r.ring; in != nil {
+				if w, h := r.w-in[left]-in[right], r.h-in[top]-in[bottom]; w > 0 && h > 0 {
+					p.Ops = append(p.Ops, rectOps(x0+in[left], y0+in[top], w, h)...)
+				}
+				p.Fill.Rule = typeset.EvenOdd
+			}
+			*out = append(*out, p)
 		}
 	}
 }
@@ -172,11 +207,20 @@ func edges(c *box, st *Style, centred bool) *box {
 	bh := float64(b.asc+b.desc) - float64(m[top]+m[bottom])
 	if !st.Hidden {
 		b.fill(bx, by, bw, bh, st.Background)
-		b.fill(bx, by, bw, bd[top], st.BorderColor[top])
-		b.fill(bx, float64(by+bh)-bd[bottom], bw, bd[bottom], st.BorderColor[bottom])
-		b.fill(bx, by, bd[left], bh, st.BorderColor[left])
-		b.fill(float64(bx+bw)-bd[right], by, bd[right], bh, st.BorderColor[right])
+		b.borders(bx, by, bw, bh, st)
 	}
 	b.add(c, float64(m[left]+startPB), 0)
 	return b
+}
+
+// rectOps returns the closed path of the rectangle of top-left corner x,
+// y, w wide and h tall.
+func rectOps(x, y, w, h float64) []typeset.PathOp {
+	return []typeset.PathOp{
+		{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x, Y: y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x + w, Y: y}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x + w, Y: y + h}}},
+		{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x, Y: y + h}}},
+		{Kind: typeset.ClosePath},
+	}
 }
