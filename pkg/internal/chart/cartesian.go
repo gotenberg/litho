@@ -931,15 +931,16 @@ func (rd *renderer) placeLabels(d *dim) {
 }
 
 // officeCut shortens the labels of d, a category axis under the plot
-// area whose labels Office turns by 45 degrees, so that the plot area
-// keeps officeTurnedPlot of the chart's height over them: each label
-// longer than that leaves room keeps its longest run of whole words that
-// fits, or its longest run of characters when its first word does not
-// fit, and an ellipsis after it that takes no room. items and blocks are
-// the labels' texts and layouts, the blocks replaced in place by the
-// shortened runs; gap separates the labels from the axis. It returns the
-// blocks drawn in their place, the runs with their ellipsis, nil for a
-// label kept whole.
+// area whose labels Office turns by 45 degrees, when one of them is too
+// long for the plot area to keep officeTurnedPlot of the chart's height
+// over it: every label then keeps its first word, or the longest run of
+// that word's characters that fits when the word does not, and an
+// ellipsis after it that takes no room; a label of one word that fits
+// stays whole. items and blocks are the labels' texts and layouts, the
+// blocks replaced in place by the shortened runs; gap separates the
+// labels from the axis. It returns the blocks drawn in their place, the
+// runs with their ellipsis, nil for a label kept whole, and nil when no
+// label is cut.
 //
 // # Corpus evidence
 //
@@ -954,45 +955,57 @@ func (rd *renderer) placeLabels(d *dim) {
 //     under the plot area, 44.04 and 47.24 pt, is that of "Categor" and
 //     "Category" turned, the ellipsis left out; its dots run past the
 //     place of a whole label's end by their own length.
+//   - probe, xlsx: the same labels under untitled charts 116.16 and
+//     145.2 pt high and titled ones 130.68 and 159.72 pt high are all
+//     printed "Category...", where "Category number..." would leave the
+//     plot area 0.431 of the chart's height in the untitled chart 145.2 pt
+//     high and whole labels leave 0.4267 in the untitled chart 174.24 pt
+//     high, printed whole: no share of the height admits the second word
+//     and refuses the whole label, so a cut keeps the first word alone.
+//     Labels whose first words differ in length are not measured.
 func (rd *renderer) officeCut(d *dim, items []item, blocks []*block, st TextStyle, gap float64) []*block {
 	room := rd.page.Y + rd.page.Height - officePad - gap - d.inner.Y - float64(rd.page.Height*officeTurnedPlot)
 	fits := func(b *block) bool {
+		if b == nil {
+			return true
+		}
 		_, h := b.rotated()
-		return b == nil || h <= room
+		return h <= room
 	}
-	var drawn []*block
+	cut := false
+	for _, b := range blocks {
+		if !fits(b) {
+			cut = true
+			break
+		}
+	}
+	if !cut {
+		return nil
+	}
+	drawn := make([]*block, len(blocks))
 	for i, b := range blocks {
-		if fits(b) {
-			continue
-		}
 		words := strings.Fields(items[i].text)
-		if len(words) == 0 {
+		if len(words) == 0 || len(words) == 1 && fits(b) {
 			continue
 		}
-		var cut *block
-		cutText := ""
-		for n := len(words) - 1; n >= 1 && cut == nil; n-- {
-			t := strings.Join(words[:n], " ")
-			if c := rd.measure(t, st, 0); fits(c) {
-				cut, cutText = c, t
+		short, text := rd.measure(words[0], st, 0), words[0]
+		if !fits(short) {
+			r := []rune(words[0])
+			if len(r) < 2 {
+				continue
 			}
-		}
-		if r := []rune(words[0]); cut == nil {
 			for n := len(r) - 1; n >= 1; n-- {
 				t := string(r[:n])
 				if c := rd.measure(t, st, 0); fits(c) || n == 1 {
-					cut, cutText = c, t
+					short, text = c, t
 					break
 				}
 			}
 		}
-		if cut == nil {
+		if short == nil {
 			continue
 		}
-		if drawn == nil {
-			drawn = make([]*block, len(blocks))
-		}
-		blocks[i], drawn[i] = cut, rd.measure(cutText+officeEllipsis, st, 0)
+		blocks[i], drawn[i] = short, rd.measure(text+officeEllipsis, st, 0)
 	}
 	return drawn
 }
@@ -1036,6 +1049,14 @@ const officeTurnedEdge = 1.7
 // officeTurnedPlot is the least share of the chart's height the plot area
 // keeps over category labels Office turns (officeCut): a third, inside
 // the measured bounds of 0.3152 and 0.3427.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: untitled charts 145.2 and 174.24 pt high whose whole
+//     labels would leave the plot area 0.312 and 0.4267 of the chart's
+//     height are cut and kept whole. A share of the room under the
+//     plot area's top, between 0.4366 and 0.4557, fits the same eleven
+//     charts, titled and untitled.
 const officeTurnedPlot = 1.0 / 3
 
 // officeEllipsis ends a label Office cuts short.

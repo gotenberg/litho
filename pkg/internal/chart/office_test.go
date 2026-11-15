@@ -598,9 +598,10 @@ func TestRender_OfficeCornerLegend(t *testing.T) {
 }
 
 // TestRender_OfficeTurnedLabels holds category labels Office turns by 45
-// degrees to its rules: cut after their first word, with an ellipsis,
-// when whole they would leave the plot area less than a third of the
-// chart's height, whole when they leave it more; every label printed;
+// degrees to its rules: all cut after their first word, with an
+// ellipsis, when one of them whole would leave the plot area less than a
+// third of the chart's height, whole when they leave it more; every
+// label printed;
 // the value axis counted at its length under one line of labels.
 func TestRender_OfficeTurnedLabels(t *testing.T) {
 	render := func(h float64, names ...string) ([]string, []string, typeset.Rect) {
@@ -636,6 +637,13 @@ func TestRender_OfficeTurnedLabels(t *testing.T) {
 	}
 	if b.Height < 145.2/3 {
 		t.Errorf("short chart plot height %v, under a third", b.Height)
+	}
+	// One label too long cuts every label to its first word, even those a
+	// second word or their whole length would leave room for.
+	mixed := []string{"AAA B", "BBB B", "CCC CCCCCC CCCCCC CCCCCC", "DDD D", "EEE E", "FFF F"}
+	cats, _, _ = render(159.72, mixed...)
+	if strings.Join(cats, " ") != strings.Join(want, " ") {
+		t.Errorf("mixed labels = %q, want %q", cats, want)
 	}
 	_, one, _ := render(145.2, "A", "B", "C", "D", "E", "F")
 	if strings.Join(vals, " ") != strings.Join(one, " ") {
