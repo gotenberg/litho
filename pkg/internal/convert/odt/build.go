@@ -130,9 +130,11 @@ type builder struct {
 	// frame gives it ([captionOf]), nil when none does or
 	// office.Options.DerivedAltText is off.
 	captions map[*odf.Element]string
-	// derivedAlt is office.Options DerivedAltText.
-	derivedAlt bool
-	controls   []*formfield.Control
+	// derivedAlt is office.Options DerivedAltText, and defaultLang its
+	// DefaultLang, the language of a document that names none.
+	derivedAlt  bool
+	defaultLang string
+	controls    []*formfield.Control
 	// formIDs indexes the form elements by id for [builder.controlElem],
 	// built on first use.
 	formIDs map[string]*odf.Element

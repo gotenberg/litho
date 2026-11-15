@@ -814,6 +814,7 @@ func undescribed(n *layout.Node, g frameGeom) *layout.Node {
 // picture, a text box, or an object's replacement picture.
 func (b *builder) frame(c *odf.Element, g frameGeom, depth int) *layout.Node {
 	alt := odf.Describe(c)
+	var object *odf.Element
 	for _, k := range c.Children {
 		switch {
 		case k.Is(odf.NSDraw, "image"):
@@ -823,6 +824,15 @@ func (b *builder) frame(c *odf.Element, g frameGeom, depth int) *layout.Node {
 			}
 			if alt == "" {
 				alt = b.captions[c]
+			}
+			if alt == "" && object != nil && b.derivedAlt {
+				if derived, lang := b.objectAlt(object); derived != "" {
+					n := b.imageNode(pic, g, derived)
+					// The node holds no text: its language is its
+					// description's.
+					n.Lang = lang
+					return n
+				}
 			}
 			return b.imageNode(pic, g, alt)
 		case k.Is(odf.NSDraw, "text-box"):
@@ -846,6 +856,7 @@ func (b *builder) frame(c *odf.Element, g frameGeom, depth int) *layout.Node {
 			}
 			// The replacement picture, a draw:image after the object, is
 			// tried next.
+			object = k
 			b.warn("object", warn.ContentUnsupported, warn.Approximated, "embedded objects are drawn as their replacement picture")
 		case k.Is(odf.NSDraw, "object-ole"):
 			b.warn("object", warn.ContentUnsupported, warn.Approximated, "embedded objects are drawn as their replacement picture")
