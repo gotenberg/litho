@@ -111,7 +111,8 @@ func (l *layouter) scripts(e *Element, st *Style, c lctx, depth int) *box {
 
 // attachScripts places a subscript, a superscript or both on base, styled
 // st, as msub, msup and msubsup do (MathML Core, 3.4.1.2 to 3.4.1.4); a
-// nil script is absent.
+// nil script is absent. Under [Style.ScriptKerning] a script and a base
+// that are single glyphs move by the math kerning of their corners.
 func (l *layouter) attachScripts(base, sub, sup *box, st *Style) *box {
 	f := l.faceOf(st)
 	size := st.Size
@@ -128,17 +129,28 @@ func (l *layouter) attachScripts(base, sub, sup *box, st *Style) *box {
 	case sup != nil:
 		s.sup = supShift(f, size, st.Cramped, base, sup)
 	}
+	var subKern, supKern float64
+	if st.ScriptKerning {
+		if sub != nil {
+			subKern = subscriptKern(base, sub, s.sub)
+		}
+		if sup != nil {
+			supKern = superscriptKern(base, sup, s.sup)
+		}
+	}
 	if sub != nil {
-		b.w = max(b.w, base.w-largeOp+sub.w+space)
+		x := base.w - largeOp + subKern
+		b.w = max(b.w, x+sub.w+space)
 		b.asc = max(b.asc, sub.asc-s.sub)
 		b.desc = max(b.desc, sub.desc+s.sub)
-		b.add(sub, base.w-largeOp, s.sub)
+		b.add(sub, x, s.sub)
 	}
 	if sup != nil {
-		b.w = max(b.w, base.w+italic+sup.w+space)
+		x := base.w + italic + supKern
+		b.w = max(b.w, x+sup.w+space)
 		b.asc = max(b.asc, sup.asc+s.sup)
 		b.desc = max(b.desc, sup.desc-s.sup)
-		b.add(sup, base.w+italic, -s.sup)
+		b.add(sup, x, -s.sup)
 	}
 	b.inkAsc, b.inkDesc = b.asc, b.desc
 	return b

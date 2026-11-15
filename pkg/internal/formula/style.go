@@ -35,7 +35,7 @@ func (l *layouter) derive(e *Element, p *Element, i int, pst *Style) *Style {
 		MathAuto: pst.MathAuto, Hidden: pst.Hidden, RTL: pst.RTL,
 		FontVariants: pst.FontVariants, ScriptScale: pst.ScriptScale,
 		OperatorFamilies: pst.OperatorFamilies, Enclose: pst.Enclose,
-		Distances: pst.Distances,
+		Distances: pst.Distances, ScriptKerning: pst.ScriptKerning,
 	}
 	nth := i + 1
 	inheritSize := false

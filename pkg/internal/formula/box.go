@@ -20,6 +20,9 @@ type box struct {
 	// one.
 	accent    float64
 	hasAccent bool
+	// glyph is the one glyph of the first available font a token draws,
+	// nil for any other box: what math kerning reads.
+	glyph *kernGlyph
 	// op holds the properties of an embellished operator, nil for a box
 	// that is not one (MathML Core, 3.2.4.1).
 	op *operator

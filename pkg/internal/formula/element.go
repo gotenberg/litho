@@ -126,6 +126,12 @@ type Style struct {
 	Padding, Border, Margin [4]float64
 	// BorderColor paints each side's border.
 	BorderColor [4]typeset.Color
+	// ScriptKerning moves a script toward its base by the math kerning of
+	// the MATH table's MathKernInfo when both are single glyphs, as the
+	// OpenType MATH table describes it for subscripts and superscripts.
+	// MathML Core defines no math kerning and Chromium applies none; the
+	// HTML converter leaves it off.
+	ScriptKerning bool
 	// Distances, when not nil, lays the formula out by font boxes and
 	// fixed distances where its first available font has no MATH table;
 	// nil takes MathML Core's fallbacks there. The HTML converter leaves

@@ -102,6 +102,7 @@ func (l *layouter) textBox(s string, st *Style) *box {
 	b.asc, b.desc = b.inkAsc, b.inkDesc
 	if glyphCount == 1 {
 		if f := l.faceOf(st); f != nil && f.ts.Key == onlyKey {
+			b.glyph = &kernGlyph{face: f, gid: only, size: st.Size}
 			if v, ok := f.math.ItalicsCorrection(only); ok {
 				b.italic = f.units(float64(v), st.Size)
 			}
