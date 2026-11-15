@@ -42,6 +42,10 @@ var (
 	// ErrInvalidLink is returned for a link holding neither or both of URI
 	// and Dest, or whose rectangle is not finite.
 	ErrInvalidLink = errors.New("invalid link")
+	// ErrInvalidComment is returned for a comment mark without a comment,
+	// a line box or a point box that is not finite and positive, a reply
+	// that has replies of its own, or a text that is not UTF-8.
+	ErrInvalidComment = errors.New("invalid comment")
 	// ErrInvalidField is returned for a form field of an unknown kind, a
 	// rectangle that is not finite or not positive, a text that is not
 	// UTF-8, an on state named Off, a selection out of order or outside

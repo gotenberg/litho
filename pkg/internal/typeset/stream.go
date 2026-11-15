@@ -529,6 +529,8 @@ func (s *Stream) Abort() {
 	s.charged = 0
 	s.w.mem.Release(s.w.form.charged)
 	s.w.form.charged = 0
+	s.w.mem.Release(s.w.commentCharged)
+	s.w.commentCharged = 0
 	s.w.mem.Release(s.w.charged)
 	s.w.charged = 0
 	s.whole = nil

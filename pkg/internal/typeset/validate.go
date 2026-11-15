@@ -107,6 +107,14 @@ func (v *validator) page(ctx context.Context, p *Page, links []Link) error {
 			return fmt.Errorf("form field %d: %w", i, err)
 		}
 	}
+	if len(p.Comments) > maxCommentMarksPerPage {
+		return fmt.Errorf("%w: %d comments on the page, at most %d", ErrLimitExceeded, len(p.Comments), maxCommentMarksPerPage)
+	}
+	for i, m := range p.Comments {
+		if err := v.comment(m); err != nil {
+			return fmt.Errorf("comment %d: %w", i, err)
+		}
+	}
 	return nil
 }
 

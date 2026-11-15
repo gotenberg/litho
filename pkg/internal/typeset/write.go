@@ -199,6 +199,13 @@ type docWriter struct {
 	// links are the links of the pages written, whose annotations are
 	// finished at the end, once every page they may go to is known.
 	links []pendingLink
+	// comment holds the comment annotations of the pages written, whose
+	// dictionaries are finished at the end; commentCharged is what they
+	// cost the budget until then, and threaded holds the comments whose
+	// thread is written ([docWriter.comments]).
+	comment        []pendingComment
+	commentCharged int64
+	threaded       map[*Comment]bool
 
 	fonts     map[string]*fontEntry
 	fontOrder []*fontEntry
@@ -369,6 +376,7 @@ func (w *docWriter) finish(ctx context.Context, tail *Document, producer string,
 	for _, pl := range w.links {
 		w.alloc.AllocAt(pl.ref.ObjectNum, w.linkDict(pl, n, dest))
 	}
+	w.finishComments(n)
 	// ISO 32000-1, 7.7.3.2: a flat tree of one Pages node is a valid page
 	// tree.
 	kids := make(ast.PdfArray, n)
@@ -683,8 +691,12 @@ func (w *docWriter) page(ctx context.Context, page *Page, links []Link) error {
 	if err != nil {
 		return err
 	}
-	if len(links) > 0 || len(widgets) > 0 {
-		annots := make(ast.PdfArray, len(links), len(links)+len(widgets))
+	notes, err := w.comments(ctx, i, page.Height, page.Comments)
+	if err != nil {
+		return err
+	}
+	if len(links) > 0 || len(widgets) > 0 || len(notes) > 0 {
+		annots := make(ast.PdfArray, len(links), len(links)+len(notes)+len(widgets))
 		for j, link := range links {
 			ref := w.alloc.Alloc(ast.PdfNull{})
 			pl := pendingLink{page: i, link: link, ref: ref, annot: -1}
@@ -698,6 +710,7 @@ func (w *docWriter) page(ctx context.Context, page *Page, links []Link) error {
 			w.links = append(w.links, pl)
 			annots[j] = ref
 		}
+		annots = append(annots, notes...)
 		dict["Annots"] = append(annots, widgets...)
 		if w.st != nil && w.version != Version14 {
 			// ISO 14289-1, 7.18.3: a page with annotations in a tagged

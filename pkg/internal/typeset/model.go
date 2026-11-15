@@ -66,6 +66,10 @@ type Page struct {
 	// Fields are the interactive form fields of the page, in the order a
 	// reader tabs through them.
 	Fields []Field
+	// Comments place the comments of the document's text on the page, in
+	// document order. They draw nothing: each is an annotation a reader
+	// lists and opens ([CommentMark]).
+	Comments []CommentMark
 	// TrimBox and BleedBox, when set, are the page's trim and bleed boxes
 	// in page coordinates (ISO 32000-1, 14.11.2): where the printed sheet
 	// is cut, and how far the content painted past the cut reaches. Each

@@ -101,8 +101,13 @@ encodes:
   shows from the page into the field (`TakeContent`), so the page and its
   widgets paint what the page alone painted. The radio buttons of one name
   are one group wherever they sit.
-- Dates never enter the model. Output bytes depend on input and options
-  alone.
+- A page holds the comments of its text as it holds its links: a
+  `CommentMark` places a `Comment` (its author, date, text, replies and
+  whether its thread is resolved) over the lines of text it covers on
+  the page, or at a point, under its Annot element. A comment draws
+  nothing.
+- No clock enters the model: the only dates are those the source records,
+  a comment's. Output bytes depend on input and options alone.
 - `Warnings` records what a converter could not render. Nothing fails
   silently. Each warning carries a code of `warn`: one closed set, each
   code named by what happened to which kind of construct, whichever
@@ -157,6 +162,14 @@ holds every page until the end.
   alpha; `JPEG` writes as DCTDecode untouched.
 - Links become Link annotations with a URI action or an XYZ destination.
   Outline entries become the outline tree.
+- A comment becomes a Text annotation over the lines it covers on a page,
+  or at its point; its first page carries a Text annotation in reply to it (`/IRT`) for each
+  reply and, for a resolved thread, the Completed state of the Review
+  model. Every one has an empty appearance stream, the print flag, its
+  text as `/Contents`, its author as `/T` and its date as `/M`, and hangs
+  from its Annot element through `/StructParent`. A PDF 1.4 file, which
+  has no `/IRT`, `/CreationDate` or state model, writes a reply as a
+  comment of its own at its thread's place and no state.
 - Fields become one widget annotation each, merged with its field but for
   a radio button, whose group is its parent field, under one `/AcroForm`.
   Each widget's appearance is a form XObject of its rectangle, drawn with
