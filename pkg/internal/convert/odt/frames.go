@@ -821,6 +821,9 @@ func (b *builder) frame(c *odf.Element, g frameGeom, depth int) *layout.Node {
 			if pic == nil {
 				continue
 			}
+			if alt == "" {
+				alt = b.captions[c]
+			}
 			return b.imageNode(pic, g, alt)
 		case k.Is(odf.NSDraw, "text-box"):
 			n := b.textBox(k, g, depth)
@@ -953,6 +956,14 @@ func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 		st.Overflow = css.OverflowHidden
 	}
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st})
+	if b.derivedAlt {
+		if frame, caption := captionOf(k); frame != nil {
+			if b.captions == nil {
+				b.captions = map[*odf.Element]string{}
+			}
+			b.captions[frame] = caption
+		}
+	}
 	n.Children = b.wrapLists(b.blocks(k, blockCtx{depth: depth + 1}), 0)
 	return n
 }

@@ -126,6 +126,12 @@ type builder struct {
 	// formFields is office.Options FormFields, and controls the form
 	// controls made fields ([builder.fieldControl]).
 	formFields bool
+	// captions maps the frame of a picture to the caption its caption
+	// frame gives it ([captionOf]), nil when none does or
+	// office.Options.DerivedAltText is off.
+	captions map[*odf.Element]string
+	// derivedAlt is office.Options DerivedAltText.
+	derivedAlt bool
 	controls   []*formfield.Control
 	// formIDs indexes the form elements by id for [builder.controlElem],
 	// built on first use.
