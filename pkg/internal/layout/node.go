@@ -531,7 +531,8 @@ type Result struct {
 	// Containers maps every node whose style is a container for size
 	// queries ([css.Style.SizeContainer]) and whose first box is a laid
 	// out block-level, inline-block or replaced box to the width and
-	// height of that box's content box, in points, when
+	// height of that box's content box, in points, the block-axis size of
+	// an inline-size container 0, when
 	// [Options.MeasureContainers] asks; nil otherwise. A box split across
 	// pages or columns has one inline size, the one it is laid out at in
 	// its first fragment (CSS Conditional 5, 6.1).

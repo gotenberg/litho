@@ -53,6 +53,9 @@ func TestContainerQueries_LaidOutAgainWithMeasuredSizes(t *testing.T) {
 		{"no container", head + `<p id=r>x</p><p id=p style="margin-left: 10cqw; width: 10cqw">x</p>`, 1, "p", -1},
 		{"style query alone", head + `<style>@container style(--a: b) { #p { margin-left: 75pt } }</style><div style="--a: b"><p id=r>x</p><p id=p>x</p></div>`, 1, "p", 75},
 		{"one level", head + `<style>@container (width > 200px) { #p { margin-left: 75pt } }</style><div class=c style="width: 300px"><p id=r>x</p><p id=p>x</p></div>`, 2, "p", 75},
+		// The query hides content, which changes the container's height:
+		// an inline-size container answers no height, so no third layout.
+		{"block size changed", head + `<style>@container (width > 200px) { #h { display: none } #p { margin-left: 75pt } }</style><div class=c style="width: 300px"><p id=r>x</p><p id=h>y</p><p id=p>x</p></div>`, 2, "p", 75},
 		{"container units", head + `<div class=c style="width: 400px"><p id=r>x</p><p id=p style="margin-left: 10cqw">x</p></div>`, 2, "p", 30},
 		{
 			"a container sized by an outer query",

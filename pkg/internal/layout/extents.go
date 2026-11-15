@@ -40,14 +40,25 @@ func (e *engine) extents(rb *box, n int) map[string]typeset.Rect {
 
 // containers returns the content box size of the first laid out
 // block-level, inline-block or replaced box of every node that is a
-// container for size queries, for [Result.Containers].
+// container for size queries, for [Result.Containers]. A container of
+// inline-size answers no query of its block axis, whose size it reports
+// as 0: its content sizes that axis, and a size no query reads must not
+// ask for another layout.
 func containers(rb *box) map[*Node][2]float64 {
 	out := map[*Node][2]float64{}
 	var walk func(*box)
 	walk = func(b *box) {
 		if n := b.node; n != nil && b.laidOut && b.kind != kindInline && b.kind != kindText && b.kind != kindBreak && b.st == n.Style && n.Style.SizeContainer() {
 			if _, ok := out[n]; !ok {
-				out[n] = [2]float64{max(b.w, 0), max(b.h, 0)}
+				w, h := max(b.w, 0), max(b.h, 0)
+				if n.Style.ContainerType&css.ContainerSize == 0 {
+					if n.Style.WritingMode == css.HorizontalTB {
+						h = 0
+					} else {
+						w = 0
+					}
+				}
+				out[n] = [2]float64{w, h}
 			}
 		}
 		for _, k := range b.kids {
