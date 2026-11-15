@@ -109,11 +109,13 @@ type compound struct {
 	// the namespace prefix of its type selector as written, "" for none,
 	// which a style sheet's @namespace rules resolve (CSS Namespaces 3,
 	// 4), and attrPrefixes those of its attribute selectors. anyNS marks
-	// a type selector written *|, which no default namespace narrows.
+	// a type selector written *|, which no default namespace narrows;
+	// typed a compound that writes a type or universal selector.
 	ns           elementNS
 	prefix       string
 	attrPrefixes []string
 	anyNS        bool
+	typed        bool
 }
 
 // elementNS is the namespace a compound selector asks an element to be in.
@@ -349,6 +351,7 @@ func parseCompound(c *selCursor, depth int) (compound, string, *selectorError) {
 	empty := true
 	if t := c.peek(); t != nil && (t.typ == tIdent || t.isDelim('*') || t.isDelim('|')) {
 		empty = false
+		comp.typed = true
 		if t.isDelim('|') {
 			// |p names an element in no namespace: every element of an
 			// HTML document is in one (Selectors 4, 5.2).

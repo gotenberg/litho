@@ -128,9 +128,10 @@ func (ns *namespaces) declare(prelude []token, c *declCtx) {
 // and a prefix the sheet does not declare makes the selector invalid
 // (Selectors 4, 5.1, 5.2 and 6.5; CSS Namespaces 3, 4). Inside :is() and
 // :where(), whose lists forgive, an invalid selector is dropped; inside
-// :not() and :has() it fails the selector. The default namespace applies
-// to the compounds of the selector itself, not to those inside a pseudo-
-// class argument.
+// :not() and :has() it fails the selector. The default namespace narrows
+// every compound without a prefix, except the subject of a selector inside
+// a pseudo-class, which it narrows only when that compound writes a type
+// or universal selector (Selectors 4, 4.2 and 4.3).
 //
 // # Corpus evidence
 //
@@ -149,7 +150,7 @@ func resolveNamespaces(list []*complexSel, ns *namespaces, top bool) bool {
 					return false
 				}
 				p.ns = e
-			} else if top && p.ns == nsAny && !p.anyNS && ns != nil {
+			} else if (top || i < len(s.parts)-1 || p.typed) && p.ns == nsAny && !p.anyNS && ns != nil {
 				p.ns = ns.def
 			}
 			for _, a := range p.attrPrefixes {

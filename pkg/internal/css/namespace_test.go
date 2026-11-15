@@ -89,3 +89,26 @@ func TestNamespaces_SupportsSelector(t *testing.T) {
 		t.Errorf("selector(y|x) applied, its prefix undeclared")
 	}
 }
+
+// TestNamespaces_DefaultInsidePseudoClasses locks Selectors 4, 4.2: inside
+// :is(), the default namespace narrows the compounds before the subject,
+// and the subject only when it writes a type or universal selector.
+func TestNamespaces_DefaultInsidePseudoClasses(t *testing.T) {
+	t.Parallel()
+	doc := `<svg><g class=c><text id=a class=a>a</text><text id=b class=b>b</text><text id=d class=d>d</text></g></svg>`
+	c := compute(t, doc, `
+@namespace "http://www.w3.org/1999/xhtml";
+*|*.a, *|*.b, *|*.d { font-size: 10px }
+*|*:is(.c .a) { font-size: 11px }
+*|*:is(.b) { font-size: 12px }
+*|*:is(*.d) { font-size: 13px }
+`)
+	for _, tt := range []struct {
+		id   string
+		want float64
+	}{{"a", 7.5}, {"b", 9}, {"d", 7.5}} {
+		if got := c.of(tt.id).FontSize; got != tt.want {
+			t.Errorf("#%s font-size %v, want %v", tt.id, got, tt.want)
+		}
+	}
+}
