@@ -306,3 +306,32 @@ func TestBackdropFilter_SameBytesOnEveryArchitecture(t *testing.T) {
 		t.Errorf("backdrop images:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+// TestBackdropFilter_HoldsFixedAndAbsolute locks Filter Effects 2, 2.1: a
+// backdrop filter makes its element the containing block of its absolute
+// and fixed descendants, which the page would otherwise place.
+func TestBackdropFilter_HoldsFixedAndAbsolute(t *testing.T) {
+	fixed := func(s *css.Style) { s.Position = css.Fixed; s.Top = css.Pts(0) }
+	for _, mod := range []func(*css.Style){fixed, abs(0, auto, auto, 0)} {
+		kid := square(5, 5, blue, mod)
+		root := doc(square(10, 10, red), el(sty(width(20), height(20), margin(0, 0, 0, 10), backdrop(invert)), kid))
+		b := boxes(t, root, page(40, 40))
+		var found *box
+		var walk func(*box)
+		walk = func(k *box) {
+			for _, c := range k.kids {
+				if c.st.Position == css.Fixed || c.abs {
+					found = c
+				}
+				walk(c)
+			}
+		}
+		walk(b)
+		if found == nil {
+			t.Fatal("no positioned box")
+		}
+		if !near(found.y, px(10)) || !near(found.x, px(10)) {
+			t.Errorf("%v box at (%v, %v) px, want (10, 10), the element's corner", found.st.Position, found.x/css.Pt, found.y/css.Pt)
+		}
+	}
+}

@@ -248,10 +248,11 @@ func holderOf(b *box) *box {
 		if a.tpart == partColumn || a.tpart == partColGroup {
 			continue
 		}
-		// A filter makes its element, the root excepted, the containing
-		// block of its absolute and fixed descendants, an inline box
-		// among them (Filter Effects 1, 3).
-		holds := a.st.HasTransform() && a.kind == kindBlock || len(a.st.Filter) > 0 && a.parent != nil
+		// A filter or a backdrop filter makes its element, the root
+		// excepted, the containing block of its absolute and fixed
+		// descendants, an inline box among them (Filter Effects 1, 3;
+		// Filter Effects 2, 2.1).
+		holds := a.st.HasTransform() && a.kind == kindBlock || filterHolds(a)
 		if !fixed && a.st.Position != css.Static {
 			holds = true
 		}
@@ -806,4 +807,11 @@ func (e *engine) clampToPage(b *box, p int) {
 	ny := max(min(b.y, top+pb.Height-b.borderH()), top)
 	b.shift(0, ny-b.y)
 	b.pageAnchored, b.anchorPage = true, p
+}
+
+// filterHolds reports a box whose filter or backdrop filter makes it the
+// containing block of its absolute and fixed descendants: any element but
+// the root (Filter Effects 1, 3; Filter Effects 2, 2.1).
+func filterHolds(a *box) bool {
+	return (len(a.st.Filter) > 0 || len(a.st.BackdropFilter) > 0) && a.parent != nil
 }
