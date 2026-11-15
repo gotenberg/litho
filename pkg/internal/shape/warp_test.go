@@ -115,7 +115,7 @@ func TestWarpCurve_CapsItsVertices(t *testing.T) {
 	for i := range 2 * MaxWarpCurvePoints {
 		ops = append(ops, typeset.PathOp{Kind: typeset.LineTo, P: [3]typeset.Point{{X: float64(i + 1)}}})
 	}
-	if c := flatten(ops); len(c.pts) != MaxWarpCurvePoints {
+	if c := flatten(ops, MaxWarpCurvePoints); len(c.pts) != MaxWarpCurvePoints {
 		t.Errorf("vertices = %d, want %d", len(c.pts), MaxWarpCurvePoints)
 	}
 }
@@ -171,5 +171,38 @@ func TestWarpLanes_ReadsTheHeightForTheShorterSide(t *testing.T) {
 	adj := WarpLanes(&TextWarp{Preset: "textDeflate", Adjust: []Adjust{{Name: "adj", Value: 0}}}, r)
 	if p := adj[0].Map(0.5, 0); math.Abs(p.Y) > 1e-9 {
 		t.Errorf("adj 0: top middle at %v, want 0", p.Y)
+	}
+}
+
+func TestWarpLanes_TakesEachSubpathAsAPath(t *testing.T) {
+	// A VML text path of plain text: one path of two subpaths, the top and
+	// the bottom edges.
+	w := warpOf([][]string{{"m", "l", "t"}, {"l", "r", "t"}, {"m", "l", "b"}, {"l", "r", "b"}})
+	lanes := WarpLanes(w, typeset.Rect{Width: 10, Height: 4})
+	if len(lanes) != 1 || !lanes[0].Envelope() {
+		t.Fatalf("lanes = %d, want one envelope", len(lanes))
+	}
+	if p := lanes[0].Map(1, 1); !nearPoint(p, typeset.Point{X: 10, Y: 4}) {
+		t.Errorf("Map(1, 1) = %v", p)
+	}
+}
+
+func TestWarpLanes_CapsTheVerticesOfAllItsPaths(t *testing.T) {
+	var d DrawingML
+	for range 3 {
+		d.Path(0, 0, FillNorm, true)
+		d.Command(CmdMove, "l", "t")
+		for range 10000 {
+			d.Command(CmdLine, "r", "b")
+			d.Command(CmdLine, "l", "t")
+		}
+	}
+	lanes := WarpLanes(&TextWarp{Custom: d.Custom()}, typeset.Rect{Width: 10, Height: 10})
+	n := 0
+	for _, l := range lanes {
+		n += len(l.Top.pts) + len(l.Bottom.pts)
+	}
+	if n == 0 || n > MaxWarpCurvePoints {
+		t.Errorf("%d vertices over %d lanes, want at most %d", n, len(lanes), MaxWarpCurvePoints)
 	}
 }

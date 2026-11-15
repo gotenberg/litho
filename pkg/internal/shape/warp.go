@@ -113,15 +113,18 @@ const (
 	// is flattened into: at the size of a slide a chord's sagitta stays
 	// below a hundredth of a point on the presets' quarter arcs.
 	curveSteps = 32
-	// MaxWarpCurvePoints caps the vertices of one flattened warp path.
-	// Anti-DoS guard, not spec-mandated: a preset's path flattens to at
-	// most 257 vertices, a traced Fontwork path a few thousand; the rest of
-	// a longer path is left out.
+	// MaxWarpCurvePoints caps the vertices of the flattened paths of one
+	// warp together, 24 bytes each, 384 KiB in all. Anti-DoS guard, not
+	// spec-mandated: a preset's paths flatten to at most 6 × 257
+	// vertices, a traced Fontwork path a few thousand; the rest of a longer
+	// warp is left out.
 	MaxWarpCurvePoints = 1 << 14
 )
 
 // WarpLanes returns the lanes of the warp w fitted to the box r, in the
-// order a body's lines take them, nil when w warps nothing. A geometry
+// order a body's lines take them, nil when w warps nothing. Each subpath
+// of the geometry's paths is a path of the warp, as a VML text path and a
+// Fontwork shape draw theirs in one path of several subpaths. A geometry
 // whose path count is even pairs its paths, a top and a bottom path a
 // lane, as the presets that fill an envelope are written (20.1.9.19: the
 // first path of a pair is the top line, the second the base line); one
@@ -158,6 +161,7 @@ func WarpLanes(w *TextWarp, r typeset.Rect) []WarpLane {
 	ev := newEvaluatorShort(def, g, r, heightShort)
 	var curves []WarpCurve
 	budget := MaxCommands
+	points := MaxWarpCurvePoints
 	for i := range def.Paths {
 		if i >= MaxPaths || budget <= 0 || len(curves) >= 2*maxWarpLanes {
 			break
@@ -165,7 +169,18 @@ func WarpLanes(w *TextWarp, r typeset.Rect) []WarpLane {
 		pd := &def.Paths[i]
 		n := min(len(pd.Cmds), budget)
 		budget -= n
-		curves = append(curves, flatten(ev.path(pd, pd.Cmds[:n])))
+		ops := ev.path(pd, pd.Cmds[:n])
+		for start := 0; start < len(ops) && len(curves) < 2*maxWarpLanes && points > 0; {
+			end := start + 1
+			for end < len(ops) && ops[end].Kind != typeset.MoveTo {
+				end++
+			}
+			if c := flatten(ops[start:end], points); len(c.pts) > 0 {
+				curves = append(curves, c)
+				points -= len(c.pts)
+			}
+			start = end
+		}
 	}
 	var lanes []WarpLane
 	if len(curves)%2 == 0 {
@@ -198,12 +213,11 @@ func warpDefinition(w *TextWarp) (*Custom, bool) {
 }
 
 // flatten returns the first subpath of ops as a measured polyline, each
-// Bézier segment cut into curveSteps chords, at most MaxWarpCurvePoints
-// vertices.
-func flatten(ops []typeset.PathOp) WarpCurve {
+// Bézier segment cut into curveSteps chords, at most limit vertices.
+func flatten(ops []typeset.PathOp, limit int) WarpCurve {
 	var c WarpCurve
 	add := func(p typeset.Point) bool {
-		if len(c.pts) >= MaxWarpCurvePoints || !numeric.Finite(p.X) || !numeric.Finite(p.Y) {
+		if len(c.pts) >= limit || !numeric.Finite(p.X) || !numeric.Finite(p.Y) {
 			return false
 		}
 		d := 0.0
