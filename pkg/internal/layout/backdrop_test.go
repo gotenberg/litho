@@ -1,7 +1,6 @@
 package layout
 
 import (
-	"math"
 	"strings"
 	"testing"
 
@@ -140,6 +139,23 @@ func TestBackdropFilter_BlurMirrorsTheEdge(t *testing.T) {
 	}
 }
 
+// TestBackdropFilter_LengthsScaleWithTheElement locks whose lengths a
+// backdrop filter's are: the element's own, so a transform scales them
+// with it, as Chromium's screen draws. A box of blur(10px) scaled by 2
+// about its centre covers the page from its left edge, over a black
+// column 60px wide; 15px past the column's edge a deviation of 20px on
+// the page leaves 77% of white, about 197, where one of 10px would
+// leave 93%, about 238.
+func TestBackdropFilter_LengthsScaleWithTheElement(t *testing.T) {
+	glass := square(100, 40, css.Color{}, abs(10, auto, auto, 50), backdrop(css.Filter{Kind: css.FilterBlur, Amount: px(10)}), func(s *css.Style) {
+		s.Transform = []css.TransformFunc{{Kind: css.TransformScale, V: [6]float64{2, 2}}}
+	})
+	img := render(t, run(t, doc(square(60, 100, black), glass), page(240, 100)), 1)
+	if c := at(img, 75, 30); c.R < 185 || c.R > 210 {
+		t.Errorf("15px past the black column under a blur scaled to 20px: %v, want about 197", c)
+	}
+}
+
 // TestBackdropFilter_ClippedToTheRadii locks the clip of Filter Effects 2,
 // 2.1: the border box with its border radii.
 func TestBackdropFilter_ClippedToTheRadii(t *testing.T) {
@@ -261,32 +277,6 @@ func TestBackdropFilter_PageCap(t *testing.T) {
 	w := backdropWarnings(res)
 	if len(w) != 1 || res.Warnings[0].Code != warn.LimitReached {
 		t.Errorf("warnings %q, want one limit", w)
-	}
-}
-
-// TestBackdropFilter_LengthsOnThePage locks the order of Filter Effects 2,
-// 2.1: the filter applies to the backdrop on the page, before the inverse
-// of the element's transforms, so its lengths are the page's.
-func TestBackdropFilter_LengthsOnThePage(t *testing.T) {
-	fs := []css.Filter{
-		{Kind: css.FilterBlur, Amount: 8},
-		{Kind: css.FilterDropShadow, Shadow: css.Shadow{X: 4, Y: 2, Blur: 6}},
-		{Kind: css.FilterGrayscale, Amount: 1},
-	}
-	got, ok := pageFilters(fs, typeset.Matrix{A: 2, D: 2, E: 30})
-	if !ok {
-		t.Fatal("refused a scale of 2")
-	}
-	if got[0].Amount != 4 || got[1].Shadow != (css.Shadow{X: 2, Y: 1, Blur: 3}) || got[2] != fs[2] {
-		t.Errorf("under a scale of 2: %+v, want the lengths halved", got)
-	}
-	turn := typeset.Matrix{A: 0, B: 1, C: -1, D: 0}
-	got, _ = pageFilters(fs, turn)
-	if math.Abs(got[0].Amount-8) > 1e-12 || math.Abs(got[1].Shadow.X-2) > 1e-12 || math.Abs(got[1].Shadow.Y+4) > 1e-12 {
-		t.Errorf("under a quarter turn: %+v, want the blur kept and the offset turned back", got)
-	}
-	if _, ok := pageFilters(fs, typeset.Matrix{A: 1}); ok {
-		t.Error("accepted a singular matrix")
 	}
 }
 

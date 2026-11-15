@@ -215,13 +215,13 @@ func (e *engine) backdropped(it *ditem, frags []typeset.Fragment, page int) []ty
 // The image is drawn in the element's own coordinates, so the clip and
 // the mirror edge of a blur lie on its border box, as Filter Effects 2,
 // 2.1 has them after the inverse of the transforms between the element
-// and its Backdrop Root. The filter's lengths are taken in the page's
-// space, where 2.1 applies the filter before that inverse: a blur(4px)
-// on an element scaled by 1.5 spreads 4 pixels on the page. A blur reads
-// past the box by mirroring it.
-//
-// Chromium's screen draws a backdrop filter in the element's own space,
-// lengths scaled with the element: litho follows the clause.
+// and its Backdrop Root. The filter is applied in those coordinates too,
+// its lengths the element's own: a blur(4px) on an element scaled by 1.5
+// spreads 6 pixels on the page. 2.1 lists the filter before that
+// inverse, which would take its lengths on the page; Chromium's screen
+// and the web-platform-tests take them with the element, and a page
+// then looks as its author saw it, so litho does as they do. A blur
+// reads past the box by mirroring it.
 //
 // # Corpus evidence
 //
@@ -246,6 +246,8 @@ func (e *engine) backdropped(it *ditem, frags []typeset.Fragment, page int) []ty
 //     under blur(4px) on an element scaled by 1.5 to 0.24 of their
 //     contrast, a deviation of 6px on the screen, and those under
 //     blur(8px) on one scaled by 0.5 to 0.51, of 4px.
+//   - wpt: css/filter-effects/backdrop-filter-on-transformed-layer
+//     expects a backdrop blur to grow with its element's scale.
 func (e *engine) backdropImage(bd *backdropFx, page int) (*typeset.Image, error) {
 	box := bd.box
 	levels := e.backdropLevels
@@ -284,10 +286,7 @@ func (e *engine) backdropImage(bd *backdropFx, page int) (*typeset.Image, error)
 	if !(box.Width > 0) || !(box.Height > 0) {
 		return nil, nil
 	}
-	fs, ok := pageFilters(bd.filter, onPage)
-	if !ok {
-		return nil, nil
-	}
+	fs := bd.filter
 	refs, err := e.filterRefs(fs, box)
 	if err != nil {
 		return nil, err
@@ -380,36 +379,6 @@ func (e *engine) backdropImage(bd *backdropFx, page int) (*typeset.Image, error)
 		}
 	}
 	return effect.Encode(e.ctx, s)
-}
-
-// pageFilters returns fs with its lengths, given on the page, taken into
-// the coordinates m maps to the page: a blur's deviation and a drop
-// shadow's divided by m's scale, the square root of its determinant, and
-// a drop shadow's offset mapped back through m. false for a singular m.
-func pageFilters(fs []css.Filter, m typeset.Matrix) ([]css.Filter, bool) {
-	lin := typeset.Matrix{A: m.A, B: m.B, C: m.C, D: m.D}
-	if lin == (typeset.Matrix{A: 1, D: 1}) {
-		return fs, true
-	}
-	inv, ok := invertMatrix(lin)
-	if !ok {
-		return nil, false
-	}
-	k := math.Sqrt(math.Abs(float64(m.A*m.D) - float64(m.B*m.C)))
-	out := make([]css.Filter, len(fs))
-	for i, f := range fs {
-		switch f.Kind { //nolint:exhaustive // the colour functions have no length
-		case css.FilterBlur:
-			f.Amount = clamp(f.Amount) / k
-		case css.FilterDropShadow:
-			x, y := clamp(f.Shadow.X), clamp(f.Shadow.Y)
-			f.Shadow.X = float64(inv.A*x) + float64(inv.C*y)
-			f.Shadow.Y = float64(inv.B*x) + float64(inv.D*y)
-			f.Shadow.Blur = clamp(f.Shadow.Blur) / k
-		}
-		out[i] = f
-	}
-	return out, true
 }
 
 // invertMatrix returns the inverse of m, false for a singular one.
