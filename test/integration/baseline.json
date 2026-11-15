@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-15T11:50:33Z",
+  "captured_at": "2026-11-15T13:04:56Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -55737,7 +55737,7 @@
           "score_tolerance": 0.02
         },
         "robustness": {
-          "matched": 229,
+          "matched": 230,
           "mismatched": 2,
           "skipped": 0,
           "metrics": {
@@ -55837,6 +55837,7 @@
             "images-svg-linked": "pass",
             "images-wrap": "pass",
             "index-field": "pass",
+            "installed-variable-fonts": "pass",
             "intl-cjk-layout": "pass",
             "intl-rtl-arabic": "pass",
             "intl-rtl-hebrew": "pass",
