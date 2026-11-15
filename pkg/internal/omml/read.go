@@ -426,8 +426,12 @@ func (b *reader) object(o *ooxml.Element, depth int) *formula.Element {
 	switch o.Local {
 	case "acc":
 		// 22.1.2.1: the accent character, a combining circumflex by
-		// default, over the base, at the base's size.
-		return el("mover", arg("e"), over(spacingAccent(charOf(pr, "chr", "\u0302"))))
+		// default, over the base as an accent, at the base's size
+		// (MathML Core, 3.4.2.4 and Appendix A: an accent's font-size
+		// inherits).
+		e := el("mover", arg("e"), op(spacingAccent(charOf(pr, "chr", "\u0302"))))
+		e.Attrs = []formula.Attr{{Name: "accent", Value: "true"}}
+		return e
 	case "bar":
 		// 22.1.2.7: a rule over or, by default, under the base
 		// (22.1.2.84 pos), as wide as the base.
@@ -489,14 +493,6 @@ func (b *reader) object(o *ooxml.Element, depth int) *formula.Element {
 		return el("msubsup", arg("e"), arg("sub"), arg("sup"))
 	}
 	return nil
-}
-
-// over returns an operator s set over or under a base at the base's own
-// size: the script level that munder and mover add is taken back. The
-// script is no accent, so it keeps OverbarVerticalGap from the base's
-// ink, as Word sets an accent above the ink of the letter it marks.
-func over(s string) *formula.Element {
-	return op(s, "scriptlevel", "+0")
 }
 
 // spacingAccents maps the combining marks Word stores as accent

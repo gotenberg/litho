@@ -172,7 +172,7 @@ func TestRead_Objects(t *testing.T) {
 			"(mrow (mo form=prefix fence=true stretchy=true symmetric=true '[') " + mi("𝑥") +
 				" (mo separator=true stretchy=true symmetric=true ',') " + mi("𝑥") + ")"},
 		{"group character", e("groupChr", x), "(munder " + mi("𝑥") + " (mo stretchy=true '⏟'))"},
-		{"accent", e("acc", `<m:accPr><m:chr m:val="̃"/></m:accPr>`+x), "(mover " + mi("𝑥") + " (mo scriptlevel=+0 '˜'))"},
+		{"accent", e("acc", `<m:accPr><m:chr m:val="̃"/></m:accPr>`+x), "(mover accent=true " + mi("𝑥") + " (mo '˜'))"},
 		{"function", e("func", e("fName", r("sin", `<m:sty m:val="p"/>`))+x),
 			"(mrow (mrow (mi mathvariant=normal 'sin')) (mspace width=0.1667em) " + mi("𝑥") + ")"},
 		{"lower limit", e("limLow", x+e("lim", r("0"))), "(munder " + mi("𝑥") + " (mrow (mn '0')))"},
