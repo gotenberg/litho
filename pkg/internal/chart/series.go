@@ -156,7 +156,7 @@ func (rd *renderer) series(g *Group, x, y *dim) []func() {
 		return rd.funnel(g, x, y)
 	case Area:
 		return rd.areas(g, x, y)
-	case Unsupported:
+	case Unsupported, Treemap, Sunburst:
 		return nil
 	case Line, Pie, Doughnut, Radar:
 	}

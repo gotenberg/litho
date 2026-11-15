@@ -53,9 +53,9 @@ func TestRender_FunnelLabelOverNoFill(t *testing.T) {
 				Labels: Labels{ShowValue: true, Style: TextStyle{Size: 8, Color: blue}},
 			}}}},
 		}
-		want := funnelLabelOnFill
+		want := onFillLabelInk
 		if none {
-			want = funnelLabelInk
+			want = unfilledLabelInk
 		}
 		walk(Render(context.Background(), ahem(t), c, chartRect), 0, func(fr typeset.Fragment, _ int) {
 			if tx, ok := fr.(*typeset.Text); ok && !near(tx.Color, want) {

@@ -36,6 +36,19 @@ func (rd *renderer) legendEntries(st TextStyle, maxW float64) []legendEntry {
 	n := 0
 	swapped := len(rd.c.Groups) > 0 && rd.c.Groups[0].Kind == Bar && rd.c.Groups[0].Horizontal
 	for _, g := range rd.c.Groups {
+		if (g.Kind == Treemap || g.Kind == Sunburst) && len(g.Series) > 0 {
+			// A treemap or sunburst lists its top-level parents.
+			s := g.Series[0]
+			tops, _ := rd.tree(s)
+			for i, t := range tops {
+				if len(out) < maxLegendEntries && !s.NoLegend && !hidden[n] {
+					fill := rd.hierarchyFill(s, i, len(tops))
+					out = append(out, legendEntry{label: rd.measure(t.name, st, maxW), fill: fill, border: hierarchyLine(s, fill)})
+				}
+				n++
+			}
+			continue
+		}
 		if g.Kind == Waterfall {
 			// A waterfall lists the kinds of its points.
 			for _, s := range g.Series {

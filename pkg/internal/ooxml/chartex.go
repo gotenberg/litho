@@ -43,16 +43,19 @@ const chartExLineWidth = 18 * 72.0 / 2540
 
 // ParseChartEx reads the Office 2016 chart part of pkg (MS-ODRAWXML,
 // 2.24.3: a cx:chartSpace root) into a chart model, with the package's
-// theme for the scheme colours and fonts, as LibreOffice prints such a
-// chart:
+// theme for the scheme colours and fonts and its chart style parts for
+// the automatic formats, as Office prints such a chart:
 //
 //   - A histogram (a clusteredColumn series with cx:binning) is a bar
 //     chart of the counts of its values in bins, the bins' ranges as its
-//     categories (see [chart.Binning]).
-//   - Every other kind (funnel, box and whisker, waterfall, treemap,
-//     sunburst, region map, Pareto, a clusteredColumn series without
-//     bins) keeps its title, legend and axes, draws no series, and shows
-//     [NoticeUnsupported] over its middle ([chart.Unsupported]).
+//     categories (see [chart.Binning]); a clusteredColumn series without
+//     bins, a Pareto chart, a waterfall, a box and whisker chart and a
+//     funnel are drawn as their kinds ([chart.Waterfall],
+//     [chart.BoxWhisker], [chart.Funnel]); a treemap and a sunburst are
+//     drawn from the levels of their categories ([chart.Hierarchy]).
+//   - A region map, or a mix of kinds, keeps its title, legend and axes,
+//     draws no series, and shows [NoticeUnsupported] over its middle
+//     ([chart.Unsupported]).
 //
 // A series' data are the cx:lvl caches of its cx:numDim and cx:strDim; a
 // formula naming a workbook's defined name (Excel names chartex data
@@ -220,6 +223,9 @@ func (x *chartExReader) read(root *Element) {
 		if g.Kind == chart.BoxWhisker {
 			x.boxWhisker(s, g.Series[i])
 		}
+		if g.Kind == chart.Treemap || g.Kind == chart.Sunburst {
+			x.hierarchy(s, g.Series[i])
+		}
 		if g.Kind == chart.Bar {
 			g.Series[i].Arrange = chart.Arrangement{
 				Aggregate:  !histogram && cxChild(cxChild(s, "layoutPr"), "aggregation") != nil,
@@ -332,8 +338,8 @@ func childText(e *Element, local string) string {
 	return c.Text
 }
 
-// dimData reads a cx:numDim or cx:strDim (MS-ODRAWXML, 2.24.3.36
-// CT_NumericDimension and 2.24.3.57 CT_StringDimension): its formula, a
+// dimData reads a cx:numDim or cx:strDim (MS-ODRAWXML, 2.24.3.68
+// CT_NumericDimension and 2.24.3.86 CT_StringDimension): its formula, a
 // workbook's defined name resolved to its range, and its first level's
 // cache.
 func (x *chartExReader) dimData(dim *Element, numeric bool) chart.Data {
@@ -343,46 +349,78 @@ func (x *chartExReader) dimData(dim *Element, numeric bool) chart.Data {
 		d.Ref = r
 	}
 	if lvl := cxChild(dim, "lvl"); lvl != nil {
-		d.Cached = true
-		d.Format = attrOr(lvl, "formatCode")
-		if strings.EqualFold(d.Format, "General") {
-			d.Format = ""
-		}
-		n, ok := Int(attrOr(lvl, "ptCount"))
-		if !ok || n < 0 {
-			n = 0
-		}
-		for _, pt := range lvl.Kids() {
-			if pt.Is(NSChartEx, "pt") {
-				if i, ok := Int(attrOr(pt, "idx")); ok && i >= n && i < chart.MaxPoints {
-					n = i + 1
-				}
-			}
-		}
-		n = min(n, chart.MaxPoints)
-		d.Values = make([]chart.Value, n)
-		next := 0
-		for _, pt := range lvl.Kids() {
-			if !pt.Is(NSChartEx, "pt") {
-				continue
-			}
-			i, ok := Int(attrOr(pt, "idx"))
-			if !ok {
-				i = next
-			}
-			next = i + 1
-			if i < 0 || i >= n {
-				continue
-			}
-			if v := parseFloat(pt.Text); numeric && !math.IsNaN(v) {
-				d.Values[i] = chart.Value{Kind: chart.Number, Number: v, Text: pt.Text}
-				continue
-			}
-			d.Values[i] = chart.Str(pt.Text)
-		}
+		d = levelData(lvl, numeric, d.Ref)
 	}
 	if !d.Cached && d.Ref != "" {
 		x.warn(warn.ChartNoCache, warn.Omitted, "an Office 2016 chart's data have no cached values in the file and are drawn empty")
+	}
+	return d
+}
+
+// parentLevels returns the cached levels of the category dimension dim
+// after its first, the points' parents, the nearest first (MS-ODRAWXML,
+// 2.24.3.86 CT_StringDimension: a cx:lvl per level of a hierarchy, the
+// leaves first), at most chart.MaxLevels.
+func parentLevels(dim *Element) []chart.Data {
+	var out []chart.Data
+	first := true
+	for _, lvl := range dim.Kids() {
+		if !lvl.Is(NSChartEx, "lvl") {
+			continue
+		}
+		if first {
+			first = false
+			continue
+		}
+		if len(out) >= chart.MaxLevels {
+			break
+		}
+		out = append(out, levelData(lvl, false, ""))
+	}
+	return out
+}
+
+// levelData reads the points of one cx:lvl cache (MS-ODRAWXML, 2.24.3.87
+// CT_StringLevel and 2.24.3.69 CT_NumericLevel), numbers when numeric,
+// with ref its formula.
+func levelData(lvl *Element, numeric bool, ref string) chart.Data {
+	d := chart.Data{Ref: ref}
+	d.Cached = true
+	d.Format = attrOr(lvl, "formatCode")
+	if strings.EqualFold(d.Format, "General") {
+		d.Format = ""
+	}
+	n, ok := Int(attrOr(lvl, "ptCount"))
+	if !ok || n < 0 {
+		n = 0
+	}
+	for _, pt := range lvl.Kids() {
+		if pt.Is(NSChartEx, "pt") {
+			if i, ok := Int(attrOr(pt, "idx")); ok && i >= n && i < chart.MaxPoints {
+				n = i + 1
+			}
+		}
+	}
+	n = min(n, chart.MaxPoints)
+	d.Values = make([]chart.Value, n)
+	next := 0
+	for _, pt := range lvl.Kids() {
+		if !pt.Is(NSChartEx, "pt") {
+			continue
+		}
+		i, ok := Int(attrOr(pt, "idx"))
+		if !ok {
+			i = next
+		}
+		next = i + 1
+		if i < 0 || i >= n {
+			continue
+		}
+		if v := parseFloat(pt.Text); numeric && !math.IsNaN(v) {
+			d.Values[i] = chart.Value{Kind: chart.Number, Number: v, Text: pt.Text}
+			continue
+		}
+		d.Values[i] = chart.Str(pt.Text)
 	}
 	return d
 }
@@ -660,6 +698,7 @@ func (x *chartExReader) kindOf(series []*Element) chart.Kind {
 		return chart.Unsupported
 	}
 	columns, waterfall, boxes, funnel, owner := true, true, true, true, false
+	treemap, sunburst := true, true
 	for _, s := range series {
 		id := attrOr(s, "layoutId")
 		columns = columns && (id == "clusteredColumn" || id == "paretoLine")
@@ -667,8 +706,14 @@ func (x *chartExReader) kindOf(series []*Element) chart.Kind {
 		waterfall = waterfall && id == "waterfall"
 		boxes = boxes && id == "boxWhisker"
 		funnel = funnel && id == "funnel"
+		treemap = treemap && id == "treemap"
+		sunburst = sunburst && id == "sunburst"
 	}
 	switch {
+	case treemap:
+		return chart.Treemap
+	case sunburst:
+		return chart.Sunburst
 	case columns && owner:
 		return chart.Bar
 	case waterfall:
@@ -679,6 +724,32 @@ func (x *chartExReader) kindOf(series []*Element) chart.Kind {
 		return chart.Funnel
 	}
 	return chart.Unsupported
+}
+
+// hierarchy reads the hierarchy of the treemap or sunburst cx:series e
+// into s: the parents its category dimension's further levels name, a
+// banner over each parent when its parent labels take one (MS-ODRAWXML,
+// 2.24.3.74 CT_ParentLabelLayout), and the width of the line the chart
+// style's data point gives each cell or sector, drawn in the cell's own
+// colour.
+func (x *chartExReader) hierarchy(e *Element, s *chart.Series) {
+	h := &chart.Hierarchy{
+		Banner: attrOr(cxChild(cxChild(e, "layoutPr"), "parentLabelLayout"), "val") == "banner",
+	}
+	if d := x.data[attrOr(cxChild(e, "dataId"), "val")]; d != nil {
+		for _, dim := range d.Kids() {
+			if dim.Is(NSChartEx, "strDim") && attrOr(dim, "type") == "cat" {
+				h.Parents = parentLevels(dim)
+				break
+			}
+		}
+	}
+	if x.style != nil {
+		if l, _ := x.styleLine("dataPoint", toCSS(x.c.AutoColor(s.Index, 1))); l != nil && !l.None {
+			h.LineWidth = l.Width
+		}
+	}
+	s.Hierarchy = h
 }
 
 // binned reports column series that are all histograms, counted in bins

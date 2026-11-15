@@ -152,6 +152,15 @@ const (
 	// down, each centred across the plot area and as wide as its value is
 	// of the greatest (MS-ODRAWXML, 2.24.4.21 ST_SeriesLayout funnel).
 	Funnel
+	// Treemap draws the points of its first series as rectangles that
+	// fill the plot area, each as large as its value, nested in their
+	// parents' ([Series.Hierarchy]; MS-ODRAWXML, 2.24.4.21
+	// ST_SeriesLayout treemap).
+	Treemap
+	// Sunburst draws the points of its first series as sectors of rings
+	// around a hole, a ring a level of their parents ([Series.Hierarchy];
+	// MS-ODRAWXML, 2.24.4.21 ST_SeriesLayout sunburst).
+	Sunburst
 )
 
 // String returns the kind's name, as warnings spell it.
@@ -181,6 +190,10 @@ func (k Kind) String() string {
 		return "box and whisker"
 	case Funnel:
 		return "funnel"
+	case Treemap:
+		return "treemap"
+	case Sunburst:
+		return "sunburst"
 	}
 	return "unknown"
 }
@@ -315,6 +328,9 @@ type Series struct {
 	// Box is how a box and whisker series draws its boxes, nil for the
 	// defaults: inclusive quartiles, nothing but the boxes and whiskers.
 	Box *Box
+	// Hierarchy holds the parents of a treemap or sunburst series' points,
+	// nil for points without parents.
+	Hierarchy *Hierarchy
 
 	// samples are the sorted values of each category of a box and
 	// whisker series, which [Render] gathers before it draws.

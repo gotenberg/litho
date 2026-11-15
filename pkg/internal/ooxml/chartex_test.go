@@ -322,3 +322,32 @@ func TestChartExFromElement_BinningBounds(t *testing.T) {
 		t.Errorf("bins %+v, want closed on the left, an underflow at 5, no overflow", b)
 	}
 }
+
+func TestChartExFromElement_Treemap(t *testing.T) {
+	data := `<cx:data id="0"><cx:strDim type="cat"><cx:f>Sheet1!$A$2:$B$4</cx:f>` +
+		`<cx:lvl ptCount="3"><cx:pt idx="0">Apples</cx:pt><cx:pt idx="1">Pears</cx:pt><cx:pt idx="2">Leeks</cx:pt></cx:lvl>` +
+		`<cx:lvl ptCount="3"><cx:pt idx="0">Fruit</cx:pt><cx:pt idx="1">Fruit</cx:pt><cx:pt idx="2">Veg</cx:pt></cx:lvl></cx:strDim>` +
+		`<cx:numDim type="size"><cx:f>Sheet1!$C$2:$C$4</cx:f><cx:lvl ptCount="3" formatCode="General"><cx:pt idx="0">3</cx:pt><cx:pt idx="1">2</cx:pt><cx:pt idx="2">1</cx:pt></cx:lvl></cx:numDim></cx:data>`
+	for _, tc := range []struct {
+		layout string
+		kind   chart.Kind
+	}{{"treemap", chart.Treemap}, {"sunburst", chart.Sunburst}} {
+		region := `<cx:series layoutId="` + tc.layout + `"><cx:dataId val="0"/><cx:layoutPr><cx:parentLabelLayout val="banner"/></cx:layoutPr></cx:series>`
+		c := readChartEx(t, chartExXML(data, `<cx:plotArea><cx:plotAreaRegion>`+region+`</cx:plotAreaRegion></cx:plotArea>`), nil)
+		g := c.Groups[0]
+		if g.Kind != tc.kind || c.Notice != nil {
+			t.Fatalf("%s: group %+v, notice %v: want it drawn without a notice", tc.layout, g, c.Notice)
+		}
+		s := g.Series[0]
+		h := s.Hierarchy
+		if h == nil || len(h.Parents) != 1 || h.Parents[0].Len() != 3 || h.Parents[0].Values[2].Text != "Veg" {
+			t.Fatalf("%s: hierarchy %+v, want the second level as the parents", tc.layout, h)
+		}
+		if s.Categories.Values[0].Text != "Apples" || s.Values.Len() != 3 {
+			t.Errorf("%s: leaves %+v, values %+v", tc.layout, s.Categories, s.Values)
+		}
+		if !h.Banner {
+			t.Errorf("%s: banner false, want the parent label layout's", tc.layout)
+		}
+	}
+}

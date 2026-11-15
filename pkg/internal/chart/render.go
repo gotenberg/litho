@@ -86,7 +86,11 @@ func (rd *renderer) render(r typeset.Rect) {
 		if rd.ctx.Err() != nil || !above(plot.Width, 1) || !above(plot.Height, 1) {
 			return
 		}
-		rd.cartesian(plot)
+		if hierarchical(c) {
+			rd.hierarchy(plot)
+		} else {
+			rd.cartesian(plot)
+		}
 		if c.Notice != nil {
 			rd.notice(c.Notice, r)
 		}
@@ -126,12 +130,19 @@ func (rd *renderer) render(r typeset.Rect) {
 	case len(c.Groups) == 0:
 	case pie:
 		rd.pies(plot)
+	case hierarchical(c):
+		rd.hierarchy(plot)
 	default:
 		rd.cartesian(plot)
 	}
 	if c.Notice != nil {
 		rd.notice(c.Notice, r)
 	}
+}
+
+// hierarchical reports a chart drawn as a treemap or a sunburst.
+func hierarchical(c *Chart) bool {
+	return len(c.Groups) > 0 && (c.Groups[0].Kind == Treemap || c.Groups[0].Kind == Sunburst)
 }
 
 // notice draws t centred on the chart's rectangle r, its lines at most two

@@ -6,28 +6,30 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
-// funnelLabelInk is the colour Office draws the data labels of a funnel's
-// bars in when the bars are not filled.
+// unfilledLabelInk is the colour Office draws the data labels of a funnel's
+// bars and of a sunburst's sectors in when they are not filled.
 //
 // # Corpus evidence
 //
 //   - litho/docx, litho/pptx: Word and PowerPoint draw the value labels of
 //     charts-chartex's and chartex's funnels, whose bars their chart
 //     style leaves unfilled, in 178,178,178, where the style gives data
-//     labels the text colour, black.
-var funnelLabelInk = typeset.Color{R: 178.0 / 255, G: 178.0 / 255, B: 178.0 / 255, A: 1}
+//     labels the text colour, black; Word draws the labels of
+//     charts-chartex's sunburst, unfilled as well, in 178,178,178.
+var unfilledLabelInk = typeset.Color{R: 178.0 / 255, G: 178.0 / 255, B: 178.0 / 255, A: 1}
 
-// funnelLabelOnFill is the colour Office draws the data labels of a
-// funnel's filled bars in, whatever colour the chart style gives data
-// labels.
+// onFillLabelInk is the colour Office draws the data labels of a
+// funnel's filled bars and of a sunburst's leaves in, whatever colour the
+// chart style gives data labels.
 //
 // # Corpus evidence
 //
 //   - probe, docx: Word draws the value labels of a funnel whose chart
 //     style fills its bars in accent1 and gives data labels 89,89,89 in
-//     254,254,254; the same style's labels of a waterfall and a treemap
-//     stay 89,89,89.
-var funnelLabelOnFill = typeset.Color{R: 254.0 / 255, G: 254.0 / 255, B: 254.0 / 255, A: 1}
+//     254,254,254, and those of a sunburst's sectors under the same
+//     style; the same style's labels of a waterfall and a treemap stay
+//     89,89,89.
+var onFillLabelInk = typeset.Color{R: 254.0 / 255, G: 254.0 / 255, B: 254.0 / 255, A: 1}
 
 // funnel draws a funnel group: per category, from the top down, a bar
 // centred across the plot area as wide as its value is of the greatest
@@ -78,9 +80,9 @@ func (rd *renderer) funnel(g *Group, x, y *dim) []func() {
 			continue
 		}
 		lb.Placement = LabelCenter
-		lb.Style.Color = funnelLabelOnFill
+		lb.Style.Color = onFillLabelInk
 		if fill == nil || fill.None {
-			lb.Style.Color = funnelLabelInk
+			lb.Style.Color = unfilledLabelInk
 		}
 		labels = append(labels, func() { rd.barLabel(g, s, j, v, lb, r, true, false, false) })
 	}
