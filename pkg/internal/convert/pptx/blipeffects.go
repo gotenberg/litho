@@ -21,19 +21,27 @@ import (
 // luminance (vcl's BitmapDuoToneFilter), then every channel shifted by
 // the brightness and scaled by the contrast (vcl's Bitmap::Convert and
 // Bitmap::Adjust); pic itself when the blip asks for none or pic is a
-// vector.
+// vector. The blip's alphaModFix (20.1.8.4, amt a percentage, 100 when
+// absent) then scales every pixel's alpha, as PowerPoint fades a picture
+// or a picture fill.
 //
 // # Corpus evidence
 //
 //   - libreoffice/pptx: sd/tdf112209's picture fill of grayscl prints grey;
 //     sd/tdf123684's background picture of duotone, phClr shaded to 69%
 //     then tinted, prints dark teal.
+//   - poi/pptx: slideshow/picture-transparency.pptx prints a black picture
+//     under alphaModFix 100, 80, 40 and 0 per cent on white as grey levels
+//     0, 51 and 153 and as nothing.
+//   - libreoffice/pptx: sd/page_transparent_bitmap.pptx prints its slide
+//     background's brick tile, alphaModFix 51 per cent, pale.
 func blipEffects(ctx context.Context, pic *layout.Picture, blip *ooxml.Element, color func(*ooxml.Element) (css.Color, bool)) *layout.Picture {
 	if pic == nil || pic.Source == nil || blip == nil {
 		return pic
 	}
 	grey, threshold := false, -1
 	var lum, con float64
+	alpha := 1.0
 	var duo []css.Color
 	for _, k := range blip.Kids() {
 		if k.Space != ooxml.NSA {
@@ -55,13 +63,18 @@ func blipEffects(ctx context.Context, pic *layout.Picture, blip *ooxml.Element, 
 			if len(duo) != 2 {
 				duo = nil
 			}
+		case "alphaModFix":
+			alpha = 1
+			if n, ok := intAttr(k, "amt"); ok {
+				alpha = max(0, min(float64(n)/100000, 1))
+			}
 		case "lum":
 			b, _ := intAttr(k, "bright")
 			c, _ := intAttr(k, "contrast")
 			lum, con = max(-100, min(float64(b)/1000, 100)), max(-100, min(float64(c)/1000, 100))
 		}
 	}
-	if !grey && threshold < 0 && duo == nil && lum == 0 && con == 0 {
+	if !grey && threshold < 0 && duo == nil && lum == 0 && con == 0 && alpha == 1 {
 		return pic
 	}
 	src, err := pic.Source.Decode(ctx)
@@ -108,6 +121,9 @@ func blipEffects(ctx context.Context, pic *layout.Picture, blip *ooxml.Element, 
 				c.R, c.G, c.B = l, l, l
 			}
 			c.R, c.G, c.B = table[c.R], table[c.G], table[c.B]
+			if alpha != 1 {
+				c.A = uint8(math.Round(float64(c.A) * alpha)) // at most 255: alpha lies in [0, 1)
+			}
 			out.SetNRGBA(x-b.Min.X, y-b.Min.Y, c)
 		}
 	}

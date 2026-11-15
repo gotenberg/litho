@@ -27,6 +27,9 @@ func TestBlipEffects(t *testing.T) {
 		// Luminance 87 of 255 blends black into white.
 		{"duotone", `<a:duotone><a:srgbClr val="000000"/><a:srgbClr val="FFFFFF"/></a:duotone>`, imgcolor.NRGBA{R: 87, G: 87, B: 87, A: 255}},
 		{"brighter", `<a:lum bright="10000"/>`, imgcolor.NRGBA{R: 226, G: 66, B: 66, A: 255}},
+		// 40 per cent of 255.
+		{"faded", `<a:alphaModFix amt="40000"/>`, imgcolor.NRGBA{R: 200, G: 40, B: 40, A: 102}},
+		{"faded out", `<a:alphaModFix amt="0"/>`, imgcolor.NRGBA{R: 200, G: 40, B: 40}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
