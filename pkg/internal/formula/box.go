@@ -197,6 +197,21 @@ func contentSize(c *box, st *Style, centred bool) *box {
 // is wider than 0, and the italic correction and top accent attachment
 // grow by the inline-end and inline-start sides. The math content box
 // keeps its baseline.
+//
+// The ink baselines move to the margin box's edge on a side of a margin
+// wider than 0, where 3.1.2 keeps them at the border box's: Chromium
+// lays a formula out by the margin boxes of its children, so the gaps of
+// a fraction, the radical over a base and the stretch of an operator
+// count a child's margins. Padding alone leaves them where 3.1.2 puts
+// them.
+//
+// # Corpus evidence
+//
+//   - wpt: padding-border-margin-005, -006 and -007 draw an msqrt, an
+//     mroot and an mfrac over an mspace of a 10px margin against the same
+//     elements over an mspace 20px larger without one; Chromium of
+//     gotenberg/gotenberg:9.4.1 draws each pair alike in its 800 by 600
+//     screenshot, which the ink of 3.1.2 does not.
 func edges(c *box, st *Style, centred bool) *box {
 	c = contentSize(c, st, centred)
 	p, bd, m := st.Padding, st.Border, st.Margin
@@ -224,6 +239,12 @@ func edges(c *box, st *Style, centred bool) *box {
 	}
 	if bd[bottom] > 0 {
 		b.inkDesc = float64(c.desc+p[bottom]) + bd[bottom]
+	}
+	if m[top] > 0 {
+		b.inkAsc = b.asc
+	}
+	if m[bottom] > 0 {
+		b.inkDesc = b.desc
 	}
 	// The border box, from the margin box's left baseline point.
 	bx, by := m[left], -float64(b.asc-m[top])

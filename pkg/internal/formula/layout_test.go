@@ -549,3 +549,28 @@ func TestDraw_BackgroundsUnderEveryGlyph(t *testing.T) {
 		t.Fatalf("paint order %v, want both backgrounds first", kinds)
 	}
 }
+
+// TestEdges_MarginsCountAsInk places the denominator of a fraction whose
+// numerator has a margin as if the margin were ink, as Chromium does (WPT
+// padding-border-margin-007), and leaves the ink of a padding alone
+// (MathML Core, 3.1.2).
+func TestEdges_MarginsCountAsInk(t *testing.T) {
+	s := dejavu(t)
+	st := mathStyle("DejaVu Math TeX Gyre", 10)
+	sp := space("10pt", "5pt", "5pt")
+	mst := st
+	mst.Margin = [4]float64{3, 0, 3, 0}
+	sp.Style = &mst
+	_, _, b := childAt(lay(t, s, el("math", sp), st), 0)
+	if !near(b.inkAsc, 8) || !near(b.inkDesc, 8) {
+		t.Fatalf("ink %g and %g, want the margin box's, 8 and 8", b.inkAsc, b.inkDesc)
+	}
+	pd := space("10pt", "5pt", "5pt")
+	pst := st
+	pst.Padding = [4]float64{3, 0, 3, 0}
+	pd.Style = &pst
+	_, _, b = childAt(lay(t, s, el("math", pd), st), 0)
+	if !near(b.inkAsc, 5) || !near(b.asc, 8) {
+		t.Fatalf("ink %g in a box of ascent %g, want 5 in 8", b.inkAsc, b.asc)
+	}
+}
