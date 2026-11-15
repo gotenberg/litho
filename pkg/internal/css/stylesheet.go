@@ -111,6 +111,16 @@ type sheetParser struct {
 	// container is the condition of the @container rules the rules being
 	// parsed sit in, nil outside any.
 	container *containerCond
+	// ns holds the @namespace rules of the style sheet being parsed.
+	ns *namespaces
+}
+
+// ruleOrder tracks the rules that must come first in a style sheet: @import
+// before any rule other than @charset and @layer statements (CSS Cascade
+// 5, 6.4.2), @namespace after those and before any other rule (CSS
+// Namespaces 3, 2). Out of order, or inside a block, they are invalid.
+type ruleOrder struct {
+	imports, namespaces bool
 }
 
 // Parse parses a stylesheet (CSS Syntax 3, 5.3.3) and the stylesheets it
@@ -142,9 +152,12 @@ func Parse(ctx context.Context, src []byte, opts ParseOptions) (*Stylesheet, err
 func (sp *sheetParser) parseSheet(ctx context.Context, src []byte, base string, cond *mediaCond, depth int) {
 	text := strings.TrimPrefix(string(src), "\xef\xbb\xbf")
 	p := &parser{tz: newTokenizer(text, maxTokens)}
-	importsAllowed := true
+	order := ruleOrder{imports: true, namespaces: true}
+	outer := sp.ns
+	sp.ns = &namespaces{}
+	defer func() { sp.ns = outer }()
 	p.rules(true, func(it item) bool {
-		sp.rule(ctx, it, base, cond, depth, &importsAllowed)
+		sp.rule(ctx, it, base, cond, depth, &order)
 		return sp.err == nil
 	})
 	if sp.err == nil && (p.tz.over || p.deep) {
@@ -177,20 +190,20 @@ func (sp *sheetParser) flush(c *declCtx) {
 var ignoredAtRules = map[string]bool{
 	"-moz-keyframes": true, "-o-keyframes": true, "starting-style": true,
 	"property": true, "viewport": true, "-ms-viewport": true, "view-transition": true,
-	"namespace": true, "charset": true,
+	"charset": true,
 }
 
 // readAtRules are the at-rules litho reads at the top level of a style
 // sheet or in a conditional group rule; the page-margin boxes of @page and
 // the feature blocks of @font-feature-values are read inside those.
 var readAtRules = []string{
-	"import", "media", "supports", "layer", "container", "page", "counter-style", "font-face",
+	"import", "namespace", "media", "supports", "layer", "container", "page", "counter-style", "font-face",
 	"keyframes", "-webkit-keyframes", "font-palette-values", "font-feature-values",
 }
 
 // readsAtRule reports whether litho reads the at-rule of the lowercased
 // name, which @supports at-rule() asks (CSS Conditional 5, 2.3). An
-// at-rule litho drops, @namespace and @charset among them, is not read.
+// at-rule litho drops, @charset among them, is not read.
 func readsAtRule(name string) bool {
 	if slices.Contains(readAtRules, name) || slices.Contains(marginBoxNames[:], name) {
 		return true
@@ -200,7 +213,7 @@ func readsAtRule(name string) bool {
 }
 
 // rule handles one top-level or nested rule.
-func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *mediaCond, depth int, importsAllowed *bool) {
+func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *mediaCond, depth int, order *ruleOrder) {
 	if err := ctx.Err(); err != nil {
 		sp.err = err
 		return
@@ -209,7 +222,7 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 	defer sp.flush(c)
 	switch it.kind { //nolint:exhaustive // declarations and errors cannot reach the top level
 	case itemQualified:
-		*importsAllowed = false
+		order.imports, order.namespaces = false, false
 		sels, err := parseSelectorList(it.prelude, 0, false)
 		if err != nil {
 			if err.unsupported != "" {
@@ -217,15 +230,25 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 			}
 			return
 		}
+		if !resolveNamespaces(sels, sp.ns, true) {
+			return
+		}
 		sp.styleBlock(ctx, it.prelude, sels, it.block, base, cond, depth, c)
 	case itemAtRule:
 		name := lower(it.name)
 		if name != "import" && name != "charset" && (name != "layer" || it.hasBlock) {
-			*importsAllowed = false
+			order.imports = false
+			if name != "namespace" {
+				order.namespaces = false
+			}
 		}
 		switch name {
+		case "namespace":
+			if order.namespaces && !it.hasBlock {
+				sp.ns.declare(it.prelude, c)
+			}
 		case "import":
-			if *importsAllowed {
+			if order.imports {
 				sp.importRule(ctx, it, base, cond, depth, c)
 			}
 		case "media":
@@ -233,7 +256,7 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 				sp.nested(ctx, it.block, base, &mediaCond{list: it.prelude, parent: cond}, depth)
 			}
 		case "supports":
-			if it.hasBlock && evalSupports(it.prelude) {
+			if it.hasBlock && evalSupports(it.prelude, sp.ns) {
 				sp.nested(ctx, it.block, base, cond, depth)
 			}
 		case "layer":
@@ -377,8 +400,8 @@ func (sp *sheetParser) nestedRule(ctx context.Context, parent []token, n item, b
 			return
 		}
 	}
-	allowed := false
-	sp.rule(ctx, item{kind: itemQualified, prelude: prelude, block: n.block}, base, cond, depth, &allowed)
+	var order ruleOrder
+	sp.rule(ctx, item{kind: itemQualified, prelude: prelude, block: n.block}, base, cond, depth, &order)
 }
 
 // hasNesting reports a selector that holds the nesting selector &, at
@@ -421,7 +444,7 @@ func (sp *sheetParser) nestedAtRule(ctx context.Context, parent []token, sels []
 	case "media":
 		sp.styleBlock(ctx, parent, sels, n.block, base, &mediaCond{list: n.prelude, parent: cond}, depth, c)
 	case "supports":
-		if evalSupports(n.prelude) {
+		if evalSupports(n.prelude, sp.ns) {
 			sp.styleBlock(ctx, parent, sels, n.block, base, cond, depth, c)
 		}
 	case "layer":
@@ -460,9 +483,9 @@ const maxNestedPrelude = 4096
 // nested parses the rule list inside a conditional group rule (CSS
 // Conditional 3, 2).
 func (sp *sheetParser) nested(ctx context.Context, block []token, base string, cond *mediaCond, depth int) {
-	allowed := false
+	var order ruleOrder
 	newListParser(block).rules(false, func(it item) bool {
-		sp.rule(ctx, it, base, cond, depth, &allowed)
+		sp.rule(ctx, it, base, cond, depth, &order)
 		return sp.err == nil
 	})
 }
@@ -516,7 +539,7 @@ func (sp *sheetParser) importRule(ctx context.Context, it item, base string, con
 		rest = trimWS(rest[1:])
 	}
 	if len(rest) > 0 && rest[0].typ == tFunction && eqFold(rest[0].value, "supports") {
-		if !evalSupports(rest[0].children) {
+		if !evalSupports(rest[0].children, sp.ns) {
 			return
 		}
 		rest = trimWS(rest[1:])

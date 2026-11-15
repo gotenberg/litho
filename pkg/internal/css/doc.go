@@ -35,9 +35,10 @@
 //
 // # Not supported
 //
-// Namespaced selectors match nothing; :has(), :dir() and the form state
-// pseudo-classes other than :checked, :disabled and :enabled make a
-// selector invalid. min(), max() and clamp() comparing a length with a
+// A namespace prefix matches the HTML, SVG and MathML elements of the
+// namespace an @namespace rule binds it to, and nothing for any other
+// namespace; :has(), :dir() and the form state pseudo-classes other than
+// :checked, :disabled and :enabled make a selector invalid. min(), max() and clamp() comparing a length with a
 // percentage make a value invalid, and so does a calc() mixing lengths and
 // percentages outside the box sizes, margins, paddings, insets, gaps and
 // flex-basis, which hold it as a [Calc]. Cascade layers are flattened into source order; @scope is

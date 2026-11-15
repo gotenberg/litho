@@ -26,6 +26,9 @@ type attrSel struct {
 	name  string
 	op    attrOp
 	value string
+	// prefix is the namespace prefix of a name written ns|name, whose
+	// name is then "": an HTML element's attributes are in no namespace.
+	prefix string
 	// fold compares the value ASCII case-insensitively, the i flag.
 	// Selectors 4, 6.3 adds the s flag, which compares it exactly; litho
 	// refuses it, as Chromium does not parse it.
@@ -99,10 +102,32 @@ type compound struct {
 	classes []string
 	attrs   []attrSel
 	pseudos []pseudoSel
-	// never marks a compound no element matches: a namespace prefix,
-	// which litho does not support.
+	// never marks a compound no element matches: |p, or an attribute
+	// selector with a namespace prefix.
 	never bool
+	// ns is the namespace an element must be in, nsAny for any; prefix is
+	// the namespace prefix of its type selector as written, "" for none,
+	// which a style sheet's @namespace rules resolve (CSS Namespaces 3,
+	// 4), and attrPrefixes those of its attribute selectors. anyNS marks
+	// a type selector written *|, which no default namespace narrows.
+	ns           elementNS
+	prefix       string
+	attrPrefixes []string
+	anyNS        bool
 }
+
+// elementNS is the namespace a compound selector asks an element to be in.
+type elementNS uint8
+
+// The namespaces of the elements of a parsed HTML document (HTML, 13.2):
+// HTML, SVG and MathML; nsUnknown is any other, which no element is in.
+const (
+	nsAny elementNS = iota
+	nsHTML
+	nsSVG
+	nsMathML
+	nsUnknown
+)
 
 // complexSel is a complex selector (Selectors 4, 3.1): compounds from
 // left to right and the combinators between them.
@@ -346,12 +371,18 @@ func parseCompound(c *selCursor, depth int) (compound, string, *selectorError) {
 					return comp, "", &selectorError{}
 				}
 				// *|p names an element in any namespace; a named prefix
-				// needs an @namespace rule, which litho does not read.
+				// names the namespace an @namespace rule binds it to,
+				// which [resolveNamespaces] sets: until then it matches
+				// nothing.
 				comp.tag = ""
 				if nn.typ == tIdent {
 					comp.tag = lower(nn.value)
 				}
-				comp.never = !anyNS
+				if anyNS {
+					comp.anyNS = true
+				} else {
+					comp.prefix, comp.ns = t.value, nsUnknown
+				}
 				c.i++
 			}
 		}
@@ -393,6 +424,7 @@ func parseCompound(c *selCursor, depth int) (compound, string, *selectorError) {
 			}
 			if a.name == "" {
 				comp.never = true
+				comp.attrPrefixes = append(comp.attrPrefixes, a.prefix)
 			} else {
 				comp.attrs = append(comp.attrs, a)
 			}
@@ -483,7 +515,7 @@ func parseAttr(list []token) (a attrSel, ok, sensitive bool) {
 		c.i++
 		if n := c.peek(); n != nil && n.isDelim('|') && c.i+1 < len(list) && list[c.i+1].typ == tIdent {
 			c.i += 2
-			a.name = ""
+			a.name, a.prefix = "", t.value
 		}
 	case t.isDelim('*') || t.isDelim('|'):
 		c.i++

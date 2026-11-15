@@ -212,7 +212,7 @@ func (m *matcher) anyMatches(list []*complexSel, n *html.Node) bool {
 
 // compound matches one compound selector.
 func (m *matcher) compound(c *compound, n *html.Node) bool {
-	if !m.charge(1) || c.never {
+	if !m.charge(1) || c.never || !c.ns.holds(n) {
 		return false
 	}
 	// Names compare ASCII case-insensitively (Selectors 4, 5.1 and HTML,
@@ -743,7 +743,7 @@ func ancestorFeatures(s *complexSel) []uint64 {
 			continue
 		}
 		p := &s.parts[i]
-		if p.never {
+		if p.never || p.ns == nsUnknown {
 			continue
 		}
 		if p.tag != "" {

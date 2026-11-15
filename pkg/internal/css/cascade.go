@@ -290,7 +290,7 @@ func (x *selIndex) add(ref selRef) {
 		(*m)[k] = append((*m)[k], ref)
 	}
 	switch {
-	case last.never:
+	case last.never || last.ns == nsUnknown:
 		// A selector that never matches needs no bucket.
 	case len(last.ids) > 0:
 		put(&x.byID, last.ids[0])

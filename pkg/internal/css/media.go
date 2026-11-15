@@ -528,9 +528,9 @@ func evalRange(in []token, m Media) tri {
 // evalSupports evaluates an @supports condition (CSS Conditional 3, 6;
 // CSS Conditional 4 and 5, 2): a declaration is supported when litho
 // parses it, and the functions as [supportsFunction] says.
-func evalSupports(l []token) bool {
+func evalSupports(l []token, ns *namespaces) bool {
 	v, ok := evalCondition(significant(l), func(t token) (tri, bool) {
-		v, ok := supportsLeaf(t)
+		v, ok := supportsLeaf(t, ns)
 		return triOf(v), ok
 	})
 	return v == triTrue && ok
@@ -538,7 +538,7 @@ func evalSupports(l []token) bool {
 
 // supportsLeaf evaluates a <supports-in-parens> that is no nested
 // condition: false with false when it does not parse.
-func supportsLeaf(t token) (bool, bool) {
+func supportsLeaf(t token, ns *namespaces) (bool, bool) {
 	switch t.typ { //nolint:exhaustive // the other token types are invalid here
 	case tLParen:
 		it, ok := declaration(trimWS(t.children))
@@ -559,7 +559,7 @@ func supportsLeaf(t token) (bool, bool) {
 		_, ok = c.expand(name, it.value)
 		return ok, true
 	case tFunction:
-		return supportsFunction(t), true
+		return supportsFunction(t, ns), true
 	}
 	return false, false
 }
@@ -568,7 +568,9 @@ func supportsLeaf(t token) (bool, bool) {
 // 5, 2), true when litho supports what it names; any other function is a
 // <general-enclosed>, false.
 //
-//   - selector(<complex-selector>): one selector that parses, every
+//   - selector(<complex-selector>): one selector that parses, its
+//     namespace prefixes declared by the style sheet's @namespace rules
+//     (CSS Namespaces 3, 4), every
 //     :is() and :where() in it holding only selectors that parse, since
 //     their forgiving lists would drop the others unseen (CSS Conditional
 //     4, 2: an unknown part is unsupported even there).
@@ -587,7 +589,7 @@ func supportsLeaf(t token) (bool, bool) {
 //     opentype, truetype, woff and woff2 and false for embedded-opentype
 //     and svg, true for at-rule() of @supports, @SUPPORTS, @top-left and
 //     @stylistic and false for @charset, @foo, supports and "@supports;".
-func supportsFunction(t token) bool {
+func supportsFunction(t token, ns *namespaces) bool {
 	args := significant(t.children)
 	switch lower(t.value) {
 	case "selector":
@@ -596,8 +598,8 @@ func supportsFunction(t token) bool {
 				return false
 			}
 		}
-		_, err := parseSelectorList(trimWS(t.children), 0, false)
-		return err == nil && strictForgivingLists(t.children)
+		sels, err := parseSelectorList(trimWS(t.children), 0, false)
+		return err == nil && strictForgivingLists(t.children) && resolveNamespaces(sels, ns, true)
 	case "font-format":
 		if len(args) != 1 || args[0].typ != tIdent {
 			return false

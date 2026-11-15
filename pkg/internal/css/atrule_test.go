@@ -202,7 +202,7 @@ func TestSupports_Conditions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		l, _ := parseComponentValues(tt.c)
-		if got := evalSupports(l); got != tt.want {
+		if got := evalSupports(l, nil); got != tt.want {
 			t.Errorf("@supports %s = %v, want %v", tt.c, got, tt.want)
 		}
 	}
