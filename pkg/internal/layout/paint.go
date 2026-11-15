@@ -876,6 +876,14 @@ func (p *painter) unit(b *box, own bool) {
 		effects = true
 		p.emit(b, false, &typeset.Group{}, bd.box.Y, bd.box.Y+bd.box.Height, -1)
 	}
+	if !effects && b.parent != nil && b.backdropRoot() && p.e.holdsBackdropFilter(b) {
+		// A Backdrop Root whose effects push no group, one a
+		// will-change makes, still bounds the backdrop of the backdrop
+		// filters inside it (Filter Effects 2, 3): a plain group marks
+		// it, in a document that has one to draw.
+		push(&ditem{group: true, fx: &groupFx{opacity: 1}})
+		effects = true
+	}
 	if effects && b.backdropRoot() {
 		// The element is a Backdrop Root (Filter Effects 2, 3): what its
 		// innermost group holds is the backdrop of the backdrop filters

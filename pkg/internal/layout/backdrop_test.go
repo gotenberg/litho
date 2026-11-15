@@ -69,8 +69,9 @@ func TestBackdropFilter_FiltersWhatLiesBehind(t *testing.T) {
 
 // TestBackdropFilter_BackdropRoot locks Filter Effects 2, 3: the backdrop
 // starts at the nearest Backdrop Root around the element, an opacity, a
-// filter, a clip-path or a blend mode, and holds what that root painted
-// before it; a transform or a z-index makes none.
+// filter, a clip-path, a blend mode or a will-change naming one, and
+// holds what that root painted before it; a transform or a z-index makes
+// none.
 //
 // # Corpus evidence
 //
@@ -79,6 +80,9 @@ func TestBackdropFilter_FiltersWhatLiesBehind(t *testing.T) {
 //     translated or has a z-index, and leaves it red inside one of
 //     opacity 0.999, filter: blur(0), clip-path: inset(0) or
 //     mix-blend-mode: multiply.
+//   - wpt: css/filter-effects backdrop-filter-backdrop-root-opacity,
+//     -filter, -clip-path, -mix-blend-mode and -backdrop-filter hold a
+//     Backdrop Root that will-change alone makes.
 func TestBackdropFilter_BackdropRoot(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -88,6 +92,7 @@ func TestBackdropFilter_BackdropRoot(t *testing.T) {
 		{"opacity", func(s *css.Style) { s.Opacity = 0.999 }, 'R'},
 		{"filter", filters(css.Filter{Kind: css.FilterBlur}), 'R'},
 		{"blend", blendMode(css.BlendMultiply), 'R'},
+		{"will-change", func(s *css.Style) { s.WillChange = css.WillStack | css.WillBackdropRoot }, 'R'},
 		{"transform", func(s *css.Style) {
 			s.Transform = []css.TransformFunc{{Kind: css.TransformTranslate, X: css.Pts(px(1))}}
 		}, 'c'},

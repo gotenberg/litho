@@ -171,9 +171,12 @@ type engine struct {
 	// (backdrop.go).
 	backdrops      bool
 	backdropLevels []backdropLevel
-	backdropPage   int
-	backdropGround func(page int) []typeset.Fragment
-	backdropCount  map[int]int
+	// anyBackdropFilter is 1 when the document's box tree holds a
+	// backdrop filter, -1 when it holds none, 0 before it is known.
+	anyBackdropFilter int8
+	backdropPage      int
+	backdropGround    func(page int) []typeset.Fragment
+	backdropCount     map[int]int
 }
 
 // charge charges the conversion's budget n bytes for what, failing the

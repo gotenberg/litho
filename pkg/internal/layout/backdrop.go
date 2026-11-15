@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/effect"
@@ -81,6 +82,31 @@ func (b *box) backdropRoot() bool {
 	st := b.st
 	return len(st.Filter) > 0 || st.Opacity < 1 || len(st.Mask.Images) > 0 || !st.ClipPath.None() ||
 		len(st.BackdropFilter) > 0 || st.MixBlendMode != css.BlendNormal || st.WillChange&css.WillBackdropRoot != 0
+}
+
+// holdsBackdropFilter reports whether the document of b holds an element
+// with a backdrop filter, walking its box tree once a layout.
+func (e *engine) holdsBackdropFilter(b *box) bool {
+	if e.anyBackdropFilter == 0 {
+		root := b
+		for root.parent != nil {
+			root = root.parent
+		}
+		e.anyBackdropFilter = -1
+		if anyBackdropFilter(root) {
+			e.anyBackdropFilter = 1
+		}
+	}
+	return e.anyBackdropFilter > 0
+}
+
+// anyBackdropFilter reports whether b or a box under it has a backdrop
+// filter.
+func anyBackdropFilter(b *box) bool {
+	if len(b.st.BackdropFilter) > 0 {
+		return true
+	}
+	return slices.ContainsFunc(b.kids, anyBackdropFilter)
 }
 
 // backdropOf returns the backdrop filter of b to draw, nil for none. An
