@@ -162,6 +162,18 @@ var silentProperties = map[string]bool{
 	// with a length (CSS Sizing 4, 7.3): an animation prints at its start
 	// or its end, where no keyword and length are ever between.
 	"interpolate-size": true,
+	// forced-color-adjust opts an element out of forced colors mode (CSS
+	// Color Adjustment 1, 3.2), which a printed page is never in: its
+	// media feature forced-colors is none (Media Queries 5, 12.4).
+	"forced-color-adjust": true,
+	// overflow-anchor selects the node scroll anchoring keeps in view
+	// while content above it changes size (CSS Scroll Anchoring 1, 3): a
+	// printed page does not scroll.
+	"overflow-anchor": true,
+	// window-drag marks the area that moves the application window, and
+	// app-region is its legacy name (CSS UI 4, 8.1): a printed page has
+	// no window.
+	"window-drag": true, "app-region": true,
 }
 
 // knownProperty reports whether litho parses the property name.
