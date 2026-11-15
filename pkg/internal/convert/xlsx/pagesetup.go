@@ -175,6 +175,7 @@ func (w *sheetReader) pageSetup(root *ooxml.Element) {
 		p.Order = sheet.OverThenDown
 	}
 	p.Draft = boolAttr(ps, "draft")
+	p.Notes = cellComments(ps)
 	// ECMA-376 Part 1, 18.18.60 ST_PrintError; "displayed", the default,
 	// and any other value print the error.
 	switch attr(ps, "errors") {

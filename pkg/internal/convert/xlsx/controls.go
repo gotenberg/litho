@@ -111,7 +111,8 @@ const (
 // row, offset, right column, offset, bottom row, offset, the offsets in
 // pixels of 0.75 point). A control whose x:PrintObject is False, or a
 // hidden shape, does not print, as Excel prints the controls of a sheet.
-// Comments (ObjectType Note) do not print and are not read.
+// A note's shape (ObjectType Note) is no control: [sheetReader.notes]
+// reads it.
 func (w *sheetReader) controls(id string) error {
 	r := w.r
 	rel, ok := r.pkg.RelationshipByID(r.ctx, w.part, id)

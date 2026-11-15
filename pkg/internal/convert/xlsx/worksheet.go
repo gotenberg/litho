@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
@@ -90,6 +91,9 @@ type sheetReader struct {
 	// printed marks a sheet that prints; one that does not is read
 	// without its drawings and conditional formats.
 	printed bool
+	// noteRuns holds the rich text of each note by cell, read for a sheet
+	// that prints its notes as displayed.
+	noteRuns map[[2]int][]text.Run
 }
 
 // maxCachedFormulas caps the formulas with a cached result a workbook
@@ -149,6 +153,7 @@ func (w *sheetReader) read(root *ooxml.Element) error {
 			return err
 		}
 	}
+	w.notes(root)
 	if w.printed {
 		w.conditionalFormats(root)
 	}
