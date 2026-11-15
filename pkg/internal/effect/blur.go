@@ -20,6 +20,9 @@ type Kernel struct {
 	// integers the weights of W sum to, in work that does not grow with
 	// the kernel's width.
 	boxes []int
+	// cut reports a kernel [MaxKernelRadius] cut short of the width its
+	// caller asked for.
+	cut bool
 }
 
 // MaxKernelRadius caps a kernel's radius in pixels. Anti-DoS guard, not
@@ -52,14 +55,17 @@ func GaussianKernel(sigma float64) Kernel {
 	if q == 0 {
 		return Kernel{}
 	}
-	n := min((3*q+sigmaUnit-1)/sigmaUnit, MaxKernelRadius)
+	full := (3*q + sigmaUnit - 1) / sigmaUnit
+	n := min(full, MaxKernelRadius)
 	w := make([]uint32, n+1)
 	for i := range w {
 		// i^2 / (2 sigma^2) with sigma = q/256: i^2 * 32768 / q^2.
 		x := float64(int64(i)*int64(i)*32768) / float64(q*q)
 		w[i] = uint32(math.Round(float64(detmath.Exp(-x) * kernelUnit))) // fits uint32: at most 2^16
 	}
-	return trim(w)
+	k := trim(w)
+	k.cut = full > MaxKernelRadius && len(k.W) > 0
+	return k
 }
 
 // TentKernel returns the triangle of radius r pixels, the weight of the
@@ -96,6 +102,7 @@ func BoxKernel(width, passes int) Kernel {
 	if width < 2 || passes < 1 {
 		return Kernel{}
 	}
+	cut := width > MaxKernelRadius
 	width = min(width, MaxKernelRadius)
 	passes = min(passes, 3)
 	full := []uint64{1}
@@ -127,7 +134,7 @@ func BoxKernel(width, passes int) Kernel {
 	}
 	// The weights at either end are 1, so trim keeps them all.
 	k := trim(w)
-	k.boxes = boxes
+	k.boxes, k.cut = boxes, cut
 	return k
 }
 
@@ -207,6 +214,10 @@ func blurRows(ctx context.Context, s *Surface, plane []uint16, k Kernel, edge Ed
 		}
 		return nil
 	}
+	if spansMirror(k, w, edge) {
+		meanRows(s, plane)
+		return nil
+	}
 	sum := k.sum()
 	var line []uint32
 	var wide, tmp []uint64
@@ -256,6 +267,10 @@ func blurColumns(ctx context.Context, s *Surface, plane []uint16, k Kernel, edge
 		}
 		return nil
 	}
+	if spansMirror(k, h, edge) {
+		meanColumns(s, plane)
+		return nil
+	}
 	d := 256 * k.sum()
 	if k.boxes != nil {
 		wide, tmp := make([]uint64, h+2*r), make([]uint64, h+2*r)
@@ -301,6 +316,62 @@ func blurColumns(ctx context.Context, s *Surface, plane []uint16, k Kernel, edge
 		}
 	}
 	return nil
+}
+
+// spansMirror reports a pass whose kernel [MaxKernelRadius] cut short over
+// a line of n pixels read past its ends mirrored or wrapped, which repeat
+// the line, when the cut kernel still reaches past the whole line: the
+// kernel asked for is wider still, and the line it blurs, periodic, tends
+// to its mean as a blur widens (Filter Effects 1, 9.14). Each pixel then
+// takes the line's mean, which the cut kernel would leave uneven.
+//
+// # Corpus evidence
+//
+//   - wpt: css/filter-effects/backdrop-filter-blur-large-value blurs a
+//     400 by 200 pixel red and green backdrop by blur(100000px) and
+//     matches a plain rgb(128, 128, 0) within one level.
+func spansMirror(k Kernel, n int, edge Edge) bool {
+	return k.cut && (edge == EdgeMirror || edge == EdgeWrap) && len(k.W)-1 >= n
+}
+
+// meanRows sets every pixel of each row of plane to the row's mean, in
+// 1/256 of a level, every channel alone.
+func meanRows(s *Surface, plane []uint16) {
+	ch := int(s.F)
+	w, h := s.W, s.H
+	n := w * ch
+	for y := range h {
+		row := s.Pix[y*n : (y+1)*n]
+		for c := range ch {
+			var sum uint64
+			for x := range w {
+				sum += uint64(row[x*ch+c])
+			}
+			m := uint16(min((sum*256+uint64(w)/2)/uint64(w), 65535)) //nolint:gosec // clamped to 16 bits
+			for x := range w {
+				plane[y*n+x*ch+c] = m
+			}
+		}
+	}
+}
+
+// meanColumns sets every pixel of each column of s to the mean of the
+// column of plane, rounded back to a level.
+func meanColumns(s *Surface, plane []uint16) {
+	ch := int(s.F)
+	w, h := s.W, s.H
+	n := w * ch
+	for x := range n {
+		var sum uint64
+		for y := range h {
+			sum += uint64(plane[y*n+x])
+		}
+		d := uint64(h) * 256              //nolint:gosec // a surface's height, positive
+		m := uint8(min((sum+d/2)/d, 255)) //nolint:gosec // clamped to a byte
+		for y := range h {
+			s.Pix[y*n+x] = m
+		}
+	}
 }
 
 // boxSums sums v over a window of each width of boxes in turn, each

@@ -161,6 +161,41 @@ func TestBlur_EdgeMirror(t *testing.T) {
 	}
 }
 
+// TestBlur_CutKernelOverARepeatedLine locks that a blur wider than
+// MaxKernelRadius over a line read mirrored or wrapped past its ends gives
+// each pixel the line's mean, the limit the blur asked for tends to
+// (Filter Effects 1, 9.14), and that any other edge, or a kernel within
+// the cap, blurs as before.
+func TestBlur_CutKernelOverARepeatedLine(t *testing.T) {
+	line := func(edge Edge, k Kernel) []uint8 {
+		s := newSurface(t, Coverage, 400, 2)
+		for y := range 2 {
+			for x := range 200 {
+				s.Pix[y*400+x] = 255
+			}
+		}
+		if err := Blur(context.Background(), s, k, k, edge); err != nil {
+			t.Fatal(err)
+		}
+		return s.Pix
+	}
+	for _, edge := range []Edge{EdgeMirror, EdgeWrap} {
+		for _, k := range []Kernel{BoxKernel(100000, 3), GaussianKernel(30000)} {
+			for i, v := range line(edge, k) {
+				if v != 128 {
+					t.Fatalf("edge %d: pixel %d is %d, want the mean 128", edge, i, v)
+				}
+			}
+		}
+	}
+	if p := line(EdgeDuplicate, BoxKernel(100000, 3)); p[0] == p[399] {
+		t.Errorf("a duplicated edge took the mean")
+	}
+	if p := line(EdgeMirror, BoxKernel(200, 3)); p[0] == 128 {
+		t.Errorf("a kernel within the cap took the mean")
+	}
+}
+
 func TestBlur_ColorChannelsApart(t *testing.T) {
 	s := newSurface(t, RGBA, 3, 1)
 	copy(s.Pix, []uint8{0, 0, 0, 0, 255, 51, 0, 255, 0, 0, 0, 0})
