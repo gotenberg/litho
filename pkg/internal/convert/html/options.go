@@ -169,6 +169,12 @@ type Options struct {
 	// linked stylesheet does, and one past them is left out with a
 	// warning. A band that is not isolated is styled by them too.
 	UserStylesheets []string
+	// DerivedAltText gives an image its markup does not describe the
+	// description the document states of it apart from alt: the caption
+	// of a figure the image alone fills (HTML Standard, 4.8.4.4.11), its
+	// aria-label, an svg element's desc (SVG 2, 5.9). false, the default,
+	// leaves such an image without one.
+	DerivedAltText bool
 	// AnimationsAtEnd prints each CSS animation at the end of its active
 	// interval, as the page shows once its animations have run: an
 	// animation's last keyframe where its fill mode keeps it, the

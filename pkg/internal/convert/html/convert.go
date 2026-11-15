@@ -407,7 +407,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	b := &builder{
 		computed: computed, res: res, scan: scan, media: media,
 		warned: map[string]bool{}, omitBackgrounds: o.OmitBackgrounds,
-		counterStyles: resolver.CounterStyles(),
+		counterStyles: resolver.CounterStyles(), derivedAlt: o.DerivedAltText,
 	}
 	// The page-margin boxes read these counters of the document as they
 	// stand at the start of each page (CSS Page 3, 6.1).

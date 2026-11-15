@@ -158,6 +158,9 @@ func (b *builder) inlineSVG(ctx context.Context, n *dom.Node, st *css.Style) []*
 	node.ID, _ = attr(n, "id")
 	node.Role = "Figure"
 	node.Alt = svgTitle(n)
+	if node.Alt == "" && b.derivedAlt {
+		node.Alt = svgDerivedAlt(n)
+	}
 	return []*layout.Node{node}
 }
 
@@ -303,6 +306,24 @@ func (b *builder) filterSource(ctx context.Context, url string, box typeset.Rect
 			return f.Apply(ctx, s, k, (s.Grid.X-box.X)/css.Pt, (s.Grid.Y-box.Y)/css.Pt)
 		},
 	}, true
+}
+
+// svgDerivedAlt returns what an svg element without a title states of
+// itself apart from it: its aria-label, which names it before its title
+// does (SVG-AAM 1.0, the accessible name computation), else the text of its first desc child, its
+// description (SVG 2, 5.9); "" for neither.
+func svgDerivedAlt(n *dom.Node) string {
+	if v, ok := attr(n, "aria-label"); ok {
+		if v = collapse(v); v != "" {
+			return bounded(v)
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == dom.ElementNode && c.Namespace == "svg" && c.Data == "desc" {
+			return bounded(collapse(textContent(c)))
+		}
+	}
+	return ""
 }
 
 // svgTitle returns the text of the first title child of an svg element,

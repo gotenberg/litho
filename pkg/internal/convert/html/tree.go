@@ -97,6 +97,9 @@ type builder struct {
 	// omitBackgrounds clears the backgrounds of the html and body
 	// elements ([Options.OmitBackgrounds]).
 	omitBackgrounds bool
+	// derivedAlt describes the images their markup does not
+	// ([Options.DerivedAltText]).
+	derivedAlt bool
 	// ids are anchors set on elements over their id attributes, nil for
 	// none.
 	ids map[*dom.Node]string
@@ -606,6 +609,9 @@ func (b *builder) image(ctx context.Context, n *dom.Node, st, parent *css.Style)
 		node.Alt = alt
 		if !hasAlt {
 			node.Alt, _ = attr(n, "title")
+			if node.Alt == "" && b.derivedAlt {
+				node.Alt = derivedImageAlt(n)
+			}
 		}
 	}
 	return []*layout.Node{node}
@@ -845,6 +851,55 @@ func (b *builder) warnOnce(code warn.Code, effect warn.Effect, key, msg string) 
 // Anti-DoS guard, not spec-mandated: a caption is a sentence or two, and
 // a reader is told the first few thousand characters of a longer one.
 const maxFigureName = 4096
+
+// derivedImageAlt returns what the document states of the img element n,
+// which has no alt attribute, apart from alt and title: its aria-label
+// (HTML-AAM 1.0, 4.1, the accessible name of img), else the caption of the
+// figure it alone fills, a figure whose first figcaption child holds text
+// and which holds, that figcaption aside, nothing but n, white space and
+// comments: the case in which the HTML Standard, 4.8.4.4.11 lets an image
+// go without alt because its figure's caption stands for it. "" for
+// neither. An image beside other content in its figure, or inside another
+// element of it, shares the caption with that content, and takes none.
+func derivedImageAlt(n *dom.Node) string {
+	if v, ok := attr(n, "aria-label"); ok {
+		if v = collapse(v); v != "" {
+			return bounded(v)
+		}
+	}
+	f := n.Parent
+	if f == nil || f.Type != dom.ElementNode || f.DataAtom != atom.Figure || f.Namespace != "" {
+		return ""
+	}
+	var caption *dom.Node
+	for c := f.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == dom.ElementNode && c.DataAtom == atom.Figcaption && c.Namespace == "" {
+			caption = c
+			break
+		}
+	}
+	if caption == nil {
+		return ""
+	}
+	for c := f.FirstChild; c != nil; c = c.NextSibling {
+		switch {
+		case c == caption || c == n || c.Type == dom.CommentNode:
+		case c.Type == dom.TextNode && strings.Trim(c.Data, "\t\n\f\r ") == "":
+		default:
+			return ""
+		}
+	}
+	return bounded(collapse(textContent(caption)))
+}
+
+// bounded returns s cut to [maxFigureName] bytes at a character.
+func bounded(s string) string {
+	for len(s) > maxFigureName {
+		_, size := utf8.DecodeLastRuneInString(s)
+		s = s[:len(s)-size]
+	}
+	return s
+}
 
 // figureName returns the name of a figure element, the Alt its Figure
 // carries (ISO 14289-1, 7.3), as HTML-AAM computes a figure's accessible

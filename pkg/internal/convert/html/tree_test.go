@@ -656,3 +656,41 @@ func TestPrepare_PictureFaults(t *testing.T) {
 		}
 	}
 }
+
+// TestPrepare_DerivedAltText holds the descriptions an image without alt
+// takes under Options.DerivedAltText: its aria-label, else the caption of
+// a figure it alone fills (HTML Standard, 4.8.4.4.11); an svg element its
+// aria-label, else its desc. An image beside other content, an image
+// marked decorative and one its markup describes take none, and without
+// the option no image takes one.
+func TestPrepare_DerivedAltText(t *testing.T) {
+	t.Parallel()
+	fsys := fstest.MapFS{"a.png": {Data: pngBytes(t, 4, 4)}}
+	src := `<figure><img id=alone src=a.png> <!-- c --><figcaption> Sales  by region </figcaption></figure>` +
+		`<figure><figcaption>Shared</figcaption><img id=shared src=a.png><p>text</p></figure>` +
+		`<figure><figcaption>Nested</figcaption><a href="#"><img id=nested src=a.png></a></figure>` +
+		`<figure><figcaption>Has alt</figcaption><img id=described src=a.png alt="Own"></figure>` +
+		`<figure><figcaption>Decor</figcaption><img id=decorative src=a.png alt=""></figure>` +
+		`<figure><figcaption>T</figcaption><img id=titled src=a.png title="Title"></figure>` +
+		`<p><img id=labelled src=a.png aria-label=" A  label "><img id=bare src=a.png></p>` +
+		`<svg id=desc width=10 height=10><desc>A  square</desc><rect width=10 height=10/></svg>` +
+		`<svg id=svglabel aria-label="Labelled" width=10 height=10><desc>d</desc></svg>`
+	want := map[string]string{
+		"alone": "Sales by region", "shared": "", "nested": "", "described": "Own", "decorative": "",
+		"titled": "Title", "labelled": "A label", "bare": "", "desc": "A square", "svglabel": "Labelled",
+	}
+	on := prep(t, src, Options{Resources: fsys, DerivedAltText: true})
+	off := prep(t, src, Options{Resources: fsys})
+	for id, alt := range want {
+		if got := byID(t, on.root, id).Alt; got != alt {
+			t.Errorf("%s: alt %q, want %q", id, got, alt)
+		}
+		offWant := map[string]string{"described": "Own", "titled": "Title"}[id]
+		if got := byID(t, off.root, id).Alt; got != offWant {
+			t.Errorf("%s without the option: alt %q, want %q", id, got, offWant)
+		}
+	}
+	if r := byID(t, on.root, "decorative").Role; r != "" {
+		t.Errorf("an image alt=\"\" marks decorative has role %q", r)
+	}
+}
