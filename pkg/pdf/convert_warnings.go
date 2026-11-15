@@ -191,6 +191,21 @@ const (
 	// Its effect is [EffectOmitted] for what is left out or cut short, and
 	// [EffectApproximated] for what is drawn simpler.
 	WarningLimitReached ConvertWarningCode = "limit-reached"
+	// WarningScriptNotRun is a document holding scripts a browser would
+	// run: a script element whose type is JavaScript or a module, inline
+	// or with a src, an event handler attribute of an event the page's
+	// load or its printing fires (onload, onerror, onpageshow,
+	// onbeforeprint), an iframe whose src is a javascript: URL. litho runs
+	// no script, so what they would draw or change is missing, and the
+	// content of noscript stays out as a browser that runs them leaves it
+	// out. A data block (application/ld+json, text/template) or a handler
+	// that waits for a user is no such script. The document is reported
+	// once, the message saying how many scripts did not run. HTML and
+	// Markdown report it; a caller that needs them run sends the document
+	// to a browser.
+	//
+	// Its effect is always [EffectOmitted].
+	WarningScriptNotRun ConvertWarningCode = "script-not-run"
 )
 
 // ConvertWarningEffect says what the construct a [ConvertWarning] reports

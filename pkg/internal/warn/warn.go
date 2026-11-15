@@ -64,6 +64,8 @@ var (
 	ContentUnsupported = Code{"content-unsupported"}
 	// LimitReached is content past one of litho's anti-DoS caps.
 	LimitReached = Code{"limit-reached"}
+	// ScriptNotRun is a script a browser would run, which litho does not.
+	ScriptNotRun = Code{"script-not-run"}
 )
 
 // All returns every code, in a fixed order: the order of the variables
@@ -91,6 +93,7 @@ func All() []Code {
 		PageSetupUnsupported,
 		ContentUnsupported,
 		LimitReached,
+		ScriptNotRun,
 	}
 }
 

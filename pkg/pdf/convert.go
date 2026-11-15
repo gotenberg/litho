@@ -169,7 +169,8 @@ func FromText(src io.Reader, opts ...TextOption) *Conversion {
 // stylesheets of its <style> and <link rel=stylesheet> elements, their
 // imports, its style attributes and its presentational attributes, and
 // those of [WithUserStylesheet], evaluated for the media type of
-// [WithMediaType]. No script runs.
+// [WithMediaType]. No script runs: a document that holds one a browser
+// would run reports [WarningScriptNotRun].
 //
 //   - Layout covers the visual formatting model of CSS 2.1, flexbox, grid
 //     without subgrid, multi-column layout, positioning, transforms,

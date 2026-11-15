@@ -498,6 +498,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	p.warnings = append(p.warnings, pageWarns...)
 	p.warnings = append(p.warnings, b.warnings...)
 	p.warnings = append(p.warnings, newWarnings(p.warnings, bandWarns)...)
+	p.warnings = append(p.warnings, scriptWarning(scan.scripts)...)
 	return p, nil
 }
 
@@ -610,6 +611,9 @@ type scan struct {
 	docURL string
 	// math reports a MathML element in the document.
 	math bool
+	// scripts counts the scripts a browser would run on its own
+	// ([scriptsOf]).
+	scripts int
 }
 
 // scanDocument walks doc once, counting its elements against maxElements,
@@ -649,6 +653,7 @@ func scanDocument(ctx context.Context, doc *dom.Node, docURL string, maxElements
 		if n.Namespace == "math" {
 			s.math = true
 		}
+		s.scripts += scriptsOf(n)
 		if n.Namespace != "" {
 			return true
 		}
