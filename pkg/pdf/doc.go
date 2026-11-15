@@ -224,7 +224,8 @@
 //     [WithMediaFeatures], [WithScale], [WithShrinkToFit],
 //     [WithCanvasBackground], [WithFinishedAnimations], [WithHeader],
 //     [WithFooter], [WithFirstPageNumber], [WithSinglePage],
-//     [WithFractionalFontMetrics], [WithUserStylesheet].
+//     [WithFractionalFontMetrics], [WithUserStylesheet],
+//     [WithRequiredResources].
 //   - [FromMarkdown] takes [MarkdownOption]: [WithMarkdownTemplate].
 //   - A conversion of an Office package takes [OfficeOption]:
 //     [WithOfficePassword].

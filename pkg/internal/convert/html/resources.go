@@ -128,6 +128,9 @@ type resources struct {
 	// results by URL.
 	requests int
 	network  map[string]networkResult
+	// stop ends the conversion at a required resource that does not load
+	// ([Options.stop]), nil when resources are not required.
+	stop context.CancelCauseFunc
 }
 
 // pictureResult is a decoded picture or why it failed.
@@ -281,6 +284,7 @@ func (r *resources) picture(ctx context.Context, u string) (*layout.Picture, err
 func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Picture, error) {
 	f, err := r.fetchTyped(ctx, u)
 	if err != nil {
+		r.failLoad("picture", u, err)
 		return nil, err
 	}
 	data := f.data

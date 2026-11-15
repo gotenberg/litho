@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
+	htmlconv "github.com/gotenberg/litho/pkg/internal/convert/html"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -828,6 +829,14 @@ var (
 	// font directories it reads hold no usable font. Nothing is written.
 	ErrConvertNoFonts = text.ErrNoFonts
 
+	// ErrConvertResourceUnavailable is returned, wrapped in an error naming
+	// the resource and why it did not load, by a [Conversion] of an HTML
+	// or Markdown source under [WithRequiredResources] when a stylesheet,
+	// an @import, a picture or a font the source names does not load.
+	// [IsInvalidInput] reports it: the source names a resource the
+	// caller's resources and client do not deliver. Nothing is written.
+	ErrConvertResourceUnavailable = htmlconv.ErrResourceUnavailable
+
 	// ErrStreamTooLarge is returned, wrapped, when decoding a stream would
 	// produce more than [Limits.MaxStreamBytes] bytes: by [Reader.DecodeImage]
 	// and an image's Decode function alongside [ErrImageNotDecodable], and by
@@ -1120,6 +1129,7 @@ var invalidInputErrors = []error{
 	ErrConvertTooManyPages,
 	ErrConvertMalformed,
 	ErrConvertEncrypted,
+	ErrConvertResourceUnavailable,
 	ErrStreamTooLarge,
 	ErrDamagedStream,
 	ErrPageContentTooLarge,

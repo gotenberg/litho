@@ -1,6 +1,7 @@
 package html
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
@@ -18,4 +19,9 @@ var (
 	// than the HTML parser follows, 512. It wraps limits.ErrInputTooLarge.
 	// Nothing is laid out.
 	ErrTooDeep = fmt.Errorf("%w: elements nested too deeply", limits.ErrInputTooLarge)
+	// ErrResourceUnavailable is returned, wrapped in an error naming the
+	// resource and why it did not load, when [Options.RequiredResources]
+	// is set and a stylesheet, an @import, a picture or a font the
+	// document names does not load. Nothing is laid out past it.
+	ErrResourceUnavailable = errors.New("resource unavailable")
 )

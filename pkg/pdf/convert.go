@@ -429,7 +429,9 @@ type ConvertWarning struct {
 // [Limits.MaxConvertPages], [ErrConvertNoFonts] when the font directories
 // hold no usable font, [ErrConvertMalformed] for an Office source that is
 // not a document of its format, [ErrConvertEncrypted] for one
-// [WithOfficePassword] does not open, [ErrInternalPanic] for a recovered
+// [WithOfficePassword] does not open, [ErrConvertResourceUnavailable] for
+// a resource of an HTML or Markdown source that does not load under
+// [WithRequiredResources], [ErrInternalPanic] for a recovered
 // panic, and ctx's error when ctx ends first.
 func (c *Conversion) WriteTo(ctx context.Context, dst io.Writer) (*ConvertReport, error) {
 	return c.run(ctx, dst, convertEnv{})
@@ -684,6 +686,7 @@ func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *te
 		DefaultLang:           o.defaultLang,
 		UserStylesheets:       o.userStylesheets,
 		DerivedAltText:        o.derivedAltText,
+		RequiredResources:     o.requiredResources,
 	}
 	name := kind.name()
 	var doc *typeset.Document

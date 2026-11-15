@@ -140,7 +140,7 @@ func (c *collector) linkElement(ctx context.Context, n *dom.Node) *css.Styleshee
 		err = fmt.Errorf("%w: it is served as %s", errStylesheetMIMEType, f.mediaType)
 	}
 	if err != nil {
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || c.res.failLoad("stylesheet", resolveRef(c.base, href), err) {
 			return nil
 		}
 		c.warn(warningCode(err), warn.Approximated, fmt.Sprintf("the stylesheet %s was left out: %v", displayURL(strings.TrimSpace(href)), err))
@@ -163,6 +163,11 @@ func (c *collector) parse(ctx context.Context, body []byte, u, media, name strin
 			return body, u, nil
 		}
 		f, err := c.res.fetchTyped(ctx, target)
+		if err != nil {
+			// A required import that does not load ends ctx, which stops
+			// the parse.
+			c.res.failLoad("@import", target, err)
+		}
 		return f.data, f.url, err
 	}
 	src, base := body, u

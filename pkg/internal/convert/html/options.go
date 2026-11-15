@@ -1,6 +1,7 @@
 package html
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -185,7 +186,16 @@ type Options struct {
 	// view timeline, prints the same either way. No transition runs
 	// either way: a document's style changes once, when it loads.
 	AnimationsAtEnd bool
+	// RequiredResources ends the conversion with [ErrResourceUnavailable]
+	// at the first stylesheet, @import, picture or font the document names
+	// that does not load (see [loadFailed]), where false, the default,
+	// leaves it out with a warning.
+	RequiredResources bool
 
+	// stop cancels the conversion's context with the error of a required
+	// resource that did not load; [convert] sets it, nil when
+	// RequiredResources is false. It does not outlive the call.
+	stop context.CancelCauseFunc
 	// maxElements caps the elements of the document: [MaxElements] when
 	// zero, which a larger value cannot raise. A test lowers it to hold a
 	// document at the cap without cascading the full count.

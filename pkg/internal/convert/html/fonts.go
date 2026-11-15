@@ -127,10 +127,20 @@ func loadFontFaces(ctx context.Context, rules []css.FontFace, res *resources, fo
 func (l *fontLoader) load(ctx context.Context, rule css.FontFace) *text.Face {
 	d := descriptorOf(rule)
 	var reasons []string
+	// unloaded is the first url() source whose file did not arrive, and
+	// why.
+	var unloaded struct {
+		url string
+		err error
+	}
 	for _, src := range rule.Sources {
 		fc, err := l.loadSource(ctx, src, d)
 		if err == nil {
 			return fc
+		}
+		var miss fetchError
+		if unloaded.err == nil && errors.As(err, &miss) {
+			unloaded.url, unloaded.err = src.URL, miss.err
 		}
 		name := "local(" + src.Local + ")"
 		if src.Local == "" {
@@ -143,6 +153,12 @@ func (l *fontLoader) load(ctx context.Context, rule css.FontFace) *text.Face {
 	}
 	if len(reasons) == 0 {
 		reasons = append(reasons, errNoFontSource.Error())
+	}
+	// A face loads from the first source that does (CSS Fonts 4, 4.3.1): a
+	// rule fails its load only when none does, and a file that did not
+	// arrive is then what a required font lacks.
+	if unloaded.err != nil && l.res.failLoad("font", unloaded.url, unloaded.err) {
+		return nil
 	}
 	l.skip(rule, reasons)
 	return nil
@@ -205,7 +221,7 @@ func (l *fontLoader) program(ctx context.Context, u string) ([]byte, error) {
 func (l *fontLoader) decode(ctx context.Context, u string) ([]byte, error) {
 	data, err := l.res.fetch(ctx, u)
 	if err != nil {
-		return nil, err
+		return nil, fetchError{err}
 	}
 	if woff.Sniff(data) != woff.Other {
 		program, err := woff.Decode(ctx, data)
@@ -222,6 +238,15 @@ func (l *fontLoader) decode(ctx context.Context, u string) ([]byte, error) {
 	}
 	return data, nil
 }
+
+// fetchError marks the error of a font source whose file did not arrive,
+// as against one that arrived and does not decode. Its message is its
+// cause's.
+type fetchError struct{ err error }
+
+func (e fetchError) Error() string { return e.err.Error() }
+
+func (e fetchError) Unwrap() error { return e.err }
 
 // isSfntProgram reports data that starts as an sfnt program or a
 // collection does (ISO/IEC 14496-22, 5.1 and 5.2): version 1.0, "true",

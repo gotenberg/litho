@@ -55,6 +55,19 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	if err != nil {
 		return nil, err
 	}
+	ctx, o, done := requireResources(ctx, o)
+	defer done()
+	out, err := convertChecked(ctx, src, fonts, o, lay)
+	if failure := resourceFailure(ctx); failure != nil {
+		// The context ended at a required resource: its error, not the
+		// context's, is the conversion's.
+		return nil, failure
+	}
+	return out, err
+}
+
+// convertChecked is [convert] once the options are checked.
+func convertChecked(ctx context.Context, src io.Reader, fonts *text.Fonts, o Options, lay layoutFunc) (*typeset.Document, error) {
 	if fonts == nil {
 		return nil, fmt.Errorf("%w: no font index", typeset.ErrInvalidOptions)
 	}
@@ -124,6 +137,12 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	}
 	out, err := p.assemble(res)
 	if err != nil {
+		return nil, err
+	}
+	// A required resource that failed late in the layout ended ctx: the
+	// pages are not charged, so nothing is held for a document never
+	// returned.
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if err := chargePages(ctx, out); err != nil {
@@ -288,6 +307,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	res := newResources(o.Resources)
 	res.svg.fonts = fonts
 	res.client = o.HTTPClient
+	res.stop = o.stop
 	c := &collector{res: res, base: scan.resourceBase, logger: o.Logger}
 	sheets := c.stylesheets(ctx, o.UserStylesheets, scan.sheets)
 	if scan.math {

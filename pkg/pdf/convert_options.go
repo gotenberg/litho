@@ -138,6 +138,7 @@ type convertConfig struct {
 	scaleSet              bool
 	noShrinkToFit         bool
 	finishedAnimations    bool
+	requiredResources     bool
 	omitCanvasBackground  bool
 	bands                 []configBand
 	firstPageNumber       int
@@ -623,6 +624,43 @@ func WithBaseURL(u string) HTMLOption {
 // the default, leaves every such reference out with a warning.
 func WithHTTPClient(client *http.Client) HTMLOption {
 	return htmlOption(func(c *convertConfig) { c.httpClient = client })
+}
+
+// WithRequiredResources sets whether a resource an HTML or Markdown source
+// names that does not load fails the conversion. false, the default,
+// leaves such a resource out and reports it as a warning; true ends the
+// conversion at the first one with an error wrapping
+// [ErrConvertResourceUnavailable] that names the resource and why it did
+// not load, and writes nothing.
+//
+// A resource is a stylesheet a link element names, an @import, a picture
+// (an img, a video's poster, a CSS image, an image of an SVG drawing), and
+// the file of a font when none of its @font-face rule's sources loads. It
+// does not load when its bytes never arrive whole: a URL the options
+// refuse or give no way to read ([WithResources], [WithHTTPClient]), a
+// file that does not exist or does not read, a request that fails, an
+// answer outside 2xx, a stylesheet served as another type than text/css,
+// a data: URL that does not decode, a resource past the caps of
+// [WithResources] on what a conversion reads. Those are the resources
+// [WarningResourceRefused], [WarningResourceNoNetwork],
+// [WarningResourceHTTPStatus] and [WarningResourceFailed] report, the
+// fonts of [WarningFontNotLoaded] whose file did not arrive, and the
+// resources of [WarningLimitReached] past a cap on the bytes or the
+// requests.
+//
+// A resource that arrives whole has loaded, whatever litho makes of it: a
+// picture that does not decode, in a format litho does not read or past
+// [Limits.MaxImagePixels], a font program that does not parse keep their
+// warnings. Every resource litho reads counts: the font of every
+// @font-face rule, whether text uses it or not, and every stylesheet,
+// whatever medium it is for.
+//
+// The client of [WithHTTPClient] still decides what the document may
+// reach: to fail on some statuses alone, set this option and let the
+// client's transport answer the others with an empty 200 response, which
+// loads and draws nothing.
+func WithRequiredResources(required bool) HTMLOption {
+	return htmlOption(func(c *convertConfig) { c.requiredResources = required })
 }
 
 // WithMediaType sets the media type the stylesheets of an HTML or Markdown
