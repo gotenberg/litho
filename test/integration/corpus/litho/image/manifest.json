@@ -1,0 +1,13 @@
+{
+  "name": "litho/image",
+  "source": "litho/image",
+  "pdf_root": "pdfs",
+  "inputs": {
+    "build": "generated",
+    "list_root": "sources"
+  },
+  "goldens": {
+    "targets": "sources",
+    "robustness": "sources"
+  }
+}

@@ -177,6 +177,7 @@ var sourcePins = map[string][]string{
 	"litho/csv": nil,
 
 	"litho/stress": nil,
+	"litho/image":  nil,
 
 	"wpt":        {"WPT_COMMIT"},
 	"resvg":      {"RESVG_COMMIT"},

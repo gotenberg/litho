@@ -74,6 +74,10 @@ test/integration/
 │   │   │   ├── sources/<name>/ docx only: a document no part tree holds (the encrypted one)
 │   │   │   ├── robustness.json How each conversion must end, hostile documents included
 │   │   │   └── FIXTURES.md     Per-document features, the hostile documents
+│   │   ├── image/              Image files litho converts, written by code at build (never committed)
+│   │   │   ├── manifest.json   inputs.build: corpus build writes every file from cmd/corpus/corpus_images.go
+│   │   │   ├── robustness.json How each conversion must end, hostile files included
+│   │   │   └── FIXTURES.md     Per-file formats and variants, the hostile files
 │   │   └── odt/, ods/, odp/    Flat OpenDocument sources litho converts, against LibreOffice's PDFs
 │   │       ├── manifest.json   references: LibreOffice's, built by corpus references into the testdata
 │   │       ├── sources/<name>/ One flat document, options.json beside it
@@ -301,6 +305,7 @@ Each feature, its oracle and its comparison rules are in [FEATURES.md](FEATURES.
 | `litho/ods`        | 6 flat ODS spreadsheets                    | As `litho/odt`                                                                                                                                                                       |
 | `litho/odp`        | 5 flat ODP presentations                   | As `litho/odt`                                                                                                                                                                       |
 | `litho/csv`        | 5 CSV files                                | Self-authored CSV files with litho's dialect options, committed, against LibreOffice's PDFs through comma-separated twins; see `corpus/litho/csv/FIXTURES.md`                        |
+| `litho/image`      | 36 image files and 25 hostile ones         | PNG, JPEG, GIF, WebP, BMP, TIFF, JPEG 2000, ICO and SVG files written by `corpus build` from code; `targets` and `robustness` only; see `corpus/litho/image/FIXTURES.md`             |
 | `libreoffice/docx` | 350 DOCX documents                         | LibreOffice core's Writer tests (MPL-2.0) at a pinned commit, fetched by `make corpus-fetch CORPUS=libreoffice`, against Microsoft's PDFs; see `corpus/libreoffice/docx/FIXTURES.md` |
 | `libreoffice/odt`  | 195 ODT documents, 45 of them flat (FODT)  | LibreOffice core's Writer tests, as `libreoffice/docx`, against LibreOffice's PDFs                                                                                                   |
 | `libreoffice/xlsx` | 280 XLSX workbooks                         | LibreOffice core's Calc and chart tests, as `libreoffice/docx`                                                                                                                       |

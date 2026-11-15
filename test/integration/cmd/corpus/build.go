@@ -129,8 +129,8 @@ func buildLithoText(ctx context.Context, m *Manifest) error {
 }
 
 // isBuildCorpus reports whether m's documents are built by `corpus build`:
-// an Office corpus zipped from its parts, or the stress corpus (see
-// [stressDocs]).
+// an Office corpus zipped from its parts, the stress corpus (see
+// [stressDocs]) or the image corpus (see [imageFiles]).
 func isBuildCorpus(m *Manifest) bool {
 	return m.Inputs != nil && m.Inputs.Build != ""
 }
@@ -176,6 +176,14 @@ func builtNames(m *Manifest) ([]string, error) {
 		}
 		return names, nil
 	}
+	if m.Name == imageCorpus {
+		files := imageFiles()
+		names := make([]string, 0, len(files))
+		for _, f := range files {
+			names = append(names, f.name)
+		}
+		return names, nil
+	}
 	format, err := buildFormat(m)
 	if err != nil {
 		return nil, err
@@ -195,6 +203,9 @@ func builtNames(m *Manifest) ([]string, error) {
 func builtInputFixtures(m *Manifest) ([]Fixture, error) {
 	if m.Name == stressCorpus {
 		return stressFixtures(m)
+	}
+	if m.Name == imageCorpus {
+		return imageFixtures(m)
 	}
 	format, err := buildFormat(m)
 	if err != nil {
@@ -223,6 +234,9 @@ func buildCorpus(ctx context.Context, m *Manifest) error {
 	}
 	if m.Name == stressCorpus {
 		return buildStress(ctx, m)
+	}
+	if m.Name == imageCorpus {
+		return buildImages(m)
 	}
 	if hasFlatPapers(m) {
 		return buildFlatPaperDocs(ctx, m)

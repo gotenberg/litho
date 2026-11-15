@@ -246,6 +246,9 @@ func sourceSums(engine, path string) (srcSum, optSum string, srcErr error) {
 // unreferencedFixtures names the fixtures of m no reference is built for: a
 // build corpus's hostile documents, which only the robustness feature reads.
 func unreferencedFixtures(m *Manifest) map[string]bool {
+	if m.Name == imageCorpus {
+		return imageHostileNames()
+	}
 	format, err := buildFormat(m)
 	if err != nil || !isBuildCorpus(m) {
 		return nil

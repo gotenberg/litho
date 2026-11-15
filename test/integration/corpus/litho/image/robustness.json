@@ -1,0 +1,112 @@
+{
+  "bomb-bmp": {
+    "result": "ErrConvertInputTooLarge",
+    "max_seconds": 5,
+    "why": "A header promising 100,000 by 100,000 pixels in a few hundred bytes: past the pixel cap, refused before a byte of the picture is decoded."
+  },
+  "bomb-gif": {
+    "result": "ErrConvertInputTooLarge",
+    "max_seconds": 5,
+    "why": "A header promising 65,535 by 65,535 pixels in a few hundred bytes: past the pixel cap, refused before a byte of the picture is decoded."
+  },
+  "bomb-ico": {
+    "result": "ErrConvertInputTooLarge",
+    "max_seconds": 5,
+    "why": "An icon whose one image is a PNG promising 100,000 by 100,000 pixels: refused as that PNG is."
+  },
+  "bomb-jp2": {
+    "result": "ErrConvertInputTooLarge",
+    "max_seconds": 5,
+    "why": "A codestream whose SIZ promises 100,000 by 100,000 pixels: past the samples the JPEG 2000 decoder takes, refused before a sample is allocated."
+  },
+  "bomb-jpeg": {
+    "result": "ErrConvertInputTooLarge",
+    "max_seconds": 5,
+    "why": "A header promising 65,535 by 65,535 pixels in a few hundred bytes: past the pixel cap, refused before a byte of the picture is decoded."
+  },
+  "bomb-png": {
+    "result": "ErrConvertInputTooLarge",
+    "max_seconds": 5,
+    "why": "A header promising 100,000 by 100,000 pixels in a few hundred bytes: past the pixel cap, refused before a byte of the picture is decoded."
+  },
+  "bomb-svg": {
+    "result": "pdf",
+    "why": "An SVG 100,000,000 pixels a side: a vector drawing allocates nothing by its size; its page is cut to 14,400 points a side, the PDF limit, with a warning."
+  },
+  "bomb-tiff": {
+    "result": "ErrConvertInputTooLarge",
+    "max_seconds": 5,
+    "why": "A header promising 100,000 by 100,000 pixels in a few hundred bytes: past the pixel cap, refused before a byte of the picture is decoded."
+  },
+  "bomb-webp": {
+    "result": "ErrConvertInputTooLarge",
+    "max_seconds": 5,
+    "why": "A header promising 16,384 by 16,384 pixels in a few hundred bytes: past the pixel cap, refused before a byte of the picture is decoded."
+  },
+  "deflate-bomb-png": {
+    "result": "ErrConvertMalformed",
+    "max_rss_mib": 256,
+    "why": "A 100 by 100 PNG whose IDAT inflates to 64 MiB: the decoder stops past the rows the header gives and refuses the extra data."
+  },
+  "deflate-bomb-tiff-strip": {
+    "result": "pdf",
+    "max_rss_mib": 256,
+    "why": "A 100 by 100 TIFF whose one Deflate strip claims 2^31 - 1 rows and inflates to 64 MiB: the strip is read as the page's 100 rows, so no more than the page's bytes are inflated."
+  },
+  "ico-outside": {
+    "result": "ErrConvertMalformed",
+    "why": "An icon whose one image's offset lies past the file: no image lies inside it, nothing to print."
+  },
+  "not-an-image": {
+    "result": "ErrConvertMalformed",
+    "why": "Text named as a PNG: the format is read from the bytes, never from the name."
+  },
+  "tiff-loop": {
+    "result": "pdf",
+    "why": "A TIFF of two pages whose last IFD links back to the first: the walk stops at the IFD it meets again, two pages."
+  },
+  "truncated-bmp": {
+    "result": "ErrConvertMalformed",
+    "why": "The file cut in half: its picture's data ends early, so it does not read as its format."
+  },
+  "truncated-gif": {
+    "result": "ErrConvertMalformed",
+    "why": "The file cut in half: its picture's data ends early, so it does not read as its format."
+  },
+  "truncated-ico": {
+    "result": "ErrConvertMalformed",
+    "why": "The file cut in half: its picture's data ends early, so it does not read as its format."
+  },
+  "truncated-jp2": {
+    "result": "ErrConvertMalformed",
+    "why": "A JP2 file cut in half: its codestream box declares more bytes than remain."
+  },
+  "truncated-jpeg": {
+    "result": "pdf",
+    "why": "A progressive JPEG cut in half: its frame header reads, and a JPEG is written as it is, never decoded, so a viewer draws the scans that remain."
+  },
+  "truncated-png": {
+    "result": "ErrConvertMalformed",
+    "why": "The file cut in half: its picture's data ends early, so it does not read as its format."
+  },
+  "truncated-tiff": {
+    "result": "ErrConvertMalformed",
+    "why": "The file cut in half: its picture's data ends early, so it does not read as its format."
+  },
+  "truncated-webp": {
+    "result": "ErrConvertMalformed",
+    "why": "The file cut in half: its picture's data ends early, so it does not read as its format."
+  },
+  "unsupported-avif": {
+    "result": "ErrConvertMalformed",
+    "why": "The signature of AVIF, which litho does not convert: refused as malformed, the message naming the format."
+  },
+  "unsupported-heif": {
+    "result": "ErrConvertMalformed",
+    "why": "The signature of HEIF, which litho does not convert: refused as malformed, the message naming the format."
+  },
+  "unsupported-jxl": {
+    "result": "ErrConvertMalformed",
+    "why": "The signature of JPEG XL, which litho does not convert: refused as malformed, the message naming the format."
+  }
+}

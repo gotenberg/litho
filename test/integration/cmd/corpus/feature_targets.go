@@ -306,7 +306,9 @@ func newTargetsFeature() *targetsFeature {
 func (f *targetsFeature) Name() string         { return "targets" }
 func (f *targetsFeature) GoldenSource() string { return "litho-self+verapdf+poppler+pdfcpu" }
 
-// GoldensOf runs the cell on the corpora the diff cell runs on.
+// GoldensOf runs the cell on the corpora the diff cell runs on, unless the
+// corpus names a goldens directory of the cell's own: a corpus no
+// reference engine judges.
 func (f *targetsFeature) GoldensOf() string { return "diff" }
 
 // ScoreTolerance is the drop each recorded score may take.
@@ -353,11 +355,19 @@ func (f *targetsFeature) HasGolden(fixtureID string) bool {
 	return m == nil || !unreferencedFixtures(m)[fixtureID]
 }
 
-// office reports whether the corpus's sources are Office documents.
+// office reports whether the corpus's sources are read as Office sources
+// are: Office documents a reference engine other than Chromium judges, or
+// the files of a build corpus no engine judges, the image files among them.
 func (f *targetsFeature) office() bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.m != nil && f.m.References != nil && f.m.References.Engine != engineChromium
+	if f.m == nil {
+		return false
+	}
+	if f.m.References == nil {
+		return isBuildCorpus(f.m)
+	}
+	return f.m.References.Engine != engineChromium
 }
 
 // targetsOutput is the cell's per-fixture output.

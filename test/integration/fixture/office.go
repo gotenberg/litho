@@ -124,7 +124,8 @@ const ReferenceOfName = "reference_of"
 // OpenDocument presentation. A Word, Excel or PowerPoint 97 to 2003 file
 // converts from a format litho does not read yet, named by its extension,
 // which [Office.Conversion] refuses with [ErrUnsupportedFormat]: its cell
-// scores a convert error until litho reads it.
+// scores a convert error until litho reads it. An image file converts
+// through [pdf.FromImage], which tells its format from its bytes.
 var officeFormats = map[string]Format{
 	".docx": FormatDOCX,
 	".dotx": FormatDOCX,
@@ -148,6 +149,16 @@ var officeFormats = map[string]Format{
 	".doc":  Format("doc"),
 	".xls":  Format("xls"),
 	".ppt":  Format("ppt"),
+	".png":  FormatImage,
+	".jpg":  FormatImage,
+	".gif":  FormatImage,
+	".webp": FormatImage,
+	".bmp":  FormatImage,
+	".tif":  FormatImage,
+	".jp2":  FormatImage,
+	".j2k":  FormatImage,
+	".ico":  FormatImage,
+	".svg":  FormatImage,
 }
 
 // Office is one Office source, read.
@@ -165,7 +176,7 @@ type Office struct {
 // ErrNoOfficeDocument reports a source directory that does not hold exactly
 // one Office document of an extension officeFormats lists, or a source file
 // of another type.
-var ErrNoOfficeDocument = errors.New("not one Office document (.docx, .dotx, .odt, .fodt, .xlsx, .xlsm, .xltx, .xltm, .ods, .fods, .ots, .csv, .pptx, .pptm, .potx, .ppsx, .odp, .fodp, .otp, .doc, .xls, .ppt)")
+var ErrNoOfficeDocument = errors.New("not one Office document (.docx, .dotx, .odt, .fodt, .xlsx, .xlsm, .xltx, .xltm, .ods, .fods, .ots, .csv, .pptx, .pptm, .potx, .ppsx, .odp, .fodp, .otp, .doc, .xls, .ppt) or image file (.png, .jpg, .gif, .webp, .bmp, .tif, .jp2, .j2k, .ico, .svg)")
 
 // LoadOffice reads an Office source: path is a source directory, holding
 // one document and an optional options file and nothing else, or a document
@@ -336,6 +347,8 @@ func (o *Office) Conversion(src io.Reader, extra ...pdf.ConvertOption) (*pdf.Con
 			return pdf.FromODP(src, all...), nil
 		}
 		return pdf.FromPPTX(src, all...), nil
+	case FormatImage:
+		return pdf.FromImage(src, optionsAs[pdf.ImageOption](common)...), nil
 	case FormatText, FormatHTML, FormatMarkdown:
 	}
 	return nil, fmt.Errorf("%w: %s", ErrUnsupportedFormat, o.Format)
@@ -370,7 +383,7 @@ type officeOptions struct {
 func (o *Office) options() officeOptions {
 	var opts officeOptions
 	opts.common = []pdf.ConvertOption{pdf.WithOutline(o.Options.NativeBookmarks == nil || *o.Options.NativeBookmarks)}
-	if !isPresentation(o.Format) && !judgedByLibreOffice(o.Format) {
+	if !isPresentation(o.Format) && !judgedByLibreOffice(o.Format) && o.Format != FormatImage {
 		opts.common = append(opts.common, pdf.WithDefaultPaper(ReferencePaper))
 	}
 	if o.Options.NativePages != "" {
@@ -441,7 +454,7 @@ func (o *Office) options() officeOptions {
 			opts.slides = append(opts.slides, pdf.WithHandouts(o.Options.Handouts))
 			opts.litho = append(opts.litho, "handouts")
 		}
-	case FormatText, FormatHTML, FormatMarkdown:
+	case FormatText, FormatHTML, FormatMarkdown, FormatImage:
 	}
 	if o.Options.DerivedAltText {
 		opts.common = append(opts.common, pdf.WithDerivedAltText(true))

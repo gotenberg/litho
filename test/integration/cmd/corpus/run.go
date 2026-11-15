@@ -105,7 +105,8 @@ type SkipCounter interface {
 
 // GoldenBorrower is an optional interface a [Feature] implements when it
 // runs on the corpora another feature's goldens provision, and reads those
-// goldens' directory: GoldensOf names that feature.
+// goldens' directory: GoldensOf names that feature. A corpus that names a
+// goldens directory for the feature itself lends it that one instead.
 type GoldenBorrower interface {
 	GoldensOf() string
 }
@@ -284,7 +285,7 @@ func runCorpus(ctx context.Context, name string, opts runOptions) (*CorpusReport
 		}
 		fr := setUpFeature(feat, manifest, opts)
 		goldenDir := manifest.GoldenDir(feat.Name())
-		if gb, ok := feat.(GoldenBorrower); ok {
+		if gb, ok := feat.(GoldenBorrower); ok && goldenDir == "" {
 			goldenDir = manifest.GoldenDir(gb.GoldensOf())
 		}
 		if goldenDir == "" {

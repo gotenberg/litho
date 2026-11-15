@@ -68,6 +68,7 @@ const (
 	FormatCSV      Format = "csv"
 	FormatPPTX     Format = "pptx"
 	FormatODP      Format = "odp"
+	FormatImage    Format = "image"
 )
 
 // ErrUnsupportedFormat reports a document of a format litho does not

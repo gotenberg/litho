@@ -207,8 +207,9 @@ func TestOfficeConversion_MapsThePresentationFields(t *testing.T) {
 
 // TestOfficeConversion_TakesEveryField checks that the options of every
 // field hold together for every format: the conversion passes validation
-// and fails only on the font directory, empty on purpose. A format litho
-// does not read fails with ErrUnsupportedFormat.
+// and fails only on the font directory, empty on purpose, or, for an image,
+// which draws no text, on its empty source. A format litho does not read
+// fails with ErrUnsupportedFormat.
 func TestOfficeConversion_TakesEveryField(t *testing.T) {
 	t.Parallel()
 
@@ -228,8 +229,12 @@ func TestOfficeConversion_TakesEveryField(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", ext, err)
 		}
-		if _, err := c.WriteTo(context.Background(), &bytes.Buffer{}); !errors.Is(err, pdf.ErrConvertNoFonts) {
-			t.Errorf("%s: %v, want ErrConvertNoFonts", ext, err)
+		want := pdf.ErrConvertNoFonts
+		if format == FormatImage {
+			want = pdf.ErrConvertMalformed
+		}
+		if _, err := c.WriteTo(context.Background(), &bytes.Buffer{}); !errors.Is(err, want) {
+			t.Errorf("%s: %v, want %v", ext, err, want)
 		}
 	}
 }
