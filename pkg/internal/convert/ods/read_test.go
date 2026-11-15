@@ -440,7 +440,10 @@ func TestRead_MetaAndWarnings(t *testing.T) {
 	if c := cellAt(doc.Sheets[0], 0, 0); c == nil || c.Value.Text != "v" || !c.MarkedInvalid {
 		t.Errorf("annotated cell = %+v", c)
 	}
-	for _, about := range []string{"cell comments", "cell validations", "named ranges"} {
+	if n := doc.Sheets[0].Notes; len(n) != 1 || n[0].Text != "note" {
+		t.Errorf("notes = %+v, want the cell's note, which its page style does not print", n)
+	}
+	for _, about := range []string{"cell validations", "named ranges"} {
 		if !hasWarningAbout(w, warn.ContentUnsupported, about) {
 			t.Errorf("no %s warning about %s in %+v", warn.ContentUnsupported, about, w)
 		}

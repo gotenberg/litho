@@ -300,9 +300,21 @@ func wordProcessingConfig(opts []WordProcessingOption) convertConfig {
 // number formats and drawn with their fonts, fills, borders, alignment,
 // wrapping and rotation, merged cells, conditional formats, pictures,
 // charts and hyperlinks. A formula shows the value its file stores unless
-// [WithFormulaRecalculation] computes it again. Cell comments are left out.
-// Macros never run. A construct that is not drawn is reported in
-// [ConvertReport.Warnings].
+// [WithFormulaRecalculation] computes it again. Macros never run. A
+// construct that is not drawn is reported in [ConvertReport.Warnings].
+//
+// The notes of a sheet's cells print where its page setup asks, as its
+// application prints them, and nowhere when it asks for none, the
+// default. A workbook's sheet that prints them at the end (cellComments
+// atEnd, ECMA-376 Part 1, 18.18.5) prints, after its pages, each note's
+// cell and text row by row under the labels Cell and Comment; one that
+// prints them as displayed (asDisplayed) draws each note the sheet shows
+// in its box beside its cell, with the arrow that points at the cell. A
+// threaded comment prints the text of the note its workbook writes for
+// it. An OpenDocument spreadsheet whose page style prints annotations
+// (style:print, ODF 1.3 Part 3, 20.325) prints, after each sheet's pages,
+// each note's cell and text column by column, as LibreOffice Calc prints
+// them; Calc prints no note on the sheet itself.
 //
 // A source that is not a workbook of its format fails with
 // [ErrConvertMalformed], an encrypted one [WithOfficePassword] does not

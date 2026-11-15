@@ -133,6 +133,10 @@ func (r *reader) readPage(mp *odf.MasterPage) pageResult {
 		pg.GridLines = slices.Contains(f, "grid")
 		pg.Headings = slices.Contains(f, "headers")
 		hideZeros = !slices.Contains(f, "zero-values")
+		if slices.Contains(f, "annotations") {
+			// Calc prints the notes on pages after the sheet's.
+			pg.Notes = sheet.NotesAtEnd
+		}
 	}
 	if pp.Get("style:print-page-order") == "ltr" {
 		pg.Order = sheet.OverThenDown

@@ -10,7 +10,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/odf"
-	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // The caps of one cell's text.
@@ -390,7 +389,9 @@ func (tb *textBuilder) inline(el *odf.Element, f *sheet.Font, depth int) {
 			tb.add("\n", f)
 			tb.space = true
 		case c.Is(odf.NSOffice, "annotation"), c.Is(odf.NSOffice, "annotation-end"):
-			tb.r.warn("comments", warn.ContentUnsupported, warn.Omitted, "cell comments are not printed")
+			// A cell's note is the office:annotation of the cell itself
+			// (ODF 1.3, Part 3, 9.1.4), which the row's reader takes; one
+			// inside the cell's text is no note Calc shows.
 		case c.Name.Space == odf.NSDraw, c.Is(odf.NSText, "ruby-text"):
 			// A ruby's annotation is drawn above its base, which Calc does
 			// not print in a cell (ODF 1.3, Part 3, 6.4).
