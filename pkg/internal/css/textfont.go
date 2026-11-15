@@ -18,7 +18,36 @@ const (
 	// JustifyInterCharacter justifies between every two typographic
 	// character units (distribute computes to it).
 	JustifyInterCharacter
+	// JustifyWordsElseCharacters justifies at word separators, and a line
+	// that holds none between every two typographic character units, as
+	// Word distributes a paragraph (ECMA-376 Part 1, 17.18.44 ST_Jc
+	// distribute). No CSS keyword computes to it.
+	JustifyWordsElseCharacters
+	// JustifyDistributeCapped gives the free space of a line to its word
+	// separators until each has grown by [DistributeSpaceGrowth] times
+	// its own width, and spreads the rest between every two typographic
+	// character units, as PowerPoint distributes a paragraph (ECMA-376
+	// Part 1, 21.1.2.1.25 ST_TextAlignType dist). No CSS keyword computes
+	// to it.
+	JustifyDistributeCapped
 )
+
+// DistributeSpaceGrowth is how much a word separator grows, as a
+// multiple of its own width, before [JustifyDistributeCapped] spreads a
+// line's free space between its characters.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/pptx: O14ISOStrict/PowerPoint/main_ppr_algn_dist, at
+//     18.025 points: the spaces of its first, wrapped line grow by 4.89
+//     points past the 0.8 every character takes, its space 4.075 wide;
+//     O14ISOStrict/Graphics/algnDist_mainLvl5ppr_AlignmentLevel5Distributed's
+//     last line by 4.97 past 4.31; a line whose free space is smaller
+//     grows its spaces alone ("the middle of the textbox", 1.44 a space).
+//   - litho/pptx: text-alignment's distributed lines at 12.265 points
+//     grow their 2.77-point spaces by 3.0 and 3.8 past 17.35 and 19.1,
+//     within the 0.6 point PowerPoint moves a glyph to its grid.
+const DistributeSpaceGrowth = 1.2
 
 // TextAutospace is the text-autospace property as Chromium ships it (CSS
 // Text 4, 8.2): the bits of the boundaries that take the extra space.

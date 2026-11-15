@@ -21,7 +21,8 @@ type jcluster struct {
 // justify spreads free points over the justification opportunities of l
 // (CSS Text 3, 7.1 and 7.4) and reports whether it found one. The
 // opportunities follow text-justify: inter-word puts one after each word
-// separator; auto, as Chromium does, adds one on each side of every
+// separator; the Office modes as [opportunities] and [shares] say; auto,
+// as Chromium does, adds one on each side of every
 // character of the scripts that set no space between words, Han, kana
 // and their punctuation (CSS Text 3, 7.4.1); inter-character puts one
 // between every two typographic character units. The spaces that hang at
@@ -39,7 +40,9 @@ func justifyCount(l *lineBox, mode css.TextJustify) int {
 }
 
 // opportunities returns, for each cluster of cls, whether a justification
-// opportunity follows it under text-justify mode, with their count.
+// opportunity follows it under text-justify mode, with their count. Under
+// the Office modes a line with no word separator takes one between every
+// two clusters.
 func opportunities(cls []jcluster, mode css.TextJustify) ([]jcluster, []bool, int) {
 	n := len(cls)
 	// opp[k] reports an opportunity between clusters k and k+1.
@@ -51,9 +54,9 @@ func opportunities(cls []jcluster, mode css.TextJustify) ([]jcluster, []bool, in
 			continue
 		}
 		switch mode {
-		case css.JustifyInterCharacter:
+		case css.JustifyInterCharacter, css.JustifyDistributeCapped:
 			opp[k] = true
-		case css.JustifyInterWord:
+		case css.JustifyInterWord, css.JustifyWordsElseCharacters:
 			opp[k] = a.sep
 		case css.JustifyAuto, css.JustifyNone:
 			opp[k] = a.sep || isCJKIdeographOrSymbol(a.r) || isCJKIdeographOrSymbol(b.r)
@@ -62,7 +65,66 @@ func opportunities(cls []jcluster, mode css.TextJustify) ([]jcluster, []bool, in
 			count++
 		}
 	}
+	if count == 0 && mode == css.JustifyWordsElseCharacters {
+		return opportunities(cls, css.JustifyInterCharacter)
+	}
 	return cls, opp, count
+}
+
+// shares returns the extra each opportunity of opp takes from free: an
+// equal part, or under [css.JustifyDistributeCapped] the word
+// separators' parts first, each at most [css.DistributeSpaceGrowth]
+// times its separator's width, and the rest in equal parts.
+func shares(cls []jcluster, opp []bool, count int, free float64, mode css.TextJustify) []float64 {
+	add := make([]float64, len(cls))
+	even := free / float64(count)
+	seps := 0
+	if mode == css.JustifyDistributeCapped && free > 0 {
+		for k := range cls {
+			if opp[k] && cls[k].sep {
+				seps++
+			}
+		}
+	}
+	if seps == 0 {
+		for k := range add {
+			if opp[k] {
+				add[k] = even
+			}
+		}
+		return add
+	}
+	part := free / float64(seps)
+	given := 0.0
+	for k := range cls {
+		if opp[k] && cls[k].sep {
+			add[k] = min(part, float64(css.DistributeSpaceGrowth*clusterWidth(cls[k])))
+			given += add[k]
+		}
+	}
+	if rest := free - given; rest > eps {
+		each := rest / float64(count)
+		for k := range add {
+			if opp[k] {
+				add[k] += each
+			}
+		}
+	}
+	return add
+}
+
+// clusterWidth returns the advance of the cluster c.
+func clusterWidth(c jcluster) float64 {
+	if c.it.text == nil {
+		return c.it.w
+	}
+	gs := c.it.text.Glyphs
+	hs := hscale(c.it.text)
+	end := c.it.w
+	if c.g1+1 < len(gs) {
+		end = float64(gs[c.g1+1].X * hs)
+	}
+	return max(0, end-float64(gs[c.g0].X*hs))
 }
 
 // justifyAs is [inlineState.justify] under text-justify mode.
@@ -79,11 +141,12 @@ func (s *inlineState) justifyAs(l *lineBox, free float64, mode css.TextJustify) 
 	if count == 0 {
 		return false
 	}
-	extra := free / float64(count)
-	// at holds where each opportunity lies before justification, for the
-	// inline box fragments: an edge moves by the extra of the
-	// opportunities before it.
-	var at []float64
+	add := shares(cls, opp, count, free, mode)
+	// at holds where each opportunity lies before justification, with its
+	// extra, for the inline box fragments: an edge moves by the extra of
+	// the opportunities before it.
+	type mark struct{ x, extra float64 }
+	var at []mark
 	for k := range n {
 		if opp[k] {
 			c := cls[k]
@@ -91,30 +154,36 @@ func (s *inlineState) justifyAs(l *lineBox, free float64, mode css.TextJustify) 
 			if c.it.text != nil && c.g1+1 < len(c.it.text.Glyphs) {
 				x = c.it.x + float64(c.it.text.Glyphs[c.g1+1].X*hscale(c.it.text))
 			}
-			at = append(at, x)
+			at = append(at, mark{x, add[k]})
 		}
 	}
+	even := mode != css.JustifyDistributeCapped || free <= 0
 	moved := func(x float64) float64 {
-		m := 0
+		m, d := 0, 0.0
 		for _, a := range at {
-			if a < x+eps {
+			if a.x < x+eps {
 				m++
+				d += a.extra
 			}
 		}
-		return x + float64(float64(m)*extra)
+		if even && m > 0 {
+			// Equal parts move an edge by their count times one part.
+			d = float64(float64(m) * at[0].extra)
+		}
+		return x + d
 	}
 	for _, f := range l.frags {
 		f.x0, f.x1 = moved(f.x0), moved(f.x1)
 	}
 	// after[it][g] is the extra after glyph g of item it.
-	after := map[*lineItem]map[int]bool{}
+	after := map[*lineItem]map[int]float64{}
 	for k := range n {
 		if opp[k] {
 			c := cls[k]
 			if after[c.it] == nil {
-				after[c.it] = map[int]bool{}
+				after[c.it] = map[int]float64{}
 			}
-			after[c.it][c.g1] = true
+			after[c.it][c.g1] += add[k]
 		}
 	}
 	acc := 0.0
@@ -126,12 +195,10 @@ func (s *inlineState) justifyAs(l *lineBox, free float64, mode css.TextJustify) 
 			hs := hscale(it.text)
 			for gi := range it.text.Glyphs {
 				it.text.Glyphs[gi].X += local / hs
-				if after[it][gi] {
-					local += extra
-				}
+				local += after[it][gi]
 			}
-		} else if after[it][0] {
-			local = extra
+		} else {
+			local = after[it][0]
 		}
 		it.w += local
 		acc += local
