@@ -88,8 +88,9 @@ const fetchJobs = 8
 const fetchRetries = 4
 
 // fetchUserAgent names the fetches to the servers they read: some (the
-// Internet Archive) refuse the Go client's default name.
-const fetchUserAgent = "litho-corpus"
+// Internet Archive) refuse the Go client's default name. It says what the
+// client does and nothing of the project that runs it.
+const fetchUserAgent = "corpus-fetch"
 
 // retryableStatus reports the 4xx answers a later attempt may not get: too
 // many requests, and the Internet Archive's 498, which it answers a burst
