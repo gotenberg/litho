@@ -241,7 +241,7 @@ func (rd *renderer) legend(page typeset.Rect, rem *typeset.Rect) {
 			l := entries[0].label
 			ln := l.lines[0]
 			keyTop := yPad + float64((l.lineH[0]-ln.Ascent-ln.Descent)/2) + ln.Ascent - float64(fs*officeKeyRaise) - float64(symH/2)
-			corner = officeCornerUnder(page, h)
+			corner = officeCornerUnder(*rem, h)
 			x, y = page.X+page.Width-officePad-w, rem.Y+officeCornerKeyTop-keyTop
 			if !corner {
 				y += officeLegendGap
@@ -414,12 +414,8 @@ const (
 const officeCornerKeyTop = 7.29
 
 // officeCornerUnder reports a legend h points high at the top right of
-// the chart's rectangle page that Office puts the plot area under rather
-// than beside: one shorter than a third of the chart.
-//
-// A third is a value inside the bounds the charts give; the rule that
-// the plot area under the legend keep at least the legend's height fits
-// the same charts.
+// a chart that Office puts the plot area under rather than beside: one
+// shorter than a third of rem, the room under the chart's title.
 //
 // # Corpus evidence
 //
@@ -429,8 +425,16 @@ const officeCornerKeyTop = 7.29
 //     three, four, five and six at 145.2 pt and four at 203.28 pt stand
 //     beside it, legends of 0.36 to 0.75 of the chart's height, each
 //     entry 18.08 pt high.
-func officeCornerUnder(page typeset.Rect, h float64) bool {
-	return h < float64(page.Height/3)
+//   - probe, xlsx: one entry goes over the plot area in charts 87.12 and
+//     101.64 pt high and stands beside it at 72.6 pt, two stand beside it
+//     at 116.16 and 130.68 pt: a legend of one entry at 72.6 pt and one
+//     of two at 145.2 pt are both 0.249 of the chart's height and go
+//     different ways, and a plot area under the legend kept at least the
+//     legend's height would put one entry beside it at 87.12 pt. A third
+//     of the room under a 10 pt title fits all sixteen charts; the
+//     measured bounds of that share are 0.3299 and 0.3676.
+func officeCornerUnder(rem typeset.Rect, h float64) bool {
+	return h < float64(rem.Height/3)
 }
 
 // officeSideRows returns how many of n entries, each pitch points apart

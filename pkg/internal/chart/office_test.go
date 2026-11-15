@@ -548,7 +548,9 @@ func TestRender_OfficeCategoryWrap(t *testing.T) {
 // TestRender_OfficeCornerLegend holds a legend at the top right under
 // OfficeRules to Office's place: beside the plot area as a right legend,
 // the plot area under it when the legend is shorter than a third of the
-// chart, beside it and officeLegendGap lower otherwise.
+// room under the title, beside it and officeLegendGap lower otherwise:
+// three 10 pt entries, shorter than a third of the chart, stand beside
+// it.
 func TestRender_OfficeCornerLegend(t *testing.T) {
 	r := typeset.Rect{Width: 361.2, Height: 145.2}
 	chart := func(entries int) *Chart {
@@ -570,7 +572,7 @@ func TestRender_OfficeCornerLegend(t *testing.T) {
 	for _, tc := range []struct {
 		entries int
 		under   bool
-	}{{1, true}, {3, true}, {4, false}} {
+	}{{1, true}, {2, true}, {3, false}, {4, false}} {
 		b, frags := plotBounds(t, chart(tc.entries), r)
 		dy, dBottom := officeLegendGap, 0.0
 		if tc.under {
