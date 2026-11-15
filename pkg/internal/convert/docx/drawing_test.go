@@ -461,3 +461,43 @@ func TestTextBox_Rotation(t *testing.T) {
 		t.Errorf("upright box transform %+v", tr)
 	}
 }
+
+// TestDrawings_BreakClear starts the line after a text wrapping break
+// below the square-wrapped drawings on the side its w:clear names
+// (ECMA-376 Part 1, 17.3.3.1 and 17.18.3 ST_BrClear), and beside them for
+// the other side and for none.
+func TestDrawings_BreakClear(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		clear string
+		below bool
+	}{{"left", true}, {"all", true}, {"right", false}, {"none", false}} {
+		t.Run(tc.clear, func(t *testing.T) {
+			t.Parallel()
+			pic := `<w:r><w:drawing><wp:anchor behindDoc="0" distT="0" distB="0" distL="0" distR="0"><wp:positionH relativeFrom="column"><wp:align>left</wp:align></wp:positionH>` +
+				`<wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:extent cx="1270000" cy="1270000"/><wp:wrapSquare wrapText="bothSides"/>` +
+				`<wp:docPr id="2" name="q"/>` + graphic("") + `</wp:anchor></w:drawing></w:r>`
+			body := `<w:p>` + pic + `<w:r><w:t>Beside</w:t><w:br w:type="textWrapping" w:clear="` + tc.clear + `"/><w:t>After</w:t></w:r></w:p>`
+			doc := convertBytes(t, docx(t, body, map[string]string{"word/media/a.png": pngData(t, 40, 40)}), office.Options{})
+			var y float64
+			found := false
+			for _, r := range textRuns(doc) {
+				var s strings.Builder
+				for _, g := range r.Glyphs {
+					s.WriteString(g.Text)
+				}
+				if strings.Contains(s.String(), "After") {
+					y, found = r.Origin.Y, true
+				}
+			}
+			if !found {
+				t.Fatalf("no run After in %q", docText(doc))
+			}
+			// The picture is 100 points tall from the paragraph's top, the
+			// top of the page area the runs are placed in.
+			if below := y > 100; below != tc.below {
+				t.Errorf("After at y %v: below the picture %v, want %v", y, below, tc.below)
+			}
+		})
+	}
+}

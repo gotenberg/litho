@@ -1258,12 +1258,17 @@ func (s *inlineState) fitLine(p *ifcPara, w []float64, pos int, indent, top, h f
 
 // clearBreak returns where the line after the paragraph p starts when the
 // paragraph ended at y: below the floats the clear value of its line break
-// names (CSS 2.1, 9.5.2, which HTML applies to br).
+// names (CSS 2.1, 9.5.2, which HTML applies to br), and under Word's rules
+// below the anchored drawings it names too ([bfc.clearWordTo]).
 func (s *inlineState) clearBreak(p *ifcPara, y float64) float64 {
 	if !p.forced || p.clear == css.ClearNone {
 		return y
 	}
-	return max(y, s.bc.clearTo(p.clear))
+	y = max(y, s.bc.clearTo(p.clear))
+	if s.root.st.WordRules > 0 {
+		y = max(y, s.bc.clearWordTo(p.clear, s.cb.x+float64(s.cb.w/2)))
+	}
+	return y
 }
 
 // advance returns how far the line l, placed, moves the flow down: its

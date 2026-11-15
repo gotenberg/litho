@@ -115,6 +115,34 @@ func (d *document) blocksInto(s *story, c *cond, parent *ooxml.Element, depth in
 	}
 }
 
+// breakClear returns the style of a text wrapping break, w:br of type
+// textWrapping, whose w:clear is clear (ECMA-376 Part 1, 17.3.3.1 and
+// 17.18.3 ST_BrClear): the line after it starts below the floating
+// objects on the side it names, left, right or both for all; st itself
+// for none.
+//
+// # Corpus evidence
+//
+//   - litho/docx breaks-symbols: Word starts the line after a break of
+//     clear left, and of clear all, below the picture floating at the left
+//     of the text before it.
+func (d *document) breakClear(st *css.Style, clear string) *css.Style {
+	var c css.Clear
+	switch clear {
+	case "left":
+		c = css.ClearLeft
+	case "right":
+		c = css.ClearRight
+	case "all":
+		c = css.ClearBoth
+	default:
+		return st
+	}
+	cs := *st
+	cs.Clear = c
+	return d.share(&cs)
+}
+
 // maxNesting caps the nesting of tables, content controls and text boxes
 // the converter follows. Anti-DoS guard, not spec-mandated: well under
 // [ooxml.MaxDepth], and Word nests tables at most a few levels.
@@ -1031,7 +1059,7 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 				sink.pageBreak(attrOr(c, "type") == "column")
 			default:
 				flush()
-				el.Children = append(el.Children, &layout.Node{Kind: layout.LineBreak, Style: st})
+				el.Children = append(el.Children, &layout.Node{Kind: layout.LineBreak, Style: d.breakClear(st, attrOr(c, "clear"))})
 			}
 		case c.Is(w, "cr"):
 			flush()

@@ -369,6 +369,32 @@ func (c *bfc) clearTo(cl css.Clear) float64 {
 	return y
 }
 
+// clearWordTo returns the position below the exclusions of Word's
+// anchored drawings ([floatRect.word]) that a text wrapping break of clear
+// cl clears, -Inf when it clears none: the line after the break restarts
+// below the floating objects on the side it names (ECMA-376 Part 1,
+// 17.18.3 ST_BrClear). A drawing is on the left when its middle lies left
+// of mid, the middle of the containing block, and on the right otherwise.
+//
+// # Corpus evidence
+//
+//   - litho/docx breaks-symbols: Word starts the line after a break of
+//     clear left below the square-wrapped picture at the left margin, and
+//     the line after a break of clear all below the one at the right.
+func (c *bfc) clearWordTo(cl css.Clear, mid float64) float64 {
+	y := math.Inf(-1)
+	for _, f := range c.floats {
+		if !f.word {
+			continue
+		}
+		left := float64(f.x0+f.x1)/2 < mid
+		if cl == css.ClearBoth || (cl == css.ClearLeft && left) || (cl == css.ClearRight && !left) {
+			y = max(y, f.y1)
+		}
+	}
+	return y
+}
+
 // clearFloatTo returns the position below the floats the clear value of
 // a float clears, as [bfc.clearTo] does but for the initial letters: they
 // are no floats, and the clear of a float ignores them (CSS Inline 3,
