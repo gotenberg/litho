@@ -816,7 +816,9 @@ var (
 
 	// ErrConvertMalformed is returned, wrapped, by a [Conversion] for a
 	// DOCX, ODT, XLSX, ODS, PPTX or ODP source that is not a document of
-	// its format, or whose required parts are missing or unreadable.
+	// its format, or whose required parts are missing or unreadable, and
+	// for an image source of no format [FromImage] reads or whose bytes do
+	// not read as its format.
 	ErrConvertMalformed = office.ErrMalformed
 
 	// ErrConvertEncrypted is returned, wrapped, by a [Conversion] for an

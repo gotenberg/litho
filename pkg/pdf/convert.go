@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/ods"
 	"github.com/gotenberg/litho/pkg/internal/convert/odt"
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/internal/convert/picture"
 	"github.com/gotenberg/litho/pkg/internal/convert/plaintext"
 	"github.com/gotenberg/litho/pkg/internal/convert/pptx"
 	"github.com/gotenberg/litho/pkg/internal/convert/xlsx"
@@ -38,6 +39,7 @@ const (
 	kindCSV
 	kindPPTX
 	kindODP
+	kindImage
 )
 
 // name names the kind in an error.
@@ -63,6 +65,8 @@ func (k convertKind) name() string {
 		return "PPTX"
 	case kindODP:
 		return "ODP"
+	case kindImage:
+		return "image"
 	}
 	return "source"
 }
@@ -70,8 +74,9 @@ func (k convertKind) name() string {
 // Conversion is one source document and how it is laid out as a PDF. A
 // constructor makes it, one per format the conversion reads: [FromText],
 // [FromHTML], [FromMarkdown], [FromDOCX], [FromODT], [FromXLSX], [FromODS],
-// [FromCSV], [FromPPTX] and [FromODP]. Each takes the options of its format
-// alone, so an option a format has no use for does not compile.
+// [FromCSV], [FromPPTX], [FromODP] and [FromImage]. Each takes the options
+// of its format alone, so an option a format has no use for does not
+// compile.
 //
 // [Conversion.WriteTo] runs it alone. [Pipeline.Convert] opens a pipeline on
 // its output, so that later stages edit, remediate, encrypt or sign what it
@@ -86,7 +91,7 @@ func (k convertKind) name() string {
 //     what the source names.
 //  2. Without it, the source's own size applies: an @page size, each
 //     section of a DOCX or ODT source, each sheet's page setup, the slide
-//     size of a presentation.
+//     size of a presentation, an image's size.
 //  3. A source that names none takes [WithDefaultPaper], else [PaperA4].
 //
 // [WithOrientation] then turns the pages that are not turned as it asks.
@@ -385,6 +390,95 @@ func presentationConfig(opts []PresentationOption) convertConfig {
 	return cfg
 }
 
+// FromImage returns the conversion of src, an image file: PNG, JPEG, GIF,
+// WebP, BMP, TIFF, JPEG 2000, ICO or SVG, told from its bytes.
+//
+// # Pages
+//
+// Each picture of the file is a page: the one picture of a PNG, a JPEG, a
+// BMP, a JPEG 2000 or an SVG file; every page of a TIFF file, its
+// reduced-resolution images left out; the first frame of an animated GIF
+// or WebP file, composed on its canvas, the rest of it transparent; the
+// largest picture of an ICO file, as a viewer shows an icon.
+//
+// A page is its picture's size: its pixels at the resolution the file
+// states (PNG pHYs, JFIF density, else EXIF resolution, TIFF resolution
+// tags, BMP pixels a metre), else 96 pixels an inch, a CSS pixel; a GIF,
+// a WebP, an ICO and a JPEG 2000 file state none that is read. An SVG
+// page is its width and height, else its view box, in CSS pixels, else
+// 300 by 150 pixels. [WithPaper] makes every page the paper, the picture
+// scaled down to fit it, never up, and centred; [WithOrientation] turns
+// the page and fits the picture to it. A picture always names its size,
+// so [WithDefaultPaper] changes nothing. A side past 14,400 points (ISO
+// 32000-1, Annex C.2) is cut to it, the picture scaled down to fit, and a
+// side under 3 points grown to 3, the picture centred, each with a
+// warning. [WithPageRanges] selects among the pages.
+//
+// # Pictures
+//
+//   - A JPEG is written as it is, never decoded, whatever its process,
+//     progressive included, and its colour space; an Adobe CMYK file's
+//     inverted samples are read inverted back.
+//   - A JPEG 2000 file is written as it is from PDF 1.5 on when it holds
+//     one colour specification, one or three colour channels of one depth,
+//     no palette and no opacity channel; otherwise, and under PDF 1.4,
+//     which has no JPXDecode filter, it is decoded and written losslessly
+//     at 8 bits a sample, a deeper component rounded to 8.
+//   - Every other format is decoded and written losslessly: an indexed
+//     picture indexed, a gray one at the fewest bits that hold its levels,
+//     16-bit samples at 16 bits, at 8 under PDF 1.4, which has no 16-bit
+//     component.
+//   - An alpha channel is a soft mask, which a PDF/A-1 remediation
+//     flattens, as it flattens any transparency.
+//   - The EXIF orientation of a JPEG, a PNG or a WebP file, and the TIFF
+//     orientation, turn the picture as it is drawn, its samples untouched.
+//   - An embedded ICC profile of a gray, RGB or CMYK space is kept;
+//     without one, the samples are read in the device space of their count,
+//     as sRGB for RGB. A profile the PDF version does not read, a version
+//     4 profile under PDF 1.4, is left out with a warning. PNG gAMA and
+//     cHRM chunks are not applied.
+//   - An SVG file stays vector, drawn as an HTML page draws an SVG
+//     picture, its text in the fonts of [WithConvertFontDirs]; its image
+//     elements are left out with a warning.
+//
+// # Structure
+//
+// The structure tree holds a Document element with a Figure a page. The
+// figure's description is what the format defines as one: a PNG text
+// chunk of keyword Description (PNG 3rd edition, 11.3.3.2), an SVG
+// root's title, else its desc (SVG 2, 5.9). The document's title is what
+// the format defines as a title: a PNG text chunk of keyword Title, the
+// EXIF ImageDescription of a JPEG, a TIFF or a WebP file (EXIF 2.32,
+// 4.6.5), an SVG root's title. A figure without a description fails a
+// PDF/UA remediation unless [WithFigureAltText] gives it one.
+//
+// # Not supported
+//
+// HEIF, AVIF, JPEG XL, BigTIFF, cursors and gzip-compressed SVG fail with
+// [ErrConvertMalformed], their message naming the format. So do a BMP of
+// 1, 2, 4 or 16 bits a pixel or compressed; a JPEG-compressed, CMYK,
+// YCbCr or CIE L*a*b* TIFF page; and a JPEG 2000 file of a CMYK, sYCC or
+// CIE L*a*b* colour space.
+//
+// # Errors
+//
+// A source that is no image of these formats, or whose bytes do not read
+// as its format, fails with [ErrConvertMalformed]. A source past
+// [Limits.MaxConvertInputBytes], a picture past [Limits.MaxImagePixels]
+// and decoded pixels past [Limits.MaxConvertMemoryBytes] fail with
+// [ErrConvertInputTooLarge], before any of its pixels is decoded; a TIFF
+// file of more pages than [Limits.MaxConvertPages] fails with
+// [ErrConvertTooManyPages].
+func FromImage(src io.Reader, opts ...ImageOption) *Conversion {
+	var cfg convertConfig
+	for _, o := range opts {
+		if o != nil {
+			o.applyConvert(&cfg)
+		}
+	}
+	return newConversion(kindImage, src, cfg)
+}
+
 // ConvertReport is what a [Conversion] reports beside the PDF.
 // Concurrent reads of a value are safe; a write needs synchronization.
 type ConvertReport struct {
@@ -429,8 +523,8 @@ type ConvertWarning struct {
 // [Limits.MaxConvertMemoryBytes], or for an HTML document past the
 // converter's element, cascade or box caps, [ErrConvertTooManyPages] past
 // [Limits.MaxConvertPages], [ErrConvertNoFonts] when the font directories
-// hold no usable font, [ErrConvertMalformed] for an Office source that is
-// not a document of its format, [ErrConvertEncrypted] for one
+// hold no usable font, [ErrConvertMalformed] for an Office or image source
+// that is not a document of its format, [ErrConvertEncrypted] for one
 // [WithOfficePassword] does not open, [ErrConvertResourceUnavailable] for
 // a resource of an HTML or Markdown source that does not load under
 // [WithRequiredResources], [ErrInternalPanic] for a recovered
@@ -527,6 +621,8 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 		// The text converter holds a piece of its source at a time, which
 		// it charges itself.
 		doc, err = convertPlainText(ctx, c.src, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages, stream)
+	case kindImage:
+		doc, err = convertImage(ctx, src, fonts, &o, version, budget.MaxConvertInputBytes, budget.MaxConvertPages, stream)
 	}
 	// The other converters hold their source whole, or the tree they parse
 	// it into, until they return.
@@ -729,7 +825,7 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 		conv = pptx.Convert
 	case kindODP:
 		conv = odp.Convert
-	case kindText, kindHTML, kindMarkdown:
+	case kindText, kindHTML, kindMarkdown, kindImage:
 		// run lays these kinds out without an Office converter.
 		return nil, fmt.Errorf("converting %s: no Office converter reads it", name)
 	}
@@ -774,6 +870,33 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 	if err != nil {
 		// The converters' errors wrap the public sentinels themselves.
 		return nil, fmt.Errorf("converting %s: %w", name, err)
+	}
+	return doc, nil
+}
+
+// convertImage lays an image source out, handing its pages to sink as it
+// makes them. Its errors wrap the public sentinels themselves: a source
+// that is no image of a format litho reads [ErrConvertMalformed], its size
+// caps and a picture past the pixel cap [ErrConvertInputTooLarge], its
+// page cap [ErrConvertTooManyPages].
+func convertImage(ctx context.Context, src io.Reader, fonts *text.Fonts, o *convertConfig, version typeset.Version, maxBytes int64, maxPages int, sink typeset.PageSink) (*typeset.Document, error) {
+	opts := picture.Options{
+		Landscape:     o.orientation == OrientationLandscape,
+		Portrait:      o.orientation == OrientationPortrait,
+		Version:       version,
+		DefaultLang:   o.defaultLang,
+		MaxInputBytes: maxBytes,
+		MaxPages:      maxPages,
+		Logger:        o.logger,
+		Sink:          sink,
+	}
+	if o.paperSet {
+		opts.PageWidth, opts.PageHeight = o.paper.Width, o.paper.Height
+	}
+	doc, err := picture.Convert(ctx, src, fonts, opts)
+	if err != nil {
+		// The converter's errors wrap the public sentinels themselves.
+		return nil, fmt.Errorf("converting image: %w", err)
 	}
 	return doc, nil
 }

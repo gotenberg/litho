@@ -10,8 +10,8 @@
 //     against a Reader and emit a new PDF via [Writer.WriteTo].
 //   - [Pipeline]: chain Convert, Split, Merge, Apply and WriteTo
 //     operations with managed intermediate storage. See [NewPipeline].
-//   - [Conversion]: lay a text, HTML, Markdown or Office source out as a
-//     new PDF. See [FromHTML] and the other From constructors.
+//   - [Conversion]: lay a text, HTML, Markdown, Office or image source out
+//     as a new PDF. See [FromHTML] and the other From constructors.
 //
 // Specialised PDF 2.0 extractors sit on [Reader] alongside the core
 // text, image, and annotation methods: [Reader.ExtractGeoData],
@@ -25,13 +25,14 @@
 // 2.x asks of it, an advisory check no PDF/UA validation depends on.
 //
 // A [Conversion] makes a new, tagged PDF from another format: plain text,
-// Markdown, HTML with its CSS, and the Office and OpenDocument text,
-// spreadsheet and presentation formats. One constructor per format makes
-// it, [FromHTML] or [FromDOCX] among them, and takes the options of that
-// format alone. [Conversion.WriteTo] runs it; [Pipeline.Convert] opens a
-// pipeline on its output, where a later stage remediates it to a PDF/A or
-// PDF/UA profile, encrypts it or signs it; [Pipeline.MergePipelines] runs
-// several pipelines at once and merges what they write.
+// Markdown, HTML with its CSS, the Office and OpenDocument text,
+// spreadsheet and presentation formats, and image files ([FromImage]).
+// One constructor per format makes it, [FromHTML] or [FromDOCX] among
+// them, and takes the options of that format alone. [Conversion.WriteTo]
+// runs it; [Pipeline.Convert] opens a pipeline on its output, where a
+// later stage remediates it to a PDF/A or PDF/UA profile, encrypts it or
+// signs it; [Pipeline.MergePipelines] runs several pipelines at once and
+// merges what they write.
 //
 // # Quick start
 //
@@ -238,6 +239,8 @@
 //     [WithCSVTypeDetection].
 //   - [FromPPTX] and [FromODP] take [PresentationOption]:
 //     [WithHiddenSlides], [WithNotesPages], [WithHandouts].
+//   - [FromImage] takes [ImageOption]: the [ConvertOption] values, and no
+//     option of its own.
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced
 // serialization controls. The defaults suit most callers:

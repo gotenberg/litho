@@ -246,13 +246,21 @@ type OfficeOption interface {
 	PresentationOption
 }
 
+// ImageOption tunes a conversion [FromImage] makes. Every [ConvertOption]
+// is one too.
+type ImageOption interface {
+	applyConvert(c *convertConfig)
+	imageOption()
+}
+
 // ConvertOption is an option every conversion takes: each of [FromText],
 // [FromHTML], [FromMarkdown], [FromDOCX], [FromODT], [FromXLSX], [FromODS],
-// [FromCSV], [FromPPTX] and [FromODP] accepts it.
+// [FromCSV], [FromPPTX], [FromODP] and [FromImage] accepts it.
 type ConvertOption interface {
 	MarginOption
 	OfficeOption
 	SheetOption
+	ImageOption
 }
 
 // The option values, one type per set of sources that take it. Each is the
@@ -279,6 +287,7 @@ func (convertOption) wordProcessingOption()           {}
 func (convertOption) spreadsheetOption()              {}
 func (convertOption) csvOption()                      {}
 func (convertOption) presentationOption()             {}
+func (convertOption) imageOption()                    {}
 
 func (f marginOption) applyConvert(c *convertConfig) { f(c) }
 func (marginOption) textOption()                     {}
@@ -333,6 +342,8 @@ func (presentationOption) presentationOption()             {}
 //   - [FromPPTX], [FromODP]: each slide, notes page and handout page is
 //     scaled down to fit the paper, never up, and centred on it. A handout
 //     page takes the paper's orientation first (see [WithHandouts]).
+//   - [FromImage]: each picture is scaled down to fit the paper, never up,
+//     and centred on it.
 //
 // Without it the source's own size applies, and [WithDefaultPaper] where
 // the source names none.
@@ -344,9 +355,10 @@ func WithPaper(paper Paper) ConvertOption {
 // Markdown file, an HTML document without an @page size, a section or a
 // sheet without a page setup, a CSV file. Without it that paper is
 // [PaperA4]. It never replaces a size the source names, which [WithPaper]
-// does, and a presentation always names its slide size. Each side must lie
-// between 3 and 14,400 points, as [WithPaper] asks, or the conversion fails
-// with [ErrInvalidConvertOptions], which also wraps [ErrInvalidPageSize].
+// does: a presentation always names its slide size, and an image its own.
+// Each side must lie between 3 and 14,400 points, as [WithPaper] asks, or
+// the conversion fails with [ErrInvalidConvertOptions], which also wraps
+// [ErrInvalidPageSize].
 func WithDefaultPaper(paper Paper) ConvertOption {
 	return convertOption(func(c *convertConfig) { c.defaultPaper, c.defaultPaperSet = paper, true })
 }
@@ -384,8 +396,8 @@ func WithPageRanges(spec string) ConvertOption {
 // WithOutline sets whether the conversion writes a document outline: the
 // headings of an HTML or Markdown source, the paragraphs of a DOCX or ODT
 // source whose style has an outline level, the sheets of a spreadsheet, the
-// slides of a presentation. true is the default. A text source has no
-// outline either way.
+// slides of a presentation. true is the default. A text source and an
+// image have no outline either way.
 func WithOutline(outline bool) ConvertOption {
 	return convertOption(func(c *convertConfig) { c.omitOutline = !outline })
 }
