@@ -1,5 +1,7 @@
 package shape
 
+//go:generate go run ../../../cmd/gen-text-warps -out textwarps_gen.go
+
 import (
 	"math"
 
@@ -189,7 +191,10 @@ func warpDefinition(w *TextWarp) (*Custom, bool) {
 	if w == nil {
 		return nil, false
 	}
-	return w.Custom, false
+	if w.Custom != nil {
+		return w.Custom, false
+	}
+	return textWarpTable[w.Preset], true
 }
 
 // flatten returns the first subpath of ops as a measured polyline, each
