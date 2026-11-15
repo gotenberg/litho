@@ -128,7 +128,9 @@ type Node struct {
 	// lands. An empty ID names nothing.
 	ID string
 	// Href makes the subtree a link: "#id" targets the node with that ID,
-	// anything else is an external URI the converter has already resolved.
+	// or the top of the document under [Options.BrowserRules] when the
+	// fragment says so; anything else is an external URI the converter has
+	// already resolved.
 	Href string
 
 	// ListValue is the ordinal of a list-item, 0 to number it after the
@@ -279,9 +281,12 @@ type Options struct {
 	// markers ([symbolRect]), the position and thickness of an auto
 	// underline, the decorations of text inside a decorating box of
 	// another size, and the page area cutting what overflows into the side
-	// margins. Off, as the Office converters leave it, the engine's own
+	// margins. It also reads a link's fragment as a browser does: "#" and
+	// a "#top" no ID matches go to the top of the document (HTML Standard,
+	// 7.4.6.4). Off, as the Office converters leave it, the engine's own
 	// rules apply: a darker shade of every colour, the marker's text, the
-	// face's underline position, content drawn into the side margins.
+	// face's underline position, content drawn into the side margins, a
+	// link that names an element or nothing.
 	BrowserRules bool
 	// FeatureValues, when not nil, returns the @font-feature-values of a
 	// family, nil for none: font-variant-alternates resolves its names

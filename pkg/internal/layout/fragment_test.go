@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
@@ -217,6 +218,55 @@ func TestLinks_AndAnchors(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("warnings %+v, want the unresolved link", res.Warnings)
+	}
+}
+
+// TestLinks_TopOfDocument sends a link to the empty fragment, and one to
+// "top" in any ASCII case that no ID matches, to the top left corner of
+// the first page under BrowserRules (HTML Standard, 7.4.6.4, "select the
+// indicated part"): an element with the ID wins, another fragment that
+// names nothing is left out, and without BrowserRules a link names an
+// element or nothing.
+func TestLinks_TopOfDocument(t *testing.T) {
+	link := func(href string) *Node {
+		a := el(inlineSty(), txt(inlineSty(), "a"))
+		a.Href, a.Role = href, "Link"
+		return a
+	}
+	tree := func() *Node {
+		named := el(sty(height(10)))
+		named.ID = "TOP"
+		return doc(el(sty(height(40))), el(sty(), link("#"), link("#top"), link("#Top"), link("#TOP"), link("#nowhere")), el(sty(height(40))), named)
+	}
+	res := runWith(t, tree(), Options{Page: page(60, 40), BrowserRules: true})
+	if len(res.Pages) != 3 {
+		t.Fatalf("%d pages, want the links on page 2 and the element on page 3", len(res.Pages))
+	}
+	links := res.Pages[1].Links
+	if len(links) != 4 {
+		t.Fatalf("%d links on page 2, want every one but the fragment that names nothing: %+v", len(links), links)
+	}
+	for i, l := range links[:3] {
+		if l.Dest == nil || *l.Dest != (typeset.Dest{Page: 1}) {
+			t.Errorf("link %d goes to %+v, want the corner of page 1", i, l.Dest)
+		}
+	}
+	if d := links[3].Dest; d == nil || d.Page != 3 {
+		t.Errorf("#TOP goes to %+v, want the element with that ID on page 3", d)
+	}
+	unresolved := 0
+	for _, w := range res.Warnings {
+		if w.Code == warn.LinkUnresolved {
+			unresolved++
+		}
+	}
+	if unresolved != 1 {
+		t.Errorf("%d unresolved links reported, want #nowhere alone: %+v", unresolved, res.Warnings)
+	}
+
+	plain := runWith(t, tree(), Options{Page: page(60, 40)})
+	if links := plain.Pages[1].Links; len(links) != 1 || links[0].Dest == nil || links[0].Dest.Page != 3 {
+		t.Errorf("without BrowserRules: links %+v, want #TOP alone", links)
 	}
 }
 

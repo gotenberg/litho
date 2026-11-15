@@ -302,7 +302,7 @@ func TestPrepare_ResolvesLinks(t *testing.T) {
 		`<a id=r href="docs/page.html">r</a><a id=s href="javascript:void(0)">s</a><a id=h href="#">h</a>`+
 		`<a name=named>n</a><span id=target>t</span>`, Options{})
 	for id, want := range map[string]string{
-		"f": "#target", "e": "#café", "x": "https://example.com/a?b#c", "r": "docs/page.html", "s": "", "h": "",
+		"f": "#target", "e": "#café", "x": "https://example.com/a?b#c", "r": "docs/page.html", "s": "", "h": "#",
 	} {
 		n := byID(t, p.root, id)
 		if n.Href != want {

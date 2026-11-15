@@ -875,6 +875,23 @@ func (e *engine) links(res *Result, links []pendingLink, used map[*typeset.Struc
 // resolveLink returns the link of the region pl, its rectangle unset, its
 // internal target resolved against the anchors e.anchors found; false for
 // an empty region or a target no element names, which it warns about.
+//
+// Under [Options.BrowserRules] the fragment selects the part of the
+// document the HTML Standard says it does (7.4.6.4, "select the indicated
+// part"): the element with that ID, else the top of the document for the
+// empty fragment and for one that reads "top" in any ASCII case. The top
+// of the document is the top left corner of its first page, with no
+// structure element: no element is the document's top. Off, a link names
+// an element or nothing.
+//
+// # Corpus evidence
+//
+//   - litho/html color-scheme: Chromium links "#top", which no element of
+//     the page carries, to [page 1 /XYZ 0 841.92 0], the paper's corner.
+//   - probe, html: Chromium sends "#", "#top", "#TOP" and "#Top" from page
+//     2 to [page 1 /XYZ 0 792 0] and writes no link for "#missing"; with an
+//     element of ID "TOP" on page 2, "#TOP" goes to the element and "#top"
+//     to the corner of page 1; an anchor of name "top" takes "#top".
 func (e *engine) resolveLink(pl pendingLink) (typeset.Link, bool) {
 	r := pl.rect
 	if !numeric.Positive(r.Width) || !numeric.Positive(r.Height) {
@@ -882,11 +899,17 @@ func (e *engine) resolveLink(pl pendingLink) (typeset.Link, bool) {
 	}
 	href := pl.lk.href
 	if id, ok := strings.CutPrefix(href, "#"); ok {
-		d, found := e.anchorsFound[id]
-		if !found {
-			d, found = e.opts.Targets[id]
+		var d typeset.Dest
+		found := false
+		if id != "" {
+			if d, found = e.anchorsFound[id]; !found {
+				d, found = e.opts.Targets[id]
+			}
 		}
-		if !found || id == "" {
+		if !found && e.opts.BrowserRules && (id == "" || strings.EqualFold(id, "top")) {
+			d, found = typeset.Dest{Page: 1}, true
+		}
+		if !found {
 			// The text prints; the target the link names is not in the
 			// source either, so nothing of the source is missing.
 			e.warnOnce(warn.LinkUnresolved, warn.Approximated, fmt.Sprintf("link to %q left out: no element has that ID", href), r.Y)

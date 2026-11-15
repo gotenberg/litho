@@ -567,15 +567,13 @@ func (b *builder) syntheticID() string {
 }
 
 // linkTarget returns the Node.Href of an <a href>: "#id" for a fragment of
-// the document itself, "" for none or a script, and otherwise the URL as
-// the author wrote it, resolved against the document's <base> when it has
-// one (HTML Standard, 4.6.4).
+// the document itself, "#" alone for the empty fragment, which is the top
+// of the document (HTML Standard, 7.4.6.4), "" for none or a script, and
+// otherwise the URL as the author wrote it, resolved against the
+// document's <base> when it has one (HTML Standard, 4.6.4).
 func (b *builder) linkTarget(href string) string {
 	href = strings.Trim(href, "\t\n\f\r ")
 	if frag, ok := strings.CutPrefix(href, "#"); ok {
-		if frag == "" {
-			return ""
-		}
 		// The fragment is percent-decoded before it is looked up (HTML
 		// Standard, 7.4.6.4).
 		if dec, err := url.PathUnescape(frag); err == nil {
