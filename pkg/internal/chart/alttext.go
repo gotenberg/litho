@@ -433,3 +433,18 @@ func capitalized(s string) string {
 	}
 	return string(unicode.ToUpper(r)) + s[size:]
 }
+
+// AltTextLang returns the language a structure element states for a
+// description [AltText] writes in a document whose language is doc, a
+// BCP 47 tag: "en" when doc is unknown or another language, "" when doc
+// is English already and the element inherits it. ISO 14289-1, 7.2 asks
+// that a change of natural language in an alternate description be
+// stated; the Lang entry of the element that holds it states the
+// language of its Alt (ISO 32000-1, 14.9.2).
+func AltTextLang(doc string) string {
+	primary, _, _ := strings.Cut(doc, "-")
+	if strings.EqualFold(strings.TrimSpace(primary), "en") {
+		return ""
+	}
+	return "en"
+}

@@ -272,3 +272,43 @@ func TestConvert_DrawingsAreFigures(t *testing.T) {
 		t.Errorf("outline %+v, want an entry naming the first Figure", out.Outline)
 	}
 }
+
+// TestConvert_DerivedAltText holds what office.Options.DerivedAltText
+// changes in a sheet: a chart its source does not describe takes the
+// description chart.AltText derives, its title first, the Figure stating
+// English in a workbook of another language; a described chart, a
+// picture, a decorative drawing and an undescribed shape are as without
+// the option.
+func TestConvert_DerivedAltText(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	pic := &layout.Picture{Source: source(t, img), Width: 2, Height: 2}
+	bars := func(title string) *chart.Chart {
+		return &chart.Chart{Title: &chart.Title{Text: title}, Groups: []*chart.Group{{Kind: chart.Bar, Series: []*chart.Series{{Name: "North", Values: chart.Data{Values: []chart.Value{chart.Num(1)}, Cached: true}}}}}}
+	}
+	sh := &Sheet{
+		Name: "S",
+		Drawings: []Drawing{
+			{From: Anchor{Row: 0, Column: 0}, Width: 40, Height: 20, Picture: pic, Name: "Picture 1"},
+			{From: Anchor{Row: 3, Column: 0}, Width: 200, Height: 120, Chart: bars("Sales"), Name: "Chart 1"},
+			{From: Anchor{Row: 12, Column: 0}, Width: 200, Height: 120, Chart: bars("Costs"), Name: "Chart 2", Alt: "Own"},
+		},
+	}
+	doc := newDoc(sh)
+	doc.Meta.Lang = "de-DE"
+	figures := func(opts office.Options) []string {
+		var got []string
+		for _, k := range convert(t, doc, opts).Structure.Kids {
+			if k.Role == "Figure" {
+				got = append(got, k.Alt+"|"+k.Lang)
+			}
+		}
+		return got
+	}
+	want := []string{"|", "Sales. Clustered column chart, 1 series (North), 1 category|en", "Own|"}
+	if got := figures(office.Options{DerivedAltText: true}); strings.Join(got, "/") != strings.Join(want, "/") {
+		t.Errorf("figures %q, want %q", got, want)
+	}
+	if got, want := figures(office.Options{}), []string{"|", "Sales|", "Own|"}; strings.Join(got, "/") != strings.Join(want, "/") {
+		t.Errorf("figures without the option %q, want %q", got, want)
+	}
+}

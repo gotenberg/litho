@@ -36,6 +36,13 @@ const (
 // set. It returns nil with a warning when the part is missing or does not
 // parse, the frame then keeping its room empty.
 //
+// The Figure carries alt, the description of its drawing; Word gives a
+// chart's title no part in it. Without one, and with
+// office.Options.DerivedAltText, it carries the description
+// [chart.AltText] derives from the chart's model, its title first, in
+// English, which the Figure states when the document's language is
+// another ([chart.AltTextLang]).
+//
 // An Office 2016 chart sits in an mc:AlternateContent whose Choice
 // requires the cx1 or cx2 namespace; the converter takes the Choice, as
 // Word draws the chart and not the Fallback picture ([understood]).
@@ -87,7 +94,12 @@ func (d *document) chart(s *story, ref *ooxml.Element, st *css.Style, w, h float
 	pic.Vector = func(ctx context.Context, r typeset.Rect) []typeset.Fragment {
 		return chart.Render(ctx, fonts, c, r)
 	}
-	return &layout.Node{Kind: layout.Replaced, Style: ps, Picture: pic, Role: "Figure", Alt: alt}
+	n := &layout.Node{Kind: layout.Replaced, Style: ps, Picture: pic, Role: "Figure", Alt: alt}
+	if alt == "" && d.opts.DerivedAltText {
+		// The node holds no text: its language is its description's.
+		n.Alt, n.Lang = chart.AltText(c), chart.AltTextLang(d.lang())
+	}
+	return n
 }
 
 // drawing builds a w:drawing (17.3.3.9): each wp:inline as an inline box,

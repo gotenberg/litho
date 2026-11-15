@@ -433,3 +433,40 @@ func TestConvert_Describe(t *testing.T) {
 		t.Errorf("%d pictures drawn, want 2", images)
 	}
 }
+
+// TestConvert_DerivedAltText holds what office.Options.DerivedAltText
+// changes on a slide: a chart its source does not describe takes the
+// description chart.AltText derives, its title first, the Figure stating
+// English in a presentation of another language; a described chart and
+// a picture are as without the option.
+func TestConvert_DerivedAltText(t *testing.T) {
+	at := func(y float64) typeset.Rect { return typeset.Rect{X: 0, Y: y, Width: 100, Height: 50} }
+	line := func() *chart.Chart {
+		return &chart.Chart{
+			Title:  &chart.Title{Text: "Chart Title", Auto: true},
+			Groups: []*chart.Group{{Kind: chart.Line, Series: []*chart.Series{{Name: "Series1", Unnamed: true, Values: chart.Data{Values: []chart.Value{chart.Num(1), chart.Num(2)}, Cached: true}}}}},
+		}
+	}
+	shapes := func() []*Shape {
+		return []*Shape{
+			{Kind: KindPicture, Name: "Picture 3", Box: at(0), Picture: tinyPicture(t)},
+			{Kind: KindChart, Name: "Chart 1", Box: at(60), Chart: line()},
+			{Kind: KindChart, Name: "Chart 2", Alt: "Own", Box: at(120), Chart: line()},
+		}
+	}
+	figures := func(opts office.Options) string {
+		d := deck(&Slide{Shapes: shapes()})
+		d.Meta.Lang = "ja"
+		var got []string
+		for _, k := range convert(t, d, opts).Structure.Kids[0].Kids {
+			got = append(got, k.Role+":"+k.Alt+":"+k.Lang)
+		}
+		return strings.Join(got, "|")
+	}
+	if got, want := figures(office.Options{DerivedAltText: true}), "Figure::|Figure:Line chart, 1 series, 2 categories:en|Figure:Own:"; got != want {
+		t.Errorf("structure %q, want %q", got, want)
+	}
+	if got, want := figures(office.Options{}), "Figure::|Figure:Chart Title:|Figure:Own:"; got != want {
+		t.Errorf("structure without the option %q, want %q", got, want)
+	}
+}

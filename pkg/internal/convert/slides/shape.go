@@ -72,7 +72,7 @@ func (b *builder) shape(s *Shape, m typeset.Matrix, depth int, parent *typeset.S
 		}
 		frags := chart.Render(b.ctx, b.fonts, s.Chart, box)
 		if len(frags) > 0 && parent != nil {
-			fig := &typeset.StructElem{Role: "Figure", Alt: chartAlt(s)}
+			fig := b.chartFigure(s)
 			adopt(frags, fig)
 			parent.Kids = append(parent.Kids, fig)
 		}
@@ -156,6 +156,20 @@ func adopt(frags []typeset.Fragment, parent *typeset.StructElem) {
 			adopt(v.Content, parent)
 		}
 	}
+}
+
+// chartFigure returns the Figure of the chart shape s: its description
+// ([chartAlt]), or, with [office.Options.DerivedAltText] and none from
+// the source, the description [chart.AltText] derives from its model, its
+// title first, in English, which the Figure states when the
+// presentation's language is another ([chart.AltTextLang]). A title alone
+// names a chart and says nothing of what it shows; the derived sentence
+// keeps it and adds the kind, the series, the categories and the axes.
+func (b *builder) chartFigure(s *Shape) *typeset.StructElem {
+	if b.opts.DerivedAltText && s.Alt == "" {
+		return &typeset.StructElem{Role: "Figure", Alt: chart.AltText(s.Chart), Lang: chart.AltTextLang(b.lang)}
+	}
+	return &typeset.StructElem{Role: "Figure", Alt: chartAlt(s)}
 }
 
 // chartAlt returns what a chart's Figure says of it: the shape's

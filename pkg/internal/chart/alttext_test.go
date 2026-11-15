@@ -172,3 +172,13 @@ func TestAltText_Bounded(t *testing.T) {
 		}
 	}
 }
+
+// TestAltTextLang states English on a description in a document of
+// another language or of none, and inherits it in an English one.
+func TestAltTextLang(t *testing.T) {
+	for doc, want := range map[string]string{"": "en", "fr-FR": "en", "ja": "en", "en": "", "en-GB": "", "EN-us": ""} {
+		if got := AltTextLang(doc); got != want {
+			t.Errorf("AltTextLang(%q) = %q, want %q", doc, got, want)
+		}
+	}
+}

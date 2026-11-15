@@ -44,7 +44,7 @@ func (b *pageBuilder) drawings(regs []*region) ([]typeset.Fragment, []*typeset.S
 		if pic == nil || (pic.Source == nil && pic.Vector == nil) {
 			continue
 		}
-		fig := figureOf(d)
+		fig := figureOf(d, b.opts.DerivedAltText, b.lang)
 		drawn := false
 		for _, rg := range regs {
 			// The drawing's box in the region's coordinates.
@@ -87,9 +87,20 @@ func (b *pageBuilder) drawings(regs []*region) ([]typeset.Fragment, []*typeset.S
 // and one of shapes alone its source does not describe, is an artifact
 // (ISO 32000-1, 14.8.2.2.2; ISO 14289-1, 7.1), as the undescribed shapes
 // of a slide or a text document are.
-func figureOf(d *Drawing) *typeset.StructElem {
+//
+// With derived set, a chart its source does not describe takes the
+// description [chart.AltText] derives from its model, its title first,
+// in English, which the Figure states when lang, the workbook's
+// language, is another ([chart.AltTextLang]). A title alone names a
+// chart and says nothing of what it shows; the derived sentence keeps it
+// and adds the kind, the series, the categories and the axes. A picture
+// is never described so: a workbook gives a picture no caption.
+func figureOf(d *Drawing, derived bool, lang string) *typeset.StructElem {
 	if d.Decorative || (d.Shape && d.Alt == "") {
 		return nil
+	}
+	if derived && d.Alt == "" && d.Chart != nil && !d.Formula {
+		return &typeset.StructElem{Role: "Figure", Alt: chart.AltText(d.Chart), Lang: chart.AltTextLang(lang)}
 	}
 	alt := d.Alt
 	if alt == "" && d.Chart != nil && d.Chart.Title != nil {

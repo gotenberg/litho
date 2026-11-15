@@ -566,3 +566,45 @@ func TestDrawings_RelativeSize(t *testing.T) {
 		}
 	}
 }
+
+// TestChartDerivedAltText holds the description a chart its drawing does
+// not describe takes under office.Options.DerivedAltText: chart.AltText of
+// its model, in English, stated on the Figure in a document of another
+// language; a described chart keeps its own, and without the option an
+// undescribed chart takes none.
+func TestChartDerivedAltText(t *testing.T) {
+	t.Parallel()
+	frame := func(descr string) string {
+		return `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="3810000" cy="2540000"/><wp:docPr id="1" name="Chart 1"` + descr + `/>` +
+			`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">` +
+			`<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rIdchart1"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	}
+	part := map[string]string{"word/charts/chart1.xml": `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart>` +
+		`<c:title><c:tx><c:rich><a:p><a:r><a:t>Quarterly</a:t></a:r></a:p></c:rich></c:tx></c:title>` +
+		`<c:plotArea><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:idx val="0"/><c:order val="0"/>` +
+		`<c:cat><c:strLit><c:ptCount val="2"/><c:pt idx="0"><c:v>North</c:v></c:pt><c:pt idx="1"><c:v>South</c:v></c:pt></c:strLit></c:cat>` +
+		`<c:val><c:numLit><c:ptCount val="2"/><c:pt idx="0"><c:v>3</c:v></c:pt><c:pt idx="1"><c:v>5</c:v></c:pt></c:numLit></c:val></c:ser>` +
+		`<c:axId val="1"/><c:axId val="2"/></c:barChart><c:catAx><c:axId val="1"/><c:axPos val="b"/><c:crossAx val="2"/></c:catAx>` +
+		`<c:valAx><c:axId val="2"/><c:axPos val="l"/><c:crossAx val="1"/></c:valAx></c:plotArea></c:chart></c:chartSpace>`}
+	chartOf := func(body string, opts office.Options) *layout.Node {
+		t.Helper()
+		got := find(buildWith(t, body, part, opts).root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+		if len(got) != 1 {
+			t.Fatalf("%d replaced boxes, want 1", len(got))
+		}
+		return got[0]
+	}
+	c := chartOf(frame(""), office.Options{DerivedAltText: true, DefaultLang: "fr-FR"})
+	if want := "Quarterly. Clustered column chart, 1 series, 2 categories (North and South)"; c.Role != "Figure" || c.Alt != want || c.Lang != "en" {
+		t.Errorf("derived: role %q alt %q lang %q, want Figure %q en", c.Role, c.Alt, c.Lang, want)
+	}
+	if c := chartOf(frame(""), office.Options{DerivedAltText: true, DefaultLang: "en-US"}); c.Lang != "" {
+		t.Errorf("in an English document the Figure states lang %q", c.Lang)
+	}
+	if c := chartOf(frame(` descr="Own"`), office.Options{DerivedAltText: true}); c.Alt != "Own" || c.Lang != "" {
+		t.Errorf("described: alt %q lang %q", c.Alt, c.Lang)
+	}
+	if c := chartOf(frame(""), office.Options{}); c.Alt != "" || c.Lang != "" {
+		t.Errorf("without the option: alt %q lang %q", c.Alt, c.Lang)
+	}
+}
