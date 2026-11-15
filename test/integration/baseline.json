@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-15T05:56:16Z",
+  "captured_at": "2026-11-15T07:43:45Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -18995,8 +18995,8 @@
     "libreoffice/odp": {
       "features": {
         "diff": {
-          "matched": 144,
-          "mismatched": 26,
+          "matched": 145,
+          "mismatched": 25,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -19197,7 +19197,7 @@
               "text_f1": 1
             },
             "sd/Math.fodp": {
-              "layout": 0.8219,
+              "layout": 0.8942,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -19333,12 +19333,12 @@
               "text_f1": 1
             },
             "sd/formula.fodp": {
-              "layout": 0.9526,
+              "layout": 0.9726,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.5714
+              "text_f1": 1
             },
             "sd/group_rotation.odp": {
               "layout": 0.9917,
@@ -60429,7 +60429,7 @@
               "text_f1": 0.9189
             },
             "mathml-formulas": {
-              "layout": 0.932,
+              "layout": 0.9353,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -117222,8 +117222,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 4830,
-          "mismatched": 502,
+          "matched": 4841,
+          "mismatched": 491,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -122422,7 +122422,7 @@
             "css/selectors/text-fill-color-visited-inheritance.html": "pass",
             "css/selectors/text-stroke-color-visited-inheritance.html": "pass",
             "css/selectors/visited-nested.html": "pass",
-            "mathml/presentation-markup/direction/direction-overall-002.html": "fail",
+            "mathml/presentation-markup/direction/direction-overall-002.html": "pass",
             "mathml/presentation-markup/direction/direction-overall-003.html": "pass",
             "mathml/presentation-markup/fractions/frac-color-001.html": "pass",
             "mathml/presentation-markup/fractions/frac-invalid-2.html": "pass",
@@ -122434,7 +122434,7 @@
             "mathml/presentation-markup/mpadded/mpadded-012.html": "pass",
             "mathml/presentation-markup/mpadded/mpadded-013.html": "pass",
             "mathml/presentation-markup/mpadded/mpadded-percentage-001.html": "pass",
-            "mathml/presentation-markup/mrow/mrow-painting-order.html": "fail",
+            "mathml/presentation-markup/mrow/mrow-painting-order.html": "pass",
             "mathml/presentation-markup/mrow/semantics-001.html": "pass",
             "mathml/presentation-markup/mrow/semantics-002.html": "pass",
             "mathml/presentation-markup/mrow/semantics-004.html": "pass",
@@ -122464,9 +122464,9 @@
             "mathml/presentation-markup/operators/op-dict-12.html": "pass",
             "mathml/presentation-markup/operators/op-dict-13.html": "pass",
             "mathml/presentation-markup/operators/op-dict-2.html": "pass",
-            "mathml/presentation-markup/operators/op-dict-3.html": "fail",
+            "mathml/presentation-markup/operators/op-dict-3.html": "pass",
             "mathml/presentation-markup/operators/op-dict-4.html": "pass",
-            "mathml/presentation-markup/operators/op-dict-5.html": "fail",
+            "mathml/presentation-markup/operators/op-dict-5.html": "pass",
             "mathml/presentation-markup/operators/op-dict-6.html": "pass",
             "mathml/presentation-markup/operators/op-dict-7.html": "fail",
             "mathml/presentation-markup/operators/op-dict-8.html": "pass",
@@ -122482,7 +122482,7 @@
             "mathml/presentation-markup/scripts/stretchy-mover-1a.html": "pass",
             "mathml/presentation-markup/scripts/stretchy-mover-1b.html": "fail",
             "mathml/presentation-markup/scripts/stretchy-mover-2a.html": "pass",
-            "mathml/presentation-markup/scripts/stretchy-mover-2b.html": "fail",
+            "mathml/presentation-markup/scripts/stretchy-mover-2b.html": "pass",
             "mathml/presentation-markup/scripts/stretchy-mover-3.html": "pass",
             "mathml/presentation-markup/scripts/stretchy-msup-1a.html": "pass",
             "mathml/presentation-markup/scripts/stretchy-msup-1b.html": "pass",
@@ -122524,7 +122524,7 @@
             "mathml/relations/css-styling/first-line-first-letter-pseudo-elements-004.html": "pass",
             "mathml/relations/css-styling/legacy-scriptminsize-attribute.html": "pass",
             "mathml/relations/css-styling/legacy-scriptsizemultiplier-attribute.html": "pass",
-            "mathml/relations/css-styling/lengths-1.html": "fail",
+            "mathml/relations/css-styling/lengths-1.html": "pass",
             "mathml/relations/css-styling/mathbackground-001.html": "pass",
             "mathml/relations/css-styling/mathbackground-002.html": "pass",
             "mathml/relations/css-styling/mathbackground-003.html": "pass",
@@ -122543,15 +122543,15 @@
             "mathml/relations/css-styling/padding-border-margin/padding-border-margin-002.html": "fail",
             "mathml/relations/css-styling/padding-border-margin/padding-border-margin-003.html": "fail",
             "mathml/relations/css-styling/padding-border-margin/padding-border-margin-004.html": "pass",
-            "mathml/relations/css-styling/padding-border-margin/padding-border-margin-005.html": "fail",
-            "mathml/relations/css-styling/padding-border-margin/padding-border-margin-006.html": "fail",
-            "mathml/relations/css-styling/padding-border-margin/padding-border-margin-007.html": "fail",
+            "mathml/relations/css-styling/padding-border-margin/padding-border-margin-005.html": "pass",
+            "mathml/relations/css-styling/padding-border-margin/padding-border-margin-006.html": "pass",
+            "mathml/relations/css-styling/padding-border-margin/padding-border-margin-007.html": "pass",
             "mathml/relations/css-styling/presentational-hints-001.html": "pass",
             "mathml/relations/css-styling/table-width-2.html": "pass",
             "mathml/relations/css-styling/table-width-3.html": "fail",
             "mathml/relations/css-styling/table-width-4.html": "pass",
-            "mathml/relations/css-styling/width-height-002.html": "fail",
-            "mathml/relations/css-styling/width-height-003.html": "fail",
+            "mathml/relations/css-styling/width-height-002.html": "pass",
+            "mathml/relations/css-styling/width-height-003.html": "pass",
             "mathml/relations/html5-tree/class-1.html": "pass",
             "mathml/relations/html5-tree/color-attributes-1.html": "pass",
             "mathml/relations/html5-tree/integration-point-2.html": "pass",
