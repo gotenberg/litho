@@ -161,8 +161,9 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 			runs.restart(i, el)
 		}
 		if newLine {
-			lines = append(lines, line{elems: elements[start:i:i]})
-			start = i
+			cut := spacesOpeningLine(elements, start, i)
+			lines = append(lines, line{elems: elements[start:cut:cut]})
+			start = cut
 		}
 	}
 	lines = append(lines, line{elems: elements[start:len(elements):len(elements)]})
@@ -379,6 +380,64 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 	}
 
 	return normalizeExtractionUnicode(normalizeSoftHyphens(sb.String()))
+}
+
+// spacesOpeningLine returns where the line that ends before the element i
+// ends, and the next begins: before the space glyphs that end the elements
+// from start to i and are set on the baseline of the element i, away from
+// the baseline of the glyph before them. A space glyph carries no position
+// the line split reads ([runTracker]), so it falls to the line before the
+// glyph that ends that line; set on the next baseline, at the start of the
+// next line, it is that line's first glyph (ISO 32000-1, 9.4.4 places each
+// glyph where the text matrix draws it). Only a horizontal line after a
+// line that holds right-to-left text is read so: a line read back from
+// visual order sets its spaces where their positions put them
+// ([reorderBidiIndices]), where a line in stream order writes a space at its
+// end as one at the start of the next, both a line break.
+//
+// PDF.js writes no space glyph (src/core/evaluator.js, buildTextContentItem,
+// which keeps it for the comparison with the next glyph), and drops one
+// that ends a text item before a line change.
+//
+// # Corpus evidence
+//
+//   - litho/html he-bidi-numbers and bidi-letter: each list marker is drawn
+//     as a space, a full stop and its number at the start of its line, from
+//     left to right; the space glyph read with the line above, so the
+//     marker of the last item read "3.אחווה" and "3.الدفعة", the others
+//     taking the space of the marker below.
+//   - pdfjs issue919.pdf pages 1 to 8: a space glyph opening each line,
+//     read with the Arabic line above at its own position, parted a word
+//     there: "ف يما", "المدخ ل", "نص وص", "ي ؤدي", "إ نتھاك", and set a space
+//     before a full stop, "لھم .". These pages, and issue12909.pdf pages 1
+//     to 9, ThuluthFeatures.pdf and litho/text arabic_hebrew.pdf, whose
+//     white space alone moves, are every page of every corpus that moves;
+//     no verdict moves. Read so after any line, a space glyph moves from
+//     the end of a line to the start of the next on 4354 govdocs/pdf, 1337
+//     pdfjs, 200 pdfcpu and 82 facturx pages, white space alone.
+func spacesOpeningLine(elements []models.TextElement, start, i int) int {
+	el := elements[i]
+	if el.Vertical || el.Angle != 0 {
+		return i
+	}
+	cut := i
+	for cut > start+1 && isSpaceGlyph(elements[cut-1].Text) {
+		cut--
+	}
+	if cut == i {
+		return i
+	}
+	if !slices.ContainsFunc(elements[start:cut], func(e models.TextElement) bool { return stringHasRTL(e.Text) }) {
+		return i
+	}
+	before := elements[cut-1]
+	for k := cut; k < i; k++ {
+		sp := elements[k]
+		if sp.Vertical || sp.Angle != 0 || math.Abs(sp.Y-el.Y) > lineBreakTolerance || math.Abs(sp.Y-before.Y) <= lineBreakTolerance {
+			return i
+		}
+	}
+	return cut
 }
 
 // writeReorderedLine writes a line [reorderBidiIndices] set in logical

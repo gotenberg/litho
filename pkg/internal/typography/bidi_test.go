@@ -382,3 +382,25 @@ func TestReconstructText_BidiCellsApart(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+// TestReconstructText_SpaceOpeningTheNextLine pins that a space glyph set on
+// the baseline of the next line, at its start in the stream, reads with
+// that line and not with the right-to-left line before it, which it would
+// open with a space the page does not show there ([spacesOpeningLine]).
+func TestReconstructText_SpaceOpeningTheNextLine(t *testing.T) {
+	el := func(text string, x, y float64) models.TextElement {
+		return models.TextElement{Text: text, X: x, Y: y, Width: 6, FontSize: 12}
+	}
+	// "فيما" then "بعد", each drawn left to right in visual order, the
+	// second line opened by a space glyph under the first word.
+	elements := []models.TextElement{
+		el("ا", 100, 500), el("م", 106, 500), el("ي", 112, 500), el("ف", 118, 500),
+		el(" ", 115, 480),
+		el("د", 121, 480), el("ع", 127, 480), el("ب", 133, 480),
+	}
+	got := ReconstructText(context.Background(), elements, nil)
+	want := "فيما\nبعد "
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
