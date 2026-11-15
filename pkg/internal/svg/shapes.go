@@ -172,7 +172,8 @@ func roundRect(x, y, w, h, rx, ry float64) []typeset.PathOp {
 }
 
 // shape draws a basic shape or a path, styled st: its fill, then its
-// stroke (SVG 1.1, 11.1). Opacity on a shape that paints only one of the
+// stroke (SVG 1.1, 11.1), or the stroke first under a paint-order that
+// asks for it (SVG 2, 13.8). Opacity on a shape that paints only one of the
 // two folds into its colour, which is exact; with both it opens a group.
 // A gradient stroke fills the stroke's outline with the gradient, as the
 // typeset model strokes in one colour.
@@ -223,18 +224,37 @@ func (r *renderer) shape(n *html.Node, st *style, s sink) {
 		}
 		return &typeset.Fill{Color: stroke.Color}
 	}
-	if strokeSh != nil {
+	paintFill := func() {
 		if fill != nil && len(ops) > 0 {
 			r.emit(s, &typeset.Path{Ops: ops, Fill: fill})
 		}
-		if o := strokeOutline(ops, stroke); outline != nil && len(o) > 0 {
-			r.emit(s, &typeset.Path{Ops: o, Fill: outline})
-		}
-	} else if len(ops) > 0 {
-		r.emit(s, &typeset.Path{Ops: ops, Fill: fill, Stroke: stroke})
 	}
-	if len(caps) > 0 && (strokeSh == nil || outline != nil) {
-		r.emit(s, &typeset.Path{Ops: caps, Fill: capFill()})
+	paintStroke := func() {
+		switch {
+		case strokeSh != nil:
+			if o := strokeOutline(ops, stroke); outline != nil && len(o) > 0 {
+				r.emit(s, &typeset.Path{Ops: o, Fill: outline})
+			}
+		case stroke != nil && len(ops) > 0:
+			r.emit(s, &typeset.Path{Ops: ops, Stroke: stroke})
+		}
+		if len(caps) > 0 && (strokeSh == nil || outline != nil) {
+			r.emit(s, &typeset.Path{Ops: caps, Fill: capFill()})
+		}
+	}
+	switch {
+	case st.strokeFirst:
+		paintStroke()
+		paintFill()
+	case strokeSh == nil && len(ops) > 0:
+		// One path fills, then strokes (ISO 32000-1, 8.5.3.1).
+		r.emit(s, &typeset.Path{Ops: ops, Fill: fill, Stroke: stroke})
+		if len(caps) > 0 {
+			r.emit(s, &typeset.Path{Ops: caps, Fill: capFill()})
+		}
+	default:
+		paintFill()
+		paintStroke()
 	}
 }
 

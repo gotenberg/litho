@@ -18,6 +18,7 @@
 //   - Painting: fill and stroke with colours, none, currentColor and
 //     url() references with a fallback (11.2), their opacities and fill
 //     rules, stroke width, caps, joins, miter limit and dashes (11.4),
+//     the order of fill and stroke paint-order sets (SVG 2, 13.8),
 //     opacity on groups, composited as one group, visibility and display.
 //   - Gradients: linearGradient and radialGradient with gradientUnits,
 //     gradientTransform, fx and fy, the href chain and stops (13.2), on

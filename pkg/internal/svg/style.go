@@ -1,6 +1,7 @@
 package svg
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
@@ -105,6 +106,9 @@ type style struct {
 	// marker records the property the renderer does not draw, for a
 	// warning.
 	marker bool
+	// strokeFirst records a paint-order that paints the stroke before the
+	// fill (SVG 2, 13.8), inherited.
+	strokeFirst bool
 }
 
 // initialStyle returns the initial values (SVG 1.1, Appendix N), with
@@ -389,6 +393,12 @@ func (st *style) apply(d declaration, parent *style) bool {
 			return false
 		}
 		return true
+	case "paint-order":
+		first, ok := parsePaintOrder(v)
+		if ok {
+			st.strokeFirst = first
+		}
+		return ok
 	case "marker", "marker-start", "marker-mid", "marker-end":
 		if !strings.EqualFold(v, "none") {
 			st.marker = true
@@ -511,6 +521,8 @@ func (st *style) copyFrom(prop string, parent *style) {
 		st.anchor = parent.anchor
 	case "overflow":
 		st.overflowOK = parent.overflowOK
+	case "paint-order":
+		st.strokeFirst = parent.strokeFirst
 	}
 }
 
@@ -527,6 +539,7 @@ var presentationAttrs = map[string]bool{
 	"marker-end": true, "overflow": true, "font-family": true, "font-size": true,
 	"font-weight": true, "font-style": true, "text-anchor": true, "mask-type": true,
 	"flood-color": true, "flood-opacity": true, "color-interpolation-filters": true,
+	"paint-order": true,
 }
 
 // blendModes are the <blend-mode> keywords (CSS Compositing 1, 5.3), in
@@ -538,6 +551,38 @@ var blendModes = map[string]typeset.BlendMode{
 	"hard-light": typeset.BlendHardLight, "soft-light": typeset.BlendSoftLight,
 	"difference": typeset.BlendDifference, "exclusion": typeset.BlendExclusion, "hue": typeset.BlendHue,
 	"saturation": typeset.BlendSaturation, "color": typeset.BlendColor, "luminosity": typeset.BlendLuminosity,
+}
+
+// parsePaintOrder parses paint-order (SVG 2, 13.8): normal, or fill,
+// stroke and markers each at most once, the operations it leaves out
+// painted after the others in their normal order. It reports whether the
+// stroke is painted before the fill; markers are not drawn, so where they
+// fall changes nothing.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 prints rectangles, a circle in a group,
+//     text and a text with a tspan stroked 16 and 8 pixels wide over a
+//     yellow fill: paint-order stroke, "markers stroke fill" and an
+//     inherited stroke paint the stroke under the fill, "fill markers"
+//     over it; a gradient stroke too.
+func parsePaintOrder(v string) (strokeFirst, ok bool) {
+	f := strings.Fields(strings.ToLower(v))
+	if len(f) == 1 && f[0] == "normal" {
+		return false, true
+	}
+	if len(f) == 0 || len(f) > 3 {
+		return false, false
+	}
+	seen := map[string]bool{}
+	for _, k := range f {
+		if k != "fill" && k != "stroke" && k != "markers" || seen[k] {
+			return false, false
+		}
+		seen[k] = true
+	}
+	fill, stroke := slices.Index(f, "fill"), slices.Index(f, "stroke")
+	return stroke >= 0 && (fill < 0 || stroke < fill), true
 }
 
 // typesetColor converts a CSS colour.

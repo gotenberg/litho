@@ -356,7 +356,8 @@ func (r *renderer) shapePiece(p *piece) {
 }
 
 // drawPiece draws the glyph runs of p with its fill, then its stroke (SVG
-// 1.1, 10.10). A stroke of the fill's colour and opacity, solid, strokes
+// 1.1, 10.10), each run stroked first under a paint-order that asks for
+// it (SVG 2, 13.8). A stroke of the fill's colour and opacity, solid, strokes
 // the glyph runs themselves, which keeps the text one object; any other
 // stroke, a gradient's included, strokes the glyphs' outlines as paths.
 func (r *renderer) drawPiece(p *piece, s sink) {
@@ -397,22 +398,31 @@ func (r *renderer) drawPiece(p *piece, s sink) {
 		if strokeW > 0 {
 			c.Stroke = min(max(c.Stroke, strokeW), c.Size)
 		}
-		if ok {
+		if ok && !st.strokeFirst {
 			r.emit(s, &c)
 		}
-		if stroke == nil {
-			continue
+		if stroke != nil {
+			r.strokeRun(&c, stroke, outline, s)
 		}
-		ops := r.runOutline(&c)
-		if len(ops) == 0 {
-			continue
+		if ok && st.strokeFirst {
+			r.emit(s, &c)
 		}
-		if outline != nil {
-			if o := strokeOutline(ops, stroke); len(o) > 0 {
-				r.emit(s, &typeset.Path{Ops: o, Fill: outline})
-			}
-			continue
-		}
-		r.emit(s, &typeset.Path{Ops: ops, Stroke: stroke})
 	}
+}
+
+// strokeRun strokes the glyph outlines of the run t with stroke, or fills
+// the outline of that stroke with outline when the stroke paints a
+// gradient.
+func (r *renderer) strokeRun(t *typeset.Text, stroke *typeset.Stroke, outline *typeset.Fill, s sink) {
+	ops := r.runOutline(t)
+	if len(ops) == 0 {
+		return
+	}
+	if outline != nil {
+		if o := strokeOutline(ops, stroke); len(o) > 0 {
+			r.emit(s, &typeset.Path{Ops: o, Fill: outline})
+		}
+		return
+	}
+	r.emit(s, &typeset.Path{Ops: ops, Stroke: stroke})
 }

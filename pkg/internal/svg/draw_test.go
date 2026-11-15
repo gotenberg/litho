@@ -203,6 +203,32 @@ func TestDraw_Painting(t *testing.T) {
 			"percent", `<svg width="100" height="100"><rect width="50%" height="100%" fill="red"/></svg>`,
 			[]probe{{40, 50, red}, {60, 50, white}},
 		},
+		// SVG 2, 13.8: paint-order stroke paints the stroke under the
+		// fill, which then covers its inner half.
+		{
+			"paint-order-normal", `<svg width="100" height="100"><rect x="20" y="20" width="60" height="60" fill="lime" stroke="blue" stroke-width="20"/></svg>`,
+			[]probe{{14, 50, blue}, {26, 50, blue}, {50, 50, lime}},
+		},
+		{
+			"paint-order-stroke", `<svg width="100" height="100"><rect x="20" y="20" width="60" height="60" fill="lime" stroke="blue" stroke-width="20" paint-order="stroke"/></svg>`,
+			[]probe{{14, 50, blue}, {26, 50, lime}, {50, 50, lime}},
+		},
+		{
+			"paint-order-inherited", `<svg width="100" height="100"><style>g { paint-order: markers stroke }</style><g><rect x="20" y="20" width="60" height="60" fill="lime" stroke="blue" stroke-width="20"/></g></svg>`,
+			[]probe{{14, 50, blue}, {26, 50, lime}},
+		},
+		{
+			"paint-order-fill-markers", `<svg width="100" height="100"><rect x="20" y="20" width="60" height="60" fill="lime" stroke="blue" stroke-width="20" paint-order="fill markers"/></svg>`,
+			[]probe{{26, 50, blue}},
+		},
+		{
+			"paint-order-gradient-stroke", `<svg width="100" height="100"><linearGradient id="g"><stop stop-color="red"/><stop offset="1" stop-color="red"/></linearGradient><rect x="20" y="20" width="60" height="60" fill="lime" stroke="url(#g)" stroke-width="20" paint-order="stroke"/></svg>`,
+			[]probe{{14, 50, red}, {26, 50, lime}},
+		},
+		{
+			"paint-order-text", `<svg width="100" height="100"><text x="10" y="80" font-family="Ahem" font-size="60" fill="lime" stroke="blue" stroke-width="20" paint-order="stroke">X</text></svg>`,
+			[]probe{{5, 60, blue}, {14, 60, lime}},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
