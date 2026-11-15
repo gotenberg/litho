@@ -146,28 +146,37 @@ const bidiSpace = -1
 // after the other and neither of them a space glyph, as PDF.js reads them
 // before it reorders a text item (src/core/evaluator.js, addFakeSpaces,
 // which it calls only for a move forward along the line). A space read
-// there is then reordered with the text around it.
+// there is then reordered with the text around it. A glyph that takes no
+// place ([takesNoPlace]) anchors no gap: the gap after it is read from the
+// glyph before it in the run.
 func visualOrder(elems []models.TextElement, indices []int, spaced func(left, right int) bool) []int {
 	type run struct {
 		x     float64
 		elems []int
 	}
 	var runs []run
+	anchor := -1
 	for i, idx := range indices {
 		el := elems[idx]
 		if i > 0 {
-			before := indices[i-1]
-			prev := elems[before]
+			prev := elems[indices[i-1]]
 			if el.X+max(el.Width, 0) >= prev.X {
 				r := &runs[len(runs)-1]
-				if spaced != nil && !isSpaceGlyph(prev.Text) && !isSpaceGlyph(el.Text) && spaced(before, idx) {
+				if spaced != nil && anchor >= 0 && !takesNoPlace(el) && !isSpaceGlyph(elems[anchor].Text) && !isSpaceGlyph(el.Text) && spaced(anchor, idx) {
 					r.elems = append(r.elems, bidiSpace)
 				}
 				r.elems = append(r.elems, idx)
+				if !takesNoPlace(el) {
+					anchor = idx
+				}
 				continue
 			}
 		}
 		runs = append(runs, run{x: el.X, elems: []int{idx}})
+		anchor = -1
+		if !takesNoPlace(el) {
+			anchor = idx
+		}
 	}
 	sort.SliceStable(runs, func(a, b int) bool { return runs[a].x < runs[b].x })
 	out := make([]int, 0, len(indices))

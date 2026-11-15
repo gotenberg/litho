@@ -822,7 +822,7 @@ func (r *runTracker) restart(i int, el models.TextElement) {
 //     issue5874.pdf, bug1142033.pdf) now read a mark or a zero-width glyph
 //     that begins a line with the glyphs after it on its baseline.
 func (r *runTracker) breaksLine(i int, el models.TextElement) bool {
-	if carriesNoPosition(el.Text) {
+	if carriesNoPosition(el.Text) || takesNoPlace(el) {
 		return false
 	}
 	if r.items != nil && r.items[i] != continuesItem {
@@ -2126,6 +2126,16 @@ func alongDist(a, b models.TextElement) float64 {
 //     "มนุษย์ทั้ งหลาย" where the page shows มนุษย์ทั้งหลาย.
 func advances(el models.TextElement) bool {
 	return el.Width != 0 && !skipsAdvance(el.Text)
+}
+
+// takesNoPlace reports whether el is a glyph with no character and no
+// advance: it adds nothing to the text and moves nothing along the line, so
+// it neither starts a line nor anchors the gap to the glyph after it. Such
+// a glyph is a part of a cluster whose text an ActualText span gives to
+// another glyph of it ([reorderActualText]): a mark drawn before its base,
+// raised or lowered off the baseline.
+func takesNoPlace(el models.TextElement) bool {
+	return el.Text == "" && el.Width == 0
 }
 
 // carriesNoPosition reports whether a glyph showing s carries no position
