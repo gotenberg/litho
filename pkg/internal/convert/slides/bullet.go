@@ -1,6 +1,7 @@
 package slides
 
 import (
+	"math"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -20,8 +21,13 @@ import (
 // bullet sits at the first line's indent and the text at the left margin,
 // pushed past the bullet when the bullet is wider than the indent; with
 // any other indent, or a centred or end-aligned paragraph, the bullet
-// opens the first line. A number stands on the text's baseline; a
-// character or a picture is centred on the first line's text height.
+// opens the first line. A number stands on the text's baseline, and so
+// does a character under PowerPoint's rules, which sets a character
+// bullet on its paragraph's baseline; under Impress's a character, and a
+// picture under both, is centred on the first line's text height. A
+// character of a symbol font drawn in another face takes, under
+// PowerPoint's rules, the advance Office's font gives it ([officeAdvance]),
+// so that the text after it starts where PowerPoint starts it.
 //
 // The bullet so sits at the larger of 0 and the smaller of the margin and
 // the margin plus the indent, and the text the indent's magnitude past the
@@ -34,6 +40,10 @@ import (
 //     positive indent set to 0 and 25.5, 36 and 25.5, 36 and 54, 18 and 10,
 //     54 and 18 points prints the bullet at the margin and the text at the
 //     margin plus the indent, to 0.01 point, in each.
+//   - libreoffice/pptx: sd/n83889.pptx prints its Wingdings 0xA7 bullets
+//     at 18.025 points on the baselines of their lines, 343.76 and 311.31,
+//     8.26 points wide, the text starting 8.24 points after the bullet,
+//     where its margin and indent are both 0.
 func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb lineBox, f fit, number int, indent float64) {
 	bu := p.Bullet
 	rel := bu.Scale
@@ -65,7 +75,7 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 	ms.TextAlign = css.AlignStart
 	var label string
 	var bw float64
-	symbol := true
+	symbol, office := true, false
 	marker := &layout.Node{Kind: layout.Element, Style: ms, Role: "Lbl"}
 	switch bu.Kind {
 	case BulletChar:
@@ -78,12 +88,22 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 		if u, ok := powerPointBullet(bu.Char, fams); ok && !b.doc.ImpressBullets {
 			txt = u
 		}
-		if txt != label && len(b.recode) < maxRecode {
-			b.recode[label] = txt
-		}
 		ms.FontFamilies = families(rs.Families)
 		marker.Children = []*layout.Node{{Kind: layout.Text, Style: ms, Text: label}}
 		bw = b.width(label, b.textStyle(&rs, 1))
+		rec := recoded{text: txt}
+		if !b.doc.ImpressBullets {
+			office = true
+			if w, ok := officeAdvance(bu.Char, fams); ok {
+				if numeric.Positive(bw) && math.Abs(w-bw/size) > officeAdvanceTolerance {
+					rec.scale = w * size / bw
+				}
+				bw = w * size
+			}
+		}
+		if (txt != label || rec.scale != 0) && len(b.recode) < maxRecode {
+			b.recode[label] = rec
+		}
 	case BulletNumber:
 		var ok bool
 		label, ok = formatNumber(bu.Format, max(number, 1))
@@ -111,7 +131,7 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 		return
 	}
 	raise := 0.0
-	if symbol {
+	if symbol && !office {
 		// Centred on the first line's text height: the bullet's box, its
 		// face's ascent plus descent tall, centred on the line's natural
 		// height, which sits at the bottom of the spaced line.
@@ -185,6 +205,19 @@ func powerPointBullet(c string, fams []string) (string, bool) {
 	return string(u), true
 }
 
+// officeAdvance returns the advance, in ems, Office's symbol font gives
+// the character c of a bullet in the families fams, the first a symbol
+// font [symbolfont.OfficeAdvance] knows: c is one code, from 0x20 to 0xFF
+// or that code in the private use area at U+F000. It is false for any
+// other bullet, whose face draws it at its own advance.
+func officeAdvance(c string, fams []string) (float64, bool) {
+	code, size := utf8.DecodeRuneInString(c)
+	if size == 0 || size != len(c) || len(fams) == 0 {
+		return 0, false
+	}
+	return symbolfont.OfficeAdvance(fams[0], code)
+}
+
 // wingdingsBullets maps the codes of Wingdings to the character
 // PowerPoint writes in the text of a bullet of the code, where its PDF
 // names one.
@@ -206,37 +239,95 @@ var wingdingsBullets = map[rune]rune{0x6C: '\u26ab', 0x71: '\u2751', 0x76: '\u27
 // characters, and a symbol font has 224.
 const maxRecode = 1024
 
+// officeAdvanceTolerance is the difference, in ems, between Office's
+// advance of a symbol font's code and the advance of the glyph drawn for
+// it past which the glyph's text is written at Office's advance: the
+// precision of [symbolfont.OfficeAdvance], a thousandth of an em.
+const officeAdvanceTolerance = 0.001
+
+// recoded is what a bullet's character drawn in a face that stands in for
+// a symbol font stands for.
+type recoded struct {
+	// text is the text the character stands for, as the printed text
+	// reads it.
+	text string
+	// scale, when not 0, is Office's advance of the code over the advance
+	// of the glyph drawn ([recodeLabels]).
+	scale float64
+}
+
 // recodeLabels gives the glyphs of the bullets of frags the text their
 // characters stand for, by recode: a bullet drawn at an OpenSymbol code
-// point reads as its symbol font's private-use code. The bullets are the
-// runs of the frags whose structure element is a Lbl.
+// point reads as its symbol font's private-use code, or as the character
+// PowerPoint writes for it. The bullets are the runs of the frags whose
+// structure element is a Lbl. It returns frags, a bullet that changes its
+// advance replaced as below.
 //
 // A private-use code means nothing to a reader, so the Lbl of a recoded
 // bullet carries as its ActualText the text it stands for, else the
 // character drawn when that text is private-use, a bullet when that one
 // is too (ISO 19005-2, 6.2.11.7.3; ISO 14289-2, 8.4.3).
-func recodeLabels(frags []typeset.Fragment, recode map[string]string) {
-	for _, f := range frags {
+//
+// A bullet of one glyph whose recoding carries a scale reads at Office's
+// advance, as PowerPoint writes it: its glyph stays as drawn, painted as
+// its outline, an artifact, and its text is written invisible over it,
+// scaled across to that advance (ISO 32000-1, 9.3.4 and 9.3.6), so that a
+// reader sets it apart from the text after it where PowerPoint's PDF
+// does. A run drawn in a colour face, or stroked, keeps its glyph.
+func (b *builder) recodeLabels(frags []typeset.Fragment, recode map[string]recoded) []typeset.Fragment {
+	var out []typeset.Fragment
+	for k, f := range frags {
 		switch v := f.(type) {
 		case *typeset.Text:
 			if v.Parent == nil || v.Parent.Role != "Lbl" {
-				continue
+				break
 			}
+			scale := 0.0
 			for i := range v.Glyphs {
-				if t, ok := recode[v.Glyphs[i].Text]; ok {
+				if r, ok := recode[v.Glyphs[i].Text]; ok {
 					if v.Parent.ActualText == "" {
 						v.Parent.ActualText = readable(v.Glyphs[i].Text)
-						if readable(t) == t {
-							v.Parent.ActualText = t
+						if readable(r.text) == r.text {
+							v.Parent.ActualText = r.text
 						}
 					}
-					v.Glyphs[i].Text = t
+					v.Glyphs[i].Text = r.text
+					scale = r.scale
 				}
 			}
+			if shown := b.officeGlyph(v, scale); shown != nil {
+				if out == nil {
+					out = append(make([]typeset.Fragment, 0, len(frags)+1), frags[:k]...)
+				}
+				out = append(out, shown)
+			}
 		case *typeset.Group:
-			recodeLabels(v.Content, recode)
+			v.Content = b.recodeLabels(v.Content, recode)
+		}
+		if out != nil {
+			out = append(out, f)
 		}
 	}
+	if out == nil {
+		return frags
+	}
+	return out
+}
+
+// officeGlyph returns the outline of the one glyph of the bullet run t,
+// an artifact, and makes t invisible text scaled across by scale, when
+// scale is positive and t can be so drawn; else nil, t unchanged.
+func (b *builder) officeGlyph(t *typeset.Text, scale float64) *typeset.Path {
+	if !numeric.Positive(scale) || len(t.Glyphs) != 1 || t.Invisible || t.Stroke > 0 || t.Palette != nil || t.HScale != 0 || t.Skew != 0 || !(t.Color.A > 0) {
+		return nil
+	}
+	ops := b.outlines.Run(nil, t)
+	if len(ops) == 0 {
+		return nil
+	}
+	t.Invisible = true
+	t.HScale = min(max(scale, typeset.MinHScale), typeset.MaxHScale)
+	return &typeset.Path{Ops: ops, Fill: &typeset.Fill{Color: t.Color}}
 }
 
 // readable returns s, or a bullet when s holds a private-use character

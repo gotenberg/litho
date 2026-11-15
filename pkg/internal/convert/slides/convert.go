@@ -83,8 +83,9 @@ type builder struct {
 	// automatically, as an OpenDocument text's.
 	autoScript bool
 	// recode maps the characters the bullets of the body being laid out
-	// draw to the text they stand for, when the two differ.
-	recode map[string]string
+	// draw to the text they stand for and the advance they read at, when
+	// either differs from what is drawn.
+	recode map[string]recoded
 	// groupFit is the scaling of each ShrinkGroup of the slide being
 	// drawn.
 	groupFit map[int]fit

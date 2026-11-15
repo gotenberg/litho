@@ -671,7 +671,7 @@ func (b *builder) layoutBody(body *TextBody, w, h float64, f fit) *laidBody {
 	// OpenDocument text, spaced by its faces, moves its scripts
 	// automatically.
 	b.autoScript = body.FontLineSpacing
-	b.recode = map[string]string{}
+	b.recode = map[string]recoded{}
 	tree := &layout.Node{Kind: layout.Element, Style: root, ID: "slides-body"}
 	nums := numbers(paras)
 	budget := maxBodyText
@@ -700,7 +700,7 @@ func (b *builder) layoutBody(body *TextBody, w, h float64, f fit) *laidBody {
 		out.frags = res.Pages[0].Content
 		out.links = res.Pages[0].Links
 		if len(b.recode) > 0 {
-			recodeLabels(out.frags, b.recode)
+			out.frags = b.recodeLabels(out.frags, b.recode)
 		}
 	}
 	if res.Structure != nil {

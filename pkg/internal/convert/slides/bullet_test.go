@@ -10,7 +10,7 @@ import (
 
 // TestText_Bullets checks bullets and numbers against the places Impress
 // gives them (p2.pptx and p6.pptx of the measurement decks: Arial 20 in a
-// box at 28.35, 28.35).
+// box at 28.35, 28.35), under Impress's rules.
 func TestText_Bullets(t *testing.T) {
 	a20 := arial(20)
 	bul := func(s string, ml, ind float64, b *Bullet) Paragraph {
@@ -46,7 +46,9 @@ func TestText_Bullets(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			pg := convert(t, deck(&Slide{Shapes: []*Shape{box(28.35, 28.35, 300, 300, tc.paras...)}}), office.Options{}).Pages[0]
+			doc := deck(&Slide{Shapes: []*Shape{box(28.35, 28.35, 300, 300, tc.paras...)}})
+			doc.ImpressBullets = true
+			pg := convert(t, doc, office.Options{}).Pages[0]
 			rs := runs(pg)
 			for _, w := range tc.want {
 				ok := false
@@ -60,6 +62,70 @@ func TestText_Bullets(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestText_PowerPointBullets locks how PowerPoint sets a character
+// bullet: on its line's baseline, and, for a symbol font's code drawn in
+// a face that stands in for it, at Office's advance, so that the text
+// after a bullet wider than its indent starts where PowerPoint starts it
+// and reads apart from the bullet where PowerPoint's reads apart.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/n83889.pptx sets its Wingdings 0xA7 bullets at
+//     18.025 points on their lines' baselines, 8.26 points wide, the text
+//     joined to them; sd/presLeftAlign.pptx sets an Arial bullet on its
+//     line's baseline, 8.15 points before its text.
+//   - openxmlsdk/pptx: v2FxTestFiles/presentation/O12_templates
+//     Stafftrain_TP10167128.potx sets its Wingdings 2 0x97 bullets at
+//     22.35 points, 12.38 points wide, the text 8.55 points after them,
+//     where OpenSymbol's glyph for the code advances a whole em.
+func TestText_PowerPointBullets(t *testing.T) {
+	p := para("One", arial(20))
+	p.MarginLeft, p.Indent = 36, -36
+	p.Bullet = &Bullet{Kind: BulletChar, Char: "•", Families: []string{"Arial"}}
+	pg := convert(t, deck(&Slide{Shapes: []*Shape{box(28.35, 28.35, 300, 300, p)}}), office.Options{}).Pages[0]
+	if b, one := find(t, pg, "•"), find(t, pg, "One"); !near(b.y, one.y, 0.01) || !near(b.x, 28.35, 0.3) || !near(one.x, 64.35, 0.3) {
+		t.Errorf("bullet at %.2f, %.2f, text at %.2f, %.2f; want both on the baseline", b.x, b.y, one.x, one.y)
+	}
+
+	// A Wingdings 2 0x97 at 28 points: Office advances it 0.554 em,
+	// 15.51 points, and the text, the bullet wider than its indent of 10
+	// points, starts there.
+	p = para("Two", arial(28))
+	p.MarginLeft, p.Indent = 10, -10
+	p.Bullet = &Bullet{Kind: BulletChar, Char: "\uf097", Families: []string{"Wingdings 2"}}
+	pg = convert(t, deck(&Slide{Shapes: []*Shape{box(0, 0, 300, 300, p)}}), office.Options{}).Pages[0]
+	if two := find(t, pg, "Two"); !near(two.x, 15.51, 0.05) {
+		t.Errorf("text at %.2f, want 15.51 past the bullet's start", two.x)
+	}
+	var lbl *typeset.Text
+	var glyph *typeset.Path
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *typeset.Text:
+				if v.Parent != nil && v.Parent.Role == "Lbl" {
+					lbl = v
+				}
+			case *typeset.Path:
+				if v.Parent == nil && v.Fill != nil && lbl == nil {
+					glyph = v
+				}
+			case *typeset.Group:
+				walk(v.Content)
+			}
+		}
+	}
+	walk(pg.Content)
+	if lbl == nil || !lbl.Invisible || glyph == nil {
+		t.Fatalf("bullet text %+v, glyph %v; want invisible text over the glyph's outline", lbl, glyph)
+	}
+	// OpenSymbol's glyph advances 1 em: the text reads 0.554 of it.
+	if !near(lbl.HScale, 0.554, 0.002) {
+		t.Errorf("bullet text scaled by %.3f, want 0.554", lbl.HScale)
 	}
 }
 
