@@ -60,6 +60,10 @@ type builder struct {
 	// beside their paragraph's text, which a paragraph without text
 	// places at their offsets instead.
 	floats map[*layout.Node]frameGeom
+	// topFrames holds the frames [builder.place] stands at the top of
+	// their paragraph, the paragraph's text below them
+	// ([builder.frameFirst]).
+	topFrames map[*layout.Node]bool
 	// chains maps the frames of chains of linked text boxes onto their
 	// place in their chain, by frame name ([scanChains]).
 	chains map[string]chainLink
@@ -502,10 +506,11 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	if !hasText(kids) && b.floatCount(kids) > 1 {
 		b.pinFloats(kids, p)
 	}
+	kids, top := b.frameFirst(kids, st)
 	// An empty paragraph keeps a line; a line break that ends the
 	// paragraph opens an empty last line, as Writer draws it. Either
 	// line break takes the paragraph's style.
-	lineBreak := visible(kids) == 0 || kids[len(kids)-1].Kind == layout.LineBreak
+	lineBreak := visible(kids[top:]) == 0 || kids[len(kids)-1].Kind == layout.LineBreak
 	for _, k := range kids {
 		if k.Style.Position == css.Absolute && k.Kind != layout.Text || lineBreak && st.Position == css.Absolute {
 			// A run-through frame anchored to the paragraph is placed from

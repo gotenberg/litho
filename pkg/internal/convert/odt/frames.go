@@ -557,6 +557,12 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 		st.Display = blockified(st.Display)
 		st.Float = css.FloatNone
 		st.Clear = css.ClearBoth
+		if g.vpos == "top" && g.vrel == "paragraph" && b.hf == nil {
+			if b.topFrames == nil {
+				b.topFrames = map[*layout.Node]bool{}
+			}
+			b.topFrames[n] = true
+		}
 		switch g.hpos {
 		case "center":
 			st.Margin[css.Left], st.Margin[css.Right] = css.Dimension{Kind: css.Auto}, css.Dimension{Kind: css.Auto}
@@ -566,6 +572,55 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 		return
 	}
 	st.Float = side
+}
+
+// frameFirst moves the frames of kids, a paragraph's inline content, that
+// stand at the top of the paragraph with no text beside them to its start,
+// and returns kids and the count of those frames. Writer sets a frame
+// anchored to a paragraph, wrapped by no text (ODF 1.3, Part 3, 20.393
+// style:wrap none) and placed at the top of the paragraph's area (20.386
+// style:vertical-pos top, 20.387 style:vertical-rel paragraph), its top
+// margin below the paragraph's top, and the paragraph's text, the text
+// before the frame and an empty paragraph's line included, below its
+// bottom margin; the paragraph's own top margin is lost under the frame,
+// and the frame's margins add to the spacing of the paragraphs around it.
+// The paragraph's style st takes the first frame's top margin as its own,
+// which [builder.spacing] adds to the bottom margin of the block before.
+//
+// # Corpus evidence
+//
+//   - litho/odt: captions sets a 3.6 cm caption frame, margins 0.201 cm,
+//     at the top of an empty paragraph after one of a 0.2 cm bottom
+//     margin: LibreOffice prints the picture 5.7 points below that
+//     paragraph's top and the next paragraph a line and 0.2 cm below the
+//     frame's bottom margin.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, the frame's margins
+//     at 0 move the caption up 5.7 points and the next paragraph 11.4;
+//     at 1 cm and 0.5 cm they move them down by 28.35 and 42.5 points; a
+//     1 cm bottom margin before the anchor paragraph moves the frame down
+//     by its difference from 0.2 cm; a 1 cm top margin of the anchor
+//     paragraph moves nothing; text before or after the frame in its
+//     paragraph prints below the frame, 5.7 points below its bottom.
+func (b *builder) frameFirst(kids []*layout.Node, st *css.Style) ([]*layout.Node, int) {
+	if len(b.topFrames) == 0 {
+		return kids, 0
+	}
+	var top, rest []*layout.Node
+	for _, k := range kids {
+		if b.topFrames[k] {
+			top = append(top, k)
+		} else {
+			rest = append(rest, k)
+		}
+	}
+	if len(top) == 0 {
+		return kids, 0
+	}
+	first := *top[0].Style
+	st.Margin[css.Top] = first.Margin[css.Top]
+	first.Margin[css.Top] = css.Pts(0)
+	top[0].Style = &first
+	return append(top, rest...), len(top)
 }
 
 // pagePosition returns the top-left corner of a page-relative frame in

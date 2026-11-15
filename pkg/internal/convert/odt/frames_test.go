@@ -60,3 +60,34 @@ func TestDuplicateFrames(t *testing.T) {
 		t.Error("the frame is not filled with the page's white")
 	}
 }
+
+// TestFrameAtParagraphTop locks where Writer sets a frame anchored to a
+// paragraph that no text wraps, at the top of the paragraph's area (see
+// [builder.frameFirst], which holds the measurements): the frame's top
+// margin below the paragraph's top, the paragraph's own top margin lost,
+// and the paragraph's text, before the frame or after it, below the
+// frame's bottom margin.
+func TestFrameAtParagraphTop(t *testing.T) {
+	auto := `<style:style style:name="fr" style:family="graphic"><style:graphic-properties style:wrap="none" style:vertical-pos="top" style:vertical-rel="paragraph" style:horizontal-pos="center" style:horizontal-rel="paragraph" fo:margin-top="0.2cm" fo:margin-bottom="0.5cm"/></style:style>` +
+		`<style:style style:name="P1" style:family="paragraph"><style:paragraph-properties fo:margin-top="1cm"/></style:style>`
+	frame := `<draw:frame draw:style-name="fr" draw:name="F" text:anchor-type="paragraph" svg:width="6cm" svg:height="3cm"><draw:text-box><text:p>Inside</text:p></draw:text-box></draw:frame>`
+	for _, body := range []string{
+		`<text:p>Before</text:p><text:p text:style-name="P1">` + frame + `Anchor</text:p><text:p>After</text:p>`,
+		`<text:p>Before</text:p><text:p text:style-name="P1">Anchor` + frame + `</text:p><text:p>After</text:p>`,
+	} {
+		pg := convertDoc(t, doc{contentAuto: auto, body: body}.pack(t), office.Options{}).Pages[0]
+		y := map[string]float64{}
+		for _, r := range runs(pg) {
+			y[strings.TrimSpace(r.text)] = r.y
+		}
+		line := y["After"] - y["Anchor"]
+		// 0.2 cm, 3 cm and 0.5 cm.
+		want := line + 5.67 + 85.04 + 14.17
+		if got := y["Anchor"] - y["Before"]; !near(got, want, 0.05) {
+			t.Errorf("%s: Anchor %.2f below Before, want %.2f", body, got, want)
+		}
+		if got := y["Inside"] - y["Before"]; !near(got, line+5.67, 0.05) {
+			t.Errorf("%s: the frame's text %.2f below Before, want %.2f", body, got, line+5.67)
+		}
+	}
+}
