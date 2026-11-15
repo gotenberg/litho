@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Légendes de figures</title>
+<style>
+body { font-family: "Liberation Serif", serif; margin: 2em; }
+figure { margin: 1em 0; }
+figcaption { font-style: italic; }
+</style>
+</head>
+<body>
+<h1>Figures sans texte de remplacement</h1>
+<p>Chaque image ci-dessous n'a pas d'attribut alt.</p>
+<figure>
+  <img src="chart.png" width="240" height="120">
+  <figcaption>Ventes par trimestre</figcaption>
+</figure>
+<figure>
+  <figcaption>Une image décrite et un paragraphe partagent cette légende</figcaption>
+  <img src="chart.png" width="120" height="60" alt="Petit graphique">
+  <p>Le paragraphe qui l'accompagne.</p>
+</figure>
+<p><img src="chart.png" width="120" height="60" aria-label="Graphique des ventes"></p>
+<svg width="160" height="80" viewBox="0 0 160 80"><desc>Un rectangle bleu</desc><rect width="160" height="80" fill="#3060c0"/></svg>
+<p><img src="chart.png" width="60" height="30" alt=""></p>
+</body>
+</html>
