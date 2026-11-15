@@ -57,4 +57,12 @@
 // trendlines and error bars of a 3D group, the equations of trendlines,
 // high-low lines and up-down bars, leader lines, multi-level categories
 // (their levels join on one label).
+//
+// # The description
+//
+// [AltText] describes a chart for a reader who cannot see it, in one
+// English sentence of fixed grammar derived from the model alone: its
+// title, its kinds, its series, its categories and its axis titles, as
+// the file names them. A converter gives it to a chart its source does
+// not describe, when the caller asks for it.
 package chart

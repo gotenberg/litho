@@ -368,7 +368,8 @@ func (r *chartReader) plotArea(ch, pa *Element) {
 	c := r.c
 	pName := pa.A(NSChart, "style-name")
 	class := strings.TrimPrefix(ch.A(NSChart, "class"), "chart:")
-	if r.boolProp(pName, "three-dimensional", false) {
+	threeD := r.boolProp(pName, "three-dimensional", false)
+	if threeD {
 		r.warn(warn.ContentUnsupported, warn.Approximated, "a 3D chart is drawn flat")
 	}
 	// The axes first: the groups name them.
@@ -430,9 +431,13 @@ func (r *chartReader) plotArea(ch, pa *Element) {
 		if g == nil {
 			g = r.group(sClass, pName, xAxis, yAxis)
 			if g == nil {
+				c.Surface = c.Surface || sClass == "surface"
 				r.warn(warn.ContentUnsupported, warn.Omitted, "a chart of class "+sClass+" is not drawn")
 				continue
 			}
+			// A chart without a view is drawn flat whatever ThreeD says
+			// ([chart.Group.ThreeD]); the flag tells [chart.AltText].
+			g.ThreeD = threeD
 			ax := se.A(NSChart, "attached-axis")
 			if ax != "" {
 				if i, ok := axisIndex[ax]; ok && strings.HasSuffix(ax, "-y") {
@@ -519,6 +524,7 @@ func (r *chartReader) group(class, pName string, xAxis, yAxis int) *chart.Group 
 	case "stock":
 		r.warn(warn.ContentUnsupported, warn.Approximated, "a stock chart is drawn as a line chart")
 		g.Kind = chart.Line
+		g.Stock = true
 	default:
 		return nil
 	}
@@ -684,15 +690,15 @@ func (r *chartReader) series(se *Element, g *chart.Group, i int, cats chart.Data
 	if se.A(NSChart, "label-cell-address") == "" {
 		// LibreOffice names a series without a label cell after its range:
 		// "Column B" for a range down a column, "Row 3" across a row.
-		s.Name = rangeName(addr)
+		s.Name, s.Unnamed = rangeName(addr), true
 	}
 	if label := se.A(NSChart, "label-cell-address"); label != "" {
 		if d := r.data(label, true); len(d.Values) > 0 && d.Values[0].Text != "" {
-			s.Name = d.Values[0].Text
+			s.Name, s.Unnamed = d.Values[0].Text, false
 		}
 	}
 	if s.Name == "" {
-		s.Name = "Series" + strconv.Itoa(i+1)
+		s.Name, s.Unnamed = "Series"+strconv.Itoa(i+1), true
 	}
 	domains := se.All(NSChart, "domain")
 	if g.Kind == chart.Bubble {

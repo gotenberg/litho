@@ -370,8 +370,46 @@ func TestChartFromElement_PointTakesSeriesFill(t *testing.T) {
 // name Office prints for it, after its index, whatever its range.
 func TestChartFromElement_UnnamedSeries(t *testing.T) {
 	plot := `<c:barChart><c:barDir val="col"/><c:ser><c:idx val="2"/><c:order val="0"/><c:val><c:numRef><c:f>Sheet1!$B$1:$B$4</c:f></c:numRef></c:val></c:ser></c:barChart>`
-	if got := readChart(t, chartXML("", "", plot), false).Groups[0].Series[0].Name; got != "Series3" {
-		t.Errorf("name = %q, want Series3", got)
+	s := readChart(t, chartXML("", "", plot), false).Groups[0].Series[0]
+	if s.Name != "Series3" || !s.Unnamed {
+		t.Errorf("name = %q, unnamed %v; want Series3, the application's", s.Name, s.Unnamed)
+	}
+	if named := readChart(t, chartXML("", "", `<c:barChart>`+ser(0, "North", "", "1")+`</c:barChart>`), false).Groups[0].Series[0]; named.Unnamed {
+		t.Errorf("a series its c:tx names reads as unnamed")
+	}
+}
+
+// TestChartFromElement_ApplicationTitles marks the titles Office supplies
+// where the file states none (ECMA-376 Part 1, 21.2.2.210 title with no
+// tx; autoTitleDeleted false) apart from the file's own, and reads the
+// kinds the renderer draws as others: a stock chart, drawn as lines, and a
+// surface chart, not drawn.
+func TestChartFromElement_ApplicationTitles(t *testing.T) {
+	one := `<c:lineChart>` + ser(0, "Sales", "", "1", "2") + `</c:lineChart>`
+	auto := readChart(t, chartXML("", `<c:autoTitleDeleted val="0"/>`, one), false)
+	if auto.Title == nil || auto.Title.Text != "Sales" || !auto.Title.Auto {
+		t.Errorf("auto title = %+v, want the series name, the application's", auto.Title)
+	}
+	placeholder := readChart(t, chartXML("", `<c:title/>`, `<c:lineChart>`+ser(0, "A", "", "1")+ser(1, "B", "", "1")+`</c:lineChart>`), false)
+	if placeholder.Title == nil || placeholder.Title.Text != "Chart Title" || !placeholder.Title.Auto {
+		t.Errorf("placeholder title = %+v", placeholder.Title)
+	}
+	own := readChart(t, chartXML("", `<c:title><c:tx><c:rich><a:p><a:r><a:t>Revenue</a:t></a:r></a:p></c:rich></c:tx></c:title>`, one), false)
+	if own.Title == nil || own.Title.Auto {
+		t.Errorf("the file's own title = %+v, want it not marked", own.Title)
+	}
+	if ax := readChart(t, chartXML("", "", `<c:barChart>`+ser(0, "A", "", "1")+`<c:axId val="1"/><c:axId val="2"/></c:barChart>`+axes), false).Axes[1]; ax.Title == nil || ax.Title.Auto {
+		t.Errorf("an axis title the file states = %+v", ax.Title)
+	}
+	if ax := readChart(t, chartXML("", "", `<c:barChart>`+ser(0, "A", "", "1")+`<c:axId val="1"/><c:axId val="2"/></c:barChart>`+strings.Replace(axes, `<c:tx><c:rich><a:bodyPr rot="-5400000"/><a:p><a:r><a:rPr sz="1200" b="0"/><a:t>Amount</a:t></a:r></a:p></c:rich></c:tx>`, "", 1)), false).Axes[1]; ax.Title == nil || ax.Title.Text != "Axis Title" || !ax.Title.Auto {
+		t.Errorf("a placeholder axis title = %+v", ax.Title)
+	}
+	stock := readChart(t, chartXML("", "", `<c:stockChart>`+ser(0, "High", "", "1")+`</c:stockChart>`), false)
+	if g := stock.Groups[0]; g.Kind != chart.Line || !g.Stock {
+		t.Errorf("stock group = %+v", g)
+	}
+	if surface := readChart(t, chartXML("", "", `<c:surfaceChart>`+ser(0, "Z", "", "1")+`</c:surfaceChart>`), false); !surface.Surface || len(surface.Groups) != 0 {
+		t.Errorf("surface chart: Surface %v, %d groups", surface.Surface, len(surface.Groups))
 	}
 }
 

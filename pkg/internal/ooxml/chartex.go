@@ -268,7 +268,7 @@ func (x *chartExReader) read(root *Element) {
 	x.readTitle(cxChild(ch, "title"))
 	for _, s := range g.Series {
 		if s.Name == "" {
-			s.Name = unnamedSeries(s.Index)
+			s.Name, s.Unnamed = unnamedSeries(s.Index), true
 		}
 	}
 	if lg := cxChild(ch, "legend"); lg != nil {
@@ -476,7 +476,8 @@ func (x *chartExReader) readTitle(t *Element) {
 	if text == "" {
 		text = paragraphsText(cxChild(t, "txPr"))
 	}
-	if text == "" {
+	auto := text == ""
+	if auto {
 		text = "Chart Title"
 	}
 	own := x.textProps(cxChild(t, "txPr"))
@@ -492,6 +493,7 @@ func (x *chartExReader) readTitle(t *Element) {
 		Style:   style,
 		Frame:   x.frame(cxChild(t, "spPr"), chart.Frame{}),
 		Overlay: boolAttr(t, "overlay"),
+		Auto:    auto,
 	}
 }
 
@@ -570,10 +572,11 @@ func (x *chartExReader) axis(e *Element, kind chart.AxisKind, grid bool) *chart.
 	a.Style = x.styleTextOf(styleName, x.textProps(cxChild(e, "txPr")), 8, 10, false)
 	if t := cxChild(e, "title"); t != nil {
 		text := txData(cxChild(t, "tx"))
-		if text == "" {
+		auto := text == ""
+		if auto {
 			text = "Axis Title"
 		}
-		a.Title = &chart.Title{Text: text, Style: x.styleTextOf("axisTitle", x.textProps(cxChild(t, "txPr")), 10, 10, true), Frame: x.frame(cxChild(t, "spPr"), chart.Frame{})}
+		a.Title = &chart.Title{Text: text, Style: x.styleTextOf("axisTitle", x.textProps(cxChild(t, "txPr")), 10, 10, true), Frame: x.frame(cxChild(t, "spPr"), chart.Frame{}), Auto: auto}
 	}
 	return a
 }

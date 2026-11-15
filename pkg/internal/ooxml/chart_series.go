@@ -43,6 +43,7 @@ func (p *chartReader) group(e *Element) *chart.Group {
 		g.Filled = childVal(e, "radarStyle") == "filled"
 	case "surfaceChart", "surface3DChart":
 		p.warn(warn.ContentUnsupported, warn.Omitted, "a surface chart is not drawn")
+		p.c.Surface = true
 		return nil
 	default:
 		return nil
@@ -53,6 +54,7 @@ func (p *chartReader) group(e *Element) *chart.Group {
 	}
 	if e.Local == "stockChart" {
 		p.warn(warn.ContentUnsupported, warn.Approximated, "a stock chart is drawn as a line chart")
+		g.Stock = true
 	}
 	switch childVal(e, "grouping") {
 	case "stacked":

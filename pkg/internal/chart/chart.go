@@ -85,6 +85,12 @@ type Chart struct {
 	// [OfficeRules] counts the intervals of a value axis drawn across the
 	// chart as PowerPoint does, where Excel's count differs.
 	PowerPoint bool
+	// Surface marks a chart whose file holds a surface chart group
+	// (ECMA-376 Part 1, 21.2.2.203 surfaceChart, and surface3DChart; ODF
+	// 1.3 Part 3, 19.15 chart:class chart:surface),
+	// which the reader leaves out of Groups: [Render] draws none. Only
+	// [AltText] reads it.
+	Surface bool
 }
 
 // Rules is the application whose automatic chart layout a [Chart] follows.
@@ -218,6 +224,11 @@ const (
 // against the same axes.
 type Group struct {
 	Kind Kind
+	// Stock marks a Line group the file states as a stock chart
+	// (ECMA-376 Part 1, 21.2.2.198 stockChart; ODF 1.3 Part 3, 19.15
+	// chart:class chart:stock), drawn as a line chart. Only [AltText]
+	// reads it.
+	Stock bool
 	// Horizontal draws a bar group's bars along the x direction, the
 	// category axis vertical (ECMA-376 Part 1, 21.2.2.17 barDir bar).
 	Horizontal bool
@@ -280,6 +291,10 @@ type Series struct {
 	Index int
 	// Name is the series' name, as the legend shows it.
 	Name string
+	// Unnamed marks a Name the reader gives a series its file does not
+	// name, as the application names it ("Series1", "Column B"); only
+	// [AltText] reads it.
+	Unnamed bool
 	// Categories are the category labels, or the x values of a scatter or
 	// bubble series; Values the values, or the y values; Sizes the bubble
 	// sizes.
@@ -539,6 +554,10 @@ type Title struct {
 	// a file that states a rotation of zero asks; such a title otherwise
 	// turns 90 degrees.
 	Upright bool
+	// Auto marks a Text the application supplies where the file states
+	// none: the placeholder "Chart Title" or "Axis Title", or the name of
+	// a chart's only series. Only [AltText] reads it.
+	Auto bool
 }
 
 // DataTable is the table of the series' values a chart draws under its

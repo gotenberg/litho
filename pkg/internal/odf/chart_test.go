@@ -93,6 +93,32 @@ func TestChartFromDocument_Kinds(t *testing.T) {
 	}
 }
 
+// TestChartFromDocument_WhatTheFileStates reads what only a description of
+// the chart uses: a series without a label cell is named by LibreOffice,
+// not the file; a stock chart, drawn as lines, a three-dimensional one,
+// drawn flat, and a surface chart, not drawn, keep their kinds (ODF 1.3
+// Part 3, 19.15 chart:class; 20.65 chart:three-dimensional).
+func TestChartFromDocument_WhatTheFileStates(t *testing.T) {
+	c := readODFChart(t, chartContent(chartStyles, "bar", "", series))
+	if s := c.Groups[0].Series[0]; s.Unnamed {
+		t.Errorf("a series its label cell names reads as unnamed: %+v", s)
+	}
+	unlabelled := `<chart:series chart:values-cell-range-address="Sheet1.B2:Sheet1.B3"/>`
+	if s := readODFChart(t, chartContent(chartStyles, "bar", "", unlabelled)).Groups[0].Series[0]; s.Name != "Column B" || !s.Unnamed {
+		t.Errorf("series without a label cell: name %q, unnamed %v", s.Name, s.Unnamed)
+	}
+	if g := readODFChart(t, chartContent(chartStyles, "stock", "", series)).Groups[0]; !g.Stock {
+		t.Error("a stock chart reads as a plain line chart")
+	}
+	threeD := strings.Replace(chartStyles, `chart:stacked="true"`, `chart:stacked="true" chart:three-dimensional="true"`, 1)
+	if g := readODFChart(t, chartContent(threeD, "bar", "", series)).Groups[0]; !g.ThreeD {
+		t.Error("a three-dimensional chart reads as flat")
+	}
+	if c := readODFChart(t, chartContent(chartStyles, "surface", "", series)); !c.Surface || len(c.Groups) != 0 {
+		t.Errorf("surface chart: Surface %v, %d groups", c.Surface, len(c.Groups))
+	}
+}
+
 func TestChartFromDocument_GroupAndSeries(t *testing.T) {
 	c := readODFChart(t, chartContent(chartStyles, "bar", "", series))
 	g := c.Groups[0]

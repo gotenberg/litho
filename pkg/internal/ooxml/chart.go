@@ -341,7 +341,7 @@ func (p *chartReader) read(root *Element) {
 	for _, g := range c.Groups {
 		for _, s := range g.Series {
 			if s.Name == "" {
-				s.Name = unnamedSeries(s.Index)
+				s.Name, s.Unnamed = unnamedSeries(s.Index), true
 			}
 		}
 	}
@@ -902,7 +902,8 @@ func (p *chartReader) readTitle(ch *Element) {
 		return
 	}
 	text := richText(t.Child(NSChart, "tx"))
-	if text == "" {
+	auto := text == ""
+	if auto {
 		if len(p.c.Groups) == 1 && (len(p.c.Groups[0].Series) == 1 || p.c.Groups[0].Kind == chart.Pie) && len(p.c.Groups[0].Series) > 0 {
 			text = p.c.Groups[0].Series[0].Name
 		}
@@ -923,6 +924,7 @@ func (p *chartReader) readTitle(ch *Element) {
 		Frame:   p.frame(t.Child(NSChart, "spPr"), chart.Frame{}),
 		Overlay: boolVal(t, "overlay", false),
 		Layout:  manualLayout(t),
+		Auto:    auto,
 	}
 }
 
@@ -1087,14 +1089,15 @@ func (p *chartReader) axis(e *Element, kind chart.AxisKind) *chart.Axis {
 			own = p.textProps(rich)
 		}
 		text := richText(t.Child(NSChart, "tx"))
-		if text == "" {
+		auto := text == ""
+		if auto {
 			text = "Axis Title"
 		}
 		// A body rotation of zero keeps the title of a vertical axis
 		// unturned, where a title that states none turns (ECMA-376 Part 1,
 		// 21.1.2.1.1 bodyPr rot).
 		upright := own.hasRotation && own.rotation == 0
-		a.Title = &chart.Title{Text: text, Style: p.textStyle(own, 10, true, 1), Frame: p.frame(t.Child(NSChart, "spPr"), chart.Frame{}), Upright: upright}
+		a.Title = &chart.Title{Text: text, Style: p.textStyle(own, 10, true, 1), Frame: p.frame(t.Child(NSChart, "spPr"), chart.Frame{}), Upright: upright, Auto: auto}
 	}
 	p.displayUnits(e.Child(NSChart, "dispUnits"), a)
 	a.BetweenCategories = childVal(e, "crossBetween") != "midCat"
