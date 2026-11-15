@@ -342,7 +342,9 @@ func lined(st *Style) bool {
 // Calc counts a visible style only below the last value of its column, a
 // column without one counting its first row as that value
 // (ScTable::GetPrintArea, ScAttrArray::GetLastVisibleAttr), and stops at
-// a run of columns formatted alike ([grid.attrColumns]).
+// a run of columns formatted alike ([grid.attrColumns]). Excel counts
+// every cell with a visible style, and a cell whose file stores an empty
+// string as a cell with a value ([Cell.EmptyText]).
 //
 // # Corpus evidence
 //
@@ -353,6 +355,11 @@ func lined(st *Style) bool {
 //   - probe, ods: A1 holding a value and J1 a border, on A4 at seven
 //     columns a page, prints one page; with the border in J2, or J3 below
 //     a value in A5, two; A1 and J1 with a border and A3 a value, one.
+//   - poi/xlsx: 61652.xlsx prints its Model sheet to the filled cells of
+//     column AW, past 30 columns formatted alike, on 15 pages;
+//     55406_Conditional_formatting_sample.xlsx prints its filled cells to
+//     column AL on a second page; 56278.xlsx prints a page for the column
+//     of empty strings right of each table.
 func (g *grid) usedRange(single bool) (Range, bool) {
 	u := Range{FirstRow: math.MaxInt32, FirstColumn: math.MaxInt32, LastRow: -1, LastColumn: -1}
 	add := func(r, c int) {
@@ -382,11 +389,13 @@ func (g *grid) usedRange(single bool) (Range, bool) {
 				continue
 			}
 			switch {
-			case hasContent(c):
+			case hasContent(c) || (excel && c.EmptyText):
 				dataLast = max(dataLast, c.Column)
 				add(ri, c.Column)
 			case !visible(c.Style):
-			case excel || ri > lastValue[c.Column]:
+			case excel:
+				add(ri, c.Column)
+			case ri > lastValue[c.Column]:
 				attrLast = max(attrLast, c.Column)
 				add(ri, 0)
 			}

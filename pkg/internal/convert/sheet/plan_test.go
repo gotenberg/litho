@@ -289,6 +289,61 @@ func TestPlan_ExcelPrintsFormattedPages(t *testing.T) {
 	}
 }
 
+// TestPlan_ExcelPrintsBlankPages locks the pages of a range Excel prints:
+// every page in the page order up to the last that holds something, the
+// blank ones between included, where Calc prints the pages that hold
+// something alone; and a page of repeated rows that hold a value holds
+// something.
+func TestPlan_ExcelPrintsBlankPages(t *testing.T) {
+	type page struct{ rows, cols [2]int }
+	tests := []struct {
+		name  string
+		excel bool
+		order PageOrder
+		rep   bool
+		want  []page
+	}{
+		{"Calc", false, DownThenOver, false, []page{{[2]int{0, 59}, [2]int{0, 9}}, {[2]int{120, 149}, [2]int{0, 9}}, {[2]int{0, 59}, [2]int{10, 15}}}},
+		{"Excel, down then over", true, DownThenOver, false, []page{
+			{[2]int{0, 59}, [2]int{0, 9}}, {[2]int{60, 119}, [2]int{0, 9}}, {[2]int{120, 149}, [2]int{0, 9}}, {[2]int{0, 59}, [2]int{10, 15}},
+		}},
+		{"Excel, over then down", true, OverThenDown, false, []page{
+			{[2]int{0, 59}, [2]int{0, 9}}, {[2]int{0, 59}, [2]int{10, 15}}, {[2]int{60, 119}, [2]int{0, 9}}, {[2]int{60, 119}, [2]int{10, 15}}, {[2]int{120, 149}, [2]int{0, 9}},
+		}},
+		{"Excel, repeated rows", true, DownThenOver, true, []page{
+			{[2]int{0, 59}, [2]int{0, 9}}, {[2]int{60, 118}, [2]int{0, 9}}, {[2]int{119, 149}, [2]int{0, 9}},
+			{[2]int{0, 59}, [2]int{10, 15}}, {[2]int{60, 118}, [2]int{10, 15}}, {[2]int{119, 149}, [2]int{10, 15}},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sh := &Sheet{Name: "S", DefaultColumnWidth: 50, DefaultRowHeight: 12.8, Page: a4()}
+			sh.Page.Order = tt.order
+			sh.Rows = []Row{
+				{Index: 0, Cells: []Cell{numCell(0, 1, nil), numCell(15, 1, nil)}},
+				{Index: 149, Cells: []Cell{numCell(0, 1, nil)}},
+			}
+			if !tt.rep {
+				sh.Rows[0].Cells = sh.Rows[0].Cells[:1]
+				sh.Rows = append(sh.Rows[:1], Row{Index: 10, Cells: []Cell{numCell(15, 1, nil)}}, sh.Rows[1])
+			} else {
+				sh.Page.RepeatRows = &Range{FirstRow: 0, LastRow: 0}
+			}
+			doc := newDoc(sh)
+			doc.ExcelRules = tt.excel
+			b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
+			sp := b.planOf(t, 0, sh)
+			var got []page
+			for _, p := range sp.pages {
+				got = append(got, page{[2]int{p.rows.first, p.rows.last}, [2]int{p.cols.first, p.cols.last}})
+			}
+			if fmt.Sprint(got) != fmt.Sprint(tt.want) {
+				t.Errorf("pages %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestDrawingCells_ExcelEndCell locks the cells of a drawing that ends at
 // a cell's top-left corner: Calc's rules stop before that cell, Excel's
 // take it in.

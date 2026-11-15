@@ -130,6 +130,24 @@ func TestRead_CellValues(t *testing.T) {
 	}
 }
 
+// TestRead_EmptyStrings keeps a cell that stores an empty string, which
+// Excel counts in the range it prints, as a cell without a value marked
+// EmptyText; a cell without a value, a formula or a style is not kept.
+func TestRead_EmptyStrings(t *testing.T) {
+	t.Parallel()
+	doc, _ := readBytes(t, oneSheet(t, `<sheetData><row r="1"><c r="A1"><v>1</v></c>`+
+		`<c r="B1" t="inlineStr"><is><t></t></is></c><c r="C1" t="str"><v></v></c><c r="D1"/></row></sheetData>`))
+	sh := doc.Sheets[0]
+	for _, col := range []int{1, 2} {
+		if c, ok := cellAt(sh, 0, col); !ok || !c.EmptyText || c.Value.Kind != sheet.Empty {
+			t.Errorf("column %d = %+v (%v), want an empty string", col, c, ok)
+		}
+	}
+	if c, ok := cellAt(sh, 0, 3); ok {
+		t.Errorf("column 3 kept: %+v", c)
+	}
+}
+
 // TestRead_Hyperlinks checks external links through their relationships
 // on the cells of their range, and the places in the workbook as # and
 // the location.

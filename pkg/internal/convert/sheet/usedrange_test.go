@@ -13,7 +13,7 @@ import (
 // unless 30 or more columns formatted alike follow, where it stops before
 // them, as Calc's ScTable::GetPrintArea does. The formatted cells sit in
 // the second row: Calc counts none in the first row of a column without a
-// value.
+// value. Excel counts every formatted cell, whatever follows.
 func TestUsedRange_FormattedColumns(t *testing.T) {
 	fill := &Style{Fill: Fill{Color: css.Color{R: 1, G: 1, A: 1}}}
 	border := &Style{Border: [4]Border{{Line: LineSolid, Width: 1}}}
@@ -33,9 +33,13 @@ func TestUsedRange_FormattedColumns(t *testing.T) {
 	}{
 		{"a short run of fills", []Cell{numCell(0, 1, nil)}, run(1, 5, fill), false, 5},
 		{"a run of 40 fills", []Cell{numCell(0, 1, nil)}, run(1, 40, fill), false, 0},
+		{"a run of 40 fills, Excel", []Cell{numCell(0, 1, nil)}, run(1, 40, fill), true, 40},
 		{"a border, then a run of 40 fills", []Cell{numCell(0, 1, nil)}, append([]Cell{{Column: 2, Style: border}}, run(3, 42, fill)...), false, 2},
 		{"fills without a value", nil, run(0, 260, fill), false, 0},
 		{"fills in the first row", append([]Cell{numCell(0, 1, nil)}, run(1, 5, fill)...), nil, false, 0},
+		{"fills in the first row, Excel", append([]Cell{numCell(0, 1, nil)}, run(1, 5, fill)...), nil, true, 5},
+		{"an empty string, Excel", []Cell{numCell(0, 1, nil), {Column: 7, EmptyText: true}}, nil, true, 7},
+		{"an empty string, Calc", []Cell{numCell(0, 1, nil), {Column: 7, EmptyText: true}}, nil, false, 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

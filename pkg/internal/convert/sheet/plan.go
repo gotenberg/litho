@@ -123,8 +123,9 @@ func (sp *sheetPlan) docArea(zoom int) (float64, float64) {
 // theirs from every band after them, manual breaks unless the sheet fits
 // that direction to pages, and the bands of rows without content left out.
 // It returns the column bands and, per row band kept, which column bands
-// hold content. ctx's error, checked every [rowsPerCheck] rows or
-// columns, stops it.
+// hold content. Under Excel's rules it keeps every band and returns no
+// such flags. ctx's error, checked every [rowsPerCheck] rows or columns,
+// stops it.
 func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band, []band, [][]bool, error) {
 	g := sp.g
 	ps := &g.sh.Page
@@ -241,6 +242,12 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 		if sp.firstRows == nil {
 			sp.firstRows = &b
 		}
+		if g.doc.ExcelRules {
+			// Excel keeps every band: [sheetPlan.lastPrinted] cuts the
+			// pages after the last that holds something.
+			rows = append(rows, b)
+			return
+		}
 		if !sp.g.empty(Range{FirstRow: b.first, LastRow: b.last, FirstColumn: a.FirstColumn, LastColumn: a.LastColumn}) {
 			h := make([]bool, len(cols))
 			leftEmpty := false
@@ -285,8 +292,9 @@ const epsilon = 1e-6
 // shows a value or draws a border, hidden rows and columns aside, and no
 // drawing overlaps it (ScDocument::IsPrintEmpty, which prints "sheets with
 // borders even if there is no cell content"). Under Excel's rules a cell
-// whose own style paints a fill or a border counts as a value: Excel
-// prints a page of formatted cells alone.
+// whose own style paints a fill or a border, or whose file stores an
+// empty string, counts as a value: Excel prints a page of formatted cells
+// alone.
 //
 // # Corpus evidence
 //
@@ -309,7 +317,7 @@ func (g *grid) empty(a Range) bool {
 		j := sort.Search(len(cells), func(j int) bool { return cells[j].Column >= a.FirstColumn })
 		for ; j < len(cells) && cells[j].Column <= a.LastColumn; j++ {
 			c := &cells[j]
-			shows := hasContent(c) || lined(c.Style) || (excel && visible(c.Style))
+			shows := hasContent(c) || lined(c.Style) || (excel && (c.EmptyText || visible(c.Style)))
 			if shows && !g.colHidden(c.Column) {
 				return false
 			}
@@ -322,6 +330,90 @@ func (g *grid) empty(a Range) bool {
 		}
 	}
 	return true
+}
+
+// lastPrinted returns the row and column bands of the last page Excel
+// prints of a range cut into the bands rows and cols, in the sheet's page
+// order: the last that holds a cell [grid.empty] counts, a drawing, text
+// overflowing from the left, or repeated rows or columns that hold one;
+// (-1, -1) when none does. Excel prints every page of the range before
+// it, the blank ones too, and none after it. No clause of ECMA-376 states
+// which pages print; the rule is Excel's, measured.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/tdf137091.xlsx prints 20 pages of A1:CV52, 18
+//     of them blank; sc/invalid_ext_data_validation.xlsx prints the blank
+//     pages of its second band of rows but the last, 13 pages of 14;
+//     chart2/fdo70609.xlsx and sc/image_hyperlink.xlsx print a blank page
+//     left of a drawing.
+//   - poi/xlsx: 61652.xlsx prints 15 pages of its Model sheet, 2 bands of
+//     rows by 8 of columns, the last page left out; 47737.xlsx prints a
+//     last page holding the repeated rows alone; 62629_toMerge.xlsx
+//     prints eight pages blank but for the footer before its table.
+//   - litho/xlsx: sparse_far_cells prints the blank page between A1 and
+//     D120.
+func (sp *sheetPlan) lastPrinted(ctx context.Context, a Range, rows, cols []band) (int, int, error) {
+	g := sp.g
+	ps := &g.sh.Page
+	var repR, repC *Range
+	if rr := ps.RepeatRows; rr != nil {
+		repR = &Range{FirstRow: max(rr.FirstRow, 0), LastRow: min(rr.LastRow, maxRows-1)}
+	}
+	if rc := ps.RepeatColumns; rc != nil {
+		repC = &Range{FirstColumn: max(rc.FirstColumn, 0), LastColumn: min(rc.LastColumn, maxColumns-1)}
+	}
+	// holds reports whether the cells of rb by cb print something, or the
+	// repeated rows or columns, which every page that reaches past their
+	// first shows. A band that runs the whole range stands for a strip of
+	// pages.
+	holds := func(rb, cb band) bool {
+		if !g.empty(Range{FirstRow: rb.first, LastRow: rb.last, FirstColumn: cb.first, LastColumn: cb.last}) {
+			return true
+		}
+		if cb.first > 0 && g.extendPrint(cb.first-1, rb.first, rb.last) >= cb.first {
+			return true
+		}
+		if repR != nil && rb.last > repR.FirstRow && !g.empty(Range{FirstRow: repR.FirstRow, LastRow: repR.LastRow, FirstColumn: cb.first, LastColumn: cb.last}) {
+			return true
+		}
+		return repC != nil && cb.last > repC.FirstColumn && !g.empty(Range{FirstRow: rb.first, LastRow: rb.last, FirstColumn: repC.FirstColumn, LastColumn: repC.LastColumn})
+	}
+	allRows, allCols := band{a.FirstRow, a.LastRow}, band{a.FirstColumn, a.LastColumn}
+	if ps.Order == OverThenDown {
+		for ri := len(rows) - 1; ri >= 0; ri-- {
+			if !holds(rows[ri], allCols) {
+				continue
+			}
+			for ci := len(cols) - 1; ci >= 0; ci-- {
+				if (len(cols)-1-ci)%rowsPerCheck == 0 {
+					if err := ctx.Err(); err != nil {
+						return 0, 0, err
+					}
+				}
+				if holds(rows[ri], cols[ci]) {
+					return ri, ci, nil
+				}
+			}
+		}
+		return -1, -1, nil
+	}
+	for ci := len(cols) - 1; ci >= 0; ci-- {
+		if !holds(allRows, cols[ci]) {
+			continue
+		}
+		for ri := len(rows) - 1; ri >= 0; ri-- {
+			if (len(rows)-1-ri)%rowsPerCheck == 0 {
+				if err := ctx.Err(); err != nil {
+					return 0, 0, err
+				}
+			}
+			if holds(rows[ri], cols[ci]) {
+				return ri, ci, nil
+			}
+		}
+	}
+	return -1, -1, nil
 }
 
 // zoomFor returns the print zoom of the range a in percent: the sheet's
@@ -424,11 +516,30 @@ func (sp *sheetPlan) plan(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		lastR, lastC := len(rows), len(cols)
+		if g.doc.ExcelRules {
+			if lastR, lastC, err = sp.lastPrinted(ctx, a, rows, cols); err != nil {
+				return err
+			}
+		}
 		if sp.first == nil && sp.firstRows != nil && len(cols) > 0 {
 			sp.first = &pagePlan{sp: sp, area: a, rows: *sp.firstRows, cols: cols[0]}
 		}
+		// shown reports whether the page of row band ri and column band
+		// ci prints: under Excel's rules every page up to the last that
+		// holds something, in the page order; under Calc's those that
+		// hold something.
+		shown := func(ri, ci int) bool {
+			if !g.doc.ExcelRules {
+				return !hidden[ri][ci]
+			}
+			if ps.Order == OverThenDown {
+				return ri < lastR || (ri == lastR && ci <= lastC)
+			}
+			return ci < lastC || (ci == lastC && ri <= lastR)
+		}
 		add := func(ri, ci int) {
-			if hidden[ri][ci] || len(sp.pages) >= maxSheetPages {
+			if !shown(ri, ci) {
 				return
 			}
 			p := &pagePlan{sp: sp, area: a, rows: rows[ri], cols: cols[ci]}
@@ -456,14 +567,14 @@ func (sp *sheetPlan) plan(ctx context.Context) error {
 			sp.pages = append(sp.pages, p)
 		}
 		if ps.Order == OverThenDown {
-			for ri := range rows {
-				for ci := range cols {
+			for ri := 0; ri < len(rows) && len(sp.pages) < maxSheetPages; ri++ {
+				for ci := 0; ci < len(cols) && len(sp.pages) < maxSheetPages; ci++ {
 					add(ri, ci)
 				}
 			}
 		} else {
-			for ci := range cols {
-				for ri := range rows {
+			for ci := 0; ci < len(cols) && len(sp.pages) < maxSheetPages; ci++ {
+				for ri := 0; ri < len(rows) && len(sp.pages) < maxSheetPages; ri++ {
 					add(ri, ci)
 				}
 			}

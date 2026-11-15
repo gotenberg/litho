@@ -427,6 +427,7 @@ func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cel
 	}
 	if cell.Value.Kind == sheet.Text && cell.Value.Text == "" && len(cell.Runs) == 0 {
 		cell.Value = sheet.Value{}
+		cell.EmptyText = true
 	}
 	if f := c.Child(nsMain, "f"); f != nil && formulaFits(f.Text) && r.recalculation != office.RecalculateNever {
 		// Under office.RecalculateNever no formula is kept: the cell shows
@@ -455,7 +456,7 @@ func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cel
 			cell.Href = href
 		}
 	}
-	if cell.Value.Kind == sheet.Empty && cell.Style == nil && cell.Formula == "" {
+	if cell.Value.Kind == sheet.Empty && cell.Style == nil && cell.Formula == "" && !cell.EmptyText {
 		return cell, false
 	}
 	return cell, true

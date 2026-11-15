@@ -277,6 +277,10 @@ type Cell struct {
 	// value its validity rule refuses (ODF 1.3 Part 3, 9.2.13
 	// table:highlighted-range with table:marked-invalid true).
 	MarkedInvalid bool
+	// EmptyText reports a cell whose file stores an empty string as its
+	// value (ECMA-376 Part 1, 18.3.1.4 c of type s, inlineStr or str):
+	// it shows nothing, and Excel counts it in the range it prints.
+	EmptyText bool
 	// Formula is the cell's formula when Calc computes it as it loads the
 	// file, as the file writes it (ECMA-376 Part 1, 18.3.1.40 f, of a cell
 	// saved without its result, or of every cell of a workbook Calc
