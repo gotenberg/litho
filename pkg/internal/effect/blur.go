@@ -142,6 +142,10 @@ const (
 	EdgeDuplicate
 	// EdgeWrap reads the opposite edge, the surface repeated.
 	EdgeWrap
+	// EdgeMirror reads the surface mirrored across the edge, the edge
+	// pixel first: the pixel one past it reads the edge pixel, the next
+	// one the pixel beside it (Filter Effects 1, 9.14, mirror).
+	EdgeMirror
 )
 
 // Blur convolves s with kx along rows, then with ky along columns, every
@@ -360,6 +364,13 @@ func edgeIndex(i, n int, edge Edge) (int, bool) {
 		return min(max(i, 0), n-1), true
 	case EdgeWrap:
 		return ((i % n) + n) % n, true
+	case EdgeMirror:
+		// The surface and its mirror image repeat every 2n pixels.
+		m := ((i % (2 * n)) + 2*n) % (2 * n)
+		if m >= n {
+			m = 2*n - 1 - m
+		}
+		return m, true
 	case EdgeNone:
 	}
 	return 0, false

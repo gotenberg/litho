@@ -129,9 +129,34 @@ func TestBlur_Edges(t *testing.T) {
 		{EdgeNone, []uint8{85, 85, 85, 85}},
 		{EdgeDuplicate, []uint8{170, 85, 85, 170}},
 		{EdgeWrap, []uint8{170, 85, 85, 170}},
+		{EdgeMirror, []uint8{170, 85, 85, 170}},
 	} {
 		if got := row(tc.edge); !slices.Equal(got, tc.want) {
 			t.Errorf("edge %d: %v, want %v", tc.edge, got, tc.want)
+		}
+	}
+}
+
+// TestBlur_EdgeMirror locks the mirror edge of Filter Effects 1, 9.14: a
+// box of 7 at the start of the row 0, 0, 255, 255, 0 reads 255, 0, 0
+// past the edge, the row's first three pixels mirrored, where duplicate
+// reads 0, 0, 0 and wrap 255, 255, 0, its last three.
+func TestBlur_EdgeMirror(t *testing.T) {
+	for _, tc := range []struct {
+		edge Edge
+		want uint8
+	}{
+		{EdgeMirror, 109},
+		{EdgeDuplicate, 73},
+		{EdgeWrap, 146},
+	} {
+		s := newSurface(t, Coverage, 5, 1)
+		copy(s.Pix, []uint8{0, 0, 255, 255, 0})
+		if err := Blur(context.Background(), s, BoxKernel(7, 1), Kernel{}, tc.edge); err != nil {
+			t.Fatal(err)
+		}
+		if s.Pix[0] != tc.want {
+			t.Errorf("edge %d: first pixel %d, want %d", tc.edge, s.Pix[0], tc.want)
 		}
 	}
 }
@@ -232,7 +257,7 @@ func fitEdge(t *testing.T, row []uint8, k Kernel) (float64, float64) {
 func TestBlur_BoxesSumAsTheirKernel(t *testing.T) {
 	rng := rand.New(rand.NewPCG(1, 2))
 	for _, f := range []Format{Coverage, RGBA} {
-		for _, edge := range []Edge{EdgeNone, EdgeDuplicate, EdgeWrap} {
+		for _, edge := range []Edge{EdgeNone, EdgeDuplicate, EdgeWrap, EdgeMirror} {
 			for _, tc := range []struct{ wx, px, wy, py int }{
 				{2, 1, 2, 1}, {2, 3, 3, 3}, {3, 2, 0, 0}, {0, 0, 4, 3},
 				{7, 3, 4, 2}, {29, 3, 29, 3}, {64, 3, 5, 1},
