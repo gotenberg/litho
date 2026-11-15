@@ -870,7 +870,7 @@ func (p *painter) unit(b *box, own bool) {
 		// effects and clips, under its background (Filter Effects 2, 2.1):
 		// the innermost group, which an empty mark opens so it reaches
 		// every page the box does.
-		bd.zoom, bd.flow = p.zoom(), p.inFlow()
+		bd.zoom = p.zoom()
 		p.e.backdrops = true
 		push(&ditem{group: true, fx: &groupFx{opacity: 1, backdrop: bd}})
 		effects = true

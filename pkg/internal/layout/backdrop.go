@@ -31,9 +31,6 @@ type backdropFx struct {
 	// zoom is how much the groups around the element enlarge it on the
 	// page, as [groupFx] zoom.
 	zoom float64
-	// flow reports that no group around the element moves it, so the
-	// box is in flow coordinates and each page draws its own slice.
-	flow bool
 	// blend is the element's blend mode: its rendering blends with its
 	// filtered backdrop, not with the page.
 	blend typeset.BlendMode
@@ -138,9 +135,7 @@ func isBackdropMark(f typeset.Fragment) bool {
 // Backdrop Root Image, filtered by the element's backdrop-filter, clipped
 // to its border box with its radii, drawn before the element's
 // background, border and content. The group's own transform, effects and
-// clip, and those around it, apply to both. band, when not nil, is the
-// slice of the flow the page shows: the element's fragment there filters
-// its own backdrop. The image is an artifact. A filter the element
+// clip, and those around it, apply to both. The image is an artifact. A filter the element
 // cannot draw leaves the backdrop unfiltered, with a warning.
 //
 // Chromium prints the element without filtering its backdrop, where its
@@ -153,7 +148,7 @@ func isBackdropMark(f typeset.Fragment) bool {
 //     blur(10px) and a translucent background over a gradient as the
 //     gradient, then the element's background and text, with no bitmap
 //     and no blur; its screenshot blurs the gradient inside the box.
-func (e *engine) backdropped(it *ditem, frags []typeset.Fragment, page int, band *typeset.Rect) []typeset.Fragment {
+func (e *engine) backdropped(it *ditem, frags []typeset.Fragment, page int) []typeset.Fragment {
 	kept := frags[:0:0]
 	for _, f := range frags {
 		if !isBackdropMark(f) {
@@ -178,7 +173,7 @@ func (e *engine) backdropped(it *ditem, frags []typeset.Fragment, page int, band
 		return kept
 	}
 	e.backdropCount[page]++
-	img, err := e.backdropImage(bd, page, band)
+	img, err := e.backdropImage(bd, page)
 	switch {
 	case err == nil:
 	case errors.Is(err, errNoFilter):
@@ -211,7 +206,11 @@ func (e *engine) backdropped(it *ditem, frags []typeset.Fragment, page int, band
 // in the root group and the paper is, are painted first. The filtered
 // backdrops of the elements around it are not part of it: each is drawn
 // into its element's group after the content the element paints.
-// Content that lies outside the box is left out of the drawing.
+// Content that lies outside the box is left out of the drawing. On a
+// page of the flow, the box is cut to the slice of the flow the page
+// shows: an element split across pages filters each fragment's own
+// backdrop, its edge at the cut (CSS Fragmentation 3, 5.4), and the part
+// of a fixed or transformed element past the page is not drawn.
 //
 // The image is drawn in the element's own coordinates, so the clip and
 // the mirror edge of a blur lie on its border box, as Filter Effects 2,
@@ -247,15 +246,8 @@ func (e *engine) backdropped(it *ditem, frags []typeset.Fragment, page int, band
 //     under blur(4px) on an element scaled by 1.5 to 0.24 of their
 //     contrast, a deviation of 6px on the screen, and those under
 //     blur(8px) on one scaled by 0.5 to 0.51, of 4px.
-func (e *engine) backdropImage(bd *backdropFx, page int, band *typeset.Rect) (*typeset.Image, error) {
+func (e *engine) backdropImage(bd *backdropFx, page int) (*typeset.Image, error) {
 	box := bd.box
-	if band != nil && bd.flow {
-		y0, y1 := max(box.Y, band.Y), min(box.Y+box.Height, band.Y+band.Height)
-		box.Y, box.Height = y0, y1-y0
-	}
-	if !(box.Width > 0) || !(box.Height > 0) {
-		return nil, nil
-	}
 	levels := e.backdropLevels
 	if len(levels) == 0 {
 		return nil, nil
@@ -280,6 +272,16 @@ func (e *engine) backdropImage(bd *backdropFx, page int, band *typeset.Rect) (*t
 	}
 	inv, ok := invertMatrix(local)
 	if !ok {
+		return nil, nil
+	}
+	if fromPage, ok := invertMatrix(onPage); ok && levels[0].flow && page >= 0 {
+		on := boundsOf(onPage, box)
+		shown := boundsOf(fromPage, typeset.Rect{X: on.X, Y: e.pageTop(page), Width: on.Width, Height: e.sliceH(page)})
+		x0, y0 := max(box.X, shown.X), max(box.Y, shown.Y)
+		x1, y1 := min(box.X+box.Width, shown.X+shown.Width), min(box.Y+box.Height, shown.Y+shown.Height)
+		box = typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
+	}
+	if !(box.Width > 0) || !(box.Height > 0) {
 		return nil, nil
 	}
 	fs, ok := pageFilters(bd.filter, onPage)

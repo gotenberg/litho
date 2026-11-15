@@ -335,3 +335,20 @@ func TestBackdropFilter_HoldsFixedAndAbsolute(t *testing.T) {
 		}
 	}
 }
+
+// TestBackdropFilter_CutToThePage locks the cut of an element that
+// reaches past its page: a transformed element taller than the 14,400
+// points a drawing can hold filters the part the page shows.
+func TestBackdropFilter_CutToThePage(t *testing.T) {
+	moved := func(s *css.Style) {
+		s.Transform = []css.TransformFunc{{Kind: css.TransformTranslate, X: css.Pts(px(1))}}
+	}
+	tall := square(20, 30000, css.Color{}, abs(0, auto, auto, 0), moved, backdrop(invert))
+	res := run(t, doc(square(40, 40, red), tall), page(40, 40))
+	if w := backdropWarnings(res); len(w) > 0 {
+		t.Errorf("warnings %q, want none", w)
+	}
+	if c := at(render(t, res, 1), 10, 20); c.R > 2 || c.G < 253 || c.B < 253 {
+		t.Errorf("inside the element: %v, want the red inverted to cyan", c)
+	}
+}

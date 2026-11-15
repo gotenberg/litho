@@ -374,12 +374,8 @@ func (e *engine) distribute(it *ditem, depth, n int, used map[*typeset.StructEle
 					continue
 				}
 				if e.admit(p) {
-					if fx := k.effects(); fx.backdrop != nil {
-						var band *typeset.Rect
-						if fx.backdrop.flow {
-							band = &typeset.Rect{Y: e.pageTop(p), Height: e.sliceH(p)}
-						}
-						frags = e.backdropped(k, frags, p, band)
+					if k.effects().backdrop != nil {
+						frags = e.backdropped(k, frags, p)
 					}
 					if fx := k.effects(); len(fx.filter) > 0 {
 						var band *typeset.Rect
@@ -555,7 +551,7 @@ func (e *engine) flatten(it *ditem, depth int, artifact bool) []typeset.Fragment
 			}
 			frags := e.flatten(k, depth+1, artifact)
 			if k.effects().backdrop != nil {
-				frags = e.backdropped(k, frags, e.backdropPage, nil)
+				frags = e.backdropped(k, frags, e.backdropPage)
 			}
 			if len(k.effects().filter) > 0 {
 				frags = e.filtered(k, frags, nil, -1)
