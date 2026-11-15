@@ -15,9 +15,11 @@ const (
 )
 
 // TestReconstructText_FormatCharacters pins how a glyph whose character is a
-// format character reads: it is not written, it passes a held space on to
-// the next glyph, and the glyphs after it in its run sit its advance
-// earlier, so a gap is measured from the glyph before it.
+// format character reads: it is not written, and it passes a held space on
+// to the next glyph. One with a width takes its place on the line, so the
+// glyph a text-positioning operator sets where it ends abuts it ([advances]),
+// except a soft hyphen, whose advance is passed over, so a gap is measured
+// from the glyph before it ([skipsAdvance]).
 func TestReconstructText_FormatCharacters(t *testing.T) {
 	t.Parallel()
 
@@ -47,14 +49,25 @@ func TestReconstructText_FormatCharacters(t *testing.T) {
 			want: "s r",
 		},
 		{
-			name: "glyphs after a format character sit its advance earlier",
+			name: "glyphs after a format character keep their place",
 			elements: []models.TextElement{
 				{Text: "a", X: 100, Y: 500, Width: 5, FontSize: 10, Chunk: 1},
 				{Text: zeroWidthSpace, X: 105, Y: 500, Width: 3, FontSize: 10, Chunk: 1},
 				{Text: "b", X: 108, Y: 500, Width: 5, FontSize: 10, Chunk: 1},
 				{Text: "c", X: 113.5, Y: 500, Width: 5, FontSize: 10, Chunk: 2},
 			},
-			want: "ab c",
+			want: "abc",
+		},
+		{
+			name: "format character set back by its advance",
+			elements: []models.TextElement{
+				{Text: "ย", X: 100, Y: 500, Width: 7.13, FontSize: 12, Chunk: 1},
+				{Text: zeroWidthSpace, X: 107.13, Y: 500, Width: 3.12, FontSize: 12, Chunk: 1},
+				{Text: "ท", X: 107.13, Y: 500, Width: 7.31, FontSize: 12, Chunk: 1},
+				{Text: "ั", X: 114.44, Y: 500, Width: 0, FontSize: 12, Chunk: 1},
+				{Text: "ง", X: 114.44, Y: 500, Width: 6.44, FontSize: 12, Chunk: 2},
+			},
+			want: "ยทัง",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

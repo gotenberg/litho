@@ -253,13 +253,13 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		// mark's advance earlier ([markAdvances]). A mark combines with the character before it
 		// (Unicode, 3.6), so a space before it would set it on that space.
 		//
-		// Format characters: PDF.js does not show a glyph whose character
-		// is a format character (Unicode category Cf: U+00AD SOFT HYPHEN,
-		// U+200B ZERO WIDTH SPACE and the rest), and does not advance past
-		// it (src/core/evaluator.js, buildTextContentItem,
-		// isInvisibleFormatMark). Such a glyph is passed over: it is not
-		// written, a space held before it waits for the next glyph, and the
-		// glyphs after it sit its advance earlier ([markAdvances]).
+		// Format characters: a glyph whose character is a format
+		// character (Unicode category Cf: U+00AD SOFT HYPHEN, U+200B ZERO
+		// WIDTH SPACE and the rest) is not written. One the font gives no
+		// width, and a soft hyphen, is passed over: a space held before it
+		// waits for the next glyph. Any other with a width is read as a
+		// glyph with no character: it takes its place on the line, and the
+		// gap to the glyph after it is measured from its end ([advances]).
 		//
 		// prevIdx is the previous element, space glyphs included; visIdx
 		// the previous element that is not a space glyph.
@@ -267,7 +267,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		pendingSpace := ""
 		for _, idx := range indices {
 			el := ln.elems[idx]
-			if el.Text == "" {
+			if el.Text == "" || (advances(el) && isFormatOnly(el.Text)) {
 				// A glyph with no character still paints, so a word gap
 				// before it is a word gap in the text, after a glyph with a
 				// character or after another with none: hold a space for
@@ -2048,13 +2048,29 @@ func alongDist(a, b models.TextElement) float64 {
 	return db - da
 }
 
-// advances reports whether el moves the position PDF.js measures the next
-// glyph from: a glyph with an advance that is neither a nonspacing mark
-// ([isNonspacingMark]) nor a format character (src/core/evaluator.js,
-// buildTextContentItem, prevTransform, and src/core/unicode.js,
-// getCharUnicodeCategory, isZeroWidthDiacritic).
+// advances reports whether el moves the position the next glyph is
+// measured from: a glyph with an advance that is no nonspacing mark
+// ([isNonspacingMark]) (src/core/evaluator.js, buildTextContentItem,
+// prevTransform, and src/core/unicode.js, getCharUnicodeCategory,
+// isZeroWidthDiacritic). A glyph whose character is a format character
+// advances by its width, as every glyph does (ISO 32000-1, 9.4.4).
+//
+// PDF.js at the reference commit skips such a glyph whole, its advance
+// with it (buildTextContentItem, isInvisibleFormatMark), so every glyph
+// after it in its text item reads that advance early, and the first glyph
+// a text-positioning operator places after it reads after a false word
+// gap. The PDF draws the glyph and moves the text position past it, and a
+// producer that wants it to take no room takes its advance back, by a TJ
+// adjustment, before the next glyph. litho reads the widths. PDF.js's own
+// later source skips only a format glyph of no width.
+//
+// # Corpus evidence
+//
+//   - litho/html th-line-break: U+200B drawn as the font's space glyph,
+//     3.12 units wide, then taken back by a TJ of 260, read
+//     "มนุษย์ทั้ งหลาย" where the page shows มนุษย์ทั้งหลาย.
 func advances(el models.TextElement) bool {
-	return el.Width != 0 && !isNonspacingMark(el.Text) && !isFormatOnly(el.Text)
+	return el.Width != 0 && !skipsAdvance(el.Text)
 }
 
 // carriesNoPosition reports whether a glyph showing s carries no position
@@ -2107,8 +2123,8 @@ func isNonspacingMark(s string) bool {
 	return true
 }
 
-// markAdvances records, for a sequence of elements, how far the nonspacing
-// marks and format characters among them advanced the text position. PDF.js
+// markAdvances records, for a sequence of elements, how far the glyphs among
+// them that [skipsAdvance] names advanced the text position. PDF.js
 // advances past no such glyph (src/core/evaluator.js, buildTextContentItem,
 // which zeroes the advance of a zero-width diacritic and skips an invisible
 // format mark), so it reads every glyph after one, until a text-positioning
@@ -2170,9 +2186,26 @@ func newMarkAdvances(elements []models.TextElement, fonts []runFont) markAdvance
 }
 
 // skipsAdvance reports whether PDF.js does not advance its text position past
-// a glyph showing s: a nonspacing mark or a format character.
+// a glyph showing s, and litho follows it: a nonspacing mark
+// ([isNonspacingMark]), or a soft hyphen. Any other format character
+// advances ([advances]).
+//
+// A soft hyphen (U+00AD) shows only where a line breaks after it (Unicode,
+// 23.2), so a glyph drawn for one inside a line is a hyphen the page shows
+// between the parts of a compound, mapped to the soft hyphen by its
+// /ToUnicode CMap. Extraction drops the character ([normalizeSoftHyphens]);
+// passing over its advance as PDF.js does keeps a word gap where the page
+// shows the hyphen, where reading the advance would glue the two parts into
+// one word the page does not show.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue1721.pdf, govdocs/pdf thread_300_300224.pdf,
+//     thread_400_400568.pdf: "va-vite", "on-going", "short-term" drawn with a
+//     hyphen mapped to U+00AD read "vavite", "ongoing", "shortterm" with its
+//     advance, "va vite", "on going", "short term" without it.
 func skipsAdvance(s string) bool {
-	return isNonspacingMark(s) || isFormatOnly(s)
+	return isNonspacingMark(s) || (isFormatOnly(s) && strings.ContainsRune(s, '\u00ad'))
 }
 
 // shift returns how far before litho's position PDF.js reads the element k:
