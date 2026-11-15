@@ -591,3 +591,25 @@ func TestBrowserRules_RowOfStretchersLaidOutFree(t *testing.T) {
 		}
 	}
 }
+
+// TestBrowserRules_UnstretchedGlyphCentred centres the glyph of a
+// stretchy operator its font cannot stretch on the target sizes under
+// browser rules, the target of a symmetric one on the axis, as Chromium
+// draws WPT op-dict-3, and lays it out as text without them (MathML Core,
+// 3.2.4.3).
+func TestBrowserRules_UnstretchedGlyphCentred(t *testing.T) {
+	for _, browser := range []bool{false, true} {
+		s := liberation(t)
+		s.BrowserRules = browser
+		st := mathStyle("Liberation Serif", 20)
+		var ys [2]float64
+		for i, sym := range []string{"false", "true"} {
+			b := lay(t, s, el("math", attrs(tok("mo", "("), "symmetric", sym), space("0", "100pt", "100pt")), st)
+			_, _, op := childAt(b, 0)
+			ys[i] = op.asc
+		}
+		if moved := !near(ys[0], ys[1]); moved != browser {
+			t.Fatalf("browser rules %v: glyph ascents %v", browser, ys)
+		}
+	}
+}

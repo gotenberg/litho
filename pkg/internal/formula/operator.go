@@ -85,6 +85,21 @@ func (l *layouter) mo(e *Element, st *Style, c lctx) *box {
 
 // moGlyph lays out the operator of one character r, or returns nil to
 // fall back to the layout of mtext.
+//
+// Under [Setter.BrowserRules], a stretchy operator along the block axis
+// whose first available font gives its glyph no construction keeps its
+// glyph's size and is moved to the middle of the target sizes, as a stretched
+// glyph is, where MathML Core, 3.2.4.3 lays it out as an mtext. The target
+// of a symmetric operator is centred on the math axis, so the property
+// still moves the glyph. Chromium's screen and print share the layout.
+//
+// # Corpus evidence
+//
+//   - wpt: op-dict-3, a parenthesis in Liberation Serif, which has no
+//     MATH table, beside an mspace 5em high and 5em deep, symmetric false
+//     against symmetric true; Chromium of gotenberg/gotenberg:9.4.1 draws
+//     the first 5px lower, its glyph centred on the baseline where the
+//     second's is centred on the axis.
 func (l *layouter) moGlyph(e *Element, r rune, op *operator, st *Style, c lctx) *box {
 	f := l.faceOf(st)
 	if f == nil || f.glyphs == nil {
@@ -106,7 +121,11 @@ func (l *layouter) moGlyph(e *Element, r rune, op *operator, st *Style, c lctx) 
 		}
 		return l.glyphBox(g, r, st, 0)
 	case op.stretchy:
-		if _, _, ok := f.math.Construction(gid, true); !ok || !c.stretch || c.inline {
+		if !c.stretch || c.inline {
+			return nil
+		}
+		_, _, ok := f.math.Construction(gid, true)
+		if !ok && !l.s.BrowserRules {
 			return nil
 		}
 		axis := f.constant(mt.AxisHeight, st.Size)
@@ -148,7 +167,9 @@ func (l *layouter) moGlyph(e *Element, r rune, op *operator, st *Style, c lctx) 
 		}
 		g := l.stretchGlyph(f, gid, true, tAsc+tDesc, st.Size)
 		if g == nil {
-			return nil
+			// A glyph the font cannot stretch keeps its size and is
+			// centred on the target as a stretched one is.
+			g = l.singleGlyph(f, gid, st.Size)
 		}
 		// Centre the glyph on the target: shift it down by delta.
 		delta := (float64(g.asc-g.desc) - float64(tAsc-tDesc)) / 2
