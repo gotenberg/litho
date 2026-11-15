@@ -51,6 +51,7 @@ func TestConvert_ValidatesEveryOption(t *testing.T) {
 		"single page with ranges":   FromHTML(src(), fonts, WithSinglePage(true), WithPageRanges("1")),
 		"empty Markdown template":   FromMarkdown(src(), fonts, WithMarkdownTemplate("")),
 		"tracked changes view":      FromDOCX(src(), fonts, WithTrackedChanges(TrackedChanges(3))),
+		"comments view":             FromODT(src(), fonts, WithComments(Comments(2))),
 		"recalculation mode":        FromXLSX(src(), fonts, WithFormulaRecalculation(Recalculation(3))),
 		"one page with a paper":     FromXLSX(src(), fonts, WithOnePagePerSheet(true), WithPaper(PaperLetter)),
 		"one page with orientation": FromODS(src(), fonts, WithOnePagePerSheet(true), WithOrientation(OrientationLandscape)),

@@ -77,6 +77,19 @@ const (
 	TrackedChangesMarked
 )
 
+// Comments is how the comments of a DOCX or ODT source are written.
+type Comments int
+
+const (
+	// CommentsHidden leaves the comments out, as Word and LibreOffice
+	// print a document. It is the zero value and the default.
+	CommentsHidden Comments = iota
+	// CommentsAnnotations writes each comment as an annotation a PDF
+	// viewer lists and opens, over the text it covers; the pages print as
+	// they do without it.
+	CommentsAnnotations
+)
+
 // Recalculation is when the formulas of an XLSX or ODS source are computed
 // again rather than shown as the value the file stores.
 type Recalculation int
@@ -152,6 +165,7 @@ type convertConfig struct {
 
 	password        string
 	trackedChanges  TrackedChanges
+	comments        Comments
 	formFields      bool
 	onePagePerSheet bool
 	sheets          []string
@@ -873,6 +887,36 @@ func WithOfficePassword(password string) OfficeOption {
 // view, and [TrackedChangesMarked] marks it.
 func WithTrackedChanges(view TrackedChanges) WordProcessingOption {
 	return wordProcessingOption(func(c *convertConfig) { c.trackedChanges = view })
+}
+
+// WithComments sets how the comments of a DOCX or ODT source are written:
+// [CommentsHidden], the default, leaves them out; [CommentsAnnotations]
+// writes them as annotations (ISO 32000-1, 12.5.6). Any other value fails
+// the conversion with [ErrInvalidConvertOptions].
+//
+// Under [CommentsAnnotations], a comment is a Text annotation (ISO
+// 32000-1, 12.5.6.4): over the lines of the text it covers, one on each
+// page that text reaches, or at its point for a comment on a point or on
+// an empty range. Each carries the comment's author, its date as the
+// source records it, and its text as plain text, a line a paragraph. A
+// reply is a Text annotation in reply to its comment, on the comment's
+// first page, and a resolved thread carries the Completed state of the
+// Review model (12.5.6.3); a PDF 1.4 file, whose version has neither,
+// writes a reply as a comment of its own at its thread's place and no
+// state. A comment without text and reply is left out. The annotations
+// draw nothing: every page shows what it shows without them, in a viewer
+// and in print, and a viewer lists them and opens one where the pointer
+// rests on its text. In a tagged PDF each annotation belongs to an Annot
+// structure element that holds the text it covers, and every PDF/A and
+// PDF/UA profile accepts them.
+//
+// The comments of the body, its tables, footnotes and text boxes are
+// written. Not written: comments in headers and footers, the formatting
+// and pictures of a comment's text, and a comment no text of the
+// document anchors. A document that holds no comment converts the same
+// under both values.
+func WithComments(view Comments) WordProcessingOption {
+	return wordProcessingOption(func(c *convertConfig) { c.comments = view })
 }
 
 // WithFormFields writes the form controls of a DOCX or ODT source as

@@ -259,8 +259,9 @@ func FromMarkdown(src io.Reader, opts ...MarkdownOption) *Conversion {
 // bookmarks. A field shows the result its file stores, a date or time field
 // the date of [WithDate] when one is given, and a page number its page.
 // [WithTrackedChanges] chooses how tracked changes print. Comments are left
-// out. Macros never run; an embedded object draws as its preview picture
-// when the package holds one. A construct that is not drawn is reported in
+// out of the pages; [WithComments] writes them as annotations. Macros never
+// run; an embedded object draws as its preview picture when the package
+// holds one. A construct that is not drawn is reported in
 // [ConvertReport.Warnings].
 //
 // A source that is not a DOCX package fails with [ErrConvertMalformed], an
@@ -840,6 +841,7 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 		SinglePageSheets:  o.onePagePerSheet,
 		PrintDate:         o.date,
 		TrackedChanges:    office.TrackedChanges(o.trackedChanges),
+		Comments:          office.Comments(o.comments),
 		FormFields:        o.formFields,
 		HiddenSheets:      o.hiddenSheets,
 		Recalculation:     office.Recalculation(o.recalculation),

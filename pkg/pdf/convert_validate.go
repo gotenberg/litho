@@ -168,6 +168,9 @@ func (o *convertConfig) validateOffice() error {
 	if o.trackedChanges < TrackedChangesAccepted || o.trackedChanges > TrackedChangesMarked {
 		return fmt.Errorf("%w: tracked changes view %d", ErrInvalidConvertOptions, o.trackedChanges)
 	}
+	if o.comments < CommentsHidden || o.comments > CommentsAnnotations {
+		return fmt.Errorf("%w: comments view %d", ErrInvalidConvertOptions, o.comments)
+	}
 	if o.recalculation < RecalculateAsNeeded || o.recalculation > RecalculateAlways {
 		return fmt.Errorf("%w: recalculation mode %d", ErrInvalidConvertOptions, o.recalculation)
 	}
