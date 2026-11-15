@@ -212,7 +212,7 @@
 //   - [Pipeline.Apply] takes [ApplyOption]: [WithEditLabel].
 //   - Every conversion takes [ConvertOption]: [WithPaper],
 //     [WithDefaultPaper], [WithOrientation], [WithPageRanges],
-//     [WithOutline], [WithColorGlyphs], [WithDate],
+//     [WithOutline], [WithColorGlyphs], [WithDerivedAltText], [WithDate],
 //     [WithDefaultLanguage], [WithConvertVersion], [WithConvertFontDirs],
 //     [WithConvertLimits], [WithConvertLogger], [WithConvertTempDir].
 //   - A conversion of text, HTML or Markdown takes [MarginOption]:

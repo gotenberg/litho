@@ -113,6 +113,7 @@ type convertConfig struct {
 	pageRanges      string
 	omitOutline     bool
 	plainGlyphs     bool
+	derivedAltText  bool
 	date            time.Time
 	defaultLang     string
 	version         string
@@ -407,6 +408,36 @@ func WithOutline(outline bool) ConvertOption {
 // is an image in the file.
 func WithColorGlyphs(color bool) ConvertOption {
 	return convertOption(func(c *convertConfig) { c.plainGlyphs = !color })
+}
+
+// WithDerivedAltText sets whether a figure the source does not describe
+// takes a description derived from what the source states of it. false is
+// the default.
+//
+// A PDF/UA file needs a description on every figure (ISO 14289-1, 7.3;
+// ISO 14289-2, 8.2.5.28.2). With true, a figure without one takes:
+//
+//   - A chart: a sentence in English of its kind, its title, its series,
+//     its categories and its axis titles, as the source names them, such
+//     as "Sales. Clustered column chart, 2 series (North and South), 4
+//     categories (Q1 to Q4)". Its structure element declares English
+//     where the document's language is another or unknown.
+//   - A picture: its caption, where the source ties one to it beyond
+//     doubt: a Word caption paragraph beside the paragraph that holds the
+//     picture alone, an OpenDocument caption in the frame that holds the
+//     picture alone, the caption of an HTML figure the image alone fills.
+//     An HTML image also takes its aria-label, and an inline SVG image its
+//     aria-label or its desc element. A spreadsheet or a presentation
+//     gives a picture no caption: its pictures take none.
+//
+// It never invents a description: a picture without a caption, and a file
+// name or a name the application generates, give none, and such a figure
+// stays without one. It never replaces or extends a description the
+// source gives, never describes what the source marks decorative, and
+// draws nothing: every page looks the same either way. For a fixed text
+// on the figures that still lack one, remediate with [WithFigureAltText].
+func WithDerivedAltText(derived bool) ConvertOption {
+	return convertOption(func(c *convertConfig) { c.derivedAltText = derived })
 }
 
 // WithDate sets the one date of the conversion, which the fields of the

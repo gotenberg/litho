@@ -683,6 +683,7 @@ func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *te
 		MediaFeatures:         o.mediaFeatures,
 		DefaultLang:           o.defaultLang,
 		UserStylesheets:       o.userStylesheets,
+		DerivedAltText:        o.derivedAltText,
 	}
 	name := kind.name()
 	var doc *typeset.Document
@@ -746,6 +747,7 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 		NotesPages:        o.notesPages,
 		Handouts:          o.handouts,
 		DefaultLang:       o.defaultLang,
+		DerivedAltText:    o.derivedAltText,
 		MaxInputBytes:     maxBytes,
 		MaxPages:          maxPages,
 		Logger:            o.logger,
