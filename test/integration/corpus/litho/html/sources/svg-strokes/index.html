@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SVG strokes</title>
+<style>
+  body { font-family: "DejaVu Sans", sans-serif; margin: 24px; color: #222; }
+  h1 { font-size: 22px; margin: 0 0 12px; }
+  h2 { font-size: 16px; margin: 20px 0 6px; }
+  p { margin: 0 0 8px; font-size: 13px; }
+  svg { display: block; }
+  .halo { paint-order: stroke markers; }
+  .axis line, .axis path { shape-rendering: crispEdges; }
+</style>
+</head>
+<body>
+<h1>Stroke painting in SVG</h1>
+
+<h2>Paint order</h2>
+<p>Each label is stroked under its fill, so the halo does not eat into the letters.</p>
+<svg width="640" height="120" viewBox="0 0 640 120">
+  <rect x="10" y="10" width="140" height="90" fill="#f4d35e" stroke="#0d3b66" stroke-width="18"/>
+  <rect x="180" y="10" width="140" height="90" fill="#f4d35e" stroke="#0d3b66" stroke-width="18" paint-order="stroke"/>
+  <text x="350" y="60" font-size="34" font-weight="bold" fill="#f4d35e" stroke="#0d3b66" stroke-width="8">Normal</text>
+  <text class="halo" x="350" y="105" font-size="34" font-weight="bold" fill="#f4d35e" stroke="#0d3b66" stroke-width="8">Halo</text>
+</svg>
+
+<h2>Non-scaling strokes</h2>
+<p>The shapes are scaled four times by the view box and again by a transform; the right-hand strokes keep a width of two pixels.</p>
+<svg width="640" height="160" viewBox="0 0 160 40">
+  <g fill="none" stroke="#ee964b" stroke-width="2">
+    <rect x="5" y="5" width="30" height="25"/>
+    <circle cx="60" cy="18" r="12"/>
+    <g transform="scale(2 1)"><rect x="40" y="5" width="10" height="25" vector-effect="non-scaling-stroke"/></g>
+    <circle cx="130" cy="18" r="12" vector-effect="non-scaling-stroke" stroke-dasharray="6 3"/>
+  </g>
+</svg>
+
+<h2>Crisp axis lines</h2>
+<p>A chart's axes and ticks are one pixel wide under crisp edges, the bars under the default rendering.</p>
+<svg width="640" height="200" viewBox="0 0 640 200">
+  <g fill="#3a86ff">
+    <rect x="60" y="110" width="60" height="70"/>
+    <rect x="160" y="60" width="60" height="120"/>
+    <rect x="260" y="90" width="60" height="90"/>
+    <rect x="360" y="30" width="60" height="150"/>
+    <rect x="460" y="130" width="60" height="50"/>
+  </g>
+  <g class="axis" stroke="#333" stroke-width="1" fill="none">
+    <path d="M40 10 V180 H600"/>
+    <line x1="35" y1="180" x2="40" y2="180"/>
+    <line x1="35" y1="130" x2="40" y2="130"/>
+    <line x1="35" y1="80" x2="40" y2="80"/>
+    <line x1="35" y1="30" x2="40" y2="30"/>
+    <line x1="40" y1="130" x2="600" y2="130" stroke="#bbb" stroke-dasharray="4 4"/>
+  </g>
+  <g font-size="12" fill="#333" text-anchor="end">
+    <text x="30" y="184">0</text><text x="30" y="134">50</text><text x="30" y="84">100</text><text x="30" y="34">150</text>
+  </g>
+</svg>
+</body>
+</html>
