@@ -69,6 +69,56 @@ func (o *overstrike) fix(ctx context.Context, s *formula.Setter, st formula.Styl
 	return nil
 }
 
+// growth decides whether the delimiters of an m:d that grows (22.1.2.40
+// grow, on by default) stretch: Word grows them only around content whose
+// ink is taller than their own glyphs' ink, where MathML Core, 3.3.1.1
+// and 3.2.4.3 stretch a symmetric fence over any content that reaches
+// further from the axis than it does. Content no taller keeps them at the
+// text's size: stretchy is set false on them. The content is measured at
+// the equation's root size.
+//
+// # Corpus evidence
+//
+//   - litho/docx sink-paper: Word's (l + b²)² keeps its parentheses at
+//     11 pt, 9.25 pt of ink from 8.0 above the baseline to 1.3 below,
+//     around content whose ink is 9.05 pt tall, the superscript 2 rising
+//     1.1 pt above them.
+//   - libreoffice/docx ooxmlexport/2120112713: Word grows the parentheses
+//     of H(C_map, Ωᵖ) at 14 pt to 16.6 pt of ink around content 14.75 pt
+//     tall, from the superscript p 10.28 pt above the baseline to the
+//     subscript map 4.47 pt below, where the text-size parenthesis would
+//     be about 11.8 pt tall: its ink reaches no further from the axis
+//     than the content's does in sink-paper, so the symmetric reach of
+//     3.2.4.3 does not tell the two apart.
+type growth struct {
+	fences, content []*formula.Element
+}
+
+func (g *growth) fix(ctx context.Context, s *formula.Setter, st formula.Style) error {
+	c, err := s.Layout(ctx, &formula.Element{Name: "mrow", Children: g.content}, st)
+	if err != nil {
+		return err
+	}
+	for _, f := range g.fences {
+		glyph := &formula.Element{Name: "mo", Text: f.Text, Attrs: []formula.Attr{{Name: "stretchy", Value: "false"}}}
+		b, err := s.Layout(ctx, glyph, st)
+		if err != nil {
+			return err
+		}
+		if c.Ascent+c.Descent > b.Ascent+b.Descent {
+			return nil
+		}
+	}
+	for _, f := range g.fences {
+		for i := range f.Attrs {
+			if f.Attrs[i].Name == "stretchy" {
+				f.Attrs[i].Value = "false"
+			}
+		}
+	}
+	return nil
+}
+
 // rowSpacing spaces the rows of a table at the root's size other than
 // single: the struts of each row but the last ([rowAscent]) take the depth
 // that sets the next row's baseline lines times the single pitch, or

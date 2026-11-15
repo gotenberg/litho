@@ -592,8 +592,11 @@ func (b *reader) delimiter(o, pr *ooxml.Element, depth int) *formula.Element {
 	if v, _ := prop(pr, "shp"); v == "match" {
 		symmetric = "false"
 	}
+	g := &growth{}
 	fence := func(s, form string) *formula.Element {
-		return op(s, "form", form, "fence", "true", "stretchy", stretchy, "symmetric", symmetric)
+		f := op(s, "form", form, "fence", "true", "stretchy", stretchy, "symmetric", symmetric)
+		g.fences = append(g.fences, f)
+		return f
 	}
 	row := &formula.Element{Name: "mrow"}
 	if s := charOf(pr, "begChr", "("); s != "" {
@@ -606,13 +609,20 @@ func (b *reader) delimiter(o, pr *ooxml.Element, depth int) *formula.Element {
 			continue
 		}
 		if n > 0 && sep != "" {
-			row.Children = append(row.Children, op(sep, "separator", "true", "stretchy", stretchy, "symmetric", symmetric))
+			s := op(sep, "separator", "true", "stretchy", stretchy, "symmetric", symmetric)
+			g.fences = append(g.fences, s)
+			row.Children = append(row.Children, s)
 		}
-		row.Children = append(row.Children, b.arg(c, depth))
+		a := b.arg(c, depth)
+		g.content = append(g.content, a)
+		row.Children = append(row.Children, a)
 		n++
 	}
 	if s := charOf(pr, "endChr", ")"); s != "" {
 		row.Children = append(row.Children, fence(s, "postfix"))
+	}
+	if stretchy == "true" && len(g.fences) > 0 && len(g.content) > 0 {
+		b.fixups = append(b.fixups, g)
 	}
 	return row
 }

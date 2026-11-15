@@ -429,3 +429,28 @@ func TestLayout_RowSpacing(t *testing.T) {
 		t.Fatalf("baselines at %v, want 54 points apart", ys)
 	}
 }
+
+// TestLayout_DelimitersGrowPastTheirGlyphs keeps the parentheses of an m:d
+// at the text's size around content their glyphs cover and grows them around taller content, as Word draws them
+// (growth).
+func TestLayout_DelimitersGrowPastTheirGlyphs(t *testing.T) {
+	s := setter(t)
+	for _, c := range []struct {
+		body    string
+		stretch string
+	}{
+		{`<m:d><m:e>` + r("a+y") + `</m:e></m:d>`, "false"},
+		{`<m:d><m:e><m:f><m:num>` + r("a") + `</m:num><m:den>` + r("b") + `</m:den></m:f></m:e></m:d>`, "true"},
+	} {
+		q := read(t, c.body)
+		st := q.Style()
+		st.Families = []string{"DejaVu Math TeX Gyre"}
+		if _, err := q.Layout(context.Background(), s, st); err != nil {
+			t.Fatal(err)
+		}
+		open := q.root.Children[0].Children[0]
+		if v, _ := open.Attr("stretchy"); v != c.stretch {
+			t.Fatalf("%s: stretchy %s, want %s", tree(q.root), v, c.stretch)
+		}
+	}
+}
