@@ -150,6 +150,8 @@ func TestFontFace_SourcesInOrder(t *testing.T) {
 		{"all fail", `src: url(fonts/none.ttf), local(Nope)`, false, "fonts/none.ttf"},
 		{"unknown format", `src: url(fonts/ahem.ttf) format("svg")`, false, "format()"},
 		{"unsupported tech", `src: url(fonts/ahem.ttf) tech(color-colrv1)`, false, "tech()"},
+		{"colour techs", `src: url(fonts/ahem.ttf) tech(color-COLRv0, color-CBDT, color-sbix, palettes)`, true, ""},
+		{"one tech unsupported", `src: url(fonts/ahem.ttf) tech(color-COLRv0, color-svg)`, false, "tech()"},
 		{"not a font", `src: url(fonts/bogus.ttf)`, false, "not a TrueType"},
 		{"outside the root", `src: url(../x.ttf)`, false, "leaves the resources root"},
 		{"absolute url", `src: url(https://example.com/f.woff2)`, false, "no HTTP client"},

@@ -63,12 +63,23 @@ var fontFormats = []string{
 	"opentype-variations", "truetype-variations", "woff-variations", "woff2-variations",
 }
 
-// fontTechs are the tech() keywords litho supports (CSS Fonts 4, 4.3.1):
-// OpenType layout features, which the shaper applies, and variations,
-// which litho instances for TrueType outlines (a CFF2 face draws its
-// default instance, with a warning). Colour fonts, palettes, Graphite and
-// AAT layout are not.
-var fontTechs = []string{"features-opentype", "variations"}
+// fontTechs are the tech() keywords litho supports (CSS Fonts 4, 4.3.1),
+// lowercased: OpenType layout features, which the shaper applies,
+// variations, which litho instances for TrueType outlines (a CFF2 face
+// draws its default instance, with a warning), the colour glyphs of COLR
+// version 0 layers and of CBDT and sbix bitmaps, which package colorfont
+// draws, and palettes, which font-palette selects. COLR version 1, SVG
+// glyphs, Graphite, AAT layout and incremental transfer are not.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156's CSS.supports is true for font-tech()
+//     of features-opentype, features-aat, variations, palettes,
+//     color-COLRv0, color-COLRv1, color-CBDT and color-sbix, and false
+//     for color-svg, features-graphite and incremental.
+//   - wpt: the font-palette reftests of css/css-fonts draw the COLR
+//     version 0 layers of a font an @font-face rule loads.
+var fontTechs = []string{"features-opentype", "variations", "color-colrv0", "color-cbdt", "color-sbix", "palettes"}
 
 // fontLoader loads the faces of one conversion's @font-face rules.
 type fontLoader struct {
