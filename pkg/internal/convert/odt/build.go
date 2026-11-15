@@ -450,6 +450,9 @@ func (b *builder) paraProps(name string) paraState {
 // its paragraph style holding its inline content, a heading's outline
 // level giving it its structure role, a list item's label first.
 func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *layout.Node {
+	if hiddenParagraph(el) {
+		return nil
+	}
 	name := b.paraStyleName(el)
 	if ctx.defStyle != "" && el.A(odf.NSText, "style-name") == "" {
 		name = ctx.defStyle
@@ -534,6 +537,40 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 		ctx.item = nil
 	}
 	return n
+}
+
+// hiddenParagraph reports a text:p or text:h that a hidden paragraph
+// field hides: a text:hidden-paragraph in its inline content whose
+// text:is-hidden, the result of its condition the document saved, is
+// true (ODF 1.3, Part 3, 7.7.11). One such field hides the paragraph
+// whatever the others say. Writer prints no hidden paragraph, its frames
+// and line breaks included. Fields inside a frame, a note or an
+// annotation belong to their own paragraphs and are not read.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt layout/U-min.fodt, layout/fly_hidden_paragraph.fodt,
+//     layout/hidden-para-as-char-fly.fodt,
+//     layout/hidden-para-follow-frame.fodt: Writer's PDF holds none of the
+//     paragraphs whose field has text:is-hidden="true", and the paragraph
+//     of U-min.fodt whose field states no text:is-hidden prints.
+func hiddenParagraph(el *odf.Element) bool {
+	for _, c := range el.Children {
+		switch {
+		case c.IsText():
+		case c.Is(odf.NSText, "hidden-paragraph"):
+			if c.A(odf.NSText, "is-hidden") == "true" {
+				return true
+			}
+		case c.Name.Space == odf.NSText && c.Name.Local != "note":
+			// Spans, links, ruby and meta hold the paragraph's own
+			// content. The parser bounds the depth (odf.MaxDepth).
+			if hiddenParagraph(c) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // paragraphID returns the xml:id of a paragraph, which text:a and

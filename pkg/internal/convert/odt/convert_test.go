@@ -181,3 +181,19 @@ func TestConvert_UnknownElementWarningCode(t *testing.T) {
 		t.Errorf("warnings %q, want one for frobnicate and one for widget", msgs)
 	}
 }
+
+// TestConvert_HiddenParagraph locks ODF 1.3, Part 3, 7.7.11: a paragraph
+// holding a text:hidden-paragraph field whose saved text:is-hidden is true
+// is not printed, wherever the field sits in its content; one whose field
+// is not hidden prints.
+func TestConvert_HiddenParagraph(t *testing.T) {
+	body := `<text:p>one</text:p>` +
+		`<text:p>GONE<text:hidden-paragraph text:condition="ooow:TRUE" text:is-hidden="true"/></text:p>` +
+		`<text:h text:outline-level="1"><text:span>GONE<text:hidden-paragraph text:condition="ooow:TRUE" text:is-hidden="true"/></text:span></text:h>` +
+		`<text:p>two<text:hidden-paragraph text:condition="ooow:x EQ 1"/></text:p>` +
+		`<text:p>three<text:hidden-paragraph text:condition="ooow:FALSE" text:is-hidden="false"/></text:p>`
+	d := convertDoc(t, doc{body: body}.pack(t), office.Options{})
+	if got, want := docText(d), "one\ntwo\nthree"; got != want {
+		t.Errorf("text = %q, want %q", got, want)
+	}
+}
