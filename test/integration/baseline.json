@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-14T23:17:33Z",
+  "captured_at": "2026-11-15T00:34:30Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -37173,8 +37173,8 @@
     "libreoffice/pptx": {
       "features": {
         "diff": {
-          "matched": 176,
-          "mismatched": 93,
+          "matched": 177,
+          "mismatched": 92,
           "skipped": 42,
           "metrics": {
             "convert_error": 0,
@@ -37215,12 +37215,12 @@
               "text_f1": 1
             },
             "chart2/funnel-pp1.pptx": {
-              "layout": 0,
+              "layout": 0.9427,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.6364
+              "text_f1": 1
             },
             "chart2/percentage-number-formats.pptx": {
               "layout": 0.9865,
@@ -46013,12 +46013,12 @@
               "text_f1": 0.8919
             },
             "chart2/SimpleHistogram.xlsx": {
-              "layout": 0.8665,
+              "layout": 0.8762,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.2692
+              "text_f1": 0.2917
             },
             "chart2/add_series_secondary_axis.xlsx": {
               "layout": 0.9086,
@@ -46133,20 +46133,20 @@
               "text_f1": 1
             },
             "chart2/box-whisker-gapwidth.xlsx": {
-              "layout": 0.2112,
+              "layout": 0.8755,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.25,
-              "text_f1": 0.384
+              "strict": 1,
+              "text_f1": 0.705
             },
             "chart2/boxWhisker.xlsx": {
-              "layout": 0,
+              "layout": 0.8837,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
-              "text_f1": 0.3462
+              "strict": 1,
+              "text_f1": 0.3971
             },
             "chart2/bubble_chart_simple.xlsx": {
               "layout": 0.484,
@@ -46229,20 +46229,20 @@
               "text_f1": 1
             },
             "chart2/clusteredColumn.xlsx": {
-              "layout": 0.0206,
+              "layout": 0.8753,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.2222
+              "strict": 1,
+              "text_f1": 0.2295
             },
             "chart2/color_funnel.xlsx": {
               "layout": 0,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 1,
-              "text_f1": 0.4375
+              "strict": 0,
+              "text_f1": 0.2667
             },
             "chart2/column-style.xlsx": {
               "layout": 0.7916,
@@ -46369,8 +46369,8 @@
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 1,
-              "text_f1": 0.4138
+              "strict": 0,
+              "text_f1": 0.2308
             },
             "chart2/gapWidth.xlsx": {
               "layout": 0.9486,
@@ -54468,8 +54468,8 @@
     "litho/docx": {
       "features": {
         "diff": {
-          "matched": 136,
-          "mismatched": 21,
+          "matched": 137,
+          "mismatched": 20,
           "skipped": 26,
           "metrics": {
             "convert_error": 0,
@@ -54510,12 +54510,12 @@
               "text_f1": 1
             },
             "charts-chartex": {
-              "layout": 0.036,
+              "layout": 0.7664,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.4967
+              "strict": 1,
+              "text_f1": 0.892
             },
             "charts-line-area": {
               "layout": 0.8221,
@@ -72103,12 +72103,12 @@
               "text_f1": 0.3056
             },
             "chartex": {
-              "layout": 0.2176,
+              "layout": 0.8371,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0,
-              "text_f1": 0.494
+              "strict": 1,
+              "text_f1": 0.8365
             },
             "comments-legacy": {
               "layout": 0.9426,
@@ -76384,12 +76384,12 @@
               "text_f1": 1
             },
             "charts_chartex": {
-              "layout": 0,
+              "layout": 0.4152,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.6362
+              "text_f1": 0.6667
             },
             "charts_combo_secondary": {
               "layout": 0.7804,
