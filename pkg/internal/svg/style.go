@@ -403,6 +403,20 @@ func (st *style) apply(d declaration, parent *style) bool {
 			st.strokeFirst = first
 		}
 		return ok
+	case "shape-rendering":
+		// A hint on how a renderer trades speed, crisp edges and
+		// geometric precision (SVG 2, 13.10.1), which the viewer of a
+		// PDF answers, not its writer: every value draws the shape as
+		// its geometry and stroke width state it. Chromium's PDF writes
+		// a thin stroke under crispEdges or optimizeSpeed as a line of
+		// width 0, which its own screen does not draw and ISO 32000-1,
+		// 8.4.3.2 advises against, a device drawing it as thin as it
+		// can: litho keeps the stated width.
+		switch strings.ToLower(v) {
+		case "auto", "geometricprecision", "crispedges", "optimizespeed":
+			return true
+		}
+		return false
 	case "vector-effect":
 		// SVG 2, 13.6 defines non-scaling-size, non-rotation and
 		// fixed-position too, which Chromium does not parse: they are
@@ -558,7 +572,7 @@ var presentationAttrs = map[string]bool{
 	"marker-end": true, "overflow": true, "font-family": true, "font-size": true,
 	"font-weight": true, "font-style": true, "text-anchor": true, "mask-type": true,
 	"flood-color": true, "flood-opacity": true, "color-interpolation-filters": true,
-	"paint-order": true, "vector-effect": true,
+	"paint-order": true, "vector-effect": true, "shape-rendering": true,
 }
 
 // blendModes are the <blend-mode> keywords (CSS Compositing 1, 5.3), in

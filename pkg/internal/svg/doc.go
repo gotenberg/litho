@@ -21,7 +21,8 @@
 //     the order of fill and stroke paint-order sets (SVG 2, 13.8), a
 //     shape's non-scaling stroke drawn in the CSS pixels of the drawing's
 //     viewport (SVG 2, 13.6; the other vector effects are invalid, as
-//     Chromium has them),
+//     Chromium has them), shape-rendering read as the hint it is and
+//     drawing nothing of its own (SVG 2, 13.10.1),
 //     opacity on groups, composited as one group, visibility and display.
 //   - Gradients: linearGradient and radialGradient with gradientUnits,
 //     gradientTransform, fx and fy, the href chain and stops (13.2), on
