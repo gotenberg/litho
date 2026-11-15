@@ -613,3 +613,36 @@ func TestBrowserRules_UnstretchedGlyphCentred(t *testing.T) {
 		}
 	}
 }
+
+// TestUnderOver_AccentsSitOnTheirBase sets an accent's ink bottom on the
+// base when the base reaches AccentBaseHeight, AccentBaseHeight above
+// the baseline when it does not, from the accent's line-descent, and
+// hangs an accent underscript from the base's ink by its line-ascent
+// (MathML Core, 3.4.2.3 and 3.4.2.4; OpenType MATH, AccentBaseHeight).
+func TestUnderOver_AccentsSitOnTheirBase(t *testing.T) {
+	s := dejavu(t)
+	st := mathStyle("DejaVu Math TeX Gyre", 100)
+	f := (&layouter{ctx: t.Context(), s: s}).faceOf(&st)
+	abh := f.constant(mt.AccentBaseHeight, 100)
+	for _, base := range []string{"x", "A"} {
+		b := lay(t, s, el("math", attrs(el("mover", tok("mi", base), tok("mo", "ˆ")), "accent", "true")), st)
+		_, _, bx := childAt(b, 0, 0)
+		_, y, acc := childAt(b, 0, 1)
+		bottom := -y - acc.inkDesc
+		if want := max(bx.inkAsc, abh); !near(bottom, want) {
+			t.Fatalf("accent over %s: ink bottom %g above the baseline, want %g", base, bottom, want)
+		}
+	}
+	// A font of web-platform-tests with no AccentBaseHeight: the accent's
+	// box sits on the base's ink.
+	w := wpt(t, "limits-upperlimitgapmin7000")
+	wst := mathStyle("limits-upperlimitgapmin7000", 10)
+	b := lay(t, w, el("math", attrs(el("mover", space("10pt", "3pt", "1pt"), space("10pt", "2pt", "4pt")), "accent", "true"),
+		attrs(el("munder", space("10pt", "3pt", "1pt"), space("10pt", "2pt", "4pt")), "accentunder", "true")), wst)
+	if _, y, _ := childAt(b, 0, 1); !near(-y, 3+4) {
+		t.Fatalf("accent baseline %g up, want 7: its descent on the base's ink", -y)
+	}
+	if _, y, _ := childAt(b, 1, 1); !near(y, 1+2) {
+		t.Fatalf("accentunder baseline %g down, want 3: its ascent under the base's ink", y)
+	}
+}

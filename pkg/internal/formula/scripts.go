@@ -229,7 +229,17 @@ func (l *layouter) stretchInline(e *Element, kids []*Element, index []int, st *S
 // placed by its top accent attachment, as the inline size 3.4.2.4 gives
 // counts it.
 //
-// Where the base is neither a large operator nor stretched, an underscript
+// Where the base is neither a large operator nor stretched, an accent
+// overscript stands max(0, AccentBaseHeight − the base's line-ascent)
+// above the base's ink from its own line-descent, and an accent
+// underscript hangs from the base's ink by its line-ascent, where 3.4.2.3
+// and 3.4.2.4 shift the script's baseline by the gap alone: an accent
+// glyph of an OpenType math font draws its ink about AccentBaseHeight
+// above its baseline (OpenType, MATH table, MathConstants:
+// AccentBaseHeight, the height a base reaches before its accents rise),
+// and the baseline rule would set the accent an x-height above a letter.
+// Chromium places accents so; each of its cases shifts a script by its
+// line edge (# Corpus evidence below). An underscript
 // that is not an accent keeps UnderbarVerticalGap between its ink top and
 // the base's ink bottom, and an overscript that is not an accent
 // OverbarVerticalGap between its ink bottom and the base's ink top: the
@@ -243,6 +253,14 @@ func (l *layouter) stretchInline(e *Element, kids []*Element, index []int, st *S
 // below and above a stretched element, where 3.4.2.3 and 3.4.2.4 name
 // them the other way round; the tests of web-platform-tests
 // (underover-parameters-2) read them as the MATH table does.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1, DejaVu Math TeX
+//     Gyre at 100px, sets the ink bottom of U+02C6 accent over x 3px
+//     above x's ink and over A 2px above A's, and the ink top of U+02CD
+//     accentunder under x and g 2px below their ink; litho set the
+//     circumflex over x 65px above it.
 func (l *layouter) attachUnderOver(e *Element, base, under, over *box, st *Style) *box {
 	f := l.faceOf(st)
 	size := st.Size
@@ -273,7 +291,10 @@ func (l *layouter) attachUnderOver(e *Element, base, under, over *box, st *Style
 		case stretchyInline:
 			shift = max(f.constant(mt.StretchStackBottomShiftDown, size), f.constant(mt.StretchStackGapBelowMin, size)+under.asc)
 		default:
-			if !e.attrIs("accentunder", "true") {
+			if e.attrIs("accentunder", "true") {
+				// An accent's line-ascent hangs below the base's ink.
+				shift = under.asc
+			} else {
 				// UnderbarVerticalGap is a gap between inks, as the
 				// gaps of the two cases above are: the underscript's
 				// ink top keeps it below the base's ink.
@@ -295,7 +316,10 @@ func (l *layouter) attachUnderOver(e *Element, base, under, over *box, st *Style
 			shift = max(f.constant(mt.StretchStackTopShiftUp, size), f.constant(mt.StretchStackGapAboveMin, size)+over.desc)
 		default:
 			if e.attrIs("accent", "true") {
-				shift = max(0, f.constant(mt.AccentBaseHeight, size)-base.asc)
+				// AccentBaseHeight less the base's line-ascent, from the
+				// accent's line-descent: its ink bottom, which an accent
+				// glyph draws above its baseline.
+				shift = max(0, f.constant(mt.AccentBaseHeight, size)-base.asc) + over.desc
 			} else {
 				// OverbarVerticalGap is a gap between inks: the
 				// overscript's ink bottom keeps it above the base's
