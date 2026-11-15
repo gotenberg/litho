@@ -525,7 +525,14 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 			// text:is-list-header).
 			if el.A(odf.NSText, "is-list-header") != "true" {
 				if lbl := b.outlineLabel(level); lbl != "" {
-					n.Children = append([]*layout.Node{b.run(lbl, t)}, n.Children...)
+					kids := make([]*layout.Node, 0, 2+len(n.Children))
+					if text, ok := strings.CutSuffix(lbl, "\n"); ok {
+						kids = append(kids, b.run(text, t), b.node(&layout.Node{Kind: layout.LineBreak, Style: n.Style}))
+						lbl = text + " "
+					} else {
+						kids = append(kids, b.run(lbl, t))
+					}
+					n.Children = append(kids, n.Children...)
 					h.label = lbl
 				}
 			}

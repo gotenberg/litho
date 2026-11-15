@@ -329,7 +329,16 @@ func arabicFormat(format string) bool {
 
 // outlineLabel returns the label of a heading at level from the outline
 // style (ODF 1.3, Part 3, 16.34), "" when the level is not numbered; the
-// heading counters advance.
+// heading counters advance. The label ends with what follows it: a tab,
+// a space, nothing, or for loext:label-followed-by newline, LibreOffice's
+// extension of text:label-followed-by, a line feed, the heading's text
+// then starting on the next line.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt odfexport/chapter-number-new-line.odt: Writer prints
+//     the number "1" of a heading whose outline level says newline on a
+//     line of its own, the heading's text on the line below.
 func (b *builder) outlineLabel(level int) string {
 	os := b.styles.Outline
 	if os == nil || level < 1 || level > odf.MaxListLevels || os.Levels[level-1] == nil {
@@ -343,6 +352,9 @@ func (b *builder) outlineLabel(level int) string {
 	b.number(item, lc, &odf.Element{})
 	if item.label == "" {
 		return ""
+	}
+	if item.lvl.Props.Get("loext:label-followed-by") == "newline" {
+		return item.label + "\n"
 	}
 	switch item.lvl.Props.Get("text:label-followed-by") {
 	case "space":

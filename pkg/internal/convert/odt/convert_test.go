@@ -233,3 +233,22 @@ func TestConvert_CrossReferences(t *testing.T) {
 		t.Errorf("page 2 = %q", got)
 	}
 }
+
+// TestConvert_OutlineLabelOnItsOwnLine sets the number of a heading whose
+// outline level is followed by a newline (loext:label-followed-by, the
+// extension LibreOffice writes beside text:label-followed-by) on a line
+// of its own, the text below; a tab follows it otherwise.
+func TestConvert_OutlineLabelOnItsOwnLine(t *testing.T) {
+	for _, tc := range []struct{ follow, want string }{
+		{`text:label-followed-by="listtab" loext:label-followed-by="newline"`, "1\nTitle"},
+		{`text:label-followed-by="space"`, "1 Title"},
+	} {
+		styles := `<text:outline-style style:name="Outline"><text:outline-level-style text:level="1" style:num-format="1">` +
+			`<style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment ` + tc.follow + `/></style:list-level-properties>` +
+			`</text:outline-level-style></text:outline-style>`
+		d := convertDoc(t, doc{styles: styles, body: `<text:h text:outline-level="1">Title</text:h>`}.pack(t), office.Options{})
+		if got := docText(d); got != tc.want {
+			t.Errorf("%s: text %q, want %q", tc.follow, got, tc.want)
+		}
+	}
+}
