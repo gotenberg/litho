@@ -73,6 +73,14 @@ func (s *PictureStore) Close() error {
 // allows, else in the store's file. Without a store they stay in memory.
 func keep(ctx context.Context, src *ImageSource) error {
 	n := int64(len(src.JPEG)) + int64(len(src.Samples)) + int64(len(src.Alpha))
+	if l := src.Layout; l != nil {
+		// The palette and the profile stay in memory wherever the
+		// samples go.
+		held := int64(len(l.Palette)) + int64(len(l.ICC))
+		if err := limits.BudgetFrom(ctx).ChargeUnits(held, 1, "encoded pictures"); err != nil {
+			return fmt.Errorf("keeping the picture: %w", err)
+		}
+	}
 	s := pictureStoreFrom(ctx)
 	if s == nil || !s.spills(n) {
 		if err := limits.BudgetFrom(ctx).ChargeUnits(n, 1, "encoded pictures"); err != nil {

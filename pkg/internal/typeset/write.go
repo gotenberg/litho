@@ -135,7 +135,8 @@ const defaultSpool = 4 << 20
 //   - An element's own content precedes its child elements in its /K: a
 //     producer that interleaves the two gives the content an element of
 //     its own.
-//   - An Adobe-marked CMYK JPEG is not inverted and renders as its negative.
+//   - An Adobe-marked CMYK JPEG made by [JPEGImage] is not inverted and
+//     renders as its negative; [JPEGLayout] inverts one.
 //   - Arrays sized by the document, the page tree's /Kids and the parent
 //     tree's /Nums, are flat and pass the 8191-element limit ISO 32000-1,
 //     Annex C advises for documents of over 4095 pages.
@@ -202,6 +203,8 @@ type docWriter struct {
 	fonts     map[string]*fontEntry
 	fontOrder []*fontEntry
 	images    map[*ImageSource]ast.PdfIndirectRef
+	// profiles are the ICC profile streams written, by their bytes.
+	profiles map[string]ast.PdfIndirectRef
 	// shadings maps a [shadingKey] to the objects written for it.
 	shadings map[string]shadingRefs
 	// st is nil for an untagged document.

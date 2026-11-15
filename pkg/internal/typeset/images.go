@@ -177,6 +177,9 @@ func (s *ImageSource) Decode(ctx context.Context) (image.Image, error) {
 	if err := checkPixels(s.Width, s.Height); err != nil {
 		return nil, err
 	}
+	if s.Layout != nil {
+		return nil, fmt.Errorf("%w: a source with a layout is written, not decoded", ErrInvalidImage)
+	}
 	model := color.NRGBAModel
 	switch {
 	case s.IsJPEG():
@@ -314,13 +317,20 @@ func (w *docWriter) image(src *ImageSource) (ast.PdfIndirectRef, error) {
 		return ref, nil
 	}
 	var stream ast.PdfStream
-	if src.IsJPEG() {
+	switch {
+	case src.Layout != nil:
+		s, err := w.layoutXObject(src)
+		if err != nil {
+			return ast.PdfIndirectRef{}, err
+		}
+		stream = s
+	case src.IsJPEG():
 		s, err := jpegXObject(src)
 		if err != nil {
 			return ast.PdfIndirectRef{}, err
 		}
 		stream = s
-	} else {
+	default:
 		stream = w.pictureXObject(src)
 	}
 	ref := w.alloc.Alloc(stream)

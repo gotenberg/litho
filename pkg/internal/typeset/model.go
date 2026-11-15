@@ -253,6 +253,11 @@ type ImageSource struct {
 	// pixel, written as a DeviceGray soft mask (ISO 32000-1, 11.6.5.3); nil
 	// when every pixel is opaque.
 	Alpha []byte
+	// Layout, when set, describes Samples and Alpha at the depths and in
+	// the colour space it names, or the colour space JPEG is read in, or
+	// marks JPEG as a JPEG 2000 file (see [ImageLayout]); Gray is then
+	// unset. nil keeps the forms above.
+	Layout *ImageLayout
 
 	// stored is where a [PictureStore] keeps the bytes, nil when the
 	// fields above hold them.

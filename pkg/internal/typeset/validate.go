@@ -228,6 +228,12 @@ func checkSource(src *ImageSource) error {
 	if err := checkPixels(src.Width, src.Height); err != nil {
 		return err
 	}
+	if src.Layout != nil {
+		if src.Gray {
+			return fmt.Errorf("%w: gray source with a layout", ErrInvalidImage)
+		}
+		return checkLayoutSource(src)
+	}
 	if src.IsJPEG() {
 		if src.hasSamples() || src.hasAlpha() || src.Gray {
 			return fmt.Errorf("%w: source holds both a JPEG and samples", ErrInvalidImage)
