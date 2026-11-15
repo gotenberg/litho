@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-15T19:46:35Z",
+  "captured_at": "2026-11-15T21:17:36Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9469,7 +9469,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.1081
+              "text_f1": 1
             },
             "layout/tdf122878.docx": {
               "layout": 0.3724,
@@ -9525,7 +9525,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8333
+              "text_f1": 1
             },
             "layout/tdf128198-1.docx": {
               "layout": 0.8082,
@@ -9549,7 +9549,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9667
+              "text_f1": 1
             },
             "layout/tdf130088.docx": {
               "layout": 0.9657,
@@ -9581,7 +9581,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.9867
+              "text_f1": 0.9892
             },
             "layout/tdf135035.docx": {
               "layout": 0.4125,
@@ -10589,7 +10589,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.66
+              "text_f1": 0.84
             },
             "ooxmlexport/fdo43093.docx": {
               "layout": 0.929,
@@ -19466,7 +19466,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9167
+              "text_f1": 1
             },
             "sd/placeholder-box-textalignment.odp": {
               "layout": 0.9413,
@@ -23980,8 +23980,8 @@
     "libreoffice/ods": {
       "features": {
         "diff": {
-          "matched": 196,
-          "mismatched": 60,
+          "matched": 203,
+          "mismatched": 53,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -23995,7 +23995,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9884
+              "text_f1": 1
             },
             "chart2/PivotChartRoundTrip.ods": {
               "layout": 0.3327,
@@ -24003,7 +24003,7 @@
               "outline_recall": 0.5,
               "pages": 0.8,
               "strict": 0,
-              "text_f1": 0.4858
+              "text_f1": 0.4818
             },
             "chart2/PivotTableExample.ods": {
               "layout": 0.4159,
@@ -24019,7 +24019,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8615
+              "text_f1": 0.9286
             },
             "chart2/axis_number_format.ods": {
               "layout": 0.9383,
@@ -24027,7 +24027,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8845
+              "text_f1": 0.95
             },
             "chart2/chart.ods": {
               "layout": 0.9915,
@@ -24035,7 +24035,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9884
+              "text_f1": 1
             },
             "chart2/chartWithDotInSheetName.ods": {
               "layout": 0.9108,
@@ -24051,7 +24051,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.6667
+              "text_f1": 1
             },
             "chart2/error_bar.ods": {
               "layout": 0.9532,
@@ -24059,7 +24059,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9604
+              "text_f1": 1
             },
             "chart2/error_bar_properties.ods": {
               "layout": 0.7861,
@@ -24067,7 +24067,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.9537
+              "text_f1": 1
             },
             "chart2/error_bar_range.ods": {
               "layout": 0.9448,
@@ -24075,7 +24075,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9506
+              "text_f1": 0.9706
             },
             "chart2/fdo60083.ods": {
               "layout": 0.9339,
@@ -24083,7 +24083,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8688
+              "text_f1": 1
             },
             "chart2/labelString.ods": {
               "layout": 0.9355,
@@ -24091,7 +24091,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8689
+              "text_f1": 0.9211
             },
             "chart2/legend_overlay.ods": {
               "layout": 0.9901,
@@ -24099,7 +24099,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9188
+              "text_f1": 1
             },
             "chart2/moving-type.ods": {
               "layout": 0.5936,
@@ -24107,7 +24107,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.7418
+              "text_f1": 0.7813
             },
             "chart2/multilevelcat.ods": {
               "layout": 0.9285,
@@ -24115,7 +24115,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8699
+              "text_f1": 0.8678
             },
             "chart2/multiple_axis.ods": {
               "layout": 0.9513,
@@ -24123,7 +24123,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8692
+              "text_f1": 1
             },
             "chart2/pie_chart_100_and_0.ods": {
               "layout": 0.9888,
@@ -24139,7 +24139,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.6429
+              "text_f1": 0.9
             },
             "chart2/ser_labels.ods": {
               "layout": 0.7185,
@@ -24147,7 +24147,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9377
+              "text_f1": 1
             },
             "chart2/smoothedLines.ods": {
               "layout": 0.9482,
@@ -24155,7 +24155,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9884
+              "text_f1": 1
             },
             "chart2/stepped_lines.ods": {
               "layout": 0.878,
@@ -24163,7 +24163,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9063
+              "text_f1": 0.9811
             },
             "chart2/tdf101894.ods": {
               "layout": 0.9239,
@@ -24171,7 +24171,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9489
+              "text_f1": 0.9941
             },
             "chart2/tdf107097.ods": {
               "layout": 0.5602,
@@ -24179,7 +24179,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.3333,
-              "text_f1": 0.9175
+              "text_f1": 0.9147
             },
             "chart2/tdf108021.ods": {
               "layout": 0.3256,
@@ -24187,7 +24187,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.7383
+              "text_f1": 0.9479
             },
             "chart2/tdf120348.ods": {
               "layout": 0.7059,
@@ -24195,7 +24195,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.1111,
-              "text_f1": 0.7999
+              "text_f1": 0.8231
             },
             "chart2/tdf123774.ods": {
               "layout": 0.9805,
@@ -24203,7 +24203,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9667
+              "text_f1": 0.9375
             },
             "chart2/tdf128432.ods": {
               "layout": 0.6583,
@@ -24211,7 +24211,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.9773
+              "text_f1": 0.9783
             },
             "chart2/tdf131115.ods": {
               "layout": 0.9692,
@@ -24219,7 +24219,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8974
+              "text_f1": 1
             },
             "chart2/tdf131979.ods": {
               "layout": 0.9755,
@@ -24227,7 +24227,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.906
+              "text_f1": 0.9815
             },
             "chart2/tdf132076.ods": {
               "layout": 0.9919,
@@ -24235,7 +24235,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9451
+              "text_f1": 1
             },
             "chart2/tdf135366_data_label_series.ods": {
               "layout": 0.8785,
@@ -24251,7 +24251,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.7994
+              "text_f1": 0.8638
             },
             "chart2/tdf136024.ods": {
               "layout": 0.849,
@@ -24259,7 +24259,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.9615
+              "text_f1": 1
             },
             "chart2/tdf146066.ods": {
               "layout": 0.7261,
@@ -24267,7 +24267,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.6977
+              "text_f1": 0.6874
             },
             "chart2/tdf146463.ods": {
               "layout": 0.6569,
@@ -24275,7 +24275,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.6667,
-              "text_f1": 0.3558
+              "text_f1": 0.3861
             },
             "chart2/tdf148142.ods": {
               "layout": 0.8748,
@@ -24283,7 +24283,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9318
+              "text_f1": 1
             },
             "chart2/tdf151091.ods": {
               "layout": 0.4323,
@@ -24291,7 +24291,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.3333,
-              "text_f1": 0.9773
+              "text_f1": 0.986
             },
             "chart2/tdf153706_XY_scatter_chart.ods": {
               "layout": 0.9559,
@@ -24299,7 +24299,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.956
+              "text_f1": 1
             },
             "chart2/tdf158223.ods": {
               "layout": 0.9368,
@@ -24307,7 +24307,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8528
+              "text_f1": 0.9476
             },
             "sc/3AnchorTypes.ods": {
               "layout": 0.9478,
@@ -24339,7 +24339,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.5
+              "text_f1": 0.8333
             },
             "sc/ManualColWidthRowHeight.ods": {
               "layout": 0.969,
@@ -24547,7 +24547,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8167
+              "text_f1": 0.7899
             },
             "sc/custom-numfmt-hybrid-cell.ods": {
               "layout": 0.9909,
@@ -24563,7 +24563,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9412
+              "text_f1": 1
             },
             "sc/dataValidity.ods": {
               "layout": 0.938,
@@ -24667,7 +24667,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.7869
+              "text_f1": 0.8998
             },
             "sc/fdo36933test.ods": {
               "layout": 0.9543,
@@ -24675,7 +24675,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8155
+              "text_f1": 0.9167
             },
             "sc/fdo43534test.ods": {
               "layout": 0.3754,
@@ -24683,7 +24683,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.6667,
-              "text_f1": 0.6611
+              "text_f1": 0.73
             },
             "sc/fdo43700test.ods": {
               "layout": 0.9542,
@@ -24691,7 +24691,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.7901
+              "text_f1": 0.9545
             },
             "sc/fdo62729.ods": {
               "layout": 0.9659,
@@ -24715,7 +24715,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.6667,
-              "text_f1": 0.9959
+              "text_f1": 0.9982
             },
             "sc/fdo79305.ods": {
               "layout": 0.7296,
@@ -24763,7 +24763,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9771
+              "text_f1": 0.984
             },
             "sc/hard-recalc.ods": {
               "layout": 0.9644,
@@ -24963,7 +24963,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9663
+              "text_f1": 0.9746
             },
             "sc/new_cond_format_test_export.ods": {
               "layout": 0.9635,
@@ -24971,7 +24971,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9663
+              "text_f1": 0.9746
             },
             "sc/notes-on-3-sheets.ods": {
               "layout": 0.969,
@@ -25059,7 +25059,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.2222,
-              "text_f1": 0.9487
+              "text_f1": 0.9674
             },
             "sc/pivot-table-str-and-err-in-data.ods": {
               "layout": 0.9708,
@@ -25163,7 +25163,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9073
+              "text_f1": 0.9536
             },
             "sc/row-height-import.ods": {
               "layout": 0.9567,
@@ -25453,7 +25453,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9417
+              "text_f1": 0.9524
             },
             "sc/tdf121612.ods": {
               "layout": 0.9652,
@@ -25461,7 +25461,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.8889,
-              "text_f1": 0.931
+              "text_f1": 0.9424
             },
             "sc/tdf121716_EvenHeaderFooter.ods": {
               "layout": 0.975,
@@ -25534,7 +25534,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9737
+              "text_f1": 1
             },
             "sc/tdf123421_2datafields.ods": {
               "layout": 0.9674,
@@ -25670,7 +25670,7 @@
               "outline_recall": 1,
               "pages": 0.6667,
               "strict": 0,
-              "text_f1": 0.6284
+              "text_f1": 0.6381
             },
             "sc/tdf130583.ods": {
               "layout": 0.9518,
@@ -25750,7 +25750,7 @@
               "outline_recall": 0.6842,
               "pages": 0.9767,
               "strict": 0.2791,
-              "text_f1": 0.6388
+              "text_f1": 0.6503
             },
             "sc/tdf137020_FlipVertical.ods": {
               "layout": 0.9856,
@@ -25822,7 +25822,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9937
+              "text_f1": 1
             },
             "sc/tdf137216_HideCol.ods": {
               "layout": 0.9934,
@@ -25862,7 +25862,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8148
+              "text_f1": 1
             },
             "sc/tdf137624_autofillMergedMixed.ods": {
               "layout": 0.9857,
@@ -25966,7 +25966,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.2857,
-              "text_f1": 0.911
+              "text_f1": 0.8954
             },
             "sc/tdf142231.ods": {
               "layout": 0.9677,
@@ -26022,7 +26022,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.5763
+              "text_f1": 1
             },
             "sc/tdf162177_Eastersunday.fods": {
               "layout": 0.9651,
@@ -31853,7 +31853,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9822
+              "text_f1": 1
             },
             "layout/tdf122607_leerzeile.odt": {
               "layout": 0.9482,
@@ -32573,7 +32573,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.7742
+              "text_f1": 0.48
             },
             "odfexport/tdf140437.odt": {
               "layout": 0.9993,
@@ -37173,8 +37173,8 @@
     "libreoffice/pptx": {
       "features": {
         "diff": {
-          "matched": 185,
-          "mismatched": 84,
+          "matched": 186,
+          "mismatched": 83,
           "skipped": 42,
           "metrics": {
             "convert_error": 0,
@@ -37388,7 +37388,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.8261
+              "text_f1": 0.8922
             },
             "chart2/tdf150176.pptx": {
               "layout": 0.9867,
@@ -45995,8 +45995,8 @@
     "libreoffice/xlsx": {
       "features": {
         "diff": {
-          "matched": 160,
-          "mismatched": 68,
+          "matched": 153,
+          "mismatched": 75,
           "skipped": 24,
           "metrics": {
             "convert_error": 0,
@@ -46026,7 +46026,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.8251
             },
             "chart2/auto_marker_excel10.xlsx": {
               "layout": 0.8907,
@@ -46042,7 +46042,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.9404
             },
             "chart2/autotitledel_2013.xlsx": {
               "layout": 0.9437,
@@ -46058,7 +46058,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.6667
             },
             "chart2/axis_character_properties.xlsx": {
               "layout": 0.8076,
@@ -46066,7 +46066,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.9872
             },
             "chart2/axis_title_default_rotation.xlsx": {
               "layout": 0.6813,
@@ -46074,7 +46074,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.7975
+              "text_f1": 0.943
             },
             "chart2/axis_title_rotated.xlsx": {
               "layout": 0.7311,
@@ -46082,7 +46082,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9657
+              "text_f1": 0.9706
             },
             "chart2/axis_title_rotation.xlsx": {
               "layout": 0.9456,
@@ -46098,7 +46098,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.7
+              "text_f1": 1
             },
             "chart2/barOfPieChart2.xlsx": {
               "layout": 0.4987,
@@ -46106,7 +46106,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.7
+              "text_f1": 1
             },
             "chart2/bar_chart_simple.xlsx": {
               "layout": 0.7581,
@@ -46114,7 +46114,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.6667
             },
             "chart2/barchart_totalsrow.xlsx": {
               "layout": 0.6441,
@@ -46122,7 +46122,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.75,
-              "text_f1": 0.8119
+              "text_f1": 0.7244
             },
             "chart2/bartest-stroke.xlsx": {
               "layout": 0.9376,
@@ -46130,7 +46130,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.9062
             },
             "chart2/box-whisker-gapwidth.xlsx": {
               "layout": 0.8755,
@@ -46138,7 +46138,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.705
+              "text_f1": 0.4962
             },
             "chart2/boxWhisker.xlsx": {
               "layout": 0.8837,
@@ -46146,7 +46146,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.3971
+              "text_f1": 0.4118
             },
             "chart2/bubble_chart_simple.xlsx": {
               "layout": 0.484,
@@ -46154,7 +46154,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.6667,
-              "text_f1": 0.5385
+              "text_f1": 0.5333
             },
             "chart2/chart-area-style-background.xlsx": {
               "layout": 0.9522,
@@ -46162,7 +46162,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.6667
             },
             "chart2/chart-area-style-border.xlsx": {
               "layout": 0.9124,
@@ -46186,7 +46186,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.9286
             },
             "chart2/chart-text-can-overlap.xlsx": {
               "layout": 0.7852,
@@ -46194,7 +46194,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.4686
+              "text_f1": 0.4691
             },
             "chart2/chart.xlsx": {
               "layout": 0.9535,
@@ -46202,7 +46202,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.9884
             },
             "chart2/chart_pie2007.xlsx": {
               "layout": 0.6447,
@@ -46210,7 +46210,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.94
             },
             "chart2/chart_title.xlsx": {
               "layout": 0.7731,
@@ -46218,7 +46218,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.6667
             },
             "chart2/chart_with_name_range.xlsx": {
               "layout": 0.9518,
@@ -46226,7 +46226,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.9354
             },
             "chart2/clusteredColumn.xlsx": {
               "layout": 0.8753,
@@ -46234,7 +46234,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.2295
+              "text_f1": 0.3008
             },
             "chart2/color_funnel.xlsx": {
               "layout": 0,
@@ -46250,7 +46250,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9615
+              "text_f1": 0.8114
             },
             "chart2/custom_data_label.xlsx": {
               "layout": 0.8658,
@@ -46266,7 +46266,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.86
+              "text_f1": 0.9615
             },
             "chart2/data_labels_fill_color.xlsx": {
               "layout": 0.8461,
@@ -46274,7 +46274,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.7667
             },
             "chart2/deleted_data_labels.xlsx": {
               "layout": 0.9309,
@@ -46282,7 +46282,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.9565
             },
             "chart2/deleted_legend_entry.xlsx": {
               "layout": 0.7675,
@@ -46290,7 +46290,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.6667,
-              "text_f1": 1
+              "text_f1": 0.6667
             },
             "chart2/deleted_legend_entry2.xlsx": {
               "layout": 0.9312,
@@ -46298,7 +46298,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.75,
-              "text_f1": 0.99
+              "text_f1": 0.6951
             },
             "chart2/dispBlanksAs_2007.xlsx": {
               "layout": 0.8207,
@@ -46314,7 +46314,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.7647
+              "text_f1": 0.8741
             },
             "chart2/empty_chart.xlsx": {
               "layout": 0.4583,
@@ -46322,7 +46322,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.5
+              "text_f1": 0
             },
             "chart2/external_str_ref.xlsx": {
               "layout": 0.7314,
@@ -46330,7 +46330,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.5
+              "text_f1": 0.8333
             },
             "chart2/fdo54361-1.xlsx": {
               "layout": 0.9364,
@@ -46346,7 +46346,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8155
+              "text_f1": 0.9113
             },
             "chart2/fdo70609.xlsx": {
               "layout": 0.7857,
@@ -46354,7 +46354,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9924
+              "text_f1": 0.902
             },
             "chart2/fdo78080.xlsx": {
               "layout": 0.8349,
@@ -46362,7 +46362,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.8333
+              "text_f1": 0.934
             },
             "chart2/funnel1.xlsx": {
               "layout": 0,
@@ -46378,7 +46378,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.902
+              "text_f1": 0.9478
             },
             "chart2/hidden_cells.xlsx": {
               "layout": 0.2354,
@@ -46394,7 +46394,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9444
+              "text_f1": 1
             },
             "chart2/invertIfNeg_bar.xlsx": {
               "layout": 0.6239,
@@ -46402,7 +46402,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9247
+              "text_f1": 0.5914
             },
             "chart2/invertIfNeg_bubble.xlsx": {
               "layout": 0.8399,
@@ -46418,7 +46418,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.6667
             },
             "chart2/majorTickMark.xlsx": {
               "layout": 0.7931,
@@ -46426,7 +46426,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.9316
             },
             "chart2/markerColor.xlsx": {
               "layout": 0.7647,
@@ -46434,7 +46434,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9905
+              "text_f1": 0.8704
             },
             "chart2/minorTickMark.xlsx": {
               "layout": 0.7876,
@@ -46442,7 +46442,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.9328
             },
             "chart2/no_marker.xlsx": {
               "layout": 0.767,
@@ -46450,7 +46450,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 1
+              "text_f1": 0.6667
             },
             "sc/Book1_custom.xlsx": {
               "layout": 0.9502,
@@ -46546,7 +46546,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8525
+              "text_f1": 0.9917
             },
             "sc/autofilter-colors-fg.xlsx": {
               "layout": 0.9234,
@@ -46578,7 +46578,7 @@
               "outline_recall": 1,
               "pages": 0.5,
               "strict": 0.5,
-              "text_f1": 0.4737
+              "text_f1": 0.5
             },
             "sc/autofilternamedrange.xlsx": {
               "layout": 0.9119,
@@ -46642,7 +46642,7 @@
               "outline_recall": 1,
               "pages": 0.7273,
               "strict": 0.7273,
-              "text_f1": 0.5667
+              "text_f1": 0.686
             },
             "sc/change-tracking.xlsx": {
               "layout": 0.8976,
@@ -46658,7 +46658,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8
+              "text_f1": 0.9894
             },
             "sc/check-boolean.xlsx": {
               "layout": 0.7547,
@@ -46842,7 +46842,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.2222
+              "text_f1": 0.3529
             },
             "sc/external-refs.xlsx": {
               "layout": 0.9638,
@@ -46866,7 +46866,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.9885,
-              "text_f1": 0.9871
+              "text_f1": 0.9997
             },
             "sc/forum-mso-en4-145327.xlsx": {
               "layout": 0.9566,
@@ -46882,7 +46882,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.8983
+              "text_f1": 0.9254
             },
             "sc/groupShape.xlsx": {
               "layout": 0.9823,
@@ -46938,7 +46938,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9083
+              "text_f1": 0.9526
             },
             "sc/matrix-multiplication.xlsx": {
               "layout": 0.9374,
@@ -47002,7 +47002,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.963
+              "text_f1": 1
             },
             "sc/pivot_table_first_header_row.xlsx": {
               "layout": 0.919,
@@ -47010,7 +47010,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9909
+              "text_f1": 0.9921
             },
             "sc/pivottable_1s_difference.xlsx": {
               "layout": 0.6439,
@@ -47050,7 +47050,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9818
+              "text_f1": 0.9841
             },
             "sc/pivottable_error_item_filter.xlsx": {
               "layout": 0.5872,
@@ -47074,7 +47074,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8926
+              "text_f1": 0.9708
             },
             "sc/pivottable_outline_mode.xlsx": {
               "layout": 0.4116,
@@ -47218,7 +47218,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.5
+              "text_f1": 0.75
             },
             "sc/tdf107586.xlsx": {
               "layout": 0,
@@ -47338,7 +47338,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.3333
+              "text_f1": 0.8889
             },
             "sc/tdf119565.xlsx": {
               "layout": 0.9813,
@@ -47402,7 +47402,7 @@
               "outline_recall": 1,
               "pages": 0.8333,
               "strict": 0.8333,
-              "text_f1": 0.6007
+              "text_f1": 0.5751
             },
             "sc/tdf122471.xlsx": {
               "layout": 0.511,
@@ -47490,7 +47490,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9706
+              "text_f1": 1
             },
             "sc/tdf134455.xlsx": {
               "layout": 0.3209,
@@ -47506,7 +47506,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.6186
+              "text_f1": 0.8892
             },
             "sc/tdf134769.xlsx": {
               "layout": 0.9602,
@@ -47538,7 +47538,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.5
+              "text_f1": 0.75
             },
             "sc/tdf137091.xlsx": {
               "layout": 0.9941,
@@ -47618,7 +47618,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 1
+              "text_f1": 0
             },
             "sc/tdf142905.xlsx": {
               "layout": 0.7906,
@@ -47810,7 +47810,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.3913
+              "text_f1": 0.3749
             },
             "sc/tdf165655.xlsx": {
               "layout": 0.7793,
@@ -47832,8 +47832,8 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 244,
-          "mismatched": 36,
+          "matched": 246,
+          "mismatched": 34,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -47848,10 +47848,10 @@
             "pass_a3b": 280,
             "pass_a3u": 280,
             "pass_a4": 280,
-            "pass_a4+ua2": 244,
+            "pass_a4+ua2": 246,
             "pass_a4e": 280,
             "pass_ua1": 250,
-            "pass_ua2": 244,
+            "pass_ua2": 246,
             "pass_v1.4": 280,
             "pass_v1.5": 280,
             "pass_v1.6": 280,
@@ -48864,10 +48864,10 @@
               "a3b": 1,
               "a3u": 1,
               "a4": 1,
-              "a4+ua2": 0,
+              "a4+ua2": 1,
               "a4e": 1,
               "ua1": 1,
-              "ua2": 0,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -53505,10 +53505,10 @@
               "a3b": 1,
               "a3u": 1,
               "a4": 1,
-              "a4+ua2": 0,
+              "a4+ua2": 1,
               "a4e": 1,
               "ua1": 1,
-              "ua2": 0,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -55699,7 +55699,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.864
+              "text_f1": 1
             },
             "tables-widths-layout": {
               "layout": 0.8296,
@@ -60008,12 +60008,12 @@
     "litho/html": {
       "features": {
         "diff": {
-          "matched": 204,
+          "matched": 206,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 204,
+            "pages_equal": 206,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -60199,7 +60199,23 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9706
+              "text_f1": 0.9565
+            },
+            "color-scheme": {
+              "layout": 0.9996,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "container-queries": {
+              "layout": 0.9565,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "display-contents": {
               "layout": 0.9642,
@@ -60543,7 +60559,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 1
+              "text_f1": 0.9951
             },
             "multicol-newsletter": {
               "layout": 0.925,
@@ -61653,31 +61669,31 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 201,
+          "matched": 203,
           "mismatched": 3,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 456,
-            "pass_a1a": 204,
-            "pass_a1b": 204,
-            "pass_a2a": 204,
-            "pass_a2a+ua1": 201,
-            "pass_a2b": 204,
-            "pass_a2u": 204,
-            "pass_a3a": 204,
-            "pass_a3b": 204,
-            "pass_a3u": 204,
-            "pass_a4": 204,
-            "pass_a4+ua2": 202,
-            "pass_a4e": 204,
-            "pass_ua1": 201,
-            "pass_ua2": 202,
-            "pass_v1.4": 204,
-            "pass_v1.5": 204,
-            "pass_v1.6": 204,
-            "pass_v1.7": 204,
-            "pass_v2.0": 204,
+            "pass_a1a": 206,
+            "pass_a1b": 206,
+            "pass_a2a": 206,
+            "pass_a2a+ua1": 203,
+            "pass_a2b": 206,
+            "pass_a2u": 206,
+            "pass_a3a": 206,
+            "pass_a3b": 206,
+            "pass_a3u": 206,
+            "pass_a4": 206,
+            "pass_a4+ua2": 204,
+            "pass_a4e": 206,
+            "pass_ua1": 203,
+            "pass_ua2": 204,
+            "pass_v1.4": 206,
+            "pass_v1.5": 206,
+            "pass_v1.6": 206,
+            "pass_v1.7": 206,
+            "pass_v2.0": 206,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -62150,6 +62166,48 @@
               "v2.0": 1
             },
             "clip-path-svg": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "color-scheme": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "container-queries": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
@@ -66258,7 +66316,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.7243
+              "text_f1": 0.7481
             },
             "wide-deck": {
               "layout": 0.9602,
@@ -76623,8 +76681,8 @@
     "litho/xlsx": {
       "features": {
         "diff": {
-          "matched": 132,
-          "mismatched": 24,
+          "matched": 134,
+          "mismatched": 22,
           "skipped": 11,
           "metrics": {
             "convert_error": 0,
@@ -76702,7 +76760,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9982
+              "text_f1": 1
             },
             "chart_sheet": {
               "layout": 0.7462,
@@ -76718,7 +76776,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.7726
+              "text_f1": 0.9
             },
             "charts_axes_legends": {
               "layout": 0.9315,
@@ -76814,7 +76872,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9184
+              "text_f1": 0.9592
             },
             "comments_at_end": {
               "layout": 0.4782,
@@ -76846,7 +76904,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.7292
+              "text_f1": 1
             },
             "dynamic_arrays": {
               "layout": 0.752,
@@ -76854,7 +76912,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.7959
+              "text_f1": 0.8041
             },
             "external_links": {
               "layout": 0.9591,
@@ -76894,7 +76952,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.4979
+              "text_f1": 0.75
             },
             "formulas": {
               "layout": 0.9444,
@@ -76910,7 +76968,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8884
+              "text_f1": 0.9175
             },
             "header_footer_images": {
               "layout": 0.4164,
@@ -76982,7 +77040,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9829
+              "text_f1": 1
             },
             "margins_centering": {
               "layout": 0.9082,
@@ -76998,7 +77056,7 @@
               "outline_recall": 1,
               "pages": 0.5,
               "strict": 0.5,
-              "text_f1": 0.4416
+              "text_f1": 0.5
             },
             "minimal": {
               "layout": 0.9283,
@@ -77014,7 +77072,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.9505
+              "text_f1": 0.9524
             },
             "options_hidden_sheets": {
               "layout": 0.9221,
@@ -77670,7 +77728,7 @@
               "outline_recall": 1,
               "pages": 0.5833,
               "strict": 0.5833,
-              "text_f1": 0.7142
+              "text_f1": 0.8451
             },
             "pictures": {
               "layout": 0.9261,
@@ -77766,7 +77824,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.8889,
-              "text_f1": 0.9876
+              "text_f1": 0.9974
             },
             "shapes_textboxes": {
               "layout": 0.9251,
@@ -77782,7 +77840,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.6557
+              "text_f1": 0.875
             },
             "sheet_protection": {
               "layout": 0.9415,
@@ -77830,7 +77888,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9944
+              "text_f1": 1
             },
             "text_overflow": {
               "layout": 0.9059,
@@ -77838,7 +77896,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9653
+              "text_f1": 0.9317
             },
             "text_rotation": {
               "layout": 0.5828,
@@ -77846,7 +77904,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.9419
+              "text_f1": 0.9832
             },
             "theme_custom": {
               "layout": 0.9569,
@@ -83312,27 +83370,27 @@
           "mismatched": 21,
           "skipped": 0,
           "metrics": {
-            "convert_error": 1,
+            "convert_error": 0,
             "oracle_targets": 475,
-            "pass_a1a": 249,
-            "pass_a1b": 249,
+            "pass_a1a": 250,
+            "pass_a1b": 250,
             "pass_a2a": 247,
             "pass_a2a+ua1": 229,
-            "pass_a2b": 249,
-            "pass_a2u": 249,
+            "pass_a2b": 250,
+            "pass_a2u": 250,
             "pass_a3a": 247,
-            "pass_a3b": 249,
-            "pass_a3u": 249,
-            "pass_a4": 249,
+            "pass_a3b": 250,
+            "pass_a3u": 250,
+            "pass_a4": 250,
             "pass_a4+ua2": 239,
-            "pass_a4e": 249,
-            "pass_ua1": 231,
+            "pass_a4e": 250,
+            "pass_ua1": 232,
             "pass_ua2": 239,
-            "pass_v1.4": 249,
-            "pass_v1.5": 249,
-            "pass_v1.6": 249,
-            "pass_v1.7": 249,
-            "pass_v2.0": 249,
+            "pass_v1.4": 250,
+            "pass_v1.5": 250,
+            "pass_v1.6": 250,
+            "pass_v1.7": 250,
+            "pass_v2.0": 250,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -88320,25 +88378,25 @@
               "v2.0": 1
             },
             "v2FxTestFiles/wordprocessing/page_layout/page_layout_big_file/column2.docx": {
-              "a1a": 0,
-              "a1b": 0,
+              "a1a": 1,
+              "a1b": 1,
               "a2a": 0,
               "a2a+ua1": 0,
-              "a2b": 0,
-              "a2u": 0,
+              "a2b": 1,
+              "a2u": 1,
               "a3a": 0,
-              "a3b": 0,
-              "a3u": 0,
-              "a4": 0,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
               "a4+ua2": 0,
-              "a4e": 0,
-              "ua1": 0,
+              "a4e": 1,
+              "ua1": 1,
               "ua2": 0,
-              "v1.4": 0,
-              "v1.5": 0,
-              "v1.6": 0,
-              "v1.7": 0,
-              "v2.0": 0
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
             },
             "v2FxTestFiles/wordprocessing/page_layout/page_layout_big_file/landScape.docx": {
               "a1a": 1,
@@ -88919,7 +88977,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.881
+              "text_f1": 0.9318
             },
             "O14ISOStrict/PowerPoint/indent51206400_mainLvl1ppr_IndentLevel1Maximum.pptx": {
               "layout": 0.7065,
@@ -89591,7 +89649,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.125,
-              "text_f1": 0.9478
+              "text_f1": 0.9781
             },
             "v2FxTestFiles/presentation/SmartArt_OrgChart1.pptx": {
               "layout": 0,
@@ -93700,7 +93758,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.05,
-              "text_f1": 0.8479
+              "text_f1": 0.837
             },
             "O14ISOStrict/Graphics/3DRotation-O12-XL-OartTextEffects.xlsx": {
               "layout": 0,
@@ -93708,7 +93766,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.1333
+              "text_f1": 0.1
             },
             "O14ISOStrict/Graphics/3D_Bar-O12-XL-Charts.xlsx": {
               "layout": 0.4636,
@@ -93716,7 +93774,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.9025
+              "text_f1": 0.849
             },
             "O14ISOStrict/Graphics/3D_Rotation_Parallel_-O12-XL-OartEffects.xlsx": {
               "layout": 0.194,
@@ -93732,7 +93790,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.3335
+              "text_f1": 0.7239
             },
             "O14ISOStrict/Graphics/Bevel-O12-XL-OartEffects.xlsx": {
               "layout": 0.9187,
@@ -93853,7 +93911,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 1
+              "text_f1": 0.9392
             },
             "v2FxTestFiles/spreadsheet/NativePivotSourceWorkbook.xlsx": {
               "layout": 0.9604,
@@ -93893,7 +93951,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.4118,
-              "text_f1": 0.9093
+              "text_f1": 0.881
             },
             "v2FxTestFiles/spreadsheet/O12_templates/ProductCompetitiveAnalysis_TP10186503.xltx": {
               "layout": 0.75,
@@ -93917,7 +93975,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9761
+              "text_f1": 0.981
             },
             "v2FxTestFiles/spreadsheet/O12_templates/VendorRatingCriteriaWorkbook_TP10192758.xltx": {
               "layout": 0.868,
@@ -93933,7 +93991,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.8824,
-              "text_f1": 0.9568
+              "text_f1": 0.9329
             },
             "v2FxTestFiles/spreadsheet/Pivot.xlsx": {
               "layout": 0.6937,
@@ -93989,7 +94047,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.025,
-              "text_f1": 0.9331
+              "text_f1": 0.9369
             },
             "v2FxTestFiles/spreadsheet/RelationalPivotA3.xlsx": {
               "layout": 0.1165,
@@ -111213,8 +111271,8 @@
     "poi/xlsx": {
       "features": {
         "diff": {
-          "matched": 123,
-          "mismatched": 36,
+          "matched": 129,
+          "mismatched": 30,
           "skipped": 26,
           "metrics": {
             "convert_error": 1,
@@ -111260,7 +111318,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.95
+              "text_f1": 1
             },
             "openxml4j/sample.xlsx": {
               "layout": 0.943,
@@ -111268,7 +111326,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.95
+              "text_f1": 1
             },
             "spreadsheet/45540_classic_Footer.xlsx": {
               "layout": 0.3934,
@@ -111276,7 +111334,7 @@
               "outline_recall": 1,
               "pages": 0.8182,
               "strict": 0.3636,
-              "text_f1": 0.5198
+              "text_f1": 0.5307
             },
             "spreadsheet/45540_classic_Header.xlsx": {
               "layout": 0.3838,
@@ -111284,7 +111342,7 @@
               "outline_recall": 1,
               "pages": 0.8182,
               "strict": 0.3636,
-              "text_f1": 0.5198
+              "text_f1": 0.5307
             },
             "spreadsheet/45544.xlsx": {
               "layout": 0.3412,
@@ -111292,7 +111350,7 @@
               "outline_recall": 1,
               "pages": 0.8,
               "strict": 0.3,
-              "text_f1": 0.4718
+              "text_f1": 0.4837
             },
             "spreadsheet/46536.xlsx": {
               "layout": 0.9545,
@@ -111484,7 +111542,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9125
+              "text_f1": 1
             },
             "spreadsheet/51710.xlsx": {
               "layout": 0.9602,
@@ -111596,7 +111654,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9497
+              "text_f1": 0.9939
             },
             "spreadsheet/54288.xlsx": {
               "layout": 0.9822,
@@ -111604,7 +111662,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9491
+              "text_f1": 0.9933
             },
             "spreadsheet/54399.xlsx": {
               "layout": 0.9084,
@@ -111764,7 +111822,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.5714
+              "text_f1": 1
             },
             "spreadsheet/56514.xlsx": {
               "layout": 0.825,
@@ -111900,7 +111958,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.6667
+              "text_f1": 1
             },
             "spreadsheet/57423.xlsx": {
               "layout": 0.9658,
@@ -112004,7 +112062,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8529
+              "text_f1": 1
             },
             "spreadsheet/58896.xlsx": {
               "layout": 0.2826,
@@ -112012,7 +112070,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.4537,
-              "text_f1": 0.5891
+              "text_f1": 0.8143
             },
             "spreadsheet/59021.xlsx": {
               "layout": 0.5926,
@@ -112020,7 +112078,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.6154
+              "text_f1": 0.85
             },
             "spreadsheet/59026.xlsx": {
               "layout": 0.9357,
@@ -112052,7 +112110,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8611
+              "text_f1": 1
             },
             "spreadsheet/59388.xlsx": {
               "layout": 0.1974,
@@ -112084,7 +112142,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.8309
+              "text_f1": 0.8686
             },
             "spreadsheet/59775.xlsx": {
               "layout": 0.8402,
@@ -112116,7 +112174,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8177
+              "text_f1": 0.9209
             },
             "spreadsheet/60709.xlsx": {
               "layout": 0.948,
@@ -112212,7 +112270,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9545
+              "text_f1": 1
             },
             "spreadsheet/64450.xlsx": {
               "layout": 0.6827,
@@ -112220,7 +112278,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.7523
+              "text_f1": 0.725
             },
             "spreadsheet/64508.xlsx": {
               "layout": 0.9452,
@@ -112228,7 +112286,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.3607
+              "text_f1": 0.6667
             },
             "spreadsheet/64667.xlsx": {
               "layout": 0.836,
@@ -112236,7 +112294,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.6667
+              "text_f1": 1
             },
             "spreadsheet/64750.xlsx": {
               "layout": 0.967,
@@ -112276,7 +112334,7 @@
               "outline_recall": 1,
               "pages": 0.75,
               "strict": 0,
-              "text_f1": 0.3824
+              "text_f1": 0.3934
             },
             "spreadsheet/Booleans.xlsx": {
               "layout": 0.718,
@@ -112292,7 +112350,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9466
+              "text_f1": 1
             },
             "spreadsheet/CustomXMLMappings.xlsx": {
               "layout": 0.9608,
@@ -112300,7 +112358,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8462
+              "text_f1": 1
             },
             "spreadsheet/CustomXmlMappings-inverse-order.xlsx": {
               "layout": 0.9608,
@@ -112308,7 +112366,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8462
+              "text_f1": 1
             },
             "spreadsheet/DataTableCities.xlsx": {
               "layout": 0.9002,
@@ -112380,7 +112438,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.9569,
-              "text_f1": 0.9611
+              "text_f1": 0.972
             },
             "spreadsheet/FormulaSheetRange.xlsx": {
               "layout": 0.9159,
@@ -112412,7 +112470,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.95
+              "text_f1": 1
             },
             "spreadsheet/Intersection-52111-xssf.xlsx": {
               "layout": 0.9151,
@@ -112428,7 +112486,7 @@
               "outline_recall": 1,
               "pages": 0.8571,
               "strict": 0.7143,
-              "text_f1": 0.8534
+              "text_f1": 0.8571
             },
             "spreadsheet/NewStyleConditionalFormattings.xlsx": {
               "layout": 0.73,
@@ -112498,8 +112556,8 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 191,
-          "mismatched": 9,
+          "matched": 192,
+          "mismatched": 8,
           "skipped": 0,
           "metrics": {
             "convert_error": 1,
@@ -112514,10 +112572,10 @@
             "pass_a3b": 199,
             "pass_a3u": 199,
             "pass_a4": 199,
-            "pass_a4+ua2": 191,
+            "pass_a4+ua2": 192,
             "pass_a4e": 199,
             "pass_ua1": 194,
-            "pass_ua2": 191,
+            "pass_ua2": 192,
             "pass_v1.4": 199,
             "pass_v1.5": 199,
             "pass_v1.6": 199,
@@ -116176,10 +116234,10 @@
               "a3b": 1,
               "a3u": 1,
               "a4": 1,
-              "a4+ua2": 0,
+              "a4+ua2": 1,
               "a4e": 1,
               "ua1": 1,
-              "ua2": 0,
+              "ua2": 1,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -117635,8 +117693,8 @@
     "wpt": {
       "features": {
         "reftest": {
-          "matched": 4841,
-          "mismatched": 491,
+          "matched": 5012,
+          "mismatched": 518,
           "skipped": 0,
           "metrics": {
             "convert_error": 0
@@ -119717,6 +119775,145 @@
             "css/css-color/xyz-d50-001.html": "pass",
             "css/css-color/xyz-d50-002.html": "pass",
             "css/css-color/xyz-d65-005.html": "pass",
+            "css/css-conditional/at-media-001.html": "pass",
+            "css/css-conditional/at-media-002.html": "fail",
+            "css/css-conditional/at-media-003.html": "fail",
+            "css/css-conditional/at-media-content-001.html": "fail",
+            "css/css-conditional/at-media-content-003.html": "pass",
+            "css/css-conditional/at-media-content-004.html": "pass",
+            "css/css-conditional/at-media-whitespace-optional-001.html": "pass",
+            "css/css-conditional/at-media-whitespace-optional-002.html": "pass",
+            "css/css-conditional/at-supports-001.html": "pass",
+            "css/css-conditional/at-supports-002.html": "pass",
+            "css/css-conditional/at-supports-003.html": "pass",
+            "css/css-conditional/at-supports-004.html": "pass",
+            "css/css-conditional/at-supports-005.html": "pass",
+            "css/css-conditional/at-supports-006.html": "pass",
+            "css/css-conditional/at-supports-007.html": "pass",
+            "css/css-conditional/at-supports-008.html": "pass",
+            "css/css-conditional/at-supports-009.html": "pass",
+            "css/css-conditional/at-supports-010.html": "pass",
+            "css/css-conditional/at-supports-011.html": "pass",
+            "css/css-conditional/at-supports-012.html": "pass",
+            "css/css-conditional/at-supports-013.html": "pass",
+            "css/css-conditional/at-supports-014.html": "pass",
+            "css/css-conditional/at-supports-015.html": "pass",
+            "css/css-conditional/at-supports-016.html": "pass",
+            "css/css-conditional/at-supports-018.html": "pass",
+            "css/css-conditional/at-supports-019.html": "pass",
+            "css/css-conditional/at-supports-020.html": "pass",
+            "css/css-conditional/at-supports-021.html": "pass",
+            "css/css-conditional/at-supports-022.html": "pass",
+            "css/css-conditional/at-supports-023.html": "pass",
+            "css/css-conditional/at-supports-024.html": "pass",
+            "css/css-conditional/at-supports-025.html": "pass",
+            "css/css-conditional/at-supports-026.html": "pass",
+            "css/css-conditional/at-supports-027.html": "pass",
+            "css/css-conditional/at-supports-028.html": "pass",
+            "css/css-conditional/at-supports-029.html": "pass",
+            "css/css-conditional/at-supports-030.html": "pass",
+            "css/css-conditional/at-supports-031.html": "pass",
+            "css/css-conditional/at-supports-032.html": "pass",
+            "css/css-conditional/at-supports-033.html": "pass",
+            "css/css-conditional/at-supports-034.html": "pass",
+            "css/css-conditional/at-supports-035.html": "pass",
+            "css/css-conditional/at-supports-036.html": "pass",
+            "css/css-conditional/at-supports-037.html": "pass",
+            "css/css-conditional/at-supports-038.html": "pass",
+            "css/css-conditional/at-supports-039.html": "pass",
+            "css/css-conditional/at-supports-043.html": "pass",
+            "css/css-conditional/at-supports-044.html": "pass",
+            "css/css-conditional/at-supports-045.html": "fail",
+            "css/css-conditional/at-supports-046.html": "pass",
+            "css/css-conditional/at-supports-048.html": "pass",
+            "css/css-conditional/at-supports-at-rule-001.html": "fail",
+            "css/css-conditional/at-supports-at-rule-002.html": "fail",
+            "css/css-conditional/at-supports-at-rule-003.html": "fail",
+            "css/css-conditional/at-supports-at-rule-004.html": "pass",
+            "css/css-conditional/at-supports-at-rule-005.html": "pass",
+            "css/css-conditional/at-supports-at-rule-006.html": "fail",
+            "css/css-conditional/at-supports-content-001.html": "fail",
+            "css/css-conditional/at-supports-content-003.html": "pass",
+            "css/css-conditional/at-supports-content-004.html": "pass",
+            "css/css-conditional/at-supports-font-format-001.html": "fail",
+            "css/css-conditional/at-supports-font-tech-001.html": "fail",
+            "css/css-conditional/at-supports-namespace-001.html": "fail",
+            "css/css-conditional/at-supports-namespace-002.html": "fail",
+            "css/css-conditional/at-supports-selector-001.html": "pass",
+            "css/css-conditional/at-supports-selector-002.html": "pass",
+            "css/css-conditional/at-supports-selector-003.html": "pass",
+            "css/css-conditional/at-supports-selector-004.html": "fail",
+            "css/css-conditional/at-supports-selector-details-content-before.html": "fail",
+            "css/css-conditional/at-supports-selector-details-content.html": "pass",
+            "css/css-conditional/at-supports-selector-detecting-invalid-in-logical-combinations.html": "fail",
+            "css/css-conditional/at-supports-selector-file-selector-button.html": "pass",
+            "css/css-conditional/at-supports-selector-picker-icon.html": "fail",
+            "css/css-conditional/at-supports-selector-picker.html": "fail",
+            "css/css-conditional/at-supports-selector-placeholder.html": "pass",
+            "css/css-conditional/container-queries/chrome-legacy-skip-recalc.html": "pass",
+            "css/css-conditional/container-queries/container-units-gradient.html": "pass",
+            "css/css-conditional/container-queries/container-units-rule-cache.html": "pass",
+            "css/css-conditional/container-queries/container-units-sharing-via-rule-node.html": "pass",
+            "css/css-conditional/container-queries/counters-in-container.html": "pass",
+            "css/css-conditional/container-queries/display-in-container.html": "pass",
+            "css/css-conditional/container-queries/flex-basis-with-container-type.html": "pass",
+            "css/css-conditional/container-queries/inline-size-bfc-floats.html": "fail",
+            "css/css-conditional/container-queries/inner-first-line-non-matching.html": "pass",
+            "css/css-conditional/container-queries/multicol-inside-container.html": "pass",
+            "css/css-conditional/container-queries/multiple-conditions-001.html": "pass",
+            "css/css-conditional/container-queries/no-layout-containment-abspos.html": "pass",
+            "css/css-conditional/container-queries/no-layout-containment-baseline.html": "pass",
+            "css/css-conditional/container-queries/no-layout-containment-fixedpos.html": "pass",
+            "css/css-conditional/container-queries/query-style-color.html": "fail",
+            "css/css-conditional/container-queries/scrollbar-container-units-block.html": "pass",
+            "css/css-conditional/container-queries/scrollbar-container-units-inline.html": "pass",
+            "css/css-conditional/container-queries/size-container-with-quotes.html": "pass",
+            "css/css-conditional/container-queries/style-negation-with-container-name.html": "pass",
+            "css/css-conditional/container-queries/style-query-attr-tainted.html": "pass",
+            "css/css-conditional/css-supports-001.xht": "pass",
+            "css/css-conditional/css-supports-002.xht": "pass",
+            "css/css-conditional/css-supports-003.xht": "pass",
+            "css/css-conditional/css-supports-004.xht": "pass",
+            "css/css-conditional/css-supports-005.xht": "pass",
+            "css/css-conditional/css-supports-006.xht": "pass",
+            "css/css-conditional/css-supports-007.xht": "pass",
+            "css/css-conditional/css-supports-008.xht": "pass",
+            "css/css-conditional/css-supports-009.xht": "pass",
+            "css/css-conditional/css-supports-010.xht": "pass",
+            "css/css-conditional/css-supports-011.xht": "pass",
+            "css/css-conditional/css-supports-012.xht": "pass",
+            "css/css-conditional/css-supports-013.xht": "pass",
+            "css/css-conditional/css-supports-014.xht": "pass",
+            "css/css-conditional/css-supports-015.xht": "pass",
+            "css/css-conditional/css-supports-016.xht": "pass",
+            "css/css-conditional/css-supports-017.xht": "pass",
+            "css/css-conditional/css-supports-018.xht": "pass",
+            "css/css-conditional/css-supports-019.xht": "pass",
+            "css/css-conditional/css-supports-020.xht": "pass",
+            "css/css-conditional/css-supports-021.xht": "pass",
+            "css/css-conditional/css-supports-022.xht": "pass",
+            "css/css-conditional/css-supports-023.xht": "pass",
+            "css/css-conditional/css-supports-024.xht": "pass",
+            "css/css-conditional/css-supports-025.xht": "pass",
+            "css/css-conditional/css-supports-026.xht": "pass",
+            "css/css-conditional/css-supports-029.xht": "pass",
+            "css/css-conditional/css-supports-030.xht": "pass",
+            "css/css-conditional/css-supports-031.xht": "pass",
+            "css/css-conditional/css-supports-032.xht": "pass",
+            "css/css-conditional/css-supports-033.xht": "pass",
+            "css/css-conditional/css-supports-034.xht": "pass",
+            "css/css-conditional/css-supports-035.xht": "pass",
+            "css/css-conditional/css-supports-036.xht": "pass",
+            "css/css-conditional/css-supports-037.xht": "pass",
+            "css/css-conditional/css-supports-038.xht": "pass",
+            "css/css-conditional/css-supports-039.xht": "pass",
+            "css/css-conditional/css-supports-040.xht": "pass",
+            "css/css-conditional/css-supports-041.xht": "pass",
+            "css/css-conditional/css-supports-042.xht": "fail",
+            "css/css-conditional/css-supports-043.xht": "pass",
+            "css/css-conditional/css-supports-044.xht": "pass",
+            "css/css-conditional/css-supports-045.xht": "pass",
+            "css/css-conditional/css-supports-046.xht": "pass",
             "css/css-content/attr-case-sensitivity-001.html": "pass",
             "css/css-content/attr-chained-pseudo-001.html": "fail",
             "css/css-content/element-replacement-gradient.html": "pass",
@@ -120835,9 +121032,9 @@
             "css/css-images/object-view-box-rect.html": "pass",
             "css/css-images/object-view-box-size-containment.html": "pass",
             "css/css-images/object-view-box-xywh-percentage.html": "pass",
-            "css/css-images/radial-gradient-container-relative-units-001.html": "fail",
-            "css/css-images/radial-gradient-container-relative-units-002.html": "fail",
-            "css/css-images/radial-gradient-container-relative-units-004.html": "fail",
+            "css/css-images/radial-gradient-container-relative-units-001.html": "pass",
+            "css/css-images/radial-gradient-container-relative-units-002.html": "pass",
+            "css/css-images/radial-gradient-container-relative-units-004.html": "pass",
             "css/css-images/tiled-conic-gradients.html": "pass",
             "css/css-inline/baseline-source/baseline-source-inline-box.html": "pass",
             "css/css-inline/br-font-size.html": "pass",
@@ -122647,6 +122844,64 @@
             "css/css-writing-modes/text-indent-vrl-010.xht": "pass",
             "css/css-writing-modes/wm-propagation-002.html": "fail",
             "css/css-writing-modes/wm-propagation-body-051.html": "pass",
+            "css/filter-effects/backdrop-filter-3d-transform-perspective.html": "pass",
+            "css/filter-effects/backdrop-filter-backdrop-root-backdrop-filter.html": "fail",
+            "css/filter-effects/backdrop-filter-backdrop-root-clip-path-2.html": "pass",
+            "css/filter-effects/backdrop-filter-backdrop-root-clip-path.html": "fail",
+            "css/filter-effects/backdrop-filter-backdrop-root-filter.html": "fail",
+            "css/filter-effects/backdrop-filter-backdrop-root-mix-blend-mode.html": "fail",
+            "css/filter-effects/backdrop-filter-backdrop-root-opacity.html": "fail",
+            "css/filter-effects/backdrop-filter-basic-opacity-2.html": "pass",
+            "css/filter-effects/backdrop-filter-basic-opacity.html": "pass",
+            "css/filter-effects/backdrop-filter-basic.html": "pass",
+            "css/filter-effects/backdrop-filter-blur-large-value.html": "fail",
+            "css/filter-effects/backdrop-filter-box-shadow.html": "pass",
+            "css/filter-effects/backdrop-filter-clip-radius-zoom.html": "pass",
+            "css/filter-effects/backdrop-filter-clip-rect-2.html": "pass",
+            "css/filter-effects/backdrop-filter-clip-rect.html": "pass",
+            "css/filter-effects/backdrop-filter-clip-rounded-clip.html": "pass",
+            "css/filter-effects/backdrop-filter-clipped.html": "pass",
+            "css/filter-effects/backdrop-filter-containing-block.html": "pass",
+            "css/filter-effects/backdrop-filter-edge-clipping.html": "pass",
+            "css/filter-effects/backdrop-filter-edge-pixels.html": "pass",
+            "css/filter-effects/backdrop-filter-fixed-clip.html": "pass",
+            "css/filter-effects/backdrop-filter-image-size-filter-size-mismatch.html": "pass",
+            "css/filter-effects/backdrop-filter-in-transform-clip-surface.html": "pass",
+            "css/filter-effects/backdrop-filter-inline-positioning.html": "fail",
+            "css/filter-effects/backdrop-filter-isolation-fixed.html": "pass",
+            "css/filter-effects/backdrop-filter-isolation-isolate.html": "pass",
+            "css/filter-effects/backdrop-filter-nested-3d-transform-perspective.html": "pass",
+            "css/filter-effects/backdrop-filter-nested-border-radius-clip-2.html": "pass",
+            "css/filter-effects/backdrop-filter-nested-border-radius-clip-3.html": "pass",
+            "css/filter-effects/backdrop-filter-nested-border-radius-clip-4.html": "pass",
+            "css/filter-effects/backdrop-filter-nested-border-radius-clip.html": "pass",
+            "css/filter-effects/backdrop-filter-on-transformed-layer.html": "fail",
+            "css/filter-effects/backdrop-filter-opacity-rounded-clip.html": "pass",
+            "css/filter-effects/backdrop-filter-over-earlier-backdrop-filter.html": "fail",
+            "css/filter-effects/backdrop-filter-paint-order.html": "pass",
+            "css/filter-effects/backdrop-filter-plus-filter-2.html": "pass",
+            "css/filter-effects/backdrop-filter-plus-filter.html": "pass",
+            "css/filter-effects/backdrop-filter-plus-mask-large.html": "pass",
+            "css/filter-effects/backdrop-filter-plus-opacity.html": "pass",
+            "css/filter-effects/backdrop-filter-plus-will-change-opacity.html": "pass",
+            "css/filter-effects/backdrop-filter-root-element.html": "pass",
+            "css/filter-effects/backdrop-filter-scale-transform.html": "pass",
+            "css/filter-effects/backdrop-filter-transform.html": "pass",
+            "css/filter-effects/backdrop-filter-with-background-clip-content-box.html": "pass",
+            "css/filter-effects/backdrop-filter-with-background-clip-padding-box.html": "pass",
+            "css/filter-effects/backdrop-filter-with-mix-blend-mode-same-element.html": "pass",
+            "css/filter-effects/backdrop-filter-zero-size.html": "pass",
+            "css/filter-effects/backdrop-filters-blur-large.html": "pass",
+            "css/filter-effects/backdrop-filters-brightness.html": "pass",
+            "css/filter-effects/backdrop-filters-contrast.html": "pass",
+            "css/filter-effects/backdrop-filters-grayscale-001.html": "pass",
+            "css/filter-effects/backdrop-filters-grayscale-002.html": "pass",
+            "css/filter-effects/backdrop-filters-grayscale-003.html": "pass",
+            "css/filter-effects/backdrop-filters-hue-rotate.html": "pass",
+            "css/filter-effects/backdrop-filters-invert.html": "pass",
+            "css/filter-effects/backdrop-filters-opacity.html": "pass",
+            "css/filter-effects/backdrop-filters-saturate.html": "pass",
+            "css/filter-effects/backdrop-filters-sepia.html": "pass",
             "css/filter-effects/blur-clip-border-radius.html": "pass",
             "css/filter-effects/blur-clip-stacking-context-001.html": "pass",
             "css/filter-effects/blur-clip-stacking-context-002.html": "pass",
@@ -122672,6 +122927,7 @@
             "css/filter-effects/filter-contrast-001.html": "pass",
             "css/filter-effects/filter-contrast-002.html": "pass",
             "css/filter-effects/filter-contrast-003.html": "pass",
+            "css/filter-effects/filter-degenerate-layer-plane-backdrop.html": "pass",
             "css/filter-effects/filter-degenerate-layer-plane.html": "pass",
             "css/filter-effects/filter-function/filter-function-001.html": "fail",
             "css/filter-effects/filter-function/filter-function-002.html": "fail",
