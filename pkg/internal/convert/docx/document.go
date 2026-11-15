@@ -129,6 +129,10 @@ type document struct {
 	// (17.3.1.31 shd), else its table cell's (17.4.32 shd), nil for
 	// none; it decides the colour of automatic text ([autoTextBackground]).
 	under *css.Color
+	// boxText is the colour of the automatic text of the text box being
+	// built, from its shape's font reference ([document.boxTextColor]),
+	// nil outside one or for none.
+	boxText *css.Color
 	// vmlTypes maps a VML shape type's id to its shape type number
 	// (o:spt, Part 4, 14.1.2.20), for the shapes that name it.
 	vmlTypes map[string]int

@@ -324,6 +324,35 @@ func (d *document) loadPicture(part, id string) *layout.Picture {
 	return pic
 }
 
+// boxTextColor returns the colour of the automatic text of a wps:wsp
+// text box whose shape style is style: the colour of its font reference
+// (ECMA-376 Part 1, 20.1.4.2.10 fontRef), nil when it states none. A
+// colour a run or its styles state wins over it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/dml-groupshape-capitalization.docx,
+//     dml-groupshape-paraspacing.docx, dml-groupshape-runfonts.docx,
+//     ooxmlimport/dml-groupshape-paraadjust.docx: Word paints the text of
+//     grouped text boxes, which states no colour, white, the lt1 of their
+//     font reference; ooxmlexport/fdo74401.docx,
+//     dml-textframe-vertadjust.docx, LineStyle_DashType.docx: white too
+//     in text boxes outside a group.
+//   - libreoffice/docx ooxmlexport/ColorOverwritten.docx: the text of a
+//     text box whose font reference is lt1 takes the red and the green of
+//     its paragraph styles.
+func (d *document) boxTextColor(style *ooxml.Element) *css.Color {
+	ref := style.Child(ooxml.NSA, "fontRef")
+	if ref == nil {
+		return nil
+	}
+	c, ok := ooxml.SchemeColor(ref, d.theme)
+	if !ok {
+		return nil
+	}
+	return &c
+}
+
 // shape builds a wps:wsp (MS-ODRAWXML, 2.3.4): a text box as a block of
 // its content over the shape's fill, any other shape as a vector picture
 // of its preset or custom geometry. alt describes the shape, "" to read
@@ -345,7 +374,10 @@ func (d *document) shape(s *story, sp *ooxml.Element, st *css.Style, w, h float6
 	d.resolveBlip(s, &ss)
 	if tb := sp.Child(ooxml.NSWPS, "txbx"); tb != nil {
 		bodyPr := sp.Child(ooxml.NSWPS, "bodyPr")
+		boxText := d.boxText
+		d.boxText = d.boxTextColor(sp.Child(ooxml.NSWPS, "style"))
 		n := d.textBox(s, tb.Child(ooxml.NSW, "txbxContent"), w, h, ss, bodyInsets(bodyPr), alt, depth)
+		d.boxText = boxText
 		id := attrOr(tb, "id")
 		if id != "" {
 			setChain(n.Style, id, 0, h)

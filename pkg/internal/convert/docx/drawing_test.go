@@ -366,6 +366,41 @@ func TestTextBox_AnchorInGroup(t *testing.T) {
 	}
 }
 
+// TestTextBox_TakesItsFontReferenceColour checks that the automatic text
+// of a text box, in a group or alone, takes the colour of its shape's
+// font reference (ECMA-376 Part 1, 20.1.4.2.10 fontRef), as Word paints
+// it, and that a colour a run states wins.
+func TestTextBox_TakesItsFontReferenceColour(t *testing.T) {
+	t.Parallel()
+	theme := `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:themeElements><a:clrScheme name="x">` +
+		`<a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:accent1><a:srgbClr val="4F81BD"/></a:accent1></a:clrScheme></a:themeElements></a:theme>`
+	style := `<wps:style><a:lnRef idx="2"><a:schemeClr val="accent1"/></a:lnRef><a:fillRef idx="1"><a:schemeClr val="accent1"/></a:fillRef><a:effectRef idx="0"><a:schemeClr val="accent1"/></a:effectRef><a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef></wps:style>`
+	wsp := func(style, text string) string {
+		return `<wps:wsp><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="762000"/></a:xfrm><a:prstGeom prst="rect"/></wps:spPr>` + style +
+			`<wps:txbx><w:txbxContent><w:p><w:r><w:t>` + text + `</w:t></w:r><w:r><w:rPr><w:color w:val="FF0000"/></w:rPr><w:t>red` + text + `</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp>`
+	}
+	grouped := `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="3657600" cy="1828800"/><wp:docPr id="1" name="g"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup">` +
+		`<wpg:wgp xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"><wpg:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="3657600" cy="1828800"/><a:chOff x="0" y="0"/><a:chExt cx="3657600" cy="1828800"/></a:xfrm></wpg:grpSpPr>` +
+		wsp(style, "grouped") + `</wpg:wgp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	alone := func(style, text string) string {
+		return `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1270000" cy="762000"/><wp:docPr id="2" name="t"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">` +
+			wsp(style, text) + `</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+	}
+	body := grouped + alone(style, "alone") + alone("", "unstyled") + `<w:p><w:r><w:t>after</w:t></w:r></w:p>`
+	b := build(t, body, map[string]string{"word/theme/theme1.xml": theme})
+	white, black, red := css.Color{R: 1, G: 1, B: 1, A: 1}, css.Color{A: 1}, css.Color{R: 1, A: 1}
+	for _, tc := range []struct {
+		text string
+		want css.Color
+	}{
+		{"grouped", white}, {"redgrouped", red}, {"alone", white}, {"redalone", red}, {"unstyled", black}, {"after", black},
+	} {
+		if st := runWith(t, b.root, tc.text).Style; st.Color != tc.want {
+			t.Errorf("run %q: colour %+v, want %+v", tc.text, st.Color, tc.want)
+		}
+	}
+}
+
 // TestCanvas checks a drawing canvas: its background and outline as a
 // rectangle of its size, then its shapes at their offsets.
 func TestCanvas(t *testing.T) {

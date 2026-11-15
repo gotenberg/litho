@@ -151,6 +151,8 @@ func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
 	} else if bg := d.autoTextBackground(r); bg != nil && luminance(*bg) < autoWhiteBelow {
 		// Automatic colour turns white on a dark background (17.3.2.6).
 		st.Color = css.Color{R: 1, G: 1, B: 1, A: 1}
+	} else if d.boxText != nil {
+		st.Color = *d.boxText
 	}
 	st.TextDecoration = 0
 	st.TextDecorationStyle = css.DecorationSolid
