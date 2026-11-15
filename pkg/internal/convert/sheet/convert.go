@@ -420,6 +420,9 @@ func (b *builder) planSheet(i int, sh *Sheet) (*sheetPlan, error) {
 		sp.height = math.Min(h, office.MaxPageSide)
 		sp.pages = sp.pages[:1]
 	}
+	if err := b.notePages(sp); err != nil {
+		return nil, err
+	}
 	return sp, nil
 }
 
@@ -427,6 +430,15 @@ func (b *builder) planSheet(i int, sh *Sheet) (*sheetPlan, error) {
 // sheet, total the document's page count.
 func (b *builder) renderPage(p *pagePlan, first bool, total int) (*typeset.Page, *typeset.StructElem, error) {
 	sp := p.sp
+	if p.notes != nil {
+		pg := &typeset.Page{Width: sp.width, Height: sp.height}
+		pg.Content = append(b.margins(p, first, p.number, total, sp.width, sp.height), p.notes.Content...)
+		var st *typeset.StructElem
+		if p.noteTags != nil {
+			st = &typeset.StructElem{Kids: []*typeset.StructElem{p.noteTags}}
+		}
+		return pg, st, nil
+	}
 	pb := &pageBuilder{builder: b, g: sp.g, p: p}
 	frags, links, st, err := pb.build()
 	if err != nil {

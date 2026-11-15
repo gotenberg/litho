@@ -4,6 +4,8 @@ import (
 	"context"
 	"math"
 	"sort"
+
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 // Calc's print headings (sc/source/ui/inc/printfun.hxx): the row number
@@ -54,6 +56,11 @@ type pagePlan struct {
 	repRows, repCols *band
 	// number is the page number its page fields show.
 	number int
+	// notes, when not nil, makes the page one of the sheet's pages of
+	// notes, laid out on the sheet's paper ([builder.notePages]): it
+	// shows no cell. noteTags, on the first, holds the structure of all.
+	notes    *typeset.Page
+	noteTags *typeset.StructElem
 }
 
 // sheetPlan is how one sheet prints.

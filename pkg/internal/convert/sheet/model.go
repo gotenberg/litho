@@ -77,6 +77,9 @@ type Sheet struct {
 	// file lists them; a rule earlier in the list, or of a lower Priority
 	// when both set one, wins over a later one for a cell both match.
 	Conditional []Conditional
+	// Notes are the notes of the sheet's cells, in the order the file
+	// lists them; Page.Notes says where they print.
+	Notes []Note
 	// Pivots are the sheet's pivot tables, whose output the builder
 	// computes from their source cells and writes over the sheet's cells,
 	// as Calc rebuilds a pivot table when it loads a workbook.
@@ -604,6 +607,8 @@ type PageSetup struct {
 	// RowBreaks and ColumnBreaks are the 0-based indexes of the rows and
 	// columns a manual page break starts, rising.
 	RowBreaks, ColumnBreaks []int
+	// Notes is where the notes of the sheet's cells print.
+	Notes PrintNotes
 }
 
 // PrintErrors is how a sheet prints its error values (ECMA-376 Part 1,
