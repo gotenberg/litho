@@ -33,8 +33,7 @@
 // whose text is laid out; the CSS display of a MathML element other than
 // none, which is laid out as math whatever it says; positioned, floated,
 // transformed, clipped or filtered elements inside a formula; dashed and
-// dotted borders, drawn solid; the mirrored glyphs of a right-to-left
-// formula; the glyph assemblies MathML Core, B.4 offers for a font
+// dotted borders, drawn solid; the glyph assemblies MathML Core, B.4 offers for a font
 // without a MATH table, where [Style.Distances] scales a bracket's glyph
 // instead; and writing modes other than horizontal-tb.
 package formula

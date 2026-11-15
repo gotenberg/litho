@@ -111,6 +111,11 @@ func (l *layouter) moGlyph(e *Element, r rune, op *operator, st *Style, c lctx) 
 		return nil
 	}
 	gid := uint16(gid16) // fits uint16: checked above
+	if st.RTL {
+		if m, ok := l.mirroredGlyph(f, r, st); ok {
+			gid = m
+		}
+	}
 	switch {
 	case op.stretchy && op.inline:
 		if _, _, ok := f.math.Construction(gid, false); !ok || !c.stretch || !c.inline {

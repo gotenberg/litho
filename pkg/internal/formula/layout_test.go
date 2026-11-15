@@ -646,3 +646,37 @@ func TestUnderOver_AccentsSitOnTheirBase(t *testing.T) {
 		t.Fatalf("accentunder baseline %g down, want 3: its ascent under the base's ink", y)
 	}
 }
+
+// TestRTL_MirroredGlyphs draws the Bidi_Mirrored characters of a
+// right-to-left formula mirrored, a stretched fence included, and draws
+// no glyph for the mark that makes its text right to left (MathML 4,
+// 3.1.5.2; Unicode, BidiMirroring).
+func TestRTL_MirroredGlyphs(t *testing.T) {
+	s := dejavu(t)
+	gids := func(rtl bool) map[string]uint16 {
+		st := mathStyle("DejaVu Math TeX Gyre", 10)
+		st.RTL = rtl
+		root := el("math", tok("mo", "("), el("mfrac", tok("mi", "a"), tok("mi", "b")), tok("mo", "≤"), tok("mn", "12"))
+		out := map[string]uint16{}
+		for _, tx := range texts(lay(t, s, root, st)) {
+			for _, g := range tx.Glyphs {
+				if g.Text == "‏" {
+					t.Fatal("the right-to-left mark is drawn")
+				}
+				if g.Text != "" {
+					out[g.Text] = g.GID
+				}
+			}
+		}
+		return out
+	}
+	ltr, rtl := gids(false), gids(true)
+	for _, c := range []string{"(", "≤"} {
+		if ltr[c] == rtl[c] || rtl[c] == 0 {
+			t.Fatalf("%s drawn as glyph %d in both directions", c, rtl[c])
+		}
+	}
+	if ltr["1"] != rtl["1"] {
+		t.Fatal("a digit is mirrored")
+	}
+}
