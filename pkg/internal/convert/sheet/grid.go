@@ -314,15 +314,23 @@ func visible(st *Style) bool {
 	if st == nil {
 		return false
 	}
-	if st.Fill.Color.A > 0 {
+	if st.Fill.Color.A > 0 || lined(st) {
 		return true
+	}
+	return (st.DiagonalUp || st.DiagonalDown) && st.Diagonal.Line != LineNone
+}
+
+// lined reports a style that draws a border on a side of its cell.
+func lined(st *Style) bool {
+	if st == nil {
+		return false
 	}
 	for _, b := range st.Border {
 		if b.Line != LineNone {
 			return true
 		}
 	}
-	return (st.DiagonalUp || st.DiagonalDown) && st.Diagonal.Line != LineNone
+	return false
 }
 
 // usedRange returns the cells a sheet without print areas prints: from A1
@@ -331,17 +339,39 @@ func visible(st *Style) bool {
 // a text overflows into unless the sheet prints on one page of its
 // content; false when there are none.
 //
+// Calc counts a visible style only below the last value of its column, a
+// column without one counting its first row as that value
+// (ScTable::GetPrintArea, ScAttrArray::GetLastVisibleAttr), and stops at
+// a run of columns formatted alike ([grid.attrColumns]).
+//
 // # Corpus evidence
 //
 //   - libreoffice/xlsx: sc/cell-value.xlsx, whose D3 text overflows far
 //     past its last column, prints 8 pages.
 //   - gotenberg/xlsx: budget-single, whose Notes sheet's A2 text
 //     overflows, prints a page of column A alone as one page of content.
+//   - probe, ods: A1 holding a value and J1 a border, on A4 at seven
+//     columns a page, prints one page; with the border in J2, or J3 below
+//     a value in A5, two; A1 and J1 with a border and A3 a value, one.
 func (g *grid) usedRange(single bool) (Range, bool) {
 	u := Range{FirstRow: math.MaxInt32, FirstColumn: math.MaxInt32, LastRow: -1, LastColumn: -1}
 	add := func(r, c int) {
 		u.FirstRow, u.LastRow = min(u.FirstRow, r), max(u.LastRow, r)
 		u.FirstColumn, u.LastColumn = min(u.FirstColumn, c), max(u.LastColumn, c)
+	}
+	excel := g.doc.ExcelRules
+	// lastValue holds, under Calc's rules, the last row of each column
+	// with a value.
+	var lastValue map[int]int
+	if !excel {
+		lastValue = map[int]int{}
+		for _, ri := range g.rowOrder {
+			for i := range g.rows[ri].Cells {
+				if c := &g.rows[ri].Cells[i]; hasContent(c) {
+					lastValue[c.Column] = ri
+				}
+			}
+		}
 	}
 	dataLast, attrLast := -1, -1
 	for _, ri := range g.rowOrder {
@@ -351,10 +381,12 @@ func (g *grid) usedRange(single bool) (Range, bool) {
 			if c.Column < 0 || c.Column >= maxColumns {
 				continue
 			}
-			if hasContent(c) {
+			switch {
+			case hasContent(c):
 				dataLast = max(dataLast, c.Column)
 				add(ri, c.Column)
-			} else if visible(c.Style) {
+			case !visible(c.Style):
+			case excel || ri > lastValue[c.Column]:
 				attrLast = max(attrLast, c.Column)
 				add(ri, 0)
 			}

@@ -282,23 +282,35 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 const epsilon = 1e-6
 
 // empty reports a range Calc does not print a page for: no cell in it
-// shows a value, hidden rows and columns aside, and no drawing overlaps it
-// (ScDocument::IsPrintEmpty). Under Excel's rules a cell whose own style
-// paints a fill or a border counts as a value: Excel prints a page of
-// formatted cells alone.
+// shows a value or draws a border, hidden rows and columns aside, and no
+// drawing overlaps it (ScDocument::IsPrintEmpty, which prints "sheets with
+// borders even if there is no cell content"). Under Excel's rules a cell
+// whose own style paints a fill or a border counts as a value: Excel
+// prints a page of formatted cells alone.
 //
 // # Corpus evidence
 //
 //   - libreoffice/ods: sc/tdf104502_hiddenColsCountedInPageCount.ods, values below
-//     the first page in a hidden column alone, prints one page.
+//     the first page in a hidden column alone, prints one page;
+//     sc/tdf103734.ods prints its fifth and sixth pages, which hold
+//     filled and bordered cells without a value.
+//   - probe, ods: a value in A1, J1 and J2 with a border, M6 with one,
+//     on A4 at seven columns a page, prints the bordered cells on a second
+//     page; with a fill in J1 and J2 in place of the borders, one page.
 func (g *grid) empty(a Range) bool {
+	excel := g.doc.ExcelRules
 	i := sort.SearchInts(g.rowOrder, a.FirstRow)
 	for ; i < len(g.rowOrder) && g.rowOrder[i] <= a.LastRow; i++ {
 		row := g.rows[g.rowOrder[i]]
+		if row.Hidden {
+			continue
+		}
 		cells := row.Cells
 		j := sort.Search(len(cells), func(j int) bool { return cells[j].Column >= a.FirstColumn })
 		for ; j < len(cells) && cells[j].Column <= a.LastColumn; j++ {
-			if (hasContent(&cells[j]) || (g.doc.ExcelRules && visible(cells[j].Style))) && !g.colHidden(cells[j].Column) && !row.Hidden {
+			c := &cells[j]
+			shows := hasContent(c) || lined(c.Style) || (excel && visible(c.Style))
+			if shows && !g.colHidden(c.Column) {
 				return false
 			}
 		}

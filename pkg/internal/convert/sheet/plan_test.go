@@ -247,24 +247,45 @@ func TestConvert_ExcelClipsWholeText(t *testing.T) {
 }
 
 // TestPlan_ExcelPrintsFormattedPages locks the page of formatted cells
-// alone: Calc leaves it out, Excel prints it.
+// alone: Excel prints it, filled or bordered; Calc prints it when a cell
+// draws a border and reaches the print range, which a visible style only
+// does below the last value of its column, the first row standing for it
+// in a column without one.
 //
 // # Corpus evidence
 //
 //   - poi/xlsx: 61605.xlsx prints a second page holding a yellow bordered
 //     cell without a value; 53798.xlsx and 60384.xlsx alike.
+//   - probe, ods: see [grid.empty] and [grid.usedRange].
 func TestPlan_ExcelPrintsFormattedPages(t *testing.T) {
 	filled := &Style{Fill: Fill{Color: css.Color{R: 255, G: 255, A: 255}}}
+	bordered := &Style{Border: [4]Border{{Line: LineSolid, Width: 1}}}
 	for _, tc := range []struct {
+		name  string
+		row   int
+		st    *Style
 		excel bool
 		want  int
-	}{{false, 1}, {true, 2}} {
-		sh := &Sheet{Name: "S", DefaultColumnWidth: 100, Rows: []Row{{Index: 0, Cells: []Cell{numCell(0, 1, nil), {Column: 8, Style: filled}}}}}
-		doc := newDoc(sh)
-		doc.ExcelRules = tc.excel
-		if n := len(convert(t, doc, office.Options{}).Pages); n != tc.want {
-			t.Errorf("Excel's rules %v: %d pages, want %d", tc.excel, n, tc.want)
-		}
+	}{
+		{"Calc, a fill", 1, filled, false, 1},
+		{"Excel, a fill", 1, filled, true, 2},
+		{"Calc, a border", 1, bordered, false, 2},
+		{"Calc, a border in the first row", 0, bordered, false, 1},
+		{"Excel, a border in the first row", 0, bordered, true, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sh := &Sheet{Name: "S", DefaultColumnWidth: 100, Rows: []Row{{Index: 0, Cells: []Cell{numCell(0, 1, nil)}}}}
+			if tc.row == 0 {
+				sh.Rows[0].Cells = append(sh.Rows[0].Cells, Cell{Column: 8, Style: tc.st})
+			} else {
+				sh.Rows = append(sh.Rows, Row{Index: tc.row, Cells: []Cell{{Column: 8, Style: tc.st}}})
+			}
+			doc := newDoc(sh)
+			doc.ExcelRules = tc.excel
+			if n := len(convert(t, doc, office.Options{}).Pages); n != tc.want {
+				t.Errorf("%d pages, want %d", n, tc.want)
+			}
+		})
 	}
 }
 

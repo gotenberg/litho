@@ -11,48 +11,41 @@ import (
 // TestUsedRange_FormattedColumns locks where the print range of formatted
 // cells right of the last value stops: at the end of the formatted cells,
 // unless 30 or more columns formatted alike follow, where it stops before
-// them, as Calc's ScTable::GetPrintArea does.
+// them, as Calc's ScTable::GetPrintArea does. The formatted cells sit in
+// the second row: Calc counts none in the first row of a column without a
+// value.
 func TestUsedRange_FormattedColumns(t *testing.T) {
 	fill := &Style{Fill: Fill{Color: css.Color{R: 1, G: 1, A: 1}}}
 	border := &Style{Border: [4]Border{{Line: LineSolid, Width: 1}}}
+	run := func(from, to int, st *Style) []Cell {
+		var cells []Cell
+		for c := from; c <= to; c++ {
+			cells = append(cells, Cell{Column: c, Style: st})
+		}
+		return cells
+	}
 	tests := []struct {
-		name  string
-		cells func() []Cell
-		want  int
+		name   string
+		first  []Cell
+		second []Cell
+		excel  bool
+		want   int
 	}{
-		{"a short run of fills", func() []Cell {
-			cells := []Cell{numCell(0, 1, nil)}
-			for c := 1; c <= 5; c++ {
-				cells = append(cells, Cell{Column: c, Style: fill})
-			}
-			return cells
-		}, 5},
-		{"a run of 40 fills", func() []Cell {
-			cells := []Cell{numCell(0, 1, nil)}
-			for c := 1; c <= 40; c++ {
-				cells = append(cells, Cell{Column: c, Style: fill})
-			}
-			return cells
-		}, 0},
-		{"a border, then a run of 40 fills", func() []Cell {
-			cells := []Cell{numCell(0, 1, nil), {Column: 2, Style: border}}
-			for c := 3; c <= 42; c++ {
-				cells = append(cells, Cell{Column: c, Style: fill})
-			}
-			return cells
-		}, 2},
-		{"fills without a value", func() []Cell {
-			var cells []Cell
-			for c := 0; c <= 260; c++ {
-				cells = append(cells, Cell{Column: c, Style: fill})
-			}
-			return cells
-		}, 0},
+		{"a short run of fills", []Cell{numCell(0, 1, nil)}, run(1, 5, fill), false, 5},
+		{"a run of 40 fills", []Cell{numCell(0, 1, nil)}, run(1, 40, fill), false, 0},
+		{"a border, then a run of 40 fills", []Cell{numCell(0, 1, nil)}, append([]Cell{{Column: 2, Style: border}}, run(3, 42, fill)...), false, 2},
+		{"fills without a value", nil, run(0, 260, fill), false, 0},
+		{"fills in the first row", append([]Cell{numCell(0, 1, nil)}, run(1, 5, fill)...), nil, false, 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			sh := &Sheet{Name: "S", Rows: []Row{{Index: 0, Cells: tc.cells()}}}
-			g := newGrid(t.Context(), newDoc(sh), sh)
+			sh := &Sheet{Name: "S", Rows: []Row{{Index: 0, Cells: tc.first}}}
+			if tc.second != nil {
+				sh.Rows = append(sh.Rows, Row{Index: 1, Cells: tc.second})
+			}
+			doc := newDoc(sh)
+			doc.ExcelRules = tc.excel
+			g := newGrid(t.Context(), doc, sh)
 			g.overflowBudget = maxOverflowCells
 			u, ok := g.usedRange(false)
 			if !ok || u.LastColumn != tc.want {
