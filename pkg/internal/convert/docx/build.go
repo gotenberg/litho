@@ -87,7 +87,11 @@ func (d *document) blocksInto(s *story, c *cond, parent *ooxml.Element, depth in
 		d.warn(warn.LimitReached, warn.Omitted, "content nested too deep is left out")
 		return
 	}
-	for _, e := range mergeDeleted(parent.Kids()) {
+	kids := mergeDeleted(parent.Kids())
+	if d.opts.DerivedAltText {
+		d.markCaptions(kids)
+	}
+	for _, e := range kids {
 		if e.Space != w || d.ctx.Err() != nil {
 			continue
 		}

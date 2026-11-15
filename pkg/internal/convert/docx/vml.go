@@ -207,6 +207,9 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 		ref := ooxml.PictureRef{Embed: id}
 		ref.Bright, ref.Contrast = vmlLum(img)
 		n := d.picture(s, ref, st, w, h, vmlAlt(k, img))
+		if caption, ok := d.captions[k]; ok && n != nil && n.Role == "Figure" && n.Alt == "" {
+			n.Alt = caption
+		}
 		if n != nil {
 			setTransform(n.Style, vmlRotation(vs), strings.Contains(vs["flip"], "x"), strings.Contains(vs["flip"], "y"))
 		}

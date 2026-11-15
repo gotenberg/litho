@@ -129,6 +129,9 @@ func (d *document) drawing(s *story, c *ooxml.Element, st *css.Style, sink *inli
 			// (ISO 32000-1, 14.8.2.2.2; ISO 14289-1, 7.1).
 			n.Role, n.Alt = "", ""
 		}
+		if caption, ok := d.captions[k]; ok && n.Role == "Figure" && n.Alt == "" && n.Kind == layout.Replaced {
+			n.Alt = caption
+		}
 		if !inline {
 			d.anchor(k, n, wpt, hpt, sink)
 		}

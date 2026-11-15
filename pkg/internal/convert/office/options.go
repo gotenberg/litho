@@ -116,10 +116,11 @@ type Options struct {
 	// document names none, "" to leave it unknown. The caller validates
 	// it.
 	DefaultLang string
-	// DerivedAltText gives a chart whose source describes it not a
-	// description derived from what the source states of it: its kind,
-	// title, series, categories and axis titles (chart.AltText). false,
-	// the default, leaves such a figure without one.
+	// DerivedAltText gives a chart or a picture whose source describes it
+	// not a description derived from what the source states of it: a
+	// chart's kind, title, series, categories and axis titles
+	// (chart.AltText), a picture's caption. false, the default, leaves
+	// such a figure without one.
 	DerivedAltText bool
 	// Sink, when set, takes the pages of a converter that hands them over
 	// as it lays them out, and the document it returns holds no page: a

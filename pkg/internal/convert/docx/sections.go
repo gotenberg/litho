@@ -399,6 +399,9 @@ func (d *document) body(root *ooxml.Element) []*section {
 		prev = s
 	}
 	d.inBody = true
+	if body != nil && d.opts.DerivedAltText {
+		d.markCaptions(mergeDeleted(body.Kids()))
+	}
 	if body != nil {
 		// Each paragraph lays its lines on the document grid of the
 		// section it belongs to, whose sectPr closes the section after it.

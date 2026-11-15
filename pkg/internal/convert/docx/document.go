@@ -64,7 +64,11 @@ type document struct {
 	fonts *text.Fonts
 	opts  office.Options
 	// symbols maps what the symbol runs draw back to their codes.
-	symbols   *office.SymbolCodes
+	symbols *office.SymbolCodes
+	// captions maps the drawing of a picture to the caption a paragraph
+	// beside it gives it ([document.markCaptions]), nil when none does or
+	// office.Options.DerivedAltText is off.
+	captions  map[*ooxml.Element]string
 	theme     *ooxml.Theme
 	styles    *styleSheet
 	numbering *numbering

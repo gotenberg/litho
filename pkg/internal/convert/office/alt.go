@@ -47,3 +47,29 @@ func ShownText(nodes []*layout.Node) string {
 	}
 	return out
 }
+
+// Caption returns the text of a caption as a picture's alt: its white
+// space collapsed, at most [MaxAltText] bytes cut at a character.
+func Caption(text string) string {
+	out := strings.Join(strings.Fields(text), " ")
+	for len(out) > MaxAltText {
+		_, size := utf8.DecodeLastRuneInString(out)
+		out = out[:len(out)-size]
+	}
+	return out
+}
+
+// FigureSequence reports whether a caption numbered by the sequence name
+// can caption a picture: any name but those an application gives the
+// captions of other things, a table, an equation or text (Word's labels
+// Table and Equation, LibreOffice's Table and Text), compared without
+// case. A Word SEQ field (ECMA-376 Part 1, 17.16.5, SEQ) and an
+// OpenDocument text:sequence (ODF 1.3 Part 3, 7.4.13) name their sequence
+// so.
+func FigureSequence(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "", "table", "equation", "text":
+		return false
+	}
+	return true
+}
