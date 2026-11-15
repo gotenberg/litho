@@ -63,6 +63,58 @@ func TestMedia_Queries(t *testing.T) {
 	}
 }
 
+// TestMedia_UnknownIsNeitherTrueNorFalse locks the three-valued logic of
+// Media Queries 4, 3.2: an unknown feature, a value its feature does not
+// take and a <general-enclosed> are unknown, not unknown is unknown, and
+// a query that is unknown matches nothing.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156's matchMedia is false for each of
+//     "(unknown)", "not (unknown)", "not (width: foo)", "not (hover:
+//     foo)", "not (orientation: foo)", "not foo(bar)", "not (1px <
+//     unknown)" and "not ((unknown) and (color))", and true for
+//     "(unknown) or (color)" and "not unknown".
+func TestMedia_UnknownIsNeitherTrueNorFalse(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		q    string
+		want bool
+	}{
+		{"(unknown)", false},
+		{"not (unknown)", false},
+		{"not (unknown: 1px)", false},
+		{"not (width: foo)", false},
+		{"not (min-width: 1px 2px)", false},
+		{"not (hover: foo)", false},
+		{"not (orientation: foo)", false},
+		{"not (color: foo)", false},
+		{"not foo(bar)", false},
+		{"not (foo(bar))", false},
+		{"not (1px < unknown)", false},
+		{"not (width < 1foo)", false},
+		{"(unknown) or (color)", true},
+		{"not ((unknown) or (color))", false},
+		{"(unknown) and (color)", false},
+		{"not ((unknown) and (color))", false},
+		{"print and not (unknown)", false},
+		{"not unknown", true},
+		{"(monochrome)", false},
+		{"not (monochrome)", true},
+		{"not (hover: hover)", true},
+	}
+	for _, tt := range tests {
+		l, _ := parseComponentValues(tt.q)
+		if got := evalMediaList(l, a4); got != tt.want {
+			t.Errorf("@media %s = %v, want %v", tt.q, got, tt.want)
+		}
+	}
+	l, _ := parseComponentValues("not print and (unknown)")
+	if !evalMediaList(l, Media{Type: "screen"}) {
+		t.Errorf("not print and (unknown) does not match a screen medium")
+	}
+}
+
 func TestSupports_Conditions(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

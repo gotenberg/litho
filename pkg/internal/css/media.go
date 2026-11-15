@@ -66,7 +66,7 @@ func evalMediaList(list []token, m Media) bool {
 		return true
 	}
 	for _, q := range parts {
-		if v, ok := evalMediaQuery(significant(q), m); ok && v {
+		if v, ok := evalMediaQuery(significant(q), m); ok && v == triTrue {
 			return true
 		}
 	}
@@ -74,13 +74,16 @@ func evalMediaList(list []token, m Media) bool {
 }
 
 // evalMediaQuery evaluates one <media-query>: [not | only]? <media-type>
-// [and <media-condition-without-or>]? or a <media-condition>.
-func evalMediaQuery(q []token, m Media) (bool, bool) {
+// [and <media-condition-without-or>]? or a <media-condition>, in the
+// three-valued logic of Media Queries 4, 3.2: a query that is unknown
+// does not match, and not unknown is unknown.
+func evalMediaQuery(q []token, m Media) (tri, bool) {
+	leaf := func(t token) (tri, bool) { return evalFeature(t, m) }
 	if len(q) == 0 {
-		return false, false
+		return triFalse, false
 	}
 	if q[0].typ != tIdent || (q[0].isIdent("not") && len(q) > 1 && q[1].typ != tIdent) {
-		return evalCondition(q, func(t token) (bool, bool) { return evalFeature(t, m) })
+		return evalCondition(q, leaf)
 	}
 	neg := false
 	i := 0
@@ -92,50 +95,52 @@ func evalMediaQuery(q []token, m Media) (bool, bool) {
 		i++
 	}
 	if i >= len(q) || q[i].typ != tIdent {
-		return false, false
+		return triFalse, false
 	}
 	typ := lower(q[i].value)
 	switch typ {
 	case "and", "or", "not", "only", "layer":
-		return false, false
+		return triFalse, false
 	}
 	want := m.Type
 	if want == "" {
 		want = "print"
 	}
-	v := typ == "all" || typ == lower(want)
+	v := triOf(typ == "all" || typ == lower(want))
 	i++
 	if i < len(q) {
 		if !q[i].isIdent("and") || i+1 >= len(q) {
-			return false, false
+			return triFalse, false
 		}
 		rest := q[i+1:]
 		for _, t := range rest {
 			if t.isIdent("or") {
-				return false, false
+				return triFalse, false
 			}
 		}
-		c, ok := evalCondition(rest, func(t token) (bool, bool) { return evalFeature(t, m) })
+		c, ok := evalCondition(rest, leaf)
 		if !ok {
-			return false, false
+			return triFalse, false
 		}
-		v = v && c
+		v = min(v, c)
 	}
 	if neg {
-		v = !v
+		v = v.not()
 	}
 	return v, true
 }
 
 // evalCondition evaluates a condition of the shape Media Queries 4, 3 and
 // CSS Conditional 3, 6 share: not <in>, <in> [and <in>]*, <in> [or <in>]*,
-// where <in> is a parenthesised condition or what leaf evaluates. An
-// unknown <in> (general-enclosed) is false.
-func evalCondition(l []token, leaf func(token) (bool, bool)) (bool, bool) {
+// where <in> is a parenthesised condition or what leaf evaluates, in
+// three-valued logic (Media Queries 4, 3.2): and is the least of its
+// operands, or the greatest, and not unknown is unknown. It is false
+// with false when the condition does not parse.
+func evalCondition(l []token, leaf func(token) (tri, bool)) (tri, bool) {
 	if len(l) == 0 {
-		return false, false
+		return triFalse, false
 	}
-	in := func(t token) (bool, bool) {
+	in := func(t token) (tri, bool) {
 		if t.typ == tLParen {
 			inner := significant(t.children)
 			if len(inner) > 0 && (inner[0].typ == tLParen || inner[0].isIdent("not")) {
@@ -146,14 +151,17 @@ func evalCondition(l []token, leaf func(token) (bool, bool)) (bool, bool) {
 	}
 	if l[0].isIdent("not") {
 		if len(l) != 2 {
-			return false, false
+			return triFalse, false
 		}
 		v, ok := in(l[1])
-		return !v && ok, ok
+		if !ok {
+			return triFalse, false
+		}
+		return v.not(), true
 	}
 	v, ok := in(l[0])
 	if !ok {
-		return false, false
+		return triFalse, false
 	}
 	if len(l) == 1 {
 		return v, true
@@ -161,21 +169,21 @@ func evalCondition(l []token, leaf func(token) (bool, bool)) (bool, bool) {
 	op := ""
 	for i := 1; i < len(l); i += 2 {
 		if l[i].typ != tIdent || i+1 >= len(l) {
-			return false, false
+			return triFalse, false
 		}
 		o := lower(l[i].value)
 		if (o != "and" && o != "or") || (op != "" && o != op) {
-			return false, false
+			return triFalse, false
 		}
 		op = o
 		w, ok := in(l[i+1])
 		if !ok {
-			return false, false
+			return triFalse, false
 		}
 		if op == "and" {
-			v = v && w
+			v = min(v, w)
 		} else {
-			v = v || w
+			v = max(v, w)
 		}
 	}
 	return v, true
@@ -209,35 +217,42 @@ const mediaColorBits = 8
 // evalFeature evaluates a <media-in-parens> holding a feature (Media
 // Queries 4, 4): width, height, aspect-ratio and orientation against the
 // page box, a handful of discrete features with the values of a static
-// printed page, and the range syntax for width and height. Any other
-// feature is false.
-func evalFeature(t token, m Media) (bool, bool) {
+// printed page, and the range syntax for width and height. A feature
+// litho does not know, a value its feature does not take, and a
+// <general-enclosed> are unknown (Media Queries 4, 3.2), as Chromium
+// evaluates them: not (unknown) matches nothing either.
+func evalFeature(t token, m Media) (tri, bool) {
 	if t.typ != tLParen {
-		return false, t.typ == tFunction
+		return triUnknown, t.typ == tFunction
 	}
 	in := significant(t.children)
 	if len(in) == 0 || in[0].typ != tIdent {
 		if len(in) >= 3 {
-			return evalRange(in, m)
+			return evalRange(in, m), true
 		}
-		return false, true
+		return triUnknown, true
 	}
 	name := lower(in[0].value)
 	if len(in) == 1 {
 		switch name {
 		case "width", "height", "device-width", "device-height":
-			return m.Width > 0 && m.Height > 0, true
+			return triOf(m.Width > 0 && m.Height > 0), true
 		case "color", "orientation", "aspect-ratio":
-			return true, true
+			return triTrue, true
+		case "monochrome", "grid":
+			return triFalse, true
 		}
 		v, ok := discreteFeature(name, m)
-		return ok && discreteTrue(name, v), true
+		if !ok {
+			return triUnknown, true
+		}
+		return triOf(discreteTrue(name, v)), true
 	}
 	if len(in) >= 3 && in[1].typ == tDelim {
-		return evalRange(in, m)
+		return evalRange(in, m), true
 	}
 	if in[1].typ != tColon || len(in) < 3 {
-		return false, true
+		return triUnknown, true
 	}
 	val := in[2:]
 	w, h := m.Width/Pt, m.Height/Pt
@@ -258,44 +273,79 @@ func evalFeature(t token, m Media) (bool, bool) {
 		switch base {
 		case "width", "height", "device-width", "device-height":
 			if len(val) != 1 {
-				return false, true
+				return triUnknown, true
 			}
 			px, ok := mediaLength(val[0])
-			if !ok || m.Width <= 0 || m.Height <= 0 {
-				return false, true
+			if !ok {
+				return triUnknown, true
+			}
+			if m.Width <= 0 || m.Height <= 0 {
+				return triFalse, true
 			}
 			got := w
 			if base == "height" || base == "device-height" {
 				got = h
 			}
-			return cmp(prefix, got, px), true
+			return triOf(cmp(prefix, got, px)), true
 		case "aspect-ratio", "device-aspect-ratio":
 			r, ok := mediaRatio(val)
-			if !ok || h <= 0 {
-				return false, true
+			if !ok {
+				return triUnknown, true
 			}
-			return cmp(prefix, w/h, r), true
+			return triOf(h > 0 && cmp(prefix, w/h, r)), true
 		}
 	}
 	if len(val) != 1 || val[0].typ != tIdent && val[0].typ != tNumber {
-		return false, true
+		return triUnknown, true
 	}
 	v := lower(val[0].value)
 	if got, ok := discreteFeature(name, m); ok {
-		return discreteMatches(name, v, got), true
+		if vals, known := discreteValues[name]; known && (val[0].typ != tIdent || !slices.Contains(vals, v)) {
+			return triUnknown, true
+		}
+		return triOf(discreteMatches(name, v, got)), true
 	}
 	switch name {
 	case "orientation":
-		if h >= w {
-			return v == "portrait", true
+		if v != "portrait" && v != "landscape" {
+			return triUnknown, true
 		}
-		return v == "landscape", true
-	case "color":
-		return val[0].typ == tNumber && val[0].num <= mediaColorBits, true
-	case "monochrome", "grid":
-		return val[0].typ == tNumber && val[0].num == 0, true
+		if h >= w {
+			return triOf(v == "portrait"), true
+		}
+		return triOf(v == "landscape"), true
+	case "color", "monochrome", "grid":
+		if val[0].typ != tNumber || !val[0].integer || val[0].num < 0 {
+			return triUnknown, true
+		}
+		if name == "color" {
+			return triOf(val[0].num <= mediaColorBits), true
+		}
+		return triOf(val[0].num == 0), true
 	}
-	return false, true
+	return triUnknown, true
+}
+
+// discreteValues are the values each discrete feature
+// [discreteFeature] answers takes (Media Queries 4, 5 to 7; Media
+// Queries 5, 4, 6 and 12): a query for any other value is unknown.
+var discreteValues = map[string][]string{
+	"overflow-block":               {"none", "scroll", "paged"},
+	"overflow-inline":              {"none", "scroll"},
+	"update":                       {"none", "slow", "fast"},
+	"color-gamut":                  {"srgb", "p3", "rec2020"},
+	"dynamic-range":                {"standard", "high"},
+	"display-mode":                 {"fullscreen", "standalone", "minimal-ui", "browser", "picture-in-picture", "window-controls-overlay"},
+	"prefers-color-scheme":         {"light", "dark"},
+	"hover":                        {"none", "hover"},
+	"any-hover":                    {"none", "hover"},
+	"pointer":                      {"none", "coarse", "fine"},
+	"any-pointer":                  {"none", "coarse", "fine"},
+	"scripting":                    {"none", "initial-only", "enabled"},
+	"forced-colors":                {"none", "active"},
+	"prefers-reduced-motion":       {"no-preference", "reduce"},
+	"prefers-contrast":             {"no-preference", "less", "more", "custom"},
+	"prefers-reduced-transparency": {"no-preference", "reduce"},
 }
 
 // discreteFeature returns the value of a discrete media feature for m:
@@ -389,7 +439,7 @@ func discreteTrue(name, v string) bool {
 // evalRange evaluates the range form of width and height (Media Queries
 // 4, 2.4.3): "width >= 600px", "600px < width" and "400px <= width <=
 // 800px".
-func evalRange(in []token, m Media) (bool, bool) {
+func evalRange(in []token, m Media) tri {
 	type op struct {
 		lt, eq bool
 		gt     bool
@@ -424,9 +474,6 @@ func evalRange(in []token, m Media) (bool, bool) {
 		}
 		return a == b
 	}
-	if m.Width <= 0 || m.Height <= 0 {
-		return false, true
-	}
 	feature := func(t token) (float64, bool) {
 		switch {
 		case t.isIdent("width"):
@@ -439,68 +486,81 @@ func evalRange(in []token, m Media) (bool, bool) {
 	if f, ok := feature(in[0]); ok {
 		o, j, ok := readOp(1)
 		if !ok || j != len(in)-1 {
-			return false, true
+			return triUnknown
 		}
 		v, ok := mediaLength(in[j])
-		return ok && test(f, o, v), true
+		if !ok {
+			return triUnknown
+		}
+		return triOf(m.Width > 0 && m.Height > 0 && test(f, o, v))
 	}
 	a, ok := mediaLength(in[0])
 	if !ok {
-		return false, true
+		return triUnknown
 	}
 	o1, j, ok := readOp(1)
 	if !ok || j >= len(in) {
-		return false, true
+		return triUnknown
 	}
 	f, ok := feature(in[j])
 	if !ok {
-		return false, true
+		return triUnknown
 	}
 	if j == len(in)-1 {
-		return test(a, o1, f), true
+		return triOf(m.Width > 0 && m.Height > 0 && test(a, o1, f))
 	}
 	o2, k, ok := readOp(j + 1)
 	if !ok || k != len(in)-1 {
-		return false, true
+		return triUnknown
 	}
 	b, ok := mediaLength(in[k])
-	return ok && test(a, o1, f) && test(f, o2, b), true
+	if !ok {
+		return triUnknown
+	}
+	return triOf(m.Width > 0 && m.Height > 0 && test(a, o1, f) && test(f, o2, b))
 }
 
 // evalSupports evaluates an @supports condition (CSS Conditional 3, 6):
 // a declaration is supported when litho parses it, selector() when the
 // selector parses.
 func evalSupports(l []token) bool {
-	v, ok := evalCondition(significant(l), func(t token) (bool, bool) {
-		switch t.typ { //nolint:exhaustive // the other token types are invalid here
-		case tLParen:
-			it, ok := declaration(trimWS(t.children))
-			if !ok {
-				return false, true
-			}
-			if len(it.name) > 2 && it.name[:2] == "--" {
-				return declarationValue(it.value), true
-			}
-			name := propertyName(lower(it.name))
-			if !knownProperty(name) {
-				return false, true
-			}
-			if containsVar(it.value) {
-				return declarationValue(it.value), true
-			}
-			c := &declCtx{quiet: true}
-			_, ok = c.expand(name, it.value)
-			return ok, true
-		case tFunction:
-			if eqFold(t.value, "selector") {
-				_, err := parseSelectorList(trimWS(t.children), 0, false)
-				return err == nil, true
-			}
+	v, ok := evalCondition(significant(l), func(t token) (tri, bool) {
+		v, ok := supportsLeaf(t)
+		return triOf(v), ok
+	})
+	return v == triTrue && ok
+}
+
+// supportsLeaf evaluates a <supports-in-parens> that is no nested
+// condition: false with false when it does not parse.
+func supportsLeaf(t token) (bool, bool) {
+	switch t.typ { //nolint:exhaustive // the other token types are invalid here
+	case tLParen:
+		it, ok := declaration(trimWS(t.children))
+		if !ok {
 			return false, true
 		}
-		return false, false
-	})
-	return v && ok
+		if len(it.name) > 2 && it.name[:2] == "--" {
+			return declarationValue(it.value), true
+		}
+		name := propertyName(lower(it.name))
+		if !knownProperty(name) {
+			return false, true
+		}
+		if containsVar(it.value) {
+			return declarationValue(it.value), true
+		}
+		c := &declCtx{quiet: true}
+		_, ok = c.expand(name, it.value)
+		return ok, true
+	case tFunction:
+		if eqFold(t.value, "selector") {
+			_, err := parseSelectorList(trimWS(t.children), 0, false)
+			return err == nil, true
+		}
+		return false, true
+	}
+	return false, false
 }
 
 // viewport returns the size the viewport units resolve against.
