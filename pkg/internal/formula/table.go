@@ -191,7 +191,7 @@ func (l *layouter) mtable(e *Element, st *Style, depth int) *box {
 	tableTop := -b.asc
 	for ri, r := range kids[:rows] {
 		if r.Name == "mtr" && r.Style != nil && !r.Style.Hidden {
-			b.fill(0, tableTop+rowY[ri], b.w, rowY[ri+1]-rowY[ri], r.Style.Background)
+			b.decorate(0, tableTop+rowY[ri], b.w, rowY[ri+1]-rowY[ri], r.Style.Background)
 		}
 	}
 	for _, c := range cells {
@@ -201,11 +201,11 @@ func (l *layouter) mtable(e *Element, st *Style, depth int) *box {
 		inner := c.content
 		if c.mtd && !c.st.Hidden {
 			bd := c.st.Border
-			b.fill(x0, y0, w, h, c.st.Background)
-			b.fill(x0, y0, w, bd[top], c.st.BorderColor[top])
-			b.fill(x0, y0+h-bd[bottom], w, bd[bottom], c.st.BorderColor[bottom])
-			b.fill(x0, y0, bd[left], h, c.st.BorderColor[left])
-			b.fill(x0+w-bd[right], y0, bd[right], h, c.st.BorderColor[right])
+			b.decorate(x0, y0, w, h, c.st.Background)
+			b.decorate(x0, y0, w, bd[top], c.st.BorderColor[top])
+			b.decorate(x0, y0+h-bd[bottom], w, bd[bottom], c.st.BorderColor[bottom])
+			b.decorate(x0, y0, bd[left], h, c.st.BorderColor[left])
+			b.decorate(x0+w-bd[right], y0, bd[right], h, c.st.BorderColor[right])
 		}
 		ow, _, _ := outer(c)
 		x := x0 + float64((w-ow)/2)

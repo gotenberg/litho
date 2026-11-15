@@ -2,6 +2,7 @@ package formula
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -517,5 +518,34 @@ func TestEdges_BorderOfOneColourIsARing(t *testing.T) {
 		if c.paths == 1 && (len(rs[0].Ops) != 10 || rs[0].Fill.Rule != typeset.EvenOdd || !near(rs[0].Ops[5].P[0].X-rs[0].Ops[0].P[0].X, 2)) {
 			t.Fatalf("ring %+v, want two rectangles filled even-odd, the inner one 2pt in", rs[0])
 		}
+	}
+}
+
+// TestDraw_BackgroundsUnderEveryGlyph paints the backgrounds of every
+// element of a formula before any glyph, so a later sibling's background
+// stays under an earlier sibling's text (CSS 2.1, Appendix E.2; WPT
+// mrow-painting-order).
+func TestDraw_BackgroundsUnderEveryGlyph(t *testing.T) {
+	s := dejavu(t)
+	st := mathStyle("DejaVu Math TeX Gyre", 10)
+	green := typeset.Color{G: 1, A: 1}
+	a, c := tok("mn", "1"), tok("mn", "2")
+	for _, e := range []*Element{a, c} {
+		est := st
+		est.Background = green
+		e.Style = &est
+	}
+	frags := lay(t, s, el("math", a, c), st).Draw(0, 0)
+	var kinds []string
+	for _, f := range frags {
+		switch f.(type) {
+		case *typeset.Path:
+			kinds = append(kinds, "bg")
+		case *typeset.Text:
+			kinds = append(kinds, "text")
+		}
+	}
+	if strings.Join(kinds, " ") != "bg bg text text" {
+		t.Fatalf("paint order %v, want both backgrounds first", kinds)
 	}
 }

@@ -46,6 +46,9 @@ type rect struct {
 	w, h  float64
 	color typeset.Color
 	ring  *[4]float64
+	// decor marks a background or a border, painted under every glyph
+	// and bar of the formula.
+	decor bool
 }
 
 // operator holds the properties of an embellished operator (MathML Core,
@@ -75,6 +78,15 @@ func (b *box) fill(x, y, w, h float64, c typeset.Color) {
 	b.items = append(b.items, item{x: x, y: y, rect: &rect{w: w, h: h, color: c}})
 }
 
+// decorate adds a background or a border rectangle of colour c whose
+// top-left corner is at x, y.
+func (b *box) decorate(x, y, w, h float64, c typeset.Color) {
+	if w <= 0 || h <= 0 || c.A <= 0 {
+		return
+	}
+	b.items = append(b.items, item{x: x, y: y, rect: &rect{w: w, h: h, color: c, decor: true}})
+}
+
 // borders paints the borders of st on the border box of top-left
 // corner x, y, w wide and h tall: one ring when every side that has a
 // width has the same colour, as the HTML layout fills a border of one
@@ -98,23 +110,35 @@ func (b *box) borders(x, y, w, h float64, st *Style) {
 	if ringed {
 		if w > 0 && h > 0 && c.A > 0 {
 			in := bd
-			b.items = append(b.items, item{x: x, y: y, rect: &rect{w: w, h: h, color: c, ring: &in}})
+			b.items = append(b.items, item{x: x, y: y, rect: &rect{w: w, h: h, color: c, ring: &in, decor: true}})
 		}
 		return
 	}
-	b.fill(x, y, w, bd[top], st.BorderColor[top])
-	b.fill(x, float64(y+h)-bd[bottom], w, bd[bottom], st.BorderColor[bottom])
-	b.fill(x, y, bd[left], h, st.BorderColor[left])
-	b.fill(float64(x+w)-bd[right], y, bd[right], h, st.BorderColor[right])
+	b.decorate(x, y, w, bd[top], st.BorderColor[top])
+	b.decorate(x, float64(y+h)-bd[bottom], w, bd[bottom], st.BorderColor[bottom])
+	b.decorate(x, y, bd[left], h, st.BorderColor[left])
+	b.decorate(float64(x+w)-bd[right], y, bd[right], h, st.BorderColor[right])
 }
 
 // draw appends the fragments of b drawn with its left baseline point at
-// x, y to out.
+// x, y to out: the backgrounds and borders of every element first, in
+// tree order, then the glyphs and bars, as CSS paints the backgrounds of
+// block-level descendants under inline content (CSS 2.1, Appendix E.2,
+// steps 4 and 7) and as Chromium paints the boxes of a formula.
 func (b *box) draw(x, y float64, out *[]typeset.Fragment) {
+	b.paint(x, y, true, out)
+	b.paint(x, y, false, out)
+}
+
+// paint appends the fragments of b drawn with its left baseline point at
+// x, y to out: its backgrounds and borders when decor is set, else the
+// rest.
+func (b *box) paint(x, y float64, decor bool, out *[]typeset.Fragment) {
 	for _, it := range b.items {
 		switch {
 		case it.child != nil:
-			it.child.draw(float64(x+it.x), float64(y+it.y), out)
+			it.child.paint(float64(x+it.x), float64(y+it.y), decor, out)
+		case decor != (it.rect != nil && it.rect.decor):
 		case it.run != nil:
 			t := *it.run
 			t.Origin = typeset.Point{X: float64(x + it.x), Y: float64(y + it.y)}
@@ -206,7 +230,7 @@ func edges(c *box, st *Style, centred bool) *box {
 	bw := float64(b.w-m[left]) - m[right]
 	bh := float64(b.asc+b.desc) - float64(m[top]+m[bottom])
 	if !st.Hidden {
-		b.fill(bx, by, bw, bh, st.Background)
+		b.decorate(bx, by, bw, bh, st.Background)
 		b.borders(bx, by, bw, bh, st)
 	}
 	b.add(c, float64(m[left]+startPB), 0)
