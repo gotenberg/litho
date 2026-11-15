@@ -114,7 +114,7 @@ func TestReadFormula_ElementsCoreLacks(t *testing.T) {
 		msgs = append(msgs, w.Message)
 	}
 	all := strings.Join(msgs, "|")
-	for _, w := range []string{"labels", "alignment", "menclose", "mglyph"} {
+	for _, w := range []string{"labels", "alignment", "mglyph"} {
 		if !strings.Contains(all, w) {
 			t.Errorf("no warning of %s in %q", w, all)
 		}
@@ -324,4 +324,41 @@ func FuzzReadFormula(f *testing.F) {
 		}
 		ff.Draw(typeset.Rect{Width: 100, Height: 20})
 	})
+}
+
+// paths returns the paths of frags, groups opened.
+func paths(frags []typeset.Fragment, out *[]*typeset.Path) {
+	for _, fr := range frags {
+		switch v := fr.(type) {
+		case *typeset.Path:
+			*out = append(*out, v)
+		case *typeset.Group:
+			paths(v.Content, out)
+		}
+	}
+}
+
+// TestFittedFormula_DrawsOverstrikeAlone draws LibreOffice's overstrike,
+// menclose notation="horizontalstrike", 0.298 em above the baseline, and
+// no other notation, as LibreOffice draws a formula (libreOfficeEnclosure).
+func TestFittedFormula_DrawsOverstrikeAlone(t *testing.T) {
+	for _, c := range []struct {
+		notation string
+		lines    int
+	}{{"horizontalstrike", 1}, {"box", 0}} {
+		_, ff, _ := fittedOf(t, `<math xmlns="http://www.w3.org/1998/Math/MathML"><menclose notation="`+c.notation+`"><mi>abc</mi></menclose></math>`)
+		w, h := ff.Size()
+		ff.view = formulaView{width: w, height: h, baseline: ff.ascent}
+		var ps []*typeset.Path
+		paths(ff.Draw(typeset.Rect{Width: w, Height: h}), &ps)
+		if len(ps) != c.lines {
+			t.Fatalf("%s: %d lines, want %d", c.notation, len(ps), c.lines)
+		}
+		if c.lines == 1 {
+			top, bottom := ps[0].Ops[0].P[0].Y, ps[0].Ops[2].P[0].Y
+			if mid := ff.ascent - float64((top+bottom)/2); !nearly(mid, float64(0.298*12)) || !nearly(bottom-top, float64(0.034*12)) {
+				t.Fatalf("strike %g up and %g thick, want 3.576 and 0.408", mid, bottom-top)
+			}
+		}
+	}
 }

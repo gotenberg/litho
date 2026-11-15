@@ -337,8 +337,7 @@ func (r *mathReader) element(el *Element, depth int) *formula.Element {
 	case "mstyle":
 		e.Attrs = styleAttrs(e.Attrs)
 	case "menclose":
-		// Laid out as an mrow: the notation is not drawn.
-		r.warn(warn.ContentUnsupported, warn.Approximated, "the enclosures of a formula's menclose elements are not drawn")
+		// Drawn by libreOfficeEnclosure.
 	case "mlabeledtr":
 		// MathML 3, 3.5.3: the first cell is the row's label. The row is
 		// laid out without it.
@@ -505,6 +504,28 @@ type FittedFormula struct {
 	Warnings []typeset.Warning
 }
 
+// libreOfficeEnclosure is how LibreOffice Math draws an menclose: its
+// overstrike, which it writes as the notation horizontalstrike, a line
+// 0.034 em thick whose middle stands 0.298 em above the baseline whatever
+// the content, across the content, which it does not pad. LibreOffice
+// writes no other notation and draws none it reads from MathML: it draws
+// a formula from the StarMath annotation it writes beside the MathML.
+//
+// # Corpus evidence
+//
+//   - probe, odt: overstrike {abc} and overstrike {x^2 + y} saved by
+//     LibreOffice of gotenberg/gotenberg:9.4.1 as menclose
+//     notation="horizontalstrike" over the content; its PDF at 48 pt draws
+//     each strike 1.63 pt thick, its middle 14.3 and 14.4 pt above the
+//     baseline, from the content's ink start to its ink end; at 12 pt
+//     0.38 pt thick and 3.5 pt up. The formula's view is as wide and as
+//     tall with the strike as without it.
+//   - probe, odt: a formula of MathML alone, menclose notation box,
+//     circle, the strikes, left, top, actuarial, madruwb, longdiv,
+//     roundedbox or phasorangle over abc, draws abc and no line in
+//     LibreOffice, which saves it without the menclose.
+var libreOfficeEnclosure = formula.Enclosure{Rule: 0.034, StrikeRaise: 0.298, Notations: []string{"horizontalstrike"}}
+
 // Lay lays f out with s at its base size, the extent of its box taken
 // as LibreOffice Math takes it: at least the ascent and descent of its
 // first font at that size. It returns nil when f draws nothing, and
@@ -527,6 +548,7 @@ func (f *Formula) Lay(ctx context.Context, s *formula.Setter, fonts *text.Fonts)
 	st := formula.Style{
 		Families: f.Families, Size: f.Size, Weight: 400, Fallback: text.FallbackLibreOffice, Color: typeset.Color{A: 1},
 		FontVariants: true, OperatorFamilies: f.Operators, ScriptScale: f.ScriptScale,
+		Enclose: &libreOfficeEnclosure,
 	}
 	if v, ok := f.Root.Attr("display"); ok && strings.EqualFold(strings.TrimSpace(v), "block") {
 		// math[display=block] lays its content out in math-style normal
