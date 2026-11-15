@@ -306,6 +306,15 @@ func TestShapes_LayoutColorMapOverride(t *testing.T) {
 	if c := d.Slides[0].Shapes[0].Text.Paragraphs[0].Runs[0].Style.Color; !sameColor(c, rgb(0xFFFFFF)) {
 		t.Errorf("a slide takes its layout's colour map: %+v", c)
 	}
+	// No layer states a background: the slide is filled with bg1, here
+	// dk1 ([reader.background]).
+	if bg := d.Slides[0].Background; bg.Kind != slides.FillSolid || !sameColor(bg.Color, rgb(0x000000)) {
+		t.Errorf("background %+v, want bg1 mapped to dk1", bg)
+	}
+	plain := loadFiles(t, deckFiles(testDeck{slides: []testSlide{{tree: textBox("TB", 0, 0, 1, 1, para("x"))}}}))
+	if bg := plain.Slides[0].Background; bg.Kind != slides.FillNone {
+		t.Errorf("background %+v, want none for bg1 white", bg)
+	}
 }
 
 func TestFillRectCrop(t *testing.T) {

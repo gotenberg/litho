@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/slides"
+	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
@@ -116,7 +117,17 @@ func (r *reader) slideWindow(bg *layout.Picture, box typeset.Rect) *layout.Pictu
 // background returns the background of a slide: the first of the slide's,
 // its layout's and its master's p:bg (19.3.1.1 bg: a bgPr fill, or a
 // bgRef into the theme's background fill styles, 20.1.4.1.7
-// bgFillStyleLst, for idx 1001 and up).
+// bgFillStyleLst, for idx 1001 and up). A slide whose chain states none
+// is filled with the colour bg1 names in the slide's colour mapping
+// (19.3.1.6 clrMap, a layout's or the slide's 19.3.1.7 clrMapOvr), as
+// PowerPoint paints it; none when that colour is opaque white, which the
+// page shows already.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/layout-clrmap-override.pptx, whose master
+//     states no background and whose layout maps bg1 to dk1, prints its
+//     slide black, its tx1 text white.
 func (r *reader) background(sl *layer) slides.Fill {
 	for l := sl; l != nil; l = l.parent {
 		bg := l.root.Child(nsP, "cSld").Child(nsP, "bg")
@@ -133,6 +144,9 @@ func (r *reader) background(sl *layer) slides.Fill {
 		if ref := bg.Child(nsP, "bgRef"); ref != nil {
 			return r.styleFill(fc, ref)
 		}
+	}
+	if c, ok := sl.sc.resolver(nil)("bg1"); ok && c.A > 0 && c != (css.Color{R: 1, G: 1, B: 1, A: 1}) {
+		return slides.Fill{Kind: slides.FillSolid, Color: c}
 	}
 	return slides.Fill{}
 }
