@@ -88,8 +88,8 @@
     "why": "Cells at A1 and XFD1048576 and a dimension spanning the whole grid: the empty pages between are not printed."
   },
   "hostile-merge-flood": {
-    "result": "ErrConvertTooManyPages",
-    "why": "A merge spanning the whole grid among 100,000 overlapping ones: the merged cell prints across more pages than one conversion may have."
+    "result": "pdf",
+    "why": "A merge spanning the whole grid among 100,000 overlapping ones: the whole-grid merge is past the bound on a merge's cells and prints as its first cell, with a warning; of the others the first is kept and the rest, which overlap it, are dropped."
   },
   "hostile-no-content-types": {
     "result": "ErrConvertMalformed",

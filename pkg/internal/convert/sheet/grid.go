@@ -49,6 +49,9 @@ type grid struct {
 	// every other cell of a merge.
 	merges  map[[2]int]Range
 	covered map[[2]int][2]int
+	// largeMerges counts the merges past maxMergeCells, each drawn as its
+	// top-left cell.
+	largeMerges int
 	// rowOrder lists the indexes of rows with cells, rising.
 	rowOrder []int
 	// colPrefix and rowPrefix are the running sums of the printed column
@@ -111,8 +114,10 @@ func newPlainGrid(doc *Document, sh *Sheet) *grid {
 		}
 		// Anti-DoS guard, not spec-mandated: a merge marks at most
 		// maxMergeCells cells covered; a larger one keeps its top-left
-		// cell and draws as a single cell.
-		if (m.LastRow-m.FirstRow+1)*(m.LastColumn-m.FirstColumn+1) > maxMergeCells {
+		// cell and draws as a single cell, which the sheet's plan
+		// reports.
+		if mergeTooLarge(m) {
+			g.largeMerges++
 			continue
 		}
 		g.merges[[2]int{m.FirstRow, m.FirstColumn}] = m
@@ -130,6 +135,15 @@ func newPlainGrid(doc *Document, sh *Sheet) *grid {
 // maxMergeCells caps the cells one merge covers. Anti-DoS guard, not
 // spec-mandated: a merged title spans a few hundred cells at most.
 const maxMergeCells = 1 << 16
+
+// mergeTooLarge reports a merge of more than maxMergeCells cells, m
+// holding at least one column. It compares the merge's rows with the rows
+// a merge of its columns may have and forms no product of the two counts:
+// the whole grid is 2^34 cells, which a 32-bit int does not hold.
+func mergeTooLarge(m Range) bool {
+	rows, cols := m.LastRow-m.FirstRow+1, m.LastColumn-m.FirstColumn+1
+	return rows > maxMergeCells/cols
+}
 
 // clampRange returns r with its indexes inside the sheet limits.
 func clampRange(r Range) Range {

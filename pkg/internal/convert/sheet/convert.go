@@ -366,6 +366,9 @@ func (b *builder) paper(sh *Sheet) (float64, float64) {
 // it.
 func (b *builder) planSheet(i int, sh *Sheet) (*sheetPlan, error) {
 	g := newGrid(b.ctx, b.doc, sh)
+	if g.largeMerges > 0 {
+		b.warn(warn.LimitReached, warn.Approximated, fmt.Sprintf("sheet %s merges more than %d cells into one; such a merge is drawn as its first cell", quote(sh.Name), maxMergeCells))
+	}
 	g.need, g.overflowBudget = b.textNeed(g), maxOverflowCells
 	if err := b.optimalHeights(g); err != nil {
 		return nil, err
