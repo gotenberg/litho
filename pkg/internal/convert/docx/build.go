@@ -589,8 +589,11 @@ func (d *document) paraStyle(pp paraProps, mark runProps) (css.Style, float64) {
 		case "both", "lowKashida", "mediumKashida", "highKashida", "thaiDistribute":
 			st.TextAlign = css.AlignJustify
 		case "distribute":
+			// Word justifies every line, the last one too, at its spaces,
+			// and a line of one word between its characters.
 			st.TextAlign = css.AlignJustify
 			st.TextAlignLast = css.AlignJustify
+			st.TextJustify = css.JustifyWordsElseCharacters
 		case "left":
 			st.TextAlign = css.AlignLeft
 			if rtl {
