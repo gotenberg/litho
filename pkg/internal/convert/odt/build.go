@@ -874,6 +874,13 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 				b.inline(c, t, out, ws, depth)
 			}
 		case "hidden-paragraph":
+		case "bookmark-ref", "reference-ref", "sequence-ref":
+			b.crossReference(c, t, out, ws, depth)
+		case "sequence":
+			if name := c.A(odf.NSText, "ref-name"); name != "" {
+				*out = append(*out, b.anchor(name))
+			}
+			b.inline(c, t, out, ws, depth)
 		case "ruby":
 			b.ruby(c, t, out, ws, depth)
 		case "conditional-text":
@@ -1057,6 +1064,34 @@ func (b *builder) link(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 	st := baseStyle()
 	n := b.node(&layout.Node{Kind: layout.Element, Style: st, Href: href, Role: "Link", Children: kids})
 	*out = append(*out, n)
+}
+
+// crossReference appends a text:bookmark-ref, text:reference-ref or
+// text:sequence-ref (ODF 1.3, Part 3, 7.7.6, 7.7.5 and 7.7.8): the content
+// the document saved, a link to the bookmark, reference mark or sequence
+// field its text:ref-name names, as Writer exports a cross-reference. A
+// name nothing in the document carries links nowhere.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt odfexport/CrossRefHeadingBookmark.fodt,
+//     odfexport/referencelanguage.odt: Writer's PDF links each of the 18
+//     references, bookmark and sequence references, every reference
+//     format among them, to the page of its target.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, Writer links a
+//     reference-ref, the text of a bookmark-ref and a sequence-ref of
+//     category and value; it leaves unlinked the page of a bookmark, of a
+//     sequence and of a note, a sequence-ref of value alone in another
+//     document, and every note-ref, which this converter does not link.
+func (b *builder) crossReference(c *odf.Element, t textState, out *[]*layout.Node, ws *wsState, depth int) {
+	var kids []*layout.Node
+	b.inline(c, t, &kids, ws, depth)
+	name := c.A(odf.NSText, "ref-name")
+	if name == "" || len(kids) == 0 {
+		*out = append(*out, kids...)
+		return
+	}
+	*out = append(*out, b.node(&layout.Node{Kind: layout.Element, Style: baseStyle(), Href: "#" + name, Role: "Link", Children: kids}))
 }
 
 // changeMark opens or closes, at a text:change-start or text:change-end

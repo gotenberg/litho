@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -195,5 +196,40 @@ func TestConvert_HiddenParagraph(t *testing.T) {
 	d := convertDoc(t, doc{body: body}.pack(t), office.Options{})
 	if got, want := docText(d), "one\ntwo\nthree"; got != want {
 		t.Errorf("text = %q, want %q", got, want)
+	}
+}
+
+// TestConvert_CrossReferences links a bookmark, reference mark or
+// sequence reference to its target (ODF 1.3, Part 3, 7.7.5, 7.7.6 and
+// 7.7.8), on the page the target lands on; a reference to a name nothing
+// carries and a note reference stay plain text.
+func TestConvert_CrossReferences(t *testing.T) {
+	body := `<text:p>Mark <text:reference-mark-start text:name="m1"/>marked<text:reference-mark-end text:name="m1"/>, bookmark <text:bookmark text:name="b1"/>here, figure <text:sequence text:ref-name="refFigure0" text:name="Figure" text:formula="ooow:Figure+1" style:num-format="1">1</text:sequence>.</text:p>` +
+		`<text:p text:style-name="Break">Second page</text:p>` +
+		`<text:p>A <text:reference-ref text:reference-format="text" text:ref-name="m1">marked</text:reference-ref>` +
+		` B <text:bookmark-ref text:reference-format="page" text:ref-name="b1">1</text:bookmark-ref>` +
+		` C <text:sequence-ref text:reference-format="value" text:ref-name="refFigure0">1</text:sequence-ref>` +
+		` D <text:bookmark-ref text:reference-format="text" text:ref-name="nothere">gone</text:bookmark-ref>.</text:p>`
+	d := doc{
+		contentAuto: `<style:style style:name="Break" style:family="paragraph"><style:paragraph-properties fo:break-before="page"/></style:style>`,
+		body:        body,
+	}
+	res := convertDoc(t, d.pack(t), office.Options{})
+	if len(res.Pages) != 2 {
+		t.Fatalf("pages = %d", len(res.Pages))
+	}
+	var dests []int
+	for _, l := range res.Pages[1].Links {
+		if l.Dest == nil || l.Parent == nil || l.Parent.Role != "Link" {
+			t.Errorf("link %+v: want an internal link under a Link element", l)
+			continue
+		}
+		dests = append(dests, l.Dest.Page)
+	}
+	if fmt.Sprint(dests) != "[1 1 1]" {
+		t.Errorf("reference link destinations = %v, want [1 1 1]", dests)
+	}
+	if got := pageText(res.Pages[1]); got != "Second page\nA marked B 1 C 1 D gone." {
+		t.Errorf("page 2 = %q", got)
 	}
 }
