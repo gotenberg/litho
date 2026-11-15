@@ -71,6 +71,15 @@ const downsampleThreshold = 1.5
 // colour edges 4:2:0 softens.
 const subsampleChromaBelow = 90
 
+// jpegWorkPerSample is how many bytes the JPEG encoder holds for each sample
+// it encodes, beside the samples: a byte of the sample's component plane and
+// two of its quantized coefficient ([dct.Encode]). An image is encoded as
+// JPEG only when that working set fits the stream budget, which bounds what
+// one decode holds, so the encoder never holds more than the decode it
+// follows. Memory guard, not spec-mandated: at the default budget it admits
+// 89 million samples, a photograph of 29 million pixels in RGB.
+const jpegWorkPerSample = 3
+
 // The reasons [ReduceImages] leaves an image as it is.
 const (
 	keptExternal      = "external data"
@@ -424,6 +433,12 @@ func planReduction(ctx context.Context, in reduceInput) (reducePlan, string, err
 	if jpegOK && quality > 0 && (tw > dct.MaxDimension || th > dct.MaxDimension) {
 		if !downsample {
 			return reducePlan{}, keptTooWideForDCT, nil
+		}
+		quality = 0
+	}
+	if jpegOK && quality > 0 && int64(tw)*int64(th)*int64(space.comps) > in.lim.MaxStreamBytes/jpegWorkPerSample {
+		if !downsample {
+			return reducePlan{}, keptBudget, nil
 		}
 		quality = 0
 	}

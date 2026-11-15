@@ -416,3 +416,24 @@ func TestReduceImages_PlacementsBeyondForms(t *testing.T) {
 		})
 	}
 }
+
+// TestReduceImages_EncoderStaysInTheStreamBudget: an image is encoded as JPEG
+// only when the encoder's working set, three bytes a sample beside the
+// samples, fits the stream budget.
+func TestReduceImages_EncoderStaysInTheStreamBudget(t *testing.T) {
+	t.Parallel()
+	img := rawImage(64, 64, ast.PdfName("DeviceRGB"), noisyPhoto(64, 64, 3), nil)
+	for _, tc := range []struct {
+		budget int64
+		jpeg   int
+	}{{64 * 64 * 3 * jpegWorkPerSample, 1}, {64*64*3*jpegWorkPerSample - 1, 0}} {
+		alloc, trailer := reduceDoc("", ast.PdfDict{}, map[int]ast.PdfObject{10: img})
+		stats, err := ReduceImages(context.Background(), alloc, trailer, ImageReduction{Quality: 75, Limits: limits.Limits{MaxStreamBytes: tc.budget}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stats.JPEG != tc.jpeg || (tc.jpeg == 0 && stats.Kept[keptBudget] != 1) {
+			t.Errorf("stream budget %d: stats = %+v", tc.budget, stats)
+		}
+	}
+}
