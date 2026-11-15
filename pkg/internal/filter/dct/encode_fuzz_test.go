@@ -42,3 +42,31 @@ func FuzzEncode(f *testing.F) {
 		}
 	})
 }
+
+// FuzzQuality feeds arbitrary data to [Quality]. The contract is
+// crash-freedom: every input either reads as a quality of 1 to 100 or
+// returns an error carrying a sentinel, and Quality fails whatever [Check]
+// fails.
+func FuzzQuality(f *testing.F) {
+	valid, err := Encode(context.Background(), testPhoto(9, 9, 3), 9, 9, 3, EncodeOptions{Quality: 60})
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add(valid)
+	f.Add(valid[:len(valid)/2])
+	f.Fuzz(func(t *testing.T, data []byte) {
+		q, err := Quality(context.Background(), data)
+		if err != nil {
+			if !errors.Is(err, ErrMalformed) && !errors.Is(err, ErrUnsupported) && !errors.Is(err, ErrLimit) {
+				t.Fatalf("error without a sentinel: %v", err)
+			}
+			return
+		}
+		if q < 1 || q > 100 {
+			t.Fatalf("quality %d", q)
+		}
+		if _, err := Check(context.Background(), data, 0, DefaultMaxSamples); err != nil {
+			t.Fatalf("Quality read %d where Check fails: %v", q, err)
+		}
+	})
+}
