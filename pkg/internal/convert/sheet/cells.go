@@ -97,12 +97,36 @@ func numValue(v Value) numfmt.Value {
 	return numfmt.Value{Kind: numfmt.Text, Text: v.Text}
 }
 
+// printedError returns what an error value prints as under e, which is
+// not ErrorsDisplayed or ErrorsBlank (ECMA-376 Part 1, 18.18.60
+// ST_PrintError: "--" for dash, "#N/A" for NA).
+//
+// # Corpus evidence
+//
+//   - litho/xlsx print_errors: Excel prints #DIV/0!, #N/A and #VALUE! as
+//     nothing under errors="blank", as "--" under "dash" and as "#N/A"
+//     under "NA".
+func printedError(e PrintErrors) string {
+	if e == ErrorsDash {
+		return "--"
+	}
+	return "#N/A"
+}
+
 // display returns what the unit u shows in its box, or false when it
 // shows nothing.
 func (b *pageBuilder) display(u *unit) (display, bool) {
 	c := u.cell
 	if !hasContent(c) {
 		return display{}, false
+	}
+	if c.Value.Kind == Error && b.g.sh.Page.Errors != ErrorsDisplayed {
+		if b.g.sh.Page.Errors == ErrorsBlank {
+			return display{}, false
+		}
+		printed := *c
+		printed.Value.Text, printed.Runs = printedError(b.g.sh.Page.Errors), nil
+		c = &printed
 	}
 	st := u.st
 	d := display{font: resolveFont(st.Font, b.doc.Default.Font), hAlign: st.Align.Horizontal, padding: b.padding(st)}

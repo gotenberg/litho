@@ -49,6 +49,10 @@ func TestConvert_CellText(t *testing.T) {
 		{"line breaks without wrap", []Cell{textCell(0, "Line1\r\nLine2", nil)}, nil, []string{"Line1", "Line2"}},
 		{"boolean", []Cell{{Column: 0, Value: Value{Kind: Bool, Number: 1}}}, nil, []string{"TRUE"}},
 		{"error", []Cell{{Column: 0, Value: Value{Kind: Error, Text: "#DIV/0!"}}}, nil, []string{"#DIV/0!"}},
+		// ECMA-376 Part 1, 18.18.60 ST_PrintError.
+		{"error printed blank", []Cell{{Column: 0, Value: Value{Kind: Error, Text: "#DIV/0!"}}, textCell(1, "x", nil)}, func(sh *Sheet) { sh.Page = a4(); sh.Page.Errors = ErrorsBlank }, []string{"x"}},
+		{"error printed as a dash", []Cell{{Column: 0, Value: Value{Kind: Error, Text: "#DIV/0!"}}}, func(sh *Sheet) { sh.Page = a4(); sh.Page.Errors = ErrorsDash }, []string{"--"}},
+		{"error printed as N/A", []Cell{{Column: 0, Value: Value{Kind: Error, Text: "#VALUE!"}}}, func(sh *Sheet) { sh.Page = a4(); sh.Page.Errors = ErrorsNA }, []string{"#N/A"}},
 		{"rich text", []Cell{{Column: 0, Value: Value{Kind: Text, Text: "Red Green"}, Runs: []Run{
 			{Text: "Red", Font: &Font{Color: css.Color{R: 1, A: 1}}}, {Text: " Green"},
 		}}}, nil, []string{"Red", " Green"}},

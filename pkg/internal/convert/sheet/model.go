@@ -580,6 +580,9 @@ type PageSetup struct {
 	// its area (ECMA-376 Part 1, 18.3.1.70 horizontalCentered and
 	// verticalCentered; ODF style:table-centering).
 	CenterHorizontally, CenterVertically bool
+	// Errors is how the cells that hold an error value print (ECMA-376
+	// Part 1, 18.3.1.63 errors); the zero value prints the error.
+	Errors PrintErrors
 	// PrintAreas are the ranges printed, in order, each starting on a new
 	// page; empty prints the used range: the cells with a value, a fill
 	// or a border, and the drawings.
@@ -592,6 +595,22 @@ type PageSetup struct {
 	// columns a manual page break starts, rising.
 	RowBreaks, ColumnBreaks []int
 }
+
+// PrintErrors is how a sheet prints its error values (ECMA-376 Part 1,
+// 18.18.60 ST_PrintError).
+type PrintErrors uint8
+
+// The ways error values print.
+const (
+	// ErrorsDisplayed prints an error value as it shows on screen.
+	ErrorsDisplayed PrintErrors = iota
+	// ErrorsBlank prints nothing in its place.
+	ErrorsBlank
+	// ErrorsDash prints "--" in its place.
+	ErrorsDash
+	// ErrorsNA prints "#N/A" in its place.
+	ErrorsNA
+)
 
 // PageOrder is the order the pages of one sheet are numbered in
 // (ECMA-376 Part 1, 18.18.51 ST_PageOrder; ODF style:print-page-order).

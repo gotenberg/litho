@@ -192,6 +192,10 @@ func TestRead_PageSetup(t *testing.T) {
 		{"printer defaults", `<sheetData/><pageSetup paperSize="1" usePrinterDefaults="0"/>`, func(p sheet.PageSetup) bool { return math.Abs(p.Width-595.28) < 0.01 }},
 		{"unknown paper", `<sheetData/><pageSetup paperSize="0"/>`, func(p sheet.PageSetup) bool { return math.Abs(p.Width-595.28) < 0.01 }},
 		{"letter", `<sheetData/><pageSetup paperSize="1"/>`, func(p sheet.PageSetup) bool { return p.Width == 612 }},
+		{"errors displayed", `<sheetData/><pageSetup errors="displayed"/>`, func(p sheet.PageSetup) bool { return p.Errors == sheet.ErrorsDisplayed }},
+		{"errors blank", `<sheetData/><pageSetup errors="blank"/>`, func(p sheet.PageSetup) bool { return p.Errors == sheet.ErrorsBlank }},
+		{"errors dash", `<sheetData/><pageSetup errors="dash"/>`, func(p sheet.PageSetup) bool { return p.Errors == sheet.ErrorsDash }},
+		{"errors NA", `<sheetData/><pageSetup errors="NA"/>`, func(p sheet.PageSetup) bool { return p.Errors == sheet.ErrorsNA }},
 		{"print options", `<sheetData/><printOptions gridLines="1" headings="true" horizontalCentered="1" verticalCentered="1"/>`, func(p sheet.PageSetup) bool {
 			return p.GridLines && p.Headings && p.CenterHorizontally && p.CenterVertically
 		}},
