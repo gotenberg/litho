@@ -19,6 +19,7 @@
 <h2>Paint order</h2>
 <p>Each label is stroked under its fill, so the halo does not eat into the letters.</p>
 <svg width="640" height="120" viewBox="0 0 640 120">
+  <title>Two rectangles and two labels, the second of each stroked under its fill</title>
   <rect x="10" y="10" width="140" height="90" fill="#f4d35e" stroke="#0d3b66" stroke-width="18"/>
   <rect x="180" y="10" width="140" height="90" fill="#f4d35e" stroke="#0d3b66" stroke-width="18" paint-order="stroke"/>
   <text x="350" y="60" font-size="34" font-weight="bold" fill="#f4d35e" stroke="#0d3b66" stroke-width="8">Normal</text>
@@ -28,6 +29,7 @@
 <h2>Non-scaling strokes</h2>
 <p>The shapes are scaled four times by the view box and again by a transform; the right-hand strokes keep a width of two pixels.</p>
 <svg width="640" height="160" viewBox="0 0 160 40">
+  <title>A rectangle and a circle with scaled strokes beside two with strokes of constant width</title>
   <g fill="none" stroke="#ee964b" stroke-width="2">
     <rect x="5" y="5" width="30" height="25"/>
     <circle cx="60" cy="18" r="12"/>
@@ -39,6 +41,7 @@
 <h2>Crisp axis lines</h2>
 <p>A chart's axes and ticks are one pixel wide under crisp edges, the bars under the default rendering.</p>
 <svg width="640" height="200" viewBox="0 0 640 200">
+  <title>A bar chart of five bars with thin axis lines, ticks and a dashed guide</title>
   <g fill="#3a86ff">
     <rect x="60" y="110" width="60" height="70"/>
     <rect x="160" y="60" width="60" height="120"/>
