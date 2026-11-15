@@ -48,13 +48,50 @@ func TestRamp_OfficeBlend(t *testing.T) {
 		}
 	}
 	a, b := in[1], in[0]
-	for k := 0; k <= 1000; k++ {
-		p := float64(k) / 1000
+	for k := 0; k <= 255; k++ {
+		p := float64(k) / 255
 		want, have := rampColor(a, b, p), lerpAt(out, p)
 		for _, d := range [...]float64{want.R - have.R, want.G - have.G, want.B - have.B} {
-			if math.Abs(d) > 1.0/255 {
+			if math.Abs(d) > 0.5/255 {
 				t.Fatalf("at %v: %v, Office %v", p, have, want)
 			}
+		}
+	}
+}
+
+// probeBlackToWhite are the 256 samples PowerPoint writes for a linear
+// gradient of 000000 at 0 to FFFFFF at 100% (probe, pptx).
+var probeBlackToWhite = [256]float64{
+	0, 11, 15, 18, 21, 23, 25, 26, 28, 30, 32, 34, 35, 36, 39, 40, 42, 43, 45,
+	45, 47, 48, 50, 51, 53, 54, 55, 56, 58, 59, 60, 62, 63, 65, 66, 67, 69, 70,
+	71, 72, 74, 75, 76, 78, 79, 80, 81, 83, 84, 86, 87, 88, 89, 91, 92, 93, 95,
+	96, 97, 99, 100, 102, 103, 104, 106, 107, 108, 109, 111, 112, 113, 115, 116,
+	117, 119, 120, 121, 123, 124, 125, 127, 128, 129, 131, 132, 133, 135, 136,
+	138, 139, 140, 141, 143, 144, 145, 147, 148, 149, 150, 152, 153, 154, 156,
+	157, 158, 159, 161, 162, 163, 164, 166, 167, 168, 169, 171, 172, 173, 174,
+	175, 176, 177, 179, 180, 181, 182, 183, 184, 186, 187, 188, 189, 190, 191,
+	192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206,
+	207, 208, 209, 210, 211, 212, 212, 213, 214, 215, 216, 217, 217, 218, 219,
+	220, 221, 221, 222, 223, 224, 224, 225, 226, 226, 227, 228, 228, 229, 230,
+	230, 231, 232, 232, 233, 233, 234, 235, 235, 236, 236, 237, 237, 238, 238,
+	239, 239, 240, 240, 241, 241, 241, 242, 242, 243, 243, 243, 244, 244, 245,
+	245, 245, 246, 246, 246, 247, 247, 247, 248, 248, 248, 248, 249, 249, 249,
+	250, 250, 250, 250, 251, 251, 251, 251, 251, 252, 252, 252, 252, 252, 252,
+	253, 253, 253, 253, 253, 254, 254, 254, 254, 254, 254, 254, 254, 255, 255,
+	255, 255, 255,
+}
+
+// TestRamp_PowerPointSamples checks the stops of a gradient of black to
+// white against PowerPoint's own samples: within a level and a half of
+// each, the blend on the power curve of 2.2 eased by the normal
+// distribution of a quarter of the run.
+func TestRamp_PowerPointSamples(t *testing.T) {
+	t.Parallel()
+	out := Ramp([]RampStop{hexStop(0, 0x000000), hexStop(1, 0xFFFFFF)})
+	for k, want := range probeBlackToWhite {
+		have := lerpAt(out, float64(k)/255).R * 255
+		if math.Abs(have-want) > 1.5 {
+			t.Errorf("sample %d: %.1f, PowerPoint %v", k, have, want)
 		}
 	}
 }

@@ -42,7 +42,7 @@ var sameBytesCases = []struct {
 	{formatXLSX, "xlsx/parts/charts_pie_doughnut", "4d0a8cb72acfd7e8c491966d35080567867e3841b38c06d4b04601aaab464b1f"},
 	{formatPPTX, "pptx/parts/chart-pie", "176168b9aa2840baf904072c8afe2b7950cd873a654822cbb8d4fb0fae65bc9b"},
 	{formatPPTX, "pptx/parts/chart-3d", "8996c81f70d172b2891d4b63e2b050daafe301a05aeac3d1d685f5a8eb071295"},
-	{formatPPTX, "pptx/parts/fill-gradient", "353e0ec4d23073816773d8eae8700b5eb6686f18ff25bac65917a247512cc8ab"},
+	{formatPPTX, "pptx/parts/fill-gradient", "9da211a09a0bc412ec0b0f123a09b15d56e08bace43e5c1ff271c1dd7a260a0f"},
 	{formatPPTX, "pptx/parts/effects-glow-softedge-reflection", "f0c161c8358b4cd94bda69ab7fd87a67a2a80428fb9560d0f0c43d9ceacac20c"},
 	{formatODT, "odt/sources/mixed-sections", "a0d798280a169ffd5893ec47d4c5856f170ae674044058b085cc132498f3dea8"},
 	{formatODS, "ods/sources/mixed-sheets", "dda900462838cc6e366ba8a2a51fd3131ad6b9e12fc2cb7ebe2fba3a911fd596"},
