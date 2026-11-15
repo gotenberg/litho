@@ -265,6 +265,41 @@ func TestTabs_Leaders(t *testing.T) {
 	}
 }
 
+// TestTabs_WordLeaders sets the copies of a leader under Word's rules on a
+// grid that starts at the sheet's left edge, a pitch of the copy's advance
+// truncated to a twip, from the first grid point at or after the tab's
+// start to the last a pitch before its end, and opens and closes them with
+// a space (ISO 32000-1, 14.8.2.5: word breaks stated by space characters);
+// see [wordLeader]. Writer's leaders are locked by [TestTabs_Leaders].
+func TestTabs_WordLeaders(t *testing.T) {
+	st := officeSty([]css.TabStop{stop(145, css.TabRight, css.TabLeaderDots)}, func(s *css.Style) { s.WordRules = 15 })
+	pb := page(203, 50)
+	pb.Margin[css.Left] = px(3)
+	res := run(t, doc(el(st, txt(st, "T\t9"))), pb)
+	var dots []float64
+	var spaces []float64
+	for _, g := range glyphsOf(res, 1) {
+		switch g.text {
+		case ".":
+			dots = append(dots, round1(g.x))
+		case " ":
+			spaces = append(spaces, round1(g.x))
+		}
+	}
+	// The tab runs from 13 to 138 on the sheet: copies at 20, 30 and on to
+	// 120, the last ending at 130.
+	want := []float64{20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120}
+	if fmt.Sprint(dots) != fmt.Sprint(want) {
+		t.Errorf("copies at %v, want %v", dots, want)
+	}
+	if fmt.Sprint(spaces) != fmt.Sprint([]float64{13, 130}) {
+		t.Errorf("spaces at %v, want [13 130]", spaces)
+	}
+	if got := glyphLayout(res, 1); !strings.HasSuffix(got, "9@138,8") {
+		t.Errorf("glyphs %s, want 9 ending on the stop", got)
+	}
+}
+
 // TestTabs_Bar draws a bar stop as a one pixel rule across every line,
 // in the text colour, and sends no tab to it.
 func TestTabs_Bar(t *testing.T) {

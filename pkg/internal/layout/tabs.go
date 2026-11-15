@@ -170,14 +170,15 @@ func leaderRune(l css.TabLeader) rune {
 // in whole twips, the tab's width over the character's advance truncated to
 // a twip, and spreads them evenly over the tab, the first at its start
 // and the last ending at its end. nil when the tab has no leader or no
-// room.
+// room. Under Word's rules, word set, it.word holds how Word sets the
+// copies once the line's place on the page is known ([wordLeader]).
 //
 // # Corpus evidence
 //
-//   - libreoffice/docx ooxmlexport/TOC_field_f.docx: the reference draws
-//     145 dots of 2.772 points in a tab of 400.9 points, 2.765 points
-//     apart, where whole advances fit 144.
-func (e *engine) tabLeader(p *ifcPara, it *lineItem) *typeset.Text {
+//   - libreoffice/odt: of 105 runs of six or more dots, hyphens or
+//     underscores between text in Writer's text, 94 read joined to the
+//     text on both sides and 7 to the text before them.
+func (e *engine) tabLeader(p *ifcPara, it *lineItem, word bool) *typeset.Text {
 	tc, ok := p.tabs[it.start]
 	if !ok {
 		return nil
@@ -217,7 +218,93 @@ func (e *engine) tabLeader(p *ifcPara, it *lineItem) *typeset.Text {
 		g.X = float64(c) * step / hs
 		t.Glyphs = append(t.Glyphs, g)
 	}
+	if word && !it.rtl {
+		it.word = e.wordLeader(&t, it, cw, twip/twips)
+	}
 	return &t
+}
+
+// wordLeader is how Word sets the copies of a tab leader: pitch apart,
+// the advance of the leader's character truncated to a twip, on a grid
+// that starts at the page's left edge, so that the copies of the lines of
+// a table of contents stand in columns. The first copy stands on the
+// first grid point at or after the tab's start and the last on the last
+// grid point a pitch or more before the tab's end. A space of the leader's face opens
+// the copies at the tab's start and another follows the last: the leader
+// reads as a word of its own between the text on either side, as Word's
+// text does. ISO 32000-1, 14.8.2.5 asks for word breaks stated by space
+// characters. Writer spreads the copies over the whole tab and states no
+// space ([engine.tabLeader]).
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlexport/TOC_field_f.docx: Word's text element of
+//     each entry reads "Heading 1 ...... " with a space each side of the
+//     dots; the 145 dots of 2.777 points (Calibri 11) stand 2.75 points
+//     apart, the first 1.47 points after the "1" and the last ending 0.25
+//     points before the page number, at 43 and 187 pitches from the page
+//     edge.
+//   - litho/docx fields-toc: the dots of entries whose text ends at
+//     108.03, 109.54, 127.77 and 136.03 points start at 110.0, 110.0,
+//     129.25 and 137.5, 40, 40, 47 and 50 pitches of 2.75 from the page
+//     edge, and all end at 533.5, 0.5 points before the page number.
+//   - litho/docx fields-toc, para-tabs, sink-report, fields-seq-captions;
+//     openxmlsdk/docx Toc/TOC2.docx, bookmark/bookmark.docx: Word's text
+//     reads a space each side of a leader; libreoffice/docx
+//     ooxmlexport/TOC_field_b.docx, TOC_field_f.docx,
+//     PreserveWfieldTOC.docx and PreserveXfieldTOC.docx read one before
+//     it alone, the page number standing over the closing space.
+type wordLeader struct {
+	pitch, adv float64
+	copy, sp   typeset.Glyph
+}
+
+// wordLeader returns how Word sets the copies of t, the leader run of the
+// tab item it, whose character advances adv points and pitch once
+// truncated to a twip; nil when the leader's face has no space, t then
+// keeping Writer's copies.
+func (e *engine) wordLeader(t *typeset.Text, it *lineItem, adv, pitch float64) *wordLeader {
+	para, _, err := e.fonts.Shape(e.ctx, []text.ParagraphRun{{Text: " ", Style: e.textStyle(it.box.st, it.box.lang)}}, text.ParagraphOptions{})
+	if err != nil {
+		e.shapeFailed(err, "tab leader", -1)
+		return nil
+	}
+	if para.Len() != 1 {
+		return nil
+	}
+	pl := para.Line(0, 1, false)
+	if len(pl.Spans) != 1 || pl.Spans[0].Text == nil || len(pl.Spans[0].Text.Glyphs) != 1 || pl.Spans[0].Text.Face != t.Face {
+		return nil
+	}
+	c := t.Glyphs[0]
+	c.X = 0
+	return &wordLeader{pitch: pitch, adv: adv, copy: c, sp: typeset.Glyph{GID: pl.Spans[0].Text.Glyphs[0].GID, Text: " "}}
+}
+
+// glyphs returns the glyphs of a leader set by w over a tab of width w
+// points whose start is x points from the page's left edge, in a run
+// scaled horizontally by hs: the opening space, the copies, the closing
+// space.
+func (wl *wordLeader) glyphs(x, w, hs float64) []typeset.Glyph {
+	first := math.Ceil(float64(x/wl.pitch) - 1e-6)
+	last := math.Floor(float64((x+w)/wl.pitch)+1e-6) - 1
+	n := min(max(last-first+1, 0), maxLeaderCopies)
+	gs := make([]typeset.Glyph, 0, int(n)+2) // fits int: at most maxLeaderCopies
+	gs = append(gs, wl.sp)
+	end := 0.0
+	for c := range int(n) { // fits int: at most maxLeaderCopies
+		g := wl.copy
+		at := float64((first+float64(c))*wl.pitch) - x
+		g.X = at / hs
+		gs = append(gs, g)
+		end = at + wl.adv
+	}
+	if n > 0 {
+		sp := wl.sp
+		sp.X = end / hs
+		gs = append(gs, sp)
+	}
+	return gs
 }
 
 // barRules returns the line-relative positions of the bar stops of the

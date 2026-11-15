@@ -91,6 +91,9 @@ type lineItem struct {
 	rtl              bool
 	// tab reports a tab, whose glyph run, when any, is its leader.
 	tab bool
+	// word, for a tab leader set by Word's rules, places the leader's
+	// glyphs once the line's place on the page is known; nil otherwise.
+	word *wordLeader
 }
 
 // inlineFrag is the part of an inline box on one line, painted with its
@@ -1746,7 +1749,7 @@ func (s *inlineState) buildLine(p *ifcPara, start, end int, left, right float64)
 		case runTab:
 			it.tab = true
 			if officeTabs(s.root.st) {
-				it.text = e.tabLeader(p, it)
+				it.text = e.tabLeader(p, it, s.root.st.WordRules > 0)
 			}
 		case runEmpty:
 		}

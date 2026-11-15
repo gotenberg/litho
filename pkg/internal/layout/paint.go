@@ -1707,6 +1707,11 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 	p.textDecorations(it, l, page, css.Underline|css.Overline, nil)
 	c := *t
 	c.Origin = typeset.Point{X: l.x + t.Origin.X + p.dx, Y: l.y + t.Origin.Y + p.dy}
+	if it.word != nil {
+		// The grid of Word's leaders starts at the sheet's left edge.
+		pb := p.e.box(page)
+		c.Glyphs = it.word.glyphs(c.Origin.X+pb.Bleed+pb.Margin[css.Left], it.w, hscale(t))
+	}
 	c.Parent = it.box.elem
 	if transposed(p.e.frameOf(it.box)) {
 		p.e.mirrorRun(&c, it.box)
