@@ -8,19 +8,12 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	_ "image/gif"  // registers GIF with image.Decode
-	_ "image/jpeg" // registers JPEG with image.Decode
-	_ "image/png"  // registers PNG with image.Decode
 	"io"
 	"io/fs"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
-
-	_ "golang.org/x/image/bmp"  // registers BMP with image.Decode
-	_ "golang.org/x/image/tiff" // registers TIFF with image.Decode
-	_ "golang.org/x/image/webp" // registers WebP with image.Decode
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/formula"
@@ -295,7 +288,7 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 	if name := unsupportedFormat(data, f.mediaType); name != "" {
 		return nil, fmt.Errorf("%w: %s", errFormatUnsupported, name)
 	}
-	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
+	cfg, format, err := imagefile.DecodeConfig(data)
 	if err != nil {
 		return nil, pictureDataError{fmt.Errorf("decoding the image header: %w", err)}
 	}
@@ -341,7 +334,7 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 	if err != nil {
 		return nil, err
 	}
-	img, _, err := image.Decode(bytes.NewReader(data))
+	img, _, err := imagefile.Decode(data)
 	if err != nil {
 		mem.Release(charged)
 		return nil, pictureDataError{fmt.Errorf("decoding the %s image: %w", format, err)}
