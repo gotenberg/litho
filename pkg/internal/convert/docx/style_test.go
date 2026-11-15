@@ -134,6 +134,31 @@ func TestAutomaticText_TurnsWhiteOnItsShading(t *testing.T) {
 	}
 }
 
+// TestHighlight_TakesWordsShadesInWord2013Documents checks the colours
+// Word paints the highlights in: its own dark shades in a document of
+// compatibility mode 15, the clause's in one of no mode.
+func TestHighlight_TakesWordsShadesInWord2013Documents(t *testing.T) {
+	t.Parallel()
+	run := func(name string) string {
+		return `<w:r><w:rPr><w:highlight w:val="` + name + `"/></w:rPr><w:t>` + name + `</w:t></w:r>`
+	}
+	body := `<w:p>` + run("darkBlue") + run("darkMagenta") + run("lightGray") + run("yellow") + `</w:p>`
+	compat15 := map[string]string{"word/settings.xml": `<w:settings ` + nsDecl + `><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`}
+	hex := func(h string) css.Color { c, _ := ooxml.HexColor(h); return c }
+	for _, tc := range []struct {
+		parts      map[string]string
+		name, want string
+	}{
+		{compat15, "darkBlue", "00008B"}, {compat15, "darkMagenta", "800080"}, {compat15, "lightGray", "D3D3D3"}, {compat15, "yellow", "FFFF00"},
+		{nil, "darkBlue", "000080"}, {nil, "lightGray", "C0C0C0"},
+	} {
+		b := build(t, body, tc.parts)
+		if got := runWith(t, b.root, tc.name).Style.BackgroundColor; got != hex(tc.want) {
+			t.Errorf("%s (mode 15: %v): %+v, want %s", tc.name, tc.parts != nil, got, tc.want)
+		}
+	}
+}
+
 // contains reports whether s holds sub.
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {

@@ -203,7 +203,7 @@ func (d *document) parseRunProps(e *ooxml.Element) *runProps {
 			}
 			r.underline = u
 		case "highlight":
-			if col, ok := highlightColor(val); ok {
+			if col, ok := highlightColor(val, d.settings.compat); ok {
 				r.highlight = &col
 			} else {
 				r.noHighlight = true
@@ -463,8 +463,23 @@ func (d *document) shadingColor(e *ooxml.Element) (css.Color, bool) {
 }
 
 // highlightColor returns the colour of an ST_HighlightColor (ECMA-376
-// Part 1, 17.18.40), false for none.
-func highlightColor(name string) (css.Color, bool) {
+// Part 1, 17.18.40) in a document of the compatibility mode compat
+// (MS-DOCX, 2.3.4 compatibilityMode), false for none: the clause's
+// colours, but for the dark ones and light grey of a Word 2013 document
+// (compat 15 and later), which Word paints in its own shades.
+//
+// # Corpus evidence
+//
+//   - litho/docx run-highlight-shading (compat 15): Word paints darkBlue
+//     00008B, darkCyan 008B8B, darkGreen 006400, darkRed 8B0000,
+//     darkGray A9A9A9 and lightGray D3D3D3, where the clause has 000080,
+//     008080, 008000, 800000, 808080 and C0C0C0; darkMagenta 800080 and
+//     darkYellow 808000 as the clause, and the eight full colours.
+//   - probe, docx (compat 15): darkBlue 00008B, darkRed 8B0000, darkGray
+//     A9A9A9.
+//   - poi/docx document/bug57031.docx (no compatibility mode): Word
+//     paints lightGray C0C0C0, as the clause.
+func highlightColor(name string, compat int) (css.Color, bool) {
 	hex := map[string]string{
 		"black": "000000", "blue": "0000FF", "cyan": "00FFFF", "green": "00FF00",
 		"magenta": "FF00FF", "red": "FF0000", "yellow": "FFFF00", "white": "FFFFFF",
@@ -472,6 +487,14 @@ func highlightColor(name string) (css.Color, bool) {
 		"darkMagenta": "800080", "darkRed": "800000", "darkYellow": "808000",
 		"darkGray": "808080", "lightGray": "C0C0C0",
 	}[name]
+	if compat >= 15 {
+		if h, ok := map[string]string{
+			"darkBlue": "00008B", "darkCyan": "008B8B", "darkGreen": "006400",
+			"darkRed": "8B0000", "darkGray": "A9A9A9", "lightGray": "D3D3D3",
+		}[name]; ok {
+			hex = h
+		}
+	}
 	return ooxml.HexColor(hex)
 }
 
