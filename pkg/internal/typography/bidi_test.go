@@ -181,6 +181,28 @@ func TestReorderBidiIndices_MirroredBracketsSetTheBase(t *testing.T) {
 	}
 }
 
+// TestReorderBidiIndices_NumberAtTheLogicalEnd pins that a European number
+// at the left end of a right-to-left line, its logical end, is read after
+// the Arabic letter to its right: UAX #9 rule W2 makes it an Arabic number,
+// which leaves the percent sign after it a neutral of the line
+// ([logicalEndContext]). Read after sor, it stayed a European number that
+// took the sign into its run.
+func TestReorderBidiIndices_NumberAtTheLogicalEnd(t *testing.T) {
+	// Visual ".%15 ةبسنب", logically "بنسبة 15%.".
+	got := reorderVisual([]string{".", "%", "1", "5", " ", "ة", "ب", "س", "ن", "ب"}, nil)
+	want := "بنسبة 15%."
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	// After a Hebrew letter the number stays European and takes the sign:
+	// "אחוזים 15%." is drawn ". 1 5 %", so ". % 1 5" reads "אחוזים %15.".
+	got = reorderVisual([]string{".", "%", "1", "5", " ", "ם", "י", "ז", "ו", "ח", "א"}, nil)
+	want = "אחוזים %15."
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestReorderBidiIndices_Empty(t *testing.T) {
 	got, _ := reorderBidiIndices(nil, nil, nil)
 	if len(got) != 0 {

@@ -271,7 +271,11 @@ func visualToLogical(texts []string) []int {
 		sor = bidiR
 	}
 
-	resolveWeakTypes(types, sor)
+	lead := sor
+	if rtl {
+		lead = logicalEndContext(types, sor)
+	}
+	resolveWeakTypes(types, sor, lead)
 	resolveNeutralTypes(types, sor)
 
 	levels := make([]int, n)
@@ -319,11 +323,39 @@ func visualToLogical(texts []string) []int {
 	return out
 }
 
+// logicalEndContext returns the strong type W2 and W7 read for the numbers
+// at the left end of a right-to-left line in visual order, before its first
+// strong character: that character's type, or sor when the line holds none.
+// Rules W2 and W7 change a number by the strong type before it in logical
+// order (UAX #9, 3.3.4). The left end of a right-to-left line in visual
+// order is its logical end, and a number there that no left-to-right text
+// holds is read in logical order after the strong character to its right,
+// not after sor.
+//
+// PDF.js reads every line from its left end with sor (src/core/bidi.js,
+// bidi), so a European number ending a right-to-left line after an Arabic
+// letter stays a European number and takes the terminator after it, where
+// rule W2 makes it an Arabic number that leaves the terminator on its own.
+//
+// # Corpus evidence
+//
+//   - litho/html bidi-letter: "الضريبة بنسبة 15%." drawn ". % 1 5" from the
+//     left, read "بنسبة %15.".
+func logicalEndContext(types []bidiClass, sor bidiClass) bidiClass {
+	for _, t := range types {
+		if t == bidiL || t == bidiR || t == bidiAL {
+			return t
+		}
+	}
+	return sor
+}
+
 // resolveWeakTypes applies UAX #9 rules W1-W7 to the types of one level run
-// whose start and end of run type is sor. W6 leaves every separator and
-// terminator it does not resolve as an other neutral, for
-// [resolveNeutralTypes].
-func resolveWeakTypes(types []bidiClass, sor bidiClass) {
+// whose start and end of run type is sor. W2 and W7 read lead as the strong
+// type before the first strong character ([logicalEndContext]). W6 leaves
+// every separator and terminator it does not resolve as an other neutral,
+// for [resolveNeutralTypes].
+func resolveWeakTypes(types []bidiClass, sor, lead bidiClass) {
 	n := len(types)
 	last := sor
 	for i, t := range types { // W1
@@ -333,7 +365,7 @@ func resolveWeakTypes(types []bidiClass, sor bidiClass) {
 			last = t
 		}
 	}
-	last = sor
+	last = lead
 	for i, t := range types { // W2
 		if t == bidiEN && last == bidiAL {
 			types[i] = bidiAN
@@ -372,7 +404,10 @@ func resolveWeakTypes(types []bidiClass, sor bidiClass) {
 			types[i] = bidiON
 		}
 	}
-	last = sor
+	last = lead
+	if last == bidiAL {
+		last = bidiR
+	}
 	for i, t := range types { // W7
 		if t == bidiEN && last == bidiL {
 			types[i] = bidiL
