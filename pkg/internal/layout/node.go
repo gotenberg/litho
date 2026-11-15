@@ -185,6 +185,15 @@ type Node struct {
 	// block, a float or a positioned box draw none. The bar is an
 	// artifact.
 	ChangeBar bool
+	// Comment, set on an inline Element of Role Annot, marks its content as
+	// the text a comment covers: on each page the element reaches, the
+	// engine places the comment over the box of each line that holds part
+	// of the element (typeset.CommentMark Lines), and an empty element at
+	// its point on its line (CommentMark At), its Annot element the
+	// comment's structure element. A comment covering text in several
+	// paragraphs marks one element in each. The comment draws nothing and
+	// changes no layout: the element is laid out as one without it.
+	Comment *typeset.Comment
 	// InitialLetter, set on a floating Element whose Style has an
 	// InitialLetter, makes it an initial letter (CSS Inline 3, 4): the
 	// first letter of its paragraph, a float of the start side, at the

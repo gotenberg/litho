@@ -36,6 +36,11 @@ type link struct {
 	// contents caches [link.describe], and described reports it is set.
 	contents  string
 	described bool
+	// comment, when set, makes the region the box of a line of the text a
+	// comment covers, or its point when point is set, rather than a link
+	// (Node.Comment): elem is then its Annot element.
+	comment *typeset.Comment
+	point   bool
 }
 
 // maxLinkContents bounds the characters of a link's description. Anti-DoS

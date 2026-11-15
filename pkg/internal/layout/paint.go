@@ -1581,6 +1581,9 @@ func (p *painter) line(l *lineBox, fl *firstLine) {
 			p.links = append(p.links, pendingLink{lk: lk, rect: s.rect})
 		}
 	}
+	if p.only == nil && p.capture == nil && !p.artifact {
+		p.commentLines(l)
+	}
 }
 
 // lineFrag paints the background and borders of the inline fragment f of

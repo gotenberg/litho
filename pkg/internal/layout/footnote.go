@@ -506,12 +506,17 @@ func (e *engine) noteLinks(res *Result, used map[*typeset.StructElem]bool) {
 		pb := e.box(k)
 		top := e.areaOrigin(k, pb)
 		for _, pl := range f.links[k] {
+			r := pl.rect
+			rect := typeset.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + top + r.Y, Width: r.Width, Height: r.Height}
+			if pl.lk.comment != nil {
+				addComment(res.Pages[k], pl.lk, rect, used)
+				continue
+			}
 			l, ok := e.resolveLink(pl)
 			if !ok {
 				continue
 			}
-			r := pl.rect
-			l.Rect = typeset.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + top + r.Y, Width: r.Width, Height: r.Height}
+			l.Rect = rect
 			if l.Parent != nil {
 				used[l.Parent] = true
 			}

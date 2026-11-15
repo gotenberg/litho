@@ -846,6 +846,10 @@ func (e *engine) anchors(rb *box, n int) map[string]typeset.Dest {
 // internal targets resolved against res.Anchors.
 func (e *engine) links(res *Result, links []pendingLink, used map[*typeset.StructElem]bool) {
 	for _, pl := range links {
+		if pl.lk.comment != nil {
+			e.commentRegion(res, pl, used)
+			continue
+		}
 		l, ok := e.resolveLink(pl)
 		if !ok {
 			continue
@@ -853,16 +857,11 @@ func (e *engine) links(res *Result, links []pendingLink, used map[*typeset.Struc
 		r := pl.rect
 		p0, p1 := e.pageOf(max(r.Y, 0)), e.pageOf(max(r.Y+r.Height-1e-3, 0))
 		for p := p0; p <= p1 && p < len(res.Pages); p++ {
-			top := e.pageTop(p)
-			pb := e.box(p)
-			y0, y1 := max(r.Y, top), min(r.Y+r.Height, top+e.sliceH(p))
-			if y1 <= y0 {
+			rect, ok := e.pageRect(p, r)
+			if !ok {
 				continue
 			}
-			l.Rect = typeset.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + y0 - top, Width: r.Width, Height: y1 - y0}
-			if e.turn != css.HorizontalTB {
-				l.Rect = turnRect(pb, e.turn, l.Rect)
-			}
+			l.Rect = rect
 			if l.Parent != nil {
 				used[l.Parent] = true
 			}
@@ -870,6 +869,22 @@ func (e *engine) links(res *Result, links []pendingLink, used map[*typeset.Struc
 		}
 	}
 	e.noteLinks(res, used)
+}
+
+// pageRect returns the part of r, a region in flow coordinates, on page
+// p, in page coordinates: false when r does not reach the page.
+func (e *engine) pageRect(p int, r typeset.Rect) (typeset.Rect, bool) {
+	top := e.pageTop(p)
+	pb := e.box(p)
+	y0, y1 := max(r.Y, top), min(r.Y+r.Height, top+e.sliceH(p))
+	if y1 <= y0 {
+		return typeset.Rect{}, false
+	}
+	rect := typeset.Rect{X: pb.Bleed + pb.Margin[css.Left] + r.X, Y: pb.Bleed + pb.Margin[css.Top] + y0 - top, Width: r.Width, Height: y1 - y0}
+	if e.turn != css.HorizontalTB {
+		rect = turnRect(pb, e.turn, rect)
+	}
+	return rect, true
 }
 
 // resolveLink returns the link of the region pl, its rectangle unset, its
