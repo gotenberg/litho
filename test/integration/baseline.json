@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-15T10:19:05Z",
+  "captured_at": "2026-11-15T11:50:33Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -54499,7 +54499,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.984
+              "text_f1": 0.9804
             },
             "charts-bar-column": {
               "layout": 0.926,
@@ -59947,8 +59947,8 @@
     "litho/html": {
       "features": {
         "diff": {
-          "matched": 199,
-          "mismatched": 1,
+          "matched": 200,
+          "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -59978,7 +59978,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.859
+              "text_f1": 0.96
             },
             "article": {
               "layout": 0.9454,
@@ -60074,7 +60074,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9219
+              "text_f1": 0.9779
             },
             "borders": {
               "layout": 0.9318,
@@ -60146,7 +60146,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.972
+              "text_f1": 1
             },
             "filter-blur": {
               "layout": 0.9766,
@@ -60234,7 +60234,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9189
+              "text_f1": 0.9925
             },
             "header-default-classes": {
               "layout": 0.955,
@@ -60258,7 +60258,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8452
+              "text_f1": 1
             },
             "images": {
               "layout": 0.9841,
@@ -61530,7 +61530,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9789
+              "text_f1": 0.9831
             },
             "user-stylesheet": {
               "layout": 0.9382,
@@ -65897,7 +65897,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.1
+              "text_f1": 0.0952
             },
             "notes-pages": {
               "layout": 0.9796,
@@ -66081,7 +66081,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.5,
-              "text_f1": 0.7297
+              "text_f1": 0.7243
             },
             "wide-deck": {
               "layout": 0.9602,
@@ -66985,7 +66985,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.2133
+              "text_f1": 0.1927
             },
             "mixed-sheets": {
               "layout": 0.9738,
@@ -67553,7 +67553,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.3333,
-              "text_f1": 0.71
+              "text_f1": 0.6941
             },
             "sheet-numbers": {
               "layout": 0.9318,
@@ -69378,7 +69378,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.4281
+              "text_f1": 0.393
             },
             "cjk-han-variants": {
               "layout": 0.9511,
@@ -69427,7 +69427,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.8372
+              "text_f1": 0.7072
             },
             "hi-devanagari": {
               "layout": 0.9696,
@@ -69435,7 +69435,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.2759
+              "text_f1": 0.2376
             },
             "installed-variable-fonts": {
               "layout": 0.9448,
@@ -69955,7 +69955,7 @@
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.2435
+              "text_f1": 0.2514
             },
             "tracked-changes": {
               "layout": 0.9525,
@@ -89442,8 +89442,8 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 160,
-          "mismatched": 22,
+          "matched": 158,
+          "mismatched": 24,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -89451,17 +89451,17 @@
             "pass_a1a": 182,
             "pass_a1b": 182,
             "pass_a2a": 182,
-            "pass_a2a+ua1": 160,
+            "pass_a2a+ua1": 158,
             "pass_a2b": 182,
             "pass_a2u": 182,
             "pass_a3a": 182,
             "pass_a3b": 182,
             "pass_a3u": 182,
             "pass_a4": 182,
-            "pass_a4+ua2": 160,
+            "pass_a4+ua2": 158,
             "pass_a4e": 182,
-            "pass_ua1": 160,
-            "pass_ua2": 160,
+            "pass_ua1": 158,
+            "pass_ua2": 158,
             "pass_v1.4": 182,
             "pass_v1.5": 182,
             "pass_v1.6": 182,
@@ -89480,17 +89480,17 @@
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
-              "a2a+ua1": 1,
+              "a2a+ua1": 0,
               "a2b": 1,
               "a2u": 1,
               "a3a": 1,
               "a3b": 1,
               "a3u": 1,
               "a4": 1,
-              "a4+ua2": 1,
+              "a4+ua2": 0,
               "a4e": 1,
-              "ua1": 1,
-              "ua2": 1,
+              "ua1": 0,
+              "ua2": 0,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -90131,17 +90131,17 @@
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
-              "a2a+ua1": 1,
+              "a2a+ua1": 0,
               "a2b": 1,
               "a2u": 1,
               "a3a": 1,
               "a3b": 1,
               "a3u": 1,
               "a4": 1,
-              "a4+ua2": 1,
+              "a4+ua2": 0,
               "a4e": 1,
-              "ua1": 1,
-              "ua2": 1,
+              "ua1": 0,
+              "ua2": 0,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -93704,8 +93704,8 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 56,
-          "mismatched": 7,
+          "matched": 53,
+          "mismatched": 10,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -93713,17 +93713,17 @@
             "pass_a1a": 63,
             "pass_a1b": 63,
             "pass_a2a": 63,
-            "pass_a2a+ua1": 58,
+            "pass_a2a+ua1": 55,
             "pass_a2b": 63,
             "pass_a2u": 63,
             "pass_a3a": 63,
             "pass_a3b": 63,
             "pass_a3u": 63,
             "pass_a4": 63,
-            "pass_a4+ua2": 56,
+            "pass_a4+ua2": 53,
             "pass_a4e": 63,
-            "pass_ua1": 58,
-            "pass_ua2": 56,
+            "pass_ua1": 55,
+            "pass_ua2": 53,
             "pass_v1.4": 63,
             "pass_v1.5": 63,
             "pass_v1.6": 63,
@@ -93805,17 +93805,17 @@
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
-              "a2a+ua1": 1,
+              "a2a+ua1": 0,
               "a2b": 1,
               "a2u": 1,
               "a3a": 1,
               "a3b": 1,
               "a3u": 1,
               "a4": 1,
-              "a4+ua2": 1,
+              "a4+ua2": 0,
               "a4e": 1,
-              "ua1": 1,
-              "ua2": 1,
+              "ua1": 0,
+              "ua2": 0,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -93847,17 +93847,17 @@
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
-              "a2a+ua1": 1,
+              "a2a+ua1": 0,
               "a2b": 1,
               "a2u": 1,
               "a3a": 1,
               "a3b": 1,
               "a3u": 1,
               "a4": 1,
-              "a4+ua2": 1,
+              "a4+ua2": 0,
               "a4e": 1,
-              "ua1": 1,
-              "ua2": 1,
+              "ua1": 0,
+              "ua2": 0,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -93889,17 +93889,17 @@
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
-              "a2a+ua1": 1,
+              "a2a+ua1": 0,
               "a2b": 1,
               "a2u": 1,
               "a3a": 1,
               "a3b": 1,
               "a3u": 1,
               "a4": 1,
-              "a4+ua2": 1,
+              "a4+ua2": 0,
               "a4e": 1,
-              "ua1": 1,
-              "ua2": 1,
+              "ua1": 0,
+              "ua2": 0,
               "v1.4": 1,
               "v1.5": 1,
               "v1.6": 1,
@@ -95115,14 +95115,14 @@
           "skipped": 0
         },
         "redact-render": {
-          "matched": 50,
-          "mismatched": 1,
+          "matched": 49,
+          "mismatched": 2,
           "skipped": 0,
           "metrics": {
             "fallback_incomplete": 0,
             "fallback_inside_leaked": 0,
             "fallback_litho_reading": 4,
-            "fallback_outside_changed": 1,
+            "fallback_outside_changed": 2,
             "fallback_poppler_no_oracle": 10,
             "fallback_refused": 20,
             "fallback_resampled": 6,
@@ -95298,12 +95298,12 @@
           }
         },
         "text": {
-          "matched": 1253,
+          "matched": 1252,
           "mismatched": 106,
-          "skipped": 1,
+          "skipped": 2,
           "metrics": {
-            "chars_match": 1296,
-            "words_match": 1253
+            "chars_match": 1295,
+            "words_match": 1252
           }
         }
       }
