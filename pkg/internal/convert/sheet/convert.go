@@ -285,7 +285,18 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 			if len(sp.pages) == 0 {
 				continue
 			}
+			// The entry names the sheet's first page that holds an
+			// element: a blank page printed before it has none to be the
+			// structure destination ISO 14289-2, 8.8 asks of an outline
+			// entry. A sheet none of whose pages holds one keeps its
+			// first page.
 			k := starts[i]
+			for j := k; j < k+len(sp.pages) && j < len(tables); j++ {
+				if tables[j] != nil {
+					k = j
+					break
+				}
+			}
 			out.Outline = append(out.Outline, typeset.Outline{Title: sp.g.sh.Name, Dest: typeset.Dest{Page: k + 1, Elem: tables[k]}})
 		}
 	}

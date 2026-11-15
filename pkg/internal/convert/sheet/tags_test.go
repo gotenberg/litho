@@ -209,6 +209,29 @@ func TestConvert_DestinationsNameTheTable(t *testing.T) {
 	}
 }
 
+// TestConvert_OutlineSkipsBlankFirstPages locks the destination of a
+// sheet's outline entry when the sheet starts with blank pages, which
+// Excel prints before the first page that holds a cell: the entry names
+// the Table of that page, since a blank page holds no element to be the
+// structure destination ISO 14289-2, 8.8 asks for.
+func TestConvert_OutlineSkipsBlankFirstPages(t *testing.T) {
+	sh := &Sheet{Name: "Far", Rows: []Row{{Index: 200, Cells: []Cell{textCell(0, "far", nil)}}}}
+	doc := newDoc(sh)
+	doc.ExcelRules = true
+	out := convert(t, doc, office.Options{})
+	if len(out.Pages) < 2 {
+		t.Fatalf("%d pages, want the blank pages before the cell's", len(out.Pages))
+	}
+	last := len(out.Pages)
+	find(t, out.Pages[last-1], "far")
+	if len(out.Outline) != 1 {
+		t.Fatalf("%d outline entries, want 1", len(out.Outline))
+	}
+	if d := out.Outline[0].Dest; d.Elem == nil || d.Page != last {
+		t.Errorf("outline entry names page %d and element %v, want the Table of page %d", d.Page, d.Elem, last)
+	}
+}
+
 // TestConvert_DrawingsAreFigures locks how a sheet's drawings read: a
 // picture is a Figure carrying its description, a chart without one its
 // title, a decorative picture and an undescribed shape artifacts, and
