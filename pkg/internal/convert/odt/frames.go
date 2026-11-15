@@ -1030,7 +1030,9 @@ func (b *builder) textBox(k *odf.Element, g frameGeom, depth int) *layout.Node {
 			b.captions[frame] = caption
 		}
 	}
+	restore := b.comments.apart()
 	n.Children = b.wrapLists(b.blocks(k, blockCtx{depth: depth + 1}), 0)
+	restore()
 	return n
 }
 

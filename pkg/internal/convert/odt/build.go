@@ -37,6 +37,9 @@ const nodeCheckEvery = 4096
 
 // builder turns the body of a text document into a layout tree.
 type builder struct {
+	// comments holds the comments of the body, nil when the conversion
+	// leaves them out (office.Options.Comments).
+	comments *comments
 	// ctx is the context of the Convert call the builder serves: a
 	// builder does not outlive it.
 	ctx    context.Context
@@ -413,6 +416,13 @@ func (b *builder) block(c *odf.Element, ctx *blockCtx) []*layout.Node {
 		// blocks.
 		return b.blockFrame(c, *ctx)
 	case odf.NSOffice:
+		if c.Name.Local == "annotation-end" && b.comments != nil {
+			// A range ending between paragraphs ends with the last one.
+			if ce := b.comments.byName[c.A(odf.NSOffice, "name")]; ce != nil {
+				b.comments.open = slices.DeleteFunc(b.comments.open, func(o *commentEntry) bool { return o == ce })
+			}
+			return nil
+		}
 		if c.Name.Local == "annotation" || c.Name.Local == "forms" {
 			return nil
 		}
@@ -499,6 +509,9 @@ func (b *builder) paragraph(el *odf.Element, isHeading bool, ctx *blockCtx) *lay
 	b.inline(el, t, &kids, ws, ctx.depth)
 	b.scriptRuns = outer
 	kids = b.splitScripts(kids, runs, strings.HasPrefix(p.writing, "rl"))
+	if b.comments != nil {
+		kids = b.wrapComments(kids, 0)
+	}
 	b.lineBreak = outerBreak
 	if st.TextAlign == css.AlignJustify && slices.ContainsFunc(runs, func(r scriptRun) bool { return hasArabic(r.text) }) {
 		b.warn("kashida", warn.ContentUnsupported, warn.Approximated, "justified Arabic text is stretched at its spaces, without kashida")
@@ -915,7 +928,11 @@ func (b *builder) inlineElement(c *odf.Element, t textState, out *[]*layout.Node
 	case odf.NSDraw:
 		b.inlineFrame(c, out, ws, depth)
 	case odf.NSOffice:
-		// office:annotation and office:annotation-end are not printed.
+		// office:annotation and office:annotation-end draw nothing; they
+		// mark where a comment sits when the comments are written.
+		if b.comments != nil && (c.Name.Local == "annotation" || c.Name.Local == "annotation-end") {
+			b.commentMark(c, out)
+		}
 	case odf.NSTable, odf.NSForm:
 	default:
 		b.inline(c, t, out, ws, depth)

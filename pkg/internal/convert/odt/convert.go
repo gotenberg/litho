@@ -76,6 +76,9 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	b.formFields = opts.FormFields
 	b.derivedAlt, b.defaultLang = opts.DerivedAltText, opts.DefaultLang
 	b.pages = newPageFlow(b, opts)
+	if opts.Comments == office.CommentsAnnotations {
+		b.readComments(body)
+	}
 	if lc := odf.Section(pkg.Styles, "styles").Child(odf.NSText, "linenumbering-configuration"); lc.A(odf.NSText, "number-lines") == "true" {
 		b.warn("line-numbering", warn.ContentUnsupported, warn.Omitted, "line numbers are not drawn")
 	}

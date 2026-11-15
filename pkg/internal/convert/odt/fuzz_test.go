@@ -46,3 +46,40 @@ func newFuzzBuilder(pkg *odf.Package) *builder {
 	b.pages = newPageFlow(b, office.Options{})
 	return b
 }
+
+// FuzzComments builds arbitrary bodies with the comments read: ranges,
+// points, replies and markers nested anywhere must neither panic nor
+// loop, and every marker leaves the tree.
+func FuzzComments(f *testing.F) {
+	flat := func(body string) []byte {
+		return []byte(`<office:document ` + nsDecl + `><office:body><office:text>` + body + `</office:text></office:body></office:document>`)
+	}
+	seed := `<text:p>a` + ann("x", "A", "c\nd", "") + `<text:a xlink:href="https://e.test/">b` + annEnd("x") + `</text:a>` + ann("", "B", "p", "") + `</text:p>` +
+		`<text:p>` + ann("y", "C", "r", ` loext:parent-name="x"`) + `e` + annEnd("y") + `</text:p>`
+	f.Add(flat(seed))
+	f.Add(flat(seed)[:200])
+	f.Fuzz(func(t *testing.T, data []byte) {
+		pkg, err := odf.Open(context.Background(), data, odf.Options{})
+		if err != nil {
+			return
+		}
+		body := odf.Section(pkg.Content, "body").Child(odf.NSOffice, "text")
+		if body == nil {
+			return
+		}
+		b := newFuzzBuilder(pkg)
+		b.readComments(body)
+		root, _ := b.document(body)
+		if root == nil {
+			t.Fatal("no root")
+		}
+		var leaked bool
+		walkNodes(root, func(n *layout.Node) {
+			_, ok := b.comments.marks[n]
+			leaked = leaked || ok
+		})
+		if leaked {
+			t.Error("a comment marker is left in the tree")
+		}
+	})
+}

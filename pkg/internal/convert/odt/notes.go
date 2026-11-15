@@ -89,7 +89,9 @@ func (b *builder) note(c *odf.Element, t textState, out *[]*layout.Node, ws *wsS
 	}
 	saved := b.hf
 	b.hf = nil
+	restore := b.comments.apart()
 	body := b.blocks(bodyEl, blockCtx{depth: depth, defStyle: b.notePara(cfg, class)})
+	restore()
 	b.hf = saved
 	prefix := b.run(label, bt)
 	// The call links to its note's number and the number back to the

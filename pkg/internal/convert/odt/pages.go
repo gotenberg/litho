@@ -423,7 +423,9 @@ func (f *pageFlow) hfNodes(g *hfGeom, number, pages int, format string) []*layou
 	if b.pkg.Flat {
 		b.scope = odf.ScopeContent
 	}
+	restore := b.comments.apart()
 	nodes := b.wrapLists(b.blocks(g.el, blockCtx{}), 0)
+	restore()
 	b.hf, b.scope = saved, savedScope
 	return nodes
 }
