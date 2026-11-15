@@ -22,6 +22,7 @@ const listStyles = `<text:list-style style:name="LN">` +
 	`<text:list-level-style-number text:level="2" style:num-suffix=")" style:num-format="a" text:display-levels="2"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="listtab" text:list-tab-stop-position="1.905cm" fo:text-indent="-0.635cm" fo:margin-left="1.905cm"/></style:list-level-properties></text:list-level-style-number></text:list-style>` +
 	`<text:list-style style:name="LB"><text:list-level-style-bullet text:level="1" text:bullet-char="•"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="space" fo:text-indent="-0.635cm" fo:margin-left="1.27cm"/></style:list-level-properties></text:list-level-style-bullet></text:list-style>` +
 	`<text:list-style style:name="LR"><text:list-level-style-number text:level="1" style:num-suffix="." style:num-format="I"><style:list-level-properties text:space-before="0.5cm" text:min-label-width="1cm"/></text:list-level-style-number></text:list-style>` +
+	`<text:list-style style:name="LS"><text:list-level-style-bullet text:level="1" style:num-prefix="(" style:num-suffix=")" text:bullet-char="•"><style:list-level-properties text:list-level-position-and-space-mode="label-alignment"><style:list-level-label-alignment text:label-followed-by="space"/></style:list-level-properties></text:list-level-style-bullet></text:list-style>` +
 	`<text:list-style style:name="LG"><text:list-level-style-number text:level="1" style:num-suffix="." style:num-format="A"/>` +
 	`<text:list-level-style-number text:level="2" loext:is-legal="true" style:num-suffix="." style:num-format="i" text:display-levels="2"/>` +
 	`<text:list-level-style-number text:level="3" loext:is-legal="true" style:num-suffix="." style:num-format="01, 02, 03, ..." text:display-levels="3"/></text:list-style>`
@@ -59,6 +60,12 @@ func TestConvert_Lists(t *testing.T) {
 		{
 			"roman label width mode", `<text:list text:style-name="LR">` + item("a") + item("b") + `</text:list>`,
 			[]string{"I.a", "II.b"},
+		},
+		{
+			// Writer prints a bullet without its level's prefix and
+			// suffix.
+			"bullet without its suffix", `<text:list text:style-name="LS">` + item("x") + `</text:list>`,
+			[]string{"• x"},
 		},
 		{
 			// LibreOffice's loext:is-legal, Word's legal numbering

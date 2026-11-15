@@ -237,11 +237,10 @@ func (b *builder) number(item *itemCtx, lc *listCtx, it *odf.Element) {
 	item.value = cnt.n[l]
 	switch lvl.Kind {
 	case "bullet":
-		item.label = lvl.El.A(odf.NSText, "bullet-char")
-		if item.label == "" {
-			item.label = "•"
-		}
-		item.label = lvl.El.A(odf.NSStyle, "num-prefix") + item.label + lvl.El.A(odf.NSStyle, "num-suffix")
+		// Writer prints a bullet level's character alone: the
+		// style:num-prefix and style:num-suffix the schema allows on it,
+		// and its loext:num-list-format, are not printed ([bulletLabel]).
+		item.label = bulletLabel(lvl)
 	case "image":
 		if href := lvl.El.A(odf.NSXLink, "href"); href != "" {
 			item.pic = b.picture(href, nil)
@@ -252,6 +251,25 @@ func (b *builder) number(item *itemCtx, lc *listCtx, it *odf.Element) {
 	default:
 		item.label = b.levelLabel(lc, l)
 	}
+}
+
+// bulletLabel returns the label of a bullet level: its text:bullet-char,
+// a bullet when it names none.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odt odfexport/tdf146264.odt: a bullet level of
+//     style:num-suffix "." and loext:num-list-format "%1%." prints "•"
+//     alone.
+//   - probe, odt: through gotenberg/gotenberg:9.4.1, bullet levels of
+//     num-prefix "(" and num-suffix ")", of num-list-format "[%1%]" with
+//     the prefix "[" and suffix "]", and of num-list-format "%1%" with the
+//     suffix ".", each print "•" alone.
+func bulletLabel(lvl *odf.ListLevel) string {
+	if c := lvl.El.A(odf.NSText, "bullet-char"); c != "" {
+		return c
+	}
+	return "•"
 }
 
 // levelStart returns a level's text:start-value, 1 by default.
