@@ -274,6 +274,17 @@ func TestChartExFromElement_BoxWhisker(t *testing.T) {
 	if s.Box.Line == nil || math.Abs(s.Box.Line.Color.R-want.R) > 1e-9 || s.Border == nil || s.Border.Color != s.Box.Line.Color {
 		t.Errorf("line %+v, outline %+v: want both 0.8 of the series' red", s.Box.Line, s.Border)
 	}
+	// Its outliers are the style's circle of five pixels, outlined by
+	// the box's line inside them.
+	marker := `<cs:lnRef idx="0"/><cs:fillRef idx="0"><cs:styleClr val="auto"/></cs:fillRef><cs:effectRef idx="0"/><cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>` +
+		`<cs:spPr><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:ln w="9525"><a:solidFill><a:schemeClr val="lt1"/></a:solidFill></a:ln></cs:spPr>`
+	style := cxStyleXML("dataPoint", ph, "dataPointMarker", marker) + ""
+	style = strings.Replace(style, "</cs:chartStyle>", `<cs:dataPointMarkerLayout symbol="circle" size="5"/></cs:chartStyle>`, 1)
+	c = readStyledChartEx(t, xml, style, cxColorStyle)
+	m := c.Groups[0].Series[0].Marker
+	if m.Symbol != chart.MarkerCircle || math.Abs(m.Size-3) > 1e-9 || m.Border == nil || m.Border.Color != c.Groups[0].Series[0].Box.Line.Color {
+		t.Errorf("marker %+v, border %+v: want a 3 pt circle outlined by the box's line", m, m.Border)
+	}
 }
 
 func TestChartExFromElement_Funnel(t *testing.T) {

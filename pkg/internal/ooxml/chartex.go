@@ -841,7 +841,31 @@ func (x *chartExReader) boxWhisker(e *Element, s *chart.Series) {
 		s.Border = &chart.Stroke{None: true}
 	}
 	s.Box = b
-	s.Marker = x.styleMarker(auto)
+	s.Marker = boxMarker(x.styleMarker(auto), b.Line)
+}
+
+// boxMarker returns m, the chart style's marker, as Office draws a box
+// plot's outliers and inner points with it: its size read in pixels at 96
+// to the inch, its outline line, the box's line, inside that size. A
+// marker the style leaves unpainted stays so.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word draws the outlier of a box plot whose chart style
+//     gives markers a circle of size 5, filled in the series colour and
+//     outlined in white, as a circle 3.0 pt across filled in accent1 and
+//     outlined 0.75 pt in the box's line colour, 54,91,157: 3.75 pt, five
+//     pixels, with its outline.
+func boxMarker(m chart.Marker, line *chart.Stroke) chart.Marker {
+	if line == nil || m.Border != nil && m.Border.None {
+		return m
+	}
+	if size := float64(m.Size*0.75) - line.Width; size > 0 {
+		m.Size = size
+	}
+	l := *line
+	m.Border = &l
+	return m
 }
 
 // boxLineShade is the factor Office multiplies each sRGB channel of a
