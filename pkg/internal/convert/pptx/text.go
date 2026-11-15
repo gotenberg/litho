@@ -850,8 +850,9 @@ func (r *reader) linkStyle(s *slides.RunStyle, h *ooxml.Element, sc scope) {
 // # Corpus evidence
 //
 //   - libreoffice/pptx: sd/bnc862510_5's buChar "••" prints one bullet.
-//   - libreoffice/pptx: sd/n862510_2's diagram bullet, of no face, prints
-//     in OpenSymbol.
+//   - libreoffice/pptx: sd/bnc862510_5's and sd/n862510_2's diagram
+//     bullets, of no face in any level, print in Calibri, the text's face,
+//     at its advance, 0.4975 em.
 func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
 	kind, holder := pc.firstWith("buNone", "buChar", "buAutoNum", "buBlip")
 	if kind == nil || kind.Local == "buNone" {
@@ -885,11 +886,10 @@ func (r *reader) bullet(pc chain, ts *textStyles) *slides.Bullet {
 			b.Kind, b.Char = slides.BulletChar, "•"
 		}
 	}
-	if f := pc.first("buFont", "buFontTx"); f == nil && b.Kind == slides.BulletChar {
-		// A bullet character no level gives a face draws in Impress's
-		// default bullet face.
-		b.Families = []string{symbolFace}
-	} else if f != nil && f.Local == "buFont" {
+	// A bullet character no level gives a face follows the text's face,
+	// as buFontTx asks (21.1.2.4.7): it draws in its paragraph's first
+	// run's face.
+	if f := pc.first("buFont", "buFontTx"); f != nil && f.Local == "buFont" {
 		if name := ts.sc.theme.font(attr(f, "typeface")); name != "" {
 			b.Families = []string{name}
 		}
