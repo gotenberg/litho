@@ -43,10 +43,15 @@ type writeOpts struct {
 	recompressImages  bool
 	compressStreams   bool
 	subsetFonts       bool
-	logger            *slog.Logger
-	bookmarks         *BookmarkOptions
-	tempDir           string
-	encrypt           *EncryptConfig
+	// imageQuality is the JPEG quality of [WithImageQuality], 0 when not
+	// given, and maxImageDPI the resolution of [WithMaxImageDPI], 0 when not
+	// given or when it asks for no maximum.
+	imageQuality int
+	maxImageDPI  float64
+	logger       *slog.Logger
+	bookmarks    *BookmarkOptions
+	tempDir      string
+	encrypt      *EncryptConfig
 	// inTheClear writes the output unencrypted, whatever [Writer.Encrypt] or
 	// [WithEncryption] asks for (see [inTheClear]).
 	inTheClear bool
@@ -204,13 +209,16 @@ func (o writeOpts) compactOptions() mutations.CompactOptions {
 		RecompressImages:  o.recompressImages,
 		CompressStreams:   o.compressStreams,
 		SubsetFonts:       o.subsetFonts,
+		ImageQuality:      o.imageQuality,
+		MaxImageDPI:       o.maxImageDPI,
 	}
 }
 
 // compacts reports whether the write asks for a compaction pass: one of the
 // options that run on a full rewrite alone.
 func (o writeOpts) compacts() bool {
-	return o.packObjectStreams || o.dedupStreams || o.recompressImages || o.compressStreams || o.subsetFonts
+	return o.packObjectStreams || o.dedupStreams || o.recompressImages || o.subsetFonts ||
+		o.imageQuality > 0 || o.maxImageDPI > 0
 }
 
 // internalEncrypt translates the requested encryption into the internal
@@ -266,9 +274,9 @@ func WithXRefStream() WriteOption {
 // effect there. The document a Writer edits after a remediation that kept a
 // later round, or after a [Pipeline] Split or Merge, is a file litho wrote for
 // it, not the caller's. [Writer.WriteTo] rewrites that file in full when this
-// option, [WithDedup], [WithImageRecompression], [WithStreamCompression] or
-// [WithFontSubsetting] is given, signed or not, unless the file still carries
-// a signature a rewrite would drop.
+// option, [WithDedup], [WithImageRecompression], [WithFontSubsetting],
+// [WithImageQuality] or [WithMaxImageDPI] is given, signed or not, unless the
+// file still carries a signature a rewrite would drop.
 //
 // Packing implies a cross-reference stream, since a traditional table cannot
 // name a compressed object, and litho writes one whether or not
@@ -355,27 +363,134 @@ func WithImageRecompression() WriteOption {
 	}
 }
 
-// WithStreamCompression compresses with FlateDecode (ISO 32000-1, 7.4.4) the
-// streams of the output that carry no filter, losslessly: content streams,
-// font programs, ICC profiles, embedded files and the like that a producer
-// wrote plain. A compression is kept only when the stream comes out smaller.
-// Every reader decodes the bytes the stream held, so pages draw and extract as
-// before. Only /Filter and /Length change.
+// WithImageQuality re-encodes the continuous-tone images of the output as
+// JPEG at quality q, keeping each re-encoding only when it is smaller. It
+// trades fidelity for size on purpose: the samples a reader decodes are no
+// longer those of the source.
 //
-// XMP metadata streams stay plain: ISO 19005-1, 6.7.2 forbids a filter on the
-// document's, and XMP is meant to be readable without one. Images are left to
-// [WithImageRecompression]. A stream whose data passes the stream budget of
-// [WithLimits] is left as it is.
+// q runs from 1 to 100 and scales the quantization tables of ITU-T T.81,
+// Annex K as libjpeg and most encoders do: 100 keeps the most detail and
+// the most bytes, 1 the fewest of both. A value below 1 is read as 1 and one
+// above 100 as 100. Without this option no image is encoded lossily.
 //
-// It applies to the full-rewrite path only, as [WithObjectStreams] does, and
-// to an encrypted output too: the pass runs before encryption. The output
-// stays deterministic.
+// An image qualifies when it has 8 bits a component in DeviceGray,
+// DeviceRGB, DeviceCMYK, CalGray, CalRGB or an ICCBased space of one, three
+// or four components (ISO 32000-1, 8.9.5.1 and 7.4.8). It becomes a baseline
+// JPEG, its chroma at half resolution below quality 90. Its /Decode,
+// /Intent, /Interpolate, colour space and ICC profile, soft mask, alternate
+// text and structure stay as they were. When the samples encode losslessly
+// with FlateDecode in no more bytes, that encoding is kept instead.
 //
-// It costs time in proportion to the plain bytes it compresses, at zlib's
-// default level, far less than [WithImageRecompression].
-func WithStreamCompression() WriteOption {
+// These images are left as they are:
+//
+//   - stencil masks and images of 1, 2, 4 or 16 bits a component;
+//   - Indexed, Lab, Separation and DeviceN images, and images with a
+//     colour-key /Mask, which a changed colour would miss;
+//   - soft masks, which stay lossless;
+//   - JPEG 2000, JBIG2 and CCITT images, and images whose filter a plugin
+//     claims ([WithFilterPlugin]);
+//   - images past the image budget of [WithLimits], and images whose data
+//     does not decode whole.
+//
+// An image that is a JPEG already is re-encoded only when the quality its
+// quantization tables were made at is above q, and only when the result is
+// smaller: each generation of JPEG coding loses detail of its own, so a JPEG
+// at or below q keeps its bytes. With [WithMaxImageDPI], a JPEG it
+// downsamples is encoded at the lower of its own quality and q.
+//
+// What it costs a picture: at 75 a photograph looks as it did at a normal
+// viewing distance, with faint blocks in smooth skies and gradients when
+// enlarged; a screenshot or a scanned page of text gains a haze of ringing
+// around its strokes and loses crispness in coloured text, which is why its
+// lossless encoding often stays the smaller and is kept. At 50 the blocks and
+// the ringing show at 100 per cent zoom. An image drawn larger than its
+// pixels, a small picture enlarged across a page, shows its blocks enlarged
+// with it, and sharp coloured edges, in a diagram or a picture of few
+// colours, take the most of it. Text, line art and shadings drawn as vectors
+// are never touched.
+//
+// It costs time: every qualifying image is decoded and encoded again, which
+// takes seconds on a file of many large photographs.
+//
+// Like [WithObjectStreams] it applies to the full-rewrite path only, and to
+// an encrypted output too: the pass runs before encryption. With
+// [WithImageRecompression], this pass runs first, and the lossless pass then
+// compresses again what this one wrote losslessly. The output stays
+// deterministic: the same input and options give the same bytes on every
+// machine.
+func WithImageQuality(q int) WriteOption {
 	return func(o *writeOpts) {
-		o.compressStreams = true
+		o.imageQuality = min(max(q, 1), 100)
+	}
+}
+
+// WithMaxImageDPI downsamples each image of the output that a page draws at
+// more than one and a half times dpi pixels an inch, to dpi pixels an inch.
+// It trades fidelity for size on purpose: the image keeps its place and size
+// on the page and loses the detail finer than dpi.
+//
+// An image's resolution is how many of its pixels fall in an inch where a
+// page draws it (ISO 32000-1, 8.9.5 and 8.3.4). litho finds every place an
+// image is drawn, through pages, form XObjects, tiling patterns, Type 3
+// glyphs, soft-mask groups and annotation appearances, and takes the largest
+// size it is drawn at, so that no place it is drawn shows it under dpi. Each
+// side of the image is measured along its own direction, so a rotated or
+// skewed placement counts at its true size, and a page's /UserUnit counts.
+// The coarser side gives the image's resolution, and both sides are scaled
+// by one factor: the image keeps its shape and no side falls under dpi.
+//
+// An image drawn at between dpi and one and a half times dpi keeps its
+// pixels, the threshold Ghostscript and Acrobat Distiller apply by default:
+// averaging an image down by less than a third blurs every edge for a small
+// saving. A reduced image takes the pixels its coarser side needs at dpi,
+// rounded up. Each new pixel is the mean of the source area it covers,
+// computed in integers in the image's own colour space. A soft mask is
+// reduced by the same rule over the places its image is drawn, so an image
+// and a mask of one size stay of one size, and it stays lossless.
+//
+// A reduced image is written as JPEG at the quality [WithImageQuality] gives
+// when it qualifies there, and a JPEG at the lower of its own quality and
+// that one, or its own quality without the option; otherwise, and whenever
+// it is no larger, it is written with FlateDecode. A reduced image is kept
+// only when it is smaller than what it replaces.
+//
+// The images [WithImageQuality] leaves alone keep their pixels too, but for
+// Lab, Separation and DeviceN images, which are reduced and written
+// losslessly. So does an image drawn nowhere litho can see, or whose drawn
+// size it cannot vouch for: one drawn by a content stream that does not
+// read, deeper than the form depth budget of [WithLimits] or more than 65,536
+// times, or named from outside the resources of the content litho reads. So
+// do an image with /Measure or /PtData, whose coordinates may count its
+// pixels, and an image whose soft mask has a /Matte, which ISO 32000-1,
+// 11.6.5.3 needs the same size as the image.
+//
+// dpi must be positive and finite. Zero, a negative value, NaN and infinity
+// ask for no maximum, and the option then changes nothing. Without the
+// option no image is downsampled.
+//
+// What it costs a picture: at 150 dpi a photograph looks as it did on a
+// screen and in an office print, and loses the fine detail a 300 dpi print
+// shows; a scanned page or a screenshot keeps text of 9 points and more
+// readable, with softer strokes. At 96 dpi a photograph still looks right
+// on a screen at 100 per cent, and small text in a picture blurs. A plan or
+// a chart stored as an image loses its finest lines and hatching, which
+// average to grey. Text, line art and shadings drawn as vectors are never
+// touched.
+//
+// It costs time: litho reads every content stream of the document to find
+// where its images are drawn, then decodes and encodes each image it
+// reduces.
+//
+// Like [WithObjectStreams] it applies to the full-rewrite path only, and to
+// an encrypted output too. With [WithImageRecompression], this pass runs
+// first. The output stays deterministic: the same input and options give
+// the same bytes on every machine.
+func WithMaxImageDPI(dpi float64) WriteOption {
+	return func(o *writeOpts) {
+		o.maxImageDPI = 0
+		if dpi > 0 && !math.IsInf(dpi, 1) {
+			o.maxImageDPI = dpi
+		}
 	}
 }
 
@@ -424,12 +539,12 @@ func WithFontSubsetting() WriteOption {
 // the write skipped compaction.
 //
 // The write skipped compaction when it was given [WithObjectStreams],
-// [WithDedup], [WithImageRecompression], [WithStreamCompression] or
-// [WithFontSubsetting] and applied none of them, because its output is an
-// incremental update of the document the Writer edits. An update appends to
-// that document's bytes and leaves them as they are (ISO 32000-1, 7.5.6). The
-// five options run on a full rewrite only, so the output is the one the write
-// produces without them.
+// [WithDedup], [WithImageRecompression], [WithFontSubsetting],
+// [WithImageQuality] or [WithMaxImageDPI] and applied none of them, because
+// its output is an incremental update of the document the Writer edits. An
+// update appends to that document's bytes and leaves them as they are (ISO
+// 32000-1, 7.5.6). The six options run on a full rewrite only, so the output
+// is the one the write produces without them.
 //
 // It applies to [Writer.WriteTo], [Pipeline.WriteTo], [Split] and [Merge], the
 // last two always rewriting. A write that fails leaves *dst as it was.
@@ -5042,8 +5157,9 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signi
 			slog.Bool("pack_object_streams", cfg.packObjectStreams),
 			slog.Bool("dedup_streams", cfg.dedupStreams),
 			slog.Bool("recompress_images", cfg.recompressImages),
-			slog.Bool("compress_streams", cfg.compressStreams),
-			slog.Bool("subset_fonts", cfg.subsetFonts))
+			slog.Bool("subset_fonts", cfg.subsetFonts),
+			slog.Int("image_quality", cfg.imageQuality),
+			slog.Float64("max_image_dpi", cfg.maxImageDPI))
 	}
 
 	// Signing requires its own two-pass incremental flow. It carries the
