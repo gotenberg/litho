@@ -246,9 +246,8 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		// buildTextContentItem, prevTransform). A zero-width glyph set over
 		// the next one after a word gap leaves that gap before both.
 		//
-		// Nonspacing marks: PDF.js shows a glyph whose character holds a
-		// nonspacing mark (Unicode category Mn) without comparing its
-		// position, so no word gap is read before it, and gives it no
+		// Nonspacing marks: PDF.js shows a glyph that is a nonspacing
+		// mark ([isNonspacingMark]) without comparing its position, so no word gap is read before it, and gives it no
 		// advance, so the glyph after it is measured from the last glyph
 		// that advanced, and every glyph its run shows after it sits the
 		// mark's advance earlier ([markAdvances]). A mark combines with the character before it
@@ -310,7 +309,7 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 					continue
 				}
 			}
-			if prevIdx >= 0 && !hasNonspacingMark(el.Text) {
+			if prevIdx >= 0 && !isNonspacingMark(el.Text) {
 				prev := ln.elems[prevIdx]
 				gap := computeLineGap(prev, el)
 				sameChunk := prev.Chunk == el.Chunk && el.Chunk != 0
@@ -818,7 +817,7 @@ func (r *runTracker) breaksLine(i int, el models.TextElement) bool {
 	}
 	last, lastIdx := r.last, r.lastIdx
 	fontChanged := r.fontChanged(i, last, el)
-	if hasNonspacingMark(el.Text) {
+	if isNonspacingMark(el.Text) {
 		r.advance(i, el)
 		if !fontChanged && el.MCID == last.MCID && !r.markedChanged(lastIdx, i) {
 			return false
@@ -2050,11 +2049,12 @@ func alongDist(a, b models.TextElement) float64 {
 }
 
 // advances reports whether el moves the position PDF.js measures the next
-// glyph from: a glyph with an advance whose character holds no nonspacing
-// mark (src/core/evaluator.js, buildTextContentItem, prevTransform, and
-// src/core/unicode.js, getCharUnicodeCategory, isZeroWidthDiacritic).
+// glyph from: a glyph with an advance that is neither a nonspacing mark
+// ([isNonspacingMark]) nor a format character (src/core/evaluator.js,
+// buildTextContentItem, prevTransform, and src/core/unicode.js,
+// getCharUnicodeCategory, isZeroWidthDiacritic).
 func advances(el models.TextElement) bool {
-	return el.Width != 0 && !hasNonspacingMark(el.Text) && !isFormatOnly(el.Text)
+	return el.Width != 0 && !isNonspacingMark(el.Text) && !isFormatOnly(el.Text)
 }
 
 // carriesNoPosition reports whether a glyph showing s carries no position
@@ -2065,15 +2065,46 @@ func carriesNoPosition(s string) bool {
 	return isSpaceGlyph(s) || isFormatOnly(s)
 }
 
-// hasNonspacingMark reports whether s holds a nonspacing mark (Unicode
-// category Mn), anywhere in it, as PDF.js tests a glyph's character.
-func hasNonspacingMark(s string) bool {
+// isNonspacingMark reports whether the glyph showing s is a nonspacing
+// mark: s holds characters and every one of them is a nonspacing mark
+// (Unicode category Mn). A glyph that also carries a base character, a
+// ligature or a conjunct such as "प्र" (U+092A U+094D U+0930) or "फ़"
+// (U+092B U+093C), shows that base and advances past it: the marks it
+// holds combine with that base inside the glyph (Unicode, 3.6), not with
+// the glyph before it, and the text position moves past every glyph by its
+// width (ISO 32000-1, 9.4.4).
+//
+// PDF.js at the reference commit tests the character with
+// /^(\s)|(\p{Mn})|(\p{Cf})$/u, whose middle group is anchored at neither
+// end (src/core/unicode.js, getCharUnicodeCategory), so it reads a glyph
+// holding a mark anywhere as a zero-width diacritic: it measures no gap
+// before it and does not advance past it, and the glyph after it reads a
+// whole glyph late, after a false word gap. litho reads the PDF's widths.
+// PDF.js's own later source anchors the test to the whole string.
+//
+// # Corpus evidence
+//
+//   - litho/html hi-devanagari: "सार्व भौम", "प्र ाप्त", "स् वतन्त्रता", the
+//     conjuncts drawn as one glyph each, mapped to their characters by
+//     /ToUnicode and given their advance by /W, read with a word gap after
+//     them that the page does not show. litho/html emoji: "⚖️ ." for "⚖️.",
+//     the emoji glyph mapped to U+2696 U+FE0F, a variation selector being a
+//     nonspacing mark.
+//   - pdfjs bug1108301.pdf: the conjuncts "দব্" and "পর্", one glyph each
+//     with the base, read "দব্ ীন" and "পর্ কাশনী", as PDF.js reads them,
+//     where the page shows the words দ্বীন and প্রকাশনী. It is the one page
+//     of every corpus whose text moves for the widths, and its words differ
+//     from PDF.js's for them.
+func isNonspacingMark(s string) bool {
+	if s == "" {
+		return false
+	}
 	for _, r := range s {
-		if unicode.Is(unicode.Mn, r) {
-			return true
+		if !unicode.Is(unicode.Mn, r) {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 // markAdvances records, for a sequence of elements, how far the nonspacing
@@ -2141,7 +2172,7 @@ func newMarkAdvances(elements []models.TextElement, fonts []runFont) markAdvance
 // skipsAdvance reports whether PDF.js does not advance its text position past
 // a glyph showing s: a nonspacing mark or a format character.
 func skipsAdvance(s string) bool {
-	return hasNonspacingMark(s) || isFormatOnly(s)
+	return isNonspacingMark(s) || isFormatOnly(s)
 }
 
 // shift returns how far before litho's position PDF.js reads the element k:

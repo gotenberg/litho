@@ -111,3 +111,58 @@ func TestMarkAdvances_Drift(t *testing.T) {
 		}
 	}
 }
+
+// TestReconstructText_GlyphHoldingAMarkAdvances pins that a glyph whose
+// characters hold a nonspacing mark beside a base character, a Devanagari
+// conjunct or a letter with a nukta drawn as one glyph, advances by its
+// width (ISO 32000-1, 9.4.4) like any glyph showing a base: the glyph a
+// text-positioning operator sets after it where it ends abuts it, and no
+// word gap is read there. A glyph whose characters are
+// all nonspacing marks still advances nowhere ([isNonspacingMark]).
+func TestReconstructText_GlyphHoldingAMarkAdvances(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		elements []models.TextElement
+		want     string
+	}{
+		{
+			name: "conjunct with a virama",
+			elements: []models.TextElement{
+				{Text: "स", X: 100, Y: 500, Width: 11.9, FontSize: 16, Chunk: 1},
+				{Text: "ा", X: 111.9, Y: 500, Width: 4.7, FontSize: 16, Chunk: 1},
+				{Text: "र्व", X: 116.6, Y: 500, Width: 9.68, FontSize: 16, Chunk: 1},
+				{Text: "भ", X: 126.28, Y: 500, Width: 12.37, FontSize: 16, Chunk: 2},
+				{Text: "ौ", X: 138.65, Y: 500, Width: 4.7, FontSize: 16, Chunk: 2},
+				{Text: "म", X: 143.35, Y: 500, Width: 10.34, FontSize: 16, Chunk: 2},
+			},
+			want: "सार्वभौम",
+		},
+		{
+			name: "letter with a nukta",
+			elements: []models.TextElement{
+				{Text: "क", X: 100, Y: 500, Width: 9.14, FontSize: 12, Chunk: 1},
+				{Text: "फ़", X: 109.14, Y: 500, Width: 8, FontSize: 12, Chunk: 1},
+				{Text: "र", X: 117.14, Y: 500, Width: 4.9, FontSize: 12, Chunk: 2},
+			},
+			want: "कफ़र",
+		},
+		{
+			name: "mark alone, its width not advanced",
+			elements: []models.TextElement{
+				{Text: "a", X: 100, Y: 500, Width: 5, FontSize: 10, Chunk: 1},
+				{Text: combiningSolidus, X: 105, Y: 500, Width: 5, FontSize: 10, Chunk: 1},
+				{Text: "b", X: 108, Y: 500, Width: 5, FontSize: 10, Chunk: 2},
+			},
+			want: "a" + combiningSolidus + " b",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ReconstructText(context.Background(), tc.elements, nil); got != tc.want {
+				t.Fatalf("ReconstructText = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
