@@ -6,15 +6,18 @@
 <style>
 body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; }
 h1 { font-size: 16pt; }
-.scene { position: relative; height: 180px; margin-bottom: 24px; background: linear-gradient(90deg, #e63946, #457b9d); }
-.scene b { position: absolute; left: 20px; top: 20px; font-size: 36pt; color: #f1faee; }
-.glass { position: absolute; left: 120px; top: 50px; width: 280px; height: 90px; padding: 8px; background: rgba(255, 255, 255, 0.3); border: 1px solid rgba(255, 255, 255, 0.6); }
+.scene { position: relative; width: 600px; height: 150px; margin-bottom: 20px; background: linear-gradient(90deg, #e63946, #457b9d); }
+.disc { position: absolute; left: 50px; top: 10px; width: 110px; height: 110px; border-radius: 50%; background: #1d3557; }
+.bar { position: absolute; left: 300px; top: 60px; width: 30px; height: 90px; background: #f1faee; }
+.glass { position: absolute; left: 120px; top: 40px; width: 300px; height: 90px; box-sizing: border-box; padding: 8px; background: rgba(255, 255, 255, 0.3); border: 1px solid #f1faee; }
+.round { border-radius: 24px; }
 </style>
 </head>
 <body>
 <h1>backdrop-filter</h1>
-<div class="scene"><b>Backdrop</b><div class="glass" style="backdrop-filter: blur(10px)">Frosted glass</div></div>
-<div class="scene"><b>Backdrop</b><div class="glass" style="backdrop-filter: grayscale(1) blur(4px)">Grey glass</div></div>
-<p>A printed page shows each glass panel over its backdrop unfiltered, its own translucent background and text drawn as they are.</p>
+<div class="scene"><i class="disc"></i><i class="bar"></i><div class="glass" style="backdrop-filter: blur(10px)">Frosted glass</div></div>
+<div class="scene"><i class="disc"></i><i class="bar"></i><div class="glass" style="backdrop-filter: grayscale(1) blur(4px)">Grey glass</div></div>
+<div class="scene"><i class="disc"></i><i class="bar"></i><div class="glass round" style="backdrop-filter: invert(1)">Inverted glass, rounded</div></div>
+<p>Each glass panel filters what lies behind its border box, under its own translucent background, border and text.</p>
 </body>
 </html>

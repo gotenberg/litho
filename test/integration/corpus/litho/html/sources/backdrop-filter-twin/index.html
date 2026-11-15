@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Backdrop filters</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 11pt; }
+h1 { font-size: 16pt; }
+.scene { position: relative; width: 600px; height: 150px; margin-bottom: 20px; background: linear-gradient(90deg, #e63946, #457b9d); }
+.disc { position: absolute; left: 50px; top: 10px; width: 110px; height: 110px; border-radius: 50%; background: #1d3557; }
+.bar { position: absolute; left: 300px; top: 60px; width: 30px; height: 90px; background: #f1faee; }
+.glass { position: absolute; left: 120px; top: 40px; width: 300px; height: 90px; box-sizing: border-box; padding: 8px; background: rgba(255, 255, 255, 0.3); border: 1px solid #f1faee; }
+.round { border-radius: 24px; }
+.clip { position: absolute; left: 120px; top: 40px; width: 300px; height: 90px; overflow: hidden; }
+.mirror { position: absolute; left: -300px; top: -90px; width: 900px; height: 270px; }
+.tile { position: absolute; width: 300px; height: 90px; overflow: hidden; }
+.copy { position: absolute; left: -120px; top: -40px; width: 600px; height: 150px; background: linear-gradient(90deg, #e63946, #457b9d); }
+</style>
+</head>
+<body>
+<h1>backdrop-filter</h1>
+<div class="scene"><i class="disc"></i><i class="bar"></i><div class="clip"><div class="mirror" style="filter: blur(10px)">
+<div class="tile" style="left: 0px; top: 0px; transform: scaleX(-1) scaleY(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 300px; top: 0px; transform: scaleY(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 600px; top: 0px; transform: scaleX(-1) scaleY(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 0px; top: 90px; transform: scaleX(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 300px; top: 90px;"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 600px; top: 90px; transform: scaleX(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 0px; top: 180px; transform: scaleX(-1) scaleY(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 300px; top: 180px; transform: scaleY(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 600px; top: 180px; transform: scaleX(-1) scaleY(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+</div></div><div class="glass">Frosted glass</div></div>
+<div class="scene"><i class="disc"></i><i class="bar"></i><div class="clip"><div class="mirror" style="filter: grayscale(1) blur(4px)">
+<div class="tile" style="left: 0px; top: 0px; transform: scaleX(-1) scaleY(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 300px; top: 0px; transform: scaleY(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 600px; top: 0px; transform: scaleX(-1) scaleY(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 0px; top: 90px; transform: scaleX(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 300px; top: 90px;"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 600px; top: 90px; transform: scaleX(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 0px; top: 180px; transform: scaleX(-1) scaleY(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 300px; top: 180px; transform: scaleY(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+<div class="tile" style="left: 600px; top: 180px; transform: scaleX(-1) scaleY(-1);"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div>
+</div></div><div class="glass">Grey glass</div></div>
+<div class="scene"><i class="disc"></i><i class="bar"></i><div class="clip round"><div class="tile" style="filter: invert(1)"><div class="copy"><i class="disc"></i><i class="bar"></i></div></div></div><div class="glass round">Inverted glass, rounded</div></div>
+<p>Each glass panel filters what lies behind its border box, under its own translucent background, border and text.</p>
+</body>
+</html>
