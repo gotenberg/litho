@@ -244,7 +244,7 @@ var wptDirs = []string{
 	"css/css-counter-styles", "css/css-values", "css/css-variables", "css/selectors", "css/css-color",
 	"css/css-images", "css/css-display", "css/css-pseudo", "css/css-masking", "css/compositing",
 	"css/css-logical", "css/css-box", "css/css-animations", "css/css-transitions", "css/css-shapes",
-	"css/filter-effects",
+	"css/filter-effects", "css/css-conditional",
 	"mathml/presentation-markup/direction", "mathml/presentation-markup/fractions",
 	"mathml/presentation-markup/menclose", "mathml/presentation-markup/mpadded", "mathml/presentation-markup/mrow",
 	"mathml/presentation-markup/operators", "mathml/presentation-markup/radicals",
@@ -270,7 +270,7 @@ var wptAreaCap = map[string]int{
 	"css/css-color": 60, "css/css-images": 60, "css/css-display": 60, "css/css-pseudo": 100,
 	"css/css-masking": 120, "css/compositing": 60, "css/css-logical": 40, "css/css-box": 40,
 	"css/css-animations": 40, "css/css-transitions": 40, "css/css-shapes": 200,
-	"css/filter-effects": 400, "mathml": 100,
+	"css/filter-effects": 400, "css/css-conditional": 200, "mathml": 100,
 }
 
 func compileAll(flags string, patterns ...string) []*regexp.Regexp {
@@ -401,7 +401,8 @@ var wptAreas = map[string]wptAreaRules{
 	"css/css-logical":            {forbidden: wptLayoutForbidden, lift: []*regexp.Regexp{wptVertical, wptSideways}},
 	"css/css-box":                {forbidden: wptLayoutForbidden, writingMode: true},
 	"css/css-shapes":             {forbidden: wptLayoutForbidden, writingMode: true},
-	"css/filter-effects":         {forbidden: []*regexp.Regexp{wptBackdropFilter}, lift: wptFontFaceRules.lift},
+	"css/filter-effects":         wptFontFaceRules,
+	"css/css-conditional":        wptFontFaceRules,
 }
 
 // wptMathRules are the rules of the MathML areas: a test may hold MathML,
@@ -417,11 +418,6 @@ func wptRules(area string) wptAreaRules {
 	}
 	return wptAreas[area]
 }
-
-// wptBackdropFilter marks a test of backdrop-filter, which Chromium prints
-// unblurred and the converter prints as Chromium does: its reftests, which
-// blur the backdrop as a screen does, are left out.
-var wptBackdropFilter = regexp.MustCompile(`(?i)backdrop-filter`)
 
 // wptProbe is a part of an area a rule singles out and caps on its own: the
 // tests of a feature the converter does not lay out, of which a few say as
