@@ -53,7 +53,7 @@ func TestRender_FunnelLabelOverNoFill(t *testing.T) {
 				Labels: Labels{ShowValue: true, Style: TextStyle{Size: 8, Color: blue}},
 			}}}},
 		}
-		want := blue
+		want := funnelLabelOnFill
 		if none {
 			want = funnelLabelInk
 		}

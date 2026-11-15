@@ -17,6 +17,18 @@ import (
 //     labels the text colour, black.
 var funnelLabelInk = typeset.Color{R: 178.0 / 255, G: 178.0 / 255, B: 178.0 / 255, A: 1}
 
+// funnelLabelOnFill is the colour Office draws the data labels of a
+// funnel's filled bars in, whatever colour the chart style gives data
+// labels.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word draws the value labels of a funnel whose chart
+//     style fills its bars in accent1 and gives data labels 89,89,89 in
+//     254,254,254; the same style's labels of a waterfall and a treemap
+//     stay 89,89,89.
+var funnelLabelOnFill = typeset.Color{R: 254.0 / 255, G: 254.0 / 255, B: 254.0 / 255, A: 1}
+
 // funnel draws a funnel group: per category, from the top down, a bar
 // centred across the plot area as wide as its value is of the greatest
 // value, the greatest as wide as the plot area, its data label at its
@@ -66,6 +78,7 @@ func (rd *renderer) funnel(g *Group, x, y *dim) []func() {
 			continue
 		}
 		lb.Placement = LabelCenter
+		lb.Style.Color = funnelLabelOnFill
 		if fill == nil || fill.None {
 			lb.Style.Color = funnelLabelInk
 		}
