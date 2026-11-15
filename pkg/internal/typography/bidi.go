@@ -3,6 +3,7 @@ package typography
 import (
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/text/unicode/bidi"
 
@@ -262,7 +263,7 @@ func visualToLogical(texts []string) []int {
 			}
 		}
 	}
-	rtl := chars <= shortLineLength || float64(rtlChars) >= rtlShareThreshold*float64(chars)
+	rtl := chars <= shortLineLength || float64(rtlChars) >= rtlShareThreshold*float64(chars) || mirroredAroundLTR(texts)
 	base := 0
 	sor := bidiL
 	if rtl {
@@ -419,6 +420,105 @@ func resolveNeutralTypes(types []bidiClass, sor bidiClass) {
 		}
 		i = end - 1
 	}
+}
+
+// maxBracketDepth bounds the open brackets [mirroredAroundLTR] tracks on
+// one line, as BD16 bounds its stack at 63 entries (UAX #9, 3.1.3). It is
+// an anti-DoS guard, not a reading rule: a line nesting brackets deeper is
+// read without the rule.
+const maxBracketDepth = 63
+
+// mirroredAroundLTR reports whether texts, the elements of a line in visual
+// order, leftmost first, hold a bracket pair shown mirrored around
+// left-to-right text: the closing bracket of the pair to the left of its
+// opening bracket, with a strong left-to-right character between them. A
+// glyph maps to the character it stands for (ISO 32000-1, 9.10.2), so a
+// pair drawn mirrored maps to a closing bracket on the left. Brackets are
+// drawn mirrored at an odd embedding level only (UAX #9, rule L4), and a
+// pair enclosing left-to-right text resolves to the right-to-left direction
+// only when the embedding direction is right to left (rule N0): such a line
+// is a right-to-left paragraph, read back from its right end. Pairs are
+// found as BD16 finds them, on the line read from right to left, where a
+// mirrored pair reads opening first.
+//
+// PDF.js sets the base direction of a line by the share of its right-to-left
+// characters alone (src/core/bidi.js, bidi), so a right-to-left line that
+// holds mostly Latin text and digits reads left to right, its brackets on
+// the wrong side.
+//
+// # Corpus evidence
+//
+//   - litho/html ar-shaping: "أشكال الحرف (ZWJ, Unicode 16.0, 9.2)" read
+//     ")ZWJ, Unicode 16.0, 9.2( أشكال الحرف". litho/html bidi-letter:
+//     "التركيب (Installation)" read "1)Installation(".
+func mirroredAroundLTR(texts []string) bool {
+	type open struct {
+		closing rune
+		at      int
+	}
+	var stack []open
+	for i := len(texts) - 1; i >= 0; i-- {
+		r, ok := singleRune(texts[i])
+		if !ok {
+			continue
+		}
+		p, _ := bidi.LookupRune(r)
+		if !p.IsBracket() {
+			continue
+		}
+		if p.IsOpeningBracket() {
+			if len(stack) == maxBracketDepth {
+				return false
+			}
+			stack = append(stack, open{closing: pairedBracket(r), at: i})
+			continue
+		}
+		for k := len(stack) - 1; k >= 0; k-- {
+			if stack[k].closing != r && stack[k].closing != canonicalBracket(r) {
+				continue
+			}
+			for _, t := range texts[i+1 : stack[k].at] {
+				if elementBidiClass(t) == bidiL {
+					return true
+				}
+			}
+			stack = stack[:k]
+			break
+		}
+	}
+	return false
+}
+
+// singleRune returns the one character s holds.
+func singleRune(s string) (rune, bool) {
+	r, size := utf8.DecodeRuneInString(s)
+	if size == 0 || size != len(s) {
+		return 0, false
+	}
+	return r, true
+}
+
+// pairedBracket returns the Bidi_Paired_Bracket of r, a bracket (UAX #9,
+// BD14, BD15).
+func pairedBracket(r rune) rune {
+	p, _ := utf8.DecodeRuneInString(bidi.ReverseString(string(r)))
+	return p
+}
+
+// canonicalBracket returns r, or the bracket it is canonically equivalent
+// to: U+2329 and U+232A pair with U+3008 and U+3009 (UAX #9, BD16).
+func canonicalBracket(r rune) rune {
+	switch r {
+	case '\u2329':
+		return '\u3008'
+	case '\u232a':
+		return '\u3009'
+	case '\u3008':
+		return '\u2329'
+	case '\u3009':
+		return '\u232a'
+	}
+	return r
 }
 
 // reverseInts reverses a slice of ints in place.

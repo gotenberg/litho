@@ -147,6 +147,40 @@ func TestReorderBidiIndices_RunsPlacedRightToLeft(t *testing.T) {
 	}
 }
 
+// TestReorderBidiIndices_MirroredBracketsSetTheBase pins that a line whose
+// bracket pair is drawn mirrored around left-to-right text reads as a
+// right-to-left paragraph, though most of its characters run left to
+// right: the pair's closing glyph, on the left, maps to ")", and UAX #9
+// rule N0 resolves a pair around left-to-right text to the right-to-left
+// direction only in a right-to-left paragraph ([mirroredAroundLTR]). A pair
+// drawn as it reads, or a mirrored pair around right-to-left text alone,
+// leaves the base to the share of right-to-left characters.
+func TestReorderBidiIndices_MirroredBracketsSetTheBase(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		texts []string
+		want  string
+	}{
+		{
+			// Visual ")ZWJ, 16.0( فرحلا", logically "الحرف (ZWJ, 16.0)".
+			name:  "mirrored pair around Latin",
+			texts: []string{")", "Z", "W", "J", ",", " ", "1", "6", ".", "0", "(", " ", "ف", "ر", "ح", "ل", "ا"},
+			want:  "الحرف (ZWJ, 16.0)",
+		},
+		{
+			name:  "pair as it reads around Latin",
+			texts: []string{"(", "Z", "W", "J", ",", " ", "1", "6", ".", "0", ")", " ", "ف", "ر", "ح", "ل", "ا"},
+			want:  "(ZWJ, 16.0) الحرف",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := reorderVisual(tc.texts, nil); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestReorderBidiIndices_Empty(t *testing.T) {
 	got, _ := reorderBidiIndices(nil, nil, nil)
 	if len(got) != 0 {
