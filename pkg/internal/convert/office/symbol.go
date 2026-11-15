@@ -183,9 +183,19 @@ var symbolChars = map[rune]rune{
 	0xB7: '•', 0xA7: '♣', 0xA8: '♦', 0xA9: '♥', 0xAA: '♠', 0xD8: '¬', 0xAE: '→', 0xDE: '⇒', 0xB0: '°', 0x2D: '−', 0x2A: '∗',
 }
 
-// wingdingsChars maps Wingdings characters list labels use to Unicode.
+// wingdingsChars maps Wingdings characters list labels use to Unicode,
+// as Word writes them where its PDF names one.
+//
+// # Corpus evidence
+//
+//   - litho/docx: breaks-symbols writes Wingdings 0x4A as U+263A, 0xE8 as
+//     U+2794 and 0xFC as U+2713, numbering-bullets 0xFC as U+2713.
+//   - openxmlsdk/docx: v2FxTestFiles/ForTestCase/header.docx, whose list
+//     levels draw Wingdings "l", "n", "u" and 0xA7, writes U+25FC and
+//     U+25C6 for the two it prints, "n" and "u" (Wingdings "l" is U+26AB
+//     in PowerPoint's PDFs).
 var wingdingsChars = map[rune]rune{
-	0xA7: '▪', 0xA8: '◻', 0x6E: '■', 0x6F: '□', 0x71: '❑', 0x75: '◆', 0x76: '❖', 0xD8: '➢', 0xFC: '✔', 0xFB: '✘',
+	0xA7: '▪', 0xA8: '◻', 0x6E: '◼', 0x6F: '□', 0x71: '❑', 0x75: '◆', 0x76: '❖', 0xD8: '➢', 0xFC: '✓', 0xFB: '✘',
 	0x9F: '•', 0xA1: '○', 0x77: '⬥', 0xE0: '➔', 0xE8: '➔', 0x4A: '☺', 0x4C: '☹', 0xF0: '⇨',
 }
 

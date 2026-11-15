@@ -22,6 +22,7 @@ func TestSymbolText(t *testing.T) {
 		{"", "Arial", ""},
 		{"x", "OpenSymbol", ""},
 		{"\t", "Wingdings", ""},
+		{"\uf0fc\uf06e", "Wingdings", "✓◼"},
 	} {
 		if got := SymbolText(tc.text, tc.family); got != tc.want {
 			t.Errorf("SymbolText(%q, %q) = %q, want %q", tc.text, tc.family, got, tc.want)
