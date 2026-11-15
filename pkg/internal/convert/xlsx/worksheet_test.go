@@ -150,6 +150,34 @@ func TestRead_Hyperlinks(t *testing.T) {
 	}
 }
 
+// TestRead_HyperlinkFormulas links a cell whose formula calls HYPERLINK
+// with a string literal for its link_location (ECMA-376 Part 1,
+// 18.17.7.170), and leaves a computed location or another formula
+// unlinked.
+func TestRead_HyperlinkFormulas(t *testing.T) {
+	t.Parallel()
+	cell := func(ref, f string) string {
+		return `<c r="` + ref + `" t="str"><f>` + f + `</f><v>x</v></c>`
+	}
+	files := workbookFiles([]testSheet{{
+		name: "S",
+		xml: `<sheetData><row r="1">` +
+			cell("A1", `HYPERLINK(&quot;https://example.com/a&quot;,&quot;Label&quot;)`) +
+			cell("B1", `hyperlink( &quot;#S!A1&quot; )`) +
+			cell("C1", `HYPERLINK(&quot;https://example.com/&quot;&amp;A2,&quot;Label&quot;)`) +
+			cell("D1", `HYPERLINK(A2)`) +
+			cell("E1", `UPPER(&quot;https://example.com/&quot;)`) +
+			cell("F1", `HYPERLINK(&quot;https://example.com/q?&quot;&quot;x&quot;&quot;&quot;)`) +
+			`</row></sheetData>`,
+	}}, minimalStyles, "", "", nil)
+	doc, _ := readBytes(t, zipFiles(t, files))
+	for col, want := range []string{"https://example.com/a", "#S!A1", "", "", "", `https://example.com/q?"x"`} {
+		if c, _ := cellAt(doc.Sheets[0], 0, col); c.Href != want {
+			t.Errorf("column %d links %q, want %q", col, c.Href, want)
+		}
+	}
+}
+
 // TestRead_HyperlinksWholeColumns checks hyperlinks over whole columns:
 // they mark the cells the sheet holds, and the reading follows those
 // cells, not the million rows of each link's range.

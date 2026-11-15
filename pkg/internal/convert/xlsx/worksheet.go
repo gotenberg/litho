@@ -450,10 +450,62 @@ func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cel
 			}
 		}
 	}
+	if f := c.Child(nsMain, "f"); f != nil && cell.Value.Kind != sheet.Empty {
+		if href, ok := hyperlinkFormula(f.Text); ok {
+			cell.Href = href
+		}
+	}
 	if cell.Value.Kind == sheet.Empty && cell.Style == nil && cell.Formula == "" {
 		return cell, false
 	}
 	return cell, true
+}
+
+// hyperlinkFormula returns the target of a formula that is a call of
+// HYPERLINK whose first argument, link_location, is a string literal
+// (ECMA-376 Part 1, 18.17.7.170): the cell links to it, as Excel prints
+// it. A location in the workbook, written "#Sheet2!A1", keeps its #, as a
+// hyperlink element's location reads ([sheetReader.hyperlinks]). Any other
+// formula, or a target computed by an expression, links nowhere.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx hyperlinks: Excel's PDF links the cell whose formula is
+//     HYPERLINK("https://github.com/gotenberg","GitHub") to that address.
+func hyperlinkFormula(f string) (string, bool) {
+	f = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(f), "="))
+	const name = "HYPERLINK("
+	if len(f) < len(name) || !strings.EqualFold(f[:len(name)], name) {
+		return "", false
+	}
+	rest := strings.TrimLeft(f[len(name):], " ")
+	if !strings.HasPrefix(rest, `"`) {
+		return "", false
+	}
+	var b strings.Builder
+	i := 1
+	for ; i < len(rest); i++ {
+		if rest[i] != '"' {
+			b.WriteByte(rest[i])
+			continue
+		}
+		if i+1 < len(rest) && rest[i+1] == '"' {
+			// A doubled quote is one quote in the string.
+			b.WriteByte('"')
+			i++
+			continue
+		}
+		break
+	}
+	if i >= len(rest) {
+		return "", false
+	}
+	after := strings.TrimSpace(rest[i+1:])
+	if !strings.HasPrefix(after, ",") && after != ")" {
+		return "", false
+	}
+	target := strings.TrimSpace(b.String())
+	return target, target != ""
 }
 
 // richTextOf decodes the text of a formula's cached string value.
