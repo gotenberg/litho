@@ -206,3 +206,45 @@ func TestWarpLanes_CapsTheVerticesOfAllItsPaths(t *testing.T) {
 		t.Errorf("%d vertices over %d lanes, want at most %d", n, len(lanes), MaxWarpCurvePoints)
 	}
 }
+
+// TestWarpLanes_FollowsAVMLArcTheWayItsSwingRuns checks the two type 144
+// (Arch Up Curve) text paths of the corpora, with each document's own
+// path, formulas and adjustment: the arc runs from the start the way the
+// swing's sign says, which decides where the text begins and which side
+// of the arc it stands on.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlimport/WordArt: path @2 @14, Word prints the
+//     text upright, left to right over the top.
+//   - litho/docx shapes-wordart: path @3 @15, Word prints the text upside
+//     down, right to left over the top.
+func TestWarpLanes_FollowsAVMLArcTheWayItsSwingRuns(t *testing.T) {
+	formulas := []string{"val #1", "val #0", "sum 0 0 #0", "sumangle #0 0 180", "sumangle #0 0 90",
+		"prod @4 2 1", "sumangle #0 90 0", "prod @6 2 1", "abs #0", "sumangle @8 0 90", "if @9 @7 @5",
+		"sumangle @10 0 360", "if @10 @11 @10", "sumangle @12 0 360", "if @12 @13 @12", "sum 0 0 @14",
+		"val 10800", "cos 10800 #0", "sin 10800 #0", "sum @17 10800 0", "sum @18 10800 0", "sum 10800 0 @17",
+		"if @9 0 21600", "sum 10800 0 @18"}
+	r := typeset.Rect{Width: 200, Height: 100}
+	for _, c := range []struct {
+		path        string
+		startX, dir float64
+	}{
+		{"al10800,10800,10800,10800@2@14e", 0, 1},
+		{"al10800,10800,10800,10800@3@15e", 200, -1},
+	} {
+		custom, problems := VML(VMLSource{Path: c.path, Formulas: formulas, Adjust: []float64{11796480}, SizeX: 21600, SizeY: 21600})
+		if len(problems) > 0 {
+			t.Fatalf("%s: %v", c.path, problems)
+		}
+		lanes := WarpLanes(&TextWarp{Custom: custom}, r)
+		if len(lanes) != 1 || lanes[0].Envelope() {
+			t.Fatalf("%s: %d lanes, want one path", c.path, len(lanes))
+		}
+		start, _ := lanes[0].Top.At(0)
+		top, dir := lanes[0].Top.At(0.5)
+		if math.Abs(start.X-c.startX) > 0.5 || math.Abs(start.Y-50) > 0.5 || math.Abs(top.Y) > 0.5 || math.Abs(dir.X-c.dir) > 0.01 {
+			t.Errorf("%s: starts at %v, middle %v heading %v; want x %v, over the top heading %v", c.path, start, top, dir, c.startX, c.dir)
+		}
+	}
+}

@@ -129,7 +129,7 @@ type vmlBuilder struct {
 // into paths of their own, painted in order; nf and ns leave the path
 // they are in unfilled or unstroked; an open subpath is filled as if
 // closed. The angles of ae and al are a start and a swing in 1/65,536 of a
-// degree, a negative swing drawn from its end, as LibreOffice reads them.
+// degree, the arc running from the start the way the swing's sign says.
 //
 // The second result lists what VML could not read, for the caller's
 // warning: an unknown command or operation, parameters left over, or a
@@ -655,25 +655,34 @@ func (b *vmlBuilder) segment(k vmlKind, a []Arg) bool {
 
 // angleEllipse draws ae or al (14.1.2.19): the arc of the ellipse of
 // centre (a0, a1) and radii (a2, a3) from the start angle a4 sweeping a5,
-// both in 1/65,536 of a degree, counter-clockwise on the page; a negative
-// swing is drawn from its end to the start, as LibreOffice reads the
-// angles of the binary and VML formats.
+// both in 1/65,536 of a degree, counter-clockwise on the page for a
+// positive swing and clockwise for a negative one: the path runs from the
+// start to the start plus the swing, which sets the way and the side a
+// text path follows it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx ooxmlimport/WordArt: Word prints "WORD-ART" on a
+//     type 144 path al 10800,10800,10800,10800 @2 @14 (start -180, swing
+//     -180 degrees) upright, left to right over the top of the ellipse.
+//   - litho/docx shapes-wordart: Word prints "Arched VML text" on the same
+//     ellipse with @3 @15 (start 0, swing +180) upside down, right to left
+//     over the top.
 func (b *vmlBuilder) angleEllipse(a []Arg, move bool) bool {
 	st := b.node(OpMulDiv, a[4], num(1), num(fd))
-	end := b.node(OpAdd, st, b.node(OpMulDiv, a[5], num(1), num(fd)), Arg{})
-	back := b.node(OpNeg, a[5], Arg{}, Arg{})
-	t0 := b.node(OpIfElse, back, end, st)
-	t1 := b.node(OpIfElse, back, st, end)
-	kind := CmdAngleEllipseTo
+	sw := b.node(OpMulDiv, a[5], num(1), num(fd))
+	end := b.node(OpAdd, st, sw, Arg{})
+	kind := CmdSwingEllipseTo
 	if move {
-		kind = CmdAngleEllipse
+		kind = CmdSwingEllipse
 	}
 	b.open = true
-	if !b.emit(kind, a[0], a[1], a[2], a[3], t0, t1) {
+	if !b.emit(kind, a[0], a[1], a[2], a[3], st, sw) {
 		return false
 	}
-	// The arc ends at t1, counter-clockwise: y falls as the angle grows.
-	rad := b.node(OpMul, t1, num(-60000), Arg{})
+	// The arc ends at the start plus the swing, counter-clockwise: y
+	// falls as the angle grows.
+	rad := b.node(OpMul, end, num(-60000), Arg{})
 	b.cx = b.add(a[0], b.node(OpCos, a[2], rad, Arg{}))
 	b.cy = b.add(a[1], b.node(OpSin, a[3], rad, Arg{}))
 	return true

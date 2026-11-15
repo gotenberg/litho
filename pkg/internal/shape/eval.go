@@ -296,6 +296,8 @@ func (pb *pathBuilder) cmd(c *Cmd) {
 		pb.arcTo(a(0), a(1), angle60k(a(2)), angle60k(a(3)))
 	case CmdAngleEllipseTo, CmdAngleEllipse:
 		pb.angleEllipse(a(0), a(1), a(2), a(3), a(4), a(5), c.Kind == CmdAngleEllipse)
+	case CmdSwingEllipseTo, CmdSwingEllipse:
+		pb.swingEllipse(a(0), a(1), a(2), a(3), a(4), a(5), c.Kind == CmdSwingEllipse)
 	case CmdArcTo, CmdArcMove, CmdClockwiseArcTo, CmdClockwiseArcMove:
 		pb.arcRect(a, c.Kind == CmdArcMove || c.Kind == CmdClockwiseArcMove,
 			c.Kind == CmdClockwiseArcTo || c.Kind == CmdClockwiseArcMove)
@@ -383,6 +385,26 @@ func (pb *pathBuilder) angleEllipse(x, y, w, h, t0, t1 float64, move bool) {
 		pb.lineTo(sx, sy)
 	}
 	pb.ellipse(x, y, w, h, a0, -sweep*math.Pi/180)
+}
+
+// swingEllipse draws the arc of the ellipse of centre (x, y) and radii
+// (w, h) from st degrees sweeping sw, counter-clockwise on the page for a
+// positive sw and clockwise for a negative one, at most a full turn, from
+// a line to its start or a new subpath, as [pathBuilder.angleEllipse].
+func (pb *pathBuilder) swingEllipse(x, y, w, h, st, sw float64, move bool) {
+	if sw == 0 || !numeric.Finite(sw) {
+		return
+	}
+	sw = min(max(sw, -360), 360)
+	// Counter-clockwise on the y-down page is a falling parametric angle.
+	a0 := -st * math.Pi / 180
+	sx, sy := x+float64(w*detmath.Cos(a0)), y+float64(h*detmath.Sin(a0))
+	if move || !pb.open {
+		pb.moveTo(sx, sy)
+	} else {
+		pb.lineTo(sx, sy)
+	}
+	pb.ellipse(x, y, w, h, a0, -sw*math.Pi/180)
 }
 
 // arcRect draws the ODF arc of the ellipse inscribed in a box, between

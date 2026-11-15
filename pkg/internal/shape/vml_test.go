@@ -160,7 +160,8 @@ func TestVML_FillStrokeAndEnd(t *testing.T) {
 
 // TestVML_AngleEllipse locks al: a full turn of 360 * 65,536 draws the
 // ellipse of its centre and radii, and a negative swing covers the same
-// arc as its positive twin from the other end.
+// arc as its positive twin run the other way: from its own start, the
+// twin's end, clockwise, which is the way a text path follows it.
 func TestVML_AngleEllipse(t *testing.T) {
 	t.Parallel()
 	ps, problems := vmlPaths(t, VMLSource{Path: "al10800,10800,10800,10800,0,23592960xe", SizeX: 21600, SizeY: 21600})
@@ -176,8 +177,12 @@ func TestVML_AngleEllipse(t *testing.T) {
 	}
 	a, _ := vmlPaths(t, VMLSource{Path: "al50,50,50,50,0,5898240e", SizeX: 100, SizeY: 100})
 	b, _ := vmlPaths(t, VMLSource{Path: "al50,50,50,50,5898240,-5898240e", SizeX: 100, SizeY: 100})
-	if !slices.Equal(a[0].Ops, b[0].Ops) {
-		t.Errorf("a negative swing draws %v, want %v", b[0].Ops, a[0].Ops)
+	ao, bo := a[0].Ops, b[0].Ops
+	if len(ao) != 2 || len(bo) != 2 {
+		t.Fatalf("ops %v and %v, want a move and a quarter", ao, bo)
+	}
+	if !near(bo[0].P[0], ao[1].P[2]) || !near(bo[1].P[2], ao[0].P[0]) || !near(bo[1].P[0], ao[1].P[1]) || !near(bo[1].P[1], ao[1].P[0]) {
+		t.Errorf("a negative swing draws %v, want %v reversed", bo, ao)
 	}
 }
 

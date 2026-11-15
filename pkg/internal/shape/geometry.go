@@ -164,6 +164,15 @@ const (
 	// CmdQuadrantY draws a quarter ellipse leaving the current point
 	// vertically (ODF Y).
 	CmdQuadrantY
+	// CmdSwingEllipseTo draws a line to, then the arc of, the ellipse of
+	// centre (x, y) and radii (w, h) from angle st sweeping sw degrees,
+	// counter-clockwise on the page for a positive sweep and clockwise for
+	// a negative one, so that the path runs from st to st + sw (VML ae:
+	// x y w h st sw).
+	CmdSwingEllipseTo
+	// CmdSwingEllipse is CmdSwingEllipseTo starting a new subpath (VML
+	// al).
+	CmdSwingEllipse
 )
 
 // Cmd is one path command with its operands.
