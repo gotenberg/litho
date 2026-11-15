@@ -369,6 +369,14 @@ type ComputeOptions struct {
 	// AnimationTime is the moment the animations are computed at,
 	// [AnimationsAtStart] by default.
 	AnimationTime AnimationTime
+	// ContainerSize returns the width and height in points of the content
+	// box of the element n, a container for size queries, as a layout
+	// measured it, false when it has no box or none was measured: the
+	// size features of @container rules and the container query units
+	// read it (CSS Conditional 5, 6.1 and 7). nil measures none, which
+	// makes every size feature unknown and every container query unit
+	// the small viewport's.
+	ContainerSize func(n *html.Node) (width, height float64, ok bool)
 	// maxSteps lowers the step budget below maxComputeSteps, for tests;
 	// zero keeps it.
 	maxSteps int
@@ -390,7 +398,16 @@ type Computed struct {
 	// first line, again under another parent style, nil when no element
 	// has a ::first-letter or a ::first-line.
 	re *restyler
+	// queried reports a style that read the size of a size container.
+	queried bool
 }
+
+// QueriesContainers reports whether a computed style depends on the size
+// of a container for size queries: a size feature of an @container rule
+// evaluated against one, or a container query unit resolved against one
+// (CSS Conditional 5, 6.1 and 7), with or without
+// [ComputeOptions.ContainerSize] answering it.
+func (c *Computed) QueriesContainers() bool { return c.queried }
 
 // restyler cascades an element, a pseudo-element of it, its
 // ::first-letter or its ::first-line again under another parent style. It
@@ -676,6 +693,21 @@ type computeState struct {
 	// reuse remembers the styles of the cascades computed, for the
 	// elements whose cascade is the same (reuse.go).
 	reuse reuseCache
+	// inPseudo reports a cascade of a pseudo-element of node, whose
+	// container queries start at node itself.
+	inPseudo bool
+	// containerUnits reports a cascade with a container query unit or a
+	// var() value among its declarations, whose lengths resolve against
+	// the element's containers.
+	containerUnits bool
+	// sizeContainers counts the containers for size queries computed so
+	// far, queried a style that read the size of one.
+	sizeContainers int
+	queried        bool
+	// cqMemo holds the value of each @container condition for the
+	// element or pseudo-element cqMemoAt counts.
+	cqMemo   map[*containerCond]bool
+	cqMemoAt int
 }
 
 // unitLang returns the language the font units of the element n are
@@ -842,7 +874,7 @@ func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOpt
 	// The styles a restyle computes inherit from styles the caller
 	// gives, which no shared table holds: none is reused.
 	cs.reuse = reuseCache{}
-	c := &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result(), table: cs.styles}
+	c := &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result(), table: cs.styles, queried: cs.queried}
 	if cs.letterCands != nil || cs.lineCands != nil {
 		c.re = &restyler{cs: cs, letters: cs.letterCands, lines: cs.lineCands}
 	}
@@ -872,6 +904,9 @@ func (cs *computeState) element(n, parent *html.Node) {
 	cs.cands = cands[:0]
 	cs.out[n] = st
 	cs.vars[n] = vars
+	if st.SizeContainer() {
+		cs.sizeContainers++
+	}
 	if parent == nil {
 		cs.root = st
 	}
@@ -909,7 +944,9 @@ func (cs *computeState) element(n, parent *html.Node) {
 			cs.lineCands[n] = pc
 			only = &firstLineProps
 		}
+		cs.inPseudo = true
 		ps, _ := cs.cascade(pc, st, vars, false, only)
+		cs.inPseudo = false
 		cs.pseudo[pseudoKey{n, pe}] = ps
 	}
 	if st.Display != DisplayNone && n.Namespace == "" && n.DataAtom == atom.Details && DetailsSummary(n) == nil {
@@ -976,7 +1013,9 @@ func (cs *computeState) restyle(n *html.Node, x *selIndex, parent *Style, parent
 	} else {
 		cs.boxParent = cs.boxParentOf(n)
 	}
+	cs.inPseudo = !elem
 	st, _ := cs.cascade(cands, parent, parentVars, false, nil)
+	cs.inPseudo = false
 	cs.noContents = false
 	cs.cands = cands[:0]
 	return st, true
@@ -1014,6 +1053,7 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 		}
 		return cmp.Compare(a.idx, b.idx)
 	})
+	cs.containerUnits = cs.sizeContainers > 0 && slices.ContainsFunc(cands, func(c cand) bool { return c.d.containerUnits || len(c.d.pending) > 0 })
 	reuse := cs.reusable(cands, only)
 	var key reuseKey
 	if reuse {
@@ -1269,6 +1309,9 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 	out := cs.cands[:0]
 	for _, ri := range matched {
 		rr := &cs.r.rules[ri]
+		if rr.rule.cont != nil && !cs.matchesContainers(rr.rule.cont, n, r != &cs.r.elems) {
+			continue
+		}
 		for i := range rr.rule.decls {
 			d := &rr.rule.decls[i]
 			out = append(out, cand{d: d, rank: rank(rr.origin, d.Important), layer: layerRank(rr.layer, d.Important), spec: uint64(cs.spec[ri]), ord: rr.order, idx: i})
@@ -1322,6 +1365,9 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 		s.lc.verticalRoot = cs.root.WritingMode != HorizontalTB
 	}
 	s.lc.lineHeight = usedLineHeight(parent)
+	if cs.containerUnits {
+		s.lc.cq = cs.containerUnitsOf(cs.node, cs.inPseudo)
+	}
 	s.lc.rootLineHeight = s.lc.lineHeight
 	if cs.root != nil {
 		s.lc.rootLineHeight = usedLineHeight(cs.root)

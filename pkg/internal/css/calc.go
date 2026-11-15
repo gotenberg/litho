@@ -126,8 +126,21 @@ const (
 	uRic
 	uVi
 	uVb
+	// The container query length units (CSS Conditional 5, 7) come last:
+	// a length holds them in its calculation tree alone, never in
+	// [length.u], so a document that names none pays nothing for them.
+	uCqw
+	uCqh
+	uCqi
+	uCqb
+	uCqmin
+	uCqmax
 	numLenUnits
 )
+
+// numLinearUnits is the count of the units a [length] holds coefficients
+// of: every unit before the container query units.
+const numLinearUnits = uCqw
 
 // lengthUnits maps the relative length units to their [lenUnit]. The
 // small, large and dynamic viewport units are the viewport units: on
@@ -142,6 +155,7 @@ var lengthUnits = map[string]lenUnit{
 	"vb": uVb, "svb": uVb, "lvb": uVb, "dvb": uVb,
 	"vmin": uVmin, "svmin": uVmin, "lvmin": uVmin, "dvmin": uVmin,
 	"vmax": uVmax, "svmax": uVmax, "lvmax": uVmax, "dvmax": uVmax,
+	"cqw": uCqw, "cqh": uCqh, "cqi": uCqi, "cqb": uCqb, "cqmin": uCqmin, "cqmax": uCqmax,
 }
 
 // otherUnits maps the angle, time, frequency and resolution units to their
@@ -787,6 +801,10 @@ func (n *calcNode) linear(vars *channelVars) (l length, ok bool) {
 		}
 		return length{num: vars.vals[n.unit]}, true
 	case opLen:
+		if n.unit >= numLinearUnits {
+			// A container query unit stays in the tree.
+			return length{}, false
+		}
 		l.u[n.unit] = n.v
 		l.hasLen = true
 		return l, true

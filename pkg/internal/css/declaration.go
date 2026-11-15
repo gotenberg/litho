@@ -107,7 +107,10 @@ type Declaration struct {
 	// it takes the value the layers below its own give each longhand
 	// (CSS Cascade 5, 7.3.5).
 	revertLayer bool
-	warns       []Warning
+	// containerUnits marks a value holding a container query unit, which
+	// resolves against the element's containers (CSS Conditional 5, 7).
+	containerUnits bool
+	warns          []Warning
 }
 
 // declCtx carries what parsing a value needs.
@@ -308,7 +311,25 @@ func (c *declCtx) declare(name string, value []token, important bool) Declaratio
 		return d
 	}
 	d.entries = entries
+	d.containerUnits = hasContainerUnit(value)
 	return d
+}
+
+// hasContainerUnit reports whether a value holds a dimension in a
+// container query unit, at any depth.
+func hasContainerUnit(l []token) bool {
+	for i := range l {
+		t := &l[i]
+		if t.typ == tDimension && len(t.value) > 2 && (t.value[0] == 'c' || t.value[0] == 'C') && (t.value[1] == 'q' || t.value[1] == 'Q') {
+			if u, ok := lengthUnits[lower(t.value)]; ok && u >= numLinearUnits {
+				return true
+			}
+		}
+		if len(t.children) > 0 && hasContainerUnit(t.children) {
+			return true
+		}
+	}
+	return false
 }
 
 // wideKeyword recognizes a CSS-wide keyword value.

@@ -265,6 +265,19 @@ func equalStyle(a, b *Style) bool {
 	if a.Contain != b.Contain {
 		return false
 	}
+	if a.ContainerType != b.ContainerType {
+		return false
+	}
+	if (a.ContainerNames == nil) != (b.ContainerNames == nil) || len(a.ContainerNames) != len(b.ContainerNames) {
+		return false
+	}
+	if len(a.ContainerNames) > 0 && &a.ContainerNames[0] != &b.ContainerNames[0] {
+		for i1 := range a.ContainerNames {
+			if a.ContainerNames[i1] != b.ContainerNames[i1] {
+				return false
+			}
+		}
+	}
 	if a.ObjectFit != b.ObjectFit {
 		return false
 	}
@@ -904,6 +917,12 @@ func hashStyle(h uint64, x *Style) uint64 {
 	h = hashBorder(h, &x.Outline)
 	h = mix(h, math.Float64bits(x.OutlineOffset))
 	h = mix(h, uint64(x.Contain))
+	h = mix(h, uint64(x.ContainerType))
+	h = mixBool(h, x.ContainerNames == nil)
+	h = mix(h, uint64(len(x.ContainerNames)))
+	for i1 := range x.ContainerNames {
+		h = mixString(h, x.ContainerNames[i1])
+	}
 	h = mix(h, uint64(x.ObjectFit))
 	for i1 := range x.ObjectPosition {
 		h = hashDimension(h, &x.ObjectPosition[i1])

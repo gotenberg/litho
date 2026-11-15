@@ -14,7 +14,7 @@ import (
 type length struct {
 	// u holds the coefficient of each unit, num a number, which only a
 	// calculation folding a <number> holds.
-	u   [numLenUnits]float64
+	u   [numLinearUnits]float64
 	pct float64
 	num float64
 	// hasLen and hasPct record the types the value holds, whatever the
@@ -55,7 +55,7 @@ func (l length) zeroLen() bool {
 // a media query, a page size and a bleed cannot.
 func (l length) viewportRelative() bool {
 	if l.expr != nil {
-		return l.expr.usesUnit(uVw, uVh, uVmin, uVmax, uVi, uVb)
+		return l.expr.usesUnit(uVw, uVh, uVmin, uVmax, uVi, uVb, uCqw, uCqh, uCqi, uCqb, uCqmin, uCqmax)
 	}
 	return l.u[uVw] != 0 || l.u[uVh] != 0 || l.u[uVmin] != 0 || l.u[uVmax] != 0 || l.u[uVi] != 0 || l.u[uVb] != 0
 }
@@ -99,6 +99,9 @@ type lenCtx struct {
 	// verticalRoot swaps the vi and vb units, which follow the root's
 	// inline and block axes (CSS Values 4, 6.1.2.2).
 	verticalRoot bool
+	// cq holds the sizes the container query units resolve against, nil
+	// for the small viewport's (CSS Conditional 5, 7).
+	cq *containerUnits
 }
 
 // unitSizes returns the size of each unit in points.
@@ -116,6 +119,11 @@ func (c *lenCtx) unitSizes() [numLenUnits]float64 {
 		s[uVi], s[uVb] = s[uVb], s[uVi]
 	}
 	s[uLh], s[uRlh] = c.lineHeight, c.rootLineHeight
+	s[uCqw], s[uCqh], s[uCqi], s[uCqb] = s[uVw], s[uVh], s[uVi], s[uVb]
+	if q := c.cq; q != nil {
+		s[uCqw], s[uCqh], s[uCqi], s[uCqb] = q.w/100, q.h/100, q.i/100, q.b/100
+	}
+	s[uCqmin], s[uCqmax] = math.Min(s[uCqi], s[uCqb]), math.Max(s[uCqi], s[uCqb])
 	return s
 }
 
@@ -310,6 +318,12 @@ func unitLength(n float64, unit string) (length, bool) {
 	u, ok := lengthUnits[unit]
 	if !ok {
 		return length{}, false
+	}
+	if u >= numLinearUnits {
+		// A container query unit resolves against the element's
+		// containers, at computed-value time: it is a tree of one leaf.
+		l.expr = &calcNode{op: opLen, unit: u, v: n}
+		return l, true
 	}
 	l.u[u] = n
 	return l, true

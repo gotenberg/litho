@@ -1162,8 +1162,15 @@ type Style struct {
 	OutlineOffset float64
 	// Contain is the contain property (CSS Containment 2, 2). The engine
 	// reads ContainPaint, which stops the body's background reaching the
-	// canvas (CSS Backgrounds 3, 2.11.2).
+	// canvas (CSS Backgrounds 3, 2.11.2). [Style.Containment] adds what
+	// ContainerType applies.
 	Contain Containment
+	// ContainerType is the container-type property (CSS Conditional 5,
+	// 5.1), zero for normal.
+	ContainerType ContainerType
+	// ContainerNames is the container-name property (CSS Conditional 5,
+	// 5.2), nil for none.
+	ContainerNames []string
 
 	// ObjectFit sizes a replaced element's picture in its content box
 	// (CSS Images 3, 5.5).

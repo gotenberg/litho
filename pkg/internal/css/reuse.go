@@ -63,7 +63,8 @@ type reuseCache struct {
 // be reused: Compute walks the tree, so the parent's style is one a
 // shared table holds and nobody writes, and the computed values depend on
 // nothing but the declarations and the key. A custom property, a var()
-// or attr() value (which reads the element's attributes), an animation
+// or attr() value (which reads the element's attributes), a container
+// query unit (which reads the element's containers), an animation
 // (which reads the element's ancestors), a presentational hint or a style
 // attribute (parsed again for each element, never equal to another's)
 // and a restricted set of longhands (::first-line) keep it out.
@@ -72,7 +73,7 @@ func (cs *computeState) reusable(cands []cand, only *[numProps]bool) bool {
 		return false
 	}
 	for _, c := range cands {
-		if c.ord < 0 || c.spec == styleAttrSpec || c.d.isCustom || len(c.d.pending) > 0 {
+		if c.ord < 0 || c.spec == styleAttrSpec || c.d.isCustom || len(c.d.pending) > 0 || c.d.containerUnits {
 			return false
 		}
 		for _, e := range c.d.entries {

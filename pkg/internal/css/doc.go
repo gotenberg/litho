@@ -23,7 +23,12 @@
 //     document timeline, time zero unless [ComputeOptions.AnimationTime]
 //     asks for their end (CSS Animations 1 and 2, Web Animations 1).
 //     Transitions parse and never run: a converted document's style
-//     changes once, when it loads.
+//     changes once, when it loads. A rule under @container applies when
+//     its query is true against the container it selects (CSS
+//     Conditional 5, 5.4): a style query reads the container's custom
+//     properties, a size query and a container query unit the size
+//     [ComputeOptions.ContainerSize] says a layout measured, which
+//     [Computed.QueriesContainers] reports a style read.
 //
 // [HTMLUserAgent] is the user agent stylesheet for HTML and [HTMLHints]
 // the presentational hints of HTML attributes.
@@ -35,8 +40,8 @@
 // selector invalid. min(), max() and clamp() comparing a length with a
 // percentage make a value invalid, and so does a calc() mixing lengths and
 // percentages outside the box sizes, margins, paddings, insets, gaps and
-// flex-basis, which hold it as a [Calc]. Cascade layers are flattened into source order; @container
-// and @scope are ignored with their rules. Logical properties map onto the
+// flex-basis, which hold it as a [Calc]. Cascade layers are flattened into source order; @scope is
+// ignored with its rules. Logical properties map onto the
 // physical ones of a horizontal left-to-right box. The input is UTF-8.
 // The flexible box layout properties and the box alignment properties that
 // apply to it compute in full (CSS Flexbox 1; CSS Box Alignment 3), and

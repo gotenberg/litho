@@ -41,7 +41,8 @@ const maxKeyframeOffsets = 1000
 // the animation, transition and timeline longhands but view-timeline-inset,
 // direction, unicode-bidi, writing-mode, text-orientation and
 // text-combine-upright (CSS Writing Modes 4, 2.1, 2.2, 3.1, 5.1 and 9.1)
-// and contain (CSS Containment 2, 3). Immutable lookup table.
+// contain (CSS Containment 2, 3), container-type and container-name (CSS
+// Conditional 5, 5.1 and 5.2). Immutable lookup table.
 //
 // # Corpus evidence
 //
@@ -58,7 +59,7 @@ var notAnimatable = func() [numProps]bool {
 		pAnimationComposition, pAnimationTimeline, pAnimationRangeStart, pAnimationRangeEnd,
 		pScrollTimelineName, pViewTimelineName, pTransitionProperty, pTransitionDuration,
 		pTransitionTimingFunction, pTransitionDelay, pTransitionBehavior, pScrollTimelineAxis,
-		pViewTimelineAxis, pTimelineScope,
+		pViewTimelineAxis, pTimelineScope, pContainerType, pContainerName,
 	} {
 		on[id] = true
 	}

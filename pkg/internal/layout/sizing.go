@@ -287,7 +287,7 @@ func keywordIntrinsic(st *css.Style, lo, hi, clo, chi, edges float64) (float64, 
 // its contain-intrinsic-height when one is set (CSS Contain 2, 3.2; CSS
 // Sizing 4, 5.1). Its content is laid out and painted all the same.
 func containedHeight(b *box, h float64) float64 {
-	if b.kind == kindReplaced || b.st.Contain&css.ContainSize == 0 {
+	if b.kind == kindReplaced || b.st.Containment()&css.ContainSize == 0 {
 		return h
 	}
 	if c := b.st.ContainIntrinsic; c != nil && c.Height >= 0 {
@@ -301,7 +301,7 @@ func containedHeight(b *box, h float64) float64 {
 // both are its contain-intrinsic-width, or 0 (CSS Contain 2, 3.2 and 3.3;
 // CSS Sizing 4, 5.1).
 func containedWidths(b *box, st *css.Style, lo, hi float64) (float64, float64) {
-	if b.kind == kindReplaced || st.Contain&(css.ContainSize|css.ContainInlineSize) == 0 {
+	if b.kind == kindReplaced || st.Containment()&(css.ContainSize|css.ContainInlineSize) == 0 {
 		return lo, hi
 	}
 	if c := st.ContainIntrinsic; c != nil && c.Width >= 0 {

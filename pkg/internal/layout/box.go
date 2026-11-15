@@ -431,11 +431,12 @@ func (b *box) marginH() float64 { return b.borderH() + b.m[css.Top] + b.m[css.Bo
 // formatting context (CSS 2.1, 9.4.1): floats, absolutely positioned
 // boxes, inline blocks, boxes with overflow other than visible or clip
 // (CSS Overflow 3, 3.1) but for the one [toViewport] reports, flow-root
-// boxes (CSS Display 3, 2.3), and the root; and the table wrapper boxes,
+// boxes (CSS Display 3, 2.3), containers for size queries (CSS
+// Conditional 5, 5.1), and the root; and the table wrapper boxes,
 // captions and cells (CSS 2.1, 17.4).
 func (b *box) establishesBFC() bool {
 	return b.parent == nil || b.float != css.FloatNone || b.abs || (b.inline && b.kind == kindBlock) ||
-		(b.st.Overflow != css.OverflowVisible && !b.st.ClipOnly() || b.st.ScrollContainer()) && !b.toViewport() || b.kind == kindReplaced || b.st.Display == css.FlowRoot ||
+		(b.st.Overflow != css.OverflowVisible && !b.st.ClipOnly() || b.st.ScrollContainer()) && !b.toViewport() || b.kind == kindReplaced || b.st.Display == css.FlowRoot || b.st.SizeContainer() ||
 		b.tpart == partWrapper || b.tpart == partCaption || b.tpart == partCell ||
 		b.flex != nil || b.flexItem || b.grid != nil || b.gridItem || b.st.Clamps() || isMulticol(b) || b.ortho
 }

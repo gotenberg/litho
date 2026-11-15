@@ -69,7 +69,10 @@ type styleRule struct {
 	selectors []*complexSel
 	decls     []Declaration
 	cond      *mediaCond
-	layer     int
+	// cont is the condition of the @container rules around the rule, nil
+	// outside any: it is evaluated for each element the selectors match.
+	cont  *containerCond
+	layer int
 }
 
 // fontFaceRule is an @font-face rule and its media condition.
@@ -105,6 +108,9 @@ type sheetParser struct {
 	layer      int
 	layerIndex map[string]int
 	anon       int
+	// container is the condition of the @container rules the rules being
+	// parsed sit in, nil outside any.
+	container *containerCond
 }
 
 // Parse parses a stylesheet (CSS Syntax 3, 5.3.3) and the stylesheets it
@@ -219,6 +225,10 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 			} else {
 				sp.declareLayers(it.prelude)
 			}
+		case "container":
+			if it.hasBlock {
+				sp.enterContainer(it.prelude, c, func() { sp.nested(ctx, it.block, base, cond, depth) })
+			}
 		case "page":
 			sels, unsupported, ok := parsePageSelectors(it.prelude)
 			if !ok {
@@ -295,11 +305,11 @@ func (sp *sheetParser) styleBlock(ctx context.Context, prelude []token, sels []*
 		if len(decls) == 0 && !first || !sp.count() {
 			return
 		}
-		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: decls, cond: cond, layer: sp.layer})
+		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: decls, cond: cond, cont: sp.container, layer: sp.layer})
 		decls, first = nil, false
 	}
 	if sp.nesting >= maxNestingDepth {
-		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: parseDeclList(block, c), cond: cond, layer: sp.layer})
+		sp.sheet.rules = append(sp.sheet.rules, styleRule{selectors: sels, decls: parseDeclList(block, c), cond: cond, cont: sp.container, layer: sp.layer})
 		return
 	}
 	sp.nesting++
@@ -397,11 +407,29 @@ func (sp *sheetParser) nestedAtRule(ctx context.Context, parent []token, sels []
 		}
 	case "layer":
 		sp.enterLayer(n.prelude, func() { sp.styleBlock(ctx, parent, sels, n.block, base, cond, depth, c) })
+	case "container":
+		sp.enterContainer(n.prelude, c, func() { sp.styleBlock(ctx, parent, sels, n.block, base, cond, depth, c) })
 	default:
 		if !ignoredAtRules[name] && !strings.HasPrefix(name, "-") {
 			c.warn(warn.CSSUnsupported, warn.Approximated, "the @%s rule is not supported and was ignored", name)
 		}
 	}
+}
+
+// enterContainer runs parse with the condition of the @container rule of
+// prelude chained to the enclosing one (CSS Conditional 5, 5.4): the
+// style rules parse records hold it, and the global at-rules ignore it.
+// A prelude that does not parse drops the rule, as Chromium drops it.
+func (sp *sheetParser) enterContainer(prelude []token, c *declCtx, parse func()) {
+	conds, ok := parseContainerPrelude(prelude)
+	if !ok {
+		c.warn(warn.CSSInvalid, warn.Approximated, "an @container rule with an invalid condition was ignored")
+		return
+	}
+	saved := sp.container
+	sp.container = &containerCond{conds: conds, parent: saved}
+	parse()
+	sp.container = saved
 }
 
 // maxNestedPrelude caps the tokens of the selector list a nested rule

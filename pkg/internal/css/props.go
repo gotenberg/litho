@@ -275,6 +275,8 @@ const (
 	pMathStyle
 	pMathShift
 	pMathDepth
+	pContainerType
+	pContainerName
 	numProps
 )
 
@@ -1125,6 +1127,9 @@ func init() {
 		props[id].interp = f
 	}
 	for id, def := range filterProps() {
+		props[id] = def
+	}
+	for id, def := range containerProps() {
 		props[id] = def
 	}
 	longhandByName = map[string]propID{}

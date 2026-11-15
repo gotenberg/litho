@@ -858,7 +858,7 @@ func (e *engine) layoutColumns(b *box, s *colSet, cb cblock, ctx *colCtx) float6
 // It stays whole in the column its top is in, which balancing makes tall
 // enough for it, as Chromium balances columns around it.
 func monolithicAbs(k *box) bool {
-	return k.abs && !k.fixed && (k.kind == kindReplaced || k.st.Contain&css.ContainSize != 0)
+	return k.abs && !k.fixed && (k.kind == kindReplaced || k.st.Containment()&css.ContainSize != 0)
 }
 
 // layoutMonolithicAbs lays out the monolithic absolutely positioned boxes

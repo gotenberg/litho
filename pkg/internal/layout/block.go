@@ -1537,7 +1537,7 @@ func (e *engine) floatBreakAfter(f *box) float64 {
 // page whole as Chromium moves it, inside an absolutely positioned box too.
 func avoidsInside(b *box) bool {
 	v := b.st.BreakInside
-	return v == css.InsideAvoid || v == css.InsideAvoidPage || v == css.InsideAvoidColumn || b.st.Contain&css.ContainSize != 0
+	return v == css.InsideAvoid || v == css.InsideAvoidPage || v == css.InsideAvoidColumn || b.st.Containment()&css.ContainSize != 0
 }
 
 // avoidsBetween reports siblings a and b between which a page break is to

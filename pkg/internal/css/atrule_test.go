@@ -128,7 +128,9 @@ p { color: black }
 	if !colorEq(p.Color, rgb(0, 128, 0)) || p.FontSize != 22.5 || !dimEq(p.Margin[Top], pts(3.75)) {
 		t.Errorf("color %+v size %v margin %+v", p.Color, p.FontSize, p.Margin[Top])
 	}
-	if !hasWarning(c.c.Warnings(), warn.CSSUnsupported, "@container") {
+	// No ancestor answers the @container rule's query: it is unknown and
+	// its rule does not apply (CSS Conditional 5, 5.4).
+	if hasWarning(c.c.Warnings(), warn.CSSUnsupported, "@container") {
 		t.Errorf("warnings = %v", c.c.Warnings())
 	}
 	if hasWarning(c.c.Warnings(), warn.CSSUnsupported, "keyframes") {
