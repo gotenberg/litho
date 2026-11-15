@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-15T08:00:49Z",
+  "captured_at": "2026-11-15T08:58:50Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -59947,8 +59947,8 @@
     "litho/html": {
       "features": {
         "diff": {
-          "matched": 198,
-          "mismatched": 2,
+          "matched": 199,
+          "mismatched": 1,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
@@ -61525,12 +61525,12 @@
               "text_f1": 1
             },
             "th-line-break": {
-              "layout": 0.234,
+              "layout": 0.9518,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
-              "text_f1": 0.9804
+              "strict": 1,
+              "text_f1": 0.9789
             },
             "user-stylesheet": {
               "layout": 0.9382,
@@ -65802,12 +65802,12 @@
     "litho/odp": {
       "features": {
         "diff": {
-          "matched": 30,
-          "mismatched": 5,
+          "matched": 34,
+          "mismatched": 3,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 33,
+            "pages_equal": 37,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -65892,7 +65892,7 @@
               "text_f1": 1
             },
             "indic-thai-slides": {
-              "layout": 0.8841,
+              "layout": 0.9483,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -66060,11 +66060,19 @@
               "text_f1": 1
             },
             "portrait-deck-landscape": {
-              "layout": 0,
+              "layout": 0.9058,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0,
-              "strict": 0,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "portrait-deck-landscape-ref": {
+              "layout": 0.9198,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
               "text_f1": 1
             },
             "rtl-slides": {
@@ -66084,42 +66092,50 @@
               "text_f1": 1
             },
             "wide-deck-paper": {
-              "layout": 0,
+              "layout": 0.895,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0,
-              "strict": 0,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "wide-deck-paper-ref": {
+              "layout": 0.9872,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
               "text_f1": 1
             }
           },
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 35,
+          "matched": 37,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 133,
-            "pass_a1a": 35,
-            "pass_a1b": 35,
-            "pass_a2a": 35,
-            "pass_a2a+ua1": 35,
-            "pass_a2b": 35,
-            "pass_a2u": 35,
-            "pass_a3a": 35,
-            "pass_a3b": 35,
-            "pass_a3u": 35,
-            "pass_a4": 35,
-            "pass_a4+ua2": 35,
-            "pass_a4e": 35,
-            "pass_ua1": 35,
-            "pass_ua2": 35,
-            "pass_v1.4": 35,
-            "pass_v1.5": 35,
-            "pass_v1.6": 35,
-            "pass_v1.7": 35,
-            "pass_v2.0": 35,
+            "pass_a1a": 37,
+            "pass_a1b": 37,
+            "pass_a2a": 37,
+            "pass_a2a+ua1": 37,
+            "pass_a2b": 37,
+            "pass_a2u": 37,
+            "pass_a3a": 37,
+            "pass_a3b": 37,
+            "pass_a3u": 37,
+            "pass_a4": 37,
+            "pass_a4+ua2": 37,
+            "pass_a4e": 37,
+            "pass_ua1": 37,
+            "pass_ua2": 37,
+            "pass_v1.4": 37,
+            "pass_v1.5": 37,
+            "pass_v1.6": 37,
+            "pass_v1.7": 37,
+            "pass_v2.0": 37,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -66801,6 +66817,27 @@
               "v1.7": 1,
               "v2.0": 1
             },
+            "portrait-deck-landscape-ref": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
             "rtl-slides": {
               "a1a": 1,
               "a1b": 1,
@@ -66844,6 +66881,27 @@
               "v2.0": 1
             },
             "wide-deck-paper": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "wide-deck-paper-ref": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
@@ -66922,12 +66980,12 @@
               "text_f1": 1
             },
             "indic-thai-cells": {
-              "layout": 0.864,
+              "layout": 0.896,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0,
-              "text_f1": 0.2162
+              "text_f1": 0.2133
             },
             "mixed-sheets": {
               "layout": 0.9738,
@@ -69892,12 +69950,12 @@
               "text_f1": 0.9976
             },
             "th-line-break": {
-              "layout": 0.278,
+              "layout": 0.9761,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
-              "strict": 0.5,
-              "text_f1": 0.161
+              "strict": 1,
+              "text_f1": 0.2435
             },
             "tracked-changes": {
               "layout": 0.9525,
