@@ -112,6 +112,7 @@ type convertConfig struct {
 	orientation     Orientation
 	pageRanges      string
 	omitOutline     bool
+	plainGlyphs     bool
 	date            time.Time
 	defaultLang     string
 	version         string
@@ -385,6 +386,27 @@ func WithPageRanges(spec string) ConvertOption {
 // outline either way.
 func WithOutline(outline bool) ConvertOption {
 	return convertOption(func(c *convertConfig) { c.omitOutline = !outline })
+}
+
+// WithColorGlyphs sets whether the conversion draws the colour glyphs of
+// its fonts: the bitmaps and the layered glyphs of an emoji font. true is
+// the default.
+//
+// With false, every glyph is drawn from an outline in the colour of its
+// text, and the file holds no picture of a glyph:
+//
+//   - An emoji takes a font without colour glyphs where one covers it,
+//     whatever variation selector follows it in the source.
+//   - A colour font draws a character only where it holds an outline for
+//     it. A font of bitmaps alone draws none.
+//   - A character left without a font is reported as
+//     [WarningMissingGlyph] and drawn as any character no font covers, an
+//     emoji blank. Install a font with emoji outlines to keep them.
+//
+// The file is smaller where the source holds many emoji: a bitmap glyph
+// is an image in the file.
+func WithColorGlyphs(color bool) ConvertOption {
+	return convertOption(func(c *convertConfig) { c.plainGlyphs = !color })
 }
 
 // WithDate sets the one date of the conversion, which the fields of the

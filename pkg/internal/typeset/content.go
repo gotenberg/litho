@@ -359,7 +359,7 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 	}
 	var set *type3Set
 	if fe.color != nil {
-		set = fe.color.set(t.Palette, t.Invisible)
+		set = fe.color.set(t.Palette, t.Invisible, t.Plain)
 	}
 
 	size := t.Size

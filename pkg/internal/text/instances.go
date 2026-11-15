@@ -297,9 +297,37 @@ func (f *Fonts) ForConversion() *Fonts {
 	if f == nil || f.inst != nil {
 		return f
 	}
+	return f.overlay(f.set, f.plain)
+}
+
+// WithPlainGlyphs returns an index for one conversion that draws no colour
+// glyph: it matches and lays out as f, except that every emoji takes text
+// presentation, an emoji presentation selector (VS16, U+FE0F) included, so
+// a face without colour glyphs draws it where one covers it; that a colour
+// face draws a character only from an outline of its own, in the run's
+// colour, and counts as not covering a character whose glyph has none, a
+// bitmap-only face covering nothing; and that the runs it lays out are
+// plain ([typeset.Text.Plain]). A character left without a face is
+// reported missing as any other. f is not modified. On an index
+// WithPlainGlyphs returned, and on nil, it returns f itself.
+func (f *Fonts) WithPlainGlyphs() *Fonts {
+	if f == nil || f.plain {
+		return f
+	}
+	return f.overlay(f.set, true)
+}
+
+// overlay returns an index of one conversion over the index f shares: its
+// document faces are set, its instances those of f when f is itself an
+// overlay.
+func (f *Fonts) overlay(set *FaceSet, plain bool) *Fonts {
 	base := f
 	if f.base != nil {
 		base = f.base
+	}
+	inst := f.inst
+	if inst == nil {
+		inst = &instanceStore{}
 	}
 	return &Fonts{
 		logger:         base.logger,
@@ -309,8 +337,9 @@ func (f *Fonts) ForConversion() *Fonts {
 		maxLoaded:      base.maxLoaded,
 		maxLoadedBytes: base.maxLoadedBytes,
 		base:           base,
-		set:            f.set,
-		inst:           &instanceStore{},
+		set:            set,
+		inst:           inst,
+		plain:          plain,
 	}
 }
 

@@ -101,9 +101,12 @@ type type3Set struct {
 	// invisible describes every glyph blank: the run is text no one
 	// sees (see [Text.Invisible]).
 	invisible bool
-	fonts     []*type3Font
-	codes     map[type3Key]type3Code
-	procs     map[bitmapKey]*type3Proc
+	// plain takes no colour data: a glyph is the program's outline,
+	// written through the Type 0 font, or blank (see [Text.Plain]).
+	plain bool
+	fonts []*type3Font
+	codes map[type3Key]type3Code
+	procs map[bitmapKey]*type3Proc
 	// gstates names the fill alpha of each translucent palette colour the
 	// descriptions draw.
 	gstates map[float64]string
@@ -170,11 +173,16 @@ func newColorFace(program []byte, upem float64, name string, logger *slog.Logger
 }
 
 // set returns the Type 3 fonts of the face for a run in palette, or
-// invisible.
-func (c *colorFace) set(palette []Color, invisible bool) *type3Set {
+// invisible, or plain: a plain run's glyphs take no colour data, so the
+// palette names nothing for it.
+func (c *colorFace) set(palette []Color, invisible, plain bool) *type3Set {
 	var b strings.Builder
 	if invisible {
 		b.WriteString("invisible")
+	}
+	if plain {
+		b.WriteString("plain")
+		palette = nil
 	}
 	for _, col := range palette {
 		fmt.Fprintf(&b, "%s %s %s %s;", num(col.R), num(col.G), num(col.B), num(col.A))
@@ -184,7 +192,7 @@ func (c *colorFace) set(palette []Color, invisible bool) *type3Set {
 		return s
 	}
 	s := &type3Set{
-		key: key, palette: palette, invisible: invisible,
+		key: key, palette: palette, invisible: invisible, plain: plain,
 		codes: map[type3Key]type3Code{}, procs: map[bitmapKey]*type3Proc{}, gstates: map[float64]string{},
 	}
 	c.sets[key] = s
@@ -198,7 +206,7 @@ func (c *colorFace) set(palette []Color, invisible bool) *type3Set {
 // outlines.
 func (w *docWriter) colorCode(ctx context.Context, fe *fontEntry, s *type3Set, gid uint16, size float64, text string) (type3Code, bool, error) {
 	c := fe.color
-	key, kind, err := c.classify(gid, size)
+	key, kind, err := c.classify(gid, size, s.plain)
 	if err != nil {
 		w.logger.Debug("text font: colour glyph drawn blank", slog.Int("gid", int(gid)), slog.Any("error", err))
 		key, kind = bitmapKey{gid: gid}, glyphBlank
@@ -245,8 +253,15 @@ const (
 
 // classify says how glyph gid at size points is drawn, and the key of
 // its description: its bitmap at the strike [colorfont.Font.Bitmap] picks,
-// its layers, its outline through the Type 0 font, or nothing.
-func (c *colorFace) classify(gid uint16, size float64) (bitmapKey, int, error) {
+// its layers, its outline through the Type 0 font, or nothing. A plain
+// run ([Text.Plain]) takes the outline or nothing.
+func (c *colorFace) classify(gid uint16, size float64, plain bool) (bitmapKey, int, error) {
+	if plain {
+		if c.outlines {
+			return bitmapKey{gid: gid}, glyphOutline, nil
+		}
+		return bitmapKey{gid: gid}, glyphBlank, nil
+	}
 	if c.font.HasBitmaps() {
 		bm, ok, err := c.font.Bitmap(gid, size*bitmapScale)
 		if err != nil {

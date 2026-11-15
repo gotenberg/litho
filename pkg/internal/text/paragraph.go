@@ -207,8 +207,11 @@ type shapedItem struct {
 	// palette is the palette of the face's layered glyphs, nil for its
 	// first (see [layoutState.palette]).
 	palette []typeset.Color
-	style   Style
-	glyphs  []shapedGlyph
+	// plain is whether the face is a colour face drawn without its colour
+	// glyphs (see [Fonts.WithPlainGlyphs]).
+	plain  bool
+	style  Style
+	glyphs []shapedGlyph
 	// ascent, descent and gap are the face's line bounds at the size;
 	// underline and strike its decoration metrics.
 	ascent, descent, gap   float64
@@ -548,7 +551,7 @@ func (p *Paragraph) shapeSegment(ctx context.Context, st *layoutState, text []ru
 		return fmt.Errorf("shaping text: %w", err)
 	}
 	seqs := emojiSequences(text[start:end],
-		func(i int) EmojiVariant { return st.styles[p.runOf[start+i]].style.emojiVariant() },
+		func(i int) EmojiVariant { return st.emojiVariant(st.styles[p.runOf[start+i]].style.emojiVariant()) },
 		func(i int) bool { return st.primaryDrawsAsText(int(p.runOf[start+i]), text[start+i]) })
 	for i := range seqs {
 		seqs[i].start += start
@@ -659,6 +662,7 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 		}
 		it.face = cf
 		it.palette = st.palette(fc, cf, &style)
+		it.plain = st.fonts.plain && fc.colourTables() != 0
 		it.stroke, it.skew = synthesis(requestOf(style), fc, style.Size)
 		if m, ok := fc.wordMetrics(style, style.Size); ok {
 			it.ascent, it.descent, it.gap = m.Ascent, m.Descent, m.LineGap
@@ -730,7 +734,7 @@ func (p *Paragraph) convert(ctx context.Context, st *layoutState, out *shaping.O
 		switch {
 		case fc.colourTables() != 0:
 			segoeAdvances(it.glyphs, p.text, w)
-		case style.settings().Emoji == EmojiText && fc != st.styles[run].primary:
+		case (style.settings().Emoji == EmojiText || st.fonts.plain) && fc != st.styles[run].primary:
 			if !segoeTextAdvances(it.glyphs, p.text, w) {
 				break
 			}
@@ -940,7 +944,7 @@ func (p *Paragraph) LineTrimmed(start, end, trim int) ParagraphLine {
 // their advance. The run's glyph slice is allocated at its length: the
 // run lives as long as the page that draws it.
 func (p *Paragraph) glyphRun(sp *Span, it *shapedItem, start, end, hangFrom int) float64 {
-	t := &typeset.Text{Face: it.face, Size: it.style.Size, Color: it.style.Color, Origin: typeset.Point{X: sp.X}, Stroke: it.stroke, Skew: it.skew, Palette: it.palette, Upright: it.upright}
+	t := &typeset.Text{Face: it.face, Size: it.style.Size, Color: it.style.Color, Origin: typeset.Point{X: sp.X}, Stroke: it.stroke, Skew: it.skew, Palette: it.palette, Plain: it.plain, Upright: it.upright}
 	hs := it.style.scale()
 	if hs != 1 {
 		t.HScale = hs

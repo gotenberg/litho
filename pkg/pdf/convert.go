@@ -500,6 +500,9 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 	if err != nil {
 		return nil, fmt.Errorf("converting %s: indexing fonts: %w", name, err)
 	}
+	if o.plainGlyphs {
+		fonts = fonts.WithPlainGlyphs()
+	}
 
 	// Every converter tags its output, so the stream marks content as it
 	// writes each page.

@@ -120,6 +120,9 @@ type Fonts struct {
 	// overlay [Fonts.ForConversion] or [Fonts.WithFaces] returned serves,
 	// nil for an index of its own.
 	inst *instanceStore
+	// plain is set on an overlay [Fonts.WithPlainGlyphs] returned, and on
+	// the overlays made from it: the conversion draws no colour glyph.
+	plain bool
 
 	// maxLoaded and maxLoadedBytes are [maxLoadedFaces] and
 	// [maxLoadedFaceBytes]; tests lower them.

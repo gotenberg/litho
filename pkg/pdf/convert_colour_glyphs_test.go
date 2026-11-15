@@ -118,3 +118,63 @@ func TestConvert_SameBytesWithColourGlyphs(t *testing.T) {
 		t.Errorf("SHA-256 %s, pinned %s", got, colourGlyphsWant)
 	}
 }
+
+// TestConvert_ColorGlyphsOff checks [WithColorGlyphs]: with false the page
+// of [colourGlyphsSource] holds no Type 3 font and no image, the layered
+// face's letters are drawn from their outlines, the emoji only the bitmap
+// face covers are reported missing and stay text, and with true the
+// conversion reports none missing and writes the bytes it writes without
+// the option.
+func TestConvert_ColorGlyphsOff(t *testing.T) {
+	t.Parallel()
+	fonts := colourGlyphFonts(t)
+	convert := func(opts ...HTMLOption) ([]byte, *ConvertReport) {
+		var out bytes.Buffer
+		rep, err := FromHTML(strings.NewReader(colourGlyphsSource), append(opts, WithConvertFontDirs(fonts))...).WriteTo(t.Context(), &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out.Bytes(), rep
+	}
+	plain, rep := convert(WithColorGlyphs(false))
+	for _, mark := range []string{"/Subtype /Type3", "/Subtype /Image"} {
+		if bytes.Contains(plain, []byte(mark)) {
+			t.Errorf("the file holds %s: a colour glyph was written", mark)
+		}
+	}
+	// A missing emoji is reported once a conversion, without its name.
+	blank := func(rep *ConvertReport) bool {
+		for _, w := range rep.Warnings {
+			if w.Code == WarningMissingGlyph && strings.Contains(w.Message, "emoji") {
+				return true
+			}
+		}
+		return false
+	}
+	if !blank(rep) {
+		t.Errorf("warnings %+v do not report the emoji only the bitmap face covers", rep.Warnings)
+	}
+	r, err := Open(t.Context(), bytes.NewReader(plain), int64(len(plain)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	text, err := r.ExtractText(t.Context(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"\u231a", "\u26bd", "A"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("text %q lacks %q", text, want)
+		}
+	}
+
+	colour, rep := convert(WithColorGlyphs(true))
+	if blank(rep) {
+		t.Errorf("with colour glyphs, warnings %+v report an emoji missing", rep.Warnings)
+	}
+	unset, _ := convert()
+	if !bytes.Equal(colour, unset) {
+		t.Error("WithColorGlyphs(true) does not write the bytes of the default")
+	}
+}

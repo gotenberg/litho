@@ -202,6 +202,12 @@ type Text struct {
 	// index lies past the slice is drawn in Color, as the face's text
 	// colour entry is. A face without layered glyphs ignores it.
 	Palette []Color
+	// Plain draws every glyph of a colour face from the program's outline,
+	// in Color, never from its bitmap or its layers: no Type 3 font and no
+	// glyph image is written for the run. A glyph of a program without
+	// outlines is blank, of its advance. A face without colour glyphs
+	// ignores it.
+	Plain bool
 }
 
 // The bounds of [Text.HScale] (ISO 32000-1, 9.3.4 puts no bound on Tz; the

@@ -352,25 +352,7 @@ func (f *Fonts) WithFaces(set *FaceSet) *Fonts {
 	if set == nil || len(set.families) == 0 {
 		return f
 	}
-	base := f
-	if f.base != nil {
-		base = f.base
-	}
-	inst := f.inst
-	if inst == nil {
-		inst = &instanceStore{}
-	}
-	return &Fonts{
-		logger:         base.logger,
-		open:           base.open,
-		faces:          base.faces,
-		byFamily:       base.byFamily,
-		maxLoaded:      base.maxLoaded,
-		maxLoadedBytes: base.maxLoadedBytes,
-		base:           base,
-		set:            set,
-		inst:           inst,
-	}
+	return f.overlay(set, f.plain)
 }
 
 // familyRef is one entry of a family list with document families in

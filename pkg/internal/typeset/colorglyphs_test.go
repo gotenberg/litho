@@ -205,6 +205,62 @@ func TestColourGlyphs_InvisibleRunDrawsNothing(t *testing.T) {
 	}
 }
 
+// TestColourGlyphs_PlainRunTakesNoColourData locks [typeset.Text.Plain]:
+// a plain run of a layered face draws each glyph's own outline through the
+// Type 0 font in the run's colour, a glyph whose outline is empty drawing
+// nothing, and a plain run of a face of bitmaps alone draws blank glyphs
+// of their advance; neither writes a glyph image or a layer's colour, and
+// both stay text. A run of the same face that is not plain, in the same
+// document, keeps its colour glyphs.
+func TestColourGlyphs_PlainRunTakesNoColourData(t *testing.T) {
+	bitmaps, layers := colourFaces(t)
+	blue := typeset.Color{B: 1, A: 1}
+	plainLayers := run(t, layers, 72, typeset.Point{X: 72, Y: 144}, "DA")
+	plainLayers.Color, plainLayers.Plain = blue, true
+	plainBitmaps := run(t, bitmaps, 72, typeset.Point{X: 72, Y: 288}, "AB")
+	plainBitmaps.Plain = true
+	out := write(t, &typeset.Document{Pages: []*typeset.Page{letter(plainLayers, plainBitmaps)}})
+	if bytes.Contains(out, []byte("/Subtype /Image")) {
+		t.Error("a plain run wrote a glyph image")
+	}
+	if !bytes.Contains(out, []byte("/Subtype /Type0")) {
+		t.Error("the plain run of the layered face is not drawn through the Type 0 font")
+	}
+	if content := inflated(t, out); regexp.MustCompile(`0 1 0 rg`).Match(content) {
+		t.Errorf("a plain run filled a layer in its palette's green:\n%s", content)
+	}
+	img := render(t, open(t, out), 1)
+	// D, whose own outline is empty, paints nothing where its layers
+	// would; A, a rectangle from the baseline to 500 units, paints in the
+	// run's colour.
+	if !near(img, 72+20, 144-10, color.NRGBA{R: 255, G: 255, B: 255, A: 255}, 8) {
+		t.Errorf("plain D at (92, 134) = %v, want the page's white", img.At(92, 134))
+	}
+	if !near(img, 144+20, 144-10, color.NRGBA{B: 255, A: 255}, 8) {
+		t.Errorf("plain A at (164, 134) = %v, want the run's blue", img.At(164, 134))
+	}
+	if !near(img, 72+20, 288-20, color.NRGBA{R: 255, G: 255, B: 255, A: 255}, 8) {
+		t.Errorf("plain bitmap glyph at (92, 268) = %v, want the page's white", img.At(92, 268))
+	}
+	got, err := open(t, out).ExtractText(context.Background(), 1)
+	if err != nil || !strings.Contains(got, "DA") || !strings.Contains(got, "AB") {
+		t.Errorf("extracted %q, %v, want DA and AB", got, err)
+	}
+
+	mixed := run(t, bitmaps, 72, typeset.Point{X: 72, Y: 432}, "AB")
+	out = write(t, &typeset.Document{Pages: []*typeset.Page{letter(plainBitmaps, mixed)}})
+	if n := bytes.Count(out, []byte("/Subtype /Image")); n == 0 {
+		t.Error("the run that is not plain lost its glyph images beside a plain run of its face")
+	}
+	img = render(t, open(t, out), 1)
+	if !near(img, 72+20, 288-20, color.NRGBA{R: 255, G: 255, B: 255, A: 255}, 8) {
+		t.Errorf("plain bitmap glyph at (92, 268) = %v beside a coloured run, want the page's white", img.At(92, 268))
+	}
+	if !near(img, 72+20, 432-20, color.NRGBA{R: 255, A: 255}, 8) {
+		t.Errorf("coloured bitmap glyph at (92, 412) = %v, want its red", img.At(92, 412))
+	}
+}
+
 // TestColourGlyphs_SameBytes locks that a document with colour glyphs is
 // written to the same bytes twice.
 func TestColourGlyphs_SameBytes(t *testing.T) {

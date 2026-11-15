@@ -626,14 +626,36 @@ func (st *layoutState) resolve(style int, script language.Script, r rune) *Face 
 	return fc
 }
 
-// covers reports whether the parsed font of fc maps r to a glyph.
+// covers reports whether the parsed font of fc maps r to a glyph. In a
+// conversion that draws no colour glyph ([Fonts.WithPlainGlyphs]), a
+// colour face covers r only where that glyph has an outline to draw it
+// with: a character that draws nothing, a space, a joiner or a selector,
+// needs none.
 func (st *layoutState) covers(fc *Face, r rune) bool {
 	ft := st.font(fc)
 	if ft == nil {
 		return false
 	}
 	gid, ok := ft.NominalGlyph(r)
-	return ok && gid != 0
+	if !ok || gid == 0 {
+		return false
+	}
+	if !st.fonts.plain || fc.colourTables() == 0 || harfbuzz.IsDefaultIgnorable(r) || unicode.IsSpace(r) {
+		return true
+	}
+	outline, ok := st.face(fc).GlyphDataOutline(gid)
+	return ok && len(outline.Segments) > 0
+}
+
+// emojiVariant returns the presentation variant the emoji of a run take
+// in this call, v being the run's own: text presentation whatever
+// selector follows where the conversion draws no colour glyph
+// ([Fonts.WithPlainGlyphs]).
+func (st *layoutState) emojiVariant(v EmojiVariant) EmojiVariant {
+	if st.fonts.plain {
+		return emojiTextOnly
+	}
+	return v
 }
 
 // isPrivateUse reports a character of a Private Use Area (Unicode 16.0,
@@ -954,7 +976,7 @@ func (st *layoutState) paragraph(ctx context.Context, para []rune, styleOf []int
 	}
 
 	seqs := emojiSequences(para,
-		func(i int) EmojiVariant { return st.styles[styleOf[i]].style.settings().Emoji },
+		func(i int) EmojiVariant { return st.emojiVariant(st.styles[styleOf[i]].style.settings().Emoji) },
 		func(i int) bool { return st.primaryDrawsAsText(styleOf[i], para[i]) })
 	var outputs []shaping.Output
 	for _, item := range items {
@@ -1159,18 +1181,35 @@ func rescale(out *shaping.Output, size fixed.Int26_6) {
 }
 
 // collectMissing records the characters out draws as .notdef because its
-// face lacks them.
+// face lacks them. In a conversion that draws no colour glyph
+// ([Fonts.WithPlainGlyphs]) it also records the characters a colour face
+// draws with a glyph that has no outline: the run's own first face draws
+// what no other face covers, and such a glyph is blank.
 func (st *layoutState) collectMissing(out *shaping.Output, para []rune) {
+	var plain *Face
+	if fc := st.byFace[out.Face]; st.fonts.plain && fc != nil && fc.colourTables() != 0 {
+		plain = fc
+	}
 	for _, g := range out.Glyphs {
+		blank := false
 		if g.GlyphID != 0 {
-			continue
+			if plain == nil {
+				continue
+			}
+			if outline, ok := out.Face.GlyphDataOutline(g.GlyphID); ok && len(outline.Segments) > 0 {
+				continue
+			}
+			blank = true
 		}
 		start, end := clusterRange(g, len(para))
 		for _, r := range para[start:end] {
 			if harfbuzz.IsDefaultIgnorable(r) {
 				continue
 			}
-			if gid, ok := out.Face.NominalGlyph(r); ok && gid != 0 {
+			if blank && unicode.IsSpace(r) {
+				continue
+			}
+			if gid, ok := out.Face.NominalGlyph(r); !blank && ok && gid != 0 {
 				continue
 			}
 			set := st.missing
@@ -1229,6 +1268,7 @@ func (st *layoutState) line(ctx context.Context, runs shaping.Line, para []rune,
 		}
 		t.Stroke, t.Skew = synthesis(ss.req, fc, s.Size)
 		t.Palette = st.palette(fc, cf, &s)
+		t.Plain = st.fonts.plain && fc.colourTables() != 0
 		pen := 0.0
 		cluster := -1
 		for k, g := range out.Glyphs {
