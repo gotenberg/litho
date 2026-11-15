@@ -220,6 +220,8 @@ func TestRead_PageSetup(t *testing.T) {
 		{"printer defaults", `<sheetData/><pageSetup paperSize="1" usePrinterDefaults="0"/>`, func(p sheet.PageSetup) bool { return math.Abs(p.Width-595.28) < 0.01 }},
 		{"unknown paper", `<sheetData/><pageSetup paperSize="0"/>`, func(p sheet.PageSetup) bool { return math.Abs(p.Width-595.28) < 0.01 }},
 		{"letter", `<sheetData/><pageSetup paperSize="1"/>`, func(p sheet.PageSetup) bool { return p.Width == 612 }},
+		{"draft", `<sheetData/><pageSetup draft="1"/>`, func(p sheet.PageSetup) bool { return p.Draft }},
+		{"not draft", `<sheetData/><pageSetup draft="0"/>`, func(p sheet.PageSetup) bool { return !p.Draft }},
 		{"errors displayed", `<sheetData/><pageSetup errors="displayed"/>`, func(p sheet.PageSetup) bool { return p.Errors == sheet.ErrorsDisplayed }},
 		{"errors blank", `<sheetData/><pageSetup errors="blank"/>`, func(p sheet.PageSetup) bool { return p.Errors == sheet.ErrorsBlank }},
 		{"errors dash", `<sheetData/><pageSetup errors="dash"/>`, func(p sheet.PageSetup) bool { return p.Errors == sheet.ErrorsDash }},

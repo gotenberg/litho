@@ -586,6 +586,9 @@ type PageSetup struct {
 	// Errors is how the cells that hold an error value print (ECMA-376
 	// Part 1, 18.3.1.63 errors); the zero value prints the error.
 	Errors PrintErrors
+	// Draft prints the cells' values without their fills, borders and
+	// grid lines (ECMA-376 Part 1, 18.3.1.63 draft).
+	Draft bool
 	// PrintAreas are the ranges printed, in order, each starting on a new
 	// page; empty prints the used range: the cells with a value, a fill
 	// or a border, and the drawings.

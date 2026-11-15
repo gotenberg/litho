@@ -174,6 +174,7 @@ func (w *sheetReader) pageSetup(root *ooxml.Element) {
 	if attr(ps, "pageOrder") == "overThenDown" {
 		p.Order = sheet.OverThenDown
 	}
+	p.Draft = boolAttr(ps, "draft")
 	// ECMA-376 Part 1, 18.18.60 ST_PrintError; "displayed", the default,
 	// and any other value print the error.
 	switch attr(ps, "errors") {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -127,6 +128,44 @@ func TestConvert_BlankBookPaper(t *testing.T) {
 		}
 		if y := find(t, pg, "H").y; math.Abs(h-y-30) > 3 {
 			t.Errorf("excel %v: header baseline %.2f below the top, want about 30", excel, h-y)
+		}
+	}
+}
+
+// TestConvert_Draft prints a draft sheet's values without the fills,
+// borders and grid lines it asks for (ECMA-376 Part 1, 18.3.1.63 draft).
+//
+// # Corpus evidence
+//
+//   - litho/xlsx print_quality_options: Excel prints the sheet of draft 1
+//     with its red bold text and none of its blue fill, its borders or the
+//     grid lines its printOptions ask for.
+func TestConvert_Draft(t *testing.T) {
+	line := Border{Line: LineSolid, Width: 1, Color: css.Color{A: 1}}
+	st := &Style{Fill: Fill{Color: css.Color{B: 1, A: 1}}, Border: [4]Border{line, line, line, line}}
+	for _, draft := range []bool{false, true} {
+		sh := &Sheet{Name: "S", Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "x", st), textCell(1, "y", nil)}}}}
+		sh.Page = a4()
+		sh.Page.GridLines, sh.Page.Draft = true, draft
+		out := convert(t, newDoc(sh), office.Options{})
+		paths := 0
+		var walk func([]typeset.Fragment)
+		walk = func(fs []typeset.Fragment) {
+			for _, f := range fs {
+				switch v := f.(type) {
+				case *typeset.Path:
+					paths++
+				case *typeset.Group:
+					walk(v.Content)
+				}
+			}
+		}
+		walk(out.Pages[0].Content)
+		if got := strings.Join(texts(out.Pages[0]), "|"); got != "x|y" {
+			t.Errorf("draft %v: texts %q", draft, got)
+		}
+		if (paths == 0) != draft {
+			t.Errorf("draft %v: %d paths drawn", draft, paths)
 		}
 	}
 }

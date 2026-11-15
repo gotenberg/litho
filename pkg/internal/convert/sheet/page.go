@@ -206,8 +206,9 @@ func (b *pageBuilder) region(rg *region) *layout.Node {
 		}
 		row.Children = append(row.Children, n)
 	}
+	draft := g.sh.Page.Draft
 	b.units(rg, func(u *unit) {
-		if c := u.st.Fill.Color; c.A > 0 {
+		if c := u.st.Fill.Color; c.A > 0 && !draft {
 			b.fills = append(b.fills, &typeset.Path{Ops: rectOps(u.x, u.y, u.w, u.h), Fill: &typeset.Fill{Color: colorOf(c)}})
 		}
 		b.drawDataBar(u)
@@ -215,7 +216,9 @@ func (b *pageBuilder) region(rg *region) *layout.Node {
 		if u.cell != nil && u.cell.MarkedInvalid {
 			b.circles = append(b.circles, invalidCircle(u))
 		}
-		b.unitBorders(bs, rg, u)
+		if !draft {
+			b.unitBorders(bs, rg, u)
+		}
 		if !b.g.valueHidden(u.r, u.c, u.cell) {
 			add(u)
 		}
@@ -261,7 +264,7 @@ func (b *pageBuilder) region(rg *region) *layout.Node {
 		}
 		b.fills = append(b.fills[:clipFills], grp)
 	}
-	if g.sh.Page.GridLines {
+	if g.sh.Page.GridLines && !draft {
 		b.grid(rg, spans)
 	}
 	for _, r := range rowOrder {
