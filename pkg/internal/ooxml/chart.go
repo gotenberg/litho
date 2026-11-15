@@ -892,9 +892,15 @@ func richText(tx *Element) string {
 	return strings.Join(parts, " ")
 }
 
-// readTitle reads the chart title, or the automatic one LibreOffice shows:
-// the series name of a chart of one series, "Chart Title" for a title
-// element without text (oox's ChartSpaceConverter).
+// readTitle reads the chart title, or the automatic one Office shows: the
+// series name of a chart of one series, "Chart Title" for a title element
+// without text in a chart that plots a series, none in a chart of no
+// series.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: chart2/empty_chart's chart, a title element with
+//     no text over a bar chart of no series, prints no text in Excel.
 func (p *chartReader) readTitle(ch *Element) {
 	t := ch.Child(NSChart, "title")
 	deleted := boolVal(ch, "autoTitleDeleted", !p.mso2007)
@@ -907,7 +913,7 @@ func (p *chartReader) readTitle(ch *Element) {
 		if len(p.c.Groups) == 1 && (len(p.c.Groups[0].Series) == 1 || p.c.Groups[0].Kind == chart.Pie) && len(p.c.Groups[0].Series) > 0 {
 			text = p.c.Groups[0].Series[0].Name
 		}
-		if text == "" && t != nil {
+		if text == "" && t != nil && p.plotsASeries() {
 			text = "Chart Title"
 		}
 	}
@@ -926,6 +932,16 @@ func (p *chartReader) readTitle(ch *Element) {
 		Layout:  manualLayout(t),
 		Auto:    auto,
 	}
+}
+
+// plotsASeries reports whether a group of the chart holds a series.
+func (p *chartReader) plotsASeries() bool {
+	for _, g := range p.c.Groups {
+		if len(g.Series) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // readLegend reads c:legend (ECMA-376 Part 1, 21.2.2.93).
