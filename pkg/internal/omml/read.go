@@ -190,8 +190,26 @@ func (q *Equation) Style() formula.Style {
 		Weight:   400,
 		Color:    q.base.Color,
 		Display:  q.display,
+		Enclose:  &wordEnclosure,
 	}
 }
+
+// wordEnclosure is how Word draws a border box (m:borderBox, 22.1.2.11)
+// and the strikes over it: lines of the math font's fraction rule
+// thickness, 0.16 em from the content's advance on the inline sides and
+// 0.14 em from its ink on the block sides. The strikes of 22.1.2.11 cross
+// the boxed area through its middle.
+//
+// # Corpus evidence
+//
+//   - litho/docx: equations-basic boxes E = mc² at 11 pt in Cambria Math;
+//     Word's PDF draws the four lines 0.75 pt thick, the fraction bar of
+//     the same document's quadratic formula as thick, the left line's
+//     inner edge 1.76 pt before E's origin, the top line's 1.39 pt above
+//     the superscript's ink and the bottom line's 1.63 pt below the
+//     baseline, under letters without descenders. Word draws no strike in
+//     the corpora: where it strikes is not measured.
+var wordEnclosure = formula.Enclosure{InlineGap: 0.16, BlockGap: 0.14}
 
 // defaultSize is the size of an equation whose run states none, Word's
 // default of 10 points (17.3.2.38 sz).
@@ -541,8 +559,7 @@ func (b *reader) box(o, pr *ooxml.Element, depth int) *formula.Element {
 }
 
 // borderBox maps m:borderBox (22.1.2.11) to an menclose of the notations
-// its hide and strike properties leave, which the layout draws as a row:
-// the border and the strikes are not drawn.
+// its hide and strike properties leave, drawn by [wordEnclosure].
 func (b *reader) borderBox(o, pr *ooxml.Element, depth int) *formula.Element {
 	var notation []string
 	for _, side := range [...][2]string{{"hideTop", "top"}, {"hideBot", "bottom"}, {"hideLeft", "left"}, {"hideRight", "right"}} {
@@ -558,7 +575,6 @@ func (b *reader) borderBox(o, pr *ooxml.Element, depth int) *formula.Element {
 			notation = append(notation, s[1])
 		}
 	}
-	b.warn(warn.ContentUnsupported, warn.Approximated, "an equation's border box is drawn without its border")
 	e := el("menclose", b.arg(o.Child(ooxml.NSM, "e"), depth))
 	if len(notation) > 0 {
 		e.Attrs = []formula.Attr{{Name: "notation", Value: strings.Join(notation, " ")}}

@@ -18,8 +18,7 @@
 // the math font, the default justification of a display equation and
 // where the limits of n-ary operators go.
 //
-// Not drawn: the border of m:borderBox (MathML's menclose, which the
-// layout draws as a row) and its strikes; line breaks inside an equation,
+// Not drawn: line breaks inside an equation,
 // automatic (brkBin, wrapIndent) or manual (m:brk); the font family a run
 // names for itself, an equation being set in the math font; the growth of
 // an n-ary operator with its argument (m:grow on m:nary); the vertical

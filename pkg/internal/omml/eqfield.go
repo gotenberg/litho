@@ -278,8 +278,20 @@ func (p *eqParser) build(name string, opts []eqOption, args [][]*formula.Element
 		}
 		return el("msubsup", el("mrow"), row(1), row(0))
 	case "x":
-		p.r.warn(warn.ContentUnsupported, warn.Approximated, "an equation field's box is drawn without its border")
-		return el("menclose", row(0))
+		// \to, \bo, \le and \ri draw the top, bottom, left and right
+		// sides; none of them draws all four (17.16.5.20, \x).
+		var sides []string
+		for _, o := range [...][2]string{{"to", "top"}, {"bo", "bottom"}, {"le", "left"}, {"ri", "right"}} {
+			if _, ok := option(opts, o[0]); ok {
+				sides = append(sides, o[1])
+			}
+		}
+		if len(sides) == 0 {
+			sides = []string{"box"}
+		}
+		e := el("menclose", row(0))
+		e.Attrs = []formula.Attr{{Name: "notation", Value: strings.Join(sides, " ")}}
+		return e
 	}
 	return el("mrow", row(0))
 }

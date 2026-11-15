@@ -220,7 +220,7 @@ func TestRead_RunSizeAndColour(t *testing.T) {
 	if got := tree(q.root); got != want {
 		t.Fatalf("tree %s, want %s", got, want)
 	}
-	if st := q.Style(); st.Size != 11 || st.Color != (typeset.Color{A: 1}) || st.Families[0] != "Cambria Math" || st.Families[1] != "math" {
+	if st := q.Style(); st.Size != 11 || st.Color != (typeset.Color{A: 1}) || st.Families[0] != "Cambria Math" || st.Families[1] != "math" || st.Enclose == nil {
 		t.Errorf("style %+v", st)
 	}
 }
