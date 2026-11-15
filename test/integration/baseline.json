@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-15T13:04:56Z",
+  "captured_at": "2026-11-15T17:14:42Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -59948,12 +59948,12 @@
     "litho/html": {
       "features": {
         "diff": {
-          "matched": 200,
+          "matched": 201,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 200,
+            "pages_equal": 201,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -59990,7 +59990,15 @@
               "text_f1": 1
             },
             "backdrop-filter": {
-              "layout": 0.9833,
+              "layout": 0.9892,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "backdrop-filter-twin": {
+              "layout": 0.9892,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -61561,31 +61569,31 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 198,
+          "matched": 199,
           "mismatched": 2,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 456,
-            "pass_a1a": 200,
-            "pass_a1b": 200,
-            "pass_a2a": 200,
-            "pass_a2a+ua1": 198,
-            "pass_a2b": 200,
-            "pass_a2u": 200,
-            "pass_a3a": 200,
-            "pass_a3b": 200,
-            "pass_a3u": 200,
-            "pass_a4": 200,
-            "pass_a4+ua2": 199,
-            "pass_a4e": 200,
-            "pass_ua1": 198,
-            "pass_ua2": 199,
-            "pass_v1.4": 200,
-            "pass_v1.5": 200,
-            "pass_v1.6": 200,
-            "pass_v1.7": 200,
-            "pass_v2.0": 200,
+            "pass_a1a": 201,
+            "pass_a1b": 201,
+            "pass_a2a": 201,
+            "pass_a2a+ua1": 199,
+            "pass_a2b": 201,
+            "pass_a2u": 201,
+            "pass_a3a": 201,
+            "pass_a3b": 201,
+            "pass_a3u": 201,
+            "pass_a4": 201,
+            "pass_a4+ua2": 200,
+            "pass_a4e": 201,
+            "pass_ua1": 199,
+            "pass_ua2": 200,
+            "pass_v1.4": 201,
+            "pass_v1.5": 201,
+            "pass_v1.6": 201,
+            "pass_v1.7": 201,
+            "pass_v2.0": 201,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -61680,6 +61688,27 @@
               "v2.0": 1
             },
             "backdrop-filter": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "backdrop-filter-twin": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
