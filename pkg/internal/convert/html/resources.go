@@ -24,6 +24,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/formula"
+	"github.com/gotenberg/litho/pkg/internal/imagefile"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/svg"
@@ -313,9 +314,9 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 	orient := 1
 	switch format {
 	case "jpeg":
-		orient = jpegOrientation(data)
+		orient = imagefile.JPEGOrientation(data)
 	case "png":
-		orient = pngOrientation(data)
+		orient = imagefile.PNGOrientation(data)
 	}
 	if orient >= 5 {
 		// Orientations 5 to 8 turn the picture a quarter.
@@ -329,8 +330,9 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 		pic.Source = src
 		return pic, nil
 	}
-	// A turned picture is encoded from the copy orientImage draws, gray
-	// for a gray one and RGBA otherwise, which EncodeImage releases.
+	// A turned picture is encoded from the copy imagefile.OrientImage
+	// draws, gray for a gray one and RGBA otherwise, which EncodeImage
+	// releases.
 	model := cfg.ColorModel
 	if orient > 1 && model != color.GrayModel {
 		model = color.RGBAModel
@@ -344,7 +346,7 @@ func (r *resources) decodePicture(ctx context.Context, u string) (*layout.Pictur
 		mem.Release(charged)
 		return nil, pictureDataError{fmt.Errorf("decoding the %s image: %w", format, err)}
 	}
-	oriented, err := orientImage(ctx, img, orient)
+	oriented, err := imagefile.OrientImage(ctx, img, orient)
 	if err != nil {
 		mem.Release(charged)
 		return nil, err
