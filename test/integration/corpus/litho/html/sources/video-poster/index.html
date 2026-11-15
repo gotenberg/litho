@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Video posters</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 10pt; }
+figure { margin: 0 0 16px; }
+figcaption { margin-top: 4px; }
+video { border: 1px solid #333; }
+.ground { background: #e9ecef; }
+.cover { object-fit: cover; }
+.fill { object-fit: fill; }
+.corner { object-position: right bottom; }
+.padded { padding: 8px; border: 4px solid #264653; background: #f4a261; }
+.narrow { width: 120px; border: 1px dashed #333; padding: 4px; }
+.narrow video { max-width: 100%; }
+.wide { width: 220px; }
+</style>
+</head>
+<body>
+<h1>Video posters VIDEO-MARKER</h1>
+<p>A poster at its own size sits on the baseline <video poster="poster.png"></video> of this line of text.</p>
+<figure><video class="ground" poster="poster.png" width="320" height="100"></video><figcaption>Width and height attributes: the poster contained and centred.</figcaption></figure>
+<figure><video class="cover" poster="poster.png" width="320" height="100"></video><figcaption>Object-fit cover: the poster fills the box and is cut.</figcaption></figure>
+<figure><video class="fill corner" poster="poster.png" style="width: 240px; height: 60px"></video><figcaption>Object-fit fill: the poster stretched to the box.</figcaption></figure>
+<figure><video class="ground corner" poster="poster.png" width="240" height="140"></video><figcaption>Object-position right bottom: the contained poster moved to a corner.</figcaption></figure>
+<figure><video class="padded" poster="poster.png" width="200" height="90"></video><figcaption>Padding, border and background around the poster.</figcaption></figure>
+<figure><video src="clip.mp4" poster="poster.png"><source src="clip.webm" type="video/webm">The fallback text of a video is not shown.</video><figcaption>A video whose sources do not load shows its poster.</figcaption></figure>
+<figure class="narrow"><video poster="poster.png"></video><figcaption>Max-width 100% in a narrow box.</figcaption></figure>
+<figure><video class="ground"></video><figcaption>No poster: the default box of 300 by 150 pixels, empty.</figcaption></figure>
+<figure><video class="ground wide"></video><figcaption>No poster at width 220px: 150 pixels tall.</figcaption></figure>
+</body>
+</html>
