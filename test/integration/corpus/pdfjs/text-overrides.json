@@ -1,0 +1,25 @@
+{
+  "overrides": [
+    {
+      "fixture": "bug1108301",
+      "page": 1,
+      "pdfjs": "কিপরাইটঃ- এেসা দব্ ীন িশিখ পর্ কাশনী",
+      "expected": "কিপরাইটঃ- এেসা দব্ীন িশিখ পর্কাশনী",
+      "reason": "PDF.js reads a word break inside two words: at the pinned commit it gives no advance to a glyph whose text holds a nonspacing mark anywhere, here a conjunct's base beside its mark, so the next glyph seems a glyph's width away. The page shows each as one word; ISO 32000-1, 9.4.4 moves the pen by the width of every glyph shown."
+    },
+    {
+      "fixture": "issue11656",
+      "page": 1,
+      "pdfjs": "שלום עולם מה שלום כולם?\nאני יורד מן החוטים, אני כבר ילד אמיתי.\nכמו כל הילדים.\nלחיוב פעולות אלה לפי סעיף15(ב)(4) לחוק מבקר המדינה",
+      "expected": "שלום עולם מה שלום כולם?\nאני יורד מן החוטים, אני כבר ילד אמיתי.\nכמו כל הילדים.\nלחיוב פעולות אלה לפי סעיף 15(ב)(4) לחוק מבקר המדינה",
+      "reason": "PDF.js reads two words joined across a space glyph the page sets between them, in a line it reorders from right to left. The page shows the gap; ISO 32000-1, 14.8.2.5 makes a space character a word break."
+    },
+    {
+      "fixture": "bug911034",
+      "page": 1,
+      "pdfjs": "‐‘‚”\n‡•\n″‵‷‹※‽‿\n⁀⁂⁃⁄⁅⁇⁉⁊⁋⁌⁍⁎\n⁐⁑⁒⁓⁔⁕⁖⁗⁛⁝\n⁥\n⁰ⁱ⁲⁳⁴⁵⁶⁻⁼ⁿ",
+      "unscored": true,
+      "reason": "The font draws Kannada glyphs for codes its ToUnicode CMap maps to General Punctuation, so the values ISO 32000-1, 9.10.2 gives are not the page's text in either reading. The two readings differ by the U+200C the CMap gives one painted glyph, which PDF.js drops and litho keeps."
+    }
+  ]
+}

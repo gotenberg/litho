@@ -15,7 +15,8 @@
     "determinism": "goldens/render"
   },
   "golden_overrides": {
-    "flatten": "flatten-scope.json"
+    "flatten": "flatten-scope.json",
+    "text": "text-overrides.json"
   },
   "skips": {
     "bug1393476": "infinite loop in xref parsing"
