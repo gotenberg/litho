@@ -126,6 +126,25 @@ type builder struct {
 	// through defsMu.
 	defDocs map[*dom.Node]*svg.Document
 	defsMu  sync.Mutex
+	// containers maps the node of each container for size queries to its
+	// element, for the sizes the layout measures; nil for none.
+	containers map[*layout.Node]*dom.Node
+}
+
+// container records node, the box of the element n, when n is a container
+// for size queries, at most [maxContainers] of them.
+func (b *builder) container(node *layout.Node, n *dom.Node) {
+	if !node.Style.SizeContainer() {
+		return
+	}
+	if len(b.containers) >= maxContainers {
+		b.warnOnce(warn.LimitReached, warn.Approximated, "containers", fmt.Sprintf("a document of more than %d containers for size queries: the others answer no size query", maxContainers))
+		return
+	}
+	if b.containers == nil {
+		b.containers = map[*layout.Node]*dom.Node{}
+	}
+	b.containers[node] = n
 }
 
 // buildRoot builds the content tree of the root element.
@@ -141,6 +160,7 @@ func (b *builder) buildRoot(ctx context.Context, root *dom.Node) (*layout.Node, 
 	if st.Display == css.DisplayNone {
 		return n, nil
 	}
+	b.container(n, root)
 	v := b.applyCounters(root, st)
 	if b.counters.innermost(footnoteCounter) == nil {
 		// The footnote counter numbers the footnotes of the whole
@@ -335,6 +355,7 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 	}
 	node := &layout.Node{Kind: layout.Element, Style: st}
 	b.semantics(node, n)
+	b.container(node, n)
 	if err := b.content(ctx, node, n, st, v, depth+1); err != nil {
 		return nil, err
 	}

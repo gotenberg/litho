@@ -386,6 +386,8 @@ type Options struct {
 	// none, and the layout charges every distinct style its boxes hold
 	// ([limits.StyleCost]). Layout calls it from its own goroutine.
 	ChargedStyle func(st *css.Style) bool
+	// MeasureContainers asks for [Result.Containers].
+	MeasureContainers bool
 	// release is when the layout releases the shaped text of its inline
 	// formatting contexts, for a test that compares the policies.
 	release releasePolicy
@@ -522,6 +524,14 @@ type Result struct {
 	// its first box landed on, in that page's coordinates. Inline boxes
 	// are not listed.
 	Extents map[string]typeset.Rect
+	// Containers maps every node whose style is a container for size
+	// queries ([css.Style.SizeContainer]) and whose first box is a laid
+	// out block-level, inline-block or replaced box to the width and
+	// height of that box's content box, in points, when
+	// [Options.MeasureContainers] asks; nil otherwise. A box split across
+	// pages or columns has one inline size, the one it is laid out at in
+	// its first fragment (CSS Conditional 5, 6.1).
+	Containers map[*Node][2]float64
 }
 
 // DefaultMaxPages is the page cap when Options.MaxPages is zero: the

@@ -107,6 +107,9 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	res.Anchors = e.anchors(rb, len(res.Pages))
 	e.anchorsFound = res.Anchors
 	res.Extents = e.extents(rb, len(res.Pages))
+	if opts.MeasureContainers {
+		res.Containers = containers(rb)
+	}
 	e.links(res, links, used)
 	typeset.PruneTree(e.root, used)
 	dropPrunedDests(e.root, res)

@@ -37,3 +37,23 @@ func (e *engine) extents(rb *box, n int) map[string]typeset.Rect {
 	walk(rb)
 	return out
 }
+
+// containers returns the content box size of the first laid out
+// block-level, inline-block or replaced box of every node that is a
+// container for size queries, for [Result.Containers].
+func containers(rb *box) map[*Node][2]float64 {
+	out := map[*Node][2]float64{}
+	var walk func(*box)
+	walk = func(b *box) {
+		if n := b.node; n != nil && b.laidOut && b.kind != kindInline && b.kind != kindText && b.kind != kindBreak && b.st == n.Style && n.Style.SizeContainer() {
+			if _, ok := out[n]; !ok {
+				out[n] = [2]float64{max(b.w, 0), max(b.h, 0)}
+			}
+		}
+		for _, k := range b.kids {
+			walk(k)
+		}
+	}
+	walk(rb)
+	return out
+}

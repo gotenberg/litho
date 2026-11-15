@@ -41,6 +41,10 @@ type printSetup struct {
 	// box, the viewport [screenWidth] by [screenHeight] (see
 	// [measureSinglePage]).
 	measure bool
+	// containers are the sizes of the containers for size queries the
+	// last layout measured, which the cascade's size queries and
+	// container query units read; nil before a layout measured any.
+	containers containerSizes
 }
 
 // newPrintSetup returns the setup of a first layout under o.

@@ -46,12 +46,7 @@ const (
 func measureSinglePage(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, lay layoutFunc) (float64, float64, error) {
 	m := o
 	m.Scale, m.MarginTop, m.MarginRight, m.MarginBottom, m.MarginLeft = 1, 0, 0, 0, 0
-	p, err := prepareDoc(ctx, doc, m, fonts, printSetup{factor: 1, measure: true})
-	if err != nil {
-		return 0, 0, err
-	}
-	continuous(p.root)
-	res, err := layOut(ctx, lay, p)
+	_, res, err := prepareAndLayOut(ctx, doc, m, fonts, printSetup{factor: 1, measure: true}, lay, func(p *prepared) { continuous(p.root) })
 	if err != nil {
 		return 0, 0, err
 	}

@@ -150,6 +150,20 @@
 // nothing, with a warning. In a page-margin box only a URL the style sheet
 // writes names a target; string-set does not take them.
 //
+// A rule under @container applies when its query is true for the element
+// (CSS Conditional 5): a style query reads the custom properties of the
+// container it selects, and a size query and the cqw, cqh, cqi, cqb,
+// cqmin and cqmax units read the size of the content box of the nearest
+// container for size queries, which only a layout measures. A document
+// whose styles read such a size is styled and laid out with the sizes
+// unknown, then again with the sizes the layout before measured, until a
+// layout measures the sizes its styles read, at most 4 layouts, with a
+// warning past that: each layout settles one more level of containers
+// whose size a query of an enclosing container changes. A container
+// split across pages or columns answers with the inline size it is laid
+// out at, the first fragment's, as Chromium prints it. A document that
+// reads no container's size is laid out once.
+//
 // position: note(name) turns an element into a note, as WeasyPrint draws
 // notes: its ::note-call stays in the flow, numbered by the note counter,
 // and the element, between its ::note-marker and its ::note-callback,

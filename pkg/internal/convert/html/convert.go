@@ -101,11 +101,7 @@ func convertChecked(ctx context.Context, src io.Reader, fonts *text.Fonts, o Opt
 		}
 		o.PageHeight = min(chromiumPaper(h+o.MarginTop+o.MarginBottom), maxPageSide)
 	}
-	p, err := prepareDoc(ctx, doc, o, fonts, newPrintSetup(o))
-	if err != nil {
-		return nil, err
-	}
-	res, err := layOut(ctx, lay, p)
+	p, res, err := prepareAndLayOut(ctx, doc, o, fonts, newPrintSetup(o), lay, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -114,10 +110,7 @@ func convertChecked(ctx context.Context, src io.Reader, fonts *text.Fonts, o Opt
 		// styles too, since the viewport the media queries and the
 		// viewport units measure changed (blink::LocalFrameView::
 		// ForceLayoutForPagination).
-		if p, err = prepareDoc(ctx, doc, o, fonts, s); err != nil {
-			return nil, err
-		}
-		if res, err = layOut(ctx, lay, p); err != nil {
+		if p, res, err = prepareAndLayOut(ctx, doc, o, fonts, s, lay, nil); err != nil {
 			return nil, err
 		}
 	}
@@ -360,7 +353,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 			res.formulas.BrowserRules = true
 		}
 	}
-	computeOpts := css.ComputeOptions{Hints: css.HTMLHints, Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts, scan.math)}
+	computeOpts := css.ComputeOptions{Hints: css.HTMLHints, Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts, scan.math), ContainerSize: setup.containers.size}
 	if o.AnimationsAtEnd {
 		computeOpts.AnimationTime = css.AnimationsAtEnd
 	}
@@ -466,7 +459,8 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 			Logger:           o.Logger,
 			// The cascade charged the styles it computed for as long as
 			// the document tree lives, which outlives the layout.
-			ChargedStyle: computed.Charged,
+			ChargedStyle:      computed.Charged,
+			MeasureContainers: computed.QueriesContainers(),
 		},
 		meta:      scan.meta,
 		headings:  b.headings,
