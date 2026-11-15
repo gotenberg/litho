@@ -388,6 +388,10 @@ type Options struct {
 	ChargedStyle func(st *css.Style) bool
 	// MeasureContainers asks for [Result.Containers].
 	MeasureContainers bool
+	// PageColor fills every page, its whole sheet, before anything else
+	// is painted on it: the canvas surface a converter's colour scheme
+	// gives (CSS Color Adjustment 1, 2.2). Transparent fills nothing.
+	PageColor css.Color
 	// release is when the layout releases the shaped text of its inline
 	// formatting contexts, for a test that compares the policies.
 	release releasePolicy

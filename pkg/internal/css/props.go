@@ -277,6 +277,7 @@ const (
 	pMathDepth
 	pContainerType
 	pContainerName
+	pColorScheme
 	numProps
 )
 
@@ -308,6 +309,9 @@ type styler struct {
 	lc     lenCtx
 	// root is the root element's style, nil while computing the root.
 	root *Style
+	// prefersDark reports a dark preferred colour scheme, the medium's
+	// prefers-color-scheme (CSS Color Adjustment 1, 2.1).
+	prefersDark bool
 }
 
 // field builds the copy function of a longhand stored at field.
@@ -440,13 +444,14 @@ func colorProp(name string, f func(*Style) *Color, slot colorSlots, initial any)
 		},
 		compute: func(_ *styler, st *Style, v any) {
 			if c, ok := v.(colorValue); ok {
-				*f(st) = c.resolve(st.Color)
+				*f(st) = c.resolve(st.Color, st.DarkScheme)
 				if c.dependsOnCurrent() {
 					st.currentColor |= slot
+					st.setColorExpr(slot, c.expr)
 				} else {
 					st.currentColor &^= slot
+					st.setColorExpr(slot, nil)
 				}
-				st.setColorExpr(slot, c.expr)
 			}
 		},
 		copyFrom: func(dst, src *Style) {
@@ -458,7 +463,7 @@ func colorProp(name string, f func(*Style) *Color, slot colorSlots, initial any)
 			}
 			v := src.slotValue(slot)
 			dst.setColorExpr(slot, v.expr)
-			*f(dst) = v.resolve(dst.Color)
+			*f(dst) = v.resolve(dst.Color, dst.DarkScheme)
 		},
 		initial: initial,
 	}
@@ -773,6 +778,11 @@ var props [numProps]propDef
 // longhandByName maps a property name, aliases included, to its longhand.
 var longhandByName map[string]propID
 
+// canvasText is the initial value of color, CanvasText (CSS Color 4,
+// 3.1), black under a light used colour scheme and white under a dark
+// one (CSS Color Adjustment 1, 2.2).
+var canvasText = colorValue{expr: &token{typ: tIdent, value: "canvastext"}, schemeOnly: true}
+
 func init() {
 	defs := []struct {
 		id  propID
@@ -793,10 +803,11 @@ func init() {
 				if c, ok := v.(colorValue); ok {
 					// CSS Color 4, 4.4: currentColor on color itself
 					// is inherit.
-					st.Color = c.resolve(s.parent.Color)
+					st.Color = c.resolve(s.parent.Color, st.DarkScheme)
 				}
 			},
 			copyFrom: field(func(s *Style) *Color { return &s.Color }),
+			initial:  canvasText,
 		}},
 		{pDisplay, propDef{name: "display", parse: parseDisplay, compute: func(_ *styler, st *Style, v any) {
 			switch d := v.(type) {
@@ -1132,6 +1143,7 @@ func init() {
 	for id, def := range containerProps() {
 		props[id] = def
 	}
+	props[pColorScheme] = colorSchemeProp()
 	longhandByName = map[string]propID{}
 	for i := range props {
 		longhandByName[props[i].name] = propID(i)

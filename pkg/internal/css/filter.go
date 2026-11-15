@@ -178,7 +178,7 @@ func computeFilters(s *styler, st *Style, specs []filterSpec) []Filter {
 			for k := range sp.shadow.n {
 				d[k] = sp.shadow.lens[k].points(s.lc)
 			}
-			f.Shadow = Shadow{X: d[0], Y: d[1], Blur: math.Max(d[2], 0), Color: sp.shadow.color.resolve(st.Color)}
+			f.Shadow = Shadow{X: d[0], Y: d[1], Blur: math.Max(d[2], 0), Color: sp.shadow.color.resolve(st.Color, st.DarkScheme)}
 			f.Shadow.current = sp.shadow.color.current
 		}
 		out[i] = f

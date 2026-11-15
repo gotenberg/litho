@@ -278,6 +278,9 @@ func equalStyle(a, b *Style) bool {
 			}
 		}
 	}
+	if a.DarkScheme != b.DarkScheme {
+		return false
+	}
 	if a.ObjectFit != b.ObjectFit {
 		return false
 	}
@@ -923,6 +926,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 	for i1 := range x.ContainerNames {
 		h = mixString(h, x.ContainerNames[i1])
 	}
+	h = mixBool(h, x.DarkScheme)
 	h = mix(h, uint64(x.ObjectFit))
 	for i1 := range x.ObjectPosition {
 		h = hashDimension(h, &x.ObjectPosition[i1])

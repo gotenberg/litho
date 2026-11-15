@@ -277,6 +277,9 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 	for k := range n {
 		pb := e.assembledBox(k, fitH)
 		pg := &typeset.Page{Width: pb.Width + 2*pb.Bleed, Height: pb.Height + 2*pb.Bleed}
+		if c, ok := colorOf(e.opts.PageColor); ok {
+			pg.Content = append(pg.Content, &typeset.Path{Ops: rectOps(typeset.Rect{Width: pg.Width, Height: pg.Height}), Fill: &typeset.Fill{Color: c}})
+		}
 		e.paintPageBackground(pg, pb)
 		e.paintMarks(pg, pb)
 		sheet := len(pg.Content)

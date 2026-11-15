@@ -286,7 +286,7 @@ func paletteOverrides(v []token) ([]PaletteOverride, bool) {
 		if !ok || c.dependsOnCurrent() {
 			return nil, false
 		}
-		out = append(out, PaletteOverride{Index: n, Color: c.resolve(Color{A: 1})})
+		out = append(out, PaletteOverride{Index: n, Color: c.resolve(Color{A: 1}, false)})
 	}
 	return out, true
 }

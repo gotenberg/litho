@@ -102,6 +102,9 @@ type lenCtx struct {
 	// cq holds the sizes the container query units resolve against, nil
 	// for the small viewport's (CSS Conditional 5, 7).
 	cq *containerUnits
+	// dark reports a dark used colour scheme, which the colours a value
+	// holds resolve under (CSS Color Adjustment 1, 2.2).
+	dark bool
 }
 
 // unitSizes returns the size of each unit in points.

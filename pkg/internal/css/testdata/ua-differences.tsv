@@ -1,4 +1,6 @@
 # Declarations where ua.css and the HTML Standard Rendering section differ.
+differs	|:link|color	LinkText, #0000ee under a light colour scheme, which Chromium prints rgb(158, 158, 255) under a dark one
+differs	|:visited|color	VisitedText, #551a8b under a light colour scheme, as the link colour follows the scheme in Chromium
 differs	|marquee|display	a block: the Standard's inline-block without a width shrinks a marquee to its content, where Chromium fills the line with it
 missing	@media (scripting)|noscript|display	no script runs: (scripting) never matches, and noscript shows
 missing	|::file-selector-button|align-content	no file selector button is drawn: litho draws a control as its text

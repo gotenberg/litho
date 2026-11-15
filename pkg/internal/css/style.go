@@ -1171,6 +1171,11 @@ type Style struct {
 	// ContainerNames is the container-name property (CSS Conditional 5,
 	// 5.2), nil for none.
 	ContainerNames []string
+	// DarkScheme reports a dark used colour scheme, the one color-scheme
+	// selects (CSS Color Adjustment 1, 2.1): light-dark() and the system
+	// colours resolve under it, and the canvas of a dark root is painted
+	// in the dark Canvas colour (2.2).
+	DarkScheme bool
 
 	// ObjectFit sizes a replaced element's picture in its content box
 	// (CSS Images 3, 5.5).

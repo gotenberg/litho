@@ -520,8 +520,8 @@ func (g *gradientSpec) compute(lc lenCtx, color Color) *Gradient {
 			st.Position = s.pos.dim(lc, false)
 		}
 		if !s.hint {
-			st.Color = s.color.resolve(color)
-			st.sc = s.color.space(color)
+			st.Color = s.color.resolve(color, lc.dark)
+			st.sc = s.color.space(color, lc.dark)
 			if st.sc.none != [4]bool{} {
 				out.interpolated = true
 			}

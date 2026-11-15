@@ -183,7 +183,7 @@ func TestParseColor_AsChromiumPrints(t *testing.T) {
 			t.Errorf("%s: refused", tt.src)
 			continue
 		}
-		got := c.resolve(Color{})
+		got := c.resolve(Color{}, false)
 		want := Color{R: tt.r, G: tt.g, B: tt.b, A: tt.a}
 		if d := math.Max(math.Max(math.Abs(got.R-want.R), math.Abs(got.G-want.G)), math.Max(math.Abs(got.B-want.B), math.Abs(got.A-want.A))); d > 0.002 {
 			t.Errorf("%s = %.4f %.4f %.4f / %.4f, want %.4f %.4f %.4f / %.4f", tt.src, got.R, got.G, got.B, got.A, want.R, want.G, want.B, want.A)

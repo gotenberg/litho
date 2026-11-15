@@ -798,7 +798,7 @@ func usedLineHeight(st *Style) float64 {
 // and font-size-adjust, which the ex and ch units of every other length
 // resolve against, then the rest in propID order.
 var computeOrder = func() []propID {
-	first := []propID{pMathDepth, pFontSize, pColor, pFontFamily, pFontWeight, pFontStyle, pFontSizeAdjust, pLineHeight}
+	first := []propID{pMathDepth, pFontSize, pColorScheme, pColor, pFontFamily, pFontWeight, pFontStyle, pFontSizeAdjust, pLineHeight}
 	out := slices.Clone(first)
 	for id := range numProps {
 		if !slices.Contains(first, id) {
@@ -1348,13 +1348,13 @@ func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRo
 func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *Style, isRoot bool) {
 	*st = *parent
 	s := &cs.sty
-	*s = styler{parent: parent, root: cs.root}
+	*s = styler{parent: parent, root: cs.root, prefersDark: cs.r.media.prefersDark()}
 	rootFS := mediumFontSize
 	if cs.root != nil {
 		rootFS = cs.root.FontSize
 	}
 	vw, vh := cs.r.media.viewport()
-	s.lc = lenCtx{fontSize: parent.FontSize, rootFontSize: rootFS, width: vw, height: vh}
+	s.lc = lenCtx{fontSize: parent.FontSize, rootFontSize: rootFS, width: vw, height: vh, dark: parent.DarkScheme}
 	s.lc.font = cs.fontUnits(parent, cs.parentLang)
 	s.lc.adjust = parent.FontSizeAdjust
 	s.lc.rootFont = cs.fontUnits(cs.root, cs.rootLang)
@@ -1396,12 +1396,20 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 				}
 			}
 		}
+		if id == pColor && isRoot && v == nil && st.DarkScheme {
+			// The root inherits from the initial values (CSS Cascade 4,
+			// 7.2): its color is CanvasText, which a dark scheme makes
+			// white.
+			v = def.initial
+		}
 		if a, ok := v.(animatedValue); ok {
 			def.copyFrom(st, a.st)
 		} else if v != nil {
 			def.compute(s, st, v)
 		}
-		switch id { //nolint:exhaustive // only the font longhands change the length context
+		switch id { //nolint:exhaustive // only the font longhands and the colour scheme change the length context
+		case pColorScheme:
+			s.lc.dark = st.DarkScheme
 		case pFontSize:
 			s.lc.fontSize = st.FontSize
 			if isRoot {

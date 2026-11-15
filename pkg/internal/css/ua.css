@@ -212,10 +212,10 @@ ruby > rt {
   text-align: start;
 }
 :link {
-  color: #0000ee;
+  color: LinkText;
 }
 :visited {
-  color: #551a8b;
+  color: VisitedText;
 }
 :link,
 :visited {

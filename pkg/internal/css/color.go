@@ -29,15 +29,20 @@ type colorValue struct {
 	// resolved against each element's color (CSS Color 5, 3 and 4). It is
 	// shared and never mutated.
 	expr *token
+	// schemeOnly marks an expr that depends on the element's used colour
+	// scheme alone, through light-dark() or a system colour (CSS Color
+	// Adjustment 1, 2.2), not on its color: its computed value is a colour.
+	schemeOnly bool
 }
 
-// resolve returns the colour against cur, the element's color.
-func (v colorValue) resolve(cur Color) Color {
+// resolve returns the colour against cur, the element's color, under the
+// element's used colour scheme, dark when dark is set.
+func (v colorValue) resolve(cur Color, dark bool) Color {
 	switch {
 	case v.current:
 		return cur
 	case v.expr != nil:
-		e := colorEnv{current: &cur}
+		e := colorEnv{current: &cur, resolving: true, dark: dark}
 		if sc, ok := e.parse(*v.expr, 0); ok {
 			return sc.paint()
 		}
@@ -46,13 +51,13 @@ func (v colorValue) resolve(cur Color) Color {
 }
 
 // space returns the colour in its own space against cur, the element's
-// color.
-func (v colorValue) space(cur Color) spaceColor {
+// color, under the element's used colour scheme.
+func (v colorValue) space(cur Color, dark bool) spaceColor {
 	switch {
 	case v.current:
 		return srgbColor(cur.R, cur.G, cur.B, cur.A)
 	case v.expr != nil:
-		e := colorEnv{current: &cur}
+		e := colorEnv{current: &cur, resolving: true, dark: dark}
 		if sc, ok := e.parse(*v.expr, 0); ok {
 			return sc
 		}
@@ -62,7 +67,7 @@ func (v colorValue) space(cur Color) spaceColor {
 
 // dependsOnCurrent reports whether the value resolves against the
 // element's color.
-func (v colorValue) dependsOnCurrent() bool { return v.current || v.expr != nil }
+func (v colorValue) dependsOnCurrent() bool { return v.current || v.expr != nil && !v.schemeOnly }
 
 // parseColor parses a <color> (CSS Color 4, 4.1 and CSS Color 5, 2).
 func parseColor(t token) (colorValue, bool) {
@@ -74,9 +79,9 @@ func parseColor(t token) (colorValue, bool) {
 	if !ok {
 		return colorValue{}, false
 	}
-	if e.usedCurrent {
+	if e.usedCurrent || e.usedScheme {
 		expr := t
-		return colorValue{expr: &expr}, true
+		return colorValue{expr: &expr, schemeOnly: !e.usedCurrent, legacy: legacySRGB(t) && sc.none == [4]bool{}}, true
 	}
 	return colorValue{c: sc.paint(), sc: sc, legacy: legacySRGB(t) && sc.none == [4]bool{}}, true
 }
@@ -722,6 +727,10 @@ const maxColorDepth = 16
 type colorEnv struct {
 	current     *Color
 	usedCurrent bool
+	// resolving is set while a value is resolved for an element, whose
+	// used colour scheme is dark when dark is set; while a declaration is
+	// parsed usedScheme records that the colour depends on the scheme.
+	resolving, dark, usedScheme bool
 }
 
 // parse parses a <color>.
@@ -783,6 +792,14 @@ func (e *colorEnv) keyword(n string) (spaceColor, bool) {
 		return srgbColor(float64(rgb[0])/255, float64(rgb[1])/255, float64(rgb[2])/255, 1), true
 	}
 	if c, ok := systemColors[n]; ok {
+		if d, ok := darkSystemColors[n]; ok {
+			if !e.resolving {
+				e.usedScheme = true
+			}
+			if e.dark {
+				c = d
+			}
+		}
 		return srgbColor(float64(c[0])/255, float64(c[1])/255, float64(c[2])/255, float64(c[3])/255), true
 	}
 	return spaceColor{}, false
@@ -1360,10 +1377,18 @@ func mixPercent(t token) (float64, bool) {
 }
 
 // lightDark parses light-dark() (CSS Color 5, 6.2), which takes its first
-// colour under a light colour scheme. litho does not support color-scheme
-// and warns of it, so every element's used scheme is light, as Chromium
-// prints a page that sets none.
+// colour under a light used colour scheme and its second under a dark one
+// (CSS Color Adjustment 1, 2.1).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints
+//     light-dark(rgb(255,0,0), rgb(0,0,255)) blue under color-scheme:
+//     dark, on the root or on the element, and red under light dark.
 func (e *colorEnv) lightDark(list []token, depth int) (spaceColor, bool) {
+	if !e.resolving {
+		e.usedScheme = true
+	}
 	parts := splitCommas(list)
 	if len(parts) != 2 {
 		return spaceColor{}, false
@@ -1378,7 +1403,7 @@ func (e *colorEnv) lightDark(list []token, depth int) (spaceColor, bool) {
 		if !ok {
 			return spaceColor{}, false
 		}
-		if i == 0 {
+		if i == 0 && !e.dark || i == 1 && e.dark {
 			out = c
 		}
 	}
@@ -1463,4 +1488,23 @@ var systemColors = map[string][4]uint8{
 	"threedlightshadow": {0, 0, 0, 255}, "threedshadow": {0, 0, 0, 255},
 	"window": {255, 255, 255, 255}, "windowframe": {0, 0, 0, 255},
 	"windowtext": {0, 0, 0, 255},
+}
+
+// darkSystemColors maps the system colours whose value under a dark used
+// colour scheme (CSS Color Adjustment 1, 2.2) differs from systemColors'
+// to the RGBA values Chromium prints, alpha 0 to 255. The deprecated
+// colours keep their light values.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 in the pinned image prints each of these
+//     values as a background under color-scheme: dark, and AccentColor,
+//     AccentColorText, ActiveText, GrayText, Highlight, HighlightText,
+//     Mark and MarkText as under light.
+var darkSystemColors = map[string][4]uint8{
+	"buttonborder": {255, 255, 255, 255}, "buttonface": {107, 107, 107, 255}, "buttontext": {255, 255, 255, 255},
+	"canvas": {18, 18, 18, 255}, "canvastext": {255, 255, 255, 255},
+	"field": {59, 59, 59, 255}, "fieldtext": {255, 255, 255, 255},
+	"linktext": {158, 158, 255, 255}, "visitedtext": {208, 173, 240, 255},
+	"selecteditem": {153, 200, 255, 255}, "selecteditemtext": {59, 59, 59, 255},
 }

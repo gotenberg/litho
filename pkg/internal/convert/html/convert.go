@@ -353,7 +353,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 			res.formulas.BrowserRules = true
 		}
 	}
-	computeOpts := css.ComputeOptions{Hints: css.HTMLHints, Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts, scan.math), ContainerSize: setup.containers.size}
+	computeOpts := css.ComputeOptions{Hints: rootHints(scan), Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts, scan.math), ContainerSize: setup.containers.size}
 	if o.AnimationsAtEnd {
 		computeOpts.AnimationTime = css.AnimationsAtEnd
 	}
@@ -476,6 +476,13 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	}
 	if b.lines != nil {
 		p.layout.FirstLine = b.lines
+	}
+	if rootStyle != nil && rootStyle.DarkScheme {
+		// A root of a dark used colour scheme paints the canvas surface in
+		// the scheme's Canvas colour (CSS Color Adjustment 1, 2.2), the
+		// whole sheet, whether backgrounds print or not, as Chromium
+		// prints it.
+		p.layout.PageColor = css.CanvasColor(true)
 	}
 	if setup.measure {
 		// The screen's viewport is the initial containing block of the
@@ -608,6 +615,9 @@ type scan struct {
 	// scripts counts the scripts a browser would run on its own
 	// ([scriptsOf]).
 	scripts int
+	// colorScheme is the content of the first <meta name=color-scheme>,
+	// "" for none.
+	colorScheme string
 }
 
 // scanDocument walks doc once, counting its elements against maxElements,
@@ -694,6 +704,30 @@ func scanDocument(ctx context.Context, doc *dom.Node, docURL string, maxElements
 	return s, nil
 }
 
+// rootHints returns the presentational hints of the document: HTML's, and
+// on the root the color-scheme a <meta name=color-scheme> gives (HTML
+// Standard, 4.2.5.1, the page's supported color schemes; CSS Color
+// Adjustment 1, 2.1), which the root's own color-scheme overrides.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints a page of
+//     <meta name=color-scheme content=dark> as one of :root {
+//     color-scheme: dark }.
+func rootHints(s *scan) func(*dom.Node) []css.Declaration {
+	if s.colorScheme == "" {
+		return css.HTMLHints
+	}
+	hint := css.Hint("color-scheme", s.colorScheme)
+	return func(n *dom.Node) []css.Declaration {
+		h := css.HTMLHints(n)
+		if n == s.root {
+			h = append(h[:len(h):len(h)], hint)
+		}
+		return h
+	}
+}
+
 // metaElement reads the document metadata a <meta name> carries (HTML
 // Standard, 4.2.5.1).
 func (s *scan) metaElement(n *dom.Node) {
@@ -704,6 +738,10 @@ func (s *scan) metaElement(n *dom.Node) {
 	}
 	content = collapse(content)
 	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "color-scheme":
+		if s.colorScheme == "" {
+			s.colorScheme = content
+		}
 	case "author":
 		if s.meta.Author == "" {
 			s.meta.Author = content

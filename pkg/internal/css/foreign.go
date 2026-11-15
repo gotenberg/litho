@@ -27,7 +27,7 @@ func ParseColor(s string) (c Color, current, ok bool) {
 	if v.current {
 		return Color{}, true, true
 	}
-	return v.resolve(Color{A: 1}), false, true
+	return v.resolve(Color{A: 1}, false), false, true
 }
 
 // Selector is a parsed selector list (Selectors 4, 4.1). It is immutable

@@ -208,7 +208,7 @@ func computeShadows(s *styler, st *Style, v any) {
 		for k := range sp.n {
 			d[k] = sp.lens[k].points(s.lc)
 		}
-		sh := Shadow{X: d[0], Y: d[1], Blur: math.Max(d[2], 0), Spread: d[3], Color: sp.color.resolve(st.Color), Inset: sp.inset}
+		sh := Shadow{X: d[0], Y: d[1], Blur: math.Max(d[2], 0), Spread: d[3], Color: sp.color.resolve(st.Color, st.DarkScheme), Inset: sp.inset}
 		sh.current = sp.color.current
 		out[i] = sh
 	}
