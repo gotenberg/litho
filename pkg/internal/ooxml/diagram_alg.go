@@ -845,9 +845,19 @@ func snake(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 // the constraints give as a share of its width, the size of a run
 // without one from a primFontSz constraint, the autofit unless the text
 // was formatted by hand, the text's rotation against the shape's
-// (autoTxRot), the vertical anchor (txAnchorVert), the levels from the
-// shallowest, the bullets from stBulletLvl and the alignment
-// (parTxLTRAlign, else centred unless bulleted).
+// (autoTxRot, the turn of the layout shape's own rot counting with the
+// algorithm's: upright text stays upright in a turned shape), the
+// vertical anchor (txAnchorVert), the levels from the shallowest, the
+// bullets from stBulletLvl and the alignment (parTxLTRAlign, else centred
+// unless bulleted).
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/smartart-vertical-block-list's descendant text
+//     sits in a round2SameRect of rot 90; PowerPoint prints its bullets
+//     upright, one under the other.
+//   - openxmlsdk/pptx: O12_templates/ListDiagram_TP10174331 (the same
+//     vList5 layout) prints "Comments" upright beside each concept.
 func (e *engine) textAlg(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 	fontSize := 0.0
 	for _, c := range cons {
@@ -873,6 +883,8 @@ func (e *engine) textAlg(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrai
 	// The rotation of a cycle's kid grows with its stAng, which a
 	// document sets: the turn is reduced by a remainder, not by steps.
 	rot := s.Rot % (360 * perDegree)
+	rot += trunc(math.Mod(s.DiagramRot, 360) * perDegree)
+	rot %= 360 * perDegree
 	if rot < 0 {
 		rot += 360 * perDegree
 	}

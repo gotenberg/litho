@@ -236,6 +236,33 @@ func TestDiagramTextRotationOfAHugeStartAngle(t *testing.T) {
 	}
 }
 
+// TestDiagramTextUprightInATurnedShape lays out nodes whose layout shape
+// is turned a quarter: under autoTxRot upr (21.4.2.1 tx, the default) the
+// text turns back against the shape's own rot and reads upright.
+func TestDiagramTextUprightInATurnedShape(t *testing.T) {
+	for _, tc := range []struct {
+		rot  string
+		want int
+	}{{"90", -90}, {"-90", -270}, {"180", -180}, {"0", 0}} {
+		layout := `<dgm:alg type="lin"/><dgm:shape/>` + strings.Replace(nodeList("rect", ""), `<dgm:shape type="rect"/>`, `<dgm:shape type="rect" rot="`+tc.rot+`"/>`, 1)
+		d := ParseDiagram(mustParse(t, diagramData("a", "b")), mustParse(t, diagramLayout(layout)), nil, nil)
+		root := d.LayOut(1200000, 600000)
+		n := 0
+		for _, k := range root.Kids {
+			if k.Name != "node" {
+				continue
+			}
+			n++
+			if k.TextRot != tc.want {
+				t.Errorf("shape rot %s: text rotation %d, want %d", tc.rot, k.TextRot, tc.want)
+			}
+		}
+		if n != 2 {
+			t.Errorf("shape rot %s: %d nodes, want 2", tc.rot, n)
+		}
+	}
+}
+
 // TestParseDiagramCapsTheAtoms reads a layout definition whose constraint
 // list, rule list and choose each hold more entries than maxDiagramAtoms:
 // the atoms read stop at the cap.
