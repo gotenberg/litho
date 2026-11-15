@@ -35,7 +35,7 @@ var sameBytesCases = []struct {
 	{formatMarkdown, "html/sources/markdown-table-align", "0e74cf4ef240afde5f34cd448ff7c201ee8e93471e6426ddbdb2ab9d8c5eddce"},
 	{formatText, "", "0e4db9f2b09fa9340fbd2159128243e13463cacc2cb782f33da207eb4ce928f6"},
 	{formatCSV, "csv/sources/paper-table", "f73035983761a56c117b0c5a008bfb073d396f7b7f2318e5580dc49e8df98c0d"},
-	{formatDOCX, "docx/parts/charts-line-area", "2d6ad2e94aacf5b03dcce0ed144e36d9eff54b0bb0c65070a93ea2493649d2b7"},
+	{formatDOCX, "docx/parts/charts-line-area", "765d4f0d0fbe41a12c944a53227e8ef8e3a52248b98ea9d1545d2bbe628796eb"},
 	{formatDOCX, "docx/parts/sink-report", "1e7181379d6b559d3005c4bf0deff18b8ce09445cbe884071dd87da5b98af523"},
 	{formatDOCX, "docx/parts/shapes-effects-3d", "802e8748188b548d2f00291b77873f2ad1b4b8999e567f6a7c4055ea6177d92b"},
 	{formatXLSX, "xlsx/parts/real_dashboard", "3e9e0d85aadb94a63df2a1e23f16603f6fc5618c4dfc0e0b7cd4fed6fb57a0c6"},

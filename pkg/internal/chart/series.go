@@ -1,6 +1,7 @@
 package chart
 
 import (
+	"iter"
 	"math"
 	"slices"
 	"strings"
@@ -587,16 +588,32 @@ func (rd *renderer) pointLabel(g *Group, s *Series, j int, v float64, lb Labels,
 	rd.labelFrame(b, lb, cx, cy)
 }
 
+// areaOrder returns the series of an area group in the order they are
+// painted: under LibreOffice's rules the last first, at the back, so the
+// first stays in front (chart2's AreaChart reverses a two-dimensional area
+// chart's series, ReverseSeriesOrderAreaAndNetChart); under [OfficeRules]
+// in their own order, each later series over the ones before it.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: chart2/tdf127811's two standard area series print
+//     the second over the first in PowerPoint.
+//   - openxmlsdk/pptx: O14ISOStrict/Graphics/2D_Area-O12-PPT-Charts the
+//     same.
+func areaOrder(series []*Series, rules Rules) iter.Seq2[int, *Series] {
+	if rules == OfficeRules {
+		return slices.All(series)
+	}
+	return slices.Backward(series)
+}
+
 // areas draws an area group: each series filled between its line and the
 // series under it, or the category axis.
 func (rd *renderer) areas(g *Group, x, y *dim) []func() {
 	sv := rd.stack(g)
 	base := y.sc.clamp(x.crossValue())
 	var labels []func()
-	// The last series is drawn first, at the back, so the first stays in
-	// front (chart2's AreaChart reverses a two-dimensional area chart's
-	// series, ReverseSeriesOrderAreaAndNetChart).
-	for i, s := range slices.Backward(g.Series) {
+	for i, s := range areaOrder(g.Series, rd.c.Rules) {
 		var top, bottom []typeset.Point
 		for j := 0; j < sv.n && j < x.n; j++ {
 			v := sv.hi[i][j]

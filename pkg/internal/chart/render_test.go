@@ -583,3 +583,21 @@ func TestRender_LabelSeparatorByRules(t *testing.T) {
 		}
 	}
 }
+
+// TestAreaOrder_ByRules checks the order area series are painted in:
+// their own under Office's rules, the reverse under LibreOffice's.
+func TestAreaOrder_ByRules(t *testing.T) {
+	series := []*Series{{Name: "A"}, {Name: "B"}, {Name: "C"}}
+	for _, tc := range []struct {
+		rules Rules
+		want  string
+	}{{OfficeRules, "ABC"}, {LibreOfficeRules, "CBA"}} {
+		var got strings.Builder
+		for _, s := range areaOrder(series, tc.rules) {
+			got.WriteString(s.Name)
+		}
+		if got.String() != tc.want {
+			t.Errorf("rules %v: painted %s, want %s", tc.rules, got.String(), tc.want)
+		}
+	}
+}
