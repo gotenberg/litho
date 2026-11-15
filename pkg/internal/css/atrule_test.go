@@ -99,6 +99,8 @@ func TestMedia_UnknownIsNeitherTrueNorFalse(t *testing.T) {
 		{"not ((unknown) and (color))", false},
 		{"print and not (unknown)", false},
 		{"not unknown", true},
+		{"not ((color) bad)", false},
+		{"((color) bad) or (color)", true},
 		{"(monochrome)", false},
 		{"not (monochrome)", true},
 		{"not (hover: hover)", true},
@@ -149,6 +151,10 @@ func TestSupports_Conditions(t *testing.T) {
 		{"selector(::column)", true},
 		{"(color: red) and (width: 1px) or (scroll-snap-type: x)", false},
 		{"font-tech(color-COLRv1)", false},
+		// CSS Conditional 3, 6: a parenthesised value that is no
+		// condition is a <general-enclosed>, false.
+		{"((color: green) bad) or (color: green)", true},
+		{"not ((color: green) bad)", true},
 	}
 	for _, tt := range tests {
 		l, _ := parseComponentValues(tt.c)

@@ -144,7 +144,12 @@ func evalCondition(l []token, leaf func(token) (tri, bool)) (tri, bool) {
 		if t.typ == tLParen {
 			inner := significant(t.children)
 			if len(inner) > 0 && (inner[0].typ == tLParen || inner[0].isIdent("not")) {
-				return evalCondition(inner, leaf)
+				if v, ok := evalCondition(inner, leaf); ok {
+					return v, true
+				}
+				// A parenthesised value that is no condition is a
+				// <general-enclosed> (Media Queries 4, 3; CSS
+				// Conditional 3, 6), which leaf evaluates.
 			}
 		}
 		return leaf(t)
