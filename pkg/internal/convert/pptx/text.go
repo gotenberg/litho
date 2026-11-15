@@ -232,8 +232,9 @@ func (r *reader) textBody(c *shapeCtx, sc []*ooxml.Element, p placeholder, ref *
 		}
 	}
 	body := bodyProps(bodies)
-	if w := bodies.child("prstTxWarp"); w != nil && attr(w, "prst") != "textNoShape" {
-		r.warn(warn.ContentUnsupported, warn.Approximated, "warped text (WordArt) is drawn unwarped")
+	body.Warp = ooxml.TextWarpOf(bodies.child("prstTxWarp"))
+	if v, ok := bodies.attr("fromWordArt"); ok {
+		body.WarpFit = ooxml.OnOff(v, false)
 	}
 	body.Paragraphs = r.paragraphs(tb, ts)
 	return body
