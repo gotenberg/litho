@@ -438,9 +438,48 @@ func (r *reader) drawShape(el *odf.Element, pc *pageCtx) *slides.Shape {
 	if hasParagraphs(el) {
 		s.Text = r.textBody(el, ss, pc)
 		r.textBodyProps(s.Text, ss.graphic, false)
+		if el.Name.Local == "custom-shape" {
+			r.fontwork(el.Child(odf.NSDraw, "enhanced-geometry"), s)
+		}
 	}
 	r.effects(ss.graphic, s)
 	return s
+}
+
+// fontwork makes the text of the custom shape s follow its geometry's
+// paths when its enhanced geometry eg is a Fontwork shape (ODF 1.3 Part
+// 3, 19.224 draw:text-path true): the text is warped between or along
+// the paths and the geometry itself is not drawn. Its glyphs take the
+// shape's solid fill, as LibreOffice paints Fontwork text with the
+// shape's area; the shape's line and other fills are left out, with a
+// warning. A draw:text-path-mode of normal draws the text as it is.
+//
+// # Corpus evidence
+//
+//   - libreoffice/odp sd/tdf100348_Fontwork2TextWarp.odp: LibreOffice
+//     stretches "Fontwork" between the two waves of its fontwork-wave
+//     shape and draws no wave.
+func (r *reader) fontwork(eg *odf.Element, s *slides.Shape) {
+	if eg == nil || eg.A(odf.NSDraw, "text-path") != "true" || s.Geometry == nil || s.Geometry.Custom == nil {
+		return
+	}
+	if eg.A(odf.NSDraw, "text-path-mode") == "normal" {
+		return
+	}
+	s.Text.Warp = &shape.TextWarp{Custom: s.Geometry.Custom}
+	s.Text.WarpFit = true
+	if s.Fill.Kind == slides.FillSolid {
+		for i := range s.Text.Paragraphs {
+			p := &s.Text.Paragraphs[i]
+			for j := range p.Runs {
+				p.Runs[j].Style.Color = s.Fill.Color
+			}
+		}
+	} else if s.Fill.Kind != slides.FillNone {
+		r.warn("fontwork", warn.ContentUnsupported, warn.Approximated, "a Fontwork text's fill other than a colour is drawn in its text colour")
+	}
+	s.Fill, s.Line = slides.Fill{}, slides.Line{}
+	s.Geometry = &shape.Geometry{Custom: &shape.Custom{}}
 }
 
 // captionGeometry returns the outline of a draw:caption (ODF 1.3, Part 3,
