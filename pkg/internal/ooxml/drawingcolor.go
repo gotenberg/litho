@@ -32,7 +32,8 @@ func DrawingColor(e *Element, scheme SchemeResolver) (css.Color, bool) {
 // and alphaOff; red, green and blue with their Mod and Off in linear RGB;
 // hue, sat and lum with their Mod and Off in HSL; tint and shade in linear
 // RGB; gray and comp; inv in linear RGB; gamma and invGamma on the sRGB
-// curve. false when c is no colour choice or names no colour.
+// curve; the result in whole levels ([wholeLevels]). false when c is no
+// colour choice or names no colour.
 func DrawingColorChoice(c *Element, scheme SchemeResolver) (css.Color, bool) {
 	if c == nil || c.Space != NSA {
 		return css.Color{}, false
@@ -61,8 +62,43 @@ func DrawingColorChoice(c *Element, scheme SchemeResolver) (css.Color, bool) {
 	if !ok {
 		return css.Color{}, false
 	}
-	return transformColor(col, c), true
+	return wholeLevels(transformColor(col, c)), true
 }
+
+// wholeLevels returns c with each colour component on a whole level of
+// 255, as Office holds a resolved colour: the nearest level, a half
+// rounded down, a value within [levelSlack] of a half counting as one.
+// The transforms before it are not rounded between steps; alpha is kept.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: PowerPoint fills FF8000 under sat 0, FF0000, 00FF00 and
+//     FFFFFF under lumMod 50% with 127 where HSL gives 127.5 exactly; it
+//     fills 4472C4 under satOff -30% with 105,124,159 (HSL 104.9, 124.38,
+//     159.1), under tint 50% then lumMod 80% with 134,150,203 (133.51,
+//     150.4, 202.74) and 000000 under tint 50% with 188 (187.52): the
+//     nearest level elsewhere. Every colour of its page is a whole level.
+//   - litho/pptx, libreoffice/pptx, openxmlsdk/pptx, poi/pptx: the lumMod
+//     and lumOff colours of PowerPoint's fills are HSL's unrounded
+//     between the steps, then cut to levels.
+//   - litho/docx shapes-presets, litho/xlsx theme_custom, litho/pptx
+//     fill-solid: every fill and stroke colour of Word's, Excel's and
+//     PowerPoint's pages is a whole level (186, 376 and 242 operands).
+//   - libreoffice/docx ooxmlexport/effect-extent-line-width.docx: Word
+//     paints a w14:textFill of C0201E under lumMod 75% 144,24,22, where
+//     HSL gives 22.5 and its floating-point arithmetic 22.500000000000004.
+func wholeLevels(c css.Color) css.Color {
+	level := func(v float64) float64 {
+		return math.Max(0, math.Ceil(float64(clamp01(v)*255)-0.5-levelSlack)) / 255
+	}
+	c.R, c.G, c.B = level(c.R), level(c.G), level(c.B)
+	return c
+}
+
+// levelSlack is the distance, in levels, within which [wholeLevels] reads
+// a component as a half: far above the error of the transforms'
+// floating-point arithmetic, far below what a level's tenth would show.
+const levelSlack = 1e-6
 
 // pct returns c's ST_Percentage attribute name as a fraction, 100,000 for 1.
 func pct(c *Element, name string) float64 {

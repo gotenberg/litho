@@ -38,7 +38,17 @@ func TestDrawingColor_Transforms(t *testing.T) {
 		{"hueOff", `<a:srgbClr val="FF0000"><a:hueOff val="7200000"/></a:srgbClr>`, [4]int{0, 255, 0, 255}, true},
 		{"hueMod", `<a:srgbClr val="00FF00"><a:hueMod val="50000"/></a:srgbClr>`, [4]int{255, 255, 0, 255}, true},
 		{"lum", `<a:srgbClr val="0000FF"><a:lum val="80000"/></a:srgbClr>`, [4]int{153, 153, 255, 255}, true},
-		{"lumMod lumOff", `<a:srgbClr val="FF0000"><a:lumMod val="50000"/><a:lumOff val="0"/></a:srgbClr>`, [4]int{128, 0, 0, 255}, true},
+		// PowerPoint's colours of a probe: a half level rounds down.
+		{"lumMod lumOff", `<a:srgbClr val="FF0000"><a:lumMod val="50000"/><a:lumOff val="0"/></a:srgbClr>`, [4]int{127, 0, 0, 255}, true},
+		{"sat 0 tie", `<a:srgbClr val="FF8000"><a:sat val="0"/></a:srgbClr>`, [4]int{127, 127, 127, 255}, true},
+		{"lumMod white tie", `<a:srgbClr val="FFFFFF"><a:lumMod val="50000"/></a:srgbClr>`, [4]int{127, 127, 127, 255}, true},
+		{"satOff", `<a:srgbClr val="4472C4"><a:satOff val="-30000"/></a:srgbClr>`, [4]int{105, 124, 159, 255}, true},
+		{"tint then lumMod", `<a:srgbClr val="4472C4"><a:tint val="50000"/><a:lumMod val="80000"/></a:srgbClr>`, [4]int{134, 150, 203, 255}, true},
+		{"lumMod then tint", `<a:srgbClr val="4472C4"><a:lumMod val="80000"/><a:tint val="50000"/></a:srgbClr>`, [4]int{190, 196, 215, 255}, true},
+		{"shade then inv", `<a:srgbClr val="4472C4"><a:shade val="50000"/><a:inv/></a:srgbClr>`, [4]int{252, 245, 221, 255}, true},
+		{"gray then tint", `<a:srgbClr val="ED7D31"><a:gray/><a:tint val="50000"/></a:srgbClr>`, [4]int{209, 209, 209, 255}, true},
+		{"gray 70AD47", `<a:srgbClr val="70AD47"><a:gray/></a:srgbClr>`, [4]int{153, 153, 153, 255}, true},
+		{"tint black", `<a:srgbClr val="000000"><a:tint val="50000"/></a:srgbClr>`, [4]int{188, 188, 188, 255}, true},
 		{"alpha", `<a:srgbClr val="000000"><a:alpha val="50000"/></a:srgbClr>`, [4]int{0, 0, 0, 128}, true},
 		{"sys default", `<a:sysClr val="window"/>`, [4]int{255, 255, 255, 255}, true},
 		// LibreOffice measured: a windowText line saved red prints black.
@@ -57,7 +67,8 @@ func TestDrawingColor_Transforms(t *testing.T) {
 		{"tint satMod past 1", `<a:schemeClr val="accent1"><a:tint val="52000"/><a:satMod val="300000"/></a:schemeClr>`, [4]int{158, 193, 255, 255}, true},
 		{"shade satMod past 1", `<a:schemeClr val="accent1"><a:shade val="20000"/><a:satMod val="300000"/></a:schemeClr>`, [4]int{0, 54, 146, 255}, true},
 		{"tint satMod 250", `<a:schemeClr val="accent1"><a:tint val="40000"/><a:satMod val="250000"/></a:schemeClr>`, [4]int{190, 211, 249, 255}, true},
-		{"satMod within 1", `<a:schemeClr val="accent1"><a:satMod val="110000"/></a:schemeClr>`, [4]int{74, 128, 195, 255}, true},
+		// HSL gives 73.5 red and 194.5 blue: a half level rounds down.
+		{"satMod within 1", `<a:schemeClr val="accent1"><a:satMod val="110000"/></a:schemeClr>`, [4]int{73, 128, 194, 255}, true},
 		{"gray", `<a:srgbClr val="FFFFFF"><a:gray/></a:srgbClr>`, [4]int{255, 255, 255, 255}, true},
 		{"gray ED7D31", `<a:srgbClr val="ED7D31"><a:gray/></a:srgbClr>`, [4]int{143, 143, 143, 255}, true},
 		{"unknown scheme", `<a:schemeClr val="accent9"/>`, [4]int{}, false},
@@ -112,6 +123,38 @@ func TestSchemeColor_AppliesTheDrawingTransforms(t *testing.T) {
 			got := [4]int{int(math.Round(c.R * 255)), int(math.Round(c.G * 255)), int(math.Round(c.B * 255)), int(math.Round(c.A * 255))}
 			if got != tc.want {
 				t.Fatalf("colour %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDrawingColor_HoldsWholeLevels(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, xml string
+		want      float64
+	}{
+		// HSL gives 127.5 exactly: PowerPoint paints 127.
+		{"tie", `<a:srgbClr val="FFFFFF"><a:lumMod val="50000"/></a:srgbClr>`, 127},
+		// 187.52 on the sRGB curve: PowerPoint paints 188.
+		{"nearest", `<a:srgbClr val="000000"><a:tint val="50000"/></a:srgbClr>`, 188},
+		{"scrgb", `<a:scrgbClr r="50000" g="50000" b="50000"/>`, 188},
+		// HSL gives 22.5 in exact arithmetic, 22.500000000000004 in
+		// floating point: Word paints 22.
+		{"tie in floating point", `<a:srgbClr val="1EC020"><a:lumMod val="75000"/></a:srgbClr>`, 22},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root, err := Parse(context.Background(), []byte(`<a:solidFill xmlns:a="`+NSA+`">`+tc.xml+`</a:solidFill>`), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			c, ok := DrawingColor(root, nil)
+			if !ok {
+				t.Fatal("no colour")
+			}
+			if c.R != tc.want/255 {
+				t.Fatalf("red %v (%v levels), want %v levels exactly", c.R, c.R*255, tc.want)
 			}
 		})
 	}

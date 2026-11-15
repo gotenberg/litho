@@ -186,8 +186,9 @@ func TestParseShapeStyle_HSLAndLinearRGB(t *testing.T) {
 		t.Errorf("hslClr fill %+v, want green", hsl.Fill)
 	}
 	lin := ParseShapeStyle(spPrOf(t, `<a:solidFill><a:scrgbClr r="100000" g="0" b="0"><a:lumMod val="50000"/></a:scrgbClr></a:solidFill>`), nil, nil)
-	if lin.Fill == nil || math.Abs(lin.Fill.R-0.5) > 1e-9 || lin.Fill.G != 0 {
-		t.Errorf("scrgbClr fill %+v, want red at half its lightness", lin.Fill)
+	// Half its lightness is 127.5 levels, which Office holds as 127.
+	if lin.Fill == nil || lin.Fill.R != 127.0/255 || lin.Fill.G != 0 {
+		t.Errorf("scrgbClr fill %+v, want red at half its lightness, 127 levels", lin.Fill)
 	}
 }
 

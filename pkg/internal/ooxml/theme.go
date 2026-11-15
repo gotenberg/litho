@@ -117,7 +117,7 @@ func SchemeColor(e *Element, theme *Theme) (css.Color, bool) {
 			col, ok = presetColor(attrOr(c, "val"))
 		}
 		if ok {
-			return transformColor(col, c), true
+			return wholeLevels(transformColor(col, c)), true
 		}
 	}
 	return css.Color{}, false
