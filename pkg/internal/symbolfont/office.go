@@ -4,11 +4,12 @@ import "strings"
 
 // OfficeAdvance returns the advance, in ems, of the glyph of code in the
 // symbol font family as Microsoft Office draws it, from the fonts Windows
-// ships: code is a code from 0x20 to 0xFF, or that code in the private use
-// area at U+F000. It is false for a family or a code [officeAdvances] does
-// not hold. A converter that draws the code in another face, as [Recode]
-// draws it in OpenSymbol, gives the glyph this advance to set what follows
-// it where Office sets it.
+// ships (Wingdings, Wingdings 2, Wingdings 3, Symbol and Webdings): code
+// is a code from 0x21 to 0xFF, or that code in the private use area at
+// U+F000. It is false for another family or another code. A converter
+// that draws the code in another face, as [Recode] draws it in OpenSymbol,
+// gives the glyph this advance to set what follows it where Office sets
+// it.
 func OfficeAdvance(family string, code rune) (float64, bool) {
 	t, ok := officeAdvances[strings.ReplaceAll(strings.ToLower(strings.TrimSpace(family)), " ", "")]
 	if !ok {
@@ -17,51 +18,124 @@ func OfficeAdvance(family string, code rune) (float64, bool) {
 	if code >= 0xf020 && code <= 0xf0ff {
 		code -= 0xf000
 	}
-	w, ok := t[code]
-	if !ok {
+	if code < 0x20 || code > 0xff || t[code-0x20] == 0 {
 		return 0, false
 	}
-	return float64(w) / 1000, true
+	return float64(t[code-0x20]) / 1000, true
 }
 
 // officeAdvances holds, by family, the advances in thousandths of an em
-// of the codes of Wingdings, Wingdings 2, Wingdings 3 and Symbol that
-// Office's PDFs embed: the /W entry of the glyph each code's text maps
-// to in the subset Office writes. The fonts are Microsoft's and none of
-// the fixture fonts carries their metrics.
+// of the codes 0x20 to 0xFF of the symbol fonts Office ships, 0 for the
+// code 0x20, not measured: the width of the glyph each code draws in the
+// subset Office's PDF embeds, its /W entry or the font's /DW (ISO
+// 32000-1, 9.7.4.3). The fonts are Microsoft's and none of the fixture
+// fonts carries their metrics.
 //
 // # Corpus evidence
 //
+//   - probe, pptx: PowerPoint prints every code 0x21 to 0xFF of
+//     Wingdings, Wingdings 2, Wingdings 3, Symbol and Webdings as a
+//     bullet, each before a run naming its font and code; the advances
+//     are the widths of its embedded subsets, each bullet on its run's
+//     baseline.
 //   - libreoffice/pptx, openxmlsdk/pptx, poi/pptx, litho/pptx,
-//     libreoffice/docx, openxmlsdk/docx, poi/docx, litho/docx and the xlsx
-//     corpora: every Type 0 font of a Microsoft reference named
-//     Wingdings-Regular, Wingdings2, Wingdings3 or SymbolMT gives each
-//     code the same width wherever it appears. A code written as its
-//     private-use character U+F000 plus the code is read so; Wingdings
-//     "l", "n", "q", "v", 0xA7, 0xD8 and 0xFC, which Office writes as
-//     U+26AB, U+25FC, U+2751, U+2756, U+25AA, U+27A2 and U+2713, are read
-//     from the bullets of sd/tdf126234.pptx, sd/tdf123090.pptx,
-//     sd/bulletColor.pptx, sd/rightToLeftParagraph.pptx, sd/n83889.pptx and
-//     litho/pptx bullets-character, and Symbol 0xB7, written U+2022, from
-//     the Symbol bullets of the Word documents.
-var officeAdvances = map[string]map[rune]uint16{
-	"wingdings": {
-		0x28: 1084, 0x2D: 1171, 0x30: 1096, 0x31: 1343, 0x32: 699, 0x33: 699,
-		0x3A: 939, 0x49: 892, 0x4B: 843, 0x54: 813, 0x57: 723, 0x62: 941,
-		0x63: 933, 0x64: 946, 0x65: 1025, 0x66: 929, 0x67: 1096, 0x68: 1065,
-		0x69: 780, 0x6B: 1271, 0x6C: 747, 0x6E: 747, 0x6F: 891, 0x71: 891,
-		0x72: 891, 0x76: 891, 0x77: 578, 0x78: 1060, 0x81: 892, 0x84: 892,
-		0x8C: 892, 0x8F: 892, 0x95: 892, 0xA7: 458, 0xA8: 891, 0xB2: 891,
-		0xD8: 794, 0xDC: 891, 0xE7: 1067, 0xFC: 786,
-	},
-	"wingdings2": {0x96: 361, 0x97: 554, 0x9E: 891, 0xA4: 891},
-	"wingdings3": {0x7D: 530},
-	"symbol": {
-		0x2A: 500, 0x30: 500, 0x31: 500, 0x32: 500, 0x33: 500, 0x35: 500,
-		0x36: 500, 0x3A: 278, 0x53: 592, 0x54: 611, 0x61: 631, 0x62: 549,
-		0x63: 549, 0x65: 439, 0x66: 521, 0x67: 411, 0x68: 603, 0x69: 329,
-		0x6B: 549, 0x6C: 549, 0x6D: 576, 0x6E: 521, 0x6F: 549, 0x71: 521,
-		0x72: 549, 0x75: 576, 0x77: 686, 0x78: 493, 0x79: 686, 0x94: 600,
-		0xA5: 713, 0xA8: 753, 0xB7: 460,
-	},
+//     libreoffice/docx, openxmlsdk/docx, poi/docx, litho/docx: every
+//     Wingdings, Wingdings 2, Wingdings 3 and Symbol glyph of a Microsoft
+//     reference advances as the probe measures it.
+var officeAdvances = map[string]*[224]uint16{
+	"wingdings":  &wingdingsAdvances,
+	"wingdings2": &wingdings2Advances,
+	"wingdings3": &wingdings3Advances,
+	"symbol":     &symbolAdvances,
+	"webdings":   &webdingsAdvances,
+}
+
+// wingdingsAdvances are the advances of Wingdings ([officeAdvances]).
+var wingdingsAdvances = [224]uint16{ //nolint:dupl // a table of 224 advances, as the other fonts' are, not repeated code
+	0, 1030, 1145, 1301, 1344, 894, 1217, 458, 1084, 892, 1132, 1132, 1171, 1171, 1441, 1443,
+	1096, 1343, 699, 699, 892, 554, 602, 1072, 948, 1078, 939, 891, 892, 892, 891, 910,
+	910, 587, 793, 674, 674, 942, 942, 549, 549, 892, 843, 843, 843, 1111, 660, 849,
+	1089, 888, 880, 650, 813, 747, 747, 723, 693, 794, 885, 892, 896, 891, 1156, 1054,
+	964, 1090, 941, 933, 946, 1025, 929, 1096, 1065, 780, 1050, 1271, 747, 953, 747, 891,
+	891, 891, 891, 458, 747, 986, 891, 578, 1060, 1060, 891, 892, 892, 530, 530, 500,
+	892, 892, 892, 892, 892, 892, 892, 892, 892, 892, 892, 892, 892, 892, 892, 892,
+	892, 892, 892, 892, 892, 892, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 313, 458,
+	313, 891, 891, 891, 891, 891, 953, 458, 891, 891, 891, 891, 891, 891, 891, 891,
+	891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891,
+	891, 891, 891, 891, 891, 891, 891, 1048, 1048, 1048, 1048, 1000, 1000, 1000, 1000, 1000,
+	1000, 1000, 1000, 1000, 1000, 1253, 1253, 794, 794, 891, 891, 891, 891, 891, 891, 979,
+	979, 891, 891, 776, 776, 776, 776, 1067, 1067, 891, 891, 873, 873, 873, 873, 891,
+	891, 811, 811, 1060, 811, 782, 782, 782, 782, 482, 385, 635, 786, 892, 892, 1035,
+}
+
+// wingdings2Advances are the advances of Wingdings 2 ([officeAdvances]).
+var wingdings2Advances = [224]uint16{ //nolint:dupl // a table of 224 advances, as the other fonts' are, not repeated code
+	0, 1030, 1021, 1012, 1019, 1145, 999, 1084, 483, 699, 699, 892, 699, 699, 892, 699,
+	699, 892, 699, 699, 1133, 1097, 892, 892, 892, 1133, 1060, 1060, 674, 674, 946, 946,
+	946, 946, 941, 941, 941, 941, 511, 511, 511, 511, 575, 575, 575, 575, 892, 645,
+	766, 892, 892, 892, 892, 891, 891, 892, 892, 1087, 843, 756, 771, 480, 505, 422,
+	497, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 892, 892, 892, 892, 892, 892, 892,
+	892, 892, 892, 892, 892, 892, 892, 892, 892, 892, 892, 892, 892, 892, 892, 500,
+	927, 927, 709, 709, 817, 650, 699, 891, 891, 891, 891, 891, 891, 891, 891, 891,
+	891, 891, 891, 1000, 1000, 265, 361, 554, 891, 891, 891, 891, 891, 891, 891, 265,
+	361, 554, 891, 891, 891, 891, 891, 891, 891, 891, 891, 305, 373, 441, 713, 986,
+	986, 986, 986, 986, 265, 313, 361, 554, 747, 747, 530, 530, 891, 891, 891, 891,
+	891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891,
+	891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891,
+	891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891,
+	891, 891, 891, 891, 891, 891, 891, 891, 730, 891, 500, 500, 500, 500, 500, 500,
+}
+
+// wingdings3Advances are the advances of Wingdings 3 ([officeAdvances]).
+var wingdings3Advances = [224]uint16{ //nolint:dupl // a table of 224 advances, as the other fonts' are, not repeated code
+	0, 891, 891, 554, 554, 705, 705, 705, 705, 891, 891, 554, 554, 819, 819, 554,
+	554, 554, 554, 554, 554, 554, 554, 554, 554, 554, 891, 891, 710, 710, 710, 710,
+	981, 981, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891,
+	891, 891, 891, 1084, 891, 855, 544, 544, 811, 811, 942, 942, 942, 942, 939, 939,
+	939, 939, 942, 942, 943, 943, 891, 891, 602, 602, 705, 705, 705, 705, 891, 602,
+	979, 979, 979, 979, 879, 879, 879, 879, 879, 879, 879, 879, 530, 530, 891, 500,
+	891, 891, 891, 891, 891, 794, 794, 891, 891, 891, 891, 385, 385, 891, 891, 482,
+	482, 891, 891, 578, 578, 891, 891, 771, 771, 891, 891, 434, 434, 891, 891, 674,
+	674, 891, 891, 916, 916, 891, 891, 891, 891, 891, 891, 891, 385, 289, 241, 192,
+	891, 891, 891, 891, 891, 530, 530, 674, 674, 795, 795, 578, 578, 439, 439, 891,
+	891, 498, 498, 891, 891, 891, 891, 891, 891, 891, 891, 891, 891, 630, 630, 630,
+	630, 958, 958, 891, 891, 752, 752, 752, 752, 1023, 1023, 891, 891, 824, 824, 824,
+	824, 1112, 1112, 891, 891, 920, 920, 920, 920, 265, 265, 603, 603, 374, 374, 603,
+	603, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 500,
+}
+
+// symbolAdvances are the advances of Symbol ([officeAdvances]).
+var symbolAdvances = [224]uint16{ //nolint:dupl // a table of 224 advances, as the other fonts' are, not repeated code
+	0, 333, 713, 500, 549, 833, 778, 439, 333, 333, 500, 549, 250, 549, 250, 278,
+	500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 278, 278, 549, 549, 549, 444,
+	549, 722, 667, 722, 612, 611, 763, 603, 722, 333, 631, 722, 686, 889, 722, 722,
+	768, 741, 556, 592, 611, 690, 439, 768, 645, 795, 611, 333, 863, 333, 658, 500,
+	500, 631, 549, 549, 494, 439, 521, 411, 603, 329, 603, 549, 549, 576, 521, 549,
+	549, 521, 549, 603, 439, 576, 713, 686, 493, 686, 494, 480, 200, 480, 549, 600,
+	600, 600, 600, 600, 600, 600, 600, 600, 600, 600, 600, 600, 600, 600, 600, 600,
+	600, 600, 600, 600, 600, 600, 600, 600, 600, 600, 600, 600, 600, 600, 600, 600,
+	600, 620, 247, 549, 167, 713, 500, 753, 753, 753, 753, 1042, 987, 603, 987, 603,
+	400, 549, 411, 549, 549, 713, 494, 460, 549, 549, 549, 549, 1000, 603, 1000, 658,
+	823, 686, 795, 987, 768, 768, 823, 768, 768, 713, 713, 713, 713, 713, 713, 713,
+	768, 713, 790, 790, 890, 823, 549, 250, 713, 603, 603, 1042, 987, 603, 987, 603,
+	494, 329, 790, 790, 786, 713, 384, 384, 384, 384, 384, 384, 494, 494, 494, 494,
+	600, 329, 274, 686, 686, 686, 384, 384, 384, 384, 384, 384, 494, 494, 494, 600,
+}
+
+// webdingsAdvances are the advances of Webdings ([officeAdvances]).
+var webdingsAdvances = [224]uint16{ //nolint:dupl // a table of 224 advances, as the other fonts' are, not repeated code
+	0, 1000, 1000, 1000, 1000, 990, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+	1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+	1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+	1000, 1000, 1000, 1000, 1000, 1000, 1000, 537, 537, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+	1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 559, 1000, 1000,
+	1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 500,
+	1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1221, 1000, 1000,
+	1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+	1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+	1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 672, 672, 1000, 843,
+	517, 1000, 1000, 1000, 1000, 428, 605, 1000, 1000, 1000, 1000, 663, 1000, 1000, 1000, 1000,
+	1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+	1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+	1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1292, 1000, 1000, 1000, 1000,
 }

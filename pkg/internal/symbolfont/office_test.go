@@ -15,6 +15,8 @@ func TestOfficeAdvance(t *testing.T) {
 		{" wingdings2 ", 0xF097, 0.554, true},
 		{"Symbol", 0xB7, 0.46, true},
 		{"Wingdings", 0x20, 0, false},
+		{"Webdings", 0x21, 1, true},
+		{"Wingdings 3", 0x7D, 0.53, true},
 		{"Arial", 0x6C, 0, false},
 		{"Wingdings", 0x2022, 0, false},
 	} {
