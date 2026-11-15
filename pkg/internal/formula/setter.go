@@ -33,8 +33,9 @@ type Setter struct {
 	fonts *text.Fonts
 	// logger receives diagnostics, nil for none.
 	logger *slog.Logger
-	// faces holds the first available fonts met, by face.
-	faces map[*text.Face]*face
+	// faces holds the first available fonts met, by face and the
+	// distances a style lays them out by.
+	faces map[faceKey]*face
 	// programs holds the parsed programs of the faces shaped runs are
 	// drawn in, for the ink of their glyphs, by face key.
 	programs map[string]*gofont.Face
@@ -43,7 +44,15 @@ type Setter struct {
 // NewSetter returns a Setter that lays formulas out with fonts, logging
 // to logger when it is not nil.
 func NewSetter(fonts *text.Fonts, logger *slog.Logger) *Setter {
-	return &Setter{fonts: fonts, logger: logger, faces: map[*text.Face]*face{}, programs: map[string]*gofont.Face{}}
+	return &Setter{fonts: fonts, logger: logger, faces: map[faceKey]*face{}, programs: map[string]*gofont.Face{}}
+}
+
+// faceKey keys the first available fonts a [Setter] keeps: a face, and the
+// distances a style lays it out by, nil for the constants of its MATH
+// table or MathML Core's fallbacks.
+type faceKey struct {
+	face      *text.Face
+	distances *Distances
 }
 
 // Box is a formula laid out: its extent about its own baseline and what
@@ -149,6 +158,9 @@ type face struct {
 	xHeight, subOffset, superOffset, ruleThickness float64
 	// browser takes Chromium's fallback constants ([Setter.BrowserRules]).
 	browser bool
+	// distances lays a face without a MATH table out by fixed distances
+	// ([Style.Distances]), nil for the fallbacks.
+	distances *Distances
 }
 
 // textStyle returns the text style a token of st is shaped in.
@@ -169,11 +181,25 @@ func (l *layouter) faceOf(st *Style) *face {
 	if tf == nil {
 		return nil
 	}
-	if f, ok := l.s.faces[tf]; ok {
+	key := faceKey{face: tf, distances: st.Distances}
+	if f, ok := l.s.faces[key]; ok {
 		return f
 	}
-	f := l.loadFace(tf)
-	l.s.faces[tf] = f
+	var f *face
+	if st.Distances != nil {
+		// The face as the fallbacks lay it out, then by the distances
+		// when it has no MATH table.
+		if base := l.faceOf(&Style{Families: st.Families, Size: st.Size, Weight: st.Weight, Italic: st.Italic, Lang: st.Lang, Fallback: st.Fallback}); base != nil {
+			c := *base
+			if c.math == nil {
+				c.distances = st.Distances
+			}
+			f = &c
+		}
+	} else {
+		f = l.loadFace(tf)
+	}
+	l.s.faces[key] = f
 	return f
 }
 

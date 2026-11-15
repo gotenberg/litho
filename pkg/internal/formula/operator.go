@@ -4,6 +4,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 	mt "github.com/gotenberg/litho/pkg/internal/typography/mathtable"
 )
 
@@ -125,11 +126,15 @@ func (l *layouter) moGlyph(e *Element, r rune, op *operator, st *Style, c lctx) 
 			return nil
 		}
 		_, _, ok := f.math.Construction(gid, true)
-		if !ok && !l.s.BrowserRules {
+		scale := !ok && f.distances != nil && f.distances.BracketExcess > 0
+		if !ok && !l.s.BrowserRules && !scale {
 			return nil
 		}
 		axis := f.constant(mt.AxisHeight, st.Size)
 		tAsc, tDesc := c.asc, c.desc
+		if scale {
+			return l.scaledBracket(f, gid, r, st, tAsc, tDesc)
+		}
 		if op.symmetric {
 			half := max(tAsc-axis, tDesc+axis)
 			tAsc, tDesc = half+axis, half-axis
@@ -176,6 +181,13 @@ func (l *layouter) moGlyph(e *Element, r rune, op *operator, st *Style, c lctx) 
 		return l.glyphBox(g, r, st, delta)
 	case op.largeop && st.Display:
 		variants, _, ok := f.math.Construction(gid, true)
+		if d := f.distances; (!ok || len(variants) == 0) && d != nil && d.LargeOperatorScale > 1 {
+			// The glyph drawn larger, its middle kept.
+			g0 := l.singleGlyph(f, gid, st.Size)
+			g := l.singleGlyph(f, gid, float64(st.Size*d.LargeOperatorScale))
+			delta := float64(float64(g.asc-g.desc)-float64(g0.asc-g0.desc)) / 2
+			return l.glyphBox(g, r, st, delta)
+		}
 		if !ok || len(variants) == 0 {
 			return nil
 		}
@@ -191,6 +203,25 @@ func (l *layouter) moGlyph(e *Element, r rune, op *operator, st *Style, c lctx) 
 		return l.glyphBox(g, r, st, 0)
 	}
 	return nil
+}
+
+// scaledBracket returns the glyph gid of f for the character r scaled
+// vertically, its width kept, so that its ink covers tAsc above the
+// baseline and tDesc below and [Distances.BracketExcess] of their sum
+// more, centred on them; a glyph that covers them already keeps its size.
+func (l *layouter) scaledBracket(f *face, gid uint16, r rune, st *Style, tAsc, tDesc float64) *box {
+	g := l.singleGlyph(f, gid, st.Size)
+	h := g.asc + g.desc
+	want := float64((tAsc + tDesc) * (1 + f.distances.BracketExcess))
+	if h > 0 && want > h {
+		k := min(want/h, 1/typeset.MinHScale)
+		w := g.w
+		g = l.singleGlyph(f, gid, float64(st.Size*k))
+		g.w, g.hscale, g.italic = w, 1/k, float64(g.italic/k)
+	}
+	delta := (float64(g.asc-g.desc) - float64(tAsc-tDesc)) / 2
+	b := l.glyphBox(g, r, st, delta)
+	return b
 }
 
 // glyphHeight returns the ink height of glyph gid of f at size.

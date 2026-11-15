@@ -35,5 +35,6 @@
 // transformed, clipped or filtered elements inside a formula; dashed and
 // dotted borders, drawn solid; the mirrored glyphs of a right-to-left
 // formula; the glyph assemblies MathML Core, B.4 offers for a font
-// without a MATH table; and writing modes other than horizontal-tb.
+// without a MATH table, where [Style.Distances] scales a bracket's glyph
+// instead; and writing modes other than horizontal-tb.
 package formula

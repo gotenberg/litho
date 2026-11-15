@@ -205,7 +205,7 @@ func TestUnderOver_ScriptsKeepTheirGaps(t *testing.T) {
 	b := lay(t, s, el("math", under), st)
 	_, _, base := childAt(b, 0, 0)
 	_, y, script := childAt(b, 0, 1)
-	f := s.faces[s.fonts.Match(textStyle(&st))]
+	f := s.faces[faceKey{face: s.fonts.Match(textStyle(&st))}]
 	gap := f.constant(mt.UnderbarVerticalGap, st.Size)
 	if got := y - script.inkAsc - base.inkDesc; !near(got, gap) || gap <= 0 {
 		t.Fatalf("underscript ink %g below the base's ink, want UnderbarVerticalGap %g", got, gap)

@@ -22,6 +22,8 @@ type glyphs struct {
 	w, asc, desc, italic float64
 	accent               float64
 	hasAccent            bool
+	// hscale scales the glyphs horizontally, 0 for their natural width.
+	hscale float64
 }
 
 // placed is one glyph of [glyphs].
@@ -199,7 +201,7 @@ func (l *layouter) glyphBox(g *glyphs, r rune, st *Style, delta float64) *box {
 	if st.Hidden || len(g.parts) == 0 {
 		return b
 	}
-	run := &typeset.Text{Face: g.face.ts, Size: g.size, Color: st.Color, Glyphs: make([]typeset.Glyph, len(g.parts))}
+	run := &typeset.Text{Face: g.face.ts, Size: g.size, Color: st.Color, HScale: g.hscale, Glyphs: make([]typeset.Glyph, len(g.parts))}
 	for i, p := range g.parts {
 		run.Glyphs[i] = typeset.Glyph{GID: p.gid, X: p.x, Y: float64(p.y + delta)}
 	}

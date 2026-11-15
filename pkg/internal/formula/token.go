@@ -34,7 +34,13 @@ func (l *layouter) token(e *Element, st *Style) *box {
 			}
 		}
 	}
-	return l.textBox(s, st)
+	b := l.textBox(s, st)
+	if e.Name != "mo" {
+		// Under distances, text takes its font's box; an operator, a
+		// symbol, keeps its ink.
+		l.faceOf(st).fontBoxed(b, st.Size, 0)
+	}
+	return b
 }
 
 // textBox shapes s in st and returns its box: its advance, and its ink

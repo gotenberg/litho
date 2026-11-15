@@ -126,6 +126,11 @@ type Style struct {
 	Padding, Border, Margin [4]float64
 	// BorderColor paints each side's border.
 	BorderColor [4]typeset.Color
+	// Distances, when not nil, lays the formula out by font boxes and
+	// fixed distances where its first available font has no MATH table;
+	// nil takes MathML Core's fallbacks there. The HTML converter leaves
+	// it nil.
+	Distances *Distances
 	// Enclose, when not nil, draws the notations of menclose by its
 	// measures (MathML 4, 3.3.9); nil lays menclose out as an mrow, as
 	// MathML Core and Chromium do, and the HTML converter leaves it so.

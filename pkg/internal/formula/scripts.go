@@ -30,16 +30,23 @@ type shifts struct {
 }
 
 // subShift returns SubShift of a subscript under base (MathML Core,
-// 3.4.1.2).
+// 3.4.1.2), or the drop of [Distances].
 func subShift(f *face, size float64, base, sub *box) float64 {
+	if _, v, ok := f.scriptShifts(size, base); ok {
+		return v
+	}
 	return max(f.constant(mt.SubscriptShiftDown, size),
 		sub.inkAsc-f.constant(mt.SubscriptTopMax, size),
 		f.constant(mt.SubscriptBaselineDropMin, size)+base.inkDesc)
 }
 
 // supShift returns SuperShift of a superscript over base, cramped under
-// math-shift: compact (MathML Core, 3.4.1.3).
+// math-shift: compact (MathML Core, 3.4.1.3), or the raise of
+// [Distances].
 func supShift(f *face, size float64, cramped bool, base, sup *box) float64 {
+	if v, _, ok := f.scriptShifts(size, base); ok {
+		return v
+	}
 	up := f.constant(mt.SuperscriptShiftUp, size)
 	if cramped {
 		up = f.constant(mt.SuperscriptShiftUpCramped, size)
@@ -54,6 +61,11 @@ func supShift(f *face, size float64, cramped bool, base, sup *box) float64 {
 // SubSuperscriptGapMin (MathML Core, 3.4.1.4).
 func pairShifts(f *face, size float64, cramped bool, base, sub, sup *box) shifts {
 	s := shifts{sub: subShift(f, size, base, sub), sup: supShift(f, size, cramped, base, sup)}
+	if _, _, ok := f.scriptShifts(size, base); ok {
+		// Under distances a pair takes the shifts each script takes
+		// alone, their font boxes overlapping as they may.
+		return s
+	}
 	gapMin := f.constant(mt.SubSuperscriptGapMin, size)
 	gap := (s.sub - sub.inkAsc) + (s.sup - sup.inkDesc)
 	if gap < gapMin {

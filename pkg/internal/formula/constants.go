@@ -11,6 +11,11 @@ import (
 // metrics. The three percentages come back as fractions, the scale-downs
 // of 0 read as their fallbacks.
 func (f *face) constant(c mt.Constant, size float64) float64 {
+	if f != nil && f.distances != nil {
+		if v, ok := distanceConstant(f.distances, c, size); ok {
+			return v
+		}
+	}
 	if f != nil {
 		if v, ok := f.math.Constant(c); ok {
 			switch c { //nolint:exhaustive // only the percentages read apart

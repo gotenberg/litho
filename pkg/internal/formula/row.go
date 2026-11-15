@@ -49,6 +49,10 @@ func (l *layouter) childForms(e *Element, kids []*Element, c lctx, through *Elem
 // spaced by the lspace and rspace of the embellished operators and
 // their italic corrections.
 //
+// Under [Style.Distances], two neighbours that are not operators keep
+// ElementSpacing apart, and a large operator or an element of under and
+// over scripts OperatorSpacing from what follows it.
+//
 // Under [Setter.BrowserRules], a row whose in-flow children all stretch
 // lays them out without a stretch size constraint, where 3.3.1.1 gives
 // them the constraint (0, 0): an mrow that is an embellished operator
@@ -125,12 +129,27 @@ func (l *layouter) rowOf(e *Element, kids []*Element, index []int, st *Style, c 
 		}
 	}
 	addSpace := e.Name == "math" || !embellished
+	spacing, opSpacing := 0.0, 0.0
+	if f := l.faceOf(st); f != nil && f.distances != nil {
+		spacing = float64(f.distances.ElementSpacing * st.Size)
+		opSpacing = float64(f.distances.OperatorSpacing * st.Size)
+	}
+	limited := func(i int) bool {
+		k := kids[i]
+		return opSpacing > 0 && (boxes[i].op != nil && boxes[i].op.largeop || k.Name == "munder" || k.Name == "mover" || k.Name == "munderover")
+	}
 	b := &box{}
 	x, prevItalic := 0.0, 0.0
 	for i, kb := range boxes {
 		slanted := kb.op == nil && kb.italic != 0
 		if !slanted {
 			x += prevItalic
+		}
+		switch {
+		case i > 0 && limited(i-1):
+			x += opSpacing
+		case i > 0 && kb.op == nil && boxes[i-1].op == nil:
+			x += spacing
 		}
 		if kb.op != nil && addSpace {
 			x += kb.op.lspace
@@ -141,7 +160,7 @@ func (l *layouter) rowOf(e *Element, kids []*Element, index []int, st *Style, c 
 		if slanted {
 			prevItalic = kb.italic
 		}
-		if kb.op != nil && addSpace {
+		if kb.op != nil && addSpace && (i+1 >= len(boxes) || !limited(i)) {
 			x += kb.op.rspace
 		}
 		if i == 0 {
