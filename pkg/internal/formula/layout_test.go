@@ -574,3 +574,20 @@ func TestEdges_MarginsCountAsInk(t *testing.T) {
 		t.Fatalf("ink %g in a box of ascent %g, want 5 in 8", b.inkAsc, b.asc)
 	}
 }
+
+// TestBrowserRules_RowOfStretchersLaidOutFree lets an mrow that is an
+// embellished operator, alone in its formula, stretch its operator over
+// its own mspace under browser rules, as Chromium draws it, where MathML
+// Core, 3.3.1.1 gives it the stretch size constraint (0, 0).
+func TestBrowserRules_RowOfStretchersLaidOutFree(t *testing.T) {
+	for _, browser := range []bool{false, true} {
+		s := wpt(t, "stretchy")
+		s.BrowserRules = browser
+		st := mathStyle("stretchy", 20)
+		b := lay(t, s, el("math", el("mrow", space("0", "100pt", "100pt"), tok("mo", "⥜"))), st)
+		_, _, op := childAt(b, 0, 1)
+		if tall := op.height() >= 200; tall != browser {
+			t.Fatalf("browser rules %v: operator %g tall", browser, op.height())
+		}
+	}
+}

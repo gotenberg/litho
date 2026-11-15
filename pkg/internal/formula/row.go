@@ -48,6 +48,23 @@ func (l *layouter) childForms(e *Element, kids []*Element, c lctx, through *Elem
 // other children (3.3.1.1), the children in a row on their baselines,
 // spaced by the lspace and rspace of the embellished operators and
 // their italic corrections.
+//
+// Under [Setter.BrowserRules], a row whose in-flow children all stretch
+// lays them out without a stretch size constraint, where 3.3.1.1 gives
+// them the constraint (0, 0): an mrow that is an embellished operator
+// then stretches its operator over its own other children, as Chromium
+// draws it. Chromium's screen and print share the layout, so they agree
+// against the clause.
+//
+// # Corpus evidence
+//
+//   - wpt: padding-border-margin-003 stretches the operator of an mrow
+//     holding an mspace 1500px tall and the operator alone, the mrow
+//     alone in its math element; Chromium of gotenberg/gotenberg:9.4.1
+//     draws the operator 1500px tall.
+//   - probe, html: in the same Chromium, an operator after an mtext X in
+//     an mrow alone in its math element grows to the X's ink, and one
+//     after an mspace 200px tall to 200px; an mo alone keeps its glyph.
 func (l *layouter) row(e *Element, st *Style, c lctx, depth int) *box {
 	kids, index := inFlow(e)
 	return l.rowOf(e, kids, index, st, c, depth)
@@ -100,7 +117,11 @@ func (l *layouter) rowOf(e *Element, kids []*Element, index []int, st *Style, c 
 			}
 		}
 		for _, i := range stretchers {
-			boxes[i] = l.child(e, kids[i], index[i], st, lctx{form: forms[i], stretch: true, asc: uAsc, desc: uDesc}, depth)
+			kc := lctx{form: forms[i], stretch: true, asc: uAsc, desc: uDesc}
+			if !laid && l.s.BrowserRules {
+				kc = lctx{form: forms[i]}
+			}
+			boxes[i] = l.child(e, kids[i], index[i], st, kc, depth)
 		}
 	}
 	addSpace := e.Name == "math" || !embellished
