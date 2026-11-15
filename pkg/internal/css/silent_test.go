@@ -20,3 +20,17 @@ func TestSilentProperties_NoEffectOnPaper(t *testing.T) {
 		}
 	}
 }
+
+// TestSilentProperties_SVGHints reads without a warning the SVG properties
+// Chromium prints nothing for: color-interpolation (SVG 2, 13.9), which it
+// parses and never applies, and the hints color-rendering (SVG 1.1,
+// 11.7.2) and buffered-rendering (SVG Tiny 1.2, 11.10.5).
+func TestSilentProperties_SVGHints(t *testing.T) {
+	t.Parallel()
+	for _, decl := range []string{"color-interpolation: linearRGB", "color-rendering: optimizeSpeed", "buffered-rendering: static"} {
+		c := compute(t, `<body><svg><rect id=t /></svg></body>`, "#t { "+decl+" }")
+		if ws := c.c.Warnings(); hasWarning(ws, warn.CSSUnsupported, "") {
+			t.Errorf("%s warns: %v", decl, ws)
+		}
+	}
+}

@@ -144,6 +144,12 @@ func (c *declCtx) warn(code warn.Code, effect warn.Effect, format string, args .
 //     auto, pixelated and crisp-edges.
 //   - probe, html: Chromium prints a JPEG of EXIF orientation 6 turned a
 //     quarter under image-orientation: none as under from-image.
+//   - probe, html: Chromium 156 writes the same PDF content for an
+//     inline svg drawing a filled and a stroked circle, a line, a
+//     gradient, a translucent group, a blurred rectangle, text and an
+//     image whether every element states color-interpolation: linearRGB,
+//     color-rendering: optimizeSpeed, buffered-rendering: static or
+//     none of them.
 var silentProperties = map[string]bool{
 	"cursor": true, "pointer-events": true, "user-select": true, "touch-action": true,
 	"resize": true, "scroll-behavior": true, "caret-color": true, "accent-color": true,
@@ -174,6 +180,12 @@ var silentProperties = map[string]bool{
 	// app-region is its legacy name (CSS UI 4, 8.1): a printed page has
 	// no window.
 	"window-drag": true, "app-region": true,
+	// color-interpolation names the colour space gradients, animations
+	// and compositing of an SVG element work in (SVG 2, 13.9); Chromium
+	// parses it and works in sRGB whatever it says, in print as on
+	// screen. color-rendering (SVG 1.1, 11.7.2) and buffered-rendering
+	// (SVG Tiny 1.2, 11.10.5) are hints a renderer may ignore.
+	"color-interpolation": true, "color-rendering": true, "buffered-rendering": true,
 }
 
 // svgProperties are the properties of SVG elements alone that package svg
