@@ -432,11 +432,12 @@ func (b *box) marginH() float64 { return b.borderH() + b.m[css.Top] + b.m[css.Bo
 // boxes, inline blocks, boxes with overflow other than visible or clip
 // (CSS Overflow 3, 3.1) but for the one [toViewport] reports, flow-root
 // boxes (CSS Display 3, 2.3), containers for size queries (CSS
-// Conditional 5, 5.1), and the root; and the table wrapper boxes,
+// Conditional 5, 5.1), boxes under layout or paint containment (CSS
+// Contain 2, 3.2 and 3.5), and the root; and the table wrapper boxes,
 // captions and cells (CSS 2.1, 17.4).
 func (b *box) establishesBFC() bool {
 	return b.parent == nil || b.float != css.FloatNone || b.abs || (b.inline && b.kind == kindBlock) ||
-		(b.st.Overflow != css.OverflowVisible && !b.st.ClipOnly() || b.st.ScrollContainer()) && !b.toViewport() || b.kind == kindReplaced || b.st.Display == css.FlowRoot || b.st.SizeContainer() ||
+		(b.st.Overflow != css.OverflowVisible && !b.st.ClipOnly() || b.st.ScrollContainer()) && !b.toViewport() || b.kind == kindReplaced || b.st.Display == css.FlowRoot || b.st.SizeContainer() || b.st.Contain&(css.ContainLayout|css.ContainPaint) != 0 ||
 		b.tpart == partWrapper || b.tpart == partCaption || b.tpart == partCell ||
 		b.flex != nil || b.flexItem || b.grid != nil || b.gridItem || b.st.Clamps() || isMulticol(b) || b.ortho
 }

@@ -101,3 +101,37 @@ func TestWillChange_MakesWhatItsPropertiesWould(t *testing.T) {
 		}
 	}
 }
+
+// TestContain_LayoutAndPaintHoldPositionedBoxes holds layout and paint
+// containment to CSS Contain 2, 3.2 and 3.5: each makes the containing
+// block of absolute and fixed descendants and an independent formatting
+// context, which style containment does not.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 places the
+//     children as this test wants and keeps a float inside a box of
+//     contain: paint.
+//   - wpt: css/css-conditional/container-queries/no-layout-containment-fixedpos
+//     (a fixed box under a container-type box inside contain: layout)
+//     matches its reference.
+func TestContain_LayoutAndPaintHoldPositionedBoxes(t *testing.T) {
+	for _, tt := range []struct {
+		c     css.Containment
+		holds bool
+	}{{css.ContainLayout, true}, {css.ContainPaint, true}, {css.ContainStyle, false}} {
+		for _, pos := range []css.Position{css.Absolute, css.Fixed} {
+			host := sty(func(s *css.Style) { s.Contain = tt.c }, margin(20))
+			child := sty(func(s *css.Style) { s.Position = pos; s.Top, s.Left = css.Pts(0), css.Pts(0) }, width(10), height(10))
+			rb := boxes(t, doc(el(sty(height(30))), el(host, el(child))), page(400, 400))
+			if held := rect(kid(t, rb, 0, 1, 0))[1] != 0; held != tt.holds {
+				t.Errorf("contain %b, position %v: held %v, want %v", tt.c, pos, held, tt.holds)
+			}
+		}
+	}
+	host := sty(func(s *css.Style) { s.Contain = css.ContainPaint })
+	rb := boxes(t, doc(el(host, el(sty(float(css.FloatLeft), width(30), height(50))))), page(400, 400))
+	if got := rect(kid(t, rb, 0, 0)); got[3] != 50 {
+		t.Errorf("paint containment %v tall, want 50 holding its float", got[3])
+	}
+}

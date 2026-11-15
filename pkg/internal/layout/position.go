@@ -251,9 +251,10 @@ func holderOf(b *box) *box {
 		// A filter or a backdrop filter makes its element, the root
 		// excepted, the containing block of its absolute and fixed
 		// descendants, an inline box among them (Filter Effects 1, 3;
-		// Filter Effects 2, 2.1), and so does a will-change that names a
+		// Filter Effects 2, 2.1), and so do layout and paint containment
+		// (CSS Contain 2, 3.2 and 3.5) and a will-change that names a
 		// property that would (CSS Will Change 1, 3).
-		holds := a.st.HasTransform() && a.kind == kindBlock || filterHolds(a) || willHold(a, fixed)
+		holds := a.st.HasTransform() && a.kind == kindBlock || filterHolds(a) || willHold(a, fixed) || containHolds(a)
 		if !fixed && a.st.Position != css.Static {
 			holds = true
 		}
@@ -820,6 +821,20 @@ func willHold(a *box, fixed bool) bool {
 		w = css.WillHoldFixed
 	}
 	return a.st.WillChange&w != 0 && a.parent != nil
+}
+
+// containHolds reports a box under layout or paint containment, which
+// makes it the containing block of its absolute and fixed descendants
+// (CSS Contain 2, 3.2 and 3.5), the root excepted.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 places an
+//     absolute and a fixed child of a box of contain: layout, and of one
+//     of contain: paint, at the box's corner, and those of a box of
+//     contain: style at the page's.
+func containHolds(a *box) bool {
+	return a.st.Contain&(css.ContainLayout|css.ContainPaint) != 0 && a.parent != nil && a.kind != kindInline
 }
 
 // filterHolds reports a box whose filter or backdrop filter makes it the
