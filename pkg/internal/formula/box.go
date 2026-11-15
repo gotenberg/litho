@@ -35,6 +35,15 @@ type item struct {
 	child *box
 	run   *typeset.Text
 	rect  *rect
+	line  *line
+}
+
+// line is a stroked path: a rounded box, a circle or a strike of an
+// enclosure. Its points are offsets from the item's position.
+type line struct {
+	ops   []typeset.PathOp
+	width float64
+	color typeset.Color
 }
 
 // rect is a filled rectangle: a fraction bar, a radical's overbar, a
@@ -76,6 +85,15 @@ func (b *box) fill(x, y, w, h float64, c typeset.Color) {
 		return
 	}
 	b.items = append(b.items, item{x: x, y: y, rect: &rect{w: w, h: h, color: c}})
+}
+
+// stroke adds the path ops, its points from the box's left baseline
+// point, stroked w wide in colour c.
+func (b *box) stroke(ops []typeset.PathOp, w float64, c typeset.Color) {
+	if w <= 0 || c.A <= 0 || len(ops) == 0 {
+		return
+	}
+	b.items = append(b.items, item{line: &line{ops: ops, width: w, color: c}})
 }
 
 // decorate adds a background or a border rectangle of colour c whose
@@ -143,6 +161,15 @@ func (b *box) paint(x, y float64, decor bool, out *[]typeset.Fragment) {
 			t := *it.run
 			t.Origin = typeset.Point{X: float64(x + it.x), Y: float64(y + it.y)}
 			*out = append(*out, &t)
+		case it.line != nil:
+			ops := make([]typeset.PathOp, len(it.line.ops))
+			for i, op := range it.line.ops {
+				for k := range op.P {
+					op.P[k] = typeset.Point{X: float64(x+it.x) + op.P[k].X, Y: float64(y+it.y) + op.P[k].Y}
+				}
+				ops[i] = op
+			}
+			*out = append(*out, &typeset.Path{Ops: ops, Stroke: &typeset.Stroke{Color: it.line.color, Width: it.line.width}})
 		case it.rect != nil:
 			r := it.rect
 			x0, y0 := float64(x+it.x), float64(y+it.y)

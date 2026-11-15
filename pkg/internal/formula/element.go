@@ -126,6 +126,10 @@ type Style struct {
 	Padding, Border, Margin [4]float64
 	// BorderColor paints each side's border.
 	BorderColor [4]typeset.Color
+	// Enclose, when not nil, draws the notations of menclose by its
+	// measures (MathML 4, 3.3.9); nil lays menclose out as an mrow, as
+	// MathML Core and Chromium do, and the HTML converter leaves it so.
+	Enclose *Enclosure
 	// Width and Height, when HasWidth and HasHeight are set, size the
 	// element's content box in place of its math content box (MathML
 	// Core, 3.1.2): the CSS width and height of the element.

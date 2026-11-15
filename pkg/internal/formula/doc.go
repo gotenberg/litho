@@ -22,8 +22,13 @@
 // of the user agent stylesheet of MathML Core, Appendix A, and the
 // element's attributes, which is what a converter without CSS needs.
 //
-// Not laid out: line breaking inside a formula; the elements of MathML 4
-// that Core lacks (menclose, mlabeledtr, mglyph, maligngroup and the
+// The notations of menclose, an element of MathML 4 that Core lacks, are
+// drawn by the measures [Style.Enclose] gives, for a converter whose
+// source's producer draws them; without them menclose is an mrow, as
+// Chromium lays it out.
+//
+// Not laid out: line breaking inside a formula; the other elements of
+// MathML 4 that Core lacks (mlabeledtr, mglyph, maligngroup and the
 // like), laid out as an mrow; HTML or SVG content inside a token element,
 // whose text is laid out; the CSS display of a MathML element other than
 // none, which is laid out as math whatever it says; positioned, floated,

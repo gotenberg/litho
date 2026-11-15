@@ -146,7 +146,10 @@ func (b *builder) formulaTree(ctx context.Context, n *dom.Node, lang string, dep
 }
 
 // formulaStyle returns the formula style of the computed style st of a
-// MathML element in language lang.
+// MathML element in language lang. It sets none of the formula's options
+// for other producers: menclose is laid out as an mrow, its notations
+// undrawn, as Chromium lays it out (MathML Core defines no menclose), and
+// neither math kerning nor fixed distances apply.
 func formulaStyle(st *css.Style, lang string) *formula.Style {
 	color := func(c css.Color) typeset.Color {
 		cl := func(v float64) float64 { return min(max(v, 0), 1) }

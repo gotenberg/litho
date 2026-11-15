@@ -64,6 +64,8 @@ func (l *layouter) layout(e *Element, st *Style, c lctx, depth int) *box {
 		b = l.mpadded(e, st, c, depth)
 	case "mtable":
 		b = l.mtable(e, st, depth)
+	case "menclose":
+		b = l.menclose(e, st, c, depth)
 	default:
 		b = l.row(e, st, c, depth)
 	}
