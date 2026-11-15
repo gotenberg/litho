@@ -440,6 +440,39 @@ func TestSpace_HeightCSSResolved(t *testing.T) {
 	}
 }
 
+// TestRTL_ContentBoxStartsOnTheRight places the math content box of a
+// right-to-left element CSS makes wider at the content box's right edge,
+// its inline-start edge (MathML Core, 3.1.2).
+func TestRTL_ContentBoxStartsOnTheRight(t *testing.T) {
+	s := dejavu(t)
+	st := mathStyle("DejaVu Math TeX Gyre", 10)
+	st.RTL = true
+	row := el("mrow", space("10pt", "1pt", "0"))
+	rst := st
+	rst.Width, rst.HasWidth = 30, true
+	row.Style = &rst
+	b := lay(t, s, el("math", row), st)
+	if x, _, _ := childAt(b, 0, 0); !near(x, 20) {
+		t.Fatalf("content at %g, want 20", x)
+	}
+}
+
+// TestRTL_MirrorsTheRadicalOfARoot draws the surd of a right-to-left
+// mroot on the right of its base, the index further right (MathML Core,
+// 3.1.1 and 3.3.3.3).
+func TestRTL_MirrorsTheRadicalOfARoot(t *testing.T) {
+	s := dejavu(t)
+	st := mathStyle("DejaVu Math TeX Gyre", 10)
+	st.RTL = true
+	b := lay(t, s, el("math", el("mroot", space("20pt", "10pt", "0"), space("5pt", "5pt", "0"))), st)
+	_, _, radical := childAt(b, 0, 1)
+	baseX, _, _ := childAt(b, 0, 1, 1)
+	surdX, _, _ := childAt(b, 0, 1, 0)
+	if !near(baseX, 0) || surdX < 20-0.01 || radical.w <= 20 {
+		t.Fatalf("base at %g, surd at %g in a radical %g wide; want the base at 0, the surd past it", baseX, surdX, radical.w)
+	}
+}
+
 // TestDerive_Direction reads the dir attribute as a presentational hint
 // for direction and lets the children of a derived style inherit it
 // (MathML Core, 2.1.3; CSS Writing Modes 3, 2.1: direction inherits).

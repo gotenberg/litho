@@ -103,7 +103,8 @@ func (b *box) draw(x, y float64, out *[]typeset.Fragment) {
 // element of style st: c itself, or a box of the width and height st
 // gives, c's inline-start and block-start edges on the content box's,
 // or, when centred, c's block-start edge on the content box's and their
-// middles aligned (MathML Core, 3.1.2, 3.3.2.1 and 3.4.2.3).
+// middles aligned (MathML Core, 3.1.2, 3.3.2.1 and 3.4.2.3). The
+// inline-start edge of a right-to-left element is its right edge.
 func contentSize(c *box, st *Style, centred bool) *box {
 	if !st.HasWidth && !st.HasHeight {
 		return c
@@ -115,8 +116,11 @@ func contentSize(c *box, st *Style, centred bool) *box {
 	x := 0.0
 	if st.HasWidth {
 		b.w = max(st.Width, 0)
-		if centred {
+		switch {
+		case centred:
 			x = float64((b.w - c.w) / 2)
+		case st.RTL:
+			x = b.w - c.w
 		}
 	}
 	if st.HasHeight {

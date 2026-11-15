@@ -193,6 +193,12 @@ func (l *layouter) mroot(e *Element, st *Style, c lctx, depth int) *box {
 	b.asc = max(rb.asc, idxBase+idx.asc)
 	b.desc = max(rb.desc, idx.desc-idxBase)
 	b.inkAsc, b.inkDesc = b.asc, b.desc
+	if st.RTL {
+		// The radical is a box of the mroot's own: the layout mirrors the
+		// boxes of elements, so it mirrors this one here, the surd on the
+		// right of the base (MathML Core, 3.1.1).
+		mirror(rb)
+	}
 	b.add(idx, before, -idxBase)
 	b.add(rb, before+idx.w+after, 0)
 	return b
