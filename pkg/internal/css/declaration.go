@@ -176,6 +176,23 @@ var silentProperties = map[string]bool{
 	"window-drag": true, "app-region": true,
 }
 
+// svgProperties are the properties of SVG elements alone that package svg
+// reads from the style sheets of the document an svg element sits in,
+// with their presentation attributes (SVG 2, 6.6 and 13): the cascade of
+// an HTML element ignores them without a warning, as they give an HTML
+// box nothing to draw. [SVGProperty] reports them.
+var svgProperties = map[string]bool{
+	"fill": true, "fill-opacity": true, "fill-rule": true, "stroke": true, "stroke-width": true,
+	"stroke-opacity": true, "stroke-linecap": true, "stroke-linejoin": true, "stroke-miterlimit": true,
+	"stroke-dasharray": true, "stroke-dashoffset": true, "clip-rule": true, "stop-color": true,
+	"stop-opacity": true, "marker": true, "marker-start": true, "marker-mid": true, "marker-end": true,
+	"text-anchor": true, "flood-color": true, "flood-opacity": true, "color-interpolation-filters": true,
+}
+
+// SVGProperty reports whether package svg, not the cascade of HTML
+// elements, reads the property name.
+func SVGProperty(name string) bool { return svgProperties[name] }
+
 // knownProperty reports whether litho parses the property name.
 func knownProperty(name string) bool {
 	if _, ok := longhandByName[name]; ok {
@@ -286,7 +303,7 @@ func (c *declCtx) declare(name string, value []token, important bool) Declaratio
 	if !knownProperty(name) {
 		// An unknown vendor-prefixed name is ignored without a warning; a
 		// legacy name alias warns as the property it names.
-		if (!strings.HasPrefix(written, "-") || written != name) && !silentProperties[name] {
+		if (!strings.HasPrefix(written, "-") || written != name) && !silentProperties[name] && !svgProperties[name] {
 			c.warn(warn.CSSUnsupported, warn.Approximated, "property %q is not supported and was ignored", written)
 		}
 		return d
