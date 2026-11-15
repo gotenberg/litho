@@ -26,6 +26,9 @@ type ImageRecompression struct {
 	// and MaxStreamBytes bounds both what one decode holds and how many
 	// re-encoded bytes the pass keeps in memory (see [RecompressImages]).
 	Limits limits.Limits
+	// Skip holds object numbers of images the pass leaves as they are:
+	// those [ReduceImages] wrote as JPEG.
+	Skip map[int]bool
 }
 
 // RecompressStats reports what [RecompressImages] changed.
@@ -102,7 +105,7 @@ func RecompressImages(ctx context.Context, alloc *ObjAllocator, cfg ImageRecompr
 
 	nums := make([]int, 0, len(pending))
 	for num, obj := range pending {
-		if s, ok := obj.(ast.PdfStream); ok && isImageStream(s.Dict) {
+		if s, ok := obj.(ast.PdfStream); ok && isImageStream(s.Dict) && !cfg.Skip[num] {
 			nums = append(nums, num)
 		}
 	}

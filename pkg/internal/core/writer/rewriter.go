@@ -45,6 +45,9 @@ type CompactConfig struct {
 	// references at one survivor; see [DedupStreams]. Note that it rewrites
 	// references inside the trailer in place.
 	DedupStreams bool
+	// ReduceImages, when not nil, downsamples images and re-encodes them as
+	// JPEG where that makes them smaller; see [ReduceImages].
+	ReduceImages *ImageReduction
 	// RecompressImages, when not nil, re-encodes image streams losslessly
 	// where that makes them smaller; see [RecompressImages].
 	RecompressImages *ImageRecompression
@@ -75,11 +78,13 @@ type CompactConfig struct {
 // stream objects, and packing would otherwise seal one inside an object
 // stream, which 7.5.7 forbids. So the direct streams are hoisted first.
 //
-// Recompression and stream compression run before dedup, so two copies of one
-// image or of one stream, which compress to identical bytes, still merge. Dedup runs before packing, which
-// removes objects from the pending set and serializes their bodies, so a
-// later dedup would neither see the full population nor be able to repoint
-// what it merged.
+// Reduction runs before lossless recompression, which then compresses the
+// images reduction wrote losslessly at its best level and leaves the JPEGs it
+// wrote, whose Huffman tables are already fitted. Both run before dedup, so
+// two copies of one image, which re-encode to identical bytes, still merge.
+// Dedup runs before packing, which removes objects from the pending set and
+// serializes their bodies, so a later dedup would neither see the full
+// population nor be able to repoint what it merged.
 func Compact(ctx context.Context, alloc *ObjAllocator, trailer ast.PdfDict, cfg CompactConfig) ([]PackedObject, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("compaction canceled: %w", err)
@@ -92,8 +97,19 @@ func Compact(ctx context.Context, alloc *ObjAllocator, trailer ast.PdfDict, cfg 
 		return nil, fmt.Errorf("hoisting direct streams: %w", err)
 	}
 
+	var reduced map[int]bool
+	if cfg.ReduceImages != nil {
+		stats, err := ReduceImages(ctx, alloc, trailer, *cfg.ReduceImages)
+		if err != nil {
+			return nil, fmt.Errorf("reducing images: %w", err)
+		}
+		reduced = stats.Encoded
+	}
+
 	if cfg.RecompressImages != nil {
-		if _, err := RecompressImages(ctx, alloc, *cfg.RecompressImages); err != nil {
+		recompress := *cfg.RecompressImages
+		recompress.Skip = reduced
+		if _, err := RecompressImages(ctx, alloc, recompress); err != nil {
 			return nil, fmt.Errorf("recompressing images: %w", err)
 		}
 	}
