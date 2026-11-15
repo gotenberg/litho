@@ -216,7 +216,7 @@ func (b *pageBuilder) region(rg *region) *layout.Node {
 			b.circles = append(b.circles, invalidCircle(u))
 		}
 		b.unitBorders(bs, rg, u)
-		if _, only := b.g.iconAt(u.r, u.c, u.cell); !only {
+		if !b.g.valueHidden(u.r, u.c, u.cell) {
 			add(u)
 		}
 	})

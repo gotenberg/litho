@@ -976,6 +976,22 @@ func Percentile(nums []float64, p float64) float64 {
 	return nums[i] + float64((pos-float64(i))*(nums[i+1]-nums[i]))
 }
 
+// valueHidden reports a cell whose icon set or data bar rule shows its
+// icon or its bar alone, without the cell's value (ECMA-376 Part 1,
+// 18.3.1.49 iconSet and 18.3.1.28 dataBar showValue; ODF
+// calcext:show-value).
+func (g *grid) valueHidden(r, c int, cell *Cell) bool {
+	if _, only := g.iconAt(r, c, cell); only {
+		return true
+	}
+	if g.cond == nil {
+		return false
+	}
+	// A bar too short to draw still hides the value.
+	res := g.cond.evaluate(g, r, c, cell)
+	return res != nil && res.bar != nil && res.bar.BarOnly
+}
+
 // iconAt returns the icon a cell shows by its icon set rule, and whether
 // the rule hides the cell's value: the icon of the highest threshold the
 // cell's number reaches, or passes for a threshold that asks it to, the

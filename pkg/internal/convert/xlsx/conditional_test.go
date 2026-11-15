@@ -33,7 +33,7 @@ func TestRead_ConditionalFormats(t *testing.T) {
 		`<cfRule type="colorScale" priority="12"><colorScale><cfvo type="num" val="$A$3"/><cfvo type="formula" val="$A$1*2"/><color rgb="FFFF0000"/><color rgb="FF0000FF"/></colorScale></cfRule>` +
 		`<cfRule type="dataBar" priority="13"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF638EC6"/></dataBar>` +
 		`<extLst><ext uri="{B025F937-C7B1-47D3-B67F-A62EFF666E3E}" xmlns:x14="` + nsX14 + `"><x14:id>{1}</x14:id></ext></extLst></cfRule>` +
-		`<cfRule type="dataBar" priority="14"><dataBar><cfvo type="percent" val="50"/><cfvo type="num" val="10"/><color rgb="FF00FF00"/></dataBar></cfRule>` +
+		`<cfRule type="dataBar" priority="14"><dataBar showValue="0"><cfvo type="percent" val="50"/><cfvo type="num" val="10"/><color rgb="FF00FF00"/></dataBar></cfRule>` +
 		`</conditionalFormatting>` +
 		`<extLst><ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}" xmlns:x14="` + nsX14 + `"><x14:conditionalFormattings><x14:conditionalFormatting xmlns:xm="` + nsXM + `">` +
 		`<x14:cfRule type="dataBar" id="{1}"><x14:dataBar><x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/></x14:dataBar></x14:cfRule><xm:sqref>A1:A4</xm:sqref>` +
@@ -141,6 +141,10 @@ func TestRead_ConditionalFormats(t *testing.T) {
 	}
 	if b := rules[11]; b.BarAxis != sheet.BarAxisNone || b.BarMinLength != 0.1 || b.BarMaxLength != 0.9 {
 		t.Errorf("plain bar %+v", b)
+	}
+	// showValue="0" hides the value (ECMA-376 Part 1, 18.3.1.28).
+	if rules[10].BarOnly || !rules[11].BarOnly {
+		t.Errorf("bars only %v and %v, want false and true", rules[10].BarOnly, rules[11].BarOnly)
 	}
 }
 

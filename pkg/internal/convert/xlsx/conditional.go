@@ -556,10 +556,13 @@ func (r *reader) dxfElementStyle(e *ooxml.Element) *sheet.Style {
 // its lengths the dataBar element's minLength and maxLength, 10 and 90
 // percent by default; the extension (MS-XLSX, 2.6.29 x14:dataBar) gives
 // the axis, automatic by default, the gradient and the negative colour,
-// and the lengths stay the dataBar element's.
+// and the lengths stay the dataBar element's. showValue false draws the
+// bar without the cell's value (ECMA-376 Part 1, 18.3.1.28).
 //
 // # Corpus evidence
 //
+//   - litho/xlsx cf_data_bars: Excel prints the bars of the rule whose
+//     showValue is 0 without the numbers of their cells.
 //   - libreoffice/xlsx: sc/databar.xlsx's middle axis, whose extension says
 //     maxLength 100, paints its longest bar across 90% of the half cell.
 func dataBarSettings(rule *sheet.Rule, db, ext *ooxml.Element, color func(*ooxml.Element) (css.Color, bool)) {
@@ -567,6 +570,9 @@ func dataBarSettings(rule *sheet.Rule, db, ext *ooxml.Element, color func(*ooxml
 		return float64(max(0, min(intAttr(db, name, def), 100))) / 100
 	}
 	rule.BarMinLength, rule.BarMaxLength = length("minLength", 10), length("maxLength", 90)
+	if v, ok := db.Attr("showValue"); ok {
+		rule.BarOnly = !ooxml.OnOff(v, true)
+	}
 	if rule.BarMinLength == 0 && rule.BarMaxLength == 0 {
 		rule.BarMaxLength = 0.001
 	}

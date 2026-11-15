@@ -141,6 +141,9 @@ type Rule struct {
 	// BarAxis places the zero of a RuleDataBar's bars (MS-XLSX x14:dataBar
 	// axisPosition; ODF calcext:axis-position).
 	BarAxis BarAxis
+	// BarOnly hides the value of a cell a RuleDataBar draws a bar in
+	// (ECMA-376 Part 1, 18.3.1.28 dataBar showValue).
+	BarOnly bool
 	// Icons is the icon set of a RuleIconSet by its SpreadsheetML name
 	// ("3Arrows", "4Rating", "5Quarters", ...; ECMA-376 Part 1, 18.18.42
 	// ST_IconSetType, which ODF's calcext:icon-set-type spells alike), its

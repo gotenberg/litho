@@ -2,6 +2,7 @@ package sheet
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
@@ -322,5 +323,23 @@ func TestConditional_FormulaThreshold(t *testing.T) {
 	g := newGrid(t.Context(), newDoc(sh), sh)
 	if _, length, _, _, ok := g.dataBar(1, 0, g.cell(1, 0)); !ok || !near(length, 0.6, 1e-9) {
 		t.Errorf("length %v (%v), want 3 of 5", length, ok)
+	}
+}
+
+// TestConvert_DataBarAlone draws a data bar whose rule hides the value
+// without the cell's number (ECMA-376 Part 1, 18.3.1.28 dataBar
+// showValue), the cell whose bar has no length included; with it
+// otherwise.
+func TestConvert_DataBarAlone(t *testing.T) {
+	for _, only := range []bool{false, true} {
+		sh := column(numCell(0, 0, nil), numCell(0, 1, nil), numCell(0, 4, nil))
+		sh.Conditional = []Conditional{{Ranges: []Range{{LastRow: 2}}, Rules: []Rule{{
+			Kind: RuleDataBar, Bar: blue, Values: []Value{num(0), num(4)}, BarMaxLength: 1, BarOnly: only,
+		}}}}
+		out := convert(t, newDoc(sh), office.Options{})
+		got := strings.Join(texts(out.Pages[0]), "|")
+		if want := map[bool]string{false: "0|1|4", true: ""}[only]; got != want {
+			t.Errorf("bar only %v: texts %q, want %q", only, got, want)
+		}
 	}
 }
