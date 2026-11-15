@@ -246,16 +246,31 @@ func (r *reader) styleFill(fc *fillCtx, ref *ooxml.Element) slides.Fill {
 }
 
 // shapeFill returns the fill of the first shape of chain whose spPr sets
-// one, else the fill its style's fillRef names.
+// one, else the fill its style's fillRef names. The style counts as the
+// formatting of the shape of chain that carries it, before the shapes it
+// inherits from: a slide's placeholder with a p:style of its own takes
+// the style's fill over a fill its layout's or master's placeholder
+// states, as PowerPoint draws it (ECMA-376 Part 1, 19.3.1.36 ph: the
+// placeholder inherits the properties the shape does not set).
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/bnc904423.pptx, a body placeholder whose
+//     p:style names fillRef 1 in accent2 and whose master's placeholder
+//     states noFill, prints filled in accent2.
 func (r *reader) shapeFill(fc *fillCtx, chain []*ooxml.Element, style *ooxml.Element) slides.Fill {
+	ref := style.Child(ooxml.NSA, "fillRef")
 	for _, el := range chain {
 		efc := *fc
 		efc.part = r.partOf(el, fc.part)
 		if f, ok := r.fillOf(&efc, spPr(el)); ok {
 			return f
 		}
+		if ref != nil && kid(el, "style") == style {
+			return r.styleFill(fc, ref)
+		}
 	}
-	if ref := style.Child(ooxml.NSA, "fillRef"); ref != nil {
+	if ref != nil {
 		return r.styleFill(fc, ref)
 	}
 	return slides.Fill{}
@@ -271,18 +286,29 @@ type lineSource struct {
 // shapeLine returns the line of a shape: each property from the first of
 // the chain's a:ln elements that sets it, then from the theme line style
 // the style's lnRef names (20.1.2.2.24 ln; 20.1.4.2.19 lnRef).
+//
+// The style's line counts as the formatting of the shape that carries it,
+// before the shapes it inherits from, as the fill does ([reader.shapeFill]).
 func (r *reader) shapeLine(fc *fillCtx, chain []*ooxml.Element, style *ooxml.Element) slides.Line {
 	var srcs []lineSource
+	var styled *lineSource
+	if ref := style.Child(ooxml.NSA, "lnRef"); ref != nil {
+		if idx, ok := intAttr(ref, "idx"); ok && idx >= 1 && idx <= len(fc.sc.theme.lines) {
+			ph, _ := fc.sc.color(ref, nil)
+			styled = &lineSource{fc.sc.theme.lines[idx-1], fc.withPh(ph)}
+		}
+	}
 	for _, el := range chain {
 		if ln := spPr(el).Child(ooxml.NSA, "ln"); ln != nil {
 			srcs = append(srcs, lineSource{ln, fc})
 		}
-	}
-	if ref := style.Child(ooxml.NSA, "lnRef"); ref != nil {
-		if idx, ok := intAttr(ref, "idx"); ok && idx >= 1 && idx <= len(fc.sc.theme.lines) {
-			ph, _ := fc.sc.color(ref, nil)
-			srcs = append(srcs, lineSource{fc.sc.theme.lines[idx-1], fc.withPh(ph)})
+		if styled != nil && kid(el, "style") == style {
+			srcs = append(srcs, *styled)
+			styled = nil
 		}
+	}
+	if styled != nil {
+		srcs = append(srcs, *styled)
 	}
 	return r.lineOf(srcs)
 }

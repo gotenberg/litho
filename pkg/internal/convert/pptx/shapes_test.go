@@ -524,3 +524,26 @@ func TestShapes_Describe(t *testing.T) {
 		}
 	}
 }
+
+// TestShapes_PlaceholderStyleOverInherited locks that a placeholder's own
+// p:style fills and outlines it over the noFill and the line its layout's
+// placeholder states ([reader.shapeFill], [reader.shapeLine]).
+func TestShapes_PlaceholderStyleOverInherited(t *testing.T) {
+	t.Parallel()
+	layout := `<p:sp><p:nvSpPr><p:cNvPr id="3" name="Body"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr>` +
+		`<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="1270000"/></a:xfrm><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody>` + para("Click") + `</p:txBody></p:sp>`
+	styled := `<p:sp><p:nvSpPr><p:cNvPr id="4" name="Styled"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/>` +
+		`<p:style><a:lnRef idx="2"><a:schemeClr val="accent1"/></a:lnRef><a:fillRef idx="1"><a:schemeClr val="accent2"/></a:fillRef><a:effectRef idx="0"><a:schemeClr val="accent2"/></a:effectRef><a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef></p:style>` +
+		`<p:txBody>` + para("x") + `</p:txBody></p:sp>`
+	d, _ := readDeck(t, testDeck{layoutTree: layout, slides: []testSlide{{tree: styled}}})
+	s := shapeNamed(d.Slides[0].Shapes, "Styled")
+	if s == nil {
+		t.Fatal("no styled placeholder")
+	}
+	if s.Fill.Kind != slides.FillSolid || !sameColor(s.Fill.Color, rgb(0xC0504D)) {
+		t.Errorf("fill %+v, want the style's accent2", s.Fill)
+	}
+	if s.Line.Width <= 0 || !sameColor(s.Line.Color, rgb(0x4F81BD)) {
+		t.Errorf("line %+v, want the style's accent1", s.Line)
+	}
+}
