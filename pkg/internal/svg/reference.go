@@ -28,7 +28,7 @@ func (d *Document) ClipRegions(ctx context.Context, id string, w, h float64) (re
 		return nil, false
 	}
 	vw, vh := d.viewport()
-	r := newRenderer(ctx, d, vw, vh)
+	r := newRenderer(ctx, d, vw, vh, identity)
 	regs, empty := r.clipPath(d.root, id, &bbox{x1: w, y1: h, ok: true}, nil)
 	if empty {
 		return nil, true
@@ -57,7 +57,7 @@ func (d *Document) MaskContent(ctx context.Context, id string, w, h float64) (co
 		return nil, false, false
 	}
 	vw, vh := d.viewport()
-	r := newRenderer(ctx, d, vw, vh)
+	r := newRenderer(ctx, d, vw, vh, identity)
 	m, found := r.mask(d.root, initialStyle(d.opts.Context), id, &bbox{x1: w, y1: h, ok: true}, 0)
 	if !found {
 		return nil, false, false
@@ -129,7 +129,7 @@ func (d *Document) Filter(ctx context.Context, id string, w, h float64) (f *Filt
 // graph resolves the filter element of id for a box of w by h user units.
 func (d *Document) graph(ctx context.Context, id string, w, h float64) (*filterGraph, bool) {
 	vw, vh := d.viewport()
-	r := newRenderer(ctx, d, vw, vh)
+	r := newRenderer(ctx, d, vw, vh, identity)
 	return r.filterGraph(id, bbox{x1: w, y1: h, ok: true})
 }
 

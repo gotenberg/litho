@@ -199,7 +199,7 @@ var svgProperties = map[string]bool{
 	"stroke-dasharray": true, "stroke-dashoffset": true, "clip-rule": true, "stop-color": true,
 	"stop-opacity": true, "marker": true, "marker-start": true, "marker-mid": true, "marker-end": true,
 	"text-anchor": true, "flood-color": true, "flood-opacity": true, "color-interpolation-filters": true,
-	"paint-order": true,
+	"paint-order": true, "vector-effect": true,
 }
 
 // SVGProperty reports whether package svg, not the cascade of HTML

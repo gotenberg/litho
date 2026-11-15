@@ -40,11 +40,15 @@ type sink struct {
 	pending typeset.Matrix
 	nest    int
 	alpha   float64
+	// ctm is the transform from the element's user space to the root's,
+	// which a groups' content shares with the element that opened it.
+	ctm typeset.Matrix
 }
 
 // with returns the sink of a child whose transform is local.
 func (s sink) with(local typeset.Matrix) sink {
 	s.pending = mul(s.pending, local)
+	s.ctm = mul(s.ctm, local)
 	return s
 }
 
@@ -78,10 +82,16 @@ type renderer struct {
 	blends  bool
 	// filterPixels counts the pixels of the filtered elements drawn.
 	filterPixels effect.Page
+	// host maps the root's user space to the host coordinate space, the
+	// CSS pixels of the viewport the drawing fills (SVG 2, 13.6), and
+	// hostUsed reports a stroke drawn in it, whose drawing then depends
+	// on the viewport's size.
+	host     typeset.Matrix
+	hostUsed bool
 }
 
-func newRenderer(ctx context.Context, d *Document, vw, vh float64) *renderer {
-	return &renderer{ctx: ctx, d: d, vw: vw, vh: vh, active: map[*html.Node]bool{}}
+func newRenderer(ctx context.Context, d *Document, vw, vh float64, host typeset.Matrix) *renderer {
+	return &renderer{ctx: ctx, d: d, vw: vw, vh: vh, active: map[*html.Node]bool{}, host: host}
 }
 
 // lc returns the length context of an element styled st.
@@ -106,7 +116,7 @@ func (r *renderer) root() []typeset.Fragment {
 	if !st.displayed {
 		return nil
 	}
-	s := sink{c: c, pending: identity, alpha: 1}
+	s := sink{c: c, pending: identity, alpha: 1, ctm: identity}
 	inner, done := r.open(s, r.d.root, st, nil)
 	r.children(r.d.root, st, inner, 0)
 	done()
@@ -328,7 +338,7 @@ func (r *renderer) open(s sink, n *html.Node, st *style, box *bbox) (sink, func(
 		// content collects apart and becomes the filter's result.
 		fc := &container{}
 		outer, closeOuter := inner, done
-		inner = sink{c: fc, pending: identity, nest: outer.nest, alpha: outer.alpha}
+		inner = sink{c: fc, pending: identity, nest: outer.nest, alpha: outer.alpha, ctm: outer.ctm}
 		done = func() {
 			outer.c.out = append(outer.c.out, r.filtered(n, st, id, box, fc.out)...)
 			outer.c.last = nil
@@ -369,7 +379,7 @@ func (r *renderer) openUnion(s sink, op float64, regions []clipRegion, fx effect
 		return s, nil, false
 	}
 	c := &container{}
-	inner := sink{c: c, pending: identity, nest: s.nest + depth, alpha: s.alpha}
+	inner := sink{c: c, pending: identity, nest: s.nest + depth, alpha: s.alpha, ctm: s.ctm}
 	return inner, func() {
 		if len(c.out) == 0 {
 			return
@@ -407,7 +417,7 @@ func (r *renderer) openGroup(s sink, op float64, clip *typeset.Path, fx effects)
 	}
 	g := &typeset.Group{Transform: s.pending, Clip: clip, Opacity: op}
 	c := &container{}
-	inner := sink{c: c, pending: identity, nest: s.nest + 1, alpha: s.alpha}
+	inner := sink{c: c, pending: identity, nest: s.nest + 1, alpha: s.alpha, ctm: s.ctm}
 	return inner, func() {
 		if len(c.out) == 0 {
 			return

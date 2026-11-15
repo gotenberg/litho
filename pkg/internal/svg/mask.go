@@ -83,7 +83,7 @@ func (r *renderer) mask(n *html.Node, st *style, id string, box *bbox, depth int
 	r.masking[me] = true
 	defer delete(r.masking, me)
 	c := &container{}
-	r.children(me, ms, sink{c: c, pending: cm, alpha: 1}, depth)
+	r.children(me, ms, sink{c: c, pending: cm, alpha: 1, ctm: cm}, depth)
 	if len(c.out) == 0 {
 		return empty, true
 	}

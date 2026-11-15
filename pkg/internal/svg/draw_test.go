@@ -225,6 +225,24 @@ func TestDraw_Painting(t *testing.T) {
 			"paint-order-gradient-stroke", `<svg width="100" height="100"><linearGradient id="g"><stop stop-color="red"/><stop offset="1" stop-color="red"/></linearGradient><rect x="20" y="20" width="60" height="60" fill="lime" stroke="url(#g)" stroke-width="20" paint-order="stroke"/></svg>`,
 			[]probe{{14, 50, red}, {26, 50, lime}},
 		},
+		// SVG 2, 13.6: a non-scaling stroke keeps its width in CSS
+		// pixels under the viewBox and the transforms.
+		{
+			"vector-effect-scaling", `<svg width="100" height="100" viewBox="0 0 10 10"><rect x="2" y="2" width="6" height="6" fill="none" stroke="blue" stroke-width="2"/></svg>`,
+			[]probe{{20, 50, blue}, {27, 50, blue}},
+		},
+		{
+			"vector-effect-non-scaling", `<svg width="100" height="100" viewBox="0 0 10 10"><rect x="2" y="2" width="6" height="6" fill="none" stroke="blue" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`,
+			[]probe{{20, 50, blue}, {27, 50, white}, {50, 20, blue}, {50, 27, white}},
+		},
+		{
+			"vector-effect-transformed", `<svg width="100" height="100" viewBox="0 0 10 10"><g transform="scale(3 1)"><rect x="1" y="2" width="2" height="6" fill="none" stroke="blue" stroke-width="2" style="vector-effect: non-scaling-stroke"/></g></svg>`,
+			[]probe{{30, 50, blue}, {37, 50, white}, {50, 20, blue}, {50, 27, white}},
+		},
+		{
+			"vector-effect-not-inherited", `<svg width="100" height="100" viewBox="0 0 10 10"><g vector-effect="non-scaling-stroke"><rect x="2" y="2" width="6" height="6" fill="none" stroke="blue" stroke-width="2"/></g></svg>`,
+			[]probe{{27, 50, blue}},
+		},
 		{
 			"paint-order-text", `<svg width="100" height="100"><text x="10" y="80" font-family="Ahem" font-size="60" fill="lime" stroke="blue" stroke-width="20" paint-order="stroke">X</text></svg>`,
 			[]probe{{5, 60, blue}, {14, 60, lime}},
@@ -236,6 +254,15 @@ func TestDraw_Painting(t *testing.T) {
 			checkProbes(t, img, 40, tt.probes)
 		})
 	}
+}
+
+// TestDraw_NonScalingStrokeAtEachSize locks that a drawing holding a
+// non-scaling stroke is drawn again for each viewport size: its stroke is
+// as wide in CSS pixels at both.
+func TestDraw_NonScalingStrokeAtEachSize(t *testing.T) {
+	d := parse(t, `<svg width="100" height="100" viewBox="0 0 10 10"><rect x="2" y="2" width="6" height="6" fill="none" stroke="blue" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`)
+	checkProbes(t, drawDoc(t, d, 100, 100), 40, []probe{{20, 50, blue}, {27, 50, white}})
+	checkProbes(t, drawDoc(t, d, 200, 200), 40, []probe{{40, 100, blue}, {44, 100, white}})
 }
 
 func TestDraw_TransformedLeaves(t *testing.T) {

@@ -214,6 +214,12 @@ func (r *renderer) shape(n *html.Node, st *style, s sink) {
 	if fill == nil && stroke == nil {
 		return
 	}
+	if st.nonScalingStroke && stroke != nil {
+		var ok bool
+		if ops, fill, outline, s, ok = r.inHostSpace(ops, fill, outline, s); !ok {
+			return
+		}
+	}
 	var caps []typeset.PathOp
 	if stroke != nil && stroke.Cap != typeset.ButtCap {
 		ops, caps = zeroLengthCaps(ops, stroke)
@@ -256,6 +262,39 @@ func (r *renderer) shape(n *html.Node, st *style, s sink) {
 		paintFill()
 		paintStroke()
 	}
+}
+
+// inHostSpace moves a shape's geometry and paints into the host coordinate
+// space, the CSS pixels of the drawing's viewport, and returns the sink
+// that draws them back where they belong: a stroke then takes its width
+// and dashes in that space, whatever transforms and viewBox scale the
+// shape (SVG 2, 13.6, non-scaling-stroke). It reports false when the
+// transform cannot be inverted, which draws nothing.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 prints a stroke 2 user units wide under a
+//     viewBox scaling by 4, and under scale(3 1) inside it, 2 CSS pixels
+//     wide, the path written in CSS pixels; dashes of 5 user units are 5
+//     CSS pixels long.
+func (r *renderer) inHostSpace(ops []typeset.PathOp, fill, outline *typeset.Fill, s sink) ([]typeset.PathOp, *typeset.Fill, *typeset.Fill, sink, bool) {
+	m := mul(r.host, s.ctm)
+	inv, ok := invert(m)
+	if !ok {
+		return nil, nil, nil, s, false
+	}
+	r.hostUsed = true
+	moved := func(f *typeset.Fill) *typeset.Fill {
+		if f == nil || f.Shading == nil {
+			return f
+		}
+		c := *f
+		sh := *c.Shading
+		sh.Transform = mul(m, sh.Transform)
+		c.Shading = &sh
+		return &c
+	}
+	return transformOps(ops, m), moved(fill), moved(outline), s.with(inv), true
 }
 
 // zeroLengthCaps splits the zero-length subpaths out of ops: SVG 1.1,

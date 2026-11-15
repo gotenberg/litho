@@ -57,7 +57,7 @@ func (r *renderer) image(n *html.Node, st *style, s sink) {
 	img := &typeset.Image{Rect: rect, Source: pic.Source}
 	if par.slice && !par.none {
 		c := &container{}
-		r.emit(sink{c: c, pending: identity, alpha: 1}, img)
+		r.emit(sink{c: c, pending: identity, alpha: 1, ctm: inner.ctm}, img)
 		g := &typeset.Group{Clip: &typeset.Path{Ops: rectOps(x, y, w, h), Fill: &typeset.Fill{}}, Opacity: 1, Content: c.out}
 		r.emit(inner, g)
 		return

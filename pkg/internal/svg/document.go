@@ -390,25 +390,34 @@ const MaxGroupDepth = maxGroupNesting + 2
 // pixels, in user units, from the cache when the content does not depend
 // on the viewport's size.
 func (d *Document) render(ctx context.Context, w, h float64) ([]typeset.Fragment, error) {
-	key := [2]float64{w, h}
+	key, shared := [2]float64{w, h}, [2]float64{-1, -1}
 	vb := d.viewBox
-	if vb.ok {
-		key = [2]float64{-1, -1}
-	}
 	d.mu.Lock()
-	if c, ok := d.cache[key]; ok {
-		d.mu.Unlock()
-		return c, nil
+	c, ok := d.cache[key]
+	if !ok && vb.ok {
+		c, ok = d.cache[shared]
 	}
 	d.mu.Unlock()
+	if ok {
+		return c, nil
+	}
 	vw, vh := w, h
+	host := identity
 	if vb.ok {
 		vw, vh = vb.w, vb.h
+		if m, ok := viewBoxTransform(vb, d.par, w, h); ok {
+			host = m
+		}
 	}
-	r := newRenderer(ctx, d, vw, vh)
+	r := newRenderer(ctx, d, vw, vh, host)
 	content := r.root()
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if vb.ok && !r.hostUsed {
+		// The user space does not depend on the viewport's size, and no
+		// stroke was drawn in the viewport's own pixels.
+		key = shared
 	}
 	d.mu.Lock()
 	if len(d.cache) < maxDrawCache {

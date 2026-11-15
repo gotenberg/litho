@@ -109,6 +109,9 @@ type style struct {
 	// strokeFirst records a paint-order that paints the stroke before the
 	// fill (SVG 2, 13.8), inherited.
 	strokeFirst bool
+	// nonScalingStroke records vector-effect: non-scaling-stroke (SVG 2,
+	// 13.6), not inherited.
+	nonScalingStroke bool
 }
 
 // initialStyle returns the initial values (SVG 1.1, Appendix N), with
@@ -162,6 +165,7 @@ func (p *style) inherit() *style {
 	st.floodColor, st.floodAlpha = paint{kind: paintColor, color: typeset.Black}, 1
 	st.blend, st.plusLighter, st.isolate = typeset.BlendNormal, false, false
 	st.background = typeset.Color{}
+	st.nonScalingStroke = false
 	return &st
 }
 
@@ -399,6 +403,19 @@ func (st *style) apply(d declaration, parent *style) bool {
 			st.strokeFirst = first
 		}
 		return ok
+	case "vector-effect":
+		// SVG 2, 13.6 defines non-scaling-size, non-rotation and
+		// fixed-position too, which Chromium does not parse: they are
+		// invalid, as there.
+		switch strings.ToLower(v) {
+		case "none":
+			st.nonScalingStroke = false
+		case "non-scaling-stroke":
+			st.nonScalingStroke = true
+		default:
+			return false
+		}
+		return true
 	case "marker", "marker-start", "marker-mid", "marker-end":
 		if !strings.EqualFold(v, "none") {
 			st.marker = true
@@ -523,6 +540,8 @@ func (st *style) copyFrom(prop string, parent *style) {
 		st.overflowOK = parent.overflowOK
 	case "paint-order":
 		st.strokeFirst = parent.strokeFirst
+	case "vector-effect":
+		st.nonScalingStroke = parent.nonScalingStroke
 	}
 }
 
@@ -539,7 +558,7 @@ var presentationAttrs = map[string]bool{
 	"marker-end": true, "overflow": true, "font-family": true, "font-size": true,
 	"font-weight": true, "font-style": true, "text-anchor": true, "mask-type": true,
 	"flood-color": true, "flood-opacity": true, "color-interpolation-filters": true,
-	"paint-order": true,
+	"paint-order": true, "vector-effect": true,
 }
 
 // blendModes are the <blend-mode> keywords (CSS Compositing 1, 5.3), in
