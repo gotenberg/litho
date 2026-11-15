@@ -53,7 +53,11 @@ func TestDrawingColor_Transforms(t *testing.T) {
 		{"sys default", `<a:sysClr val="window"/>`, [4]int{255, 255, 255, 255}, true},
 		// LibreOffice measured: a windowText line saved red prints black.
 		{"sys over lastClr", `<a:sysClr val="windowText" lastClr="FF0000"/>`, [4]int{0, 0, 0, 255}, true},
-		{"unknown sys keeps lastClr", `<a:sysClr val="hotLight" lastClr="FF0000"/>`, [4]int{255, 0, 0, 255}, true},
+		{"unknown sys keeps lastClr", `<a:sysClr val="gradientActiveCaption" lastClr="FF0000"/>`, [4]int{255, 0, 0, 255}, true},
+		// PowerPoint's colours of a probe: the system's, not lastClr.
+		{"sys highlight", `<a:sysClr val="highlight" lastClr="0078D7"/>`, [4]int{0x33, 0x99, 0xFF, 255}, true},
+		{"sys hotLight", `<a:sysClr val="hotLight" lastClr="FF0000"/>`, [4]int{0, 0x66, 0xCC, 255}, true},
+		{"sys btnFace", `<a:sysClr val="btnFace" lastClr="FF0000"/>`, [4]int{0xF0, 0xF0, 0xF0, 255}, true},
 		{"preset dk", `<a:prstClr val="dkBlue"/>`, [4]int{0, 0, 139, 255}, true},
 		{"hsl", `<a:hslClr hue="0" sat="100000" lum="50000"/>`, [4]int{255, 0, 0, 255}, true},
 		{"comp", `<a:srgbClr val="FF0000"><a:comp/></a:srgbClr>`, [4]int{0, 255, 255, 255}, true},

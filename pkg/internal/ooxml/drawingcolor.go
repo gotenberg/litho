@@ -141,10 +141,15 @@ func gammaIn(v float64) float64 { return toLinear(clamp01(v)) }
 func gammaOut(v float64) float64 { return fromLinear(clamp01(v)) }
 
 // sysColor returns the colour of a sysClr (ECMA-376 Part 1, 20.1.2.3.33):
-// the system colour its val names, as LibreOffice resolves it on a system
-// of default colours, and its lastClr, the colour the system had when the
-// file was saved, only for a name it does not know. LibreOffice prints a
-// windowText sysClr black whatever lastClr says.
+// the system colour its val names, as Office draws it, whatever its
+// lastClr, the colour the system had when the file was saved, says; the
+// lastClr only for a name litho knows no colour of.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: PowerPoint fills a highlight sysClr saved as 0078D7
+//     with 3399FF, a windowText saved as FF0000 with 000000, a btnFace
+//     saved as FF0000 with F0F0F0.
 func sysColor(c *Element) (css.Color, bool) {
 	if col, ok := systemColor(attrOr(c, "val")); ok {
 		return col, true
@@ -153,13 +158,30 @@ func sysColor(c *Element) (css.Color, bool) {
 }
 
 // systemColor returns the colour of a system colour name (ECMA-376 Part
-// 1, 20.1.10.58 ST_SystemColorVal): the window text black, the window
-// white, as LibreOffice's defaults.
+// 1, 20.1.10.58 ST_SystemColorVal): the highlight, the hot-tracked item,
+// the button face and the window text as Office draws them; the other
+// text colours black and the other window and menu colours white, as
+// LibreOffice's defaults. A name not listed takes its lastClr
+// ([sysColor]).
+//
+// # Corpus evidence
+//
+//   - probe, pptx: PowerPoint fills highlight with 3399FF, hotLight with
+//     0066CC (its lastClr too), windowText with 000000 and btnFace with
+//     F0F0F0.
+//   - litho/pptx fill-solid: PowerPoint fills a highlight sysClr saved as
+//     0078D7 with 3399FF.
 func systemColor(name string) (css.Color, bool) {
 	switch name {
+	case "highlight":
+		return HexColor("3399FF")
+	case "hotLight":
+		return HexColor("0066CC")
+	case "btnFace":
+		return HexColor("F0F0F0")
 	case "windowText", "menuText", "captionText", "btnText", "infoText", "3dDkShadow", "highlightText":
 		return css.Color{A: 1}, true
-	case "window", "menu", "btnFace", "3dLight", "btnHighlight", "infoBk", "background":
+	case "window", "menu", "3dLight", "btnHighlight", "infoBk", "background":
 		return css.Color{R: 1, G: 1, B: 1, A: 1}, true
 	}
 	return css.Color{}, false
