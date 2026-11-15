@@ -431,8 +431,20 @@ func (r *reader) composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 	pixels := &r.effectPixels
 	late, _ := r.ctx.Value(lateKey{}).(*lateWarnings) // a type assertion, nil when absent
 	out.Vector = func(ctx context.Context, rect typeset.Rect) []typeset.Fragment {
-		var frags []typeset.Fragment
+		// The leaves are clipped to the anchor's box, but a turned one,
+		// which Excel draws whole about the centre of the box its anchor
+		// holds ([leaf.whole]); each keeps its place in the paint order.
+		var drawn, frags []typeset.Fragment
+		flush := func() {
+			if len(frags) > 0 {
+				drawn = append(drawn, &typeset.Group{Clip: ooxml.RectPath(rect), Content: frags})
+				frags = nil
+			}
+		}
 		for _, l := range leaves {
+			if l.whole() {
+				flush()
+			}
 			outer, box := l.outer(rect), l.box(rect)
 			var content, upright []typeset.Fragment
 			if l.pic != nil {
@@ -460,15 +472,38 @@ func (r *reader) composite(leaves []leaf, d *sheet.Drawing) *layout.Picture {
 				frags = append(frags, content...)
 			}
 			frags = append(frags, upright...)
+			if l.whole() {
+				drawn, frags = append(drawn, frags...), nil
+			}
 		}
-		clipped := &typeset.Group{Clip: ooxml.RectPath(rect), Content: frags}
+		flush()
 		if !fx {
-			return []typeset.Fragment{clipped}
+			return drawn
 		}
 		// The effects reach past the anchor's box, outside its clip.
-		return append(underEffects(ctx, leaves, rect, pixels, late), clipped)
+		return append(underEffects(ctx, leaves, rect, pixels, late), drawn...)
 	}
 	return out
+}
+
+// whole reports a leaf drawn whole, past its anchor's box: a turned shape
+// or picture, whose anchor holds its unturned box, the box with its
+// width and height swapped for a quarter turn ([leaf.box]), and which
+// Excel turns about that box's centre and prints entire, its corners
+// past the anchor included (ECMA-376 Part 1, 20.5.2.33 twoCellAnchor;
+// 20.1.7.6 xfrm rot).
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/tdf142881.xlsx prints two snipped rectangles
+//     turned 135 and 315 degrees, 251 by 32 points, whose anchors hold
+//     them unturned, as long diagonal bars reaching far past their
+//     anchors' boxes, with their text.
+//   - libreoffice/xlsx: sc/tdf135828_Shape_Rect.xlsx prints an up arrow
+//     turned 77 degrees at its own size, its anchor holding the box a
+//     quarter turn swaps.
+func (l *leaf) whole() bool {
+	return math.Mod(l.rot, 360) != 0
 }
 
 // quarterTurn reports a rotation of 45 to 135 or 225 to 315 degrees, for

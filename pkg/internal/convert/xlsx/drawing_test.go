@@ -165,3 +165,31 @@ func TestDrawing_ChartEx(t *testing.T) {
 		t.Errorf("%d drawings for a chart whose part is missing, want none", n)
 	}
 }
+
+// TestRead_TurnedShapeDrawnWhole locks that a turned shape is drawn whole
+// about the centre of its anchor's box, past that box, where an unturned
+// one is clipped to it ([leaf.whole]).
+func TestRead_TurnedShapeDrawnWhole(t *testing.T) {
+	t.Parallel()
+	shape := func(rot string) string {
+		return `<xdr:absoluteAnchor><xdr:pos x="0" y="0"/><xdr:ext cx="2540000" cy="254000"/><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="Bar"/><xdr:cNvSpPr/></xdr:nvSpPr>` +
+			`<xdr:spPr><a:xfrm rot="` + rot + `"><a:off x="0" y="0"/><a:ext cx="2540000" cy="254000"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="00FF00"/></a:solidFill></xdr:spPr></xdr:sp><xdr:clientData/></xdr:absoluteAnchor>`
+	}
+	files := workbookFiles([]testSheet{{
+		name: "S", xml: `<sheetData/><drawing r:id="rIdD"/>`,
+		rels: `<Relationship Id="rIdD" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>`,
+	}},
+		minimalStyles, "", "", map[string]string{"xl/drawings/drawing1.xml": `<xdr:wsDr ` + drawingNS + `>` + shape("0") + shape("8100000") + `</xdr:wsDr>`})
+	doc, _ := readBytes(t, zipFiles(t, files))
+	ds := doc.Sheets[0].Drawings
+	if len(ds) != 2 {
+		t.Fatalf("%d drawings, want 2", len(ds))
+	}
+	for i, wantClip := range []bool{true, false} {
+		frags := ds[i].Picture.Vector(context.Background(), typeset.Rect{Width: 200, Height: 20})
+		g, ok := frags[0].(*typeset.Group)
+		if clipped := ok && g.Clip != nil; len(frags) != 1 || clipped != wantClip {
+			t.Errorf("drawing %d: fragments %+v, want clipped %v", i, frags, wantClip)
+		}
+	}
+}
