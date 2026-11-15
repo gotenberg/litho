@@ -387,14 +387,32 @@ func (rd *renderer) labelText(g *Group, s *Series, j int, v float64, lb Labels, 
 	}
 	sep := lb.Separator
 	if sep == "" {
-		// A percentage without the value goes on a line of its own, as
-		// Office and LibreOffice write it; other parts take a semicolon.
-		sep = "; "
-		if lb.ShowPercent && !lb.ShowValue {
-			sep = "\n"
-		}
+		sep = defaultSeparator(lb, rd.c.Rules)
 	}
 	return strings.Join(parts, sep)
+}
+
+// defaultSeparator returns what joins the parts of a data label that
+// names no separator (ECMA-376 Part 1, 21.2.2.166 separator): a
+// percentage without the value goes on a line of its own, as Office and
+// LibreOffice write it; other parts take a comma and a space under
+// [OfficeRules], a semicolon and a space under LibreOffice's.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/tdf134553's labels of category and value print
+//     "Green, $112,233" in Excel.
+//   - libreoffice/pptx: chart2/tdf146487's and chart2/tdf146756_bestFit's
+//     pie labels of category and value print joined by ", " in
+//     PowerPoint.
+func defaultSeparator(lb Labels, rules Rules) string {
+	if lb.ShowPercent && !lb.ShowValue {
+		return "\n"
+	}
+	if rules == OfficeRules {
+		return ", "
+	}
+	return "; "
 }
 
 // customLabel returns a data label's own text, its fields filled: the

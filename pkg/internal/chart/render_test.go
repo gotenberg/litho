@@ -566,3 +566,20 @@ func TestRenderPart_WritesTheTextThatReachesThePage(t *testing.T) {
 		})
 	}
 }
+
+// TestRender_LabelSeparatorByRules checks the separator of a data label
+// that names none: a comma under Office's rules, a semicolon under
+// LibreOffice's, a line break before a percentage shown without the
+// value under both.
+func TestRender_LabelSeparatorByRules(t *testing.T) {
+	for _, tc := range []struct {
+		rules   Rules
+		percent bool
+		want    string
+	}{{OfficeRules, false, ", "}, {LibreOfficeRules, false, "; "}, {OfficeRules, true, "\n"}} {
+		lb := Labels{ShowValue: !tc.percent, ShowPercent: tc.percent, ShowCategory: true}
+		if got := defaultSeparator(lb, tc.rules); got != tc.want {
+			t.Errorf("rules %v, percent %v: separator %q, want %q", tc.rules, tc.percent, got, tc.want)
+		}
+	}
+}
