@@ -1,18 +1,27 @@
 package formula
 
 import (
+	"strings"
+
 	mt "github.com/gotenberg/litho/pkg/internal/typography/mathtable"
 )
 
 // mspace lays out the blank space e, styled st (MathML Core, 3.2.5): its
 // width attribute's width, its height above the baseline and its depth
 // below, each a length that is not a percentage, a negative one read as
-// 0.
+// 0. Where CSS sized the element, the presentational hints of its
+// attributes among the rules, a height attribute that stands alone is
+// the height CSS resolved, in whatever unit it is written.
 func (l *layouter) mspace(e *Element, st *Style) *box {
 	b := &box{}
 	b.w = l.nonPercent(e, "width", st)
 	b.asc = l.nonPercent(e, "height", st)
 	b.desc = l.nonPercent(e, "depth", st)
+	if _, ok := e.Attr("depth"); st.HasHeight && !ok && l.nonPercent(e, "height", st) == 0 {
+		if v, ok := e.Attr("height"); ok && !strings.HasSuffix(strings.TrimSpace(v), "%") {
+			b.asc = st.Height
+		}
+	}
 	b.inkAsc, b.inkDesc = b.asc, b.desc
 	return b
 }

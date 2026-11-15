@@ -137,3 +137,19 @@ func TestMathHints_MathsizeTakesLengths(t *testing.T) {
 		t.Fatalf("sizes %g, %g, %g; want 15, 15, 30", c.of("k").FontSize, c.of("b").FontSize, c.of("l").FontSize)
 	}
 }
+
+// TestMathHints_SpaceLengths maps the width of mspace onto width and its
+// height and depth onto height, a sum when both are given, leaving
+// percentages out (MathML Core, 3.2.5).
+func TestMathHints_SpaceLengths(t *testing.T) {
+	c := computeMath(t, `<p style="font-size:10px"><math><mspace id=a width="20em" height="3px" depth="1em"/><mspace id=b width="50%" depth="4px"/><mspace id=c height="10%"/></math></p>`, "", 0.8, 0.6)
+	if a := c.of("a"); a.Width.Kind != Points || !near(a.Width.Value, 150) || a.Height.Kind != Points || !near(a.Height.Value, 9.75) {
+		t.Fatalf("a: width %+v, height %+v; want 150pt and 9.75pt", a.Width, a.Height)
+	}
+	if b := c.of("b"); b.Width.Kind == Points || b.Height.Kind != Points || !near(b.Height.Value, 3) {
+		t.Fatalf("b: width %+v, height %+v; want auto and 3pt", b.Width, b.Height)
+	}
+	if h := c.of("c").Height; h.Kind == Points {
+		t.Fatalf("c: height %+v; want auto", h)
+	}
+}

@@ -156,8 +156,9 @@ const maxMathDepthSteps = 64
 // mathHints returns the presentational hints of the MathML element n
 // (MathML Core, 2.1.4 to 2.1.6 and 3.2.2): dir sets direction, mathcolor
 // color, mathbackground background-color, mathsize font-size,
-// displaystyle math-style, scriptlevel math-depth, and mathvariant="normal"
-// on mi sets text-transform to none.
+// displaystyle math-style, scriptlevel math-depth, mathvariant="normal"
+// on mi sets text-transform to none, and the width, height and depth of
+// mspace set width and height (3.2.5).
 func mathHints(n *html.Node) []Declaration {
 	var h hints
 	if v, ok := attr(n, "dir"); ok {
@@ -193,7 +194,37 @@ func mathHints(n *html.Node) []Declaration {
 			h.add("text-transform", "none")
 		}
 	}
+	if n.Data == "mspace" {
+		spaceHints(n, &h)
+	}
 	return h.list
+}
+
+// spaceHints adds the presentational hints of the mspace element n
+// (MathML Core, 3.2.5): a width attribute that is a length sets width,
+// and the height and depth attributes that are lengths set height, to
+// calc(height + depth) when both are.
+func spaceHints(n *html.Node, h *hints) {
+	length := func(name string) (string, bool) {
+		v, ok := attr(n, name)
+		if !ok || !lengthPercentage(v) || strings.HasSuffix(strings.TrimSpace(v), "%") {
+			return "", false
+		}
+		return strings.TrimSpace(v), true
+	}
+	if v, ok := length("width"); ok {
+		h.add("width", v)
+	}
+	height, okH := length("height")
+	depth, okD := length("depth")
+	switch {
+	case okH && okD:
+		h.add("height", "calc("+height+" + "+depth+")")
+	case okH:
+		h.add("height", height)
+	case okD:
+		h.add("height", depth)
+	}
 }
 
 // scriptLevel returns the math-depth a scriptlevel attribute v maps to

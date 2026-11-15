@@ -119,3 +119,22 @@ func TestMath_PositionedChildrenOutOfFlow(t *testing.T) {
 		t.Fatalf("formula reads %q, want the in-flow children alone", got)
 	}
 }
+
+// TestMath_SpaceOfNoHeightKeepsItsWidth sizes a formula of no height, an
+// mspace of a width alone, at its width, and one of no width at its
+// height, written in a unit the cascade resolves (MathML Core, 3.2.5).
+func TestMath_SpaceOfNoHeightKeepsItsWidth(t *testing.T) {
+	src := `<p style="font-size:10px"><math id=a><mspace width="20ch"/></math><math id=b><mspace height="2rem"/></math></p>`
+	p, err := prepare(context.Background(), []byte(src), Options{}, testFonts(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := byID(t, p.root, "a")
+	if a.Kind != layout.Replaced || a.Style.Width.Kind != css.Points || a.Style.Width.Value <= 0 || a.Style.Height.Value != 0 {
+		t.Fatalf("width alone: kind %d, width %+v, height %+v", a.Kind, a.Style.Width, a.Style.Height)
+	}
+	b := byID(t, p.root, "b")
+	if b.Style.Height.Kind != css.Points || b.Style.Height.Value != 24 || b.Style.Width.Value != 0 {
+		t.Fatalf("height alone: width %+v, height %+v; want a height of 24pt", b.Style.Width, b.Style.Height)
+	}
+}

@@ -56,7 +56,8 @@ func (b *builder) mathElement(ctx context.Context, n *dom.Node, st *css.Style) [
 		inner = anonInline(st)
 	}
 	node := &layout.Node{Kind: layout.Replaced, Style: inner, Role: "Formula", Alt: formula.AltText(root)}
-	if box.Width > 0 && box.Ascent+box.Descent > 0 {
+	switch h := box.Ascent + box.Descent; {
+	case box.Width > 0 && h > 0:
 		node.Picture = &layout.Picture{
 			Width: box.Width, Height: box.Ascent + box.Descent, NoRatio: true,
 			HasBaseline: true, Baseline: box.Ascent,
@@ -64,6 +65,20 @@ func (b *builder) mathElement(ctx context.Context, n *dom.Node, st *css.Style) [
 				return box.Draw(r.X, float64(r.Y+box.Ascent))
 			},
 		}
+	case box.Width > 0 || h > 0:
+		// The layout draws no picture of no area. A formula of no height,
+		// an mspace of a width alone, still takes its width on the line,
+		// and one of no width its height (MathML Core, 3.2.5): the size
+		// of a replaced box without a picture, where CSS sizes nothing.
+		sized := *inner
+		if sized.Width.Kind == css.Auto {
+			sized.Width = css.Pts(box.Width)
+		}
+		if sized.Height.Kind == css.Auto {
+			sized.Height = css.Pts(max(h, 0))
+		}
+		sized.BoxSizing = css.ContentBox
+		node.Style = &sized
 	}
 	if !block {
 		node.ID, _ = attr(n, "id")

@@ -422,3 +422,20 @@ func TestTable_ColumnSpan(t *testing.T) {
 		t.Fatalf("cell contents at %v in %g, want the third at 28 in 66", xs, b.Width)
 	}
 }
+
+// TestSpace_HeightCSSResolved takes the line-ascent of an mspace whose
+// height attribute stands alone in a unit the layout cannot resolve from
+// the height CSS resolved for it, the attribute being its presentational
+// hint (MathML Core, 3.2.5).
+func TestSpace_HeightCSSResolved(t *testing.T) {
+	s := dejavu(t)
+	st := mathStyle("DejaVu Math TeX Gyre", 10)
+	sp := attrs(&Element{Name: "mspace"}, "height", "2rem")
+	sst := st
+	sst.Height, sst.HasHeight = 24, true
+	sp.Style = &sst
+	b := lay(t, s, el("math", sp), st)
+	if !near(b.Ascent, 24) || !near(b.Descent, 0) {
+		t.Fatalf("ascent %g, descent %g; want 24 and 0", b.Ascent, b.Descent)
+	}
+}
