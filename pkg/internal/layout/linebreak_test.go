@@ -223,3 +223,28 @@ func TestLineBreak_HyphenBeforeDigit(t *testing.T) {
 		})
 	}
 }
+
+// TestLineBreak_WordKeepsASolidus checks that under Word's rules no line
+// breaks after a solidus: an address too long for its line breaks where
+// the line ends, as overflow-wrap breaks a long word.
+func TestLineBreak_WordKeepsASolidus(t *testing.T) {
+	word := func(s *css.Style) { s.WordRules, s.OverflowWrap = 15, css.BreakWord }
+	css2 := func(s *css.Style) { s.OverflowWrap = css.BreakWord }
+	tests := []struct {
+		name string
+		st   *css.Style
+		want []string
+	}{
+		{"word breaks where the line ends", sty(word), []string{"ab/c", "def"}},
+		{"css breaks after the solidus", sty(css2), []string{"ab/", "cdef"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := run(t, doc(el(tt.st, txt(tt.st, "ab/cdef"))), page(40, 100))
+			got, _ := lineTexts(res, 1)
+			if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+				t.Errorf("lines %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

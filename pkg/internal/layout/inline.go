@@ -281,13 +281,30 @@ func (p *ifcPara) allowed(i int) bool {
 // word-break: keep-all closes (CSS Text 3, 5.3): the opportunities of UAX
 // #14 and those line-break opens between the typographic letter units of
 // CJK alike; one between two Hangul characters that
-// [css.Office.KeepHangul] closes; and one between two emoji that
-// [css.Office.KeepEmoji] closes.
+// [css.Office.KeepHangul] closes; one between two emoji that
+// [css.Office.KeepEmoji] closes; and, under [css.Style.WordRules], one
+// after a solidus (see keptAfterSolidus).
 func (p *ifcPara) keptTogether(i int, a, b rune) bool {
 	st := p.styleAt(i)
 	return st.WordBreak == css.KeepAll && isWordChar(a) && isWordChar(b) ||
 		st.KeepHangul && unicode.Is(unicode.Hangul, a) && unicode.Is(unicode.Hangul, b) ||
-		st.KeepEmoji && text.EmojiJoins(a, b)
+		st.KeepEmoji && text.EmojiJoins(a, b) ||
+		keptAfterSolidus(st, a)
+}
+
+// keptAfterSolidus reports the boundary after a solidus that Word keeps
+// closed: UAX #14 opens one between a solidus (class SY) and a letter
+// (LB31), Word reads a path or an address as one word, which a line too
+// narrow for it breaks where the line ends (overflow-wrap).
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/docx: hyperlink-in_table breaks "http://www.ecma.org/"
+//     in a narrow cell as "http://www.ecma" and ".org/", not after the
+//     slashes; Moon_Tregillus breaks its long addresses at the last
+//     letter that fits ("moonlandi" and "ng.htm").
+func keptAfterSolidus(st *css.Style, a rune) bool {
+	return st.WordRules > 0 && a == '/'
 }
 
 // hangsPunct reports whether character i of p is punctuation that may
