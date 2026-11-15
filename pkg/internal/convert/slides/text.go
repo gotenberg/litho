@@ -1086,6 +1086,7 @@ func (b *builder) paragraph(p *Paragraph, i, n int, body *TextBody, f fit, numbe
 	if p.Align == css.AlignAuto {
 		st.TextAlign = css.AlignStart
 	}
+	st.TextJustify = p.Justify
 	sideLen := func(v float64) float64 {
 		if !numeric.Finite(v) {
 			return 0

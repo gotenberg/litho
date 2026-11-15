@@ -618,8 +618,10 @@ type Paragraph struct {
 	// Style is the run style an empty paragraph's line and the bullet
 	// default to (21.1.2.2.3 endParaRPr).
 	Style RunStyle
-	// Align is the horizontal alignment.
-	Align css.TextAlign
+	// Align is the horizontal alignment; Justify the method a justified
+	// line spreads its free space by, css.JustifyAuto by default.
+	Align   css.TextAlign
+	Justify css.TextJustify
 	// Level is the list level, 0 for the first.
 	Level int
 	// MarginLeft is the indent of the paragraph from the text rectangle's

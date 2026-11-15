@@ -167,6 +167,11 @@ func TestText_ParagraphsAndBullets(t *testing.T) {
 				t.Errorf("bullet %+v", p.Bullet)
 			}
 		}},
+		{"dist distributes as PowerPoint", `<a:p><a:pPr algn="dist"/><a:r><a:t>x</a:t></a:r></a:p>`, func(t *testing.T, p slides.Paragraph) {
+			if p.Align != css.AlignJustifyAll || p.Justify != css.JustifyDistributeCapped {
+				t.Errorf("align %v, justify %v", p.Align, p.Justify)
+			}
+		}},
 		{"exact line spacing", `<a:p><a:pPr><a:lnSpc><a:spcPts val="2400"/></a:lnSpc></a:pPr><a:r><a:t>x</a:t></a:r></a:p>`, func(t *testing.T, p slides.Paragraph) {
 			if p.LineSpacingPoints != 24 {
 				t.Errorf("paragraph %+v", p)

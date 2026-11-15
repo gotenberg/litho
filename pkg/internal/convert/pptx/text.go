@@ -375,7 +375,11 @@ func (r *reader) paragraph(p *ooxml.Element, ts *textStyles) slides.Paragraph {
 		out.Align = css.AlignRight
 	case "just", "justLow":
 		out.Align = css.AlignJustify
-	case "dist", "thaiDist":
+	case "dist":
+		// PowerPoint spreads every line, the last one too, past what its
+		// spaces may grow (css.JustifyDistributeCapped).
+		out.Align, out.Justify = css.AlignJustifyAll, css.JustifyDistributeCapped
+	case "thaiDist":
 		out.Align = css.AlignJustifyAll
 	default:
 		out.Align = css.AlignLeft
