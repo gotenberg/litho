@@ -300,27 +300,33 @@ func TestShape_ShadowUnder(t *testing.T) {
 
 // TestShape_ShapeOnlyShadow checks that a hard shadow copies the shape's
 // text unless it is ShapeOnly, as the copies of most preset shadows are,
-// whether the shape has a fill or not.
+// whether the shape has a fill or not, and that the copy of the text is
+// its glyphs' outlines, so the page's text holds the shape's text once
+// ([builder.outlinedText]).
 func TestShape_ShapeOnlyShadow(t *testing.T) {
-	var count func(frags []typeset.Fragment) int
-	count = func(frags []typeset.Fragment) int {
-		n := 0
+	var count func(frags []typeset.Fragment) (int, int)
+	count = func(frags []typeset.Fragment) (texts, black int) {
 		for _, f := range frags {
 			switch f := f.(type) {
 			case *typeset.Text:
-				n++
+				texts++
+			case *typeset.Path:
+				if f.Fill != nil && f.Fill.Color == (typeset.Color{A: 1}) {
+					black++
+				}
 			case *typeset.Group:
-				n += count(f.Content)
+				t, b := count(f.Content)
+				texts, black = texts+t, black+b
 			}
 		}
-		return n
+		return texts, black
 	}
 	for _, tc := range []struct {
-		name       string
-		filled     bool
-		shapeOnly  bool
-		wantGlyphs int
-	}{{"filled", true, false, 2}, {"filled, shape only", true, true, 1}, {"text alone", false, false, 2}, {"text alone, shape only", false, true, 1}} {
+		name      string
+		filled    bool
+		shapeOnly bool
+		wantCopy  int
+	}{{"filled", true, false, 2}, {"filled, shape only", true, true, 1}, {"text alone", false, false, 1}, {"text alone, shape only", false, true, 0}} {
 		t.Run(tc.name, func(t *testing.T) {
 			sh := box(100, 100, 200, 100, para("Shadow", arial(20)))
 			if tc.filled {
@@ -330,8 +336,8 @@ func TestShape_ShapeOnlyShadow(t *testing.T) {
 			d := deck(&Slide{Shapes: []*Shape{sh}})
 			d.Effects = EffectsPowerPoint
 			doc := convert(t, d, office.Options{})
-			if n := count(doc.Pages[0].Content); n != tc.wantGlyphs {
-				t.Errorf("%d runs of text, want %d", n, tc.wantGlyphs)
+			if texts, black := count(doc.Pages[0].Content); texts != 1 || black != tc.wantCopy {
+				t.Errorf("%d runs of text and %d black paths, want 1 and %d", texts, black, tc.wantCopy)
 			}
 		})
 	}

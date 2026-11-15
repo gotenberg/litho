@@ -580,12 +580,55 @@ func (b *builder) hardShadow(ctx context.Context, sh *Shadow, glows, frags []typ
 			}
 		}
 	}
-	content = append(content, group(toSlide, officefx.Recolor(frags, c, sh.KeepAlpha))...)
+	content = append(content, group(toSlide, b.outlinedText(officefx.Recolor(frags, c, sh.KeepAlpha), 0))...)
 	if len(content) == 0 {
 		return nil
 	}
 	g := &typeset.Group{Transform: shadowMatrix(sh, bounds), Opacity: min(sh.Opacity, 1), Content: content}
 	return []typeset.Fragment{g}
+}
+
+// outlinedText returns frags with each text run drawn as its glyph
+// outlines, filled, and stroked when the run is, in its colour: a hard
+// shadow's copy of a shape's text, which PowerPoint's PDF holds as no
+// text, the shadowed text reading once (ISO 32000-1, 14.8.2.2: the copy
+// is no content of the document's text). An invisible run, which draws
+// nothing, and the runs of a face without outlines are left out.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/tdf111789.pptx, a shape of text with an outer
+//     shadow: PowerPoint's page text holds "Text shape with shadow" once.
+//   - poi/pptx: slideshow/prProps.pptx holds each of the labels of its
+//     three shadowed shapes once.
+func (b *builder) outlinedText(frags []typeset.Fragment, depth int) []typeset.Fragment {
+	out := frags[:0:0]
+	for _, f := range frags {
+		switch v := f.(type) {
+		case *typeset.Text:
+			if v.Invisible {
+				continue
+			}
+			ops := b.outlines.Run(nil, v)
+			if len(ops) == 0 {
+				continue
+			}
+			p := &typeset.Path{Ops: ops, Fill: &typeset.Fill{Color: v.Color}}
+			if v.Stroke > 0 {
+				p.Stroke = &typeset.Stroke{Color: v.Color, Width: v.Stroke}
+			}
+			out = append(out, p)
+		case *typeset.Group:
+			if depth < maxRecolorDepth {
+				g := *v
+				g.Content = b.outlinedText(v.Content, depth+1)
+				out = append(out, &g)
+			}
+		default:
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // recolorBitmap returns the hard shadow of a soft edge's bitmap in slide
