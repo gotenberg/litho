@@ -45,6 +45,13 @@ type evaluator struct {
 // newEvaluator prepares def's guides for the box r, the adjustments of g
 // overriding the defaults by name.
 func newEvaluator(def *Custom, g *Geometry, r typeset.Rect) *evaluator {
+	return newEvaluatorShort(def, g, r, false)
+}
+
+// newEvaluatorShort is [newEvaluator] whose shorter side (ss and its
+// fractions) is the height when heightShort is set, whatever the box's
+// shape.
+func newEvaluatorShort(def *Custom, g *Geometry, r typeset.Rect, heightShort bool) *evaluator {
 	nAdj := min(len(def.Adjust), MaxGuides)
 	nGd := min(len(def.Guides), MaxGuides-nAdj)
 	ev := &evaluator{
@@ -72,6 +79,9 @@ func newEvaluator(def *Custom, g *Geometry, r typeset.Rect) *evaluator {
 		ev.gsx, ev.gsy = 1.0/emuPerPoint, 1.0/emuPerPoint
 	}
 	ss, ls := math.Min(w, h), math.Max(w, h)
+	if heightShort {
+		ss = h
+	}
 	b := &ev.builtins
 	b[BuiltinL], b[BuiltinT], b[BuiltinR], b[BuiltinB] = l, t, l+w, t+h
 	b[BuiltinW], b[BuiltinH] = w, h
