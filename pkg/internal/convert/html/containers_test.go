@@ -104,3 +104,28 @@ func TestContainerQueries_LayoutsAreBounded(t *testing.T) {
 		t.Errorf("warnings %q, want the container layouts' one", msgs)
 	}
 }
+
+// TestStyleContainment_ScopesCounters locks CSS Contain 2, 3.3: under
+// style containment, from contain: style or a container-type, a
+// counter-increment creates a counter of its own rather than step one
+// outside the element, which keeps counting past it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 numbers the
+//     paragraphs one, two and three, four, five and six of this test 1,
+//     1, 1, 2, 1 and 3.
+func TestStyleContainment_ScopesCounters(t *testing.T) {
+	t.Parallel()
+	src := `<!DOCTYPE html><style>body { counter-reset: k } p::before { counter-increment: k; content: counter(k) }</style>` +
+		`<p></p><div style="container-type: inline-size"><p></p><p></p></div><p></p><div style="contain: style"><p></p></div><p></p>`
+	var got []string
+	eachNode(prep(t, src, Options{}).root, func(n *layout.Node) {
+		if n.Kind == layout.Text && strings.TrimSpace(n.Text) != "" {
+			got = append(got, n.Text)
+		}
+	})
+	if s := strings.Join(got, ","); s != "1,1,1,2,1,3" {
+		t.Errorf("text %q, want 1,1,1,2,1,3", s)
+	}
+}

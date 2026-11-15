@@ -202,6 +202,14 @@ func (b *builder) content(ctx context.Context, node *layout.Node, n *dom.Node, s
 	}
 	b.counters.open()
 	defer b.counters.close()
+	if st.Containment()&css.ContainStyle != 0 {
+		// Style containment scopes counter-increment and counter-set to
+		// the element's subtree (CSS Contain 2, 3.3); counter() still
+		// reads the counters around it.
+		outer := b.counters.scope
+		b.counters.scope = b.counters.level()
+		defer func() { b.counters.scope = outer }()
+	}
 	before := b.pseudo(ctx, n, css.PseudoBefore)
 	if before != nil {
 		b.onFirstLine(before, n, css.PseudoBefore, true)

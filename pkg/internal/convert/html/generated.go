@@ -43,6 +43,22 @@ type counterState struct {
 	// pushed lists the names the element being styled instantiated anew,
 	// for [counterState.leave].
 	pushed []string
+	// scope is the level of the children of the nearest element under
+	// style containment, 0 for none: counter-increment and counter-set
+	// below it see no instance an outer level created (CSS Contain 2,
+	// 3.3).
+	scope int
+}
+
+// scoped returns the innermost instance named name that
+// counter-increment and counter-set act on: none created outside the
+// nearest element under style containment, nil for none.
+func (c *counterState) scoped(name string) *counterInst {
+	in := c.innermost(name)
+	if in == nil || in.level < c.scope {
+		return nil
+	}
+	return in
 }
 
 // leave ends the element or pseudo-element that instantiated the counters
@@ -208,7 +224,7 @@ func (b *builder) applyCounters(n *dom.Node, st *css.Style) int {
 	}
 	if implicit {
 		step := 1
-		if in := c.innermost(listItem); in != nil && in.reversed {
+		if in := c.scoped(listItem); in != nil && in.reversed {
 			step = -1
 		}
 		b.increment(listItem, step, inst)
@@ -216,7 +232,7 @@ func (b *builder) applyCounters(n *dom.Node, st *css.Style) int {
 	// An li's value attribute is a counter-set of list-item the cascade
 	// gives (css.HTMLHints), below the author's.
 	for _, op := range st.CounterSet {
-		if in := c.innermost(op.Name); in != nil {
+		if in := c.scoped(op.Name); in != nil {
 			in.value = clampCounter(op.Value)
 		} else {
 			inst(op.Name, op.Value, false)
@@ -282,10 +298,10 @@ func pageOp(st *css.Style) bool {
 // increment adds by to the innermost counter named name, instantiating it
 // at 0 when none is in scope (CSS Lists 3, 4.5).
 func (b *builder) increment(name string, by int, inst func(string, int, bool)) {
-	in := b.counters.innermost(name)
+	in := b.counters.scoped(name)
 	if in == nil {
 		inst(name, 0, false)
-		if in = b.counters.innermost(name); in == nil {
+		if in = b.counters.scoped(name); in == nil {
 			return
 		}
 	}
