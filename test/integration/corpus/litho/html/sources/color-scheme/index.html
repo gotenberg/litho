@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="dark">
+<title>A dark colour scheme</title>
+<style>
+  body { margin: 24px; font: 14px/1.4 sans-serif; }
+  h1 { font-size: 22px; }
+  .panel { background: light-dark(#eef, #223); border: 1px solid light-dark(#99c, #556); padding: 8px; margin: 8px 0; }
+  .light { color-scheme: light; background: Canvas; color: CanvasText; padding: 8px; }
+  .chip { background: ButtonFace; color: ButtonText; border: 1px solid ButtonBorder; padding: 0 6px; }
+  .field { background: Field; color: FieldText; padding: 0 6px; }
+</style>
+</head>
+<body>
+<h1>A page in a dark colour scheme</h1>
+<p>The page declares a dark scheme in its metadata: the sheet is dark and the text light.</p>
+<div class="panel">A panel coloured by light-dark(), its dark colours.</div>
+<p>A <a href="#top">link</a> in the link colour of the scheme, a <span class="chip">button face</span> and a <span class="field">field</span>.</p>
+<div class="light">A part in the light scheme: Canvas and CanvasText resolve light here.</div>
+</body>
+</html>

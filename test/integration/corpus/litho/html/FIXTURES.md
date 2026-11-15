@@ -237,6 +237,15 @@ Chromium prints a `backdrop-filter` without filtering the backdrop, where its sc
 | `backdrop-filter-twin` | 1     | none                    | The same page, each panel's filtered backdrop drawn by `filter` on a copy of the scene clipped to the panel                                                               |
 | `text-shadow-blur`     | 1     | none                    | Blurred `text-shadow` of 1 to 12 pixels on headings and body text, two shadows on one run, and the shadow of an underline                                                 |
 
+## Container queries and colour schemes
+
+`container-queries` styles its components by `@container` rules, which Chromium prints applied: the page is its own reference. Its cards answer containers of different widths, named and unnamed, its bar and text are sized in container query units, a tag answers a style query, and an inner container's width comes from a percentage of an outer one. `color-scheme` declares a dark scheme by `<meta name=color-scheme>`, which Chromium prints on a dark sheet, margins included, with `light-dark()` and the system colours in their dark values, and one part back in the light scheme.
+
+| Source              | Pages | Options | Exercises                                                                                                                                                                     |
+| ------------------- | ----- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `container-queries` | 1     | none    | `container-type`, `container-name` and the `container` shorthand; size queries in both syntaxes with `and`; named containers; the `cq*` units; a style query; nesting         |
+| `color-scheme`      | 1     | none    | `<meta name=color-scheme content=dark>`; the dark canvas and text; `light-dark()`; `LinkText`, `ButtonFace`, `ButtonText`, `ButtonBorder`, `Field`, `FieldText`; a light part |
+
 ## Expected text
 
 Seven sources name `expectedText: "expected-text.txt"` in their `options.json`: Chromium writes their text wrong in its PDF, so their text score reads the file beside them, the page's text in reading order written from the source, and not Chromium's (see [Expected text](../../../FEATURES.md#expected-text)). Each file holds what the page prints: the headings, the paragraphs and the table cells in document order, the numbers of ordered list items (`1.`, `2.`), and no disc bullet, which both engines draw as a shape; the characters as the source holds them, joiners, non-joiners, zero width spaces and variation selectors included. Neither the key nor the file changes the reference. What Chromium's PDF holds, read by PDF.js:

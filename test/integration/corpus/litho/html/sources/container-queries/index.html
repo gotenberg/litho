@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Container queries</title>
+<style>
+  body { margin: 0; font: 14px/1.4 sans-serif; color: #222; }
+  h1 { font-size: 22px; margin: 0 0 12px; }
+  h2 { font-size: 15px; margin: 0 0 6px; }
+  p { margin: 0 0 6px; }
+  .layout { display: flex; gap: 16px; }
+  main { container: main / inline-size; flex: 1; }
+  aside { container: side / inline-size; width: 180px; }
+  .card { container-type: inline-size; border: 1px solid #9ab; border-radius: 6px; padding: 8px; margin-bottom: 10px; background: #f4f7fa; }
+  .card .media { display: grid; grid-template-columns: 1fr; gap: 6px; }
+  .card .thumb { height: 40px; background: #6a8fb5; }
+  @container (inline-size > 300px) {
+    .card .media { grid-template-columns: 80px 1fr; }
+    .card h2 { color: #0a5; }
+  }
+  @container (width < 200px) {
+    .card h2 { font-size: 12px; text-transform: uppercase; }
+    .card .thumb { display: none; }
+  }
+  @container side (width < 300px) {
+    .note { border-left: 4px solid #c60; padding-left: 6px; }
+  }
+  @container main (min-width: 400px) and (max-width: 2000px) {
+    .wide-only { display: block; }
+  }
+  .wide-only { display: none; font-style: italic; }
+  .units { container-type: size; width: 400px; height: 120px; border: 1px dashed #888; margin: 12px 0; }
+  .units .bar { height: 10cqh; width: 50cqw; background: #8b6; margin-bottom: 2cqh; }
+  .units p { font-size: max(12px, 4cqi); margin-left: 5cqmin; }
+  .theme { --tone: warm; }
+  @container style(--tone: warm) {
+    .tag { background: #fde4c8; border: 1px solid #c60; padding: 0 4px; }
+  }
+  .outer { container-type: inline-size; width: 500px; }
+  .inner { container-type: inline-size; width: 70%; border: 1px solid #ccc; padding: 4px; }
+  @container (width > 300px) and (width < 400px) {
+    .inner p { font-weight: bold; }
+  }
+</style>
+</head>
+<body>
+<h1>Components that answer their containers</h1>
+<div class="layout">
+  <main>
+    <div class="card"><div class="media"><div class="thumb"></div><div><h2>Main card</h2><p>A card in the main column lays its picture beside its text once its container is wider than 300 pixels.</p></div></div></div>
+    <p class="wide-only">This line shows when the main column is at least 400 pixels wide.</p>
+    <div class="card" style="width: 170px"><div class="media"><div class="thumb"></div><div><h2>Narrow card</h2><p>Below 200 pixels the picture goes and the heading shrinks.</p></div></div></div>
+  </main>
+  <aside>
+    <div class="card"><div class="media"><div class="thumb"></div><div><h2>Side card</h2><p>The sidebar is 180 pixels wide.</p></div></div></div>
+    <p class="note">A note styled by the named side container.</p>
+  </aside>
+</div>
+<div class="units">
+  <div class="bar"></div>
+  <p>Container units size this bar and this text.</p>
+</div>
+<div class="theme"><p>A <span class="tag">warm</span> tag styled by a style query.</p></div>
+<div class="outer"><div class="inner"><p>The inner container is 350 pixels wide: this text is bold.</p></div></div>
+</body>
+</html>
