@@ -255,7 +255,8 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		//
 		// Format characters: a glyph whose character is a format
 		// character (Unicode category Cf: U+00AD SOFT HYPHEN, U+200B ZERO
-		// WIDTH SPACE and the rest) is not written. One the font gives no
+		// WIDTH SPACE and the rest) is not written, but for the joiners
+		// ([isJoinerOnly]). One the font gives no
 		// width, and a soft hyphen, is passed over: a space held before it
 		// waits for the next glyph. Any other with a width is read as a
 		// glyph with no character: it takes its place on the line, and the
@@ -267,6 +268,18 @@ func reconstructText(ctx context.Context, elements []models.TextElement, fonts [
 		pendingSpace := ""
 		for _, idx := range indices {
 			el := ln.elems[idx]
+			if isJoinerOnly(el.Text) {
+				// A joiner combines with the characters around it: no
+				// word gap is read before it.
+				writeSpace(&sb, pendingSpace)
+				pendingSpace = ""
+				sb.WriteString(el.Text)
+				if advances(el) {
+					prevIdx, visIdx = idx, idx
+					advAt = base + idx
+				}
+				continue
+			}
 			if el.Text == "" || (advances(el) && isFormatOnly(el.Text)) {
 				// A glyph with no character still paints, so a word gap
 				// before it is a word gap in the text, after a glyph with a
@@ -383,7 +396,7 @@ func writeReorderedLine(sb *strings.Builder, elems []models.TextElement, order [
 			continue
 		}
 		text := elems[idx].Text
-		if text == "" {
+		if text == "" || (isFormatOnly(text) && !isJoinerOnly(text)) {
 			continue
 		}
 		if isSpaceGlyph(text) {
@@ -1464,6 +1477,48 @@ func literalSpaceSize(elems []models.TextElement, fonts []runFont, p, i int) flo
 // glyphs set in the same direction.
 func gapReadable(angle float64) bool {
 	return math.Abs(angle) < math.Pi/180 || isHalfTurn(angle) || isOrthogonalRotation(angle)
+}
+
+// isJoinerOnly reports whether s is made only of U+200C ZERO WIDTH
+// NON-JOINER and U+200D ZERO WIDTH JOINER, two format characters extraction
+// writes. A joiner changes what the page shows: U+200D asks for the joining
+// form of a letter, U+200C keeps two letters apart, a ligature or a
+// conjunct broken (Unicode, 23.2), so "त्‌रि" and "त्रि", or Persian
+// "می‌خواهم" and "میخواهم", read differently on the page and in the text.
+// The text of a glyph is the characters its /ToUnicode entry maps it to
+// (ISO 32000-1, 9.10.2).
+//
+// PDF.js at the reference commit writes no format character
+// (src/core/evaluator.js, buildTextContentItem, isInvisibleFormatMark), so
+// its text reads the joined and the parted forms alike. Every other format
+// character stays unwritten, as PDF.js leaves it: it changes no glyph the
+// page shows. U+200B ZERO WIDTH SPACE marks where a line may break, the
+// bidirectional marks and controls an order the text already shows, and a
+// soft hyphen where a word may be hyphenated ([normalizeSoftHyphens]).
+//
+// # Corpus evidence
+//
+//   - litho/html hi-devanagari: "त्‌रि" read "त्रि". litho/html ar-shaping:
+//     the joining forms "ع‍", "‍ع‍", "‍ع", "ه‍", each a letter and a
+//     joiner on a line of its own, read "ع" and "ه".
+//   - pdfjs bug911034.pdf: the one page of every corpus whose text moves.
+//     Its font draws Kannada glyphs for codes its /ToUnicode CMap maps to
+//     General Punctuation, one of them U+200C, so neither PDF.js's text nor
+//     litho's is what the page shows; litho's holds the U+200C the CMap
+//     gives a glyph the page paints.
+//   - pdfjs issue9186.pdf, bug1392647.pdf: U+200B between "2017" and ",",
+//     and between two "o" the page shows side by side; written, it would
+//     part characters the page shows together.
+func isJoinerOnly(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r != '\u200c' && r != '\u200d' {
+			return false
+		}
+	}
+	return true
 }
 
 // isFormatOnly reports whether s is made only of format characters
