@@ -286,7 +286,10 @@ func (f *Format) Apply(v Value) Result {
 	case Error:
 		return Result{Text: v.Text}
 	case Bool:
-		if f.standard || (len(f.sections) == 1 && f.sections[0].kind == secGeneral) {
+		// Excel prints a boolean as TRUE or FALSE whatever its format
+		// (ECMA-376 Part 1, 18.18.11 ST_CellType b); Calc formats it as
+		// the number 0 or 1 unless the format is General.
+		if f.standard || f.excel || (len(f.sections) == 1 && f.sections[0].kind == secGeneral) {
 			t := "FALSE"
 			if v.Number != 0 {
 				t = "TRUE"

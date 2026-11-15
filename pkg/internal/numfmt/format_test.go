@@ -329,3 +329,30 @@ func TestFormat_Excel(t *testing.T) {
 		t.Error("Excel changed General")
 	}
 }
+
+// TestApply_ExcelBooleans locks a boolean under Excel's rules: TRUE or
+// FALSE whatever its format, where Calc formats the number.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: sc/ceiling-floor.xlsx prints TRUE for booleans
+//     under the format 0; sc/tdf122191.xlsx prints TRUE under
+//     "IGAZ";"IGAZ";"HAMIS".
+func TestApply_ExcelBooleans(t *testing.T) {
+	for _, tc := range []struct {
+		code string
+		v    float64
+		want string
+	}{{"0", 1, "TRUE"}, {"0.00", 0, "FALSE"}, {`"IGAZ";"IGAZ";"HAMIS"`, 1, "TRUE"}} {
+		f, err := Parse(tc.code)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := f.Excel().Apply(Value{Kind: Bool, Number: tc.v}).Text; got != tc.want {
+			t.Errorf("%s: %q, want %q", tc.code, got, tc.want)
+		}
+		if got := f.Apply(Value{Kind: Bool, Number: tc.v}).Text; got == tc.want {
+			t.Errorf("%s under Calc's rules: %q", tc.code, got)
+		}
+	}
+}
