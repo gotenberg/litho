@@ -362,3 +362,33 @@ func TestFittedFormula_DrawsOverstrikeAlone(t *testing.T) {
 		}
 	}
 }
+
+// TestFittedFormula_LaysOutByLibreOfficeDistances draws a display sum
+// at 1.455 times the base size and raises a superscript half an em, as
+// LibreOffice Math does in fonts without a MATH table
+// (libreOfficeDistances).
+func TestFittedFormula_LaysOutByLibreOfficeDistances(t *testing.T) {
+	_, ff, _ := fittedOf(t, `<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><munderover><mo>∑</mo><mi>i</mi><mi>n</mi></munderover><msup><mi>a</mi><mn>2</mn></msup></mrow></math>`)
+	w, h := ff.Size()
+	ff.view = formulaView{width: w, height: h, baseline: ff.ascent}
+	var runs [][2]any
+	glyphRuns(ff.Draw(typeset.Rect{Width: w, Height: h}), typeset.Identity, &runs)
+	var sum, a, two *typeset.Text
+	for _, r := range runs {
+		tx := r[0].(*typeset.Text)
+		switch tx.Glyphs[0].Text {
+		case "∑":
+			sum = tx
+		case "a":
+			a = tx
+		case "2":
+			two = tx
+		}
+	}
+	if sum == nil || !nearly(sum.Size, 12*1.455) {
+		t.Fatalf("sum %+v, want at 17.46 pt", sum)
+	}
+	if a == nil || two == nil || !nearly(float64(a.Origin.Y-two.Origin.Y), 6) {
+		t.Fatalf("superscript raised %g, want 6", a.Origin.Y-two.Origin.Y)
+	}
+}

@@ -526,6 +526,41 @@ type FittedFormula struct {
 //     LibreOffice, which saves it without the menclose.
 var libreOfficeEnclosure = formula.Enclosure{Rule: 0.034, StrikeRaise: 0.298, Notations: []string{"horizontalstrike"}}
 
+// libreOfficeDistances are the rules LibreOffice Math lays a formula out
+// by in its fonts, Liberation Serif and OpenSymbol, which have no MATH
+// table, at the distances its settings record by default
+// (RelativeIndexSuperscript and RelativeIndexSubscript 20,
+// RelativeOperatorExcessSize 50, RelativeBracketExcessSize 5,
+// RelativeSpacing 10, the limit distances 0): every glyph boxed by its
+// font's ascent and descent, a superscript's baseline 0.5 em above its
+// base's and a subscript's 0.232 em below, moved by what a taller or
+// deeper base reaches past its font's box, the limits of a large operator
+// 0.076 em from its ink and those of a word such as lim touching it, a
+// large operator drawn at 1.455 times its size, a bracket
+// scaled to cover its content and 5 per cent more, and 0.133 em between
+// two neighbours that are not operators.
+//
+// # Corpus evidence
+//
+//   - probe, odt: formulas written in StarMath at 12 pt, saved and printed
+//     by LibreOffice of gotenberg/gotenberg:9.4.1, each frame at its
+//     view: the superscript of a, A, x and of a nitalic aaa stands 6.0 pt
+//     above the base's baseline, 12.0 at 24 pt, and 6.0 above the
+//     numerator of a fraction; the subscript of a, g and x 2.78 pt below,
+//     5.65 at 24 pt, 2.39 below a fraction's denominator.
+//   - probe, odt: sum, int and prod in display print at 17.45 to 17.5 pt;
+//     the lower limit of the sum at 7.2 pt stands 9.02 pt below the
+//     sum's baseline and its upper limit 15.4 above, those of int 9.85 and
+//     16.3, of prod 8.9: each limit's font box 0.9 pt from the operator's
+//     ink; the limit of lim stands 8.96 below, its font box on lim's.
+//   - probe, odt: left( a over b right) draws parentheses 29.5 pt tall,
+//     as wide as unstretched ones, around a fraction whose font boxes
+//     span 28.4 pt; a b and 2x print 1.6 and 1.95 pt apart at 12 pt.
+var libreOfficeDistances = formula.Distances{
+	SuperscriptRaise: 0.5, SubscriptDrop: 0.232, LargeOperatorScale: 1.455, BracketExcess: 0.05, ElementSpacing: 0.133,
+	LimitGap: 0.076, OperatorSpacing: 0.26,
+}
+
 // Lay lays f out with s at its base size, the extent of its box taken
 // as LibreOffice Math takes it: at least the ascent and descent of its
 // first font at that size. It returns nil when f draws nothing, and
@@ -548,7 +583,7 @@ func (f *Formula) Lay(ctx context.Context, s *formula.Setter, fonts *text.Fonts)
 	st := formula.Style{
 		Families: f.Families, Size: f.Size, Weight: 400, Fallback: text.FallbackLibreOffice, Color: typeset.Color{A: 1},
 		FontVariants: true, OperatorFamilies: f.Operators, ScriptScale: f.ScriptScale,
-		Enclose: &libreOfficeEnclosure,
+		Enclose: &libreOfficeEnclosure, Distances: &libreOfficeDistances,
 	}
 	if v, ok := f.Root.Attr("display"); ok && strings.EqualFold(strings.TrimSpace(v), "block") {
 		// math[display=block] lays its content out in math-style normal
