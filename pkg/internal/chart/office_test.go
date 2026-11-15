@@ -255,7 +255,7 @@ func TestOfficeHorizontalIntervals_ProbeCharts(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			n := officeHorizontalIntervals(tt.length, calibriLine*tt.size)
+			n := officeHorizontalIntervals(tt.length, calibriLine*tt.size, false)
 			s := autoScale(nil, tt.lo, tt.hi, scaleOptions{zero: tt.zero, border: true, maxCount: n})
 			if math.Abs(s.min-tt.min) > 1e-9 || math.Abs(s.max-tt.max) > 1e-9 || math.Abs(s.major-tt.major) > 1e-9 {
 				t.Errorf("scale = [%v, %v] by %v, want [%v, %v] by %v", s.min, s.max, s.major, tt.min, tt.max, tt.major)
@@ -279,8 +279,52 @@ func TestOfficeHorizontalIntervals_Bounds(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := officeHorizontalIntervals(tt.length, tt.lineH); got != tt.want {
+			if got := officeHorizontalIntervals(tt.length, tt.lineH, false); got != tt.want {
 				t.Errorf("officeHorizontalIntervals(%v, %v) = %d, want %d", tt.length, tt.lineH, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestOfficeHorizontalIntervals_PowerPoint holds PowerPoint's count of the
+// intervals of a value axis across the chart to its probe: the length
+// over three rounded label lines, rounded to the nearest whole number,
+// where Excel's count drops what is left.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: bar charts over 2.1, 3.3 and 4.45 or 4.0, 7.5 and 9.5,
+//     labels of Calibri, axes of the lengths below; PowerPoint's scales.
+func TestOfficeHorizontalIntervals_PowerPoint(t *testing.T) {
+	tests := []struct {
+		name                       string
+		hi, length, size           float64
+		wantMin, wantMax, wantStep float64
+	}{
+		{"P01", 4.45, 130.35, 10, 0, 6, 2},
+		{"P13", 4.45, 420.51, 10, 0, 5, 0.5},
+		{"P17", 4.45, 125.90, 12, 0, 6, 2},
+		{"P19", 9.5, 122.71, 12, 0, 10, 5},
+		{"P21", 4.45, 205.94, 12, 0, 5, 1},
+		{"P23", 9.5, 202.74, 12, 0, 10, 2},
+		{"P29", 4.45, 416.06, 12, 0, 5, 1},
+		{"P31", 9.5, 412.86, 12, 0, 10, 2},
+		{"P33", 4.45, 121.46, 14, 0, 5, 5},
+		{"P41", 4.45, 291.55, 14, 0, 5, 1},
+		{"P51", 9.5, 108.11, 18, 0, 10, 5},
+		{"P53", 4.45, 192.61, 18, 0, 6, 2},
+		{"P57", 4.45, 282.64, 18, 0, 6, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := officeHorizontalIntervals(tt.length, 1.2207*tt.size, true)
+			lo := 2.1
+			if tt.hi > 5 {
+				lo = 4
+			}
+			s := autoScale(nil, lo, tt.hi, scaleOptions{zero: true, border: true, maxCount: n})
+			if s.min != tt.wantMin || s.max != tt.wantMax || math.Abs(s.major-tt.wantStep) > 1e-9 {
+				t.Errorf("scale = [%v, %v] by %v, want [%v, %v] by %v", s.min, s.max, s.major, tt.wantMin, tt.wantMax, tt.wantStep)
 			}
 		})
 	}

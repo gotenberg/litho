@@ -713,7 +713,7 @@ func (rd *renderer) fitScale(d *dim) {
 			if d.vertical {
 				opt.maxCount = officeIntervals(d.length()+rd.officeLabelExcess(d.other), lineH)
 			} else {
-				opt.maxCount = officeHorizontalIntervals(d.length(), lineH)
+				opt.maxCount = officeHorizontalIntervals(d.length(), lineH, rd.c.PowerPoint)
 			}
 			if same > 0 {
 				opt.maxCount = max(1, min(opt.maxCount, len(ticks)/(same+1)))

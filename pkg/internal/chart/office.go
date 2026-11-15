@@ -478,7 +478,9 @@ func officeIntervals(length, lineH float64) int {
 // automatic scale gives a value axis drawn across the chart, length points
 // long, whose labels are lineH points high: one interval for every
 // officeLabelPitch label lines along it, at least one and at most
-// maxAutoTicks. The labels' widths do not count.
+// maxAutoTicks. The labels' widths do not count. Excel drops the part of
+// an interval left at the end; PowerPoint, in a chart of a presentation,
+// rounds it to the nearest interval.
 //
 // # Corpus evidence
 //
@@ -495,12 +497,27 @@ func officeIntervals(length, lineH float64) int {
 //   - probe, xlsx: on 15 scatter charts, frames 4 to 10 columns wide, the
 //     horizontal axis follows the same count, and the vertical one the
 //     count of officeIntervals.
-func officeHorizontalIntervals(length, lineH float64) int {
+//   - probe, pptx: on 64 bar charts of PowerPoint, axes 108 to 421 pt
+//     long, labels of 10, 12, 14 and 18 pt Calibri, the choice is the
+//     smallest step whose intervals number at most the length over three
+//     rounded lines, rounded to the nearest whole number, on every chart:
+//     at 12 pt five intervals of 40.55 pt are kept and ten of 41.6 pt
+//     refused, which no least length an interval explains; at 18 pt two
+//     intervals of 54.06 pt are kept on an axis 108.11 pt long, 1.66
+//     times three lines of 21.75 pt. The same labels in Arial 12 pt on
+//     16 charts take fewer intervals than this count gives on 10 of them
+//     (three refused on 123.54 pt, where 40.5 pt lines give 3.05): not
+//     explained.
+func officeHorizontalIntervals(length, lineH float64, round bool) int {
 	h := officeLabelLine(lineH)
 	if !numeric.Positive(h) {
 		return maxAutoTicks
 	}
-	return officeClampIntervals(math.Floor(length / float64(officeLabelPitch*h)))
+	n := length / float64(officeLabelPitch*h)
+	if round {
+		return officeClampIntervals(math.Round(n))
+	}
+	return officeClampIntervals(math.Floor(n))
 }
 
 // officeLabelPitch is the length of a major interval of a value axis drawn

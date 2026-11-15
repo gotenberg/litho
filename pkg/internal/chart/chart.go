@@ -81,6 +81,10 @@ type Chart struct {
 	// Word marks a chart of a Word document, which under [OfficeRules]
 	// takes Word's legend keys where Excel's and PowerPoint's differ.
 	Word bool
+	// PowerPoint marks a chart of a presentation, which under
+	// [OfficeRules] counts the intervals of a value axis drawn across the
+	// chart as PowerPoint does, where Excel's count differs.
+	PowerPoint bool
 }
 
 // Rules is the application whose automatic chart layout a [Chart] follows.

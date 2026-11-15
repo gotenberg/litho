@@ -181,7 +181,7 @@ func ChartFromElement(root *Element, theme *Theme, opts ChartOptions) (*chart.Ch
 	if theme == nil || len(theme.Colors) == 0 {
 		theme = officeTheme
 	}
-	p := &chartReader{theme: theme, style: defaultChartStyle, c: &chart.Chart{Rules: chart.OfficeRules}, mso2007: opts.MSO2007, impress: opts.Presentation}
+	p := &chartReader{theme: theme, style: defaultChartStyle, c: &chart.Chart{Rules: chart.OfficeRules, PowerPoint: opts.Presentation}, mso2007: opts.MSO2007, impress: opts.Presentation}
 	if v, ok := Int(childVal(root, "style")); ok && v >= 1 && v <= 48 {
 		p.style = v
 	}
