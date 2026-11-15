@@ -101,6 +101,28 @@ jobs:
       - name: Vet linux/arm/v7
         run: GOOS=linux GOARCH=arm GOARM=7 go vet ./...
 
+  # A conversion writes the same bytes on every machine, and tests pin them.
+  # arm64 is where the compiler fuses a multiply and an add into one
+  # instruction, so a pin that moves here alone names an expression whose
+  # result depends on the CPU. -race has run on amd64.
+  test-unit-arm64:
+    needs:
+      - lint
+      - lint-prettier
+    name: Run unit tests (arm64)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests on linux/arm64
+        run: go test ./...
+
   # The corpus converts with a copy of the Gotenberg image's fonts, passed as
   # font directories. This job runs the same conversions inside the image
   # itself, with no directory, so litho must find the fonts by its own
