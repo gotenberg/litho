@@ -18,14 +18,40 @@ import (
 // text path (14.1.2.22 textpath on), whose path warps text and is not an
 // outline.
 func VMLPath(sp, typ *Element) (shape.VMLSource, bool) {
-	var src shape.VMLSource
+	if vmlTextPathOn(sp, typ) {
+		return shape.VMLSource{}, false
+	}
+	return vmlPath(sp, typ)
+}
+
+// VMLTextPath returns the path a VML shape sp of type typ sets its text
+// path's string along (ECMA-376 Part 4, 14.1.2.22 textpath, on; its path,
+// 14.1.2.14 textpathok), read as [VMLPath] reads an outline. It reports
+// false when the shape draws no text path or neither has a path.
+func VMLTextPath(sp, typ *Element) (shape.VMLSource, bool) {
+	if !vmlTextPathOn(sp, typ) {
+		return shape.VMLSource{}, false
+	}
+	return vmlPath(sp, typ)
+}
+
+// vmlTextPathOn reports whether the shape sp or its type typ turns its
+// text path on (14.1.2.22 on).
+func vmlTextPathOn(sp, typ *Element) bool {
 	for _, e := range []*Element{sp, typ} {
 		if tp := e.Child(NSV, "textpath"); tp != nil {
 			if v, ok := tp.Attr("on"); ok && vmlTrue(v) {
-				return src, false
+				return true
 			}
 		}
 	}
+	return false
+}
+
+// vmlPath reads the path, formulas, adjustments and coordinate space of
+// sp and its type typ.
+func vmlPath(sp, typ *Element) (shape.VMLSource, bool) {
+	var src shape.VMLSource
 	pathOf := func(e *Element) string {
 		if v, ok := e.Attr("path"); ok {
 			return v
