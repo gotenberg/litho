@@ -44,6 +44,9 @@ type block struct {
 	style TextStyle
 	// lineH is the height of each line.
 	lineH []float64
+	// shown, when not nil, is the part of the page that shows: a line
+	// whose box does not reach it is not drawn.
+	shown *typeset.Rect
 }
 
 // rotated returns the block's bounding box size once rotated.
@@ -90,7 +93,7 @@ func (rd *renderer) measure(s string, st TextStyle, maxW float64) *block {
 	if err != nil || len(lines) == 0 {
 		return nil
 	}
-	b := &block{lines: lines, style: st}
+	b := &block{lines: lines, style: st, shown: rd.shown}
 	b.style.Size = ts.Size
 	for _, l := range lines {
 		b.w = max(b.w, l.Width)
@@ -152,6 +155,10 @@ func (b *block) draw(cx, cy float64, al align) []typeset.Fragment {
 		return nil
 	}
 	x0, y := cx-float64(b.w/2), cy-float64(b.h/2)
+	var turn typeset.Matrix
+	if b.style.Rotation != 0 {
+		turn = rotateAbout(b.style.Rotation, cx, cy)
+	}
 	var out []typeset.Fragment
 	for i, l := range b.lines {
 		dx := 0.0
@@ -163,6 +170,10 @@ func (b *block) draw(cx, cy float64, al align) []typeset.Fragment {
 		case alignLeft:
 		}
 		base := y + float64((b.lineH[i]-l.Ascent-l.Descent)/2) + l.Ascent
+		if b.shown != nil && !reaches(typeset.Rect{X: x0 + dx, Y: y, Width: l.Width, Height: b.lineH[i]}, turn, *b.shown) {
+			y += b.lineH[i]
+			continue
+		}
 		for _, run := range l.Runs {
 			t := *run
 			t.Origin = typeset.Point{X: x0 + dx + run.Origin.X, Y: base}
@@ -173,7 +184,23 @@ func (b *block) draw(cx, cy float64, al align) []typeset.Fragment {
 	if b.style.Rotation == 0 || len(out) == 0 {
 		return out
 	}
-	return []typeset.Fragment{&typeset.Group{Transform: rotateAbout(b.style.Rotation, cx, cy), Content: out}}
+	return []typeset.Fragment{&typeset.Group{Transform: turn, Content: out}}
+}
+
+// reaches reports whether the box of a line, turned by m when m is not
+// the zero matrix, overlaps shown: the bounding box of its turned corners
+// and shown share some area.
+func reaches(box typeset.Rect, m typeset.Matrix, shown typeset.Rect) bool {
+	x0, y0, x1, y1 := box.X, box.Y, box.X+box.Width, box.Y+box.Height
+	if m != (typeset.Matrix{}) {
+		x0, y0, x1, y1 = math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
+		for _, p := range [4][2]float64{{box.X, box.Y}, {box.X + box.Width, box.Y}, {box.X, box.Y + box.Height}, {box.X + box.Width, box.Y + box.Height}} {
+			x := float64(m.A*p[0]) + float64(m.C*p[1]) + m.E
+			y := float64(m.B*p[0]) + float64(m.D*p[1]) + m.F
+			x0, y0, x1, y1 = min(x0, x), min(y0, y), max(x1, x), max(y1, y)
+		}
+	}
+	return x1 > shown.X && x0 < shown.X+shown.Width && y1 > shown.Y && y0 < shown.Y+shown.Height
 }
 
 // rotateAbout returns the transform that turns the page counter-clockwise
@@ -197,4 +224,7 @@ type renderer struct {
 	fixed *typeset.Rect
 	// points indexes each series' point overrides by point index.
 	points map[*Series]map[int]*Point
+	// shown, when not nil, is the part of the page that shows
+	// ([RenderPart]).
+	shown *typeset.Rect
 }

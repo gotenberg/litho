@@ -529,3 +529,40 @@ func TestRender_DisplayUnit(t *testing.T) {
 		t.Errorf("labels %q, want them in millions", labels)
 	}
 }
+
+// TestRenderPart_WritesTheTextThatReachesThePage locks the rule of
+// [RenderPart]: a part of a chart writes the lines of text whose box
+// reaches the part that shows, a cut one whole, and no other, and draws
+// what [Render] draws.
+func TestRenderPart_WritesTheTextThatReachesThePage(t *testing.T) {
+	c := barChart(1, 2)
+	// The 14 pt title of five Ahem squares spans x 175 to 245.
+	c.Title = &Title{Text: "Sales", Style: TextStyle{Size: 14, Color: typeset.Black}}
+	whole := Render(context.Background(), ahem(t), c, chartRect)
+	for _, tc := range []struct {
+		name  string
+		shown typeset.Rect
+		title bool
+	}{
+		{"whole chart", chartRect, true},
+		{"title cut at the edge", typeset.Rect{X: 10, Y: 20, Width: 190, Height: 200}, true},
+		{"title on the next page", typeset.Rect{X: 10, Y: 20, Width: 100, Height: 200}, false},
+		{"title on the page before", typeset.Rect{X: 10, Y: 100, Width: 400, Height: 120}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			part := RenderPart(context.Background(), ahem(t), c, chartRect, tc.shown)
+			if got := slices.Contains(texts(part), "Sales"); got != tc.title {
+				t.Errorf("title written = %v, want %v (texts %q)", got, tc.title, texts(part))
+			}
+			want, got := paths(whole, red), paths(part, red)
+			if len(got) != len(want) {
+				t.Fatalf("%d bars, want %d", len(got), len(want))
+			}
+			for i := range want {
+				if bounds(got[i]) != bounds(want[i]) {
+					t.Errorf("bar %d at %v, want %v", i, bounds(got[i]), bounds(want[i]))
+				}
+			}
+		})
+	}
+}

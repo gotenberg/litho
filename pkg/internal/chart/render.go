@@ -62,10 +62,37 @@ const (
 // A three-dimensional chart with a view is drawn as a parallel
 // projection (see [View3D]); trendline equations are not drawn.
 func Render(ctx context.Context, fonts *text.Fonts, c *Chart, r typeset.Rect) []typeset.Fragment {
+	return render(ctx, fonts, c, r, nil)
+}
+
+// RenderPart draws c into r as [Render] does, for a page that shows only
+// the part of r inside shown: a line of text whose box does not reach
+// shown is left out, as Microsoft Excel prints a chart that crosses a
+// page's edge, writing on each page the text that at least partly shows
+// there. What is drawn inside shown does not change.
+//
+// # Corpus evidence
+//
+//   - libreoffice/xlsx: chart2/external_str_ref.xlsx, chart2/fdo54361.xlsx
+//     and chart2/chart-text-can-overlap.xlsx: on each page the chart
+//     crosses, Excel writes the title and the labels whose line reaches
+//     the page's clip, a cut one whole ("2012" on both pages), and none
+//     of the others: page 2 of external_str_ref holds the first line of
+//     the title, which ends 4 points inside the clip with its trailing
+//     space, and not its second line, nor the axis labels.
+//   - probe, xlsx: Calc, printing the same workbooks, writes every text
+//     of the chart on every page the chart crosses.
+func RenderPart(ctx context.Context, fonts *text.Fonts, c *Chart, r, shown typeset.Rect) []typeset.Fragment {
+	return render(ctx, fonts, c, r, &shown)
+}
+
+// render draws c into r, writing only the text that reaches shown when
+// shown is not nil.
+func render(ctx context.Context, fonts *text.Fonts, c *Chart, r typeset.Rect, shown *typeset.Rect) []typeset.Fragment {
 	if c == nil || fonts == nil || !numeric.PositiveFinite(r.Width) || !numeric.PositiveFinite(r.Height) {
 		return nil
 	}
-	rd := &renderer{ctx: ctx, fonts: fonts, c: boxed(arranged(binned(c))), page: r}
+	rd := &renderer{ctx: ctx, fonts: fonts, c: boxed(arranged(binned(c))), page: r, shown: shown}
 	rd.render(r)
 	if len(rd.out) == 0 {
 		return nil

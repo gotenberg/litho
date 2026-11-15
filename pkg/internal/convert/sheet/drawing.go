@@ -55,9 +55,14 @@ func (b *pageBuilder) drawings(regs []*region) ([]typeset.Fragment, []*typeset.S
 			}
 			r := typeset.Rect{X: x, Y: y, Width: rc.Width, Height: rc.Height}
 			var content []typeset.Fragment
-			if pic.Vector != nil {
+			switch {
+			case d.Picture == nil && d.Chart != nil && g.doc.ExcelRules:
+				// Excel writes on a page only the chart's text that
+				// reaches the page ([chart.RenderPart]).
+				content = chart.RenderPart(b.ctx, b.fonts, d.Chart, r, typeset.Rect{X: rg.x0, Y: rg.y0, Width: rg.w, Height: rg.h})
+			case pic.Vector != nil:
 				content = pic.Vector(b.ctx, r)
-			} else {
+			default:
 				content = []typeset.Fragment{&typeset.Image{Rect: r, Source: pic.Source}}
 			}
 			if fig != nil && adopt(content, fig) {
