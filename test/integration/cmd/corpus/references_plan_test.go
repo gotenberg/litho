@@ -491,3 +491,34 @@ func TestSourceSums_LeaveTheDerivedAltTextOut(t *testing.T) {
 		t.Error("a source that sets derivedAltText owns no reference")
 	}
 }
+
+// TestSourceSums_LeaveTheCommentsOut pins that the comments key, whose
+// annotations draw nothing, moves no digest a reference records and asks
+// for no twin: an Office source that sets it keeps the reference it had
+// without it.
+func TestSourceSums_LeaveTheCommentsOut(t *testing.T) {
+	t.Parallel()
+
+	fx := planSources(t, map[string]map[string]string{
+		"memo":          {"memo.fodt": "<x/>"},
+		"memo-comments": {"memo.fodt": "<x/>", "options.json": `{"comments": "annotations"}`},
+	})
+	sums := map[string][2]string{}
+	for _, f := range fx {
+		src, opt, err := sourceSums(engineLibreOffice, f.PDFPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sums[f.ID] = [2]string{src, opt}
+	}
+	if sums["memo-comments"] != sums["memo"] {
+		t.Errorf("comments moved the digests: %v against %v", sums["memo-comments"], sums["memo"])
+	}
+	p, err := planReferences(fx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.ownsNoReference("memo-comments") {
+		t.Error("a source that sets comments owns no reference")
+	}
+}

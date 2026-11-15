@@ -529,9 +529,10 @@ func expectedTextFile(dir string) string {
 
 // referenceNeutral are the keys of an options file no reference depends
 // on: the expected text, which the rig alone reads
-// ([fixture.ExpectedTextName]), and the derived descriptions, which draw
-// nothing ([fixture.DerivedAltTextName]).
-var referenceNeutral = []string{fixture.ExpectedTextName, fixture.DerivedAltTextName}
+// ([fixture.ExpectedTextName]), and the derived descriptions and the
+// comments, which draw nothing ([fixture.DerivedAltTextName],
+// [fixture.CommentsName]).
+var referenceNeutral = []string{fixture.ExpectedTextName, fixture.DerivedAltTextName, fixture.CommentsName}
 
 // optionsDigest returns the SHA-256 a reference records for the options
 // file at path: the file's own, or, for one that names a key no reference

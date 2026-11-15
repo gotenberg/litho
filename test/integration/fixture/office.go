@@ -97,6 +97,11 @@ type OfficeOptions struct {
 	// It is litho's own option but draws nothing: the source keeps its
 	// reference ([DerivedAltTextName]).
 	DerivedAltText bool `json:"derivedAltText,omitempty"`
+	// Comments is how a text document writes its comments:
+	// "hidden", the default, or "annotations", pdf.WithComments. It is
+	// litho's own option but draws nothing: the source keeps its reference
+	// ([CommentsName]).
+	Comments string `json:"comments,omitempty"`
 }
 
 // OfficeOptionNames are the keys of an Office options file, the JSON names
@@ -233,7 +238,7 @@ func LoadOffice(path string) (*Office, error) {
 func ParseOfficeOptions(data []byte) (OfficeOptions, error) {
 	var o OfficeOptions
 	names := append(slices.Clone(OfficeOptionNames), OfficeLithoOptionNames...)
-	if err := decodeStrict(data, append(names, ReferenceOfName, InstalledFontsName, DerivedAltTextName), &o); err != nil {
+	if err := decodeStrict(data, append(names, ReferenceOfName, InstalledFontsName, DerivedAltTextName, CommentsName), &o); err != nil {
 		return OfficeOptions{}, err
 	}
 	return o, o.validate()
@@ -259,6 +264,9 @@ func (o OfficeOptions) validate() error {
 	if _, ok := trackedChangesViews[o.TrackedChanges]; !ok {
 		return fmt.Errorf("trackedChanges %q: want accepted, rejected or marked", o.TrackedChanges)
 	}
+	if _, ok := commentsViews[o.Comments]; !ok {
+		return fmt.Errorf("%s %q: want hidden or annotations", CommentsName, o.Comments)
+	}
 	if _, ok := recalculationModes[o.Recalculation]; !ok {
 		return fmt.Errorf("recalculation %q: want asNeeded, never or always", o.Recalculation)
 	}
@@ -276,6 +284,13 @@ var trackedChangesViews = map[string]pdf.TrackedChanges{
 	"accepted": pdf.TrackedChangesAccepted,
 	"rejected": pdf.TrackedChangesRejected,
 	"marked":   pdf.TrackedChangesMarked,
+}
+
+// commentsViews maps the comments values to litho's views.
+var commentsViews = map[string]pdf.Comments{
+	"":            pdf.CommentsHidden,
+	"hidden":      pdf.CommentsHidden,
+	"annotations": pdf.CommentsAnnotations,
 }
 
 // recalculationModes maps the recalculation values to litho's modes.
@@ -418,6 +433,10 @@ func (o *Office) options() officeOptions {
 		if view := trackedChangesViews[o.Options.TrackedChanges]; view != pdf.TrackedChangesAccepted {
 			opts.word = append(opts.word, pdf.WithTrackedChanges(view))
 			opts.litho = append(opts.litho, "trackedChanges")
+		}
+		if view := commentsViews[o.Options.Comments]; view != pdf.CommentsHidden {
+			// The comments draw nothing: the source keeps its reference.
+			opts.word = append(opts.word, pdf.WithComments(view))
 		}
 	case FormatXLSX, FormatODS:
 		if o.Options.Sheets != nil {

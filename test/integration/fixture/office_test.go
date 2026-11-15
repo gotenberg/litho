@@ -166,11 +166,11 @@ func TestOfficeOptionNames_MatchTheJSONNames(t *testing.T) {
 		tags = append(tags, name)
 	}
 	// The route's fields, then litho's own options, then the key that
-	// borrows a reference, the one that installs fixture fonts and the one
-	// that derives descriptions: the last three are no fields of the
-	// route's.
+	// borrows a reference, the one that installs fixture fonts, the one
+	// that derives descriptions and the one that writes comments: the last
+	// four are no fields of the route's.
 	want := append(slices.Clone(OfficeOptionNames), OfficeLithoOptionNames...)
-	if want = append(want, ReferenceOfName, InstalledFontsName, DerivedAltTextName); !slices.Equal(tags, want) {
+	if want = append(want, ReferenceOfName, InstalledFontsName, DerivedAltTextName, CommentsName); !slices.Equal(tags, want) {
 		t.Errorf("json names %v, want %v", tags, want)
 	}
 }
@@ -328,5 +328,41 @@ func TestDerivedAltText_ConvertsWithTheOptionAndKeepsTheReference(t *testing.T) 
 	ref, err := LoadReference(dir)
 	if err != nil || ref.Unreferenced() {
 		t.Errorf("LoadReference = %+v, %v; want a reference of its own", ref, err)
+	}
+}
+
+// TestComments_ConvertsWithTheOptionAndKeepsTheReference holds the
+// comments key: a DOCX or ODT source that sets it to annotations converts
+// with pdf.WithComments, and, since the comments draw nothing, counts as
+// setting no litho option: it keeps a reference of its own and needs no
+// twin. Another format ignores it, and a value other than hidden or
+// annotations is refused.
+func TestComments_ConvertsWithTheOptionAndKeepsTheReference(t *testing.T) {
+	t.Parallel()
+
+	opts, err := ParseOfficeOptions([]byte(`{"comments": "annotations"}`))
+	if err != nil || opts.Comments != "annotations" {
+		t.Fatalf("options: %+v, %v", opts, err)
+	}
+	for _, format := range []Format{FormatDOCX, FormatODT, FormatXLSX, FormatPPTX} {
+		o := &Office{Format: format, Options: opts}
+		if got := o.LithoOptions(); len(got) != 0 {
+			t.Errorf("%s: LithoOptions = %v, want none", format, got)
+		}
+		want := len((&Office{Format: format}).options().word)
+		if format == FormatDOCX || format == FormatODT {
+			want++
+		}
+		if n := len(o.options().word); n != want {
+			t.Errorf("%s: %d word processing options, want %d", format, n, want)
+		}
+	}
+	for _, v := range []string{`"hidden"`, `""`} {
+		if _, err := ParseOfficeOptions([]byte(`{"comments": ` + v + `}`)); err != nil {
+			t.Errorf("%s: %v", v, err)
+		}
+	}
+	if _, err := ParseOfficeOptions([]byte(`{"comments": "margin"}`)); err == nil {
+		t.Error("an unknown view is read")
 	}
 }

@@ -362,7 +362,7 @@ An option that changes what prints needs a fixture: a source with its `options.j
 - Name the twin in the fixture's `options.json`: `"reference_of": "<twin's directory name>"`. The twin must have a reference of its own: it cannot borrow in turn, nor set litho's own options.
 - Run `make corpus-prepare CORPUS=<corpus>`: it builds the twin's reference and none for the fixture, which the `diff` cell then scores against the twin's goldens.
 
-A fixture that sets litho's own options and names no twin is converted by `targets` and `robustness` but not scored by `diff`, which names it in a notice. The keys, the options they map to and the values that count as not set are in [FEATURES.md](FEATURES.md#twins-and-lithos-own-options).
+A fixture that sets litho's own options and names no twin is converted by `targets` and `robustness` but not scored by `diff`, which names it in a notice. The keys, the options they map to and the values that count as not set are in [FEATURES.md](FEATURES.md#twins-and-lithos-own-options). Two keys of litho's own draw nothing, `derivedAltText` and `comments`: a source that sets one keeps the reference of the source as written and needs no twin, and the digest a reference records leaves the key out.
 
 A fixture that needs fonts no directory of the Gotenberg image holds names fixture font directories under `installedFonts` in its `options.json`: litho converts it with them, and `corpus references` converts it in a container that has them installed (see [Installed fonts](FEATURES.md#installed-fonts)). `go run ./test/integration/cmd/corpus fetch --corpus=fonts/<directory>` installs one such directory alone.
 

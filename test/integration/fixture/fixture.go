@@ -475,6 +475,16 @@ const ExpectedTextName = "expectedText"
 // own or the one its reference_of names.
 const DerivedAltTextName = "derivedAltText"
 
+// CommentsName is the key of an Office options file that converts a DOCX
+// or ODT source with pdf.WithComments ([OfficeOptions.Comments]). Like
+// [DerivedAltTextName] it is litho's own option that changes no page: the
+// comments are annotations that draw nothing, and the diff cell draws the
+// Office pages without their annotations anyway. No reference depends on
+// it: the reference builders post neither it nor ask for a twin, the
+// digest a reference records leaves it out, and the diff cell scores the
+// source against the reference of the source as written.
+const CommentsName = "comments"
+
 // InstalledFontsName is the key of an options file, HTML or Office, that
 // names the fixture font directories a source is converted with as
 // installed fonts ([Options.InstalledFonts], [OfficeOptions.InstalledFonts]).
