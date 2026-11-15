@@ -1192,7 +1192,11 @@ func symbol(c *ooxml.Element) string {
 
 // wordText returns the text of a w:t element t as Word reads it: without
 // the white space at its edges unless t keeps it with xml:space
-// "preserve" (ECMA-376 Part 1, 17.3.3.31 t; XML 1.0, 2.10).
+// "preserve" (ECMA-376 Part 1, 17.3.3.31 t; XML 1.0, 2.10), and each line
+// end inside it a space. A w:t holds no break: a line break is a w:br or
+// a w:cr (17.3.3.1, 17.3.3.4), and Word sets the line end of the text, a
+// carriage return and a line feed both read as one line feed (XML 1.0,
+// 2.11), as a space on the line.
 //
 // # Corpus evidence
 //
@@ -1200,11 +1204,18 @@ func symbol(c *ooxml.Element) string {
 //     runs "SDT " and " Run", which keep no white space, as "SDTRun".
 //   - poi/docx: document/Bug60341.docx prints the footer runs "Page " and
 //     "of " as "Page1of1".
+//   - libreoffice/docx: ooxmlimport/tdf108806.docx prints a w:t holding a
+//     carriage return and a line feed between two sentences on one line,
+//     the two sentences a space apart in its text.
 func wordText(t *ooxml.Element) string {
-	if v, ok := t.AttrNS(xmlNS, "space"); ok && v == "preserve" {
-		return t.Text
+	s := t.Text
+	if v, ok := t.AttrNS(xmlNS, "space"); !ok || v != "preserve" {
+		s = strings.Trim(s, " \t\r\n")
 	}
-	return strings.Trim(t.Text, " \t\r\n")
+	if strings.ContainsAny(s, "\r\n") {
+		s = strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ").Replace(s)
+	}
+	return s
 }
 
 // xmlNS is the namespace of the xml prefix (Namespaces in XML 1.0, 3).

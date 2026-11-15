@@ -57,3 +57,15 @@ func TestBuild_TextEdgeSpaces(t *testing.T) {
 		t.Errorf("text %q, want %q", got, want)
 	}
 }
+
+// TestBuild_TextLineEnds locks a line end inside a w:t: a space on the
+// line, not a break, as Word reads it (see [wordText]).
+func TestBuild_TextLineEnds(t *testing.T) {
+	b := build(t, "<w:p><w:r><w:t xml:space=\"preserve\">One.\r\nTwo.\nThree.</w:t></w:r></w:p>", nil)
+	if got, want := textOf(b.root), "One. Two. Three."; got != want {
+		t.Errorf("text %q, want %q", got, want)
+	}
+	if n := countBreaks(b.root); n != 0 {
+		t.Errorf("%d breaks, want none", n)
+	}
+}
