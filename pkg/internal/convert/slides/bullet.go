@@ -184,21 +184,26 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 }
 
 // powerPointBullet returns the character PowerPoint writes in the text of
-// a bullet of the character c in the families fams, the first Wingdings:
-// the Unicode character [wingdingsBullets] gives its code, a character
-// from 0x20 to 0xFF or that code in the private use area at U+F000, as
-// ISO 32000-1, 9.10.3 lets a ToUnicode map a glyph to the character it
-// stands for. It is false for another font and for a code the table
-// leaves out, whose private-use character PowerPoint writes as it is.
+// a bullet of the character c in the families fams, the first Wingdings
+// or Symbol: the Unicode character [powerPointBullets] gives its code, a
+// character from 0x20 to 0xFF or that code in the private use area at
+// U+F000, as ISO 32000-1, 9.10.3 lets a ToUnicode map a glyph to the
+// character it stands for. It is false for another font and for a code
+// the table leaves out, whose private-use character PowerPoint writes as
+// it is.
 func powerPointBullet(c string, fams []string) (string, bool) {
 	code, size := utf8.DecodeRuneInString(c)
-	if size == 0 || size != len(c) || len(fams) == 0 || !strings.EqualFold(strings.TrimSpace(fams[0]), "Wingdings") {
+	if size == 0 || size != len(c) || len(fams) == 0 {
+		return "", false
+	}
+	table, ok := powerPointBullets[strings.ToLower(strings.TrimSpace(fams[0]))]
+	if !ok {
 		return "", false
 	}
 	if code >= 0xf020 && code <= 0xf0ff {
 		code -= 0xf000
 	}
-	u, ok := wingdingsBullets[code]
+	u, ok := table[code]
 	if !ok {
 		return "", false
 	}
@@ -218,12 +223,17 @@ func officeAdvance(c string, fams []string) (float64, bool) {
 	return symbolfont.OfficeAdvance(fams[0], code)
 }
 
-// wingdingsBullets maps the codes of Wingdings to the character
-// PowerPoint writes in the text of a bullet of the code, where its PDF
-// names one.
+// powerPointBullets maps, by family, the codes of Wingdings and Symbol to
+// the character PowerPoint writes in the text of a bullet of the code,
+// where its PDF names one; PowerPoint writes every other code of these
+// fonts, and every code of Wingdings 2, Wingdings 3 and Webdings, as its
+// private-use character.
 //
 // # Corpus evidence
 //
+//   - probe, pptx: PowerPoint prints every code 0x21 to 0xFF of Wingdings,
+//     Wingdings 2, Wingdings 3, Symbol and Webdings as a bullet; its text
+//     names these characters and the private-use one for every other.
 //   - libreoffice/pptx: sd/bulletColor.pptx and sd/bulletMarginAndIndent.pptx
 //     write Wingdings "q" as U+2751, sd/n83889.pptx Wingdings 0xA7 as
 //     U+25AA, sd/rightToLeftParagraph.pptx Wingdings "v" as U+2756,
@@ -234,7 +244,16 @@ func officeAdvance(c string, fams []string) (float64, bool) {
 //   - openxmlsdk/pptx: v2FxTestFiles/presentation/O12_templates
 //     EdStudPres_TP10167125.potx writes Wingdings 0xA8 as U+F0A8, and
 //     Stafftrain_TP10167128.potx Wingdings 2 0x97 as U+F097.
-var wingdingsBullets = map[rune]rune{0x6C: '\u26ab', 0x6E: '\u25fc', 0x71: '\u2751', 0x76: '\u2756', 0xA7: '\u25aa', 0xD8: '\u27a2', 0xFC: '\u2713'}
+var powerPointBullets = map[string]map[rune]rune{
+	"wingdings": {
+		0x4A: '\u263a', 0x6C: '\u26ab', 0x6E: '\u25fc', 0x71: '\u2751', 0x73: '\u2b27', 0x74: '\u29eb', 0x75: '\u25c6',
+		0x76: '\u2756', 0xA7: '\u25aa', 0xD8: '\u27a2', 0xE0: '\u2192', 0xE8: '\u2794', 0xFC: '\u2713',
+	},
+	"symbol": {
+		0x28: '(', 0x29: ')', 0x2B: '+', 0x2D: '\u2212', 0x3D: '=', 0x5E: '\u22a5', 0xAE: '\u2192', 0xB7: '\u2022',
+		0xBE: '\u23af', 0xD3: '\u00a9', 0xE3: '\u00a9',
+	},
+}
 
 // maxRecode caps the recoded bullet characters a text body remembers.
 // Anti-DoS guard, not spec-mandated: a body's bullets use a few
