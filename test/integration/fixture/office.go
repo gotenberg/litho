@@ -93,6 +93,10 @@ type OfficeOptions struct {
 	// format Microsoft's references judge the key counts as litho's own
 	// ([Office.LithoOptions]). Default none.
 	InstalledFonts []string `json:"installedFonts,omitempty"`
+	// DerivedAltText converts with pdf.WithDerivedAltText. Default false.
+	// It is litho's own option but draws nothing: the source keeps its
+	// reference ([DerivedAltTextName]).
+	DerivedAltText bool `json:"derivedAltText,omitempty"`
 }
 
 // OfficeOptionNames are the keys of an Office options file, the JSON names
@@ -218,7 +222,7 @@ func LoadOffice(path string) (*Office, error) {
 func ParseOfficeOptions(data []byte) (OfficeOptions, error) {
 	var o OfficeOptions
 	names := append(slices.Clone(OfficeOptionNames), OfficeLithoOptionNames...)
-	if err := decodeStrict(data, append(names, ReferenceOfName, InstalledFontsName), &o); err != nil {
+	if err := decodeStrict(data, append(names, ReferenceOfName, InstalledFontsName, DerivedAltTextName), &o); err != nil {
 		return OfficeOptions{}, err
 	}
 	return o, o.validate()
@@ -438,6 +442,9 @@ func (o *Office) options() officeOptions {
 			opts.litho = append(opts.litho, "handouts")
 		}
 	case FormatText, FormatHTML, FormatMarkdown:
+	}
+	if o.Options.DerivedAltText {
+		opts.common = append(opts.common, pdf.WithDerivedAltText(true))
 	}
 	if o.Options.Date != "" {
 		// validate checked the value.

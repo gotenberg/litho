@@ -166,10 +166,11 @@ func TestOfficeOptionNames_MatchTheJSONNames(t *testing.T) {
 		tags = append(tags, name)
 	}
 	// The route's fields, then litho's own options, then the key that
-	// borrows a reference and the one that installs fixture fonts: the
-	// last three are no fields of the route's.
+	// borrows a reference, the one that installs fixture fonts and the one
+	// that derives descriptions: the last three are no fields of the
+	// route's.
 	want := append(slices.Clone(OfficeOptionNames), OfficeLithoOptionNames...)
-	if want = append(want, ReferenceOfName, InstalledFontsName); !slices.Equal(tags, want) {
+	if want = append(want, ReferenceOfName, InstalledFontsName, DerivedAltTextName); !slices.Equal(tags, want) {
 		t.Errorf("json names %v, want %v", tags, want)
 	}
 }
@@ -277,5 +278,50 @@ func TestInstalledFonts_ValidatedAndCountedAsLithosOwnForMicrosoft(t *testing.T)
 	ref, err := LoadReference(dir)
 	if err != nil || !slices.Equal(ref.InstalledFonts, html.InstalledFonts) || ref.Unreferenced() {
 		t.Errorf("LoadReference = %+v, %v", ref, err)
+	}
+}
+
+// TestDerivedAltText_ConvertsWithTheOptionAndKeepsTheReference holds the
+// derivedAltText key: an HTML or Office source that sets it converts with
+// pdf.WithDerivedAltText, and, since the option draws nothing, counts as
+// setting no litho option: it keeps a reference of its own and needs no
+// twin, in every format.
+func TestDerivedAltText_ConvertsWithTheOptionAndKeepsTheReference(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{"derivedAltText": true}`)
+	html, err := ParseOptions(data)
+	if err != nil || !html.DerivedAltText {
+		t.Fatalf("html: %+v, %v", html, err)
+	}
+	office, err := ParseOfficeOptions(data)
+	if err != nil || !office.DerivedAltText {
+		t.Fatalf("office: %+v, %v", office, err)
+	}
+	for _, format := range []Format{FormatDOCX, FormatODT, FormatXLSX, FormatODS, FormatPPTX, FormatODP} {
+		o := &Office{Format: format, Options: office}
+		if got := o.LithoOptions(); len(got) != 0 {
+			t.Errorf("%s: LithoOptions = %v, want none", format, got)
+		}
+		if n, m := len(o.options().common), len((&Office{Format: format}).options().common); n != m+1 {
+			t.Errorf("%s: %d common options, want the %d without the key and one more", format, n, m)
+		}
+	}
+	dir := t.TempDir()
+	write(t, dir, HTMLDocument, "<p>x</p>")
+	write(t, dir, OptionsFile, string(data))
+	src, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := src.LithoOptions(); len(got) != 0 {
+		t.Errorf("html: LithoOptions = %v, want none", got)
+	}
+	if n, m := len(src.PrintOptions()), len((&Source{}).PrintOptions()); n != m+1 {
+		t.Errorf("html: %d print options, want %d and one more", n, m)
+	}
+	ref, err := LoadReference(dir)
+	if err != nil || ref.Unreferenced() {
+		t.Errorf("LoadReference = %+v, %v; want a reference of its own", ref, err)
 	}
 }

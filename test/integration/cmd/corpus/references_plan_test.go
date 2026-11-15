@@ -455,3 +455,39 @@ func TestSourceSums_LeaveTheExpectedTextOut(t *testing.T) {
 		}
 	}
 }
+
+// TestSourceSums_LeaveTheDerivedAltTextOut pins that the derivedAltText
+// key, which draws nothing, moves no digest a reference records and asks
+// for no twin: a source that sets it keeps the reference it had without
+// it alone, and an options file with another key still counts that key.
+func TestSourceSums_LeaveTheDerivedAltTextOut(t *testing.T) {
+	t.Parallel()
+
+	fx := planSources(t, map[string]map[string]string{
+		"plain":         {"index.html": "<p>Text</p>"},
+		"derived":       {"index.html": "<p>Text</p>", "options.json": `{"derivedAltText": true}`},
+		"scaled":        {"index.html": "<p>Text</p>", "options.json": `{"scale": 0.5}`},
+		"scaledDerived": {"index.html": "<p>Text</p>", "options.json": `{"scale": 0.5, "derivedAltText": true}`},
+	})
+	sums := map[string][2]string{}
+	for _, f := range fx {
+		src, opt, err := sourceSums(engineChromium, f.PDFPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sums[f.ID] = [2]string{src, opt}
+	}
+	if sums["derived"] != sums["plain"] {
+		t.Errorf("derivedAltText moved the digests: %v against %v", sums["derived"], sums["plain"])
+	}
+	if sums["scaledDerived"][0] != sums["scaled"][0] || sums["scaledDerived"][1] == "" {
+		t.Errorf("an options file with another key: %v, %v", sums["scaledDerived"], sums["scaled"])
+	}
+	p, err := planReferences(fx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.ownsNoReference("derived") {
+		t.Error("a source that sets derivedAltText owns no reference")
+	}
+}

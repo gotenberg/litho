@@ -174,6 +174,10 @@ type Options struct {
 	// reference engine writes its text wrong. It is no route field and no
 	// litho option: no reference depends on it. Default none.
 	ExpectedText string `json:"expectedText,omitempty"`
+	// DerivedAltText converts with pdf.WithDerivedAltText. Default false.
+	// It is litho's own option, but it draws nothing, so the reference of
+	// the source as written stands for it ([DerivedAltTextName]).
+	DerivedAltText bool `json:"derivedAltText,omitempty"`
 }
 
 // BandOptions are one band of [Options.Bands].
@@ -351,7 +355,7 @@ func Load(dir string) (*Source, error) {
 func ParseOptions(data []byte) (Options, error) {
 	var o Options
 	names := append(slices.Clone(OptionNames), LithoOptionNames...)
-	if err := decodeStrict(data, append(names, ReferenceOfName, InstalledFontsName, ExpectedTextName), &o); err != nil {
+	if err := decodeStrict(data, append(names, ReferenceOfName, InstalledFontsName, ExpectedTextName, DerivedAltTextName), &o); err != nil {
 		return Options{}, err
 	}
 	return o, o.validate()
@@ -458,6 +462,17 @@ func (o Options) validate() error {
 // It is no route field and no litho option: the rig alone reads it, and a
 // reference is built and checked without it, the file it names included.
 const ExpectedTextName = "expectedText"
+
+// DerivedAltTextName is the key of an options file, HTML or Office, that
+// converts a source with pdf.WithDerivedAltText ([Options.DerivedAltText],
+// [OfficeOptions.DerivedAltText]). It is litho's own option and no route
+// field, but unlike [LithoOptionNames] it changes no page: it writes
+// descriptions into the structure tree and draws nothing. So no reference
+// depends on it: the reference builders post neither it nor ask for a
+// twin, the digest a reference records leaves it out, and the diff cell
+// scores the source against the reference of the source as written, its
+// own or the one its reference_of names.
+const DerivedAltTextName = "derivedAltText"
 
 // InstalledFontsName is the key of an options file, HTML or Office, that
 // names the fixture font directories a source is converted with as
@@ -613,6 +628,9 @@ func (s *Source) PrintOptions() []pdf.HTMLOption {
 	}
 	for _, css := range s.UserStylesheets {
 		opts = append(opts, pdf.WithUserStylesheet(css))
+	}
+	if o.DerivedAltText {
+		opts = append(opts, pdf.WithDerivedAltText(true))
 	}
 	return opts
 }

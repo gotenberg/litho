@@ -185,11 +185,11 @@ func TestOptionNames_AreTheJSONNamesOfOptions(t *testing.T) {
 		tags = append(tags, name)
 	}
 	// The route's fields, then litho's own options, then the key that
-	// borrows a reference, the one that installs fixture fonts and the one
-	// that names the expected text: the last four are no fields of the
-	// route's.
+	// borrows a reference, the one that installs fixture fonts, the one
+	// that names the expected text and the one that derives descriptions:
+	// the last four are no fields of the route's.
 	want := append(slices.Clone(OptionNames), LithoOptionNames...)
-	if want = append(want, ReferenceOfName, InstalledFontsName, ExpectedTextName); !slices.Equal(tags, want) {
+	if want = append(want, ReferenceOfName, InstalledFontsName, ExpectedTextName, DerivedAltTextName); !slices.Equal(tags, want) {
 		t.Errorf("json names %v, want %v", tags, want)
 	}
 }

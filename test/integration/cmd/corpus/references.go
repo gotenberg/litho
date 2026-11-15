@@ -527,11 +527,17 @@ func expectedTextFile(dir string) string {
 	return opts.ExpectedText
 }
 
+// referenceNeutral are the keys of an options file no reference depends
+// on: the expected text, which the rig alone reads
+// ([fixture.ExpectedTextName]), and the derived descriptions, which draw
+// nothing ([fixture.DerivedAltTextName]).
+var referenceNeutral = []string{fixture.ExpectedTextName, fixture.DerivedAltTextName}
+
 // optionsDigest returns the SHA-256 a reference records for the options
-// file at path: the file's own, or, for one that names the expected text
-// ([fixture.ExpectedTextName]), which no reference depends on, the digest
-// of its other keys as compact JSON with sorted keys, "" when it holds no
-// other, as for a source without options.
+// file at path: the file's own, or, for one that names a key no reference
+// depends on ([referenceNeutral]), the digest of its other keys as compact
+// JSON with sorted keys, "" when it holds no other, as for a source
+// without options.
 func optionsDigest(path string) (string, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // a committed source's options
 	if err != nil {
@@ -541,10 +547,16 @@ func optionsDigest(path string) (string, error) {
 	if json.Unmarshal(data, &fields) != nil {
 		return fileDigest(path)
 	}
-	if _, ok := fields[fixture.ExpectedTextName]; !ok {
+	neutral := false
+	for _, k := range referenceNeutral {
+		if _, ok := fields[k]; ok {
+			neutral = true
+			delete(fields, k)
+		}
+	}
+	if !neutral {
 		return fileDigest(path)
 	}
-	delete(fields, fixture.ExpectedTextName)
 	if len(fields) == 0 {
 		return "", nil
 	}
