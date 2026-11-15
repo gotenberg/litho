@@ -26,6 +26,10 @@ type Document struct {
 	// Effects says whose rules draw the shapes' shadows, glows and soft
 	// edges: the zero value, PowerPoint's; Impress's.
 	Effects EffectRules
+	// ImpressBullets writes the text of a symbol font's bullet as Impress
+	// prints it, its private-use code; false writes the Unicode character
+	// PowerPoint writes for it where Office's table names one.
+	ImpressBullets bool
 	// Width and Height are the slide size in points (ECMA-376 Part 1,
 	// 19.2.1.36 sldSz; ODF fo:page-width and fo:page-height of the master
 	// pages' page layout), both positive.

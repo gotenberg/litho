@@ -3,6 +3,7 @@ package slides
 import (
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -69,9 +70,13 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 	switch bu.Kind {
 	case BulletChar:
 		var txt string
+		fams := rs.Families
 		label, txt, rs.Families = symbolfont.Recode(bu.Char, rs.Families)
 		if label == "" {
 			return
+		}
+		if u, ok := powerPointBullet(bu.Char, fams); ok && !b.doc.ImpressBullets {
+			txt = u
 		}
 		if txt != label && len(b.recode) < maxRecode {
 			b.recode[label] = txt
@@ -158,6 +163,44 @@ func (b *builder) bullet(node *layout.Node, p *Paragraph, first *RunStyle, lb li
 	node.Children = append([]*layout.Node{marker}, node.Children...)
 }
 
+// powerPointBullet returns the character PowerPoint writes in the text of
+// a bullet of the character c in the families fams, the first Wingdings:
+// the Unicode character [wingdingsBullets] gives its code, a character
+// from 0x20 to 0xFF or that code in the private use area at U+F000, as
+// ISO 32000-1, 9.10.3 lets a ToUnicode map a glyph to the character it
+// stands for. It is false for another font and for a code the table
+// leaves out, whose private-use character PowerPoint writes as it is.
+func powerPointBullet(c string, fams []string) (string, bool) {
+	code, size := utf8.DecodeRuneInString(c)
+	if size == 0 || size != len(c) || len(fams) == 0 || !strings.EqualFold(strings.TrimSpace(fams[0]), "Wingdings") {
+		return "", false
+	}
+	if code >= 0xf020 && code <= 0xf0ff {
+		code -= 0xf000
+	}
+	u, ok := wingdingsBullets[code]
+	if !ok {
+		return "", false
+	}
+	return string(u), true
+}
+
+// wingdingsBullets maps the codes of Wingdings to the character
+// PowerPoint writes in the text of a bullet of the code, where its PDF
+// names one.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: sd/bulletColor.pptx and sd/bulletMarginAndIndent.pptx
+//     write Wingdings "q" as U+2751, sd/n83889.pptx Wingdings 0xA7 as
+//     U+25AA, sd/rightToLeftParagraph.pptx Wingdings "v" as U+2756,
+//     oox/outliner-list-style.pptx and sd/bullet-indent.pptx Wingdings "l"
+//     as U+26AB.
+//   - openxmlsdk/pptx: v2FxTestFiles/presentation/O12_templates
+//     EdStudPres_TP10167125.potx writes Wingdings 0xA8 as U+F0A8, and
+//     Stafftrain_TP10167128.potx Wingdings 2 0x97 as U+F097.
+var wingdingsBullets = map[rune]rune{0x6C: '\u26ab', 0x71: '\u2751', 0x76: '\u2756', 0xA7: '\u25aa'}
+
 // maxRecode caps the recoded bullet characters a text body remembers.
 // Anti-DoS guard, not spec-mandated: a body's bullets use a few
 // characters, and a symbol font has 224.
@@ -169,9 +212,9 @@ const maxRecode = 1024
 // runs of the frags whose structure element is a Lbl.
 //
 // A private-use code means nothing to a reader, so the Lbl of a recoded
-// bullet carries the character drawn as its ActualText, a bullet when
-// that one is private-use too (ISO 19005-2, 6.2.11.7.3; ISO 14289-2,
-// 8.4.3).
+// bullet carries as its ActualText the text it stands for, else the
+// character drawn when that text is private-use, a bullet when that one
+// is too (ISO 19005-2, 6.2.11.7.3; ISO 14289-2, 8.4.3).
 func recodeLabels(frags []typeset.Fragment, recode map[string]string) {
 	for _, f := range frags {
 		switch v := f.(type) {
@@ -183,6 +226,9 @@ func recodeLabels(frags []typeset.Fragment, recode map[string]string) {
 				if t, ok := recode[v.Glyphs[i].Text]; ok {
 					if v.Parent.ActualText == "" {
 						v.Parent.ActualText = readable(v.Glyphs[i].Text)
+						if readable(t) == t {
+							v.Parent.ActualText = t
+						}
 					}
 					v.Glyphs[i].Text = t
 				}

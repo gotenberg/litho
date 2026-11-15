@@ -86,30 +86,49 @@ func TestFormatNumber(t *testing.T) {
 }
 
 // TestText_SymbolBulletText checks that a recoded bullet draws OpenSymbol's
-// glyph and reads as its symbol font's private-use code
-// (sd/tdf123090.pptx: a Wingdings "n").
+// glyph and reads as the Unicode character PowerPoint writes for it,
+// whether the file writes the code or its private-use character, or as
+// that private-use character under Impress's rules or where PowerPoint
+// names no character (sd/bulletColor.pptx: a Wingdings "q").
 func TestText_SymbolBulletText(t *testing.T) {
-	p := para("aaa", arial(18))
-	p.MarginLeft, p.Indent = 18, -18
-	p.Bullet = &Bullet{Kind: BulletChar, Char: "n", Families: []string{"Wingdings"}}
-	out := convert(t, deck(&Slide{Shapes: []*Shape{box(10, 10, 300, 100, p)}}), office.Options{})
-	pg := out.Pages[0]
-	find(t, pg, "\uf06e")
-	find(t, pg, "aaa")
-	// Its Lbl reads as the character drawn, not the private-use code.
-	var lbl *typeset.StructElem
-	var walk func(*typeset.StructElem)
-	walk = func(e *typeset.StructElem) {
-		if e.Role == "Lbl" && lbl == nil {
-			lbl = e
+	for _, tc := range []struct {
+		impress            bool
+		char, family, text string
+		name               string
+	}{
+		{false, "q", "Wingdings", "\u2751", "\u2751"},
+		{false, "\uf071", "Wingdings", "\u2751", "\u2751"},
+		{true, "q", "Wingdings", "\uf071", ""},
+		{false, "q", "Wingdings 2", "\uf071", ""},
+		{false, "n", "Wingdings", "\uf06e", ""},
+	} {
+		p := para("aaa", arial(18))
+		p.MarginLeft, p.Indent = 18, -18
+		p.Bullet = &Bullet{Kind: BulletChar, Char: tc.char, Families: []string{tc.family}}
+		doc := deck(&Slide{Shapes: []*Shape{box(10, 10, 300, 100, p)}})
+		doc.ImpressBullets = tc.impress
+		out := convert(t, doc, office.Options{})
+		pg := out.Pages[0]
+		find(t, pg, tc.text)
+		find(t, pg, "aaa")
+		// Its Lbl reads as a character a reader can name, not the
+		// private-use code.
+		var lbl *typeset.StructElem
+		var walk func(*typeset.StructElem)
+		walk = func(e *typeset.StructElem) {
+			if e.Role == "Lbl" && lbl == nil {
+				lbl = e
+			}
+			for _, k := range e.Kids {
+				walk(k)
+			}
 		}
-		for _, k := range e.Kids {
-			walk(k)
+		walk(out.Structure)
+		if lbl == nil || lbl.ActualText == "" || []rune(lbl.ActualText)[0] >= 0xe000 && []rune(lbl.ActualText)[0] <= 0xf8ff {
+			t.Errorf("Impress %v: bullet Lbl %+v", tc.impress, lbl)
+		} else if tc.name != "" && lbl.ActualText != tc.name {
+			t.Errorf("bullet Lbl reads %q, want %q", lbl.ActualText, tc.name)
 		}
-	}
-	walk(out.Structure)
-	if lbl == nil || lbl.ActualText == "" || []rune(lbl.ActualText)[0] >= 0xe000 && []rune(lbl.ActualText)[0] <= 0xf8ff {
-		t.Errorf("bullet Lbl %+v", lbl)
 	}
 }
 

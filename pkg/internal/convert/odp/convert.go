@@ -68,6 +68,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	opts.NotesPaperWidth, opts.NotesPaperHeight = notesPaper(opts)
 	doc.Fallback = text.FallbackLibreOffice
 	doc.Effects = slides.EffectsImpress
+	doc.ImpressBullets = true
 	out, err := slides.Convert(ctx, doc, fonts, opts)
 	if err != nil {
 		return nil, err
