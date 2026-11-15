@@ -25,14 +25,14 @@ func (l *layouter) childStyle(e *Element, p *Element, i int, pst *Style) *Style 
 
 // derive applies the rules of MathML Core, Appendix A that hold for e, the
 // child at index i of p, to the style it inherits from pst, then e's
-// presentational hints (2.1.5, 2.1.6, 3.2.2), which outrank the user agent
+// presentational hints (2.1.3 to 2.1.6, 3.2.2), which outrank the user agent
 // rules as author rules do (CSS Cascading 4, 6.2).
 func (l *layouter) derive(e *Element, p *Element, i int, pst *Style) *Style {
 	st := &Style{
 		Families: pst.Families, Size: pst.Size, Weight: pst.Weight, Italic: pst.Italic,
 		Lang: pst.Lang, Fallback: pst.Fallback, Color: pst.Color,
 		Display: pst.Display, Cramped: pst.Cramped, Depth: pst.Depth,
-		MathAuto: pst.MathAuto, Hidden: pst.Hidden,
+		MathAuto: pst.MathAuto, Hidden: pst.Hidden, RTL: pst.RTL,
 		FontVariants: pst.FontVariants, ScriptScale: pst.ScriptScale,
 		OperatorFamilies: pst.OperatorFamilies,
 	}
@@ -97,6 +97,14 @@ func (l *layouter) derive(e *Element, p *Element, i int, pst *Style) *Style {
 		st.Padding[left], st.Padding[right] = pxPt, pxPt
 	}
 	// Presentational hints.
+	if v, ok := e.Attr("dir"); ok {
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "rtl":
+			st.RTL = true
+		case "ltr":
+			st.RTL = false
+		}
+	}
 	if v, ok := e.Attr("displaystyle"); ok {
 		switch strings.ToLower(strings.TrimSpace(v)) {
 		case "true":

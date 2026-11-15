@@ -439,3 +439,24 @@ func TestSpace_HeightCSSResolved(t *testing.T) {
 		t.Fatalf("ascent %g, descent %g; want 24 and 0", b.Ascent, b.Descent)
 	}
 }
+
+// TestDerive_Direction reads the dir attribute as a presentational hint
+// for direction and lets the children of a derived style inherit it
+// (MathML Core, 2.1.3; CSS Writing Modes 3, 2.1: direction inherits).
+func TestDerive_Direction(t *testing.T) {
+	s := dejavu(t)
+	st := mathStyle("DejaVu Math TeX Gyre", 10)
+	row := func() *Element { return el("mrow", space("10pt", "1pt", "0"), space("20pt", "1pt", "0")) }
+	for _, c := range []struct {
+		root *Element
+		path []int
+	}{
+		{el("math", attrs(row(), "dir", "rtl")), []int{0, 0}},
+		{el("math", attrs(el("mstyle", row()), "dir", "rtl")), []int{0, 0, 0}},
+	} {
+		b := lay(t, s, c.root, st)
+		if x, _, _ := childAt(b, c.path...); !near(x, 20) {
+			t.Fatalf("first space at depth %d at %g, want 20", len(c.path), x)
+		}
+	}
+}
