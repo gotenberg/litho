@@ -525,9 +525,9 @@ func evalRange(in []token, m Media) tri {
 	return triOf(m.Width > 0 && m.Height > 0 && test(a, o1, f) && test(f, o2, b))
 }
 
-// evalSupports evaluates an @supports condition (CSS Conditional 3, 6):
-// a declaration is supported when litho parses it, selector() when the
-// selector parses.
+// evalSupports evaluates an @supports condition (CSS Conditional 3, 6;
+// CSS Conditional 4 and 5, 2): a declaration is supported when litho
+// parses it, and the functions as [supportsFunction] says.
 func evalSupports(l []token) bool {
 	v, ok := evalCondition(significant(l), func(t token) (tri, bool) {
 		v, ok := supportsLeaf(t)
@@ -559,13 +559,77 @@ func supportsLeaf(t token) (bool, bool) {
 		_, ok = c.expand(name, it.value)
 		return ok, true
 	case tFunction:
-		if eqFold(t.value, "selector") {
-			_, err := parseSelectorList(trimWS(t.children), 0, false)
-			return err == nil, true
-		}
-		return false, true
+		return supportsFunction(t), true
 	}
 	return false, false
+}
+
+// supportsFunction evaluates a supports function (CSS Conditional 4 and
+// 5, 2), true when litho supports what it names; any other function is a
+// <general-enclosed>, false.
+//
+//   - selector(<complex-selector>): one selector that parses, every
+//     :is() and :where() in it holding only selectors that parse, since
+//     their forgiving lists would drop the others unseen (CSS Conditional
+//     4, 2: an unknown part is unsupported even there).
+//   - font-format(<font-format>): a keyword whose files litho reads, as
+//     an @font-face format() hint has them ([ReadsFontFormat]).
+//   - font-tech(<font-tech>): one keyword litho supports, as an
+//     @font-face tech() has them ([SupportsFontTech]).
+//   - at-rule(<at-keyword-token>): an at-rule litho reads
+//     ([readsAtRule]).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156's CSS.supports is false for
+//     selector(:is(:foo)), selector(:is(a, :foo)) and
+//     selector(:where(:foo)), true for font-format() of collection,
+//     opentype, truetype, woff and woff2 and false for embedded-opentype
+//     and svg, true for at-rule() of @supports, @SUPPORTS, @top-left and
+//     @stylistic and false for @charset, @foo, supports and "@supports;".
+func supportsFunction(t token) bool {
+	args := significant(t.children)
+	switch lower(t.value) {
+	case "selector":
+		for _, a := range args {
+			if a.typ == tComma {
+				return false
+			}
+		}
+		_, err := parseSelectorList(trimWS(t.children), 0, false)
+		return err == nil && strictForgivingLists(t.children)
+	case "font-format":
+		if len(args) != 1 || args[0].typ != tIdent {
+			return false
+		}
+		f := lower(args[0].value)
+		return slices.Contains(fontFormatKeywords, f) && ReadsFontFormat(f)
+	case "font-tech":
+		return len(args) == 1 && args[0].typ == tIdent && SupportsFontTech(lower(args[0].value))
+	case "at-rule":
+		return len(args) == 1 && args[0].typ == tAtKeyword && readsAtRule(lower(args[0].value))
+	}
+	return false
+}
+
+// strictForgivingLists reports whether every :is(), :where() and
+// :-webkit-any() in a selector holds selectors that all parse.
+func strictForgivingLists(l []token) bool {
+	for i := range l {
+		t := &l[i]
+		if t.typ == tFunction && i > 0 && l[i-1].typ == tColon {
+			switch lower(t.value) {
+			case "is", "where", "-webkit-any":
+				if _, err := parseSelectorList(trimWS(t.children), 0, false); err != nil {
+					return false
+				}
+			}
+		}
+		if len(t.children) > 0 && !strictForgivingLists(t.children) {
+			return false
+		}
+	}
+	return true
 }
 
 // viewport returns the size the viewport units resolve against.

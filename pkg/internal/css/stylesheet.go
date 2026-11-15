@@ -180,6 +180,25 @@ var ignoredAtRules = map[string]bool{
 	"namespace": true, "charset": true,
 }
 
+// readAtRules are the at-rules litho reads at the top level of a style
+// sheet or in a conditional group rule; the page-margin boxes of @page and
+// the feature blocks of @font-feature-values are read inside those.
+var readAtRules = []string{
+	"import", "media", "supports", "layer", "container", "page", "counter-style", "font-face",
+	"keyframes", "-webkit-keyframes", "font-palette-values", "font-feature-values",
+}
+
+// readsAtRule reports whether litho reads the at-rule of the lowercased
+// name, which @supports at-rule() asks (CSS Conditional 5, 2.3). An
+// at-rule litho drops, @namespace and @charset among them, is not read.
+func readsAtRule(name string) bool {
+	if slices.Contains(readAtRules, name) || slices.Contains(marginBoxNames[:], name) {
+		return true
+	}
+	_, ok := featureValueBlocks[name]
+	return ok
+}
+
 // rule handles one top-level or nested rule.
 func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *mediaCond, depth int, importsAllowed *bool) {
 	if err := ctx.Err(); err != nil {

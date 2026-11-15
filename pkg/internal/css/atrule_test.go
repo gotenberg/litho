@@ -155,6 +155,50 @@ func TestSupports_Conditions(t *testing.T) {
 		// condition is a <general-enclosed>, false.
 		{"((color: green) bad) or (color: green)", true},
 		{"not ((color: green) bad)", true},
+		// CSS Conditional 4, 2: one <complex-selector>, every part of
+		// it known, forgiving lists included.
+		{"selector(div, div)", false},
+		{"selector(:is(.a))", true},
+		{"selector(:is(:foo, .a))", false},
+		{"selector(:where(:foo, .a))", false},
+		{"selector(:not(:foo, .a))", false},
+		{"selector(:has(:foo, .a))", false},
+		{"selector(a :is(b, :where(c, :foo)))", false},
+		// CSS Conditional 5, 2.2: a <font-format> keyword litho reads.
+		{"font-format(opentype)", true},
+		{"font-format(TrueType)", true},
+		{"font-format(woff2)", true},
+		{"font-format(collection)", true},
+		{"font-format(svg)", false},
+		{"font-format(embedded-opentype)", false},
+		{"font-format(truetype-variations)", false},
+		{"font-format(\"woff\")", false},
+		{"font-format()", false},
+		{"font-format(truetype opentype)", false},
+		{"font-format(truetype, opentype)", false},
+		// A <font-tech> keyword litho supports.
+		{"font-tech(features-opentype)", true},
+		{"font-tech(color-COLRv0)", true},
+		{"font-tech(palettes)", true},
+		{"font-tech(variations)", true},
+		{"font-tech(color-svg)", false},
+		{"font-tech(features-opentype, color-COLRv0)", false},
+		{"font-tech(features-opentype color-COLRv0)", false},
+		{"font-tech(\"features-opentype\")", false},
+		{"font-tech()", false},
+		// CSS Conditional 5, 2.3: an at-rule litho reads.
+		{"at-rule(@supports)", true},
+		{"at-rule( @media )", true},
+		{"at-rule(@SUPPORTS)", true},
+		{"at-rule(@support\\73)", true},
+		{"at-rule(@top-left)", true},
+		{"at-rule(@swash)", true},
+		{"at-rule(@charset)", false},
+		{"at-rule(@foo)", false},
+		{"at-rule(supports)", false},
+		{"at-rule(@supports;)", false},
+		{"at-rule(@media) and (color: red)", true},
+		{"named-feature(foo)", false},
 	}
 	for _, tt := range tests {
 		l, _ := parseComponentValues(tt.c)

@@ -53,34 +53,6 @@ var (
 // font's whole payload.
 const maxShownDataURL = 64
 
-// fontFormats are the format() hints litho reads (CSS Fonts 4, 4.3.1,
-// Table 1): TrueType, OpenType with glyf or CFF outlines, collections, WOFF
-// and WOFF2, and the -variations forms of the older syntax, which name
-// the same formats holding variations. embedded-opentype and svg are
-// refused.
-var fontFormats = []string{
-	"collection", "opentype", "truetype", "woff", "woff2",
-	"opentype-variations", "truetype-variations", "woff-variations", "woff2-variations",
-}
-
-// fontTechs are the tech() keywords litho supports (CSS Fonts 4, 4.3.1),
-// lowercased: OpenType layout features, which the shaper applies,
-// variations, which litho instances for TrueType outlines (a CFF2 face
-// draws its default instance, with a warning), the colour glyphs of COLR
-// version 0 layers and of CBDT and sbix bitmaps, which package colorfont
-// draws, and palettes, which font-palette selects. COLR version 1, SVG
-// glyphs, Graphite, AAT layout and incremental transfer are not.
-//
-// # Corpus evidence
-//
-//   - probe, html: Chromium 156's CSS.supports is true for font-tech()
-//     of features-opentype, features-aat, variations, palettes,
-//     color-COLRv0, color-COLRv1, color-CBDT and color-sbix, and false
-//     for color-svg, features-graphite and incremental.
-//   - wpt: the font-palette reftests of css/css-fonts draw the COLR
-//     version 0 layers of a font an @font-face rule loads.
-var fontTechs = []string{"features-opentype", "variations", "color-colrv0", "color-cbdt", "color-sbix", "palettes"}
-
 // fontLoader loads the faces of one conversion's @font-face rules.
 type fontLoader struct {
 	res    *resources
@@ -189,11 +161,11 @@ func (l *fontLoader) loadSource(ctx context.Context, src css.FontSource, d text.
 	if src.Local != "" {
 		return l.fonts.LocalFace(src.Local, d)
 	}
-	if len(src.Formats) > 0 && !slices.ContainsFunc(src.Formats, func(f string) bool { return slices.Contains(fontFormats, f) }) {
+	if len(src.Formats) > 0 && !slices.ContainsFunc(src.Formats, css.ReadsFontFormat) {
 		return nil, errFontFormat
 	}
 	for _, t := range src.Tech {
-		if !slices.Contains(fontTechs, t) {
+		if !css.SupportsFontTech(t) {
 			return nil, errFontTech
 		}
 	}
