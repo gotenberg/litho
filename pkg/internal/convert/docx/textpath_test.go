@@ -53,3 +53,44 @@ func TestVMLTextPath(t *testing.T) {
 		t.Errorf("trimmed ink %.2f,%.2f..%.2f,%.2f, want the box", x0, y0, x1, y1)
 	}
 }
+
+// TestVMLTextPath_FollowsItsShapeTypePath checks that a text path of a
+// shape type other than plain text is set along the type's path: two
+// subpaths an envelope its ink fills, the string not kept as text, as
+// Word writes none.
+func TestVMLTextPath_FollowsItsShapeTypePath(t *testing.T) {
+	t.Parallel()
+	// A path that rises from the left to the right edge: the top edge
+	// from (0, 10800) to (21600, 0), the bottom one the box's.
+	src := `<w:p><w:r><w:pict><v:shapetype id="_x0000_t172" coordsize="21600,21600" o:spt="172" path="m0,10800l21600,0m0,21600l21600,21600e"><v:path textpathok="t"/><v:textpath on="t" fitshape="t"/></v:shapetype>` +
+		`<v:shape id="w" type="#_x0000_t172" style="width:200pt;height:50pt" fillcolor="red" stroked="f">` +
+		`<v:textpath style="font-family:&quot;Test Sans&quot;" string="AB"/></v:shape></w:pict></w:r></w:p>`
+	pics := find(build(t, src, nil).root, func(n *layout.Node) bool { return n.Kind == layout.Replaced })
+	if len(pics) != 1 {
+		t.Fatalf("%d replaced boxes, want the text path", len(pics))
+	}
+	var hidden bool
+	x0, y0, x1, y1 := math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)
+	var walk func([]typeset.Fragment)
+	walk = func(fs []typeset.Fragment) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *typeset.Path:
+				_, oy0, _, oy1, _ := opsBounds(v.Ops)
+				ox0, _, ox1, _, _ := opsBounds(v.Ops)
+				x0, y0, x1, y1 = min(x0, ox0), min(y0, oy0), max(x1, ox1), max(y1, oy1)
+			case *typeset.Text:
+				hidden = hidden || v.Invisible
+			case *typeset.Group:
+				walk(v.Content)
+			}
+		}
+	}
+	walk(pics[0].Picture.Vector(t.Context(), typeset.Rect{Width: 200, Height: 50}))
+	if hidden {
+		t.Error("the string is kept as text")
+	}
+	if math.Abs(x0) > 0.01 || math.Abs(x1-200) > 0.01 || math.Abs(y1-50) > 0.01 || math.Abs(y0) > 0.5 {
+		t.Errorf("outlines span (%.2f, %.2f)-(%.2f, %.2f), want the envelope from the top right corner to the bottom", x0, y0, x1, y1)
+	}
+}

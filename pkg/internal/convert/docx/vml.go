@@ -212,7 +212,7 @@ func (d *document) vmlShape(s *story, k *ooxml.Element, vs ooxml.VMLStyle, st *c
 		}
 		return n
 	}
-	if d.vmlType(k) == sptPlainText {
+	if k.Child(ooxml.NSV, "textpath") != nil {
 		if n := d.vmlTextPath(k, st, w, h); n != nil {
 			setTransform(n.Style, vmlRotation(vs), strings.Contains(vs["flip"], "x"), strings.Contains(vs["flip"], "y"))
 			return n

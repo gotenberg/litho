@@ -8,10 +8,12 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/officefx"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // sptPlainText is the shape type of a VML text path drawn straight
@@ -92,6 +94,7 @@ func (d *document) vmlTextPath(k *ooxml.Element, st *css.Style, w, h float64) *l
 	ps.Width, ps.Height = css.Pts(w), css.Pts(h)
 	ps.LineHeight = css.Dimension{Kind: css.Normal}
 	pic := &layout.Picture{Width: w, Height: h}
+	warp := d.vmlTextWarp(k, typ)
 	pic.Vector = func(ctx context.Context, r typeset.Rect) []typeset.Fragment {
 		if fonts == nil {
 			return nil
@@ -101,23 +104,25 @@ func (d *document) vmlTextPath(k *ooxml.Element, st *css.Style, w, h float64) *l
 			return nil
 		}
 		var outlines text.Outlines
-		var ops []typeset.PathOp
-		for _, t := range lines[0].Runs {
-			if t != nil {
-				ops = outlines.Run(ops, t)
+		ops, warped := warpTextPath(ctx, lines, warp, r, &outlines)
+		if !warped {
+			for _, t := range lines[0].Runs {
+				if t != nil {
+					ops = outlines.Run(ops, t)
+				}
 			}
+			x0, y0, x1, y1, ok := opsBounds(ops)
+			if !ok {
+				return nil
+			}
+			// The outlines are at the baseline origin, y downward.
+			m := typeset.Matrix{A: r.Width / lines[0].Width, D: 1, E: r.X, F: r.Y + float64(textPathBaseline*r.Height)}
+			if trim && x1 > x0 && y1 > y0 {
+				m = typeset.Matrix{A: r.Width / (x1 - x0), D: r.Height / (y1 - y0)}
+				m.E, m.F = r.X-float64(x0*m.A), r.Y-float64(y0*m.D)
+			}
+			ops = transformOps(ops, m)
 		}
-		x0, y0, x1, y1, ok := opsBounds(ops)
-		if !ok {
-			return nil
-		}
-		// The outlines are at the baseline origin, y downward.
-		m := typeset.Matrix{A: r.Width / lines[0].Width, D: 1, E: r.X, F: r.Y + float64(textPathBaseline*r.Height)}
-		if trim && x1 > x0 && y1 > y0 {
-			m = typeset.Matrix{A: r.Width / (x1 - x0), D: r.Height / (y1 - y0)}
-			m.E, m.F = r.X-float64(x0*m.A), r.Y-float64(y0*m.D)
-		}
-		ops = transformOps(ops, m)
 		var out []typeset.Fragment
 		if shadow != nil {
 			sh := transformOps(ops, typeset.Matrix{A: 1, D: 1, E: shadowDX, F: shadowDY})
@@ -126,6 +131,108 @@ func (d *document) vmlTextPath(k *ooxml.Element, st *css.Style, w, h float64) *l
 		return append(out, ss.PaintOps(ops, r)...)
 	}
 	return &layout.Node{Kind: layout.Replaced, Style: ps, Picture: pic, Alt: str}
+}
+
+// vmlTextWarp returns the path a VML text path of a shape type other
+// than plain text sets its string along (Part 4, 14.1.2.22 textpath), nil
+// for plain text or a shape whose path does not read.
+func (d *document) vmlTextWarp(k, typ *ooxml.Element) *shape.TextWarp {
+	if d.vmlType(k) == sptPlainText {
+		return nil
+	}
+	src, ok := ooxml.VMLTextPath(k, typ)
+	if !ok {
+		return nil
+	}
+	c, problems := shape.VML(src)
+	if len(problems) > 0 {
+		d.warn(warn.ContentUnsupported, warn.Approximated, "a VML text path is drawn along its path in part: "+strings.Join(problems, "; "))
+	}
+	return &shape.TextWarp{Custom: c}
+}
+
+// maxTextPathLines caps the lines of a VML text path's string set along
+// its path. Anti-DoS guard, not spec-mandated: WordArt holds a line or
+// two.
+const maxTextPathLines = 16
+
+// warpTextPath returns the outlines of the lines of a VML text path's
+// string set along the path warp fitted to r, as officefx.WarpText sets
+// a body converted from WordArt, the lines stacked at their line
+// distance; false when warp is nil or draws nothing. The string is not
+// kept as text: Word writes none for a VML text path, whose shape's
+// alternative text names it.
+//
+// # Corpus evidence
+//
+//   - litho/docx shapes-wordart: Word sets "Arched VML text", a shape of
+//     type 144 (Arch Up Curve) whose path is one arc, along the arc.
+//   - libreoffice/docx ooxmlexport/fdo74110: Word stretches the three
+//     centred lines of a type 164 text path between its two curves.
+//   - libreoffice/docx ooxmlimport/WordArt and ooxmlexport/fdo74110,
+//     litho/docx shapes-wordart: Word's PDFs hold no text for their VML
+//     text paths.
+func warpTextPath(ctx context.Context, lines []text.Line, warp *shape.TextWarp, r typeset.Rect, outlines *text.Outlines) ([]typeset.PathOp, bool) {
+	lanes := shape.WarpLanes(warp, r)
+	if lanes == nil {
+		return nil, false
+	}
+	var frags []typeset.Fragment
+	y, width := 0.0, 0.0
+	for i := range lines {
+		if i < maxTextPathLines {
+			width = max(width, lines[i].Width)
+		}
+	}
+	for i := range lines {
+		if i >= maxTextPathLines {
+			break
+		}
+		l := &lines[i]
+		// Each line is centred on the widest, as Word sets the lines of
+		// a text path.
+		x := (width - l.Width) / 2
+		y += l.Ascent
+		for _, t := range l.Runs {
+			if t != nil {
+				// The paints are the shape's; the run is drawn as its
+				// outline and kept as text, which takes a colour.
+				c := *t
+				c.Color = typeset.Black
+				frags = append(frags, &typeset.Group{Transform: typeset.Matrix{A: 1, D: 1, E: x, F: y}, Opacity: 1, Content: []typeset.Fragment{&c}})
+			}
+		}
+		y += l.Descent + l.LineGap
+	}
+	out, _, err := officefx.WarpText(ctx, frags, typeset.Identity, &officefx.Warp{Lanes: lanes, Fit: true, Block: width}, outlines)
+	if err != nil {
+		return nil, false
+	}
+	var ops []typeset.PathOp
+	var walk func(fs []typeset.Fragment, m typeset.Matrix)
+	walk = func(fs []typeset.Fragment, m typeset.Matrix) {
+		for _, f := range fs {
+			switch v := f.(type) {
+			case *typeset.Path:
+				ops = append(ops, transformOps(v.Ops, m)...)
+			case *typeset.Text:
+				if !v.Invisible {
+					ops = append(ops, transformOps(outlines.Run(nil, v), m)...)
+				}
+			case *typeset.Group:
+				gt := v.Transform
+				if gt == (typeset.Matrix{}) {
+					gt = typeset.Identity
+				}
+				walk(v.Content, compose(m, gt))
+			}
+		}
+	}
+	walk(out, typeset.Identity)
+	if len(ops) == 0 {
+		return nil, false
+	}
+	return ops, true
 }
 
 // vmlShadow returns the colour and offset of a VML shape's shadow (Part 4,
