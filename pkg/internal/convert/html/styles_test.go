@@ -153,7 +153,7 @@ func TestDecode_FollowsTheDeclaredCharset(t *testing.T) {
 		"utf-16le bom":       {[]byte("\xff\xfe<\x00p\x00>\x00\xe9\x00"), "é"},
 		"undeclared latin":   {[]byte("<p>caf\xe9</p>"), "caf�"},
 	} {
-		got := decode(tc.src)
+		got := Decode(tc.src)
 		if !strings.Contains(got, tc.want) {
 			t.Errorf("%s: %q, want it to hold %q", name, got, tc.want)
 		}

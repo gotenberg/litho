@@ -1,7 +1,6 @@
 package docx
 
 import (
-	"bytes"
 	"encoding/xml"
 	"fmt"
 	"path"
@@ -11,6 +10,7 @@ import (
 	dom "golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
+	"github.com/gotenberg/litho/pkg/internal/convert/html"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -75,7 +75,9 @@ func (d *document) altChunk(s *story, c *cond, e *ooxml.Element, depth int, out 
 		d.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("an imported HTML chunk past %d bytes is left out", maxChunkBytes))
 		return
 	}
-	root, err := dom.Parse(bytes.NewReader(data))
+	// The chunk is an HTML document of its own: its byte order mark and
+	// the charset it declares say how its bytes read, as a page's do.
+	root, err := dom.Parse(strings.NewReader(html.Decode(data)))
 	if err != nil {
 		d.warn(warn.ContentUnsupported, warn.Omitted, fmt.Sprintf("an imported HTML chunk does not parse: %v", err))
 		return

@@ -61,6 +61,45 @@ func TestAltChunk(t *testing.T) {
 	}
 }
 
+// TestAltChunk_ReadsItsBytesAsAnHTMLDocument checks that an HTML chunk is
+// decoded as a page is (HTML Standard, 13.2.3.2): a byte order mark is no
+// text of the chunk, so no character of the output maps to U+FEFF, which
+// PDF/A-2 forbids in a ToUnicode CMap (ISO 19005-2, 6.2.11.7.2), and a
+// chunk in a legacy encoding its meta element names reads in it.
+func TestAltChunk_ReadsItsBytesAsAnHTMLDocument(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct{ chunk, want string }{
+		"utf-8 with a byte order mark": {"\xef\xbb\xbf<html><body><p>caf\xc3\xa9</p></body></html>", "café"},
+		"windows-1252 by its meta":     {`<html><head><meta charset="windows-1252"></head><body><p>caf` + "\xe9" + `</p></body></html>`, "café"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			files := pkgFiles(`<w:altChunk r:id="rIdH"/>`, map[string]string{"word/chunk.htm": tc.chunk})
+			files["word/_rels/document.xml.rels"] = strings.Replace(files["word/_rels/document.xml.rels"], `</Relationships>`,
+				`<Relationship Id="rIdH" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk" Target="chunk.htm"/></Relationships>`, 1)
+			pkg, err := ooxml.Open(t.Context(), zipFiles(t, files))
+			if err != nil {
+				t.Fatal(err)
+			}
+			d, err := load(context.Background(), pkg, testFonts(t), office.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			root := &layout.Node{Kind: layout.Element, Style: d.blockStyle()}
+			for _, s := range d.body(d.root) {
+				root.Children = append(root.Children, d.sectionNode(s, nil))
+			}
+			got := textOf(root)
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("text %q lacks %q", got, tc.want)
+			}
+			if strings.ContainsRune(got, '\uFEFF') {
+				t.Errorf("text %q holds the byte order mark", got)
+			}
+		})
+	}
+}
+
 // TestChunkKind locks the kinds a chunk is named by: its content type,
 // else its extension.
 func TestChunkKind(t *testing.T) {

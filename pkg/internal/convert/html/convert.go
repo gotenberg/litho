@@ -180,14 +180,15 @@ func readCapped(src io.Reader, maxBytes int64) ([]byte, error) {
 	return data, nil
 }
 
-// decode returns data as UTF-8: the encoding of a byte order mark, else
+// Decode returns the bytes of an HTML document as UTF-8, without a byte
+// order mark: it reads data in the encoding of a byte order mark, else
 // the one a <meta charset> or <meta http-equiv=Content-Type> in the first
 // 1024 bytes names (HTML Standard, 13.2.3.2, the prescan), else UTF-8. The
 // HTML Standard falls back on a locale-dependent legacy encoding;
 // litho picks UTF-8, what every document written this century uses, so
 // the output does not depend on where it runs. An invalid sequence reads
 // as U+FFFD.
-func decode(data []byte) string {
+func Decode(data []byte) string {
 	enc, name, certain := charset.DetermineEncoding(data, "")
 	if !certain && name == "windows-1252" && !declaresCharset(data) {
 		// DetermineEncoding's own fallback, not a declaration.
@@ -262,7 +263,7 @@ type heading struct {
 // parse parses the HTML source data, running the insertion steps of the
 // elements it inserts that change the tree.
 func parse(data []byte) (*dom.Node, error) {
-	doc, err := dom.Parse(strings.NewReader(decode(data)))
+	doc, err := dom.Parse(strings.NewReader(Decode(data)))
 	if err != nil {
 		// A strings.Reader never fails, so the parser fails only on its
 		// own nesting cap.
