@@ -191,6 +191,10 @@ func (q *Equation) Style() formula.Style {
 		Color:    q.base.Color,
 		Display:  q.display,
 		Enclose:  &wordEnclosure,
+		// Scripts kern by the math font's MathKernInfo (OpenType, MATH),
+		// the kerning the table gives subscripts and superscripts, which
+		// MathML Core leaves out.
+		ScriptKerning: true,
 	}
 }
 
