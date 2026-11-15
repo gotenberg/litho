@@ -134,6 +134,11 @@ func readsInVisualOrder(elems []models.TextElement, indices []int) bool {
 // space read from a gap between two glyphs, where no element is.
 const bidiSpace = -1
 
+// bidiRunGap stands in the order [visualOrder] returns for a word space
+// read from the gap between two runs. [reorderBidiIndices] returns it as a
+// [bidiSpace].
+const bidiRunGap = -2
+
 // visualOrder returns the elements of a line from left to right, with a
 // [bidiSpace] where spaced reports a word gap between two glyphs. The stream
 // is cut where an element sits wholly to the left of the one shown before
@@ -142,13 +147,38 @@ const bidiSpace = -1
 // a glyph a producer shows with a small move back, a space before a mark of
 // punctuation or a mark over its letter, stays where the stream puts it.
 //
-// Gaps are read inside a run only, between two glyphs the stream shows one
-// after the other and neither of them a space glyph, as PDF.js reads them
-// before it reorders a text item (src/core/evaluator.js, addFakeSpaces,
-// which it calls only for a move forward along the line). A space read
-// there is then reordered with the text around it. A glyph that takes no
-// place ([takesNoPlace]) anchors no gap: the gap after it is read from the
-// glyph before it in the run.
+// Gaps are read inside a run, between two glyphs the stream shows one after
+// the other and neither of them a space glyph, as PDF.js reads them before
+// it reorders a text item (src/core/evaluator.js, addFakeSpaces, which it
+// calls only for a move forward along the line), and between two runs the
+// order sets side by side, from the right end of the one to the left end of
+// the other ([runEdge]). A space read there is then reordered with the text
+// around it. A glyph that takes no place ([takesNoPlace]) anchors no gap:
+// the gap after it is read from the glyph before it in the run.
+//
+// The gap between two runs is a gap on the page: the runs sit side by side
+// where the line shows them, and a word gap between them parts their words
+// (ISO 32000-1, 14.8.2.5, where a consumer reads word breaks from the
+// positions of the glyphs). PDF.js reads no gap where a producer moves
+// back along the line (compareWithLastPosition ends its text item there),
+// so its text glues the words two runs show apart: the cells of a table
+// row placed from right to left, each drawn from left to right.
+//
+// # Corpus evidence
+//
+//   - litho/html bidi-letter: the header and rows of a right-to-left table
+//     read "البندالكميةسعر الوحدةالمجموع" and "Model X-200250$120.00$30,000.00".
+//     litho/html he-bidi-numbers: "סעיףנושאשנה" and "ושוויון1948".
+//   - pdfjs issue11656.pdf page 1: "סעיף15(ב)(4)", as PDF.js reads it,
+//     where the page sets a space glyph between "סעיף" and "15", the two in
+//     runs of their own. It is the one page of every corpus whose words
+//     match PDF.js without this gap and differ from it with the gap.
+//   - pdfjs issue15033.pdf page 1: "510054919ע.מ" for two items 12.7 units
+//     apart, and "בעמקלריטי" for two blocks. pdfjs issue919.pdf pages 1 to
+//     9: "العلمأن", "مقابلنقود" and the like, words the page sets apart,
+//     where PDF.js's text is no Arabic (its golden holds control
+//     characters). pdfjs issue11526.pdf pages 1 and 2 gain a space between
+//     two runs of characters its fonts map wrongly.
 func visualOrder(elems []models.TextElement, indices []int, spaced func(left, right int) bool) []int {
 	type run struct {
 		x     float64
@@ -180,10 +210,41 @@ func visualOrder(elems []models.TextElement, indices []int, spaced func(left, ri
 	}
 	sort.SliceStable(runs, func(a, b int) bool { return runs[a].x < runs[b].x })
 	out := make([]int, 0, len(indices))
-	for _, r := range runs {
+	for k, r := range runs {
+		if k > 0 && spaced != nil {
+			if left, right := runEdge(elems, runs[k-1].elems, true), runEdge(elems, r.elems, false); left >= 0 && right >= 0 && spaced(left, right) {
+				out = append(out, bidiRunGap)
+			}
+		}
 		out = append(out, r.elems...)
 	}
 	return out
+}
+
+// runEdge returns the glyph at the right end of a run of a line in visual
+// order, the one whose advance ends farthest right, or at its left end, the
+// one that starts farthest left, or -1 when the run holds none: a space
+// glyph or a glyph that takes no place ([takesNoPlace]) is no edge.
+func runEdge(elems []models.TextElement, run []int, right bool) int {
+	edge := -1
+	for _, idx := range run {
+		if idx == bidiSpace {
+			continue
+		}
+		el := elems[idx]
+		if takesNoPlace(el) || isSpaceGlyph(el.Text) {
+			continue
+		}
+		switch {
+		case edge < 0:
+			edge = idx
+		case right && el.X+max(el.Width, 0) > elems[edge].X+max(elems[edge].Width, 0):
+			edge = idx
+		case !right && el.X < elems[edge].X:
+			edge = idx
+		}
+	}
+	return edge
 }
 
 // reorderBidiIndices returns the elements of a horizontal line in logical
@@ -221,17 +282,21 @@ func reorderBidiIndices(elems []models.TextElement, indices []int, spaced func(l
 	}
 	visual := visualOrder(elems, indices, spaced)
 	texts := make([]string, len(visual))
+	firstGap := len(visual)
 	for i, idx := range visual {
-		if idx == bidiSpace {
+		if idx == bidiSpace || idx == bidiRunGap {
 			texts[i] = " "
+			if idx == bidiRunGap {
+				firstGap = min(firstGap, i)
+			}
 			continue
 		}
 		texts[i] = elems[idx].Text
 	}
-	order := visualToLogical(texts)
+	order := visualToLogical(texts, firstGap)
 	out := make([]int, len(order))
 	for i, pos := range order {
-		out[i] = visual[pos]
+		out[i] = max(visual[pos], bidiSpace)
 	}
 	return out, true
 }
@@ -258,8 +323,10 @@ const (
 // no explicit embedding (X1-X10), no bracket pairing (N0) and no mirroring
 // (L4): a glyph already shows the shape it is drawn with. It works on
 // elements rather than characters, so the characters of one glyph stay in
-// their /ToUnicode order ([elementBidiClass]).
-func visualToLogical(texts []string) []int {
+// their /ToUnicode order ([elementBidiClass]). firstGap is the position in
+// texts of the first word space read between two runs ([bidiRunGap]), or
+// len(texts) when there is none ([logicalEndContext]).
+func visualToLogical(texts []string, firstGap int) []int {
 	n := len(texts)
 	types := make([]bidiClass, n)
 	rtlChars, chars := 0, 0
@@ -282,7 +349,7 @@ func visualToLogical(texts []string) []int {
 
 	lead := sor
 	if rtl {
-		lead = logicalEndContext(types, sor)
+		lead = logicalEndContext(types[:min(firstGap, len(types))], sor)
 	}
 	resolveWeakTypes(types, sor, lead)
 	resolveNeutralTypes(types, sor)
@@ -339,7 +406,9 @@ func visualToLogical(texts []string) []int {
 // order (UAX #9, 3.3.4). The left end of a right-to-left line in visual
 // order is its logical end, and a number there that no left-to-right text
 // holds is read in logical order after the strong character to its right,
-// not after sor.
+// not after sor. types are those of the line up to its first gap between
+// two runs ([bidiRunGap]): the runs a gap parts may be paragraphs of their
+// own, the cells of a table row, each read from its own sor.
 //
 // PDF.js reads every line from its left end with sor (src/core/bidi.js,
 // bidi), so a European number ending a right-to-left line after an Arabic

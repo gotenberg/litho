@@ -354,3 +354,31 @@ func joinByIndices(texts []string, indices []int) string {
 	}
 	return sb.String()
 }
+
+// TestReconstructText_BidiCellsApart pins that the runs of a right-to-left
+// line a producer places from right to left, each drawn from left to
+// right, the cells of a table row, read apart where the page sets them
+// apart ([visualOrder]), and that a number in a cell of its own keeps its
+// currency sign: the cells after the first gap are read from their own sor
+// ([logicalEndContext]).
+func TestReconstructText_BidiCellsApart(t *testing.T) {
+	cell := func(x float64, texts ...string) []models.TextElement {
+		out := make([]models.TextElement, len(texts))
+		for i, s := range texts {
+			out[i] = models.TextElement{Text: s, X: x + float64(6*i), Y: 100, Width: 6, FontSize: 12}
+		}
+		return out
+	}
+	var elements []models.TextElement
+	// The cells "התקנה", "כמות", "12" and "$150.00", right to left, each
+	// drawn left to right in visual order.
+	elements = append(elements, cell(400, "ה", "נ", "ק", "ת", "ה")...)
+	elements = append(elements, cell(300, "ת", "ו", "מ", "כ")...)
+	elements = append(elements, cell(200, "1", "2")...)
+	elements = append(elements, cell(100, "$", "1", "5", "0", ".", "0", "0")...)
+	got := ReconstructText(context.Background(), elements, nil)
+	want := "התקנה כמות 12 $150.00"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
