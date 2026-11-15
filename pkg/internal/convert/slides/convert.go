@@ -92,6 +92,11 @@ type builder struct {
 	// effectPixels counts the pixels of the effect bitmaps of the slide
 	// being drawn.
 	effectPixels effect.Page
+	// outlines reads the glyph outlines of warped text.
+	outlines text.Outlines
+	// warped is what the warped text of the slide being built holds,
+	// charged to the budget until its page is handed over.
+	warped int64
 }
 
 // warn records a warning once per code, effect and message.
@@ -462,7 +467,8 @@ func (b *builder) handOver(out *typeset.Document, pg *typeset.Page) error {
 		// The stream names the page it refuses.
 		return err
 	}
-	b.mem.Release(typeset.CountGlyphs(pg) * limits.GlyphCost)
+	b.mem.Release(typeset.CountGlyphs(pg)*limits.GlyphCost + b.warped)
+	b.warped = 0
 	return nil
 }
 

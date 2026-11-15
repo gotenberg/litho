@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
+	"github.com/gotenberg/litho/pkg/internal/officefx"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/symbolfont"
 	"github.com/gotenberg/litho/pkg/internal/text"
@@ -318,6 +319,13 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box typeset.Rect)
 		m = translate(inner.X+dx, inner.Y+dy)
 	}
 	frags := lay.frags
+	if body.Warp != nil {
+		if warped, ok := b.warpText(body, res.box, m, lw, frags); ok {
+			res.frags = warped
+			res.structure = lay.structure
+			return res
+		}
+	}
 	if body.Clip && !vertical {
 		// A clipped body draws no line whose baseline falls outside its
 		// rectangle and cuts the others at it, as Impress prints a text
@@ -341,6 +349,44 @@ func (b *builder) shapeText(body *TextBody, g *shape.Geometry, box typeset.Rect)
 	}
 	res.structure = lay.structure
 	return res
+}
+
+// warpText returns the laid-out text frags of body, mapped by m, warped
+// to the shape body.Warp fitted to the shape's box, and true; false when
+// the warp draws nothing, the caller drawing the text unwarped. Vertical
+// text is not warped, with a warning. The links of the text keep their
+// unwarped places.
+func (b *builder) warpText(body *TextBody, box typeset.Rect, m typeset.Matrix, block float64, frags []typeset.Fragment) ([]typeset.Fragment, bool) {
+	lanes := shape.WarpLanes(body.Warp, box)
+	if lanes == nil {
+		if body.Warp.Custom != nil || body.Warp.Preset != "textNoShape" {
+			b.warn(warn.ContentUnsupported, warn.Approximated, "warped text of an unknown shape is drawn unwarped")
+		}
+		return nil, false
+	}
+	if body.Vertical.Vertical() {
+		b.warn(warn.ContentUnsupported, warn.Approximated, "warped vertical text is drawn unwarped")
+		return nil, false
+	}
+	out, notes, err := officefx.WarpText(b.ctx, frags, m, &officefx.Warp{Lanes: lanes, Fit: body.WarpFit, Block: block}, &b.outlines)
+	if err != nil {
+		return nil, false
+	}
+	if notes.Capped {
+		b.warn(warn.LimitReached, warn.Approximated, fmt.Sprintf("warped text of more than %d glyphs is drawn unwarped", officefx.MaxWarpGlyphs))
+	}
+	if notes.Effects {
+		b.warn(warn.ContentUnsupported, warn.Omitted, "the effects of warped text are not drawn")
+	}
+	// The warped outlines hold path operations a document can multiply
+	// by its glyphs; the page holds them until it is handed over.
+	cost := typeset.ContentCost(out)
+	if err := b.mem.Charge(cost, "warped text"); err != nil {
+		// The refusal stops the conversion, which reports it.
+		return nil, true
+	}
+	b.warped += cost
+	return out, true
 }
 
 // jumpPrefix starts the target a run's jump to a slide carries through

@@ -538,6 +538,13 @@ type TextBody struct {
 	// Impress stacks OpenDocument paragraphs; false, the default, adds the
 	// two, as it stacks PresentationML paragraphs.
 	MaxParagraphSpacing bool
+	// Warp, when not nil, warps the laid-out text to a shape fitted to the
+	// shape's box (ECMA-376 Part 1, 20.1.9.19 prstTxWarp; ODF 1.3 Part 3, 19.224
+	// draw:text-path), as officefx.WarpText draws it.
+	Warp *shape.TextWarp
+	// WarpFit scales the lines that follow a path of Warp to span it
+	// (21.1.2.1.1 bodyPr fromWordArt).
+	WarpFit bool
 }
 
 // Anchor is the vertical placement of a text body (ECMA-376 Part 1,
