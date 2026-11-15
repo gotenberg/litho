@@ -97,6 +97,43 @@ func TestRunProperties(t *testing.T) {
 	}
 }
 
+// TestAutomaticText_TurnsWhiteOnItsShading checks the background that
+// decides the colour of automatic text, as Word paints it in a probe: a
+// run's shading, else its paragraph's, else its cell's; never a
+// highlight.
+func TestAutomaticText_TurnsWhiteOnItsShading(t *testing.T) {
+	t.Parallel()
+	shd := func(fill string) string { return `<w:shd w:val="clear" w:color="auto" w:fill="` + fill + `"/>` }
+	run := func(rpr, text string) string {
+		return `<w:r><w:rPr>` + rpr + `</w:rPr><w:t xml:space="preserve">` + text + `</w:t></w:r>`
+	}
+	cell := func(fill, text string) string {
+		return `<w:tc><w:tcPr><w:tcW w:w="2400" w:type="dxa"/>` + shd(fill) + `</w:tcPr><w:p>` + run(``, text) + `</w:p></w:tc>`
+	}
+	body := `<w:p>` + run(shd("383838"), "run383838") + run(shd("404040"), "run404040") + run(shd("C00000"), "runC00000") +
+		run(shd("008000"), "run008000") + run(`<w:highlight w:val="black"/>`, "hlblack") + run(`<w:highlight w:val="darkBlue"/>`, "hldarkblue") + `</w:p>` +
+		`<w:p><w:pPr>` + shd("202020") + `</w:pPr>` + run(``, "para202020") + run(shd("FFFFFF"), "runwhite") + `</w:p>` +
+		`<w:p><w:pPr>` + shd("404040") + `</w:pPr>` + run(``, "para404040") + `</w:p>` +
+		`<w:tbl><w:tblPr><w:tblW w:w="7200" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="2400"/></w:tblGrid><w:tr>` +
+		cell("202020", "cell202020") + cell("606060", "cell606060") + `</w:tr></w:tbl>` +
+		`<w:p>` + run(``, "after") + `</w:p>`
+	b := build(t, body, nil)
+	white, black := css.Color{R: 1, G: 1, B: 1, A: 1}, css.Color{A: 1}
+	for _, tc := range []struct {
+		text string
+		want css.Color
+	}{
+		{"run383838", white}, {"run404040", black}, {"runC00000", white}, {"run008000", black},
+		{"hlblack", black}, {"hldarkblue", black},
+		{"para202020", white}, {"runwhite", black}, {"para404040", black},
+		{"cell202020", white}, {"cell606060", black}, {"after", black},
+	} {
+		if st := runWith(t, b.root, tc.text).Style; st.Color != tc.want {
+			t.Errorf("run %q: colour %+v, want %+v", tc.text, st.Color, tc.want)
+		}
+	}
+}
+
 // contains reports whether s holds sub.
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {

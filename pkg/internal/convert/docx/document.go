@@ -125,6 +125,10 @@ type document struct {
 	// inCell counts the table cells being built, whose paragraphs'
 	// frame properties are ignored.
 	inCell int
+	// under is the shading the paragraph being built lies on: its own
+	// (17.3.1.31 shd), else its table cell's (17.4.32 shd), nil for
+	// none; it decides the colour of automatic text ([autoTextBackground]).
+	under *css.Color
 	// vmlTypes maps a VML shape type's id to its shape type number
 	// (o:spt, Part 4, 14.1.2.20), for the shapes that name it.
 	vmlTypes map[string]int

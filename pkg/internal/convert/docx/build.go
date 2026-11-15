@@ -314,6 +314,11 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 		// A hidden paragraph mark on an empty paragraph hides it.
 		return nil
 	}
+	if pp.shading != nil {
+		under := d.under
+		d.under = pp.shading
+		defer func() { d.under = under }()
+	}
 	base, lineMult := d.paraStyle(pp, rp.mark)
 	// st is the paragraph's style before what each piece changes: its runs
 	// derive theirs from it.

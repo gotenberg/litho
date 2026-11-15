@@ -730,7 +730,13 @@ func (d *document) table(s *story, t *ooxml.Element, depth int) *layout.Node {
 			}
 			d.nested++
 			d.inCell++
+			under := d.under
+			if cst.BackgroundColor.A > 0 {
+				bg := cst.BackgroundColor
+				d.under = &bg
+			}
 			bs := d.blocks(s, cc, c.xml, depth+1)
+			d.under = under
 			if n := len(bs); n >= 2 && endsWithTableMark(c.xml) && bs[n-2].node.Role == "Table" && bs[n-1].node.Role == "P" && bs[n-1].node.ID == "" {
 				bs = bs[:n-1]
 			}

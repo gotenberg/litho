@@ -671,7 +671,12 @@ func (d *document) textBox(s *story, content *ooxml.Element, w, h float64, ss oo
 	if content != nil {
 		ts := &story{part: s.part, fields: s.fields, note: s.note}
 		d.nested++
+		// The box's text lies on the box, not on the shading of the
+		// paragraph that anchors it.
+		under := d.under
+		d.under = nil
 		kids = d.finish(d.blocks(ts, nil, content, depth+1))
+		d.under = under
 		d.nested--
 	}
 	n := &layout.Node{Kind: layout.Element, Style: bs, Children: kids}

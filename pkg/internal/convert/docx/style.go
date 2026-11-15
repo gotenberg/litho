@@ -148,7 +148,7 @@ func (d *document) applyRun(st *css.Style, r runProps, lineMult float64) {
 	st.Color = css.Color{A: 1}
 	if r.color != nil && !r.color.auto {
 		st.Color = r.color.c
-	} else if bg := runBackground(r); bg != nil && luminance(*bg) < autoWhiteBelow {
+	} else if bg := d.autoTextBackground(r); bg != nil && luminance(*bg) < autoWhiteBelow {
 		// Automatic colour turns white on a dark background (17.3.2.6).
 		st.Color = css.Color{R: 1, G: 1, B: 1, A: 1}
 	}
@@ -288,6 +288,28 @@ func runBackground(r runProps) *css.Color {
 	return r.shading
 }
 
+// autoTextBackground returns the background that decides the colour of
+// a run's automatic text (ECMA-376 Part 1, 17.3.2.6 color, auto): the
+// run's shading, else the paragraph's, else the table cell's; none for a
+// highlighted run, whose automatic text Word paints black on every
+// highlight colour.
+//
+// # Corpus evidence
+//
+//   - probe, docx: Word paints automatic text white on a paragraph shaded
+//     202020 and on a cell shaded 202020, black on a paragraph shaded
+//     404040 and on cells shaded 404040 and 606060; black on the
+//     highlights black, darkBlue, darkRed, darkGray, blue and red.
+func (d *document) autoTextBackground(r runProps) *css.Color {
+	switch {
+	case r.highlight != nil:
+		return nil
+	case r.shading != nil:
+		return r.shading
+	}
+	return d.under
+}
+
 // autoWhiteBelow is the [luminance] of a run's background below which
 // Word paints the run's automatic text white (ECMA-376 Part 1, 17.3.2.6
 // leaves the choice to the consumer). Word's switch lies between the
@@ -296,6 +318,11 @@ func runBackground(r runProps) *css.Color {
 //
 // # Corpus evidence
 //
+//   - probe, docx: Word paints automatic text white on runs shaded
+//     101010, 202020, 303030 and 383838 (0.220), 800000, 000080, 1F3864
+//     and C00000 (0.225), black on runs shaded 404040 (0.251), 484848,
+//     505050, 585858, 008000 (0.295), 0070C0 and 7030A0, and on a run
+//     shaded pct50 of 000000 over FFFFFF.
 //   - probe, docx: Word paints automatic text white on a run shaded
 //     202020 (0.125), black on runs shaded 606060 (0.376), 808080 and
 //     A0A0A0, and on a run and a paragraph shaded 3060C0 (0.363).
@@ -303,6 +330,10 @@ func runBackground(r runProps) *css.Color {
 //     on a solid shading of 2F5496 (0.316) and on its pct75 and pct90
 //     mixes with FFF2CC, and on highlights yellow, green, cyan, magenta
 //     (0.413) and light grey.
+//   - litho/docx styles-custom-theme: Word paints the automatic text of
+//     a paragraph shaded accent6 under themeFillShade BF white; it paints
+//     the shading 33,57,87 (0.209), the theme colour, over the 2C4D75
+//     stored beside it.
 const autoWhiteBelow = 0.25
 
 // luminance returns the relative luminance of c, roughly.
