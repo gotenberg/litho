@@ -73,6 +73,9 @@ type document struct {
 	styles    *styleSheet
 	numbering *numbering
 	settings  settings
+	// comments holds the comments of the text, nil when the conversion
+	// leaves them out (office.Options.Comments).
+	comments  *comments
 	footnotes map[string]*ooxml.Element
 	endnotes  map[string]*ooxml.Element
 	// footnotesPart and endnotesPart name the parts the notes come from,
@@ -233,6 +236,9 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	d.readFontTable(fontRoot)
 	if d.loadEmbeddedFonts(fontPart, fontRoot); d.err != nil {
 		return nil, d.err
+	}
+	if opts.Comments == office.CommentsAnnotations {
+		d.readComments()
 	}
 	d.footnotesPart = pkg.RelatedPart(ctx, main, ooxml.RelFootnotes)
 	if d.footnotes, err = d.readNotes(d.footnotesPart, "footnote"); err != nil {

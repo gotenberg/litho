@@ -39,6 +39,8 @@ var relTypes = map[string]string{
 	"word/settings.xml":          "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings",
 	"word/footnotes.xml":         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes",
 	"word/endnotes.xml":          "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes",
+	"word/comments.xml":          "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments",
+	"word/commentsExtended.xml":  "http://schemas.microsoft.com/office/2011/relationships/commentsExtended",
 	"word/theme/theme1.xml":      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme",
 	"word/header1.xml":           "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",
 	"word/header2.xml":           "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header",

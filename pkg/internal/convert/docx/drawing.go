@@ -722,7 +722,9 @@ func (d *document) textBox(s *story, content *ooxml.Element, w, h float64, ss oo
 		// paragraph that anchors it.
 		under := d.under
 		d.under = nil
+		restore := d.comments.apart()
 		kids = d.finish(d.blocks(ts, nil, content, depth+1))
+		restore()
 		d.under = under
 		d.nested--
 	}

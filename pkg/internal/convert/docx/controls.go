@@ -184,11 +184,11 @@ func (d *document) inlineControl(s *story, rp resolvedPara, ps *css.Style, lineM
 // its field (formfield.Printed), which the backend writes when the field
 // does not land and the element prints its content alone.
 func (d *document) closeControl(sink *inlineSink, ctl *formfield.Control) {
-	if len(sink.links) == 0 {
+	fr, reopen := sink.takeFrame()
+	if fr == nil {
 		return
 	}
-	fr := sink.links[len(sink.links)-1]
-	sink.links = sink.links[:len(sink.links)-1]
+	defer sink.reopen(reopen)
 	if len(fr.nodes) == 0 {
 		return
 	}
@@ -424,9 +424,12 @@ func (d *document) endLegacy(fl *field, sink *inlineSink) {
 	ctl := fl.control
 	fl.control = nil
 	d.form.open--
-	if len(sink.links) > 0 && ctl.Field.Kind == typeset.FieldText {
+	// The comment ranges open in the result close into it first, so that
+	// its text is read whole, and open again after the control.
+	defer sink.reopen(sink.closeAbove())
+	if fr := sink.innermost(); fr != nil && ctl.Field.Kind == typeset.FieldText {
 		var b strings.Builder
-		for _, n := range sink.links[len(sink.links)-1].nodes {
+		for _, n := range fr.nodes {
 			b.WriteString(office.ShownText([]*layout.Node{n}))
 		}
 		ctl.Field.Value = strings.TrimRight(b.String(), " ")

@@ -36,6 +36,10 @@ const (
 	RelEndnotes       = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes"
 	RelImage          = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
 	RelHyperlink      = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
+	RelComments       = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments"
+	// RelCommentsExtended names Word's part of the threads and resolution
+	// of a document's comments ([MS-DOCX] 2.3.3).
+	RelCommentsExtended = "http://schemas.microsoft.com/office/2011/relationships/commentsExtended"
 )
 
 // strictRelPrefix and transitionalRelPrefix are the relationship type

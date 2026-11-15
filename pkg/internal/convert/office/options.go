@@ -65,6 +65,9 @@ type Options struct {
 	// TrackedChanges is how a text document prints the changes it tracks.
 	// Other documents ignore it.
 	TrackedChanges TrackedChanges
+	// Comments is how a text document writes the comments of its text.
+	// Other documents ignore it.
+	Comments Comments
 	// Sheets, when not nil, are the names of the sheets of a spreadsheet
 	// that print, matched exactly, in book order, hidden ones included; a
 	// name the book has no sheet for fails with typeset.ErrInvalidOptions. The
@@ -145,6 +148,19 @@ const (
 	ChangesMarked
 )
 
+// Comments is how a text document writes the comments its text carries
+// (ECMA-376 Part 1, 17.13.4; ODF 1.3 Part 3, 14.1).
+type Comments int
+
+const (
+	// CommentsHidden leaves the comments out. The zero value.
+	CommentsHidden Comments = iota
+	// CommentsAnnotations writes each comment as a markup annotation over
+	// the text it covers, with its replies and whether its thread is
+	// resolved; the pages print as without it.
+	CommentsAnnotations
+)
+
 // Recalculation is when a spreadsheet's formulas are computed again rather
 // than shown as the value the file stores.
 type Recalculation int
@@ -214,6 +230,9 @@ func (o Options) Validate() error {
 	}
 	if o.TrackedChanges < ChangesAccepted || o.TrackedChanges > ChangesMarked {
 		return fmt.Errorf("%w: tracked changes view %d", typeset.ErrInvalidOptions, o.TrackedChanges)
+	}
+	if o.Comments < CommentsHidden || o.Comments > CommentsAnnotations {
+		return fmt.Errorf("%w: comments view %d", typeset.ErrInvalidOptions, o.Comments)
 	}
 	if o.Recalculation < RecalculateAsNeeded || o.Recalculation > RecalculateAlways {
 		return fmt.Errorf("%w: recalculation mode %d", typeset.ErrInvalidOptions, o.Recalculation)

@@ -40,6 +40,7 @@ const (
 	NSWPG  = "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"
 	NSWP14 = "http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing"
 	NSW14  = "http://schemas.microsoft.com/office/word/2010/wordml"
+	NSW15  = "http://schemas.microsoft.com/office/word/2012/wordml"
 	NSV    = "urn:schemas-microsoft-com:vml"
 	NSO    = "urn:schemas-microsoft-com:office:office"
 	NSW10  = "urn:schemas-microsoft-com:office:word"

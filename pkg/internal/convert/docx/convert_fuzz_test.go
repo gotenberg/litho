@@ -62,3 +62,31 @@ func FuzzRevisions(f *testing.F) {
 		}
 	})
 }
+
+// FuzzComments converts arbitrary bodies and comments parts with the
+// comments written as annotations: it must neither panic nor loop, and a
+// document it writes passes the model's checks.
+func FuzzComments(f *testing.F) {
+	body := `<w:p><w:commentRangeStart w:id="0"/><w:r><w:t>a</w:t></w:r><w:r><w:br w:type="page"/></w:r><w:commentRangeStart w:id="1"/>` +
+		`<w:hyperlink r:id="rIdlink"><w:r><w:t>b</w:t></w:r><w:commentRangeEnd w:id="0"/></w:hyperlink><w:r><w:commentReference w:id="0"/></w:r>` +
+		`<w:commentRangeEnd w:id="1"/><w:r><w:commentReference w:id="2"/></w:r></w:p>`
+	parts := commentParts([][3]string{{"0", "A", "x\ny"}, {"1", "B", "z"}, {"2", "C", "w"}}, map[string]string{"1": "0"}, map[string]bool{"0": true})
+	f.Add([]byte(body), []byte(parts["word/comments.xml"]), []byte(parts["word/commentsExtended.xml"]))
+	f.Add([]byte(body[:len(body)/2]), []byte(parts["word/comments.xml"][:40]), []byte(parts["word/commentsExtended.xml"]))
+	fonts := testFonts(f)
+	f.Fuzz(func(t *testing.T, body, comments, ext []byte) {
+		files := pkgFiles("", map[string]string{"word/comments.xml": string(comments), "word/commentsExtended.xml": string(ext)})
+		files["word/document.xml"] = `<w:document ` + nsDecl + `><w:body>` + string(body) + `</w:body></w:document>`
+		data := zipFiles(t, files)
+		doc, err := Convert(context.Background(), bytes.NewReader(data), fonts, office.Options{MaxPages: 50, Comments: office.CommentsAnnotations})
+		if err != nil {
+			return
+		}
+		if len(doc.Pages) == 0 {
+			t.Fatal("no page without an error")
+		}
+		if err := doc.Validate(context.Background()); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+	})
+}

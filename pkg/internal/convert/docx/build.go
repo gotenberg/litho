@@ -3,6 +3,7 @@ package docx
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -108,6 +109,14 @@ func (d *document) blocksInto(s *story, c *cond, parent *ooxml.Element, depth in
 			d.blocksInto(s, c, e, depth+1, out)
 		case "altChunk":
 			d.altChunk(s, c, e, depth, out)
+		case "commentRangeStart", "commentRangeEnd":
+			// A range marker between paragraphs: the next paragraph opens
+			// the range, or the last one closed it.
+			if d.comments != nil && e.Local == "commentRangeStart" {
+				d.comments.start(attrOr(e, "id"), nil)
+			} else if d.comments != nil {
+				d.comments.end(attrOr(e, "id"), nil)
+			}
 		case "br":
 			// A break outside a run, which the schema does not allow and
 			// LibreOffice reads: a page or column break moves the next
@@ -327,7 +336,10 @@ func (d *document) paragraph(s *story, c *cond, p *ooxml.Element, depth int) []b
 	// st is the paragraph's style before what each piece changes: its runs
 	// derive theirs from it.
 	st := d.share(&base)
-	sink := &inlineSink{}
+	sink := &inlineSink{para: st}
+	if d.comments != nil {
+		d.comments.resume(sink)
+	}
 	d.revisions.bound(p, st, sink, true)
 	d.inlines(s, rp, st, lineMult, p, sink, depth)
 	d.revisions.bound(p, st, sink, false)
@@ -840,7 +852,8 @@ func (d *document) textWidth(s string, st *css.Style) float64 {
 type inlineSink struct {
 	segs []*segment
 	cur  *segment
-	// links collects the nodes of the open hyperlinks.
+	// links collects the nodes of the open hyperlinks and comment ranges,
+	// innermost last.
 	links []*linkFrame
 	// positioned is set when a drawing is positioned from the paragraph,
 	// which then becomes its containing block.
@@ -848,6 +861,9 @@ type inlineSink struct {
 	// changed is set while the nodes of a run the marked view marked are
 	// added: they draw a change bar (layout.Node ChangeBar).
 	changed bool
+	// para is the style of the paragraph the nodes are collected for,
+	// which a comment range's element takes ([inlineSink.addComment]).
+	para *css.Style
 }
 
 // segment is one piece of a paragraph between page breaks.
@@ -858,10 +874,13 @@ type segment struct {
 	column bool
 }
 
-// linkFrame is a hyperlink being collected.
+// linkFrame is a hyperlink or a comment's range being collected.
 type linkFrame struct {
-	href  string
-	nodes []*layout.Node
+	href string
+	// comment is the comment whose range the frame collects, nil for a
+	// hyperlink.
+	comment *commentEntry
+	nodes   []*layout.Node
 }
 
 // add appends n to the open hyperlink, else the current segment.
@@ -881,8 +900,16 @@ func (k *inlineSink) add(n *layout.Node) {
 	k.cur.nodes = append(k.cur.nodes, n)
 }
 
-// pageBreak starts a new segment, after a column break when column.
+// pageBreak starts a new segment, after a column break when column. An
+// open comment range closes before the break and opens again after it, so
+// its text stays on its side of the break; the frames inside it close and
+// open with it.
 func (k *inlineSink) pageBreak(column bool) {
+	var reopen []*linkFrame
+	if slices.ContainsFunc(k.links, func(f *linkFrame) bool { return f.comment != nil }) {
+		reopen = k.closeFrom(0)
+	}
+	defer k.reopen(reopen)
 	if k.cur == nil {
 		k.cur = &segment{}
 		k.segs = append(k.segs, k.cur)
@@ -908,13 +935,106 @@ func (k *inlineSink) anchor(id string) bool {
 func (k *inlineSink) openLink(href string) { k.links = append(k.links, &linkFrame{href: href}) }
 
 // closeLink ends the innermost hyperlink and adds it as a Link element.
+// The comment ranges opened inside it close with it and open again after
+// it.
 func (k *inlineSink) closeLink() {
-	if len(k.links) == 0 {
+	for i := len(k.links) - 1; i >= 0; i-- {
+		if k.links[i].comment == nil {
+			k.reopen(k.closeFrom(i)[1:])
+			return
+		}
+	}
+}
+
+// takeFrame pops the innermost frame that is no comment's range, a
+// hyperlink's or a control's, for its caller to add, and returns it with
+// the comment frames opened inside it, which it closes into it first: the
+// caller opens them again ([inlineSink.reopen]) once it added the frame's
+// element. nil when no such frame is open.
+func (k *inlineSink) takeFrame() (*linkFrame, []*linkFrame) {
+	for i := len(k.links) - 1; i >= 0; i-- {
+		if k.links[i].comment != nil {
+			continue
+		}
+		above := k.closeFrom(i + 1)
+		f := k.links[i]
+		k.links = k.links[:i]
+		return f, above
+	}
+	return nil, nil
+}
+
+// closeAbove closes the comment frames opened inside the innermost frame
+// that is no comment's range, into it, and returns them for the caller to
+// open again ([inlineSink.reopen]); nil when there is no such frame.
+func (k *inlineSink) closeAbove() []*linkFrame {
+	for i := len(k.links) - 1; i >= 0; i-- {
+		if k.links[i].comment == nil {
+			return k.closeFrom(i + 1)
+		}
+	}
+	return nil
+}
+
+// inFrame reports whether a hyperlink's or a control's frame is open.
+func (k *inlineSink) inFrame() bool {
+	return slices.ContainsFunc(k.links, func(f *linkFrame) bool { return f.comment == nil })
+}
+
+// innermost returns the innermost frame that is no comment's range, nil
+// for none.
+func (k *inlineSink) innermost() *linkFrame {
+	for i := len(k.links) - 1; i >= 0; i-- {
+		if k.links[i].comment == nil {
+			return k.links[i]
+		}
+	}
+	return nil
+}
+
+// openComment starts collecting the range of comment ce.
+func (k *inlineSink) openComment(ce *commentEntry) {
+	k.links = append(k.links, &linkFrame{comment: ce})
+}
+
+// closeComment ends the range of comment ce and adds it as an Annot
+// element. The frames opened inside it close with it and open again after
+// it, as overlapping ranges nest.
+func (k *inlineSink) closeComment(ce *commentEntry) {
+	i := slices.IndexFunc(k.links, func(f *linkFrame) bool { return f.comment == ce })
+	if i < 0 {
 		return
 	}
-	f := k.links[len(k.links)-1]
-	k.links = k.links[:len(k.links)-1]
+	k.reopen(k.closeFrom(i)[1:])
+}
+
+// closeFrom closes the frames from index i up, innermost first, and
+// returns them in their order.
+func (k *inlineSink) closeFrom(i int) []*linkFrame {
+	closed := slices.Clone(k.links[i:])
+	for len(k.links) > i {
+		f := k.links[len(k.links)-1]
+		k.links = k.links[:len(k.links)-1]
+		k.closeFrame(f)
+	}
+	return closed
+}
+
+// reopen opens frames like those given, empty, in their order.
+func (k *inlineSink) reopen(frames []*linkFrame) {
+	for _, f := range frames {
+		k.links = append(k.links, &linkFrame{href: f.href, comment: f.comment})
+	}
+}
+
+// closeFrame adds the nodes f collected, popped from the frames, as a
+// Link element, or as the Annot element of its comment's range.
+func (k *inlineSink) closeFrame(f *linkFrame) {
 	if len(f.nodes) == 0 {
+		return
+	}
+	if f.comment != nil {
+		k.addComment(f)
 		return
 	}
 	st := *f.nodes[0].Style
@@ -922,12 +1042,42 @@ func (k *inlineSink) closeLink() {
 	k.add(&layout.Node{Kind: layout.Element, Style: inlineStyle(&st), Href: f.href, Role: "Link", Children: f.nodes})
 }
 
+// addComment adds the nodes of the comment frame f in Annot elements
+// carrying its comment, one for each run of nodes in the line: a drawing
+// placed out of the line, absolutely or floating, stays outside them, as
+// it is laid out without the comment.
+func (k *inlineSink) addComment(f *linkFrame) {
+	var run []*layout.Node
+	flush := func() {
+		if len(run) == 0 {
+			return
+		}
+		// The element takes its paragraph's style, as the paragraph's own
+		// inline box has it: its runs sit on their line, and their
+		// superscripts and subscripts rise and drop, as without it.
+		st := run[0].Style
+		if k.para != nil {
+			st = k.para
+		}
+		k.add(&layout.Node{Kind: layout.Element, Style: inlineStyle(st), Role: "Annot", Comment: f.comment.c, Children: run})
+		f.comment.covered = true
+		run = nil
+	}
+	for _, n := range f.nodes {
+		if st := n.Style; st != nil && (st.Float != css.FloatNone || st.Position == css.Absolute || st.Position == css.Fixed) {
+			flush()
+			k.add(n)
+			continue
+		}
+		run = append(run, n)
+	}
+	flush()
+}
+
 // finish closes the open hyperlinks and returns the segments, at least
 // one.
 func (k *inlineSink) finish() []*segment {
-	for len(k.links) > 0 {
-		k.closeLink()
-	}
+	k.closeFrom(0)
 	if len(k.segs) == 0 {
 		k.segs = append(k.segs, &segment{})
 	}
@@ -970,6 +1120,14 @@ func (d *document) inlines(s *story, rp resolvedPara, ps *css.Style, lineMult fl
 			}
 		case e.Is(ooxml.NSM, "oMath"), e.Is(ooxml.NSM, "oMathPara"):
 			d.math(rp, ps, lineMult, e, sink)
+		case d.comments != nil && e.Is(w, "commentRangeStart"):
+			if d.commentsHere(s) {
+				d.comments.start(attrOr(e, "id"), sink)
+			}
+		case d.comments != nil && e.Is(w, "commentRangeEnd"):
+			if d.commentsHere(s) {
+				d.comments.end(attrOr(e, "id"), sink)
+			}
 		}
 	}
 }
@@ -1085,6 +1243,11 @@ func (d *document) run(s *story, rp resolvedPara, ps *css.Style, lineMult float6
 		case c.Is(w, "footnoteReference"), c.Is(w, "endnoteReference"):
 			emit()
 			d.noteCall(s, c, st, sink)
+		case d.comments != nil && c.Is(w, "commentReference"):
+			if d.commentsHere(s) {
+				emit()
+				d.comments.reference(attrOr(c, "id"), ps, sink)
+			}
 		case c.Is(w, "footnoteRef"), c.Is(w, "endnoteRef"):
 			// The number opening a note's text is raised unless its style
 			// places it, as LibreOffice draws a note's anchor.
@@ -1138,7 +1301,7 @@ func (d *document) ruby(s *story, rp resolvedPara, ps *css.Style, lineMult float
 		if e == nil {
 			return nil
 		}
-		sub := &inlineSink{}
+		sub := &inlineSink{para: ps}
 		d.inlines(s, rp, ps, lineMult, e, sub, depth+1)
 		var out []*layout.Node
 		for _, seg := range sub.finish() {

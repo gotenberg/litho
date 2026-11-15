@@ -246,7 +246,7 @@ func fieldLink(instr string, sink *inlineSink) string {
 		return href
 	}
 	args := fieldArgs(instr)
-	if len(args) < 2 || len(sink.links) > 0 || !slices.Contains(args[2:], `\h`) {
+	if len(args) < 2 || sink.inFrame() || !slices.Contains(args[2:], `\h`) {
 		return ""
 	}
 	switch strings.ToUpper(args[0]) {
