@@ -366,3 +366,33 @@ func TestComments_ConvertsWithTheOptionAndKeepsTheReference(t *testing.T) {
 		t.Error("an unknown view is read")
 	}
 }
+
+// TestSinglePage_TextDocumentsTakeItAsLithosOwn holds the singlePage key:
+// a text document converts with pdf.WithSinglePage, its page ranges set
+// aside, and counts it as litho's own option, since no engine prints a
+// text document on one page; a spreadsheet takes it as the route's field.
+func TestSinglePage_TextDocumentsTakeItAsLithosOwn(t *testing.T) {
+	t.Parallel()
+	opts, err := ParseOfficeOptions([]byte(`{"singlePage": true, "nativePages": "2"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for format, want := range map[Format][]string{
+		FormatDOCX: {SinglePageName},
+		FormatODT:  {SinglePageName},
+		FormatXLSX: nil,
+		FormatODS:  nil,
+		FormatPPTX: nil,
+	} {
+		o := &Office{Format: format, Options: opts}
+		if got := o.LithoOptions(); !slices.Equal(got, want) {
+			t.Errorf("%s: LithoOptions = %v, want %v", format, got, want)
+		}
+		if isText(format) {
+			c, plain := o.options(), (&Office{Format: format}).options()
+			if len(c.word) != len(plain.word)+1 || len(c.common) != len(plain.common) {
+				t.Errorf("%s: %d text options and %d common ones, want the single page and no page range", format, len(c.word), len(c.common))
+			}
+		}
+	}
+}

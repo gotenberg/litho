@@ -36,8 +36,12 @@ type OfficeOptions struct {
 	PaperWidth  *float64 `json:"paperWidth,omitempty"`
 	PaperHeight *float64 `json:"paperHeight,omitempty"`
 	// SinglePage prints each sheet of a spreadsheet on one page the size
-	// of its content. Default false: each sheet is cut into pages of its
-	// paper. The route's former name, singlePageSheets, is refused.
+	// of its content, and a text document on one page sized to its
+	// content (pdf.WithSinglePage). Default false: each sheet is cut into
+	// pages of its paper, a text document laid out on its pages. The
+	// route's former name, singlePageSheets, is refused. No engine prints
+	// a text document on one page: on a DOCX or ODT source the key counts
+	// as litho's own ([SinglePageName]).
 	SinglePage bool `json:"singlePage,omitempty"`
 	// ExportHiddenSlides prints the slides a presentation hides too.
 	// Default false: a hidden slide is left out.
@@ -114,6 +118,12 @@ var OfficeOptionNames = []string{"password", "landscape", "nativePages", "native
 // the fixture its reference_of names, a document that is in itself what the
 // option makes of this one.
 var OfficeLithoOptionNames = []string{"trackedChanges", "sheets", "sheetNumbers", "hiddenSheets", "recalculation", "csvSeparators", "csvTypeDetection", "handouts", "date"}
+
+// SinglePageName is the key of an Office options file that asks for a
+// single page ([OfficeOptions.SinglePage]): a route field for a
+// spreadsheet, litho's own option for a text document, which no reference
+// engine prints on one page, so [Office.LithoOptions] names it there.
+const SinglePageName = "singlePage"
 
 // ReferenceOfName is the key of an Office options file that borrows another
 // fixture's reference (see [OfficeOptions.ReferenceOf]): it is no route
@@ -322,15 +332,16 @@ var ReferencePaper = pdf.Paper{Width: ReferencePaperWidth, Height: ReferencePape
 // says, the references' paper as the default paper of a text document or
 // a spreadsheet (a presentation sizes its own slides), and the landscape
 // switch, the page ranges, the password, the paper size, in points, the
-// single page sheets, the hidden slides and the notes pages when the
-// options name them. A CSV file splits its fields at commas, semicolons
+// single page sheets or single page, the hidden slides and the notes pages
+// when the options name them. A CSV file splits its fields at commas, semicolons
 // and tabs alike, as its references were made.
 //
 // A field the format has no option for is left out, as the route ignores
-// it: a password for a CSV file, single page sheets for a text document or
-// a presentation, the slide fields for any other document. Single page
-// sheets set the paper and the landscape switch aside: the page takes the
-// sheet's size. A format litho does not read fails with
+// it: a password for a CSV file, a single page for a presentation, the
+// slide fields for any other document. Single page sheets set the paper
+// and the landscape switch aside: the page takes the sheet's size. A
+// single page of a text document sets the page ranges aside: one page has
+// no range to select. A format litho does not read fails with
 // [ErrUnsupportedFormat].
 func (o *Office) Conversion(src io.Reader, extra ...pdf.ConvertOption) (*pdf.Conversion, error) {
 	opts := o.options()
@@ -401,7 +412,9 @@ func (o *Office) options() officeOptions {
 	if !isPresentation(o.Format) && !judgedByLibreOffice(o.Format) && o.Format != FormatImage {
 		opts.common = append(opts.common, pdf.WithDefaultPaper(ReferencePaper))
 	}
-	if o.Options.NativePages != "" {
+	onePage := o.Options.SinglePage && isText(o.Format)
+	if o.Options.NativePages != "" && !onePage {
+		// One page has no range to select.
 		opts.common = append(opts.common, pdf.WithPageRanges(o.Options.NativePages))
 	}
 	onePagePerSheet := o.Options.SinglePage && isSheets(o.Format)
@@ -429,6 +442,9 @@ func (o *Office) options() officeOptions {
 	case FormatDOCX, FormatODT:
 		if o.formFields() {
 			opts.word = append(opts.word, pdf.WithFormFields(true))
+		}
+		if onePage {
+			opts.word = append(opts.word, pdf.WithSinglePage(true))
 		}
 		if view := trackedChangesViews[o.Options.TrackedChanges]; view != pdf.TrackedChangesAccepted {
 			opts.word = append(opts.word, pdf.WithTrackedChanges(view))
@@ -522,12 +538,16 @@ func sameRunes(a, b []rune) bool {
 // out, as the conversion leaves it out: "trackedChanges": "accepted",
 // "recalculation": "asNeeded", "hiddenSheets": false, "csvTypeDetection":
 // true, "handouts": 0 and csvSeparators holding a comma, a semicolon and a
-// tab ([ReferenceCSVSeparators]), in any order. [InstalledFontsName]
-// follows them when the source names installed fonts in a format
+// tab ([ReferenceCSVSeparators]), in any order. [SinglePageName] follows
+// them when a text document asks for a single page, and
+// [InstalledFontsName] when the source names installed fonts in a format
 // Microsoft's references judge: Office for the web installs no font. A
 // source that names none converts as its reference engine prints it.
 func (o *Office) LithoOptions() []string {
 	keys := o.options().litho
+	if o.Options.SinglePage && isText(o.Format) {
+		keys = append(keys, SinglePageName)
+	}
 	if len(o.Options.InstalledFonts) > 0 && !judgedByLibreOffice(o.Format) {
 		keys = append(keys, InstalledFontsName)
 	}
@@ -545,6 +565,12 @@ func isPresentation(f Format) bool {
 // others.
 func judgedByLibreOffice(f Format) bool {
 	return f == FormatODT || f == FormatODS || f == FormatCSV || f == FormatODP
+}
+
+// isText reports whether a format is a text document's, which
+// [pdf.WithSinglePage] writes on one page.
+func isText(f Format) bool {
+	return f == FormatDOCX || f == FormatODT
 }
 
 // isSheets reports whether a format is laid out as sheets, which
