@@ -61,6 +61,9 @@ func (o *convertConfig) validate() error {
 		// surrounding spaces are refused rather than trimmed.
 		return fmt.Errorf("%w: default language %q is not a well-formed language tag", ErrInvalidConvertOptions, o.defaultLang)
 	}
+	if o.singlePage && o.pageRanges != "" {
+		return fmt.Errorf("%w: a single page has no page range to select", ErrInvalidConvertOptions)
+	}
 	if err := o.validateMargins(); err != nil {
 		return err
 	}
@@ -132,8 +135,7 @@ func within(v, lo, hi float64) bool {
 	return v >= lo && v <= hi
 }
 
-// validateHTML reports an HTML or Markdown option out of range, or a single
-// page asked with a page selection.
+// validateHTML reports an HTML or Markdown option out of range.
 func (o *convertConfig) validateHTML() error {
 	if o.media != "" && o.media != htmlconv.MediaPrint && o.media != htmlconv.MediaScreen {
 		return fmt.Errorf("%w: media type %q is neither %q nor %q", ErrInvalidConvertOptions, o.media, htmlconv.MediaPrint, htmlconv.MediaScreen)
@@ -152,9 +154,6 @@ func (o *convertConfig) validateHTML() error {
 		if name == "" || name != strings.ToLower(name) {
 			return fmt.Errorf("%w: media feature %q is not a lowercase name", ErrInvalidConvertOptions, name)
 		}
-	}
-	if o.singlePage && o.pageRanges != "" {
-		return fmt.Errorf("%w: a single page has no page range to select", ErrInvalidConvertOptions)
 	}
 	if o.markdownTemplateSet && o.markdownTemplate == "" {
 		return fmt.Errorf("%w: an empty Markdown template never calls toHTML", ErrInvalidConvertOptions)

@@ -49,6 +49,8 @@ func TestConvert_ValidatesEveryOption(t *testing.T) {
 		"media feature case":        FromHTML(src(), fonts, WithMediaFeatures(map[string]string{"Color": "x"})),
 		"empty media feature":       FromHTML(src(), fonts, WithMediaFeatures(map[string]string{"": "x"})),
 		"single page with ranges":   FromHTML(src(), fonts, WithSinglePage(true), WithPageRanges("1")),
+		"DOCX single page, ranges":  FromDOCX(src(), fonts, WithSinglePage(true), WithPageRanges("1")),
+		"ODT single page, ranges":   FromODT(src(), fonts, WithPageRanges("1-2"), WithSinglePage(true)),
 		"empty Markdown template":   FromMarkdown(src(), fonts, WithMarkdownTemplate("")),
 		"tracked changes view":      FromDOCX(src(), fonts, WithTrackedChanges(TrackedChanges(3))),
 		"comments view":             FromODT(src(), fonts, WithComments(Comments(2))),

@@ -851,6 +851,7 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 		Password:          o.password,
 		OmitOutline:       o.omitOutline,
 		SinglePageSheets:  o.onePagePerSheet,
+		SinglePage:        o.singlePage,
 		PrintDate:         o.date,
 		TrackedChanges:    office.TrackedChanges(o.trackedChanges),
 		Comments:          office.Comments(o.comments),

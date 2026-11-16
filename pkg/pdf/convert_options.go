@@ -216,6 +216,14 @@ type MarginOption interface {
 	HTMLOption
 }
 
+// SinglePageOption is an option of the sources litho can write on one page
+// sized to their content: [FromHTML], [FromMarkdown], [FromDOCX] and
+// [FromODT] take it.
+type SinglePageOption interface {
+	HTMLOption
+	WordProcessingOption
+}
+
 // WordProcessingOption tunes a conversion [FromDOCX] or [FromODT] makes.
 // Every [ConvertOption] and every [OfficeOption] is one too.
 type WordProcessingOption interface {
@@ -285,6 +293,7 @@ type (
 	textOption           func(*convertConfig)
 	htmlOption           func(*convertConfig)
 	markdownOption       func(*convertConfig)
+	singlePageOption     func(*convertConfig)
 	officeOption         func(*convertConfig)
 	wordProcessingOption func(*convertConfig)
 	sheetOption          func(*convertConfig)
@@ -317,6 +326,11 @@ func (htmlOption) markdownOption()                 {}
 
 func (f markdownOption) applyConvert(c *convertConfig) { f(c) }
 func (markdownOption) markdownOption()                 {}
+
+func (f singlePageOption) applyConvert(c *convertConfig) { f(c) }
+func (singlePageOption) htmlOption()                     {}
+func (singlePageOption) markdownOption()                 {}
+func (singlePageOption) wordProcessingOption()           {}
 
 func (f officeOption) applyConvert(c *convertConfig) { f(c) }
 func (officeOption) wordProcessingOption()           {}
@@ -803,16 +817,58 @@ func WithFirstPageNumber(n int) HTMLOption {
 	return htmlOption(func(c *convertConfig) { c.firstPageNumber, c.firstPageNumberSet = n, true })
 }
 
-// WithSinglePage writes an HTML or Markdown source on one page sized to its
-// content: the document is measured first as a screen 800 CSS pixels wide
-// would show it, in one continuous column, forced breaks ignored, at least
-// 437.12 CSS pixels tall and 800 wide, and the paper becomes that tall plus
-// the top and bottom margins, and with [OrientationLandscape] that wide
-// plus the left and right margins. The document is printed on it as usual
-// and only the first page is written. With [WithPageRanges] the conversion
-// fails with [ErrInvalidConvertOptions]: one page has no range to select.
-func WithSinglePage(single bool) HTMLOption {
-	return htmlOption(func(c *convertConfig) { c.singlePage = single })
+// WithSinglePage writes the source on one page sized to its content, the
+// whole document in one column with no page break, as a screen shows it.
+// false, the default, writes the pages the source lays out on. The page is
+// at most 14,400 points tall, the largest page ISO 32000-1, Annex C.2
+// allows: the content past it is left out, and a text document reports a
+// warning. With [WithPageRanges] the conversion fails with
+// [ErrInvalidConvertOptions]: one page has no range to select.
+//
+// # HTML and Markdown
+//
+// The document is measured first as a screen 800 CSS pixels wide would
+// show it, in one continuous column, forced breaks ignored, at least
+// 437.12 CSS pixels tall and 800 wide. The paper becomes that tall plus
+// the top and bottom margins; its width stays the paper's, or with
+// [OrientationLandscape] that measured width plus the left and right
+// margins. The document is then printed on it as usual, forced breaks
+// cutting, and only the first page is written: a [PageBand] draws once,
+// the one band.Pages selects for the first page, with counter(page) at the
+// first page number.
+//
+// # DOCX and ODT
+//
+// The page takes the first section's or master page's width and its side
+// and top margins, the last one's bottom margin, and is as tall as the
+// content between them. [WithPaper] and [WithOrientation] set that width
+// as they set a section's: a text document has no content wider than its
+// text area to measure. No page, section or column break of the source
+// ends the page: the content follows on, and keep-with-next, widow and
+// orphan rules have nothing to split. A section of several columns keeps
+// them, balanced. A section or master page of another width lays its
+// content out in the first one's width, and the conversion reports a
+// warning that names it.
+//
+// The header of the first page draws once at the top, and the footer of
+// the last section or master page, as a page after its first shows it,
+// once at the bottom: the end of the document is where its last footer
+// belongs, where an HTML band shows the first page's. Both number the
+// page as the source numbers its first page, and count one page.
+// Footnotes follow the body, in order, under the source's separator;
+// endnotes stay where the pages put them. A picture, frame or text box
+// placed from the page or its margins is placed on the single page: one
+// aligned to the bottom of the page sits at the bottom of the single page,
+// one centred on the page at its middle, one at an offset from the top
+// stays at that offset. The fields litho computes, page numbers and counts
+// in headers and footers and the page numbers of an ODT table of
+// contents, show the single page's; a field that shows the result the
+// file stores, a DOCX table of contents among them, shows it still.
+// [WithTrackedChanges], [WithFormFields], [WithComments] and [WithOutline]
+// work as on the pages, every field, comment and outline entry on the one
+// page.
+func WithSinglePage(single bool) SinglePageOption {
+	return singlePageOption(func(c *convertConfig) { c.singlePage = single })
 }
 
 // WithFractionalFontMetrics sets whether the lines of an HTML or Markdown

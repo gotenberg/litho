@@ -224,9 +224,10 @@
 //     [WithResources], [WithBaseURL], [WithHTTPClient], [WithMediaType],
 //     [WithMediaFeatures], [WithScale], [WithShrinkToFit],
 //     [WithCanvasBackground], [WithFinishedAnimations], [WithHeader],
-//     [WithFooter], [WithFirstPageNumber], [WithSinglePage],
-//     [WithFractionalFontMetrics], [WithUserStylesheet],
-//     [WithRequiredResources].
+//     [WithFooter], [WithFirstPageNumber], [WithFractionalFontMetrics],
+//     [WithUserStylesheet], [WithRequiredResources].
+//   - [FromHTML], [FromMarkdown], [FromDOCX] and [FromODT] take
+//     [SinglePageOption]: [WithSinglePage].
 //   - [FromMarkdown] takes [MarkdownOption]: [WithMarkdownTemplate].
 //   - A conversion of an Office package takes [OfficeOption]:
 //     [WithOfficePassword].
