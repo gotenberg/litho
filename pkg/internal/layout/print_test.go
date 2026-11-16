@@ -127,3 +127,20 @@ func TestFitFirstPage_PaintsTheTrimmedPage(t *testing.T) {
 		RRRG
 	`)
 }
+
+func TestFitFirstPage_HoldsTheFootnoteArea(t *testing.T) {
+	t.Parallel()
+	red2 := sty(font(2), fg(red))
+	root := doc(el(red2, txt(red2, "X"), call("X", "XX")))
+	res, err := Layout(context.Background(), root, ahem(t), Options{Page: PageBox{Width: px(6), Height: px(40)}, FitFirstPage: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The line of the call, then the note's line under it: the area
+	// stacks under the flow inside the trimmed page, not over it.
+	assertPixels(t, res, 1, `
+		RRRR__
+		RRRR__
+		BBBB__
+		BBBB__`)
+}

@@ -239,7 +239,9 @@ func (e *engine) overflowRight(rb *box) float64 {
 
 // fittedHeight returns the height of the content the first page shows,
 // from the top of its page area, for [Options.FitFirstPage], at most the
-// area's height and at least one point. A box that ends on the first page
+// area's height and at least one point: the slice of the flow the page
+// shows, then its footnote and note areas, which stack under and over that
+// slice inside the area (CSS GCPM 3, 3.4). A box that ends on the first page
 // counts with its bottom margin, one the cut crosses for its descendants
 // and lines that end on the page when part of its content starts on a
 // later page, and fills the page otherwise, and so does a fragment that ends there,
@@ -248,7 +250,12 @@ func (e *engine) overflowRight(rb *box) float64 {
 // no room of its own.
 func (e *engine) fittedHeight(rb *box, d *ditem) float64 {
 	areaH := e.areaH(0)
-	end := areaH + eps
+	sliceH, notes := areaH, 0.0
+	if e.foot != nil && len(e.foot.pages) > 0 {
+		fp := e.foot.pages[0]
+		sliceH, notes = e.usableH(0, e.box(0), 0), fp.h+fp.nh
+	}
+	end := sliceH + eps
 	bottom := 0.0
 	stack := []*box{rb}
 	for len(stack) > 0 {
@@ -269,7 +276,7 @@ func (e *engine) fittedHeight(rb *box, d *ditem) float64 {
 		if b.mc != nil || !continues(b, end) {
 			// The box itself reaches past the cut, or its columns do: it
 			// fills the page.
-			bottom = areaH
+			bottom = sliceH
 			continue
 		}
 		for _, l := range b.lines {
@@ -304,7 +311,7 @@ func (e *engine) fittedHeight(rb *box, d *ditem) float64 {
 		}
 	}
 	walk(d, math.Inf(-1), math.Inf(1))
-	return min(max(clamp(bottom), 1), areaH)
+	return min(max(clamp(bottom)+notes, 1), areaH)
 }
 
 // assembledBox returns the page box page k is assembled with: its own,
