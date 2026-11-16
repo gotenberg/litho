@@ -223,7 +223,7 @@ func (f *mergeEmptyFeature) runMergeEmpty(ctx context.Context, pdfPath string) (
 	}
 
 	var buf bytes.Buffer
-	if err := pdf.Merge(ctx, []*pdf.Reader{src, partnerR}, &buf); err != nil {
+	if err := pdf.Merge(ctx, []*pdf.Reader{src, partnerR}, &buf, pdf.WithSignatureRemoval()); err != nil {
 		return mergeEmptyOutput{}, fmt.Errorf("pdf.Merge: %w", err)
 	}
 

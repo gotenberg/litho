@@ -219,7 +219,7 @@ func runMerge(ctx context.Context, pdfPath string) (mergeOutput, error) {
 	defer src2.Close()
 
 	var buf bytes.Buffer
-	if err := pdf.Merge(ctx, []*pdf.Reader{src, src2}, &buf); err != nil {
+	if err := pdf.Merge(ctx, []*pdf.Reader{src, src2}, &buf, pdf.WithSignatureRemoval()); err != nil {
 		return mergeOutput{}, fmt.Errorf("pdf.Merge: %w", err)
 	}
 

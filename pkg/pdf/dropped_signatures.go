@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"context"
+	"fmt"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -48,6 +49,27 @@ func WithDroppedSignatures(dst *[]DroppedSignature) WriteOption {
 	return func(o *writeOpts) {
 		o.droppedSignatures = dst
 	}
+}
+
+// WithSignatureRemoval allows an output to leave out the signatures of its
+// inputs, as [DroppedSignature] describes. Without it, [Writer.WriteTo],
+// [Split], [Merge], [Compose] and [Pipeline.WriteTo] return
+// [ErrSignaturesDropped] rather than write an output that drops one. Given to
+// [Pipeline.WriteTo], it allows every stage of the pipeline; given to
+// [Pipeline.Split], [Pipeline.Merge] or [Pipeline.Compose], that stage only.
+func WithSignatureRemoval() WriteOption {
+	return func(o *writeOpts) {
+		o.signatureRemoval = true
+	}
+}
+
+// refuseDropping returns [ErrSignaturesDropped] when dropped, the signatures
+// an output leaves out, is not empty and cfg does not allow it.
+func (cfg writeOpts) refuseDropping(dropped []DroppedSignature) error {
+	if len(dropped) == 0 || cfg.signatureRemoval {
+		return nil
+	}
+	return fmt.Errorf("%w: %d signature(s); pass WithSignatureRemoval to drop them", ErrSignaturesDropped, len(dropped))
 }
 
 // DroppedSignatures returns the signatures the output of [Writer.WriteTo]

@@ -258,13 +258,14 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 	}
 
 	ex := &executor{
-		tempDir:     cfg.tempDir,
-		pageSize:    cfg.pageSize,
-		finalOpts:   opts,
-		finalDst:    dst,
-		totalStages: len(p.stages),
-		logger:      logger,
-		result:      &PipelineResult{},
+		tempDir:          cfg.tempDir,
+		pageSize:         cfg.pageSize,
+		finalOpts:        opts,
+		signatureRemoval: cfg.signatureRemoval,
+		finalDst:         dst,
+		totalStages:      len(p.stages),
+		logger:           logger,
+		result:           &PipelineResult{},
 	}
 	defer ex.cleanup()
 
@@ -368,6 +369,10 @@ type executor struct {
 	// pipeline's output owes the caller although every intermediate file is
 	// written in the clear (see [executor.carryEncryption]). nil when none did.
 	encrypt *EncryptConfig
+	// signatureRemoval tells that the options of [Pipeline.WriteTo] allow
+	// every stage to drop signatures (see [WithSignatureRemoval]), which the
+	// intermediate files carry over.
+	signatureRemoval bool
 }
 
 func (ex *executor) isLastStage() bool { return ex.stageIdx == ex.totalStages-1 }
@@ -447,7 +452,7 @@ func (ex *executor) flushToTempFile(ctx context.Context, stage string) error {
 		cfg := encryptConfigFromInternal(*ex.writer.encryptCfg)
 		encrypt = &cfg
 	}
-	if err := ex.writer.WriteTo(ctx, f, ex.carryEncryption(encrypt)); err != nil {
+	if err := ex.writer.WriteTo(ctx, f, ex.intermediateOptions(ex.carryEncryption(encrypt))...); err != nil {
 		return fmt.Errorf("flushing pending mutations: %w", err)
 	}
 	ex.recordDropped(ex.writer.DroppedSignatures()...)
@@ -492,7 +497,16 @@ func (ex *executor) restructureOptions(stageOpts []WriteOption) []WriteOption {
 		opts = append(opts, func(o *writeOpts) { o.pageSize = pageSize })
 	}
 	opts = append(opts, stageOpts...)
-	return append(opts, ex.carryEncryption(cfg.encrypt))
+	return ex.intermediateOptions(append(opts, ex.carryEncryption(cfg.encrypt))...)
+}
+
+// intermediateOptions returns opts, the options of an intermediate file, with
+// the signature removal the options of [Pipeline.WriteTo] allow.
+func (ex *executor) intermediateOptions(opts ...WriteOption) []WriteOption {
+	if ex.signatureRemoval {
+		opts = append(opts, WithSignatureRemoval())
+	}
+	return opts
 }
 
 // reopenAsCurrent makes f, an intermediate file the pipeline wrote from the

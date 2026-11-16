@@ -288,7 +288,7 @@ func TestSplit_TagsTheDrawnSignature(t *testing.T) {
 	defer src.Close()
 
 	var out bytes.Buffer
-	if err := Split(ctx, src, []int{1}, &out); err != nil {
+	if err := Split(ctx, src, []int{1}, &out, WithSignatureRemoval()); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
 	if content := pageContent(ctx, t, out.Bytes(), 1); !strings.Contains(content, "/Form <</MCID 1>> BDC") {

@@ -325,7 +325,7 @@ func (f *mutationFeature) signInto(ctx context.Context, data []byte, name string
 	defer w.Close()
 	w.Sign(f.signer.Signer, pdf.WithSignatureField(name))
 	var buf bytes.Buffer
-	if err := w.WriteTo(ctx, &buf); err != nil {
+	if err := w.WriteTo(ctx, &buf, pdf.WithSignatureRemoval()); err != nil {
 		t.err = fmt.Errorf("signing in the field %q: %w", name, err)
 		return t
 	}

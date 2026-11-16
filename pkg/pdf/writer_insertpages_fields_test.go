@@ -31,7 +31,7 @@ func insertPageBytes(ctx context.Context, t *testing.T, target, source []byte, p
 		t.Fatalf("InsertPages: %v", err)
 	}
 	var out bytes.Buffer
-	if err := w.WriteTo(ctx, &out); err != nil {
+	if err := w.WriteTo(ctx, &out, WithSignatureRemoval()); err != nil {
 		t.Fatalf("WriteTo: %v", err)
 	}
 	return out.Bytes()

@@ -259,6 +259,17 @@ var (
 	// WriteTo writes the rewrite and signs it in an incremental update on top.
 	ErrSignFullRewriteIncompatible = errors.New("sign is incompatible with encryption and decryption")
 
+	// ErrSignaturesDropped is returned by [Writer.WriteTo], [Split], [Merge],
+	// [Compose] and [Pipeline.WriteTo] when the output would leave out a
+	// signature of an input and [WithSignatureRemoval] does not allow it.
+	//
+	// A signature's digest covers the bytes of the file it was made in (ISO
+	// 32000-1, 12.8.1). A full rewrite, a split, a merge and a composition
+	// move them, so no signature survives them (see [DroppedSignature]). An
+	// incremental update keeps every signature and never returns it. Nothing
+	// is written to the destination when it is returned.
+	ErrSignaturesDropped = errors.New("the output would drop the signatures of the input")
+
 	// ErrSignatureFieldUnavailable is returned by [Writer.WriteTo] when the
 	// field [WithSignatureField] names cannot take the signature. Nothing is
 	// written.
@@ -965,6 +976,7 @@ var invalidInputErrors = []error{
 	ErrInvalidPlacement,
 	ErrInvalidStampPosition,
 	ErrSignFullRewriteIncompatible,
+	ErrSignaturesDropped,
 	ErrSignatureFieldUnavailable,
 	ErrSignatureFieldLocked,
 	ErrSeedValueUnmet,

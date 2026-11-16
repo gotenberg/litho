@@ -108,7 +108,7 @@ func timestampOnce(ctx context.Context, data []byte) ([]byte, error) {
 	defer w.Close()
 	w.Timestamp(tsa.TSAURL())
 	var buf bytes.Buffer
-	if err := w.WriteTo(ctx, &buf); err != nil {
+	if err := w.WriteTo(ctx, &buf, pdf.WithSignatureRemoval()); err != nil {
 		mu.Lock()
 		defer mu.Unlock()
 		return nil, fmt.Errorf("timestamping (authority reports %q): %w", reported, err)

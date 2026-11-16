@@ -326,7 +326,7 @@ func TestWriter_Redact_LeakVectors(t *testing.T) {
 				t.Fatalf("Redact: %v", redactErr)
 			}
 			var out bytes.Buffer
-			if err := w.WriteTo(ctx, &out); err != nil {
+			if err := w.WriteTo(ctx, &out, WithSignatureRemoval()); err != nil {
 				t.Fatalf("WriteTo: %v", err)
 			}
 			if outputHolds(t, out.Bytes(), v.carrier) {

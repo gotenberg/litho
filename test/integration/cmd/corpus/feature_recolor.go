@@ -602,7 +602,7 @@ func (f *recolorFeature) convertOnce(ctx context.Context, src *pdf.Reader, opts 
 		return nil, nil, err
 	}
 	var buf bytes.Buffer
-	if err := w.WriteTo(ctx, &buf); err != nil {
+	if err := w.WriteTo(ctx, &buf, pdf.WithSignatureRemoval()); err != nil {
 		return nil, nil, fmt.Errorf("writing: %w", err)
 	}
 	return buf.Bytes(), report, nil

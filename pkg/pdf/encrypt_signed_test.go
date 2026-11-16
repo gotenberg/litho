@@ -48,7 +48,7 @@ func TestEncryptDropsTheSourceSignature(t *testing.T) {
 		enc := NewWriter(signedReader)
 		enc.Encrypt(EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: algorithm, Permissions: -1})
 		var out bytes.Buffer
-		err := enc.WriteTo(ctx, &out)
+		err := enc.WriteTo(ctx, &out, WithSignatureRemoval())
 		dropped := enc.DroppedSignatures()
 		if closeErr := enc.Close(); closeErr != nil {
 			t.Errorf("Close: %v", closeErr)

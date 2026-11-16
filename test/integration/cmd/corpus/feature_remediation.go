@@ -405,7 +405,7 @@ func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Co
 	}
 
 	var buf bytes.Buffer
-	if err := w.WriteTo(ctx, &buf); err != nil {
+	if err := w.WriteTo(ctx, &buf, pdf.WithSignatureRemoval()); err != nil {
 		out.LithoPost = out.LithoPre
 		out.VeraPost = out.VeraPre
 		return nil

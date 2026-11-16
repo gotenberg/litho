@@ -67,7 +67,7 @@ func writeDirect(t *testing.T, data []byte, edit func(*Writer) error) []byte {
 		t.Fatalf("queuing the edit: %v", err)
 	}
 	var out bytes.Buffer
-	if err := w.WriteTo(context.Background(), &out); err != nil {
+	if err := w.WriteTo(context.Background(), &out, WithSignatureRemoval()); err != nil {
 		t.Fatalf("WriteTo: %v", err)
 	}
 	return out.Bytes()
@@ -338,7 +338,7 @@ func TestWriter_FormPathsReachAPageWrittenDirectlyInKids(t *testing.T) {
 		defer w.Close()
 		w.Encrypt(EncryptConfig{OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: -1})
 		var out bytes.Buffer
-		if err := w.WriteTo(ctx, &out); err != nil {
+		if err := w.WriteTo(ctx, &out, WithSignatureRemoval()); err != nil {
 			t.Fatalf("WriteTo: %v", err)
 		}
 		if dropped := w.DroppedSignatures(); len(dropped) != 1 {

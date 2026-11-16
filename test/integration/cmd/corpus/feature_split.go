@@ -153,7 +153,7 @@ func runSplit(ctx context.Context, pdfPath string) (splitOutput, error) {
 	}
 
 	var buf bytes.Buffer
-	if err := pdf.Split(ctx, src, splitPages(inputPages), &buf); err != nil {
+	if err := pdf.Split(ctx, src, splitPages(inputPages), &buf, pdf.WithSignatureRemoval()); err != nil {
 		return splitOutput{}, fmt.Errorf("pdf.Split: %w", err)
 	}
 

@@ -140,7 +140,7 @@ func runMergeCatalog(ctx context.Context, pdfPath string) (mergeCatalogOutput, e
 	defer src2.Close()
 
 	var buf bytes.Buffer
-	if err := pdf.Merge(ctx, []*pdf.Reader{src, src2}, &buf); err != nil {
+	if err := pdf.Merge(ctx, []*pdf.Reader{src, src2}, &buf, pdf.WithSignatureRemoval()); err != nil {
 		return skip(fmt.Sprintf("litho cannot merge the input: %v", err), inputPages)
 	}
 

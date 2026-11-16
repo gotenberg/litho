@@ -120,7 +120,8 @@
 // 12.8.1). An incremental update appends to them and keeps every signature. A
 // full rewrite, a [Split] and a [Merge] move them, so they leave the input's
 // signatures out: each signed widget's appearance is drawn into its page, and
-// the field leaves the form. [Writer.DroppedSignatures],
+// the field leaves the form. Such an output returns [ErrSignaturesDropped]
+// unless [WithSignatureRemoval] allows it. [Writer.DroppedSignatures],
 // [PipelineResult.DroppedSignatures] and [WithDroppedSignatures] report what
 // an output left out.
 //
@@ -153,9 +154,9 @@
 //     [WithBookmarks], [WithPipelineTempDir], [WithTempDir],
 //     [WithEncryption], [WithObjectStreams], [WithDedup],
 //     [WithImageRecompression], [WithFontSubsetting], [WithCompactionSkipped],
-//     [WithDroppedSignatures], [WithDefaultPageSize]. [NewWriter] takes them
-//     too, as defaults for the Writer's WriteTo, which overrides them with
-//     its own, and a [WithDefaultPageSize] given to it also reaches its
+//     [WithDroppedSignatures], [WithSignatureRemoval], [WithDefaultPageSize].
+//     [NewWriter] takes them too, as defaults for the Writer's WriteTo,
+//     which overrides them with its own, and a [WithDefaultPageSize] given to it also reaches its
 //     remediation. [WithTempDir] places the temp files of [NewWriter],
 //     [Writer.WriteTo] and [Pipeline.WriteTo], and [Split], [Merge] and
 //     [Compose] ignore it. [Pipeline.Split] and [Pipeline.Merge] honour

@@ -278,7 +278,7 @@ func remediatePairOnce(ctx context.Context, pdfPath string, pdfa models.PDFAProf
 		out.RemediationError = err.Error()
 	} else {
 		var buf bytes.Buffer
-		if err := w.WriteTo(ctx, &buf); err != nil {
+		if err := w.WriteTo(ctx, &buf, pdf.WithSignatureRemoval()); err != nil {
 			out.RemediationError = fmt.Sprintf("write: %v", err)
 		} else {
 			result = buf.Bytes()

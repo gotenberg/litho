@@ -943,7 +943,7 @@ func (f *redactRenderFeature) redactOnce(ctx context.Context, src *pdf.Reader, r
 		return nil, nil, err
 	}
 	var buf bytes.Buffer
-	if err := w.WriteTo(ctx, &buf); err != nil {
+	if err := w.WriteTo(ctx, &buf, pdf.WithSignatureRemoval()); err != nil {
 		return nil, nil, err
 	}
 	return buf.Bytes(), report, nil

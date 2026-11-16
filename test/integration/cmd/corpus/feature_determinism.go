@@ -414,7 +414,7 @@ func remediateForDeterminism(ctx context.Context, data []byte, home string, aggr
 		return nil, fmt.Errorf("remediating at %s: %w", home, err)
 	}
 	var out bytes.Buffer
-	if err := w.WriteTo(ctx, &out); err != nil {
+	if err := w.WriteTo(ctx, &out, pdf.WithSignatureRemoval()); err != nil {
 		return nil, fmt.Errorf("writing: %w", err)
 	}
 	for _, e := range report.Residual {
@@ -483,7 +483,7 @@ func generateBookmarksForDeterminism(ctx context.Context, data []byte) ([]byte, 
 	defer w.Close()
 	w.GenerateBookmarks(determinismBookmarkOptions(), pdf.BookmarkReplace)
 	var out bytes.Buffer
-	if err := w.WriteTo(ctx, &out); err != nil {
+	if err := w.WriteTo(ctx, &out, pdf.WithSignatureRemoval()); err != nil {
 		return nil, fmt.Errorf("writing: %w", err)
 	}
 	return out.Bytes(), nil
@@ -505,7 +505,7 @@ func flattenForDeterminism(ctx context.Context, data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("flattening: %w", err)
 	}
 	var out bytes.Buffer
-	if err := w.WriteTo(ctx, &out, pdf.WithFullRewrite()); err != nil {
+	if err := w.WriteTo(ctx, &out, pdf.WithFullRewrite(), pdf.WithSignatureRemoval()); err != nil {
 		return nil, fmt.Errorf("writing: %w", err)
 	}
 	return out.Bytes(), nil
@@ -532,7 +532,7 @@ func splitReconstructForDeterminism(ctx context.Context, data []byte) ([]byte, e
 	if err := pdf.Split(ctx, r, pages, &out, pdf.WithBookmarks(pdf.BookmarkOptions{
 		Handling:   pdf.BookmarkReconstruct,
 		Generation: determinismBookmarkOptions(),
-	})); err != nil {
+	}), pdf.WithSignatureRemoval()); err != nil {
 		return nil, fmt.Errorf("splitting: %w", err)
 	}
 	return out.Bytes(), nil

@@ -182,6 +182,16 @@ func Compose(ctx context.Context, width, height float64, placements []Placement,
 		}
 	}
 
+	// The new file drops every signature of every source.
+	docs := make([]*document.Document, len(sources))
+	for i, src := range sources {
+		docs[i] = src.Doc
+	}
+	dropped := droppedSignaturesOf(ctx, docs...)
+	if err := cfg.refuseDropping(dropped); err != nil {
+		return err
+	}
+
 	if err := mutations.Compose(ctx, mutations.ComposeConfig{
 		MediaBox:   mediaBox,
 		Pages:      pageCount,
@@ -195,11 +205,7 @@ func Compose(ctx context.Context, width, height float64, placements []Placement,
 		return err
 	}
 	if cfg.droppedSignatures != nil {
-		docs := make([]*document.Document, len(sources))
-		for i, src := range sources {
-			docs[i] = src.Doc
-		}
-		*cfg.droppedSignatures = droppedSignaturesOf(ctx, docs...)
+		*cfg.droppedSignatures = dropped
 	}
 	if cfg.compactionSkipped != nil {
 		*cfg.compactionSkipped = false

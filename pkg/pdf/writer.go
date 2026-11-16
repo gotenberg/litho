@@ -52,6 +52,9 @@ type writeOpts struct {
 	// droppedSignatures receives the signatures the output drops (see
 	// [WithDroppedSignatures]).
 	droppedSignatures *[]DroppedSignature
+	// signatureRemoval allows the output to drop the signatures of its inputs
+	// (see [WithSignatureRemoval]).
+	signatureRemoval bool
 	// compactionSkipped receives whether the output left out the compaction
 	// asked for (see [WithCompactionSkipped]).
 	compactionSkipped *bool
@@ -1412,7 +1415,9 @@ func (w *Writer) writeTempFile(ctx context.Context, src *Writer, pattern string)
 	tf := &tempFileWriter{f: f}
 	encrypt := src.encryptCfg
 	src.encryptCfg = nil
-	writeErr := src.writeToInternal(ctx, tf, nil)
+	// A scratch file is not the caller's output: the write that is decides
+	// on the signatures it drops (see [WithSignatureRemoval]).
+	writeErr := src.writeToInternal(ctx, tf, nil, WithSignatureRemoval())
 	src.encryptCfg = encrypt
 	closeErr := f.Close()
 	closed = true
@@ -4361,6 +4366,11 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	if cfg.pageSizeErr != nil {
 		return cfg.pageSizeErr
 	}
+	// A remediation that rewrote the document dropped its signatures already
+	// (see [Writer.DroppedSignatures]).
+	if err := cfg.refuseDropping(w.droppedSignatures); err != nil {
+		return err
+	}
 	// Refused whether or not the write would end up a full rewrite: an option
 	// that packs only when the write happens to rewrite would leave the
 	// conformance of the output to how much the remediation repaired.
@@ -4859,6 +4869,12 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signi
 	}
 
 	if cfg.fullRewrite || w.forceRewrite {
+		// A full rewrite drops every signature of the documents it copies
+		// (see [Writer.recordDroppedSignatures]): refuse it before writing,
+		// unless the caller allows it.
+		if err := cfg.refuseDropping(droppedSignaturesOf(ctx, append([]*document.Document{w.reader.doc}, w.pageSources()...)...)); err != nil {
+			return err
+		}
 		// Pre-apply mutations into a source-namespace allocator and hand
 		// the results to the copier as overrides. Mutations resolve from
 		// the source document and AllocAt source object numbers; running
@@ -5108,6 +5124,12 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 		return fmt.Errorf("resolving source pages: %w", err)
 	}
 
+	// The new file drops every signature of the source.
+	dropped := droppedSignaturesOf(ctx, src.doc)
+	if err := cfg.refuseDropping(dropped); err != nil {
+		return err
+	}
+
 	version := cfg.version
 	bookmarkCfg := buildSplitBookmarkConfig(src, cfg.bookmarks)
 	if err := mutations.Split(ctx, src.doc, allPages, pages, dst, version, cfg.xrefStream, cfg.compactOptions(), bookmarkCfg, cfg.internalEncrypt(), cfg.pageSize); err != nil {
@@ -5119,7 +5141,7 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 		return err
 	}
 	if cfg.droppedSignatures != nil {
-		*cfg.droppedSignatures = droppedSignaturesOf(ctx, src.doc)
+		*cfg.droppedSignatures = dropped
 	}
 	if cfg.compactionSkipped != nil {
 		*cfg.compactionSkipped = false
@@ -5217,6 +5239,16 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 		}
 	}
 
+	// The new file drops every signature of every source.
+	docs := make([]*document.Document, len(sources))
+	for i, src := range sources {
+		docs[i] = src.doc
+	}
+	dropped := droppedSignaturesOf(ctx, docs...)
+	if err := cfg.refuseDropping(dropped); err != nil {
+		return err
+	}
+
 	bookmarkCfg := buildMergeBookmarkConfig(sources, cfg.bookmarks)
 	if err := mutations.Merge(ctx, mergeSources, dst, cfg.version, cfg.xrefStream, cfg.compactOptions(), bookmarkCfg, cfg.internalEncrypt(), cfg.pageSize); err != nil {
 		// Translate at the boundary so a caller can match with errors.Is
@@ -5229,11 +5261,7 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 		return err
 	}
 	if cfg.droppedSignatures != nil {
-		docs := make([]*document.Document, len(sources))
-		for i, src := range sources {
-			docs[i] = src.doc
-		}
-		*cfg.droppedSignatures = droppedSignaturesOf(ctx, docs...)
+		*cfg.droppedSignatures = dropped
 	}
 	if cfg.compactionSkipped != nil {
 		*cfg.compactionSkipped = false

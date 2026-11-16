@@ -512,7 +512,7 @@ func (f *flattenFeature) flattenOnce(ctx context.Context, src *pdf.Reader) ([]by
 		return nil, report, nil
 	}
 	var buf bytes.Buffer
-	if err := w.WriteTo(ctx, &buf); err != nil {
+	if err := w.WriteTo(ctx, &buf, pdf.WithSignatureRemoval()); err != nil {
 		return nil, nil, fmt.Errorf("writing: %w", err)
 	}
 	return buf.Bytes(), report, nil

@@ -171,7 +171,7 @@ func TestMerge_BakesSignedSignatures(t *testing.T) {
 	defer blank.Close()
 
 	var out bytes.Buffer
-	if err := Merge(ctx, []*Reader{blank, src}, &out); err != nil {
+	if err := Merge(ctx, []*Reader{blank, src}, &out, WithSignatureRemoval()); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 	checkSignaturesBaked(ctx, t, out.Bytes(), 2)
@@ -186,7 +186,7 @@ func TestSplit_BakesSignedSignatures(t *testing.T) {
 	defer src.Close()
 
 	var out bytes.Buffer
-	if err := Split(ctx, src, []int{1}, &out); err != nil {
+	if err := Split(ctx, src, []int{1}, &out, WithSignatureRemoval()); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
 	checkSignaturesBaked(ctx, t, out.Bytes(), 1)
@@ -221,7 +221,7 @@ func TestSplit_BakesASignatureOnAnInheritingPage(t *testing.T) {
 	defer src.Close()
 
 	var out bytes.Buffer
-	if err := Split(ctx, src, []int{1}, &out); err != nil {
+	if err := Split(ctx, src, []int{1}, &out, WithSignatureRemoval()); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
 	text := pageText(ctx, t, out.Bytes(), 1)

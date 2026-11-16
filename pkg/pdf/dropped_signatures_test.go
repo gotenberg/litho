@@ -102,7 +102,7 @@ func writeSigned(ctx context.Context, t *testing.T, data []byte, edit func(w *Wr
 	defer w.Close()
 	opts := edit(w)
 	var out bytes.Buffer
-	if err := w.WriteTo(ctx, &out, opts...); err != nil {
+	if err := w.WriteTo(ctx, &out, append(opts, WithSignatureRemoval())...); err != nil {
 		t.Fatalf("WriteTo: %v", err)
 	}
 	return out.Bytes(), w.DroppedSignatures()
@@ -443,7 +443,7 @@ func TestWriter_DroppedSignaturesWaitsForTheOutput(t *testing.T) {
 		t.Errorf("after a failed WriteTo, DroppedSignatures = %v, want nil", got)
 	}
 	var out bytes.Buffer
-	if err := w.WriteTo(ctx, &out); err != nil {
+	if err := w.WriteTo(ctx, &out, WithSignatureRemoval()); err != nil {
 		t.Fatalf("WriteTo: %v", err)
 	}
 	if got := w.DroppedSignatures(); !slices.Equal(got, certifiedDropped) {
@@ -464,7 +464,7 @@ func TestSplitMerge_ReportDroppedSignatures(t *testing.T) {
 
 	var split bytes.Buffer
 	var splitDropped []DroppedSignature
-	if err := Split(ctx, src, []int{1}, &split, WithDroppedSignatures(&splitDropped)); err != nil {
+	if err := Split(ctx, src, []int{1}, &split, WithDroppedSignatures(&splitDropped), WithSignatureRemoval()); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
 	if !slices.Equal(splitDropped, certifiedDropped) {
@@ -476,7 +476,7 @@ func TestSplitMerge_ReportDroppedSignatures(t *testing.T) {
 
 	var merged bytes.Buffer
 	var mergeDropped []DroppedSignature
-	if err := Merge(ctx, []*Reader{blank, src, src}, &merged, WithDroppedSignatures(&mergeDropped)); err != nil {
+	if err := Merge(ctx, []*Reader{blank, src, src}, &merged, WithDroppedSignatures(&mergeDropped), WithSignatureRemoval()); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 	if !slices.Equal(mergeDropped, certifiedDropped) {
@@ -504,7 +504,7 @@ func TestPipeline_ReportsDroppedSignatures(t *testing.T) {
 			var out bytes.Buffer
 			var viaOption []DroppedSignature
 			result, err := NewPipeline().Open(src).Apply(tc.apply).Split([]int{1}).
-				WriteTo(ctx, &out, WithDroppedSignatures(&viaOption))
+				WriteTo(ctx, &out, WithDroppedSignatures(&viaOption), WithSignatureRemoval())
 			if err != nil {
 				t.Fatalf("WriteTo: %v", err)
 			}
