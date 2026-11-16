@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-16T01:05:20Z",
+  "captured_at": "2026-11-16T06:22:09Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -54468,12 +54468,12 @@
     "litho/docx": {
       "features": {
         "diff": {
-          "matched": 142,
+          "matched": 143,
           "mismatched": 17,
           "skipped": 26,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 157,
+            "pages_equal": 158,
             "reference_fonts_missing": 26
           },
           "scores": {
@@ -54574,6 +54574,14 @@
               "text_f1": 0.943
             },
             "comments": {
+              "layout": 0.9657,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
+            "comments-annotations": {
               "layout": 0.9657,
               "link_recall": 1,
               "outline_recall": 1,
@@ -55753,7 +55761,7 @@
           "score_tolerance": 0.02
         },
         "robustness": {
-          "matched": 232,
+          "matched": 235,
           "mismatched": 2,
           "skipped": 0,
           "metrics": {
@@ -55773,6 +55781,9 @@
             "charts-stock-combo": "pass",
             "charts-trendlines-errorbars": "pass",
             "comments": "pass",
+            "comments-annotations": "pass",
+            "comments-kinds": "pass",
+            "comments-kinds-annotations": "pass",
             "compat-mode-11": "pass",
             "compat-mode-12": "pass",
             "compat-mode-14": "pass",
@@ -55997,31 +56008,31 @@
           }
         },
         "targets": {
-          "matched": 159,
+          "matched": 162,
           "mismatched": 30,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 399,
-            "pass_a1a": 189,
-            "pass_a1b": 189,
-            "pass_a2a": 188,
-            "pass_a2a+ua1": 159,
-            "pass_a2b": 189,
-            "pass_a2u": 189,
-            "pass_a3a": 188,
-            "pass_a3b": 189,
-            "pass_a3u": 189,
-            "pass_a4": 189,
-            "pass_a4+ua2": 160,
-            "pass_a4e": 189,
-            "pass_ua1": 160,
-            "pass_ua2": 160,
-            "pass_v1.4": 189,
-            "pass_v1.5": 189,
-            "pass_v1.6": 189,
-            "pass_v1.7": 189,
-            "pass_v2.0": 189,
+            "pass_a1a": 192,
+            "pass_a1b": 192,
+            "pass_a2a": 191,
+            "pass_a2a+ua1": 162,
+            "pass_a2b": 192,
+            "pass_a2u": 192,
+            "pass_a3a": 191,
+            "pass_a3b": 192,
+            "pass_a3u": 192,
+            "pass_a4": 192,
+            "pass_a4+ua2": 163,
+            "pass_a4e": 192,
+            "pass_ua1": 163,
+            "pass_ua2": 163,
+            "pass_v1.4": 192,
+            "pass_v1.5": 192,
+            "pass_v1.6": 192,
+            "pass_v1.7": 192,
+            "pass_v2.0": 192,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -56284,6 +56295,69 @@
               "v2.0": 1
             },
             "comments": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "comments-annotations": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "comments-kinds": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "comments-kinds-annotations": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
@@ -70493,12 +70567,12 @@
     "litho/odt": {
       "features": {
         "diff": {
-          "matched": 76,
+          "matched": 78,
           "mismatched": 6,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 82,
+            "pages_equal": 84,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -70533,6 +70607,22 @@
               "pages": 1,
               "strict": 0,
               "text_f1": 0.9732
+            },
+            "comments": {
+              "layout": 0.9066,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9899
+            },
+            "comments-annotations": {
+              "layout": 0.9066,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9899
             },
             "date-fields": {
               "layout": 0.9507,
@@ -71163,31 +71253,31 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 81,
+          "matched": 83,
           "mismatched": 1,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 171,
-            "pass_a1a": 82,
-            "pass_a1b": 82,
-            "pass_a2a": 82,
-            "pass_a2a+ua1": 81,
-            "pass_a2b": 82,
-            "pass_a2u": 82,
-            "pass_a3a": 82,
-            "pass_a3b": 82,
-            "pass_a3u": 82,
-            "pass_a4": 82,
-            "pass_a4+ua2": 81,
-            "pass_a4e": 82,
-            "pass_ua1": 81,
-            "pass_ua2": 81,
-            "pass_v1.4": 82,
-            "pass_v1.5": 82,
-            "pass_v1.6": 82,
-            "pass_v1.7": 82,
-            "pass_v2.0": 82,
+            "pass_a1a": 84,
+            "pass_a1b": 84,
+            "pass_a2a": 84,
+            "pass_a2a+ua1": 83,
+            "pass_a2b": 84,
+            "pass_a2u": 84,
+            "pass_a3a": 84,
+            "pass_a3b": 84,
+            "pass_a3u": 84,
+            "pass_a4": 84,
+            "pass_a4+ua2": 83,
+            "pass_a4e": 84,
+            "pass_ua1": 83,
+            "pass_ua2": 83,
+            "pass_v1.4": 84,
+            "pass_v1.5": 84,
+            "pass_v1.6": 84,
+            "pass_v1.7": 84,
+            "pass_v2.0": 84,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -71261,6 +71351,48 @@
               "v2.0": 1
             },
             "cjk-han-variants": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "comments": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "comments-annotations": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
@@ -77576,12 +77708,12 @@
     "litho/xlsx": {
       "features": {
         "diff": {
-          "matched": 134,
-          "mismatched": 22,
+          "matched": 136,
+          "mismatched": 20,
           "skipped": 11,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 151,
+            "pages_equal": 153,
             "reference_fonts_missing": 11
           },
           "scores": {
@@ -77770,12 +77902,12 @@
               "text_f1": 0.9592
             },
             "comments_at_end": {
-              "layout": 0.4782,
+              "layout": 0.9386,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5,
-              "strict": 0.5,
-              "text_f1": 0.5
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9483
             },
             "data_validation": {
               "layout": 0.9589,
@@ -78810,12 +78942,12 @@
               "text_f1": 1
             },
             "threaded_comments": {
-              "layout": 0.4799,
+              "layout": 0.8652,
               "link_recall": 1,
               "outline_recall": 1,
-              "pages": 0.5,
-              "strict": 0.5,
-              "text_f1": 0.5
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 0.9674
             },
             "wide_columns": {
               "layout": 0.3001,
