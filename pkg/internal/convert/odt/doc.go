@@ -64,6 +64,21 @@
 //     whole-package encryption. A missing or wrong password fails with
 //     office.ErrEncrypted.
 //
+// # Single page
+//
+// office.Options.SinglePage lays the document out on one page as tall as
+// its content, at most office.MaxPageSide, the content past it left out
+// with a warning: the first page's width, side and top margins, and the
+// bottom margin of the master page a page after the first of the last
+// master page use shows. No break ends the page; the columns of every
+// page layout and section balance; a master page of another width lays
+// its content out in the first page's, with a warning. The header of the
+// first page draws once at the top and the footer of that last master
+// page once at the bottom, both numbered as the first page and counting
+// one page. Footnotes follow the body; a frame centred in the page or at
+// its bottom moves to the single page's, and a frame anchored to a
+// numbered page sits on the single page.
+//
 // # What is not
 //
 // WMF, EMF and SVM pictures, the tables of drawing shapes, other custom

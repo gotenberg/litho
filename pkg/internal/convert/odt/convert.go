@@ -74,6 +74,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	b.changeMarks = marks
 	b.date = opts.PrintDate
 	b.formFields = opts.FormFields
+	b.single = opts.SinglePage
 	b.derivedAlt, b.defaultLang = opts.DerivedAltText, opts.DefaultLang
 	b.pages = newPageFlow(b, opts)
 	if opts.Comments == office.CommentsAnnotations {
@@ -89,6 +90,12 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if b.err != nil {
 		return nil, b.err
 	}
+	if b.single {
+		b.pages.warnWidths()
+		if err := layout.OnePage(ctx, root); err != nil {
+			return nil, err
+		}
+	}
 	// The tree is finished: its paragraphs and spans styled alike share
 	// one style.
 	layout.ShareStyles(ctx, root, b.shared)
@@ -98,6 +105,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 			Page:          first,
 			PageFor:       b.pages.pageFor,
 			MarginContent: b.pages.marginContent,
+			FitFirstPage:  b.single,
 			Lang:          root.Lang,
 			Fallback:      text.FallbackLibreOffice,
 			Image:         b.loadPicture,
@@ -125,6 +133,28 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if b.err != nil {
 		return nil, b.err
 	}
+	if b.single && len(res.Pages) == 1 && b.placeOnSinglePage(res) {
+		// The frames centred in the page or at its bottom moved to the
+		// single page's: the document lays out again on a page that tall,
+		// which a frame in its bottom margin then does not grow. Text a
+		// moved frame pushes past it keeps the first layout.
+		b.pages.height = res.Pages[0].Height
+		again, err := lay()
+		if err != nil {
+			return nil, err
+		}
+		if b.err != nil {
+			return nil, b.err
+		}
+		if len(again.Pages) == 1 {
+			res = again
+		}
+	}
+	if b.single {
+		if w := office.FirstPageOnly(res); w != nil {
+			b.warn("single-page", w.Code, w.Effect, w.Message)
+		}
+	}
 	if checkSharedStyles && !b.shared.Intact() {
 		return nil, errSharedStyleWritten
 	}
@@ -134,6 +164,23 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	}
 	doc.Warnings = append(doc.Warnings, drawings.Take()...)
 	return doc, nil
+}
+
+// placeOnSinglePage moves the frames whose position depends on the
+// page's height ([heightFrame]) to where they sit on the single page of
+// res, and reports whether any moved. The page is as tall as the content
+// laid out with the frames on their master page's page, so each still
+// fits on it.
+func (b *builder) placeOnSinglePage(res *layout.Result) bool {
+	if len(b.heightFrames) == 0 || len(res.Pages) == 0 {
+		return false
+	}
+	h := res.Pages[0].Height
+	moved := false
+	for _, hf := range b.heightFrames {
+		moved = hf.moveTo(b, h) || moved
+	}
+	return moved
 }
 
 // checkSharedStyles makes a conversion fail with errSharedStyleWritten

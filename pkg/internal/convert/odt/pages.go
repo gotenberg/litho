@@ -1,6 +1,7 @@
 package odt
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -60,6 +61,9 @@ type pageFlow struct {
 	// that asks for its page's geometry gets one without the header and
 	// footer, which are what is being measured.
 	building int
+	// height is the height of a single page, 0 until its content is laid
+	// out: the page is then [office.MaxPageSide] tall and trimmed.
+	height float64
 }
 
 // hfGeom is a header's or footer's placement on its page.
@@ -148,6 +152,9 @@ func (f *pageFlow) masterAt(mp *odf.MasterPage, offset int) *odf.MasterPage {
 // pageFor is the layout's PageFor: the page box of the master page the
 // page shows, the instance its name says, at its offset in it.
 func (f *pageFlow) pageFor(info layout.PageInfo) layout.PageBox {
+	if f.opts.SinglePage {
+		return f.singleBox(info.Index)
+	}
 	inst := f.byName[info.Name]
 	if inst == nil && len(f.instances) > 0 {
 		inst = f.instances[0]
@@ -189,6 +196,64 @@ func (f *pageFlow) pageFor(info layout.PageInfo) layout.PageBox {
 	f.entries[info.Index] = pageEntry{inst: inst, master: mp, number: number, box: box, geom: g, left: left, first: offset == 0}
 	f.entries = f.entries[:info.Index+1]
 	return box
+}
+
+// singleParts returns the geometries a single page takes its header and
+// its footer from, and the page's number: the first page of the first
+// master page use, numbered as it restarts or 1, then the master page a
+// page after the first of the last use shows, as the last page of the
+// document shows it, on a page of the same number.
+func (f *pageFlow) singleParts() (head, foot *pageGeom, number int) {
+	first, last := f.instances[0], f.instances[len(f.instances)-1]
+	number = 1
+	if first.restart > 0 {
+		number = first.restart
+	}
+	left := number%2 == 0
+	return f.geom(first.master, left, true), f.geom(f.masterAt(last.master, 1), left, false), number
+}
+
+// singleBox returns the page box of a single page, recording the page as
+// pageFor does: the header's page with the footer's bottom margin,
+// [office.MaxPageSide] tall, the page the layout trims to its content, or
+// the height its content measured once it is known.
+func (f *pageFlow) singleBox(index int) layout.PageBox {
+	if len(f.instances) == 0 {
+		f.start("", 0)
+	}
+	head, foot, number := f.singleParts()
+	box := head.box
+	box.Margin[css.Bottom] = foot.box.Margin[css.Bottom]
+	box.Height = office.MaxPageSide
+	if f.height > 0 {
+		box.Height = f.height
+	}
+	for len(f.entries) <= index {
+		f.entries = append(f.entries, pageEntry{})
+	}
+	f.entries[index] = pageEntry{inst: f.instances[0], master: f.instances[0].master, number: number, box: box, geom: head, first: index == 0}
+	f.entries = f.entries[:index+1]
+	return box
+}
+
+// warnWidths reports each master page use whose page is not as wide as
+// the first's: a single page has one width, the first's, and lays the
+// content of every use out in it.
+func (f *pageFlow) warnWidths() {
+	if len(f.instances) == 0 {
+		return
+	}
+	w := f.geom(f.instances[0].master, false, true).box.Width
+	for i, inst := range f.instances[1:] {
+		if g := f.geom(inst.master, false, true); g.box.Width != w {
+			name := "the default master page"
+			if inst.master != nil {
+				name = "master page " + strconv.Quote(inst.master.Name)
+			}
+			f.b.warnEach("single-page-width", strconv.Itoa(i+1), warn.PageSetupUnsupported, warn.Approximated,
+				fmt.Sprintf("%s, %.1f points wide, is laid out at the %.1f points of the first page on the single page", name, g.box.Width, w))
+		}
+	}
 }
 
 // geom returns the geometry of the master page mp on a left or right
@@ -470,29 +535,50 @@ func (f *pageFlow) marginContent(info layout.PageInfo, pages int) []typeset.Frag
 	}
 	e := f.entries[info.Index]
 	g := e.geom
-	if g == nil || (g.header == nil && g.footer == nil) {
+	if g == nil {
+		return nil
+	}
+	// Each part sits at its distance from the top or the bottom of its
+	// page; a single page takes its footer from the last page's master
+	// page and numbers one page.
+	head, foot := g, g
+	pageH := e.box.Height
+	count := pages + len(f.blanks)
+	if f.opts.SinglePage {
+		head, foot, _ = f.singleParts()
+		count = 1
+	}
+	if info.Height > 0 {
+		pageH = info.Height
+	}
+	if head.header == nil && foot.footer == nil {
 		return nil
 	}
 	root := baseStyle()
 	root.Display = css.Block
 	rn := &layout.Node{Kind: layout.Element, Style: root}
-	for _, hg := range []*hfGeom{g.header, g.footer} {
+	for _, part := range []struct {
+		hg     *hfGeom
+		y      float64
+		format string
+	}{{head.header, head.top, head.format}, {foot.footer, 0, foot.format}} {
+		hg := part.hg
 		if hg == nil {
 			continue
 		}
-		y := g.top
-		if hg == g.footer {
-			y = g.bottom - hg.h
+		y := part.y
+		if hg == foot.footer {
+			y = pageH - (foot.box.Height - foot.bottom) - hg.h
 		}
 		st := baseStyle()
 		st.Display = css.Block
 		st.Position = css.Absolute
 		st.Left, st.Top = css.Pts(hg.x), css.Pts(y)
 		st.Width = css.Pts(hg.w)
-		rn.Children = append(rn.Children, &layout.Node{Kind: layout.Element, Style: st, Children: f.hfNodes(hg, e.number, pages+len(f.blanks), g.format)})
+		rn.Children = append(rn.Children, &layout.Node{Kind: layout.Element, Style: st, Children: f.hfNodes(hg, e.number, count, part.format)})
 	}
 	res, err := layout.Layout(f.b.ctx, rn, f.b.fonts, layout.Options{
-		Page: layout.PageBox{Width: e.box.Width, Height: e.box.Height}, MaxPages: maxSubLayoutPages,
+		Page: layout.PageBox{Width: e.box.Width, Height: pageH}, MaxPages: maxSubLayoutPages,
 		Image: f.b.loadPicture, Fallback: text.FallbackLibreOffice,
 	})
 	if err != nil || len(res.Pages) == 0 {

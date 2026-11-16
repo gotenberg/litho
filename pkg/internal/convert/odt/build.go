@@ -40,6 +40,10 @@ type builder struct {
 	// comments holds the comments of the body, nil when the conversion
 	// leaves them out (office.Options.Comments).
 	comments *comments
+	// heightFrames are the frames positioned from the page at a height
+	// that depends on the page's, which a single page sets once its
+	// content is laid out (see [heightFrame]).
+	heightFrames []heightFrame
 	// ctx is the context of the Convert call the builder serves: a
 	// builder does not outlive it.
 	ctx    context.Context
@@ -133,6 +137,9 @@ type builder struct {
 	// formFields is office.Options FormFields, and controls the form
 	// controls made fields ([builder.fieldControl]).
 	formFields bool
+	// single is office.Options SinglePage: the document lays out on one
+	// page as tall as its content (see [pageFlow.singleBox]).
+	single bool
 	// captions maps the frame of a picture to the caption its caption
 	// frame gives it ([captionOf]), nil when none does or
 	// office.Options.DerivedAltText is off.

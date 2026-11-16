@@ -514,6 +514,9 @@ func (b *builder) place(n *layout.Node, g frameGeom, page bool) {
 			applyFrameWrap(&st, g.wrap, frameMargins(g.props))
 			x, y := b.pagePosition(g)
 			st.Left, st.Top = css.Pts(x), css.Pts(y)
+			if hf, ok := b.heightFrame(n, g); ok {
+				b.heightFrames = append(b.heightFrames, hf)
+			}
 		case paraRel(g.hrel):
 			st.Left = css.Pts(alignX(g, b.contentWidth()))
 		}
@@ -686,6 +689,49 @@ func (b *builder) pagePosition(g frameGeom) (float64, float64) {
 		y = y1 - h
 	}
 	return x, y
+}
+
+// heightFrame is a frame positioned from the page at a height that
+// depends on the page's: centred in the page or its content area, or at
+// its bottom (ODF 1.3, Part 3, 20.386 style:vertical-pos). On a single
+// page it is placed first on its master page's page, pageH tall, then
+// moved by share times what the single page's height changes.
+type heightFrame struct {
+	n            *layout.Node
+	share, pageH float64
+}
+
+// heightFrame returns the page-anchored frame n of geometry g as a
+// [heightFrame] when the conversion lays a single page out and its
+// position depends on the page's height.
+func (b *builder) heightFrame(n *layout.Node, g frameGeom) (heightFrame, bool) {
+	if !b.single {
+		return heightFrame{}, false
+	}
+	var share float64
+	switch g.vpos {
+	case "middle", "center":
+		share = 0.5
+	case "bottom":
+		share = 1
+	default:
+		return heightFrame{}, false
+	}
+	return heightFrame{n: n, share: share, pageH: b.currentGeom().box.Height}, true
+}
+
+// moveTo moves the frame to where it sits on a page h points tall. Its
+// style is shared, so the node takes a moved copy. It reports whether the
+// frame moved.
+func (hf heightFrame) moveTo(b *builder, h float64) bool {
+	dy := float64(hf.share * (h - hf.pageH))
+	if dy == 0 {
+		return false
+	}
+	st := *hf.n.Style
+	st.Top = css.Pts(st.Top.Value + dy)
+	hf.n.Style = b.share(&st)
+	return true
 }
 
 // currentGeom returns the geometry of the master page the body being
