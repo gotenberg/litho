@@ -266,9 +266,12 @@ func (e *engine) fittedHeight(rb *box, d *ditem) float64 {
 		}
 		if y := b.y + b.borderH() + max(b.m[css.Bottom], 0); y <= end {
 			bottom = max(bottom, y)
-			if !clipsContent(b) {
+			if !clipsContent(b) && b.mc == nil {
 				// Content that overflows a box that fits is content the
-				// page shows too (CSS Overflow 3, 2.2).
+				// page shows too (CSS Overflow 3, 2.2). The boxes of a
+				// multi-column container lie in its columns, at positions
+				// of the column flow, which runs on from one column into
+				// the next: the container's own box holds them.
 				stack = append(stack, b.kids...)
 			}
 			continue

@@ -164,3 +164,22 @@ func TestFitFirstPage_MarginContentSeesTheTrimmedHeight(t *testing.T) {
 		t.Errorf("margin content saw heights %v, want the trimmed page's %v", heights, res.Pages[0].Height)
 	}
 }
+
+func TestFitFirstPage_BalancedColumnsTakeTheirOwnHeight(t *testing.T) {
+	t.Parallel()
+	cols := sty(func(s *css.Style) { s.Columns.Count = 3 })
+	var kids []*Node
+	for range 60 {
+		st := sty(font(2))
+		kids = append(kids, el(st, txt(st, "XX XX")))
+	}
+	res, err := Layout(context.Background(), doc(el(cols, kids...)), ahem(t), Options{Page: page(60, 1000), FitFirstPage: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Sixty lines of 2 px in three balanced columns: 40 px, not the 120
+	// the lines measure laid end to end down the column flow.
+	if got := res.Pages[0].Height; got > px(42) || got < px(40) {
+		t.Errorf("first page height %v, want the balanced columns' %v", got, px(40))
+	}
+}
