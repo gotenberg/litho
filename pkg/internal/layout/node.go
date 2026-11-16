@@ -453,6 +453,12 @@ type PageInfo struct {
 	// A group holds the pages from the one its box starts on to the one
 	// it ends on, and stops at a forced break before a box outside it.
 	Groups []css.PageGroup
+	// Height is the height in points of the page box the page is
+	// assembled with, which [Options.FitFirstPage] trims on the first
+	// page: set for [Options.MarginContent] and [Options.MarginLinks], so
+	// that content placed from the bottom edge sits on the trimmed page;
+	// 0 for [Options.PageFor], which sizes the box.
+	Height float64
 }
 
 // sameInfo reports whether a and b name a page alike.

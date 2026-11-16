@@ -287,8 +287,10 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 		canvasEnd := len(pg.Content)
 		e.paintFrame(pg, pb)
 		var paper map[typeset.Fragment]bool
+		info := e.infoOf(k)
+		info.Height = pb.Height
 		if e.opts.MarginContent != nil {
-			mc := e.opts.MarginContent(e.infoOf(k), n)
+			mc := e.opts.MarginContent(info, n)
 			if e.turn != css.HorizontalTB {
 				paper = make(map[typeset.Fragment]bool, len(mc))
 				for _, f := range mc {
@@ -298,7 +300,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 			pg.Content = append(pg.Content, mc...)
 		}
 		if e.opts.MarginLinks != nil {
-			for _, l := range e.opts.MarginLinks(e.infoOf(k)) {
+			for _, l := range e.opts.MarginLinks(info) {
 				if l.Parent != nil {
 					e.root.Kids = append(e.root.Kids, l.Parent)
 					used[l.Parent] = true

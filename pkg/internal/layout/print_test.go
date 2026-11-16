@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
+	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
 func TestContentWidth_ScrollableOverflow(t *testing.T) {
@@ -143,4 +144,23 @@ func TestFitFirstPage_HoldsTheFootnoteArea(t *testing.T) {
 		RRRR__
 		BBBB__
 		BBBB__`)
+}
+
+func TestFitFirstPage_MarginContentSeesTheTrimmedHeight(t *testing.T) {
+	t.Parallel()
+	var heights []float64
+	res, err := Layout(context.Background(), doc(el(sty(height(12)))), ahem(t), Options{
+		Page:         page(20, 100),
+		FitFirstPage: true,
+		MarginContent: func(info PageInfo, _ int) []typeset.Fragment {
+			heights = append(heights, info.Height)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(heights) != 1 || !near(heights[0], res.Pages[0].Height) || !near(heights[0], px(12)) {
+		t.Errorf("margin content saw heights %v, want the trimmed page's %v", heights, res.Pages[0].Height)
+	}
 }
