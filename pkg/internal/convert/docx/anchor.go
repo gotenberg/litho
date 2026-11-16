@@ -400,6 +400,57 @@ func (a pendingAnchor) resolve(s *section) {
 	}
 }
 
+// heightAnchor is a drawing positioned from the page of section geo at
+// a height that depends on the page's: aligned to the middle or the
+// bottom of the page or of its margins, at a percentage of it, or from
+// its bottom margin (20.4.2.11). On a single page it is placed first on
+// geo's page, then moved by what the single page's height changes.
+type heightAnchor struct {
+	a   pendingAnchor
+	geo section
+}
+
+// heightAnchor returns the drawing a as a [heightAnchor] of section s,
+// false when its position does not depend on the page's height.
+func (a pendingAnchor) heightAnchor(s *section) (heightAnchor, bool) {
+	if a.p.simple || !a.page && (!a.word || !fromPageV(a.p.relV)) {
+		return heightAnchor{}, false
+	}
+	taller := *s
+	taller.height++
+	if vPos(s, a.p) == vPos(&taller, a.p) {
+		return heightAnchor{}, false
+	}
+	return heightAnchor{a: a, geo: *s}, true
+}
+
+// moveTo moves the drawing, and the shapes detached from it, to where
+// it sits on a page h points tall: by the difference of its positions on
+// that page and on its section's. Its styles are shared, so each node
+// takes a moved copy. It reports whether the drawing moved.
+func (ha heightAnchor) moveTo(d *document, h float64) bool {
+	page := ha.geo
+	page.height = h
+	dy := vPos(&page, ha.a.p) - vPos(&ha.geo, ha.a.p)
+	if dy == 0 {
+		return false
+	}
+	move := func(n *layout.Node) {
+		st := *n.Style
+		if st.WordAnchor.Set {
+			st.WordAnchor.Y += dy
+		} else {
+			st.Top = css.Pts(st.Top.Value + dy)
+		}
+		n.Style = d.share(&st)
+	}
+	move(ha.a.n)
+	for _, k := range ha.a.kids {
+		move(k)
+	}
+	return true
+}
+
 // resolveWord sets the offsets of a float of css.Office.WordAnchor on a
 // page of section s: the horizontal one from the start of the text area,
 // the vertical one from its paragraph's top, or from the page area's top

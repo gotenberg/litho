@@ -91,30 +91,79 @@ func (d *document) convert() (*typeset.Document, error) {
 		}
 		tree.Children = append(tree.Children, d.sectionNode(s, extra))
 	}
+	single := d.opts.SinglePage
+	if single {
+		if err := layout.OnePage(d.ctx, tree); err != nil {
+			return nil, err
+		}
+	}
 	// The tree is finished: its paragraphs and runs styled alike share
 	// one style.
 	layout.ShareStyles(d.ctx, tree, d.shared)
 	pg := d.newPages(secs)
 	first := pg.box(layout.PageInfo{Name: secs[0].name})
-	res, err := layout.Layout(d.ctx, tree, d.fonts, layout.Options{
-		Page:          first,
-		PageFor:       pg.box,
-		Placed:        pg.place,
-		MarginContent: pg.margins,
-		Lang:          d.lang(),
-		MaxPages:      d.opts.MaxPages,
-		Logger:        d.opts.Logger,
-	})
+	lay := func() (*layout.Result, error) {
+		return layout.Layout(d.ctx, tree, d.fonts, layout.Options{
+			Page:          first,
+			PageFor:       pg.box,
+			Placed:        pg.place,
+			MarginContent: pg.margins,
+			FitFirstPage:  single,
+			Lang:          d.lang(),
+			MaxPages:      d.opts.MaxPages,
+			Logger:        d.opts.Logger,
+		})
+	}
+	res, err := lay()
 	if err != nil {
 		return nil, err
 	}
 	if d.err != nil {
 		return nil, d.err
 	}
+	if single && len(res.Pages) == 1 && d.placeOnSinglePage(res) {
+		// The drawings positioned from the page's middle or bottom moved
+		// to the single page's: the document lays out again on a page that
+		// tall, which a drawing in its bottom margin then does not grow.
+		// Text a moved drawing pushes past it keeps the first layout.
+		pg.height = res.Pages[0].Height
+		again, err := lay()
+		if err != nil {
+			return nil, err
+		}
+		if d.err != nil {
+			return nil, d.err
+		}
+		if len(again.Pages) == 1 {
+			res = again
+		}
+	}
+	if single {
+		if w := office.FirstPageOnly(res); w != nil {
+			d.warn(w.Code, w.Effect, w.Message)
+		}
+	}
 	if checkSharedStyles && !d.shared.Intact() {
 		return nil, errSharedStyleWritten
 	}
 	return d.assemble(res)
+}
+
+// placeOnSinglePage moves the drawings whose position depends on the
+// page's height ([heightAnchor]) to where they sit on the single page of
+// res, and reports whether any moved. The page is as tall as the content
+// laid out with the drawings on the first section's page, so each still
+// fits on it.
+func (d *document) placeOnSinglePage(res *layout.Result) bool {
+	if len(d.heightAnchors) == 0 || len(res.Pages) == 0 {
+		return false
+	}
+	h := res.Pages[0].Height
+	moved := false
+	for _, ha := range d.heightAnchors {
+		moved = ha.moveTo(d, h) || moved
+	}
+	return moved
 }
 
 // checkSharedStyles makes a conversion fail with errSharedStyleWritten

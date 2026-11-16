@@ -56,6 +56,10 @@ type Options struct {
 	// the sheet's paper, scale and page breaks are then ignored, and the
 	// page size options above too. A text document ignores it.
 	SinglePageSheets bool
+	// SinglePage lays a text document out on one page as tall as its
+	// content, at most MaxPageSide (see the text converters). Other
+	// documents ignore it.
+	SinglePage bool
 	// PrintDate is what the date and time fields of a spreadsheet's headers
 	// and footers, of a presentation's slides and of a text document show;
 	// the zero time shows nothing for a spreadsheet and the text the file

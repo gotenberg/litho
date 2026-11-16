@@ -457,7 +457,15 @@ func (d *document) body(root *ooxml.Element) []*section {
 	for i, s := range secs {
 		s.name = fmt.Sprintf("s%d", i)
 		s.id = d.newID("sec")
-		if i > 0 && s.breakType == "continuous" {
+		switch {
+		case i > 0 && d.opts.SinglePage:
+			// One page has one width: a section of another lays its
+			// content out in the first section's.
+			s.name = secs[0].name
+			if s.width != secs[0].width {
+				d.warn(warn.PageSetupUnsupported, warn.Approximated, fmt.Sprintf("section %d, %.1f points wide, is laid out at the %.1f points of the first section on the single page", i+1, s.width, secs[0].width))
+			}
+		case i > 0 && s.breakType == "continuous":
 			if samePage(secs[i-1], s) {
 				s.name = secs[i-1].name
 				secs[i-1].balance = true
@@ -476,6 +484,12 @@ func (d *document) body(root *ooxml.Element) []*section {
 		geo.cols, geo.colSpace, geo.colTracks = s.cols, s.colSpace, s.colTracks
 		for _, a := range s.pending {
 			a.resolve(&geo)
+			if !d.opts.SinglePage {
+				continue
+			}
+			if ha, ok := a.heightAnchor(&geo); ok {
+				d.heightAnchors = append(d.heightAnchors, ha)
+			}
 		}
 		if i > 0 && s.name != secs[i-1].name && len(s.blocks) > 0 && len(secs[i-1].blocks) > 0 {
 			first, last := s.blocks[0].info, secs[i-1].blocks[len(secs[i-1].blocks)-1].info

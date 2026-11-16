@@ -71,6 +71,17 @@
 // The document's background colour, or its gradient, paints every page,
 // as Word prints it.
 //
+// office.Options.SinglePage lays the document out on one page as tall as
+// its content, at most office.MaxPageSide, the content past it left out
+// with a warning: the first section's width, side and top margins, the
+// last section's bottom margin. No break ends the page; the columns of
+// every section balance; a section of another width lays its content out
+// in the first section's, with a warning. The header of the first page
+// draws once at the top and the footer of the last section, as a page
+// after its first shows it, once at the bottom, both numbered as the
+// first page and counting one page. Footnotes follow the body; a drawing
+// positioned from the page's middle or bottom moves to the single page's.
+//
 // # Tables
 //
 // Tables are laid out with the fixed algorithm over their grid, borders

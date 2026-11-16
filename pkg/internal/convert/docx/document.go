@@ -120,6 +120,10 @@ type document struct {
 	// nested counts the table cells, text boxes and notes being built,
 	// whose drawings are not anchored to the page.
 	pending []pendingAnchor
+	// heightAnchors are the drawings of the body positioned from the page
+	// at a height that depends on the page's, which a single page sets
+	// once its content is laid out (see [heightAnchor]).
+	heightAnchors []heightAnchor
 	// page holds the page size and margins of the body section being
 	// read, nil outside the body: what a drawing sized relative to the
 	// page or its margins is sized from ([document.relativeSize]).

@@ -3,6 +3,7 @@ package docx
 import (
 	"math"
 
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -25,6 +26,9 @@ type pages struct {
 	secs    []*section
 	byName  map[string]*section
 	hfParts map[string]*ooxml.Element
+	// height is the height of a single page, 0 until its content is laid
+	// out: the page is then [office.MaxPageSide] tall and trimmed.
+	height float64
 }
 
 // newPages measures the headers and footers of every section and returns
@@ -126,10 +130,33 @@ func wrap(st *css.Style, n ...*layout.Node) *layout.Node {
 // footer taller than its distance leaves, as Word and Writer grow them,
 // the section's page borders and the document's page background.
 func (p *pages) box(info layout.PageInfo) layout.PageBox {
+	if p.d.opts.SinglePage {
+		return p.singleBox()
+	}
 	s := p.byName[info.Name]
 	if s == nil {
 		s = p.secs[0]
 	}
+	return p.sectionBox(s, info.Index)
+}
+
+// singleBox returns the page box of a single page: the first section's
+// width, side and top margins, the last section's bottom margin, and
+// [office.MaxPageSide] tall, the page the layout trims to its content, or
+// the height its content measured once it is known.
+func (p *pages) singleBox() layout.PageBox {
+	b := p.sectionBox(p.secs[0], 0)
+	b.Margin[css.Bottom] = p.sectionBox(p.secs[len(p.secs)-1], 0).Margin[css.Bottom]
+	b.Height = office.MaxPageSide
+	if p.height > 0 {
+		b.Height = p.height
+	}
+	return b
+}
+
+// sectionBox returns the page box of a page of section s, index being
+// the page's 0-based position in the document (see [pages.box]).
+func (p *pages) sectionBox(s *section, index int) layout.PageBox {
 	m := s.margin
 	top, bottom := math.Abs(m[css.Top]), math.Abs(m[css.Bottom])
 	hh, fh := 0.0, 0.0
@@ -148,7 +175,7 @@ func (p *pages) box(info layout.PageInfo) layout.PageBox {
 	top = min(top, float64(s.height/2)-minPageArea/2)
 	bottom = min(bottom, float64(s.height/2)-minPageArea/2)
 	left, right := m[css.Left]+s.gutter, m[css.Right]
-	if p.d.settings.mirrorMargins && info.Index%2 == 1 {
+	if p.d.settings.mirrorMargins && index%2 == 1 {
 		// An even page of mirrored margins has its inside margin, and
 		// the gutter, on the right (17.15.1.57 mirrorMargins).
 		left, right = right, left
@@ -258,14 +285,22 @@ func (p *pages) margins(info layout.PageInfo, total int) []typeset.Fragment {
 	case p.d.settings.evenAndOdd && number%2 == 0:
 		kind = "even"
 	}
-	v := &fieldValues{page: number, pages: total, format: pageFormat(s.pageFormat)}
+	foot, footKind := s, kind
+	if p.d.opts.SinglePage {
+		s, number, kind, foot, footKind = p.singleParts()
+		total = 1
+	}
 	pb := p.box(info)
+	if info.Height > 0 {
+		pb.Height = info.Height
+	}
 	areaW := max(pb.Width-pb.Margin[css.Left]-pb.Margin[css.Right], minPageArea)
 	root := &layout.Node{Kind: layout.Element, Style: p.d.blockStyle()}
-	place := func(part string, y float64, fromBottom bool, h float64) {
+	place := func(s *section, part string, y float64, fromBottom bool, h float64) {
 		if part == "" {
 			return
 		}
+		v := &fieldValues{page: number, pages: total, format: pageFormat(s.pageFormat)}
 		n, anchors := p.content(part, v)
 		n.Style.Position = css.Absolute
 		n.Style.Left = css.Pts(pb.Margin[css.Left])
@@ -274,18 +309,22 @@ func (p *pages) margins(info layout.PageInfo, total int) []typeset.Fragment {
 			y = pb.Height - y - h
 		}
 		n.Style.Top = css.Pts(max(0, y))
+		// A drawing positioned from the page sits on the page drawn, the
+		// single page trimmed to its content included.
+		geo := *s
+		geo.height = pb.Height
 		for _, a := range anchors {
 			// The part is the drawing's containing block: its offsets
 			// from the page become offsets from the part's corner.
-			a.resolve(s)
+			a.resolve(&geo)
 			a.st.Left = css.Pts(a.st.Left.Value - pb.Margin[css.Left])
 			a.st.Top = css.Pts(a.st.Top.Value - n.Style.Top.Value)
 		}
 		root.Children = append(root.Children, n)
 	}
-	hk, fk := s.part("header", kind), s.part("footer", kind)
-	place(s.headers[hk], s.header, false, s.headerH[hk])
-	place(s.footers[fk], s.footer, true, s.footerH[fk])
+	hk, fk := s.part("header", kind), foot.part("footer", footKind)
+	place(s, s.headers[hk], s.header, false, s.headerH[hk])
+	place(foot, foot.footers[fk], foot.footer, true, foot.footerH[fk])
 	if len(root.Children) == 0 {
 		return nil
 	}
@@ -300,6 +339,32 @@ func (p *pages) margins(info layout.PageInfo, total int) []typeset.Fragment {
 		return nil
 	}
 	return artifacts(res.Pages[0].Content)
+}
+
+// singleParts returns what the margins of a single page show: the
+// header of the first section's first page, its kind and the page's
+// number, then the footer of the last section on a page after its first,
+// as the last page of the document shows it, and its kind (17.10.1). The
+// page is numbered as the first section numbers its first page (17.6.12
+// pgNumType start), and counts one page.
+func (p *pages) singleParts() (head *section, number int, headKind string, foot *section, footKind string) {
+	head, foot = p.secs[0], p.secs[len(p.secs)-1]
+	number = 1
+	if head.pageStart != nil {
+		number = *head.pageStart
+	}
+	even := p.d.settings.evenAndOdd && number%2 == 0
+	headKind, footKind = "default", "default"
+	switch {
+	case head.titlePage:
+		headKind = "first"
+	case even:
+		headKind = "even"
+	}
+	if even {
+		footKind = "even"
+	}
+	return head, number, headKind, foot, footKind
 }
 
 // artifacts returns frags with no structure element: headers and footers
