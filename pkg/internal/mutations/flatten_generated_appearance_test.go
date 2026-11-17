@@ -393,8 +393,10 @@ func TestFlattenDrawsAValueWithAnOfferedFont(t *testing.T) {
 	t.Parallel()
 	ctx, doc, alloc := flattenDoc(t,
 		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (СУВОРОВ) /Rect [10 10 130 30] >>")
-	latin := fontbuild.TrueType{PostScriptName: "LatinOnly", Family: "Latin Only", Subfamily: "Regular",
-		Glyphs: []fontbuild.Glyph{{Name: "A", Unicode: 'A', Advance: 600}}, NotdefAdvance: 500}.Build()
+	latin := fontbuild.TrueType{
+		PostScriptName: "LatinOnly", Family: "Latin Only", Subfamily: "Regular",
+		Glyphs: []fontbuild.Glyph{{Name: "A", Unicode: 'A', Advance: 600}}, NotdefAdvance: 500,
+	}.Build()
 	if err := FlattenFormWith(ctx, alloc, doc, FlattenOptions{Fonts: offering(latin, cyrillicTrueType())}); err != nil {
 		t.Fatalf("FlattenFormWith: %v", err)
 	}
@@ -639,11 +641,13 @@ func TestFlattenDrawsAGlyphTwoCharactersShare(t *testing.T) {
 	t.Parallel()
 	ctx, doc, alloc := flattenDoc(t,
 		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V <FEFF65E5672C> /Rect [10 10 130 30] >>")
-	program := fontbuild.TrueType{PostScriptName: "TestCJK", Family: "Test CJK", Subfamily: "Regular",
+	program := fontbuild.TrueType{
+		PostScriptName: "TestCJK", Family: "Test CJK", Subfamily: "Regular",
 		Glyphs: []fontbuild.Glyph{
 			{Name: "uni65E5", Unicode: 0x65E5, Advance: 1000},
 			{Name: "uni672C", Unicode: 0x672C, Advance: 1000},
-		}, NotdefAdvance: 500}.Build()
+		}, NotdefAdvance: 500,
+	}.Build()
 	windows := truetype.CmapSubtable{PlatformID: 3, EncodingID: 1}
 	program, err := truetype.RewriteCmap(ctx, program, []truetype.CmapAlias{
 		{Target: windows, From: windows, Codes: map[uint32]uint16{0x2F47: 1, 0x65E5: 1, 0x672C: 2}},
