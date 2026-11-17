@@ -531,3 +531,23 @@ func lastName(op content.Operation) (ast.PdfName, bool) {
 	name, ok := op.Operands[len(op.Operands)-1].(ast.PdfName)
 	return name, ok
 }
+
+// formFontNumbers returns the object numbers of the fonts the interactive
+// form's default resources name (ISO 32000-1, Table 218, /DR), which a reader
+// types a field's new value with.
+func formFontNumbers(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) map[int]bool {
+	fonts := make(map[int]bool)
+	ref, ok := catalogRefForFixer(ctx, doc)
+	if !ok {
+		return fonts
+	}
+	catalog := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+	form := liveDictValue(ctx, alloc, doc, catalog["AcroForm"])
+	dr := liveDictValue(ctx, alloc, doc, form["DR"])
+	for _, v := range liveDictValue(ctx, alloc, doc, dr["Font"]) {
+		if r, ok := v.(ast.PdfIndirectRef); ok {
+			fonts[r.ObjectNum] = true
+		}
+	}
+	return fonts
+}

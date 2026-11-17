@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/typography"
+	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
@@ -50,6 +51,7 @@ func fixTrueTypeEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	}
 
 	count, dropped := 0, 0
+	shown := &shownCodes{alloc: alloc, doc: doc}
 	for objNum, entry := range sweptObjects(doc) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -82,7 +84,7 @@ func fixTrueTypeEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		// Normalising one onto it would introduce the very violation this
 		// package exists to remove.
 		if keepsBuiltInEncoding(ctx, doc, fontDict) {
-			if dropSymbolicEncoding(ctx, alloc, doc, objNum, fontDict) {
+			if dropSymbolicEncoding(ctx, alloc, doc, objNum, fontDict, shown) {
 				dropped++
 			}
 			continue
@@ -156,13 +158,16 @@ func fixTrueTypeEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 // loses its /BaseEncoding and keeps its /Differences, which the clauses allow
 // ([compliance.SymbolicEncodingNamed] gives the reading).
 //
-// Only where no glyph changes: when the embedded program's only cmap subtable
-// a reader can look a code up in is the Microsoft Symbol (3,0) one. ISO
-// 32000-1, 9.6.6.4 reads a code of a font with a base encoding through its
-// glyph name and the (3,1) or (1,0) subtable, and a symbolic font with none
-// through the (3,0) one; with neither (3,1) nor (1,0) in the program, both
-// readings end at the (3,0) subtable. A program that carries either may draw a
-// code another glyph once the encoding goes, and keeps the residual.
+// Only where no glyph changes. ISO 32000-1, 9.6.6.4 reads a code of a font
+// with a base encoding through its glyph name and the (3,1) or (1,0) subtable,
+// and a symbolic font with none through the code itself and the (3,0) or (1,0)
+// subtable; readers differ on which a symbolic font with an encoding takes.
+// When the program's only cmap subtable is the Microsoft Symbol (3,0) one, both
+// readings end there. When it also carries a (3,1) or (1,0) subtable, the
+// encoding goes only if, for every code the document shows with the font, the
+// glyph name's route selects nothing or the glyph the code's route selects
+// ([codeRoutesAgree]). A font the interactive form's default resources name
+// can be typed with any code, so all 256 must agree.
 //
 // The encoding is rewritten on the font, never in a shared encoding object,
 // which other fonts may name.
@@ -176,17 +181,19 @@ func fixTrueTypeEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 //
 // # Corpus evidence
 //
-//   - litho symbolenc_2b.pdf: S1 and S2 lose their base encoding and S3,
-//     whose program also carries a (3,1) subtable, keeps it; the outputs at
-//     the manifest's eight profiles, default and aggressive, report the rule
-//     set veraPDF 1.30.3 reports, Poppler draws them as it draws the source,
-//     and litho extracts the same text.
+//   - litho symbolenc_2b.pdf: S1 and S2 lose their base encoding, S3, whose
+//     (3,1) subtable selects the glyphs its (3,0) one does, S4, whose (1,0)
+//     subtable does on the codes it shows, lose it too, and S5, whose (1,0)
+//     subtable selects another glyph for a code it shows, keeps it; the
+//     outputs at the manifest's eight profiles, default and aggressive,
+//     report the rule set veraPDF 1.30.3 reports, Poppler draws them as it
+//     draws the source, and litho extracts the same text.
 //   - govdocs thread_000_000594.pdf and 13 others: two to four symbolic
 //     TrueType fonts each, under /WinAnsiEncoding over a (3,0)-only program.
 //     Their PDF/A-2b outputs, which kept 6.2.11.6 t3 alone on veraPDF 1.30.3,
 //     pass it, and Poppler draws their 235 pages and extracts their text as it
 //     does from the outputs that kept the encoding.
-func dropSymbolicEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, objNum int, fontDict ast.PdfDict) bool {
+func dropSymbolicEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, objNum int, fontDict ast.PdfDict, shown *shownCodes) bool {
 	if !compliance.SymbolicEncodingNamed(ctx, doc, fontDict["Encoding"]) {
 		return false
 	}
@@ -207,11 +214,15 @@ func dropSymbolicEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		return false
 	}
 	subs, err := truetype.CmapSubtables(program)
-	if err != nil ||
-		!slices.Contains(subs, truetype.CmapSubtable{PlatformID: 3, EncodingID: 0}) ||
-		slices.Contains(subs, truetype.CmapSubtable{PlatformID: 3, EncodingID: 1}) ||
-		slices.Contains(subs, truetype.CmapSubtable{PlatformID: 1, EncodingID: 0}) {
+	if err != nil || !slices.Contains(subs, truetype.CmapSubtable{PlatformID: 3, EncodingID: 0}) {
 		return false
+	}
+	if slices.Contains(subs, truetype.CmapSubtable{PlatformID: 3, EncodingID: 1}) ||
+		slices.Contains(subs, truetype.CmapSubtable{PlatformID: 1, EncodingID: 0}) {
+		codes, all := shown.of(ctx, objNum)
+		if !codeRoutesAgree(ctx, doc, fontDict, program, codes, all) {
+			return false
+		}
 	}
 
 	newFont := make(ast.PdfDict, len(fontDict)+1)
@@ -244,6 +255,129 @@ func dropSymbolicEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	}
 	alloc.AllocAt(objNum, newFont)
 	return true
+}
+
+// shownCodes reads, on first use, the codes each font of the document shows
+// ([collectFontUses]) and the fonts the interactive form's default resources
+// name ([formFontNumbers]), for [dropSymbolicEncoding].
+type shownCodes struct {
+	alloc  *writer.ObjAllocator
+	doc    *document.Document
+	loaded bool
+	// paged reports a page tree the walk read; without one, no code a font
+	// shows is known.
+	paged bool
+	codes map[int]map[byte]bool
+	form  map[int]bool
+}
+
+// of returns the codes the font objNum holds is shown with, and whether every
+// code must be taken as shown instead: for a font the form names, or when the
+// document has no page tree to read.
+func (s *shownCodes) of(ctx context.Context, objNum int) (map[byte]bool, bool) {
+	if !s.loaded {
+		s.loaded = true
+		s.form = formFontNumbers(ctx, s.alloc, s.doc)
+		if catalog, err := document.ResolveCatalog(ctx, s.doc); err == nil {
+			if pages, err := document.ResolvePages(ctx, s.doc, catalog); err == nil {
+				s.paged = true
+				s.codes = collectFontUses(ctx, s.alloc, s.doc, pages, pageTreeEntries(ctx, s.alloc, s.doc, pages)).codes
+			}
+		}
+	}
+	return s.codes[objNum], !s.paged || s.form[objNum]
+}
+
+// codeRoutesAgree reports whether each of codes, or each of the 256 when all
+// is set, selects the same glyph of the TrueType program through either route
+// ISO 32000-1, 9.6.6.4 gives a simple font, so a reader draws it the same with
+// the font's base encoding and without it.
+//
+// The code's route looks the code up in the (3,0) subtable in the ranges
+// 0x0000, 0xF000, 0xF100 and 0xF200, then in the (1,0) subtable. The glyph
+// name's route reads the name the font's encoding gives the code, base
+// encoding and /Differences, and looks up its character in the (3,1)
+// subtable, then its Mac OS Roman code in the (1,0) subtable. A name route
+// that selects nothing agrees: a reader finding nothing there takes the code's
+// route, as the renderer and PDF.js do.
+func codeRoutesAgree(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, program []byte, codes map[byte]bool, all bool) bool {
+	lookup := func(platform, encoding uint16) map[uint32]uint16 {
+		m, err := truetype.SubtableCodeToGID(ctx, program, truetype.CmapSubtable{PlatformID: platform, EncodingID: encoding})
+		if err != nil {
+			return nil
+		}
+		return m
+	}
+	symbol, unicode, roman := lookup(3, 0), lookup(3, 1), lookup(1, 0)
+
+	names := maps.Clone(compliance.PredefinedEncodingNames(string(baseEncodingName(ctx, doc, fontDict["Encoding"]))))
+	if names == nil {
+		names = make(map[byte]string)
+	}
+	maps.Copy(names, compliance.DifferencesGlyphNames(ctx, doc, fontDict))
+	macCodes := make(map[string]byte)
+	for code, name := range compliance.PredefinedEncodingNames("MacRomanEncoding") {
+		macCodes[name] = code
+	}
+
+	byCode := func(b byte) uint16 {
+		for _, hi := range [...]uint32{0x0000, 0xF000, 0xF100, 0xF200} {
+			if gid := symbol[hi|uint32(b)]; gid != 0 {
+				return gid
+			}
+		}
+		return roman[uint32(b)]
+	}
+	byName := func(b byte) uint16 {
+		name := names[b]
+		if name == "" {
+			return 0
+		}
+		if r, ok := encodings.GlyphToRuneFull(name); ok && r != 0 {
+			if gid := unicode[uint32(r)]; gid != 0 { //nolint:gosec // a glyph name's rune is a Unicode scalar value.
+				return gid
+			}
+		}
+		if mc, ok := macCodes[name]; ok {
+			return roman[uint32(mc)]
+		}
+		return 0
+	}
+	agree := func(b byte) bool {
+		gid := byName(b)
+		return gid == 0 || gid == byCode(b)
+	}
+	if all {
+		for b := range 256 {
+			if !agree(byte(b)) {
+				return false
+			}
+		}
+		return true
+	}
+	for b := range codes {
+		if !agree(b) {
+			return false
+		}
+	}
+	return true
+}
+
+// baseEncodingName returns the predefined encoding enc names, directly or as
+// the /BaseEncoding of its dictionary, "" when it names none.
+func baseEncodingName(ctx context.Context, doc *document.Document, enc ast.PdfObject) ast.PdfName {
+	resolved, err := document.ResolveObject(ctx, doc, enc)
+	if err != nil {
+		return ""
+	}
+	switch v := resolved.(type) {
+	case ast.PdfName:
+		return v
+	case ast.PdfDict:
+		name, _ := document.ResolveName(ctx, doc, v["BaseEncoding"])
+		return name
+	}
+	return ""
 }
 
 // symbolicFontFlag is bit 3 of the font descriptor /Flags, which per ISO

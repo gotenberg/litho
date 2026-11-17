@@ -519,24 +519,10 @@ func (e *fontEmbedder) descriptorUsers(ctx context.Context, uses fontUses) map[i
 	return e.fdUsers
 }
 
-// formFonts returns the object numbers of the fonts the interactive form's
-// default resources name (ISO 32000-1, Table 218, /DR).
+// formFonts returns [formFontNumbers], read once per run.
 func (e *fontEmbedder) formFonts(ctx context.Context) map[int]bool {
-	if e.drFonts != nil {
-		return e.drFonts
-	}
-	e.drFonts = make(map[int]bool)
-	ref, ok := catalogRefForFixer(ctx, e.doc)
-	if !ok {
-		return e.drFonts
-	}
-	catalog := resolveFromAllocOrDoc(ctx, e.alloc, e.doc, ref)
-	form := liveDictValue(ctx, e.alloc, e.doc, catalog["AcroForm"])
-	dr := liveDictValue(ctx, e.alloc, e.doc, form["DR"])
-	for _, v := range liveDictValue(ctx, e.alloc, e.doc, dr["Font"]) {
-		if r, ok := v.(ast.PdfIndirectRef); ok {
-			e.drFonts[r.ObjectNum] = true
-		}
+	if e.drFonts == nil {
+		e.drFonts = formFontNumbers(ctx, e.alloc, e.doc)
 	}
 	return e.drFonts
 }

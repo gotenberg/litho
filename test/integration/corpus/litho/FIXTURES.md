@@ -10360,9 +10360,10 @@ dictionary. Reporting tools write Wingdings and barcode fonts as symbolic
 TrueType under `/WinAnsiEncoding`, over a program whose only `cmap` subtable is
 the Microsoft Symbol (3,0). ISO 32000-1, 9.6.6.4 reads a code of such a font
 through its glyph name and the (3,1) or (1,0) subtable while it states a base
-encoding, and through the (3,0) subtable once it states none, so with neither
-(3,1) nor (1,0) in the program both readings draw the same glyph. Remediation
-left the rule on every such font. Fourteen govdocs files hold such fonts, and
+encoding, and through the code and the (3,0) or (1,0) subtable once it states
+none, so with neither (3,1) nor (1,0) in the program both readings draw the same
+glyph, and with either they draw the same glyph wherever the subtables agree.
+Remediation left the rule on every such font. Fourteen govdocs files hold such fonts, and
 govdocs runs no remediation cell, so this fixture gates the repair. Every font
 shows `41 42`:
 
@@ -10372,19 +10373,30 @@ shows `41 42`:
 | `S2` | symbolic    | indirect, `/BaseEncoding /WinAnsiEncoding`, `66 /B` | (3,0)            |
 | `N1` | nonsymbolic | the same object as `S2`                             | (3,1), (1,0)     |
 | `S3` | symbolic    | `/WinAnsiEncoding`                                  | (3,0), (3,1)     |
+| `S4` | symbolic    | `/WinAnsiEncoding`                                  | (3,0), (1,0)     |
+| `S5` | symbolic    | `/WinAnsiEncoding`                                  | (3,0), (1,0)     |
+
+`S3`'s (3,1) subtable selects the glyphs its (3,0) one does. `S4` has the shape
+reporting tools embed Wingdings with: its (1,0) subtable agrees with (3,0) on
+`41` and `42`, and maps Mac OS Roman `DB`, which WinAnsi code `80` (Euro) reads
+through, where (3,0) maps nothing; no page shows `80`. `S5`'s (1,0) subtable
+swaps `41` and `42`.
 
 veraPDF 1.30.3 and litho report the same rule set and the same counts in all
-thirteen cells: t3 three times at PDF/A-2 and 3, `6.3.7/2`, `6.2.10.6/3`,
-`7.21.6/3` and `8.4.5.7/3` three times at the other parts. At PDF/A-1 `N1`'s
-`/Differences` also fail `6.3.7/1` and `S3`'s two subtables `6.3.7/3`.
+thirteen cells: t3 five times at PDF/A-2 and 3, `6.3.7/2`, `6.2.10.6/3`,
+`7.21.6/3` and `8.4.5.7/3` five times at the other parts. At PDF/A-1 `N1`'s
+`/Differences` also fail `6.3.7/1`, and the two subtables of `S3`, `S4` and
+`S5` `6.3.7/3`.
 
 Remediation removes `S1`'s `/Encoding` and `S2`'s `/BaseEncoding`, copying the
 rest of `S2`'s dictionary onto the font so `N1` keeps the shared object, and
 writes each a `/ToUnicode` holding the reading its encoding gave, so text
-extraction reads `AB` on every line before and after. `S3` keeps its encoding:
-dropping it could select another glyph through (3,1). In the outputs of the
-eight profiles `manifest.json` lists, default and aggressive, both tools report
-`S3`'s t3 alone, plus `6.3.7/1` and `6.3.7/3` at PDF/A-1b. litho reported a
+extraction reads `AB` on every line before and after. `S3` and `S4` lose their
+`/Encoding` too: both routes select the same glyph for every code the page
+shows. `S5` keeps it, since dropping it would draw `41` and `42` as each
+other's glyph. In the outputs of the eight profiles `manifest.json` lists,
+default and aggressive, both tools report `S5`'s t3 alone, plus `6.3.7/1` and
+`6.3.7/3` at PDF/A-1b. litho reported a
 `.notdef` glyph for `S2`'s code `41` in those outputs: a `/Differences`-only
 dictionary names the codes it lists alone, and veraPDF reads the others from the
 program.
