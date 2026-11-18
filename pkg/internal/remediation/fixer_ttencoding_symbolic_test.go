@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
@@ -206,5 +207,51 @@ func TestFixTrueTypeEncoding_SymbolicRoutesAgreeOnShownCodes(t *testing.T) {
 				t.Fatalf("font rewritten (%v), want it left alone", descs)
 			}
 		})
+	}
+}
+
+// TestFixTrueTypeEncoding_MacRomanNameTakesItsLowestCode pins the glyph name's
+// route of ISO 32000-1, 9.6.6.4 through the (1,0) subtable for a name
+// MacRomanEncoding gives two codes. Annex D, D.2 names both 0o40 and 0o312
+// "space", and Mac OS Roman puts the no-break space at 0o312, so "space" reads
+// code 0x20: a font whose (1,0) subtable maps 0xCA to another glyph still
+// loses its encoding when it shows code 0x20.
+func TestFixTrueTypeEncoding_MacRomanNameTakesItsLowestCode(t *testing.T) {
+	t.Parallel()
+
+	lowest := make(map[string]byte)
+	names := compliance.PredefinedEncodingNames("MacRomanEncoding")
+	for c := 255; c >= 0; c-- {
+		if name, ok := names[byte(c)]; ok {
+			lowest[name] = byte(c)
+		}
+	}
+	if !reflect.DeepEqual(macRomanCodes, lowest) {
+		t.Errorf("macRomanCodes does not take each name's lowest code: space = %#x", macRomanCodes["space"])
+	}
+
+	program := trueTypeWithCmapTable(cmapTableOf(
+		cmapSubtableRecord{3, 0, cmapFormat0(map[byte]byte{0x20: 1})},
+		cmapSubtableRecord{1, 0, cmapFormat0(map[byte]byte{0x20: 1, 0xCA: 2})},
+	))
+	doc, alloc := newTestDoc(t, assemblePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 7 0 R /Resources << /Font << /F1 4 0 R >> >> >>",
+		"<< /Type /Font /Subtype /TrueType /BaseFont /LithoSym /FirstChar 32 /LastChar 32 /Widths [250] /FontDescriptor 5 0 R /Encoding /WinAnsiEncoding >>",
+		"<< /Type /FontDescriptor /FontName /LithoSym /Flags 4 /FontFile2 6 0 R >>",
+		streamObject(program),
+		streamObject([]byte("BT /F1 12 Tf 72 700 Td ( ) Tj ET")),
+	}))
+
+	descs, err := fixTrueTypeEncoding(context.Background(), alloc, doc, Options{PreserveContent: true}, nil, "PDF/A-2b")
+	if err != nil {
+		t.Fatalf("fixTrueTypeEncoding: %v", err)
+	}
+	if _, pending := alloc.Pending()[4]; !pending || len(descs) != 1 {
+		t.Fatalf("font not rewritten (%v)", descs)
+	}
+	if enc, ok := pendingDict(t, alloc, 4)["Encoding"]; ok {
+		t.Errorf("/Encoding = %v, want none", enc)
 	}
 }

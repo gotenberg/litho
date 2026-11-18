@@ -288,6 +288,23 @@ func (s *shownCodes) of(ctx context.Context, objNum int) (map[byte]bool, bool) {
 	return s.codes[objNum], !s.paged || s.form[objNum]
 }
 
+// macRomanCodes maps each glyph name of MacRomanEncoding to the code the
+// glyph name's route of ISO 32000-1, 9.6.6.4 looks up in the (1,0) subtable.
+// Annex D, D.2 names 0o312 "space" beside 0o40, where Mac OS Roman puts the
+// no-break space, so a name with two codes takes its lowest, as readers do.
+var macRomanCodes = func() map[string]byte {
+	names := compliance.PredefinedEncodingNames("MacRomanEncoding")
+	codes := make(map[string]byte, len(names))
+	for c := range 256 {
+		if name, ok := names[byte(c)]; ok {
+			if _, seen := codes[name]; !seen {
+				codes[name] = byte(c)
+			}
+		}
+	}
+	return codes
+}()
+
 // codeRoutesAgree reports whether each of codes, or each of the 256 when all
 // is set, selects the same glyph of the TrueType program through either route
 // ISO 32000-1, 9.6.6.4 gives a simple font, so a reader draws it the same with
@@ -315,10 +332,6 @@ func codeRoutesAgree(ctx context.Context, doc *document.Document, fontDict ast.P
 		names = make(map[byte]string)
 	}
 	maps.Copy(names, compliance.DifferencesGlyphNames(ctx, doc, fontDict))
-	macCodes := make(map[string]byte)
-	for code, name := range compliance.PredefinedEncodingNames("MacRomanEncoding") {
-		macCodes[name] = code
-	}
 
 	byCode := func(b byte) uint16 {
 		for _, hi := range [...]uint32{0x0000, 0xF000, 0xF100, 0xF200} {
@@ -338,7 +351,7 @@ func codeRoutesAgree(ctx context.Context, doc *document.Document, fontDict ast.P
 				return gid
 			}
 		}
-		if mc, ok := macCodes[name]; ok {
+		if mc, ok := macRomanCodes[name]; ok {
 			return roman[uint32(mc)]
 		}
 		return 0
