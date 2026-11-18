@@ -113,8 +113,8 @@ type overdrawCell struct {
 	x, y int64
 }
 
-// dropOverdrawn returns elements, and fonts parallel to them when not nil,
-// without the glyphs that draw an earlier glyph again over itself: the same
+// dropOverdrawn returns the indices, in order, of the elements left once the
+// glyphs that draw an earlier glyph again over itself are dropped: the same
 // character at the same size, along a direction turned so little that its
 // box's far end moves under [overdrawMaxOffset] ems ([overdrawMaxTurn]), under
 // [overdrawMaxOffset] ems away on each axis ([overdraws]), the earlier glyph
@@ -163,32 +163,30 @@ type overdrawCell struct {
 //   - govdocs thread_000_000208.pdf: "Modified for the Web" drawn at the top
 //     of each page and again, at the same place, at the end of its stream;
 //     keeping the last copy read the header at the end of the page.
-func dropOverdrawn(ctx context.Context, elements []models.TextElement, fonts []runFont) ([]models.TextElement, []runFont, error) {
+func dropOverdrawn(ctx context.Context, elements []models.TextElement) ([]int, error) {
 	if len(elements) < 2 {
-		return elements, fonts, nil
+		return allIndices(len(elements)), nil
 	}
 	dropped, _, err := overdrawCopies(ctx, elements)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	if dropped == nil {
-		return elements, fonts, nil
-	}
-	outEl := make([]models.TextElement, 0, len(elements))
-	var outFonts []runFont
-	if fonts != nil {
-		outFonts = make([]runFont, 0, len(fonts))
-	}
+	kept := make([]int, 0, len(elements))
 	for i := range elements {
-		if dropped[i] {
-			continue
-		}
-		outEl = append(outEl, elements[i])
-		if fonts != nil {
-			outFonts = append(outFonts, fonts[i])
+		if dropped == nil || !dropped[i] {
+			kept = append(kept, i)
 		}
 	}
-	return outEl, outFonts, nil
+	return kept, nil
+}
+
+// allIndices returns 0 to n-1.
+func allIndices(n int) []int {
+	out := make([]int, n)
+	for i := range out {
+		out[i] = i
+	}
+	return out
 }
 
 // OverdrawCopies returns, parallel to elements, the index of the earlier

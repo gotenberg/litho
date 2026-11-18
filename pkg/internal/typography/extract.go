@@ -1228,27 +1228,79 @@ func rectsIntersect(a, b [4]float64) bool {
 // ExtractText extracts text from a page's content operations and reconstructs it via [ReconstructText].
 // The page's names resolve as [ExtractElements] resolves them.
 func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, config ExtractionConfig) (string, error) {
-	machine.StripArtifacts = config.StripArtifacts
-
-	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{runFonts: true, annotations: config.Annotations})
+	shown, err := ExtractShownText(ctx, doc, machine, page, ops, config)
 	if err != nil {
 		return "", err
+	}
+	return shown.Text(ctx), nil
+}
+
+// ShownText is the text of a page as [ExtractText] reads it: the glyphs its
+// [ExtractionConfig] keeps, in content order, before they are assembled into
+// a string.
+type ShownText struct {
+	// Elements are the glyphs kept, in content order.
+	Elements []models.TextElement
+	// PageOps names, parallel to Elements, the index in the operations the
+	// text was extracted from of the operation that drew each glyph: the
+	// show operator, or the Do that drew the form XObject holding it. It is
+	// [OriginUnattributable] for a glyph an annotation's appearance drew.
+	PageOps []int
+	// fonts are the run fonts parallel to Elements, nil when they do not
+	// pair one to one with them.
+	fonts []runFont
+	// beads are the article thread beads on the page, when they cover every
+	// glyph (see [beadsCoverAllElements]).
+	beads []semantics.Bead
+}
+
+// Text assembles every glyph into the string [ExtractText] returns.
+func (s ShownText) Text(ctx context.Context) string {
+	return reconstructText(ctx, s.Elements, s.fonts, s.beads)
+}
+
+// TextOf assembles the glyphs at the given indices into Elements, in the
+// order given, as [ShownText.Text] assembles all of them, article threads
+// aside: the caller orders a part of the page itself.
+func (s ShownText) TextOf(ctx context.Context, indices []int) string {
+	elements := make([]models.TextElement, len(indices))
+	var fonts []runFont
+	if s.fonts != nil {
+		fonts = make([]runFont, len(indices))
+	}
+	for i, k := range indices {
+		elements[i] = s.Elements[k]
+		if fonts != nil {
+			fonts[i] = s.fonts[k]
+		}
+	}
+	return reconstructText(ctx, elements, fonts, nil)
+}
+
+// ExtractShownText extracts the glyphs of a page's content operations that
+// config keeps, as [ExtractText] reads them before assembling them. The
+// page's names resolve as [ExtractElements] resolves them.
+func ExtractShownText(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, config ExtractionConfig) (ShownText, error) {
+	machine.StripArtifacts = config.StripArtifacts
+
+	ex, err := extractElements(ctx, doc, machine, page, ops, extractionRecord{runFonts: true, pageOps: true, annotations: config.Annotations})
+	if err != nil {
+		return ShownText{}, err
 	}
 	elements, runFonts := ex.elements, ex.runFonts
 	if config.StripInvisible && config.Reveal != nil && HasWhiteFillInvisible(elements, machine.WhiteFills()) {
 		if err := config.Reveal(ctx, elements, machine.WhiteFills()); err != nil {
-			return "", err
+			return ShownText{}, err
 		}
 	}
 
 	// Filter elements based on config, keeping each element's run font
-	// beside it. Fonts that do not pair one to one with the elements are
-	// dropped rather than misattributed.
+	// and drawing operation beside it. Fonts that do not pair one to one
+	// with the elements are dropped rather than misattributed.
 	if len(runFonts) != len(elements) {
 		runFonts = nil
 	}
-	var filtered []models.TextElement
-	var filteredFonts []runFont
+	var kept []int
 	for i, el := range elements {
 		if config.StripInvisible && el.Invisible {
 			continue
@@ -1259,16 +1311,13 @@ func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.
 		if config.StripClipped && el.IsClipped {
 			continue
 		}
-		filtered = append(filtered, el)
-		if runFonts != nil {
-			filteredFonts = append(filteredFonts, runFonts[i])
-		}
+		kept = append(kept, i)
 	}
 
 	if doc != nil {
 		doc.Logger.Debug("text elements filtered",
 			slog.Int("before", len(elements)),
-			slog.Int("after", len(filtered)),
+			slog.Int("after", len(kept)),
 			slog.Bool("strip_invisible", config.StripInvisible),
 			slog.Bool("strip_hidden", config.StripHidden),
 			slog.Bool("strip_clipped", config.StripClipped),
@@ -1277,9 +1326,32 @@ func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.
 	}
 
 	if config.DropOverdrawn {
-		filtered, filteredFonts, err = dropOverdrawn(ctx, filtered, filteredFonts)
+		filtered := make([]models.TextElement, len(kept))
+		for i, k := range kept {
+			filtered[i] = elements[k]
+		}
+		survivors, err := dropOverdrawn(ctx, filtered)
 		if err != nil {
-			return "", err
+			return ShownText{}, err
+		}
+		for i, k := range survivors {
+			survivors[i] = kept[k]
+		}
+		kept = survivors
+	}
+
+	shown := ShownText{
+		Elements: make([]models.TextElement, len(kept)),
+		PageOps:  make([]int, len(kept)),
+	}
+	if runFonts != nil {
+		shown.fonts = make([]runFont, len(kept))
+	}
+	for i, k := range kept {
+		shown.Elements[i] = elements[k]
+		shown.PageOps[i] = ex.pageOps[k]
+		if runFonts != nil {
+			shown.fonts[i] = runFonts[k]
 		}
 	}
 
@@ -1301,11 +1373,11 @@ func ExtractText(ctx context.Context, doc *document.Document, machine *graphics.
 	// end of the output and place the sidebar before the main body.
 	// When coverage is incomplete the page is reconstructed in
 	// content-stream order instead.
-	if !beadsCoverAllElements(filtered, pageBeads) {
-		pageBeads = nil
+	if beadsCoverAllElements(shown.Elements, pageBeads) {
+		shown.beads = pageBeads
 	}
 
-	return reconstructText(ctx, filtered, filteredFonts, pageBeads), nil
+	return shown, nil
 }
 
 // beadsCoverAllElements reports whether every element in elements

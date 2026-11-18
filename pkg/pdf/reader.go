@@ -941,35 +941,7 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 		return "", err
 	}
 
-	// Initialize the graphics state machine with the CropBox as the visible region.
-	machine := graphics.NewMachine(boxToRect(targetPage.CropBox))
-	// Extract text from every optional-content layer regardless of the
-	// /OCProperties visibility flags. Visibility belongs in the viewer's
-	// viewport; callers asking for textual content should get it without
-	// having to pre-configure OCs.
-	machine.IgnoreOCVisibility = true
-	machine.MarkUnvaluedText = o.markUnvalued
-
-	// Build the extraction config. WithHiddenText disables all stripping;
-	// the granular options override individual flags.
-	config := typography.ExtractionConfig{
-		StripInvisible: !o.includeHidden && !o.includeInvisible,
-		StripHidden:    !o.includeHidden && !o.includeClipPath,
-		StripClipped:   !o.includeHidden && !o.includeClipped,
-		StripArtifacts: !o.includeHidden && !o.includeArtifacts,
-		Annotations:    o.includeAnnotations,
-	}
-	// The reading of what the page shows reads text drawn again over
-	// itself, a shadow or a fake bold, once; one asking for invisible text
-	// asks for every glyph the content stream draws, and keeps every copy.
-	config.DropOverdrawn = config.StripInvisible
-	if config.StripInvisible {
-		machine.RecordWhiteFills = true
-		config.Reveal = func(ctx context.Context, elements []models.TextElement, whiteFills []bool) error {
-			return r.revealWhiteText(ctx, targetPage, elements, whiteFills)
-		}
-	}
-
+	machine, config := r.textExtraction(targetPage, o)
 	text, err := typography.ExtractText(ctx, r.doc, machine, targetPage, ops, config)
 	if err != nil {
 		if errors.Is(err, typography.ErrFontNotFound) {
@@ -1000,6 +972,42 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 	}
 
 	return text, nil
+}
+
+// textExtraction returns the graphics state machine and the configuration
+// that read the text of page as o asks, the reading [Reader.ExtractText] and
+// [Reader.ExtractMarkdown] share.
+func (r *Reader) textExtraction(page *document.Page, o extractTextOpts) (*graphics.Machine, typography.ExtractionConfig) {
+	// Initialize the graphics state machine with the CropBox as the visible region.
+	machine := graphics.NewMachine(boxToRect(page.CropBox))
+	// Extract text from every optional-content layer regardless of the
+	// /OCProperties visibility flags. Visibility belongs in the viewer's
+	// viewport; callers asking for textual content should get it without
+	// having to pre-configure OCs.
+	machine.IgnoreOCVisibility = true
+	machine.MarkUnvaluedText = o.markUnvalued
+
+	// Build the extraction config. WithHiddenText disables all stripping;
+	// the granular options override individual flags.
+	config := typography.ExtractionConfig{
+		StripInvisible: !o.includeHidden && !o.includeInvisible,
+		StripHidden:    !o.includeHidden && !o.includeClipPath,
+		StripClipped:   !o.includeHidden && !o.includeClipped,
+		StripArtifacts: !o.includeHidden && !o.includeArtifacts,
+		Annotations:    o.includeAnnotations,
+	}
+	// The reading of what the page shows reads text drawn again over
+	// itself, a shadow or a fake bold, once; one asking for invisible text
+	// asks for every glyph the content stream draws, and keeps every copy.
+	config.DropOverdrawn = config.StripInvisible
+	if config.StripInvisible {
+		machine.RecordWhiteFills = true
+		config.Reveal = func(ctx context.Context, elements []models.TextElement, whiteFills []bool) error {
+			return r.revealWhiteText(ctx, page, elements, whiteFills)
+		}
+	}
+
+	return machine, config
 }
 
 // ExtractAllText extracts and concatenates text from every page in the

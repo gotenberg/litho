@@ -3,6 +3,7 @@ package typography
 import (
 	"context"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 
@@ -97,7 +98,7 @@ func TestDropOverdrawn(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, _, err := dropOverdrawn(context.Background(), c.els, nil)
+			got, err := keptOverdrawn(c.els)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -109,22 +110,31 @@ func TestDropOverdrawn(t *testing.T) {
 }
 
 // TestDropOverdrawnKeepsTheFirstCopy checks the copy kept is the one drawn
-// first, where the content stream first draws the text, and that the fonts
-// parallel to the elements follow them.
+// first, where the content stream first draws the text, and that its
+// indices name the elements kept, so slices parallel to them can follow.
 func TestDropOverdrawnKeepsTheFirstCopy(t *testing.T) {
 	t.Parallel()
 	els := append(overdrawText(1, "Hi", 101, 499), overdrawText(2, "Hi", 100, 500)...)
-	fonts := []runFont{{name: "a"}, {name: "a"}, {name: "b"}, {name: "b"}}
-	got, gotFonts, err := dropOverdrawn(context.Background(), els, fonts)
+	kept, err := dropOverdrawn(context.Background(), els)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0].Chunk != 1 || got[1].Chunk != 1 {
-		t.Errorf("kept %+v, want chunk 1", got)
+	if !slices.Equal(kept, []int{0, 1}) {
+		t.Errorf("kept %v, want [0 1], the glyphs of chunk 1", kept)
 	}
-	if len(gotFonts) != 2 || gotFonts[0].name != "a" || gotFonts[1].name != "a" {
-		t.Errorf("kept fonts %+v, want those of chunk 1", gotFonts)
+}
+
+// keptOverdrawn returns the elements [dropOverdrawn] keeps.
+func keptOverdrawn(els []models.TextElement) ([]models.TextElement, error) {
+	kept, err := dropOverdrawn(context.Background(), els)
+	if err != nil {
+		return nil, err
 	}
+	out := make([]models.TextElement, len(kept))
+	for i, k := range kept {
+		out[i] = els[k]
+	}
+	return out, nil
 }
 
 // TestDropOverdrawnBoundsACell sets thousands of one character at one place,
@@ -137,7 +147,7 @@ func TestDropOverdrawnBoundsACell(t *testing.T) {
 	for i := range els {
 		els[i] = models.TextElement{Text: "a", X: 100, Y: 500, FontSize: 12, Chunk: i}
 	}
-	got, _, err := dropOverdrawn(context.Background(), els, nil)
+	got, err := keptOverdrawn(els)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +253,7 @@ func TestDropOverdrawnCurvedCopies(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, _, err := dropOverdrawn(context.Background(), c.els, nil)
+			got, err := keptOverdrawn(c.els)
 			if err != nil {
 				t.Fatal(err)
 			}
