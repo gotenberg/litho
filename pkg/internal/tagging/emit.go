@@ -726,6 +726,12 @@ func (e *emitter) wireCatalog(ctx context.Context, stRef ast.PdfIndirectRef) err
 	return nil
 }
 
+// PageContent returns the decoded content of page as [Classify] reads it, its
+// streams joined: the bytes the offsets of a [ContentSpan] address.
+func PageContent(ctx context.Context, doc *document.Document, page *document.Page) ([]byte, error) {
+	return pageContentBytes(ctx, nil, doc, page)
+}
+
 // pageContentBytes returns a page's decoded, concatenated content as alloc
 // stages it: the page dict, its /Contents and each content stream are read
 // alloc-first (see [stagedValue]), so the content marked is the content the

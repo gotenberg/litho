@@ -134,10 +134,10 @@
 //     [WithOCREngine], [WithFilterPlugin], [WithCIISchemas],
 //     [WithSchematron], [WithLenient], [WithDefaultCMYKProfile],
 //     [WithLimits], [WithStrictStreams].
-//   - [Reader.ExtractText] and [Reader.ExtractAllText] take
-//     [ExtractTextOption]: [WithHiddenText], [WithInvisibleText],
-//     [WithClipPathText], [WithClippedText], [WithArtifacts],
-//     [WithAnnotationText].
+//   - [Reader.ExtractText], [Reader.ExtractAllText] and
+//     [Reader.ExtractMarkdown] take [ExtractTextOption]: [WithHiddenText],
+//     [WithInvisibleText], [WithClipPathText], [WithClippedText],
+//     [WithArtifacts], [WithAnnotationText].
 //   - [Reader.RenderPage], [Reader.RenderPageReport] and
 //     [WithRedactionGlyphOutlines] take [RenderOption]: [WithRenderDPI],
 //     [WithRenderBackground],
