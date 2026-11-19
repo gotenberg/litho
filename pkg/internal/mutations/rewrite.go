@@ -36,6 +36,9 @@ type CompactOptions struct {
 	// RecompressImages re-encodes image streams losslessly where that makes
 	// them smaller, leaving their samples unchanged.
 	RecompressImages bool
+	// CompressStreams compresses with FlateDecode the streams that carry no
+	// filter, where that makes them smaller.
+	CompressStreams bool
 	// SubsetFonts subsets the embedded TrueType, CFF and Type 1 font
 	// programs to the glyphs the document can show, keeping every glyph ID
 	// (see [fontsubset.Run]). It runs first, before the passes above.
@@ -50,6 +53,7 @@ func (c CompactOptions) passes(doc *document.Document) writer.CompactConfig {
 		PackObjectStreams: c.PackObjectStreams,
 		DedupStreams:      c.DedupStreams,
 		RecompressImages:  c.imageRecompression(doc),
+		CompressStreams:   c.streamCompression(doc),
 	}
 }
 
@@ -134,6 +138,15 @@ func (c CompactOptions) imageRecompression(doc *document.Document) *writer.Image
 		return nil
 	}
 	return &writer.ImageRecompression{Decoder: doc.Filters, Limits: doc.Limits()}
+}
+
+// streamCompression returns the configuration of the stream compression pass
+// under doc's budgets, or nil when c does not ask for it.
+func (c CompactOptions) streamCompression(doc *document.Document) *writer.StreamCompression {
+	if !c.CompressStreams {
+		return nil
+	}
+	return &writer.StreamCompression{Limits: doc.Limits()}
 }
 
 // FullRewriteConfig holds the parameters for a full document rewrite.

@@ -41,6 +41,7 @@ type writeOpts struct {
 	packObjectStreams bool
 	dedupStreams      bool
 	recompressImages  bool
+	compressStreams   bool
 	subsetFonts       bool
 	logger            *slog.Logger
 	bookmarks         *BookmarkOptions
@@ -181,6 +182,7 @@ func (o writeOpts) compactOptions() mutations.CompactOptions {
 		PackObjectStreams: o.packObjectStreams,
 		DedupStreams:      o.dedupStreams,
 		RecompressImages:  o.recompressImages,
+		CompressStreams:   o.compressStreams,
 		SubsetFonts:       o.subsetFonts,
 	}
 }
@@ -188,7 +190,7 @@ func (o writeOpts) compactOptions() mutations.CompactOptions {
 // compacts reports whether the write asks for a compaction pass: one of the
 // options that run on a full rewrite alone.
 func (o writeOpts) compacts() bool {
-	return o.packObjectStreams || o.dedupStreams || o.recompressImages || o.subsetFonts
+	return o.packObjectStreams || o.dedupStreams || o.recompressImages || o.compressStreams || o.subsetFonts
 }
 
 // internalEncrypt translates the requested encryption into the internal
@@ -244,9 +246,9 @@ func WithXRefStream() WriteOption {
 // effect there. The document a Writer edits after a remediation that kept a
 // later round, or after a [Pipeline] Split or Merge, is a file litho wrote for
 // it, not the caller's. [Writer.WriteTo] rewrites that file in full when this
-// option, [WithDedup], [WithImageRecompression] or [WithFontSubsetting] is
-// given, signed or not, unless the file still carries a signature a rewrite
-// would drop.
+// option, [WithDedup], [WithImageRecompression], [WithStreamCompression] or
+// [WithFontSubsetting] is given, signed or not, unless the file still carries
+// a signature a rewrite would drop.
 //
 // Packing implies a cross-reference stream, since a traditional table cannot
 // name a compressed object, and litho writes one whether or not
@@ -333,6 +335,30 @@ func WithImageRecompression() WriteOption {
 	}
 }
 
+// WithStreamCompression compresses with FlateDecode (ISO 32000-1, 7.4.4) the
+// streams of the output that carry no filter, losslessly: content streams,
+// font programs, ICC profiles, embedded files and the like that a producer
+// wrote plain. A compression is kept only when the stream comes out smaller.
+// Every reader decodes the bytes the stream held, so pages draw and extract as
+// before. Only /Filter and /Length change.
+//
+// XMP metadata streams stay plain: ISO 19005-1, 6.7.2 forbids a filter on the
+// document's, and XMP is meant to be readable without one. Images are left to
+// [WithImageRecompression]. A stream whose data passes the stream budget of
+// [WithLimits] is left as it is.
+//
+// It applies to the full-rewrite path only, as [WithObjectStreams] does, and
+// to an encrypted output too: the pass runs before encryption. The output
+// stays deterministic.
+//
+// It costs time in proportion to the plain bytes it compresses, at zlib's
+// default level, far less than [WithImageRecompression].
+func WithStreamCompression() WriteOption {
+	return func(o *writeOpts) {
+		o.compressStreams = true
+	}
+}
+
 // WithFontSubsetting subsets the embedded font programs to the glyphs the
 // document can show, losslessly. It covers TrueType (/FontFile2), CFF
 // (/FontFile3 /Type1C and /CIDFontType0C) and Type 1 (/FontFile) programs.
@@ -378,11 +404,12 @@ func WithFontSubsetting() WriteOption {
 // the write skipped compaction.
 //
 // The write skipped compaction when it was given [WithObjectStreams],
-// [WithDedup], [WithImageRecompression] or [WithFontSubsetting] and applied
-// none of them, because its output is an incremental update of the document
-// the Writer edits. An update appends to that document's bytes and leaves them
-// as they are (ISO 32000-1, 7.5.6). The four options run on a full rewrite
-// only, so the output is the one the write produces without them.
+// [WithDedup], [WithImageRecompression], [WithStreamCompression] or
+// [WithFontSubsetting] and applied none of them, because its output is an
+// incremental update of the document the Writer edits. An update appends to
+// that document's bytes and leaves them as they are (ISO 32000-1, 7.5.6). The
+// five options run on a full rewrite only, so the output is the one the write
+// produces without them.
 //
 // It applies to [Writer.WriteTo], [Pipeline.WriteTo], [Split] and [Merge], the
 // last two always rewriting. A write that fails leaves *dst as it was.
@@ -4892,6 +4919,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signi
 			slog.Bool("pack_object_streams", cfg.packObjectStreams),
 			slog.Bool("dedup_streams", cfg.dedupStreams),
 			slog.Bool("recompress_images", cfg.recompressImages),
+			slog.Bool("compress_streams", cfg.compressStreams),
 			slog.Bool("subset_fonts", cfg.subsetFonts))
 	}
 

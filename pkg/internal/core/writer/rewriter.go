@@ -47,6 +47,10 @@ type CompactConfig struct {
 	// RecompressImages, when not nil, re-encodes image streams losslessly
 	// where that makes them smaller; see [RecompressImages].
 	RecompressImages *ImageRecompression
+	// CompressStreams, when not nil, compresses with FlateDecode the streams
+	// that carry no filter, where that makes them smaller; see
+	// [CompressStreams].
+	CompressStreams *StreamCompression
 }
 
 // Compact runs the compaction passes cfg selects over the objects pending in
@@ -70,8 +74,8 @@ type CompactConfig struct {
 // stream objects, and packing would otherwise seal one inside an object
 // stream, which 7.5.7 forbids. So the direct streams are hoisted first.
 //
-// Recompression runs before dedup, so two copies of one image, which
-// re-encode to identical bytes, still merge. Dedup runs before packing, which
+// Recompression and stream compression run before dedup, so two copies of one
+// image or of one stream, which compress to identical bytes, still merge. Dedup runs before packing, which
 // removes objects from the pending set and serializes their bodies, so a
 // later dedup would neither see the full population nor be able to repoint
 // what it merged.
@@ -90,6 +94,12 @@ func Compact(ctx context.Context, alloc *ObjAllocator, trailer ast.PdfDict, cfg 
 	if cfg.RecompressImages != nil {
 		if _, err := RecompressImages(ctx, alloc, *cfg.RecompressImages); err != nil {
 			return nil, fmt.Errorf("recompressing images: %w", err)
+		}
+	}
+
+	if cfg.CompressStreams != nil {
+		if _, err := CompressStreams(ctx, alloc, *cfg.CompressStreams); err != nil {
+			return nil, err
 		}
 	}
 

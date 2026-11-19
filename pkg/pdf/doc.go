@@ -153,7 +153,8 @@
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],
 //     [WithBookmarks], [WithPipelineTempDir], [WithTempDir],
 //     [WithEncryption], [WithObjectStreams], [WithDedup],
-//     [WithImageRecompression], [WithFontSubsetting], [WithCompactionSkipped],
+//     [WithImageRecompression], [WithStreamCompression], [WithFontSubsetting],
+//     [WithCompactionSkipped],
 //     [WithDroppedSignatures], [WithSignatureRemoval], [WithDefaultPageSize].
 //     [NewWriter] takes them too, as defaults for the Writer's WriteTo,
 //     which overrides them with its own, and a [WithDefaultPageSize] given to it also reaches its
@@ -202,12 +203,12 @@
 // [WithEncryption] is how an output becomes encrypted. No operation preserves
 // a source's encryption, so an edited document is written in the clear unless
 // this option asks otherwise. [WithObjectStreams], [WithDedup],
-// [WithImageRecompression] and [WithFontSubsetting] shrink a full rewrite,
-// losslessly, and the first three decline on an encrypted output.
-// [WithCompactionSkipped] reports a write that applied none of them because
-// it appended an incremental update. [WithImageRecompression] costs far more
-// time than the other two, and [WithFontSubsetting] leaves later edits no
-// glyph the document does not show: ask for each on its own.
+// [WithImageRecompression], [WithStreamCompression] and [WithFontSubsetting]
+// shrink a full rewrite, losslessly, and the first three decline on an
+// encrypted output. [WithCompactionSkipped] reports a write that applied none
+// of them because it appended an incremental update. [WithImageRecompression]
+// costs far more time than the others, and [WithFontSubsetting] leaves later
+// edits no glyph the document does not show: ask for each on its own.
 //
 // # Resource limits
 //
