@@ -3067,6 +3067,16 @@ type remediationTarget struct {
 	// engine keeping state across rounds starts each run afresh: a run
 	// [Writer.remediateFlattening] repeats included.
 	begin func()
+	// engines counts the engines the rounds alternate between, 0 for one. A
+	// run ends once each of them has run a round that repaired nothing on
+	// the output standing.
+	engines int
+}
+
+// engineCount returns the number of engines the rounds of t alternate
+// between.
+func (t remediationTarget) engineCount() int {
+	return max(t.engines, 1)
 }
 
 // maxRounds returns the bound on the rounds of a run for t.
@@ -3143,8 +3153,9 @@ type pairedRemediation struct {
 	// last is the engine of the round that ran last.
 	last pairEngine
 	// leftA and leftUA count the violations of each profile in the output
-	// judged last, which is the output the next round repairs: a round whose
-	// output is not kept ends the remediation.
+	// judged last, which is the output the next round repairs. A round whose
+	// output is not kept hands the next round to the other engine, and the
+	// remediation ends when that one repairs nothing either.
 	leftA, leftUA int
 }
 
@@ -3206,6 +3217,7 @@ func (p *pairedRemediation) run(ctx context.Context, alloc *writer.ObjAllocator,
 func (p *pairedRemediation) target(t remediationTarget) remediationTarget {
 	t.accessibilityClause = pdfuaAccessibilityClause(p.pdfua)
 	t.rounds = maxPairRemediationRounds
+	t.engines = 2
 	t.begin = p.begin
 	return t
 }
@@ -3784,6 +3796,11 @@ func (w *Writer) remediate(
 	// rewritten tells that the output standing is a full rewrite, which a
 	// later round's rewrite repairs nothing of (see [repaired]).
 	rewritten := w.forceRewrite
+	// idle counts the rounds since the output standing was kept that
+	// repaired nothing. Each of the target's engines gets one on that output
+	// before the run ends: the engine of a pair that repaired nothing leaves
+	// the other one a repair it deferred to its next round.
+	idle := 0
 	for round := 2; round <= target.maxRounds() && len(residual) > 0; round++ {
 		next, ok, err := w.remediationRound(ctx, temps, tmpPath, run, disabled, revalidate, baseline, tol, rewritten)
 		if err != nil {
@@ -3797,8 +3814,13 @@ func (w *Writer) remediate(
 			fonts = next.fonts
 		}
 		if !ok {
+			idle++
+			if idle < target.engineCount() {
+				continue
+			}
 			break
 		}
+		idle = 0
 		doc.Logger.Debug("remediate: extra round kept",
 			slog.Int("round", round),
 			slog.Int("fixes", len(next.fixed)),

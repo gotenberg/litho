@@ -512,6 +512,38 @@ func TestRemediatePDFAWithPDFUARewritesWhatThePDFUARoundLeft(t *testing.T) {
 	}
 }
 
+// TestRemediatePDFAWithPDFUAGivesEachEngineATurn pins that a paired
+// remediation does not end on a round of one engine that repaired nothing
+// while the other still has a repair to make. complex_1b's first PDF/A round
+// changes the output intent, so the annotation colour arrays ISO 19005-1,
+// 6.5.3 judges against it wait for the next PDF/A round. The PDF/UA round
+// before it repaired nothing, and ended the remediation with the arrays left.
+func TestRemediatePDFAWithPDFUAGivesEachEngineATurn(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/complex_1b.pdf")
+	if err != nil {
+		t.Fatalf("reading the fixture: %v", err)
+	}
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	w := NewWriter(r)
+	defer w.Close()
+	report, err := w.RemediatePDFA(ctx, models.PDFA1b, WithPDFUA(models.PDFUA1))
+	if err != nil {
+		t.Fatalf("RemediatePDFA: %v", err)
+	}
+	for _, v := range report.ResidualViolations() {
+		if v.Clause == "6.5.3" {
+			t.Errorf("residual %s", v.Error())
+		}
+	}
+}
+
 // TestRepaired pins when a later remediation round repairs something: a fix
 // other than the full-rewrite note, or the note itself on an output not
 // rewritten yet.
