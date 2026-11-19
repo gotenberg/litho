@@ -476,7 +476,7 @@ func TestPairedRemediationTakesTurns(t *testing.T) {
 // TestRemediatePDFAWithPDFUARewritesWhatThePDFUARoundLeft pins that the first
 // PDF/A round of a paired remediation keeps the full rewrite it asks for, its
 // whole repair of a stream /Length the source got wrong (ISO 19005-2,
-// 6.1.7.1). It runs on the PDF/UA round's incremental output, which carries
+// 6.1.7.1). It ran on the PDF/UA round's incremental output, which carried
 // the source's bytes, and a later round's rewrite counted as no repair, so the
 // round was dropped and the output kept the defect.
 func TestRemediatePDFAWithPDFUARewritesWhatThePDFUARoundLeft(t *testing.T) {

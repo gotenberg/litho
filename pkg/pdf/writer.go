@@ -2555,7 +2555,12 @@ func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remedia
 // RemediatePDFA validates the document against the given PDF/A profile,
 // applies targeted fixes, and queues the result for writing. The report
 // describes what was fixed and what could not be fixed automatically.
-// Uses incremental update to preserve existing document structure.
+//
+// Its output is a full rewrite when the remediation changed the document,
+// unless the document is signed: an incremental update would keep every
+// object the remediation replaced or removed in the file. A signed document
+// gets an incremental update, which keeps its signatures. A full rewrite would
+// drop them (see [WithSignatureRemoval]).
 //
 // Its output is never encrypted, because every part of ISO 19005 forbids the
 // Encrypt key in the trailer (6.1.3 in each). It returns
@@ -2667,6 +2672,9 @@ func (w *Writer) remediateFlattening(ctx context.Context, target remediationTarg
 // [RemediationReport.Residual], which the output's own pdfuaid claim does not
 // account for.
 //
+// Its output is a full rewrite or an incremental update as
+// [Writer.RemediatePDFA] describes.
+//
 // Its output may be encrypted, but a PDF/UA-1 output only with permissions
 // that set bit 10 of the P key, which ISO 14289-1, 7.16 requires of an
 // encrypted conforming file, and [EncryptConfig.Permissions] of -1 or from
@@ -2697,6 +2705,9 @@ func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile
 // conformance level and returns a report of what was fixed and what
 // remains. WTPDF adopts the ISO 14289-2 requirements, so the fixes are the
 // PDF/UA-2 ones, plus the PDF Declaration WTPDF states of its own.
+//
+// Its output is a full rewrite or an incremental update as
+// [Writer.RemediatePDFA] describes.
 //
 // Violations the level does not state are never reported: the run is judged
 // by [Reader.ValidateWTPDF], which applies the level's rule subtractions.
@@ -2763,6 +2774,9 @@ type FacturXConfig struct {
 // associated file, remediates the document against the configured
 // PDF/A-3 profile, and injects the four `fx:` XMP properties plus the
 // PDF/A extension schema declaration the format requires.
+//
+// Its output is a full rewrite or an incremental update as
+// [Writer.RemediatePDFA] describes.
 //
 // The returned [RemediationReport] aggregates the underlying PDF/A-3
 // fixes plus the Factur-X-specific operations.
@@ -3633,7 +3647,7 @@ func (w *Writer) remediate(
 		w.trailerDirty = true
 	}
 
-	if report.NeedsFullRewrite {
+	if report.NeedsFullRewrite || rewritesRemediation(ctx, doc, len(alloc.Pending()) > 0 || report.TrailerDirty) {
 		w.forceRewrite = true
 	}
 	if report.RequiredVersion != "" {
@@ -3868,6 +3882,22 @@ func (w *Writer) remediate(
 	return &RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual, RolledBack: dedupeFixes(rolledBack), FontRefusals: fontRefusals(fonts)}, nil
 }
 
+// rewritesRemediation reports whether a remediation that edited doc writes
+// its output as a full rewrite although its repairs need none.
+//
+// An incremental update keeps every object the remediation replaced in the
+// file (ISO 32000-1, 7.5.6): the content stream the tagging marked again, and
+// the bytes of what the profile forbids and the remediation removed, such as a
+// JavaScript action or an embedded file, which the validated revision no
+// longer reaches. A full rewrite leaves them out and writes the header of the
+// profile's version. A signed document keeps the update, which leaves its
+// signatures verifiable: a rewrite would drop them (ISO 32000-1, 12.8.1), and
+// only [WithSignatureRemoval] allows that. A remediation that edited nothing
+// leaves the file as it was.
+func rewritesRemediation(ctx context.Context, doc *document.Document, edited bool) bool {
+	return edited && len(mutations.SignedSignatures(ctx, doc)) == 0
+}
+
 // fontVerdict returns the fonts a remediation pass left unembedded, with the
 // ones it embedded when rolledBack says the writer discarded its content
 // repairs, which the embeddings are among, and whether the pass judged the
@@ -3904,8 +3934,8 @@ func countRepairs(fixes []string) int {
 // well when the round's input, the output standing, is not a full rewrite
 // already, rewritten false: the rewrite then repairs the formatting the
 // incremental updates of that output carry. The first round of the PDF/A
-// engine of a paired remediation ([WithPDFUA]) runs on the incremental output
-// of the PDF/UA one.
+// engine of a paired remediation ([WithPDFUA]) runs on the output of the
+// PDF/UA one.
 //
 // # Corpus evidence
 //
@@ -4094,7 +4124,7 @@ func (w *Writer) remediationRound(
 	w2 := newWriterOn(r2)
 	w2.rewriteOverrides = alloc.Pending()
 	w2.trailerDirty = rep.TrailerDirty
-	w2.forceRewrite = rep.NeedsFullRewrite
+	w2.forceRewrite = rep.NeedsFullRewrite || rewritesRemediation(ctx, r2.doc, len(alloc.Pending()) > 0 || rep.TrailerDirty)
 	w2.requiredVersion = rep.RequiredVersion
 
 	tmpPath, res, reason, err := w.writeRound(ctx, temps, w2, revalidate, baseline, tol)
@@ -4102,7 +4132,7 @@ func (w *Writer) remediationRound(
 		return roundResult{}, false, err
 	}
 	if reason == "" {
-		kept := roundResult{path: tmpPath, residual: res, fixed: rep.Fixed, dropped: w2.droppedSignatures, rewrote: rep.NeedsFullRewrite, baseline: rebased}
+		kept := roundResult{path: tmpPath, residual: res, fixed: rep.Fixed, dropped: w2.droppedSignatures, rewrote: w2.forceRewrite, baseline: rebased}
 		kept.fonts, kept.fontsJudged = fontVerdict(rep, false)
 		return kept, true, nil
 	}
@@ -4125,7 +4155,7 @@ func (w *Writer) remediationRound(
 	}
 	result := discarded()
 	result.path, result.residual, result.fixed, result.rolledBack, result.disabled = tmpPath, res, kept, rep.ContentFixed, rep.ContentFixers
-	result.dropped, result.rewrote, result.baseline = w2.droppedSignatures, rep.NeedsFullRewrite, rebased
+	result.dropped, result.rewrote, result.baseline = w2.droppedSignatures, w2.forceRewrite, rebased
 	return result, true, nil
 }
 

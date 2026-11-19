@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -69,12 +70,41 @@ func TestRemediationIgnoresEarlierExtraction(t *testing.T) {
 					t.Fatalf("reopening the output: %v", err)
 				}
 				defer out.Close()
-				if widths, err := out.doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: 6}); err != nil {
-					t.Errorf("resolving the font's /Widths in the output: %v", err)
-				} else if _, ok := widths.(ast.PdfArray); !ok {
+				if widths, ok := firstFontWidths(ctx, t, out); !ok {
 					t.Errorf("the font's /Widths is a %T in the output, want the file's array", widths)
 				}
 			})
 		}
 	}
+}
+
+// firstFontWidths returns the /Widths of the font /F1 of r's first page,
+// followed through its reference whatever number the output gave it, and
+// whether it is an array.
+func firstFontWidths(ctx context.Context, t *testing.T, r *Reader) (ast.PdfObject, bool) {
+	t.Helper()
+	catalog, err := document.ResolveCatalog(ctx, r.doc)
+	if err != nil {
+		t.Fatalf("resolving the catalog: %v", err)
+	}
+	pages, err := document.ResolvePages(ctx, r.doc, catalog)
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("resolving the pages: %v", err)
+	}
+	resolve := func(obj ast.PdfObject) ast.PdfObject {
+		if ref, ok := obj.(ast.PdfIndirectRef); ok {
+			resolved, err := r.doc.Resolve(ctx, ref)
+			if err != nil {
+				t.Fatalf("resolving %v: %v", ref, err)
+			}
+			return resolved
+		}
+		return obj
+	}
+	resources, _ := resolve(pages[0].Dict["Resources"]).(ast.PdfDict)
+	fonts, _ := resolve(resources["Font"]).(ast.PdfDict)
+	font, _ := resolve(fonts["F1"]).(ast.PdfDict)
+	widths := resolve(font["Widths"])
+	_, ok := widths.(ast.PdfArray)
+	return widths, ok
 }

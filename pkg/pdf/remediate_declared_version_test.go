@@ -11,8 +11,9 @@ import (
 
 // declaredVersionPDF builds a one-page document whose header declares version
 // and whose catalog carries catalogExtra. It opens with the binary comment and
-// keeps an exact cross-reference table, so no PDF/A file-structure rule fires
-// and a remediation repairs it in an incremental update, which keeps the
+// keeps an exact cross-reference table, so no PDF/A file-structure rule fires.
+// A remediation rewrites it in full, and repairs a signed copy (see
+// [signedDeclaredVersionPDF]) in an incremental update, which keeps the
 // header: the case where only the catalog /Version can declare a version.
 func declaredVersionPDF(version, catalogExtra string) []byte {
 	objs := []string{
@@ -34,6 +35,14 @@ func declaredVersionPDF(version, catalogExtra string) []byte {
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
 	return buf.Bytes()
+}
+
+// signedDeclaredVersionPDF is [declaredVersionPDF] signed in an incremental
+// update of its own, so a remediation keeps the signature in an incremental
+// update rather than rewriting the file (see [Writer.RemediatePDFA]).
+func signedDeclaredVersionPDF(t *testing.T, version, catalogExtra string) []byte {
+	t.Helper()
+	return signWith(t, declaredVersionPDF(version, catalogExtra), newCMSTestSigner(t))
 }
 
 // remediateDeclared remediates data for profile and returns the output.
@@ -69,8 +78,9 @@ func remediateDeclared(t *testing.T, data []byte, profile string) []byte {
 }
 
 // TestRemediate_IncrementalOutputDeclaresTheRequiredVersion pins that a
-// remediation that stays incremental declares the version a full rewrite
-// writes in the header: the one of the standard its profile is built on.
+// remediation that stays incremental, as one of a signed document does,
+// declares the version a full rewrite writes in the header: the one of the
+// standard its profile is built on.
 //
 // An incremental update keeps the source's header, so these outputs declared
 // whatever the source did, 1.3 for a PDF/A-1b file carrying PDF 1.4 metadata
@@ -98,7 +108,7 @@ func TestRemediate_IncrementalOutputDeclaresTheRequiredVersion(t *testing.T) {
 	} {
 		t.Run(tc.profile, func(t *testing.T) {
 			t.Parallel()
-			data := declaredVersionPDF(tc.source, "")
+			data := signedDeclaredVersionPDF(t, tc.source, "")
 			out := remediateDeclared(t, data, tc.profile)
 
 			// The header stays the source's on an incremental update, so the
@@ -149,7 +159,11 @@ func TestRemediate_CatalogVersionFollowsTheOutput(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			// A signed source keeps the remediation incremental.
 			data := declaredVersionPDF(tc.source, tc.catalog)
+			if !tc.rewrite {
+				data = signedDeclaredVersionPDF(t, tc.source, tc.catalog)
+			}
 			out := remediateDeclared(t, data, tc.profile)
 
 			if rewrote := !bytes.HasPrefix(out, data); rewrote != tc.rewrite {

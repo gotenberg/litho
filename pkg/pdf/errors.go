@@ -254,7 +254,8 @@ var (
 	// A full rewrite does not return it, despite the name. Full rewrites are
 	// [WithFullRewrite], an edit that forces one ([Writer.DeletePages],
 	// [Writer.InsertPages], [Writer.FlattenForm], [Writer.ClearMetadata],
-	// [Writer.Redact]), and a remediation whose repairs need one, such as the
+	// [Writer.Redact]), and a remediation that changed an unsigned document
+	// (see [Writer.RemediatePDFA]) or whose repairs need one, such as the
 	// formatting a PDF/A profile requires of the header and of every object.
 	// WriteTo writes the rewrite and signs it in an incremental update on top.
 	ErrSignFullRewriteIncompatible = errors.New("sign is incompatible with encryption and decryption")
