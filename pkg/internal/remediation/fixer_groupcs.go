@@ -170,7 +170,7 @@ func fixGroupCS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 			// family) are satisfied without depending on which intent
 			// other fixers install.
 			if blendingCSRef.ObjectNum == 0 {
-				blendingCSRef = alloc.Alloc(ast.NewStream(ast.PdfDict{"N": ast.PdfInt(3)}, sRGBICCProfile))
+				blendingCSRef = alloc.Alloc(sRGBICCStream())
 			}
 			newPage := make(ast.PdfDict, len(pageDict)+1)
 			maps.Copy(newPage, pageDict)
@@ -218,7 +218,7 @@ func fixGroupCS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 			continue
 		}
 		if blendingCSRef.ObjectNum == 0 {
-			blendingCSRef = alloc.Alloc(ast.NewStream(ast.PdfDict{"N": ast.PdfInt(3)}, sRGBICCProfile))
+			blendingCSRef = alloc.Alloc(sRGBICCStream())
 		}
 		newGroup["CS"] = ast.PdfArray{ast.PdfName("ICCBased"), blendingCSRef}
 

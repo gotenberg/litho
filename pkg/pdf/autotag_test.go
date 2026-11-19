@@ -141,7 +141,7 @@ func TestWriter_RemediatePDFUA_AutoTagsStructure(t *testing.T) {
 
 	// The written content carries per-element marks and not the content-tag
 	// fixer's whole-page /Document wrapper, proving it deferred (no double-wrap).
-	outStr := out.String()
+	outStr := pageContent(ctx, t, out.Bytes(), 1)
 	if !strings.Contains(outStr, "/H1 <</MCID") || !strings.Contains(outStr, "/P <</MCID") {
 		t.Errorf("per-element auto-tag marks missing from remediated content")
 	}

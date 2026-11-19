@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // para returns one text object setting lines from (x, y) down at a 12-point
@@ -170,7 +171,7 @@ func TestEmit_InterleavedLinesListTheirSequences(t *testing.T) {
 	}
 	page := mustDict(t, pending[3], "page")
 	stream, _ := pending[mustRef(t, page["Contents"], "/Contents").ObjectNum].(ast.PdfStream)
-	marked, err := stream.Bytes(ctx)
+	marked, err := filter.DecodeStream(ctx, stream)
 	if err != nil {
 		t.Fatalf("content: %v", err)
 	}

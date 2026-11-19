@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -147,7 +148,7 @@ func TestEmit_StructuredTree(t *testing.T) {
 	if !ok {
 		t.Fatalf("content stream: got %T, want PdfStream", pending[csRef.ObjectNum])
 	}
-	marked, err := cs.Bytes(ctx)
+	marked, err := filter.DecodeStream(ctx, cs)
 	if err != nil {
 		t.Fatalf("content bytes: %v", err)
 	}

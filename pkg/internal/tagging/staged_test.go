@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // stagedTestDoc opens a single untagged page whose content stream, object 5,
@@ -50,7 +51,7 @@ func TestAutoTagMarksTheStagedContent(t *testing.T) {
 	if !ok {
 		t.Fatalf("object %d is not a queued stream", ref.ObjectNum)
 	}
-	data, err := stream.Bytes(ctx)
+	data, err := filter.DecodeStream(ctx, stream)
 	if err != nil {
 		t.Fatalf("reading the marked content: %v", err)
 	}

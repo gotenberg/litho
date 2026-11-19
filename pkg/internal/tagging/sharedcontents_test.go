@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // TestAutoTag_SharedContents pins that pages naming one /Contents object, and
@@ -62,7 +63,7 @@ func TestAutoTag_SharedContents(t *testing.T) {
 				if !ok {
 					t.Fatalf("page %d /Contents %v: got %T, want a marked stream", i+1, ref, alloc.Pending()[ref.ObjectNum])
 				}
-				marked, err := s.Bytes(ctx)
+				marked, err := filter.DecodeStream(ctx, s)
 				if err != nil {
 					t.Fatalf("page %d marked stream: %v", i+1, err)
 				}

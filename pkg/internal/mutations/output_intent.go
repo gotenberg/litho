@@ -2,7 +2,6 @@ package mutations
 
 import (
 	"bytes"
-	"compress/zlib"
 	"context"
 	"fmt"
 	"log/slog"
@@ -11,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 )
 
@@ -173,16 +173,7 @@ func liveDict(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Doc
 // flateProfile returns spec's profile as an ICC profile stream (ISO 32000-1,
 // 8.6.5.5, Table 66), FlateDecode-compressed.
 func flateProfile(spec OutputIntentSpec) ast.PdfStream {
-	var buf bytes.Buffer
-	w := zlib.NewWriter(&buf)
-	// A bytes.Buffer grows without failing, so neither call can.
-	_, _ = w.Write(spec.Profile)
-	_ = w.Close()
-	return ast.NewStream(ast.PdfDict{
-		"N":      ast.PdfInt(spec.Components),
-		"Filter": ast.PdfName("FlateDecode"),
-		"Length": ast.PdfInt(buf.Len()),
-	}, buf.Bytes())
+	return filter.FlateStream(ast.PdfDict{"N": ast.PdfInt(spec.Components)}, spec.Profile)
 }
 
 // OutputIntentConflict is an output intent of a subtype other than GTS_PDFA1

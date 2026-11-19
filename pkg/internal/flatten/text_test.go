@@ -20,7 +20,7 @@ func TestFlattenKeepsAlphaZeroTextInvisible(t *testing.T) {
 	if pr := report.Pages[0]; pr.TransparentText != 0 {
 		t.Errorf("report %+v: text kept invisible exactly is no approximation", pr)
 	}
-	if !bytes.Contains(out, []byte("3 Tr")) {
+	if !bytes.Contains(contentOf(t, out), []byte("3 Tr")) {
 		t.Error("the invisible text is not drawn in mode 3")
 	}
 }
@@ -57,10 +57,10 @@ func TestFlattenKeepsCoveredTextHidden(t *testing.T) {
 			if pr := report.Pages[0]; pr.TextUnderTransparency != 0 {
 				t.Errorf("report %+v: covered text is no approximation", pr)
 			}
-			if n := bytes.Count(out, []byte("/FlatIm1 Do")); n != 2 {
+			if n := bytes.Count(contentOf(t, out), []byte("/FlatIm1 Do")); n != 2 {
 				t.Errorf("the image is drawn %d times, want 2: once under the text, once over its covered part", n)
 			}
-			if !bytes.Contains(out, []byte("(Hidden) Tj")) {
+			if !bytes.Contains(contentOf(t, out), []byte("(Hidden) Tj")) {
 				t.Error("the covered text left the content")
 			}
 		})
@@ -79,12 +79,12 @@ func TestFlattenKeepsUnembeddedGlyphsHiddenWhole(t *testing.T) {
 	out, _ := flattenBytes(t, fixture{
 		content: "BT /F1 12 Tf 10 20 Td (Hidden) Tj ET 0 0 1 rg 0 0 30 50 re f q /GS1 gs 1 0 0 rg 5 5 90 40 re f Q",
 	}.bytes(), Options{})
-	// The update appends the page's new content after the original's.
-	i := bytes.LastIndex(out, []byte("(Hidden) Tj ET"))
+	drawn := contentOf(t, out)
+	i := bytes.LastIndex(drawn, []byte("(Hidden) Tj ET"))
 	if i < 0 {
 		t.Fatal("the covered text left the content")
 	}
-	after := out[i:]
+	after := drawn[i:]
 	clip, _, ok := bytes.Cut(after, []byte("W n"))
 	if !ok {
 		t.Fatal("no overpaint clip after the text")

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/tagging"
 )
 
 // fixture is a one-page PDF: object 3 is the page, object 4 its content,
@@ -112,4 +113,17 @@ func kinds(a *Analysis) string {
 		parts = append(parts, s)
 	}
 	return strings.Join(parts, " ")
+}
+
+// contentOf returns the decoded content of data's first page, its streams
+// joined: the operators a check on the drawing reads, whatever filter the
+// streams are stored under.
+func contentOf(t testing.TB, data []byte) []byte {
+	t.Helper()
+	doc, pg := open(t, data)
+	out, err := tagging.PageContent(context.Background(), doc, pg)
+	if err != nil {
+		t.Fatalf("page content: %v", err)
+	}
+	return out
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -41,7 +42,8 @@ func excisePageFixture(t *testing.T, body string) (*document.Document, *document
 	return doc, pages[0]
 }
 
-// newPageContents returns the bytes the page's rewritten /Contents stream holds.
+// newPageContents returns the decoded bytes of the page's rewritten /Contents
+// stream.
 func newPageContents(t *testing.T, alloc *writer.ObjAllocator, objNum int) []byte {
 	t.Helper()
 	ctx := context.Background()
@@ -58,12 +60,16 @@ func newPageContents(t *testing.T, alloc *writer.ObjAllocator, objNum int) []byt
 	if !ok {
 		t.Fatalf("/Contents target = %T, want a stream", alloc.Pending()[ref.ObjectNum])
 	}
-	got, err := stream.Bytes(ctx)
+	raw, err := stream.Bytes(ctx)
 	if err != nil {
 		t.Fatalf("stream.Bytes: %v", err)
 	}
-	if length, ok := stream.Dict["Length"].(ast.PdfInt); !ok || int(length) != len(got) {
-		t.Errorf("/Length = %v, want %d to match the body", stream.Dict["Length"], len(got))
+	if length, ok := stream.Dict["Length"].(ast.PdfInt); !ok || int(length) != len(raw) {
+		t.Errorf("/Length = %v, want %d to match the body", stream.Dict["Length"], len(raw))
+	}
+	got, err := filter.DecodeStream(ctx, stream)
+	if err != nil {
+		t.Fatalf("decoding /Contents: %v", err)
 	}
 	return got
 }

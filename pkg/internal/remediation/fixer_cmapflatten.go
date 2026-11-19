@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 )
 
@@ -526,7 +527,7 @@ func namedEncodingStream(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	if !ok {
 		return "", ast.PdfIndirectRef{}, false
 	}
-	encRef := alloc.Alloc(flateStream(ast.PdfDict{
+	encRef := alloc.Alloc(filter.FlateStream(ast.PdfDict{
 		"Type":     ast.PdfName("CMap"),
 		"CMapName": name,
 		"WMode":    ast.PdfInt(prog.WMode),

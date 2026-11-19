@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // pdfWithICCVersion builds a PDF whose OutputIntent DestOutputProfile is a
@@ -122,7 +123,7 @@ func TestFixCorruptICC_ReplacesTruncatedProfile(t *testing.T) {
 	if !ok {
 		t.Fatalf("replacement profile: got %T, want PdfStream", streamObj)
 	}
-	data, err := stream.Bytes(context.Background())
+	data, err := filter.DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("reading replacement profile bytes: %v", err)
 	}

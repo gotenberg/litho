@@ -157,3 +157,23 @@ func PredictorParms(width, comps, bpc int) ast.PdfDict {
 	}
 	return parms
 }
+
+// FlateStream returns data compressed as a /FlateDecode stream (ISO 32000-1,
+// 7.4.4) over a copy of dict, with /Filter and /Length set. litho writes the
+// streams it makes, such as a content stream it marks or an ICC profile it
+// adds, compressed: written plain, they weigh several times what the source
+// they replace or join stored.
+func FlateStream(dict ast.PdfDict, data []byte) ast.PdfStream {
+	var buf bytes.Buffer
+	w := zlib.NewWriter(&buf)
+	// A bytes.Buffer grows without failing, so neither call can.
+	_, _ = w.Write(data)
+	_ = w.Close()
+	out := make(ast.PdfDict, len(dict)+2)
+	for k, v := range dict {
+		out[k] = v
+	}
+	out["Filter"] = ast.PdfName("FlateDecode")
+	out["Length"] = ast.PdfInt(buf.Len())
+	return ast.NewStream(out, buf.Bytes())
+}

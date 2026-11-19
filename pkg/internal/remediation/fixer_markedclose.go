@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -127,7 +128,7 @@ func fixMarkedContentClose(ctx context.Context, alloc *writer.ObjAllocator, doc 
 			body := make([]byte, 0, end+len(closing))
 			body = append(body, data[:end]...)
 			body = append(body, closing...)
-			contents = alloc.Alloc(ast.NewStream(ast.PdfDict{"Length": ast.PdfInt(len(body))}, body))
+			contents = alloc.Alloc(filter.FlateStream(nil, body))
 		} else {
 			closingRef := alloc.Alloc(ast.NewStream(ast.PdfDict{"Length": ast.PdfInt(len(closing))}, closing))
 			contents = append(contentElements(ctx, alloc, doc, contentsObj), closingRef)

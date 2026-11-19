@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // cmykIntentPDF builds a one-page document whose sole output intent is a
@@ -115,7 +116,7 @@ func TestFixOutputIntentAddsRGBOverACMYKIntent(t *testing.T) {
 		if !streamOK {
 			continue
 		}
-		body, bodyErr := stream.Bytes(ctx)
+		body, bodyErr := filter.DecodeStream(ctx, stream)
 		if bodyErr != nil || len(body) < 20 {
 			continue
 		}

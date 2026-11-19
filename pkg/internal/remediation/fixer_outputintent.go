@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 )
@@ -45,13 +46,13 @@ const (
 // which deflates to 27 KB, and most PDF/A outputs carry a copy, the
 // DefaultCMYK [fixDeviceColorIntent] stages beside an RGB intent.
 func cmykICCStream() ast.PdfStream {
-	return flateStream(ast.PdfDict{"N": ast.PdfInt(4)}, cmykICCProfile)
+	return filter.FlateStream(ast.PdfDict{"N": ast.PdfInt(4)}, cmykICCProfile)
 }
 
 // sRGBICCStream returns the stock sRGB profile as an ICC profile stream of
-// three components.
+// three components, FlateDecode-compressed.
 func sRGBICCStream() ast.PdfStream {
-	return ast.NewStream(ast.PdfDict{"N": ast.PdfInt(3)}, sRGBICCProfile)
+	return filter.FlateStream(ast.PdfDict{"N": ast.PdfInt(3)}, sRGBICCProfile)
 }
 
 // hasMatchingOutputIntent reports whether an existing PDF/A output intent
@@ -223,7 +224,7 @@ func fixOutputIntentCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc
 		if anchorData != nil && len(anchorData) < 128 {
 			// Replace with a stock sRGB profile when the existing stream is
 			// too short to be a valid ICC header.
-			anchorProfile = alloc.Alloc(ast.NewStream(ast.PdfDict{"N": ast.PdfInt(3)}, sRGBICCProfile))
+			anchorProfile = alloc.Alloc(sRGBICCStream())
 			anchorData = sRGBICCProfile
 			anchor.dict["DestOutputProfile"] = anchorProfile
 			anchor.changed = true

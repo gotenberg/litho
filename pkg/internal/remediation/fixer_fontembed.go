@@ -1,9 +1,7 @@
 package remediation
 
 import (
-	"bytes"
 	"cmp"
-	"compress/zlib"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -17,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
@@ -958,7 +957,7 @@ func (e *fontEmbedder) write(ctx context.Context, objNum int, font ast.PdfDict, 
 	descriptor[plan.programKey] = e.programRef(plan.program, mapping)
 	if plan.cidSet != nil {
 		// ISO 32000-1, Table 124 makes /CIDSet a stream, which is indirect.
-		descriptor["CIDSet"] = e.alloc.Alloc(flateStream(ast.PdfDict{}, plan.cidSet))
+		descriptor["CIDSet"] = e.alloc.Alloc(filter.FlateStream(ast.PdfDict{}, plan.cidSet))
 	}
 
 	holder := font
@@ -974,14 +973,14 @@ func (e *fontEmbedder) write(ctx context.Context, objNum int, font ast.PdfDict, 
 			out["Encoding"] = *encoding
 		}
 		if plan.toUnicode != nil {
-			out["ToUnicode"] = e.alloc.Alloc(flateStream(ast.PdfDict{}, plan.toUnicode))
+			out["ToUnicode"] = e.alloc.Alloc(filter.FlateStream(ast.PdfDict{}, plan.toUnicode))
 		}
 		e.alloc.AllocAt(objNum, out)
 		return
 	}
 	desc := maps.Clone(plan.descendant)
 	desc["FontDescriptor"] = descriptorRef
-	desc["CIDToGIDMap"] = e.alloc.Alloc(flateStream(ast.PdfDict{}, plan.cidToGID))
+	desc["CIDToGIDMap"] = e.alloc.Alloc(filter.FlateStream(ast.PdfDict{}, plan.cidToGID))
 	out := maps.Clone(plan.font)
 	var descEntry ast.PdfObject
 	if arr := liveArray(ctx, e.alloc, e.doc, font["DescendantFonts"]); len(arr) > 0 {
@@ -1018,7 +1017,7 @@ func (e *fontEmbedder) programRef(prog *suppliedProgram, mapping string) ast.Pdf
 	} else {
 		dict["Subtype"] = ast.PdfName("Type1C")
 	}
-	ref := e.alloc.Alloc(flateStream(dict, prog.data))
+	ref := e.alloc.Alloc(filter.FlateStream(dict, prog.data))
 	e.programs[key] = ref
 	return ref
 }
@@ -1033,19 +1032,6 @@ func programStream(prog *suppliedProgram) ast.PdfStream {
 		dict["Subtype"] = ast.PdfName("Type1C")
 	}
 	return ast.NewStream(dict, prog.data)
-}
-
-// flateStream returns data compressed as a FlateDecode stream over dict.
-func flateStream(dict ast.PdfDict, data []byte) ast.PdfStream {
-	var buf bytes.Buffer
-	w := zlib.NewWriter(&buf)
-	// A bytes.Buffer grows without failing, so neither call can.
-	_, _ = w.Write(data)
-	_ = w.Close()
-	out := maps.Clone(dict)
-	out["Filter"] = ast.PdfName("FlateDecode")
-	out["Length"] = ast.PdfInt(buf.Len())
-	return ast.NewStream(out, buf.Bytes())
 }
 
 // descriptor returns the font descriptor the embedded font carries: the

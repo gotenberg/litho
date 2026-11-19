@@ -156,7 +156,7 @@ func TestFlattenTransparentSquare(t *testing.T) {
 	if pr.Regions != 1 || pr.Removed != 1 || pr.DPI != DefaultDPI || !pr.GroupRemoved {
 		t.Errorf("report %+v", pr)
 	}
-	if !bytes.Contains(out, []byte("/Artifact BMC")) {
+	if !bytes.Contains(contentOf(t, out), []byte("/Artifact BMC")) {
 		t.Error("the composite is not marked as an artifact")
 	}
 }
@@ -282,7 +282,7 @@ func TestFlattenClipsWhatTheCompositeHolds(t *testing.T) {
 	if pr := report.Pages[0]; pr.Removed != 2 {
 		t.Errorf("report %+v, want the squares alone removed", pr)
 	}
-	if !bytes.Contains(out, []byte("W* n")) {
+	if !bytes.Contains(contentOf(t, out), []byte("W* n")) {
 		t.Error("the rule is not clipped out of the region")
 	}
 }

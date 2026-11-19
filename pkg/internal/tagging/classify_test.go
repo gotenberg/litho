@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // headingPagePDF is a single page with one large heading line and two smaller
@@ -126,7 +127,7 @@ func TestAutoTag_EndToEnd(t *testing.T) {
 	// and the merged P wraps both body lines.
 	page := mustDict(t, pending[3], "page")
 	cs := pending[mustRef(t, page["Contents"], "/Contents").ObjectNum].(ast.PdfStream)
-	marked, _ := cs.Bytes(ctx)
+	marked, _ := filter.DecodeStream(ctx, cs)
 	got := string(marked)
 	if n := strings.Count(got, ">> BDC\n"); n != 2 {
 		t.Errorf("want 2 structure BDC, got %d:\n%s", n, got)
@@ -162,7 +163,7 @@ func TestAutoTag_ArtifactsNonTextContent(t *testing.T) {
 	pending := alloc.Pending()
 	page := mustDict(t, pending[3], "page")
 	cstream := pending[mustRef(t, page["Contents"], "/Contents").ObjectNum].(ast.PdfStream)
-	marked, _ := cstream.Bytes(ctx)
+	marked, _ := filter.DecodeStream(ctx, cstream)
 	got := string(marked)
 
 	// Two structure marks (H1 heading + P body).
@@ -209,7 +210,7 @@ func TestAutoTag_StrokeBlocksMergeAndStaysArtifact(t *testing.T) {
 	}
 	page := mustDict(t, alloc.Pending()[3], "page")
 	cstream := alloc.Pending()[mustRef(t, page["Contents"], "/Contents").ObjectNum].(ast.PdfStream)
-	marked, _ := cstream.Bytes(ctx)
+	marked, _ := filter.DecodeStream(ctx, cstream)
 	got := string(marked)
 	if n := strings.Count(got, ">> BDC\n"); n != 2 {
 		t.Errorf("structure BDC: got %d, want 2 (two unmerged P)\n%s", n, got)
@@ -388,7 +389,7 @@ func TestAutoTag_FigureEndToEnd(t *testing.T) {
 	for _, obj := range alloc.Pending() {
 		switch v := obj.(type) {
 		case ast.PdfStream:
-			body, err := v.Bytes(ctx)
+			body, err := filter.DecodeStream(ctx, v)
 			if err == nil && bytes.Contains(body, []byte("/Figure <</MCID")) {
 				foundFigureMark = true
 			}

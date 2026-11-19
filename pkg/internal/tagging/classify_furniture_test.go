@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // pagesPDF is a document of one Letter page per content stream, all sharing
@@ -65,7 +66,7 @@ func autoTagPages(t *testing.T, contents []string) (marked []string, roles []ast
 		if !ok {
 			t.Fatalf("page %d /Contents is not a queued stream", i+1)
 		}
-		b, err := cs.Bytes(ctx)
+		b, err := filter.DecodeStream(ctx, cs)
 		if err != nil {
 			t.Fatalf("page %d content: %v", i+1, err)
 		}

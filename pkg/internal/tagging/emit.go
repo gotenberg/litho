@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
@@ -292,7 +293,7 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 		if prior, done := marks[contentsRef.ObjectNum]; sharable && done && bytes.Equal(prior.data, marked) {
 			streamRef = prior.ref
 		} else {
-			streamRef = e.alloc.Alloc(ast.NewStream(ast.PdfDict{"Length": ast.PdfInt(len(marked))}, marked))
+			streamRef = e.alloc.Alloc(filter.FlateStream(nil, marked))
 			if sharable && !done {
 				marks[contentsRef.ObjectNum] = markedContents{data: marked, ref: streamRef}
 			}

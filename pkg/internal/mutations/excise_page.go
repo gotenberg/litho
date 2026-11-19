@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -79,7 +80,7 @@ func EditPageSpans(
 	baseDict := latestPageDict(alloc, page)
 	newDict := make(ast.PdfDict, len(baseDict))
 	maps.Copy(newDict, baseDict)
-	newDict["Contents"] = alloc.Alloc(ast.NewStream(ast.PdfDict{"Length": ast.PdfInt(len(out))}, out))
+	newDict["Contents"] = alloc.Alloc(filter.FlateStream(nil, out))
 
 	if !alloc.AllocAt(page.Ref.ObjectNum, newDict) {
 		return ErrPageNotAddressable

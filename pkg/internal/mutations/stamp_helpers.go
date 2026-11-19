@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -362,7 +363,7 @@ func endDanglingContent(ctx context.Context, doc *document.Document, alloc *writ
 	out = append(out, elems[:k]...)
 	if cut := min(end-starts[k], len(datas[k])); cut > 0 {
 		kept := datas[k][:cut]
-		out = append(out, alloc.Alloc(ast.NewStream(ast.PdfDict{"Length": ast.PdfInt(len(kept))}, kept)))
+		out = append(out, alloc.Alloc(filter.FlateStream(nil, kept)))
 	}
 	return out
 }

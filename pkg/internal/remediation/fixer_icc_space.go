@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 )
 
@@ -122,7 +123,7 @@ func v2ProfileStream(dict ast.PdfDict, v2 []byte) ast.PdfStream {
 	delete(newDict, "Filter")
 	delete(newDict, "DecodeParms")
 	delete(newDict, "DL")
-	return flateStream(newDict, v2)
+	return filter.FlateStream(newDict, v2)
 }
 
 // collectICCBasedProfiles returns, in ascending object-number order, the

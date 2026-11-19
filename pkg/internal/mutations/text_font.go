@@ -1,8 +1,6 @@
 package mutations
 
 import (
-	"bytes"
-	"compress/zlib"
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
@@ -15,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
@@ -205,7 +204,7 @@ func (s *sharedTextFont) write(ctx context.Context, alloc *writer.ObjAllocator, 
 // are the CIDs cidToGID maps to the program's glyphs, so the /W array and the
 // ToUnicode CMap are keyed by code.
 func (f *textFont) embedTrueTypeAt(alloc *writer.ObjAllocator, sub *embeddedTTF, program []byte, cidToGID []uint16, widths map[uint16]uint16, toUnicode map[uint16]rune, ref ast.PdfIndirectRef) {
-	fontFileRef := alloc.Alloc(flateStream(ast.PdfDict{"Length1": ast.PdfInt(len(program))}, program))
+	fontFileRef := alloc.Alloc(filter.FlateStream(ast.PdfDict{"Length1": ast.PdfInt(len(program))}, program))
 	upe := float64(sub.unitsPerEm)
 	if upe == 0 {
 		upe = 1000
@@ -231,7 +230,7 @@ func (f *textFont) embedTrueTypeAt(alloc *writer.ObjAllocator, sub *embeddedTTF,
 	for cid, gid := range cidToGID {
 		binary.BigEndian.PutUint16(mapping[2*cid:], gid)
 	}
-	cidToGIDRef := alloc.Alloc(flateStream(ast.PdfDict{}, mapping))
+	cidToGIDRef := alloc.Alloc(filter.FlateStream(ast.PdfDict{}, mapping))
 	cidFontRef := alloc.Alloc(ast.PdfDict{
 		"Type":     ast.PdfName("Font"),
 		"Subtype":  ast.PdfName("CIDFontType2"),
@@ -261,7 +260,7 @@ func (f *textFont) embedTrueTypeAt(alloc *writer.ObjAllocator, sub *embeddedTTF,
 // are the CIDs of the charset, or the glyph IDs of a name-keyed program, so
 // the /W array and the ToUnicode CMap are keyed by code.
 func (f *textFont) embedCFFFontAt(alloc *writer.ObjAllocator, sub *embeddedTTF, program []byte, ref ast.PdfIndirectRef) {
-	fontFileRef := alloc.Alloc(flateStream(ast.PdfDict{"Subtype": ast.PdfName("CIDFontType0C")}, program))
+	fontFileRef := alloc.Alloc(filter.FlateStream(ast.PdfDict{"Subtype": ast.PdfName("CIDFontType0C")}, program))
 	upe := float64(sub.unitsPerEm)
 	if upe == 0 {
 		upe = 1000
@@ -502,21 +501,6 @@ func (t *textFonts) finish(ctx context.Context, alloc *writer.ObjAllocator, doc 
 		s.write(ctx, alloc, doc)
 	}
 	return nil
-}
-
-// flateStream returns data as a FlateDecode stream carrying dict (ISO
-// 32000-1, 7.4.4), which the embedded programs and the CIDToGIDMap take: a
-// font program the subset left whole, as a CID-keyed CFF program is, weighs
-// what its subroutines weigh, and Flate takes a fifth to a half off it.
-func flateStream(dict ast.PdfDict, data []byte) ast.PdfStream {
-	var buf bytes.Buffer
-	w := zlib.NewWriter(&buf)
-	// A bytes.Buffer grows without failing, so neither call can.
-	_, _ = w.Write(data)
-	_ = w.Close()
-	dict["Filter"] = ast.PdfName("FlateDecode")
-	dict["Length"] = ast.PdfInt(buf.Len())
-	return ast.NewStream(dict, buf.Bytes())
 }
 
 // distinctRunes returns the characters of text in order, each once.
