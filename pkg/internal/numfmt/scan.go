@@ -474,7 +474,11 @@ func (s *section) resolve() {
 		s.literalize(tDot, ".")
 		s.literalize(tComma, ",")
 		s.literalize(tSlash, "/")
-		s.literalize(tPercent, "%")
+		if s.kind != secGeneral {
+			// A percent sign beside General scales the number, as in a
+			// number section.
+			s.literalize(tPercent, "%")
+		}
 	}
 	if s.kind != secNumber {
 		for i, t := range s.toks {

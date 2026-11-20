@@ -350,7 +350,9 @@ func (s *section) text(t string) Result {
 			r.setFill(tk, b.Len())
 		case tLit:
 			b.WriteString(tk.text)
-		case tDigit, tDot, tComma, tPercent, tExp, tSlash, tDate, tAMPM, tAP, tSecFrac:
+		case tPercent:
+			b.WriteByte('%')
+		case tDigit, tDot, tComma, tExp, tSlash, tDate, tAMPM, tAP, tSecFrac:
 		}
 	}
 	r.Text = b.String()
@@ -400,11 +402,25 @@ func (s *section) number(x float64, first bool) Result {
 	return r
 }
 
-// general formats x as the General keyword, with the section's literals.
+// general formats x as the General keyword, with the section's literals,
+// x scaled by 100 for each percent sign.
+//
+// # Corpus evidence
+//
+//   - probe, ods: 0.125 in a percentage style of no decimal places, read
+//     as General%, prints 12.5% in LibreOffice 26.8.2.2 under 37 system
+//     locales.
 func (s *section) general(x float64, first bool) Result {
 	neg := x < 0
 	if neg {
 		x = -x
+	}
+	percents := 0
+	for _, t := range s.toks {
+		if t.kind == tPercent && percents < maxPercentSigns {
+			x *= 100
+			percents++
+		}
 	}
 	g := generalString(x)
 	if s.loc != nil {

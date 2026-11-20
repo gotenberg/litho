@@ -429,3 +429,31 @@ func TestApply_ClockSeconds(t *testing.T) {
 		}
 	}
 }
+
+// TestApply_GeneralPercent checks that a percent sign beside General
+// scales the number by 100, as LibreOffice prints a percentage style of
+// no decimal places.
+//
+// # Corpus evidence
+//
+//   - probe, ods: 0.125 in such a style prints 12.5% in LibreOffice
+//     26.8.2.2 under en-US and 12,5% under de-DE.
+func TestApply_GeneralPercent(t *testing.T) {
+	for _, tt := range []struct {
+		loc  models.Locale
+		v    float64
+		want string
+	}{
+		{"", 0.125, "12.5%"},
+		{"", -0.125, "-12.5%"},
+		{models.LocaleDeDE, 0.125, "12,5%"},
+	} {
+		f, err := Parse("General%")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := f.WithLocale(tt.loc).Apply(Value{Kind: Number, Number: tt.v}).Text; got != tt.want {
+			t.Errorf("%q %v: %q, want %q", tt.loc, tt.v, got, tt.want)
+		}
+	}
+}
