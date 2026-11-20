@@ -167,6 +167,31 @@ func approxFloor(v float64) float64 {
 	return math.Floor(r)
 }
 
+// clockSeconds returns the whole seconds of the time of day raw, in
+// seconds, of the serial number x, as a clock reads them: raw rounded
+// first to the decimals the magnitude of x leaves exact, nine for a time
+// alone and fewer as the days grow, two at least, then cut to the second
+// (tools::Time::GetClock). A date and time stored to the second whose
+// binary error falls just short of it reads that second.
+//
+// # Corpus evidence
+//
+//   - probe, ods: 2025-12-09T13:30:45 in DD.MM.YYYY HH:MM:SS prints
+//     09.12.2025 13:30:45 in LibreOffice 26.8.2.2 under 37 locales; its
+//     serial is 45 seconds less 6e-7.
+func clockSeconds(x, raw float64) float64 {
+	decimals := 9
+	if a := math.Abs(x); a >= 1 {
+		decimals = min(max(10-int(math.Ceil(detmath.Log10(a))), 2), 9)
+	}
+	p := detmath.Pow(10, float64(decimals))
+	t := math.Floor(float64(raw*p)+0.5) / p
+	if t >= 86400 {
+		t = raw
+	}
+	return math.Floor(t)
+}
+
 // date formats the serial number x by a date or time section. A time
 // that shows whole seconds is cut to the second, one that shows fractions
 // of a second or no seconds is rounded.
@@ -231,7 +256,12 @@ func (s *section) date(x float64, first bool) Result {
 		sub = t - float64(total)
 	} else {
 		d := math.Floor(x)
-		t := whole(float64((x-d)*86400*scale)) / scale
+		var t float64
+		if seconds && frac == 0 && !s.excel {
+			t = clockSeconds(x, float64((x-d)*86400))
+		} else {
+			t = whole(float64((x-d)*86400*scale)) / scale
+		}
 		if t >= 86400 {
 			d++
 			t -= 86400

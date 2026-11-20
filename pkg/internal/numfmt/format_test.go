@@ -398,3 +398,34 @@ func TestApply_ExcelBooleans(t *testing.T) {
 		}
 	}
 }
+
+// TestApply_ClockSeconds checks that a date and time shows the second its
+// serial number stands for when the binary error of the serial falls
+// just short of it, as tools::Time::GetClock reads it, and that a time
+// short of the next second by more than that error keeps its second.
+//
+// # Corpus evidence
+//
+//   - probe, ods: 2025-12-09T13:30:45, stored as the serial
+//     46000.56302083333, prints 09.12.2025 13:30:45 in DD.MM.YYYY
+//     HH:MM:SS in LibreOffice 26.8.2.2 of the pinned image.
+func TestApply_ClockSeconds(t *testing.T) {
+	for _, tt := range []struct {
+		code string
+		v    float64
+		want string
+	}{
+		{"dd.mm.yyyy hh:mm:ss", 46000.56302083333, "09.12.2025 13:30:45"},
+		{"hh:mm:ss", 0.56302083333333, "13:30:45"},
+		{"hh:mm:ss", 0.5630208, "13:30:44"},
+		{"dd.mm.yyyy hh:mm:ss", 46000.5630207, "09.12.2025 13:30:44"},
+	} {
+		f, err := Parse(tt.code)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := f.Apply(Value{Kind: Number, Number: tt.v}).Text; got != tt.want {
+			t.Errorf("%s %v: %q, want %q", tt.code, tt.v, got, tt.want)
+		}
+	}
+}
