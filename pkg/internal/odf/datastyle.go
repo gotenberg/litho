@@ -308,7 +308,7 @@ func (d *DataStyles) sectionCode(el *Element) string {
 				// (SvXMLNumFormatContext::AddNumber).
 				places = numfmt.CurrencyDigits(d.styleLocale(el))
 			}
-			b.WriteString(numberCode(c, kind == "percentage-style", places))
+			b.WriteString(numberCode(c, places))
 		case "scientific-number":
 			b.WriteString(scientificCode(c))
 		case "fraction":
@@ -568,14 +568,25 @@ func minDecimals(el *Element, places int) int {
 }
 
 // numberCode translates number:number (ODF 1.3, Part 3, 16.29.3). A
-// number without decimal places and nothing else is the General format,
-// unless defaultPlaces, the decimal places of a currency style's locale,
-// is not negative: it then takes those. The embedded texts (16.29.4) are
+// number without decimal places is the General keyword, whatever else it
+// states, unless defaultPlaces, the decimal places of a currency style's
+// locale, is not negative: it then takes those
+// (SvXMLNumFormatContext::AddNumber). The embedded texts (16.29.4) are
 // written among the integer digits.
-func numberCode(el *Element, percent bool, defaultPlaces int) string {
+//
+// # Corpus evidence
+//
+//   - probe, ods: under 37 system locales, LibreOffice 26.8.2.2 prints
+//     1234.5 in a number style of grouping and no decimal places as
+//     1234.5, and 0.125 in a percentage style of no decimal places as
+//     12.5%.
+func numberCode(el *Element, defaultPlaces int) string {
 	places, hasPlaces := attrInt(el, NSNumber, "decimal-places")
 	if !hasPlaces && defaultPlaces >= 0 {
 		places, hasPlaces = defaultPlaces, true
+	}
+	if !hasPlaces {
+		return "General"
 	}
 	ints, _ := attrInt(el, NSNumber, "min-integer-digits")
 	grouping := el.A(NSNumber, "grouping") == "true"
@@ -583,9 +594,6 @@ func numberCode(el *Element, percent bool, defaultPlaces int) string {
 	embedded := el.All(NSNumber, "embedded-text")
 	if len(embedded) > maxEmbeddedTexts {
 		embedded = embedded[:maxEmbeddedTexts]
-	}
-	if !hasPlaces && !grouping && ints <= 1 && factor == "" && len(embedded) == 0 && !percent {
-		return "General"
 	}
 	code := integerCode(ints, grouping)
 	if len(embedded) > 0 {
@@ -630,9 +638,18 @@ func embed(code string, texts []*Element) string {
 }
 
 // scientificCode translates number:scientific-number (ODF 1.3, Part 3,
-// 16.29.6): "0.00E+00".
+// 16.29.6): "0.00E+00", the General keyword without decimal places, as
+// [numberCode] writes a number.
+//
+// # Corpus evidence
+//
+//   - probe, ods: a scientific number of no decimal places prints 1234.5
+//     as 1234.5 in LibreOffice 26.8.2.2.
 func scientificCode(el *Element) string {
-	places, _ := attrInt(el, NSNumber, "decimal-places")
+	places, hasPlaces := attrInt(el, NSNumber, "decimal-places")
+	if !hasPlaces {
+		return "General"
+	}
 	ints, _ := attrInt(el, NSNumber, "min-integer-digits")
 	code := integerCode(max(ints, 1), el.A(NSNumber, "grouping") == "true")
 	if iv, ok := attrInt(el, NSNumber, "exponent-interval"); ok && iv > 1 && iv > len(code) {

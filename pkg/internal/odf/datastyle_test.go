@@ -18,11 +18,17 @@ import (
 //     #,##0.00\ [$€-407];[RED]\-#,##0.00\ [$€-407]; dd\.mm\.yy;
 //     [hh]:mm:ss.00; h:mm\ AM/PM; 0.000E+00; # ??/??; "TRUE";"TRUE";"FALSE";
 //     "Note: "@; 0,\K; #.0##; 0 ?/8; mmm\-yy; 000\-0000.00; General.
+//   - probe, ods: G1, G2 and G3 print 1234.5, 0.125 and 1234.5 as 1234.5,
+//     12.5% and 1234.5, the General format, in LibreOffice 26.8.2.2
+//     (TestDataStyle_CalcLocales in the ODS converter).
 func TestDataStyles_Code(t *testing.T) {
 	tests := []struct {
 		name, xml, want string
 	}{
 		{"N0", `<number:number-style style:name="N0"><number:number number:min-integer-digits="1"/></number:number-style>`, "General"},
+		{"G1", `<number:number-style style:name="G1"><number:number number:min-integer-digits="1" number:grouping="true"/></number:number-style>`, "General"},
+		{"G2", `<number:percentage-style style:name="G2"><number:number number:min-integer-digits="1"/><number:text>%</number:text></number:percentage-style>`, "General%"},
+		{"G3", `<number:number-style style:name="G3"><number:scientific-number number:min-integer-digits="1" number:min-exponent-digits="2"/></number:number-style>`, "General"},
 		{"N1", `<number:number-style style:name="N1"><number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1" number:grouping="true"/></number:number-style>`, "#,##0.00"},
 		{"N2", `<number:percentage-style style:name="N2"><number:number number:decimal-places="1" number:min-decimal-places="1" number:min-integer-digits="1"/><number:text>%</number:text></number:percentage-style>`, "0.0%"},
 		{
@@ -97,7 +103,7 @@ func TestNumberCode_ManyEmbeddedTexts(t *testing.T) {
 			Children: []*Element{{Text: "x"}},
 		})
 	}
-	if code := numberCode(num, false, -1); len(code) > maxFormatCode {
+	if code := numberCode(num, -1); len(code) > maxFormatCode {
 		t.Errorf("code of %d bytes, past %d", len(code), maxFormatCode)
 	}
 }

@@ -81,7 +81,7 @@ func TestDataStyle_CalcLocales(t *testing.T) {
 // of th-TH, the Minguo year of zh-TW), native digits, the day names in
 // hanja of ko-KR, and a long date of hi-IN that numfmt does not read.
 var dataStyleDepartures = map[models.Locale]map[string]bool{
-	"":                {"q_era": true, "pc_nodec": true, "sc_nodec": true, "nu_group_nodec": true},
+	"":                {"q_era": true},
 	models.LocaleArEG: styleSet("b_dl_ml_ys", "d_d_m_ys_src", "e_wl_d_mtl_yl", "e2_wl_d_mtl_yl_src", "h_d_mt_ys", "l_w_d_mtl_yl", "m_dl_ml_yl_h_m", "n_d_m_ys_h_m_src", "o_dl_ml_yl_h_m_s"),
 	models.LocaleHiIN: styleSet("e2_wl_d_mtl_yl_src"),
 	models.LocaleKoKR: styleSet("l_w_d_mtl_yl"),
