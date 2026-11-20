@@ -1,9 +1,9 @@
 package chart
 
 import (
-	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/shape"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // Chart is one chart as a reader found it: its title, its legend, its plot
@@ -60,10 +60,9 @@ type Chart struct {
 	// first cell of a range reference, "" for General, and false when it
 	// cannot: the source format of an axis linked to its source.
 	FormatResolver func(ref string) (string, bool)
-	// Locale is the separators the chart's numbers are written with, those
-	// of the document's language, unless a number format names its own
-	// locale; the zero Locale writes en-US's.
-	Locale numfmt.Locale
+	// Locale is the locale the chart's numbers are written in, unless a
+	// number format names its own; the zero Locale writes en-US's.
+	Locale models.Locale
 	// Notice, when set, is a text drawn over the middle of the chart in
 	// its frame, at most two thirds of the chart's width, over the plot
 	// area and its axes: the reader's note that it does not draw the

@@ -3,8 +3,6 @@ package chart
 import (
 	"math"
 	"sort"
-
-	"github.com/gotenberg/litho/pkg/internal/numfmt"
 )
 
 // Arrangement is how a series' points are gathered and ordered before they
@@ -79,7 +77,7 @@ func arrange(cats, vals Data, a Arrangement) (Data, Data) {
 			cat = Num(float64(i + 1))
 		}
 		if a.Aggregate {
-			key := cats.label(i, numfmt.Locale{})
+			key := cats.label(i, "")
 			if k, dup := seen[key]; dup && i < cats.Len() {
 				pts[k].v += v
 				continue

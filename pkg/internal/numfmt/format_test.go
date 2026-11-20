@@ -2,6 +2,8 @@ package numfmt
 
 import (
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestApply_Calc locks the strings Calc shows for each code and value.
@@ -275,7 +277,7 @@ func TestFormat_WithLocale(t *testing.T) {
 			t.Errorf("%s %s: %q, want %q", tt.lang, tt.code, got, tt.want)
 		}
 	}
-	if General.WithLocale(Locale{}) != General {
+	if General.WithLocale("") != General || General.WithLocale(models.LocaleEnUS) != General {
 		t.Error("the en-US locale copies the format")
 	}
 }
@@ -303,7 +305,7 @@ func TestParse_LocaleTag(t *testing.T) {
 	if id, ok := LCIDOf("hu-HU"); !ok || id != 0x40E {
 		t.Errorf("LCIDOf(hu-HU) = %x %v", id, ok)
 	}
-	if id, ok := LCIDOf("de"); !ok || LocaleOf(lcidTags[id]) != LocaleOf("de") {
+	if id, ok := LCIDOf("de"); !ok || localeOfLCID(id).tag != LocaleOf("de") {
 		t.Errorf("LCIDOf(de) = %x %v", id, ok)
 	}
 	if _, ok := LCIDOf("en-US"); ok {
@@ -311,13 +313,17 @@ func TestParse_LocaleTag(t *testing.T) {
 	}
 }
 
-// TestLCIDOf_Deterministic checks that a tag two identifiers name, es-ES
-// (0x40A, traditional sort, and 0xC0A, modern sort), gives the lower one
-// every time, whatever order the table's map ranges in.
-func TestLCIDOf_Deterministic(t *testing.T) {
-	for range 200 {
-		if id, ok := LCIDOf("es-ES"); !ok || id != 0x40A {
-			t.Fatalf("LCIDOf(es-ES) = %x %v, want 40a", id, ok)
+// TestLCIDOf_RoundTrips checks that the identifier a tag is written with
+// names that tag back, and that both identifiers of es-ES (0x40A,
+// traditional sort, and 0xC0A, modern sort) name es-ES.
+func TestLCIDOf_RoundTrips(t *testing.T) {
+	id, ok := LCIDOf("es-ES")
+	if !ok || localeOfLCID(id) == nil || localeOfLCID(id).tag != models.LocaleEsES {
+		t.Fatalf("LCIDOf(es-ES) = %x %v", id, ok)
+	}
+	for _, id := range []uint64{0x40A, 0xC0A} {
+		if d := localeOfLCID(id); d == nil || d.tag != models.LocaleEsES {
+			t.Errorf("localeOfLCID(%x) = %v", id, d)
 		}
 	}
 }

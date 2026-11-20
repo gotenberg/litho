@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/detmath"
 )
@@ -32,6 +33,104 @@ var nullDate = time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC)
 var monthNames = [12]string{"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"}
 
 var dayNames = [7]string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
+
+// The cases a month name takes (svl zformat.cxx, ImpUseMonthCase).
+const (
+	caseNominative = iota + 1
+	caseGenitive
+	casePartitive
+)
+
+// monthCase returns the case a section writes its month names in: the
+// nominative when a literal other than a space or a comma follows a month
+// name, or one that does not end with a space precedes it, or no day of
+// the month is near it; the genitive when the day follows the month; the
+// partitive when it precedes it (LibreOffice's rule, which a locale with
+// genitive or partitive names follows).
+func (s *section) monthCase() int {
+	monthSeen, daySeen := false, false
+	for i, t := range s.toks {
+		if t.kind != tDate {
+			continue
+		}
+		switch {
+		case t.key == kDay && t.n <= 2:
+			if monthSeen {
+				return caseGenitive
+			}
+			daySeen = true
+		case t.key == kMonth && t.n >= 3:
+			next := i+1 < len(s.toks) && s.toks[i+1].kind == tLit && s.toks[i+1].text != "" &&
+				s.toks[i+1].text[0] != ' ' && s.toks[i+1].text[0] != ','
+			prev := i > 0 && s.toks[i-1].kind == tLit && s.toks[i-1].text != "" &&
+				s.toks[i-1].text[len(s.toks[i-1].text)-1] != ' '
+			switch {
+			case next || prev:
+				return caseNominative
+			case daySeen:
+				return casePartitive
+			}
+			monthSeen = true
+		}
+	}
+	return caseNominative
+}
+
+// monthName returns the name of month mo (1 to 12) a keyword of n letters
+// writes, in the section's locale and case.
+func (s *section) monthName(mo time.Month, n int) string {
+	full, abbr := monthNames[mo-1], monthNames[mo-1][:3]
+	if loc := s.loc; loc != nil {
+		names := loc.months
+		switch s.monthCase() {
+		case casePartitive:
+			if loc.partitive != nil {
+				names = loc.partitive
+				break
+			}
+			fallthrough
+		case caseGenitive:
+			if loc.genitive != nil {
+				names = loc.genitive
+			}
+		}
+		abbr, full = names[mo-1][0], names[mo-1][1]
+	}
+	switch n {
+	case 3:
+		return abbr
+	case 4:
+		return full
+	}
+	if s.loc != nil && s.loc.narrow != nil && s.loc.narrow[mo-1] != "" {
+		return s.loc.narrow[mo-1]
+	}
+	// The narrow name is the full name's first character.
+	r, _ := utf8.DecodeRuneInString(full)
+	return string(r)
+}
+
+// time100Sep returns the separator of the fraction of a second.
+func (s *section) time100Sep() string {
+	if s.loc != nil {
+		return s.loc.time100Sep
+	}
+	return "."
+}
+
+// dayName returns the name of weekday a keyword of n letters writes.
+func (s *section) dayName(wd time.Weekday, n int) string {
+	if loc := s.loc; loc != nil {
+		if n == 3 {
+			return loc.days[wd][0]
+		}
+		return loc.days[wd][1]
+	}
+	if n == 3 {
+		return dayNames[wd][:3]
+	}
+	return dayNames[wd]
+}
 
 // excelLeapDay is the serial number of the 1900 date system's February
 // 29, 1900, a day Excel counts and the calendar does not (ECMA-376 Part
@@ -173,10 +272,14 @@ func (s *section) date(x float64, first bool) Result {
 		case tFill:
 			r.setFill(t, b.Len())
 		case tAMPM:
+			am, pmText := "AM", "PM"
+			if s.loc != nil {
+				am, pmText = s.loc.am, s.loc.pm
+			}
 			if pm {
-				b.WriteString("PM")
+				b.WriteString(pmText)
 			} else {
-				b.WriteString("AM")
+				b.WriteString(am)
 			}
 		case tAP:
 			if pm {
@@ -187,9 +290,9 @@ func (s *section) date(x float64, first bool) Result {
 		case tSecFrac:
 			ds := strconv.FormatFloat(sub, 'f', min(t.n, maxSecondDigits), 64)
 			if i := strings.IndexByte(ds, '.'); i >= 0 {
-				b.WriteString(ds[i:])
+				b.WriteString(s.time100Sep() + ds[i+1:])
 			} else {
-				b.WriteString("." + strings.Repeat("0", min(t.n, maxSecondDigits)))
+				b.WriteString(s.time100Sep() + strings.Repeat("0", min(t.n, maxSecondDigits)))
 			}
 		case tDate:
 			switch t.key {
@@ -207,21 +310,15 @@ func (s *section) date(x float64, first bool) Result {
 					pad(int64(mo), 1)
 				case 2:
 					pad(int64(mo), 2)
-				case 3:
-					b.WriteString(monthNames[mo-1][:3])
-				case 4:
-					b.WriteString(monthNames[mo-1])
 				default:
-					b.WriteString(monthNames[mo-1][:1])
+					b.WriteString(s.monthName(mo, t.n))
 				}
 			case kDay:
 				switch t.n {
 				case 1, 2:
 					pad(int64(mday), t.n)
-				case 3:
-					b.WriteString(dayNames[weekday][:3])
 				default:
-					b.WriteString(dayNames[weekday])
+					b.WriteString(s.dayName(weekday, t.n))
 				}
 			case kHour:
 				h := hour

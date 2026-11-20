@@ -4,7 +4,7 @@ import (
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
-	"github.com/gotenberg/litho/pkg/internal/numfmt"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // MaxPoints caps the points of one series a reader keeps. Anti-DoS guard,
@@ -94,7 +94,7 @@ func (d Data) number(i int) (float64, bool) {
 
 // label returns point i as a category label, formatted with the data's
 // format and loc's separators when it is a number.
-func (d Data) label(i int, loc numfmt.Locale) string {
+func (d Data) label(i int, loc models.Locale) string {
 	if i < 0 || i >= len(d.Values) {
 		return ""
 	}
@@ -112,7 +112,7 @@ func (d Data) label(i int, loc numfmt.Locale) string {
 // labelAs returns point i as a category label, a number formatted with
 // code when not empty, as an axis with its own number format shows its
 // numeric categories, else with the data's format.
-func (d Data) labelAs(i int, code string, loc numfmt.Locale) string {
+func (d Data) labelAs(i int, code string, loc models.Locale) string {
 	if code != "" && i >= 0 && i < len(d.Values) && d.Values[i].Kind == Number {
 		return formatLabel(code, d.Values[i].Number, loc)
 	}

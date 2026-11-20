@@ -5,6 +5,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // formatLabel formats v with the number format code code, the
@@ -13,7 +14,7 @@ import (
 // numfmt refuses falls back to General. The separators are loc's, unless
 // the code names a locale of its own ([$-407]). A label is never "###": a
 // chart has no column to fit.
-func formatLabel(code string, v float64, loc numfmt.Locale) string {
+func formatLabel(code string, v float64, loc models.Locale) string {
 	if !numeric.Finite(v) {
 		return ""
 	}
@@ -31,5 +32,5 @@ func formatLabel(code string, v float64, loc numfmt.Locale) string {
 
 // formatGeneral formats the index v in the General format.
 func formatGeneral(v float64) string {
-	return formatLabel("", v, numfmt.Locale{})
+	return formatLabel("", v, "")
 }

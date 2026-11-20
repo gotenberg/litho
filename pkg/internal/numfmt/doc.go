@@ -7,10 +7,17 @@
 // [Parse] reads a code once; [Format.Apply] formats a value by it, and
 // [Format.Fit] formats it for a cell of a given width, as Calc narrows a
 // General number and shows "###" for a number that does not fit. The
-// output is Calc's for the en-US locale, the only one: month and day names
+// output is Calc's for the en-US locale by default: month and day names
 // in English, "." the decimal separator, "," the thousands separator,
 // TRUE and FALSE for booleans, and the null date 1899-12-30 for serial
 // numbers.
+//
+// [Format.WithLocale] formats under another locale, one of models' Locale
+// constants, each a locale LibreOffice ships: its separators and digit
+// grouping, its month names in the case Calc picks, day names, AM and PM,
+// boolean words, and its system long date and time for [$-F800] and
+// [$-F400]. [Code] gives a locale's built-in formats. The table is
+// generated from LibreOffice's locale data by cmd/gen-locales.
 //
 // What a code can say:
 //
@@ -19,9 +26,10 @@
 //   - Colours [Black] [Blue] [Cyan] [Green] [Magenta] [Red] [White]
 //     [Yellow], LibreOffice's [Brown] and [Grey], and [Color n] from the
 //     56-colour workbook palette.
-//   - Locale tags [$-409], which are ignored, the system tags [$-F800]
-//     and [$-F400], which stand for the en-US long date and time, and
-//     currency tags [$€-407], which show their symbol.
+//   - Locale tags [$-407], which format their section in that locale, the
+//     system tags [$-F800] and [$-F400], which stand for the locale's long
+//     date and time, and currency tags [$€-407], which show their symbol
+//     and leave the locale as it is.
 //   - Literal text in quotes, backslash escapes, and the characters that
 //     stand for themselves ($ - + / ( ) : ! ^ & ' ~ { } < > = and space).
 //   - "_x", replaced by the spaces LibreOffice inserts for the width of
@@ -37,6 +45,7 @@
 //   - @, the text of a text value, and General, Calc's standard format.
 //
 // Not supported: the calendar and numeral system tags ([~buddhist],
-// [NatNum1], [DBNum1]), which are ignored, other locales, the era and
-// quarter keywords, and Japanese and Chinese date keywords.
+// [NatNum1], [DBNum1]), which are ignored, a locale's default calendar
+// when it is not the Gregorian one (fa-IR) and its native digits, the era
+// and quarter keywords, and Japanese and Chinese date keywords.
 package numfmt

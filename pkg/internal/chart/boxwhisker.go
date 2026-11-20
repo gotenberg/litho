@@ -4,7 +4,6 @@ import (
 	"math"
 	"slices"
 
-	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 )
 
@@ -152,7 +151,7 @@ func boxed(c *Chart) *Chart {
 				}
 				key := ""
 				if cats.Len() > 0 {
-					key = cats.label(k, numfmt.Locale{})
+					key = cats.label(k, "")
 				}
 				at, seen := index[key]
 				if !seen {

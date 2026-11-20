@@ -6,8 +6,8 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
-	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // layoutPasses is how often the plot area is fitted to its axis labels:
@@ -50,7 +50,7 @@ type dim struct {
 	// rather than LibreOffice's.
 	officeScale bool
 	// loc is the separators of the chart's locale.
-	loc numfmt.Locale
+	loc models.Locale
 	// other is the crossing dimension.
 	other *dim
 

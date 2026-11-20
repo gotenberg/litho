@@ -219,24 +219,29 @@ func (s *section) writeInt(b *strings.Builder, r *Result, ip string, from, to in
 		case t.kind == tComma && role != nil && role[i] != 0:
 		default:
 			if out.Len() > 0 {
-				writeGrouped(b, out.String(), group, s.group())
+				s.writeGrouped(b, out.String(), group)
 				out.Reset()
 			}
 			s.writeOther(b, r, t)
 		}
 	}
 	if out.Len() > 0 {
-		writeGrouped(b, out.String(), group, s.group())
+		s.writeGrouped(b, out.String(), group)
 	}
 }
 
-// writeGrouped writes the digits run d, with the thousands separator sep
-// between each group of three digits from the right when group is set.
-func writeGrouped(b *strings.Builder, d string, group bool, sep string) {
+// writeGrouped writes the digits run d, with the thousands separator
+// between each group of three digits from the right when group is set, or
+// in a locale that groups by three then two, between the first group of
+// three and each group of two after it (LibreOffice's digit grouping,
+// utl::DigitGroupingIterator).
+func (s *section) writeGrouped(b *strings.Builder, d string, group bool) {
 	if !group {
 		b.WriteString(d)
 		return
 	}
+	sep := s.group()
+	indian := s.loc != nil && s.loc.indian
 	digits := 0
 	for _, c := range d {
 		if c >= '0' && c <= '9' {
@@ -246,7 +251,8 @@ func writeGrouped(b *strings.Builder, d string, group bool, sep string) {
 	seen := 0
 	for _, c := range d {
 		if c >= '0' && c <= '9' {
-			if seen > 0 && (digits-seen)%3 == 0 {
+			rest := digits - seen
+			if seen > 0 && (!indian && rest%3 == 0 || indian && rest >= 3 && (rest-3)%2 == 0) {
 				b.WriteString(sep)
 			}
 			seen++

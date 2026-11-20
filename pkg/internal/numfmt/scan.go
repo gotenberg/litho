@@ -97,25 +97,31 @@ type section struct {
 	kind         sectionKind
 	// empty reports a section the code left blank, which shows nothing.
 	empty bool
-	// loc is the locale the section writes its separators in, nil for
-	// en-US.
-	loc *Locale
+	// loc is the locale the section formats in, nil for en-US; tagged
+	// reports a locale its own [$-LCID] tag names, which
+	// [Format.WithLocale] keeps.
+	loc    *localeData
+	tagged bool
+	// system is the system format its tag stands for, [$-F800] or
+	// [$-F400], 0 for none: [Format.WithLocale] replaces it by the
+	// locale's.
+	system byte
 	// excel formats dates and times as Excel shows them ([Format.Excel]).
 	excel bool
 }
 
 // decimal returns the decimal separator the section writes.
 func (s *section) decimal() string {
-	if s.loc != nil && s.loc.Decimal != "" {
-		return s.loc.Decimal
+	if s.loc != nil {
+		return s.loc.decimal
 	}
 	return "."
 }
 
 // group returns the thousands separator the section writes.
 func (s *section) group() string {
-	if s.loc != nil && s.loc.Group != "" {
-		return s.loc.Group
+	if s.loc != nil {
+		return s.loc.group
 	}
 	return ","
 }
@@ -335,7 +341,25 @@ func scanSection(src string) (*section, error) {
 		}
 	}
 	s.resolve()
+	if s.tagged {
+		s.plainSpaces()
+	}
 	return s, nil
+}
+
+// plainSpaces turns the no-break spaces of the section's literals into
+// spaces when its locale groups digits with one: LibreOffice reads a code
+// so in such a locale, and writes the separator alone as a no-break space
+// (svl zformat.cxx, the SvNumberformat constructor).
+func (s *section) plainSpaces() {
+	if s.loc == nil || (s.loc.group != "\u00a0" && s.loc.group != "\u202f") {
+		return
+	}
+	for i, t := range s.toks {
+		if t.kind == tLit {
+			s.toks[i].text = strings.ReplaceAll(t.text, s.loc.group, " ")
+		}
+	}
 }
 
 // bracket reads the content of a [...] group: a colour, a condition, a
@@ -348,17 +372,15 @@ func (s *section) bracket(b string, lit func(string)) error {
 	case strings.HasPrefix(u, "$"):
 		// A currency or locale tag: [$symbol-locale] shows the symbol
 		// (ECMA-376 Part 1, 18.8.31); a locale tag without a symbol
-		// writes the section's separators in that locale, as LibreOffice
-		// does ([$-407]#,##0.00 prints 1.234,50, [$€-407]#,##0.00
-		// €1,234.50).
+		// formats the section in that locale, its separators and its
+		// names, as LibreOffice does ([$-407]#,##0.00 prints 1.234,50,
+		// [$€-407]#,##0.00 €1,234.50 under en-US).
 		sym, id, _ := strings.Cut(b[strings.IndexByte(b, '$')+1:], "-")
 		if sym != "" {
 			lit(sym)
 		} else if n, err := strconv.ParseUint(strings.TrimSpace(id), 16, 32); err == nil {
-			if tag, ok := lcidTags[n&0xFFFF]; ok {
-				if loc := LocaleOf(tag); loc != (Locale{}) {
-					s.loc = &loc
-				}
+			if d := localeOfLCID(n); d != nil {
+				s.loc, s.tagged = d, true
 			}
 		}
 		return nil

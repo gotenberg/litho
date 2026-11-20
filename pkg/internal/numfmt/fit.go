@@ -57,8 +57,8 @@ func (f *Format) Fit(v Value, width float64, measure func(string) float64) Resul
 	if signs+dots+exps > 0 {
 		s = narrowGeneral(x, digitCount(w, maxDigit))
 	}
-	if loc := f.sections[0].loc; loc != nil && loc.Decimal != "" {
-		s = strings.Replace(s, ".", loc.Decimal, 1)
+	if loc := f.sections[0].loc; loc != nil {
+		s = strings.Replace(s, ".", loc.decimal, 1)
 	}
 	if measure(s) > w {
 		return f.hash(r)
@@ -77,8 +77,8 @@ func (f *Format) Fit(v Value, width float64, measure func(string) float64) Resul
 //   - libreoffice/xlsx: sc/escape-unicode prints 1161014163 as 1.16E+09 in
 //     a column of the default width, where Calc fits 1.161E+09.
 func (f *Format) excelGeneral(r Result, s string, w float64, measure func(string) float64) Result {
-	if loc := f.sections[0].loc; loc != nil && loc.Decimal != "" {
-		s = strings.Replace(s, ".", loc.Decimal, 1)
+	if loc := f.sections[0].loc; loc != nil {
+		s = strings.Replace(s, ".", loc.decimal, 1)
 	}
 	if measure(s) > w {
 		return f.hash(r)

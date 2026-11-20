@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestFormatLabel_Codes(t *testing.T) {
@@ -36,7 +37,7 @@ func TestFormatLabel_Codes(t *testing.T) {
 		{"#", 0, ""},
 	}
 	for _, tt := range tests {
-		if got := formatLabel(tt.code, tt.v, numfmt.Locale{}); got != tt.want {
+		if got := formatLabel(tt.code, tt.v, ""); got != tt.want {
 			t.Errorf("formatLabel(%q, %v) = %q, want %q", tt.code, tt.v, got, tt.want)
 		}
 	}
@@ -47,7 +48,7 @@ func TestFormatLabel_Locale(t *testing.T) {
 	tests := []struct {
 		code string
 		v    float64
-		loc  numfmt.Locale
+		loc  models.Locale
 		want string
 	}{
 		{"0.00%", 0.2143, hu, "21,43%"},
@@ -55,7 +56,7 @@ func TestFormatLabel_Locale(t *testing.T) {
 		{"#,##0.0", 1234.5, numfmt.LocaleOf("de-DE"), "1.234,5"},
 		// A code naming its own locale keeps it.
 		{"[$-409]0.0", 0.5, hu, "0.5"},
-		{"0.0", 0.5, numfmt.Locale{}, "0.5"},
+		{"0.0", 0.5, "", "0.5"},
 	}
 	for _, tt := range tests {
 		if got := formatLabel(tt.code, tt.v, tt.loc); got != tt.want {
@@ -75,7 +76,7 @@ func TestData_LabelAsAxisFormat(t *testing.T) {
 		{1, "yyyy-mm-dd", "x"},
 	}
 	for _, tt := range tests {
-		if got := d.labelAs(tt.i, tt.code, numfmt.Locale{}); got != tt.want {
+		if got := d.labelAs(tt.i, tt.code, ""); got != tt.want {
 			t.Errorf("labelAs(%d, %q) = %q, want %q", tt.i, tt.code, got, tt.want)
 		}
 	}
