@@ -110,9 +110,12 @@ func (r *reader) wraps(scope odf.Scope, name string) bool {
 }
 
 // dataCode returns the format code of the data style name, with a
-// [$-LCID] locale tag when the style names a locale whose separators are
-// not en-US's (ODF 1.3 Part 3, 19.351 number:language and 19.348
-// number:country), as Calc writes its numbers in the data style's locale.
+// [$-LCID] locale tag when the style names a locale (ODF 1.3 Part 3,
+// 19.351 number:language and 19.348 number:country), as Calc formats a
+// value in the data style's locale whatever the system's: its
+// separators, its names and its words. A style that names no language
+// takes the conversion's locale, the document's default language
+// deciding nothing.
 //
 // # Corpus evidence
 //
@@ -120,17 +123,26 @@ func (r *reader) wraps(scope odf.Scope, name string) bool {
 //     prints, in LibreOffice 26.8.2.2, 1.234.567,50 for number:language
 //     de and number:country DE, 1,234,567.50 for en US and for no
 //     language, whatever the default cell style's fo:language.
+//   - probe, ods: under the system locales en-US, de-DE, fr-FR and ja-JP,
+//     styles of fr-FR, en-US and de-DE print 2025-12-09 as mardi 9
+//     décembre 2025, Tuesday 9 December 2025 and Dienstag 9 Dezember 2025
+//     and true as VRAI, TRUE and WAHR; styles of no language print in
+//     the system locale (火曜日 9 十二月 2025 under ja-JP), a default
+//     cell style of fo:language de and fo:country DE changing nothing.
 func (r *reader) dataCode(scope odf.Scope, name string) string {
 	code := r.data.Code(scope, name)
 	el := r.data.Element(scope, name)
-	if el == nil || code == "" || strings.Contains(code, "[$") {
+	if el == nil || code == "" {
 		return code
 	}
 	lang := el.A(odf.NSNumber, "language")
 	if c := el.A(odf.NSNumber, "country"); lang != "" && c != "" {
 		lang += "-" + c
 	}
-	id, ok := numfmt.LCIDOf(lang)
+	if lang == "" {
+		return code
+	}
+	id, ok := numfmt.LCID(numfmt.LocaleOf(lang))
 	if !ok {
 		return code
 	}

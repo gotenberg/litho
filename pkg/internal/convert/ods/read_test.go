@@ -511,7 +511,8 @@ func TestRead_DataStyleLocale(t *testing.T) {
 	if c := cellAt(doc.Sheets[0], 0, 0); c == nil || c.Style == nil || c.Style.Format != "[$-407]#,##0.00" {
 		t.Errorf("German format %+v", c)
 	}
-	if c := cellAt(doc.Sheets[0], 0, 1); c == nil || c.Style == nil || c.Style.Format != "0.00" {
+	// en-US is named too: under another conversion locale it stays en-US.
+	if c := cellAt(doc.Sheets[0], 0, 1); c == nil || c.Style == nil || c.Style.Format != "[$-409]0.00" {
 		t.Errorf("en-US format %+v", c)
 	}
 }
