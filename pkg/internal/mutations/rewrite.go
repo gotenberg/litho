@@ -181,6 +181,15 @@ func (c CompactOptions) imageReduction(doc *document.Document) *writer.ImageRedu
 	}
 }
 
+// streamCompression returns the configuration of the stream compression pass
+// under doc's budgets, or nil when c does not ask for it.
+func (c CompactOptions) streamCompression(doc *document.Document) *writer.StreamCompression {
+	if !c.CompressStreams {
+		return nil
+	}
+	return &writer.StreamCompression{Limits: doc.Limits()}
+}
+
 // FullRewriteConfig holds the parameters for a full document rewrite.
 type FullRewriteConfig struct {
 	Doc             *document.Document

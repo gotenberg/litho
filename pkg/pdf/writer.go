@@ -217,8 +217,8 @@ func (o writeOpts) compactOptions() mutations.CompactOptions {
 // compacts reports whether the write asks for a compaction pass: one of the
 // options that run on a full rewrite alone.
 func (o writeOpts) compacts() bool {
-	return o.packObjectStreams || o.dedupStreams || o.recompressImages || o.subsetFonts ||
-		o.imageQuality > 0 || o.maxImageDPI > 0
+	return o.packObjectStreams || o.dedupStreams || o.recompressImages || o.compressStreams ||
+		o.subsetFonts || o.imageQuality > 0 || o.maxImageDPI > 0
 }
 
 // internalEncrypt translates the requested encryption into the internal
@@ -491,6 +491,30 @@ func WithMaxImageDPI(dpi float64) WriteOption {
 		if dpi > 0 && !math.IsInf(dpi, 1) {
 			o.maxImageDPI = dpi
 		}
+	}
+}
+
+// WithStreamCompression compresses with FlateDecode (ISO 32000-1, 7.4.4) the
+// streams of the output that carry no filter, losslessly: content streams,
+// font programs, ICC profiles, embedded files and the like that a producer
+// wrote plain. A compression is kept only when the stream comes out smaller.
+// Every reader decodes the bytes the stream held, so pages draw and extract as
+// before. Only /Filter and /Length change.
+//
+// XMP metadata streams stay plain: ISO 19005-1, 6.7.2 forbids a filter on the
+// document's, and XMP is meant to be readable without one. Images are left to
+// [WithImageRecompression]. A stream whose data passes the stream budget of
+// [WithLimits] is left as it is.
+//
+// It applies to the full-rewrite path only, as [WithObjectStreams] does, and
+// to an encrypted output too: the pass runs before encryption. The output
+// stays deterministic.
+//
+// It costs time in proportion to the plain bytes it compresses, at zlib's
+// default level, far less than [WithImageRecompression].
+func WithStreamCompression() WriteOption {
+	return func(o *writeOpts) {
+		o.compressStreams = true
 	}
 }
 
@@ -4765,6 +4789,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, step *signi
 			slog.Bool("pack_object_streams", cfg.packObjectStreams),
 			slog.Bool("dedup_streams", cfg.dedupStreams),
 			slog.Bool("recompress_images", cfg.recompressImages),
+			slog.Bool("compress_streams", cfg.compressStreams),
 			slog.Bool("subset_fonts", cfg.subsetFonts),
 			slog.Int("image_quality", cfg.imageQuality),
 			slog.Float64("max_image_dpi", cfg.maxImageDPI))
