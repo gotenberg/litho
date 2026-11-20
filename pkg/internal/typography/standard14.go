@@ -56,8 +56,8 @@ func standard14Name(baseFont string) string {
 // is 600 units wide.
 func Standard14Width(baseFont, glyph string) (float64, bool) {
 	name := standard14Name(baseFont)
-	if isCourier(name) {
-		return courierWidth, glyph != "" && glyph != ".notdef"
+	if w, ok := fixedWidth(name); ok {
+		return float64(w), glyph != "" && glyph != ".notdef"
 	}
 	metrics, ok := standard14GlyphWidths[name]
 	if !ok {

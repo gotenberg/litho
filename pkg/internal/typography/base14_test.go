@@ -227,11 +227,11 @@ func TestStandard14GlyphWidths_Completeness(t *testing.T) {
 	}
 
 	// Symbol must have its Greek letters.
-	if _, ok := symbolWidths["Alpha"]; !ok {
+	if _, ok := standard14GlyphWidths["Symbol"]["Alpha"]; !ok {
 		t.Error("Symbol missing glyph Alpha")
 	}
 	// ZapfDingbats must have its dingbat entries.
-	if _, ok := zapfDingbatsWidths["a1"]; !ok {
+	if _, ok := standard14GlyphWidths["ZapfDingbats"]["a1"]; !ok {
 		t.Error("ZapfDingbats missing glyph a1")
 	}
 }
@@ -261,5 +261,21 @@ func TestInjectStandard14Widths_SymbolDifferences(t *testing.T) {
 	}
 	if w := font.GlyphWidth(8); w != 521 {
 		t.Errorf("Symbol theta width: got %g, want 521", w)
+	}
+}
+
+// TestStandard14Width_ZapfDingbatsFromItsAFM pins the widths ZapfDingbats.afm
+// gives the glyphs of codes 227 to 254, a162 to a191, whose names do not run
+// in code order: each differs from the width of the glyph at the next code, so
+// a width read one code off fails here.
+func TestStandard14Width_ZapfDingbatsFromItsAFM(t *testing.T) {
+	t.Parallel()
+
+	for glyph, want := range map[string]float64{
+		"a162": 924, "a174": 917, "a176": 931, "a177": 463, "a191": 918, "a193": 836,
+	} {
+		if got, ok := Standard14Width("ZapfDingbats", glyph); !ok || got != want {
+			t.Errorf("ZapfDingbats %s = %g, %t, want %g", glyph, got, ok, want)
+		}
 	}
 }

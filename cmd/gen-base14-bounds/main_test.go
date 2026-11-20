@@ -13,6 +13,14 @@ const sampleAFM = `StartFontMetrics 4.1
 Comment Copyright (c) 1985, 1987, 1989, 1990, 1997 Adobe Systems Incorporated.  All Rights Reserved.
 Comment Creation Date: Thu May  1 12:38:23 1997
 FontName Helvetica
+ItalicAngle 0
+IsFixedPitch false
+FontBBox -166 -225 1000 931
+EncodingScheme AdobeStandardEncoding
+CapHeight 718
+Ascender 718
+Descender -207
+StdVW 88
 StartCharMetrics 2
 C 32 ; WX 278 ; N space ; B 0 0 0 0 ;
 C 65 ; WX 667 ; N A ; B 14 0 654 718 ;
@@ -31,6 +39,12 @@ func TestParseAFM(t *testing.T) {
 	}
 	if got, want := a.bounds["fi"], [4]int{7, 0, 512, 728}; got != want {
 		t.Errorf("fi = %v, want %v", got, want)
+	}
+	if got, want := a.widths["A"], 667; got != want {
+		t.Errorf("A width = %d, want %d", got, want)
+	}
+	if a.fixedPitch {
+		t.Error("fixedPitch = true for IsFixedPitch false")
 	}
 	if !strings.HasPrefix(a.copyright, "Copyright (c) 1985") {
 		t.Errorf("copyright = %q", a.copyright)
@@ -51,6 +65,8 @@ func TestParseAFMRefusesWhatItCannotTranscribe(t *testing.T) {
 		{"short box", strings.Replace(sampleAFM, "B 14 0 654 718", "B 14 0 654", 1), "Helvetica", errCharMetric},
 		{"no name", strings.Replace(sampleAFM, "N A ;", "", 1), "Helvetica", errCharMetric},
 		{"duplicate", strings.Replace(sampleAFM, "N fi", "N A", 1), "Helvetica", errDuplicateName},
+		{"no width", strings.Replace(sampleAFM, "WX 667 ; ", "", 1), "Helvetica", errCharMetric},
+		{"no pitch", strings.Replace(sampleAFM, "IsFixedPitch false\n", "", 1), "Helvetica", errHeader},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := parseAFM([]byte(tc.data), tc.font); !errors.Is(err, tc.want) {
@@ -76,9 +92,23 @@ func TestGenerateWritesValidGo(t *testing.T) {
 	if _, err := parser.ParseFile(token.NewFileSet(), outputName, code, parser.ParseComments); err != nil {
 		t.Fatalf("generated source does not parse: %v", err)
 	}
-	for _, want := range []string{`"A":`, "{14, 0, 654, 718}", "that this paragraph is not modified"} {
+	for _, want := range []string{`"A":`, "{14, 0, 654, 718}", "667,", "that this paragraph is not modified"} {
 		if !strings.Contains(string(code), want) {
 			t.Errorf("generated source lacks %q", want)
 		}
+	}
+}
+
+func TestGenerateRefusesAFixedPitchFontOfTwoWidths(t *testing.T) {
+	a, err := parseAFM([]byte(strings.Replace(sampleAFM, "IsFixedPitch false", "IsFixedPitch true", 1)), "Helvetica")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed := make(map[string]afm, len(fonts))
+	for _, name := range fonts {
+		parsed[name] = a
+	}
+	if _, err := generate(parsed); !errors.Is(err, errFixedPitch) {
+		t.Errorf("err = %v, want %v", err, errFixedPitch)
 	}
 }

@@ -64,12 +64,17 @@ var (
 	errNoCharMetrics = errors.New("character metrics not found")
 	errCharMetric    = errors.New("malformed character metric")
 	errDuplicateName = errors.New("duplicate glyph name")
+	errHeader        = errors.New("malformed global font information")
+	errFixedPitch    = errors.New("a fixed-pitch font whose glyphs differ in width")
 )
 
 // afm is what the generator reads of one AFM file.
 type afm struct {
 	copyright string
 	bounds    map[string][4]int
+	widths    map[string]int
+	// fixedPitch is IsFixedPitch (Adobe Technical Note #5004, section 4).
+	fixedPitch bool
 }
 
 func main() {
@@ -139,12 +144,20 @@ func readSource(dir, name string) ([]byte, error) {
 // names the glyph and B gives its box llx lly urx ury (Adobe Technical Note
 // #5004, section 8.2).
 func parseAFM(data []byte, name string) (afm, error) {
-	a := afm{bounds: make(map[string][4]int)}
+	a := afm{bounds: make(map[string][4]int), widths: make(map[string]int)}
+	sawPitch := false
 	inMetrics, sawMetrics := false, false
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		switch {
+		case strings.HasPrefix(line, "IsFixedPitch "):
+			switch v := strings.TrimSpace(strings.TrimPrefix(line, "IsFixedPitch ")); v {
+			case "true", "false":
+				a.fixedPitch, sawPitch = v == "true", true
+			default:
+				return afm{}, fmt.Errorf("%w: %q", errHeader, line)
+			}
 		case strings.HasPrefix(line, "FontName "):
 			if got := strings.TrimSpace(strings.TrimPrefix(line, "FontName ")); got != name {
 				return afm{}, fmt.Errorf("%w: %q", errFontName, got)
@@ -158,7 +171,7 @@ func parseAFM(data []byte, name string) (afm, error) {
 		case strings.HasPrefix(line, "EndCharMetrics"):
 			inMetrics = false
 		case inMetrics && line != "":
-			glyph, box, err := parseCharMetric(line)
+			glyph, width, box, err := parseCharMetric(line)
 			if err != nil {
 				return afm{}, err
 			}
@@ -166,6 +179,7 @@ func parseAFM(data []byte, name string) (afm, error) {
 				return afm{}, fmt.Errorf("%w: %q", errDuplicateName, glyph)
 			}
 			a.bounds[glyph] = box
+			a.widths[glyph] = width
 		}
 	}
 	if err := sc.Err(); err != nil {
@@ -177,16 +191,36 @@ func parseAFM(data []byte, name string) (afm, error) {
 	if !sawMetrics || len(a.bounds) == 0 {
 		return afm{}, errNoCharMetrics
 	}
+	if !sawPitch {
+		return afm{}, fmt.Errorf("%w: no IsFixedPitch", errHeader)
+	}
 	return a, nil
 }
 
-// parseCharMetric returns the glyph name and box of one character metric
-// line, such as "C 65 ; WX 667 ; N A ; B 14 0 654 718 ;".
-func parseCharMetric(line string) (string, [4]int, error) {
+// fixedWidth returns the one width every glyph of a fixed-pitch font
+// advances by, refusing a font whose glyphs differ.
+func (a afm) fixedWidth() (int, error) {
+	width := -1
+	for _, glyph := range slices.Sorted(maps.Keys(a.widths)) {
+		switch w := a.widths[glyph]; {
+		case width < 0:
+			width = w
+		case w != width:
+			return 0, fmt.Errorf("%w: %q is %d, others %d", errFixedPitch, glyph, w, width)
+		}
+	}
+	return width, nil
+}
+
+// parseCharMetric returns the glyph name, advance width and box of one
+// character metric line, such as "C 65 ; WX 667 ; N A ; B 14 0 654 718 ;".
+func parseCharMetric(line string) (string, int, [4]int, error) {
 	var (
-		glyph  string
-		box    [4]int
-		hasBox bool
+		glyph    string
+		width    int
+		box      [4]int
+		hasBox   bool
+		hasWidth bool
 	)
 	for field := range strings.SplitSeq(line, ";") {
 		parts := strings.Fields(field)
@@ -196,36 +230,50 @@ func parseCharMetric(line string) (string, [4]int, error) {
 		switch parts[0] {
 		case "N":
 			if len(parts) != 2 {
-				return "", box, fmt.Errorf("%w: %q", errCharMetric, line)
+				return "", 0, box, fmt.Errorf("%w: %q", errCharMetric, line)
 			}
 			glyph = parts[1]
+		case "WX":
+			if len(parts) != 2 {
+				return "", 0, box, fmt.Errorf("%w: %q", errCharMetric, line)
+			}
+			v, err := strconv.Atoi(parts[1])
+			if err != nil {
+				return "", 0, box, fmt.Errorf("%w: %q: %w", errCharMetric, line, err)
+			}
+			width, hasWidth = v, true
 		case "B":
 			if len(parts) != 5 {
-				return "", box, fmt.Errorf("%w: %q", errCharMetric, line)
+				return "", 0, box, fmt.Errorf("%w: %q", errCharMetric, line)
 			}
 			for i := range box {
 				v, err := strconv.Atoi(parts[i+1])
 				if err != nil {
-					return "", box, fmt.Errorf("%w: %q: %w", errCharMetric, line, err)
+					return "", 0, box, fmt.Errorf("%w: %q: %w", errCharMetric, line, err)
 				}
 				box[i] = v
 			}
 			hasBox = true
 		}
 	}
-	if glyph == "" || !hasBox {
-		return "", box, fmt.Errorf("%w: %q", errCharMetric, line)
+	if glyph == "" || !hasBox || !hasWidth {
+		return "", 0, box, fmt.Errorf("%w: %q", errCharMetric, line)
 	}
-	return glyph, box, nil
+	return glyph, width, box, nil
 }
 
-// generate renders the gofmt-formatted Go file carrying the glyph boxes of
-// every font of [fonts].
+// generate renders the gofmt-formatted Go file carrying the glyph boxes and
+// the advance widths of every font of [fonts].
 func generate(parsed map[string]afm) ([]byte, error) {
+	for _, name := range fonts {
+		if _, ok := parsed[name]; !ok {
+			return nil, fmt.Errorf("no AFM data for %s", name)
+		}
+	}
 	var buf bytes.Buffer
-	buf.WriteString("// Code generated by cmd/gen-base14-bounds; DO NOT EDIT.\n\n")
+	buf.WriteString("// Code generated by cmd/gen-base14-bounds from the Core 14 AFM files of Apache PDFBox; DO NOT EDIT.\n\n")
 	buf.WriteString(comment(fmt.Sprintf("Derived from the Core 14 AFM files of Apache PDFBox (%s), "+
-		"commit %s, directory %s. The glyph boxes are transcribed unchanged.", pdfboxRepo, pdfboxCommit, afmDir)))
+		"commit %s, directory %s. The glyph boxes and the advance widths are transcribed unchanged.", pdfboxRepo, pdfboxCommit, afmDir)))
 	buf.WriteString("//\n")
 	for _, name := range fonts {
 		buf.WriteString(comment(name + ": " + parsed[name].copyright))
@@ -233,23 +281,55 @@ func generate(parsed map[string]afm) ([]byte, error) {
 	buf.WriteString("//\n")
 	buf.WriteString(comment(license))
 	buf.WriteString("\npackage typography\n\n")
+
 	buf.WriteString(comment("standard14GlyphBounds maps each standard 14 font to the bounding box of " +
 		"each of its glyphs, keyed by glyph name: llx, lly, urx and ury in glyph space units, " +
 		"1000 to the em, from the B entries of its AFM file (Adobe Technical Note #5004, section 8.2)."))
 	buf.WriteString("var standard14GlyphBounds = map[string]map[string][4]int16{\n")
 	for _, name := range fonts {
-		a, ok := parsed[name]
-		if !ok {
-			return nil, fmt.Errorf("no AFM data for %s", name)
-		}
 		fmt.Fprintf(&buf, "\t%q: {\n", name)
+		a := parsed[name]
 		for _, glyph := range slices.Sorted(maps.Keys(a.bounds)) {
 			b := a.bounds[glyph]
 			fmt.Fprintf(&buf, "\t\t%q: {%d, %d, %d, %d},\n", glyph, b[0], b[1], b[2], b[3])
 		}
 		buf.WriteString("\t},\n")
 	}
-	buf.WriteString("}\n")
+	buf.WriteString("}\n\n")
+
+	buf.WriteString(comment("standard14GlyphWidths maps each standard 14 font that is not fixed-pitch to the " +
+		"advance width of each of its glyphs, keyed by glyph name, in glyph space units, 1000 to the em, " +
+		"from the WX entries of its AFM file (Adobe Technical Note #5004, section 8.2)."))
+	buf.WriteString("var standard14GlyphWidths = map[string]map[string]int16{\n")
+	for _, name := range fonts {
+		a := parsed[name]
+		if a.fixedPitch {
+			continue
+		}
+		fmt.Fprintf(&buf, "\t%q: {\n", name)
+		for _, glyph := range slices.Sorted(maps.Keys(a.widths)) {
+			fmt.Fprintf(&buf, "\t\t%q: %d,\n", glyph, a.widths[glyph])
+		}
+		buf.WriteString("\t},\n")
+	}
+	buf.WriteString("}\n\n")
+
+	buf.WriteString(comment("standard14FixedWidths maps each fixed-pitch standard 14 font, whose AFM file " +
+		"states IsFixedPitch true, to the one WX entry every glyph of it shares."))
+	buf.WriteString("var standard14FixedWidths = map[string]int16{\n")
+	for _, name := range fonts {
+		a := parsed[name]
+		if !a.fixedPitch {
+			continue
+		}
+		w, err := a.fixedWidth()
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		fmt.Fprintf(&buf, "\t%q: %d,\n", name, w)
+	}
+	buf.WriteString("}\n\n")
+
 	code, err := format.Source(buf.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("formatting generated source: %w", err)

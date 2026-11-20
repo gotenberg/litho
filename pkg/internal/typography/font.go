@@ -3755,9 +3755,9 @@ func injectStandard14Widths(font *Font, baseFont string, serif bool) {
 	}
 
 	widths := make([]float64, 256)
-	if isCourier(name) {
+	if w, ok := fixedWidth(name); ok {
 		for i := range widths {
-			widths[i] = courierWidth
+			widths[i] = float64(w)
 		}
 	} else {
 		glyphWidths := standard14GlyphWidths[name]
