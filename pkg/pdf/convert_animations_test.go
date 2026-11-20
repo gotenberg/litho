@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestWithFinishedAnimations checks that an animation prints at time zero
@@ -24,7 +26,7 @@ func TestWithFinishedAnimations(t *testing.T) {
 		{"time zero, stated", []HTMLOption{WithFinishedAnimations(false)}, 0xffff, 0xffff, 0xffff},
 		{"finished", []HTMLOption{WithFinishedAnimations(true)}, 0, 0, 0xffff},
 	} {
-		opts := append([]HTMLOption{WithConvertFontDirs(convertFontDir(t)), WithPaper(Paper{Width: 200, Height: 200}), WithMargins(0, 0, 0, 0)}, tt.opts...)
+		opts := append([]HTMLOption{WithConvertFontDirs(convertFontDir(t)), WithPaper(models.Paper{Width: 200, Height: 200}), WithMargins(0, 0, 0, 0)}, tt.opts...)
 		var out bytes.Buffer
 		if _, err := FromHTML(strings.NewReader(src), opts...).WriteTo(ctx, &out); err != nil {
 			t.Fatalf("%s: %v", tt.name, err)

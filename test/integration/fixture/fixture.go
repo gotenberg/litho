@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -186,40 +187,40 @@ type BandOptions struct {
 	// Edge is "header" or "footer".
 	Edge string `json:"edge"`
 	// HTML and CSS name files of the source directory: the band's
-	// pdf.PageBand.HTML and CSS. Left out, the band's HTML is empty, which
+	// models.PageBand.HTML and CSS. Left out, the band's HTML is empty, which
 	// removes a band from the pages it selects.
 	HTML string `json:"html,omitempty"`
 	CSS  string `json:"css,omitempty"`
-	// Pages are the page set's terms, joined by pdf.PageSet.Or: "first",
-	// "last", "left", "right", "blank", "N-M" (pdf.PageRange), "N-"
-	// (pdf.PagesFrom), "page:NAME" (pdf.NamedPages). Left out, every
+	// Pages are the page set's terms, joined by models.PageSet.Or: "first",
+	// "last", "left", "right", "blank", "N-M" (models.PageRange), "N-"
+	// (models.PagesFrom), "page:NAME" (models.NamedPages). Left out, every
 	// page.
 	Pages []string `json:"pages,omitempty"`
 	// Room is "margin", the default, or "content", which sets
-	// pdf.PageBand.GrowMargin.
+	// models.PageBand.GrowMargin.
 	Room string `json:"room,omitempty"`
-	// Isolated sets pdf.PageBand.IgnoreDocumentStyles.
+	// Isolated sets models.PageBand.IgnoreDocumentStyles.
 	Isolated bool `json:"isolated,omitempty"`
 }
 
 // pageSet returns the page set of the terms of b.
-func (b BandOptions) pageSet() (pdf.PageSet, error) {
-	var set pdf.PageSet
+func (b BandOptions) pageSet() (models.PageSet, error) {
+	var set models.PageSet
 	for i, term := range b.Pages {
-		var t pdf.PageSet
+		var t models.PageSet
 		switch {
 		case term == "first":
-			t = pdf.FirstPage()
+			t = models.FirstPage()
 		case term == "last":
-			t = pdf.LastPage()
+			t = models.LastPage()
 		case term == "left":
-			t = pdf.LeftPages()
+			t = models.LeftPages()
 		case term == "right":
-			t = pdf.RightPages()
+			t = models.RightPages()
 		case term == "blank":
-			t = pdf.BlankPages()
+			t = models.BlankPages()
 		case strings.HasPrefix(term, "page:") && len(term) > len("page:"):
-			t = pdf.NamedPages(strings.TrimPrefix(term, "page:"))
+			t = models.NamedPages(strings.TrimPrefix(term, "page:"))
 		default:
 			from, to, ok := strings.Cut(term, "-")
 			f, err := strconv.Atoi(from)
@@ -228,12 +229,12 @@ func (b BandOptions) pageSet() (pdf.PageSet, error) {
 				l, err = strconv.Atoi(to)
 			}
 			if !ok || err != nil || f < 1 || l != 0 && l < f {
-				return pdf.PageSet{}, fmt.Errorf("band pages %q: want first, last, left, right, blank, N-M, N- or page:NAME", term)
+				return models.PageSet{}, fmt.Errorf("band pages %q: want first, last, left, right, blank, N-M, N- or page:NAME", term)
 			}
 			if l == 0 {
-				t = pdf.PagesFrom(f)
+				t = models.PagesFrom(f)
 			} else {
-				t = pdf.PageRange(f, l)
+				t = models.PageRange(f, l)
 			}
 		}
 		if i == 0 {
@@ -248,7 +249,7 @@ func (b BandOptions) pageSet() (pdf.PageSet, error) {
 // SourceBand is a band of a source, read.
 type SourceBand struct {
 	Footer bool
-	Band   pdf.PageBand
+	Band   models.PageBand
 }
 
 // Source is one source directory, read.
@@ -319,7 +320,7 @@ func Load(dir string) (*Source, error) {
 		if err != nil {
 			return nil, err
 		}
-		sb := SourceBand{Footer: b.Edge == "footer", Band: pdf.PageBand{Pages: pages, IgnoreDocumentStyles: b.Isolated}}
+		sb := SourceBand{Footer: b.Edge == "footer", Band: models.PageBand{Pages: pages, IgnoreDocumentStyles: b.Isolated}}
 		if b.Room == "content" {
 			sb.Band.GrowMargin = true
 		}
@@ -619,7 +620,7 @@ func (s *Source) PrintOptions() []pdf.HTMLOption {
 		pdf.WithOutline(o.NativeBookmarks),
 	}
 	if o.Landscape {
-		opts = append(opts, pdf.WithOrientation(pdf.OrientationLandscape))
+		opts = append(opts, pdf.WithOrientation(models.OrientationLandscape))
 	}
 	if o.Scale != nil {
 		opts = append(opts, pdf.WithScale(*o.Scale))

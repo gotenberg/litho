@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // ann returns an office:annotation of name (none when ""), by who, with
@@ -51,14 +52,14 @@ var commentDoc = doc{
 }
 
 // TestComments_Annotations holds what a comment of an ODT document becomes
-// under office.CommentsAnnotations (ODF 1.3, Part 3, 14.1 and 14.2): a
+// under models.CommentsAnnotations (ODF 1.3, Part 3, 14.1 and 14.2): a
 // mark over the lines of its range, in each paragraph it spans and on
 // each page, a point where it has no range, a reply on its thread's
 // comment (loext:parent-name), its resolution (loext:resolved), and
 // nothing of a comment in a header.
 func TestComments_Annotations(t *testing.T) {
 	t.Parallel()
-	d := convertDoc(t, commentDoc.flat(), office.Options{Comments: office.CommentsAnnotations})
+	d := convertDoc(t, commentDoc.flat(), office.Options{Comments: models.CommentsAnnotations})
 	if len(d.Pages) != 2 {
 		t.Fatalf("%d pages, want 2", len(d.Pages))
 	}

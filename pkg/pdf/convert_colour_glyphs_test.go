@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // colourGlyphsWant pins the SHA-256 of the conversion
@@ -128,7 +129,7 @@ func TestConvert_SameBytesWithColourGlyphs(t *testing.T) {
 func TestConvert_ColorGlyphsOff(t *testing.T) {
 	t.Parallel()
 	fonts := colourGlyphFonts(t)
-	convert := func(opts ...HTMLOption) ([]byte, *ConvertReport) {
+	convert := func(opts ...HTMLOption) ([]byte, *models.ConvertReport) {
 		var out bytes.Buffer
 		rep, err := FromHTML(strings.NewReader(colourGlyphsSource), append(opts, WithConvertFontDirs(fonts))...).WriteTo(t.Context(), &out)
 		if err != nil {
@@ -143,9 +144,9 @@ func TestConvert_ColorGlyphsOff(t *testing.T) {
 		}
 	}
 	// A missing emoji is reported once a conversion, without its name.
-	blank := func(rep *ConvertReport) bool {
+	blank := func(rep *models.ConvertReport) bool {
 		for _, w := range rep.Warnings {
-			if w.Code == WarningMissingGlyph && strings.Contains(w.Message, "emoji") {
+			if w.Code == models.WarningMissingGlyph && strings.Contains(w.Message, "emoji") {
 				return true
 			}
 		}

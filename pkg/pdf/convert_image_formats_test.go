@@ -195,9 +195,9 @@ func TestFromImage_SizesThePageByTheResolution(t *testing.T) {
 		{"no resolution", plain, nil, 225, 112.5},
 		{"300 pixels an inch", at300, nil, 72, 36},
 		{"turned, 150 pixels an inch", turned, nil, 72, 144},
-		{"default paper changes nothing", plain, []ImageOption{WithDefaultPaper(PaperA4)}, 225, 112.5},
-		{"paper", plain, []ImageOption{WithPaper(PaperA4)}, PaperA4.Width, PaperA4.Height},
-		{"portrait", plain, []ImageOption{WithOrientation(OrientationPortrait)}, 112.5, 225},
+		{"default paper changes nothing", plain, []ImageOption{WithDefaultPaper(models.PaperA4)}, 225, 112.5},
+		{"paper", plain, []ImageOption{WithPaper(models.PaperA4)}, models.PaperA4.Width, models.PaperA4.Height},
+		{"portrait", plain, []ImageOption{WithOrientation(models.OrientationPortrait)}, 112.5, 225},
 		{"svg view box", svg, nil, 300, 150},
 		{"svg size", svgSized, nil, 144, 72},
 	} {
@@ -219,12 +219,12 @@ func TestFromImage_FitsThePictureToThePaper(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range []struct {
 		name  string
-		paper Paper
+		paper models.Paper
 		// box is the picture's rectangle on the page, in points.
 		box image.Rectangle
 	}{
-		{"never up", Paper{Width: 100, Height: 100}, image.Rect(35, 42, 65, 57)},
-		{"down to fit", Paper{Width: 15, Height: 30}, image.Rect(0, 11, 15, 18)},
+		{"never up", models.Paper{Width: 100, Height: 100}, image.Rect(35, 42, 65, 57)},
+		{"down to fit", models.Paper{Width: 15, Height: 30}, image.Rect(0, 11, 15, 18)},
 	} {
 		r, _, _ := convertImageFile(t, encodePNG(t, red), WithPaper(tc.paper))
 		img, err := r.RenderPage(ctx, 1, WithRenderDPI(72))

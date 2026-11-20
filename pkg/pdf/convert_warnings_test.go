@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 )
 
 // TestConvertWarningCodes_MirrorTheInternalSet holds the ConvertWarningCode
-// constants declared in convert_warnings.go equal to the internal codes,
+// constants declared in pkg/models/warnings.go equal to the internal codes,
 // one for one, in order and value for value, so that a code added on one
 // side alone fails.
 func TestConvertWarningCodes_MirrorTheInternalSet(t *testing.T) {
@@ -25,7 +26,7 @@ func TestConvertWarningCodes_MirrorTheInternalSet(t *testing.T) {
 }
 
 // TestConvertWarningEffects_MirrorTheInternalSet holds the
-// ConvertWarningEffect constants declared in convert_warnings.go equal to
+// ConvertWarningEffect constants declared in pkg/models/warnings.go equal to
 // the internal effects, one for one, in order and value for value.
 func TestConvertWarningEffects_MirrorTheInternalSet(t *testing.T) {
 	t.Parallel()
@@ -38,11 +39,11 @@ func TestConvertWarningEffects_MirrorTheInternalSet(t *testing.T) {
 }
 
 // mirrors checks that the string constants of type typ declared in
-// convert_warnings.go hold the values internal, in order.
+// pkg/models/warnings.go hold the values internal, in order.
 func mirrors(t *testing.T, typ string, internal []string) {
 	t.Helper()
 
-	f, err := parser.ParseFile(token.NewFileSet(), "convert_warnings.go", nil, 0)
+	f, err := parser.ParseFile(token.NewFileSet(), filepath.Join("..", "models", "warnings.go"), nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

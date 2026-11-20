@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // wordDOCX returns a DOCX whose body is body.
@@ -62,12 +64,12 @@ func TestConvert_TrackedChangesViews(t *testing.T) {
 		`<text:changed-region text:id="d"><text:deletion><office:change-info><dc:creator>Ada</dc:creator></office:change-info><text:p>slow </text:p></text:deletion></text:changed-region>`+
 		`</text:tracked-changes><text:p>the <text:change-start text:change-id="i"/>quick <text:change-end text:change-id="i"/><text:change text:change-id="d"/>fox</text:p>`)
 	for _, tc := range []struct {
-		view TrackedChanges
+		view models.TrackedChanges
 		want string
 	}{
-		{TrackedChangesAccepted, "the quick fox"},
-		{TrackedChangesRejected, "the slow fox"},
-		{TrackedChangesMarked, "the quick slow fox"},
+		{models.TrackedChangesAccepted, "the quick fox"},
+		{models.TrackedChangesRejected, "the slow fox"},
+		{models.TrackedChangesMarked, "the quick slow fox"},
 	} {
 		if got := convertedText(t, FromDOCX(bytes.NewReader(docx), fonts, WithTrackedChanges(tc.view))); got != tc.want {
 			t.Errorf("DOCX view %d: %q, want %q", tc.view, got, tc.want)

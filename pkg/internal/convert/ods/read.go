@@ -92,7 +92,7 @@ type reader struct {
 	// sparks counts the sparklines placed, against maxSparklines.
 	sparks int
 	// keepFormulas keeps the formulas of the cells for the builder to
-	// compute; off, under office.RecalculateNever, a cell shows the value
+	// compute; off, under models.RecalculateNever, a cell shows the value
 	// the file stores.
 	keepFormulas bool
 

@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // commentParts returns the comments part of the comments given as id,
@@ -62,7 +63,7 @@ func rf(id string) string { return `<w:r><w:commentReference w:id="` + id + `"/>
 func tr(s string) string  { return `<w:r><w:t xml:space="preserve">` + s + `</w:t></w:r>` }
 
 // TestComments_Annotations holds what a comment of a DOCX document becomes
-// under office.CommentsAnnotations (ECMA-376 Part 1, 17.13.4): a mark over
+// under models.CommentsAnnotations (ECMA-376 Part 1, 17.13.4): a mark over
 // the lines of its range, in each paragraph it spans and on each side of a
 // page break, a point where its range is empty or missing, the replies of
 // its thread (w15:paraIdParent) on its comment, its resolution (w15:done),
@@ -84,7 +85,7 @@ func TestComments_Annotations(t *testing.T) {
 		{"5", "Alan", "Across the break."},
 		{"6", "Alan", "Into a link."},
 	}, map[string]string{"4": "3"}, map[string]bool{"3": true})
-	doc := convertBytes(t, docx(t, body, extra), office.Options{Comments: office.CommentsAnnotations})
+	doc := convertBytes(t, docx(t, body, extra), office.Options{Comments: models.CommentsAnnotations})
 	pages := commentsOf(doc)
 	if len(pages) != 2 {
 		t.Fatalf("%d pages, want 2", len(doc.Pages))
@@ -164,7 +165,7 @@ func textOrigins(pg *typeset.Page) string {
 func TestComments_EmptyLeftOut(t *testing.T) {
 	t.Parallel()
 	body := `<w:p>` + rs("0") + tr("covered") + re("0") + rf("0") + rs("1") + tr(" kept") + re("1") + rf("1") + `</w:p>`
-	doc := convertBytes(t, docx(t, body, commentParts([][3]string{{"0", "Ada", " "}, {"1", "Ada", "Kept."}}, nil, nil)), office.Options{Comments: office.CommentsAnnotations})
+	doc := convertBytes(t, docx(t, body, commentParts([][3]string{{"0", "Ada", " "}, {"1", "Ada", "Kept."}}, nil, nil)), office.Options{Comments: models.CommentsAnnotations})
 	if m := doc.Pages[0].Comments; len(m) != 1 || m[0].Comment.Text != "Kept." {
 		t.Errorf("comments %+v", m)
 	}
@@ -177,7 +178,7 @@ func TestComments_HeaderLeftOut(t *testing.T) {
 	body := `<w:p>` + tr("Body") + `</w:p><w:sectPr><w:headerReference w:type="default" r:id="rIdheader1"/></w:sectPr>`
 	extra := commentParts([][3]string{{"0", "Ada", "In the header."}}, nil, nil)
 	extra["word/header1.xml"] = `<w:hdr ` + nsDecl + `><w:p>` + rs("0") + tr("Head") + re("0") + rf("0") + `</w:p></w:hdr>`
-	doc := convertBytes(t, docx(t, body, extra), office.Options{Comments: office.CommentsAnnotations})
+	doc := convertBytes(t, docx(t, body, extra), office.Options{Comments: models.CommentsAnnotations})
 	for _, p := range doc.Pages {
 		if len(p.Comments) > 0 {
 			t.Errorf("header comment written: %+v", p.Comments)
@@ -198,7 +199,7 @@ func TestComments_TextBounded(t *testing.T) {
 	t.Parallel()
 	long := strings.Repeat("é", typeset.MaxCommentText)
 	body := `<w:p>` + rs("0") + tr("x") + re("0") + rf("0") + `</w:p>`
-	doc := convertBytes(t, docx(t, body, commentParts([][3]string{{"0", "Ada", long}}, nil, nil)), office.Options{Comments: office.CommentsAnnotations})
+	doc := convertBytes(t, docx(t, body, commentParts([][3]string{{"0", "Ada", long}}, nil, nil)), office.Options{Comments: models.CommentsAnnotations})
 	c := doc.Pages[0].Comments[0].Comment
 	if len(c.Text) > typeset.MaxCommentText || !strings.HasPrefix(long, c.Text) {
 		t.Errorf("text of %d bytes", len(c.Text))
@@ -226,7 +227,7 @@ func TestComments_LeaveDrawingsAndControlsAsTheyAre(t *testing.T) {
 		rs("1") + tr("Jane") + `<w:r><w:fldChar w:fldCharType="end"/></w:r>` + tr(" Doe") + re("1") + rf("1") + `</w:p>`
 	extra := commentParts([][3]string{{"0", "Ada", "On the picture."}, {"1", "Ada", "On the field."}}, nil, nil)
 	extra["word/media/a.png"] = pngData(t, 40, 20)
-	on := convertBytes(t, docx(t, body, extra), office.Options{Comments: office.CommentsAnnotations, FormFields: true})
+	on := convertBytes(t, docx(t, body, extra), office.Options{Comments: models.CommentsAnnotations, FormFields: true})
 	off := convertBytes(t, docx(t, body, extra), office.Options{FormFields: true})
 	if len(on.Pages[0].Comments) != 2 {
 		t.Fatalf("comments %+v", on.Pages[0].Comments)

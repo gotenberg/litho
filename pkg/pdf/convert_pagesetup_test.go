@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // odfNS declares the namespaces of the flat OpenDocument test sources.
@@ -79,13 +81,13 @@ func testODP(w, h string) string {
 
 // convertSizes converts src as format with the test face and opts and
 // returns the report and each page's size.
-func convertSizes(t *testing.T, format testFormat, src string, opts ...ConvertOption) (*ConvertReport, [][2]float64) {
+func convertSizes(t *testing.T, format testFormat, src string, opts ...ConvertOption) (*models.ConvertReport, [][2]float64) {
 	t.Helper()
 	return conversionSizes(t, fromFormat(format, strings.NewReader(src), append([]ConvertOption{WithConvertFontDirs(convertFontDir(t))}, opts...)...))
 }
 
 // conversionSizes runs c and returns the report and each page's size.
-func conversionSizes(t *testing.T, c *Conversion) (*ConvertReport, [][2]float64) {
+func conversionSizes(t *testing.T, c *Conversion) (*models.ConvertReport, [][2]float64) {
 	t.Helper()
 	ctx := context.Background()
 	var out bytes.Buffer
@@ -149,13 +151,13 @@ func TestConvert_DefaultPaper(t *testing.T) {
 	} {
 		_, sizes := convertSizes(t, tc.format, tc.src)
 		checkSizes(t, tc.name, sizes, 0, a4W, a4H)
-		_, sizes = convertSizes(t, tc.format, tc.src, WithDefaultPaper(PaperLetter))
+		_, sizes = convertSizes(t, tc.format, tc.src, WithDefaultPaper(models.PaperLetter))
 		checkSizes(t, tc.name+" Letter default", sizes, 0, letterW, letterH)
 		// A size the source names wins over the default.
-		_, sizes = convertSizes(t, tc.format, tc.src, WithDefaultPaper(PaperLetter), WithPaper(Paper{Width: 400, Height: 500}))
+		_, sizes = convertSizes(t, tc.format, tc.src, WithDefaultPaper(models.PaperLetter), WithPaper(models.Paper{Width: 400, Height: 500}))
 		checkSizes(t, tc.name+" paper", sizes, 0, 400, 500)
 	}
-	_, sizes := convertSizes(t, formatODT, testODT("148mm", "210mm"), WithDefaultPaper(PaperLetter))
+	_, sizes := convertSizes(t, formatODT, testODT("148mm", "210mm"), WithDefaultPaper(models.PaperLetter))
 	checkSizes(t, "odt A5", sizes, 1, 419.528, 595.276)
 }
 
@@ -167,13 +169,13 @@ func TestConvert_HTMLPageSizeWithoutPaper(t *testing.T) {
 	src := `<style>@page { size: A5 }</style><p>x`
 	_, sizes := convertSizes(t, formatHTML, src)
 	checkSizes(t, "A5", sizes, 1, 419.528, 595.276)
-	_, sizes = convertSizes(t, formatHTML, src, WithOrientation(OrientationLandscape))
+	_, sizes = convertSizes(t, formatHTML, src, WithOrientation(models.OrientationLandscape))
 	checkSizes(t, "A5 landscape asked", sizes, 1, 419.528, 595.276)
-	_, sizes = convertSizes(t, formatHTML, src, WithPaper(PaperLetter))
+	_, sizes = convertSizes(t, formatHTML, src, WithPaper(models.PaperLetter))
 	checkSizes(t, "A5 on Letter", sizes, 1, letterW, letterH)
-	_, sizes = convertSizes(t, formatHTML, src, WithDefaultPaper(PaperLetter))
+	_, sizes = convertSizes(t, formatHTML, src, WithDefaultPaper(models.PaperLetter))
 	checkSizes(t, "A5 over a Letter default", sizes, 1, 419.528, 595.276)
-	_, sizes = convertSizes(t, formatHTML, `<p>x`, WithOrientation(OrientationLandscape))
+	_, sizes = convertSizes(t, formatHTML, `<p>x`, WithOrientation(models.OrientationLandscape))
 	checkSizes(t, "default turned", sizes, 1, a4H, a4W)
 }
 
@@ -185,15 +187,15 @@ func TestConvert_PaperReplacesOrientation(t *testing.T) {
 	land := testODT("11in", "8.5in")
 	_, sizes := convertSizes(t, formatODT, land)
 	checkSizes(t, "own", sizes, 1, letterH, letterW)
-	_, sizes = convertSizes(t, formatODT, land, WithPaper(PaperLetter))
+	_, sizes = convertSizes(t, formatODT, land, WithPaper(models.PaperLetter))
 	checkSizes(t, "Letter", sizes, 1, letterW, letterH)
-	_, sizes = convertSizes(t, formatODT, land, WithPaper(PaperLetter), WithOrientation(OrientationLandscape))
+	_, sizes = convertSizes(t, formatODT, land, WithPaper(models.PaperLetter), WithOrientation(models.OrientationLandscape))
 	checkSizes(t, "Letter landscape", sizes, 1, letterH, letterW)
-	_, sizes = convertSizes(t, formatText, "A line", WithOrientation(OrientationLandscape))
+	_, sizes = convertSizes(t, formatText, "A line", WithOrientation(models.OrientationLandscape))
 	checkSizes(t, "text landscape", sizes, 1, a4H, a4W)
-	_, sizes = convertSizes(t, formatText, "A line", WithOrientation(OrientationLandscape), WithPaper(Paper{Width: letterH, Height: letterW}))
+	_, sizes = convertSizes(t, formatText, "A line", WithOrientation(models.OrientationLandscape), WithPaper(models.Paper{Width: letterH, Height: letterW}))
 	checkSizes(t, "text landscape paper", sizes, 1, letterH, letterW)
-	_, sizes = convertSizes(t, formatODS, testODS("210mm", "297mm", "", 2), WithPaper(PaperLetter), WithOrientation(OrientationLandscape))
+	_, sizes = convertSizes(t, formatODS, testODS("210mm", "297mm", "", 2), WithPaper(models.PaperLetter), WithOrientation(models.OrientationLandscape))
 	checkSizes(t, "sheet", sizes, 0, letterH, letterW)
 }
 
@@ -203,8 +205,8 @@ func TestConvert_PaperReplacesOrientation(t *testing.T) {
 // slide size.
 func TestConvert_PortraitTurnsLandscapePages(t *testing.T) {
 	t.Parallel()
-	portrait := WithOrientation(OrientationPortrait)
-	landA4 := Paper{Width: a4H, Height: a4W}
+	portrait := WithOrientation(models.OrientationPortrait)
+	landA4 := models.Paper{Width: a4H, Height: a4W}
 	for _, tc := range []struct {
 		name   string
 		format testFormat
@@ -237,7 +239,7 @@ func TestConvert_SheetRefitsToThePaper(t *testing.T) {
 	src := testODS("210mm", "297mm", ` style:scale-to-X="1" style:scale-to-Y="1"`, 120)
 	_, sizes := convertSizes(t, formatODS, src)
 	checkSizes(t, "A4", sizes, 1, 595.276, 841.89)
-	_, sizes = convertSizes(t, formatODS, src, WithPaper(Paper{Width: 396, Height: 612}), WithOrientation(OrientationLandscape))
+	_, sizes = convertSizes(t, formatODS, src, WithPaper(models.Paper{Width: 396, Height: 612}), WithOrientation(models.OrientationLandscape))
 	checkSizes(t, "small landscape", sizes, 1, 612, 396)
 }
 
@@ -251,15 +253,15 @@ func TestConvert_SlidesFitThePaper(t *testing.T) {
 	fonts := WithConvertFontDirs(convertFontDir(t))
 	_, sizes := convertSizes(t, formatODP, wide)
 	checkSizes(t, "slides", sizes, 2, 793.701, 446.457)
-	_, sizes = convertSizes(t, formatODP, wide, WithPaper(PaperLetter))
+	_, sizes = convertSizes(t, formatODP, wide, WithPaper(models.PaperLetter))
 	checkSizes(t, "slides on Letter", sizes, 2, letterW, letterH)
-	_, sizes = convertSizes(t, formatODP, testODP("19.05cm", "25.4cm"), WithOrientation(OrientationLandscape))
+	_, sizes = convertSizes(t, formatODP, testODP("19.05cm", "25.4cm"), WithOrientation(models.OrientationLandscape))
 	checkSizes(t, "portrait slides turned", sizes, 2, 720, 540)
 	_, sizes = conversionSizes(t, FromODP(strings.NewReader(wide), fonts, WithNotesPages(true)))
 	checkSizes(t, "notes", sizes[2:], 2, a4W, a4H)
-	_, sizes = conversionSizes(t, FromODP(strings.NewReader(wide), fonts, WithNotesPages(true), WithDefaultPaper(PaperLetter)))
+	_, sizes = conversionSizes(t, FromODP(strings.NewReader(wide), fonts, WithNotesPages(true), WithDefaultPaper(models.PaperLetter)))
 	checkSizes(t, "notes on the default paper", sizes[2:], 2, letterW, letterH)
-	_, sizes = conversionSizes(t, FromODP(strings.NewReader(wide), fonts, WithNotesPages(true), WithPaper(PaperA4)))
+	_, sizes = conversionSizes(t, FromODP(strings.NewReader(wide), fonts, WithNotesPages(true), WithPaper(models.PaperA4)))
 	checkSizes(t, "notes on A4", sizes, 4, a4W, a4H)
 }
 

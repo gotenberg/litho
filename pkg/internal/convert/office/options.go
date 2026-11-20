@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // MaxPageSide is the longest page side in points (ISO 32000-1, Annex
@@ -68,10 +69,10 @@ type Options struct {
 	PrintDate time.Time
 	// TrackedChanges is how a text document prints the changes it tracks.
 	// Other documents ignore it.
-	TrackedChanges TrackedChanges
+	TrackedChanges models.TrackedChanges
 	// Comments is how a text document writes the comments of its text.
 	// Other documents ignore it.
-	Comments Comments
+	Comments models.Comments
 	// Sheets, when not nil, are the names of the sheets of a spreadsheet
 	// that print, matched exactly, in book order, hidden ones included; a
 	// name the book has no sheet for fails with typeset.ErrInvalidOptions. The
@@ -88,7 +89,7 @@ type Options struct {
 	HiddenSheets bool
 	// Recalculation is when the formulas of a spreadsheet are computed
 	// again. Other documents ignore it.
-	Recalculation Recalculation
+	Recalculation models.Recalculation
 	// CSVSeparators are the characters that end a field of a CSV file, any
 	// of them; nil is a comma alone (RFC 4180, 2). Other documents ignore
 	// it.
@@ -135,50 +136,6 @@ type Options struct {
 	// hand its pages over returns them in the document as without it.
 	Sink typeset.PageSink
 }
-
-// TrackedChanges is how a text document prints the insertions and the
-// deletions it tracks (ECMA-376 Part 1, 17.13.5; ODF 1.3 Part 3, 5.5).
-type TrackedChanges int
-
-const (
-	// ChangesAccepted prints the text as it reads once every change is
-	// accepted: insertions kept, deletions left out. The zero value.
-	ChangesAccepted TrackedChanges = iota
-	// ChangesRejected prints the text as it read before the changes:
-	// insertions left out, deletions kept.
-	ChangesRejected
-	// ChangesMarked prints both, an insertion underlined and a deletion
-	// struck through, each in its author's colour.
-	ChangesMarked
-)
-
-// Comments is how a text document writes the comments its text carries
-// (ECMA-376 Part 1, 17.13.4; ODF 1.3 Part 3, 14.1).
-type Comments int
-
-const (
-	// CommentsHidden leaves the comments out. The zero value.
-	CommentsHidden Comments = iota
-	// CommentsAnnotations writes each comment as a markup annotation over
-	// the text it covers, with its replies and whether its thread is
-	// resolved; the pages print as without it.
-	CommentsAnnotations
-)
-
-// Recalculation is when a spreadsheet's formulas are computed again rather
-// than shown as the value the file stores.
-type Recalculation int
-
-const (
-	// RecalculateAsNeeded computes a formula again when the file gives no
-	// reason to trust its stored value, by each format's own rule. The zero
-	// value.
-	RecalculateAsNeeded Recalculation = iota
-	// RecalculateNever shows the stored value of every formula.
-	RecalculateNever
-	// RecalculateAlways computes every formula again.
-	RecalculateAlways
-)
 
 // DefaultPage returns the page size of a section or sheet whose file
 // names none: DefaultPageWidth and DefaultPageHeight when set, else w by
@@ -232,13 +189,13 @@ func (o Options) Validate() error {
 	if o.Landscape && o.Portrait {
 		return fmt.Errorf("%w: landscape and portrait exclude each other", typeset.ErrInvalidOptions)
 	}
-	if o.TrackedChanges < ChangesAccepted || o.TrackedChanges > ChangesMarked {
+	if o.TrackedChanges < models.TrackedChangesAccepted || o.TrackedChanges > models.TrackedChangesMarked {
 		return fmt.Errorf("%w: tracked changes view %d", typeset.ErrInvalidOptions, o.TrackedChanges)
 	}
-	if o.Comments < CommentsHidden || o.Comments > CommentsAnnotations {
+	if o.Comments < models.CommentsHidden || o.Comments > models.CommentsAnnotations {
 		return fmt.Errorf("%w: comments view %d", typeset.ErrInvalidOptions, o.Comments)
 	}
-	if o.Recalculation < RecalculateAsNeeded || o.Recalculation > RecalculateAlways {
+	if o.Recalculation < models.RecalculateAsNeeded || o.Recalculation > models.RecalculateAlways {
 		return fmt.Errorf("%w: recalculation mode %d", typeset.ErrInvalidOptions, o.Recalculation)
 	}
 	if o.Sheets != nil && o.SheetNumbers != nil {

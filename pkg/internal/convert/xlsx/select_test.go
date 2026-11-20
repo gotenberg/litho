@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestRead_RecalculationModes locks what each recalculation mode keeps of
@@ -20,12 +21,12 @@ func TestRead_RecalculationModes(t *testing.T) {
 		map[string]string{"docProps/app.xml": `<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Microsoft Excel</Application></Properties>`})
 	data := zipFiles(t, files)
 	tests := []struct {
-		mode office.Recalculation
+		mode models.Recalculation
 		b, c string
 	}{
-		{office.RecalculateAsNeeded, "", "A1+1"},
-		{office.RecalculateNever, "", ""},
-		{office.RecalculateAlways, "A1*2", "A1+1"},
+		{models.RecalculateAsNeeded, "", "A1+1"},
+		{models.RecalculateNever, "", ""},
+		{models.RecalculateAlways, "A1*2", "A1+1"},
 	}
 	for _, tc := range tests {
 		doc, _, err := load(context.Background(), bytes.NewReader(data), testFonts(t), office.Options{Recalculation: tc.mode})
@@ -38,7 +39,7 @@ func TestRead_RecalculationModes(t *testing.T) {
 		if b.Formula != tc.b || b.Value.Number != 7 || c.Formula != tc.c {
 			t.Errorf("mode %d: B1 %q %v, C1 %q, want %q and %q", tc.mode, b.Formula, b.Value, c.Formula, tc.b, tc.c)
 		}
-		if tc.mode == office.RecalculateNever && cok {
+		if tc.mode == models.RecalculateNever && cok {
 			t.Errorf("never: C1 listed %+v, want nothing: it stores no value", c)
 		}
 	}

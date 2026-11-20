@@ -7,6 +7,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -20,14 +21,14 @@ func ExampleWithHeader() {
 		pdf.WithConvertFontDirs("testdata/fonts"),
 		pdf.WithMargins(72, 54, 72, 54),
 		// A header on every page, then none on the first.
-		pdf.WithHeader(pdf.PageBand{
+		pdf.WithHeader(models.PageBand{
 			HTML: `<div class="row"><span class="title"></span><span class="page"></span></div>`,
 			CSS: `.row { display: flex; justify-content: space-between; font-size: 9pt }
 			      .title::after { content: string(document-title) }
 			      .page::after { content: "Page " counter(page) " of " counter(pages) }`,
 		}),
-		pdf.WithHeader(pdf.PageBand{Pages: pdf.FirstPage()}),
-		pdf.WithFooter(pdf.PageBand{HTML: `<p style="font-size: 8pt">Confidential</p>`, Pages: pdf.LastPage()}),
+		pdf.WithHeader(models.PageBand{Pages: models.FirstPage()}),
+		pdf.WithFooter(models.PageBand{HTML: `<p style="font-size: 8pt">Confidential</p>`, Pages: models.LastPage()}),
 	).WriteTo(context.Background(), &out)
 	if err != nil {
 		log.Fatal(err)

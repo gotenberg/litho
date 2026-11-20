@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // userSheetPage opens data and returns the size and the text of its page
@@ -74,8 +76,8 @@ func TestConvert_UserStylesheetPageSizeYieldsToThePaper(t *testing.T) {
 		opts []HTMLOption
 		w, h float64
 	}{
-		{"default paper", []HTMLOption{user, WithDefaultPaper(PaperLetter)}, 595.276, 419.528},
-		{"paper", []HTMLOption{user, WithPaper(PaperA4)}, 841.89, 595.276},
+		{"default paper", []HTMLOption{user, WithDefaultPaper(models.PaperLetter)}, 595.276, 419.528},
+		{"paper", []HTMLOption{user, WithPaper(models.PaperA4)}, 841.89, 595.276},
 	} {
 		data, _ := convertHTMLTest(t, dir, `<p>x`, tc.opts...)
 		if w, h, _ := userSheetPage(t, data, 1); math.Abs(w-tc.w) > 0.01 || math.Abs(h-tc.h) > 0.01 {
@@ -87,11 +89,11 @@ func TestConvert_UserStylesheetPageSizeYieldsToThePaper(t *testing.T) {
 func TestConvert_UserStylesheetReportsWhatItLeavesOut(t *testing.T) {
 	t.Parallel()
 	_, rep := convertHTMLTest(t, convertFontDir(t), `<p>x`, WithUserStylesheet(`@import "missing.css"; p { color: red }`))
-	var got []ConvertWarningCode
+	var got []models.ConvertWarningCode
 	for _, w := range rep.Warnings {
 		got = append(got, w.Code)
 	}
-	if !slices.Equal(got, []ConvertWarningCode{WarningResourceFailed}) {
+	if !slices.Equal(got, []models.ConvertWarningCode{models.WarningResourceFailed}) {
 		t.Errorf("warnings %+v, want the import's failure, as a <style> element's", rep.Warnings)
 	}
 }

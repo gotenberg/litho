@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // Pipeline chains write operations against a single PDF state that
@@ -92,7 +93,7 @@ type StageReport struct {
 	BytesOut int64
 	// Conversion is the report of a [Pipeline.Convert] stage, nil for any
 	// other stage.
-	Conversion *ConvertReport
+	Conversion *models.ConvertReport
 	// Pipelines holds the result of each pipeline a
 	// [Pipeline.MergePipelines] stage ran, in the order they were given,
 	// nil for any other stage.

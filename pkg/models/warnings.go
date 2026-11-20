@@ -1,4 +1,4 @@
-package pdf
+package models
 
 // ConvertWarningCode names the kind of construct a [ConvertWarning]
 // reports, in kebab-case. The codes form a closed set, the Warning
@@ -15,10 +15,11 @@ type ConvertWarningCode string
 // effects (see [ConvertWarningEffect]) it reports.
 const (
 	// WarningMissingGlyph is a character no font of the font directories
-	// covers. It prints as the font's missing-glyph box, an emoji blank.
-	// Each character is reported once, and the message names it. Every
-	// format reports it. Installing a font that covers the character, or
-	// naming its directory with [WithConvertFontDirs], prints it.
+	// covers. It prints as the font's missing-glyph box, an emoji blank. Each
+	// character is reported once, and the message names it. Every format
+	// reports it. Installing a font that covers the character, or naming its
+	// directory with [github.com/gotenberg/litho/pkg/pdf.WithConvertFontDirs],
+	// prints it.
 	//
 	// Its effect is always [EffectOmitted]: the character does not print.
 	WarningMissingGlyph ConvertWarningCode = "missing-glyph"
@@ -55,18 +56,19 @@ const (
 	//
 	// Its effect is always [EffectApproximated].
 	WarningCSSInvalid ConvertWarningCode = "css-invalid"
-	// WarningResourceRefused is a stylesheet, picture or font the options
-	// do not let the conversion read: a URL of a scheme other than http and
-	// https, a path that leaves the root of [WithResources], or a relative
-	// URL when no resources are given. It is left out. HTML and Markdown
-	// report it.
+	// WarningResourceRefused is a stylesheet, picture or font the options do
+	// not let the conversion read: a URL of a scheme other than http and
+	// https, a path that leaves the root of
+	// [github.com/gotenberg/litho/pkg/pdf.WithResources], or a relative URL
+	// when no resources are given. It is left out. HTML and Markdown report
+	// it.
 	//
 	// Its effect is [EffectOmitted] for a picture and [EffectApproximated]
 	// for a stylesheet, whose content prints without its styles.
 	WarningResourceRefused ConvertWarningCode = "resource-refused"
-	// WarningResourceNoNetwork is an http or https stylesheet, picture or
-	// font with no [WithHTTPClient] to fetch it. It is left out. HTML and
-	// Markdown report it.
+	// WarningResourceNoNetwork is an http or https stylesheet, picture or font
+	// with no [github.com/gotenberg/litho/pkg/pdf.WithHTTPClient] to fetch it.
+	// It is left out. HTML and Markdown report it.
 	//
 	// Its effect is [EffectOmitted] for a picture and [EffectApproximated]
 	// for a stylesheet.
@@ -122,7 +124,7 @@ const (
 	// theme, the styles. The part is left out, prints empty or a default
 	// stands in, as the message says. DOCX, XLSX, ODS, PPTX and ODP report
 	// it; a main part that does not parse fails the conversion with
-	// [ErrConvertMalformed] instead.
+	// [github.com/gotenberg/litho/pkg/pdf.ErrConvertMalformed] instead.
 	//
 	// Its effect is [EffectOmitted] for a part left out or printed empty,
 	// and [EffectApproximated] where a default or what the file stores
@@ -136,9 +138,10 @@ const (
 	// Its effect is [EffectApproximated] for a control printed as its text,
 	// and [EffectOmitted] for one printed as its empty frame or not at all.
 	WarningFormWidgetOmitted ConvertWarningCode = "form-widget-omitted"
-	// WarningFormFieldOmitted is a form control [WithFormFields] asked to
-	// become a field that prints as it shows, without one: a control that
-	// breaks across pages or shows nothing. DOCX and ODT report it.
+	// WarningFormFieldOmitted is a form control
+	// [github.com/gotenberg/litho/pkg/pdf.WithFormFields] asked to become a
+	// field that prints as it shows, without one: a control that breaks across
+	// pages or shows nothing. DOCX and ODT report it.
 	//
 	// Its effect is always [EffectApproximated]: the control prints.
 	WarningFormFieldOmitted ConvertWarningCode = "form-field-omitted"

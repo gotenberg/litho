@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // singlePages converts d on one page and on pages.
@@ -115,7 +116,7 @@ func TestSinglePage_OptionsCarryOver(t *testing.T) {
 	auto := `<style:style style:name="PB" style:family="paragraph"><style:paragraph-properties fo:break-before="page"/></style:style>`
 	body := `<text:h text:outline-level="1">One</text:h><text:p>` + ann + `commented<office:annotation-end office:name="a"/></text:p>` +
 		`<text:h text:outline-level="1" text:style-name="PB">Two</text:h><text:p>x</text:p>`
-	one, paged := singlePages(t, doc{contentAuto: auto, body: body}, office.Options{Comments: office.CommentsAnnotations})
+	one, paged := singlePages(t, doc{contentAuto: auto, body: body}, office.Options{Comments: models.CommentsAnnotations})
 	if len(one.Pages) != 1 || len(paged.Pages) != 2 {
 		t.Fatalf("%d pages with the option, %d without", len(one.Pages), len(paged.Pages))
 	}

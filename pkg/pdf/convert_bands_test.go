@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // bandPages is an HTML document of three pages, titled Report.
@@ -42,10 +44,10 @@ func TestConvert_HeaderAndFooterBands(t *testing.T) {
 	t.Parallel()
 	data, rep := convertHTMLTest(t, convertFontDir(t), bandPages,
 		WithMargins(72, 36, 72, 36),
-		WithHeader(PageBand{HTML: `<span class="t"></span>`, CSS: `.t::after { content: string(document-title) " " counter(page) "/" counter(pages) }`}),
-		WithHeader(PageBand{Pages: FirstPage()}),
-		WithFooter(PageBand{HTML: "Last", Pages: LastPage()}),
-		WithFooter(PageBand{HTML: "Left", Pages: LeftPages(), IgnoreDocumentStyles: true}),
+		WithHeader(models.PageBand{HTML: `<span class="t"></span>`, CSS: `.t::after { content: string(document-title) " " counter(page) "/" counter(pages) }`}),
+		WithHeader(models.PageBand{Pages: models.FirstPage()}),
+		WithFooter(models.PageBand{HTML: "Last", Pages: models.LastPage()}),
+		WithFooter(models.PageBand{HTML: "Left", Pages: models.LeftPages(), IgnoreDocumentStyles: true}),
 		WithFirstPageNumber(7),
 	)
 	if rep.Pages != 3 || len(rep.Warnings) != 0 {
@@ -70,7 +72,7 @@ func TestConvert_BandsInMarkdown(t *testing.T) {
 	var out bytes.Buffer
 	rep, err := FromMarkdown(strings.NewReader(src), WithConvertFontDirs(convertFontDir(t)),
 		WithUserStylesheet(`h2 { string-set: section content(text); break-before: page }`),
-		WithFooter(PageBand{
+		WithFooter(models.PageBand{
 			HTML: `<span class="t"></span><span class="s"></span>`,
 			CSS:  `.t::after { content: string(document-title) } .s::before { content: " | " string(section) }`,
 		}),
@@ -95,18 +97,18 @@ func TestConvert_BandsRefuseOptionsOutOfRange(t *testing.T) {
 	dir := convertFontDir(t)
 	many := make([]HTMLOption, 0, 65)
 	for range 65 {
-		many = append(many, WithHeader(PageBand{}))
+		many = append(many, WithHeader(models.PageBand{}))
 	}
 	for name, opts := range map[string][]HTMLOption{
-		"page range from 0":    {WithHeader(PageBand{Pages: PageRange(0, 2)})},
-		"page range backwards": {WithFooter(PageBand{Pages: FirstPage().Or(PageRange(4, 3))})},
-		"empty page name":      {WithHeader(PageBand{Pages: NamedPages("")})},
-		"page range to 0":      {WithHeader(PageBand{Pages: PageRange(2, 0)})},
-		"pages from 0":         {WithHeader(PageBand{Pages: PagesFrom(0)})},
+		"page range from 0":    {WithHeader(models.PageBand{Pages: models.PageRange(0, 2)})},
+		"page range backwards": {WithFooter(models.PageBand{Pages: models.FirstPage().Or(models.PageRange(4, 3))})},
+		"empty page name":      {WithHeader(models.PageBand{Pages: models.NamedPages("")})},
+		"page range to 0":      {WithHeader(models.PageBand{Pages: models.PageRange(2, 0)})},
+		"pages from 0":         {WithHeader(models.PageBand{Pages: models.PagesFrom(0)})},
 		"too many bands":       many,
 		"negative first page":  {WithFirstPageNumber(-1)},
 		"first page past 2^30": {WithFirstPageNumber(1<<30 + 1)},
-		"band past its size":   {WithHeader(PageBand{HTML: strings.Repeat("x", 1<<20+1)})},
+		"band past its size":   {WithHeader(models.PageBand{HTML: strings.Repeat("x", 1<<20+1)})},
 	} {
 		_, err := FromHTML(strings.NewReader("<p>x</p>"), append([]HTMLOption{WithConvertFontDirs(dir)}, opts...)...).WriteTo(context.Background(), &bytes.Buffer{})
 		if !errors.Is(err, ErrInvalidConvertOptions) {
@@ -124,8 +126,8 @@ func TestPageSet_OrWithEveryPageSelectsEveryPage(t *testing.T) {
 	t.Parallel()
 	data, _ := convertHTMLTest(t, convertFontDir(t), bandPages,
 		WithMargins(72, 36, 72, 36),
-		WithHeader(PageBand{HTML: "Band", Pages: PageSet{}.Or(FirstPage())}),
-		WithFooter(PageBand{HTML: "Foot", Pages: PagesFrom(2).Or(NamedPages("none"))}),
+		WithHeader(models.PageBand{HTML: "Band", Pages: models.PageSet{}.Or(models.FirstPage())}),
+		WithFooter(models.PageBand{HTML: "Foot", Pages: models.PagesFrom(2).Or(models.NamedPages("none"))}),
 	)
 	for i, got := range bandTexts(t, data) {
 		if !strings.Contains(got, "Band") {
@@ -142,15 +144,15 @@ func TestConvert_BandGrowMarginWritesTheTwinOfItsMargin(t *testing.T) {
 	dir := convertFontDir(t)
 	band := `<div style="height: 120pt">Letterhead</div>`
 	src := strings.Repeat("<p>line</p>", 60)
-	data, rep := convertHTMLTest(t, dir, src, WithMargins(36, 36, 36, 36), WithHeader(PageBand{HTML: band, GrowMargin: true}))
-	twin, _ := convertHTMLTest(t, dir, src, WithMargins(120, 36, 36, 36), WithHeader(PageBand{HTML: band}))
+	data, rep := convertHTMLTest(t, dir, src, WithMargins(36, 36, 36, 36), WithHeader(models.PageBand{HTML: band, GrowMargin: true}))
+	twin, _ := convertHTMLTest(t, dir, src, WithMargins(120, 36, 36, 36), WithHeader(models.PageBand{HTML: band}))
 	if !bytes.Equal(data, twin) {
 		t.Error("GrowMargin writes other bytes than the margin it measured, set by hand")
 	}
 	if len(rep.Warnings) != 0 {
 		t.Errorf("warnings %+v, want none", rep.Warnings)
 	}
-	_, rep = convertHTMLTest(t, dir, src, WithMargins(36, 36, 36, 36), WithHeader(PageBand{HTML: band}))
+	_, rep = convertHTMLTest(t, dir, src, WithMargins(36, 36, 36, 36), WithHeader(models.PageBand{HTML: band}))
 	if len(rep.Warnings) != 1 || !strings.Contains(rep.Warnings[0].Message, "the header is 120 points tall") {
 		t.Errorf("warnings %+v, want the header's overflow", rep.Warnings)
 	}
@@ -162,7 +164,7 @@ func TestConvert_BandCrossReferenceWithFirstPageNumber(t *testing.T) {
 	data, rep := convertHTMLTest(t, convertFontDir(t), src,
 		WithMargins(72, 36, 72, 36),
 		WithFirstPageNumber(5),
-		WithFooter(PageBand{HTML: `<span class="r"></span>`, CSS: `.r::after { content: "end at " target-counter(url(#end), page) ", here " counter(page) }`, GrowMargin: true}),
+		WithFooter(models.PageBand{HTML: `<span class="r"></span>`, CSS: `.r::after { content: "end at " target-counter(url(#end), page) ", here " counter(page) }`, GrowMargin: true}),
 	)
 	if rep.Pages != 3 || len(rep.Warnings) != 0 {
 		t.Errorf("report %+v, want 3 pages and no warning", rep)

@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // refPages is a document of three pages whose last paragraph is #end.
@@ -108,8 +109,8 @@ func TestBands_PageGroups(t *testing.T) {
 	</style>
 	<p>intro</p><section><div></div></section><section><div style="height: 100pt"></div></section>`
 	o := Options{PreferCSSPageSize: true, Bands: []Band{
-		{HTML: "BAND", Pages: PageSet{{Kind: PageRange, From: 5, To: 5}}},
-		{Footer: true, HTML: "CHAPTER", Pages: PageSet{{Kind: PageNamed, Name: "chapter"}}},
+		{HTML: "BAND", Pages: models.PageRange(5, 5)},
+		{Footer: true, HTML: "CHAPTER", Pages: models.NamedPages("chapter")},
 	}}
 	doc := convertDoc(t, src, o)
 	// The page group headers of the document show where no header band

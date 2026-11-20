@@ -20,12 +20,12 @@ func TestConvert_ValidatesEveryOption(t *testing.T) {
 	fonts := WithConvertFontDirs(convertFontDir(t))
 	src := func() *strings.Reader { return strings.NewReader("x") }
 	for name, c := range map[string]*Conversion{
-		"paper side zero":           FromText(src(), fonts, WithPaper(Paper{Width: 0, Height: 10})),
-		"paper side past the limit": FromODT(src(), fonts, WithPaper(Paper{Width: 20000, Height: 5})),
-		"paper side NaN":            FromPPTX(src(), fonts, WithPaper(Paper{Width: math.NaN(), Height: 5})),
-		"default paper":             FromHTML(src(), fonts, WithDefaultPaper(Paper{Width: -1, Height: 5})),
-		"orientation":               FromText(src(), fonts, WithOrientation(Orientation(3))),
-		"negative orientation":      FromXLSX(src(), fonts, WithOrientation(Orientation(-1))),
+		"paper side zero":           FromText(src(), fonts, WithPaper(models.Paper{Width: 0, Height: 10})),
+		"paper side past the limit": FromODT(src(), fonts, WithPaper(models.Paper{Width: 20000, Height: 5})),
+		"paper side NaN":            FromPPTX(src(), fonts, WithPaper(models.Paper{Width: math.NaN(), Height: 5})),
+		"default paper":             FromHTML(src(), fonts, WithDefaultPaper(models.Paper{Width: -1, Height: 5})),
+		"orientation":               FromText(src(), fonts, WithOrientation(models.Orientation(3))),
+		"negative orientation":      FromXLSX(src(), fonts, WithOrientation(models.Orientation(-1))),
 		"default language":          FromCSV(src(), fonts, WithDefaultLanguage("en_US")),
 		"version":                   FromODP(src(), fonts, WithConvertVersion("1.3")),
 		"negative margin":           FromText(src(), fonts, WithMargins(-1, 0, 0, 0)),
@@ -52,12 +52,12 @@ func TestConvert_ValidatesEveryOption(t *testing.T) {
 		"DOCX single page, ranges":  FromDOCX(src(), fonts, WithSinglePage(true), WithPageRanges("1")),
 		"ODT single page, ranges":   FromODT(src(), fonts, WithPageRanges("1-2"), WithSinglePage(true)),
 		"empty Markdown template":   FromMarkdown(src(), fonts, WithMarkdownTemplate("")),
-		"tracked changes view":      FromDOCX(src(), fonts, WithTrackedChanges(TrackedChanges(3))),
-		"comments view":             FromODT(src(), fonts, WithComments(Comments(2))),
-		"recalculation mode":        FromXLSX(src(), fonts, WithFormulaRecalculation(Recalculation(3))),
-		"one page with a paper":     FromXLSX(src(), fonts, WithOnePagePerSheet(true), WithPaper(PaperLetter)),
-		"one page with orientation": FromODS(src(), fonts, WithOnePagePerSheet(true), WithOrientation(OrientationLandscape)),
-		"CSV one page with a paper": FromCSV(src(), fonts, WithOnePagePerSheet(true), WithPaper(PaperA4)),
+		"tracked changes view":      FromDOCX(src(), fonts, WithTrackedChanges(models.TrackedChanges(3))),
+		"comments view":             FromODT(src(), fonts, WithComments(models.Comments(2))),
+		"recalculation mode":        FromXLSX(src(), fonts, WithFormulaRecalculation(models.Recalculation(3))),
+		"one page with a paper":     FromXLSX(src(), fonts, WithOnePagePerSheet(true), WithPaper(models.PaperLetter)),
+		"one page with orientation": FromODS(src(), fonts, WithOnePagePerSheet(true), WithOrientation(models.OrientationLandscape)),
+		"CSV one page with a paper": FromCSV(src(), fonts, WithOnePagePerSheet(true), WithPaper(models.PaperA4)),
 		"sheets and numbers":        FromXLSX(src(), fonts, WithSheets("A"), WithSheetNumbers(1)),
 		"no sheet name":             FromODS(src(), fonts, WithSheets()),
 		"no sheet number":           FromXLSX(src(), fonts, WithSheetNumbers()),
@@ -113,7 +113,7 @@ func TestConvert_NamesTheSameBadMediaFeature(t *testing.T) {
 func TestConvert_PaperLiesInThePageSizes(t *testing.T) {
 	t.Parallel()
 	fonts := WithConvertFontDirs(convertFontDir(t))
-	for _, p := range []Paper{{}, {Width: 1, Height: 1}, {Width: 2.99, Height: 500}, {Width: 500, Height: 14400.5}, {Width: math.Inf(1), Height: 500}} {
+	for _, p := range []models.Paper{{}, {Width: 1, Height: 1}, {Width: 2.99, Height: 500}, {Width: 500, Height: 14400.5}, {Width: math.Inf(1), Height: 500}} {
 		for name, opt := range map[string]ConvertOption{"WithPaper": WithPaper(p), "WithDefaultPaper": WithDefaultPaper(p)} {
 			var out bytes.Buffer
 			_, err := FromText(strings.NewReader("A"), fonts, opt).WriteTo(context.Background(), &out)
@@ -122,7 +122,7 @@ func TestConvert_PaperLiesInThePageSizes(t *testing.T) {
 			}
 		}
 	}
-	for _, p := range []Paper{{Width: 3, Height: 3}, {Width: 14400, Height: 14400}} {
+	for _, p := range []models.Paper{{Width: 3, Height: 3}, {Width: 14400, Height: 14400}} {
 		for name, opt := range map[string]ConvertOption{"WithPaper": WithPaper(p), "WithDefaultPaper": WithDefaultPaper(p)} {
 			var out bytes.Buffer
 			if _, err := FromText(strings.NewReader("A"), fonts, opt, WithMargins(0, 0, 0, 0)).WriteTo(context.Background(), &out); err != nil {

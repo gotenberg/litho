@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestWarningScriptNotRun_HTMLAndMarkdown checks that an HTML and a
@@ -28,9 +30,9 @@ func TestWarningScriptNotRun_HTMLAndMarkdown(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", tc.name, err)
 		}
-		var got []ConvertWarning
+		var got []models.ConvertWarning
 		for _, w := range rep.Warnings {
-			if w.Code == WarningScriptNotRun {
+			if w.Code == models.WarningScriptNotRun {
 				got = append(got, w)
 			}
 		}
@@ -40,7 +42,7 @@ func TestWarningScriptNotRun_HTMLAndMarkdown(t *testing.T) {
 			}
 			continue
 		}
-		if len(got) != 1 || !strings.Contains(got[0].Message, tc.want) || got[0].Effect != EffectOmitted {
+		if len(got) != 1 || !strings.Contains(got[0].Message, tc.want) || got[0].Effect != models.EffectOmitted {
 			t.Errorf("%s: got %+v, want one omitted WarningScriptNotRun saying %q", tc.name, got, tc.want)
 		}
 	}

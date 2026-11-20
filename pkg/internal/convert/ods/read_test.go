@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/warn"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func near(a, b float64) bool { return math.Abs(a-b) < 0.01 }
@@ -488,7 +489,7 @@ func TestRead_Formulas(t *testing.T) {
 	}
 	// Never keeps no formula: A1 shows its stored 5, B1, which stores
 	// nothing, is not listed.
-	doc, _, err := Read(context.Background(), flat{body: table("S", row)}.bytes(), nil, office.Options{Recalculation: office.RecalculateNever})
+	doc, _, err := Read(context.Background(), flat{body: table("S", row)}.bytes(), nil, office.Options{Recalculation: models.RecalculateNever})
 	if err != nil {
 		t.Fatal(err)
 	}

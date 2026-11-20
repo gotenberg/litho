@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // fuzzSeeds are document bodies exercising most of the converter: a
@@ -55,7 +56,7 @@ func FuzzRevisions(f *testing.F) {
 		files := pkgFiles("", nil)
 		files["word/document.xml"] = `<w:document ` + nsDecl + `><w:body>` + string(body) + `</w:body></w:document>`
 		data := zipFiles(t, files)
-		opts := office.Options{MaxPages: 50, TrackedChanges: office.TrackedChanges(view % 3)}
+		opts := office.Options{MaxPages: 50, TrackedChanges: models.TrackedChanges(view % 3)}
 		doc, err := Convert(context.Background(), bytes.NewReader(data), fonts, opts)
 		if err == nil && len(doc.Pages) == 0 {
 			t.Fatal("no page without an error")
@@ -78,7 +79,7 @@ func FuzzComments(f *testing.F) {
 		files := pkgFiles("", map[string]string{"word/comments.xml": string(comments), "word/commentsExtended.xml": string(ext)})
 		files["word/document.xml"] = `<w:document ` + nsDecl + `><w:body>` + string(body) + `</w:body></w:document>`
 		data := zipFiles(t, files)
-		doc, err := Convert(context.Background(), bytes.NewReader(data), fonts, office.Options{MaxPages: 50, Comments: office.CommentsAnnotations})
+		doc, err := Convert(context.Background(), bytes.NewReader(data), fonts, office.Options{MaxPages: 50, Comments: models.CommentsAnnotations})
 		if err != nil {
 			return
 		}

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gotenberg/litho/pkg/pdf"
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/test/integration/fixture"
 )
 
@@ -69,7 +69,7 @@ func convertWithSystemFonts(ctx context.Context, src string) ([]string, error) {
 	}
 	var missing []string
 	for _, w := range report.Warnings {
-		if w.Code == pdf.WarningMissingGlyph {
+		if w.Code == models.WarningMissingGlyph {
 			missing = append(missing, w.Message)
 		}
 	}

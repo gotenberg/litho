@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestRevisions_JoinedParagraphs(t *testing.T) {
@@ -46,7 +47,7 @@ func TestRevisions_JoinedParagraphs(t *testing.T) {
 }
 
 // views are the three tracked-changes views, in office's order.
-var views = []office.TrackedChanges{office.ChangesAccepted, office.ChangesRejected, office.ChangesMarked}
+var views = []models.TrackedChanges{models.TrackedChangesAccepted, models.TrackedChangesRejected, models.TrackedChangesMarked}
 
 func TestRevisions_Views(t *testing.T) {
 	t.Parallel()
@@ -117,7 +118,7 @@ func TestRevisions_Marks(t *testing.T) {
 		`<w:ins w:id="1" w:author="Ada">` + `<w:r><w:rPr><w:color w:val="00FF00"/><w:u w:val="double"/></w:rPr><w:t xml:space="preserve">ada </w:t></w:r></w:ins>` +
 		`<w:ins w:id="2" w:author="Grace">` + r("grace ") + `</w:ins>` +
 		`<w:del w:id="3" w:author="Ada"><w:r><w:delText>gone</w:delText></w:r></w:del></w:p>`
-	b := buildWith(t, body, nil, office.Options{TrackedChanges: office.ChangesMarked})
+	b := buildWith(t, body, nil, office.Options{TrackedChanges: models.TrackedChangesMarked})
 	for _, tc := range []struct {
 		text  string
 		deco  css.TextDecoration
@@ -151,7 +152,7 @@ func TestRevisions_MarkKinds(t *testing.T) {
 		`<w:ins w:id="6" w:author="Ada">` + r("lonely words") + `</w:ins>` +
 		`<w:r><w:rPr><w:i/><w:rPrChange w:id="7" w:author="Grace"><w:rPr/></w:rPrChange></w:rPr><w:t>restyled</w:t></w:r></w:p>` +
 		`<w:p><w:pPr><w:jc w:val="center"/><w:pPrChange w:id="8" w:author="Ada"><w:pPr/></w:pPrChange></w:pPr>` + r("centred") + `</w:p>`
-	b := buildWith(t, body, nil, office.Options{TrackedChanges: office.ChangesMarked})
+	b := buildWith(t, body, nil, office.Options{TrackedChanges: models.TrackedChangesMarked})
 	green := office.RGB(office.MovedColor)
 	ada, grace := office.RGB(office.AuthorColor(0)), office.RGB(office.AuthorColor(1))
 	for _, tc := range []struct {
@@ -197,10 +198,10 @@ func TestRevisions_Bars(t *testing.T) {
 		}
 		return strings.Join(s, "")
 	}
-	if got, want := bars(office.Options{TrackedChanges: office.ChangesMarked}), "[added][][]"; got != want {
+	if got, want := bars(office.Options{TrackedChanges: models.TrackedChangesMarked}), "[added][][]"; got != want {
 		t.Errorf("marked for a bar %s, want %s", got, want)
 	}
-	for _, v := range []office.TrackedChanges{office.ChangesAccepted, office.ChangesRejected} {
+	for _, v := range []models.TrackedChanges{models.TrackedChangesAccepted, models.TrackedChangesRejected} {
 		if got := bars(office.Options{TrackedChanges: v}); got != "" {
 			t.Errorf("view %d marks %s for a bar", v, got)
 		}
@@ -218,7 +219,7 @@ func TestRevisions_RowGround(t *testing.T) {
 		`<w:tr>` + tc("kept") + `</w:tr>` +
 		`<w:tr><w:trPr><w:ins w:id="1" w:author="Ada"/></w:trPr>` + tc("ins") + `</w:tr>` +
 		`<w:tr><w:trPr><w:del w:id="2" w:author="Ada"/></w:trPr>` + tc("del") + `</w:tr></w:tbl><w:p/>`
-	b := buildWith(t, body, nil, office.Options{TrackedChanges: office.ChangesMarked})
+	b := buildWith(t, body, nil, office.Options{TrackedChanges: models.TrackedChangesMarked})
 	want := []css.Color{{R: 1, G: 1, A: 1}, office.RGB(office.RowInsertedFill), office.RGB(office.RowDeletedFill)}
 	cells := role(b.root, "TD")
 	if len(cells) != len(want) {

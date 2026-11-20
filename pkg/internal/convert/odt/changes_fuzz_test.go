@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // FuzzResolveChanges rewrites arbitrary flat documents into each
@@ -29,7 +29,7 @@ func FuzzResolveChanges(f *testing.F) {
 			return
 		}
 		b := newFuzzBuilder(pkg)
-		marks, err := resolveChanges(context.Background(), body, office.TrackedChanges(view%3), b.rowTracked, b.warn)
+		marks, err := resolveChanges(context.Background(), body, models.TrackedChanges(view%3), b.rowTracked, b.warn)
 		if err != nil {
 			t.Fatal(err)
 		}

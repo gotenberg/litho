@@ -17,6 +17,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // nsMain is the SpreadsheetML namespace (ECMA-376 Part 1, 18; the Strict
@@ -72,7 +73,7 @@ type reader struct {
 	calculated     bool
 	cachedFormulas map[[3]int]bool
 	// recalculation is the options' recalculation mode.
-	recalculation office.Recalculation
+	recalculation models.Recalculation
 	// digitWidth is the widest digit of the Normal font and spaceWidth its
 	// space, in points, in whole printer pixels as Excel measures them;
 	// screenDigit is the digit in screen pixels ([reader.measureNormalFont]).
@@ -223,7 +224,7 @@ func (r *reader) recalculates() bool {
 // keepCachedResults clears the formula of every cell of doc whose
 // formula caches a result, unless LibreOffice recalculates the workbook
 // ([reader.recalculates]): such a cell shows its cached result. Under
-// office.RecalculateAlways no formula is listed, and none cleared.
+// models.RecalculateAlways no formula is listed, and none cleared.
 func (r *reader) keepCachedResults(doc *sheet.Document) {
 	if len(r.cachedFormulas) == 0 || r.recalculates() {
 		return

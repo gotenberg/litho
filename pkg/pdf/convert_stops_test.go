@@ -7,6 +7,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // chartDOCX returns a DOCX of one paragraph and one inline chart whose
@@ -52,7 +54,7 @@ func TestConvert_ACapPassedInAPartStopsTheConversion(t *testing.T) {
 	}
 	found := false
 	for _, w := range rep.Warnings {
-		found = found || w.Code == WarningPartMalformed
+		found = found || w.Code == models.WarningPartMalformed
 	}
 	if !found {
 		t.Errorf("warnings %+v lack chart-malformed", rep.Warnings)

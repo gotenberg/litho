@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/odf"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // region returns a text:changed-region of id, kind and author, holding
@@ -130,9 +131,9 @@ func TestConvert_TrackedChangesViews(t *testing.T) {
 	}
 	for _, tc := range cases {
 		for _, v := range []struct {
-			view office.TrackedChanges
+			view models.TrackedChanges
 			want string
-		}{{office.ChangesAccepted, tc.accepted}, {office.ChangesRejected, tc.rejected}, {office.ChangesMarked, tc.marked}} {
+		}{{models.TrackedChangesAccepted, tc.accepted}, {models.TrackedChangesRejected, tc.rejected}, {models.TrackedChangesMarked, tc.marked}} {
 			t.Run(tc.name+"/"+[]string{"accepted", "rejected", "marked"}[v.view], func(t *testing.T) {
 				d := doc{contentAuto: tc.contentAuto, body: `<text:tracked-changes>` + tc.regions + `</text:tracked-changes>` + tc.body}
 				res := convertDoc(t, d.pack(t), office.Options{TrackedChanges: v.view})
@@ -150,7 +151,7 @@ func markedTree(t *testing.T, regions, body, contentAuto string) *layout.Node {
 	t.Helper()
 	b := newTestBuilder(t, doc{contentAuto: contentAuto, body: `<text:tracked-changes>` + regions + `</text:tracked-changes>` + body})
 	el := odfBody(b)
-	marks, err := resolveChanges(context.Background(), el, office.ChangesMarked, b.rowTracked, b.warn)
+	marks, err := resolveChanges(context.Background(), el, models.TrackedChangesMarked, b.rowTracked, b.warn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +230,7 @@ func TestConvert_TrackedChangesBars(t *testing.T) {
 	}
 	b := newTestBuilder(t, doc{body: `<text:tracked-changes>` + regions + `</text:tracked-changes>` + body})
 	el := odfBody(b)
-	if _, err := resolveChanges(context.Background(), el, office.ChangesAccepted, b.rowTracked, b.warn); err != nil {
+	if _, err := resolveChanges(context.Background(), el, models.TrackedChangesAccepted, b.rowTracked, b.warn); err != nil {
 		t.Fatal(err)
 	}
 	root, _ := b.document(el)
@@ -299,7 +300,7 @@ func TestConvert_TrackedChangesAuthorsCycle(t *testing.T) {
 }
 
 func TestResolveChanges_KeepsTheSpaceASplitPutsFirst(t *testing.T) {
-	for _, view := range []office.TrackedChanges{office.ChangesRejected, office.ChangesMarked} {
+	for _, view := range []models.TrackedChanges{models.TrackedChangesRejected, models.TrackedChangesMarked} {
 		b := newTestBuilder(t, doc{body: `<text:tracked-changes>` + region("d", "deletion", "Ada", `<text:p/><text:p/>`) +
 			`</text:tracked-changes><text:p>first<text:change text:change-id="d"/> second</text:p>`})
 		el := odfBody(b)

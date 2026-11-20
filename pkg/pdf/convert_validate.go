@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	htmlconv "github.com/gotenberg/litho/pkg/internal/convert/html"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // maxConvertFontSize is the largest font size [WithFontSize] takes, in
@@ -52,7 +53,7 @@ func (o *convertConfig) validate() error {
 			return err
 		}
 	}
-	if o.orientation < OrientationSource || o.orientation > OrientationLandscape {
+	if o.orientation < models.OrientationSource || o.orientation > models.OrientationLandscape {
 		return fmt.Errorf("%w: orientation %d", ErrInvalidConvertOptions, o.orientation)
 	}
 	if o.defaultLang != "" && (strings.TrimSpace(o.defaultLang) != o.defaultLang || !compliance.IsValidLangTag(o.defaultLang)) {
@@ -79,7 +80,7 @@ func (o *convertConfig) validate() error {
 // checkPaper reports a paper whose sides do not both lie in the page sizes
 // ISO 32000-1, Annex C.2, Table C.1 allows, as an error wrapping both
 // [ErrInvalidConvertOptions] and [ErrInvalidPageSize].
-func checkPaper(name string, p Paper) error {
+func checkPaper(name string, p models.Paper) error {
 	if err := checkPageSize(p.Width, p.Height); err != nil {
 		return fmt.Errorf("%w: %s: %w", ErrInvalidConvertOptions, name, err)
 	}
@@ -164,16 +165,16 @@ func (o *convertConfig) validateHTML() error {
 // validateOffice reports an Office option out of range, or two that exclude
 // each other.
 func (o *convertConfig) validateOffice() error {
-	if o.trackedChanges < TrackedChangesAccepted || o.trackedChanges > TrackedChangesMarked {
+	if o.trackedChanges < models.TrackedChangesAccepted || o.trackedChanges > models.TrackedChangesMarked {
 		return fmt.Errorf("%w: tracked changes view %d", ErrInvalidConvertOptions, o.trackedChanges)
 	}
-	if o.comments < CommentsHidden || o.comments > CommentsAnnotations {
+	if o.comments < models.CommentsHidden || o.comments > models.CommentsAnnotations {
 		return fmt.Errorf("%w: comments view %d", ErrInvalidConvertOptions, o.comments)
 	}
-	if o.recalculation < RecalculateAsNeeded || o.recalculation > RecalculateAlways {
+	if o.recalculation < models.RecalculateAsNeeded || o.recalculation > models.RecalculateAlways {
 		return fmt.Errorf("%w: recalculation mode %d", ErrInvalidConvertOptions, o.recalculation)
 	}
-	if o.onePagePerSheet && (o.paperSet || o.orientation != OrientationSource) {
+	if o.onePagePerSheet && (o.paperSet || o.orientation != models.OrientationSource) {
 		return fmt.Errorf("%w: a sheet laid out on one page takes its content's size, not a paper or an orientation", ErrInvalidConvertOptions)
 	}
 	if err := o.validateSheets(); err != nil {

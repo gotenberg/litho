@@ -23,6 +23,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // convertKind is the format of the source a [Conversion] reads.
@@ -92,7 +93,7 @@ func (k convertKind) name() string {
 //  2. Without it, the source's own size applies: an @page size, each
 //     section of a DOCX or ODT source, each sheet's page setup, the slide
 //     size of a presentation, an image's size.
-//  3. A source that names none takes [WithDefaultPaper], else [PaperA4].
+//  3. A source that names none takes [WithDefaultPaper], else [models.PaperA4].
 //
 // [WithOrientation] then turns the pages that are not turned as it asks.
 //
@@ -175,7 +176,7 @@ func FromText(src io.Reader, opts ...TextOption) *Conversion {
 // imports, its style attributes and its presentational attributes, and
 // those of [WithUserStylesheet], evaluated for the media type of
 // [WithMediaType]. No script runs: a document that holds one a browser
-// would run reports [WarningScriptNotRun].
+// would run reports [models.WarningScriptNotRun].
 //
 //   - Layout covers the visual formatting model of CSS 2.1, flexbox, grid
 //     without subgrid, multi-column layout, positioning, transforms,
@@ -189,7 +190,7 @@ func FromText(src io.Reader, opts ...TextOption) *Conversion {
 //     fragments, each laid out in a document of its own and drawn in the
 //     top or the bottom margin of the pages it selects in the place of
 //     that margin's page-margin boxes, with the page's numbers, named
-//     strings and cross-references (see [PageBand]).
+//     strings and cross-references (see [models.PageBand]).
 //   - CSS animations print at time zero, or finished with
 //     [WithFinishedAnimations]. No transition runs.
 //   - Stylesheets, images and fonts are read from [WithResources], or
@@ -203,7 +204,7 @@ func FromText(src io.Reader, opts ...TextOption) *Conversion {
 //     image does, and neither its frames nor its controls.
 //
 // A construct that is not drawn as the document means it is reported in
-// [ConvertReport.Warnings].
+// [models.ConvertReport.Warnings].
 //
 // Each element maps to the standard structure type of its meaning (ISO
 // 32000-1, 14.8.4), images carry their alt text, and the root element's
@@ -262,7 +263,7 @@ func FromMarkdown(src io.Reader, opts ...MarkdownOption) *Conversion {
 // out of the pages; [WithComments] writes them as annotations. Macros never
 // run; an embedded object draws as its preview picture when the package
 // holds one. A construct that is not drawn is reported in
-// [ConvertReport.Warnings].
+// [models.ConvertReport.Warnings].
 //
 // A source that is not a DOCX package fails with [ErrConvertMalformed], an
 // encrypted one [WithOfficePassword] does not open with
@@ -301,7 +302,7 @@ func wordProcessingConfig(opts []WordProcessingOption) convertConfig {
 // wrapping and rotation, merged cells, conditional formats, pictures,
 // charts and hyperlinks. A formula shows the value its file stores unless
 // [WithFormulaRecalculation] computes it again. Macros never run. A
-// construct that is not drawn is reported in [ConvertReport.Warnings].
+// construct that is not drawn is reported in [models.ConvertReport.Warnings].
 //
 // The notes of a sheet's cells print where its page setup asks, as its
 // application prints them, and nowhere when it asks for none, the
@@ -376,7 +377,7 @@ func FromCSV(src io.Reader, opts ...CSVOption) *Conversion {
 // slide, and [WithHandouts] prints handout pages in place of the slides.
 // Transitions, animations, narration and comments are not printed. Macros
 // never run. A construct that is not drawn is reported in
-// [ConvertReport.Warnings].
+// [models.ConvertReport.Warnings].
 //
 // A source that is not a presentation of its format fails with
 // [ErrConvertMalformed], an encrypted one [WithOfficePassword] does not
@@ -492,33 +493,6 @@ func FromImage(src io.Reader, opts ...ImageOption) *Conversion {
 	return newConversion(kindImage, src, cfg)
 }
 
-// ConvertReport is what a [Conversion] reports beside the PDF.
-// Concurrent reads of a value are safe; a write needs synchronization.
-type ConvertReport struct {
-	// Pages is the number of pages written.
-	Pages int
-	// Warnings lists what the conversion could not render as the source
-	// meant it, in the order met.
-	Warnings []ConvertWarning
-}
-
-// ConvertWarning is one construct of the source a [Conversion] did not
-// render faithfully.
-// Concurrent reads of a value are safe; a write needs synchronization.
-type ConvertWarning struct {
-	// Code names the kind of construct: one of the Warning constants (see
-	// [ConvertWarningCode]).
-	Code ConvertWarningCode
-	// Effect says what the construct cost the PDF: content left out or
-	// content printed differently (see [ConvertWarningEffect]). It is
-	// never "".
-	Effect ConvertWarningEffect
-	// Message explains the construct and what was done instead.
-	Message string
-	// Page is the 1-based page the construct lands on, 0 when it has none.
-	Page int
-}
-
 // WriteTo runs the conversion and writes the PDF to dst.
 //
 // It reads the source to its end and writes dst; it closes neither.
@@ -542,7 +516,7 @@ type ConvertWarning struct {
 // a resource of an HTML or Markdown source that does not load under
 // [WithRequiredResources], [ErrInternalPanic] for a recovered
 // panic, and ctx's error when ctx ends first.
-func (c *Conversion) WriteTo(ctx context.Context, dst io.Writer) (*ConvertReport, error) {
+func (c *Conversion) WriteTo(ctx context.Context, dst io.Writer) (*models.ConvertReport, error) {
 	return c.run(ctx, dst, convertEnv{})
 }
 
@@ -555,7 +529,7 @@ type convertEnv struct {
 
 // run converts c's source and writes the PDF to dst (see
 // [Conversion.WriteTo]).
-func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ *ConvertReport, err error) {
+func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ *models.ConvertReport, err error) {
 	if c == nil {
 		return nil, fmt.Errorf("converting: nil conversion: %w", ErrNilSource)
 	}
@@ -664,9 +638,9 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 		return nil, fmt.Errorf("converting %s: writing the PDF: %w", name, err)
 	}
 
-	report := &ConvertReport{Pages: stream.Pages()}
+	report := &models.ConvertReport{Pages: stream.Pages()}
 	for _, w := range tail.Warnings {
-		report.Warnings = append(report.Warnings, ConvertWarning{Code: ConvertWarningCode(w.Code.String()), Effect: ConvertWarningEffect(w.Effect.String()), Message: w.Message, Page: w.Page})
+		report.Warnings = append(report.Warnings, models.ConvertWarning{Code: models.ConvertWarningCode(w.Code.String()), Effect: models.ConvertWarningEffect(w.Effect.String()), Message: w.Message, Page: w.Page})
 	}
 	return report, nil
 }
@@ -687,7 +661,7 @@ func resolveConvertVersion(v string) (typeset.Version, error) {
 
 // turned returns the paper w by h turned as o's orientation asks.
 func (o *convertConfig) turned(w, h float64) (float64, float64) {
-	if o.orientation == OrientationLandscape && w < h || o.orientation == OrientationPortrait && w > h {
+	if o.orientation == models.OrientationLandscape && w < h || o.orientation == models.OrientationPortrait && w > h {
 		return h, w
 	}
 	return w, h
@@ -703,12 +677,12 @@ func (o *convertConfig) basePaper() (float64, float64) {
 }
 
 // fallbackPaper returns the paper of a source that names none: the one
-// [WithDefaultPaper] names, else [PaperA4].
+// [WithDefaultPaper] names, else [models.PaperA4].
 func (o *convertConfig) fallbackPaper() (float64, float64) {
 	if o.defaultPaperSet {
 		return o.defaultPaper.Width, o.defaultPaper.Height
 	}
-	return PaperA4.Width, PaperA4.Height
+	return models.PaperA4.Width, models.PaperA4.Height
 }
 
 // margins returns the page margins: the caller's, else 2 cm a side.
@@ -758,8 +732,8 @@ func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *te
 	// switch, which also widens a single page. A paper the caller neither
 	// turns nor names portrait goes as it is.
 	w, h := o.basePaper()
-	landscape := o.orientation == OrientationLandscape
-	if o.orientation != OrientationSource && w > h {
+	landscape := o.orientation == models.OrientationLandscape
+	if o.orientation != models.OrientationSource && w > h {
 		w, h = h, w
 	}
 	top, right, bottom, left := o.margins()
@@ -844,8 +818,8 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 	}
 	dw, dh := o.fallbackPaper()
 	opts := office.Options{
-		Landscape:         o.orientation == OrientationLandscape,
-		Portrait:          o.orientation == OrientationPortrait,
+		Landscape:         o.orientation == models.OrientationLandscape,
+		Portrait:          o.orientation == models.OrientationPortrait,
 		DefaultPageWidth:  dw,
 		DefaultPageHeight: dh,
 		Password:          o.password,
@@ -853,11 +827,11 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 		SinglePageSheets:  o.onePagePerSheet,
 		SinglePage:        o.singlePage,
 		PrintDate:         o.date,
-		TrackedChanges:    office.TrackedChanges(o.trackedChanges),
-		Comments:          office.Comments(o.comments),
+		TrackedChanges:    o.trackedChanges,
+		Comments:          o.comments,
 		FormFields:        o.formFields,
 		HiddenSheets:      o.hiddenSheets,
-		Recalculation:     office.Recalculation(o.recalculation),
+		Recalculation:     o.recalculation,
 		CSVKeepText:       o.csvKeepText,
 		HiddenSlides:      o.hiddenSlides,
 		NotesPages:        o.notesPages,
@@ -896,8 +870,8 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 // page cap [ErrConvertTooManyPages].
 func convertImage(ctx context.Context, src io.Reader, fonts *text.Fonts, o *convertConfig, version typeset.Version, maxBytes int64, maxPages int, sink typeset.PageSink) (*typeset.Document, error) {
 	opts := picture.Options{
-		Landscape:     o.orientation == OrientationLandscape,
-		Portrait:      o.orientation == OrientationPortrait,
+		Landscape:     o.orientation == models.OrientationLandscape,
+		Portrait:      o.orientation == models.OrientationPortrait,
 		Version:       version,
 		DefaultLang:   o.defaultLang,
 		MaxInputBytes: maxBytes,

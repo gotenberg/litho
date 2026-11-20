@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -289,26 +290,26 @@ func (o OfficeOptions) validate() error {
 }
 
 // trackedChangesViews maps the trackedChanges values to litho's views.
-var trackedChangesViews = map[string]pdf.TrackedChanges{
-	"":         pdf.TrackedChangesAccepted,
-	"accepted": pdf.TrackedChangesAccepted,
-	"rejected": pdf.TrackedChangesRejected,
-	"marked":   pdf.TrackedChangesMarked,
+var trackedChangesViews = map[string]models.TrackedChanges{
+	"":         models.TrackedChangesAccepted,
+	"accepted": models.TrackedChangesAccepted,
+	"rejected": models.TrackedChangesRejected,
+	"marked":   models.TrackedChangesMarked,
 }
 
 // commentsViews maps the comments values to litho's views.
-var commentsViews = map[string]pdf.Comments{
-	"":            pdf.CommentsHidden,
-	"hidden":      pdf.CommentsHidden,
-	"annotations": pdf.CommentsAnnotations,
+var commentsViews = map[string]models.Comments{
+	"":            models.CommentsHidden,
+	"hidden":      models.CommentsHidden,
+	"annotations": models.CommentsAnnotations,
 }
 
 // recalculationModes maps the recalculation values to litho's modes.
-var recalculationModes = map[string]pdf.Recalculation{
-	"":         pdf.RecalculateAsNeeded,
-	"asNeeded": pdf.RecalculateAsNeeded,
-	"never":    pdf.RecalculateNever,
-	"always":   pdf.RecalculateAlways,
+var recalculationModes = map[string]models.Recalculation{
+	"":         models.RecalculateAsNeeded,
+	"asNeeded": models.RecalculateAsNeeded,
+	"never":    models.RecalculateNever,
+	"always":   models.RecalculateAlways,
 }
 
 // ReferencePaperWidth and ReferencePaperHeight are the paper, in points,
@@ -324,7 +325,7 @@ const (
 
 // ReferencePaper is the paper of [ReferencePaperWidth] by
 // [ReferencePaperHeight].
-var ReferencePaper = pdf.Paper{Width: ReferencePaperWidth, Height: ReferencePaperHeight}
+var ReferencePaper = models.Paper{Width: ReferencePaperWidth, Height: ReferencePaperHeight}
 
 // Conversion returns the conversion of src, the source's document, at the
 // litho options of the source's fields, then extra: the outline switch
@@ -419,10 +420,10 @@ func (o *Office) options() officeOptions {
 	}
 	onePagePerSheet := o.Options.SinglePage && isSheets(o.Format)
 	if o.Options.Landscape && !onePagePerSheet {
-		opts.common = append(opts.common, pdf.WithOrientation(pdf.OrientationLandscape))
+		opts.common = append(opts.common, pdf.WithOrientation(models.OrientationLandscape))
 	}
 	if o.Options.PaperWidth != nil && o.Options.PaperHeight != nil && !onePagePerSheet {
-		opts.common = append(opts.common, pdf.WithPaper(pdf.Paper{Width: *o.Options.PaperWidth * 72, Height: *o.Options.PaperHeight * 72}))
+		opts.common = append(opts.common, pdf.WithPaper(models.Paper{Width: *o.Options.PaperWidth * 72, Height: *o.Options.PaperHeight * 72}))
 	}
 	if o.Options.Password != "" {
 		opts.office = append(opts.office, pdf.WithOfficePassword(o.Options.Password))
@@ -446,11 +447,11 @@ func (o *Office) options() officeOptions {
 		if onePage {
 			opts.word = append(opts.word, pdf.WithSinglePage(true))
 		}
-		if view := trackedChangesViews[o.Options.TrackedChanges]; view != pdf.TrackedChangesAccepted {
+		if view := trackedChangesViews[o.Options.TrackedChanges]; view != models.TrackedChangesAccepted {
 			opts.word = append(opts.word, pdf.WithTrackedChanges(view))
 			opts.litho = append(opts.litho, "trackedChanges")
 		}
-		if view := commentsViews[o.Options.Comments]; view != pdf.CommentsHidden {
+		if view := commentsViews[o.Options.Comments]; view != models.CommentsHidden {
 			// The comments draw nothing: the source keeps its reference.
 			opts.word = append(opts.word, pdf.WithComments(view))
 		}
@@ -467,7 +468,7 @@ func (o *Office) options() officeOptions {
 			opts.spreadsheet = append(opts.spreadsheet, pdf.WithHiddenSheets(true))
 			opts.litho = append(opts.litho, "hiddenSheets")
 		}
-		if mode := recalculationModes[o.Options.Recalculation]; mode != pdf.RecalculateAsNeeded {
+		if mode := recalculationModes[o.Options.Recalculation]; mode != models.RecalculateAsNeeded {
 			opts.spreadsheet = append(opts.spreadsheet, pdf.WithFormulaRecalculation(mode))
 			opts.litho = append(opts.litho, "recalculation")
 		}

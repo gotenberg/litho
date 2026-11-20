@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // handoutODP is a presentation of seven 28 by 15.75 cm slides named S1 to
@@ -48,7 +50,7 @@ func TestConvert_Handouts(t *testing.T) {
 	fonts := WithConvertFontDirs(convertFontDir(t))
 	shown := []string{"S1", "S2", "S3", "S5", "S6", "S7"}
 	for _, per := range []int{1, 2, 3, 4, 6, 9} {
-		for _, o := range []Orientation{OrientationPortrait, OrientationLandscape} {
+		for _, o := range []models.Orientation{models.OrientationPortrait, models.OrientationLandscape} {
 			t.Run(fmt.Sprintf("%d/%d", per, o), func(t *testing.T) {
 				t.Parallel()
 				var out bytes.Buffer
@@ -66,7 +68,7 @@ func TestConvert_Handouts(t *testing.T) {
 				}
 				defer r.Close()
 				w, h := a4W, a4H
-				if o == OrientationLandscape {
+				if o == models.OrientationLandscape {
 					w, h = h, w
 				}
 				for i := 1; i <= pages; i++ {
@@ -118,11 +120,11 @@ func TestConvert_HandoutsSelectAndFit(t *testing.T) {
 	fonts := WithConvertFontDirs(convertFontDir(t))
 	_, sizes := conversionSizes(t, FromODP(strings.NewReader(handoutODP()), fonts, WithHandouts(2), WithPageRanges("2-3")))
 	checkSizes(t, "handout pages 2 and 3", sizes, 2, a4W, a4H)
-	_, sizes = conversionSizes(t, FromODP(strings.NewReader(handoutODP()), fonts, WithHandouts(4), WithPaper(PaperLetter)))
+	_, sizes = conversionSizes(t, FromODP(strings.NewReader(handoutODP()), fonts, WithHandouts(4), WithPaper(models.PaperLetter)))
 	checkSizes(t, "handouts on Letter", sizes, 2, letterW, letterH)
 	// A paper on its side turns the handout page: six slides on one page
 	// that fills the paper's width.
-	_, sizes = conversionSizes(t, FromODP(strings.NewReader(handoutODP()), fonts, WithHandouts(6), WithPaper(Paper{Width: letterH, Height: letterW})))
+	_, sizes = conversionSizes(t, FromODP(strings.NewReader(handoutODP()), fonts, WithHandouts(6), WithPaper(models.Paper{Width: letterH, Height: letterW})))
 	checkSizes(t, "handouts on Letter on its side", sizes, 1, letterH, letterW)
 }
 

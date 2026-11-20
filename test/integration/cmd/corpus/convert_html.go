@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 	"github.com/gotenberg/litho/test/integration/fixture"
 )
@@ -93,7 +94,7 @@ func conversion(src []byte, s htmlSettings) (*pdf.Conversion, error) {
 		pdf.WithMargins(s.Top, s.Right, s.Bottom, s.Left),
 	}
 	if s.Width > 0 && s.Height > 0 {
-		paper := pdf.Paper{Width: s.Width, Height: s.Height}
+		paper := models.Paper{Width: s.Width, Height: s.Height}
 		if s.PreferCSSPageSize {
 			opts = append(opts, pdf.WithDefaultPaper(paper))
 		} else {

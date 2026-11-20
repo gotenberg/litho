@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/odf"
 	"github.com/gotenberg/litho/pkg/internal/warn"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // maxTrackedChanges bounds the tracked changes a document's view is built
@@ -86,7 +87,7 @@ type changes struct {
 // too, both kept, each change's text drawn by its mark. A formatting
 // change prints with its new formatting under every view: the file keeps
 // no record of the old one but what text:format-change names (5.5.5).
-func resolveChanges(ctx context.Context, body *odf.Element, view office.TrackedChanges, rowTracked func(*odf.Element) bool, report func(what string, code warn.Code, effect warn.Effect, msg string)) (map[string]changeMark, error) {
+func resolveChanges(ctx context.Context, body *odf.Element, view models.TrackedChanges, rowTracked func(*odf.Element) bool, report func(what string, code warn.Code, effect warn.Effect, msg string)) (map[string]changeMark, error) {
 	tc := body.Child(odf.NSText, "tracked-changes")
 	if tc == nil {
 		return nil, nil
@@ -104,12 +105,12 @@ func resolveChanges(ctx context.Context, body *odf.Element, view office.TrackedC
 	c.index(body, nil)
 	var marks map[string]changeMark
 	switch view {
-	case office.ChangesAccepted:
+	case models.TrackedChangesAccepted:
 		c.dropRows(changeDeletion)
 		if err := c.cutAll(ctx, changeDeletion); err != nil {
 			return nil, err
 		}
-	case office.ChangesRejected:
+	case models.TrackedChangesRejected:
 		c.dropRows(changeInsertion)
 		if err := c.cutAll(ctx, changeInsertion); err != nil {
 			return nil, err
@@ -117,7 +118,7 @@ func resolveChanges(ctx context.Context, body *odf.Element, view office.TrackedC
 		if err := c.spliceAll(ctx, false); err != nil {
 			return nil, err
 		}
-	case office.ChangesMarked:
+	case models.TrackedChangesMarked:
 		if err := c.spliceAll(ctx, true); err != nil {
 			return nil, err
 		}

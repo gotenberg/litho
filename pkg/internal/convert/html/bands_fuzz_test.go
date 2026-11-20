@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // FuzzPageDecorations fuzzes a band's HTML and CSS, drawn as a header on
@@ -30,7 +31,7 @@ func FuzzPageDecorations(f *testing.F) {
 			MarginTop: 40, MarginBottom: 40, MaxInputBytes: 1 << 14, MaxPages: 16,
 			Bands: []Band{
 				{HTML: html, CSS: sheetOfBand, Room: RoomContent},
-				{Footer: true, HTML: html, CSS: sheetOfBand, Isolated: true, Pages: PageSet{{Kind: PageLast}, {Kind: PageRange, From: 2}}},
+				{Footer: true, HTML: html, CSS: sheetOfBand, Isolated: true, Pages: models.LastPage().Or(models.PagesFrom(2))},
 			},
 		}
 		doc, err := Convert(context.Background(), strings.NewReader(src), testFonts(t), o)

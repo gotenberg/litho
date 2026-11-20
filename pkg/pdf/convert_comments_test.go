@@ -36,8 +36,8 @@ func TestConvert_Comments(t *testing.T) {
 		c    *Conversion
 		want []string
 	}{
-		{"annotations", FromODT(strings.NewReader(src), fonts, WithComments(CommentsAnnotations)), []string{"Text Is this right?", "Text Yes.", "Text Done.", "Text Completed"}},
-		{"hidden", FromODT(strings.NewReader(src), fonts, WithComments(CommentsHidden)), nil},
+		{"annotations", FromODT(strings.NewReader(src), fonts, WithComments(models.CommentsAnnotations)), []string{"Text Is this right?", "Text Yes.", "Text Done.", "Text Completed"}},
+		{"hidden", FromODT(strings.NewReader(src), fonts, WithComments(models.CommentsHidden)), nil},
 		{"default", FromODT(strings.NewReader(src), fonts), nil},
 	} {
 		ctx := context.Background()
@@ -69,7 +69,7 @@ func TestConvert_Comments(t *testing.T) {
 func TestConvert_CommentsRemediate(t *testing.T) {
 	t.Parallel()
 	src := strings.Replace(commentsODT(), `office:version="1.3"`, `xmlns:loext="urn:org:documentfoundation:names:experimental:office:xmlns:loext:1.0" office:version="1.3"`, 1)
-	c := FromODT(strings.NewReader(src), WithConvertFontDirs(convertFontDir(t)), WithComments(CommentsAnnotations), WithDefaultLanguage("en"))
+	c := FromODT(strings.NewReader(src), WithConvertFontDirs(convertFontDir(t)), WithComments(models.CommentsAnnotations), WithDefaultLanguage("en"))
 	out, report, err := convertAndRemediate(context.Background(), c, "1.7", models.PDFA2b, models.PDFUA1, "en")
 	if err != nil {
 		t.Fatalf("remediating: %v", err)

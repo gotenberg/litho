@@ -16,6 +16,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 	"github.com/gotenberg/litho/test/integration/fixture"
 )
@@ -245,7 +246,7 @@ func TestReftestFeature_ScreenPagesAreNotShrunk(t *testing.T) {
 	var mu sync.Mutex
 	shrunk := map[bool]bool{}
 	record := func(ctx context.Context, src []byte, s htmlSettings) ([]byte, error) {
-		opts := append([]pdf.HTMLOption{pdf.WithPaper(pdf.Paper{Width: 600, Height: 450}), pdf.WithMargins(0, 0, 0, 0)}, s.Print...)
+		opts := append([]pdf.HTMLOption{pdf.WithPaper(models.Paper{Width: 600, Height: 450}), pdf.WithMargins(0, 0, 0, 0)}, s.Print...)
 		var out bytes.Buffer
 		if _, err := pdf.FromHTML(bytes.NewReader(src), opts...).WriteTo(ctx, &out); err != nil {
 			return nil, err

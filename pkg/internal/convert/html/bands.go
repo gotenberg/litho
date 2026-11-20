@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // Band is a header or a footer: an HTML fragment drawn in the top or the
@@ -48,8 +49,8 @@ type Band struct {
 	HTML string
 	// CSS is a style sheet of the band's document, after the source's.
 	CSS string
-	// Pages selects the pages; nil selects every page.
-	Pages PageSet
+	// Pages selects the pages; the zero value selects every page.
+	Pages models.PageSet
 	// Room is how the band makes room for itself.
 	Room Room
 	// Isolated styles the band's document without the source's style
@@ -71,40 +72,6 @@ const (
 	// the grown margins, which it keeps.
 	RoomContent
 )
-
-// PageSet selects pages: a page any of its terms selects. nil selects
-// every page.
-type PageSet []PageTerm
-
-// PageKind is what a [PageTerm] selects.
-type PageKind int
-
-// The pages a [PageTerm] selects.
-const (
-	// PageFirst is the first page (CSS Page 3, 4.2.1, :first).
-	PageFirst PageKind = iota + 1
-	// PageLast is the last page, which no page selector names.
-	PageLast
-	// PageLeft and PageRight are the left and the right pages (CSS Page
-	// 3, 4.2.2, :left and :right).
-	PageLeft
-	PageRight
-	// PageBlank is a page a forced break left empty (CSS Page 3, 4.2.3,
-	// :blank).
-	PageBlank
-	// PageRange is the pages From to To, counted from 1 in the document,
-	// whatever their number shows; To 0 runs to the last page.
-	PageRange
-	// PageNamed is the pages of the page type Name (CSS Page 3, 4.1).
-	PageNamed
-)
-
-// PageTerm is one term of a [PageSet].
-type PageTerm struct {
-	Kind     PageKind
-	From, To int
-	Name     string
-}
 
 // MaxBands caps [Options.Bands]: 64. Anti-DoS guard, not spec-mandated:
 // each band is styled and built once and each page picks its band among
@@ -139,14 +106,14 @@ func checkBands(bands []Band) error {
 		if b.Room != RoomMargin && b.Room != RoomContent {
 			return fmt.Errorf("%w: %s has an unknown room %d", typeset.ErrInvalidOptions, name, b.Room)
 		}
-		for _, t := range b.Pages {
+		for _, t := range b.Pages.Terms() {
 			switch t.Kind {
-			case PageFirst, PageLast, PageLeft, PageRight, PageBlank:
-			case PageRange:
+			case models.PageKindFirst, models.PageKindLast, models.PageKindLeft, models.PageKindRight, models.PageKindBlank:
+			case models.PageKindRange:
 				if t.From < 1 || t.To != 0 && t.To < t.From {
 					return fmt.Errorf("%w: %s selects pages %d to %d, not a range of pages counted from 1", typeset.ErrInvalidOptions, name, t.From, t.To)
 				}
-			case PageNamed:
+			case models.PageKindNamed:
 				if t.Name == "" {
 					return fmt.Errorf("%w: %s selects the pages of an empty page name", typeset.ErrInvalidOptions, name)
 				}
@@ -166,29 +133,30 @@ func (b Band) edgeName() string {
 	return "header"
 }
 
-// selects reports whether s selects the page info names, a right page
-// when right, of a document whose page count is pages.
-func (s PageSet) selects(info layout.PageInfo, right bool, pages int) bool {
-	if len(s) == 0 {
+// selects reports whether the terms of a page set select the page info
+// names, a right page when right, of a document whose page count is pages.
+// No term selects every page.
+func selects(terms []models.PageTerm, info layout.PageInfo, right bool, pages int) bool {
+	if len(terms) == 0 {
 		return true
 	}
-	for _, t := range s {
+	for _, t := range terms {
 		var ok bool
 		switch t.Kind {
-		case PageFirst:
+		case models.PageKindFirst:
 			ok = info.Index == 0
-		case PageLast:
+		case models.PageKindLast:
 			ok = info.Index == pages-1
-		case PageLeft:
+		case models.PageKindLeft:
 			ok = !right
-		case PageRight:
+		case models.PageKindRight:
 			ok = right
-		case PageBlank:
+		case models.PageKindBlank:
 			ok = info.Blank
-		case PageRange:
+		case models.PageKindRange:
 			n := info.Index + 1
 			ok = n >= t.From && (t.To == 0 || n <= t.To)
-		case PageNamed:
+		case models.PageKindNamed:
 			// A page type name is a custom identifier, matched as written
 			// (CSS Page 3, 4.1; CSS Values 4, 4.2).
 			ok = info.Name == t.Name
@@ -224,6 +192,8 @@ const titleString = "document-title"
 // bandState is a band built for drawing.
 type bandState struct {
 	band Band
+	// terms are the terms of band.Pages, read once.
+	terms []models.PageTerm
 	// node is the band element's box, nil for an empty band; gcpm holds
 	// the page counter and string() items of its generated content.
 	node *layout.Node
@@ -281,7 +251,7 @@ func buildBands(ctx context.Context, env bandEnv, root *css.Style) ([]*bandState
 		if err := ctx.Err(); err != nil {
 			return nil, boxes, nil, err
 		}
-		s := &bandState{band: b}
+		s := &bandState{band: b, terms: b.Pages.Terms()}
 		out = append(out, s)
 		if b.HTML == "" {
 			continue
@@ -443,7 +413,7 @@ func (p *prepared) bandsOn(info layout.PageInfo, pages int) [2]*bandState {
 		if s.band.Footer {
 			edge = 1
 		}
-		if picked[edge] || !s.band.Pages.selects(info, right, pages) {
+		if picked[edge] || !selects(s.terms, info, right, pages) {
 			continue
 		}
 		picked[edge] = true

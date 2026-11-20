@@ -15,10 +15,12 @@ import (
 
 	xbmp "golang.org/x/image/bmp"
 	xtiff "golang.org/x/image/tiff"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // convertImageFile converts the image file data with opts and opens the PDF.
-func convertImageFile(t *testing.T, data []byte, opts ...ImageOption) (*Reader, []byte, *ConvertReport) {
+func convertImageFile(t *testing.T, data []byte, opts ...ImageOption) (*Reader, []byte, *models.ConvertReport) {
 	t.Helper()
 	ctx := context.Background()
 	var out bytes.Buffer

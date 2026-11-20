@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -64,7 +65,7 @@ func Build(ctx context.Context, sourcesDir, outDir, fontsDir string) error {
 	}
 	opts := []pdf.TextOption{
 		pdf.WithConvertFontDirs(fontDirs...),
-		pdf.WithPaper(pdf.Paper{Width: paperWidth, Height: paperHeight}),
+		pdf.WithPaper(models.Paper{Width: paperWidth, Height: paperHeight}),
 		pdf.WithMargins(margin, margin, margin, margin),
 		pdf.WithFontFamilies(fontFamily),
 		pdf.WithFontSize(fontSize),
@@ -155,7 +156,7 @@ func buildOne(ctx context.Context, source, outDir string, opts []pdf.TextOption)
 	return nil
 }
 
-func convert(ctx context.Context, src []byte, opts []pdf.TextOption) ([]byte, *pdf.ConvertReport, error) {
+func convert(ctx context.Context, src []byte, opts []pdf.TextOption) ([]byte, *models.ConvertReport, error) {
 	var buf bytes.Buffer
 	report, err := pdf.FromText(bytes.NewReader(src), opts...).WriteTo(ctx, &buf)
 	if err != nil {

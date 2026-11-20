@@ -9,11 +9,11 @@ import (
 )
 
 // This file holds the drawing of the marked view of tracked changes
-// ([ChangesMarked]) that the DOCX and ODT converters share. Word's
-// marked view is not measured: no reference prints a document's changes
-// shown. Both converters draw LibreOffice's, which prints a DOCX
-// document's changes as an OpenDocument one's. The layout engine draws
-// the change bar of a line that holds changed content (layout.Node
+// ([models.TrackedChangesMarked]) that the DOCX
+// and ODT converters share. Word's marked view is not measured: no reference
+// prints a document's changes shown. Both converters draw LibreOffice's, which
+// prints a DOCX document's changes as an OpenDocument one's. The layout engine
+// draws the change bar of a line that holds changed content (layout.Node
 // ChangeBar).
 
 // MarkKind is how the marked view draws the text of a change.

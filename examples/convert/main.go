@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -43,9 +44,9 @@ func run(ctx context.Context, args []string) error {
 			return err
 		}
 		defer root.Close()
-		conversion = pdf.FromHTML(in, pdf.WithPaper(pdf.PaperLetter), pdf.WithResources(root.FS()), pdf.WithMediaType("print"))
+		conversion = pdf.FromHTML(in, pdf.WithPaper(models.PaperLetter), pdf.WithResources(root.FS()), pdf.WithMediaType("print"))
 	default:
-		conversion = pdf.FromText(in, pdf.WithPaper(pdf.PaperLetter), pdf.WithFontSize(11))
+		conversion = pdf.FromText(in, pdf.WithPaper(models.PaperLetter), pdf.WithFontSize(11))
 	}
 
 	out, err := os.Create(args[0]) //nolint:gosec // The output path is the example's own argument.
@@ -61,7 +62,7 @@ func run(ctx context.Context, args []string) error {
 	omitted := 0
 	for _, w := range report.Warnings {
 		fmt.Printf("page %d: %s (%s): %s\n", w.Page, w.Code, w.Effect, w.Message)
-		if w.Effect == pdf.EffectOmitted {
+		if w.Effect == models.EffectOmitted {
 			omitted++
 		}
 	}

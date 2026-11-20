@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestConvertWarnings_Families converts, through the public API, one source
@@ -41,29 +43,29 @@ func TestConvertWarnings_Families(t *testing.T) {
 	for _, tc := range []struct {
 		family string
 		conv   func() *Conversion
-		code   ConvertWarningCode
+		code   models.ConvertWarningCode
 		about  string
 	}{
-		{"text and fonts", func() *Conversion { return FromText(strings.NewReader("café"), fonts) }, WarningMissingGlyph, "U+00E9"},
-		{"text and fonts", html(`<style>@font-face { font-family: Gone; src: url(gone.woff) } p { font-family: Gone }</style><p>x`), WarningFontNotLoaded, "Gone"},
-		{"style sheets", html(`<style>p { frobnicate: 1 }</style><p>x`), WarningCSSUnsupported, "frobnicate"},
-		{"style sheets", html(`<style>p { width: red }</style><p>x`), WarningCSSInvalid, "width"},
-		{"resources", func() *Conversion { return FromHTML(strings.NewReader(`<img src="a.png" alt=a>`), fonts) }, WarningResourceRefused, "a.png"},
-		{"resources", html(`<img src="https://example.com/a.png" alt=a>`), WarningResourceNoNetwork, "example.com"},
-		{"resources", html(`<img src="`+server.URL+`/a.png" alt=a>`, WithHTTPClient(server.Client())), WarningResourceHTTPStatus, "410"},
-		{"resources", html(`<img src="gone.png" alt=a>`), WarningResourceFailed, "gone.png"},
-		{"pictures", html(`<img src="bad.png" alt=a>`), WarningPictureUnreadable, "bad.png"},
-		{"pictures", odt(frame(`<draw:image><office:binary-data>` + wmf + `</office:binary-data></draw:image>`)), WarningPictureFormatUnsupported, "WMF"},
-		{"pictures", odt(frame(`<draw:image xlink:href="Pictures/gone.png" xmlns:xlink="http://www.w3.org/1999/xlink"/>`)), WarningPictureMissing, "Pictures/gone.png"},
-		{"pictures", odt(frame(`<draw:image><office:binary-data>!!!</office:binary-data></draw:image>`)), WarningPictureUnreadable, "base64"},
-		{"charts", func() *Conversion { return FromODS(strings.NewReader(chartODS), fonts) }, WarningChartNoCache, "no values"},
-		{"packages", func() *Conversion { return FromXLSX(bytes.NewReader(brokenSheetXLSX(t)), fonts) }, WarningPartMalformed, "does not parse"},
-		{"forms", html(`<p><input value=x>`), WarningFormWidgetOmitted, "form controls"},
-		{"links", html(`<p><a href="#nowhere">x</a>`), WarningLinkUnresolved, "nowhere"},
-		{"value formats", func() *Conversion { return FromXLSX(bytes.NewReader(brokenSheetXLSX(t)), fonts) }, WarningValueFormatUnsupported, "[Bogus]"},
-		{"page setup", html(`<style>@page { size: 20000in }</style><p>x`), WarningPageSetupUnsupported, "@page size"},
-		{"other content", html(`<p>a<iframe src="x.html">i</iframe>`), WarningContentUnsupported, "<iframe>"},
-		{"limits", func() *Conversion { return FromText(strings.NewReader(strings.Repeat("a", 1<<16+1)), fonts) }, WarningLimitReached, ""},
+		{"text and fonts", func() *Conversion { return FromText(strings.NewReader("café"), fonts) }, models.WarningMissingGlyph, "U+00E9"},
+		{"text and fonts", html(`<style>@font-face { font-family: Gone; src: url(gone.woff) } p { font-family: Gone }</style><p>x`), models.WarningFontNotLoaded, "Gone"},
+		{"style sheets", html(`<style>p { frobnicate: 1 }</style><p>x`), models.WarningCSSUnsupported, "frobnicate"},
+		{"style sheets", html(`<style>p { width: red }</style><p>x`), models.WarningCSSInvalid, "width"},
+		{"resources", func() *Conversion { return FromHTML(strings.NewReader(`<img src="a.png" alt=a>`), fonts) }, models.WarningResourceRefused, "a.png"},
+		{"resources", html(`<img src="https://example.com/a.png" alt=a>`), models.WarningResourceNoNetwork, "example.com"},
+		{"resources", html(`<img src="`+server.URL+`/a.png" alt=a>`, WithHTTPClient(server.Client())), models.WarningResourceHTTPStatus, "410"},
+		{"resources", html(`<img src="gone.png" alt=a>`), models.WarningResourceFailed, "gone.png"},
+		{"pictures", html(`<img src="bad.png" alt=a>`), models.WarningPictureUnreadable, "bad.png"},
+		{"pictures", odt(frame(`<draw:image><office:binary-data>` + wmf + `</office:binary-data></draw:image>`)), models.WarningPictureFormatUnsupported, "WMF"},
+		{"pictures", odt(frame(`<draw:image xlink:href="Pictures/gone.png" xmlns:xlink="http://www.w3.org/1999/xlink"/>`)), models.WarningPictureMissing, "Pictures/gone.png"},
+		{"pictures", odt(frame(`<draw:image><office:binary-data>!!!</office:binary-data></draw:image>`)), models.WarningPictureUnreadable, "base64"},
+		{"charts", func() *Conversion { return FromODS(strings.NewReader(chartODS), fonts) }, models.WarningChartNoCache, "no values"},
+		{"packages", func() *Conversion { return FromXLSX(bytes.NewReader(brokenSheetXLSX(t)), fonts) }, models.WarningPartMalformed, "does not parse"},
+		{"forms", html(`<p><input value=x>`), models.WarningFormWidgetOmitted, "form controls"},
+		{"links", html(`<p><a href="#nowhere">x</a>`), models.WarningLinkUnresolved, "nowhere"},
+		{"value formats", func() *Conversion { return FromXLSX(bytes.NewReader(brokenSheetXLSX(t)), fonts) }, models.WarningValueFormatUnsupported, "[Bogus]"},
+		{"page setup", html(`<style>@page { size: 20000in }</style><p>x`), models.WarningPageSetupUnsupported, "@page size"},
+		{"other content", html(`<p>a<iframe src="x.html">i</iframe>`), models.WarningContentUnsupported, "<iframe>"},
+		{"limits", func() *Conversion { return FromText(strings.NewReader(strings.Repeat("a", 1<<16+1)), fonts) }, models.WarningLimitReached, ""},
 	} {
 		var out bytes.Buffer
 		rep, err := tc.conv().WriteTo(context.Background(), &out)
@@ -74,7 +76,7 @@ func TestConvertWarnings_Families(t *testing.T) {
 		found := false
 		for _, w := range rep.Warnings {
 			found = found || w.Code == tc.code && strings.Contains(w.Message, tc.about)
-			if w.Effect != EffectOmitted && w.Effect != EffectApproximated {
+			if w.Effect != models.EffectOmitted && w.Effect != models.EffectApproximated {
 				t.Errorf("%s: the %s warning %q has the effect %q", tc.family, w.Code, w.Message, w.Effect)
 			}
 		}
@@ -93,23 +95,23 @@ func TestConvertWarnings_EffectTellsLossFromApproximation(t *testing.T) {
 	t.Parallel()
 
 	fonts := WithConvertFontDirs(convertFontDir(t))
-	effect := func(src string) ConvertWarningEffect {
+	effect := func(src string) models.ConvertWarningEffect {
 		t.Helper()
 		var out bytes.Buffer
 		rep, err := FromHTML(strings.NewReader(src), fonts, WithResources(fstest.MapFS{})).WriteTo(context.Background(), &out)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(rep.Warnings) != 1 || rep.Warnings[0].Code != WarningResourceFailed {
-			t.Fatalf("want one %s warning, got %+v", WarningResourceFailed, rep.Warnings)
+		if len(rep.Warnings) != 1 || rep.Warnings[0].Code != models.WarningResourceFailed {
+			t.Fatalf("want one %s warning, got %+v", models.WarningResourceFailed, rep.Warnings)
 		}
 		return rep.Warnings[0].Effect
 	}
-	if got := effect(`<p>a<img src="gone.png" alt="">`); got != EffectOmitted {
-		t.Errorf("a picture left out: effect %q, want %q", got, EffectOmitted)
+	if got := effect(`<p>a<img src="gone.png" alt="">`); got != models.EffectOmitted {
+		t.Errorf("a picture left out: effect %q, want %q", got, models.EffectOmitted)
 	}
-	if got := effect(`<link rel="stylesheet" href="gone.css"><p>a`); got != EffectApproximated {
-		t.Errorf("a stylesheet left out: effect %q, want %q", got, EffectApproximated)
+	if got := effect(`<link rel="stylesheet" href="gone.css"><p>a`); got != models.EffectApproximated {
+		t.Errorf("a stylesheet left out: effect %q, want %q", got, models.EffectApproximated)
 	}
 }
 

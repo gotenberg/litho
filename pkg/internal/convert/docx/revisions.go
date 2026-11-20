@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // markDeleted reports a paragraph whose mark is a tracked deletion
@@ -111,7 +112,7 @@ func mergeDeleted(kids []*ooxml.Element) []*ooxml.Element {
 // revisions rewrites the revisions of a part into the view
 // office.Options.TrackedChanges asks for (ECMA-376 Part 1, 17.13.5).
 type revisions struct {
-	view office.TrackedChanges
+	view models.TrackedChanges
 	// authors numbers the authors of the marked view in the order the
 	// converter meets them, the main part first.
 	authors map[string]int
@@ -169,7 +170,7 @@ func (r *revisions) resolve(el *ooxml.Element, depth int) {
 		// Properties hold revision marks, not revised content.
 		return
 	}
-	if depth == 0 && r.view == office.ChangesMarked {
+	if depth == 0 && r.view == models.TrackedChangesMarked {
 		r.findMoves(el)
 	}
 	var kids []*ooxml.Element
@@ -184,11 +185,11 @@ func (r *revisions) resolve(el *ooxml.Element, depth int) {
 		switch k.Local {
 		case "ins", "moveTo":
 			changed = true
-			if r.view == office.ChangesRejected {
+			if r.view == models.TrackedChangesRejected {
 				continue
 			}
 			r.resolve(k, depth+1)
-			if r.view == office.ChangesMarked {
+			if r.view == models.TrackedChangesMarked {
 				kind := office.MarkInsert
 				if k.Local == "moveTo" || r.moved[k] {
 					kind = office.MarkMoveTo
@@ -198,12 +199,12 @@ func (r *revisions) resolve(el *ooxml.Element, depth int) {
 			kids = append(kids, k.Children...)
 		case "del", "moveFrom":
 			changed = true
-			if r.view == office.ChangesAccepted {
+			if r.view == models.TrackedChangesAccepted {
 				continue
 			}
 			r.resolve(k, depth+1)
 			undelete(k, depth+1)
-			if r.view == office.ChangesMarked {
+			if r.view == models.TrackedChangesMarked {
 				kind := office.MarkDelete
 				if k.Local == "moveFrom" || r.moved[k] {
 					kind = office.MarkMoveFrom
@@ -212,13 +213,13 @@ func (r *revisions) resolve(el *ooxml.Element, depth int) {
 			}
 			kids = append(kids, k.Children...)
 		case "tr":
-			if t := k.Child(w, "trPr"); r.view == office.ChangesAccepted && t.Child(w, "del") != nil ||
-				r.view == office.ChangesRejected && t.Child(w, "ins") != nil {
+			if t := k.Child(w, "trPr"); r.view == models.TrackedChangesAccepted && t.Child(w, "del") != nil ||
+				r.view == models.TrackedChangesRejected && t.Child(w, "ins") != nil {
 				changed = true
 				continue
 			}
 			r.resolve(k, depth+1)
-			if r.view == office.ChangesMarked {
+			if r.view == models.TrackedChangesMarked {
 				r.rowGround(k)
 			}
 			kids = append(kids, k)
@@ -226,12 +227,12 @@ func (r *revisions) resolve(el *ooxml.Element, depth int) {
 			if markChanged {
 				r.markStart[k] = true
 			}
-			markChanged = r.paragraphMark(k) && r.view == office.ChangesMarked
+			markChanged = r.paragraphMark(k) && r.view == models.TrackedChangesMarked
 			if markChanged {
 				r.markEnd[k] = true
 			}
 			r.resolve(k, depth+1)
-			if r.view == office.ChangesMarked {
+			if r.view == models.TrackedChangesMarked {
 				r.markAttributes(k, k.Child(w, "pPr").Child(w, "pPrChange"), depth+1)
 			}
 			kids = append(kids, k)
@@ -260,11 +261,11 @@ func (r *revisions) paragraphMark(p *ooxml.Element) bool {
 			switch c.Local {
 			case "del", "moveFrom":
 				revised = true
-				deleted = deleted || r.view == office.ChangesAccepted
+				deleted = deleted || r.view == models.TrackedChangesAccepted
 				continue
 			case "ins", "moveTo":
 				revised = true
-				deleted = deleted || r.view == office.ChangesRejected
+				deleted = deleted || r.view == models.TrackedChangesRejected
 				continue
 			}
 		}

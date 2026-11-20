@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // threePages is a document of three pages, A, B and C, titled T1.
@@ -82,18 +83,18 @@ func TestBands_PageSets(t *testing.T) {
 		`<p>1</p><p>2</p><p>3</p><p class="ch">4</p><p class="ch">5</p><p>6</p>`
 	for _, tt := range []struct {
 		name  string
-		pages PageSet
+		pages models.PageSet
 		want  string
 	}{
-		{"every page", nil, "111111"},
-		{"first", PageSet{{Kind: PageFirst}}, "100000"},
-		{"last", PageSet{{Kind: PageLast}}, "000001"},
-		{"left", PageSet{{Kind: PageLeft}}, "010101"},
-		{"right", PageSet{{Kind: PageRight}}, "101010"},
-		{"range", PageSet{{Kind: PageRange, From: 2, To: 3}}, "011000"},
-		{"range to the end", PageSet{{Kind: PageRange, From: 5}}, "000011"},
-		{"named", PageSet{{Kind: PageNamed, Name: "ch"}}, "000110"},
-		{"union", PageSet{{Kind: PageFirst}, {Kind: PageLast}}, "100001"},
+		{"every page", models.PageSet{}, "111111"},
+		{"first", models.FirstPage(), "100000"},
+		{"last", models.LastPage(), "000001"},
+		{"left", models.LeftPages(), "010101"},
+		{"right", models.RightPages(), "101010"},
+		{"range", models.PageRange(2, 3), "011000"},
+		{"range to the end", models.PagesFrom(5), "000011"},
+		{"named", models.NamedPages("ch"), "000110"},
+		{"union", models.FirstPage().Or(models.LastPage()), "100001"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -117,7 +118,7 @@ func TestBands_BlankPages(t *testing.T) {
 	t.Parallel()
 	// The second paragraph starts on a right page: page 2 is blank.
 	src := `<style>body { margin: 0 } p { margin: 0 } .r { break-before: right }</style><p>1</p><p class="r">2</p>`
-	doc := convertDoc(t, src, bandOptions(Band{HTML: "BLANK", Pages: PageSet{{Kind: PageBlank}}}))
+	doc := convertDoc(t, src, bandOptions(Band{HTML: "BLANK", Pages: models.BlankPages()}))
 	if len(doc.Pages) != 3 {
 		t.Fatalf("%d pages, want 3", len(doc.Pages))
 	}
@@ -132,8 +133,8 @@ func TestBands_LaterWinsAndEmptyRemoves(t *testing.T) {
 	t.Parallel()
 	doc := convertDoc(t, threePages, bandOptions(
 		Band{HTML: "ALL"},
-		Band{Pages: PageSet{{Kind: PageFirst}}},
-		Band{HTML: "LAST", Pages: PageSet{{Kind: PageLast}}},
+		Band{Pages: models.FirstPage()},
+		Band{HTML: "LAST", Pages: models.LastPage()},
 		Band{Footer: true, HTML: "FOOT"},
 	))
 	for i, want := range []string{"", "ALL", "LAST"} {
@@ -154,7 +155,7 @@ func TestBands_ReplaceTheirMarginsBoxes(t *testing.T) {
 	src := `<style>@page { @top-left { content: "DOC-TL" } @top-right { content: "DOC-TR" } @bottom-center { content: "DOC-B" } }</style>` + threePages
 	doc := convertDoc(t, src, bandOptions(
 		Band{HTML: "BAND"},
-		Band{Pages: PageSet{{Kind: PageLast}}},
+		Band{Pages: models.LastPage()},
 	))
 	for i, pg := range doc.Pages {
 		band := i < 2
@@ -327,10 +328,9 @@ func TestBands_InvalidOptions(t *testing.T) {
 	t.Parallel()
 	for _, b := range []Band{
 		{Room: 7},
-		{Pages: PageSet{{Kind: PageRange, From: 0, To: 2}}},
-		{Pages: PageSet{{Kind: PageRange, From: 3, To: 2}}},
-		{Pages: PageSet{{Kind: PageNamed}}},
-		{Pages: PageSet{{Kind: 99}}},
+		{Pages: models.PageRange(0, 2)},
+		{Pages: models.PageRange(3, 2)},
+		{Pages: models.NamedPages("")},
 		{HTML: strings.Repeat("x", maxBandBytes+1)},
 	} {
 		_, err := Convert(context.Background(), strings.NewReader("x"), testFonts(t), Options{Bands: []Band{b}})

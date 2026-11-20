@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // understood lists the namespaces whose mc:Choice the converter reads
@@ -241,7 +242,7 @@ func load(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	if d.loadEmbeddedFonts(fontPart, fontRoot); d.err != nil {
 		return nil, d.err
 	}
-	if opts.Comments == office.CommentsAnnotations {
+	if opts.Comments == models.CommentsAnnotations {
 		d.readComments()
 	}
 	d.footnotesPart = pkg.RelatedPart(ctx, main, ooxml.RelFootnotes)

@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // testBookSheet is one sheet of a test workbook: its name, whether it is
@@ -155,10 +157,10 @@ func TestConvert_FormulaRecalculation(t *testing.T) {
 	t.Parallel()
 	dir := convertFontDir(t)
 	book := testWorkbook(t, "Microsoft Excel", testBookSheet{name: "S", row: `<c r="A1"><v>2</v></c><c r="B1"><f>A1*2</f><v>7</v></c><c r="C1"><f>A1+1</f></c>`})
-	for mode, want := range map[Recalculation]string{
-		RecalculateAsNeeded: "2 7 3",
-		RecalculateNever:    "2 7",
-		RecalculateAlways:   "2 4 3",
+	for mode, want := range map[models.Recalculation]string{
+		models.RecalculateAsNeeded: "2 7 3",
+		models.RecalculateNever:    "2 7",
+		models.RecalculateAlways:   "2 4 3",
 	} {
 		pages, _ := convertedPages(t, FromXLSX(bytes.NewReader(book), WithConvertFontDirs(dir), WithFormulaRecalculation(mode)))
 		if len(pages) != 1 || pages[0] != want {
@@ -173,7 +175,7 @@ func TestConvert_FormulaRecalculation(t *testing.T) {
 		`<table:table table:name="S"><table:table-row><table:table-cell office:value-type="float" office:value="2"><text:p>2</text:p></table:table-cell>` +
 		`<table:table-cell table:formula="of:=[.A1]*2" office:value-type="float" office:value="7"><text:p>7</text:p></table:table-cell></table:table-row></table:table>` +
 		`</office:spreadsheet></office:body></office:document>`
-	for mode, want := range map[Recalculation]string{RecalculateAsNeeded: "2 4", RecalculateNever: "2 7", RecalculateAlways: "2 4"} {
+	for mode, want := range map[models.Recalculation]string{models.RecalculateAsNeeded: "2 4", models.RecalculateNever: "2 7", models.RecalculateAlways: "2 4"} {
 		pages, _ := convertedPages(t, FromODS(strings.NewReader(ods), WithConvertFontDirs(dir), WithFormulaRecalculation(mode)))
 		if len(pages) != 1 || pages[0] != want {
 			t.Errorf("ODS mode %d: %q, want %q", mode, pages, want)

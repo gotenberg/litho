@@ -10,13 +10,13 @@ import (
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/chart"
-	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/warn"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // The base column width and the row height of a sheet whose format
@@ -370,7 +370,7 @@ func dedupCells(cells []sheet.Cell) []sheet.Cell {
 // recalculate a workbook it loads unless [reader.recalculates]; one
 // without (18.3.1.40 f, no v) keeps its text for the builder to compute
 // (an empty v is none, as budget.xlsx saves its totals), a shared
-// formula's other cells excepted. That is office.RecalculateAsNeeded;
+// formula's other cells excepted. That is models.RecalculateAsNeeded;
 // [reader.recalculation] may keep every formula or none. It reports false
 // for a cell without a value, a formula or a style.
 func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cell, bool) {
@@ -434,13 +434,13 @@ func (w *sheetReader) cell(c *ooxml.Element, col int, row *sheet.Row) (sheet.Cel
 		cell.Value = sheet.Value{}
 		cell.EmptyText = true
 	}
-	if f := c.Child(nsMain, "f"); f != nil && formulaFits(f.Text) && r.recalculation != office.RecalculateNever {
-		// Under office.RecalculateNever no formula is kept: the cell shows
+	if f := c.Child(nsMain, "f"); f != nil && formulaFits(f.Text) && r.recalculation != models.RecalculateNever {
+		// Under models.RecalculateNever no formula is kept: the cell shows
 		// the result the file caches, nothing without one. Under
-		// office.RecalculateAlways every formula is kept for the builder
+		// models.RecalculateAlways every formula is kept for the builder
 		// to compute, a cached result or not.
 		cell.Formula = strings.TrimSpace(f.Text)
-		if v != nil && strings.TrimSpace(v.Text) != "" && r.recalculation == office.RecalculateAsNeeded {
+		if v != nil && strings.TrimSpace(v.Text) != "" && r.recalculation == models.RecalculateAsNeeded {
 			// A cached result shows unless the workbook is recalculated
 			// ([reader.keepCachedResults]).
 			if t := attr(c, "t"); (t == "" || t == "n") && cell.Value.Kind == sheet.Number && cell.Value.Number != 0 {

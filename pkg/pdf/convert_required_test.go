@@ -14,6 +14,8 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestWithRequiredResources_FailsEveryLoadThatFails states, one row for
@@ -56,38 +58,38 @@ func TestWithRequiredResources_FailsEveryLoadThatFails(t *testing.T) {
 		opts []HTMLOption
 		// code is the warning the conversion reports without the option,
 		// about the text the message holds.
-		code  ConvertWarningCode
+		code  models.ConvertWarningCode
 		about string
 		// fails reports a load that fails; otherwise the resource arrived
 		// and the option changes nothing.
 		fails bool
 	}{
-		{"relative URL without resources", `<img src="a.png" alt=x>`, nil, WarningResourceRefused, "a.png", true},
-		{"path leaving the root", `<img src="../a.png" alt=x>`, []HTMLOption{WithResources(files)}, WarningResourceRefused, "a.png", true},
-		{"file URL", `<img src="file:///etc/a.png" alt=x>`, []HTMLOption{WithResources(files)}, WarningResourceRefused, "a.png", true},
-		{"scheme never fetched", `<img src="ftp://example.com/a.png" alt=x>`, []HTMLOption{WithResources(files)}, WarningResourceRefused, "a.png", true},
-		{"no HTTP client", `<img src="https://example.com/a.png" alt=x>`, []HTMLOption{WithResources(files)}, WarningResourceNoNetwork, "a.png", true},
-		{"status outside 2xx", `<img src="` + server.URL + `/gone.png" alt=x>`, []HTMLOption{WithHTTPClient(server.Client())}, WarningResourceHTTPStatus, "404", true},
-		{"request that fails", `<img src="` + closed.URL + `/a.png" alt=x>`, []HTMLOption{WithHTTPClient(&http.Client{Timeout: 5 * time.Second})}, WarningResourceFailed, "a.png", true},
-		{"file that does not exist", `<img src="gone.png" alt=x>`, []HTMLOption{WithResources(files)}, WarningResourceFailed, "gone.png", true},
-		{"stylesheet served as text/plain", `<link rel=stylesheet href="` + server.URL + `/plain.css"><p>x`, []HTMLOption{WithHTTPClient(server.Client())}, WarningResourceFailed, "text/plain", true},
-		{"stylesheet for another medium", `<link rel=stylesheet media=screen href="gone.css"><p>x`, []HTMLOption{WithResources(files)}, WarningResourceFailed, "gone.css", true},
-		{"@import", `<style>@import url(gone.css);</style><p>x`, []HTMLOption{WithResources(files)}, WarningResourceFailed, "gone.css", true},
-		{"data URL that does not decode", `<img src="data:image/png;base64,%%%" alt=x>`, nil, WarningResourceFailed, "base64,%%%", true},
-		{"CSS image", `<div style="background-image: url(gone.png); height: 10px"></div>`, []HTMLOption{WithResources(files)}, WarningPictureUnreadable, "gone.png", true},
-		{"video poster", `<video poster="gone.png"></video>`, []HTMLOption{WithResources(files)}, WarningResourceFailed, "gone.png", true},
-		{"image of an SVG drawing", `<svg width=10 height=10><image href="gone.png" width=10 height=10 /></svg>`, []HTMLOption{WithResources(files)}, WarningPictureUnreadable, "gone.png", true},
-		{"font whose file does not arrive", `<style>@font-face { font-family: F; src: url(gone.ttf) } p { font-family: F }</style><p>x`, []HTMLOption{WithResources(files)}, WarningFontNotLoaded, "gone.ttf", true},
-		{"font no text uses", `<style>@font-face { font-family: F; src: url(gone.ttf) }</style><p>x`, []HTMLOption{WithResources(files)}, WarningFontNotLoaded, "gone.ttf", true},
-		{"resource past the size cap", `<img src="big.png" alt=x>`, []HTMLOption{WithResources(big)}, WarningLimitReached, "big.png", true},
-		{"picture that does not decode", `<img src="bad.png" alt=x>`, []HTMLOption{WithResources(files)}, WarningPictureUnreadable, "bad.png", false},
-		{"picture format litho does not read", `<img src="a.ico" alt=x>`, []HTMLOption{WithResources(files)}, WarningPictureFormatUnsupported, "ICO", false},
-		{"picture past the pixel cap", `<img src="a.png" alt=x>`, []HTMLOption{WithResources(files), WithConvertLimits(Limits{MaxImagePixels: 50})}, WarningLimitReached, "a.png", false},
-		{"font program that does not parse", `<style>@font-face { font-family: F; src: url(bad.ttf) } p { font-family: F }</style><p>x`, []HTMLOption{WithResources(files)}, WarningFontNotLoaded, "bad.ttf", false},
+		{"relative URL without resources", `<img src="a.png" alt=x>`, nil, models.WarningResourceRefused, "a.png", true},
+		{"path leaving the root", `<img src="../a.png" alt=x>`, []HTMLOption{WithResources(files)}, models.WarningResourceRefused, "a.png", true},
+		{"file URL", `<img src="file:///etc/a.png" alt=x>`, []HTMLOption{WithResources(files)}, models.WarningResourceRefused, "a.png", true},
+		{"scheme never fetched", `<img src="ftp://example.com/a.png" alt=x>`, []HTMLOption{WithResources(files)}, models.WarningResourceRefused, "a.png", true},
+		{"no HTTP client", `<img src="https://example.com/a.png" alt=x>`, []HTMLOption{WithResources(files)}, models.WarningResourceNoNetwork, "a.png", true},
+		{"status outside 2xx", `<img src="` + server.URL + `/gone.png" alt=x>`, []HTMLOption{WithHTTPClient(server.Client())}, models.WarningResourceHTTPStatus, "404", true},
+		{"request that fails", `<img src="` + closed.URL + `/a.png" alt=x>`, []HTMLOption{WithHTTPClient(&http.Client{Timeout: 5 * time.Second})}, models.WarningResourceFailed, "a.png", true},
+		{"file that does not exist", `<img src="gone.png" alt=x>`, []HTMLOption{WithResources(files)}, models.WarningResourceFailed, "gone.png", true},
+		{"stylesheet served as text/plain", `<link rel=stylesheet href="` + server.URL + `/plain.css"><p>x`, []HTMLOption{WithHTTPClient(server.Client())}, models.WarningResourceFailed, "text/plain", true},
+		{"stylesheet for another medium", `<link rel=stylesheet media=screen href="gone.css"><p>x`, []HTMLOption{WithResources(files)}, models.WarningResourceFailed, "gone.css", true},
+		{"@import", `<style>@import url(gone.css);</style><p>x`, []HTMLOption{WithResources(files)}, models.WarningResourceFailed, "gone.css", true},
+		{"data URL that does not decode", `<img src="data:image/png;base64,%%%" alt=x>`, nil, models.WarningResourceFailed, "base64,%%%", true},
+		{"CSS image", `<div style="background-image: url(gone.png); height: 10px"></div>`, []HTMLOption{WithResources(files)}, models.WarningPictureUnreadable, "gone.png", true},
+		{"video poster", `<video poster="gone.png"></video>`, []HTMLOption{WithResources(files)}, models.WarningResourceFailed, "gone.png", true},
+		{"image of an SVG drawing", `<svg width=10 height=10><image href="gone.png" width=10 height=10 /></svg>`, []HTMLOption{WithResources(files)}, models.WarningPictureUnreadable, "gone.png", true},
+		{"font whose file does not arrive", `<style>@font-face { font-family: F; src: url(gone.ttf) } p { font-family: F }</style><p>x`, []HTMLOption{WithResources(files)}, models.WarningFontNotLoaded, "gone.ttf", true},
+		{"font no text uses", `<style>@font-face { font-family: F; src: url(gone.ttf) }</style><p>x`, []HTMLOption{WithResources(files)}, models.WarningFontNotLoaded, "gone.ttf", true},
+		{"resource past the size cap", `<img src="big.png" alt=x>`, []HTMLOption{WithResources(big)}, models.WarningLimitReached, "big.png", true},
+		{"picture that does not decode", `<img src="bad.png" alt=x>`, []HTMLOption{WithResources(files)}, models.WarningPictureUnreadable, "bad.png", false},
+		{"picture format litho does not read", `<img src="a.ico" alt=x>`, []HTMLOption{WithResources(files)}, models.WarningPictureFormatUnsupported, "ICO", false},
+		{"picture past the pixel cap", `<img src="a.png" alt=x>`, []HTMLOption{WithResources(files), WithConvertLimits(Limits{MaxImagePixels: 50})}, models.WarningLimitReached, "a.png", false},
+		{"font program that does not parse", `<style>@font-face { font-family: F; src: url(bad.ttf) } p { font-family: F }</style><p>x`, []HTMLOption{WithResources(files)}, models.WarningFontNotLoaded, "bad.ttf", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			convert := func(required bool) (*ConvertReport, error) {
+			convert := func(required bool) (*models.ConvertReport, error) {
 				opts := append([]HTMLOption{fonts, WithRequiredResources(required)}, tc.opts...)
 				return FromHTML(strings.NewReader(tc.src), opts...).WriteTo(context.Background(), io.Discard)
 			}
@@ -176,7 +178,7 @@ func TestWithRequiredResources_OffWritesTheSameBytes(t *testing.T) {
 }
 
 // requiredHasWarning reports a warning of code whose message holds about.
-func requiredHasWarning(rep *ConvertReport, code ConvertWarningCode, about string) bool {
+func requiredHasWarning(rep *models.ConvertReport, code models.ConvertWarningCode, about string) bool {
 	for _, w := range rep.Warnings {
 		if w.Code == code && strings.Contains(w.Message, about) {
 			return true

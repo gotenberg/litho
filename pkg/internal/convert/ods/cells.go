@@ -57,7 +57,7 @@ func (r *reader) cell(el *odf.Element) (sheet.Cell, bool) {
 	// Calc recalculates an OpenDocument spreadsheet as it loads it,
 	// whatever program wrote it: every formula is kept for the builder
 	// to compute (ODF 1.3 Part 3, 19.643 table:formula), under
-	// office.RecalculateAsNeeded and office.RecalculateAlways alike.
+	// models.RecalculateAsNeeded and models.RecalculateAlways alike.
 	if f := el.A(odf.NSTable, "formula"); f != "" && len(f) <= maxFormulaLen && r.keepFormulas {
 		c.Formula = f
 	}

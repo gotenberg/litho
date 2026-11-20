@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // textTops returns the top-down baseline of the first run of each text on
@@ -309,7 +310,7 @@ func TestSinglePage_OptionsCarryOver(t *testing.T) {
 	extra := commentParts([][3]string{{"0", "Ada", "On one page."}}, nil, nil)
 	extra["word/styles.xml"] = styles
 	data := docx(t, body, extra)
-	opts := office.Options{FormFields: true, Comments: office.CommentsAnnotations, TrackedChanges: office.ChangesMarked}
+	opts := office.Options{FormFields: true, Comments: models.CommentsAnnotations, TrackedChanges: models.TrackedChangesMarked}
 	paged := convertBytes(t, data, opts)
 	opts.SinglePage = true
 	one := convertBytes(t, data, opts)

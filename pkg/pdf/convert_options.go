@@ -6,109 +6,8 @@ import (
 	"net/http"
 	"slices"
 	"time"
-)
 
-// Paper is a page size in points, 1/72 inch: 25.4 mm is 72 points.
-// Concurrent reads of a value are safe; a write needs synchronization.
-type Paper struct {
-	// Width and Height are the sides in points. A paper wider than it is
-	// high is a landscape paper.
-	Width, Height float64
-}
-
-// The papers a conversion names most, each portrait. Their sides are the
-// ones ISO 216 and ANSI/ASME Y14.1 give them, to a thousandth of a point.
-// Any other size is a [Paper] literal.
-var (
-	// PaperA3 is ISO 216 A3, 297 by 420 mm.
-	PaperA3 = Paper{Width: 841.890, Height: 1190.551}
-	// PaperA4 is ISO 216 A4, 210 by 297 mm, the paper of a source that names
-	// none unless [WithDefaultPaper] names another.
-	PaperA4 = Paper{Width: 595.276, Height: 841.890}
-	// PaperA5 is ISO 216 A5, 148 by 210 mm.
-	PaperA5 = Paper{Width: 419.528, Height: 595.276}
-	// PaperB5 is ISO 216 B5, 176 by 250 mm. The JIS B5 a spreadsheet often
-	// names is larger, 182 by 257 mm.
-	PaperB5 = Paper{Width: 498.898, Height: 708.661}
-	// PaperLetter is North American Letter, 8.5 by 11 inches.
-	PaperLetter = Paper{Width: 612, Height: 792}
-	// PaperLegal is North American Legal, 8.5 by 14 inches.
-	PaperLegal = Paper{Width: 612, Height: 1008}
-	// PaperTabloid is North American Tabloid, 11 by 17 inches.
-	PaperTabloid = Paper{Width: 792, Height: 1224}
-	// PaperExecutive is North American Executive, 7.25 by 10.5 inches.
-	PaperExecutive = Paper{Width: 522, Height: 756}
-)
-
-// Orientation is the way the pages of a conversion are turned.
-type Orientation int
-
-const (
-	// OrientationSource keeps each page turned as its paper or its source
-	// names it. It is the zero value and the default.
-	OrientationSource Orientation = iota
-	// OrientationPortrait turns every page that is wider than it is high.
-	OrientationPortrait
-	// OrientationLandscape turns every page that is higher than it is wide.
-	OrientationLandscape
-)
-
-// TrackedChanges is how the changes a DOCX or ODT source tracks are printed.
-type TrackedChanges int
-
-const (
-	// TrackedChangesAccepted prints the text as it reads once every change
-	// is accepted: insertions kept, deletions left out. It is the zero value
-	// and the default.
-	TrackedChangesAccepted TrackedChanges = iota
-	// TrackedChangesRejected prints the text as it read before the changes:
-	// insertions left out, deletions kept. A change of formatting keeps its
-	// new formatting.
-	TrackedChangesRejected
-	// TrackedChangesMarked prints both, each marked as LibreOffice shows
-	// tracked changes: an insertion underlined, a deletion struck through
-	// and text whose formatting changed in bold, each in the colour of its
-	// author, taken in turn from nine colours in the order the authors first
-	// appear; moved text double underlined where it went and double struck
-	// through where it was, in green; an inserted table row on a light blue
-	// ground and a deleted one on a pink ground. A change bar, a black
-	// hairline left of the text column, stands beside each line a change
-	// touches, the lines of a text box excepted.
-	TrackedChangesMarked
-)
-
-// Comments is how the comments of a DOCX or ODT source are written.
-type Comments int
-
-const (
-	// CommentsHidden leaves the comments out, as Word and LibreOffice
-	// print a document. It is the zero value and the default.
-	CommentsHidden Comments = iota
-	// CommentsAnnotations writes each comment as an annotation a PDF
-	// viewer lists and opens, over the text it covers; the pages print as
-	// they do without it.
-	CommentsAnnotations
-)
-
-// Recalculation is when the formulas of an XLSX or ODS source are computed
-// again rather than shown as the value the file stores.
-type Recalculation int
-
-const (
-	// RecalculateAsNeeded computes a formula again when the file gives no
-	// reason to trust its stored value: every formula of an ODS source; in
-	// an XLSX source, a formula without a stored value, and every formula of
-	// a workbook that neither Microsoft Excel nor LibreOffice wrote and none
-	// of whose formulas stores a number other than 0. It is the zero value
-	// and the default.
-	RecalculateAsNeeded Recalculation = iota
-	// RecalculateNever shows the value the file stores for every formula,
-	// and nothing for a formula without one.
-	RecalculateNever
-	// RecalculateAlways computes every formula again. A formula litho does
-	// not compute keeps its stored value, and so does a cell that shares
-	// the formula of another.
-	RecalculateAlways
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // convertConfig collects what the options of a [Conversion] set.
@@ -118,11 +17,11 @@ type convertConfig struct {
 	limits   Limits
 	tempDir  string
 
-	paper           Paper
+	paper           models.Paper
 	paperSet        bool
-	defaultPaper    Paper
+	defaultPaper    models.Paper
 	defaultPaperSet bool
-	orientation     Orientation
+	orientation     models.Orientation
 	pageRanges      string
 	omitOutline     bool
 	plainGlyphs     bool
@@ -164,8 +63,8 @@ type convertConfig struct {
 	markdownTemplateSet bool
 
 	password        string
-	trackedChanges  TrackedChanges
-	comments        Comments
+	trackedChanges  models.TrackedChanges
+	comments        models.Comments
 	formFields      bool
 	onePagePerSheet bool
 	sheets          []string
@@ -173,7 +72,7 @@ type convertConfig struct {
 	sheetNumbers    []int
 	sheetNumbersSet bool
 	hiddenSheets    bool
-	recalculation   Recalculation
+	recalculation   models.Recalculation
 	csvSeparators   []rune
 	csvSeparatorSet bool
 	csvKeepText     bool
@@ -375,32 +274,33 @@ func (presentationOption) presentationOption()             {}
 //
 // Without it the source's own size applies, and [WithDefaultPaper] where
 // the source names none.
-func WithPaper(paper Paper) ConvertOption {
+func WithPaper(paper models.Paper) ConvertOption {
 	return convertOption(func(c *convertConfig) { c.paper, c.paperSet = paper, true })
 }
 
 // WithDefaultPaper sets the paper of a source that names none: a text or
-// Markdown file, an HTML document without an @page size, a section or a
-// sheet without a page setup, a CSV file. Without it that paper is
-// [PaperA4]. It never replaces a size the source names, which [WithPaper]
-// does: a presentation always names its slide size, and an image its own.
-// Each side must lie between 3 and 14,400 points, as [WithPaper] asks, or
-// the conversion fails with [ErrInvalidConvertOptions], which also wraps
+// Markdown file, an HTML document without an @page size, a section or a sheet
+// without a page setup, a CSV file. Without it that paper is [models.PaperA4].
+// It never replaces a size the source names, which [WithPaper] does: a
+// presentation always names its slide size, and an image its own. Each side
+// must lie between 3 and 14,400 points, as [WithPaper] asks, or the conversion
+// fails with [ErrInvalidConvertOptions], which also wraps
 // [ErrInvalidPageSize].
-func WithDefaultPaper(paper Paper) ConvertOption {
+func WithDefaultPaper(paper models.Paper) ConvertOption {
 	return convertOption(func(c *convertConfig) { c.defaultPaper, c.defaultPaperSet = paper, true })
 }
 
-// WithOrientation turns the pages of the conversion: [OrientationPortrait]
-// turns every page that is wider than it is high, [OrientationLandscape]
-// every page that is higher than it is wide, whatever named the page's
-// size. [OrientationSource], the default, turns none. Any other value fails
-// the conversion with [ErrInvalidConvertOptions].
+// WithOrientation turns the pages of the conversion:
+// [models.OrientationPortrait] turns every page that is wider than it is high,
+// [models.OrientationLandscape] every page that is higher than it is wide,
+// whatever named the page's size. [models.OrientationSource], the default,
+// turns none. Any other value fails the conversion with
+// [ErrInvalidConvertOptions].
 //
 // In an HTML or Markdown source the paper turns before the @page rules see
 // it, and an @page size that applies keeps its own orientation (CSS Paged
 // Media 3, 7.1).
-func WithOrientation(orientation Orientation) ConvertOption {
+func WithOrientation(orientation models.Orientation) ConvertOption {
 	return convertOption(func(c *convertConfig) { c.orientation = orientation })
 }
 
@@ -442,7 +342,7 @@ func WithOutline(outline bool) ConvertOption {
 //   - A colour font draws a character only where it holds an outline for
 //     it. A font of bitmaps alone draws none.
 //   - A character left without a font is reported as
-//     [WarningMissingGlyph] and drawn as any character no font covers, an
+//     [models.WarningMissingGlyph] and drawn as any character no font covers, an
 //     emoji blank. Install a font with emoji outlines to keep them.
 //
 // The file is smaller where the source holds many emoji: a bitmap glyph
@@ -673,20 +573,19 @@ func WithHTTPClient(client *http.Client) HTMLOption {
 // [ErrConvertResourceUnavailable] that names the resource and why it did
 // not load, and writes nothing.
 //
-// A resource is a stylesheet a link element names, an @import, a picture
-// (an img, a video's poster, a CSS image, an image of an SVG drawing), and
-// the file of a font when none of its @font-face rule's sources loads. It
-// does not load when its bytes never arrive whole: a URL the options
-// refuse or give no way to read ([WithResources], [WithHTTPClient]), a
-// file that does not exist or does not read, a request that fails, an
-// answer outside 2xx, a stylesheet served as another type than text/css,
-// a data: URL that does not decode, a resource past the caps of
-// [WithResources] on what a conversion reads. Those are the resources
-// [WarningResourceRefused], [WarningResourceNoNetwork],
-// [WarningResourceHTTPStatus] and [WarningResourceFailed] report, the
-// fonts of [WarningFontNotLoaded] whose file did not arrive, and the
-// resources of [WarningLimitReached] past a cap on the bytes or the
-// requests.
+// A resource is a stylesheet a link element names, an @import, a picture (an
+// img, a video's poster, a CSS image, an image of an SVG drawing), and the
+// file of a font when none of its @font-face rule's sources loads. It does not
+// load when its bytes never arrive whole: a URL the options refuse or give no
+// way to read ([WithResources], [WithHTTPClient]), a file that does not exist
+// or does not read, a request that fails, an answer outside 2xx, a stylesheet
+// served as another type than text/css, a data: URL that does not decode, a
+// resource past the caps of [WithResources] on what a conversion reads. Those
+// are the resources [models.WarningResourceRefused],
+// [models.WarningResourceNoNetwork], [models.WarningResourceHTTPStatus] and
+// [models.WarningResourceFailed] report, the fonts of
+// [models.WarningFontNotLoaded] whose file did not arrive, and the resources
+// of [models.WarningLimitReached] past a cap on the bytes or the requests.
 //
 // A resource that arrives whole has loaded, whatever litho makes of it: a
 // picture that does not decode, in a format litho does not read or past
@@ -768,19 +667,19 @@ func WithFinishedAnimations(finished bool) HTMLOption {
 	return htmlOption(func(c *convertConfig) { c.finishedAnimations = finished })
 }
 
-// WithHeader draws band in the top margin of the pages of an HTML or
-// Markdown source that band.Pages selects, in the place of the
-// page-margin boxes of that margin (CSS Paged Media 3, 5). Several apply in
-// order: on a page two select, the later one draws, and one whose HTML is
-// empty leaves the page to the document's own boxes. None, the default,
-// draws the margins as the document's style sheets do. See [PageBand] for
-// what the band holds and how it is laid out. Past 64 headers and footers
-// together, a band whose HTML and CSS pass 1 MiB together, or a band out of
-// range, the conversion fails with [ErrInvalidConvertOptions].
+// WithHeader draws band in the top margin of the pages of an HTML or Markdown
+// source that band.Pages selects, in the place of the page-margin boxes of
+// that margin (CSS Paged Media 3, 5). Several apply in order: on a page two
+// select, the later one draws, and one whose HTML is empty leaves the page to
+// the document's own boxes. None, the default, draws the margins as the
+// document's style sheets do. See [models.PageBand] for what the band holds
+// and how it is laid out. Past 64 headers and footers together, a band whose
+// HTML and CSS pass 1 MiB together, or a band out of range, the conversion
+// fails with [ErrInvalidConvertOptions].
 //
 // A band on every page but the first:
 //
-//	pdf.WithHeader(pdf.PageBand{HTML: header, Pages: pdf.PagesFrom(2)}),
+//	pdf.WithHeader(models.PageBand{HTML: header, Pages: models.PagesFrom(2)}),
 //
 // In a Markdown source, a band shows the title, its first heading, with
 // string(document-title), and the current section once a user stylesheet
@@ -788,12 +687,12 @@ func WithFinishedAnimations(finished bool) HTMLOption {
 //
 //	pdf.FromMarkdown(src,
 //		pdf.WithUserStylesheet(`h2 { string-set: section content(text) }`),
-//		pdf.WithHeader(pdf.PageBand{
+//		pdf.WithHeader(models.PageBand{
 //			HTML: `<span class="t"></span><span class="s"></span>`,
 //			CSS:  `.t::after { content: string(document-title) } .s::before { content: " | " string(section) }`,
 //		}),
 //	)
-func WithHeader(band PageBand) HTMLOption {
+func WithHeader(band models.PageBand) HTMLOption {
 	return htmlOption(func(c *convertConfig) { c.bands = append(c.bands, configBand{band: band}) })
 }
 
@@ -801,18 +700,18 @@ func WithHeader(band PageBand) HTMLOption {
 // Markdown source that band.Pages selects, as [WithHeader] draws one in the
 // top margin. Headers and footers are chosen apart: a footer never takes
 // the place of a header.
-func WithFooter(band PageBand) HTMLOption {
+func WithFooter(band models.PageBand) HTMLOption {
 	return htmlOption(func(c *convertConfig) { c.bands = append(c.bands, configBand{band: band, footer: true}) })
 }
 
-// WithFirstPageNumber numbers the first page of an HTML or Markdown source
-// n, and the pages after it on from there: the page counter that
-// counter(page) shows in a [PageBand] and in a page-margin box starts at n
-// (CSS Paged Media 3, 6.1). 1 is the default. The document's @page rules
-// that reset, increment or set the page counter apply on top of it. n lies
-// in [0, 2^30]; any other value fails the conversion with
-// [ErrInvalidConvertOptions]. It numbers nothing else: [WithPageRanges],
-// [PageRange] and [PagesFrom] count pages from 1 whatever their number.
+// WithFirstPageNumber numbers the first page of an HTML or Markdown source n,
+// and the pages after it on from there: the page counter that counter(page)
+// shows in a [models.PageBand] and in a page-margin box starts at n (CSS Paged
+// Media 3, 6.1). 1 is the default. The document's @page rules that reset,
+// increment or set the page counter apply on top of it. n lies in [0, 2^30];
+// any other value fails the conversion with [ErrInvalidConvertOptions]. It
+// numbers nothing else: [WithPageRanges], [models.PageRange] and
+// [models.PagesFrom] count pages from 1 whatever their number.
 func WithFirstPageNumber(n int) HTMLOption {
 	return htmlOption(func(c *convertConfig) { c.firstPageNumber, c.firstPageNumberSet = n, true })
 }
@@ -831,9 +730,9 @@ func WithFirstPageNumber(n int) HTMLOption {
 // show it, in one continuous column, forced breaks ignored, at least
 // 437.12 CSS pixels tall and 800 wide. The paper becomes that tall plus
 // the top and bottom margins; its width stays the paper's, or with
-// [OrientationLandscape] that measured width plus the left and right
+// [models.OrientationLandscape] that measured width plus the left and right
 // margins. The document is then printed on it as usual, forced breaks
-// cutting, and only the first page is written: a [PageBand] draws once,
+// cutting, and only the first page is written: a [models.PageBand] draws once,
 // the one band.Pages selects for the first page, with counter(page) at the
 // first page number.
 //
@@ -933,24 +832,25 @@ func WithOfficePassword(password string) OfficeOption {
 }
 
 // WithTrackedChanges sets how the changes a DOCX or ODT source tracks are
-// printed: [TrackedChangesAccepted], the default, [TrackedChangesRejected]
-// or [TrackedChangesMarked]. A source that tracks no change prints the same
-// under each. Any other value fails the conversion with
-// [ErrInvalidConvertOptions].
+// printed: [models.TrackedChangesAccepted], the default,
+// [models.TrackedChangesRejected] or [models.TrackedChangesMarked]. A source
+// that tracks no change prints the same under each. Any other value fails the
+// conversion with [ErrInvalidConvertOptions].
 //
 // The view covers inserted and deleted text, paragraphs and table rows. A
 // tracked change of formatting prints with the new formatting under every
-// view, and [TrackedChangesMarked] marks it.
-func WithTrackedChanges(view TrackedChanges) WordProcessingOption {
+// view, and [models.TrackedChangesMarked] marks it.
+func WithTrackedChanges(view models.TrackedChanges) WordProcessingOption {
 	return wordProcessingOption(func(c *convertConfig) { c.trackedChanges = view })
 }
 
 // WithComments sets how the comments of a DOCX or ODT source are written:
-// [CommentsHidden], the default, leaves them out; [CommentsAnnotations]
-// writes them as annotations (ISO 32000-1, 12.5.6). Any other value fails
-// the conversion with [ErrInvalidConvertOptions].
+// [models.CommentsHidden], the default, leaves them out;
+// [models.CommentsAnnotations] writes them as annotations (ISO 32000-1,
+// 12.5.6). Any other value fails the conversion with
+// [ErrInvalidConvertOptions].
 //
-// Under [CommentsAnnotations], a comment is a Text annotation (ISO
+// Under [models.CommentsAnnotations], a comment is a Text annotation (ISO
 // 32000-1, 12.5.6.4): over the lines of the text it covers, one on each
 // page that text reaches, or at its point for a comment on a point or on
 // an empty range. Each carries the comment's author, its date as the
@@ -971,7 +871,7 @@ func WithTrackedChanges(view TrackedChanges) WordProcessingOption {
 // and pictures of a comment's text, and a comment no text of the
 // document anchors. A document that holds no comment converts the same
 // under both values.
-func WithComments(view Comments) WordProcessingOption {
+func WithComments(view models.Comments) WordProcessingOption {
 	return wordProcessingOption(func(c *convertConfig) { c.comments = view })
 }
 
@@ -1018,8 +918,8 @@ func WithComments(view Comments) WordProcessingOption {
 // another; an ODT push button, as a grey box with its label, a hidden,
 // image, grid, file or password control, as its empty frame; any control
 // in a header or a footer, and one whose content breaks across two
-// pages, which [ConvertReport.Warnings] reports as a
-// [WarningFormFieldOmitted]. An ODT control in a header or a footer, or
+// pages, which [models.ConvertReport.Warnings] reports as a
+// [models.WarningFormFieldOmitted]. An ODT control in a header or a footer, or
 // one that does not print, prints nothing.
 //
 // Each field costs a widget annotation and an appearance stream, two for
@@ -1086,16 +986,16 @@ func WithHiddenSheets(include bool) SpreadsheetOption {
 	return spreadsheetOption(func(c *convertConfig) { c.hiddenSheets = include })
 }
 
-// WithFormulaRecalculation sets when the formulas of an XLSX or ODS source
-// are computed again: [RecalculateAsNeeded], the default,
-// [RecalculateNever] or [RecalculateAlways]. Any other value fails the
-// conversion with [ErrInvalidConvertOptions].
+// WithFormulaRecalculation sets when the formulas of an XLSX or ODS source are
+// computed again: [models.RecalculateAsNeeded], the default,
+// [models.RecalculateNever] or [models.RecalculateAlways]. Any other value
+// fails the conversion with [ErrInvalidConvertOptions].
 //
 // A computed value depends on nothing outside the file: a formula that
 // reads the clock, a random number or another workbook keeps its stored
-// value. Use [RecalculateNever] to print exactly what the file's last
+// value. Use [models.RecalculateNever] to print exactly what the file's last
 // application saved.
-func WithFormulaRecalculation(mode Recalculation) SpreadsheetOption {
+func WithFormulaRecalculation(mode models.Recalculation) SpreadsheetOption {
 	return spreadsheetOption(func(c *convertConfig) { c.recalculation = mode })
 }
 

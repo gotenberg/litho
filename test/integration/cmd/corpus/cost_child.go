@@ -449,7 +449,7 @@ type costJob struct {
 	out    *os.File
 	budget atomic.Int64
 	logs   atomic.Int64
-	report *pdf.ConvertReport
+	report *models.ConvertReport
 	text   int64
 	err    error
 }

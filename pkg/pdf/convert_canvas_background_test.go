@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestWithCanvasBackground_DropsEconomyBackgrounds checks that a
@@ -18,7 +20,7 @@ func TestWithCanvasBackground_DropsEconomyBackgrounds(t *testing.T) {
 	<div></div><div style="print-color-adjust: economy; border-left: 10px solid lime"></div>`
 	var out bytes.Buffer
 	c := FromHTML(strings.NewReader(src), WithConvertFontDirs(convertFontDir(t)),
-		WithPaper(Paper{Width: 200, Height: 200}), WithMargins(0, 0, 0, 0), WithCanvasBackground(false))
+		WithPaper(models.Paper{Width: 200, Height: 200}), WithMargins(0, 0, 0, 0), WithCanvasBackground(false))
 	if _, err := c.WriteTo(ctx, &out); err != nil {
 		t.Fatal(err)
 	}

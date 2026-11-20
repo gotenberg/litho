@@ -17,6 +17,7 @@ import (
 	"testing/fstest"
 
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // convertTestFont builds a "Convert Serif" face covering printable ASCII,
@@ -47,7 +48,7 @@ func convertFontDir(t *testing.T) string {
 
 // convertText converts src with the test face and opts, failing the test on
 // error.
-func convertText(t *testing.T, dir, src string, opts ...TextOption) ([]byte, *ConvertReport) {
+func convertText(t *testing.T, dir, src string, opts ...TextOption) ([]byte, *models.ConvertReport) {
 	t.Helper()
 	var out bytes.Buffer
 	rep, err := FromText(strings.NewReader(src), append([]TextOption{WithConvertFontDirs(dir)}, opts...)...).WriteTo(context.Background(), &out)
@@ -95,7 +96,7 @@ func TestConvert_AppliesPageSetup(t *testing.T) {
 	ctx := context.Background()
 	src := strings.Repeat("ABCD EFGH\n", 30)
 	data, rep := convertText(t, convertFontDir(t), src,
-		WithPaper(PaperLetter), WithMargins(10, 10, 10, 10), WithFontSize(20), WithFontFamilies("Convert Serif"))
+		WithPaper(models.PaperLetter), WithMargins(10, 10, 10, 10), WithFontSize(20), WithFontFamilies("Convert Serif"))
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -118,7 +119,7 @@ func TestConvert_ReportsMissingGlyphs(t *testing.T) {
 	if len(rep.Warnings) != 1 {
 		t.Fatalf("warnings %+v, want one", rep.Warnings)
 	}
-	if w := rep.Warnings[0]; w.Code != WarningMissingGlyph || !strings.Contains(w.Message, "U+00E9") || w.Page != 1 {
+	if w := rep.Warnings[0]; w.Code != models.WarningMissingGlyph || !strings.Contains(w.Message, "U+00E9") || w.Page != 1 {
 		t.Errorf("warning %+v", w)
 	}
 }
@@ -131,7 +132,7 @@ func TestConvert_RefusesBadInput(t *testing.T) {
 		src  string
 		want error
 	}{
-		"bad paper":          {opts: []TextOption{WithPaper(Paper{Width: -1, Height: 10})}, want: ErrInvalidConvertOptions},
+		"bad paper":          {opts: []TextOption{WithPaper(models.Paper{Width: -1, Height: 10})}, want: ErrInvalidConvertOptions},
 		"no room":            {opts: []TextOption{WithMargins(500, 0, 500, 0)}, want: ErrInvalidConvertOptions},
 		"NaN font size":      {opts: []TextOption{WithFontSize(math.NaN())}, want: ErrInvalidConvertOptions},
 		"negative limit":     {opts: []TextOption{WithConvertLimits(Limits{MaxConvertPages: -1})}, want: ErrInvalidLimits},
@@ -276,7 +277,7 @@ func convertHTMLResources(t *testing.T) fstest.MapFS {
 
 // convertHTMLTest converts src as HTML with the test face, the test resources
 // and opts, failing the test on error.
-func convertHTMLTest(t *testing.T, dir, src string, opts ...HTMLOption) ([]byte, *ConvertReport) {
+func convertHTMLTest(t *testing.T, dir, src string, opts ...HTMLOption) ([]byte, *models.ConvertReport) {
 	t.Helper()
 	var out bytes.Buffer
 	base := []HTMLOption{WithConvertFontDirs(dir), WithResources(convertHTMLResources(t))}
@@ -353,7 +354,7 @@ func TestConvert_HTMLAppliesPageSetupAndMedia(t *testing.T) {
 	ctx := context.Background()
 	dir := convertFontDir(t)
 	src := `<style>@media screen { p { break-before: page } }</style><p>one</p><p>two</p>`
-	data, rep := convertHTMLTest(t, dir, src, WithPaper(PaperLetter), WithMargins(0, 0, 0, 0))
+	data, rep := convertHTMLTest(t, dir, src, WithPaper(models.PaperLetter), WithMargins(0, 0, 0, 0))
 	if rep.Pages != 1 {
 		t.Errorf("print: %d pages, want 1", rep.Pages)
 	}
@@ -376,8 +377,8 @@ func TestConvert_HTMLAppliesPageSetupAndMedia(t *testing.T) {
 		opts []HTMLOption
 		w, h float64
 	}{
-		{"default paper", []HTMLOption{WithDefaultPaper(PaperA4)}, 595.276, 419.528},
-		{"paper", []HTMLOption{WithPaper(PaperA4)}, 841.89, 595.276},
+		{"default paper", []HTMLOption{WithDefaultPaper(models.PaperA4)}, 595.276, 419.528},
+		{"paper", []HTMLOption{WithPaper(models.PaperA4)}, 841.89, 595.276},
 		{"no paper", nil, 595.276, 419.528},
 	} {
 		data, _ = convertHTMLTest(t, dir, `<style>@page { size: A5 landscape }</style><p>x`, tc.opts...)
@@ -402,7 +403,7 @@ func TestConvert_HTMLRefusesBadInput(t *testing.T) {
 		want error
 	}{
 		"bad media":        {opts: []HTMLOption{WithMediaType("tv")}, want: ErrInvalidConvertOptions},
-		"bad paper":        {opts: []HTMLOption{WithPaper(Paper{Width: -1, Height: 10})}, want: ErrInvalidConvertOptions},
+		"bad paper":        {opts: []HTMLOption{WithPaper(models.Paper{Width: -1, Height: 10})}, want: ErrInvalidConvertOptions},
 		"input past limit": {src: "<p>ABCD", opts: []HTMLOption{WithConvertLimits(Limits{MaxConvertInputBytes: 4})}, want: ErrConvertInputTooLarge},
 		"pages past limit": {src: `<p style="break-after: page">A<p>B`, opts: []HTMLOption{WithConvertLimits(Limits{MaxConvertPages: 1})}, want: ErrConvertTooManyPages},
 		"too deep":         {src: strings.Repeat("<div>", 600), want: ErrConvertInputTooLarge},
@@ -429,11 +430,11 @@ func TestConvert_HTMLReportsWhatItLeavesOut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WriteTo: %v", err)
 	}
-	var got []ConvertWarningCode
+	var got []models.ConvertWarningCode
 	for _, w := range rep.Warnings {
 		got = append(got, w.Code)
 	}
-	if !slices.Equal(got, []ConvertWarningCode{WarningResourceRefused, WarningContentUnsupported}) {
+	if !slices.Equal(got, []models.ConvertWarningCode{models.WarningResourceRefused, models.WarningContentUnsupported}) {
 		t.Errorf("warnings %+v", rep.Warnings)
 	}
 }

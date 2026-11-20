@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // markedSVG is an SVG picture whose path has a marker, which litho leaves
@@ -64,7 +66,7 @@ func TestConvert_SVGPictureWarningsReachTheReport(t *testing.T) {
 				continue
 			}
 			n++
-			if w.Code != WarningContentUnsupported || w.Effect != EffectOmitted {
+			if w.Code != models.WarningContentUnsupported || w.Effect != models.EffectOmitted {
 				t.Errorf("%s: the warning is %s, %s", tc.family, w.Code, w.Effect)
 			}
 		}
