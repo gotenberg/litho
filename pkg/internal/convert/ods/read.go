@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // The caps of one spreadsheet.
@@ -73,12 +74,14 @@ const (
 type reader struct {
 	// paperW and paperH are the paper of a page style that names none.
 	paperW, paperH float64
-	ctx            context.Context
-	pkg            *odf.Package
-	fonts          *text.Fonts
-	styles         *odf.Styles
-	data           *odf.DataStyles
-	draw           *odf.DrawStyles
+	// locale is the options' locale, which the charts format under.
+	locale models.Locale
+	ctx    context.Context
+	pkg    *odf.Package
+	fonts  *text.Fonts
+	styles *odf.Styles
+	data   *odf.DataStyles
+	draw   *odf.DrawStyles
 
 	doc      *sheet.Document
 	cellSty  map[string]*sheet.Style

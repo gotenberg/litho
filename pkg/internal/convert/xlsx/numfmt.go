@@ -1,6 +1,12 @@
 package xlsx
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+
+	"github.com/gotenberg/litho/pkg/internal/numfmt"
+	"github.com/gotenberg/litho/pkg/models"
+)
 
 // builtinFormats maps the built-in number format ids (ECMA-376 Part 1,
 // 18.8.30, the table of implied formats) onto the codes Excel shows them
@@ -78,6 +84,67 @@ var builtinFormats = map[int]string{
 	57: "m/d/yyyy",
 	58: "m/d/yyyy",
 }
+
+// localeBuiltin returns the code a built-in number format id takes under
+// a locale other than en-US, "" for an id that keeps its code of
+// [builtinFormats] and under en-US. The ids that stand for a format of the
+// system take the locale's, as Calc's import maps them
+// (sc/source/filter/oox/numberformatsbuffer.cxx, spBuiltinFormats_BASE):
+// 9 and 10 the percent formats, 14 the short date with a four-digit year,
+// 22 that date and the 24-hour time, 5 to 8, 42 and 44 the currency
+// formats of the locale's default currency, red where Excel's are. The
+// other ids keep their codes, the names, AM and PM they write being the
+// locale's. Excel's own print of a workbook under another locale is not
+// measured: these are Calc's.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: over 37 locales, 350 of 504 cases of ids 5 to 8, 10
+//     and 14 to 22 print as Calc prints them (TestLocaleBuiltin_Calc):
+//     2025-12-09 13:30 in id 14 as 09.12.2025 under de-DE and ru-RU,
+//     09/12/2025 under fr-FR, 2025/12/09 under ja-JP, 09-12-2025 under
+//     hi-IN; the others follow Calc's own table a locale.
+func localeBuiltin(id int, loc models.Locale) string {
+	if numfmt.IsDefault(loc) {
+		return ""
+	}
+	red := func(code string) string {
+		pos, neg, ok := strings.Cut(code, ";")
+		if !ok {
+			return code
+		}
+		return pos + ";[RED]" + neg
+	}
+	// Excel's currency formats show no decimals or two, whatever the
+	// currency's.
+	withDecimals := func(code string) string {
+		return currencyNumber.ReplaceAllLiteralString(code, "#,##0.00")
+	}
+	switch id {
+	case 9:
+		return numfmt.Code(loc, numfmt.CodePercentInt)
+	case 10:
+		return numfmt.Code(loc, numfmt.CodePercent)
+	case 14:
+		return numfmt.Code(loc, numfmt.CodeDateDDMMYYYY)
+	case 22:
+		if d := numfmt.Code(loc, numfmt.CodeDateDDMMYYYY); d != "" {
+			return d + " hh:mm"
+		}
+	case 5, 42:
+		return numfmt.Code(loc, numfmt.CodeCurrencyDefaultInt)
+	case 6:
+		return red(numfmt.Code(loc, numfmt.CodeCurrencyDefaultInt))
+	case 7, 44:
+		return withDecimals(numfmt.Code(loc, numfmt.CodeCurrencyDefaultInt))
+	case 8:
+		return red(withDecimals(numfmt.Code(loc, numfmt.CodeCurrencyDefaultInt)))
+	}
+	return ""
+}
+
+// currencyNumber matches the number of a currency format code.
+var currencyNumber = regexp.MustCompile(`#,##0(\.0+)?`)
 
 // maxFormatCode caps a number format code's length. Anti-DoS guard, not
 // spec-mandated: Excel refuses codes past 255 characters.

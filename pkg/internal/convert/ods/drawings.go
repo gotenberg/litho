@@ -175,6 +175,7 @@ func (r *reader) chartOf(dir string, inline *odf.Element) *chart.Chart {
 		r.warn(chartWarning(w.Code), w.Code, w.Effect, w.Message)
 	}
 	c.Resolver = r.rangeValues
+	c.Locale = r.locale
 	return c
 }
 

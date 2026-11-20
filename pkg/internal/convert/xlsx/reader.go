@@ -74,6 +74,8 @@ type reader struct {
 	cachedFormulas map[[3]int]bool
 	// recalculation is the options' recalculation mode.
 	recalculation models.Recalculation
+	// locale is the options' locale, which the built-in formats follow.
+	locale models.Locale
 	// digitWidth is the widest digit of the Normal font and spaceWidth its
 	// space, in points, in whole printer pixels as Excel measures them;
 	// screenDigit is the digit in screen pixels ([reader.measureNormalFont]).
@@ -139,7 +141,7 @@ func read(ctx context.Context, pkg *ooxml.Package, fonts *text.Fonts, opts offic
 	if err != nil {
 		return nil, nil, err
 	}
-	r := &reader{ctx: ctx, pkg: pkg, fonts: fonts, recalculation: opts.Recalculation, warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, caches: map[string]*pivotCache{}}
+	r := &reader{ctx: ctx, pkg: pkg, fonts: fonts, recalculation: opts.Recalculation, locale: opts.Locale, warned: map[string]bool{}, pictures: map[string]*layout.Picture{}, caches: map[string]*pivotCache{}}
 	r.paperW, r.paperH = opts.DefaultPage(paperSizes[1].points())
 	root, err := pkg.ParseXML(ctx, main, understood)
 	if err != nil {

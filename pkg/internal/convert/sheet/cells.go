@@ -52,7 +52,8 @@ type display struct {
 
 // format returns the format of the code, General for a code numfmt
 // refuses, with a warning once per code; under Excel's rules, its Excel
-// variant ([numfmt.Format.Excel]).
+// variant ([numfmt.Format.Excel]); formatting under the conversion's
+// locale, a section that names its own keeping it.
 func (b *builder) format(code string) *numfmt.Format {
 	if f, ok := b.formats[code]; ok {
 		return f
@@ -65,6 +66,7 @@ func (b *builder) format(code string) *numfmt.Format {
 	if b.doc.ExcelRules {
 		f = f.Excel()
 	}
+	f = f.WithLocale(b.opts.Locale)
 	if len(b.formats) < maxFormats {
 		b.formats[code] = f
 	}

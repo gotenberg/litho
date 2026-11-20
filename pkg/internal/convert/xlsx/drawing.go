@@ -62,6 +62,7 @@ func (r *reader) chartOf(part string) *chart.Chart {
 	}
 	c.Resolver = r.rangeValues
 	c.FormatResolver = r.rangeFormat
+	c.Locale = r.locale
 	return c
 }
 

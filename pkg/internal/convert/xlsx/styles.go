@@ -328,6 +328,9 @@ func (r *reader) format(id int) string {
 	if code, ok := r.styles.numFmts[id]; ok {
 		return code
 	}
+	if code := localeBuiltin(id, r.locale); code != "" {
+		return code
+	}
 	if code, ok := builtinFormats[id]; ok {
 		return code
 	}

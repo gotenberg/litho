@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -98,6 +99,13 @@ type Options struct {
 	// holds; off, the default, a field that reads as a number, a date or a
 	// time is laid out as one. Other documents ignore it.
 	CSVKeepText bool
+	// Locale is the locale a spreadsheet or a CSV file is formatted under,
+	// what the file leaves to the system: the General format, the built-in
+	// formats, separators, names and the system formats, and how a CSV
+	// file's numbers and dates read. A format or a data style that names
+	// its own locale keeps it. "" formats under en-US. Other documents
+	// ignore it.
+	Locale models.Locale
 	// Handouts, when positive, prints a presentation as handout pages in
 	// place of its slide pages, that many slides a page: 1, 2, 3, 4, 6 or
 	// 9. Zero, the default, prints the slides. Other documents ignore it.
@@ -197,6 +205,9 @@ func (o Options) Validate() error {
 	}
 	if o.Recalculation < models.RecalculateAsNeeded || o.Recalculation > models.RecalculateAlways {
 		return fmt.Errorf("%w: recalculation mode %d", typeset.ErrInvalidOptions, o.Recalculation)
+	}
+	if o.Locale != "" && !numfmt.Known(o.Locale) {
+		return fmt.Errorf("%w: locale %q", typeset.ErrInvalidOptions, o.Locale)
 	}
 	if o.Sheets != nil && o.SheetNumbers != nil {
 		return fmt.Errorf("%w: sheet names and sheet numbers exclude each other", typeset.ErrInvalidOptions)

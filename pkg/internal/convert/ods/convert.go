@@ -82,6 +82,7 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 	r := newReader(ctx, pkg, fonts)
 	r.paperW, r.paperH = opts.DefaultPage(sheet.FallbackWidth, sheet.FallbackHeight)
 	r.keepFormulas = opts.Recalculation != models.RecalculateNever
+	r.locale = opts.Locale
 	doc := r.document(body)
 	if r.err != nil {
 		return nil, nil, r.err
