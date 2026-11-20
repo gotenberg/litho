@@ -132,13 +132,20 @@ func (s *mergePipelinesStage) apply(ctx context.Context, ex *executor) error {
 func (s *mergePipelinesStage) runAll(ctx context.Context, ex *executor, outs []mergedOutput) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	// The pipelines the stage merges are part of the stage: what allows
+	// the stage to drop signatures allows them (see [WithSignatureRemoval]).
+	cfg := writeOpts{}
+	for _, o := range s.opts {
+		o(&cfg)
+	}
+	removal := ex.signatureRemoval || cfg.signatureRemoval
 	errs := make([]error, len(outs))
 	next := make(chan int)
 	var wg sync.WaitGroup
 	for range min(ex.concurrency, len(outs)) {
 		wg.Go(func() {
 			for i := range next {
-				err := ex.runMerged(runCtx, i, s.pipelines[i], &outs[i])
+				err := ex.runMerged(runCtx, i, s.pipelines[i], &outs[i], removal)
 				if err == nil {
 					continue
 				}
@@ -205,12 +212,13 @@ func mergedFailure(ctx context.Context, errs []error, outs []mergedOutput) error
 // runMerged runs p, the pipeline at position i of a MergePipelines stage, on
 // a worker goroutine, into out.file, and opens that file as out.reader. The
 // pipeline runs as [Pipeline.WriteTo] runs it, with the logger, the temp
-// directory, the default page size and the signature removal of the merging
-// pipeline, and writes its output in the clear (see
-// [executor.terminalOptions]). A panic of the
-// pipeline is recovered here, on the worker that raised it, into an error
-// wrapping [ErrInternalPanic].
-func (ex *executor) runMerged(ctx context.Context, i int, p *Pipeline, out *mergedOutput) (err error) {
+// directory and the default page size of the merging pipeline, and writes
+// its output in the clear (see [executor.terminalOptions]). removal allows
+// every stage of p to drop signatures: the merging pipeline's own allowance
+// or the stage's (see [WithSignatureRemoval]). A panic of the pipeline is
+// recovered here, on the worker that raised it, into an error wrapping
+// [ErrInternalPanic].
+func (ex *executor) runMerged(ctx context.Context, i int, p *Pipeline, out *mergedOutput, removal bool) (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			err = panicerr.Log(ex.logger, &panicerr.Error{
@@ -218,7 +226,10 @@ func (ex *executor) runMerged(ctx context.Context, i int, p *Pipeline, out *merg
 			})
 		}
 	}()
-	opts := ex.intermediateOptions(WithWriteLogger(ex.logger), WithPipelineTempDir(ex.tempDir))
+	opts := []WriteOption{WithWriteLogger(ex.logger), WithPipelineTempDir(ex.tempDir)}
+	if removal {
+		opts = append(opts, WithSignatureRemoval())
+	}
 	pageSize := slices.Clone(ex.pageSize)
 	if pageSize != nil {
 		opts = append(opts, func(o *writeOpts) { o.pageSize = pageSize })
@@ -229,7 +240,7 @@ func (ex *executor) runMerged(ctx context.Context, i int, p *Pipeline, out *merg
 		tempDir:          ex.tempDir,
 		pageSize:         pageSize,
 		finalOpts:        opts,
-		signatureRemoval: ex.signatureRemoval,
+		signatureRemoval: removal,
 		finalDst:         out.file,
 		totalStages:      len(p.stages),
 		logger:           ex.logger,

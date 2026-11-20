@@ -585,6 +585,46 @@ func TestMergePipelinesAllowsSignatureRemovalInEachPipeline(t *testing.T) {
 	}
 }
 
+// TestMergePipelinesStageAllowsSignatureRemovalInItsPipelines pins that
+// WithSignatureRemoval given to a MergePipelines stage reaches the stages of
+// the pipelines it merges, which are part of that stage: a merged pipeline
+// whose Split drops the signatures of a signed source is written. The option
+// stays the stage's: a later stage of the merging pipeline that drops a
+// signature is still refused.
+func TestMergePipelinesStageAllowsSignatureRemovalInItsPipelines(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	open := func() *Reader { return openDeclaration(t, certifiedPDF(), false) }
+
+	src := open()
+	defer src.Close()
+	var out bytes.Buffer
+	result, err := NewPipeline().
+		MergePipelines([]*Pipeline{NewPipeline().Open(src).Split([]int{1})}, WithSignatureRemoval()).
+		WriteTo(ctx, &out)
+	if err != nil {
+		t.Fatalf("a MergePipelines stage given WithSignatureRemoval: %v", err)
+	}
+	if out.Len() == 0 || len(result.DroppedSignatures) == 0 {
+		t.Errorf("wrote %d bytes and reported %v, want an output and the dropped signatures", out.Len(), result.DroppedSignatures)
+	}
+
+	first, second := open(), open()
+	defer first.Close()
+	defer second.Close()
+	var refused bytes.Buffer
+	_, err = NewPipeline().
+		MergePipelines([]*Pipeline{NewPipeline().Open(first).Split([]int{1})}, WithSignatureRemoval()).
+		Merge([]*Reader{second}).
+		WriteTo(ctx, &refused)
+	if !errors.Is(err, ErrSignaturesDropped) {
+		t.Errorf("a later Merge of a signed document: err = %v, want ErrSignaturesDropped", err)
+	}
+	if refused.Len() != 0 {
+		t.Errorf("a refused write wrote %d bytes, want none", refused.Len())
+	}
+}
+
 // TestConversionStageConformsThroughRemediation pins the rule of a
 // conversion: it claims no conformance, and a remediation stage after it
 // makes the output conform, as the last edit.

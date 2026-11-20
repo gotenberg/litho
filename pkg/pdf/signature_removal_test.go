@@ -88,8 +88,9 @@ func TestSignatureRemoval_RefusedByDefault(t *testing.T) {
 	}
 }
 
-// TestSignatureRemoval_StageOption pins that the option given to a pipeline
-// stage allows that stage, and an incremental update needs none.
+// TestSignatureRemoval_StageOption pins that the option given to a split, a
+// merge or a compose stage allows that stage, and that a pipeline that
+// changes nothing and an incremental update need none.
 func TestSignatureRemoval_StageOption(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -103,6 +104,32 @@ func TestSignatureRemoval_StageOption(t *testing.T) {
 	}
 	if len(result.DroppedSignatures) == 0 {
 		t.Error("the split reported no dropped signature")
+	}
+
+	for name, stage := range map[string]func(src *Reader, opts ...WriteOption) *Pipeline{
+		"merge": func(src *Reader, opts ...WriteOption) *Pipeline {
+			return NewPipeline().Open(src).Merge([]*Reader{src}, opts...)
+		},
+		"compose": func(src *Reader, opts ...WriteOption) *Pipeline {
+			return NewPipeline().Compose(612, 792, []Placement{{Source: src}}, opts...)
+		},
+	} {
+		signed := openDeclaration(t, certifiedPDF(), false)
+		defer signed.Close()
+		if _, err := stage(signed).WriteTo(ctx, &bytes.Buffer{}); !errors.Is(err, ErrSignaturesDropped) {
+			t.Errorf("a %s stage without WithSignatureRemoval: err = %v, want ErrSignaturesDropped", name, err)
+		}
+		var allowed bytes.Buffer
+		if _, err := stage(signed, WithSignatureRemoval()).WriteTo(ctx, &allowed); err != nil || allowed.Len() == 0 {
+			t.Errorf("a %s stage given WithSignatureRemoval: err = %v, %d bytes", name, err, allowed.Len())
+		}
+	}
+
+	untouched := openDeclaration(t, certifiedPDF(), false)
+	defer untouched.Close()
+	var same bytes.Buffer
+	if _, err := NewPipeline().Open(untouched).WriteTo(ctx, &same); err != nil {
+		t.Errorf("a pipeline that changes nothing: %v", err)
 	}
 
 	incremental := openDeclaration(t, certifiedPDF(), false)

@@ -464,9 +464,10 @@ type executor struct {
 	// pipeline's output owes the caller although every intermediate file is
 	// written in the clear (see [executor.carryEncryption]). nil when none did.
 	encrypt *models.EncryptConfig
-	// signatureRemoval tells that the options of [Pipeline.WriteTo] allow
-	// every stage to drop signatures (see [WithSignatureRemoval]), which the
-	// intermediate files carry over.
+	// signatureRemoval tells that every stage may drop signatures (see
+	// [WithSignatureRemoval]), which the intermediate files carry over: the
+	// options of [Pipeline.WriteTo] allow it, or, for a merged pipeline,
+	// those of the MergePipelines stage that runs it.
 	signatureRemoval bool
 }
 

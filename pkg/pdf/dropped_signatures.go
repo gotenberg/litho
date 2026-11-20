@@ -30,8 +30,9 @@ func WithDroppedSignatures(dst *[]models.DroppedSignature) WriteOption {
 // [ErrSignaturesDropped] rather than write an output that drops one. Given to
 // [Pipeline.WriteTo], it allows every stage of the pipeline and of the
 // pipelines a [Pipeline.MergePipelines] stage merges; given to
-// [Pipeline.Split], [Pipeline.Merge], [Pipeline.MergePipelines] or
-// [Pipeline.Compose], that stage only.
+// [Pipeline.Split], [Pipeline.Merge] or [Pipeline.Compose], that stage only;
+// given to [Pipeline.MergePipelines], that stage and every stage of the
+// pipelines it merges.
 func WithSignatureRemoval() WriteOption {
 	return func(o *writeOpts) {
 		o.signatureRemoval = true
