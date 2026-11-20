@@ -1,7 +1,6 @@
 package xlsx
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
@@ -87,64 +86,30 @@ var builtinFormats = map[int]string{
 
 // localeBuiltin returns the code a built-in number format id takes under
 // a locale other than en-US, "" for an id that keeps its code of
-// [builtinFormats] and under en-US. The ids that stand for a format of the
-// system take the locale's, as Calc's import maps them
-// (sc/source/filter/oox/numberformatsbuffer.cxx, spBuiltinFormats_BASE):
-// 9 and 10 the percent formats, 14 the short date with a four-digit year,
-// 22 that date and the 24-hour time, 5 to 8, 42 and 44 the currency
-// formats of the locale's default currency, red where Excel's are. The
-// other ids keep their codes, the names, AM and PM they write being the
-// locale's. Excel's own print of a workbook under another locale is not
-// measured: these are Calc's.
+// [builtinFormats] and under en-US. The ids take the codes Calc's import
+// gives them under that locale (numfmt.Builtin): a table of Calc's own
+// for the locales it knows, over the locale's own system formats for the
+// others. A code of Calc's table that numfmt does not read (an era year,
+// Thai digits) leaves its id the format of the base table. Excel's own
+// print of a workbook under another locale is not measured: these are
+// Calc's.
 //
 // # Corpus evidence
 //
-//   - probe, xlsx: over 37 locales, 350 of 504 cases of ids 5 to 8, 10
-//     and 14 to 22 print as Calc prints them (TestLocaleBuiltin_Calc):
-//     2025-12-09 13:30 in id 14 as 09.12.2025 under de-DE and ru-RU,
-//     09/12/2025 under fr-FR, 2025/12/09 under ja-JP, 09-12-2025 under
-//     hi-IN; the others follow Calc's own table a locale.
+//   - probe, xlsx: every id from 0 to 81, over 46000.5625 (2025-12-09
+//     13:30) for a date or time and 1234.5, -1234.5 and 0.125 for the
+//     others, under 36 locales (TestLocaleBuiltin_Calc): 5,767 of 5,832
+//     cases print as Calc prints them, among them 09.12.2025 for id 14
+//     under de-DE, 9.12.2025 under cs-CZ, 2025/12/09 under ja-JP, and
+//     09. Dez 25 for id 15 under de-DE, 9 Dec 25 under en-IN, which
+//     Calc's table does not name; the others are the era years of ja-JP
+//     and zh-TW and the Thai digits of th-TH.
 func localeBuiltin(id int, loc models.Locale) string {
 	if numfmt.IsDefault(loc) {
 		return ""
 	}
-	red := func(code string) string {
-		pos, neg, ok := strings.Cut(code, ";")
-		if !ok {
-			return code
-		}
-		return pos + ";[RED]" + neg
-	}
-	// Excel's currency formats show no decimals or two, whatever the
-	// currency's.
-	withDecimals := func(code string) string {
-		return currencyNumber.ReplaceAllLiteralString(code, "#,##0.00")
-	}
-	switch id {
-	case 9:
-		return numfmt.Code(loc, numfmt.CodePercentInt)
-	case 10:
-		return numfmt.Code(loc, numfmt.CodePercent)
-	case 14:
-		return numfmt.Code(loc, numfmt.CodeDateDDMMYYYY)
-	case 22:
-		if d := numfmt.Code(loc, numfmt.CodeDateDDMMYYYY); d != "" {
-			return d + " hh:mm"
-		}
-	case 5, 42:
-		return numfmt.Code(loc, numfmt.CodeCurrencyDefaultInt)
-	case 6:
-		return red(numfmt.Code(loc, numfmt.CodeCurrencyDefaultInt))
-	case 7, 44:
-		return withDecimals(numfmt.Code(loc, numfmt.CodeCurrencyDefaultInt))
-	case 8:
-		return red(withDecimals(numfmt.Code(loc, numfmt.CodeCurrencyDefaultInt)))
-	}
-	return ""
+	return numfmt.Builtin(loc, id)
 }
-
-// currencyNumber matches the number of a currency format code.
-var currencyNumber = regexp.MustCompile(`#,##0(\.0+)?`)
 
 // maxFormatCode caps a number format code's length. Anti-DoS guard, not
 // spec-mandated: Excel refuses codes past 255 characters.

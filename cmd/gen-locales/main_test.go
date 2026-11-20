@@ -64,3 +64,68 @@ func TestTranslate(t *testing.T) {
 		t.Error("an era keyword translated")
 	}
 }
+
+// TestCalcTables checks the reading of Calc's tables: macros expanded
+// with their arguments, string literals joined, the three kinds of entry,
+// and the resolution of a locale's table over its parents, an id reused
+// taking the final format of the id it names.
+func TestCalcTables(t *testing.T) {
+	cxx := `
+#define SYM "\"kr\""
+#define NUMFMT_STRING( INDEX, FORMATCODE ) \
+    { INDEX, u"" FORMATCODE ""_ustr, -1, -1 }
+#define NUMFMT_PREDEF( INDEX, PREDEFINED ) \
+    { INDEX, {}, css::i18n::NumberFormatIndex::PREDEFINED, -1 }
+#define NUMFMT_REUSE( INDEX, REUSED_INDEX ) \
+    { INDEX, {}, -1, REUSED_INDEX }
+#define TWO( INDEX, CODE ) NUMFMT_STRING( INDEX + 0, CODE ), NUMFMT_STRING( INDEX + 1, CODE ";" CODE )
+const BuiltinFormat spBuiltinFormats_BASE[] =
+{
+    NUMFMT_PREDEF( 14, DATE_SYS_DDMMYYYY ), // a comment
+    NUMFMT_REUSE( 27, 14 ),
+    NUMFMT_STRING( 45, "mm:ss" ),
+};
+/** A locale. */
+const BuiltinFormat spBuiltinFormats_xx_XX[] =
+{
+    NUMFMT_STRING( 14, "D.M.YYYY" ),
+    TWO( 5, SYM " #,##0" ),
+    NUMFMT_STRING( 46, "?\?/?\?" ),
+};
+constexpr BuiltinFormatTable spBuiltinFormatTables[] =
+{
+    { u"*"_ustr,     u""_ustr,  spBuiltinFormats_BASE },
+    { u"xx-XX"_ustr, u"*"_ustr, spBuiltinFormats_xx_XX },
+};
+int f() { return '"'; }
+`
+	idl := "const short DATE_START = 18; const short DATE_SYS_DDMMYYYY = DATE_START+3;"
+	tables, err := calcTables(cxx, idl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tables) != 2 || tables[1].Locale != "xx-XX" || tables[1].Parent != "*" {
+		t.Fatalf("tables %+v", tables)
+	}
+	got := tables[1].Formats
+	if len(got) != 4 || got[1].ID != 5 || got[1].Code != `"kr" #,##0` || got[2].ID != 6 || got[2].Code != `"kr" #,##0;"kr" #,##0` || got[3].Code != "??/??" {
+		t.Errorf("xx-XX formats %+v", got)
+	}
+	if f := tables[0].Formats[0]; f.Predef == nil || *f.Predef != 21 {
+		t.Errorf("base 14 %+v", f)
+	}
+	cb := &calcBuiltins{tables: map[string]calcTable{}}
+	for _, tb := range tables {
+		cb.tables[tb.Locale] = tb
+	}
+	res, err := cb.resolve("xx-XX")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res[27].Code != "D.M.YYYY" || res[45].Code != "mm:ss" {
+		t.Errorf("xx-XX resolves 27 to %+v, 45 to %+v", res[27], res[45])
+	}
+	if res, err = cb.resolve("yy-YY"); err != nil || res[27].Predef == nil || *res[27].Predef != 21 {
+		t.Errorf("a locale without a table resolves 27 to %+v, %v", res[27], err)
+	}
+}

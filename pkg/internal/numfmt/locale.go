@@ -49,6 +49,19 @@ type localeData struct {
 	codes *[numCodes]string
 	// acceptance are the date acceptance patterns of the CSV reader.
 	acceptance []string
+	// calc are the built-in number formats Calc's import gives a
+	// workbook under the locale where its base table does not, by id.
+	calc []calcBuiltin
+}
+
+// calcBuiltin is a built-in number format of an XLSX as Calc's import
+// maps it (sc/source/filter/oox/numberformatsbuffer.cxx): code, in
+// SpreadsheetML syntax, when slot is -1, else the locale's own code of
+// that place in codes.
+type calcBuiltin struct {
+	id   uint8
+	slot int8
+	code string
 }
 
 // lcidLocale maps a Windows locale identifier to an index of [locales].
@@ -60,7 +73,12 @@ type lcidLocale struct {
 // The built-in formats of a locale, by i18npool's NumberFormatIndex: the
 // order of cmd/gen-locales' codeOrder.
 const (
-	CodeScientific             = iota // SCIENTIFIC_000E00, 0.00E+00
+	CodeGeneral                = iota // NUMBER_STANDARD, General
+	CodeInt                           // NUMBER_INT, 0
+	CodeDec2                          // NUMBER_DEC2, 0.00
+	CodeInt1000                       // NUMBER_1000INT, #,##0
+	CodeDec1000                       // NUMBER_1000DEC2, #,##0.00
+	CodeScientific                    // SCIENTIFIC_000E00, 0.00E+00
 	CodePercentInt                    // PERCENT_INT, 0%
 	CodePercent                       // PERCENT_DEC2, 0.00%
 	CodeCurrencyInt                   // CURRENCY_1000INT
@@ -71,7 +89,10 @@ const (
 	CodeDateLong                      // DATE_SYSTEM_LONG
 	CodeDateDDMMYY                    // DATE_SYS_DDMMYY
 	CodeDateDDMMYYYY                  // DATE_SYS_DDMMYYYY
+	CodeDateDMMMYY                    // DATE_SYS_DMMMYY
 	CodeDateISO                       // DATE_DIN_YYYYMMDD
+	CodeDateMMYY                      // DATE_SYS_MMYY
+	CodeDateDDMMM                     // DATE_SYS_DDMMM
 	CodeTimeHHMM                      // TIME_HHMM
 	CodeTimeHHMMSS                    // TIME_HHMMSS
 	CodeTimeHHMMAMPM                  // TIME_HHMMAMPM
@@ -123,6 +144,28 @@ func Code(loc models.Locale, c int) string {
 		return ""
 	}
 	return d.codes[c]
+}
+
+// Builtin returns the code of the built-in number format id of an XLSX
+// (ECMA-376 Part 1, 18.8.30) opened by Calc under loc, as its import maps
+// the ids: by a table of its own for the locale where it has one, over a
+// base table that gives the ids the locale's own formats. It returns ""
+// for a locale the table lacks, an id past 81, which Calc's tables do not
+// name, and a format the locale states with a keyword numfmt does not
+// read.
+func Builtin(loc models.Locale, id int) string {
+	d := lookup(loc)
+	if d == nil || id < 0 || id >= len(calcBase) {
+		return ""
+	}
+	b := calcBase[id]
+	if i, ok := slices.BinarySearchFunc(d.calc, id, func(c calcBuiltin, id int) int { return int(c.id) - id }); ok {
+		b = d.calc[i]
+	}
+	if b.slot >= 0 {
+		return d.codes[b.slot]
+	}
+	return b.code
 }
 
 // Separators returns the decimal and thousands separators of loc, "." and

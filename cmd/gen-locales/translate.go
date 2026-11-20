@@ -95,8 +95,8 @@ type piece struct {
 	// 'g' group, 0 none.
 	raw bool
 	// date reports a date or time keyword; digit a digit placeholder;
-	// second a seconds keyword.
-	date, digit, second bool
+	// second a seconds keyword; exp the letter E.
+	date, digit, second, exp bool
 }
 
 // translate returns code in SpreadsheetML syntax.
@@ -212,6 +212,11 @@ func (t translator) section(src string) (string, error) {
 		}
 	}
 	date := slices.ContainsFunc(ps, func(p piece) bool { return p.date })
+	if date && slices.ContainsFunc(ps, func(p piece) bool { return p.exp }) {
+		// E beside a date is the year of an era (zforscan.cxx, the
+		// keyword NF_KEY_EC), not an exponent.
+		return "", fmt.Errorf("%w: E", errKeyword)
+	}
 	var b strings.Builder
 	afterSecond := false
 	for k, p := range ps {
@@ -293,7 +298,7 @@ func (t translator) keyword(c byte, n int, raw string) (piece, error) {
 	case 'E':
 		// The exponent of a scientific format: E+ E-.
 		if n == 1 {
-			return piece{text: raw}, nil
+			return piece{text: raw, exp: true}, nil
 		}
 	}
 	return piece{}, fmt.Errorf("%w: %s", errKeyword, raw)

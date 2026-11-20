@@ -117,15 +117,16 @@ type sources struct {
 	names []string
 }
 
-// readSources reads the locale files and the two identifier files of the
-// checkout at dir, and checks their digest against the pinned one.
+// readSources reads the locale files, the two identifier files and the
+// two files of Calc's built-in formats of the checkout at dir, and checks
+// their digest against the pinned one.
 func readSources(dir string) (*sources, error) {
 	s := &sources{files: map[string][]byte{}}
 	entries, err := os.ReadDir(filepath.Join(dir, dataDir))
 	if err != nil {
 		return nil, err
 	}
-	paths := []string{isolangCxx, langH}
+	paths := []string{isolangCxx, langH, numberFormatsCxx, numberFormatIdxIDL}
 	for _, e := range entries {
 		if strings.HasSuffix(e.Name(), ".xml") {
 			paths = append(paths, dataDir+"/"+e.Name())
@@ -174,6 +175,10 @@ func extract(s *sources) (*extractFile, error) {
 		return nil, err
 	}
 	out := &extractFile{Commit: commit}
+	out.CalcTables, err = calcTables(string(s.files[numberFormatsCxx]), string(s.files[numberFormatIdxIDL]))
+	if err != nil {
+		return nil, err
+	}
 	for _, name := range s.names {
 		r, err := record(name, trees, ids)
 		if err != nil {
@@ -404,10 +409,11 @@ func (r *localeRecord) currency(trees map[string]*node, file string) error {
 }
 
 // wantedIndices are the format indices of LibreOffice's built-in formats
-// the table keeps (i18npool's NumberFormatIndex): the scientific and
-// percent formats a CSV value takes, the currency formats, and the date,
-// time and date-time formats.
-var wantedIndices = []int{7, 8, 9, 12, 13, 14, 15, 18, 19, 20, 21, 33, 39, 40, 41, 42, 43, 44, 45, 46, 47, 50}
+// the table keeps (i18npool's NumberFormatIndex): the number, scientific
+// and percent formats, the currency formats, and the date, time and
+// date-time formats, which a CSV value and Calc's built-in formats of a
+// workbook take.
+var wantedIndices = []int{0, 1, 2, 3, 4, 7, 8, 9, 12, 13, 14, 15, 18, 19, 20, 21, 22, 33, 34, 35, 39, 40, 41, 42, 43, 44, 45, 46, 47, 50}
 
 // formats reads the format codes of LC_FORMAT, translated into the
 // SpreadsheetML syntax, the date acceptance patterns, the default format

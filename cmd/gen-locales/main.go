@@ -14,7 +14,7 @@ import (
 // and the digest of the files the extract reads ([readSources]).
 const (
 	commit        = "9dea406ab7695df6325b11b0e19fdca8db4b7276"
-	sourcesSHA256 = "54c63a2679b346930abf9142153435a0fe6c4dfe13aee6d81ec0575d93aa7a2d"
+	sourcesSHA256 = "58d5e52916143fbab3732fbf3af808de3caad59268f28e6ed806e3d5032a2a7d"
 )
 
 // The files the command reads and writes, relative to the module root.
@@ -30,6 +30,9 @@ type extractFile struct {
 	Commit string `json:"commit"`
 	// Locales are the records, by file name.
 	Locales []localeRecord `json:"locales"`
+	// CalcTables are the tables of Calc's built-in number formats, in the
+	// order the source lists them.
+	CalcTables []calcTable `json:"calcTables"`
 }
 
 // localeRecord is one locale, as its file and the files it refers to
