@@ -264,6 +264,7 @@ What each fixture plants, the rules each must and must not fire, and the diverge
 | `structsplit_ua1.pdf`  | PDF/UA-1     | Structure elements whose marked content a redaction cuts         |
 | `annotstraddle_2b.pdf` | PDF/A-2b     | An annotation across the regions; a removed one's pop-up, reply  |
 | `fartext_1b.pdf`       | PDF/A-1b     | Content placed past the real limit; clamps that would move it    |
+| `symbolenc_2b.pdf`     | PDF/A-2b     | Symbolic TrueType fonts that state a base encoding               |
 
 ### Must-not-fire controls
 
