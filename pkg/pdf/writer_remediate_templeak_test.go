@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/remediation"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // errEngineFailed is the error the failing engines of
@@ -18,7 +19,7 @@ var errEngineFailed = errors.New("the engine failed")
 // remediateAtBoundary runs [Writer.remediate] behind the panic boundary the
 // public remediation methods install, so a panic inside it comes back as
 // [ErrInternalPanic] as it does to a caller.
-func remediateAtBoundary(ctx context.Context, w *Writer, revalidate func(context.Context, *Reader) ([]error, error), run remediationRun) (rep *RemediationReport, err error) {
+func remediateAtBoundary(ctx context.Context, w *Writer, revalidate func(context.Context, *Reader) ([]error, error), run remediationRun) (rep *models.RemediationReport, err error) {
 	defer recoverToError(nil, "remediate", &err)
 	return w.remediate(ctx, engineTarget, DefaultRegressionTolerance, revalidate, run)
 }

@@ -76,7 +76,7 @@ func remediateFixture(ctx context.Context, data []byte, profile string, opts ...
 	w := NewWriter(r)
 	defer w.Close()
 
-	var report *RemediationReport
+	var report *models.RemediationReport
 	switch {
 	case strings.HasPrefix(profile, "PDF/A"):
 		report, err = w.RemediatePDFA(ctx, models.PDFAProfile(profile), opts...)

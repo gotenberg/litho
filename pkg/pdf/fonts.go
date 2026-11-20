@@ -3,7 +3,6 @@ package pdf
 import (
 	"cmp"
 	"context"
-	"fmt"
 	"io/fs"
 	"log/slog"
 	"math"
@@ -11,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/remediation"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // FontProvider supplies the programs of the fonts a document shows without
@@ -78,30 +78,6 @@ type FontCode struct {
 	Width float64
 }
 
-// FontRefusal records a font a remediation left unembedded although a
-// [FontProvider] was configured. Values are safe to read concurrently.
-type FontRefusal struct {
-	// BaseFont is the font's /BaseFont.
-	BaseFont string
-	// Object is the object number of the font dictionary in the file the
-	// pass that last judged it read: the document for the first pass, the
-	// output of the pass before for a later one. An output written as an
-	// incremental update keeps the document's numbers, and one rewritten
-	// whole numbers its objects anew. It is 0 for a font dictionary written
-	// inline in a resource dictionary.
-	Object int
-	// Err says why, wrapping [ErrFontNotSupplied],
-	// [ErrFontProgramInvalid], [ErrFontEmbeddingRestricted],
-	// [ErrFontKind], [ErrFontCoverage], [ErrFontWidths],
-	// [ErrFontRejected], [ErrFontUnwritable] or [ErrFontRolledBack].
-	Err error
-}
-
-// String describes the refusal.
-func (r FontRefusal) String() string {
-	return fmt.Sprintf("font %s (object %d): %v", r.BaseFont, r.Object, r.Err)
-}
-
 // WithFontProvider embeds the programs p supplies for the fonts a document
 // shows without embedding them.
 //
@@ -132,7 +108,7 @@ func (r FontRefusal) String() string {
 //
 // Fonts given the same program share it: one subset serves them all, and a
 // whole program is written once.
-// [RemediationReport.Fixed] states which each font received.
+// [models.RemediationReport.Fixed] states which each font received.
 //
 // A TrueType program receives the cmap a PDF reader looks its glyphs up through
 // (ISO 32000-1, 9.6.6.4):
@@ -147,7 +123,7 @@ func (r FontRefusal) String() string {
 // gave its codes, unless it carries its own.
 //
 // Every font it leaves unembedded is listed with the reason in
-// [RemediationReport.FontRefusals], and stays in the residual. Embedding
+// [models.RemediationReport.FontRefusals], and stays in the residual. Embedding
 // changes the glyphs that render, so a regression the integrity probe detects
 // rolls it back with the other content-modifying fixes. Without a provider, no
 // font is embedded and no refusal is listed.
@@ -187,10 +163,10 @@ func WithFontProvider(p FontProvider) RemediateOption {
 // Symbol takes Standard Symbols PS and ZapfDingbats D050000L. The width check
 // keeps a family that is not metric-compatible after all from moving text.
 //
-// A program refused for the font gives way to the next file that matches it, in
-// that order, up to eight programs, so Courier New serves a Courier whose own
-// face draws a glyph of another width. [RemediationReport.Fixed] names the
-// program each font received.
+// A program refused for the font gives way to the next file that matches it,
+// in that order, up to eight programs, so Courier New serves a Courier whose
+// own face draws a glyph of another width. [models.RemediationReport.Fixed]
+// names the program each font received.
 //
 // A program of more than 64 MiB, a collection of more than 256 MiB, or a file
 // no TrueType, OpenType or CFF reader accepts, is skipped. The index reads at
@@ -211,8 +187,8 @@ func WithFontFiles(fsys fs.FS) RemediateOption {
 // keeps every glyph, at the cost of a larger file.
 //
 // Each font is still embedded only where the whole program serves it as the
-// document shows it, and [RemediationReport.Fixed] states that the caller asked
-// for the whole program. Without a provider it does nothing.
+// document shows it, and [models.RemediationReport.Fixed] states that the
+// caller asked for the whole program. Without a provider it does nothing.
 func WithWholeFontPrograms() RemediateOption {
 	return func(o *remediateOpts) {
 		o.wholeFonts = true
@@ -544,15 +520,13 @@ func fontProvider(logger *slog.Logger, providers []FontProvider) remediation.Fon
 	}
 }
 
-// fontRefusals translates the engine's refusals.
-func fontRefusals(in []remediation.FontRefusal) []FontRefusal {
+// fontRefusals returns the engine's refusals in a copy ordered by object
+// number, nil for none.
+func fontRefusals(in []models.FontRefusal) []models.FontRefusal {
 	if len(in) == 0 {
 		return nil
 	}
-	out := make([]FontRefusal, len(in))
-	for i, r := range in {
-		out[i] = FontRefusal{BaseFont: r.BaseFont, Object: r.Object, Err: r.Err}
-	}
-	slices.SortStableFunc(out, func(a, b FontRefusal) int { return cmp.Compare(a.Object, b.Object) })
+	out := slices.Clone(in)
+	slices.SortStableFunc(out, func(a, b models.FontRefusal) int { return cmp.Compare(a.Object, b.Object) })
 	return out
 }

@@ -54,7 +54,7 @@ func fixturePrograms() map[string][]byte {
 // remediatedFixture remediates data at PDF/A-2b with opts, and returns the
 // report, the output, and the rule classes the output fails with the count of
 // each.
-func remediatedFixture(t *testing.T, data []byte, opts ...RemediateOption) (*RemediationReport, []byte, map[string]int) {
+func remediatedFixture(t *testing.T, data []byte, opts ...RemediateOption) (*models.RemediationReport, []byte, map[string]int) {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))

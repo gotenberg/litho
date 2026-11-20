@@ -5,6 +5,8 @@ import (
 	"context"
 	"slices"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestEncryptDropsTheSourceSignature pins that encrypting a signed document
@@ -56,7 +58,7 @@ func TestEncryptDropsTheSourceSignature(t *testing.T) {
 		if err != nil {
 			t.Fatalf("algorithm %d: encrypting: %v", algorithm, err)
 		}
-		if wantDropped := []DroppedSignature{{Field: want[0].FieldName}}; !slices.Equal(dropped, wantDropped) {
+		if wantDropped := []models.DroppedSignature{{Field: want[0].FieldName}}; !slices.Equal(dropped, wantDropped) {
 			t.Errorf("algorithm %d: DroppedSignatures = %v, want %v", algorithm, dropped, wantDropped)
 		}
 

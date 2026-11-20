@@ -219,7 +219,7 @@ var convertTargets = []convertTargetCase{
 // tc names a profile, remediates the result to it in a later pipeline
 // stage, with lang as the language of the remediation when not empty. The
 // report is nil without a profile.
-func convertToTarget(t *testing.T, format testFormat, src []byte, tc convertTargetCase, lang string, opts ...ConvertOption) ([]byte, *RemediationReport) {
+func convertToTarget(t *testing.T, format testFormat, src []byte, tc convertTargetCase, lang string, opts ...ConvertOption) ([]byte, *models.RemediationReport) {
 	t.Helper()
 	ctx := context.Background()
 	c := fromFormat(format, bytes.NewReader(src), append(opts, WithConvertVersion(tc.version))...)
@@ -240,7 +240,7 @@ func convertToTarget(t *testing.T, format testFormat, src []byte, tc convertTarg
 // checkTarget opens data and checks what tc asks of it: one revision whose
 // header names the version, no catalog /Version, the language, and a file
 // both litho validators pass when the report says nothing is left.
-func checkTarget(t *testing.T, data []byte, rep *RemediationReport, tc convertTargetCase, lang string) {
+func checkTarget(t *testing.T, data []byte, rep *models.RemediationReport, tc convertTargetCase, lang string) {
 	t.Helper()
 	if got := bytes.Count(data, []byte("%%EOF")); got != 1 {
 		t.Errorf("%d %%%%EOF markers, want one revision", got)

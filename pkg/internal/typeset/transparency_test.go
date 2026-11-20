@@ -583,7 +583,7 @@ func TestTransparencyGroupTagged(t *testing.T) {
 			t.Errorf("ExtractText lacks %q: %q", want, text)
 		}
 	}
-	report, fixed := remediate(t, out, func(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+	report, fixed := remediate(t, out, func(ctx context.Context, w *pdf.Writer) (*models.RemediationReport, error) {
 		return w.RemediatePDFUA(ctx, models.PDFUA1)
 	})
 	for _, v := range report.Residual {
@@ -610,7 +610,7 @@ func TestTransparencyRemediates(t *testing.T) {
 	for _, profile := range []models.PDFAProfile{models.PDFA1b, models.PDFA2b, models.PDFA4} {
 		t.Run(string(profile), func(t *testing.T) {
 			t.Parallel()
-			report, fixed := remediate(t, out, func(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+			report, fixed := remediate(t, out, func(ctx context.Context, w *pdf.Writer) (*models.RemediationReport, error) {
 				return w.RemediatePDFA(ctx, profile)
 			})
 			for _, v := range report.Residual {

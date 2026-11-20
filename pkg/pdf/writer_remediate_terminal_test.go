@@ -276,7 +276,7 @@ func appearedFormPDF() []byte {
 }
 
 // remediateFor runs the remediation of profile, "PDF/A-2b" or "PDF/UA-1", on w.
-func remediateFor(ctx context.Context, w *Writer, profile string) (*RemediationReport, error) {
+func remediateFor(ctx context.Context, w *Writer, profile string) (*models.RemediationReport, error) {
 	if profile == string(models.PDFUA1) {
 		return w.RemediatePDFUA(ctx, models.PDFUA1)
 	}

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -400,7 +401,7 @@ func remediateForDeterminism(ctx context.Context, data []byte, home string, aggr
 	if aggressive {
 		opts = append(opts, pdf.WithAggressiveFixes())
 	}
-	var report *pdf.RemediationReport
+	var report *models.RemediationReport
 	if p, ok := dirToPDFAProfile[home]; ok {
 		report, err = w.RemediatePDFA(ctx, p, opts...)
 	} else if p, ok := dirToPDFUAProfile[home]; ok {

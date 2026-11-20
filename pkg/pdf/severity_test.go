@@ -12,7 +12,7 @@ import (
 
 func TestToViolation_SeverityAndFields(t *testing.T) {
 	warn := toViolation(compliance.Violation{Rule: compliance.Rule_cii_sch_Warning, Context: "invoice"})
-	if warn.Severity != SeverityWarning {
+	if warn.Severity != models.SeverityWarning {
 		t.Errorf("warning rule -> severity %v, want SeverityWarning", warn.Severity)
 	}
 	if warn.Clause != "CII_SCH" {
@@ -22,14 +22,14 @@ func TestToViolation_SeverityAndFields(t *testing.T) {
 	fatal := toViolation(compliance.Violation{
 		Rule: compliance.Rule{Specification: "ISO_19005_1", Clause: "6.1.2", TestNumber: 3, Description: "x"},
 	})
-	if fatal.Severity != SeverityFatal {
+	if fatal.Severity != models.SeverityFatal {
 		t.Errorf("PDF/A rule -> severity %v, want SeverityFatal", fatal.Severity)
 	}
 
 	// An error that is not a compliance violation maps to a fatal
 	// Violation carrying its message.
 	plain := toViolation(errors.New("boom"))
-	if plain.Severity != SeverityFatal || plain.Description != "boom" {
+	if plain.Severity != models.SeverityFatal || plain.Description != "boom" {
 		t.Errorf("plain error -> %+v, want {fatal, boom}", plain)
 	}
 
@@ -69,7 +69,7 @@ func TestValidatePDFAReport_StructuredMatchesFlat(t *testing.T) {
 	}
 	for i := range report {
 		// PDF/A conformance is binary: every violation is fatal.
-		if report[i].Severity != SeverityFatal {
+		if report[i].Severity != models.SeverityFatal {
 			t.Errorf("violation %d severity = %v, want SeverityFatal", i, report[i].Severity)
 		}
 		// Same order, same text as the flat form.

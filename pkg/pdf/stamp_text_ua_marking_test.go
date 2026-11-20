@@ -9,13 +9,13 @@ import (
 // contentMarkingViolations returns the PDF/UA-1 violations of data under ISO
 // 14289-1, 7.1 test 3: content neither tagged as real content nor marked as
 // an artifact.
-func contentMarkingViolations(t *testing.T, data []byte) []Violation {
+func contentMarkingViolations(t *testing.T, data []byte) []models.Violation {
 	t.Helper()
 	got, err := openColorPDF(t, data).ValidatePDFUAReport(t.Context(), models.PDFUA1)
 	if err != nil {
 		t.Fatalf("ValidatePDFUAReport: %v", err)
 	}
-	var marking []Violation
+	var marking []models.Violation
 	for _, v := range got {
 		if v.Clause == "7.1" && v.TestNumber == 3 {
 			marking = append(marking, v)

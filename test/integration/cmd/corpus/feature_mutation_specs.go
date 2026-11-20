@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -103,10 +104,10 @@ type mutationPlan struct {
 	password string
 	// autoTag is the report [pdf.Writer.AutoTag] returned, which the write
 	// fills.
-	autoTag *pdf.AutoTagReport
+	autoTag *models.AutoTagReport
 	// droppedSignatures are the input's signatures the write left out (see
 	// [pdf.Writer.DroppedSignatures]), which the write fills.
-	droppedSignatures []pdf.DroppedSignature
+	droppedSignatures []models.DroppedSignature
 	// release frees what the mutation holds until the write, a second Reader.
 	release func()
 	// signField names the unsigned signature field mutate-sign signs in, ""
@@ -364,7 +365,7 @@ const mutationRedactReach = 1e6
 //     and 7 pass) under mutate-pages and mutate-encrypt: a full rewrite drops
 //     the direct /Info dictionary the source's cross-reference stream holds.
 //   - litho/pdf: mutate-autotag tags 59 PDFs and leaves 43 alone, each for the
-//     reason [pdf.AutoTagReport] names and [verifyAutoTag] finds on the input:
+//     reason [models.AutoTagReport] names and [verifyAutoTag] finds on the input:
 //     26 already tagged, 13 with nothing to tag, 3 with marked content and 1
 //     with a page it cannot read.
 //   - litho/pdf complex_2u, forbidden_mix, inlineimage_2b: the 3 with marked

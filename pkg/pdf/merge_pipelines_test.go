@@ -537,7 +537,7 @@ func TestMergePipelinesReportsDroppedSignatures(t *testing.T) {
 	t.Parallel()
 	r := openThreePage(t)
 	defer r.Close()
-	var dropped []DroppedSignature
+	var dropped []models.DroppedSignature
 	result, err := NewPipeline().MergePipelines([]*Pipeline{
 		mergedPages(r, 1),
 		NewPipeline().Open(r).Apply(func(_ context.Context, w *Writer) error { w.Sign(newCMSTestSigner(t)); return nil }),

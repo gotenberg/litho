@@ -141,9 +141,9 @@ func WithCIISchemas(fsys fs.FS, rootPath string) OpenOption {
 // business-rule pass over the embedded CII XML. When phase is
 // non-empty, only that phase's active patterns evaluate; pass "" to
 // run every pattern. A fired assertion appears in the result under
-// the CII_SCH clause; [FacturXReport.Structured], from
+// the CII_SCH clause; [models.FacturXReport.Structured], from
 // [Reader.ValidateFacturXReport] or [Reader.ValidateZUGFeRDReport],
-// returns it as a [Violation] value.
+// returns it as a [models.Violation] value.
 //
 // fsys is any [io/fs.FS]: an embed.FS for bundled rule sets, an
 // os.DirFS for a path on disk. rootPath is the Schematron root file
@@ -162,9 +162,9 @@ func WithSchematron(fsys fs.FS, rootPath string, phase string) OpenOption {
 // that the specification does not sanction. By default litho validates
 // strictly: a tolerated but non-spec /AFRelationship (e.g. Alternative
 // carried over from ZUGFeRD 2.0), an application/xml embedded-stream
-// subtype, or a non-spec XMP Version surfaces as a [SeverityWarning]
-// [Violation] from [Reader.ValidateFacturX] / [Reader.ValidateZUGFeRD]
-// (see [FacturXReport.Warnings]). WithLenient accepts those values
+// subtype, or a non-spec XMP Version surfaces as a [models.SeverityWarning]
+// [models.Violation] from [Reader.ValidateFacturX] / [Reader.ValidateZUGFeRD]
+// (see [models.FacturXReport.Warnings]). WithLenient accepts those values
 // silently, matching the behaviour of producers that carry them over
 // from earlier ZUGFeRD generations. It does not relax fatal structural
 // rules.
@@ -304,11 +304,11 @@ func (r *Reader) ValidateWTPDF(ctx context.Context, profile models.WTPDFProfile)
 }
 
 // ValidatePDFAReport audits the document against a PDF/A profile and
-// returns structured [Violation] values carrying the clause, test
+// returns structured [models.Violation] values carrying the clause, test
 // number, and severity that [Reader.ValidatePDFA] stringifies away.
-// Every PDF/A violation is [SeverityFatal]: ISO 19005 conformance is
+// Every PDF/A violation is [models.SeverityFatal]: ISO 19005 conformance is
 // binary. Use [Reader.ValidatePDFA] for the flat error form.
-func (r *Reader) ValidatePDFAReport(ctx context.Context, profile models.PDFAProfile) (_ []Violation, err error) {
+func (r *Reader) ValidatePDFAReport(ctx context.Context, profile models.PDFAProfile) (_ []models.Violation, err error) {
 	defer recoverToError(r.logger(), "Reader.ValidatePDFAReport", &err)
 	errs, err := compliance.ValidatePDFA(ctx, r.doc, profile)
 	if err != nil {
@@ -318,9 +318,9 @@ func (r *Reader) ValidatePDFAReport(ctx context.Context, profile models.PDFAProf
 }
 
 // ValidatePDFUAReport mirrors [Reader.ValidatePDFAReport] for PDF/UA.
-// Every PDF/UA violation is [SeverityFatal]: ISO 14289 conformance is
+// Every PDF/UA violation is [models.SeverityFatal]: ISO 14289 conformance is
 // binary.
-func (r *Reader) ValidatePDFUAReport(ctx context.Context, profile models.PDFUAProfile) (_ []Violation, err error) {
+func (r *Reader) ValidatePDFUAReport(ctx context.Context, profile models.PDFUAProfile) (_ []models.Violation, err error) {
 	defer recoverToError(r.logger(), "Reader.ValidatePDFUAReport", &err)
 	errs, err := compliance.ValidatePDFUA(ctx, r.doc, profile)
 	if err != nil {
@@ -330,8 +330,8 @@ func (r *Reader) ValidatePDFUAReport(ctx context.Context, profile models.PDFUAPr
 }
 
 // ValidateWTPDFReport mirrors [Reader.ValidatePDFAReport] for WTPDF.
-// Every WTPDF violation is [SeverityFatal]: conformance is binary.
-func (r *Reader) ValidateWTPDFReport(ctx context.Context, profile models.WTPDFProfile) (_ []Violation, err error) {
+// Every WTPDF violation is [models.SeverityFatal]: conformance is binary.
+func (r *Reader) ValidateWTPDFReport(ctx context.Context, profile models.WTPDFProfile) (_ []models.Violation, err error) {
 	defer recoverToError(r.logger(), "Reader.ValidateWTPDFReport", &err)
 	errs, err := compliance.ValidateWTPDF(ctx, r.doc, profile)
 	if err != nil {
@@ -358,33 +358,14 @@ func (r *Reader) ValidateFacturX(ctx context.Context) (_ []error, err error) {
 	return compliance.ValidateFacturX(ctx, r.doc, r.facturXValidateOpts(ctx)...)
 }
 
-// FacturXReport partitions the output of a [Reader.ValidateFacturXReport]
-// call into hard violations and Schematron advisories. Violations are
-// the PDF/A-3 plus hybrid-invoice rule failures that callers must act
-// on; Advisories list Schematron rules whose XPath the bundled engine
-// could not evaluate and whose verdict is therefore unknown.
-//
-// Values are immutable once returned; callers may share a FacturXReport
-// across goroutines without synchronisation.
-type FacturXReport struct {
-	// Violations are hard rule failures: PDF/A-3 base, hybrid-invoice
-	// AF/XMP/CII checks, and Schematron assertions that fired.
-	Violations []error
-	// Advisories list Schematron rules skipped because the bundled
-	// XPath engine does not support the construct the rule uses.
-	// Each entry wraps [ErrSchematronRuleSkipped] and names the rule
-	// id plus the unsupported construct in its error message.
-	Advisories []error
-}
-
 // ValidateFacturXReport runs the same checks as [Reader.ValidateFacturX]
-// and returns a [FacturXReport] that pre-partitions the result into
+// and returns a [models.FacturXReport] that pre-partitions the result into
 // hard violations and Schematron advisories. Callers that only want
 // the hard violations can use [Reader.ValidateFacturX] directly.
-func (r *Reader) ValidateFacturXReport(ctx context.Context) (FacturXReport, error) {
+func (r *Reader) ValidateFacturXReport(ctx context.Context) (models.FacturXReport, error) {
 	errs, err := r.ValidateFacturX(ctx)
 	if err != nil {
-		return FacturXReport{}, err
+		return models.FacturXReport{}, err
 	}
 	return partitionFacturXErrors(errs), nil
 }
@@ -392,16 +373,16 @@ func (r *Reader) ValidateFacturXReport(ctx context.Context) (FacturXReport, erro
 // ValidateZUGFeRDReport mirrors [Reader.ValidateFacturXReport] for the
 // ZUGFeRD entry point. See that function's docs for how the report
 // partitions errors.
-func (r *Reader) ValidateZUGFeRDReport(ctx context.Context, version models.ZUGFeRDVersion) (FacturXReport, error) {
+func (r *Reader) ValidateZUGFeRDReport(ctx context.Context, version models.ZUGFeRDVersion) (models.FacturXReport, error) {
 	errs, err := r.ValidateZUGFeRD(ctx, version)
 	if err != nil {
-		return FacturXReport{}, err
+		return models.FacturXReport{}, err
 	}
 	return partitionFacturXErrors(errs), nil
 }
 
-func partitionFacturXErrors(errs []error) FacturXReport {
-	var rep FacturXReport
+func partitionFacturXErrors(errs []error) models.FacturXReport {
+	var rep models.FacturXReport
 	for _, e := range errs {
 		if errors.Is(e, ErrSchematronRuleSkipped) {
 			rep.Advisories = append(rep.Advisories, e)
@@ -410,28 +391,6 @@ func partitionFacturXErrors(errs []error) FacturXReport {
 		rep.Violations = append(rep.Violations, e)
 	}
 	return rep
-}
-
-// Structured returns the hard violations as structured [Violation]
-// values carrying clause, test number, and severity. Unlike PDF/A and
-// PDF/UA, a Factur-X result mixes [SeverityFatal] (PDF/A-3 base and
-// fired Schematron asserts) with [SeverityWarning] (soft Schematron
-// rules and report notices).
-func (rep FacturXReport) Structured() []Violation {
-	return toViolations(rep.Violations)
-}
-
-// Fatals returns the structured violations whose severity is
-// [SeverityFatal]: the failures that make the document non-conformant.
-func (rep FacturXReport) Fatals() []Violation {
-	return filterBySeverity(rep.Violations, SeverityFatal)
-}
-
-// Warnings returns the structured violations whose severity is
-// [SeverityWarning]: soft Schematron findings that do not by themselves
-// fail conformance.
-func (rep FacturXReport) Warnings() []Violation {
-	return filterBySeverity(rep.Violations, SeverityWarning)
 }
 
 // facturXValidateOpts assembles the compliance options threaded into

@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // dssVRIKey is the /VRI key of a signature whose /Contents is <30820001>, as
@@ -182,7 +184,7 @@ func TestWriter_RewriteDropsTheStoreOfSignaturesAnEditRemoved(t *testing.T) {
 		return nil
 	})
 	checkNoSecurityStore(ctx, t, out, "")
-	if want := []DroppedSignature{{Field: "approval"}}; !slices.Equal(dropped, want) {
+	if want := []models.DroppedSignature{{Field: "approval"}}; !slices.Equal(dropped, want) {
 		t.Errorf("DroppedSignatures = %v, want %v", dropped, want)
 	}
 }
@@ -238,8 +240,8 @@ func TestSplitMergeInsert_LeaveTheSecurityStoreOut(t *testing.T) {
 		src := openDeclaration(t, certifiedDSSPDF(), false)
 		defer src.Close()
 		var out bytes.Buffer
-		var dropped []DroppedSignature
-		if err := Split(ctx, src, []int{1, 2}, &out, WithDroppedSignatures(&dropped), WithSignatureRemoval()); err != nil {
+		var dropped []models.DroppedSignature
+		if err := Split(ctx, src, []int{1, 2}, &out, WithDroppedSignatures(&dropped)); err != nil {
 			t.Fatalf("Split: %v", err)
 		}
 		checkNoSecurityStore(ctx, t, out.Bytes(), "")
@@ -255,8 +257,8 @@ func TestSplitMergeInsert_LeaveTheSecurityStoreOut(t *testing.T) {
 		blank := openDeclaration(t, blankPagePDF(), false)
 		defer blank.Close()
 		var out bytes.Buffer
-		var dropped []DroppedSignature
-		if err := Merge(ctx, []*Reader{src, blank}, &out, WithDroppedSignatures(&dropped), WithSignatureRemoval()); err != nil {
+		var dropped []models.DroppedSignature
+		if err := Merge(ctx, []*Reader{src, blank}, &out, WithDroppedSignatures(&dropped)); err != nil {
 			t.Fatalf("Merge: %v", err)
 		}
 		checkNoSecurityStore(ctx, t, out.Bytes(), "")

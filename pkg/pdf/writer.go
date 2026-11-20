@@ -57,10 +57,7 @@ type writeOpts struct {
 	inTheClear bool
 	// droppedSignatures receives the signatures the output drops (see
 	// [WithDroppedSignatures]).
-	droppedSignatures *[]DroppedSignature
-	// signatureRemoval allows the output to drop the signatures of its inputs
-	// (see [WithSignatureRemoval]).
-	signatureRemoval bool
+	droppedSignatures *[]models.DroppedSignature
 	// compactionSkipped receives whether the output left out the compaction
 	// asked for (see [WithCompactionSkipped]).
 	compactionSkipped *bool
@@ -793,12 +790,12 @@ func WithRegressionTolerance(tol RegressionTolerance) RemediateOption {
 // The remediation runs the PDF/UA engine first, then the PDF/A one, and
 // alternates them for as long as each round still fixes something, up to four
 // rounds against three for one profile. Every round judges its output against
-// both profiles, so [RemediationReport.Residual] lists what the output leaves
-// of either, and [Violation.Specification] tells them apart: ISO_14289_1,
-// ISO_14289_2 and ISO_32005 name the PDF/UA violations, and every other
-// specification, ISO_19005_1 to ISO_19005_4 among them, the violations of the
-// PDF/A side. An empty Residual means the output conforms to both. The cost is
-// one more validation per round, and one more round at most.
+// both profiles, so [models.RemediationReport.Residual] lists what the output
+// leaves of either, and [models.Violation.Specification] tells them apart:
+// ISO_14289_1, ISO_14289_2 and ISO_32005 name the PDF/UA violations, and every
+// other specification, ISO_19005_1 to ISO_19005_4 among them, the violations
+// of the PDF/A side. An empty Residual means the output conforms to both. The
+// cost is one more validation per round, and one more round at most.
 //
 // An empty profile, the default, remediates to the PDF/A profile alone.
 // [Writer.RemediatePDFUA] and [Writer.RemediateWTPDF] ignore the option.
@@ -806,61 +803,6 @@ func WithPDFUA(profile models.PDFUAProfile) RemediateOption {
 	return func(o *remediateOpts) {
 		o.pdfua = profile
 	}
-}
-
-// RemediationReport describes what the remediation engine fixed and what it
-// could not fix automatically.
-// Concurrent reads of a value are safe; a write needs synchronization.
-type RemediationReport struct {
-	// Fixed lists human-readable descriptions of applied fixes that were
-	// kept in the output.
-	Fixed []string
-	// Residual contains violations that could not be fixed automatically,
-	// in the flat error form the Validate methods return.
-	// [RemediationReport.ResidualViolations] returns the same findings as
-	// structured [Violation] values. If content-modifying fixers were rolled
-	// back, the violations they had claimed to handle move back here.
-	//
-	// A remediation given [WithPDFUA] lists the violations of both its
-	// profiles here, each [Violation] naming its standard in Specification.
-	//
-	// A Factur-X remediation or repair lists the failures a validation of its
-	// output reports, [FacturXReport.Fatals]: a warning does not fail
-	// conformance and is not listed, so an empty Residual means the output
-	// validates.
-	//
-	// A non-empty Residual does not stop the output from ASSERTING the
-	// profile. The identification schemas are themselves requirements
-	// (ISO 19005-1, 6.7.11 and ISO 14289-1, clause 5), so remediation writes
-	// pdfaid or pdfuaid to satisfy them, and a document still failing other
-	// clauses carries that claim regardless: a PDF/A-2b run leaving seven
-	// font-embedding violations emits pdfaid:part 2 and pdfaid:conformance B
-	// all the same. Read this field rather than trusting what the document
-	// says about itself.
-	Residual []error
-	// RolledBack lists human-readable descriptions of content-modifying
-	// fixes that were applied, failed the post-remediation integrity probe,
-	// and were subsequently discarded. When non-empty, the output preserves
-	// rendering at the cost of leaving the listed violations unfixed. The
-	// flattening of a PDF/A-1 remediation is the exception: discarded, it
-	// gives way to setting the transparency opaque, which fixes the same
-	// violations and changes how the page draws (see [Writer.RemediatePDFA]).
-	RolledBack []string
-	// FontRefusals lists, in object-number order, the fonts the output
-	// shows unembedded although [WithFontProvider] or [WithFontFiles] was
-	// given, each with the reason. It is nil without a provider. It is the
-	// verdict of the last pass that judged the fonts: a font one round
-	// refused and a later round embedded is not listed, and one every round
-	// refused is listed once, with the last round's reason.
-	FontRefusals []FontRefusal
-}
-
-// ResidualViolations returns the residual findings as structured
-// [Violation] values with clause, test number, context, and severity.
-// Residual keeps the raw error form; this accessor is the structured view
-// for callers that route, filter, or report findings programmatically.
-func (r *RemediationReport) ResidualViolations() []Violation {
-	return toViolations(r.Residual)
 }
 
 // BookmarkHandling controls how bookmarks are produced for the output of
@@ -1134,7 +1076,7 @@ type Signer interface {
 //
 // A remediation is the last edit on a Writer. It writes the edits queued
 // before it to a temp file and validates, repairs and measures that document,
-// so its [RemediationReport] describes the output. After it, the Writer
+// so its [models.RemediationReport] describes the output. After it, the Writer
 // accepts [Writer.Sign], [Writer.Timestamp], [Writer.SetEditLabel],
 // [Writer.WriteTo] and [Writer.Close], and refuses every other call that
 // edits, a second remediation included, with [ErrEditAfterRemediation]:
@@ -1274,7 +1216,7 @@ type Writer struct {
 	// output left out, each a full rewrite (see [Writer.DroppedSignatures]). A
 	// remediation writes its output before WriteTo, so the record outlives
 	// one write; a remediation or a WriteTo that fails puts it back as it was.
-	droppedSignatures []DroppedSignature
+	droppedSignatures []models.DroppedSignature
 
 	// compactionSkipped records that the write [Writer.WriteTo] is running
 	// was asked for compaction and appended an incremental update, which
@@ -2011,36 +1953,6 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 	})
 }
 
-// AutoTagReport says what a [Writer.AutoTag] did to the document.
-//
-// AutoTag is queued like every other edit, so the Writer fills the report when
-// it applies the edit: during [Writer.WriteTo], or during a remediation or a
-// [Writer.Redact] queued after AutoTag, since those apply the edits queued
-// before them. Until then Applied is false and the other fields are zero.
-//
-// Values must not be shared across goroutines without synchronization: the
-// Writer fills one on the goroutine that calls the method applying the edit, so
-// read it after that call returns.
-type AutoTagReport struct {
-	// Applied reports whether the Writer applied the edit. It stays false when
-	// the call that would apply it failed before reaching it, and when the
-	// Writer refused AutoTag after a remediation (see [ErrEditAfterRemediation]).
-	// It says the edit ran, not that the output was written: the applying
-	// call's error says that.
-	Applied bool
-	// Skipped is nil when AutoTag built a structure tree. Otherwise it says why
-	// AutoTag left the document as it was, and wraps one of
-	// [ErrAutoTagAlreadyTagged], [ErrAutoTagMarkedContent],
-	// [ErrAutoTagUnreadableContent] and [ErrAutoTagNothingToTag]: test it with
-	// [errors.Is]. A skip fails nothing, and the output is written without a
-	// new tree.
-	Skipped error
-	// Page is the 1-based page Skipped concerns, counted among the pages the
-	// Writer holds when AutoTag is queued, 0 when it concerns the whole
-	// document or AutoTag skipped nothing.
-	Page int
-}
-
 // AutoTag synthesizes a logical structure tree (a tagged PDF) for an untagged
 // document. The change is applied when [Writer.WriteTo] is called.
 //
@@ -2060,8 +1972,9 @@ type AutoTagReport struct {
 // pages the Writer holds when it is queued, a page inserted before it included
 // and a page deleted before it left out.
 //
-// It leaves some documents alone by design. The returned [AutoTagReport] says
-// so in Skipped once the edit is applied. The skipped documents are:
+// It leaves some documents alone by design. The returned
+// [models.AutoTagReport] says so in Skipped once the edit is applied. The
+// skipped documents are:
 //
 //   - An already-tagged document ([ErrAutoTagAlreadyTagged]).
 //   - One whose content is already marked, since marking it again would nest or
@@ -2076,8 +1989,8 @@ type AutoTagReport struct {
 // return. Whether AutoTag tags depends on the document the edits queued before
 // it produce, which only applying them decides. A caller that does not need the
 // report calls AutoTag as a statement and ignores it.
-func (w *Writer) AutoTag() *AutoTagReport {
-	report := &AutoTagReport{}
+func (w *Writer) AutoTag() *models.AutoTagReport {
+	report := &models.AutoTagReport{}
 	if w.refuseAfterRemediation("AutoTag") != nil {
 		return report
 	}
@@ -2087,7 +2000,7 @@ func (w *Writer) AutoTag() *AutoTagReport {
 			// WriteTo does, and one that fails leaves them queued, so the edit
 			// can run more than once. Each run describes the document it saw,
 			// so it starts from an empty report.
-			*report = AutoTagReport{}
+			*report = models.AutoTagReport{}
 			res, err := tagging.AutoTag(ctx, alloc, doc)
 			if err != nil {
 				return fmt.Errorf("auto-tagging: %w", err)
@@ -2095,7 +2008,7 @@ func (w *Writer) AutoTag() *AutoTagReport {
 			for _, d := range res.Descriptions {
 				doc.Logger.Debug("auto-tag", slog.String("detail", d))
 			}
-			*report = AutoTagReport{Applied: true, Skipped: res.Skipped, Page: res.Page}
+			*report = models.AutoTagReport{Applied: true, Skipped: res.Skipped, Page: res.Page}
 			return nil
 		},
 	})
@@ -2819,9 +2732,9 @@ func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remedia
 //   - A widget's form field, when the widget was the field's only one.
 //   - The structure element of a tagged document.
 //
-// [RemediationReport.Fixed] names each removal. A signed signature field keeps
-// its widget. Every other annotation gets the flags those clauses require, so
-// one that showed only in print now shows on screen too.
+// [models.RemediationReport.Fixed] names each removal. A signed signature
+// field keeps its widget. Every other annotation gets the flags those clauses
+// require, so one that showed only in print now shows on screen too.
 //
 // At PDF/A-1a and PDF/A-1b, which forbid transparency (ISO 19005-1, 6.4), it
 // flattens transparency first, in both modes, as [Writer.FlattenTransparency]
@@ -2830,16 +2743,16 @@ func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remedia
 //
 // What flattening leaves is set opaque, which changes how it draws. That
 // covers annotation appearances, Type 3 glyphs that paint with transparency
-// and a page it refuses. [RemediationReport.Fixed] says which. A composite of
-// images and shadings only is encoded as JPEG at quality 90 when that is
-// smaller (see [WithFlattenJPEGQuality]). Every other composite is encoded
-// losslessly.
+// and a page it refuses. [models.RemediationReport.Fixed] says which. A
+// composite of images and shadings only is encoded as JPEG at quality 90 when
+// that is smaller (see [WithFlattenJPEGQuality]). Every other composite is
+// encoded losslessly.
 //
 // The integrity probe takes text flattening draws invisible, the text a
 // constant alpha of 0 hid, as kept, and counts each composite as the images it
 // replaced. An output it still refuses with its pages flattened is remediated
 // again with every page's transparency set opaque.
-// [RemediationReport.RolledBack] lists the flattening.
+// [models.RemediationReport.RolledBack] lists the flattening.
 //
 // Given [WithPDFUA], it remediates to that PDF/UA profile too, and the output
 // conforms to both profiles. A PDF/UA profile the PDF/A one does not pair
@@ -2848,7 +2761,7 @@ func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remedia
 // It is the last edit on the Writer (see [Writer]). It judges the document the
 // edits queued before it produce, and afterwards the Writer accepts
 // [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
-func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
+func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, opts ...RemediateOption) (_ *models.RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediatePDFA", &err)
 	cfg, remOpts := w.remediateConfig(opts)
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
@@ -2873,10 +2786,10 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 // again with the flattening disabled when the output it flattened regresses.
 // The flattening runs before every other fixer, outside the content tier a
 // rollback discards, so no rollback reaches it, and the transparency is then
-// set opaque instead. The probe accounts for what flattening changes by
-// design (see [Writer.remediate]), so a regression here is a loss it does not
-// account for. [RemediationReport.RolledBack] lists the abandoned flattening.
-func (w *Writer) remediateFlattening(ctx context.Context, target remediationTarget, tol RegressionTolerance, revalidate func(context.Context, *Reader) ([]error, error), run remediationRun) (*RemediationReport, error) {
+// set opaque instead. The probe accounts for what flattening changes by design
+// (see [Writer.remediate]), so a regression here is a loss it does not account
+// for. [models.RemediationReport.RolledBack] lists the abandoned flattening.
+func (w *Writer) remediateFlattening(ctx context.Context, target remediationTarget, tol RegressionTolerance, revalidate func(context.Context, *Reader) ([]error, error), run remediationRun) (*models.RemediationReport, error) {
 	var flattened []string
 	recording := func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
 		rep, err := run(ctx, alloc, doc, disabled)
@@ -2903,8 +2816,8 @@ func (w *Writer) remediateFlattening(ctx context.Context, target remediationTarg
 // RemediatePDFUA validates the document against the given PDF/UA profile,
 // applies targeted fixes, and queues the result for writing. The report
 // describes what was fixed and what could not be fixed automatically; see
-// [RemediationReport.Residual], which the output's own pdfuaid claim does not
-// account for.
+// [models.RemediationReport.Residual], which the output's own pdfuaid claim
+// does not account for.
 //
 // Its output is a full rewrite or an incremental update as
 // [Writer.RemediatePDFA] describes.
@@ -2923,7 +2836,7 @@ func (w *Writer) remediateFlattening(ctx context.Context, target remediationTarg
 // It is the last edit on the Writer (see [Writer]): it judges the document the
 // edits queued before it produce, and afterwards the Writer accepts
 // [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
-func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
+func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile, opts ...RemediateOption) (_ *models.RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediatePDFUA", &err)
 	cfg, remOpts := w.remediateConfig(opts)
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
@@ -2949,7 +2862,7 @@ func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile
 // It is the last edit on the Writer (see [Writer]): it judges the document the
 // edits queued before it produce, and afterwards the Writer accepts
 // [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
-func (w *Writer) RemediateWTPDF(ctx context.Context, profile models.WTPDFProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
+func (w *Writer) RemediateWTPDF(ctx context.Context, profile models.WTPDFProfile, opts ...RemediateOption) (_ *models.RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediateWTPDF", &err)
 	cfg, remOpts := w.remediateConfig(opts)
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
@@ -3009,10 +2922,7 @@ type FacturXConfig struct {
 // PDF/A-3 profile, and injects the four `fx:` XMP properties plus the
 // PDF/A extension schema declaration the format requires.
 //
-// Its output is a full rewrite or an incremental update as
-// [Writer.RemediatePDFA] describes.
-//
-// The returned [RemediationReport] aggregates the underlying PDF/A-3
+// The returned [models.RemediationReport] aggregates the underlying PDF/A-3
 // fixes plus the Factur-X-specific operations.
 //
 // There is no RemediateZUGFeRD: the ZUGFeRD 2.1+ generation is
@@ -3047,14 +2957,15 @@ type FacturXConfig struct {
 // invoice and is judged as one: the residual holds what
 // [Reader.ValidateFacturX] finds failing on it, the XSD and Schematron
 // verdicts on the invoice XML included, and leaves out its warnings, as
-// [FacturXReport.Fatals] does. An empty residual means the output validates.
-// Before reading the document, it returns [ErrInvoiceNotCII] for an invoice
-// XML that is not a Cross-Industry Invoice, and [ErrFacturXLevelMismatch] when
-// the XML declares another level than [FacturXConfig.Level] (Factur-X 1.0.07,
-// 4.3). An XRechnung invoice is accepted at BASIC, EN 16931 and EXTENDED,
-// where it validates. Another file name, a legacy ZUGFeRD layout, is judged
-// against the PDF/A-3 profile alone and its XML is not checked.
-func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts ...RemediateOption) (_ *RemediationReport, err error) {
+// [models.FacturXReport.Fatals] does. An empty residual means the output
+// validates. Before reading the document, it returns [ErrInvoiceNotCII] for an
+// invoice XML that is not a Cross-Industry Invoice, and
+// [ErrFacturXLevelMismatch] when the XML declares another level than
+// [FacturXConfig.Level] (Factur-X 1.0.07, 4.3). An XRechnung invoice is
+// accepted at BASIC, EN 16931 and EXTENDED, where it validates. Another file
+// name, a legacy ZUGFeRD layout, is judged against the PDF/A-3 profile alone
+// and its XML is not checked.
+func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts ...RemediateOption) (_ *models.RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediateFacturX", &err)
 	if len(cfg.InvoiceXML) == 0 {
 		return nil, ErrEmptyInvoiceXML
@@ -3126,15 +3037,15 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 }
 
 // RepairFacturX repairs the PDF-container metadata of a received hybrid
-// invoice (Factur-X or ZUGFeRD): catalog /AF membership, the invoice
-// filespec /AFRelationship and /F + /UF pair, and the embedded stream
-// /Subtype. The invoice XML payload is business data and is never
-// modified; XSD or Schematron findings inside it remain in the residual
-// list. The residual holds what [Reader.ValidateFacturX] finds failing on the
-// output and leaves out its warnings, as [FacturXReport.Fatals] does, so it
-// matches [Writer.RemediateFacturX] on the same invoice. Returns [ErrNoInvoiceAttachment] when the document carries no
-// known invoice attachment. Use [Writer.RemediateFacturX] to embed a new
-// invoice instead.
+// invoice (Factur-X or ZUGFeRD): catalog /AF membership, the invoice filespec
+// /AFRelationship and /F + /UF pair, and the embedded stream /Subtype. The
+// invoice XML payload is business data and is never modified; XSD or
+// Schematron findings inside it remain in the residual list. The residual
+// holds what [Reader.ValidateFacturX] finds failing on the output and leaves
+// out its warnings, as [models.FacturXReport.Fatals] does, so it matches
+// [Writer.RemediateFacturX] on the same invoice. Returns
+// [ErrNoInvoiceAttachment] when the document carries no known invoice
+// attachment. Use [Writer.RemediateFacturX] to embed a new invoice instead.
 //
 // It is the last edit on the Writer (see [Writer]): it judges the document the
 // edits queued before it produce, and afterwards the Writer accepts
@@ -3150,7 +3061,7 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 // no invoice XML, while the PDF/UA remediation may tag the pages and repair
 // what PDF/UA-1 requires. PDF/UA-2 returns [ErrIncompatibleProfiles], and a
 // document without an invoice [ErrNoInvoiceAttachment], before either runs.
-func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ *RemediationReport, err error) {
+func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ *models.RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RepairFacturX", &err)
 	rcfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
 	for _, o := range opts {
@@ -3766,7 +3677,7 @@ func (w *Writer) remediate(
 	tol RegressionTolerance,
 	revalidate func(context.Context, *Reader) ([]error, error),
 	run remediationRun,
-) (*RemediationReport, error) {
+) (*models.RemediationReport, error) {
 	if w.closed {
 		return nil, ErrWriterClosed
 	}
@@ -3864,7 +3775,7 @@ func (w *Writer) remediate(
 	// cancelled ends a run whose caller gave up: nothing it serialized will
 	// be written, so its temp file goes now rather than at Close, and the
 	// Writer is put back as it was.
-	cancelled := func(tmpPath string, err error) (*RemediationReport, error) {
+	cancelled := func(tmpPath string, err error) (*models.RemediationReport, error) {
 		temps.remove(tmpPath)
 		restorePreState()
 		return nil, fmt.Errorf("remediation canceled: %w", err)
@@ -4143,7 +4054,7 @@ func (w *Writer) remediate(
 	w.markPreSerialized(tmpPath)
 	w.remediation, w.pdfaClause, w.accessibilityClause = target.method, target.pdfaClause, target.accessibilityClause
 	w.xrefStreamClause = target.xrefStreamClause
-	return &RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual, RolledBack: dedupeFixes(rolledBack), FontRefusals: fontRefusals(fonts)}, nil
+	return &models.RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual, RolledBack: dedupeFixes(rolledBack), FontRefusals: fontRefusals(fonts)}, nil
 }
 
 // rewritesRemediation reports whether a remediation that edited doc writes
@@ -4166,14 +4077,14 @@ func rewritesRemediation(ctx context.Context, doc *document.Document, edited boo
 // ones it embedded when rolledBack says the writer discarded its content
 // repairs, which the embeddings are among, and whether the pass judged the
 // fonts at all ([remediation.Report.FontsJudged]).
-func fontVerdict(rep *remediation.Report, rolledBack bool) ([]remediation.FontRefusal, bool) {
+func fontVerdict(rep *remediation.Report, rolledBack bool) ([]models.FontRefusal, bool) {
 	if rep == nil || !rep.FontsJudged {
 		return nil, false
 	}
 	out := slices.Clone(rep.FontRefusals)
 	if rolledBack {
 		for _, f := range rep.FontsEmbedded {
-			out = append(out, remediation.FontRefusal{BaseFont: f.BaseFont, Object: f.Object, Err: remediation.ErrFontRolledBack})
+			out = append(out, models.FontRefusal{BaseFont: f.BaseFont, Object: f.Object, Err: remediation.ErrFontRolledBack})
 		}
 	}
 	return out, true
@@ -4253,10 +4164,10 @@ type roundResult struct {
 	disabled   []string
 	// dropped are the signatures the round's full rewrite left out, which a
 	// first round written as an incremental update kept.
-	dropped []DroppedSignature
+	dropped []models.DroppedSignature
 	// fonts is the round's verdict on the fonts ([fontVerdict]), set with
 	// fontsJudged whenever the round's pass judged them, kept or not.
-	fonts       []remediation.FontRefusal
+	fonts       []models.FontRefusal
 	fontsJudged bool
 	// rewrote tells that the round's output is a full rewrite.
 	rewrote bool

@@ -487,7 +487,8 @@ var (
 	// none of them reaches this.
 	ErrPageDeletionIncomplete = errors.New("page deletion incomplete: a prune stopped at its depth bound, so the deleted page would survive in the output")
 
-	// ErrAutoTagAlreadyTagged is what [AutoTagReport.Skipped] wraps when
+	// ErrAutoTagAlreadyTagged is what
+	// [github.com/gotenberg/litho/pkg/models.AutoTagReport.Skipped] wraps when
 	// [Writer.AutoTag] left the document alone because it already declares a
 	// logical structure: a catalog /StructTreeRoot (ISO 32000-1, 14.7.2) or
 	// /MarkInfo with /Marked true (ISO 32000-1, 14.7.1). A second tree would
@@ -495,21 +496,26 @@ var (
 	// the output is written without a new tree.
 	ErrAutoTagAlreadyTagged = tagging.ErrAlreadyTagged
 
-	// ErrAutoTagMarkedContent is what [AutoTagReport.Skipped] wraps when
+	// ErrAutoTagMarkedContent is what
+	// [github.com/gotenberg/litho/pkg/models.AutoTagReport.Skipped] wraps when
 	// [Writer.AutoTag] left the document alone because a page's content
 	// already holds a marked-content sequence, a BDC or BMC operator (ISO
 	// 32000-1, 14.6), and marking it again would nest or cross it. That
 	// includes the /Artifact sequence a stamp queued before AutoTag wraps its
-	// content in. [AutoTagReport.Page] names the first such page.
+	// content in. [github.com/gotenberg/litho/pkg/models.AutoTagReport.Page]
+	// names the first such page.
 	ErrAutoTagMarkedContent = tagging.ErrMarkedContent
 
-	// ErrAutoTagUnreadableContent is what [AutoTagReport.Skipped] wraps when
-	// [Writer.AutoTag] left the document alone because a page's content
-	// cannot be assembled, so it cannot be shown to be unmarked.
-	// [AutoTagReport.Page] names the first such page.
+	// ErrAutoTagUnreadableContent is what
+	// [github.com/gotenberg/litho/pkg/models.AutoTagReport.Skipped] wraps when
+	// [Writer.AutoTag] left the document alone because a page's content cannot
+	// be assembled, so it cannot be shown to be unmarked.
+	// [github.com/gotenberg/litho/pkg/models.AutoTagReport.Page] names the
+	// first such page.
 	ErrAutoTagUnreadableContent = tagging.ErrUnreadableContent
 
-	// ErrAutoTagNothingToTag is what [AutoTagReport.Skipped] wraps when
+	// ErrAutoTagNothingToTag is what
+	// [github.com/gotenberg/litho/pkg/models.AutoTagReport.Skipped] wraps when
 	// [Writer.AutoTag] left the document alone because no page draws text or
 	// an image it places in a structure element. Text drawn only inside form
 	// XObjects counts as none: AutoTag does not descend into them.
@@ -558,45 +564,55 @@ var (
 	// writable directory with [WithTempDir].
 	ErrRemediationUnverified = errors.New("remediation output could not be written to a temp file to verify it")
 
-	// ErrFontNotSupplied is the reason of a [FontRefusal] for a font the
+	// ErrFontNotSupplied is the reason of a
+	// [github.com/gotenberg/litho/pkg/models.FontRefusal] for a font the
 	// [FontProvider] supplied no program for.
 	ErrFontNotSupplied = remediation.ErrFontNotSupplied
 
-	// ErrFontProgramInvalid is the reason of a [FontRefusal] for a supplied
+	// ErrFontProgramInvalid is the reason of a
+	// [github.com/gotenberg/litho/pkg/models.FontRefusal] for a supplied
 	// program litho cannot read as a TrueType, OpenType or CFF font, or one
 	// larger than the document's stream budget ([Limits]).
 	ErrFontProgramInvalid = remediation.ErrFontProgramInvalid
 
-	// ErrFontEmbeddingRestricted is the reason of a [FontRefusal] for a
-	// supplied program whose OS/2 fsType forbids embedding its outlines.
+	// ErrFontEmbeddingRestricted is the reason of a
+	// [github.com/gotenberg/litho/pkg/models.FontRefusal] for a supplied
+	// program whose OS/2 fsType forbids embedding its outlines.
 	ErrFontEmbeddingRestricted = remediation.ErrFontEmbeddingRestricted
 
-	// ErrFontKind is the reason of a [FontRefusal] for a font the supplied
-	// program cannot serve: a TrueType font given CFF outlines, a symbolic
-	// font whose codes name no glyphs, a multiple master font, or a
+	// ErrFontKind is the reason of a
+	// [github.com/gotenberg/litho/pkg/models.FontRefusal] for a font the
+	// supplied program cannot serve: a TrueType font given CFF outlines, a
+	// symbolic font whose codes name no glyphs, a multiple master font, or a
 	// composite font whose CIDs name no characters, such as an Identity
 	// ordering.
 	ErrFontKind = remediation.ErrFontKind
 
-	// ErrFontCoverage is the reason of a [FontRefusal] for a supplied program
-	// lacking a glyph for a code the document shows.
+	// ErrFontCoverage is the reason of a
+	// [github.com/gotenberg/litho/pkg/models.FontRefusal] for a supplied
+	// program lacking a glyph for a code the document shows.
 	ErrFontCoverage = remediation.ErrFontCoverage
 
-	// ErrFontWidths is the reason of a [FontRefusal] for a supplied program
-	// whose advances disagree with the widths the font declares by more than
-	// one unit, so text would move, or for a font that declares no widths.
+	// ErrFontWidths is the reason of a
+	// [github.com/gotenberg/litho/pkg/models.FontRefusal] for a supplied
+	// program whose advances disagree with the widths the font declares by
+	// more than one unit, so text would move, or for a font that declares no
+	// widths.
 	ErrFontWidths = remediation.ErrFontWidths
 
-	// ErrFontRejected is the reason of a [FontRefusal] for a font that,
+	// ErrFontRejected is the reason of a
+	// [github.com/gotenberg/litho/pkg/models.FontRefusal] for a font that,
 	// embedded, would fail a rule of the profile it did not fail before.
 	ErrFontRejected = remediation.ErrFontRejected
 
-	// ErrFontUnwritable is the reason of a [FontRefusal] for a font
-	// dictionary written inline in a resource dictionary that no object
-	// number reaches, so no embedded font can be written in its place.
+	// ErrFontUnwritable is the reason of a
+	// [github.com/gotenberg/litho/pkg/models.FontRefusal] for a font
+	// dictionary written inline in a resource dictionary that no object number
+	// reaches, so no embedded font can be written in its place.
 	ErrFontUnwritable = remediation.ErrFontUnwritable
 
-	// ErrFontRolledBack is the reason of a [FontRefusal] for a font whose
+	// ErrFontRolledBack is the reason of a
+	// [github.com/gotenberg/litho/pkg/models.FontRefusal] for a font whose
 	// embedding was discarded with the other content repairs of its round,
 	// when the output failed the integrity checks.
 	ErrFontRolledBack = remediation.ErrFontRolledBack
@@ -619,10 +635,10 @@ var (
 	// remediation counts as an edit.
 	//
 	// A remediation validates and repairs the document as edited when it runs.
-	// Its [RemediationReport] describes the output only if nothing edits that
-	// document afterwards. After one, a Writer accepts [Writer.Sign],
-	// [Writer.WriteTo] and [Writer.Close], and refuses everything else. Queue
-	// the edit before the remediation.
+	// Its [github.com/gotenberg/litho/pkg/models.RemediationReport] describes
+	// the output only if nothing edits that document afterwards. After one, a
+	// Writer accepts [Writer.Sign], [Writer.WriteTo] and [Writer.Close], and
+	// refuses everything else. Queue the edit before the remediation.
 	//
 	// A refused call queues nothing. A method that has an error return hands
 	// the refusal back at once. Every refusal, whatever the method, is also
@@ -782,7 +798,7 @@ var (
 	// resolution, or it cannot be written back. The error names the page.
 	// The [Writer] is left as it was. A page whose content does not read is
 	// no refusal: it is left as it is and listed in
-	// [FlattenReport.SkippedPages].
+	// [github.com/gotenberg/litho/pkg/models.FlattenReport.SkippedPages].
 	ErrTransparencyFlatteningRefused = errors.New("transparency flattening refused")
 
 	// ErrInvalidLimits is returned, wrapped in an error naming the field, by

@@ -42,7 +42,7 @@ func init() { register("groupspace_2b", groupspace2b) }
 //
 // Page 4 paints its rows through form `F`, which page 5 paints too: converting
 // the form for page 4 would change page 5, which has no group, so page 4 keeps
-// its colours (pdf.FlattenedPage.GroupSpaceUnconverted).
+// its colours (models.FlattenedPage.GroupSpaceUnconverted).
 //
 // See ../FIXTURES.md for the authoritative expected firing set.
 func groupspace2b() ([]byte, error) {

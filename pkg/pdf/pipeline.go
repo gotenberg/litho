@@ -74,7 +74,7 @@ type PipelineResult struct {
 	// them: a Split or a Merge drops every signature of the documents it
 	// reads, and an Apply stage those its Writer's full rewrite drops (see
 	// [Writer.DroppedSignatures]).
-	DroppedSignatures []DroppedSignature
+	DroppedSignatures []models.DroppedSignature
 }
 
 // StageReport summarizes a single pipeline stage.
@@ -591,7 +591,7 @@ func (ex *executor) flushToTempFile(ctx context.Context, stage string) error {
 
 // recordDropped adds to the result the signatures a stage's output does not
 // carry, each once.
-func (ex *executor) recordDropped(sigs ...DroppedSignature) {
+func (ex *executor) recordDropped(sigs ...models.DroppedSignature) {
 	ex.result.DroppedSignatures = appendDroppedSignatures(ex.result.DroppedSignatures, sigs...)
 }
 

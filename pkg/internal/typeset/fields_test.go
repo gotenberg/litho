@@ -191,16 +191,16 @@ func TestWriteFieldsRemediate(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
 		name  string
-		fix   func(context.Context, *pdf.Writer) (*pdf.RemediationReport, error)
+		fix   func(context.Context, *pdf.Writer) (*models.RemediationReport, error)
 		check func(context.Context, *pdf.Reader) ([]error, error)
 	}{
-		{"PDF/A-2b", func(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+		{"PDF/A-2b", func(ctx context.Context, w *pdf.Writer) (*models.RemediationReport, error) {
 			return w.RemediatePDFA(ctx, models.PDFA2b)
 		}, func(ctx context.Context, r *pdf.Reader) ([]error, error) { return r.ValidatePDFA(ctx, models.PDFA2b) }},
-		{"PDF/UA-1", func(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+		{"PDF/UA-1", func(ctx context.Context, w *pdf.Writer) (*models.RemediationReport, error) {
 			return w.RemediatePDFUA(ctx, models.PDFUA1)
 		}, func(ctx context.Context, r *pdf.Reader) ([]error, error) { return r.ValidatePDFUA(ctx, models.PDFUA1) }},
-		{"PDF/UA-2", func(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+		{"PDF/UA-2", func(ctx context.Context, w *pdf.Writer) (*models.RemediationReport, error) {
 			return w.RemediatePDFUA(ctx, models.PDFUA2)
 		}, func(ctx context.Context, r *pdf.Reader) ([]error, error) { return r.ValidatePDFUA(ctx, models.PDFUA2) }},
 	} {

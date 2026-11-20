@@ -225,7 +225,7 @@ func TestWriter_EditsPagesWrittenDirectlyInKids(t *testing.T) {
 
 	t.Run("autotag", func(t *testing.T) {
 		t.Parallel()
-		var report *AutoTagReport
+		var report *models.AutoTagReport
 		out := writeDirect(t, base, func(w *Writer) error {
 			report = w.AutoTag()
 			return nil

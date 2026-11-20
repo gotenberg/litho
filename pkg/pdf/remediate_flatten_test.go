@@ -92,7 +92,7 @@ func TestRemediatePDFA1FlattensTransparency(t *testing.T) {
 
 // remediateA1b remediates data at PDF/A-1b with opts and returns the report
 // and the output, failing on a 6.4 violation left in it.
-func remediateA1b(t *testing.T, data []byte, opts ...RemediateOption) (*RemediationReport, *Reader) {
+func remediateA1b(t *testing.T, data []byte, opts ...RemediateOption) (*models.RemediationReport, *Reader) {
 	t.Helper()
 	ctx := context.Background()
 	w := NewWriter(openColorPDF(t, data))

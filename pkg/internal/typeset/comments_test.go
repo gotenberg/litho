@@ -132,22 +132,22 @@ func TestWriteCommentsRemediate(t *testing.T) {
 	for _, c := range []struct {
 		name    string
 		version typeset.Version
-		fix     func(context.Context, *pdf.Writer) (*pdf.RemediationReport, error)
+		fix     func(context.Context, *pdf.Writer) (*models.RemediationReport, error)
 		check   func(context.Context, *pdf.Reader) ([]error, error)
 	}{
-		{"PDF/A-1b", typeset.Version14, func(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+		{"PDF/A-1b", typeset.Version14, func(ctx context.Context, w *pdf.Writer) (*models.RemediationReport, error) {
 			return w.RemediatePDFA(ctx, models.PDFA1b)
 		}, func(ctx context.Context, r *pdf.Reader) ([]error, error) { return r.ValidatePDFA(ctx, models.PDFA1b) }},
-		{"PDF/A-2b", typeset.Version17, func(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+		{"PDF/A-2b", typeset.Version17, func(ctx context.Context, w *pdf.Writer) (*models.RemediationReport, error) {
 			return w.RemediatePDFA(ctx, models.PDFA2b)
 		}, func(ctx context.Context, r *pdf.Reader) ([]error, error) { return r.ValidatePDFA(ctx, models.PDFA2b) }},
-		{"PDF/A-4", typeset.Version20, func(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+		{"PDF/A-4", typeset.Version20, func(ctx context.Context, w *pdf.Writer) (*models.RemediationReport, error) {
 			return w.RemediatePDFA(ctx, models.PDFA4)
 		}, func(ctx context.Context, r *pdf.Reader) ([]error, error) { return r.ValidatePDFA(ctx, models.PDFA4) }},
-		{"PDF/UA-1", typeset.Version17, func(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+		{"PDF/UA-1", typeset.Version17, func(ctx context.Context, w *pdf.Writer) (*models.RemediationReport, error) {
 			return w.RemediatePDFUA(ctx, models.PDFUA1)
 		}, func(ctx context.Context, r *pdf.Reader) ([]error, error) { return r.ValidatePDFUA(ctx, models.PDFUA1) }},
-		{"PDF/UA-2", typeset.Version20, func(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+		{"PDF/UA-2", typeset.Version20, func(ctx context.Context, w *pdf.Writer) (*models.RemediationReport, error) {
 			return w.RemediatePDFUA(ctx, models.PDFUA2)
 		}, func(ctx context.Context, r *pdf.Reader) ([]error, error) { return r.ValidatePDFUA(ctx, models.PDFUA2) }},
 	} {

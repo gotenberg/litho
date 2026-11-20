@@ -128,12 +128,12 @@ func TestRemediate_RaisesTheReportedVersionForISO14289_2(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		run  func(context.Context, *Writer) (*RemediationReport, error)
+		run  func(context.Context, *Writer) (*models.RemediationReport, error)
 	}{
-		{"PDF/UA-2", func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+		{"PDF/UA-2", func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 			return w.RemediatePDFUA(ctx, models.PDFUA2)
 		}},
-		{"WTPDF-1.0-Reuse", func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+		{"WTPDF-1.0-Reuse", func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 			return w.RemediateWTPDF(ctx, models.WTPDF1Reuse)
 		}},
 	} {

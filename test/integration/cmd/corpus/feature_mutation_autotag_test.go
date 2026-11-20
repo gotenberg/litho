@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -97,18 +98,18 @@ func TestMutationAutoTag_AnUnprovenReportIsABrokenPromise(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name   string
-		report pdf.AutoTagReport
+		report models.AutoTagReport
 		// skipEdit leaves AutoTag unqueued, so the output has no tree.
 		skipEdit bool
 		want     string
 	}{
-		{name: "never applied", report: pdf.AutoTagReport{}, want: "without applying"},
-		{name: "tagged without a tree", report: pdf.AutoTagReport{Applied: true}, skipEdit: true, want: "no structure tree"},
-		{name: "already tagged", report: pdf.AutoTagReport{Applied: true, Skipped: pdf.ErrAutoTagAlreadyTagged}, want: "structure tree nor /MarkInfo"},
-		{name: "marked content", report: pdf.AutoTagReport{Applied: true, Skipped: fmt.Errorf("page 1: %w", pdf.ErrAutoTagMarkedContent), Page: 1}, want: "no marked-content operator"},
-		{name: "unreadable content", report: pdf.AutoTagReport{Applied: true, Skipped: pdf.ErrAutoTagUnreadableContent, Page: 1}, want: "page 1 reads"},
-		{name: "nothing to tag", report: pdf.AutoTagReport{Applied: true, Skipped: pdf.ErrAutoTagNothingToTag}, want: "has text"},
-		{name: "an unknown reason", report: pdf.AutoTagReport{Applied: true, Skipped: errors.New("felt like it")}, want: "felt like it"},
+		{name: "never applied", report: models.AutoTagReport{}, want: "without applying"},
+		{name: "tagged without a tree", report: models.AutoTagReport{Applied: true}, skipEdit: true, want: "no structure tree"},
+		{name: "already tagged", report: models.AutoTagReport{Applied: true, Skipped: pdf.ErrAutoTagAlreadyTagged}, want: "structure tree nor /MarkInfo"},
+		{name: "marked content", report: models.AutoTagReport{Applied: true, Skipped: fmt.Errorf("page 1: %w", pdf.ErrAutoTagMarkedContent), Page: 1}, want: "no marked-content operator"},
+		{name: "unreadable content", report: models.AutoTagReport{Applied: true, Skipped: pdf.ErrAutoTagUnreadableContent, Page: 1}, want: "page 1 reads"},
+		{name: "nothing to tag", report: models.AutoTagReport{Applied: true, Skipped: pdf.ErrAutoTagNothingToTag}, want: "has text"},
+		{name: "an unknown reason", report: models.AutoTagReport{Applied: true, Skipped: errors.New("felt like it")}, want: "felt like it"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

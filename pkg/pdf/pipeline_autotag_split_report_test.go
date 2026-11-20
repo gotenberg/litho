@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestPipeline_AutoTagBeforeASplitReportsWhyItSkipped pins that an AutoTag
@@ -34,7 +36,7 @@ func TestPipeline_AutoTagBeforeASplitReportsWhyItSkipped(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			var report *AutoTagReport
+			var report *models.AutoTagReport
 			p := NewPipeline().Open(openColorPDF(t, tc.data)).
 				Apply(func(_ context.Context, w *Writer) error {
 					report = w.AutoTag()

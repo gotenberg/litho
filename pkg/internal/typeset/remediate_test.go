@@ -13,7 +13,7 @@ import (
 )
 
 // remediate runs fix over out and returns the report and the written file.
-func remediate(t *testing.T, out []byte, fix func(context.Context, *pdf.Writer) (*pdf.RemediationReport, error)) (*pdf.RemediationReport, []byte) {
+func remediate(t *testing.T, out []byte, fix func(context.Context, *pdf.Writer) (*models.RemediationReport, error)) (*models.RemediationReport, []byte) {
 	t.Helper()
 	ctx := context.Background()
 	w := pdf.NewWriter(open(t, out))
@@ -58,7 +58,7 @@ func mixedDoc(t *testing.T) *typeset.Document {
 
 func TestWriteRemediatesToPDFA2b(t *testing.T) {
 	t.Parallel()
-	report, fixed := remediate(t, write(t, mixedDoc(t)), func(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+	report, fixed := remediate(t, write(t, mixedDoc(t)), func(ctx context.Context, w *pdf.Writer) (*models.RemediationReport, error) {
 		return w.RemediatePDFA(ctx, models.PDFA2b)
 	})
 	for _, fix := range report.Fixed {
@@ -78,7 +78,7 @@ func TestWriteRemediatesToPDFA2b(t *testing.T) {
 
 func TestWriteRemediatesToPDFUA1(t *testing.T) {
 	t.Parallel()
-	report, fixed := remediate(t, write(t, taggedDoc(t)), func(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+	report, fixed := remediate(t, write(t, taggedDoc(t)), func(ctx context.Context, w *pdf.Writer) (*models.RemediationReport, error) {
 		return w.RemediatePDFUA(ctx, models.PDFUA1)
 	})
 	for _, fix := range report.Fixed {

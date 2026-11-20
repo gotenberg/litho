@@ -365,11 +365,11 @@ var costOps = map[string]costOp{
 		return int64(b.Dx()) * int64(b.Dy()) * 4, nil
 	},
 	// pdfa validates the document against PDF/A-2b.
-	"pdfa": costValidate(func(ctx context.Context, r *pdf.Reader) ([]pdf.Violation, error) {
+	"pdfa": costValidate(func(ctx context.Context, r *pdf.Reader) ([]models.Violation, error) {
 		return r.ValidatePDFAReport(ctx, models.PDFA2b)
 	}),
 	// pdfua validates the document against PDF/UA-1.
-	"pdfua": costValidate(func(ctx context.Context, r *pdf.Reader) ([]pdf.Violation, error) {
+	"pdfua": costValidate(func(ctx context.Context, r *pdf.Reader) ([]models.Violation, error) {
 		return r.ValidatePDFUAReport(ctx, models.PDFUA1)
 	}),
 	// remediate remediates the document to PDF/A-2b and writes it.
@@ -425,7 +425,7 @@ func costWrite(edit func(context.Context, *pdf.Writer, []string) error, opts ...
 
 // costValidate returns an operation that validates the document with
 // check, counting the bytes of a line a violation.
-func costValidate(check func(context.Context, *pdf.Reader) ([]pdf.Violation, error)) costOp {
+func costValidate(check func(context.Context, *pdf.Reader) ([]models.Violation, error)) costOp {
 	return func(ctx context.Context, src string, _ []string, _ io.Writer) (int64, error) {
 		r, err := pdf.OpenFile(ctx, src)
 		if err != nil {

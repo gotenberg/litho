@@ -40,7 +40,7 @@ const maxFontDirDepth = 32
 //     metric-compatible family.
 //   - The same bounds.
 //   - Every check of [WithFontProvider] before a program is embedded, each font
-//     left unembedded listed in [RemediationReport.FontRefusals].
+//     left unembedded listed in [github.com/gotenberg/litho/pkg/models.RemediationReport.FontRefusals].
 //
 // The directories are indexed once, at the first font a remediation asks for,
 // and the index is kept for every remediation the option serves. A file the

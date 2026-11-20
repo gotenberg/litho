@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -120,10 +121,10 @@ func TestFlattenFeature_Plants(t *testing.T) {
 		t.Errorf("control: %+v %+v", v, out)
 	}
 
-	claim := func(ctx context.Context, w *pdf.Writer) (*pdf.FlattenReport, error) {
+	claim := func(ctx context.Context, w *pdf.Writer) (*models.FlattenReport, error) {
 		// Rewriting the file changes nothing a viewer sees.
 		w.SetMetadata(pdf.Metadata{Title: "planted"})
-		return &pdf.FlattenReport{Pages: []pdf.FlattenedPage{{Page: 1}}}, ctx.Err()
+		return &models.FlattenReport{Pages: []models.FlattenedPage{{Page: 1}}}, ctx.Err()
 	}
 	left := newTestFlatten()
 	left.flatten = claim
@@ -132,14 +133,14 @@ func TestFlattenFeature_Plants(t *testing.T) {
 	}
 
 	drawn := newTestFlatten()
-	drawn.flatten = func(ctx context.Context, w *pdf.Writer) (*pdf.FlattenReport, error) {
+	drawn.flatten = func(ctx context.Context, w *pdf.Writer) (*models.FlattenReport, error) {
 		if _, err := w.FlattenTransparency(ctx); err != nil {
 			return nil, err
 		}
 		if err := w.StampText(pdf.TextStamp{Text: "PLANTED PLANTED", FontSize: 40, Opacity: 1}); err != nil {
 			return nil, err
 		}
-		return &pdf.FlattenReport{Pages: []pdf.FlattenedPage{{Page: 1}}}, nil
+		return &models.FlattenReport{Pages: []models.FlattenedPage{{Page: 1}}}, nil
 	}
 	v, _ = runFlatten(t, drawn, data)
 	if v.Match || v.Metrics[metricFlattenLithoMismatch] != 1 || v.Metrics[metricFlattenPopplerMismatch] != 1 {
@@ -147,7 +148,7 @@ func TestFlattenFeature_Plants(t *testing.T) {
 	}
 
 	dropped := newTestFlatten()
-	dropped.flatten = func(ctx context.Context, w *pdf.Writer) (*pdf.FlattenReport, error) {
+	dropped.flatten = func(ctx context.Context, w *pdf.Writer) (*models.FlattenReport, error) {
 		if _, err := w.Redact(ctx, []pdf.RedactRegion{{Page: 1, Rect: [4]float64{15, 150, 100, 185}}}); err != nil {
 			return nil, err
 		}
@@ -169,7 +170,7 @@ func TestFlattenFeature_Plants(t *testing.T) {
 func TestFlattenFeature_DrawnAnnotationsStillLoseNoText(t *testing.T) {
 	t.Parallel()
 	f := newTestFlatten()
-	f.flatten = func(ctx context.Context, w *pdf.Writer) (*pdf.FlattenReport, error) {
+	f.flatten = func(ctx context.Context, w *pdf.Writer) (*models.FlattenReport, error) {
 		if _, err := w.Redact(ctx, []pdf.RedactRegion{{Page: 1, Rect: [4]float64{15, 150, 100, 185}}}); err != nil {
 			return nil, err
 		}

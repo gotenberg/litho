@@ -66,7 +66,7 @@ func run(ctx context.Context, args []string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	var report *pdf.RemediationReport
+	var report *models.RemediationReport
 	result, err := pdf.NewPipeline().
 		MergePipelines(pipelines).
 		Apply(func(ctx context.Context, w *pdf.Writer) error {

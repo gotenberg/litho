@@ -304,7 +304,7 @@ func TestWriterSignedRemediationValidatesLikeTheUnsigned(t *testing.T) {
 	data := signablePDF()
 	before := validatePDFA2b(t, data)
 
-	unsigned := func() ([]byte, *RemediationReport) {
+	unsigned := func() ([]byte, *models.RemediationReport) {
 		r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 		if err != nil {
 			t.Fatalf("Open: %v", err)
@@ -430,7 +430,7 @@ func TestWriterSignsARemediationThatRewrites(t *testing.T) {
 	// compares the signed output with the unsigned one byte for byte.
 	pinnedID := WithDocumentID([]byte("0123456789abcdef"))
 
-	unsigned := func() ([]byte, *RemediationReport) {
+	unsigned := func() ([]byte, *models.RemediationReport) {
 		r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 		if err != nil {
 			t.Fatalf("Open: %v", err)

@@ -46,7 +46,7 @@ func abProgram(psName, family, style string, a, b uint16) []byte {
 
 // remediateFonts remediates data at PDF/A-2b with opts and returns the report
 // and the residual findings of the rule requiring embedded programs.
-func remediateFonts(t *testing.T, data []byte, opts ...RemediateOption) (*RemediationReport, int) {
+func remediateFonts(t *testing.T, data []byte, opts ...RemediateOption) (*models.RemediationReport, int) {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -301,10 +301,11 @@ func TestWithFontProvider_SystemFontsFollowARefusedProgram(t *testing.T) {
 	}
 }
 
-// TestWithFontProvider_ReportsTheFinalState pins [RemediationReport.FontRefusals]
-// to the fonts the output leaves unembedded, across the rounds a remediation
-// runs: a font the first round refuses and a later round embeds is not listed,
-// and one every round refuses is listed once.
+// TestWithFontProvider_ReportsTheFinalState pins
+// [models.RemediationReport.FontRefusals] to the fonts the output leaves
+// unembedded, across the rounds a remediation runs: a font the first round
+// refuses and a later round embeds is not listed, and one every round refuses
+// is listed once.
 func TestWithFontProvider_ReportsTheFinalState(t *testing.T) {
 	t.Parallel()
 	data := unembeddedFontsDoc("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
@@ -339,7 +340,7 @@ func TestFontVerdict_RolledBack(t *testing.T) {
 	t.Parallel()
 	rep := &remediation.Report{
 		FontsJudged:   true,
-		FontRefusals:  []remediation.FontRefusal{{BaseFont: "Courier", Object: 7, Err: remediation.ErrFontNotSupplied}},
+		FontRefusals:  []models.FontRefusal{{BaseFont: "Courier", Object: 7, Err: remediation.ErrFontNotSupplied}},
 		FontsEmbedded: []remediation.FontEmbed{{BaseFont: "Helvetica", Object: 5}},
 	}
 	kept, judged := fontVerdict(rep, false)

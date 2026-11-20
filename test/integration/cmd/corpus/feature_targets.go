@@ -70,7 +70,7 @@ func (t outputTarget) options() []pdf.ConvertOption {
 }
 
 // remediate remediates w to the target's profiles and returns the report.
-func (t outputTarget) remediate(ctx context.Context, w *pdf.Writer) (*pdf.RemediationReport, error) {
+func (t outputTarget) remediate(ctx context.Context, w *pdf.Writer) (*models.RemediationReport, error) {
 	var pdfa models.PDFAProfile
 	var pdfua models.PDFUAProfile
 	for _, p := range t.Profiles {
@@ -193,12 +193,12 @@ func oracleSampled(id string, oneIn int) bool {
 // the zero target being the plain conversion, and returns the remediation
 // report of a target that names a profile, nil for another. It is
 // [convertTarget] outside tests; a test plants a defect through it.
-type targetConverter func(ctx context.Context, src []byte, s htmlSettings, t outputTarget) ([]byte, *pdf.RemediationReport, error)
+type targetConverter func(ctx context.Context, src []byte, s htmlSettings, t outputTarget) ([]byte, *models.RemediationReport, error)
 
 // convertTarget converts src at s at the target's version and, for a target
 // that names a profile, remediates the result in a pipeline stage after the
 // conversion, writing it in full at that version.
-func convertTarget(ctx context.Context, src []byte, s htmlSettings, t outputTarget) ([]byte, *pdf.RemediationReport, error) {
+func convertTarget(ctx context.Context, src []byte, s htmlSettings, t outputTarget) ([]byte, *models.RemediationReport, error) {
 	s.Extra = append(append([]pdf.ConvertOption(nil), s.Extra...), t.options()...)
 	if t.versionOnly() {
 		data, err := convertHTML(ctx, src, s)
@@ -208,7 +208,7 @@ func convertTarget(ctx context.Context, src []byte, s htmlSettings, t outputTarg
 	if err != nil {
 		return nil, nil, err
 	}
-	var report *pdf.RemediationReport
+	var report *models.RemediationReport
 	var buf bytes.Buffer
 	_, err = pdf.NewPipeline().Convert(c).Apply(func(ctx context.Context, w *pdf.Writer) error {
 		var err error
@@ -712,12 +712,12 @@ const maxReasonRules = 6
 // checkConformance validates r at each of the target's profiles, holds the
 // report's Residual to the verdict, and records litho's verdicts for the
 // veraPDF comparison.
-func (f *targetsFeature) checkConformance(ctx context.Context, res *targetResult, r *pdf.Reader, t outputTarget, report *pdf.RemediationReport) {
+func (f *targetsFeature) checkConformance(ctx context.Context, res *targetResult, r *pdf.Reader, t outputTarget, report *models.RemediationReport) {
 	res.litho = make(map[string]lithoVerdict, len(t.Profiles))
 	validatorClean := true
 	for _, p := range t.Profiles {
 		var (
-			violations []pdf.Violation
+			violations []models.Violation
 			err        error
 		)
 		if p.pdfa != "" {

@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -56,7 +57,7 @@ type signFieldTrial struct {
 	name    string
 	output  []byte
 	err     error
-	dropped []pdf.DroppedSignature
+	dropped []models.DroppedSignature
 }
 
 // qpdfFormField is one field of qpdf --json's "acroform" key: qpdf lists the
@@ -621,8 +622,8 @@ func (f *mutationFeature) checkFieldSignature(ctx context.Context, in *mutationI
 
 // fieldNameDiff returns the field names out has and in has not, and the ones
 // in has and out has not, each sorted. The field of a signature the write
-// dropped goes with it (see [pdf.DroppedSignature]), so it is not lost.
-func fieldNameDiff(in, out *qpdfForm, dropped []pdf.DroppedSignature) (added, lost []string) {
+// dropped goes with it (see [models.DroppedSignature]), so it is not lost.
+func fieldNameDiff(in, out *qpdfForm, dropped []models.DroppedSignature) (added, lost []string) {
 	names := func(q *qpdfForm) map[string]bool {
 		m := make(map[string]bool, len(q.fields))
 		for _, f := range q.fields {
@@ -637,7 +638,7 @@ func fieldNameDiff(in, out *qpdfForm, dropped []pdf.DroppedSignature) (added, lo
 		}
 	}
 	for n := range inNames {
-		if !outNames[n] && !slices.ContainsFunc(dropped, func(d pdf.DroppedSignature) bool { return d.Field == n }) {
+		if !outNames[n] && !slices.ContainsFunc(dropped, func(d models.DroppedSignature) bool { return d.Field == n }) {
 			lost = append(lost, n)
 		}
 	}

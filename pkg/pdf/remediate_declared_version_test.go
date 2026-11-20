@@ -57,7 +57,7 @@ func remediateDeclared(t *testing.T, data []byte, profile string) []byte {
 
 	w := NewWriter(r)
 	defer w.Close()
-	var report *RemediationReport
+	var report *models.RemediationReport
 	switch profile {
 	case "PDF/UA-1", "PDF/UA-2":
 		report, err = w.RemediatePDFUA(ctx, models.PDFUAProfile(profile))

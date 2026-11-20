@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/flatten"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // FlattenOption configures [Writer.FlattenTransparency].
@@ -25,11 +26,11 @@ type flattenOpts struct {
 }
 
 // WithFlattenDPI composites transparent regions at dpi pixels per inch.
-// Default 300, the resolution of print. A page whose composite would pass
-// the render pixel budget ([Limits.MaxRenderPixels]) is composited at the
-// highest resolution that fits, which [FlattenedPage.DPI] reports. A dpi that
-// is not a positive finite number makes [Writer.FlattenTransparency] fail
-// with [ErrInvalidFlattenOptions].
+// Default 300, the resolution of print. A page whose composite would pass the
+// render pixel budget ([Limits.MaxRenderPixels]) is composited at the highest
+// resolution that fits, which [models.FlattenedPage.DPI] reports. A dpi that
+// is not a positive finite number makes [Writer.FlattenTransparency] fail with
+// [ErrInvalidFlattenOptions].
 func WithFlattenDPI(dpi float64) FlattenOption {
 	return func(o *flattenOpts) { o.dpi = dpi }
 }
@@ -76,98 +77,13 @@ func WithFlattenJPEGQuality(q int) FlattenOption {
 // that prints CMYK separations prints them, overprinting simulated (ISO
 // 32000-1, 8.6.7), as [WithOverprintSimulation] draws a page: the composites
 // are DeviceCMYK images that hold what overprinting printed, where an image
-// would otherwise knock out the inks overprinting left. A spot colorant has
-// no separation of its own here and knocks out through its alternate space.
-// By default a region composites as viewers draw it, and
-// [FlattenedPage.Overprinted] counts the paintings whose overprinting the
-// composite drops.
+// would otherwise knock out the inks overprinting left. A spot colorant has no
+// separation of its own here and knocks out through its alternate space. By
+// default a region composites as viewers draw it, and
+// [models.FlattenedPage.Overprinted] counts the paintings whose overprinting
+// the composite drops.
 func WithFlattenOverprintSimulation() FlattenOption {
 	return func(o *flattenOpts) { o.overprint = true }
-}
-
-// FlattenedPage describes what [Writer.FlattenTransparency] did to one page.
-// Concurrent reads of a value are safe; a write needs synchronization.
-type FlattenedPage struct {
-	// Page is the 1-based page number.
-	Page int
-	// Regions counts the areas composited into opaque images, and DPI the
-	// resolution they were composited at, 0 when there were none.
-	Regions int
-	DPI     float64
-	// CoarseMasks counts the soft masks composited at a fraction of DPI:
-	// their groups did not fit [Limits.MaxRenderPixels] even at the lowest
-	// resolution flattening tries, so their opacity is approximated within a
-	// few pixels of where each mask changes. Flattening refuses a page whose
-	// transparency does not fit otherwise.
-	CoarseMasks int
-	// Rasterized counts the painting operations (paths, images, shadings,
-	// form XObjects) whose painting the images took over.
-	Rasterized int
-	// KeptText counts the text objects, and forms showing text, inside a
-	// region that stay text, drawn above its image.
-	KeptText int
-	// TextUnderTransparency counts the text objects, and forms showing
-	// text, that transparent content drawn over them left visible: text
-	// stays above the image, so they draw without that content's tint over
-	// them. Their look is approximated. Text the source hid under content
-	// drawn after it stays hidden and is not counted.
-	TextUnderTransparency int
-	// TransparentText counts the text objects whose own transparency the
-	// output approximates: a constant alpha composited over white where the
-	// text lay over other content, a soft mask or a blend mode dropped. Text
-	// on the paper and text under an alpha of 0 are drawn exactly and not
-	// counted.
-	TransparentText int
-	// GroupRemoved reports that the page's transparency group was removed.
-	GroupRemoved bool
-	// GroupSpaceConverted reports that the page's transparency group blended in
-	// the grey or CMYK space its /CS names, which litho's renderer reads a page
-	// painting with transparency in, the composites included. What the composites
-	// leave of the page, and its annotations' appearances, were converted to that
-	// space, so the page reads as it did once the group is gone (see
-	// [Writer.FlattenTransparency]).
-	GroupSpaceConverted bool
-	// GroupSpaceUnconverted reports such a page whose content stayed in its own
-	// colour spaces. The conversion would have rewritten an object another page
-	// paints and does not convert to that space, or met content it cannot read
-	// whole, or a group space it cannot write. Its colours outside the composites
-	// read in the device's space, as viewers that blend every page in RGB, such
-	// as poppler, read the source.
-	GroupSpaceUnconverted bool
-	// Annotations counts the annotations whose appearance was drawn into
-	// the page's content, and EmptiedAnnotations those painting with
-	// transparency that a viewer does not display, whose appearance was
-	// removed with nothing drawn in its place.
-	Annotations        int
-	EmptiedAnnotations int
-	// JPEGImages counts the composites, or tiles of a composite, encoded as
-	// JPEG ([WithFlattenJPEGQuality]).
-	JPEGImages int
-	// Overprinted counts the painting operations under overprint (ISO
-	// 32000-1, 8.6.7) whose painting inside a region a composite took over.
-	// An image paints every ink it holds, so on a device that overprints
-	// their overprinting is lost, unless [WithFlattenOverprintSimulation]
-	// composites it into the image. Viewers draw without overprinting by
-	// default, so the loss shows only in print or in an overprint preview.
-	Overprinted int
-}
-
-// FlattenReport describes what [Writer.FlattenTransparency] did.
-// Concurrent reads of a value are safe; a write needs synchronization.
-type FlattenReport struct {
-	// Pages lists the pages it changed, in order.
-	Pages []FlattenedPage
-	// TransparentAnnotations counts the annotations left painting with
-	// transparency, which [Writer.FlattenTransparency] does not draw into
-	// the page: form field widgets, which [Writer.FlattenForm] bakes, pop-ups,
-	// annotations under optional content or kept upright on a rotated page,
-	// and annotations with no appearance litho can draw.
-	TransparentAnnotations int
-	// SkippedPages lists the 1-based numbers of the pages whose content does
-	// not read, a stream that does not decode or a reference to an object
-	// the file lacks: they are left as they are, their transparency
-	// included, as a viewer draws them.
-	SkippedPages []int
 }
 
 // FlattenTransparency removes the live transparency of every page (ISO 32000-2,
@@ -226,16 +142,16 @@ type FlattenReport struct {
 // conversion then converts the composites. [WithFlattenOverprintSimulation]
 // composites every page in DeviceCMYK with overprinting simulated.
 //
-// The page group's /CS converts every colour painted on a page that paints with
-// transparency into that space (11.4.7, Table 147). The flattening removes the
-// group. On a page whose group names a grey or CMYK space, what the composites
-// leave and the page's annotation appearances are therefore converted into that
-// space as [Writer.ConvertColors] converts a page. The page reads as it did, an
-// RGB colour outside the CMYK gamut included
-// ([FlattenedPage.GroupSpaceConverted]). A page whose conversion would rewrite
-// an object a page not converted to that space also paints keeps its colours
-// ([FlattenedPage.GroupSpaceUnconverted]). Overprint simulation converts no
-// page.
+// The page group's /CS converts every colour painted on a page that paints
+// with transparency into that space (11.4.7, Table 147). The flattening
+// removes the group. On a page whose group names a grey or CMYK space, what
+// the composites leave and the page's annotation appearances are therefore
+// converted into that space as [Writer.ConvertColors] converts a page. The
+// page reads as it did, an RGB colour outside the CMYK gamut included
+// ([models.FlattenedPage.GroupSpaceConverted]). A page whose conversion would
+// rewrite an object a page not converted to that space also paints keeps its
+// colours ([models.FlattenedPage.GroupSpaceUnconverted]). Overprint simulation
+// converts no page.
 //
 // # Annotations
 //
@@ -271,8 +187,8 @@ type FlattenReport struct {
 //   - Annotations whose appearance litho cannot draw.
 //
 // Those painting with transparency are counted in
-// [FlattenReport.TransparentAnnotations]. A Type 3 glyph's description is text
-// too (9.6.5), so transparency a glyph paints with stays in it.
+// [models.FlattenReport.TransparentAnnotations]. A Type 3 glyph's description
+// is text too (9.6.5), so transparency a glyph paints with stays in it.
 //
 // # Ordering and errors
 //
@@ -284,8 +200,8 @@ type FlattenReport struct {
 // [ErrEditAfterRemediation]. A page it cannot flatten fails it with
 // [ErrTransparencyFlatteningRefused], leaving the Writer as it was. A page
 // whose content does not read is left as it is and listed in
-// [FlattenReport.SkippedPages].
-func (w *Writer) FlattenTransparency(ctx context.Context, opts ...FlattenOption) (_ *FlattenReport, err error) {
+// [models.FlattenReport.SkippedPages].
+func (w *Writer) FlattenTransparency(ctx context.Context, opts ...FlattenOption) (_ *models.FlattenReport, err error) {
 	defer recoverToError(w.logger(), "Writer.FlattenTransparency", &err)
 
 	if w.closed {
@@ -372,14 +288,14 @@ func (b bakedAnnotations) signaturesPending() bool {
 
 // addTo records the bake in report: the pages whose annotations it drew or
 // emptied, in page order.
-func (b bakedAnnotations) addTo(report *FlattenReport) {
+func (b bakedAnnotations) addTo(report *models.FlattenReport) {
 	if b.report == nil {
 		return
 	}
-	page := func(i int) *FlattenedPage {
-		at, found := slices.BinarySearchFunc(report.Pages, i+1, func(p FlattenedPage, page int) int { return cmp.Compare(p.Page, page) })
+	page := func(i int) *models.FlattenedPage {
+		at, found := slices.BinarySearchFunc(report.Pages, i+1, func(p models.FlattenedPage, page int) int { return cmp.Compare(p.Page, page) })
 		if !found {
-			report.Pages = slices.Insert(report.Pages, at, FlattenedPage{Page: i + 1})
+			report.Pages = slices.Insert(report.Pages, at, models.FlattenedPage{Page: i + 1})
 		}
 		return &report.Pages[at]
 	}
@@ -491,7 +407,7 @@ func (w *Writer) rewriteSignatures(ctx context.Context) (func(), error) {
 
 // flattenTransparency flattens the document the Writer holds, reporting
 // whether it changed anything.
-func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts, reads map[int]bool) (*FlattenReport, bool, error) {
+func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts, reads map[int]bool) (*models.FlattenReport, bool, error) {
 	if err := w.promotePageTree(ctx); err != nil {
 		return nil, false, err
 	}
@@ -524,12 +440,12 @@ func (w *Writer) flattenTransparency(ctx context.Context, o flattenOpts, reads m
 			return nil, false, err
 		}
 	}
-	report := &FlattenReport{TransparentAnnotations: result.TransparentAnnotations}
+	report := &models.FlattenReport{TransparentAnnotations: result.TransparentAnnotations}
 	for _, i := range result.Skipped {
 		report.SkippedPages = append(report.SkippedPages, i+1)
 	}
 	for _, p := range result.Pages {
-		report.Pages = append(report.Pages, FlattenedPage{
+		report.Pages = append(report.Pages, models.FlattenedPage{
 			Page:                  p.Page + 1,
 			Regions:               p.Regions,
 			DPI:                   p.DPI,

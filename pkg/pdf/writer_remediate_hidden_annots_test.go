@@ -33,7 +33,7 @@ func hiddenAnnotsPDF() []byte {
 
 // remediateHiddenAnnots opens data, runs remediate on a Writer over it, and
 // returns the report and the reopened output.
-func remediateHiddenAnnots(t *testing.T, data []byte, remediate func(context.Context, *Writer) (*RemediationReport, error)) (*RemediationReport, *Reader) {
+func remediateHiddenAnnots(t *testing.T, data []byte, remediate func(context.Context, *Writer) (*models.RemediationReport, error)) (*models.RemediationReport, *Reader) {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -97,7 +97,7 @@ func hiddenFieldNames(t *testing.T, r *Reader) []string {
 func TestRemediatePDFARemovesAnnotationsThatNeverShow(t *testing.T) {
 	t.Parallel()
 
-	report, out := remediateHiddenAnnots(t, hiddenAnnotsPDF(), func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+	report, out := remediateHiddenAnnots(t, hiddenAnnotsPDF(), func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 		return w.RemediatePDFA(ctx, models.PDFA2b)
 	})
 
@@ -159,7 +159,7 @@ func TestRemediatePDFARemovesAnnotationsThatNeverShow(t *testing.T) {
 func TestRemediatePDFUAKeepsHiddenAnnotations(t *testing.T) {
 	t.Parallel()
 
-	report, out := remediateHiddenAnnots(t, hiddenAnnotsPDF(), func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+	report, out := remediateHiddenAnnots(t, hiddenAnnotsPDF(), func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 		return w.RemediatePDFUA(ctx, models.PDFUA1)
 	})
 

@@ -54,13 +54,13 @@ var strictTextTolerance = RegressionTolerance{MaxTextDropRatio: 0, MaxImageDropR
 // remediatedOutput is what one remediation of a source wrote, with the report
 // it returned.
 type remediatedOutput struct {
-	report *RemediationReport
+	report *models.RemediationReport
 	bytes  []byte
 }
 
 // remediateToBytes opens data, remediates it with remediate, and writes the
 // output.
-func remediateToBytes(t *testing.T, data []byte, remediate func(context.Context, *Writer) (*RemediationReport, error)) remediatedOutput {
+func remediateToBytes(t *testing.T, data []byte, remediate func(context.Context, *Writer) (*models.RemediationReport, error)) remediatedOutput {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -101,12 +101,12 @@ func TestWriterRemediateRollbackReportsTheOutput(t *testing.T) {
 
 	data := pages12PDF()
 	type profileRun struct {
-		remediate func(context.Context, *Writer, ...RemediateOption) (*RemediationReport, error)
+		remediate func(context.Context, *Writer, ...RemediateOption) (*models.RemediationReport, error)
 		validate  func(context.Context, *Reader) ([]error, error)
 	}
 	pdfa := func(p models.PDFAProfile) profileRun {
 		return profileRun{
-			remediate: func(ctx context.Context, w *Writer, opts ...RemediateOption) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer, opts ...RemediateOption) (*models.RemediationReport, error) {
 				return w.RemediatePDFA(ctx, p, opts...)
 			},
 			validate: func(ctx context.Context, r *Reader) ([]error, error) { return r.ValidatePDFA(ctx, p) },
@@ -114,7 +114,7 @@ func TestWriterRemediateRollbackReportsTheOutput(t *testing.T) {
 	}
 	pdfua := func(p models.PDFUAProfile) profileRun {
 		return profileRun{
-			remediate: func(ctx context.Context, w *Writer, opts ...RemediateOption) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer, opts ...RemediateOption) (*models.RemediationReport, error) {
 				return w.RemediatePDFUA(ctx, p, opts...)
 			},
 			validate: func(ctx context.Context, r *Reader) ([]error, error) { return r.ValidatePDFUA(ctx, p) },
@@ -137,8 +137,8 @@ func TestWriterRemediateRollbackReportsTheOutput(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			with := func(opts ...RemediateOption) func(context.Context, *Writer) (*RemediationReport, error) {
-				return func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			with := func(opts ...RemediateOption) func(context.Context, *Writer) (*models.RemediationReport, error) {
+				return func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 					return tc.run.remediate(ctx, w, opts...)
 				}
 			}
@@ -192,7 +192,7 @@ func TestWriterRemediateRollbackReportsTheOutput(t *testing.T) {
 			if got, want := sortedErrorStrings(rolled.report.Residual), sortedErrorStrings(found); !slices.Equal(got, want) {
 				t.Errorf("Residual = %q, want the %q re-validating the written bytes finds", got, want)
 			}
-			if !slices.ContainsFunc(rolled.report.ResidualViolations(), func(v Violation) bool { return v.Clause == tc.notdef }) {
+			if !slices.ContainsFunc(rolled.report.ResidualViolations(), func(v models.Violation) bool { return v.Clause == tc.notdef }) {
 				t.Errorf("Residual = %q, want the .notdef reference (%s) the rolled-back strip had claimed", rolled.report.Residual, tc.notdef)
 			}
 		})

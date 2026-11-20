@@ -26,7 +26,7 @@ func compliantInvoiceXML(t *testing.T) []byte {
 // remediateFacturXBytes runs [Writer.RemediateFacturX] on data, or
 // [Writer.RepairFacturX] when cfg is nil, and returns the report and the
 // output.
-func remediateFacturXBytes(t *testing.T, data []byte, cfg *FacturXConfig) (*RemediationReport, []byte) {
+func remediateFacturXBytes(t *testing.T, data []byte, cfg *FacturXConfig) (*models.RemediationReport, []byte) {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -36,7 +36,7 @@ func remediateFacturXBytes(t *testing.T, data []byte, cfg *FacturXConfig) (*Reme
 	defer r.Close()
 	w := NewWriter(r)
 	defer w.Close()
-	var report *RemediationReport
+	var report *models.RemediationReport
 	if cfg == nil {
 		report, err = w.RepairFacturX(ctx)
 	} else {
@@ -54,7 +54,7 @@ func remediateFacturXBytes(t *testing.T, data []byte, cfg *FacturXConfig) (*Reme
 
 // facturXFatals returns the failures [Reader.ValidateFacturXReport] reports
 // on data, the violations that make a validation non-compliant.
-func facturXFatals(t *testing.T, data []byte) []Violation {
+func facturXFatals(t *testing.T, data []byte) []models.Violation {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -161,7 +161,7 @@ func TestFacturXResidualMatchesValidation(t *testing.T) {
 
 			for _, run := range []struct {
 				name   string
-				report *RemediationReport
+				report *models.RemediationReport
 				output []byte
 			}{
 				{"embedded", embedded, out},
@@ -177,7 +177,7 @@ func TestFacturXResidualMatchesValidation(t *testing.T) {
 					t.Errorf("%s: residual %v, want a residual: %v", run.name, run.report.Residual, tc.wantResidual)
 				}
 				for _, v := range run.report.ResidualViolations() {
-					if v.Severity != SeverityFatal {
+					if v.Severity != models.SeverityFatal {
 						t.Errorf("%s: residual holds a %s: %v", run.name, v.Severity, v)
 					}
 				}

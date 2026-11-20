@@ -40,15 +40,15 @@ func checkInvoiceLevel(invoiceXML []byte, level models.FacturXLevel) error {
 }
 
 // facturXFailures returns the violations of a [Reader.ValidateFacturX] result
-// that fail conformance: the hard violations of [FacturXReport.Fatals]. A
-// warning, a soft Schematron finding, does not by itself make an invoice
-// non-conformant, and an advisory (a Schematron rule litho could not
-// evaluate) is no verdict at all, so a remediation's residual counts neither,
-// as a validation's compliance verdict does not.
+// that fail conformance: the hard violations of [models.FacturXReport.Fatals].
+// A warning, a soft Schematron finding, does not by itself make an invoice
+// non-conformant, and an advisory (a Schematron rule litho could not evaluate)
+// is no verdict at all, so a remediation's residual counts neither, as a
+// validation's compliance verdict does not.
 func facturXFailures(errs []error) []error {
 	var out []error
 	for _, e := range partitionFacturXErrors(errs).Violations {
-		if toViolation(e).Severity == SeverityFatal {
+		if toViolation(e).Severity == models.SeverityFatal {
 			out = append(out, e)
 		}
 	}

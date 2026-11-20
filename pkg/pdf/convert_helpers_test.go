@@ -76,12 +76,12 @@ func withSpool(held int64) ConvertOption {
 // alone, with lang as the document language when not empty. The output is
 // written in full at version, the version c converts at. opts reach the
 // pipeline's write after those two.
-func convertAndRemediate(ctx context.Context, c *Conversion, version string, pdfa models.PDFAProfile, pdfua models.PDFUAProfile, lang string, opts ...WriteOption) ([]byte, *RemediationReport, error) {
+func convertAndRemediate(ctx context.Context, c *Conversion, version string, pdfa models.PDFAProfile, pdfua models.PDFUAProfile, lang string, opts ...WriteOption) ([]byte, *models.RemediationReport, error) {
 	var remOpts []RemediateOption
 	if lang != "" {
 		remOpts = append(remOpts, WithLanguage(lang))
 	}
-	var report *RemediationReport
+	var report *models.RemediationReport
 	var out bytes.Buffer
 	_, err := NewPipeline().Convert(c).Apply(func(ctx context.Context, w *Writer) error {
 		var err error

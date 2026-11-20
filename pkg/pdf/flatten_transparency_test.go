@@ -67,7 +67,7 @@ func pixelsApart(a, b image.Image, tolerance float64) float64 {
 }
 
 // flattenPDF flattens data with opts and returns the report and the output.
-func flattenPDF(t *testing.T, data []byte, opts ...FlattenOption) (*FlattenReport, []byte) {
+func flattenPDF(t *testing.T, data []byte, opts ...FlattenOption) (*models.FlattenReport, []byte) {
 	t.Helper()
 	ctx := context.Background()
 	w := NewWriter(openColorPDF(t, data))

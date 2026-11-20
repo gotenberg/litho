@@ -150,7 +150,7 @@ func (refusingWriter) Write([]byte) (int, error) { return 0, errRefusedWrite }
 
 // laterRoundWriter opens [laterRoundPDF] and remediates it for PDF/A-1b,
 // failing the test unless the remediation keeps a second round.
-func laterRoundWriter(t *testing.T) (*Writer, *RemediationReport) {
+func laterRoundWriter(t *testing.T) (*Writer, *models.RemediationReport) {
 	t.Helper()
 
 	ctx := context.Background()

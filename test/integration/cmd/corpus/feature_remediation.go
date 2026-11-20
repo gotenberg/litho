@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -109,18 +110,20 @@ func (f *remediationFeature) Prepare(ctx context.Context, fixtures []Fixture) er
 // (auto-tagging makes remediation target PDF/UA, and WTPDF adopts the
 // ISO 14289-2 rules, so all three are supported). ok is false for a profile
 // the remediation engine does not target.
-func (f *remediationFeature) remediators(profile string) (validate func(context.Context, *pdf.Reader) ([]pdf.Violation, error), remediate func(context.Context, *pdf.Writer) error, ok bool) {
+func (f *remediationFeature) remediators(profile string) (validate func(context.Context, *pdf.Reader) ([]models.Violation, error), remediate func(context.Context, *pdf.Writer) error, ok bool) {
 	var opts []pdf.RemediateOption
 	if f.aggressive {
 		opts = append(opts, pdf.WithAggressiveFixes())
 	}
 	if p, isA := dirToPDFAProfile[profile]; isA {
-		return func(ctx context.Context, r *pdf.Reader) ([]pdf.Violation, error) { return r.ValidatePDFAReport(ctx, p) },
+		return func(ctx context.Context, r *pdf.Reader) ([]models.Violation, error) {
+				return r.ValidatePDFAReport(ctx, p)
+			},
 			func(ctx context.Context, w *pdf.Writer) error { _, err := w.RemediatePDFA(ctx, p, opts...); return err },
 			true
 	}
 	if p, isUA := dirToPDFUAProfile[profile]; isUA {
-		return func(ctx context.Context, r *pdf.Reader) ([]pdf.Violation, error) {
+		return func(ctx context.Context, r *pdf.Reader) ([]models.Violation, error) {
 				return r.ValidatePDFUAReport(ctx, p)
 			},
 			func(ctx context.Context, w *pdf.Writer) error {
@@ -130,7 +133,7 @@ func (f *remediationFeature) remediators(profile string) (validate func(context.
 			true
 	}
 	if p, isWT := dirToWTPDFProfile[profile]; isWT {
-		return func(ctx context.Context, r *pdf.Reader) ([]pdf.Violation, error) {
+		return func(ctx context.Context, r *pdf.Reader) ([]models.Violation, error) {
 				return r.ValidateWTPDFReport(ctx, p)
 			},
 			func(ctx context.Context, w *pdf.Writer) error {
@@ -379,7 +382,7 @@ type remediationReport struct {
 // the remediated bytes to stagingDir under <basename>.pdf. The validate and
 // remediate closures bind the conformance profile (PDF/A or PDF/UA), keeping the
 // open/write/stage skeleton profile-agnostic. The basename comes from pdfPath.
-func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Context, *pdf.Reader) ([]pdf.Violation, error), remediate func(context.Context, *pdf.Writer) error, stagingDir string, out *remediationOutput, stagingPath *string) error {
+func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Context, *pdf.Reader) ([]models.Violation, error), remediate func(context.Context, *pdf.Writer) error, stagingDir string, out *remediationOutput, stagingPath *string) error {
 	data, err := os.ReadFile(pdfPath)
 	if err != nil {
 		return fmt.Errorf("read: %w", err)
@@ -640,7 +643,7 @@ func ruleID(clause string, test int) string {
 // distinctRuleIDs returns the sorted, deduplicated "clause-tNN" ids of
 // the violations, the same identifiers batchValidate derives from
 // VeraPDF rule summaries.
-func distinctRuleIDs(violations []pdf.Violation) []string {
+func distinctRuleIDs(violations []models.Violation) []string {
 	seen := make(map[string]bool, len(violations))
 	var ids []string
 	for _, v := range violations {
@@ -654,7 +657,7 @@ func distinctRuleIDs(violations []pdf.Violation) []string {
 	return ids
 }
 
-func isNew(v pdf.Violation, before []pdf.Violation) bool {
+func isNew(v models.Violation, before []models.Violation) bool {
 	vs := v.Error()
 	for _, b := range before {
 		if b.Error() == vs {

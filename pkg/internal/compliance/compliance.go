@@ -187,11 +187,30 @@ var warningRules = map[Rule]bool{
 	Rule_invoice_VersionNonSpec:        true,
 }
 
-// SeverityOf classifies a violation as fatal or warning. The pdf package
-// maps this onto its public Severity enum at the boundary.
+// SeverityOf classifies a violation as fatal or warning. [Violation.Structured]
+// maps it onto [models.Severity].
 func SeverityOf(v Violation) string {
 	if warningRules[v.Rule] {
 		return SeverityWarning
 	}
 	return SeverityFatal
+}
+
+// Structured returns r as a [models.Violation]: its rule's specification,
+// clause, test number and description, its context, and
+// [models.SeverityWarning] for a rule [SeverityOf] classifies as a warning,
+// [models.SeverityFatal] otherwise.
+func (r Violation) Structured() models.Violation {
+	sev := models.SeverityFatal
+	if SeverityOf(r) == SeverityWarning {
+		sev = models.SeverityWarning
+	}
+	return models.Violation{
+		Specification: r.Rule.Specification,
+		Clause:        r.Rule.Clause,
+		TestNumber:    r.Rule.TestNumber,
+		Description:   r.Rule.Description,
+		Context:       r.Context,
+		Severity:      sev,
+	}
 }

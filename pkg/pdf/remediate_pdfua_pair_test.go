@@ -50,7 +50,7 @@ func pairTextPDF() []byte {
 // pairFonts supplies the program of pairTextPDF's font.
 var pairFonts = WithFontFiles(os.DirFS("testdata/fonts"))
 
-// pdfuaSpecification reports whether spec, a [Violation.Specification],
+// pdfuaSpecification reports whether spec, a [models.Violation.Specification],
 // names a standard PDF/UA judges a file against: ISO 14289, and ISO 32005,
 // whose structure rules PDF/UA-2 applies.
 func pdfuaSpecification(spec string) bool {
@@ -174,13 +174,13 @@ func TestRemediateWithPDFUARefusesIncompatiblePairs(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		data      func() []byte
-		remediate func(ctx context.Context, w *Writer) (*RemediationReport, error)
+		remediate func(ctx context.Context, w *Writer) (*models.RemediationReport, error)
 		want      string
 	}{
 		{
 			name: "PDF/A-1b and PDF/UA-2",
 			data: signablePDF,
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RemediatePDFA(ctx, models.PDFA1b, WithPDFUA(models.PDFUA2))
 			},
 			want: "PDF/A-1b requires PDF/UA-1, not PDF/UA-2",
@@ -188,7 +188,7 @@ func TestRemediateWithPDFUARefusesIncompatiblePairs(t *testing.T) {
 		{
 			name: "PDF/A-2b and PDF/UA-2",
 			data: signablePDF,
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RemediatePDFA(ctx, models.PDFA2b, WithPDFUA(models.PDFUA2))
 			},
 			want: "PDF/A-2b requires PDF/UA-1, not PDF/UA-2",
@@ -196,7 +196,7 @@ func TestRemediateWithPDFUARefusesIncompatiblePairs(t *testing.T) {
 		{
 			name: "PDF/A-3u and PDF/UA-2",
 			data: signablePDF,
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RemediatePDFA(ctx, models.PDFA3u, WithPDFUA(models.PDFUA2))
 			},
 			want: "PDF/A-3u requires PDF/UA-1, not PDF/UA-2",
@@ -204,7 +204,7 @@ func TestRemediateWithPDFUARefusesIncompatiblePairs(t *testing.T) {
 		{
 			name: "PDF/A-4 and PDF/UA-1",
 			data: signablePDF,
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RemediatePDFA(ctx, models.PDFA4, WithPDFUA(models.PDFUA1))
 			},
 			want: "PDF/A-4 requires PDF/UA-2, not PDF/UA-1",
@@ -212,7 +212,7 @@ func TestRemediateWithPDFUARefusesIncompatiblePairs(t *testing.T) {
 		{
 			name: "PDF/A-4f and PDF/UA-1",
 			data: signablePDF,
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RemediatePDFA(ctx, models.PDFA4f, WithPDFUA(models.PDFUA1))
 			},
 			want: "PDF/A-4f requires PDF/UA-2, not PDF/UA-1",
@@ -220,7 +220,7 @@ func TestRemediateWithPDFUARefusesIncompatiblePairs(t *testing.T) {
 		{
 			name: "Factur-X and PDF/UA-2",
 			data: signablePDF,
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: []byte(facturXSampleCII), Level: models.FacturXMinimum}, WithPDFUA(models.PDFUA2))
 			},
 			want: "PDF/A-3b requires PDF/UA-1, not PDF/UA-2",
@@ -228,7 +228,7 @@ func TestRemediateWithPDFUARefusesIncompatiblePairs(t *testing.T) {
 		{
 			name: "a Factur-X repair and PDF/UA-2",
 			data: defectiveInvoicePDF,
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RepairFacturX(ctx, WithPDFUA(models.PDFUA2))
 			},
 			want: "PDF/A-3b requires PDF/UA-1, not PDF/UA-2",
@@ -496,7 +496,7 @@ func TestRemediatePDFAWithPDFUARewritesWhatThePDFUARoundLeft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ValidatePDFAReport: %v", err)
 	}
-	if !slices.ContainsFunc(before, func(v Violation) bool { return v.Clause == "6.1.7.1" }) {
+	if !slices.ContainsFunc(before, func(v models.Violation) bool { return v.Clause == "6.1.7.1" }) {
 		t.Fatal("precondition: the fixture does not fail ISO 19005-2, 6.1.7.1")
 	}
 	w := NewWriter(r)

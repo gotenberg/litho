@@ -1,6 +1,9 @@
 package remediation
 
-import "github.com/gotenberg/litho/pkg/internal/core/writer"
+import (
+	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/models"
+)
 
 // Report describes what the remediation engine fixed and what it could not fix.
 type Report struct {
@@ -37,7 +40,7 @@ type Report struct {
 	ContentFixers []string
 	// FontRefusals lists the fonts left unembedded although [Options.Fonts]
 	// was set, each with the reason, in the order the run met them.
-	FontRefusals []FontRefusal
+	FontRefusals []models.FontRefusal
 	// FontsEmbedded lists the fonts the run embedded a supplied program for,
 	// which a writer rolling back the content tier reports as refused
 	// ([ErrFontRolledBack]).

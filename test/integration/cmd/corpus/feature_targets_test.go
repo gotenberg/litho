@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/pdf"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // targetsSource is a two-page HTML source: a heading, a paragraph and a
@@ -119,8 +119,8 @@ func hasReason(r targetResult, part string) bool {
 
 // plant wraps the real converter so the conversion to target id goes
 // through edit and report, a defect planted in that target alone.
-func plant(id string, edit func([]byte) []byte, report func(*pdf.RemediationReport)) targetConverter {
-	return func(ctx context.Context, src []byte, s htmlSettings, t outputTarget) ([]byte, *pdf.RemediationReport, error) {
+func plant(id string, edit func([]byte) []byte, report func(*models.RemediationReport)) targetConverter {
+	return func(ctx context.Context, src []byte, s htmlSettings, t outputTarget) ([]byte, *models.RemediationReport, error) {
 		if t.ID == id && edit != nil {
 			src = edit(src)
 		}
@@ -186,7 +186,7 @@ func TestTargets_CatchesPlantedDefects(t *testing.T) {
 		},
 		"report claims a clean file": {
 			target: "ua1",
-			convert: plant("ua1", nil, func(rep *pdf.RemediationReport) {
+			convert: plant("ua1", nil, func(rep *models.RemediationReport) {
 				rep.Residual = nil
 			}),
 			reason:   "the remediation report says the file conforms",

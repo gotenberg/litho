@@ -404,7 +404,7 @@ func validateWithLitho(ctx context.Context, pdfPath, profileDir string) complian
 // validateReader runs litho's validator for the PDF/A, PDF/UA or WTPDF profile
 // profileDir names on r. known is false for a directory no map covers, which
 // validates nothing.
-func validateReader(ctx context.Context, r *pdf.Reader, profileDir string) (violations []pdf.Violation, known bool, err error) {
+func validateReader(ctx context.Context, r *pdf.Reader, profileDir string) (violations []models.Violation, known bool, err error) {
 	if pdfa, ok := dirToPDFAProfile[profileDir]; ok {
 		violations, err = r.ValidatePDFAReport(ctx, pdfa)
 		return violations, true, err

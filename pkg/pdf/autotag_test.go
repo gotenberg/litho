@@ -163,11 +163,11 @@ func TestWriter_RemediatePDFUA_AutoTagsStructure(t *testing.T) {
 	}
 }
 
-func hasStructureViolation(vs []Violation) bool {
+func hasStructureViolation(vs []models.Violation) bool {
 	return slices.ContainsFunc(vs, isStructureViolation)
 }
 
-func isStructureViolation(v Violation) bool {
+func isStructureViolation(v models.Violation) bool {
 	d := strings.ToLower(v.Description + " " + v.Context)
 	return strings.Contains(d, "structtreeroot") ||
 		strings.Contains(d, "marked") ||
@@ -176,7 +176,7 @@ func isStructureViolation(v Violation) bool {
 		strings.Contains(d, "tagged")
 }
 
-func describeStructureViolations(vs []Violation) string {
+func describeStructureViolations(vs []models.Violation) string {
 	var b strings.Builder
 	for _, v := range vs {
 		if isStructureViolation(v) {
@@ -186,7 +186,7 @@ func describeStructureViolations(vs []Violation) string {
 	return b.String()
 }
 
-func describeAll(vs []Violation) string {
+func describeAll(vs []models.Violation) string {
 	var b strings.Builder
 	for _, v := range vs {
 		fmt.Fprintf(&b, "  clause %s test %d: %s\n", v.Clause, v.TestNumber, v.Description)

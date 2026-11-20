@@ -47,7 +47,7 @@ const (
 	metricFlattenTransparencyLeft = "transparency_left"
 	// metricFlattenAnnotations counts the PDFs whose annotations are left
 	// painting with transparency, which flattening does not draw into the
-	// page (see [pdf.FlattenReport.TransparentAnnotations]): an inventory.
+	// page (see [models.FlattenReport.TransparentAnnotations]): an inventory.
 	metricFlattenAnnotations = "annotations_left"
 	// metricFlattenSkippedPages counts the pages whose content does not
 	// read, left as they are: an inventory.
@@ -134,7 +134,7 @@ const (
 type flattenFeature struct {
 	workers int
 	// flatten runs the flattening; tests replace it to plant a defect.
-	flatten func(ctx context.Context, w *pdf.Writer) (*pdf.FlattenReport, error)
+	flatten func(ctx context.Context, w *pdf.Writer) (*models.FlattenReport, error)
 	// poppler renders the batch, [renderWithPoppler] outside tests, and pin
 	// returns the version it must report, "" to accept any.
 	poppler func(ctx context.Context, dir string, jobs []popplerJob) (string, error)
@@ -152,7 +152,7 @@ type flattenFeature struct {
 func newFlattenFeature() *flattenFeature {
 	return &flattenFeature{
 		workers: runtime.NumCPU(),
-		flatten: func(ctx context.Context, w *pdf.Writer) (*pdf.FlattenReport, error) {
+		flatten: func(ctx context.Context, w *pdf.Writer) (*models.FlattenReport, error) {
 			return w.FlattenTransparency(ctx)
 		},
 		poppler: renderWithPoppler,
@@ -268,11 +268,11 @@ type flattenOutput struct {
 	// Error says why the PDF was not checked: it does not open, the
 	// flattening refused it (Refused) or failed (Failed), or it had nothing
 	// to flatten (Unchanged).
-	Error     string             `json:"error,omitempty"`
-	Refused   bool               `json:"refused,omitempty"`
-	Failed    bool               `json:"failed,omitempty"`
-	Unchanged bool               `json:"unchanged,omitempty"`
-	Report    *pdf.FlattenReport `json:"report,omitempty"`
+	Error     string                `json:"error,omitempty"`
+	Refused   bool                  `json:"refused,omitempty"`
+	Failed    bool                  `json:"failed,omitempty"`
+	Unchanged bool                  `json:"unchanged,omitempty"`
+	Report    *models.FlattenReport `json:"report,omitempty"`
 	// ReopenFailed reports an output litho cannot open.
 	ReopenFailed bool `json:"reopen_failed,omitempty"`
 	// TextChanged lists the pages whose text changed.
@@ -501,7 +501,7 @@ func (f *flattenFeature) prepareOne(ctx context.Context, staging string, n int, 
 
 // flattenOnce flattens src on a Writer of its own and writes the result, nil
 // when there was nothing to flatten.
-func (f *flattenFeature) flattenOnce(ctx context.Context, src *pdf.Reader) ([]byte, *pdf.FlattenReport, error) {
+func (f *flattenFeature) flattenOnce(ctx context.Context, src *pdf.Reader) ([]byte, *models.FlattenReport, error) {
 	w := pdf.NewWriter(src)
 	defer w.Close()
 	report, err := f.flatten(ctx, w)

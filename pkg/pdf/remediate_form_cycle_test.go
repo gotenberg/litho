@@ -72,12 +72,12 @@ func TestRemediation_FormCycleWritesTheSameBytes(t *testing.T) {
 	ctx := context.Background()
 	remediations := []struct {
 		name string
-		run  func(*Writer) (*RemediationReport, error)
+		run  func(*Writer) (*models.RemediationReport, error)
 	}{
-		{"PDF/UA-1", func(w *Writer) (*RemediationReport, error) {
+		{"PDF/UA-1", func(w *Writer) (*models.RemediationReport, error) {
 			return w.RemediatePDFUA(ctx, models.PDFUA1, WithDocumentID([]byte("0123456789abcdef")))
 		}},
-		{"PDF/A-2a", func(w *Writer) (*RemediationReport, error) {
+		{"PDF/A-2a", func(w *Writer) (*models.RemediationReport, error) {
 			return w.RemediatePDFA(ctx, models.PDFA2a, WithDocumentID([]byte("0123456789abcdef")))
 		}},
 	}

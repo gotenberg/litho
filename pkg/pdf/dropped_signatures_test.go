@@ -81,7 +81,7 @@ func certifiedPDF() []byte {
 
 // certifiedDropped is what a write of [certifiedPDF] that leaves every
 // signature out reports.
-var certifiedDropped = []DroppedSignature{
+var certifiedDropped = []models.DroppedSignature{
 	{Field: "author", Perms: "DocMDP"},
 	{Field: "form1.witness"},
 	{Perms: "UR3"},
@@ -89,7 +89,7 @@ var certifiedDropped = []DroppedSignature{
 
 // writeSigned opens data, applies edit to a Writer on it and returns the output
 // and the signatures the Writer reports dropping.
-func writeSigned(ctx context.Context, t *testing.T, data []byte, edit func(w *Writer) []WriteOption) ([]byte, []DroppedSignature) {
+func writeSigned(ctx context.Context, t *testing.T, data []byte, edit func(w *Writer) []WriteOption) ([]byte, []models.DroppedSignature) {
 	t.Helper()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -361,7 +361,7 @@ func TestWriter_SignedRewriteKeepsOnlyItsOwnSignature(t *testing.T) {
 	if valid := validSignatures(ctx, t, out); !slices.Equal(valid, []string{sigs[0].FieldName}) {
 		t.Errorf("valid signatures = %v, want [%s]", valid, sigs[0].FieldName)
 	}
-	want := append(slices.Clone(certifiedDropped[:2]), DroppedSignature{Field: "Signature1"}, certifiedDropped[2])
+	want := append(slices.Clone(certifiedDropped[:2]), models.DroppedSignature{Field: "Signature1"}, certifiedDropped[2])
 	if !slices.Equal(dropped, want) {
 		t.Errorf("DroppedSignatures = %v, want %v", dropped, want)
 	}
@@ -461,8 +461,8 @@ func TestSplitMerge_ReportDroppedSignatures(t *testing.T) {
 	defer blank.Close()
 
 	var split bytes.Buffer
-	var splitDropped []DroppedSignature
-	if err := Split(ctx, src, []int{1}, &split, WithDroppedSignatures(&splitDropped), WithSignatureRemoval()); err != nil {
+	var splitDropped []models.DroppedSignature
+	if err := Split(ctx, src, []int{1}, &split, WithDroppedSignatures(&splitDropped)); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
 	if !slices.Equal(splitDropped, certifiedDropped) {
@@ -473,8 +473,8 @@ func TestSplitMerge_ReportDroppedSignatures(t *testing.T) {
 	}
 
 	var merged bytes.Buffer
-	var mergeDropped []DroppedSignature
-	if err := Merge(ctx, []*Reader{blank, src, src}, &merged, WithDroppedSignatures(&mergeDropped), WithSignatureRemoval()); err != nil {
+	var mergeDropped []models.DroppedSignature
+	if err := Merge(ctx, []*Reader{blank, src, src}, &merged, WithDroppedSignatures(&mergeDropped)); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 	if !slices.Equal(mergeDropped, certifiedDropped) {
@@ -500,7 +500,7 @@ func TestPipeline_ReportsDroppedSignatures(t *testing.T) {
 			src := openDeclaration(t, certifiedPDF(), false)
 			defer src.Close()
 			var out bytes.Buffer
-			var viaOption []DroppedSignature
+			var viaOption []models.DroppedSignature
 			result, err := NewPipeline().Open(src).Apply(tc.apply).Split([]int{1}).
 				WriteTo(ctx, &out, WithDroppedSignatures(&viaOption), WithSignatureRemoval())
 			if err != nil {
@@ -582,7 +582,7 @@ func TestWriter_FullRewriteTagsTheDrawnSignature(t *testing.T) {
 	in := taggedSignedPDF()
 	out, dropped := writeSigned(ctx, t, in, func(*Writer) []WriteOption { return []WriteOption{WithFullRewrite()} })
 
-	if want := []DroppedSignature{{Field: "approval"}}; !slices.Equal(dropped, want) {
+	if want := []models.DroppedSignature{{Field: "approval"}}; !slices.Equal(dropped, want) {
 		t.Errorf("DroppedSignatures = %v, want %v", dropped, want)
 	}
 	content := pageContent(ctx, t, out, 1)

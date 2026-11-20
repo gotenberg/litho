@@ -114,3 +114,31 @@ type DSSInfo struct {
 	// store.
 	VRICount int `json:"vriCount"`
 }
+
+// DroppedSignature names a signature of an input that an output does not
+// carry.
+//
+// A signature's digest covers the bytes of the file it was made in, as its
+// /ByteRange names them (ISO 32000-1, 12.8.1). An output that rewrites the
+// file, or builds a new one, moves every one of those bytes, so a signature
+// carried into it could never verify. litho leaves it out instead: a signed
+// signature field leaves the form and its widget's appearance is drawn into
+// the page, so the page looks as it did, and a /Perms entry naming a signature
+// goes. The input's document security store goes with its signatures: the
+// catalog /DSS holds their certificates, OCSP responses, CRLs and /VRI entries
+// (ISO 32000-2, 12.8.4.3), which validate nothing the output holds. An
+// incremental update appends to the signed bytes and keeps every signature,
+// and the store.
+//
+// DroppedSignature values are immutable and safe for concurrent use.
+type DroppedSignature struct {
+	// Field is the fully qualified name of the signed signature field that
+	// held the signature (ISO 32000-1, 12.7.3.2), "" for a signature no field
+	// holds: the usage rights signature /Perms /UR3 names (ISO 32000-1,
+	// 12.8.2.3).
+	Field string
+	// Perms names the catalog /Perms entry that referred to the signature,
+	// "DocMDP" for a certification signature and "UR3" for a usage rights
+	// signature (ISO 32000-1, 12.8.4, Table 258), and is "" when none did.
+	Perms string
+}

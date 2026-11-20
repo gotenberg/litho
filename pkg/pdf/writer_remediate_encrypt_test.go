@@ -27,7 +27,7 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 		encrypt bool
 		// atNew are the options given to NewWriter.
 		atNew      []WriteOption
-		remediate  func(ctx context.Context, w *Writer) (*RemediationReport, error)
+		remediate  func(ctx context.Context, w *Writer) (*models.RemediationReport, error)
 		writeOpts  []WriteOption
 		wantClause string
 	}{
@@ -35,7 +35,7 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 			name:    "Encrypt before a PDF/A-2b remediation",
 			data:    signablePDF,
 			encrypt: true,
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RemediatePDFA(ctx, models.PDFA2b)
 			},
 			wantClause: "ISO 19005-2, 6.1.3",
@@ -44,7 +44,7 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 			name:    "Encrypt before a PDF/A-1b remediation",
 			data:    signablePDF,
 			encrypt: true,
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RemediatePDFA(ctx, models.PDFA1b)
 			},
 			wantClause: "ISO 19005-1, 6.1.3",
@@ -53,7 +53,7 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 			name:    "Encrypt before a Factur-X remediation",
 			data:    signablePDF,
 			encrypt: true,
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: []byte(facturXSampleCII), Level: models.FacturXMinimum})
 			},
 			wantClause: "ISO 19005-3, 6.1.3",
@@ -62,7 +62,7 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 			name:  "WithEncryption given to NewWriter before a PDF/A-2b remediation",
 			data:  signablePDF,
 			atNew: []WriteOption{WithEncryption(aes256)},
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RemediatePDFA(ctx, models.PDFA2b)
 			},
 			wantClause: "ISO 19005-2, 6.1.3",
@@ -71,7 +71,7 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 			name:  "WithEncryption given to NewWriter before a Factur-X repair",
 			data:  defectiveInvoicePDF,
 			atNew: []WriteOption{WithEncryption(aes256)},
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RepairFacturX(ctx)
 			},
 			wantClause: "ISO 19005-3, 6.1.3",
@@ -79,7 +79,7 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 		{
 			name: "WithEncryption after a PDF/A-4 remediation",
 			data: signablePDF,
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RemediatePDFA(ctx, models.PDFA4)
 			},
 			writeOpts:  []WriteOption{WithEncryption(aes256)},
@@ -88,7 +88,7 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 		{
 			name: "WithEncryption after a Factur-X repair",
 			data: defectiveInvoicePDF,
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RepairFacturX(ctx)
 			},
 			writeOpts:  []WriteOption{WithEncryption(aes256)},
@@ -98,7 +98,7 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 			name:    "Encrypt before a PDF/A-2b and PDF/UA-1 remediation",
 			data:    signablePDF,
 			encrypt: true,
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RemediatePDFA(ctx, models.PDFA2b, WithPDFUA(models.PDFUA1))
 			},
 			wantClause: "ISO 19005-2, 6.1.3",
@@ -107,7 +107,7 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 			name:  "WithEncryption given to NewWriter before a Factur-X repair with PDF/UA-1",
 			data:  defectiveInvoicePDF,
 			atNew: []WriteOption{WithEncryption(aes256)},
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RepairFacturX(ctx, WithPDFUA(models.PDFUA1))
 			},
 			wantClause: "ISO 19005-3, 6.1.3",
@@ -115,7 +115,7 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 		{
 			name: "WithEncryption after a PDF/A-4 and PDF/UA-2 remediation",
 			data: signablePDF,
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
 				return w.RemediatePDFA(ctx, models.PDFA4, WithPDFUA(models.PDFUA2))
 			},
 			writeOpts:  []WriteOption{WithEncryption(aes256)},

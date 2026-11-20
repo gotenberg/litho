@@ -62,18 +62,6 @@ type FontProvider func(ctx context.Context, req FontRequest) ([]FontCandidate, e
 // aborts the remediation.
 type FontCandidate func(ctx context.Context) ([]byte, error)
 
-// FontRefusal records a font a remediation left unembedded although a
-// [FontProvider] was configured.
-type FontRefusal struct {
-	// BaseFont is the font's /BaseFont.
-	BaseFont string
-	// Object is the object number of the font dictionary.
-	Object int
-	// Err wraps one of the refusal sentinels, [ErrFontNotSupplied] to
-	// [ErrFontUnwritable], or [ErrFontRolledBack].
-	Err error
-}
-
 // FontEmbed records a font a run embedded a supplied program for.
 type FontEmbed struct {
 	// BaseFont is the font's /BaseFont.

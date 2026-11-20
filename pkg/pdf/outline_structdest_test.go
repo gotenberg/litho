@@ -97,7 +97,7 @@ func elemLabel(elem ast.PdfDict) string {
 }
 
 // structDestViolations returns the ISO 14289-2, 8.8 violations of data.
-func structDestViolations(t *testing.T, data []byte) []Violation {
+func structDestViolations(t *testing.T, data []byte) []models.Violation {
 	t.Helper()
 	r := openDeclaration(t, data, false)
 	defer r.Close()
@@ -105,7 +105,7 @@ func structDestViolations(t *testing.T, data []byte) []Violation {
 	if err != nil {
 		t.Fatalf("ValidatePDFUAReport: %v", err)
 	}
-	var out []Violation
+	var out []models.Violation
 	for _, v := range violations {
 		if v.Clause == "8.8" {
 			out = append(out, v)

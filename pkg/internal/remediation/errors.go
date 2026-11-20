@@ -19,7 +19,7 @@ var errInlineImageSplice = errors.New("remediation: the repairs of a content str
 var errStructTreeUnread = errors.New("remediation: the structure tree cannot be read whole")
 
 // The reasons a remediation leaves a font unembedded although a font provider
-// is configured ([Options.Fonts]). Each [FontRefusal] wraps one of them.
+// is configured ([Options.Fonts]). Each [models.FontRefusal] wraps one of them.
 var (
 	// ErrFontNotSupplied reports that the provider supplied no program for
 	// the font.

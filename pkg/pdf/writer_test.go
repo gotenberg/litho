@@ -1971,7 +1971,7 @@ func TestPipeline_RemediatePDFUA(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 
-	var report *RemediationReport
+	var report *models.RemediationReport
 	var out bytes.Buffer
 	_, err = NewPipeline().
 		Open(r).

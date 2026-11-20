@@ -19,6 +19,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // maxListedCodes bounds how many codes a refusal names; the rest are counted.
@@ -39,10 +40,10 @@ func matchFontEmbed(v compliance.Violation) bool {
 }
 
 // fixFontEmbed embeds, for each font the document shows without its program,
-// the program [Options.Fonts] supplies, and records a [FontRefusal] for every
-// such font it leaves unembedded. litho ships no font program, so without a
-// provider the fixer does nothing and the embedding rules stay in the
-// residual.
+// the program [Options.Fonts] supplies, and records a [models.FontRefusal] for
+// every such font it leaves unembedded. litho ships no font program, so
+// without a provider the fixer does nothing and the embedding rules stay in
+// the residual.
 //
 // A supplied program replaces the one a viewer substituted, so it is embedded
 // only where it draws what the document showed: a glyph for every code the
@@ -70,7 +71,7 @@ func matchFontEmbed(v compliance.Violation) bool {
 // and so is a font of a subtype that takes no program ([ErrFontKind]).
 //
 // Every font this pass leaves unembedded while it shows text unembedded is
-// listed with a [FontRefusal], one written inline with object number 0.
+// listed with a [models.FontRefusal], one written inline with object number 0.
 //
 // # Corpus evidence
 //
@@ -166,7 +167,7 @@ func fixFontEmbed(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	for _, o := range outcomes {
 		if o.refused != nil {
 			if opts.fonts != nil {
-				opts.fonts.refused = append(opts.fonts.refused, FontRefusal{BaseFont: o.baseFont, Object: o.objNum, Err: o.refused})
+				opts.fonts.refused = append(opts.fonts.refused, models.FontRefusal{BaseFont: o.baseFont, Object: o.objNum, Err: o.refused})
 			}
 			continue
 		}

@@ -1,6 +1,9 @@
 package remediation
 
-import "github.com/gotenberg/litho/pkg/internal/core/ast"
+import (
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/models"
+)
 
 // Options configures remediation behavior.
 type Options struct {
@@ -67,7 +70,7 @@ type flattenLedger struct {
 
 // fontLedger is what one run of [fixFontEmbed] did with the fonts it met.
 type fontLedger struct {
-	refused  []FontRefusal
+	refused  []models.FontRefusal
 	embedded []FontEmbed
 }
 
