@@ -42,8 +42,9 @@ type Limits struct {
 	// stream, is skipped as a damaged one would be. The image codecs,
 	// DCTDecode, JPXDecode and JBIG2Decode, are bounded by MaxImagePixels
 	// instead. An Open function streams a single FlateDecode, LZWDecode or
-	// BrotliDecode filter without holding its output, and that read is not
-	// bounded. Default 256 MiB, at most 4 GiB.
+	// BrotliDecode filter without holding its output, and a read past the
+	// bound fails with [ErrStreamTooLarge] as well. Default 256 MiB, at most
+	// 4 GiB.
 	//
 	// Four further bounds move with it. The content of one page, summed
 	// across the streams of its /Contents array, may take a quarter of it, 64

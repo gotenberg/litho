@@ -383,6 +383,51 @@ func TestLimits_EmbeddedFileBudget(t *testing.T) {
 	}
 }
 
+// TestLimits_StreamBudgetBoundsAnEmbeddedFileRead pins that the Open function
+// of an embedded file under a single FlateDecode filter, which streams its
+// decoded bytes, hands on no more than [Limits.MaxStreamBytes]: past it, the
+// read fails with ErrStreamTooLarge, as an invalid input.
+func TestLimits_StreamBudgetBoundsAnEmbeddedFileRead(t *testing.T) {
+	t.Parallel()
+
+	const budget = 1 << 20
+	var z bytes.Buffer
+	w := zlib.NewWriter(&z)
+	if _, err := w.Write(make([]byte, 3*budget)); err != nil {
+		t.Fatalf("building the stream: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("closing the writer: %v", err)
+	}
+	data := limitsPDF(
+		"<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [(a.bin) 4 0 R] >> >> >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /Filespec /F (a.bin) /EF << /F 5 0 R >> >>",
+		streamObj("/Type /EmbeddedFile /Filter /FlateDecode", z.Bytes()),
+	)
+	read := func(l Limits) (int64, error) {
+		files, err := openLimited(t, data, l).EmbeddedFiles(context.Background())
+		if err != nil || len(files) != 1 {
+			t.Fatalf("EmbeddedFiles = %d files, %v; want one", len(files), err)
+		}
+		rc, err := files[0].Open(context.Background())
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		defer func() { _ = rc.Close() }()
+		return io.Copy(io.Discard, rc)
+	}
+
+	if n, err := read(Limits{}); err != nil || n != 3*budget {
+		t.Errorf("default budget: %d bytes, %v; want %d bytes", n, err, 3*budget)
+	}
+	n, err := read(Limits{MaxStreamBytes: budget})
+	if !errors.Is(err, ErrStreamTooLarge) || !IsInvalidInput(err) || n != budget {
+		t.Errorf("1 MiB budget: %d bytes, %v; want %d bytes and an invalid input wrapping ErrStreamTooLarge", n, err, budget)
+	}
+}
+
 // nestedFormsPDF builds a page that paints /Fm1, which paints /Fm2, which
 // paints /Fm3, which shows the text "Deep" and the image /Deep.
 func nestedFormsPDF() []byte {

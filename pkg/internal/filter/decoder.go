@@ -293,10 +293,10 @@ func (d *Decoder) DecodeStreamUpTo(ctx context.Context, stream ast.PdfStream, st
 // through its filter pipeline, consulting registered plugins for filter names
 // they handle. For a single FlateDecode, LZWDecode or BrotliDecode filter
 // without predictor parameters, the decoded data is streamed without full
-// buffering, and so without the stream budget, which bounds what a decode
-// holds in memory. For other filter configurations, and whenever a plugin
-// claims a filter of the chain, the stream is decoded eagerly into a buffer
-// under d's budgets.
+// buffering, and a read past d's stream budget fails with
+// [ErrDecompressionBomb]. For other filter configurations, and whenever a
+// plugin claims a filter of the chain, the stream is decoded eagerly into a
+// buffer under d's budgets.
 //
 // The caller must close the returned reader when done.
 func (d *Decoder) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
@@ -352,6 +352,7 @@ func (d *Decoder) newStreamReader(ctx context.Context, stream ast.PdfStream, str
 	}
 
 	parms := extractDecodeParms(stream.Dict, len(filters))
+	lim := d.limits()
 
 	// Fast path: single Flate or LZW filter without predictor, true streaming.
 	// A decoder that refuses salvaged data decodes eagerly instead, so that it
@@ -367,7 +368,7 @@ func (d *Decoder) newStreamReader(ctx context.Context, stream ast.PdfStream, str
 			if err != nil {
 				return nil, err
 			}
-			t := &tolerantReader{r: r, c: r, filter: filters[0], tolerate: func(error) bool { return true }}
+			t := &tolerantReader{r: r, c: r, filter: filters[0], limit: lim.MaxStreamBytes, tolerate: func(error) bool { return true }}
 			if !framed {
 				t.endDefect = func() error { return errZlibHeaderDamaged }
 			}
@@ -387,6 +388,7 @@ func (d *Decoder) newStreamReader(ctx context.Context, stream ast.PdfStream, str
 			return &tolerantReader{
 				r:        lr,
 				filter:   filters[0],
+				limit:    lim.MaxStreamBytes,
 				tolerate: func(err error) bool { return err == io.ErrUnexpectedEOF },
 				endDefect: func() error {
 					if lr.eod {
@@ -400,7 +402,12 @@ func (d *Decoder) newStreamReader(ctx context.Context, stream ast.PdfStream, str
 			if err != nil {
 				return nil, err
 			}
-			return io.NopCloser(brotli.NewReader(bytes.NewReader(raw))), nil
+			return &tolerantReader{
+				r:        brotli.NewReader(bytes.NewReader(raw)),
+				filter:   filters[0],
+				limit:    lim.MaxStreamBytes,
+				tolerate: func(error) bool { return false },
+			}, nil
 		}
 	}
 

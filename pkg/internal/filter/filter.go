@@ -681,7 +681,12 @@ type tolerantReader struct {
 	// decoder produced data.
 	endDefect func() error
 	// filter names the filter for the record of a salvage.
-	filter   ast.PdfName
+	filter ast.PdfName
+	// limit bounds the decoded bytes the reader hands on, the stream budget
+	// (limits.Limits.MaxStreamBytes). Past it, Read fails with
+	// [ErrDecompressionBomb], which no tolerate forgives. Zero sets no bound.
+	limit    int64
+	read     int64
 	produced bool
 	salvage  error
 }
@@ -690,6 +695,13 @@ func (t *tolerantReader) Read(p []byte) (int, error) {
 	n, err := t.r.Read(p)
 	if n > 0 {
 		t.produced = true
+	}
+	if t.limit > 0 {
+		t.read += int64(n)
+		if t.read > t.limit {
+			over := int(t.read - t.limit) // fits int: the excess is part of this read's n bytes.
+			return n - over, fmt.Errorf("%s output exceeds %d bytes: %w", string(t.filter), t.limit, ErrDecompressionBomb)
+		}
 	}
 	if err == io.EOF && t.produced && t.endDefect != nil {
 		if defect := t.endDefect(); defect != nil {

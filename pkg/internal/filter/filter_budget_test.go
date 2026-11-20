@@ -5,6 +5,7 @@ import (
 	"compress/zlib"
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -76,5 +77,52 @@ func TestDecoder_LoweredBudgetBoundsPluginsAndCCITT(t *testing.T) {
 	parms := ast.PdfDict{"Columns": ast.PdfInt(8), "Rows": ast.PdfInt(lowBudget + 1)}
 	if _, err := decodeCCITTFax(context.Background(), nil, parms, lowBudget); !errors.Is(err, ErrDecompressionBomb) {
 		t.Errorf("CCITTFaxDecode rows past a 1 MiB budget: err = %v, want ErrDecompressionBomb", err)
+	}
+}
+
+// TestDecoder_LoweredBudgetBoundsTheStreamingReaders pins that the readers
+// NewStreamReader streams, a single FlateDecode, LZWDecode or BrotliDecode
+// filter, hand on no more than the stream budget: a stream of exactly the
+// budget reads whole, and one past it fails with ErrDecompressionBomb after
+// the budget's bytes.
+func TestDecoder_LoweredBudgetBoundsTheStreamingReaders(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		filter   ast.PdfName
+		compress func([]byte) []byte
+		parms    ast.PdfObject
+	}{
+		{"FlateDecode", zlibCompress, nil},
+		// compress/lzw switches code width without PDF's early change.
+		{"LZWDecode", lzwCompress, ast.PdfDict{"EarlyChange": ast.PdfInt(0)}},
+		{"BrotliDecode", brotliCompress, nil},
+	} {
+		t.Run(string(tc.filter), func(t *testing.T) {
+			t.Parallel()
+
+			d := NewDecoder(nil, limits.Limits{MaxStreamBytes: lowBudget})
+			read := func(size int) (int, error) {
+				dict := ast.PdfDict{"Filter": tc.filter}
+				if tc.parms != nil {
+					dict["DecodeParms"] = tc.parms
+				}
+				stream := ast.NewStream(dict, tc.compress(make([]byte, size)))
+				rc, err := d.NewStreamReader(context.Background(), stream)
+				if err != nil {
+					t.Fatalf("NewStreamReader: %v", err)
+				}
+				defer func() { _ = rc.Close() }()
+				n, err := io.Copy(io.Discard, rc)
+				return int(n), err
+			}
+
+			if n, err := read(lowBudget); err != nil || n != lowBudget {
+				t.Errorf("at the budget: %d bytes, %v; want %d bytes", n, err, lowBudget)
+			}
+			if n, err := read(3 * lowBudget); !errors.Is(err, ErrDecompressionBomb) || n != lowBudget {
+				t.Errorf("past the budget: %d bytes, %v; want %d bytes and ErrDecompressionBomb", n, err, lowBudget)
+			}
+		})
 	}
 }
