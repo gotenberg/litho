@@ -67,6 +67,11 @@ type Format struct {
 	// excel reports a format that shows values as Excel does
 	// ([Format.Excel]).
 	excel bool
+	// boolean reports a code that writes TRUE and FALSE in quotes, which
+	// stands for the boolean format (svl zforscan.cxx,
+	// sBooleanEquivalent1 and sBooleanEquivalent2): [Format.WithLocale]
+	// writes the locale's words.
+	boolean bool
 }
 
 // General is the General format.
@@ -85,7 +90,7 @@ func Parse(code string) (*Format, error) {
 	if err != nil {
 		return nil, err
 	}
-	f := &Format{}
+	f := &Format{boolean: code == `"TRUE";"TRUE";"FALSE"` || code == `[>0]"TRUE";[<0]"TRUE";"FALSE"`}
 	for i, p := range parts {
 		p, sys := systemFormat(p)
 		parts[i] = p

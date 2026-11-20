@@ -1337,3 +1337,27 @@ func lang(tag models.Locale) string {
 	}
 	return string(tag)
 }
+
+// TestWithLocale_BooleanEquivalent checks that the code an ODS boolean
+// style reads as writes the locale's words, as Calc writes a boolean style
+// that names no language.
+//
+// # Corpus evidence
+//
+//   - probe, ods: a boolean style of no language prints true and false as
+//     VRAI and FAUX under fr-FR, WAHR under de-DE, TRUE under en-US.
+func TestWithLocale_BooleanEquivalent(t *testing.T) {
+	f, err := Parse(`"TRUE";"TRUE";"FALSE"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		loc  models.Locale
+		v    float64
+		want string
+	}{{models.LocaleFrFR, 1, "VRAI"}, {models.LocaleFrFR, 0, "FAUX"}, {models.LocaleDeDE, 1, "WAHR"}, {"", 1, "TRUE"}} {
+		if got := f.WithLocale(tt.loc).Apply(Value{Kind: Number, Number: tt.v}).Text; got != tt.want {
+			t.Errorf("%s %v: %q, want %q", tt.loc, tt.v, got, tt.want)
+		}
+	}
+}

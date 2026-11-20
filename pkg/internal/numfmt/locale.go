@@ -225,6 +225,16 @@ func (f *Format) WithLocale(loc models.Locale) *Format {
 			c.loc = d
 			c.toks = slices.Clone(c.toks)
 			c.plainSpaces()
+			if f.boolean {
+				for k, t := range c.toks {
+					switch {
+					case t.kind == tLit && t.text == "TRUE":
+						c.toks[k].text = strings.ToUpper(d.trueWord)
+					case t.kind == tLit && t.text == "FALSE":
+						c.toks[k].text = strings.ToUpper(d.falseWord)
+					}
+				}
+			}
 		}
 		out.sections[i] = &c
 	}
