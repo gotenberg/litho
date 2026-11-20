@@ -961,9 +961,10 @@ func WithOnePagePerSheet(one bool) SheetOption {
 // ships: what the file leaves to the system its spreadsheet runs on. It
 // decides the General format, the decimal and thousands separators and
 // the digit grouping, month and day names, AM and PM, the boolean words,
-// the system long date and time ([$-F800], [$-F400]), the built-in date,
-// time, percent and currency formats an XLSX file names by number, the
-// formats of an ODS data style that names no language, and how the
+// the system long date and time ([$-F800], [$-F400]), every built-in
+// format an XLSX file names by number, what an ODS data style that names
+// no language leaves open (the order of an automatic date, the decimal
+// places of a currency, the default form of a number), and how the
 // numbers, currency amounts, booleans, dates and times of a CSV source
 // read under type detection and the formats they take. The values print
 // as LibreOffice Calc prints them under that locale.
@@ -974,8 +975,9 @@ func WithOnePagePerSheet(one bool) SheetOption {
 // characters that separate a CSV source's fields ([WithCSVSeparators]),
 // the page, the fonts or the text's language ([WithDefaultLanguage]).
 // Calendars other than the Gregorian one, such as fa-IR's Persian
-// calendar, and a locale's native digits are not followed: dates print
-// in the Gregorian calendar with Western digits. Excel's own print of an
+// calendar, era years such as ja-JP's, and a locale's native digits are
+// not followed: dates print in the Gregorian calendar with Western
+// digits. Excel's own print of an
 // XLSX source under a locale other than en-US is not followed: it was
 // not measured.
 //
