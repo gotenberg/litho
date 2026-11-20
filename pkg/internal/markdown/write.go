@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/tagging"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 )
@@ -286,7 +287,7 @@ func (w *writer) list(n *node) []block {
 	start := 1
 	if ordered && items[0].label != "" {
 		if digits := leadingDigits.FindString(unescape(items[0].label)); digits != "" {
-			if v, err := strconv.Atoi(digits); err == nil && v < 1_000_000_000 {
+			if v, err := intconv.Atoi(digits); err == nil && v < 1_000_000_000 {
 				start = v
 			}
 		}
