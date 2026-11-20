@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // ErrCompressionDiverged is returned, wrapped, when a stream [CompressStreams]
@@ -23,7 +24,7 @@ type StreamCompression struct {
 	// Limits bounds the pass: a stream whose data passes MaxStreamBytes is
 	// left as it is, and MaxStreamBytes also bounds how many compressed bytes
 	// the pass keeps in memory.
-	Limits limits.Limits
+	Limits models.Limits
 }
 
 // flateFilterEntry is what the /Filter entry adds to a stream's dictionary,
@@ -56,7 +57,7 @@ const flateFilterEntry = len("/Filter /FlateDecode")
 // The caller must not run this on an encrypted document, as for the other
 // compaction passes (see [Compact]).
 func CompressStreams(ctx context.Context, alloc *ObjAllocator, cfg StreamCompression) (int, error) {
-	lim := cfg.Limits.WithDefaults()
+	lim := limits.WithDefaults(cfg.Limits)
 	pending := alloc.Pending()
 
 	nums := make([]int, 0, len(pending))

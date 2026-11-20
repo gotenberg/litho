@@ -8,7 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter"
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // plainContent is a content stream long enough for FlateDecode to shrink it.
@@ -105,7 +105,7 @@ func TestCompressStreams_RecompressesPastTheBudget(t *testing.T) {
 	alloc := NewObjAllocator(0)
 	first := alloc.Alloc(ast.NewStream(ast.PdfDict{}, data))
 	second := alloc.Alloc(ast.NewStream(ast.PdfDict{}, data))
-	if n, err := CompressStreams(ctx, alloc, StreamCompression{Limits: limits.Limits{MaxStreamBytes: int64(len(data))}}); err != nil || n != 2 {
+	if n, err := CompressStreams(ctx, alloc, StreamCompression{Limits: models.Limits{MaxStreamBytes: int64(len(data))}}); err != nil || n != 2 {
 		t.Fatalf("CompressStreams = %d, %v, want 2, nil", n, err)
 	}
 	a, err := alloc.Pending()[first.ObjectNum].(ast.PdfStream).Bytes(ctx)
