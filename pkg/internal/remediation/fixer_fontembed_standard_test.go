@@ -74,7 +74,7 @@ func TestFixFontEmbed_TrueTypeWithoutEncodingKeepsStandardGlyphs(t *testing.T) {
 		{Name: "ntilde", Unicode: 'ñ', Advance: 556},
 		{Name: "ugrave", Unicode: 'ù', Advance: 556},
 	}, NotdefAdvance: 500}.Build()
-	provider := func(_ context.Context, _ FontRequest) ([]byte, error) { return program, nil }
+	provider := func(_ context.Context, _ models.FontRequest) ([]byte, error) { return program, nil }
 
 	doc, alloc := newTestDoc(t, data)
 	before := pageText(t, doc)

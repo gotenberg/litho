@@ -49,7 +49,7 @@ type OpenOption func(*openOpts)
 type openOpts struct {
 	logger    *slog.Logger
 	password  string
-	ocr       models.OCREngine
+	ocr       plugins.OCREngine
 	filters   []plugins.FilterDecoder
 	ciiFS     fs.FS  // nil unless WithCIISchemas was supplied
 	ciiRoot   string // schema root path within ciiFS
@@ -89,7 +89,7 @@ func WithPassword(password string) OpenOption {
 // WithOCREngine injects an OCR backend (e.g., Tesseract, Google Cloud Vision).
 // When set, [Reader.ExtractText] automatically hands off scanned image pages to the
 // OCR engine instead of returning [ErrRequiresOCR].
-func WithOCREngine(engine models.OCREngine) OpenOption {
+func WithOCREngine(engine plugins.OCREngine) OpenOption {
 	return func(o *openOpts) {
 		o.ocr = engine
 	}
@@ -236,7 +236,7 @@ func checkCMYKProfile(profile []byte) error {
 // must not be called concurrently with other Reader methods.
 type Reader struct {
 	doc    *document.Document
-	ocr    models.OCREngine
+	ocr    plugins.OCREngine
 	closer io.Closer // non-nil when opened via OpenFile
 	// pagesMu serializes the walks of the page tree; pages holds the result
 	// of the first one that ran to its end (see [Reader.resolvePages]).
@@ -1116,97 +1116,10 @@ type BookmarkGenerationOptions struct {
 	// HeadingScorer scores heading candidates. When nil, the default
 	// heuristic scorer is used. Replace this for ML-based or custom
 	// heading detection.
-	HeadingScorer HeadingScorer
+	HeadingScorer plugins.HeadingScorer
 	// HeadingScoreThreshold is the minimum score for a candidate to be
 	// included as a heading, from 0 to 1. Zero selects the default 0.5.
 	HeadingScoreThreshold float64
-}
-
-// HeadingScorer assigns a heading-likelihood score to a candidate line.
-// Scores are in [0, 1]; values >= 0.5 are treated as headings.
-// Implementations may use any algorithm (rule-based, statistical, ML).
-//
-// The interface is owned by the [pdf] package so callers never have to
-// import an internal path. An internal adapter translates candidates
-// from the engine's shape to [HeadingCandidate] before each Score call.
-// Implementations must be safe for concurrent use.
-type HeadingScorer interface {
-	// Score returns the heading likelihood of candidate, in [0, 1].
-	Score(candidate HeadingCandidate) float64
-}
-
-// HeadingScript classifies a candidate's dominant script. Scorers can
-// use it to pick script-specific heuristics (for example, CJK headings
-// have different length and punctuation conventions than Latin).
-// HeadingScript values are immutable and safe for concurrent use.
-type HeadingScript string
-
-// Heading-script constants mirror the engine's detected script set.
-const (
-	HeadingScriptLatin      HeadingScript = "Latin"
-	HeadingScriptCJK        HeadingScript = "CJK"
-	HeadingScriptCyrillic   HeadingScript = "Cyrillic"
-	HeadingScriptArabic     HeadingScript = "Arabic"
-	HeadingScriptDevanagari HeadingScript = "Devanagari"
-	HeadingScriptThai       HeadingScript = "Thai"
-	HeadingScriptOther      HeadingScript = "Other"
-)
-
-// HeadingCandidate is the input passed to a [HeadingScorer]. It holds
-// the reconstructed line text plus structural features that distinguish
-// headings from body text.
-// Concurrent reads of a value are safe; a write needs synchronization.
-type HeadingCandidate struct {
-	// Text is the reconstructed line text.
-	Text string
-	// FontSize is the page-space font size of the line.
-	FontSize float64
-	// BodySize is the detected body text size for the document (or 0
-	// if unknown).
-	BodySize float64
-	// PageNum is the 1-based page number where the line appears.
-	PageNum int
-	// CharCount is the number of characters in Text after normalization.
-	CharCount int
-	// IsBold indicates the line uses a bold font.
-	IsBold bool
-	// HasNumbering indicates the line starts with a section-number prefix.
-	HasNumbering bool
-	// NumberingDepth is the depth implied by the numbering (1 for "1",
-	// 2 for "1.1", etc.). 0 if no numbering.
-	NumberingDepth int
-	// Script is the dominant script of the text.
-	Script HeadingScript
-}
-
-// headingScorerAdapter wraps a public [HeadingScorer] so it satisfies
-// the internal [bookmarks.HeadingScorer] interface. Each Score call
-// translates the internal candidate shape to the public one, so the
-// user's scorer never sees an internal type.
-type headingScorerAdapter struct{ inner HeadingScorer }
-
-func (a headingScorerAdapter) Score(c bookmarks.HeadingCandidate) float64 {
-	return a.inner.Score(HeadingCandidate{
-		Text:           c.Text,
-		FontSize:       c.FontSize,
-		BodySize:       c.BodySize,
-		PageNum:        c.PageNum,
-		CharCount:      c.CharCount,
-		IsBold:         c.IsBold,
-		HasNumbering:   c.HasNumbering,
-		NumberingDepth: c.NumberingDepth,
-		Script:         HeadingScript(bookmarks.ScriptName(c.Script)),
-	})
-}
-
-// adaptHeadingScorer returns the internal scorer interface, or nil if
-// the public scorer is nil so downstream callers fall back to the
-// default heuristic.
-func adaptHeadingScorer(s HeadingScorer) bookmarks.HeadingScorer {
-	if s == nil {
-		return nil
-	}
-	return headingScorerAdapter{inner: s}
 }
 
 // GenerateBookmarks analyzes the document content and returns an
@@ -1234,7 +1147,7 @@ func (r *Reader) GenerateBookmarks(ctx context.Context, opts BookmarkGenerationO
 // validate refuses a field out of range with [ErrInvalidBookmarkOptions].
 // Zero selects the default of every numeric field, so only a negative or
 // non-finite value is refused, and a HeadingScoreThreshold above 1, since a
-// [HeadingScorer] scores in [0, 1] and no candidate could reach it.
+// [plugins.HeadingScorer] scores in [0, 1] and no candidate could reach it.
 func (o BookmarkGenerationOptions) validate() error {
 	switch {
 	case o.MaxDepth < 0:

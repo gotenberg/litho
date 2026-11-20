@@ -94,7 +94,7 @@ func subsetSerif() []byte {
 
 // subsetProvider supplies subsetSans, with fsType, and subsetSerif.
 func subsetProvider(fsType uint16) programFunc {
-	return func(_ context.Context, req FontRequest) ([]byte, error) {
+	return func(_ context.Context, req models.FontRequest) ([]byte, error) {
 		switch req.BaseFont {
 		case "Helvetica", "ArialMT":
 			return subsetSans(fsType), nil
@@ -343,7 +343,7 @@ func TestFixFontEmbed_SubsetsCompositeFonts(t *testing.T) {
 		}.Build()
 	}
 	provider := func(fsType uint16) programFunc {
-		return func(context.Context, FontRequest) ([]byte, error) { return program(fsType), nil }
+		return func(context.Context, models.FontRequest) ([]byte, error) { return program(fsType), nil }
 	}
 	data := compositePDF("UniJIS-UCS2-H", "Japan1")
 	for _, profile := range []string{string(models.PDFA1b), string(models.PDFA2b)} {
@@ -435,7 +435,7 @@ func TestFixFontEmbed_FontsShareOneSubset(t *testing.T) {
 		trueTypeFont("ArialMT", 667, 667),
 		trueTypeFont("Arial-BoldMT", 667, 667),
 	)
-	provider := func(context.Context, FontRequest) ([]byte, error) { return subsetSans(0), nil }
+	provider := func(context.Context, models.FontRequest) ([]byte, error) { return subsetSans(0), nil }
 	report, doc, _ := remediateFontsAndReopen(t, data, string(models.PDFA2b), provider)
 	if len(report.FontRefusals) != 0 {
 		t.Fatalf("refusals %v", report.FontRefusals)
@@ -477,7 +477,7 @@ func TestFixFontEmbed_EncodingsKeepOwnPrograms(t *testing.T) {
 		strings.Replace(trueTypeFont("Arial-BoldMT", 667, 667), "/WinAnsiEncoding", "/MacRomanEncoding", 1),
 		trueTypeFont("Arial-ItalicMT", 667, 667),
 	)
-	provider := func(context.Context, FontRequest) ([]byte, error) { return subsetSans(0), nil }
+	provider := func(context.Context, models.FontRequest) ([]byte, error) { return subsetSans(0), nil }
 	for _, whole := range []bool{false, true} {
 		report, doc, _ := remediateWithOptionsAndReopen(t, data, string(models.PDFA2b), Options{PreserveContent: true, Fonts: oneProgram(provider), WholeFonts: whole})
 		if len(report.FontRefusals) != 0 {
@@ -529,7 +529,7 @@ func TestFixFontEmbed_InlineFontSharesSubset(t *testing.T) {
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(stream), stream),
 		trueTypeFont("ArialMT", 667, 667),
 	)
-	provider := func(context.Context, FontRequest) ([]byte, error) { return subsetSans(0), nil }
+	provider := func(context.Context, models.FontRequest) ([]byte, error) { return subsetSans(0), nil }
 	for _, profile := range []string{string(models.PDFA1b), string(models.PDFA2b)} {
 		report, doc, _ := remediateFontsAndReopen(t, data, profile, provider)
 		if len(report.FontRefusals) != 0 {
@@ -596,7 +596,7 @@ func TestFixFontEmbed_InlineFontKeepsSharedDescriptorWhole(t *testing.T) {
 		font("ArialMT"),
 		descriptor,
 	)
-	provider := func(_ context.Context, req FontRequest) ([]byte, error) {
+	provider := func(_ context.Context, req models.FontRequest) ([]byte, error) {
 		if req.BaseFont == "ArialMT" {
 			return subsetSans(0), nil
 		}

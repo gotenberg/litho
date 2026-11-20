@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // TestPipelineEncryptsItsOutputAcrossARestructuringStage pins that an
@@ -279,12 +280,12 @@ func TestPipelineRefusesWhatAnEncryptedWriterRefusesAcrossARestructuringStage(t 
 	encrypt := func(_ context.Context, w *Writer) error { w.Encrypt(cfg); return nil }
 	for _, tc := range []struct {
 		name  string
-		build func(src *Reader, signer Signer) *Pipeline
+		build func(src *Reader, signer plugins.Signer) *Pipeline
 		want  error
 	}{
 		{
 			name: "a signature after the split",
-			build: func(src *Reader, signer Signer) *Pipeline {
+			build: func(src *Reader, signer plugins.Signer) *Pipeline {
 				return NewPipeline().Open(src).Apply(encrypt).Split([]int{1}).
 					Apply(func(_ context.Context, w *Writer) error { w.Sign(signer); return nil })
 			},
@@ -292,7 +293,7 @@ func TestPipelineRefusesWhatAnEncryptedWriterRefusesAcrossARestructuringStage(t 
 		},
 		{
 			name: "a signature beside the encryption, before the split",
-			build: func(src *Reader, signer Signer) *Pipeline {
+			build: func(src *Reader, signer plugins.Signer) *Pipeline {
 				return NewPipeline().Open(src).
 					Apply(func(ctx context.Context, w *Writer) error { w.Sign(signer); return encrypt(ctx, w) }).
 					Split([]int{1})
@@ -301,7 +302,7 @@ func TestPipelineRefusesWhatAnEncryptedWriterRefusesAcrossARestructuringStage(t 
 		},
 		{
 			name: "a PDF/A remediation after the split",
-			build: func(src *Reader, _ Signer) *Pipeline {
+			build: func(src *Reader, _ plugins.Signer) *Pipeline {
 				return NewPipeline().Open(src).Apply(encrypt).Split([]int{1}).
 					Apply(func(ctx context.Context, w *Writer) error {
 						_, err := w.RemediatePDFA(ctx, models.PDFA2b)

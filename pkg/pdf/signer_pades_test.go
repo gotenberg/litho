@@ -11,11 +11,12 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // wrappedSigner hides the signer of NewSigner behind the Signer interface, so
 // the Writer treats it as a caller's own implementation.
-type wrappedSigner struct{ Signer }
+type wrappedSigner struct{ plugins.Signer }
 
 // oidSigningTime is the CMS signing-time attribute (RFC 5652, 11.3).
 var oidSigningTime = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 5}

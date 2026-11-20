@@ -66,7 +66,7 @@ func TestFixFontEmbed_FitsTheCmapOfAMacintoshProgram(t *testing.T) {
 			strings.Replace(strings.Replace(descriptor, "%s", "MacSymbol", 1), "%d", "4", 1),
 	)
 	unicode := macintoshProgram(t, sansProgram(0, 667, 667), truetype.CmapSubtable{PlatformID: 3, EncodingID: 1})
-	provider := func(_ context.Context, _ FontRequest) ([]byte, error) { return unicode, nil }
+	provider := func(_ context.Context, _ models.FontRequest) ([]byte, error) { return unicode, nil }
 	for _, profile := range []models.PDFAProfile{models.PDFA1b, models.PDFA2b} {
 		doc, alloc := newTestDoc(t, data)
 		report, err := RemediatePDFA(context.Background(), doc, alloc, profile, Options{PreserveContent: true, Fonts: oneProgram(provider)})
@@ -121,7 +121,7 @@ func TestFixFontEmbed_SymbolicType1OverTrueType(t *testing.T) {
 		{"codes the program maps elsewhere", symbolProgram(true, ""), nil},
 		{"a name no glyph bears", symbolProgram(false, "Beta"), ErrFontCoverage},
 	} {
-		provider := func(_ context.Context, _ FontRequest) ([]byte, error) { return tc.prog, nil }
+		provider := func(_ context.Context, _ models.FontRequest) ([]byte, error) { return tc.prog, nil }
 		for _, profile := range []models.PDFAProfile{models.PDFA1b, models.PDFA2b} {
 			doc, alloc := newTestDoc(t, data)
 			report, err := RemediatePDFA(context.Background(), doc, alloc, profile, Options{PreserveContent: true, Fonts: oneProgram(provider)})

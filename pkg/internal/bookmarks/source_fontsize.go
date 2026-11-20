@@ -114,7 +114,7 @@ func GenerateFromFontSize(ctx context.Context, pages []PageTextElements, opts Op
 			}
 		}
 
-		hc := HeadingCandidate{
+		hc := models.HeadingCandidate{
 			Text:           c.text,
 			FontSize:       c.fontSize,
 			BodySize:       bodySize,
@@ -123,7 +123,7 @@ func GenerateFromFontSize(ctx context.Context, pages []PageTextElements, opts Op
 			IsBold:         c.isBold,
 			HasNumbering:   c.hasNumbering,
 			NumberingDepth: c.numberingDepth,
-			Script:         script,
+			Script:         script.heading(),
 		}
 		c.score = opts.Scorer.Score(hc)
 		if c.score < opts.ScoreThreshold {

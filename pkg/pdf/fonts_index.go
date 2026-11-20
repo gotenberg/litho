@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/remediation"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // maxFontFileBytes bounds the size of a font program [WithFontFiles] and
@@ -52,9 +53,9 @@ const maxFontWalkEntries = 1 << 18
 // faces read under 16 MiB.
 const maxFontIndexBytes = 64 << 20
 
-// fontFiles is the [FontProvider] of [WithFontFiles] and [WithSystemFonts].
-// Its index is built once, under mu, and read-only after, so concurrent
-// remediations share it.
+// fontFiles is the [github.com/gotenberg/litho/pkg/plugins.FontProvider] of
+// [WithFontFiles] and [WithSystemFonts]. Its index is built once, under mu,
+// and read-only after, so concurrent remediations share it.
 type fontFiles struct {
 	// list returns the font files to index, in the order a tie between
 	// matches is broken, as keys open takes.
@@ -99,13 +100,13 @@ func newFontFiles(fsys fs.FS) *fontFiles {
 }
 
 // FontProgram returns the program of the best indexed match for req.
-func (f *fontFiles) FontProgram(ctx context.Context, req FontRequest) ([]byte, error) {
+func (f *fontFiles) FontProgram(ctx context.Context, req models.FontRequest) ([]byte, error) {
 	return f.program(ctx, nil, req)
 }
 
 // program returns the program of the best indexed match for req, logging to
 // logger, which may be nil, what it skips.
-func (f *fontFiles) program(ctx context.Context, logger *slog.Logger, req FontRequest) ([]byte, error) {
+func (f *fontFiles) program(ctx context.Context, logger *slog.Logger, req models.FontRequest) ([]byte, error) {
 	logger = orDiscard(logger)
 	files, err := f.index(ctx, logger)
 	if err != nil {
@@ -121,7 +122,7 @@ func (f *fontFiles) program(ctx context.Context, logger *slog.Logger, req FontRe
 // candidates returns a reader for the program of every indexed match for req,
 // best first ([matchFontFiles]), logging to logger what it skips. Each reads
 // its program when the remediation reaches it.
-func (f *fontFiles) candidates(ctx context.Context, logger *slog.Logger, req FontRequest) ([]remediation.FontCandidate, error) {
+func (f *fontFiles) candidates(ctx context.Context, logger *slog.Logger, req models.FontRequest) ([]remediation.FontCandidate, error) {
 	logger = orDiscard(logger)
 	files, err := f.index(ctx, logger)
 	if err != nil {

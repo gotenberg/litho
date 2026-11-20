@@ -3,6 +3,8 @@ package bookmarks
 import (
 	"regexp"
 	"unicode"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // scriptKind classifies a piece of text by dominant script.
@@ -18,27 +20,25 @@ const (
 	scriptOther
 )
 
-// ScriptName returns a stable string identifier for a [scriptKind] so
-// that pkg/pdf (which cannot name [scriptKind] directly) can translate
-// a [HeadingCandidate.Script] value into its own public enum.
-func ScriptName(k scriptKind) string {
+// heading returns the [models.HeadingScript] that names k.
+func (k scriptKind) heading() models.HeadingScript {
 	switch k {
 	case scriptLatin:
-		return "Latin"
+		return models.HeadingScriptLatin
 	case scriptCJK:
-		return "CJK"
+		return models.HeadingScriptCJK
 	case scriptCyrillic:
-		return "Cyrillic"
+		return models.HeadingScriptCyrillic
 	case scriptArabic:
-		return "Arabic"
+		return models.HeadingScriptArabic
 	case scriptDevanagari:
-		return "Devanagari"
+		return models.HeadingScriptDevanagari
 	case scriptThai:
-		return "Thai"
+		return models.HeadingScriptThai
 	case scriptOther:
-		return "Other"
+		return models.HeadingScriptOther
 	}
-	return "Other"
+	return models.HeadingScriptOther
 }
 
 // detectScript returns the dominant script of the given text by counting
@@ -92,15 +92,15 @@ var (
 
 // matchLanguagePattern returns true if the text matches a language-specific
 // heading pattern.
-func matchLanguagePattern(text string, script scriptKind) bool {
+func matchLanguagePattern(text string, script models.HeadingScript) bool {
 	switch script {
-	case scriptCJK:
+	case models.HeadingScriptCJK:
 		return reCJKChapter.MatchString(text) || reKoreanChapter.MatchString(text)
-	case scriptCyrillic:
+	case models.HeadingScriptCyrillic:
 		return reRussianChapter.MatchString(text)
-	case scriptArabic:
+	case models.HeadingScriptArabic:
 		return reArabicChapter.MatchString(text)
-	case scriptLatin, scriptDevanagari, scriptThai, scriptOther:
+	case models.HeadingScriptLatin, models.HeadingScriptDevanagari, models.HeadingScriptThai, models.HeadingScriptOther:
 		return false
 	}
 	return false

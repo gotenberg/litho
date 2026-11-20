@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 func TestSystemFontDirs(t *testing.T) {
@@ -163,7 +165,7 @@ func TestWithSystemFonts_ComesAfterTheCallersFonts(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	callers := FontProviderFunc(func(_ context.Context, req FontRequest) ([]byte, error) {
+	callers := plugins.FontProviderFunc(func(_ context.Context, req models.FontRequest) ([]byte, error) {
 		if req.BaseFont == "Helvetica-Bold" {
 			return abProgram("CallerSans-Bold", "Caller Sans", "Bold", 722, 722), nil
 		}
@@ -190,7 +192,7 @@ func TestWithSystemFonts_MintsItsOwnID(t *testing.T) {
 	t.Parallel()
 	data := readLithoFixture(t, "filestruct_1b.pdf")
 	ctx := context.Background()
-	never := WithFontProvider(FontProviderFunc(func(context.Context, FontRequest) ([]byte, error) { return nil, nil }))
+	never := WithFontProvider(plugins.FontProviderFunc(func(context.Context, models.FontRequest) ([]byte, error) { return nil, nil }))
 	id := func(opts ...RemediateOption) string {
 		t.Helper()
 		out, err := remediateFixture(ctx, data, "PDF/A-1b", opts...)

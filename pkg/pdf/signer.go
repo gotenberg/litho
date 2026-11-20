@@ -13,27 +13,29 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/pkcs12"
 	"github.com/gotenberg/litho/pkg/internal/signature"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
-// builtinSigner is the [Signer] [NewSigner] returns. It is safe for concurrent
-// use when its key is.
+// builtinSigner is the [plugins.Signer] [NewSigner] returns. It is safe for
+// concurrent use when its key is.
 type builtinSigner struct {
 	cms *signature.CMSSigner
 }
 
-// NewSigner returns a [Signer] that signs with key as the subject of cert and
-// writes a detached CMS SignedData (RFC 5652), the adbe.pkcs7.detached
-// signature of ISO 32000-1, 12.8.3.3: SHA-256, with the content-type,
-// signing-time, message-digest and ESS signing-certificate-v2 (RFC 5035)
-// signed attributes, and cert followed by chain in its certificates. chain is
-// the intermediate certificates a verifier needs to reach a trusted root, in
-// any order; duplicates and cert itself are dropped. [WithPAdES] makes it the
-// CAdES signature of a PAdES baseline signature instead.
+// NewSigner returns a [plugins.Signer] that signs with key as the subject of
+// cert and writes a detached CMS SignedData (RFC 5652), the
+// adbe.pkcs7.detached signature of ISO 32000-1, 12.8.3.3: SHA-256, with the
+// content-type, signing-time, message-digest and ESS signing-certificate-v2
+// (RFC 5035) signed attributes, and cert followed by chain in its
+// certificates. chain is the intermediate certificates a verifier needs to
+// reach a trusted root, in any order; duplicates and cert itself are dropped.
+// [WithPAdES] makes it the CAdES signature of a PAdES baseline signature
+// instead.
 //
 // key is an RSA key, signed with PKCS #1 v1.5, or an ECDSA key on P-256,
 // P-384 or P-521. It is a [crypto.Signer], so a key held in an HSM or a cloud
 // key service works when its client implements that interface. For any other
-// scheme implement [Signer] directly.
+// scheme implement [plugins.Signer] directly.
 //
 // The signature carries an RFC 3161 timestamp only with
 // [WithTimestampAuthority], which reaches the authority over the network.
@@ -42,7 +44,7 @@ type builtinSigner struct {
 // [ErrSignerKeyMismatch] when key does not match cert, and
 // [ErrSignerCertificateUsage] when cert's key usage excludes signing. The
 // Signer is safe for concurrent use when key is.
-func NewSigner(cert *x509.Certificate, key crypto.Signer, chain ...*x509.Certificate) (Signer, error) {
+func NewSigner(cert *x509.Certificate, key crypto.Signer, chain ...*x509.Certificate) (plugins.Signer, error) {
 	cms, err := signature.NewCMSSigner(cert, key, chain)
 	if err != nil {
 		return nil, fmt.Errorf("building the signer: %w", err)
@@ -50,10 +52,10 @@ func NewSigner(cert *x509.Certificate, key crypto.Signer, chain ...*x509.Certifi
 	return &builtinSigner{cms: cms}, nil
 }
 
-// ParseSignerPEM returns the [Signer] of [NewSigner] from PEM data: certPEM
-// holds the signing certificate and, optionally, its chain, and keyPEM the
-// private key, in PKCS #8 (PRIVATE KEY), PKCS #1 (RSA PRIVATE KEY) or SEC 1
-// (EC PRIVATE KEY) form. The certificate whose public key matches the key
+// ParseSignerPEM returns the [plugins.Signer] of [NewSigner] from PEM data:
+// certPEM holds the signing certificate and, optionally, its chain, and keyPEM
+// the private key, in PKCS #8 (PRIVATE KEY), PKCS #1 (RSA PRIVATE KEY) or SEC
+// 1 (EC PRIVATE KEY) form. The certificate whose public key matches the key
 // signs, and the others form its chain. Blocks of other types are skipped, so
 // one file holding the key and the certificates may be passed as both.
 //
@@ -62,7 +64,7 @@ func NewSigner(cert *x509.Certificate, key crypto.Signer, chain ...*x509.Certifi
 // [NewSigner]. Input with no certificate, no key or more than one key, or a
 // block that does not parse, returns [ErrSignerPEM]. It returns the errors of
 // [NewSigner] too.
-func ParseSignerPEM(certPEM, keyPEM []byte) (Signer, error) {
+func ParseSignerPEM(certPEM, keyPEM []byte) (plugins.Signer, error) {
 	var certs []*x509.Certificate
 	for block, rest := pem.Decode(certPEM); block != nil; block, rest = pem.Decode(rest) {
 		if block.Type != "CERTIFICATE" {
@@ -85,11 +87,11 @@ func ParseSignerPEM(certPEM, keyPEM []byte) (Signer, error) {
 	return signerOfKey(key, certs)
 }
 
-// ParseSignerPKCS12 returns the [Signer] of [NewSigner] from a PKCS #12 key
-// store (RFC 7292) under password: the .p12 or .pfx file that certificate
-// authorities, browsers and operating systems export. The store holds one
-// private key. The certificate whose public key matches it signs, and the
-// store's other certificates form its chain.
+// ParseSignerPKCS12 returns the [plugins.Signer] of [NewSigner] from a PKCS
+// #12 key store (RFC 7292) under password: the .p12 or .pfx file that
+// certificate authorities, browsers and operating systems export. The store
+// holds one private key. The certificate whose public key matches it signs,
+// and the store's other certificates form its chain.
 //
 // The password verifies the store's MAC (HMAC over SHA-1 or SHA-2, keyed by
 // the derivation of RFC 7292, Appendix B) and decrypts its content: PBES2
@@ -103,7 +105,7 @@ func ParseSignerPEM(certPEM, keyPEM []byte) (Signer, error) {
 // states an iteration count over 2^21, exceeds 1 MiB, or holds no private
 // key, more than one, or no certificate. It returns [ErrSignerKeyMismatch]
 // when no certificate is the key's, and the errors of [NewSigner].
-func ParseSignerPKCS12(data []byte, password string) (_ Signer, err error) {
+func ParseSignerPKCS12(data []byte, password string) (_ plugins.Signer, err error) {
 	defer recoverToError(nil, "ParseSignerPKCS12", &err)
 	contents, err := pkcs12.Decode(data, password)
 	if errors.Is(err, pkcs12.ErrIncorrectPassword) {
@@ -125,9 +127,9 @@ func ParseSignerPKCS12(data []byte, password string) (_ Signer, err error) {
 	return signerOfKey(key, contents.Certificates)
 }
 
-// signerOfKey returns the [Signer] of [NewSigner] for key, signing as the
-// certificate of certs whose public key is key's, the others its chain.
-func signerOfKey(key crypto.Signer, certs []*x509.Certificate) (Signer, error) {
+// signerOfKey returns the [plugins.Signer] of [NewSigner] for key, signing as
+// the certificate of certs whose public key is key's, the others its chain.
+func signerOfKey(key crypto.Signer, certs []*x509.Certificate) (plugins.Signer, error) {
 	leaf := -1
 	for i, c := range certs {
 		if pub, ok := key.Public().(interface{ Equal(crypto.PublicKey) bool }); ok && pub.Equal(c.PublicKey) {
@@ -244,12 +246,11 @@ func WithSignerName(name string) SignOption {
 }
 
 // WithSigningTime sets the /M signing time, and the signing-time attribute of
-// the SignedData when the [Signer] is the one of [NewSigner] and [WithPAdES],
-// which writes none, is not given. Without it both record the time of
-// [Writer.WriteTo]. A fixed time, with a deterministic
-// signature scheme such as RSA PKCS #1 v1.5, makes the signed output
-// reproducible byte for byte. The time is the signer's claim, not a trusted
-// timestamp.
+// the SignedData when the [plugins.Signer] is the one of [NewSigner] and
+// [WithPAdES], which writes none, is not given. Without it both record the
+// time of [Writer.WriteTo]. A fixed time, with a deterministic signature
+// scheme such as RSA PKCS #1 v1.5, makes the signed output reproducible byte
+// for byte. The time is the signer's claim, not a trusted timestamp.
 func WithSigningTime(t time.Time) SignOption {
 	return func(o *signOpts) { o.info.Time = t }
 }
@@ -269,8 +270,8 @@ func WithSigningTime(t time.Time) SignOption {
 // ESIC entry, and a level includes the ones below it.
 //
 // The signer of [NewSigner] builds that SignedData. The SignedData of another
-// [Signer] is checked, and [Writer.WriteTo] returns [ErrSignatureNotPAdES]
-// when it does not qualify.
+// [plugins.Signer] is checked, and [Writer.WriteTo] returns
+// [ErrSignatureNotPAdES] when it does not qualify.
 //
 // With [WithTimestampAuthority] the signature reaches level B-T, and with
 // [WithLTV] as well, B-LT.
@@ -286,7 +287,7 @@ func WithPAdES() SignOption {
 // status, the nonce, the imprint, and a signature by a certificate restricted
 // to timestamping, RFC 3161, 2.3 and 2.4.2), and adds it to the SignerInfo's
 // unsigned attributes as the signature-time-stamp attribute (RFC 3161,
-// Appendix A). It works with any [Signer] returning a DER SignedData.
+// Appendix A). It works with any [plugins.Signer] returning a DER SignedData.
 //
 // Each exchange is bounded by ctx and by a one-minute timeout, and the answer
 // by a size cap. An authority that cannot be reached, refuses, or answers
@@ -322,7 +323,7 @@ func WithTimestampAuthority(url string) SignOption {
 //
 // The seed value subfilters are in preference order, and the first litho
 // writes is the one the signature takes. The following case applies when the
-// subfilter is ETSI.CAdES.detached and a [Signer] other than the one of
+// subfilter is ETSI.CAdES.detached and a [plugins.Signer] other than the one of
 // [NewSigner] returns a SignedData that is not a CAdES one (see [WithPAdES]):
 //
 //   - A list that is a recommendation lets [Writer.WriteTo] call the Signer

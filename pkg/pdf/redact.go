@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/flatten"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/render/glyph"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // RedactRegion names an area of one page whose content is to be removed.
@@ -134,7 +135,7 @@ type redactOpts struct {
 	noOutlines bool
 	// outlineProviders are the substitute fonts [WithRedactionGlyphOutlines]
 	// was given.
-	outlineProviders []FontProvider
+	outlineProviders []plugins.FontProvider
 }
 
 // redactGlyphOutlines is how a redaction selects glyphs by their outlines

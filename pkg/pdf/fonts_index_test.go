@@ -10,6 +10,7 @@ import (
 	"testing/fstest"
 
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestWithFontFiles_EmbedsAFaceOfACollection pins that a face of a TrueType
@@ -48,7 +49,7 @@ func TestMatchFontFile_PrefersRegularAndBoldWeights(t *testing.T) {
 		{"Helvetica-Light", "light.ttc"},
 	} {
 		got := ""
-		if f := matchFontFile(files, FontRequest{BaseFont: tc.base, Subtype: "TrueType"}); f != nil {
+		if f := matchFontFile(files, models.FontRequest{BaseFont: tc.base, Subtype: "TrueType"}); f != nil {
 			got = f.path
 		}
 		if got != tc.want {
@@ -75,26 +76,26 @@ func TestMatchFontFile_KeepsTheStyle(t *testing.T) {
 		{path: "arialblack.ttf", psName: "arialblack", family: "arialblack", bold: true, weight: 900},
 	}
 	for _, tc := range []struct {
-		req  FontRequest
+		req  models.FontRequest
 		want string
 	}{
 		// A width word names another family, here a metric-compatible one.
-		{FontRequest{BaseFont: "Helvetica-Narrow", Subtype: "Type1"}, "arialnarrow.ttf"},
-		{FontRequest{BaseFont: "Futura-Bold", Subtype: "Type1"}, "futurabold.ttc"},
-		{FontRequest{BaseFont: "Futura-CondensedBold", Subtype: "Type1"}, "futuracondensed.ttc"},
-		{FontRequest{BaseFont: "Futura", Subtype: "Type1"}, "futura.ttc"},
+		{models.FontRequest{BaseFont: "Helvetica-Narrow", Subtype: "Type1"}, "arialnarrow.ttf"},
+		{models.FontRequest{BaseFont: "Futura-Bold", Subtype: "Type1"}, "futurabold.ttc"},
+		{models.FontRequest{BaseFont: "Futura-CondensedBold", Subtype: "Type1"}, "futuracondensed.ttc"},
+		{models.FontRequest{BaseFont: "Futura", Subtype: "Type1"}, "futura.ttc"},
 		// A weight word the family has no face of matches no face.
-		{FontRequest{BaseFont: "Helvetica-Black", Subtype: "Type1"}, ""},
-		{FontRequest{BaseFont: "Futura-Light", Subtype: "Type1"}, ""},
-		{FontRequest{BaseFont: "Futura-Book", Subtype: "Type1"}, ""},
-		{FontRequest{BaseFont: "Futura-Heavy", Subtype: "Type1"}, ""},
+		{models.FontRequest{BaseFont: "Helvetica-Black", Subtype: "Type1"}, ""},
+		{models.FontRequest{BaseFont: "Futura-Light", Subtype: "Type1"}, ""},
+		{models.FontRequest{BaseFont: "Futura-Book", Subtype: "Type1"}, ""},
+		{models.FontRequest{BaseFont: "Futura-Heavy", Subtype: "Type1"}, ""},
 		// The Italic flag asks for the italic face, and never removes the
 		// italic a name states.
-		{FontRequest{BaseFont: "TimesNewRoman", Subtype: "TrueType", Flags: fontFlagItalic}, "timesitalic.ttf"},
-		{FontRequest{BaseFont: "TimesNewRoman,Italic", Subtype: "TrueType"}, "timesitalic.ttf"},
-		{FontRequest{BaseFont: "TimesNewRoman", Subtype: "TrueType"}, "times.ttf"},
+		{models.FontRequest{BaseFont: "TimesNewRoman", Subtype: "TrueType", Flags: fontFlagItalic}, "timesitalic.ttf"},
+		{models.FontRequest{BaseFont: "TimesNewRoman,Italic", Subtype: "TrueType"}, "timesitalic.ttf"},
+		{models.FontRequest{BaseFont: "TimesNewRoman", Subtype: "TrueType"}, "times.ttf"},
 		// The PostScript name still matches whatever the weight.
-		{FontRequest{BaseFont: "ArialBlack", Subtype: "TrueType"}, "arialblack.ttf"},
+		{models.FontRequest{BaseFont: "ArialBlack", Subtype: "TrueType"}, "arialblack.ttf"},
 	} {
 		got := ""
 		if f := matchFontFile(files, tc.req); f != nil {
@@ -187,10 +188,10 @@ func TestFontFiles_CancelledIndexIsNotKept(t *testing.T) {
 	f := newFontFiles(fstest.MapFS{"a.ttf": {Data: abProgram("TestSans", "Test Sans", "Regular", 667, 667)}})
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := f.FontProgram(cancelled, FontRequest{BaseFont: "TestSans"}); !errors.Is(err, context.Canceled) {
+	if _, err := f.FontProgram(cancelled, models.FontRequest{BaseFont: "TestSans"}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("FontProgram under a cancelled ctx: err = %v, want context.Canceled", err)
 	}
-	program, err := f.FontProgram(context.Background(), FontRequest{BaseFont: "TestSans", Subtype: "TrueType"})
+	program, err := f.FontProgram(context.Background(), models.FontRequest{BaseFont: "TestSans", Subtype: "TrueType"})
 	if err != nil || program == nil {
 		t.Errorf("FontProgram after a cancelled index = %d bytes, %v, want the program", len(program), err)
 	}

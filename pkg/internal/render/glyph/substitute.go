@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // Options configure how fonts load.
@@ -21,32 +22,10 @@ type Options struct {
 	Substitutes Provider
 }
 
-// Request describes a font a document shows without embedding its program,
-// for a [Provider] to answer. Its fields mean what the remediation font
-// request's do, so a caller adapts one provider to both.
-type Request struct {
-	// BaseFont is the font name asked for: the font's /BaseFont as the file
-	// writes it, a subset tag included, or the standard 14 font that stands
-	// in for it ([Font] asks for both, in that order).
-	BaseFont string
-	// Subtype is the font's /Subtype, the descendant CIDFont's for a Type 0
-	// font.
-	Subtype string
-	// Flags is the font descriptor's /Flags (ISO 32000-1, 9.8.2), 0 when the
-	// font has no descriptor.
-	Flags int
-	// Encoding names the predefined encoding or CMap the font names, "" for
-	// none.
-	Encoding string
-	// Ordering is a Type 0 font's character collection, Registry and
-	// Ordering joined by a hyphen, "" for a simple font.
-	Ordering string
-}
-
 // Provider returns the programs that may serve a font, best first, or none.
 // A [Font] draws with the first one that parses. An error aborts loading the
 // font. A provider shared by concurrent loads must be safe for concurrent use.
-type Provider func(ctx context.Context, req Request) ([]Candidate, error)
+type Provider func(ctx context.Context, req models.FontRequest) ([]Candidate, error)
 
 // Candidate reads one program a [Provider] offers: a TrueType or OpenType
 // program, a bare CFF program or a Type 1 program. It returns nil for a
@@ -56,7 +35,7 @@ type Candidate func(ctx context.Context) ([]byte, error)
 // substitute asks opts.Substitutes for a program to draw a font the document
 // does not embed, trying the requests [substituteRequests] lists in turn. A
 // font no candidate serves draws placeholders.
-func (f *Font) substitute(ctx context.Context, req Request, opts Options) error {
+func (f *Font) substitute(ctx context.Context, req models.FontRequest, opts Options) error {
 	f.source = SourcePlaceholder
 	if opts.Substitutes == nil {
 		return nil
@@ -108,8 +87,8 @@ func (f *Font) substitute(ctx context.Context, req Request, opts Options) error 
 //     answers to, one under WinAnsiEncoding and one with no /Encoding, show
 //     41 42; poppler and PDFium draw A and B with the face they draw the
 //     nonsymbolic ones with.
-func substituteRequests(req Request) []Request {
-	out := []Request{req}
+func substituteRequests(req models.FontRequest) []models.FontRequest {
+	out := []models.FontRequest{req}
 	for _, face := range cjkStandIns[req.Ordering] {
 		r := req
 		r.BaseFont = face

@@ -10,6 +10,8 @@ import (
 	"testing/fstest"
 
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // cyrillicFormPDF builds a one-page form whose only field holds a Cyrillic
@@ -143,8 +145,8 @@ func TestNewFontProviderSource(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	fsys := cyrillicFontFS()
-	var asked FontRequest
-	provider := FontProviderFunc(func(_ context.Context, req FontRequest) ([]byte, error) {
+	var asked models.FontRequest
+	provider := plugins.FontProviderFunc(func(_ context.Context, req models.FontRequest) ([]byte, error) {
 		asked = req
 		return fsys["cyrillic/TestSans.ttf"].Data, nil
 	})

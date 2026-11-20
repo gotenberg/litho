@@ -1,5 +1,7 @@
 package bookmarks
 
+import "github.com/gotenberg/litho/pkg/plugins"
+
 // Options controls bookmark generation behavior.
 type Options struct {
 	// MaxDepth limits how many heading levels are included. Default 3.
@@ -25,7 +27,7 @@ type Options struct {
 	StripNumberingFromTitle bool
 	// Scorer scores heading candidates. When nil, the default heuristic
 	// scorer is used. Replace this for custom or ML-based heading detection.
-	Scorer HeadingScorer
+	Scorer plugins.HeadingScorer
 	// ScoreThreshold is the minimum score for a candidate to be included
 	// as a heading. Default 0.5.
 	ScoreThreshold float64

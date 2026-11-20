@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/internal/pkitest"
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // verifyWith opens data and verifies its signatures against the PKI's root.
@@ -48,7 +49,7 @@ func TestWithTimestampAuthority(t *testing.T) {
 			t.Parallel()
 			pki := pkitest.New(t)
 			pki.SetTSAMode(tc.mode)
-			var signer Signer
+			var signer plugins.Signer
 			signer, err := NewSigner(pki.Leaf, pki.LeafKey, pki.Intermediate)
 			if err != nil {
 				t.Fatal(err)

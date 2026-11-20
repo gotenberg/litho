@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/pdf"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // ExampleNewSigner signs a document with an ECDSA key and its certificate,
@@ -68,7 +69,7 @@ func ExampleParseSignerPEM() {
 
 // sign returns unembeddedFontsPDF signed by signer, at a pinned signing time
 // the certificate of selfSignedCertificate covers.
-func sign(ctx context.Context, signer pdf.Signer) []byte {
+func sign(ctx context.Context, signer plugins.Signer) []byte {
 	r, err := pdf.Open(ctx, bytes.NewReader(unembeddedFontsPDF), int64(len(unembeddedFontsPDF)))
 	if err != nil {
 		log.Fatal(err)

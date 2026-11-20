@@ -9,6 +9,8 @@ import (
 	"testing/fstest"
 
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // unembeddedTextPDF is a 100 by 100 page showing A at 50 points in a TrueType
@@ -56,19 +58,19 @@ func TestRenderPageFonts(t *testing.T) {
 		// No program: a hollow placeholder box.
 		{"none", nil, paper},
 		{"files", []RenderOption{WithRenderFontFiles(fstest.MapFS{"fonts/rect.ttf": {Data: program}})}, ink},
-		{"provider", []RenderOption{WithRenderFontProvider(FontProviderFunc(func(_ context.Context, req FontRequest) ([]byte, error) {
+		{"provider", []RenderOption{WithRenderFontProvider(plugins.FontProviderFunc(func(_ context.Context, req models.FontRequest) ([]byte, error) {
 			if req.BaseFont != "Rect" || req.Subtype != "TrueType" {
 				return nil, nil
 			}
 			return program, nil
 		}))}, ink},
 		// A provider that fails draws placeholders and fails nothing.
-		{"failing", []RenderOption{WithRenderFontProvider(FontProviderFunc(func(context.Context, FontRequest) ([]byte, error) {
+		{"failing", []RenderOption{WithRenderFontProvider(plugins.FontProviderFunc(func(context.Context, models.FontRequest) ([]byte, error) {
 			return nil, errors.New("boom")
 		}))}, paper},
 		// A provider that supplies nothing gives way to the next.
 		{"chain", []RenderOption{
-			WithRenderFontProvider(FontProviderFunc(func(context.Context, FontRequest) ([]byte, error) { return nil, nil })),
+			WithRenderFontProvider(plugins.FontProviderFunc(func(context.Context, models.FontRequest) ([]byte, error) { return nil, nil })),
 			WithRenderFontFiles(fstest.MapFS{"rect.ttf": {Data: program}}),
 		}, ink},
 	}
@@ -93,7 +95,7 @@ func TestWithRenderSystemFonts(t *testing.T) {
 	if o.systemFonts == nil {
 		t.Fatal("the option registered no provider")
 	}
-	if p := renderFontProvider(nil, []FontProvider{o.systemFonts}); p == nil {
+	if p := renderFontProvider(nil, []plugins.FontProvider{o.systemFonts}); p == nil {
 		t.Error("no glyph provider over the system fonts")
 	}
 	if p := renderFontProvider(nil, nil); p != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/annot"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // DefaultRenderDPI is the resolution [Reader.RenderPage] draws at when
@@ -31,7 +32,7 @@ type renderOpts struct {
 	background color.Color
 	// fonts and systemFonts supply the fonts a document does not embed
 	// (render_fonts.go).
-	fonts       []FontProvider
+	fonts       []plugins.FontProvider
 	systemFonts *fontFiles
 	// target selects the annotations drawn.
 	target models.RenderTarget

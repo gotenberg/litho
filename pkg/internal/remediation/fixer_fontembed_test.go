@@ -88,8 +88,8 @@ func TestFixFontEmbed_EmbedsSuppliedPrograms(t *testing.T) {
 		trueTypeFont("ArialMT", 667, 667),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>",
 	)
-	var requests []FontRequest
-	provider := func(_ context.Context, req FontRequest) ([]byte, error) {
+	var requests []models.FontRequest
+	provider := func(_ context.Context, req models.FontRequest) ([]byte, error) {
 		requests = append(requests, req)
 		switch req.BaseFont {
 		case "Helvetica", "ArialMT":
@@ -157,7 +157,7 @@ func TestFixFontEmbed_Refusals(t *testing.T) {
 			" /Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 >> >>",
 		trueTypeFont("Garbled", 667, 667),
 	)
-	provider := func(_ context.Context, req FontRequest) ([]byte, error) {
+	provider := func(_ context.Context, req models.FontRequest) ([]byte, error) {
 		switch req.BaseFont {
 		case "Narrow":
 			return sansProgram(0, 667, 667), nil
@@ -224,7 +224,7 @@ func TestFixFontEmbed_SharedAndUnreadableDescriptors(t *testing.T) {
 			" /CapHeight 700 /StemV 80 /FontFile3 11 0 R >>",
 		"<< /Length 4 >>\nstream\nnone\nendstream",
 	)
-	provider := func(context.Context, FontRequest) ([]byte, error) { return sansProgram(0, 667, 667), nil }
+	provider := func(context.Context, models.FontRequest) ([]byte, error) { return sansProgram(0, 667, 667), nil }
 	doc, alloc := newTestDoc(t, data)
 	report, err := RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{PreserveContent: true, Fonts: oneProgram(provider)})
 	if err != nil {
@@ -248,11 +248,11 @@ func TestFixFontEmbed_SharedAndUnreadableDescriptors(t *testing.T) {
 }
 
 // programFunc supplies one program for a font, or nil for none.
-type programFunc = func(ctx context.Context, req FontRequest) ([]byte, error)
+type programFunc = func(ctx context.Context, req models.FontRequest) ([]byte, error)
 
 // oneProgram adapts f to a [FontProvider] offering the one program f returns.
 func oneProgram(f programFunc) FontProvider {
-	return func(ctx context.Context, req FontRequest) ([]FontCandidate, error) {
+	return func(ctx context.Context, req models.FontRequest) ([]FontCandidate, error) {
 		program, err := f(ctx, req)
 		if err != nil || program == nil {
 			return nil, err
@@ -264,7 +264,7 @@ func oneProgram(f programFunc) FontProvider {
 // offering returns a [FontProvider] offering programs in order, counting in
 // reads how many it was asked to read.
 func offering(reads *atomic.Int32, programs ...[]byte) FontProvider {
-	return func(context.Context, FontRequest) ([]FontCandidate, error) {
+	return func(context.Context, models.FontRequest) ([]FontCandidate, error) {
 		out := make([]FontCandidate, len(programs))
 		for i, p := range programs {
 			out[i] = func(context.Context) ([]byte, error) { reads.Add(1); return p, nil }
@@ -339,7 +339,7 @@ func TestFixFontEmbed_Candidates(t *testing.T) {
 	t.Run("candidate error", func(t *testing.T) {
 		t.Parallel()
 		failure := errors.New("font file unreadable")
-		provider := func(context.Context, FontRequest) ([]FontCandidate, error) {
+		provider := func(context.Context, models.FontRequest) ([]FontCandidate, error) {
 			return []FontCandidate{
 				func(context.Context) ([]byte, error) { return wide, nil },
 				func(context.Context) ([]byte, error) { return nil, failure },
@@ -358,7 +358,7 @@ func TestFixFontEmbed_ProviderError(t *testing.T) {
 	doc, alloc := newTestDoc(t, unembeddedFontsPDF(trueTypeFont("ArialMT", 667, 667)))
 	_, err := RemediatePDFA(context.Background(), doc, alloc, models.PDFA2b, Options{
 		PreserveContent: true,
-		Fonts:           oneProgram(func(context.Context, FontRequest) ([]byte, error) { return nil, failure }),
+		Fonts:           oneProgram(func(context.Context, models.FontRequest) ([]byte, error) { return nil, failure }),
 	})
 	if !errors.Is(err, failure) {
 		t.Errorf("RemediatePDFA error = %v, want the provider's", err)
@@ -403,8 +403,8 @@ func TestFixFontEmbed_CompositeFont(t *testing.T) {
 		PostScriptName: "TestMincho", Family: "Test Mincho", Subfamily: "Regular",
 		Glyphs: []fontbuild.Glyph{{Name: "uni3042", Unicode: 0x3042, Advance: 1000}}, NotdefAdvance: 1000,
 	}.Build()
-	var got FontRequest
-	provider := func(_ context.Context, req FontRequest) ([]byte, error) {
+	var got models.FontRequest
+	provider := func(_ context.Context, req models.FontRequest) ([]byte, error) {
 		got = req
 		return program, nil
 	}

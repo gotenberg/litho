@@ -11,13 +11,14 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/pdf"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // corpusSignerCN is the common name of the certificate [corpusSigner] signs
 // with, which the mutate-sign feature looks for among the verified signatures.
 const corpusSignerCN = "litho corpus signer"
 
-// corpusSigner is the built-in [pdf.Signer] of [pdf.NewSigner] over a
+// corpusSigner is the built-in [plugins.Signer] of [pdf.NewSigner] over a
 // throwaway ECDSA P-256 key and a self-signed certificate, so mutate-sign
 // measures the signer litho ships. Its CMS SignedData holds one signer and its
 // certificate, what ISO 19005-2, 6.4.3 tests 2 and 3 ask of a signature, so
@@ -34,7 +35,7 @@ const corpusSignerCN = "litho corpus signer"
 // Safe for concurrent use: the built-in signer is, and cert is set once by
 // newCorpusSigner.
 type corpusSigner struct {
-	pdf.Signer
+	plugins.Signer
 	cert *x509.Certificate
 }
 

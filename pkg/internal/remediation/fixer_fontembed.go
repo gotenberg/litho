@@ -344,7 +344,7 @@ func (e *fontEmbedder) embed(ctx context.Context, order int, t fontTarget) error
 		return refused(fmt.Errorf("%w: the font carries a program validation cannot read, which litho does not replace", ErrFontKind))
 	}
 
-	var req FontRequest
+	var req models.FontRequest
 	var build func(ctx context.Context, prog *suppliedProgram) (*embedPlan, error)
 	var err error
 	if subtype == "Type0" {
@@ -479,7 +479,7 @@ const maxFontCandidates = 8
 //     plusminus at Adobe's 500 and 564); 15 a code no face has a glyph for (a
 //     control code, a .notdef space, an fi Symbol does not draw); and 13 of an
 //     Identity ordering.
-func (e *fontEmbedder) planCandidates(ctx context.Context, req FontRequest, build func(ctx context.Context, prog *suppliedProgram) (*embedPlan, error), before []compliance.Violation, shown []ast.PdfString) (*embedPlan, error) {
+func (e *fontEmbedder) planCandidates(ctx context.Context, req models.FontRequest, build func(ctx context.Context, prog *suppliedProgram) (*embedPlan, error), before []compliance.Violation, shown []ast.PdfString) (*embedPlan, error) {
 	candidates, err := e.provider(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("font provider for %s: %w", req.BaseFont, err)
@@ -549,12 +549,12 @@ func (e *fontEmbedder) planProgram(ctx context.Context, data []byte, build func(
 // provider answers: a TrueType font takes a TrueType program, and a Type 1
 // font a CFF program as /Type1C or a TrueType program, which makes it a
 // TrueType font.
-func (e *fontEmbedder) prepareSimple(ctx context.Context, font ast.PdfDict, subtype string, shownSet map[byte]bool) (*simpleFont, FontRequest, error) {
+func (e *fontEmbedder) prepareSimple(ctx context.Context, font ast.PdfDict, subtype string, shownSet map[byte]bool) (*simpleFont, models.FontRequest, error) {
 	if subtype == "MMType1" {
 		// ISO 32000-1, 9.6.2.3 draws a multiple master instance from the
 		// master design a /FontFile program holds, which no other program
 		// stands in for.
-		return nil, FontRequest{}, fmt.Errorf("%w: a multiple master font", ErrFontKind)
+		return nil, models.FontRequest{}, fmt.Errorf("%w: a multiple master font", ErrFontKind)
 	}
 	fd := liveDictValue(ctx, e.alloc, e.doc, font["FontDescriptor"])
 	baseFont := nameOf(ctx, e.doc, font["BaseFont"])
@@ -565,12 +565,12 @@ func (e *fontEmbedder) prepareSimple(ctx context.Context, font ast.PdfDict, subt
 
 	widths, err := e.declaredWidths(ctx, font, fd, baseFont, names)
 	if err != nil {
-		return nil, FontRequest{}, err
+		return nil, models.FontRequest{}, err
 	}
-	req := FontRequest{BaseFont: baseFont, Subtype: subtype, Flags: flags, Encoding: simpleEncodingName(ctx, e.doc, font)}
+	req := models.FontRequest{BaseFont: baseFont, Subtype: subtype, Flags: flags, Encoding: simpleEncodingName(ctx, e.doc, font)}
 	for _, code := range codes {
 		w := widths.at(code)
-		fc := FontCode{Code: uint32(code), Glyph: names[code], Width: w}
+		fc := models.FontCode{Code: uint32(code), Glyph: names[code], Width: w}
 		if r, ok := encodings.GlyphToRuneFull(names[code]); ok {
 			fc.Unicode = r
 		}
@@ -800,25 +800,25 @@ func liveEncodingFont(alloc *writer.ObjAllocator, font ast.PdfDict) ast.PdfDict 
 // descendant takes: a CIDFontType0 descendant reads a CFF program's glyphs by
 // CID, which such a map cannot redirect. An Identity ordering names glyphs of
 // a program the file does not carry, so no mapping reaches another program.
-func (e *fontEmbedder) prepareComposite(ctx context.Context, font ast.PdfDict, shown []ast.PdfString) (*compositeFont, FontRequest, error) {
+func (e *fontEmbedder) prepareComposite(ctx context.Context, font ast.PdfDict, shown []ast.PdfString) (*compositeFont, models.FontRequest, error) {
 	desc := e.descendant(ctx, font)
 	if desc == nil {
-		return nil, FontRequest{}, fmt.Errorf("%w: a composite font with no descendant CIDFont", ErrFontKind)
+		return nil, models.FontRequest{}, fmt.Errorf("%w: a composite font with no descendant CIDFont", ErrFontKind)
 	}
 	baseFont := nameOf(ctx, e.doc, desc["BaseFont"])
 	info := liveDictValue(ctx, e.alloc, e.doc, desc["CIDSystemInfo"])
 	registry := stringOf(ctx, e.doc, info["Registry"])
 	ordering := stringOf(ctx, e.doc, info["Ordering"])
 	if registry != "Adobe" || !adobeOrderings[ordering] {
-		return nil, FontRequest{}, fmt.Errorf("%w: the %s-%s character collection maps no CID to a character", ErrFontKind, registry, ordering)
+		return nil, models.FontRequest{}, fmt.Errorf("%w: the %s-%s character collection maps no CID to a character", ErrFontKind, registry, ordering)
 	}
 	toUnicode := cmap.AdobeCIDToUnicode(ordering)
 	cids := compliance.Type0ShownCIDs(ctx, e.doc, liveEncodingFont(e.alloc, font), shown)
 	if len(cids) == 0 {
-		return nil, FontRequest{}, fmt.Errorf("%w: the codes the document shows decode to no CID", ErrFontKind)
+		return nil, models.FontRequest{}, fmt.Errorf("%w: the codes the document shows decode to no CID", ErrFontKind)
 	}
 	fd := liveDictValue(ctx, e.alloc, e.doc, desc["FontDescriptor"])
-	req := FontRequest{
+	req := models.FontRequest{
 		BaseFont: baseFont,
 		Subtype:  nameOf(ctx, e.doc, desc["Subtype"]),
 		Flags:    int(document.Float(resolved(ctx, e.doc, fd["Flags"]))),
@@ -827,7 +827,7 @@ func (e *fontEmbedder) prepareComposite(ctx context.Context, font ast.PdfDict, s
 	}
 	sorted := slices.Sorted(maps.Keys(cids))
 	for _, cid := range sorted {
-		req.Codes = append(req.Codes, FontCode{Code: uint32(cid), Unicode: toUnicode[int(cid)], Width: compliance.DeclaredCIDWidth(ctx, e.doc, desc, cid)})
+		req.Codes = append(req.Codes, models.FontCode{Code: uint32(cid), Unicode: toUnicode[int(cid)], Width: compliance.DeclaredCIDWidth(ctx, e.doc, desc, cid)})
 	}
 	c := &compositeFont{font: font, desc: desc, fd: fd, baseFont: baseFont, codes: req.Codes, toUnicode: toUnicode}
 	return c, req, nil
@@ -838,7 +838,7 @@ func (e *fontEmbedder) prepareComposite(ctx context.Context, font ast.PdfDict, s
 type compositeFont struct {
 	font, desc, fd ast.PdfDict
 	baseFont       string
-	codes          []FontCode
+	codes          []models.FontCode
 	toUnicode      map[int]rune
 }
 

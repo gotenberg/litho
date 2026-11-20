@@ -1,6 +1,10 @@
 package bookmarks
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
+)
 
 func TestDetectScript(t *testing.T) {
 	tests := []struct {
@@ -22,16 +26,16 @@ func TestDetectScript(t *testing.T) {
 }
 
 func TestMatchLanguagePattern(t *testing.T) {
-	if !matchLanguagePattern("第一章 序論", scriptCJK) {
+	if !matchLanguagePattern("第一章 序論", models.HeadingScriptCJK) {
 		t.Error("CJK chapter pattern should match")
 	}
-	if !matchLanguagePattern("제1장 서론", scriptCJK) {
+	if !matchLanguagePattern("제1장 서론", models.HeadingScriptCJK) {
 		t.Error("Korean chapter pattern should match")
 	}
-	if !matchLanguagePattern("Глава 5 Введение", scriptCyrillic) {
+	if !matchLanguagePattern("Глава 5 Введение", models.HeadingScriptCyrillic) {
 		t.Error("Russian chapter pattern should match")
 	}
-	if matchLanguagePattern("Plain English", scriptLatin) {
+	if matchLanguagePattern("Plain English", models.HeadingScriptLatin) {
 		t.Error("Latin should not match any pattern (no Latin patterns defined)")
 	}
 }

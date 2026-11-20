@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // TestPipelineRefusesToSignAfterRestructuringAnEncryptedSource pins that a
@@ -24,7 +26,7 @@ func TestPipelineRefusesToSignAfterRestructuringAnEncryptedSource(t *testing.T) 
 	const userPw = "secret"
 	encrypted := encryptedWithUserPassword(t, userPw, "owner")
 	plain := threePagePDF()
-	sign := func(signer Signer) func(context.Context, *Writer) error {
+	sign := func(signer plugins.Signer) func(context.Context, *Writer) error {
 		return func(_ context.Context, w *Writer) error {
 			w.Sign(signer)
 			return nil
@@ -33,23 +35,23 @@ func TestPipelineRefusesToSignAfterRestructuringAnEncryptedSource(t *testing.T) 
 
 	for _, tc := range []struct {
 		name  string
-		build func(enc, other *Reader, signer Signer) *Pipeline
+		build func(enc, other *Reader, signer plugins.Signer) *Pipeline
 	}{
 		{
 			name: "a split",
-			build: func(enc, _ *Reader, signer Signer) *Pipeline {
+			build: func(enc, _ *Reader, signer plugins.Signer) *Pipeline {
 				return NewPipeline().Open(enc).Split([]int{1, 2}).Apply(sign(signer))
 			},
 		},
 		{
 			name: "two splits",
-			build: func(enc, _ *Reader, signer Signer) *Pipeline {
+			build: func(enc, _ *Reader, signer plugins.Signer) *Pipeline {
 				return NewPipeline().Open(enc).Split([]int{1, 2}).Split([]int{1}).Apply(sign(signer))
 			},
 		},
 		{
 			name: "an edit, then a split",
-			build: func(enc, _ *Reader, signer Signer) *Pipeline {
+			build: func(enc, _ *Reader, signer plugins.Signer) *Pipeline {
 				return NewPipeline().Open(enc).
 					Apply(func(_ context.Context, w *Writer) error {
 						w.SetMetadata(Metadata{Title: "edited"})
@@ -60,7 +62,7 @@ func TestPipelineRefusesToSignAfterRestructuringAnEncryptedSource(t *testing.T) 
 		},
 		{
 			name: "a decryption, then a split",
-			build: func(enc, _ *Reader, signer Signer) *Pipeline {
+			build: func(enc, _ *Reader, signer plugins.Signer) *Pipeline {
 				return NewPipeline().Open(enc).
 					Apply(func(_ context.Context, w *Writer) error {
 						w.RemoveEncryption()
@@ -71,25 +73,25 @@ func TestPipelineRefusesToSignAfterRestructuringAnEncryptedSource(t *testing.T) 
 		},
 		{
 			name: "a merge of a plaintext document into it",
-			build: func(enc, other *Reader, signer Signer) *Pipeline {
+			build: func(enc, other *Reader, signer plugins.Signer) *Pipeline {
 				return NewPipeline().Open(enc).Merge([]*Reader{other}).Apply(sign(signer))
 			},
 		},
 		{
 			name: "a merge of it into a plaintext document",
-			build: func(enc, other *Reader, signer Signer) *Pipeline {
+			build: func(enc, other *Reader, signer plugins.Signer) *Pipeline {
 				return NewPipeline().Open(other).Merge([]*Reader{enc}).Apply(sign(signer))
 			},
 		},
 		{
 			name: "a split, then a merge of a plaintext document",
-			build: func(enc, other *Reader, signer Signer) *Pipeline {
+			build: func(enc, other *Reader, signer plugins.Signer) *Pipeline {
 				return NewPipeline().Open(enc).Split([]int{1}).Merge([]*Reader{other}).Apply(sign(signer))
 			},
 		},
 		{
 			name: "a split, then Sign and an edit in one stage",
-			build: func(enc, _ *Reader, signer Signer) *Pipeline {
+			build: func(enc, _ *Reader, signer plugins.Signer) *Pipeline {
 				return NewPipeline().Open(enc).Split([]int{1}).
 					Apply(func(_ context.Context, w *Writer) error {
 						w.Sign(signer)
@@ -144,12 +146,12 @@ func TestPipelineSignsAfterRestructuringAPlaintextSource(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		pages int
-		build func(src, other *Reader, signer Signer) *Pipeline
+		build func(src, other *Reader, signer plugins.Signer) *Pipeline
 	}{
 		{
 			name:  "a split",
 			pages: 2,
-			build: func(src, _ *Reader, signer Signer) *Pipeline {
+			build: func(src, _ *Reader, signer plugins.Signer) *Pipeline {
 				return NewPipeline().Open(src).Split([]int{1, 2}).
 					Apply(func(_ context.Context, w *Writer) error { w.Sign(signer); return nil })
 			},
@@ -157,7 +159,7 @@ func TestPipelineSignsAfterRestructuringAPlaintextSource(t *testing.T) {
 		{
 			name:  "a merge",
 			pages: 6,
-			build: func(src, other *Reader, signer Signer) *Pipeline {
+			build: func(src, other *Reader, signer plugins.Signer) *Pipeline {
 				return NewPipeline().Open(src).Merge([]*Reader{other}).
 					Apply(func(_ context.Context, w *Writer) error { w.Sign(signer); return nil })
 			},

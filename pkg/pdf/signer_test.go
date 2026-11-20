@@ -19,6 +19,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // testPKI is a root certificate authority and a signing certificate it issued.
@@ -72,7 +73,7 @@ func newTestPKI(t *testing.T, leafKey crypto.Signer) testPKI {
 }
 
 // signWith signs src with signer and opts and returns the output.
-func signWith(t *testing.T, src []byte, signer Signer, opts ...SignOption) []byte {
+func signWith(t *testing.T, src []byte, signer plugins.Signer, opts ...SignOption) []byte {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))

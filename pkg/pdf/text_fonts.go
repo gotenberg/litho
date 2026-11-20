@@ -5,6 +5,8 @@ import (
 	"io/fs"
 
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // FontSource offers the font programs that draw text the standard 14 fonts
@@ -45,7 +47,7 @@ func NewFontFileSource(fsys fs.FS) FontSource {
 // NewFontProviderSource offers the one program p returns for a line, asked
 // with the standard font's name as the request's BaseFont, TrueType as its
 // Subtype and the line's characters as its Codes.
-func NewFontProviderSource(p FontProvider) FontSource {
+func NewFontProviderSource(p plugins.FontProvider) FontSource {
 	if p == nil {
 		return FontSource{}
 	}
@@ -88,15 +90,15 @@ func newFontFilesSource(files *fontFiles) FontSource {
 }
 
 // textFontRequest translates the request of a line of text into the one a
-// [FontProvider] answers.
-func textFontRequest(req mutations.TextFontRequest) FontRequest {
+// [plugins.FontProvider] answers.
+func textFontRequest(req mutations.TextFontRequest) models.FontRequest {
 	base := req.StandardFont
 	if base == "" {
 		base = "Helvetica"
 	}
-	out := FontRequest{BaseFont: base, Subtype: "TrueType"}
+	out := models.FontRequest{BaseFont: base, Subtype: "TrueType"}
 	for _, r := range req.Text {
-		out.Codes = append(out.Codes, FontCode{Code: uint32(r), Unicode: r}) //nolint:gosec // a rune is at most 0x10FFFF
+		out.Codes = append(out.Codes, models.FontCode{Code: uint32(r), Unicode: r}) //nolint:gosec // a rune is at most 0x10FFFF
 	}
 	return out
 }

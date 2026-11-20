@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // threeTextPagesPDF builds three pages drawing "first", "second" and "third"
@@ -134,7 +135,7 @@ func TestWriterSignsAnEditThatRewrites(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			write := func(signer Signer) ([]byte, error) {
+			write := func(signer plugins.Signer) ([]byte, error) {
 				r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 				if err != nil {
 					t.Fatalf("Open: %v", err)
@@ -268,7 +269,7 @@ func TestWriterSignsARequestedFullRewrite(t *testing.T) {
 			t.Parallel()
 
 			src := tc.data()
-			write := func(signer Signer) ([]byte, error) {
+			write := func(signer plugins.Signer) ([]byte, error) {
 				r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
 				if err != nil {
 					t.Fatalf("Open: %v", err)

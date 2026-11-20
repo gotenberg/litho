@@ -12,6 +12,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // fontEmbedFixture is the litho corpus fixture whose unembedded fonts
@@ -138,7 +139,7 @@ func TestFontEmbedFixture(t *testing.T) {
 		t.Fatalf("reading the fixture: %v", err)
 	}
 	programs := fixturePrograms()
-	provider := FontProviderFunc(func(_ context.Context, req FontRequest) ([]byte, error) {
+	provider := plugins.FontProviderFunc(func(_ context.Context, req models.FontRequest) ([]byte, error) {
 		return programs[req.BaseFont], nil
 	})
 

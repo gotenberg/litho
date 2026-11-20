@@ -9,13 +9,14 @@ import (
 
 	"github.com/gotenberg/litho/internal/pkitest"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
-// countingSigner is a caller's own [Signer] that counts its Sign calls. It
-// signs through the signer of NewSigner's public method, whose SignedData
-// carries a signing-time and so is no PAdES CAdES signature.
+// countingSigner is a caller's own [plugins.Signer] that counts its Sign
+// calls. It signs through the signer of NewSigner's public method, whose
+// SignedData carries a signing-time and so is no PAdES CAdES signature.
 type countingSigner struct {
-	Signer
+	plugins.Signer
 	calls *atomic.Int32
 }
 
@@ -54,7 +55,7 @@ func TestSeedSubFilterFallback(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var calls atomic.Int32
-			var signer Signer = countingSigner{Signer: builtin, calls: &calls}
+			var signer plugins.Signer = countingSigner{Signer: builtin, calls: &calls}
 			if tc.builtin {
 				signer = builtin
 			}
@@ -128,7 +129,7 @@ func TestSeedSubFilterFallbackFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sign := func(signer Signer, field string) ([]byte, error) {
+	sign := func(signer plugins.Signer, field string) ([]byte, error) {
 		ctx := context.Background()
 		r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
 		if err != nil {
@@ -156,7 +157,7 @@ func TestSeedSubFilterFallbackFixture(t *testing.T) {
 	if _, err := sign(wrappedSigner{builtin}, "seedmet"); !errors.Is(err, ErrSeedValueUnmet) || !errors.Is(err, ErrSignatureNotPAdES) {
 		t.Errorf("a caller's Signer, seedmet: %v, want ErrSeedValueUnmet and ErrSignatureNotPAdES", err)
 	}
-	for _, signer := range []Signer{builtin, wrappedSigner{builtin}} {
+	for _, signer := range []plugins.Signer{builtin, wrappedSigner{builtin}} {
 		if _, err := sign(signer, "seedunmet"); !errors.Is(err, ErrSeedValueUnmet) {
 			t.Errorf("%T, seedunmet: %v, want ErrSeedValueUnmet", signer, err)
 		}

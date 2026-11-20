@@ -8,53 +8,14 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
+	"github.com/gotenberg/litho/pkg/models"
 )
-
-// FontRequest describes a font a document shows without embedding its
-// program, for a [FontProvider] to answer.
-type FontRequest struct {
-	// BaseFont is the font's /BaseFont as the file writes it, a subset tag
-	// included; a composite font's is its descendant CIDFont's.
-	BaseFont string
-	// Subtype is the font's /Subtype: Type1, MMType1 or TrueType for a
-	// simple font, the descendant's CIDFontType0 or CIDFontType2 for a
-	// composite one.
-	Subtype string
-	// Flags is the font descriptor's /Flags (ISO 32000-1, 9.8.2), 0 when the
-	// font has no descriptor.
-	Flags int
-	// Encoding names the font's encoding: the predefined simple encoding its
-	// /Encoding or /BaseEncoding names, or the CMap a composite font's
-	// /Encoding names. It is empty when the font names none.
-	Encoding string
-	// Ordering is a composite font's character collection, Registry and
-	// Ordering joined by a hyphen (Adobe-Japan1), and empty for a simple
-	// font.
-	Ordering string
-	// Codes lists what the document shows with the font, in code order.
-	Codes []FontCode
-}
-
-// FontCode is one code a document shows with a font.
-type FontCode struct {
-	// Code is a simple font's character code, or the CID a composite font's
-	// code selects.
-	Code uint32
-	// Glyph is the glyph name a simple font's encoding gives the code, empty
-	// when it gives none or the font is composite.
-	Glyph string
-	// Unicode is the character the glyph stands for, 0 when unknown.
-	Unicode rune
-	// Width is the width the font declares for the code, in glyph space
-	// units (thousandths of an em).
-	Width float64
-}
 
 // FontProvider returns the programs that may serve a font, best first, or
 // none. The engine embeds the first one it accepts for the font, and reads the
 // others only when it refuses the ones before. An error aborts the
 // remediation.
-type FontProvider func(ctx context.Context, req FontRequest) ([]FontCandidate, error)
+type FontProvider func(ctx context.Context, req models.FontRequest) ([]FontCandidate, error)
 
 // FontCandidate reads one program a [FontProvider] offers: a TrueType or
 // OpenType program, or a bare CFF one. It returns nil for a program that turns

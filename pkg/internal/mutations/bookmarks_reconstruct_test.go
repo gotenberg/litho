@@ -21,7 +21,7 @@ import (
 // fixture that fails to would leave these tests asserting nothing.
 type alwaysHeading struct{}
 
-func (alwaysHeading) Score(bookmarks.HeadingCandidate) float64 { return 1 }
+func (alwaysHeading) Score(models.HeadingCandidate) float64 { return 1 }
 
 // reconstructOptions disables every filter that could silently drop the single
 // candidate each fixture supplies.

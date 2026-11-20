@@ -3,7 +3,6 @@ package pdf
 import (
 	"bufio"
 	"context"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -26,6 +25,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/remediation"
 	"github.com/gotenberg/litho/pkg/internal/tagging"
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // WriteOption configures the behavior of [Writer.WriteTo], [Split], [Merge],
@@ -665,7 +665,7 @@ type remediateOpts struct {
 	figureAlt       string
 	tolerance       RegressionTolerance
 	documentID      []byte
-	fonts           FontProvider
+	fonts           plugins.FontProvider
 	systemFonts     *fontFiles
 	wholeFonts      bool
 	// pdfua is the PDF/UA profile a PDF/A-based remediation targets too, ""
@@ -1033,35 +1033,6 @@ type PDFStamp struct {
 	Rotation float64
 }
 
-// Signer produces a PKCS#7 / CMS signature for the given digest.
-// Implementations control key material and signing algorithms. litho
-// calls [Signer.Sign] during [Writer.WriteTo] with the SHA-256 hash of
-// the ByteRange regions.
-//
-// [NewSigner], [ParseSignerPEM] and [ParseSignerPKCS12] return one built on
-// an X.509 certificate and an RSA or ECDSA key. Implement it for anything else, such as a
-// signature with a timestamp or one a remote service computes whole.
-//
-// The interface is owned by the [pdf] package so callers never have to
-// import an internal path. An internal adapter forwards user
-// implementations to the signing engine at write time.
-// Implementations must be safe for concurrent use. One signature may call
-// Sign twice: again when the RFC 3161 token outgrows the room reserved for it,
-// and again under another subfilter when a signature field's seed values
-// recommend ETSI.CAdES.detached first and the first SignedData is not a CAdES
-// one (see [WithSignatureField]).
-type Signer interface {
-	// Sign computes a PKCS#7 / CMS signature over the given SHA-256
-	// digest bytes.
-	Sign(digest []byte) ([]byte, error)
-	// Certificate returns the signing certificate for embedding in the
-	// signature field's /Cert entry.
-	Certificate() *x509.Certificate
-	// EstimatedSize returns the maximum expected signature byte count;
-	// used to size the /Contents placeholder in the output PDF.
-	EstimatedSize() int
-}
-
 // Writer queues modifications against an open [Reader] and emits the
 // result through [Writer.WriteTo]. Usage is:
 //
@@ -1152,7 +1123,7 @@ type Writer struct {
 	// be idempotent, and a stamp was drawn twice. They stay queued all the
 	// same, since a redaction that refuses puts the Writer back as it was.
 	folded          int
-	signer          Signer
+	signer          plugins.Signer
 	timestamp       *timestampOpts
 	signOpts        signOpts
 	requiredVersion string
@@ -1528,9 +1499,9 @@ func (w *Writer) createTemp(pattern string) (*os.File, error) {
 // The file is never signed, even when [Writer.Sign] was called before the
 // remediation that writes it. It is what the remediation measures and
 // revalidates, and [Writer.WriteTo] signs afresh, so signing it ran the
-// caller's [Signer] once per probe for nothing. It also sent the probe through
-// the signing path, which then left out every repair, so the remediation
-// judged the unrepaired document.
+// caller's [plugins.Signer] once per probe for nothing. It also sent the probe
+// through the signing path, which then left out every repair, so the
+// remediation judged the unrepaired document.
 //
 // Nor is it encrypted, even when [Writer.Encrypt] was called before the
 // remediation: [Writer.WriteTo] encrypts afresh, as it does for
@@ -2542,7 +2513,7 @@ func (w *Writer) RemoveAttachment(name string) {
 // opts set the optional entries of the signature dictionary, the signing time
 // and the field the signature goes in (see [SignOption]). A later call
 // replaces the signer and the options of an earlier one.
-func (w *Writer) Sign(signer Signer, opts ...SignOption) {
+func (w *Writer) Sign(signer plugins.Signer, opts ...SignOption) {
 	w.signer = signer
 	w.signLabel = w.editLabel
 	w.signOpts = signOpts{}
@@ -2563,7 +2534,7 @@ func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remedia
 	}
 	// The caller's provider comes first, so the system's fonts serve only
 	// the fonts it supplies no program for.
-	var providers []FontProvider
+	var providers []plugins.FontProvider
 	if cfg.fonts != nil {
 		providers = append(providers, cfg.fonts)
 	}
@@ -5418,7 +5389,7 @@ func generationToInternal(opts BookmarkGenerationOptions) bookmarks.Options {
 		PreferStructureTree:     opts.PreferStructureTree,
 		DetectNumbering:         opts.DetectNumbering,
 		StripNumberingFromTitle: opts.StripNumberingFromTitle,
-		Scorer:                  adaptHeadingScorer(opts.HeadingScorer),
+		Scorer:                  opts.HeadingScorer,
 		ScoreThreshold:          opts.HeadingScoreThreshold,
 	}
 }

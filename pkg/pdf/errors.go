@@ -327,15 +327,15 @@ var (
 	ErrSeedValueUnmet = mutations.ErrSeedValueUnmet
 
 	// ErrSignatureNotPAdES is returned by [Writer.WriteTo] under [WithPAdES]
-	// when the SignedData a [Signer] other than the one of [NewSigner]
-	// returned is not the CAdES signature of a PAdES baseline signature: it
-	// carries a signing-time attribute, or lacks the content-type,
-	// message-digest or ESS signing-certificate one (ETSI EN 319 142-1, 6.3,
-	// Table 1). It is also returned, with [ErrSeedValueUnmet], when the seed
-	// values of the field [WithSignatureField] names require a list of
-	// subfilters whose first litho writes is ETSI.CAdES.detached, and that
-	// Signer's SignedData does not qualify.
-	// Nothing is written.
+	// when the SignedData a [github.com/gotenberg/litho/pkg/plugins.Signer]
+	// other than the one of [NewSigner] returned is not the CAdES signature of
+	// a PAdES baseline signature: it carries a signing-time attribute, or
+	// lacks the content-type, message-digest or ESS signing-certificate one
+	// (ETSI EN 319 142-1, 6.3, Table 1). It is also returned, with
+	// [ErrSeedValueUnmet], when the seed values of the field
+	// [WithSignatureField] names require a list of subfilters whose first
+	// litho writes is ETSI.CAdES.detached, and that Signer's SignedData does
+	// not qualify. Nothing is written.
 	ErrSignatureNotPAdES = signature.ErrNotCAdES
 
 	// ErrTimestampAuthority is returned by [Writer.WriteTo] when the RFC 3161
@@ -567,7 +567,8 @@ var (
 
 	// ErrFontNotSupplied is the reason of a
 	// [github.com/gotenberg/litho/pkg/models.FontRefusal] for a font the
-	// [FontProvider] supplied no program for.
+	// [github.com/gotenberg/litho/pkg/plugins.FontProvider] supplied no
+	// program for.
 	ErrFontNotSupplied = remediation.ErrFontNotSupplied
 
 	// ErrFontProgramInvalid is the reason of a

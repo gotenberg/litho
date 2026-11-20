@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // OIDs of the CMS SignedData [cmsTestSigner] builds (RFC 5652, RFC 5754, RFC
@@ -334,11 +335,11 @@ func TestWriterSignedRemediationValidatesLikeTheUnsigned(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		sign func(ctx context.Context, r *Reader, signer Signer) ([]byte, error)
+		sign func(ctx context.Context, r *Reader, signer plugins.Signer) ([]byte, error)
 	}{
 		{
 			name: "signed after the remediation",
-			sign: func(ctx context.Context, r *Reader, signer Signer) ([]byte, error) {
+			sign: func(ctx context.Context, r *Reader, signer plugins.Signer) ([]byte, error) {
 				w := NewWriter(r)
 				defer w.Close()
 				if _, err := w.RemediatePDFA(ctx, models.PDFA2b); err != nil {
@@ -352,7 +353,7 @@ func TestWriterSignedRemediationValidatesLikeTheUnsigned(t *testing.T) {
 		},
 		{
 			name: "signed before the remediation",
-			sign: func(ctx context.Context, r *Reader, signer Signer) ([]byte, error) {
+			sign: func(ctx context.Context, r *Reader, signer plugins.Signer) ([]byte, error) {
 				w := NewWriter(r)
 				defer w.Close()
 				w.Sign(signer)
@@ -366,7 +367,7 @@ func TestWriterSignedRemediationValidatesLikeTheUnsigned(t *testing.T) {
 		},
 		{
 			name: "a pipeline signing in a later stage",
-			sign: func(ctx context.Context, r *Reader, signer Signer) ([]byte, error) {
+			sign: func(ctx context.Context, r *Reader, signer plugins.Signer) ([]byte, error) {
 				var out bytes.Buffer
 				_, err := NewPipeline().Open(r).
 					Apply(func(ctx context.Context, w *Writer) error {
@@ -459,11 +460,11 @@ func TestWriterSignsARemediationThatRewrites(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		sign func(ctx context.Context, r *Reader, signer Signer) ([]byte, error)
+		sign func(ctx context.Context, r *Reader, signer plugins.Signer) ([]byte, error)
 	}{
 		{
 			name: "signed after the remediation",
-			sign: func(ctx context.Context, r *Reader, signer Signer) ([]byte, error) {
+			sign: func(ctx context.Context, r *Reader, signer plugins.Signer) ([]byte, error) {
 				w := NewWriter(r)
 				defer w.Close()
 				if _, err := w.RemediatePDFA(ctx, models.PDFA2b, pinnedID); err != nil {
@@ -477,7 +478,7 @@ func TestWriterSignsARemediationThatRewrites(t *testing.T) {
 		},
 		{
 			name: "signed before the remediation",
-			sign: func(ctx context.Context, r *Reader, signer Signer) ([]byte, error) {
+			sign: func(ctx context.Context, r *Reader, signer plugins.Signer) ([]byte, error) {
 				w := NewWriter(r)
 				defer w.Close()
 				w.Sign(signer)
@@ -491,7 +492,7 @@ func TestWriterSignsARemediationThatRewrites(t *testing.T) {
 		},
 		{
 			name: "a pipeline signing in a later stage",
-			sign: func(ctx context.Context, r *Reader, signer Signer) ([]byte, error) {
+			sign: func(ctx context.Context, r *Reader, signer plugins.Signer) ([]byte, error) {
 				var out bytes.Buffer
 				_, err := NewPipeline().Open(r).
 					Apply(func(ctx context.Context, w *Writer) error {

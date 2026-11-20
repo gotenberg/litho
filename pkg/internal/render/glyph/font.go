@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // Source names where a glyph's outline comes from, for the render report.
@@ -260,7 +261,7 @@ func (f *Font) loadSimple(ctx context.Context, doc *document.Document, fontDict 
 		f.prog, f.source = prog, SourceEmbedded
 		return nil
 	}
-	req := Request{
+	req := models.FontRequest{
 		BaseFont: baseFont,
 		Subtype:  f.subtype,
 		Flags:    flags,
@@ -317,7 +318,7 @@ func (f *Font) loadType0(ctx context.Context, doc *document.Document, fontDict a
 		f.collection = cmap.AdobeCIDToUnicode(collection)
 	}
 	f.glyphOrder = typography.StandardFontGlyphMap(ctx, doc, fontDict)
-	req := Request{
+	req := models.FontRequest{
 		BaseFont: nameOf(ctx, doc, cidFont["BaseFont"]),
 		Subtype:  f.subtype,
 		Flags:    int(document.Float(desc["Flags"])),

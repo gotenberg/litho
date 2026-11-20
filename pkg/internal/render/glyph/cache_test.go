@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestCacheRetriesAFailedProvider keeps a provider's failure out of the
@@ -30,7 +31,7 @@ func TestCacheRetriesAFailedProvider(t *testing.T) {
 	}
 	program := fontbuild.TrueType{PostScriptName: "Sub", Family: "Sub", Subfamily: "Regular", Glyphs: glyphs}.Build()
 	var calls atomic.Int32
-	provider := func(context.Context, Request) ([]Candidate, error) {
+	provider := func(context.Context, models.FontRequest) ([]Candidate, error) {
 		if calls.Add(1) == 1 {
 			return nil, errors.New("transient")
 		}

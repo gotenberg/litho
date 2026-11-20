@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/internal/pkitest"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // seedFieldPDF returns a one-page document with the text fields Name and
@@ -28,7 +29,7 @@ func seedFieldPDF(sigEntries string, extra ...string) []byte {
 
 // signSeeded signs src in the Approval field and returns the output or the
 // WriteTo error.
-func signSeeded(t *testing.T, src []byte, signer Signer, opts ...SignOption) ([]byte, error) {
+func signSeeded(t *testing.T, src []byte, signer plugins.Signer, opts ...SignOption) ([]byte, error) {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))

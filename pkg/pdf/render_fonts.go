@@ -6,6 +6,8 @@ import (
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/render/glyph"
+	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // WithRenderFontProvider draws the fonts a document shows without embedding
@@ -18,20 +20,20 @@ import (
 // CIDFont of an Adobe CJK character collection (Adobe-GB1, -CNS1, -Japan1,
 // -Korea1), then by the PostScript names of the Noto Sans CJK and Source Han
 // Sans Regular faces of the collection's region (NotoSansJP-Regular,
-// NotoSansCJKjp-Regular, SourceHanSansJP-Regular for Adobe-Japan1); then by the
-// standard 14 font whose metrics stand in for it (ISO 32000-1, 9.6.2.2),
+// NotoSansCJKjp-Regular, SourceHanSansJP-Regular for Adobe-Japan1); then by
+// the standard 14 font whose metrics stand in for it (ISO 32000-1, 9.6.2.2),
 // chosen by name or by its descriptor's /Flags, and draws with the first
-// program that parses: a TrueType or OpenType program, a bare CFF program or
-// a Type 1 program. [FontRequest.Codes] is empty. A glyph the program lacks
-// draws a box, a code the font's encoding names no glyph for draws nothing,
-// and a glyph whose advance differs from the declared width is
-// scaled to it, so text keeps the positions the document gives it. An error
-// p returns is logged at Debug and the font draws boxes.
+// program that parses: a TrueType or OpenType program, a bare CFF program or a
+// Type 1 program. [models.FontRequest.Codes] is empty. A glyph the program
+// lacks draws a box, a code the font's encoding names no glyph for draws
+// nothing, and a glyph whose advance differs from the declared width is scaled
+// to it, so text keeps the positions the document gives it. An error p returns
+// is logged at Debug and the font draws boxes.
 //
 // Repeated, the option adds providers, asked in order. The page drawn then
 // depends on the programs p supplies. p must be safe for concurrent use when
 // RenderPage runs concurrently.
-func WithRenderFontProvider(p FontProvider) RenderOption {
+func WithRenderFontProvider(p plugins.FontProvider) RenderOption {
 	return func(o *renderOpts) {
 		if p != nil {
 			o.fonts = append(o.fonts, p)
@@ -76,22 +78,15 @@ func WithRenderSystemFonts() RenderOption {
 // offer every face that serves the font, best first, read when the loader
 // reaches it. A provider's error ends the request: the font then draws
 // placeholders, and the glyph cache asks again at the next font load.
-func renderFontProvider(logger *slog.Logger, providers []FontProvider) glyph.Provider {
+func renderFontProvider(logger *slog.Logger, providers []plugins.FontProvider) glyph.Provider {
 	if len(providers) == 0 {
 		return nil
 	}
-	return func(ctx context.Context, req glyph.Request) ([]glyph.Candidate, error) {
-		out := FontRequest{
-			BaseFont: req.BaseFont,
-			Subtype:  req.Subtype,
-			Flags:    req.Flags,
-			Encoding: req.Encoding,
-			Ordering: req.Ordering,
-		}
+	return func(ctx context.Context, req models.FontRequest) ([]glyph.Candidate, error) {
 		var candidates []glyph.Candidate
 		for _, p := range providers {
 			if files, ok := p.(*fontFiles); ok {
-				offered, err := files.candidates(ctx, logger, out)
+				offered, err := files.candidates(ctx, logger, req)
 				if err != nil {
 					return nil, err
 				}
@@ -100,7 +95,7 @@ func renderFontProvider(logger *slog.Logger, providers []FontProvider) glyph.Pro
 				}
 				continue
 			}
-			program, err := p.FontProgram(ctx, out)
+			program, err := p.FontProgram(ctx, req)
 			if err != nil {
 				return nil, err
 			}

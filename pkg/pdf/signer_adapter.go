@@ -9,9 +9,10 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/signature"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
-// signerAdapter wraps a public [Signer] so it satisfies the internal
+// signerAdapter wraps a public [plugins.Signer] so it satisfies the internal
 // [mutations.Signer] interface. The method sets are identical; this
 // adapter exists only to bridge the two named interface types without
 // leaking the internal one through the public API.
@@ -19,15 +20,16 @@ import (
 // at is the signing time the signature dictionary's /M records. It reaches the
 // signer of [NewSigner] as the SignedData's signing-time, so the two agree.
 type signerAdapter struct {
-	inner Signer
+	inner plugins.Signer
 	at    time.Time
 }
 
 // Sign returns the SignedData over digest. Under ETSI.CAdES.detached the
 // signer of [NewSigner] writes the CAdES form, and the SignedData of any other
-// [Signer] is refused with [ErrSignatureNotPAdES] when it is not one (see
-// [WithPAdES]). The refusal also wraps [mutations.ErrSubFilterUnwritable], so
-// a subfilter a field's seed values chose gives way to the next they accept.
+// [plugins.Signer] is refused with [ErrSignatureNotPAdES] when it is not one
+// (see [WithPAdES]). The refusal also wraps
+// [mutations.ErrSubFilterUnwritable], so a subfilter a field's seed values
+// chose gives way to the next they accept.
 //
 // With a timestamp authority, the SignedData's signature value is then
 // timestamped (see [WithTimestampAuthority]).
@@ -61,7 +63,7 @@ func (a signerAdapter) signedData(digest []byte, cades bool) ([]byte, error) {
 func (a signerAdapter) Certificate() *x509.Certificate { return a.inner.Certificate() }
 
 // Chain returns the chain the signer of [NewSigner] was given, and nil for
-// any other [Signer], whose chain the interface does not expose.
+// any other [plugins.Signer], whose chain the interface does not expose.
 func (a signerAdapter) Chain() []*x509.Certificate {
 	if s, ok := a.inner.(*builtinSigner); ok {
 		return s.cms.Chain()
@@ -108,7 +110,7 @@ func timestampSignature(ctx context.Context, der []byte, tsaURL string) ([]byte,
 
 // signing returns the signer and the signature dictionary entries of a write,
 // with the signing time [WithSigningTime] set or else now.
-func (w *Writer) signing(signer Signer) (signerAdapter, mutations.SignatureInfo) {
+func (w *Writer) signing(signer plugins.Signer) (signerAdapter, mutations.SignatureInfo) {
 	info := w.signOpts.info
 	if info.Time.IsZero() {
 		info.Time = time.Now()

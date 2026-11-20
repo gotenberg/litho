@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/glyph"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // white is the background every fixture is drawn over, as pdftoppm draws.
@@ -37,7 +38,7 @@ type fixture struct {
 func (f fixture) options() Options {
 	opts := Options{DPI: 72, Background: white}
 	if f.substitute != nil {
-		opts.Fonts = func(context.Context, glyph.Request) ([]glyph.Candidate, error) {
+		opts.Fonts = func(context.Context, models.FontRequest) ([]glyph.Candidate, error) {
 			return []glyph.Candidate{func(context.Context) ([]byte, error) { return f.substitute, nil }}, nil
 		}
 	}

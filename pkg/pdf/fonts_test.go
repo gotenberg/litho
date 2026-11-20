@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/remediation"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // unembeddedFontsDoc builds one page showing "AB" with each font, which its
@@ -159,8 +160,8 @@ func TestWithWholeFontPrograms_EmbedsWholePrograms(t *testing.T) {
 func TestWithFontProvider_ReportsRefusals(t *testing.T) {
 	t.Parallel()
 	data := unembeddedFontsDoc("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
-	var asked []FontRequest
-	provider := FontProviderFunc(func(_ context.Context, req FontRequest) ([]byte, error) {
+	var asked []models.FontRequest
+	provider := plugins.FontProviderFunc(func(_ context.Context, req models.FontRequest) ([]byte, error) {
 		asked = append(asked, req)
 		return nil, nil
 	})
@@ -188,7 +189,7 @@ func TestWithFontProvider_AbortsOnProviderError(t *testing.T) {
 	defer r.Close()
 	w := NewWriter(r)
 	defer w.Close()
-	_, err = w.RemediatePDFA(ctx, models.PDFA2b, WithFontProvider(FontProviderFunc(func(context.Context, FontRequest) ([]byte, error) {
+	_, err = w.RemediatePDFA(ctx, models.PDFA2b, WithFontProvider(plugins.FontProviderFunc(func(context.Context, models.FontRequest) ([]byte, error) {
 		return nil, failure
 	})))
 	if !errors.Is(err, failure) {
@@ -206,16 +207,16 @@ func TestMatchFontFile(t *testing.T) {
 		{path: "e.ttf", psName: "wingdings", family: "wingdings"},
 	}
 	for _, tc := range []struct {
-		req  FontRequest
+		req  models.FontRequest
 		want string
 	}{
-		{FontRequest{BaseFont: "ArialMT", Subtype: "TrueType"}, "a.ttf"},
-		{FontRequest{BaseFont: "Arial-BoldMT", Subtype: "TrueType"}, "b.ttf"},
-		{FontRequest{BaseFont: "QWERTY+Arial,Bold", Subtype: "TrueType"}, "b.ttf"},
-		{FontRequest{BaseFont: "Times-Italic", Subtype: "Type1"}, "d.otf"},
-		{FontRequest{BaseFont: "TimesNewRomanPS-ItalicMT", Subtype: "TrueType"}, "c.ttf"},
-		{FontRequest{BaseFont: "Courier", Subtype: "Type1"}, ""},
-		{FontRequest{BaseFont: "Wingdings-Regular", Subtype: "TrueType"}, "e.ttf"},
+		{models.FontRequest{BaseFont: "ArialMT", Subtype: "TrueType"}, "a.ttf"},
+		{models.FontRequest{BaseFont: "Arial-BoldMT", Subtype: "TrueType"}, "b.ttf"},
+		{models.FontRequest{BaseFont: "QWERTY+Arial,Bold", Subtype: "TrueType"}, "b.ttf"},
+		{models.FontRequest{BaseFont: "Times-Italic", Subtype: "Type1"}, "d.otf"},
+		{models.FontRequest{BaseFont: "TimesNewRomanPS-ItalicMT", Subtype: "TrueType"}, "c.ttf"},
+		{models.FontRequest{BaseFont: "Courier", Subtype: "Type1"}, ""},
+		{models.FontRequest{BaseFont: "Wingdings-Regular", Subtype: "TrueType"}, "e.ttf"},
 	} {
 		got := ""
 		if f := matchFontFile(files, tc.req); f != nil {
@@ -238,7 +239,7 @@ func TestMatchFontFiles_RanksEveryMatch(t *testing.T) {
 		{path: "c2.ttf", psName: "courierstd", family: "courier"},
 	}
 	var got []string
-	for _, f := range matchFontFiles(files, FontRequest{BaseFont: "Courier", Subtype: "TrueType"}) {
+	for _, f := range matchFontFiles(files, models.FontRequest{BaseFont: "Courier", Subtype: "TrueType"}) {
 		got = append(got, f.path)
 	}
 	if want := []string{"c.ttf", "c2.ttf", "cn.ttf", "lm.ttf"}; !slices.Equal(got, want) {
@@ -285,7 +286,7 @@ func TestWithFontProvider_SystemFontsFollowARefusedProgram(t *testing.T) {
 	}
 	data := unembeddedFontsDoc("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
 	var asked atomic.Int32
-	provider := FontProviderFunc(func(context.Context, FontRequest) ([]byte, error) {
+	provider := plugins.FontProviderFunc(func(context.Context, models.FontRequest) ([]byte, error) {
 		asked.Add(1)
 		return abProgram("Wrong", "Wrong", "Regular", 500, 500), nil
 	})
@@ -312,7 +313,7 @@ func TestWithFontProvider_ReportsTheFinalState(t *testing.T) {
 	program := abProgram("TestSans", "Test Sans", "Regular", 667, 667)
 
 	var calls atomic.Int32
-	late := FontProviderFunc(func(context.Context, FontRequest) ([]byte, error) {
+	late := plugins.FontProviderFunc(func(context.Context, models.FontRequest) ([]byte, error) {
 		if calls.Add(1) == 1 {
 			return nil, nil
 		}
@@ -326,7 +327,7 @@ func TestWithFontProvider_ReportsTheFinalState(t *testing.T) {
 		t.Errorf("a font embedded in the second round: %d unembedded, refusals %v, want none", after, report.FontRefusals)
 	}
 
-	never := FontProviderFunc(func(context.Context, FontRequest) ([]byte, error) { return nil, nil })
+	never := plugins.FontProviderFunc(func(context.Context, models.FontRequest) ([]byte, error) { return nil, nil })
 	report, after = remediateFonts(t, data, WithFontProvider(never))
 	if after != 1 || len(report.FontRefusals) != 1 || !errors.Is(report.FontRefusals[0].Err, ErrFontNotSupplied) {
 		t.Errorf("a font every round refuses: %d unembedded, refusals %v, want it listed once", after, report.FontRefusals)

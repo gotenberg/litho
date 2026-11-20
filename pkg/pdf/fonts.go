@@ -11,72 +11,8 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/remediation"
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
-
-// FontProvider supplies the programs of the fonts a document shows without
-// embedding them, which every PDF/A, PDF/UA and WTPDF profile requires
-// embedded (ISO 19005-2, 6.2.11.4.1 and ISO 14289-1, 7.21.4.1 among them). litho ships no
-// font program, so a remediation embeds only what a provider supplies, and
-// the licence to embed it is the caller's. [WithFontProvider] registers one.
-//
-// FontProgram returns a TrueType or OpenType program, or a bare CFF one, for
-// the font req describes, or nil to supply none. A returned error aborts the
-// remediation. A provider shared by concurrent remediations must be safe for
-// concurrent use.
-type FontProvider interface {
-	FontProgram(ctx context.Context, req FontRequest) ([]byte, error)
-}
-
-// FontProviderFunc adapts a function to a [FontProvider].
-type FontProviderFunc func(ctx context.Context, req FontRequest) ([]byte, error)
-
-// FontProgram calls f.
-func (f FontProviderFunc) FontProgram(ctx context.Context, req FontRequest) ([]byte, error) {
-	return f(ctx, req)
-}
-
-// FontRequest describes a font a document shows without embedding its
-// program. Values are safe to read concurrently.
-type FontRequest struct {
-	// BaseFont is the font's /BaseFont as the file writes it, a subset tag
-	// included; a composite font's is its descendant CIDFont's.
-	BaseFont string
-	// Subtype is the font's /Subtype: Type1, MMType1 or TrueType for a
-	// simple font, the descendant's CIDFontType0 or CIDFontType2 for a
-	// composite one.
-	Subtype string
-	// Flags is the font descriptor's /Flags (ISO 32000-1, 9.8.2), 0 when the
-	// font has no descriptor. Bit 3 (value 4) marks a symbolic font, bit 7
-	// (64) an italic one.
-	Flags int
-	// Encoding names the font's encoding: the predefined simple encoding its
-	// /Encoding or /BaseEncoding names, or the CMap a composite font's
-	// /Encoding names. It is empty when the font names none.
-	Encoding string
-	// Ordering is a composite font's character collection, Registry and
-	// Ordering joined by a hyphen (Adobe-Japan1), and empty for a simple
-	// font.
-	Ordering string
-	// Codes lists what the document shows with the font, in code order.
-	Codes []FontCode
-}
-
-// FontCode is one code a document shows with a font. Values are safe to read
-// concurrently.
-type FontCode struct {
-	// Code is a simple font's character code, or the CID a composite font's
-	// code selects.
-	Code uint32
-	// Glyph is the glyph name a simple font's encoding gives the code, empty
-	// when it gives none or the font is composite.
-	Glyph string
-	// Unicode is the character the glyph stands for, 0 when unknown.
-	Unicode rune
-	// Width is the width the font declares for the code, in thousandths of
-	// an em. The supplied program's advance must agree with it within one
-	// unit, or the font is refused.
-	Width float64
-}
 
 // WithFontProvider embeds the programs p supplies for the fonts a document
 // shows without embedding them.
@@ -127,7 +63,7 @@ type FontCode struct {
 // changes the glyphs that render, so a regression the integrity probe detects
 // rolls it back with the other content-modifying fixes. Without a provider, no
 // font is embedded and no refusal is listed.
-func WithFontProvider(p FontProvider) RemediateOption {
+func WithFontProvider(p plugins.FontProvider) RemediateOption {
 	return func(o *remediateOpts) {
 		o.fonts = p
 	}
@@ -246,7 +182,7 @@ func metricFamilies(family string) []string {
 //     families the system does not ship (Melior, New Century Schoolbook, Century Gothic, WP symbol
 //     fonts) or styles it has no face of (Geneva,Bold, Symbol,Italic); none is
 //     a name the matching misreads.
-func matchFontFile(files []fontFile, req FontRequest) *fontFile {
+func matchFontFile(files []fontFile, req models.FontRequest) *fontFile {
 	if ranked := matchFontFiles(files, req); len(ranked) > 0 {
 		return ranked[0]
 	}
@@ -259,7 +195,7 @@ func matchFontFile(files []fontFile, req FontRequest) *fontFile {
 // one, so a face of a metric-compatible family stands for the font where the
 // face of its own name draws a glyph wider or narrower than the font
 // declares.
-func matchFontFiles(files []fontFile, req FontRequest) []*fontFile {
+func matchFontFiles(files []fontFile, req models.FontRequest) []*fontFile {
 	base := req.BaseFont
 	if tag, rest, ok := strings.Cut(base, "+"); ok && len(tag) == 6 {
 		base = rest
@@ -476,28 +412,22 @@ func normalizeFontName(name string) string {
 
 // fontProvider adapts providers to the remediation engine: each is asked in
 // turn, and the programs they offer are the font's candidates, in provider
-// order, the first error aborting. A [FontProvider] offers the one program it
-// returns, and the providers of [WithFontFiles] and [WithSystemFonts] every
-// face that serves the font, best first, read when the engine reaches it and
-// logging to logger what they skip. The engine embeds the first candidate it
-// accepts, so a later provider serves a font only when no program an earlier
-// one offers does.
-func fontProvider(logger *slog.Logger, providers []FontProvider) remediation.FontProvider {
+// order, the first error aborting. A [plugins.FontProvider] offers the one
+// program it returns, and the providers of [WithFontFiles] and
+// [WithSystemFonts] every face that serves the font, best first, read when the
+// engine reaches it and logging to logger what they skip. The engine embeds
+// the first candidate it accepts, so a later provider serves a font only when
+// no program an earlier one offers does.
+func fontProvider(logger *slog.Logger, providers []plugins.FontProvider) remediation.FontProvider {
 	if len(providers) == 0 {
 		return nil
 	}
-	return func(ctx context.Context, req remediation.FontRequest) ([]remediation.FontCandidate, error) {
-		out := FontRequest{
-			BaseFont: req.BaseFont,
-			Subtype:  req.Subtype,
-			Flags:    req.Flags,
-			Encoding: req.Encoding,
-			Ordering: req.Ordering,
-			Codes:    make([]FontCode, len(req.Codes)),
-		}
-		for i, c := range req.Codes {
-			out.Codes[i] = FontCode{Code: c.Code, Glyph: c.Glyph, Unicode: c.Unicode, Width: c.Width}
-		}
+	return func(ctx context.Context, req models.FontRequest) ([]remediation.FontCandidate, error) {
+		// A provider gets its own copy of the codes: it cannot change the
+		// engine's.
+		out := req
+		out.Codes = make([]models.FontCode, len(req.Codes))
+		copy(out.Codes, req.Codes)
 		var candidates []remediation.FontCandidate
 		for _, p := range providers {
 			if files, ok := p.(*fontFiles); ok {

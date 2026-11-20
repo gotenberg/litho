@@ -49,7 +49,7 @@ func directResourcesPDF() []byte {
 
 // inlineProvider supplies a program for every font of [inlineFontsPDF] but
 // Times-Roman.
-func inlineProvider(_ context.Context, req FontRequest) ([]byte, error) {
+func inlineProvider(_ context.Context, req models.FontRequest) ([]byte, error) {
 	switch req.BaseFont {
 	case "Helvetica", "ArialMT":
 		return sansProgram(0, 667, 667), nil

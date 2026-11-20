@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/plugins"
 )
 
 // TestWriterRefusesToSignAnEncryptedSourceAfterARemediation pins that a
@@ -35,11 +36,11 @@ func TestWriterRefusesToSignAnEncryptedSourceAfterARemediation(t *testing.T) {
 
 	for _, tc := range []struct {
 		name  string
-		write func(ctx context.Context, t *testing.T, r *Reader, signer Signer, out *bytes.Buffer) error
+		write func(ctx context.Context, t *testing.T, r *Reader, signer plugins.Signer, out *bytes.Buffer) error
 	}{
 		{
 			name: "a PDF/A-2b remediation",
-			write: func(ctx context.Context, t *testing.T, r *Reader, signer Signer, out *bytes.Buffer) error {
+			write: func(ctx context.Context, t *testing.T, r *Reader, signer plugins.Signer, out *bytes.Buffer) error {
 				w := NewWriter(r)
 				defer w.Close()
 				if err := pdfa(ctx, w); err != nil {
@@ -51,7 +52,7 @@ func TestWriterRefusesToSignAnEncryptedSourceAfterARemediation(t *testing.T) {
 		},
 		{
 			name: "an edit then a PDF/A-2b remediation",
-			write: func(ctx context.Context, t *testing.T, r *Reader, signer Signer, out *bytes.Buffer) error {
+			write: func(ctx context.Context, t *testing.T, r *Reader, signer plugins.Signer, out *bytes.Buffer) error {
 				w := NewWriter(r)
 				defer w.Close()
 				edit(w)
@@ -64,7 +65,7 @@ func TestWriterRefusesToSignAnEncryptedSourceAfterARemediation(t *testing.T) {
 		},
 		{
 			name: "Sign, an edit, then a PDF/UA-1 remediation",
-			write: func(ctx context.Context, t *testing.T, r *Reader, signer Signer, out *bytes.Buffer) error {
+			write: func(ctx context.Context, t *testing.T, r *Reader, signer plugins.Signer, out *bytes.Buffer) error {
 				w := NewWriter(r)
 				defer w.Close()
 				w.Sign(signer)
@@ -77,7 +78,7 @@ func TestWriterRefusesToSignAnEncryptedSourceAfterARemediation(t *testing.T) {
 		},
 		{
 			name: "a remediation keeping a later round",
-			write: func(ctx context.Context, t *testing.T, r *Reader, signer Signer, out *bytes.Buffer) error {
+			write: func(ctx context.Context, t *testing.T, r *Reader, signer plugins.Signer, out *bytes.Buffer) error {
 				w := NewWriter(r)
 				defer w.Close()
 				e := &roundsEngine{steps: []roundsStep{{keys: []string{"PageLayout"}}, {keys: []string{"PageMode"}}}}
@@ -93,7 +94,7 @@ func TestWriterRefusesToSignAnEncryptedSourceAfterARemediation(t *testing.T) {
 		},
 		{
 			name: "a pipeline signing after an edit and a remediation",
-			write: func(ctx context.Context, _ *testing.T, r *Reader, signer Signer, out *bytes.Buffer) error {
+			write: func(ctx context.Context, _ *testing.T, r *Reader, signer plugins.Signer, out *bytes.Buffer) error {
 				_, err := NewPipeline().Open(r).
 					Apply(func(ctx context.Context, w *Writer) error {
 						edit(w)

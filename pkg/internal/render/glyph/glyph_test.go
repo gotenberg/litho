@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // testDoc is a document with no file behind it, which reads the direct
@@ -318,7 +319,7 @@ func TestSubstituteRequestsAndScaling(t *testing.T) {
 	t.Parallel()
 	program := fontbuild.TrueType{PostScriptName: "Sub", Family: "Sub", Subfamily: "Regular", Glyphs: glyphs}.Build()
 	var asked []string
-	provider := func(_ context.Context, req Request) ([]Candidate, error) {
+	provider := func(_ context.Context, req models.FontRequest) ([]Candidate, error) {
 		asked = append(asked, req.BaseFont)
 		if req.BaseFont != "Times-Bold" {
 			return nil, nil
@@ -357,7 +358,7 @@ func TestSubstituteRequestsAndScaling(t *testing.T) {
 func TestSubstituteNotdefCodesDrawNothing(t *testing.T) {
 	t.Parallel()
 	program := fontbuild.TrueType{PostScriptName: "Sub", Family: "Sub", Subfamily: "Regular", Glyphs: glyphs}.Build()
-	provider := func(context.Context, Request) ([]Candidate, error) {
+	provider := func(context.Context, models.FontRequest) ([]Candidate, error) {
 		return []Candidate{func(context.Context) ([]byte, error) { return program, nil }}, nil
 	}
 	f := load(t, unembedded("Melior", 32), Options{Substitutes: provider})
@@ -389,7 +390,7 @@ func TestSymbolicSubstituteDrawsByName(t *testing.T) {
 	t.Parallel()
 	program := fontbuild.TrueType{PostScriptName: "Sub", Family: "Sub", Subfamily: "Regular", Glyphs: glyphs}.Build()
 	var asked []string
-	provider := func(_ context.Context, req Request) ([]Candidate, error) {
+	provider := func(_ context.Context, req models.FontRequest) ([]Candidate, error) {
 		asked = append(asked, req.BaseFont)
 		if req.BaseFont != "Helvetica" {
 			return nil, nil
@@ -435,7 +436,7 @@ func TestSubstituteRequestOrder(t *testing.T) {
 		{"Calibri", 32, "Adobe-Identity", []string{"Calibri", "Helvetica"}},
 	} {
 		var got []string
-		for _, r := range substituteRequests(Request{BaseFont: c.name, Flags: c.flags, Ordering: c.ordering}) {
+		for _, r := range substituteRequests(models.FontRequest{BaseFont: c.name, Flags: c.flags, Ordering: c.ordering}) {
 			got = append(got, r.BaseFont)
 		}
 		if len(got) != len(c.want) {
@@ -454,7 +455,7 @@ func TestSubstituteRequestOrder(t *testing.T) {
 func TestProviderErrorAborts(t *testing.T) {
 	t.Parallel()
 	boom := errors.New("boom")
-	provider := func(context.Context, Request) ([]Candidate, error) { return nil, boom }
+	provider := func(context.Context, models.FontRequest) ([]Candidate, error) { return nil, boom }
 	_, err := Load(context.Background(), testDoc(), unembedded("Melior", 32), Options{Substitutes: provider})
 	if !errors.Is(err, boom) {
 		t.Errorf("Load error %v, want the provider's", err)
