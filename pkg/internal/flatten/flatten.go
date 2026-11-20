@@ -26,6 +26,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // DefaultDPI is the resolution regions are composited at when the caller
@@ -536,7 +537,7 @@ func (f *flattener) render(ctx context.Context, pg *document.Page, shared *page.
 	dpi := f.dpi
 	budget := f.doc.Limits().WithDefaults().MaxRenderPixels
 	for {
-		g, err := page.WholePixelGeometry(pg, page.CropBox, dpi)
+		g, err := page.WholePixelGeometry(pg, models.RenderCropBox, dpi)
 		if err != nil {
 			return nil, page.Geometry{}, 0, 0, fmt.Errorf("compositing at %v dpi: %w", dpi, err)
 		}
@@ -548,7 +549,7 @@ func (f *flattener) render(ctx context.Context, pg *document.Page, shared *page.
 		res, report, err := page.RenderGroup(ctx, f.doc, pg, page.Options{
 			DPI:               dpi,
 			Background:        [4]float32{1, 1, 1, 1},
-			Omit:              page.Text | page.Annotations,
+			Omit:              models.RenderText | models.RenderAnnotations,
 			GroupSpace:        true,
 			DefaultGroupSpace: f.deviceSpace(ctx, pg),
 			Shared:            shared,

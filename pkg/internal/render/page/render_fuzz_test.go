@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // fuzzResources are the resources of the page [FuzzRender] draws: an image,
@@ -68,7 +69,7 @@ func FuzzRender(f *testing.F) {
 			t.Fatalf("ResolvePages: %d pages, %v", len(pages), err)
 		}
 		opts := fx.options()
-		opts.Box = Box(mode % 5)
+		opts.Box = models.RenderBox(mode % 5)
 		opts.CMYK = mode&8 != 0
 		opts.GroupSpace = mode&16 != 0
 		res, _, err := RenderGroup(ctx, doc, pages[0], opts)

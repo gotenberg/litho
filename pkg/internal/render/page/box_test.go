@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestBoxGeometry sizes each page boundary as a viewer reads it: a box the
@@ -17,16 +18,16 @@ func TestBoxGeometry(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		page          string
-		box           Box
+		box           models.RenderBox
 		width, height int
 	}{
-		{"/MediaBox [0 0 100 50] /CropBox [10 10 60 40]", CropBox, 50, 30},
-		{"/MediaBox [0 0 100 50] /CropBox [10 10 60 40]", MediaBox, 100, 50},
-		{"/MediaBox [0 0 100 50] /CropBox [10 10 60 40]", TrimBox, 50, 30},
-		{"/MediaBox [0 0 100 50] /CropBox [10 10 60 40] /TrimBox [20 20 20 30]", TrimBox, 50, 30},
-		{"/MediaBox [0 0 100 50] /CropBox [10 10 60 40] /BleedBox [-10 0 70 50]", BleedBox, 70, 50},
-		{"/MediaBox [0 0 100 50] /ArtBox [5 5 25 15]", ArtBox, 20, 10},
-		{"/MediaBox [0 0 100 50] /ArtBox [5 5 25 15]", Box(200), 100, 50},
+		{"/MediaBox [0 0 100 50] /CropBox [10 10 60 40]", models.RenderCropBox, 50, 30},
+		{"/MediaBox [0 0 100 50] /CropBox [10 10 60 40]", models.RenderMediaBox, 100, 50},
+		{"/MediaBox [0 0 100 50] /CropBox [10 10 60 40]", models.RenderTrimBox, 50, 30},
+		{"/MediaBox [0 0 100 50] /CropBox [10 10 60 40] /TrimBox [20 20 20 30]", models.RenderTrimBox, 50, 30},
+		{"/MediaBox [0 0 100 50] /CropBox [10 10 60 40] /BleedBox [-10 0 70 50]", models.RenderBleedBox, 70, 50},
+		{"/MediaBox [0 0 100 50] /ArtBox [5 5 25 15]", models.RenderArtBox, 20, 10},
+		{"/MediaBox [0 0 100 50] /ArtBox [5 5 25 15]", models.RenderBox(200), 100, 50},
 	} {
 		_, pg := open(t, fixture{page: tc.page}.bytes(), limits.Limits{})
 		g, err := BoxGeometry(pg, tc.box, 72)

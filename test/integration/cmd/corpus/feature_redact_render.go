@@ -971,7 +971,7 @@ func lithoCheck(ctx context.Context, src, after *pdf.Reader, page int, sets *red
 			check.Error = fmt.Sprintf("render before: %v", err)
 			return check, nil
 		}
-		images, err := render(src, pdf.WithRenderContent(pdf.RenderImages))
+		images, err := render(src, pdf.WithRenderContent(models.RenderImages))
 		if err != nil {
 			check.Error = fmt.Sprintf("render before, images only: %v", err)
 			return check, nil
@@ -984,12 +984,12 @@ func lithoCheck(ctx context.Context, src, after *pdf.Reader, page int, sets *red
 		check.Error = fmt.Sprintf("render after: %v", err)
 		return check, nil
 	}
-	images, err := render(after, pdf.WithRenderContent(pdf.RenderImages))
+	images, err := render(after, pdf.WithRenderContent(models.RenderImages))
 	if err != nil {
 		check.Error = fmt.Sprintf("render after, images only: %v", err)
 		return check, nil
 	}
-	onBlack, err := render(after, pdf.WithRenderContent(pdf.RenderImages), pdf.WithRenderBackground(color.Black))
+	onBlack, err := render(after, pdf.WithRenderContent(models.RenderImages), pdf.WithRenderBackground(color.Black))
 	if err != nil {
 		check.Error = fmt.Sprintf("render after, images only over black: %v", err)
 		return check, nil
@@ -999,7 +999,7 @@ func lithoCheck(ctx context.Context, src, after *pdf.Reader, page int, sets *red
 	// check reads it ([pdf.WithRenderRedactionReading]): before a transfer
 	// function and under the initial intent, either of which may draw that
 	// colour pale on screen.
-	blank, err := render(after, pdf.WithRenderContent(pdf.RenderImages), pdf.WithRenderBackground(color.Black), pdf.WithRenderRedactionReading())
+	blank, err := render(after, pdf.WithRenderContent(models.RenderImages), pdf.WithRenderBackground(color.Black), pdf.WithRenderRedactionReading())
 	if err != nil {
 		check.Error = fmt.Sprintf("render after, blanked images over black: %v", err)
 		return check, nil

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"image/color"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // annotatedPDF is a 100 by 50 page with two square annotations: a red one
@@ -40,8 +42,8 @@ func TestRenderPageTarget(t *testing.T) {
 		left, right color.NRGBA
 	}{
 		{"default", nil, white, blue},
-		{"view", []RenderOption{WithRenderTarget(RenderForView)}, white, blue},
-		{"print", []RenderOption{WithRenderTarget(RenderForPrint)}, red, white},
+		{"view", []RenderOption{WithRenderTarget(models.RenderForView)}, white, blue},
+		{"print", []RenderOption{WithRenderTarget(models.RenderForPrint)}, red, white},
 	} {
 		img, err := r.RenderPage(ctx, 1, append(tc.opts, WithRenderDPI(72))...)
 		if err != nil {
@@ -54,7 +56,7 @@ func TestRenderPageTarget(t *testing.T) {
 			t.Errorf("%s: right annotation pixel %v, want %v", tc.name, got, tc.right)
 		}
 	}
-	if _, err := r.RenderPage(ctx, 1, WithRenderTarget(RenderTarget(9))); !errors.Is(err, ErrInvalidRenderOptions) {
+	if _, err := r.RenderPage(ctx, 1, WithRenderTarget(models.RenderTarget(9))); !errors.Is(err, ErrInvalidRenderOptions) {
 		t.Errorf("target 9: %v, want ErrInvalidRenderOptions", err)
 	}
 }

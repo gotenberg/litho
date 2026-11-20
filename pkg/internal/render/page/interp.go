@@ -20,6 +20,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/shade"
 	"github.com/gotenberg/litho/pkg/internal/render/stroke"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // renderer carries one render.
@@ -113,7 +114,7 @@ type renderer struct {
 	// omit is the content left out ([Options.Omit]). It is cleared where a
 	// kind's own content runs: a Type 3 glyph description, a pattern cell, a
 	// soft mask's group.
-	omit Content
+	omit models.RenderContent
 	// overprint simulates overprinting ([Options.Overprint]).
 	overprint bool
 	// deviceInks marks a page composited in a CMYK device's own inks,
@@ -147,7 +148,7 @@ type renderer struct {
 }
 
 // omits reports whether the render leaves out content of kind k.
-func (r *renderer) omits(k Content) bool {
+func (r *renderer) omits(k models.RenderContent) bool {
 	return r.omit&k != 0
 }
 
@@ -474,7 +475,7 @@ func (r *renderer) paintPath(s *scope, operator string) error {
 		}
 	}
 	st := r.m.Current()
-	if !st.SkipExtraction && !s.path.Empty() && !r.omits(Paths) {
+	if !st.SkipExtraction && !s.path.Empty() && !r.omits(models.RenderPaths) {
 		var err error
 		switch operator {
 		case "f", "F", "B", "b":

@@ -20,6 +20,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/glyph"
 	"github.com/gotenberg/litho/pkg/internal/render/shade"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // maxRenderOperators bounds the operators one render executes, across the
@@ -102,8 +103,10 @@ type Options struct {
 	// of ISO 32000-1, 12.5.3.
 	Annotations annot.Mode
 	// Omit names the kinds of content left out of the page; the zero value
-	// draws everything. See [Content].
-	Omit Content
+	// draws everything. See [models.RenderContent]. A soft mask's group
+	// (ISO 32000-1, 11.6.5.2) shapes what it masks rather than painting, so
+	// it is drawn whole; text left out still advances the text position.
+	Omit models.RenderContent
 	// GroupSpace composites the page group in the grey or CMYK space its
 	// /Group /CS names whatever its content (ISO 32000-1, 11.4.7), as a
 	// writer of the composite in that space needs it. Unset, the page group
@@ -132,7 +135,7 @@ type Options struct {
 	// groups it is done with to it ([Result.Release]).
 	Pool *surface.Pool
 	// Box is the page boundary drawn, the crop box by default.
-	Box Box
+	Box models.RenderBox
 	// WholePixels draws the boundary onto exactly the whole pixels of the
 	// raster ([WholePixelGeometry]) rather than at DPI on both axes, its
 	// last column and row partly off the page: a caller that draws the
@@ -200,18 +203,18 @@ type Options struct {
 	// which are not drawn on the page's raster. The render calls it on its
 	// own goroutine, in painting order.
 	Glyph func(origin geom.Point, bounds geom.Rect)
-	// OmitGlyph, when not nil, is called with the text origin, in device
-	// space as [Options.Glyph] reports it, of each glyph the page shows, a
-	// Type 3 glyph's among them, and leaves out each glyph it returns true
-	// for as [Options.Omit] leaves out [Text]: the glyph paints nothing and
-	// keeps its clipping (ISO 32000-1, 9.3.6). It is not called for the
+	// OmitGlyph, when not nil, is called with the text origin, in device space
+	// as [Options.Glyph] reports it, of each glyph the page shows, a Type 3
+	// glyph's among them, and leaves out each glyph it returns true for as
+	// [Options.Omit] leaves out [models.RenderText]: the glyph paints nothing
+	// and keeps its clipping (ISO 32000-1, 9.3.6). It is not called for the
 	// glyphs a Type 3 glyph description, an annotation appearance, a soft
-	// mask's group or a tiling pattern's cells show, which are drawn whole
-	// as [Options.Omit] draws them. A caller judging some glyphs by the
-	// pixels they change draws the page with and without them. The render
-	// calls it on its own goroutine, once for each glyph shown, in the order
-	// the content shows them, so a caller can tell apart glyphs shown at one
-	// origin by their rank there.
+	// mask's group or a tiling pattern's cells show, which are drawn whole as
+	// [Options.Omit] draws them. A caller judging some glyphs by the pixels
+	// they change draws the page with and without them. The render calls it on
+	// its own goroutine, once for each glyph shown, in the order the content
+	// shows them, so a caller can tell apart glyphs shown at one origin by
+	// their rank there.
 	OmitGlyph func(origin geom.Point) bool
 	// OmitGlyphClip also leaves out of the text clipping path each glyph
 	// [Options.OmitGlyph] leaves out, in the modes that add to it (4 to 7,
@@ -228,41 +231,6 @@ type Options struct {
 	// reading where text paints needs whole.
 	SolidPlaceholders bool
 }
-
-// Content is a set of kinds of content, told apart by the operator that
-// paints them, as Ghostscript's FILTERTEXT, FILTERIMAGE and FILTERVECTOR
-// tell them apart.
-//
-// A kind left out paints nothing, but keeps every other effect: a path
-// still clips (ISO 32000-1, 8.5.4), text in a clipping mode still adds its
-// glyphs to the clip at ET (9.3.6), and text still advances the text
-// position. The kind is the outermost painting operator's: a Type 3 glyph
-// description is text however it paints (9.6.5), and the cells of a tiling
-// pattern are the fill or stroke they paint (8.7.3.1). An annotation appearance
-// is the annotation (12.5.5), drawn whole. A soft mask's group
-// (11.6.5.2) shapes what it masks rather than painting, so it is drawn
-// whole. A form XObject is a container: its content is told apart operator
-// by operator.
-type Content uint8
-
-const (
-	// Text is what the text-showing operators paint (9.4.3, Table 109).
-	Text Content = 1 << iota
-	// Paths is what the path-painting operators paint (8.5.3.1, Table 60),
-	// in a colour, a shading pattern or a tiling pattern.
-	Paths
-	// Images is what Do paints for an image XObject and what BI paints,
-	// stencil masks included (8.9).
-	Images
-	// Shadings is what sh paints (8.7.4.2).
-	Shadings
-	// Annotations is the annotation appearances drawn over the content
-	// (12.5.5), each whole whatever kinds it paints.
-	Annotations
-)
-
-// AllContent holds every kind of [Content].
-const AllContent = Text | Paths | Images | Shadings | Annotations
 
 // Report says what a render left out.
 type Report struct {
@@ -484,7 +452,7 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 	if err := r.run(ops, pg.DrawResources, g.Matrix, 0); err != nil {
 		return nil, report, err
 	}
-	if opts.Omit&Annotations == 0 {
+	if opts.Omit&models.RenderAnnotations == 0 {
 		// An appearance stream is the annotation (12.5.5): drawn whole.
 		r.omit, r.omitGlyph = 0, nil
 		if err := r.annotations(g, opts.Annotations); err != nil {

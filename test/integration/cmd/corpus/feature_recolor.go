@@ -192,7 +192,7 @@ const recolorJPEGQuality = 85
 type recolorFeature struct {
 	// convert runs the conversion with the options given; tests replace it
 	// to plant a defect.
-	convert func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*pdf.ColorReport, error)
+	convert func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*models.ColorReport, error)
 	qpdf    string
 	// jpegQuality is the JPEG run's quality, 0 for no JPEG run.
 	jpegQuality int
@@ -204,7 +204,7 @@ type recolorFeature struct {
 
 func newRecolorFeature() *recolorFeature {
 	f := &recolorFeature{
-		convert: func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*pdf.ColorReport, error) {
+		convert: func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*models.ColorReport, error) {
 			return w.ConvertColors(ctx, pdf.CMYKColorTarget(), opts...)
 		},
 		jpegQuality: recolorJPEGQuality,
@@ -249,10 +249,10 @@ type recolorOutput struct {
 	Failed  bool   `json:"failed,omitempty"`
 	// ReopenFailed and QPDF report the output-level checks; QPDF lists the
 	// classes qpdf finds in the output and not the input.
-	ReopenFailed bool              `json:"reopen_failed,omitempty"`
-	QPDF         []string          `json:"qpdf,omitempty"`
-	Report       *pdf.ColorReport  `json:"report,omitempty"`
-	Pages        []recolorPageEval `json:"pages,omitempty"`
+	ReopenFailed bool                `json:"reopen_failed,omitempty"`
+	QPDF         []string            `json:"qpdf,omitempty"`
+	Report       *models.ColorReport `json:"report,omitempty"`
+	Pages        []recolorPageEval   `json:"pages,omitempty"`
 	// JPEG is the JPEG run, nil when it did not run.
 	JPEG *recolorJPEGRun `json:"jpeg,omitempty"`
 }
@@ -594,7 +594,7 @@ func (prep *recolorJPEGPrep) finish(output []byte, renders []image.Image) *recol
 
 // convertOnce converts src on a Writer of its own, with opts, and writes the
 // result.
-func (f *recolorFeature) convertOnce(ctx context.Context, src *pdf.Reader, opts ...pdf.ColorOption) ([]byte, *pdf.ColorReport, error) {
+func (f *recolorFeature) convertOnce(ctx context.Context, src *pdf.Reader, opts ...pdf.ColorOption) ([]byte, *models.ColorReport, error) {
 	w := pdf.NewWriter(src)
 	defer w.Close()
 	report, err := f.convert(ctx, w, opts...)

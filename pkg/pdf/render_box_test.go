@@ -7,6 +7,8 @@ import (
 	"image"
 	"image/color"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // boxedPDF is a page whose media box [0 0 200 100] holds a crop box
@@ -41,11 +43,11 @@ func TestRenderPageBox(t *testing.T) {
 		left color.NRGBA
 	}{
 		{"default", nil, image.Pt(100, 80), white},
-		{"crop", []RenderOption{WithRenderBox(RenderCropBox)}, image.Pt(100, 80), white},
-		{"media", []RenderOption{WithRenderBox(RenderMediaBox)}, image.Pt(200, 100), red},
-		{"bleed", []RenderOption{WithRenderBox(RenderBleedBox)}, image.Pt(120, 100), red},
-		{"trim", []RenderOption{WithRenderBox(RenderTrimBox)}, image.Pt(90, 70), white},
-		{"art", []RenderOption{WithRenderBox(RenderArtBox)}, image.Pt(100, 80), white},
+		{"crop", []RenderOption{WithRenderBox(models.RenderCropBox)}, image.Pt(100, 80), white},
+		{"media", []RenderOption{WithRenderBox(models.RenderMediaBox)}, image.Pt(200, 100), red},
+		{"bleed", []RenderOption{WithRenderBox(models.RenderBleedBox)}, image.Pt(120, 100), red},
+		{"trim", []RenderOption{WithRenderBox(models.RenderTrimBox)}, image.Pt(90, 70), white},
+		{"art", []RenderOption{WithRenderBox(models.RenderArtBox)}, image.Pt(100, 80), white},
 	} {
 		img, err := r.RenderPage(ctx, 1, append(tc.opts, WithRenderDPI(72))...)
 		if err != nil {
@@ -58,7 +60,7 @@ func TestRenderPageBox(t *testing.T) {
 			t.Errorf("%s: pixel (2, 50) %v, want %v", tc.name, got, tc.left)
 		}
 	}
-	if _, err := r.RenderPage(ctx, 1, WithRenderBox(RenderBox(9))); !errors.Is(err, ErrInvalidRenderOptions) {
+	if _, err := r.RenderPage(ctx, 1, WithRenderBox(models.RenderBox(9))); !errors.Is(err, ErrInvalidRenderOptions) {
 		t.Errorf("box 9: %v, want ErrInvalidRenderOptions", err)
 	}
 }
@@ -68,7 +70,7 @@ func TestRenderPageBox(t *testing.T) {
 func TestRenderPageBoxRotated(t *testing.T) {
 	t.Parallel()
 	r := openLimited(t, boxedPDF(90), Limits{})
-	img, err := r.RenderPage(context.Background(), 1, WithRenderDPI(72), WithRenderBox(RenderBleedBox))
+	img, err := r.RenderPage(context.Background(), 1, WithRenderDPI(72), WithRenderBox(models.RenderBleedBox))
 	if err != nil {
 		t.Fatal(err)
 	}

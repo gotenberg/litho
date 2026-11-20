@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // The expected pixels below are computed by hand: at 72 dpi a 100-unit page
@@ -352,7 +353,7 @@ func TestWholePixelGeometry(t *testing.T) {
 		{"/MediaBox [0 0 100.4 50.2] /Rotate 270 /UserUnit 2", 72, 101, 201},
 	} {
 		_, pg := open(t, fixture{page: tc.page}.bytes(), limits.Limits{})
-		g, err := WholePixelGeometry(pg, CropBox, tc.dpi)
+		g, err := WholePixelGeometry(pg, models.RenderCropBox, tc.dpi)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.page, err)
 		}

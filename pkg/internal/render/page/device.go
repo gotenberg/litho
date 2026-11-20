@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // pointsPerInch is the size of a default user space unit, 1/72 inch (ISO
@@ -26,43 +27,24 @@ type Geometry struct {
 	Width, Height int
 }
 
-// Box selects the page boundary a render draws (ISO 32000-1, 14.11.2): the
-// region of the page the raster holds.
-type Box uint8
-
-const (
-	// CropBox is the region a viewer shows and prints (14.11.2.1), the
-	// default.
-	CropBox Box = iota
-	// MediaBox is the whole medium the page is drawn on.
-	MediaBox
-	// BleedBox is the region production clips the page to, the bleed
-	// around the trimmed page included.
-	BleedBox
-	// TrimBox is the finished page after trimming.
-	TrimBox
-	// ArtBox is the page's meaningful content as its creator meant it.
-	ArtBox
-)
-
-// region returns the boundary b of pg as [Box] describes it, read as a
-// viewer reads page boxes: the effective boxes of [document.Page], each
+// region returns the boundary b of pg as [models.RenderBox] describes it, read
+// as a viewer reads page boxes: the effective boxes of [document.Page], each
 // defaulting to the crop box (ISO 32000-1, 7.7.3.3, Table 30) and reduced to
 // the media box (14.11.2.1), and the region a viewer shows
 // ([document.Page.ViewedBox]) where the box is none a viewer uses
 // ([document.UsableBox]). A Box no constant names is the crop box.
-func (b Box) region(pg *document.Page) ast.PdfArray {
+func region(b models.RenderBox, pg *document.Page) ast.PdfArray {
 	var box ast.PdfArray
 	switch b {
-	case MediaBox:
+	case models.RenderMediaBox:
 		return pg.ViewedMediaBox()
-	case BleedBox:
+	case models.RenderBleedBox:
 		box = pg.BleedBox
-	case TrimBox:
+	case models.RenderTrimBox:
 		box = pg.TrimBox
-	case ArtBox:
+	case models.RenderArtBox:
 		box = pg.ArtBox
-	case CropBox:
+	case models.RenderCropBox:
 	}
 	if document.UsableBox(box) {
 		return box
@@ -76,14 +58,14 @@ func (b Box) region(pg *document.Page) ast.PdfArray {
 // Table 30). The raster holds the turned box, each side rounded up to whole
 // pixels as pdftoppm rounds it.
 func PageGeometry(pg *document.Page, dpi float64) (Geometry, error) {
-	return BoxGeometry(pg, CropBox, dpi)
+	return BoxGeometry(pg, models.RenderCropBox, dpi)
 }
 
 // BoxGeometry returns the device geometry of [PageGeometry] for the page
 // boundary b rather than the crop box: content outside it is cut off, and
 // content between it and a smaller crop box is drawn, as a production tool
 // images the bleed. A /Rotate turns the boundary as it turns the crop box.
-func BoxGeometry(pg *document.Page, b Box, dpi float64) (Geometry, error) {
+func BoxGeometry(pg *document.Page, b models.RenderBox, dpi float64) (Geometry, error) {
 	return boxGeometry(pg, b, dpi, false)
 }
 
@@ -93,15 +75,15 @@ func BoxGeometry(pg *document.Page, b Box, dpi float64) (Geometry, error) {
 // it. Each axis scales by its own factor, at most one pixel's worth over the
 // side: a page 595 points wide at 89 dpi maps onto 736 pixels, not 735.5.
 // [Options.WholePixels] renders at it.
-func WholePixelGeometry(pg *document.Page, b Box, dpi float64) (Geometry, error) {
+func WholePixelGeometry(pg *document.Page, b models.RenderBox, dpi float64) (Geometry, error) {
 	return boxGeometry(pg, b, dpi, true)
 }
 
-func boxGeometry(pg *document.Page, b Box, dpi float64, whole bool) (Geometry, error) {
+func boxGeometry(pg *document.Page, b models.RenderBox, dpi float64, whole bool) (Geometry, error) {
 	if !numeric.PositiveFinite(dpi) {
 		return Geometry{}, fmt.Errorf("%w: resolution %v dpi", ErrInvalidOptions, dpi)
 	}
-	box := b.region(pg)
+	box := region(b, pg)
 	x0, y0 := document.Float(box[0]), document.Float(box[1])
 	x1, y1 := document.Float(box[2]), document.Float(box[3])
 	x0, x1 = min(x0, x1), max(x0, x1)

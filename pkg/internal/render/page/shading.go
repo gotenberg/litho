@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
 	"github.com/gotenberg/litho/pkg/internal/render/shade"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // The pattern types: a tiling pattern (ISO 32000-1, 8.7.3.1, Table 75) and a
@@ -34,7 +35,7 @@ func (r *renderer) resource(s *scope, kind, name ast.PdfName) ast.PdfObject {
 // the current clip, in the fill alpha (11.6.4.4).
 func (r *renderer) shading(s *scope, op content.Operation) error {
 	st := r.m.Current()
-	if st.SkipExtraction || len(op.Operands) != 1 || r.clip().empty() || r.omits(Shadings) {
+	if st.SkipExtraction || len(op.Operands) != 1 || r.clip().empty() || r.omits(models.RenderShadings) {
 		return nil
 	}
 	name, ok := op.Operands[0].(ast.PdfName)

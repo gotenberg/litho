@@ -170,8 +170,8 @@ func boxesMeet(a, b [4]float64) bool {
 // boundary drawn: the crop box, or region, when not the zero box, reduced to
 // the crop box. A caller judging a few glyphs draws only where they lie, so a
 // page of dense art costs the rasterisation of that part alone.
-func (s *textScene) frame(pg *document.Page, region [4]float64) (*document.Page, page.Box, error) {
-	box := page.CropBox
+func (s *textScene) frame(pg *document.Page, region [4]float64) (*document.Page, models.RenderBox, error) {
+	box := models.RenderCropBox
 	if region != [4]float64{} {
 		crop := boxToRect(pg.ViewedBox())
 		region = [4]float64{
@@ -186,7 +186,7 @@ func (s *textScene) frame(pg *document.Page, region [4]float64) (*document.Page,
 		// written.
 		clipped := *pg
 		clipped.ArtBox = ast.PdfArray{ast.PdfReal(region[0]), ast.PdfReal(region[1]), ast.PdfReal(region[2]), ast.PdfReal(region[3])}
-		pg, box = &clipped, page.ArtBox
+		pg, box = &clipped, models.RenderArtBox
 	}
 	var err error
 	s.geo, err = page.BoxGeometry(pg, box, sceneDPI)
@@ -198,12 +198,12 @@ func (s *textScene) frame(pg *document.Page, region [4]float64) (*document.Page,
 
 // render draws pg, framed by [textScene.frame], at [sceneDPI] over white with
 // its annotations as a viewer shows them, and what opts sets besides.
-func (s *textScene) render(ctx context.Context, r *Reader, pg *document.Page, box page.Box, opts page.Options) (*image.NRGBA, error) {
+func (s *textScene) render(ctx context.Context, r *Reader, pg *document.Page, box models.RenderBox, opts page.Options) (*image.NRGBA, error) {
 	opts.DPI = sceneDPI
 	opts.Background = [4]float32{1, 1, 1, 1}
 	opts.Annotations = annot.View
 	opts.Box = box
-	img, _, err := renderImage(ctx, r.doc, pg, RenderRGB, opts)
+	img, _, err := renderImage(ctx, r.doc, pg, models.RenderRGB, opts)
 	if err != nil {
 		return nil, err
 	}

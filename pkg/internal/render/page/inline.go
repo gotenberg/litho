@@ -6,6 +6,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // inlineKeys spells out the abbreviated keys of an inline image dictionary
@@ -47,7 +48,7 @@ var inlineSpaces = map[ast.PdfName]ast.PdfName{
 // inlineImage paints the inline image of a BI operation, whose operands the
 // parse gave as the dictionary and the data ([content.InlineImageData]).
 func (r *renderer) inlineImage(s *scope, op content.Operation) error {
-	if r.m.Current().SkipExtraction || len(op.Operands) != 2 || r.omits(Images) {
+	if r.m.Current().SkipExtraction || len(op.Operands) != 2 || r.omits(models.RenderImages) {
 		return nil
 	}
 	inline, ok := op.Operands[0].(ast.PdfDict)

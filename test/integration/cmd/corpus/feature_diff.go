@@ -667,7 +667,7 @@ func readDiffPages(ctx context.Context, data []byte, hideAnnotations bool) (diff
 		}
 		renderOpts := []pdf.RenderOption{pdf.WithRenderDPI(diffDPI)}
 		if hideAnnotations {
-			renderOpts = append(renderOpts, pdf.WithRenderContent(pdf.RenderAllContent&^pdf.RenderAnnotations))
+			renderOpts = append(renderOpts, pdf.WithRenderContent(models.RenderAllContent&^models.RenderAnnotations))
 		}
 		img, err := r.RenderPage(ctx, p, renderOpts...)
 		if err != nil {

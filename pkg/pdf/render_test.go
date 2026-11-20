@@ -8,6 +8,8 @@ import (
 	"image/color"
 	"sync"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // renderPDF is a 100 by 50 page: a red square at the lower-left corner and a
@@ -125,7 +127,7 @@ func TestRenderPageConcurrent(t *testing.T) {
 				errs <- err
 				return
 			}
-			if string(got.(*image.NRGBA).Pix) != string(want.(*image.NRGBA).Pix) || rep != (RenderReport{}) {
+			if string(got.(*image.NRGBA).Pix) != string(want.(*image.NRGBA).Pix) || rep != (models.RenderReport{}) {
 				errs <- errors.New("a concurrent render with its report differs")
 			}
 		})

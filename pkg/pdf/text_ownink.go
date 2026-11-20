@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // maxSceneOwnDrawings bounds the drawings [textScene.judgeOwnInk] makes of a
@@ -62,7 +63,7 @@ type ownInkOptions struct {
 	// omit is the content every drawing leaves out besides the runs judged:
 	// none for the page as a viewer shows it, all but text for the runs
 	// drawn with nothing else.
-	omit page.Content
+	omit models.RenderContent
 	// under, when not nil, is told each pixel the own ink of seen run k
 	// marks, with the colours, RGB in their three bytes, the page shows there
 	// drawn whole, with, and without the run, without: what lies under the
@@ -502,7 +503,7 @@ func (s *textScene) groupRuns(ctx context.Context, runs [][]int, pending []int) 
 // differs from the page drawn whole at one of its pixels. No two runs of the
 // group hold one pixel, so what differs inside one run's boxes is its own
 // ink alone.
-func (s *textScene) groupDrawing(ctx context.Context, r *Reader, pg *document.Page, box page.Box, runs [][]int, group []int, o ownInkOptions, d glyphDrawing, verdicts []inkVerdict) error {
+func (s *textScene) groupDrawing(ctx context.Context, r *Reader, pg *document.Page, box models.RenderBox, runs [][]int, group []int, o ownInkOptions, d glyphDrawing, verdicts []inkVerdict) error {
 	var idx []int
 	for _, k := range group {
 		idx = append(idx, runs[k]...)

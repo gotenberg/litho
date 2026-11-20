@@ -17,6 +17,7 @@ import (
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/semantics"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // colorTargetKind tells the targets of [ColorTarget] apart.
@@ -77,37 +78,17 @@ func ICCColorTarget(profile []byte) ColorTarget {
 	return ColorTarget{kind: targetICC, profile: bytes.Clone(profile)}
 }
 
-// RenderingIntent is the rendering intent of a colour conversion (ISO
-// 32000-1, 8.6.5.8, Table 70; ICC.1:2010, 6.2). The zero value is
-// [IntentRelativeColorimetric], the intent 8.6.5.8 makes the default.
-// RenderingIntent values are immutable and safe for concurrent use.
-type RenderingIntent uint8
-
-const (
-	// IntentRelativeColorimetric maps the source white to the target's and
-	// keeps every colour the target can reproduce, clipping the rest.
-	IntentRelativeColorimetric RenderingIntent = iota
-	// IntentPerceptual compresses the source gamut into the target's,
-	// keeping the relations between colours over their exact values.
-	IntentPerceptual
-	// IntentSaturation keeps colours vivid over their exact values.
-	IntentSaturation
-	// IntentAbsoluteColorimetric keeps colours exact, the source white
-	// included, simulating the source medium on the target.
-	IntentAbsoluteColorimetric
-)
-
 // iccIntent returns the ICC rendering intent i names, false for a value no
 // constant names.
-func (i RenderingIntent) iccIntent() (icc.Intent, bool) {
+func iccIntent(i models.RenderingIntent) (icc.Intent, bool) {
 	switch i {
-	case IntentRelativeColorimetric:
+	case models.IntentRelativeColorimetric:
 		return icc.RelativeColorimetric, true
-	case IntentPerceptual:
+	case models.IntentPerceptual:
 		return icc.Perceptual, true
-	case IntentSaturation:
+	case models.IntentSaturation:
 		return icc.Saturation, true
-	case IntentAbsoluteColorimetric:
+	case models.IntentAbsoluteColorimetric:
 		return icc.AbsoluteColorimetric, true
 	}
 	return 0, false
@@ -140,7 +121,7 @@ type ColorOption func(*colorOpts)
 //     worst without compensation, draws 46 apart, as its /ON page does;
 //     poppler reads it 94 apart without and 36 with.
 type colorOpts struct {
-	intent RenderingIntent
+	intent models.RenderingIntent
 	// noBPC converts without black point compensation
 	// ([WithoutBlackPointCompensation]).
 	noBPC        bool
@@ -157,13 +138,13 @@ type colorOpts struct {
 }
 
 // WithColorIntent converts colours with the rendering intent i. Default
-// [IntentRelativeColorimetric], the graphics state's initial intent (ISO
-// 32000-1, 8.6.5.8). A rendering intent the content states overrides it for
-// the colours it governs, as a viewer reads them: the ri operator and an
-// ExtGState /RI for the colours painted after them, and an image's /Intent
-// for the image ([ColorReport.IntentOperators]). A value no constant names
+// [models.IntentRelativeColorimetric], the graphics state's initial intent
+// (ISO 32000-1, 8.6.5.8). A rendering intent the content states overrides it
+// for the colours it governs, as a viewer reads them: the ri operator and an
+// ExtGState /RI for the colours painted after them, and an image's /Intent for
+// the image ([models.ColorReport.IntentOperators]). A value no constant names
 // makes [Writer.ConvertColors] fail with [ErrInvalidColorTarget].
-func WithColorIntent(i RenderingIntent) ColorOption {
+func WithColorIntent(i models.RenderingIntent) ColorOption {
 	return func(o *colorOpts) { o.intent = i }
 }
 
@@ -179,7 +160,7 @@ func WithColorIntent(i RenderingIntent) ColorOption {
 // It is the choice a graphics state leaves to the conversion: a PDF 2.0
 // /UseBlackPtComp of /ON or /OFF (ISO 32000-2, Table 57) overrides it for the
 // colours, images and shadings painted under that state, and /Default, its
-// initial value, follows it ([ColorReport.BlackPointOperators]).
+// initial value, follows it ([models.ColorReport.BlackPointOperators]).
 func WithoutBlackPointCompensation() ColorOption {
 	return func(o *colorOpts) { o.noBPC = true }
 }
@@ -230,7 +211,7 @@ func WithSpotConversion() ColorOption {
 //
 // Under overprint, a converted colour keeps what it painted. The conversion
 // writes /OPM 0 where overprint mode 1 would leave the cyan, magenta and yellow
-// under a K-only colour unpainted ([ColorReport.OverprintPreserved]).
+// under a K-only colour unpainted ([models.ColorReport.OverprintPreserved]).
 //
 // It has no effect under a target of another component count. Off by default.
 func WithKOnlyBlack() ColorOption {
@@ -283,157 +264,6 @@ func WithJPEGQuality(q int) ColorOption {
 	return func(o *colorOpts) { o.jpegQuality, o.jpegQualitySet = q, true }
 }
 
-// ColorReport describes what [Writer.ConvertColors] converted.
-// Concurrent reads of a value are safe; a write needs synchronization.
-type ColorReport struct {
-	// Target is the family the converted colours are written in:
-	// "DeviceGray", "DeviceRGB", "DeviceCMYK" or "ICCBased".
-	Target string
-	// ConvertedOperators counts the colour operators rewritten, and
-	// ConvertedColorSpaces the colour space resources.
-	ConvertedOperators   int
-	ConvertedColorSpaces int
-	// ConvertedImages counts the image XObjects and inline images
-	// re-encoded in the target, and ConvertedShadings the shadings.
-	ConvertedImages   int
-	ConvertedShadings int
-	// KOnlyBlackColors counts the colours [WithKOnlyBlack] wrote on the
-	// black ink alone, of ConvertedOperators and of the annotation and
-	// default appearance colours.
-	KOnlyBlackColors int
-	// KeptSpotColorants names, sorted, the colorants of the spot colours
-	// kept with their alternate space converted. Empty under
-	// [WithSpotConversion].
-	KeptSpotColorants []string
-	// OutputIntent is "added" when the conversion added a GTS_PDFA1 output
-	// intent of the target's profile, "replaced" when it gave the existing
-	// GTS_PDFA1 intents that profile, and "" when it left the intents alone.
-	OutputIntent string
-	// KeptOutputIntents lists the /S of each output intent of another
-	// subtype the conversion left as it was, GTS_PDFX among them.
-	KeptOutputIntents []string
-	// ReplacedOutputIntents lists the /OutputConditionIdentifier of each
-	// intent [WithReplacedOutputIntents] pointed at the target profile.
-	ReplacedOutputIntents []string
-	// TargetProfile says where the profile the colours were converted to
-	// came from: [ProfileSourceOutputIntent] for [OutputIntentColorTarget],
-	// [ProfileSourceCaller] for [ICCColorTarget] and for a
-	// [CMYKColorTarget] read in the profile of [WithDefaultCMYKProfile], and
-	// [ProfileSourceBuiltin] for litho's own profiles.
-	TargetProfile string
-	// SourceProfiles maps each device family the conversion read colours of
-	// ("DeviceGray", "DeviceRGB", "DeviceCMYK") to where the profiles it read the
-	// family through came from, sorted, once each. A source is one of:
-	//
-	//   - The output intent's (ISO 32000-1, 14.11.5).
-	//   - The caller's.
-	//   - The target's, for the target's own family.
-	//   - litho's built-in one.
-	//   - The built-in one standing in for an output intent or caller profile
-	//     litho cannot convert through ([ProfileSourceBuiltinFallback]).
-	//   - A Default colour space of the resources (8.6.5.6).
-	//
-	// An ICCBased space litho cannot read through its own profile, read as its
-	// device family, is counted under that family.
-	SourceProfiles map[string][]string
-	// IntentFallbacks lists, once per profile, each profile a conversion read
-	// through another table than the one for the rendering intent: a profile
-	// without that table is read through its perceptual one (ICC.1:2010,
-	// 6.2), or through its matrix and tone curves when it has no perceptual
-	// table either. Empty when every profile held the intent's table or
-	// serves every intent alike.
-	IntentFallbacks []IntentFallback
-	// OverprintPreserved counts the paintings under overprint (ISO 32000-1,
-	// 8.6.7) that print as they did because the conversion wrote the graphics
-	// state dictionaries in force at them, OverprintStates of them, with /OPM 0.
-	// Colour converted into CMYK under overprint mode 1 would otherwise leave the
-	// inks of its zero components unpainted.
-	OverprintPreserved int
-	OverprintStates    int
-	// OverprintChanged counts the paintings under overprint that print otherwise
-	// once converted, on a device that overprints:
-	//
-	//   - A spot colour converted to process colour paints every process ink
-	//     where it painted its own alone.
-	//   - A CMYK colour painted under overprint mode 1 paints the inks its zero
-	//     components left unpainted, or stops leaving them.
-	//
-	// Viewers draw without overprinting by default, so the change shows only in
-	// print or in an overprint preview.
-	OverprintChanged int
-	// BlackPointOperators counts the colour operators converted under a graphics
-	// state whose /UseBlackPtComp (ISO 32000-2, Table 57) differs from the
-	// conversion's own choice, which is /OFF by default and /ON under
-	// [WithoutBlackPointCompensation]. BlackPointInlineImages counts the inline
-	// images so converted. BlackPointCopies counts the image XObjects and
-	// shadings written a second time, converted under such a state, for the
-	// paintings under it.
-	BlackPointOperators    int
-	BlackPointInlineImages int
-	BlackPointCopies       int
-	// BlackPointUnhonoured counts the paintings under such a state whose colour
-	// converts as the conversion's own choice asks all the same:
-	//
-	//   - A form XObject or a Type 3 glyph, which inherits the state but converts
-	//     once for every painting.
-	//   - An image or a shading painted by a stream whose resources are not its
-	//     own.
-	BlackPointUnhonoured int
-	// IntentOperators, IntentInlineImages, IntentCopies and
-	// IntentUnhonoured count as the BlackPoint fields do, for a graphics
-	// state whose rendering intent, set by the ri operator or an ExtGState
-	// /RI (ISO 32000-1, 8.6.5.8), differs from [WithColorIntent]'s. An image
-	// stating its own /Intent converts under it and is never copied for a
-	// state's.
-	IntentOperators    int
-	IntentInlineImages int
-	IntentCopies       int
-	IntentUnhonoured   int
-}
-
-// Where a profile [Writer.ConvertColors] read came from, as
-// [ColorReport.TargetProfile], [ColorReport.SourceProfiles] and
-// [IntentFallback.Profile] name it.
-const (
-	// ProfileSourceBuiltin is litho's built-in profile of a device family.
-	ProfileSourceBuiltin = "builtin"
-	// ProfileSourceBuiltinFallback is litho's built-in profile standing in
-	// for an output intent or caller profile litho cannot convert through.
-	ProfileSourceBuiltinFallback = "builtin-fallback"
-	// ProfileSourceCaller is a profile the caller gave: [ICCColorTarget]'s,
-	// or [WithDefaultCMYKProfile]'s.
-	ProfileSourceCaller = "caller"
-	// ProfileSourceOutputIntent is the destination profile of the document's
-	// output intent (ISO 32000-1, 14.11.5).
-	ProfileSourceOutputIntent = "output-intent"
-	// ProfileSourceTarget is the target's profile, which the target's own
-	// device family means when nothing else names a profile for it.
-	ProfileSourceTarget = "target"
-	// ProfileSourceDefaultSpace is a Default colour space of the resources
-	// (ISO 32000-1, 8.6.5.6) read in place of a device family.
-	ProfileSourceDefaultSpace = "default-space"
-	// ProfileSourceDocument is a profile the document embeds, an ICCBased
-	// space's (8.6.5.5).
-	ProfileSourceDocument = "document"
-)
-
-// IntentFallback is a profile [Writer.ConvertColors] read through another
-// table than the one for the rendering intent [WithColorIntent] selects.
-// IntentFallback values are immutable and safe for concurrent use.
-type IntentFallback struct {
-	// Target is true for the target's profile, false for a source's.
-	Target bool
-	// Components is the number of components of the profile's data colour
-	// space: 1, 3 or 4.
-	Components int
-	// Profile says where the profile came from, one of the ProfileSource
-	// constants.
-	Profile string
-	// Table is the table the profile was read through: "perceptual" or
-	// "matrix" (its matrix and tone curves).
-	Table string
-}
-
 // ConvertColors converts every colour the document paints to target.
 //
 // It converts:
@@ -464,9 +294,9 @@ type IntentFallback struct {
 // A target whose profile is an output or display device profile becomes the
 // document's GTS_PDFA1 output intent: the existing GTS_PDFA1 intents take its
 // profile, or one is added. An intent of any other subtype, a PDF/X intent
-// among them, is kept as it was and named in [ColorReport.KeptOutputIntents].
-// Only the producer can restate the printing condition a document was prepared
-// for.
+// among them, is kept as it was and named in
+// [models.ColorReport.KeptOutputIntents]. Only the producer can restate the
+// printing condition a document was prepared for.
 //
 // [WithReplacedOutputIntents] points those over another profile of the target's
 // component count at the target's profile, keeping their subtype and printing
@@ -532,7 +362,7 @@ type IntentFallback struct {
 // after it then reads the converted colours through the output intent it set. A
 // signature the source carries is dropped from the rewrite, as for every full
 // rewrite (see [Writer.DroppedSignatures]).
-func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...ColorOption) (_ *ColorReport, err error) {
+func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...ColorOption) (_ *models.ColorReport, err error) {
 	defer recoverToError(w.logger(), "Writer.ConvertColors", &err)
 
 	if w.closed {
@@ -548,7 +378,7 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 	for _, opt := range opts {
 		opt(&o)
 	}
-	intent, ok := o.intent.iccIntent()
+	intent, ok := iccIntent(o.intent)
 	if !ok {
 		return nil, fmt.Errorf("%w: rendering intent %d", ErrInvalidColorTarget, o.intent)
 	}
@@ -625,7 +455,7 @@ func (w *Writer) ConvertColors(ctx context.Context, target ColorTarget, opts ...
 		return nil, fmt.Errorf("%w: %w", ErrColorConversionRefused, err)
 	}
 
-	report := &ColorReport{
+	report := &models.ColorReport{
 		Target:               resolved.family,
 		ConvertedOperators:   result.operators,
 		ConvertedColorSpaces: result.colorSpaces,
@@ -708,7 +538,7 @@ type resolvedColorTarget struct {
 	family     string
 	profile    []byte
 	components int
-	// source is where profile came from ([ColorReport.TargetProfile]).
+	// source is where profile came from ([models.ColorReport.TargetProfile]).
 	source string
 	// setsIntent reports whether the target becomes the document's output
 	// intent, and condition, registry and info are the entries it names its
@@ -743,20 +573,20 @@ func resolveColorTarget(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		if err != nil {
 			return t, err
 		}
-		t.profile, t.source = profile, ProfileSourceOutputIntent
+		t.profile, t.source = profile, models.ProfileSourceOutputIntent
 	case targetCMYK:
 		t.profile, t.condition, t.registry = icc.CMYKPrinterProfile(), builtinCMYKCondition, iccRegistry
-		t.source = ProfileSourceBuiltin
+		t.source = models.ProfileSourceBuiltin
 		if doc.CMYKProfile != nil {
 			t.profile, t.condition, t.registry = bytes.Clone(doc.CMYKProfile), customCondition, ""
-			t.source = ProfileSourceCaller
+			t.source = models.ProfileSourceCaller
 		}
 	case targetRGB:
-		t.profile, t.condition, t.source = icc.SRGBProfile(), "sRGB IEC61966-2.1", ProfileSourceBuiltin
+		t.profile, t.condition, t.source = icc.SRGBProfile(), "sRGB IEC61966-2.1", models.ProfileSourceBuiltin
 	case targetGray:
-		t.profile, t.condition, t.source = icc.SGrayProfile(), customCondition, ProfileSourceBuiltin
+		t.profile, t.condition, t.source = icc.SGrayProfile(), customCondition, models.ProfileSourceBuiltin
 	case targetICC:
-		t.profile, t.condition, t.source = target.profile, customCondition, ProfileSourceCaller
+		t.profile, t.condition, t.source = target.profile, customCondition, models.ProfileSourceCaller
 	default:
 		return t, fmt.Errorf("%w: unknown target", ErrInvalidColorTarget)
 	}

@@ -100,9 +100,13 @@ var (
 
 	// ErrInvalidRenderOptions is returned, wrapped, by [Reader.RenderPage]
 	// when [WithRenderDPI] is not positive and finite, [WithRenderTarget]
-	// names no [RenderTarget], [WithRenderContent] holds a bit no
-	// [RenderContent] names, [WithRenderBox] names no [RenderBox],
-	// [WithRenderColorModel] names no [RenderColorModel], or
+	// names no [github.com/gotenberg/litho/pkg/models.RenderTarget],
+	// [WithRenderContent] holds a bit no
+	// [github.com/gotenberg/litho/pkg/models.RenderContent] names,
+	// [WithRenderBox] names no
+	// [github.com/gotenberg/litho/pkg/models.RenderBox],
+	// [WithRenderColorModel] names no
+	// [github.com/gotenberg/litho/pkg/models.RenderColorModel], or
 	// [WithRenderCMYKProfile] is given a profile litho cannot read CMYK
 	// through or is given for an RGB render.
 	ErrInvalidRenderOptions = page.ErrInvalidOptions

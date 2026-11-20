@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/render/page"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -193,7 +192,7 @@ func (s *textScene) judgeUnseen(ctx context.Context, r *Reader, pg *document.Pag
 	// path's or a text object's clip, ISO 32000-1, 8.5.4 and 9.3.6), so text
 	// a clip removes paints nothing alone either.
 	alone, err := s.judgeOwnInk(ctx, r, pg, [4]float64{}, pick(unseen),
-		ownInkOptions{omit: page.Paths | page.Images | page.Shadings | page.Annotations})
+		ownInkOptions{omit: models.RenderPaths | models.RenderImages | models.RenderShadings | models.RenderAnnotations})
 	if err != nil {
 		return nil, err
 	}

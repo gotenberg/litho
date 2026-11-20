@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	"github.com/gotenberg/litho/pkg/internal/render/annot"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // DefaultRenderDPI is the resolution [Reader.RenderPage] draws at when
@@ -33,13 +34,13 @@ type renderOpts struct {
 	fonts       []FontProvider
 	systemFonts *fontFiles
 	// target selects the annotations drawn.
-	target RenderTarget
+	target models.RenderTarget
 	// content selects the kinds of content drawn.
-	content RenderContent
+	content models.RenderContent
 	// box selects the page boundary drawn.
-	box RenderBox
+	box models.RenderBox
 	// model selects the colour model of the image returned.
-	model RenderColorModel
+	model models.RenderColorModel
 	// cmykProfile is the CMYK device's profile, nil for the page's
 	// DeviceCMYK reading; cmykProfileErr says why the profile given could
 	// not be read.
@@ -53,56 +54,25 @@ type renderOpts struct {
 	redactionReading bool
 }
 
-// RenderBox selects the page boundary [Reader.RenderPage] draws, by the page
-// boundaries of ISO 32000-1, 14.11.2.
-type RenderBox uint8
-
-const (
-	// RenderCropBox draws the crop box, the region a viewer shows and
-	// prints. It is the default, and what pdftoppm draws.
-	RenderCropBox RenderBox = iota
-	// RenderMediaBox draws the whole medium the page is drawn on.
-	RenderMediaBox
-	// RenderBleedBox draws the bleed box, the region a production
-	// environment clips the page to, bleed included.
-	RenderBleedBox
-	// RenderTrimBox draws the trim box, the finished page.
-	RenderTrimBox
-	// RenderArtBox draws the art box, the page's meaningful content.
-	RenderArtBox
-)
-
-// WithRenderBox selects the page boundary drawn. Default [RenderCropBox].
-// Each box is read as a viewer reads it: a bleed, trim or art box the page
-// does not state, or states as no rectangle enclosing an area, is its crop
-// box (ISO 32000-1, 7.7.3.3, Table 30), and every box is reduced to the media
-// box (14.11.2.1). Content outside the box is cut off; content between a
-// larger box and the crop box is drawn. Any other value makes
-// [Reader.RenderPage] fail with [ErrInvalidRenderOptions].
-func WithRenderBox(b RenderBox) RenderOption {
+// WithRenderBox selects the page boundary drawn. Default
+// [models.RenderCropBox]. Each box is read as a viewer reads it: a bleed, trim
+// or art box the page does not state, or states as no rectangle enclosing an
+// area, is its crop box (ISO 32000-1, 7.7.3.3, Table 30), and every box is
+// reduced to the media box (14.11.2.1). Content outside the box is cut off;
+// content between a larger box and the crop box is drawn. Any other value
+// makes [Reader.RenderPage] fail with [ErrInvalidRenderOptions].
+func WithRenderBox(b models.RenderBox) RenderOption {
 	return func(o *renderOpts) {
 		o.box = b
 	}
 }
 
-// RenderColorModel selects the colour model of the image [Reader.RenderPage]
-// returns.
-type RenderColorModel uint8
-
-const (
-	// RenderRGB returns an *image.NRGBA in sRGB. It is the default.
-	RenderRGB RenderColorModel = iota
-	// RenderCMYK returns an *image.CMYK: amounts of ink, for a CMYK device
-	// whose ICC profile [WithRenderCMYKProfile] sets.
-	RenderCMYK
-)
-
 // WithRenderColorModel selects the colour model of the image returned. Default
-// [RenderRGB].
+// [models.RenderRGB].
 //
-// Under [RenderCMYK] the page is composited for a CMYK device. Its transparency
-// blends in the device's CMYK, and the image holds the inks, over paper that
-// takes none.
+// Under [models.RenderCMYK] the page is composited for a CMYK device. Its
+// transparency blends in the device's CMYK, and the image holds the inks, over
+// paper that takes none.
 //
 // A page group whose /CS names another space blends in the device's CMYK too.
 // This is a deliberate departure from ISO 32000-1, 11.4.7 and 11.3.4, which
@@ -125,14 +95,14 @@ const (
 //
 // Any other value makes [Reader.RenderPage] fail with
 // [ErrInvalidRenderOptions].
-func WithRenderColorModel(m RenderColorModel) RenderOption {
+func WithRenderColorModel(m models.RenderColorModel) RenderOption {
 	return func(o *renderOpts) {
 		o.model = m
 	}
 }
 
 // WithRenderCMYKProfile sets the ICC profile of the CMYK device
-// [RenderCMYK] draws for. Without it the device is the one DeviceCMYK is
+// [models.RenderCMYK] draws for. Without it the device is the one DeviceCMYK is
 // read in for the page: the page's or the document's CMYK output intent
 // (ISO 32000-2, 14.11.5), then [WithDefaultCMYKProfile], then litho's
 // built-in profile of the CGATS TR 001 (SWOP) printing condition.
@@ -140,7 +110,7 @@ func WithRenderColorModel(m RenderColorModel) RenderOption {
 // profile holds the bytes of a CMYK ICC profile, and is copied and read
 // once, here.
 // [Reader.RenderPage] fails with [ErrInvalidRenderOptions] when litho cannot
-// read colours through it, or when the colour model is not [RenderCMYK].
+// read colours through it, or when the colour model is not [models.RenderCMYK].
 func WithRenderCMYKProfile(profile []byte) RenderOption {
 	p, err := icc.Parse(bytes.Clone(profile))
 	if err == nil && p.Components() != 4 {
@@ -151,67 +121,19 @@ func WithRenderCMYKProfile(profile []byte) RenderOption {
 	}
 }
 
-// RenderContent is a set of kinds of content [Reader.RenderPage] draws, told
-// apart by the operator that paints them, as Ghostscript's -dFILTERTEXT,
-// -dFILTERIMAGE and -dFILTERVECTOR tell them apart. Combine kinds with |.
-//
-// Content of a kind left out paints nothing and keeps every other effect: a
-// path still clips (ISO 32000-1, 8.5.4) and text in a clipping mode still
-// clips (9.3.6). The kind is the painting operator's: a Type 3 glyph is text
-// whatever its description paints, the cells of a tiling pattern belong to
-// the fill or stroke they paint, an annotation is drawn whole with its
-// appearance stream, and a form XObject's content is told apart
-// operator by operator.
-type RenderContent uint8
-
-const (
-	// RenderText is what the text-showing operators paint (ISO 32000-1,
-	// 9.4.3).
-	RenderText RenderContent = 1 << iota
-	// RenderPaths is what the path-painting operators fill and stroke (ISO
-	// 32000-1, 8.5.3), in a colour or a pattern.
-	RenderPaths
-	// RenderImages is what image XObjects and inline images paint, image
-	// masks included (ISO 32000-1, 8.9).
-	RenderImages
-	// RenderShadings is what the sh operator paints (ISO 32000-1, 8.7.4.2).
-	RenderShadings
-	// RenderAnnotations is the annotation appearances drawn over the page
-	// ([WithRenderTarget] selects which), each whole whatever it paints.
-	RenderAnnotations
-)
-
-// RenderAllContent holds every kind of [RenderContent]: what
-// [Reader.RenderPage] draws by default.
-const RenderAllContent = RenderText | RenderPaths | RenderImages | RenderShadings | RenderAnnotations
-
 // WithRenderContent draws only the kinds of content c holds, over the
-// background. Default [RenderAllContent]. A value holding a bit no kind
+// background. Default [models.RenderAllContent]. A value holding a bit no kind
 // names makes [Reader.RenderPage] fail with [ErrInvalidRenderOptions].
-func WithRenderContent(c RenderContent) RenderOption {
+func WithRenderContent(c models.RenderContent) RenderOption {
 	return func(o *renderOpts) {
 		o.content = c
 	}
 }
 
-// RenderTarget selects which annotations [Reader.RenderPage] draws over a
-// page, by the annotation flags of ISO 32000-1, 12.5.3.
-type RenderTarget uint8
-
-const (
-	// RenderForView draws the annotations a viewer shows on screen: those
-	// without the /NoView flag. It is the default, and what poppler's
-	// pdftoppm draws.
-	RenderForView RenderTarget = iota
-	// RenderForPrint draws the annotations a viewer prints: those with the
-	// /Print flag.
-	RenderForPrint
-)
-
-// WithRenderTarget selects the annotations drawn: [RenderForView] (the
-// default) or [RenderForPrint]. Any other value makes [Reader.RenderPage]
-// fail with [ErrInvalidRenderOptions].
-func WithRenderTarget(t RenderTarget) RenderOption {
+// WithRenderTarget selects the annotations drawn: [models.RenderForView] (the
+// default) or [models.RenderForPrint]. Any other value makes
+// [Reader.RenderPage] fail with [ErrInvalidRenderOptions].
+func WithRenderTarget(t models.RenderTarget) RenderOption {
 	return func(o *renderOpts) {
 		o.target = t
 	}
@@ -294,7 +216,7 @@ func WithRenderRedactionReading() RenderOption {
 }
 
 // RenderPage draws the given 1-based page and returns it as an *image.NRGBA, or
-// an *image.CMYK under [WithRenderColorModel] ([RenderCMYK]).
+// an *image.CMYK under [WithRenderColorModel] ([models.RenderCMYK]).
 //
 // The image's (0, 0) is the top-left corner of the page's crop box, or of the
 // boundary [WithRenderBox] selects, as displayed: its /Rotate and /UserUnit
@@ -319,7 +241,7 @@ func WithRenderRedactionReading() RenderOption {
 //     masks, isolated and knockout transparency groups and text knockout.
 //   - Blending in the grey or CMYK space a transparency group's /CS names where
 //     its content paints with transparency, and in sRGB otherwise, or in the
-//     device's CMYK under [RenderCMYK].
+//     device's CMYK under [models.RenderCMYK].
 //   - An annotation with no appearance stream, as ISO 32000-1 defines it from
 //     its dictionary, for the Square, Circle, Line, Polygon, PolyLine, Ink,
 //     text markup and Link types. A Text annotation draws as litho's own
@@ -376,72 +298,20 @@ func (r *Reader) RenderPage(ctx context.Context, pageNum int, opts ...RenderOpti
 	return img, err
 }
 
-// RenderReport says what [Reader.RenderPageReport] drew other than the file
-// asks, or did not draw: the parts of the image a caller should not take for
-// the page's exact look. Every count is zero for a page drawn as the file
-// describes it.
-// Concurrent reads of a value are safe; a write needs synchronization.
-type RenderReport struct {
-	// PlaceholderGlyphs counts the glyphs drawn as hollow boxes, their font
-	// neither embedded nor supplied by [WithRenderFontProvider],
-	// [WithRenderFontFiles] or [WithRenderSystemFonts] (ISO 32000-1, 9.6.2.2
-	// leaves a substitute to the reader).
-	PlaceholderGlyphs int
-	// UnreadableGlyphs counts the glyphs left out because their font program,
-	// embedded or supplied, could not draw them: a glyph description cut
-	// short, out of range, or a composite that contains itself. They paint
-	// nothing and clip nothing, as MuPDF and PDFium leave them out; another
-	// viewer may draw part of them. A glyph that would paint nothing anyway,
-	// invisible or left out by [WithRenderContent], is not counted.
-	UnreadableGlyphs int
-	// SynthesizedAnnotations counts the annotations drawn from an appearance
-	// litho built from the annotation dictionary, the file holding no
-	// appearance stream: the Square, Circle, Line, Polygon, PolyLine, Ink,
-	// text markup, Link and Text types. ISO 32000-1, 12.5.5 leaves their look
-	// to the viewer, so another viewer may draw them otherwise; a Text
-	// annotation's icon (12.5.6.4) is each viewer's own.
-	SynthesizedAnnotations int
-	// AnnotationsWithoutAppearance counts the annotations not drawn at all:
-	// they hold no appearance stream and their look is a viewer's icon or
-	// text (FreeText, Stamp and the like).
-	AnnotationsWithoutAppearance int
-	// StaleAppearances counts the form field widgets drawn from the
-	// appearance stream the file holds although the form's
-	// /NeedAppearances asks the viewer to build new ones (ISO 32000-1,
-	// 12.7.2): litho builds none, so the field may show an out-of-date value.
-	StaleAppearances int
-	// TransparencyOverBudget counts the transparency groups, soft masks and
-	// knockout text objects (ISO 32000-1, 11.4, 11.6.5.2, 9.3.8) whose
-	// rasters would pass [Limits.MaxRenderPixels], drawn other than the file
-	// asks: a group's content through the group's alpha and soft mask
-	// without the group, a soft mask hiding what it masks, a knockout text
-	// object glyph by glyph.
-	TransparencyOverBudget int
-	// CoarseMasks counts the soft masks drawn at a coarser resolution than
-	// the page to fit [Limits.MaxRenderPixels]: their effect is kept,
-	// approximated within a few pixels of where the mask changes.
-	CoarseMasks int
-	// Skipped counts the constructs the file damages, left out of the page
-	// as a viewer leaves them out: an image that does not decode or whose
-	// mask does not, a shading or pattern that does not compile, a form past
-	// [Limits.MaxFormDepth] or in a cycle.
-	Skipped int
-}
-
 // RenderPageReport draws the page as [Reader.RenderPage] draws it, with the
-// same options, errors and image, and returns a [RenderReport] counting what
-// the image approximates or leaves out. A caller that shows the image as the
-// page, or compares it against another renderer's, reads the report to know
-// where it may differ.
+// same options, errors and image, and returns a [models.RenderReport] counting
+// what the image approximates or leaves out. A caller that shows the image as
+// the page, or compares it against another renderer's, reads the report to
+// know where it may differ.
 //
 // RenderPageReport is safe for concurrent use with every other read of the
 // [Reader], as [Reader.RenderPage] is.
-func (r *Reader) RenderPageReport(ctx context.Context, pageNum int, opts ...RenderOption) (_ image.Image, _ RenderReport, err error) {
+func (r *Reader) RenderPageReport(ctx context.Context, pageNum int, opts ...RenderOption) (_ image.Image, _ models.RenderReport, err error) {
 	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.RenderPageReport", &err)
 	img, rep, err := r.renderPage(ctx, pageNum, opts)
 	if err != nil {
-		return nil, RenderReport{}, err
+		return nil, models.RenderReport{}, err
 	}
 	return img, renderReport(r.logger(), rep), nil
 }
@@ -450,8 +320,8 @@ func (r *Reader) RenderPageReport(ctx context.Context, pageNum int, opts ...Rend
 // of [page.Report.Unsupported] it does not know is logged at Debug rather
 // than dropped silently; TestRenderReportCoversEveryKey keeps the switch
 // complete.
-func renderReport(logger *slog.Logger, rep page.Report) RenderReport {
-	out := RenderReport{CoarseMasks: rep.CoarseMasks, SynthesizedAnnotations: rep.Synthesized}
+func renderReport(logger *slog.Logger, rep page.Report) models.RenderReport {
+	out := models.RenderReport{CoarseMasks: rep.CoarseMasks, SynthesizedAnnotations: rep.Synthesized}
 	for _, k := range slices.Sorted(maps.Keys(rep.Unsupported)) {
 		n := rep.Unsupported[k]
 		switch k {
@@ -477,32 +347,31 @@ func renderReport(logger *slog.Logger, rep page.Report) RenderReport {
 // renderPage draws the page for [Reader.RenderPage] and
 // [Reader.RenderPageReport], logging at Debug what the render approximated.
 func (r *Reader) renderPage(ctx context.Context, pageNum int, opts []RenderOption) (image.Image, page.Report, error) {
-	o := renderOpts{dpi: DefaultRenderDPI, background: color.White, content: RenderAllContent}
+	o := renderOpts{dpi: DefaultRenderDPI, background: color.White, content: models.RenderAllContent}
 	for _, opt := range opts {
 		opt(&o)
 	}
 	var mode annot.Mode
 	switch o.target {
-	case RenderForView:
+	case models.RenderForView:
 		mode = annot.View
-	case RenderForPrint:
+	case models.RenderForPrint:
 		mode = annot.Print
 	default:
 		return nil, page.Report{}, fmt.Errorf("%w: render target %d", ErrInvalidRenderOptions, o.target)
 	}
-	if o.content&^RenderAllContent != 0 {
+	if o.content&^models.RenderAllContent != 0 {
 		return nil, page.Report{}, fmt.Errorf("%w: render content %#x", ErrInvalidRenderOptions, uint8(o.content))
 	}
-	box, ok := renderBoxes[o.box]
-	if !ok {
+	if o.box > models.RenderArtBox {
 		return nil, page.Report{}, fmt.Errorf("%w: render box %d", ErrInvalidRenderOptions, o.box)
 	}
-	if o.model != RenderRGB && o.model != RenderCMYK {
+	if o.model != models.RenderRGB && o.model != models.RenderCMYK {
 		return nil, page.Report{}, fmt.Errorf("%w: colour model %d", ErrInvalidRenderOptions, o.model)
 	}
 	if o.cmykProfileSet {
 		switch {
-		case o.model != RenderCMYK:
+		case o.model != models.RenderCMYK:
 			return nil, page.Report{}, fmt.Errorf("%w: a CMYK profile for an RGB render", ErrInvalidRenderOptions)
 		case o.cmykProfileErr != nil:
 			return nil, page.Report{}, fmt.Errorf("%w: CMYK profile: %w", ErrInvalidRenderOptions, o.cmykProfileErr)
@@ -528,9 +397,9 @@ func (r *Reader) renderPage(ctx context.Context, pageNum int, opts []RenderOptio
 		Background:  bg,
 		Fonts:       renderFontProvider(r.logger(), providers),
 		Annotations: mode,
-		Omit:        omittedContent(o.content),
-		Box:         box,
-		CMYK:        o.model == RenderCMYK,
+		Omit:        models.RenderAllContent &^ o.content,
+		Box:         o.box,
+		CMYK:        o.model == models.RenderCMYK,
 		CMYKProfile: o.cmykProfile,
 		Overprint:   o.overprint,
 
@@ -562,12 +431,12 @@ func (r *Reader) renderPage(ctx context.Context, pageNum int, opts []RenderOptio
 // renderImage draws pg with opts and returns it in the colour model m: the
 // page group's sRGB canvas as an *image.NRGBA, or its inks as an
 // *image.CMYK.
-func renderImage(ctx context.Context, doc *document.Document, pg *document.Page, m RenderColorModel, opts page.Options) (image.Image, page.Report, error) {
+func renderImage(ctx context.Context, doc *document.Document, pg *document.Page, m models.RenderColorModel, opts page.Options) (image.Image, page.Report, error) {
 	res, report, err := page.RenderGroup(ctx, doc, pg, opts)
 	if err != nil {
 		return nil, report, err
 	}
-	if m == RenderCMYK {
+	if m == models.RenderCMYK {
 		img, err := res.CMYK(ctx)
 		return img, report, err
 	}
@@ -576,34 +445,4 @@ func renderImage(ctx context.Context, doc *document.Document, pg *document.Page,
 		return nil, report, err
 	}
 	return canvas.Image(), report, nil
-}
-
-// renderBoxes maps each [RenderBox] to the renderer's.
-var renderBoxes = map[RenderBox]page.Box{
-	RenderCropBox:  page.CropBox,
-	RenderMediaBox: page.MediaBox,
-	RenderBleedBox: page.BleedBox,
-	RenderTrimBox:  page.TrimBox,
-	RenderArtBox:   page.ArtBox,
-}
-
-// omittedContent returns the kinds of content the renderer leaves out when
-// [Reader.RenderPage] draws c.
-func omittedContent(c RenderContent) page.Content {
-	var omit page.Content
-	for _, k := range []struct {
-		public   RenderContent
-		internal page.Content
-	}{
-		{RenderText, page.Text},
-		{RenderPaths, page.Paths},
-		{RenderImages, page.Images},
-		{RenderShadings, page.Shadings},
-		{RenderAnnotations, page.Annotations},
-	} {
-		if c&k.public == 0 {
-			omit |= k.internal
-		}
-	}
-	return omit
 }

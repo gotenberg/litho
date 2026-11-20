@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // FuzzRenderPage opens the fuzzed bytes and draws their first page under the
@@ -25,11 +27,11 @@ func FuzzRenderPage(f *testing.F) {
 		defer r.Close()
 		opts := []RenderOption{
 			WithRenderDPI(float64(9 + mode%4*9)),
-			WithRenderBox(RenderBox(mode / 4 % 5)),
-			WithRenderTarget(RenderTarget(mode / 32 % 2)),
+			WithRenderBox(models.RenderBox(mode / 4 % 5)),
+			WithRenderTarget(models.RenderTarget(mode / 32 % 2)),
 		}
 		if mode >= 64 {
-			opts = append(opts, WithRenderColorModel(RenderCMYK))
+			opts = append(opts, WithRenderColorModel(models.RenderCMYK))
 		}
 		if _, err := r.RenderPage(ctx, 1, opts...); errors.Is(err, ErrInternalPanic) {
 			t.Fatalf("RenderPage panicked: %v", err)

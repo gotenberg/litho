@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // RedactionCheckDPI is the resolution, in pixels per inch, the pixel check of
@@ -339,7 +340,7 @@ func (cp *redactCheckPage) checkInside(
 		return nil
 	}
 	white, black := [4]float32{1, 1, 1, 1}, [4]float32{0, 0, 0, 1}
-	imagesOnly := page.AllContent &^ page.Images
+	imagesOnly := models.RenderAllContent &^ models.RenderImages
 	images, err := renderCheckRaster(ctx, doc, pg, page.Options{Omit: imagesOnly, Background: white, Within: within, Shared: shared})
 	if err != nil {
 		return &RedactionPixelError{Page: pageNum, Err: fmt.Errorf("rendering the redacted page's images: %w", err)}
@@ -430,11 +431,11 @@ func (cp *redactCheckPage) checkOutside(
 		}
 	}
 	white := [4]float32{1, 1, 1, 1}
-	beforeImages, err := renderCheckRaster(ctx, beforeDoc, bpg, page.Options{Omit: page.AllContent &^ page.Images, Background: white, Within: within})
+	beforeImages, err := renderCheckRaster(ctx, beforeDoc, bpg, page.Options{Omit: models.RenderAllContent &^ models.RenderImages, Background: white, Within: within})
 	if err != nil {
 		return &RedactionPixelError{Page: pageNum, Err: fmt.Errorf("rendering the page's images before: %w", err)}
 	}
-	afterImages, err := renderCheckRaster(ctx, afterDoc, apg, page.Options{Omit: page.AllContent &^ page.Images, Background: white, Within: within, Shared: shared})
+	afterImages, err := renderCheckRaster(ctx, afterDoc, apg, page.Options{Omit: models.RenderAllContent &^ models.RenderImages, Background: white, Within: within, Shared: shared})
 	if err != nil {
 		return &RedactionPixelError{Page: pageNum, Err: fmt.Errorf("rendering the redacted page's images: %w", err)}
 	}

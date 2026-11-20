@@ -10,12 +10,13 @@ import (
 // center, the middle of an edge, or a corner. The zero value,
 // [PositionNone], places a stamp by its X and Y.
 //
-// With any other position, the page is read as a viewer shows it: its crop
-// box (see [RenderCropBox]) turned by its /Rotate, so a stamp reads the same
-// way up on every page. The box bounding the stamp, once turned by its
-// Rotation, sits against the position, and the stamp's X and Y then move it
-// from there, right and up as viewed. A stamp at a corner or an edge stays on
-// the page whatever its Rotation; a large X or Y moves it off.
+// With any other position, the page is read as a viewer shows it: its crop box
+// (see [github.com/gotenberg/litho/pkg/models.RenderCropBox]) turned by its
+// /Rotate, so a stamp reads the same way up on every page. The box bounding
+// the stamp, once turned by its Rotation, sits against the position, and the
+// stamp's X and Y then move it from there, right and up as viewed. A stamp at
+// a corner or an edge stays on the page whatever its Rotation; a large X or Y
+// moves it off.
 //
 // The box bounding a [TextStamp] is the ink of its glyphs: their outlines in
 // an embedded font, the glyph boxes of the Adobe Font Metrics for a standard

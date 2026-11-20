@@ -22,6 +22,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/imgpaint"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // inlineImageName labels an inline image, which has no resource name.
@@ -57,7 +58,7 @@ func (r *renderer) do(s *scope, op content.Operation) error {
 	}
 	switch subtype {
 	case "Image":
-		if r.omits(Images) {
+		if r.omits(models.RenderImages) {
 			return nil
 		}
 		return r.image(s, name, stream)

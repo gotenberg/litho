@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"image/color"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // contentKindsPDF is a 200 by 50 page painting one 20-unit square of each
@@ -46,20 +48,20 @@ func TestRenderPageContent(t *testing.T) {
 	r := openLimited(t, contentKindsPDF(), Limits{})
 	white := color.NRGBA{255, 255, 255, 255}
 	kinds := []struct {
-		kind RenderContent
+		kind models.RenderContent
 		x    int
 		ink  color.NRGBA
 	}{
-		{RenderText, 20, color.NRGBA{0, 0, 0, 255}},
-		{RenderPaths, 50, color.NRGBA{255, 0, 0, 255}},
-		{RenderImages, 75, color.NRGBA{0, 255, 0, 255}},
-		{RenderImages, 110, color.NRGBA{0, 0, 255, 255}},
-		{RenderShadings, 140, color.NRGBA{255, 255, 0, 255}},
-		{RenderAnnotations, 170, color.NRGBA{255, 0, 255, 255}},
+		{models.RenderText, 20, color.NRGBA{0, 0, 0, 255}},
+		{models.RenderPaths, 50, color.NRGBA{255, 0, 0, 255}},
+		{models.RenderImages, 75, color.NRGBA{0, 255, 0, 255}},
+		{models.RenderImages, 110, color.NRGBA{0, 0, 255, 255}},
+		{models.RenderShadings, 140, color.NRGBA{255, 255, 0, 255}},
+		{models.RenderAnnotations, 170, color.NRGBA{255, 0, 255, 255}},
 	}
-	for _, sel := range []RenderContent{
-		RenderAllContent, RenderText, RenderPaths, RenderImages, RenderShadings, RenderAnnotations,
-		RenderImages | RenderText, 0,
+	for _, sel := range []models.RenderContent{
+		models.RenderAllContent, models.RenderText, models.RenderPaths, models.RenderImages, models.RenderShadings, models.RenderAnnotations,
+		models.RenderImages | models.RenderText, 0,
 	} {
 		img, err := r.RenderPage(ctx, 1, WithRenderDPI(72), WithRenderContent(sel))
 		if err != nil {
@@ -79,7 +81,7 @@ func TestRenderPageContent(t *testing.T) {
 			t.Errorf("content %#x: the clipped half of the image paints %v", uint8(sel), got)
 		}
 	}
-	if _, err := r.RenderPage(ctx, 1, WithRenderContent(RenderAllContent+1)); !errors.Is(err, ErrInvalidRenderOptions) {
-		t.Errorf("content %#x: %v, want ErrInvalidRenderOptions", uint8(RenderAllContent+1), err)
+	if _, err := r.RenderPage(ctx, 1, WithRenderContent(models.RenderAllContent+1)); !errors.Is(err, ErrInvalidRenderOptions) {
+		t.Errorf("content %#x: %v, want ErrInvalidRenderOptions", uint8(models.RenderAllContent+1), err)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // clippedPage paints under clips of every kind: a page with a hole cut out
@@ -105,7 +106,7 @@ func TestWithinPaintsMarkedPixelsAlike(t *testing.T) {
 // whole sharing a [Shared], then without: each pixel holds the same values.
 func TestSharedRendersAlike(t *testing.T) {
 	t.Parallel()
-	textOnly := Paths | Images | Shadings | Annotations
+	textOnly := models.RenderPaths | models.RenderImages | models.RenderShadings | models.RenderAnnotations
 	shared := NewShared(1 << 20)
 	sharedText := renderClipped(t, "", Options{Omit: textOnly, Shared: shared})
 	sharedWhole := renderClipped(t, "", Options{Shared: shared})
@@ -126,7 +127,7 @@ func TestOmitGlyphLeavesOutTheGlyphsItNames(t *testing.T) {
 	all := func(int, int) bool { return true }
 	var asked, shown []geom.Point
 	every := renderClipped(t, "", Options{OmitGlyph: func(p geom.Point) bool { asked = append(asked, p); return true }})
-	sameBits(t, renderClipped(t, "", Options{Omit: Text}), every, all)
+	sameBits(t, renderClipped(t, "", Options{Omit: models.RenderText}), every, all)
 	none := renderClipped(t, "", Options{OmitGlyph: func(geom.Point) bool { return false }})
 	sameBits(t, renderClipped(t, "", Options{Glyph: func(p geom.Point, _ geom.Rect) { shown = append(shown, p) }}), none, all)
 	if len(asked) == 0 || len(asked) != len(shown) {

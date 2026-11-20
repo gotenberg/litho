@@ -4,6 +4,8 @@ import (
 	"context"
 	"image/color"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestRenderPage_RedactionReading draws a blanked image under a transfer
@@ -17,7 +19,7 @@ func TestRenderPage_RedactionReading(t *testing.T) {
 		t.Helper()
 		r := openPixelCheck(t, transferPDF(samples))
 		img, err := r.RenderPage(ctx, 1, append([]RenderOption{
-			WithRenderDPI(72), WithRenderContent(RenderImages), WithRenderBackground(color.Black),
+			WithRenderDPI(72), WithRenderContent(models.RenderImages), WithRenderBackground(color.Black),
 		}, opts...)...)
 		if err != nil {
 			t.Fatal(err)

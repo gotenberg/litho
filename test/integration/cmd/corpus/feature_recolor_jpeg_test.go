@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -57,7 +58,7 @@ func recolorJPEGPDF(t *testing.T) []byte {
 
 // runRecolorPDF runs the feature on the PDF data with convert planted, nil
 // for the real conversion, and scores it.
-func runRecolorPDF(t *testing.T, data []byte, convert func(context.Context, *pdf.Writer, ...pdf.ColorOption) (*pdf.ColorReport, error)) Verdict {
+func runRecolorPDF(t *testing.T, data []byte, convert func(context.Context, *pdf.Writer, ...pdf.ColorOption) (*models.ColorReport, error)) Verdict {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "in.pdf")
 	if err := os.WriteFile(path, data, 0o600); err != nil {
@@ -75,7 +76,7 @@ func runRecolorPDF(t *testing.T, data []byte, convert func(context.Context, *pdf
 }
 
 // convertCMYK is the cell's own conversion.
-func convertCMYK(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*pdf.ColorReport, error) {
+func convertCMYK(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*models.ColorReport, error) {
 	return w.ConvertColors(ctx, pdf.CMYKColorTarget(), opts...)
 }
 
@@ -94,8 +95,8 @@ func TestRecolorFeature_JPEGRun(t *testing.T) {
 
 	// Each plant changes the JPEG run alone: the lossless run is the real
 	// conversion.
-	plant := func(jpegRun func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*pdf.ColorReport, error)) func(context.Context, *pdf.Writer, ...pdf.ColorOption) (*pdf.ColorReport, error) {
-		return func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*pdf.ColorReport, error) {
+	plant := func(jpegRun func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*models.ColorReport, error)) func(context.Context, *pdf.Writer, ...pdf.ColorOption) (*models.ColorReport, error) {
+		return func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*models.ColorReport, error) {
 			if len(opts) == 0 {
 				return convertCMYK(ctx, w)
 			}
@@ -104,19 +105,19 @@ func TestRecolorFeature_JPEGRun(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name   string
-		run    func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*pdf.ColorReport, error)
+		run    func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*models.ColorReport, error)
 		metric string
 	}{
-		{"stamp", func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*pdf.ColorReport, error) {
+		{"stamp", func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*models.ColorReport, error) {
 			if err := w.StampText(pdf.TextStamp{Text: "PLANTED PLANTED", FontSize: 40, Opacity: 1}); err != nil {
 				return nil, err
 			}
 			return convertCMYK(ctx, w, opts...)
 		}, metricJPEGInkMoved},
-		{"rgb", func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*pdf.ColorReport, error) {
+		{"rgb", func(ctx context.Context, w *pdf.Writer, opts ...pdf.ColorOption) (*models.ColorReport, error) {
 			return w.ConvertColors(ctx, pdf.RGBColorTarget(), opts...)
 		}, metricJPEGOutOfTarget},
-		{"failure", func(context.Context, *pdf.Writer, ...pdf.ColorOption) (*pdf.ColorReport, error) {
+		{"failure", func(context.Context, *pdf.Writer, ...pdf.ColorOption) (*models.ColorReport, error) {
 			return nil, errors.New("planted failure")
 		}, metricJPEGFailed},
 	} {

@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // coverLevel is how far, as a share of full intensity, the page drawn whole
@@ -98,7 +99,7 @@ func (c *coverage) renders(ctx context.Context, a *Analysis) error {
 	}
 	budget := c.f.doc.Limits().WithDefaults().MaxRenderPixels
 	shared := c.shared
-	text, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Omit: page.Paths | page.Images | page.Shadings | page.Annotations, GroupSpace: true, DefaultGroupSpace: c.f.deviceSpace(ctx, c.pg), Shared: shared, Pool: c.f.pool, Overprint: c.f.overprint, SolidPlaceholders: true, WholePixels: true})
+	text, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Omit: models.RenderPaths | models.RenderImages | models.RenderShadings | models.RenderAnnotations, GroupSpace: true, DefaultGroupSpace: c.f.deviceSpace(ctx, c.pg), Shared: shared, Pool: c.f.pool, Overprint: c.f.overprint, SolidPlaceholders: true, WholePixels: true})
 	if err != nil {
 		return fmt.Errorf("rendering the page's text at %v dpi: %w", c.dpi, err)
 	}
@@ -135,7 +136,7 @@ func (c *coverage) renders(ctx context.Context, a *Analysis) error {
 			}
 		}
 	}
-	whole, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Background: [4]float32{1, 1, 1, 1}, Omit: page.Annotations, GroupSpace: true, DefaultGroupSpace: c.f.deviceSpace(ctx, c.pg), Within: within, Shared: shared, Pool: c.f.pool, Overprint: c.f.overprint, SolidPlaceholders: true, WholePixels: true})
+	whole, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Background: [4]float32{1, 1, 1, 1}, Omit: models.RenderAnnotations, GroupSpace: true, DefaultGroupSpace: c.f.deviceSpace(ctx, c.pg), Within: within, Shared: shared, Pool: c.f.pool, Overprint: c.f.overprint, SolidPlaceholders: true, WholePixels: true})
 	if err != nil {
 		return fmt.Errorf("rendering the page whole at %v dpi: %w", c.dpi, err)
 	}

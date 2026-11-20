@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // cmykRenderPDF is a 100 by 20 page of five 20-unit squares, left to right: a
@@ -80,7 +81,7 @@ func TestRenderPageCMYK(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	r := openLimited(t, cmykRenderPDF(), Limits{})
-	img, err := r.RenderPage(ctx, 1, WithRenderDPI(72), WithRenderColorModel(RenderCMYK))
+	img, err := r.RenderPage(ctx, 1, WithRenderDPI(72), WithRenderColorModel(models.RenderCMYK))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +121,7 @@ func TestRenderPageCMYKBackground(t *testing.T) {
 	})
 	r := openLimited(t, data, Limits{})
 	for _, bg := range []color.Color{color.White, color.Transparent, nil} {
-		img, err := r.RenderPage(ctx, 1, WithRenderDPI(72), WithRenderColorModel(RenderCMYK), WithRenderBackground(bg))
+		img, err := r.RenderPage(ctx, 1, WithRenderDPI(72), WithRenderColorModel(models.RenderCMYK), WithRenderBackground(bg))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -140,7 +141,7 @@ func TestRenderPageCMYKProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := openLimited(t, cmykRenderPDF(), Limits{})
-	img, err := r.RenderPage(ctx, 1, WithRenderDPI(72), WithRenderColorModel(RenderCMYK), WithRenderCMYKProfile(profile))
+	img, err := r.RenderPage(ctx, 1, WithRenderDPI(72), WithRenderColorModel(models.RenderCMYK), WithRenderCMYKProfile(profile))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +171,7 @@ func TestRenderPageCMYKOutputIntent(t *testing.T) {
 		fmt.Sprintf("<< /N 4 /Length %d >>\nstream\n%s\nendstream", len(profile), profile),
 	})
 	r := openLimited(t, data, Limits{})
-	img, err := r.RenderPage(ctx, 1, WithRenderDPI(72), WithRenderColorModel(RenderCMYK))
+	img, err := r.RenderPage(ctx, 1, WithRenderDPI(72), WithRenderColorModel(models.RenderCMYK))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,9 +187,9 @@ func TestRenderPageCMYKRefusals(t *testing.T) {
 	ctx := context.Background()
 	r := openLimited(t, cmykRenderPDF(), Limits{})
 	for name, opts := range map[string][]RenderOption{
-		"model 7":         {WithRenderColorModel(RenderColorModel(7))},
-		"garbage profile": {WithRenderColorModel(RenderCMYK), WithRenderCMYKProfile([]byte("not a profile"))},
-		"RGB profile":     {WithRenderColorModel(RenderCMYK), WithRenderCMYKProfile(icc.SRGBProfile())},
+		"model 7":         {WithRenderColorModel(models.RenderColorModel(7))},
+		"garbage profile": {WithRenderColorModel(models.RenderCMYK), WithRenderCMYKProfile([]byte("not a profile"))},
+		"RGB profile":     {WithRenderColorModel(models.RenderCMYK), WithRenderCMYKProfile(icc.SRGBProfile())},
 		"profile for RGB": {WithRenderCMYKProfile(icc.CMYKPrinterProfile())},
 	} {
 		if _, err := r.RenderPage(ctx, 1, opts...); !errors.Is(err, ErrInvalidRenderOptions) {
@@ -208,7 +209,7 @@ func TestRenderPageCMYKDeterministic(t *testing.T) {
 	done := make(chan int)
 	for i := range imgs {
 		go func() {
-			imgs[i], errs[i] = r.RenderPage(ctx, 1, WithRenderDPI(50), WithRenderColorModel(RenderCMYK))
+			imgs[i], errs[i] = r.RenderPage(ctx, 1, WithRenderDPI(50), WithRenderColorModel(models.RenderCMYK))
 			done <- i
 		}()
 	}

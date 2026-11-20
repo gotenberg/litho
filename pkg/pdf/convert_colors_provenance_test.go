@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestConvertColors_ReportsProfileProvenance pins which profiles the report
@@ -34,39 +35,39 @@ func TestConvertColors_ReportsProfileProvenance(t *testing.T) {
 		opts      []ColorOption
 		profile   string
 		sources   map[string][]string
-		fallbacks []IntentFallback
+		fallbacks []models.IntentFallback
 	}{
 		{
 			name:    "built-in CMYK",
 			src:     recolorPDF(""),
 			target:  CMYKColorTarget(),
-			profile: ProfileSourceBuiltin,
-			sources: map[string][]string{"DeviceRGB": {ProfileSourceBuiltin}},
+			profile: models.ProfileSourceBuiltin,
+			sources: map[string][]string{"DeviceRGB": {models.ProfileSourceBuiltin}},
 		},
 		{
 			name:    "output intent",
 			src:     withIntents,
 			target:  OutputIntentColorTarget(),
-			profile: ProfileSourceOutputIntent,
-			sources: map[string][]string{"DeviceRGB": {ProfileSourceOutputIntent}},
+			profile: models.ProfileSourceOutputIntent,
+			sources: map[string][]string{"DeviceRGB": {models.ProfileSourceOutputIntent}},
 		},
 		{
 			name:    "caller profile without the intent's table",
 			src:     recolorPDF(""),
 			target:  ICCColorTarget(lutRGB),
-			profile: ProfileSourceCaller,
-			sources: map[string][]string{"DeviceRGB": {ProfileSourceBuiltin}},
-			fallbacks: []IntentFallback{
-				{Target: true, Components: 3, Profile: ProfileSourceCaller, Table: "perceptual"},
+			profile: models.ProfileSourceCaller,
+			sources: map[string][]string{"DeviceRGB": {models.ProfileSourceBuiltin}},
+			fallbacks: []models.IntentFallback{
+				{Target: true, Components: 3, Profile: models.ProfileSourceCaller, Table: "perceptual"},
 			},
 		},
 		{
 			name:    "caller profile under its own intent",
 			src:     recolorPDF(""),
 			target:  ICCColorTarget(lutRGB),
-			opts:    []ColorOption{WithColorIntent(IntentPerceptual)},
-			profile: ProfileSourceCaller,
-			sources: map[string][]string{"DeviceRGB": {ProfileSourceBuiltin}},
+			opts:    []ColorOption{WithColorIntent(models.IntentPerceptual)},
+			profile: models.ProfileSourceCaller,
+			sources: map[string][]string{"DeviceRGB": {models.ProfileSourceBuiltin}},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -102,10 +103,10 @@ func TestConvertColors_ReportsTheCallerCMYKProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.TargetProfile != ProfileSourceBuiltin {
+	if report.TargetProfile != models.ProfileSourceBuiltin {
 		t.Errorf("TargetProfile = %q, want builtin", report.TargetProfile)
 	}
-	want := map[string][]string{"DeviceCMYK": {ProfileSourceCaller}}
+	want := map[string][]string{"DeviceCMYK": {models.ProfileSourceCaller}}
 	if !reflect.DeepEqual(report.SourceProfiles, want) {
 		t.Errorf("SourceProfiles = %v, want %v", report.SourceProfiles, want)
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // recolorPDF draws one page in DeviceRGB, with the output intents intents
@@ -66,7 +67,7 @@ func openColorPDF(t *testing.T, data []byte, opts ...OpenOption) *Reader {
 
 // convertAndWrite runs ConvertColors through f on data and writes the
 // output.
-func convertAndWrite(t *testing.T, r *Reader, f *fakeRecolor, target ColorTarget, opts ...ColorOption) (*ColorReport, []byte) {
+func convertAndWrite(t *testing.T, r *Reader, f *fakeRecolor, target ColorTarget, opts ...ColorOption) (*models.ColorReport, []byte) {
 	t.Helper()
 	ctx := context.Background()
 	w := NewWriter(r)
@@ -247,7 +248,7 @@ func TestConvertColors_Options(t *testing.T) {
 	r := openColorPDF(t, recolorPDF(""), WithDefaultCMYKProfile(custom))
 	f := &fakeRecolor{}
 	report, out := convertAndWrite(t, r, f, CMYKColorTarget(),
-		WithColorIntent(IntentPerceptual), WithBlackPointCompensation(), WithSpotConversion(), WithoutOutputIntent())
+		WithColorIntent(models.IntentPerceptual), WithBlackPointCompensation(), WithSpotConversion(), WithoutOutputIntent())
 	if !bytes.Equal(f.req.profile, custom) || f.req.intent != icc.Perceptual || !f.req.blackPointCompensation || !f.req.convertSpots {
 		t.Errorf("request = %+v", f.req)
 	}
@@ -310,7 +311,7 @@ func TestConvertColors_ICCTarget(t *testing.T) {
 	}
 	w := NewWriter(openColorPDF(t, recolorPDF("")))
 	t.Cleanup(func() { _ = w.Close() })
-	if _, err := w.ConvertColors(context.Background(), RGBColorTarget(), WithColorIntent(RenderingIntent(9))); !errors.Is(err, ErrInvalidColorTarget) {
+	if _, err := w.ConvertColors(context.Background(), RGBColorTarget(), WithColorIntent(models.RenderingIntent(9))); !errors.Is(err, ErrInvalidColorTarget) {
 		t.Errorf("unknown intent: err = %v, want ErrInvalidColorTarget", err)
 	}
 }

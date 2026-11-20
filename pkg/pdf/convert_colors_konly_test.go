@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // kOnlyPDF paints DeviceGray black text and a DeviceRGB black rectangle.
@@ -24,7 +25,7 @@ func kOnlyPDF() []byte {
 
 // kOnlyConverted converts kOnlyPDF to CMYK with opts and returns the k
 // operators of the output's page, one per line, and the report.
-func kOnlyConverted(t *testing.T, opts ...ColorOption) (string, *ColorReport) {
+func kOnlyConverted(t *testing.T, opts ...ColorOption) (string, *models.ColorReport) {
 	t.Helper()
 	ctx := context.Background()
 	w := NewWriter(openColorPDF(t, kOnlyPDF()))

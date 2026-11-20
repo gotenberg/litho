@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestConvertColors_LaterConversionReadsTheIntentAnEarlierOneSet pins that a
@@ -30,7 +32,7 @@ func TestConvertColors_LaterConversionReadsTheIntentAnEarlierOneSet(t *testing.T
 			if err != nil {
 				t.Fatalf("ConvertColors to the output intent: %v", err)
 			}
-			if report.TargetProfile != ProfileSourceOutputIntent {
+			if report.TargetProfile != models.ProfileSourceOutputIntent {
 				t.Errorf("the second conversion's profile came from %v, want the output intent", report.TargetProfile)
 			}
 			var out bytes.Buffer

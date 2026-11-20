@@ -16,6 +16,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/render/page"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // approximatedPDF is a 200 by 100 page drawn with every approximation a
@@ -52,7 +53,7 @@ func TestRenderPageReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep != (RenderReport{}) {
+	if rep != (models.RenderReport{}) {
 		t.Errorf("report of an exact page = %+v, want zero", rep)
 	}
 	want, err := r.RenderPage(ctx, 1, WithRenderDPI(72))
@@ -68,7 +69,7 @@ func TestRenderPageReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantRep := RenderReport{
+	wantRep := models.RenderReport{
 		PlaceholderGlyphs:            3,
 		SynthesizedAnnotations:       1,
 		AnnotationsWithoutAppearance: 1,
@@ -87,7 +88,7 @@ func TestRenderPageReport(t *testing.T) {
 	}
 
 	// Content left out by WithRenderContent is not drawn, so not reported.
-	_, rep, err = r.RenderPageReport(ctx, 1, WithRenderDPI(72), WithRenderContent(RenderPaths))
+	_, rep, err = r.RenderPageReport(ctx, 1, WithRenderDPI(72), WithRenderContent(models.RenderPaths))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,9 +97,10 @@ func TestRenderPageReport(t *testing.T) {
 	}
 }
 
-// TestRenderPageReportUnreadableGlyphs pins [RenderReport.UnreadableGlyphs]:
-// the embedded TrueType program draws B, and A (GID 2) is a composite that
-// contains itself, which no program can draw, shown twice.
+// TestRenderPageReportUnreadableGlyphs pins
+// [models.RenderReport.UnreadableGlyphs]: the embedded TrueType program draws
+// B, and A (GID 2) is a composite that contains itself, which no program can
+// draw, shown twice.
 func TestRenderPageReportUnreadableGlyphs(t *testing.T) {
 	t.Parallel()
 	program := fontbuild.TrueType{PostScriptName: "Rect", Family: "Rect", Subfamily: "Regular", Glyphs: []fontbuild.Glyph{
@@ -122,7 +124,7 @@ func TestRenderPageReportUnreadableGlyphs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (RenderReport{UnreadableGlyphs: 2}); rep != want {
+	if want := (models.RenderReport{UnreadableGlyphs: 2}); rep != want {
 		t.Errorf("report = %+v, want %+v", rep, want)
 	}
 }
@@ -148,11 +150,11 @@ func TestRenderPageReportErrors(t *testing.T) {
 	}
 }
 
-// TestRenderReportCoversEveryKey keeps [renderReport] complete. The
-// renderer's report counts unsupported constructs under string keys, the
-// constants of package page; a key added there without a public field would
-// reach only a Debug log, which is the gap [RenderReport] closes. The keys are
-// read from the package source with go/ast, so a new one fails here.
+// TestRenderReportCoversEveryKey keeps [renderReport] complete. The renderer's
+// report counts unsupported constructs under string keys, the constants of
+// package page; a key added there without a public field would reach only a
+// Debug log, which is the gap [models.RenderReport] closes. The keys are read
+// from the package source with go/ast, so a new one fails here.
 func TestRenderReportCoversEveryKey(t *testing.T) {
 	t.Parallel()
 
@@ -201,7 +203,7 @@ func TestRenderReportCoversEveryKey(t *testing.T) {
 	}
 	for _, k := range keys {
 		got := renderReport(slog.New(slog.DiscardHandler), page.Report{Unsupported: map[string]int{k: 1}})
-		if got == (RenderReport{}) {
+		if got == (models.RenderReport{}) {
 			t.Errorf("page key %q has no field in RenderReport", k)
 		}
 	}

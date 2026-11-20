@@ -12,11 +12,12 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // convertBuiltin runs ConvertColors with the built-in engine and writes the
 // output.
-func convertBuiltin(t *testing.T, src []byte, target ColorTarget, opts ...ColorOption) (*ColorReport, []byte) {
+func convertBuiltin(t *testing.T, src []byte, target ColorTarget, opts ...ColorOption) (*models.ColorReport, []byte) {
 	t.Helper()
 	ctx := context.Background()
 	w := NewWriter(openColorPDF(t, src))

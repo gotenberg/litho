@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestGlyphReportsOriginAndPlaceholderBounds(t *testing.T) {
@@ -71,13 +72,13 @@ func TestUnreadableGlyphsAreReported(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		content string
-		omit    Content
+		omit    models.RenderContent
 		want    int
 	}{
 		{"filled", "BT /F 20 Tf 10 50 Td (AAB) Tj ET", 0, 2},
 		{"clipping", "BT 7 Tr /F 20 Tf 10 50 Td (AB) Tj ET 0 0 100 100 re f", 0, 1},
 		{"invisible", "BT 3 Tr /F 20 Tf 10 50 Td (AB) Tj ET", 0, 0},
-		{"text left out", "BT /F 20 Tf 10 50 Td (AB) Tj ET", Text, 0},
+		{"text left out", "BT /F 20 Tf 10 50 Td (AB) Tj ET", models.RenderText, 0},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

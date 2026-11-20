@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/glyph"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
 	"github.com/gotenberg/litho/pkg/internal/render/stroke"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // maxType3Depth bounds how deeply Type 3 glyph descriptions nest: a glyph
@@ -277,7 +278,7 @@ func (r *renderer) paintGlyph(s *scope, st *graphics.State, key glyphKey, g glyp
 	}
 	// Text left out keeps its clipping (9.3.6) and paints nothing.
 	glyphOmitted := r.omitGlyph != nil && r.omitGlyph(r.toDevice().Apply(origin))
-	omitted := r.omits(Text) || glyphOmitted
+	omitted := r.omits(models.RenderText) || glyphOmitted
 	// A glyph left out of the clip as well ([Options.OmitGlyphClip]) is
 	// drawn as if in a mode that adds nothing to it, and the text object
 	// still clips, as it does for a clipping glyph with no outline: what

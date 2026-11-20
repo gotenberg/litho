@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/recolor"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // recolorRequest is what [Writer.ConvertColors] asks the colour conversion
@@ -44,19 +45,20 @@ type recolorRequest struct {
 // recolorResult counts what the engine converted.
 type recolorResult struct {
 	operators, colorSpaces, images, shadings int
-	// kOnlyBlack is [ColorReport.KOnlyBlackColors].
+	// kOnlyBlack is [models.ColorReport.KOnlyBlackColors].
 	kOnlyBlack int
 	// keptSpots names the colorants of the Separation and DeviceN spaces
 	// the engine kept, their alternate space converted.
 	keptSpots []string
-	// sourceProfiles and intentFallbacks are [ColorReport.SourceProfiles]
-	// and [ColorReport.IntentFallbacks].
+	// sourceProfiles and intentFallbacks are
+	// [models.ColorReport.SourceProfiles] and
+	// [models.ColorReport.IntentFallbacks].
 	sourceProfiles  map[string][]string
-	intentFallbacks []IntentFallback
+	intentFallbacks []models.IntentFallback
 	// overprintPreserved, overprintStates and overprintChanged are what
-	// [ColorReport] says of overprinting paintings.
+	// [models.ColorReport] says of overprinting paintings.
 	overprintPreserved, overprintStates, overprintChanged int
-	// blackPoint is what [ColorReport] says of the graphics states'
+	// blackPoint is what [models.ColorReport] says of the graphics states'
 	// /UseBlackPtComp.
 	blackPoint recolor.BlackPointReport
 	// intent is what it says of the rendering intents the content states.
@@ -140,7 +142,7 @@ func recolorDocument(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 }
 
 // deviceFamilies maps the data colour space signatures of package recolor to
-// the device family names a [ColorReport] uses.
+// the device family names a [models.ColorReport] uses.
 var deviceFamilies = map[string]string{ // static lookup table, ICC.1:2010 Table 19 to ISO 32000-1 8.6.4
 	recolor.SpaceGray: graphics.FamilyDeviceGray,
 	recolor.SpaceRGB:  graphics.FamilyDeviceRGB,
@@ -148,25 +150,25 @@ var deviceFamilies = map[string]string{ // static lookup table, ICC.1:2010 Table
 }
 
 // profileSource names where a profile package recolor read came from, as a
-// [ColorReport] spells it: a profile the options gave a device space is the
-// output intent's, except DeviceCMYK's when cmykFromCaller.
+// [models.ColorReport] spells it: a profile the options gave a device space is
+// the output intent's, except DeviceCMYK's when cmykFromCaller.
 func profileSource(space, provenance string, cmykFromCaller bool) string {
 	switch provenance {
 	case recolor.ProfileGiven:
 		if space == recolor.SpaceCMYK && cmykFromCaller {
-			return ProfileSourceCaller
+			return models.ProfileSourceCaller
 		}
-		return ProfileSourceOutputIntent
+		return models.ProfileSourceOutputIntent
 	case recolor.ProfileTarget:
-		return ProfileSourceTarget
+		return models.ProfileSourceTarget
 	case recolor.ProfileBuiltin:
-		return ProfileSourceBuiltin
+		return models.ProfileSourceBuiltin
 	case recolor.ProfileBuiltinFallback:
-		return ProfileSourceBuiltinFallback
+		return models.ProfileSourceBuiltinFallback
 	case recolor.ProfileDefaultSpace:
-		return ProfileSourceDefaultSpace
+		return models.ProfileSourceDefaultSpace
 	}
-	return ProfileSourceDocument
+	return models.ProfileSourceDocument
 }
 
 // sourceProfiles translates package recolor's DeviceProfiles.
@@ -191,13 +193,13 @@ func sourceProfiles(in map[string][]string, cmykFromCaller bool) map[string][]st
 }
 
 // intentFallbacks translates package recolor's IntentFallbacks.
-func intentFallbacks(in []recolor.IntentFallback, cmykFromCaller bool) []IntentFallback {
+func intentFallbacks(in []recolor.IntentFallback, cmykFromCaller bool) []models.IntentFallback {
 	if len(in) == 0 {
 		return nil
 	}
-	out := make([]IntentFallback, 0, len(in))
+	out := make([]models.IntentFallback, 0, len(in))
 	for _, f := range in {
-		fb := IntentFallback{Target: f.Target, Table: f.Table.String()}
+		fb := models.IntentFallback{Target: f.Target, Table: f.Table.String()}
 		switch f.Space {
 		case recolor.SpaceGray:
 			fb.Components = 1
@@ -206,8 +208,8 @@ func intentFallbacks(in []recolor.IntentFallback, cmykFromCaller bool) []IntentF
 		default:
 			fb.Components = 3
 		}
-		// The target's own provenance is [ColorReport.TargetProfile], which
-		// [Writer.ConvertColors] fills in.
+		// The target's own provenance is [models.ColorReport.TargetProfile],
+		// which [Writer.ConvertColors] fills in.
 		if !f.Target {
 			fb.Profile = profileSource(f.Space, f.Profile, cmykFromCaller)
 		}
