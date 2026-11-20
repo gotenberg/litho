@@ -8245,7 +8245,7 @@ a fix. veraPDF 1.30.2 and litho report the same rule set and the same counts in
 all thirteen cells, 19 for `6.2.4.3/2` (`6.2.3.3/1` at PDF/A-1); at PDF/UA both
 count `7.1/3` and `8.2.2/1` fifteen times. A chain of twelve tiling cells, each
 selecting the next, is left out: litho counts a cell as a level of the form
-budget (`pdf.Limits.MaxFormDepth`, 10 by default) and stops there, where
+budget (`models.Limits.MaxFormDepth`, 10 by default) and stops there, where
 veraPDF has no budget. Raised to 40, litho reports the innermost cell's
 DeviceRGB as veraPDF does.
 

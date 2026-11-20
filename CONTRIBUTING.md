@@ -24,8 +24,8 @@ One thing per PR. Keep features, bug fixes, and refactoring in separate PRs.
 
 ```
 cmd/gen-*/           -> Generators for committed tables (rules, CMaps, fonts, Schematron).
-pkg/pdf/             -> Public API: Reader, Writer, Pipeline, options, sentinel errors.
-pkg/models/          -> Public data types pkg/pdf returns.
+pkg/pdf/             -> Public API: Reader, Writer, Pipeline, Conversion, options, error types, sentinel errors.
+pkg/models/          -> Public data types: every value a caller passes in or gets back.
 pkg/plugins/         -> Public interfaces a caller implements.
 pkg/internal/        -> Everything else: parser, filters, fonts, compliance, remediation, renderer.
 examples/            -> Runnable programs, one per task.
@@ -71,7 +71,14 @@ test/integration/    -> Corpus matrix scoring litho against veraPDF, PDF.js and 
 
 ### Encapsulation
 
-`pkg/pdf`, `pkg/models` and `pkg/plugins` are the public surface. No type from `pkg/internal/` appears in a public signature, not even through a type alias. Translate at the boundary; use adapters for interfaces.
+`pkg/pdf`, `pkg/models` and `pkg/plugins` are the public surface. No type from `pkg/internal/` appears in a public signature, not even through a type alias.
+
+- `pkg/models` declares every data type that crosses the public boundary, in either direction: reports, results and the values a caller passes. It is the one definition: `pkg/pdf` and `pkg/internal` both use it, and no internal package declares a second copy to translate at the boundary. It imports the standard library alone, does no I/O and names no internal type.
+- `pkg/pdf` keeps what cannot leave it: the handles (`Reader`, `Writer`, `Pipeline`, `Conversion`), the option types, the error types beside the sentinels, and the types that hold a handle, a plugin or an internal value. A function that needs an internal value or a sentinel of `pkg/pdf` stays there too (`DefaultLimits`, `ValidateLimits`, `ParseStampPosition`).
+- `pkg/plugins` declares the interfaces a caller implements. It imports the standard library and `pkg/models` alone; `pkg/models` never imports it.
+- An internal type that carries more than the public one, a field the caller must not see or an internal value, stays internal and is translated at the boundary; use adapters for interfaces.
+
+`TestPublicPackagesKeepTheirPlace` enforces the imports, the internal types in public signatures, and the data types `pkg/pdf` may declare: a new one is declared in `pkg/models`.
 
 ### Error handling
 
@@ -114,7 +121,7 @@ Never load embedded files, images, or binary streams into memory during parsing.
 - litho ships for 32-bit platforms, where `int` stops at 2^31 - 1. Narrow an `int64`, `uint64`, `uint32` or `uint` to `int` with `intconv.Clamp`, which saturates instead of wrapping, or state the bound on the same line: `int(n) // fits int: at most len(data), checked above`. `TestNarrowingConversionsAreClampedOrBounded` enforces it. Bound a sum or product of file-derived values before forming it, since a 32-bit `int` overflows where a 64-bit one does not.
 - Parse an integer from a file at a stated width, never with `strconv.Atoi`, a bit size of 0 or `strconv.IntSize`, or a scan or decode into `int`: `intconv.Atoi` reads 64 bits and saturates for a value compared with bounds before any arithmetic, `intconv.Atoi32` reads 32 bits where the format's type does, and `TestParsesReadTheSameOnEveryWidth` enforces it.
 - Every defensive cap is a named package-level const whose comment says it is an anti-DoS guard, not spec-mandated, and why its value is safe for real documents (see `maxPageTreeDepth`). No bare numeric limits, and no conceptual limit defined twice with divergent values.
-- A cap that bounds a resource a caller trades against what litho reads joins `pdf.Limits`, with a default equal to the const it replaces, a ceiling, and a test that lowers it through the public API. Code reads `Document.Limits` at run time, never the const. A cap derived from a budget keeps a documented relation to it (see `pdf.Limits`). A recursion guard that protects litho's own stack never joins it: no `recover` catches a Go stack overflow.
+- A cap that bounds a resource a caller trades against what litho reads joins `models.Limits`, with a default equal to the const it replaces, a ceiling, and a test that lowers it through the public API. Code reads `Document.Limits` at run time, never the const. A cap derived from a budget keeps a documented relation to it (see `models.Limits`). A recursion guard that protects litho's own stack never joins it: no `recover` catches a Go stack overflow.
 
 ### Panics and goroutines
 
@@ -166,7 +173,7 @@ A doc comment is a contract with the caller. Write down what the caller can rely
 - **One idea per paragraph.** Use short paragraphs, `# Headings` and `-` lists.
 - **Say what is not supported.** `Only sequential JPEG qualifies.` saves the caller an experiment.
 
-Public godoc never mentions the corpus, corpus files, gate cells, measurement counts, commit hashes, or how a behavior was found. `TestPublicGodocNeverMentionsCorpus` enforces it.
+Public godoc never mentions the corpus, corpus files, gate cells, measurement counts, commit hashes, or how a behavior was found. `TestPublicGodocNeverMentionsCorpus` enforces it in `pkg/pdf`, `pkg/models` and `pkg/plugins`.
 
 ### Code comments
 
@@ -211,7 +218,7 @@ Stage specific files. Never `git add -A` or `git add .`.
 
 ### Checklist
 
-- [ ] No `pkg/internal` type in a public signature.
+- [ ] No `pkg/internal` type in a public signature; a new data type is declared in `pkg/models`.
 - [ ] Errors wrapped, each fact named once, caller-caused errors classified; silenced errors justified and logged.
 - [ ] I/O and recursive functions take and check `context.Context`.
 - [ ] Concurrency contract documented and honored under `-race`.

@@ -17,7 +17,7 @@ A fetched presentation's ID names the directory whose tests it comes from: `sd/<
 - its name is plain ASCII (letters, digits, dot, underscore, hyphen);
 - a `.odp` is a zip package whose `content.xml` holds an `office:presentation` body, with no entry under `Basic/` (macros), no WMF, EMF or SVM picture, no audio or video file (`.mp4 .mov .avi .wmv .mp3 .wav .m4a`), and every `Object*/` directory a chart by the manifest's media type (`application/vnd.oasis.opendocument.chart`); the pictures LibreOffice stores in `ObjectReplacements/` in place of the objects are not drawn. A `.fodp` is a flat file holding an `office:presentation` body whose embedded documents, if any, are charts, with no `draw:plugin`, no audio or video media type and no link to a WMF, EMF, SVM or media file. An encrypted package, whose `content.xml` is not readable, does not qualify;
 - the route converts it: every candidate did on the first run, so the script's `REFUSED` names none of this corpus;
-- the cell can score its reference: the script's `UNSCORABLE` leaves out `sd/qa/unit/data/odp/canvas-slide.odp`, a slide 500 cm square, Impress's largest, which drawn at 72 dpi is 14174 pixels square, four times the render budget the cell draws a page within (`pdf.Limits`' `MaxRenderPixels`, 50 million).
+- the cell can score its reference: the script's `UNSCORABLE` leaves out `sd/qa/unit/data/odp/canvas-slide.odp`, a slide 500 cm square, Impress's largest, which drawn at 72 dpi is 14174 pixels square, four times the render budget the cell draws a page within (`models.Limits`' `MaxRenderPixels`, 50 million).
 
 The candidates of each directory are sorted by name and the first ones kept, up to its cap:
 

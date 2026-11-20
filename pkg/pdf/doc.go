@@ -13,6 +13,13 @@
 //   - [Conversion]: lay a text, HTML, Markdown, Office or image source out
 //     as a new PDF. See [FromHTML] and the other From constructors.
 //
+// The values these types take and return, reports, results and the values
+// a caller passes, are the data types of
+// [github.com/gotenberg/litho/pkg/models]. The interfaces a caller
+// implements, a font provider, a heading scorer, a signer, an OCR engine and
+// a stream filter decoder, are in [github.com/gotenberg/litho/pkg/plugins].
+// This package holds the handles, their options and the errors they return.
+//
 // Specialised PDF 2.0 extractors sit on [Reader] alongside the core
 // text, image, and annotation methods: [Reader.ExtractGeoData],
 // [Reader.ExtractMeasurements], [Reader.Extract3DModels],
