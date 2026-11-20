@@ -10427,7 +10427,7 @@ writes each a `/ToUnicode` holding the reading its encoding gave, so text
 extraction reads `AB` on every line before and after. `S3` and `S4` lose their
 `/Encoding` too: both routes select the same glyph for every code the page
 shows. `S5` keeps it, since dropping it would draw `41` and `42` as each
-other's glyph. In the outputs of the eight profiles `manifest.json` lists,
+other's glyph. In the outputs of the first eight profiles `manifest.json` lists,
 default and aggressive, both tools report `S5`'s t3 alone, plus `6.3.7/1` and
 `6.3.7/3` at PDF/A-1b. litho reported a
 `.notdef` glyph for `S2`'s code `41` in those outputs: a `/Differences`-only
