@@ -2644,6 +2644,9 @@ func (w *Writer) RemediateWTPDF(ctx context.Context, profile models.WTPDFProfile
 // PDF/A-3 profile, and injects the four `fx:` XMP properties plus the
 // PDF/A extension schema declaration the format requires.
 //
+// Its output is a full rewrite or an incremental update as
+// [Writer.RemediatePDFA] describes.
+//
 // The returned [models.RemediationReport] aggregates the underlying PDF/A-3
 // fixes plus the Factur-X-specific operations.
 //
