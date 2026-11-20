@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // sixLabels is a /PageLabels tree giving six pages the labels i, ii, A-5, A-6,
@@ -421,7 +422,7 @@ func TestPageLabelsSurviveEncryption(t *testing.T) {
 	ctx := context.Background()
 	var out bytes.Buffer
 	src := openBytes(t, labelledPDF(6, sixLabels))
-	if err := Split(ctx, src, []int{3, 4}, &out, WithEncryption(EncryptConfig{UserPassword: "u", OwnerPassword: "o", Algorithm: EncryptAES256})); err != nil {
+	if err := Split(ctx, src, []int{3, 4}, &out, WithEncryption(models.EncryptConfig{UserPassword: "u", OwnerPassword: "o", Algorithm: models.EncryptAES256})); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
 	r, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()), WithPassword("u"))

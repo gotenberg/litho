@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestGetInt_Present(t *testing.T) {
@@ -150,10 +151,10 @@ func TestNewHandler_MissingP_DefaultsToAllPermissions(t *testing.T) {
 //
 //   - govdocs/pdf: files commonly declare V=2 R=3.
 func TestAuthenticate_V2R3_BlankUserPassword(t *testing.T) {
-	cfg := EncryptConfig{
+	cfg := models.EncryptConfig{
 		UserPassword:  "",
 		OwnerPassword: "ownersecret",
-		Algorithm:     RC4_128,
+		Algorithm:     models.EncryptRC4_128,
 		Permissions:   -1324,
 	}
 	docID := []byte("0123456789abcdef")

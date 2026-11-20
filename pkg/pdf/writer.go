@@ -51,7 +51,7 @@ type writeOpts struct {
 	logger       *slog.Logger
 	bookmarks    *BookmarkOptions
 	tempDir      string
-	encrypt      *EncryptConfig
+	encrypt      *models.EncryptConfig
 	// inTheClear writes the output unencrypted, whatever [Writer.Encrypt] or
 	// [WithEncryption] asks for (see [inTheClear]).
 	inTheClear bool
@@ -177,7 +177,7 @@ func WithFullRewrite() WriteOption {
 // On [Writer.WriteTo] this is equivalent to [Writer.Encrypt] and likewise
 // forces a full rewrite, since every string and stream must be encrypted. It
 // replaces the encryption Encrypt or NewWriter asked for.
-func WithEncryption(cfg EncryptConfig) WriteOption {
+func WithEncryption(cfg models.EncryptConfig) WriteOption {
 	return func(o *writeOpts) {
 		o.encrypt = &cfg
 	}
@@ -222,13 +222,13 @@ func (o writeOpts) compacts() bool {
 // config the write engine consumes, or nil when none was requested.
 //
 // Converting here is what lets [Split] and [Merge] hand the value straight to
-// the mutations layer while [crypto.EncryptConfig] stays out of every public
+// the mutations layer while [models.EncryptConfig] stays out of every public
 // signature.
-func (o writeOpts) internalEncrypt() *crypto.EncryptConfig {
+func (o writeOpts) internalEncrypt() *models.EncryptConfig {
 	if o.encrypt == nil || o.inTheClear {
 		return nil
 	}
-	internal := o.encrypt.toInternal()
+	internal := *o.encrypt
 	return &internal
 }
 
@@ -1114,7 +1114,7 @@ type Writer struct {
 	source       *Reader
 	basePath     string
 	mutations    []mutation
-	encryptCfg   *crypto.EncryptConfig
+	encryptCfg   *models.EncryptConfig
 	decrypt      bool
 	forceRewrite bool
 	trailerDirty bool
@@ -2015,119 +2015,6 @@ func (w *Writer) AutoTag() *models.AutoTagReport {
 	return report
 }
 
-// EncryptAlgorithm identifies a PDF standard-security-handler algorithm.
-// Values cover the ISO 32000 V=1..5 security handlers. The zero value is
-// [EncryptAES256], the recommended one; the RC4 variants are provided for
-// legacy-compatibility writes only, and a caller names them to get them.
-// EncryptAlgorithm values are immutable and safe for concurrent use.
-type EncryptAlgorithm int
-
-// Each algorithm carries a minimum PDF version, and the output declares it:
-// a file selecting a handler its declared version does not define misdescribes
-// itself. RC4 needs nothing beyond PDF 1.4, AES-128 raises the output to 1.6,
-// and AES-256 raises it to 1.7 and records the Adobe extension that defines
-// it. See [EncryptAES256] for why 1.7 rather than 2.0.
-//
-// The constants are listed from the strongest handler down, and the
-// strongest is the zero value, so an [EncryptConfig] that names no algorithm
-// never selects a weak one.
-const (
-	// EncryptAES256 uses 256-bit AES-CBC (V=5, R=6) through the AESV3 crypt
-	// filter. Recommended, and the zero value.
-	//
-	// ISO 32000-2 defines this handler, but the output declares PDF 1.7 plus
-	// an /Extensions entry naming Adobe extension level 3 rather than PDF
-	// 2.0. AES-256 is an extension to 1.7, not a feature of it, and declaring
-	// 2.0 would overstate a document whose body is unchanged.
-	EncryptAES256 EncryptAlgorithm = iota
-	// EncryptAES128 uses 128-bit AES-CBC (V=4, R=4) through the AESV2 crypt
-	// filter, which ISO 32000-1, Table 25 introduces in PDF 1.6. The output
-	// declares at least that version.
-	EncryptAES128
-	// EncryptRC4_128 uses 128-bit RC4 (V=2, R=3), a PDF 1.4 handler. Weak.
-	// Legacy only.
-	EncryptRC4_128
-	// EncryptRC4_40 uses 40-bit RC4 (V=1, R=2), a PDF 1.1 handler. Weak.
-	// Legacy only.
-	EncryptRC4_40
-)
-
-// EncryptConfig specifies the parameters for password-based encryption.
-// It is the public-API mirror of the internal encryption config: the
-// [pdf] package owns this type so callers never import an internal
-// path.
-// Concurrent reads of a value are safe; a write needs synchronization.
-type EncryptConfig struct {
-	// UserPassword unlocks the document for reading. Empty string means
-	// the document can be opened without a password, but [Permissions]
-	// still apply to viewers that enforce them.
-	UserPassword string
-	// OwnerPassword grants full access. Writers should pick a different
-	// value from [EncryptConfig.UserPassword]; callers that supply identical
-	// passwords get the same effective permissions as an
-	// empty-user-password doc.
-	//
-	// Under [EncryptAES256] both passwords are prepared with SASLprep (RFC
-	// 4013) before they are hashed, as ISO 32000-2, 7.6.4.3.3 requires, so
-	// "Ⅸ" and "IX" name the same password. A password SASLprep rejects
-	// yields [ErrPasswordRejected]. The other algorithms hash the password
-	// bytes as given (ISO 32000-1, 7.6.3.3).
-	OwnerPassword string
-	// Algorithm selects the standard security handler variant. The zero
-	// value selects [EncryptAES256]; [EncryptRC4_40] and the other weaker
-	// handlers are written only when named.
-	Algorithm EncryptAlgorithm
-	// Permissions is the 32-bit PDF permission mask. Pass -1 for "all
-	// permissions granted", or build one with [Permissions.Mask].
-	//
-	// The P entry the output carries holds the permission bits of the mask
-	// and the reserved bits at the values ISO 32000-2, 7.6.4.2, Table 22
-	// gives them, whatever the mask holds there: bits 1-2 cleared ("Reserved.
-	// Must be zero (0)."), bits 7-8 set ("Reserved. Must be 1.") and bits
-	// 13-32 set ("(Security handlers of revision 3 or greater) Reserved. Must
-	// be 1."). The table names no value of bits 13-32 for the revision 2
-	// handler, [EncryptRC4_40], which gets them set as well, as the example
-	// of ISO 32000-1, 7.6.3.2 shows. -1 is written as -4, and 0, every
-	// permission denied, as -3904. Readers ignore those bits (ISO 32000-1,
-	// 7.6.3.2), so this changes no permission.
-	//
-	// An output that declares PDF 2.0 sets bit 10 whatever the mask says: ISO
-	// 32000-2, Table 22 marks the bit "Not used" and reads "PDF writers shall
-	// always set this bit to 1". Below 2.0 the mask is written as given, and
-	// bit 10 is the permission to extract text and graphics in support of
-	// accessibility (ISO 32000-1, Table 22).
-	Permissions int32
-}
-
-// toInternal translates an [EncryptConfig] into the internal
-// [crypto.EncryptConfig] consumed by the write engine. Kept
-// lowercase-private so the internal type never appears in a public
-// signature.
-//
-// [EncryptAlgorithm] and [crypto.Algorithm] list the handlers in the same
-// order, AES-256 first, so the algorithm converts by value, and a value
-// outside the list stays one the engine refuses.
-func (c EncryptConfig) toInternal() crypto.EncryptConfig {
-	return crypto.EncryptConfig{
-		UserPassword:  c.UserPassword,
-		OwnerPassword: c.OwnerPassword,
-		Algorithm:     crypto.Algorithm(c.Algorithm),
-		Permissions:   c.Permissions,
-	}
-}
-
-// encryptConfigFromInternal is the inverse of [EncryptConfig.toInternal]. A
-// [Pipeline] reads the encryption a [Writer] was asked for back through it, to
-// carry it past an intermediate file written in the clear.
-func encryptConfigFromInternal(c crypto.EncryptConfig) EncryptConfig {
-	return EncryptConfig{
-		UserPassword:  c.UserPassword,
-		OwnerPassword: c.OwnerPassword,
-		Algorithm:     EncryptAlgorithm(c.Algorithm),
-		Permissions:   c.Permissions,
-	}
-}
-
 // Encrypt applies password-based encryption to the output document.
 // Forces a full rewrite since every string and stream must be
 // encrypted. It replaces the encryption [NewWriter] was given, and
@@ -2144,7 +2031,7 @@ func encryptConfigFromInternal(c crypto.EncryptConfig) EncryptConfig {
 // ([WithDocumentID]): a value derived from anything less than the whole
 // plaintext output would give two different outputs under one password the
 // same key, and under RC4 the same keystream.
-func (w *Writer) Encrypt(cfg EncryptConfig) {
+func (w *Writer) Encrypt(cfg models.EncryptConfig) {
 	if w.refuseAfterRemediation("Encrypt") != nil {
 		return
 	}
@@ -2153,9 +2040,8 @@ func (w *Writer) Encrypt(cfg EncryptConfig) {
 
 // askEncryption makes cfg the encryption of the output and forces the full
 // rewrite it needs. by names the call that asked for it.
-func (w *Writer) askEncryption(cfg EncryptConfig, by string) {
-	internal := cfg.toInternal()
-	w.encryptCfg = &internal
+func (w *Writer) askEncryption(cfg models.EncryptConfig, by string) {
+	w.encryptCfg = &cfg
 	w.encryptBy = by
 	w.forceRewrite = true
 }
@@ -2824,9 +2710,9 @@ func (w *Writer) remediateFlattening(ctx context.Context, target remediationTarg
 //
 // Its output may be encrypted, but a PDF/UA-1 output only with permissions
 // that set bit 10 of the P key, which ISO 14289-1, 7.16 requires of an
-// encrypted conforming file, and [EncryptConfig.Permissions] of -1 or from
-// [Permissions.Mask] set it. ISO 32000-1, Table 22 makes the bit the
-// permission to extract text and graphics in support of accessibility. The
+// encrypted conforming file, and [models.EncryptConfig.Permissions] of -1 or
+// from [models.Permissions.Mask] set it. ISO 32000-1, Table 22 makes the bit
+// the permission to extract text and graphics in support of accessibility. The
 // remediation judges its output before it is encrypted, so rather than report
 // a document the write would then break, it returns
 // [ErrPDFUAForbidsBarringAccessibility] when [Writer.Encrypt], or the
@@ -3436,7 +3322,7 @@ func (o writeOpts) xrefStreamOption() string {
 // encrypted conforming file to set bit 10 of its P key, "" when it states
 // none. ISO 14289-1, 7.16 does. The PDF/UA-2 profile holds no such rule. ISO
 // 32000-2, Table 22 marks the bit "Not used", and an output declaring PDF 2.0
-// sets it whatever the mask (see [EncryptConfig.Permissions]).
+// sets it whatever the mask (see [models.EncryptConfig.Permissions]).
 func pdfuaAccessibilityClause(profile models.PDFUAProfile) string {
 	if profile == models.PDFUA1 {
 		return "ISO 14289-1, 7.16"
@@ -4613,9 +4499,9 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	// refused write leaves the Writer as it was: it used to keep the
 	// encryption, and a retry without the option was refused or encrypted all
 	// the same.
-	var encrypt *crypto.EncryptConfig
+	var encrypt *models.EncryptConfig
 	if cfg.encrypt != nil {
-		internal := cfg.encrypt.toInternal()
+		internal := *cfg.encrypt
 		encrypt = &internal
 	}
 	if encrypt != nil {

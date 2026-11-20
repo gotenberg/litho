@@ -10,8 +10,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
-	"github.com/gotenberg/litho/pkg/internal/crypto"
 	"github.com/gotenberg/litho/pkg/internal/fontsubset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // CompactOptions selects which output-compaction passes a full rewrite runs.
@@ -71,7 +71,7 @@ func (c CompactOptions) passes(doc *document.Document) writer.CompactConfig {
 // the three write paths, [FullRewrite], [Split] and [Merge], share it so that
 // they cannot drift. doc is the document the fonts and images are read under,
 // and what names the output in an error.
-func finishRewrite(ctx context.Context, dst io.Writer, doc *document.Document, alloc *writer.ObjAllocator, trailer ast.PdfDict, version string, xrefStream bool, compact CompactOptions, encryptCfg *crypto.EncryptConfig, what string) error {
+func finishRewrite(ctx context.Context, dst io.Writer, doc *document.Document, alloc *writer.ObjAllocator, trailer ast.PdfDict, version string, xrefStream bool, compact CompactOptions, encryptCfg *models.EncryptConfig, what string) error {
 	if err := compact.subsetFonts(ctx, doc, alloc, trailer); err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func (c CompactOptions) imageReduction(doc *document.Document) *writer.ImageRedu
 // FullRewriteConfig holds the parameters for a full document rewrite.
 type FullRewriteConfig struct {
 	Doc             *document.Document
-	EncryptCfg      *crypto.EncryptConfig
+	EncryptCfg      *models.EncryptConfig
 	Decrypt         bool
 	Version         string
 	RequiredVersion string

@@ -118,7 +118,7 @@ func sharedReaderOps(t *testing.T) []sharedReaderOp {
 		}},
 		{"Encrypt", func(ctx context.Context, r *Reader) ([]byte, error) {
 			return writeOnReader(ctx, r, func(w *Writer) error {
-				w.Encrypt(EncryptConfig{UserPassword: "u", OwnerPassword: "o", Algorithm: EncryptAES256, Permissions: -1})
+				w.Encrypt(models.EncryptConfig{UserPassword: "u", OwnerPassword: "o", Algorithm: models.EncryptAES256, Permissions: -1})
 				return nil
 			})
 		}},
@@ -126,7 +126,7 @@ func sharedReaderOps(t *testing.T) []sharedReaderOp {
 			return writeOnReader(ctx, r, func(w *Writer) error {
 				w.SetMetadata(Metadata{Title: "encrypted"})
 				return nil
-			}, WithEncryption(EncryptConfig{OwnerPassword: "o", Algorithm: EncryptAES128, Permissions: -1}))
+			}, WithEncryption(models.EncryptConfig{OwnerPassword: "o", Algorithm: models.EncryptAES128, Permissions: -1}))
 		}},
 		{"Sign", func(ctx context.Context, r *Reader) ([]byte, error) {
 			return writeOnReader(ctx, r, func(w *Writer) error {

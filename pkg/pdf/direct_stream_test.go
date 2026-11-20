@@ -144,7 +144,7 @@ func assertDirectStreamText(t *testing.T, data []byte, password string, pages in
 // would read back either way.
 func TestDirectStream_EveryWritePathWritesItIndirect(t *testing.T) {
 	t.Parallel()
-	encryption := EncryptConfig{UserPassword: "u", OwnerPassword: "o", Algorithm: EncryptAES128}
+	encryption := models.EncryptConfig{UserPassword: "u", OwnerPassword: "o", Algorithm: models.EncryptAES128}
 	for _, tc := range []struct {
 		name     string
 		password string

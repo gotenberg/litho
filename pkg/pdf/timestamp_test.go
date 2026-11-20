@@ -124,7 +124,7 @@ func TestWriterTimestamp(t *testing.T) {
 			{"a token over another digest", func(w *Writer) { w.Timestamp(pki.TSAURL()) }, ErrTimestampAuthority},
 			{"an encryption", func(w *Writer) {
 				w.Timestamp(pki.TSAURL())
-				w.Encrypt(EncryptConfig{UserPassword: "u", OwnerPassword: "o"})
+				w.Encrypt(models.EncryptConfig{UserPassword: "u", OwnerPassword: "o"})
 			}, ErrSignFullRewriteIncompatible},
 		} {
 			src := writerTestPDF()

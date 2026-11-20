@@ -3,6 +3,8 @@ package pdf
 import (
 	"bytes"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestMerge_PacksAndDedupsAnEncryptedOutput pins that Merge applies object
@@ -17,7 +19,7 @@ func TestMerge_PacksAndDedupsAnEncryptedOutput(t *testing.T) {
 	var out bytes.Buffer
 	if err := Merge(ctx, []*Reader{openColorPDF(t, data), openColorPDF(t, data)}, &out,
 		WithObjectStreams(), WithDedup(),
-		WithEncryption(EncryptConfig{UserPassword: "s", OwnerPassword: "o"})); err != nil {
+		WithEncryption(models.EncryptConfig{UserPassword: "s", OwnerPassword: "o"})); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 	if !bytes.Contains(out.Bytes(), []byte(objStmMarker)) {

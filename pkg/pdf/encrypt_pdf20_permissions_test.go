@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // permissionsPDF builds a one-page document whose header declares header and
@@ -47,34 +49,34 @@ func TestEncryptSetsBit10OnAPDF20Output(t *testing.T) {
 	// Every permission but extraction for accessibility, reserved bits 1-2
 	// clear as ISO 32000-1, Table 22 asks.
 	mask := ^int32(0b11 | accessibility)
-	encrypt := func(alg EncryptAlgorithm) EncryptConfig {
-		return EncryptConfig{UserPassword: userPw, OwnerPassword: "owner", Algorithm: alg, Permissions: mask}
+	encrypt := func(alg models.EncryptAlgorithm) models.EncryptConfig {
+		return models.EncryptConfig{UserPassword: userPw, OwnerPassword: "owner", Algorithm: alg, Permissions: mask}
 	}
 	pdf20 := permissionsPDF("2.0", "")
 	pdf17 := permissionsPDF("1.7", "")
 	catalog20 := permissionsPDF("1.7", "/Version /2.0")
 
-	type write func(ctx context.Context, r *Reader, cfg EncryptConfig, out *bytes.Buffer) error
+	type write func(ctx context.Context, r *Reader, cfg models.EncryptConfig, out *bytes.Buffer) error
 	encryptMethod := func(opts ...WriteOption) write {
-		return func(ctx context.Context, r *Reader, cfg EncryptConfig, out *bytes.Buffer) error {
+		return func(ctx context.Context, r *Reader, cfg models.EncryptConfig, out *bytes.Buffer) error {
 			w := NewWriter(r)
 			defer w.Close()
 			w.Encrypt(cfg)
 			return w.WriteTo(ctx, out, opts...)
 		}
 	}
-	withEncryption := func(ctx context.Context, r *Reader, cfg EncryptConfig, out *bytes.Buffer) error {
+	withEncryption := func(ctx context.Context, r *Reader, cfg models.EncryptConfig, out *bytes.Buffer) error {
 		w := NewWriter(r)
 		defer w.Close()
 		return w.WriteTo(ctx, out, WithEncryption(cfg))
 	}
-	split := func(ctx context.Context, r *Reader, cfg EncryptConfig, out *bytes.Buffer) error {
+	split := func(ctx context.Context, r *Reader, cfg models.EncryptConfig, out *bytes.Buffer) error {
 		return Split(ctx, r, []int{1}, out, WithEncryption(cfg))
 	}
-	merge := func(ctx context.Context, r *Reader, cfg EncryptConfig, out *bytes.Buffer) error {
+	merge := func(ctx context.Context, r *Reader, cfg models.EncryptConfig, out *bytes.Buffer) error {
 		return Merge(ctx, []*Reader{r, r}, out, WithEncryption(cfg), WithVersion("2.0"))
 	}
-	merge17 := func(ctx context.Context, r *Reader, cfg EncryptConfig, out *bytes.Buffer) error {
+	merge17 := func(ctx context.Context, r *Reader, cfg models.EncryptConfig, out *bytes.Buffer) error {
 		return Merge(ctx, []*Reader{r, r}, out, WithEncryption(cfg))
 	}
 
@@ -94,7 +96,7 @@ func TestEncryptSetsBit10OnAPDF20Output(t *testing.T) {
 		{name: "Split of a PDF 1.7 source", src: pdf17, write: split},
 		{name: "Merge of PDF 1.7 sources", src: pdf17, write: merge17},
 	} {
-		for _, alg := range []EncryptAlgorithm{EncryptRC4_40, EncryptRC4_128, EncryptAES128, EncryptAES256} {
+		for _, alg := range []models.EncryptAlgorithm{models.EncryptRC4_40, models.EncryptRC4_128, models.EncryptAES128, models.EncryptAES256} {
 			t.Run(fmt.Sprintf("%s/algorithm %d", tc.name, alg), func(t *testing.T) {
 				t.Parallel()
 

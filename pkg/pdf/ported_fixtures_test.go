@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // translucentCyanPDF builds a 100 by 100 page filled with DeviceCMYK cyan at
@@ -62,7 +64,7 @@ func encryptBytes(t *testing.T, data []byte, pw string) []byte {
 	r := openColorPDF(t, data)
 	w := NewWriter(r)
 	defer w.Close()
-	w.Encrypt(EncryptConfig{UserPassword: pw, OwnerPassword: pw + "-owner", Permissions: -1})
+	w.Encrypt(models.EncryptConfig{UserPassword: pw, OwnerPassword: pw + "-owner", Permissions: -1})
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
 		t.Fatalf("encrypting the fixture: %v", err)

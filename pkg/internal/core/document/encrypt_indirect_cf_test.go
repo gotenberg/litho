@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // aesCryptFilterPDF builds an AES-128 document that opens on the empty user
@@ -18,8 +19,8 @@ func aesCryptFilterPDF(t *testing.T, indirect bool) []byte {
 	t.Helper()
 
 	docID := bytes.Repeat([]byte{0xCD}, 16)
-	enc, encDict, err := crypto.NewEncryptor(crypto.EncryptConfig{
-		Algorithm:   crypto.AES_128,
+	enc, encDict, err := crypto.NewEncryptor(models.EncryptConfig{
+		Algorithm:   models.EncryptAES128,
 		Permissions: -1852,
 	}, docID)
 	if err != nil {

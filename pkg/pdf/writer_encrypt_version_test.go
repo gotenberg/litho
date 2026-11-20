@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // Each encryption algorithm carries a minimum PDF version, and the output
@@ -20,17 +22,17 @@ func TestWriteTo_EncryptionDeclaresItsVersion(t *testing.T) {
 
 	for _, tc := range []struct {
 		name       string
-		algorithm  EncryptAlgorithm
+		algorithm  models.EncryptAlgorithm
 		wantHeader string
 		wantADBE   bool
 	}{
 		// /V 2 /R 3 is a PDF 1.4 handler, so the source version already
 		// covers it and nothing should move.
-		{"RC4-128 leaves the version alone", EncryptRC4_128, "%PDF-1.4", false},
+		{"RC4-128 leaves the version alone", models.EncryptRC4_128, "%PDF-1.4", false},
 		// AESV2 arrived in PDF 1.6 (ISO 32000-1, Table 25).
-		{"AES-128 raises to 1.6 bare", EncryptAES128, "%PDF-1.6", false},
+		{"AES-128 raises to 1.6 bare", models.EncryptAES128, "%PDF-1.6", false},
 		// AESV3 is ISO 32000-2, declared as an extension to 1.7.
-		{"AES-256 raises to 1.7 with an extension", EncryptAES256, "%PDF-1.7", true},
+		{"AES-256 raises to 1.7 with an extension", models.EncryptAES256, "%PDF-1.7", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -49,7 +51,7 @@ func TestWriteTo_EncryptionDeclaresItsVersion(t *testing.T) {
 			defer r.Close()
 
 			var out bytes.Buffer
-			err = NewWriter(r).WriteTo(ctx, &out, WithEncryption(EncryptConfig{
+			err = NewWriter(r).WriteTo(ctx, &out, WithEncryption(models.EncryptConfig{
 				UserPassword: "u",
 				Algorithm:    tc.algorithm,
 			}))
@@ -83,32 +85,30 @@ func TestWriteTo_EncryptionDeclaresItsVersion(t *testing.T) {
 	}
 }
 
-// TestEncryptConfigZeroValueIsAES256 pins that an [EncryptConfig] naming no
-// algorithm encrypts with AES-256 (V 5, R 6), the handler [EncryptAES256]
-// recommends. The zero value selected [EncryptRC4_40], a 40-bit handler its own
-// documentation calls weak and for legacy use only. Each constant maps to the
-// handler it names, RC4-40 included.
+// TestEncryptConfigZeroValueIsAES256 pins that an [models.EncryptConfig]
+// naming no algorithm encrypts with AES-256 (V 5, R 6), the handler
+// [models.EncryptAES256] recommends. The zero value selected
+// [models.EncryptRC4_40], a 40-bit handler its own documentation calls weak
+// and for legacy use only. Each constant maps to the handler it names, RC4-40
+// included.
 func TestEncryptConfigZeroValueIsAES256(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
 		name         string
-		algorithm    EncryptAlgorithm
+		algorithm    models.EncryptAlgorithm
 		wantV, wantR int
 	}{
 		{name: "zero value", wantV: 5, wantR: 6},
-		{name: "EncryptAES256", algorithm: EncryptAES256, wantV: 5, wantR: 6},
-		{name: "EncryptAES128", algorithm: EncryptAES128, wantV: 4, wantR: 4},
-		{name: "EncryptRC4_128", algorithm: EncryptRC4_128, wantV: 2, wantR: 3},
-		{name: "EncryptRC4_40", algorithm: EncryptRC4_40, wantV: 1, wantR: 2},
+		{name: "EncryptAES256", algorithm: models.EncryptAES256, wantV: 5, wantR: 6},
+		{name: "EncryptAES128", algorithm: models.EncryptAES128, wantV: 4, wantR: 4},
+		{name: "EncryptRC4_128", algorithm: models.EncryptRC4_128, wantV: 2, wantR: 3},
+		{name: "EncryptRC4_40", algorithm: models.EncryptRC4_40, wantV: 1, wantR: 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg := EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: tc.algorithm, Permissions: -1}
-			if back := encryptConfigFromInternal(cfg.toInternal()); back != cfg {
-				t.Errorf("the config reads back from the write engine as %+v, want %+v", back, cfg)
-			}
+			cfg := models.EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: tc.algorithm, Permissions: -1}
 			out, err := writeWithOptions(t, twinPagesPDF(), nil, nil, []WriteOption{WithEncryption(cfg)})
 			if err != nil {
 				t.Fatalf("WriteTo: %v", err)

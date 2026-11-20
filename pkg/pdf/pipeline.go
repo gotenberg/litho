@@ -412,9 +412,9 @@ func (ex *executor) terminalOptions() []WriteOption {
 	if !ex.merged {
 		return ex.finalOpts
 	}
-	var encrypt *EncryptConfig
+	var encrypt *models.EncryptConfig
 	if ex.writer.encryptCfg != nil {
-		cfg := encryptConfigFromInternal(*ex.writer.encryptCfg)
+		cfg := *ex.writer.encryptCfg
 		encrypt = &cfg
 	}
 	opts := append(slices.Clone(ex.finalOpts), ex.carryEncryption(encrypt))
@@ -498,11 +498,7 @@ type executor struct {
 	// encrypt is the encryption an earlier stage asked for, which the
 	// pipeline's output owes the caller although every intermediate file is
 	// written in the clear (see [executor.carryEncryption]). nil when none did.
-	encrypt *EncryptConfig
-	// signatureRemoval tells that the options of [Pipeline.WriteTo] allow
-	// every stage to drop signatures (see [WithSignatureRemoval]), which the
-	// intermediate files carry over.
-	signatureRemoval bool
+	encrypt *models.EncryptConfig
 }
 
 func (ex *executor) isLastStage() bool { return ex.stageIdx == ex.totalStages-1 }
@@ -541,7 +537,7 @@ func (ex *executor) ensureWriter() {
 // A later request replaces it, as [WithEncryption] on [Writer.WriteTo]
 // replaces [Writer.Encrypt]. The remediation writes its temp files in the
 // clear for the same reason (see [Writer.writeTempFile]).
-func (ex *executor) carryEncryption(cfg *EncryptConfig) WriteOption {
+func (ex *executor) carryEncryption(cfg *models.EncryptConfig) WriteOption {
 	if cfg != nil {
 		carried := *cfg
 		ex.encrypt = &carried
@@ -577,9 +573,9 @@ func (ex *executor) flushToTempFile(ctx context.Context, stage string) error {
 		return fmt.Errorf("creating intermediate temp file: %w", err)
 	}
 	ex.tmpFiles = append(ex.tmpFiles, f)
-	var encrypt *EncryptConfig
+	var encrypt *models.EncryptConfig
 	if ex.writer.encryptCfg != nil {
-		cfg := encryptConfigFromInternal(*ex.writer.encryptCfg)
+		cfg := *ex.writer.encryptCfg
 		encrypt = &cfg
 	}
 	if err := ex.writer.WriteTo(ctx, f, ex.intermediateOptions(ex.carryEncryption(encrypt))...); err != nil {

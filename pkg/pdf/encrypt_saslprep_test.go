@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestEncryptAES256PreparesThePasswordWithSASLprep pins ISO 32000-2,
@@ -15,8 +17,8 @@ func TestEncryptAES256PreparesThePasswordWithSASLprep(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	out := splitOnePage(t, ctx, threePagePDF(), WithEncryption(EncryptConfig{
-		UserPassword: "Ⅸ", OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: -1,
+	out := splitOnePage(t, ctx, threePagePDF(), WithEncryption(models.EncryptConfig{
+		UserPassword: "Ⅸ", OwnerPassword: "owner", Algorithm: models.EncryptAES256, Permissions: -1,
 	}))
 	assertPasswordProtected(t, ctx, out, "IX")
 	assertPasswordProtected(t, ctx, out, "Ⅸ")
@@ -26,7 +28,7 @@ func TestEncryptAES256PreparesThePasswordWithSASLprep(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	var buf bytes.Buffer
-	err = NewWriter(r).WriteTo(ctx, &buf, WithEncryption(EncryptConfig{UserPassword: "tab\there", Algorithm: EncryptAES256}))
+	err = NewWriter(r).WriteTo(ctx, &buf, WithEncryption(models.EncryptConfig{UserPassword: "tab\there", Algorithm: models.EncryptAES256}))
 	if !errors.Is(err, ErrPasswordRejected) {
 		t.Fatalf("WriteTo with a prohibited password = %v, want ErrPasswordRejected", err)
 	}
@@ -36,8 +38,8 @@ func TestEncryptAES256PreparesThePasswordWithSASLprep(t *testing.T) {
 
 	// The legacy handlers take the password bytes as given (ISO 32000-1,
 	// 7.6.3.3, Algorithm 2), so the same password encrypts there.
-	out = splitOnePage(t, ctx, threePagePDF(), WithEncryption(EncryptConfig{
-		UserPassword: "tab\there", OwnerPassword: "owner", Algorithm: EncryptAES128, Permissions: -1,
+	out = splitOnePage(t, ctx, threePagePDF(), WithEncryption(models.EncryptConfig{
+		UserPassword: "tab\there", OwnerPassword: "owner", Algorithm: models.EncryptAES128, Permissions: -1,
 	}))
 	assertPasswordProtected(t, ctx, out, "tab\there")
 }

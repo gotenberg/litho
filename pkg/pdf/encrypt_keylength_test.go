@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestOpen_AES128WithoutTopLevelLength pins that an AES-128 document opens
@@ -25,7 +27,7 @@ func TestOpen_AES128WithoutTopLevelLength(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	w.Encrypt(EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: EncryptAES128, Permissions: -1})
+	w.Encrypt(models.EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: models.EncryptAES128, Permissions: -1})
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
 		t.Fatalf("WriteTo: %v", err)

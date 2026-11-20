@@ -9,7 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
-	"github.com/gotenberg/litho/pkg/internal/crypto"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // ComposePlacement draws one page of a [ComposeConfig] source on a composed
@@ -50,7 +50,7 @@ type ComposeConfig struct {
 	// Compact selects the compaction passes.
 	Compact CompactOptions
 	// Encrypt encrypts the output, nil for none.
-	Encrypt *crypto.EncryptConfig
+	Encrypt *models.EncryptConfig
 }
 
 // Compose writes a new document of cfg.Pages pages, each on cfg.MediaBox, and

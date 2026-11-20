@@ -1,6 +1,10 @@
 package pdf
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
+)
 
 // TestReader_PermissionsOfAnUnencryptedDocumentGrantEverything pins that a
 // document with no /Encrypt grants every permission: ISO 32000-1, 7.6.3.2
@@ -12,7 +16,7 @@ func TestReader_PermissionsOfAnUnencryptedDocumentGrantEverything(t *testing.T) 
 	if r.IsEncrypted() {
 		t.Fatal("precondition: the fixture reports itself encrypted")
 	}
-	want := Permissions{
+	want := models.Permissions{
 		Print:             true,
 		ModifyContent:     true,
 		ExtractText:       true,

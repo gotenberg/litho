@@ -99,7 +99,7 @@ func checkSecurityStore(ctx context.Context, t *testing.T, data []byte) {
 func TestWriter_FullRewriteDropsTheSecurityStore(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	encrypt := EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: -1}
+	encrypt := models.EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: models.EncryptAES256, Permissions: -1}
 
 	for _, tc := range []struct {
 		name     string

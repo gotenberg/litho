@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // encryptedRebuiltPDF builds an RC4-128 document that opens on the empty user
@@ -18,8 +19,8 @@ func encryptedRebuiltPDF(t *testing.T, author string) []byte {
 	t.Helper()
 
 	docID := bytes.Repeat([]byte{0xAB}, 16)
-	enc, encDict, err := crypto.NewEncryptor(crypto.EncryptConfig{
-		Algorithm:   crypto.RC4_128,
+	enc, encDict, err := crypto.NewEncryptor(models.EncryptConfig{
+		Algorithm:   models.EncryptRC4_128,
 		Permissions: -1852,
 	}, docID)
 	if err != nil {

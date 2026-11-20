@@ -996,24 +996,11 @@ func (r *Reader) ExtractAllText(ctx context.Context, opts ...ExtractTextOption) 
 	return sb.String(), nil
 }
 
-// Permissions represents the document's permission flags as defined by
-// ISO 32000-2, Table 22. For unencrypted documents, all flags are true.
-// Concurrent reads of a value are safe; a write needs synchronization.
-type Permissions struct {
-	Print             bool // Bit 3: Print the document.
-	ModifyContent     bool // Bit 4: Modify document contents.
-	ExtractText       bool // Bit 5: Copy or extract text and graphics.
-	ModifyAnnotations bool // Bit 6: Add or modify annotations, fill form fields.
-	FillForms         bool // Bit 9: Fill form fields (even if bit 6 is clear).
-	Assemble          bool // Bit 11: Assemble the document.
-	PrintHighQuality  bool // Bit 12: Print high-quality (bit 3 must also be set).
-}
-
 // Permissions returns the document's permission flags. For unencrypted
 // documents, all permissions are granted.
-func (r *Reader) Permissions() Permissions {
+func (r *Reader) Permissions() models.Permissions {
 	if !r.IsEncrypted() {
-		return Permissions{
+		return models.Permissions{
 			Print:             true,
 			ModifyContent:     true,
 			ExtractText:       true,
@@ -1024,7 +1011,7 @@ func (r *Reader) Permissions() Permissions {
 		}
 	}
 	p := r.doc.Crypto.PermissionFlags()
-	return Permissions{
+	return models.Permissions{
 		Print:             p&4 != 0,
 		ModifyContent:     p&8 != 0,
 		ExtractText:       p&16 != 0,
@@ -1033,37 +1020,6 @@ func (r *Reader) Permissions() Permissions {
 		Assemble:          p&1024 != 0,
 		PrintHighQuality:  p&2048 != 0,
 	}
-}
-
-// Mask builds the 32-bit /P permission value for these flags, suitable
-// for [EncryptConfig.Permissions], and the inverse of the decoding in
-// [Reader.Permissions]. It sets the reserved bits ISO 32000-2, Table 22
-// requires to be 1: bits 7-8, and bits 13-32 for security handlers of
-// revision 3 or greater. The table names no value of bits 13-32 for the
-// revision 2 handler, whose mask gets them set as well. It clears the
-// reserved low bits 1-2, and sets each named permission bit only when its
-// flag is true. Bit 10, the permission to extract content for
-// accessibility, has no flag here and stays set. The writer sets the
-// reserved bits of any mask the same way (see [EncryptConfig.Permissions]),
-// so -1 grants what a Mask with every flag true grants.
-func (p Permissions) Mask() int32 {
-	// Start from all bits set, then clear the reserved low bits and any
-	// denied permission. The high reserved bits stay 1 as the spec wants.
-	var m int32 = -1
-	m &^= 0b11 // reserved bits 1-2 must be 0
-	clear := func(bit int32, granted bool) {
-		if !granted {
-			m &^= bit
-		}
-	}
-	clear(4, p.Print)
-	clear(8, p.ModifyContent)
-	clear(16, p.ExtractText)
-	clear(32, p.ModifyAnnotations)
-	clear(256, p.FillForms)
-	clear(1024, p.Assemble)
-	clear(2048, p.PrintHighQuality)
-	return m
 }
 
 // XMPMetadata returns a lazy Open function for the catalog /Metadata

@@ -760,10 +760,10 @@ func TestWriter_Encrypt_AES256(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.Encrypt(EncryptConfig{
+	w.Encrypt(models.EncryptConfig{
 		UserPassword:  "user123",
 		OwnerPassword: "owner456",
-		Algorithm:     EncryptAES256,
+		Algorithm:     models.EncryptAES256,
 		Permissions:   -4, // allow printing
 	})
 
@@ -817,10 +817,10 @@ func TestWriter_Encrypt_AES128(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.Encrypt(EncryptConfig{
+	w.Encrypt(models.EncryptConfig{
 		UserPassword:  "test",
 		OwnerPassword: "test",
-		Algorithm:     EncryptAES128,
+		Algorithm:     models.EncryptAES128,
 		Permissions:   -4,
 	})
 
@@ -851,9 +851,9 @@ func TestWriter_Decrypt(t *testing.T) {
 	// First, encrypt the document.
 	r, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	w := NewWriter(r)
-	w.Encrypt(EncryptConfig{
+	w.Encrypt(models.EncryptConfig{
 		UserPassword: "secret",
-		Algorithm:    EncryptAES256,
+		Algorithm:    models.EncryptAES256,
 		Permissions:  -4,
 	})
 	var encrypted bytes.Buffer
@@ -901,9 +901,9 @@ func TestWriter_EncryptAndModify(t *testing.T) {
 	r, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	w := NewWriter(r)
 	w.SetMetadata(Metadata{Title: "Encrypted Doc"})
-	w.Encrypt(EncryptConfig{
+	w.Encrypt(models.EncryptConfig{
 		UserPassword: "pw",
-		Algorithm:    EncryptAES256,
+		Algorithm:    models.EncryptAES256,
 		Permissions:  -4,
 	})
 
@@ -2123,8 +2123,8 @@ func TestWriter_FailedWriteDoesNotConsume(t *testing.T) {
 
 	// Sign + encryption is rejected before any bytes are written.
 	var bad bytes.Buffer
-	if err := w.WriteTo(ctx, &bad, WithEncryption(EncryptConfig{
-		OwnerPassword: "o", Algorithm: EncryptAES256, Permissions: -1,
+	if err := w.WriteTo(ctx, &bad, WithEncryption(models.EncryptConfig{
+		OwnerPassword: "o", Algorithm: models.EncryptAES256, Permissions: -1,
 	})); !errors.Is(err, ErrSignFullRewriteIncompatible) {
 		t.Fatalf("rejected write: got %v, want ErrSignFullRewriteIncompatible", err)
 	}
@@ -2160,7 +2160,7 @@ func TestWriter_SignWithFullRewriteOps_ReturnsIncompatible(t *testing.T) {
 		setup func(t *testing.T, w *Writer, opts *[]WriteOption)
 	}{
 		{name: "encrypt", setup: func(_ *testing.T, w *Writer, _ *[]WriteOption) {
-			w.Encrypt(EncryptConfig{UserPassword: "u", OwnerPassword: "o", Algorithm: EncryptAES256, Permissions: -1})
+			w.Encrypt(models.EncryptConfig{UserPassword: "u", OwnerPassword: "o", Algorithm: models.EncryptAES256, Permissions: -1})
 		}},
 		{name: "remove-encryption", setup: func(_ *testing.T, w *Writer, _ *[]WriteOption) { w.RemoveEncryption() }},
 		// WithFullRewrite is not among them: WriteTo signs the rewrite it asks
@@ -2172,8 +2172,8 @@ func TestWriter_SignWithFullRewriteOps_ReturnsIncompatible(t *testing.T) {
 		// the write proceeds and silently drops either the signature or the
 		// encryption.
 		{name: "with-encryption", setup: func(_ *testing.T, _ *Writer, opts *[]WriteOption) {
-			*opts = append(*opts, WithEncryption(EncryptConfig{
-				UserPassword: "u", OwnerPassword: "o", Algorithm: EncryptAES256, Permissions: -1,
+			*opts = append(*opts, WithEncryption(models.EncryptConfig{
+				UserPassword: "u", OwnerPassword: "o", Algorithm: models.EncryptAES256, Permissions: -1,
 			}))
 		}},
 	}
@@ -4676,10 +4676,10 @@ func TestWriter_EncryptedSourceRewrittenDecrypted(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	w.Encrypt(EncryptConfig{
+	w.Encrypt(models.EncryptConfig{
 		UserPassword:  "user123",
 		OwnerPassword: "owner456",
-		Algorithm:     EncryptAES128,
+		Algorithm:     models.EncryptAES128,
 	})
 	var enc bytes.Buffer
 	if err := w.WriteTo(ctx, &enc); err != nil {

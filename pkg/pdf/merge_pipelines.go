@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/panicerr"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 type mergePipelinesStage struct {
@@ -32,7 +33,7 @@ type mergedOutput struct {
 	result *PipelineResult
 	// encrypt is the encryption the pipeline asked for its output, which the
 	// merging pipeline's output owes the caller instead, nil when none did.
-	encrypt *EncryptConfig
+	encrypt *models.EncryptConfig
 }
 
 // apply runs the pipelines into intermediate files, then merges them, after

@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestEncryptPendingObjects_LeavesSignatureValueInTheClear pins that the
@@ -29,7 +30,7 @@ func TestEncryptPendingObjects_LeavesSignatureValueInTheClear(t *testing.T) {
 
 	const value = "\x30\x82\x01\x00 signature value"
 	const name = "Jane Doe"
-	for _, algorithm := range []crypto.Algorithm{crypto.RC4_128, crypto.AES_128, crypto.AES_256} {
+	for _, algorithm := range []models.EncryptAlgorithm{models.EncryptRC4_128, models.EncryptAES128, models.EncryptAES256} {
 		alloc := writer.NewObjAllocator(0)
 		sig := alloc.Alloc(ast.PdfDict{
 			"Type":      ast.PdfName("Sig"),
@@ -37,7 +38,7 @@ func TestEncryptPendingObjects_LeavesSignatureValueInTheClear(t *testing.T) {
 			"Contents":  ast.PdfString(value),
 			"ByteRange": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(10), ast.PdfInt(20), ast.PdfInt(30)},
 		})
-		enc, _, err := crypto.NewEncryptor(crypto.EncryptConfig{
+		enc, _, err := crypto.NewEncryptor(models.EncryptConfig{
 			UserPassword: "user", OwnerPassword: "owner", Algorithm: algorithm, Permissions: -1,
 		}, GenerateDocumentID())
 		if err != nil {

@@ -1,9 +1,13 @@
 package pdf
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
+)
 
 func TestPermissions_Mask_RoundTrip(t *testing.T) {
-	cases := []Permissions{
+	cases := []models.Permissions{
 		{Print: true, ModifyContent: true, ExtractText: true, ModifyAnnotations: true, FillForms: true, Assemble: true, PrintHighQuality: true},
 		{}, // all denied
 		{Print: true, ExtractText: true},
@@ -16,7 +20,7 @@ func TestPermissions_Mask_RoundTrip(t *testing.T) {
 			t.Errorf("%+v: reserved bits 1-2 set in mask %#x", p, uint32(m))
 		}
 		// Decoding the mask the way Reader.Permissions does must recover p.
-		got := Permissions{
+		got := models.Permissions{
 			Print:             m&4 != 0,
 			ModifyContent:     m&8 != 0,
 			ExtractText:       m&16 != 0,
@@ -31,7 +35,7 @@ func TestPermissions_Mask_RoundTrip(t *testing.T) {
 	}
 
 	// All permissions granted is the conventional 0xFFFFFFFC value.
-	all := Permissions{
+	all := models.Permissions{
 		Print:             true,
 		ModifyContent:     true,
 		ExtractText:       true,

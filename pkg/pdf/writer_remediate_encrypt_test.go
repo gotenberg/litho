@@ -11,7 +11,7 @@ import (
 )
 
 // aes256 is an encryption a reader opens without a password.
-var aes256 = EncryptConfig{OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: -1}
+var aes256 = models.EncryptConfig{OwnerPassword: "owner", Algorithm: models.EncryptAES256, Permissions: -1}
 
 // TestWriterRefusesToEncryptAPDFARemediation pins that the output of a PDF/A
 // remediation is never encrypted: every part of ISO 19005 forbids the Encrypt
@@ -242,7 +242,7 @@ func TestWriterEncryptBeforeARemediationProtectsTheOutput(t *testing.T) {
 			defer r.Close()
 			w := NewWriter(r)
 			defer w.Close()
-			w.Encrypt(EncryptConfig{UserPassword: tc.password, OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: -1})
+			w.Encrypt(models.EncryptConfig{UserPassword: tc.password, OwnerPassword: "owner", Algorithm: models.EncryptAES256, Permissions: -1})
 			if err := tc.remediate(ctx, t, w); err != nil {
 				t.Fatalf("the remediation: %v", err)
 			}
@@ -302,7 +302,7 @@ func TestPipelineRefusesToEncryptAPDFARemediation(t *testing.T) {
 func TestWriterRefusesAPDFUA1EncryptionBarringAccessibility(t *testing.T) {
 	t.Parallel()
 
-	barred := EncryptConfig{OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: -1 &^ accessibilityPermission}
+	barred := models.EncryptConfig{OwnerPassword: "owner", Algorithm: models.EncryptAES256, Permissions: -1 &^ accessibilityPermission}
 	remediate := func(ctx context.Context, w *Writer) error {
 		_, err := w.RemediatePDFUA(ctx, models.PDFUA1)
 		return err
@@ -395,7 +395,7 @@ func TestWriterRefusesAPDFUA1EncryptionBarringAccessibility(t *testing.T) {
 func TestWriterEncryptsAPDFUA1RemediationThatPermitsAccessibility(t *testing.T) {
 	t.Parallel()
 
-	permitted := EncryptConfig{OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: accessibilityPermission}
+	permitted := models.EncryptConfig{OwnerPassword: "owner", Algorithm: models.EncryptAES256, Permissions: accessibilityPermission}
 	for _, tc := range []struct {
 		name    string
 		encrypt bool

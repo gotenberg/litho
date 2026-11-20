@@ -10,7 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
-	"github.com/gotenberg/litho/pkg/internal/crypto"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // MergeSource represents one input document for a merge operation.
@@ -34,7 +34,7 @@ type MergeSource struct {
 // source order, then mediaBoxFallback, nil for none, that holds what the page
 // paints, and US Letter, what a viewer drew, when none does (see
 // [document.MediaBoxDefault]).
-func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version string, xrefStream bool, compact CompactOptions, bookmarkCfg BookmarkConfig, encryptCfg *crypto.EncryptConfig, mediaBoxFallback ast.PdfArray) error {
+func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version string, xrefStream bool, compact CompactOptions, bookmarkCfg BookmarkConfig, encryptCfg *models.EncryptConfig, mediaBoxFallback ast.PdfArray) error {
 	if len(sources) == 0 {
 		return fmt.Errorf("no sources to merge")
 	}

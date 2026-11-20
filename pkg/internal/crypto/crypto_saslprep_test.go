@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // saslprepTrailer is the trailer the SASLprep tests open their dictionaries
@@ -22,7 +23,7 @@ func TestAES256PasswordIsSASLprepped(t *testing.T) {
 	t.Parallel()
 
 	docID := []byte("0123456789abcdef")
-	cfg := EncryptConfig{UserPassword: "Ⅸ", OwnerPassword: "ｏｗｎ", Algorithm: AES_256, Permissions: -4}
+	cfg := models.EncryptConfig{UserPassword: "Ⅸ", OwnerPassword: "ｏｗｎ", Algorithm: models.EncryptAES256, Permissions: -4}
 	_, encDict, err := NewEncryptor(cfg, docID)
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
@@ -82,7 +83,7 @@ func TestAES256EncryptRefusesWhatSASLprepRejects(t *testing.T) {
 		{"pw\U0001F600", "ok"},
 		{"bad\xff", "ok"},
 	} {
-		_, _, err := NewEncryptor(EncryptConfig{UserPassword: tt.user, OwnerPassword: tt.owner, Algorithm: AES_256}, []byte("0123456789abcdef"))
+		_, _, err := NewEncryptor(models.EncryptConfig{UserPassword: tt.user, OwnerPassword: tt.owner, Algorithm: models.EncryptAES256}, []byte("0123456789abcdef"))
 		if !errors.Is(err, ErrPasswordRejected) {
 			t.Errorf("NewEncryptor(%q, %q) = %v, want ErrPasswordRejected", tt.user, tt.owner, err)
 		}
@@ -95,7 +96,7 @@ func TestLegacyPasswordIsNotSASLprepped(t *testing.T) {
 	t.Parallel()
 
 	docID := []byte("0123456789abcdef")
-	_, encDict, err := NewEncryptor(EncryptConfig{UserPassword: "tab\there", Algorithm: AES_128}, docID)
+	_, encDict, err := NewEncryptor(models.EncryptConfig{UserPassword: "tab\there", Algorithm: models.EncryptAES128}, docID)
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)
 	}

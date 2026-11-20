@@ -5,17 +5,19 @@ import (
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestEncryptWritesTheReservedPermissionBits pins that every encrypted output
 // carries the P value ISO 32000-2, 7.6.4.2, Table 22 requires of its reserved
-// bits, whatever mask [EncryptConfig.Permissions] holds: bits 1-2 "Reserved.
-// Must be zero (0).", bits 7-8 "Reserved. Must be 1." and bits 13-32
-// "(Security handlers of revision 3 or greater) Reserved. Must be 1.".
+// bits, whatever mask [models.EncryptConfig.Permissions] holds: bits 1-2
+// "Reserved. Must be zero (0).", bits 7-8 "Reserved. Must be 1." and bits
+// 13-32 "(Security handlers of revision 3 or greater) Reserved. Must be 1.".
 //
-// -1, the mask the CLI writes and [EncryptConfig.Permissions] documents for
-// "all permissions granted", set bits 1-2, and a mask denying everything, 0,
-// cleared bits 7-8 and 13-32. The permission bits stay the caller's, and an
+// -1, the mask the CLI writes and [models.EncryptConfig.Permissions] documents
+// for "all permissions granted", set bits 1-2, and a mask denying everything,
+// 0, cleared bits 7-8 and 13-32. The permission bits stay the caller's, and an
 // output declaring PDF 2.0 still sets bit 10.
 func TestEncryptWritesTheReservedPermissionBits(t *testing.T) {
 	t.Parallel()
@@ -24,20 +26,20 @@ func TestEncryptWritesTheReservedPermissionBits(t *testing.T) {
 	pdf17 := permissionsPDF("1.7", "")
 	pdf20 := permissionsPDF("2.0", "")
 
-	type write func(ctx context.Context, r *Reader, cfg EncryptConfig, out *bytes.Buffer) error
-	encryptMethod := func(ctx context.Context, r *Reader, cfg EncryptConfig, out *bytes.Buffer) error {
+	type write func(ctx context.Context, r *Reader, cfg models.EncryptConfig, out *bytes.Buffer) error
+	encryptMethod := func(ctx context.Context, r *Reader, cfg models.EncryptConfig, out *bytes.Buffer) error {
 		w := NewWriter(r)
 		defer w.Close()
 		w.Encrypt(cfg)
 		return w.WriteTo(ctx, out)
 	}
-	split := func(ctx context.Context, r *Reader, cfg EncryptConfig, out *bytes.Buffer) error {
+	split := func(ctx context.Context, r *Reader, cfg models.EncryptConfig, out *bytes.Buffer) error {
 		return Split(ctx, r, []int{1}, out, WithEncryption(cfg))
 	}
-	merge := func(ctx context.Context, r *Reader, cfg EncryptConfig, out *bytes.Buffer) error {
+	merge := func(ctx context.Context, r *Reader, cfg models.EncryptConfig, out *bytes.Buffer) error {
 		return Merge(ctx, []*Reader{r, r}, out, WithEncryption(cfg))
 	}
-	pipeline := func(ctx context.Context, r *Reader, cfg EncryptConfig, out *bytes.Buffer) error {
+	pipeline := func(ctx context.Context, r *Reader, cfg models.EncryptConfig, out *bytes.Buffer) error {
 		_, err := NewPipeline().Open(r).
 			Apply(func(_ context.Context, w *Writer) error { w.Encrypt(cfg); return nil }).
 			Split([]int{1}).
@@ -62,7 +64,7 @@ func TestEncryptWritesTheReservedPermissionBits(t *testing.T) {
 		{name: "no permission, Writer.Encrypt on PDF 2.0", src: pdf20, write: encryptMethod, mask: 0, want: -3904 | 1<<9},
 		{name: "every permission, Writer.Encrypt on PDF 2.0", src: pdf20, write: encryptMethod, mask: -1, want: -4},
 	} {
-		for _, alg := range []EncryptAlgorithm{EncryptRC4_40, EncryptRC4_128, EncryptAES128, EncryptAES256} {
+		for _, alg := range []models.EncryptAlgorithm{models.EncryptRC4_40, models.EncryptRC4_128, models.EncryptAES128, models.EncryptAES256} {
 			t.Run(fmt.Sprintf("%s/algorithm %d", tc.name, alg), func(t *testing.T) {
 				t.Parallel()
 
@@ -72,7 +74,7 @@ func TestEncryptWritesTheReservedPermissionBits(t *testing.T) {
 					t.Fatalf("Open: %v", err)
 				}
 				defer r.Close()
-				cfg := EncryptConfig{UserPassword: userPw, OwnerPassword: "owner", Algorithm: alg, Permissions: tc.mask}
+				cfg := models.EncryptConfig{UserPassword: userPw, OwnerPassword: "owner", Algorithm: alg, Permissions: tc.mask}
 				var out bytes.Buffer
 				if err := tc.write(ctx, r, cfg, &out); err != nil {
 					t.Fatalf("write: %v", err)

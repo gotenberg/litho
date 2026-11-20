@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestNewEncryptor_AES256_Perms pins that the R6 /Encrypt dictionary carries a
@@ -14,7 +15,7 @@ import (
 // (Acrobat, pikepdf) reject the file even though a lenient reader decrypts.
 func TestNewEncryptor_AES256_Perms(t *testing.T) {
 	docID := []byte("0123456789abcdef")
-	cfg := EncryptConfig{UserPassword: "user123", OwnerPassword: "owner456", Algorithm: AES_256, Permissions: -4}
+	cfg := models.EncryptConfig{UserPassword: "user123", OwnerPassword: "owner456", Algorithm: models.EncryptAES256, Permissions: -4}
 
 	_, encDict, err := NewEncryptor(cfg, docID)
 	if err != nil {
@@ -56,10 +57,10 @@ func TestNewEncryptor_AES256_Perms(t *testing.T) {
 
 func TestNewEncryptor_AES256_RoundTrip(t *testing.T) {
 	docID := []byte("0123456789abcdef")
-	cfg := EncryptConfig{
+	cfg := models.EncryptConfig{
 		UserPassword:  "user123",
 		OwnerPassword: "owner456",
-		Algorithm:     AES_256,
+		Algorithm:     models.EncryptAES256,
 		Permissions:   -4,
 	}
 
@@ -108,10 +109,10 @@ func TestNewEncryptor_AES256_RoundTrip(t *testing.T) {
 
 func TestNewEncryptor_AES256_OwnerPassword(t *testing.T) {
 	docID := []byte("0123456789abcdef")
-	cfg := EncryptConfig{
+	cfg := models.EncryptConfig{
 		UserPassword:  "user",
 		OwnerPassword: "owner",
-		Algorithm:     AES_256,
+		Algorithm:     models.EncryptAES256,
 		Permissions:   -4,
 	}
 
@@ -135,9 +136,9 @@ func TestNewEncryptor_AES256_OwnerPassword(t *testing.T) {
 
 func TestNewEncryptor_AES128_RoundTrip(t *testing.T) {
 	docID := []byte("0123456789abcdef")
-	cfg := EncryptConfig{
+	cfg := models.EncryptConfig{
 		UserPassword: "test",
-		Algorithm:    AES_128,
+		Algorithm:    models.EncryptAES128,
 		Permissions:  -4,
 	}
 
@@ -178,9 +179,9 @@ func TestNewEncryptor_AES128_RoundTrip(t *testing.T) {
 
 func TestNewEncryptor_RC4_128_RoundTrip(t *testing.T) {
 	docID := []byte("0123456789abcdef")
-	cfg := EncryptConfig{
+	cfg := models.EncryptConfig{
 		UserPassword: "pw",
-		Algorithm:    RC4_128,
+		Algorithm:    models.EncryptRC4_128,
 		Permissions:  -4,
 	}
 
@@ -248,11 +249,11 @@ func TestNewEncryptorWritesTheReservedPermissionBits(t *testing.T) {
 		// its reserved low bits set and bits 7-8 cleared.
 		{name: "print and copy", mask: (-44 | 0b11) &^ 0xC0, want: -44},
 	} {
-		for _, alg := range []Algorithm{RC4_40, RC4_128, AES_128, AES_256} {
+		for _, alg := range []models.EncryptAlgorithm{models.EncryptRC4_40, models.EncryptRC4_128, models.EncryptAES128, models.EncryptAES256} {
 			t.Run(fmt.Sprintf("%s/algorithm %d", tc.name, alg), func(t *testing.T) {
 				t.Parallel()
 
-				cfg := EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: alg, Permissions: tc.mask}
+				cfg := models.EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: alg, Permissions: tc.mask}
 				_, encDict, err := NewEncryptor(cfg, docID)
 				if err != nil {
 					t.Fatalf("NewEncryptor: %v", err)
@@ -276,7 +277,7 @@ func TestNewEncryptorWritesTheReservedPermissionBits(t *testing.T) {
 				if got := int32(h.PermissionFlags()); got != tc.want { //nolint:gosec // P is a 32-bit field, read back as written.
 					t.Errorf("PermissionFlags() = %d, want %d", got, tc.want)
 				}
-				if alg != AES_256 {
+				if alg != models.EncryptAES256 {
 					return
 				}
 				perms, ok := encDict["Perms"].(ast.PdfString)
@@ -303,7 +304,7 @@ func TestNewEncryptorWritesTheReservedPermissionBits(t *testing.T) {
 func TestNewEncryptor_ZeroAlgorithmIsAES256(t *testing.T) {
 	t.Parallel()
 
-	cfg := EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Permissions: -4}
+	cfg := models.EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Permissions: -4}
 	_, encDict, err := NewEncryptor(cfg, []byte("0123456789abcdef"))
 	if err != nil {
 		t.Fatalf("NewEncryptor: %v", err)

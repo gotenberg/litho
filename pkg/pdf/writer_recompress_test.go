@@ -9,6 +9,8 @@ import (
 	"image/jpeg"
 	"slices"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // gradientImagePDF builds a one-page document showing /Im0, a 64x48 RGB
@@ -155,7 +157,7 @@ func TestWriter_WithImageRecompression_AppliesToEncryptedOutput(t *testing.T) {
 	write := func(opts ...WriteOption) []byte {
 		t.Helper()
 		var out bytes.Buffer
-		opts = append(opts, WithEncryption(EncryptConfig{UserPassword: "u", OwnerPassword: "o"}))
+		opts = append(opts, WithEncryption(models.EncryptConfig{UserPassword: "u", OwnerPassword: "o"}))
 		if err := NewWriter(openRecompressSource(t, data)).WriteTo(ctx, &out, opts...); err != nil {
 			t.Fatalf("WriteTo: %v", err)
 		}

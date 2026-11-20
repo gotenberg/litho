@@ -92,7 +92,7 @@ func (s Severity) String() string {
 // interchangeably.
 // Concurrent reads of a value are safe; a write needs synchronization.
 //
-//nolint:errname // Violation is the public domain name; "ViolationError" would be redundant and it mirrors compliance.Violation.
+//nolint:errname // Violation is the domain name; "ViolationError" would be redundant.
 type Violation struct {
 	// Specification is the ISO standard identifier (e.g. "ISO_19005_1").
 	Specification string

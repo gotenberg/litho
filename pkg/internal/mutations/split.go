@@ -9,7 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
-	"github.com/gotenberg/litho/pkg/internal/crypto"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // Split extracts the specified 1-based pages from a document into a new PDF
@@ -28,7 +28,7 @@ import (
 // Letter, what a viewer drew, when none does (see [document.MediaBoxDefault]).
 // The sizes come from the whole of doc, not the pages the split keeps: a split
 // of the one page missing its media box from an A4 document is an A4 page.
-func Split(ctx context.Context, doc *document.Document, allPages []*document.Page, pages []int, dst io.Writer, version string, xrefStream bool, compact CompactOptions, bookmarkCfg BookmarkConfig, encryptCfg *crypto.EncryptConfig, mediaBoxFallback ast.PdfArray) error {
+func Split(ctx context.Context, doc *document.Document, allPages []*document.Page, pages []int, dst io.Writer, version string, xrefStream bool, compact CompactOptions, bookmarkCfg BookmarkConfig, encryptCfg *models.EncryptConfig, mediaBoxFallback ast.PdfArray) error {
 	if len(pages) == 0 {
 		return fmt.Errorf("no pages specified")
 	}

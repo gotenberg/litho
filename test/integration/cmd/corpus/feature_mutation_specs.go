@@ -278,7 +278,7 @@ const (
 // permission bit of ISO 32000-2, Table 22 set (3-6 and 9-12), and every
 // reserved bit at the value the table forbids, bits 1-2 set and bits 7-8 and
 // 13-32 clear. The writer corrects the reserved bits whatever the mask holds
-// (see [pdf.EncryptConfig]), so the output's P is -4, as for -1, and
+// (see [models.EncryptConfig]), so the output's P is -4, as for -1, and
 // [verifyEncrypt] sees a regression in either correction, where -1 hid one
 // that stopped setting bits 7-8 and 13-32.
 const mutationEncryptPermissions int32 = 0b1111_0011_1111
@@ -481,10 +481,10 @@ var mutationSpecs = []mutationSpec{
 		name:         "encrypt",
 		extraMetrics: []string{metricPromiseBroken},
 		apply: func(_ context.Context, _ *mutationFeature, in *mutationInput, w *pdf.Writer) (mutationPlan, error) {
-			w.Encrypt(pdf.EncryptConfig{
+			w.Encrypt(models.EncryptConfig{
 				UserPassword:  mutationEncryptUser,
 				OwnerPassword: mutationEncryptOwner,
-				Algorithm:     pdf.EncryptAES256,
+				Algorithm:     models.EncryptAES256,
 				Permissions:   mutationEncryptPermissions,
 			})
 			plan := identityPlan(in)

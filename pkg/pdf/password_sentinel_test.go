@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // encryptedWithUserPassword returns a three-page document encrypted with a real
@@ -22,10 +24,10 @@ func encryptedWithUserPassword(t *testing.T, userPw, ownerPw string) []byte {
 	defer src.Close()
 
 	w := NewWriter(src)
-	w.Encrypt(EncryptConfig{
+	w.Encrypt(models.EncryptConfig{
 		UserPassword:  userPw,
 		OwnerPassword: ownerPw,
-		Algorithm:     EncryptAES128,
+		Algorithm:     models.EncryptAES128,
 		Permissions:   -1,
 	})
 

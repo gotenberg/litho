@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // grainyPhotoPDF builds a one-page document drawing /Im0, a 300 x 300 RGB
@@ -147,7 +149,7 @@ func TestWriter_ImageOptionsApplyToEncryptedOutput(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	data := grainyPhotoPDF()
-	enc := WithEncryption(EncryptConfig{UserPassword: "u", OwnerPassword: "o"})
+	enc := WithEncryption(models.EncryptConfig{UserPassword: "u", OwnerPassword: "o"})
 	plain := rewriteWithImageOptions(t, data, enc)
 	reduced := rewriteWithImageOptions(t, data, enc, WithMaxImageDPI(150), WithImageQuality(75))
 	if len(reduced) >= len(plain)/4 {

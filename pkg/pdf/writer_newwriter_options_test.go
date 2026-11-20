@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // The tests here pin that the options given to [NewWriter] are defaults for
@@ -92,7 +94,7 @@ func TestNewWriterOptionsAreWriteToDefaults(t *testing.T) {
 		{
 			name: "WithEncryption",
 			opt: func(v int) WriteOption {
-				return WithEncryption(EncryptConfig{UserPassword: passwordOf(v), OwnerPassword: "owner", Permissions: -1})
+				return WithEncryption(models.EncryptConfig{UserPassword: passwordOf(v), OwnerPassword: "owner", Permissions: -1})
 			},
 			check: func(t *testing.T, _, out []byte, v int) {
 				ctx := context.Background()
@@ -308,8 +310,8 @@ func TestNewWriterTempDirIsAWriteToDefault(t *testing.T) {
 func TestNewWriterEncryptionMeetsTheWriteToGuards(t *testing.T) {
 	t.Parallel()
 
-	first := EncryptConfig{UserPassword: passwordOf(1), OwnerPassword: "owner", Permissions: -1}
-	second := EncryptConfig{UserPassword: passwordOf(2), OwnerPassword: "owner", Permissions: -1}
+	first := models.EncryptConfig{UserPassword: passwordOf(1), OwnerPassword: "owner", Permissions: -1}
+	second := models.EncryptConfig{UserPassword: passwordOf(2), OwnerPassword: "owner", Permissions: -1}
 
 	t.Run("a signature beside it is refused", func(t *testing.T) {
 		t.Parallel()

@@ -336,7 +336,7 @@ func TestWriter_FormPathsReachAPageWrittenDirectlyInKids(t *testing.T) {
 		t.Parallel()
 		w := NewWriter(openDirect(t, signed))
 		defer w.Close()
-		w.Encrypt(EncryptConfig{OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: -1})
+		w.Encrypt(models.EncryptConfig{OwnerPassword: "owner", Algorithm: models.EncryptAES256, Permissions: -1})
 		var out bytes.Buffer
 		if err := w.WriteTo(ctx, &out, WithSignatureRemoval()); err != nil {
 			t.Fatalf("WriteTo: %v", err)

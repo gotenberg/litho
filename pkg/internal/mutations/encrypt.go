@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // applyEncryption encrypts every pending object and installs the /Encrypt
@@ -33,7 +34,7 @@ import (
 // version is the header version the output is written with. When the output
 // declares PDF 2.0, bit 10 of the P entry is set whatever mask cfg carries
 // (see [crypto.AccessibilityPermission]).
-func applyEncryption(ctx context.Context, alloc *writer.ObjAllocator, trailer ast.PdfDict, cfg *crypto.EncryptConfig, version string) error {
+func applyEncryption(ctx context.Context, alloc *writer.ObjAllocator, trailer ast.PdfDict, cfg *models.EncryptConfig, version string) error {
 	enc := *cfg
 	// ISO 32000-2, 7.6.4.2, Table 22, bit 10: "Not used. This bit was
 	// previously used to determine whether content could be extracted for the

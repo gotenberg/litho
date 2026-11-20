@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // declarationPDF builds a two-page document whose header declares header,
@@ -72,15 +73,15 @@ func writerEdit(name string, edit func(w *Writer, r *Reader) error, opts ...Writ
 // fullRewriteEdits lists every public path that writes a document in full
 // rather than appending to it.
 func fullRewriteEdits() []rewriteEdit {
-	encrypt := func(alg EncryptAlgorithm) func(w *Writer, _ *Reader) error {
+	encrypt := func(alg models.EncryptAlgorithm) func(w *Writer, _ *Reader) error {
 		return func(w *Writer, _ *Reader) error {
-			w.Encrypt(EncryptConfig{UserPassword: declarationPassword, OwnerPassword: "owner", Algorithm: alg, Permissions: -1})
+			w.Encrypt(models.EncryptConfig{UserPassword: declarationPassword, OwnerPassword: "owner", Algorithm: alg, Permissions: -1})
 			return nil
 		}
 	}
-	rc4 := writerEdit("Encrypt RC4-128", encrypt(EncryptRC4_128))
+	rc4 := writerEdit("Encrypt RC4-128", encrypt(models.EncryptRC4_128))
 	rc4.encrypts = true
-	aes := writerEdit("Encrypt AES-256", encrypt(EncryptAES256))
+	aes := writerEdit("Encrypt AES-256", encrypt(models.EncryptAES256))
 	aes.encrypts = true
 	// AES-256 selects the AESV3 crypt filter, which litho declares as an
 	// extension to PDF 1.7.

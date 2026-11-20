@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // objStmMarker is how a packed object stream appears once serialized: the
@@ -223,7 +225,7 @@ func TestWriter_WithObjectStreams_AppliesToEncryptedOutput(t *testing.T) {
 		return out.Bytes()
 	}
 	packed := write()
-	encrypted := write(WithEncryption(EncryptConfig{UserPassword: "u", OwnerPassword: "o"}))
+	encrypted := write(WithEncryption(models.EncryptConfig{UserPassword: "u", OwnerPassword: "o"}))
 
 	if !bytes.Contains(encrypted, []byte(objStmMarker)) {
 		t.Fatal("the encrypted output carries no object stream")
@@ -255,7 +257,7 @@ func TestMerge_WithDedup_AppliesToEncryptedOutput(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	data := threePagePDF()
-	encrypt := WithEncryption(EncryptConfig{UserPassword: "u", OwnerPassword: "o"})
+	encrypt := WithEncryption(models.EncryptConfig{UserPassword: "u", OwnerPassword: "o"})
 
 	selfMerge := func(opts ...WriteOption) []byte {
 		t.Helper()
@@ -298,7 +300,7 @@ func TestSplit_WithObjectStreams_AppliesToEncryptedOutput(t *testing.T) {
 	}
 	defer r.Close()
 	var out bytes.Buffer
-	if err := Split(ctx, r, []int{1}, &out, WithObjectStreams(), WithEncryption(EncryptConfig{UserPassword: "u", OwnerPassword: "o"})); err != nil {
+	if err := Split(ctx, r, []int{1}, &out, WithObjectStreams(), WithEncryption(models.EncryptConfig{UserPassword: "u", OwnerPassword: "o"})); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
 	if !bytes.Contains(out.Bytes(), []byte(objStmMarker)) {

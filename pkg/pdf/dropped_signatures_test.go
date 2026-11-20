@@ -230,7 +230,7 @@ func TestWriter_FullRewriteDropsTheSourceSignatures(t *testing.T) {
 func TestWriter_EncryptionDropsTheSourceSignatures(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cfg := EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: -1}
+	cfg := models.EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: models.EncryptAES256, Permissions: -1}
 
 	for _, tc := range []struct {
 		name string

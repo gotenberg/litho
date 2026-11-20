@@ -455,7 +455,7 @@ func TestMergePipelinesCarriesEncryptionToTheOutput(t *testing.T) {
 	ctx := context.Background()
 	r := openThreePage(t)
 	defer r.Close()
-	cfg := EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: -1}
+	cfg := models.EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: models.EncryptAES256, Permissions: -1}
 
 	for name, p := range map[string]*Pipeline{
 		"Writer.Encrypt": NewPipeline().MergePipelines([]*Pipeline{

@@ -11,23 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/crypto/saslprep"
-)
-
-// Algorithm enumerates supported encryption algorithms, from the strongest
-// down. The zero value is [AES_256], so a config that names none never
-// selects a weak handler. The order matches the public pdf.EncryptAlgorithm,
-// which converts to it by value.
-type Algorithm int
-
-const (
-	// AES_256 uses 256-bit AES-CBC (V=5, R=6). Recommended.
-	AES_256 Algorithm = iota
-	// AES_128 uses 128-bit AES-CBC (V=4, R=4).
-	AES_128
-	// RC4_128 uses 128-bit RC4 (V=2, R=3).
-	RC4_128
-	// RC4_40 uses 40-bit RC4 (V=1, R=2). Weak, for legacy compatibility only.
-	RC4_40
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // AccessibilityPermission is bit 10 of the P entry of a standard security
@@ -61,8 +45,8 @@ const (
 // the reserved high-order flag bits in the encryption dictionary's P value are
 // required to be 1, the integer value P shall be specified as a negative
 // integer", and gives -44 as the example for a revision 2 handler. litho sets
-// bits 13-32 for that handler ([RC4_40]) too, as the example does, although
-// the ISO 32000-2 row names revision 3 or greater.
+// bits 13-32 for that handler ([models.EncryptRC4_40]) too, as the example
+// does, although the ISO 32000-2 row names revision 3 or greater.
 //
 // A reader ignores the reserved bits: "Conforming readers shall ignore all
 // flags other than those at bit positions 3, 4, 5, 6, 9, 10, 11, and 12" (ISO
@@ -74,17 +58,6 @@ func permissionsEntry(p int32) int32 {
 	return p&^reservedZeroBits | reservedOneBits
 }
 
-// EncryptConfig specifies the encryption parameters for a new document.
-type EncryptConfig struct {
-	UserPassword  string
-	OwnerPassword string
-	Algorithm     Algorithm
-	// Permissions is the permission mask of the P entry. [NewEncryptor]
-	// writes it through [permissionsEntry], which sets the reserved bits to
-	// the values ISO 32000-2, Table 22 requires whatever the mask holds.
-	Permissions int32
-}
-
 // Encryptor creates per-object encryption functions for writing encrypted PDFs.
 type Encryptor struct {
 	handler *Handler
@@ -93,18 +66,18 @@ type Encryptor struct {
 // NewEncryptor builds the /Encrypt dictionary, computes O/U/OE/UE values,
 // derives the file encryption key, and returns an Encryptor ready for use.
 // The documentID should be the first element of the /ID array.
-func NewEncryptor(cfg EncryptConfig, documentID []byte) (*Encryptor, ast.PdfDict, error) {
+func NewEncryptor(cfg models.EncryptConfig, documentID []byte) (*Encryptor, ast.PdfDict, error) {
 	var v, r, keyLen int
 	var cfm string
 
 	switch cfg.Algorithm {
-	case RC4_40:
+	case models.EncryptRC4_40:
 		v, r, keyLen, cfm = 1, 2, 5, "V2"
-	case RC4_128:
+	case models.EncryptRC4_128:
 		v, r, keyLen, cfm = 2, 3, 16, "V2"
-	case AES_128:
+	case models.EncryptAES128:
 		v, r, keyLen, cfm = 4, 4, 16, "AESV2"
-	case AES_256:
+	case models.EncryptAES256:
 		v, r, keyLen, cfm = 5, 6, 32, "AESV3"
 	default:
 		return nil, nil, fmt.Errorf("unsupported encryption algorithm: %d", cfg.Algorithm)

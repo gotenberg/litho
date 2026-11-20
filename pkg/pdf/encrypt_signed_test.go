@@ -46,9 +46,9 @@ func TestEncryptDropsTheSourceSignature(t *testing.T) {
 		t.Fatalf("the signed document holds %d signatures (%v), want 1", len(want), err)
 	}
 
-	for _, algorithm := range []EncryptAlgorithm{EncryptRC4_128, EncryptAES128, EncryptAES256} {
+	for _, algorithm := range []models.EncryptAlgorithm{models.EncryptRC4_128, models.EncryptAES128, models.EncryptAES256} {
 		enc := NewWriter(signedReader)
-		enc.Encrypt(EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: algorithm, Permissions: -1})
+		enc.Encrypt(models.EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: algorithm, Permissions: -1})
 		var out bytes.Buffer
 		err := enc.WriteTo(ctx, &out, WithSignatureRemoval())
 		dropped := enc.DroppedSignatures()

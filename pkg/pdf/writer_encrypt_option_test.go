@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // The tests here cover [WithEncryption] on the standalone page operations.
@@ -62,10 +64,10 @@ func assertPasswordProtected(t *testing.T, ctx context.Context, out []byte, pass
 
 func TestSplit_WithEncryption(t *testing.T) {
 	ctx := context.Background()
-	out := splitOnePage(t, ctx, threePagePDF(), WithEncryption(EncryptConfig{
+	out := splitOnePage(t, ctx, threePagePDF(), WithEncryption(models.EncryptConfig{
 		UserPassword:  "user123",
 		OwnerPassword: "owner456",
-		Algorithm:     EncryptAES256,
+		Algorithm:     models.EncryptAES256,
 		Permissions:   -1,
 	}))
 
@@ -101,10 +103,10 @@ func TestSplit_WithEncryption(t *testing.T) {
 // score-based gate would report.
 func TestSplit_WithEncryptionAndXRefStream(t *testing.T) {
 	ctx := context.Background()
-	out := splitOnePage(t, ctx, threePagePDF(), WithXRefStream(), WithEncryption(EncryptConfig{
+	out := splitOnePage(t, ctx, threePagePDF(), WithXRefStream(), WithEncryption(models.EncryptConfig{
 		UserPassword:  "user123",
 		OwnerPassword: "owner456",
-		Algorithm:     EncryptAES256,
+		Algorithm:     models.EncryptAES256,
 		Permissions:   -1,
 	}))
 
@@ -133,10 +135,10 @@ func TestMerge_WithEncryptionAndXRefStream(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := Merge(ctx, []*Reader{r1, r2}, &out, WithXRefStream(), WithEncryption(EncryptConfig{
+	if err := Merge(ctx, []*Reader{r1, r2}, &out, WithXRefStream(), WithEncryption(models.EncryptConfig{
 		UserPassword:  "user123",
 		OwnerPassword: "owner456",
-		Algorithm:     EncryptAES256,
+		Algorithm:     models.EncryptAES256,
 		Permissions:   -1,
 	})); err != nil {
 		t.Fatalf("Merge: %v", err)
@@ -179,10 +181,10 @@ func TestMerge_WithEncryption(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := Merge(ctx, []*Reader{r1, r2}, &out, WithEncryption(EncryptConfig{
+	if err := Merge(ctx, []*Reader{r1, r2}, &out, WithEncryption(models.EncryptConfig{
 		UserPassword:  "user123",
 		OwnerPassword: "owner456",
-		Algorithm:     EncryptAES256,
+		Algorithm:     models.EncryptAES256,
 		Permissions:   -1,
 	})); err != nil {
 		t.Fatalf("Merge: %v", err)
@@ -226,10 +228,10 @@ func TestMerge_WithEncryptionAcrossDifferentPasswords(t *testing.T) {
 			t.Fatalf("Open: %v", err)
 		}
 		w := NewWriter(r)
-		w.Encrypt(EncryptConfig{
+		w.Encrypt(models.EncryptConfig{
 			UserPassword:  password,
 			OwnerPassword: password + "-owner",
-			Algorithm:     EncryptAES256,
+			Algorithm:     models.EncryptAES256,
 			Permissions:   -1,
 		})
 		var buf bytes.Buffer
@@ -251,10 +253,10 @@ func TestMerge_WithEncryptionAcrossDifferentPasswords(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := Merge(ctx, []*Reader{alpha, beta}, &out, WithEncryption(EncryptConfig{
+	if err := Merge(ctx, []*Reader{alpha, beta}, &out, WithEncryption(models.EncryptConfig{
 		UserPassword:  "merged",
 		OwnerPassword: "merged-owner",
-		Algorithm:     EncryptAES256,
+		Algorithm:     models.EncryptAES256,
 		Permissions:   -1,
 	})); err != nil {
 		t.Fatalf("Merge: %v", err)
@@ -321,10 +323,10 @@ func TestWriteTo_WithEncryptionCoversThePageOperations(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := w.WriteTo(ctx, &out, WithEncryption(EncryptConfig{
+	if err := w.WriteTo(ctx, &out, WithEncryption(models.EncryptConfig{
 		UserPassword:  "user123",
 		OwnerPassword: "owner456",
-		Algorithm:     EncryptAES256,
+		Algorithm:     models.EncryptAES256,
 		Permissions:   -1,
 	})); err != nil {
 		t.Fatalf("WriteTo: %v", err)
@@ -356,10 +358,10 @@ func TestSplit_EncryptedSourceStaysProtectedWhenAsked(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	w.Encrypt(EncryptConfig{
+	w.Encrypt(models.EncryptConfig{
 		UserPassword:  "source-user",
 		OwnerPassword: "source-owner",
-		Algorithm:     EncryptAES256,
+		Algorithm:     models.EncryptAES256,
 		Permissions:   -1,
 	})
 	var enc bytes.Buffer
@@ -373,10 +375,10 @@ func TestSplit_EncryptedSourceStaysProtectedWhenAsked(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := Split(ctx, src, []int{2}, &out, WithEncryption(EncryptConfig{
+	if err := Split(ctx, src, []int{2}, &out, WithEncryption(models.EncryptConfig{
 		UserPassword:  "split-user",
 		OwnerPassword: "split-owner",
-		Algorithm:     EncryptAES256,
+		Algorithm:     models.EncryptAES256,
 		Permissions:   -1,
 	})); err != nil {
 		t.Fatalf("Split: %v", err)

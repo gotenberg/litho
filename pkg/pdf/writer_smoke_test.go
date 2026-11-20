@@ -137,10 +137,10 @@ func TestWriter_RoundTrip_Encrypt(t *testing.T) {
 	// authenticates as user. OwnerPassword is set so the file is
 	// genuinely encrypted per spec.
 	w := NewWriter(src)
-	w.Encrypt(EncryptConfig{
+	w.Encrypt(models.EncryptConfig{
 		UserPassword:  "",
 		OwnerPassword: "owner",
-		Algorithm:     EncryptAES128,
+		Algorithm:     models.EncryptAES128,
 		Permissions:   -1,
 	})
 
@@ -189,10 +189,10 @@ func TestWriter_RoundTrip_EncryptThenDecrypt(t *testing.T) {
 	src, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	defer src.Close()
 	w := NewWriter(src)
-	w.Encrypt(EncryptConfig{
+	w.Encrypt(models.EncryptConfig{
 		UserPassword:  "",
 		OwnerPassword: "owner",
-		Algorithm:     EncryptAES128,
+		Algorithm:     models.EncryptAES128,
 		Permissions:   -1,
 	})
 	var encrypted bytes.Buffer

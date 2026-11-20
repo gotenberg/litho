@@ -73,7 +73,7 @@ func refusedCalls(t *testing.T) []refusedCall {
 		}},
 		{"AutoTag", func(_ context.Context, _ *testing.T, w *Writer) error { w.AutoTag(); return nil }},
 		{"Encrypt", func(_ context.Context, _ *testing.T, w *Writer) error {
-			w.Encrypt(EncryptConfig{OwnerPassword: "o", Algorithm: EncryptAES256, Permissions: -1})
+			w.Encrypt(models.EncryptConfig{OwnerPassword: "o", Algorithm: models.EncryptAES256, Permissions: -1})
 			return nil
 		}},
 		{"RemoveEncryption", func(_ context.Context, _ *testing.T, w *Writer) error { w.RemoveEncryption(); return nil }},

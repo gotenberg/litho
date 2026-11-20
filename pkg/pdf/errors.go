@@ -400,12 +400,13 @@ var (
 	ErrEncryptedNotAuthenticated = errors.New("source document is encrypted and not authenticated; reopen with WithPassword before writing")
 
 	// ErrPasswordRejected is returned by [Writer.WriteTo] when an
-	// [EncryptAES256] password of [WithEncryption] or [Writer.Encrypt] is one
-	// SASLprep (RFC 4013) rejects: it holds a control, private-use,
-	// non-character or other prohibited character, fails the bidirectional
-	// checks, holds a code point Unicode 3.2 leaves unassigned, or is not
-	// valid UTF-8. ISO 32000-2, 7.6.4.3.3 prepares the password with SASLprep,
-	// so a reader that does could never open the output. Nothing is written.
+	// [github.com/gotenberg/litho/pkg/models.EncryptAES256] password of
+	// [WithEncryption] or [Writer.Encrypt] is one SASLprep (RFC 4013) rejects:
+	// it holds a control, private-use, non-character or other prohibited
+	// character, fails the bidirectional checks, holds a code point Unicode
+	// 3.2 leaves unassigned, or is not valid UTF-8. ISO 32000-2, 7.6.4.3.3
+	// prepares the password with SASLprep, so a reader that does could never
+	// open the output. Nothing is written.
 	ErrPasswordRejected = crypto.ErrPasswordRejected
 
 	// ErrRedactionRefused is returned by [Writer.Redact] when a region selects

@@ -29,7 +29,7 @@ func TestPipelineEncryptsItsOutputAcrossARestructuringStage(t *testing.T) {
 	plain := threePagePDF()
 	encrypt := func(user, owner string) func(context.Context, *Writer) error {
 		return func(_ context.Context, w *Writer) error {
-			w.Encrypt(EncryptConfig{UserPassword: user, OwnerPassword: owner, Algorithm: EncryptAES256, Permissions: -1})
+			w.Encrypt(models.EncryptConfig{UserPassword: user, OwnerPassword: owner, Algorithm: models.EncryptAES256, Permissions: -1})
 			return nil
 		}
 	}
@@ -91,7 +91,7 @@ func TestPipelineEncryptsItsOutputAcrossARestructuringStage(t *testing.T) {
 			name: "a split asking for encryption, then an edit",
 			build: func(src, _ *Reader) *Pipeline {
 				return NewPipeline().Open(src).
-					Split([]int{2, 3}, WithEncryption(EncryptConfig{UserPassword: userPw, OwnerPassword: ownerPw, Algorithm: EncryptAES128, Permissions: -1})).
+					Split([]int{2, 3}, WithEncryption(models.EncryptConfig{UserPassword: userPw, OwnerPassword: ownerPw, Algorithm: models.EncryptAES128, Permissions: -1})).
 					Apply(setTitle)
 			},
 			open:  userPw,
@@ -167,7 +167,7 @@ func TestPipelineReencryptsAnEncryptedSourceAcrossASplit(t *testing.T) {
 	var out bytes.Buffer
 	_, err = NewPipeline().Open(src).
 		Apply(func(_ context.Context, w *Writer) error {
-			w.Encrypt(EncryptConfig{UserPassword: newPw, OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: -1})
+			w.Encrypt(models.EncryptConfig{UserPassword: newPw, OwnerPassword: "owner", Algorithm: models.EncryptAES256, Permissions: -1})
 			return nil
 		}).
 		Split([]int{2}).
@@ -194,9 +194,9 @@ func TestPipelineReencryptsAnEncryptedSourceAcrossASplit(t *testing.T) {
 func TestPipelineOutputEncryptionFollowsTheLastRequest(t *testing.T) {
 	t.Parallel()
 
-	first := EncryptConfig{UserPassword: "first", OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: -1}
-	second := EncryptConfig{UserPassword: "second", OwnerPassword: "owner", Algorithm: EncryptAES128, Permissions: -1}
-	encrypt := func(cfg EncryptConfig) func(context.Context, *Writer) error {
+	first := models.EncryptConfig{UserPassword: "first", OwnerPassword: "owner", Algorithm: models.EncryptAES256, Permissions: -1}
+	second := models.EncryptConfig{UserPassword: "second", OwnerPassword: "owner", Algorithm: models.EncryptAES128, Permissions: -1}
+	encrypt := func(cfg models.EncryptConfig) func(context.Context, *Writer) error {
 		return func(_ context.Context, w *Writer) error {
 			w.Encrypt(cfg)
 			return nil
@@ -275,7 +275,7 @@ func TestPipelineOutputEncryptionFollowsTheLastRequest(t *testing.T) {
 func TestPipelineRefusesWhatAnEncryptedWriterRefusesAcrossARestructuringStage(t *testing.T) {
 	t.Parallel()
 
-	cfg := EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: -1}
+	cfg := models.EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: models.EncryptAES256, Permissions: -1}
 	encrypt := func(_ context.Context, w *Writer) error { w.Encrypt(cfg); return nil }
 	for _, tc := range []struct {
 		name  string
