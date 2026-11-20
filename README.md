@@ -1,10 +1,9 @@
 # litho
 
-Pure-Go PDF Conforming Processor for ISO 32000 (PDF 1.4 through 2.0). It extracts text and structured content, validates against PDF/A, PDF/UA, WTPDF, Factur-X and ZUGFeRD, repairs non-conformant files, and edits, renders, encrypts and signs them, with no C dependencies.
+Pure-Go PDF Conforming Processor for ISO 32000 (PDF 1.4 through 2.0). It extracts text and structured content, validates against PDF/A, PDF/UA, WTPDF, Factur-X and ZUGFeRD, repairs non-conformant files, edits, renders, encrypts and signs them, and converts text, web and office documents to PDF, with no C dependencies.
 
-**litho** is a pure-Go PDF Conforming Processor. Read, validate, remediate, and produce PDF documents with no C dependencies.
-
-litho implements ISO 32000 (PDF 1.4 through 2.0). It extracts text and structured content, validates against PDF/A, PDF/UA, WTPDF, Factur-X and ZUGFeRD, repairs non-conformant files, edits, renders, encrypts and signs them, and converts text, web and office documents to PDF.
+> [!NOTE]
+> litho powers the PDF operations of [Gotenberg](https://github.com/gotenberg/gotenberg) 9. Its API is pre-1.0 and may change between releases.
 
 ## Install
 
@@ -12,7 +11,7 @@ litho implements ISO 32000 (PDF 1.4 through 2.0). It extracts text and structure
 go get github.com/gotenberg/litho
 ```
 
-Go 1.27.3+. No CGO. litho is a library: it ships no command.
+Go 1.27.3+. No CGO.
 
 ## Quick start
 
