@@ -522,7 +522,7 @@ func TestRemediatePDFAWithPDFUAGivesEachEngineATurn(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	data, err := os.ReadFile("../../test/integration/corpus/litho/pdfs/complex_1b.pdf")
+	data, err := os.ReadFile("../../test/integration/corpus/litho/pdf/pdfs/complex_1b.pdf")
 	if err != nil {
 		t.Fatalf("reading the fixture: %v", err)
 	}
