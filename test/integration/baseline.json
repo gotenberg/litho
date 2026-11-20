@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-20T19:08:09Z",
+  "captured_at": "2026-11-20T19:53:06Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -53754,15 +53754,23 @@
     "litho/csv": {
       "features": {
         "diff": {
-          "matched": 22,
+          "matched": 23,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 22,
+            "pages_equal": 23,
             "reference_fonts_missing": 0
           },
           "scores": {
+            "locale-de-de": {
+              "layout": 0.9749,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
+            },
             "paper-table": {
               "layout": 0.975,
               "link_recall": 1,
@@ -53943,31 +53951,31 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 23,
+          "matched": 24,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "oracle_targets": 76,
-            "pass_a1a": 23,
-            "pass_a1b": 23,
-            "pass_a2a": 23,
-            "pass_a2a+ua1": 23,
-            "pass_a2b": 23,
-            "pass_a2u": 23,
-            "pass_a3a": 23,
-            "pass_a3b": 23,
-            "pass_a3u": 23,
-            "pass_a4": 23,
-            "pass_a4+ua2": 23,
-            "pass_a4e": 23,
-            "pass_ua1": 23,
-            "pass_ua2": 23,
-            "pass_v1.4": 23,
-            "pass_v1.5": 23,
-            "pass_v1.6": 23,
-            "pass_v1.7": 23,
-            "pass_v2.0": 23,
+            "oracle_targets": 95,
+            "pass_a1a": 24,
+            "pass_a1b": 24,
+            "pass_a2a": 24,
+            "pass_a2a+ua1": 24,
+            "pass_a2b": 24,
+            "pass_a2u": 24,
+            "pass_a3a": 24,
+            "pass_a3b": 24,
+            "pass_a3u": 24,
+            "pass_a4": 24,
+            "pass_a4+ua2": 24,
+            "pass_a4e": 24,
+            "pass_ua1": 24,
+            "pass_ua2": 24,
+            "pass_v1.4": 24,
+            "pass_v1.5": 24,
+            "pass_v1.6": 24,
+            "pass_v1.7": 24,
+            "pass_v2.0": 24,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -53978,6 +53986,27 @@
           },
           "scores": {
             "leading-zeros": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "locale-de-de": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
@@ -68260,12 +68289,12 @@
     "litho/ods": {
       "features": {
         "diff": {
-          "matched": 79,
+          "matched": 80,
           "mismatched": 3,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 82,
+            "pages_equal": 83,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -68316,6 +68345,14 @@
               "pages": 1,
               "strict": 0,
               "text_f1": 0.1927
+            },
+            "locale-fr-fr": {
+              "layout": 0.9612,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "mixed-sheets": {
               "layout": 0.9738,
@@ -68929,31 +68966,31 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 82,
+          "matched": 83,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 228,
-            "pass_a1a": 82,
-            "pass_a1b": 82,
-            "pass_a2a": 82,
-            "pass_a2a+ua1": 82,
-            "pass_a2b": 82,
-            "pass_a2u": 82,
-            "pass_a3a": 82,
-            "pass_a3b": 82,
-            "pass_a3u": 82,
-            "pass_a4": 82,
-            "pass_a4+ua2": 82,
-            "pass_a4e": 82,
-            "pass_ua1": 82,
-            "pass_ua2": 82,
-            "pass_v1.4": 82,
-            "pass_v1.5": 82,
-            "pass_v1.6": 82,
-            "pass_v1.7": 82,
-            "pass_v2.0": 82,
+            "pass_a1a": 83,
+            "pass_a1b": 83,
+            "pass_a2a": 83,
+            "pass_a2a+ua1": 83,
+            "pass_a2b": 83,
+            "pass_a2u": 83,
+            "pass_a3a": 83,
+            "pass_a3b": 83,
+            "pass_a3u": 83,
+            "pass_a4": 83,
+            "pass_a4+ua2": 83,
+            "pass_a4e": 83,
+            "pass_ua1": 83,
+            "pass_ua2": 83,
+            "pass_v1.4": 83,
+            "pass_v1.5": 83,
+            "pass_v1.6": 83,
+            "pass_v1.7": 83,
+            "pass_v2.0": 83,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -69069,6 +69106,27 @@
               "v2.0": 1
             },
             "indic-thai-cells": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "locale-fr-fr": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
