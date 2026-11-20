@@ -428,11 +428,10 @@ func (r *localeRecord) formats(trees map[string]*node, file string) error {
 	}
 	kw := keywordsFor(r.Tag)
 	type elem struct {
-		index         int
-		usage, typ    string
-		def           bool
-		code          string
-		translatedErr error
+		index      int
+		usage, typ string
+		def        bool
+		code       string
 	}
 	var elems []elem
 	general := ""

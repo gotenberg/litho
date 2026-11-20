@@ -125,7 +125,7 @@ func run(doExtract bool, src, root string) error {
 		if err := enc.Encode(x); err != nil {
 			return err
 		}
-		return os.WriteFile(filepath.Join(root, extractPath), buf.Bytes(), 0o600)
+		return os.WriteFile(filepath.Clean(filepath.Join(root, extractPath)), buf.Bytes(), 0o600)
 	}
 	data, err := os.ReadFile(filepath.Join(root, extractPath))
 	if err != nil {
@@ -135,8 +135,8 @@ func run(doExtract bool, src, root string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(root, tablePath), table, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Clean(filepath.Join(root, tablePath)), table, 0o600); err != nil { //nolint:gosec // a fixed path under the module root
 		return err
 	}
-	return os.WriteFile(filepath.Join(root, modelsPath), models, 0o600)
+	return os.WriteFile(filepath.Clean(filepath.Join(root, modelsPath)), models, 0o600) //nolint:gosec // a fixed path under the module root
 }

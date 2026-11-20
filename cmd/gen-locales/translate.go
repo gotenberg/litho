@@ -235,7 +235,7 @@ func (t translator) section(src string) (string, error) {
 		case p.text == "." || p.text == ",":
 			// A literal the SpreadsheetML syntax would read as a
 			// separator.
-			if date && !(afterSecond && nextZero && p.text == ".") {
+			if date && (!afterSecond || !nextZero || p.text != ".") {
 				b.WriteString(p.text)
 			} else {
 				b.WriteString(`\` + p.text)
@@ -265,13 +265,15 @@ func isLetter(c byte) bool { return c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z'
 
 // keyword translates a run of n letters c (upper case), raw as written.
 func (t translator) keyword(c byte, n int, raw string) (piece, error) {
-	if en, ok := t.kw.letters[c]; ok {
+	en, localized := t.kw.letters[c]
+	switch {
+	case localized:
 		c = en
-	} else if t.kw.yearA && c == 'A' && (n == 2 || n == 4) {
+	case t.kw.yearA && c == 'A' && (n == 2 || n == 4):
 		c = 'Y'
-	} else if t.kw.yearA && c == 'O' && (n == 3 || n == 4) {
+	case t.kw.yearA && c == 'O' && (n == 3 || n == 4):
 		c = 'D'
-	} else if !t.kw.yearA && c == 'A' && (n == 3 || n == 4) {
+	case !t.kw.yearA && c == 'A' && (n == 3 || n == 4):
 		c = 'D'
 	}
 	switch c {

@@ -243,7 +243,7 @@ func (r *localeReader) ungroup(intPart string, hasExp bool) (string, bool) {
 			return "", false
 		}
 		for _, g := range groups[1:] {
-			if len(g) != 3 && !(r.info.Indian && len(g) == 2) {
+			if len(g) != 3 && (!r.info.Indian || len(g) != 2) {
 				return "", false
 			}
 		}
