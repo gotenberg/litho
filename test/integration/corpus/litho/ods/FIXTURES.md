@@ -26,9 +26,10 @@ The pinned image leaves LibreOffice's locale empty, so LibreOffice prints a page
 
 A source whose `options.json` names `locale` converts with `WithLocale`, and `corpus references` builds its reference in a container whose LibreOffice runs under that locale (`LC_ALL` set to the tag; see `FEATURES.md`).
 
-| Source         | Pages (LibreOffice) | Options          | Exercises                                                                                                                                                                                                                        |
-| -------------- | ------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `locale-fr-fr` | 3                   | `locale` `fr-FR` | Data styles of no language under fr-FR: separators, day and month names, the fraction of a second, VRAI and FAUX, General numbers; the same styles naming en-US print in en-US, the style's own language winning over the locale |
+| Source                         | Pages (LibreOffice) | Options          | Exercises                                                                                                                                                                                                                                                                                                   |
+| ------------------------------ | ------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `locale-fr-fr`                 | 3                   | `locale` `fr-FR` | Data styles of no language under fr-FR: separators, day and month names, the fraction of a second, VRAI and FAUX, General numbers; the same styles naming en-US print in en-US, the style's own language winning over the locale                                                                            |
+| `locale-de-de-automatic-order` | 1                   | `locale` `de-DE` | Date styles of automatic order and no language under de-DE, printed in the locale's default date formats, day first; a style that matches none, one naming en-US, one not of automatic order; a currency style of no decimal places, a number style of no integer digits, a percentage of no decimal places |
 
 ## Writing systems
 
