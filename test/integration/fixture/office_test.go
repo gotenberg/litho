@@ -167,10 +167,10 @@ func TestOfficeOptionNames_MatchTheJSONNames(t *testing.T) {
 	}
 	// The route's fields, then litho's own options, then the key that
 	// borrows a reference, the one that installs fixture fonts, the one
-	// that derives descriptions and the one that writes comments: the last
-	// four are no fields of the route's.
+	// that derives descriptions, the one that writes comments and the
+	// locale: the last five are no fields of the pinned route's.
 	want := append(slices.Clone(OfficeOptionNames), OfficeLithoOptionNames...)
-	if want = append(want, ReferenceOfName, InstalledFontsName, DerivedAltTextName, CommentsName); !slices.Equal(tags, want) {
+	if want = append(want, ReferenceOfName, InstalledFontsName, DerivedAltTextName, CommentsName, LocaleName); !slices.Equal(tags, want) {
 		t.Errorf("json names %v, want %v", tags, want)
 	}
 }
@@ -394,5 +394,49 @@ func TestSinglePage_TextDocumentsTakeItAsLithosOwn(t *testing.T) {
 				t.Errorf("%s: %d text options and %d common ones, want the single page and no page range", format, len(c.word), len(c.common))
 			}
 		}
+	}
+}
+
+// TestLocale_ConvertsWithTheOptionAndBuildsTheReferenceUnderIt holds the
+// locale key: a tag of the Locale constants' shape is read, any other
+// refused; a sheet source converts with pdf.WithLocale; LibreOffice's
+// references are built under it, so it counts as litho's own only where
+// Microsoft's judge.
+func TestLocale_ConvertsWithTheOptionAndBuildsTheReferenceUnderIt(t *testing.T) {
+	t.Parallel()
+
+	for _, bad := range []string{`"de_DE"`, `"DE-de"`, `"de-DE "`, `"x"`} {
+		if _, err := ParseOfficeOptions([]byte(`{"locale": ` + bad + `}`)); err == nil {
+			t.Errorf("%s: accepted", bad)
+		}
+	}
+	for _, good := range []string{"de-DE", "sr-Latn-RS", "ca-ES-valencia", "eo"} {
+		if _, err := ParseOfficeOptions([]byte(`{"locale": "` + good + `"}`)); err != nil {
+			t.Errorf("%s: %v", good, err)
+		}
+	}
+	office, err := ParseOfficeOptions([]byte(`{"locale": "de-DE"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for format, want := range map[Format][]string{
+		FormatODS:  nil,
+		FormatCSV:  nil,
+		FormatXLSX: {LocaleName},
+		FormatODT:  nil,
+	} {
+		o := &Office{Format: format, Options: office}
+		if got := o.LithoOptions(); !slices.Equal(got, want) {
+			t.Errorf("%s: LithoOptions = %v, want %v", format, got, want)
+		}
+	}
+	if opts := (&Office{Format: FormatCSV, Options: office}).options(); len(opts.sheet) != 1 {
+		t.Errorf("csv sheet options %d, want the locale", len(opts.sheet))
+	}
+	dir := t.TempDir()
+	write(t, dir, "s.ods", "x")
+	write(t, dir, OptionsFile, `{"locale": "de-DE"}`)
+	if ref, err := LoadReference(dir); err != nil || ref.Locale != "de-DE" || ref.Unreferenced() {
+		t.Errorf("LoadReference = %+v, %v", ref, err)
 	}
 }

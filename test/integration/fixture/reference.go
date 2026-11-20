@@ -19,6 +19,9 @@ type Reference struct {
 	// InstalledFonts are the fixture font directories the source names
 	// under [InstalledFontsName], which its reference is built with.
 	InstalledFonts []string
+	// Locale is the locale an Office source names under [LocaleName],
+	// which its reference is built under; "" for none.
+	Locale string
 }
 
 // Unreferenced reports whether the source sets a litho-only option and
@@ -46,5 +49,5 @@ func LoadReference(path string) (Reference, error) {
 	if err != nil {
 		return Reference{}, err
 	}
-	return Reference{Of: src.Options.ReferenceOf, LithoOptions: src.LithoOptions(), InstalledFonts: src.Options.InstalledFonts}, nil
+	return Reference{Of: src.Options.ReferenceOf, LithoOptions: src.LithoOptions(), InstalledFonts: src.Options.InstalledFonts, Locale: src.Options.Locale}, nil
 }

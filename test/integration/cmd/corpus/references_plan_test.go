@@ -316,7 +316,7 @@ func TestBuildReferences_RecordsLithoOnlySourcesWithoutAnEngine(t *testing.T) {
 			writeFiles(t, m.TestdataRoot(), map[string]string{"references/styled.pdf": "%PDF- built before"})
 			pins := &resolvedPins{Values: map[string]string{}}
 			conv := &recordingConverter{}
-			if err := buildReferences(t.Context(), func(context.Context, []string) (referenceConverter, error) { return conv, nil }, m, pins, nil); err != nil {
+			if err := buildReferences(t.Context(), func(context.Context, []string, string) (referenceConverter, error) { return conv, nil }, m, pins, nil); err != nil {
 				t.Fatal(err)
 			}
 			if !slices.Equal(conv.names, []string{"page"}) {
@@ -334,7 +334,7 @@ func TestBuildReferences_RecordsLithoOnlySourcesWithoutAnEngine(t *testing.T) {
 				t.Error("the borrower has a reference of its own")
 			}
 
-			noEngine := func(context.Context, []string) (referenceConverter, error) {
+			noEngine := func(context.Context, []string, string) (referenceConverter, error) {
 				return nil, errors.New("no converter may start")
 			}
 			if err := buildReferences(t.Context(), noEngine, m, pins, []string{"styled"}); err != nil {

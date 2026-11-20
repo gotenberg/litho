@@ -96,15 +96,16 @@ func planReferences(fixtures []Fixture) (referencePlan, error) {
 // sourceReference reads what the source at path says of its reference for
 // the reference builder: borrows when it names reference_of, litho the
 // litho-only keys it sets when it names none, and fonts the fixture font
-// directories its reference is built with. A source that does not load
+// directories its reference is built with, and locale the locale it is
+// built under. A source that does not load
 // reads as none of these, and its build reports why.
-func sourceReference(path string) (borrows bool, litho, fonts []string) {
+func sourceReference(path string) (borrows bool, litho, fonts []string, locale string) {
 	ref, err := fixture.LoadReference(path)
 	if err != nil {
-		return false, nil, nil
+		return false, nil, nil, ""
 	}
 	if ref.Of != "" {
-		return true, nil, nil
+		return true, nil, nil, ""
 	}
-	return false, ref.LithoOptions, ref.InstalledFonts
+	return false, ref.LithoOptions, ref.InstalledFonts, ref.Locale
 }

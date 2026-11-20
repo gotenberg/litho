@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -107,6 +108,14 @@ type OfficeOptions struct {
 	// litho's own option but draws nothing: the source keeps its reference
 	// ([CommentsName]).
 	Comments string `json:"comments,omitempty"`
+	// Locale is the locale a spreadsheet or CSV source is formatted
+	// under, a BCP 47 tag of the models Locale constants
+	// (pdf.WithLocale). Default none, en-US. LibreOffice's references
+	// are built under it: the container that converts the source runs
+	// with LC_ALL set to the tag, which LibreOffice reads. Office for the
+	// web takes no locale, so in a format Microsoft's references judge the
+	// key counts as litho's own ([Office.LithoOptions]).
+	Locale string `json:"locale,omitempty"`
 }
 
 // OfficeOptionNames are the keys of an Office options file, the JSON names
@@ -125,6 +134,12 @@ var OfficeLithoOptionNames = []string{"trackedChanges", "sheets", "sheetNumbers"
 // spreadsheet, litho's own option for a text document, which no reference
 // engine prints on one page, so [Office.LithoOptions] names it there.
 const SinglePageName = "singlePage"
+
+// LocaleName is the key of an Office options file that formats a
+// spreadsheet or CSV source under a locale ([OfficeOptions.Locale]): no
+// route field of the pinned image, which the reference builder applies to
+// the container instead, so it is not among [OfficeOptionNames].
+const LocaleName = "locale"
 
 // ReferenceOfName is the key of an Office options file that borrows another
 // fixture's reference (see [OfficeOptions.ReferenceOf]): it is no route
@@ -249,7 +264,7 @@ func LoadOffice(path string) (*Office, error) {
 func ParseOfficeOptions(data []byte) (OfficeOptions, error) {
 	var o OfficeOptions
 	names := append(slices.Clone(OfficeOptionNames), OfficeLithoOptionNames...)
-	if err := decodeStrict(data, append(names, ReferenceOfName, InstalledFontsName, DerivedAltTextName, CommentsName), &o); err != nil {
+	if err := decodeStrict(data, append(names, ReferenceOfName, InstalledFontsName, DerivedAltTextName, CommentsName, LocaleName), &o); err != nil {
 		return OfficeOptions{}, err
 	}
 	return o, o.validate()
@@ -275,6 +290,9 @@ func (o OfficeOptions) validate() error {
 	if _, ok := trackedChangesViews[o.TrackedChanges]; !ok {
 		return fmt.Errorf("trackedChanges %q: want accepted, rejected or marked", o.TrackedChanges)
 	}
+	if o.Locale != "" && !localePattern.MatchString(o.Locale) {
+		return fmt.Errorf("%s %q: want a BCP 47 tag of the models Locale constants", LocaleName, o.Locale)
+	}
 	if _, ok := commentsViews[o.Comments]; !ok {
 		return fmt.Errorf("%s %q: want hidden or annotations", CommentsName, o.Comments)
 	}
@@ -288,6 +306,12 @@ func (o OfficeOptions) validate() error {
 	}
 	return validateInstalledFonts(o.InstalledFonts)
 }
+
+// localePattern matches the shape of the tags of the models Locale
+// constants: a language, a script, a region and a variant, the last three
+// optional (sr-Latn-RS, ca-ES-valencia). A tag of that shape the constants
+// lack fails the conversion with pdf.ErrInvalidConvertOptions.
+var localePattern = regexp.MustCompile(`^[a-z]{2,3}(-[A-Z][a-z]{3})?(-[A-Z]{2})?(-[a-z]{5,8})?$`)
 
 // trackedChangesViews maps the trackedChanges values to litho's views.
 var trackedChangesViews = map[string]models.TrackedChanges{
@@ -492,6 +516,9 @@ func (o *Office) options() officeOptions {
 		}
 	case FormatText, FormatHTML, FormatMarkdown, FormatImage:
 	}
+	if o.Options.Locale != "" && isSheets(o.Format) {
+		opts.sheet = append(opts.sheet, pdf.WithLocale(models.Locale(o.Options.Locale)))
+	}
 	if o.Options.DerivedAltText {
 		opts.common = append(opts.common, pdf.WithDerivedAltText(true))
 	}
@@ -551,6 +578,9 @@ func (o *Office) LithoOptions() []string {
 	}
 	if len(o.Options.InstalledFonts) > 0 && !judgedByLibreOffice(o.Format) {
 		keys = append(keys, InstalledFontsName)
+	}
+	if o.Options.Locale != "" && isSheets(o.Format) && !judgedByLibreOffice(o.Format) {
+		keys = append(keys, LocaleName)
 	}
 	return keys
 }

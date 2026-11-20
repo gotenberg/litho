@@ -72,7 +72,7 @@ func TestBuildReferences_OneConverterPerInstalledFontSet(t *testing.T) {
 		opened []string
 		convs  = map[string]*recordingConverter{}
 	)
-	open := func(_ context.Context, fonts []string) (referenceConverter, error) {
+	open := func(_ context.Context, fonts []string, _ string) (referenceConverter, error) {
 		key := strings.Join(fonts, ",")
 		opened = append(opened, key)
 		convs[key] = &recordingConverter{}

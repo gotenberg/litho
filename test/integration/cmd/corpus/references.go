@@ -141,8 +141,8 @@ type referenceBuilders struct {
 
 // build builds the references of m, the ones only names when set.
 func (b *referenceBuilders) build(ctx context.Context, m *Manifest, only []string) error {
-	return buildReferences(ctx, func(ctx context.Context, fonts []string) (referenceConverter, error) {
-		return b.converter(ctx, m.References.Engine, fonts)
+	return buildReferences(ctx, func(ctx context.Context, fonts []string, locale string) (referenceConverter, error) {
+		return b.converter(ctx, m.References.Engine, fonts, locale)
 	}, m, b.pins, only)
 }
 
@@ -150,7 +150,7 @@ func (b *referenceBuilders) build(ctx context.Context, m *Manifest, only []strin
 // directories fonts installed, started the first time a corpus asks for
 // it. Office for the web installs no font: a source of its corpora that
 // names some is never converted (see [fixture.Office.LithoOptions]).
-func (b *referenceBuilders) converter(ctx context.Context, engine string, fonts []string) (referenceConverter, error) {
+func (b *referenceBuilders) converter(ctx context.Context, engine string, fonts []string, locale string) (referenceConverter, error) {
 	if engine == engineMicrosoft {
 		if b.ms == nil {
 			ms, err := newMSGraph(ctx)
@@ -161,7 +161,7 @@ func (b *referenceBuilders) converter(ctx context.Context, engine string, fonts 
 		}
 		return b.ms, nil
 	}
-	key := strings.Join(fonts, "\n")
+	key := strings.Join(fonts, "\n") + "\x00" + locale
 	if g, ok := b.g[key]; ok {
 		return g, nil
 	}
@@ -169,7 +169,7 @@ func (b *referenceBuilders) converter(ctx context.Context, engine string, fonts 
 	if image == "" {
 		return nil, errors.New("GOTENBERG_IMAGE is not pinned")
 	}
-	g, err := startGotenberg(ctx, image, fonts)
+	g, err := startGotenberg(ctx, image, fonts, locale)
 	if err != nil {
 		return nil, fmt.Errorf("starting %s: %w", image, err)
 	}
@@ -213,8 +213,20 @@ const gotenbergFontsDir = "/usr/local/share/fonts"
 // startGotenberg starts image on a free loopback port, with the fixture
 // font directories fonts installed under [gotenbergFontsDir], and waits for
 // its health route and for fontconfig to list every font file of fonts.
-func startGotenberg(ctx context.Context, image string, fonts []string) (*gotenberg, error) {
+// A locale other than "" runs the container with LC_ALL set to that BCP
+// 47 tag, which LibreOffice reads as its locale: the pinned image's route
+// takes none.
+//
+// # Corpus evidence
+//
+//   - probe, csv: gotenberg/gotenberg:9.4.1 started with LC_ALL=de-DE
+//     prints "1.234,5" and 13.01.2026 of a CSV file as 1234,5 and
+//     13.01.26, Calc's de-DE reading; without it as the file's text.
+func startGotenberg(ctx context.Context, image string, fonts []string, locale string) (*gotenberg, error) {
 	args := []string{"run", "-d", "--rm", "-p", "127.0.0.1::3000"}
+	if locale != "" {
+		args = append(args, "-e", "LC_ALL="+locale)
+	}
 	installed, err := installedFontMounts(fonts)
 	if err != nil {
 		return nil, err
@@ -473,11 +485,19 @@ func chromiumFiles(dir string, opts fixture.Options) ([]formFile, error) {
 // litho-only keys it sets: a source that sets some is not converted, and
 // the reference manifest records why (see [referencePlan]). fonts are the
 // fixture font directories its options.json names under installedFonts,
-// installed in the container that converts it.
+// installed in the container that converts it, locale the locale that
+// container runs under ([fixture.LocaleName]).
 type referenceJob struct {
 	name, path, options, source string
 	litho                       []string
 	fonts                       []string
+	locale                      string
+}
+
+// key returns what tells apart the containers jobs convert in: the fonts
+// installed and the locale.
+func (j referenceJob) key() string {
+	return strings.Join(j.fonts, "\n") + "\x00" + j.locale
 }
 
 // sourceDigest returns the SHA-256 a reference records for the source at
@@ -659,7 +679,7 @@ func (g *gotenberg) convert(ctx context.Context, engine string, j referenceJob) 
 // and no sign-in, and once for each set of installed fixture fonts the
 // sources to convert name: a source converts with exactly the fonts it
 // names, and its record holds their digest (see [installedFontsDigest]).
-func buildReferences(ctx context.Context, open func(ctx context.Context, fonts []string) (referenceConverter, error), m *Manifest, pins *resolvedPins, only []string) error {
+func buildReferences(ctx context.Context, open func(ctx context.Context, fonts []string, locale string) (referenceConverter, error), m *Manifest, pins *resolvedPins, only []string) error {
 	if isBuildCorpus(m) || hasFlatPapers(m) {
 		if err := buildCorpus(ctx, m); err != nil {
 			return err
@@ -689,11 +709,11 @@ func buildReferences(ctx context.Context, open func(ctx context.Context, fonts [
 		builder = referenceBuilder(engine, pins.Values)
 	)
 	for _, j := range jobs {
-		key := strings.Join(j.fonts, "\n")
+		key := j.key()
 		if _, ok := convs[key]; ok || len(j.litho) > 0 {
 			continue
 		}
-		conv, err := open(ctx, j.fonts)
+		conv, err := open(ctx, j.fonts, j.locale)
 		if err != nil {
 			return err
 		}
@@ -744,7 +764,7 @@ func buildReferences(ctx context.Context, open func(ctx context.Context, fonts [
 			fmt.Printf("  %s: %s sets litho's own %s: no reference\n", m.Name, j.name, strings.Join(j.litho, ", "))
 			return nil
 		}
-		status, body, err := convs[strings.Join(j.fonts, "\n")].convert(ctx, engine, j)
+		status, body, err := convs[j.key()].convert(ctx, engine, j)
 		switch {
 		case errors.Is(err, errMSGraphSignIn):
 			return err
@@ -860,11 +880,11 @@ func referenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 			continue
 		}
 		dir := filepath.Join(sources, name)
-		borrows, litho, fonts := sourceReference(dir)
+		borrows, litho, fonts, locale := sourceReference(dir)
 		if borrows {
 			continue
 		}
-		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), "sources/" + name, litho, fonts})
+		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), "sources/" + name, litho, fonts, locale})
 	}
 	jobs = append(jobs, flatPaperReferenceJobs(m, only)...)
 	if m.Inputs == nil || m.Inputs.List == "" {
@@ -885,7 +905,7 @@ func referenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 		if _, err := os.Stat(doc); err != nil {
 			return nil, fmt.Errorf("%s is missing: run make corpus-fetch CORPUS=%s", doc, m.Name)
 		}
-		jobs = append(jobs, referenceJob{name, doc, "", d.ID, nil, nil})
+		jobs = append(jobs, referenceJob{name, doc, "", d.ID, nil, nil, ""})
 	}
 	sort.Slice(jobs, func(i, j int) bool { return jobs[i].name < jobs[j].name })
 	return jobs, nil
@@ -945,11 +965,11 @@ func builtReferenceJobs(m *Manifest, only []string) ([]referenceJob, error) {
 		if _, err := fixture.LoadOffice(dir); err != nil {
 			return nil, fmt.Errorf("%w (run make corpus-build CORPUS=%s)", err, m.Name)
 		}
-		borrows, litho, fonts := sourceReference(dir)
+		borrows, litho, fonts, locale := sourceReference(dir)
 		if borrows {
 			continue
 		}
-		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), path.Join(m.Inputs.Build, name), litho, fonts})
+		jobs = append(jobs, referenceJob{name, dir, optionsPath(dir), path.Join(m.Inputs.Build, name), litho, fonts, locale})
 	}
 	return jobs, nil
 }
