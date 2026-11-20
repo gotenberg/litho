@@ -1358,18 +1358,30 @@ func ExtractShownText(ctx context.Context, doc *document.Document, machine *grap
 	}
 
 	// Filter elements based on config, keeping each element's run font
-	// beside it. Fonts that do not pair one to one with the elements are
-	// dropped rather than misattributed. The extraction owns both slices,
-	// so the kept entries move down in place: a kept entry is written at
-	// or before the index it is read from.
+	// and drawing operation beside it. Fonts that do not pair one to one
+	// with the elements are dropped rather than misattributed. The
+	// extraction owns the three slices, so the kept entries move down in
+	// place: a kept entry is written at or before the index it is read
+	// from.
 	if len(runFonts) != len(elements) {
 		runFonts = nil
 	}
-	filtered := elements[:0]
-	var filteredFonts []runFont
-	if runFonts != nil {
-		filteredFonts = runFonts[:0]
+	pageOps := ex.pageOps
+	keep := func(i, k int) {
+		elements[i] = elements[k]
+		pageOps[i] = pageOps[k]
+		if runFonts != nil {
+			runFonts[i] = runFonts[k]
+		}
 	}
+	shrink := func(n int) {
+		elements, pageOps = elements[:n], pageOps[:n]
+		if runFonts != nil {
+			runFonts = runFonts[:n]
+		}
+	}
+	before := len(elements)
+	kept := 0
 	for i, el := range elements {
 		if config.StripInvisible && el.Invisible {
 			continue
@@ -1380,13 +1392,15 @@ func ExtractShownText(ctx context.Context, doc *document.Document, machine *grap
 		if config.StripClipped && el.IsClipped {
 			continue
 		}
-		kept = append(kept, i)
+		keep(kept, i)
+		kept++
 	}
+	shrink(kept)
 
 	if doc != nil {
 		doc.Logger.Debug("text elements filtered",
-			slog.Int("before", len(elements)),
-			slog.Int("after", len(kept)),
+			slog.Int("before", before),
+			slog.Int("after", kept),
 			slog.Bool("strip_invisible", config.StripInvisible),
 			slog.Bool("strip_hidden", config.StripHidden),
 			slog.Bool("strip_clipped", config.StripClipped),
@@ -1395,34 +1409,17 @@ func ExtractShownText(ctx context.Context, doc *document.Document, machine *grap
 	}
 
 	if config.DropOverdrawn {
-		filtered := make([]models.TextElement, len(kept))
-		for i, k := range kept {
-			filtered[i] = elements[k]
-		}
-		survivors, err := dropOverdrawn(ctx, filtered)
+		survivors, err := dropOverdrawn(ctx, elements)
 		if err != nil {
 			return ShownText{}, err
 		}
 		for i, k := range survivors {
-			survivors[i] = kept[k]
+			keep(i, k)
 		}
-		kept = survivors
+		shrink(len(survivors))
 	}
 
-	shown := ShownText{
-		Elements: make([]models.TextElement, len(kept)),
-		PageOps:  make([]int, len(kept)),
-	}
-	if runFonts != nil {
-		shown.fonts = make([]runFont, len(kept))
-	}
-	for i, k := range kept {
-		shown.Elements[i] = elements[k]
-		shown.PageOps[i] = ex.pageOps[k]
-		if runFonts != nil {
-			shown.fonts[i] = runFonts[k]
-		}
-	}
+	shown := ShownText{Elements: elements, PageOps: pageOps, fonts: runFonts}
 
 	var pageBeads []semantics.Bead
 	allThreads, _ := semantics.ResolveThreads(ctx, doc) // Non-fatal: proceed without thread reordering on error.

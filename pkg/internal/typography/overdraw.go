@@ -161,8 +161,8 @@ func (x *overdrawIndex) add(c overdrawCell, j int) {
 	x.cells[c] = l
 }
 
-// dropOverdrawn returns elements, and fonts parallel to them when not nil,
-// without the glyphs that draw an earlier glyph again over itself: the same
+// dropOverdrawn returns the indices, in order, of the elements left once the
+// glyphs that draw an earlier glyph again over itself are dropped: the same
 // character at the same size, along a direction turned so little that its
 // box's far end moves under [overdrawMaxOffset] ems ([overdrawMaxTurn]), under
 // [overdrawMaxOffset] ems away on each axis ([overdraws]), the earlier glyph
