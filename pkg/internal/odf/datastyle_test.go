@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/xml"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestDataStyles_Code checks the translation against the codes
@@ -42,7 +44,7 @@ func TestDataStyles_Code(t *testing.T) {
 		{"N16", `<number:number-style style:name="N16"><number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="7"><number:embedded-text number:position="4">-</number:embedded-text></number:number></number:number-style>`, `000\-0000.00`},
 		{"N17", `<number:number-style style:name="N17"><number:number number:decimal-places="0" number:min-integer-digits="1"/><style:map style:condition="value()&gt;0" style:apply-style-name="N3P0"/><style:map style:condition="value()&lt;0" style:apply-style-name="N1"/></number:number-style>`, `#,##0.00\ [$€-407];#,##0.00;0`},
 		{"N18", `<number:number-style style:name="N18"><number:number number:decimal-places="0" number:min-integer-digits="1"/><style:map style:condition="value()=1" style:apply-style-name="N1"/></number:number-style>`, `[=1]#,##0.00;0`},
-		{"N20", `<number:date-style style:name="N20" number:automatic-order="true"><number:day number:style="long"/><number:text>.</number:text><number:month number:style="long"/><number:text>.</number:text><number:year/></number:date-style>`, "mm/dd/yy"},
+		{"N20", `<number:date-style style:name="N20" number:automatic-order="true"><number:day number:style="long"/><number:text>.</number:text><number:month number:style="long"/><number:text>.</number:text><number:year/></number:date-style>`, "MM/DD/YY"},
 		{"N21", `<number:date-style style:name="N21" number:automatic-order="true" number:language="de"><number:day/><number:text>.</number:text><number:month/><number:text>.</number:text><number:year/></number:date-style>`, `d\.m\.yy`},
 		{"N22", `<number:number-style style:name="N22"><number:scientific-number number:decimal-places="2" number:min-integer-digits="1" number:min-exponent-digits="1" loext:forced-exponent-sign="false"/></number:number-style>`, "0.00E-0"},
 		{"N19", `<number:currency-style style:name="N19"><number:currency-symbol number:language="xx" number:country="YY">¤</number:currency-symbol><number:number number:decimal-places="0" number:min-integer-digits="1"/></number:currency-style>`, `[$¤]0`},
@@ -95,7 +97,59 @@ func TestNumberCode_ManyEmbeddedTexts(t *testing.T) {
 			Children: []*Element{{Text: "x"}},
 		})
 	}
-	if code := numberCode(num, false); len(code) > maxFormatCode {
+	if code := numberCode(num, false, -1); len(code) > maxFormatCode {
 		t.Errorf("code of %d bytes, past %d", len(code), maxFormatCode)
+	}
+}
+
+// TestDataStyles_LocaleDecides checks what a data style leaves to a
+// locale: a date style of automatic order whose parts are those of a
+// default date format takes that format of the style's language, else of
+// the locale given, en-US without one; a currency style without decimal
+// places takes those of the locale's currency; a number style without
+// integer digits is the locale's system number format. A style whose
+// parts match no default format is written as its elements come.
+//
+// # Corpus evidence
+//
+//   - probe, ods: under the system locale de-DE, LibreOffice 26.8.2.2
+//     prints 2025-12-09 in these date styles as 09.12.2025, 09.12.25,
+//     9.12.25 and 9. Dez 25, and under ja-JP 1234.5 in the currency
+//     style as 1,235€ (TestDataStyle_CalcLocales in the ODS converter).
+func TestDataStyles_LocaleDecides(t *testing.T) {
+	styles := `<number:date-style style:name="L" number:automatic-order="true"><number:day number:style="long"/><number:text>/</number:text><number:month number:style="long"/><number:text>/</number:text><number:year number:style="long"/></number:date-style>` +
+		`<number:date-style style:name="S" number:automatic-order="true" number:format-source="language"><number:day/><number:text>/</number:text><number:month/><number:text>/</number:text><number:year/></number:date-style>` +
+		`<number:date-style style:name="X" number:automatic-order="true"><number:day/><number:text>.</number:text><number:month/><number:text>.</number:text><number:year/></number:date-style>` +
+		`<number:date-style style:name="T" number:automatic-order="true"><number:day/><number:text>.</number:text><number:month number:textual="true"/><number:text>.</number:text><number:year/></number:date-style>` +
+		`<number:date-style style:name="E" number:automatic-order="true"><number:era/><number:day number:style="long"/><number:month number:style="long"/><number:year number:style="long"/></number:date-style>` +
+		`<number:date-style style:name="J" number:automatic-order="true" number:language="ja" number:country="JP"><number:day number:style="long"/><number:text>.</number:text><number:month number:style="long"/><number:text>.</number:text><number:year number:style="long"/></number:date-style>` +
+		`<number:currency-style style:name="C"><number:number number:min-integer-digits="1" number:grouping="true"/><number:currency-symbol>€</number:currency-symbol></number:currency-style>` +
+		`<number:number-style style:name="N"><number:number number:decimal-places="3"/></number:number-style>`
+	doc := `<office:document ` + ns + ` xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"><office:styles>` + styles + `</office:styles></office:document>`
+	p, err := Open(context.Background(), []byte(doc), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		loc  models.Locale
+		name string
+		want string
+	}{
+		{"", "L", "MM/DD/YYYY"},
+		{models.LocaleDeDE, "L", "DD.MM.YYYY"},
+		{models.LocaleDeDE, "S", "DD.MM.YY"},
+		{"", "S", "M/D/YY"},
+		{models.LocaleDeDE, "X", `d\.m\.yy`},
+		{models.LocaleDeDE, "T", "D. MMM YY"},
+		{"", "T", "MMM D, YY"},
+		{models.LocaleDeDE, "E", "gddmmyyyy"},
+		{models.LocaleDeDE, "J", "YYYY/MM/DD"},
+		{models.LocaleJaJP, "C", "#,##0[$€]"},
+		{models.LocaleDeDE, "C", "#,##0.00[$€]"},
+		{models.LocaleDeDE, "N", "#,###.00"},
+	} {
+		if got := NewDataStyles(p).WithLocale(tt.loc).Code(ScopeContent, tt.name); got != tt.want {
+			t.Errorf("%q %s = %s, want %s", tt.loc, tt.name, got, tt.want)
+		}
 	}
 }

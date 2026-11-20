@@ -411,9 +411,9 @@ func (r *localeRecord) currency(trees map[string]*node, file string) error {
 // wantedIndices are the format indices of LibreOffice's built-in formats
 // the table keeps (i18npool's NumberFormatIndex): the number, scientific
 // and percent formats, the currency formats, and the date, time and
-// date-time formats, which a CSV value and Calc's built-in formats of a
-// workbook take.
-var wantedIndices = []int{0, 1, 2, 3, 4, 7, 8, 9, 12, 13, 14, 15, 18, 19, 20, 21, 22, 33, 34, 35, 39, 40, 41, 42, 43, 44, 45, 46, 47, 50}
+// date-time formats, which a CSV value, Calc's built-in formats of a
+// workbook and the data styles of automatic order take.
+var wantedIndices = []int{0, 1, 2, 3, 4, 5, 7, 8, 9, 12, 13, 14, 15, 18, 19, 20, 21, 22, 23, 25, 27, 29, 30, 33, 34, 35, 39, 40, 41, 42, 43, 44, 45, 46, 47, 50}
 
 // formats reads the format codes of LC_FORMAT, translated into the
 // SpreadsheetML syntax, the date acceptance patterns, the default format

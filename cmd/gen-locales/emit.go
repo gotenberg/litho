@@ -17,9 +17,9 @@ import (
 // whose default format it is, or "currency" and "currencyInt", the default
 // currency's formats.
 var codeOrder = []string{
-	"0", "1", "2", "3", "4", "7", "8", "9", "12", "13", "14", "15", "18", "19", "20", "21", "22", "33", "34", "35", "39", "40", "41", "42",
-	"43", "44", "45", "46", "47", "50", "DATE", "TIME", "DATE_TIME", "PERCENT_NUMBER", "SCIENTIFIC_NUMBER",
-	"currency", "currencyInt",
+	"0", "1", "2", "3", "4", "5", "7", "8", "9", "12", "13", "14", "15", "18", "19", "20", "21", "22", "23", "25",
+	"27", "29", "30", "33", "34", "35", "39", "40", "41", "42", "43", "44", "45", "46", "47", "50", "DATE", "TIME",
+	"DATE_TIME", "PERCENT_NUMBER", "SCIENTIFIC_NUMBER", "currency", "currencyInt",
 }
 
 // header is the first lines of both generated files.
@@ -234,9 +234,9 @@ func emitTable(locs []localeRecord, tables []calcTable) ([]byte, error) {
 		if overrides != "" {
 			calcRef = calc.ref(overrides)
 		}
-		fmt.Fprintf(&rows, "\t{tag: models.%s, lcid: 0x%04X, decimal: %q, decimalAlt: %q, group: %q, dateSep: %q, timeSep: %q, time100Sep: %q, am: %q, pm: %q, trueWord: %q, falseWord: %q, indian: %v, currency: %q, calendar: %q, months: &%s, genitive: %s, partitive: %s, narrow: %s, days: &%s, codes: &%s, acceptance: %s, calc: %s},\n",
+		fmt.Fprintf(&rows, "\t{tag: models.%s, lcid: 0x%04X, decimal: %q, decimalAlt: %q, group: %q, dateSep: %q, timeSep: %q, time100Sep: %q, am: %q, pm: %q, trueWord: %q, falseWord: %q, indian: %v, currency: %q, currencyDigits: %d, calendar: %q, months: &%s, genitive: %s, partitive: %s, narrow: %s, days: &%s, codes: &%s, acceptance: %s, calc: %s},\n",
 			constName(l.Tag), l.LCIDs[0], l.Decimal, l.DecimalAlt, l.Group, l.DateSep, l.TimeSep, l.Time100Sep, l.AM, l.PM,
-			l.True, l.False, slices.Equal(l.Grouping, []int{3, 2}), l.Currency, l.Calendar, months, genitive, partitive, narrow, days, code, stringsLit(l.Acceptance), calcRef)
+			l.True, l.False, slices.Equal(l.Grouping, []int{3, 2}), l.Currency, l.CurrencyDigits, l.Calendar, months, genitive, partitive, narrow, days, code, stringsLit(l.Acceptance), calcRef)
 		for _, id := range l.LCIDs {
 			lcidRows = append(lcidRows, fmt.Sprintf("{0x%04X, %d}", id, i))
 		}

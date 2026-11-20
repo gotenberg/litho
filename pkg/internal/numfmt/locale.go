@@ -31,8 +31,10 @@ type localeData struct {
 	trueWord, falseWord string
 	// indian reports digits grouped by three then by two (12,34,567).
 	indian bool
-	// currency is the default currency's symbol.
-	currency string
+	// currency is the default currency's symbol, currencyDigits its
+	// decimal places.
+	currency       string
+	currencyDigits int
 	// calendar is the unoid of the default calendar when it is not the
 	// Gregorian one, which numfmt does not follow.
 	calendar string
@@ -78,6 +80,7 @@ const (
 	CodeDec2                          // NUMBER_DEC2, 0.00
 	CodeInt1000                       // NUMBER_1000INT, #,##0
 	CodeDec1000                       // NUMBER_1000DEC2, #,##0.00
+	CodeNumberSystem                  // NUMBER_SYSTEM
 	CodeScientific                    // SCIENTIFIC_000E00, 0.00E+00
 	CodePercentInt                    // PERCENT_INT, 0%
 	CodePercent                       // PERCENT_DEC2, 0.00%
@@ -90,6 +93,11 @@ const (
 	CodeDateDDMMYY                    // DATE_SYS_DDMMYY
 	CodeDateDDMMYYYY                  // DATE_SYS_DDMMYYYY
 	CodeDateDMMMYY                    // DATE_SYS_DMMMYY
+	CodeDateDMMMYYYY                  // DATE_SYS_DMMMYYYY
+	CodeDateDMMMMYYYY                 // DATE_SYS_DMMMMYYYY
+	CodeDateNNDMMMYY                  // DATE_SYS_NNDMMMYY
+	CodeDateNNDMMMMYYYY               // DATE_SYS_NNDMMMMYYYY
+	CodeDateNNNNDMMMMYYYY             // DATE_SYS_NNNNDMMMMYYYY
 	CodeDateISO                       // DATE_DIN_YYYYMMDD
 	CodeDateMMYY                      // DATE_SYS_MMYY
 	CodeDateDDMMM                     // DATE_SYS_DDMMM
@@ -166,6 +174,41 @@ func Builtin(loc models.Locale, id int) string {
 		return d.codes[b.slot]
 	}
 	return b.code
+}
+
+// formatIndexCodes map an i18n NumberFormatIndex to the place of its
+// code in a locale's codes, for the indices the table keeps.
+var formatIndexCodes = map[int]int{
+	0: CodeGeneral, 1: CodeInt, 2: CodeDec2, 3: CodeInt1000, 4: CodeDec1000, 5: CodeNumberSystem,
+	7: CodeScientific, 8: CodePercentInt, 9: CodePercent, 12: CodeCurrencyInt, 13: CodeCurrency,
+	14: CodeCurrencyIntRed, 15: CodeCurrencyRed, 18: CodeDateShort, 19: CodeDateLong, 20: CodeDateDDMMYY,
+	21: CodeDateDDMMYYYY, 22: CodeDateDMMMYY, 23: CodeDateDMMMYYYY, 25: CodeDateDMMMMYYYY,
+	27: CodeDateNNDMMMYY, 29: CodeDateNNDMMMMYYYY, 30: CodeDateNNNNDMMMMYYYY, 33: CodeDateISO,
+	34: CodeDateMMYY, 35: CodeDateDDMMM, 39: CodeTimeHHMM, 40: CodeTimeHHMMSS, 41: CodeTimeHHMMAMPM,
+	42: CodeTimeHHMMSSAMPM, 43: CodeTimeElapsed, 44: CodeTimeMMSS00, 45: CodeTimeElapsed00,
+	46: CodeDateTime, 47: CodeDateTimeDDMMYYYYHHMMSS, 50: CodeDateTimeDDMMYYYYHHMM,
+}
+
+// FormatIndexCode returns the code of the built-in format of loc whose
+// i18n NumberFormatIndex is index (LibreOffice's offapi
+// com/sun/star/i18n/NumberFormatIndex.idl), in SpreadsheetML syntax; ""
+// for a locale or an index the table lacks and for a format the locale
+// states with a keyword numfmt does not read.
+func FormatIndexCode(loc models.Locale, index int) string {
+	c, ok := formatIndexCodes[index]
+	if !ok {
+		return ""
+	}
+	return Code(loc, c)
+}
+
+// CurrencyDigits returns the decimal places of the default currency of
+// loc, 2 for a locale the table lacks.
+func CurrencyDigits(loc models.Locale) int {
+	if d := lookup(loc); d != nil {
+		return d.currencyDigits
+	}
+	return 2
 }
 
 // Separators returns the decimal and thousands separators of loc, "." and

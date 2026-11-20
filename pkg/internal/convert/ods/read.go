@@ -74,7 +74,8 @@ const (
 type reader struct {
 	// paperW and paperH are the paper of a page style that names none.
 	paperW, paperH float64
-	// locale is the options' locale, which the charts format under.
+	// locale is the options' locale, which the charts and the data
+	// styles that name no language format under.
 	locale models.Locale
 	ctx    context.Context
 	pkg    *odf.Package
