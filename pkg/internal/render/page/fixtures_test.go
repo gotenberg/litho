@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/glyph"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -84,7 +83,7 @@ func buildPDF(objs []string) []byte {
 }
 
 // open parses data and returns its first page.
-func open(t testing.TB, data []byte, lim limits.Limits) (*document.Document, *document.Page) {
+func open(t testing.TB, data []byte, lim models.Limits) (*document.Document, *document.Page) {
 	t.Helper()
 	ctx := context.Background()
 	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, document.WithLimits(lim))
@@ -105,7 +104,7 @@ func open(t testing.TB, data []byte, lim limits.Limits) (*document.Document, *do
 // draw renders the fixture at 72 dpi over white.
 func draw(t testing.TB, f fixture) (*image.NRGBA, Report) {
 	t.Helper()
-	doc, pg := open(t, f.bytes(), limits.Limits{})
+	doc, pg := open(t, f.bytes(), models.Limits{})
 	c, report, err := Render(context.Background(), doc, pg, f.options())
 	if err != nil {
 		t.Fatalf("Render: %v", err)

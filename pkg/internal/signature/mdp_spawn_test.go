@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -167,7 +166,7 @@ func TestEvaluateMDP_SpawnPaintsTemplate(t *testing.T) {
 }
 
 // TestEvaluateMDP_SpawnDecodeBudget pins the stream budget the comparison of a
-// re-encoded spawn decodes under (limits.Limits.MaxStreamBytes): a copy whose
+// re-encoded spawn decodes under (models.Limits.MaxStreamBytes): a copy whose
 // content decodes past it cannot be told from the template's, so the page it
 // adds is reported, while the default budget compares it.
 func TestEvaluateMDP_SpawnDecodeBudget(t *testing.T) {
@@ -177,11 +176,11 @@ func TestEvaluateMDP_SpawnDecodeBudget(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		lim  limits.Limits
+		lim  models.Limits
 		want bool
 	}{
-		{"default budget", limits.Limits{}, true},
-		{"budget below the content", limits.Limits{MaxStreamBytes: 4 << 10}, false},
+		{"default budget", models.Limits{}, true},
+		{"budget below the content", models.Limits{MaxStreamBytes: 4 << 10}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()

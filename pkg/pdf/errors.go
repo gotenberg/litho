@@ -91,7 +91,7 @@ var (
 	// render exceeds its budget. It does so in three cases:
 	//
 	//   - the page at the requested resolution holds more than
-	//     [Limits.MaxRenderPixels] pixels;
+	//     [github.com/gotenberg/litho/pkg/models.Limits.MaxRenderPixels] pixels;
 	//   - the clips it keeps at once hold more than eight times that;
 	//   - its content runs more operators than one render allows.
 	//
@@ -575,7 +575,8 @@ var (
 	// ErrFontProgramInvalid is the reason of a
 	// [github.com/gotenberg/litho/pkg/models.FontRefusal] for a supplied
 	// program litho cannot read as a TrueType, OpenType or CFF font, or one
-	// larger than the document's stream budget ([Limits]).
+	// larger than the document's stream budget
+	// ([github.com/gotenberg/litho/pkg/models.Limits]).
 	ErrFontProgramInvalid = remediation.ErrFontProgramInvalid
 
 	// ErrFontEmbeddingRestricted is the reason of a
@@ -805,9 +806,10 @@ var (
 	ErrTransparencyFlatteningRefused = errors.New("transparency flattening refused")
 
 	// ErrInvalidLimits is returned, wrapped in an error naming the field, by
-	// [Limits.Validate], by [Open] and [OpenFile] when a budget given to
-	// [WithLimits] is negative or above its ceiling, and by a [Conversion]
-	// for one given to [WithConvertLimits]. See [Limits].
+	// [ValidateLimits], by [Open] and [OpenFile] when a budget given to
+	// [WithLimits] is negative or above its ceiling, and by a [Conversion] for
+	// one given to [WithConvertLimits]. See
+	// [github.com/gotenberg/litho/pkg/models.Limits].
 	ErrInvalidLimits = limits.ErrInvalid
 
 	// ErrInvalidConvertOptions is returned, wrapped in an error naming the
@@ -826,15 +828,18 @@ var (
 	ErrConversionReused = errors.New("conversion already ran")
 
 	// ErrConvertInputTooLarge is returned, wrapped, by a [Conversion] for a
-	// source longer than [Limits.MaxConvertInputBytes], for a document
-	// whose elements, cascade, boxes, parts or cells pass the converter's
-	// caps, and for one the [Limits.MaxConvertMemoryBytes] budget cannot
-	// hold, in every format. Nothing is written.
+	// source longer than
+	// [github.com/gotenberg/litho/pkg/models.Limits.MaxConvertInputBytes], for
+	// a document whose elements, cascade, boxes, parts or cells pass the
+	// converter's caps, and for one the
+	// [github.com/gotenberg/litho/pkg/models.Limits.MaxConvertMemoryBytes]
+	// budget cannot hold, in every format. Nothing is written.
 	ErrConvertInputTooLarge = limits.ErrInputTooLarge
 
-	// ErrConvertTooManyPages is returned, wrapped, by a [Conversion] when
-	// the layout needs more than [Limits.MaxConvertPages] pages. Nothing is
-	// written.
+	// ErrConvertTooManyPages is returned, wrapped, by a [Conversion] when the
+	// layout needs more than
+	// [github.com/gotenberg/litho/pkg/models.Limits.MaxConvertPages] pages.
+	// Nothing is written.
 	ErrConvertTooManyPages = limits.ErrTooManyPages
 
 	// ErrConvertMalformed is returned, wrapped, by a [Conversion] for a
@@ -863,9 +868,11 @@ var (
 	ErrConvertResourceUnavailable = htmlconv.ErrResourceUnavailable
 
 	// ErrStreamTooLarge is returned, wrapped, when decoding a stream would
-	// produce more than [Limits.MaxStreamBytes] bytes: by [Reader.DecodeImage]
-	// and an image's Decode function alongside [ErrImageNotDecodable], and by
-	// the Open function of an image or an embedded file.
+	// produce more than
+	// [github.com/gotenberg/litho/pkg/models.Limits.MaxStreamBytes] bytes: by
+	// [Reader.DecodeImage] and an image's Decode function alongside
+	// [ErrImageNotDecodable], and by the Open function of an image or an
+	// embedded file.
 	ErrStreamTooLarge = filter.ErrDecompressionBomb
 
 	// ErrDamagedStream is returned, wrapped in an error naming the filter and
@@ -881,17 +888,20 @@ var (
 
 	// ErrPageContentTooLarge is returned, wrapped, when the decoded content of
 	// a page, summed across the streams of its /Contents array, takes more
-	// than a quarter of [Limits.MaxStreamBytes]: by [Reader.ExtractText] and
-	// the other calls that read a page's operators, by [Writer.Redact]
-	// alongside [ErrRedactionRefused], and by [Writer.WriteTo] for a
-	// [Writer.StampPDF] whose source page is that heavy. Validation and
-	// remediation read such a page as they read a damaged one instead.
+	// than a quarter of
+	// [github.com/gotenberg/litho/pkg/models.Limits.MaxStreamBytes]: by
+	// [Reader.ExtractText] and the other calls that read a page's operators,
+	// by [Writer.Redact] alongside [ErrRedactionRefused], and by
+	// [Writer.WriteTo] for a [Writer.StampPDF] whose source page is that
+	// heavy. Validation and remediation read such a page as they read a
+	// damaged one instead.
 	ErrPageContentTooLarge = limits.ErrPageContentTooLarge
 
 	// ErrImageTooLarge is returned, wrapped alongside [ErrImageNotDecodable],
 	// by [Reader.DecodeImage] and an image's Decode function when the image
-	// declares more than [Limits.MaxImagePixels] pixels, or its decoded
-	// samples take more than four bytes a pixel of that budget.
+	// declares more than
+	// [github.com/gotenberg/litho/pkg/models.Limits.MaxImagePixels] pixels, or
+	// its decoded samples take more than four bytes a pixel of that budget.
 	ErrImageTooLarge = pdfimage.ErrImageTooLarge
 
 	// ErrSchematronRuleSkipped is returned by [Reader.ValidateFacturX]

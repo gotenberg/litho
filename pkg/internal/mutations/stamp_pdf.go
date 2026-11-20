@@ -335,11 +335,11 @@ func collectContents(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			}
 			buf.Write(data)
 
-			// Bounded for the reason given on limits.Limits.MaxPageContentBytes:
+			// Bounded for the reason given on limits.MaxPageContentBytes:
 			// the per-stream budget says nothing about their sum, so a page
 			// naming thousands of streams grows this buffer with the file's
 			// object count rather than with anything the page could draw.
-			if limit := doc.Limits().MaxPageContentBytes(); int64(buf.Len()) > limit {
+			if limit := limits.MaxPageContentBytes(doc.Limits()); int64(buf.Len()) > limit {
 				return nil, fmt.Errorf("%w of %d bytes", limits.ErrPageContentTooLarge, limit)
 			}
 		}

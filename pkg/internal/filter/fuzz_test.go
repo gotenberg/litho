@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // pureGoFilters are the stream filters decoded without a crypt handler. FuzzApplyDecodeFilter runs each fuzz input through all
@@ -21,7 +22,7 @@ var pureGoFilters = []ast.PdfName{
 // scale their caps from it, and at the default budget a few bytes of JPEG 2000
 // or DCT data can declare an image that takes gigabytes to decode, which
 // exhausts a fuzzing worker's memory rather than finding a crash.
-var fuzzImageLimits = limits.Limits{MaxImagePixels: 1 << 20}.WithDefaults()
+var fuzzImageLimits = limits.WithDefaults(models.Limits{MaxImagePixels: 1 << 20})
 
 // FuzzApplyDecodeFilter feeds arbitrary bytes to each pure-Go stream
 // filter. The contract under test is crash-freedom on hostile input,

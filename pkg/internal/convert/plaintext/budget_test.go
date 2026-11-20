@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/text"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // discard is a sink that keeps no page.
@@ -37,7 +38,7 @@ func TestConvert_ChargesTheStructureTree(t *testing.T) {
 		t.Fatal(err)
 	}
 	held := func(lines int) int64 {
-		ctx, mem, done := limits.WithBudget(context.Background(), limits.Limits{})
+		ctx, mem, done := limits.WithBudget(context.Background(), models.Limits{})
 		defer done()
 		if _, err := Convert(ctx, strings.NewReader(strings.Repeat("aa a\n", lines)), fonts, Options{FontFamilies: []string{"Budget"}, Sink: discard{}}); err != nil {
 			t.Fatal(err)

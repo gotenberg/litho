@@ -5,7 +5,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestGreyICCGroupTakesColoursThroughItsProfile checks ISO 32000-1, 11.3.4: a
@@ -35,7 +35,7 @@ func TestGreyICCGroupTakesColoursThroughItsProfile(t *testing.T) {
 				content: content,
 				objs:    []string{profile},
 			}
-			doc, pg := open(t, f.bytes(), limits.Limits{})
+			doc, pg := open(t, f.bytes(), models.Limits{})
 			opts := f.options()
 			opts.GroupSpace = true
 			res, _, err := RenderGroup(context.Background(), doc, pg, opts)

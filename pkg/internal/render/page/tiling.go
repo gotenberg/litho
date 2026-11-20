@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
@@ -198,7 +199,7 @@ func (r *renderer) tilingFill(s *scope, cov *raster.Coverage, c graphics.Color, 
 		r.skip("tiling pattern", err)
 		return nil
 	}
-	if lim := r.doc.Limits().WithDefaults().MaxFormDepth; s.depth+1 > lim {
+	if lim := limits.WithDefaults(r.doc.Limits()).MaxFormDepth; s.depth+1 > lim {
 		r.skip("tiling pattern", fmt.Errorf("nested deeper than %d forms and patterns", lim))
 		return nil
 	}

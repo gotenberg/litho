@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -56,7 +55,7 @@ func FuzzRender(f *testing.F) {
 		fx := fixture{page: "/CropBox [0 0 90 90] /BleedBox [-5 -5 95 95] " + fuzzResources, content: string(content), objs: objs}
 		data := fx.bytes()
 		ctx := context.Background()
-		doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, document.WithLimits(limits.Limits{MaxRenderPixels: 1 << 15}))
+		doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, document.WithLimits(models.Limits{MaxRenderPixels: 1 << 15}))
 		if err != nil {
 			t.Fatalf("NewDocument: %v", err)
 		}

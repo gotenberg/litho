@@ -48,7 +48,7 @@ func TestRenderPageReport(t *testing.T) {
 
 	// A page drawn as the file describes it reports nothing, and the image is
 	// the one RenderPage draws.
-	r := openLimited(t, renderPDF(), Limits{})
+	r := openLimited(t, renderPDF(), models.Limits{})
 	img, rep, err := r.RenderPageReport(ctx, 1, WithRenderDPI(72))
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func TestRenderPageReport(t *testing.T) {
 		t.Error("RenderPageReport draws another image than RenderPage")
 	}
 
-	r = openLimited(t, approximatedPDF(), Limits{})
+	r = openLimited(t, approximatedPDF(), models.Limits{})
 	img, rep, err = r.RenderPageReport(ctx, 1, WithRenderDPI(72))
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +119,7 @@ func TestRenderPageReportUnreadableGlyphs(t *testing.T) {
 		"<< /Type /FontDescriptor /FontName /Rect /Flags 32 /FontBBox [0 0 1000 500] /ItalicAngle 0 " +
 			"/Ascent 500 /Descent 0 /CapHeight 500 /StemV 80 /FontFile2 7 0 R >>",
 		fmt.Sprintf("<< /Length %d /Length1 %d >>\nstream\n%s\nendstream", len(program), len(program), program),
-	}), Limits{})
+	}), models.Limits{})
 	_, rep, err := r.RenderPageReport(context.Background(), 1, WithRenderDPI(72))
 	if err != nil {
 		t.Fatal(err)
@@ -132,14 +132,14 @@ func TestRenderPageReportUnreadableGlyphs(t *testing.T) {
 func TestRenderPageReportErrors(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	r := openLimited(t, renderPDF(), Limits{})
+	r := openLimited(t, renderPDF(), models.Limits{})
 	if _, _, err := r.RenderPageReport(ctx, 2); !errors.Is(err, ErrInvalidPageNumber) {
 		t.Errorf("page 2: %v, want ErrInvalidPageNumber", err)
 	}
 	if _, _, err := r.RenderPageReport(ctx, 1, WithRenderTarget(7)); !errors.Is(err, ErrInvalidRenderOptions) {
 		t.Errorf("bad target: %v, want ErrInvalidRenderOptions", err)
 	}
-	small := openLimited(t, renderPDF(), Limits{MaxRenderPixels: 5_000})
+	small := openLimited(t, renderPDF(), models.Limits{MaxRenderPixels: 5_000})
 	if _, _, err := small.RenderPageReport(ctx, 1, WithRenderDPI(73)); !errors.Is(err, ErrRenderTooLarge) {
 		t.Errorf("past MaxRenderPixels: %v, want ErrRenderTooLarge", err)
 	}

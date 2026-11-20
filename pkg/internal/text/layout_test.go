@@ -15,6 +15,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // near reports whether a and b agree within the 1/4096 point precision of
@@ -417,7 +418,7 @@ func TestLayout_ChargesTheShapingStateWhileItRuns(t *testing.T) {
 	f := newTestFonts(t, sansFamily()...)
 	s := strings.Repeat("AB ", 1000)
 	run := []Run{{Text: s, Style: style()}}
-	ctx, mem, done := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 1 << 20})
+	ctx, mem, done := limits.WithBudget(context.Background(), models.Limits{MaxConvertMemoryBytes: 1 << 20})
 	defer done()
 	lines, _, err := f.Layout(ctx, run, 100, Options{})
 	if err != nil {
@@ -435,7 +436,7 @@ func TestLayout_ChargesTheShapingStateWhileItRuns(t *testing.T) {
 	if got, want := mem.Peak(), int64(len(s))*shapeRuneCost; got < want {
 		t.Errorf("peak %d bytes, want at least the %d of the shaping state", got, want)
 	}
-	small, _, done2 := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: int64(len(s))*shapeRuneCost - 1})
+	small, _, done2 := limits.WithBudget(context.Background(), models.Limits{MaxConvertMemoryBytes: int64(len(s))*shapeRuneCost - 1})
 	defer done2()
 	if _, _, err := f.Layout(small, run, 100, Options{}); !errors.Is(err, limits.ErrMemoryBudget) {
 		t.Errorf("under %d bytes: %v, want limits.ErrMemoryBudget", int64(len(s))*shapeRuneCost-1, err)

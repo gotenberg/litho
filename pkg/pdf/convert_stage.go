@@ -79,10 +79,10 @@ func (s *convertStage) apply(ctx context.Context, ex *executor) error {
 // directory and the [WithDefaultPageSize] of the pipeline that merges it. The
 // merged bytes are the same whatever the concurrency.
 //
-// Each pipeline spends memory within its own limits, a conversion up to
-// twice [Limits.MaxConvertMemoryBytes], so size a host for that many times
-// what one pipeline holds, plus the merge, which reads every output at
-// once. Concurrency 1 holds one pipeline at a time.
+// Each pipeline spends memory within its own limits, a conversion up to twice
+// [models.Limits.MaxConvertMemoryBytes], so size a host for that many times
+// what one pipeline holds, plus the merge, which reads every output at once.
+// Concurrency 1 holds one pipeline at a time.
 //
 // When one fails, those still running are cancelled through their context,
 // none starts after it, and the stage fails naming the pipeline by its

@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestConvert_MarkdownLaysOutTheRenderedHTML(t *testing.T) {
@@ -40,7 +42,7 @@ func TestConvert_MarkdownLaysOutTheRenderedHTML(t *testing.T) {
 		t.Errorf("metadata %v, %v", meta, err)
 	}
 	if _, err := FromMarkdown(strings.NewReader(strings.Repeat("x", 64)),
-		WithConvertFontDirs(convertFontDir(t)), WithConvertLimits(Limits{MaxConvertInputBytes: 16})).WriteTo(ctx, &bytes.Buffer{}); !IsInvalidInput(err) {
+		WithConvertFontDirs(convertFontDir(t)), WithConvertLimits(models.Limits{MaxConvertInputBytes: 16})).WriteTo(ctx, &bytes.Buffer{}); !IsInvalidInput(err) {
 		t.Errorf("past the cap: %v", err)
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // stackedPDF is a 400-point square page on a peach tint holding two pieces
@@ -43,7 +45,7 @@ func stackedPDF() []byte {
 // copies at 1:1, the shadowed Shadow by its black copy, and Twice once.
 func TestCheckTextContrastStacked(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, stackedPDF(), Limits{})
+	r := openLimited(t, stackedPDF(), models.Limits{})
 
 	rep, err := r.CheckTextContrast(context.Background(), 1)
 	if err != nil {
@@ -75,7 +77,7 @@ func TestCheckTextContrastStacked(t *testing.T) {
 // wholly under its second.
 func TestExtractUnseenTextStacked(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, stackedPDF(), Limits{})
+	r := openLimited(t, stackedPDF(), models.Limits{})
 
 	got, err := r.ExtractUnseenText(context.Background(), 1)
 	if err != nil {
@@ -102,7 +104,7 @@ func TestStackRunsSharedPrefix(t *testing.T) {
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 	})
-	r := openLimited(t, data, Limits{})
+	r := openLimited(t, data, models.Limits{})
 	ctx := context.Background()
 	pg, err := r.resolvePage(ctx, 1)
 	if err != nil {

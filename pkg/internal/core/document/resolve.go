@@ -21,6 +21,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // Float safely extracts a float64 from a [ast.PdfObject].
@@ -834,14 +835,14 @@ func parseObjStmHeader(ctx context.Context, decoded []byte, n int) (objNums, off
 }
 
 // cacheObjStm stores a parsed object stream for reuse, bounding the total cached
-// decoded bytes at [limits.Limits.MaxObjStmCacheBytes] of the document's budgets
+// decoded bytes at [limits.MaxObjStmCacheBytes] of the document's budgets
 // with an evict-all policy. Object-stream resolution has strong locality (a
 // page's compressed objects share one stream), so evicting the whole map on
 // overflow rarely thrashes. A single stream larger than the bound is not
 // cached, so it cannot force repeated evictions. Eviction costs a re-decode,
 // never a wrong answer.
 func (d *Document) cacheObjStm(objStmNum int, data *objStmData) {
-	limit := d.Limits().MaxObjStmCacheBytes()
+	limit := limits.MaxObjStmCacheBytes(d.Limits())
 	if int64(len(data.decoded)) > limit {
 		return
 	}

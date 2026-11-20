@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/models"
@@ -294,7 +295,7 @@ func redactFormText(
 	out *textRemoval,
 	outlines *GlyphOutlines,
 ) error {
-	if depth > doc.Limits().WithDefaults().MaxFormDepth {
+	if depth > limits.WithDefaults(doc.Limits()).MaxFormDepth {
 		return fmt.Errorf("%w: a form showing text nests past the form-depth budget", ErrRegionInFormXObject)
 	}
 	obj, err := resolveAllocFirst(ctx, alloc, doc, ref)

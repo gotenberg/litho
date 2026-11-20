@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // formDAGPDF builds a page whose forms nest as a directed acyclic graph: each of
@@ -222,7 +222,7 @@ func TestTextBearingXObjects_ShortestChainDecides(t *testing.T) {
 		{budget: 4, want: map[string]bool{"X0": true, "P": true}},
 	} {
 		doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil,
-			document.WithLimits(limits.Limits{MaxFormDepth: tc.budget}))
+			document.WithLimits(models.Limits{MaxFormDepth: tc.budget}))
 		if err != nil {
 			t.Fatalf("NewDocument: %v", err)
 		}

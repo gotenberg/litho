@@ -84,7 +84,7 @@ func TestWithRequiredResources_FailsEveryLoadThatFails(t *testing.T) {
 		{"resource past the size cap", `<img src="big.png" alt=x>`, []HTMLOption{WithResources(big)}, models.WarningLimitReached, "big.png", true},
 		{"picture that does not decode", `<img src="bad.png" alt=x>`, []HTMLOption{WithResources(files)}, models.WarningPictureUnreadable, "bad.png", false},
 		{"picture format litho does not read", `<img src="a.ico" alt=x>`, []HTMLOption{WithResources(files)}, models.WarningPictureFormatUnsupported, "ICO", false},
-		{"picture past the pixel cap", `<img src="a.png" alt=x>`, []HTMLOption{WithResources(files), WithConvertLimits(Limits{MaxImagePixels: 50})}, models.WarningLimitReached, "a.png", false},
+		{"picture past the pixel cap", `<img src="a.png" alt=x>`, []HTMLOption{WithResources(files), WithConvertLimits(models.Limits{MaxImagePixels: 50})}, models.WarningLimitReached, "a.png", false},
 		{"font program that does not parse", `<style>@font-face { font-family: F; src: url(bad.ttf) } p { font-family: F }</style><p>x`, []HTMLOption{WithResources(files)}, models.WarningFontNotLoaded, "bad.ttf", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

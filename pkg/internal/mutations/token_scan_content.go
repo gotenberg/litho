@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // markPageContents records the streams a page dictionary's /Contents names
@@ -113,7 +114,7 @@ func (w *scanWalk) markContent(ctx context.Context, ref ast.PdfIndirectRef) {
 	}
 	switch v := obj.(type) {
 	case ast.PdfStream:
-		data, ok := w.readStream(ctx, ref.ObjectNum, v, w.doc.Limits().MaxPageContentBytes())
+		data, ok := w.readStream(ctx, ref.ObjectNum, v, limits.MaxPageContentBytes(w.doc.Limits()))
 		if !ok {
 			w.unreadable[ref.ObjectNum] = true
 			return

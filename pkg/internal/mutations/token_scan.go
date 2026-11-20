@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // maxScanDepth bounds nesting while walking one object. Anti-DoS guard, not
@@ -619,7 +620,7 @@ func (w *scanWalk) scanDestsKeys(ctx context.Context, catalogNum int, catalog as
 // sees: a redacted word inside a Flate-compressed structure tree or appearance
 // stream is invisible to a scan of the stored bytes.
 //
-// It reads at most [limits.Limits.MaxPageContentBytes] of the document's
+// It reads at most [limits.MaxPageContentBytes] of the document's
 // budgets from one stream, and reports a longer one unreadable. That bound is an
 // anti-DoS guard, not spec-mandated: a scan decodes every stream in the
 // document, so a decompression bomb would otherwise be read in full. It is the
@@ -627,7 +628,7 @@ func (w *scanWalk) scanDestsKeys(ctx context.Context, catalogNum int, catalog as
 // reader accepts is past anything a scan needs to read, and a caller that
 // raises the stream budget to edit a heavy page can then scan that page too.
 func (w *scanWalk) scanStreamData(ctx context.Context, objNum int, stream ast.PdfStream) {
-	limit := w.doc.Limits().MaxPageContentBytes()
+	limit := limits.MaxPageContentBytes(w.doc.Limits())
 	if w.imageDataSkipped(objNum, stream) {
 		w.scanStoredTail(ctx, objNum, stream, limit)
 		return

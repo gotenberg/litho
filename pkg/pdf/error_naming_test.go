@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestPerPageMethodsNameThePageOnce holds every per-page [Reader] method to the
@@ -63,7 +65,7 @@ func TestRenderTooLargeNamesItsFailureOnce(t *testing.T) {
 	t.Parallel()
 
 	data := multiPagePDF()
-	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)), WithLimits(Limits{MaxRenderPixels: 1000}))
+	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)), WithLimits(models.Limits{MaxRenderPixels: 1000}))
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
 	}

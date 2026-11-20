@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
 
@@ -25,7 +26,7 @@ import (
 // A Decoder is immutable once built, so it is safe for concurrent use.
 type Decoder struct {
 	plugins map[ast.PdfName]plugins.FilterDecoder
-	lim     limits.Limits
+	lim     models.Limits
 	// refuse fails a stream whose data a filter salvaged or kept only the
 	// prefix of (see [Decoder.RefuseSalvaged]).
 	refuse bool
@@ -34,8 +35,8 @@ type Decoder struct {
 // NewDecoder creates a Decoder with the given filter plugins, bounding every
 // decode by lim, whose zero budgets read as their defaults. Duplicate filter
 // names are resolved in favor of the last plugin registered.
-func NewDecoder(pp []plugins.FilterDecoder, lim limits.Limits) *Decoder {
-	d := &Decoder{lim: lim.WithDefaults()}
+func NewDecoder(pp []plugins.FilterDecoder, lim models.Limits) *Decoder {
+	d := &Decoder{lim: limits.WithDefaults(lim)}
 	if len(pp) > 0 {
 		d.plugins = make(map[ast.PdfName]plugins.FilterDecoder, len(pp))
 		for _, p := range pp {
@@ -46,11 +47,11 @@ func NewDecoder(pp []plugins.FilterDecoder, lim limits.Limits) *Decoder {
 }
 
 // limits returns the budgets d decodes under. A nil *Decoder has the defaults.
-func (d *Decoder) limits() limits.Limits {
+func (d *Decoder) limits() models.Limits {
 	if d == nil {
 		return limits.Default()
 	}
-	return d.lim.WithDefaults()
+	return limits.WithDefaults(d.lim)
 }
 
 // builtin returns a Decoder that consults no plugin and decodes under d's

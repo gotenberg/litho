@@ -501,7 +501,7 @@ func textBearingXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 // Go's map order (CONTRIBUTING "Deterministic output").
 //
 // A form further below the page than the document's form budget
-// ([limits.Limits.MaxFormDepth]) is not read: text extraction reads the same
+// ([models.Limits.MaxFormDepth]) is not read: text extraction reads the same
 // budget, so a form deep enough to escape this scan carries no text the
 // extractor would reach either. A page form paints text when a chain of at most
 // that many forms, itself included, leads it to a form showing text. The
@@ -543,7 +543,7 @@ type formNode struct {
 // each form is read at its shortest distance from the page, and follows a
 // form's children only while that distance leaves them within the form budget.
 // The page's XObjects sit at distance 1, and the budget is at least 1
-// ([limits.Limits.WithDefaults]). The forms and their resources are read
+// ([limits.WithDefaults]). The forms and their resources are read
 // alloc-first (see [stagedValue]).
 //
 // A scan that ctx stops leaves the forms it did not read showing no text, and
@@ -744,7 +744,7 @@ func PageContent(ctx context.Context, doc *document.Document, page *document.Pag
 // page's content bytes: between the two, Emit queues only new objects and page
 // dicts, and it reads each page's content before rewriting that page.
 //
-// The content is bounded by [limits.Limits.MaxPageContentBytes] of the
+// The content is bounded by [limits.MaxPageContentBytes] of the
 // document's budgets, an anti-DoS guard, not spec-mandated. It reads the same
 // bound as [content.ParsePageContent] rather than a value of its own. A bound
 // of its own was written to match, then drifted when that limit rose from 32 MB
@@ -782,7 +782,7 @@ func pageContentBytes(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 		return nil, fmt.Errorf("unexpected /Contents type %T", resolved)
 	}
 
-	limit := doc.Limits().MaxPageContentBytes()
+	limit := limits.MaxPageContentBytes(doc.Limits())
 	var all []byte
 	for _, s := range streams {
 		data, err := doc.DecodeStream(ctx, s)

@@ -40,7 +40,7 @@ func unseenPDF() []byte {
 
 func TestExtractUnseenText(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, unseenPDF(), Limits{})
+	r := openLimited(t, unseenPDF(), models.Limits{})
 
 	got, err := r.ExtractUnseenText(context.Background(), 1)
 	if err != nil {
@@ -106,7 +106,7 @@ func neighbourBoxPDF() []byte {
 // there is reported, though no pixel of either is its alone.
 func TestExtractUnseenTextInsideNeighbourBox(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, neighbourBoxPDF(), Limits{})
+	r := openLimited(t, neighbourBoxPDF(), models.Limits{})
 
 	got, err := r.ExtractUnseenText(context.Background(), 1)
 	if err != nil {
@@ -137,7 +137,7 @@ func TestExtractUnseenTextClipMode(t *testing.T) {
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 	})
-	r := openLimited(t, data, Limits{})
+	r := openLimited(t, data, models.Limits{})
 
 	got, err := r.ExtractUnseenText(context.Background(), 1)
 	if err != nil {
@@ -156,11 +156,11 @@ func TestExtractUnseenTextErrors(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	r := openLimited(t, unseenPDF(), Limits{})
+	r := openLimited(t, unseenPDF(), models.Limits{})
 	if _, err := r.ExtractUnseenText(ctx, 2); !errors.Is(err, ErrInvalidPageNumber) {
 		t.Errorf("page 2: err %v, want ErrInvalidPageNumber", err)
 	}
-	small := openLimited(t, unseenPDF(), Limits{MaxRenderPixels: 100})
+	small := openLimited(t, unseenPDF(), models.Limits{MaxRenderPixels: 100})
 	if _, err := small.ExtractUnseenText(ctx, 1); !errors.Is(err, ErrRenderTooLarge) {
 		t.Errorf("budget of 100 pixels: err %v, want ErrRenderTooLarge", err)
 	}
@@ -169,7 +169,7 @@ func TestExtractUnseenTextErrors(t *testing.T) {
 // TestExtractUnseenTextConcurrent reads the page from several goroutines.
 func TestExtractUnseenTextConcurrent(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, unseenPDF(), Limits{})
+	r := openLimited(t, unseenPDF(), models.Limits{})
 	ctx := context.Background()
 
 	var wg sync.WaitGroup
@@ -226,7 +226,7 @@ func TestExtractUnseenTextClipCopy(t *testing.T) {
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 	})
-	r := openLimited(t, data, Limits{})
+	r := openLimited(t, data, models.Limits{})
 
 	got, err := r.ExtractUnseenText(context.Background(), 1)
 	if err != nil {
@@ -274,7 +274,7 @@ func TestExtractUnseenTextPaintedTwin(t *testing.T) {
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 	})
-	r := openLimited(t, data, Limits{})
+	r := openLimited(t, data, models.Limits{})
 
 	got, err := r.ExtractUnseenText(context.Background(), 1)
 	if err != nil {

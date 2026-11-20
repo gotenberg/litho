@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestFormWithHugeBBox draws a form whose /BBox reaches ±9×10^307, which a
@@ -18,7 +18,7 @@ func TestFormWithHugeBBox(t *testing.T) {
 		objs: []string{stream("/Type /XObject /Subtype /Form /BBox ["+huge+" "+huge+" "+huge[1:]+" "+huge[1:]+"]",
 			"1 0 0 rg 10 10 80 80 re f")},
 	}
-	doc, pg := open(t, f.bytes(), limits.Limits{})
+	doc, pg := open(t, f.bytes(), models.Limits{})
 	for _, dpi := range []float64{72, 300} {
 		opts := f.options()
 		opts.DPI = dpi

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
@@ -97,7 +98,7 @@ func (c *coverage) renders(ctx context.Context, a *Analysis) error {
 	if c.whole != nil {
 		return nil
 	}
-	budget := c.f.doc.Limits().WithDefaults().MaxRenderPixels
+	budget := limits.WithDefaults(c.f.doc.Limits()).MaxRenderPixels
 	shared := c.shared
 	text, _, err := page.RenderGroup(ctx, c.f.doc, c.pg, page.Options{DPI: c.dpi, Omit: models.RenderPaths | models.RenderImages | models.RenderShadings | models.RenderAnnotations, GroupSpace: true, DefaultGroupSpace: c.f.deviceSpace(ctx, c.pg), Shared: shared, Pool: c.f.pool, Overprint: c.f.overprint, SolidPlaceholders: true, WholePixels: true})
 	if err != nil {

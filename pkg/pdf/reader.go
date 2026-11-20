@@ -58,10 +58,10 @@ type openOpts struct {
 	schRoot   string
 	schPhase  string
 	schSchema *schematron.Schema
-	lenient   bool   // relax Factur-X/ZUGFeRD consumer-path tolerances
-	cmyk      []byte // nil unless WithDefaultCMYKProfile was supplied
-	limits    Limits // zero fields keep their defaults (WithLimits)
-	strict    bool   // refuse salvaged stream data (WithStrictStreams)
+	lenient   bool          // relax Factur-X/ZUGFeRD consumer-path tolerances
+	cmyk      []byte        // nil unless WithDefaultCMYKProfile was supplied
+	limits    models.Limits // zero fields keep their defaults (WithLimits)
+	strict    bool          // refuse salvaged stream data (WithStrictStreams)
 }
 
 // WithLogger injects a structured logger for debug-level diagnostic output.
@@ -541,10 +541,10 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (_
 		opt(&o)
 	}
 	defer recoverToError(o.logger, "pdf.Open", &err)
-	if err := o.limits.Validate(); err != nil {
+	if err := ValidateLimits(o.limits); err != nil {
 		return nil, err
 	}
-	lim := o.limits.internal()
+	lim := o.limits
 	if o.ciiFS != nil {
 		schema, err := xsd.Load(ctx, o.ciiFS, o.ciiRoot)
 		if err != nil {
@@ -686,7 +686,7 @@ func (r *Reader) reopenFile(ctx context.Context, path string) (*Reader, error) {
 // open the way the other settings are, and a re-read that fell back to the
 // defaults would ignore a budget the caller lowered.
 func (r *Reader) reopenOptions() []OpenOption {
-	return []OpenOption{WithLogger(r.doc.Logger), WithLimits(limitsFromInternal(r.doc.Limits()))}
+	return []OpenOption{WithLogger(r.doc.Logger), WithLimits(r.doc.Limits())}
 }
 
 // OpenFile opens a PDF directly from the filesystem. The returned [Reader]
@@ -871,7 +871,8 @@ func WithArtifacts() ExtractTextOption {
 // white heading on a coloured bar among it. Text in rendering mode 3 paints
 // nothing and is dropped without a drawing. Text in mode 7 is read: what the
 // page paints next shows through it. A page that cannot be drawn, past
-// [Limits.MaxRenderPixels] for one, drops its white text as white on white.
+// [models.Limits.MaxRenderPixels] for one, drops its white text as white on
+// white.
 //
 // The judgement is cached per page. [Reader.ExtractTextElements],
 // [Reader.ExtractTables] and [Reader.GenerateBookmarks] read it too, so they
@@ -1816,9 +1817,10 @@ func imageDecodeError(name string, err error) error {
 	case errors.Is(err, pdfimage.ErrImageNotFound):
 		return fmt.Errorf("image %q: %w", name, ErrImageNotFound)
 	case errors.Is(err, ErrImageTooLarge) || errors.Is(err, ErrStreamTooLarge) || errors.Is(err, ErrDamagedStream) || errors.Is(err, ErrInternalPanic):
-		// A budget the caller can raise ([Limits]), or [WithStrictStreams],
-		// refused the image, or a decoding worker panicked, and its sentinel
-		// is public, so the cause is wrapped alongside the contract.
+		// A budget the caller can raise ([models.Limits]), or
+		// [WithStrictStreams], refused the image, or a decoding worker
+		// panicked, and its sentinel is public, so the cause is wrapped
+		// alongside the contract.
 		return fmt.Errorf("image %q: %w: %w", name, ErrImageNotDecodable, err)
 	}
 	// The cause is formatted rather than wrapped: its sentinels are internal,

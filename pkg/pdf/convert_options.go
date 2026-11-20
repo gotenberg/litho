@@ -14,7 +14,7 @@ import (
 type convertConfig struct {
 	logger   *slog.Logger
 	fontDirs []string
-	limits   Limits
+	limits   models.Limits
 	tempDir  string
 
 	paper           models.Paper
@@ -449,11 +449,11 @@ func WithConvertFontDirs(dirs ...string) ConvertOption {
 }
 
 // WithConvertLimits sets the resource budgets of the conversion. It reads
-// [Limits.MaxConvertInputBytes], [Limits.MaxConvertPages],
-// [Limits.MaxConvertMemoryBytes] and [Limits.MaxImagePixels]; a zero field
-// keeps its default, and a field out of range fails the conversion with
-// [ErrInvalidLimits] before it reads the source.
-func WithConvertLimits(l Limits) ConvertOption {
+// [models.Limits.MaxConvertInputBytes], [models.Limits.MaxConvertPages],
+// [models.Limits.MaxConvertMemoryBytes] and [models.Limits.MaxImagePixels]; a
+// zero field keeps its default, and a field out of range fails the conversion
+// with [ErrInvalidLimits] before it reads the source.
+func WithConvertLimits(l models.Limits) ConvertOption {
 	return convertOption(func(c *convertConfig) { c.limits = l })
 }
 
@@ -537,11 +537,11 @@ func WithTabWidth(columns int) TextOption {
 //
 // A conversion reads at most 32 MiB a file and 256 MiB of files in all, and
 // decodes at most 4096 distinct images, each within
-// [Limits.MaxImagePixels]; a resource past a cap is left out with a
-// warning. An image costs [Limits.MaxConvertMemoryBytes] 4 bytes a pixel (8
-// for 16 bits a channel) while it is decoded, then its compressed samples
-// for as long as the conversion holds it; a JPEG written as it is costs its
-// file. A document whose images the budget cannot hold fails with
+// [models.Limits.MaxImagePixels]; a resource past a cap is left out with a
+// warning. An image costs [models.Limits.MaxConvertMemoryBytes] 4 bytes a
+// pixel (8 for 16 bits a channel) while it is decoded, then its compressed
+// samples for as long as the conversion holds it; a JPEG written as it is
+// costs its file. A document whose images the budget cannot hold fails with
 // [ErrConvertInputTooLarge].
 func WithResources(fsys fs.FS) HTMLOption {
 	return htmlOption(func(c *convertConfig) { c.resources = fsys })
@@ -589,7 +589,7 @@ func WithHTTPClient(client *http.Client) HTMLOption {
 //
 // A resource that arrives whole has loaded, whatever litho makes of it: a
 // picture that does not decode, in a format litho does not read or past
-// [Limits.MaxImagePixels], a font program that does not parse keep their
+// [models.Limits.MaxImagePixels], a font program that does not parse keep their
 // warnings. Every resource litho reads counts: the font of every
 // @font-face rule, whether text uses it or not, and every stylesheet,
 // whatever medium it is for.
@@ -817,7 +817,7 @@ const DefaultMarkdownTemplate = `<!doctype html><html><head><meta charset="utf-8
 // nodes fails the same way, as does an error while executing it. Each
 // toHTML call inserts the same HTML, so a second call prints the source
 // twice. A template longer than 1 MiB is refused, and one that renders past
-// [Limits.MaxConvertInputBytes]'s ceiling fails with
+// [models.Limits.MaxConvertInputBytes]'s ceiling fails with
 // [ErrConvertInputTooLarge].
 func WithMarkdownTemplate(tmpl string) MarkdownOption {
 	return markdownOption(func(c *convertConfig) { c.markdownTemplate, c.markdownTemplateSet = tmpl, true })

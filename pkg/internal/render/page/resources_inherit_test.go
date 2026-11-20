@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestRenderResourcesInheritedWhole pins that a page draws with the nearest
@@ -29,7 +29,7 @@ func TestRenderResourcesInheritedWhole(t *testing.T) {
 				stream("", "/Fm Do"),
 				stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100]", "1 0 0 rg 0 0 100 100 re f"),
 			})
-			doc, pg := open(t, data, limits.Limits{})
+			doc, pg := open(t, data, models.Limits{})
 			if _, merged := pg.Resources["XObject"]; !merged {
 				t.Fatal("the merged resources lost the root's /XObject")
 			}

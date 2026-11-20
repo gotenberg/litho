@@ -295,7 +295,7 @@ func normalAppearance(ctx context.Context, doc *document.Document, annotDict ast
 //
 // depth is how many forms the resources sit below the page: 0 for the page's
 // own, 1 for a form the page paints or an annotation's appearance. Resources
-// deeper than the document's form budget, limits.Limits.MaxFormDepth, are
+// deeper than the document's form budget, models.Limits.MaxFormDepth, are
 // not walked, which bounds a merely deep chain; ISO 32000-1, 8.10 puts no
 // limit on nesting. The seen set breaks a cycle.
 func walkImages(ctx context.Context, doc *document.Document, resources ast.PdfDict, seen map[int]bool, depth int, visit imageVisitor) bool {

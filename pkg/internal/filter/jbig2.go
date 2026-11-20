@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter/jbig2"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // decodeJBIG2 decodes a JBIG2Decode stream (ISO 32000-1, 7.4.7): the segments
@@ -33,12 +34,12 @@ import (
 //   - pdfjs bitmap-template1.pdf: a DeviceGray JBIG2 image with no /Decode,
 //     whose foreground poppler draws dark at 158,888 of its 159,600 pixels,
 //     the rest being resampled edges.
-func decodeJBIG2(ctx context.Context, data []byte, parms ast.PdfDict, lim limits.Limits) ([]byte, error) {
+func decodeJBIG2(ctx context.Context, data []byte, parms ast.PdfDict, lim models.Limits) ([]byte, error) {
 	globals, err := jbig2Globals(ctx, parms, lim)
 	if err != nil {
 		return nil, err
 	}
-	bm, err := jbig2.Decode(ctx, data, globals, lim.ScaleImageCap(jbig2.DefaultMaxBitmapBytes))
+	bm, err := jbig2.Decode(ctx, data, globals, limits.ScaleImageCap(lim, jbig2.DefaultMaxBitmapBytes))
 	if err != nil {
 		return nil, jbig2Error(err)
 	}
@@ -52,7 +53,7 @@ func decodeJBIG2(ctx context.Context, data []byte, parms ast.PdfDict, lim limits
 
 // probeJBIG2 is the probe of JBIG2Decode (see codecProbes): decodeJBIG2 with
 // [jbig2.Check] in place of decoding the regions.
-func probeJBIG2(ctx context.Context, data []byte, parms, _ ast.PdfDict, lim limits.Limits) error {
+func probeJBIG2(ctx context.Context, data []byte, parms, _ ast.PdfDict, lim models.Limits) error {
 	globals, err := jbig2Globals(ctx, parms, lim)
 	if err != nil {
 		return err
@@ -65,7 +66,7 @@ func probeJBIG2(ctx context.Context, data []byte, parms, _ ast.PdfDict, lim limi
 
 // jbig2Globals returns the decoded JBIG2Globals stream of parms, or nil when
 // there is none, decoded under the stream budget of lim.
-func jbig2Globals(ctx context.Context, parms ast.PdfDict, lim limits.Limits) ([]byte, error) {
+func jbig2Globals(ctx context.Context, parms ast.PdfDict, lim models.Limits) ([]byte, error) {
 	stream, ok := parms["JBIG2Globals"].(ast.PdfStream)
 	if !ok {
 		return nil, nil

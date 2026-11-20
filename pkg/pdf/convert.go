@@ -109,7 +109,7 @@ func (k convertKind) name() string {
 //
 // # Memory
 //
-// A conversion spends memory within [Limits.MaxConvertMemoryBytes] and
+// A conversion spends memory within [models.Limits.MaxConvertMemoryBytes] and
 // fails with [ErrConvertInputTooLarge] past it. The index of the installed
 // fonts is not charged to it: the process shares it between conversions
 // (see [WithConvertFontDirs]). A text source, a
@@ -236,7 +236,7 @@ func FromHTML(src io.Reader, opts ...HTMLOption) *Conversion {
 // [FromHTML] lays one out, with every option of an HTML source: its
 // relative images and links resolve in [WithResources] or against
 // [WithBaseURL]. The raw HTML a Markdown document holds is kept,
-// unsanitised: no script runs. [Limits.MaxConvertInputBytes] caps the
+// unsanitised: no script runs. [models.Limits.MaxConvertInputBytes] caps the
 // Markdown, not the HTML it renders to. The default template titles the
 // document with its first heading, which a band of [WithHeader] or
 // [WithFooter] shows as string(document-title).
@@ -476,13 +476,13 @@ func presentationConfig(opts []PresentationOption) convertConfig {
 //
 // # Errors
 //
-// A source that is no image of these formats, or whose bytes do not read
-// as its format, fails with [ErrConvertMalformed]. A source past
-// [Limits.MaxConvertInputBytes], a picture past [Limits.MaxImagePixels]
-// and decoded pixels past [Limits.MaxConvertMemoryBytes] fail with
-// [ErrConvertInputTooLarge], before any of its pixels is decoded; a TIFF
-// file of more pages than [Limits.MaxConvertPages] fails with
-// [ErrConvertTooManyPages].
+// A source that is no image of these formats, or whose bytes do not read as
+// its format, fails with [ErrConvertMalformed]. A source past
+// [models.Limits.MaxConvertInputBytes], a picture past
+// [models.Limits.MaxImagePixels] and decoded pixels past
+// [models.Limits.MaxConvertMemoryBytes] fail with [ErrConvertInputTooLarge],
+// before any of its pixels is decoded; a TIFF file of more pages than
+// [models.Limits.MaxConvertPages] fails with [ErrConvertTooManyPages].
 func FromImage(src io.Reader, opts ...ImageOption) *Conversion {
 	var cfg convertConfig
 	for _, o := range opts {
@@ -506,16 +506,16 @@ func FromImage(src io.Reader, opts ...ImageOption) *Conversion {
 // [ErrNilDestination] for a nil dst, [ErrInvalidLimits] or
 // [ErrInvalidConvertOptions] for an option out of range, two options that
 // exclude each other or a page range the document has no pages for,
-// [ErrConvertInputTooLarge] past [Limits.MaxConvertInputBytes] or
-// [Limits.MaxConvertMemoryBytes], or for an HTML document past the
+// [ErrConvertInputTooLarge] past [models.Limits.MaxConvertInputBytes] or
+// [models.Limits.MaxConvertMemoryBytes], or for an HTML document past the
 // converter's element, cascade or box caps, [ErrConvertTooManyPages] past
-// [Limits.MaxConvertPages], [ErrConvertNoFonts] when the font directories
-// hold no usable font, [ErrConvertMalformed] for an Office or image source
-// that is not a document of its format, [ErrConvertEncrypted] for one
-// [WithOfficePassword] does not open, [ErrConvertResourceUnavailable] for
+// [models.Limits.MaxConvertPages], [ErrConvertNoFonts] when the font
+// directories hold no usable font, [ErrConvertMalformed] for an Office or
+// image source that is not a document of its format, [ErrConvertEncrypted] for
+// one [WithOfficePassword] does not open, [ErrConvertResourceUnavailable] for
 // a resource of an HTML or Markdown source that does not load under
-// [WithRequiredResources], [ErrInternalPanic] for a recovered
-// panic, and ctx's error when ctx ends first.
+// [WithRequiredResources], [ErrInternalPanic] for a recovered panic, and ctx's
+// error when ctx ends first.
 func (c *Conversion) WriteTo(ctx context.Context, dst io.Writer) (*models.ConvertReport, error) {
 	return c.run(ctx, dst, convertEnv{})
 }
@@ -549,7 +549,7 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 	if dst == nil {
 		return nil, fmt.Errorf("converting %s: %w", name, ErrNilDestination)
 	}
-	if err := o.limits.Validate(); err != nil {
+	if err := ValidateLimits(o.limits); err != nil {
 		return nil, fmt.Errorf("converting %s: %w", name, err)
 	}
 	if err := o.validate(); err != nil {
@@ -563,7 +563,7 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 		return nil, fmt.Errorf("converting %s: %w", name, ErrConversionReused)
 	}
 
-	budget := o.limits.internal().WithDefaults()
+	budget := limits.WithDefaults(o.limits)
 	ctx, mem, endBudget := limits.WithBudget(ctx, budget)
 	defer endBudget()
 	defer func() { err = convertBudgetError(o.logger, name, mem, err) }()

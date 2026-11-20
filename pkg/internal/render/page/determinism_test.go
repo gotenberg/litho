@@ -11,7 +11,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // pinnedRenderHashes holds the SHA-256 of the float canvas of each fixture
@@ -100,7 +100,7 @@ func TestRender_SameBytesOnEveryArchitecture(t *testing.T) {
 		if f.substitute != nil {
 			continue
 		}
-		doc, pg := open(t, f.bytes(), limits.Limits{})
+		doc, pg := open(t, f.bytes(), models.Limits{})
 		for _, dpi := range []float64{72, 173} {
 			opts := f.options()
 			opts.DPI, opts.Background = dpi, [4]float32{}

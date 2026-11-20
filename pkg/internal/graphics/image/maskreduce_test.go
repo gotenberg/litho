@@ -10,7 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // maskDoc builds a document whose object 1 is the mask stream dict over data,
@@ -26,7 +26,7 @@ func maskDoc(t *testing.T, dict string, data []byte, maxPixels int64) (context.C
 	fmt.Fprintf(&buf, "trailer\n<< /Size 2 >>\nstartxref\n%d\n%%%%EOF\n", xref)
 	ctx := context.Background()
 	doc, err := document.NewDocument(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()), nil,
-		document.WithLimits(limits.Limits{MaxImagePixels: maxPixels}))
+		document.WithLimits(models.Limits{MaxImagePixels: maxPixels}))
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}

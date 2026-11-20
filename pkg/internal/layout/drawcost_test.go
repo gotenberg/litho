@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // heapNoise is what the live heap moves by between two readings with
@@ -71,7 +72,7 @@ func TestBoxCostCoversABox(t *testing.T) {
 	for name, mk := range costShapes() {
 		root := mk()
 		ShareStyles(context.Background(), root, nil)
-		ctx, b, done := limits.WithBudget(context.Background(), limits.Limits{})
+		ctx, b, done := limits.WithBudget(context.Background(), models.Limits{})
 		pb := page(400, 600)
 		before := liveHeap()
 		e, rb, err := layoutFlow(ctx, root, fonts, Options{Page: pb}, pb, nil, nil, css.HorizontalTB)
@@ -95,7 +96,7 @@ func TestDisplayCostCoversTheList(t *testing.T) {
 	for name, mk := range costShapes() {
 		root := mk()
 		ShareStyles(context.Background(), root, nil)
-		ctx, _, done := limits.WithBudget(context.Background(), limits.Limits{})
+		ctx, _, done := limits.WithBudget(context.Background(), models.Limits{})
 		pb := page(400, 600)
 		e, rb, err := layoutFlow(ctx, root, fonts, Options{Page: pb}, pb, nil, nil, css.HorizontalTB)
 		if err != nil {
@@ -117,7 +118,7 @@ func TestDisplayCostCoversTheList(t *testing.T) {
 }
 
 func TestSettleDrawn_GivesBackWhatTheListDoesNotHold(t *testing.T) {
-	ctx, b, done := limits.WithBudget(context.Background(), limits.Limits{})
+	ctx, b, done := limits.WithBudget(context.Background(), models.Limits{})
 	defer done()
 	e := newEngine(ctx, ahem(t), Options{}, 100, 100)
 	e.chargeDrawn(10_000)

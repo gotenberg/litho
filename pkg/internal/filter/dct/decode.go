@@ -19,11 +19,11 @@ import (
 //
 // The cap is four samples a pixel of [limits.DefaultMaxImagePixels], the
 // most components a frame Decode reads holds (T.81, B.2.2; ISO 32000-1,
-// 7.4.8). The image budget is the bound pdf.Limits documents for a
+// 7.4.8). The image budget is the bound models.Limits documents for a
 // codestream whatever its dictionary declares, and the image decoder reads
 // up to four bytes a pixel of it, so the codec refuses no frame the budget
 // admits. [Decode] takes the cap scaled with the document's image budget
-// (limits.Limits.ScaleImageCap).
+// (limits.ScaleImageCap).
 //
 // # Corpus evidence
 //

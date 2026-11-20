@@ -16,11 +16,11 @@ import (
 // them, and every sample costs decoding time.
 //
 // The cap is four samples a pixel of [limits.DefaultMaxImagePixels], as the
-// DCT decoder's is: the image budget is the bound pdf.Limits documents for a
+// DCT decoder's is: the image budget is the bound models.Limits documents for a
 // codestream whatever its dictionary declares, and the image decoder reads up
 // to four bytes a pixel of it, so the codec refuses no image of up to four
 // components the budget admits. [Describe] and [Decode] take the cap scaled
-// with the document's image budget (limits.Limits.ScaleImageCap).
+// with the document's image budget (limits.ScaleImageCap).
 //
 // The JPXDecode filter renders tile by tile ([Image.Render]): the tile being
 // decoded holds four bytes of wavelet coefficients a sample, and the output one

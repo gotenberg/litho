@@ -777,7 +777,7 @@ func copyEmbedded(ctx context.Context, buf *bytes.Buffer, r io.Reader, n int64, 
 // lists the profiles whose pass clears a file.
 //
 // Safety limits prevent abuse: the document's embedded-file budget
-// (limits.Limits.MaxEmbeddedFileBytes) per file, [maxEmbeddedDepth] levels
+// (models.Limits.MaxEmbeddedFileBytes) per file, [maxEmbeddedDepth] levels
 // of nesting, and context cancellation is checked per file. A larger embedded
 // PDF is not validated and raises no violation, so a crafted attachment cannot
 // make validation hold a huge document in memory and parse it; the budget

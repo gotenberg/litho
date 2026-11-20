@@ -288,13 +288,13 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 		allData = append(allData, data...)
 		allData = append(allData, '\n')
 
-		// Bounded for the reason given on limits.Limits.MaxPageContentBytes:
+		// Bounded for the reason given on limits.MaxPageContentBytes:
 		// the per-stream budget does not bound the sum across a /Contents
 		// array, and this buffer feeds every page-scoped check. Stopping here
 		// leaves the page looking unreadable, which the callers already answer
 		// conservatively, rather than letting a crafted page grow the buffer
 		// with the file's object count.
-		if limit := doc.Limits().MaxPageContentBytes(); int64(len(allData)) > limit {
+		if limit := limits.MaxPageContentBytes(doc.Limits()); int64(len(allData)) > limit {
 			return nil, fmt.Errorf("%w of %d bytes", limits.ErrPageContentTooLarge, limit)
 		}
 	}

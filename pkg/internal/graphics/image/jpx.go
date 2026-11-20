@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // jpxColour is how litho reads the colours of a JPXDecode image whose
@@ -61,7 +62,7 @@ func jpxColorSpace(ctx context.Context, doc *document.Document, stream ast.PdfSt
 	if err != nil {
 		return jpxColour{}, fmt.Errorf("reading the JPEG 2000 data: %w", err)
 	}
-	img, err := jpx.Describe(data, doc.Limits().ScaleImageCap(jpx.DefaultMaxSamples))
+	img, err := jpx.Describe(data, limits.ScaleImageCap(doc.Limits(), jpx.DefaultMaxSamples))
 	if err != nil {
 		return jpxColour{}, fmt.Errorf("reading the JPEG 2000 header: %w", err)
 	}

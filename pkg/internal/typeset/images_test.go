@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // oneShot returns data compressed in one write: the stream a whole decoded
@@ -175,7 +176,7 @@ func TestEncodeImageRefuses(t *testing.T) {
 // released once it is encoded, then its compressed samples, held.
 func TestEncodeImageBudget(t *testing.T) {
 	t.Parallel()
-	ctx, mem, done := limits.WithBudget(context.Background(), limits.Limits{})
+	ctx, mem, done := limits.WithBudget(context.Background(), models.Limits{})
 	defer done()
 	if err := typeset.ChargeImage(ctx, 100, 100, color.NRGBAModel); err != nil || mem.Held() != 40_000 {
 		t.Fatalf("charge: %v, held %d", err, mem.Held())
@@ -195,7 +196,7 @@ func TestEncodeImageBudget(t *testing.T) {
 	if want := int64(len(src.Samples) + len(src.Alpha)); mem.Held() != want {
 		t.Errorf("held %d after a decode released, want %d", mem.Held(), want)
 	}
-	small, _, done2 := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 1000})
+	small, _, done2 := limits.WithBudget(context.Background(), models.Limits{MaxConvertMemoryBytes: 1000})
 	defer done2()
 	if _, err := src.Decode(small); !errors.Is(err, limits.ErrMemoryBudget) {
 		t.Errorf("decode past the budget: %v", err)

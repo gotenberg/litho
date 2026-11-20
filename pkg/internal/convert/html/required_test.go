@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/text"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestRequiredResources_StopBeforeLayout checks that a required stylesheet
@@ -19,7 +20,7 @@ import (
 func TestRequiredResources_StopBeforeLayout(t *testing.T) {
 	t.Parallel()
 
-	ctx, mem, done := limits.WithBudget(context.Background(), limits.Limits{})
+	ctx, mem, done := limits.WithBudget(context.Background(), models.Limits{})
 	defer done()
 	laidOut := 0
 	lay := func(ctx context.Context, root *layout.Node, fonts *text.Fonts, opts layout.Options) (*layout.Result, error) {
@@ -54,7 +55,7 @@ func TestRequiredResources_StopInLayout(t *testing.T) {
 
 	src := `<div style="background-image: url(gone.png); height: 10px"></div><p>x`
 	held := func(required bool) (int64, error) {
-		ctx, mem, done := limits.WithBudget(context.Background(), limits.Limits{})
+		ctx, mem, done := limits.WithBudget(context.Background(), models.Limits{})
 		defer done()
 		o := Options{Resources: fstest.MapFS{}, RequiredResources: required}
 		_, err := Convert(ctx, strings.NewReader(src), testFonts(t), o)

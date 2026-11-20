@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // maxPageTreeDepth caps the recursion through the page tree. Anti-DoS guard,
@@ -55,7 +56,7 @@ type job struct {
 type walk struct {
 	g   *graph
 	dec *filter.Decoder
-	lim limits.Limits
+	lim models.Limits
 	// owners are the objects whose /Resources slot the walk reads every
 	// stream of: page tree nodes, pages, forms, tiling patterns, Type 3
 	// fonts and appearance streams.
@@ -79,7 +80,7 @@ type walk struct {
 }
 
 // newWalk interprets every content stream the page tree reaches.
-func newWalk(ctx context.Context, g *graph, dec *filter.Decoder, lim limits.Limits) (*walk, error) {
+func newWalk(ctx context.Context, g *graph, dec *filter.Decoder, lim models.Limits) (*walk, error) {
 	w := &walk{
 		g: g, dec: dec, lim: lim,
 		owners: make(map[loc]bool), resources: make(map[loc]bool), fontDicts: make(map[loc]bool),
@@ -286,7 +287,7 @@ func (w *walk) contentBytes(ctx context.Context, j job) ([]byte, bool, error) {
 		if err != nil || !ok {
 			return nil, false, err
 		}
-		if int64(len(out)+len(data)) > w.lim.MaxPageContentBytes() {
+		if int64(len(out)+len(data)) > limits.MaxPageContentBytes(w.lim) {
 			return nil, false, nil
 		}
 		out = append(out, data...)

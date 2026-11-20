@@ -5,13 +5,13 @@ import (
 	"image"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // drawWith renders f at 72 dpi over white, simulating overprint or not.
 func drawWith(t *testing.T, f fixture, overprint bool) *image.NRGBA {
 	t.Helper()
-	doc, pg := open(t, f.bytes(), limits.Limits{})
+	doc, pg := open(t, f.bytes(), models.Limits{})
 	opts := f.options()
 	opts.Overprint = overprint
 	c, _, err := Render(context.Background(), doc, pg, opts)

@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/raster"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestFill_Coverage(t *testing.T) {
@@ -321,7 +322,7 @@ func TestFill_Refusals(t *testing.T) {
 	if err := Fill(cctx, s, []Path{{Ops: rect(0, 0, 4, 4)}}, typeset.Identity); !errors.Is(err, context.Canceled) {
 		t.Errorf("Fill on a cancelled context = %v, want context.Canceled", err)
 	}
-	bctx, b, done := limits.WithBudget(ctx, limits.Limits{MaxConvertMemoryBytes: 1 << 16})
+	bctx, b, done := limits.WithBudget(ctx, models.Limits{MaxConvertMemoryBytes: 1 << 16})
 	defer done()
 	big, err := New(bctx, Coverage, 200, 200, Grid{})
 	if err != nil {

@@ -38,7 +38,7 @@ import (
 // budget.
 //
 // [Decode] takes the cap scaled with the document's budget
-// ([limits.Limits.ScaleImageCap]).
+// ([limits.ScaleImageCap]).
 //
 // # Corpus evidence
 //

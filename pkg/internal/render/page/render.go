@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/graphics/function"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/annot"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
@@ -27,7 +28,7 @@ import (
 // page and every form XObject it paints, each painting counted as often as it
 // runs. Anti-DoS, not spec-mandated: ISO 32000-1, 8.10 lets forms paint forms
 // any number of times, so a few kilobytes of forms that each paint the next
-// twice run 2^depth times their operators, which [limits.Limits.MaxFormDepth]
+// twice run 2^depth times their operators, which [models.Limits.MaxFormDepth]
 // bounds only in depth. 1<<26 is a hundred times the operators of the
 // heaviest real page, 608,043 on page 1 of pdfjs issue21089.pdf.
 const maxRenderOperators = 1 << 26
@@ -268,7 +269,7 @@ func (r *Report) count(key string) {
 // corner of the page's crop box as displayed ([PageGeometry]).
 //
 // The canvas and every raster at its size are held to the document's render
-// pixel budget ([limits.Limits.MaxRenderPixels]): a page past it fails with
+// pixel budget ([models.Limits.MaxRenderPixels]): a page past it fails with
 // [ErrTooLarge] before anything is drawn. A construct the file damages is
 // skipped and counted in the report, as a viewer skips it, and content that
 // does not parse leaves the page blank; the render fails only on ctx or a
@@ -351,7 +352,7 @@ func RenderGroup(ctx context.Context, doc *document.Document, pg *document.Page,
 	if err != nil {
 		return nil, report, err
 	}
-	budget := doc.Limits().WithDefaults().MaxRenderPixels
+	budget := limits.WithDefaults(doc.Limits()).MaxRenderPixels
 	if w := opts.Within; w != nil && (w.Width != g.Width || w.Height != g.Height || len(w.A) != g.Width*g.Height) {
 		return nil, report, fmt.Errorf("%w: a %dx%d Within on a %dx%d page", ErrInvalidOptions, w.Width, w.Height, g.Width, g.Height)
 	}

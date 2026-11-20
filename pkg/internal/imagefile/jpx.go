@@ -29,7 +29,7 @@ import (
 // states its resolution in an optional box litho does not read.
 func readJPX(ctx context.Context, data []byte, o *Options, fn func(*Picture) error) error {
 	mem := limits.BudgetFrom(ctx)
-	img, err := jpx.Describe(data, mem.Limits().ScaleImageCap(jpx.DefaultMaxSamples))
+	img, err := jpx.Describe(data, limits.ScaleImageCap(mem.Limits(), jpx.DefaultMaxSamples))
 	if errors.Is(err, jpx.ErrLimit) {
 		return fmt.Errorf("%w: JPEG 2000: %w", limits.ErrPictureTooLarge, err)
 	}

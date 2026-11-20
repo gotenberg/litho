@@ -407,11 +407,11 @@ func resolveContentBytesAt(ctx context.Context, alloc *writer.ObjAllocator, doc 
 			all = append(all, data...)
 			all = append(all, '\n')
 
-			// Bounded for the reason given on limits.Limits.MaxPageContentBytes:
+			// Bounded for the reason given on limits.MaxPageContentBytes:
 			// the per-stream budget says nothing about their sum, so a page
 			// naming thousands of streams grows this buffer with the file's
 			// object count rather than with anything the page could draw.
-			if limit := doc.Limits().MaxPageContentBytes(); int64(len(all)) > limit {
+			if limit := limits.MaxPageContentBytes(doc.Limits()); int64(len(all)) > limit {
 				return nil, fmt.Errorf("%w of %d bytes", limits.ErrPageContentTooLarge, limit)
 			}
 		}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestImageTakesStateIntent checks ISO 32000-1, 8.6.5.8: an image with no
@@ -70,7 +70,7 @@ func TestDefaultBlackPointKeepsInitialImageIntent(t *testing.T) {
 		objs: []string{stream("/N 1", string(liftedGreyProfile())), stream("/Type /XObject /Subtype /Image /Width 1 "+
 			"/Height 1 /BitsPerComponent 8 /ColorSpace [/ICCBased 5 0 R]", "\x00")},
 	}
-	doc, pg := open(t, f.bytes(), limits.Limits{})
+	doc, pg := open(t, f.bytes(), models.Limits{})
 	opts := f.options()
 	opts.DefaultBlackPoint = true
 	c, _, err := Render(context.Background(), doc, pg, opts)

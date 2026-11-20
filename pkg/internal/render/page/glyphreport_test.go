@@ -6,7 +6,6 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 	"github.com/gotenberg/litho/pkg/models"
@@ -22,7 +21,7 @@ func TestGlyphReportsOriginAndPlaceholderBounds(t *testing.T) {
 		content: "0 g BT /F 20 Tf 10 50 Td (A B) Tj ET",
 		objs:    []string{"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"},
 	}
-	doc, pg := open(t, f.bytes(), limits.Limits{})
+	doc, pg := open(t, f.bytes(), models.Limits{})
 	type shown struct {
 		origin geom.Point
 		bounds geom.Rect
@@ -83,7 +82,7 @@ func TestUnreadableGlyphsAreReported(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			f := fixture{page: textPage, content: tt.content, objs: objs}
-			doc, pg := open(t, f.bytes(), limits.Limits{})
+			doc, pg := open(t, f.bytes(), models.Limits{})
 			opts := f.options()
 			opts.Omit = tt.omit
 			c, report, err := Render(context.Background(), doc, pg, opts)
@@ -110,7 +109,7 @@ func TestNoTransferLeavesTransferFunctionsOut(t *testing.T) {
 		content: "q /Inv gs 0 g 0 0 20 20 re f Q",
 		objs:    []string{invert},
 	}
-	doc, pg := open(t, f.bytes(), limits.Limits{})
+	doc, pg := open(t, f.bytes(), models.Limits{})
 	opts := f.options()
 	opts.NoTransfer = true
 	c, _, err := Render(context.Background(), doc, pg, opts)

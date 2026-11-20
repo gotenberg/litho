@@ -13,6 +13,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // maxNestedScanDepth bounds how many containers deep the output scan reads: an
@@ -248,7 +249,7 @@ func (w *scanWalk) scanZip(ctx context.Context, objNum int, data []byte, depth i
 	if len(archive.File) > maxNestedScanMembers {
 		return fmt.Errorf("%w: %d zip members", ErrNestedContainerUnread, len(archive.File))
 	}
-	budget := w.doc.Limits().MaxPageContentBytes()
+	budget := limits.MaxPageContentBytes(w.doc.Limits())
 	for _, member := range archive.File {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -275,7 +276,7 @@ func (w *scanWalk) scanZip(ctx context.Context, objNum int, data []byte, depth i
 func (w *scanWalk) scanGzip(ctx context.Context, objNum int, data []byte, depth int) error {
 	body, err := readBounded(func() (io.ReadCloser, error) {
 		return gzip.NewReader(bytes.NewReader(data))
-	}, w.doc.Limits().MaxPageContentBytes())
+	}, limits.MaxPageContentBytes(w.doc.Limits()))
 	if err != nil {
 		return fmt.Errorf("reading the gzip member: %w", err)
 	}

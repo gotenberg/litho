@@ -17,6 +17,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestPrepare_MapsElementsToRoles(t *testing.T) {
@@ -539,7 +540,7 @@ func TestResources_CapImages(t *testing.T) {
 	if _, err := r.picture(ctx, rootPrefix+"0.png"); err == nil || errors.Is(err, limits.ErrMemoryBudget) {
 		t.Errorf("picture under the budget: %v", err)
 	}
-	mctx, mem, done := limits.WithBudget(ctx, limits.Limits{MaxConvertMemoryBytes: 1 << 27})
+	mctx, mem, done := limits.WithBudget(ctx, models.Limits{MaxConvertMemoryBytes: 1 << 27})
 	defer done()
 	// The budget holds the file's bytes, never its pixels.
 	if _, err := r.picture(mctx, rootPrefix+"1.png"); err == nil || !errors.Is(mem.Err(), limits.ErrMemoryBudget) || mem.Held() >= 1<<10 {

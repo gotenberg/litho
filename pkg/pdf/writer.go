@@ -590,11 +590,10 @@ func WithPipelineTempDir(dir string) WriteOption {
 const (
 	// defaultPipelineConcurrency caps the pipelines a
 	// [Pipeline.MergePipelines] stage runs at once when the caller names no
-	// number. Memory guard, not spec-mandated: each pipeline may spend its
-	// own limits, a conversion up to twice [Limits.MaxConvertMemoryBytes],
-	// so a host of many cores must not start as many as it has. Past four
-	// at once the measured time no longer falls and the memory keeps
-	// growing.
+	// number. Memory guard, not spec-mandated: each pipeline may spend its own
+	// limits, a conversion up to twice [models.Limits.MaxConvertMemoryBytes],
+	// so a host of many cores must not start as many as it has. Past four at
+	// once the measured time no longer falls and the memory keeps growing.
 	defaultPipelineConcurrency = 4
 	// maxPipelineConcurrency is the most a caller may ask for. Anti-DoS
 	// guard, not spec-mandated: past it the intermediate files and the

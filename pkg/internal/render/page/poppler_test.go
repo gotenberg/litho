@@ -9,7 +9,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // popplerFixtures are drawn by both litho and the pinned poppler. Each
@@ -156,7 +156,7 @@ func TestAgainstPoppler(t *testing.T) {
 			}
 			want := toNRGBA(golden)
 			f := popplerFixtures[name]
-			doc, pg := open(t, f.bytes(), limits.Limits{})
+			doc, pg := open(t, f.bytes(), models.Limits{})
 			c, _, err := Render(context.Background(), doc, pg, f.options())
 			if err != nil {
 				t.Fatal(err)

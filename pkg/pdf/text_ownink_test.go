@@ -28,7 +28,7 @@ func layeredPDF(content string) []byte {
 func TestOwnInkLayeredContrast(t *testing.T) {
 	t.Parallel()
 	r := openLimited(t, layeredPDF("BT 0 g 0 G 16 w 2 Tr /F1 40 Tf 100 200 Td (I) Tj ET\n"+
-		"BT 1 g 0 Tr /F1 12 Tf 100 200 Td (l) Tj ET\n"), Limits{})
+		"BT 1 g 0 Tr /F1 12 Tf 100 200 Td (l) Tj ET\n"), models.Limits{})
 	rep, err := r.CheckTextContrast(context.Background(), 1)
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +47,7 @@ func TestOwnInkLayeredUnseen(t *testing.T) {
 	t.Parallel()
 	r := openLimited(t, layeredPDF("BT 0 g /F1 12 Tf 100 300 Td (HIDE) Tj ET\n"+
 		"1 g 95 295 50 20 re f\n"+
-		"0 g BT /F1 12 Tf 0 1 -1 0 100 300 Tm (W) Tj ET\n"), Limits{})
+		"0 g BT /F1 12 Tf 0 1 -1 0 100 300 Tm (W) Tj ET\n"), models.Limits{})
 	unseen, err := r.ExtractUnseenText(context.Background(), 1)
 	if err != nil {
 		t.Fatal(err)
@@ -76,7 +76,7 @@ func TestOwnInkLayeredWhiteText(t *testing.T) {
 	t.Parallel()
 	r := openLimited(t, layeredPDF("1 g 90 290 120 30 re f\n"+
 		"BT 1 g /F1 12 Tf 100 300 Td (GHOST) Tj ET\n"+
-		"BT 0 g /F1 12 Tf 100 300 Td (V) Tj ET\n"), Limits{})
+		"BT 0 g /F1 12 Tf 100 300 Td (V) Tj ET\n"), models.Limits{})
 	text, err := r.ExtractText(context.Background(), 1)
 	if err != nil {
 		t.Fatal(err)

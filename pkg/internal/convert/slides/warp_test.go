@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/shape"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // warpDeck returns a deck of n slides, each a box of warped text.
@@ -27,7 +28,7 @@ func warpDeck(n int, warp *shape.TextWarp) *Document {
 // end when it ended.
 func peakOf(t *testing.T, doc *Document, limit int64) (int64, error) {
 	t.Helper()
-	ctx, b, done := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: limit})
+	ctx, b, done := limits.WithBudget(context.Background(), models.Limits{MaxConvertMemoryBytes: limit})
 	defer done()
 	_, err := Convert(ctx, doc, pinnedFonts(t), office.Options{})
 	if err != nil && ctx.Err() != nil {

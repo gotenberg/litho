@@ -135,9 +135,9 @@ func TestConvert_RefusesBadInput(t *testing.T) {
 		"bad paper":          {opts: []TextOption{WithPaper(models.Paper{Width: -1, Height: 10})}, want: ErrInvalidConvertOptions},
 		"no room":            {opts: []TextOption{WithMargins(500, 0, 500, 0)}, want: ErrInvalidConvertOptions},
 		"NaN font size":      {opts: []TextOption{WithFontSize(math.NaN())}, want: ErrInvalidConvertOptions},
-		"negative limit":     {opts: []TextOption{WithConvertLimits(Limits{MaxConvertPages: -1})}, want: ErrInvalidLimits},
-		"input past limit":   {src: "ABCD", opts: []TextOption{WithConvertLimits(Limits{MaxConvertInputBytes: 3})}, want: ErrConvertInputTooLarge},
-		"pages past limit":   {src: "A\fB", opts: []TextOption{WithConvertLimits(Limits{MaxConvertPages: 1})}, want: ErrConvertTooManyPages},
+		"negative limit":     {opts: []TextOption{WithConvertLimits(models.Limits{MaxConvertPages: -1})}, want: ErrInvalidLimits},
+		"input past limit":   {src: "ABCD", opts: []TextOption{WithConvertLimits(models.Limits{MaxConvertInputBytes: 3})}, want: ErrConvertInputTooLarge},
+		"pages past limit":   {src: "A\fB", opts: []TextOption{WithConvertLimits(models.Limits{MaxConvertPages: 1})}, want: ErrConvertTooManyPages},
 		"no font in the dir": {opts: []TextOption{WithConvertFontDirs(t.TempDir())}, want: ErrConvertNoFonts},
 	} {
 		var out bytes.Buffer
@@ -154,8 +154,8 @@ func TestConvert_RefusesBadInput(t *testing.T) {
 		}
 	}
 	// The limits pass at their bound.
-	convertText(t, dir, "ABCD", WithConvertLimits(Limits{MaxConvertInputBytes: 4}))
-	convertText(t, dir, "A\fB", WithConvertLimits(Limits{MaxConvertPages: 2}))
+	convertText(t, dir, "ABCD", WithConvertLimits(models.Limits{MaxConvertInputBytes: 4}))
+	convertText(t, dir, "A\fB", WithConvertLimits(models.Limits{MaxConvertPages: 2}))
 }
 
 func TestConvert_IsDeterministicAndConcurrent(t *testing.T) {
@@ -404,8 +404,8 @@ func TestConvert_HTMLRefusesBadInput(t *testing.T) {
 	}{
 		"bad media":        {opts: []HTMLOption{WithMediaType("tv")}, want: ErrInvalidConvertOptions},
 		"bad paper":        {opts: []HTMLOption{WithPaper(models.Paper{Width: -1, Height: 10})}, want: ErrInvalidConvertOptions},
-		"input past limit": {src: "<p>ABCD", opts: []HTMLOption{WithConvertLimits(Limits{MaxConvertInputBytes: 4})}, want: ErrConvertInputTooLarge},
-		"pages past limit": {src: `<p style="break-after: page">A<p>B`, opts: []HTMLOption{WithConvertLimits(Limits{MaxConvertPages: 1})}, want: ErrConvertTooManyPages},
+		"input past limit": {src: "<p>ABCD", opts: []HTMLOption{WithConvertLimits(models.Limits{MaxConvertInputBytes: 4})}, want: ErrConvertInputTooLarge},
+		"pages past limit": {src: `<p style="break-after: page">A<p>B`, opts: []HTMLOption{WithConvertLimits(models.Limits{MaxConvertPages: 1})}, want: ErrConvertTooManyPages},
 		"too deep":         {src: strings.Repeat("<div>", 600), want: ErrConvertInputTooLarge},
 	} {
 		var out bytes.Buffer

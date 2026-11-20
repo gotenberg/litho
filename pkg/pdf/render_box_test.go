@@ -32,7 +32,7 @@ func boxedPDF(rotate int) []byte {
 func TestRenderPageBox(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	r := openLimited(t, boxedPDF(0), Limits{})
+	r := openLimited(t, boxedPDF(0), models.Limits{})
 	red := color.NRGBA{255, 0, 0, 255}
 	white := color.NRGBA{255, 255, 255, 255}
 	for _, tc := range []struct {
@@ -69,7 +69,7 @@ func TestRenderPageBox(t *testing.T) {
 // /Rotate as it turns the crop box.
 func TestRenderPageBoxRotated(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, boxedPDF(90), Limits{})
+	r := openLimited(t, boxedPDF(90), models.Limits{})
 	img, err := r.RenderPage(context.Background(), 1, WithRenderDPI(72), WithRenderBox(models.RenderBleedBox))
 	if err != nil {
 		t.Fatal(err)

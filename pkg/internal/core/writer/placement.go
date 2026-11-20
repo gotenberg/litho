@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // maxPlacementPageTreeDepth caps the recursion of [measurePlacements] through
@@ -204,7 +205,7 @@ type placementWalk struct {
 	pending map[int]ast.PdfObject
 	trailer ast.PdfDict
 	dec     *filter.Decoder
-	lim     limits.Limits
+	lim     models.Limits
 	out     *placements
 	// xobjectDicts are the /XObject dictionaries of the resources the walk
 	// drew streams with: an image named in another one may be drawn where
@@ -232,7 +233,7 @@ type placementWalk struct {
 // document's form depth budget or more than [maxPlacementsPerImage] times, or
 // when something other than a resource dictionary the walk read or an
 // image's mask entry refers to it.
-func measurePlacements(ctx context.Context, pending map[int]ast.PdfObject, trailer ast.PdfDict, dec *filter.Decoder, lim limits.Limits) (*placements, error) {
+func measurePlacements(ctx context.Context, pending map[int]ast.PdfObject, trailer ast.PdfDict, dec *filter.Decoder, lim models.Limits) (*placements, error) {
 	w := &placementWalk{
 		pending: pending, trailer: trailer, dec: dec, lim: lim,
 		out:          &placements{drawn: make(map[int]*imagePlacement), unmeasured: make(map[int]unmeasuredReason)},
@@ -548,7 +549,7 @@ func (w *placementWalk) contentBytes(ctx context.Context, c pnode) ([]byte, bool
 		if err != nil {
 			return nil, false, fmt.Errorf("decoding a content stream: %w", err)
 		}
-		if !ok || int64(len(out))+int64(len(data)) > w.lim.MaxPageContentBytes() {
+		if !ok || int64(len(out))+int64(len(data)) > limits.MaxPageContentBytes(w.lim) {
 			return nil, false, nil
 		}
 		out = append(out, data...)

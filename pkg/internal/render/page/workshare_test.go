@@ -6,7 +6,6 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
@@ -46,7 +45,7 @@ func clippedPage(group string) fixture {
 // returns its sRGB canvas.
 func renderClipped(t *testing.T, group string, opts Options) *surface.Canvas {
 	t.Helper()
-	doc, pg := open(t, clippedPage(group).bytes(), limits.Limits{})
+	doc, pg := open(t, clippedPage(group).bytes(), models.Limits{})
 	opts.DPI, opts.Background = 72, white
 	res, _, err := RenderGroup(context.Background(), doc, pg, opts)
 	if err != nil {

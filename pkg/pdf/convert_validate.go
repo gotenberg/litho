@@ -35,7 +35,7 @@ const maxCSVSeparators = 8
 // maxConvertSheets bounds the sheets [WithSheets] and [WithSheetNumbers]
 // name. Anti-DoS guard, not spec-mandated: each name is matched against the
 // workbook's sheets, and a workbook of more sheets than this converts past
-// [Limits.MaxConvertPages] anyway.
+// [models.Limits.MaxConvertPages] anyway.
 const maxConvertSheets = 4096
 
 // validate reports the first option out of range, or the first two options

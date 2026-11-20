@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // maxFormCopiesPerPage bounds the form copies one page's redaction makes. It
@@ -140,7 +141,7 @@ func copyFormForPlacement(
 	// The walk that found the placement reads no deeper than the document's
 	// form-depth budget, so this holds the copy to the same bound should the
 	// two ever disagree.
-	if maxDepth := doc.Limits().WithDefaults().MaxFormDepth; depth > maxDepth {
+	if maxDepth := limits.WithDefaults(doc.Limits()).MaxFormDepth; depth > maxDepth {
 		return 0, fmt.Errorf("%w: forms nest past the form-depth budget of %d", ErrImageShared, maxDepth)
 	}
 	*budget--

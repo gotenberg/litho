@@ -7,11 +7,12 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestStops_TellsTheEndOfAConversionFromAConstruct(t *testing.T) {
 	t.Parallel()
-	_, b, done := limits.WithBudget(context.Background(), limits.Limits{MaxImagePixels: 100, MaxConvertMemoryBytes: 1000})
+	_, b, done := limits.WithBudget(context.Background(), models.Limits{MaxImagePixels: 100, MaxConvertMemoryBytes: 1000})
 	defer done()
 	tooLarge := b.CheckPicture(20, 20)
 	refusal := b.Charge(2000, "pictures")

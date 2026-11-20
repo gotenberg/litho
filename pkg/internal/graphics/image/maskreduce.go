@@ -23,7 +23,7 @@ import (
 const maskReduceRowsPerCheck = 64
 
 // DecodeMaskAt decodes a mask stream as [DecodeMask] does while its Width x
-// Height fits the document's image budget, limits.Limits.MaxImagePixels.
+// Height fits the document's image budget, models.Limits.MaxImagePixels.
 //
 // Past the budget it reads the samples row by row and averages them, box by
 // box, onto a grid of at most cols x rows samples: the resolution the caller

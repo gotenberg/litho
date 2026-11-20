@@ -21,7 +21,7 @@ import (
 // device family whatever Default colour space the resources define for it
 // (ISO 32000-1, 8.6.5.6), and a soft mask's group, which shapes opacity rather
 // than colour (11.6.5.2), is not walked. Each stream is read once, and the
-// walk stops at the form nesting budget of [Limits].
+// walk stops at the form nesting budget of [models.Limits].
 func (r *Reader) ExtractColorSpaces(ctx context.Context, pageNum int) (_ []models.ColorSpaceUse, err error) {
 	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.ExtractColorSpaces", &err)

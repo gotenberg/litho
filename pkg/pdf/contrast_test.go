@@ -54,7 +54,7 @@ func failuresByText(rep models.ContrastReport) map[string]models.TextContrast {
 
 func TestCheckTextContrast(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, contrastPDF(), Limits{})
+	r := openLimited(t, contrastPDF(), models.Limits{})
 	ctx := context.Background()
 
 	rep, err := r.CheckTextContrast(ctx, 1)
@@ -115,7 +115,7 @@ func TestCheckTextContrast(t *testing.T) {
 // against the white page.
 func TestCheckTextContrastInsideNeighbourBox(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, neighbourBoxPDF(), Limits{})
+	r := openLimited(t, neighbourBoxPDF(), models.Limits{})
 
 	rep, err := r.CheckTextContrast(context.Background(), 1)
 	if err != nil {
@@ -155,7 +155,7 @@ func TestCheckTextContrastManyApart(t *testing.T) {
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", content.Len(), content.String()),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 	})
-	r := openLimited(t, data, Limits{})
+	r := openLimited(t, data, models.Limits{})
 
 	rep, err := r.CheckTextContrast(context.Background(), 1)
 	if err != nil {
@@ -170,11 +170,11 @@ func TestCheckTextContrastErrors(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	r := openLimited(t, contrastPDF(), Limits{})
+	r := openLimited(t, contrastPDF(), models.Limits{})
 	if _, err := r.CheckTextContrast(ctx, 0); !errors.Is(err, ErrInvalidPageNumber) {
 		t.Errorf("page 0: err %v, want ErrInvalidPageNumber", err)
 	}
-	small := openLimited(t, contrastPDF(), Limits{MaxRenderPixels: 100})
+	small := openLimited(t, contrastPDF(), models.Limits{MaxRenderPixels: 100})
 	if _, err := small.CheckTextContrast(ctx, 1); !errors.Is(err, ErrRenderTooLarge) {
 		t.Errorf("budget of 100 pixels: err %v, want ErrRenderTooLarge", err)
 	}
@@ -183,7 +183,7 @@ func TestCheckTextContrastErrors(t *testing.T) {
 // TestCheckTextContrastConcurrent measures the page from several goroutines.
 func TestCheckTextContrastConcurrent(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, contrastPDF(), Limits{})
+	r := openLimited(t, contrastPDF(), models.Limits{})
 	ctx := context.Background()
 
 	var wg sync.WaitGroup
@@ -224,7 +224,7 @@ func TestCheckTextContrastClipCopy(t *testing.T) {
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 	})
-	r := openLimited(t, data, Limits{})
+	r := openLimited(t, data, models.Limits{})
 
 	rep, err := r.CheckTextContrast(context.Background(), 1)
 	if err != nil {
@@ -250,7 +250,7 @@ func TestCheckTextContrastPaintedTwin(t *testing.T) {
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 	})
-	r := openLimited(t, data, Limits{})
+	r := openLimited(t, data, models.Limits{})
 
 	rep, err := r.CheckTextContrast(context.Background(), 1)
 	if err != nil {

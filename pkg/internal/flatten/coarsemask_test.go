@@ -9,7 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // pagePDF is a one-page PDF of size × size points: object 3 the page with
@@ -24,7 +24,7 @@ func pagePDF(size int, resources, data string, objs ...string) []byte {
 }
 
 // flattenWith runs [Document] over data's first page under lim.
-func flattenWith(t *testing.T, data []byte, lim limits.Limits) (*Report, error) {
+func flattenWith(t *testing.T, data []byte, lim models.Limits) (*Report, error) {
 	t.Helper()
 	ctx := context.Background()
 	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, document.WithLimits(lim))
@@ -92,7 +92,7 @@ func TestFlattenRefusesHiddenMask(t *testing.T) {
 		objs = append(objs, stream(fmt.Sprintf("/Type /XObject /Subtype /Form /BBox [0 0 %d %d] /Group << /S /Transparency /I true /K true >> %s", size, size, res), body))
 	}
 	data := pagePDF(1000, "/XObject << /G 6 0 R >>", "0 0 1 rg 0 0 1000 1000 re f /G Do", objs...)
-	_, err := flattenWith(t, data, limits.Limits{MaxRenderPixels: 1_000_000})
+	_, err := flattenWith(t, data, models.Limits{MaxRenderPixels: 1_000_000})
 	if !errors.Is(err, ErrTooComplex) {
 		t.Fatalf("err = %v, want ErrTooComplex", err)
 	}

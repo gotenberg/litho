@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // liveHeap returns the bytes the live objects hold, after a collection.
@@ -82,7 +83,7 @@ func TestChargeTree_ChargesWhatDecodingGrows(t *testing.T) {
 // returns stay charged once it returns: the caller writes them all
 // afterwards.
 func TestConvert_ChargesThePagesItReturns(t *testing.T) {
-	ctx, mem, done := limits.WithBudget(context.Background(), limits.Limits{})
+	ctx, mem, done := limits.WithBudget(context.Background(), models.Limits{})
 	defer done()
 	src := strings.Repeat(`<p style="border:1px solid">a word</p>`, 200)
 	doc, err := Convert(ctx, strings.NewReader(src), testFonts(t), Options{})

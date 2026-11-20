@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
 
@@ -178,7 +179,7 @@ func TestRecompressImagesLeavesAlone(t *testing.T) {
 	}{
 		{"jpeg", imageDict(16, 16, ast.PdfDict{"Filter": ast.PdfName("DCTDecode")}), []byte{0xff, 0xd8, 0xff, 0xd9}, ImageRecompression{}},
 		{"salvaged flate", imageDict(16, 16, ast.PdfDict{"Filter": ast.PdfName("FlateDecode")}), damaged, ImageRecompression{}},
-		{"past the image budget", imageDict(16, 16, nil), samples, ImageRecompression{Limits: limits.Limits{MaxImagePixels: 255}}},
+		{"past the image budget", imageDict(16, 16, nil), samples, ImageRecompression{Limits: models.Limits{MaxImagePixels: 255}}},
 		{"plugin claims the filter", imageDict(16, 16, ast.PdfDict{"Filter": ast.PdfName("FlateDecode")}), best, ImageRecompression{Decoder: claim}},
 		{"external data", imageDict(16, 16, ast.PdfDict{"F": ast.PdfString("x.bin")}), samples, ImageRecompression{}},
 		{"not an image", ast.PdfDict{"Type": ast.PdfName("XObject"), "Subtype": ast.PdfName("Form")}, samples, ImageRecompression{}},
@@ -272,7 +273,7 @@ func TestRecompressImagesLazyPathMatchesRetained(t *testing.T) {
 		t.Fatal(err)
 	}
 	lazy, _ := build()
-	if _, err := RecompressImages(ctx, lazy, ImageRecompression{Limits: limits.Limits{MaxStreamBytes: 1}}); err != nil {
+	if _, err := RecompressImages(ctx, lazy, ImageRecompression{Limits: models.Limits{MaxStreamBytes: 1}}); err != nil {
 		t.Fatal(err)
 	}
 	var a, b bytes.Buffer
@@ -403,7 +404,7 @@ func TestRecompressImagesLeavesOtherJPEGsAlone(t *testing.T) {
 			[]byte(hex.EncodeToString(data) + ">"),
 			ImageRecompression{},
 		},
-		{"past the image budget", jpegDict(), data, ImageRecompression{Limits: limits.Limits{MaxImagePixels: 32*32 - 1}}},
+		{"past the image budget", jpegDict(), data, ImageRecompression{Limits: models.Limits{MaxImagePixels: 32*32 - 1}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -442,7 +443,7 @@ func TestRecompressImagesLazyJPEGMatchesRetained(t *testing.T) {
 		t.Fatal(err)
 	}
 	lazy, _ := build()
-	stats, err := RecompressImages(ctx, lazy, ImageRecompression{Limits: limits.Limits{MaxStreamBytes: 1}})
+	stats, err := RecompressImages(ctx, lazy, ImageRecompression{Limits: models.Limits{MaxStreamBytes: 1}})
 	if err != nil || stats.Images != 1 {
 		t.Fatalf("stats = %+v, err = %v", stats, err)
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // keptForms readies the XObjects of a page whose operations ops are edited
@@ -95,7 +96,7 @@ func (f *flattener) ungroup(ctx context.Context, obj ast.PdfObject, stream ast.P
 		// A form that paints itself is left as it is where it recurses.
 		f.ungrouped[ref.ObjectNum] = obj
 	}
-	if depth > f.doc.Limits().WithDefaults().MaxFormDepth {
+	if depth > limits.WithDefaults(f.doc.Limits()).MaxFormDepth {
 		return obj, nil
 	}
 	dict := maps.Clone(stream.Dict)

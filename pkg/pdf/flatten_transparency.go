@@ -27,10 +27,10 @@ type flattenOpts struct {
 
 // WithFlattenDPI composites transparent regions at dpi pixels per inch.
 // Default 300, the resolution of print. A page whose composite would pass the
-// render pixel budget ([Limits.MaxRenderPixels]) is composited at the highest
-// resolution that fits, which [models.FlattenedPage.DPI] reports. A dpi that
-// is not a positive finite number makes [Writer.FlattenTransparency] fail with
-// [ErrInvalidFlattenOptions].
+// render pixel budget ([models.Limits.MaxRenderPixels]) is composited at the
+// highest resolution that fits, which [models.FlattenedPage.DPI] reports. A
+// dpi that is not a positive finite number makes [Writer.FlattenTransparency]
+// fail with [ErrInvalidFlattenOptions].
 func WithFlattenDPI(dpi float64) FlattenOption {
 	return func(o *flattenOpts) { o.dpi = dpi }
 }

@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -230,7 +229,7 @@ func TestFormGuards(t *testing.T) {
 			stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100]", "0 g 0 0 100 100 re f"),
 		},
 	}
-	doc, pg := open(t, f.bytes(), limits.Limits{MaxFormDepth: 1})
+	doc, pg := open(t, f.bytes(), models.Limits{MaxFormDepth: 1})
 	c, report, err := Render(context.Background(), doc, pg, Options{DPI: 72, Background: white})
 	if err != nil {
 		t.Fatal(err)
@@ -318,7 +317,7 @@ func TestPageGeometry(t *testing.T) {
 		{"/MediaBox [0 0 100 50] /UserUnit 2", 72, 200, 100, geom.Point{X: 0, Y: 50}, geom.Point{X: 0, Y: 0}},
 		{"/MediaBox [0 0 100.4 50]", 72, 101, 50, geom.Point{}, geom.Point{X: 0, Y: 50}},
 	} {
-		_, pg := open(t, fixture{page: tc.page}.bytes(), limits.Limits{})
+		_, pg := open(t, fixture{page: tc.page}.bytes(), models.Limits{})
 		g, err := PageGeometry(pg, tc.dpi)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.page, err)
@@ -328,7 +327,7 @@ func TestPageGeometry(t *testing.T) {
 			t.Errorf("%s: %dx%d, %v -> %v; want %dx%d, %v", tc.page, g.Width, g.Height, tc.probe, got, tc.width, tc.height, tc.want)
 		}
 	}
-	_, pg := open(t, fixture{}.bytes(), limits.Limits{})
+	_, pg := open(t, fixture{}.bytes(), models.Limits{})
 	for _, dpi := range []float64{0, -1, math.NaN(), math.Inf(1)} {
 		if _, err := PageGeometry(pg, dpi); !errors.Is(err, ErrInvalidOptions) {
 			t.Errorf("dpi %v: %v, want ErrInvalidOptions", dpi, err)
@@ -352,7 +351,7 @@ func TestWholePixelGeometry(t *testing.T) {
 		{"/MediaBox [10 20 110.4 70.3] /Rotate 90", 300, 210, 419},
 		{"/MediaBox [0 0 100.4 50.2] /Rotate 270 /UserUnit 2", 72, 101, 201},
 	} {
-		_, pg := open(t, fixture{page: tc.page}.bytes(), limits.Limits{})
+		_, pg := open(t, fixture{page: tc.page}.bytes(), models.Limits{})
 		g, err := WholePixelGeometry(pg, models.RenderCropBox, tc.dpi)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.page, err)
@@ -389,7 +388,7 @@ func TestRotatedPage(t *testing.T) {
 func TestBudgets(t *testing.T) {
 	t.Parallel()
 	data := fixture{content: "0 g 0 0 100 100 re f"}.bytes()
-	doc, pg := open(t, data, limits.Limits{MaxRenderPixels: 9_999})
+	doc, pg := open(t, data, models.Limits{MaxRenderPixels: 9_999})
 	if _, _, err := Render(context.Background(), doc, pg, Options{DPI: 72}); !errors.Is(err, ErrTooLarge) {
 		t.Errorf("page past the pixel budget: %v, want ErrTooLarge", err)
 	}
@@ -398,18 +397,18 @@ func TestBudgets(t *testing.T) {
 	for i := range 9 {
 		nested.WriteString("q 0 0 m 100 0 l " + strconv.Itoa(i) + " 100 l h W n ")
 	}
-	doc, pg = open(t, fixture{content: nested.String()}.bytes(), limits.Limits{MaxRenderPixels: 10_000})
+	doc, pg = open(t, fixture{content: nested.String()}.bytes(), models.Limits{MaxRenderPixels: 10_000})
 	if _, _, err := Render(context.Background(), doc, pg, Options{DPI: 72}); !errors.Is(err, ErrTooLarge) {
 		t.Errorf("nine nested masks: %v, want ErrTooLarge", err)
 	}
 	// Rectangular clips cost no mask, however deep they nest.
-	doc, pg = open(t, fixture{content: strings.Repeat("q 1 1 98 98 re W n ", 50) + "0 g 0 0 100 100 re f"}.bytes(), limits.Limits{MaxRenderPixels: 10_000})
+	doc, pg = open(t, fixture{content: strings.Repeat("q 1 1 98 98 re W n ", 50) + "0 g 0 0 100 100 re f"}.bytes(), models.Limits{MaxRenderPixels: 10_000})
 	if _, _, err := Render(context.Background(), doc, pg, Options{DPI: 72}); err != nil {
 		t.Errorf("rectangular clips: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	doc, pg = open(t, fixture{content: strings.Repeat("0 0 1 1 re f ", 200)}.bytes(), limits.Limits{})
+	doc, pg = open(t, fixture{content: strings.Repeat("0 0 1 1 re f ", 200)}.bytes(), models.Limits{})
 	if _, _, err := Render(ctx, doc, pg, Options{DPI: 72}); !errors.Is(err, context.Canceled) {
 		t.Errorf("cancelled render: %v, want context.Canceled", err)
 	}
@@ -439,7 +438,7 @@ func TestDeterministic(t *testing.T) {
 
 func TestConcurrentRenders(t *testing.T) {
 	t.Parallel()
-	doc, pg := open(t, busyPage.bytes(), limits.Limits{})
+	doc, pg := open(t, busyPage.bytes(), models.Limits{})
 	want, _, err := Render(context.Background(), doc, pg, Options{DPI: 72, Background: white})
 	if err != nil {
 		t.Fatal(err)
@@ -466,7 +465,7 @@ func TestConcurrentRenders(t *testing.T) {
 }
 
 func BenchmarkRenderBusyPage(b *testing.B) {
-	doc, pg := open(b, busyPage.bytes(), limits.Limits{})
+	doc, pg := open(b, busyPage.bytes(), models.Limits{})
 	b.ReportAllocs()
 	for b.Loop() {
 		if _, _, err := Render(context.Background(), doc, pg, Options{DPI: 300, Background: white}); err != nil {

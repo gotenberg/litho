@@ -41,7 +41,7 @@ func streamObj(dict string, data []byte) string {
 }
 
 // openLimited opens data under l.
-func openLimited(t *testing.T, data []byte, l Limits) *Reader {
+func openLimited(t *testing.T, data []byte, l models.Limits) *Reader {
 	t.Helper()
 	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)), WithLimits(l))
 	if err != nil {
@@ -56,7 +56,7 @@ func openLimited(t *testing.T, data []byte, l Limits) *Reader {
 func TestDefaultLimits_KeepThePreviousCaps(t *testing.T) {
 	t.Parallel()
 
-	want := Limits{
+	want := models.Limits{
 		MaxStreamBytes:       256 << 20,
 		MaxImagePixels:       100_000_000,
 		MaxEmbeddedFileBytes: 50 * 1024 * 1024,
@@ -71,8 +71,8 @@ func TestDefaultLimits_KeepThePreviousCaps(t *testing.T) {
 	if got := DefaultLimits(); got != want {
 		t.Errorf("DefaultLimits() = %+v, want %+v", got, want)
 	}
-	r := openLimited(t, minimalPDF(), Limits{})
-	if got := limitsFromInternal(r.doc.Limits()); got != want {
+	r := openLimited(t, minimalPDF(), models.Limits{})
+	if got := r.doc.Limits(); got != want {
 		t.Errorf("a Reader opened with zero Limits reads under %+v, want %+v", got, want)
 	}
 }
@@ -83,7 +83,7 @@ func TestOpen_RefusesInvalidLimits(t *testing.T) {
 	t.Parallel()
 
 	data := minimalPDF()
-	for name, l := range map[string]Limits{
+	for name, l := range map[string]models.Limits{
 		"negative stream bytes":         {MaxStreamBytes: -1},
 		"negative image pixels":         {MaxImagePixels: -1},
 		"negative embedded file bytes":  {MaxEmbeddedFileBytes: -1},
@@ -107,7 +107,7 @@ func TestOpen_RefusesInvalidLimits(t *testing.T) {
 		}
 	}
 
-	ceilings := Limits{
+	ceilings := models.Limits{
 		MaxStreamBytes:       limits.MaxStreamBytesCeiling,
 		MaxImagePixels:       limits.MaxImagePixelsCeiling,
 		MaxEmbeddedFileBytes: limits.MaxEmbeddedFileBytesCeiling,
@@ -119,12 +119,12 @@ func TestOpen_RefusesInvalidLimits(t *testing.T) {
 
 		MaxConvertMemoryBytes: limits.MaxConvertMemoryBytesCeiling,
 	}
-	for _, l := range []Limits{{}, DefaultLimits(), ceilings, {MaxFormDepth: 1, MaxCachedObjects: 1}} {
+	for _, l := range []models.Limits{{}, DefaultLimits(), ceilings, {MaxFormDepth: 1, MaxCachedObjects: 1}} {
 		openLimited(t, data, l)
 	}
 }
 
-// TestLimitsValidate_IsTheCheckOpenRuns pins [Limits.Validate] to the check
+// TestLimitsValidate_IsTheCheckOpenRuns pins [ValidateLimits] to the check
 // [Open] runs: for a budget below zero or past its ceiling it returns an error
 // wrapping [ErrInvalidLimits] with the very message Open returns, naming the
 // field, and for zero budgets, the defaults and the ceilings it returns nil.
@@ -133,21 +133,21 @@ func TestLimitsValidate_IsTheCheckOpenRuns(t *testing.T) {
 
 	data := minimalPDF()
 	for name, tc := range map[string]struct {
-		l     Limits
+		l     models.Limits
 		field string
 	}{
-		"negative stream bytes":        {Limits{MaxStreamBytes: -1}, "MaxStreamBytes"},
-		"image pixels past ceiling":    {Limits{MaxImagePixels: limits.MaxImagePixelsCeiling + 1}, "MaxImagePixels"},
-		"embedded bytes past ceiling":  {Limits{MaxEmbeddedFileBytes: limits.MaxEmbeddedFileBytesCeiling + 1}, "MaxEmbeddedFileBytes"},
-		"form depth past ceiling":      {Limits{MaxFormDepth: 257}, "MaxFormDepth"},
-		"negative cached objects":      {Limits{MaxCachedObjects: -1}, "MaxCachedObjects"},
-		"render pixels past ceiling":   {Limits{MaxRenderPixels: limits.MaxRenderPixelsCeiling + 1}, "MaxRenderPixels"},
-		"convert input past ceiling":   {Limits{MaxConvertInputBytes: limits.MaxConvertInputBytesCeiling + 1}, "MaxConvertInputBytes"},
-		"negative convert pages":       {Limits{MaxConvertPages: -1}, "MaxConvertPages"},
-		"convert memory past ceiling":  {Limits{MaxConvertMemoryBytes: limits.MaxConvertMemoryBytesCeiling + 1}, "MaxConvertMemoryBytes"},
-		"the first bad field is named": {Limits{MaxStreamBytes: limits.MaxStreamBytesCeiling + 1, MaxFormDepth: -1}, "MaxStreamBytes"},
+		"negative stream bytes":        {models.Limits{MaxStreamBytes: -1}, "MaxStreamBytes"},
+		"image pixels past ceiling":    {models.Limits{MaxImagePixels: limits.MaxImagePixelsCeiling + 1}, "MaxImagePixels"},
+		"embedded bytes past ceiling":  {models.Limits{MaxEmbeddedFileBytes: limits.MaxEmbeddedFileBytesCeiling + 1}, "MaxEmbeddedFileBytes"},
+		"form depth past ceiling":      {models.Limits{MaxFormDepth: 257}, "MaxFormDepth"},
+		"negative cached objects":      {models.Limits{MaxCachedObjects: -1}, "MaxCachedObjects"},
+		"render pixels past ceiling":   {models.Limits{MaxRenderPixels: limits.MaxRenderPixelsCeiling + 1}, "MaxRenderPixels"},
+		"convert input past ceiling":   {models.Limits{MaxConvertInputBytes: limits.MaxConvertInputBytesCeiling + 1}, "MaxConvertInputBytes"},
+		"negative convert pages":       {models.Limits{MaxConvertPages: -1}, "MaxConvertPages"},
+		"convert memory past ceiling":  {models.Limits{MaxConvertMemoryBytes: limits.MaxConvertMemoryBytesCeiling + 1}, "MaxConvertMemoryBytes"},
+		"the first bad field is named": {models.Limits{MaxStreamBytes: limits.MaxStreamBytesCeiling + 1, MaxFormDepth: -1}, "MaxStreamBytes"},
 	} {
-		verr := tc.l.Validate()
+		verr := ValidateLimits(tc.l)
 		if !errors.Is(verr, ErrInvalidLimits) {
 			t.Errorf("%s: Validate() = %v, want ErrInvalidLimits", name, verr)
 			continue
@@ -161,7 +161,7 @@ func TestLimitsValidate_IsTheCheckOpenRuns(t *testing.T) {
 		}
 	}
 
-	ceilings := Limits{
+	ceilings := models.Limits{
 		MaxStreamBytes:       limits.MaxStreamBytesCeiling,
 		MaxImagePixels:       limits.MaxImagePixelsCeiling,
 		MaxEmbeddedFileBytes: limits.MaxEmbeddedFileBytesCeiling,
@@ -173,8 +173,8 @@ func TestLimitsValidate_IsTheCheckOpenRuns(t *testing.T) {
 
 		MaxConvertMemoryBytes: limits.MaxConvertMemoryBytesCeiling,
 	}
-	for _, l := range []Limits{{}, DefaultLimits(), ceilings} {
-		if err := l.Validate(); err != nil {
+	for _, l := range []models.Limits{{}, DefaultLimits(), ceilings} {
+		if err := ValidateLimits(l); err != nil {
 			t.Errorf("Validate(%+v) = %v, want nil", l, err)
 		}
 	}
@@ -220,17 +220,17 @@ func budgetImagesPDF(t *testing.T) []byte {
 	)
 }
 
-// TestLimits_StreamBudget pins [Limits.MaxStreamBytes] through the public API:
-// a FlateDecode image and a RunLengthDecode image that decode under the default
-// budget fail with [ErrStreamTooLarge] under a 512 KiB one, from
-// [Reader.DecodeImage] and from the image's Open function.
+// TestLimits_StreamBudget pins [models.Limits.MaxStreamBytes] through the
+// public API: a FlateDecode image and a RunLengthDecode image that decode
+// under the default budget fail with [ErrStreamTooLarge] under a 512 KiB one,
+// from [Reader.DecodeImage] and from the image's Open function.
 func TestLimits_StreamBudget(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	data := budgetImagesPDF(t)
-	def := openLimited(t, data, Limits{})
-	low := openLimited(t, data, Limits{MaxStreamBytes: 512 << 10})
+	def := openLimited(t, data, models.Limits{})
+	low := openLimited(t, data, models.Limits{MaxStreamBytes: 512 << 10})
 	for _, name := range []string{"Flate", "RL"} {
 		if _, err := def.DecodeImage(ctx, 1, name); err != nil {
 			t.Errorf("%s under the default budget: %v", name, err)
@@ -283,7 +283,7 @@ func heavyPagePDF() []byte {
 }
 
 // TestLimits_PageContentFollowsTheStreamBudget pins the page content bound to
-// [Limits.MaxStreamBytes]: the page of [heavyPagePDF] is refused with
+// [models.Limits.MaxStreamBytes]: the page of [heavyPagePDF] is refused with
 // [ErrPageContentTooLarge] under a 64 KiB stream budget, since its two parts
 // sum past a quarter of it, and read under the default and under a 256 KiB
 // budget.
@@ -295,12 +295,12 @@ func TestLimits_PageContentFollowsTheStreamBudget(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range []struct {
 		name  string
-		l     Limits
+		l     models.Limits
 		reads bool
 	}{
-		{"default", Limits{}, true},
-		{"256 KiB", Limits{MaxStreamBytes: 256 << 10}, true},
-		{"64 KiB", Limits{MaxStreamBytes: 64 << 10}, false},
+		{"default", models.Limits{}, true},
+		{"256 KiB", models.Limits{MaxStreamBytes: 256 << 10}, true},
+		{"64 KiB", models.Limits{MaxStreamBytes: 64 << 10}, false},
 	} {
 		text, err := openLimited(t, data, tc.l).ExtractText(ctx, 1)
 		if tc.reads {
@@ -327,11 +327,11 @@ func TestLimits_PageContentTooLargeReachesTheWriter(t *testing.T) {
 
 	for _, tc := range []struct {
 		name    string
-		l       Limits
+		l       models.Limits
 		refused bool
 	}{
-		{"default", Limits{}, false},
-		{"64 KiB", Limits{MaxStreamBytes: 64 << 10}, true},
+		{"default", models.Limits{}, false},
+		{"64 KiB", models.Limits{MaxStreamBytes: 64 << 10}, true},
 	} {
 		heavy := openLimited(t, heavyPagePDF(), tc.l)
 		_, err := NewWriter(heavy).Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{70, 690, 200, 720}}})
@@ -350,24 +350,24 @@ func TestLimits_PageContentTooLargeReachesTheWriter(t *testing.T) {
 	}
 }
 
-// TestLimits_ImagePixelBudget pins [Limits.MaxImagePixels]: the 1024x1024
-// image decodes under a budget of exactly its pixels and fails with
+// TestLimits_ImagePixelBudget pins [models.Limits.MaxImagePixels]: the
+// 1024x1024 image decodes under a budget of exactly its pixels and fails with
 // [ErrImageTooLarge] under one pixel less.
 func TestLimits_ImagePixelBudget(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	data := budgetImagesPDF(t)
-	if _, err := openLimited(t, data, Limits{MaxImagePixels: 1024 * 1024}).DecodeImage(ctx, 1, "Raw"); err != nil {
+	if _, err := openLimited(t, data, models.Limits{MaxImagePixels: 1024 * 1024}).DecodeImage(ctx, 1, "Raw"); err != nil {
 		t.Errorf("under a budget of its pixels: %v", err)
 	}
-	_, err := openLimited(t, data, Limits{MaxImagePixels: 1024*1024 - 1}).DecodeImage(ctx, 1, "Raw")
+	_, err := openLimited(t, data, models.Limits{MaxImagePixels: 1024*1024 - 1}).DecodeImage(ctx, 1, "Raw")
 	if !errors.Is(err, ErrImageTooLarge) || !errors.Is(err, ErrImageNotDecodable) {
 		t.Errorf("under a budget one pixel short: err = %v, want ErrImageTooLarge and ErrImageNotDecodable", err)
 	}
 }
 
-// TestLimits_EmbeddedFileBudget pins [Limits.MaxEmbeddedFileBytes]: an
+// TestLimits_EmbeddedFileBudget pins [models.Limits.MaxEmbeddedFileBytes]: an
 // embedded PDF that is no PDF/A file raises ISO 19005-2, 6.8 t5 under the
 // default budget, and a budget below its size leaves it unvalidated.
 func TestLimits_EmbeddedFileBudget(t *testing.T) {
@@ -381,7 +381,7 @@ func TestLimits_EmbeddedFileBudget(t *testing.T) {
 		"<< /Type /Filespec /F (inner.pdf) /UF (inner.pdf) /EF << /F 5 0 R >> >>",
 		streamObj("/Type /EmbeddedFile /Subtype /application#2Fpdf", inner),
 	)
-	count := func(l Limits) int {
+	count := func(l models.Limits) int {
 		violations, err := openLimited(t, data, l).ValidatePDFAReport(context.Background(), models.PDFA2b)
 		if err != nil {
 			t.Fatalf("ValidatePDFAReport under %+v: %v", l, err)
@@ -394,10 +394,10 @@ func TestLimits_EmbeddedFileBudget(t *testing.T) {
 		}
 		return n
 	}
-	if n := count(Limits{}); n != 1 {
+	if n := count(models.Limits{}); n != 1 {
 		t.Errorf("default budget: %d 6.8 t5 violations, want 1", n)
 	}
-	if n := count(Limits{MaxEmbeddedFileBytes: int64(len(inner)) - 1}); n != 0 {
+	if n := count(models.Limits{MaxEmbeddedFileBytes: int64(len(inner)) - 1}); n != 0 {
 		t.Errorf("budget below the embedded PDF: %d 6.8 t5 violations, want 0", n)
 	}
 }
@@ -466,9 +466,9 @@ func nestedFormsPDF() []byte {
 	)
 }
 
-// TestLimits_FormDepth pins [Limits.MaxFormDepth] for text extraction and image
-// listing alike: what /Fm3, three forms down, shows is read under a budget of
-// 3 and the default, and skipped under a budget of 2.
+// TestLimits_FormDepth pins [models.Limits.MaxFormDepth] for text extraction
+// and image listing alike: what /Fm3, three forms down, shows is read under a
+// budget of 3 and the default, and skipped under a budget of 2.
 func TestLimits_FormDepth(t *testing.T) {
 	t.Parallel()
 
@@ -478,7 +478,7 @@ func TestLimits_FormDepth(t *testing.T) {
 		depth int
 		reads bool
 	}{{0, true}, {3, true}, {2, false}, {1, false}} {
-		r := openLimited(t, data, Limits{MaxFormDepth: tc.depth})
+		r := openLimited(t, data, models.Limits{MaxFormDepth: tc.depth})
 		text, err := r.ExtractText(ctx, 1)
 		if err != nil && !errors.Is(err, ErrRequiresOCR) {
 			t.Fatalf("depth %d: ExtractText: %v", tc.depth, err)
@@ -496,16 +496,16 @@ func TestLimits_FormDepth(t *testing.T) {
 	}
 }
 
-// TestLimits_CachedObjectsStillRead pins that [Limits.MaxCachedObjects] costs
-// re-parsing, never a wrong answer: a cache of one object reads every page of
-// a document as the default cache does.
+// TestLimits_CachedObjectsStillRead pins that [models.Limits.MaxCachedObjects]
+// costs re-parsing, never a wrong answer: a cache of one object reads every
+// page of a document as the default cache does.
 func TestLimits_CachedObjectsStillRead(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	data := nestedFormsPDF()
-	def := openLimited(t, data, Limits{})
-	one := openLimited(t, data, Limits{MaxCachedObjects: 1})
+	def := openLimited(t, data, models.Limits{})
+	one := openLimited(t, data, models.Limits{MaxCachedObjects: 1})
 	want, err := def.ExtractText(ctx, 1)
 	if err != nil {
 		t.Fatalf("default cache: %v", err)
@@ -525,7 +525,7 @@ func TestReader_ReopenCarriesLimits(t *testing.T) {
 	t.Parallel()
 
 	data := nestedFormsPDF()
-	l := Limits{MaxStreamBytes: 1 << 20, MaxImagePixels: 1 << 16, MaxEmbeddedFileBytes: 1 << 10, MaxFormDepth: 2, MaxCachedObjects: 7, MaxRenderPixels: 1 << 20, MaxConvertInputBytes: 1 << 10, MaxConvertPages: 3, MaxConvertMemoryBytes: 1 << 20}
+	l := models.Limits{MaxStreamBytes: 1 << 20, MaxImagePixels: 1 << 16, MaxEmbeddedFileBytes: 1 << 10, MaxFormDepth: 2, MaxCachedObjects: 7, MaxRenderPixels: 1 << 20, MaxConvertInputBytes: 1 << 10, MaxConvertPages: 3, MaxConvertMemoryBytes: 1 << 20}
 	r := openLimited(t, data, l)
 	path := filepath.Join(t.TempDir(), "reopen.pdf")
 	if err := os.WriteFile(path, data, 0o600); err != nil {
@@ -536,7 +536,7 @@ func TestReader_ReopenCarriesLimits(t *testing.T) {
 		t.Fatalf("reopenFile: %v", err)
 	}
 	defer next.Close()
-	if got := limitsFromInternal(next.doc.Limits()); got != l {
+	if got := next.doc.Limits(); got != l {
 		t.Errorf("the re-read document reads under %+v, want %+v", got, l)
 	}
 }

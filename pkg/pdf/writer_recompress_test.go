@@ -134,7 +134,7 @@ func TestWriter_WithImageRecompression_KeepsPixels(t *testing.T) {
 func TestWriter_WithImageRecompression_HonoursImageBudget(t *testing.T) {
 	t.Parallel()
 	data, samples := gradientImagePDF()
-	r := openRecompressSource(t, data, WithLimits(Limits{MaxImagePixels: 64*48 - 1}))
+	r := openRecompressSource(t, data, WithLimits(models.Limits{MaxImagePixels: 64*48 - 1}))
 	var out bytes.Buffer
 	if err := NewWriter(r).WriteTo(context.Background(), &out, WithFullRewrite(), WithImageRecompression()); err != nil {
 		t.Fatalf("WriteTo: %v", err)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // opsOf decodes a path from data: a byte of kind, then the op's points
@@ -63,7 +64,7 @@ func FuzzFill(f *testing.F) {
 	f.Add(valid, uint8(40), uint8(40), 1.5, 1.0)
 	f.Add(valid[:len(valid)-7], uint8(3), uint8(200), 0.0, -2.0)
 	f.Fuzz(func(t *testing.T, data []byte, w, h uint8, width, scale float64) {
-		ctx, _, done := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 8 << 20})
+		ctx, _, done := limits.WithBudget(context.Background(), models.Limits{MaxConvertMemoryBytes: 8 << 20})
 		defer done()
 		s, err := New(ctx, Coverage, int(w)+1, int(h)+1, Grid{})
 		if err != nil {
@@ -102,7 +103,7 @@ func FuzzGeometry(f *testing.F) {
 	f.Add(1.5, -2.25, 0.8, 0.2, -0.1, 1.3, 4.0, 7, 3, 2.0)
 	f.Add(math.Inf(1), math.NaN(), 1e300, -1e300, 0.0, 0.0, -5.0, -1, 1<<30, 1e9)
 	f.Fuzz(func(t *testing.T, dx, dy, a, b, c, d, sigma float64, width, passes int, r float64) {
-		ctx, _, done := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 64 << 20})
+		ctx, _, done := limits.WithBudget(context.Background(), models.Limits{MaxConvertMemoryBytes: 64 << 20})
 		defer done()
 		s, err := New(ctx, RGBA, 17, 9, Grid{})
 		if err != nil {

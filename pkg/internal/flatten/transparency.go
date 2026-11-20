@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 )
 
@@ -235,7 +236,7 @@ func newScanner(doc *document.Document, pageResources ast.PdfDict) *scanner {
 		pageResources: pageResources,
 		forms:         make(map[int]contentInfo),
 		patterns:      make(map[int]bool),
-		maxDepth:      doc.Limits().WithDefaults().MaxFormDepth,
+		maxDepth:      limits.WithDefaults(doc.Limits()).MaxFormDepth,
 	}
 }
 

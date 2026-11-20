@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // paragraphs returns a tree of n paragraphs, each of its own style
@@ -77,7 +78,7 @@ func TestEngineSharesAnonymousStyles(t *testing.T) {
 
 func TestLayoutChargesAStyleOnce(t *testing.T) {
 	peak := func(share bool) int64 {
-		ctx, b, done := limits.WithBudget(context.Background(), limits.Limits{})
+		ctx, b, done := limits.WithBudget(context.Background(), models.Limits{})
 		defer done()
 		tree := paragraphs(200)
 		if share {
@@ -96,7 +97,7 @@ func TestLayoutChargesAStyleOnce(t *testing.T) {
 
 func TestLayoutChargesNoStyleAnotherStageCharged(t *testing.T) {
 	peak := func(charged func(*css.Style) bool) int64 {
-		ctx, b, done := limits.WithBudget(context.Background(), limits.Limits{})
+		ctx, b, done := limits.WithBudget(context.Background(), models.Limits{})
 		defer done()
 		if _, err := Layout(ctx, paragraphs(200), ahem(t), Options{Page: page(100, 200), ChargedStyle: charged}); err != nil {
 			t.Fatalf("Layout: %v", err)

@@ -22,6 +22,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // limitedCopy copies from r to buf in 1 MB chunks up to limit bytes, the
@@ -391,10 +392,10 @@ func extractDecodeParms(dict ast.PdfDict, numFilters int) []ast.PdfDict {
 // reads only its parameters.
 //
 // The general-purpose filters are bounded by the stream budget, the image
-// codecs by caps scaled from the pixel budget ([limits.Limits.ScaleImageCap]):
+// codecs by caps scaled from the pixel budget ([limits.ScaleImageCap]):
 // a DCTDecode, JPXDecode or JBIG2Decode image of four bytes a pixel is
 // entitled to more output than the stream budget holds.
-func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName, parms, dict ast.PdfDict, lim limits.Limits) ([]byte, error) {
+func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName, parms, dict ast.PdfDict, lim models.Limits) ([]byte, error) {
 	switch filterName {
 	case "FlateDecode", "Fl":
 		decoded, err := decodeFlateDecode(ctx, data, lim.MaxStreamBytes)
@@ -420,10 +421,10 @@ func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName,
 		return decodeRunLength(data, lim.MaxStreamBytes)
 
 	case "DCTDecode", "DCT":
-		return decodeDCT(ctx, data, parms, dict, lim.ScaleImageCap(dct.DefaultMaxSamples))
+		return decodeDCT(ctx, data, parms, dict, limits.ScaleImageCap(lim, dct.DefaultMaxSamples))
 
 	case "JPXDecode":
-		return decodeJPX(ctx, data, dict, lim.ScaleImageCap(jpx.DefaultMaxSamples))
+		return decodeJPX(ctx, data, dict, limits.ScaleImageCap(lim, jpx.DefaultMaxSamples))
 
 	case "JBIG2Decode":
 		return decodeJBIG2(ctx, data, parms, lim)
@@ -986,7 +987,7 @@ func decodeCCITTFax(ctx context.Context, data []byte, parms ast.PdfDict, limit i
 // probeCCITTFax is the probe of CCITTFaxDecode (see codecProbes):
 // decodeCCITTFax with [ccitt.Check], which decodes the first row alone, the
 // only one whose failure fails the decoding.
-func probeCCITTFax(ctx context.Context, data []byte, parms, _ ast.PdfDict, lim limits.Limits) error {
+func probeCCITTFax(ctx context.Context, data []byte, parms, _ ast.PdfDict, lim models.Limits) error {
 	if err := ccitt.Check(ctx, data, ccittParams(parms, lim.MaxStreamBytes)); err != nil {
 		return ccittError(err)
 	}

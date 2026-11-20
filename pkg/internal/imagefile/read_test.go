@@ -14,12 +14,13 @@ import (
 	"github.com/gotenberg/litho/internal/imagetest"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // readAll reads every picture of data with o.
 func readAll(t *testing.T, data []byte, o Options) ([]*Picture, Info, error) {
 	t.Helper()
-	ctx, _, end := limits.WithBudget(context.Background(), limits.Limits{}.WithDefaults())
+	ctx, _, end := limits.WithBudget(context.Background(), limits.WithDefaults(models.Limits{}))
 	defer end()
 	var pics []*Picture
 	info, err := Read(ctx, data, Sniff(data), o, func(p *Picture) error {
@@ -355,7 +356,7 @@ func FuzzRead(f *testing.F) {
 		f.Add(data[:len(data)/2])
 	}
 	f.Fuzz(func(t *testing.T, data []byte) {
-		ctx, _, end := limits.WithBudget(context.Background(), limits.Limits{MaxImagePixels: 1 << 16, MaxConvertMemoryBytes: 64 << 20}.WithDefaults())
+		ctx, _, end := limits.WithBudget(context.Background(), limits.WithDefaults(models.Limits{MaxImagePixels: 1 << 16, MaxConvertMemoryBytes: 64 << 20}))
 		defer end()
 		_, err := Read(ctx, data, Sniff(data), Options{MaxPictures: 4}, func(*Picture) error { return nil })
 		if err != nil && !errors.Is(err, ErrMalformed) && !errors.Is(err, ErrUnsupported) && !errors.Is(err, limits.ErrPictureTooLarge) &&

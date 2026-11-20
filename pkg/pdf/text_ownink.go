@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
 	"github.com/gotenberg/litho/pkg/internal/render/surface"
@@ -327,7 +328,7 @@ func (s *textScene) judgeOwnInk(ctx context.Context, r *Reader, pg *document.Pag
 	if err := s.countCover(ctx, func(i int) bool { return judged[i] }); err != nil {
 		return nil, err
 	}
-	budget := r.doc.Limits().WithDefaults().MaxRenderPixels
+	budget := limits.WithDefaults(r.doc.Limits()).MaxRenderPixels
 	within, err := s.inkMask(all, budget)
 	if err != nil {
 		return nil, err

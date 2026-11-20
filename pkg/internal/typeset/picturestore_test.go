@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // storeDoc returns a page placing a picture with alpha, a gray one and a
@@ -66,7 +67,7 @@ func TestPictureStoreKeepsTheBytes(t *testing.T) {
 	var outs [2][]byte
 	var pixels [2][]image.Image
 	for i, hold := range []int64{-1, 1} {
-		ctx, mem, end := limits.WithBudget(context.Background(), limits.Limits{})
+		ctx, mem, end := limits.WithBudget(context.Background(), models.Limits{})
 		ctx, store := typeset.WithPictureStore(ctx, dir, hold)
 		doc := storeDoc(t, ctx)
 		if hold > 0 {
@@ -143,7 +144,7 @@ func TestDecodeChargesByColourModel(t *testing.T) {
 			if err := jpeg.Encode(&jb, tc.img, nil); err != nil {
 				t.Fatal(err)
 			}
-			ctx, mem, end := limits.WithBudget(context.Background(), limits.Limits{})
+			ctx, mem, end := limits.WithBudget(context.Background(), models.Limits{})
 			defer end()
 			src, err := typeset.JPEGImage(ctx, jb.Bytes())
 			if err != nil {

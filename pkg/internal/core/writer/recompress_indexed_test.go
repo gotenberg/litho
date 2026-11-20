@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // paletteColor is colour c of [paletteRGB], distinct for every c below 256.
@@ -298,7 +298,7 @@ func TestRecompressImagesLazyIndexedMatchesRetained(t *testing.T) {
 		t.Fatal(err)
 	}
 	lazy, _ := build()
-	if _, err := RecompressImages(ctx, lazy, ImageRecompression{Limits: limits.Limits{MaxStreamBytes: 1}}); err != nil {
+	if _, err := RecompressImages(ctx, lazy, ImageRecompression{Limits: models.Limits{MaxStreamBytes: 1}}); err != nil {
 		t.Fatal(err)
 	}
 	var a, b bytes.Buffer

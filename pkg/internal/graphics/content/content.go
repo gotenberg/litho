@@ -859,7 +859,7 @@ func (vp *violationPlacer) finish() []FormatViolation {
 
 // ParsePageContent extracts, concatenates, and parses the content streams of a page or form XObject.
 //
-// The concatenated content is bounded by [limits.Limits.MaxPageContentBytes] of
+// The concatenated content is bounded by [limits.MaxPageContentBytes] of
 // the document's budgets: ISO 32000-1, 7.7.3.3 lets a page split its content
 // across an array of streams, and the per-stream budget says nothing about
 // their sum. opts choose how it reads the streams, as for [ParseStreamData].
@@ -915,7 +915,7 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 	}
 
 	o := optionsOf(ctx, opts)
-	limit := doc.Limits().MaxPageContentBytes()
+	limit := limits.MaxPageContentBytes(doc.Limits())
 	var allData []byte
 	for _, s := range streams {
 		if ctx.Err() != nil {

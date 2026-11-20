@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter/dct"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // ImageRecompression configures [RecompressImages]: the decoder that reads the
@@ -25,7 +26,7 @@ type ImageRecompression struct {
 	// Limits bounds the pass: an image past MaxImagePixels is left as it is,
 	// and MaxStreamBytes bounds both what one decode holds and how many
 	// re-encoded bytes the pass keeps in memory (see [RecompressImages]).
-	Limits limits.Limits
+	Limits models.Limits
 	// Skip holds object numbers of images the pass leaves as they are:
 	// those [ReduceImages] wrote as JPEG.
 	Skip map[int]bool
@@ -89,7 +90,7 @@ type RecompressStats struct {
 //
 // Re-encoded bytes are kept in memory up to the stream budget in total, a
 // cache of what that budget bounds, which derives from it as
-// [limits.Limits.MaxObjStmCacheBytes] does. Past it, an image's re-encoding is
+// [limits.MaxObjStmCacheBytes] does. Past it, an image's re-encoding is
 // redone from its source when the stream is serialized, so beyond that budget
 // the pass holds one image's samples at a time, as the resource-streaming rule
 // asks. Images are visited in object-number order, and zlib output and a
@@ -100,7 +101,7 @@ type RecompressStats struct {
 // reaches this point. [WriteRewrite] declines it there, as it declines the
 // other compaction passes.
 func RecompressImages(ctx context.Context, alloc *ObjAllocator, cfg ImageRecompression) (RecompressStats, error) {
-	lim := cfg.Limits.WithDefaults()
+	lim := limits.WithDefaults(cfg.Limits)
 	pending := alloc.Pending()
 
 	nums := make([]int, 0, len(pending))
@@ -204,7 +205,7 @@ func planRecompression(
 	pending map[int]ast.PdfObject,
 	s ast.PdfStream,
 	dec *filter.Decoder,
-	lim limits.Limits,
+	lim models.Limits,
 ) (recompressionPlan, bool, error) {
 	if _, external := s.Dict["F"]; external {
 		return recompressionPlan{}, false, nil

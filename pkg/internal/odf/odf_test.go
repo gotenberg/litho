@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 const ns = `xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" ` +
@@ -124,7 +125,7 @@ func TestParseXML_NoEntityExpansion(t *testing.T) {
 
 func TestParseXML_ChargesEveryNode(t *testing.T) {
 	for _, n := range []int{1, xmlChargeEvery - 1, xmlChargeEvery, xmlChargeEvery + 7} {
-		ctx, mem, done := limits.WithBudget(context.Background(), limits.Limits{})
+		ctx, mem, done := limits.WithBudget(context.Background(), models.Limits{})
 		// The root's start and end and n-1 empty children's are n nodes
 		// of each kind: 2n tokens.
 		src := "<a>" + strings.Repeat("<b/>", n-1) + "</a>"

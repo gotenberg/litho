@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // The text fixtures embed a fontbuild TrueType program whose glyphs are
@@ -269,7 +269,7 @@ func BenchmarkRenderText(b *testing.B) {
 	}
 	sb.WriteString("ET")
 	f := fixture{page: textPage, content: sb.String(), objs: trueTypeObjs()}
-	doc, pg := open(b, f.bytes(), limits.Limits{})
+	doc, pg := open(b, f.bytes(), models.Limits{})
 	b.ReportAllocs()
 	for b.Loop() {
 		if _, _, err := Render(context.Background(), doc, pg, Options{DPI: 150, Background: white}); err != nil {

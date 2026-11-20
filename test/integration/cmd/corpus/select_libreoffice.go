@@ -59,7 +59,7 @@ var libreOfficeLeftOut = []string{
 	// read the document".
 	"sw/qa/extras/ooxmlimport/data/math-malformed_xml.docx",
 	// A slide of 500 by 500 cm, Impress's largest: drawn at 72 dpi it is
-	// 14174 pixels square, four times the render budget (pdf.Limits'
+	// 14174 pixels square, four times the render budget (models.Limits'
 	// MaxRenderPixels, 50 million) the cell draws a page within.
 	"sd/qa/unit/data/odp/canvas-slide.odp",
 }

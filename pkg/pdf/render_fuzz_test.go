@@ -20,7 +20,7 @@ func FuzzRenderPage(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, data []byte, mode uint8) {
 		ctx := context.Background()
-		r, err := Open(ctx, bytes.NewReader(data), int64(len(data)), WithLimits(Limits{MaxRenderPixels: 1 << 16, MaxStreamBytes: 1 << 20, MaxImagePixels: 1 << 16}))
+		r, err := Open(ctx, bytes.NewReader(data), int64(len(data)), WithLimits(models.Limits{MaxRenderPixels: 1 << 16, MaxStreamBytes: 1 << 20, MaxImagePixels: 1 << 16}))
 		if err != nil {
 			return
 		}

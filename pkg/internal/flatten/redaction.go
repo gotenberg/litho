@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
@@ -188,7 +189,7 @@ func redaction(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Do
 	clippedBy := make(map[int][]Rect)
 	var cover *coverage
 	if drawn {
-		shared := page.NewShared(doc.Limits().WithDefaults().MaxRenderPixels)
+		shared := page.NewShared(limits.WithDefaults(doc.Limits()).MaxRenderPixels)
 		res, g, dpi, _, err := f.render(ctx, pg, shared)
 		if err != nil {
 			return out, err

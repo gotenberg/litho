@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
 
@@ -32,7 +32,7 @@ func TestDecoder_LoweredBudgetRefusesAFlateBomb(t *testing.T) {
 	if out, err := DecodeStream(context.Background(), stream); err != nil || len(out) != 3*lowBudget {
 		t.Fatalf("default budget: %d bytes, %v; want %d bytes", len(out), err, 3*lowBudget)
 	}
-	d := NewDecoder(nil, limits.Limits{MaxStreamBytes: lowBudget})
+	d := NewDecoder(nil, models.Limits{MaxStreamBytes: lowBudget})
 	if _, err := d.DecodeStream(context.Background(), stream); !errors.Is(err, ErrDecompressionBomb) {
 		t.Errorf("1 MiB budget: err = %v, want ErrDecompressionBomb", err)
 	}
@@ -50,7 +50,7 @@ func TestDecoder_LoweredBudgetRefusesARunLengthBomb(t *testing.T) {
 	if out, err := DecodeStream(context.Background(), stream); err != nil || len(out) != 3*lowBudget {
 		t.Fatalf("default budget: %d bytes, %v; want %d bytes", len(out), err, 3*lowBudget)
 	}
-	d := NewDecoder(nil, limits.Limits{MaxStreamBytes: lowBudget})
+	d := NewDecoder(nil, models.Limits{MaxStreamBytes: lowBudget})
 	if _, err := d.DecodeStream(context.Background(), stream); !errors.Is(err, ErrDecompressionBomb) {
 		t.Errorf("1 MiB budget: err = %v, want ErrDecompressionBomb", err)
 	}
@@ -68,7 +68,7 @@ func TestDecoder_LoweredBudgetBoundsPluginsAndCCITT(t *testing.T) {
 	t.Parallel()
 
 	p := &mockPlugin{name: "VendorDecode", result: make([]byte, lowBudget+1)}
-	d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{MaxStreamBytes: lowBudget})
+	d := NewDecoder([]plugins.FilterDecoder{p}, models.Limits{MaxStreamBytes: lowBudget})
 	stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("VendorDecode")}, []byte("raw"))
 	if _, err := d.DecodeStream(context.Background(), stream); !errors.Is(err, ErrDecompressionBomb) {
 		t.Errorf("plugin output past a 1 MiB budget: err = %v, want ErrDecompressionBomb", err)

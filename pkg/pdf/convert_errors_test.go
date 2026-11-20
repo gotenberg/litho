@@ -7,6 +7,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestConvert_ErrorNamesEachFactOnce locks the chains a [Conversion]
@@ -16,7 +18,7 @@ func TestConvert_ErrorNamesEachFactOnce(t *testing.T) {
 	t.Parallel()
 	dir := convertFontDir(t)
 	fonts := WithConvertFontDirs(dir)
-	onePage := WithConvertLimits(Limits{MaxConvertPages: 1})
+	onePage := WithConvertLimits(models.Limits{MaxConvertPages: 1})
 	for name, tc := range map[string]struct {
 		format testFormat
 		src    []byte
@@ -29,8 +31,8 @@ func TestConvert_ErrorNamesEachFactOnce(t *testing.T) {
 		"HTML pages":     {format: formatHTML, src: []byte(`<p style="break-after: page">A<p>B`), opts: []ConvertOption{fonts, onePage}, want: ErrConvertTooManyPages, label: "HTML"},
 		"DOCX pages":     {format: formatDOCX, src: longDOCX(t, 60), opts: []ConvertOption{fonts, onePage}, want: ErrConvertTooManyPages, label: "DOCX"},
 		"XLSX pages":     {format: formatXLSX, src: longXLSX(t, 200), opts: []ConvertOption{fonts, onePage}, want: ErrConvertTooManyPages, label: "XLSX"},
-		"DOCX input":     {format: formatDOCX, src: longDOCX(t, 1), opts: []ConvertOption{fonts, WithConvertLimits(Limits{MaxConvertInputBytes: 10})}, want: ErrConvertInputTooLarge, label: "DOCX"},
-		"HTML input":     {format: formatHTML, src: []byte("<p>ABCD"), opts: []ConvertOption{fonts, WithConvertLimits(Limits{MaxConvertInputBytes: 4})}, want: ErrConvertInputTooLarge, label: "HTML"},
+		"DOCX input":     {format: formatDOCX, src: longDOCX(t, 1), opts: []ConvertOption{fonts, WithConvertLimits(models.Limits{MaxConvertInputBytes: 10})}, want: ErrConvertInputTooLarge, label: "DOCX"},
+		"HTML input":     {format: formatHTML, src: []byte("<p>ABCD"), opts: []ConvertOption{fonts, WithConvertLimits(models.Limits{MaxConvertInputBytes: 4})}, want: ErrConvertInputTooLarge, label: "HTML"},
 		"DOCX malformed": {format: formatDOCX, src: []byte("PK\x03\x04 not a package"), opts: []ConvertOption{fonts}, want: ErrConvertMalformed, label: "DOCX"},
 		"PPTX no main":   {format: formatPPTX, src: noMainPart(t), opts: []ConvertOption{fonts}, want: ErrConvertMalformed, label: "PPTX"},
 		"XLSX no main":   {format: formatXLSX, src: noMainPart(t), opts: []ConvertOption{fonts}, want: ErrConvertMalformed, label: "XLSX"},

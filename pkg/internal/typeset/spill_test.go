@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestSpill_ChargesAStreamItsCapacity checks that a stream kept in memory
@@ -13,7 +14,7 @@ import (
 // grown past its length keeps its spare capacity alive.
 func TestSpill_ChargesAStreamItsCapacity(t *testing.T) {
 	t.Parallel()
-	ctx, mem, cancel := limits.WithBudget(context.Background(), limits.Limits{})
+	ctx, mem, cancel := limits.WithBudget(context.Background(), models.Limits{})
 	defer cancel()
 	w := newDocWriter(ctx, Options{Spool: -1}, Version17, false)
 	w.alloc.Alloc(ast.NewStream(ast.PdfDict{}, make([]byte, 10, 4096)))

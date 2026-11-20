@@ -12,7 +12,7 @@ type FlattenedPage struct {
 	DPI     float64
 	// CoarseMasks counts the soft masks composited at a fraction of DPI: their
 	// groups did not fit
-	// [github.com/gotenberg/litho/pkg/pdf.Limits.MaxRenderPixels] even at the
+	// [Limits.MaxRenderPixels] even at the
 	// lowest resolution flattening tries, so their opacity is approximated
 	// within a few pixels of where each mask changes. Flattening refuses a
 	// page whose transparency does not fit otherwise.

@@ -10,7 +10,7 @@ var (
 
 	// ErrDecompressionBomb is returned, wrapped in an error naming the filter
 	// and the budget, when a filter's output would exceed the stream budget
-	// (limits.Limits.MaxStreamBytes). pkg/pdf re-exports it as
+	// (models.Limits.MaxStreamBytes). pkg/pdf re-exports it as
 	// pdf.ErrStreamTooLarge.
 	ErrDecompressionBomb = errors.New("decoded stream exceeds the stream size limit")
 

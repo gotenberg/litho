@@ -14,12 +14,14 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
-// TestConvert_MemoryBudget pins [Limits.MaxConvertMemoryBytes] through the
-// public API: a conversion the lowered budget cannot hold fails with
-// [ErrConvertInputTooLarge], names what it was holding, and writes
-// nothing; the same source converts under the default budget.
+// TestConvert_MemoryBudget pins [models.Limits.MaxConvertMemoryBytes] through
+// the public API: a conversion the lowered budget cannot hold fails with
+// [ErrConvertInputTooLarge], names what it was holding, and writes nothing;
+// the same source converts under the default budget.
 func TestConvert_MemoryBudget(t *testing.T) {
 	t.Parallel()
 	dir := convertFontDir(t)
@@ -76,7 +78,7 @@ func TestConvert_MemoryBudget(t *testing.T) {
 				limit = 2 << 20
 			}
 			var out bytes.Buffer
-			rep, err := conversion(WithConvertLimits(Limits{MaxConvertMemoryBytes: limit})).WriteTo(context.Background(), &out)
+			rep, err := conversion(WithConvertLimits(models.Limits{MaxConvertMemoryBytes: limit})).WriteTo(context.Background(), &out)
 			if !errors.Is(err, ErrConvertInputTooLarge) || rep != nil || !strings.Contains(err.Error(), tc.holds) {
 				t.Fatalf("under %d bytes: %v, %+v, want ErrConvertInputTooLarge naming %s", limit, err, rep, tc.holds)
 			}
@@ -102,7 +104,7 @@ func TestConvert_PagesLeaveTheBudgetOnceWritten(t *testing.T) {
 	// glyphs at once, and 2.8 MB of structure tree until the file is
 	// written.
 	text := strings.Repeat("words and more words on a line of text\n", 4000)
-	low := []TextOption{WithConvertFontDirs(dir), WithConvertLimits(Limits{MaxConvertMemoryBytes: 4 << 20})}
+	low := []TextOption{WithConvertFontDirs(dir), WithConvertLimits(models.Limits{MaxConvertMemoryBytes: 4 << 20})}
 	var out bytes.Buffer
 	rep, err := FromText(strings.NewReader(text), low...).WriteTo(context.Background(), &out)
 	if err != nil || rep.Pages != 77 {
@@ -142,7 +144,7 @@ func TestConvert_TextChargesThePieceItHolds(t *testing.T) {
 }
 
 // TestConvert_JustOverTheBudget pins the refusal of the smallest document
-// a lowered [Limits.MaxConvertMemoryBytes] cannot hold, for the
+// a lowered [models.Limits.MaxConvertMemoryBytes] cannot hold, for the
 // converters whose memory grows with what they keep until the file is
 // written: the document one unit smaller converts, the smallest one past
 // it fails with [ErrConvertInputTooLarge] from the memory budget, whose
@@ -190,7 +192,7 @@ func TestConvert_JustOverTheBudget(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			convert := func(n int) error {
-				opts := []ConvertOption{WithConvertFontDirs(dir), WithConvertLimits(Limits{MaxConvertMemoryBytes: tc.limit})}
+				opts := []ConvertOption{WithConvertFontDirs(dir), WithConvertLimits(models.Limits{MaxConvertMemoryBytes: tc.limit})}
 				_, err := fromFormat(tc.format, strings.NewReader(tc.src(n)), opts...).WriteTo(context.Background(), io.Discard)
 				return err
 			}

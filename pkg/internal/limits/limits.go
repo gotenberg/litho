@@ -3,59 +3,9 @@ package limits
 import (
 	"fmt"
 	"math"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
-
-// Limits holds the nine resource budgets of one document or conversion. A
-// zero field stands for its default, which [Limits.WithDefaults] fills in.
-// Only these nine are
-// configurable: the recursion guards that protect litho's own stack stay fixed
-// consts in the packages that recurse, since a Go stack overflow is fatal and
-// no recover can catch it.
-//
-// Limits is a plain value. A Document is given one during construction and
-// only reads it afterwards, so it needs no lock.
-type Limits struct {
-	// MaxStreamBytes bounds the decoded output of one stream. See
-	// [DefaultMaxStreamBytes]. The page content bound, the object-stream
-	// cache, the font-program cache, the colour-transform cache and the form
-	// content cache derive from it: see [Limits.MaxPageContentBytes],
-	// [Limits.MaxObjStmCacheBytes], [Limits.MaxFontProgCacheBytes],
-	// [Limits.MaxColorCacheBytes] and [Limits.MaxFormCacheBytes].
-	MaxStreamBytes int64
-
-	// MaxImagePixels bounds Width x Height of one image, and scales the
-	// codecs' pixel and sample caps. See [DefaultMaxImagePixels].
-	MaxImagePixels int64
-
-	// MaxEmbeddedFileBytes bounds the decoded embedded PDF compliance opens.
-	// See [DefaultMaxEmbeddedFileBytes].
-	MaxEmbeddedFileBytes int64
-
-	// MaxFormDepth bounds how many form XObjects nest below the page. See
-	// [DefaultMaxFormDepth].
-	MaxFormDepth int
-
-	// MaxCachedObjects bounds the entries of the object cache. See
-	// [DefaultMaxCachedObjects].
-	MaxCachedObjects int
-
-	// MaxRenderPixels bounds Width x Height of one rendered page and of every
-	// raster the renderer allocates at its size. See
-	// [DefaultMaxRenderPixels].
-	MaxRenderPixels int64
-
-	// MaxConvertInputBytes bounds the source bytes one conversion reads. See
-	// [DefaultMaxConvertInputBytes].
-	MaxConvertInputBytes int64
-
-	// MaxConvertPages bounds the pages one conversion lays out. See
-	// [DefaultMaxConvertPages].
-	MaxConvertPages int
-
-	// MaxConvertMemoryBytes bounds the memory one conversion holds, as its
-	// [Budget] accounts it. See [DefaultMaxConvertMemoryBytes].
-	MaxConvertMemoryBytes int64
-}
 
 // DefaultMaxStreamBytes caps the decoded output of one stream at 256 MiB. It is
 // an anti-DoS guard, not spec-mandated: ISO 32000-1, 7.4 puts no bound on a
@@ -99,7 +49,7 @@ const DefaultMaxStreamBytes = 256 << 20
 // The image decoder reads at most four bytes per pixel of decoded samples, the
 // RGBA worst case. The codecs cap what a codestream declares whatever its
 // dictionary says, and those caps scale with the budget: see
-// [Limits.ScaleImageCap].
+// [ScaleImageCap].
 const DefaultMaxImagePixels = 100_000_000
 
 // DefaultMaxEmbeddedFileBytes caps the decoded embedded PDF PDF/A validation
@@ -284,7 +234,7 @@ const (
 
 	// MaxImagePixelsCeiling is 2^30 pixels. The decoder reads up to four
 	// bytes a pixel, so the samples of one image then reach the stream
-	// ceiling, and every codec cap [Limits.ScaleImageCap] scales stays well
+	// ceiling, and every codec cap [ScaleImageCap] scales stays well
 	// inside int64.
 	MaxImagePixelsCeiling = min(1<<30, math.MaxInt/4)
 
@@ -324,8 +274,8 @@ const (
 )
 
 // Default returns every budget at its default.
-func Default() Limits {
-	return Limits{
+func Default() models.Limits {
+	return models.Limits{
 		MaxStreamBytes:       DefaultMaxStreamBytes,
 		MaxImagePixels:       DefaultMaxImagePixels,
 		MaxEmbeddedFileBytes: DefaultMaxEmbeddedFileBytes,
@@ -340,7 +290,7 @@ func Default() Limits {
 }
 
 // WithDefaults returns l with every zero budget set to its default.
-func (l Limits) WithDefaults() Limits {
+func WithDefaults(l models.Limits) models.Limits {
 	d := Default()
 	if l.MaxStreamBytes == 0 {
 		l.MaxStreamBytes = d.MaxStreamBytes
@@ -375,7 +325,7 @@ func (l Limits) WithDefaults() Limits {
 // Validate reports the first budget that is negative or above its ceiling, as
 // an error wrapping [ErrInvalid]. A zero budget is valid: it stands for its
 // default.
-func (l Limits) Validate() error {
+func Validate(l models.Limits) error {
 	for _, b := range []struct {
 		name           string
 		value, ceiling int64
@@ -407,13 +357,13 @@ func (l Limits) Validate() error {
 // base cap admits, while a raised or lowered budget moves each codec cap with
 // it. The product stays within int64 for any base up to 2^32, the codec caps
 // being 4 x 10^8 samples at most, under [MaxImagePixelsCeiling].
-func (l Limits) ScaleImageCap(base int64) int64 {
-	pixels := l.WithDefaults().MaxImagePixels
+func ScaleImageCap(l models.Limits, base int64) int64 {
+	pixels := WithDefaults(l).MaxImagePixels
 	return max(base*pixels/DefaultMaxImagePixels, 1)
 }
 
 // pageContentShare divides the stream budget into the page content bound:
-// [Limits.MaxPageContentBytes] is MaxStreamBytes over it. That method says why
+// [MaxPageContentBytes] is MaxStreamBytes over it. That function says why
 // a page gets a quarter.
 const pageContentShare = 4
 
@@ -452,8 +402,8 @@ const pageContentShare = 4
 //     pdfjs pdf.pdf: eight pages about 10; a single text stream of 540 KB
 //     5.5.
 //   - pdfjs issue21089.pdf: page 1 comes within 16% of a 32 MB bound.
-func (l Limits) MaxPageContentBytes() int64 {
-	return max(l.WithDefaults().MaxStreamBytes/pageContentShare, 1)
+func MaxPageContentBytes(l models.Limits) int64 {
+	return max(WithDefaults(l).MaxStreamBytes/pageContentShare, 1)
 }
 
 // MaxObjStmCacheBytes returns the bound on the decoded object-stream bytes a
@@ -468,12 +418,12 @@ func (l Limits) MaxPageContentBytes() int64 {
 // the streams between the two uncached, so each object read from one decodes
 // the whole stream again. A bound above it would let the cache outgrow what the
 // caller allowed one decode.
-func (l Limits) MaxObjStmCacheBytes() int64 {
-	return l.WithDefaults().MaxStreamBytes
+func MaxObjStmCacheBytes(l models.Limits) int64 {
+	return WithDefaults(l).MaxStreamBytes
 }
 
 // fontProgCacheShare divides the stream budget into the font-program cache
-// bound: [Limits.MaxFontProgCacheBytes] is MaxStreamBytes over it. That method
+// bound: [MaxFontProgCacheBytes] is MaxStreamBytes over it. That method
 // says why the cache gets a quarter.
 const fontProgCacheShare = 4
 
@@ -498,12 +448,12 @@ const fontProgCacheShare = 4
 //   - All corpora: of the 2129 documents that embed any font program, the
 //     heaviest embeds 18.4 MB of them, so 64 MiB leaves better than 3x
 //     headroom.
-func (l Limits) MaxFontProgCacheBytes() int64 {
-	return max(l.WithDefaults().MaxStreamBytes/fontProgCacheShare, 1)
+func MaxFontProgCacheBytes(l models.Limits) int64 {
+	return max(WithDefaults(l).MaxStreamBytes/fontProgCacheShare, 1)
 }
 
 // colorCacheShare divides the stream budget into the colour-transform cache
-// bound: [Limits.MaxColorCacheBytes] is MaxStreamBytes over it. That method
+// bound: [MaxColorCacheBytes] is MaxStreamBytes over it. That method
 // says why the cache gets a quarter.
 const colorCacheShare = 4
 
@@ -523,12 +473,12 @@ const colorCacheShare = 4
 // makes the default 64 MiB. The densest lookup table in common use, 33
 // points over four inputs, builds a transform of about 29 MB, and a
 // document rarely holds more than one or two profiles.
-func (l Limits) MaxColorCacheBytes() int64 {
-	return max(l.WithDefaults().MaxStreamBytes/colorCacheShare, 1)
+func MaxColorCacheBytes(l models.Limits) int64 {
+	return max(WithDefaults(l).MaxStreamBytes/colorCacheShare, 1)
 }
 
 // formCacheShare divides the stream budget into the form content cache bound:
-// [Limits.MaxFormCacheBytes] is MaxStreamBytes over it. That method says why
+// [MaxFormCacheBytes] is MaxStreamBytes over it. That function says why
 // the cache gets a quarter.
 const formCacheShare = 4
 
@@ -546,7 +496,7 @@ const formCacheShare = 4
 // quarter of the budget, as the font-program and colour-transform caches are,
 // so the document's caches together stay within a small multiple of one
 // budget. Parsed operators retain between three and ten times the content
-// bytes they were read from (see [Limits.MaxPageContentBytes]), so the default
+// bytes they were read from (see [MaxPageContentBytes]), so the default
 // holds between 6 and 18 MiB of form content.
 //
 // # Corpus evidence
@@ -555,13 +505,13 @@ const formCacheShare = 4
 //     after flattening spent 2.0 s of 9.9 s CPU parsing form XObjects, the
 //     same forms again on each page; with the cache, all content parsing
 //     takes 0.2 s.
-func (l Limits) MaxFormCacheBytes() int64 {
-	return max(l.WithDefaults().MaxStreamBytes/formCacheShare, 1)
+func MaxFormCacheBytes(l models.Limits) int64 {
+	return max(WithDefaults(l).MaxStreamBytes/formCacheShare, 1)
 }
 
 // textVisibilityCacheShare divides the stream budget into the text visibility
-// cache bound: [Limits.MaxTextVisibilityCacheBytes] is MaxStreamBytes over it.
-// That method says why the cache gets a sixty-fourth.
+// cache bound: [MaxTextVisibilityCacheBytes] is MaxStreamBytes over it.
+// That function says why the cache gets a sixty-fourth.
 const textVisibilityCacheShare = 64
 
 // MaxTextVisibilityCacheBytes returns the bound on the text visibility
@@ -577,6 +527,6 @@ const textVisibilityCacheShare = 64
 // come from: a verdict holds a few dozen bytes a glyph, far fewer than the
 // content bytes that drew it, so a sixty-fourth holds the verdicts of about a
 // hundred thousand glyphs, many documents' worth of white text.
-func (l Limits) MaxTextVisibilityCacheBytes() int64 {
-	return max(l.WithDefaults().MaxStreamBytes/textVisibilityCacheShare, 1)
+func MaxTextVisibilityCacheBytes(l models.Limits) int64 {
+	return max(WithDefaults(l).MaxStreamBytes/textVisibilityCacheShare, 1)
 }

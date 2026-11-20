@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // decodeJPX decodes a JPXDecode stream (ISO 32000-1, 7.4.9) into one byte per
@@ -55,8 +56,8 @@ func describeJPX(data []byte, dict ast.PdfDict, maxSamples int64) (*jpx.Image, [
 
 // probeJPX is the probe of JPXDecode (see codecProbes): decodeJPX up to the
 // samples, with [jpx.Image.Check] in place of rendering them.
-func probeJPX(ctx context.Context, data []byte, _, dict ast.PdfDict, lim limits.Limits) error {
-	img, channels, err := describeJPX(data, dict, lim.ScaleImageCap(jpx.DefaultMaxSamples))
+func probeJPX(ctx context.Context, data []byte, _, dict ast.PdfDict, lim models.Limits) error {
+	img, channels, err := describeJPX(data, dict, limits.ScaleImageCap(lim, jpx.DefaultMaxSamples))
 	if err != nil {
 		return err
 	}

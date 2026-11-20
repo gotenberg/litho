@@ -107,7 +107,7 @@ func TestRedactPixelCheckIgnoresRemovedGlyphsReachingPastTheRegion(t *testing.T)
 func TestRedactPixelCheckRefusesAPageItCannotRenderAndLeavesTheWriter(t *testing.T) {
 	ctx := context.Background()
 	src := plantedPDF(pixelCheckBody, plant{})
-	r := openPixelCheck(t, src, WithLimits(Limits{MaxRenderPixels: 1000}))
+	r := openPixelCheck(t, src, WithLimits(models.Limits{MaxRenderPixels: 1000}))
 	w := NewWriter(r)
 	defer w.Close()
 	_, err := w.Redact(ctx, []models.RedactRegion{pixelCheckRegion})
@@ -601,7 +601,7 @@ func TestRedactWithoutPixelCheckSkipsIt(t *testing.T) {
 
 	// A page the check cannot render refuses under the default, and the
 	// opt-out never renders it.
-	r := openPixelCheck(t, plantedPDF(pixelCheckBody, plant{}), WithLimits(Limits{MaxRenderPixels: 1000}))
+	r := openPixelCheck(t, plantedPDF(pixelCheckBody, plant{}), WithLimits(models.Limits{MaxRenderPixels: 1000}))
 	w2 := NewWriter(r)
 	defer w2.Close()
 	if _, err := w2.Redact(ctx, []models.RedactRegion{pixelCheckRegion}, WithoutRedactionPixelCheck()); err != nil {

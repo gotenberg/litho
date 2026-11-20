@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // whiteTextPDF is a letter page holding four runs, each a word no other
@@ -39,7 +41,7 @@ func whiteTextPDF() []byte {
 
 func TestExtractText_WhiteTextJudgedByRendering(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, whiteTextPDF(), Limits{})
+	r := openLimited(t, whiteTextPDF(), models.Limits{})
 	ctx := context.Background()
 
 	got, err := r.ExtractText(ctx, 1)
@@ -76,7 +78,7 @@ func TestExtractText_WhiteTextJudgedByRendering(t *testing.T) {
 
 func TestExtractTextElements_WhiteTextJudgedByRendering(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, whiteTextPDF(), Limits{})
+	r := openLimited(t, whiteTextPDF(), models.Limits{})
 
 	els, err := r.ExtractTextElements(context.Background(), 1)
 	if err != nil {
@@ -126,7 +128,7 @@ func whiteOwnInkPDF() []byte {
 // holds: UNDERBIG reads, COVERED does not.
 func TestExtractText_WhiteTextJudgedByItsOwnInk(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, whiteOwnInkPDF(), Limits{})
+	r := openLimited(t, whiteOwnInkPDF(), models.Limits{})
 
 	got, err := r.ExtractText(context.Background(), 1)
 	if err != nil {
@@ -156,7 +158,7 @@ func TestExtractText_ShadowReadOnce(t *testing.T) {
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-	}), Limits{})
+	}), models.Limits{})
 	ctx := context.Background()
 	got, err := r.ExtractText(ctx, 1)
 	if err != nil {
@@ -181,7 +183,7 @@ func TestExtractText_ShadowReadOnce(t *testing.T) {
 // it.
 func TestExtractText_WhiteTextUnrenderableKeepsJudgement(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, whiteTextPDF(), Limits{MaxRenderPixels: 100})
+	r := openLimited(t, whiteTextPDF(), models.Limits{MaxRenderPixels: 100})
 
 	got, err := r.ExtractText(context.Background(), 1)
 	if err != nil {
@@ -199,7 +201,7 @@ func TestExtractText_WhiteTextUnrenderableKeepsJudgement(t *testing.T) {
 // which share the document's verdict cache.
 func TestExtractText_WhiteTextConcurrent(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, whiteTextPDF(), Limits{})
+	r := openLimited(t, whiteTextPDF(), models.Limits{})
 	ctx := context.Background()
 
 	var wg sync.WaitGroup

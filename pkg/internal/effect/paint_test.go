@@ -20,6 +20,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/page"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/typography/embed"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // contentFont is a TrueType face with quadratic outlines for A, B and the
@@ -297,7 +298,7 @@ func TestPaint_UntaggedAndShared(t *testing.T) {
 // budget to zero, on success and on a refusal.
 func TestPaint_BudgetReturnsToZero(t *testing.T) {
 	t.Parallel()
-	ctx, budget, done := limits.WithBudget(context.Background(), limits.Limits{})
+	ctx, budget, done := limits.WithBudget(context.Background(), models.Limits{})
 	defer done()
 	s, err := Paint(ctx, []Content{
 		{Fragments: contentKinds(t)["gradient"], Grid: Grid{Scale: 2}, W: 320, H: 240},
@@ -319,7 +320,7 @@ func TestPaint_BudgetReturnsToZero(t *testing.T) {
 		t.Errorf("held %d bytes after Release, want 0", got)
 	}
 
-	small, _, done2 := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 1 << 20})
+	small, _, done2 := limits.WithBudget(context.Background(), models.Limits{MaxConvertMemoryBytes: 1 << 20})
 	defer done2()
 	if _, err := Paint(small, []Content{{Fragments: contentKinds(t)["gradient"], Grid: Grid{Scale: 4}, W: 640, H: 480}}); !errors.Is(err, limits.ErrMemoryBudget) {
 		t.Errorf("Paint past the budget: %v, want ErrMemoryBudget", err)

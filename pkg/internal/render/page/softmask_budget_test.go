@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // overBudget is the render pixel budget of the tests below: a 100 x 100
 // page fits it, a group over the whole page does not.
-var overBudget = limits.Limits{MaxRenderPixels: 12_000}
+var overBudget = models.Limits{MaxRenderPixels: 12_000}
 
 // TestSoftMaskPastBudget checks that a soft mask of the graphics state whose
 // group would pass the render pixel budget still masks (ISO 32000-1,
@@ -63,7 +63,7 @@ func TestSoftMaskPastReduction(t *testing.T) {
 		content: "0 0 1 rg 0 0 1000 1000 re f /G Do",
 		objs:    append([]string{mask}, objs...),
 	}
-	doc, pg := open(t, f.bytes(), limits.Limits{MaxRenderPixels: 1_000_000})
+	doc, pg := open(t, f.bytes(), models.Limits{MaxRenderPixels: 1_000_000})
 	c, report, err := Render(context.Background(), doc, pg, f.options())
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ func TestPatternCellReturnsMaskPixels(t *testing.T) {
 	// The page's mask group over 100 x 100 pixels holds four planes and a
 	// layer, 50,000 pixels: it fits 51,000 with nothing else held, and not
 	// beside the cell mask's 2,500.
-	doc, pg := open(t, f.bytes(), limits.Limits{MaxRenderPixels: 51_000})
+	doc, pg := open(t, f.bytes(), models.Limits{MaxRenderPixels: 51_000})
 	c, report, err := Render(context.Background(), doc, pg, f.options())
 	if err != nil {
 		t.Fatal(err)

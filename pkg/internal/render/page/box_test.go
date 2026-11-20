@@ -6,7 +6,6 @@ import (
 	"image"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -29,7 +28,7 @@ func TestBoxGeometry(t *testing.T) {
 		{"/MediaBox [0 0 100 50] /ArtBox [5 5 25 15]", models.RenderArtBox, 20, 10},
 		{"/MediaBox [0 0 100 50] /ArtBox [5 5 25 15]", models.RenderBox(200), 100, 50},
 	} {
-		_, pg := open(t, fixture{page: tc.page}.bytes(), limits.Limits{})
+		_, pg := open(t, fixture{page: tc.page}.bytes(), models.Limits{})
 		g, err := BoxGeometry(pg, tc.box, 72)
 		if err != nil {
 			t.Fatalf("%s box %d: %v", tc.page, tc.box, err)
@@ -48,7 +47,7 @@ func TestRenderCMYK(t *testing.T) {
 		page:    "/Group << /S /Transparency /CS /DeviceRGB >>",
 		content: "0 0 0 1 k 0 0 50 100 re f 0.5 g 50 0 50 100 re f",
 	}
-	doc, pg := open(t, f.bytes(), limits.Limits{})
+	doc, pg := open(t, f.bytes(), models.Limits{})
 	ctx := context.Background()
 	opts := f.options()
 	opts.CMYK = true

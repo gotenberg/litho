@@ -32,7 +32,7 @@ import (
 const (
 	// maxBytesPerPixel is how many bytes of decoded samples a pixel may
 	// take, the RGBA worst case. The pixel budget,
-	// limits.Limits.MaxImagePixels, times it caps the decoded byte stream
+	// models.Limits.MaxImagePixels, times it caps the decoded byte stream
 	// and bounds [io.ReadAll] on the streaming decoder output. Anti-DoS, not
 	// spec-mandated.
 	maxBytesPerPixel = 4

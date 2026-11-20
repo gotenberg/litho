@@ -45,7 +45,7 @@ var (
 func TestRenderPageFonts(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	r := openLimited(t, unembeddedTextPDF(), Limits{})
+	r := openLimited(t, unembeddedTextPDF(), models.Limits{})
 	program := rectProgram()
 
 	// The middle of the glyph, and its left edge.

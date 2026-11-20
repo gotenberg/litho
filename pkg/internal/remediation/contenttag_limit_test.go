@@ -10,11 +10,12 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestResolveContentBytes_RefusesPastTheBound pins that the content-tagging
 // fixer refuses a page whose /Contents parts sum past
-// [limits.Limits.MaxPageContentBytes] with [limits.ErrPageContentTooLarge]:
+// [limits.MaxPageContentBytes] with [limits.ErrPageContentTooLarge]:
 // two 20 KiB parts pass a quarter of a 64 KiB stream budget, and read whole
 // under the default one.
 func TestResolveContentBytes_RefusesPastTheBound(t *testing.T) {
@@ -46,11 +47,11 @@ func TestResolveContentBytes_RefusesPastTheBound(t *testing.T) {
 
 	for _, tc := range []struct {
 		name    string
-		l       limits.Limits
+		l       models.Limits
 		refused bool
 	}{
-		{"default", limits.Limits{}, false},
-		{"64 KiB", limits.Limits{MaxStreamBytes: 64 << 10}, true},
+		{"default", models.Limits{}, false},
+		{"64 KiB", models.Limits{MaxStreamBytes: 64 << 10}, true},
 	} {
 		doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, document.WithLimits(tc.l))
 		if err != nil {

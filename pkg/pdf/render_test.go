@@ -35,7 +35,7 @@ func nrgbaAt(t *testing.T, img image.Image, x, y int) color.NRGBA {
 
 func TestRenderPage(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, renderPDF(), Limits{})
+	r := openLimited(t, renderPDF(), models.Limits{})
 	ctx := context.Background()
 
 	img, err := r.RenderPage(ctx, 1, WithRenderDPI(72))
@@ -83,7 +83,7 @@ func TestRenderPage(t *testing.T) {
 func TestRenderPageErrors(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	r := openLimited(t, renderPDF(), Limits{})
+	r := openLimited(t, renderPDF(), models.Limits{})
 	if _, err := r.RenderPage(ctx, 2); !errors.Is(err, ErrInvalidPageNumber) {
 		t.Errorf("page 2: %v, want ErrInvalidPageNumber", err)
 	}
@@ -93,7 +93,7 @@ func TestRenderPageErrors(t *testing.T) {
 
 	// The render budget, lowered through the public API, refuses a page past
 	// it and draws one within it.
-	small := openLimited(t, renderPDF(), Limits{MaxRenderPixels: 5_000})
+	small := openLimited(t, renderPDF(), models.Limits{MaxRenderPixels: 5_000})
 	if _, err := small.RenderPage(ctx, 1, WithRenderDPI(73)); !errors.Is(err, ErrRenderTooLarge) {
 		t.Errorf("past MaxRenderPixels: %v, want ErrRenderTooLarge", err)
 	}
@@ -104,7 +104,7 @@ func TestRenderPageErrors(t *testing.T) {
 
 func TestRenderPageConcurrent(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, renderPDF(), Limits{})
+	r := openLimited(t, renderPDF(), models.Limits{})
 	ctx := context.Background()
 	want, err := r.RenderPage(ctx, 1, WithRenderDPI(72))
 	if err != nil {

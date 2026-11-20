@@ -80,7 +80,7 @@ func nearCMYK(a, b color.CMYK) bool {
 func TestRenderPageCMYK(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	r := openLimited(t, cmykRenderPDF(), Limits{})
+	r := openLimited(t, cmykRenderPDF(), models.Limits{})
 	img, err := r.RenderPage(ctx, 1, WithRenderDPI(72), WithRenderColorModel(models.RenderCMYK))
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +119,7 @@ func TestRenderPageCMYKBackground(t *testing.T) {
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] >>",
 	})
-	r := openLimited(t, data, Limits{})
+	r := openLimited(t, data, models.Limits{})
 	for _, bg := range []color.Color{color.White, color.Transparent, nil} {
 		img, err := r.RenderPage(ctx, 1, WithRenderDPI(72), WithRenderColorModel(models.RenderCMYK), WithRenderBackground(bg))
 		if err != nil {
@@ -140,7 +140,7 @@ func TestRenderPageCMYKProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := openLimited(t, cmykRenderPDF(), Limits{})
+	r := openLimited(t, cmykRenderPDF(), models.Limits{})
 	img, err := r.RenderPage(ctx, 1, WithRenderDPI(72), WithRenderColorModel(models.RenderCMYK), WithRenderCMYKProfile(profile))
 	if err != nil {
 		t.Fatal(err)
@@ -170,7 +170,7 @@ func TestRenderPageCMYKOutputIntent(t *testing.T) {
 		"<< /Length 22 >>\nstream\n1 0 0 rg 0 0 10 10 re f\nendstream",
 		fmt.Sprintf("<< /N 4 /Length %d >>\nstream\n%s\nendstream", len(profile), profile),
 	})
-	r := openLimited(t, data, Limits{})
+	r := openLimited(t, data, models.Limits{})
 	img, err := r.RenderPage(ctx, 1, WithRenderDPI(72), WithRenderColorModel(models.RenderCMYK))
 	if err != nil {
 		t.Fatal(err)
@@ -185,7 +185,7 @@ func TestRenderPageCMYKOutputIntent(t *testing.T) {
 func TestRenderPageCMYKRefusals(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	r := openLimited(t, cmykRenderPDF(), Limits{})
+	r := openLimited(t, cmykRenderPDF(), models.Limits{})
 	for name, opts := range map[string][]RenderOption{
 		"model 7":         {WithRenderColorModel(models.RenderColorModel(7))},
 		"garbage profile": {WithRenderColorModel(models.RenderCMYK), WithRenderCMYKProfile([]byte("not a profile"))},
@@ -203,7 +203,7 @@ func TestRenderPageCMYKRefusals(t *testing.T) {
 func TestRenderPageCMYKDeterministic(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	r := openLimited(t, cmykRenderPDF(), Limits{})
+	r := openLimited(t, cmykRenderPDF(), models.Limits{})
 	imgs := make([]image.Image, 2)
 	errs := make([]error, 2)
 	done := make(chan int)

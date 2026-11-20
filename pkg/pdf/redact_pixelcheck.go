@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/annot"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/page"
@@ -138,11 +139,11 @@ func (e *RedactionPixelError) Unwrap() []error {
 // sees. A path, an image or an annotation may still paint inside a region.
 //
 // A page the check cannot render also refuses, with its cause in
-// [RedactionPixelError.Err]. That covers a page past [Limits.MaxRenderPixels].
-// A check that did not run proved nothing. A document the check cannot write
-// or reopen to render fails Redact with the cause itself, not a
-// RedactionPixelError: an edit queued before Redact that fails reports its
-// [EditError], as [Writer.WriteTo] would.
+// [RedactionPixelError.Err]. That covers a page past
+// [models.Limits.MaxRenderPixels]. A check that did not run proved nothing. A
+// document the check cannot write or reopen to render fails Redact with the
+// cause itself, not a RedactionPixelError: an edit queued before Redact that
+// fails reports its [EditError], as [Writer.WriteTo] would.
 //
 // The check renders the redacted document as [Writer.WriteTo] would write it,
 // through a temp file in the Writer's temp directory. It draws annotations as a
@@ -265,7 +266,7 @@ func checkRedactedPage(
 	if !ok {
 		return fail(fmt.Errorf("the page's device matrix %v does not invert", g.Matrix))
 	}
-	budget := after.doc.Limits().WithDefaults().MaxRenderPixels
+	budget := limits.WithDefaults(after.doc.Limits()).MaxRenderPixels
 	excluded, err := surface.NewMask(g.Width, g.Height, budget)
 	if err != nil {
 		return fail(err)

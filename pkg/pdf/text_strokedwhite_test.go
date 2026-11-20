@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // strokedWhitePDF is a letter page of runs on the white page, each a word no
@@ -39,7 +41,7 @@ func strokedWhitePDF() []byte {
 
 func TestExtractText_JudgesTextByEveryPaintItsModeApplies(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, strokedWhitePDF(), Limits{})
+	r := openLimited(t, strokedWhitePDF(), models.Limits{})
 	ctx := context.Background()
 
 	got, err := r.ExtractText(ctx, 1)
@@ -96,7 +98,7 @@ func strokedContrastPDF() []byte {
 
 func TestCheckTextContrast_JudgesAnOutlineByItsStroke(t *testing.T) {
 	t.Parallel()
-	r := openLimited(t, strokedContrastPDF(), Limits{})
+	r := openLimited(t, strokedContrastPDF(), models.Limits{})
 
 	rep, err := r.CheckTextContrast(context.Background(), 1)
 	if err != nil {

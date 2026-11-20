@@ -62,7 +62,7 @@ type Content struct {
 // bytes a pixel of the largest content, where a surface takes 4. The
 // rasters the renderer holds besides its canvas, for transparency groups
 // and soft masks, are bounded by the render pixel budget
-// ([limits.Limits.MaxRenderPixels]) as in every render, and not charged.
+// ([models.Limits.MaxRenderPixels]) as in every render, and not charged.
 //
 // It fails with an error wrapping [ErrGrid] for a grid whose scale is not
 // positive and finite or whose origin is not finite, [ErrTooLarge] for a

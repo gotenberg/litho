@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/filter/dct"
 	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // flateCompress is [filter.CompressFlate].
@@ -102,7 +103,7 @@ func (im *Images) jpegSource(ctx context.Context, stream ast.PdfStream, filterNa
 		im.doc.Logger.Debug("recolor: keeping a JPEG 2000 image lossless whose data does not read", slog.Any("err", err))
 		return false
 	}
-	img, err := jpx.Describe(data, im.doc.Limits().ScaleImageCap(jpx.DefaultMaxSamples))
+	img, err := jpx.Describe(data, limits.ScaleImageCap(im.doc.Limits(), jpx.DefaultMaxSamples))
 	if err != nil {
 		im.doc.Logger.Debug("recolor: keeping a JPEG 2000 image lossless whose header does not read", slog.Any("err", err))
 		return false

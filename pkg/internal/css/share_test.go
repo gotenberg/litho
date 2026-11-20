@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestStylesShareEqualValues(t *testing.T) {
@@ -120,7 +121,7 @@ func TestComputeSharesStylesOfElementsStyledAlike(t *testing.T) {
 
 func TestComputeChargesAStyleOnce(t *testing.T) {
 	charged := func(n int) int64 {
-		ctx, b, done := limits.WithBudget(context.Background(), limits.Limits{})
+		ctx, b, done := limits.WithBudget(context.Background(), models.Limits{})
 		defer done()
 		root := parseHTML(t, "<p>x</p>"+strings.Repeat("<p>y</p>", n))
 		r := NewResolver(a4, []Sheet{{Sheet: HTMLUserAgent(), Origin: UserAgent}})

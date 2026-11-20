@@ -11,6 +11,7 @@ import (
 	"github.com/gomarkdown/markdown/ast"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // mustRender renders src as Convert does, failing the test on error.
@@ -72,7 +73,7 @@ func TestASTNodeCostCoversANode(t *testing.T) {
 
 func TestRender_ChargesTheTreeThenTheBody(t *testing.T) {
 	src := []byte(strings.Repeat("- a\n", 1000))
-	ctx, mem, end := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 1 << 30}.WithDefaults())
+	ctx, mem, end := limits.WithBudget(context.Background(), limits.WithDefaults(models.Limits{MaxConvertMemoryBytes: 1 << 30}))
 	defer end()
 	body, _, err := render(ctx, src)
 	if err != nil {
@@ -84,7 +85,7 @@ func TestRender_ChargesTheTreeThenTheBody(t *testing.T) {
 	if mem.Peak() < 2000*astNodeCost {
 		t.Errorf("render peaked at %d bytes, under the tree of 3,000 nodes", mem.Peak())
 	}
-	ctx, _, end2 := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 1000 * astNodeCost}.WithDefaults())
+	ctx, _, end2 := limits.WithBudget(context.Background(), limits.WithDefaults(models.Limits{MaxConvertMemoryBytes: 1000 * astNodeCost}))
 	defer end2()
 	if _, _, err := render(ctx, src); !errors.Is(err, limits.ErrMemoryBudget) {
 		t.Errorf("render under a budget smaller than its tree = %v, want ErrMemoryBudget", err)

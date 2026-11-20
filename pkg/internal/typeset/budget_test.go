@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestWrite_GivesBackTheStreamsCharge checks that what a write charges
@@ -32,7 +33,7 @@ func TestWrite_GivesBackTheStreamsCharge(t *testing.T) {
 		{"aborted", -1, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, budget, cancel := limits.WithBudget(context.Background(), limits.Limits{})
+			ctx, budget, cancel := limits.WithBudget(context.Background(), models.Limits{})
 			defer cancel()
 			if err := budget.Charge(1000, "a conversion's own"); err != nil {
 				t.Fatal(err)
@@ -73,7 +74,7 @@ func TestWrite_GivesBackTheStreamsCharge(t *testing.T) {
 // memory or spool: the page objects wait for the page tree at the end.
 func TestWrite_ChargesEachPageWritten(t *testing.T) {
 	held := func(pages int) int64 {
-		ctx, budget, cancel := limits.WithBudget(context.Background(), limits.Limits{})
+		ctx, budget, cancel := limits.WithBudget(context.Background(), models.Limits{})
 		defer cancel()
 		s, err := typeset.NewStream(ctx, typeset.Options{Spool: 0, TempDir: t.TempDir()}, false)
 		if err != nil {

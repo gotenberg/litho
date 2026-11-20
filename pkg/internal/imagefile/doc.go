@@ -10,7 +10,7 @@
 //
 // Every size, count and offset a file states is bounded before it is used:
 // a picture against the conversion's pixel budget
-// (limits.Limits.MaxImagePixels) before it is decoded, a profile or a text
+// (models.Limits.MaxImagePixels) before it is decoded, a profile or a text
 // against the caps of this package, a file's pictures against
 // [MaxPictures].
 package imagefile

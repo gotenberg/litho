@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
-	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // cmykMultiplyForm is an isolated transparency group in the blending colour
@@ -90,7 +90,7 @@ func TestCMYKPageGroupKeepsInk(t *testing.T) {
 		page:    "/Group << /S /Transparency /CS /DeviceCMYK >> /Resources << /ExtGState << /A << /ca 0.5 >> >> >>",
 		content: "/A gs 0 0 0 1 k 0 0 50 100 re f 0 0 1 rg 50 0 50 100 re f",
 	}
-	doc, pg := open(t, f.bytes(), limits.Limits{})
+	doc, pg := open(t, f.bytes(), models.Limits{})
 	res, _, err := RenderGroup(context.Background(), doc, pg, Options{DPI: 72, Background: white, GroupSpace: true})
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ func TestCMYKPageGroupKeepsInk(t *testing.T) {
 	// Unforced, a page whose content paints opaque, with Normal, stays in
 	// sRGB.
 	opaque := fixture{page: "/Group << /S /Transparency /CS /DeviceCMYK >>", content: "0 0 1 rg 0 0 50 100 re f"}
-	doc, pg = open(t, opaque.bytes(), limits.Limits{})
+	doc, pg = open(t, opaque.bytes(), models.Limits{})
 	res, _, err = RenderGroup(context.Background(), doc, pg, Options{DPI: 72, Background: white})
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +135,7 @@ func TestUnusableICCGroupSpaceReadsAlternate(t *testing.T) {
 			content: "/A gs 0 0 1 rg 0 0 100 100 re f",
 			objs:    objs,
 		}
-		doc, pg := open(t, f.bytes(), limits.Limits{})
+		doc, pg := open(t, f.bytes(), models.Limits{})
 		res, _, err := RenderGroup(context.Background(), doc, pg, Options{DPI: 72, Background: white, GroupSpace: true})
 		if err != nil {
 			t.Fatal(err)
@@ -228,7 +228,7 @@ func TestCMYKPageGroupKeepsImageInk(t *testing.T) {
 			stream("/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8", "\x40"),
 		},
 	}
-	doc, pg := open(t, f.bytes(), limits.Limits{})
+	doc, pg := open(t, f.bytes(), models.Limits{})
 	res, _, err := RenderGroup(context.Background(), doc, pg, Options{DPI: 72, Background: white, GroupSpace: true})
 	if err != nil {
 		t.Fatal(err)
@@ -287,7 +287,7 @@ func TestCMYKLinksCompensateBlackPoints(t *testing.T) {
 	t.Run("device", func(t *testing.T) {
 		t.Parallel()
 		f := fixture{content: "0 0 0 rg 0 0 100 100 re f"}
-		doc, pg := open(t, f.bytes(), limits.Limits{})
+		doc, pg := open(t, f.bytes(), models.Limits{})
 		opts := f.options()
 		opts.CMYK, opts.CMYKProfile = true, profile
 		res, _, err := RenderGroup(ctx, doc, pg, opts)
@@ -318,7 +318,7 @@ func TestCMYKLinksCompensateBlackPoints(t *testing.T) {
 			content: "0 0 0 rg 0 0 100 100 re f",
 			objs:    []string{stream("/N 4", string(data))},
 		}
-		doc, pg := open(t, f.bytes(), limits.Limits{})
+		doc, pg := open(t, f.bytes(), models.Limits{})
 		opts := f.options()
 		opts.GroupSpace = true
 		res, _, err := RenderGroup(ctx, doc, pg, opts)
@@ -390,7 +390,7 @@ func TestCMYKLinksHonourUseBlackPtCompOff(t *testing.T) {
 	t.Run("device", func(t *testing.T) {
 		t.Parallel()
 		f := fixture{page: resources, content: content, objs: []string{stream("/N 4", "unused"), image}}
-		doc, pg := open(t, f.bytes(), limits.Limits{})
+		doc, pg := open(t, f.bytes(), models.Limits{})
 		opts := f.options()
 		opts.CMYK, opts.CMYKProfile = true, profile
 		res, _, err := RenderGroup(ctx, doc, pg, opts)
@@ -407,7 +407,7 @@ func TestCMYKLinksHonourUseBlackPtCompOff(t *testing.T) {
 			content: content,
 			objs:    []string{stream("/N 4", string(data)), image},
 		}
-		doc, pg := open(t, f.bytes(), limits.Limits{})
+		doc, pg := open(t, f.bytes(), models.Limits{})
 		opts := f.options()
 		opts.GroupSpace = true
 		res, _, err := RenderGroup(ctx, doc, pg, opts)

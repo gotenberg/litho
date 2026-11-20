@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/convert/html"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestParseTemplate_Check(t *testing.T) {
@@ -117,7 +118,7 @@ func TestRender_Fails(t *testing.T) {
 
 func TestRender_ChargesTheBudget(t *testing.T) {
 	t.Parallel()
-	ctx, budget, done := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 64})
+	ctx, budget, done := limits.WithBudget(context.Background(), models.Limits{MaxConvertMemoryBytes: 64})
 	defer done()
 	body, title := mustRender(t, []byte(strings.Repeat("word ", 100)))
 	tmpl, err := parseTemplate("")

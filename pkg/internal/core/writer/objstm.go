@@ -20,7 +20,7 @@ const maxObjStmObjects = 200
 
 // maxObjStmPayload bounds the uncompressed bytes in one object stream. It is
 // an anti-DoS guard on the WRITE side mirroring the object-stream cache bound
-// on the read side (limits.Limits.MaxObjStmCacheBytes): a document of unusually
+// on the read side (limits.MaxObjStmCacheBytes): a document of unusually
 // large dictionaries must not produce a single stream whose inflation dwarfs
 // the file it came from. 8 MiB is far above any real dictionary population and
 // still bounded.

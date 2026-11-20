@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter/jbig2"
 	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestDefault_PinsTheCaps pins every default, and every codec cap scaled
@@ -16,7 +17,7 @@ import (
 func TestDefault_PinsTheCaps(t *testing.T) {
 	t.Parallel()
 
-	want := limits.Limits{
+	want := models.Limits{
 		MaxStreamBytes:       256 << 20,
 		MaxImagePixels:       100_000_000,
 		MaxEmbeddedFileBytes: 50 * 1024 * 1024,
@@ -31,7 +32,7 @@ func TestDefault_PinsTheCaps(t *testing.T) {
 	if got := limits.Default(); got != want {
 		t.Errorf("Default() = %+v, want %+v", got, want)
 	}
-	if got := (limits.Limits{}).WithDefaults(); got != want {
+	if got := limits.WithDefaults((models.Limits{})); got != want {
 		t.Errorf("zero Limits with defaults = %+v, want %+v", got, want)
 	}
 
@@ -44,7 +45,7 @@ func TestDefault_PinsTheCaps(t *testing.T) {
 		if c.base != c.was {
 			t.Errorf("%s default = %d, want %d", name, c.base, c.was)
 		}
-		if got := d.ScaleImageCap(c.base); got != c.was {
+		if got := limits.ScaleImageCap(d, c.base); got != c.was {
 			t.Errorf("%s scaled at the default budget = %d, want %d", name, got, c.was)
 		}
 	}
@@ -64,7 +65,7 @@ func TestScaleImageCap_MovesWithTheBudget(t *testing.T) {
 		{1, 1 << 27, 1},
 		{1, 100, 1},
 	} {
-		if got := (limits.Limits{MaxImagePixels: tc.pixels}).ScaleImageCap(tc.base); got != tc.want {
+		if got := limits.ScaleImageCap((models.Limits{MaxImagePixels: tc.pixels}), tc.base); got != tc.want {
 			t.Errorf("ScaleImageCap(%d) under %d pixels = %d, want %d", tc.base, tc.pixels, got, tc.want)
 		}
 	}
@@ -83,29 +84,29 @@ func TestDerivedBounds_FollowTheStreamBudget(t *testing.T) {
 
 	for _, tc := range []struct {
 		name                                     string
-		l                                        limits.Limits
+		l                                        models.Limits
 		page, objStmCache, fontCache, colorCache int64
 	}{
 		{"default", limits.Default(), 64 << 20, 256 << 20, 64 << 20, 64 << 20},
-		{"zero reads as the default", limits.Limits{}, 64 << 20, 256 << 20, 64 << 20, 64 << 20},
-		{"raised", limits.Limits{MaxStreamBytes: 1 << 30}, 256 << 20, 1 << 30, 256 << 20, 256 << 20},
-		{"ceiling", limits.Limits{MaxStreamBytes: limits.MaxStreamBytesCeiling}, limits.MaxStreamBytesCeiling / 4, limits.MaxStreamBytesCeiling, limits.MaxStreamBytesCeiling / 4, limits.MaxStreamBytesCeiling / 4},
-		{"lowered", limits.Limits{MaxStreamBytes: 64 << 10}, 16 << 10, 64 << 10, 16 << 10, 16 << 10},
-		{"below four bytes", limits.Limits{MaxStreamBytes: 3}, 1, 3, 1, 1},
+		{"zero reads as the default", models.Limits{}, 64 << 20, 256 << 20, 64 << 20, 64 << 20},
+		{"raised", models.Limits{MaxStreamBytes: 1 << 30}, 256 << 20, 1 << 30, 256 << 20, 256 << 20},
+		{"ceiling", models.Limits{MaxStreamBytes: limits.MaxStreamBytesCeiling}, limits.MaxStreamBytesCeiling / 4, limits.MaxStreamBytesCeiling, limits.MaxStreamBytesCeiling / 4, limits.MaxStreamBytesCeiling / 4},
+		{"lowered", models.Limits{MaxStreamBytes: 64 << 10}, 16 << 10, 64 << 10, 16 << 10, 16 << 10},
+		{"below four bytes", models.Limits{MaxStreamBytes: 3}, 1, 3, 1, 1},
 	} {
-		if got := tc.l.MaxPageContentBytes(); got != tc.page {
+		if got := limits.MaxPageContentBytes(tc.l); got != tc.page {
 			t.Errorf("%s: MaxPageContentBytes() = %d, want %d", tc.name, got, tc.page)
 		}
-		if got := tc.l.MaxObjStmCacheBytes(); got != tc.objStmCache {
+		if got := limits.MaxObjStmCacheBytes(tc.l); got != tc.objStmCache {
 			t.Errorf("%s: MaxObjStmCacheBytes() = %d, want %d", tc.name, got, tc.objStmCache)
 		}
-		if got := tc.l.MaxFontProgCacheBytes(); got != tc.fontCache {
+		if got := limits.MaxFontProgCacheBytes(tc.l); got != tc.fontCache {
 			t.Errorf("%s: MaxFontProgCacheBytes() = %d, want %d", tc.name, got, tc.fontCache)
 		}
-		if got := tc.l.MaxColorCacheBytes(); got != tc.colorCache {
+		if got := limits.MaxColorCacheBytes(tc.l); got != tc.colorCache {
 			t.Errorf("%s: MaxColorCacheBytes() = %d, want %d", tc.name, got, tc.colorCache)
 		}
-		if got := tc.l.MaxFormCacheBytes(); got != tc.colorCache {
+		if got := limits.MaxFormCacheBytes(tc.l); got != tc.colorCache {
 			t.Errorf("%s: MaxFormCacheBytes() = %d, want %d", tc.name, got, tc.colorCache)
 		}
 	}
@@ -119,16 +120,16 @@ func TestMaxTextVisibilityCacheBytes_FollowsTheStreamBudget(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		l    limits.Limits
+		l    models.Limits
 		want int64
 	}{
 		{"default", limits.Default(), 4 << 20},
-		{"zero reads as the default", limits.Limits{}, 4 << 20},
-		{"raised", limits.Limits{MaxStreamBytes: 1 << 30}, 16 << 20},
-		{"lowered", limits.Limits{MaxStreamBytes: 64 << 10}, 1 << 10},
-		{"below sixty-four bytes", limits.Limits{MaxStreamBytes: 3}, 1},
+		{"zero reads as the default", models.Limits{}, 4 << 20},
+		{"raised", models.Limits{MaxStreamBytes: 1 << 30}, 16 << 20},
+		{"lowered", models.Limits{MaxStreamBytes: 64 << 10}, 1 << 10},
+		{"below sixty-four bytes", models.Limits{MaxStreamBytes: 3}, 1},
 	} {
-		if got := tc.l.MaxTextVisibilityCacheBytes(); got != tc.want {
+		if got := limits.MaxTextVisibilityCacheBytes(tc.l); got != tc.want {
 			t.Errorf("%s: MaxTextVisibilityCacheBytes() = %d, want %d", tc.name, got, tc.want)
 		}
 	}
@@ -139,7 +140,7 @@ func TestMaxTextVisibilityCacheBytes_FollowsTheStreamBudget(t *testing.T) {
 func TestValidate_RefusesNegativeAndPastCeiling(t *testing.T) {
 	t.Parallel()
 
-	ceilings := limits.Limits{
+	ceilings := models.Limits{
 		MaxStreamBytes:       limits.MaxStreamBytesCeiling,
 		MaxImagePixels:       limits.MaxImagePixelsCeiling,
 		MaxEmbeddedFileBytes: limits.MaxEmbeddedFileBytesCeiling,
@@ -151,12 +152,12 @@ func TestValidate_RefusesNegativeAndPastCeiling(t *testing.T) {
 
 		MaxConvertMemoryBytes: limits.MaxConvertMemoryBytesCeiling,
 	}
-	for _, l := range []limits.Limits{{}, limits.Default(), ceilings} {
-		if err := l.Validate(); err != nil {
+	for _, l := range []models.Limits{{}, limits.Default(), ceilings} {
+		if err := limits.Validate(l); err != nil {
 			t.Errorf("Validate(%+v) = %v, want nil", l, err)
 		}
 	}
-	for _, l := range []limits.Limits{
+	for _, l := range []models.Limits{
 		{MaxStreamBytes: -1},
 		{MaxImagePixels: -1},
 		{MaxEmbeddedFileBytes: -1},
@@ -176,7 +177,7 @@ func TestValidate_RefusesNegativeAndPastCeiling(t *testing.T) {
 		{MaxConvertMemoryBytes: -1},
 		{MaxConvertMemoryBytes: limits.MaxConvertMemoryBytesCeiling + 1},
 	} {
-		if err := l.Validate(); !errors.Is(err, limits.ErrInvalid) {
+		if err := limits.Validate(l); !errors.Is(err, limits.ErrInvalid) {
 			t.Errorf("Validate(%+v) = %v, want ErrInvalid", l, err)
 		}
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter/dct"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // ImageReduction configures [ReduceImages]: what it trades and the decoder
@@ -26,7 +27,7 @@ type ImageReduction struct {
 	// Limits bounds the pass: an image past MaxImagePixels, or whose samples
 	// pass MaxStreamBytes, is left as it is, and MaxStreamBytes bounds the
 	// re-encoded bytes the pass keeps in memory.
-	Limits limits.Limits
+	Limits models.Limits
 	// Quality is the JPEG quality, 1 to 100, continuous-tone images are
 	// re-encoded at, as [dct.EncodeOptions.Quality] reads it; 0 re-encodes
 	// none that is not downsampled.
@@ -158,7 +159,7 @@ func ReduceImages(ctx context.Context, alloc *ObjAllocator, trailer ast.PdfDict,
 	if cfg.Quality <= 0 && !(cfg.MaxDPI > 0) {
 		return stats, nil
 	}
-	lim := cfg.Limits.WithDefaults()
+	lim := limits.WithDefaults(cfg.Limits)
 	pending := alloc.Pending()
 
 	var places *placements
@@ -270,7 +271,7 @@ type reduceInput struct {
 	matted   bool
 	places   *placements
 	cfg      ImageReduction
-	lim      limits.Limits
+	lim      models.Limits
 	pending  map[int]ast.PdfObject
 }
 
@@ -393,7 +394,7 @@ func planReduction(ctx context.Context, in reduceInput) (reducePlan, string, err
 		return reducePlan{}, keptBudget, nil
 	}
 	// width x height x comps is at most MaxStreamBytes, checked above, which
-	// limits.Limits bounds by the int range, so neither side saturates.
+	// models.Limits bounds by the int range, so neither side saturates.
 	w, h := intconv.Clamp(width), intconv.Clamp(height)
 
 	tw, th, reason := in.target(w, h)

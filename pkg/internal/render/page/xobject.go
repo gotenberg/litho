@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
 	"github.com/gotenberg/litho/pkg/internal/render/colorconv"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
@@ -144,7 +145,7 @@ func boxPath(m geom.Matrix, box [4]float64) geom.Path {
 // Do composite the group as a whole, ca for its alpha. A soft mask's group
 // is painted with honourGroup unset, into the group its caller made.
 func (r *renderer) formXObject(s *scope, ref ast.PdfIndirectRef, stream ast.PdfStream, honourGroup bool) error {
-	if lim := r.doc.Limits().WithDefaults().MaxFormDepth; s.depth+1 > lim {
+	if lim := limits.WithDefaults(r.doc.Limits()).MaxFormDepth; s.depth+1 > lim {
 		r.skip("form XObject", fmt.Errorf("nested deeper than %d forms", lim))
 		return nil
 	}
@@ -507,7 +508,7 @@ func (r *renderer) colorKey(stream ast.PdfStream, ranges ast.PdfArray, width, he
 		}
 		keys[i] = intconv.Clamp(n)
 	}
-	maxPixels := r.doc.Limits().WithDefaults().MaxImagePixels
+	maxPixels := limits.WithDefaults(r.doc.Limits()).MaxImagePixels
 	if width <= 0 || height <= 0 || int64(width) > maxPixels/int64(height) || bpc < 1 || bpc > 16 || space.Components < 1 {
 		return nil, fmt.Errorf("colour key over a %dx%d image of %d bits", width, height, bpc)
 	}

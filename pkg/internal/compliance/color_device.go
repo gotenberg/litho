@@ -92,7 +92,7 @@ type deviceCSUsage struct {
 }
 
 // formTooDeep reports whether a content scope depth levels below the page is
-// deeper than the document's form budget, limits.Limits.MaxFormDepth. The
+// deeper than the document's form budget, models.Limits.MaxFormDepth. The
 // page's own content, or an annotation's appearance, is at 0 and a form it
 // paints at 1; a tiling pattern and a Type 3 glyph description count as a
 // level each, as a form does. Anti-DoS guard, not spec-mandated: ISO 32000-1

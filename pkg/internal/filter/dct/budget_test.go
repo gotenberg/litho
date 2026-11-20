@@ -10,7 +10,7 @@ import (
 
 // TestCheck_AdmitsTheImageBudget pins that the default cap admits every frame
 // the default image budget admits, in any count of components Decode reads:
-// pdf.Limits holds a codestream to the budget its image dictionary is held
+// models.Limits holds a codestream to the budget its image dictionary is held
 // to, and the image decoder takes up to four bytes a pixel of it. The cap
 // was 2^27 samples, so a colour JPEG past 44.7 MP was refused although the
 // budget admits 100 MP. A frame past four samples a pixel of the budget stays

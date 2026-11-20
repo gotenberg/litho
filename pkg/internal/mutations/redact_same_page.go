@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -366,7 +367,7 @@ func pageContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	}
 	var streams []pageContentStream
 	var data []byte
-	limit := doc.Limits().MaxPageContentBytes()
+	limit := limits.MaxPageContentBytes(doc.Limits())
 	for _, item := range items {
 		objNum := 0
 		if ref, isRef := item.(ast.PdfIndirectRef); isRef {
@@ -406,7 +407,7 @@ func streamTokens(ctx context.Context, doc *document.Document, alloc *writer.Obj
 	w.contents[s.objNum] = true
 	w.matchBytes(s.objNum, data, "stream")
 	w.scanContentStrings(ctx, s.objNum, data)
-	w.scanStoredTail(ctx, s.objNum, s.stream, doc.Limits().MaxPageContentBytes())
+	w.scanStoredTail(ctx, s.objNum, s.stream, limits.MaxPageContentBytes(doc.Limits()))
 	if w.err != nil {
 		return nil, w.err
 	}

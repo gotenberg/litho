@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestLimits_JBIG2MaskBoundedByBytes pins that the image budget bounds a
@@ -36,7 +38,7 @@ func TestLimits_JBIG2MaskBoundedByBytes(t *testing.T) {
 
 	dark := func(maxImagePixels int64) int {
 		t.Helper()
-		r := openLimited(t, data, Limits{MaxImagePixels: maxImagePixels})
+		r := openLimited(t, data, models.Limits{MaxImagePixels: maxImagePixels})
 		defer r.Close()
 		img, err := r.RenderPage(context.Background(), 1, WithRenderDPI(72))
 		if err != nil {

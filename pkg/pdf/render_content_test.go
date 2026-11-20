@@ -45,7 +45,7 @@ func contentKindsPDF() []byte {
 func TestRenderPageContent(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	r := openLimited(t, contentKindsPDF(), Limits{})
+	r := openLimited(t, contentKindsPDF(), models.Limits{})
 	white := color.NRGBA{255, 255, 255, 255}
 	kinds := []struct {
 		kind models.RenderContent

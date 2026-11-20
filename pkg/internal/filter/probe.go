@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // codecProbe finds, from the headers of a codec filter's input data alone,
@@ -15,7 +15,7 @@ import (
 // data before that, nil when it decodes the data as far as the headers tell,
 // and errUnsettled when only decoding tells. parms and dict are what
 // applyDecodeFilter hands the decoder, and lim the budgets it decodes under.
-type codecProbe func(ctx context.Context, data []byte, parms, dict ast.PdfDict, lim limits.Limits) error
+type codecProbe func(ctx context.Context, data []byte, parms, dict ast.PdfDict, lim models.Limits) error
 
 // codecProbes holds the probe of each filter whose built-in decoder refuses a
 // feature it lacks as it meets it in the data. Each probe reads what its

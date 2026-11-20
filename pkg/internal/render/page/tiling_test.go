@@ -6,7 +6,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // tilePattern writes a tiling pattern stream with extra dictionary entries.
@@ -270,7 +270,7 @@ func TestTilingBadPatterns(t *testing.T) {
 
 func BenchmarkTilingFill(b *testing.B) {
 	data := patternPopplerFixtures["tiling_coloured"].bytes()
-	doc, pg := open(b, data, limits.Limits{})
+	doc, pg := open(b, data, models.Limits{})
 	for b.Loop() {
 		if _, _, err := Render(context.Background(), doc, pg, Options{DPI: 300}); err != nil {
 			b.Fatal(err)

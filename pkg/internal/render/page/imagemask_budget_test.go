@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // maskedRed is a page that paints a 1x1 red image over the whole page
@@ -36,7 +36,7 @@ func TestImageMaskPastBudget(t *testing.T) {
 	// 200x100 samples: the left half 0, the right half opaque. Under a
 	// budget of 10,000 pixels the mask is refused whole.
 	row := strings.Repeat("\x00", 100) + strings.Repeat("\xff", 100)
-	lim := limits.Limits{MaxImagePixels: 10_000}
+	lim := models.Limits{MaxImagePixels: 10_000}
 	for _, tc := range []struct {
 		name, entry, mask string
 	}{
@@ -78,7 +78,7 @@ func TestStencilImagePastBudget(t *testing.T) {
 				strings.Repeat(strings.Repeat("\x00", 12)+"\x0f"+strings.Repeat("\xff", 12), 100)),
 		},
 	}
-	doc, pg := open(t, f.bytes(), limits.Limits{MaxImagePixels: 10_000})
+	doc, pg := open(t, f.bytes(), models.Limits{MaxImagePixels: 10_000})
 	c, report, err := Render(context.Background(), doc, pg, f.options())
 	if err != nil {
 		t.Fatalf("Render: %v", err)

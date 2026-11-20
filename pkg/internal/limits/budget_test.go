@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestBudget_RefusesPastTheLimitAndSticks pins that a charge past the limit
@@ -17,7 +18,7 @@ import (
 func TestBudget_RefusesPastTheLimitAndSticks(t *testing.T) {
 	t.Parallel()
 
-	ctx, b, done := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 100})
+	ctx, b, done := limits.WithBudget(context.Background(), models.Limits{MaxConvertMemoryBytes: 100})
 	defer done()
 	if limits.BudgetFrom(ctx) != b {
 		t.Fatal("the context does not carry the budget")
@@ -77,7 +78,7 @@ func TestBudget_Nil(t *testing.T) {
 func TestBudget_ConcurrentCharges(t *testing.T) {
 	t.Parallel()
 
-	ctx, b, done := limits.WithBudget(context.Background(), limits.Limits{})
+	ctx, b, done := limits.WithBudget(context.Background(), models.Limits{})
 	if b.Limits().MaxConvertMemoryBytes != limits.DefaultMaxConvertMemoryBytes || limits.BudgetFrom(ctx) != b {
 		t.Fatalf("default budget %+v", b.Limits())
 	}
@@ -105,7 +106,7 @@ func TestBudget_ConcurrentCharges(t *testing.T) {
 func TestBudget_ChargePicture(t *testing.T) {
 	t.Parallel()
 
-	_, b, done := limits.WithBudget(context.Background(), limits.Limits{MaxImagePixels: 100, MaxConvertMemoryBytes: 1000})
+	_, b, done := limits.WithBudget(context.Background(), models.Limits{MaxImagePixels: 100, MaxConvertMemoryBytes: 1000})
 	defer done()
 	if n, err := b.ChargePicture(10, 10, color.NRGBAModel); err != nil || n != 400 {
 		t.Errorf("10 by 10: %d, %v", n, err)

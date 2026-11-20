@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
 
@@ -200,7 +200,7 @@ func TestUnsupportedFeature_OneNotion(t *testing.T) {
 func TestUndecodableFilters_Chains(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	declining := NewDecoder([]plugins.FilterDecoder{&mockPlugin{name: "JPXDecode", err: plugins.ErrUnsupportedFilter}}, limits.Limits{})
+	declining := NewDecoder([]plugins.FilterDecoder{&mockPlugin{name: "JPXDecode", err: plugins.ErrUnsupportedFilter}}, models.Limits{})
 
 	for _, tc := range []struct {
 		name    string

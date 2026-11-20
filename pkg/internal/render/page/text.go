@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/render/glyph"
 	"github.com/gotenberg/litho/pkg/internal/render/raster"
@@ -425,7 +426,7 @@ func (r *renderer) type3Glyph(s *scope, key glyphKey, g glyph.Glyph, glyphToUser
 		r.skip("Type 3 glyph", fmt.Errorf("nested deeper than %d Type 3 glyphs", maxType3Depth))
 		return nil
 	}
-	if lim := r.doc.Limits().WithDefaults().MaxFormDepth; s.depth+1 > lim {
+	if lim := limits.WithDefaults(r.doc.Limits()).MaxFormDepth; s.depth+1 > lim {
 		r.skip("Type 3 glyph", fmt.Errorf("nested deeper than %d forms", lim))
 		return nil
 	}

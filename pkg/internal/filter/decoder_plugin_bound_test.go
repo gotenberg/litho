@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
 
@@ -29,7 +30,7 @@ func TestDecoder_PluginOutputOverTheCapIsRefused(t *testing.T) {
 	}
 
 	p := &mockPlugin{name: "JPXDecode", result: make([]byte, limits.DefaultMaxStreamBytes+1)}
-	d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
+	d := NewDecoder([]plugins.FilterDecoder{p}, models.Limits{})
 
 	stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("JPXDecode")}, []byte("raw"))
 	out, err := d.DecodeStream(context.Background(), stream)
@@ -50,7 +51,7 @@ func TestDecoder_PluginOutputAtTheCapIsKept(t *testing.T) {
 	}
 
 	p := &mockPlugin{name: "JPXDecode", result: make([]byte, limits.DefaultMaxStreamBytes)}
-	d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
+	d := NewDecoder([]plugins.FilterDecoder{p}, models.Limits{})
 
 	stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("JPXDecode")}, []byte("raw"))
 	out, err := d.DecodeStream(context.Background(), stream)
@@ -68,7 +69,7 @@ func TestDecoder_SmallPluginOutputStillDecodes(t *testing.T) {
 	t.Parallel()
 
 	p := &mockPlugin{name: "JPXDecode", result: []byte("pixels")}
-	d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
+	d := NewDecoder([]plugins.FilterDecoder{p}, models.Limits{})
 
 	stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("JPXDecode")}, []byte("raw"))
 	out, err := d.DecodeStream(context.Background(), stream)

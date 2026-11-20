@@ -18,6 +18,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 	"github.com/gotenberg/litho/pkg/internal/typography/type1"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // Config configures [Run].
@@ -29,7 +30,7 @@ type Config struct {
 	// Limits bounds the pass: MaxStreamBytes bounds what one decode holds,
 	// MaxPageContentBytes the content of one page, and MaxFontProgCacheBytes
 	// how many subset program bytes the pass keeps in memory (see [Run]).
-	Limits limits.Limits
+	Limits models.Limits
 	// Logger receives, at Debug, why each program is left whole. Nil logs
 	// nothing.
 	Logger *slog.Logger
@@ -89,7 +90,7 @@ type Stats struct {
 // subtables, glyph names, charset, built-in encoding and Type 1 charstring
 // widths must be the program's.
 //
-// Subset bytes are kept in memory up to [limits.Limits.MaxFontProgCacheBytes]
+// Subset bytes are kept in memory up to [limits.MaxFontProgCacheBytes]
 // in total. Past it, a program's subset is redone from its source when the
 // stream is serialized. Programs are visited in object-number order and every
 // step depends on the bytes alone, so the output does too.
@@ -136,7 +137,7 @@ type Stats struct {
 //     and the subset gives its real lengths.
 func Run(ctx context.Context, alloc *writer.ObjAllocator, trailer ast.PdfDict, cfg Config) (Stats, error) {
 	var stats Stats
-	lim := cfg.Limits.WithDefaults()
+	lim := limits.WithDefaults(cfg.Limits)
 	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
@@ -183,7 +184,7 @@ func Run(ctx context.Context, alloc *writer.ObjAllocator, trailer ast.PdfDict, c
 		// The members of a group share one subset, so the encoding is held
 		// once whatever their number.
 		var replacement ast.PdfStream
-		if size := int64(len(plan.encoded)); retained+size <= lim.MaxFontProgCacheBytes() {
+		if size := int64(len(plan.encoded)); retained+size <= limits.MaxFontProgCacheBytes(lim) {
 			retained += size
 			replacement = ast.NewStream(plan.dict, plan.encoded)
 		} else {

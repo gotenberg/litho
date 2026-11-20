@@ -10,7 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter"
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
 
@@ -137,7 +137,7 @@ func TestDecodeImage_FilterARegisteredPluginHandlesIsNotRefused(t *testing.T) {
 	ctx, doc, page := imagePDF(t, filteredImagePDF("/Filter /VendorDecode", []byte("encoded")))
 	doc.Filters = filter.NewDecoder([]plugins.FilterDecoder{
 		stubPlugin{name: "VendorDecode", out: bytes.Repeat([]byte{0x80}, 8*8*3)},
-	}, limits.Limits{})
+	}, models.Limits{})
 
 	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
 	if err != nil {
@@ -168,7 +168,7 @@ func TestDecodeImage_FilterAPluginDeclinesIsRefused(t *testing.T) {
 
 	encoded := bytes.Repeat([]byte{0x80}, 8*8*3)
 	ctx, doc, page := imagePDF(t, filteredImagePDF("/Filter /VendorDecode", encoded))
-	doc.Filters = filter.NewDecoder([]plugins.FilterDecoder{decliningPlugin{name: "VendorDecode"}}, limits.Limits{})
+	doc.Filters = filter.NewDecoder([]plugins.FilterDecoder{decliningPlugin{name: "VendorDecode"}}, models.Limits{})
 
 	_, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
 	if err == nil {

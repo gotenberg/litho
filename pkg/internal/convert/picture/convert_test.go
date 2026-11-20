@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/svg"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestSVGSize checks an SVG page's size: its width and height, one of them
@@ -65,7 +66,7 @@ func TestOrientation_DrawsTheStoredCornersWhereTheTagSays(t *testing.T) {
 
 // convert converts data with o under a default budget.
 func convert(data []byte, o Options) (*typeset.Document, error) {
-	ctx, _, end := limits.WithBudget(context.Background(), limits.Limits{}.WithDefaults())
+	ctx, _, end := limits.WithBudget(context.Background(), limits.WithDefaults(models.Limits{}))
 	defer end()
 	return Convert(ctx, bytes.NewReader(data), nil, o)
 }
@@ -117,7 +118,7 @@ func FuzzConvert(f *testing.F) {
 		f.Add(data[:len(data)/2])
 	}
 	f.Fuzz(func(t *testing.T, data []byte) {
-		ctx, _, end := limits.WithBudget(context.Background(), limits.Limits{MaxImagePixels: 1 << 16, MaxConvertMemoryBytes: 64 << 20}.WithDefaults())
+		ctx, _, end := limits.WithBudget(context.Background(), limits.WithDefaults(models.Limits{MaxImagePixels: 1 << 16, MaxConvertMemoryBytes: 64 << 20}))
 		defer end()
 		_, err := Convert(ctx, bytes.NewReader(data), nil, Options{MaxPages: 4})
 		if err != nil && !errors.Is(err, office.ErrMalformed) && !errors.Is(err, limits.ErrInputTooLarge) &&

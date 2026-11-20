@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestImageXObjectConvertedWithTheContent converts an image the page's
@@ -131,16 +132,16 @@ func TestICCEngineFallsBackFromAnUnreadableDeviceProfile(t *testing.T) {
 // TestSpotGridScalesWithTheImageBudget bounds a tint transform's grid by the
 // image budget: a lowered budget samples a 4-colorant DeviceN more coarsely.
 func TestSpotGridScalesWithTheImageBudget(t *testing.T) {
-	k, err := samplesPerInput(4, limits.Default().ScaleImageCap(maxSampledEntries))
+	k, err := samplesPerInput(4, limits.ScaleImageCap(limits.Default(), maxSampledEntries))
 	if err != nil || k != 16 {
 		t.Errorf("default budget: %d samples per colorant, %v; want 16", k, err)
 	}
-	low := limits.Limits{MaxImagePixels: limits.DefaultMaxImagePixels / 100}
-	k, err = samplesPerInput(4, low.ScaleImageCap(maxSampledEntries))
+	low := models.Limits{MaxImagePixels: limits.DefaultMaxImagePixels / 100}
+	k, err = samplesPerInput(4, limits.ScaleImageCap(low, maxSampledEntries))
 	if err != nil || k != 5 {
 		t.Errorf("a hundredth of the budget: %d samples per colorant, %v; want 5", k, err)
 	}
-	if _, err := samplesPerInput(32, low.ScaleImageCap(maxSampledEntries)); err == nil {
+	if _, err := samplesPerInput(32, limits.ScaleImageCap(low, maxSampledEntries)); err == nil {
 		t.Error("32 colorants fit a hundredth of the budget")
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/warn"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestPrepare_UserStylesheetsCascadeBetweenEngineAndDocument(t *testing.T) {
@@ -74,7 +75,7 @@ func TestPrepare_UserStylesheetHeldToTheResourceCaps(t *testing.T) {
 		t.Errorf("admit past the total cap: %v", err)
 	}
 
-	ctx, _, done := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 1 << 20})
+	ctx, _, done := limits.WithBudget(context.Background(), models.Limits{MaxConvertMemoryBytes: 1 << 20})
 	defer done()
 	if err := newResources(nil).admit(ctx, 2<<20); err == nil || ctx.Err() == nil {
 		t.Errorf("admit past the budget: %v, context %v", err, ctx.Err())

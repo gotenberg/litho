@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 )
 
@@ -287,7 +288,7 @@ func (f *flattener) textForm(ctx context.Context, op content.Operation, resource
 			return copied, nil
 		}
 	}
-	if depth > f.doc.Limits().WithDefaults().MaxFormDepth {
+	if depth > limits.WithDefaults(f.doc.Limits()).MaxFormDepth {
 		return ast.PdfIndirectRef{}, nil
 	}
 	if isRef {

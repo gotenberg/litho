@@ -20,6 +20,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/render/blend"
@@ -367,7 +368,7 @@ func (f *flattener) page(ctx context.Context, pg *document.Page) (PageReport, bo
 	if len(a.Regions) > 0 {
 		// The composite and the renderings that read what it covers draw
 		// the same page.
-		shared := page.NewShared(f.doc.Limits().WithDefaults().MaxRenderPixels)
+		shared := page.NewShared(limits.WithDefaults(f.doc.Limits()).MaxRenderPixels)
 		res, g, dpi, coarse, err := f.render(ctx, pg, shared)
 		if err != nil {
 			return pr, false, err
@@ -535,7 +536,7 @@ func (f *flattener) subdict(ctx context.Context, resources ast.PdfDict, key ast.
 // whose soft masks alone did not fit is accepted with them coarse.
 func (f *flattener) render(ctx context.Context, pg *document.Page, shared *page.Shared) (*page.Result, page.Geometry, float64, int, error) {
 	dpi := f.dpi
-	budget := f.doc.Limits().WithDefaults().MaxRenderPixels
+	budget := limits.WithDefaults(f.doc.Limits()).MaxRenderPixels
 	for {
 		g, err := page.WholePixelGeometry(pg, models.RenderCropBox, dpi)
 		if err != nil {

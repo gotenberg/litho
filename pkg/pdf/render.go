@@ -269,11 +269,12 @@ func WithRenderRedactionReading() RenderOption {
 // An image, shading, pattern or form the file damages is left out of the page,
 // as a viewer leaves it out, and logged at Debug. So is an image whose mask
 // cannot be read, rather than painted showing what the mask hides. A mask past
-// [Limits.MaxImagePixels] is read at the resolution the page draws it at. A
-// soft mask of the graphics state whose group would pass
-// [Limits.MaxRenderPixels] is drawn at a coarser resolution, and hides what it
-// masks when even that does not fit. A transparency group past it paints its
-// content through the group's alpha and soft mask, without the group.
+// [models.Limits.MaxImagePixels] is read at the resolution the page draws it
+// at. A soft mask of the graphics state whose group would pass
+// [models.Limits.MaxRenderPixels] is drawn at a coarser resolution, and hides
+// what it masks when even that does not fit. A transparency group past it
+// paints its content through the group's alpha and soft mask, without the
+// group.
 //
 // # Errors
 //
@@ -282,7 +283,7 @@ func WithRenderRedactionReading() RenderOption {
 //   - [ErrInvalidPageNumber] for a page outside the document.
 //   - [ErrInvalidRenderOptions] for a bad resolution, target, content, box,
 //     colour model or CMYK profile.
-//   - [ErrRenderTooLarge] when the page passes [Limits.MaxRenderPixels].
+//   - [ErrRenderTooLarge] when the page passes [models.Limits.MaxRenderPixels].
 //
 // # Concurrency
 //

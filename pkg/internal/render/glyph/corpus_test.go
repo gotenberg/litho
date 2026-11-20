@@ -9,7 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // fixture opens the litho corpus fixture name.
@@ -120,7 +120,7 @@ func TestCacheSharesAndBoundsFonts(t *testing.T) {
 
 	// A stream budget of 4 bytes bounds the font program cache at 1 byte,
 	// which no program fits: each request loads the font anew.
-	small := fixture(t, "fontclaims_2b.pdf", document.WithLimits(limits.Limits{MaxStreamBytes: 4}))
+	small := fixture(t, "fontclaims_2b.pdf", document.WithLimits(models.Limits{MaxStreamBytes: 4}))
 	tight := NewCache(small, Options{})
 	if fixtureFont(t, tight, 6) == fixtureFont(t, tight, 6) {
 		t.Error("a font whose program passes the budget was kept")

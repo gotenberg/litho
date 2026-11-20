@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestNew_Bounds(t *testing.T) {
@@ -33,7 +34,7 @@ func TestNew_Bounds(t *testing.T) {
 }
 
 func TestNew_ChargesBudget(t *testing.T) {
-	ctx, b, done := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 1 << 20})
+	ctx, b, done := limits.WithBudget(context.Background(), models.Limits{MaxConvertMemoryBytes: 1 << 20})
 	defer done()
 	s, err := New(ctx, RGBA, 256, 256, Grid{})
 	if err != nil {

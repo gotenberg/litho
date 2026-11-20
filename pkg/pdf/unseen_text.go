@@ -72,10 +72,10 @@ func invisibleMode(mode int) bool {
 // nothing and has no such copy is reported for its mode.
 //
 // It returns [ErrInvalidPageNumber] for a page outside the document,
-// [ErrFontMissing] when the page's text cannot be read, and [ErrRenderTooLarge]
-// when the page cannot be drawn within [Limits.MaxRenderPixels] or its glyph
-// boxes cover the page past 64 times. It is safe for concurrent use with every
-// other read of the [Reader].
+// [ErrFontMissing] when the page's text cannot be read, and
+// [ErrRenderTooLarge] when the page cannot be drawn within
+// [models.Limits.MaxRenderPixels] or its glyph boxes cover the page past 64
+// times. It is safe for concurrent use with every other read of the [Reader].
 func (r *Reader) ExtractUnseenText(ctx context.Context, pageNum int) (_ []models.UnseenText, err error) {
 	defer pageError(pageNum, &err)
 	defer recoverToError(r.logger(), "Reader.ExtractUnseenText", &err)

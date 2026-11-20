@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func init() {
@@ -256,7 +256,7 @@ func TestTransparencyOverBudget(t *testing.T) {
 		objs: []string{stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency /I true >> "+
 			"/Resources << /ExtGState << /M << /BM /Multiply >> >> >>", "/M gs 1 0 0 rg 0 0 100 100 re f")},
 	}
-	doc, pg := open(t, f.bytes(), limits.Limits{MaxRenderPixels: 12_000})
+	doc, pg := open(t, f.bytes(), models.Limits{MaxRenderPixels: 12_000})
 	c, report, err := Render(context.Background(), doc, pg, Options{DPI: 72, Background: white})
 	if err != nil {
 		t.Fatal(err)

@@ -114,7 +114,7 @@ func TestWriter_Redact_CopiesAnImageDrawnPastTheFormDepthBudget(t *testing.T) {
 		"\nendstream\nendobj\ntrailer\n"), 1)
 
 	ctx := context.Background()
-	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)), WithLimits(Limits{MaxFormDepth: 2}))
+	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)), WithLimits(models.Limits{MaxFormDepth: 2}))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

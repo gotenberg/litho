@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/render/annot"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // square writes a /Square annotation over rect with flags f, its appearance
@@ -121,7 +121,7 @@ func init() {
 
 func drawMode(t *testing.T, f fixture, mode annot.Mode) (*Report, map[[2]int]rgb) {
 	t.Helper()
-	doc, pg := open(t, f.bytes(), limits.Limits{})
+	doc, pg := open(t, f.bytes(), models.Limits{})
 	c, report, err := Render(context.Background(), doc, pg, Options{DPI: 72, Background: white, Annotations: mode})
 	if err != nil {
 		t.Fatal(err)
@@ -272,7 +272,7 @@ func TestAnnotationOverUnreadableContent(t *testing.T) {
 	// /Contents naming a dictionary, no stream: the page content does not
 	// parse, and its annotations still draw.
 	data := bytes.Replace(annotPopplerFixtures["annot_flags"].bytes(), []byte("/Contents 4 0 R"), []byte("/Contents 5 0 R"), 1)
-	doc, pg := open(t, data, limits.Limits{})
+	doc, pg := open(t, data, models.Limits{})
 	c, report, err := Render(context.Background(), doc, pg, Options{DPI: 72, Background: white})
 	if err != nil {
 		t.Fatal(err)

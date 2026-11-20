@@ -52,7 +52,7 @@ func embeddedProgram(ctx context.Context, doc *document.Document, desc ast.PdfDi
 
 // decodeProgram decodes the font program stream obj, through the document's
 // font program cache when obj is an indirect reference. The cache bounds what
-// it holds at [limits.Limits.MaxFontProgCacheBytes]. A nil entry, which the
+// it holds at [limits.MaxFontProgCacheBytes]. A nil entry, which the
 // compliance checks record for a program whose deflate data is corrupt, is
 // decoded again: a viewer draws what the filter recovers.
 func decodeProgram(ctx context.Context, doc *document.Document, obj ast.PdfObject) []byte {

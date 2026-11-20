@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestRenderPage_OverprintSimulation(t *testing.T) {
@@ -18,7 +20,7 @@ func TestRenderPage_OverprintSimulation(t *testing.T) {
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 40 40] /Contents 4 0 R /Resources << /ExtGState << /OP 5 0 R >> >> >>",
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
 		"<< /Type /ExtGState /OP true /OPM 1 >>",
-	}), Limits{})
+	}), models.Limits{})
 	ctx := context.Background()
 	plain, err := r.RenderPage(ctx, 1, WithRenderDPI(72))
 	if err != nil {

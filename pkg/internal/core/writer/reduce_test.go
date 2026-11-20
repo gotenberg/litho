@@ -10,7 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter/dct"
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // noisyPhoto returns w x h pixels of c components that vary smoothly with
@@ -392,13 +392,13 @@ func TestReduceImages_PlacementsBeyondForms(t *testing.T) {
 		content string
 		res     ast.PdfDict
 		objects map[int]ast.PdfObject
-		limits  limits.Limits
+		limits  models.Limits
 		w       ast.PdfObject
 	}{
-		{"tiling pattern", "/Pattern cs /P1 scn 0 0 72 72 re f", ast.PdfDict{"Pattern": ast.PdfDict{"P1": ast.PdfIndirectRef{ObjectNum: 11}}}, map[int]ast.PdfObject{11: pattern}, limits.Limits{}, ast.PdfInt(150)},
-		{"Type 3 glyph", "BT /F1 72 Tf (a) Tj ET", ast.PdfDict{"Font": ast.PdfDict{"F1": ast.PdfIndirectRef{ObjectNum: 12}}}, map[int]ast.PdfObject{12: font, 13: glyph}, limits.Limits{}, ast.PdfInt(150)},
-		{"soft-mask group", "/GS1 gs", ast.PdfDict{"ExtGState": ast.PdfDict{"GS1": ast.PdfDict{"SMask": ast.PdfDict{"S": ast.PdfName("Luminosity"), "G": ast.PdfIndirectRef{ObjectNum: 14}}}}}, map[int]ast.PdfObject{14: group}, limits.Limits{}, ast.PdfInt(150)},
-		{"past the form depth budget", "/Fm11 Do", ast.PdfDict{"XObject": ast.PdfDict{"Fm11": ast.PdfIndirectRef{ObjectNum: 15}}}, map[int]ast.PdfObject{15: form("/Fm12 Do"), 12: form("q 72 0 0 72 0 0 cm /Im10 Do Q")}, limits.Limits{MaxFormDepth: 1}, ast.PdfInt(300)},
+		{"tiling pattern", "/Pattern cs /P1 scn 0 0 72 72 re f", ast.PdfDict{"Pattern": ast.PdfDict{"P1": ast.PdfIndirectRef{ObjectNum: 11}}}, map[int]ast.PdfObject{11: pattern}, models.Limits{}, ast.PdfInt(150)},
+		{"Type 3 glyph", "BT /F1 72 Tf (a) Tj ET", ast.PdfDict{"Font": ast.PdfDict{"F1": ast.PdfIndirectRef{ObjectNum: 12}}}, map[int]ast.PdfObject{12: font, 13: glyph}, models.Limits{}, ast.PdfInt(150)},
+		{"soft-mask group", "/GS1 gs", ast.PdfDict{"ExtGState": ast.PdfDict{"GS1": ast.PdfDict{"SMask": ast.PdfDict{"S": ast.PdfName("Luminosity"), "G": ast.PdfIndirectRef{ObjectNum: 14}}}}}, map[int]ast.PdfObject{14: group}, models.Limits{}, ast.PdfInt(150)},
+		{"past the form depth budget", "/Fm11 Do", ast.PdfDict{"XObject": ast.PdfDict{"Fm11": ast.PdfIndirectRef{ObjectNum: 15}}}, map[int]ast.PdfObject{15: form("/Fm12 Do"), 12: form("q 72 0 0 72 0 0 cm /Im10 Do Q")}, models.Limits{MaxFormDepth: 1}, ast.PdfInt(300)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -428,7 +428,7 @@ func TestReduceImages_EncoderStaysInTheStreamBudget(t *testing.T) {
 		jpeg   int
 	}{{64 * 64 * 3 * jpegWorkPerSample, 1}, {64*64*3*jpegWorkPerSample - 1, 0}} {
 		alloc, trailer := reduceDoc("", ast.PdfDict{}, map[int]ast.PdfObject{10: img})
-		stats, err := ReduceImages(context.Background(), alloc, trailer, ImageReduction{Quality: 75, Limits: limits.Limits{MaxStreamBytes: tc.budget}})
+		stats, err := ReduceImages(context.Background(), alloc, trailer, ImageReduction{Quality: 75, Limits: models.Limits{MaxStreamBytes: tc.budget}})
 		if err != nil {
 			t.Fatal(err)
 		}

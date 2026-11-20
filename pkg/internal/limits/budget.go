@@ -6,6 +6,8 @@ import (
 	"image/color"
 	"sync"
 	"sync/atomic"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // Budget is the memory one conversion may hold, as litho accounts it: each
@@ -27,7 +29,7 @@ import (
 // is unlimited: its charges always succeed, so code that runs without a
 // budget never fails a charge.
 type Budget struct {
-	limits Limits
+	limits models.Limits
 	limit  int64
 	held   atomic.Int64
 	peak   atomic.Int64
@@ -46,8 +48,8 @@ type budgetKey struct{}
 // Budget; and the function that releases the context's resources, which
 // the caller defers. The context is cancelled, with the refusal as its
 // cause, when a charge passes the limit.
-func WithBudget(ctx context.Context, l Limits) (context.Context, *Budget, func()) {
-	l = l.WithDefaults()
+func WithBudget(ctx context.Context, l models.Limits) (context.Context, *Budget, func()) {
+	l = WithDefaults(l)
 	ctx, cancel := context.WithCancelCause(ctx)
 	b := &Budget{limits: l, limit: l.MaxConvertMemoryBytes, cancel: cancel}
 	ctx = context.WithValue(ctx, budgetKey{}, b)
@@ -62,7 +64,7 @@ func BudgetFrom(ctx context.Context) *Budget {
 
 // Limits returns the budgets of the conversion b accounts, every field
 // filled in, or the defaults for a nil b.
-func (b *Budget) Limits() Limits {
+func (b *Budget) Limits() models.Limits {
 	if b == nil {
 		return Default()
 	}
@@ -70,7 +72,7 @@ func (b *Budget) Limits() Limits {
 }
 
 // CheckPicture checks a picture of w by h pixels against
-// [Limits.MaxImagePixels], failing with an error wrapping
+// [models.Limits.MaxImagePixels], failing with an error wrapping
 // [ErrPictureTooLarge] past it or for a side that is not positive. A
 // picture written as it is (a JPEG) is checked and costs nothing more; a
 // decoded one is charged by [Budget.ChargePicture].
@@ -84,8 +86,8 @@ func (b *Budget) CheckPicture(w, h int) error {
 	return nil
 }
 
-// ChargePicture checks a picture of w by h pixels of colour model m, the
-// model its header names, against [Limits.MaxImagePixels], failing with an
+// ChargePicture checks a picture of w by h pixels of colour model m, the model
+// its header names, against [models.Limits.MaxImagePixels], failing with an
 // error wrapping [ErrPictureTooLarge] past it or for a side that is not
 // positive, and charges its decoded pixels ([PixelCost] each) before it is
 // decoded. It returns what it charged, for the caller to release once the

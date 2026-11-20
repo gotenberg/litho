@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 	"github.com/gotenberg/litho/pkg/internal/typography/varfont"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // varFontPath is a variable TrueType font of five axes, wght, wdth, slnt,
@@ -256,7 +257,7 @@ func TestVariableFaceUnsupported(t *testing.T) {
 func TestVariableFaceChargesTheBudget(t *testing.T) {
 	t.Parallel()
 	fonts, base := loadVarFace(t, FaceDescriptor{})
-	ctx, b, done := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 1 << 20})
+	ctx, b, done := limits.WithBudget(context.Background(), models.Limits{MaxConvertMemoryBytes: 1 << 20})
 	defer done()
 	if err := b.Charge(1<<20-1024, "test"); err != nil {
 		t.Fatal(err)

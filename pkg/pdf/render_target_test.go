@@ -32,7 +32,7 @@ func annotatedPDF() []byte {
 func TestRenderPageTarget(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	r := openLimited(t, annotatedPDF(), Limits{})
+	r := openLimited(t, annotatedPDF(), models.Limits{})
 	white := color.NRGBA{255, 255, 255, 255}
 	red := color.NRGBA{255, 0, 0, 255}
 	blue := color.NRGBA{0, 0, 255, 255}

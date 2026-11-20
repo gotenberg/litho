@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestMaskCostCoversATranslucentFill holds [maskCost] to what the writer
@@ -13,7 +14,7 @@ import (
 // is written: what a page of them holds once written stays within what
 // the budget accounts for it.
 func TestMaskCostCoversATranslucentFill(t *testing.T) {
-	ctx, mem, cancel := limits.WithBudget(context.Background(), limits.Limits{})
+	ctx, mem, cancel := limits.WithBudget(context.Background(), models.Limits{})
 	defer cancel()
 	const n = 16_000
 	w := newDocWriter(ctx, Options{Spool: -1}, Version17, false)
@@ -45,7 +46,7 @@ func TestMaskCostCoversATranslucentFill(t *testing.T) {
 // accounts for it.
 func TestPatternCostCoversAPattern(t *testing.T) {
 	for name, translucent := range map[string]bool{"opaque cells": false, "translucent cells": true} {
-		ctx, mem, cancel := limits.WithBudget(context.Background(), limits.Limits{})
+		ctx, mem, cancel := limits.WithBudget(context.Background(), models.Limits{})
 		const n = 2_000
 		w := newDocWriter(ctx, Options{Spool: -1}, Version17, false)
 		a := 1.0

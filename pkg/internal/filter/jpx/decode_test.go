@@ -12,10 +12,11 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestDescribe_AdmitsWhatTheImageBudgetAdmits pins the cap to the image
-// budget, as pdf.Limits documents it: a 100-megapixel image of three or four
+// budget, as models.Limits documents it: a 100-megapixel image of three or four
 // components is described under the default budget, one more row of four
 // components is refused, and halving the budget halves the cap.
 func TestDescribe_AdmitsWhatTheImageBudgetAdmits(t *testing.T) {
@@ -34,7 +35,7 @@ func TestDescribe_AdmitsWhatTheImageBudgetAdmits(t *testing.T) {
 	if err := describe(10000, 10001, 4, DefaultMaxSamples); !errors.Is(err, ErrLimit) {
 		t.Errorf("10000x10001 in 4 components = %v, want %v", err, ErrLimit)
 	}
-	half := limits.Limits{MaxImagePixels: limits.DefaultMaxImagePixels / 2}.ScaleImageCap(DefaultMaxSamples)
+	half := limits.ScaleImageCap(models.Limits{MaxImagePixels: limits.DefaultMaxImagePixels / 2}, DefaultMaxSamples)
 	if err := describe(10000, 10000, 3, half); !errors.Is(err, ErrLimit) {
 		t.Errorf("10000x10000 in 3 components under half the budget = %v, want %v", err, ErrLimit)
 	}

@@ -124,19 +124,19 @@ type RenderReport struct {
 	StaleAppearances int
 	// TransparencyOverBudget counts the transparency groups, soft masks and
 	// knockout text objects (ISO 32000-1, 11.4, 11.6.5.2, 9.3.8) whose rasters
-	// would pass [github.com/gotenberg/litho/pkg/pdf.Limits.MaxRenderPixels],
+	// would pass [Limits.MaxRenderPixels],
 	// drawn other than the file asks: a group's content through the group's
 	// alpha and soft mask without the group, a soft mask hiding what it masks,
 	// a knockout text object glyph by glyph.
 	TransparencyOverBudget int
 	// CoarseMasks counts the soft masks drawn at a coarser resolution than the
-	// page to fit [github.com/gotenberg/litho/pkg/pdf.Limits.MaxRenderPixels]:
+	// page to fit [Limits.MaxRenderPixels]:
 	// their effect is kept, approximated within a few pixels of where the mask
 	// changes.
 	CoarseMasks int
 	// Skipped counts the constructs the file damages, left out of the page
 	// as a viewer leaves them out: an image that does not decode or whose
 	// mask does not, a shading or pattern that does not compile, a form past
-	// [github.com/gotenberg/litho/pkg/pdf.Limits.MaxFormDepth] or in a cycle.
+	// [Limits.MaxFormDepth] or in a cycle.
 	Skipped int
 }

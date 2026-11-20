@@ -8,12 +8,13 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // Cache loads the fonts of one document once each, keyed by the object
 // number of their dictionary, so a page that selects a font a thousand times
 // parses its program once. The programs the cached fonts hold count against
-// the document's font program budget, [limits.Limits.MaxFontProgCacheBytes]:
+// the document's font program budget, [limits.MaxFontProgCacheBytes]:
 // a load that would pass it empties the cache first, and a font whose program
 // alone passes it is loaded for each request and never kept.
 //
@@ -66,7 +67,7 @@ func (c *Cache) Font(ctx context.Context, fontObj ast.PdfObject) (*Font, error) 
 	if font != nil {
 		size = int64(font.size())
 	}
-	limit := c.doc.Limits().MaxFontProgCacheBytes()
+	limit := limits.MaxFontProgCacheBytes(c.doc.Limits())
 	if size > limit {
 		return font, err
 	}

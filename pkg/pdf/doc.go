@@ -272,18 +272,18 @@
 // input can lower them, and one that handles unusually large images can raise
 // them, through [WithLimits]:
 //
-//	reader, err := pdf.OpenFile(ctx, "scan.pdf", pdf.WithLimits(pdf.Limits{
+//	reader, err := pdf.OpenFile(ctx, "scan.pdf", pdf.WithLimits(models.Limits{
 //		MaxStreamBytes: 64 << 20,
 //		MaxImagePixels: 25_000_000,
 //	}))
 //
 // A stream or an image past its budget fails with [ErrStreamTooLarge] or
 // [ErrImageTooLarge], and a page whose content passes a quarter of the stream
-// budget with [ErrPageContentTooLarge]; see [Limits] for what each budget
-// bounds. A budget
-// below zero or past its ceiling makes [Open] fail with [ErrInvalidLimits],
-// and [Limits.Validate] reports it before any document opens, for budgets
-// read from configuration.
+// budget with [ErrPageContentTooLarge]; see
+// [github.com/gotenberg/litho/pkg/models.Limits] for what each budget bounds.
+// A budget below zero or past its ceiling makes [Open] fail with
+// [ErrInvalidLimits], and [ValidateLimits] reports it before any document
+// opens, for budgets read from configuration.
 //
 // # Embedding files
 //

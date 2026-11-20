@@ -20,6 +20,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/panicerr"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // Document represents a parsed PDF document. It holds a reference to the
@@ -57,15 +58,15 @@ type Document struct {
 	fontCache        map[int]any
 	cmapCache        map[int]any         // parsed CMap by ToUnicode stream object number
 	objStmCache      map[int]*objStmData // parsed object streams by ObjStm object number
-	objStmCacheBytes int                 // decoded bytes held in objStmCache, bounded by limits.Limits.MaxObjStmCacheBytes
+	objStmCacheBytes int                 // decoded bytes held in objStmCache, bounded by limits.MaxObjStmCacheBytes
 	fontProgCache    map[int][]byte      // decoded font programs by FontFile stream object number
-	fontProgBytes    int                 // decoded bytes held in fontProgCache, bounded by limits.Limits.MaxFontProgCacheBytes
+	fontProgBytes    int                 // decoded bytes held in fontProgCache, bounded by limits.MaxFontProgCacheBytes
 	colorCache       map[[2]int]any      // colour transforms by profile object number and rendering intent
-	colorCacheBytes  int                 // bytes held in colorCache, bounded by limits.Limits.MaxColorCacheBytes
+	colorCacheBytes  int                 // bytes held in colorCache, bounded by limits.MaxColorCacheBytes
 	formCache        map[[2]int]any      // parsed form XObject content by form object number and parse variant
-	formCacheBytes   int64               // bytes retained by formCache, bounded by limits.Limits.MaxFormCacheBytes
+	formCacheBytes   int64               // bytes retained by formCache, bounded by limits.MaxFormCacheBytes
 	textVisCache     map[int]any         // text visibility verdicts by page object number
-	textVisBytes     int64               // bytes retained by textVisCache, bounded by limits.Limits.MaxTextVisibilityCacheBytes
+	textVisBytes     int64               // bytes retained by textVisCache, bounded by limits.MaxTextVisibilityCacheBytes
 	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache, formCache, textVisCache, formatViolations and xrefEntries once construction completes
 	runMu            sync.Mutex          // serializes compliance-engine validation runs
 	xrefAugment      xrefAugmentation    // runs the raw-bytes augmentation of xrefEntries to completion at most once
@@ -74,7 +75,7 @@ type Document struct {
 	openedEntries    []numberedXRefEntry // sorted entries [Document.OpenedXRefEntries] yields, nil until built and after the augmentation changes the index; never modified once stored; protected by mu
 	xrefChanges      uint64              // times the augmentation changed the index, so a snapshot built across a change is not stored; protected by mu
 	maxCacheSize     int                 // objects objectCache holds at most
-	limits           limits.Limits       // resource budgets, set by NewDocument, read-only after
+	limits           models.Limits       // resource budgets, set by NewDocument, read-only after
 	Crypto           *crypto.Handler
 	streamCrypt      ast.PdfName // the /StmF crypt filter Crypto decrypts streams with, set by NewDocument, read-only after
 	OCConfig         *OCConfig
@@ -957,13 +958,13 @@ type Option func(*options)
 
 // options holds what the Options of one NewDocument call set.
 type options struct {
-	limits limits.Limits
+	limits models.Limits
 }
 
 // WithLimits sets the resource budgets the document is read under. A zero
 // budget reads as its default. The caller validates lim first
-// ([limits.Limits.Validate]): NewDocument trusts it.
-func WithLimits(lim limits.Limits) Option {
+// ([limits.Validate]): NewDocument trusts it.
+func WithLimits(lim models.Limits) Option {
 	return func(o *options) {
 		o.limits = lim
 	}
@@ -971,16 +972,16 @@ func WithLimits(lim limits.Limits) Option {
 
 // Limits returns the resource budgets the document is read under, every
 // one filled in. A nil or zero-value Document has the defaults.
-func (d *Document) Limits() limits.Limits {
+func (d *Document) Limits() models.Limits {
 	if d == nil {
 		return limits.Default()
 	}
-	return d.limits.WithDefaults()
+	return limits.WithDefaults(d.limits)
 }
 
 // NewDocument creates a new [Document] by parsing the XRef chains.
 // If logger is nil, a no-op logger is used. The object cache holds at most
-// [limits.Limits.MaxCachedObjects] entries of the budgets [WithLimits] sets.
+// [models.Limits.MaxCachedObjects] entries of the budgets [WithLimits] sets.
 //
 // # Corpus evidence
 //
@@ -1001,7 +1002,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	for _, opt := range opts {
 		opt(&o)
 	}
-	lim := o.limits.WithDefaults()
+	lim := limits.WithDefaults(o.limits)
 
 	// Validate PDF Header. Scan up to headerScanLimit bytes so files
 	// with a leading prefix (UTF-8 BOM, explanatory comment) are still
@@ -1446,7 +1447,7 @@ func (d *Document) CachedFontProgram(objNum int) ([]byte, bool) {
 
 // SetCachedFontProgram stores a decoded font program keyed by its FontFile
 // stream object number, bounding the total cached bytes at
-// [limits.Limits.MaxFontProgCacheBytes] of the document's budgets with an
+// [limits.MaxFontProgCacheBytes] of the document's budgets with an
 // evict-all policy.
 //
 // Font programs have strong locality: one embedded font is re-read by every
@@ -1454,7 +1455,7 @@ func (d *Document) CachedFontProgram(objNum int) ([]byte, bool) {
 // program larger than the bound is not cached, so it cannot force repeated
 // evictions.
 func (d *Document) SetCachedFontProgram(objNum int, data []byte) {
-	limit := d.Limits().MaxFontProgCacheBytes()
+	limit := limits.MaxFontProgCacheBytes(d.Limits())
 	if int64(len(data)) > limit {
 		return
 	}
@@ -1486,11 +1487,11 @@ func (d *Document) CachedColorTransform(objNum, intent int) (any, bool) {
 
 // SetCachedColorTransform stores a colour transform of size bytes keyed by
 // its profile stream object number and rendering intent, bounding the total
-// bytes at [limits.Limits.MaxColorCacheBytes] of the document's budgets with
+// bytes at [limits.MaxColorCacheBytes] of the document's budgets with
 // an evict-all policy. A transform larger than the bound is not cached, so it
 // cannot force repeated evictions.
 func (d *Document) SetCachedColorTransform(objNum, intent int, t any, size int) {
-	limit := d.Limits().MaxColorCacheBytes()
+	limit := limits.MaxColorCacheBytes(d.Limits())
 	if int64(size) > limit {
 		return
 	}
@@ -1522,7 +1523,7 @@ func (d *Document) CachedFormContent(objNum, variant int) (any, bool) {
 
 // SetCachedFormContent stores the parsed content of the form XObject with the
 // given object number, parsed as variant names and retaining size bytes,
-// bounding the total at [limits.Limits.MaxFormCacheBytes] of the document's
+// bounding the total at [limits.MaxFormCacheBytes] of the document's
 // budgets with an evict-all policy. The variant is the caller's: two parses
 // of one form that read its content differently store under distinct
 // variants. Content larger than the bound is not cached, so it cannot force
@@ -1531,7 +1532,7 @@ func (d *Document) CachedFormContent(objNum, variant int) (any, bool) {
 // Forms have strong locality: a form drawn on every page, a letterhead or a
 // watermark, is read once per page, which is what makes the cache pay.
 func (d *Document) SetCachedFormContent(objNum, variant int, c any, size int64) {
-	limit := d.Limits().MaxFormCacheBytes()
+	limit := limits.MaxFormCacheBytes(d.Limits())
 	if size > limit {
 		return
 	}
@@ -1562,7 +1563,7 @@ func (d *Document) CachedTextVisibility(pageObjNum int) (any, bool) {
 
 // SetCachedTextVisibility stores the text visibility verdict of the page with
 // the given object number, retaining size bytes, bounding the total at
-// [limits.Limits.MaxTextVisibilityCacheBytes] of the document's budgets with an
+// [limits.MaxTextVisibilityCacheBytes] of the document's budgets with an
 // evict-all policy. A verdict larger than the bound is not cached, so it cannot
 // force repeated evictions.
 //
@@ -1570,7 +1571,7 @@ func (d *Document) CachedTextVisibility(pageObjNum int) (any, bool) {
 // in several ways (text, elements, tables, bookmarks) reads the same page
 // again, which is what makes the cache pay.
 func (d *Document) SetCachedTextVisibility(pageObjNum int, v any, size int64) {
-	limit := d.Limits().MaxTextVisibilityCacheBytes()
+	limit := limits.MaxTextVisibilityCacheBytes(d.Limits())
 	if size > limit {
 		return
 	}

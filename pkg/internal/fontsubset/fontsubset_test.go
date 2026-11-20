@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 	"github.com/gotenberg/litho/pkg/internal/typography/type1"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // testGlyphs are the glyphs of the test programs after .notdef: space at
@@ -472,7 +473,7 @@ func TestRun_PastTheCacheRedoesTheSubset(t *testing.T) {
 		}
 		return d, d.finish(ast.PdfDict{"Font": names}, nil, content+" ET"), progs
 	}
-	serialize := func(lim limits.Limits) ([]byte, int) {
+	serialize := func(lim models.Limits) ([]byte, int) {
 		d, trailer, progs := build()
 		if _, err := Run(context.Background(), d.alloc, trailer, Config{Limits: lim}); err != nil {
 			t.Fatalf("Run: %v", err)
@@ -491,9 +492,9 @@ func TestRun_PastTheCacheRedoesTheSubset(t *testing.T) {
 		}
 		return buf.Bytes(), encoded
 	}
-	want, encoded := serialize(limits.Limits{})
-	tight := limits.Limits{MaxStreamBytes: int64(largest)}
-	if cache := tight.MaxFontProgCacheBytes(); int64(encoded) <= cache {
+	want, encoded := serialize(models.Limits{})
+	tight := models.Limits{MaxStreamBytes: int64(largest)}
+	if cache := limits.MaxFontProgCacheBytes(tight); int64(encoded) <= cache {
 		t.Fatalf("precondition: the %d subset bytes fit the %d byte cache", encoded, cache)
 	}
 	if got, _ := serialize(tight); !bytes.Equal(got, want) {

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
-	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
 
@@ -40,7 +40,7 @@ func TestDecoderHandles(t *testing.T) {
 		t.Error("nil Decoder should handle nothing")
 	}
 
-	d := NewDecoder([]plugins.FilterDecoder{fakePlugin{name: "JBIG2Decode"}}, limits.Limits{})
+	d := NewDecoder([]plugins.FilterDecoder{fakePlugin{name: "JBIG2Decode"}}, models.Limits{})
 	if d == nil {
 		t.Fatal("NewDecoder returned nil for a non-empty plugin set")
 	}

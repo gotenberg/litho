@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // session is one recolouring of a document: the target, the objects it
@@ -274,7 +275,7 @@ func (s *session) newStream(dict ast.PdfDict, data []byte) (ast.PdfStream, error
 // writes, under the default image budget. Anti-DoS guard, not spec-mandated:
 // ISO 32000-1, 7.10.2 puts no bound on /Size. The grid is an image of the
 // tint transform, one point per pixel, so it scales with the document's image
-// budget ([limits.Limits.ScaleImageCap]): 65536 points of four 16-bit outputs
+// budget ([limits.ScaleImageCap]): 65536 points of four 16-bit outputs
 // is half a megabyte, and leaves a 1-input function its full
 // [maxSamplesPerInput] and a 4-colorant DeviceN 16 points per colorant.
 const maxSampledEntries = 1 << 16
@@ -311,7 +312,7 @@ func samplesPerInput(m int, limit int64) (int, error) {
 // linear interpolation, and returns its reference.
 func (s *session) sampledFunction(ctx context.Context, domain []float64, outN int, eval func(in, out []float64)) (ast.PdfIndirectRef, error) {
 	m := len(domain) / 2
-	k, err := samplesPerInput(m, s.doc.Limits().ScaleImageCap(maxSampledEntries))
+	k, err := samplesPerInput(m, limits.ScaleImageCap(s.doc.Limits(), maxSampledEntries))
 	if err != nil {
 		return ast.PdfIndirectRef{}, err
 	}

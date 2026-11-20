@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // limitsDocBytes assembles a document of objs, numbered from 1, the first
@@ -70,13 +71,13 @@ func TestNewDocument_ReadsItsLimits(t *testing.T) {
 		t.Errorf("a Document opened without WithLimits reads under %+v, want the defaults", got)
 	}
 
-	lim := limits.Limits{MaxStreamBytes: 1024, MaxCachedObjects: 2}
+	lim := models.Limits{MaxStreamBytes: 1024, MaxCachedObjects: 2}
 	doc, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, WithLimits(lim))
 	if err != nil {
 		t.Fatalf("NewDocument with limits: %v", err)
 	}
-	if got := doc.Limits(); got != lim.WithDefaults() {
-		t.Errorf("Limits() = %+v, want %+v", got, lim.WithDefaults())
+	if got := doc.Limits(); got != limits.WithDefaults(lim) {
+		t.Errorf("Limits() = %+v, want %+v", got, limits.WithDefaults(lim))
 	}
 	for n := 1; n <= len(objs); n++ {
 		if _, err := doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: n}); err != nil {
@@ -106,7 +107,7 @@ func TestNewDocument_ReadsItsLimits(t *testing.T) {
 }
 
 // TestCacheObjStm_FollowsTheStreamBudget pins the object-stream cache to
-// [limits.Limits.MaxObjStmCacheBytes] of the document's budgets: an object
+// [limits.MaxObjStmCacheBytes] of the document's budgets: an object
 // stream as large as the stream budget is cached, a larger one is not, and a
 // stream that would take the cache past the budget empties it first. The
 // default document caches a stream the lowered budget refuses.
@@ -120,7 +121,7 @@ func TestCacheObjStm_FollowsTheStreamBudget(t *testing.T) {
 	ctx := context.Background()
 	const budget = 100
 
-	doc, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, WithLimits(limits.Limits{MaxStreamBytes: budget}))
+	doc, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, WithLimits(models.Limits{MaxStreamBytes: budget}))
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
@@ -158,7 +159,7 @@ func TestCacheObjStm_FollowsTheStreamBudget(t *testing.T) {
 }
 
 // TestSetCachedFontProgram_FollowsTheStreamBudget pins the font-program cache
-// to [limits.Limits.MaxFontProgCacheBytes] of the document's budgets, a
+// to [limits.MaxFontProgCacheBytes] of the document's budgets, a
 // quarter of the stream budget: a program as large as the bound is cached, a
 // larger one is not, and a program that would take the cache past the bound
 // empties it first. The default document caches a program the lowered budget
@@ -173,11 +174,11 @@ func TestSetCachedFontProgram_FollowsTheStreamBudget(t *testing.T) {
 	ctx := context.Background()
 	const budget, bound = 400, 100
 
-	doc, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, WithLimits(limits.Limits{MaxStreamBytes: budget}))
+	doc, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, WithLimits(models.Limits{MaxStreamBytes: budget}))
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	if got := doc.Limits().MaxFontProgCacheBytes(); got != bound {
+	if got := limits.MaxFontProgCacheBytes(doc.Limits()); got != bound {
 		t.Fatalf("MaxFontProgCacheBytes() = %d under a %d-byte budget, want %d", got, budget, bound)
 	}
 	cached := func(d *Document, nums ...int) []int {
@@ -214,7 +215,7 @@ func TestSetCachedFontProgram_FollowsTheStreamBudget(t *testing.T) {
 }
 
 // TestSetCachedColorTransform_FollowsTheStreamBudget pins the colour-transform
-// cache to [limits.Limits.MaxColorCacheBytes] of the document's budgets, a
+// cache to [limits.MaxColorCacheBytes] of the document's budgets, a
 // quarter of the stream budget: a transform as large as the bound is cached, a
 // larger one is not, and a transform that would take the cache past the bound
 // empties it first. The default document caches a transform the lowered
@@ -229,11 +230,11 @@ func TestSetCachedColorTransform_FollowsTheStreamBudget(t *testing.T) {
 	ctx := context.Background()
 	const budget, bound, intent = 400, 100, 1
 
-	doc, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, WithLimits(limits.Limits{MaxStreamBytes: budget}))
+	doc, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, WithLimits(models.Limits{MaxStreamBytes: budget}))
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	if got := doc.Limits().MaxColorCacheBytes(); got != bound {
+	if got := limits.MaxColorCacheBytes(doc.Limits()); got != bound {
 		t.Fatalf("MaxColorCacheBytes() = %d under a %d-byte budget, want %d", got, budget, bound)
 	}
 	cached := func(d *Document, nums ...int) []int {
@@ -270,7 +271,7 @@ func TestSetCachedColorTransform_FollowsTheStreamBudget(t *testing.T) {
 }
 
 // TestSetCachedFormContent_FollowsTheStreamBudget pins the form content cache
-// to [limits.Limits.MaxFormCacheBytes] of the document's budgets, a quarter of
+// to [limits.MaxFormCacheBytes] of the document's budgets, a quarter of
 // the stream budget: content as large as the bound is cached, larger content
 // is not, and content that would take the cache past the bound empties it
 // first. Two variants of one form are held apart, [Document.ClearCaches] and
@@ -286,11 +287,11 @@ func TestSetCachedFormContent_FollowsTheStreamBudget(t *testing.T) {
 	ctx := context.Background()
 	const budget, bound, variant = 400, 100, 0
 
-	doc, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, WithLimits(limits.Limits{MaxStreamBytes: budget}))
+	doc, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, WithLimits(models.Limits{MaxStreamBytes: budget}))
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	if got := doc.Limits().MaxFormCacheBytes(); got != bound {
+	if got := limits.MaxFormCacheBytes(doc.Limits()); got != bound {
 		t.Fatalf("MaxFormCacheBytes() = %d under a %d-byte budget, want %d", got, budget, bound)
 	}
 	cached := func(d *Document, nums ...int) []int {

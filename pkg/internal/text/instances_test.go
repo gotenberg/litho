@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 	"github.com/gotenberg/litho/pkg/internal/typography/varfont"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // installedVar indexes the variable test font beside a static sans face.
@@ -162,7 +163,7 @@ func TestInstalledInstancesBelongToTheConversion(t *testing.T) {
 		t.Errorf("report %+v, want the bound for LithoVar", rep.DefaultInstances)
 	}
 
-	ctx, mem, done := limits.WithBudget(context.Background(), limits.Limits{MaxConvertMemoryBytes: 1 << 20})
+	ctx, mem, done := limits.WithBudget(context.Background(), models.Limits{MaxConvertMemoryBytes: 1 << 20})
 	defer done()
 	_, _, err := index.ForConversion().Shape(ctx, []ParagraphRun{{Text: "AB", Style: Style{Families: []string{"LithoVar"}, Weight: 700, Size: 30, Fallback: FallbackChromium}}}, ParagraphOptions{})
 	if err != nil {

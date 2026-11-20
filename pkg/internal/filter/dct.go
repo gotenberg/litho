@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter/dct"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // probeDCT is the probe of DCTDecode (see codecProbes): the lenient decoder's
@@ -19,11 +20,11 @@ import (
 // decodes past its headers is decoded by image/jpeg or the lenient decoder,
 // and both refuse every coding the lenient decoder lacks, so the headers
 // answer for decodeDCT.
-func probeDCT(ctx context.Context, data []byte, _, dict ast.PdfDict, lim limits.Limits) error {
+func probeDCT(ctx context.Context, data []byte, _, dict ast.PdfDict, lim models.Limits) error {
 	if len(data) == 0 {
 		return errors.New("dct decode: empty input")
 	}
-	settled, err := dct.Check(ctx, data, dctStatedHeight(dict), lim.ScaleImageCap(dct.DefaultMaxSamples))
+	settled, err := dct.Check(ctx, data, dctStatedHeight(dict), limits.ScaleImageCap(lim, dct.DefaultMaxSamples))
 	switch {
 	case errors.Is(err, dct.ErrUnsupported):
 		return fmt.Errorf("%w: DCTDecode: %w", ErrUnsupportedFilter, err)

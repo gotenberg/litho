@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/panicerr"
 )
 
@@ -75,7 +76,7 @@ func ReadSMaskInData(ctx context.Context, doc *document.Document, stream ast.Pdf
 	if err != nil {
 		return nil, fmt.Errorf("%w: reading the JPEG 2000 data: %w", ErrDataSoftMask, err)
 	}
-	img, err := jpx.Describe(data, doc.Limits().ScaleImageCap(jpx.DefaultMaxSamples))
+	img, err := jpx.Describe(data, limits.ScaleImageCap(doc.Limits(), jpx.DefaultMaxSamples))
 	if err != nil {
 		return nil, fmt.Errorf("%w: reading the JPEG 2000 header: %w", ErrDataSoftMask, err)
 	}

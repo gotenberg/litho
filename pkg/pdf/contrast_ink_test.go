@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // contrastInkPDF is a 400-point square page whose content is drawn as
@@ -30,7 +32,7 @@ func TestCheckTextContrastTransfer(t *testing.T) {
 	t.Parallel()
 	r := openLimited(t, contrastInkPDF("q /Inv gs 1 g 0 0 400 400 re f\n"+
 		"BT 0 g /F1 12 Tf 20 360 Td (SHOWNWHITE) Tj ET\n"+
-		"BT 0.6 g /F1 12 Tf 20 320 Td (SHOWNGREY) Tj ET Q\n"), Limits{})
+		"BT 0.6 g /F1 12 Tf 20 320 Td (SHOWNGREY) Tj ET Q\n"), models.Limits{})
 	rep, err := r.CheckTextContrast(context.Background(), 1)
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +62,7 @@ func TestCheckTextContrastLaterBlend(t *testing.T) {
 	t.Parallel()
 	r := openLimited(t, contrastInkPDF("1 g 0 0 400 400 re f\nBT 0 g /F1 12 Tf 20 360 Td (UNDERBLEND) Tj ET\n"+
 		"BT 0.6 g /F1 12 Tf 20 100 Td (BESIDE) Tj ET\n"+
-		"q /Diff gs 1 g 0 300 400 100 re f Q\n"), Limits{})
+		"q /Diff gs 1 g 0 300 400 100 re f Q\n"), models.Limits{})
 	rep, err := r.CheckTextContrast(context.Background(), 1)
 	if err != nil {
 		t.Fatal(err)

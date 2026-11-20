@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/typography/fontbuild"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func init() {
@@ -182,7 +182,7 @@ func TestSolidPlaceholdersFillTheBox(t *testing.T) {
 		objs[i] = strings.ReplaceAll(objs[i], "/Calibri", "/Melior")
 	}
 	f := fixture{page: textPage, content: "0 g BT /F 20 Tf 5 70 Td <00410002> Tj ET", objs: objs}
-	doc, pg := open(t, f.bytes(), limits.Limits{})
+	doc, pg := open(t, f.bytes(), models.Limits{})
 	opts := f.options()
 	opts.SolidPlaceholders = true
 	c, report, err := Render(context.Background(), doc, pg, opts)
