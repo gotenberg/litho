@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // samePageCopyPDF builds a one-page document drawing "SECRET" at y=700, which
@@ -66,7 +68,7 @@ func TestWriter_Redact_WarnsAboutVisibleCopiesOnTheRedactedPage(t *testing.T) {
 	if len(report.SurvivingCopies) != 0 {
 		t.Errorf("SurvivingCopies = %+v, want none on a redaction that succeeded", report.SurvivingCopies)
 	}
-	found := slices.ContainsFunc(report.CopiesOnRedactedPages, func(h RedactionHit) bool {
+	found := slices.ContainsFunc(report.CopiesOnRedactedPages, func(h models.RedactionHit) bool {
 		if h.Token != "SECRET" || !slices.Equal(h.Pages, []int{1}) || len(h.Boxes) != 1 {
 			return false
 		}
@@ -104,7 +106,7 @@ func TestWriter_Redact_JudgesASamePageCopyByItsOwnInk(t *testing.T) {
 		if err != nil {
 			t.Fatalf("options %d: Redact: %v", len(opts), err)
 		}
-		if !slices.ContainsFunc(report.CopiesOnRedactedPages, func(h RedactionHit) bool { return h.Token == "SECRET" }) {
+		if !slices.ContainsFunc(report.CopiesOnRedactedPages, func(h models.RedactionHit) bool { return h.Token == "SECRET" }) {
 			t.Errorf("options %d: CopiesOnRedactedPages = %+v, want SECRET", len(opts), report.CopiesOnRedactedPages)
 		}
 	}
@@ -119,7 +121,7 @@ func TestWriter_Redact_ToleratesAnOutlinedWhiteCopy(t *testing.T) {
 		if err != nil {
 			t.Fatalf("options %d: Redact: %v", len(opts), err)
 		}
-		if !slices.ContainsFunc(report.CopiesOnRedactedPages, func(h RedactionHit) bool { return h.Token == "SECRET" }) {
+		if !slices.ContainsFunc(report.CopiesOnRedactedPages, func(h models.RedactionHit) bool { return h.Token == "SECRET" }) {
 			t.Errorf("options %d: CopiesOnRedactedPages = %+v, want SECRET", len(opts), report.CopiesOnRedactedPages)
 		}
 	}
@@ -193,7 +195,7 @@ func TestWriter_Redact_VisibleSamePageCopyHoldsThroughAutoTag(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.Redact(ctx, []RedactRegion{coversSecret}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{coversSecret}); err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
 	w.AutoTag()

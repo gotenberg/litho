@@ -444,11 +444,12 @@ var (
 	// a removed string, or could not read an object and so cannot prove it
 	// clean. Clearing a page is not clearing a document: the same text lives
 	// in the structure tree, annotation values, outlines and metadata.
-	// [RedactReport.SurvivingCopies] and [RedactReport.UnreadableObjects] name
-	// where, and the [Writer] is left untouched so a caller that ignores the
-	// error cannot write a half-redacted document. [Writer.WriteTo] returns it,
-	// writing nothing, when a removed string survives in the output it is about
-	// to write, for example one a later stage put back.
+	// [github.com/gotenberg/litho/pkg/models.RedactReport.SurvivingCopies] and
+	// [github.com/gotenberg/litho/pkg/models.RedactReport.UnreadableObjects]
+	// name where, and the [Writer] is left untouched so a caller that ignores
+	// the error cannot write a half-redacted document. [Writer.WriteTo]
+	// returns it, writing nothing, when a removed string survives in the
+	// output it is about to write, for example one a later stage put back.
 	ErrRedactionIncomplete = errors.New("redaction incomplete: a copy of the removed text survives in the document")
 
 	// ErrRedactionPixelCheck is returned by [Writer.Redact], unless

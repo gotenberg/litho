@@ -334,7 +334,7 @@ func TestLimits_PageContentTooLargeReachesTheWriter(t *testing.T) {
 		{"64 KiB", Limits{MaxStreamBytes: 64 << 10}, true},
 	} {
 		heavy := openLimited(t, heavyPagePDF(), tc.l)
-		_, err := NewWriter(heavy).Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{70, 690, 200, 720}}})
+		_, err := NewWriter(heavy).Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{70, 690, 200, 720}}})
 		if tc.refused != errors.Is(err, ErrPageContentTooLarge) || (tc.refused && !errors.Is(err, ErrRedactionRefused)) || (!tc.refused && err != nil) {
 			t.Errorf("%s: Redact error = %v, want the page refused %v", tc.name, err, tc.refused)
 		}

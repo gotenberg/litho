@@ -108,7 +108,7 @@ func refusedCalls(t *testing.T) []refusedCall {
 			return nil
 		}},
 		{"Redact", func(ctx context.Context, _ *testing.T, w *Writer) error {
-			_, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 100, 720}}})
+			_, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 100, 720}}})
 			return err
 		}},
 		{"ConvertColors", func(ctx context.Context, _ *testing.T, w *Writer) error {
@@ -364,7 +364,7 @@ func TestWriterEditBeforeARemediationValidatesAsTheReportSays(t *testing.T) {
 			return nil
 		}},
 		{"a redaction", redactableTextPDF(""), func(ctx context.Context, _ *testing.T, w *Writer) error {
-			_, err := w.Redact(ctx, []RedactRegion{coversSecret})
+			_, err := w.Redact(ctx, []models.RedactRegion{coversSecret})
 			return err
 		}},
 	} {

@@ -15,48 +15,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/flatten"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/render/glyph"
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
-
-// RedactRegion names an area of one page whose content is to be removed.
-//
-// Rect is [llx, lly, urx, ury] in page space, the same shape and order as
-// [models.Annotation.Rect] and an annotation /Rect in ISO 32000-1, Table 166.
-// Page is 1-based, like every other page argument in this package.
-// RedactRegion values are immutable and safe for concurrent use.
-type RedactRegion struct {
-	// Page is the 1-based page the region applies to.
-	Page int
-	// Rect is [llx, lly, urx, ury] in page space.
-	Rect [4]float64
-}
-
-// RedactionHit names a place a redacted string still appears.
-//
-// It is reported rather than silently tolerated: a redaction that cannot
-// account for every copy has not redacted the document, so these accompany
-// [ErrRedactionIncomplete] to say where the survivor is.
-// RedactionHit values are immutable and safe for concurrent use.
-type RedactionHit struct {
-	// ObjectNum is the object the copy was found in.
-	ObjectNum int
-	// Token is the string that survived.
-	Token string
-	// Where is "string" for a string, "stream" for a stream's data, decoded or
-	// as stored, or "name" for a destination name.
-	Where string
-	// Pages lists the 1-based pages whose content draws the object, ascending.
-	// It is set only on [RedactReport.CopiesOnOtherPages] and
-	// [RedactReport.CopiesOnRedactedPages], which names the one redacted page
-	// whose content stream holds the copy.
-	Pages []int
-	// Boxes are the ink boxes [llx lly urx ury], in default user space, of the
-	// text runs that spell the copy on the page. It is set only on
-	// [RedactReport.CopiesOnRedactedPages], and empty there when the page's
-	// content spells the string only in the numbers of operators that draw no
-	// text, a coordinate matching a removed date.
-	Boxes [][4]float64
-}
 
 // RedactOption configures [Writer.Redact].
 type RedactOption func(*redactOpts)
@@ -160,8 +121,8 @@ func (s *redactGlyphOutlines) glyphOutlines(doc *document.Document) *mutations.G
 // A copy counts when a page the regions do not cover draws it. It also counts
 // when a page they do cover draws it as visible text outside the regions.
 // Without this option, Redact reports such copies in
-// [RedactReport.CopiesOnOtherPages] or [RedactReport.CopiesOnRedactedPages]
-// instead.
+// [models.RedactReport.CopiesOnOtherPages] or
+// [models.RedactReport.CopiesOnRedactedPages] instead.
 //
 // Use it when the regions select every occurrence of what must go, so a copy
 // elsewhere means the selection missed one.
@@ -177,7 +138,7 @@ func WithStrictRedaction() RedactOption {
 // drawn among them that an opaque image over them must take with it, are drawn
 // instead as opaque images of the page at 300 dpi. Each image is clipped to the
 // area it covers less the regions. The units are removed from the content.
-// [RedactReport.RasterisedUnits] counts them.
+// [models.RedactReport.RasterisedUnits] counts them.
 //
 // The images paint nothing inside the regions, and their samples there are the
 // paper's colour, so the file keeps nothing of what lay there. Everything the
@@ -192,7 +153,7 @@ func WithStrictRedaction() RedactOption {
 // removes the annotation with its pop-up and the text and geometry it carries,
 // and a reply to it loses its /IRT entry (12.5.6.2). Its look is then page
 // content the regions cut, and nothing of it marks what lay inside them.
-// [RedactReport.BakedAnnotations] counts them.
+// [models.RedactReport.BakedAnnotations] counts them.
 //
 // These annotations still refuse: a widget, its look being its field's value
 // (12.7.3.3), a pop-up, an annotation under optional content, a NoRotate one on
@@ -229,7 +190,7 @@ func WithRedactionRasterFallback() RedactOption {
 // area becomes the link's /Rect. Left as several, the areas become its
 // /QuadPoints, one quadrilateral each, with /Rect their bounding box. A reader
 // that ignores /QuadPoints activates the whole box.
-// [RedactReport.ClippedAnnotations] lists the links cut.
+// [models.RedactReport.ClippedAnnotations] lists the links cut.
 //
 // A pop-up that is not open and has no appearance stream stays as it is. Its
 // /Rect only places the window it opens over its parent (12.5.6.14).
@@ -284,8 +245,9 @@ func WithRedactionAnnotationClipping() RedactOption {
 // keeps its advance box too. A Type 3 glyph is bounded by what its description
 // paints either way.
 //
-// The removed glyphs' boxes in [RedactReport.RemovedGlyphBoxes] hold their
-// outlines. [Writer.WriteTo], applying the regions again, selects the same way.
+// The removed glyphs' boxes in [models.RedactReport.RemovedGlyphBoxes] hold
+// their outlines. [Writer.WriteTo], applying the regions again, selects the
+// same way.
 //
 // Use this option to keep a glyph whose advance box lies outside every region
 // and whose outline reaches in. The cost is that ink staying inside the region,
@@ -346,8 +308,9 @@ func WithRedactionGlyphOutlines(fonts ...RenderOption) RedactOption {
 // would decode traces of the ink beside a region into it.
 //
 // A blanked photograph is re-encoded only when the source held it as JPEG or
-// JPEG 2000, so blanking never turns a lossless picture lossy. It is re-encoded
-// only when that saves bytes. [RedactReport.LossyBlankedImages] counts them.
+// JPEG 2000, so blanking never turns a lossless picture lossy. It is
+// re-encoded only when that saves bytes.
+// [models.RedactReport.LossyBlankedImages] counts them.
 //
 // The picture becomes a form XObject at the image's own object number, so every
 // placement and reference finds it there. The form draws the lossless image of
@@ -362,7 +325,7 @@ func WithRedactionGlyphOutlines(fonts ...RenderOption) RedactOption {
 //
 // A later redaction that reaches a JPEG tile blanks it in a copy, as it blanks
 // any image a form nested in another form draws (see
-// [RedactReport.ImagesBlankedInCopy]). [WithStrictRedaction] refuses it.
+// [models.RedactReport.ImagesBlankedInCopy]). [WithStrictRedaction] refuses it.
 //
 // By default every image a redaction writes is lossless under FlateDecode, at
 // the cost of size. A blanked JPEG 2000 photograph weighs several times its
@@ -378,143 +341,10 @@ func WithRedactionJPEGQuality(q int) RedactOption {
 	return func(o *redactOpts) { o.jpegQuality, o.jpegQualitySet = q, true }
 }
 
-// RedactReport describes what a redaction removed, per vector.
-//
-// Removing content from a page does not remove the copies of it held elsewhere
-// in the file, so the report covers both halves: what the pages lost, and what
-// the document-wide passes cleared afterwards.
-// Concurrent reads of a value are safe; a write needs synchronization.
-type RedactReport struct {
-	// RemovedText holds the text of each show-text operator removed, one
-	// string per operator, in the order the pages drew them. An operator split
-	// at its glyphs gives one string per run of removed glyphs.
-	RemovedText []string
-	// RemovedGlyphBoxes maps a 1-based page number to the box, in user space,
-	// each glyph removed from it paints, in the order the page drew them. It
-	// lists every glyph, whatever its character, a space among them.
-	//
-	// A glyph is removed when this box meets a region, so its ink may reach
-	// past the region. These boxes are where the page changed for it.
-	RemovedGlyphBoxes map[int][][4]float64
-	// BlankedImages names the images whose covered samples were overwritten:
-	// an image XObject by its resource name, an inline image as "(inline)".
-	BlankedImages []string
-	// ImagesBlankedInCopy maps a 1-based page number to the images of
-	// BlankedImages that page blanked in a copy, by the resource name it drew
-	// them with.
-	//
-	// Each is also painted, or named, where the regions do not cover the same
-	// samples. The covered placement was therefore repointed at a blanked copy
-	// of its own, and the image itself kept its samples for the others, so it
-	// is still in the file.
-	//
-	// A covered placement that lay wholly inside a region was removed instead
-	// of repointed (see RemovedImages). Its image is listed here all the same,
-	// since it too stays in the file.
-	//
-	// [WithStrictRedaction] refuses such an image instead.
-	ImagesBlankedInCopy map[int][]string
-	// FormsCopied maps a 1-based page number to the form XObjects it now draws
-	// a copy of, because an image of ImagesBlankedInCopy was painted inside
-	// them. The count covers the form the page draws and each form between it
-	// and the image, once per covered placement.
-	//
-	// The copy names the blanked image where the form named the image. The form
-	// itself is unchanged, and every other placement still draws it.
-	FormsCopied map[int]int
-	// RemovedPaths counts the painted paths removed.
-	RemovedPaths int
-	// ClippedPaths counts the painted paths that reached outside the regions:
-	// their geometry inside the regions was removed and the rest is painted
-	// under a clip that excludes the regions.
-	ClippedPaths int
-	// RemovedImages counts the image placements a page's own content drew
-	// wholly inside a region.
-	//
-	// They are removed, not only blanked. The blanked samples of a picture
-	// drawn as many small images, a logo one run of pixels at a time, would
-	// keep its outline on the page in black.
-	//
-	// An image XObject among them is also in BlankedImages, its samples
-	// overwritten in the file. An inline image goes with its operator, and is
-	// not.
-	RemovedImages int
-	// RemovedAnnotations lists the object numbers of annotations dropped
-	// because their rectangle sat inside a region, ascending.
-	RemovedAnnotations []int
-	// ClippedAnnotations lists the object numbers of annotations kept with
-	// the part inside the regions cut away, ascending (see
-	// [WithoutRedactionAnnotationClipping]).
-	ClippedAnnotations []int
-	// DroppedPageEntries names page entries dropped because they held a copy
-	// of what was removed, such as /Thumb.
-	DroppedPageEntries []string
-	// RasterisedUnits counts the painting elements that
-	// [WithRedactionRasterFallback] drew as images with the regions painted
-	// out instead of removing them: the form XObjects and shading paints
-	// whose content the regions selected, and those drawn among them that the
-	// images took with them.
-	RasterisedUnits int
-	// BakedAnnotations counts the annotations reaching outside the regions that
-	// [WithRedactionRasterFallback] drew into their pages and removed.
-	//
-	// Their look is page content the regions cut. The annotations, with their
-	// pop-ups and the text they carry, are gone. They are counted, not named,
-	// since the document is written out and reopened, renumbered, once they are
-	// drawn.
-	BakedAnnotations int
-	// FontsFullyRemovedOnPage maps a 1-based page number to the object numbers
-	// of fonts whose every glyph on that page was removed.
-	//
-	// Redact reports these fonts rather than refusing, and the report is
-	// page-scoped on purpose. The font may still be drawn elsewhere, and its
-	// embedded program carries the outlines either way. litho cannot yet
-	// re-subset across the three embedded font formats, so a caller that must
-	// also strip those outlines is told which programs to deal with.
-	FontsFullyRemovedOnPage map[int][]int
-	// ScrubbedAnnotations, ScrubbedFormFields and ScrubbedOutlineItems list
-	// the object numbers the document-wide passes rewrote, ascending.
-	ScrubbedAnnotations  []int
-	ScrubbedFormFields   []int
-	ScrubbedOutlineItems []int
-	// RemovedScripts counts the JavaScript the redaction removed: each script
-	// action cut out of an action entry, and the document-level
-	// /Names/JavaScript tree as one.
-	RemovedScripts int
-	// ScrubbedPrivateData names the applications whose private data the
-	// redaction removed from the catalog's /PieceInfo, sorted.
-	ScrubbedPrivateData []string
-	// SurvivingCopies names every place a removed string was still found by
-	// the verification scan. Non-empty only alongside
-	// [ErrRedactionIncomplete].
-	SurvivingCopies []RedactionHit
-	// CopiesOnOtherPages names the removed strings the content of pages outside
-	// the regions still draws, each with the pages that draw it.
-	//
-	// These are warnings: the redaction succeeded, and the output keeps them.
-	// The slice is empty under [WithStrictRedaction], which refuses them
-	// instead.
-	CopiesOnOtherPages []RedactionHit
-	// CopiesOnRedactedPages names the removed strings a redacted page still
-	// draws as visible text outside every region, each with the page and the
-	// boxes of the runs that spell it.
-	//
-	// These are warnings: the redaction succeeded, and the output keeps them.
-	// The slice is empty under [WithStrictRedaction], which refuses them
-	// instead.
-	CopiesOnRedactedPages []RedactionHit
-	// UnreadableObjects lists objects the verification scan could not decode.
-	//
-	// A stream it could not read is one it has not proved clean, so these fail
-	// the redaction as surely as a hit does.
-	UnreadableObjects []int
-
-	// LossyBlankedImages counts the images of BlankedImages that
-	// [WithRedactionJPEGQuality] redrew with JPEG tiles outside the regions:
-	// each is now a form XObject drawing a lossless image of the whole
-	// picture with JPEG tiles over it.
-	LossyBlankedImages int
-
+// redaction is a [models.RedactReport] a redaction builds, beside what the
+// redaction itself reads back of its pages and the report does not hold.
+type redaction struct {
+	report *models.RedactReport
 	// clippedByPage maps a 0-based page index to the annotations cut on that
 	// page, which [mutations.CheckRewrittenAnnotationUses] reads.
 	clippedByPage map[int][]int
@@ -596,7 +426,7 @@ type RedactReport struct {
 // # Verification scan
 //
 // [ErrRedactionIncomplete] names every survivor in
-// [RedactReport.SurvivingCopies] so the caller can act on it.
+// [models.RedactReport.SurvivingCopies] so the caller can act on it.
 //
 // The scan looks for each removed run holding at least three letters or digits.
 // It also looks for each such word drawn across shorter runs, as a producer
@@ -616,10 +446,11 @@ type RedactReport struct {
 // Redact annotation applies to the page it sits on (ISO 32000-2, 12.5.6.23).
 // The same text drawn on another page is content the caller did not select.
 //
-// Such a copy is reported in [RedactReport.CopiesOnOtherPages] with the pages
-// that draw it, and the output keeps it. The copy may sit in a content stream,
-// a form XObject, a tiling pattern, a Type 3 glyph or an annotation appearance,
-// provided another page draws it and no redacted page draws or names it.
+// Such a copy is reported in [models.RedactReport.CopiesOnOtherPages] with the
+// pages that draw it, and the output keeps it. The copy may sit in a content
+// stream, a form XObject, a tiling pattern, a Type 3 glyph or an annotation
+// appearance, provided another page draws it and no redacted page draws or
+// names it.
 //
 // A copy anywhere else still refuses: the redacted page's own resources and
 // annotations, the structure tree, the metadata or any other object.
@@ -632,11 +463,11 @@ type RedactReport struct {
 // 32000-2, 12.5.6.23). The same characters shown again elsewhere on the page, a
 // running head or a repeated word, are text the caller did not select.
 //
-// Such a copy is reported in [RedactReport.CopiesOnRedactedPages] with the page
-// and the boxes of the runs that spell it, and the output keeps it. So is a
-// removed run of digits that the page's content spells only in the numbers of
-// operators that draw no text (a path, a matrix, a colour). ISO 32000-1, 9.10.1
-// reads text from the strings of show-text operators alone.
+// Such a copy is reported in [models.RedactReport.CopiesOnRedactedPages] with
+// the page and the boxes of the runs that spell it, and the output keeps it.
+// So is a removed run of digits that the page's content spells only in the
+// numbers of operators that draw no text (a path, a matrix, a colour). ISO
+// 32000-1, 9.10.1 reads text from the strings of show-text operators alone.
 //
 // A copy counts only when all of these hold:
 //
@@ -687,11 +518,11 @@ type RedactReport struct {
 //   - JavaScript goes, wherever an action entry or the /Names/JavaScript tree
 //     holds it (ISO 32000-1, 12.6.4.16). A script builds a word at run time
 //     from pieces no comparison of bytes finds. Form calculations and custom
-//     navigation go with it. See [RedactReport.RemovedScripts].
+//     navigation go with it. See [models.RedactReport.RemovedScripts].
 //   - The private data of the catalog's /PieceInfo goes, its dictionaries and
 //     their /LastModified staying (ISO 32000-1, 14.5). It is an application's
 //     own format, an embedded search index among them, that the scan cannot
-//     read. See [RedactReport.ScrubbedPrivateData].
+//     read. See [models.RedactReport.ScrubbedPrivateData].
 //   - Signatures leave the form, /Perms and the /DSS, their appearances drawn
 //     into the pages, as every full rewrite does (see
 //     [Writer.DroppedSignatures]). A copy in a signature dictionary or a
@@ -713,34 +544,34 @@ type RedactReport struct {
 //
 // A painted path reaching outside the regions loses its geometry inside them,
 // and the rest is painted under a clip that excludes them (see
-// [RedactReport.ClippedPaths]).
+// [models.RedactReport.ClippedPaths]).
 //
 // An image is blanked by rewriting it. An image also painted somewhere the
 // regions do not cover the same samples is blanked in a copy instead. That
 // place may be another page, a second spot on one page, or an annotation or a
 // form. The covered placement paints the copy under a new resource name, and
 // every other placement keeps the image as it was (see
-// [RedactReport.ImagesBlankedInCopy]). [WithStrictRedaction] refuses such an
-// image.
+// [models.RedactReport.ImagesBlankedInCopy]). [WithStrictRedaction] refuses
+// such an image.
 //
 // An image a form XObject draws on the page is blanked in place when every
 // placement of it had the same samples covered. One also painted elsewhere is
 // blanked in a copy too. The form, and each form nested between it and the
 // image, is copied for the covered placement, and the copy names the blanked
 // image. The page draws the copy, while every other placement draws the form as
-// it was (see [RedactReport.FormsCopied]).
+// it was (see [models.RedactReport.FormsCopied]).
 //
 // A placement the page's own content draws wholly inside a region is removed,
-// with the q ... Q group that placed it when that group paints nothing else, so
-// the paper shows where it was (see [RedactReport.RemovedImages]). Blanked, it
-// would paint its outline in black, and a picture drawn as many small images
-// would keep its shape. Its image is still blanked in place when no placement
-// the regions do not cover paints it, since the file keeps it.
+// with the q ... Q group that placed it when that group paints nothing else,
+// so the paper shows where it was (see [models.RedactReport.RemovedImages]).
+// Blanked, it would paint its outline in black, and a picture drawn as many
+// small images would keep its shape. Its image is still blanked in place when
+// no placement the regions do not cover paints it, since the file keeps it.
 //
 // An inline image is blanked in place. A new inline image with the covered
 // samples overwritten replaces the bytes between BI and EI (ISO 32000-1,
-// 8.9.7), and [RedactReport.BlankedImages] names it "(inline)". Redact refuses
-// an inline image in any of these cases:
+// 8.9.7), and [models.RedactReport.BlankedImages] names it "(inline)". Redact
+// refuses an inline image in any of these cases:
 //
 //   - readers end its data at different bytes;
 //   - its dictionary writes a key both abbreviated and in full;
@@ -765,13 +596,13 @@ type RedactReport struct {
 // # Limits
 //
 // Redact does not re-subset embedded fonts whose glyphs now describe only
-// removed text (see [RedactReport.FontsFullyRemovedOnPage]). It cannot remove
-// content a form XObject draws, which it refuses instead.
+// removed text (see [models.RedactReport.FontsFullyRemovedOnPage]). It cannot
+// remove content a form XObject draws, which it refuses instead.
 //
 // It does not find a copy that no comparison of text recognises. Examples are
 // text an image or a thumbnail inside an attachment draws, and an attachment in
 // a format whose compression the scan does not know.
-func (w *Writer) Redact(ctx context.Context, regions []RedactRegion, opts ...RedactOption) (_ *RedactReport, err error) {
+func (w *Writer) Redact(ctx context.Context, regions []models.RedactRegion, opts ...RedactOption) (_ *models.RedactReport, err error) {
 	defer recoverToError(w.logger(), "Writer.Redact", &err)
 
 	if w.closed {
@@ -784,7 +615,7 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion, opts ...Red
 		return nil, err
 	}
 	if len(regions) == 0 {
-		return &RedactReport{}, nil
+		return &models.RedactReport{}, nil
 	}
 	var o redactOpts
 	for _, opt := range opts {
@@ -824,7 +655,7 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion, opts ...Red
 // document out and reopens it, so the renderer the raster fallback composites
 // with reads the drawing. It returns how many it removed; undo restores the
 // Writer as it was before.
-func (w *Writer) bakeRedactedAnnotations(ctx context.Context, regions []RedactRegion) (int, func(), error) {
+func (w *Writer) bakeRedactedAnnotations(ctx context.Context, regions []models.RedactRegion) (int, func(), error) {
 	noop := func() {}
 	if err := w.promotePageTree(ctx); err != nil {
 		return 0, noop, err
@@ -883,7 +714,7 @@ func (w *Writer) bakeRedactedAnnotations(ctx context.Context, regions []RedactRe
 
 // redact applies regions as [Writer.Redact] describes, with the raster
 // fallback when o asks for it.
-func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpts) (*RedactReport, error) {
+func (w *Writer) redact(ctx context.Context, regions []models.RedactRegion, o redactOpts) (*models.RedactReport, error) {
 	// The pixel check compares the redacted pages with the pages as staged
 	// before the redaction, which must be rendered from a document the
 	// redaction's passes have not started on.
@@ -962,11 +793,12 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 			pageOpts.Rasterise = flatten.RedactionJPEG(o.jpegQuality)
 		}
 	}
-	report, copied, err := redactPages(ctx, alloc, doc, pages, byPage, order, o.strict, pageOpts)
+	red, copied, err := redactPages(ctx, alloc, doc, pages, byPage, order, o.strict, pageOpts)
 	if err != nil {
 		restoreTrailer()
 		return nil, err
 	}
+	report := red.report
 	// An annotation is one object however many pages list it, so removing it
 	// from one page is exact only when no other page still shows it. That
 	// also needs every page's regions applied first.
@@ -974,14 +806,14 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 		restoreTrailer()
 		return nil, fmt.Errorf("%w: %w", ErrRedactionRefused, useErr)
 	}
-	if useErr := mutations.CheckRewrittenAnnotationUses(ctx, alloc, doc, pages, report.clippedByPage); useErr != nil {
+	if useErr := mutations.CheckRewrittenAnnotationUses(ctx, alloc, doc, pages, red.clippedByPage); useErr != nil {
 		restoreTrailer()
 		return nil, fmt.Errorf("%w: %w", ErrRedactionRefused, useErr)
 	}
 	// Once every placement is blanked: a picture blanked in place on two
 	// pages is one object, whose tiles must avoid what either region reaches.
-	if o.jpegQuality > 0 && len(report.blankedPhotographs) > 0 {
-		lossy, encErr := mutations.EncodeBlankedPhotographs(ctx, alloc, doc, report.blankedPhotographs, o.jpegQuality)
+	if o.jpegQuality > 0 && len(red.blankedPhotographs) > 0 {
+		lossy, encErr := mutations.EncodeBlankedPhotographs(ctx, alloc, doc, red.blankedPhotographs, o.jpegQuality)
 		if encErr != nil {
 			restoreTrailer()
 			return nil, fmt.Errorf("re-encoding blanked photographs: %w", encErr)
@@ -1037,7 +869,7 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	report.ScrubbedOutlineItems = sanitized.OutlineItems
 	for _, hit := range sanitized.Scan.Hits {
 		report.SurvivingCopies = append(report.SurvivingCopies,
-			RedactionHit{ObjectNum: hit.ObjectNum, Token: hit.Token, Where: hit.Where})
+			models.RedactionHit{ObjectNum: hit.ObjectNum, Token: hit.Token, Where: hit.Where})
 	}
 	report.UnreadableObjects = sanitized.Scan.Unreadable
 
@@ -1076,13 +908,13 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 	w.forceRewrite = true
 	w.recordRedaction(regions, needles, o, copied, report.CopiesOnRedactedPages)
 	w.redactionOutlines = append(w.redactionOutlines, outlines)
-	judgeCopies := slices.ContainsFunc(report.CopiesOnRedactedPages, func(h RedactionHit) bool { return len(h.Boxes) > 0 })
+	judgeCopies := slices.ContainsFunc(report.CopiesOnRedactedPages, func(h models.RedactionHit) bool { return len(h.Boxes) > 0 })
 	if judgeCopies || !o.noPixelCheck {
 		var check *redactedOutputCheck
 		if !o.noPixelCheck {
 			check = &redactedOutputCheck{
 				before: before, regions: regions, order: order,
-				removed: redactedGlyphs{boxes: report.RemovedGlyphBoxes, origins: report.removedGlyphOrigins},
+				removed: redactedGlyphs{boxes: report.RemovedGlyphBoxes, origins: red.removedGlyphOrigins},
 			}
 		}
 		unseen, checkErr := w.checkRedactedOutput(ctx, report.CopiesOnRedactedPages, check)
@@ -1110,7 +942,7 @@ func (w *Writer) redact(ctx context.Context, regions []RedactRegion, o redactOpt
 // written pages against.
 type redactedOutputCheck struct {
 	before  *Reader
-	regions []RedactRegion
+	regions []models.RedactRegion
 	order   []int
 	removed redactedGlyphs
 }
@@ -1121,7 +953,7 @@ type redactedOutputCheck struct {
 // those copies (see [unseenSamePageCopies]), and then, when pixels is not
 // nil, runs the pixel check of [Writer.Redact] on the pages of pixels.order
 // against pixels.before.
-func (w *Writer) checkRedactedOutput(ctx context.Context, samePage []RedactionHit, pixels *redactedOutputCheck) ([]RedactionHit, error) {
+func (w *Writer) checkRedactedOutput(ctx context.Context, samePage []models.RedactionHit, pixels *redactedOutputCheck) ([]models.RedactionHit, error) {
 	after, release, err := w.writeAndReopen(ctx, "litho-redact-after-*.pdf")
 	if err != nil {
 		if ctx.Err() != nil {
@@ -1150,7 +982,8 @@ func (w *Writer) checkRedactedOutput(ctx context.Context, samePage []RedactionHi
 }
 
 // redactPages applies the regions of byPage to each page of order, and
-// returns the report and the images it blanked in a copy rather than in place.
+// returns the redaction and the images it blanked in a copy rather than in
+// place.
 //
 // Blanking rewrites an image in place, so it is exact only when every place
 // that paints the image had the same samples covered. That needs every page's
@@ -1173,11 +1006,11 @@ func redactPages(
 	order []int,
 	strict bool,
 	pageOpts mutations.RedactOptions,
-) (*RedactReport, map[int]bool, error) {
+) (*redaction, map[int]bool, error) {
 	snap := alloc.Snapshot()
 	var copied map[int]bool
 	for {
-		report := &RedactReport{}
+		report := &redaction{report: &models.RedactReport{}}
 		var blanked, removed []int
 		for _, pageNum := range order {
 			opts := pageOpts
@@ -1231,7 +1064,7 @@ func (w *Writer) tolerableCopies(
 	pages []*document.Page,
 	byPage map[int][][4]float64,
 	scan mutations.ScanResult,
-) (others, samePage []RedactionHit, ok bool, err error) {
+) (others, samePage []models.RedactionHit, ok bool, err error) {
 	if len(scan.Unreadable) > 0 || len(scan.Hits) == 0 {
 		return nil, nil, false, nil
 	}
@@ -1251,10 +1084,10 @@ func (w *Writer) tolerableCopies(
 		return nil, nil, false, nil
 	}
 	for _, c := range copies {
-		others = append(others, RedactionHit{ObjectNum: c.Hit.ObjectNum, Token: c.Hit.Token, Where: c.Hit.Where, Pages: c.Pages})
+		others = append(others, models.RedactionHit{ObjectNum: c.Hit.ObjectNum, Token: c.Hit.Token, Where: c.Hit.Where, Pages: c.Pages})
 	}
 	for _, c := range same {
-		samePage = append(samePage, RedactionHit{ObjectNum: c.Hit.ObjectNum, Token: c.Hit.Token, Where: c.Hit.Where, Pages: []int{c.Page}, Boxes: c.Boxes})
+		samePage = append(samePage, models.RedactionHit{ObjectNum: c.Hit.ObjectNum, Token: c.Hit.Token, Where: c.Hit.Where, Pages: []int{c.Page}, Boxes: c.Boxes})
 	}
 	return others, samePage, true, nil
 }
@@ -1278,7 +1111,7 @@ func seedAllocator(alloc *writer.ObjAllocator, overrides map[int]ast.PdfObject) 
 //
 // copied holds the images the redaction blanked in a copy rather than in
 // place, which WriteTo checks the composed pages for.
-func (w *Writer) recordRedaction(regions []RedactRegion, needles []string, o redactOpts, copied map[int]bool, samePage []RedactionHit) {
+func (w *Writer) recordRedaction(regions []models.RedactRegion, needles []string, o redactOpts, copied map[int]bool, samePage []models.RedactionHit) {
 	w.redactions = append(w.redactions, slices.Clone(regions))
 	w.redactionCopies = append(w.redactionCopies, copied)
 	w.redactionClips = append(w.redactionClips, !o.noClipAnnots)
@@ -1549,7 +1382,7 @@ func (w *Writer) copiedImagesRestored(ctx context.Context, alloc *writer.ObjAllo
 // groupRedactRegions collects the regions of each page, and returns the pages
 // in ascending order so the same input always drives the same sequence of
 // edits.
-func groupRedactRegions(regions []RedactRegion, pageCount int) (map[int][][4]float64, []int, error) {
+func groupRedactRegions(regions []models.RedactRegion, pageCount int) (map[int][][4]float64, []int, error) {
 	byPage := make(map[int][][4]float64, len(regions))
 	for _, region := range regions {
 		if region.Page < 1 || region.Page > pageCount {
@@ -1567,7 +1400,8 @@ func groupRedactRegions(regions []RedactRegion, pageCount int) (map[int][][4]flo
 }
 
 // mergePageRedaction folds one page's result into the document-wide report.
-func mergePageRedaction(out *RedactReport, pageNum int, in mutations.RedactReport) {
+func mergePageRedaction(red *redaction, pageNum int, in mutations.RedactReport) {
+	out := red.report
 	out.RemovedText = append(out.RemovedText, in.RemovedText...)
 	if len(in.RemovedGlyphBoxes) > 0 {
 		if out.RemovedGlyphBoxes == nil {
@@ -1576,13 +1410,13 @@ func mergePageRedaction(out *RedactReport, pageNum int, in mutations.RedactRepor
 		out.RemovedGlyphBoxes[pageNum] = append(out.RemovedGlyphBoxes[pageNum], in.RemovedGlyphBoxes...)
 	}
 	if len(in.RemovedGlyphOrigins) > 0 {
-		if out.removedGlyphOrigins == nil {
-			out.removedGlyphOrigins = make(map[int][][2]float64)
+		if red.removedGlyphOrigins == nil {
+			red.removedGlyphOrigins = make(map[int][][2]float64)
 		}
-		out.removedGlyphOrigins[pageNum] = append(out.removedGlyphOrigins[pageNum], in.RemovedGlyphOrigins...)
+		red.removedGlyphOrigins[pageNum] = append(red.removedGlyphOrigins[pageNum], in.RemovedGlyphOrigins...)
 	}
 	out.BlankedImages = append(out.BlankedImages, in.BlankedImages...)
-	out.blankedPhotographs = mutations.MergeBlankedPhotographs(out.blankedPhotographs, in.BlankedPhotographs)
+	red.blankedPhotographs = mutations.MergeBlankedPhotographs(red.blankedPhotographs, in.BlankedPhotographs)
 	if len(in.ImagesBlankedInCopy) > 0 {
 		if out.ImagesBlankedInCopy == nil {
 			out.ImagesBlankedInCopy = make(map[int][]string)
@@ -1602,10 +1436,10 @@ func mergePageRedaction(out *RedactReport, pageNum int, in mutations.RedactRepor
 	out.RemovedAnnotations = append(out.RemovedAnnotations, in.RemovedAnnotations...)
 	if len(in.ClippedAnnotations) > 0 {
 		out.ClippedAnnotations = append(out.ClippedAnnotations, in.ClippedAnnotations...)
-		if out.clippedByPage == nil {
-			out.clippedByPage = make(map[int][]int)
+		if red.clippedByPage == nil {
+			red.clippedByPage = make(map[int][]int)
 		}
-		out.clippedByPage[pageNum-1] = append(out.clippedByPage[pageNum-1], in.ClippedAnnotations...)
+		red.clippedByPage[pageNum-1] = append(red.clippedByPage[pageNum-1], in.ClippedAnnotations...)
 	}
 	out.DroppedPageEntries = append(out.DroppedPageEntries, in.DroppedPageEntries...)
 	if len(in.FontsFullyRemovedOnPage) > 0 {

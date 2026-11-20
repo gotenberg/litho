@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // placeFormRight draws /Fm1 where placeRight draws /Im1.
@@ -58,7 +59,7 @@ func TestWriter_Redact_BlanksASharedFormImageInAFormCopy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			src := formImageDoc([]string{placeFormLeft, placeFormLeft})
-			out, report, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: tc.region}})
+			out, report, err := redactWith(t, src, []models.RedactRegion{{Page: 1, Rect: tc.region}})
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
 			}
@@ -90,7 +91,7 @@ func TestWriter_Redact_FormCopyPerPlacementOnOnePage(t *testing.T) {
 	t.Parallel()
 
 	src := formImageDoc([]string{placeFormLeft + " " + placeFormRight})
-	out, report, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: wholeLeft}})
+	out, report, err := redactWith(t, src, []models.RedactRegion{{Page: 1, Rect: wholeLeft}})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -115,7 +116,7 @@ func TestWriter_Redact_FormCopyFollowsNestedForms(t *testing.T) {
 		t.Run(strconv.Itoa(depth), func(t *testing.T) {
 			t.Parallel()
 			src := formChainDoc(depth, []string{placeFormLeft + " " + placeFormRight, placeFormLeft})
-			out, report, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: wholeLeft}})
+			out, report, err := redactWith(t, src, []models.RedactRegion{{Page: 1, Rect: wholeLeft}})
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
 			}
@@ -144,7 +145,7 @@ func TestWriter_Redact_FormCopyRepointsOnlyTheCoveredDo(t *testing.T) {
 	src := formImageDoc([]string{placeFormLeft})
 	src = bytes.Replace(src, []byte("/Length 30 >>\nstream\nq 100 0 0 100 0 0 cm /Im1 Do Q"),
 		[]byte("/Length 60 >>\nstream\nq 50 0 0 100 0 0 cm /Im1 Do Q q 50 0 0 100 50 0 cm /Im1 Do Q"), 1)
-	out, report, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: [4]float64{90, 490, 145, 610}}})
+	out, report, err := redactWith(t, src, []models.RedactRegion{{Page: 1, Rect: [4]float64{90, 490, 145, 610}}})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -172,7 +173,7 @@ func TestWriter_WriteTo_ReappliesAFormCopyThatWasUndone(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: wholeLeft}}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: wholeLeft}}); err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
 	pages, err := w.reader.resolvePages(ctx)
@@ -211,7 +212,7 @@ func TestWriter_Redact_FormCopyWithTheOtherOptions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			src := formImageDoc([]string{placeFormLeft + " " + placeRight, placeFormLeft})
-			out, report, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: wholeLeft}}, tc.opt)
+			out, report, err := redactWith(t, src, []models.RedactRegion{{Page: 1, Rect: wholeLeft}}, tc.opt)
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
 			}
@@ -240,7 +241,7 @@ func TestWriter_Redact_FormCopyIsDeterministic(t *testing.T) {
 	t.Parallel()
 
 	src := formChainDoc(3, []string{placeFormLeft + " " + placeFormRight, placeFormLeft})
-	regions := []RedactRegion{{Page: 1, Rect: topLeft}, {Page: 1, Rect: wholeRight}, {Page: 2, Rect: bottomLeft}}
+	regions := []models.RedactRegion{{Page: 1, Rect: topLeft}, {Page: 1, Rect: wholeRight}, {Page: 2, Rect: bottomLeft}}
 	first, _, err := redactWith(t, src, regions)
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
@@ -264,13 +265,13 @@ func TestWriter_Redact_FormCopiesPastTheCapRefuse(t *testing.T) {
 
 	// At the cap every placement gets its copy.
 	atCap := formImageDoc([]string{strings.Repeat(placeFormLeft+" ", 1024), placeFormLeft})
-	if _, report, err := redactWith(t, atCap, []RedactRegion{{Page: 1, Rect: wholeLeft}}); err != nil || report.FormsCopied[1] != 1024 {
+	if _, report, err := redactWith(t, atCap, []models.RedactRegion{{Page: 1, Rect: wholeLeft}}); err != nil || report.FormsCopied[1] != 1024 {
 		t.Fatalf("Redact at the cap = %v, %v, want 1024 forms copied on page 1", err, report)
 	}
 
 	page1 := strings.Repeat(placeFormLeft+" ", 1025)
 	src := formImageDoc([]string{page1, placeFormLeft})
-	out, _, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: wholeLeft}})
+	out, _, err := redactWith(t, src, []models.RedactRegion{{Page: 1, Rect: wholeLeft}})
 	if !errors.Is(err, ErrRedactionRefused) || !errors.Is(err, mutations.ErrImageShared) {
 		t.Fatalf("Redact = %v, want ErrRedactionRefused wrapping ErrImageShared", err)
 	}

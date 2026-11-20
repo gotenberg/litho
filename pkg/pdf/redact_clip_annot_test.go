@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // clippedLinkDoc is a page drawing "SECRET LINK" with a borderless link over
@@ -42,7 +43,7 @@ func TestWriter_Redact_FallbackDrawsAStraddlingAnnotationIntoThePage(t *testing.
 		"20 0 obj\n<< /Type /Annot /Subtype /Popup /Rect [400 400 500 500] /Parent 8 0 R >>\nendobj\n"
 	src := imageDoc([]string{""}, "", "/Annots [8 0 R 20 0 R]", square)
 	ctx := context.Background()
-	region := []RedactRegion{{Page: 1, Rect: [4]float64{90, 590, 200, 710}}}
+	region := []models.RedactRegion{{Page: 1, Rect: [4]float64{90, 590, 200, 710}}}
 
 	open := func() *Writer {
 		r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
@@ -103,7 +104,7 @@ func TestWriter_Redact_FallbackRefusesAnAnnotationAnotherPageShows(t *testing.T)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	_, err = NewWriter(r).Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{90, 590, 200, 710}}}, WithRedactionRasterFallback())
+	_, err = NewWriter(r).Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{90, 590, 200, 710}}}, WithRedactionRasterFallback())
 	if !errors.Is(err, ErrRedactionRefused) || !errors.Is(err, mutations.ErrAnnotationStraddlesRegion) {
 		t.Errorf("err = %v, want ErrRedactionRefused wrapping ErrAnnotationStraddlesRegion", err)
 	}
@@ -117,9 +118,9 @@ func TestWriter_Redact_FallbackRefusesAnAnnotationAnotherPageShows(t *testing.T)
 func TestWriter_Redact_CutsALinkByDefault(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	region := []RedactRegion{{Page: 1, Rect: [4]float64{90, 690, 150, 730}}}
+	region := []models.RedactRegion{{Page: 1, Rect: [4]float64{90, 690, 150, 730}}}
 
-	redact := func(src []byte, opts ...RedactOption) ([]byte, *RedactReport, error) {
+	redact := func(src []byte, opts ...RedactOption) ([]byte, *models.RedactReport, error) {
 		r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
 		if err != nil {
 			t.Fatalf("Open: %v", err)

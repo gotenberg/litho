@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -52,7 +53,7 @@ func TestRedactRenderCatchesAWhitespaceGlyphLeftInside(t *testing.T) {
 	data := whitespaceGlyphPDF("BT /T3 24 Tf 88 88 Td ( ) Tj ET")
 
 	broken := newTestRedactRender()
-	broken.redact = func(context.Context, *pdf.Writer, pdf.RedactRegion, ...pdf.RedactOption) (*pdf.RedactReport, error) {
+	broken.redact = func(context.Context, *pdf.Writer, models.RedactRegion, ...pdf.RedactOption) (*models.RedactReport, error) {
 		return nil, nil
 	}
 	v, sc := runRedactRender(t, broken, data, "p1-quarter")
@@ -83,8 +84,8 @@ func TestRedactRenderExcludesRemovedWhitespaceGlyphs(t *testing.T) {
 	// The report is what excludes the glyph: without it, its ink above the
 	// region reads as changed outside.
 	blind := newTestRedactRender()
-	blind.redact = func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion, _ ...pdf.RedactOption) (*pdf.RedactReport, error) {
-		_, err := w.Redact(ctx, []pdf.RedactRegion{region})
+	blind.redact = func(ctx context.Context, w *pdf.Writer, region models.RedactRegion, _ ...pdf.RedactOption) (*models.RedactReport, error) {
+		_, err := w.Redact(ctx, []models.RedactRegion{region})
 		return nil, err
 	}
 	_, sc = runRedactRender(t, blind, data, "p1-quarter")

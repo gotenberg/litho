@@ -8,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // glyphOverhangPDF returns a page showing "A" at 60 pt at x 100, y 400, and
@@ -49,11 +51,11 @@ func glyphOverhangPDF(t *testing.T) []byte {
 
 // glyphOverhangRegion covers x 115 to 200 around "A": its outline, not its
 // advance box.
-var glyphOverhangRegion = []RedactRegion{{Page: 1, Rect: [4]float64{115, 380, 200, 450}}}
+var glyphOverhangRegion = []models.RedactRegion{{Page: 1, Rect: [4]float64{115, 380, 200, 450}}}
 
 // redactOutlined runs a redaction with opts and returns the written bytes, or the
 // redaction's error.
-func redactOutlined(t *testing.T, src []byte, regions []RedactRegion, opts ...RedactOption) ([]byte, *RedactReport, error) {
+func redactOutlined(t *testing.T, src []byte, regions []models.RedactRegion, opts ...RedactOption) ([]byte, *models.RedactReport, error) {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
@@ -122,7 +124,7 @@ func TestWriter_Redact_GlyphOutlinesRemoveAGlyphWhoseOutlineReachesIn(t *testing
 func TestWriter_Redact_GlyphOutlinesKeepWhatNoOutlineReaches(t *testing.T) {
 	t.Parallel()
 	src := glyphOverhangPDF(t)
-	region := []RedactRegion{{Page: 1, Rect: [4]float64{150, 380, 200, 450}}}
+	region := []models.RedactRegion{{Page: 1, Rect: [4]float64{150, 380, 200, 450}}}
 	out, report, err := redactOutlined(t, src, region)
 	if err != nil {
 		t.Fatalf("Redact: %v", err)

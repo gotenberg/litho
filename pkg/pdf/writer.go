@@ -1159,7 +1159,7 @@ type Writer struct {
 	// composed output against them, because a stage queued before or after
 	// Redact can rebuild content from the source document and restore what
 	// Redact removed.
-	redactions     [][]RedactRegion
+	redactions     [][]models.RedactRegion
 	redactedTokens []string
 	// redactionTolerances records, per successful non-strict Redact call, the
 	// copies on other pages it reported rather than refused, so WriteTo

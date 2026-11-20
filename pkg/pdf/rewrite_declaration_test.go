@@ -378,7 +378,7 @@ func TestWriter_InsertPages_DeclaresTheSourceAfterARedaction(t *testing.T) {
 	if err := w.InsertPages(2, source, 2); err != nil {
 		t.Fatalf("InsertPages: %v", err)
 	}
-	if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{60, 690, 200, 720}}}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{60, 690, 200, 720}}}); err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
 	var out bytes.Buffer

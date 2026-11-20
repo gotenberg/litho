@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // redactableTextPDF builds a one-page document drawing two runs: "SECRET" at
@@ -50,7 +52,7 @@ func redactableBodyPDF(body, info string) []byte {
 }
 
 // coversSecret is the region that takes the whole "SECRET" run.
-var coversSecret = RedactRegion{Page: 1, Rect: [4]float64{90, 690, 300, 730}}
+var coversSecret = models.RedactRegion{Page: 1, Rect: [4]float64{90, 690, 300, 730}}
 
 // twoPageRedactablePDF builds a two-page document drawing "ALPHA" on page 1 and
 // "BETA" on page 2, both at the same coordinates.
@@ -77,7 +79,7 @@ func twoPageRedactablePDF() []byte {
 }
 
 // redactAndWrite runs a redaction and returns the written bytes.
-func redactAndWrite(t *testing.T, src []byte, regions []RedactRegion) []byte {
+func redactAndWrite(t *testing.T, src []byte, regions []models.RedactRegion) []byte {
 	t.Helper()
 	ctx := context.Background()
 
@@ -106,7 +108,7 @@ func redactAndWrite(t *testing.T, src []byte, regions []RedactRegion) []byte {
 // it destroys data while reporting success.
 func TestWriter_Redact_RoutesARegionToThePageItNames(t *testing.T) {
 	out := redactAndWrite(t, twoPageRedactablePDF(),
-		[]RedactRegion{{Page: 2, Rect: [4]float64{90, 690, 300, 730}}})
+		[]models.RedactRegion{{Page: 2, Rect: [4]float64{90, 690, 300, 730}}})
 
 	if bytes.Contains(out, []byte("BETA")) {
 		t.Error("page 2 was named but its text survived")
@@ -121,7 +123,7 @@ func TestWriter_Redact_RoutesARegionToThePageItNames(t *testing.T) {
 func TestWriter_Redact_ClearsSeveralPagesInOneCall(t *testing.T) {
 	// Deliberately out of order: the grouping sorts, so the same input must
 	// drive the same sequence of edits whichever order the caller passes.
-	out := redactAndWrite(t, twoPageRedactablePDF(), []RedactRegion{
+	out := redactAndWrite(t, twoPageRedactablePDF(), []models.RedactRegion{
 		{Page: 2, Rect: [4]float64{90, 690, 300, 730}},
 		{Page: 1, Rect: [4]float64{90, 690, 300, 730}},
 	})
@@ -147,7 +149,7 @@ func TestWriter_Redact_RejectsAPageOutOfRange(t *testing.T) {
 	w := NewWriter(r)
 
 	for _, page := range []int{0, 3, -1} {
-		_, err := w.Redact(ctx, []RedactRegion{{Page: page, Rect: [4]float64{90, 690, 300, 730}}})
+		_, err := w.Redact(ctx, []models.RedactRegion{{Page: page, Rect: [4]float64{90, 690, 300, 730}}})
 		if !errors.Is(err, ErrInvalidPageNumber) {
 			t.Errorf("page %d: err = %v, want ErrInvalidPageNumber", page, err)
 		}
@@ -174,7 +176,7 @@ func TestWriter_Redact_RemovesTheCoveredTextFromTheOutput(t *testing.T) {
 	}
 	w := NewWriter(r)
 
-	report, err := w.Redact(ctx, []RedactRegion{coversSecret})
+	report, err := w.Redact(ctx, []models.RedactRegion{coversSecret})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -222,7 +224,7 @@ func TestWriter_Redact_ClearsTheMetadataCopy(t *testing.T) {
 	}
 	w := NewWriter(r)
 
-	if _, err := w.Redact(ctx, []RedactRegion{coversSecret}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{coversSecret}); err != nil {
 		t.Fatalf("Redact: %v (the /Info copy was not composed away)", err)
 	}
 
@@ -289,7 +291,7 @@ func TestWriter_Redact_FailsClosedWhenACopySurvives(t *testing.T) {
 	}
 	w := NewWriter(r)
 
-	report, err := w.Redact(ctx, []RedactRegion{coversSecret})
+	report, err := w.Redact(ctx, []models.RedactRegion{coversSecret})
 	if !errors.Is(err, ErrRedactionIncomplete) {
 		t.Fatalf("err = %v, want ErrRedactionIncomplete", err)
 	}
@@ -339,7 +341,7 @@ func TestWriter_Redact_RefusesPartialCoverage(t *testing.T) {
 	// Clips the left edge of "SECRET": some glyphs inside the region, some
 	// outside. Removing the operator would take the rest of the word, and
 	// splitting it would change the clip.
-	if _, err := w.Redact(ctx, []RedactRegion{clipsSecret}); err == nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{clipsSecret}); err == nil {
 		t.Fatal("a region covering an operator only partly was accepted")
 	} else if !errors.Is(err, ErrRedactionRefused) {
 		t.Errorf("err = %v, want ErrRedactionRefused", err)
@@ -356,7 +358,7 @@ func TestWriter_Redact_RefusesPartialCoverage(t *testing.T) {
 }
 
 // clipsSecret covers the left edge of "SECRET", its first two glyphs.
-var clipsSecret = RedactRegion{Page: 1, Rect: [4]float64{90, 690, 110, 730}}
+var clipsSecret = models.RedactRegion{Page: 1, Rect: [4]float64{90, 690, 110, 730}}
 
 // TestWriter_Redact_SplitsPartialCoverage pins that a region over part of a
 // run removes the glyphs it covers and keeps the rest, through the public
@@ -370,7 +372,7 @@ func TestWriter_Redact_SplitsPartialCoverage(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.Redact(ctx, []RedactRegion{clipsSecret}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{clipsSecret}); err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
 	var out bytes.Buffer

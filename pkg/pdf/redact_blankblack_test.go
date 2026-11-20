@@ -5,6 +5,8 @@ import (
 	"context"
 	"image"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestRedact_BlanksImagesToTheirBlack redacts the litho fixture
@@ -47,7 +49,7 @@ func TestRedact_BlanksImagesToTheirBlack(t *testing.T) {
 			defer r.Close()
 			w := NewWriter(r)
 			defer w.Close()
-			report, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: tc.region}})
+			report, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: tc.region}})
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
 			}

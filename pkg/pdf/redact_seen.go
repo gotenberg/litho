@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // seenCopyBoxSlack is how far, in points, a glyph's ink box may reach past
@@ -22,7 +23,7 @@ import (
 const seenCopyBoxSlack = 0.5
 
 // unseenSamePageCopies returns the copies of copies, each a
-// [RedactReport.CopiesOnRedactedPages] entry, that no rendering of after
+// [models.RedactReport.CopiesOnRedactedPages] entry, that no rendering of after
 // shows: a run a later opaque fill, an image, other text or anything else
 // paints over, or one drawn in the colour of what lies under it. Such a copy
 // is a hidden duplicate of the removed text, not the page's other text, so
@@ -45,7 +46,7 @@ const seenCopyBoxSlack = 0.5
 //     "tück" drawn plainly below the region, in "Stück", was refused as unseen
 //     while the boxes of the large "99" beside it held every pixel it marks;
 //     judged by its own ink it shows, and the redaction succeeds reporting it.
-func unseenSamePageCopies(ctx context.Context, after *Reader, copies []RedactionHit) ([]RedactionHit, error) {
+func unseenSamePageCopies(ctx context.Context, after *Reader, copies []models.RedactionHit) ([]models.RedactionHit, error) {
 	byPage := make(map[int][]int)
 	for i, c := range copies {
 		if len(c.Boxes) > 0 && len(c.Pages) > 0 {
@@ -63,7 +64,7 @@ func unseenSamePageCopies(ctx context.Context, after *Reader, copies []Redaction
 		after.logger().Debug("redact: the written pages do not resolve, copies on them count as unseen", slog.Any("err", err))
 		return slices.Clone(copies), nil
 	}
-	var unseen []RedactionHit
+	var unseen []models.RedactionHit
 	for _, pageNum := range slices.Sorted(maps.Keys(byPage)) {
 		idx := byPage[pageNum]
 		seen, err := seenOnPage(ctx, after, pages, pageNum, copies, idx)
@@ -85,7 +86,7 @@ func unseenSamePageCopies(ctx context.Context, after *Reader, copies []Redaction
 
 // seenOnPage draws page pageNum and reports, parallel to idx, whether each
 // copy it names shows (see [unseenSamePageCopies]).
-func seenOnPage(ctx context.Context, after *Reader, pages []*document.Page, pageNum int, copies []RedactionHit, idx []int) ([]bool, error) {
+func seenOnPage(ctx context.Context, after *Reader, pages []*document.Page, pageNum int, copies []models.RedactionHit, idx []int) ([]bool, error) {
 	if pageNum < 1 || pageNum > len(pages) {
 		return nil, fmt.Errorf("page %d of %d", pageNum, len(pages))
 	}

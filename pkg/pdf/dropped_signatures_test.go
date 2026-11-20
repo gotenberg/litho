@@ -207,7 +207,7 @@ func TestWriter_FullRewriteDropsTheSourceSignatures(t *testing.T) {
 			return []WriteOption{WithFullRewrite()}
 		}},
 		{"Redact", func(t *testing.T, w *Writer) []WriteOption {
-			if _, err := w.Redact(ctx, []RedactRegion{{Page: 2, Rect: [4]float64{0, 600, 612, 792}}}); err != nil {
+			if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 2, Rect: [4]float64{0, 600, 612, 792}}}); err != nil {
 				t.Fatalf("Redact: %v", err)
 			}
 			return nil

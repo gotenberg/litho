@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestWriter_Redact_PlacesAnAppearanceLessAnnotationWhereItDraws pins that an
@@ -28,12 +29,12 @@ func TestWriter_Redact_PlacesAnAppearanceLessAnnotationWhereItDraws(t *testing.T
 	src := imageDoc([]string{""}, "", "/Annots [8 0 R]", line)
 	ctx := context.Background()
 
-	redact := func(region [4]float64) (*RedactReport, error) {
+	redact := func(region [4]float64) (*models.RedactReport, error) {
 		r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
 		if err != nil {
 			t.Fatalf("Open: %v", err)
 		}
-		return NewWriter(r).Redact(ctx, []RedactRegion{{Page: 1, Rect: region}})
+		return NewWriter(r).Redact(ctx, []models.RedactRegion{{Page: 1, Rect: region}})
 	}
 
 	_, err := redact([4]float64{153, 198, 459, 594})
@@ -63,13 +64,13 @@ func TestWriter_Redact_PlacesATextIconWhereItDraws(t *testing.T) {
 
 	const note = "8 0 obj\n<< /Type /Annot /Subtype /Text /Rect [100 600 104 604] /C [1 1 0] /Contents (SECRET) >>\nendobj\n"
 	ctx := context.Background()
-	redact := func(page string, region [4]float64) (*RedactReport, error) {
+	redact := func(page string, region [4]float64) (*models.RedactReport, error) {
 		src := imageDoc([]string{""}, "", page, note)
 		r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
 		if err != nil {
 			t.Fatalf("Open: %v", err)
 		}
-		return NewWriter(r).Redact(ctx, []RedactRegion{{Page: 1, Rect: region}})
+		return NewWriter(r).Redact(ctx, []models.RedactRegion{{Page: 1, Rect: region}})
 	}
 
 	// The icon spans x 100 to 124, y 580 to 604, past the small /Rect.
@@ -111,7 +112,7 @@ func TestWriter_Redact_KeepsAnAppearanceLessSquareARegionPasses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	report, err := NewWriter(r).Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{0, 205, 612, 215}}})
+	report, err := NewWriter(r).Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{0, 205, 612, 215}}})
 	if err != nil {
 		t.Fatalf("band past /Rect: %v", err)
 	}

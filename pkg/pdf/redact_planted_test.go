@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // plantedPDF builds a one-page document that draws body, with a copy of the
@@ -106,7 +108,7 @@ func assertPlantCaught(t *testing.T, src []byte, word string) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.Redact(ctx, []RedactRegion{coversSecret}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{coversSecret}); err != nil {
 		if errors.Is(err, ErrRedactionIncomplete) || errors.Is(err, ErrRedactionRefused) {
 			return
 		}

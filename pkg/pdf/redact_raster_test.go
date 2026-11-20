@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // formTextPDF builds a page whose content is one form showing two words,
@@ -32,7 +34,7 @@ func TestWriterRedactRasterFallback(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	data := formTextPDF()
-	region := []RedactRegion{{Page: 1, Rect: [4]float64{390, 690, 500, 720}}}
+	region := []models.RedactRegion{{Page: 1, Rect: [4]float64{390, 690, 500, 720}}}
 
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {

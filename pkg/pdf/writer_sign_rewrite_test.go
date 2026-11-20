@@ -119,7 +119,7 @@ func TestWriterSignsAnEditThatRewrites(t *testing.T) {
 		{
 			name: "redact",
 			edit: func(t *testing.T, w *Writer) {
-				report, err := w.Redact(ctx, []RedactRegion{{Page: 2, Rect: [4]float64{90, 690, 300, 730}}})
+				report, err := w.Redact(ctx, []models.RedactRegion{{Page: 2, Rect: [4]float64{90, 690, 300, 730}}})
 				if err != nil {
 					t.Fatalf("Redact: %v", err)
 				}

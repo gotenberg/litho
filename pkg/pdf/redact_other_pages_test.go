@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // otherPageCopyPDF builds a two-page document. Page 1 draws "SECRET" at y=700,
@@ -123,7 +125,7 @@ func jpegWithComment(text string) []byte {
 }
 
 // redactOtherPageCopy redacts "SECRET" off page 1 and writes the result.
-func redactOtherPageCopy(t *testing.T, src []byte, opts ...RedactOption) (*RedactReport, []byte, error) {
+func redactOtherPageCopy(t *testing.T, src []byte, opts ...RedactOption) (*models.RedactReport, []byte, error) {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
@@ -131,7 +133,7 @@ func redactOtherPageCopy(t *testing.T, src []byte, opts ...RedactOption) (*Redac
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	report, err := w.Redact(ctx, []RedactRegion{coversSecret}, opts...)
+	report, err := w.Redact(ctx, []models.RedactRegion{coversSecret}, opts...)
 	if err != nil {
 		return report, nil, err
 	}
@@ -160,7 +162,7 @@ func TestWriter_Redact_WarnsAboutCopiesOtherPagesDraw(t *testing.T) {
 			if len(report.SurvivingCopies) != 0 {
 				t.Errorf("SurvivingCopies = %+v, want none on a redaction that succeeded", report.SurvivingCopies)
 			}
-			found := slices.ContainsFunc(report.CopiesOnOtherPages, func(h RedactionHit) bool {
+			found := slices.ContainsFunc(report.CopiesOnOtherPages, func(h models.RedactionHit) bool {
 				return h.ObjectNum == tc.object && h.Token == "SECRET" && slices.Equal(h.Pages, []int{2})
 			})
 			if !found {
@@ -188,7 +190,7 @@ func TestWriter_Redact_StrictRefusesCopiesOtherPagesDraw(t *testing.T) {
 	if !errors.Is(err, ErrRedactionIncomplete) {
 		t.Fatalf("err = %v, want ErrRedactionIncomplete", err)
 	}
-	if report == nil || !slices.ContainsFunc(report.SurvivingCopies, func(h RedactionHit) bool { return h.ObjectNum == 8 }) {
+	if report == nil || !slices.ContainsFunc(report.SurvivingCopies, func(h models.RedactionHit) bool { return h.ObjectNum == 8 }) {
 		t.Errorf("report = %+v, want object 8 among SurvivingCopies", report)
 	}
 	if report != nil && len(report.CopiesOnOtherPages) != 0 {
@@ -212,7 +214,7 @@ func TestWriter_Redact_RefusesCopiesBeyondOtherPagesContent(t *testing.T) {
 			if !errors.Is(err, ErrRedactionIncomplete) {
 				t.Fatalf("err = %v, want ErrRedactionIncomplete", err)
 			}
-			if report == nil || !slices.ContainsFunc(report.SurvivingCopies, func(h RedactionHit) bool { return h.ObjectNum == tc.object }) {
+			if report == nil || !slices.ContainsFunc(report.SurvivingCopies, func(h models.RedactionHit) bool { return h.ObjectNum == tc.object }) {
 				t.Errorf("report = %+v, want object %d among SurvivingCopies", report, tc.object)
 			}
 		})
@@ -231,7 +233,7 @@ func TestWriter_Redact_CopiesOnOtherPagesHoldThroughAutoTag(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.Redact(ctx, []RedactRegion{coversSecret}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{coversSecret}); err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
 	w.AutoTag()

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // stretchedSamplePDF returns a page drawing a one-sample grey image twice,
@@ -47,7 +48,7 @@ func TestWriterRedactClearsARegionOverAnAlreadyBlankedInlineSample(t *testing.T)
 	t.Parallel()
 	src := stretchedInlineSamplePDF()
 
-	first, report, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: [4]float64{90, 90, 110, 110}}})
+	first, report, err := redactWith(t, src, []models.RedactRegion{{Page: 1, Rect: [4]float64{90, 90, 110, 110}}})
 	if err != nil {
 		t.Fatalf("first Redact: %v", err)
 	}
@@ -55,7 +56,7 @@ func TestWriterRedactClearsARegionOverAnAlreadyBlankedInlineSample(t *testing.T)
 		t.Fatalf("first BlankedImages = %v, want the first inline image", report.BlankedImages)
 	}
 
-	second, report, err := redactWith(t, first, []RedactRegion{{Page: 1, Rect: [4]float64{10, 10, 40, 40}}})
+	second, report, err := redactWith(t, first, []models.RedactRegion{{Page: 1, Rect: [4]float64{10, 10, 40, 40}}})
 	if err != nil {
 		t.Fatalf("second Redact over the blanked inline sample: %v", err)
 	}
@@ -69,7 +70,7 @@ func TestWriterRedactClearsARegionOverAnAlreadyBlankedInlineSample(t *testing.T)
 		t.Errorf("second placement = %d, want %d: no region met it", got, want)
 	}
 
-	_, _, err = redactWith(t, first, []RedactRegion{{Page: 1, Rect: [4]float64{310, 10, 340, 40}}})
+	_, _, err = redactWith(t, first, []models.RedactRegion{{Page: 1, Rect: [4]float64{310, 10, 340, 40}}})
 	if !errors.Is(err, mutations.ErrImageRegionCoversNoSample) {
 		t.Errorf("Redact over the grey inline image's corner = %v, want ErrImageRegionCoversNoSample", err)
 	}
@@ -93,7 +94,7 @@ func TestWriterRedactClearsARegionOverAnAlreadyBlankedSample(t *testing.T) {
 
 	// Over the first placement's centre: blanks its sample in a copy, the
 	// image being painted at (300,0) too.
-	first, report, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: [4]float64{90, 90, 110, 110}}})
+	first, report, err := redactWith(t, src, []models.RedactRegion{{Page: 1, Rect: [4]float64{90, 90, 110, 110}}})
 	if err != nil {
 		t.Fatalf("first Redact: %v", err)
 	}
@@ -102,7 +103,7 @@ func TestWriterRedactClearsARegionOverAnAlreadyBlankedSample(t *testing.T) {
 	}
 
 	// The first placement's corner, far from its centre, on the blank.
-	second, report, err := redactWith(t, first, []RedactRegion{{Page: 1, Rect: [4]float64{10, 10, 40, 40}}})
+	second, report, err := redactWith(t, first, []models.RedactRegion{{Page: 1, Rect: [4]float64{10, 10, 40, 40}}})
 	if err != nil {
 		t.Fatalf("second Redact over the blanked sample: %v", err)
 	}
@@ -118,7 +119,7 @@ func TestWriterRedactClearsARegionOverAnAlreadyBlankedSample(t *testing.T) {
 	}
 
 	// The second placement's corner still shows the grey picture.
-	_, _, err = redactWith(t, first, []RedactRegion{{Page: 1, Rect: [4]float64{310, 10, 340, 40}}})
+	_, _, err = redactWith(t, first, []models.RedactRegion{{Page: 1, Rect: [4]float64{310, 10, 340, 40}}})
 	if !errors.Is(err, mutations.ErrImageRegionCoversNoSample) {
 		t.Errorf("Redact over the grey placement's corner = %v, want ErrImageRegionCoversNoSample", err)
 	}
@@ -156,7 +157,7 @@ func halfBlankSamplePDF() []byte {
 func TestWriterRedactLeavesAnAlreadyBlankPlacementOfAnImageBlankedInACopy(t *testing.T) {
 	t.Parallel()
 	src := halfBlankSamplePDF()
-	regions := []RedactRegion{
+	regions := []models.RedactRegion{
 		{Page: 1, Rect: [4]float64{90, 40, 110, 60}},
 		{Page: 1, Rect: [4]float64{310, 160, 340, 190}},
 	}

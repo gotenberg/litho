@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // taggedParagraphPDF builds a tagged one-page document whose paragraph,
@@ -30,7 +32,7 @@ func taggedParagraphPDF(props, elem string) []byte {
 }
 
 // coversMiddleWord takes "SECRET" of "Keep SECRET words" and neither space.
-var coversMiddleWord = RedactRegion{Page: 1, Rect: [4]float64{133, 690, 179, 730}}
+var coversMiddleWord = models.RedactRegion{Page: 1, Rect: [4]float64{133, 690, 179, 730}}
 
 // TestWriterRedactKeepsTheRestOfATaggedParagraphTagged pins the output of a
 // redaction that cuts a structure element's content: the removed word is gone
@@ -40,7 +42,7 @@ var coversMiddleWord = RedactRegion{Page: 1, Rect: [4]float64{133, 690, 179, 730
 func TestWriterRedactKeepsTheRestOfATaggedParagraphTagged(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	out := redactAndWrite(t, taggedParagraphPDF("", ""), []RedactRegion{coversMiddleWord})
+	out := redactAndWrite(t, taggedParagraphPDF("", ""), []models.RedactRegion{coversMiddleWord})
 	r, err := Open(ctx, bytes.NewReader(out), int64(len(out)))
 	if err != nil {
 		t.Fatalf("Open output: %v", err)
@@ -95,7 +97,7 @@ func TestWriterRedactRefusesTextSpanningTheCut(t *testing.T) {
 			}
 			w := NewWriter(r)
 			defer w.Close()
-			_, err = w.Redact(ctx, []RedactRegion{coversMiddleWord})
+			_, err = w.Redact(ctx, []models.RedactRegion{coversMiddleWord})
 			if err == nil {
 				err = w.WriteTo(ctx, &bytes.Buffer{})
 			}

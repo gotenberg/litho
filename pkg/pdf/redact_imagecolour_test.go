@@ -63,7 +63,7 @@ func TestRedact_ImageColourKeepsPDFA(t *testing.T) {
 			defer r.Close()
 			w := NewWriter(r)
 			defer w.Close()
-			if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: rect}}); err != nil {
+			if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: rect}}); err != nil {
 				t.Fatalf("Redact: %v", err)
 			}
 			var out bytes.Buffer

@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // unparsedFormBody is what the second form, object 30, draws: formImageDoc's
@@ -77,7 +78,7 @@ func TestWriter_Redact_CopiesAnImageAnUnparsedFormNames(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			src := unparsedFormDoc(tc.dict, tc.data)
-			regions := []RedactRegion{{Page: 1, Rect: wholeLeft}}
+			regions := []models.RedactRegion{{Page: 1, Rect: wholeLeft}}
 
 			out, report, err := redactOpened(t, src, tc.open, regions)
 			if err != nil {
@@ -121,12 +122,12 @@ func TestWriter_Redact_RefusesAnUnparsedFormUnderARegion(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		src     []byte
-		regions []RedactRegion
+		regions []models.RedactRegion
 	}{
-		{"inside a region", src, []RedactRegion{{Page: 1, Rect: [4]float64{290, 490, 410, 610}}}},
-		{"partly under a region", src, []RedactRegion{{Page: 1, Rect: [4]float64{350, 490, 410, 610}}}},
-		{"beside a covered image", src, []RedactRegion{{Page: 1, Rect: wholeLeft}, {Page: 1, Rect: [4]float64{350, 490, 410, 610}}}},
-		{"no /BBox", unbounded, []RedactRegion{{Page: 1, Rect: wholeLeft}}},
+		{"inside a region", src, []models.RedactRegion{{Page: 1, Rect: [4]float64{290, 490, 410, 610}}}},
+		{"partly under a region", src, []models.RedactRegion{{Page: 1, Rect: [4]float64{350, 490, 410, 610}}}},
+		{"beside a covered image", src, []models.RedactRegion{{Page: 1, Rect: wholeLeft}, {Page: 1, Rect: [4]float64{350, 490, 410, 610}}}},
+		{"no /BBox", unbounded, []models.RedactRegion{{Page: 1, Rect: wholeLeft}}},
 	} {
 		for _, mode := range []struct {
 			name string
@@ -167,7 +168,7 @@ func TestCheckRedactedPage_UnreadFormInARegion(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := checkRedactedPage(ctx, r, r, 1, []RedactRegion{{Page: 1, Rect: tc.region}}, nil, nil)
+			err := checkRedactedPage(ctx, r, r, 1, []models.RedactRegion{{Page: 1, Rect: tc.region}}, nil, nil)
 			var pixelErr *RedactionPixelError
 			switch {
 			case !tc.fails && err != nil:
@@ -187,7 +188,7 @@ func TestWriter_Redact_RasterisesBesideAnUnparsedForm(t *testing.T) {
 
 	whole := deflated(t, []byte(unparsedFormBody))
 	src := unparsedFormDoc("/Filter /FlateDecode", whole[:len(whole)/2])
-	out, _, err := redactOpened(t, src, []OpenOption{WithStrictStreams()}, []RedactRegion{{Page: 1, Rect: wholeLeft}},
+	out, _, err := redactOpened(t, src, []OpenOption{WithStrictStreams()}, []models.RedactRegion{{Page: 1, Rect: wholeLeft}},
 		WithRedactionRasterFallback())
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
@@ -207,7 +208,7 @@ func TestWriter_Redact_BlanksInPlaceBesideAParsedForm(t *testing.T) {
 	t.Parallel()
 
 	src := unparsedFormDoc("/Filter /FlateDecode", deflated(t, []byte("% nothing drawn")))
-	out, report, err := redactOpened(t, src, nil, []RedactRegion{{Page: 1, Rect: wholeLeft}}, WithStrictRedaction())
+	out, report, err := redactOpened(t, src, nil, []models.RedactRegion{{Page: 1, Rect: wholeLeft}}, WithStrictRedaction())
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -220,7 +221,7 @@ func TestWriter_Redact_BlanksInPlaceBesideAParsedForm(t *testing.T) {
 }
 
 // redactOpened is [redactWith] for a document opened with open.
-func redactOpened(t *testing.T, src []byte, open []OpenOption, regions []RedactRegion, opts ...RedactOption) ([]byte, *RedactReport, error) {
+func redactOpened(t *testing.T, src []byte, open []OpenOption, regions []models.RedactRegion, opts ...RedactOption) ([]byte, *models.RedactReport, error) {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)), open...)

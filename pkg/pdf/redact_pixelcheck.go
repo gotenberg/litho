@@ -128,7 +128,7 @@ func (e *RedactionPixelError) Unwrap() []error {
 //   - Outside the regions, dilated by two pixels, and the glyphs the redaction
 //     removed, nothing changed but the samples image blanking rewrote.
 //     Blanking rewrites them whole, past the region's edge. A glyph goes whole
-//     when its box meets a region ([RedactReport.RemovedGlyphBoxes]). A
+//     when its box meets a region ([models.RedactReport.RemovedGlyphBoxes]). A
 //     removed glyph is cleared where its box lies and where the page drew it,
 //     found by its origin. A font the document does not embed draws as a
 //     placeholder box, which can reach past the glyph's box.
@@ -166,8 +166,8 @@ func WithRedactionPixelCheck() RedactOption {
 }
 
 // redactedGlyphs is what a redaction reports of the glyphs it removed, by
-// 1-based page: the box of each ([RedactReport.RemovedGlyphBoxes]) and the
-// origin of each the page's own content showed, in the default user space.
+// 1-based page: the box of each ([models.RedactReport.RemovedGlyphBoxes]) and
+// the origin of each the page's own content showed, in the default user space.
 type redactedGlyphs struct {
 	boxes   map[int][][4]float64
 	origins map[int][][2]float64
@@ -197,12 +197,12 @@ type redactedGlyphs struct {
 func checkRedactionPixels(
 	ctx context.Context,
 	before, after *Reader,
-	regions []RedactRegion,
+	regions []models.RedactRegion,
 	order []int,
 	removed redactedGlyphs,
 ) error {
 	for _, pageNum := range order {
-		var mine []RedactRegion
+		var mine []models.RedactRegion
 		for _, r := range regions {
 			if r.Page == pageNum {
 				mine = append(mine, r)
@@ -232,7 +232,7 @@ func checkRedactedPage(
 	ctx context.Context,
 	before, after *Reader,
 	pageNum int,
-	regions []RedactRegion,
+	regions []models.RedactRegion,
 	removed [][4]float64,
 	origins [][2]float64,
 ) error {
@@ -321,7 +321,7 @@ func (cp *redactCheckPage) checkInside(
 	shared *page.Shared,
 	budget int64,
 	pageNum int,
-	regions []RedactRegion,
+	regions []models.RedactRegion,
 ) error {
 	within, err := surface.NewMask(cp.w, cp.h, budget)
 	if err != nil {

@@ -13,7 +13,7 @@ import (
 // emptyCorner is a region in the bottom-right corner of a US Letter page, away
 // from the text [signablePDF] and [laterRoundPDF] draw at y=700, the rectangle
 // [laterRoundPDF] fills from (20, 20) to (120, 120), and its annotation.
-var emptyCorner = []RedactRegion{{Page: 1, Rect: [4]float64{540, 0, 590, 50}}}
+var emptyCorner = []models.RedactRegion{{Page: 1, Rect: [4]float64{540, 0, 590, 50}}}
 
 // TestRedactSelectingNothingAfterStagedEdits pins that a redaction selecting
 // nothing leaves the Writer as it was when other edits are already staged.

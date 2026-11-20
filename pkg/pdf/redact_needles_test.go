@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestWriter_Redact_IgnoresACopyTooShortToIdentify pins that a removed run
@@ -25,7 +27,7 @@ func TestWriter_Redact_IgnoresACopyTooShortToIdentify(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	report, err := w.Redact(ctx, []RedactRegion{coversSecret})
+	report, err := w.Redact(ctx, []models.RedactRegion{coversSecret})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -55,7 +57,7 @@ func TestWriter_Redact_AShortRedactionHoldsThroughAutoTag(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.Redact(ctx, []RedactRegion{coversSecret}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{coversSecret}); err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
 	w.AutoTag()

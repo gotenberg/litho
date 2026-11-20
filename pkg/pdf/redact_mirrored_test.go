@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // mirroredCase is one way of setting text whose glyphs the rendering matrix
@@ -115,7 +116,7 @@ func mirroredRunPDF(c mirroredCase) []byte {
 // for Helvetica's S, E, C, R, E, T at 12pt, 43.2 for the Type 3 font's). The
 // band stays clear of the baseline by more than the descender reach a zone
 // adds, so only a zone on the ink side meets it.
-func mirroredInkRegion(c mirroredCase) RedactRegion {
+func mirroredInkRegion(c mirroredCase) models.RedactRegion {
 	width := 48.672
 	if c.type3 != "" {
 		width = 43.2
@@ -130,7 +131,7 @@ func mirroredInkRegion(c mirroredCase) RedactRegion {
 			minY, maxY = math.Min(minY, y), math.Max(maxY, y)
 		}
 	}
-	return RedactRegion{Page: 1, Rect: [4]float64{minX, minY, maxX, maxY}}
+	return models.RedactRegion{Page: 1, Rect: [4]float64{minX, minY, maxX, maxY}}
 }
 
 // pageLetters returns every glyph extraction finds on page 1, sorted, so the
@@ -174,7 +175,7 @@ func TestWriter_Redact_ReflectedGlyphsRedactWhereTheirInkIs(t *testing.T) {
 			if got := pageLetters(t, src); got != "CEEEEKPRST" {
 				t.Fatalf("source page letters = %q, want both runs", got)
 			}
-			out := redactAndWrite(t, src, []RedactRegion{mirroredInkRegion(c)})
+			out := redactAndWrite(t, src, []models.RedactRegion{mirroredInkRegion(c)})
 			if got := pageLetters(t, out); got != "EEKP" {
 				t.Errorf("after redacting SECRET's ink the page reads %q, want only KEEP's letters", got)
 			}

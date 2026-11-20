@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // objStmRedactBody draws the redacted word and a word that stays.
@@ -87,7 +88,7 @@ func TestWriter_Redact_RefusesOverACopyInsideAnObjectStream(t *testing.T) {
 	privateDictMember(t, r.doc)
 
 	w := NewWriter(r)
-	_, err = w.Redact(ctx, []RedactRegion{coversSecret})
+	_, err = w.Redact(ctx, []models.RedactRegion{coversSecret})
 	if err == nil {
 		var out bytes.Buffer
 		err = w.WriteTo(ctx, &out)
@@ -113,7 +114,7 @@ func TestWriter_Redact_PackedSourceWithoutACopySucceeds(t *testing.T) {
 	privateDictMember(t, r.doc)
 
 	w := NewWriter(r)
-	if _, err := w.Redact(ctx, []RedactRegion{coversSecret}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{coversSecret}); err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
 	var out bytes.Buffer
@@ -139,7 +140,7 @@ func TestScanOutputForTokens_ReadsMembersOfACompactOutput(t *testing.T) {
 	defer r.Close()
 
 	w := NewWriter(r)
-	if _, err := w.Redact(ctx, []RedactRegion{coversSecret}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{coversSecret}); err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
 	var out bytes.Buffer

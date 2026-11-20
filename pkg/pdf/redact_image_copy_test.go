@@ -31,7 +31,7 @@ func TestWriter_Redact_ImageCopySurvivesEveryWriterStage(t *testing.T) {
 
 	redact := func(t *testing.T, w *Writer) {
 		t.Helper()
-		if _, err := w.Redact(context.Background(), []RedactRegion{{Page: 1, Rect: topLeft}}); err != nil {
+		if _, err := w.Redact(context.Background(), []models.RedactRegion{{Page: 1, Rect: topLeft}}); err != nil {
 			t.Fatalf("Redact: %v", err)
 		}
 	}
@@ -107,7 +107,7 @@ func TestWriter_WriteTo_ReappliesARedactionWhoseImageCopyWasUndone(t *testing.T)
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: topLeft}}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: topLeft}}); err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
 	pages, err := w.reader.resolvePages(ctx)
@@ -145,7 +145,7 @@ func TestWriter_Redact_AgainOverAnImageCopy(t *testing.T) {
 	}
 	w := NewWriter(r)
 	for _, rect := range [][4]float64{topLeft, bottomLeft} {
-		if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: rect}}); err != nil {
+		if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: rect}}); err != nil {
 			t.Fatalf("Redact %v: %v", rect, err)
 		}
 	}
@@ -178,7 +178,7 @@ func TestWriter_Redact_ImageCopyKeepsTheSoftMask(t *testing.T) {
 		[]byte("/Subtype /Image /Width 4 /Height 4 /ColorSpace /DeviceGray /BitsPerComponent 8 /SMask 30 0 R /Length 16 >>\nstream\n"+
 			string(bytes.Repeat([]byte{0x80}, 16))), 1)
 
-	out, report, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: topLeft}})
+	out, report, err := redactWith(t, src, []models.RedactRegion{{Page: 1, Rect: topLeft}})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestWriter_Redact_BlanksAnImageAFormDraws(t *testing.T) {
 	t.Parallel()
 
 	src := formImageDoc([]string{placeFormLeft + " " + placeRight})
-	out, report, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: wholeLeft}})
+	out, report, err := redactWith(t, src, []models.RedactRegion{{Page: 1, Rect: wholeLeft}})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestWriter_Redact_StrictRefusesASharedImageAFormDraws(t *testing.T) {
 	t.Parallel()
 
 	src := formImageDoc([]string{placeFormLeft, placeFormLeft})
-	out, _, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: wholeLeft}}, WithStrictRedaction())
+	out, _, err := redactWith(t, src, []models.RedactRegion{{Page: 1, Rect: wholeLeft}}, WithStrictRedaction())
 	if !errors.Is(err, ErrRedactionRefused) || !errors.Is(err, mutations.ErrImageShared) {
 		t.Fatalf("Redact = %v, want ErrRedactionRefused wrapping ErrImageShared", err)
 	}
@@ -273,7 +273,7 @@ func TestWriter_Redact_ImageCopyIsDeterministic(t *testing.T) {
 	t.Parallel()
 
 	src := imageDoc([]string{placeLeft + " " + placeRight, placeLeft}, "", "", "")
-	regions := []RedactRegion{{Page: 1, Rect: topLeft}, {Page: 1, Rect: wholeRight}, {Page: 2, Rect: bottomLeft}}
+	regions := []models.RedactRegion{{Page: 1, Rect: topLeft}, {Page: 1, Rect: wholeRight}, {Page: 2, Rect: bottomLeft}}
 	first, _, err := redactWith(t, src, regions)
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
@@ -305,7 +305,7 @@ func TestWriter_Redact_ImageCopyWithTheOtherOptions(t *testing.T) {
 	withForm = bytes.Replace(withForm, []byte("/XObject << /Im1 7 0 R >>"), []byte("/XObject << /Im1 7 0 R /Fm9 30 0 R >>"), 1)
 	// The bottom half of the left placement and the form's square: a
 	// placement the region covers whole is removed, not blanked in a copy.
-	region := RedactRegion{Page: 1, Rect: [4]float64{90, 410, 210, 545}}
+	region := models.RedactRegion{Page: 1, Rect: [4]float64{90, 410, 210, 545}}
 
 	for _, tc := range []struct {
 		name   string
@@ -318,7 +318,7 @@ func TestWriter_Redact_ImageCopyWithTheOtherOptions(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			out, report, err := redactWith(t, tc.src, []RedactRegion{region}, tc.opt)
+			out, report, err := redactWith(t, tc.src, []models.RedactRegion{region}, tc.opt)
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
 			}

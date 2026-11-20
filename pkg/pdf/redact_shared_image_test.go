@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // imageDoc builds a document whose pages all name object 7, a 4x4 DeviceGray
@@ -81,7 +82,7 @@ func imageSamples(t *testing.T, pdf []byte, page int) []uint8 {
 
 // redactRegions opens src, runs one Redact over regions and writes the result.
 // A refused redaction is returned as the error with the unchanged document.
-func redactRegions(t *testing.T, src []byte, regions ...RedactRegion) ([]byte, error) {
+func redactRegions(t *testing.T, src []byte, regions ...models.RedactRegion) ([]byte, error) {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
@@ -120,7 +121,7 @@ func TestWriter_Redact_SecondCallKeepsImageBlanking(t *testing.T) {
 	}
 	w := NewWriter(r)
 	for _, rect := range [][4]float64{topLeft, bottomLeft} {
-		if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: rect}}); err != nil {
+		if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: rect}}); err != nil {
 			t.Fatalf("Redact %v: %v", rect, err)
 		}
 	}
@@ -169,7 +170,7 @@ func TestWriter_Redact_NeverBlanksBeyondTheRegions(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		src     []byte
-		regions []RedactRegion
+		regions []models.RedactRegion
 		// shared says the image is painted where the regions do not cover
 		// the same samples: blanked in a copy, refused under strict.
 		shared bool
@@ -178,40 +179,40 @@ func TestWriter_Redact_NeverBlanksBeyondTheRegions(t *testing.T) {
 		{
 			name:    "one of two placements on a page",
 			src:     imageDoc([]string{placeLeft + " " + placeRight}, "", "", ""),
-			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}},
+			regions: []models.RedactRegion{{Page: 1, Rect: wholeLeft}},
 			shared:  true,
 			probes:  []probe{{1, leftTop, gone}, {1, leftBottom, gone}, {1, right, kept}},
 		},
 		{
 			name:    "both placements on a page",
 			src:     imageDoc([]string{placeLeft + " " + placeRight}, "", "", ""),
-			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}, {Page: 1, Rect: wholeRight}},
+			regions: []models.RedactRegion{{Page: 1, Rect: wholeLeft}, {Page: 1, Rect: wholeRight}},
 			probes:  []probe{{1, leftTop, gone}, {1, right, gone}},
 		},
 		{
 			name:    "different parts of two placements",
 			src:     imageDoc([]string{placeLeft + " " + placeRight}, "", "", ""),
-			regions: []RedactRegion{{Page: 1, Rect: topLeft}, {Page: 1, Rect: wholeRight}},
+			regions: []models.RedactRegion{{Page: 1, Rect: topLeft}, {Page: 1, Rect: wholeRight}},
 			shared:  true,
 			probes:  []probe{{1, leftTop, blank}, {1, leftBottom, kept}, {1, right, gone}},
 		},
 		{
 			name:    "one of two pages",
 			src:     imageDoc([]string{placeLeft, placeLeft}, "", "", ""),
-			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}},
+			regions: []models.RedactRegion{{Page: 1, Rect: wholeLeft}},
 			shared:  true,
 			probes:  []probe{{1, leftTop, gone}, {2, leftTop, kept}},
 		},
 		{
 			name:    "every page",
 			src:     imageDoc([]string{placeLeft, placeLeft}, "", "", ""),
-			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}, {Page: 2, Rect: wholeLeft}},
+			regions: []models.RedactRegion{{Page: 1, Rect: wholeLeft}, {Page: 2, Rect: wholeLeft}},
 			probes:  []probe{{1, leftTop, gone}, {2, leftTop, gone}},
 		},
 		{
 			name:    "also painted by an annotation appearance",
 			src:     imageDoc([]string{placeLeft}, "", "/Annots [9 0 R] ", annotAppearance),
-			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}},
+			regions: []models.RedactRegion{{Page: 1, Rect: wholeLeft}},
 			shared:  true,
 			probes:  []probe{{1, leftTop, gone}, {1, annot, kept}},
 		},
@@ -220,7 +221,7 @@ func TestWriter_Redact_NeverBlanksBeyondTheRegions(t *testing.T) {
 			// page is walked from the page tree, not from its destinations.
 			name:    "page named by an outline",
 			src:     imageDoc([]string{placeLeft}, "/Outlines 20 0 R ", "", outline),
-			regions: []RedactRegion{{Page: 1, Rect: wholeLeft}},
+			regions: []models.RedactRegion{{Page: 1, Rect: wholeLeft}},
 			probes:  []probe{{1, leftTop, gone}},
 		},
 	} {
@@ -262,7 +263,7 @@ func TestWriter_Redact_NeverBlanksBeyondTheRegions(t *testing.T) {
 // redactWith opens src, runs one Redact over regions with opts and writes the
 // result. A refused redaction is returned as the error with the unchanged
 // document.
-func redactWith(t *testing.T, src []byte, regions []RedactRegion, opts ...RedactOption) ([]byte, *RedactReport, error) {
+func redactWith(t *testing.T, src []byte, regions []models.RedactRegion, opts ...RedactOption) ([]byte, *models.RedactReport, error) {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))

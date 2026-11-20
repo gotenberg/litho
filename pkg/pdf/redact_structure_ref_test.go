@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestWriterRedactBlanksAnImageAStructureElementNamesInPlace pins that a
@@ -29,7 +31,7 @@ func TestWriterRedactBlanksAnImageAStructureElementNamesInPlace(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	report, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: topLeft}})
+	report, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: topLeft}})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}

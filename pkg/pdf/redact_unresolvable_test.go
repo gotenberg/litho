@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"sort"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // unresolvableDoc assembles a one-page document drawing SECRET at y=700 and
@@ -97,7 +99,7 @@ func redactSecret(t *testing.T, data []byte) ([]byte, error) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.Redact(ctx, []RedactRegion{coversSecret}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{coversSecret}); err != nil {
 		return nil, err
 	}
 	var out bytes.Buffer
@@ -215,7 +217,7 @@ func TestWriter_Redact_RefusesCopiesNoDecodedValueSpells(t *testing.T) {
 				t.Fatalf("Open: %v", err)
 			}
 			w := NewWriter(r)
-			report, err := w.Redact(ctx, []RedactRegion{coversSecret})
+			report, err := w.Redact(ctx, []models.RedactRegion{coversSecret})
 			if !errors.Is(err, ErrRedactionIncomplete) {
 				t.Fatalf("err = %v, want ErrRedactionIncomplete", err)
 			}

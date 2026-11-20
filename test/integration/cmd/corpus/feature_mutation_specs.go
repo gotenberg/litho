@@ -890,11 +890,11 @@ func reservedPermissionBits(p int32) string {
 // sees into a refusal, which this cell does not gate. The redact-render cell
 // judges the pixels with litho and poppler both.
 func applyRedact(ctx context.Context, _ *mutationFeature, in *mutationInput, w *pdf.Writer) (mutationPlan, error) {
-	region := pdf.RedactRegion{
+	region := models.RedactRegion{
 		Page: 1,
 		Rect: [4]float64{-mutationRedactReach, -mutationRedactReach, mutationRedactReach, mutationRedactReach},
 	}
-	if _, err := w.Redact(ctx, []pdf.RedactRegion{region}, pdf.WithoutRedactionPixelCheck()); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{region}, pdf.WithoutRedactionPixelCheck()); err != nil {
 		return mutationPlan{}, fmt.Errorf("redacting page 1: %w", err)
 	}
 	return identityPlan(in), nil

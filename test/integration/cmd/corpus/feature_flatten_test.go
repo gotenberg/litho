@@ -149,7 +149,7 @@ func TestFlattenFeature_Plants(t *testing.T) {
 
 	dropped := newTestFlatten()
 	dropped.flatten = func(ctx context.Context, w *pdf.Writer) (*models.FlattenReport, error) {
-		if _, err := w.Redact(ctx, []pdf.RedactRegion{{Page: 1, Rect: [4]float64{15, 150, 100, 185}}}); err != nil {
+		if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{15, 150, 100, 185}}}); err != nil {
 			return nil, err
 		}
 		return w.FlattenTransparency(ctx)
@@ -171,7 +171,7 @@ func TestFlattenFeature_DrawnAnnotationsStillLoseNoText(t *testing.T) {
 	t.Parallel()
 	f := newTestFlatten()
 	f.flatten = func(ctx context.Context, w *pdf.Writer) (*models.FlattenReport, error) {
-		if _, err := w.Redact(ctx, []pdf.RedactRegion{{Page: 1, Rect: [4]float64{15, 150, 100, 185}}}); err != nil {
+		if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{15, 150, 100, 185}}}); err != nil {
 			return nil, err
 		}
 		report, err := w.FlattenTransparency(ctx)

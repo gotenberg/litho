@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/filter/dct"
 	"github.com/gotenberg/litho/pkg/internal/imagetiles"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // lossyBlankSide is the side, in samples, of [jpegPhotoPDF]'s photograph:
@@ -65,7 +66,7 @@ func jpegPhotoPDF(t *testing.T, extra string, objs ...string) []byte {
 
 // redactBytes redacts region on page 1 of data with opts and returns the
 // output and the report.
-func redactBytes(t *testing.T, data []byte, region [4]float64, opts ...RedactOption) ([]byte, *RedactReport) {
+func redactBytes(t *testing.T, data []byte, region [4]float64, opts ...RedactOption) ([]byte, *models.RedactReport) {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -75,7 +76,7 @@ func redactBytes(t *testing.T, data []byte, region [4]float64, opts ...RedactOpt
 	defer r.Close()
 	w := NewWriter(r)
 	defer w.Close()
-	report, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: region}}, opts...)
+	report, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: region}}, opts...)
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -333,7 +334,7 @@ func TestWriterRedactAgainOverALossyBlanking(t *testing.T) {
 		w := NewWriter(r)
 		defer w.Close()
 		for _, region := range [][4]float64{lossyBlankRegion, corner} {
-			if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: region}}, WithRedactionJPEGQuality(75)); err != nil {
+			if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: region}}, WithRedactionJPEGQuality(75)); err != nil {
 				t.Fatalf("Redact %v: %v", region, err)
 			}
 		}

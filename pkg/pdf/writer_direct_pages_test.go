@@ -250,7 +250,7 @@ func TestWriter_EditsPagesWrittenDirectlyInKids(t *testing.T) {
 		t.Parallel()
 		w := NewWriter(openDirect(t, base))
 		defer w.Close()
-		if _, err := w.Redact(ctx, []RedactRegion{{Page: 2, Rect: [4]float64{0, 0, 300, 300}}}); err != nil {
+		if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 2, Rect: [4]float64{0, 0, 300, 300}}}); err != nil {
 			t.Fatalf("Redact: %v", err)
 		}
 		var out bytes.Buffer

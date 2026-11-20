@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // inkBoxCase sets "SEC" and "RET" in two show operators of one text object,
@@ -85,7 +86,7 @@ func (c inkBoxCase) keepOrigin() [2]float64 {
 // whole-operator, so the region meets every glyph "RET" shows, and none of
 // "SEC". Except in the turned case, the band lies past the reach a zone sized
 // by the font size gives the glyphs.
-func (c inkBoxCase) region() RedactRegion {
+func (c inkBoxCase) region() models.RedactRegion {
 	g, fm := c.glyph, c.fm
 	txMin, txMax := math.Inf(1), math.Inf(-1)
 	for k := 3; k <= 5; k++ {
@@ -106,7 +107,7 @@ func (c inkBoxCase) region() RedactRegion {
 			minY, maxY = math.Min(minY, p[1]), math.Max(maxY, p[1])
 		}
 	}
-	return RedactRegion{Page: 1, Rect: [4]float64{minX, minY, maxX, maxY}}
+	return models.RedactRegion{Page: 1, Rect: [4]float64{minX, minY, maxX, maxY}}
 }
 
 // pdf returns the case's document.
@@ -168,7 +169,7 @@ func TestWriter_Redact_RemovesTheGlyphWhoseInkARegionCovers(t *testing.T) {
 			if got := pageLetters(t, src); got != "CEEEEKPRST" {
 				t.Fatalf("source page letters = %q, want both runs", got)
 			}
-			out := redactAndWrite(t, src, []RedactRegion{c.region()})
+			out := redactAndWrite(t, src, []models.RedactRegion{c.region()})
 			if got := pageLetters(t, out); got != "CEEEKPS" {
 				t.Errorf("after redacting the ink of RET the page reads %q, want every letter but those of RET", got)
 			}

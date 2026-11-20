@@ -5,6 +5,8 @@ import (
 	"context"
 	"image/color"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestRedact_BlanksUnderUseBlackPtCompOff redacts the centred quarter of the
@@ -27,7 +29,7 @@ func TestRedact_BlanksUnderUseBlackPtCompOff(t *testing.T) {
 	defer r.Close()
 	w := NewWriter(r)
 	defer w.Close()
-	report, err := w.Redact(ctx, []RedactRegion{{Page: 3, Rect: [4]float64{25, 50, 75, 150}}})
+	report, err := w.Redact(ctx, []models.RedactRegion{{Page: 3, Rect: [4]float64{25, 50, 75, 150}}})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}

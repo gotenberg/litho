@@ -72,7 +72,7 @@ func TestWriter_Redact_SurvivesEveryWriterStage(t *testing.T) {
 
 	redactSecret := func(t *testing.T, w *Writer) {
 		t.Helper()
-		if _, err := w.Redact(context.Background(), []RedactRegion{coversSecret}); err != nil {
+		if _, err := w.Redact(context.Background(), []models.RedactRegion{coversSecret}); err != nil {
 			t.Fatalf("Redact: %v", err)
 		}
 	}
@@ -136,22 +136,22 @@ func TestWriter_Redact_SecondCallKeepsTheFirst(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		src    []byte
-		first  RedactRegion
-		second RedactRegion
+		first  models.RedactRegion
+		second models.RedactRegion
 		gone   []string
 	}{
 		{
 			name:   "different pages",
 			src:    twoPageRedactablePDF(),
-			first:  RedactRegion{Page: 1, Rect: [4]float64{90, 690, 300, 730}},
-			second: RedactRegion{Page: 2, Rect: [4]float64{90, 690, 300, 730}},
+			first:  models.RedactRegion{Page: 1, Rect: [4]float64{90, 690, 300, 730}},
+			second: models.RedactRegion{Page: 2, Rect: [4]float64{90, 690, 300, 730}},
 			gone:   []string{"ALPHA", "BETA"},
 		},
 		{
 			name:   "same page",
 			src:    redactableTextPDF(""),
 			first:  coversSecret,
-			second: RedactRegion{Page: 1, Rect: [4]float64{90, 590, 300, 630}},
+			second: models.RedactRegion{Page: 1, Rect: [4]float64{90, 590, 300, 630}},
 			gone:   []string{"SECRET", "KEEP"},
 		},
 	} {
@@ -163,10 +163,10 @@ func TestWriter_Redact_SecondCallKeepsTheFirst(t *testing.T) {
 				t.Fatalf("Open: %v", err)
 			}
 			w := NewWriter(r)
-			if _, err := w.Redact(ctx, []RedactRegion{tc.first}); err != nil {
+			if _, err := w.Redact(ctx, []models.RedactRegion{tc.first}); err != nil {
 				t.Fatalf("first Redact: %v", err)
 			}
-			if _, err := w.Redact(ctx, []RedactRegion{tc.second}); err != nil {
+			if _, err := w.Redact(ctx, []models.RedactRegion{tc.second}); err != nil {
 				t.Fatalf("second Redact: %v", err)
 			}
 			var out bytes.Buffer
@@ -192,7 +192,7 @@ func TestWriter_WriteTo_RefusesARedactionALaterStageUndid(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.Redact(ctx, []RedactRegion{coversSecret}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{coversSecret}); err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
 	// /Info is the home SanitizeDocument deliberately leaves to ClearMetadata,

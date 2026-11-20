@@ -68,7 +68,7 @@ func TestEditErrorNamesTheStageThatQueuedTheEdit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	region := []RedactRegion{{Page: 1, Rect: [4]float64{0, 0, 100, 100}}}
+	region := []models.RedactRegion{{Page: 1, Rect: [4]float64{0, 0, 100, 100}}}
 
 	sign := func(p *Pipeline) (string, string) {
 		p.Apply(func(_ context.Context, w *Writer) error {

@@ -132,7 +132,7 @@ func TestWriterAutoTagReportIsFilledByTheCallThatAppliesIt(t *testing.T) {
 			return err
 		}},
 		{name: "a redaction", after: func(ctx context.Context, w *Writer) error {
-			_, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{60, 650, 560, 690}}})
+			_, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{60, 650, 560, 690}}})
 			return err
 		}},
 	} {

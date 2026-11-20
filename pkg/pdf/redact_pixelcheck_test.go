@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // pixelCheckBody draws a word to redact at the top of the page, a word to
@@ -15,7 +17,7 @@ const pixelCheckBody = "BT /F1 24 Tf 100 700 Td (Secret) Tj ET " +
 	"BT /F1 24 Tf 100 100 Td (Keep) Tj ET"
 
 // pixelCheckRegion covers the word to redact.
-var pixelCheckRegion = RedactRegion{Page: 1, Rect: [4]float64{80, 680, 300, 740}}
+var pixelCheckRegion = models.RedactRegion{Page: 1, Rect: [4]float64{80, 680, 300, 740}}
 
 func openPixelCheck(t *testing.T, data []byte, opts ...OpenOption) *Reader {
 	t.Helper()
@@ -32,7 +34,7 @@ func TestRedactPixelCheckPassesAnExactRedaction(t *testing.T) {
 	r := openPixelCheck(t, plantedPDF(pixelCheckBody, plant{}))
 	w := NewWriter(r)
 	defer w.Close()
-	report, err := w.Redact(ctx, []RedactRegion{pixelCheckRegion})
+	report, err := w.Redact(ctx, []models.RedactRegion{pixelCheckRegion})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -54,7 +56,7 @@ func TestRedactPixelCheckFindsContentLeftInsideARegion(t *testing.T) {
 	// The "redacted" document still draws the word: what a redaction that
 	// missed it would write.
 	after := openPixelCheck(t, plantedPDF(pixelCheckBody, plant{}))
-	err := checkRedactionPixels(ctx, before, after, []RedactRegion{pixelCheckRegion}, []int{1}, redactedGlyphs{})
+	err := checkRedactionPixels(ctx, before, after, []models.RedactRegion{pixelCheckRegion}, []int{1}, redactedGlyphs{})
 	var pe *RedactionPixelError
 	if !errors.As(err, &pe) {
 		t.Fatalf("got %v, want a RedactionPixelError", err)
@@ -72,7 +74,7 @@ func TestRedactPixelCheckFindsAChangeOutsideTheRegions(t *testing.T) {
 	before := openPixelCheck(t, plantedPDF(pixelCheckBody, plant{}))
 	// The word is gone, and so is the square no region covers.
 	after := openPixelCheck(t, plantedPDF("BT /F1 24 Tf 100 100 Td (Keep) Tj ET", plant{}))
-	err := checkRedactionPixels(ctx, before, after, []RedactRegion{pixelCheckRegion}, []int{1}, redactedGlyphs{})
+	err := checkRedactionPixels(ctx, before, after, []models.RedactRegion{pixelCheckRegion}, []int{1}, redactedGlyphs{})
 	var pe *RedactionPixelError
 	if !errors.As(err, &pe) {
 		t.Fatalf("got %v, want a RedactionPixelError", err)
@@ -92,12 +94,12 @@ func TestRedactPixelCheckIgnoresRemovedGlyphsReachingPastTheRegion(t *testing.T)
 	after := openPixelCheck(t, plantedPDF("q 0 0 1 rg 300 300 100 100 re f Q BT /F1 24 Tf 100 100 Td (Keep) Tj ET", plant{}))
 	// A region meeting only the top of the word: the redaction removes the
 	// glyphs whole, and their boxes say where the page changed for them.
-	region := RedactRegion{Page: 1, Rect: [4]float64{80, 715, 300, 740}}
-	if err := checkRedactionPixels(ctx, before, after, []RedactRegion{region}, []int{1}, redactedGlyphs{}); err == nil {
+	region := models.RedactRegion{Page: 1, Rect: [4]float64{80, 715, 300, 740}}
+	if err := checkRedactionPixels(ctx, before, after, []models.RedactRegion{region}, []int{1}, redactedGlyphs{}); err == nil {
 		t.Fatal("the glyphs below the region changed, and no glyph box excused them")
 	}
 	removed := map[int][][4]float64{1: {{95, 690, 190, 730}}}
-	if err := checkRedactionPixels(ctx, before, after, []RedactRegion{region}, []int{1}, redactedGlyphs{boxes: removed}); err != nil {
+	if err := checkRedactionPixels(ctx, before, after, []models.RedactRegion{region}, []int{1}, redactedGlyphs{boxes: removed}); err != nil {
 		t.Fatalf("removed glyph boxes do not excuse their own pixels: %v", err)
 	}
 }
@@ -108,7 +110,7 @@ func TestRedactPixelCheckRefusesAPageItCannotRenderAndLeavesTheWriter(t *testing
 	r := openPixelCheck(t, src, WithLimits(Limits{MaxRenderPixels: 1000}))
 	w := NewWriter(r)
 	defer w.Close()
-	_, err := w.Redact(ctx, []RedactRegion{pixelCheckRegion})
+	_, err := w.Redact(ctx, []models.RedactRegion{pixelCheckRegion})
 	var pe *RedactionPixelError
 	if !errors.As(err, &pe) || pe.Err == nil || !errors.Is(err, ErrRedactionPixelCheck) {
 		t.Fatalf("got %v, want a pixel check that could not render", err)
@@ -128,7 +130,7 @@ func TestRedactPixelCheckRefusesAPageItCannotRenderAndLeavesTheWriter(t *testing
 const placeholderBody = "BT /F1 200 Tf 100 400 Td (S) Tj ET"
 
 // placeholderRegion meets the top of the glyph only.
-var placeholderRegion = RedactRegion{Page: 1, Rect: [4]float64{80, 560, 150, 640}}
+var placeholderRegion = models.RedactRegion{Page: 1, Rect: [4]float64{80, 560, 150, 640}}
 
 // placeholderRemoved is what the redaction reports of the glyph: its box,
 // from 0.2 em below the baseline to 1 em above it, and its origin.
@@ -141,7 +143,7 @@ func TestRedactPixelCheckClearsWhatAPlaceholderDrewForARemovedGlyph(t *testing.T
 	ctx := context.Background()
 	before := openPixelCheck(t, plantedPDF(placeholderBody, plant{}))
 	after := openPixelCheck(t, plantedPDF("", plant{}))
-	regions := []RedactRegion{placeholderRegion}
+	regions := []models.RedactRegion{placeholderRegion}
 	boxesOnly := redactedGlyphs{boxes: placeholderRemoved.boxes}
 	var pe *RedactionPixelError
 	if err := checkRedactionPixels(ctx, before, after, regions, []int{1}, boxesOnly); !errors.As(err, &pe) || pe.Outside == 0 {
@@ -165,7 +167,7 @@ func TestRedactPixelCheckFindsAKeptGlyphOverlappingARemovedPlaceholder(t *testin
 	// "redaction" removed both, though only the S met the region.
 	before := openPixelCheck(t, plantedPDF("BT /F1 200 Tf -60 Tc 100 400 Td (SK) Tj ET", plant{}))
 	after := openPixelCheck(t, plantedPDF("", plant{}))
-	err := checkRedactionPixels(ctx, before, after, []RedactRegion{placeholderRegion}, []int{1}, placeholderRemoved)
+	err := checkRedactionPixels(ctx, before, after, []models.RedactRegion{placeholderRegion}, []int{1}, placeholderRemoved)
 	var pe *RedactionPixelError
 	if !errors.As(err, &pe) || pe.Outside == 0 {
 		t.Fatalf("got %v, want the lost K found outside the region", err)
@@ -179,7 +181,7 @@ func TestRedactPixelCheckKeepsAGlyphDrawnAtARemovedOriginInTheCheck(t *testing.T
 	// that lost the I is found.
 	before := openPixelCheck(t, plantedPDF(placeholderBody+" BT /F1 200 Tf 100 400 Td (I) Tj ET", plant{}))
 	after := openPixelCheck(t, plantedPDF("", plant{}))
-	err := checkRedactionPixels(ctx, before, after, []RedactRegion{placeholderRegion}, []int{1}, placeholderRemoved)
+	err := checkRedactionPixels(ctx, before, after, []models.RedactRegion{placeholderRegion}, []int{1}, placeholderRemoved)
 	var pe *RedactionPixelError
 	if !errors.As(err, &pe) || pe.Outside == 0 {
 		t.Fatalf("got %v, want the lost I found outside the region", err)
@@ -203,14 +205,14 @@ func transferPDF(samples string) []byte {
 }
 
 // transferRegion covers the image.
-var transferRegion = RedactRegion{Page: 1, Rect: [4]float64{80, 380, 320, 620}}
+var transferRegion = models.RedactRegion{Page: 1, Rect: [4]float64{80, 380, 320, 620}}
 
 func TestRedactPixelCheckReadsABlankedImageBeforeItsTransfer(t *testing.T) {
 	ctx := context.Background()
 	before := openPixelCheck(t, transferPDF("\x00\xff\x80\x40"))
 	// Blanked to black, which the transfer paints near white.
 	after := openPixelCheck(t, transferPDF("\x00\x00\x00\x00"))
-	if err := checkRedactionPixels(ctx, before, after, []RedactRegion{transferRegion}, []int{1}, redactedGlyphs{}); err != nil {
+	if err := checkRedactionPixels(ctx, before, after, []models.RedactRegion{transferRegion}, []int{1}, redactedGlyphs{}); err != nil {
 		t.Fatalf("a blanked image under a transfer function counts as a leak: %v", err)
 	}
 }
@@ -220,7 +222,7 @@ func TestRedactPixelCheckFindsAnImageLeftUnderATransfer(t *testing.T) {
 	before := openPixelCheck(t, transferPDF("\x00\xff\x80\x40"))
 	// The "redaction" left the picture, which the transfer turns pale.
 	after := openPixelCheck(t, transferPDF("\x00\xff\x80\x40"))
-	err := checkRedactionPixels(ctx, before, after, []RedactRegion{transferRegion}, []int{1}, redactedGlyphs{})
+	err := checkRedactionPixels(ctx, before, after, []models.RedactRegion{transferRegion}, []int{1}, redactedGlyphs{})
 	var pe *RedactionPixelError
 	if !errors.As(err, &pe) || pe.Inside == 0 {
 		t.Fatalf("got %v, want the picture found inside the region", err)
@@ -260,7 +262,7 @@ func type3GlyphShownPDF(glyph, resources, before string) []byte {
 }
 
 // type3ShadingRegion lies over the shading, clear of the glyph's stated box.
-var type3ShadingRegion = RedactRegion{Page: 1, Rect: [4]float64{250, 550, 350, 650}}
+var type3ShadingRegion = models.RedactRegion{Page: 1, Rect: [4]float64{250, 550, 350, 650}}
 
 // TestRedactRemovesAType3GlyphByWhatItPaints redacts a region over the far
 // side of the shading a Type 3 glyph paints, clear of the box its font
@@ -278,7 +280,7 @@ func TestRedactRemovesAType3GlyphByWhatItPaints(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			w := NewWriter(openPixelCheck(t, src))
 			defer w.Close()
-			report, err := w.Redact(ctx, []RedactRegion{type3ShadingRegion})
+			report, err := w.Redact(ctx, []models.RedactRegion{type3ShadingRegion})
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
 			}
@@ -321,7 +323,7 @@ func TestRedactBoundsAResourcelessType3GlyphWhereShown(t *testing.T) {
 	ctx := context.Background()
 	w := NewWriter(openPixelCheck(t, resourcelessType3PDF()))
 	defer w.Close()
-	report, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{110, 190, 130, 240}}})
+	report, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{110, 190, 130, 240}}})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -342,7 +344,7 @@ func strokedTextPDF(joins string) []byte {
 }
 
 // strokedTextRegion lies over the stroke above the outline's box.
-var strokedTextRegion = RedactRegion{Page: 1, Rect: [4]float64{100, 432, 130, 442}}
+var strokedTextRegion = models.RedactRegion{Page: 1, Rect: [4]float64{100, 432, 130, 442}}
 
 // TestRedactRemovesStrokedTextByItsStroke redacts, with the pixel check off,
 // a region over the stroke of a glyph and clear of its outline: the glyph is
@@ -359,7 +361,7 @@ func TestRedactRemovesStrokedTextByItsStroke(t *testing.T) {
 			src := strokedTextPDF(joins)
 			w := NewWriter(openPixelCheck(t, src))
 			defer w.Close()
-			report, err := w.Redact(ctx, []RedactRegion{strokedTextRegion}, WithoutRedactionPixelCheck())
+			report, err := w.Redact(ctx, []models.RedactRegion{strokedTextRegion}, WithoutRedactionPixelCheck())
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
 			}
@@ -372,7 +374,7 @@ func TestRedactRemovesStrokedTextByItsStroke(t *testing.T) {
 			}
 			before := openPixelCheck(t, src)
 			after := openPixelCheck(t, out.Bytes())
-			if err := checkRedactionPixels(ctx, before, after, []RedactRegion{strokedTextRegion}, []int{1},
+			if err := checkRedactionPixels(ctx, before, after, []models.RedactRegion{strokedTextRegion}, []int{1},
 				redactedGlyphs{boxes: report.RemovedGlyphBoxes}); err != nil {
 				t.Fatalf("the stroke is left in the region: %v", err)
 			}
@@ -387,10 +389,10 @@ func TestRedactBoundsAStrokeByHalfItsPen(t *testing.T) {
 	ctx := context.Background()
 	// The outline's box tops out at 400 + 24, an em above the baseline; half
 	// the pen reaches 20 above that.
-	region := RedactRegion{Page: 1, Rect: [4]float64{100, 450, 130, 460}}
+	region := models.RedactRegion{Page: 1, Rect: [4]float64{100, 450, 130, 460}}
 	for _, joins := range []string{"", "1 j"} {
 		w := NewWriter(openPixelCheck(t, strokedTextPDF(joins)))
-		report, err := w.Redact(ctx, []RedactRegion{region})
+		report, err := w.Redact(ctx, []models.RedactRegion{region})
 		w.Close()
 		if err != nil {
 			t.Fatalf("%q: Redact: %v", joins, err)
@@ -411,7 +413,7 @@ func inheritedPenPDF(before string) []byte {
 // inheritedPenRegion lies over the pen of a line width of 4000 units in
 // glyph space, 400 points under the font matrix and size, above the line it
 // strokes.
-var inheritedPenRegion = RedactRegion{Page: 1, Rect: [4]float64{120, 520, 180, 560}}
+var inheritedPenRegion = models.RedactRegion{Page: 1, Rect: [4]float64{120, 520, 180, 560}}
 
 // TestRedactBoundsAType3StrokeByTheShowingPen redacts, with the pixel check
 // off, a region over the pen a Type 3 glyph's stroke inherits from where the
@@ -429,7 +431,7 @@ func TestRedactBoundsAType3StrokeByTheShowingPen(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			w := NewWriter(openPixelCheck(t, src))
 			defer w.Close()
-			report, err := w.Redact(ctx, []RedactRegion{inheritedPenRegion}, WithoutRedactionPixelCheck())
+			report, err := w.Redact(ctx, []models.RedactRegion{inheritedPenRegion}, WithoutRedactionPixelCheck())
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
 			}
@@ -441,7 +443,7 @@ func TestRedactBoundsAType3StrokeByTheShowingPen(t *testing.T) {
 				t.Fatalf("WriteTo: %v", err)
 			}
 			if err := checkRedactionPixels(ctx, openPixelCheck(t, src), openPixelCheck(t, out.Bytes()),
-				[]RedactRegion{inheritedPenRegion}, []int{1}, redactedGlyphs{boxes: report.RemovedGlyphBoxes}); err != nil {
+				[]models.RedactRegion{inheritedPenRegion}, []int{1}, redactedGlyphs{boxes: report.RemovedGlyphBoxes}); err != nil {
 				t.Fatalf("the pen is left in the region: %v", err)
 			}
 		})
@@ -461,7 +463,7 @@ func TestRedactKeepsAType3StrokeUnderAThinShowingPen(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			w := NewWriter(openPixelCheck(t, src))
 			defer w.Close()
-			report, err := w.Redact(ctx, []RedactRegion{inheritedPenRegion})
+			report, err := w.Redact(ctx, []models.RedactRegion{inheritedPenRegion})
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
 			}
@@ -511,7 +513,7 @@ func TestRedactBoundsANestedType3StrokeByTheShowingPen(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			w := NewWriter(openPixelCheck(t, src))
 			defer w.Close()
-			report, err := w.Redact(ctx, []RedactRegion{inheritedPenRegion}, WithoutRedactionPixelCheck())
+			report, err := w.Redact(ctx, []models.RedactRegion{inheritedPenRegion}, WithoutRedactionPixelCheck())
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
 			}
@@ -523,7 +525,7 @@ func TestRedactBoundsANestedType3StrokeByTheShowingPen(t *testing.T) {
 				t.Fatalf("WriteTo: %v", err)
 			}
 			if err := checkRedactionPixels(ctx, openPixelCheck(t, src), openPixelCheck(t, out.Bytes()),
-				[]RedactRegion{inheritedPenRegion}, []int{1}, redactedGlyphs{boxes: report.RemovedGlyphBoxes}); err != nil {
+				[]models.RedactRegion{inheritedPenRegion}, []int{1}, redactedGlyphs{boxes: report.RemovedGlyphBoxes}); err != nil {
 				t.Fatalf("the nested pen is left in the region: %v", err)
 			}
 		})
@@ -545,7 +547,7 @@ func TestRedactKeepsANestedType3StrokeUnderTheOuterPen(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			w := NewWriter(openPixelCheck(t, src))
 			defer w.Close()
-			report, err := w.Redact(ctx, []RedactRegion{inheritedPenRegion})
+			report, err := w.Redact(ctx, []models.RedactRegion{inheritedPenRegion})
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
 			}
@@ -560,7 +562,7 @@ func TestRedactKeepsANestedType3StrokeUnderTheOuterPen(t *testing.T) {
 // for [placeholderBody]'s glyph, a quarter em below its baseline, and clear
 // of the glyph's box, a fifth of an em below it: the redaction selects no
 // glyph and leaves the frame's bottom edge inside the region.
-var placeholderLeakRegion = RedactRegion{Page: 1, Rect: [4]float64{120, 348, 180, 356}}
+var placeholderLeakRegion = models.RedactRegion{Page: 1, Rect: [4]float64{120, 348, 180, 356}}
 
 func TestRedactRefusesALeakTheTokenScanCannotSeeByDefault(t *testing.T) {
 	ctx := context.Background()
@@ -573,7 +575,7 @@ func TestRedactRefusesALeakTheTokenScanCannotSeeByDefault(t *testing.T) {
 			src := plantedPDF(placeholderBody, plant{})
 			w := NewWriter(openPixelCheck(t, src))
 			defer w.Close()
-			_, err := w.Redact(ctx, []RedactRegion{placeholderLeakRegion}, opts...)
+			_, err := w.Redact(ctx, []models.RedactRegion{placeholderLeakRegion}, opts...)
 			var pe *RedactionPixelError
 			if !errors.As(err, &pe) || pe.Inside == 0 || !errors.Is(err, ErrRedactionRefused) {
 				t.Fatalf("got %v, want the placeholder frame found inside the region", err)
@@ -593,7 +595,7 @@ func TestRedactWithoutPixelCheckSkipsIt(t *testing.T) {
 	ctx := context.Background()
 	w := NewWriter(openPixelCheck(t, plantedPDF(placeholderBody, plant{})))
 	defer w.Close()
-	if _, err := w.Redact(ctx, []RedactRegion{placeholderLeakRegion}, WithoutRedactionPixelCheck()); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{placeholderLeakRegion}, WithoutRedactionPixelCheck()); err != nil {
 		t.Fatalf("Redact without the pixel check: %v", err)
 	}
 
@@ -602,7 +604,7 @@ func TestRedactWithoutPixelCheckSkipsIt(t *testing.T) {
 	r := openPixelCheck(t, plantedPDF(pixelCheckBody, plant{}), WithLimits(Limits{MaxRenderPixels: 1000}))
 	w2 := NewWriter(r)
 	defer w2.Close()
-	if _, err := w2.Redact(ctx, []RedactRegion{pixelCheckRegion}, WithoutRedactionPixelCheck()); err != nil {
+	if _, err := w2.Redact(ctx, []models.RedactRegion{pixelCheckRegion}, WithoutRedactionPixelCheck()); err != nil {
 		t.Fatalf("Redact without the pixel check rendered the page: %v", err)
 	}
 }
@@ -619,7 +621,7 @@ func TestRedactKeepsTheSnapOfASplitRectangle(t *testing.T) {
 	r := openPixelCheck(t, plantedPDF(body, plant{}))
 	w := NewWriter(r)
 	defer w.Close()
-	if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{153, 198, 459, 594}}}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{153, 198, 459, 594}}}); err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
 }
@@ -635,7 +637,7 @@ func TestRedactKeepsACutStrokeUnadjusted(t *testing.T) {
 	r := openPixelCheck(t, plantedPDF(body, plant{}))
 	w := NewWriter(r)
 	defer w.Close()
-	if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{153, 198, 459, 594}}}); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{153, 198, 459, 594}}}); err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
 }
@@ -667,7 +669,7 @@ func TestRedactClearsTheSampleWhoseCellTheRegionEdgeCuts(t *testing.T) {
 		for _, interpolate := range []bool{false, true} {
 			for _, edge := range []float64{176, 180, 195} {
 				w := NewWriter(openPixelCheck(t, cutCellPDF(grey, interpolate)))
-				if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{edge, 250, 400, 450}}}); err != nil {
+				if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{edge, 250, 400, 450}}}); err != nil {
 					t.Errorf("grey %#x, interpolate %v, edge %v: Redact: %v", grey, interpolate, edge, err)
 				}
 				if err := w.Close(); err != nil {
@@ -684,10 +686,10 @@ func TestRedactClearsTheSampleWhoseCellTheRegionEdgeCuts(t *testing.T) {
 // grey kept. The check sees the grey inside the region.
 func TestRedactPixelCheckFindsTheCutCellLeftPainting(t *testing.T) {
 	ctx := context.Background()
-	region := RedactRegion{Page: 1, Rect: [4]float64{180, 250, 400, 450}}
+	region := models.RedactRegion{Page: 1, Rect: [4]float64{180, 250, 400, 450}}
 	before := openPixelCheck(t, cutCellPDF(0x80, false))
 	after := openPixelCheck(t, cutCellPDF(0x80, false))
-	err := checkRedactionPixels(ctx, before, after, []RedactRegion{region}, []int{1}, redactedGlyphs{})
+	err := checkRedactionPixels(ctx, before, after, []models.RedactRegion{region}, []int{1}, redactedGlyphs{})
 	var pe *RedactionPixelError
 	if !errors.As(err, &pe) || pe.Inside == 0 {
 		t.Fatalf("got %v, want the kept grey found inside the region", err)

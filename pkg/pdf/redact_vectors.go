@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/remediation"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // clearOpaqueCopies removes the document-wide homes of a copy that the
@@ -28,7 +29,7 @@ import (
 //     over bytes it no longer covers (ISO 32000-1, 12.8.1). Scanning the
 //     document before that step refused a redaction over a signer's /Reason
 //     or a certificate that the output never carries.
-func clearOpaqueCopies(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, report *RedactReport) error {
+func clearOpaqueCopies(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, report *models.RedactReport) error {
 	scripts, err := remediation.StripJavaScript(ctx, alloc, doc)
 	if err != nil {
 		return fmt.Errorf("removing scripts: %w", err)

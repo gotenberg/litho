@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -126,7 +127,7 @@ func TestRedactRenderCatchesPlantedLeaks(t *testing.T) {
 		data := redactKindPDF(kind.body)
 
 		broken := newTestRedactRender()
-		broken.redact = func(context.Context, *pdf.Writer, pdf.RedactRegion, ...pdf.RedactOption) (*pdf.RedactReport, error) {
+		broken.redact = func(context.Context, *pdf.Writer, models.RedactRegion, ...pdf.RedactOption) (*models.RedactReport, error) {
 			return nil, nil
 		}
 		v, sc := runRedactRender(t, broken, data, "p1-quarter")
@@ -152,9 +153,9 @@ func TestRedactRenderCatchesPlantedLeaks(t *testing.T) {
 func TestRedactRenderCatchesChangesOutside(t *testing.T) {
 	t.Parallel()
 	f := newTestRedactRender()
-	f.redact = func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion, _ ...pdf.RedactOption) (*pdf.RedactReport, error) {
+	f.redact = func(ctx context.Context, w *pdf.Writer, region models.RedactRegion, _ ...pdf.RedactOption) (*models.RedactReport, error) {
 		region.Rect = [4]float64{-1000, -1000, 1000, 1000}
-		return w.Redact(ctx, []pdf.RedactRegion{region})
+		return w.Redact(ctx, []models.RedactRegion{region})
 	}
 	data := redactKindPDF("0 0 1 rg 80 80 40 40 re f 1 0 0 rg 10 10 20 20 re f")
 	v, sc := runRedactRender(t, f, data, "p1-quarter")
@@ -247,11 +248,11 @@ func TestRedactRenderChecksTheRasterFallback(t *testing.T) {
 func TestRedactRenderCatchesAFallbackLeak(t *testing.T) {
 	t.Parallel()
 	f := newTestRedactRender()
-	f.redact = func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion, opts ...pdf.RedactOption) (*pdf.RedactReport, error) {
+	f.redact = func(ctx context.Context, w *pdf.Writer, region models.RedactRegion, opts ...pdf.RedactOption) (*models.RedactReport, error) {
 		if len(opts) > 0 {
 			region.Rect = [4]float64{81, 81, 82, 82}
 		}
-		return w.Redact(ctx, []pdf.RedactRegion{region}, opts...)
+		return w.Redact(ctx, []models.RedactRegion{region}, opts...)
 	}
 	v, sc := runRedactRender(t, f, redactKindPDF(redactShadingBody), "p1-quarter"+redactFallbackSuffix)
 	if sc.Litho == nil || sc.Litho.Inside == 0 || v.Metrics[metricFallbackInsideLeaked] == 0 || v.Match {
@@ -342,16 +343,16 @@ func TestRedactRenderInterpolationSpill(t *testing.T) {
 		t.Errorf("image drawn without interpolation: %+v, want a pass without interpolation spill", sc.Litho)
 	}
 
-	for name, redact := range map[string]func(context.Context, *pdf.Writer, pdf.RedactRegion, ...pdf.RedactOption) (*pdf.RedactReport, error){
-		"removes nothing": func(context.Context, *pdf.Writer, pdf.RedactRegion, ...pdf.RedactOption) (*pdf.RedactReport, error) {
+	for name, redact := range map[string]func(context.Context, *pdf.Writer, models.RedactRegion, ...pdf.RedactOption) (*models.RedactReport, error){
+		"removes nothing": func(context.Context, *pdf.Writer, models.RedactRegion, ...pdf.RedactOption) (*models.RedactReport, error) {
 			return nil, nil
 		},
 		// The samples centred at 62.5, whose cells end at 75, lie in the
 		// region [50 50 150 150] and out of [76 76 150 150], whose edge cuts
 		// no cell of theirs.
-		"keeps samples inside": func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion, opts ...pdf.RedactOption) (*pdf.RedactReport, error) {
+		"keeps samples inside": func(ctx context.Context, w *pdf.Writer, region models.RedactRegion, opts ...pdf.RedactOption) (*models.RedactReport, error) {
 			region.Rect = [4]float64{76, 76, 150, 150}
-			return w.Redact(ctx, []pdf.RedactRegion{region}, append(opts, pdf.WithoutRedactionPixelCheck())...)
+			return w.Redact(ctx, []models.RedactRegion{region}, append(opts, pdf.WithoutRedactionPixelCheck())...)
 		},
 	} {
 		f := newTestRedactRender()
@@ -406,7 +407,7 @@ func TestRedactRenderJudgesTheBlankAsWritten(t *testing.T) {
 	}
 
 	broken := newTestRedactRender()
-	broken.redact = func(context.Context, *pdf.Writer, pdf.RedactRegion, ...pdf.RedactOption) (*pdf.RedactReport, error) {
+	broken.redact = func(context.Context, *pdf.Writer, models.RedactRegion, ...pdf.RedactOption) (*models.RedactReport, error) {
 		return nil, nil
 	}
 	v, sc = runRedactRender(t, broken, data, "p1-quarter")

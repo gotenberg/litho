@@ -458,7 +458,7 @@ type redactRenderFeature struct {
 	pin func() string
 	// redact applies a scenario's region and returns its report, nil when it
 	// has none; tests replace it to plant a leak.
-	redact func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion, opts ...pdf.RedactOption) (*pdf.RedactReport, error)
+	redact func(ctx context.Context, w *pdf.Writer, region models.RedactRegion, opts ...pdf.RedactOption) (*models.RedactReport, error)
 
 	mu sync.RWMutex
 	// sampled names the PDFs in scope, nil for every PDF.
@@ -477,8 +477,8 @@ func newRedactRenderFeature() *redactRenderFeature {
 		// to find would come back as a refusal, which the cell counts but
 		// does not gate. The cell is the independent judge of the engine,
 		// with poppler as the second reading.
-		redact: func(ctx context.Context, w *pdf.Writer, region pdf.RedactRegion, opts ...pdf.RedactOption) (*pdf.RedactReport, error) {
-			return w.Redact(ctx, []pdf.RedactRegion{region}, append(opts, pdf.WithoutRedactionPixelCheck())...)
+		redact: func(ctx context.Context, w *pdf.Writer, region models.RedactRegion, opts ...pdf.RedactOption) (*models.RedactReport, error) {
+			return w.Redact(ctx, []models.RedactRegion{region}, append(opts, pdf.WithoutRedactionPixelCheck())...)
 		},
 		outputs: make(map[string][]byte),
 	}
@@ -568,7 +568,7 @@ type redactRenderOutcome struct {
 	NoOracle       bool   `json:"no_oracle,omitempty"`
 	// Fallback marks a scenario run with [pdf.WithRedactionRasterFallback]
 	// after the default mode refused it; RasterisedUnits is what its report
-	// counted ([pdf.RedactReport.RasterisedUnits]).
+	// counted ([models.RedactReport.RasterisedUnits]).
 	Fallback        bool `json:"fallback,omitempty"`
 	RasterisedUnits int  `json:"rasterised_units,omitempty"`
 }
@@ -869,7 +869,7 @@ func (f *redactRenderFeature) scenario(ctx context.Context, run *redactRun, page
 		redactOpts = append(redactOpts, pdf.WithRedactionRasterFallback())
 		tag = "r"
 	}
-	output, report, err := f.redactOnce(ctx, run.src, pdf.RedactRegion{Page: outcome.Page, Rect: outcome.Rect}, redactOpts...)
+	output, report, err := f.redactOnce(ctx, run.src, models.RedactRegion{Page: outcome.Page, Rect: outcome.Rect}, redactOpts...)
 	if err != nil {
 		outcome.Cause = err.Error()
 		switch {
@@ -933,7 +933,7 @@ func (f *redactRenderFeature) scenario(ctx context.Context, run *redactRun, page
 
 // redactOnce applies one region to a Writer over src and writes the result,
 // with the redaction's report.
-func (f *redactRenderFeature) redactOnce(ctx context.Context, src *pdf.Reader, region pdf.RedactRegion, opts ...pdf.RedactOption) ([]byte, *pdf.RedactReport, error) {
+func (f *redactRenderFeature) redactOnce(ctx context.Context, src *pdf.Reader, region models.RedactRegion, opts ...pdf.RedactOption) ([]byte, *models.RedactReport, error) {
 	w := pdf.NewWriter(src)
 	defer w.Close()
 	report, err := f.redact(ctx, w, region, opts...)
@@ -1644,7 +1644,7 @@ func (s *redactPixelSets) grown(marked func(i int) bool) []bool {
 // on a page of geometry g, text the runs extraction reads on the page.
 //
 // removed holds the boxes of the glyphs the redaction removed
-// ([pdf.RedactReport.RemovedGlyphBoxes]). A glyph goes whole when its box
+// ([models.RedactReport.RemovedGlyphBoxes]). A glyph goes whole when its box
 // meets the region, so its ink past the region changes by design. The text
 // runs alone miss some of them: extraction drops a run whose characters are
 // all white space, though its glyphs may paint, as a font may draw a glyph

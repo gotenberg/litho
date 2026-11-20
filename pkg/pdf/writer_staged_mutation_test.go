@@ -99,7 +99,7 @@ func TestWriterEditQueuedBeforeAStageIsAppliedOnce(t *testing.T) {
 		{
 			name: "a redaction",
 			stage: func(ctx context.Context, t *testing.T, w *Writer) {
-				report, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 100, 720}}})
+				report, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 100, 720}}})
 				if err != nil {
 					t.Fatalf("Redact: %v", err)
 				}
@@ -314,7 +314,7 @@ func TestWriterRedactAfterAnXObjectStampRedacts(t *testing.T) {
 			if err := tc.stamp(ctx, w); err != nil {
 				t.Fatalf("stamping: %v", err)
 			}
-			report, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 100, 720}}})
+			report, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 100, 720}}})
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
 			}
@@ -361,7 +361,7 @@ func TestWriterRedactOverAPDFStampRefusesAsOnTheStampedFile(t *testing.T) {
 				t.Fatalf("StampPDF: %v", err)
 			}
 		}
-		_, err = w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{90, 390, 200, 420}}})
+		_, err = w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{90, 390, 200, 420}}})
 		return err
 	}
 
@@ -416,7 +416,7 @@ func TestWriterRedactAfterBookmarksScrubsTheirTitles(t *testing.T) {
 	w := NewWriter(r)
 	defer w.Close()
 	w.SetBookmarks([]models.Bookmark{{Title: "The page", PageNumber: 1}})
-	report, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 100, 720}}})
+	report, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 100, 720}}})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}

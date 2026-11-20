@@ -5,6 +5,8 @@ import (
 	"context"
 	"strconv"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // indexedCMYKPDF builds a one-page document showing a 2x1 indexed image over
@@ -30,9 +32,9 @@ func indexedCMYKPDF() []byte {
 func TestPipeline_ReopenKeepsTheReadingOptions(t *testing.T) {
 	t.Parallel()
 
-	leftPixel := RedactRegion{Page: 1, Rect: [4]float64{60, 610, 140, 690}}
+	leftPixel := models.RedactRegion{Page: 1, Rect: [4]float64{60, 610, 140, 690}}
 	redact := func(ctx context.Context, w *Writer) error {
-		_, err := w.Redact(ctx, []RedactRegion{leftPixel})
+		_, err := w.Redact(ctx, []models.RedactRegion{leftPixel})
 		return err
 	}
 	for _, tc := range []struct {

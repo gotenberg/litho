@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // blankEntriesImage is the image dictionary entries the tests plant on
@@ -84,7 +85,7 @@ func TestWriterRedactBlankedImageKeepsWhereItPaints(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			out, err := redactRegions(t, blankEntriesDoc([]string{placeLeft}, tc.space, false), RedactRegion{Page: 1, Rect: topLeft})
+			out, err := redactRegions(t, blankEntriesDoc([]string{placeLeft}, tc.space, false), models.RedactRegion{Page: 1, Rect: topLeft})
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
 			}
@@ -119,7 +120,7 @@ func TestWriterRedactBlankedImageKeepsWhereItPaints(t *testing.T) {
 func TestWriterRedactBlankedCopyCarriesNoStructParent(t *testing.T) {
 	t.Parallel()
 	out, err := redactRegions(t, blankEntriesDoc([]string{placeLeft + " " + placeRight}, "/ColorSpace /DeviceGray /BitsPerComponent 8", false),
-		RedactRegion{Page: 1, Rect: topLeft})
+		models.RedactRegion{Page: 1, Rect: topLeft})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -147,7 +148,7 @@ func TestWriterRedactHiddenImageStaysHidden(t *testing.T) {
 	if got := renderedGray(t, src, 1, copyLeftTop); !nearGray(got, 0xff) {
 		t.Fatalf("hidden image renders %d before the redaction, want paper", got)
 	}
-	out, err := redactRegions(t, src, RedactRegion{Page: 1, Rect: topLeft})
+	out, err := redactRegions(t, src, models.RedactRegion{Page: 1, Rect: topLeft})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}

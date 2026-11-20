@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"math"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // photoFormPDF builds a page a form fills with a 208 by 208 RGB image of
@@ -56,7 +58,7 @@ func redactPhotoForm(t *testing.T, opts ...RedactOption) ([]byte, error) {
 	defer r.Close()
 	w := NewWriter(r)
 	defer w.Close()
-	if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{80, 80, 120, 120}}}, opts...); err != nil {
+	if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{80, 80, 120, 120}}}, opts...); err != nil {
 		return nil, err
 	}
 	var out bytes.Buffer

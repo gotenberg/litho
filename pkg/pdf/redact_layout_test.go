@@ -60,8 +60,8 @@ func runElement(t *testing.T, pdf []byte, word string) models.TextElement {
 
 // regionInside returns a region strictly inside the box a run paints, so it
 // selects every glyph of the run and touches none of its neighbours.
-func regionInside(el models.TextElement) RedactRegion {
-	return RedactRegion{Page: 1, Rect: [4]float64{el.X + 1, el.Y + 1, el.X + el.Width - 1, el.Y + el.FontSize - 3}}
+func regionInside(el models.TextElement) models.RedactRegion {
+	return models.RedactRegion{Page: 1, Rect: [4]float64{el.X + 1, el.Y + 1, el.X + el.Width - 1, el.Y + el.FontSize - 3}}
 }
 
 // TestWriter_Redact_KeepsTheLayoutAroundARemovedRun pins that removing a run
@@ -98,7 +98,7 @@ func TestWriter_Redact_KeepsTheLayoutAroundARemovedRun(t *testing.T) {
 			secret := runElement(t, src, "SECRET")
 			before := runElement(t, src, tc.kept)
 
-			out := redactAndWrite(t, src, []RedactRegion{regionInside(secret)})
+			out := redactAndWrite(t, src, []models.RedactRegion{regionInside(secret)})
 			assertRedacted(t, out, []string{"SECRET"}, []string{"AAAA", tc.kept})
 
 			after := runElement(t, out, tc.kept)
@@ -125,7 +125,7 @@ func TestWriter_Redact_WritesNoAdvanceNothingDependsOn(t *testing.T) {
 	t.Parallel()
 
 	src := layoutPDF("BT /F1 12 Tf 100 700 Td (AAAA) Tj /F1 11 Tf (SECRET) Tj ET BT /F1 12 Tf 100 600 Td (KEEP) Tj ET")
-	out := redactAndWrite(t, src, []RedactRegion{regionInside(runElement(t, src, "SECRET"))})
+	out := redactAndWrite(t, src, []models.RedactRegion{regionInside(runElement(t, src, "SECRET"))})
 	assertRedacted(t, out, []string{"SECRET"}, []string{"AAAA", "KEEP"})
 	if bytes.Contains(out, []byte("TJ")) || strings.Contains(string(out), "T*") {
 		t.Errorf("the output carries a compensating operator nothing depends on")

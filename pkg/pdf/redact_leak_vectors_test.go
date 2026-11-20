@@ -17,6 +17,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // leakBody draws SECRET, which coversSecret takes, and KEEP, which stays.
@@ -315,7 +316,7 @@ func TestWriter_Redact_LeakVectors(t *testing.T) {
 				t.Fatalf("Open: %v", err)
 			}
 			w := NewWriter(r)
-			_, redactErr := w.Redact(ctx, []RedactRegion{coversSecret})
+			_, redactErr := w.Redact(ctx, []models.RedactRegion{coversSecret})
 			if v.refuse {
 				if !errors.Is(redactErr, ErrRedactionIncomplete) {
 					t.Fatalf("Redact: want ErrRedactionIncomplete, got %v", redactErr)
@@ -360,7 +361,7 @@ func TestWriter_Redact_ReportsScriptsAndPrivateData(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	report, err := w.Redact(ctx, []RedactRegion{coversSecret})
+	report, err := w.Redact(ctx, []models.RedactRegion{coversSecret})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -401,7 +402,7 @@ func TestWriter_Redact_BlankedImageLosesItsAlternates(t *testing.T) {
 	if !bytes.Contains(src, []byte("/Alternates")) {
 		t.Fatal("the fixture's image carries no /Alternates")
 	}
-	out, err := redactRegions(t, src, RedactRegion{Page: 1, Rect: wholeLeft})
+	out, err := redactRegions(t, src, models.RedactRegion{Page: 1, Rect: wholeLeft})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -427,7 +428,7 @@ func TestWriter_Redact_KeepsAnAttachmentWithoutACopy(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			out := redactAndWrite(t, plantedPDF(leakBody, attachment("n."+name, data)), []RedactRegion{coversSecret})
+			out := redactAndWrite(t, plantedPDF(leakBody, attachment("n."+name, data)), []models.RedactRegion{coversSecret})
 			if !outputHolds(t, out, data) {
 				t.Error("the attachment was not written out")
 			}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/filter/dct"
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestWriter_Redact_BlanksANestedFormImageInPlace pins that an image drawn
@@ -27,15 +28,15 @@ func TestWriter_Redact_BlanksANestedFormImageInPlace(t *testing.T) {
 		for _, tc := range []struct {
 			name        string
 			contents    []string
-			regions     []RedactRegion
+			regions     []models.RedactRegion
 			top, bottom uint8
 		}{
-			{"whole placement", []string{placeFormLeft}, []RedactRegion{{Page: 1, Rect: wholeLeft}}, 0, 0},
-			{"top half", []string{placeFormLeft}, []RedactRegion{{Page: 1, Rect: topLeft}}, 0, 0x40},
+			{"whole placement", []string{placeFormLeft}, []models.RedactRegion{{Page: 1, Rect: wholeLeft}}, 0, 0},
+			{"top half", []string{placeFormLeft}, []models.RedactRegion{{Page: 1, Rect: topLeft}}, 0, 0x40},
 			{
 				"same samples on every page",
 				[]string{placeFormLeft, placeFormLeft},
-				[]RedactRegion{{Page: 1, Rect: topLeft}, {Page: 2, Rect: topLeft}},
+				[]models.RedactRegion{{Page: 1, Rect: topLeft}, {Page: 2, Rect: topLeft}},
 				0, 0x40,
 			},
 		} {
@@ -75,7 +76,7 @@ func TestWriter_Redact_CopiesANestedFormImageDrawnUncovered(t *testing.T) {
 		t.Run(strconv.Itoa(depth), func(t *testing.T) {
 			t.Parallel()
 			src := formChainDoc(depth, []string{placeFormLeft, placeFormLeft})
-			regions := []RedactRegion{{Page: 1, Rect: wholeLeft}}
+			regions := []models.RedactRegion{{Page: 1, Rect: wholeLeft}}
 			out, report, err := redactWith(t, src, regions)
 			if err != nil {
 				t.Fatalf("Redact: %v", err)
@@ -118,7 +119,7 @@ func TestWriter_Redact_CopiesAnImageDrawnPastTheFormDepthBudget(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	report, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: wholeLeft}})
+	report, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: wholeLeft}})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -239,7 +240,7 @@ func TestWriterRedactCopiesASharedPhotographNextToALossyTile(t *testing.T) {
 		t.Errorf("uncovered point %v = %d, want %d", at, got, want)
 	}
 
-	if _, _, err := redactWith(t, first, []RedactRegion{{Page: 1, Rect: region}}, WithStrictRedaction()); !errors.Is(err, mutations.ErrImageShared) {
+	if _, _, err := redactWith(t, first, []models.RedactRegion{{Page: 1, Rect: region}}, WithStrictRedaction()); !errors.Is(err, mutations.ErrImageShared) {
 		t.Errorf("strict Redact = %v, want ErrImageShared", err)
 	}
 }

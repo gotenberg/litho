@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // mosaicStrips draws /Im1 as n strips 2 points high, 4 points apart from
@@ -31,7 +33,7 @@ func TestWriter_Redact_RemovesAMosaicTheRegionCoversWhole(t *testing.T) {
 
 	const strips = 10
 	src := imageDoc([]string{mosaicStrips(strips)}, "", "", "")
-	out, report, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: [4]float64{0, 0, 612, 792}}})
+	out, report, err := redactWith(t, src, []models.RedactRegion{{Page: 1, Rect: [4]float64{0, 0, 612, 792}}})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}
@@ -67,7 +69,7 @@ func TestWriter_Redact_RemovesTheStripsInsideAndKeepsTheRest(t *testing.T) {
 
 	src := imageDoc([]string{mosaicStrips(10)}, "", "", "")
 	// From between the fifth and sixth strips up.
-	regions := []RedactRegion{{Page: 1, Rect: [4]float64{0, 619, 612, 792}}}
+	regions := []models.RedactRegion{{Page: 1, Rect: [4]float64{0, 619, 612, 792}}}
 	out, report, err := redactWith(t, src, regions)
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
@@ -103,7 +105,7 @@ func TestWriter_Redact_RemovesOnlyTheDoOfAGroupThatPaintsMore(t *testing.T) {
 	ctx := context.Background()
 
 	src := imageDoc([]string{"q 0 0 1 rg 10 10 50 50 re f 100 0 0 100 300 500 cm /Im1 Do Q"}, "", "", "")
-	out, report, err := redactWith(t, src, []RedactRegion{{Page: 1, Rect: wholeRight}})
+	out, report, err := redactWith(t, src, []models.RedactRegion{{Page: 1, Rect: wholeRight}})
 	if err != nil {
 		t.Fatalf("Redact: %v", err)
 	}

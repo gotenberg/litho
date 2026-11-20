@@ -64,7 +64,7 @@ func TestEditsKeepObjectsTheTableLeavesOut(t *testing.T) {
 		{
 			name: "redact",
 			edit: func(ctx context.Context, w *Writer) error {
-				_, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{60, 700, 200, 740}}})
+				_, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{60, 700, 200, 740}}})
 				return err
 			},
 		},

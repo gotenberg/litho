@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestWriter_Redact_RefusesAnAnnotationAnotherPageShows pins that removing an
@@ -35,7 +36,7 @@ func TestWriter_Redact_RefusesAnAnnotationAnotherPageShows(t *testing.T) {
 	region := [4]float64{90, 690, 300, 730}
 	ctx := context.Background()
 
-	redact := func(regions []RedactRegion) (*RedactReport, error) {
+	redact := func(regions []models.RedactRegion) (*models.RedactReport, error) {
 		r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
 		if err != nil {
 			t.Fatalf("Open: %v", err)
@@ -43,12 +44,12 @@ func TestWriter_Redact_RefusesAnAnnotationAnotherPageShows(t *testing.T) {
 		return NewWriter(r).Redact(ctx, regions)
 	}
 
-	_, err := redact([]RedactRegion{{Page: 1, Rect: region}})
+	_, err := redact([]models.RedactRegion{{Page: 1, Rect: region}})
 	if !errors.Is(err, ErrRedactionRefused) || !errors.Is(err, mutations.ErrAnnotationStraddlesRegion) {
 		t.Fatalf("one page: err = %v, want ErrRedactionRefused wrapping ErrAnnotationStraddlesRegion", err)
 	}
 
-	report, err := redact([]RedactRegion{{Page: 1, Rect: region}, {Page: 2, Rect: region}})
+	report, err := redact([]models.RedactRegion{{Page: 1, Rect: region}, {Page: 2, Rect: region}})
 	if err != nil {
 		t.Fatalf("both pages: %v", err)
 	}

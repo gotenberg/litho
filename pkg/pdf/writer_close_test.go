@@ -104,7 +104,7 @@ func TestWriterCloseRemovesRemediationOutput(t *testing.T) {
 	if _, err := w.RemediatePDFA(ctx, models.PDFA2b); !errors.Is(err, ErrWriterClosed) {
 		t.Errorf("RemediatePDFA after Close returned %v, want ErrWriterClosed", err)
 	}
-	if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{0, 0, 10, 10}}}); !errors.Is(err, ErrWriterClosed) {
+	if _, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{0, 0, 10, 10}}}); !errors.Is(err, ErrWriterClosed) {
 		t.Errorf("Redact after Close returned %v, want ErrWriterClosed", err)
 	}
 	if got := lithoTempFiles(t, dir); len(got) != 0 {

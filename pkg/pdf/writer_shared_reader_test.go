@@ -150,7 +150,7 @@ func sharedReaderOps(t *testing.T) []sharedReaderOp {
 		{"Redact", func(ctx context.Context, r *Reader) ([]byte, error) {
 			return writeOnReader(ctx, r, func(w *Writer) error {
 				w.SetMetadata(Metadata{Title: "before redaction"})
-				_, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 200, 720}}, {Page: 2, Rect: [4]float64{10, 690, 200, 720}}})
+				_, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 200, 720}}, {Page: 2, Rect: [4]float64{10, 690, 200, 720}}})
 				return err
 			})
 		}},

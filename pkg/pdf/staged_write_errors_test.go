@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestRedactReportsTheStagedWriteFailure pins that the pixel check of Redact,
@@ -20,7 +22,7 @@ func TestRedactReportsTheStagedWriteFailure(t *testing.T) {
 	if err := badStampPDF(t, w); err != nil {
 		t.Fatalf("StampPDF: %v", err)
 	}
-	_, err := w.Redact(context.Background(), []RedactRegion{{Page: 1, Rect: [4]float64{0, 0, 100, 100}}})
+	_, err := w.Redact(context.Background(), []models.RedactRegion{{Page: 1, Rect: [4]float64{0, 0, 100, 100}}})
 
 	if _, ok := errors.AsType[*RedactionPixelError](err); ok {
 		t.Errorf("Redact = %v, want no RedactionPixelError: the check never ran", err)
@@ -48,7 +50,7 @@ func TestStagedWriteNamesTheOperation(t *testing.T) {
 			return err
 		}},
 		{"Redact", func(ctx context.Context, w *Writer) error {
-			_, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{0, 0, 100, 100}}},
+			_, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{0, 0, 100, 100}}},
 				WithRedactionRasterFallback(), WithoutRedactionPixelCheck())
 			return err
 		}},

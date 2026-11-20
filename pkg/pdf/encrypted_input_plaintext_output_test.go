@@ -90,7 +90,7 @@ func TestWriter_AnEditOnAnEncryptedSourceWritesAPlaintextOutput(t *testing.T) {
 			return err
 		}},
 		{"Redact", onePage, func(ctx context.Context, _ *testing.T, w *Writer) error {
-			_, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{0, 650, 600, 770}}})
+			_, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{0, 650, 600, 770}}})
 			return err
 		}},
 		{"FlattenTransparency", translucent, func(ctx context.Context, _ *testing.T, w *Writer) error {
