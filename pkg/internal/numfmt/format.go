@@ -386,8 +386,13 @@ func (s *section) number(x float64, first bool) Result {
 	case secDate:
 		return s.date(x, first)
 	case secText:
-		// A number in a text section shows in the standard format.
-		return s.text(generalString(x))
+		// A number in a text section shows in the standard format, with
+		// the decimal separator of the section's locale.
+		g := generalString(x)
+		if s.loc != nil {
+			g = strings.Replace(g, ".", s.loc.decimal, 1)
+		}
+		return s.text(g)
 	case secLiteral:
 	}
 	r := s.text("")

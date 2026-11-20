@@ -1361,3 +1361,33 @@ func TestWithLocale_BooleanEquivalent(t *testing.T) {
 		}
 	}
 }
+
+// TestWithLocale_NumberInTextFormat checks that a number in a text format
+// prints in the standard format with the locale's decimal separator, as
+// Calc prints it.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: a cell of built-in format 49 (@) prints 1234.5 as
+//     1234,5 under de-DE and 1234٫5 under ar-EG, and -1234.5 as -1234,5
+//     under de-DE, in LibreOffice 26.8.2.2 of the pinned image.
+func TestWithLocale_NumberInTextFormat(t *testing.T) {
+	for _, tt := range []struct {
+		loc  models.Locale
+		v    float64
+		want string
+	}{
+		{models.LocaleDeDE, 1234.5, "1234,5"},
+		{models.LocaleDeDE, -1234.5, "-1234,5"},
+		{models.LocaleArEG, 1234.5, "1234٫5"},
+		{models.LocaleEnUS, 1234.5, "1234.5"},
+	} {
+		f, err := Parse("@")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := f.WithLocale(tt.loc).Apply(Value{Kind: Number, Number: tt.v}).Text; got != tt.want {
+			t.Errorf("%s %v: %q, want %q", tt.loc, tt.v, got, tt.want)
+		}
+	}
+}
