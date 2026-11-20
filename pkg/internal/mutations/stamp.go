@@ -8,6 +8,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/embed"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -132,19 +133,6 @@ func StampText(
 		if baseFont == "" {
 			baseFont = "Helvetica"
 		}
-		fontDict := ast.PdfDict{
-			"Type":     ast.PdfName("Font"),
-			"Subtype":  ast.PdfName("Type1"),
-			"BaseFont": baseFont,
-		}
-		// Symbol and ZapfDingbats use their built-in encodings; all other
-		// standard fonts use WinAnsiEncoding so extended Latin characters
-		// render correctly.
-		if baseFont != "Symbol" && baseFont != "ZapfDingbats" {
-			fontDict["Encoding"] = ast.PdfName("WinAnsiEncoding")
-		}
-		fontRef = alloc.Alloc(fontDict)
-		fontResName = ast.PdfName(fmt.Sprintf("StampF%d", fontRef.ObjectNum))
 
 		// A standard font draws through WinAnsiEncoding, so the text has to be
 		// written in it. Emitting the Go string's UTF-8 bytes instead put two
@@ -156,6 +144,14 @@ func StampText(
 		winAnsi, encodable := winAnsiEncode(opts.Text)
 		switch {
 		case encodable:
+			// The font is written with its widths and font descriptor, which
+			// ISO 32000-2, 9.6.2.2 requires of a standard font; Symbol and
+			// ZapfDingbats keep their built-in encodings, the others name
+			// WinAnsiEncoding ([typography.WriteStandard14Font]).
+			if fontRef, err = typography.WriteStandard14Font(alloc, string(baseFont)); err != nil {
+				return fmt.Errorf("writing the stamp's font: %w", err)
+			}
+			fontResName = ast.PdfName(fmt.Sprintf("StampF%d", fontRef.ObjectNum))
 			encoded = "(" + escapePDFString(string(winAnsi)) + ")"
 			if opts.Position != models.PositionNone {
 				glyphs = standardInkGlyphs(string(baseFont), winAnsi)
