@@ -17,12 +17,15 @@ import (
 type FacturXReport struct {
 	// Violations are hard rule failures: PDF/A-3 base, hybrid-invoice
 	// AF/XMP/CII checks, and Schematron assertions that fired.
-	Violations []error
+	// JSON leaves them out, an error having no JSON form:
+	// [FacturXReport.Structured] gives the violations one.
+	Violations []error `json:"-"`
 	// Advisories list Schematron rules skipped because the bundled XPath
 	// engine does not support the construct the rule uses. Each entry wraps
 	// [github.com/gotenberg/litho/pkg/pdf.ErrSchematronRuleSkipped] and names
 	// the rule id plus the unsupported construct in its error message.
-	Advisories []error
+	// JSON leaves them out: an error has no JSON form.
+	Advisories []error `json:"-"`
 }
 
 // Structured returns the hard violations as structured [Violation]
@@ -95,17 +98,17 @@ func (s Severity) String() string {
 //nolint:errname // Violation is the domain name; "ViolationError" would be redundant.
 type Violation struct {
 	// Specification is the ISO standard identifier (e.g. "ISO_19005_1").
-	Specification string
+	Specification string `json:"specification"`
 	// Clause is the standard clause number (e.g. "6.1.2").
-	Clause string
+	Clause string `json:"clause"`
 	// TestNumber identifies the specific test within a clause.
-	TestNumber int
+	TestNumber int `json:"testNumber"`
 	// Description is the normative requirement text.
-	Description string
+	Description string `json:"description"`
 	// Context describes where the violation occurred (page, object, font).
-	Context string
+	Context string `json:"context"`
 	// Severity grades the violation.
-	Severity Severity
+	Severity Severity `json:"severity"`
 }
 
 // Error implements the error interface with the same text as the flat

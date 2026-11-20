@@ -19,23 +19,23 @@ const (
 type FacturXConfig struct {
 	// InvoiceXML is the Cross-Industry Invoice (CII) XML payload that
 	// will be embedded as the Factur-X data file. Required, non-empty.
-	InvoiceXML []byte
+	InvoiceXML []byte `json:"invoiceXML"`
 	// Level is the Factur-X conformance level. Required; must satisfy
 	// [FacturXLevel.IsValid].
-	Level FacturXLevel
+	Level FacturXLevel `json:"level"`
 	// Profile is the PDF/A-3 conformance level used as the underlying
 	// archival base. Optional; defaults to [DefaultFacturXProfile].
 	// Must be one of [PDFA3a], [PDFA3b], or
 	// [PDFA3u].
-	Profile PDFAProfile
+	Profile PDFAProfile `json:"profile"`
 	// FileName is the embedded file name. Optional; defaults to
 	// "xrechnung.xml" for [FacturXXRechnung] and "factur-x.xml"
 	// for every other level (Factur-X 1.07.2, 6.2 and 7.7). The same
 	// value is written into the XMP `fx:DocumentFileName` property.
-	FileName string
+	FileName string `json:"fileName"`
 	// DocumentType is the value of the XMP `fx:DocumentType` property.
 	// Optional; defaults to [DefaultFacturXDocumentType].
-	DocumentType string
+	DocumentType string `json:"documentType"`
 	// Relationship is the embedded-file `/AFRelationship` value.
 	// Optional; defaults to "Data" for [FacturXMinimum] and
 	// [FacturXBasicWL], whose XML carries less than the visual
@@ -43,5 +43,5 @@ type FacturXConfig struct {
 	// 6.2.2 and 7.7). BASIC, EN 16931 and EXTENDED also admit "Data" or
 	// "Source" in France, depending on how the PDF was made; Germany
 	// admits "Alternative" alone.
-	Relationship string
+	Relationship string `json:"relationship"`
 }

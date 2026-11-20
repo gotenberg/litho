@@ -4,13 +4,13 @@ package models
 // ISO 32000-2, Table 22. For unencrypted documents, all flags are true.
 // Concurrent reads of a value are safe; a write needs synchronization.
 type Permissions struct {
-	Print             bool // Bit 3: Print the document.
-	ModifyContent     bool // Bit 4: Modify document contents.
-	ExtractText       bool // Bit 5: Copy or extract text and graphics.
-	ModifyAnnotations bool // Bit 6: Add or modify annotations, fill form fields.
-	FillForms         bool // Bit 9: Fill form fields (even if bit 6 is clear).
-	Assemble          bool // Bit 11: Assemble the document.
-	PrintHighQuality  bool // Bit 12: Print high-quality (bit 3 must also be set).
+	Print             bool `json:"print"`             // Bit 3: Print the document.
+	ModifyContent     bool `json:"modifyContent"`     // Bit 4: Modify document contents.
+	ExtractText       bool `json:"extractText"`       // Bit 5: Copy or extract text and graphics.
+	ModifyAnnotations bool `json:"modifyAnnotations"` // Bit 6: Add or modify annotations, fill form fields.
+	FillForms         bool `json:"fillForms"`         // Bit 9: Fill form fields (even if bit 6 is clear).
+	Assemble          bool `json:"assemble"`          // Bit 11: Assemble the document.
+	PrintHighQuality  bool `json:"printHighQuality"`  // Bit 12: Print high-quality (bit 3 must also be set).
 }
 
 // Mask builds the 32-bit /P permission value for these flags, suitable for
@@ -87,7 +87,7 @@ type EncryptConfig struct {
 	// UserPassword unlocks the document for reading. Empty string means
 	// the document can be opened without a password, but [Permissions]
 	// still apply to viewers that enforce them.
-	UserPassword string
+	UserPassword string `json:"userPassword"`
 	// OwnerPassword grants full access. Writers should pick a different
 	// value from [EncryptConfig.UserPassword]; callers that supply identical
 	// passwords get the same effective permissions as an
@@ -98,11 +98,11 @@ type EncryptConfig struct {
 	// and "IX" name the same password. A password SASLprep rejects yields
 	// [github.com/gotenberg/litho/pkg/pdf.ErrPasswordRejected]. The other
 	// algorithms hash the password bytes as given (ISO 32000-1, 7.6.3.3).
-	OwnerPassword string
+	OwnerPassword string `json:"ownerPassword"`
 	// Algorithm selects the standard security handler variant. The zero
 	// value selects [EncryptAES256]; [EncryptRC4_40] and the other weaker
 	// handlers are written only when named.
-	Algorithm EncryptAlgorithm
+	Algorithm EncryptAlgorithm `json:"algorithm"`
 	// Permissions is the 32-bit PDF permission mask. Pass -1 for "all
 	// permissions granted", or build one with [Permissions.Mask].
 	//
@@ -122,5 +122,5 @@ type EncryptConfig struct {
 	// always set this bit to 1". Below 2.0 the mask is written as given, and
 	// bit 10 is the permission to extract text and graphics in support of
 	// accessibility (ISO 32000-1, Table 22).
-	Permissions int32
+	Permissions int32 `json:"permissions"`
 }

@@ -47,15 +47,15 @@ type PageBand struct {
 	// draws nothing on Pages: the margin shows what the source's
 	// page-margin boxes put there, which removes a band an earlier option
 	// put on those pages.
-	HTML string
+	HTML string `json:"html"`
 	// CSS is a style sheet of the band's document. Unless
 	// IgnoreDocumentStyles it cascades after the source's style sheets, so its rules win over
 	// theirs as a later author style sheet's do; its selectors match the
 	// band's document alone, and nothing of it styles the source.
-	CSS string
+	CSS string `json:"css"`
 	// Pages selects the pages the band is drawn on. The zero value selects
 	// every page.
-	Pages PageSet
+	Pages PageSet `json:"pages"`
 	// GrowMargin sets what a band taller than its margin does. false, the
 	// default, keeps the page margin the source and the options give: the
 	// band overflows it, over the page area or off the page, and the
@@ -74,7 +74,7 @@ type PageBand struct {
 	// times, before the margins grow and again after: eight layouts at most.
 	// With [github.com/gotenberg/litho/pkg/pdf.WithSinglePage] the page grows
 	// by what its margins grow.
-	GrowMargin bool
+	GrowMargin bool `json:"growMargin"`
 	// IgnoreDocumentStyles styles the band's document with the engine's
 	// default style sheet, the <style> elements of HTML and CSS alone. false,
 	// the default, applies the source's style sheets first, the user
@@ -84,7 +84,7 @@ type PageBand struct {
 	// the source's @font-face fonts draw the band's text, its relative URLs
 	// load the source's resources, and the source's @page rules set the page
 	// and its margins.
-	IgnoreDocumentStyles bool
+	IgnoreDocumentStyles bool `json:"ignoreDocumentStyles"`
 }
 
 // PageSet selects pages of an HTML or Markdown source for a [PageBand]. The
@@ -129,11 +129,12 @@ const (
 // Concurrent reads of a value are safe; a write needs synchronization.
 type PageTerm struct {
 	// Kind is the kind of page the term selects.
-	Kind PageKind
+	Kind PageKind `json:"kind"`
 	// From and To bound a range of pages, both included.
-	From, To int
+	From int `json:"from"`
+	To   int `json:"to"`
 	// Name is a page type name, matched as written.
-	Name string
+	Name string `json:"name"`
 }
 
 // FirstPage selects the first page (CSS Paged Media 3, 4.2.1, :first).

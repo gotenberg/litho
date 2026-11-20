@@ -6,7 +6,7 @@ package models
 type RemediationReport struct {
 	// Fixed lists human-readable descriptions of applied fixes that were
 	// kept in the output.
-	Fixed []string
+	Fixed []string `json:"fixed"`
 	// Residual contains violations that could not be fixed automatically,
 	// in the flat error form the Validate methods return.
 	// [RemediationReport.ResidualViolations] returns the same findings as
@@ -30,7 +30,9 @@ type RemediationReport struct {
 	// font-embedding violations emits pdfaid:part 2 and pdfaid:conformance B
 	// all the same. Read this field rather than trusting what the document
 	// says about itself.
-	Residual []error
+	// JSON leaves it out, an error having no JSON form:
+	// [RemediationReport.ResidualViolations] gives the violations one.
+	Residual []error `json:"-"`
 	// RolledBack lists human-readable descriptions of content-modifying fixes
 	// that were applied, failed the post-remediation integrity probe, and were
 	// subsequently discarded. When non-empty, the output preserves rendering
@@ -39,7 +41,7 @@ type RemediationReport struct {
 	// setting the transparency opaque, which fixes the same violations and
 	// changes how the page draws (see
 	// [github.com/gotenberg/litho/pkg/pdf.Writer.RemediatePDFA]).
-	RolledBack []string
+	RolledBack []string `json:"rolledBack"`
 	// FontRefusals lists, in object-number order, the fonts the output shows
 	// unembedded although
 	// [github.com/gotenberg/litho/pkg/pdf.WithFontProvider] or
@@ -48,7 +50,7 @@ type RemediationReport struct {
 	// pass that judged the fonts: a font one round refused and a later round
 	// embedded is not listed, and one every round refused is listed once, with
 	// the last round's reason.
-	FontRefusals []FontRefusal
+	FontRefusals []FontRefusal `json:"fontRefusals"`
 }
 
 // ResidualViolations returns the residual findings as structured
@@ -79,7 +81,7 @@ type AutoTagReport struct {
 	// [github.com/gotenberg/litho/pkg/pdf.ErrEditAfterRemediation]). It says
 	// the edit ran, not that the output was written: the applying call's error
 	// says that.
-	Applied bool
+	Applied bool `json:"applied"`
 	// Skipped is nil when AutoTag built a structure tree. Otherwise it says
 	// why AutoTag left the document as it was, and wraps one of
 	// [github.com/gotenberg/litho/pkg/pdf.ErrAutoTagAlreadyTagged],
@@ -88,11 +90,12 @@ type AutoTagReport struct {
 	// [github.com/gotenberg/litho/pkg/pdf.ErrAutoTagNothingToTag]: test it
 	// with [errors.Is]. A skip fails nothing, and the output is written
 	// without a new tree.
-	Skipped error
+	// JSON leaves it out: an error has no JSON form.
+	Skipped error `json:"-"`
 	// Page is the 1-based page Skipped concerns, counted among the pages the
 	// Writer holds when AutoTag is queued, 0 when it concerns the whole
 	// document or AutoTag skipped nothing.
-	Page int
+	Page int `json:"page"`
 }
 
 // RegressionTolerance bounds the integrity probe that runs after remediation.
@@ -108,15 +111,15 @@ type RegressionTolerance struct {
 	// [github.com/gotenberg/litho/pkg/pdf.Reader.ExtractText], so emptying a
 	// few pages of a long document counts; when AllowPageLoss lets the page
 	// count change, against the sum across all pages. Defaults to 0.1 (10%).
-	MaxTextDropRatio float64
+	MaxTextDropRatio float64 `json:"maxTextDropRatio"`
 	// MaxImageDropRatio is the largest acceptable fraction of
 	// [github.com/gotenberg/litho/pkg/pdf.Reader.ExtractImages] entries that
 	// remediation may remove. Defaults to 0.5 (50%) to accommodate aggressive
 	// image-stream fixers that legitimately drop corrupt XObjects.
-	MaxImageDropRatio float64
+	MaxImageDropRatio float64 `json:"maxImageDropRatio"`
 	// AllowPageLoss permits the page count to decrease. When false (the
 	// default), any change to the page count is treated as a regression.
-	AllowPageLoss bool
+	AllowPageLoss bool `json:"allowPageLoss"`
 }
 
 // DefaultRegressionTolerance is the tolerance applied when none is set via

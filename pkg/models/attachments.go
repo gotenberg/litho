@@ -34,15 +34,15 @@ type EmbeddedFile struct {
 // Concurrent reads of a value are safe; a write needs synchronization.
 type AssociatedFile struct {
 	// Name is the displayed file name.
-	Name string
+	Name string `json:"name"`
 	// Data is the file content. It is retained, not copied: the file is
 	// written when [github.com/gotenberg/litho/pkg/pdf.Writer.WriteTo] drains
 	// the queue, so leave the slice untouched until then.
-	Data []byte
+	Data []byte `json:"data"`
 	// MimeType is the embedded file /Subtype (e.g., "application/xml").
-	MimeType string
+	MimeType string `json:"mimeType"`
 	// Relationship is the /AFRelationship value. Valid per
 	// ISO 32000-2 §7.11.3: Source, Data, Alternative, Supplement,
 	// EncryptedPayload, FormData, Schema, Unspecified.
-	Relationship string
+	Relationship string `json:"relationship"`
 }

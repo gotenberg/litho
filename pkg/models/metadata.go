@@ -10,12 +10,12 @@ package models
 // ModDate belong in the PDF date form "D:YYYYMMDDHHmmSSOHH'mm" (ISO 32000-1,
 // 7.9.4).
 type Metadata struct {
-	Title        string
-	Author       string
-	Subject      string
-	Keywords     string
-	Creator      string
-	Producer     string
-	CreationDate string
-	ModDate      string
+	Title        string `json:"title"`
+	Author       string `json:"author"`
+	Subject      string `json:"subject"`
+	Keywords     string `json:"keywords"`
+	Creator      string `json:"creator"`
+	Producer     string `json:"producer"`
+	CreationDate string `json:"creationDate"`
+	ModDate      string `json:"modDate"`
 }

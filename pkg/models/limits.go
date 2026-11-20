@@ -72,7 +72,7 @@ type Limits struct {
 	// built from ICC profiles it keeps cached a quarter each, 64 MiB by
 	// default: when one would take more, its cache is emptied and refilled,
 	// which costs re-decoding, never a wrong answer.
-	MaxStreamBytes int64
+	MaxStreamBytes int64 `json:"maxStreamBytes"`
 
 	// MaxImagePixels bounds Width x Height of one image.
 	// [github.com/gotenberg/litho/pkg/pdf.Reader.DecodeImage] and an image's
@@ -87,14 +87,14 @@ type Limits struct {
 	// [github.com/gotenberg/litho/pkg/pdf.Conversion] holds each picture of
 	// its source to it as well: a larger one is left out with a warning.
 	// Default 100,000,000, at most 2^30.
-	MaxImagePixels int64
+	MaxImagePixels int64 `json:"maxImagePixels"`
 
 	// MaxEmbeddedFileBytes bounds the decoded size of an embedded PDF that
 	// PDF/A validation opens to check its conformance (ISO 19005-2, 6.8;
 	// ISO 19005-4, 6.9). A larger embedded PDF is not validated and raises no
 	// violation. An embedded file that is not a PDF is judged from its header
 	// and reported whatever its size. Default 50 MiB, at most 4 GiB.
-	MaxEmbeddedFileBytes int64
+	MaxEmbeddedFileBytes int64 `json:"maxEmbeddedFileBytes"`
 
 	// MaxFormDepth bounds how many form XObjects nest below the page: a form
 	// the page paints directly, or an annotation's appearance, is at depth 1,
@@ -106,7 +106,7 @@ type Limits struct {
 	// description as one level each, as a form. Forms that share sub-forms
 	// cost work that grows with the depth, so raise it only as far as the
 	// documents need. Default 10, at most 256.
-	MaxFormDepth int
+	MaxFormDepth int `json:"maxFormDepth"`
 
 	// MaxCachedObjects bounds how many parsed objects the
 	// [github.com/gotenberg/litho/pkg/pdf.Reader] keeps. When the cache is
@@ -114,7 +114,7 @@ type Limits struct {
 	// parsing it again if it is asked for, never a wrong answer. Default
 	// 50,000, at most 8,388,607, the most indirect objects ISO 32000-1, Annex
 	// C allows a file.
-	MaxCachedObjects int
+	MaxCachedObjects int `json:"maxCachedObjects"`
 
 	// MaxRenderPixels bounds Width x Height of one page
 	// [github.com/gotenberg/litho/pkg/pdf.Reader.RenderPage] draws, and of
@@ -123,7 +123,7 @@ type Limits struct {
 	// [github.com/gotenberg/litho/pkg/pdf.ErrRenderTooLarge] before anything
 	// is drawn. The renderer holds 16 bytes a pixel for the page. Default
 	// 50,000,000, a US Letter or A4 page at 600 dpi, at most 2^30.
-	MaxRenderPixels int64
+	MaxRenderPixels int64 `json:"maxRenderPixels"`
 
 	// MaxConvertInputBytes bounds the source bytes one
 	// [github.com/gotenberg/litho/pkg/pdf.Conversion] reads. A larger source
@@ -132,14 +132,14 @@ type Limits struct {
 	// document in memory, about 50 bytes for each character of plain text and
 	// 170 for each byte of HTML, within MaxConvertMemoryBytes. Default 16 MiB,
 	// about 4,200 A4 pages of plain text at 12 points, at most 1 GiB.
-	MaxConvertInputBytes int64
+	MaxConvertInputBytes int64 `json:"maxConvertInputBytes"`
 
 	// MaxConvertPages bounds the pages one
 	// [github.com/gotenberg/litho/pkg/pdf.Conversion] lays out. A source that
 	// needs more fails with
 	// [github.com/gotenberg/litho/pkg/pdf.ErrConvertTooManyPages]; no page is
 	// dropped. Default 10,000, at most 100,000.
-	MaxConvertPages int
+	MaxConvertPages int `json:"maxConvertPages"`
 
 	// MaxConvertMemoryBytes bounds the memory one
 	// [github.com/gotenberg/litho/pkg/pdf.Conversion] holds, as litho accounts
@@ -169,5 +169,5 @@ type Limits struct {
 	// about twice the account, since the garbage collector frees what is
 	// released a while later: size a host for twice the budget per
 	// concurrent conversion. Default 1 GiB, at most 64 GiB.
-	MaxConvertMemoryBytes int64
+	MaxConvertMemoryBytes int64 `json:"maxConvertMemoryBytes"`
 }

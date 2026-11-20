@@ -138,11 +138,11 @@ type DroppedSignature struct {
 	// held the signature (ISO 32000-1, 12.7.3.2), "" for a signature no field
 	// holds: the usage rights signature /Perms /UR3 names (ISO 32000-1,
 	// 12.8.2.3).
-	Field string
+	Field string `json:"field"`
 	// Perms names the catalog /Perms entry that referred to the signature,
 	// "DocMDP" for a certification signature and "UR3" for a usage rights
 	// signature (ISO 32000-1, 12.8.4, Table 258), and is "" when none did.
-	Perms string
+	Perms string `json:"perms"`
 }
 
 // ValidationData is the validation material
@@ -155,9 +155,10 @@ type DroppedSignature struct {
 type ValidationData struct {
 	// Certificates are certificates the signer's and the timestamp
 	// authority's chains may need beyond those their SignedData carry.
-	Certificates []*x509.Certificate
+	// JSON leaves them out.
+	Certificates []*x509.Certificate `json:"-"`
 	// OCSPResponses are DER OCSPResponse messages (RFC 6960, 4.2.1).
-	OCSPResponses [][]byte
+	OCSPResponses [][]byte `json:"ocspResponses"`
 	// CRLs are DER certificate revocation lists (RFC 5280, 5.1).
-	CRLs [][]byte
+	CRLs [][]byte `json:"crLs"`
 }

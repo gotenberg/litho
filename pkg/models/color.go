@@ -26,35 +26,35 @@ const (
 type ColorReport struct {
 	// Target is the family the converted colours are written in:
 	// "DeviceGray", "DeviceRGB", "DeviceCMYK" or "ICCBased".
-	Target string
+	Target string `json:"target"`
 	// ConvertedOperators counts the colour operators rewritten, and
 	// ConvertedColorSpaces the colour space resources.
-	ConvertedOperators   int
-	ConvertedColorSpaces int
+	ConvertedOperators   int `json:"convertedOperators"`
+	ConvertedColorSpaces int `json:"convertedColorSpaces"`
 	// ConvertedImages counts the image XObjects and inline images
 	// re-encoded in the target, and ConvertedShadings the shadings.
-	ConvertedImages   int
-	ConvertedShadings int
+	ConvertedImages   int `json:"convertedImages"`
+	ConvertedShadings int `json:"convertedShadings"`
 	// KOnlyBlackColors counts the colours
 	// [github.com/gotenberg/litho/pkg/pdf.WithKOnlyBlack] wrote on the black
 	// ink alone, of ConvertedOperators and of the annotation and default
 	// appearance colours.
-	KOnlyBlackColors int
+	KOnlyBlackColors int `json:"kOnlyBlackColors"`
 	// KeptSpotColorants names, sorted, the colorants of the spot colours
 	// kept with their alternate space converted. Empty under
 	// [github.com/gotenberg/litho/pkg/pdf.WithSpotConversion].
-	KeptSpotColorants []string
+	KeptSpotColorants []string `json:"keptSpotColorants"`
 	// OutputIntent is "added" when the conversion added a GTS_PDFA1 output
 	// intent of the target's profile, "replaced" when it gave the existing
 	// GTS_PDFA1 intents that profile, and "" when it left the intents alone.
-	OutputIntent string
+	OutputIntent string `json:"outputIntent"`
 	// KeptOutputIntents lists the /S of each output intent of another
 	// subtype the conversion left as it was, GTS_PDFX among them.
-	KeptOutputIntents []string
+	KeptOutputIntents []string `json:"keptOutputIntents"`
 	// ReplacedOutputIntents lists the /OutputConditionIdentifier of each
 	// intent [github.com/gotenberg/litho/pkg/pdf.WithReplacedOutputIntents]
 	// pointed at the target profile.
-	ReplacedOutputIntents []string
+	ReplacedOutputIntents []string `json:"replacedOutputIntents"`
 	// TargetProfile says where the profile the colours were converted to came
 	// from: [ProfileSourceOutputIntent] for
 	// [github.com/gotenberg/litho/pkg/pdf.OutputIntentColorTarget],
@@ -63,7 +63,7 @@ type ColorReport struct {
 	// [github.com/gotenberg/litho/pkg/pdf.CMYKColorTarget] read in the profile
 	// of [github.com/gotenberg/litho/pkg/pdf.WithDefaultCMYKProfile], and
 	// [ProfileSourceBuiltin] for litho's own profiles.
-	TargetProfile string
+	TargetProfile string `json:"targetProfile"`
 	// SourceProfiles maps each device family the conversion read colours of
 	// ("DeviceGray", "DeviceRGB", "DeviceCMYK") to where the profiles it read the
 	// family through came from, sorted, once each. A source is one of:
@@ -78,21 +78,21 @@ type ColorReport struct {
 	//
 	// An ICCBased space litho cannot read through its own profile, read as its
 	// device family, is counted under that family.
-	SourceProfiles map[string][]string
+	SourceProfiles map[string][]string `json:"sourceProfiles"`
 	// IntentFallbacks lists, once per profile, each profile a conversion read
 	// through another table than the one for the rendering intent: a profile
 	// without that table is read through its perceptual one (ICC.1:2010,
 	// 6.2), or through its matrix and tone curves when it has no perceptual
 	// table either. Empty when every profile held the intent's table or
 	// serves every intent alike.
-	IntentFallbacks []IntentFallback
+	IntentFallbacks []IntentFallback `json:"intentFallbacks"`
 	// OverprintPreserved counts the paintings under overprint (ISO 32000-1,
 	// 8.6.7) that print as they did because the conversion wrote the graphics
 	// state dictionaries in force at them, OverprintStates of them, with /OPM 0.
 	// Colour converted into CMYK under overprint mode 1 would otherwise leave the
 	// inks of its zero components unpainted.
-	OverprintPreserved int
-	OverprintStates    int
+	OverprintPreserved int `json:"overprintPreserved"`
+	OverprintStates    int `json:"overprintStates"`
 	// OverprintChanged counts the paintings under overprint that print otherwise
 	// once converted, on a device that overprints:
 	//
@@ -103,7 +103,7 @@ type ColorReport struct {
 	//
 	// Viewers draw without overprinting by default, so the change shows only in
 	// print or in an overprint preview.
-	OverprintChanged int
+	OverprintChanged int `json:"overprintChanged"`
 	// BlackPointOperators counts the colour operators converted under a
 	// graphics state whose /UseBlackPtComp (ISO 32000-2, Table 57) differs
 	// from the conversion's own choice, which is /OFF by default and /ON under
@@ -111,9 +111,9 @@ type ColorReport struct {
 	// BlackPointInlineImages counts the inline images so converted.
 	// BlackPointCopies counts the image XObjects and shadings written a second
 	// time, converted under such a state, for the paintings under it.
-	BlackPointOperators    int
-	BlackPointInlineImages int
-	BlackPointCopies       int
+	BlackPointOperators    int `json:"blackPointOperators"`
+	BlackPointInlineImages int `json:"blackPointInlineImages"`
+	BlackPointCopies       int `json:"blackPointCopies"`
 	// BlackPointUnhonoured counts the paintings under such a state whose colour
 	// converts as the conversion's own choice asks all the same:
 	//
@@ -121,17 +121,17 @@ type ColorReport struct {
 	//     once for every painting.
 	//   - An image or a shading painted by a stream whose resources are not its
 	//     own.
-	BlackPointUnhonoured int
+	BlackPointUnhonoured int `json:"blackPointUnhonoured"`
 	// IntentOperators, IntentInlineImages, IntentCopies and IntentUnhonoured
 	// count as the BlackPoint fields do, for a graphics state whose rendering
 	// intent, set by the ri operator or an ExtGState /RI (ISO 32000-1,
 	// 8.6.5.8), differs from
 	// [github.com/gotenberg/litho/pkg/pdf.WithColorIntent]'s. An image stating
 	// its own /Intent converts under it and is never copied for a state's.
-	IntentOperators    int
-	IntentInlineImages int
-	IntentCopies       int
-	IntentUnhonoured   int
+	IntentOperators    int `json:"intentOperators"`
+	IntentInlineImages int `json:"intentInlineImages"`
+	IntentCopies       int `json:"intentCopies"`
+	IntentUnhonoured   int `json:"intentUnhonoured"`
 }
 
 // Where a profile [github.com/gotenberg/litho/pkg/pdf.Writer.ConvertColors]
@@ -168,14 +168,14 @@ const (
 // values are immutable and safe for concurrent use.
 type IntentFallback struct {
 	// Target is true for the target's profile, false for a source's.
-	Target bool
+	Target bool `json:"target"`
 	// Components is the number of components of the profile's data colour
 	// space: 1, 3 or 4.
-	Components int
+	Components int `json:"components"`
 	// Profile says where the profile came from, one of the ProfileSource
 	// constants.
-	Profile string
+	Profile string `json:"profile"`
 	// Table is the table the profile was read through: "perceptual" or
 	// "matrix" (its matrix and tone curves).
-	Table string
+	Table string `json:"table"`
 }

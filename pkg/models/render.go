@@ -97,7 +97,7 @@ type RenderReport struct {
 	// [github.com/gotenberg/litho/pkg/pdf.WithRenderFontFiles] or
 	// [github.com/gotenberg/litho/pkg/pdf.WithRenderSystemFonts] (ISO 32000-1,
 	// 9.6.2.2 leaves a substitute to the reader).
-	PlaceholderGlyphs int
+	PlaceholderGlyphs int `json:"placeholderGlyphs"`
 	// UnreadableGlyphs counts the glyphs left out because their font program,
 	// embedded or supplied, could not draw them: a glyph description cut
 	// short, out of range, or a composite that contains itself. They paint
@@ -105,38 +105,38 @@ type RenderReport struct {
 	// viewer may draw part of them. A glyph that would paint nothing anyway,
 	// invisible or left out by
 	// [github.com/gotenberg/litho/pkg/pdf.WithRenderContent], is not counted.
-	UnreadableGlyphs int
+	UnreadableGlyphs int `json:"unreadableGlyphs"`
 	// SynthesizedAnnotations counts the annotations drawn from an appearance
 	// litho built from the annotation dictionary, the file holding no
 	// appearance stream: the Square, Circle, Line, Polygon, PolyLine, Ink,
 	// text markup, Link and Text types. ISO 32000-1, 12.5.5 leaves their look
 	// to the viewer, so another viewer may draw them otherwise; a Text
 	// annotation's icon (12.5.6.4) is each viewer's own.
-	SynthesizedAnnotations int
+	SynthesizedAnnotations int `json:"synthesizedAnnotations"`
 	// AnnotationsWithoutAppearance counts the annotations not drawn at all:
 	// they hold no appearance stream and their look is a viewer's icon or
 	// text (FreeText, Stamp and the like).
-	AnnotationsWithoutAppearance int
+	AnnotationsWithoutAppearance int `json:"annotationsWithoutAppearance"`
 	// StaleAppearances counts the form field widgets drawn from the
 	// appearance stream the file holds although the form's
 	// /NeedAppearances asks the viewer to build new ones (ISO 32000-1,
 	// 12.7.2): litho builds none, so the field may show an out-of-date value.
-	StaleAppearances int
+	StaleAppearances int `json:"staleAppearances"`
 	// TransparencyOverBudget counts the transparency groups, soft masks and
 	// knockout text objects (ISO 32000-1, 11.4, 11.6.5.2, 9.3.8) whose rasters
 	// would pass [Limits.MaxRenderPixels],
 	// drawn other than the file asks: a group's content through the group's
 	// alpha and soft mask without the group, a soft mask hiding what it masks,
 	// a knockout text object glyph by glyph.
-	TransparencyOverBudget int
+	TransparencyOverBudget int `json:"transparencyOverBudget"`
 	// CoarseMasks counts the soft masks drawn at a coarser resolution than the
 	// page to fit [Limits.MaxRenderPixels]:
 	// their effect is kept, approximated within a few pixels of where the mask
 	// changes.
-	CoarseMasks int
+	CoarseMasks int `json:"coarseMasks"`
 	// Skipped counts the constructs the file damages, left out of the page
 	// as a viewer leaves them out: an image that does not decode or whose
 	// mask does not, a shading or pattern that does not compile, a form past
 	// [Limits.MaxFormDepth] or in a cycle.
-	Skipped int
+	Skipped int `json:"skipped"`
 }

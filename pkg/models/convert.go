@@ -5,10 +5,10 @@ package models
 // synchronization.
 type ConvertReport struct {
 	// Pages is the number of pages written.
-	Pages int
+	Pages int `json:"pages"`
 	// Warnings lists what the conversion could not render as the source
 	// meant it, in the order met.
-	Warnings []ConvertWarning
+	Warnings []ConvertWarning `json:"warnings"`
 }
 
 // ConvertWarning is one construct of the source a
@@ -17,13 +17,13 @@ type ConvertReport struct {
 type ConvertWarning struct {
 	// Code names the kind of construct: one of the Warning constants (see
 	// [ConvertWarningCode]).
-	Code ConvertWarningCode
+	Code ConvertWarningCode `json:"code"`
 	// Effect says what the construct cost the PDF: content left out or
 	// content printed differently (see [ConvertWarningEffect]). It is
 	// never "".
-	Effect ConvertWarningEffect
+	Effect ConvertWarningEffect `json:"effect"`
 	// Message explains the construct and what was done instead.
-	Message string
+	Message string `json:"message"`
 	// Page is the 1-based page the construct lands on, 0 when it has none.
-	Page int
+	Page int `json:"page"`
 }

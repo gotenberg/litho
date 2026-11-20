@@ -24,23 +24,23 @@ const (
 // synchronization.
 type HeadingCandidate struct {
 	// Text is the reconstructed line text.
-	Text string
+	Text string `json:"text"`
 	// FontSize is the page-space font size of the line.
-	FontSize float64
+	FontSize float64 `json:"fontSize"`
 	// BodySize is the detected body text size for the document (or 0
 	// if unknown).
-	BodySize float64
+	BodySize float64 `json:"bodySize"`
 	// PageNum is the 1-based page number where the line appears.
-	PageNum int
+	PageNum int `json:"pageNum"`
 	// CharCount is the number of characters in Text after normalization.
-	CharCount int
+	CharCount int `json:"charCount"`
 	// IsBold indicates the line uses a bold font.
-	IsBold bool
+	IsBold bool `json:"isBold"`
 	// HasNumbering indicates the line starts with a section-number prefix.
-	HasNumbering bool
+	HasNumbering bool `json:"hasNumbering"`
 	// NumberingDepth is the depth implied by the numbering (1 for "1",
 	// 2 for "1.1", etc.). 0 if no numbering.
-	NumberingDepth int
+	NumberingDepth int `json:"numberingDepth"`
 	// Script is the dominant script of the text.
-	Script HeadingScript
+	Script HeadingScript `json:"script"`
 }

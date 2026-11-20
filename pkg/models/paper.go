@@ -5,7 +5,8 @@ package models
 type Paper struct {
 	// Width and Height are the sides in points. A paper wider than it is
 	// high is a landscape paper.
-	Width, Height float64
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
 }
 
 // The papers a conversion names most, each portrait. Their sides are the
