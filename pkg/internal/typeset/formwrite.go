@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/typography"
 )
 
 // The field flags this package writes (ISO 32000-1, 12.7.3.1, Table 221;
@@ -243,7 +244,9 @@ func (w *docWriter) widget(ctx context.Context, page int, height float64, f *Fie
 			return ast.PdfIndirectRef{}, err
 		}
 		dict["AP"] = ast.PdfDict{"N": app}
-		w.variableText(dict, f)
+		if err := w.variableText(dict, f); err != nil {
+			return ast.PdfIndirectRef{}, err
+		}
 	}
 	if group == nil {
 		dict["T"] = textString(name)
@@ -281,16 +284,17 @@ func addFlags(dict ast.PdfDict, flags int) {
 // whose value a reader sets in type (ISO 32000-1, 12.7.3.3): the type, the
 // value and the default value, the options, the flags, the maximum length
 // and the default appearance, which names the form's Helvetica at the
-// field's size and colour.
-func (w *docWriter) variableText(dict ast.PdfDict, f *Field) {
+// field's size and colour. The Helvetica is written with its widths and font
+// descriptor ([typography.WriteStandard14Font]), which ISO 32000-2, 9.6.2.2
+// requires of a standard font.
+func (w *docWriter) variableText(dict ast.PdfDict, f *Field) error {
 	fs := &w.form
 	if fs.font.ObjectNum == 0 {
-		fs.font = w.alloc.Alloc(ast.PdfDict{
-			"Type":     ast.PdfName("Font"),
-			"Subtype":  ast.PdfName("Type1"),
-			"BaseFont": ast.PdfName("Helvetica"),
-			"Encoding": ast.PdfName("WinAnsiEncoding"),
-		})
+		font, err := typography.WriteStandard14Font(w.alloc, "Helvetica")
+		if err != nil {
+			return fmt.Errorf("writing the form's font: %w", err)
+		}
+		fs.font = font
 	}
 	flags := 0
 	if f.ReadOnly {
@@ -351,6 +355,7 @@ func (w *docWriter) variableText(dict ast.PdfDict, f *Field) {
 		c = Black
 	}
 	dict["DA"] = ast.PdfString(fmt.Sprintf("/%s %s Tf %s %s %s rg", formFontName, num(f.FontSize), num(c.R), num(c.G), num(c.B)))
+	return nil
 }
 
 // appearance writes frags, a field's appearance in page coordinates, as a

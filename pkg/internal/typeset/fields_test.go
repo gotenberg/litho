@@ -10,6 +10,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
@@ -159,6 +161,45 @@ func TestWriteFieldsAtEveryVersion(t *testing.T) {
 			t.Errorf("%s: %d fields, %v", v, len(fields), err)
 		}
 		qpdfCheck(t, buf.Bytes())
+	}
+}
+
+// TestWriteFieldsDefaultFontIsComplete pins that the Helvetica of the form's
+// default resources states /FirstChar, /LastChar, /Widths and a
+// /FontDescriptor at every version: ISO 32000-2, 9.6.2.2 requires them of a
+// standard font, and ISO 32000-1, 9.6.2.2 deprecates their absence from PDF
+// 1.5 on.
+func TestWriteFieldsDefaultFontIsComplete(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	for _, v := range []typeset.Version{typeset.Version14, typeset.Version17, typeset.Version20} {
+		var buf bytes.Buffer
+		if err := typeset.Write(ctx, formDoc(t), &buf, typeset.Options{Version: v}); err != nil {
+			t.Fatalf("Write %s: %v", v, err)
+		}
+		doc, err := document.NewDocument(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()), nil)
+		if err != nil {
+			t.Fatalf("%s: reopen: %v", v, err)
+		}
+		catalog, err := document.ResolveCatalog(ctx, doc)
+		if err != nil {
+			t.Fatalf("%s: catalog: %v", v, err)
+		}
+		form, _ := document.ResolveDict(ctx, doc, catalog.Dict["AcroForm"])
+		dr, _ := document.ResolveDict(ctx, doc, form["DR"])
+		fonts, _ := document.ResolveDict(ctx, doc, dr["Font"])
+		font, _ := document.ResolveDict(ctx, doc, fonts["Helv"])
+		if font["BaseFont"] != ast.PdfName("Helvetica") {
+			t.Fatalf("%s: /DR /Font /Helv = %v", v, font)
+		}
+		for _, key := range []ast.PdfName{"FirstChar", "LastChar", "Widths", "FontDescriptor"} {
+			if _, ok := font[key]; !ok {
+				t.Errorf("%s: the form's Helvetica lacks /%s", v, key)
+			}
+		}
+		if _, ok := font["FontDescriptor"].(ast.PdfIndirectRef); !ok {
+			t.Errorf("%s: /FontDescriptor %v is no indirect reference", v, font["FontDescriptor"])
+		}
 	}
 }
 
