@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/embed"
 )
 
@@ -52,6 +53,22 @@ type textFonts struct {
 	// loaded caches the programs parsed, by the hash of their bytes, so a
 	// program the source offers for every line is read once.
 	loaded map[[32]byte]*embed.Font
+	// standard is the standard Helvetica the edit's appearances fall back
+	// on ([appearanceFont]), written at its first use; zero before.
+	standard ast.PdfIndirectRef
+}
+
+// standardFont returns the standard Helvetica of the edit, writing it at the
+// first call ([typography.WriteStandard14Font]).
+func (f *textFonts) standardFont(alloc *writer.ObjAllocator) (ast.PdfIndirectRef, error) {
+	if f.standard.ObjectNum == 0 {
+		ref, err := typography.WriteStandard14Font(alloc, "Helvetica")
+		if err != nil {
+			return ast.PdfIndirectRef{}, fmt.Errorf("writing the fallback font: %w", err)
+		}
+		f.standard = ref
+	}
+	return f.standard, nil
 }
 
 // sharedTextFont is one program the edit draws with: the font object it

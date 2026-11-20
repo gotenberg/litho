@@ -1605,7 +1605,10 @@ func textFieldAppearance(
 	// CP1252, i.e. mojibake: it is drawn with a program the fonts offer that
 	// covers it, embedded as a Type0 font, matched to the /DA font's family.
 	if encoded, ok := winAnsiEncode(text); ok {
-		res, resourceName := appearanceFont(ctx, doc, alloc, catalogDict, fontName)
+		res, resourceName, err := appearanceFont(ctx, doc, alloc, catalogDict, fontName, fonts)
+		if err != nil {
+			return ast.PdfStream{}, false, err
+		}
 		// The font name comes from the document's /DA, so it is spelled by the
 		// writer: written raw, a name holding white space, a delimiter or a "#"
 		// reads back as another name (ISO 32000-1, 7.3.5), and the Tf selects no
@@ -1668,7 +1671,10 @@ func widgetDefaultAppearance(ctx context.Context, doc *document.Document, alloc 
 // for, to match a program to: the /BaseFont of the form's /DR font of that
 // name, or Helvetica.
 func standardFontOf(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, catalogDict ast.PdfDict, fontName string) string {
-	res, _ := appearanceFont(ctx, doc, alloc, catalogDict, fontName)
+	res, ok := formFont(ctx, doc, alloc, catalogDict, fontName)
+	if !ok {
+		return "Helvetica"
+	}
 	dict, err := resolveDictAllocFirst(ctx, alloc, doc, res)
 	if err != nil || dict == nil {
 		return "Helvetica"
@@ -1706,36 +1712,51 @@ func checkMarkAppearance(boxOps string, width, height float64) ast.PdfStream {
 // name it is reached by inside the stream's own resources.
 //
 // The form's /DR holds the fonts a /DA names (ISO 32000-1, 12.7.2). When the
-// document does not supply one, a standard Helvetica is written: the alternative
-// is drawing nothing, and Helvetica is one of the standard 14 a viewer knows
-// without embedding. That leaves the output short of a PDF/A font-embedding
-// requirement, which remediation fixes separately.
+// document does not supply one, a standard Helvetica is written, once an edit
+// ([textFonts.standardFont]): the alternative is drawing nothing, and
+// Helvetica is one of the standard 14 a viewer knows without embedding. It is
+// written with its widths and font descriptor, which ISO 32000-2, 9.6.2.2
+// requires of a standard font ([typography.WriteStandard14Font]). That leaves
+// the output short of a PDF/A font-embedding requirement, which remediation
+// fixes separately.
 func appearanceFont(
 	ctx context.Context,
 	doc *document.Document,
 	alloc *writer.ObjAllocator,
 	catalogDict ast.PdfDict,
 	fontName string,
-) (ast.PdfObject, string) {
-	if fontName != "" {
-		if acroForm, err := resolveDictAllocFirst(ctx, alloc, doc, catalogDict["AcroForm"]); err == nil && acroForm != nil {
-			if dr, err := resolveDictAllocFirst(ctx, alloc, doc, acroForm["DR"]); err == nil && dr != nil {
-				if fonts, err := resolveDictAllocFirst(ctx, alloc, doc, dr["Font"]); err == nil && fonts != nil {
-					if fontObj, ok := fonts[ast.PdfName(fontName)]; ok {
-						return fontObj, fontName
-					}
-				}
-			}
-		}
+	fonts *textFonts,
+) (ast.PdfObject, string, error) {
+	if fontObj, ok := formFont(ctx, doc, alloc, catalogDict, fontName); ok {
+		return fontObj, fontName, nil
 	}
+	ref, err := fonts.standardFont(alloc)
+	if err != nil {
+		return nil, "", err
+	}
+	return ref, fallbackFontName, nil
+}
 
-	ref := alloc.Alloc(ast.PdfDict{
-		"Type":     ast.PdfName("Font"),
-		"Subtype":  ast.PdfName("Type1"),
-		"BaseFont": ast.PdfName("Helvetica"),
-		"Encoding": ast.PdfName("WinAnsiEncoding"),
-	})
-	return ref, fallbackFontName
+// formFont returns the font the form's /DR names fontName (ISO 32000-1,
+// 12.7.2), and whether it names one.
+func formFont(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, catalogDict ast.PdfDict, fontName string) (ast.PdfObject, bool) {
+	if fontName == "" {
+		return nil, false
+	}
+	acroForm, err := resolveDictAllocFirst(ctx, alloc, doc, catalogDict["AcroForm"])
+	if err != nil || acroForm == nil {
+		return nil, false
+	}
+	dr, err := resolveDictAllocFirst(ctx, alloc, doc, acroForm["DR"])
+	if err != nil || dr == nil {
+		return nil, false
+	}
+	fonts, err := resolveDictAllocFirst(ctx, alloc, doc, dr["Font"])
+	if err != nil || fonts == nil {
+		return nil, false
+	}
+	fontObj, ok := fonts[ast.PdfName(fontName)]
+	return fontObj, ok
 }
 
 // parseDefaultAppearance reads the font name, size and colour operators out of
