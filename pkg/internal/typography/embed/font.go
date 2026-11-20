@@ -100,6 +100,22 @@ func (f *Font) PostScriptName() string { return f.postScriptName }
 // scales as if it were 1000.
 func (f *Font) UnitsPerEm() uint16 { return f.unitsPerEm }
 
+// Program returns the program [Load] parsed. The slice aliases it: the
+// caller must not modify it.
+func (f *Font) Program() []byte { return f.raw }
+
+// CFFTable returns the "CFF " table of a program with CFF outlines, and nil
+// for one with glyf outlines. The slice aliases the program: the caller must
+// not modify it.
+func (f *Font) CFFTable() []byte { return f.cff }
+
+// Ascent returns the hhea table's ascender in font units.
+func (f *Font) Ascent() int16 { return f.ascent }
+
+// Descent returns the hhea table's descender in font units, negative below
+// the baseline.
+func (f *Font) Descent() int16 { return f.descent }
+
 // GID returns the glyph the program's Unicode cmap maps r to, and false when
 // it maps none.
 func (f *Font) GID(r rune) (uint16, bool) {

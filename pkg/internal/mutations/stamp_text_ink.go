@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/render/geom"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 	"github.com/gotenberg/litho/pkg/internal/typography/cff"
+	"github.com/gotenberg/litho/pkg/internal/typography/embed"
 	"github.com/gotenberg/litho/pkg/internal/typography/truetype"
 )
 
@@ -78,19 +79,19 @@ func standardInkGlyphs(baseFont string, codes []byte) []inkGlyph {
 type glyphOutliner func(ctx context.Context, gid int) (geom.Path, error)
 
 // embeddedInkGlyphs returns the glyphs text draws in the TrueType or OpenType
-// program f, the one the stamp embeds, bounded by their outlines. cffData is
-// the program's CFF table, nil for glyf outlines. A character the program
+// program f, the one the stamp embeds, bounded by their outlines: its CFF
+// table when it has one, its glyf table otherwise. A character the program
 // lacks draws glyph 0, as [encodeTextAsGIDs] encodes it. A program whose
 // outlines do not read bounds each glyph by its advance and the font's ascent
 // and descent instead, which still places the stamp, a little less tightly.
-func embeddedInkGlyphs(ctx context.Context, doc *document.Document, f *embeddedTTF, cffData []byte, text string) ([]inkGlyph, error) {
-	upem := float64(f.unitsPerEm)
+func embeddedInkGlyphs(ctx context.Context, doc *document.Document, f *embed.Font, text string) ([]inkGlyph, error) {
+	upem := float64(f.UnitsPerEm())
 	if upem == 0 {
 		upem = 1000
 	}
 	// A program whose outlines do not read leaves outline nil, and each glyph
 	// then says so in the log as it falls back (see [outlineOf]).
-	outline, err := newGlyphOutliner(f.raw, cffData)
+	outline, err := newGlyphOutliner(f.Program(), f.CFFTable())
 	if err != nil {
 		outline = nil
 	}
@@ -103,10 +104,11 @@ func embeddedInkGlyphs(ctx context.Context, doc *document.Document, f *embeddedT
 				return nil, err
 			}
 		}
-		gid := f.unicodeToGID[r]
+		gid, _ := f.GID(r)
 		g, seen := cache[gid]
 		if !seen {
-			g = inkGlyph{advance: float64(f.widths[gid]) / upem}
+			w, _ := f.Width(gid)
+			g = inkGlyph{advance: float64(w) / upem}
 			path, err := outlineOf(ctx, outline, gid)
 			switch {
 			case ctx.Err() != nil:
@@ -117,7 +119,7 @@ func embeddedInkGlyphs(ctx context.Context, doc *document.Document, f *embeddedT
 						slog.Int("gid", int(gid)), slog.String("err", err.Error()),
 					)
 				}
-				g.box = [4]float64{0, float64(f.descent) / upem, g.advance, float64(f.ascent) / upem}
+				g.box = [4]float64{0, float64(f.Descent()) / upem, g.advance, float64(f.Ascent()) / upem}
 				g.inked = true
 			default:
 				if b, ok := path.Bounds(); ok {

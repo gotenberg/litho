@@ -97,7 +97,7 @@ type drawnText struct {
 	resName string
 	encoded string
 	// font is the program that draws the text, which a placed stamp measures.
-	font *textFont
+	font *embed.Font
 }
 
 // draw returns the font that draws req's text: a font of an earlier line
