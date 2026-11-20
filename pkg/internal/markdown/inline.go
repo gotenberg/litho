@@ -211,8 +211,8 @@ func (w *writer) linkAt(g glyphRef) (Link, bool) {
 		return Link{}, false
 	}
 	el := page.Shown.Elements[g.index]
-	x := el.X + float64(detmath.Cos(el.Angle)*el.Width)/2
-	y := el.Y + float64(detmath.Sin(el.Angle)*el.Width)/2 + float64(math.Abs(el.FontSize)*0.3)
+	x := el.X + float64(detmath.Cos(el.Angle)*el.Width/2)
+	y := el.Y + float64(detmath.Sin(el.Angle)*el.Width/2) + float64(math.Abs(el.FontSize)*0.3)
 	for _, link := range page.Links {
 		r := link.Rect
 		x0, x1 := min(r[0], r[2]), max(r[0], r[2])
