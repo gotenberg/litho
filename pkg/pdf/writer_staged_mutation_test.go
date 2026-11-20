@@ -55,7 +55,7 @@ func TestWriterMetadataEditBeforeARemediationReachesTheXMP(t *testing.T) {
 	defer src.Close()
 	w := NewWriter(src)
 	defer w.Close()
-	w.SetMetadata(Metadata{Title: "Edited title", Author: "Edited author"})
+	w.SetMetadata(models.Metadata{Title: "Edited title", Author: "Edited author"})
 	if _, err := w.RemediatePDFA(ctx, models.PDFA2b); err != nil {
 		t.Fatalf("RemediatePDFA: %v", err)
 	}

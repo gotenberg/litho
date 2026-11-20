@@ -117,7 +117,7 @@ func TestWithLTV(t *testing.T) {
 	t.Run("supplied", func(t *testing.T) {
 		t.Parallel()
 		pki := pkitest.New(t)
-		data := ValidationData{Certificates: []*x509.Certificate{pki.Root}, CRLs: [][]byte{pki.CRL(pki.Intermediate), pki.CRL(pki.Root)}}
+		data := models.ValidationData{Certificates: []*x509.Certificate{pki.Root}, CRLs: [][]byte{pki.CRL(pki.Intermediate), pki.CRL(pki.Root)}}
 		out, err := signLTV(t, pki, writerTestPDF(), WithValidationData(data))
 		if err != nil {
 			t.Fatalf("WriteTo: %v", err)
@@ -192,7 +192,7 @@ func TestWithLTV(t *testing.T) {
 			pki.Revoke(pki.Leaf, time.Now().Add(-time.Hour))
 		}, nil, ErrCertificateRevoked},
 		{"supplied data that misses a certificate", nil, func(pki *pkitest.PKI) []SignOption {
-			return []SignOption{WithValidationData(ValidationData{Certificates: []*x509.Certificate{pki.Root}, CRLs: [][]byte{pki.CRL(pki.Intermediate)}})}
+			return []SignOption{WithValidationData(models.ValidationData{Certificates: []*x509.Certificate{pki.Root}, CRLs: [][]byte{pki.CRL(pki.Intermediate)}})}
 		}, ErrValidationData},
 	} {
 		t.Run("refuses "+tc.name, func(t *testing.T) {

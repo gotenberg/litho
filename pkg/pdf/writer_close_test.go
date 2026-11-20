@@ -253,7 +253,7 @@ func TestWriterFailedRemediationLeavesNoTempFile(t *testing.T) {
 			if tc.cancelRun {
 				e.cancel = cancel
 			}
-			_, err = w.remediate(ctx, engineTarget, DefaultRegressionTolerance, cancelOnCall(tc.cancelCall, cancel), e.run)
+			_, err = w.remediate(ctx, engineTarget, models.DefaultRegressionTolerance, cancelOnCall(tc.cancelCall, cancel), e.run)
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("remediate returned %v, want %v", err, tc.wantErr)
 			}
@@ -291,7 +291,7 @@ func TestWriterRemediationRoundCancellationLeavesNoTempFile(t *testing.T) {
 		return e.run(ctx, alloc, doc, disabled)
 	}
 	w := NewWriter(r)
-	if _, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, e.revalidate, run); !errors.Is(err, context.Canceled) {
+	if _, err := w.remediate(ctx, engineTarget, models.DefaultRegressionTolerance, e.revalidate, run); !errors.Is(err, context.Canceled) {
 		t.Fatalf("remediate returned %v, want context.Canceled", err)
 	}
 	if len(e.disabled) != 2 {
@@ -324,11 +324,11 @@ func TestWriterRefusesASecondRemediation(t *testing.T) {
 	w := NewWriter(r)
 	defer w.Close()
 	first := &roundsEngine{}
-	if _, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, first.revalidate, first.run); err != nil {
+	if _, err := w.remediate(ctx, engineTarget, models.DefaultRegressionTolerance, first.revalidate, first.run); err != nil {
 		t.Fatalf("first remediate: %v", err)
 	}
 	second := &roundsEngine{steps: []roundsStep{{keys: []string{"PageLayout"}}}}
-	if _, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, second.revalidate, second.run); !errors.Is(err, ErrEditAfterRemediation) {
+	if _, err := w.remediate(ctx, engineTarget, models.DefaultRegressionTolerance, second.revalidate, second.run); !errors.Is(err, ErrEditAfterRemediation) {
 		t.Fatalf("second remediate returned %v, want ErrEditAfterRemediation", err)
 	}
 	if len(second.disabled) != 0 {

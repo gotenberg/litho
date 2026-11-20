@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // flattenAt72 is a Pipeline.Apply stage that flattens at 72 dpi.
@@ -50,7 +52,7 @@ func TestPipeline_FlattenTransparencyAfterAnEditKeepsTheDefaultProfile(t *testin
 	t.Parallel()
 
 	setTitle := func(_ context.Context, w *Writer) error {
-		w.SetMetadata(Metadata{Title: "T"})
+		w.SetMetadata(models.Metadata{Title: "T"})
 		return nil
 	}
 	for _, tc := range []struct {

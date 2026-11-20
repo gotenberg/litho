@@ -663,7 +663,7 @@ type remediateOpts struct {
 	lang            string
 	preserveContent bool
 	figureAlt       string
-	tolerance       RegressionTolerance
+	tolerance       models.RegressionTolerance
 	documentID      []byte
 	fonts           plugins.FontProvider
 	systemFonts     *fontFiles
@@ -671,40 +671,6 @@ type remediateOpts struct {
 	// pdfua is the PDF/UA profile a PDF/A-based remediation targets too, ""
 	// for none (see [WithPDFUA]).
 	pdfua models.PDFUAProfile
-}
-
-// RegressionTolerance bounds the integrity probe that runs after
-// remediation. If the probe detects a content drop beyond these bounds,
-// content-modifying fixers are rolled back and, if the output still
-// regresses, remediation fails with [ErrRemediationBrokePDF].
-// Values are immutable and safe for concurrent use.
-type RegressionTolerance struct {
-	// MaxTextDropRatio is the largest acceptable fraction of a page's
-	// extracted text that remediation may remove. 0.0 forbids any drop;
-	// 1.0 accepts any drop (including going from text to no text). The
-	// ratio is evaluated on each page against the length of its
-	// [Reader.ExtractText], so emptying a few pages of a long document
-	// counts; when AllowPageLoss lets the page count change, against the
-	// sum across all pages. Defaults to 0.1 (10%).
-	MaxTextDropRatio float64
-	// MaxImageDropRatio is the largest acceptable fraction of
-	// [Reader.ExtractImages] entries that remediation may remove.
-	// Defaults to 0.5 (50%) to accommodate aggressive image-stream fixers
-	// that legitimately drop corrupt XObjects.
-	MaxImageDropRatio float64
-	// AllowPageLoss permits the page count to decrease. When false (the
-	// default), any change to the page count is treated as a regression.
-	AllowPageLoss bool
-}
-
-// DefaultRegressionTolerance is the tolerance applied when none is set via
-// [WithRegressionTolerance]. Values prioritize catching silent text loss,
-// which is the most common aggressive-fix failure mode. The two ratios are
-// fractions between 0 and 1, as [RegressionTolerance] defines them.
-var DefaultRegressionTolerance = RegressionTolerance{
-	MaxTextDropRatio:  0.1,
-	MaxImageDropRatio: 0.5,
-	AllowPageLoss:     false,
 }
 
 // WithLanguage sets the BCP 47 language tag for the catalog /Lang entry.
@@ -763,11 +729,11 @@ func WithDocumentID(id []byte) RemediateOption {
 	}
 }
 
-// WithRegressionTolerance overrides [DefaultRegressionTolerance] for a
+// WithRegressionTolerance overrides [models.DefaultRegressionTolerance] for a
 // single remediation call. Use tighter bounds for documents whose textual
 // or visual integrity must be preserved byte-for-byte; use looser bounds
 // when aggressive compliance outranks content fidelity.
-func WithRegressionTolerance(tol RegressionTolerance) RemediateOption {
+func WithRegressionTolerance(tol models.RegressionTolerance) RemediateOption {
 	return func(o *remediateOpts) {
 		o.tolerance = tol
 	}
@@ -833,25 +799,6 @@ type BookmarkOptions struct {
 	Generation BookmarkGenerationOptions
 }
 
-// Metadata holds document information dictionary fields for [Writer.SetMetadata].
-// Concurrent reads of a value are safe; a write needs synchronization.
-//
-// Each field is the entry of the same name in the Info dictionary (ISO
-// 32000-1, Table 317). An empty field leaves the existing entry alone. A
-// value is written as given, with no check of its form: CreationDate and
-// ModDate belong in the PDF date form "D:YYYYMMDDHHmmSSOHH'mm" (ISO 32000-1,
-// 7.9.4).
-type Metadata struct {
-	Title        string
-	Author       string
-	Subject      string
-	Keywords     string
-	Creator      string
-	Producer     string
-	CreationDate string
-	ModDate      string
-}
-
 // TextStamp defines a text overlay to stamp on pages.
 // Concurrent reads of a value are safe; a write needs synchronization.
 type TextStamp struct {
@@ -862,8 +809,9 @@ type TextStamp struct {
 	// With a Position, they move the stamp from it instead.
 	X, Y float64
 	// Position places the stamp against the center, an edge or a corner of
-	// each page (see [StampPosition]). The zero value places it by X and Y.
-	Position StampPosition
+	// each page (see [models.StampPosition]). The zero value places it by X
+	// and Y.
+	Position models.StampPosition
 	// FontSize is the text size in points; zero defaults to 12.
 	FontSize float64
 	// Opacity is 0.0-1.0 (1.0 = fully opaque). Zero means fully opaque.
@@ -962,8 +910,9 @@ type ImageStamp struct {
 	// Position, they move the image from it instead.
 	X, Y float64
 	// Position places the image against the center, an edge or a corner of
-	// each page (see [StampPosition]). The zero value places it by X and Y.
-	Position StampPosition
+	// each page (see [models.StampPosition]). The zero value places it by X
+	// and Y.
+	Position models.StampPosition
 	// Width and Height set the target size in points. Zero for one means
 	// "proportional to the other". Zero for both means "use the image's
 	// natural pixel dimensions as points".
@@ -986,10 +935,10 @@ type PDFStamp struct {
 	// as a viewer shows it: its crop box, turned by its /Rotate. With a
 	// Position, they move the stamp from it instead.
 	X, Y float64
-	// Position places the source page against the center, an edge or a
-	// corner of each page (see [StampPosition]). The zero value places it by
-	// X and Y.
-	Position StampPosition
+	// Position places the source page against the center, an edge or a corner
+	// of each page (see [models.StampPosition]). The zero value places it by X
+	// and Y.
+	Position models.StampPosition
 	// Scale is the uniform scale factor. Zero is treated as 1.0.
 	Scale float64
 	// Opacity is 0.0-1.0; zero treated as fully opaque.
@@ -1546,13 +1495,13 @@ func (t *tempFileWriter) Write(p []byte) (int, error) {
 // SetMetadata sets or replaces document Info dictionary fields. Empty fields
 // in meta are skipped (the existing value is preserved). The mutation is
 // queued and applied when [Writer.WriteTo] is called.
-func (w *Writer) SetMetadata(meta Metadata) {
+func (w *Writer) SetMetadata(meta models.Metadata) {
 	if w.refuseAfterRemediation("SetMetadata") != nil {
 		return
 	}
 	w.queue("SetMetadata", mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
-			return mutations.SetMetadata(ctx, alloc, doc, mutations.Metadata(meta))
+			return mutations.SetMetadata(ctx, alloc, doc, meta)
 		},
 	})
 	// A document that carries XMP duplicates these values there, and leaving
@@ -2213,7 +2162,7 @@ func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
 				Height:   stamp.Height,
 				Opacity:  stamp.Opacity,
 				Rotation: stamp.Rotation,
-				Position: stamp.Position.toMutations(),
+				Position: stamp.Position,
 			}, pages)
 		},
 	})
@@ -2269,7 +2218,7 @@ func (w *Writer) StampPDF(stamp PDFStamp, pages ...int) error {
 				Scale:       stamp.Scale,
 				Opacity:     stamp.Opacity,
 				Rotation:    stamp.Rotation,
-				Position:    stamp.Position.toMutations(),
+				Position:    stamp.Position,
 			}, pages)
 		},
 	})
@@ -2287,7 +2236,7 @@ func textStampToOptions(s TextStamp) mutations.TextStampOptions {
 		Opacity:  s.Opacity,
 		Color:    s.Color,
 		Rotation: s.Rotation,
-		Position: s.Position.toMutations(),
+		Position: s.Position,
 	}
 	if len(s.Font.ttf) > 0 {
 		opts.TTFBytes = s.Font.ttf
@@ -2341,24 +2290,6 @@ func (w *Writer) AddAttachment(name string, data []byte, mimeType string) {
 	})
 }
 
-// AssociatedFile describes an embedded file for PDF/A-3+ compliance with the
-// /AFRelationship and document-level /AF array required by Factur-X / ZUGFeRD.
-// Concurrent reads of a value are safe; a write needs synchronization.
-type AssociatedFile struct {
-	// Name is the displayed file name.
-	Name string
-	// Data is the file content. It is retained, not copied: the file is
-	// written when [Writer.WriteTo] drains the queue, so leave the slice
-	// untouched until then.
-	Data []byte
-	// MimeType is the embedded file /Subtype (e.g., "application/xml").
-	MimeType string
-	// Relationship is the /AFRelationship value. Valid per
-	// ISO 32000-2 §7.11.3: Source, Data, Alternative, Supplement,
-	// EncryptedPayload, FormData, Schema, Unspecified.
-	Relationship string
-}
-
 // AddAssociatedFile embeds a file as a PDF/A-3+ associated file: sets
 // /Subtype and /AFRelationship on the embedded-file stream and adds the
 // filespec to the catalog /AF array. Use this for Factur-X and
@@ -2372,7 +2303,7 @@ type AssociatedFile struct {
 // writes no /AFRelationship.
 // [Writer.WriteTo] reports [ErrAttachmentTreeIncomplete] on a tree too deep to
 // read, for the reason given on [Writer.AddAttachment].
-func (w *Writer) AddAssociatedFile(af AssociatedFile) {
+func (w *Writer) AddAssociatedFile(af models.AssociatedFile) {
 	if w.refuseAfterRemediation("AddAssociatedFile") != nil {
 		return
 	}
@@ -2478,7 +2409,7 @@ func (w *Writer) Sign(signer plugins.Signer, opts ...SignOption) {
 // to the Writer's logger, and the default page size [NewWriter] was given (see
 // [WithDefaultPageSize]) sizes a page the remediation gives a media box.
 func (w *Writer) remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options) {
-	cfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
+	cfg := remediateOpts{lang: "en", preserveContent: true, tolerance: models.DefaultRegressionTolerance}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -2596,7 +2527,7 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 // set opaque instead. The probe accounts for what flattening changes by design
 // (see [Writer.remediate]), so a regression here is a loss it does not account
 // for. [models.RemediationReport.RolledBack] lists the abandoned flattening.
-func (w *Writer) remediateFlattening(ctx context.Context, target remediationTarget, tol RegressionTolerance, revalidate func(context.Context, *Reader) ([]error, error), run remediationRun) (*models.RemediationReport, error) {
+func (w *Writer) remediateFlattening(ctx context.Context, target remediationTarget, tol models.RegressionTolerance, revalidate func(context.Context, *Reader) ([]error, error), run remediationRun) (*models.RemediationReport, error) {
 	var flattened []string
 	recording := func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
 		rep, err := run(ctx, alloc, doc, disabled)
@@ -2680,50 +2611,6 @@ func (w *Writer) RemediateWTPDF(ctx context.Context, profile models.WTPDFProfile
 	})
 }
 
-// FacturX defaults applied by [Writer.RemediateFacturX] when the
-// corresponding [FacturXConfig] field is zero.
-const (
-	// DefaultFacturXProfile is the PDF/A-3 conformance level used when
-	// [FacturXConfig.Profile] is empty.
-	DefaultFacturXProfile = models.PDFA3b
-	// DefaultFacturXDocumentType is the value written into the XMP
-	// `fx:DocumentType` property when [FacturXConfig.DocumentType] is
-	// empty.
-	DefaultFacturXDocumentType = "INVOICE"
-)
-
-// FacturXConfig describes the inputs to [Writer.RemediateFacturX].
-// Concurrent reads of a value are safe; a write needs synchronization.
-type FacturXConfig struct {
-	// InvoiceXML is the Cross-Industry Invoice (CII) XML payload that
-	// will be embedded as the Factur-X data file. Required, non-empty.
-	InvoiceXML []byte
-	// Level is the Factur-X conformance level. Required; must satisfy
-	// [models.FacturXLevel.IsValid].
-	Level models.FacturXLevel
-	// Profile is the PDF/A-3 conformance level used as the underlying
-	// archival base. Optional; defaults to [DefaultFacturXProfile].
-	// Must be one of [models.PDFA3a], [models.PDFA3b], or
-	// [models.PDFA3u].
-	Profile models.PDFAProfile
-	// FileName is the embedded file name. Optional; defaults to
-	// "xrechnung.xml" for [models.FacturXXRechnung] and "factur-x.xml"
-	// for every other level (Factur-X 1.07.2, 6.2 and 7.7). The same
-	// value is written into the XMP `fx:DocumentFileName` property.
-	FileName string
-	// DocumentType is the value of the XMP `fx:DocumentType` property.
-	// Optional; defaults to [DefaultFacturXDocumentType].
-	DocumentType string
-	// Relationship is the embedded-file `/AFRelationship` value.
-	// Optional; defaults to "Data" for [models.FacturXMinimum] and
-	// [models.FacturXBasicWL], whose XML carries less than the visual
-	// part, and "Alternative" for every other level (Factur-X 1.07.2,
-	// 6.2.2 and 7.7). BASIC, EN 16931 and EXTENDED also admit "Data" or
-	// "Source" in France, depending on how the PDF was made; Germany
-	// admits "Alternative" alone.
-	Relationship string
-}
-
 // RemediateFacturX embeds the supplied invoice XML as a Factur-X
 // associated file, remediates the document against the configured
 // PDF/A-3 profile, and injects the four `fx:` XMP properties plus the
@@ -2735,7 +2622,7 @@ type FacturXConfig struct {
 // There is no RemediateZUGFeRD: the ZUGFeRD 2.1+ generation is
 // byte-for-byte Factur-X, so use this method with the defaults. The
 // legacy generations differ only in the embedded file name and
-// relationship, which [FacturXConfig] can reproduce:
+// relationship, which [models.FacturXConfig] can reproduce:
 //
 //   - ZUGFeRD 2.1+ / Factur-X: the defaults, which follow the level.
 //   - ZUGFeRD 2.0:             FileName "zugferd-invoice.xml", Relationship "Alternative".
@@ -2768,11 +2655,11 @@ type FacturXConfig struct {
 // validates. Before reading the document, it returns [ErrInvoiceNotCII] for an
 // invoice XML that is not a Cross-Industry Invoice, and
 // [ErrFacturXLevelMismatch] when the XML declares another level than
-// [FacturXConfig.Level] (Factur-X 1.0.07, 4.3). An XRechnung invoice is
+// [models.FacturXConfig.Level] (Factur-X 1.0.07, 4.3). An XRechnung invoice is
 // accepted at BASIC, EN 16931 and EXTENDED, where it validates. Another file
 // name, a legacy ZUGFeRD layout, is judged against the PDF/A-3 profile alone
 // and its XML is not checked.
-func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts ...RemediateOption) (_ *models.RemediationReport, err error) {
+func (w *Writer) RemediateFacturX(ctx context.Context, cfg models.FacturXConfig, opts ...RemediateOption) (_ *models.RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediateFacturX", &err)
 	if len(cfg.InvoiceXML) == 0 {
 		return nil, ErrEmptyInvoiceXML
@@ -2782,7 +2669,7 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 	}
 	profile := cfg.Profile
 	if profile == "" {
-		profile = DefaultFacturXProfile
+		profile = models.DefaultFacturXProfile
 	}
 	if profile != models.PDFA3a && profile != models.PDFA3b && profile != models.PDFA3u {
 		return nil, fmt.Errorf("%w: got %q", ErrInvalidFacturXProfile, profile)
@@ -2794,7 +2681,7 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 	}
 	docType := cfg.DocumentType
 	if docType == "" {
-		docType = DefaultFacturXDocumentType
+		docType = models.DefaultFacturXDocumentType
 	}
 	relationship := cfg.Relationship
 	if relationship == "" {
@@ -2824,7 +2711,7 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 		}
 		return r.ValidatePDFA(ctx, profile)
 	}
-	fxOpts := remediation.FacturXOptions{
+	fxOpts := models.FacturXConfig{
 		InvoiceXML:   cfg.InvoiceXML,
 		Level:        cfg.Level,
 		Profile:      profile,
@@ -2870,7 +2757,7 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 // document without an invoice [ErrNoInvoiceAttachment], before either runs.
 func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ *models.RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RepairFacturX", &err)
-	rcfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
+	rcfg := remediateOpts{lang: "en", preserveContent: true, tolerance: models.DefaultRegressionTolerance}
 	for _, o := range opts {
 		o(&rcfg)
 	}
@@ -3379,7 +3266,7 @@ func (w *Writer) materializeNow(ctx context.Context, method string) (undo func()
 // Text is weighed page by page when both samples count the same pages, the
 // tolerance applying to each page: over the whole document, a repair that
 // empties a few pages of a long one stays within it. A sample without
-// per-page counts, or whose pages moved under [RegressionTolerance]
+// per-page counts, or whose pages moved under [models.RegressionTolerance]
 // AllowPageLoss, is weighed as a whole.
 //
 // # Corpus evidence
@@ -3392,7 +3279,7 @@ func (w *Writer) materializeNow(ctx context.Context, method string) (undo func()
 //     of page 16's twelve codes no mapping gives a character, 5 of 126 over
 //     the document; page by page the content tier rolls back, in both modes.
 //   - verapdf, facturx: no fixture moves.
-func evaluateRegression(baseline, post integritySnap, tol RegressionTolerance) string {
+func evaluateRegression(baseline, post integritySnap, tol models.RegressionTolerance) string {
 	if baseline.pageCount > 0 {
 		if !tol.AllowPageLoss && post.pageCount != baseline.pageCount {
 			return fmt.Sprintf("page count changed from %d to %d", baseline.pageCount, post.pageCount)
@@ -3481,7 +3368,7 @@ type remediationRun func(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 func (w *Writer) remediate(
 	ctx context.Context,
 	target remediationTarget,
-	tol RegressionTolerance,
+	tol models.RegressionTolerance,
 	revalidate func(context.Context, *Reader) ([]error, error),
 	run remediationRun,
 ) (*models.RemediationReport, error) {
@@ -4023,7 +3910,7 @@ func (w *Writer) remediationRound(
 	disabled []string,
 	revalidate func(context.Context, *Reader) ([]error, error),
 	baseline integritySnap,
-	tol RegressionTolerance,
+	tol models.RegressionTolerance,
 	rewritten bool,
 ) (roundResult, bool, error) {
 	logger := w.reader.doc.Logger
@@ -4153,7 +4040,7 @@ func (w *Writer) writeRound(
 	w2 *Writer,
 	revalidate func(context.Context, *Reader) ([]error, error),
 	baseline integritySnap,
-	tol RegressionTolerance,
+	tol models.RegressionTolerance,
 ) (string, []error, string, error) {
 	logger := w.reader.doc.Logger
 

@@ -197,7 +197,7 @@ func TestWriter_WriteTo_RefusesARedactionALaterStageUndid(t *testing.T) {
 	}
 	// /Info is the home SanitizeDocument deliberately leaves to ClearMetadata,
 	// which runs inside Redact and not after it.
-	w.SetMetadata(Metadata{Title: "SECRET"})
+	w.SetMetadata(models.Metadata{Title: "SECRET"})
 
 	var out bytes.Buffer
 	err = w.WriteTo(ctx, &out)

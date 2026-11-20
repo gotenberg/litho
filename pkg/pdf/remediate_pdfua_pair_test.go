@@ -221,7 +221,7 @@ func TestRemediateWithPDFUARefusesIncompatiblePairs(t *testing.T) {
 			name: "Factur-X and PDF/UA-2",
 			data: signablePDF,
 			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
-				return w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: []byte(facturXSampleCII), Level: models.FacturXMinimum}, WithPDFUA(models.PDFUA2))
+				return w.RemediateFacturX(ctx, models.FacturXConfig{InvoiceXML: []byte(facturXSampleCII), Level: models.FacturXMinimum}, WithPDFUA(models.PDFUA2))
 			},
 			want: "PDF/A-3b requires PDF/UA-1, not PDF/UA-2",
 		},
@@ -286,7 +286,7 @@ func TestRemediateFacturXWithPDFUAConformsToBoth(t *testing.T) {
 	defer r.Close()
 	w := NewWriter(r)
 	defer w.Close()
-	report, err := w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: compliantInvoiceXML(t), Level: models.FacturXEN16931}, WithPDFUA(models.PDFUA1), pairFonts)
+	report, err := w.RemediateFacturX(ctx, models.FacturXConfig{InvoiceXML: compliantInvoiceXML(t), Level: models.FacturXEN16931}, WithPDFUA(models.PDFUA1), pairFonts)
 	if err != nil {
 		t.Fatalf("RemediateFacturX: %v", err)
 	}
@@ -459,7 +459,7 @@ func TestPairedRemediationTakesTurns(t *testing.T) {
 			pair := &pairedRemediation{pdfua: models.PDFUA1, validateA: a.validate, validateUA: ua.validate, runA: a.run, runUA: ua.run}
 			w := NewWriter(r)
 			defer w.Close()
-			report, err := w.remediate(ctx, pair.target(engineTarget), DefaultRegressionTolerance, pair.revalidate, pair.run)
+			report, err := w.remediate(ctx, pair.target(engineTarget), models.DefaultRegressionTolerance, pair.revalidate, pair.run)
 			if err != nil {
 				t.Fatalf("remediate: %v", err)
 			}
@@ -654,7 +654,7 @@ func TestRemediatePDFA1WithPDFUAFlatteningFallsBackOnALoss(t *testing.T) {
 			return rep, nil
 		},
 	}
-	report, err := w.remediateFlattening(ctx, pair.target(remediationTarget{method: "RemediatePDFA"}), DefaultRegressionTolerance, pair.revalidate, pair.run)
+	report, err := w.remediateFlattening(ctx, pair.target(remediationTarget{method: "RemediatePDFA"}), models.DefaultRegressionTolerance, pair.revalidate, pair.run)
 	if err != nil {
 		t.Fatalf("remediateFlattening: %v", err)
 	}

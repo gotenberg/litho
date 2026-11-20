@@ -19,43 +19,18 @@ import (
 // properties declared by the Factur-X 1.0.07 specification.
 const FacturXNS = "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#"
 
-// FacturXOptions configures [RemediateFacturX]. Values must not be
-// shared across goroutines without synchronization.
-type FacturXOptions struct {
-	// InvoiceXML is the Cross-Industry Invoice (CII) XML payload that
-	// will be embedded as the Factur-X data file. Required, non-empty.
-	InvoiceXML []byte
-	// Level is the Factur-X conformance level written into the XMP
-	// `fx:ConformanceLevel` property.
-	Level models.FacturXLevel
-	// Profile is the PDF/A-3 conformance level used as the underlying
-	// archival base. Must be one of [models.PDFA3a], [models.PDFA3b],
-	// or [models.PDFA3u].
-	Profile models.PDFAProfile
-	// FileName is the embedded file name, from
-	// compliance.FacturXEmbeddingFor unless the caller overrides it. The
-	// same value is written into the XMP `fx:DocumentFileName` property.
-	FileName string
-	// DocumentType is the value of the XMP `fx:DocumentType` property.
-	// Defaults to "INVOICE" when empty.
-	DocumentType string
-	// Relationship is the embedded-file `/AFRelationship` value, from
-	// compliance.FacturXEmbeddingFor unless the caller overrides it.
-	Relationship string
-}
-
 // RemediateFacturX embeds a Factur-X invoice XML in doc, remediates the
 // document against the given PDF/A-3 profile, and injects the four
 // `fx:` XMP properties along with the extension schema declaration
 // required by ISO 19005 for non-predefined namespaces.
 //
-// The caller is the boundary that validates [FacturXOptions.Level],
-// [FacturXOptions.Profile], and the InvoiceXML payload; this entry
+// The caller is the boundary that validates [models.FacturXConfig.Level],
+// [models.FacturXConfig.Profile], and the InvoiceXML payload; this entry
 // point trusts the input.
 //
 // The returned [Report] aggregates the underlying PDF/A-3 fixes plus
 // the Factur-X-specific operations.
-func RemediateFacturX(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, cfg FacturXOptions, opts Options) (*Report, error) {
+func RemediateFacturX(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, cfg models.FacturXConfig, opts Options) (*Report, error) {
 	// The invoice attachment is allocated before the PDF/A remediation runs.
 	if err := reserveDefinedObjects(ctx, doc, alloc); err != nil {
 		return nil, fmt.Errorf("factur-x: %w", err)
@@ -103,7 +78,7 @@ func RemediateFacturX(ctx context.Context, doc *document.Document, alloc *writer
 // cfg.FileName, as a text/xml stream with cfg.Relationship, and lists its file
 // specification in the catalog /AF array: the attachment RemediateFacturX would
 // write.
-func invoiceEmbedded(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, cfg FacturXOptions) bool {
+func invoiceEmbedded(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, cfg models.FacturXConfig) bool {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return false
@@ -163,7 +138,7 @@ func invoiceEmbedded(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 // `pdfaExtension:schemas` block so the new namespace is registered.
 // The function assumes the PDF/A-3 remediation pass has already run, so
 // a Metadata stream is present and PDF/A-conformant before patching.
-func injectFacturXXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, cfg FacturXOptions) ([]string, error) {
+func injectFacturXXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, cfg models.FacturXConfig) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, fmt.Errorf("trailer missing /Root")

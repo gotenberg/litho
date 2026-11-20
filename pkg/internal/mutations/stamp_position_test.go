@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestStampPlacementMatrixPlacesTheBoxAsViewed pins that a placed stamp's box,
@@ -37,34 +38,34 @@ func TestStampPlacementMatrixPlacesTheBoxAsViewed(t *testing.T) {
 		{
 			name:    "center of a portrait page",
 			media:   box(0, 0, 612, 792),
-			place:   stampPlacement{position: PositionCenter, box: [4]float64{0, 0, 100, 50}},
+			place:   stampPlacement{position: models.PositionCenter, box: [4]float64{0, 0, 100, 50}},
 			wantBox: [4]float64{256, 371, 356, 421},
 		},
 		{
 			name:    "top-left of a box away from the origin, offset",
 			media:   box(100, 200, 712, 992),
-			place:   stampPlacement{position: PositionTopLeft, box: [4]float64{0, 0, 100, 50}, dx: 10, dy: -20},
+			place:   stampPlacement{position: models.PositionTopLeft, box: [4]float64{0, 0, 100, 50}, dx: 10, dy: -20},
 			wantBox: [4]float64{10, 722, 110, 772},
 		},
 		{
 			name:    "bottom-right of a page turned a quarter",
 			media:   box(0, 0, 612, 792),
 			rotate:  90,
-			place:   stampPlacement{position: PositionBottomRight, box: [4]float64{0, 0, 100, 50}},
+			place:   stampPlacement{position: models.PositionBottomRight, box: [4]float64{0, 0, 100, 50}},
 			wantBox: [4]float64{692, 0, 792, 50},
 		},
 		{
 			name:    "top of a page turned half",
 			media:   box(0, 0, 612, 792),
 			rotate:  180,
-			place:   stampPlacement{position: PositionTop, box: [4]float64{0, 0, 100, 50}},
+			place:   stampPlacement{position: models.PositionTop, box: [4]float64{0, 0, 100, 50}},
 			wantBox: [4]float64{256, 742, 356, 792},
 		},
 		{
 			name:    "left of a page turned three quarters",
 			media:   box(0, 0, 612, 792),
 			rotate:  270,
-			place:   stampPlacement{position: PositionLeft, box: [4]float64{0, 0, 100, 50}},
+			place:   stampPlacement{position: models.PositionLeft, box: [4]float64{0, 0, 100, 50}},
 			wantBox: [4]float64{0, 281, 100, 331},
 		},
 		{
@@ -72,14 +73,14 @@ func TestStampPlacementMatrixPlacesTheBoxAsViewed(t *testing.T) {
 			// wide, which the corner holds.
 			name:    "a rotated stamp in a corner stays on the page",
 			media:   box(0, 0, 612, 792),
-			place:   stampPlacement{position: PositionTopRight, box: [4]float64{0, 0, 100, 100}, rotation: 45},
+			place:   stampPlacement{position: models.PositionTopRight, box: [4]float64{0, 0, 100, 100}, rotation: 45},
 			wantBox: [4]float64{612 - 100*math.Sqrt2, 792 - 100*math.Sqrt2, 612, 792},
 		},
 		{
 			// A text box sits above and below its baseline.
 			name:    "a box that does not start at its origin",
 			media:   box(0, 0, 200, 200),
-			place:   stampPlacement{position: PositionCenter, box: [4]float64{5, -20, 95, 60}},
+			place:   stampPlacement{position: models.PositionCenter, box: [4]float64{5, -20, 95, 60}},
 			wantBox: [4]float64{55, 60, 145, 140},
 		},
 	} {
@@ -126,7 +127,7 @@ func TestPlacedStampWritesNoStreamNothingDraws(t *testing.T) {
 		MimeType: "image/png",
 		Width:    20,
 		Height:   10,
-		Position: PositionCenter,
+		Position: models.PositionCenter,
 	}, nil); err != nil {
 		t.Fatalf("StampImage: %v", err)
 	}
@@ -140,7 +141,7 @@ func TestPlacedStampWritesNoStreamNothingDraws(t *testing.T) {
 }
 
 // TestStampRefusesAnUnknownPosition pins that a position outside the ones
-// [StampPosition] lists is refused before anything is written.
+// [models.StampPosition] lists is refused before anything is written.
 func TestStampRefusesAnUnknownPosition(t *testing.T) {
 	t.Parallel()
 

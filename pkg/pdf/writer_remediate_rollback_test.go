@@ -49,7 +49,7 @@ func pages12PDF() []byte {
 }
 
 // strictTextTolerance refuses any drop of the extracted text.
-var strictTextTolerance = RegressionTolerance{MaxTextDropRatio: 0, MaxImageDropRatio: 1}
+var strictTextTolerance = models.RegressionTolerance{MaxTextDropRatio: 0, MaxImageDropRatio: 1}
 
 // remediatedOutput is what one remediation of a source wrote, with the report
 // it returned.

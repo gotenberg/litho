@@ -228,7 +228,7 @@ func TestWithDefaultPageSize_SizesADocumentWithNoMediaBox(t *testing.T) {
 			defer r.Close()
 			var out bytes.Buffer
 			p := NewPipeline().Open(r).Split([]int{1, 2}).Apply(func(_ context.Context, w *Writer) error {
-				w.SetMetadata(Metadata{Title: "t"})
+				w.SetMetadata(models.Metadata{Title: "t"})
 				return nil
 			})
 			if _, err := p.WriteTo(ctx, &out, opt); err != nil {

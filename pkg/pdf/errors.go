@@ -245,7 +245,8 @@ var (
 
 	// ErrInvalidStampPosition is returned by [Writer.StampText],
 	// [Writer.StampImage], [Writer.StampPDF] and [Pipeline.WriteTo] when a
-	// stamp's Position is none of the ones [StampPosition] lists, and by
+	// stamp's Position is none of the ones
+	// [github.com/gotenberg/litho/pkg/models.StampPosition] lists, and by
 	// [ParseStampPosition] for a name none of them has.
 	ErrInvalidStampPosition = mutations.ErrInvalidStampPosition
 
@@ -549,9 +550,10 @@ var (
 	ErrNameHoldsNull = writer.ErrNameHoldsNull
 
 	// ErrRemediationBrokePDF is returned by [Writer.RemediatePDFA] and
-	// [Writer.RemediatePDFUA] when applied fixes make the output regress beyond
-	// the configured [RegressionTolerance]. It applies when rolling back
-	// content-modifying fixers did not recover the document.
+	// [Writer.RemediatePDFUA] when applied fixes make the output regress
+	// beyond the configured
+	// [github.com/gotenberg/litho/pkg/models.RegressionTolerance]. It applies
+	// when rolling back content-modifying fixers did not recover the document.
 	//
 	// The source [Reader] is left untouched. The caller can retry with a looser
 	// tolerance, disable aggressive fixes, or report the document as unfixable.
@@ -698,8 +700,9 @@ var (
 	ErrIncompatibleProfiles = errors.New("the PDF/A and PDF/UA profiles require different PDF versions")
 
 	// ErrEmptyInvoiceXML is returned by [Writer.RemediateFacturX] when
-	// [FacturXConfig.InvoiceXML] is nil or zero-length. Factur-X
-	// requires an embedded Cross-Industry Invoice payload.
+	// [github.com/gotenberg/litho/pkg/models.FacturXConfig.InvoiceXML] is nil
+	// or zero-length. Factur-X requires an embedded Cross-Industry Invoice
+	// payload.
 	ErrEmptyInvoiceXML = errors.New("factur-x invoice XML is empty")
 
 	// ErrNoInvoiceAttachment is returned by [Writer.RepairFacturX] when
@@ -708,29 +711,32 @@ var (
 	// ZUGFeRD-invoice.xml).
 	ErrNoInvoiceAttachment = errors.New("no hybrid invoice attachment found")
 
-	// ErrInvalidFacturXLevel is returned by [Writer.RemediateFacturX]
-	// when [FacturXConfig.Level] does not match one of the documented
-	// [models.FacturXLevel] constants.
+	// ErrInvalidFacturXLevel is returned by [Writer.RemediateFacturX] when
+	// [github.com/gotenberg/litho/pkg/models.FacturXConfig.Level] does not
+	// match one of the documented [models.FacturXLevel] constants.
 	ErrInvalidFacturXLevel = errors.New("factur-x conformance level is invalid")
 
 	// ErrInvoiceNotCII is returned, wrapped with the reason, by
-	// [Writer.RemediateFacturX] when [FacturXConfig.InvoiceXML] is not
+	// [Writer.RemediateFacturX] when
+	// [github.com/gotenberg/litho/pkg/models.FacturXConfig.InvoiceXML] is not
 	// well-formed XML whose root is CrossIndustryInvoice in the UN/CEFACT
 	// CrossIndustryInvoice:100 namespace, the syntax Factur-X 1.0.07 embeds
 	// (EN 16931-3-3). The Writer is left as it was.
 	ErrInvoiceNotCII = compliance.ErrInvoiceNotCII
 
 	// ErrFacturXLevelMismatch is returned, wrapped, by
-	// [Writer.RemediateFacturX] when [FacturXConfig.Level] is not the level
-	// the invoice XML declares in its specification identifier (BT-24),
-	// which Factur-X 1.0.07, 4.3 fixes per level and the validator judges
-	// the XML against. The message names both levels and the identifier.
-	// The Writer is left as it was.
+	// [Writer.RemediateFacturX] when
+	// [github.com/gotenberg/litho/pkg/models.FacturXConfig.Level] is not the
+	// level the invoice XML declares in its specification identifier (BT-24),
+	// which Factur-X 1.0.07, 4.3 fixes per level and the validator judges the
+	// XML against. The message names both levels and the identifier. The
+	// Writer is left as it was.
 	ErrFacturXLevelMismatch = errors.New("factur-x conformance level does not match the invoice XML")
 
-	// ErrInvalidFacturXProfile is returned by [Writer.RemediateFacturX]
-	// when [FacturXConfig.Profile] is not a PDF/A-3 conformance level.
-	// Factur-X 1.0.07 mandates a PDF/A-3 archival base.
+	// ErrInvalidFacturXProfile is returned by [Writer.RemediateFacturX] when
+	// [github.com/gotenberg/litho/pkg/models.FacturXConfig.Profile] is not a
+	// PDF/A-3 conformance level. Factur-X 1.0.07 mandates a PDF/A-3 archival
+	// base.
 	ErrInvalidFacturXProfile = errors.New("factur-x requires a PDF/A-3 profile")
 
 	// ErrInvalidZUGFeRDVersion is returned by [Reader.ValidateZUGFeRD]

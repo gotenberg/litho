@@ -7,6 +7,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // xmpTitledPDF is a one-page document whose catalog carries an XMP packet
@@ -78,7 +80,7 @@ func TestSetMetadataSyncsXMPTitle(t *testing.T) {
 	})
 
 	w := NewWriter(r)
-	w.SetMetadata(Metadata{Title: newTitle})
+	w.SetMetadata(models.Metadata{Title: newTitle})
 
 	var out bytes.Buffer
 	if err = w.WriteTo(ctx, &out); err != nil {
@@ -135,7 +137,7 @@ func TestSetMetadataLeavesDocumentsWithoutXMPAlone(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.SetMetadata(Metadata{Title: "Any Title"})
+	w.SetMetadata(models.Metadata{Title: "Any Title"})
 
 	var out bytes.Buffer
 	if err = w.WriteTo(ctx, &out); err != nil {

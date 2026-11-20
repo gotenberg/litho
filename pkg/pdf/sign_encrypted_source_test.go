@@ -28,7 +28,7 @@ func TestWriterRefusesToSignAnEncryptedSourceAfterARemediation(t *testing.T) {
 
 	const userPw = "secret"
 	encrypted := encryptedWithUserPassword(t, userPw, "owner")
-	edit := func(w *Writer) { w.SetMetadata(Metadata{Title: "edited"}) }
+	edit := func(w *Writer) { w.SetMetadata(models.Metadata{Title: "edited"}) }
 	pdfa := func(ctx context.Context, w *Writer) error {
 		_, err := w.RemediatePDFA(ctx, models.PDFA2b)
 		return err
@@ -82,7 +82,7 @@ func TestWriterRefusesToSignAnEncryptedSourceAfterARemediation(t *testing.T) {
 				w := NewWriter(r)
 				defer w.Close()
 				e := &roundsEngine{steps: []roundsStep{{keys: []string{"PageLayout"}}, {keys: []string{"PageMode"}}}}
-				if _, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, e.revalidate, e.run); err != nil {
+				if _, err := w.remediate(ctx, engineTarget, models.DefaultRegressionTolerance, e.revalidate, e.run); err != nil {
 					t.Fatalf("remediate: %v", err)
 				}
 				if len(e.disabled) != 2 {

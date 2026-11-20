@@ -73,7 +73,7 @@ var malformedEntryPoints = []struct {
 	{"Merge of one", func(ctx context.Context, r *Reader) error { return Merge(ctx, []*Reader{r}, io.Discard) }},
 	{"Pipeline", func(ctx context.Context, r *Reader) error {
 		_, err := NewPipeline().Open(r).Apply(func(_ context.Context, w *Writer) error {
-			w.SetMetadata(Metadata{Title: "t"})
+			w.SetMetadata(models.Metadata{Title: "t"})
 			return nil
 		}).WriteTo(ctx, io.Discard)
 		return err

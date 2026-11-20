@@ -35,7 +35,7 @@ func TestPipelineEncryptsItsOutputAcrossARestructuringStage(t *testing.T) {
 		}
 	}
 	setTitle := func(_ context.Context, w *Writer) error {
-		w.SetMetadata(Metadata{Title: "after the split"})
+		w.SetMetadata(models.Metadata{Title: "after the split"})
 		return nil
 	}
 
@@ -218,7 +218,7 @@ func TestPipelineOutputEncryptionFollowsTheLastRequest(t *testing.T) {
 			name: "WithEncryption on WriteTo after a split and an edit",
 			build: func(src *Reader) *Pipeline {
 				return NewPipeline().Open(src).Apply(encrypt(first)).Split([]int{1}).
-					Apply(func(_ context.Context, w *Writer) error { w.SetMetadata(Metadata{Title: "t"}); return nil })
+					Apply(func(_ context.Context, w *Writer) error { w.SetMetadata(models.Metadata{Title: "t"}); return nil })
 			},
 			opts: []WriteOption{WithEncryption(second)},
 		},

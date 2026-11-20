@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // defectiveInvoicePDF embeds factur-x.xml with every container defect
@@ -100,7 +102,7 @@ func TestWriter_RepairFacturX_NoInvoice(t *testing.T) {
 
 	w := NewWriter(r)
 	defer w.Close()
-	w.SetMetadata(Metadata{Title: "Queued before"})
+	w.SetMetadata(models.Metadata{Title: "Queued before"})
 	if _, err := w.RepairFacturX(ctx); !errors.Is(err, ErrNoInvoiceAttachment) {
 		t.Errorf("err = %v, want ErrNoInvoiceAttachment", err)
 	}

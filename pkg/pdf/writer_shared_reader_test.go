@@ -74,14 +74,14 @@ func sharedReaderOps(t *testing.T) []sharedReaderOp {
 		}},
 		{"EditThenRemediate", func(ctx context.Context, r *Reader) ([]byte, error) {
 			return writeOnReader(ctx, r, func(w *Writer) error {
-				w.SetMetadata(Metadata{Title: "edited"})
+				w.SetMetadata(models.Metadata{Title: "edited"})
 				_, err := w.RemediatePDFA(ctx, models.PDFA2b, WithDocumentID(id))
 				return err
 			})
 		}},
 		{"SetMetadata", func(ctx context.Context, r *Reader) ([]byte, error) {
 			return writeOnReader(ctx, r, func(w *Writer) error {
-				w.SetMetadata(Metadata{Title: "title", Author: "author"})
+				w.SetMetadata(models.Metadata{Title: "title", Author: "author"})
 				return nil
 			})
 		}},
@@ -124,13 +124,13 @@ func sharedReaderOps(t *testing.T) []sharedReaderOp {
 		}},
 		{"WithEncryption", func(ctx context.Context, r *Reader) ([]byte, error) {
 			return writeOnReader(ctx, r, func(w *Writer) error {
-				w.SetMetadata(Metadata{Title: "encrypted"})
+				w.SetMetadata(models.Metadata{Title: "encrypted"})
 				return nil
 			}, WithEncryption(models.EncryptConfig{OwnerPassword: "o", Algorithm: models.EncryptAES128, Permissions: -1}))
 		}},
 		{"Sign", func(ctx context.Context, r *Reader) ([]byte, error) {
 			return writeOnReader(ctx, r, func(w *Writer) error {
-				w.SetMetadata(Metadata{Subject: "signed"})
+				w.SetMetadata(models.Metadata{Subject: "signed"})
 				w.Sign(signer)
 				return nil
 			})
@@ -143,13 +143,13 @@ func sharedReaderOps(t *testing.T) []sharedReaderOp {
 		}},
 		{"WriteLogger", func(ctx context.Context, r *Reader) ([]byte, error) {
 			return writeOnReader(ctx, r, func(w *Writer) error {
-				w.SetMetadata(Metadata{Keywords: "logged"})
+				w.SetMetadata(models.Metadata{Keywords: "logged"})
 				return nil
 			}, WithWriteLogger(logger))
 		}},
 		{"Redact", func(ctx context.Context, r *Reader) ([]byte, error) {
 			return writeOnReader(ctx, r, func(w *Writer) error {
-				w.SetMetadata(Metadata{Title: "before redaction"})
+				w.SetMetadata(models.Metadata{Title: "before redaction"})
 				_, err := w.Redact(ctx, []models.RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 200, 720}}, {Page: 2, Rect: [4]float64{10, 690, 200, 720}}})
 				return err
 			})

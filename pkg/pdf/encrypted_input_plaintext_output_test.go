@@ -73,7 +73,7 @@ func TestWriter_AnEditOnAnEncryptedSourceWritesAPlaintextOutput(t *testing.T) {
 			return nil
 		}},
 		{"SetMetadata", doc, func(_ context.Context, _ *testing.T, w *Writer) error {
-			w.SetMetadata(Metadata{Title: "T"})
+			w.SetMetadata(models.Metadata{Title: "T"})
 			return nil
 		}},
 		{"StampText", doc, func(_ context.Context, _ *testing.T, w *Writer) error {

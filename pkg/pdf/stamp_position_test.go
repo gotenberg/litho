@@ -13,34 +13,21 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gotenberg/litho/pkg/internal/mutations"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestStampPositionNamesRoundTrip pins that every position reads back from
-// its name, and that the public positions list the internal ones in the same
-// order, which [StampPosition.toMutations] relies on.
+// its name.
 func TestStampPositionNamesRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	internal := []mutations.StampPosition{
-		mutations.PositionNone, mutations.PositionCenter,
-		mutations.PositionTopLeft, mutations.PositionTop, mutations.PositionTopRight,
-		mutations.PositionLeft, mutations.PositionRight,
-		mutations.PositionBottomLeft, mutations.PositionBottom, mutations.PositionBottomRight,
-	}
-	if len(internal) != len(stampPositionNames) {
-		t.Fatalf("%d internal positions, %d public ones", len(internal), len(stampPositionNames))
-	}
-	for i, name := range stampPositionNames {
-		p, err := ParseStampPosition(name)
+	for p := models.PositionNone; p <= models.PositionBottomRight; p++ {
+		got, err := ParseStampPosition(p.String())
 		if err != nil {
-			t.Fatalf("ParseStampPosition(%q): %v", name, err)
+			t.Fatalf("ParseStampPosition(%q): %v", p.String(), err)
 		}
-		if p.String() != name {
-			t.Errorf("%q reads back as %q", name, p.String())
-		}
-		if p.toMutations() != internal[i] {
-			t.Errorf("%q maps to internal position %d, want %d", name, p.toMutations(), internal[i])
+		if got != p {
+			t.Errorf("%q reads back as %v", p.String(), got)
 		}
 	}
 	if _, err := ParseStampPosition("middle"); !errors.Is(err, ErrInvalidStampPosition) || !IsInvalidInput(err) {
@@ -49,7 +36,7 @@ func TestStampPositionNamesRoundTrip(t *testing.T) {
 }
 
 // TestStampRefusesAnUnknownPosition pins that each stamp refuses a position
-// outside the ones [StampPosition] lists when it is queued.
+// outside the ones [models.StampPosition] lists when it is queued.
 func TestStampRefusesAnUnknownPosition(t *testing.T) {
 	t.Parallel()
 
@@ -57,7 +44,7 @@ func TestStampRefusesAnUnknownPosition(t *testing.T) {
 	defer r.Close()
 	w := NewWriter(r)
 	defer w.Close()
-	bad := StampPosition(len(stampPositionNames))
+	bad := models.PositionBottomRight + 1
 	for name, err := range map[string]error{
 		"StampText":  w.StampText(TextStamp{Text: "hi", Position: bad}),
 		"StampImage": w.StampImage(ImageStamp{Data: redPNG(t), MimeType: "image/png", Position: bad}),
@@ -85,17 +72,17 @@ func TestStampTextPlacesStandardFontInk(t *testing.T) {
 	}{
 		{
 			name:  "center",
-			stamp: TextStamp{Position: PositionCenter},
+			stamp: TextStamp{Position: models.PositionCenter},
 			wantX: 306 - 49.35, wantY: 396 - 35.9,
 		},
 		{
 			name:  "top-right, moved in",
-			stamp: TextStamp{Position: PositionTopRight, X: -10, Y: -20},
+			stamp: TextStamp{Position: models.PositionTopRight, X: -10, Y: -20},
 			wantX: 602 - 91, wantY: 772 - 71.8,
 		},
 		{
 			name:  "bottom-left",
-			stamp: TextStamp{Position: PositionBottomLeft},
+			stamp: TextStamp{Position: models.PositionBottomLeft},
 			wantX: -7.7, wantY: 0,
 		},
 	} {
@@ -142,21 +129,21 @@ func TestStampPositionPlacesTheInkAsViewed(t *testing.T) {
 	}
 	type kind struct {
 		name  string
-		stamp func(t *testing.T, w *Writer, pos StampPosition, rotation, dx, dy float64) error
+		stamp func(t *testing.T, w *Writer, pos models.StampPosition, rotation, dx, dy float64) error
 		// w and h size the stamp's box, in points.
 		w, h float64
 	}
 	kinds := []kind{
 		{
 			name: "image",
-			stamp: func(t *testing.T, w *Writer, pos StampPosition, rotation, dx, dy float64) error {
+			stamp: func(t *testing.T, w *Writer, pos models.StampPosition, rotation, dx, dy float64) error {
 				return w.StampImage(ImageStamp{Data: redPNG(t), MimeType: "image/png", Width: 120, Height: 60, Position: pos, Rotation: rotation, X: dx, Y: dy})
 			},
 			w: 120, h: 60,
 		},
 		{
 			name: "pdf",
-			stamp: func(t *testing.T, w *Writer, pos StampPosition, rotation, dx, dy float64) error {
+			stamp: func(t *testing.T, w *Writer, pos models.StampPosition, rotation, dx, dy float64) error {
 				src := openBytes(t, redPagePDF(120, 60))
 				t.Cleanup(func() { _ = src.Close() })
 				return w.StampPDF(PDFStamp{Source: src, Position: pos, Rotation: rotation, X: dx, Y: dy})
@@ -164,7 +151,7 @@ func TestStampPositionPlacesTheInkAsViewed(t *testing.T) {
 			w: 120, h: 60,
 		},
 	}
-	textStamp := func(t *testing.T, w *Writer, pos StampPosition, rotation float64) error {
+	textStamp := func(t *testing.T, w *Writer, pos models.StampPosition, rotation float64) error {
 		ttf, err := NewTTFFont(t.Context(), font)
 		if err != nil {
 			t.Fatalf("NewTTFFont: %v", err)
@@ -175,14 +162,14 @@ func TestStampPositionPlacesTheInkAsViewed(t *testing.T) {
 	for _, shape := range pageShapes {
 		for _, k := range kinds {
 			for _, rotation := range []float64{0, 30} {
-				for _, pos := range []StampPosition{PositionCenter, PositionTopLeft, PositionBottomRight} {
+				for _, pos := range []models.StampPosition{models.PositionCenter, models.PositionTopLeft, models.PositionBottomRight} {
 					t.Run(fmt.Sprintf("%s/%s/%g/%s", shape.name, k.name, rotation, pos), func(t *testing.T) {
 						t.Parallel()
 
 						// The offset moves the stamp inward: past the edge, the
 						// page would cut it off.
 						dx, dy := 5.0, -5.0
-						if pos == PositionBottomRight {
+						if pos == models.PositionBottomRight {
 							dx, dy = -5, 5
 						}
 						got := stampedInk(t, shape.entries, func(w *Writer) error { return k.stamp(t, w, pos, rotation, dx, dy) })
@@ -202,7 +189,7 @@ func TestStampPositionPlacesTheInkAsViewed(t *testing.T) {
 			t.Parallel()
 
 			for _, rotation := range []float64{0, 40} {
-				got := stampedInk(t, shape.entries, func(w *Writer) error { return textStamp(t, w, PositionCenter, rotation) })
+				got := stampedInk(t, shape.entries, func(w *Writer) error { return textStamp(t, w, models.PositionCenter, rotation) })
 				cx, cy := (got[0]+got[2])/2, (got[1]+got[3])/2
 				if math.Abs(cx-(shape.w/2+5)) > 1.5 || math.Abs(cy-(shape.h/2+5)) > 1.5 {
 					t.Errorf("rotated %g: the text's ink centers on (%g, %g) in the image, want (%g, %g)", rotation, cx, cy, shape.w/2+5, shape.h/2+5)
@@ -230,7 +217,7 @@ func TestStampPositionPlacesEachPageOfAMixedDocument(t *testing.T) {
 	defer r.Close()
 	w := NewWriter(r)
 	defer w.Close()
-	if err := w.StampImage(ImageStamp{Data: redPNG(t), MimeType: "image/png", Width: 100, Height: 50, Position: PositionCenter}); err != nil {
+	if err := w.StampImage(ImageStamp{Data: redPNG(t), MimeType: "image/png", Width: 100, Height: 50, Position: models.PositionCenter}); err != nil {
 		t.Fatalf("StampImage: %v", err)
 	}
 	out := writeAndReopen(t, w)
@@ -257,7 +244,7 @@ func TestStampPositionReadsTheRotateAnEarlierEditStages(t *testing.T) {
 	if err := w.RotatePages(90); err != nil {
 		t.Fatalf("RotatePages: %v", err)
 	}
-	if err := w.StampImage(ImageStamp{Data: redPNG(t), MimeType: "image/png", Width: 100, Height: 50, Position: PositionTopLeft}); err != nil {
+	if err := w.StampImage(ImageStamp{Data: redPNG(t), MimeType: "image/png", Width: 100, Height: 50, Position: models.PositionTopLeft}); err != nil {
 		t.Fatalf("StampImage: %v", err)
 	}
 	assertInk(t, renderedInk(t, writeAndReopen(t, w), 1), [4]float64{0, 0, 100, 50}, 1.5)
@@ -265,11 +252,11 @@ func TestStampPositionReadsTheRotateAnEarlierEditStages(t *testing.T) {
 
 // anchorOf returns where pos sits along each axis of the page, as viewed: 0
 // at the left or bottom edge, 0.5 in the middle, 1 at the right or top edge.
-func anchorOf(pos StampPosition) (float64, float64) {
+func anchorOf(pos models.StampPosition) (float64, float64) {
 	switch pos {
-	case PositionTopLeft:
+	case models.PositionTopLeft:
 		return 0, 1
-	case PositionBottomRight:
+	case models.PositionBottomRight:
 		return 1, 0
 	}
 	return 0.5, 0.5

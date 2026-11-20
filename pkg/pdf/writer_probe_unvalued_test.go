@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // unvaluedCodePDF is a page that shows "AB" in Helvetica, then code 5A20 in
@@ -77,7 +79,7 @@ func TestProbeIntegrityIgnoresUnvaluedReading(t *testing.T) {
 	if baseline.textLen == 0 {
 		t.Fatal("probe counted no text on a page showing AB")
 	}
-	if reason := evaluateRegression(baseline, post, DefaultRegressionTolerance); reason != "" {
+	if reason := evaluateRegression(baseline, post, models.DefaultRegressionTolerance); reason != "" {
 		t.Errorf("probe flagged a code with no Unicode value read as .notdef: %s", reason)
 	}
 }
@@ -93,7 +95,7 @@ func TestProbeIntegrityCatchesLostText(t *testing.T) {
 		"own value kept": unvaluedCodePDF("/Adobe-Japan1-99 usecmap", false),
 		"read as notdef": unvaluedCodePDF("1 begincidchar\n<0001> 1\nendcidchar", false),
 	} {
-		if reason := evaluateRegression(baseline, probeSnap(t, post), DefaultRegressionTolerance); reason == "" {
+		if reason := evaluateRegression(baseline, probeSnap(t, post), models.DefaultRegressionTolerance); reason == "" {
 			t.Errorf("%s: probe accepted a post that lost the AB show", name)
 		}
 	}

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestWithVersionReachesTheOutputOfAnIntermediate pins that [WithVersion]
@@ -60,7 +62,7 @@ func TestWithVersionReachesTheOutputOfAnIntermediate(t *testing.T) {
 				e := &roundsEngine{steps: steps}
 				w := NewWriter(r)
 				defer w.Close()
-				if _, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, e.revalidate, e.run); err != nil {
+				if _, err := w.remediate(ctx, engineTarget, models.DefaultRegressionTolerance, e.revalidate, e.run); err != nil {
 					t.Fatalf("remediate: %v", err)
 				}
 				if w.basePath == "" {

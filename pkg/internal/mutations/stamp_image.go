@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // ImageStampOptions describes a single image overlay applied by
@@ -30,8 +31,8 @@ type ImageStampOptions struct {
 	// Position, they offset the image from it instead.
 	X, Y float64
 	// Position places the image against a position of each page (see
-	// [stampPlacement]). [PositionNone] places it by X and Y.
-	Position StampPosition
+	// [stampPlacement]). [models.PositionNone] places it by X and Y.
+	Position models.StampPosition
 	// Width and Height set the target rectangle in points. If both are
 	// zero, the image is rendered at one PDF point per pixel. If exactly
 	// one is zero, it is computed to preserve the aspect ratio.

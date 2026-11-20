@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/remediation"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // errMissingCatalogKey is the residual the test engine of
@@ -158,7 +159,7 @@ func TestWriterRemediateContinuesAfterRollback(t *testing.T) {
 
 			e := &roundsEngine{steps: tc.steps}
 			w := NewWriter(r)
-			report, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, e.revalidate, e.run)
+			report, err := w.remediate(ctx, engineTarget, models.DefaultRegressionTolerance, e.revalidate, e.run)
 			if err != nil {
 				t.Fatalf("remediate: %v", err)
 			}

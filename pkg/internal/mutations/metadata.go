@@ -7,22 +7,11 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
-// Metadata holds document information dictionary fields.
-type Metadata struct {
-	Title        string
-	Author       string
-	Subject      string
-	Keywords     string
-	Creator      string
-	Producer     string
-	CreationDate string
-	ModDate      string
-}
-
 // SetMetadata creates or replaces the /Info dictionary.
-func SetMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, meta Metadata) error {
+func SetMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, meta models.Metadata) error {
 	// Resolve the existing Info dict if any, through the allocator.
 	//
 	// Mutations queued on one writer share a single allocator and are applied

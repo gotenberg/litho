@@ -252,7 +252,7 @@ func TestPipeline_ConvertOpensThePipeline(t *testing.T) {
 	c := FromText(strings.NewReader("First page\fSecond page"), WithConvertFontDirs(convertFontDir(t)))
 	var out bytes.Buffer
 	res, err := NewPipeline().Convert(c).Apply(func(_ context.Context, w *Writer) error {
-		w.SetMetadata(Metadata{Title: "Converted"})
+		w.SetMetadata(models.Metadata{Title: "Converted"})
 		return nil
 	}).WriteTo(ctx, &out)
 	if err != nil {

@@ -94,3 +94,38 @@ type AutoTagReport struct {
 	// document or AutoTag skipped nothing.
 	Page int
 }
+
+// RegressionTolerance bounds the integrity probe that runs after remediation.
+// If the probe detects a content drop beyond these bounds, content-modifying
+// fixers are rolled back and, if the output still regresses, remediation fails
+// with [github.com/gotenberg/litho/pkg/pdf.ErrRemediationBrokePDF]. Values are
+// immutable and safe for concurrent use.
+type RegressionTolerance struct {
+	// MaxTextDropRatio is the largest acceptable fraction of a page's
+	// extracted text that remediation may remove. 0.0 forbids any drop; 1.0
+	// accepts any drop (including going from text to no text). The ratio is
+	// evaluated on each page against the length of its
+	// [github.com/gotenberg/litho/pkg/pdf.Reader.ExtractText], so emptying a
+	// few pages of a long document counts; when AllowPageLoss lets the page
+	// count change, against the sum across all pages. Defaults to 0.1 (10%).
+	MaxTextDropRatio float64
+	// MaxImageDropRatio is the largest acceptable fraction of
+	// [github.com/gotenberg/litho/pkg/pdf.Reader.ExtractImages] entries that
+	// remediation may remove. Defaults to 0.5 (50%) to accommodate aggressive
+	// image-stream fixers that legitimately drop corrupt XObjects.
+	MaxImageDropRatio float64
+	// AllowPageLoss permits the page count to decrease. When false (the
+	// default), any change to the page count is treated as a regression.
+	AllowPageLoss bool
+}
+
+// DefaultRegressionTolerance is the tolerance applied when none is set via
+// [github.com/gotenberg/litho/pkg/pdf.WithRegressionTolerance]. Values
+// prioritize catching silent text loss, which is the most common
+// aggressive-fix failure mode. The two ratios are fractions between 0 and 1,
+// as [RegressionTolerance] defines them.
+var DefaultRegressionTolerance = RegressionTolerance{
+	MaxTextDropRatio:  0.1,
+	MaxImageDropRatio: 0.5,
+	AllowPageLoss:     false,
+}

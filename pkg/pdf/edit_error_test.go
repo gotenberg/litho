@@ -159,7 +159,7 @@ func TestEditLabelOfTheStageOnly(t *testing.T) {
 
 	p := NewPipeline().Open(openBytes(t, editTestPDF()))
 	p.Apply(func(_ context.Context, w *Writer) error {
-		w.SetMetadata(Metadata{Title: "Labeled"})
+		w.SetMetadata(models.Metadata{Title: "Labeled"})
 		return nil
 	}, WithEditLabel("metadata"))
 	p.Apply(func(_ context.Context, w *Writer) error {
@@ -197,7 +197,7 @@ func TestSetMetadataLabelsBothEdits(t *testing.T) {
 	w := NewWriter(openBytes(t, editTestPDF()))
 	defer w.Close()
 	w.SetEditLabel("meta")
-	w.SetMetadata(Metadata{Title: "Labeled"})
+	w.SetMetadata(models.Metadata{Title: "Labeled"})
 
 	if len(w.mutations) != 2 {
 		t.Fatalf("SetMetadata queued %d edits, want 2", len(w.mutations))

@@ -54,7 +54,7 @@ func refusedCalls(t *testing.T) []refusedCall {
 	}
 	return []refusedCall{
 		{"SetMetadata", func(_ context.Context, _ *testing.T, w *Writer) error {
-			w.SetMetadata(Metadata{Title: "late"})
+			w.SetMetadata(models.Metadata{Title: "late"})
 			return nil
 		}},
 		{"ClearMetadata", func(_ context.Context, _ *testing.T, w *Writer) error { w.ClearMetadata(); return nil }},
@@ -100,7 +100,7 @@ func refusedCalls(t *testing.T) []refusedCall {
 			return nil
 		}},
 		{"AddAssociatedFile", func(_ context.Context, _ *testing.T, w *Writer) error {
-			w.AddAssociatedFile(AssociatedFile{Name: "late.xml", Data: []byte("<late/>"), MimeType: "application/xml", Relationship: "Data"})
+			w.AddAssociatedFile(models.AssociatedFile{Name: "late.xml", Data: []byte("<late/>"), MimeType: "application/xml", Relationship: "Data"})
 			return nil
 		}},
 		{"RemoveAttachment", func(_ context.Context, _ *testing.T, w *Writer) error {
@@ -132,7 +132,7 @@ func refusedCalls(t *testing.T) []refusedCall {
 			return err
 		}},
 		{"RemediateFacturX", func(ctx context.Context, _ *testing.T, w *Writer) error {
-			_, err := w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: []byte(facturXSampleCII), Level: models.FacturXMinimum})
+			_, err := w.RemediateFacturX(ctx, models.FacturXConfig{InvoiceXML: []byte(facturXSampleCII), Level: models.FacturXMinimum})
 			return err
 		}},
 		{"RepairFacturX", func(ctx context.Context, _ *testing.T, w *Writer) error {
@@ -348,7 +348,7 @@ func TestWriterEditBeforeARemediationValidatesAsTheReportSays(t *testing.T) {
 			return w.DeletePages(1)
 		}},
 		{"a metadata edit", signablePDF(), func(_ context.Context, _ *testing.T, w *Writer) error {
-			w.SetMetadata(Metadata{Title: "Edited title", Author: "Edited author"})
+			w.SetMetadata(models.Metadata{Title: "Edited title", Author: "Edited author"})
 			return nil
 		}},
 		{"a form flatten", placeholderFormPDF(), func(_ context.Context, _ *testing.T, w *Writer) error {

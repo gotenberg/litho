@@ -1,5 +1,7 @@
 package models
 
+import "crypto/x509"
+
 // Signature represents a cryptographic signature found in the document.
 // Concurrent reads of a value are safe; a write needs synchronization.
 type Signature struct {
@@ -141,4 +143,21 @@ type DroppedSignature struct {
 	// "DocMDP" for a certification signature and "UR3" for a usage rights
 	// signature (ISO 32000-1, 12.8.4, Table 258), and is "" when none did.
 	Perms string
+}
+
+// ValidationData is the validation material
+// [github.com/gotenberg/litho/pkg/pdf.WithValidationData] hands a signature's
+// document security store instead of fetching it.
+//
+// A ValidationData is read, never modified, by
+// [github.com/gotenberg/litho/pkg/pdf.Writer.WriteTo]; do not modify it while
+// a write that was given it runs.
+type ValidationData struct {
+	// Certificates are certificates the signer's and the timestamp
+	// authority's chains may need beyond those their SignedData carry.
+	Certificates []*x509.Certificate
+	// OCSPResponses are DER OCSPResponse messages (RFC 6960, 4.2.1).
+	OCSPResponses [][]byte
+	// CRLs are DER certificate revocation lists (RFC 5280, 5.1).
+	CRLs [][]byte
 }

@@ -54,7 +54,7 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 			data:    signablePDF,
 			encrypt: true,
 			remediate: func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
-				return w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: []byte(facturXSampleCII), Level: models.FacturXMinimum})
+				return w.RemediateFacturX(ctx, models.FacturXConfig{InvoiceXML: []byte(facturXSampleCII), Level: models.FacturXMinimum})
 			},
 			wantClause: "ISO 19005-3, 6.1.3",
 		},
@@ -215,7 +215,7 @@ func TestWriterEncryptBeforeARemediationProtectsTheOutput(t *testing.T) {
 	}
 	laterRounds := func(ctx context.Context, t *testing.T, w *Writer) error {
 		e := &roundsEngine{steps: []roundsStep{{keys: []string{"PageLayout"}}, {keys: []string{"PageMode"}}}}
-		_, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, e.revalidate, e.run)
+		_, err := w.remediate(ctx, engineTarget, models.DefaultRegressionTolerance, e.revalidate, e.run)
 		if err == nil && len(e.disabled) != 2 {
 			t.Fatalf("the engine ran %d rounds, want 2", len(e.disabled))
 		}

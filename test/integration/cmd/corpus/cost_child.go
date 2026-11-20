@@ -390,7 +390,7 @@ var costOps = map[string]costOp{
 	}),
 	// stamp stamps a diagonal watermark on every page.
 	"stamp": costWrite(func(_ context.Context, w *pdf.Writer, _ []string) error {
-		return w.StampText(pdf.TextStamp{Text: "CONFIDENTIAL", Position: pdf.PositionCenter, FontSize: 48, Opacity: 0.3, Rotation: 45, Color: [3]float64{0.8, 0, 0}})
+		return w.StampText(pdf.TextStamp{Text: "CONFIDENTIAL", Position: models.PositionCenter, FontSize: 48, Opacity: 0.3, Rotation: 45, Color: [3]float64{0.8, 0, 0}})
 	}),
 	// colors converts every colour to the built-in CMYK profile.
 	"colors": costWrite(func(ctx context.Context, w *pdf.Writer, _ []string) error {

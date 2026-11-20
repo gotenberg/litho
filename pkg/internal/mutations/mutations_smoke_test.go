@@ -52,7 +52,7 @@ func newMutationDoc(t *testing.T, data []byte) (*document.Document, *writer.ObjA
 func TestSetMetadata_AddsAllFields(t *testing.T) {
 	t.Parallel()
 	doc, alloc := newMutationDoc(t, minimalPDFMutations())
-	err := SetMetadata(context.Background(), alloc, doc, Metadata{
+	err := SetMetadata(context.Background(), alloc, doc, models.Metadata{
 		Title:    "New Title",
 		Author:   "Alice",
 		Subject:  "Sub",
@@ -72,7 +72,7 @@ func TestSetMetadata_EmptyOverrides(t *testing.T) {
 	t.Parallel()
 	doc, alloc := newMutationDoc(t, minimalPDFMutations())
 	// Empty fields should not overwrite existing values (contract).
-	err := SetMetadata(context.Background(), alloc, doc, Metadata{})
+	err := SetMetadata(context.Background(), alloc, doc, models.Metadata{})
 	if err != nil {
 		t.Fatalf("SetMetadata: %v", err)
 	}

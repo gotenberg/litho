@@ -26,7 +26,7 @@ func compliantInvoiceXML(t *testing.T) []byte {
 // remediateFacturXBytes runs [Writer.RemediateFacturX] on data, or
 // [Writer.RepairFacturX] when cfg is nil, and returns the report and the
 // output.
-func remediateFacturXBytes(t *testing.T, data []byte, cfg *FacturXConfig) (*models.RemediationReport, []byte) {
+func remediateFacturXBytes(t *testing.T, data []byte, cfg *models.FacturXConfig) (*models.RemediationReport, []byte) {
 	t.Helper()
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -109,7 +109,7 @@ func TestRemediateFacturXRefusesAnInvoiceItWouldNotConform(t *testing.T) {
 			w := NewWriter(r)
 			defer w.Close()
 
-			_, err = w.RemediateFacturX(ctx, FacturXConfig{InvoiceXML: tc.xml, Level: tc.level})
+			_, err = w.RemediateFacturX(ctx, models.FacturXConfig{InvoiceXML: tc.xml, Level: tc.level})
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("RemediateFacturX returned %v, want %v", err, tc.want)
 			}
@@ -154,7 +154,7 @@ func TestFacturXResidualMatchesValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg := &FacturXConfig{InvoiceXML: tc.xml, Level: models.FacturXEN16931}
+			cfg := &models.FacturXConfig{InvoiceXML: tc.xml, Level: models.FacturXEN16931}
 			embedded, out := remediateFacturXBytes(t, writerTestPDF(), cfg)
 			again, outAgain := remediateFacturXBytes(t, out, cfg)
 			repaired, outRepaired := remediateFacturXBytes(t, out, nil)
@@ -223,7 +223,7 @@ func TestFacturXXRechnungSellerContact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading the invoice fixture: %v", err)
 	}
-	cfg := &FacturXConfig{InvoiceXML: data, Level: models.FacturXXRechnung}
+	cfg := &models.FacturXConfig{InvoiceXML: data, Level: models.FacturXXRechnung}
 	_, out := remediateFacturXBytes(t, writerTestPDF(), cfg)
 	for _, v := range facturXFatals(t, out) {
 		t.Errorf("fatal violation on a compliant XRechnung invoice: %+v", v)

@@ -112,7 +112,7 @@ func TestWriterEditBeforeLaterRoundsOfTheTestEngine(t *testing.T) {
 			if err := w.RotatePages(90); err != nil {
 				t.Fatalf("RotatePages: %v", err)
 			}
-			if _, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, e.revalidate, e.run); err != nil {
+			if _, err := w.remediate(ctx, engineTarget, models.DefaultRegressionTolerance, e.revalidate, e.run); err != nil {
 				t.Fatalf("remediate: %v", err)
 			}
 			if len(e.disabled) != 3 {
@@ -283,7 +283,7 @@ func TestWriterEditBeforeALaterRoundKeepsItsFixes(t *testing.T) {
 			name:          "rotated and metadata set before",
 			binaryComment: true,
 			before: func(w *Writer) error {
-				w.SetMetadata(Metadata{Subject: "earlier edit"})
+				w.SetMetadata(models.Metadata{Subject: "earlier edit"})
 				return w.RotatePages(270)
 			},
 			wantRotate:  270,

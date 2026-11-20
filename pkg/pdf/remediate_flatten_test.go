@@ -191,7 +191,7 @@ func TestRemediatePDFA1CountsACompositeAsTheImagesItReplaced(t *testing.T) {
 	t.Parallel()
 	in := photoPDF()
 	src := openColorPDF(t, in)
-	report, out := remediateA1b(t, in, WithRegressionTolerance(RegressionTolerance{MaxTextDropRatio: 0.1}))
+	report, out := remediateA1b(t, in, WithRegressionTolerance(models.RegressionTolerance{MaxTextDropRatio: 0.1}))
 	if !slicesContainPrefix(report.Fixed, "flattened transparency on 1 page(s)") || len(report.RolledBack) != 0 {
 		t.Fatalf("flattening not kept: Fixed = %q, RolledBack = %q", report.Fixed, report.RolledBack)
 	}
@@ -252,7 +252,7 @@ func TestRemediateFlatteningFallsBackOnALoss(t *testing.T) {
 	w := NewWriter(openColorPDF(t, transparentPDF()))
 	t.Cleanup(func() { _ = w.Close() })
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) { return r.ValidatePDFA(ctx, models.PDFA1b) }
-	report, err := w.remediateFlattening(ctx, remediationTarget{method: "RemediatePDFA"}, DefaultRegressionTolerance, revalidate,
+	report, err := w.remediateFlattening(ctx, remediationTarget{method: "RemediatePDFA"}, models.DefaultRegressionTolerance, revalidate,
 		func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
 			rep, err := remediation.RemediatePDFA(ctx, doc, alloc, models.PDFA1b, remediation.Options{PreserveContent: true}.WithDisabled(disabled))
 			if err != nil || len(rep.Flattened) == 0 {

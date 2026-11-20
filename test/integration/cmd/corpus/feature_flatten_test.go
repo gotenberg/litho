@@ -123,7 +123,7 @@ func TestFlattenFeature_Plants(t *testing.T) {
 
 	claim := func(ctx context.Context, w *pdf.Writer) (*models.FlattenReport, error) {
 		// Rewriting the file changes nothing a viewer sees.
-		w.SetMetadata(pdf.Metadata{Title: "planted"})
+		w.SetMetadata(models.Metadata{Title: "planted"})
 		return &models.FlattenReport{Pages: []models.FlattenedPage{{Page: 1}}}, ctx.Err()
 	}
 	left := newTestFlatten()

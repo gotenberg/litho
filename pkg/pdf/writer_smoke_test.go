@@ -39,7 +39,7 @@ func TestWriter_RoundTrip_SetMetadata_All(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	r2 := openRewrite(t, threePagePDF(), func(w *Writer) {
-		w.SetMetadata(Metadata{
+		w.SetMetadata(models.Metadata{
 			Title:    "Round Trip Title",
 			Author:   "Author Name",
 			Subject:  "A Subject",

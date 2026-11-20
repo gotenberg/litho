@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestSetMetadata_DoesNotResurrectClearedFields pins that [SetMetadata] after
@@ -41,7 +42,7 @@ func TestSetMetadata_DoesNotResurrectClearedFields(t *testing.T) {
 		t.Fatalf("precondition: ClearMetadata left %v, want an empty /Info", cleared)
 	}
 
-	if err := SetMetadata(ctx, alloc, doc, Metadata{Title: "New Title"}); err != nil {
+	if err := SetMetadata(ctx, alloc, doc, models.Metadata{Title: "New Title"}); err != nil {
 		t.Fatalf("SetMetadata: %v", err)
 	}
 

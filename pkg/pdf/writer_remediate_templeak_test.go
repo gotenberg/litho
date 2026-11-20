@@ -21,7 +21,7 @@ var errEngineFailed = errors.New("the engine failed")
 // [ErrInternalPanic] as it does to a caller.
 func remediateAtBoundary(ctx context.Context, w *Writer, revalidate func(context.Context, *Reader) ([]error, error), run remediationRun) (rep *models.RemediationReport, err error) {
 	defer recoverToError(nil, "remediate", &err)
-	return w.remediate(ctx, engineTarget, DefaultRegressionTolerance, revalidate, run)
+	return w.remediate(ctx, engineTarget, models.DefaultRegressionTolerance, revalidate, run)
 }
 
 // panicOnCall returns revalidate, which then panics on its nth call, as a

@@ -137,12 +137,12 @@ func TestMergePipelinesAppendsToTheCurrentDocument(t *testing.T) {
 	var out bytes.Buffer
 	result, err := NewPipeline().Open(r).
 		Apply(func(_ context.Context, w *Writer) error {
-			w.SetMetadata(Metadata{Title: "merged"})
+			w.SetMetadata(models.Metadata{Title: "merged"})
 			return nil
 		}).
 		MergePipelines([]*Pipeline{mergedPages(other, 1), mergedText(t, "appended")}).
 		Apply(func(_ context.Context, w *Writer) error {
-			w.SetMetadata(Metadata{Author: "litho"})
+			w.SetMetadata(models.Metadata{Author: "litho"})
 			return nil
 		}).
 		WriteTo(ctx, &out)
@@ -351,7 +351,7 @@ func TestMergePipelinesRemovesItsIntermediateFiles(t *testing.T) {
 		p := NewPipeline().MergePipelines([]*Pipeline{mergedText(t, "one"), mergedPages(r, 2), mergedText(t, "three")})
 		if tail == "edited after" {
 			p = p.Apply(func(_ context.Context, w *Writer) error {
-				w.SetMetadata(Metadata{Title: "x"})
+				w.SetMetadata(models.Metadata{Title: "x"})
 				return nil
 			}).Split([]int{1, 2})
 		}
@@ -470,7 +470,7 @@ func TestMergePipelinesCarriesEncryptionToTheOutput(t *testing.T) {
 			NewPipeline().Open(r).Apply(func(_ context.Context, w *Writer) error { w.Encrypt(cfg); return nil }),
 			mergedPages(r, 1),
 		}).Apply(func(_ context.Context, w *Writer) error {
-			w.SetMetadata(Metadata{Title: "x"})
+			w.SetMetadata(models.Metadata{Title: "x"})
 			return nil
 		}),
 	} {

@@ -63,7 +63,7 @@
 //		// Mutate and write
 //		writer := pdf.NewWriter(reader)
 //		defer writer.Close()
-//		writer.SetMetadata(pdf.Metadata{Title: "Redacted copy"})
+//		writer.SetMetadata(models.Metadata{Title: "Redacted copy"})
 //		if err := writer.RotatePages(90, 1); err != nil {
 //			log.Fatal(err)
 //		}

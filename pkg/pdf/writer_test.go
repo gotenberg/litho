@@ -146,7 +146,7 @@ func TestWriter_SetMetadata(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.SetMetadata(Metadata{
+	w.SetMetadata(models.Metadata{
 		Title:  "New Title",
 		Author: "John",
 	})
@@ -546,7 +546,7 @@ func TestWriter_MultipleMutations(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.SetMetadata(Metadata{Title: "Combined"})
+	w.SetMetadata(models.Metadata{Title: "Combined"})
 	if err := w.RotatePages(180, 1); err != nil {
 		t.Fatalf("RotatePages: %v", err)
 	}
@@ -900,7 +900,7 @@ func TestWriter_EncryptAndModify(t *testing.T) {
 
 	r, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	w := NewWriter(r)
-	w.SetMetadata(Metadata{Title: "Encrypted Doc"})
+	w.SetMetadata(models.Metadata{Title: "Encrypted Doc"})
 	w.Encrypt(models.EncryptConfig{
 		UserPassword: "pw",
 		Algorithm:    models.EncryptAES256,
@@ -2055,7 +2055,7 @@ func TestWriter_XRefStream_RoundTrips(t *testing.T) {
 				t.Fatalf("Open: %v", err)
 			}
 			w := NewWriter(r)
-			w.SetMetadata(Metadata{Title: "xrefstream"})
+			w.SetMetadata(models.Metadata{Title: "xrefstream"})
 
 			var out bytes.Buffer
 			if err := w.WriteTo(ctx, &out, tc.opts...); err != nil {
@@ -2090,7 +2090,7 @@ func TestWriter_SingleUse_SecondWriteReturnsErrWriterConsumed(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.SetMetadata(Metadata{Title: "once"})
+	w.SetMetadata(models.Metadata{Title: "once"})
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -2320,7 +2320,7 @@ func TestWriter_SignThenModify(t *testing.T) {
 
 	w := NewWriter(r)
 	w.Sign(&mockSigner{})
-	w.SetMetadata(Metadata{Title: "Signed Document"})
+	w.SetMetadata(models.Metadata{Title: "Signed Document"})
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -2360,7 +2360,7 @@ func TestWriter_SignAndModify(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.SetMetadata(Metadata{Title: "Signed Document"})
+	w.SetMetadata(models.Metadata{Title: "Signed Document"})
 	w.Sign(&mockSigner{})
 
 	var out bytes.Buffer
@@ -3398,77 +3398,77 @@ func TestEvaluateRegression(t *testing.T) {
 		name     string
 		baseline integritySnap
 		post     integritySnap
-		tol      RegressionTolerance
+		tol      models.RegressionTolerance
 		wantOK   bool
 	}{
 		{
 			name:     "identical",
 			baseline: integritySnap{pageCount: 3, textLen: 100, imageCount: 2},
 			post:     integritySnap{pageCount: 3, textLen: 100, imageCount: 2},
-			tol:      DefaultRegressionTolerance,
+			tol:      models.DefaultRegressionTolerance,
 			wantOK:   true,
 		},
 		{
 			name:     "page loss forbidden by default",
 			baseline: integritySnap{pageCount: 3, textLen: 100},
 			post:     integritySnap{pageCount: 2, textLen: 100},
-			tol:      DefaultRegressionTolerance,
+			tol:      models.DefaultRegressionTolerance,
 			wantOK:   false,
 		},
 		{
 			name:     "page loss allowed when opted in",
 			baseline: integritySnap{pageCount: 3, textLen: 100},
 			post:     integritySnap{pageCount: 2, textLen: 100},
-			tol:      RegressionTolerance{MaxTextDropRatio: 0.1, AllowPageLoss: true},
+			tol:      models.RegressionTolerance{MaxTextDropRatio: 0.1, AllowPageLoss: true},
 			wantOK:   true,
 		},
 		{
 			name:     "text gone entirely",
 			baseline: integritySnap{pageCount: 1, textLen: 100},
 			post:     integritySnap{pageCount: 1, textLen: 0},
-			tol:      DefaultRegressionTolerance,
+			tol:      models.DefaultRegressionTolerance,
 			wantOK:   false,
 		},
 		{
 			name:     "text drop within ratio",
 			baseline: integritySnap{pageCount: 1, textLen: 1000},
 			post:     integritySnap{pageCount: 1, textLen: 950},
-			tol:      DefaultRegressionTolerance,
+			tol:      models.DefaultRegressionTolerance,
 			wantOK:   true,
 		},
 		{
 			name:     "text drop exceeds ratio",
 			baseline: integritySnap{pageCount: 1, textLen: 1000},
 			post:     integritySnap{pageCount: 1, textLen: 800},
-			tol:      DefaultRegressionTolerance,
+			tol:      models.DefaultRegressionTolerance,
 			wantOK:   false,
 		},
 		{
 			name:     "zero baseline text accepts empty post",
 			baseline: integritySnap{pageCount: 1, textLen: 0, imageCount: 0},
 			post:     integritySnap{pageCount: 1, textLen: 0, imageCount: 0},
-			tol:      RegressionTolerance{MaxTextDropRatio: 0.0, MaxImageDropRatio: 0.0},
+			tol:      models.RegressionTolerance{MaxTextDropRatio: 0.0, MaxImageDropRatio: 0.0},
 			wantOK:   true,
 		},
 		{
 			name:     "image drop within tolerance",
 			baseline: integritySnap{pageCount: 1, textLen: 0, imageCount: 4},
 			post:     integritySnap{pageCount: 1, textLen: 0, imageCount: 2},
-			tol:      DefaultRegressionTolerance,
+			tol:      models.DefaultRegressionTolerance,
 			wantOK:   true,
 		},
 		{
 			name:     "image drop exceeds tolerance",
 			baseline: integritySnap{pageCount: 1, textLen: 0, imageCount: 4},
 			post:     integritySnap{pageCount: 1, textLen: 0, imageCount: 0},
-			tol:      DefaultRegressionTolerance,
+			tol:      models.DefaultRegressionTolerance,
 			wantOK:   false,
 		},
 		{
 			name:     "strict tolerance catches any text drop",
 			baseline: integritySnap{pageCount: 1, textLen: 100},
 			post:     integritySnap{pageCount: 1, textLen: 99},
-			tol:      RegressionTolerance{MaxTextDropRatio: 0.0, MaxImageDropRatio: 1.0},
+			tol:      models.RegressionTolerance{MaxTextDropRatio: 0.0, MaxImageDropRatio: 1.0},
 			wantOK:   false,
 		},
 		{
@@ -3478,28 +3478,28 @@ func TestEvaluateRegression(t *testing.T) {
 			name:     "pages emptied in a long document",
 			baseline: integritySnap{pageCount: 30, textLen: 3000, pageText: slices.Repeat([]int{100}, 30)},
 			post:     integritySnap{pageCount: 30, textLen: 2700, pageText: append(slices.Repeat([]int{100}, 27), 0, 0, 0)},
-			tol:      DefaultRegressionTolerance,
+			tol:      models.DefaultRegressionTolerance,
 			wantOK:   false,
 		},
 		{
 			name:     "every page within the tolerance",
 			baseline: integritySnap{pageCount: 3, textLen: 300, pageText: []int{100, 100, 100}},
 			post:     integritySnap{pageCount: 3, textLen: 273, pageText: []int{91, 92, 90}},
-			tol:      DefaultRegressionTolerance,
+			tol:      models.DefaultRegressionTolerance,
 			wantOK:   true,
 		},
 		{
 			name:     "a page past the tolerance",
 			baseline: integritySnap{pageCount: 3, textLen: 300, pageText: []int{100, 100, 100}},
 			post:     integritySnap{pageCount: 3, textLen: 289, pageText: []int{100, 100, 89}},
-			tol:      DefaultRegressionTolerance,
+			tol:      models.DefaultRegressionTolerance,
 			wantOK:   false,
 		},
 		{
 			name:     "a page without text in the source",
 			baseline: integritySnap{pageCount: 2, textLen: 100, pageText: []int{100, 0}},
 			post:     integritySnap{pageCount: 2, textLen: 100, pageText: []int{100, 0}},
-			tol:      RegressionTolerance{MaxTextDropRatio: 0.0, MaxImageDropRatio: 1.0},
+			tol:      models.RegressionTolerance{MaxTextDropRatio: 0.0, MaxImageDropRatio: 1.0},
 			wantOK:   true,
 		},
 		{
@@ -3508,7 +3508,7 @@ func TestEvaluateRegression(t *testing.T) {
 			name:     "page loss weighs the whole document",
 			baseline: integritySnap{pageCount: 3, textLen: 300, pageText: []int{100, 100, 100}},
 			post:     integritySnap{pageCount: 2, textLen: 280, pageText: []int{140, 140}},
-			tol:      RegressionTolerance{MaxTextDropRatio: 0.1, AllowPageLoss: true},
+			tol:      models.RegressionTolerance{MaxTextDropRatio: 0.1, AllowPageLoss: true},
 			wantOK:   true,
 		},
 		{
@@ -3518,7 +3518,7 @@ func TestEvaluateRegression(t *testing.T) {
 			name:     "zero baseline skips all checks",
 			baseline: integritySnap{},
 			post:     integritySnap{pageCount: 12, textLen: 4000, imageCount: 3},
-			tol:      DefaultRegressionTolerance,
+			tol:      models.DefaultRegressionTolerance,
 			wantOK:   true,
 		},
 	}
@@ -3761,7 +3761,7 @@ func TestWriter_RemediatePDFA_Pages12_NoSilentBreakage(t *testing.T) {
 	if len(postText) >= len(baselineText) {
 		t.Errorf("post text is %d bytes, want fewer than the %d before: the strip did not reach the output", len(postText), len(baselineText))
 	}
-	if minText := int(float64(len(baselineText)) * (1 - DefaultRegressionTolerance.MaxTextDropRatio)); len(postText) < minText {
+	if minText := int(float64(len(baselineText)) * (1 - models.DefaultRegressionTolerance.MaxTextDropRatio)); len(postText) < minText {
 		t.Errorf("post text is %d bytes, below the %d the default tolerance allows", len(postText), minText)
 	}
 }
@@ -3886,7 +3886,7 @@ func TestWriter_RemediateFacturX_RoundTrip(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	report, err := w.RemediateFacturX(ctx, FacturXConfig{
+	report, err := w.RemediateFacturX(ctx, models.FacturXConfig{
 		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXEN16931)),
 		Level:      models.FacturXEN16931,
 	})
@@ -3984,7 +3984,7 @@ func TestWriter_RemediateFacturX_XRechnungLevel(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+	if _, err := w.RemediateFacturX(ctx, models.FacturXConfig{
 		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXXRechnung)),
 		Level:      models.FacturXXRechnung,
 	}); err != nil {
@@ -4044,7 +4044,7 @@ func TestWriter_RemediateFacturX_AppliesDefaults(t *testing.T) {
 
 			w := NewWriter(r)
 			// Profile, FileName, DocumentType, Relationship omitted on purpose.
-			if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+			if _, err := w.RemediateFacturX(ctx, models.FacturXConfig{
 				InvoiceXML: []byte(facturXSampleCIIAt(tc.level)),
 				Level:      tc.level,
 			}); err != nil {
@@ -4094,7 +4094,7 @@ func TestReader_ValidateFacturX_XRechnungFileName(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+	if _, err := w.RemediateFacturX(ctx, models.FacturXConfig{
 		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXXRechnung)),
 		Level:      models.FacturXXRechnung,
 		FileName:   "factur-x.xml",
@@ -4139,7 +4139,7 @@ func TestReader_ValidateFacturX_RoundTrip(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+	if _, err := w.RemediateFacturX(ctx, models.FacturXConfig{
 		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXEN16931)),
 		Level:      models.FacturXEN16931,
 	}); err != nil {
@@ -4187,7 +4187,7 @@ func TestReader_ValidateZUGFeRD_VersionMismatch(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+	if _, err := w.RemediateFacturX(ctx, models.FacturXConfig{
 		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXBasic)),
 		Level:      models.FacturXBasic,
 	}); err != nil {
@@ -4249,7 +4249,7 @@ func TestReader_ValidateFacturX_WithXSD(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+	if _, err := w.RemediateFacturX(ctx, models.FacturXConfig{
 		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXEN16931)),
 		Level:      models.FacturXEN16931,
 	}); err != nil {
@@ -4304,7 +4304,7 @@ func TestReader_ValidateFacturX_WithSchematron_HappyPath(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+	if _, err := w.RemediateFacturX(ctx, models.FacturXConfig{
 		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXEN16931)),
 		Level:      models.FacturXEN16931,
 	}); err != nil {
@@ -4354,7 +4354,7 @@ func TestReader_ValidateFacturX_WithSchematron_AssertFires(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+	if _, err := w.RemediateFacturX(ctx, models.FacturXConfig{
 		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXEN16931)),
 		Level:      models.FacturXEN16931,
 	}); err != nil {
@@ -4409,7 +4409,7 @@ func TestReader_ValidateFacturX_WithSchematron_SkippedAdvisory(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+	if _, err := w.RemediateFacturX(ctx, models.FacturXConfig{
 		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXEN16931)),
 		Level:      models.FacturXEN16931,
 	}); err != nil {
@@ -4468,7 +4468,7 @@ func TestReader_ValidateFacturXReport_PartitionsAdvisories(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+	if _, err := w.RemediateFacturX(ctx, models.FacturXConfig{
 		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXEN16931)),
 		Level:      models.FacturXEN16931,
 	}); err != nil {
@@ -4522,7 +4522,7 @@ func TestReader_ValidateFacturX_BundledXSDDefault(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	w := NewWriter(r)
-	if _, err := w.RemediateFacturX(ctx, FacturXConfig{
+	if _, err := w.RemediateFacturX(ctx, models.FacturXConfig{
 		InvoiceXML: []byte(facturXSampleCIIAt(models.FacturXMinimum)),
 		Level:      models.FacturXMinimum,
 	}); err != nil {
@@ -4581,22 +4581,22 @@ func TestWriter_RemediateFacturX_RejectsBadConfig(t *testing.T) {
 
 	cases := []struct {
 		name string
-		cfg  FacturXConfig
+		cfg  models.FacturXConfig
 		want error
 	}{
 		{
 			name: "empty invoice",
-			cfg:  FacturXConfig{Level: models.FacturXBasic},
+			cfg:  models.FacturXConfig{Level: models.FacturXBasic},
 			want: ErrEmptyInvoiceXML,
 		},
 		{
 			name: "invalid level",
-			cfg:  FacturXConfig{InvoiceXML: []byte("<x/>"), Level: "TURBO"},
+			cfg:  models.FacturXConfig{InvoiceXML: []byte("<x/>"), Level: "TURBO"},
 			want: ErrInvalidFacturXLevel,
 		},
 		{
 			name: "non-PDF/A-3 profile",
-			cfg: FacturXConfig{
+			cfg: models.FacturXConfig{
 				InvoiceXML: []byte("<x/>"),
 				Level:      models.FacturXBasic,
 				Profile:    models.PDFA2b,
@@ -4638,7 +4638,7 @@ func TestWriter_RebuiltSourceForcesFullRewrite(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.SetMetadata(Metadata{Title: "New Title"})
+	w.SetMetadata(models.Metadata{Title: "New Title"})
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -4692,7 +4692,7 @@ func TestWriter_EncryptedSourceRewrittenDecrypted(t *testing.T) {
 		t.Fatalf("Open encrypted: %v", err)
 	}
 	w2 := NewWriter(r2)
-	w2.SetMetadata(Metadata{Title: "Edited Title"})
+	w2.SetMetadata(models.Metadata{Title: "Edited Title"})
 	var out bytes.Buffer
 	if err := w2.WriteTo(ctx, &out); err != nil {
 		t.Fatalf("WriteTo (edit): %v", err)
@@ -4737,7 +4737,7 @@ func TestWriter_MutationAfterRemediationNotDropped(t *testing.T) {
 	if _, err := w.RemediatePDFA(ctx, models.PDFA2b); err != nil {
 		t.Fatalf("RemediatePDFA: %v", err)
 	}
-	w.SetMetadata(Metadata{Title: "Post-Remediation Title"})
+	w.SetMetadata(models.Metadata{Title: "Post-Remediation Title"})
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); !errors.Is(err, ErrEditAfterRemediation) {

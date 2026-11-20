@@ -371,7 +371,7 @@ func TestConvertColors_Composition(t *testing.T) {
 	w := NewWriter(openColorPDF(t, recolorPDF("")))
 	t.Cleanup(func() { _ = w.Close() })
 	w.recolor = (&fakeRecolor{}).engine
-	w.SetMetadata(Metadata{Title: "Converted"})
+	w.SetMetadata(models.Metadata{Title: "Converted"})
 	if _, err := w.ConvertColors(ctx, CMYKColorTarget()); err != nil {
 		t.Fatal(err)
 	}

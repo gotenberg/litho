@@ -57,7 +57,7 @@ func TestAddAssociatedFile_RaisesTheReportedVersion(t *testing.T) {
 	defer r.Close()
 
 	w := NewWriter(r)
-	w.AddAssociatedFile(AssociatedFile{
+	w.AddAssociatedFile(models.AssociatedFile{
 		Name:         "invoice.xml",
 		Data:         []byte("<x/>"),
 		MimeType:     "application/xml",

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
 
@@ -54,7 +55,7 @@ func TestPipelineRefusesToSignAfterRestructuringAnEncryptedSource(t *testing.T) 
 			build: func(enc, _ *Reader, signer plugins.Signer) *Pipeline {
 				return NewPipeline().Open(enc).
 					Apply(func(_ context.Context, w *Writer) error {
-						w.SetMetadata(Metadata{Title: "edited"})
+						w.SetMetadata(models.Metadata{Title: "edited"})
 						return nil
 					}).
 					Split([]int{1}).Apply(sign(signer))
@@ -95,7 +96,7 @@ func TestPipelineRefusesToSignAfterRestructuringAnEncryptedSource(t *testing.T) 
 				return NewPipeline().Open(enc).Split([]int{1}).
 					Apply(func(_ context.Context, w *Writer) error {
 						w.Sign(signer)
-						w.SetMetadata(Metadata{Title: "edited"})
+						w.SetMetadata(models.Metadata{Title: "edited"})
 						return nil
 					})
 			},

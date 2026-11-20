@@ -47,7 +47,7 @@ func TestWriterRedactRasterFallback(t *testing.T) {
 		t.Fatalf("without the fallback: err = %v, want ErrRedactionRefused", err)
 	}
 
-	w.SetMetadata(Metadata{Title: "Kept title"})
+	w.SetMetadata(models.Metadata{Title: "Kept title"})
 	report, err := w.Redact(ctx, region, WithRedactionRasterFallback())
 	if err != nil {
 		t.Fatalf("with the fallback: %v", err)

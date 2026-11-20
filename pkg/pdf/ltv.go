@@ -3,28 +3,13 @@ package pdf
 import (
 	"bytes"
 	"context"
-	"crypto/x509"
 	"fmt"
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/signature"
+	"github.com/gotenberg/litho/pkg/models"
 )
-
-// ValidationData is the validation material [WithValidationData] hands a
-// signature's document security store instead of fetching it.
-//
-// A ValidationData is read, never modified, by [Writer.WriteTo]; do not
-// modify it while a write that was given it runs.
-type ValidationData struct {
-	// Certificates are certificates the signer's and the timestamp
-	// authority's chains may need beyond those their SignedData carry.
-	Certificates []*x509.Certificate
-	// OCSPResponses are DER OCSPResponse messages (RFC 6960, 4.2.1).
-	OCSPResponses [][]byte
-	// CRLs are DER certificate revocation lists (RFC 5280, 5.1).
-	CRLs [][]byte
-}
 
 // WithLTV adds the signature's long-term validation data to the document
 // security store (ISO 32000-2, 12.8.4.3).
@@ -67,7 +52,7 @@ func WithLTV() SignOption {
 // a root the first given OCSP response, or failing that CRL, that vouches for
 // it. A certificate none vouches for fails the write with
 // [ErrValidationData]. It implies [WithLTV].
-func WithValidationData(data ValidationData) SignOption {
+func WithValidationData(data models.ValidationData) SignOption {
 	return func(o *signOpts) {
 		o.ltv = true
 		o.validation = &data
@@ -75,7 +60,7 @@ func WithValidationData(data ValidationData) SignOption {
 }
 
 // toInternal returns the validation data as the signature package reads it.
-func (v *ValidationData) toInternal() *signature.ValidationData {
+func validationToInternal(v *models.ValidationData) *signature.ValidationData {
 	if v == nil {
 		return nil
 	}
@@ -125,7 +110,7 @@ func (w *Writer) appendValidationData(ctx context.Context, data []byte, opts ...
 	if contents == nil {
 		return nil, fmt.Errorf("the signed document holds no signature reaching its end")
 	}
-	collected, err := signature.CollectValidationData(ctx, contents, w.signOpts.validation.toInternal())
+	collected, err := signature.CollectValidationData(ctx, contents, validationToInternal(w.signOpts.validation))
 	if err != nil {
 		return nil, fmt.Errorf("gathering the signature's validation data: %w", err)
 	}

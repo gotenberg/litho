@@ -182,7 +182,7 @@ func TestWriter_EveryWriteOfABareTreeWritesItComplete(t *testing.T) {
 	}{
 		{"full rewrite", writeWith(func(*Writer) error { return nil }, WithFullRewrite()), []string{"Alpha", "Bravo"}, nil},
 		{"rotation", writeWith(func(w *Writer) error { return w.RotatePages(90) }), []string{"Alpha", "Bravo"}, nil},
-		{"metadata", writeWith(func(w *Writer) error { w.SetMetadata(Metadata{Title: "t"}); return nil }), []string{"Alpha", "Bravo"}, unwritten},
+		{"metadata", writeWith(func(w *Writer) error { w.SetMetadata(models.Metadata{Title: "t"}); return nil }), []string{"Alpha", "Bravo"}, unwritten},
 		{"stamp", writeWith(func(w *Writer) error { return w.StampText(TextStamp{Text: "zz", X: 10, Y: 10}, 2) }), []string{"Alpha", "Bravo"}, nil},
 		{"deletion", writeWith(func(w *Writer) error { return w.DeletePages(1) }), []string{"Bravo"}, nil},
 		{"insertion", func(t *testing.T, r *Reader) []byte {

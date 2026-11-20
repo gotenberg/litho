@@ -28,3 +28,21 @@ type EmbeddedFile struct {
 	// Open reads the file's decoded content. Each call returns a new reader.
 	Open func(ctx context.Context) (io.ReadCloser, error) `json:"-"`
 }
+
+// AssociatedFile describes an embedded file for PDF/A-3+ compliance with the
+// /AFRelationship and document-level /AF array required by Factur-X / ZUGFeRD.
+// Concurrent reads of a value are safe; a write needs synchronization.
+type AssociatedFile struct {
+	// Name is the displayed file name.
+	Name string
+	// Data is the file content. It is retained, not copied: the file is
+	// written when [github.com/gotenberg/litho/pkg/pdf.Writer.WriteTo] drains
+	// the queue, so leave the slice untouched until then.
+	Data []byte
+	// MimeType is the embedded file /Subtype (e.g., "application/xml").
+	MimeType string
+	// Relationship is the /AFRelationship value. Valid per
+	// ISO 32000-2 §7.11.3: Source, Data, Alternative, Supplement,
+	// EncryptedPayload, FormData, Schema, Unspecified.
+	Relationship string
+}

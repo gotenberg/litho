@@ -11,37 +11,19 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
-// StampPosition names where a stamp sits on a page: its center, one of its
-// edges, or one of its corners. The zero value, [PositionNone], places a
-// stamp by its X and Y alone.
-type StampPosition uint8
-
-const (
-	// PositionNone places the stamp at X and Y, in points from the page's
-	// bottom-left corner.
-	PositionNone StampPosition = iota
-	PositionCenter
-	PositionTopLeft
-	PositionTop
-	PositionTopRight
-	PositionLeft
-	PositionRight
-	PositionBottomLeft
-	PositionBottom
-	PositionBottomRight
-	// positionCount bounds the valid positions.
-	positionCount
-)
+// positionCount bounds the valid positions.
+const positionCount = models.PositionBottomRight + 1
 
 // ErrInvalidStampPosition is returned when a stamp names a position outside
-// the ones [StampPosition] lists.
+// the ones [models.StampPosition] lists.
 var ErrInvalidStampPosition = errors.New("invalid stamp position")
 
-// checkStampPosition refuses a position outside the ones [StampPosition]
+// checkStampPosition refuses a position outside the ones [models.StampPosition]
 // lists.
-func checkStampPosition(p StampPosition) error {
+func checkStampPosition(p models.StampPosition) error {
 	if p >= positionCount {
 		return fmt.Errorf("%w: %d", ErrInvalidStampPosition, p)
 	}
@@ -50,38 +32,38 @@ func checkStampPosition(p StampPosition) error {
 
 // anchor returns where p sits along each axis of the page: 0 at the left or
 // bottom edge, 0.5 at the middle, 1 at the right or top edge.
-func (p StampPosition) anchor() (fx, fy float64) {
+func anchor(p models.StampPosition) (fx, fy float64) {
 	switch p {
-	case PositionTopLeft:
+	case models.PositionTopLeft:
 		return 0, 1
-	case PositionTop:
+	case models.PositionTop:
 		return 0.5, 1
-	case PositionTopRight:
+	case models.PositionTopRight:
 		return 1, 1
-	case PositionLeft:
+	case models.PositionLeft:
 		return 0, 0.5
-	case PositionRight:
+	case models.PositionRight:
 		return 1, 0.5
-	case PositionBottomLeft:
+	case models.PositionBottomLeft:
 		return 0, 0
-	case PositionBottom:
+	case models.PositionBottom:
 		return 0.5, 0
-	case PositionBottomRight:
+	case models.PositionBottomRight:
 		return 1, 0
-	case PositionCenter, PositionNone, positionCount:
+	case models.PositionCenter, models.PositionNone, positionCount:
 	}
-	// [PositionNone] and positions past [positionCount] never reach a
+	// [models.PositionNone] and positions past [positionCount] never reach a
 	// placement: [checkStampPosition] refuses the latter, and the former
 	// places by X and Y.
 	return 0.5, 0.5
 }
 
-// stampPlacement places a stamp against a [StampPosition] of each page it
-// lands on. A builder writes the stamp's operators in a frame of its own,
+// stampPlacement places a stamp against a [models.StampPosition] of each page
+// it lands on. A builder writes the stamp's operators in a frame of its own,
 // rotated about the origin, and the placement moves that frame onto each page
 // (see [stampPlacement.matrix]).
 type stampPlacement struct {
-	position StampPosition
+	position models.StampPosition
 	// box is the stamp's extent in its own frame before rotation: llx, lly,
 	// urx and ury, in points.
 	box [4]float64
@@ -129,7 +111,7 @@ func (p stampPlacement) matrix(page *document.Page, rotate int) [6]float64 {
 		w, h = h, w
 	}
 
-	fx, fy := p.position.anchor()
+	fx, fy := anchor(p.position)
 	b := p.rotatedBounds()
 	tx := float64(fx*w) - (b[0] + float64(fx*(b[2]-b[0]))) + p.dx
 	ty := float64(fy*h) - (b[1] + float64(fy*(b[3]-b[1]))) + p.dy
@@ -153,11 +135,11 @@ func (p stampPlacement) matrix(page *document.Page, rotate int) [6]float64 {
 }
 
 // placedOrigin returns where a stamp of width w and height h, drawn from its
-// bottom-left corner, starts in its frame, and its placement: x and y with
-// no placement for [PositionNone], the origin and a placement of the w by h
-// box offset by x and y otherwise.
-func placedOrigin(position StampPosition, x, y, w, h, rotation float64) (float64, float64, *stampPlacement) {
-	if position == PositionNone {
+// bottom-left corner, starts in its frame, and its placement: x and y with no
+// placement for [models.PositionNone], the origin and a placement of the w by
+// h box offset by x and y otherwise.
+func placedOrigin(position models.StampPosition, x, y, w, h, rotation float64) (float64, float64, *stampPlacement) {
+	if position == models.PositionNone {
 		return x, y, nil
 	}
 	return 0, 0, &stampPlacement{

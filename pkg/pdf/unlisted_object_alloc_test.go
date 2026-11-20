@@ -50,7 +50,7 @@ func TestEditsKeepObjectsTheTableLeavesOut(t *testing.T) {
 		{
 			name: "metadata",
 			edit: func(_ context.Context, w *Writer) error {
-				w.SetMetadata(Metadata{Title: "Edited"})
+				w.SetMetadata(models.Metadata{Title: "Edited"})
 				return nil
 			},
 		},

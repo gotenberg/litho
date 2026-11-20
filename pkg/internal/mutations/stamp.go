@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/typography/embed"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TextStampOptions holds everything needed to stamp a line of text on one
@@ -24,8 +25,9 @@ type TextStampOptions struct {
 	// a Position, they offset the stamp from it instead.
 	X, Y float64
 	// Position places the box bounding the text's ink against a position of
-	// each page (see [stampPlacement]). [PositionNone] places it by X and Y.
-	Position StampPosition
+	// each page (see [stampPlacement]). [models.PositionNone] places it by X
+	// and Y.
+	Position models.StampPosition
 	// FontSize is the text size in points. Zero defaults to 12.
 	FontSize float64
 	// Opacity is 0.0-1.0 where 1.0 is fully opaque. A zero value is
@@ -110,6 +112,12 @@ func StampText(
 			return fmt.Errorf("parsing TTF for stamp: %w", err)
 		}
 
+		if opts.Position != models.PositionNone {
+			if glyphs, err = embeddedInkGlyphs(ctx, doc, f, opts.Text); err != nil {
+				return err
+			}
+		}
+
 		// Subset the program to just the glyphs referenced by the stamp
 		// text (plus .notdef and any composite-glyph dependencies), keeping
 		// glyph IDs, so the text is encoded as glyph IDs. On any subsetting
@@ -149,7 +157,7 @@ func StampText(
 		switch {
 		case encodable:
 			encoded = "(" + escapePDFString(string(winAnsi)) + ")"
-			if opts.Position != PositionNone {
+			if opts.Position != models.PositionNone {
 				glyphs = standardInkGlyphs(string(baseFont), winAnsi)
 			}
 		case opts.Fonts == nil:
@@ -162,9 +170,8 @@ func StampText(
 			if err != nil {
 				return err
 			}
-			if opts.Position != PositionNone {
-				// Measured before finish writes the program's subset.
-				if glyphs, err = embeddedInkGlyphs(ctx, doc, drawn.font.embeddedTTF, drawn.font.cff, opts.Text); err != nil {
+			if opts.Position != models.PositionNone {
+				if glyphs, err = embeddedInkGlyphs(ctx, doc, drawn.font, opts.Text); err != nil {
 					return err
 				}
 			}
@@ -192,7 +199,7 @@ func StampText(
 	// onto each page by its placement.
 	x, y := opts.X, opts.Y
 	var place *stampPlacement
-	if opts.Position != PositionNone {
+	if opts.Position != models.PositionNone {
 		x, y = 0, 0
 		place = &stampPlacement{
 			position: opts.Position,

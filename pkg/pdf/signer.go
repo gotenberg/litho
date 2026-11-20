@@ -13,6 +13,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/mutations"
 	"github.com/gotenberg/litho/pkg/internal/pkcs12"
 	"github.com/gotenberg/litho/pkg/internal/signature"
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
 
@@ -218,7 +219,7 @@ type signOpts struct {
 	// store, and validation, when set, is where it comes from (see
 	// [WithLTV] and [WithValidationData]).
 	ltv        bool
-	validation *ValidationData
+	validation *models.ValidationData
 }
 
 // WithSignatureReason sets the /Reason for signing, such as "I approve this

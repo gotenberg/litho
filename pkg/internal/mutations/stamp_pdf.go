@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/limits"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // PDFStampOptions describes a single PDF-page overlay applied by
@@ -29,9 +30,9 @@ type PDFStampOptions struct {
 	// Position, they offset the stamp from it instead.
 	X, Y float64
 	// Position places the source page, as a viewer shows it, against a
-	// position of each page (see [stampPlacement]). [PositionNone] places it
-	// by X and Y.
-	Position StampPosition
+	// position of each page (see [stampPlacement]). [models.PositionNone]
+	// places it by X and Y.
+	Position models.StampPosition
 	// Scale is a uniform scale factor. Zero is treated as 1.0.
 	Scale float64
 	// Opacity is 0.0-1.0; zero is treated as fully opaque.

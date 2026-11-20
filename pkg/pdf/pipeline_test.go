@@ -30,7 +30,7 @@ func TestPipeline_Validate_EmptyPipeline(t *testing.T) {
 
 func TestPipeline_Validate_ApplyBeforeOpen(t *testing.T) {
 	p := NewPipeline().Apply(func(_ context.Context, w *Writer) error {
-		w.SetMetadata(Metadata{Title: "x"})
+		w.SetMetadata(models.Metadata{Title: "x"})
 		return nil
 	})
 	err := p.Validate()
@@ -88,7 +88,7 @@ func TestPipeline_Apply_SetMetadata(t *testing.T) {
 	_, err := NewPipeline().
 		Open(r).
 		Apply(func(_ context.Context, w *Writer) error {
-			w.SetMetadata(Metadata{Title: "Piped"})
+			w.SetMetadata(models.Metadata{Title: "Piped"})
 			return nil
 		}).
 		WriteTo(ctx, &out)
@@ -150,7 +150,7 @@ func TestPipeline_Split_ThenApply(t *testing.T) {
 		Open(r).
 		Split([]int{1, 2}).
 		Apply(func(_ context.Context, w *Writer) error {
-			w.SetMetadata(Metadata{Title: "After Split"})
+			w.SetMetadata(models.Metadata{Title: "After Split"})
 			return nil
 		}).
 		WriteTo(ctx, &out)
@@ -177,7 +177,7 @@ func TestPipeline_Apply_ThenSplit(t *testing.T) {
 	_, err := NewPipeline().
 		Open(r).
 		Apply(func(_ context.Context, w *Writer) error {
-			w.SetMetadata(Metadata{Title: "Before Split"})
+			w.SetMetadata(models.Metadata{Title: "Before Split"})
 			return nil
 		}).
 		Split([]int{1}).
@@ -229,7 +229,7 @@ func TestPipeline_TempDir_Honored(t *testing.T) {
 		Open(r).
 		Split([]int{1, 2}).
 		Apply(func(_ context.Context, w *Writer) error {
-			w.SetMetadata(Metadata{Title: "x"})
+			w.SetMetadata(models.Metadata{Title: "x"})
 			return nil
 		}).
 		WriteTo(context.Background(), &out, WithPipelineTempDir(tempDir))
@@ -278,7 +278,7 @@ func TestPipeline_PartialFailure_DstUntouched(t *testing.T) {
 		Open(r).
 		Split([]int{99}).
 		Apply(func(_ context.Context, w *Writer) error {
-			w.SetMetadata(Metadata{Title: "x"})
+			w.SetMetadata(models.Metadata{Title: "x"})
 			return nil
 		}).
 		WriteTo(context.Background(), &out)
@@ -301,7 +301,7 @@ func TestPipeline_ContextCanceled(t *testing.T) {
 	_, err := NewPipeline().
 		Open(r).
 		Apply(func(_ context.Context, w *Writer) error {
-			w.SetMetadata(Metadata{Title: "x"})
+			w.SetMetadata(models.Metadata{Title: "x"})
 			return nil
 		}).
 		WriteTo(ctx, &out)
