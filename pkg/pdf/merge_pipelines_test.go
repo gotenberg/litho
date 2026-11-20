@@ -531,22 +531,57 @@ func TestMergePipelinesReadsAnEncryptedSource(t *testing.T) {
 }
 
 // TestMergePipelinesReportsDroppedSignatures pins that a signature a merged
-// pipeline writes, which the merge drops, reaches the merging pipeline's
+// pipeline writes, which the merge drops, is refused unless
+// WithSignatureRemoval allows it, and then reaches the merging pipeline's
 // DroppedSignatures.
 func TestMergePipelinesReportsDroppedSignatures(t *testing.T) {
 	t.Parallel()
 	r := openThreePage(t)
 	defer r.Close()
+	merge := func() *Pipeline {
+		return NewPipeline().MergePipelines([]*Pipeline{
+			mergedPages(r, 1),
+			NewPipeline().Open(r).Apply(func(_ context.Context, w *Writer) error { w.Sign(newCMSTestSigner(t)); return nil }),
+		})
+	}
+	if _, err := merge().WriteTo(context.Background(), &bytes.Buffer{}); !errors.Is(err, ErrSignaturesDropped) {
+		t.Errorf("WriteTo without WithSignatureRemoval: err = %v, want ErrSignaturesDropped", err)
+	}
 	var dropped []models.DroppedSignature
-	result, err := NewPipeline().MergePipelines([]*Pipeline{
-		mergedPages(r, 1),
-		NewPipeline().Open(r).Apply(func(_ context.Context, w *Writer) error { w.Sign(newCMSTestSigner(t)); return nil }),
-	}).WriteTo(context.Background(), &bytes.Buffer{}, WithDroppedSignatures(&dropped))
+	result, err := merge().WriteTo(context.Background(), &bytes.Buffer{}, WithDroppedSignatures(&dropped), WithSignatureRemoval())
 	if err != nil {
 		t.Fatalf("WriteTo: %v", err)
 	}
 	if len(result.DroppedSignatures) != 1 || len(dropped) != 1 {
 		t.Errorf("dropped signatures: result %v, option %v, want the merged pipeline's one", result.DroppedSignatures, dropped)
+	}
+}
+
+// TestMergePipelinesAllowsSignatureRemovalInEachPipeline pins that the
+// WithSignatureRemoval given to the merging pipeline's WriteTo reaches the
+// stages of the pipelines it merges: a merged pipeline whose Split drops the
+// signature its Apply wrote is refused without the option and written with
+// it.
+func TestMergePipelinesAllowsSignatureRemovalInEachPipeline(t *testing.T) {
+	t.Parallel()
+	r := openThreePage(t)
+	defer r.Close()
+	merge := func() *Pipeline {
+		return NewPipeline().MergePipelines([]*Pipeline{
+			NewPipeline().Open(r).
+				Apply(func(_ context.Context, w *Writer) error { w.Sign(newCMSTestSigner(t)); return nil }).
+				Split([]int{1}),
+		})
+	}
+	if _, err := merge().WriteTo(context.Background(), &bytes.Buffer{}); !errors.Is(err, ErrSignaturesDropped) {
+		t.Errorf("WriteTo without WithSignatureRemoval: err = %v, want ErrSignaturesDropped", err)
+	}
+	result, err := merge().WriteTo(context.Background(), &bytes.Buffer{}, WithSignatureRemoval())
+	if err != nil {
+		t.Fatalf("WriteTo with WithSignatureRemoval: %v", err)
+	}
+	if len(result.DroppedSignatures) != 1 {
+		t.Errorf("dropped signatures: %v, want the merged pipeline's one", result.DroppedSignatures)
 	}
 }
 

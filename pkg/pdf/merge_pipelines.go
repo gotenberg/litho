@@ -205,8 +205,9 @@ func mergedFailure(ctx context.Context, errs []error, outs []mergedOutput) error
 // runMerged runs p, the pipeline at position i of a MergePipelines stage, on
 // a worker goroutine, into out.file, and opens that file as out.reader. The
 // pipeline runs as [Pipeline.WriteTo] runs it, with the logger, the temp
-// directory and the default page size of the merging pipeline, and writes its
-// output in the clear (see [executor.terminalOptions]). A panic of the
+// directory, the default page size and the signature removal of the merging
+// pipeline, and writes its output in the clear (see
+// [executor.terminalOptions]). A panic of the
 // pipeline is recovered here, on the worker that raised it, into an error
 // wrapping [ErrInternalPanic].
 func (ex *executor) runMerged(ctx context.Context, i int, p *Pipeline, out *mergedOutput) (err error) {
@@ -217,21 +218,22 @@ func (ex *executor) runMerged(ctx context.Context, i int, p *Pipeline, out *merg
 			})
 		}
 	}()
-	opts := []WriteOption{WithWriteLogger(ex.logger), WithPipelineTempDir(ex.tempDir)}
+	opts := ex.intermediateOptions(WithWriteLogger(ex.logger), WithPipelineTempDir(ex.tempDir))
 	pageSize := slices.Clone(ex.pageSize)
 	if pageSize != nil {
 		opts = append(opts, func(o *writeOpts) { o.pageSize = pageSize })
 	}
 	sub := &executor{
-		merged:      true,
-		concurrency: ex.concurrency,
-		tempDir:     ex.tempDir,
-		pageSize:    pageSize,
-		finalOpts:   opts,
-		finalDst:    out.file,
-		totalStages: len(p.stages),
-		logger:      ex.logger,
-		result:      &models.PipelineResult{},
+		merged:           true,
+		concurrency:      ex.concurrency,
+		tempDir:          ex.tempDir,
+		pageSize:         pageSize,
+		finalOpts:        opts,
+		signatureRemoval: ex.signatureRemoval,
+		finalDst:         out.file,
+		totalStages:      len(p.stages),
+		logger:           ex.logger,
+		result:           &models.PipelineResult{},
 	}
 	defer sub.cleanup()
 	if err := sub.run(ctx, p.stages); err != nil {
