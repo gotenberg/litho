@@ -462,7 +462,7 @@ func TestSplitMerge_ReportDroppedSignatures(t *testing.T) {
 
 	var split bytes.Buffer
 	var splitDropped []models.DroppedSignature
-	if err := Split(ctx, src, []int{1}, &split, WithDroppedSignatures(&splitDropped)); err != nil {
+	if err := Split(ctx, src, []int{1}, &split, WithDroppedSignatures(&splitDropped), WithSignatureRemoval()); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
 	if !slices.Equal(splitDropped, certifiedDropped) {
@@ -474,7 +474,7 @@ func TestSplitMerge_ReportDroppedSignatures(t *testing.T) {
 
 	var merged bytes.Buffer
 	var mergeDropped []models.DroppedSignature
-	if err := Merge(ctx, []*Reader{blank, src, src}, &merged, WithDroppedSignatures(&mergeDropped)); err != nil {
+	if err := Merge(ctx, []*Reader{blank, src, src}, &merged, WithDroppedSignatures(&mergeDropped), WithSignatureRemoval()); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 	if !slices.Equal(mergeDropped, certifiedDropped) {

@@ -25,7 +25,7 @@ func WithDroppedSignatures(dst *[]models.DroppedSignature) WriteOption {
 }
 
 // WithSignatureRemoval allows an output to leave out the signatures of its
-// inputs, as [DroppedSignature] describes. Without it, [Writer.WriteTo],
+// inputs, as [models.DroppedSignature] describes. Without it, [Writer.WriteTo],
 // [Split], [Merge], [Compose] and [Pipeline.WriteTo] return
 // [ErrSignaturesDropped] rather than write an output that drops one. Given to
 // [Pipeline.WriteTo], it allows every stage of the pipeline; given to
@@ -38,7 +38,7 @@ func WithSignatureRemoval() WriteOption {
 
 // refuseDropping returns [ErrSignaturesDropped] when dropped, the signatures
 // an output leaves out, is not empty and cfg does not allow it.
-func (cfg writeOpts) refuseDropping(dropped []DroppedSignature) error {
+func (cfg writeOpts) refuseDropping(dropped []models.DroppedSignature) error {
 	if len(dropped) == 0 || cfg.signatureRemoval {
 		return nil
 	}

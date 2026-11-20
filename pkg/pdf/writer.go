@@ -58,6 +58,9 @@ type writeOpts struct {
 	// droppedSignatures receives the signatures the output drops (see
 	// [WithDroppedSignatures]).
 	droppedSignatures *[]models.DroppedSignature
+	// signatureRemoval allows the output to drop the signatures of its inputs
+	// (see [WithSignatureRemoval]).
+	signatureRemoval bool
 	// compactionSkipped receives whether the output left out the compaction
 	// asked for (see [WithCompactionSkipped]).
 	compactionSkipped *bool

@@ -305,14 +305,15 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 		concurrency = min(runtime.GOMAXPROCS(0), defaultPipelineConcurrency)
 	}
 	ex := &executor{
-		concurrency: concurrency,
-		tempDir:     cfg.tempDir,
-		pageSize:    cfg.pageSize,
-		finalOpts:   opts,
-		finalDst:    dst,
-		totalStages: len(p.stages),
-		logger:      logger,
-		result:      &models.PipelineResult{},
+		concurrency:      concurrency,
+		tempDir:          cfg.tempDir,
+		pageSize:         cfg.pageSize,
+		finalOpts:        opts,
+		signatureRemoval: cfg.signatureRemoval,
+		finalDst:         dst,
+		totalStages:      len(p.stages),
+		logger:           logger,
+		result:           &models.PipelineResult{},
 	}
 	defer ex.cleanup()
 
@@ -462,6 +463,10 @@ type executor struct {
 	// pipeline's output owes the caller although every intermediate file is
 	// written in the clear (see [executor.carryEncryption]). nil when none did.
 	encrypt *models.EncryptConfig
+	// signatureRemoval tells that the options of [Pipeline.WriteTo] allow
+	// every stage to drop signatures (see [WithSignatureRemoval]), which the
+	// intermediate files carry over.
+	signatureRemoval bool
 }
 
 func (ex *executor) isLastStage() bool { return ex.stageIdx == ex.totalStages-1 }

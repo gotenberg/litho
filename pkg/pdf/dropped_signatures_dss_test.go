@@ -241,7 +241,7 @@ func TestSplitMergeInsert_LeaveTheSecurityStoreOut(t *testing.T) {
 		defer src.Close()
 		var out bytes.Buffer
 		var dropped []models.DroppedSignature
-		if err := Split(ctx, src, []int{1, 2}, &out, WithDroppedSignatures(&dropped)); err != nil {
+		if err := Split(ctx, src, []int{1, 2}, &out, WithDroppedSignatures(&dropped), WithSignatureRemoval()); err != nil {
 			t.Fatalf("Split: %v", err)
 		}
 		checkNoSecurityStore(ctx, t, out.Bytes(), "")
@@ -258,7 +258,7 @@ func TestSplitMergeInsert_LeaveTheSecurityStoreOut(t *testing.T) {
 		defer blank.Close()
 		var out bytes.Buffer
 		var dropped []models.DroppedSignature
-		if err := Merge(ctx, []*Reader{src, blank}, &out, WithDroppedSignatures(&dropped)); err != nil {
+		if err := Merge(ctx, []*Reader{src, blank}, &out, WithDroppedSignatures(&dropped), WithSignatureRemoval()); err != nil {
 			t.Fatalf("Merge: %v", err)
 		}
 		checkNoSecurityStore(ctx, t, out.Bytes(), "")
