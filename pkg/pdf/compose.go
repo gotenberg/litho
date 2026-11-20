@@ -74,9 +74,10 @@ type Placement struct {
 // # Options
 //
 // Compose honours [WithVersion], [WithXRefStream], [WithObjectStreams],
-// [WithDedup], [WithImageRecompression], [WithFontSubsetting],
-// [WithImageQuality], [WithMaxImageDPI], [WithEncryption], [WithWriteLogger],
-// [WithDroppedSignatures] and [WithCompactionSkipped]. The output declares at least the highest version
+// [WithDedup], [WithImageRecompression], [WithStreamCompression],
+// [WithFontSubsetting], [WithImageQuality], [WithMaxImageDPI],
+// [WithEncryption], [WithWriteLogger], [WithDroppedSignatures] and
+// [WithCompactionSkipped]. The output declares at least the highest version
 // of its sources. [WithBookmarks] and [WithDefaultPageSize] do not apply:
 // the output has no outline, and every page has a media box. A
 // [WithDefaultPageSize] out of range still fails with [ErrInvalidPageSize].

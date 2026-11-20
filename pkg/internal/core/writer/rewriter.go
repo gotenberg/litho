@@ -80,11 +80,12 @@ type CompactConfig struct {
 //
 // Reduction runs before lossless recompression, which then compresses the
 // images reduction wrote losslessly at its best level and leaves the JPEGs it
-// wrote, whose Huffman tables are already fitted. Both run before dedup, so
-// two copies of one image, which re-encode to identical bytes, still merge.
-// Dedup runs before packing, which removes objects from the pending set and
-// serializes their bodies, so a later dedup would neither see the full
-// population nor be able to repoint what it merged.
+// wrote, whose Huffman tables are already fitted. Both, and stream
+// compression, run before dedup, so two copies of one image or of one stream,
+// which compress to identical bytes, still merge. Dedup runs before packing,
+// which removes objects from the pending set and serializes their bodies, so a
+// later dedup would neither see the full population nor be able to repoint
+// what it merged.
 func Compact(ctx context.Context, alloc *ObjAllocator, trailer ast.PdfDict, cfg CompactConfig) ([]PackedObject, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("compaction canceled: %w", err)

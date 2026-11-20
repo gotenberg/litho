@@ -274,11 +274,12 @@ func (p *Pipeline) mergedPipelineErrors(st *mergePipelinesStage, seen map[*Pipel
 // [ErrEditAfterRemediation] (see [Pipeline]).
 //
 // [WithObjectStreams], [WithDedup], [WithImageRecompression],
-// [WithFontSubsetting], [WithImageQuality], [WithMaxImageDPI] and
-// [WithVersion] reach the output after a Split or a Merge too: when a later
-// stage edits the file a Split or a Merge wrote, the output is a full rewrite
-// of it, and a signature goes on top of that rewrite. On the source itself
-// they apply only when the write rewrites it in full, as on [Writer.WriteTo].
+// [WithStreamCompression], [WithFontSubsetting], [WithImageQuality],
+// [WithMaxImageDPI] and [WithVersion] reach the output after a Split or a
+// Merge too: when a later stage edits the file a Split or a Merge wrote, the
+// output is a full rewrite of it, and a signature goes on top of that
+// rewrite. On the source itself they apply only when the write rewrites it
+// in full, as on [Writer.WriteTo].
 func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (_ *models.PipelineResult, err error) {
 	if err := p.Validate(); err != nil {
 		return nil, err

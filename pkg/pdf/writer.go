@@ -274,9 +274,10 @@ func WithXRefStream() WriteOption {
 // effect there. The document a Writer edits after a remediation that kept a
 // later round, or after a [Pipeline] Split or Merge, is a file litho wrote for
 // it, not the caller's. [Writer.WriteTo] rewrites that file in full when this
-// option, [WithDedup], [WithImageRecompression], [WithFontSubsetting],
-// [WithImageQuality] or [WithMaxImageDPI] is given, signed or not, unless the
-// file still carries a signature a rewrite would drop.
+// option, [WithDedup], [WithImageRecompression], [WithStreamCompression],
+// [WithFontSubsetting], [WithImageQuality] or [WithMaxImageDPI] is given,
+// signed or not, unless the file still carries a signature a rewrite would
+// drop.
 //
 // Packing implies a cross-reference stream, since a traditional table cannot
 // name a compressed object, and litho writes one whether or not
@@ -563,12 +564,12 @@ func WithFontSubsetting() WriteOption {
 // the write skipped compaction.
 //
 // The write skipped compaction when it was given [WithObjectStreams],
-// [WithDedup], [WithImageRecompression], [WithFontSubsetting],
-// [WithImageQuality] or [WithMaxImageDPI] and applied none of them, because
-// its output is an incremental update of the document the Writer edits. An
-// update appends to that document's bytes and leaves them as they are (ISO
-// 32000-1, 7.5.6). The six options run on a full rewrite only, so the output
-// is the one the write produces without them.
+// [WithDedup], [WithImageRecompression], [WithStreamCompression],
+// [WithFontSubsetting], [WithImageQuality] or [WithMaxImageDPI] and applied
+// none of them, because its output is an incremental update of the document
+// the Writer edits. An update appends to that document's bytes and leaves them
+// as they are (ISO 32000-1, 7.5.6). The seven options run on a full rewrite
+// only, so the output is the one the write produces without them.
 //
 // It applies to [Writer.WriteTo], [Pipeline.WriteTo], [Split] and [Merge], the
 // last two always rewriting. A write that fails leaves *dst as it was.

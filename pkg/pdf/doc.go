@@ -140,7 +140,8 @@
 // 12.8.1). An incremental update appends to them and keeps every signature. A
 // full rewrite, a [Split] and a [Merge] move them, so they leave the input's
 // signatures out: each signed widget's appearance is drawn into its page, and
-// the field leaves the form. [Writer.DroppedSignatures],
+// the field leaves the form. Such an output returns [ErrSignaturesDropped]
+// unless [WithSignatureRemoval] allows it. [Writer.DroppedSignatures],
 // [github.com/gotenberg/litho/pkg/models.PipelineResult.DroppedSignatures] and
 // [WithDroppedSignatures] report what an output left out.
 //
@@ -173,8 +174,9 @@
 //     [WithBookmarks], [WithPipelineTempDir], [WithPipelineConcurrency],
 //     [WithTempDir],
 //     [WithEncryption], [WithObjectStreams], [WithDedup],
-//     [WithImageRecompression], [WithFontSubsetting], [WithImageQuality],
-//     [WithMaxImageDPI], [WithCompactionSkipped], [WithDroppedSignatures],
+//     [WithImageRecompression], [WithStreamCompression], [WithFontSubsetting],
+//     [WithImageQuality], [WithMaxImageDPI], [WithCompactionSkipped],
+//     [WithDroppedSignatures], [WithSignatureRemoval],
 //     [WithDefaultPageSize]. [NewWriter] takes them
 //     too, as defaults for the Writer's WriteTo, which overrides them with
 //     its own, and a [WithDefaultPageSize] given to it also reaches its
@@ -257,13 +259,13 @@
 // [WithEncryption] is how an output becomes encrypted. No operation preserves
 // a source's encryption, so an edited document is written in the clear unless
 // this option asks otherwise. [WithObjectStreams], [WithDedup],
-// [WithImageRecompression] and [WithFontSubsetting] shrink a full rewrite,
-// losslessly, and the first three decline on an encrypted output.
-// [WithImageQuality] and [WithMaxImageDPI] shrink it further by re-encoding
-// images as JPEG and downsampling them, which changes their pixels.
-// [WithCompactionSkipped] reports a write that applied none of them because
-// it appended an incremental update. [WithImageRecompression] and the two
-// lossy options cost far more time than the other two, and
+// [WithImageRecompression], [WithStreamCompression] and [WithFontSubsetting]
+// shrink a full rewrite, losslessly, and the first three decline on an
+// encrypted output. [WithImageQuality] and [WithMaxImageDPI] shrink it
+// further by re-encoding images as JPEG and downsampling them, which changes
+// their pixels. [WithCompactionSkipped] reports a write that applied none of
+// them because it appended an incremental update. [WithImageRecompression]
+// and the two lossy options cost far more time than the others, and
 // [WithFontSubsetting] leaves later edits no glyph the document does not
 // show: ask for each on its own.
 //
