@@ -43,8 +43,10 @@ func TestParseAFM(t *testing.T) {
 	if got, want := a.widths["A"], 667; got != want {
 		t.Errorf("A width = %d, want %d", got, want)
 	}
-	if a.fixedPitch {
-		t.Error("fixedPitch = true for IsFixedPitch false")
+	h := a.header
+	if h.bbox != [4]int{-166, -225, 1000, 931} || h.italicAngle != "0" || h.fixedPitch || h.fontSpecific ||
+		!h.vertical || h.ascender != 718 || h.descender != -207 || h.capHeight != 718 || h.stdVW != 88 {
+		t.Errorf("header = %+v", h)
 	}
 	if !strings.HasPrefix(a.copyright, "Copyright (c) 1985") {
 		t.Errorf("copyright = %q", a.copyright)
@@ -67,6 +69,11 @@ func TestParseAFMRefusesWhatItCannotTranscribe(t *testing.T) {
 		{"duplicate", strings.Replace(sampleAFM, "N fi", "N A", 1), "Helvetica", errDuplicateName},
 		{"no width", strings.Replace(sampleAFM, "WX 667 ; ", "", 1), "Helvetica", errCharMetric},
 		{"no pitch", strings.Replace(sampleAFM, "IsFixedPitch false\n", "", 1), "Helvetica", errHeader},
+		{"no bbox", strings.Replace(sampleAFM, "FontBBox -166 -225 1000 931\n", "", 1), "Helvetica", errHeader},
+		{"short bbox", strings.Replace(sampleAFM, "FontBBox -166 -225 1000 931", "FontBBox -166 -225 1000", 1), "Helvetica", errHeader},
+		{"no stem", strings.Replace(sampleAFM, "StdVW 88\n", "", 1), "Helvetica", errHeader},
+		{"vertical in part", strings.Replace(sampleAFM, "CapHeight 718\n", "", 1), "Helvetica", errHeader},
+		{"stated twice", strings.Replace(sampleAFM, "StdVW 88", "StdVW 88\nStdVW 90", 1), "Helvetica", errHeader},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := parseAFM([]byte(tc.data), tc.font); !errors.Is(err, tc.want) {
@@ -92,10 +99,21 @@ func TestGenerateWritesValidGo(t *testing.T) {
 	if _, err := parser.ParseFile(token.NewFileSet(), outputName, code, parser.ParseComments); err != nil {
 		t.Fatalf("generated source does not parse: %v", err)
 	}
-	for _, want := range []string{`"A":`, "{14, 0, 654, 718}", "667,", "that this paragraph is not modified"} {
+	for _, want := range []string{`"A":`, "{14, 0, 654, 718}", "667,", "italicAngle: 0", "stdVW: 88", "that this paragraph is not modified"} {
 		if !strings.Contains(string(code), want) {
 			t.Errorf("generated source lacks %q", want)
 		}
+	}
+}
+
+func TestParseAFMReadsAFontWithoutVerticalMetrics(t *testing.T) {
+	data := strings.NewReplacer("CapHeight 718\n", "", "Ascender 718\n", "", "Descender -207\n", "").Replace(sampleAFM)
+	a, err := parseAFM([]byte(data), "Helvetica")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.header.vertical {
+		t.Error("vertical = true for a file that states no Ascender, Descender or CapHeight")
 	}
 }
 

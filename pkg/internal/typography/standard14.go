@@ -67,6 +67,28 @@ func Standard14Width(baseFont, glyph string) (float64, bool) {
 	return float64(w), ok
 }
 
+// standard14Descriptor is the global font information the AFM file of a
+// standard font states (Adobe Technical Note #5004, section 4), in glyph space
+// units, 1000 to the em.
+type standard14Descriptor struct {
+	// bbox is FontBBox: llx, lly, urx and ury.
+	bbox [4]int16
+	// italicAngle is ItalicAngle, in degrees counter-clockwise from the
+	// vertical.
+	italicAngle float64
+	// fixedPitch is IsFixedPitch.
+	fixedPitch bool
+	// fontSpecific is an EncodingScheme of FontSpecific: the font's glyphs
+	// lie outside the standard Latin character set.
+	fontSpecific bool
+	// ascender, descender and capHeight are Ascender, Descender and
+	// CapHeight, which the file states when vertical is true.
+	ascender, descender, capHeight int16
+	vertical                       bool
+	// stdVW is StdVW, the width of the font's dominant vertical stems.
+	stdVW int16
+}
+
 // IsStandard14 reports whether baseFont names one of the standard 14 fonts,
 // read as [Standard14Width] reads it.
 func IsStandard14(baseFont string) bool {

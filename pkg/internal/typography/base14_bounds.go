@@ -3,8 +3,8 @@
 // Derived from the Core 14 AFM files of Apache PDFBox
 // (https://github.com/apache/pdfbox), commit
 // 78be2c012e6b5f0c0b368dc9863fc01e9ec78f85, directory
-// pdfbox/src/main/resources/org/apache/pdfbox/resources/afm. The glyph boxes
-// and the advance widths are transcribed unchanged.
+// pdfbox/src/main/resources/org/apache/pdfbox/resources/afm. The glyph boxes,
+// the advance widths and the global font information are transcribed unchanged.
 //
 // Courier: Copyright (c) 1989, 1990, 1991, 1992, 1993, 1997 Adobe Systems
 // Incorporated. All Rights Reserved.
@@ -7198,4 +7198,26 @@ var standard14FixedWidths = map[string]int16{
 	"Courier-Bold":        600,
 	"Courier-BoldOblique": 600,
 	"Courier-Oblique":     600,
+}
+
+// standard14Descriptors maps each standard 14 font to the global font
+// information of its AFM file (Adobe Technical Note #5004, section 4):
+// FontBBox, ItalicAngle, IsFixedPitch, an EncodingScheme of FontSpecific,
+// Ascender, Descender and CapHeight, which vertical says the file states, and
+// StdVW.
+var standard14Descriptors = map[string]standard14Descriptor{
+	"Courier":               {bbox: [4]int16{-23, -250, 715, 805}, italicAngle: 0, fixedPitch: true, fontSpecific: false, ascender: 629, descender: -157, capHeight: 562, vertical: true, stdVW: 51},
+	"Courier-Bold":          {bbox: [4]int16{-113, -250, 749, 801}, italicAngle: 0, fixedPitch: true, fontSpecific: false, ascender: 629, descender: -157, capHeight: 562, vertical: true, stdVW: 106},
+	"Courier-BoldOblique":   {bbox: [4]int16{-57, -250, 869, 801}, italicAngle: -12, fixedPitch: true, fontSpecific: false, ascender: 629, descender: -157, capHeight: 562, vertical: true, stdVW: 106},
+	"Courier-Oblique":       {bbox: [4]int16{-27, -250, 849, 805}, italicAngle: -12, fixedPitch: true, fontSpecific: false, ascender: 629, descender: -157, capHeight: 562, vertical: true, stdVW: 51},
+	"Helvetica":             {bbox: [4]int16{-166, -225, 1000, 931}, italicAngle: 0, fixedPitch: false, fontSpecific: false, ascender: 718, descender: -207, capHeight: 718, vertical: true, stdVW: 88},
+	"Helvetica-Bold":        {bbox: [4]int16{-170, -228, 1003, 962}, italicAngle: 0, fixedPitch: false, fontSpecific: false, ascender: 718, descender: -207, capHeight: 718, vertical: true, stdVW: 140},
+	"Helvetica-BoldOblique": {bbox: [4]int16{-174, -228, 1114, 962}, italicAngle: -12, fixedPitch: false, fontSpecific: false, ascender: 718, descender: -207, capHeight: 718, vertical: true, stdVW: 140},
+	"Helvetica-Oblique":     {bbox: [4]int16{-170, -225, 1116, 931}, italicAngle: -12, fixedPitch: false, fontSpecific: false, ascender: 718, descender: -207, capHeight: 718, vertical: true, stdVW: 88},
+	"Symbol":                {bbox: [4]int16{-180, -293, 1090, 1010}, italicAngle: 0, fixedPitch: false, fontSpecific: true, ascender: 0, descender: 0, capHeight: 0, vertical: false, stdVW: 85},
+	"Times-Bold":            {bbox: [4]int16{-168, -218, 1000, 935}, italicAngle: 0, fixedPitch: false, fontSpecific: false, ascender: 683, descender: -217, capHeight: 676, vertical: true, stdVW: 139},
+	"Times-BoldItalic":      {bbox: [4]int16{-200, -218, 996, 921}, italicAngle: -15, fixedPitch: false, fontSpecific: false, ascender: 683, descender: -217, capHeight: 669, vertical: true, stdVW: 121},
+	"Times-Italic":          {bbox: [4]int16{-169, -217, 1010, 883}, italicAngle: -15.5, fixedPitch: false, fontSpecific: false, ascender: 683, descender: -217, capHeight: 653, vertical: true, stdVW: 76},
+	"Times-Roman":           {bbox: [4]int16{-168, -218, 1000, 898}, italicAngle: 0, fixedPitch: false, fontSpecific: false, ascender: 683, descender: -217, capHeight: 662, vertical: true, stdVW: 84},
+	"ZapfDingbats":          {bbox: [4]int16{-1, -143, 981, 820}, italicAngle: 0, fixedPitch: false, fontSpecific: true, ascender: 0, descender: 0, capHeight: 0, vertical: false, stdVW: 90},
 }

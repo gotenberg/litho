@@ -85,9 +85,6 @@ func normalizeBase14Name(name string) string {
 // isStandard14 returns true if the (normalized) font name is one of the 14
 // standard base fonts.
 func isStandard14(name string) bool {
-	if _, ok := fixedWidth(name); ok {
-		return true
-	}
-	_, ok := standard14GlyphWidths[name]
+	_, ok := standard14Descriptors[name]
 	return ok
 }

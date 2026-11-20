@@ -73,8 +73,24 @@ type afm struct {
 	copyright string
 	bounds    map[string][4]int
 	widths    map[string]int
-	// fixedPitch is IsFixedPitch (Adobe Technical Note #5004, section 4).
-	fixedPitch bool
+	header    header
+}
+
+// header is the global font information of an AFM file the generator
+// transcribes (Adobe Technical Note #5004, section 4). Ascender, Descender
+// and CapHeight are optional there, and the Core 14 files of Symbol and
+// ZapfDingbats state none of them: vertical says whether all three were read.
+type header struct {
+	bbox         [4]int
+	italicAngle  string
+	fixedPitch   bool
+	fontSpecific bool
+	ascender     int
+	descender    int
+	capHeight    int
+	vertical     bool
+	stdVW        int
+	seen         map[string]bool
 }
 
 func main() {
@@ -144,19 +160,15 @@ func readSource(dir, name string) ([]byte, error) {
 // names the glyph and B gives its box llx lly urx ury (Adobe Technical Note
 // #5004, section 8.2).
 func parseAFM(data []byte, name string) (afm, error) {
-	a := afm{bounds: make(map[string][4]int), widths: make(map[string]int)}
-	sawPitch := false
+	a := afm{bounds: make(map[string][4]int), widths: make(map[string]int), header: header{seen: make(map[string]bool)}}
 	inMetrics, sawMetrics := false, false
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		switch {
-		case strings.HasPrefix(line, "IsFixedPitch "):
-			switch v := strings.TrimSpace(strings.TrimPrefix(line, "IsFixedPitch ")); v {
-			case "true", "false":
-				a.fixedPitch, sawPitch = v == "true", true
-			default:
-				return afm{}, fmt.Errorf("%w: %q", errHeader, line)
+		case !inMetrics && !sawMetrics && isHeaderKey(line):
+			if err := a.header.read(line); err != nil {
+				return afm{}, err
 			}
 		case strings.HasPrefix(line, "FontName "):
 			if got := strings.TrimSpace(strings.TrimPrefix(line, "FontName ")); got != name {
@@ -191,10 +203,109 @@ func parseAFM(data []byte, name string) (afm, error) {
 	if !sawMetrics || len(a.bounds) == 0 {
 		return afm{}, errNoCharMetrics
 	}
-	if !sawPitch {
-		return afm{}, fmt.Errorf("%w: no IsFixedPitch", errHeader)
+	if err := a.header.complete(); err != nil {
+		return afm{}, err
 	}
 	return a, nil
+}
+
+// headerKeys are the global font information keys the generator reads.
+var headerKeys = []string{"FontBBox", "ItalicAngle", "IsFixedPitch", "EncodingScheme", "Ascender", "Descender", "CapHeight", "StdVW"}
+
+// isHeaderKey reports whether line states one of [headerKeys].
+func isHeaderKey(line string) bool {
+	key, _, _ := strings.Cut(line, " ")
+	return slices.Contains(headerKeys, key)
+}
+
+// read transcribes one line of global font information.
+func (h *header) read(line string) error {
+	fields := strings.Fields(line)
+	key, values := fields[0], fields[1:]
+	if h.seen[key] {
+		return fmt.Errorf("%w: %s stated twice", errHeader, key)
+	}
+	h.seen[key] = true
+	ints := func(n int) ([]int, error) {
+		if len(values) != n {
+			return nil, fmt.Errorf("%w: %q", errHeader, line)
+		}
+		out := make([]int, n)
+		for i, v := range values {
+			x, err := strconv.ParseInt(v, 10, 32)
+			if err != nil {
+				return nil, fmt.Errorf("%w: %q: %w", errHeader, line, err)
+			}
+			out[i] = int(x)
+		}
+		return out, nil
+	}
+	switch key {
+	case "FontBBox":
+		v, err := ints(4)
+		if err != nil {
+			return err
+		}
+		copy(h.bbox[:], v)
+	case "ItalicAngle":
+		if len(values) != 1 {
+			return fmt.Errorf("%w: %q", errHeader, line)
+		}
+		if _, err := strconv.ParseFloat(values[0], 64); err != nil {
+			return fmt.Errorf("%w: %q: %w", errHeader, line, err)
+		}
+		h.italicAngle = values[0]
+	case "IsFixedPitch":
+		if len(values) != 1 || (values[0] != "true" && values[0] != "false") {
+			return fmt.Errorf("%w: %q", errHeader, line)
+		}
+		h.fixedPitch = values[0] == "true"
+	case "EncodingScheme":
+		if len(values) != 1 {
+			return fmt.Errorf("%w: %q", errHeader, line)
+		}
+		h.fontSpecific = values[0] == "FontSpecific"
+	default:
+		v, err := ints(1)
+		if err != nil {
+			return err
+		}
+		switch key {
+		case "Ascender":
+			h.ascender = v[0]
+		case "Descender":
+			h.descender = v[0]
+		case "CapHeight":
+			h.capHeight = v[0]
+		case "StdVW":
+			h.stdVW = v[0]
+		}
+	}
+	return nil
+}
+
+// complete checks that every key the descriptor needs was read, and that
+// Ascender, Descender and CapHeight were read together or not at all.
+func (h *header) complete() error {
+	for _, key := range []string{"FontBBox", "ItalicAngle", "IsFixedPitch", "EncodingScheme", "StdVW"} {
+		if !h.seen[key] {
+			return fmt.Errorf("%w: no %s", errHeader, key)
+		}
+	}
+	n := 0
+	for _, key := range []string{"Ascender", "Descender", "CapHeight"} {
+		if h.seen[key] {
+			n++
+		}
+	}
+	switch n {
+	case 0:
+	case 3:
+		h.vertical = true
+	default:
+		return fmt.Errorf("%w: Ascender, Descender and CapHeight stated in part", errHeader)
+	}
+	return nil
 }
 
 // fixedWidth returns the one width every glyph of a fixed-pitch font
@@ -262,8 +373,8 @@ func parseCharMetric(line string) (string, int, [4]int, error) {
 	return glyph, width, box, nil
 }
 
-// generate renders the gofmt-formatted Go file carrying the glyph boxes and
-// the advance widths of every font of [fonts].
+// generate renders the gofmt-formatted Go file carrying the glyph boxes, the
+// advance widths and the global font information of every font of [fonts].
 func generate(parsed map[string]afm) ([]byte, error) {
 	for _, name := range fonts {
 		if _, ok := parsed[name]; !ok {
@@ -273,7 +384,8 @@ func generate(parsed map[string]afm) ([]byte, error) {
 	var buf bytes.Buffer
 	buf.WriteString("// Code generated by cmd/gen-base14-bounds from the Core 14 AFM files of Apache PDFBox; DO NOT EDIT.\n\n")
 	buf.WriteString(comment(fmt.Sprintf("Derived from the Core 14 AFM files of Apache PDFBox (%s), "+
-		"commit %s, directory %s. The glyph boxes and the advance widths are transcribed unchanged.", pdfboxRepo, pdfboxCommit, afmDir)))
+		"commit %s, directory %s. The glyph boxes, the advance widths and the global font "+
+		"information are transcribed unchanged.", pdfboxRepo, pdfboxCommit, afmDir)))
 	buf.WriteString("//\n")
 	for _, name := range fonts {
 		buf.WriteString(comment(name + ": " + parsed[name].copyright))
@@ -303,7 +415,7 @@ func generate(parsed map[string]afm) ([]byte, error) {
 	buf.WriteString("var standard14GlyphWidths = map[string]map[string]int16{\n")
 	for _, name := range fonts {
 		a := parsed[name]
-		if a.fixedPitch {
+		if a.header.fixedPitch {
 			continue
 		}
 		fmt.Fprintf(&buf, "\t%q: {\n", name)
@@ -319,7 +431,7 @@ func generate(parsed map[string]afm) ([]byte, error) {
 	buf.WriteString("var standard14FixedWidths = map[string]int16{\n")
 	for _, name := range fonts {
 		a := parsed[name]
-		if !a.fixedPitch {
+		if !a.header.fixedPitch {
 			continue
 		}
 		w, err := a.fixedWidth()
@@ -330,6 +442,19 @@ func generate(parsed map[string]afm) ([]byte, error) {
 	}
 	buf.WriteString("}\n\n")
 
+	buf.WriteString(comment("standard14Descriptors maps each standard 14 font to the global font " +
+		"information of its AFM file (Adobe Technical Note #5004, section 4): FontBBox, ItalicAngle, " +
+		"IsFixedPitch, an EncodingScheme of FontSpecific, Ascender, Descender and CapHeight, " +
+		"which vertical says the file states, and StdVW."))
+	buf.WriteString("var standard14Descriptors = map[string]standard14Descriptor{\n")
+	for _, name := range fonts {
+		h := parsed[name].header
+		fmt.Fprintf(&buf, "\t%q: {bbox: [4]int16{%d, %d, %d, %d}, italicAngle: %s, fixedPitch: %t, fontSpecific: %t, "+
+			"ascender: %d, descender: %d, capHeight: %d, vertical: %t, stdVW: %d},\n",
+			name, h.bbox[0], h.bbox[1], h.bbox[2], h.bbox[3], h.italicAngle, h.fixedPitch, h.fontSpecific,
+			h.ascender, h.descender, h.capHeight, h.vertical, h.stdVW)
+	}
+	buf.WriteString("}\n")
 	code, err := format.Source(buf.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("formatting generated source: %w", err)
