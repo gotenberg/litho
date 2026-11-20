@@ -126,7 +126,7 @@ func remediateFixture(ctx context.Context, data []byte, profile string, opts ...
 //   - govdocs/pdf, verapdf, pdfcpu, pdf20, facturx: the 930 files naming a
 //     /StructTreeRoot in their bytes, at the same 15 profiles and both modes
 //     under the same injected delay, wrote the same bytes in all 27900 cells.
-//   - pdfjs: the command line wrote different bytes for 7 of 158 tagged
+//   - pdfjs: two remediations wrote different bytes for 7 of 158 tagged
 //     files at WTPDF-1.0-Accessibility, all in the trailer /ID alone, the
 //     random /ID remediation writes for a file without a valid one.
 func TestRemediationWritesTheSameBytesEveryRun(t *testing.T) {
