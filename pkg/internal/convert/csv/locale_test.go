@@ -13,9 +13,8 @@ import (
 //
 // Left out, where Calc reads otherwise: the Hijri dates ar-EG writes in
 // Arabic-Indic digits, de-AT's taking of de-DE's month names (Januar,
-// Jan), ko-KR's refusal of 13 Jan 2026, fa-IR (Persian calendar and
-// digits), and en-US's 13 Jan 2026, which Calc keeps as text and
-// [detect] reads as a date.
+// Jan) and fa-IR (Persian calendar and digits). The dates with a month
+// name are locked by TestDetect_CalcNamedDates.
 //
 // # Corpus evidence
 //

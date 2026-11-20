@@ -234,9 +234,9 @@ func emitTable(locs []localeRecord, tables []calcTable) ([]byte, error) {
 		if overrides != "" {
 			calcRef = calc.ref(overrides)
 		}
-		fmt.Fprintf(&rows, "\t{tag: models.%s, lcid: 0x%04X, decimal: %q, decimalAlt: %q, group: %q, dateSep: %q, timeSep: %q, time100Sep: %q, am: %q, pm: %q, trueWord: %q, falseWord: %q, indian: %v, currency: %q, currencyDigits: %d, calendar: %q, months: &%s, genitive: %s, partitive: %s, narrow: %s, days: &%s, codes: &%s, acceptance: %s, calc: %s},\n",
+		fmt.Fprintf(&rows, "\t{tag: models.%s, lcid: 0x%04X, decimal: %q, decimalAlt: %q, group: %q, dateSep: %q, timeSep: %q, time100Sep: %q, am: %q, pm: %q, trueWord: %q, falseWord: %q, indian: %v, currency: %q, currencyDigits: %d, calendar: %q, longOrder: %q, longDaySep: %q, months: &%s, genitive: %s, partitive: %s, narrow: %s, days: &%s, codes: &%s, acceptance: %s, calc: %s},\n",
 			constName(l.Tag), l.LCIDs[0], l.Decimal, l.DecimalAlt, l.Group, l.DateSep, l.TimeSep, l.Time100Sep, l.AM, l.PM,
-			l.True, l.False, slices.Equal(l.Grouping, []int{3, 2}), l.Currency, l.CurrencyDigits, l.Calendar, months, genitive, partitive, narrow, days, code, stringsLit(l.Acceptance), calcRef)
+			l.True, l.False, slices.Equal(l.Grouping, []int{3, 2}), l.Currency, l.CurrencyDigits, l.Calendar, l.LongOrder, l.LongDaySep, months, genitive, partitive, narrow, days, code, stringsLit(l.Acceptance), calcRef)
 		for _, id := range l.LCIDs {
 			lcidRows = append(lcidRows, fmt.Sprintf("{0x%04X, %d}", id, i))
 		}

@@ -35,6 +35,10 @@ type localeData struct {
 	// decimal places.
 	currency       string
 	currencyDigits int
+	// longOrder is the order of day, month and year of the long date,
+	// "DMY", "MDY", "YMD" or "YDM"; longDaySep what it writes after the
+	// day.
+	longOrder, longDaySep string
 	// calendar is the unoid of the default calendar when it is not the
 	// Gregorian one, which numfmt does not follow.
 	calendar string
@@ -352,6 +356,10 @@ type LocaleInfo struct {
 	// Order is the order of day, month and year in the locale's short
 	// date: "DMY", "MDY" or "YMD".
 	Order string
+	// LongOrder is the order of day, month and year in the locale's long
+	// date, "DMY", "MDY", "YMD" or "YDM"; LongDaySep what a long date
+	// writes after its day.
+	LongOrder, LongDaySep string
 }
 
 // Info returns what loc states for a reader of typed text, false for a
@@ -366,6 +374,7 @@ func Info(loc models.Locale) (LocaleInfo, bool) {
 		AM: d.am, PM: d.pm, True: d.trueWord, False: d.falseWord, DateSep: d.dateSep, TimeSep: d.timeSep, Time100Sep: d.time100Sep,
 		Months: *d.months, Genitive: d.genitive, Partitive: d.partitive,
 		Acceptance: d.acceptance, Order: dateOrder(d.codes[CodeDateDDMMYYYY]),
+		LongOrder: d.longOrder, LongDaySep: d.longDaySep,
 	}, true
 }
 

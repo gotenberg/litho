@@ -4,8 +4,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 	"github.com/gotenberg/litho/pkg/internal/numfmt"
@@ -21,6 +19,8 @@ import (
 type localeReader struct {
 	loc  models.Locale
 	info numfmt.LocaleInfo
+	// months reads the dates with a month name.
+	months *monthNamer
 	// formats are the formats of the kinds, parsed once.
 	formats [kTimeFraction + 1]*numfmt.Format
 }
@@ -36,6 +36,9 @@ func newLocaleReader(loc models.Locale) *localeReader {
 		return nil
 	}
 	r := &localeReader{loc: loc, info: info}
+	lang, _, _ := strings.Cut(string(loc), "-")
+	r.months = newMonthNamer(lang, &r.info.Months, r.info.Genitive, r.info.Partitive,
+		info.Order, info.LongOrder, info.DateSep, info.Decimal, info.LongDaySep)
 	for k := range r.formats {
 		f, err := numfmt.Parse(r.code(kind(k)))
 		if err != nil {
@@ -276,7 +279,7 @@ func (r *localeReader) dateTime(s string, year int) (detected, bool) {
 		if timePart != "" {
 			k = kDateTimeISO
 		}
-	case r.numericDate(datePart, year, &day), r.namedDate(datePart, &day):
+	case r.numericDate(datePart, year, &day), r.months.date(datePart, year, &day):
 		if timePart != "" {
 			k = kDateTimeUS
 		}
@@ -405,56 +408,6 @@ func splitPattern(p string) (string, []string, bool) {
 		seps = append(seps, sep)
 	}
 	return letters.String(), seps, letters.Len() >= 2
-}
-
-// namedDate reads a date with a month name of the locale: day, month and
-// year, "13. Januar 2026" or "13 janv. 2026", in a locale whose dates do
-// not put the month first; month, day and year, "Jan 13, 2026", in one
-// that does. A day followed by a full stop is a day only where the full
-// stop separates dates.
-func (r *localeReader) namedDate(s string, day *float64) bool {
-	f := strings.FieldsFunc(s, func(c rune) bool { return c == ' ' || c == ',' })
-	if len(f) != 3 {
-		return false
-	}
-	dTok, mTok, yTok := f[0], f[1], f[2]
-	if r.info.Order == "MDY" {
-		mTok, dTok = f[0], f[1]
-	}
-	if d, ok := strings.CutSuffix(dTok, "."); ok && r.info.DateSep == "." {
-		dTok = d
-	}
-	m := r.month(mTok)
-	d, ok1 := atoi(dTok, 2)
-	y, ok2 := atoi(yTok, 4)
-	if m == 0 || !ok1 || !ok2 || len(yTok) == 3 {
-		return false
-	}
-	v, ok := serial(fullYear(y, len(yTok)), m, d)
-	if ok {
-		*day = v
-	}
-	return ok
-}
-
-// month returns the month (1 to 12) a word names in any of the locale's
-// cases, abbreviated or full, in any letter case; 0 for none.
-func (r *localeReader) month(w string) int {
-	if w == "" || !utf8.ValidString(w) || strings.IndexFunc(w, unicode.IsLetter) < 0 {
-		return 0
-	}
-	lists := []*[12][2]string{&r.info.Months, r.info.Genitive, r.info.Partitive}
-	for _, names := range lists {
-		if names == nil {
-			continue
-		}
-		for i, n := range names {
-			if strings.EqualFold(w, n[0]) || strings.EqualFold(w, n[1]) {
-				return i + 1
-			}
-		}
-	}
-	return 0
 }
 
 // time reads "H:MM", "H:MM:SS" and "H:MM:SS<sep>f" in the locale's

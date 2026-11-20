@@ -1,0 +1,963 @@
+locale	input	type	shown
+en-US	13 Jan 2026	string	13 Jan 2026
+en-US	13 January 2026	string	13 January 2026
+en-US	13-Jan-2026	date	01/13/26
+en-US	13-Jan-26	date	01/13/26
+en-US	Jan 13 2026	date	01/13/26
+en-US	Jan 13, 2026	date	01/13/26
+en-US	January 13, 2026	date	01/13/26
+en-US	2026 Jan 13	string	2026 Jan 13
+en-US	2026-Jan-13	date	01/13/26
+en-US	Jan 2026	date	01/01/26
+en-US	January 2026	date	01/01/26
+en-US	13 Jan	string	13 Jan
+en-US	Jan 13	date	01/13/26
+en-US	Jan	string	Jan
+en-US	13. January 2026	string	13. January 2026
+en-US	13 January	string	13 January
+en-US	2026 13 Jan	string	2026 13 Jan
+en-US	13.Jan.2026	string	13.Jan.2026
+en-US	13/Jan/2026	string	13/Jan/2026
+en-US	Jan-13-2026	string	Jan-13-2026
+en-US	13 Jan 26	string	13 Jan 26
+en-US	1 Jan 2026	string	1 Jan 2026
+en-US	13 Jan 2026	string	13 Jan 2026
+en-US	Jan 13, 2026	date	01/13/26
+en-US	13 January 2026	string	13 January 2026
+en-US	January 13, 2026	date	01/13/26
+en-GB	13 Jan 2026	date	13/01/26
+en-GB	13 January 2026	date	13/01/26
+en-GB	13-Jan-2026	date	13/01/26
+en-GB	13-Jan-26	date	13/01/26
+en-GB	Jan 13 2026	date	13/01/26
+en-GB	Jan 13, 2026	string	Jan 13, 2026
+en-GB	January 13, 2026	string	January 13, 2026
+en-GB	2026 Jan 13	string	2026 Jan 13
+en-GB	2026-Jan-13	date	13/01/26
+en-GB	Jan 2026	date	01/01/26
+en-GB	January 2026	date	01/01/26
+en-GB	13 Jan	date	13/01/26
+en-GB	Jan 13	date	01/01/13
+en-GB	Jan	string	Jan
+en-GB	13. January 2026	string	13. January 2026
+en-GB	13 January	date	13/01/26
+en-GB	2026 13 Jan	string	2026 13 Jan
+en-GB	13.Jan.2026	date	13/01/26
+en-GB	13/Jan/2026	string	13/Jan/2026
+en-GB	Jan-13-2026	string	Jan-13-2026
+en-GB	13 Jan 26	date	13/01/26
+en-GB	1 Jan 2026	date	01/01/26
+en-GB	13 Jan 2026	date	13/01/26
+en-GB	Jan 13, 2026	string	Jan 13, 2026
+en-GB	13 January 2026	date	13/01/26
+en-GB	January 13, 2026	string	January 13, 2026
+en-IN	13 Jan 2026	date	13/01/26
+en-IN	13 January 2026	date	13/01/26
+en-IN	13-Jan-2026	date	13/01/26
+en-IN	13-Jan-26	date	13/01/26
+en-IN	Jan 13 2026	date	13/01/26
+en-IN	Jan 13, 2026	string	Jan 13, 2026
+en-IN	January 13, 2026	string	January 13, 2026
+en-IN	2026 Jan 13	string	2026 Jan 13
+en-IN	2026-Jan-13	date	13/01/26
+en-IN	Jan 2026	date	01/01/26
+en-IN	January 2026	date	01/01/26
+en-IN	13 Jan	date	13/01/26
+en-IN	Jan 13	date	01/01/13
+en-IN	Jan	string	Jan
+en-IN	13. January 2026	string	13. January 2026
+en-IN	13 January	date	13/01/26
+en-IN	2026 13 Jan	string	2026 13 Jan
+en-IN	13.Jan.2026	date	13/01/26
+en-IN	13/Jan/2026	string	13/Jan/2026
+en-IN	Jan-13-2026	string	Jan-13-2026
+en-IN	13 Jan 26	date	13/01/26
+en-IN	1 Jan 2026	date	01/01/26
+en-IN	13 Jan 2026	date	13/01/26
+en-IN	Jan 13, 2026	string	Jan 13, 2026
+en-IN	13 January 2026	date	13/01/26
+en-IN	January 13, 2026	string	January 13, 2026
+en-ZA	13 Jan 2026	date	2026-01-13
+en-ZA	13 January 2026	date	2026-01-13
+en-ZA	13-Jan-2026	date	2026-01-13
+en-ZA	13-Jan-26	date	2026-01-13
+en-ZA	Jan 13 2026	date	2026-01-13
+en-ZA	Jan 13, 2026	string	Jan 13, 2026
+en-ZA	January 13, 2026	string	January 13, 2026
+en-ZA	2026 Jan 13	date	2026-01-13
+en-ZA	2026-Jan-13	date	2026-01-13
+en-ZA	Jan 2026	date	2026-01-01
+en-ZA	January 2026	date	2026-01-01
+en-ZA	13 Jan	date	2013-01-01
+en-ZA	Jan 13	date	2026-01-13
+en-ZA	Jan	string	Jan
+en-ZA	13. January 2026	string	13. January 2026
+en-ZA	13 January	date	2013-01-01
+en-ZA	2026 13 Jan	string	2026 13 Jan
+en-ZA	13.Jan.2026	date	2026-01-13
+en-ZA	13/Jan/2026	string	13/Jan/2026
+en-ZA	Jan-13-2026	string	Jan-13-2026
+en-ZA	13 Jan 26	date	2026-01-13
+en-ZA	1 Jan 2026	date	2026-01-01
+en-ZA	13 Jan 2026	date	2026-01-13
+en-ZA	Jan 13, 2026	string	Jan 13, 2026
+en-ZA	13 January 2026	date	2026-01-13
+en-ZA	January 13, 2026	string	January 13, 2026
+de-DE	13 Jan 2026	date	13.01.26
+de-DE	13 Januar 2026	date	13.01.26
+de-DE	13-Jan-2026	date	13.01.26
+de-DE	13-Jan-26	date	13.01.26
+de-DE	Jan 13 2026	date	13.01.26
+de-DE	Jan 13, 2026	string	Jan 13, 2026
+de-DE	Januar 13, 2026	string	Januar 13, 2026
+de-DE	2026 Jan 13	string	2026 Jan 13
+de-DE	2026-Jan-13	date	13.01.26
+de-DE	Jan 2026	date	01.01.26
+de-DE	Januar 2026	date	01.01.26
+de-DE	13 Jan	date	13.01.26
+de-DE	Jan 13	date	01.01.13
+de-DE	Jan	string	Jan
+de-DE	13. Januar 2026	date	13.01.26
+de-DE	13 Januar	date	13.01.26
+de-DE	2026 13 Jan	string	2026 13 Jan
+de-DE	13.Jan.2026	date	13.01.26
+de-DE	13/Jan/2026	string	13/Jan/2026
+de-DE	Jan-13-2026	string	Jan-13-2026
+de-DE	13 Jan 26	date	13.01.26
+de-DE	1 Jan 2026	date	01.01.26
+de-DE	13 Jan 2026	date	13.01.26
+de-DE	Jan 13, 2026	string	Jan 13, 2026
+de-DE	13 January 2026	string	13 January 2026
+de-DE	January 13, 2026	string	January 13, 2026
+de-AT	13 Jän 2026	date	13.01.26
+de-AT	13 Jänner 2026	date	13.01.26
+de-AT	13-Jän-2026	date	13.01.26
+de-AT	13-Jän-26	date	13.01.26
+de-AT	Jän 13 2026	date	13.01.26
+de-AT	Jän 13, 2026	string	Jän 13, 2026
+de-AT	Jänner 13, 2026	string	Jänner 13, 2026
+de-AT	2026 Jän 13	string	2026 Jän 13
+de-AT	2026-Jän-13	date	13.01.26
+de-AT	Jän 2026	date	01.01.26
+de-AT	Jänner 2026	date	01.01.26
+de-AT	13 Jän	date	13.01.26
+de-AT	Jän 13	date	01.01.13
+de-AT	Jän	string	Jän
+de-AT	13. Jänner 2026	date	13.01.26
+de-AT	13 Jänner	date	13.01.26
+de-AT	2026 13 Jän	string	2026 13 Jän
+de-AT	13.Jän.2026	date	13.01.26
+de-AT	13/Jän/2026	string	13/Jän/2026
+de-AT	Jän-13-2026	string	Jän-13-2026
+de-AT	13 Jän 26	date	13.01.26
+de-AT	1 Jän 2026	date	01.01.26
+de-AT	13 Jan 2026	date	13.01.26
+de-AT	Jan 13, 2026	string	Jan 13, 2026
+de-AT	13 January 2026	string	13 January 2026
+de-AT	January 13, 2026	string	January 13, 2026
+de-CH	13 Jan 2026	date	13.01.26
+de-CH	13 Januar 2026	date	13.01.26
+de-CH	13-Jan-2026	date	13.01.26
+de-CH	13-Jan-26	date	13.01.26
+de-CH	Jan 13 2026	date	13.01.26
+de-CH	Jan 13, 2026	string	Jan 13, 2026
+de-CH	Januar 13, 2026	string	Januar 13, 2026
+de-CH	2026 Jan 13	string	2026 Jan 13
+de-CH	2026-Jan-13	date	13.01.26
+de-CH	Jan 2026	date	01.01.26
+de-CH	Januar 2026	date	01.01.26
+de-CH	13 Jan	date	13.01.26
+de-CH	Jan 13	date	01.01.13
+de-CH	Jan	string	Jan
+de-CH	13. Januar 2026	date	13.01.26
+de-CH	13 Januar	date	13.01.26
+de-CH	2026 13 Jan	string	2026 13 Jan
+de-CH	13.Jan.2026	date	13.01.26
+de-CH	13/Jan/2026	string	13/Jan/2026
+de-CH	Jan-13-2026	string	Jan-13-2026
+de-CH	13 Jan 26	date	13.01.26
+de-CH	1 Jan 2026	date	01.01.26
+de-CH	13 Jan 2026	date	13.01.26
+de-CH	Jan 13, 2026	string	Jan 13, 2026
+de-CH	13 January 2026	string	13 January 2026
+de-CH	January 13, 2026	string	January 13, 2026
+fr-FR	13 janv. 2026	date	13/01/26
+fr-FR	13 janvier 2026	date	13/01/26
+fr-FR	13-janv.-2026	date	13/01/26
+fr-FR	13-janv.-26	date	13/01/26
+fr-FR	janv. 13 2026	date	13/01/26
+fr-FR	janv. 13, 2026	string	janv. 13, 2026
+fr-FR	janvier 13, 2026	string	janvier 13, 2026
+fr-FR	2026 janv. 13	string	2026 janv. 13
+fr-FR	2026-janv.-13	date	13/01/26
+fr-FR	janv. 2026	date	01/01/26
+fr-FR	janvier 2026	date	01/01/26
+fr-FR	13 janv.	date	13/01/26
+fr-FR	janv. 13	date	01/01/13
+fr-FR	janv.	string	janv.
+fr-FR	13. janvier 2026	string	13. janvier 2026
+fr-FR	13 janvier	date	13/01/26
+fr-FR	2026 13 janv.	string	2026 13 janv.
+fr-FR	13.janv..2026	string	13.janv..2026
+fr-FR	13/janv./2026	string	13/janv./2026
+fr-FR	janv.-13-2026	string	janv.-13-2026
+fr-FR	13 janv. 26	date	13/01/26
+fr-FR	1 janv. 2026	date	01/01/26
+fr-FR	13 Jan 2026	string	13 Jan 2026
+fr-FR	Jan 13, 2026	string	Jan 13, 2026
+fr-FR	13 January 2026	string	13 January 2026
+fr-FR	January 13, 2026	string	January 13, 2026
+fr-CA	13 janv. 2026	date	2026-01-13
+fr-CA	13 janvier 2026	date	2026-01-13
+fr-CA	13-janv.-2026	date	2026-01-13
+fr-CA	13-janv.-26	date	2026-01-13
+fr-CA	janv. 13 2026	date	2026-01-13
+fr-CA	janv. 13, 2026	string	janv. 13, 2026
+fr-CA	janvier 13, 2026	string	janvier 13, 2026
+fr-CA	2026 janv. 13	date	2026-01-13
+fr-CA	2026-janv.-13	date	2026-01-13
+fr-CA	janv. 2026	date	2026-01-01
+fr-CA	janvier 2026	date	2026-01-01
+fr-CA	13 janv.	date	2013-01-01
+fr-CA	janv. 13	date	2026-01-13
+fr-CA	janv.	string	janv.
+fr-CA	13. janvier 2026	string	13. janvier 2026
+fr-CA	13 janvier	date	2013-01-01
+fr-CA	2026 13 janv.	string	2026 13 janv.
+fr-CA	13.janv..2026	string	13.janv..2026
+fr-CA	13/janv./2026	string	13/janv./2026
+fr-CA	janv.-13-2026	date	2026-01-13
+fr-CA	13 janv. 26	date	2026-01-13
+fr-CA	1 janv. 2026	date	2026-01-01
+fr-CA	13 Jan 2026	string	13 Jan 2026
+fr-CA	Jan 13, 2026	string	Jan 13, 2026
+fr-CA	13 January 2026	string	13 January 2026
+fr-CA	January 13, 2026	string	January 13, 2026
+es-ES	13 ene 2026	date	13/01/26
+es-ES	13 enero 2026	date	13/01/26
+es-ES	13-ene-2026	date	13/01/26
+es-ES	13-ene-26	date	13/01/26
+es-ES	ene 13 2026	date	13/01/26
+es-ES	ene 13, 2026	string	ene 13, 2026
+es-ES	enero 13, 2026	string	enero 13, 2026
+es-ES	2026 ene 13	string	2026 ene 13
+es-ES	2026-ene-13	date	13/01/26
+es-ES	ene 2026	date	01/01/26
+es-ES	enero 2026	date	01/01/26
+es-ES	13 ene	date	13/01/26
+es-ES	ene 13	date	01/01/13
+es-ES	ene	string	ene
+es-ES	13. enero 2026	string	13. enero 2026
+es-ES	13 enero	date	13/01/26
+es-ES	2026 13 ene	string	2026 13 ene
+es-ES	13.ene.2026	string	13.ene.2026
+es-ES	13/ene/2026	string	13/ene/2026
+es-ES	ene-13-2026	string	ene-13-2026
+es-ES	13 ene 26	date	13/01/26
+es-ES	1 ene 2026	date	01/01/26
+es-ES	13 Jan 2026	string	13 Jan 2026
+es-ES	Jan 13, 2026	string	Jan 13, 2026
+es-ES	13 January 2026	string	13 January 2026
+es-ES	January 13, 2026	string	January 13, 2026
+es-MX	13 ene 2026	date	13/01/26
+es-MX	13 enero 2026	date	13/01/26
+es-MX	13-ene-2026	date	13/01/26
+es-MX	13-ene-26	date	13/01/26
+es-MX	ene 13 2026	date	13/01/26
+es-MX	ene 13, 2026	string	ene 13, 2026
+es-MX	enero 13, 2026	string	enero 13, 2026
+es-MX	2026 ene 13	string	2026 ene 13
+es-MX	2026-ene-13	date	13/01/26
+es-MX	ene 2026	date	01/01/26
+es-MX	enero 2026	date	01/01/26
+es-MX	13 ene	date	13/01/26
+es-MX	ene 13	date	01/01/13
+es-MX	ene	string	ene
+es-MX	13. enero 2026	string	13. enero 2026
+es-MX	13 enero	date	13/01/26
+es-MX	2026 13 ene	string	2026 13 ene
+es-MX	13.ene.2026	date	13/01/26
+es-MX	13/ene/2026	string	13/ene/2026
+es-MX	ene-13-2026	string	ene-13-2026
+es-MX	13 ene 26	date	13/01/26
+es-MX	1 ene 2026	date	01/01/26
+es-MX	13 Jan 2026	string	13 Jan 2026
+es-MX	Jan 13, 2026	string	Jan 13, 2026
+es-MX	13 January 2026	string	13 January 2026
+es-MX	January 13, 2026	string	January 13, 2026
+it-IT	13 gen 2026	date	13/01/2026
+it-IT	13 gennaio 2026	date	13/01/2026
+it-IT	13-gen-2026	date	13/01/2026
+it-IT	13-gen-26	date	13/01/2026
+it-IT	gen 13 2026	date	13/01/2026
+it-IT	gen 13, 2026	string	gen 13, 2026
+it-IT	gennaio 13, 2026	string	gennaio 13, 2026
+it-IT	2026 gen 13	string	2026 gen 13
+it-IT	2026-gen-13	date	13/01/2026
+it-IT	gen 2026	date	01/01/2026
+it-IT	gennaio 2026	date	01/01/2026
+it-IT	13 gen	date	13/01/2026
+it-IT	gen 13	date	01/01/2013
+it-IT	gen	string	gen
+it-IT	13. gennaio 2026	string	13. gennaio 2026
+it-IT	13 gennaio	date	13/01/2026
+it-IT	2026 13 gen	string	2026 13 gen
+it-IT	13.gen.2026	string	13.gen.2026
+it-IT	13/gen/2026	string	13/gen/2026
+it-IT	gen-13-2026	string	gen-13-2026
+it-IT	13 gen 26	date	13/01/2026
+it-IT	1 gen 2026	date	01/01/2026
+it-IT	13 Jan 2026	string	13 Jan 2026
+it-IT	Jan 13, 2026	string	Jan 13, 2026
+it-IT	13 January 2026	string	13 January 2026
+it-IT	January 13, 2026	string	January 13, 2026
+nl-NL	13 jan 2026	date	13-01-26
+nl-NL	13 januari 2026	date	13-01-26
+nl-NL	13-jan-2026	date	13-01-26
+nl-NL	13-jan-26	date	13-01-26
+nl-NL	jan 13 2026	date	13-01-26
+nl-NL	jan 13, 2026	string	jan 13, 2026
+nl-NL	januari 13, 2026	string	januari 13, 2026
+nl-NL	2026 jan 13	string	2026 jan 13
+nl-NL	2026-jan-13	date	13-01-26
+nl-NL	jan 2026	date	01-01-26
+nl-NL	januari 2026	date	01-01-26
+nl-NL	13 jan	date	13-01-26
+nl-NL	jan 13	date	01-01-13
+nl-NL	jan	string	jan
+nl-NL	13. januari 2026	string	13. januari 2026
+nl-NL	13 januari	date	13-01-26
+nl-NL	2026 13 jan	string	2026 13 jan
+nl-NL	13.jan.2026	string	13.jan.2026
+nl-NL	13/jan/2026	string	13/jan/2026
+nl-NL	jan-13-2026	date	13-01-26
+nl-NL	13 jan 26	date	13-01-26
+nl-NL	1 jan 2026	date	01-01-26
+nl-NL	13 Jan 2026	date	13-01-26
+nl-NL	Jan 13, 2026	string	Jan 13, 2026
+nl-NL	13 January 2026	string	13 January 2026
+nl-NL	January 13, 2026	string	January 13, 2026
+pt-BR	13 jan 2026	date	13/01/26
+pt-BR	13 janeiro 2026	date	13/01/26
+pt-BR	13-jan-2026	date	13/01/26
+pt-BR	13-jan-26	date	13/01/26
+pt-BR	jan 13 2026	date	13/01/26
+pt-BR	jan 13, 2026	string	jan 13, 2026
+pt-BR	janeiro 13, 2026	string	janeiro 13, 2026
+pt-BR	2026 jan 13	string	2026 jan 13
+pt-BR	2026-jan-13	date	13/01/26
+pt-BR	jan 2026	date	01/01/26
+pt-BR	janeiro 2026	date	01/01/26
+pt-BR	13 jan	date	13/01/26
+pt-BR	jan 13	date	01/01/13
+pt-BR	jan	string	jan
+pt-BR	13. janeiro 2026	string	13. janeiro 2026
+pt-BR	13 janeiro	date	13/01/26
+pt-BR	2026 13 jan	string	2026 13 jan
+pt-BR	13.jan.2026	string	13.jan.2026
+pt-BR	13/jan/2026	string	13/jan/2026
+pt-BR	jan-13-2026	string	jan-13-2026
+pt-BR	13 jan 26	date	13/01/26
+pt-BR	1 jan 2026	date	01/01/26
+pt-BR	13 Jan 2026	date	13/01/26
+pt-BR	Jan 13, 2026	string	Jan 13, 2026
+pt-BR	13 January 2026	string	13 January 2026
+pt-BR	January 13, 2026	string	January 13, 2026
+pt-PT	13 jan 2026	date	13-01-2026
+pt-PT	13 janeiro 2026	date	13-01-2026
+pt-PT	13-jan-2026	date	13-01-2026
+pt-PT	13-jan-26	date	13-01-2026
+pt-PT	jan 13 2026	date	13-01-2026
+pt-PT	jan 13, 2026	string	jan 13, 2026
+pt-PT	janeiro 13, 2026	string	janeiro 13, 2026
+pt-PT	2026 jan 13	string	2026 jan 13
+pt-PT	2026-jan-13	date	13-01-2026
+pt-PT	jan 2026	date	01-01-2026
+pt-PT	janeiro 2026	date	01-01-2026
+pt-PT	13 jan	date	13-01-2026
+pt-PT	jan 13	date	01-01-2013
+pt-PT	jan	string	jan
+pt-PT	13. janeiro 2026	string	13. janeiro 2026
+pt-PT	13 janeiro	date	13-01-2026
+pt-PT	2026 13 jan	string	2026 13 jan
+pt-PT	13.jan.2026	string	13.jan.2026
+pt-PT	13/jan/2026	string	13/jan/2026
+pt-PT	jan-13-2026	date	13-01-2026
+pt-PT	13 jan 26	date	13-01-2026
+pt-PT	1 jan 2026	date	01-01-2026
+pt-PT	13 Jan 2026	date	13-01-2026
+pt-PT	Jan 13, 2026	string	Jan 13, 2026
+pt-PT	13 January 2026	string	13 January 2026
+pt-PT	January 13, 2026	string	January 13, 2026
+sv-SE	13 jan 2026	date	2026-01-13
+sv-SE	13 januari 2026	date	2026-01-13
+sv-SE	13-jan-2026	date	2026-01-13
+sv-SE	13-jan-26	date	2026-01-13
+sv-SE	jan 13 2026	date	2026-01-13
+sv-SE	jan 13, 2026	string	jan 13, 2026
+sv-SE	januari 13, 2026	string	januari 13, 2026
+sv-SE	2026 jan 13	date	2026-01-13
+sv-SE	2026-jan-13	date	2026-01-13
+sv-SE	jan 2026	date	2026-01-01
+sv-SE	januari 2026	date	2026-01-01
+sv-SE	13 jan	date	2013-01-01
+sv-SE	jan 13	date	2026-01-13
+sv-SE	jan	string	jan
+sv-SE	13. januari 2026	string	13. januari 2026
+sv-SE	13 januari	date	2013-01-01
+sv-SE	2026 13 jan	string	2026 13 jan
+sv-SE	13.jan.2026	string	13.jan.2026
+sv-SE	13/jan/2026	string	13/jan/2026
+sv-SE	jan-13-2026	date	2026-01-13
+sv-SE	13 jan 26	date	2026-01-13
+sv-SE	1 jan 2026	date	2026-01-01
+sv-SE	13 Jan 2026	date	2026-01-13
+sv-SE	Jan 13, 2026	string	Jan 13, 2026
+sv-SE	13 January 2026	string	13 January 2026
+sv-SE	January 13, 2026	string	January 13, 2026
+fi-FI	13 tammi 2026	date	13.01.26
+fi-FI	13 tammikuu 2026	date	13.01.26
+fi-FI	13-tammi-2026	date	13.01.26
+fi-FI	13-tammi-26	date	13.01.26
+fi-FI	tammi 13 2026	date	13.01.26
+fi-FI	tammi 13, 2026	string	tammi 13, 2026
+fi-FI	tammikuu 13, 2026	string	tammikuu 13, 2026
+fi-FI	2026 tammi 13	string	2026 tammi 13
+fi-FI	2026-tammi-13	date	13.01.26
+fi-FI	tammi 2026	date	01.01.26
+fi-FI	tammikuu 2026	date	01.01.26
+fi-FI	13 tammi	date	13.01.26
+fi-FI	tammi 13	date	01.01.13
+fi-FI	tammi	string	tammi
+fi-FI	13. tammikuu 2026	date	13.01.26
+fi-FI	13 tammikuu	date	13.01.26
+fi-FI	2026 13 tammi	string	2026 13 tammi
+fi-FI	13.tammi.2026	date	13.01.26
+fi-FI	13/tammi/2026	string	13/tammi/2026
+fi-FI	tammi-13-2026	string	tammi-13-2026
+fi-FI	13 tammi 26	date	13.01.26
+fi-FI	1 tammi 2026	date	01.01.26
+fi-FI	13 Jan 2026	string	13 Jan 2026
+fi-FI	Jan 13, 2026	string	Jan 13, 2026
+fi-FI	13 January 2026	string	13 January 2026
+fi-FI	January 13, 2026	string	January 13, 2026
+nb-NO	13 jan. 2026	date	13.01.2026
+nb-NO	13 januar 2026	date	13.01.2026
+nb-NO	13-jan.-2026	date	13.01.2026
+nb-NO	13-jan.-26	date	13.01.2026
+nb-NO	jan. 13 2026	date	13.01.2026
+nb-NO	jan. 13, 2026	string	jan. 13, 2026
+nb-NO	januar 13, 2026	string	januar 13, 2026
+nb-NO	2026 jan. 13	string	2026 jan. 13
+nb-NO	2026-jan.-13	date	13.01.2026
+nb-NO	jan. 2026	date	01.01.2026
+nb-NO	januar 2026	date	01.01.2026
+nb-NO	13 jan.	date	13.01.2026
+nb-NO	jan. 13	date	01.01.2013
+nb-NO	jan.	string	jan.
+nb-NO	13. januar 2026	date	13.01.2026
+nb-NO	13 januar	date	13.01.2026
+nb-NO	2026 13 jan.	string	2026 13 jan.
+nb-NO	13.jan..2026	date	13.01.2026
+nb-NO	13/jan./2026	string	13/jan./2026
+nb-NO	jan.-13-2026	string	jan.-13-2026
+nb-NO	13 jan. 26	date	13.01.2026
+nb-NO	1 jan. 2026	date	01.01.2026
+nb-NO	13 Jan 2026	string	13 Jan 2026
+nb-NO	Jan 13, 2026	string	Jan 13, 2026
+nb-NO	13 January 2026	string	13 January 2026
+nb-NO	January 13, 2026	string	January 13, 2026
+da-DK	13 jan 2026	date	13-01-26
+da-DK	13 januar 2026	date	13-01-26
+da-DK	13-jan-2026	date	13-01-26
+da-DK	13-jan-26	date	13-01-26
+da-DK	jan 13 2026	date	13-01-26
+da-DK	jan 13, 2026	string	jan 13, 2026
+da-DK	januar 13, 2026	string	januar 13, 2026
+da-DK	2026 jan 13	string	2026 jan 13
+da-DK	2026-jan-13	date	13-01-26
+da-DK	jan 2026	date	01-01-26
+da-DK	januar 2026	date	01-01-26
+da-DK	13 jan	date	13-01-26
+da-DK	jan 13	date	01-01-13
+da-DK	jan	string	jan
+da-DK	13. januar 2026	string	13. januar 2026
+da-DK	13 januar	date	13-01-26
+da-DK	2026 13 jan	string	2026 13 jan
+da-DK	13.jan.2026	string	13.jan.2026
+da-DK	13/jan/2026	string	13/jan/2026
+da-DK	jan-13-2026	date	13-01-26
+da-DK	13 jan 26	date	13-01-26
+da-DK	1 jan 2026	date	01-01-26
+da-DK	13 Jan 2026	date	13-01-26
+da-DK	Jan 13, 2026	string	Jan 13, 2026
+da-DK	13 January 2026	string	13 January 2026
+da-DK	January 13, 2026	string	January 13, 2026
+pl-PL	13 I 2026	date	13.01.2026
+pl-PL	13 styczeń 2026	date	13.01.2026
+pl-PL	13-I-2026	date	13.01.2026
+pl-PL	13-I-26	date	13.01.2026
+pl-PL	I 13 2026	date	13.01.2026
+pl-PL	I 13, 2026	string	I 13, 2026
+pl-PL	styczeń 13, 2026	string	styczeń 13, 2026
+pl-PL	2026 I 13	string	2026 I 13
+pl-PL	2026-I-13	date	13.01.2026
+pl-PL	I 2026	date	1.01.2026
+pl-PL	styczeń 2026	date	1.01.2026
+pl-PL	13 I	date	13.01.2026
+pl-PL	I 13	date	1.01.2013
+pl-PL	I	string	I
+pl-PL	13. styczeń 2026	date	13.01.2026
+pl-PL	13 styczeń	date	13.01.2026
+pl-PL	2026 13 I	string	2026 13 I
+pl-PL	13.I.2026	date	13.01.2026
+pl-PL	13/I/2026	string	13/I/2026
+pl-PL	I-13-2026	string	I-13-2026
+pl-PL	13 I 26	date	13.01.2026
+pl-PL	1 I 2026	date	1.01.2026
+pl-PL	13 Jan 2026	string	13 Jan 2026
+pl-PL	Jan 13, 2026	string	Jan 13, 2026
+pl-PL	13 January 2026	string	13 January 2026
+pl-PL	January 13, 2026	string	January 13, 2026
+ru-RU	13 янв 2026	date	13.01.26
+ru-RU	13 Январь 2026	date	13.01.26
+ru-RU	13-янв-2026	date	13.01.26
+ru-RU	13-янв-26	date	13.01.26
+ru-RU	янв 13 2026	date	13.01.26
+ru-RU	янв 13, 2026	string	янв 13, 2026
+ru-RU	Январь 13, 2026	string	Январь 13, 2026
+ru-RU	2026 янв 13	string	2026 янв 13
+ru-RU	2026-янв-13	date	13.01.26
+ru-RU	янв 2026	date	01.01.26
+ru-RU	Январь 2026	date	01.01.26
+ru-RU	13 янв	date	13.01.26
+ru-RU	янв 13	date	01.01.13
+ru-RU	янв	string	янв
+ru-RU	13. Январь 2026	date	13.01.26
+ru-RU	13 Январь	date	13.01.26
+ru-RU	2026 13 янв	string	2026 13 янв
+ru-RU	13.янв.2026	date	13.01.26
+ru-RU	13/янв/2026	string	13/янв/2026
+ru-RU	янв-13-2026	string	янв-13-2026
+ru-RU	13 янв 26	date	13.01.26
+ru-RU	1 янв 2026	date	01.01.26
+ru-RU	13 Jan 2026	string	13 Jan 2026
+ru-RU	Jan 13, 2026	string	Jan 13, 2026
+ru-RU	13 January 2026	string	13 January 2026
+ru-RU	January 13, 2026	string	January 13, 2026
+uk-UA	13 січ 2026	date	13.01.26
+uk-UA	13 Січень 2026	date	13.01.26
+uk-UA	13-січ-2026	date	13.01.26
+uk-UA	13-січ-26	date	13.01.26
+uk-UA	січ 13 2026	date	13.01.26
+uk-UA	січ 13, 2026	string	січ 13, 2026
+uk-UA	Січень 13, 2026	string	Січень 13, 2026
+uk-UA	2026 січ 13	string	2026 січ 13
+uk-UA	2026-січ-13	date	13.01.26
+uk-UA	січ 2026	date	01.01.26
+uk-UA	Січень 2026	date	01.01.26
+uk-UA	13 січ	date	13.01.26
+uk-UA	січ 13	date	01.01.13
+uk-UA	січ	string	січ
+uk-UA	13. Січень 2026	date	13.01.26
+uk-UA	13 Січень	date	13.01.26
+uk-UA	2026 13 січ	string	2026 13 січ
+uk-UA	13.січ.2026	date	13.01.26
+uk-UA	13/січ/2026	string	13/січ/2026
+uk-UA	січ-13-2026	string	січ-13-2026
+uk-UA	13 січ 26	date	13.01.26
+uk-UA	1 січ 2026	date	01.01.26
+uk-UA	13 Jan 2026	string	13 Jan 2026
+uk-UA	Jan 13, 2026	string	Jan 13, 2026
+uk-UA	13 January 2026	string	13 January 2026
+uk-UA	January 13, 2026	string	January 13, 2026
+cs-CZ	13 I 2026	date	13.01.2026
+cs-CZ	13 leden 2026	date	13.01.2026
+cs-CZ	13-I-2026	date	13.01.2026
+cs-CZ	13-I-26	date	13.01.2026
+cs-CZ	I 13 2026	date	13.01.2026
+cs-CZ	I 13, 2026	string	I 13, 2026
+cs-CZ	leden 13, 2026	string	leden 13, 2026
+cs-CZ	2026 I 13	string	2026 I 13
+cs-CZ	2026-I-13	date	13.01.2026
+cs-CZ	I 2026	date	01.01.2026
+cs-CZ	leden 2026	date	01.01.2026
+cs-CZ	13 I	date	13.01.2026
+cs-CZ	I 13	date	01.01.2013
+cs-CZ	I	string	I
+cs-CZ	13. leden 2026	date	13.01.2026
+cs-CZ	13 leden	date	13.01.2026
+cs-CZ	2026 13 I	string	2026 13 I
+cs-CZ	13.I.2026	date	13.01.2026
+cs-CZ	13/I/2026	string	13/I/2026
+cs-CZ	I-13-2026	string	I-13-2026
+cs-CZ	13 I 26	date	13.01.2026
+cs-CZ	1 I 2026	date	01.01.2026
+cs-CZ	13 Jan 2026	string	13 Jan 2026
+cs-CZ	Jan 13, 2026	string	Jan 13, 2026
+cs-CZ	13 January 2026	string	13 January 2026
+cs-CZ	January 13, 2026	string	January 13, 2026
+hu-HU	13 I. 2026	string	13 I. 2026
+hu-HU	13 január 2026	string	13 január 2026
+hu-HU	13-I.-2026	date	2026-01-13
+hu-HU	13-I.-26	date	2026-01-13
+hu-HU	I. 13 2026	date	2026-01-13
+hu-HU	I. 13, 2026	string	I. 13, 2026
+hu-HU	január 13, 2026	string	január 13, 2026
+hu-HU	2026 I. 13	date	2026-01-13
+hu-HU	2026-I.-13	date	2026-01-13
+hu-HU	I. 2026	date	2026-01-01
+hu-HU	január 2026	date	2026-01-01
+hu-HU	13 I.	date	2013-01-01
+hu-HU	I. 13	date	2026-01-13
+hu-HU	I.	string	I.
+hu-HU	13. január 2026	string	13. január 2026
+hu-HU	13 január	date	2013-01-01
+hu-HU	2026 13 I.	string	2026 13 I.
+hu-HU	13.I..2026	string	13.I..2026
+hu-HU	13/I./2026	string	13/I./2026
+hu-HU	I.-13-2026	string	I.-13-2026
+hu-HU	13 I. 26	date	2013-01-26
+hu-HU	1 I. 2026	string	1 I. 2026
+hu-HU	13 Jan 2026	string	13 Jan 2026
+hu-HU	Jan 13, 2026	string	Jan 13, 2026
+hu-HU	13 January 2026	string	13 January 2026
+hu-HU	January 13, 2026	string	January 13, 2026
+tr-TR	13 Oca 2026	date	13.01.2026
+tr-TR	13 Ocak 2026	date	13.01.2026
+tr-TR	13-Oca-2026	date	13.01.2026
+tr-TR	13-Oca-26	date	13.01.2026
+tr-TR	Oca 13 2026	date	13.01.2026
+tr-TR	Oca 13, 2026	string	Oca 13, 2026
+tr-TR	Ocak 13, 2026	string	Ocak 13, 2026
+tr-TR	2026 Oca 13	string	2026 Oca 13
+tr-TR	2026-Oca-13	date	13.01.2026
+tr-TR	Oca 2026	date	01.01.2026
+tr-TR	Ocak 2026	date	01.01.2026
+tr-TR	13 Oca	date	13.01.2026
+tr-TR	Oca 13	date	01.01.2013
+tr-TR	Oca	string	Oca
+tr-TR	13. Ocak 2026	date	13.01.2026
+tr-TR	13 Ocak	date	13.01.2026
+tr-TR	2026 13 Oca	string	2026 13 Oca
+tr-TR	13.Oca.2026	date	13.01.2026
+tr-TR	13/Oca/2026	string	13/Oca/2026
+tr-TR	Oca-13-2026	string	Oca-13-2026
+tr-TR	13 Oca 26	date	13.01.2026
+tr-TR	1 Oca 2026	date	01.01.2026
+tr-TR	13 Jan 2026	string	13 Jan 2026
+tr-TR	Jan 13, 2026	string	Jan 13, 2026
+tr-TR	13 January 2026	string	13 January 2026
+tr-TR	January 13, 2026	string	January 13, 2026
+el-GR	13 Ιαν 2026	date	13/01/26
+el-GR	13 Ιανουαρίου 2026	date	13/01/26
+el-GR	13-Ιαν-2026	date	13/01/26
+el-GR	13-Ιαν-26	date	13/01/26
+el-GR	Ιαν 13 2026	date	13/01/26
+el-GR	Ιαν 13, 2026	string	Ιαν 13, 2026
+el-GR	Ιανουαρίου 13, 2026	string	Ιανουαρίου 13, 2026
+el-GR	2026 Ιαν 13	string	2026 Ιαν 13
+el-GR	2026-Ιαν-13	date	13/01/26
+el-GR	Ιαν 2026	date	01/01/26
+el-GR	Ιανουαρίου 2026	date	01/01/26
+el-GR	13 Ιαν	date	13/01/26
+el-GR	Ιαν 13	date	01/01/13
+el-GR	Ιαν	string	Ιαν
+el-GR	13. Ιανουαρίου 2026	string	13. Ιανουαρίου 2026
+el-GR	13 Ιανουαρίου	date	13/01/26
+el-GR	2026 13 Ιαν	string	2026 13 Ιαν
+el-GR	13.Ιαν.2026	string	13.Ιαν.2026
+el-GR	13/Ιαν/2026	string	13/Ιαν/2026
+el-GR	Ιαν-13-2026	string	Ιαν-13-2026
+el-GR	13 Ιαν 26	date	13/01/26
+el-GR	1 Ιαν 2026	date	01/01/26
+el-GR	13 Jan 2026	string	13 Jan 2026
+el-GR	Jan 13, 2026	string	Jan 13, 2026
+el-GR	13 January 2026	string	13 January 2026
+el-GR	January 13, 2026	string	January 13, 2026
+ja-JP	13 1月 2026	string	13 1月 2026
+ja-JP	13 一月 2026	string	13 一月 2026
+ja-JP	13-1月-2026	string	13-1月-2026
+ja-JP	13-1月-26	string	13-1月-26
+ja-JP	1月 13 2026	string	1月 13 2026
+ja-JP	1月 13, 2026	string	1月 13, 2026
+ja-JP	一月 13, 2026	string	一月 13, 2026
+ja-JP	2026 1月 13	string	2026 1月 13
+ja-JP	2026-1月-13	string	2026-1月-13
+ja-JP	1月 2026	string	1月 2026
+ja-JP	一月 2026	date	1月1日
+ja-JP	13 1月	string	13 1月
+ja-JP	1月 13	string	1月 13
+ja-JP	1月	string	1月
+ja-JP	13. 一月 2026	string	13. 一月 2026
+ja-JP	13 一月	date	1月1日
+ja-JP	2026 13 1月	string	2026 13 1月
+ja-JP	13.1月.2026	string	13.1月.2026
+ja-JP	13/1月/2026	string	13/1月/2026
+ja-JP	1月-13-2026	string	1月-13-2026
+ja-JP	13 1月 26	string	13 1月 26
+ja-JP	1 1月 2026	string	1 1月 2026
+ja-JP	13 Jan 2026	string	13 Jan 2026
+ja-JP	Jan 13, 2026	string	Jan 13, 2026
+ja-JP	13 January 2026	string	13 January 2026
+ja-JP	January 13, 2026	string	January 13, 2026
+zh-CN	13 1月 2026	string	13 1月 2026
+zh-CN	13 一月 2026	string	13 一月 2026
+zh-CN	13-1月-2026	string	13-1月-2026
+zh-CN	13-1月-26	string	13-1月-26
+zh-CN	1月 13 2026	string	1月 13 2026
+zh-CN	1月 13, 2026	string	1月 13, 2026
+zh-CN	一月 13, 2026	string	一月 13, 2026
+zh-CN	2026 1月 13	string	2026 1月 13
+zh-CN	2026-1月-13	string	2026-1月-13
+zh-CN	1月 2026	string	1月 2026
+zh-CN	一月 2026	date	26年1月1日
+zh-CN	13 1月	string	13 1月
+zh-CN	1月 13	string	1月 13
+zh-CN	1月	string	1月
+zh-CN	13. 一月 2026	string	13. 一月 2026
+zh-CN	13 一月	date	13年1月1日
+zh-CN	2026 13 1月	string	2026 13 1月
+zh-CN	13.1月.2026	string	13.1月.2026
+zh-CN	13/1月/2026	string	13/1月/2026
+zh-CN	1月-13-2026	string	1月-13-2026
+zh-CN	13 1月 26	string	13 1月 26
+zh-CN	1 1月 2026	string	1 1月 2026
+zh-CN	13 Jan 2026	string	13 Jan 2026
+zh-CN	Jan 13, 2026	string	Jan 13, 2026
+zh-CN	13 January 2026	string	13 January 2026
+zh-CN	January 13, 2026	string	January 13, 2026
+zh-TW	13 1月 2026	string	13 1月 2026
+zh-TW	13 一月 2026	string	13 一月 2026
+zh-TW	13-1月-2026	string	13-1月-2026
+zh-TW	13-1月-26	string	13-1月-26
+zh-TW	1月 13 2026	string	1月 13 2026
+zh-TW	1月 13, 2026	string	1月 13, 2026
+zh-TW	一月 13, 2026	string	一月 13, 2026
+zh-TW	2026 1月 13	string	2026 1月 13
+zh-TW	2026-1月-13	string	2026-1月-13
+zh-TW	1月 2026	string	1月 2026
+zh-TW	一月 2026	date	2026/1/1
+zh-TW	13 1月	string	13 1月
+zh-TW	1月 13	string	1月 13
+zh-TW	1月	string	1月
+zh-TW	13. 一月 2026	string	13. 一月 2026
+zh-TW	13 一月	date	2013/1/1
+zh-TW	2026 13 1月	string	2026 13 1月
+zh-TW	13.1月.2026	string	13.1月.2026
+zh-TW	13/1月/2026	string	13/1月/2026
+zh-TW	1月-13-2026	string	1月-13-2026
+zh-TW	13 1月 26	string	13 1月 26
+zh-TW	1 1月 2026	string	1 1月 2026
+zh-TW	13 Jan 2026	string	13 Jan 2026
+zh-TW	Jan 13, 2026	string	Jan 13, 2026
+zh-TW	13 January 2026	string	13 January 2026
+zh-TW	January 13, 2026	string	January 13, 2026
+ko-KR	13 Jan 2026	string	13 Jan 2026
+ko-KR	13 January 2026	string	13 January 2026
+ko-KR	13-Jan-2026	date	2026년 1월 13일
+ko-KR	13-Jan-26	date	2026년 1월 13일
+ko-KR	Jan 13 2026	date	2026년 1월 13일
+ko-KR	Jan 13, 2026	string	Jan 13, 2026
+ko-KR	January 13, 2026	string	January 13, 2026
+ko-KR	2026 Jan 13	date	2026년 1월 13일
+ko-KR	2026-Jan-13	date	2026년 1월 13일
+ko-KR	Jan 2026	date	2026년 1월 1일
+ko-KR	January 2026	date	2026년 1월 1일
+ko-KR	13 Jan	date	2013년 1월 1일
+ko-KR	Jan 13	date	2026년 1월 13일
+ko-KR	Jan	string	Jan
+ko-KR	13. January 2026	string	13. January 2026
+ko-KR	13 January	date	2013년 1월 1일
+ko-KR	2026 13 Jan	string	2026 13 Jan
+ko-KR	13.Jan.2026	string	13.Jan.2026
+ko-KR	13/Jan/2026	string	13/Jan/2026
+ko-KR	Jan-13-2026	string	Jan-13-2026
+ko-KR	13 Jan 26	date	2013년 1월 26일
+ko-KR	1 Jan 2026	string	1 Jan 2026
+ko-KR	13 Jan 2026	string	13 Jan 2026
+ko-KR	Jan 13, 2026	string	Jan 13, 2026
+ko-KR	13 January 2026	string	13 January 2026
+ko-KR	January 13, 2026	string	January 13, 2026
+he-IL	13 ינו 2026	date	13/01/26
+he-IL	13 ינואר 2026	date	13/01/26
+he-IL	13-ינו-2026	date	13/01/26
+he-IL	13-ינו-26	date	13/01/26
+he-IL	ינו 13 2026	date	13/01/26
+he-IL	ינו 13, 2026	string	ינו 13, 2026
+he-IL	ינואר 13, 2026	string	ינואר 13, 2026
+he-IL	2026 ינו 13	string	2026 ינו 13
+he-IL	2026-ינו-13	date	13/01/26
+he-IL	ינו 2026	date	01/01/26
+he-IL	ינואר 2026	date	01/01/26
+he-IL	13 ינו	date	13/01/26
+he-IL	ינו 13	date	01/01/13
+he-IL	ינו	string	ינו
+he-IL	13. ינואר 2026	string	13. ינואר 2026
+he-IL	13 ינואר	date	13/01/26
+he-IL	2026 13 ינו	string	2026 13 ינו
+he-IL	13.ינו.2026	date	13/01/26
+he-IL	13/ינו/2026	string	13/ינו/2026
+he-IL	ינו-13-2026	string	ינו-13-2026
+he-IL	13 ינו 26	date	13/01/26
+he-IL	1 ינו 2026	date	01/01/26
+he-IL	13 Jan 2026	string	13 Jan 2026
+he-IL	Jan 13, 2026	string	Jan 13, 2026
+he-IL	13 January 2026	string	13 January 2026
+he-IL	January 13, 2026	string	January 13, 2026
+ar-EG	13 يناير 2026	date	١٤٤٧/٠٧/٢٤
+ar-EG	13 يناير 2026	date	١٤٤٧/٠٧/٢٤
+ar-EG	13-يناير-2026	date	١٤٤٧/٠٧/٢٤
+ar-EG	13-يناير-26	date	١٤٤٧/٠٧/٢٤
+ar-EG	يناير 13 2026	date	١٤٤٧/٠٧/٢٤
+ar-EG	يناير 13, 2026	string	يناير 13, 2026
+ar-EG	يناير 13, 2026	string	يناير 13, 2026
+ar-EG	2026 يناير 13	string	2026 يناير 13
+ar-EG	2026-يناير-13	date	١٤٤٧/٠٧/٢٤
+ar-EG	يناير 2026	date	١٤٤٧/٠٧/١٢
+ar-EG	يناير 2026	date	١٤٤٧/٠٧/١٢
+ar-EG	13 يناير	date	١٤٤٧/٠٧/٢٤
+ar-EG	يناير 13	date	١٤٣٤/٠٢/١٩
+ar-EG	يناير	string	يناير
+ar-EG	13. يناير 2026	string	13. يناير 2026
+ar-EG	13 يناير	date	١٤٤٧/٠٧/٢٤
+ar-EG	2026 13 يناير	string	2026 13 يناير
+ar-EG	13.يناير.2026	string	13.يناير.2026
+ar-EG	13/يناير/2026	string	13/يناير/2026
+ar-EG	يناير-13-2026	string	يناير-13-2026
+ar-EG	13 يناير 26	date	١٤٤٧/٠٧/٢٤
+ar-EG	1 يناير 2026	date	١٤٤٧/٠٧/١٢
+ar-EG	13 Jan 2026	string	13 Jan 2026
+ar-EG	Jan 13, 2026	string	Jan 13, 2026
+ar-EG	13 January 2026	string	13 January 2026
+ar-EG	January 13, 2026	string	January 13, 2026
+hi-IN	13 जनवरी. 2026	string	13 जनवरी. 2026
+hi-IN	13 जनवरी 2026	date	13-01-2026
+hi-IN	13-जनवरी.-2026	string	13-जनवरी.-2026
+hi-IN	13-जनवरी.-26	string	13-जनवरी.-26
+hi-IN	जनवरी. 13 2026	string	जनवरी. 13 2026
+hi-IN	जनवरी. 13, 2026	string	जनवरी. 13, 2026
+hi-IN	जनवरी 13, 2026	string	जनवरी 13, 2026
+hi-IN	2026 जनवरी. 13	string	2026 जनवरी. 13
+hi-IN	2026-जनवरी.-13	string	2026-जनवरी.-13
+hi-IN	जनवरी. 2026	string	जनवरी. 2026
+hi-IN	जनवरी 2026	date	01-01-2026
+hi-IN	13 जनवरी.	string	13 जनवरी.
+hi-IN	जनवरी. 13	string	जनवरी. 13
+hi-IN	जनवरी.	string	जनवरी.
+hi-IN	13. जनवरी 2026	string	13. जनवरी 2026
+hi-IN	13 जनवरी	date	13-01-2026
+hi-IN	2026 13 जनवरी.	string	2026 13 जनवरी.
+hi-IN	13.जनवरी..2026	string	13.जनवरी..2026
+hi-IN	13/जनवरी./2026	string	13/जनवरी./2026
+hi-IN	जनवरी.-13-2026	string	जनवरी.-13-2026
+hi-IN	13 जनवरी. 26	string	13 जनवरी. 26
+hi-IN	1 जनवरी. 2026	string	1 जनवरी. 2026
+hi-IN	13 Jan 2026	string	13 Jan 2026
+hi-IN	Jan 13, 2026	string	Jan 13, 2026
+hi-IN	13 January 2026	string	13 January 2026
+hi-IN	January 13, 2026	string	January 13, 2026
+th-TH	13 ม.ค. 2026	date	13/01/26
+th-TH	13 มกราคม 2026	date	13/01/26
+th-TH	13-ม.ค.-2026	date	13/01/26
+th-TH	13-ม.ค.-26	date	13/01/26
+th-TH	ม.ค. 13 2026	date	13/01/26
+th-TH	ม.ค. 13, 2026	string	ม.ค. 13, 2026
+th-TH	มกราคม 13, 2026	string	มกราคม 13, 2026
+th-TH	2026 ม.ค. 13	string	2026 ม.ค. 13
+th-TH	2026-ม.ค.-13	date	13/01/26
+th-TH	ม.ค. 2026	date	01/01/26
+th-TH	มกราคม 2026	date	01/01/26
+th-TH	13 ม.ค.	date	13/01/26
+th-TH	ม.ค. 13	date	01/01/13
+th-TH	ม.ค.	string	ม.ค.
+th-TH	13. มกราคม 2026	string	13. มกราคม 2026
+th-TH	13 มกราคม	date	13/01/26
+th-TH	2026 13 ม.ค.	string	2026 13 ม.ค.
+th-TH	13.ม.ค..2026	date	13/01/26
+th-TH	13/ม.ค./2026	string	13/ม.ค./2026
+th-TH	ม.ค.-13-2026	string	ม.ค.-13-2026
+th-TH	13 ม.ค. 26	date	13/01/26
+th-TH	1 ม.ค. 2026	date	01/01/26
+th-TH	13 Jan 2026	string	13 Jan 2026
+th-TH	Jan 13, 2026	string	Jan 13, 2026
+th-TH	13 January 2026	string	13 January 2026
+th-TH	January 13, 2026	string	January 13, 2026
+lt-LT	13 Sau 2026	string	13 Sau 2026
+lt-LT	13 sausis 2026	string	13 sausis 2026
+lt-LT	13-Sau-2026	date	2026-01-13
+lt-LT	13-Sau-26	date	2026-01-13
+lt-LT	Sau 13 2026	date	2026-01-13
+lt-LT	Sau 13, 2026	string	Sau 13, 2026
+lt-LT	sausis 13, 2026	string	sausis 13, 2026
+lt-LT	2026 Sau 13	date	2026-01-13
+lt-LT	2026-Sau-13	date	2026-01-13
+lt-LT	Sau 2026	date	2026-01-01
+lt-LT	sausis 2026	date	2026-01-01
+lt-LT	13 Sau	date	2013-01-01
+lt-LT	Sau 13	date	2026-01-13
+lt-LT	Sau	string	Sau
+lt-LT	13. sausis 2026	string	13. sausis 2026
+lt-LT	13 sausis	date	2013-01-01
+lt-LT	2026 13 Sau	string	2026 13 Sau
+lt-LT	13.Sau.2026	string	13.Sau.2026
+lt-LT	13/Sau/2026	string	13/Sau/2026
+lt-LT	Sau-13-2026	date	2026-01-13
+lt-LT	13 Sau 26	date	2013-01-26
+lt-LT	1 Sau 2026	string	1 Sau 2026
+lt-LT	13 Jan 2026	string	13 Jan 2026
+lt-LT	Jan 13, 2026	string	Jan 13, 2026
+lt-LT	13 January 2026	string	13 January 2026
+lt-LT	January 13, 2026	string	January 13, 2026
+ca-ES	13 gen. 2026	date	13/01/26
+ca-ES	13 gener 2026	date	13/01/26
+ca-ES	13-gen.-2026	date	13/01/26
+ca-ES	13-gen.-26	date	13/01/26
+ca-ES	gen. 13 2026	date	13/01/26
+ca-ES	gen. 13, 2026	string	gen. 13, 2026
+ca-ES	gener 13, 2026	string	gener 13, 2026
+ca-ES	2026 gen. 13	string	2026 gen. 13
+ca-ES	2026-gen.-13	date	13/01/26
+ca-ES	gen. 2026	date	01/01/26
+ca-ES	gener 2026	date	01/01/26
+ca-ES	13 gen.	date	13/01/26
+ca-ES	gen. 13	date	01/01/13
+ca-ES	gen.	string	gen.
+ca-ES	13. gener 2026	string	13. gener 2026
+ca-ES	13 gener	date	13/01/26
+ca-ES	2026 13 gen.	string	2026 13 gen.
+ca-ES	13.gen..2026	string	13.gen..2026
+ca-ES	13/gen./2026	string	13/gen./2026
+ca-ES	gen.-13-2026	string	gen.-13-2026
+ca-ES	13 gen. 26	date	13/01/26
+ca-ES	1 gen. 2026	date	01/01/26
+ca-ES	13 Jan 2026	string	13 Jan 2026
+ca-ES	Jan 13, 2026	string	Jan 13, 2026
+ca-ES	13 January 2026	string	13 January 2026
+ca-ES	January 13, 2026	string	January 13, 2026
+sr-RS	13 јан 2026	date	13.01.26
+sr-RS	13 јануар 2026	date	13.01.26
+sr-RS	13-јан-2026	date	13.01.26
+sr-RS	13-јан-26	date	13.01.26
+sr-RS	јан 13 2026	date	13.01.26
+sr-RS	јан 13, 2026	string	јан 13, 2026
+sr-RS	јануар 13, 2026	string	јануар 13, 2026
+sr-RS	2026 јан 13	string	2026 јан 13
+sr-RS	2026-јан-13	date	13.01.26
+sr-RS	јан 2026	date	01.01.26
+sr-RS	јануар 2026	date	01.01.26
+sr-RS	13 јан	date	13.01.26
+sr-RS	јан 13	date	01.01.13
+sr-RS	јан	string	јан
+sr-RS	13. јануар 2026	date	13.01.26
+sr-RS	13 јануар	date	13.01.26
+sr-RS	2026 13 јан	string	2026 13 јан
+sr-RS	13.јан.2026	date	13.01.26
+sr-RS	13/јан/2026	string	13/јан/2026
+sr-RS	јан-13-2026	string	јан-13-2026
+sr-RS	13 јан 26	date	13.01.26
+sr-RS	1 јан 2026	date	01.01.26
+sr-RS	13 Jan 2026	string	13 Jan 2026
+sr-RS	Jan 13, 2026	string	Jan 13, 2026
+sr-RS	13 January 2026	string	13 January 2026
+sr-RS	January 13, 2026	string	January 13, 2026

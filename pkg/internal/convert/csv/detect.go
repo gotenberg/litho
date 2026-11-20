@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
+	"github.com/gotenberg/litho/pkg/internal/numfmt"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // kind is the format Calc's Standard column type gives a detected value
@@ -184,11 +186,16 @@ func detectNumber(s string) (detected, bool) {
 	return detected{kind: k, value: v}, true
 }
 
-// monthNames are the en-US month names and their abbreviations.
-var monthNames = map[string]int{
-	"jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3, "apr": 4, "april": 4,
-	"may": 5, "jun": 6, "june": 6, "jul": 7, "july": 7, "aug": 8, "august": 8, "sep": 9, "sept": 9,
-	"september": 9, "oct": 10, "october": 10, "nov": 11, "november": 11, "dec": 12, "december": 12,
+// enUSMonths reads the en-US dates with a month name.
+var enUSMonths = newEnUSMonths()
+
+// newEnUSMonths returns the namer of en-US.
+func newEnUSMonths() *monthNamer {
+	info, ok := numfmt.Info(models.LocaleEnUS)
+	if !ok {
+		return &monthNamer{}
+	}
+	return newMonthNamer("en", &info.Months, info.Genitive, info.Partitive, info.Order, info.LongOrder, info.DateSep, info.Decimal, info.LongDaySep)
 }
 
 // detectDateTime reads a date, a time, or a date and a time: ISO 8601
@@ -224,7 +231,7 @@ func detectDateTime(s string, year int) (detected, bool) {
 			k = kDateTimeUS
 		}
 	default:
-		if timePart == "" && namedDate(lower, &day) {
+		if timePart == "" && enUSMonths.date(s, year, &day) {
 			return detected{kind: kDateUS, value: day}, true
 		}
 		return detected{}, false
@@ -325,50 +332,6 @@ func usDate(s string, year int, day *float64) bool {
 		y = fullYear(v, len(f[2]))
 	}
 	v, ok := serial(y, m, d)
-	*day = v
-	return ok
-}
-
-// namedDate reads a date with a month name: "Jan 10, 2026", "January 10
-// 2026", "10-Jan-2026", "10 Jan 2026", "Jan 2026".
-func namedDate(s string, day *float64) bool {
-	f := strings.FieldsFunc(s, func(r rune) bool { return r == ' ' || r == ',' || r == '-' })
-	var m, d, y, yDigits int
-	switch {
-	case len(f) == 3 && monthNames[f[0]] > 0:
-		m = monthNames[f[0]]
-		var ok bool
-		if d, ok = atoi(f[1], 2); !ok {
-			return false
-		}
-		if y, ok = atoi(f[2], 4); !ok {
-			return false
-		}
-		yDigits = len(f[2])
-	case len(f) == 3 && monthNames[f[1]] > 0:
-		m = monthNames[f[1]]
-		var ok bool
-		if d, ok = atoi(f[0], 2); !ok {
-			return false
-		}
-		if y, ok = atoi(f[2], 4); !ok {
-			return false
-		}
-		yDigits = len(f[2])
-	case len(f) == 2 && monthNames[f[0]] > 0 && len(f[1]) == 4:
-		m, d = monthNames[f[0]], 1
-		var ok bool
-		if y, ok = atoi(f[1], 4); !ok {
-			return false
-		}
-		yDigits = 4
-	default:
-		return false
-	}
-	if yDigits == 3 {
-		return false
-	}
-	v, ok := serial(fullYear(y, yDigits), m, d)
 	*day = v
 	return ok
 }

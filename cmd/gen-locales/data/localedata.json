@@ -16,6 +16,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "waar",
@@ -157,6 +158,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M/D"
    ]
@@ -176,6 +178,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "waar",
@@ -317,6 +320,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D",
     "M/D"
@@ -337,6 +341,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AN",
    "pm": "EW",
    "true": "Yiw",
@@ -478,6 +483,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M/D"
    ]
@@ -497,6 +503,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "ጡዋት",
    "pm": "ከሰዓት",
    "true": "አውነት",
@@ -638,6 +645,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -658,6 +666,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "Verdadero",
@@ -849,6 +858,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -869,6 +879,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -1010,6 +1021,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -1030,6 +1042,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -1171,6 +1184,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -1191,6 +1205,7 @@
    "time100Sep": "٫",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -1332,6 +1347,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -1352,6 +1368,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -1493,6 +1510,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -1513,6 +1531,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -1654,6 +1673,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -1674,6 +1694,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -1815,6 +1836,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -1835,6 +1857,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -1976,6 +1999,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -1996,6 +2020,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -2137,6 +2162,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -2157,6 +2183,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -2298,6 +2325,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -2318,6 +2346,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -2459,6 +2488,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -2478,6 +2508,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صحيح",
@@ -2619,6 +2650,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -2639,6 +2671,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -2780,6 +2813,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -2800,6 +2834,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -2941,6 +2976,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -2961,6 +2997,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -3102,6 +3139,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -3122,6 +3160,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -3263,6 +3302,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -3283,6 +3323,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "، ",
+   "longDaySep": "، ",
    "am": "ص",
    "pm": "م",
    "true": "صح",
@@ -3424,6 +3465,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -3443,6 +3485,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "Braero",
@@ -3634,6 +3677,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -3653,6 +3697,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -3794,6 +3839,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -3814,6 +3860,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "düz",
@@ -3955,6 +4002,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -3974,6 +4022,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "сапраўдна",
@@ -4165,6 +4214,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M/",
     "D.M."
@@ -4185,6 +4235,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -4326,6 +4377,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -4345,6 +4397,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "пр. об.",
    "pm": "сл. об.",
    "true": "вярно",
@@ -4486,6 +4539,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M.Y г.",
     "D.M.Y г.",
@@ -4509,6 +4563,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -4650,6 +4705,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -4669,6 +4725,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "s.fɛ",
    "pm": "w.fɛ",
    "true": "Tiɲɛ",
@@ -4810,6 +4867,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -4829,6 +4887,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "পূর্বাহ্ণ",
    "pm": "অপরাহ্ণ",
    "true": "সত্য",
@@ -4969,6 +5028,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D-M"
    ],
@@ -4991,6 +5051,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "পূর্বাহ্ণ",
    "pm": "অপরাহ্ণ",
    "true": "সত্য",
@@ -5132,6 +5193,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D-M"
    ],
@@ -5154,6 +5216,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "སྔ་ཆ",
    "pm": "ཕྱི་ཆ",
    "true": "ཨིན་",
@@ -5295,6 +5358,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "YMD",
    "acceptance": [
     "M-D"
    ]
@@ -5314,6 +5378,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "སྔ་ཆ",
    "pm": "ཕྱི་ཆ",
    "true": "ཨིན་",
@@ -5456,6 +5521,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "YMD",
    "acceptance": [
     "M-D"
    ]
@@ -5476,6 +5542,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "gwir",
@@ -5617,6 +5684,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M.Y",
@@ -5639,6 +5707,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "tacno",
@@ -5780,6 +5849,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -5799,6 +5869,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -5940,6 +6011,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -5960,6 +6032,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " de ",
    "am": "AM",
    "pm": "PM",
    "true": "veritat",
@@ -6101,6 +6174,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -6121,6 +6195,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " de ",
    "am": "AM",
    "pm": "PM",
    "true": "veritat",
@@ -6262,6 +6337,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -6281,6 +6357,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ". ",
    "am": "dop.",
    "pm": "odp.",
    "true": "pravda",
@@ -6472,6 +6549,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M.",
     "D. M.",
@@ -6495,6 +6573,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "до по́лꙋд.",
    "pm": "по по́лꙋд.",
    "true": "вѣ́рнѡ",
@@ -6686,6 +6765,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M.",
     "D/M/"
@@ -6706,6 +6786,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "тĕрĕс",
@@ -6847,6 +6928,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -6866,6 +6948,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -7007,6 +7090,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -7027,6 +7111,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": ". ",
    "am": "AM",
    "pm": "PM",
    "true": "sand",
@@ -7168,6 +7253,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D-M"
    ]
@@ -7187,6 +7273,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -7328,6 +7415,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -7347,6 +7435,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ". ",
    "am": "vorm.",
    "pm": "nachm.",
    "true": "wahr",
@@ -7488,6 +7577,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M."
    ]
@@ -7507,6 +7597,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ". ",
    "am": "vorm.",
    "pm": "nachm.",
    "true": "wahr",
@@ -7648,6 +7739,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M."
    ]
@@ -7667,6 +7759,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ". ",
    "am": "vorm.",
    "pm": "nachm.",
    "true": "wahr",
@@ -7808,6 +7901,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M."
    ]
@@ -7827,6 +7921,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ". ",
    "am": "vorm.",
    "pm": "nachm.",
    "true": "wahr",
@@ -7968,6 +8063,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M."
    ]
@@ -7987,6 +8083,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ". ",
    "am": "vorm.",
    "pm": "nachm.",
    "true": "wahr",
@@ -8128,6 +8225,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M."
    ]
@@ -8148,6 +8246,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ". ",
    "am": "dopołdnja",
    "pm": "wótpołdnja",
    "true": "wěrno",
@@ -8339,6 +8438,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M."
    ]
@@ -8358,6 +8458,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ،",
+   "longDaySep": " ،",
    "am": "މކ",
    "pm": "މފ",
    "true": "true",
@@ -8499,6 +8600,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "YMD",
    "acceptance": [
     "D/M"
    ]
@@ -8519,6 +8621,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "སྔ་ཆ",
    "pm": "ཕྱི་ཆ",
    "true": "ཨིན་",
@@ -8661,6 +8764,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "YMD",
    "acceptance": [
     "M-D"
    ]
@@ -8680,6 +8784,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "ND",
    "pm": "LK",
    "true": "ngaŋwa",
@@ -8821,6 +8926,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -8840,6 +8946,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AN",
    "pm": "EW",
    "true": "ɛ",
@@ -8981,6 +9088,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M/D"
    ]
@@ -9000,6 +9108,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "ΠΜ",
    "pm": "ΜΜ",
    "true": "σωστό",
@@ -9141,6 +9250,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -9160,6 +9270,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -9301,6 +9412,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -9320,6 +9432,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -9461,6 +9574,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -9481,6 +9595,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -9622,6 +9737,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M/D"
    ]
@@ -9641,6 +9757,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -9782,6 +9899,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M-D",
     "M/D/Y",
@@ -9803,6 +9921,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": ". ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -9944,6 +10063,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D"
    ]
@@ -9963,6 +10083,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -10104,6 +10225,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -10124,6 +10246,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "True",
@@ -10265,6 +10388,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M/D"
    ]
@@ -10284,6 +10408,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -10425,6 +10550,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -10445,6 +10571,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -10586,6 +10713,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -10606,6 +10734,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -10747,6 +10876,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -10767,6 +10897,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "true",
@@ -10908,6 +11039,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -10928,6 +11060,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -11069,6 +11202,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -11088,6 +11222,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -11230,6 +11365,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -11250,6 +11386,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -11391,6 +11528,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D/M"
    ]
@@ -11410,6 +11548,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -11551,6 +11690,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -11571,6 +11711,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -11712,6 +11853,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -11732,6 +11874,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -11873,6 +12016,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -11893,6 +12037,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -12034,6 +12179,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -12054,6 +12200,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -12195,6 +12342,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -12215,6 +12363,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -12356,6 +12505,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M/D"
    ]
@@ -12375,6 +12525,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -12516,6 +12667,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -12536,6 +12688,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -12677,6 +12830,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -12696,6 +12850,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -12837,6 +12992,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M/D"
    ]
@@ -12856,6 +13012,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -12997,6 +13154,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M/D"
    ]
@@ -13016,6 +13174,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -13157,6 +13316,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M/D"
    ]
@@ -13176,6 +13336,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -13317,6 +13478,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D",
     "M/D"
@@ -13337,6 +13499,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -13478,6 +13641,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -13498,6 +13662,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -13639,6 +13804,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M/D"
    ]
@@ -13657,6 +13823,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "atm",
    "pm": "ptm",
    "true": "vera",
@@ -13798,6 +13965,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D"
    ]
@@ -13817,6 +13985,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -13958,6 +14127,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -13977,6 +14147,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -14118,6 +14289,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -14137,6 +14309,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -14278,6 +14451,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D-M"
    ]
@@ -14297,6 +14471,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -14438,6 +14613,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -14457,6 +14633,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -14598,6 +14775,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -14617,6 +14795,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -14758,6 +14937,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -14777,6 +14957,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -14918,6 +15099,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -14938,6 +15120,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -15079,6 +15262,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -15098,6 +15282,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -15239,6 +15424,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -15258,6 +15444,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -15399,6 +15586,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -15418,6 +15606,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -15559,6 +15748,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -15578,6 +15768,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -15719,6 +15910,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -15738,6 +15930,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -15879,6 +16072,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -15898,6 +16092,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -16039,6 +16234,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -16058,6 +16254,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -16199,6 +16396,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -16218,6 +16416,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -16359,6 +16558,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -16378,6 +16578,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " de ",
    "am": "AM",
    "pm": "PM",
    "true": "verdadero",
@@ -16519,6 +16720,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -16538,6 +16740,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "verdadero",
@@ -16679,6 +16882,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -16698,6 +16902,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -16839,6 +17044,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -16858,6 +17064,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ". ",
    "am": "e.l",
    "pm": "p.l",
    "true": "tõene",
@@ -17013,6 +17220,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M",
     "D. M",
@@ -17035,6 +17243,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "egiazkoa",
@@ -17176,6 +17385,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "YMD",
    "acceptance": [
     "M/D"
    ]
@@ -17195,6 +17405,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadero",
@@ -17336,6 +17547,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -17356,6 +17568,7 @@
    "time100Sep": "٫",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "صبح",
    "pm": "بعدازظهر",
    "true": "درست",
@@ -17498,6 +17711,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M/D"
    ]
@@ -17517,6 +17731,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": ". ",
    "am": "ap.",
    "pm": "ip.",
    "true": "Tosi",
@@ -17758,6 +17973,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M."
    ]
@@ -17777,6 +17993,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": ". ",
    "am": "AM",
    "pm": "PM",
    "true": "sonn",
@@ -17918,6 +18135,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D-M"
    ]
@@ -17937,6 +18155,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -18078,6 +18297,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -18097,6 +18317,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -18238,6 +18459,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M.Y",
@@ -18259,6 +18481,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -18400,6 +18623,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M.Y",
@@ -18421,6 +18645,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -18562,6 +18787,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D",
     "M/D/Y",
@@ -18583,6 +18809,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -18724,6 +18951,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M."
@@ -18744,6 +18972,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -18885,6 +19114,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M.Y",
@@ -18906,6 +19136,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -19047,6 +19278,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M.Y",
@@ -19068,6 +19300,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -19209,6 +19442,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M.Y",
@@ -19230,6 +19464,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -19371,6 +19606,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -19390,6 +19626,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -19531,6 +19768,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M.Y",
@@ -19552,6 +19790,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -19693,6 +19932,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M.Y",
@@ -19714,6 +19954,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -19855,6 +20096,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M.Y",
@@ -19876,6 +20118,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -20017,6 +20260,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M.Y",
@@ -20038,6 +20282,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -20179,6 +20424,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M.Y",
@@ -20200,6 +20446,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " di ",
    "am": "AM",
    "pm": "PM",
    "true": "vêr",
@@ -20335,6 +20582,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ],
@@ -20362,6 +20610,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "ma",
    "pm": "mi",
    "true": "wier",
@@ -20503,6 +20752,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D-M"
    ]
@@ -20522,6 +20772,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "fíor",
@@ -20663,6 +20914,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -20684,6 +20936,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "m",
    "pm": "f",
    "true": "Fìor",
@@ -20875,6 +21128,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M.Y",
@@ -20896,6 +21150,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " de ",
    "am": "a. m.",
    "pm": "p. m.",
    "true": "verdadeiro",
@@ -21037,6 +21292,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -21056,6 +21312,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "woar",
@@ -21197,6 +21454,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D-M"
    ]
@@ -21216,6 +21474,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "deu matin",
    "pm": "deu vrèspe",
    "true": "exacte",
@@ -21357,6 +21616,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M.Y",
@@ -21378,6 +21638,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "ખરું",
@@ -21519,6 +21780,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D-M"
    ],
@@ -21541,6 +21803,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "te'ete",
@@ -21682,6 +21945,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -21701,6 +21965,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "Gaskiya",
@@ -21842,6 +22107,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M/D"
    ]
@@ -21861,6 +22127,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "Gaskiya",
@@ -22002,6 +22269,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M/D"
    ]
@@ -22021,6 +22289,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "ʻOiaʻiʻo",
@@ -22162,6 +22431,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M/D"
    ]
@@ -22181,6 +22451,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -22322,6 +22593,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -22341,6 +22613,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "सही",
@@ -22482,6 +22755,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D-M"
    ],
@@ -22504,6 +22778,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "tuod",
@@ -22645,6 +22920,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M/D"
    ]
@@ -22664,6 +22940,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ". ",
    "am": "AM",
    "pm": "PM",
    "true": "točno",
@@ -22855,6 +23132,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M",
     "D.M.Y.",
@@ -22878,6 +23156,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ". ",
    "am": "dopołdnja",
    "pm": "popołdnju",
    "true": "prawje",
@@ -23069,6 +23348,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M."
    ]
@@ -23088,6 +23368,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "Vre",
@@ -23229,6 +23510,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -23248,6 +23530,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": ".",
    "am": "de.",
    "pm": "du.",
    "true": "Igaz",
@@ -23403,6 +23686,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "YMD",
    "acceptance": [
     "M-D",
     "M.D",
@@ -23428,6 +23712,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "ճշմարիտ",
@@ -23569,6 +23854,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -23587,6 +23873,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "ver",
@@ -23728,6 +24015,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -23747,6 +24035,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "benar",
@@ -23888,6 +24177,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -23907,6 +24197,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ti ",
    "am": "AM",
    "pm": "PM",
    "true": "pudno",
@@ -24048,6 +24339,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M/D",
     "M-D"
@@ -24068,6 +24360,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": ". ",
    "am": "f.h.",
    "pm": "e.h.",
    "true": "Rétt",
@@ -24209,6 +24502,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M.",
     "D. M.",
@@ -24231,6 +24525,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "vero",
@@ -24372,6 +24667,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M."
    ]
@@ -24391,6 +24687,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "vero",
@@ -24532,6 +24829,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -24551,6 +24849,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -24692,6 +24991,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -24711,6 +25011,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": "日",
    "am": "午前",
    "pm": "午後",
    "true": "true",
@@ -24852,6 +25153,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "YMD",
    "acceptance": [
     "M-D",
     "M/D",
@@ -24876,6 +25178,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "PDM",
    "pm": "BDM",
    "true": "jetnu",
@@ -25017,6 +25320,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -25036,6 +25340,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "ჭეშმარიტი",
@@ -25177,6 +25482,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -25197,6 +25503,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "n tufat",
    "pm": "n tmeddit",
    "true": "ih",
@@ -25338,6 +25645,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -25357,6 +25665,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "ақиқат",
@@ -25498,6 +25807,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -25517,6 +25827,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -25658,6 +25969,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -25678,6 +25990,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": ". ",
    "am": "AM",
    "pm": "PM",
    "true": "eqqortoq",
@@ -25819,6 +26132,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D-M"
    ]
@@ -25838,6 +26152,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "ព្រឹក",
    "pm": "ល្ងាច",
    "true": "ត្រូវ",
@@ -25979,6 +26294,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -25998,6 +26314,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "BN",
    "pm": "PN",
    "true": "rast",
@@ -26139,6 +26456,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M/D"
    ]
@@ -26158,6 +26476,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "ಸಹೀ",
@@ -26299,6 +26618,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D-M"
    ],
@@ -26321,6 +26641,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -26462,6 +26783,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -26482,6 +26804,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "",
+   "longDaySep": "일",
    "am": "오전",
    "pm": "오후",
    "true": "참",
@@ -26623,6 +26946,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "YMD",
    "acceptance": [
     "M/D",
     "M-D",
@@ -26647,6 +26971,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "чындык",
@@ -26788,6 +27113,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -26809,6 +27135,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "verum",
@@ -26999,6 +27326,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ],
@@ -27022,6 +27350,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ". ",
    "am": "moies",
    "pm": "nomëttes",
    "true": "wouer",
@@ -27163,6 +27492,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -27182,6 +27512,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -27323,6 +27654,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -27342,6 +27674,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "Kituufu",
@@ -27483,6 +27816,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M/D"
    ]
@@ -27502,6 +27836,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "Uthui",
@@ -27643,6 +27978,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D"
    ]
@@ -27662,6 +27998,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "पूर्वान्ह",
    "pm": "अपरान्ह",
    "true": "ठीक",
@@ -27803,6 +28140,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M/D"
    ]
@@ -27822,6 +28160,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " a-i ",
+   "longDaySep": " de ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "veo",
@@ -27963,6 +28302,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -27982,6 +28322,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "Veira",
@@ -28123,6 +28464,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -28142,6 +28484,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "mpenzá",
@@ -28283,6 +28626,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D-M"
    ]
@@ -28302,6 +28646,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "ກ່ອນທ່ຽງ",
    "pm": "ຫລັງທ່ຽງ",
    "true": "ແມ່ນແລ້ວ",
@@ -28442,6 +28787,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ],
@@ -28465,6 +28811,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "priešpiet",
    "pm": "popiet",
    "true": "teisingai",
@@ -28656,6 +29003,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "YMD",
    "acceptance": [
     "M-D"
    ]
@@ -28675,6 +29023,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "patīss",
@@ -28816,6 +29165,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -28835,6 +29185,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": "",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "patiess",
@@ -28976,6 +29327,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "YDM",
    "acceptance": [
     "D.M"
    ]
@@ -28995,6 +29347,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "पूर्वाह्न",
    "pm": "अपराह्न",
    "true": "सही",
@@ -29137,6 +29490,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M."
    ]
@@ -29156,6 +29510,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -29297,6 +29652,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -29316,6 +29672,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -29457,6 +29814,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -29476,6 +29834,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "bana",
@@ -29617,6 +29976,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -29636,6 +29996,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "точно",
@@ -29777,6 +30138,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D.M"
    ]
@@ -29796,6 +30158,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -29937,6 +30300,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -29956,6 +30320,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "അതെ",
@@ -30097,6 +30462,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D-M"
    ],
@@ -30119,6 +30485,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "үнэн",
@@ -30260,6 +30627,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M.D"
    ]
@@ -30279,6 +30647,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "ᠦᠨᠡᠨ",
@@ -30420,6 +30789,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M.D"
    ]
@@ -30439,6 +30809,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "sɩda",
@@ -30580,6 +30951,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M/D"
    ]
@@ -30599,6 +30971,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "सही",
@@ -30740,6 +31113,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D-M"
    ],
@@ -30762,6 +31136,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -30903,6 +31278,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D-M"
@@ -30923,6 +31299,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "QN",
    "pm": "WN",
    "true": "Veru",
@@ -31064,6 +31441,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -31083,6 +31461,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "၊ ",
+   "longDaySep": "၊ ",
    "am": "နံနက်",
    "pm": "ညနေ",
    "true": "မှန်",
@@ -31224,6 +31603,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 85
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D/M"
    ]
@@ -31243,6 +31623,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "в.м.",
    "pm": "ч.л.",
    "true": "Виде",
@@ -31384,6 +31765,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M/D"
    ]
@@ -31403,6 +31785,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": ". ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "sann",
@@ -31544,6 +31927,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M",
     "D/M/Y",
@@ -31566,6 +31950,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ". ",
    "am": "vüörm.",
    "pm": "naom.",
    "true": "waor",
@@ -31707,6 +32092,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M."
    ]
@@ -31726,6 +32112,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "पूर्वान्ह",
    "pm": "अपरान्ह",
    "true": "ठीक",
@@ -31866,6 +32253,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M/D"
    ],
@@ -31888,6 +32276,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -32029,6 +32418,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -32048,6 +32438,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -32189,6 +32580,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -32208,6 +32600,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -32349,6 +32742,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -32368,6 +32762,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "waar",
@@ -32509,6 +32904,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -32528,6 +32924,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "waar",
@@ -32669,6 +33066,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D-M"
    ]
@@ -32688,6 +33086,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": ". ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "sann",
@@ -32829,6 +33228,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M",
     "D/M/Y",
@@ -32851,6 +33251,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": ". ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "sann",
@@ -32992,6 +33393,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M",
     "D/M/Y",
@@ -33014,6 +33416,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "qiniso",
@@ -33155,6 +33558,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D",
     "M/D"
@@ -33175,6 +33579,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -33316,6 +33721,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D",
     "M/D"
@@ -33336,6 +33742,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "Choona",
@@ -33477,6 +33884,7 @@
     "SCIENTIFIC_NUMBER": 6,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -33496,6 +33904,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " de ",
    "am": "AM",
    "pm": "PM",
    "true": "vertat",
@@ -33637,6 +34046,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -33656,6 +34066,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "verai",
@@ -33797,6 +34208,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D.M.Y",
@@ -33818,6 +34230,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "Dhugaa",
@@ -33959,6 +34372,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -33978,6 +34392,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "ପୂର୍ବାହ୍ନ",
    "pm": "ଅପରାହ୍ନ",
    "true": "ସତ",
@@ -34120,6 +34535,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -34139,6 +34555,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "ਸ਼ਾਮ",
    "true": "ਸਹੀ",
@@ -34280,6 +34697,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D-M"
    ],
@@ -34302,6 +34720,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "Berdat",
@@ -34443,6 +34862,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D"
    ]
@@ -34462,6 +34882,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "Berdat",
@@ -34603,6 +35024,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D"
    ]
@@ -34622,6 +35044,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "waahr",
@@ -34763,6 +35186,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M/D"
    ]
@@ -34782,6 +35206,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "tjukaṟuru",
@@ -34923,6 +35348,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -34942,6 +35368,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "prawda",
@@ -35133,6 +35560,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -35153,6 +35581,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "Marina",
@@ -35294,6 +35723,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -35313,6 +35743,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " de ",
    "am": "AM",
    "pm": "PM",
    "true": "verdadeiro",
@@ -35454,6 +35885,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D-M"
    ]
@@ -35473,6 +35905,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " de ",
    "am": "AM",
    "pm": "PM",
    "true": "verdadeiro",
@@ -35614,6 +36047,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -35633,6 +36067,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " de ",
    "am": "AM",
    "pm": "PM",
    "true": "verdadeiro",
@@ -35774,6 +36209,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D-M"
    ]
@@ -35793,6 +36229,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": " de ",
    "am": "AM",
    "pm": "PM",
    "true": "verdadeiro",
@@ -35934,6 +36371,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D-M"
    ]
@@ -35953,6 +36391,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "pc",
    "pm": "cp",
    "true": "ȓ",
@@ -36090,6 +36529,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ],
@@ -36115,6 +36555,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -36256,6 +36697,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -36275,6 +36717,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "adevărat",
@@ -36416,6 +36859,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -36435,6 +36879,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "adevărat",
@@ -36576,6 +37021,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -36595,6 +37041,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "истина",
@@ -36786,6 +37233,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M.",
     "D/M/"
@@ -36806,6 +37254,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "дообіду",
    "pm": "пообідї",
    "true": "Правда",
@@ -36947,6 +37396,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -36967,6 +37417,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "nibyo",
@@ -37108,6 +37559,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -37127,6 +37579,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "ᱥᱟᱹᱨᱤ",
@@ -37268,6 +37721,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D-M"
    ],
@@ -37290,6 +37744,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "ᱥᱟᱹᱨᱤ",
@@ -37430,6 +37885,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D-M"
    ],
@@ -37452,6 +37908,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "Beru",
@@ -37593,6 +38050,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -37612,6 +38070,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -37753,6 +38212,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -37772,6 +38232,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "ND",
    "pm": "LK",
    "true": "Taâ-tënë",
@@ -37913,6 +38374,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -37932,6 +38394,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -38073,6 +38536,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M-D",
     "M/D/Y",
@@ -38094,6 +38558,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "Halale",
@@ -38235,6 +38700,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M/D"
    ]
@@ -38254,6 +38720,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ". ",
    "am": "dop.",
    "pm": "odp.",
    "true": "pravda",
@@ -38445,6 +38912,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M.",
     "D. M.",
@@ -38468,6 +38936,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "dop.",
    "pm": "pop.",
    "true": "true",
@@ -38609,6 +39078,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D. M. Y",
     "D.M.",
@@ -38630,6 +39100,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "XH",
    "pm": "XD",
    "true": "Run",
@@ -38771,6 +39242,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -38790,6 +39262,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "e paradites",
    "pm": "e pasdites",
    "true": "e vërtetë",
@@ -38931,6 +39404,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -38951,6 +39425,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "пре.",
    "pm": "поп.",
    "true": "тачно",
@@ -39092,6 +39567,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -39111,6 +39587,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "pre.",
    "pm": "pop.",
    "true": "tačno",
@@ -39252,6 +39729,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -39272,6 +39750,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "pre.",
    "pm": "pop.",
    "true": "tačno",
@@ -39413,6 +39892,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -39433,6 +39913,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "pre.",
    "pm": "pop.",
    "true": "tačno",
@@ -39574,6 +40055,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -39594,6 +40076,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "пре.",
    "pm": "поп.",
    "true": "тачно",
@@ -39735,6 +40218,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -39755,6 +40239,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "пре.",
    "pm": "поп.",
    "true": "тачно",
@@ -39896,6 +40381,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -39915,6 +40401,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -40056,6 +40543,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D",
     "M/D"
@@ -40076,6 +40564,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -40217,6 +40706,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D",
     "M/D"
@@ -40237,6 +40727,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "leres",
@@ -40378,6 +40869,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -40397,6 +40889,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": ". ",
    "am": "fm",
    "pm": "em",
    "true": "sant",
@@ -40538,6 +41031,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -40557,6 +41051,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "fm",
    "pm": "em",
    "true": "sant",
@@ -40698,6 +41193,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M",
     "D/M Y"
@@ -40718,6 +41214,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "UM",
    "pm": "MU",
    "true": "kweli",
@@ -40859,6 +41356,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D/M"
    ]
@@ -40878,6 +41376,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "prowda",
@@ -41069,6 +41568,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -41088,6 +41588,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "ஸரி",
@@ -41229,6 +41730,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D-M"
    ],
@@ -41251,6 +41753,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "నిజము",
@@ -41392,6 +41895,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "MDY",
    "acceptance": [
     "D-M"
    ],
@@ -41414,6 +41918,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -41555,6 +42060,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -41574,6 +42080,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "ПЧ",
    "pm": "БЧ",
    "true": "Ҳаққонӣ",
@@ -41715,6 +42222,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -41734,6 +42242,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "จริง",
@@ -41874,6 +42383,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ],
@@ -41896,6 +42406,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "ሓቂ",
@@ -42037,6 +42548,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M/D"
    ]
@@ -42056,6 +42568,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "ንጉሆ",
    "pm": "ምሸት",
    "true": "ሓቂ",
@@ -42197,6 +42710,7 @@
     "SCIENTIFIC_NUMBER": 6,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -42216,6 +42730,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "ÖÖ",
    "pm": "ÖS",
    "true": "Dogry",
@@ -42357,6 +42872,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -42376,6 +42892,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -42517,6 +43034,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D",
     "M/D"
@@ -42537,6 +43055,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "Tru",
@@ -42678,6 +43197,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -42697,6 +43217,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "doğru",
@@ -42838,6 +43359,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M",
     "D/M",
@@ -42861,6 +43383,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "ntiyiso",
@@ -43002,6 +43525,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D",
     "M/D"
@@ -43022,6 +43546,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -43163,6 +43688,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -43182,6 +43708,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "көндез",
    "pm": "кич",
    "true": "чын",
@@ -43323,6 +43850,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M."
    ]
@@ -43342,6 +43870,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "ND",
    "pm": "LK",
    "true": "vrai",
@@ -43483,6 +44012,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -43502,6 +44032,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "چ ب",
    "pm": "چ ك",
    "true": "راست",
@@ -43643,6 +44174,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D"
    ]
@@ -43662,6 +44194,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": "",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "істина",
@@ -43853,6 +44386,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -43872,6 +44406,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "قبل دوپہر",
    "pm": "بعد دوپہر",
    "true": "راست",
@@ -44013,6 +44548,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -44033,6 +44569,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "haqiqiy",
@@ -44174,6 +44711,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M"
    ]
@@ -44193,6 +44731,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "ngoho",
@@ -44334,6 +44873,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D",
     "M/D"
@@ -44354,6 +44894,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "a.m.",
    "pm": "p.m.",
    "true": "Vero",
@@ -44495,6 +45036,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -44514,6 +45056,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "sáng",
    "pm": "chiều",
    "true": "đúng",
@@ -44655,6 +45198,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -44674,6 +45218,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -44815,6 +45360,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -44834,6 +45380,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ". ",
    "am": "i.l",
    "pm": "p.l",
    "true": "tõtõ",
@@ -44989,6 +45536,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D.M",
     "D. M",
@@ -45011,6 +45559,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " di ",
    "am": "AM",
    "pm": "PM",
    "true": "vraiy",
@@ -45152,6 +45701,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -45171,6 +45721,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "yinyaniso",
@@ -45312,6 +45863,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D",
     "M/D"
@@ -45332,6 +45884,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -45473,6 +46026,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -45492,6 +46046,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "אמת",
@@ -45633,6 +46188,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "MDY",
    "acceptance": [
     "M/D"
    ]
@@ -45652,6 +46208,7 @@
    "time100Sep": ",",
    "listSep": ";",
    "dayOfWeekSep": ", ",
+   "longDaySep": ", ",
    "am": "AM",
    "pm": "PM",
    "true": "vrai",
@@ -45793,6 +46350,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
+   "longOrder": "DMY",
    "acceptance": [
     "D/M"
    ]
@@ -45813,6 +46371,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "",
+   "longDaySep": "日",
    "am": "上午",
    "pm": "下午",
    "true": "TRUE",
@@ -45954,6 +46513,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "YMD",
    "acceptance": [
     "M-D",
     "M/D",
@@ -45979,6 +46539,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "",
+   "longDaySep": "日",
    "am": "上午",
    "pm": "下午",
    "true": "真",
@@ -46120,6 +46681,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "YMD",
    "acceptance": [
     "D/M"
    ]
@@ -46139,6 +46701,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "",
+   "longDaySep": "日",
    "am": "上午",
    "pm": "下午",
    "true": "真",
@@ -46280,6 +46843,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 69
    },
+   "longOrder": "YMD",
    "acceptance": [
     "D-M"
    ]
@@ -46299,6 +46863,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "",
+   "longDaySep": "日",
    "am": "上午",
    "pm": "下午",
    "true": "TRUE",
@@ -46440,6 +47005,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "YMD",
    "acceptance": [
     "M/D"
    ]
@@ -46459,6 +47025,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": "",
+   "longDaySep": "日",
    "am": "上午",
    "pm": "下午",
    "true": "真",
@@ -46596,6 +47163,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "YMD",
    "acceptance": [
     "M月D日",
     "M-D",
@@ -46625,6 +47193,7 @@
    "time100Sep": ".",
    "listSep": ";",
    "dayOfWeekSep": " ",
+   "longDaySep": " ",
    "am": "AM",
    "pm": "PM",
    "true": "true",
@@ -46766,6 +47335,7 @@
     "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
+   "longOrder": "DMY",
    "acceptance": [
     "M-D",
     "M/D"

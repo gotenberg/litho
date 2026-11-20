@@ -57,6 +57,8 @@ type localeRecord struct {
 	Time100Sep   string `json:"time100Sep"`
 	ListSep      string `json:"listSep"`
 	DayOfWeekSep string `json:"dayOfWeekSep"`
+	// LongDateDaySeparator, what a long date writes after its day.
+	LongDaySep string `json:"longDaySep"`
 	// LC_CTYPE TimeAM and TimePM.
 	AM string `json:"am"`
 	PM string `json:"pm"`
@@ -88,6 +90,11 @@ type localeRecord struct {
 	Codes map[string]string `json:"codes"`
 	// Defaults are the formatindex of the default format of each usage.
 	Defaults map[string]int `json:"defaults"`
+	// LongOrder is the order of day, month and year of the locale's long
+	// date format, "DMY", "MDY", "YMD" or "YDM", as LibreOffice reads it
+	// from the raw format code (unotools localedatawrapper.cxx,
+	// loadDateOrders and scanDateOrderImpl).
+	LongOrder string `json:"longOrder"`
 	// Acceptance are LC_FORMAT's DateAcceptancePattern.
 	Acceptance []string `json:"acceptance,omitempty"`
 	// Unsupported are the format codes, by formatindex, that hold a

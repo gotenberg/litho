@@ -244,6 +244,7 @@ func record(file string, trees map[string]*node, ids map[string][]uint16) (local
 	r.Time100Sep = sep.textOf("Time100SecSeparator")
 	r.ListSep = sep.textOf("ListSeparator")
 	r.DayOfWeekSep = sep.textOf("LongDateDayOfWeekSeparator")
+	r.LongDaySep = sep.textOf("LongDateDaySeparator")
 	r.AM = ctype.textOf("TimeAM")
 	r.PM = ctype.textOf("TimePM")
 
@@ -455,6 +456,11 @@ func (r *localeRecord) formats(trees map[string]*node, file string) error {
 		}
 		elems = append(elems, elem{index: idx, usage: e.attrs["usage"], typ: e.attrs["type"], def: e.attrs["default"] == "true", code: code})
 	}
+	fs := make([]dateFormat, len(elems))
+	for i, e := range elems {
+		fs[i] = dateFormat{index: e.index, usage: e.usage, typ: e.typ, def: e.def}
+	}
+	r.LongOrder = longDateOrder(fs, func(i int) string { return elems[i].code })
 	tr := translator{kw: kw, general: general, decimal: r.Decimal, group: r.Group, time100: r.Time100Sep, dowSep: r.DayOfWeekSep}
 	r.Codes = map[string]string{}
 	for _, e := range elems {
@@ -506,6 +512,88 @@ func (r *localeRecord) formats(trees map[string]*node, file string) error {
 		}
 	}
 	return nil
+}
+
+// dateFormat is what loadDateOrders reads of one format element.
+type dateFormat struct {
+	index      int
+	usage, typ string
+	def        bool
+}
+
+// longDateOrder returns the order of the locale's long date as
+// LibreOffice reads it (unotools/source/i18n/localedatawrapper.cxx,
+// loadDateOrders): the last default long DATE format, else the first
+// long one, else the edit format of index 21, scanned for the first D,
+// M and Y of its raw code (scanDateOrderImpl, with the localized letters
+// it tries when one is missing). code returns an element's raw code.
+func longDateOrder(fs []dateFormat, code func(int) string) string {
+	edit, long := -1, -1
+	for i, f := range fs {
+		if f.usage != "DATE" {
+			continue
+		}
+		if edit < 0 && f.index == 21 {
+			edit = i
+		}
+		if f.typ == "long" {
+			if f.def || long < 0 {
+				long = i
+			}
+		}
+	}
+	switch {
+	case edit >= 0 && fs[edit].typ == "long":
+		return scanDateOrder(code(edit))
+	case long >= 0:
+		return scanDateOrder(code(long))
+	case edit >= 0:
+		return scanDateOrder(code(edit))
+	}
+	return "DMY"
+}
+
+// scanDateOrder is scanDateOrderImpl: the order of the first day, month
+// and year letters of a raw code, the German, French, Italian, Spanish,
+// Dutch and Finnish letters tried when the English ones are missing.
+func scanDateOrder(c string) string {
+	d, m, y := strings.IndexByte(c, 'D'), strings.IndexByte(c, 'M'), strings.IndexByte(c, 'Y')
+	if d < 0 || m < 0 || y < 0 {
+		switch {
+		case m < 0:
+			if m = strings.IndexByte(c, 'K'); m >= 0 {
+				d, y = strings.IndexByte(c, 'P'), strings.IndexByte(c, 'V')
+			}
+		case d < 0:
+			if d = strings.IndexByte(c, 'T'); d >= 0 {
+				y = strings.IndexByte(c, 'J')
+			} else if y = strings.IndexByte(c, 'A'); y >= 0 {
+				if d = strings.IndexByte(c, 'J'); d < 0 {
+					d = strings.IndexByte(c, 'G')
+				}
+			}
+		default:
+			if y = strings.IndexByte(c, 'A'); y < 0 {
+				y = strings.IndexByte(c, 'J')
+			}
+		}
+		for _, p := range []*int{&d, &m, &y} {
+			if *p < 0 {
+				*p = len(c)
+			}
+		}
+	}
+	switch {
+	case d <= m && m <= y:
+		return "DMY"
+	case m <= d && d <= y:
+		return "MDY"
+	case y <= m && m <= d:
+		return "YMD"
+	case y <= d && d <= m:
+		return "YDM"
+	}
+	return "DMY"
 }
 
 // definePattern reads "#define LANGUAGE_X LanguageType(0x0407)".
