@@ -242,7 +242,8 @@
 //     [WithOfficePassword].
 //   - [FromDOCX] and [FromODT] take [WordProcessingOption]:
 //     [WithTrackedChanges], [WithComments], [WithFormFields].
-//   - A conversion of sheets takes [SheetOption]: [WithOnePagePerSheet].
+//   - A conversion of sheets takes [SheetOption]: [WithOnePagePerSheet],
+//     [WithLocale].
 //   - [FromXLSX] and [FromODS] take [SpreadsheetOption]: [WithSheets],
 //     [WithSheetNumbers], [WithHiddenSheets], [WithFormulaRecalculation].
 //   - [FromCSV] takes [CSVOption]: [WithCSVSeparators],

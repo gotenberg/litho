@@ -833,6 +833,7 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 		HiddenSheets:      o.hiddenSheets,
 		Recalculation:     o.recalculation,
 		CSVKeepText:       o.csvKeepText,
+		Locale:            o.locale,
 		HiddenSlides:      o.hiddenSlides,
 		NotesPages:        o.notesPages,
 		Handouts:          o.handouts,

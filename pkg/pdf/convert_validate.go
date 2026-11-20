@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	htmlconv "github.com/gotenberg/litho/pkg/internal/convert/html"
+	"github.com/gotenberg/litho/pkg/internal/numfmt"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -179,6 +180,9 @@ func (o *convertConfig) validateOffice() error {
 	}
 	if err := o.validateSheets(); err != nil {
 		return err
+	}
+	if o.locale != "" && !numfmt.Known(o.locale) {
+		return fmt.Errorf("%w: locale %q is not one of the Locale constants", ErrInvalidConvertOptions, o.locale)
 	}
 	if o.csvSeparatorSet {
 		if len(o.csvSeparators) == 0 || len(o.csvSeparators) > maxCSVSeparators {

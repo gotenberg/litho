@@ -76,6 +76,7 @@ type convertConfig struct {
 	csvSeparators   []rune
 	csvSeparatorSet bool
 	csvKeepText     bool
+	locale          models.Locale
 	hiddenSlides    bool
 	notesPages      bool
 	handouts        int
@@ -953,6 +954,37 @@ func WithFormFields(fields bool) WordProcessingOption {
 // fails with [ErrInvalidConvertOptions]: the page takes its content's size.
 func WithOnePagePerSheet(one bool) SheetOption {
 	return sheetOption(func(c *convertConfig) { c.onePagePerSheet = one })
+}
+
+// WithLocale formats the values of an XLSX, ODS or CSV source under
+// locale, one of the models Locale constants, each a locale LibreOffice
+// ships: what the file leaves to the system its spreadsheet runs on. It
+// decides the General format, the decimal and thousands separators and
+// the digit grouping, month and day names, AM and PM, the boolean words,
+// the system long date and time ([$-F800], [$-F400]), the built-in date,
+// time, percent and currency formats an XLSX file names by number, the
+// formats of an ODS data style that names no language, and how the
+// numbers, currency amounts, booleans, dates and times of a CSV source
+// read under type detection and the formats they take. The values print
+// as LibreOffice Calc prints them under that locale.
+//
+// It never overrides what the file states: a format code's own locale
+// tag ([$-407]), an ODS data style's language and country, a currency
+// symbol, a format's separators and literals. It does not change the
+// characters that separate a CSV source's fields ([WithCSVSeparators]),
+// the page, the fonts or the text's language ([WithDefaultLanguage]).
+// Calendars other than the Gregorian one, such as fa-IR's Persian
+// calendar, and a locale's native digits are not followed: dates print
+// in the Gregorian calendar with Western digits. Excel's own print of an
+// XLSX source under a locale other than en-US is not followed: it was
+// not measured.
+//
+// The default is [models.LocaleEnUS]; the zero Locale means it too, and
+// without the option no conversion writes another byte. A value that is
+// not one of the constants fails the conversion with
+// [ErrInvalidConvertOptions].
+func WithLocale(locale models.Locale) SheetOption {
+	return sheetOption(func(c *convertConfig) { c.locale = locale })
 }
 
 // WithSheets prints the sheets of an XLSX or ODS source that names lists,

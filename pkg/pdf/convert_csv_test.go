@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestConvert_CSVSeparators checks that the fields of a CSV source end at
@@ -52,6 +54,39 @@ func TestConvert_CSVTypeDetection(t *testing.T) {
 		pages, _ := convertedPages(t, FromCSV(strings.NewReader(src), WithConvertFontDirs(dir), WithCSVTypeDetection(detect)))
 		if len(pages) != 1 || pages[0] != want {
 			t.Errorf("detection %v: %q, want %q", detect, pages, want)
+		}
+	}
+}
+
+// TestConvert_CSVLocale checks that WithLocale reads and shows a CSV
+// source's values in the locale's syntax, that the default and en-US
+// write the same bytes as no option, and that a value outside the Locale
+// constants fails the conversion.
+func TestConvert_CSVLocale(t *testing.T) {
+	t.Parallel()
+	dir := convertFontDir(t)
+	src := "n,d\n\"1.234,5\",13.01.2026\n"
+	pages, _ := convertedPages(t, FromCSV(strings.NewReader(src), WithConvertFontDirs(dir), WithLocale(models.LocaleDeDE)))
+	if want := "n d 1234,5 13.01.26"; len(pages) != 1 || pages[0] != want {
+		t.Errorf("de-DE: %q, want %q", pages, want)
+	}
+	write := func(opts ...CSVOption) []byte {
+		var b bytes.Buffer
+		if _, err := FromCSV(strings.NewReader(src), append([]CSVOption{WithConvertFontDirs(dir)}, opts...)...).WriteTo(context.Background(), &b); err != nil {
+			t.Fatal(err)
+		}
+		return b.Bytes()
+	}
+	plain := write()
+	for _, loc := range []models.Locale{"", models.LocaleEnUS} {
+		if !bytes.Equal(write(WithLocale(loc)), plain) {
+			t.Errorf("locale %q writes other bytes than no option", loc)
+		}
+	}
+	for _, loc := range []models.Locale{"de", "de_DE", "xx-YY", "de-de"} {
+		_, err := FromCSV(strings.NewReader(src), WithConvertFontDirs(dir), WithLocale(loc)).WriteTo(context.Background(), &bytes.Buffer{})
+		if !errors.Is(err, ErrInvalidConvertOptions) {
+			t.Errorf("locale %q: err = %v, want ErrInvalidConvertOptions", loc, err)
 		}
 	}
 }
