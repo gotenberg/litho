@@ -15,3 +15,6 @@
 # An extract TestSpecExtractsMatchDownloads writes, one property a line so
 # that a pin update reads as a diff of properties.
 /pkg/internal/css/testdata/specs/webref-properties.json
+# The extract cmd/gen-locales writes, as it writes it: its generator test
+# reads it back.
+/cmd/gen-locales/data/localedata.json
