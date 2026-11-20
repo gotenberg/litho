@@ -1,0 +1,7 @@
+Artikel;Menge;Rabatt;Datum;Uhrzeit;Bezahlt
+Schrauben;1.250;5%;13.01.2026;08:30;WAHR
+Muttern;"3,5";"12,5%";1.2.2026;15:30:45;FALSCH
+Bolzen;"-12,75";0%;"13. Januar 2026";"15:30:45,5";wahr
+Dichtungen;"1,5E+03";100%;2026-02-28;25:10;falsch
+Federn;"1.234.567,891";"7,25 %";28.02.26;12:00;Zürich
+Muster;0.5;1.5;2/1/2026;3:30 PM;TRUE

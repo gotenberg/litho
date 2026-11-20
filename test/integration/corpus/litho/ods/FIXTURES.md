@@ -22,6 +22,14 @@ The pinned image leaves LibreOffice's locale empty, so LibreOffice prints a page
 | `hidden-sheets`          | 5 (the reference's) | `hiddenSheets`; `reference_of` `hidden-sheets-ref`                 | Every sheet in book order                                                                                                                                   |
 | `hidden-sheets-ref`      | 5                   | none                                                               | `sheet-selection` with `Data` shown                                                                                                                         |
 
+## Locale
+
+A source whose `options.json` names `locale` converts with `WithLocale`, and `corpus references` builds its reference in a container whose LibreOffice runs under that locale (`LC_ALL` set to the tag; see `FEATURES.md`).
+
+| Source         | Pages (LibreOffice) | Options          | Exercises                                                                                                                                                                                                                        |
+| -------------- | ------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `locale-fr-fr` | 3                   | `locale` `fr-FR` | Data styles of no language under fr-FR: separators, day and month names, the fraction of a second, VRAI and FAUX, General numbers; the same styles naming en-US print in en-US, the style's own language winning over the locale |
+
 ## Writing systems
 
 The spreadsheets below each lock how Calc prints one script in cells. Their running text is the Universal Declaration of Human Rights in each language, the United Nations' translations as the UDHR in Unicode project transcribes them (`efele.net/udhr`, `github.com/eric-muller/udhr`); the strings that show a rule come from the standard that states it, cited in the document. Each document names its faces in its styles, faces of the Gotenberg image that the fixture fonts carry: Liberation Sans for Latin, Noto Sans CJK JP, SC, TC and KR as the Asian font, and DejaVu Sans (Arabic, Hebrew), Noto Sans Devanagari or Noto Sans Thai as the complex font, each with its `style:language-*` and `style:country-*`. The faces in the table are those `pdffonts` reads in each reference. Asian text stays at the regular weight: the fixture fonts hold no bold Noto Sans CJK, which the image has.
