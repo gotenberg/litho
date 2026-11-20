@@ -101,7 +101,7 @@ func TestDecoder_LoweredBudgetBoundsTheStreamingReaders(t *testing.T) {
 		t.Run(string(tc.filter), func(t *testing.T) {
 			t.Parallel()
 
-			d := NewDecoder(nil, limits.Limits{MaxStreamBytes: lowBudget})
+			d := NewDecoder(nil, models.Limits{MaxStreamBytes: lowBudget})
 			read := func(size int) (int, error) {
 				dict := ast.PdfDict{"Filter": tc.filter}
 				if tc.parms != nil {

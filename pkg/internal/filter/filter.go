@@ -684,7 +684,7 @@ type tolerantReader struct {
 	// filter names the filter for the record of a salvage.
 	filter ast.PdfName
 	// limit bounds the decoded bytes the reader hands on, the stream budget
-	// (limits.Limits.MaxStreamBytes). Past it, Read fails with
+	// (models.Limits.MaxStreamBytes). Past it, Read fails with
 	// [ErrDecompressionBomb], which no tolerate forgives. Zero sets no bound.
 	limit    int64
 	read     int64

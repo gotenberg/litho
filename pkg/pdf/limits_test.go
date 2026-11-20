@@ -425,7 +425,7 @@ func TestLimits_StreamBudgetBoundsAnEmbeddedFileRead(t *testing.T) {
 		"<< /Type /Filespec /F (a.bin) /EF << /F 5 0 R >> >>",
 		streamObj("/Type /EmbeddedFile /Filter /FlateDecode", z.Bytes()),
 	)
-	read := func(l Limits) (int64, error) {
+	read := func(l models.Limits) (int64, error) {
 		files, err := openLimited(t, data, l).EmbeddedFiles(context.Background())
 		if err != nil || len(files) != 1 {
 			t.Fatalf("EmbeddedFiles = %d files, %v; want one", len(files), err)
@@ -438,10 +438,10 @@ func TestLimits_StreamBudgetBoundsAnEmbeddedFileRead(t *testing.T) {
 		return io.Copy(io.Discard, rc)
 	}
 
-	if n, err := read(Limits{}); err != nil || n != 3*budget {
+	if n, err := read(models.Limits{}); err != nil || n != 3*budget {
 		t.Errorf("default budget: %d bytes, %v; want %d bytes", n, err, 3*budget)
 	}
-	n, err := read(Limits{MaxStreamBytes: budget})
+	n, err := read(models.Limits{MaxStreamBytes: budget})
 	if !errors.Is(err, ErrStreamTooLarge) || !IsInvalidInput(err) || n != budget {
 		t.Errorf("1 MiB budget: %d bytes, %v; want %d bytes and an invalid input wrapping ErrStreamTooLarge", n, err, budget)
 	}
