@@ -153,6 +153,7 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 	sh.HeaderFooter.Odd.Footer[1] = []sheet.Span{{Text: "Page "}, {Field: sheet.FieldPage}}
 	sh.HeaderFooter.Even, sh.HeaderFooter.First = sh.HeaderFooter.Odd, sh.HeaderFooter.Odd
 	sh.HeaderFooter.FooterMinHeight = footerHeight - footerSpacing
+	lr := newLocaleReader(opts.Locale)
 	styles := map[kind]*sheet.Style{}
 	styleOf := func(k kind) *sheet.Style {
 		if k == kText || k == kGeneral || k == kBool {
@@ -163,10 +164,16 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 		}
 		st := def
 		st.Format = formatCodes[k]
+		if lr != nil {
+			st.Format = lr.code(k)
+		}
 		styles[k] = &st
 		return &st
 	}
 	cols := newColumns()
+	if lr != nil {
+		cols.show = lr.display
+	}
 	undated := false
 	mem := budget.BudgetFrom(ctx)
 	for ri, rec := range recs {
@@ -182,11 +189,15 @@ func Read(ctx context.Context, data []byte, fonts *text.Fonts, opts office.Optio
 				continue
 			}
 			var d detected
-			if !opts.CSVKeepText {
+			switch {
+			case opts.CSVKeepText:
+			case lr != nil:
+				d = lr.detect(f, year)
+			default:
 				d = detect(f, year)
 			}
 			c := sheet.Cell{Column: ci, Style: styleOf(d.kind), Value: cellValue(d, f)}
-			if d.kind == kDateUS && printDate.IsZero() && !hasYear(f) {
+			if d.kind == kDateUS && printDate.IsZero() && (lr == nil && !hasYear(f) || lr != nil && !lr.hasYear(f)) {
 				undated = true
 			}
 			cols.add(ci, ri, f, d)

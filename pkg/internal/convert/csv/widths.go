@@ -57,6 +57,9 @@ type columns struct {
 	// cells holds each column's non-empty fields in row order.
 	cells map[int][]colCell
 	last  int
+	// show is the text a value shows in the format of a kind: [display]
+	// under en-US, the locale's under another.
+	show func(k kind, v float64) string
 }
 
 // colCell is one non-empty field of a column.
@@ -68,7 +71,7 @@ type colCell struct {
 
 // newColumns returns an empty tracker.
 func newColumns() *columns {
-	return &columns{head: map[int]*[4]kind{}, cells: map[int][]colCell{}, last: -1}
+	return &columns{head: map[int]*[4]kind{}, cells: map[int][]colCell{}, last: -1, show: display}
 }
 
 // add records the field raw of column col, row row, read as d.
@@ -113,7 +116,7 @@ func (c *columns) longest(col int) string {
 	for _, cell := range c.cells[col] {
 		s := cell.text
 		if cell.kind != kText {
-			s = display(f, cell.value)
+			s = c.show(f, cell.value)
 		}
 		if cell.kind == kText && strings.Contains(s, "\n") {
 			for line := range strings.SplitSeq(s, "\n") {
