@@ -131,12 +131,16 @@
     "CURRENCY": "[$$-8036] #,##0.00;[RED][$$-8036]-#,##0.00",
     "DATE": "YY/MM/DD",
     "DATE_TIME": "YY/MM/DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -273,12 +277,16 @@
     "CURRENCY": "[$R-436] #,##0.00;[RED][$R-436]-#,##0.00",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD HH:MM:SS",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 47,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -416,12 +424,16 @@
     "CURRENCY": "#,##0.00 [$₵-62F];[RED]-#,##0.00 [$₵-62F]",
     "DATE": "MM/DD/YY",
     "DATE_TIME": "MM/DD/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -558,12 +570,16 @@
     "CURRENCY": "[$ETB-45E]#,##0.00;[RED]-[$ETB-45E]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -751,12 +767,16 @@
     "CURRENCY": "#,##0.00 [$€-665];[RED]-#,##0.00 [$€-665]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -772,6 +792,7 @@
     14337
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -882,8 +903,8 @@
     "41": "AM/PMMM:HH",
     "42": "AM/PMSS:MM:HH",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "[~hijri]AM/PMHH:MM YYYY/MM/D",
     "47": "[NatNum1][~hijri]AM/PMHH:MM:SS YYYY/MM/D",
     "50": "[~hijri]AM/PMHH:MM YYYY/MM/D",
@@ -893,12 +914,16 @@
     "CURRENCY": "[$د.إ‏-3801] #,##0.00;[RED][$د.إ‏-3801] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -914,6 +939,7 @@
     15361
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -1024,8 +1050,8 @@
     "41": "AM/PMMM:HH",
     "42": "AM/PMSS:MM:HH",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "[~hijri]AM/PMHH:MM YYYY/MM/D",
     "47": "[NatNum1][~hijri]AM/PMHH:MM:SS YYYY/MM/D",
     "50": "[~hijri]AM/PMHH:MM YYYY/MM/D",
@@ -1035,12 +1061,16 @@
     "CURRENCY": "[$د.ب.‏-3C01] #,##0.00;[RED][$د.ب.‏-3C01] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -1056,6 +1086,7 @@
     5121
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": " ",
    "dateSep": "/",
    "timeSep": ":",
@@ -1177,12 +1208,16 @@
     "CURRENCY": "[$د.ج.‏-1401] #,##0.00;[RED][$د.ج.‏-1401] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -1198,6 +1233,7 @@
     3073
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -1308,8 +1344,8 @@
     "41": "AM/PMMM:HH",
     "42": "AM/PMSS:MM:HH",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "[~hijri]AM/PMHH:MM YYYY/MM/D",
     "47": "[NatNum1][~hijri]AM/PMHH:MM:SS YYYY/MM/D",
     "50": "[~hijri]AM/PMHH:MM YYYY/MM/D",
@@ -1319,12 +1355,16 @@
     "CURRENCY": "[$ج.م.‏-C01] #,##0.00;[RED][$ج.م.‏-C01] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -1340,6 +1380,7 @@
     2049
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -1450,8 +1491,8 @@
     "41": "AM/PMMM:HH",
     "42": "AM/PMSS:MM:HH",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "[~hijri]AM/PMHH:MM YYYY/MM/D",
     "47": "[NatNum1][~hijri]AM/PMHH:MM:SS YYYY/MM/D",
     "50": "[~hijri]AM/PMHH:MM YYYY/MM/D",
@@ -1461,12 +1502,16 @@
     "CURRENCY": "[$د.ع.‏-801] #,##0.00;[RED][$د.ع.‏-801] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -1482,6 +1527,7 @@
     11265
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -1592,8 +1638,8 @@
     "41": "AM/PMMM:HH",
     "42": "AM/PMSS:MM:HH",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "[~hijri]AM/PMHH:MM YYYY/MM/D",
     "47": "[NatNum1][~hijri]AM/PMHH:MM:SS YYYY/MM/D",
     "50": "[~hijri]AM/PMHH:MM YYYY/MM/D",
@@ -1603,12 +1649,16 @@
     "CURRENCY": "[$د.أ.‏-2C01] #,##0.00;[RED][$د.أ.‏-2C01] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -1624,6 +1674,7 @@
     13313
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -1734,8 +1785,8 @@
     "41": "AM/PMMM:HH",
     "42": "AM/PMSS:MM:HH",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "[~hijri]AM/PMHH:MM YYYY/MM/D",
     "47": "[NatNum1][~hijri]AM/PMHH:MM:SS YYYY/MM/D",
     "50": "[~hijri]AM/PMHH:MM YYYY/MM/D",
@@ -1745,12 +1796,16 @@
     "CURRENCY": "[$د.ك‏-3801] #,##0.00;[RED][$د.ك‏-3801] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -1766,6 +1821,7 @@
     12289
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -1876,8 +1932,8 @@
     "41": "AM/PMMM:HH",
     "42": "AM/PMSS:MM:HH",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "[~hijri]AM/PMHH:MM YYYY/MM/D",
     "47": "[NatNum1][~hijri]AM/PMHH:MM:SS YYYY/MM/D",
     "50": "[~hijri]AM/PMHH:MM YYYY/MM/D",
@@ -1887,12 +1943,16 @@
     "CURRENCY": "[$ل.ل.‏-3001] #,##0.00;[RED][$ل.ل.‏-3001] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -1908,6 +1968,7 @@
     4097
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -2018,8 +2079,8 @@
     "41": "AM/PMMM:HH",
     "42": "AM/PMSS:MM:HH",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "[~hijri]AM/PMHH:MM YYYY/MM/D",
     "47": "[NatNum1][~hijri]AM/PMHH:MM:SS YYYY/MM/D",
     "50": "[~hijri]AM/PMHH:MM YYYY/MM/D",
@@ -2029,12 +2090,16 @@
     "CURRENCY": "[$د.ل.‏-1001] #,##0.00;[RED][$د.ل.‏-1001] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -2050,6 +2115,7 @@
     6145
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -2160,8 +2226,8 @@
     "41": "AM/PMMM:HH",
     "42": "AM/PMSS:MM:HH",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "[~hijri]AM/PMHH:MM YYYY/MM/D",
     "47": "[NatNum1][~hijri]AM/PMHH:MM:SS YYYY/MM/D",
     "50": "[~hijri]AM/PMHH:MM YYYY/MM/D",
@@ -2171,12 +2237,16 @@
     "CURRENCY": "[$د.م.‏-1801] #,##0.00;[RED][$د.م.‏-1801] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -2313,12 +2383,16 @@
     "CURRENCY": "[$ر.ع-2001]#,##0.00;[RED]-#,##0.00 [$ر.ع-2001]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -2334,6 +2408,7 @@
     16385
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -2444,8 +2519,8 @@
     "41": "AM/PMMM:HH",
     "42": "AM/PMSS:MM:HH",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "[~hijri]AM/PMHH:MM YYYY/MM/D",
     "47": "[NatNum1][~hijri]AM/PMHH:MM:SS YYYY/MM/D",
     "50": "[~hijri]AM/PMHH:MM YYYY/MM/D",
@@ -2455,12 +2530,16 @@
     "CURRENCY": "[$ر.ق.‏-4001] #,##0.00;[RED][$ر.ق.‏-4001] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -2476,6 +2555,7 @@
     1025
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -2586,8 +2666,8 @@
     "41": "AM/PMMM:HH",
     "42": "AM/PMSS:MM:HH",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "[~hijri]AM/PMHH:MM YYYY/MM/D",
     "47": "[NatNum1][~hijri]AM/PMHH:MM:SS YYYY/MM/D",
     "50": "[~hijri]AM/PMHH:MM YYYY/MM/D",
@@ -2597,12 +2677,16 @@
     "CURRENCY": "[$⃁-401] #,##0.00;[RED][$⃁-401] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -2618,6 +2702,7 @@
     10241
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -2728,8 +2813,8 @@
     "41": "AM/PMMM:HH",
     "42": "AM/PMSS:MM:HH",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "[~hijri]AM/PMHH:MM YYYY/MM/D",
     "47": "[NatNum1][~hijri]AM/PMHH:MM:SS YYYY/MM/D",
     "50": "[~hijri]AM/PMHH:MM YYYY/MM/D",
@@ -2739,12 +2824,16 @@
     "CURRENCY": "[$ل.س.‏-2801] #,##0.00;[RED][$ل.س.‏-2801] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -2760,6 +2849,7 @@
     7169
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -2870,8 +2960,8 @@
     "41": "AM/PMMM:HH",
     "42": "AM/PMSS:MM:HH",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "[~hijri]AM/PMHH:MM YYYY/MM/D",
     "47": "[NatNum1][~hijri]AM/PMHH:MM:SS YYYY/MM/D",
     "50": "[~hijri]AM/PMHH:MM YYYY/MM/D",
@@ -2881,12 +2971,16 @@
     "CURRENCY": "[$د.ت.‏-1C01] #,##0.00;[RED][$د.ت.‏-1C01] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -2902,6 +2996,7 @@
     9217
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -3012,8 +3107,8 @@
     "41": "AM/PMMM:HH",
     "42": "AM/PMSS:MM:HH",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "[~hijri]AM/PMHH:MM YYYY/MM/D",
     "47": "[NatNum1][~hijri]AM/PMHH:MM:SS YYYY/MM/D",
     "50": "[~hijri]AM/PMHH:MM YYYY/MM/D",
@@ -3023,12 +3118,16 @@
     "CURRENCY": "[$ر.ي.‏-2401] #,##0.00;[RED][$ر.ي.‏-2401] #,##0.00 -",
     "DATE": "[NatNum1][~hijri]YYYY/MM/D",
     "DATE_TIME": "[~hijri]AM/PMHH:MM YYYY/MM/D",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -3215,12 +3314,16 @@
     "CURRENCY": "#,##0.00[$€-64A];[RED]-#,##0.00[$€-64A]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -3357,12 +3460,16 @@
     "CURRENCY": "[$CFA-8277] #,##0.00;[RED][$CFA-8277]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -3500,12 +3607,16 @@
     "CURRENCY": "[$₼-42C]#,##0.00;[RED][$₼-42C]-#,##0.00",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -3692,12 +3803,16 @@
     "CURRENCY": "#,##0.00[$р.-423];[RED]-#,##0.00[$р.-423]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -3835,12 +3950,16 @@
     "CURRENCY": "[$CFA-65B] #,##0.00;[RED][$CFA-65B]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -3977,12 +4096,16 @@
     "CURRENCY": "#,##0.00 [$лв.-402];[RED]-#,##0.00 [$лв.-402]",
     "DATE": "D.MM.YYYY\" г.\"",
     "DATE_TIME": "D.MM.YYYY\" г.\", H:MM\" ч.\"",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "H:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -4123,12 +4246,16 @@
     "CURRENCY": "[$CFA-65C] #,##0.00;[RED][$CFA-65C]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -4265,12 +4392,16 @@
     "CURRENCY": "#,##0.00 [$CFA-62E];[RED]-#,##0.00 [$CFA-62E]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -4406,12 +4537,16 @@
     "CURRENCY": "[$৳-845]#,##0.00;[RED]-[$৳-845]#,##0.00",
     "DATE": "DD-MM-YYYY",
     "DATE_TIME": "DD-MM-YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -4551,12 +4686,16 @@
     "CURRENCY": "[$₹-445]#,##0.00;[RED]-[$₹-445]#,##0.00",
     "DATE": "DD-MM-YYYY",
     "DATE_TIME": "DD-MM-YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -4696,12 +4835,16 @@
     "CURRENCY": "[$￥-451]#,##0;-[$￥-451]#,##0",
     "DATE": "[NatNum1]YY-MM-DD",
     "DATE_TIME": "[NatNum1]\"སྤྱི་ལོ\" YYYY \"ཟླ་\" M \"ཚེས་\" DD HH:MM AM/PM",
+    "PERCENT_NUMBER": "[NatNum1]0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "[NatNum1]HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 12,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -4839,12 +4982,16 @@
     "CURRENCY": "[$₹-8051]#,##0.00;[RED]-[$₹-8051]#,##0.00",
     "DATE": "[NatNum1]YY-MM-DD",
     "DATE_TIME": "[NatNum1]\"སྤྱི་ལོ\" YYYY \"ཟླ་\" M \"ཚེས་\" DD HH:MM AM/PM",
+    "PERCENT_NUMBER": "[NatNum1]0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "[NatNum1]HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -4982,12 +5129,16 @@
     "CURRENCY": "#,##0.00 [$F-47E];[RED]-#,##0.00 [$F-47E]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -5127,12 +5278,16 @@
     "CURRENCY": "[$KM-141A]#,##0.00;[RED]-[$KM-141A]#,##0.00",
     "DATE": "D.M.YYYY",
     "DATE_TIME": "DD.MM.YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -5269,12 +5424,16 @@
     "CURRENCY": "[$CFA-678] #,##0.00;[RED][$CFA-678]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -5412,12 +5571,16 @@
     "CURRENCY": "#,##0 [$₧-403];[RED]-#,##0 [$₧-403]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -5555,12 +5718,16 @@
     "CURRENCY": "#,##0 [$₧-803];[RED]-#,##0 [$₧-803]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -5747,12 +5914,16 @@
     "CURRENCY": "#,##0.00 [$Kč-405];[RED]-#,##0.00 [$Kč-405]",
     "DATE": "DD.MM.YYYY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -5943,12 +6114,16 @@
     "CURRENCY": "#,##0.00 [$₽-694];[RED]-#,##0.00 [$₽-694]",
     "DATE": "[NatNum1]DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -6086,12 +6261,16 @@
     "CURRENCY": "#,##0.00[$₽-635];[RED]-#,##0.00[$₽-635]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -6228,12 +6407,16 @@
     "CURRENCY": "[$£-452]#,##0.00;[RED]-[$£-452]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -6359,9 +6542,9 @@
     "40": "HH:MM:SS",
     "41": "HH:MM AM/PM",
     "42": "HH:MM:SS AM/PM",
-    "43": "[TT]:MM:SS",
+    "43": "[HH]:MM:SS",
     "44": "MM:SS.00",
-    "45": "[TT]:MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "DD-MM-YY HH:MM",
     "47": "DD-MM-YYYY HH:MM:SS",
     "50": "DD-MM-YYYY HH:MM",
@@ -6371,12 +6554,16 @@
     "CURRENCY": "[$kr.-406] #,##0.00;[RED][$kr.-406] -#,##0.00",
     "DATE": "DD-MM-YY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -6513,12 +6700,16 @@
     "CURRENCY": "[$CFA-679] #,##0.00;[RED][$CFA-679]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -6655,12 +6846,16 @@
     "CURRENCY": "[$öS-C07] #,##0.00;[RED]-[$öS-C07] #,##0.00",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -6797,12 +6992,16 @@
     "CURRENCY": "[$CHF-807] #,##0.00;[RED][$CHF-807] -#,##0.00",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -6939,12 +7138,16 @@
     "CURRENCY": "#,##0.00 [$DM-407];[RED]-#,##0.00 [$DM-407]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -7081,12 +7284,16 @@
     "CURRENCY": "[$CHF-1407] #,##0.00;[RED][$CHF-1407]-#,##0.00",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -7223,12 +7430,16 @@
     "CURRENCY": "#,##0.00 [$F-1007];[RED]-#,##0.00 [$F-1007]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -7416,12 +7627,16 @@
     "CURRENCY": "#,##0.00 [$€-82E];[RED]-#,##0.00 [$€-82E]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY H:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "H:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -7558,12 +7773,16 @@
     "CURRENCY": "[$ރ.‏-465]#,##0.00;[RED]-[$ރ.‏-465]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "MM/DD/YY HH:MM މކ/މފ",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS މކ/މފ"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -7702,12 +7921,16 @@
     "CURRENCY": "[NatNum1][$Nu-C51]#,##0.00;[NatNum1][RED]-[$Nu-C51]#,##0.00",
     "DATE": "[NatNum1]YY-MM-DD",
     "DATE_TIME": "[NatNum1]\"སྤྱི་ལོ\" YYYY \"ཟླ་\" M \"ཚེས་\" DD HH:MM AM/PM",
+    "PERCENT_NUMBER": "[NatNum1]0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "[NatNum1]HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -7844,12 +8067,16 @@
     "CURRENCY": "[$CFA-664] #,##0.00;[RED][$CFA-664]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -7986,12 +8213,16 @@
     "CURRENCY": "#,##0.00 [$₵-637];[RED]-#,##0.00 [$₵-637]",
     "DATE": "MM/DD/YY",
     "DATE_TIME": "MM/DD/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -8128,12 +8359,16 @@
     "CURRENCY": "#,##0.00 [$Δρχ-408];[RED]-#,##0.00 [$Δρχ-408]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -8270,12 +8505,16 @@
     "CURRENCY": "[$$-C09]#,##0.00;[RED]-[$$-C09]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -8412,12 +8651,16 @@
     "CURRENCY": "[$P-9809]#,##0.00;[RED]-[$P-9809]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -8555,12 +8798,16 @@
     "CURRENCY": "[$BZ$-2809]#,##0.00;[RED]-[$BZ$-2809]#,##0.00",
     "DATE": "MM/DD/YY",
     "DATE_TIME": "MM/DD/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -8697,12 +8944,16 @@
     "CURRENCY": "[$$-1009]#,##0.00;[RED]-[$$-1009]#,##0.00",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -8841,12 +9092,16 @@
     "CURRENCY": "[$kr.-B009]#,##0.00;[RED]-[$kr.-B009]#,##0.00",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD\"T\"HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -8983,12 +9238,16 @@
     "CURRENCY": "[$£-809]#,##0.00;[RED]-[$£-809]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -9126,12 +9385,16 @@
     "CURRENCY": "[$₵-8409]#,##0.00;[RED]-[$₵-8409]#,##0.00",
     "DATE": "YY/MM/DD",
     "DATE_TIME": "YY/MM/DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -9268,12 +9531,16 @@
     "CURRENCY": "[$D-9009]#,##0.00;[RED]-[$D-9009]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -9411,12 +9678,16 @@
     "CURRENCY": "[$$-BC09]#,##0.00;[RED]-[$$-BC09]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -9554,12 +9825,16 @@
     "CURRENCY": "[$HK$-3C09]#,##0.00;[RED]-[$HK$-3C09]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -9697,12 +9972,16 @@
     "CURRENCY": "[$IR£-1809]#,##0.00;[RED]-[$IR£-1809]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -9840,12 +10119,16 @@
     "CURRENCY": "[$‎₪-B409] #,##0.00;[RED][$‎₪-B409] -#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -9983,12 +10266,16 @@
     "CURRENCY": "[$₹-4009]#,##0.00;[RED]-[$₹-4009]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -10126,12 +10413,16 @@
     "CURRENCY": "[$J$-2009]#,##0.00;[RED]-[$J$-2009]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -10268,12 +10559,16 @@
     "CURRENCY": "[$KSh-AC09]#,##0.00;[RED]-[$KSh-AC09]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -10411,12 +10706,16 @@
     "CURRENCY": "[$Rs-A409]#,##0.00;[RED]-[$Rs-A409]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -10554,12 +10853,16 @@
     "CURRENCY": "[$₨-9C09]#,##0.00;[RED]-[$₨-9C09]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -10697,12 +11000,16 @@
     "CURRENCY": "[$MK-8809]#,##0.00;[RED]-[$MK-8809]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -10840,12 +11147,16 @@
     "CURRENCY": "[$RM-4409]#,##0.00;[RED]-[$RM-4409]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -10983,12 +11294,16 @@
     "CURRENCY": "[$$-8009] #,##0.00;[RED][$$-8009]-#,##0.00",
     "DATE": "YY/MM/DD",
     "DATE_TIME": "YY/MM/DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -11125,12 +11440,16 @@
     "CURRENCY": "[$₦-A809]#,##0.00;[RED]-[$₦-A809]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -11268,12 +11587,16 @@
     "CURRENCY": "[$$-1409]#,##0.00;[RED]-[$$-1409]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -11410,12 +11733,16 @@
     "CURRENCY": "[$Php-3409]#,##0.00;[RED]-[$Php-3409]#,##0.00",
     "DATE": "MM/DD/YY",
     "DATE_TIME": "MM/DD/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -11552,12 +11879,16 @@
     "CURRENCY": "[$TT$-2C09]#,##0.00;[RED]-[$TT$-2C09]#,##0.00",
     "DATE": "MM/DD/YY",
     "DATE_TIME": "MM/DD/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -11694,12 +12025,16 @@
     "CURRENCY": "[$$-409]#,##0.00;[RED]-[$$-409]#,##0.00",
     "DATE": "MM/DD/YY",
     "DATE_TIME": "MM/DD/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -11836,12 +12171,16 @@
     "CURRENCY": "[$R-1C09] #,##0.00;[RED][$R-1C09]-#,##0.00",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD HH:MM:SS",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 47,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -11979,12 +12318,16 @@
     "CURRENCY": "[$K-A009]#,##0.00;[RED]-[$K-A009]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -12122,12 +12465,16 @@
     "CURRENCY": "[$Z$-3009]#,##0.00;[RED]-[$Z$-3009]#,##0.00",
     "DATE": "MM/DD/YY",
     "DATE_TIME": "MM/DD/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -12263,12 +12610,16 @@
     "CURRENCY": "#,##0.00 [$€-611];[RED]-#,##0.00 [$€-611]",
     "DATE": "YY-MM-DD",
     "DATE_TIME": "YY-MM-DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -12405,12 +12756,16 @@
     "CURRENCY": "[$$-2C0A]#,##0.00;[RED]([$$-2C0A]#,##0.00)",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -12536,8 +12891,8 @@
     "41": "HH:MM AM/PM",
     "42": "HH:MM:SS AM/PM",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "DD/MM/YY HH:MM",
     "47": "DD/MM/YYYY HH:MM:SS",
     "50": "DD/MM/YYYY HH:MM",
@@ -12547,12 +12902,16 @@
     "CURRENCY": "[$Bs-400A] #,##0.00;[RED]-[$Bs-400A] #,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -12689,12 +13048,16 @@
     "CURRENCY": "[$$-340A]#,##0;[RED][$$-340A] -#,##0",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -12831,12 +13194,16 @@
     "CURRENCY": "[$$-240A]#,##0.00;[RED]([$$-240A]#,##0.00)",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -12973,12 +13340,16 @@
     "CURRENCY": "[$₡-140A] #,##0.00;[RED]-[$₡-140A] #,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "D/MM/YYYY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -13115,12 +13486,16 @@
     "CURRENCY": "[$RD$-1C0A] #,##0.00;[RED]-[$RD$-1C0A] #,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -13246,8 +13621,8 @@
     "41": "HH:MM AM/PM",
     "42": "HH:MM:SS AM/PM",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS,00",
-    "45": "[HH]:MM:SS,00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "DD/MM/YY HH:MM",
     "47": "DD/MM/YYYY HH:MM:SS",
     "50": "DD/MM/YYYY HH:MM",
@@ -13257,12 +13632,16 @@
     "CURRENCY": "[$S/-300A]#,##0.00;[RED][$S/-300A]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -13400,12 +13779,16 @@
     "CURRENCY": "#,##0 [$₧-40A];[RED]-#,##0 [$₧-40A]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -13542,12 +13925,16 @@
     "CURRENCY": "[$Q-100A]#,##0.00;[RED]([$Q-100A]#,##0.00)",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -13684,12 +14071,16 @@
     "CURRENCY": "[$L-480A]#,##0.00;[RED]-[$L-480A]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -13826,12 +14217,16 @@
     "CURRENCY": "[$$-80A]#,##0.00;[RED]-[$$-80A]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -13968,12 +14363,16 @@
     "CURRENCY": "[$C$-4C0A] #,##0.00;[RED]([$C$-4C0A] #,##0.00)",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -14110,12 +14509,16 @@
     "CURRENCY": "[$B/.-180A]#,##0.00;[RED]([$B/.-180A]#,##0.00)",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -14252,12 +14655,16 @@
     "CURRENCY": "[$S/-280A]#,##0.00;[RED][$S/-280A]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -14394,12 +14801,16 @@
     "CURRENCY": "[$$-500A] #,##0.00;[RED]([$$-500A] #,##0.00)",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -14536,12 +14947,16 @@
     "CURRENCY": "[$₲-3C0A]#,##0.00;[RED]([$₲-3C0A]#,##0.00)",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -14678,12 +15093,16 @@
     "CURRENCY": "[$C-440A] #,##0.00;[RED]-[$C-440A] #,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -14820,12 +15239,16 @@
     "CURRENCY": "[$$-380A]#,##0.00;[RED]([$$-380A]#,##0.00)",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -14962,12 +15385,16 @@
     "CURRENCY": "[$Bs-200A]#,##0.00;[RED]([$Bs-200A]#,##0.00)",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -15118,12 +15545,16 @@
     "CURRENCY": "#,##0.00 [$kr-425];[RED]-#,##0.00 [$kr-425]",
     "DATE": "DD.MM.YYYY",
     "DATE_TIME": "HH:MM DD.MM.YY",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -15263,12 +15694,16 @@
     "CURRENCY": "#,##0 [$₧-42D];[RED]-#,##0 [$₧-42D]",
     "DATE": "YY/MM/DD",
     "DATE_TIME": "YY/MM/DD HH:MM",
+    "PERCENT_NUMBER": "%0.00",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -15405,12 +15840,16 @@
     "CURRENCY": "#,##0 [$€-6B6];[RED]-#,##0 [$€-6B6]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -15426,6 +15865,7 @@
     1065
    ],
    "decimal": "٫",
+   "decimalAlt": ".",
    "group": "٬",
    "dateSep": "/",
    "timeSep": ":",
@@ -15548,12 +15988,16 @@
     "CURRENCY": "[NatNum1]#,##0 [$﷼-429];[RED][NatNum1]-#,##0 [$﷼-429]",
     "DATE": "[NatNum1][~persian]YYYY/MM/DD",
     "DATE_TIME": "[NatNum1][~persian]D MMM YYYY، ساعت HH:MM",
+    "PERCENT_NUMBER": "[NatNum1]0.00%",
+    "SCIENTIFIC_NUMBER": "[NatNum1]0.00E+00",
     "TIME": "[NatNum1]HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -15778,9 +16222,9 @@
     "40": "HH:MM:SS",
     "41": "HH:MM AM/PM",
     "42": "HH:MM:SS AM/PM",
-    "43": "[TT]:MM:SS",
+    "43": "[HH]:MM:SS",
     "44": "MM:SS.00",
-    "45": "[TT]:MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "DD.MM.YY HH:MM",
     "47": "DD.MM.YYYY HH:MM:SS",
     "50": "DD.MM.YYYY HH:MM",
@@ -15790,12 +16234,16 @@
     "CURRENCY": "#,##0.00 [$mk-40B];[RED]-#,##0.00 [$mk-40B]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -15932,12 +16380,16 @@
     "CURRENCY": "[$kr.-438] #,##0.00;[RED][$kr.-438] -#,##0.00",
     "DATE": "DD-MM-YY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -16074,12 +16526,16 @@
     "CURRENCY": "#,##0.00 [$FB-80C];[RED]-#,##0.00 [$FB-80C]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -16216,12 +16672,16 @@
     "CURRENCY": "#,##0.00 [$F-800C];[RED]-#,##0.00 [$F-800C]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -16360,12 +16820,16 @@
     "CURRENCY": "#,##0.00 [$F-840C];[RED]-#,##0.00 [$F-840C]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -16504,12 +16968,16 @@
     "CURRENCY": "#,##0.00 [$$-C0C];[RED]-#,##0.00 [$$-C0C]",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -16648,12 +17116,16 @@
     "CURRENCY": "[$CHF-100C] #,##0.00;[RED][$CHF-100C] -#,##0.00",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -16791,12 +17263,16 @@
     "CURRENCY": "#,##0.00 [$F-300C];[RED]-#,##0.00 [$F-300C]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -16935,12 +17411,16 @@
     "CURRENCY": "#,##0.00 [$F-40C];[RED]-#,##0.00 [$F-40C]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -17079,12 +17559,16 @@
     "CURRENCY": "#,##0.00 [$FG-940C];[RED]-#,##0.00 [$FG-940C]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -17223,12 +17707,16 @@
     "CURRENCY": "#,##0.00 [$F-140C];[RED]-#,##0.00 [$F-140C]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -17365,12 +17853,16 @@
     "CURRENCY": "#,##0.00 [$F-180C];[RED]-#,##0.00 [$F-180C]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -17509,12 +18001,16 @@
     "CURRENCY": "#,##0.00 [$F-340C];[RED]-#,##0.00 [$F-340C]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -17653,12 +18149,16 @@
     "CURRENCY": "#,##0.00 [$F-880C];[RED]-#,##0.00 [$F-880C]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -17797,12 +18297,16 @@
     "CURRENCY": "#,##0.00 [$F-280C];[RED]-#,##0.00 [$F-280C]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -17941,12 +18445,16 @@
     "CURRENCY": "#,##0.00 [$F-8C0C];[RED]-#,##0.00 [$F-8C0C]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -18084,12 +18592,16 @@
     "CURRENCY": "#,##0.00[$€-631];[RED]-#,##0.00[$€-631]",
     "DATE": "DD/MM/YYYY",
     "DATE_TIME": "DD/MM/YYYY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -18229,12 +18741,16 @@
     "CURRENCY": "[$€-462] #,##0.00;[RED][$€-462] #,##0.00-",
     "DATE": "DD-MM-YY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -18371,12 +18887,16 @@
     "CURRENCY": "[$£-83C]#,##0.00;[RED]-[$£-83C]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -18565,12 +19085,16 @@
     "CURRENCY": "[$£-43C]#,##0.00;[RED]-[$£-43C]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -18709,12 +19233,16 @@
     "CURRENCY": "#,##0 [$₧-456];[RED]-#,##0 [$₧-456]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -18851,12 +19379,16 @@
     "CURRENCY": "[$€-6B5] #,##0.00;[RED][$€-6B5] #,##0.00-",
     "DATE": "DD-MM-YY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -18993,12 +19525,16 @@
     "CURRENCY": "[$€-636]#,##0.00;[RED]([$€-636]#,##0.00)",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -19137,12 +19673,16 @@
     "CURRENCY": "[$₹-447]#,##0.00;[RED]-[$₹-447]#,##0.00",
     "DATE": "DD-MM-YYYY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -19282,12 +19822,16 @@
     "CURRENCY": "[$₲-474]#,##0.00;[RED][$₲-474]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -19424,12 +19968,16 @@
     "CURRENCY": "#,##0.00 [$₵-8068];[RED]-#,##0.00 [$₵-8068]",
     "DATE": "MM/DD/YY",
     "DATE_TIME": "MM/DD/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -19566,12 +20114,16 @@
     "CURRENCY": "[$₦-468] #,##0.00;[RED][$₦-468] -#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -19708,12 +20260,16 @@
     "CURRENCY": "[$$-475]#,##0.00;[RED]([$$-475]#,##0.00)",
     "DATE": "YY/MM/DD",
     "DATE_TIME": "YY/MM/DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -19850,12 +20406,16 @@
     "CURRENCY": "[$‎₪-40D] #,##0.00;[RED][$‎₪-40D] -#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -19992,12 +20552,16 @@
     "CURRENCY": "[$₹-439]#,##0.00;[RED]-[$₹-439]#,##0.00",
     "DATE": "DD-MM-YYYY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -20137,12 +20701,16 @@
     "CURRENCY": "[$₱-63D]#,##0.00;[RED]-[$₱-63D]#,##0.00",
     "DATE": "MM/DD/YY",
     "DATE_TIME": "MM/DD/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -20329,12 +20897,16 @@
     "CURRENCY": "#,##0.00 [$kn-41A];[RED]-#,##0.00 [$kn-41A]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -20525,12 +21097,16 @@
     "CURRENCY": "#,##0.00 [$€-42E];[RED]-#,##0.00 [$€-42E]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -20667,12 +21243,16 @@
     "CURRENCY": "[$G-65A]#,##0.00;[RED]-[$G-65A]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -20823,12 +21403,16 @@
     "CURRENCY": "#,##0.00 [$Ft-40E];[RED]-#,##0.00 [$Ft-40E]",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YY-MM-DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "H:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 33,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -20971,12 +21555,16 @@
     "CURRENCY": "#,##0.00[$դր.-42B];[RED]-#,##0.00[$դր.-42B]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -21112,12 +21700,16 @@
     "CURRENCY": "#,##0.00 [$€-612];[RED]-#,##0.00 [$€-612]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -21254,12 +21846,16 @@
     "CURRENCY": "[$Rp-421]#,##0;[RED]([$Rp-421]#,##0)",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -21396,12 +21992,16 @@
     "CURRENCY": "[$Php-6A3]#,##0.00;[RED]-[$Php-6A3]#,##0.00",
     "DATE": "MM/DD/YY",
     "DATE_TIME": "MM/DD/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -21539,12 +22139,16 @@
     "CURRENCY": "#,##0.00 [$kr.-40F];[RED]-#,##0.00 [$kr.-40F]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -21684,12 +22288,16 @@
     "CURRENCY": "[$CHF-810] #,##0.00;[RED][$CHF-810] -#,##0.00",
     "DATE": "DD.MM.YYYY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -21826,12 +22434,16 @@
     "CURRENCY": "[$₤-410] #,##0;[RED]-[$₤-410] #,##0",
     "DATE": "DD/MM/YYYY",
     "DATE_TIME": "DD/MM/YYYY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 21,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -21968,12 +22580,16 @@
     "CURRENCY": "[$CFA-683] #,##0.00;[RED][$CFA-683]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -22110,12 +22726,16 @@
     "CURRENCY": "[$￥-411]#,##0;[RED]-[$￥-411]#,##0",
     "DATE": "M\"月\"D\"日\"",
     "DATE_TIME": "YYYY/M/D H:MM",
+    "PERCENT_NUMBER": "0%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 35,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 8,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -22257,12 +22877,16 @@
     "CURRENCY": "[$€-658]#,##0.00;[RED]-[$€-658]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -22399,12 +23023,16 @@
     "CURRENCY": "#,##0.00[$ლ.-437];[RED]-#,##0.00[$ლ.-437]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -22542,12 +23170,16 @@
     "CURRENCY": "[$DA-85F]#,##0.00;[RED]-[$DA-85F]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -22684,12 +23316,16 @@
     "CURRENCY": "#,##0.00 [$₸-43F];[RED]-#,##0.00 [$₸-43F]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -22826,12 +23462,16 @@
     "CURRENCY": "[$CFA-681] #,##0.00;[RED][$CFA-681]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -22969,12 +23609,16 @@
     "CURRENCY": "[$kr.-46F] #,##0.00;[RED][$kr.-46F] -#,##0.00",
     "DATE": "DD-MM-YY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -23111,12 +23755,16 @@
     "CURRENCY": "#,##0[$៛-453];[RED]-#,##0[$៛-453]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -23253,12 +23901,16 @@
     "CURRENCY": "[$₺-626]#,##0.00;[RED]-[$₺-626]#,##0.00",
     "DATE": "MM/DD/YY",
     "DATE_TIME": "MM/DD/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -23395,12 +24047,16 @@
     "CURRENCY": "[$₹-44b]#,##0.00;[RED]-[$₹-44b]#,##0.00",
     "DATE": "DD-MM-YYYY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -23540,12 +24196,16 @@
     "CURRENCY": "[$CFA-827B] #,##0.00;[RED][$CFA-827B]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -23683,12 +24343,16 @@
     "CURRENCY": "[$￦-412]#,##0;[RED]-[$￦-412]#,##0",
     "DATE": "YYYY\"년\" M\"월\" D\"일\"",
     "DATE_TIME": "YYYY\"년\" M\"월\" D\"일\" H\"시\" M\"분\" S\"초\"",
+    "PERCENT_NUMBER": "0%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "H\"시\" M\"분\" S\"초\""
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 25,
     "DATE_TIME": 66,
+    "PERCENT_NUMBER": 8,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -23830,12 +24494,16 @@
     "CURRENCY": "#,##0.00[$сом-440];[RED]-#,##0.00[$сом-440]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -24024,12 +24692,16 @@
     "CURRENCY": "[$€-8076] #,##0;[RED]-[$€-8076] #,##0",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -24167,12 +24839,16 @@
     "CURRENCY": "#,##0.00 [$€-46E];[RED]-#,##0.00 [$€-46E]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -24309,12 +24985,16 @@
     "CURRENCY": "[$CFA-65E] #,##0.00;[RED][$CFA-65E]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -24451,12 +25131,16 @@
     "CURRENCY": "#,##0.00 [$USh-63B];[RED]-#,##0.00 [$USh-63B]",
     "DATE": "YY/MM/DD",
     "DATE_TIME": "YY/MM/DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -24593,12 +25277,16 @@
     "CURRENCY": "[$$-692]#,##0.00;[RED]-[$$-692]#,##0.00",
     "DATE": "YY-MM-DD",
     "DATE_TIME": "YY-MM-DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -24735,12 +25423,16 @@
     "CURRENCY": "[$रू-657] #,##0.00;[RED]-[$रू-657] #,##0.00",
     "DATE": "YY/MM/DD",
     "DATE_TIME": "YY/MM/DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -24877,12 +25569,16 @@
     "CURRENCY": "[$€-6A6] #,##0;[RED]-[$€-6A6] #,##0",
     "DATE": "DD/MM/YYYY",
     "DATE_TIME": "DD/MM/YYYY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 21,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -25019,12 +25715,16 @@
     "CURRENCY": "[$€-68D] #,##0;[RED]-[$€-68D] #,##0",
     "DATE": "DD/MM/YYYY",
     "DATE_TIME": "DD/MM/YYYY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 21,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -25161,12 +25861,16 @@
     "CURRENCY": "[$FC-639] #,##0.00;[RED]-[$FC-639] #,##0.00",
     "DATE": "DD-MM-YY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -25302,12 +26006,16 @@
     "CURRENCY": "#,##0[$₭-454];[RED]-#,##0[$₭-454]",
     "DATE": "DD/MM/YYYY",
     "DATE_TIME": "DD/MM/YY \"ວັນທີ\" \"ເດືອນ\" \"ປີ\" HH\"ໂມງ\":MM\"ນາທີ\"",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH\"ໂມງ\":MM\"ນາທີ\":SS\"ວິນາທີ\""
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -25498,12 +26206,16 @@
     "CURRENCY": "#,##0.00 [$Lt-427];[RED]-#,##0.00 [$Lt-427]",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YY-MM-DD HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 18,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -25640,12 +26352,16 @@
     "CURRENCY": "[$Ls-64B] #,##0.00;[RED][$Ls-64B] -#,##0.00",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -25782,12 +26498,16 @@
     "CURRENCY": "[$Ls-426] #,##0.00;[RED][$Ls-426] -#,##0.00",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -25925,12 +26645,16 @@
     "CURRENCY": "[$₹-645]#,##0.00;[RED]-[$₹-645]#,##0.00",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -26067,12 +26791,16 @@
     "CURRENCY": "[$CFA-65F] #,##0.00;[RED][$CFA-65F]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -26209,12 +26937,16 @@
     "CURRENCY": "[$₨-6B2]#,##0.00;[RED]-[$₨-6B2]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -26351,12 +27083,16 @@
     "CURRENCY": "[$Rp-6A7]#,##0;[RED]([$Rp-6A7]#,##0)",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -26493,12 +27229,16 @@
     "CURRENCY": "[$МДен-42F]#,##0.00;[RED]-[$МДен-42F]#,##0.00",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -26635,12 +27375,16 @@
     "CURRENCY": "[$CFA-65D] #,##0.00;[RED][$CFA-65D]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -26777,12 +27521,16 @@
     "CURRENCY": "[$₹-44C]#,##0.00;[RED]-[$₹-44C]#,##0.00",
     "DATE": "DD-MM-YYYY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -26922,12 +27670,16 @@
     "CURRENCY": "#,##0.00[$₮-450];[RED]-#,##0.00[$₮-450]",
     "DATE": "YY.MM.DD",
     "DATE_TIME": "YY.MM.DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -27064,12 +27816,16 @@
     "CURRENCY": "#,##0.00[$₮-450];[RED]-#,##0.00[$₮-450]",
     "DATE": "YY.MM.DD",
     "DATE_TIME": "YY.MM.DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -27206,12 +27962,16 @@
     "CURRENCY": "#,##0.00 [$F-62D];[RED]-[$F-62D] #,##0.00",
     "DATE": "YY/MM/DD",
     "DATE_TIME": "YY/MM/DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -27348,12 +28108,16 @@
     "CURRENCY": "[$₹-44E]#,##0.00;[RED]-[$₹-44E]#,##0.00",
     "DATE": "DD-MM-YYYY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -27493,12 +28257,16 @@
     "CURRENCY": "[$RM-43E]#,##0.00;[RED]-[$RM-43E]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -27636,12 +28404,16 @@
     "CURRENCY": "[$€-043A]#,##0.00;[RED]-[$€-043A]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -27778,12 +28550,16 @@
     "CURRENCY": "[NatNum1]#,##0[$ကျပ်-455];[NatNum1]-#,##0[$ကျပ်-455]",
     "DATE": "[NatNum1]DD/MM/YY",
     "DATE_TIME": "MM/DD/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "[NatNum1]HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 88,
     "DATE": 74,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 85
    },
    "acceptance": [
@@ -27920,12 +28696,16 @@
     "CURRENCY": "#,##0.00 [$₽-66C];[RED]-#,##0.00 [$₽-66C]",
     "DATE": "YY/MM/DD",
     "DATE_TIME": "YY/MM/DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -28050,9 +28830,9 @@
     "40": "HH:MM:SS",
     "41": "HH:MM AM/PM",
     "42": "HH:MM:SS AM/PM",
-    "43": "[TT]:MM:SS",
+    "43": "[HH]:MM:SS",
     "44": "MM:SS.00",
-    "45": "[TT]:MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "DD.MM.YY HH:MM",
     "47": "DD.MM.YYYY HH:MM:SS",
     "50": "DD.MM.YYYY HH:MM",
@@ -28062,12 +28842,16 @@
     "CURRENCY": "[$kr-414] #,##0.00;[RED]-[$kr-414] #,##0.00",
     "DATE": "DD.MM.YYYY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -28207,12 +28991,16 @@
     "CURRENCY": "#,##0.00 [$DM-63C];[RED]-#,##0.00 [$DM-63C]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -28348,12 +29136,16 @@
     "CURRENCY": "[NatNum1][$रू-461] #,##0.00;[RED]-[$रू-461] #,##0.00",
     "DATE": "[NatNum1]YYYY/MM/DD",
     "DATE_TIME": "[NatNum1]YY/MM/DD HH:MM",
+    "PERCENT_NUMBER": "[NatNum1]0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "[NatNum1]HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -28493,12 +29285,16 @@
     "CURRENCY": "[$CFA-67D] #,##0.00;[RED][$CFA-67D]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -28635,12 +29431,16 @@
     "CURRENCY": "[$CFA-67C] #,##0.00;[RED][$CFA-67C]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -28777,12 +29577,16 @@
     "CURRENCY": "[$CFA-827E] #,##0.00;[RED][$CFA-827E]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -28907,9 +29711,9 @@
     "40": "HH:MM:SS",
     "41": "HH:MM AM/PM",
     "42": "HH:MM:SS AM/PM",
-    "43": "[UU]:MM:SS",
+    "43": "[HH]:MM:SS",
     "44": "MM:SS.00",
-    "45": "[UU]:MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "DD/MM/YY HH:MM",
     "47": "DD/MM/YYYY HH:MM:SS",
     "50": "DD/MM/YYYY HH:MM",
@@ -28919,12 +29723,16 @@
     "CURRENCY": "[$BF-813] #,##0.00;[RED][$BF-813] -#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -29049,9 +29857,9 @@
     "40": "HH:MM:SS",
     "41": "HH:MM AM/PM",
     "42": "HH:MM:SS AM/PM",
-    "43": "[UU]:MM:SS",
+    "43": "[HH]:MM:SS",
     "44": "MM:SS.00",
-    "45": "[UU]:MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "DD-MM-YY HH:MM",
     "47": "DD-MM-YYYY HH:MM:SS",
     "50": "DD-MM-YYYY HH:MM",
@@ -29061,12 +29869,16 @@
     "CURRENCY": "[$fl-413] #,##0.00;[RED][$fl-413] #,##0.00-",
     "DATE": "DD-MM-YY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -29191,9 +30003,9 @@
     "40": "HH:MM:SS",
     "41": "HH:MM AM/PM",
     "42": "HH:MM:SS AM/PM",
-    "43": "[TT]:MM:SS",
+    "43": "[HH]:MM:SS",
     "44": "MM:SS.00",
-    "45": "[TT]:MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "DD.MM.YY HH:MM",
     "47": "DD.MM.YYYY HH:MM:SS",
     "50": "DD.MM.YYYY HH:MM",
@@ -29203,12 +30015,16 @@
     "CURRENCY": "[$kr-814] #,##0.00;[RED]-[$kr-814] #,##0.00",
     "DATE": "DD.MM.YYYY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -29336,9 +30152,9 @@
     "40": "HH:MM:SS",
     "41": "HH:MM AM/PM",
     "42": "HH:MM:SS AM/PM",
-    "43": "[TT]:MM:SS",
+    "43": "[HH]:MM:SS",
     "44": "MM:SS.00",
-    "45": "[TT]:MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "DD.MM.YY HH:MM",
     "47": "DD.MM.YYYY HH:MM:SS",
     "50": "DD.MM.YYYY HH:MM",
@@ -29348,12 +30164,16 @@
     "CURRENCY": "[$kr-14] #,##0.00;[RED]-[$kr-14] #,##0.00",
     "DATE": "DD.MM.YYYY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -29493,12 +30313,16 @@
     "CURRENCY": "[$R-62C] #,##0.00;[RED][$R-62C]-#,##0.00",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD HH:MM:SS",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 47,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -29636,12 +30460,16 @@
     "CURRENCY": "[$R-46C] #,##0.00;[RED][$R-46C]-#,##0.00",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD HH:MM:SS",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 47,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -29779,12 +30607,16 @@
     "CURRENCY": "[$K-695]#,##0.00;[RED]-[$K-695]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 6,
     "TIME": 42
    },
    "acceptance": [
@@ -29921,12 +30753,16 @@
     "CURRENCY": "#,##0 [$€-8082];[RED]-#,##0 [$€-8082]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -30063,12 +30899,16 @@
     "CURRENCY": "[$€-482] #,##0.00;[RED]-[$€-482] #,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -30207,12 +31047,16 @@
     "CURRENCY": "[$Qar-0472]#,##0.00;[RED]([$Qar-0472]#,##0.00)",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -30350,12 +31194,16 @@
     "CURRENCY": "[$₹-448]#,##0.00;[RED]-[$₹-448]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -30492,12 +31340,16 @@
     "CURRENCY": "[$₹-446]#,##0.00;[RED]-[$₹-446]#,##0.00",
     "DATE": "DD-MM-YYYY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -30637,12 +31489,16 @@
     "CURRENCY": "[$$-8879]#,##0.00;[RED]-[$$-8879]#,##0.00",
     "DATE": "YY-MM-DD",
     "DATE_TIME": "YY-MM-DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -30779,12 +31635,16 @@
     "CURRENCY": "[$NAf-8479]#,##0.00;[RED]-[$NAf-8479]#,##0.00",
     "DATE": "YY-MM-DD",
     "DATE_TIME": "YY-MM-DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -30921,12 +31781,16 @@
     "CURRENCY": "[$$-6AF]#,##0.00;[RED]-[$$-6AF]#,##0.00",
     "DATE": "MM/DD/YY",
     "DATE_TIME": "MM/DD/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -31063,12 +31927,16 @@
     "CURRENCY": "[$$-66B]#,##0.00;[RED]-[$$-66B]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -31255,12 +32123,16 @@
     "CURRENCY": "#,##0.00 [$zł-415];[RED]-#,##0.00 [$zł-415]",
     "DATE": "D.MM.YYYY",
     "DATE_TIME": "YYYY-MM-DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -31387,8 +32259,8 @@
     "41": "HH:MM AM/PM",
     "42": "HH:MM:SS AM/PM",
     "43": "[HH]:MM:SS",
-    "44": "MM:SS\\.00",
-    "45": "[HH]:MM:SS\\.00",
+    "44": "MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "DD.MM.YY HH:MM",
     "47": "DD.MM.YYYY HH:MM:SS AM/PM",
     "50": "DD.MM.YYYY HH:MM",
@@ -31398,12 +32270,16 @@
     "CURRENCY": "#,##0.00 [$Ar.-64F];[RED]- #,##0.00 [$Ar.-64F]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -31540,12 +32416,16 @@
     "CURRENCY": "#,##0.00 [$Kz-816];[RED]-#,##0.00 [$Kz-816]",
     "DATE": "DD-MM-YY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -31682,12 +32562,16 @@
     "CURRENCY": "[$R$-416] #,##0.00;[RED]-[$R$-416] #,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -31824,12 +32708,16 @@
     "CURRENCY": "#,##0.00 [$MTn-8416];[RED]-#,##0.00 [$MTn-8416]",
     "DATE": "DD-MM-YYYY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -31966,12 +32854,16 @@
     "CURRENCY": "#,##0.00 [$$-816];[RED]-#,##0.00 [$$-816]",
     "DATE": "DD-MM-YYYY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -32104,12 +32996,16 @@
     "9": "0.00%",
     "CURRENCY": "[$$-68E]#,##0.00;[RED]([$$-68E]#,##0.00)",
     "DATE": "DD-MM-YY",
-    "DATE_TIME": "DD-MM-YY HH:MM"
+    "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -32252,12 +33148,16 @@
     "CURRENCY": "[$CFA-827F] #,##0.00;[RED][$CFA-827F]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -32394,12 +33294,16 @@
     "CURRENCY": "#,##0.00 [$lei-418];[RED]-#,##0.00 [$lei-418]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -32536,12 +33440,16 @@
     "CURRENCY": "#,##0.00 [$lei-418];[RED]-#,##0.00 [$lei-418]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -32728,12 +33636,16 @@
     "CURRENCY": "#,##0.00 [$₽-419];[RED]-#,##0.00 [$₽-419]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -32871,12 +33783,16 @@
     "CURRENCY": "[$€-8256]#,##0.00;[RED]-[$€-8256]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -33014,12 +33930,16 @@
     "CURRENCY": "#,##0.00 [$F-487];[RED]-#,##0.00 [$F-487]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -33156,12 +34076,16 @@
     "CURRENCY": "[$₹-646]#,##0.00;[RED]-[$₹-646]#,##0.00",
     "DATE": "DD-MM-YYYY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -33300,12 +34224,16 @@
     "CURRENCY": "[$₹-6B3]#,##0.00;[RED]-[$₹-6B3]#,##0.00",
     "DATE": "DD-MM-YYYY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -33445,12 +34373,16 @@
     "CURRENCY": "[$€-627] #,##0.00;[RED]-[$€-627] #,##0.00",
     "DATE": "DD/MM/YYYY",
     "DATE_TIME": "DD/MM/YYYY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -33587,12 +34519,16 @@
     "CURRENCY": "[$CFA-680] #,##0.00;[RED][$CFA-680]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -33729,12 +34665,16 @@
     "CURRENCY": "[$CFA-63A] #,##0.00;[RED][$CFA-63A]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -33871,12 +34811,16 @@
     "CURRENCY": "[$$-648]#,##0.00;[RED]-[$$-648]#,##0.00",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -34015,12 +34959,16 @@
     "CURRENCY": "[$$-685]#,##0.00;[RED]-[$$-685]#,##0.00",
     "DATE": "YY/MM/DD",
     "DATE_TIME": "YY/MM/DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -34207,12 +35155,16 @@
     "CURRENCY": "#,##0.00 [$Sk-41B];[RED]-#,##0.00 [$Sk-41B]",
     "DATE": "DD.MM.YYYY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -34353,12 +35305,16 @@
     "CURRENCY": "#,##0.00 [$SIT-424];[RED]-#,##0.00 [$SIT-424]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -34497,12 +35453,16 @@
     "CURRENCY": "[$Ssh-477]#,##0.00;[RED]-[$Ssh-477]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -34639,12 +35599,16 @@
     "CURRENCY": "#,##0.00 [$L-41C];[RED]-#,##0.00 [$L-41C]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -34782,12 +35746,16 @@
     "CURRENCY": "#,##0.00 [$ДИН-C1A];[RED]-#,##0.00 [$ДИН-C1A]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -34924,12 +35892,16 @@
     "CURRENCY": "#,##0.00 [$Din-81A];[RED]-#,##0.00 [$Din-81A]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -35067,12 +36039,16 @@
     "CURRENCY": "#,##0.00 [$€-C81A];[RED]-#,##0.00 [$€-C81A]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -35210,12 +36186,16 @@
     "CURRENCY": "#,##0.00 [$RSD-881A];[RED]-#,##0.00 [$RSD-881A]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -35353,12 +36333,16 @@
     "CURRENCY": "#,##0.00 [$€-CC1A];[RED]-#,##0.00 [$€-CC1A]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -35496,12 +36480,16 @@
     "CURRENCY": "#,##0.00 [$РСД-8C1A];[RED]-#,##0.00 [$РСД-8C1A]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -35638,12 +36626,16 @@
     "CURRENCY": "[$R-62B] #,##0.00;[RED][$R-62B]-#,##0.00",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD HH:MM:SS",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 47,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -35781,12 +36773,16 @@
     "CURRENCY": "[$R-430] #,##0.00;[RED][$R-430]-#,##0.00",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD HH:MM:SS",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 47,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -35924,12 +36920,16 @@
     "CURRENCY": "[$Rp-6A8]#,##0;[RED]([$Rp-6A8]#,##0)",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -36054,9 +37054,9 @@
     "40": "HH:MM:SS",
     "41": "HH:MM AM/PM",
     "42": "HH:MM:SS AM/PM",
-    "43": "[TT]:MM:SS",
+    "43": "[HH]:MM:SS",
     "44": "MM:SS.00",
-    "45": "[TT]:MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "DD.MM.YY HH:MM",
     "47": "DD.MM.YYYY HH:MM:SS",
     "50": "DD.MM.YYYY HH:MM",
@@ -36066,12 +37066,16 @@
     "CURRENCY": "#,##0.00 [$mk-81D];[RED]-#,##0.00 [$mk-81D]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -36196,9 +37200,9 @@
     "40": "HH:MM:SS",
     "41": "HH:MM AM/PM",
     "42": "HH:MM:SS AM/PM",
-    "43": "[TT]:MM:SS",
+    "43": "[HH]:MM:SS",
     "44": "MM:SS.00",
-    "45": "[TT]:MM:SS.00",
+    "45": "[HH]:MM:SS.00",
     "46": "YY-MM-DD HH:MM",
     "47": "YYYY-MM-DD HH:MM:SS",
     "50": "YYYY-MM-DD HH:MM",
@@ -36208,12 +37212,16 @@
     "CURRENCY": "#,##0.00 [$kr-41D];[RED]-#,##0.00 [$kr-41D]",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YY-MM-DD HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 18,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -36351,12 +37359,16 @@
     "CURRENCY": "[$TSh-8041]#,##0.00;[RED]-[$TSh-8041]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -36543,12 +37555,16 @@
     "CURRENCY": "#,##0.00 [$zł-699];[RED]-#,##0.00 [$zł-699]",
     "DATE": "D.MM.YYYY",
     "DATE_TIME": "YYYY-MM-DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -36685,12 +37701,16 @@
     "CURRENCY": "[$₹-449]#,##0.00;[RED]-[$₹-449]#,##0.00",
     "DATE": "DD-MM-YYYY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -36830,12 +37850,16 @@
     "CURRENCY": "[$₹-44a]#,##0.00;[RED]-[$₹-44a]#,##0.00",
     "DATE": "DD-MM-YYYY",
     "DATE_TIME": "DD-MM-YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -36975,12 +37999,16 @@
     "CURRENCY": "[$CFA-660] #,##0.00;[RED][$CFA-660]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -37117,12 +38145,16 @@
     "CURRENCY": "#,##0.00[$смн.-428];[RED]-#,##0.00[$смн.-428]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -37258,12 +38290,16 @@
     "CURRENCY": "[$฿-41E]#,##0.00;[RED]-[$฿-41E]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -37403,12 +38439,16 @@
     "CURRENCY": "#,##0.00[$ናቕፋ-873];[RED]-#,##0.00[$ናቕፋ-873]",
     "DATE": "MM/DD/YY",
     "DATE_TIME": "MM/DD/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -37545,12 +38585,16 @@
     "CURRENCY": "[$ብር-473]#,##0.00;[RED]-[$ብር-473]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 6,
     "TIME": 42
    },
    "acceptance": [
@@ -37687,12 +38731,16 @@
     "CURRENCY": "[$m-442]#,##0.00;[RED]([$m-442]#,##0.00)",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00\" \"%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -37829,12 +38877,16 @@
     "CURRENCY": "[$R-432] #,##0.00;[RED][$R-432]-#,##0.00",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD HH:MM:SS",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 47,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -37972,12 +39024,16 @@
     "CURRENCY": "[$K-647]#,##0.00;[RED]-[$K-647]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -38114,12 +39170,16 @@
     "CURRENCY": "[$₺-41F]#,##0.00;[RED]-[$₺-41F]#,##0.00",
     "DATE": "DD.MM.YYYY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "%0.00",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -38260,12 +39320,16 @@
     "CURRENCY": "[$R-431] #,##0.00;[RED][$R-431]-#,##0.00",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD HH:MM:SS",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 47,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -38403,12 +39467,16 @@
     "CURRENCY": "[$CFA-682] #,##0.00;[RED][$CFA-682]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -38545,12 +39613,16 @@
     "CURRENCY": "#,##0.00 [$₽-444];[RED]-#,##0.00 [$₽-444]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -38687,12 +39759,16 @@
     "CURRENCY": "[$CFA-661] #,##0.00;[RED][$CFA-661]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -38829,12 +39905,16 @@
     "CURRENCY": "[$￥-0480]#,##0.00;[RED][$￥-0480]-#,##0.00",
     "DATE": "YY-MM-DD",
     "DATE_TIME": "YY-MM-DD HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -39021,12 +40101,16 @@
     "CURRENCY": "#,##0.00 [$грн.-422];[RED]-#,##0.00 [$грн.-422]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -39163,12 +40247,16 @@
     "CURRENCY": "[$₨-420]#,##0.00;[RED]-[$₨-420]#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -39306,12 +40394,16 @@
     "CURRENCY": "#,##0.00[$soʻm.-443];[RED]-#,##0.00[$soʻm.-443]",
     "DATE": "DD.MM.YY",
     "DATE_TIME": "DD.MM.YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -39448,12 +40540,16 @@
     "CURRENCY": "[$R-433] #,##0.00;[RED][$R-433]-#,##0.00",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD HH:MM:SS",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 47,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -39591,12 +40687,16 @@
     "CURRENCY": "[$€-695] #,##0;[RED]-[$€-695] #,##0",
     "DATE": "DD/MM/YYYY",
     "DATE_TIME": "DD/MM/YYYY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 14,
     "DATE": 21,
     "DATE_TIME": 50,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -39733,12 +40833,16 @@
     "CURRENCY": "#,##0 [$₫-42A];[RED]-#,##0 [$₫-42A]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -39875,12 +40979,16 @@
     "CURRENCY": "[$CFA-662] #,##0.00;[RED][$CFA-662]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -40031,12 +41139,16 @@
     "CURRENCY": "#,##0.00 [$kr-675];[RED]-#,##0.00 [$kr-675]",
     "DATE": "DD.MM.YYYY",
     "DATE_TIME": "HH:MM DD.MM.YY",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -40176,12 +41288,16 @@
     "CURRENCY": "#,##0.00[$FB-633];[RED]-#,##0.00[$FB-633]",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -40318,12 +41434,16 @@
     "CURRENCY": "[$R-434] #,##0.00;[RED][$R-434]-#,##0.00",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD HH:MM:SS",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 47,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -40461,12 +41581,16 @@
     "CURRENCY": "[$CFA-67A] #,##0.00;[RED][$CFA-67A]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -40603,12 +41727,16 @@
     "CURRENCY": "[$$-83D]#,##0.00;[RED]-[$$-83D]#,##0.00",
     "DATE": "MM/DD/YY",
     "DATE_TIME": "MM/DD/YY HH:MM AM/PM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -40745,12 +41873,16 @@
     "CURRENCY": "[$CFA-8284] #,##0.00;[RED][$CFA-8284]-#,##0.00",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "DD/MM/YY HH:MM",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS AM/PM"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 42
    },
    "acceptance": [
@@ -40888,12 +42020,16 @@
     "CURRENCY": "[$￥-804]#,##0;-[$￥-804]#,##0",
     "DATE": "YY\"年\"M\"月\"D\"日\"",
     "DATE_TIME": "YYYY/MM/DD HH:MM:SS",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 12,
     "DATE": 18,
     "DATE_TIME": 47,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -41036,12 +42172,16 @@
     "CURRENCY": "[$HK$-C04]#,##0;-[$HK$-C04]#,##0",
     "DATE": "DD/MM/YY",
     "DATE_TIME": "YYYY\"年\"M\"月\"D\"日\" HH\"時\"MM\"分\"SS\"秒\"",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 12,
     "DATE": 18,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -41178,12 +42318,16 @@
     "CURRENCY": "[$MOP$-1404]#,##0;-[$MOP$-1404]#,##0",
     "DATE": "YYYY\"年\"M\"月\"D\"日\"",
     "DATE_TIME": "YYYY\"年\"M\"月\"D\"日\" HH\"時\"MM\"分\"SS\"秒\"",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "AM/PM HH\"時\"MM\"分\"SS\"秒\""
    },
    "defaults": {
     "CURRENCY": 12,
     "DATE": 23,
     "DATE_TIME": 72,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 69
    },
    "acceptance": [
@@ -41320,12 +42464,16 @@
     "CURRENCY": "[$S$-1004]#,##0;-[$S$-1004]#,##0",
     "DATE": "YY/M/D",
     "DATE_TIME": "YY\"年\"M\"月\"D\"日\"HH\"时\"MM\"分\"",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 12,
     "DATE": 20,
     "DATE_TIME": 46,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -41461,12 +42609,16 @@
     "CURRENCY": "[$NT$-404]#,##0;-[$NT$-404]#,##0",
     "DATE": "YYYY/M/D",
     "DATE_TIME": "YYYY\"年\"M\"月\"D\"日\" HH\"時\"MM\"分\"",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 12,
     "DATE": 18,
     "DATE_TIME": 91,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [
@@ -41610,12 +42762,16 @@
     "CURRENCY": "[$R-435] #,##0.00;[RED][$R-435]-#,##0.00",
     "DATE": "YYYY-MM-DD",
     "DATE_TIME": "YYYY-MM-DD HH:MM:SS",
+    "PERCENT_NUMBER": "0.00%",
+    "SCIENTIFIC_NUMBER": "0.00E+00",
     "TIME": "HH:MM:SS"
    },
    "defaults": {
     "CURRENCY": 15,
     "DATE": 21,
     "DATE_TIME": 47,
+    "PERCENT_NUMBER": 9,
+    "SCIENTIFIC_NUMBER": 7,
     "TIME": 40
    },
    "acceptance": [

@@ -47,6 +47,7 @@ type localeRecord struct {
 	LCIDs []uint16 `json:"lcids,omitempty"`
 	// LC_CTYPE/Separators.
 	Decimal      string `json:"decimal"`
+	DecimalAlt   string `json:"decimalAlt,omitempty"`
 	Group        string `json:"group"`
 	DateSep      string `json:"dateSep"`
 	TimeSep      string `json:"timeSep"`

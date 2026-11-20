@@ -50,9 +50,10 @@ func TestTranslate(t *testing.T) {
 		{"en-US", ".", ",", "General", "0.00E+00", "0.00E+00"},
 		{"de-CH", ".", "'", "Standard", "#'##0.00", "#,##0.00"},
 		{"de-DE", ",", ".", "Standard", "Standard", "General"},
+		{"sv-SE", ",", "\u00a0", "Standard", "[TT]:MM:SS,00", "[HH]:MM:SS.00"},
 	} {
 		sep := map[string]string{"de-DE": ", ", "en-US": ", "}[tt.tag]
-		tr := translator{kw: keywordsFor(tt.tag), general: tt.general, decimal: tt.decimal, group: tt.group, dowSep: sep}
+		tr := translator{kw: keywordsFor(tt.tag), general: tt.general, decimal: tt.decimal, group: tt.group, time100: tt.decimal, dowSep: sep}
 		got, err := tr.translate(tt.code)
 		if err != nil || got != tt.want {
 			t.Errorf("%s %q: %q %v, want %q", tt.tag, tt.code, got, err, tt.want)

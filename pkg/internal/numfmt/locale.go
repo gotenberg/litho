@@ -22,6 +22,9 @@ type localeData struct {
 	// dateSep, timeSep and time100Sep the separators of the parts of a
 	// date, a time and a second.
 	decimal, group, dateSep, timeSep, time100Sep string
+	// decimalAlt is a second decimal separator typed text may use, ""
+	// for none.
+	decimalAlt string
 	// am and pm are what AM/PM writes.
 	am, pm string
 	// trueWord and falseWord name the booleans.
@@ -82,6 +85,8 @@ const (
 	CodeDate                          // the default date format
 	CodeTime                          // the default time format
 	CodeDateTimeDefault               // the default date and time format
+	CodePercentDefault                // the default percent format
+	CodeScientificDefault             // the default scientific format
 	CodeCurrencyDefault               // the default currency, two decimals or its own
 	CodeCurrencyDefaultInt            // the default currency without decimals
 	numCodes
@@ -170,6 +175,16 @@ func localeOfLCID(id uint64) *localeData {
 	return nil
 }
 
+// LCID returns the Windows locale identifier a [$-LCID] tag names loc
+// with, false for a locale the table lacks.
+func LCID(loc models.Locale) (uint64, bool) {
+	d := lookup(loc)
+	if d == nil {
+		return 0, false
+	}
+	return uint64(d.lcid), true
+}
+
 // LCIDOf returns the Windows locale identifier of the language tag lang
 // ("hu-HU"), for a reader that writes a locale into a format code as a
 // [$-LCID] tag; false for a locale whose separators are en-US's or that
@@ -214,4 +229,69 @@ func (f *Format) WithLocale(loc models.Locale) *Format {
 		out.sections[i] = &c
 	}
 	return &out
+}
+
+// LocaleInfo is what a reader of typed text needs of a locale.
+type LocaleInfo struct {
+	// Decimal and Group are the separators; Indian reports digits
+	// grouped by three then two.
+	Decimal, Group string
+	Indian         bool
+	// DecimalAlt is a second decimal separator typed text may use, ""
+	// for none.
+	DecimalAlt string
+	// Currency is the default currency's symbol.
+	Currency string
+	// AM and PM are the time markers, True and False the boolean words.
+	AM, PM, True, False string
+	// DateSep, TimeSep and Time100Sep separate the parts of a date, of a
+	// time and the fraction of a second.
+	DateSep, TimeSep, Time100Sep string
+	// Months are the abbreviated and full month names, Genitive and
+	// Partitive their other cases, nil when the same.
+	Months              [12][2]string
+	Genitive, Partitive *[12][2]string
+	// Acceptance are the date acceptance patterns ("D.M.", "M/D").
+	Acceptance []string
+	// Order is the order of day, month and year in the locale's short
+	// date: "DMY", "MDY" or "YMD".
+	Order string
+}
+
+// Info returns what loc states for a reader of typed text, false for a
+// locale the table lacks.
+func Info(loc models.Locale) (LocaleInfo, bool) {
+	d := lookup(loc)
+	if d == nil {
+		return LocaleInfo{}, false
+	}
+	return LocaleInfo{
+		Decimal: d.decimal, DecimalAlt: d.decimalAlt, Group: d.group, Indian: d.indian, Currency: d.currency,
+		AM: d.am, PM: d.pm, True: d.trueWord, False: d.falseWord, DateSep: d.dateSep, TimeSep: d.timeSep, Time100Sep: d.time100Sep,
+		Months: *d.months, Genitive: d.genitive, Partitive: d.partitive,
+		Acceptance: d.acceptance, Order: dateOrder(d.codes[CodeDateDDMMYYYY]),
+	}, true
+}
+
+// dateOrder returns the order of the day, month and year keywords of a
+// date code, "DMY" when it does not say.
+func dateOrder(code string) string {
+	var out []byte
+	for i := 0; i < len(code); i++ {
+		c := code[i] &^ 0x20
+		switch c {
+		case '"':
+			if j := strings.IndexByte(code[i+1:], '"'); j >= 0 {
+				i += j + 1
+			}
+		case 'D', 'M', 'Y':
+			if !slices.Contains(out, c) {
+				out = append(out, c)
+			}
+		}
+	}
+	if len(out) != 3 {
+		return "DMY"
+	}
+	return string(out)
 }

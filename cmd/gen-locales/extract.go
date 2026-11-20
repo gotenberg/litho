@@ -232,6 +232,7 @@ func record(file string, trees map[string]*node, ids map[string][]uint16) (local
 	}
 	sep := ctype.child("Separators")
 	r.Decimal = sep.textOf("DecimalSeparator")
+	r.DecimalAlt = sep.textOf("DecimalSeparatorAlternative")
 	r.Group = sep.textOf("ThousandSeparator")
 	r.DateSep = sep.textOf("DateSeparator")
 	r.TimeSep = sep.textOf("TimeSeparator")
@@ -449,7 +450,7 @@ func (r *localeRecord) formats(trees map[string]*node, file string) error {
 		}
 		elems = append(elems, elem{index: idx, usage: e.attrs["usage"], typ: e.attrs["type"], def: e.attrs["default"] == "true", code: code})
 	}
-	tr := translator{kw: kw, general: general, decimal: r.Decimal, group: r.Group, dowSep: r.DayOfWeekSep}
+	tr := translator{kw: kw, general: general, decimal: r.Decimal, group: r.Group, time100: r.Time100Sep, dowSep: r.DayOfWeekSep}
 	r.Codes = map[string]string{}
 	for _, e := range elems {
 		if !slices.Contains(wantedIndices, e.index) {
@@ -470,7 +471,7 @@ func (r *localeRecord) formats(trees map[string]*node, file string) error {
 		r.Grouping = []int{3, 2}
 	}
 	r.Defaults = map[string]int{}
-	for _, usage := range []string{"DATE", "TIME", "DATE_TIME", "CURRENCY"} {
+	for _, usage := range []string{"DATE", "TIME", "DATE_TIME", "CURRENCY", "PERCENT_NUMBER", "SCIENTIFIC_NUMBER"} {
 		best, rank := -1, 0
 		for _, e := range elems {
 			if e.usage != usage || !e.def {

@@ -81,6 +81,8 @@ type translator struct {
 	general string
 	decimal string
 	group   string
+	// time100 separates a second from its fraction.
+	time100 string
 	// dowSep is what NNNN writes after the day of the week
 	// (LongDateDayOfWeekSeparator).
 	dowSep string
@@ -172,6 +174,12 @@ func (t translator) section(src string) (string, error) {
 			if strings.EqualFold(b, "ROT") {
 				b = "RED"
 			}
+			if u := strings.ToUpper(b); u != "" && strings.Trim(u, u[:1]) == "" {
+				// An elapsed time, [TT] for [HH] in Swedish.
+				if p, err := t.keyword(u[0], len(u), b); err == nil && p.date {
+					b = p.text
+				}
+			}
 			ps = append(ps, piece{text: "[" + b + "]", date: isElapsed(b)})
 			i += j + 1
 		case strings.HasPrefix(upper[i:], "AM/PM"):
@@ -218,7 +226,7 @@ func (t translator) section(src string) (string, error) {
 		nextDigit := k+1 < len(ps) && ps[k+1].digit
 		nextZero := k+1 < len(ps) && ps[k+1].text == "0"
 		switch {
-		case date && p.text == t.decimal && afterSecond && nextZero:
+		case date && (p.text == t.decimal || p.text == t.time100) && afterSecond && nextZero:
 			b.WriteByte('.')
 		case !date && p.text == t.decimal && (prevDigit || nextDigit):
 			b.WriteByte('.')

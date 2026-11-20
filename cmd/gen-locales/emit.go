@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"go/format"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,7 +18,7 @@ import (
 // currency's formats.
 var codeOrder = []string{
 	"7", "8", "9", "12", "13", "14", "15", "18", "19", "20", "21", "33", "39", "40", "41", "42", "43", "44", "45",
-	"46", "47", "50", "DATE", "TIME", "DATE_TIME", "currency", "currencyInt",
+	"46", "47", "50", "DATE", "TIME", "DATE_TIME", "PERCENT_NUMBER", "SCIENTIFIC_NUMBER", "currency", "currencyInt",
 }
 
 // header is the first lines of both generated files.
@@ -127,7 +128,7 @@ func namesLit(typ string, pairs [][2]string) string {
 // default currency's and its decimals by that currency's, as LibreOffice
 // builds the default currency format (svl zforlist.cxx,
 // SvNumberFormatter::GetCurrencyFormatStrings).
-func currencyCode(l localeRecord, base string) string {
+func currencyCode(l localeRecord, base string, decimals int) string {
 	code := l.Codes[base]
 	if code == "" {
 		return ""
@@ -152,13 +153,16 @@ func currencyCode(l localeRecord, base string) string {
 		b.WriteString("[$" + tag + "]")
 		code = code[i+j+1:]
 	}
-	out := b.String()
-	zeros := strings.Repeat("0", l.CurrencyDigits)
-	if l.CurrencyDigits == 0 {
-		return strings.ReplaceAll(out, "0.00", "0")
+	digits := "#,##0"
+	if decimals > 0 {
+		digits += "." + strings.Repeat("0", decimals)
 	}
-	return strings.ReplaceAll(out, "0.00", "0."+zeros)
+	return numberPart.ReplaceAllLiteralString(b.String(), digits)
 }
+
+// numberPart matches the number of a currency format code: grouped
+// digits and their decimals.
+var numberPart = regexp.MustCompile(`#,##0(\.0+)?`)
 
 // codesOf returns the codes of a locale in codeOrder.
 func codesOf(l localeRecord) []string {
@@ -166,9 +170,9 @@ func codesOf(l localeRecord) []string {
 	for i, k := range codeOrder {
 		switch k {
 		case "currency":
-			out[i] = currencyCode(l, "13")
+			out[i] = currencyCode(l, "13", l.CurrencyDigits)
 		case "currencyInt":
-			out[i] = currencyCode(l, "12")
+			out[i] = currencyCode(l, "12", 0)
 		default:
 			out[i] = l.Codes[k]
 		}
@@ -215,8 +219,8 @@ func emitTable(locs []localeRecord) ([]byte, error) {
 		}
 		cl.WriteString("}")
 		code := codes.ref(cl.String())
-		fmt.Fprintf(&rows, "\t{tag: models.%s, lcid: 0x%04X, decimal: %q, group: %q, dateSep: %q, timeSep: %q, time100Sep: %q, am: %q, pm: %q, trueWord: %q, falseWord: %q, indian: %v, currency: %q, calendar: %q, months: &%s, genitive: %s, partitive: %s, narrow: %s, days: &%s, codes: &%s, acceptance: %s},\n",
-			constName(l.Tag), l.LCIDs[0], l.Decimal, l.Group, l.DateSep, l.TimeSep, l.Time100Sep, l.AM, l.PM,
+		fmt.Fprintf(&rows, "\t{tag: models.%s, lcid: 0x%04X, decimal: %q, decimalAlt: %q, group: %q, dateSep: %q, timeSep: %q, time100Sep: %q, am: %q, pm: %q, trueWord: %q, falseWord: %q, indian: %v, currency: %q, calendar: %q, months: &%s, genitive: %s, partitive: %s, narrow: %s, days: &%s, codes: &%s, acceptance: %s},\n",
+			constName(l.Tag), l.LCIDs[0], l.Decimal, l.DecimalAlt, l.Group, l.DateSep, l.TimeSep, l.Time100Sep, l.AM, l.PM,
 			l.True, l.False, slices.Equal(l.Grouping, []int{3, 2}), l.Currency, l.Calendar, months, genitive, partitive, narrow, days, code, stringsLit(l.Acceptance))
 		for _, id := range l.LCIDs {
 			lcidRows = append(lcidRows, fmt.Sprintf("{0x%04X, %d}", id, i))
