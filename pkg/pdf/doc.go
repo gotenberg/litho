@@ -133,10 +133,9 @@
 // 12.8.1). An incremental update appends to them and keeps every signature. A
 // full rewrite, a [Split] and a [Merge] move them, so they leave the input's
 // signatures out: each signed widget's appearance is drawn into its page, and
-// the field leaves the form. Such an output returns [ErrSignaturesDropped]
-// unless [WithSignatureRemoval] allows it. [Writer.DroppedSignatures],
-// [PipelineResult.DroppedSignatures] and [WithDroppedSignatures] report what
-// an output left out.
+// the field leaves the form. [Writer.DroppedSignatures],
+// [github.com/gotenberg/litho/pkg/models.PipelineResult.DroppedSignatures] and
+// [WithDroppedSignatures] report what an output left out.
 //
 // # Functional options
 //

@@ -17,7 +17,7 @@ import (
 //
 // [Split] and [Merge] build a new file, so they drop every signature of every
 // source. [Writer.WriteTo] reports what [Writer.DroppedSignatures] reports, and
-// [Pipeline.WriteTo] what [PipelineResult.DroppedSignatures] holds.
+// [Pipeline.WriteTo] what [models.PipelineResult.DroppedSignatures] holds.
 func WithDroppedSignatures(dst *[]models.DroppedSignature) WriteOption {
 	return func(o *writeOpts) {
 		o.droppedSignatures = dst

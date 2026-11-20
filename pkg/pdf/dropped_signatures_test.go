@@ -482,8 +482,9 @@ func TestSplitMerge_ReportDroppedSignatures(t *testing.T) {
 	}
 }
 
-// TestPipeline_ReportsDroppedSignatures pins [PipelineResult.DroppedSignatures]
-// over an Apply stage that rewrites and one that does not, before a Split.
+// TestPipeline_ReportsDroppedSignatures pins
+// [models.PipelineResult.DroppedSignatures] over an Apply stage that rewrites
+// and one that does not, before a Split.
 func TestPipeline_ReportsDroppedSignatures(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -30,7 +30,7 @@ type mergedOutput struct {
 	// reader reads file, nil until the pipeline succeeded.
 	reader *Reader
 	// result is the pipeline's own result.
-	result *PipelineResult
+	result *models.PipelineResult
 	// encrypt is the encryption the pipeline asked for its output, which the
 	// merging pipeline's output owes the caller instead, nil when none did.
 	encrypt *models.EncryptConfig
@@ -65,7 +65,7 @@ func (s *mergePipelinesStage) apply(ctx context.Context, ex *executor) error {
 	if ex.cur != nil {
 		sources = append(sources, ex.cur)
 	}
-	results := make([]*PipelineResult, len(outs))
+	results := make([]*models.PipelineResult, len(outs))
 	for i, out := range outs {
 		sources = append(sources, out.reader)
 		results[i] = out.result
@@ -75,7 +75,7 @@ func (s *mergePipelinesStage) apply(ctx context.Context, ex *executor) error {
 		}
 	}
 	opts := ex.restructureOptions(s.opts)
-	report := StageReport{Index: ex.stageIdx, Name: s.name(), Materialized: true, Pipelines: results}
+	report := models.StageReport{Index: ex.stageIdx, Name: s.name(), Materialized: true, Pipelines: results}
 
 	if ex.isLastStage() {
 		if err := Merge(ctx, sources, ex.finalDst, opts...); err != nil {
@@ -231,7 +231,7 @@ func (ex *executor) runMerged(ctx context.Context, i int, p *Pipeline, out *merg
 		finalDst:    out.file,
 		totalStages: len(p.stages),
 		logger:      ex.logger,
-		result:      &PipelineResult{},
+		result:      &models.PipelineResult{},
 	}
 	defer sub.cleanup()
 	if err := sub.run(ctx, p.stages); err != nil {

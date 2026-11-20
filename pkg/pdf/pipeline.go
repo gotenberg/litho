@@ -58,46 +58,9 @@ import (
 // A Pipeline is not safe for concurrent use. Every stage method appends to the
 // same slice, so building one from several goroutines races; declare the
 // pipeline on one goroutine and hand the finished value to [Pipeline.WriteTo].
-// [PipelineResult] carries the same requirement.
+// [models.PipelineResult] carries the same requirement.
 type Pipeline struct {
 	stages []stage
-}
-
-// PipelineResult holds per-stage execution info returned from
-// [Pipeline.WriteTo].
-// Concurrent reads of a value are safe; a write needs synchronization.
-type PipelineResult struct {
-	// Stages reports one entry per executed stage in declaration order.
-	Stages []StageReport
-	// DroppedSignatures lists the signatures of the pipeline's documents that
-	// its output does not carry, each once, in the order the stages dropped
-	// them: a Split or a Merge drops every signature of the documents it
-	// reads, and an Apply stage those its Writer's full rewrite drops (see
-	// [Writer.DroppedSignatures]).
-	DroppedSignatures []models.DroppedSignature
-}
-
-// StageReport summarizes a single pipeline stage.
-// Concurrent reads of a value are safe; a write needs synchronization.
-type StageReport struct {
-	// Index is the 0-based position of the stage in declaration order.
-	Index int
-	// Name is the short stage identifier: "open", "compose", "convert",
-	// "merge-pipelines", "split", "merge", "apply", or "write".
-	Name string
-	// Materialized is true if the stage flushed the pipeline state to
-	// an intermediate temp file or to the final destination.
-	Materialized bool
-	// BytesOut is the size of the intermediate file for restructuring
-	// stages, or 0 otherwise.
-	BytesOut int64
-	// Conversion is the report of a [Pipeline.Convert] stage, nil for any
-	// other stage.
-	Conversion *models.ConvertReport
-	// Pipelines holds the result of each pipeline a
-	// [Pipeline.MergePipelines] stage ran, in the order they were given,
-	// nil for any other stage.
-	Pipelines []*PipelineResult
 }
 
 // NewPipeline creates an empty [Pipeline]. Seed it with [Pipeline.Open],
@@ -316,7 +279,7 @@ func (p *Pipeline) mergedPipelineErrors(st *mergePipelinesStage, seen map[*Pipel
 // stage edits the file a Split or a Merge wrote, the output is a full rewrite
 // of it, and a signature goes on top of that rewrite. On the source itself
 // they apply only when the write rewrites it in full, as on [Writer.WriteTo].
-func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (_ *PipelineResult, err error) {
+func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (_ *models.PipelineResult, err error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
@@ -349,7 +312,7 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 		finalDst:    dst,
 		totalStages: len(p.stages),
 		logger:      logger,
-		result:      &PipelineResult{},
+		result:      &models.PipelineResult{},
 	}
 	defer ex.cleanup()
 
@@ -485,7 +448,7 @@ type executor struct {
 	stageIdx    int
 	totalStages int
 	logger      *slog.Logger
-	result      *PipelineResult
+	result      *models.PipelineResult
 	// merged is true while the executor runs a pipeline a
 	// [Pipeline.MergePipelines] stage merges: its output is an intermediate
 	// file of the merging pipeline, written in the clear (see
@@ -732,7 +695,7 @@ func (ex *executor) cleanup() {
 }
 
 func (ex *executor) recordStage(name string, materialized bool, bytesOut int64) {
-	ex.result.Stages = append(ex.result.Stages, StageReport{
+	ex.result.Stages = append(ex.result.Stages, models.StageReport{
 		Index: ex.stageIdx, Name: name, Materialized: materialized, BytesOut: bytesOut,
 	})
 }

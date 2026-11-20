@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // Convert opens the pipeline on the PDF c writes, as [Conversion.WriteTo]
@@ -20,7 +22,7 @@ import (
 // files in the pipeline's temp directory unless its own options name
 // others. The document is read back within the limits of
 // [WithConvertLimits]. Its report is the stage's
-// [StageReport.Conversion].
+// [models.StageReport.Conversion].
 func (p *Pipeline) Convert(c *Conversion) *Pipeline {
 	return p.add(&convertStage{c: c})
 }
@@ -57,7 +59,7 @@ func (s *convertStage) apply(ctx context.Context, ex *executor) error {
 	}
 	ex.cur, ex.curOwned, ex.curFile = r, true, f
 	ex.releaseWriter()
-	ex.result.Stages = append(ex.result.Stages, StageReport{
+	ex.result.Stages = append(ex.result.Stages, models.StageReport{
 		Index: ex.stageIdx, Name: s.name(), Materialized: true, BytesOut: size, Conversion: report,
 	})
 	return nil
@@ -84,12 +86,12 @@ func (s *convertStage) apply(ctx context.Context, ex *executor) error {
 //
 // When one fails, those still running are cancelled through their context,
 // none starts after it, and the stage fails naming the pipeline by its
-// position and wrapping its error: the one that stopped the others, a
-// failure that follows it counting as that cancellation whatever it reports.
-// A panic in a pipeline, an Apply closure's included, fails the stage with an
-// error wrapping [ErrInternalPanic]. The result of each is the stage's
-// [StageReport.Pipelines], and the signatures each drops, and those of its
-// output the merge drops, reach [PipelineResult.DroppedSignatures].
+// position and wrapping its error: the one that stopped the others, a failure
+// that follows it counting as that cancellation whatever it reports. A panic
+// in a pipeline, an Apply closure's included, fails the stage with an error
+// wrapping [ErrInternalPanic]. The result of each is the stage's
+// [models.StageReport.Pipelines], and the signatures each drops, and those of
+// its output the merge drops, reach [models.PipelineResult.DroppedSignatures].
 //
 // A pipeline given here is declared like any other and never written by
 // the caller: the stage writes it. It must not call MergePipelines itself
