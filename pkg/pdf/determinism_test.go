@@ -226,7 +226,7 @@ func TestWriterEditsWriteTheSameBytesEveryRun(t *testing.T) {
 		},
 		"bookmarks": func(ctx context.Context, r *Reader, out *bytes.Buffer) error {
 			return writeEdited(ctx, r, out, func(w *Writer) error {
-				w.GenerateBookmarks(BookmarkGenerationOptions{}, BookmarkReplace)
+				w.GenerateBookmarks(BookmarkGenerationOptions{}, models.BookmarkReplace)
 				return nil
 			})
 		},
@@ -239,10 +239,10 @@ func TestWriterEditsWriteTheSameBytesEveryRun(t *testing.T) {
 			return w.WriteTo(ctx, out, WithFullRewrite(), WithObjectStreams(), WithDedup())
 		},
 		"split": func(ctx context.Context, r *Reader, out *bytes.Buffer) error {
-			return Split(ctx, r, []int{2, 1}, out, WithBookmarks(BookmarkOptions{Handling: BookmarkReconstruct}))
+			return Split(ctx, r, []int{2, 1}, out, WithBookmarks(BookmarkOptions{Handling: models.BookmarkReconstruct}))
 		},
 		"merge": func(ctx context.Context, r *Reader, out *bytes.Buffer) error {
-			return Merge(ctx, []*Reader{r, r}, out, WithBookmarks(BookmarkOptions{Handling: BookmarkMixed, WrapEachSource: true}))
+			return Merge(ctx, []*Reader{r, r}, out, WithBookmarks(BookmarkOptions{Handling: models.BookmarkMixed, WrapEachSource: true}))
 		},
 	}
 	for _, fixture := range []string{"outlinedest_ua2.pdf", "multipage_2b.pdf", "structcopy_ua2.pdf", "pagelabels_2b.pdf"} {

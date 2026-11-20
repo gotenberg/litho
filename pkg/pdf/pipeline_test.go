@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func openThreePage(t *testing.T) *Reader {
@@ -322,7 +324,7 @@ func TestPipeline_MergeWithBookmarks(t *testing.T) {
 	_, err := NewPipeline().
 		Open(r1).
 		Merge([]*Reader{r2}, WithBookmarks(BookmarkOptions{
-			Handling: BookmarkNone,
+			Handling: models.BookmarkNone,
 		})).
 		WriteTo(ctx, &out)
 	if err != nil {

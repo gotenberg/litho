@@ -2,6 +2,8 @@ package mutations
 
 import (
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestFilterAndRemap_DropOrphans(t *testing.T) {
@@ -14,7 +16,7 @@ func TestFilterAndRemap_DropOrphans(t *testing.T) {
 	oldToNew := map[int]int{1: 1, 5: 2}
 	newPageNum := func(old int) int { return oldToNew[old] }
 
-	got := FilterAndRemap(bookmarks, newPageNum, OrphanDrop, true, keptOldPages)
+	got := FilterAndRemap(bookmarks, newPageNum, models.OrphanDrop, true, keptOldPages)
 
 	if len(got) != 2 {
 		t.Fatalf("got %d bookmarks, want 2", len(got))
@@ -38,7 +40,7 @@ func TestFilterAndRemap_PromoteOrphanChildren(t *testing.T) {
 	oldToNew := map[int]int{1: 1, 5: 2}
 	newPageNum := func(old int) int { return oldToNew[old] }
 
-	got := FilterAndRemap(bookmarks, newPageNum, OrphanDrop, true, keptOldPages)
+	got := FilterAndRemap(bookmarks, newPageNum, models.OrphanDrop, true, keptOldPages)
 
 	if len(got) != 2 {
 		t.Fatalf("expected 2 promoted children, got %d", len(got))
@@ -62,7 +64,7 @@ func TestFilterAndRemap_NoPromote(t *testing.T) {
 			return 1
 		}
 		return 0
-	}, OrphanDrop, false, []int{1})
+	}, models.OrphanDrop, false, []int{1})
 
 	if len(got) != 0 {
 		t.Errorf("expected children to be dropped with parent, got %d", len(got))
@@ -77,7 +79,7 @@ func TestFilterAndRemap_OrphanRemap(t *testing.T) {
 	oldToNew := map[int]int{1: 1, 5: 2, 10: 3}
 	newPageNum := func(old int) int { return oldToNew[old] }
 
-	got := FilterAndRemap(bookmarks, newPageNum, OrphanRemap, false, keptOldPages)
+	got := FilterAndRemap(bookmarks, newPageNum, models.OrphanRemap, false, keptOldPages)
 	if len(got) != 1 {
 		t.Fatalf("expected 1 remapped bookmark, got %d", len(got))
 	}
@@ -90,7 +92,7 @@ func TestFilterAndRemap_OrphanKeep(t *testing.T) {
 	bookmarks := []OutlineItem{
 		{Title: "Dropped", PageNumber: 3},
 	}
-	got := FilterAndRemap(bookmarks, func(int) int { return 0 }, OrphanKeep, false, []int{1})
+	got := FilterAndRemap(bookmarks, func(int) int { return 0 }, models.OrphanKeep, false, []int{1})
 	if len(got) != 1 {
 		t.Fatalf("expected 1 kept bookmark, got %d", len(got))
 	}

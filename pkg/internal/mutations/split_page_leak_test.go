@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // nestedPageTreePDF builds a four-page document whose page tree has an
@@ -96,7 +97,7 @@ func splitFirstTwoPages(t *testing.T, withBeads bool) []byte {
 	}
 
 	var out bytes.Buffer
-	if err := Split(ctx, doc, pages, []int{1, 2}, &out, "", false, CompactOptions{}, BookmarkConfig{Handling: BookmarkNone}, nil, nil); err != nil {
+	if err := Split(ctx, doc, pages, []int{1, 2}, &out, "", false, CompactOptions{}, BookmarkConfig{Handling: models.BookmarkNone}, nil, nil); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
 	return out.Bytes()

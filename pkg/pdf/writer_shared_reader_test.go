@@ -96,7 +96,7 @@ func sharedReaderOps(t *testing.T) []sharedReaderOp {
 				w.SetFormField("blank", "filled in")
 				w.AddAttachment("note.txt", []byte("attached"), "text/plain")
 				w.SetBookmarks([]models.Bookmark{{Title: "first", PageNumber: 1}})
-				w.GenerateBookmarks(BookmarkGenerationOptions{}, BookmarkAppend)
+				w.GenerateBookmarks(BookmarkGenerationOptions{}, models.BookmarkAppend)
 				return nil
 			})
 		}},

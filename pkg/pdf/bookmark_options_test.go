@@ -6,6 +6,8 @@ import (
 	"errors"
 	"math"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 func TestBookmarkGenerationOptionsRefusesOutOfRange(t *testing.T) {
@@ -35,13 +37,13 @@ func TestBookmarkGenerationOptionsRefusesOutOfRange(t *testing.T) {
 			}
 
 			w := NewWriter(r)
-			w.GenerateBookmarks(tc.opts, BookmarkReplace)
+			w.GenerateBookmarks(tc.opts, models.BookmarkReplace)
 			var out bytes.Buffer
 			if err := w.WriteTo(ctx, &out); !errors.Is(err, ErrInvalidBookmarkOptions) {
 				t.Errorf("Writer.WriteTo: got %v, want ErrInvalidBookmarkOptions", err)
 			}
 
-			bm := WithBookmarks(BookmarkOptions{Handling: BookmarkReconstruct, Generation: tc.opts})
+			bm := WithBookmarks(BookmarkOptions{Handling: models.BookmarkReconstruct, Generation: tc.opts})
 			out.Reset()
 			if err := Split(ctx, r, []int{1}, &out, bm); !errors.Is(err, ErrInvalidBookmarkOptions) {
 				t.Errorf("Split: got %v, want ErrInvalidBookmarkOptions", err)

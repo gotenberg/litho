@@ -644,8 +644,9 @@ func WithTempDir(dir string) WriteOption {
 // outline.
 //
 // When omitted, the operation uses sensible defaults. [Split] uses
-// [BookmarkUpdate] with [OrphanDrop] and PromoteOrphanChildren=true. [Merge]
-// uses [BookmarkUpdate] with no wrapping.
+// [models.BookmarkUpdate] with [models.OrphanDrop] and
+// PromoteOrphanChildren=true. [Merge] uses [models.BookmarkUpdate] with no
+// wrapping.
 func WithBookmarks(opts BookmarkOptions) WriteOption {
 	return func(o *writeOpts) {
 		copy := opts
@@ -805,51 +806,16 @@ func WithPDFUA(profile models.PDFUAProfile) RemediateOption {
 	}
 }
 
-// BookmarkHandling controls how bookmarks are produced for the output of
-// [Split] and [Merge].
-// BookmarkHandling values are immutable and safe for concurrent use.
-type BookmarkHandling int
-
-const (
-	// BookmarkUpdate keeps existing bookmarks and remaps page indexes.
-	// Bookmarks pointing to dropped pages are handled per [OrphanPolicy].
-	// This is the default.
-	BookmarkUpdate BookmarkHandling = iota
-	// BookmarkReconstruct ignores existing bookmarks and auto-generates a
-	// new outline from the output content via the heading detector.
-	BookmarkReconstruct
-	// BookmarkMixed uses existing bookmarks when present, otherwise
-	// auto-generates per source.
-	BookmarkMixed
-	// BookmarkNone produces no outline at all.
-	BookmarkNone
-)
-
-// OrphanPolicy controls what happens to bookmarks whose target page is no
-// longer in the output document (Split only).
-// OrphanPolicy values are immutable and safe for concurrent use.
-type OrphanPolicy int
-
-const (
-	// OrphanDrop removes the bookmark.
-	OrphanDrop OrphanPolicy = iota
-	// OrphanRemap retargets the bookmark to the nearest kept page.
-	OrphanRemap
-	// OrphanKeep emits the bookmark with no destination so the title
-	// remains visible (no clickable target).
-	OrphanKeep
-)
-
 // BookmarkOptions configures bookmark handling for [Split] and [Merge].
 // Pass to a write call via [WithBookmarks].
 // Concurrent reads of a value are safe; a write needs synchronization.
 type BookmarkOptions struct {
 	// Handling selects the high-level strategy. Defaults to BookmarkUpdate.
-	Handling BookmarkHandling
+	Handling models.BookmarkHandling
 
 	// OrphanPolicy controls what happens to bookmarks for dropped pages
 	// during Split. Defaults to OrphanDrop.
-	OrphanPolicy OrphanPolicy
+	OrphanPolicy models.OrphanPolicy
 	// PromoteOrphanChildren promotes children of dropped bookmarks to the
 	// dropped bookmark's level. Split promotes them only when [WithBookmarks]
 	// is not given. Once it is, this field applies as set, so its zero value
@@ -1842,21 +1808,6 @@ func checkBookmarks(bookmarks []models.Bookmark, pages int, path string) error {
 	return nil
 }
 
-// BookmarkMergeMode controls how auto-generated bookmarks are combined with
-// any existing document outline.
-// BookmarkMergeMode values are immutable and safe for concurrent use.
-type BookmarkMergeMode int
-
-const (
-	// BookmarkReplace replaces the existing outline with the generated
-	// bookmarks. This is the default.
-	BookmarkReplace BookmarkMergeMode = iota
-	// BookmarkPrepend inserts generated bookmarks before any existing entries.
-	BookmarkPrepend
-	// BookmarkAppend inserts generated bookmarks after any existing entries.
-	BookmarkAppend
-)
-
 // GenerateBookmarks auto-detects headings in the document and queues a
 // mutation that replaces the outline with the generated bookmark tree.
 // The merge mode controls whether existing bookmarks are preserved. The
@@ -1870,7 +1821,7 @@ const (
 // stamped or redacted on it on the same Writer is not read. [Writer.WriteTo]
 // returns [ErrInvalidBookmarkOptions] and writes nothing when a field of opts
 // is out of range.
-func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode BookmarkMergeMode) {
+func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode models.BookmarkMergeMode) {
 	if w.refuseAfterRemediation("GenerateBookmarks") != nil {
 		return
 	}
@@ -1894,9 +1845,9 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 
 			final := generated
 			switch mode {
-			case BookmarkReplace:
+			case models.BookmarkReplace:
 				// nothing to merge
-			case BookmarkPrepend, BookmarkAppend:
+			case models.BookmarkPrepend, models.BookmarkAppend:
 				// The outline an earlier edit queued is the existing one, and
 				// reading the Reader's instead wrote over it.
 				existing, staged := mutations.StagedBookmarks(ctx, alloc, doc, resolvedPages)
@@ -1905,7 +1856,7 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 					existing = renumberBookmarks(existing, readerPages, resolvedPages)
 				}
 				if err == nil && len(existing) > 0 {
-					if mode == BookmarkPrepend {
+					if mode == models.BookmarkPrepend {
 						merged := make([]models.Bookmark, 0, len(generated)+len(existing))
 						merged = append(merged, generated...)
 						merged = append(merged, existing...)
@@ -5367,8 +5318,8 @@ func buildSplitBookmarkConfig(src *Reader, opts *BookmarkOptions) mutations.Book
 		return cfg
 	}
 	cfg := mutations.BookmarkConfig{
-		Handling:              mutations.BookmarkHandling(opts.Handling),
-		OrphanPolicy:          mutations.OrphanHandling(opts.OrphanPolicy),
+		Handling:              opts.Handling,
+		OrphanPolicy:          opts.OrphanPolicy,
 		PromoteOrphanChildren: opts.PromoteOrphanChildren,
 		Generation:            generationToInternal(opts.Generation),
 		TextElements: func(ctx context.Context, _ int, pageNum int) ([]models.TextElement, error) {
@@ -5409,7 +5360,7 @@ func buildMergeBookmarkConfig(sources []*Reader, opts *BookmarkOptions) mutation
 		return cfg
 	}
 	cfg := mutations.BookmarkConfig{
-		Handling:       mutations.BookmarkHandling(opts.Handling),
+		Handling:       opts.Handling,
 		WrapEachSource: opts.WrapEachSource,
 		SourceLabels:   opts.SourceLabels,
 		Generation:     generationToInternal(opts.Generation),

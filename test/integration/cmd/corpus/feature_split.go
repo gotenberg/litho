@@ -41,7 +41,7 @@ import (
 //
 // The bookmark assertions are invariants rather than exact-tree
 // matches, so the test does not couple to the specific orphan policy
-// ([pdf.OrphanDrop] / [pdf.PromoteOrphanChildren]) the default
+// ([models.OrphanDrop] / [pdf.PromoteOrphanChildren]) the default
 // Split path applies. Fixtures whose input first or last page is
 // image-only ([pdf.ErrRequiresOCR]) are skipped: the split may
 // have worked but the test has nothing to compare.

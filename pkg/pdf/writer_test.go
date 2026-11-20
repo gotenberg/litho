@@ -654,7 +654,7 @@ func TestWriter_GenerateBookmarks(t *testing.T) {
 	}
 
 	w := NewWriter(r)
-	w.GenerateBookmarks(BookmarkGenerationOptions{}, BookmarkReplace)
+	w.GenerateBookmarks(BookmarkGenerationOptions{}, models.BookmarkReplace)
 
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
@@ -2634,7 +2634,7 @@ func TestSplit_BookmarkNone(t *testing.T) {
 	r, _ := Open(ctx, bytes.NewReader(data), int64(len(data)))
 
 	var out bytes.Buffer
-	if err := Split(ctx, r, []int{1, 2}, &out, WithBookmarks(BookmarkOptions{Handling: BookmarkNone})); err != nil {
+	if err := Split(ctx, r, []int{1, 2}, &out, WithBookmarks(BookmarkOptions{Handling: models.BookmarkNone})); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
 
@@ -2655,8 +2655,8 @@ func TestSplit_BookmarkOrphanRemap(t *testing.T) {
 
 	var out bytes.Buffer
 	err := Split(ctx, r, []int{1, 3}, &out, WithBookmarks(BookmarkOptions{
-		Handling:     BookmarkUpdate,
-		OrphanPolicy: OrphanRemap,
+		Handling:     models.BookmarkUpdate,
+		OrphanPolicy: models.OrphanRemap,
 	}))
 	if err != nil {
 		t.Fatalf("Split: %v", err)
@@ -2747,7 +2747,7 @@ func TestMerge_BookmarkNone(t *testing.T) {
 	r2, _ := Open(ctx, bytes.NewReader(src), int64(len(src)))
 
 	var out bytes.Buffer
-	err := Merge(ctx, []*Reader{r1, r2}, &out, WithBookmarks(BookmarkOptions{Handling: BookmarkNone}))
+	err := Merge(ctx, []*Reader{r1, r2}, &out, WithBookmarks(BookmarkOptions{Handling: models.BookmarkNone}))
 	if err != nil {
 		t.Fatalf("Merge: %v", err)
 	}

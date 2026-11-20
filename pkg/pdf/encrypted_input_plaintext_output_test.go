@@ -65,7 +65,7 @@ func TestWriter_AnEditOnAnEncryptedSourceWritesAPlaintextOutput(t *testing.T) {
 				SkipHeaderFooter:    true,
 				PreferStructureTree: true,
 				DetectNumbering:     true,
-			}, BookmarkReplace)
+			}, models.BookmarkReplace)
 			return nil
 		}},
 		{"SetFormField", form, func(_ context.Context, _ *testing.T, w *Writer) error {

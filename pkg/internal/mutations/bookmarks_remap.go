@@ -2,20 +2,8 @@ package mutations
 
 import (
 	"fmt"
-)
 
-// OrphanHandling controls what happens to bookmarks whose target page is
-// no longer in the output document.
-type OrphanHandling int
-
-const (
-	// OrphanDrop removes the bookmark entirely.
-	OrphanDrop OrphanHandling = iota
-	// OrphanRemap retargets the bookmark to the nearest kept page.
-	OrphanRemap
-	// OrphanKeep emits the bookmark with a zero PageNumber so the title
-	// remains visible but the destination is dropped by [SetBookmarks].
-	OrphanKeep
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // FilterAndRemap walks a bookmark tree and applies an orphan policy. The
@@ -28,7 +16,7 @@ const (
 func FilterAndRemap(
 	bookmarks []OutlineItem,
 	newPageNum func(int) int,
-	policy OrphanHandling,
+	policy models.OrphanPolicy,
 	promoteOrphanChildren bool,
 	keptPages []int,
 ) []OutlineItem {
@@ -52,12 +40,12 @@ func FilterAndRemap(
 
 		// Orphan handling.
 		switch policy {
-		case OrphanDrop:
+		case models.OrphanDrop:
 			if promoteOrphanChildren && len(processedChildren) > 0 {
 				out = append(out, processedChildren...)
 			}
 			// else: drop everything
-		case OrphanRemap:
+		case models.OrphanRemap:
 			remapped := nearestKeptPage(bm.PageNumber, keptPages)
 			if remapped > 0 {
 				bm.PageNumber = remapped
@@ -67,7 +55,7 @@ func FilterAndRemap(
 				// No kept page at all (shouldn't happen), promote children.
 				out = append(out, processedChildren...)
 			}
-		case OrphanKeep:
+		case models.OrphanKeep:
 			bm.PageNumber = 0 // SetBookmarks emits no Dest when page is missing
 			bm.Children = processedChildren
 			out = append(out, bm)

@@ -282,11 +282,11 @@ func TestGenerateDocumentID_NonEmpty(t *testing.T) {
 func TestDefaultBookmarkConfigs(t *testing.T) {
 	t.Parallel()
 	split := DefaultSplitBookmarkConfig()
-	if split.Handling != BookmarkUpdate {
+	if split.Handling != models.BookmarkUpdate {
 		t.Errorf("split default handling: got %v, want BookmarkUpdate", split.Handling)
 	}
 	merge := DefaultMergeBookmarkConfig()
-	if merge.Handling != BookmarkUpdate {
+	if merge.Handling != models.BookmarkUpdate {
 		t.Errorf("merge default handling: got %v, want BookmarkUpdate", merge.Handling)
 	}
 }

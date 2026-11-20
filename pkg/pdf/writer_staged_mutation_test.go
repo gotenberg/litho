@@ -447,7 +447,7 @@ func TestWriterRedactAfterBookmarksScrubsTheirTitles(t *testing.T) {
 func TestWriterGeneratedBookmarksKeepTheStagedOutline(t *testing.T) {
 	t.Parallel()
 
-	for name, mode := range map[string]BookmarkMergeMode{"append": BookmarkAppend, "prepend": BookmarkPrepend} {
+	for name, mode := range map[string]models.BookmarkMergeMode{"append": models.BookmarkAppend, "prepend": models.BookmarkPrepend} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
@@ -471,7 +471,7 @@ func TestWriterGeneratedBookmarksKeepTheStagedOutline(t *testing.T) {
 				t.Fatalf("the output carries %d bookmarks, want the one set and the generated ones", len(bookmarks))
 			}
 			set := bookmarks[0]
-			if mode == BookmarkPrepend {
+			if mode == models.BookmarkPrepend {
 				set = bookmarks[len(bookmarks)-1]
 			}
 			want := models.Bookmark{Title: "Set earlier", PageNumber: 2, Children: []models.Bookmark{{Title: "Child", PageNumber: 1}}}
@@ -611,7 +611,7 @@ func TestWriterGeneratedBookmarksSkipADeletedPage(t *testing.T) {
 	if err := w.DeletePages(2); err != nil {
 		t.Fatalf("DeletePages: %v", err)
 	}
-	w.GenerateBookmarks(BookmarkGenerationOptions{}, BookmarkReplace)
+	w.GenerateBookmarks(BookmarkGenerationOptions{}, models.BookmarkReplace)
 
 	bookmarks, err := writeAndReopen(t, w).Bookmarks(ctx)
 	if err != nil {

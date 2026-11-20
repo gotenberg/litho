@@ -379,7 +379,7 @@ func TestWriterGenerateBookmarksReadsInsertedPages(t *testing.T) {
 	if err := w.DeletePages(2); err != nil {
 		t.Fatalf("DeletePages: %v", err)
 	}
-	w.GenerateBookmarks(BookmarkGenerationOptions{}, BookmarkReplace)
+	w.GenerateBookmarks(BookmarkGenerationOptions{}, models.BookmarkReplace)
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
 		t.Fatalf("WriteTo: %v", err)

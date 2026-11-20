@@ -480,7 +480,7 @@ func generateBookmarksForDeterminism(ctx context.Context, data []byte) ([]byte, 
 	defer r.Close()
 	w := pdf.NewWriter(r)
 	defer w.Close()
-	w.GenerateBookmarks(determinismBookmarkOptions(), pdf.BookmarkReplace)
+	w.GenerateBookmarks(determinismBookmarkOptions(), models.BookmarkReplace)
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out, pdf.WithSignatureRemoval()); err != nil {
 		return nil, fmt.Errorf("writing: %w", err)
@@ -529,7 +529,7 @@ func splitReconstructForDeterminism(ctx context.Context, data []byte) ([]byte, e
 	}
 	var out bytes.Buffer
 	if err := pdf.Split(ctx, r, pages, &out, pdf.WithBookmarks(pdf.BookmarkOptions{
-		Handling:   pdf.BookmarkReconstruct,
+		Handling:   models.BookmarkReconstruct,
 		Generation: determinismBookmarkOptions(),
 	}), pdf.WithSignatureRemoval()); err != nil {
 		return nil, fmt.Errorf("splitting: %w", err)

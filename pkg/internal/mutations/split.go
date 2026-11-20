@@ -167,7 +167,7 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	// Handle bookmarks for the output, once its structure tree is whole, so
 	// each item can open the structure element it names (see
 	// [outlineTargets]).
-	if bookmarkCfg.Handling != BookmarkNone {
+	if bookmarkCfg.Handling != models.BookmarkNone {
 		newBookmarks, err := resolveSplitBookmarks(ctx, doc, allPages, pages, bookmarkCfg)
 		if err != nil {
 			doc.Logger.Debug("resolving split bookmarks failed",

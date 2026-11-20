@@ -74,7 +74,7 @@ func TestResolveSplitBookmarks_Reconstruct(t *testing.T) {
 
 	var asked []int
 	cfg := BookmarkConfig{
-		Handling:   BookmarkReconstruct,
+		Handling:   models.BookmarkReconstruct,
 		Generation: reconstructOptions(),
 		TextElements: func(_ context.Context, _, pageNum int) ([]models.TextElement, error) {
 			asked = append(asked, pageNum)
@@ -110,7 +110,7 @@ func TestResolveSplitBookmarks_ReconstructSkipsOutOfRange(t *testing.T) {
 
 	var asked []int
 	cfg := BookmarkConfig{
-		Handling:   BookmarkReconstruct,
+		Handling:   models.BookmarkReconstruct,
 		Generation: reconstructOptions(),
 		TextElements: func(_ context.Context, _, pageNum int) ([]models.TextElement, error) {
 			asked = append(asked, pageNum)
@@ -139,7 +139,7 @@ func TestResolveSplitBookmarks_ReconstructWithoutProvider(t *testing.T) {
 	pages := []*document.Page{{Ref: ast.PdfIndirectRef{ObjectNum: 1}}}
 
 	got, err := resolveSplitBookmarks(context.Background(), reconstructDoc(), pages, []int{1}, BookmarkConfig{
-		Handling:   BookmarkReconstruct,
+		Handling:   models.BookmarkReconstruct,
 		Generation: reconstructOptions(),
 	})
 	if err != nil {
@@ -163,7 +163,7 @@ func TestResolveMergeBookmarks_Reconstruct(t *testing.T) {
 
 	var askedSource, askedPage []int
 	cfg := BookmarkConfig{
-		Handling:   BookmarkReconstruct,
+		Handling:   models.BookmarkReconstruct,
 		Generation: reconstructOptions(),
 		TextElements: func(_ context.Context, sourceIdx, pageNum int) ([]models.TextElement, error) {
 			askedSource = append(askedSource, sourceIdx)

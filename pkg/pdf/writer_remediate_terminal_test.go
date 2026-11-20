@@ -68,7 +68,7 @@ func refusedCalls(t *testing.T) []refusedCall {
 			return nil
 		}},
 		{"GenerateBookmarks", func(_ context.Context, _ *testing.T, w *Writer) error {
-			w.GenerateBookmarks(BookmarkGenerationOptions{}, BookmarkReplace)
+			w.GenerateBookmarks(BookmarkGenerationOptions{}, models.BookmarkReplace)
 			return nil
 		}},
 		{"AutoTag", func(_ context.Context, _ *testing.T, w *Writer) error { w.AutoTag(); return nil }},

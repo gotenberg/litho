@@ -7,6 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/bookmarks"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // resolveSplitBookmarks computes the final bookmark tree to write for a [Split]
@@ -19,7 +20,7 @@ func resolveSplitBookmarks(
 	keptPages []int,
 	cfg BookmarkConfig,
 ) ([]OutlineItem, error) {
-	if cfg.Handling == BookmarkNone {
+	if cfg.Handling == models.BookmarkNone {
 		return nil, nil
 	}
 
@@ -34,7 +35,7 @@ func resolveSplitBookmarks(
 	newPageNum := func(old int) int { return oldToNew[old] }
 
 	switch cfg.Handling {
-	case BookmarkUpdate:
+	case models.BookmarkUpdate:
 		existing, err := sourceOutline(ctx, doc, allPages, 0)
 		if err != nil {
 			doc.Logger.Debug("reading source outline for split failed",
@@ -43,10 +44,10 @@ func resolveSplitBookmarks(
 		}
 		return FilterAndRemap(existing, newPageNum, cfg.OrphanPolicy, cfg.PromoteOrphanChildren, keptPages), nil
 
-	case BookmarkReconstruct:
+	case models.BookmarkReconstruct:
 		return reconstructFromKeptPages(ctx, doc, allPages, keptPages, cfg)
 
-	case BookmarkMixed:
+	case models.BookmarkMixed:
 		existing, err := sourceOutline(ctx, doc, allPages, 0)
 		if err != nil {
 			doc.Logger.Debug("reading source outline for mixed split failed",
@@ -57,7 +58,7 @@ func resolveSplitBookmarks(
 			return FilterAndRemap(existing, newPageNum, cfg.OrphanPolicy, cfg.PromoteOrphanChildren, keptPages), nil
 		}
 		return reconstructFromKeptPages(ctx, doc, allPages, keptPages, cfg)
-	case BookmarkNone:
+	case models.BookmarkNone:
 		return nil, nil
 	}
 	return nil, nil
@@ -121,7 +122,7 @@ func resolveMergeBookmarks(
 	cumulativeOffsets []int,
 	cfg BookmarkConfig,
 ) []OutlineItem {
-	if cfg.Handling == BookmarkNone {
+	if cfg.Handling == models.BookmarkNone {
 		return nil
 	}
 
@@ -133,7 +134,7 @@ func resolveMergeBookmarks(
 		firstPageOfSource[i] = offset + 1
 
 		switch cfg.Handling {
-		case BookmarkUpdate:
+		case models.BookmarkUpdate:
 			existing, err := sourceOutline(ctx, src.Doc, src.Pages, i)
 			if err != nil {
 				src.Doc.Logger.Debug("reading source outline for merge failed",
@@ -143,7 +144,7 @@ func resolveMergeBookmarks(
 			}
 			perSource[i] = OffsetPages(existing, offset)
 
-		case BookmarkReconstruct:
+		case models.BookmarkReconstruct:
 			generated, err := generateForMergeSource(ctx, src, i, offset, cfg)
 			if err != nil {
 				src.Doc.Logger.Debug("generating bookmarks for merge source failed",
@@ -153,7 +154,7 @@ func resolveMergeBookmarks(
 			}
 			perSource[i] = generated
 
-		case BookmarkMixed:
+		case models.BookmarkMixed:
 			existing, err := sourceOutline(ctx, src.Doc, src.Pages, i)
 			if err != nil {
 				src.Doc.Logger.Debug("reading source outline for mixed merge failed",
@@ -173,7 +174,7 @@ func resolveMergeBookmarks(
 				}
 				perSource[i] = generated
 			}
-		case BookmarkNone:
+		case models.BookmarkNone:
 			// nothing
 		}
 	}
