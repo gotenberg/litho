@@ -244,7 +244,7 @@ var wptDirs = []string{
 	"css/css-counter-styles", "css/css-values", "css/css-variables", "css/selectors", "css/css-color",
 	"css/css-images", "css/css-display", "css/css-pseudo", "css/css-masking", "css/compositing",
 	"css/css-logical", "css/css-box", "css/css-animations", "css/css-transitions", "css/css-shapes",
-	"css/filter-effects", "css/css-conditional",
+	"css/filter-effects", "css/css-conditional", "css/css-anchor-position",
 	"mathml/presentation-markup/direction", "mathml/presentation-markup/fractions",
 	"mathml/presentation-markup/menclose", "mathml/presentation-markup/mpadded", "mathml/presentation-markup/mrow",
 	"mathml/presentation-markup/operators", "mathml/presentation-markup/radicals",
@@ -259,6 +259,13 @@ var wptDirs = []string{
 // of mathml/relations, the "mathml" cap. An area of a feature the converter
 // does not lay out (ruby) keeps a few tests: they say the feature is missing
 // as well as many would.
+//
+// # Corpus evidence
+//
+//   - wpt: css/css-anchor-position holds 105 candidates at the pin once
+//     its script tests (388 files) and the standing exclusions are left
+//     out, about as many as css-display or css-color; its cap of 120 keeps
+//     every one, as the modules of that size do.
 var wptAreaCap = map[string]int{
 	"css/CSS2": 24, "css/css-backgrounds": 80, "css/css-text": 120, "css/css-lists": 40, "css/css-page": 40,
 	"css/css-break": 40, "css/css-flexbox": 200, "css/css-align": 20, "css/css-grid": 200, "css/css-multicol": 80,
@@ -270,7 +277,7 @@ var wptAreaCap = map[string]int{
 	"css/css-color": 60, "css/css-images": 60, "css/css-display": 60, "css/css-pseudo": 100,
 	"css/css-masking": 120, "css/compositing": 60, "css/css-logical": 40, "css/css-box": 40,
 	"css/css-animations": 40, "css/css-transitions": 40, "css/css-shapes": 200,
-	"css/filter-effects": 400, "css/css-conditional": 200, "mathml": 100,
+	"css/filter-effects": 400, "css/css-conditional": 200, "css/css-anchor-position": 120, "mathml": 100,
 }
 
 func compileAll(flags string, patterns ...string) []*regexp.Regexp {
