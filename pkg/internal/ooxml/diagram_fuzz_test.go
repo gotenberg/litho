@@ -27,6 +27,14 @@ func FuzzDiagram(f *testing.F) {
 	}
 	f.Add([]byte(diagramData(many...)), sized(`<dgm:constrLst><dgm:constr type="primFontSz" for="ch" forName="node" op="equ" val="65"/></dgm:constrLst>`,
 		`<dgm:ruleLst><dgm:rule type="primFontSz" val="5"/></dgm:ruleLst>`))
+	// The snake's numeric parameters and lengths: a fixed break past any
+	// count and below one, a balanced grid of ten thousand nodes, a spacing
+	// of 1e300 millimetres, a node of no height.
+	f.Add([]byte(diagramData("a", "b", "c")), []byte(diagramLayout(blockList(`<dgm:param type="bkpt" val="fixed"/><dgm:param type="bkPtFixedVal" val="99999999999"/>`))))
+	f.Add([]byte(diagramData("a", "b", "c")), []byte(diagramLayout(blockList(`<dgm:param type="bkpt" val="fixed"/><dgm:param type="bkPtFixedVal" val="-3"/><dgm:param type="flowDir" val="col"/>`))))
+	f.Add([]byte(diagramData(many...)), []byte(diagramLayout(blockList(`<dgm:param type="bkpt" val="bal"/>`))))
+	f.Add([]byte(diagramData("a", "b")), []byte(diagramLayout(`<dgm:alg type="snake"/><dgm:shape/><dgm:constrLst><dgm:constr type="sp" val="1e300"/>`+
+		`<dgm:constr type="h" for="ch" forName="node" val="0"/></dgm:constrLst>`+nodeList("rect", ""))))
 	f.Fuzz(func(t *testing.T, data, layout []byte) {
 		dm, err := Parse(context.Background(), data, nil)
 		if err != nil {

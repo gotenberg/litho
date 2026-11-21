@@ -57,7 +57,6 @@ type DiagramShape struct {
 	tmpl         *shapeTemplate
 	sub          string
 	zorder, zoff int
-	ar           float64
 	vcount       int64
 	// atom is the layout node the shape lays out, parent the shape of the
 	// enclosing layout node, pt the presentation point; nil for none.
@@ -142,6 +141,8 @@ type engine struct {
 	// at, by constraint type and node name, where the shapes a linear
 	// layout sizes from that size leave it no more room.
 	fontCaps map[string]float64
+	// lists caches the constraints and rules of a layout node for a point.
+	lists    map[nodePoint]nodeLists
 	root     *DiagramShape
 	rootAtom *DiagramAtom
 }
@@ -183,7 +184,7 @@ type walker struct {
 func (d *Diagram) LayOut(w, h int64, fit DiagramTextFit) *DiagramShape {
 	rootPt := d.root()
 	root := &DiagramShape{Group: true, W: w, H: h}
-	e := &engine{d: d, presShp: map[*DiagramPoint]*DiagramShape{}, shpPres: map[*DiagramShape]*DiagramPoint{}, ptIndex: map[*DiagramPoint]int{}, tmpls: map[*DiagramAtom]*shapeTemplate{}, children: map[[2]string]bool{}, fontCaps: map[string]float64{}, root: root, rootAtom: d.Layout}
+	e := &engine{d: d, presShp: map[*DiagramPoint]*DiagramShape{}, shpPres: map[*DiagramShape]*DiagramPoint{}, ptIndex: map[*DiagramPoint]int{}, tmpls: map[*DiagramAtom]*shapeTemplate{}, children: map[[2]string]bool{}, fontCaps: map[string]float64{}, lists: map[nodePoint]nodeLists{}, root: root, rootAtom: d.Layout}
 	for _, c := range d.Connections {
 		e.children[[2]string{c.Src, c.Dest}] = true
 	}
@@ -243,7 +244,6 @@ func (w *walker) visit(a *DiagramAtom) {
 	case AtomAlg:
 		switch {
 		case w.m == modeCreate && w.look == lookAlgorithm:
-			w.parent.ar = a.Ratio
 			w.parent.vcount = verticalShapesCount(a, w.parent)
 		case w.m == modeLayout && w.look == lookAlgorithm:
 			if s, ok := w.e.presShp[w.cur]; ok {

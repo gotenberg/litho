@@ -107,8 +107,6 @@ type sizer struct {
 	// shapes in layout order.
 	members map[*DiagramShape][]member
 	holders []*DiagramShape
-	// lists caches the constraints and rules of a layout node for a point.
-	lists map[nodePoint]nodeLists
 }
 
 // member is a text shape under a shape, depth layout levels down.
@@ -193,7 +191,7 @@ type nodeLists struct {
 //   - libreoffice/pptx: n819614's 56 orgChart1 nodes, formatted by hand
 //     (custT) at 7 points, are saved at 7 points.
 func (e *engine) sizeText(fit DiagramTextFit) {
-	z := &sizer{e: e, fit: fit, members: map[*DiagramShape][]member{}, lists: map[nodePoint]nodeLists{}}
+	z := &sizer{e: e, fit: fit, members: map[*DiagramShape][]member{}}
 	var texts []*DiagramShape
 	collectTexts(e.root, 0, &texts)
 	if len(texts) == 0 {
@@ -221,10 +219,7 @@ func (e *engine) sizeText(fit DiagramTextFit) {
 
 // step counts one step of the sizing against the layout's steps and
 // reports whether the steps are spent.
-func (z *sizer) step() bool {
-	z.e.steps++
-	return z.e.steps > maxDiagramSteps
-}
+func (z *sizer) step() bool { return z.e.step() }
 
 // collectTexts appends the text shapes of s and its kids, in layout order,
 // at most maxDiagramTexts.
@@ -244,12 +239,11 @@ func collectTexts(s *DiagramShape, depth int, out *[]*DiagramShape) {
 // presentation point p: its own lists and those of the branches its
 // chooses take (21.4.2.5 choose), not those of the layout nodes and
 // for-each it holds.
-func (z *sizer) own(a *DiagramAtom, p *DiagramPoint) ([]DiagramConstraint, []DiagramRule) {
+func (e *engine) own(a *DiagramAtom, p *DiagramPoint) ([]DiagramConstraint, []DiagramRule) {
 	key := nodePoint{a, p}
-	if l, ok := z.lists[key]; ok {
+	if l, ok := e.lists[key]; ok {
 		return l.cons, l.rules
 	}
-	e := z.e
 	var cons []DiagramConstraint
 	var rules []DiagramRule
 	var walk func(a *DiagramAtom, depth int)
@@ -277,7 +271,7 @@ func (z *sizer) own(a *DiagramAtom, p *DiagramPoint) ([]DiagramConstraint, []Dia
 	if a != nil {
 		walk(a, 0)
 	}
-	z.lists[key] = nodeLists{cons, rules}
+	e.lists[key] = nodeLists{cons, rules}
 	return cons, rules
 }
 
@@ -307,7 +301,7 @@ func (z *sizer) spec(s *DiagramShape) *textSize {
 			s.Insets, s.Inset = savedInsets, savedInset
 		}
 	}()
-	cons, rules := z.own(s.atom, s.pt)
+	cons, rules := z.e.own(s.atom, s.pt)
 	for _, c := range cons {
 		// A primary size that refers to the secondary one makes the
 		// secondary size the shape's (21.4.2.8: "primFontSz refType
@@ -382,7 +376,7 @@ func (z *sizer) spec(s *DiagramShape) *textSize {
 	}()
 	depth := 1
 	for a := s.parent; a != nil && depth < maxDiagramDepth; a, depth = a.parent, depth+1 {
-		ac, ar := z.own(a.atom, a.pt)
+		ac, ar := z.e.own(a.atom, a.pt)
 		for _, c := range ac {
 			if (c.Type == "w" || c.Type == "h") && strings.HasPrefix(c.RefType, "user") {
 				t.unresolved = true
@@ -463,7 +457,7 @@ func (z *sizer) union(i, j int) {
 // another's, the shapes named by its refForName under that instance.
 func (z *sizer) tie() {
 	for _, h := range z.holders {
-		cons, _ := z.own(h.atom, h.pt)
+		cons, _ := z.e.own(h.atom, h.pt)
 		for _, c := range cons {
 			if (c.Op != "equ" && c.Op != "none") || (c.Type != primFontSz && c.Type != secFontSz) {
 				continue
