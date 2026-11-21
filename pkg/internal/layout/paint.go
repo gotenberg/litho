@@ -92,7 +92,9 @@ type groupFx struct {
 	// coordinates of the first page and paints on every page (CSS 2.1,
 	// 9.6.1), from the page from on: a fixed box anchored to the flow is
 	// drawn from its anchor's page ([engine.anchorRect]), at most
-	// maxFixedFrom.
+	// maxFixedFrom. Its transform, when set, maps the engine's frame onto
+	// the turned flow the box is laid out in, along which its copies move
+	// from page to page.
 	fixed bool
 	// shift reports the group of a relatively positioned box in columns:
 	// transform is its offset, which moves each of its fragments after
@@ -807,7 +809,14 @@ func (p *painter) unit(b *box, own bool) {
 		savedMono := p.mono
 		p.mono = -1
 		defer func() { p.mono = savedMono }()
-		push(&ditem{group: true, fx: &groupFx{opacity: 1, fixed: true, from: uint16(min(max(b.anchorPage, 0), maxFixedFrom))}})
+		fx := &groupFx{opacity: 1, fixed: true, from: uint16(min(max(b.anchorPage, 0), maxFixedFrom))}
+		if turn, turned := frameTurn(b); turned {
+			if inv, ok := invertMatrix(turn); ok {
+				inv.E, inv.F = 0, 0
+				fx.transform = &inv
+			}
+		}
+		push(&ditem{group: true, fx: fx})
 	}
 	if b.pageAnchored {
 		// A page-anchored box paints on its page alone, unclipped by the
@@ -985,20 +994,28 @@ func (p *painter) unit(b *box, own bool) {
 // the page and column cuts read: the turner of an orthogonal flow entered
 // from the engine's frame, whose content is laid out off the cuts in
 // turned coordinates (CSS Writing Modes 4, 7.3: its root is monolithic in
-// the page's fragmentation). Every fragment the unit paints takes that
+// the page's fragmentation), or an absolutely positioned box of a turned
+// flow whose containing block lies in the engine's frame, laid out there
+// whole ([engine.layoutAbs]). Every fragment the unit paints takes that
 // extent ([atExtent]), so it lands on the page or in the column the unit's
 // place on the page is in, not where its turned coordinates would put it.
 func (p *painter) turnedUnit(b *box) (float64, float64, bool) {
-	if !b.turner() || p.inTurn > 0 {
-		return 0, 0, false
+	switch {
+	case b.turner() && p.inTurn == 0:
+		r := p.borderRect(b)
+		m, _, ok := transformOf(b, r)
+		if !ok {
+			return 0, 0, false
+		}
+		r = boundsOf(m, r)
+		return r.Y, r.Y + r.Height, true
+	case b.abs && innerTurner(b) != nil && innerTurner(b.cbBox) == nil:
+		turn, _ := frameTurn(b)
+		r := boundsOf(turn, typeset.Rect{X: b.x, Y: b.y, Width: b.borderW(), Height: b.borderH()})
+		_, dy := ancestorOffset(b)
+		return r.Y + dy, r.Y + r.Height + dy, true
 	}
-	r := p.borderRect(b)
-	m, _, ok := transformOf(b, r)
-	if !ok {
-		return 0, 0, false
-	}
-	r = boundsOf(m, r)
-	return r.Y, r.Y + r.Height, true
+	return 0, 0, false
 }
 
 // pageTurned is the page of the group of a unit of a turned flow, whose

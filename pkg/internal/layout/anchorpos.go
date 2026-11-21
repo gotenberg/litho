@@ -410,15 +410,26 @@ func (e *engine) anchorRect(a, p, pcb *box) (edges, int) {
 		}
 	}
 	if !p.fixed {
-		return r, -1
+		return intoFrame(pcb, p, r), -1
 	}
 	first, last := e.pageOf(r.y0+eps), e.pageOf(max(r.y1-eps, r.y0+eps))
 	top := e.pageTop(first)
 	if last == first {
-		return edges{r.x0, r.y0 - top, r.x1, r.y1 - top}, first
+		return intoFrame(pcb, p, edges{r.x0, r.y0 - top, r.x1, r.y1 - top}), first
 	}
 	// Fragments on several pages: their bounding box on the page.
-	return edges{r.x0, min(r.y0-top, 0), r.x1, e.pageH}, first
+	return intoFrame(pcb, p, edges{r.x0, min(r.y0-top, 0), r.x1, e.pageH}), first
+}
+
+// intoFrame returns r, a rectangle in the coordinates the containing block
+// box pcb of the absolutely positioned box p is laid out in, nil for the
+// engine's frame, in the coordinates p is laid out in: turned into the
+// orthogonal flow p lies in when pcb lies outside it.
+func intoFrame(pcb, p *box, r edges) edges {
+	if m, ok := toFrame(pcb, p); ok {
+		return mapRect(m, r)
+	}
+	return r
 }
 
 // mappedRect returns r, a rectangle of the anchor a, with the relative
@@ -760,24 +771,21 @@ func (s *anchorScope) substitute(st *css.Style) *css.Style {
 	return &c
 }
 
-// icbAxes returns the axes of the initial containing block and of a page
-// area: the principal writing mode's ([Options.Principal]).
-func (e *engine) icbAxes() flowAxes {
+// cbAxes returns the axes of the containing block cb of the absolutely
+// positioned box b in the coordinates b is laid out in: the writing mode of
+// the box that generates it, or the principal writing mode for the initial
+// containing block and a page area ([Options.Principal]), seen from the
+// turned flow b is laid out in, which an orthogonal flow inside the
+// containing block turns ([engine.containerOf]).
+func (e *engine) cbAxes(b *box, cb absCB) flowAxes {
 	st := e.opts.Principal
 	if st == nil {
 		st = e.rootBox.stOrNil()
 	}
-	return e.axesIn(st, e.turn)
-}
-
-// boxAxes returns the axes of the box c in the coordinates it lays its
-// content out in: the anonymous block of an orthogonal flow is that
-// flow's horizontal layout itself.
-func (e *engine) boxAxes(c *box) flowAxes {
-	if c.anon && c.parent != nil && c.parent.ortho {
-		return flowAxesOf(c.st)
+	if cb.box != nil {
+		st = cb.box.st
 	}
-	return e.axesIn(c.st, e.frameOf(c))
+	return e.axesIn(st, e.frameOf(b))
 }
 
 // axesIn returns the axes of the style st in the coordinates of a turned

@@ -55,6 +55,63 @@ func (e *engine) wrapOrtho(b *box) {
 // layout, not a box CSS knows: it holds no positioned descendant.
 func (b *box) turner() bool { return b.anon && b.parent != nil && b.parent.ortho }
 
+// frameTurn returns the matrix that maps the coordinates b is laid out in
+// onto the engine's own, the frame its pages are cut in: the turns of the
+// orthogonal flows around b, innermost first, each about its turner's
+// border box where the layout put it, relative offsets aside; false for a
+// box laid out in the engine's frame, whose matrix is the identity.
+func frameTurn(b *box) (typeset.Matrix, bool) {
+	m, turned := typeset.Identity, false
+	for a, depth := b.parent, 0; a != nil && depth <= maxTreeDepth; a, depth = a.parent, depth+1 {
+		if !a.turner() {
+			continue
+		}
+		if t, _, ok := transformOf(a, typeset.Rect{X: a.x, Y: a.y, Width: a.borderW(), Height: a.borderH()}); ok {
+			m = mul(t, m)
+			turned = true
+		}
+	}
+	return m, turned
+}
+
+// toFrame returns the matrix that maps the coordinates the box from is laid
+// out in onto those the box to is laid out in, nil from standing for the
+// engine's frame, and false when both are laid out in the same frame.
+func toFrame(from, to *box) (typeset.Matrix, bool) {
+	if innerTurner(from) == innerTurner(to) {
+		return typeset.Identity, false
+	}
+	fm := typeset.Identity
+	if from != nil {
+		fm, _ = frameTurn(from)
+	}
+	tm, _ := frameTurn(to)
+	inv, ok := invertMatrix(tm)
+	if !ok {
+		return typeset.Identity, false
+	}
+	return mul(inv, fm), true
+}
+
+// applyPoint returns the point (x, y) mapped by m.
+func applyPoint(m typeset.Matrix, x, y float64) (float64, float64) {
+	return float64(m.A*x) + float64(m.C*y) + m.E, float64(m.B*x) + float64(m.D*y) + m.F
+}
+
+// innerTurner returns the turner of the orthogonal flow b is laid out in,
+// nil for a box of the engine's frame.
+func innerTurner(b *box) *box {
+	if b == nil {
+		return nil
+	}
+	for a, depth := b.parent, 0; a != nil && depth <= maxTreeDepth; a, depth = a.parent, depth+1 {
+		if a.turner() {
+			return a
+		}
+	}
+	return nil
+}
+
 // orthoFormatter lays out the content of the root of an orthogonal flow:
 // the anonymous block holding it is laid out horizontally, as wide as the
 // root's content box is tall, then turned a quarter turn into the root's

@@ -203,7 +203,27 @@ func (e *engine) layoutPositionedBox(k *box) {
 // is set, the viewport a screen positions fixed boxes in. A positioned row group, row or cell holds it as any
 // positioned box does (CSS Position 3, 2); a column or a column group,
 // to which position does not apply, never does.
+//
+// The rectangle is given in the coordinates b is laid out in: a box of an
+// orthogonal flow whose containing block lies outside that flow sees it
+// turned into the flow, where the physical insets [engine.turnedStyle]
+// turned measure from its sides (CSS Writing Modes 4, 7.3 and 6: the
+// containing block is the one CSS 2.1, 10.1 names, and physical insets
+// keep their physical meaning).
 func (e *engine) containerOf(b *box) absCB {
+	cb := e.ownContainer(b)
+	if m, ok := toFrame(cb.box, b); ok {
+		r := boundsOf(m, typeset.Rect{X: cb.x, Y: cb.y, Width: cb.w, Height: cb.h})
+		cb.x, cb.y, cb.w, cb.h = r.X, r.Y, r.Width, r.Height
+	}
+	return cb
+}
+
+// ownContainer returns the containing block of the absolutely positioned
+// box b in the coordinates of the box that generates it, or of the
+// engine's frame for the initial containing block and a page area
+// ([engine.containerOf]).
+func (e *engine) ownContainer(b *box) absCB {
 	if b.st.PageAnchor && b.st.Position == css.Absolute {
 		return e.pageCB(b)
 	}
@@ -250,7 +270,7 @@ func holderOf(b *box) *box {
 	fixed := b.st.Position == css.Fixed
 	var prev *box
 	for a := b.parent; a != nil; prev, a = a, a.parent {
-		if a.tpart == partColumn || a.tpart == partColGroup {
+		if a.tpart == partColumn || a.tpart == partColGroup || a.turner() {
 			continue
 		}
 		// A filter or a backdrop filter makes its element, the root
@@ -384,6 +404,11 @@ func (e *engine) layoutAbs(b *box) {
 	// containing block, which move none of the containing block itself.
 	for a := b.parent; a != nil && a != cb.box; {
 		ox, oy := offset(a)
+		if m, ok := toFrame(a, b); ok {
+			// The offset of a box outside b's orthogonal flow moves it
+			// along the page's axes, which the flow turns.
+			ox, oy = float64(m.A*ox)+float64(m.C*oy), float64(m.B*ox)+float64(m.D*oy)
+		}
 		b.sx += ox
 		b.sy += oy
 		if a.abs {
@@ -410,10 +435,24 @@ func (e *engine) layoutAbs(b *box) {
 		defer func() { e.noPaginate-- }()
 		defer e.clampToPage(b, e.pageOf(b.sy))
 	}
+	turn, turned := frameTurn(b)
+	if turned {
+		// A box of an orthogonal flow is monolithic in the page's
+		// fragmentation, whose axis runs across its own block axis: no
+		// page cut runs through it ([painter.turnedUnit]).
+		e.noPaginate++
+		defer func() { e.noPaginate-- }()
+	}
 	if b.fixed {
 		// A fixed box sits on the page its static position falls on, then
-		// on every page (CSS 2.1, 9.6.1).
-		b.sy -= e.pageTop(e.pageOf(b.sy))
+		// on every page (CSS 2.1, 9.6.1): the page of the engine's frame,
+		// into which an orthogonal flow turns.
+		if inv, ok := invertMatrix(turn); turned && ok {
+			x, y := applyPoint(turn, b.sx, b.sy)
+			b.sx, b.sy = applyPoint(inv, x, y-e.pageTop(e.pageOf(y)))
+		} else {
+			b.sy -= e.pageTop(e.pageOf(b.sy))
+		}
 		e.noPaginate++
 		defer func() { e.noPaginate-- }()
 	}

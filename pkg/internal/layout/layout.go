@@ -497,9 +497,10 @@ func oneObject(content []typeset.Fragment) bool {
 	return false
 }
 
-// groupTransform returns the transform of the group it.
+// groupTransform returns the transform of the group it: none for a fixed
+// box's, whose transform says how its copies move ([groupFx]).
 func groupTransform(it *ditem) typeset.Matrix {
-	if m := it.effects().transform; m != nil {
+	if m := it.effects().transform; m != nil && !it.fixedGroup() {
 		return *m
 	}
 	return typeset.Identity
@@ -524,7 +525,13 @@ func (e *engine) repeat(it *ditem, depth, n int, used map[*typeset.StructElem]bo
 			continue
 		}
 		e.pageFrags[p] += leaves
-		e.pushBackdropLevel(backdropLevel{move: typeset.Matrix{A: 1, D: 1, F: e.pageTop(p)}})
+		move := typeset.Matrix{A: 1, D: 1, F: e.pageTop(p)}
+		if t := it.fx.transform; t != nil {
+			// The copy moves down the engine's frame, which the turned
+			// flow the box is laid out in sees along its own axes.
+			move.E, move.F = float64(t.C*move.F), float64(t.D*move.F)
+		}
+		e.pushBackdropLevel(backdropLevel{move: move})
 		saved := e.backdropPage
 		e.backdropPage = p
 		frags := e.flatten(it, depth+1, p > from)
@@ -536,7 +543,7 @@ func (e *engine) repeat(it *ditem, depth, n int, used map[*typeset.StructElem]bo
 			}
 		}
 		out[p] = append(out[p], &typeset.Group{
-			Transform: typeset.Matrix{A: 1, D: 1, F: e.pageTop(p)},
+			Transform: move,
 			Opacity:   1,
 			Content:   frags,
 		})
