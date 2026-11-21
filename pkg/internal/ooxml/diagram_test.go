@@ -115,6 +115,14 @@ func TestDiagramLayOut(t *testing.T) {
 			want: []string{"background rect 0,0 600x300", "node rect 0,0 300x300", "node rect 300,0 300x300"},
 		},
 		{
+			name:  "a negative z-order offset moves a shape under the ones before it",
+			texts: []string{"a", "b"},
+			layout: `<dgm:alg type="lin"/><dgm:shape/><dgm:forEach axis="ch" ptType="node"><dgm:layoutNode name="node"><dgm:shape type="rect"/></dgm:layoutNode>` +
+				`<dgm:forEach axis="followSib" ptType="sibTrans" cnt="1"><dgm:layoutNode name="sibTrans"><dgm:shape type="ellipse" zOrderOff="-1"/></dgm:layoutNode></dgm:forEach></dgm:forEach>`,
+			w: 600, h: 300,
+			want: []string{"background rect 0,0 600x300", "sibTrans ellipse 200,0 200x300", "node rect 0,0 200x300", "node rect 400,0 200x300"},
+		},
+		{
 			name:  "z-order offsets lift a shape over the next ones, the last transition hidden",
 			texts: []string{"a", "b"},
 			layout: `<dgm:alg type="lin"/><dgm:shape/><dgm:forEach axis="ch" ptType="node"><dgm:layoutNode name="node"><dgm:shape type="rect" zOrderOff="1"/></dgm:layoutNode>` +

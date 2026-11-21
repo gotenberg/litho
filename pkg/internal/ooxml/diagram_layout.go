@@ -664,8 +664,14 @@ func (e *engine) maxDepth(id string, depth int) int {
 }
 
 // sortByZOrder orders a shape's kids by their z-order offsets (21.4.2.23
-// zOrderOff), as LibreOffice does: a kid moves above the next ones by
-// its positive offset.
+// zOrderOff): a kid moves above the next ones by a positive offset, as
+// LibreOffice does, and under the ones before it by a negative one.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: smartart-linear-rule-vert's list1 childText
+//     rectangles, of zOrderOff -2, lie under the parentText shapes they
+//     overlap in PowerPoint's reference.
 func sortByZOrder(s *DiagramShape, depth int) {
 	if depth >= maxDiagramDepth {
 		return
@@ -676,17 +682,24 @@ func sortByZOrder(s *DiagramShape, depth int) {
 	}
 	for i := range k {
 		off := k[i].zoff
-		if off <= 0 {
-			continue
-		}
-		k[i].zorder += off
 		k[i].zoff = 0
-		for j := range off {
-			n := i + j + 1
-			if n >= len(k) {
-				break
+		switch {
+		case off > 0:
+			k[i].zorder += off
+			for j := range off {
+				n := i + j + 1
+				if n >= len(k) {
+					break
+				}
+				k[n].zorder--
 			}
-			k[n].zorder--
+		case off < 0:
+			// A negative offset moves the kid under the ones before it.
+			off = max(off, -i)
+			k[i].zorder += off
+			for j := range -off {
+				k[i-j-1].zorder++
+			}
 		}
 	}
 	sort.SliceStable(k, func(a, b int) bool { return k[a].zorder < k[b].zorder })
