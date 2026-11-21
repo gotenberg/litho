@@ -191,3 +191,24 @@ func hasWarning(res *Result, code warn.Code, sub string) bool {
 	}
 	return false
 }
+
+// The viewport's edges sit on whole CSS pixels of the page, as Blink lays
+// a frame's document out, so the document does not paint over a border
+// sharing a pixel with it.
+func TestEmbed_ViewportOnWholePixels(t *testing.T) {
+	var gotW, gotH float64
+	pic := embedded(func(w, h float64) *Embedded {
+		gotW, gotH = w, h
+		return redDoc(10)
+	})
+	frame := &Node{Kind: Replaced, Style: sty(width(3.4), height(2.2), func(s *css.Style) {
+		s.Display = css.Block
+		s.Margin[css.Top] = css.Pts(px(1.3))
+		s.Margin[css.Left] = css.Pts(px(0.7))
+	}), Role: "DocumentFragment", Picture: pic}
+	run(t, doc(frame), page(6, 6))
+	// From (0.7, 1.3) to (4.1, 3.5): from (1, 1) to (4, 4).
+	if !near(gotW/css.Pt, 3) || !near(gotH/css.Pt, 3) {
+		t.Errorf("viewport %v by %v px, want 3 by 3", gotW/css.Pt, gotH/css.Pt)
+	}
+}

@@ -2,6 +2,7 @@ package layout
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
@@ -27,6 +28,8 @@ func (p *painter) embedded(b *box, box typeset.Rect) {
 		view = typeset.Rect{X: cx - float64(box.Height/2), Y: cy - float64(box.Width/2), Width: box.Height, Height: box.Width}
 		m := uprightTurn(b.turn, cx, cy)
 		turn = &m
+	} else if page := p.e.monoPage(box.Y, box.Height); page >= 0 && p.e.cols == nil {
+		view = p.e.snappedView(box, page)
 	}
 	doc := b.picture.Embed(p.e.ctx, view.Width, view.Height)
 	if doc == nil || len(doc.Content) == 0 {
@@ -77,6 +80,32 @@ func (p *painter) embedded(b *box, box typeset.Rect) {
 		lk := &link{href: l.URI, elem: l.Parent, contents: l.Contents, described: true}
 		p.links = append(p.links, pendingLink{lk: lk, rect: r})
 	}
+}
+
+// snappedView returns the content box box, on page page, with its edges
+// moved to the nearest whole CSS pixel of the page: Blink lays a frame's
+// document out, and clips it, in the content box snapped to whole pixels
+// (blink::LayoutEmbeddedContent::UpdateGeometry), so the document's
+// edges and its borders' do not share a pixel. box itself when snapping
+// leaves no area.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 paints the yellow
+//     canvas of a framed document with a 1 pixel border, below lines of
+//     text, on whole pixels, its border in the pixel row under it; laid out
+//     on the unsnapped content box, 0.07 pixel into that row, litho's
+//     canvas covered the border there as poppler draws it.
+func (e *engine) snappedView(box typeset.Rect, page int) typeset.Rect {
+	pb := e.box(page)
+	ox, oy := pb.Bleed+pb.Margin[css.Left], pb.Bleed+pb.Margin[css.Top]-e.pageTop(page)
+	snap := func(v, o float64) float64 { return float64(math.Round((v+o)/css.Pt)*css.Pt) - o }
+	x0, y0 := snap(box.X, ox), snap(box.Y, oy)
+	x1, y1 := snap(box.X+box.Width, ox), snap(box.Y+box.Height, oy)
+	if !(x1 > x0) || !(y1 > y0) {
+		return box
+	}
+	return typeset.Rect{X: x0, Y: y0, Width: x1 - x0, Height: y1 - y0}
 }
 
 // embeds reports a replaced box that paints an embedded document: its
