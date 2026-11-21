@@ -170,6 +170,14 @@ type Text struct {
 	// converter sets it to embolden a face that has no bold, as browsers
 	// synthesise bold. Zero fills only. It is at most [Text.Size].
 	Stroke float64
+	// Outline, when set, strokes the glyph outlines with a pen of its own,
+	// the line centred on the outline at the pen's width, join and miter
+	// limit: text rendering mode 2, fill then stroke, or mode 1, stroke
+	// alone, when Color is fully transparent (ISO 32000-1, 9.3.6). The run
+	// stays one text object, extracted and tagged once. Cap and dash do not
+	// apply. Its width is positive and at most [MaxOutlineWidth]. A run
+	// with an outline has no Stroke and is not Invisible.
+	Outline *Stroke
 	// Skew slants the glyphs by Skew points to the right per point above
 	// the baseline, a shear about each glyph's baseline origin in the text
 	// matrix (ISO 32000-1, 9.4.2). A converter sets it to slant a face that
@@ -177,12 +185,6 @@ type Text struct {
 	// Zero draws upright; a negative value leans left. Its magnitude is at
 	// most 1.
 	Skew float64
-	// Invisible draws the glyphs neither filled nor stroked, text
-	// rendering mode 3 (ISO 32000-1, 9.3.6): the run stays in the page as
-	// text, extracted and tagged, while something else draws what it
-	// looks like, as an OCR layer under a scan does. Color, alpha
-	// included, is then not painted. An invisible run has no Stroke.
-	Invisible bool
 	// HScale scales the glyphs horizontally about their origins, the text
 	// state's horizontal scaling (ISO 32000-1, 9.3.4): the glyph shapes
 	// and the positions along the baseline are both scaled, so a converter
@@ -190,6 +192,12 @@ type Text struct {
 	// positions. 1 and 0 draw at the natural width. It lies in [MinHScale,
 	// MaxHScale].
 	HScale float64
+	// Invisible draws the glyphs neither filled nor stroked, text
+	// rendering mode 3 (ISO 32000-1, 9.3.6): the run stays in the page as
+	// text, extracted and tagged, while something else draws what it
+	// looks like, as an OCR layer under a scan does. Color, alpha
+	// included, is then not painted. An invisible run has no Stroke.
+	Invisible bool
 	// Upright turns each glyph a quarter turn counter-clockwise about its
 	// origin, which X and Y still place: the run belongs to a vertical
 	// line laid out across the content of a group the page turns a
@@ -205,19 +213,25 @@ type Text struct {
 	// diagonal (CSS Writing Modes 4, 3.1), and its glyphs read unreflected
 	// on the page.
 	Mirror bool
-	// Palette, for a run whose face draws layered colour glyphs (OpenType,
-	// COLR and CPAL), fills each layer with the entry of its palette
-	// index; nil fills them with the face's first palette. A layer whose
-	// index lies past the slice is drawn in Color, as the face's text
-	// colour entry is. A face without layered glyphs ignores it.
-	Palette []Color
 	// Plain draws every glyph of a colour face from the program's outline,
 	// in Color, never from its bitmap or its layers: no Type 3 font and no
 	// glyph image is written for the run. A glyph of a program without
 	// outlines is blank, of its advance. A face without colour glyphs
 	// ignores it.
 	Plain bool
+	// Palette, for a run whose face draws layered colour glyphs (OpenType,
+	// COLR and CPAL), fills each layer with the entry of its palette
+	// index; nil fills them with the face's first palette. A layer whose
+	// index lies past the slice is drawn in Color, as the face's text
+	// colour entry is. A face without layered glyphs ignores it.
+	Palette []Color
 }
+
+// MaxOutlineWidth bounds the line width of a [Text.Outline], in points.
+// Anti-DoS guard, not spec-mandated: a line wider than a page covers the
+// page whatever its glyphs, and keeping it within the real range of PDF
+// 1.4 keeps it writable (PDF Reference 1.4, Appendix C).
+const MaxOutlineWidth = 14400
 
 // The bounds of [Text.HScale] (ISO 32000-1, 9.3.4 puts no bound on Tz; the
 // Office formats scale text between 1% and 600%).

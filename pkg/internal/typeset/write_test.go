@@ -733,6 +733,48 @@ func TestWriteSyntheticBoldAndItalic(t *testing.T) {
 	}
 }
 
+// TestWriteTextOutline strokes a run's glyph outlines with a pen of its own
+// (ISO 32000-1, 9.3.6): fill then stroke in mode 2, its colour, width,
+// join and miter limit set and the dash cleared; stroke alone in mode 1
+// when the fill is transparent; one text object, so the text extracts
+// once; and the ink of the stroked glyph spreading past the filled one.
+func TestWriteTextOutline(t *testing.T) {
+	t.Parallel()
+	red := typeset.Color{R: 1, A: 1}
+	plain := run(t, sans, 40, typeset.Point{X: 50, Y: 100}, "H")
+	outlined := run(t, sans, 40, typeset.Point{X: 50, Y: 100}, "H")
+	outlined.Outline = &typeset.Stroke{Color: typeset.Color{A: 1}, Width: 6, Join: typeset.MiterJoin, Miter: 4}
+	hollow := run(t, sans, 40, typeset.Point{X: 50, Y: 100}, "H")
+	hollow.Color = typeset.Color{}
+	hollow.Outline = &typeset.Stroke{Color: red, Width: 2}
+	write1 := func(txt *typeset.Text) (image.Image, []byte, *pdf.Reader) {
+		page := &typeset.Page{Width: 200, Height: 200, Content: []typeset.Fragment{txt}}
+		out := write(t, &typeset.Document{Pages: []*typeset.Page{page}})
+		r := open(t, out)
+		return render(t, r, 1), inflated(t, out), r
+	}
+	plainImg, _, _ := write1(plain)
+	img, content, r := write1(outlined)
+	for _, op := range []string{"0 0 0 RG", "6 w 0 j 4 M [] 0 d", "2 Tr", "0 Tr\nET"} {
+		if !bytes.Contains(content, []byte(op)) {
+			t.Errorf("outlined run content lacks %q:\n%s", op, content)
+		}
+	}
+	if n := bytes.Count(content, []byte("BT")); n != 1 {
+		t.Errorf("outlined run writes %d text objects, want 1", n)
+	}
+	if got, err := r.ExtractText(t.Context(), 1); err != nil || strings.TrimSpace(got) != "H" {
+		t.Errorf("text %q (%v), want H once", got, err)
+	}
+	if p, o := inkIn(plainImg, 0, 0, 200, 200), inkIn(img, 0, 0, 200, 200); o <= p {
+		t.Errorf("outlined ink %d, plain %d: want more", o, p)
+	}
+	_, hollowContent, _ := write1(hollow)
+	if !bytes.Contains(hollowContent, []byte("1 Tr")) || bytes.Contains(hollowContent, []byte(" rg")) {
+		t.Errorf("hollow run content:\n%s", hollowContent)
+	}
+}
+
 func TestWritePageBoxes(t *testing.T) {
 	page := &typeset.Page{Width: 100, Height: 200, TrimBox: &typeset.Rect{X: 10, Y: 20, Width: 80, Height: 160}, BleedBox: &typeset.Rect{Width: 100, Height: 200}}
 	r := open(t, write(t, &typeset.Document{Pages: []*typeset.Page{page}}))

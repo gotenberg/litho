@@ -340,6 +340,9 @@ func (p *pageWriter) textBounds(ctx context.Context, b *bounds, v *Text, t Matri
 		hs = 1
 	}
 	size, half := v.Size, float64(v.Stroke/2)
+	if v.Outline != nil {
+		half = v.Outline.Width / 2
+	}
 	gx0, gx1 := math.Inf(1), math.Inf(-1)
 	for _, gy := range [2]float64{gb[1], gb[3]} {
 		for _, gx := range [2]float64{gb[0], gb[2]} {

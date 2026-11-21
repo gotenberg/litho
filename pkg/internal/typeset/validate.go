@@ -196,6 +196,19 @@ func (v *validator) text(t *Text) error {
 		// 9.3.6, Table 106): a stroke would draw nothing.
 		return fmt.Errorf("%w: stroke %v of invisible text", ErrInvalidText, t.Stroke)
 	}
+	if o := t.Outline; o != nil {
+		switch {
+		case !numeric.Finite(o.Width) || o.Width <= 0 || o.Width > MaxOutlineWidth:
+			return fmt.Errorf("%w: outline width %v", ErrInvalidText, o.Width)
+		case t.Stroke > 0 || t.Invisible:
+			// One text object takes one rendering mode and one line
+			// width (ISO 32000-1, 9.3.6).
+			return fmt.Errorf("%w: outline with a stroke or invisible", ErrInvalidText)
+		}
+		if err := checkStroke(o); err != nil {
+			return err
+		}
+	}
 	if !numeric.Finite(t.Skew) || math.Abs(t.Skew) > 1 {
 		return fmt.Errorf("%w: skew %v", ErrInvalidText, t.Skew)
 	}
@@ -210,7 +223,12 @@ func (v *validator) text(t *Text) error {
 			return fmt.Errorf("%w: glyph %d at (%v, %v)", ErrInvalidText, i, g.X, g.Y)
 		}
 	}
-	if err := checkColor(t.Color); err != nil {
+	fill := t.Color
+	if t.Outline != nil && fill.A == 0 {
+		// A transparent run with an outline is stroked alone.
+		fill.A = 1
+	}
+	if err := checkColor(fill); err != nil {
 		return err
 	}
 	if len(t.Palette) > maxPaletteEntries {

@@ -79,6 +79,9 @@ func textExtent(t *Text, off Point) float64 {
 		hs = t.HScale
 	}
 	m := max(math.Abs(t.Size), math.Abs(t.Stroke))
+	if t.Outline != nil {
+		m = max(m, t.Outline.Width)
+	}
 	for _, g := range t.Glyphs {
 		m = max(m, math.Abs(t.Origin.X+float64(g.X*hs)+off.X), math.Abs(t.Origin.Y+g.Y+off.Y))
 	}
@@ -92,6 +95,11 @@ func scaledText(t *Text, off Point, k float64) *Text {
 	c.Origin = Point{X: (t.Origin.X + off.X) / k, Y: (t.Origin.Y + off.Y) / k}
 	c.Size = t.Size / k
 	c.Stroke = t.Stroke / k
+	if t.Outline != nil {
+		o := *t.Outline
+		o.Width /= k
+		c.Outline = &o
+	}
 	c.Glyphs = make([]Glyph, len(t.Glyphs))
 	for i, g := range t.Glyphs {
 		g.X /= k

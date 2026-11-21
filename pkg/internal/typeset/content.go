@@ -307,9 +307,10 @@ func (p *pageWriter) color(c Color, op string) {
 // text writes a run as one text object (ISO 32000-1, 9.4). The font is
 // selected at size 1 and the text matrix carries the size, with d negated
 // so the glyphs stand upright under the page's flip, and the skew as c:
-// [size 0 size*skew -size x y]. A run with a stroke is drawn in text
-// rendering mode 2 (9.3.6) with that line width, an invisible run in mode
-// 3 with no colour set, a run with a horizontal scale under Tz (9.3.4).
+// [size 0 size*skew -size x y]. A run with a stroke or an outline is drawn
+// in text rendering mode 2 (9.3.6) with that pen, a transparent run with
+// an outline in mode 1, stroked alone, an invisible run in mode 3 with no
+// colour set, a run with a horizontal scale under Tz (9.3.4).
 // Glyphs on one baseline share TJ arrays, a glyph away from where the
 // previous one's advance leaves the pen taking a TJ adjustment in
 // thousandths of text space (9.4.3); a change of baseline sets a new text
@@ -326,16 +327,38 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 		return err
 	}
 	p.mark(t.Parent, t.Order)
+	o := t.Outline
+	hollow := o != nil && t.Color.A <= 0
 	if !t.Invisible {
 		cur := p.currentAlpha()
-		stroke := cur.stroke
-		if t.Stroke > 0 {
+		fill, stroke := t.Color.A*opacity, cur.stroke
+		switch {
+		case o != nil:
+			stroke = o.Color.A * opacity
+			if hollow {
+				fill = cur.fill
+			}
+		case t.Stroke > 0:
 			stroke = t.Color.A * opacity
 		}
-		p.setAlpha(alphaState{fill: t.Color.A * opacity, stroke: stroke})
-		p.color(t.Color, "rg")
+		p.setAlpha(alphaState{fill: fill, stroke: stroke})
+		if !hollow {
+			p.color(t.Color, "rg")
+		}
 	}
-	if t.Stroke > 0 {
+	switch {
+	case o != nil:
+		// The outline's own pen: its colour, width, join and miter limit
+		// (8.4.3), the line centred on the glyph outlines (9.3.6).
+		p.color(o.Color, "RG")
+		miter := o.Miter
+		if miter == 0 {
+			miter = 10
+		}
+		// A dash an earlier path set would dash the outline: it is
+		// cleared (8.4.3.6).
+		fmt.Fprintf(&p.buf, "%s w %d j %s M [] 0 d\n", num(o.Width), o.Join, num(miter))
+	case t.Stroke > 0:
 		// Synthetic bold: the outline is stroked in the fill colour with
 		// round joins, so no miter spikes at sharp corners (8.4.3.4).
 		p.color(t.Color, "RG")
@@ -346,7 +369,9 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 	switch {
 	case t.Invisible:
 		mode = 3
-	case t.Stroke > 0:
+	case hollow:
+		mode = 1
+	case o != nil, t.Stroke > 0:
 		mode = 2
 	}
 	hs := 1.0
@@ -391,7 +416,7 @@ func (p *pageWriter) text(ctx context.Context, t *Text, opacity float64) error {
 		if colour {
 			name = p.fontName(tc.font.ref)
 			advance = tc.font.procs[tc.code].width / fe.color.upem
-			if mode == 2 {
+			if mode == 1 || mode == 2 {
 				glyphMode = 0
 			}
 		} else {
