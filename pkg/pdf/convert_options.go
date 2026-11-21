@@ -717,19 +717,19 @@ func WithFirstPageNumber(n int) HTMLOption {
 	return htmlOption(func(c *convertConfig) { c.firstPageNumber, c.firstPageNumberSet = n, true })
 }
 
-// WithSinglePage writes the source on one page sized to its content, the
-// whole document in one column with no page break, as a screen shows it.
-// false, the default, writes the pages the source lays out on. With
-// [WithPageRanges] the conversion fails with [ErrInvalidConvertOptions]:
-// one page has no range to select.
+// WithSinglePage writes the source on one page sized to its content: the
+// document laid out as it prints, at the width of the page area, in one
+// column the page grows with. false, the default, writes the pages the
+// source lays out on. With [WithPageRanges] the conversion fails with
+// [ErrInvalidConvertOptions]: one page has no range to select.
 //
 // # Page size
 //
 // The page is as tall as the content, past the 14,400 points ISO 32000-1,
 // Annex C.2 lists when the content is taller: that annex is informative,
-// ISO 32000-2 sets no page size limit, Chromium writes a single page the
-// same way, and PDFium, poppler, pdf.js and Apple's PDFKit show such a page
-// at its true size. The page carries no /UserUnit. It stops at 1,048,576
+// ISO 32000-2 sets no page size limit, and PDFium, poppler, pdf.js and
+// Apple's PDFKit show such a page at its true size. The page carries no
+// /UserUnit. It stops at 1,048,576
 // points (2^20, about 370 metres), and at 32,767 points under
 // [WithConvertVersion] "1.4", whose real numbers stop there (PDF Reference
 // 1.4, Appendix C): the content past it is left out, and the conversion
@@ -746,15 +746,31 @@ func WithFirstPageNumber(n int) HTMLOption {
 //
 // # HTML and Markdown
 //
-// The document is measured first as a screen 800 CSS pixels wide would
-// show it, in one continuous column, forced breaks ignored, at least
-// 437.12 CSS pixels tall and 800 wide. The paper becomes that tall plus
-// the top and bottom margins; its width stays the paper's, or with
-// [models.OrientationLandscape] that measured width plus the left and right
-// margins. The document is then printed on it as usual, forced breaks
-// cutting, and only the first page is written: a [models.PageBand] draws once,
-// the one band.Pages selects for the first page, with counter(page) at the
-// first page number.
+// The page is as wide as the paper in its orientation, or as an @page
+// size, and as tall as the document laid out on it, in one column at the
+// width of its page area, plus the top and bottom margins: nothing is left
+// out for wrapping, and a short document makes a short page. [WithScale]
+// and the shrink to fit of a document wider than its page area apply as
+// they do on the pages, and the height follows the content they lay out.
+// Below a scale of 1 the content is laid out within the page size limit,
+// so the page stops at that limit times the scale. A browser's own
+// single-page print can leave the end of such a document out, since it
+// takes the height from a screen wider than the page area.
+//
+// No page break of the source ends the page: a forced break, to any page,
+// breaks nothing, and a box that avoids a page break has none to avoid
+// (CSS Fragmentation 3, 3.1). A column break inside a multi-column
+// container still ends its column. The page takes the box and margins of
+// the first page, its @page :first rules and the page name the document
+// starts with included; a later named page, a :left or a :right rule
+// changes nothing. A [models.PageBand] draws once, the one band.Pages
+// selects for the first page, with counter(page) at the first page number
+// and counter(pages) at 1.
+//
+// The initial containing block, the viewport units and the media features
+// measure the page area of the paper as the pages have it (CSS 2.1, 10.1;
+// CSS Paged Media 3, 3.1): a root of height 100%, a box positioned at its
+// bottom or a block 100vh tall makes the page as tall as the paper.
 //
 // # DOCX and ODT
 //

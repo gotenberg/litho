@@ -83,15 +83,16 @@ type Options struct {
 	// print scale works.
 	Scale float64
 	// SinglePage writes one page sized to the content: the document is
-	// measured first as a screen 800 CSS pixels wide would show it, in one
-	// continuous column without margins or forced breaks, its height at
-	// least 437.12 CSS pixels and its width at least 800. The paper is
-	// then as tall as that height plus the top and bottom margins, and in
-	// Landscape as wide as that width plus the left and right margins;
-	// the document is printed on it as usual, forced breaks cutting, and
-	// only the first page is written. The page may pass the 14,400 points
-	// of ISO 32000-1, Annex C.2, up to FittedLimit: content measured past
-	// it is left out, with a warning.
+	// printed as on the pages, at the width of the page area, with the
+	// scale and the shrink to fit of a document wider than its area, in
+	// one column as tall as a single page may be, and the first page is
+	// trimmed to its content plus the top and bottom margins. The page
+	// keeps the paper's width in its orientation. The initial containing
+	// block, the viewport units and the media features measure the page
+	// area of the paged print. No page break ends the page, and the page
+	// takes the first page's box. The page may pass the 14,400 points of ISO
+	// 32000-1, Annex C.2, up to FittedLimit: content laid out past it is
+	// left out, with a warning.
 	SinglePage bool
 	// FittedLimit is the largest side, in points, of the single page:
 	// [typeset.FittedPageLimit] of the version the file is written at.

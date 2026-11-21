@@ -269,8 +269,8 @@ type Options struct {
 	// plus its top and bottom margins, at most its box's Height and at
 	// least one point of page area: the flow is cut as the box says, and
 	// the page is then trimmed to what it holds. A converter lays a
-	// document out on one page this way (Chromium's single page, as
-	// Gotenberg prints it).
+	// document out on one page this way, on a box as tall as a single
+	// page may be.
 	FitFirstPage bool
 	// FittedLimit, when positive, lays out pages sized from their content:
 	// a page box side may pass the 14,400 points of ISO 32000-1, Annex
@@ -282,9 +282,9 @@ type Options struct {
 	// containing block, which otherwise is the page area (CSS 2.1, 10.1):
 	// the root's percentage heights and the boxes positioned in the
 	// initial containing block measure it, while the flow is still cut
-	// at the page area. A converter that measures a document on a screen
-	// taller than any document sets the screen's height here. Its width
-	// stays the page area's.
+	// at the page area. A converter that lays a single page out on a box
+	// taller than the paper sets the height of the paper's page area here.
+	// Its width stays the page area's.
 	ViewportHeight float64
 	// PixelFontMetrics rounds the ascent, descent and line gap of every
 	// face to whole CSS pixels before the line boxes use them, and lays a

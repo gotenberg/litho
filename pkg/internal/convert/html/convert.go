@@ -90,19 +90,6 @@ func convertChecked(ctx context.Context, src io.Reader, fonts *text.Fonts, o Opt
 		return nil, err
 	}
 	defer limits.BudgetFrom(ctx).Release(charged)
-	if o.SinglePage {
-		// The route sizes the paper to the content it measures on screen,
-		// then prints it (see [measureSinglePage]).
-		w, h, err := measureSinglePage(ctx, doc, o, fonts, lay)
-		if err != nil {
-			return nil, err
-		}
-		limit := o.fittedLimit()
-		if o.Landscape {
-			o.PageWidth = min(chromiumPaper(w+o.MarginLeft+o.MarginRight), limit)
-		}
-		o.PageHeight = min(chromiumPaper(h+o.MarginTop+o.MarginBottom), limit)
-	}
 	p, res, err := prepareAndLayOut(ctx, doc, o, fonts, newPrintSetup(o), lay, nil)
 	if err != nil {
 		return nil, err
@@ -138,10 +125,9 @@ func convertChecked(ctx context.Context, src io.Reader, fonts *text.Fonts, o Opt
 	if err != nil {
 		return nil, err
 	}
-	if p.o.SinglePage && p.o.PageHeight >= p.o.fittedLimit() && len(res.Pages) > 1 {
-		// The paper reached the tallest single page before it held the
-		// content measured: what flowed past it is left out with the
-		// first page, as a text document's is.
+	if p.singleCut(res) {
+		// The content reached the tallest single page: what flowed past it
+		// is left out with the first page, as a text document's is.
 		out.Warnings = append(out.Warnings, office.SinglePageCut(p.o.fittedLimit()))
 	}
 	// A required resource that failed late in the layout ended ctx: the
@@ -343,14 +329,11 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	// margins @page sets (CSS Page 3, 3.1 and 5.1), both as the layout
 	// sees them: scaled by the setup's factor, as Chromium's initial
 	// containing block is
-	// (blink::CalculateInitialContainingBlockSizeForPagination); the
-	// screen measurement of a single page sees the screen (single.go).
+	// (blink::CalculateInitialContainingBlockSizeForPagination); a single
+	// page sees what its paged print sees (see [singleViewport]).
 	// Evaluate the media rules again when that changes anything.
 	w, h := media.Width*setup.factor, media.Height*setup.factor
-	vw, vh := areaOf(setup.layoutBox(first))
-	if setup.measure {
-		w, h, vw, vh = screenWidth, screenHeight, screenWidth, screenHeight
-	}
+	vw, vh := areaOf(setup.pagedBox(first))
 	if w != media.Width || h != media.Height || vw != w || vh != h {
 		media.Width, media.Height = w, h
 		media.ViewportWidth, media.ViewportHeight = vw, vh
@@ -376,7 +359,9 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	// namedFirst is the box of a first page the root's start page value
 	// names, nil for none.
 	var namedFirst *layout.PageBox
-	if name := startPage(computed, scan.root); name != "" && resolver.HasNamedPages() && !setup.measure {
+	firstName := ""
+	if name := startPage(computed, scan.root); name != "" && resolver.HasNamedPages() {
+		firstName = name
 		// The first page takes the root's start page value (CSS Page 3,
 		// 4.1), and the viewport units its page area: compute again when
 		// that page's area is not the one assumed.
@@ -389,7 +374,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 		if vw == 0 && vh == 0 {
 			vw, vh = media.Width, media.Height
 		}
-		if nw, nh := areaOf(setup.layoutBox(named)); nw != vw || nh != vh {
+		if nw, nh := areaOf(setup.pagedBox(named)); nw != vw || nh != vh {
 			media.ViewportWidth, media.ViewportHeight = nw, nh
 			resolver = css.NewResolver(media, sheets)
 			if computed, err = resolver.Compute(ctx, doc, computeOpts); err != nil {
@@ -450,13 +435,18 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	// the builder derives from them, generated content's among them, are
 	// shared here.
 	layout.ShareStyles(ctx, root, nil)
+	if setup.fitted > 0 {
+		if err := unbroken(ctx, root, firstName); err != nil {
+			return nil, err
+		}
+	}
 
 	p := &prepared{
 		root: root,
 		layout: layout.Options{
 			Page:             page,
 			PageAt:           pageAt,
-			FitFirstPage:     setup.measure,
+			FitFirstPage:     setup.fitted > 0,
 			FittedLimit:      setup.fitted,
 			PixelFontMetrics: !o.FractionalFontMetrics,
 			BrowserRules:     true,
@@ -497,11 +487,8 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 		// prints it.
 		p.layout.PageColor = css.CanvasColor(true)
 	}
-	if setup.measure {
-		// The screen's viewport is the initial containing block of the
-		// measurement, which the page, as tall as a PDF page may be, only
-		// keeps from fragmenting (see [measureSinglePage]).
-		p.layout.ViewportHeight = screenHeight
+	if setup.fitted > 0 {
+		p.layout.ViewportHeight = singleViewport(media)
 	}
 	p.setupPages(ctx, resolver)
 	for _, w := range computed.Warnings() {

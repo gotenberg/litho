@@ -2,78 +2,74 @@ package html
 
 import (
 	"context"
-	"math"
-
-	dom "golang.org/x/net/html"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
-	"github.com/gotenberg/litho/pkg/internal/text"
 )
 
-// The screen a single page is measured on, in points. Gotenberg's
-// singlePage reads Page.getLayoutMetrics' cssContentSize before printing
-// (gotenberg/pkg/modules/chromium/tasks.go, printToPdfActionFunc): the
-// document laid out on the screen of headless Chromium, which no device
-// metrics override sizes for a PDF. That screen is 800 CSS pixels wide;
-// its viewport, the floor of the content size, is 437.12 CSS pixels tall,
-// what the route's references show for a document shorter than it
-// (single-page-landscape and page-1 under singlePage both print a page
-// 327.84 points plus the margins tall).
-const (
-	// screenWidth is 800 CSS pixels.
-	screenWidth = 600
-	// screenHeight is 437.12 CSS pixels.
-	screenHeight = 327.84
-)
-
-// measureSinglePage returns the width and height in points of the content
-// of doc as Gotenberg's singlePage measures it: laid out in one continuous
-// column [screenWidth] wide, without margins, page box or forced breaks,
-// at the print media type the route emulates; the width at least
-// [screenWidth] and the height at least [screenHeight], the screen's
-// viewport, which the content size never falls below. The viewport is the
-// initial containing block (CSS 2.1, 10.1): the root's percentage heights
-// and the boxes positioned in it measure the screen, not the page the
-// column is laid out on.
+// A single page ([Options.SinglePage]) is the document laid out as it is
+// printed, in one pass: on the page boxes of its paged print, each as tall
+// as the bound of a single page ([printSetup.layoutBox]), so the flow runs
+// on in one column at the width of the paper's page area, at the scale
+// and with the shrink to fit of a document wider than its area that a
+// paged print applies ([prepared.refit]). Nothing ends the page
+// ([unbroken]). The layout trims the first page to the content it holds
+// plus its top and bottom margins (layout.Options.FitFirstPage), and that
+// page is written. The page keeps the width of the first page's box: the
+// paper's in its orientation, or its @page size's.
 //
-// # Corpus evidence
-//
-//   - probe, html: html and body at height: 100% with a paragraph print
-//     on a page 340.08 points tall through the route, a box positioned at
-//     top: 0 and bottom: 0 on one 328.08 points tall: the screen's viewport,
-//     not the content laid out past it.
-func measureSinglePage(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, lay layoutFunc) (float64, float64, error) {
-	m := o
-	m.Scale, m.MarginTop, m.MarginRight, m.MarginBottom, m.MarginLeft = 1, 0, 0, 0, 0
-	_, res, err := prepareAndLayOut(ctx, doc, m, fonts, printSetup{factor: 1, measure: true, fitted: o.fittedLimit()}, lay, func(p *prepared) { continuous(p.root) })
-	if err != nil {
-		return 0, 0, err
-	}
-	h := 0.0
-	if len(res.Pages) > 0 {
-		h = res.Pages[0].Height
-	}
-	return max(res.ContentWidth, screenWidth), max(h, screenHeight), nil
-}
+// Chromium's single page, as Gotenberg prints it, takes its height from
+// the document laid out on a screen 800 CSS pixels wide, then prints it on
+// the paper's page area with its forced breaks: text that wraps taller on
+// the paper, or follows a forced break, is lost. litho does not follow it
+// there.
 
-// continuous removes the forced breaks of the tree under root: a screen
-// lays the document out as one column (CSS Fragmentation 3, 3.1, breaks
-// apply in fragmented flows alone). Styles shared by several nodes stay
-// shared; the walk keeps its own stack.
-func continuous(root *layout.Node) {
+// unbrokenCheck is how many nodes [unbroken] visits between two checks of
+// its context.
+const unbrokenCheck = 1024
+
+// unbroken readies the tree under root to be laid out on a single page,
+// one continuous column nothing ends: a forced page break, to any page,
+// and a page break a box avoids become auto, since a forced break only
+// breaks a fragmented flow (CSS Fragmentation 3, 3.1); and every box takes
+// the page name first, the start page value of the root, since a change of
+// page name forces a break (CSS Page 3, 4.1): the page keeps the first
+// page's box, and a later named page changes nothing. Column breaks, and
+// a break avoided in any fragmentation context, stay: the columns of a
+// multi-column container are still fragmentainers. Styles shared by
+// several nodes stay shared: each is copied once. It returns ctx's error
+// when ctx ends first.
+func unbroken(ctx context.Context, root *layout.Node, first string) error {
 	done := map[*css.Style]*css.Style{}
 	stack := []*layout.Node{root}
-	for len(stack) > 0 {
+	for visited := 0; len(stack) > 0; visited++ {
+		if visited%unbrokenCheck == 0 {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
 		n := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		if st := n.Style; st != nil && (st.BreakBefore != css.BreakAuto || st.BreakAfter != css.BreakAuto) {
+		if n == nil {
+			continue
+		}
+		name := ""
+		if n == root {
+			name = first
+		}
+		if st := n.Style; st != nil && paged(st, name) {
 			c, ok := done[st]
-			if !ok {
+			if !ok || c.Page != name {
 				cp := *st
-				cp.BreakBefore, cp.BreakAfter = css.BreakAuto, css.BreakAuto
+				cp.BreakBefore, cp.BreakAfter = unpaged(cp.BreakBefore), unpaged(cp.BreakAfter)
+				if cp.BreakInside == css.InsideAvoidPage {
+					cp.BreakInside = css.InsideAuto
+				}
+				cp.Page = name
 				c = &cp
-				done[st] = c
+				if n != root {
+					done[st] = c
+				}
 			}
 			n.Style = c
 		}
@@ -81,17 +77,52 @@ func continuous(root *layout.Node) {
 		if n.Marker != nil {
 			stack = append(stack, n.Marker)
 		}
+		if n.Footnote != nil {
+			stack = append(stack, n.Footnote)
+		}
 	}
+	return nil
 }
 
-// chromiumPaper returns the paper side v, in points, as printToPDF prints
-// it: rounded up to whole points (print_to_pdf::GetPrintPagesParams,
-// gfx::ToCeiledSize of the paper in points), then to the nearest dot at
-// 300 dpi, the PDF's device resolution (printing::kDefaultPdfDpi). Every
-// page size of the route's references is a whole number of such dots:
-// 599.04 points is 2496 dots, 1087.92 is 4533. The route sizes a single
-// page's paper in inches, so it lands there.
-func chromiumPaper(v float64) float64 {
-	const dots = 300.0 / 72
-	return math.Round(math.Ceil(v-1e-9)*dots) / dots
+// paged reports a style that names something [unbroken] undoes, name being
+// the page name it takes.
+func paged(st *css.Style, name string) bool {
+	return unpaged(st.BreakBefore) != st.BreakBefore || unpaged(st.BreakAfter) != st.BreakAfter ||
+		st.BreakInside == css.InsideAvoidPage || st.Page != name
+}
+
+// unpaged returns the break value b takes on a page nothing ends: auto for
+// a forced or avoided page break, b otherwise.
+func unpaged(b css.Break) css.Break {
+	switch b {
+	case css.Page, css.LeftPage, css.RightPage, css.BreakAvoidPage:
+		return css.BreakAuto
+	case css.BreakAuto, css.BreakAvoid, css.Column, css.BreakAvoidColumn:
+		return b
+	}
+	return b
+}
+
+// singleViewport returns the height, in points of the layout, of the
+// initial containing block of a single page: the page area of its first
+// page in the paged print of the same paper, scale and @page rules, which
+// the media features and viewport units of media read (CSS 2.1, 10.1; CSS
+// Page 3, 3.1 and 5.1). The page the content is laid out on is as tall as
+// a single page may be, so its own area cannot be the block: a root of
+// height 100% or a box positioned at bottom 0 of the block would reach the
+// bound. With the paged area, such a document prints on a page as tall as
+// the paper and one without such a box as tall as its content, and one
+// layout decides both.
+func singleViewport(media css.Media) float64 {
+	if media.ViewportHeight > 0 {
+		return media.ViewportHeight
+	}
+	return media.Height
+}
+
+// singleCut reports whether the content of the single page res laid out
+// passed the bound of a single page: nothing else ends the page, so a
+// second page holds what the first could not.
+func (p *prepared) singleCut(res *layout.Result) bool {
+	return p.o.SinglePage && len(res.Pages) > 1
 }

@@ -198,9 +198,9 @@
 // queries and viewport units measure is that enlarged area. A document
 // wider than its page area is laid out again at its content's width, at
 // most 1.5 times the area's, and drawn shrunk to fit, as browsers print,
-// unless [Options.NoShrinkToFit]. [Options.SinglePage] sizes the paper to the
-// content measured as an 800 pixel screen would show it, and writes the
-// first page. Page selection is the caller's, after layout, so page
+// unless [Options.NoShrinkToFit]. [Options.SinglePage] lays the document
+// out as it prints, in one column, and writes the first page trimmed to
+// its content. Page selection is the caller's, after layout, so page
 // numbers count the whole document. [Options.OmitBackgrounds] blanks the
 // canvas alone, and [Options.OmitOutline] writes no outline.
 //

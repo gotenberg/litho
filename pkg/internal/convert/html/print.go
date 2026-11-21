@@ -36,11 +36,6 @@ const shrinkSlack = 0.75 / 64
 type printSetup struct {
 	// factor is the layout's points per point of the page.
 	factor float64
-	// measure lays the document out as the screen measurement of a single
-	// page: one continuous column [screenWidth] wide, no margins, no page
-	// box, the viewport [screenWidth] by [screenHeight] (see
-	// [measureSinglePage]).
-	measure bool
 	// containers are the sizes of the containers for size queries the
 	// last layout measured, which the cascade's size queries and
 	// container query units read; nil before a layout measured any.
@@ -69,19 +64,9 @@ func (s printSetup) side() float64 {
 	return maxPageSide
 }
 
-// source returns the page box b of the @page rules as the setup lays it
-// out, still in points of the page: the screen column when measuring.
-func (s printSetup) source(b layout.PageBox) layout.PageBox {
-	if s.measure {
-		return layout.PageBox{Width: screenWidth, Height: s.side()}
-	}
-	return b
-}
-
-// layoutBox returns the box the layout engine lays the page b out on: the
-// source box multiplied by the factor.
-func (s printSetup) layoutBox(b layout.PageBox) layout.PageBox {
-	b = s.source(b)
+// pagedBox returns the box the layout engine lays the page b out on in a
+// paged print: b multiplied by the factor.
+func (s printSetup) pagedBox(b layout.PageBox) layout.PageBox {
 	b.Width *= s.factor
 	b.Height *= s.factor
 	b.Bleed *= s.factor
@@ -91,13 +76,33 @@ func (s printSetup) layoutBox(b layout.PageBox) layout.PageBox {
 	return b
 }
 
+// layoutBox returns the box the layout engine lays the page b out on: the
+// paged box, which a single page makes as tall as [printSetup.singleSheet]
+// with its bleed, so that the flow runs on in one column the layout then
+// trims to its content (layout.Options.FitFirstPage).
+func (s printSetup) layoutBox(b layout.PageBox) layout.PageBox {
+	b = s.pagedBox(b)
+	if s.fitted > 0 {
+		b.Height = s.singleSheet() - float64(2*b.Bleed)
+	}
+	return b
+}
+
+// singleSheet returns the height, in points of the layout, of the sheet a
+// single page is laid out on before it is trimmed: the bound of a single
+// page multiplied by the factor, so that the page drawn divided by it
+// stays within the bound, and at most the bound, the tallest page the
+// layout engine lays out.
+func (s printSetup) singleSheet() float64 {
+	return float64(s.fitted * min(s.factor, 1))
+}
+
 // fitFactor returns the setup with its factor lowered, with a warning, so
 // that the page boxes boxes, in points of the page, stay within the PDF
 // page limit once multiplied.
 func (s printSetup) fitFactor(boxes ...layout.PageBox) (printSetup, []typeset.Warning) {
 	side := 0.0
 	for _, b := range boxes {
-		b = s.source(b)
 		side = max(side, b.Width, b.Height)
 	}
 	if side <= 0 || side*s.factor <= s.side() {
@@ -111,10 +116,11 @@ func (s printSetup) fitFactor(boxes ...layout.PageBox) (printSetup, []typeset.Wa
 }
 
 // refit returns the setup of a second layout when the first, res, laid
-// the document out wider than its page area, false when it fits or is
-// measured: the factor grown by the overflow ratio, at most [maxShrink], as
-// Chromium shrinks such a document
-// (blink::CalculateOverflowShrinkForPrinting).
+// the document out wider than its page area, false when it fits: the
+// factor grown by the overflow ratio, at most [maxShrink], as Chromium
+// shrinks such a document (blink::CalculateOverflowShrinkForPrinting). A
+// single page shrinks as the pages do, and its height follows the shrunk
+// layout.
 func (p *prepared) refit(res *layout.Result) (printSetup, bool) {
 	s := p.setup
 	lw, _ := areaOf(s.layoutBox(p.first))
@@ -122,7 +128,7 @@ func (p *prepared) refit(res *layout.Result) (printSetup, bool) {
 	if !numeric.Positive(lw) || !wider {
 		return s, false
 	}
-	if s.measure || p.o.NoShrinkToFit {
+	if p.o.NoShrinkToFit {
 		return s, false
 	}
 	s.factor *= min(res.ContentWidth/lw, maxShrink)
@@ -141,21 +147,29 @@ type placement struct {
 // orientation, and the source page is scaled down to fit it, never up,
 // and centred on it, as Chromium prints without preferCSSPageSize
 // (blink::TargetPageBorderBoxLogicalRect,
-// blink::PageBoxDefaultSizeWithSourceOrientation). A sheet side is at
-// most the PDF page limit.
+// blink::PageBoxDefaultSizeWithSourceOrientation). A single page's sheet
+// is as tall as the page it is trimmed to, drawn at that scale, and as
+// wide as the paper in its orientation without preferCSSPageSize. A sheet
+// side is at most the PDF page limit.
 func (p *prepared) placement(lp *typeset.Page) placement {
 	f := p.setup.factor
 	sw, sh := lp.Width/f, lp.Height/f
 	tw, th := sw, sh
+	single := p.setup.fitted > 0
 	if !p.o.PreferCSSPageSize {
 		tw, th = p.o.PageWidth, p.o.PageHeight
-		if !nearly(sw, sh) && (tw > th) != (sw > sh) {
+		if single {
+			th = sh
+		} else if !nearly(sw, sh) && (tw > th) != (sw > sh) {
 			tw, th = th, tw
 		}
 	}
 	fit := min(1, tw/sw, th/sh)
 	if fit > 1-1e-9 {
 		fit = 1
+	}
+	if single {
+		th = sh * fit
 	}
 	pl := placement{s: fit / f, ox: (tw - float64(sw*fit)) / 2, oy: (th - float64(sh*fit)) / 2, w: min(tw, p.setup.side()), h: min(th, p.setup.side())}
 	if math.Abs(pl.ox) < 1e-6 {
