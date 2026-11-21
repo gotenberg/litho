@@ -10,7 +10,8 @@ import (
 // TestAnchorLonghandsParse holds the value grammars of CSS Anchor
 // Positioning 1: anchor-name and anchor-scope (2.1, 2.1.1),
 // position-anchor (2.3), position-try-fallbacks (5.1), position-try-order
-// (5.2) and position-visibility (5.5).
+// (5.2) and position-visibility (5.5), and anchor-center, which Chromium
+// takes after an overflow position as a <self-position>.
 func TestAnchorLonghandsParse(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -49,7 +50,11 @@ func TestAnchorLonghandsParse(t *testing.T) {
 		{"justify-self: anchor-center", true},
 		{"align-self: anchor-center", true},
 		{"place-self: anchor-center", true},
-		{"align-self: safe anchor-center", false},
+		{"align-self: safe anchor-center", true},
+		{"justify-self: unsafe anchor-center", true},
+		{"place-self: safe anchor-center", true},
+		{"justify-items: safe anchor-center", false},
+		{"align-self: anchor-center safe", false},
 		{"align-items: anchor-center", false},
 	} {
 		d := ParseDeclarations(c.decl, ParseOptions{})

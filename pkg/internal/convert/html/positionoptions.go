@@ -2,6 +2,7 @@ package html
 
 import (
 	dom "golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -43,6 +44,19 @@ func (b *builder) positioned(node *layout.Node, n *dom.Node) {
 		b.anchored = map[*layout.Node]*dom.Node{}
 	}
 	b.anchored[node] = n
+}
+
+// principalStyle returns the style of the first body child of the root
+// root, whose writing-mode and direction are the root's used values (CSS
+// Writing Modes 3, 8), nil when it has none.
+func principalStyle(c *css.Computed, root *dom.Node) *css.Style {
+	if root == nil {
+		return nil
+	}
+	if body := childElement(root, atom.Body); body != nil {
+		return c.Style(body)
+	}
+	return nil
 }
 
 // chosen returns the position options res chose, by element, for the

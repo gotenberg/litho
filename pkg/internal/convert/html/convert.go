@@ -464,6 +464,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 			// the document tree lives, which outlives the layout.
 			ChargedStyle:      computed.Charged,
 			MeasureContainers: computed.QueriesContainers(),
+			Principal:         principalStyle(computed, scan.root),
 		},
 		meta:      scan.meta,
 		headings:  b.headings,

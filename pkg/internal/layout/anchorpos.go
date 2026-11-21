@@ -88,7 +88,7 @@ func (e *engine) anchoredBox(b *box) bool {
 			return true
 		}
 	}
-	if st.AlignSelf == css.BoxAnchorCenter || st.JustifySelf == css.BoxAnchorCenter {
+	if st.AlignSelf.Keyword() == css.BoxAnchorCenter || st.JustifySelf.Keyword() == css.BoxAnchorCenter {
 		return true
 	}
 	for _, d := range [...]css.Dimension{
@@ -658,6 +658,15 @@ func (s *anchorScope) substitute(st *css.Style) *css.Style {
 		}
 	}
 	return &c
+}
+
+// icbAxes returns the axes of the initial containing block and of a page
+// area: the principal writing mode's ([Options.Principal]).
+func (e *engine) icbAxes() flowAxes {
+	if e.opts.Principal != nil {
+		return flowAxesOf(e.opts.Principal)
+	}
+	return flowAxesOf(e.rootBox.stOrNil())
 }
 
 // stOrNil returns the style of b, nil for no box.

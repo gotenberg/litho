@@ -394,3 +394,36 @@ func TestAnchor_GridAreaShiftsInPaddingBox(t *testing.T) {
 		<div class=gd style="width: 300px"><div class=a id=a2></div><div class="p g" id=p2></div></div>`,
 		map[string]string{"1:r": "100,80+30x20", "1:g": "320,230+30x20"})
 }
+
+// TestAnchor_CenterOverflow holds anchor-center's overflow (CSS Anchor
+// Positioning 1, 4.2; CSS Box Alignment 3, 4.4): the box is sized in its
+// inset-modified containing block and centred on the anchor; one larger
+// than the room centred there shifts back into its containing block by
+// default, and safe aligns it at the start of that room instead, the
+// start of the initial containing block taken from the principal writing
+// mode, a body's direction (CSS Writing Modes 3, 8).
+//
+// # Corpus evidence
+//
+//   - wpt: css/css-anchor-position/anchor-center-safe and
+//     anchor-center-safe-rtl draw their references in Chromium of
+//     gotenberg/gotenberg:9.4.1.
+func TestAnchor_CenterOverflow(t *testing.T) {
+	t.Parallel()
+	style := `
+		#a { anchor-name: --a; left: 560px; top: 0 }
+		#b { anchor-name: --b; left: 560px; top: 100px }
+		#p1 { position-anchor: --a; top: anchor(bottom); justify-self: safe anchor-center; width: 100px }
+		#p2 { position-anchor: --a; top: calc(anchor(bottom) + 30px); justify-self: anchor-center; width: 100px }
+		#p3 { position-anchor: --b; top: anchor(bottom); justify-self: anchor-center; width: auto; height: auto; font-size: 0; line-height: 0 }
+		#p3 span { display: inline-block; width: 50px; height: 10px }`
+	checkAnchored(t, style,
+		`<div class=c><div class=a id=a></div><div class=a id=b></div><div class="p r" id=p1></div>
+		<div class="p g" id=p2></div><div class="p k" id=p3><span></span><span></span></div></div>`,
+		map[string]string{"1:r": "660,80+100x20", "1:g": "600,110+100x20", "1:k": "600,180+100x10"})
+	checkAnchored(t, `body { direction: rtl }
+		#f { position: fixed; anchor-name: --f; right: 0; top: 0 }
+		#q { position: fixed; position-anchor: --f; top: anchor(bottom); right: 0; justify-self: safe anchor-center; width: 100px }`,
+		`<div class=a id=f></div><div class="p g" id=q></div>`,
+		map[string]string{"1:g": "700,40+100x20"})
+}

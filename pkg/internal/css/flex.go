@@ -115,6 +115,12 @@ func parseAlign(v []token, set alignSet, justify bool) (BoxAlign, bool) {
 		positions = contentPositions
 	}
 	a, ok := positions[pos]
+	if !ok && pos == "anchor-center" && set == alignSelf && len(words) == 2 {
+		// CSS Anchor Positioning 1, 4.2 adds anchor-center to align-self
+		// and justify-self alone; Chromium parses it as a <self-position>,
+		// an overflow position before it, and so does litho.
+		a, ok = BoxAnchorCenter, true
+	}
 	if !ok && justify && (pos == "left" || pos == "right") {
 		a, ok = BoxLeft, true
 		if pos == "right" {

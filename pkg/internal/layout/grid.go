@@ -514,8 +514,8 @@ func justifySelf(k, c *css.Style) css.BoxAlign {
 // positioned takes for a: anchor-center is center there (CSS Anchor
 // Positioning 1, 4.2).
 func inFlowAlign(a css.BoxAlign) css.BoxAlign {
-	if a == css.BoxAnchorCenter {
-		return css.BoxCenter
+	if a.Keyword() == css.BoxAnchorCenter {
+		return css.BoxCenter | a&css.BoxSafe
 	}
 	return a
 }

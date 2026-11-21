@@ -37,8 +37,12 @@ type anchorPlan struct {
 	// imcb is the inset-modified containing block.
 	imcb   edges
 	ax, ay alignKind
-	def    *box
-	defR   edges
+	// safe reports, for the horizontal then the vertical axis, a safe
+	// self-alignment, and startLow an axis whose start is its low edge in
+	// the containing block's writing mode.
+	safe, startLow [2]bool
+	def            *box
+	defR           edges
 	// refsDefault reports a box that references its default anchor
 	// (position-visibility: anchor-valid); missing one whose anchor
 	// function found no anchor.
@@ -201,7 +205,7 @@ func (e *engine) scrollableCB(cb absCB) absCB {
 func (e *engine) planAnchored(b *box, st *css.Style, cb absCB) *anchorPlan {
 	a := st.AnchorPositioning()
 	self := flowAxesOf(st)
-	cbAxes := flowAxesOf(e.rootBox.stOrNil())
+	cbAxes := e.icbAxes()
 	if cb.box != nil {
 		cbAxes = flowAxesOf(cb.box.st)
 	}
@@ -236,7 +240,7 @@ func (e *engine) planAnchored(b *box, st *css.Style, cb absCB) *anchorPlan {
 		hAlign, vAlign = vAlign, hAlign
 	}
 	for i, al := range [2]css.BoxAlign{hAlign, vAlign} {
-		if al == css.BoxAnchorCenter {
+		if al.Keyword() == css.BoxAnchorCenter {
 			plan.refsDefault = true
 			if s.def != nil {
 				zero[i] = true
@@ -309,6 +313,7 @@ func (e *engine) planAnchored(b *box, st *css.Style, cb absCB) *anchorPlan {
 		} else {
 			plan.ay = k
 		}
+		plan.safe[i], plan.startLow[i] = al.Safe(), cbAxes.startLow(i == 0)
 	}
 	plan.st, plan.cb = sub, cb
 	plan.imcb = e.insetModified(b, sub, cb)
@@ -379,7 +384,7 @@ func (e *engine) positionOptions(b *box, base *css.Style, cb absCB) []tryEntry {
 	a := base.AnchorPositioning()
 	out := make([]tryEntry, 1, 1+len(a.Fallbacks))
 	out[0] = tryEntry{st: base}
-	cbAxes := flowAxesOf(e.rootBox.stOrNil())
+	cbAxes := e.icbAxes()
 	if cb.box != nil {
 		cbAxes = flowAxesOf(cb.box.st)
 	}
@@ -736,25 +741,29 @@ func (e *engine) layoutPlan(b *box, plan *anchorPlan) {
 	st := *plan.st
 	cb := plan.cb
 	c := plan.imcb
-	ranges := [2][2]float64{{c.x0, c.x1}, {c.y0, c.y1}}
+	// sized is the inset-modified containing block, the room the box is
+	// sized in (CSS Position 3, 4.1); ranges are where it aligns, which
+	// anchor-center narrows to the widest range centred on the anchor.
+	sized := [2][2]float64{{c.x0, c.x1}, {c.y0, c.y1}}
+	for i := range sized {
+		if math.IsInf(sized[i][1], 1) {
+			sized[i][1] = [2]float64{cb.x + cb.w, cb.y + cb.h}[i]
+		}
+	}
+	ranges := sized
 	if plan.ax == alignAnchorCenter && plan.def != nil {
-		ranges[0] = centred(c.x0, c.x1, float64((plan.defR.x0+plan.defR.x1)/2))
+		ranges[0] = centred(sized[0][0], sized[0][1], float64((plan.defR.x0+plan.defR.x1)/2))
 	}
 	if plan.ay == alignAnchorCenter && plan.def != nil {
-		ranges[1] = centred(c.y0, c.y1, float64((plan.defR.y0+plan.defR.y1)/2))
-	}
-	for i := range ranges {
-		if math.IsInf(ranges[i][1], 1) {
-			ranges[i][1] = [2]float64{cb.x + cb.w, cb.y + cb.h}[i]
-		}
+		ranges[1] = centred(sized[1][0], sized[1][1], float64((plan.defR.y0+plan.defR.y1)/2))
 	}
 	lay := cb
 	if plan.ax != alignNormal {
-		lay.x, lay.w = ranges[0][0], max(ranges[0][1]-ranges[0][0], 0)
+		lay.x, lay.w = sized[0][0], max(sized[0][1]-sized[0][0], 0)
 		st.Left, st.Right = alignedInsets(plan.ax)
 	}
 	if plan.ay != alignNormal {
-		lay.y, lay.h = ranges[1][0], max(ranges[1][1]-ranges[1][0], 0)
+		lay.y, lay.h = sized[1][0], max(sized[1][1]-sized[1][0], 0)
 		st.Top, st.Bottom = alignedInsets(plan.ay)
 	}
 	if plan.ay == alignCenter || plan.ay == alignAnchorCenter {
@@ -763,30 +772,52 @@ func (e *engine) layoutPlan(b *box, plan *anchorPlan) {
 		e.noPaginate++
 		e.layoutAbsIn(b, lay)
 		e.noPaginate--
-		st.Top = css.Pts(float64(max(lay.h-b.marginH(), 0) / 2))
-		if lay.h < b.marginH() {
-			st.Top = css.Pts(float64((lay.h - b.marginH()) / 2))
-		}
+		st.Top = css.Pts(float64(ranges[1][0]-lay.y) + float64((ranges[1][1]-ranges[1][0]-b.marginH())/2))
 	}
 	b.st, b.orig = &st, nil
 	e.layoutAbsIn(b, lay)
 	// The vertical shift lays the box out again, so it comes before the
 	// horizontal moves.
 	if plan.ay != alignNormal {
-		if dy := intoRange(b.y-b.m[css.Top], b.marginH(), ranges[1][0], ranges[1][1], plan.orig.y0, plan.orig.y1); dy != 0 {
-			st.Top = css.Pts(b.y - b.m[css.Top] + dy - lay.y)
+		y := b.y - b.m[css.Top]
+		dy := intoRange(y, b.marginH(), ranges[1][0], ranges[1][1], plan.orig.y0, plan.orig.y1)
+		if plan.safe[1] {
+			dy = safeShift(y, b.marginH(), ranges[1], plan.startLow[1])
+		}
+		if dy != 0 {
+			st.Top = css.Pts(y + dy - lay.y)
 			st.Bottom = css.Dimension{Kind: css.Auto}
 			e.layoutAbsIn(b, lay)
 		}
 	}
 	if plan.ax == alignCenter || plan.ax == alignAnchorCenter {
-		b.shift(float64((lay.w-b.marginW())/2), 0)
+		b.shift(float64(ranges[0][0]-lay.x)+float64((ranges[0][1]-ranges[0][0]-b.marginW())/2), 0)
 	}
 	if plan.ax != alignNormal {
-		if dx := intoRange(b.x-b.m[css.Left], b.marginW(), ranges[0][0], ranges[0][1], plan.orig.x0, plan.orig.x1); dx != 0 {
+		x := b.x - b.m[css.Left]
+		dx := intoRange(x, b.marginW(), ranges[0][0], ranges[0][1], plan.orig.x0, plan.orig.x1)
+		if plan.safe[0] {
+			dx = safeShift(x, b.marginW(), ranges[0], plan.startLow[0])
+		}
+		if dx != 0 {
 			b.shift(dx, 0)
 		}
 	}
+}
+
+// safeShift returns how far a margin box at p of size n moves under a
+// safe self-alignment in the range r: a box larger than its range is
+// aligned at the range's start, as flow-start aligns it (CSS Box Alignment
+// 3, 4.4), and one it holds stays. The explicit overflow position takes
+// the place of the default overflow alignment.
+func safeShift(p, n float64, r [2]float64, startLow bool) float64 {
+	if n <= r[1]-r[0]+eps {
+		return 0
+	}
+	if startLow {
+		return r[0] - p
+	}
+	return r[1] - n - p
 }
 
 // alignedInsets returns the insets that put a box aligned k in its range:

@@ -356,6 +356,11 @@ type Options struct {
 	// keeps while it fits (CSS Anchor Positioning 1, 5.4.1.1). nil for a
 	// first layout.
 	PositionChoices map[int]int
+	// Principal is the style whose writing-mode and direction are the
+	// principal writing mode, the used values of the root and so of the
+	// initial containing block (CSS Writing Modes 3, 8): an HTML body's,
+	// which the converter names; nil for the root's own.
+	Principal *css.Style
 	// PageGroups tracks the page groups of [PageInfo.Groups], which
 	// [Options.PageFor] and [Options.MarginContent] then receive; off,
 	// every page belongs to none.
