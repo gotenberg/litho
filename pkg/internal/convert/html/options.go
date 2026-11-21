@@ -196,7 +196,7 @@ type Options struct {
 	// either way: a document's style changes once, when it loads.
 	AnimationsAtEnd bool
 	// RequiredResources ends the conversion with [ErrResourceUnavailable]
-	// at the first stylesheet, @import, picture or font the document names
+	// at the first stylesheet, @import, picture, font or frame the document names
 	// that does not load (see [loadFailed]), where false, the default,
 	// leaves it out with a warning.
 	RequiredResources bool
@@ -205,6 +205,12 @@ type Options struct {
 	// resource that did not load; [convert] sets it, nil when
 	// RequiredResources is false. It does not outlive the call.
 	stop context.CancelCauseFunc
+	// frames lays out the documents of the conversion's frames; [convert]
+	// sets it, nil loads none. It does not outlive the call.
+	frames *frameSet
+	// frame, when set, makes the document the one of a frame, laid out on
+	// its viewport ([builder.frame]).
+	frame *frameDoc
 	// maxElements caps the elements of the document: [MaxElements] when
 	// zero, which a larger value cannot raise. A test lowers it to hold a
 	// document at the cap without cascading the full count.

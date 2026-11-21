@@ -110,21 +110,32 @@ type resources struct {
 	fsys   fs.FS
 	client *http.Client
 
-	mu       sync.Mutex
-	read     int64
-	pictures map[string]pictureResult
+	// resourceAccount is what the document reads, which the documents of
+	// its frames share ([resources.forFrame]).
+	*resourceAccount
 	// svg is what the SVG pictures share.
 	svg svgState
 	// formulas lays the formulas of a document holding MathML out, nil
 	// for a document without.
 	formulas *formula.Setter
+	// stop ends the conversion at a required resource that does not load
+	// ([Options.stop]), nil when resources are not required.
+	stop context.CancelCauseFunc
+}
+
+// resourceAccount counts and caches what a document and the documents of
+// its frames read, under one mutex: the bytes against
+// [maxTotalResourceBytes], the decoded pictures against
+// limits.MaxConvertPictures, the HTTP requests against
+// [maxNetworkRequests].
+type resourceAccount struct {
+	mu       sync.Mutex
+	read     int64
+	pictures map[string]pictureResult
 	// requests counts the HTTP requests sent; network caches their
 	// results by URL.
 	requests int
 	network  map[string]networkResult
-	// stop ends the conversion at a required resource that does not load
-	// ([Options.stop]), nil when resources are not required.
-	stop context.CancelCauseFunc
 }
 
 // pictureResult is a decoded picture or why it failed.
@@ -134,7 +145,15 @@ type pictureResult struct {
 }
 
 func newResources(fsys fs.FS) *resources {
-	return &resources{fsys: fsys, pictures: map[string]pictureResult{}, network: map[string]networkResult{}}
+	return &resources{fsys: fsys, resourceAccount: &resourceAccount{pictures: map[string]pictureResult{}, network: map[string]networkResult{}}}
+}
+
+// forFrame returns the resources of the document of a frame of r's
+// document: the same files, client and stop, and the same account, so the
+// frames read within the bounds of the conversion, with SVG pictures and
+// formulas of their own.
+func (r *resources) forFrame() *resources {
+	return &resources{fsys: r.fsys, client: r.client, resourceAccount: r.resourceAccount, stop: r.stop}
 }
 
 // fetch returns the bytes u names: a data: URL's payload (RFC 2397), an

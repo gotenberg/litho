@@ -72,6 +72,12 @@ func pageBoxes(ctx context.Context, r *css.Resolver, o Options, rtl bool) (layou
 // leave no page area give way to o's, with a warning. ctx's error stops
 // it.
 func pageBox(ctx context.Context, r *css.Resolver, o Options, sel css.PageSelector) (layout.PageBox, []typeset.Warning, error) {
+	if o.frame != nil {
+		// A frame's document lays out on its viewport, which no @page rule
+		// sizes (HTML Standard, 15.3.2; CSS Page 3, 3.1 styles the pages
+		// of a paginated document).
+		return layout.PageBox{Width: o.PageWidth, Height: o.PageHeight}, nil, nil
+	}
 	ps, err := r.Page(ctx, sel)
 	if err != nil {
 		return layout.PageBox{}, nil, err

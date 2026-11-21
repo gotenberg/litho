@@ -239,8 +239,20 @@
 //     (100vw without one, calc() not read).
 //   - <input>, <button>, <select> and <textarea> draw as inline blocks
 //     holding the text they show, without their widgets, with a warning.
-//   - <iframe>, <embed> and <audio> are left out with a warning; <object>
-//     and <canvas> draw their fallback content. A <video> is a replaced box
+//   - <iframe> draws the document of its srcdoc, else of its src: a
+//     replaced box, 300 by 150 CSS pixels unless sized, in which the
+//     document is read as a resource, styled and laid out for the same
+//     media on a viewport the size of the box's content box, in one
+//     column, and cut at the box. Its @page rules and forced breaks do not
+//     apply, no script runs, and its canvas is transparent unless it sets
+//     a background or a dark colour scheme. Frames nest 8 deep, a
+//     conversion lays out 1000 at most, a document appears once among the
+//     documents that frame it, and a frame's document is held to the
+//     input cap; past these, or when the document does not load or is not
+//     HTML, the box shows nothing, with a warning.
+//   - <frame>, <frameset>, <embed> and <audio> are left out with a
+//     warning; <object> and <canvas> draw their fallback content. A
+//     <video> is a replaced box
 //     showing its poster, sized by it, or 300 by 150 CSS pixels showing
 //     nothing without one; its frames and controls are not drawn.
 //   - Elements whose display is none, and their content, generate nothing.
@@ -253,7 +265,9 @@
 // and LI, tables Table, THead, TBody, TFoot, TR, TH and TD, figures and
 // images Figure with their alt text, captions Caption, block quotes
 // BlockQuote, code Code, quotations Quote, links Link and phrasing
-// elements Span. The root element's lang is the document's language.
+// elements Span. A frame starts a DocumentFragment (ISO 32000-2, 14.8.4.4)
+// holding the elements of its document; its headings stay out of the
+// outline. The root element's lang is the document's language.
 //
 // # Links and outline
 //

@@ -426,7 +426,7 @@ func TestConvert_HTMLRefusesBadInput(t *testing.T) {
 func TestConvert_HTMLReportsWhatItLeavesOut(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	rep, err := FromHTML(strings.NewReader(`<p><img src="a.png" alt="alt text"><iframe src="x"></iframe>`), WithConvertFontDirs(convertFontDir(t))).WriteTo(context.Background(), &out)
+	rep, err := FromHTML(strings.NewReader(`<p><img src="a.png" alt="alt text"><audio src="x"></audio>`), WithConvertFontDirs(convertFontDir(t))).WriteTo(context.Background(), &out)
 	if err != nil {
 		t.Fatalf("WriteTo: %v", err)
 	}

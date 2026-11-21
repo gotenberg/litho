@@ -417,9 +417,9 @@ func TestPrepare_LeavesEmbeddedContentOut(t *testing.T) {
 	if got := treeText(byID(t, p.root, "x")); got != "amfallbackcanvas-fallback" {
 		t.Errorf("text %q", got)
 	}
-	want := []string{"content-unsupported", "content-unsupported", "content-unsupported"}
+	want := []string{"content-unsupported", "content-unsupported"}
 	if got := codes(p.warnings); strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("warnings %v, want three unsupported-element (audio once)", got)
+		t.Errorf("warnings %v, want two unsupported-element (audio once): an iframe's document is read when it is laid out", got)
 	}
 }
 

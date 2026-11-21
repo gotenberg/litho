@@ -74,10 +74,11 @@ var skipped = map[atom.Atom]bool{
 }
 
 // unsupported are the elements whose content is not drawn, with a
-// warning: embedded documents and audio. A video draws its poster
-// ([builder.video]). Immutable lookup table.
+// warning: embedded documents other than an iframe's ([builder.frame])
+// and audio. A video draws its poster ([builder.video]). Immutable lookup
+// table.
 var unsupported = map[atom.Atom]bool{
-	atom.Iframe: true, atom.Embed: true, atom.Audio: true, atom.Frame: true, atom.Frameset: true,
+	atom.Embed: true, atom.Audio: true, atom.Frame: true, atom.Frameset: true,
 }
 
 // builder turns the styled DOM into the layout's content tree. It lives
@@ -133,6 +134,16 @@ type builder struct {
 	// chosen option a cascade reads to its element ([builder.positioned]);
 	// nil for none.
 	anchored map[*layout.Node]*dom.Node
+	// frames lays the documents of frames out, nil to load none;
+	// frameOpts are the options the document is converted with,
+	// frameSelf its URL, [srcdocURL] for a srcdoc, frameChain the URLs
+	// of the documents that hold it and frameDepth its nesting, 0 for the
+	// conversion's own document ([builder.frame]).
+	frames     *frameSet
+	frameOpts  Options
+	frameSelf  string
+	frameChain []string
+	frameDepth int
 }
 
 // container records node, the box of the element n, when n is a container
@@ -347,6 +358,8 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 			return b.image(ctx, n, st, parent), nil
 		case atom.Video:
 			return b.video(ctx, n, st), nil
+		case atom.Iframe:
+			return b.frame(n, st), nil
 		case atom.Input, atom.Select, atom.Textarea:
 			return b.control(n, st), nil
 		case atom.Button:

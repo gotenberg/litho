@@ -58,6 +58,7 @@ func convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts Options
 	}
 	ctx, o, done := requireResources(ctx, o)
 	defer done()
+	o.frames = newFrameSet(fonts, lay)
 	out, err := convertChecked(ctx, src, fonts, o, lay)
 	if failure := resourceFailure(ctx); failure != nil {
 		// The context ended at a required resource: its error, not the
@@ -125,6 +126,7 @@ func convertChecked(ctx context.Context, src io.Reader, fonts *text.Fonts, o Opt
 	if err != nil {
 		return nil, err
 	}
+	out.Warnings = append(out.Warnings, o.frames.take()...)
 	if p.singleCut(res) {
 		// The content reached the tallest single page: what flowed past it
 		// is left out with the first page, as a text document's is.
@@ -288,14 +290,31 @@ func parse(data []byte) (*dom.Node, error) {
 // says. fonts resolves the ex and ch units; nil takes their half-em
 // fallback. It leaves doc as it is, so a second layout prepares it again.
 func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, setup printSetup) (*prepared, error) {
-	scan, err := scanDocument(ctx, doc, documentBase(o.BaseURL), o.elementCap())
+	if o.frames == nil {
+		// A document prepared outside Convert lays its frames out alone,
+		// with the fonts it was given.
+		o.frames = newFrameSet(fonts, layout.Layout)
+	}
+	docURL := documentBase(o.BaseURL)
+	if o.frame != nil {
+		docURL = o.frame.base
+	}
+	scan, err := scanDocument(ctx, doc, docURL, o.elementCap())
 	if err != nil {
 		return nil, err
 	}
 	if scan.lang == "" {
 		scan.lang, scan.meta.Lang = o.DefaultLang, o.DefaultLang
 	}
-	res := newResources(o.Resources)
+	var res *resources
+	if o.frame != nil {
+		res = o.frame.res.forFrame()
+		if !scan.based {
+			scan.linkBase = o.frame.links
+		}
+	} else {
+		res = newResources(o.Resources)
+	}
 	res.svg.fonts = fonts
 	res.client = o.HTTPClient
 	res.stop = o.stop
@@ -348,7 +367,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 			res.formulas.BrowserRules = true
 		}
 	}
-	computeOpts := css.ComputeOptions{Hints: rootHints(scan), Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts, scan.math), ContainerSize: setup.containers.size, PositionOption: setup.options.option}
+	computeOpts := css.ComputeOptions{Hints: frameHints(rootHints(scan), scan, o.frame), Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts, scan.math), ContainerSize: setup.containers.size, PositionOption: setup.options.option}
 	if o.AnimationsAtEnd {
 		computeOpts.AnimationTime = css.AnimationsAtEnd
 	}
@@ -418,6 +437,10 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 		computed: computed, res: res, scan: scan, media: media,
 		warned: map[string]bool{}, omitBackgrounds: o.OmitBackgrounds,
 		counterStyles: resolver.CounterStyles(), derivedAlt: o.DerivedAltText,
+		frames: o.frames, frameOpts: o, frameSelf: scan.docURL,
+	}
+	if o.frame != nil {
+		b.frameChain, b.frameDepth, b.frameSelf = o.frame.chain, o.frame.depth, o.frame.url
 	}
 	// The page-margin boxes read these counters of the document as they
 	// stand at the start of each page (CSS Page 3, 6.1).
@@ -491,7 +514,10 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 	if setup.fitted > 0 {
 		p.layout.ViewportHeight = singleViewport(media)
 	}
-	p.setupPages(ctx, resolver)
+	if o.frame == nil {
+		// A frame's document has no pages: its @page rules apply to none.
+		p.setupPages(ctx, resolver)
+	}
 	for _, w := range computed.Warnings() {
 		p.warnings = append(p.warnings, typeset.Warning{Code: w.Code, Effect: w.Effect, Message: displayURL(w.Message)})
 	}
@@ -609,8 +635,11 @@ type scan struct {
 	// document that is not on the network.
 	resourceBase, linkBase string
 	// docURL is the document's own URL: [Options.BaseURL] when it is an
-	// http or https URL, else [documentURL].
+	// http or https URL, else [documentURL]; for a frame's document, the
+	// URL its relative URLs resolve against.
 	docURL string
+	// based reports a <base href> that set the bases.
+	based bool
 	// math reports a MathML element in the document.
 	math bool
 	// scripts counts the scripts a browser would run on its own
@@ -768,7 +797,7 @@ func (s *scan) setBase(href string) {
 	if u == "" {
 		return
 	}
-	s.linkBase = u
+	s.linkBase, s.based = u, true
 	if !isAbsolute(u) || isNetworkURL(u) {
 		s.resourceBase = u
 	}
