@@ -66,6 +66,10 @@ type textSize struct {
 	// fixed marks text formatted by hand (prSet custT): it keeps its own
 	// sizes.
 	fixed bool
+	// unresolved marks a shape whose box an enclosing layout sizes from a
+	// variable the engine does not resolve: it keeps the size and autofit
+	// the text algorithm gave it.
+	unresolved bool
 	// caps bound the size by a factor of other shapes' (an lte constraint).
 	caps []sizeCap
 	// insets are the factors of the size each inset is (lMarg, tMarg,
@@ -151,6 +155,11 @@ type nodeLists struct {
 //     floor when nothing fits.
 //   - Text formatted by hand keeps its sizes, and a run that states its
 //     size keeps it.
+//   - A shape an enclosing layout sizes beside a width or height that
+//     refers to a user-defined variable (refType userA to userZ), which
+//     the layout engine does not resolve, is not in the box PowerPoint
+//     computes: its text keeps the size, autofit and insets the text
+//     algorithm gives it.
 //
 // The standard is silent on how the search runs and on what a tie is: the
 // whole-point steps, the floor of the rules before an unbounded growth,
@@ -175,6 +184,12 @@ type nodeLists struct {
 //   - libreoffice/pptx: smartart-preserve's two list1 parentText nodes,
 //     which one constraint of op none for des sets to 65 and no equality
 //     ties, are both saved at 30 points.
+//   - libreoffice/pptx: smartart-linear-rule's hProcess3 sizes a padding
+//     from userP; PowerPoint prints its parTx text 145 points apart and
+//     45 points from the frame's edge where litho's columns stand 150.8
+//     apart from 10: sized at PowerPoint's 50.5 points in those columns,
+//     the page scored 0.956 against 0.970 with the text the algorithm
+//     gives.
 //   - libreoffice/pptx: n819614's 56 orgChart1 nodes, formatted by hand
 //     (custT) at 7 points, are saved at 7 points.
 func (e *engine) sizeText(fit DiagramTextFit) {
@@ -286,6 +301,12 @@ func names(forAxis, forName string, s *DiagramShape, depth int) bool {
 // and rules and those of the layout nodes around it.
 func (z *sizer) spec(s *DiagramShape) *textSize {
 	t := &textSize{s: s, kind: primFontSz, fixed: z.e.customText(s)}
+	savedInsets, savedInset := s.Insets, s.Inset
+	defer func() {
+		if t.unresolved {
+			s.Insets, s.Inset = savedInsets, savedInset
+		}
+	}()
 	cons, rules := z.own(s.atom, s.pt)
 	for _, c := range cons {
 		// A primary size that refers to the secondary one makes the
@@ -362,6 +383,11 @@ func (z *sizer) spec(s *DiagramShape) *textSize {
 	depth := 1
 	for a := s.parent; a != nil && depth < maxDiagramDepth; a, depth = a.parent, depth+1 {
 		ac, ar := z.own(a.atom, a.pt)
+		for _, c := range ac {
+			if (c.Type == "w" || c.Type == "h") && strings.HasPrefix(c.RefType, "user") {
+				t.unresolved = true
+			}
+		}
 		starts(ac, depth)
 		floors(ar, depth)
 		insets(ac, depth)
@@ -539,7 +565,14 @@ func (z *sizer) ready(group []*textSize) bool {
 }
 
 // size finds and sets the size of one group.
-func (z *sizer) size(group []*textSize) {
+func (z *sizer) size(all []*textSize) {
+	var group []*textSize
+	for _, t := range all {
+		t.done = true
+		if !t.unresolved {
+			group = append(group, t)
+		}
+	}
 	hi, lo := math.Inf(1), 0.0
 	starts, floors := false, false
 	for _, t := range group {

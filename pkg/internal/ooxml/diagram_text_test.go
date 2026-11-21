@@ -251,3 +251,17 @@ func TestDiagramTextSizeOfHostileDefinitions(t *testing.T) {
 		}
 	})
 }
+
+// TestDiagramTextSizeLeavesUnresolvedBoxes lays out a node whose enclosing
+// layout sizes a shape from a user-defined variable (21.4.7.21
+// ST_ConstraintType userA to userZ), which the layout engine does not
+// resolve: the node's box is not the one PowerPoint computes, so its text
+// keeps the size and autofit the text algorithm gives it, and its insets.
+func TestDiagramTextSizeLeavesUnresolvedBoxes(t *testing.T) {
+	root := `<dgm:constrLst><dgm:constr type="primFontSz" for="ch" forName="node" op="equ" val="65"/>` +
+		`<dgm:constr type="w" for="ch" forName="node" refType="userA"/></dgm:constrLst>`
+	nodes := sizedNodes(t, []string{"abcdefghijkl"}, root, `<dgm:ruleLst><dgm:rule type="primFontSz" val="5"/></dgm:ruleLst>`)
+	if n := nodes[0]; !n.Autofit || n.Inset != [4]bool{} {
+		t.Errorf("size %v autofit %v insets %v %v: the sizing changed a box it cannot resolve", n.FontSize, n.Autofit, n.Insets, n.Inset)
+	}
+}
