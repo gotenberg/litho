@@ -33,8 +33,13 @@ func matchPageBoxes(v compliance.Violation) bool {
 // fixPageBoxes normalises every page's /MediaBox, /CropBox, /BleedBox,
 // /TrimBox and /ArtBox so each side falls within [pdfAPageMin,
 // pdfAPageMax]. Expanding under-sized boxes is lossless, so it always
-// runs; shrinking over-sized boxes can crop visible content and only
-// runs in aggressive mode.
+// runs. Under PDF/A-2 and PDF/A-3 a page whose own boxes pass
+// [pdfAPageMax] is written in larger units, whole, in either mode
+// ([rewriteUserUnit]). Shrinking an over-sized box crops visible content
+// and only runs in aggressive mode, for the pages that rewrite refuses: a
+// PDF/A-1 target, whose PDF 1.4 has no /UserUnit; a box on a page tree
+// node; a side the unit would bring under [pdfAPageMin]. In the default
+// mode those stay unrepaired.
 //
 // A box no viewer uses (see [document.UsableBox]), because it is not four
 // numbers or encloses no area, is repaired as the absent box a viewer reads it
@@ -88,7 +93,7 @@ func matchPageBoxes(v compliance.Violation) bool {
 //   - verapdf 6-1-13-t09-fail-c through -f: walking only the leaves left them
 //     unremediable, their box sitting on the "Pages tree" node litho itself
 //     names in the violation.
-func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, _ string) ([]string, error) {
+func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
@@ -123,6 +128,13 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		return box, nil
 	}
 
+	// ISO 19005-2 and -3, 6.1.13 bound the page boundaries at 14,400
+	// units, and /UserUnit (ISO 32000-1, Table 30, PDF 1.6) sizes the
+	// unit: a page past the bound is written in larger units, whole. PDF/A-1
+	// builds on PDF 1.4, which has no /UserUnit.
+	part := compliance.PDFAPart(profile)
+	unitTarget := part == 2 || part == 3
+	var units []userUnitPage
 	count := 0
 	for _, pe := range pageEntries {
 		if ctx.Err() != nil {
@@ -131,6 +143,12 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		modified := false
 		newPage := make(ast.PdfDict, len(pe.dict))
 		maps.Copy(newPage, pe.dict)
+		if unitTarget && pe.ref.ObjectNum > 0 && oversizedBoxes(ctx, doc, newPage) {
+			if rewritten, k, ok := rewriteUserUnit(ctx, alloc, doc, pe, newPage); ok {
+				newPage, modified = rewritten, true
+				units = append(units, userUnitPage{ref: pe.ref, k: k})
+			}
+		}
 		for _, key := range []ast.PdfName{"MediaBox", "CropBox", "BleedBox", "TrimBox", "ArtBox"} {
 			arr, ok := newPage[key].(ast.PdfArray)
 			if !ok {
@@ -198,6 +216,12 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	nodes := clampPageTreeBoxes(ctx, alloc, doc, pagesObj, opts.PreserveContent, document.LetterMediaBox())
 
 	var fixes []string
+	if len(units) > 0 {
+		if _, err := scaleUserUnitRefs(ctx, alloc, doc, units, len(pageEntries) == 1); err != nil {
+			return nil, err
+		}
+		fixes = append(fixes, fmt.Sprintf("wrote %d page(s) past %v units in larger user space units", len(units), pdfAPageMax))
+	}
 	if count > 0 {
 		fixes = append(fixes, fmt.Sprintf("normalised page boundaries on %d page(s)", count))
 	}
