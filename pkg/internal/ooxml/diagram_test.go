@@ -423,3 +423,25 @@ func TestDiagramCompositeBottomEdge(t *testing.T) {
 		t.Errorf("boxes\n got %q\nwant %q", got, want)
 	}
 }
+
+// TestDiagramCompositeOwnBound lays out a composite kid whose own
+// constraint keeps its height at most 0.4 of its width (op lte, 21.4.7.10
+// ST_BoolOperator): it bounds the height the composite sets, and sets none
+// of its own.
+func TestDiagramCompositeOwnBound(t *testing.T) {
+	for _, c := range []struct {
+		fact string
+		want string
+	}{
+		{"0.2", "pict rect 0,400 1000x200"},
+		{"0.6", "pict rect 0,300 1000x400"},
+	} {
+		layout := `<dgm:alg type="composite"/><dgm:shape/><dgm:constrLst>` +
+			`<dgm:constr type="w" for="ch" forName="pict" refType="w"/><dgm:constr type="h" for="ch" forName="pict" refType="h" fact="` + c.fact + `"/></dgm:constrLst>` +
+			`<dgm:layoutNode name="pict"><dgm:shape type="rect"/><dgm:constrLst><dgm:constr type="h" refType="w" op="lte" fact="0.4"/></dgm:constrLst></dgm:layoutNode>`
+		d := ParseDiagram(mustParse(t, withPresNames(diagramData("a"), 1, "pict")), mustParse(t, diagramLayout(layout)), nil, nil)
+		if got := boxes(d.LayOut(1000, 1000, nil))[1]; got != c.want {
+			t.Errorf("height %s of the box: %q, want %q", c.fact, got, c.want)
+		}
+	}
+}

@@ -1,6 +1,7 @@
 package ooxml
 
 import (
+	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -162,6 +163,7 @@ func composite(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 	for _, c := range cons {
 		applyConstraint(c, props)
 	}
+	var bounds []DiagramConstraint
 	for _, k := range s.Kids {
 		for _, c := range cons {
 			if c.ForName == k.Name {
@@ -181,9 +183,25 @@ func composite(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 					continue
 				}
 				c.ForName, c.RefForName = n.Name, n.Name
+				if c.Op == "lte" || c.Op == "gte" {
+					bounds = append(bounds, c)
+					continue
+				}
 				applyConstraint(c, props)
 			}
 		}
+		// A kid's own lte or gte constraint bounds a length the others set
+		// (21.4.7.10 ST_BoolOperator) and sets none.
+		for _, c := range bounds {
+			b := layoutProps{c.ForName: maps.Clone(props[c.ForName])}
+			applyConstraint(c, b)
+			v, okB := b.get(c.ForName, c.Type)
+			cur, okC := props.get(c.ForName, c.Type)
+			if okB && okC && (c.Op == "lte" && cur > v || c.Op == "gte" && cur < v) {
+				props.set(c.ForName, c.Type, v)
+			}
+		}
+		bounds = bounds[:0]
 		w, h := s.W, s.H
 		var x, y int64
 		if p, ok := props[k.Name]; ok {
