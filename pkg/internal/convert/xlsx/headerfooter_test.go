@@ -31,7 +31,7 @@ type span struct {
 func TestParseHeaderFooter(t *testing.T) {
 	t.Parallel()
 	base := sheet.Font{Families: []string{"Calibri"}, Size: 11}
-	theme := &ooxml.Theme{Colors: map[string]css.Color{"accent1": rgb(0x4472C4)}, Major: ooxml.FontScheme{Latin: "Cambria"}, Minor: ooxml.FontScheme{Latin: "Corbel"}}
+	theme := &ooxml.Theme{Colors: map[string]css.Color{"accent1": rgb(0x4472C4), "folHlink": rgb(0x954F72)}, Major: ooxml.FontScheme{Latin: "Cambria"}, Minor: ooxml.FontScheme{Latin: "Corbel"}}
 	b := span{family: "Calibri", size: 11}
 	with := func(s span, f func(*span)) span { f(&s); return s }
 	for _, tc := range []struct {
@@ -93,6 +93,15 @@ func TestParseHeaderFooter(t *testing.T) {
 				with(b, func(s *span) { s.text, s.family = "C", "Arial" }),
 				with(b, func(s *span) { s.text, s.family = "D", "Arial" }),
 				with(b, func(s *span) { s.text, s.family, s.italic = "E", "Arial", true }),
+			}},
+		},
+		{
+			"theme colours past their bounds", "&K12+000a&K04+150b&K04-101c&K04-100d",
+			[3][]span{1: {
+				with(b, func(s *span) { s.text, s.color = "a", rgb(0x954F72) }),
+				with(b, func(s *span) { s.text, s.color = "b", tint(rgb(0x4472C4), 0) }),
+				with(b, func(s *span) { s.text, s.color = "c", tint(rgb(0x4472C4), 0) }),
+				with(b, func(s *span) { s.text, s.color = "d", tint(rgb(0x4472C4), -1) }),
 			}},
 		},
 		{"an unknown code drops its whole character", "&éa&€b&K€0000c", [3][]span{1: {with(b, func(s *span) { s.text = "ab€0000c" })}}},
