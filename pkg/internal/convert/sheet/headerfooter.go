@@ -48,6 +48,12 @@ func (b *builder) spanText(s Span, f hfFields) string {
 	case FieldTitle:
 		return b.doc.Meta.Title
 	case FieldDate:
+		// Desktop Excel prints the date and time a header asks for
+		// (Microsoft, "Formatting and VBA codes for headers and footers":
+		// &D prints the current date, &T the time); Office for the web
+		// prints neither (probe, xlsx: "&L&D&C&T&R&Z&F" prints nothing).
+		// The conversion has no clock: it prints the date the caller
+		// gives, and nothing without one.
 		if b.opts.PrintDate.IsZero() {
 			return ""
 		}
