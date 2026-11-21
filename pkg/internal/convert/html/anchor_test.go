@@ -478,3 +478,18 @@ func TestAnchor_VisibleThroughEscapedClip(t *testing.T) {
 		<div class="p g" id=p1></div><div class="p r" id=p2></div>`,
 		map[string]string{"1:g": "0,60+30x20", "1:r": ""})
 }
+
+// TestAnchor_DefaultAnchorInItsContainingBlock holds the default anchor's
+// box in the containing block's coordinates (CSS Anchor Positioning 1,
+// 2): the offsets of the box that generates the containing block move
+// the anchor and the positioned box alike, so they leave the anchor box
+// where it is within it.
+func TestAnchor_DefaultAnchorInItsContainingBlock(t *testing.T) {
+	t.Parallel()
+	checkAnchored(t, `
+		.rel { position: relative; top: 30px; width: 200px; height: 100px }
+		#z { anchor-name: --z; left: 50px; top: 10px }
+		#p1 { position-anchor: --z; top: anchor(bottom); left: anchor(left) }`,
+		`<div class=rel><div class=a id=z></div><div class="p g" id=p1></div></div>`,
+		map[string]string{"1:g": "50,80+30x20"})
+}

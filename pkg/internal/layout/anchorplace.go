@@ -209,7 +209,7 @@ func (e *engine) planAnchored(b *box, st *css.Style, cb absCB) *anchorPlan {
 	if cb.box != nil {
 		cbAxes = flowAxesOf(cb.box.st)
 	}
-	s := &anchorScope{e: e, b: b, cbAxes: cbAxes, self: self, page: -1, rects: map[*box]edges{}}
+	s := &anchorScope{e: e, b: b, cb: cb, cbAxes: cbAxes, self: self, page: -1, rects: map[*box]edges{}}
 	s.def = e.defaultAnchor(b, st, 0)
 	if s.def != nil {
 		cb = e.scrollableCB(cb)
