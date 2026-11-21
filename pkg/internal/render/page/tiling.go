@@ -431,10 +431,12 @@ func (r *renderer) tile(s *scope, tp *tilingPattern, resources ast.PdfDict, toTi
 // The cells run in a renderer of their own, sharing the render's budgets and
 // caches, from the initial graphics state (ISO 32000-1, 8.7.3.1: the cell is
 // painted in its own space, independent of the state where the pattern is
-// used) with the CTM of the cell's place, into dst as the group the cells'
-// transparency composites in. Each cell is its own copy: a
-// pattern used inside the cell maps into the moved cell's space. The cells
-// paint without stroke adjustment ([renderer.adjusts]).
+// used; 11.6.7: its blend mode, soft mask and alpha constant start at their
+// defaults, the fill's applying to its result) with the CTM of the cell's
+// place, into dst as the group the cells' transparency composites in. Each
+// cell is its own copy: a pattern used inside the cell maps into the moved
+// cell's space. The cells paint without stroke adjustment
+// ([renderer.adjusts]).
 func (r *renderer) drawCells(s *scope, tp *tilingPattern, resources ast.PdfDict, dst *blend.Group, toDst geom.Matrix) error {
 	inv, ok := toDst.Invert()
 	if !ok {

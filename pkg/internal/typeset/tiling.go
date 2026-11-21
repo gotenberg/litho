@@ -57,6 +57,22 @@ func (p *pageWriter) tilingFill(ctx context.Context, pa *Path, opacity float64) 
 // tilingPattern writes the pattern of t placed by the matrix m and
 // returns its reference: its cell's content is written as a stream of its
 // own with its own resources, as an artifact, its bounding box the cell.
+//
+// The cell starts from full opacity and the normal blend mode without
+// saying so: ISO 32000-1, 11.6.7 encloses the pattern definition in an
+// implicit transparency group and states that "As always for transparency
+// groups, those parameters related to transparency (blend mode, soft mask,
+// and alpha constant) shall be initialized to their standard default
+// values", whatever state the stream that paints it is in; the fill's own
+// state composites the cell's result. A reset written at the head of the
+// cell says nothing more, and a reader that runs a lone cell in the
+// painting state lets it replace the fill's blend mode.
+//
+// # Corpus evidence
+//
+//   - litho/html backgrounds-layers: poppler 26.09 and 26.11 run the one
+//     cell of a picture filled under Multiply in the current state, and a
+//     written /BM /Normal at its head drew the picture unblended.
 func (p *pageWriter) tilingPattern(ctx context.Context, t *Tiling, m Matrix) (ast.PdfIndirectRef, error) {
 	if err := p.w.mem.ChargeUnits(1, patternCost, "patterns"); err != nil {
 		return ast.PdfIndirectRef{}, fmt.Errorf("writing a pattern: %w", err)
@@ -64,11 +80,6 @@ func (p *pageWriter) tilingPattern(ctx context.Context, t *Tiling, m Matrix) (as
 	p.w.charged += patternCost
 	cw := newPageWriter(p.w, p.index, &Page{Width: t.Width, Height: t.Height})
 	cw.steps, cw.bare = p.steps, true
-	// The cell starts from full opacity and the normal blend mode, said
-	// in its stream, whatever state the stream that paints it is in: the
-	// pattern's own result takes the fill's (ISO 32000-1, 11.6.7).
-	cw.alpha[0], cw.blend = alphaState{fill: -1, stroke: -1}, BlendLuminosity+1
-	cw.setState(alphaState{fill: 1, stroke: 1}, BlendNormal)
 	if err := cw.fragments(ctx, t.Content, 1); err != nil {
 		return ast.PdfIndirectRef{}, err
 	}

@@ -125,3 +125,44 @@ func TestCountGlyphs_CountsPatternCells(t *testing.T) {
 		t.Errorf("CountGlyphs = %d, want the 2 of the cell", n)
 	}
 }
+
+// TestWriteTiling_CellSaysNoTransparencyState fills a purple square with a
+// green picture under the Multiply blend mode, one cell covering the fill.
+// ISO 32000-1, 11.6.7 starts a pattern cell's blend mode, soft mask and
+// alpha constant at their defaults, so the cell's stream sets none of them:
+// a reader that runs a lone cell in the painting state then keeps the
+// fill's blend mode, and the picture multiplies over the purple.
+func TestWriteTiling_CellSaysNoTransparencyState(t *testing.T) {
+	t.Parallel()
+	green := typeset.Color{G: 1, A: 1}
+	cell := &typeset.Tiling{
+		Content: []typeset.Fragment{&typeset.Path{Ops: rect(0, 0, 100, 100), Fill: &typeset.Fill{Color: green}}},
+		Width:   100, Height: 100, XStep: 100, YStep: 100,
+		Transform: typeset.Matrix{A: 1, D: 1},
+	}
+	page := &typeset.Page{Width: 100, Height: 100, Content: []typeset.Fragment{
+		&typeset.Path{Ops: rect(0, 0, 100, 100), Fill: &typeset.Fill{Color: typeset.Color{R: 0.5, G: 0.2, B: 0.9, A: 1}}},
+		&typeset.Group{Transform: typeset.Matrix{A: 1, D: 1}, Blend: typeset.BlendMultiply, Content: []typeset.Fragment{
+			&typeset.Path{Ops: rect(0, 0, 100, 100), Fill: &typeset.Fill{Tiling: cell}},
+		}},
+	}}
+	doc := &typeset.Document{Pages: []*typeset.Page{page}}
+	if err := doc.Validate(t.Context()); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	out := write(t, doc)
+	streams := inflated(t, out)
+	if !bytes.Contains(streams, []byte("/Pattern cs")) {
+		t.Fatal("no pattern fill written")
+	}
+	if !bytes.Contains(streams, []byte("0 1 0 rg")) {
+		t.Fatal("no cell content written")
+	}
+	if bytes.Contains(streams, []byte(" gs\n0 1 0 rg")) {
+		t.Error("the cell's stream sets a graphics state before its content")
+	}
+	img := render(t, open(t, out), 1)
+	if want := (color.NRGBA{R: 0, G: 51, B: 0}); !near(img, 50, 50, want, 3) {
+		t.Errorf("pixel (50, 50) = %v, want the green multiplied over the purple, %v", img.At(50, 50), want)
+	}
+}

@@ -1,7 +1,9 @@
 package page
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"maps"
 	"math"
 	"testing"
@@ -299,4 +301,40 @@ func TestTilingFractionalOriginHasNoSeams(t *testing.T) {
 		want[[2]int{10*i + 1, 10*i - 1}] = blue
 	}
 	expect(t, img, 8, want)
+}
+
+// TestTilingCellStartsAtDefaultTransparency fills a purple square with a
+// green pattern under /BM /Multiply and /ca 0.5. ISO 32000-1, 11.6.7
+// encloses the pattern definition in an implicit transparency group whose
+// "parameters related to transparency (blend mode, soft mask, and alpha
+// constant) shall be initialized to their standard default values", and
+// the state in force at the fill composites the cell's result. A cell that
+// sets /BM /Normal and full alpha at its head therefore draws what one
+// that sets nothing draws, with one cell over the fill and with many: the
+// green multiplied over the purple, at half opacity.
+func TestTilingCellStartsAtDefaultTransparency(t *testing.T) {
+	t.Parallel()
+	fill := func(cell float64, reset bool) fixture {
+		data := fmt.Sprintf("0 1 0 rg 0 0 %g %g re f", cell, cell)
+		res := "<< >>"
+		if reset {
+			data = "/GN gs " + data
+			res = "<< /ExtGState << /GN << /Type /ExtGState /BM /Normal /ca 1 /CA 1 >> >> >>"
+		}
+		return fixture{
+			page:    "/Resources << /Pattern << /P 5 0 R >> /ExtGState << /GM << /Type /ExtGState /BM /Multiply /ca 0.5 >> >> >>",
+			content: "0.5 0.2 0.9 rg 0 0 100 100 re f /GM gs /Pattern cs /P scn 0 0 100 100 re f",
+			objs:    []string{tilePattern(fmt.Sprintf("/PaintType 1 /BBox [0 0 %g %g] /XStep %g /YStep %g /Resources %s", cell, cell, cell, cell, res), data)},
+		}
+	}
+	// Purple (128, 51, 230) times green, half over purple: (64, 51, 115).
+	want := rgb{64, 51, 115}
+	for _, cell := range []float64{200, 10} {
+		plain, _ := draw(t, fill(cell, false))
+		reset, _ := draw(t, fill(cell, true))
+		expect(t, plain, 2, map[[2]int]rgb{{50, 50}: want})
+		if !bytes.Equal(plain.Pix, reset.Pix) {
+			t.Errorf("cell of %g: the written reset changes the drawing", cell)
+		}
+	}
 }
