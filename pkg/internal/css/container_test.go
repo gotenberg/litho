@@ -41,6 +41,9 @@ func TestContainerProperties_ParseAndCompute(t *testing.T) {
 		{"container-type: size scroll-state", ContainerSize | ContainerScrollState, nil},
 		{"container-type: scroll-state inline-size", ContainerInlineSize | ContainerScrollState, nil},
 		{"container-type: size inline-size", 0, nil},
+		{"container-type: anchored", ContainerAnchored, nil},
+		{"container-type: anchored inline-size scroll-state", ContainerAnchored | ContainerInlineSize | ContainerScrollState, nil},
+		{"container-type: anchored anchored", 0, nil},
 		{"container-type: normal", 0, nil},
 		{"container-name: card Main", 0, []string{"card", "Main"}},
 		{"container-name: none", 0, nil},
@@ -63,7 +66,8 @@ func TestContainerType_AppliesContainment(t *testing.T) {
 	t.Parallel()
 	// CSS Conditional 5, 5.1: size applies size and style containment,
 	// inline-size inline-size and style containment; neither applies
-	// layout containment.
+	// layout containment. CSS Anchor Positioning 2, 2.1: anchored applies
+	// style containment.
 	tests := []struct {
 		decl string
 		want Containment
@@ -72,6 +76,7 @@ func TestContainerType_AppliesContainment(t *testing.T) {
 		{"container-type: inline-size", ContainInlineSize | ContainStyle},
 		{"container-type: inline-size; contain: size", ContainSize | ContainStyle},
 		{"container-type: scroll-state", 0},
+		{"container-type: anchored", ContainStyle},
 		{"contain: paint", ContainPaint},
 	}
 	for _, tt := range tests {

@@ -23,6 +23,11 @@ const (
 	ContainerInlineSize
 	// ContainerScrollState answers scroll-state queries.
 	ContainerScrollState
+	// ContainerAnchored answers anchored queries, on the position option
+	// an anchored box took, which litho evaluates to unknown. It applies
+	// style containment (CSS Anchor Positioning 2, 2.1, an editor's draft
+	// Chromium parses).
+	ContainerAnchored
 )
 
 // SizeContainer reports a container for size queries: container-type
@@ -48,6 +53,9 @@ func (s *Style) SizeContainer() bool {
 //     keeps a float inside such a container.
 func (s *Style) Containment() Containment {
 	c := s.Contain
+	if s.ContainerType&ContainerAnchored != 0 {
+		c |= ContainStyle
+	}
 	switch {
 	case s.ContainerType&ContainerSize != 0:
 		c |= ContainSize | ContainStyle
@@ -77,12 +85,13 @@ func containerProps() map[propID]propDef {
 }
 
 // parseContainerType parses normal | [ [ size | inline-size ] ||
-// scroll-state ] (CSS Conditional 5, 5.1).
+// scroll-state || anchored ] (CSS Conditional 5, 5.1, extended by CSS
+// Anchor Positioning 2, 2.1).
 func parseContainerType(v []token, _ *declCtx) (any, bool) {
 	if k, ok := keyword(v); ok && k == "normal" {
 		return ContainerType(0), true
 	}
-	if len(v) == 0 || len(v) > 2 {
+	if len(v) == 0 || len(v) > 3 {
 		return nil, false
 	}
 	var t ContainerType
@@ -98,10 +107,13 @@ func parseContainerType(v []token, _ *declCtx) (any, bool) {
 			bit = ContainerInlineSize
 		case "scroll-state":
 			bit = ContainerScrollState
+		case "anchored":
+			bit = ContainerAnchored
 		default:
 			return nil, false
 		}
-		if t&bit != 0 || bit != ContainerScrollState && t&(ContainerSize|ContainerInlineSize) != 0 {
+		size := bit == ContainerSize || bit == ContainerInlineSize
+		if t&bit != 0 || size && t&(ContainerSize|ContainerInlineSize) != 0 {
 			return nil, false
 		}
 		t |= bit
