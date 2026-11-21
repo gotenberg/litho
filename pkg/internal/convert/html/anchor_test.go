@@ -367,3 +367,30 @@ func TestAnchor_FallbackStylesInherit(t *testing.T) {
 		<div class=p id=p2><div class=m></div></div></div>`,
 		map[string]string{"1:g": "620,290+30x40", "1:m": "655,330+30x10"})
 }
+
+// TestAnchor_GridAreaShiftsInPaddingBox holds the original containing
+// block of a box a grid container holds: the grid area its placement
+// names is an adjustment of the containing block (CSS Position 3, 2.1.1),
+// so a box that overflows its position-area shifts to stay inside the
+// container's padding box, not the grid area (CSS Box Alignment 3,
+// 4.4.1.2).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 shows a box in a
+//     zero-width track left of the grid shifted to the padding box's
+//     left edge, and a box right of the anchor, outside its grid area but
+//     inside the padding box, where the area puts it.
+func TestAnchor_GridAreaShiftsInPaddingBox(t *testing.T) {
+	t.Parallel()
+	checkAnchored(t, `
+		.gd { display: grid; grid: 60px 60px / 100px 100px; padding: 20px; position: relative; margin: 0 0 10px 100px; width: 200px }
+		.gd > .a { position: static; width: auto; height: auto }
+		#a1 { grid-area: 1/1/2/2; anchor-name: --a1 }
+		#p1 { grid-area: 2/2/3/3; position-anchor: --a1; position-area: bottom left }
+		#a2 { grid-area: 2/2/3/3; anchor-name: --a2 }
+		#p2 { grid-area: 1/1/2/2; position-anchor: --a2; position-area: top right }`,
+		`<div class=gd style="width: 200px"><div class=a id=a1></div><div class="p r" id=p1></div></div>
+		<div class=gd style="width: 300px"><div class=a id=a2></div><div class="p g" id=p2></div></div>`,
+		map[string]string{"1:r": "100,80+30x20", "1:g": "320,230+30x20"})
+}

@@ -212,6 +212,12 @@ func (e *engine) planAnchored(b *box, st *css.Style, cb absCB) *anchorPlan {
 		s.defR = s.rectOf(s.def)
 	}
 	plan := &anchorPlan{def: s.def, defR: s.defR, orig: edges{cb.x, cb.y, cb.x + cb.w, cb.y + cb.h}}
+	if g := cb.box; g != nil && g.grid != nil {
+		// The grid area a grid container's placement names is already an
+		// adjustment of the containing block: the original one is the
+		// container's padding box (CSS Position 3, 2.1.1).
+		plan.orig = edges{g.x + g.bd[css.Left], g.y + g.bd[css.Top], g.x + g.bd[css.Left] + g.w + g.pd[css.Left] + g.pd[css.Right], g.y + g.bd[css.Top] + g.h + g.pd[css.Top] + g.pd[css.Bottom]}
+	}
 	var zero [2]bool
 	var area physArea
 	if !a.Area.None() {
