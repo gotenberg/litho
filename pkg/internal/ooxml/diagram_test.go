@@ -503,3 +503,18 @@ func TestDiagramCompositeInferredEdges(t *testing.T) {
 		t.Errorf("boxes\n got %q\nwant %q", got, want)
 	}
 }
+
+// TestDiagramCompositeOffsets moves a composite kid's edges by the offsets
+// its constraints set (21.4.7.21 ST_ConstraintType lOff, rOff), as
+// vProcess5 keeps a node's text clear of the arrow beside it.
+func TestDiagramCompositeOffsets(t *testing.T) {
+	layout := `<dgm:alg type="composite"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="w" for="ch" forName="pict" refType="w" fact="0.5"/><dgm:constr type="h" for="ch" forName="pict" refType="h"/>` +
+		`<dgm:constr type="l" for="ch" forName="pict"/><dgm:constr type="t" for="ch" forName="pict"/>` +
+		`<dgm:constr type="rOff" for="ch" forName="pict" refType="w" fact="-0.1"/><dgm:constr type="lOff" for="ch" forName="pict" refType="w" fact="0.05"/></dgm:constrLst>` +
+		`<dgm:layoutNode name="pict"><dgm:shape type="rect"/></dgm:layoutNode>`
+	d := ParseDiagram(mustParse(t, withPresNames(diagramData("a"), 1, "pict")), mustParse(t, diagramLayout(layout)), nil, nil)
+	if got, want := boxes(d.LayOut(1000, 1000, nil))[1], "pict rect 50,0 350x1000"; got != want {
+		t.Errorf("box %q, want %q", got, want)
+	}
+}

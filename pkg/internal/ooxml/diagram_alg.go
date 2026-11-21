@@ -307,6 +307,26 @@ func (r *compositeRun) lay(place bool) {
 					h = b - t
 				}
 			}
+			// The offsets move an edge, a centre or a length the others set
+			// (21.4.7.21 ST_ConstraintType lOff, rOff, tOff, bOff, ctrXOff,
+			// ctrYOff, wOff, hOff).
+			for _, o := range sortedKeys(p) {
+				v := p[o]
+				switch o {
+				case "lOff":
+					x, w = x+v, w-v
+				case "rOff", "wOff":
+					w += v
+				case "tOff":
+					y, h = y+v, h-v
+				case "bOff", "hOff":
+					h += v
+				case "ctrXOff":
+					x += v
+				case "ctrYOff":
+					y += v
+				}
+			}
 			r.right = max(r.right, float64(x+w))
 			r.bottom = max(r.bottom, float64(y+h))
 			w, h = min(w, s.W), min(h, s.H)
