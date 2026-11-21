@@ -1,6 +1,7 @@
 package sheet
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/numeric"
@@ -60,6 +61,11 @@ func colSum(prefix *[]float64, width func(int) float64, c int) float64 {
 func rowSum(prefix *[]float64, height func(int) float64, r int) float64 {
 	r = min(max(r, 0), maxRows)
 	p := *prefix
+	if len(p) <= r {
+		// One allocation reaches a far row: append's growth would copy the
+		// sums once per doubling on the way.
+		p = slices.Grow(p, r+1-len(p))
+	}
 	for len(p) <= r {
 		n := len(p)
 		if n == 0 {
