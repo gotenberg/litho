@@ -72,7 +72,15 @@ type sheetPlan struct {
 	// width and height are the paper, margin its margins.
 	width, height float64
 	margin        [4]float64
-	pages         []*pagePlan
+	// cuts are the print ranges cut into pages, full the pages of cells
+	// they print by the sheet's program's rule; pages are the pages
+	// [sheetPlan.emit] makes, notes the sheet's pages of notes, which
+	// follow them, and capped reports cells past [maxSheetPages] left out.
+	cuts   []cut
+	full   int64
+	pages  []*pagePlan
+	notes  []*pagePlan
+	capped bool
 	// single reports a page sized to the sheet's content.
 	single bool
 	// first is the first page of the first print range, printed or not:
@@ -313,7 +321,6 @@ const epsilon = 1e-6
 //     on A4 at seven columns a page, prints the bordered cells on a second
 //     page; with a fill in J1 and J2 in place of the borders, one page.
 func (g *grid) empty(a Range) bool {
-	excel := g.doc.ExcelRules
 	i := sort.SearchInts(g.rowOrder, a.FirstRow)
 	for ; i < len(g.rowOrder) && g.rowOrder[i] <= a.LastRow; i++ {
 		row := g.rows[g.rowOrder[i]]
@@ -323,9 +330,7 @@ func (g *grid) empty(a Range) bool {
 		cells := row.Cells
 		j := sort.Search(len(cells), func(j int) bool { return cells[j].Column >= a.FirstColumn })
 		for ; j < len(cells) && cells[j].Column <= a.LastColumn; j++ {
-			c := &cells[j]
-			shows := hasContent(c) || lined(c.Style) || (excel && (c.EmptyText || visible(c.Style)))
-			if shows && !g.colHidden(c.Column) {
+			if c := &cells[j]; g.shows(c) && !g.colHidden(c.Column) {
 				return false
 			}
 		}
@@ -337,6 +342,13 @@ func (g *grid) empty(a Range) bool {
 		}
 	}
 	return true
+}
+
+// shows reports a cell that makes its page print ([grid.empty]): one with
+// a value or a border, and under Excel's rules one whose style paints or
+// whose file stores an empty string.
+func (g *grid) shows(c *Cell) bool {
+	return hasContent(c) || lined(c.Style) || (g.doc.ExcelRules && (c.EmptyText || visible(c.Style)))
 }
 
 // lastPrinted returns the row and column bands of the last page Excel
@@ -496,8 +508,10 @@ func (sp *sheetPlan) zoomFor(ctx context.Context, a Range) (int, error) {
 	return zoom, err
 }
 
-// plan fills the pages of the sheet: per print range, its zoom, then its
-// pages in the sheet's page order. ctx's error stops it.
+// plan cuts the sheet into pages: per print range, its zoom, then its
+// row and column bands and which of their pages the sheet's program
+// prints, counted in full. [sheetPlan.emit] makes the pages. ctx's error
+// stops it.
 func (sp *sheetPlan) plan(ctx context.Context) error {
 	g := sp.g
 	ps := &g.sh.Page
@@ -523,71 +537,218 @@ func (sp *sheetPlan) plan(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		lastR, lastC := len(rows), len(cols)
+		c := cut{a: a, rows: rows, cols: cols, hidden: hidden}
 		if g.doc.ExcelRules {
-			if lastR, lastC, err = sp.lastPrinted(ctx, a, rows, cols); err != nil {
+			if c.lastR, c.lastC, err = sp.lastPrinted(ctx, a, rows, cols); err != nil {
 				return err
 			}
 		}
 		if sp.first == nil && sp.firstRows != nil && len(cols) > 0 {
 			sp.first = &pagePlan{sp: sp, area: a, rows: *sp.firstRows, cols: cols[0]}
 		}
-		// shown reports whether the page of row band ri and column band
-		// ci prints: under Excel's rules every page up to the last that
-		// holds something, in the page order; under Calc's those that
-		// hold something.
-		shown := func(ri, ci int) bool {
-			if !g.doc.ExcelRules {
-				return !hidden[ri][ci]
-			}
-			if ps.Order == OverThenDown {
-				return ri < lastR || (ri == lastR && ci <= lastC)
-			}
-			return ci < lastC || (ci == lastC && ri <= lastR)
+		sp.cuts = append(sp.cuts, c)
+		sp.full += sp.count(&c)
+	}
+	return nil
+}
+
+// cut is a print range cut into pages: its row and column bands, and
+// which of their pages the sheet's program prints.
+type cut struct {
+	a          Range
+	rows, cols []band
+	// hidden flags, under Calc's rules, the pages of each row band that
+	// hold nothing, which Calc leaves out.
+	hidden [][]bool
+	// lastR and lastC are, under Excel's rules, the bands of the last page
+	// Excel prints ([sheetPlan.lastPrinted]), -1 for none.
+	lastR, lastC int
+}
+
+// pageKey names the page of row band ri and column band ci of a cut.
+type pageKey struct{ ri, ci int }
+
+// shown reports whether the sheet's program prints the page of row band
+// ri and column band ci of c: under Excel's rules every page up to the
+// last that holds something, in the page order; under Calc's those that
+// hold something.
+func (sp *sheetPlan) shown(c *cut, ri, ci int) bool {
+	if !sp.g.doc.ExcelRules {
+		return !c.hidden[ri][ci]
+	}
+	if sp.g.sh.Page.Order == OverThenDown {
+		return ri < c.lastR || (ri == c.lastR && ci <= c.lastC)
+	}
+	return ci < c.lastC || (ci == c.lastC && ri <= c.lastR)
+}
+
+// page returns the page of row band ri and column band ci of c, its bands
+// less the repeated rows and columns it starts among, nil when nothing of
+// them is left.
+func (sp *sheetPlan) page(c *cut, ri, ci int) *pagePlan {
+	ps := &sp.g.sh.Page
+	p := &pagePlan{sp: sp, area: c.a, rows: c.rows[ri], cols: c.cols[ci]}
+	if rc := ps.RepeatColumns; rc != nil {
+		p.cols, p.repCols = repeated(p.cols, max(rc.FirstColumn, 0), min(rc.LastColumn, maxColumns-1))
+	}
+	if rr := ps.RepeatRows; rr != nil {
+		p.rows, p.repRows = repeated(p.rows, max(rr.FirstRow, 0), min(rr.LastRow, maxRows-1))
+	}
+	if p.cols.first > p.cols.last || p.rows.first > p.rows.last {
+		return nil
+	}
+	return p
+}
+
+// repeated returns the band b a page shows once the repeated lines first
+// to last take the place of those of b it starts among, and the repeated
+// band the page shows before it, nil for none.
+func repeated(b band, first, last int) (band, *band) {
+	b = trimRepeated(b, first, last)
+	if b.first > last && first <= last {
+		return b, &band{first, last}
+	}
+	return b, nil
+}
+
+// trimRepeated returns the band b less the repeated lines first to last
+// it starts among.
+func trimRepeated(b band, first, last int) band {
+	if b.first > first && b.first <= last {
+		b.first = last + 1
+	}
+	return b
+}
+
+// count returns how many pages of c the sheet's program prints
+// ([sheetPlan.shown]) that [sheetPlan.page] keeps. Under Excel's rules it
+// counts by arithmetic, never page by page, so a range of millions of
+// blank pages costs its bands alone; the count of the format's largest
+// grid, 2^20 rows by 2^14 columns, fits an int64.
+func (sp *sheetPlan) count(c *cut) int64 {
+	ps := &sp.g.sh.Page
+	keptR := func(ri int) bool {
+		if rr := ps.RepeatRows; rr != nil {
+			b := trimRepeated(c.rows[ri], max(rr.FirstRow, 0), min(rr.LastRow, maxRows-1))
+			return b.first <= b.last
 		}
-		add := func(ri, ci int) {
-			if !shown(ri, ci) {
-				return
-			}
-			p := &pagePlan{sp: sp, area: a, rows: rows[ri], cols: cols[ci]}
-			if rc := ps.RepeatColumns; rc != nil {
-				first, last := max(rc.FirstColumn, 0), min(rc.LastColumn, maxColumns-1)
-				if p.cols.first > first && p.cols.first <= last {
-					p.cols.first = last + 1
-				}
-				if p.cols.first > last && first <= last {
-					p.repCols = &band{first, last}
-				}
-			}
-			if rr := ps.RepeatRows; rr != nil {
-				first, last := max(rr.FirstRow, 0), min(rr.LastRow, maxRows-1)
-				if p.rows.first > first && p.rows.first <= last {
-					p.rows.first = last + 1
-				}
-				if p.rows.first > last && first <= last {
-					p.repRows = &band{first, last}
-				}
-			}
-			if p.cols.first > p.cols.last || p.rows.first > p.rows.last {
-				return
-			}
-			sp.pages = append(sp.pages, p)
+		return true
+	}
+	keptC := func(ci int) bool {
+		if rc := ps.RepeatColumns; rc != nil {
+			b := trimRepeated(c.cols[ci], max(rc.FirstColumn, 0), min(rc.LastColumn, maxColumns-1))
+			return b.first <= b.last
 		}
-		if ps.Order == OverThenDown {
-			for ri := 0; ri < len(rows) && len(sp.pages) < maxSheetPages; ri++ {
-				for ci := 0; ci < len(cols) && len(sp.pages) < maxSheetPages; ci++ {
-					add(ri, ci)
+		return true
+	}
+	// sum counts the kept bands among the first n.
+	sum := func(n int, kept func(int) bool) int64 {
+		var k int64
+		for i := range n {
+			if kept(i) {
+				k++
+			}
+		}
+		return k
+	}
+	if !sp.g.doc.ExcelRules {
+		cols := make([]bool, len(c.cols))
+		for ci := range cols {
+			cols[ci] = keptC(ci)
+		}
+		var n int64
+		for ri := range c.rows {
+			if !keptR(ri) {
+				continue
+			}
+			for ci, ok := range cols {
+				if ok && !c.hidden[ri][ci] {
+					n++
 				}
 			}
-		} else {
-			for ci := 0; ci < len(cols) && len(sp.pages) < maxSheetPages; ci++ {
-				for ri := 0; ri < len(rows) && len(sp.pages) < maxSheetPages; ri++ {
-					add(ri, ci)
+		}
+		return n
+	}
+	if c.lastR < 0 || c.lastC < 0 {
+		return 0
+	}
+	one := func(ok bool) int64 {
+		if ok {
+			return 1
+		}
+		return 0
+	}
+	if ps.Order == OverThenDown {
+		return sum(c.lastR, keptR)*sum(len(c.cols), keptC) + one(keptR(c.lastR))*sum(c.lastC+1, keptC)
+	}
+	return sum(c.lastC, keptC)*sum(len(c.rows), keptR) + one(keptC(c.lastC))*sum(c.lastR+1, keptR)
+}
+
+// emit makes the sheet's pages, in its page order, its pages of notes
+// after them: every page its program prints, or, when sparse, those that
+// hold something ([sheetPlan.contentPages]). It returns how many of the
+// pages its program prints hold something, every page when not sparse.
+// A sheet makes at most [maxSheetPages] pages of cells, capped reporting
+// the rest left out. ctx's error stops it.
+func (sp *sheetPlan) emit(ctx context.Context, sparse bool) (int64, error) {
+	sp.pages, sp.capped = nil, false
+	var held int64
+	add := func(c *cut, ri, ci int) {
+		if !sp.shown(c, ri, ci) {
+			return
+		}
+		p := sp.page(c, ri, ci)
+		if p == nil {
+			return
+		}
+		held++
+		if len(sp.pages) >= maxSheetPages {
+			sp.capped = true
+			return
+		}
+		sp.pages = append(sp.pages, p)
+	}
+	overThenDown := sp.g.sh.Page.Order == OverThenDown
+	for i := range sp.cuts {
+		c := &sp.cuts[i]
+		if sparse {
+			keys, err := sp.contentPages(ctx, c)
+			if err != nil {
+				return 0, err
+			}
+			for _, k := range keys {
+				add(c, k.ri, k.ci)
+			}
+			continue
+		}
+		// outer and inner are the bands of the page order: columns then
+		// rows down then over, rows then columns over then down. Under
+		// Excel's rules no page past the last it prints is visited.
+		outer, inner := len(c.cols), len(c.rows)
+		lastO, lastI := c.lastC, c.lastR
+		if overThenDown {
+			outer, inner = inner, outer
+			lastO, lastI = lastI, lastO
+		}
+		excel := sp.g.doc.ExcelRules
+		if excel {
+			outer = min(outer, lastO+1)
+		}
+		for o := 0; o < outer && !sp.capped; o++ {
+			for in := 0; in < inner && !sp.capped && (!excel || o < lastO || in <= lastI); in++ {
+				if overThenDown {
+					add(c, o, in)
+				} else {
+					add(c, in, o)
 				}
 			}
 		}
 	}
-	return nil
+	if !sparse {
+		held = sp.full
+	}
+	sp.pages = append(sp.pages, sp.notes...)
+	return held, nil
 }
 
 // maxSheetPages caps the pages of one sheet. Anti-DoS guard, not

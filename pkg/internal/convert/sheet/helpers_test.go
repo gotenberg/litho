@@ -189,10 +189,14 @@ func (b *builder) pivotsOf(t testing.TB, doc *Document) *Document {
 	return out
 }
 
-// planOf is [builder.planSheet] that fails t on an error.
+// planOf is [builder.planSheet] then [builder.emitSheet], every page the
+// sheet's program prints, that fails t on an error.
 func (b *builder) planOf(t testing.TB, i int, sh *Sheet) *sheetPlan {
 	t.Helper()
 	sp, err := b.planSheet(i, sh)
+	if err == nil {
+		_, err = b.emitSheet(sp, false)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

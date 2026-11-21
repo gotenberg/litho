@@ -304,6 +304,20 @@ func wordProcessingConfig(opts []WordProcessingOption) convertConfig {
 // [WithFormulaRecalculation] computes it again. Macros never run. A
 // construct that is not drawn is reported in [models.ConvertReport.Warnings].
 //
+// A sheet prints, as Excel prints it, every page of its used range or
+// print range in its page order up to the last that holds something, the
+// blank pages between included. When those pages of the workbook pass
+// [models.Limits.MaxConvertPages], the pages that hold nothing are left
+// out (a page holds something when one of its own cells holds a value, a
+// border, a fill or an empty string, a drawing overlaps it, or a text
+// runs into it from the left; the repeated rows and columns it shows do
+// not count), the pages kept number and count among themselves, and the
+// report holds one [models.WarningLimitReached] saying how many were left
+// out. A workbook whose pages that hold something pass the limit by
+// themselves fails with [ErrConvertTooManyPages]. An OpenDocument
+// spreadsheet prints the pages that hold something alone, as LibreOffice
+// Calc does, and fails past the limit.
+//
 // The notes of a sheet's cells print where its page setup asks, as its
 // application prints them, and nowhere when it asks for none, the
 // default. A workbook's sheet that prints them at the end (cellComments

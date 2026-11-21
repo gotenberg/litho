@@ -75,7 +75,7 @@ const (
 )
 
 // notePages lays out the notes of the sheet of sp on pages of the sheet's
-// paper and margins, appended to its pages, when its page setup prints
+// paper and margins, which follow its pages of cells, when its page setup prints
 // them at the end: as Excel prints a workbook's under its rules
 // ([builder.excelNotes]), else as Calc prints them.
 func (b *builder) notePages(sp *sheetPlan) error {
@@ -111,7 +111,7 @@ func (b *builder) notePages(sp *sheetPlan) error {
 		if i == 0 {
 			p.noteTags = &typeset.StructElem{Role: "Div", Kids: res.Structure.Kids}
 		}
-		sp.pages = append(sp.pages, p)
+		sp.notes = append(sp.notes, p)
 	}
 	return nil
 }

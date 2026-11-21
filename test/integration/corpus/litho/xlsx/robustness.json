@@ -84,8 +84,8 @@
     "why": "One run of 50 MiB of letters with no break opportunity: its part inflates past 600 times its compressed size, a deflate bomb's ratio, and is refused before it is inflated."
   },
   "hostile-max-dimensions": {
-    "result": "ErrConvertTooManyPages",
-    "why": "Cells at A1 and XFD1048576 and a dimension spanning the whole grid: Excel prints every page of the used range up to the last that holds a cell, the blank pages between included, far more than the conversion's page cap."
+    "result": "pdf",
+    "why": "Cells at A1 and XFD1048576 and a dimension spanning the whole grid: Excel prints every page of the used range up to the last that holds a cell, the blank pages between included, far more than the conversion's page cap; the blank pages are left out with a warning and the two that hold a cell print."
   },
   "hostile-merge-flood": {
     "result": "pdf",

@@ -138,7 +138,9 @@ type Limits struct {
 	// [github.com/gotenberg/litho/pkg/pdf.Conversion] lays out. A source that
 	// needs more fails with
 	// [github.com/gotenberg/litho/pkg/pdf.ErrConvertTooManyPages]; no page is
-	// dropped. Default 10,000, at most 100,000.
+	// dropped but the blank pages of a workbook, which
+	// [github.com/gotenberg/litho/pkg/pdf.FromXLSX] leaves out when they
+	// alone carry it past the limit. Default 10,000, at most 100,000.
 	MaxConvertPages int `json:"maxConvertPages"`
 
 	// MaxConvertMemoryBytes bounds the memory one

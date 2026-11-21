@@ -187,8 +187,9 @@ const (
 	// WarningLimitReached is content past one of the caps litho sets to
 	// bound the time and memory of a conversion: elements nested too deep,
 	// too many lines, glyphs, shapes, cells, pictures or layout passes, a
-	// picture of too many pixels, a source line too long. What lies past
-	// the cap is left out, cut short or drawn simpler, as the message says.
+	// picture of too many pixels, a source line too long, a workbook whose
+	// blank pages carry it past the page limit. What lies past the cap is
+	// left out, cut short or drawn simpler, as the message says.
 	// Every format reports it.
 	//
 	// Its effect is [EffectOmitted] for what is left out or cut short, and

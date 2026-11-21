@@ -99,8 +99,8 @@ func (b *builder) warn(code warn.Code, effect warn.Effect, msg string) {
 // headers and footers, MaxPages caps the pages. It returns ctx's error
 // when ctx ends first, typeset.ErrInvalidOptions for options out of range
 // or a nil fonts or doc, text.ErrNoFonts for an index without faces, and
-// limits.ErrTooManyPages past the page cap. The output depends on doc,
-// fonts' index and opts alone.
+// limits.ErrTooManyPages past the page cap, blank pages aside under
+// Excel's rules. The output depends on doc, fonts' index and opts alone.
 //
 // # Pages
 //
@@ -116,9 +116,16 @@ func (b *builder) warn(code warn.Code, effect warn.Effect, msg string) {
 // their room from every page after the first; manual breaks start a page
 // unless the sheet fits that direction to pages. A fit to pages finds the
 // largest whole percent up to 100 at which the sheet fits, by Calc's
-// bisection. A page of rows and columns that hold no value and no drawing
-// is not printed. Pages number down then over, or over then down, from
-// the sheet's first page number or on from the previous sheet.
+// bisection. Under Calc's rules a page of rows and columns that hold no
+// value and no drawing is not printed; under Excel's every page up to the
+// last that holds something prints, the blank ones too
+// ([sheetPlan.lastPrinted]). When those pages of the book pass MaxPages,
+// the pages that hold nothing are left out ([sheetPlan.contentPages]),
+// with one warning saying how many: the page limit refuses a book for the
+// pages that hold something alone. Pages number down then over, or over
+// then down, from the sheet's first page number or on from the previous
+// sheet, and the page count fields count the pages printed, as Calc
+// numbers the pages it prints when it leaves empty ones out.
 //
 // # Cells
 //
@@ -184,6 +191,8 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 	if err != nil {
 		return nil, err
 	}
+	// full counts the pages the book prints by its program's rule.
+	var full int64
 	for i, sh := range doc.Sheets {
 		if !printed[i] {
 			continue
@@ -196,11 +205,27 @@ func Convert(ctx context.Context, doc *Document, fonts *text.Fonts, opts office.
 			return nil, err
 		}
 		plans = append(plans, sp)
+		full += sp.full + int64(len(sp.notes))
+		if full > int64(limit) && !doc.ExcelRules {
+			return nil, fmt.Errorf("%w: more than %d", limits.ErrTooManyPages, limit)
+		}
+	}
+	sparse := full > int64(limit)
+	var held int64
+	for _, sp := range plans {
+		n, err := b.emitSheet(sp, sparse)
+		if err != nil {
+			return nil, err
+		}
+		held += n + int64(len(sp.notes))
 		starts = append(starts, len(pages))
 		pages = append(pages, sp.pages...)
 		if len(pages) > limit {
 			return nil, fmt.Errorf("%w: more than %d", limits.ErrTooManyPages, limit)
 		}
+	}
+	if sparse {
+		b.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("the book prints %d pages by Excel's rule, more than %d; the %d that hold nothing are left out", full, limit, full-held))
 	}
 	// Page numbers: each sheet from its first page number, else on from
 	// the previous sheet's last.
@@ -408,22 +433,43 @@ func (b *builder) planSheet(i int, sh *Sheet) (*sheetPlan, error) {
 	if err := sp.plan(b.ctx); err != nil {
 		return nil, err
 	}
-	if len(sp.pages) >= maxSheetPages {
-		b.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("sheet %s has more than %d pages; the rest are left out", quote(sh.Name), maxSheetPages))
-	}
-	if sp.single && len(sp.pages) > 0 {
-		// LibreOffice's SinglePageSheets export sizes the page to the
-		// printed cells alone: no margins, no header or footer.
-		w, h := sp.singleSize()
-		sp.margin = [4]float64{}
-		sp.width = math.Min(w, office.MaxPageSide)
-		sp.height = math.Min(h, office.MaxPageSide)
-		sp.pages = sp.pages[:1]
+	if sp.single {
+		if _, err := sp.emit(b.ctx, false); err != nil {
+			return nil, err
+		}
+		if len(sp.pages) > 0 {
+			// LibreOffice's SinglePageSheets export sizes the page to the
+			// printed cells alone: no margins, no header or footer.
+			w, h := sp.singleSize()
+			sp.margin = [4]float64{}
+			sp.width = math.Min(w, office.MaxPageSide)
+			sp.height = math.Min(h, office.MaxPageSide)
+			sp.pages = sp.pages[:1]
+		}
+		sp.full = int64(len(sp.pages))
 	}
 	if err := b.notePages(sp); err != nil {
 		return nil, err
 	}
 	return sp, nil
+}
+
+// emitSheet makes the pages of the sheet of sp ([sheetPlan.emit]),
+// reporting cells past [maxSheetPages] left out, and returns how many of
+// the pages its program prints hold something. A sheet on one page keeps
+// the page [builder.planSheet] made.
+func (b *builder) emitSheet(sp *sheetPlan, sparse bool) (int64, error) {
+	if sp.single {
+		return sp.full, nil
+	}
+	held, err := sp.emit(b.ctx, sparse)
+	if err != nil {
+		return 0, err
+	}
+	if sp.capped {
+		b.warn(warn.LimitReached, warn.Omitted, fmt.Sprintf("sheet %s has more than %d pages; the rest are left out", quote(sp.g.sh.Name), maxSheetPages))
+	}
+	return held, nil
 }
 
 // renderPage draws the page p, first reporting the first page of its

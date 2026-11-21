@@ -152,7 +152,9 @@ const DefaultMaxConvertInputBytes = 16 << 20
 // DefaultMaxConvertPages caps the pages one conversion lays out at 10,000. It
 // is an anti-DoS guard, not spec-mandated: ISO 32000-1 sets no page count, and
 // a small source can ask for many pages, a run of form feeds one page per
-// byte. A converter fails past it rather than drop pages.
+// byte. A converter fails past it rather than drop pages, but for the
+// blank pages of a workbook printed by Excel's rule, which it leaves out
+// when they alone carry the workbook past it.
 //
 // 10,000 pages holds the default input budget laid out at 12 points nearly
 // three times over, and a 2,000-page report five times.
