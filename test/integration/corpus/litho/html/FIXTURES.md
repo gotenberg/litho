@@ -264,11 +264,12 @@ Chromium prints a `backdrop-filter` without filtering the backdrop, where its sc
 
 ## Anchor positioning
 
-`anchor-positioning` is a two-page report whose margin notes sit beside the terms they explain and whose chart labels sit on the bars they name, placed by CSS Anchor Positioning, which Chromium prints applied: the page is its own reference.
+`anchor-positioning` is a two-page report whose margin notes sit beside the terms they explain and whose chart labels sit on the bars they name, placed by CSS Anchor Positioning, which Chromium prints applied: the page is its own reference. `anchor-positioning-vertical` is a page in `writing-mode: vertical-rl` whose notes sit below the terms they explain, placed by the logical keywords, which read the page's writing mode, and the last one flipped to the side of the lines before it.
 
-| Source               | Pages | Options | Exercises                                                                                                                                                                                                                                                                                       |
-| -------------------- | ----- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `anchor-positioning` | 2     | none    | `anchor-name` on inline terms and blocks; `position-anchor`; `anchor()` and `anchor-size()` in insets and sizes; `position-area` with its default alignments; `anchor-center`; `position-try` with `most-width`; a box declared after the page break that follows its anchor to the second page |
+| Source                        | Pages | Options | Exercises                                                                                                                                                                                                                                                                                       |
+| ----------------------------- | ----- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `anchor-positioning`          | 2     | none    | `anchor-name` on inline terms and blocks; `position-anchor`; `anchor()` and `anchor-size()` in insets and sizes; `position-area` with its default alignments; `anchor-center`; `position-try` with `most-width`; a box declared after the page break that follows its anchor to the second page |
+| `anchor-positioning-vertical` | 1     | none    | A `vertical-rl` root (Noto Sans CJK JP); `position-area` with `inline-end`, `center`, `span-block-end`; `anchor(start)` and `anchor(end)` in insets; `position-try-fallbacks: flip-block` on a term at the block-end edge                                                                       |
 
 ## Expected text
 

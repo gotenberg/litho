@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>縦書きの注釈</title>
+<style>
+  @page { size: A5 landscape; margin: 14mm 16mm; }
+  html { writing-mode: vertical-rl; }
+  body { margin: 0; font: 15px/1.9 sans-serif; color: #222; }
+  h1 { font-size: 22px; line-height: 1.4; margin: 0 0 0 14px; }
+  p { margin: 0 0 0 22px; }
+  .page { position: relative; block-size: 176mm; }
+  /* The last line stands at the page's left edge. */
+  .last { position: absolute; inset-block-end: 0; inset-inline-start: 0; margin: 0; }
+  .term { font-weight: bold; color: #0b4f8a; border-right: 2px solid #9cc3e6; }
+  .note {
+    position: absolute; margin: 6px 0; padding: 6px 3px; font-size: 11px; line-height: 1.5;
+    inline-size: 11em; background: #eef5fb; border-top: 3px solid #0b4f8a;
+  }
+  .note b { color: #0b4f8a; }
+  #t1 { anchor-name: --t1; }
+  #t2 { anchor-name: --t2; }
+  #t3 { anchor-name: --t3; }
+  #t4 { anchor-name: --t4; }
+  /* Below the term, past the end of its line, centred on it. */
+  .n1 { position-anchor: --t1; position-area: inline-end center; }
+  /* Below the term, reaching toward the lines after it. */
+  .n2 { position-anchor: --t2; position-area: inline-end span-block-end; }
+  /* anchor() insets: the note's top on the term's end edge, its right
+     side on the term's start edge. */
+  .n3 { position-anchor: --t3; top: anchor(end); right: anchor(start); }
+  /* The last line, at the page's left edge, leaves no room on its
+     block-end side: the note flips to the block-start side, toward the
+     lines before it. */
+  .n4 { position-anchor: --t4; position-area: inline-end span-block-end; position-try-fallbacks: flip-block; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>縦書きの注釈</h1>
+<p>注は、語の下の余白に置く。</p>
+<p>一つ目は<span class="term" id="t1">行末の注</span></p>
+<p>行は右から左へ進む。</p>
+<p>二つ目は<span class="term" id="t2">次の行へ</span></p>
+<p>注は語に結び付く。</p>
+<p>行が増えても離れない。</p>
+<p>三つ目は<span class="term" id="t3">関数の注</span></p>
+<p>語の端を関数で読む。</p>
+<p>最後の行は紙面の左端に立つ。</p>
+<p class="last">最後は<span class="term" id="t4">反転の注</span></p>
+<aside class="note n1"><b>行末</b>　語の行の終わりの側に、語を中心にして置く。</aside>
+<aside class="note n2"><b>次の行へ</b>　語の下から、後の行の側へ広がる。</aside>
+<aside class="note n3"><b>anchor()</b>　語の下端と右端から始まる。</aside>
+<aside class="note n4"><b>反転</b>　左に余地がなく、前の行の側へ移った。</aside>
+</div>
+</body>
+</html>
