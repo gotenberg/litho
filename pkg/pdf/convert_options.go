@@ -740,8 +740,9 @@ func WithFirstPageNumber(n int) HTMLOption {
 // PDF/A-2 and PDF/A-3 keep the 14,400 units (ISO 19005-2, 6.1.13): their
 // remediation writes a taller page in larger units, its /UserUnit a power
 // of two, at the size it had. PDFium, poppler and PDFKit ignore /UserUnit
-// and show such a page 1/UserUnit as large; pdf.js and Acrobat show it at
-// its size. PDF/A-1, PDF/A-4 and PDF/UA take the tall page as it is.
+// and show such a page 1/UserUnit as large; pdf.js shows it at its size.
+// PDF/A-4 and PDF/UA take the tall page as it is, and PDF/A-1 up to its
+// 32,767 points (ISO 19005-1, 6.1.12).
 //
 // # HTML and Markdown
 //
