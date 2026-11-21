@@ -211,7 +211,7 @@ func TestFrame_Bounds(t *testing.T) {
 			fsys: frameDocs(map[string]string{"a.html": `<p>Atext</p><iframe src="b.html" width=700 height=500></iframe>`, "b.html": `<p>Btext</p><iframe src="a.html#x" width=600 height=400></iframe>`}),
 			code: warn.LimitReached, message: "holds a document that holds it", want: []string{"Atext", "Btext"}},
 		{name: "depth", src: `<iframe src="d0.html" width=600 height=400></iframe>`, fsys: frameDocs(chain),
-			code: warn.LimitReached, message: fmt.Sprintf("nested deeper than %d", maxFrameDepth), want: []string{"Level0"}, absent: []string{fmt.Sprintf("Level%d", maxFrameDepth)}},
+			code: warn.LimitReached, message: fmt.Sprintf("nested deeper than %d", maxFrameDepth), want: []string{"Level0", fmt.Sprintf("Level%d", maxFrameDepth-1)}, absent: []string{fmt.Sprintf("Level%d", maxFrameDepth)}},
 		{name: "count", src: many + "<p>Outertext</p>", code: warn.LimitReached, message: fmt.Sprintf("more than %d frames", maxFrames), want: []string{"Outertext"}},
 		{name: "size", src: `<p>Outertext</p><iframe src="big.html"></iframe>`, fsys: big, o: Options{MaxInputBytes: 1000},
 			code: warn.LimitReached, message: "pass the input cap of 1000 bytes", want: []string{"Outertext"}, absent: []string{"long"}},
@@ -426,5 +426,44 @@ func TestFrame_HoldsWhatItsViewportShows(t *testing.T) {
 	}
 	if n := len(out.Structure.Kids); n != 2 {
 		t.Errorf("%d elements, want 2", n)
+	}
+}
+
+// A group that only clips the frame's page to a rectangle holding the
+// viewport is unwrapped; any other group stays.
+func TestUnwrapViewport(t *testing.T) {
+	rect := func(x0, y0, x1, y1 float64) *typeset.Path {
+		return &typeset.Path{Ops: []typeset.PathOp{
+			{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: x0, Y: y0}}}, {Kind: typeset.LineTo, P: [3]typeset.Point{{X: x1, Y: y0}}},
+			{Kind: typeset.LineTo, P: [3]typeset.Point{{X: x1, Y: y1}}}, {Kind: typeset.LineTo, P: [3]typeset.Point{{X: x0, Y: y1}}},
+			{Kind: typeset.ClosePath},
+		}}
+	}
+	leaf := &typeset.Path{}
+	view := area{0, 0, 100, 50}
+	tests := []struct {
+		name  string
+		group *typeset.Group
+		flat  bool
+	}{
+		{"page area", &typeset.Group{Opacity: 1, Clip: rect(0, 0, 100, 1e6)}, true},
+		{"no clip", &typeset.Group{}, true},
+		{"a smaller clip", &typeset.Group{Opacity: 1, Clip: rect(0, 0, 100, 40)}, false},
+		{"a slanted clip", &typeset.Group{Opacity: 1, Clip: &typeset.Path{Ops: []typeset.PathOp{
+			{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: -10, Y: -10}}}, {Kind: typeset.LineTo, P: [3]typeset.Point{{X: 200, Y: -5}}},
+			{Kind: typeset.LineTo, P: [3]typeset.Point{{X: 200, Y: 200}}}, {Kind: typeset.LineTo, P: [3]typeset.Point{{X: -10, Y: 200}}},
+		}}}, false},
+		{"a transform", &typeset.Group{Opacity: 1, Transform: typeset.Matrix{A: 2, D: 1}}, false},
+		{"an opacity", &typeset.Group{Opacity: 0.5}, false},
+		{"a blend mode", &typeset.Group{Opacity: 1, Blend: typeset.BlendMultiply}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.group.Content = []typeset.Fragment{leaf}
+			out := unwrapViewport([]typeset.Fragment{tt.group}, view)
+			if flat := len(out) == 1 && out[0] == typeset.Fragment(leaf); flat != tt.flat {
+				t.Errorf("unwrapped %v, want %v", flat, tt.flat)
+			}
+		})
 	}
 }

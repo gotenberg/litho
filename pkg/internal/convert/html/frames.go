@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"path"
 	"strings"
@@ -580,6 +581,7 @@ func (s *frameSet) layOutDoc(ctx context.Context, o Options, fd *frameDoc, data 
 	// its box shows.
 	pg := out.Pages[0]
 	pg.Content, _ = cullFrags(pg.Content, typeset.Identity, area{0, 0, w, h}, 0)
+	pg.Content = unwrapViewport(pg.Content, area{0, 0, w, h})
 	view := &typeset.Document{Pages: []*typeset.Page{pg}, Structure: out.Structure}
 	typeset.PruneStructure(view)
 	return &layout.Embedded{Content: pg.Content, Links: pg.Links, Structure: view.Structure}, out.Warnings, nil
@@ -658,4 +660,69 @@ func frameHints(hints func(*dom.Node) []css.Declaration, s *scan, fd *frameDoc) 
 		}
 		return append(fd.body[:len(fd.body):len(fd.body)], h...)
 	}
+}
+
+// unwrapViewport returns the content of a frame's page with each of its
+// top-level groups that does nothing inside the viewport view replaced by
+// what it holds: a group of no transform, opacity, blending or
+// transparency group, clipped to a rectangle that holds the viewport, as
+// the page area of a page of no margins clips the flow. The frame clips
+// to its viewport, so such a group only spends one of the levels the
+// typeset model allows a page (layout.MaxEmbedDepth), which a frame of
+// frames would spend at every level.
+func unwrapViewport(frags []typeset.Fragment, view area) []typeset.Fragment {
+	out := make([]typeset.Fragment, 0, len(frags))
+	for _, f := range frags {
+		g, ok := f.(*typeset.Group)
+		if !ok || !inert(g) || !holdsArea(g.Clip, view) {
+			out = append(out, f)
+			continue
+		}
+		out = append(out, g.Content...)
+	}
+	return out
+}
+
+// inert reports a group that paints its content as it is: no transform,
+// full opacity, the normal blend mode, no transparency group.
+func inert(g *typeset.Group) bool {
+	m := g.Transform
+	return (m == typeset.Matrix{} || m == typeset.Identity) && (g.Opacity == 0 || g.Opacity == 1) &&
+		g.Blend == typeset.BlendNormal && g.Transparency == nil
+}
+
+// holdsArea reports a clip that is an axis-aligned rectangle holding a,
+// or no clip at all.
+func holdsArea(clip *typeset.Path, a area) bool {
+	if clip == nil {
+		return true
+	}
+	box := area{math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)}
+	points := 0
+	for _, op := range clip.Ops {
+		switch op.Kind {
+		case typeset.MoveTo, typeset.LineTo:
+			p := op.P[0]
+			box = area{min(box.x0, p.X), min(box.y0, p.Y), max(box.x1, p.X), max(box.y1, p.Y)}
+			points++
+		case typeset.ClosePath:
+		case typeset.CurveTo:
+			return false
+		}
+	}
+	if points < 4 || points > 5 {
+		return false
+	}
+	for _, op := range clip.Ops {
+		if op.Kind == typeset.ClosePath {
+			continue
+		}
+		// Every corner of an axis-aligned rectangle lies on two of its
+		// box's edges.
+		p := op.P[0]
+		if p.X != box.x0 && p.X != box.x1 || p.Y != box.y0 && p.Y != box.y1 {
+			return false
+		}
+	}
+	return box.x0 <= a.x0 && box.y0 <= a.y0 && box.x1 >= a.x1 && box.y1 >= a.y1
 }
