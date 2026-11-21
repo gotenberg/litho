@@ -248,9 +248,9 @@
 //     apply, no script runs, and its canvas is transparent unless it sets
 //     a background or a dark colour scheme. Frames nest 8 deep, a
 //     conversion lays out 1000 at most, a document appears once among the
-//     documents that frame it, and a frame's document is held to the
-//     input cap; past these, or when the document does not load or is not
-//     HTML, the box shows nothing, with a warning.
+//     documents that frame it, and the documents the frames lay out are
+//     held together to the input cap; past these, or when the document
+//     does not load or is not HTML, the box shows nothing, with a warning.
 //   - <frame>, <frameset> and <audio> are left out with a warning; an
 //     <object> of anything else and <canvas> draw their fallback content,
 //     and an <embed> of anything else is left out with a warning. A

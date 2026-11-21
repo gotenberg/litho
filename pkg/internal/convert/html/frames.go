@@ -87,8 +87,11 @@ type frameSet struct {
 	loaded map[*dom.Node]bool
 	// sources holds each document read by its URL, or why it was not.
 	sources map[string]frameSource
-	// laid holds each frame's document laid out at a viewport size.
-	laid map[frameKey]*layout.Embedded
+	// laid holds each frame's document laid out at a viewport size, and
+	// laidBytes counts the bytes of the documents laid out, against the
+	// input cap ([Options.MaxInputBytes]).
+	laid      map[frameKey]*layout.Embedded
+	laidBytes int64
 	// warnings are those of the frames and their documents, in the order
 	// met, each message once.
 	warnings []typeset.Warning
@@ -194,8 +197,10 @@ type frameRequest struct {
 //
 // A frame of no src, of an empty one, of about:blank, or of zero size
 // shows nothing. One whose document does not load, is not HTML, or passes
-// a bound ([maxFrameDepth], [maxFrames], [maxFrameAncestors], the input
-// cap of a source) keeps its box and shows nothing, with a warning.
+// a bound ([maxFrameDepth], [maxFrames], [maxFrameAncestors], or the
+// input cap, which the documents the frames lay out share, each counted
+// as often as it is laid out) keeps its box and shows nothing, with a
+// warning.
 //
 // The loading attribute changes nothing: a lazy frame loads, as Chromium
 // prints it. The sandbox attribute changes nothing either: it disables
@@ -431,8 +436,14 @@ func (s *frameSet) layOutFrame(ctx context.Context, req *frameRequest, w, h floa
 		}
 	}
 	fd.chain = append(append([]string(nil), req.chain...), withoutFragment(req.self))
-	if int64(len(data)) > req.o.MaxInputBytes {
-		return left(warn.LimitReached, fmt.Sprintf("the document is longer than %d bytes", req.o.MaxInputBytes))
+	s.mu.Lock()
+	over := s.laidBytes+int64(len(data)) > req.o.MaxInputBytes
+	if !over {
+		s.laidBytes += int64(len(data))
+	}
+	s.mu.Unlock()
+	if over {
+		return left(warn.LimitReached, fmt.Sprintf("the documents of the frames pass the input cap of %d bytes", req.o.MaxInputBytes))
 	}
 	out, warns, err := s.layOutDoc(ctx, req.o, fd, data, w, h)
 	if err != nil {
