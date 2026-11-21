@@ -278,7 +278,16 @@ func (p *hfParser) counted(f sheet.Field, s string, i int) int {
 	return j - 1
 }
 
-// newPart starts the part i, its font reset to the base font.
+// newPart starts the part i, its font reset to the base font: no face,
+// size or colour carries from one part into the next, as Excel prints
+// them.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx headers_footers_codes: after "&L&"Arial,Bold"&14Left &A",
+//     Excel prints "&C&"Times New Roman,Italic"Centre" in Times New Roman
+//     Italic at 11 points and "&R&K0070C0Right" in Calibri 11, the Normal
+//     font: words 12.2 and 11.0 points tall where "Left" is 15.7.
 func (p *hfParser) newPart(i int) {
 	p.flush()
 	if i != p.part {
