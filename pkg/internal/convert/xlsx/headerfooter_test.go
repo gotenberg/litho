@@ -70,8 +70,11 @@ func TestParseHeaderFooter(t *testing.T) {
 		{"a part resets the font", "&B&LA&RB", [3][]span{{with(b, func(s *span) { s.text = "A" })}, nil, {with(b, func(s *span) { s.text = "B" })}}},
 		{"a line break stays", "a\nb&c&", [3][]span{1: {with(b, func(s *span) { s.text = "a\nb" })}}},
 		{
-			"a size of three digits at most", "&12345a&0b&8 9",
-			[3][]span{1: {with(b, func(s *span) { s.text, s.size = "45ab", 123 }), with(b, func(s *span) { s.text, s.size = " 9", 8 })}},
+			"sizes held between 1 and 409 points", "&12345a&0b&0123c&8 9",
+			[3][]span{1: {
+				with(b, func(s *span) { s.text, s.size = "a", 409 }), with(b, func(s *span) { s.text, s.size = "b", 1 }),
+				with(b, func(s *span) { s.text, s.size = "c", 123 }), with(b, func(s *span) { s.text, s.size = " 9", 8 }),
+			}},
 		},
 		{"dropped codes", "&Gx&O&Hy&\"Ar", [3][]span{1: {with(b, func(s *span) { s.text = "xy" })}}},
 		{

@@ -55,9 +55,19 @@ func (r *reader) headerFooter(e *ooxml.Element, printed bool) sheet.HeaderFooter
 	return hf
 }
 
-// maxSizeDigits is how many digits a font size code reads (MS-OI29500,
-// 2.1.619, the formatting codes of evenHeader: fontsize = "&" 1*3DIGIT).
-const maxSizeDigits = 3
+// The sizes a font size code reads, in points: a size past them prints at
+// the nearer one, as Excel prints it.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: Excel for the web prints "&12345x" and "&500w" at 409
+//     points, the "45" not printed, "&0123y" at 123 points and "&0z" at 1
+//     point (Calibri drawn at 409.01, 123.02 and 0.96), where MS-OI29500,
+//     2.1.619 gives a size of one to three digits.
+const (
+	minHeaderSize = 1
+	maxHeaderSize = 409
+)
 
 // hfParser is the state of one header or footer text's parsing.
 type hfParser struct {
@@ -84,7 +94,8 @@ type hfParser struct {
 // &X and &Y toggle bold, italic, single and double underline, strike,
 // superscript and subscript; &"font,style" sets the face and its bold or
 // italic style ("-" is the Normal font's face), &nn the size in points,
-// one to three digits,
+// every digit read and the size held between minHeaderSize and
+// maxHeaderSize,
 // &Krrggbb or &Kttsnnn the colour (a theme index with a tint percent);
 // && is an ampersand and a line break stays in the text. Other codes,
 // &G (a picture), &O and &H (outline and shadow) and any other character
@@ -184,15 +195,14 @@ func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) (parts [3]
 				i += n - 1
 			}
 			if code >= '0' && code <= '9' {
-				// A digit past the size's maxSizeDigits is text.
-				j := i
-				for j < len(s) && j-i < maxSizeDigits && s[j] >= '0' && s[j] <= '9' {
-					j++
+				// Every digit is the size's; past the largest size the
+				// rest cannot move it, so the sum stops there.
+				n, j := 0, i
+				for ; j < len(s) && s[j] >= '0' && s[j] <= '9'; j++ {
+					n = min(n*10+int(s[j]-'0'), maxHeaderSize)
 				}
-				if n, err := intconv.Atoi(s[i:j]); err == nil && n > 0 && n <= maxFontSize {
-					p.flush()
-					p.font.Size = float64(n)
-				}
+				p.flush()
+				p.font.Size = float64(max(n, minHeaderSize))
 				i = j - 1
 			}
 		}
