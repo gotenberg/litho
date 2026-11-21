@@ -643,3 +643,55 @@ func TestAnchor_VerticalRoot(t *testing.T) {
 		}
 	}
 }
+
+// pxBox parses a box pxBoxes gives: x, y, width and height.
+func pxBox(t *testing.T, s string) [4]float64 {
+	t.Helper()
+	var b [4]float64
+	if _, err := fmt.Sscanf(s, "%g,%g+%gx%g", &b[0], &b[1], &b[2], &b[3]); err != nil {
+		t.Fatalf("box %q: %v", s, err)
+	}
+	return b
+}
+
+// TestAnchor_FixedOnTrimmedSinglePage holds an anchored fixed box on a
+// single page, whose containing block is the page area the page is
+// trimmed to (CSS 2.1, 10.1, item 3), not the taller viewport the page is
+// first laid out in: its position options are tried against that area,
+// so a box below its anchor that the trimmed page cannot hold flips above
+// it (CSS Anchor Positioning 1, 5.4.1). The yellow fixed box marks the
+// bottom of the trimmed page area.
+func TestAnchor_FixedOnTrimmedSinglePage(t *testing.T) {
+	t.Parallel()
+	doc := convertDoc(t, `<style>@page { margin: 0 } html, body { margin: 0 }
+		#a { anchor-name: --a; margin-top: 120px; width: 40px; height: 20px }
+		#p { position: fixed; position-anchor: --a; position-area: bottom; position-try-fallbacks: flip-block;
+			width: 30px; height: 120px; background: lime }
+		#q { position: fixed; bottom: 0; width: 10px; height: 10px; background: yellow }</style>
+		<div style="height: 150px; display: flow-root"><div id=a></div></div><div id=p></div><div id=q></div>`, Options{SinglePage: true, PreferCSSPageSize: true})
+	boxes := pxBoxes(doc)[0]
+	if q := pxBox(t, boxes["y"]); q[1]+q[3] >= 140+120 {
+		t.Fatalf("trimmed page area ends at %v: it holds the box below its anchor, the test proves nothing", q[1]+q[3])
+	}
+	if got := boxes["g"]; got != "5,0+30x120" {
+		t.Errorf("fixed box %q, want 5,0+30x120: above its anchor, the trimmed page holding no 120px below it", got)
+	}
+}
+
+// TestAnchor_VerticalSinglePage holds an anchored note on a single page
+// of a vertical-rl root, which the layout lays out horizontally on a
+// turned page: block-start is the right of the anchor, once (CSS Anchor
+// Positioning 1, 3.1.2). A first block of 100px leaves the note room on
+// the page, which grows sideways with the flow.
+func TestAnchor_VerticalSinglePage(t *testing.T) {
+	t.Parallel()
+	doc := convertDoc(t, `<style>html { writing-mode: vertical-rl } html, body { margin: 0 }
+		#a { anchor-name: --a; display: inline-block; width: 40px; height: 60px; background: red }
+		#n { position: absolute; position-anchor: --a; position-area: block-start center; width: 30px; height: 20px; background: lime }</style>
+		<div style="width: 100px"></div><p>A term <span id=a></span> in a line.</p><div id=n></div>`, Options{SinglePage: true})
+	boxes := pxBoxes(doc)[0]
+	a, n := pxBox(t, boxes["r"]), pxBox(t, boxes["g"])
+	if n[0] != a[0]+a[2] || n[1] != a[1]+20 {
+		t.Errorf("note at %v, anchor at %v: want the note against the anchor's right side, centred on it", n, a)
+	}
+}
