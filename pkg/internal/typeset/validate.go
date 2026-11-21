@@ -26,6 +26,11 @@ import (
 // per page and every [validateCheck] fragments, elements or outline
 // entries.
 func (d *Document) Validate(ctx context.Context) error {
+	return d.validate(ctx, "")
+}
+
+// validate is [Document.Validate] for a file of version, "" for 1.7.
+func (d *Document) validate(ctx context.Context, version Version) error {
 	if len(d.Pages) == 0 {
 		return ErrNoPages
 	}
@@ -36,7 +41,7 @@ func (d *Document) Validate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	v := validator{pages: len(d.Pages), elems: elems, images: make(map[*ImageSource]bool)}
+	v := validator{version: version, pages: len(d.Pages), elems: elems, images: make(map[*ImageSource]bool)}
 	for i, page := range d.Pages {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -57,6 +62,9 @@ func (d *Document) Validate(ctx context.Context) error {
 
 // validator carries what the checks of one document share.
 type validator struct {
+	// version is the version the file is written for, "" for 1.7 when
+	// the document is checked on its own.
+	version Version
 	// pages is the page count destinations are checked against, -1 while
 	// the pages are still coming: a [Stream] checks them at its end.
 	pages int
@@ -81,10 +89,16 @@ type validator struct {
 
 // page checks p, with links in place of its own.
 func (v *validator) page(ctx context.Context, p *Page, links []Link) error {
-	// ISO 32000-1, Annex C.2, Table C.1 bounds a page side at 14400 units.
+	// ISO 32000-1, Annex C.2, Table C.1 bounds a page side at 14400 units;
+	// a page sized from its content takes its version's bound instead
+	// (see [FittedPageLimit]).
+	limit := float64(maxPageSize)
+	if p.Fitted {
+		limit = FittedPageLimit(v.version)
+	}
 	for _, side := range []float64{p.Width, p.Height} {
-		if !numeric.Finite(side) || side <= 0 || side > maxPageSize {
-			return fmt.Errorf("%w: size %v by %v points, each side in (0, %d]", ErrInvalidPage, p.Width, p.Height, maxPageSize)
+		if !numeric.Finite(side) || side <= 0 || side > limit {
+			return fmt.Errorf("%w: size %v by %v points, each side in (0, %v]", ErrInvalidPage, p.Width, p.Height, limit)
 		}
 	}
 	if err := pageBoxes(p); err != nil {

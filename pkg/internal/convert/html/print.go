@@ -45,18 +45,35 @@ type printSetup struct {
 	// last layout measured, which the cascade's size queries and
 	// container query units read; nil before a layout measured any.
 	containers containerSizes
+	// fitted is the largest side of a single page, sized from its content
+	// ([Options.FittedLimit]), 0 for a paged document, whose page sides
+	// stay within [maxPageSide].
+	fitted float64
 }
 
 // newPrintSetup returns the setup of a first layout under o.
 func newPrintSetup(o Options) printSetup {
-	return printSetup{factor: 1 / o.Scale}
+	s := printSetup{factor: 1 / o.Scale}
+	if o.SinglePage {
+		s.fitted = o.fittedLimit()
+	}
+	return s
+}
+
+// side returns the largest page side the setup lays out on, in points:
+// a single page's bound, else [maxPageSide].
+func (s printSetup) side() float64 {
+	if s.fitted > 0 {
+		return s.fitted
+	}
+	return maxPageSide
 }
 
 // source returns the page box b of the @page rules as the setup lays it
 // out, still in points of the page: the screen column when measuring.
 func (s printSetup) source(b layout.PageBox) layout.PageBox {
 	if s.measure {
-		return layout.PageBox{Width: screenWidth, Height: maxPageSide}
+		return layout.PageBox{Width: screenWidth, Height: s.side()}
 	}
 	return b
 }
@@ -83,10 +100,10 @@ func (s printSetup) fitFactor(boxes ...layout.PageBox) (printSetup, []typeset.Wa
 		b = s.source(b)
 		side = max(side, b.Width, b.Height)
 	}
-	if side <= 0 || side*s.factor <= maxPageSide {
+	if side <= 0 || side*s.factor <= s.side() {
 		return s, nil
 	}
-	limit := maxPageSide / side
+	limit := s.side() / side
 	w := typeset.Warning{Code: warn.PageSetupUnsupported, Effect: warn.Approximated, Message: fmt.Sprintf(
 		"the page of %v points a side cannot be laid out %.3g times larger, past the PDF page limit; it is laid out %.3g times larger", side, s.factor, limit)}
 	s.factor = limit
@@ -140,7 +157,7 @@ func (p *prepared) placement(lp *typeset.Page) placement {
 	if fit > 1-1e-9 {
 		fit = 1
 	}
-	pl := placement{s: fit / f, ox: (tw - float64(sw*fit)) / 2, oy: (th - float64(sh*fit)) / 2, w: min(tw, maxPageSide), h: min(th, maxPageSide)}
+	pl := placement{s: fit / f, ox: (tw - float64(sw*fit)) / 2, oy: (th - float64(sh*fit)) / 2, w: min(tw, p.setup.side()), h: min(th, p.setup.side())}
 	if math.Abs(pl.ox) < 1e-6 {
 		pl.ox = 0
 	}
@@ -167,7 +184,7 @@ func (pl placement) identity() bool {
 // group under the placement's transform, clipped to the source page, its
 // links moved with it.
 func (pl placement) page(lp *typeset.Page) *typeset.Page {
-	out := &typeset.Page{Width: pl.w, Height: pl.h, Content: lp.Content, Links: lp.Links, TrimBox: lp.TrimBox, BleedBox: lp.BleedBox}
+	out := &typeset.Page{Width: pl.w, Height: pl.h, Content: lp.Content, Links: lp.Links, TrimBox: lp.TrimBox, BleedBox: lp.BleedBox, Fitted: lp.Fitted}
 	if pl.identity() {
 		return out
 	}

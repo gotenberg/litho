@@ -719,11 +719,29 @@ func WithFirstPageNumber(n int) HTMLOption {
 
 // WithSinglePage writes the source on one page sized to its content, the
 // whole document in one column with no page break, as a screen shows it.
-// false, the default, writes the pages the source lays out on. The page is
-// at most 14,400 points tall, the largest page ISO 32000-1, Annex C.2
-// allows: the content past it is left out, and the conversion reports a
-// warning. With [WithPageRanges] the conversion fails with
-// [ErrInvalidConvertOptions]: one page has no range to select.
+// false, the default, writes the pages the source lays out on. With
+// [WithPageRanges] the conversion fails with [ErrInvalidConvertOptions]:
+// one page has no range to select.
+//
+// # Page size
+//
+// The page is as tall as the content, past the 14,400 points ISO 32000-1,
+// Annex C.2 lists when the content is taller: that annex is informative,
+// ISO 32000-2 sets no page size limit, Chromium writes a single page the
+// same way, and PDFium, poppler, pdf.js and Apple's PDFKit show such a page
+// at its true size. The page carries no /UserUnit. It stops at 1,048,576
+// points (2^20, about 370 metres), and at 32,767 points under
+// [WithConvertVersion] "1.4", whose real numbers stop there (PDF Reference
+// 1.4, Appendix C): the content past it is left out, and the conversion
+// reports a warning. A conversion's memory limit,
+// [models.Limits.MaxConvertMemoryBytes], may stop a long document first,
+// as it stops a paged one.
+//
+// PDF/A-2 and PDF/A-3 keep the 14,400 units (ISO 19005-2, 6.1.13): their
+// remediation writes a taller page in larger units, its /UserUnit a power
+// of two, at the size it had. PDFium, poppler and PDFKit ignore /UserUnit
+// and show such a page 1/UserUnit as large; pdf.js and Acrobat show it at
+// its size. PDF/A-1, PDF/A-4 and PDF/UA take the tall page as it is.
 //
 // # HTML and Markdown
 //

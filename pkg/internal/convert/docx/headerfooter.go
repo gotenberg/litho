@@ -3,7 +3,6 @@ package docx
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
@@ -27,7 +26,8 @@ type pages struct {
 	byName  map[string]*section
 	hfParts map[string]*ooxml.Element
 	// height is the height of a single page, 0 until its content is laid
-	// out: the page is then [office.MaxPageSide] tall and trimmed.
+	// out: the page is then [office.Options.FittedPageLimit] tall and
+	// trimmed.
 	height float64
 }
 
@@ -142,12 +142,12 @@ func (p *pages) box(info layout.PageInfo) layout.PageBox {
 
 // singleBox returns the page box of a single page: the first section's
 // width, side and top margins, the last section's bottom margin, and
-// [office.MaxPageSide] tall, the page the layout trims to its content, or
+// [office.Options.FittedPageLimit] tall, the page the layout trims to its content, or
 // the height its content measured once it is known.
 func (p *pages) singleBox() layout.PageBox {
 	b := p.sectionBox(p.secs[0], 0)
 	b.Margin[css.Bottom] = p.sectionBox(p.secs[len(p.secs)-1], 0).Margin[css.Bottom]
-	b.Height = office.MaxPageSide
+	b.Height = p.d.opts.FittedPageLimit()
 	if p.height > 0 {
 		b.Height = p.height
 	}

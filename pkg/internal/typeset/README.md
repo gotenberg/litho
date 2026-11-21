@@ -205,6 +205,21 @@ Every size read from the model is bounded before allocation. The number
 of pages, fragments per page, glyphs per run and ops per path each have a
 named anti-DoS cap.
 
+A page side lies within 14,400 points, the limit ISO 32000-1, Annex C.2
+lists, unless the page is sized from its content (`Page.Fitted`): a single
+page, or a picture at its natural size. Such a page is written whole with
+a media box as tall as its content and no `/UserUnit`, up to
+`FittedPageLimit` of the version: 2^20 points, the longest length the
+layout engine holds, and 32,767 at PDF 1.4, whose real numbers stop there.
+Annex C.2 is informative, ISO 32000-2 sets no page size, Chromium writes a
+single page the same way, and PDFium, poppler, pdf.js and Apple's PDFKit
+show such a page at its true size, where three of them show a `/UserUnit`
+page at a fraction of it. The converters take the bound from the caller
+(`html.Options.FittedLimit`, `office.Options.FittedLimit`, the version of
+`picture.Options`), cut what passes it and report a warning. A PDF/A-2 or
+PDF/A-3 remediation, whose 6.1.13 keeps the 14,400 units, writes such a
+page in larger units (`fixer_userunit.go`).
+
 ## The text stack
 
 `text` wraps go-text/typesetting (Unlicense OR BSD-3-Clause) and nothing

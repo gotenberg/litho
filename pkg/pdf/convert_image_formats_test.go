@@ -248,17 +248,25 @@ func TestFromImage_FitsThePictureToThePaper(t *testing.T) {
 	}
 }
 
-// TestFromImage_KeepsAPageWithinThePDFLimits checks that a page past
-// 14,400 points is cut to it, the picture scaled down, and one under 3
-// points grown to 3, each with a warning.
+// TestFromImage_KeepsAPageWithinThePDFLimits checks the page of a picture
+// at its natural size: past the 14,400 points of ISO 32000-1, Annex C.2,
+// an informative limit, it is written whole, with no warning; past 32,767
+// points under PDF 1.4, whose real numbers stop there, it is cut and the
+// picture scaled down, and under 3 points grown to 3, each with a warning.
 func TestFromImage_KeepsAPageWithinThePDFLimits(t *testing.T) {
 	t.Parallel()
 	// 1,000 pixels at 3 pixels an inch, stated as 118 pixels a metre: 24,021
-	// points, cut to 14,400; the page keeps its 20 pixels' 480 points.
+	// points by the 20 pixels' 480.
 	wide := imagetest.WithPNGChunks(encodePNG(t, testPicture(1000, 20)), imagetest.PNGChunk{Type: "pHYs", Data: imagetest.PHYs(3)})
 	r, _, report := convertImageFile(t, wide)
-	if w, h := pageSize(t, r, 1); !near(w, 14400) || !near(h, 480) || len(report.Warnings) != 1 {
-		t.Errorf("wide: page %v by %v, warnings %+v", w, h, report.Warnings)
+	if pg, _ := r.Page(t.Context(), 1); pg.Width < 24000 || pg.Height < 480 || len(report.Warnings) != 0 {
+		t.Errorf("wide: page %v by %v, warnings %+v; want its natural size", pg.Width, pg.Height, report.Warnings)
+	}
+	// At 2 pixels an inch, 36,000 points: cut to 32,767 under PDF 1.4.
+	wider := imagetest.WithPNGChunks(encodePNG(t, testPicture(1000, 20)), imagetest.PNGChunk{Type: "pHYs", Data: imagetest.PHYs(2)})
+	r, _, report = convertImageFile(t, wider, WithConvertVersion("1.4"))
+	if pg, _ := r.Page(t.Context(), 1); !near(pg.Width, 32767) || len(report.Warnings) != 1 {
+		t.Errorf("wider at 1.4: page %v wide, warnings %+v; want 32,767 and a warning", pg.Width, report.Warnings)
 	}
 	tiny := encodePNG(t, testPicture(1, 1))
 	r, _, report = convertImageFile(t, tiny)

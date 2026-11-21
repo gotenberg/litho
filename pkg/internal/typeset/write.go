@@ -147,7 +147,7 @@ func Write(ctx context.Context, doc *Document, dst io.Writer, opts Options) erro
 	if doc == nil {
 		return fmt.Errorf("%w: nil document", ErrNoPages)
 	}
-	if err := doc.Validate(ctx); err != nil {
+	if err := doc.validate(ctx, opts.Version); err != nil {
 		return err
 	}
 	s, err := newStream(ctx, opts, doc.Structure != nil, true)

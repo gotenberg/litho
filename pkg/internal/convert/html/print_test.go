@@ -295,9 +295,9 @@ func TestConvert_SinglePage(t *testing.T) {
 			DefaultPageWidth, screenHeight, 1,
 		},
 		{
-			"capped at the PDF limit", `<div style="height:20000pt"></div>`,
+			"past the 14,400 points of Annex C.2", `<div style="height:20000pt"></div>`,
 			Options{},
-			DefaultPageWidth, maxPageSide, 1,
+			DefaultPageWidth, 20000, 1,
 		},
 	}
 	for _, tt := range tests {
@@ -311,7 +311,7 @@ func TestConvert_SinglePage(t *testing.T) {
 			pg := doc.Pages[0]
 			// The paper comes out as printToPDF sizes it: whole points,
 			// then whole 300 dpi dots.
-			w, h := tt.w, min(chromiumPaper(tt.h), maxPageSide)
+			w, h := tt.w, chromiumPaper(tt.h)
 			if tt.o.Landscape {
 				w = chromiumPaper(w)
 			}

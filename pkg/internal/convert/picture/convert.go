@@ -66,9 +66,12 @@ type Options struct {
 // imagefile for the pictures of a file). The page is the picture's size,
 // its pixels at the resolution its file states, else 96 pixels an inch;
 // an SVG file's page is its width and height, else its view box, in CSS
-// pixels, else 300 by 150 pixels. A side past 14,400 points is cut to it
-// and the picture scaled down to fit, as a side under 3 points is grown
-// to it with the picture centred, each with a warning. The structure tree
+// pixels, else 300 by 150 pixels. A page of the picture's size may pass
+// the 14,400 points of ISO 32000-1, Annex C.2 (see
+// [typeset.FittedPageLimit]); a side past the limit of the version, or
+// past 14,400 points on the options' paper, is cut to it and the picture
+// scaled down to fit, as a side under 3 points is grown to it with the
+// picture centred, each with a warning. The structure tree
 // holds a Document element with a Figure a page, described by what the
 // format defines as the picture's description.
 //
@@ -187,6 +190,12 @@ func (c *converter) addPage(ctx context.Context, p *typeset.Page, fig *typeset.S
 }
 
 // flush hands the last page to the sink.
+// fitted reports whether a page takes its picture's size rather than the
+// options' paper: such a page is [typeset.Page.Fitted].
+func (c *converter) fitted() bool {
+	return c.opts.PageWidth <= 0 || c.opts.PageHeight <= 0
+}
+
 func (c *converter) flush(ctx context.Context) error {
 	if c.opts.Sink == nil || c.pending == nil {
 		return nil
@@ -200,19 +209,23 @@ func (c *converter) flush(ctx context.Context) error {
 // and the rectangle the picture is drawn in on it: the options' paper, or
 // the picture's size, turned as the options ask, the picture scaled down
 // to fit it, never up, and centred (as a slide is fitted to a caller's
-// paper). A side past 14,400 points or under 3 is brought within them,
-// with a warning.
+// paper). A side past its limit or under 3 points is brought within
+// them, with a warning: a paper side's limit is 14,400 points, and that
+// of a page of the picture's size, which [converter.fitted] reports, is
+// [typeset.FittedPageLimit] of the version.
 func (c *converter) pageFor(w, h float64) (float64, float64, typeset.Rect) {
 	pw, ph := w, h
-	if c.opts.PageWidth > 0 && c.opts.PageHeight > 0 {
+	limit := typeset.FittedPageLimit(c.opts.Version)
+	if !c.fitted() {
 		pw, ph = c.opts.PageWidth, c.opts.PageHeight
+		limit = maxPageSide
 	}
 	if c.opts.Landscape && pw < ph || c.opts.Portrait && pw > ph {
 		pw, ph = ph, pw
 	}
-	if pw > maxPageSide || ph > maxPageSide {
-		c.warn(warn.LimitReached, warn.Approximated, fmt.Sprintf("a page of %.0f by %.0f points is cut to %d points a side, the PDF limit, and the picture scaled down to fit it", pw, ph, maxPageSide))
-		pw, ph = min(pw, maxPageSide), min(ph, maxPageSide)
+	if pw > limit || ph > limit {
+		c.warn(warn.LimitReached, warn.Approximated, fmt.Sprintf("a page of %.0f by %.0f points is cut to %.0f points a side, the page limit, and the picture scaled down to fit it", pw, ph, limit))
+		pw, ph = min(pw, limit), min(ph, limit)
 	}
 	if pw < minPageSide || ph < minPageSide {
 		c.warn(warn.LimitReached, warn.Approximated, fmt.Sprintf("a page of %.2f by %.2f points is grown to %d points a side, the PDF minimum, the picture centred on it", pw, ph, minPageSide))

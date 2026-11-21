@@ -268,6 +268,12 @@ type Options struct {
 	// document out on one page this way (Chromium's single page, as
 	// Gotenberg prints it).
 	FitFirstPage bool
+	// FittedLimit, when positive, lays out pages sized from their content:
+	// a page box side may pass the 14,400 points of ISO 32000-1, Annex
+	// C.2 up to it, and every page is [typeset.Page.Fitted]. The converter
+	// sets it to [typeset.FittedPageLimit] of the file's version. Zero
+	// keeps every side within 14,400 points.
+	FittedLimit float64
 	// ViewportHeight, when positive, is the height in points of the initial
 	// containing block, which otherwise is the page area (CSS 2.1, 10.1):
 	// the root's percentage heights and the boxes positioned in the

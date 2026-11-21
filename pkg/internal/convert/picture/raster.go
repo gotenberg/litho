@@ -46,7 +46,7 @@ func (c *converter) raster(ctx context.Context, p *imagefile.Picture) error {
 			&typeset.Image{Rect: typeset.Rect{Width: w, Height: h}, Source: p.Source, Parent: fig},
 		}}
 	}
-	return c.addPage(ctx, &typeset.Page{Width: pw, Height: ph, Content: []typeset.Fragment{frag}}, fig)
+	return c.addPage(ctx, &typeset.Page{Width: pw, Height: ph, Content: []typeset.Fragment{frag}, Fitted: c.fitted()}, fig)
 }
 
 // orientation returns the transform that takes a picture drawn at its

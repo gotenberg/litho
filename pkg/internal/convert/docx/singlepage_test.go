@@ -214,7 +214,10 @@ func TestSinglePage_FootnotesAfterTheBody(t *testing.T) {
 	}
 }
 
-func TestSinglePage_TooTallIsCutWithAWarning(t *testing.T) {
+// TestSinglePage_TallerThanAnnexCIsWhole states the single page rule: a
+// page sized from its content passes the 14,400 points of ISO 32000-1,
+// Annex C.2, an informative limit, and holds the whole document.
+func TestSinglePage_TallerThanAnnexCIsWhole(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
 	for range 2000 {
@@ -225,8 +228,32 @@ func TestSinglePage_TooTallIsCutWithAWarning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(doc.Pages) != 1 || doc.Pages[0].Height > office.MaxPageSide || doc.Pages[0].Height < office.MaxPageSide-72-36 {
-		t.Fatalf("%d pages, the first %v tall; want one filled to %d", len(doc.Pages), doc.Pages[0].Height, office.MaxPageSide)
+	if len(doc.Pages) != 1 || doc.Pages[0].Height <= office.MaxPageSide || !doc.Pages[0].Fitted {
+		t.Fatalf("%d pages, the first %v tall, fitted %v; want one page past %d points", len(doc.Pages), doc.Pages[0].Height, doc.Pages[0].Fitted, office.MaxPageSide)
+	}
+	if !strings.Contains(docText(doc), "theend") {
+		t.Error("the end of the document is missing")
+	}
+	for _, w := range doc.Warnings {
+		if strings.Contains(w.Message, "single page") {
+			t.Errorf("a whole page warns of a cut: %+v", w)
+		}
+	}
+}
+
+func TestSinglePage_TooTallIsCutWithAWarning(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	for range 2000 {
+		b.WriteString(para("text"))
+	}
+	b.WriteString(para("theend"))
+	doc, err := Convert(context.Background(), bytes.NewReader(docx(t, b.String(), nil)), testFonts(t), office.Options{SinglePage: true, FittedLimit: 15000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Pages) != 1 || doc.Pages[0].Height > 15000 || doc.Pages[0].Height < 15000-72-36 {
+		t.Fatalf("%d pages, the first %v tall; want one filled to 15000", len(doc.Pages), doc.Pages[0].Height)
 	}
 	if strings.Contains(docText(doc), "theend") {
 		t.Error("the content past the tallest page is drawn")

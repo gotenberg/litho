@@ -127,3 +127,43 @@ func FuzzConvert(f *testing.F) {
 		}
 	})
 }
+
+// TestConvert_PictureSizedPagePassesAnnexC states the rule of a page sized
+// from its content: a picture taller than the 14,400 points of ISO
+// 32000-1, Annex C.2, an informative limit, takes a page of its natural
+// size, with no warning, up to [typeset.FittedPageLimit] of the version;
+// PDF 1.4 stops at 32,767 points, its largest real number, and a paper
+// keeps the 14,400 point bound.
+func TestConvert_PictureSizedPagePassesAnnexC(t *testing.T) {
+	t.Parallel()
+	tall := []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50000"><rect width="100" height="50000" fill="red"/></svg>`)
+	for _, tc := range []struct {
+		name   string
+		o      Options
+		h      float64
+		fitted bool
+		warned bool
+	}{
+		{"natural size", Options{}, 37500, true, false},
+		{"PDF 1.4", Options{Version: typeset.Version14}, 32767, true, true},
+	} {
+		doc, err := convert(tall, tc.o)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		pg := doc.Pages[0]
+		if pg.Height != tc.h || pg.Fitted != tc.fitted || (len(doc.Warnings) > 0) != tc.warned {
+			t.Errorf("%s: page %vx%v fitted %v, warnings %+v; want %v tall, fitted %v, warned %v", tc.name, pg.Width, pg.Height, pg.Fitted, doc.Warnings, tc.h, tc.fitted, tc.warned)
+		}
+		if err := doc.Validate(t.Context()); err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+		}
+	}
+	doc, err := convert(tall, Options{PageWidth: 595, PageHeight: 842})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pg := doc.Pages[0]; pg.Height != 842 || pg.Fitted {
+		t.Errorf("on a paper: page %vx%v fitted %v; want the paper", pg.Width, pg.Height, pg.Fitted)
+	}
+}

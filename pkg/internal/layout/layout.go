@@ -25,7 +25,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	if root == nil || fonts == nil {
 		return nil, fmt.Errorf("%w: nil root or font index", ErrInvalidOptions)
 	}
-	if err := checkPage(opts.Page); err != nil {
+	if err := checkPage(opts.Page, opts.FittedLimit); err != nil {
 		return nil, err
 	}
 	turn := principalMode(root, opts)
@@ -44,7 +44,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 	case opts.PageAt != nil:
 		first = opts.PageAt(0)
 	}
-	if err := checkPage(first); err != nil {
+	if err := checkPage(first, opts.FittedLimit); err != nil {
 		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
@@ -276,7 +276,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 	perPage := e.distribute(d, 0, n, used, free)
 	for k := range n {
 		pb := e.assembledBox(k, fitH)
-		pg := &typeset.Page{Width: pb.Width + 2*pb.Bleed, Height: pb.Height + 2*pb.Bleed}
+		pg := &typeset.Page{Width: pb.Width + 2*pb.Bleed, Height: pb.Height + 2*pb.Bleed, Fitted: e.opts.FittedLimit > 0}
 		if c, ok := colorOf(e.opts.PageColor); ok {
 			pg.Content = append(pg.Content, &typeset.Path{Ops: rectOps(typeset.Rect{Width: pg.Width, Height: pg.Height}), Fill: &typeset.Fill{Color: c}})
 		}
@@ -1002,7 +1002,7 @@ func layoutFlow(ctx context.Context, root *Node, fonts *text.Fonts, opts Options
 		e.mark(0, name, false, nil)
 		if opts.PageFor != nil {
 			first = opts.PageFor(e.infoOf(0))
-			if err := checkPage(first); err != nil {
+			if err := checkPage(first, e.opts.FittedLimit); err != nil {
 				return nil, nil, err
 			}
 			e.pageW, e.pageH = areaOf(first)

@@ -10,12 +10,17 @@ import (
 )
 
 // checkPage reports a page box whose size or margins [Layout] cannot lay
-// out on.
-func checkPage(pb PageBox) error {
-	if !numeric.Finite(pb.Width) || !numeric.Finite(pb.Height) || pb.Width <= 0 || pb.Height <= 0 || pb.Width > maxPageSide || pb.Height > maxPageSide {
+// out on: each side within 14,400 points, or within fitted, when positive,
+// for a page sized from its content ([Options.FittedLimit]).
+func checkPage(pb PageBox, fitted float64) error {
+	limit := float64(maxPageSide)
+	if fitted > limit {
+		limit = fitted
+	}
+	if !numeric.Finite(pb.Width) || !numeric.Finite(pb.Height) || pb.Width <= 0 || pb.Height <= 0 || pb.Width > limit || pb.Height > limit {
 		return fmt.Errorf("%w: page of %v by %v points", ErrInvalidOptions, pb.Width, pb.Height)
 	}
-	if !numeric.Finite(pb.Bleed) || pb.Bleed < 0 || pb.Width+2*pb.Bleed > maxPageSide || pb.Height+2*pb.Bleed > maxPageSide {
+	if !numeric.Finite(pb.Bleed) || pb.Bleed < 0 || pb.Width+2*pb.Bleed > limit || pb.Height+2*pb.Bleed > limit {
 		return fmt.Errorf("%w: bleed of %v points on a page of %v by %v", ErrInvalidOptions, pb.Bleed, pb.Width, pb.Height)
 	}
 	for _, m := range pb.Margin {
@@ -83,7 +88,7 @@ func (g *geometry) grow() bool {
 	case e.opts.PageAt != nil:
 		pb = e.opts.PageAt(n)
 	}
-	if err := checkPage(pb); err != nil {
+	if err := checkPage(pb, e.opts.FittedLimit); err != nil {
 		e.fail(fmt.Errorf("page %d: %w", n+1, err))
 		return false
 	}

@@ -59,9 +59,13 @@ type Options struct {
 	// page size options above too. A text document ignores it.
 	SinglePageSheets bool
 	// SinglePage lays a text document out on one page as tall as its
-	// content, at most MaxPageSide (see the text converters). Other
+	// content, at most FittedLimit (see the text converters). Other
 	// documents ignore it.
 	SinglePage bool
+	// FittedLimit is the largest side, in points, of a page sized from
+	// its content, a single page's: [typeset.FittedPageLimit] of the
+	// version the file is written at. Zero takes that of PDF 1.7.
+	FittedLimit float64
 	// PrintDate is what the date and time fields of a spreadsheet's headers
 	// and footers, of a presentation's slides and of a text document show;
 	// the zero time shows nothing for a spreadsheet and the text the file
@@ -219,4 +223,13 @@ func (o Options) Validate() error {
 		return fmt.Errorf("%w: max pages %d is negative", typeset.ErrInvalidOptions, o.MaxPages)
 	}
 	return nil
+}
+
+// FittedPageLimit returns the largest side of a page sized from its
+// content (see [Options.FittedLimit]).
+func (o Options) FittedPageLimit() float64 {
+	if o.FittedLimit > 0 {
+		return o.FittedLimit
+	}
+	return typeset.FittedPageLimit(typeset.Version17)
 }

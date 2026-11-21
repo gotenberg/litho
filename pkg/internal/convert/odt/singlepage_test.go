@@ -128,7 +128,10 @@ func TestSinglePage_OptionsCarryOver(t *testing.T) {
 	}
 }
 
-func TestSinglePage_TooTallIsCutWithAWarning(t *testing.T) {
+// TestSinglePage_TallerThanAnnexCIsWhole states the single page rule: a
+// page sized from its content passes the 14,400 points of ISO 32000-1,
+// Annex C.2, an informative limit, and holds the whole document.
+func TestSinglePage_TallerThanAnnexCIsWhole(t *testing.T) {
 	t.Parallel()
 	var b strings.Builder
 	for range 1200 {
@@ -136,7 +139,28 @@ func TestSinglePage_TooTallIsCutWithAWarning(t *testing.T) {
 	}
 	b.WriteString(`<text:p>theend</text:p>`)
 	one, _ := singlePages(t, doc{body: b.String()}, office.Options{})
-	if len(one.Pages) != 1 || one.Pages[0].Height > office.MaxPageSide {
+	if len(one.Pages) != 1 || one.Pages[0].Height <= office.MaxPageSide || !one.Pages[0].Fitted {
+		t.Fatalf("%d pages, the first %v tall, fitted %v; want one page past %d points", len(one.Pages), one.Pages[0].Height, one.Pages[0].Fitted, office.MaxPageSide)
+	}
+	if !strings.Contains(docText(one), "theend") {
+		t.Error("the end of the document is missing")
+	}
+	for _, w := range one.Warnings {
+		if strings.Contains(w.Message, "single page") {
+			t.Errorf("a whole page warns of a cut: %+v", w)
+		}
+	}
+}
+
+func TestSinglePage_TooTallIsCutWithAWarning(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	for range 1200 {
+		b.WriteString(`<text:p>text</text:p>`)
+	}
+	b.WriteString(`<text:p>theend</text:p>`)
+	one, _ := singlePages(t, doc{body: b.String()}, office.Options{FittedLimit: 15000})
+	if len(one.Pages) != 1 || one.Pages[0].Height > 15000 {
 		t.Fatalf("%d pages, the first %v tall", len(one.Pages), one.Pages[0].Height)
 	}
 	if strings.Contains(docText(one), "theend") {

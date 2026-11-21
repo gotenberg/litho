@@ -72,7 +72,9 @@
 // as Word prints it.
 //
 // office.Options.SinglePage lays the document out on one page as tall as
-// its content, at most office.MaxPageSide, the content past it left out
+// its content, at most office.Options.FittedPageLimit, past the 14,400
+// points of ISO 32000-1, Annex C.2 when the content is taller, the content
+// past it left out
 // with a warning: the first section's width, side and top margins, the
 // last section's bottom margin. No break ends the page; the columns of
 // every section balance; a section of another width lays its content out

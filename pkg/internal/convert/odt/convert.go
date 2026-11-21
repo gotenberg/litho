@@ -100,6 +100,10 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	// The tree is finished: its paragraphs and spans styled alike share
 	// one style.
 	layout.ShareStyles(ctx, root, b.shared)
+	fittedLimit := 0.0
+	if b.single {
+		fittedLimit = opts.FittedPageLimit()
+	}
 	lay := func() (*layout.Result, error) {
 		b.pages.reset()
 		return layout.Layout(ctx, root, fonts, layout.Options{
@@ -107,6 +111,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 			PageFor:       b.pages.pageFor,
 			MarginContent: b.pages.marginContent,
 			FitFirstPage:  b.single,
+			FittedLimit:   fittedLimit,
 			Lang:          root.Lang,
 			Fallback:      text.FallbackLibreOffice,
 			Image:         b.loadPicture,
@@ -152,7 +157,7 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 		}
 	}
 	if b.single {
-		if w := office.FirstPageOnly(res); w != nil {
+		if w := office.FirstPageOnly(res, opts.FittedPageLimit()); w != nil {
 			b.warn("single-page", w.Code, w.Effect, w.Message)
 		}
 	}

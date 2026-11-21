@@ -89,9 +89,14 @@ type Options struct {
 	// then as tall as that height plus the top and bottom margins, and in
 	// Landscape as wide as that width plus the left and right margins;
 	// the document is printed on it as usual, forced breaks cutting, and
-	// only the first page is written. A paper side stops at 14,400
-	// points: content measured past it is left out, with a warning.
+	// only the first page is written. The page may pass the 14,400 points
+	// of ISO 32000-1, Annex C.2, up to FittedLimit: content measured past
+	// it is left out, with a warning.
 	SinglePage bool
+	// FittedLimit is the largest side, in points, of the single page:
+	// [typeset.FittedPageLimit] of the version the file is written at.
+	// Zero takes that of PDF 1.7.
+	FittedLimit float64
 	// OmitBackgrounds drops the background colours and images of the html
 	// and body elements, which paint the canvas (CSS 2.1, 14.2), and keeps
 	// every other element's and the page box's: the page comes out white
@@ -301,4 +306,13 @@ func (o Options) withDefaults() (Options, error) {
 		return o, err
 	}
 	return o, nil
+}
+
+// fittedLimit returns the largest side of a single page (see
+// [Options.FittedLimit]).
+func (o Options) fittedLimit() float64 {
+	if o.FittedLimit > 0 {
+		return o.FittedLimit
+	}
+	return typeset.FittedPageLimit(typeset.Version17)
 }

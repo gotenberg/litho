@@ -76,6 +76,11 @@ type Page struct {
 	// lies within the page, the trim box within the bleed box. nil leaves
 	// the box out, which a reader takes as the media box.
 	TrimBox, BleedBox *Rect
+	// Fitted marks a page sized from its content rather than from a
+	// paper: its sides may pass the 14,400 points of ISO 32000-1, Annex
+	// C.2, up to [FittedPageLimit] of the file's version. Any other page
+	// keeps each side within 14,400 points.
+	Fitted bool
 }
 
 // Fragment is something painted on a page: a [Text] run, an [Image], a

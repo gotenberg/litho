@@ -97,10 +97,11 @@ func convertChecked(ctx context.Context, src io.Reader, fonts *text.Fonts, o Opt
 		if err != nil {
 			return nil, err
 		}
+		limit := o.fittedLimit()
 		if o.Landscape {
-			o.PageWidth = min(chromiumPaper(w+o.MarginLeft+o.MarginRight), maxPageSide)
+			o.PageWidth = min(chromiumPaper(w+o.MarginLeft+o.MarginRight), limit)
 		}
-		o.PageHeight = min(chromiumPaper(h+o.MarginTop+o.MarginBottom), maxPageSide)
+		o.PageHeight = min(chromiumPaper(h+o.MarginTop+o.MarginBottom), limit)
 	}
 	p, res, err := prepareAndLayOut(ctx, doc, o, fonts, newPrintSetup(o), lay, nil)
 	if err != nil {
@@ -133,11 +134,11 @@ func convertChecked(ctx context.Context, src io.Reader, fonts *text.Fonts, o Opt
 	if err != nil {
 		return nil, err
 	}
-	if p.o.SinglePage && p.o.PageHeight >= maxPageSide && len(res.Pages) > 1 {
-		// The paper reached the tallest page a PDF may have before it held
-		// the content measured (ISO 32000-1, Annex C.2): what flowed past
-		// it is left out with the first page, as a text document's is.
-		out.Warnings = append(out.Warnings, office.SinglePageCut())
+	if p.o.SinglePage && p.o.PageHeight >= p.o.fittedLimit() && len(res.Pages) > 1 {
+		// The paper reached the tallest single page before it held the
+		// content measured: what flowed past it is left out with the
+		// first page, as a text document's is.
+		out.Warnings = append(out.Warnings, office.SinglePageCut(p.o.fittedLimit()))
 	}
 	// A required resource that failed late in the layout ended ctx: the
 	// pages are not charged, so nothing is held for a document never
@@ -165,7 +166,7 @@ func (p *prepared) makeRoom(ctx context.Context, doc *dom.Node, pages int) (*pre
 	before, after := p.pages.box(info), p.grown(info, pages)
 	o := p.o
 	grow := after.Margin[css.Top] - before.Margin[css.Top] + after.Margin[css.Bottom] - before.Margin[css.Bottom]
-	o.PageHeight = min(o.PageHeight+grow, maxPageSide)
+	o.PageHeight = min(o.PageHeight+grow, o.fittedLimit())
 	q, err := prepareDoc(ctx, doc, o, p.fonts, p.setup)
 	if err != nil {
 		return nil, err
@@ -452,6 +453,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 			Page:             page,
 			PageAt:           pageAt,
 			FitFirstPage:     setup.measure,
+			FittedLimit:      setup.fitted,
 			PixelFontMetrics: !o.FractionalFontMetrics,
 			BrowserRules:     true,
 			FeatureValues:    resolver.FontFeatureValues,

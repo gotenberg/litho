@@ -59,6 +59,7 @@ func TestValidateRefuses(t *testing.T) {
 		{"NaN width", &Document{Pages: []*Page{{Width: nan, Height: 10}}}, ErrInvalidPage},
 		{"infinite height", &Document{Pages: []*Page{{Width: 10, Height: inf}}}, ErrInvalidPage},
 		{"beyond Annex C", &Document{Pages: []*Page{{Width: 14401, Height: 10}}}, ErrInvalidPage},
+		{"fitted beyond its limit", &Document{Pages: []*Page{{Width: 10, Height: maxFittedPageSize + 1, Fitted: true}}}, ErrInvalidPage},
 		{"nil fragment", page(nil), ErrInvalidFragment},
 		{"typed nil text", page((*Text)(nil)), ErrInvalidFragment},
 		{"nil face", page(&Text{Size: 12}), ErrInvalidText},
@@ -273,6 +274,36 @@ func TestValidatePageBoxes(t *testing.T) {
 		err := (&Document{Pages: []*Page{page}}).Validate(t.Context())
 		if (err == nil) != tt.ok {
 			t.Errorf("%s: Validate() = %v", tt.name, err)
+		}
+	}
+}
+
+// TestStream_FittedPageTakesItsVersionsLimit states the bound of a page
+// sized from its content: past the 14,400 points of ISO 32000-1, Annex
+// C.2, up to [FittedPageLimit] of the file's version, 32,767 points at PDF
+// 1.4 (PDF Reference 1.4, Appendix C), and a page that is not fitted stays
+// within 14,400.
+func TestStream_FittedPageTakesItsVersionsLimit(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		version Version
+		page    Page
+		ok      bool
+	}{
+		{Version17, Page{Width: 600, Height: 40000, Fitted: true}, true},
+		{Version20, Page{Width: 600, Height: 40000, Fitted: true}, true},
+		{Version14, Page{Width: 600, Height: 32767, Fitted: true}, true},
+		{Version14, Page{Width: 600, Height: 32768, Fitted: true}, false},
+		{Version17, Page{Width: 600, Height: 14401}, false},
+	} {
+		var out bytes.Buffer
+		page := tc.page
+		err := Write(t.Context(), &Document{Pages: []*Page{&page}}, &out, Options{Version: tc.version})
+		if (err == nil) != tc.ok || !tc.ok && !errors.Is(err, ErrInvalidPage) {
+			t.Errorf("%s, %vx%v fitted %v: %v, want ok %v", tc.version, page.Width, page.Height, page.Fitted, err, tc.ok)
+		}
+		if tc.ok && !bytes.Contains(out.Bytes(), []byte(" 40000]")) && !bytes.Contains(out.Bytes(), []byte(" 32767]")) {
+			t.Errorf("%s: the media box is not the page's", tc.version)
 		}
 	}
 }

@@ -138,7 +138,7 @@ func newStream(ctx context.Context, opts Options, tagged, checked bool) (*Stream
 		producer: producer,
 		checked:  checked,
 		expected: -1,
-		v:        validator{pages: -1, parents: make(map[*StructElem]bool), images: make(map[*ImageSource]bool)},
+		v:        validator{version: version, pages: -1, parents: make(map[*StructElem]bool), images: make(map[*ImageSource]bool)},
 	}
 	return s, nil
 }
@@ -400,7 +400,7 @@ func (s *Stream) closeWhole(ctx context.Context, tail *Document, dst io.Writer) 
 	}
 	SelectPages(&doc, pages)
 	tail.Warnings, tail.Structure, tail.Outline = doc.Warnings, doc.Structure, doc.Outline
-	if err := doc.Validate(ctx); err != nil {
+	if err := doc.validate(ctx, s.w.version); err != nil {
 		return err
 	}
 	s.checked = true

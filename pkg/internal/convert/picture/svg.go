@@ -78,7 +78,7 @@ func (c *converter) svg(ctx context.Context, data []byte, fonts *text.Fonts) err
 		w.Page = c.pages
 		c.doc.Warnings = append(c.doc.Warnings, w)
 	}
-	return c.addPage(ctx, &typeset.Page{Width: pw, Height: ph, Content: content}, fig)
+	return c.addPage(ctx, &typeset.Page{Width: pw, Height: ph, Content: content, Fitted: c.fitted()}, fig)
 }
 
 // svgSize returns a drawing's page size in points: its width and height,

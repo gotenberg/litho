@@ -92,6 +92,10 @@ func (d *document) convert() (*typeset.Document, error) {
 		tree.Children = append(tree.Children, d.sectionNode(s, extra))
 	}
 	single := d.opts.SinglePage
+	fittedLimit := 0.0
+	if single {
+		fittedLimit = d.opts.FittedPageLimit()
+	}
 	if single {
 		if err := layout.OnePage(d.ctx, tree); err != nil {
 			return nil, err
@@ -109,6 +113,7 @@ func (d *document) convert() (*typeset.Document, error) {
 			Placed:        pg.place,
 			MarginContent: pg.margins,
 			FitFirstPage:  single,
+			FittedLimit:   fittedLimit,
 			Lang:          d.lang(),
 			MaxPages:      d.opts.MaxPages,
 			Logger:        d.opts.Logger,
@@ -139,7 +144,7 @@ func (d *document) convert() (*typeset.Document, error) {
 		}
 	}
 	if single {
-		if w := office.FirstPageOnly(res); w != nil {
+		if w := office.FirstPageOnly(res, d.opts.FittedPageLimit()); w != nil {
 			d.warn(w.Code, w.Effect, w.Message)
 		}
 	}

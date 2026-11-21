@@ -437,10 +437,13 @@ func presentationConfig(opts []PresentationOption) convertConfig {
 // 300 by 150 pixels. [WithPaper] makes every page the paper, the picture
 // scaled down to fit it, never up, and centred; [WithOrientation] turns
 // the page and fits the picture to it. A picture always names its size,
-// so [WithDefaultPaper] changes nothing. A side past 14,400 points (ISO
-// 32000-1, Annex C.2) is cut to it, the picture scaled down to fit, and a
-// side under 3 points grown to 3, the picture centred, each with a
-// warning. [WithPageRanges] selects among the pages.
+// so [WithDefaultPaper] changes nothing. A page of the picture's size may
+// pass the 14,400 points ISO 32000-1, Annex C.2 lists, as a single page
+// does (see [WithSinglePage]): a side past 1,048,576 points, or 32,767
+// under [WithConvertVersion] "1.4", or past 14,400 points on a paper, is
+// cut to it, the picture scaled down to fit, and a side under 3 points
+// grown to 3, the picture centred, each with a warning. [WithPageRanges]
+// selects among the pages.
 //
 // # Pictures
 //
@@ -615,9 +618,9 @@ func (c *Conversion) run(ctx context.Context, dst io.Writer, env convertEnv) (_ 
 	var doc *typeset.Document
 	switch c.kind {
 	case kindHTML, kindMarkdown:
-		doc, err = convertHTML(ctx, src, c.kind, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages)
+		doc, err = convertHTML(ctx, src, c.kind, fonts, &o, version, budget.MaxConvertInputBytes, budget.MaxConvertPages)
 	case kindDOCX, kindODT, kindXLSX, kindODS, kindCSV, kindPPTX, kindODP:
-		doc, err = convertOffice(ctx, src, c.kind, fonts, &o, budget.MaxConvertInputBytes, budget.MaxConvertPages, stream)
+		doc, err = convertOffice(ctx, src, c.kind, fonts, &o, version, budget.MaxConvertInputBytes, budget.MaxConvertPages, stream)
 	case kindText:
 		// The text converter holds a piece of its source at a time, which
 		// it charges itself.
@@ -741,7 +744,7 @@ func convertPlainText(ctx context.Context, src io.Reader, fonts *text.Fonts, o *
 // [ErrInvalidConvertOptions], every cap on the document's size or
 // complexity [ErrConvertInputTooLarge], its page cap
 // [ErrConvertTooManyPages].
-func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *text.Fonts, o *convertConfig, maxBytes int64, maxPages int) (*typeset.Document, error) {
+func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *text.Fonts, o *convertConfig, version typeset.Version, maxBytes int64, maxPages int) (*typeset.Document, error) {
 	// The converter takes the paper as a portrait sheet and a landscape
 	// switch, which also widens a single page. A paper the caller neither
 	// turns nor names portrait goes as it is.
@@ -772,6 +775,7 @@ func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *te
 		PreferCSSPageSize:     !o.paperSet && !o.singlePage,
 		Scale:                 o.scale,
 		SinglePage:            o.singlePage,
+		FittedLimit:           typeset.FittedPageLimit(version),
 		OmitBackgrounds:       o.omitCanvasBackground,
 		OmitOutline:           o.omitOutline,
 		NoShrinkToFit:         o.noShrinkToFit,
@@ -808,7 +812,7 @@ func convertHTML(ctx context.Context, src io.Reader, kind convertKind, fonts *te
 // [ErrConvertInputTooLarge], its page cap [ErrConvertTooManyPages], a
 // package that is not one [ErrConvertMalformed], an encrypted one
 // [ErrConvertEncrypted].
-func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *text.Fonts, o *convertConfig, maxBytes int64, maxPages int, sink typeset.PageSink) (*typeset.Document, error) {
+func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *text.Fonts, o *convertConfig, version typeset.Version, maxBytes int64, maxPages int, sink typeset.PageSink) (*typeset.Document, error) {
 	name := kind.name()
 	var conv func(context.Context, io.Reader, *text.Fonts, office.Options) (*typeset.Document, error)
 	switch kind {
@@ -840,6 +844,7 @@ func convertOffice(ctx context.Context, src io.Reader, kind convertKind, fonts *
 		OmitOutline:       o.omitOutline,
 		SinglePageSheets:  o.onePagePerSheet,
 		SinglePage:        o.singlePage,
+		FittedLimit:       typeset.FittedPageLimit(version),
 		PrintDate:         o.date,
 		TrackedChanges:    o.trackedChanges,
 		Comments:          o.comments,

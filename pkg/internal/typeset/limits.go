@@ -70,6 +70,47 @@ const maxImagePixels = limits.MaxImagePixelsCeiling
 // dimension. It is the implementation limit, not a litho guard.
 const maxPageSize = 14400
 
+// maxFittedPageSize is the largest side, in points, of a page sized from
+// its content ([Page.Fitted]): 2^20 points, about 370 metres, the longest
+// length the layout engine holds (its maxLength), so a single page measured
+// past it could show nothing more. Anti-DoS guard, not spec-mandated: ISO
+// 32000-2 sets no page size. The readers measured place text at that
+// distance as they do on an A4 page; the memory budget, not this bound,
+// stops most documents first.
+//
+// # Corpus evidence
+//
+//   - probe, html: a line of text 1,000,000, 2,000,000 and 4,000,000 points
+//     down a page draws the same pixels at 288 dpi as at the top in
+//     PDFium 159, poppler 26.11 and CoreGraphics; at 8,000,000 points
+//     PDFium draws it a quarter point lower, a reader holding coordinates
+//     in 32-bit floats.
+//   - probe, html: single pages of 100,000 and 1,000,000 points of text
+//     convert in 0.4 and 2.5 seconds with 29 and 198 MiB of heap in use
+//     at the peak (GOGC=10); 8,000,000 points pass the default 1 GiB
+//     memory budget. Chromium 156 (Gotenberg 9.4.1) writes a single page of
+//     65,094 points and refuses one of 66,094 as too large.
+const maxFittedPageSize = 1 << 20
+
+// FittedPageLimit returns the largest side, in points, of a page sized
+// from its content ([Page.Fitted]) in a file of version v: the largest
+// real number a PDF 1.4 file holds, 32,767 (PDF Reference 1.4, Appendix
+// C, Table C.1; ISO 19005-1, 6.1.12 makes it a rule), and
+// [maxFittedPageSize] in every later version, "" standing for 1.7.
+//
+// Such a page passes the 14,400 units of ISO 32000-1, Annex C.2, Table
+// C.1, which is informative: it lists the limits of one implementation,
+// and ISO 32000-2 states no page size limit. Chromium writes a single
+// page as tall as its content, and PDFium, poppler, pdf.js and Apple's
+// PDFKit show such a page at its true size, where PDFium, poppler and
+// PDFKit show a page in larger /UserUnit units at a fraction of it.
+func FittedPageLimit(v Version) float64 {
+	if v == Version14 {
+		return realLimit
+	}
+	return maxFittedPageSize
+}
+
 // maxShadingStops caps the stops of one [Shading]. Anti-DoS guard, not
 // spec-mandated: ISO 32000-1, 7.10.4 sets no bound on a stitching
 // function's subfunctions, and Write emits one per pair of stops. litho's
