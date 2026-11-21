@@ -852,7 +852,8 @@ func sizedByStyle(st *css.Style) bool {
 // select's selected option, a textarea's text or placeholder. The box
 // takes the size of that text, as field-sizing: content asks (15.5.6 and
 // 15.5.17); the default preferred size of field-sizing: fixed is not laid
-// out.
+// out. An input's text stays on one line, as a single-line text entry
+// widget shows it (15.5.6).
 func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
 	b.warnOnce(warn.FormWidgetOmitted, warn.Approximated, "form", "form controls are drawn as their text, without their widgets")
 	var s string
@@ -860,6 +861,12 @@ func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
 	switch n.DataAtom { //nolint:exhaustive // every other element takes the default path
 	case atom.Input:
 		s = inputText(n)
+		if st.WhiteSpace != css.Pre {
+			// The computed style is shared: the text takes a copy.
+			c := *st
+			c.WhiteSpace = css.Pre
+			textSt = &c
+		}
 	case atom.Select:
 		s = selectText(n)
 	default:

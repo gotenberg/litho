@@ -412,12 +412,20 @@ func TestPrepare_DrawsFormControlsAsText(t *testing.T) {
 
 // TestPrepare_SizesFormControlsByTheirText holds a control to the text
 // it shows, as field-sizing: content sizes it (HTML Standard, 15.5.6 and
-// 15.5.17): an empty textarea shows its placeholder.
+// 15.5.17): an empty textarea shows its placeholder, and an input's text
+// stays on one line.
 func TestPrepare_SizesFormControlsByTheirText(t *testing.T) {
 	t.Parallel()
 	p := prep(t, `<textarea id=ta placeholder="Tell us"></textarea><input id=in value="a long answer" style="width: 5px">`, Options{})
 	if got := treeText(byID(t, p.root, "ta")); got != "Tell us" {
 		t.Errorf("textarea text %q, want its placeholder", got)
+	}
+	in := byID(t, p.root, "in")
+	if len(in.Children) != 1 || in.Children[0].Style.WhiteSpace != css.Pre {
+		t.Fatalf("input text %+v, want one run that does not wrap", in.Children)
+	}
+	if in.Style.WhiteSpace == css.Pre {
+		t.Error("the input's own style changed: the computed style is shared")
 	}
 }
 
