@@ -32,6 +32,11 @@ const (
 	stressDocxPages = 2000
 	// stressSlides is how many slides the long deck holds.
 	stressSlides = 500
+	// stressFrameChain is how many documents the chain of frames links,
+	// each framing the next; stressFrames how many frames the flood
+	// holds, each of the same 1 MiB document.
+	stressFrameChain = 200
+	stressFrames     = 10_000
 )
 
 // stressDoc is one document of the stress corpus.
@@ -69,6 +74,11 @@ func stressDocs() []stressDoc {
 			return os.WriteFile(filepath.Join(dir, "index.csv"), stressCSV(cells), 0o644) //nolint:gosec // testdata is world-readable
 		}})
 	}
+	docs = append(docs,
+		stressDoc{"html-frames-self", "index.html", writeStressSelfFrames},
+		stressDoc{fmt.Sprintf("html-frames-chain-%d", stressFrameChain), "index.html", writeStressFrameChain},
+		stressDoc{fmt.Sprintf("html-frames-%d", stressFrames), "index.html", writeStressFrameFlood},
+	)
 	docs = append(docs, stressDoc{fmt.Sprintf("docx-%dpages", stressDocxPages), "index.docx", func(dir string) error {
 		data, err := stressDocx(stressDocxPages)
 		if err != nil {
@@ -344,4 +354,53 @@ func stressPptx(n int) ([]byte, error) {
 		`<Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>` +
 		types.String() + `</Types>`)
 	return zipPackage(parts)
+}
+
+// writeStressSelfFrames writes a page that frames itself fifty times and
+// a pair of documents that frame each other, as index.html, a.html and
+// b.html.
+func writeStressSelfFrames(dir string) error {
+	page := "<!doctype html><html><body><p>A page framing itself.</p>\n" +
+		strings.Repeat(`<iframe src="index.html#self" width="600" height="400"></iframe>`+"\n", 50) +
+		`<iframe src="a.html" width="600" height="400"></iframe></body></html>` + "\n"
+	files := map[string]string{
+		"index.html": page,
+		"a.html":     `<!doctype html><p>A frames B.</p><iframe src="b.html" width="580" height="380"></iframe>` + "\n",
+		"b.html":     `<!doctype html><p>B frames A.</p><iframe src="a.html?again" width="560" height="360"></iframe><iframe src="a.html" width="560" height="360"></iframe>` + "\n",
+	}
+	for _, name := range []string{"index.html", "a.html", "b.html"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(files[name]), 0o644); err != nil { //nolint:gosec // testdata is world-readable
+			return err
+		}
+	}
+	return nil
+}
+
+// writeStressFrameChain writes a page framing the first of
+// [stressFrameChain] documents, each framing the next.
+func writeStressFrameChain(dir string) error {
+	frame := func(i int) string {
+		return fmt.Sprintf(`<iframe src="d%03d.html" width="600" height="400"></iframe>`, i)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<!doctype html><p>A chain of frames.</p>"+frame(0)+"\n"), 0o644); err != nil { //nolint:gosec // testdata is world-readable
+		return err
+	}
+	for i := range stressFrameChain {
+		doc := fmt.Sprintf("<!doctype html><p>Document %d.</p>%s\n", i, frame(i+1))
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("d%03d.html", i)), []byte(doc), 0o644); err != nil { //nolint:gosec // testdata is world-readable
+			return err
+		}
+	}
+	return nil
+}
+
+// writeStressFrameFlood writes a page of [stressFrames] frames of one
+// document of 1 MiB of paragraphs, page.html.
+func writeStressFrameFlood(dir string) error {
+	page := "<!doctype html><html><body><p>A flood of frames.</p>\n" +
+		strings.Repeat(`<iframe src="page.html" width="300" height="150"></iframe>`+"\n", stressFrames) + "</body></html>\n"
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte(page), 0o644); err != nil { //nolint:gosec // testdata is world-readable
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "page.html"), stressHTML(1<<20), 0o644) //nolint:gosec // testdata is world-readable
 }

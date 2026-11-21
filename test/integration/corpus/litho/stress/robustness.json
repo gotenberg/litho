@@ -62,6 +62,25 @@
     "max_seconds": 10,
     "why": "1,000,000 cells, the cap: each cell is charged what the pages built from it cost when it is read, so the budget refuses the workbook while it is read, before any page is planned."
   },
+  "html-frames-self": {
+    "result": "pdf",
+    "max_seconds": 20,
+    "require": ["A page framing itself."],
+    "why": "A page framing itself fifty times, and two documents framing each other: a document appears once among the documents that frame it, so each frame of the page shows it once, with empty frames inside, and the pair alternates until frames nest 8 deep; about 70 MiB."
+  },
+  "html-frames-chain-200": {
+    "result": "pdf",
+    "max_seconds": 20,
+    "require": ["Document 7."],
+    "forbid": ["Document 8."],
+    "why": "200 documents, each framing the next: frames nest 8 deep, so the documents 0 to 7 show and the ninth level is left out with a warning, its box empty; about 50 MiB."
+  },
+  "html-frames-10000": {
+    "result": "pdf",
+    "max_seconds": 30,
+    "max_rss_mib": 768,
+    "why": "10,000 frames of one document of 1 MiB of paragraphs: the document is read once, and the documents the frames lay out are held together to the input cap of 16 MiB, so 16 frames show it and the others keep their boxes empty, with a warning; about 830 pages, 7 seconds and 360 MiB."
+  },
   "docx-2000pages": {
     "result": "pdf",
     "max_seconds": 20,
