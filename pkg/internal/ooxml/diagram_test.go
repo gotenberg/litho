@@ -424,6 +424,42 @@ func TestDiagramCompositeBottomEdge(t *testing.T) {
 	}
 }
 
+// TestDiagramCompositeSizesFromTheFont lays out a composite whose kids'
+// heights are factors of a font size read in millimetres, as hList1's
+// parTx and desTx: they keep those heights while they fit, and when they
+// do not, the size falls to the whole point under the share that fits,
+// the kids and the text taking it.
+func TestDiagramCompositeSizesFromTheFont(t *testing.T) {
+	layout := `<dgm:alg type="composite"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="primFontSz" for="ch" forName="pict" val="40"/>` +
+		`<dgm:constr type="h" for="ch" forName="pict" op="equ"/>` +
+		`<dgm:constr type="h" for="ch" forName="pict" refType="primFontSz" refFor="ch" refForName="pict" fact="0.8"/>` +
+		`<dgm:constr type="h" for="ch" forName="label" refType="primFontSz" refFor="ch" refForName="pict" fact="1.22"/>` +
+		`<dgm:constr type="t" for="ch" forName="pict"/><dgm:constr type="t" for="ch" forName="label" refType="h" refFor="ch" refForName="pict"/></dgm:constrLst>` +
+		`<dgm:layoutNode name="pict"><dgm:alg type="tx"/><dgm:shape type="rect"/></dgm:layoutNode><dgm:layoutNode name="label"><dgm:shape type="ellipse"/></dgm:layoutNode>`
+	for _, c := range []struct {
+		h          int64
+		want       []string
+		wantSize   float64
+		description string
+	}{
+		// 40 points: 32 and 48.8 mm, 2908800 EMU in all.
+		{3000000, []string{"pict rect 0,45600 1000x1152000", "label ellipse 0,1197600 1000x1756800"}, 40, "the kids fit"},
+		// 2000000 EMU hold 0.688 of them: 27.5 points, 27 in whole points.
+		{2000000, []string{"pict rect 0,18280 1000x777600", "label ellipse 0,795880 1000x1185840"}, 27, "the size falls"},
+	} {
+		d := ParseDiagram(mustParse(t, withPresNames(diagramData("a"), 1, "pict", "label")), mustParse(t, diagramLayout(layout)), nil, nil)
+		root := d.LayOut(1000, c.h, nil)
+		got := boxes(root)[1:]
+		if strings.Join(got, "; ") != strings.Join(c.want, "; ") {
+			t.Errorf("%s: boxes %q, want %q", c.description, got, c.want)
+		}
+		if size := root.Kids[1].FontSize; size != c.wantSize {
+			t.Errorf("%s: text at %v points, want %v", c.description, size, c.wantSize)
+		}
+	}
+}
+
 // TestDiagramCompositeOwnBound lays out a composite kid whose own
 // constraint keeps its height at most 0.4 of its width (op lte, 21.4.7.10
 // ST_BoolOperator): it bounds the height the composite sets, and sets none

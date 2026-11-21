@@ -93,7 +93,7 @@ func (e *engine) layoutShape(a *DiagramAtom, s *DiagramShape, cons []DiagramCons
 	}
 	switch a.Alg {
 	case "composite":
-		composite(a, s, cons)
+		e.composite(a, s, cons)
 	case "conn":
 		connAlg(a, s)
 	case "cycle":
@@ -135,9 +135,79 @@ func (lp layoutProps) get(name, prop string) (int64, bool) {
 
 // composite places each kid by the constraints on its layout node's name
 // (21.4.2.1 composite): left, top, width, height, the centres and the far
-// edges, each a factor of a reference property or a value in millimetres,
-// then centres the kids vertically in the free height.
-func composite(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
+// edges, each a factor of a reference property, a value in millimetres or
+// a factor of a font size read in millimetres, then centres the kids
+// vertically in the free height. An equality of no value sets nothing.
+//
+// Kids sized from a font size that do not fit the composite's box bound
+// that size: the lengths are linear in the size, so the size falls by the
+// share that brings the kids' far edges back to the box, in whole points
+// (see [engine.capFont]).
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: smartart-dir's hList1 stacks a parTx 0.8 and a desTx
+//     1.22 of the primary size tall in a 182.5-point composite: they fit up
+//     to 31.87 points, and Office prints both texts at 31 points, the
+//     boxes 177.5 points tall in all.
+func (e *engine) composite(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
+	run := &compositeRun{e: e, a: a, s: s, cons: cons, keys: map[string]bool{}}
+	// A bound (lte) met at one size and not at the next makes the far edges
+	// piecewise linear: the share is taken again from the size it gave.
+	for range maxCompositeFits {
+		run.scale = 1
+		run.lay(false)
+		if len(run.keys) == 0 {
+			break
+		}
+		r1, b1 := run.right, run.bottom
+		run.scale = 0
+		run.lay(false)
+		r0, b0 := run.right, run.bottom
+		f := 1.0
+		if b1 > float64(s.H) && b1 > b0 {
+			f = min(f, (float64(s.H)-b0)/(b1-b0))
+		}
+		if r1 > float64(s.W) && r1 > r0 {
+			f = min(f, (float64(s.W)-r0)/(r1-r0))
+		}
+		if f >= 1 {
+			break
+		}
+		for _, key := range sortedKeys(run.keys) {
+			e.capFont(key, cons, max(f, 0))
+		}
+	}
+	run.scale = 1
+	run.lay(true)
+}
+
+// maxCompositeFits caps the times a composite takes the share of a font
+// size its kids leave room for. Anti-DoS guard, not spec-mandated: a share
+// is taken again only where a bound starts or stops holding, once for
+// each bound of the definitions PowerPoint offers (hList1's parTx, at
+// most 0.4 of its width tall).
+const maxCompositeFits = 4
+
+// compositeRun is one evaluation of a composite's constraints: at scale 1
+// with every font-sized length at its size, at 0 without them. It records
+// the font sizes the lengths refer to and the far edges of the kids before
+// they are cut to the box. It does not outlive the composite's layout.
+type compositeRun struct {
+	e             *engine
+	a             *DiagramAtom
+	s             *DiagramShape
+	cons          []DiagramConstraint
+	scale         float64
+	keys          map[string]bool
+	right, bottom float64
+}
+
+// lay evaluates the constraints and, when place is set, gives the kids
+// their boxes.
+func (r *compositeRun) lay(place bool) {
+	a, s, cons := r.a, r.s, r.cons
+	r.right, r.bottom = 0, 0
 	props := layoutProps{}
 	var xOff int64
 	vmin, vmax := int64(math.MaxInt32), int64(0)
@@ -161,13 +231,15 @@ func composite(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 		props.set("", "b", s.H)
 	}
 	for _, c := range cons {
-		applyConstraint(c, props)
+		r.apply(c, props)
 	}
+	type box struct{ x, y, w, h int64 }
+	boxes := make([]box, len(s.Kids))
 	var bounds []DiagramConstraint
-	for _, k := range s.Kids {
+	for i, k := range s.Kids {
 		for _, c := range cons {
 			if c.ForName == k.Name {
-				applyConstraint(c, props)
+				r.apply(c, props)
 			}
 		}
 		for _, n := range a.Node.Kids {
@@ -187,7 +259,7 @@ func composite(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 					bounds = append(bounds, c)
 					continue
 				}
-				applyConstraint(c, props)
+				r.apply(c, props)
 			}
 		}
 		// A kid's own lte or gte constraint bounds a length the others set
@@ -206,10 +278,10 @@ func composite(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 		var x, y int64
 		if p, ok := props[k.Name]; ok {
 			if v, ok := p["w"]; ok {
-				w = min(v, s.W)
+				w = v
 			}
 			if v, ok := p["h"]; ok {
-				h = min(v, s.H)
+				h = v
 			}
 			if v, ok := p["l"]; ok {
 				x = v
@@ -226,8 +298,8 @@ func composite(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 				y = v - h
 			}
 			if l, ok := p["l"]; ok {
-				if r, ok := p["r"]; ok {
-					w = r - l
+				if rr, ok := p["r"]; ok {
+					w = rr - l
 				}
 			}
 			if t, ok := p["t"]; ok {
@@ -235,13 +307,22 @@ func composite(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 					h = b - t
 				}
 			}
+			r.right = max(r.right, float64(x+w))
+			r.bottom = max(r.bottom, float64(y+h))
+			w, h = min(w, s.W), min(h, s.H)
 			x += xOff
 			w = min(w, s.W-x)
 			h = min(h, s.H-y)
 		}
-		k.W, k.H, k.X, k.Y = w, h, x, y
+		boxes[i] = box{x, y, w, h}
 		vmin = min(vmin, y)
 		vmax = max(vmax, y+h)
+	}
+	if !place {
+		return
+	}
+	for i, k := range s.Kids {
+		k.W, k.H, k.X, k.Y = boxes[i].w, boxes[i].h, boxes[i].x, boxes[i].y
 	}
 	ph, _ := props.get("", "h")
 	if vmin < 0 || vmin > vmax || vmax > ph {
@@ -252,6 +333,22 @@ func composite(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 			k.Y += diff / 2
 		}
 	}
+}
+
+// apply applies one constraint of a composite: a length that refers to a
+// font size is its factor of that size read in millimetres (see
+// [engine.fontLength]), times the run's scale; an equality of no value
+// sets nothing (21.4.7.10 ST_BoolOperator equ).
+func (r *compositeRun) apply(c DiagramConstraint, props layoutProps) {
+	if c.ForName == "" || (c.Op == "equ" && !c.HasValue && c.RefType == "none") {
+		return
+	}
+	if v, key, ok := r.e.fontLength(c, r.cons); ok {
+		r.keys[key] = true
+		props.set(c.ForName, c.Type, trunc(float64(v*r.scale)))
+		return
+	}
+	applyConstraint(c, props)
 }
 
 // applyConstraint applies one constraint to the layout properties: its
