@@ -78,10 +78,46 @@ type Picture struct {
 	// drawn unscaled from the top of the box's content edge.
 	HasBaseline bool
 	Baseline    float64
+	// Embed, when set, makes the picture a document laid out on its own,
+	// the content of a frame (HTML Standard, 4.8.5): Source, Vector and
+	// Gradient are nil, the three NoNatural flags are set and Width and
+	// Height hold the default object size, 300 by 150 CSS pixels (CSS 2.1,
+	// 10.3.2 and 10.6.2). The engine calls it from its own goroutine with
+	// its context and the size in points of the box's content box, its
+	// viewport, and paints what it returns there, clipped to it:
+	// object-fit and object-position do not apply. A nil result paints
+	// nothing.
+	Embed func(ctx context.Context, w, h float64) *Embedded
 	// view, when set, is the part of the picture an object-view-box makes
 	// its whole: Width and Height are then the part's size.
 	view *viewBox
 }
+
+// Embedded is a document laid out on its own, as [Picture.Embed] returns
+// it, in the coordinates of its viewport: the origin at the top left of
+// the content box it paints into.
+type Embedded struct {
+	// Content paints the document. Its leaves hang from the elements of
+	// Structure, or from none for an artifact; their group nesting is at
+	// most [MaxEmbedDepth].
+	Content []typeset.Fragment
+	// Links are the document's links with a URI; a region is clipped to
+	// the viewport as the content is, and each hangs from its Link
+	// element of Structure.
+	Links []typeset.Link
+	// Structure is the root of the document's structure tree, nil for
+	// none: its kids hang from the element of the box the document paints
+	// into, which takes its Lang when it has none.
+	Structure *typeset.StructElem
+}
+
+// MaxEmbedDepth is the deepest group nesting an [Embedded] may hold: 10,
+// the room [MaxVectorDepth] leaves a vector picture, twice, since a frame
+// holds a page of its own with its groups. Anti-DoS guard, not
+// spec-mandated: the typeset model bounds the groups of a page, and a
+// page of frames nested a few deep keeps under it. A deeper document is
+// left out with a warning.
+const MaxEmbedDepth = 2 * MaxVectorDepth
 
 // MaxVectorDepth is the deepest group nesting a [Picture.Vector] may
 // return; the engine keeps room for it under its own groups.

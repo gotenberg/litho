@@ -195,6 +195,14 @@ func (e *engine) enter(n *Node, b *box, ctx genCtx) genCtx {
 		return out
 	}
 	b.elem = own
+	if out.elem != ctx.elem && n.Kind == Replaced && n.Picture != nil && n.Picture.Embed != nil {
+		// The embedded document's structure hangs from this element when
+		// it is painted.
+		if e.embeds == nil {
+			e.embeds = map[*typeset.StructElem]int{}
+		}
+		e.embeds[out.elem] = out.structDepth
+	}
 	if n.Href != "" {
 		l := &link{href: n.Href, node: n}
 		if out.elem != nil && out.elem.Role == "Link" {
@@ -452,7 +460,7 @@ func (e *engine) genContents(n *Node, parent *box, ctx genCtx, ordinal *int) []*
 // validPicture reports a picture the engine can draw: a source or a
 // vector, and a finite, positive intrinsic size.
 func validPicture(p *Picture) bool {
-	return p != nil && (p.Source != nil || p.Vector != nil || p.Gradient != nil) && numeric.PositiveFinite(p.Width) && numeric.PositiveFinite(p.Height)
+	return p != nil && (p.Source != nil || p.Vector != nil || p.Gradient != nil || p.Embed != nil) && numeric.PositiveFinite(p.Width) && numeric.PositiveFinite(p.Height)
 }
 
 // genInline generates an inline element: its inline box, split around the

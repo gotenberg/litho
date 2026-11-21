@@ -157,7 +157,7 @@ func (t *tagWalk) walk(b *box, run int) {
 		}
 		t.add(b.outside.elem, tagEvent{mark: b.outside})
 	}
-	if b.elem != nil && (b.kind == kindText || b.kind == kindReplaced || b.chain != nil) {
+	if b.elem != nil && (b.kind == kindText || b.kind == kindReplaced && !b.embeds() || b.chain != nil) {
 		r := 0
 		if inlineLevel {
 			r = run

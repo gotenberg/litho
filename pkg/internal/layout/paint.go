@@ -1308,6 +1308,10 @@ func (p *painter) replaced(b *box) {
 		return
 	}
 	box := typeset.Rect{X: b.contentX() + p.dx, Y: b.contentY() + p.dy, Width: b.w, Height: b.h}
+	if b.picture.Embed != nil {
+		p.embedded(b, box)
+		return
+	}
 	var img typeset.Fragment
 	var r typeset.Rect
 	if b.turn != css.HorizontalTB {

@@ -198,6 +198,11 @@ type engine struct {
 	// boxes are laid out in: the first page's content under
 	// [Options.FitFirstPage] ([engine.fitFixed]).
 	fixedH float64
+	// embeds maps the structure element of each replaced box of an
+	// embedded document to its depth in the structure tree, or to -1 once
+	// the painter hung the document's structure from it, which a second
+	// paint does not hang again ([painter.embedded]); nil for none.
+	embeds map[*typeset.StructElem]int
 }
 
 // charge charges the conversion's budget n bytes for what, failing the
