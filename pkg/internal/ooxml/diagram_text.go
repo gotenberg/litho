@@ -475,14 +475,25 @@ func (z *sizer) union(i, j int) {
 
 // tie joins the groups the font size constraints of the enclosing layout
 // nodes make: every shape one constraint names under one instance of its
-// layout node, whether it states equality (op equ) or sets the one value
-// they share (op none), and, for a constraint that sets a size to
-// another's, the shapes named by its refForName under that instance.
+// layout node, whether it states equality (op equ), sets the one value
+// they share (op none) or a value they start from (op gte), and, for a
+// constraint that sets a size to another's, the shapes named by its
+// refForName under that instance.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: four default nodes whose font size constraint states
+//     op gte and 50 in place of op equ and 65, one of them a word too wide
+//     at 50: Office sets all four at 31.73 points, as with op equ, under
+//     the 50 the constraint states.
 func (z *sizer) tie() {
 	for _, h := range z.holders {
 		cons, _ := z.e.own(h.atom, h.pt)
 		for _, c := range cons {
-			if (c.Op != "equ" && c.Op != "none") || (c.Type != primFontSz && c.Type != secFontSz) {
+			// A value the size is at least (op gte) ties the shapes it names
+			// as an equality does: Office sets them at one size, under it.
+			gte := c.Op == "gte" && c.RefType == "none"
+			if (c.Op != "equ" && c.Op != "none" && !gte) || (c.Type != primFontSz && c.Type != secFontSz) {
 				continue
 			}
 			refers := c.RefForName != "" && (c.RefType == primFontSz || c.RefType == secFontSz) && !boundBy(c)

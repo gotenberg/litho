@@ -438,9 +438,9 @@ func TestDiagramCompositeSizesFromTheFont(t *testing.T) {
 		`<dgm:constr type="t" for="ch" forName="pict"/><dgm:constr type="t" for="ch" forName="label" refType="h" refFor="ch" refForName="pict"/></dgm:constrLst>` +
 		`<dgm:layoutNode name="pict"><dgm:alg type="tx"/><dgm:shape type="rect"/></dgm:layoutNode><dgm:layoutNode name="label"><dgm:shape type="ellipse"/></dgm:layoutNode>`
 	for _, c := range []struct {
-		h          int64
-		want       []string
-		wantSize   float64
+		h           int64
+		want        []string
+		wantSize    float64
 		description string
 	}{
 		// 40 points: 32 and 48.8 mm, 2908800 EMU in all.

@@ -81,6 +81,7 @@ func TestDiagramTextSize(t *testing.T) {
 		{"a constraint value no shape outgrows is kept", tied, rule, []string{"a", "b"}, []float64{65, 65}, true},
 		{"one constraint ties its nodes at the size the widest needs", tied, rule, []string{"a", "abcdefghijkl"}, []float64{36, 36}, true},
 		{"an op none constraint over the nodes ties them too", strings.Replace(tied, ` op="equ"`, ``, 1), rule, []string{"a", "abcdefghijkl"}, []float64{36, 36}, true},
+		{"an op gte constraint over the nodes ties them under its value", strings.Replace(tied, `op="equ"`, `op="gte"`, 1), rule, []string{"a", "abcdefghijkl"}, []float64{36, 36}, true},
 		{"a node's own constraint sizes it alone", ``, own + rule, []string{"a", "abcdefghijkl"}, []float64{65, 36}, true},
 		{"without a rule the start is kept", tied, ``, []string{"abcdefghijkl"}, []float64{65}, true},
 		{"the floor of the rule stops the shrink", tied, `<dgm:ruleLst><dgm:rule type="primFontSz" val="40"/></dgm:ruleLst>`, []string{"abcdefghijkl"}, []float64{40}, true},
