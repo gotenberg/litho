@@ -204,6 +204,11 @@ func (e *engine) overflowRight(rb *box) float64 {
 		if b.abs {
 			ax, ay := ancestorOffset(b)
 			m = typeset.Matrix{A: 1, D: 1, E: ax, F: ay}
+			if t, turned := frameTurn(b); turned {
+				// A box of an orthogonal flow counts where the flow's turn
+				// puts it on the page.
+				m = mul(m, t)
+			}
 		}
 		ox, oy := offset(b)
 		m = mul(m, typeset.Matrix{A: 1, D: 1, E: ox, F: oy})

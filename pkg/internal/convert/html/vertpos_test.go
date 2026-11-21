@@ -156,3 +156,21 @@ func TestVertical_OrthogonalRootIsMonolithic(t *testing.T) {
 		}
 	}
 }
+
+// TestVertical_PositionedBoxesOverflowWhereTheyPaint locks the overflow a
+// positioned box of an orthogonal flow adds to the document: its border
+// box where the flow's turn puts it on the page (CSS Overflow 3, 2.2), so a
+// vertical container at the page's right edge widens nothing and the page
+// is not shrunk to fit.
+func TestVertical_PositionedBoxesOverflowWhereTheyPaint(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"vertical-rl", "vertical-lr", "sideways-rl"} {
+		doc := convertDoc(t, `<style>@page { size: 600px 400px; margin: 0 } html, body { margin: 0 }
+			.v { writing-mode: `+mode+`; position: relative; width: 150px; height: 300px; margin-left: 440px }
+			.b { position: absolute; bottom: 0; left: 0; width: 40px; height: 20px; background: red }</style>
+			<div class=v><p>縦書き</p><div class=b></div></div>`, Options{PreferCSSPageSize: true})
+		if got := pxBoxes(doc)[0]["r"]; got != "440,280+40x20" {
+			t.Errorf("%s: badge %q, want 440,280+40x20 on a page not shrunk", mode, got)
+		}
+	}
+}
