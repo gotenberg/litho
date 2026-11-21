@@ -849,10 +849,14 @@ func sizedByStyle(st *css.Style) bool {
 
 // control builds a form control styled st as an inline-block holding the
 // text it shows (HTML Standard, 15.5): an input's value or placeholder, a
-// select's selected option, a textarea's text.
+// select's selected option, a textarea's text or placeholder. The box
+// takes the size of that text, as field-sizing: content asks (15.5.6 and
+// 15.5.17); the default preferred size of field-sizing: fixed is not laid
+// out.
 func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
 	b.warnOnce(warn.FormWidgetOmitted, warn.Approximated, "form", "form controls are drawn as their text, without their widgets")
 	var s string
+	textSt := st
 	switch n.DataAtom { //nolint:exhaustive // every other element takes the default path
 	case atom.Input:
 		s = inputText(n)
@@ -860,11 +864,14 @@ func (b *builder) control(n *dom.Node, st *css.Style) []*layout.Node {
 		s = selectText(n)
 	default:
 		s = textContent(n)
+		if s == "" {
+			s, _ = attr(n, "placeholder")
+		}
 	}
 	node := &layout.Node{Kind: layout.Element, Style: st}
 	node.ID, _ = attr(n, "id")
 	if s != "" {
-		node.Children = []*layout.Node{{Kind: layout.Text, Style: st, Text: s}}
+		node.Children = []*layout.Node{{Kind: layout.Text, Style: textSt, Text: s}}
 	}
 	return []*layout.Node{node}
 }

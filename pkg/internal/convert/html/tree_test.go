@@ -410,6 +410,17 @@ func TestPrepare_DrawsFormControlsAsText(t *testing.T) {
 	}
 }
 
+// TestPrepare_SizesFormControlsByTheirText holds a control to the text
+// it shows, as field-sizing: content sizes it (HTML Standard, 15.5.6 and
+// 15.5.17): an empty textarea shows its placeholder.
+func TestPrepare_SizesFormControlsByTheirText(t *testing.T) {
+	t.Parallel()
+	p := prep(t, `<textarea id=ta placeholder="Tell us"></textarea><input id=in value="a long answer" style="width: 5px">`, Options{})
+	if got := treeText(byID(t, p.root, "ta")); got != "Tell us" {
+		t.Errorf("textarea text %q, want its placeholder", got)
+	}
+}
+
 func TestPrepare_LeavesEmbeddedContentOut(t *testing.T) {
 	t.Parallel()
 	p := prep(t, `<p id=x>a<iframe src="x.html">i</iframe><audio>v</audio><math><mi>m</mi></math>`+
