@@ -1,0 +1,10 @@
+{
+  "differences": [
+    {
+      "fixture": "scale_percent",
+      "page": 1,
+      "pixels": 7,
+      "reason": "The sheet prints at 10 per cent: its title, Carlito Bold at 1.4 device pixels, has its baseline at y = 54.98 under the sheet's clip, whose top is y = 54.0, so its ink lies inside the clip (ISO 32000-1, 9.4.4 and 8.5.4). poppler snaps the glyph origin to the pixel grid, which lifts the title out of the clip, and draws none of it; removing the cell's clip does not bring it back, moving the text half a pixel down does. litho, PDF.js and macOS Quick Look draw the title in row 54. The 7 pixels are most of the page's ink past the render rule's tolerance, so its ink bar fails the page: a real one-row difference, poppler's."
+    }
+  ]
+}

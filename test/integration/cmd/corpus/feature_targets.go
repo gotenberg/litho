@@ -285,6 +285,9 @@ type targetsFeature struct {
 	m        *Manifest
 	fontDirs []string
 	outputs  map[string][]byte
+	// popplerDiffs are the pages the corpus accepts poppler drawing apart
+	// from litho (see [targetsFeature.LoadOverrides]).
+	popplerDiffs map[popplerDifferenceKey]popplerDifference
 }
 
 func newTargetsFeature() *targetsFeature {
@@ -404,9 +407,11 @@ type targetResult struct {
 	// verdict and the rules it fails, for the veraPDF comparison.
 	litho map[string]lithoVerdict
 	// file and pages are the staged target file, relative to the staging
-	// directory, and the pages litho drew of it there.
-	file  string
-	pages int
+	// directory, and the pages litho drew of it there; fixture is the ID
+	// of the fixture it was converted from.
+	file    string
+	pages   int
+	fixture string
 }
 
 // lithoVerdict is litho's validation of a target at one profile.
@@ -654,6 +659,7 @@ func (f *targetsFeature) prepareOne(ctx context.Context, fx Fixture, office bool
 			return res
 		}
 		r := f.checkTarget(ctx, src, settings, t, base)
+		r.fixture = fx.ID
 		if sampled && !r.ConvertError {
 			if err := stageTarget(&r, staging, fmt.Sprintf("f%d-t%d", n, k)); err != nil {
 				r.fail("staging for the oracles: %v", err)

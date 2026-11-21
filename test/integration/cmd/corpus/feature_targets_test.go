@@ -289,6 +289,82 @@ func TestTargets_Oracles(t *testing.T) {
 				}
 			},
 		},
+		"poppler draws apart, accepted": {
+			setup: func(f *targetsFeature) {
+				f.poppler = blank
+				f.popplerDiffs = map[popplerDifferenceKey]popplerDifference{
+					{"doc", 1}: {Fixture: "doc", Page: 1, Pixels: 1 << 30, Reason: "test"},
+					{"doc", 2}: {Fixture: "doc", Page: 2, Pixels: 1 << 30, Reason: "test"},
+				}
+			},
+			check: func(t *testing.T, v Verdict, out targetsOutput) {
+				if r := result(t, out, "a2b"); !r.Pass || r.RendererDisagrees {
+					t.Errorf("a2b: %+v, want the accepted page to pass", r)
+				}
+				if v.Metrics[metricRendererDisagrees] != 0 {
+					t.Errorf("renderer_disagrees %d, want 0", v.Metrics[metricRendererDisagrees])
+				}
+			},
+		},
+		"poppler draws apart, past the pixels accepted": {
+			setup: func(f *targetsFeature) {
+				f.poppler = blank
+				f.popplerDiffs = map[popplerDifferenceKey]popplerDifference{{"doc", 1}: {Fixture: "doc", Page: 1, Pixels: 1, Reason: "test"}}
+			},
+			check: func(t *testing.T, v Verdict, out targetsOutput) {
+				if r := result(t, out, "a2b"); r.Pass || !r.RendererDisagrees || !hasReason(r, "past the 1 accepted") {
+					t.Errorf("a2b: %+v, want poppler to disagree past the bound", r)
+				}
+				if v.Metrics[metricRendererDisagrees] != 3 {
+					t.Errorf("renderer_disagrees %d, want 3", v.Metrics[metricRendererDisagrees])
+				}
+			},
+		},
+		"accepted difference gone": {
+			setup: func(f *targetsFeature) {
+				f.popplerDiffs = map[popplerDifferenceKey]popplerDifference{{"doc", 1}: {Fixture: "doc", Page: 1, Pixels: 10, Reason: "test"}}
+			},
+			check: func(t *testing.T, v Verdict, out targetsOutput) {
+				if r := result(t, out, "a2b"); r.Pass || r.RendererDisagrees || !hasReason(r, "is stale") {
+					t.Errorf("a2b: %+v, want a stale entry to fail without a disagreement", r)
+				}
+				if v.Metrics[metricRendererDisagrees] != 0 {
+					t.Errorf("renderer_disagrees %d, want 0", v.Metrics[metricRendererDisagrees])
+				}
+			},
+		},
+		"accepted difference on one target": {
+			setup: func(f *targetsFeature) {
+				f.poppler = func(ctx context.Context, dir string, jobs []popplerJob) (string, error) {
+					var mine, apart []popplerJob
+					for _, j := range jobs {
+						if strings.Contains(j.PDF, "-t1") {
+							apart = append(apart, j)
+						} else {
+							mine = append(mine, j)
+						}
+					}
+					if _, err := blank(ctx, dir, apart); err != nil {
+						return "", err
+					}
+					return lithoAsPoppler(ctx, dir, mine)
+				}
+				f.popplerDiffs = map[popplerDifferenceKey]popplerDifference{
+					{"doc", 1}: {Fixture: "doc", Page: 1, Pixels: 1 << 30, Reason: "test"},
+					{"doc", 2}: {Fixture: "doc", Page: 2, Pixels: 1 << 30, Reason: "test"},
+				}
+			},
+			check: func(t *testing.T, v Verdict, out targetsOutput) {
+				for _, id := range []string{"v1.4", "a2b"} {
+					if r := result(t, out, id); !r.Pass {
+						t.Errorf("%s: %+v, want a pass: the entry is used on a2b, so it is not stale", id, r)
+					}
+				}
+				if v.Metrics[metricRendererDisagrees] != 0 {
+					t.Errorf("renderer_disagrees %d, want 0", v.Metrics[metricRendererDisagrees])
+				}
+			},
+		},
 		"oracles missing": {
 			setup: func(f *targetsFeature) {
 				f.veraFound = func() error { return unavailable }
@@ -322,6 +398,36 @@ func TestTargets_Oracles(t *testing.T) {
 			}
 			tc.check(t, v, out)
 		})
+	}
+}
+
+// TestReadPopplerDifferences checks that a poppler difference file names a
+// page the oracle draws, a positive pixel count and a reason, each page
+// once.
+func TestReadPopplerDifferences(t *testing.T) {
+	for name, tc := range map[string]struct {
+		body string
+		ok   bool
+	}{
+		"valid":      {`{"differences":[{"fixture":"a","page":1,"pixels":7,"reason":"r"},{"fixture":"a","page":2,"pixels":7,"reason":"r"}]}`, true},
+		"no fixture": {`{"differences":[{"page":1,"pixels":7,"reason":"r"}]}`, false},
+		"page 0":     {`{"differences":[{"fixture":"a","page":0,"pixels":7,"reason":"r"}]}`, false},
+		"page past":  {`{"differences":[{"fixture":"a","page":4,"pixels":7,"reason":"r"}]}`, false},
+		"no pixel":   {`{"differences":[{"fixture":"a","page":1,"reason":"r"}]}`, false},
+		"no reason":  {`{"differences":[{"fixture":"a","page":1,"pixels":7}]}`, false},
+		"twice":      {`{"differences":[{"fixture":"a","page":1,"pixels":7,"reason":"r"},{"fixture":"a","page":1,"pixels":8,"reason":"r"}]}`, false},
+	} {
+		path := filepath.Join(t.TempDir(), "differences.json")
+		if err := os.WriteFile(path, []byte(tc.body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		got, err := readPopplerDifferences(path)
+		if tc.ok && (err != nil || len(got) != 2) {
+			t.Errorf("%s: %d entries, %v", name, len(got), err)
+		}
+		if !tc.ok && !errors.Is(err, errPopplerDifferenceInvalid) {
+			t.Errorf("%s: %v, want an invalid entry", name, err)
+		}
 	}
 }
 

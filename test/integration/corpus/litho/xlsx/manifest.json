@@ -13,5 +13,8 @@
   "goldens": {
     "diff": "goldens/diff",
     "robustness": "sources"
+  },
+  "golden_overrides": {
+    "targets": "poppler-differences.json"
   }
 }

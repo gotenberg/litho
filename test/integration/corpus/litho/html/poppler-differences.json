@@ -1,0 +1,10 @@
+{
+  "differences": [
+    {
+      "fixture": "backgrounds-layers",
+      "page": 1,
+      "pixels": 8947,
+      "reason": "The multiply box (7,300 of the pixels) fills a path with a coloured tiling pattern under /BM /Multiply, in an isolated group whose backdrop is purple; the cell's own stream sets /BM /Normal for itself. A pattern cell is an implicit transparency group whose blend mode starts at Normal, and the blend mode in force when the pattern paints composites its result with the backdrop (ISO 32000-1, 11.6.7 and 8.7.3.1). poppler 26.09 and 26.11 paint a pattern whose one cell covers the fill by running the cell's stream in the current state, so the cell's Normal replaces the fill's Multiply and the picture shows unblended; with many cells it multiplies. litho, PDF.js and macOS Quick Look multiply. The rest are the anti-aliased edges of the tile.png circles, which poppler composes with a dark fringe."
+    }
+  ]
+}

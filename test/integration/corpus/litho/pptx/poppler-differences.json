@@ -1,0 +1,22 @@
+{
+  "differences": [
+    {
+      "fixture": "background-picture",
+      "page": 2,
+      "pixels": 20756,
+      "reason": "A 32 by 32 picture drawn 920 times at 24 by 24 points, each on whole device pixels at 72 dpi (ISO 32000-1, 8.9.4: the image's unit square maps to the CTM, so sample 16 lands at 12 pixels). poppler's downscaler places sample edges up to a pixel late, 13 pixels then 11, and moves the picture's diagonal by two; litho, PDF.js and macOS Quick Look put each edge on the 12-pixel boundary. No tiling pattern is involved."
+    },
+    {
+      "fixture": "background-picture",
+      "page": 3,
+      "pixels": 20755,
+      "reason": "The same picture tiled as on page 2, poppler's downscaler placing its sample edges up to a pixel off the 12-pixel boundaries litho, PDF.js and macOS Quick Look agree on (ISO 32000-1, 8.9.4)."
+    },
+    {
+      "fixture": "text-cjk",
+      "page": 1,
+      "pixels": 5463,
+      "reason": "The same glyphs at the same places (ISO 32000-1, 9.4.4): poppler draws each glyph with its origin moved to the device pixel grid vertically, a quarter-pixel move of the text giving the same pixels, so a one-pixel horizontal stroke of Noto Sans CJK at a fractional baseline is one black row in poppler and two grey rows in litho, PDF.js and macOS Quick Look. The lines whose baselines sit 0.4 to 0.6 of a pixel off the grid carry most of the pixels; the line 0.03 off carries 151."
+    }
+  ]
+}

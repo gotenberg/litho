@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gotenberg/litho/pkg/pdf"
@@ -171,6 +172,11 @@ func (f *targetsFeature) judgeWithPoppler(ctx context.Context, staging string, s
 	if unavailable != "" {
 		fmt.Fprintf(os.Stderr, "targets: %s\n", unavailable)
 	}
+	var (
+		mu      sync.Mutex
+		matched = map[popplerDifferenceKey]bool{}
+		used    = map[popplerDifferenceKey]bool{}
+	)
 	pool(workers, len(staged), func(i int) {
 		r := staged[i]
 		if r.pages == 0 {
@@ -182,13 +188,28 @@ func (f *targetsFeature) judgeWithPoppler(ctx context.Context, staging string, s
 			return
 		}
 		for p := 1; p <= r.pages; p++ {
-			if detail := comparePoppler(staging, r.file, p); detail != "" {
+			j := f.judgePopplerPage(staging, r, p)
+			if j.entry {
+				mu.Lock()
+				key := popplerDifferenceKey{r.fixture, p}
+				matched[key] = matched[key] || j.matched
+				used[key] = used[key] || !j.matched
+				mu.Unlock()
+			}
+			if j.reason != "" && !r.RendererDisagrees {
 				r.RendererDisagrees = true
-				r.fail("poppler draws page %d apart from litho: %s", p, detail)
-				return
+				r.fail("poppler draws page %d apart from litho: %s", p, j.reason)
 			}
 		}
 	})
+	for _, r := range staged {
+		for p := 1; p <= r.pages; p++ {
+			key := popplerDifferenceKey{r.fixture, p}
+			if matched[key] && !used[key] {
+				r.fail("poppler draws page %d as litho does on every target: its accepted difference is stale", p)
+			}
+		}
+	}
 }
 
 // popplerDPI returns the resolution poppler draws page of the file at path
@@ -217,24 +238,26 @@ func popplerPNGRoot(file string, page int) string {
 }
 
 // comparePoppler compares poppler's drawing of page of a staged file with
-// litho's, "" when they match under the render cell's rule.
-func comparePoppler(staging, file string, page int) string {
+// litho's, "" when they match under the render cell's rule, and returns
+// the count of pixels that differ when both drawings were read at one
+// size.
+func comparePoppler(staging, file string, page int) (detail string, pixels int) {
 	theirs, err := readPNG(filepath.Join(staging, popplerPNGRoot(file, page)+".png"))
 	if err != nil {
-		return "poppler renders no page"
+		return "poppler renders no page", 0
 	}
 	mine, err := readPNG(filepath.Join(staging, lithoPNG(file, page)))
 	if err != nil {
-		return fmt.Sprintf("litho's drawing: %v", err)
+		return fmt.Sprintf("litho's drawing: %v", err), 0
 	}
 	d := comparePage(mine, theirs)
 	switch {
 	case d.Error != "":
-		return d.Error
+		return d.Error, 0
 	case !d.Match:
-		return fmt.Sprintf("%d of %d pixels differ", d.DiffPixels, d.Pixels)
+		return fmt.Sprintf("%d of %d pixels differ", d.DiffPixels, d.Pixels), d.DiffPixels
 	}
-	return ""
+	return "", d.DiffPixels
 }
 
 // judgeWithPdfcpu validates the staged files of the version targets with

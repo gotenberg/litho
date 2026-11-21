@@ -11,5 +11,8 @@
   "references": {
     "dir": "references",
     "engine": "chromium"
+  },
+  "golden_overrides": {
+    "targets": "poppler-differences.json"
   }
 }
