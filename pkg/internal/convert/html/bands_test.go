@@ -410,3 +410,44 @@ func TestBands_RoomContentOnASinglePage(t *testing.T) {
 		t.Errorf("content at %v, want between the 100 point header and the bottom margin", l.y)
 	}
 }
+
+// TestBands_HorizontalOnAVerticalPage locks the writing mode of a band on
+// the pages of a vertical root: horizontal, as Chromium lays out its
+// header and footer templates, whether the source sets its writing mode
+// on the root's element or in a style sheet the band reads: no group turns
+// the band's text.
+func TestBands_HorizontalOnAVerticalPage(t *testing.T) {
+	t.Parallel()
+	for _, src := range []string{
+		`<html style="writing-mode:vertical-rl"><body style="margin:0"><p>A</p>`,
+		`<style>html { writing-mode: vertical-lr } body { margin: 0 }</style><p>A</p>`,
+	} {
+		doc := convertDoc(t, src, bandOptions(Band{HTML: `<p>HB</p>`, CSS: `p { margin: 0 }`}))
+		if turned, found := turnedText(doc.Pages[0].Content, "HB", false); !found || turned {
+			t.Errorf("%s: band found %v, turned %v; want found and upright", src, found, turned)
+		}
+	}
+}
+
+// turnedText reports whether a run holding s lies under a group that turns
+// it, within frags, and whether one was found; turned reports a group
+// around frags that turns.
+func turnedText(frags []typeset.Fragment, s string, turned bool) (bool, bool) {
+	for _, f := range frags {
+		switch v := f.(type) {
+		case *typeset.Group:
+			if t, ok := turnedText(v.Content, s, turned || v.Transform.B != 0 || v.Transform.C != 0); ok {
+				return t, true
+			}
+		case *typeset.Text:
+			var b strings.Builder
+			for _, g := range v.Glyphs {
+				b.WriteString(g.Text)
+			}
+			if strings.Contains(b.String(), s) {
+				return turned, true
+			}
+		}
+	}
+	return false, false
+}

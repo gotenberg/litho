@@ -176,13 +176,19 @@ const (
 )
 
 // bandBaseCSS lays the band's element out as a block, at the user agent's
-// origin, under which the source's and the band's rules win.
-const bandBaseCSS = bandElement + " { display: block }"
+// origin, under which the source's and the band's rules win; but for the
+// writing mode of the band's root and body, horizontal whatever the
+// source's: a band is a document of its own across a margin of the page,
+// as Chromium lays out its header and footer templates, horizontal on the
+// pages of a vertical document too (an important declaration of the user
+// agent wins over the author's, CSS Cascade 4, 6.2).
+const bandBaseCSS = bandElement + " { display: block } html, body { writing-mode: horizontal-tb !important }"
 
 // bandBoxCSS makes the page-margin boxes a band takes as wide as the page
 // area (CSS Page 3, 5.3.2.2: a definite width; the boxes beside take what
-// is left, none).
-const bandBoxCSS = `@page { @top-center { content: ""; width: 100% } @bottom-center { content: ""; width: 100% } }`
+// is left, none), horizontal: the band's box takes no writing mode from
+// the source's root through the page context.
+const bandBoxCSS = `@page { @top-center { content: ""; width: 100%; writing-mode: horizontal-tb } @bottom-center { content: ""; width: 100%; writing-mode: horizontal-tb } }`
 
 // titleString is the named string whose value, before any element of the
 // source sets it, is the source's title: what a band or a page-margin box
