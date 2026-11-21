@@ -237,9 +237,9 @@ func composite(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 }
 
 // applyConstraint applies one constraint to the layout properties: its
-// reference property times its factor, the right edge inferred from the
-// left and the width, else its value in millimetres (points for a font
-// size reference).
+// reference property times its factor, the right or bottom edge inferred
+// from the left or top edge and the length, else its value in millimetres
+// (points for a font size reference).
 func applyConstraint(c DiagramConstraint, props layoutProps) {
 	if c.ForName == "" {
 		return
@@ -252,11 +252,16 @@ func applyConstraint(c DiagramConstraint, props layoutProps) {
 		props.set(c.ForName, c.Type, trunc(float64(v)*c.Factor))
 		return
 	}
-	if c.RefType == "r" {
-		l, okL := ref["l"]
-		w, okW := ref["w"]
-		if okL && okW {
-			props.set(c.ForName, c.Type, trunc(float64(l+w)*c.Factor))
+	// A far edge no constraint states is the near edge plus the length
+	// (21.4.7.21 ST_ConstraintType r "right", b "bottom").
+	for _, e := range [][3]string{{"r", "l", "w"}, {"b", "t", "h"}} {
+		if c.RefType != e[0] {
+			continue
+		}
+		near, okN := ref[e[1]]
+		length, okL := ref[e[2]]
+		if okN && okL {
+			props.set(c.ForName, c.Type, trunc(float64(near+length)*c.Factor))
 			return
 		}
 	}

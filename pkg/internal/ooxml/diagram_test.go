@@ -405,3 +405,21 @@ func TestDiagramLinearAlignment(t *testing.T) {
 		}
 	}
 }
+
+// TestDiagramCompositeBottomEdge lays a kid of a composite out under
+// another by a top that refers to the other's bottom edge (21.4.7.21
+// ST_ConstraintType b), the edge the other's top and height make, as
+// pList1's text sits under its picture.
+func TestDiagramCompositeBottomEdge(t *testing.T) {
+	layout := `<dgm:alg type="composite"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="w" for="ch" forName="pict" refType="w"/><dgm:constr type="h" for="ch" forName="pict" refType="h" fact="0.65"/><dgm:constr type="t" for="ch" forName="pict"/>` +
+		`<dgm:constr type="w" for="ch" forName="label" refType="w"/><dgm:constr type="h" for="ch" forName="label" refType="h" fact="0.35"/>` +
+		`<dgm:constr type="t" for="ch" forName="label" refType="b" refFor="ch" refForName="pict"/></dgm:constrLst>` +
+		`<dgm:layoutNode name="pict"><dgm:shape type="rect"/></dgm:layoutNode><dgm:layoutNode name="label"><dgm:shape type="ellipse"/></dgm:layoutNode>`
+	d := ParseDiagram(mustParse(t, withPresNames(diagramData("a"), 1, "pict", "label")), mustParse(t, diagramLayout(layout)), nil, nil)
+	got := boxes(d.LayOut(1000, 1000, nil))
+	want := []string{"background rect 0,0 1000x1000", "pict rect 0,0 1000x650", "label ellipse 0,650 1000x350"}
+	if strings.Join(got, "; ") != strings.Join(want, "; ") {
+		t.Errorf("boxes\n got %q\nwant %q", got, want)
+	}
+}
