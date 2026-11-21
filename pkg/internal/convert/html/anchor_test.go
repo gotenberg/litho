@@ -525,3 +525,27 @@ func TestAnchor_InlineBoxes(t *testing.T) {
 		<div class="p k" id=p3></div>`,
 		map[string]string{"1:g": "50,10+30x20", "1:m": "100,20+30x20", "1:k": "0,70+300x30"})
 }
+
+// TestAnchor_ColumnsOfTheContainingBlock holds the anchor box of an anchor
+// in the columns of a multi-column container that is itself the
+// containing block (CSS Anchor Positioning 1, 2: the bounding box of the
+// anchor's fragments): the box is laid out outside the columns (CSS
+// Position 3, 3.5.3), so it sees each piece of the anchor where its column
+// puts it, an inline anchor's pieces each in their own.
+//
+// # Corpus evidence
+//
+//   - wpt: css/css-anchor-position/anchor-position-inline-004,
+//     anchor-name-multicol-003 and -004 draw their references in Chromium
+//     of gotenberg/gotenberg:9.4.1.
+func TestAnchor_ColumnsOfTheContainingBlock(t *testing.T) {
+	t.Parallel()
+	checkAnchored(t, `
+		.mc { position: relative; columns: 2; column-gap: 0; column-fill: auto; width: 200px; height: 40px; font-size: 10px; line-height: 20px; orphans: 1; widows: 1 }
+		.ib { display: inline-block; height: 10px }
+		#m { anchor-name: --m }
+		#p4 { position-anchor: --m; top: anchor(top); left: anchor(left); width: anchor-size(width); height: anchor-size(height) }`,
+		`<div class=mc><div style="height: 20px"></div><span class=ib style="width: 50px"></span><span id=m><span class=ib style="width: 50px"></span><span class=ib style="width: 30px"></span></span>
+		<div class="p y" id=p4></div></div>`,
+		map[string]string{"1:y": "50,5+80x30"})
+}

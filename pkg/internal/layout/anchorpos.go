@@ -391,22 +391,22 @@ func splitOut(k *box, piece func(*box) bool) bool {
 // box p, whose containing block's box is pcb (CSS Anchor Positioning 1,
 // 2): a's border box with the relative offsets and transforms of a and of
 // its ancestors up to pcb applied, the axis-aligned bounding box of what
-// they make of it, and through each multi-column container it crosses the
-// bounding box of its pieces in the columns. A fixed p, whose containing
+// they make of it, and through each multi-column container it crosses,
+// pcb itself included, whose positioned boxes are laid out outside its
+// columns (CSS Position 3, 3.5.3), the bounding box of its pieces in the
+// columns. A fixed p, whose containing
 // block is a page's area, sees the anchor on its page: page is the page
 // the anchor starts on, -1 for p not fixed.
 func (e *engine) anchorRect(a, p, pcb *box) (edges, int) {
-	r := boxRect(a)
-	for x, n := a, 0; x != nil && x != pcb && n <= maxTreeDepth; x, n = x.parent, n+1 {
-		if x.transformed() {
-			if m, _, ok := transformOf(x, typeset.Rect{X: x.x, Y: x.y, Width: x.borderW(), Height: x.borderH()}); ok {
-				r = mapRect(m, r)
-			}
-		}
-		dx, dy := ownOffset(x)
-		r = edges{r.x0 + dx, r.y0 + dy, r.x1 + dx, r.y1 + dy}
-		if c := x.parent; c != nil && c != pcb && c.mc != nil {
-			r = columnRect(c, x, r)
+	// Each piece of an inline anchor goes to its own column: their
+	// bounding box is taken where the columns put them.
+	var r edges
+	for i, piece := range boxPieces(a) {
+		pr := e.mappedRect(a, pcb, piece)
+		if i == 0 {
+			r = pr
+		} else {
+			r = r.union(pr)
 		}
 	}
 	if !p.fixed {
@@ -419,6 +419,26 @@ func (e *engine) anchorRect(a, p, pcb *box) (edges, int) {
 	}
 	// Fragments on several pages: their bounding box on the page.
 	return edges{r.x0, min(r.y0-top, 0), r.x1, e.pageH}, first
+}
+
+// mappedRect returns r, a rectangle of the anchor a, with the relative
+// offsets and transforms of a and of its ancestors up to pcb applied, and
+// through each multi-column container it crosses the bounding box of its
+// pieces in the columns.
+func (e *engine) mappedRect(a, pcb *box, r edges) edges {
+	for x, n := a, 0; x != nil && x != pcb && n <= maxTreeDepth; x, n = x.parent, n+1 {
+		if x.transformed() {
+			if m, _, ok := transformOf(x, typeset.Rect{X: x.x, Y: x.y, Width: x.borderW(), Height: x.borderH()}); ok {
+				r = mapRect(m, r)
+			}
+		}
+		dx, dy := ownOffset(x)
+		r = edges{r.x0 + dx, r.y0 + dy, r.x1 + dx, r.y1 + dy}
+		if c := x.parent; c != nil && c.mc != nil {
+			r = columnRect(c, x, r)
+		}
+	}
+	return r
 }
 
 // mapRect returns the bounding box of r mapped by m.
