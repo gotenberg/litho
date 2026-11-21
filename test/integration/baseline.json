@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-21T14:21:21Z",
+  "captured_at": "2026-11-21T16:20:06Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -54498,11 +54498,11 @@
       "features": {
         "diff": {
           "matched": 145,
-          "mismatched": 17,
+          "mismatched": 18,
           "skipped": 26,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 160,
+            "pages_equal": 161,
             "reference_fonts_missing": 26
           },
           "scores": {
@@ -55652,6 +55652,14 @@
             },
             "smartart": {
               "layout": 0.6388,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0,
+              "text_f1": 1
+            },
+            "smartart-text-size": {
+              "layout": 0.592,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
@@ -73756,11 +73764,11 @@
       "features": {
         "diff": {
           "matched": 116,
-          "mismatched": 9,
+          "mismatched": 10,
           "skipped": 14,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 125,
+            "pages_equal": 126,
             "reference_fonts_missing": 14
           },
           "scores": {
@@ -74611,6 +74619,14 @@
               "pages": 1,
               "strict": 0,
               "text_f1": 0.8629
+            },
+            "smartart-text-size": {
+              "layout": 0.3454,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 0,
+              "text_f1": 1
             },
             "style-references": {
               "layout": 0.9877,
