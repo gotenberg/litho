@@ -310,9 +310,15 @@ func (e *engine) planAnchored(b *box, st *css.Style, cb absCB) *anchorPlan {
 	if s.def != nil && cb.box == nil && !cb.page && !cb.anchored {
 		// The scrollable containing block of the root grows with what
 		// overflows its end edges, the box itself included: a box never
-		// shifts back from them. Its options are still tried against the
+		// shifts back from them, its inline end and its bottom. Its options are still tried against the
 		// page's width and the document's height.
-		plan.orig.x1, plan.orig.y1 = math.Inf(1), math.Inf(1)
+		plan.orig.y1 = math.Inf(1)
+		if e.rtlRoot {
+			// A right-to-left root scrolls leftward.
+			plan.orig.x0 = math.Inf(-1)
+		} else {
+			plan.orig.x1 = math.Inf(1)
+		}
 	}
 	return plan
 }
@@ -746,19 +752,21 @@ func (e *engine) layoutPlan(b *box, plan *anchorPlan) {
 	}
 	b.st, b.orig = &st, nil
 	e.layoutAbsIn(b, lay)
+	// The vertical shift lays the box out again, so it comes before the
+	// horizontal moves.
+	if plan.ay != alignNormal {
+		if dy := intoRange(b.y-b.m[css.Top], b.marginH(), ranges[1][0], ranges[1][1], plan.orig.y0, plan.orig.y1); dy != 0 {
+			st.Top = css.Pts(b.y - b.m[css.Top] + dy - lay.y)
+			st.Bottom = css.Dimension{Kind: css.Auto}
+			e.layoutAbsIn(b, lay)
+		}
+	}
 	if plan.ax == alignCenter || plan.ax == alignAnchorCenter {
 		b.shift((lay.w-b.marginW())/2, 0)
 	}
 	if plan.ax != alignNormal {
 		if dx := intoRange(b.x-b.m[css.Left], b.marginW(), ranges[0][0], ranges[0][1], plan.orig.x0, plan.orig.x1); dx != 0 {
 			b.shift(dx, 0)
-		}
-	}
-	if plan.ay != alignNormal {
-		if dy := intoRange(b.y-b.m[css.Top], b.marginH(), ranges[1][0], ranges[1][1], plan.orig.y0, plan.orig.y1); dy != 0 {
-			st.Top = css.Pts(b.y - b.m[css.Top] + dy - lay.y)
-			st.Bottom = css.Dimension{Kind: css.Auto}
-			e.layoutAbsIn(b, lay)
 		}
 	}
 }
