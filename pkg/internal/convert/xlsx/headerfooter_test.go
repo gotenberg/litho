@@ -72,6 +72,7 @@ func TestParseHeaderFooter(t *testing.T) {
 			[3][]span{1: {with(b, func(s *span) { s.text, s.size = "45ab", 123 }), with(b, func(s *span) { s.text, s.size = " 9", 8 })}},
 		},
 		{"dropped codes", "&Gx&O&Hy&\"Ar", [3][]span{1: {with(b, func(s *span) { s.text = "xy" })}}},
+		{"an unknown code drops its whole character", "&éa&€b&K€0000c", [3][]span{1: {with(b, func(s *span) { s.text = "ab€0000c" })}}},
 		{
 			"page offsets", "&P+1 of &N&P+1&N&P+12abc&p+3&N-2",
 			[3][]span{1: {

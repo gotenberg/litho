@@ -76,8 +76,10 @@ type hfParser struct {
 // one to three digits,
 // &Krrggbb or &Kttsnnn the colour (a theme index with a tint percent);
 // && is an ampersand and a line break stays in the text. Other codes,
-// &G (a picture), &O and &H (outline and shadow), are dropped. Every
-// span carries the font it draws with.
+// &G (a picture), &O and &H (outline and shadow) and any other character
+// after an ampersand, are dropped with their character, as Office reads
+// an unknown code (MS-OI29500, 2.1.619, emptytoken). Every span carries
+// the font it draws with.
 func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) [3][]sheet.Span {
 	p := &hfParser{base: base, theme: theme, font: copyFont(base), part: 1}
 	if utf8.RuneCountInString(s) > maxHeaderRunes {
@@ -146,7 +148,7 @@ func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) [3][]sheet
 			p.flush()
 			p.font.Script = toggleScript(p.font.Script, sheet.Subscript)
 		case 'K':
-			if i+6 < len(s) {
+			if i+6 < len(s) && ascii(s[i+1:i+7]) {
 				p.flush()
 				p.color(s[i+1 : i+7])
 				i += 6
@@ -161,6 +163,13 @@ func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) [3][]sheet
 			p.fontName(s[i+1 : i+1+end])
 			i += end + 1
 		default:
+			if code >= utf8.RuneSelf {
+				// An unknown code renders nothing (MS-OI29500, 2.1.619,
+				// emptytoken = "&" *1UNICHAR): its whole character goes,
+				// not its first byte.
+				_, n := utf8.DecodeRuneInString(s[i:])
+				i += n - 1
+			}
 			if code >= '0' && code <= '9' {
 				// A digit past the size's maxSizeDigits is text.
 				j := i
@@ -177,6 +186,16 @@ func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) [3][]sheet
 	}
 	p.flush()
 	return p.parts
+}
+
+// ascii reports s holds ASCII bytes alone.
+func ascii(s string) bool {
+	for i := range len(s) {
+		if s[i] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
 }
 
 // copyFont returns f with its own family slice.

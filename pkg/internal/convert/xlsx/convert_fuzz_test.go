@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
@@ -102,10 +103,15 @@ func FuzzParseHeaderFooter(f *testing.F) {
 	f.Add(`&"Ar`)
 	f.Add(`&RPage &P+1 of &N-1&P+12abc&P+1&14x&P+99999999999999999999999&N-`)
 	f.Add(`&12345a&0b&8 9`)
+	f.Add(`&éa&€b&K€0000c`)
 	base := sheet.Font{Families: []string{"Calibri"}, Size: 11}
 	f.Fuzz(func(t *testing.T, s string) {
+		valid := utf8.ValidString(s)
 		for _, part := range parseHeaderFooter(s, base, nil) {
 			for _, sp := range part {
+				if valid && !utf8.ValidString(sp.Text) {
+					t.Fatalf("span %q of valid UTF-8 %q is not", sp.Text, s)
+				}
 				if sp.Font == nil || sp.Font.Size <= 0 || len(sp.Font.Families) == 0 {
 					t.Fatalf("span %+v", sp)
 				}
