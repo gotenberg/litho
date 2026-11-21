@@ -208,13 +208,18 @@ func (e *engine) targetAnchor(p *box, name string) *box {
 }
 
 // originating returns the box of the element a ::before or ::after box b
-// belongs to, nil for another box.
+// belongs to, nil for another box. A fieldset's pseudo-elements are
+// children of its anonymous content box (HTML Standard, 15.3.13), whose
+// element is the fieldset.
 func (e *engine) originating(b *box) *box {
 	if b.node == nil || !b.node.Generated {
 		return nil
 	}
 	for a := b.parent; a != nil; a = a.parent {
 		if a.node != nil && !a.anon {
+			if fieldsetPart(a) == FieldsetContent && fieldsetPart(a.parent) == FieldsetBox {
+				a = a.parent
+			}
 			return e.anchorsIndexed().principal[a.node]
 		}
 	}

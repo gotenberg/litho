@@ -444,3 +444,17 @@ func TestAbsoluteSelfAlignment(t *testing.T) {
 		<div class="p k" id=p4></div></div>`,
 		map[string]string{"1:r": "670,320+30x20", "1:g": "385,50+30x20", "1:m": "100,40+30x20", "1:k": "670,40+30x20"})
 }
+
+// TestAnchor_FieldsetPseudoElement holds the implicit anchor of a
+// fieldset's ::before (CSS Anchor Positioning 1, 2.3.1): its originating
+// element is the fieldset, whose border box the position-area grid takes,
+// not the anonymous content box that holds the pseudo-element.
+func TestAnchor_FieldsetPseudoElement(t *testing.T) {
+	t.Parallel()
+	checkAnchored(t, `
+		fieldset { margin: 0; padding: 0; border: 10px solid blue; width: 200px; height: 50px }
+		fieldset::before { content: ""; display: block; position: absolute; width: 10px; height: 10px; background: lime;
+			position-anchor: auto; position-area: bottom right }`,
+		`<fieldset></fieldset>`,
+		map[string]string{"1:g": "220,70+10x10"})
+}
