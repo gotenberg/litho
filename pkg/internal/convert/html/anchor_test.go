@@ -729,3 +729,31 @@ func TestAnchor_OverflowPositions(t *testing.T) {
 		`<div class=c><div class=a id=b></div><div class="p m" id=p3></div><div class="p k" id=p4></div></div>`,
 		map[string]string{"1:m": "405,240+30x100", "1:k": "405,280+30x100"})
 }
+
+// TestAnchor_NestedColumns locks an anchor in columns nested in columns,
+// seen from a box whose containing block lies outside both: each piece the
+// inner columns cut is cut again by the outer ones where it lies in their
+// flow, and the anchor box is the bounding box of all of them (CSS Anchor
+// Positioning 1, 2; CSS Position 3, 3.5.3).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) prints the box
+//     at 170,10, 180 by 100 pixels; the bounding box of the inner pieces,
+//     cut by the outer columns as one, is 250 pixels wide.
+//   - wpt: css-anchor-position/anchor-position-multicol-nested-001 draws
+//     its reference.
+func TestAnchor_NestedColumns(t *testing.T) {
+	t.Parallel()
+	doc := convertDoc(t, `<style>@page { size: 800px 400px; margin: 0 } html, body { margin: 0 }
+		.cb { position: relative }
+		.columns { columns: 4; column-fill: auto; column-gap: 10px; width: 630px; height: 100px }
+		.columns .columns { columns: 2; width: 130px; height: 200px }
+		.a { anchor-name: --a; margin-left: 10px; width: 20px; height: 150px }
+		.t { position: absolute; left: anchor(--a left); top: anchor(--a top); width: anchor-size(--a width); height: anchor-size(--a height); background: red }</style>
+		<div class=cb><div style="height: 10px"></div><div class=columns><div style="height: 110px"></div>
+		<div class=columns><div style="height: 60px"></div><div class=a></div></div></div><div class=t></div></div>`, Options{PreferCSSPageSize: true})
+	if got := pxBoxes(doc)[0]["r"]; got != "170,10+180x100" {
+		t.Errorf("box %q, want 170,10+180x100", got)
+	}
+}

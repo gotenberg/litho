@@ -435,18 +435,27 @@ func intoFrame(pcb, p *box, r edges) edges {
 // mappedRect returns r, a rectangle of the anchor a, with the relative
 // offsets and transforms of a and of its ancestors up to pcb applied, and
 // through each multi-column container it crosses the bounding box of its
-// pieces in the columns.
+// pieces in the columns. The pieces stay apart until the last container:
+// in columns nested in columns each piece the inner ones cut is cut again
+// by the outer ones where it lies in their flow, as Chromium fragments it.
 func (e *engine) mappedRect(a, pcb *box, r edges) edges {
+	ps := []edges{r}
+	each := func(f func(edges) edges) {
+		for i, p := range ps {
+			ps[i] = f(p)
+		}
+	}
 	for x, n := a, 0; x != nil && x != pcb && n <= maxTreeDepth; x, n = x.parent, n+1 {
 		c := x.parent
 		inColumns := c != nil && c.mc != nil
+		dx, dy := ownOffset(x)
+		move := func(p edges) edges { return edges{p.x0 + dx, p.y0 + dy, p.x1 + dx, p.y1 + dy} }
 		if x.transformed() && inColumns {
 			// A box the columns cut is transformed fragment by fragment,
 			// each about its own border box (CSS Fragmentation 3, 5.5),
 			// as Chromium draws it.
-			dx, dy := ownOffset(x)
-			r = edges{r.x0 + dx, r.y0 + dy, r.x1 + dx, r.y1 + dy}
-			r = columnRectEach(c, x, r, func(p edges) edges {
+			each(move)
+			ps = columnPieces(c, x, ps, func(p edges) edges {
 				f := typeset.Rect{X: x.x + dx, Y: p.y0, Width: x.borderW(), Height: p.y1 - p.y0}
 				if m, _, ok := transformOf(x, f); ok {
 					return mapRect(m, p)
@@ -457,16 +466,19 @@ func (e *engine) mappedRect(a, pcb *box, r edges) edges {
 		}
 		if x.transformed() {
 			if m, _, ok := transformOf(x, typeset.Rect{X: x.x, Y: x.y, Width: x.borderW(), Height: x.borderH()}); ok {
-				r = mapRect(m, r)
+				each(func(p edges) edges { return mapRect(m, p) })
 			}
 		}
-		dx, dy := ownOffset(x)
-		r = edges{r.x0 + dx, r.y0 + dy, r.x1 + dx, r.y1 + dy}
+		each(move)
 		if inColumns {
-			r = columnRect(c, x, r)
+			ps = columnPieces(c, x, ps, nil)
 		}
 	}
-	return r
+	out := ps[0]
+	for _, p := range ps[1:] {
+		out = out.union(p)
+	}
+	return out
 }
 
 // mapRect returns the bounding box of r mapped by m.
@@ -480,45 +492,55 @@ func mapRect(m typeset.Matrix, r edges) edges {
 	return out
 }
 
-// columnRect returns the bounding box of the pieces the columns of the
-// multi-column container c cut r, a rectangle of c's column flow inside
-// its child k, into, each moved to its column.
-func columnRect(c, k *box, r edges) edges {
-	return columnRectEach(c, k, r, nil)
-}
+// maxAnchorPieces bounds the pieces [columnPieces] keeps apart. Anti-DoS
+// guard, not spec-mandated: an anchor cut by nested columns into more
+// pieces than that is taken whole past it, as the bounding box of the
+// pieces already cut, which no real page tells apart.
+const maxAnchorPieces = 1024
 
-// columnRectEach is [columnRect] with each piece mapped by each, when not
-// nil, before it moves to its column.
-func columnRectEach(c, k *box, r edges, each func(edges) edges) edges {
+// columnPieces returns the pieces the columns of the multi-column
+// container c cut each rectangle of rs, rectangles of c's column flow
+// inside its child k, into, each mapped by each, when not nil, before it
+// moves to its column; never empty. Past [maxAnchorPieces] the pieces are
+// their bounding box.
+func columnPieces(c, k *box, rs []edges, each func(edges) edges) []edges {
 	s := setOf(c, k)
 	if s == nil || len(s.frags) == 0 {
-		return r
+		return rs
 	}
-	i0, i1 := s.fragOf(c, r.y0+eps), s.fragOf(c, max(r.y1-eps, r.y0+eps))
-	out := r
-	found := false
-	for i := i0; i <= i1 && i-i0 <= maxColumns; i++ {
-		y0, y1 := s.band(c, i)
-		if i == 0 {
-			y0 = math.Inf(-1)
+	var out []edges
+	for _, r := range rs {
+		i0, i1 := s.fragOf(c, r.y0+eps), s.fragOf(c, max(r.y1-eps, r.y0+eps))
+		found := false
+		for i := i0; i <= i1 && i-i0 <= maxColumns; i++ {
+			y0, y1 := s.band(c, i)
+			if i == 0 {
+				y0 = math.Inf(-1)
+			}
+			if i == len(s.frags)-1 {
+				y1 = math.Inf(1)
+			}
+			lo, hi := max(r.y0, y0), min(r.y1, y1)
+			if hi < lo || hi == lo && r.y1 > r.y0 {
+				continue
+			}
+			dx, dy := c.mc.shiftOf(s, i)
+			piece := edges{r.x0, lo, r.x1, hi}
+			if each != nil {
+				piece = each(piece)
+			}
+			out = append(out, edges{piece.x0 + dx, piece.y0 + dy, piece.x1 + dx, piece.y1 + dy})
+			found = true
 		}
-		if i == len(s.frags)-1 {
-			y1 = math.Inf(1)
-		}
-		lo, hi := max(r.y0, y0), min(r.y1, y1)
-		if hi < lo || hi == lo && r.y1 > r.y0 {
-			continue
-		}
-		dx, dy := c.mc.shiftOf(s, i)
-		piece := edges{r.x0, lo, r.x1, hi}
-		if each != nil {
-			piece = each(piece)
-		}
-		piece = edges{piece.x0 + dx, piece.y0 + dy, piece.x1 + dx, piece.y1 + dy}
 		if !found {
-			out, found = piece, true
-		} else {
-			out = out.union(piece)
+			out = append(out, r)
+		}
+		if len(out) > maxAnchorPieces {
+			u := out[0]
+			for _, p := range out[1:] {
+				u = u.union(p)
+			}
+			out = []edges{u}
 		}
 	}
 	return out
