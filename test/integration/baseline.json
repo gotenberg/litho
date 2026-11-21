@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-20T19:53:06Z",
+  "captured_at": "2026-11-21T00:15:41Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -9020,12 +9020,12 @@
           },
           "scores": {
             "sc/fdo48621_broken_quotes.csv": {
-              "layout": 0.9652,
+              "layout": 0.9653,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9983
+              "text_f1": 1
             },
             "sc/numberformat.csv": {
               "layout": 0.979,
@@ -25750,7 +25750,7 @@
               "outline_recall": 0.6842,
               "pages": 0.9767,
               "strict": 0.2791,
-              "text_f1": 0.6503
+              "text_f1": 0.6504
             },
             "sc/tdf137020_FlipVertical.ods": {
               "layout": 0.9856,
@@ -25961,12 +25961,12 @@
               "text_f1": 1
             },
             "sc/tdf141914.ods": {
-              "layout": 0.549,
+              "layout": 0.5538,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 0.2857,
-              "text_f1": 0.8954
+              "text_f1": 0.9073
             },
             "sc/tdf142231.ods": {
               "layout": 0.9677,
@@ -68289,12 +68289,12 @@
     "litho/ods": {
       "features": {
         "diff": {
-          "matched": 80,
+          "matched": 81,
           "mismatched": 3,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
-            "pages_equal": 83,
+            "pages_equal": 84,
             "reference_fonts_missing": 0
           },
           "scores": {
@@ -68345,6 +68345,14 @@
               "pages": 1,
               "strict": 0,
               "text_f1": 0.1927
+            },
+            "locale-de-de-automatic-order": {
+              "layout": 0.9716,
+              "link_recall": 1,
+              "outline_recall": 1,
+              "pages": 1,
+              "strict": 1,
+              "text_f1": 1
             },
             "locale-fr-fr": {
               "layout": 0.9612,
@@ -68966,31 +68974,31 @@
           "score_tolerance": 0.02
         },
         "targets": {
-          "matched": 83,
+          "matched": 84,
           "mismatched": 0,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 228,
-            "pass_a1a": 83,
-            "pass_a1b": 83,
-            "pass_a2a": 83,
-            "pass_a2a+ua1": 83,
-            "pass_a2b": 83,
-            "pass_a2u": 83,
-            "pass_a3a": 83,
-            "pass_a3b": 83,
-            "pass_a3u": 83,
-            "pass_a4": 83,
-            "pass_a4+ua2": 83,
-            "pass_a4e": 83,
-            "pass_ua1": 83,
-            "pass_ua2": 83,
-            "pass_v1.4": 83,
-            "pass_v1.5": 83,
-            "pass_v1.6": 83,
-            "pass_v1.7": 83,
-            "pass_v2.0": 83,
+            "pass_a1a": 84,
+            "pass_a1b": 84,
+            "pass_a2a": 84,
+            "pass_a2a+ua1": 84,
+            "pass_a2b": 84,
+            "pass_a2u": 84,
+            "pass_a3a": 84,
+            "pass_a3b": 84,
+            "pass_a3u": 84,
+            "pass_a4": 84,
+            "pass_a4+ua2": 84,
+            "pass_a4e": 84,
+            "pass_ua1": 84,
+            "pass_ua2": 84,
+            "pass_v1.4": 84,
+            "pass_v1.5": 84,
+            "pass_v1.6": 84,
+            "pass_v1.7": 84,
+            "pass_v2.0": 84,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -69106,6 +69114,27 @@
               "v2.0": 1
             },
             "indic-thai-cells": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "locale-de-de-automatic-order": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
