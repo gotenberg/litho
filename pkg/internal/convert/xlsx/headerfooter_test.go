@@ -2,11 +2,13 @@ package xlsx
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // span is a compact form of a header span for the tests: its text or
@@ -109,7 +111,10 @@ func TestParseHeaderFooter(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := parseHeaderFooter(tc.in, base, theme)
+			got, picture := parseHeaderFooter(tc.in, base, theme)
+			if picture != strings.Contains(tc.in, "&G") {
+				t.Errorf("picture %v", picture)
+			}
 			for part := range 3 {
 				if len(got[part]) != len(tc.want[part]) {
 					t.Fatalf("part %d = %d spans %+v, want %d", part, len(got[part]), got[part], len(tc.want[part]))
@@ -149,6 +154,34 @@ func TestRead_HeaderFooter(t *testing.T) {
 	}
 	if f := hf.Odd.Header[1][0].Font; f == nil || f.Families[0] != "Test Sans" {
 		t.Errorf("header font %+v, want the Normal font", f)
+	}
+}
+
+// TestRead_HeaderFooterPictures checks that the header pictures of a
+// printed sheet, which are not drawn, are reported once, and that a
+// doubled ampersand before G is no picture.
+func TestRead_HeaderFooterPictures(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, header string
+		want         int
+	}{
+		{"a picture", `&amp;L&amp;G&amp;Ctext`, 1},
+		{"an ampersand and a G", `&amp;&amp;G`, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, warnings := readBytes(t, oneSheet(t, `<sheetData/><headerFooter differentFirst="1"><oddHeader>`+tc.header+`</oddHeader><firstFooter>`+tc.header+`</firstFooter></headerFooter>`))
+			got := 0
+			for _, w := range warnings {
+				if w.Code == warn.ContentUnsupported && w.Effect == warn.Omitted && strings.Contains(w.Message, "headers and footers") {
+					got++
+				}
+			}
+			if got != tc.want {
+				t.Errorf("%d warnings %+v, want %d", got, warnings, tc.want)
+			}
+		})
 	}
 }
 

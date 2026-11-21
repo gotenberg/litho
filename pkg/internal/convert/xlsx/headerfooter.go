@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
+	"github.com/gotenberg/litho/pkg/internal/warn"
 )
 
 // maxHeaderRunes caps the characters of one header or footer text.
@@ -20,19 +21,24 @@ const maxHeaderRunes = 4096
 // and right parts. As LibreOffice imports it, differentOddEven and
 // differentFirst give the even and first pages their own texts even when
 // those are empty, which then print nothing; scaleWithDoc is not read.
+// A picture a text places (&G) is not drawn: the header of a printed
+// sheet that holds one is reported.
 //
 // # Corpus evidence
 //
 //   - probe, xlsx: a sheet with differentFirst, an odd header and footer
 //     and a first header alone prints, in LibreOffice 26.8.2.2, its first
 //     page with the first header and no footer.
-func (r *reader) headerFooter(e *ooxml.Element) sheet.HeaderFooter {
+func (r *reader) headerFooter(e *ooxml.Element, printed bool) sheet.HeaderFooter {
 	base := r.normal().Font
+	pictures := false
+	parse := func(name string) [3][]sheet.Span {
+		parts, picture := parseHeaderFooter(textOf(e.Child(nsMain, name)), base, r.theme)
+		pictures = pictures || picture
+		return parts
+	}
 	margins := func(header, footer string) sheet.Margins {
-		return sheet.Margins{
-			Header: parseHeaderFooter(textOf(e.Child(nsMain, header)), base, r.theme),
-			Footer: parseHeaderFooter(textOf(e.Child(nsMain, footer)), base, r.theme),
-		}
+		return sheet.Margins{Header: parse(header), Footer: parse(footer)}
 	}
 	hf := sheet.HeaderFooter{Odd: margins("oddHeader", "oddFooter")}
 	if boolAttr(e, "differentOddEven") {
@@ -42,6 +48,9 @@ func (r *reader) headerFooter(e *ooxml.Element) sheet.HeaderFooter {
 	if boolAttr(e, "differentFirst") {
 		hf.DifferentFirst = true
 		hf.First = margins("firstHeader", "firstFooter")
+	}
+	if pictures && printed {
+		r.warn(warn.ContentUnsupported, warn.Omitted, "the pictures of headers and footers are left out")
 	}
 	return hf
 }
@@ -58,6 +67,8 @@ type hfParser struct {
 	part  int
 	parts [3][]sheet.Span
 	buf   strings.Builder
+	// picture reports a picture code (&G) read.
+	picture bool
 }
 
 // parseHeaderFooter parses a header or footer text (ECMA-376 Part 1,
@@ -79,8 +90,8 @@ type hfParser struct {
 // &G (a picture), &O and &H (outline and shadow) and any other character
 // after an ampersand, are dropped with their character, as Office reads
 // an unknown code (MS-OI29500, 2.1.619, emptytoken). Every span carries
-// the font it draws with.
-func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) [3][]sheet.Span {
+// the font it draws with; picture reports a picture code read.
+func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) (parts [3][]sheet.Span, picture bool) {
 	p := &hfParser{base: base, theme: theme, font: copyFont(base), part: 1}
 	if utf8.RuneCountInString(s) > maxHeaderRunes {
 		s = string([]rune(s)[:maxHeaderRunes])
@@ -126,6 +137,8 @@ func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) [3][]sheet
 			p.field(sheet.FieldDate)
 		case 'T':
 			p.field(sheet.FieldTime)
+		case 'G':
+			p.picture = true
 		case 'B':
 			p.flush()
 			p.font.Bold = !p.font.Bold
@@ -185,7 +198,7 @@ func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) [3][]sheet
 		}
 	}
 	p.flush()
-	return p.parts
+	return p.parts, p.picture
 }
 
 // ascii reports s holds ASCII bytes alone.

@@ -107,7 +107,8 @@ func FuzzParseHeaderFooter(f *testing.F) {
 	base := sheet.Font{Families: []string{"Calibri"}, Size: 11}
 	f.Fuzz(func(t *testing.T, s string) {
 		valid := utf8.ValidString(s)
-		for _, part := range parseHeaderFooter(s, base, nil) {
+		parts, _ := parseHeaderFooter(s, base, nil)
+		for _, part := range parts {
 			for _, sp := range part {
 				if valid && !utf8.ValidString(sp.Text) {
 					t.Fatalf("span %q of valid UTF-8 %q is not", sp.Text, s)
