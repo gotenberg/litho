@@ -269,6 +269,10 @@ func anchorLonghand(name string, parse func(v []token) (any, bool), set func(*An
 			setAnchor(st, func(a *AnchorPos) { set(a, v) })
 		},
 		copyFrom: func(dst, src *Style) {
+			if dst.Anchor == nil && src.Anchor == nil {
+				// The common case, both initial, allocates nothing.
+				return
+			}
 			setAnchor(dst, func(a *AnchorPos) { cp(a, src.AnchorPositioning()) })
 		},
 	}
@@ -987,8 +991,10 @@ const (
 func withAnchors(def propDef, f func(*Style) *Dimension, insetAxis anchorAxis) propDef {
 	parse, compute := def.parse, def.compute
 	def.parse = func(v []token, c *declCtx) (any, bool) {
-		if t, ok := single(v); ok && anchorFunctionToken(&t) {
-			l, ok := anchorLength(t, insetAxis != axisNone)
+		// The token is read in place: a copy whose address is taken would
+		// cost every length declaration an allocation.
+		if len(v) == 1 && v[0].typ == tFunction && anchorFunctionToken(&v[0]) {
+			l, ok := anchorLength(v[0], insetAxis != axisNone)
 			if !ok {
 				return nil, false
 			}
