@@ -3,6 +3,7 @@ package ooxml
 import (
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/detmath"
 )
@@ -99,7 +100,7 @@ func (e *engine) layoutShape(a *DiagramAtom, s *DiagramShape, cons []DiagramCons
 	case "hierChild", "hierRoot":
 		hierarchy(a, s)
 	case "lin":
-		linear(a, s, cons, rules)
+		e.linear(a, s, cons, rules)
 	case "pyra":
 		pyramid(s)
 	case "snake":
@@ -457,7 +458,7 @@ func hierarchy(a *DiagramAtom, s *DiagramShape) {
 // their names give, scaled down to fit, with the spacing the sp, space or
 // sibTrans constraint gives; a kid centred across the direction; the
 // rules say which kids shrink. A child order "t" reverses the stacking.
-func linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint, rules []string) {
+func (e *engine) linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint, rules []string) {
 	if len(s.Kids) == 0 || s.W == 0 || s.H == 0 {
 		return
 	}
@@ -478,6 +479,11 @@ func linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint, rules []s
 	count := float64(len(s.Kids))
 	connAngle := map[string]int64{"fromL": 0, "fromR": 180, "fromT": 270, "fromB": 90}[dir]
 	var spaceW, spaceH int64
+	along, across := "w", "h"
+	if vertical {
+		along, across = "h", "w"
+	}
+	fl := e.fontLengths(s, cons, along, across)
 	props := layoutProps{}
 	for _, c := range cons {
 		if c.ForName == "" {
@@ -486,15 +492,14 @@ func linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint, rules []s
 		if props[c.ForName] == nil {
 			props[c.ForName] = map[string]int64{}
 		}
-		if c.Op == "equ" && c.RefType == "none" && !c.HasValue {
-			// An equality states no length: it ties the lengths others set.
+		if !setsLength(c) {
 			continue
 		}
 		if c.Type == "w" {
-			props.set(c.ForName, "w", min(fontSized(c, cons, s.W), s.W))
+			props.set(c.ForName, "w", min(e.lengthOf(c, cons, fl, s.W), s.W))
 		}
 		if c.Type == "h" {
-			props.set(c.ForName, "h", min(fontSized(c, cons, s.H), s.H))
+			props.set(c.ForName, "h", min(e.lengthOf(c, cons, fl, s.H), s.H))
 		}
 		if c.ForName == "sp" || c.ForName == "space" || c.ForName == "sibTrans" {
 			if c.Type == "w" {
@@ -566,7 +571,7 @@ func linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint, rules []s
 		}
 		spaceW, spaceH = 0, 0
 	} else {
-		s.Kids = dropEmptyGroups(s.Kids)
+		s.Kids = dropEmptyGroupsBut(s.Kids, fl.spacers)
 		count = float64(len(s.Kids))
 	}
 	cw, ch := s.W, s.H
@@ -609,6 +614,13 @@ func linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint, rules []s
 	}
 	spaceW = trunc(float64(spaceW) * scaleW)
 	spaceH = trunc(float64(spaceH) * scaleH)
+	// The set of kids sits along the direction where the definition's
+	// horzAlign or vertAlign puts it, when it states one (21.4.2.3 alg lin).
+	if horizontal {
+		x += incX * alignOffset(param(a, "horzAlign", ""), s.W-trunc(float64(totW)*scaleW))
+	} else if vertical {
+		y += incY * alignOffset(param(a, "vertAlign", ""), s.H-trunc(float64(totH)*scaleH))
+	}
 	for _, k := range s.Kids {
 		w, h := sizeOf(k)
 		if len(shrink) == 0 || shrink[k.Name] {
@@ -616,11 +628,13 @@ func linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint, rules []s
 			h = trunc(float64(h) * scaleH)
 		}
 		k.W, k.H = w, h
+		// Each kid sits across the direction where nodeVertAlign or
+		// nodeHorzAlign puts it, in the middle by default.
 		if incX != 0 {
-			y = (s.H - h) / 2
+			y = crossOffset(param(a, "nodeVertAlign", "mid"), s.H-h)
 		}
 		if incY != 0 {
-			x = (s.W - w) / 2
+			x = crossOffset(param(a, "nodeHorzAlign", "ctr"), s.W-w)
 		}
 		x, y = max(x, 0), max(y, 0)
 		k.X, k.Y = x, y
@@ -637,31 +651,246 @@ func linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint, rules []s
 	}
 }
 
-// fontSized returns the length a width or height constraint of a linear
-// layout gives: its factor of the font size it refers to (21.4.2.8 constr
-// refType primFontSz or secFontSz), in points of the value the
-// constraint starting that size states, as PowerPoint sizes such shapes
-// from their text; else its factor of the side, the parent's length. An
-// equality of no value sets no length of its own (21.4.7.10
-// ST_BoolOperator equ): it ties the lengths other constraints set.
+// setsLength reports a width or height constraint of a linear layout that
+// states a length: an equality of no value (21.4.7.10 ST_BoolOperator equ)
+// only ties the lengths others set, and an lte or gte one bounds a length
+// without setting it.
+func setsLength(c DiagramConstraint) bool {
+	switch c.Op {
+	case "lte", "gte":
+		return false
+	case "equ":
+		return c.HasValue || c.RefType != "none"
+	}
+	return true
+}
+
+// fontKey names the size a font size constraint type starts a layout node
+// at.
+func fontKey(typ, name string) string { return typ + "\x00" + name }
+
+// fontStart returns the size, in points, the constraints of cons start the
+// font size typ of the layout node name at, bounded by the room earlier
+// linear layouts left it; 0 for none.
+func (e *engine) fontStart(cons []DiagramConstraint, typ, name string) float64 {
+	for _, f := range cons {
+		if f.Type == typ && f.ForName == name && f.HasValue && f.RefType == "none" && f.Value > 0 {
+			v := min(f.Value, maxDiagramFontSize)
+			if c, ok := e.fontCaps[fontKey(typ, name)]; ok {
+				v = min(v, c)
+			}
+			return v
+		}
+	}
+	return 0
+}
+
+// fontLength returns the length, in EMU, a width or height constraint that
+// refers to a font size gives (refType primFontSz or secFontSz): its factor
+// of that size read in millimetres, and the size's key; false for another
+// constraint or a size no constraint starts.
+func (e *engine) fontLength(c DiagramConstraint, cons []DiagramConstraint) (float64, string, bool) {
+	if c.RefType != primFontSz && c.RefType != secFontSz {
+		return 0, "", false
+	}
+	start := e.fontStart(cons, c.RefType, c.RefForName)
+	if start <= 0 {
+		return 0, "", false
+	}
+	return float64(float64(c.Factor*start) * 36000), fontKey(c.RefType, c.RefForName), true
+}
+
+// fontLayout is what the font-sized lengths of a linear layout are: the
+// kids whose length along the direction comes from a font size, which keep
+// their room even when they draw nothing, and the lengths of the kids that
+// grow without limit (val INF), the largest font-sized length of a layout
+// node they hold.
+type fontLayout struct {
+	spacers   map[string]bool
+	unbounded map[string]float64
+}
+
+// fontLengths bounds the font sizes the kids of a linear layout are sized
+// from by the room the layout has, and returns their lengths. PowerPoint
+// sizes the shapes from the font and the font from the shapes: a font size
+// whose shapes along the direction, with the fixed lengths beside them,
+// pass the layout's length falls by the share that makes them fit, and so
+// does one whose shape across the direction passes the layout's width. The
+// standard is silent on the unit; a font size reads as that many
+// millimetres, as the evidence below measures.
 //
 // # Corpus evidence
 //
-//   - libreoffice/pptx: smartart-linear-rule's hProcess3 parTx, whose height
-//     a constraint makes the primary font size, prints at 50.5 points in
-//     PowerPoint's reference; laid out as tall as its 286-point column, its
-//     text took 65 points and ran past the slide's edge.
-//   - openxmlsdk/pptx: O12_templates/EmpOrienPres_TP10220212 passes the diff
-//     with its linear shapes sized from the font, layout 0.7473 to 0.7526.
-func fontSized(c DiagramConstraint, cons []DiagramConstraint, side int64) int64 {
-	if c.RefType == primFontSz || c.RefType == secFontSz {
+//   - libreoffice/pptx: smartart-linear-rule's hProcess3 background arrow,
+//     twice the primary font size tall, fills its 286-point layout, and
+//     PowerPoint's reference prints the text at 50.5 points: 2 x 50.5 mm
+//     is 286 points; its text sits where the column's spacers of half the
+//     size put it, 0.5 x 50.5 mm under the column's top.
+//   - libreoffice/pptx: smartart-linear-rule-vert's list1 items (0.82,
+//     -0.41 and 0.7 of the size) repeat every 117.7 points in the
+//     reference's 356-point frame: three items of 1.11 mm a point of size
+//     fill it at 37.75 points, 118.8 points an item.
+func (e *engine) fontLengths(s *DiagramShape, cons []DiagramConstraint, along, across string) fontLayout {
+	out := fontLayout{spacers: map[string]bool{}, unbounded: map[string]float64{}}
+	alongRoom, acrossRoom := s.W, s.H
+	if along == "h" {
+		alongRoom, acrossRoom = s.H, s.W
+	}
+	kids := map[string]*DiagramShape{}
+	for _, k := range s.Kids {
+		kids[k.Name] = k
+	}
+	// The unbounded kids take the largest font-sized length of a layout
+	// node under them.
+	for _, c := range cons {
+		k, ok := kids[c.ForName]
+		if !ok || !c.Unbounded || c.Type != along {
+			continue
+		}
+		under := map[string]bool{}
+		nodeNames(k.atom, under, 0)
 		for _, f := range cons {
-			if f.Type == c.RefType && f.ForName == c.RefForName && f.HasValue && f.RefType == "none" && f.Value > 0 {
-				return trunc(float64(c.Factor*min(f.Value, maxDiagramFontSize)) * 12700)
+			if f.Type != along || !under[f.ForName] || !setsLength(f) {
+				continue
+			}
+			if v, _, ok := e.fontLength(f, cons); ok {
+				out.unbounded[k.Name] = max(out.unbounded[k.Name], v)
 			}
 		}
 	}
+	scale := 1.0
+	keys := map[string]bool{}
+	alongLen := map[string]float64{}
+	fontAlong := map[string]bool{}
+	for _, c := range cons {
+		k, ok := kids[c.ForName]
+		if !ok || !setsLength(c) {
+			continue
+		}
+		v, key, font := e.fontLength(c, cons)
+		if !font {
+			if c.Type == along {
+				alongLen[k.Name] = float64(alongRoom) * c.Factor
+				if c.Unbounded {
+					if u, ok := out.unbounded[k.Name]; ok {
+						alongLen[k.Name], fontAlong[k.Name] = u, true
+					}
+				}
+			}
+			continue
+		}
+		keys[key] = true
+		if c.Type == across && v > float64(acrossRoom) {
+			scale = min(scale, float64(acrossRoom)/v)
+		}
+		if c.Type == along {
+			alongLen[k.Name], fontAlong[k.Name] = v, true
+			out.spacers[k.Name] = true
+		}
+	}
+	if len(keys) == 0 {
+		return out
+	}
+	var fixed, font float64
+	all := true
+	for _, k := range s.Kids {
+		v, ok := alongLen[k.Name]
+		if !ok {
+			all = false
+			break
+		}
+		if fontAlong[k.Name] {
+			font += v
+		} else {
+			fixed += v
+		}
+	}
+	if all && font > 0 && fixed+font > float64(alongRoom) && float64(alongRoom) > fixed {
+		scale = min(scale, (float64(alongRoom)-fixed)/font)
+	}
+	if scale < 1 {
+		for key := range keys {
+			typ, name, _ := strings.Cut(key, "\x00")
+			if v := e.fontStart(cons, typ, name); v > 0 {
+				e.fontCaps[key] = float64(v * scale)
+			}
+		}
+		for n, v := range out.unbounded {
+			out.unbounded[n] = float64(v * scale)
+		}
+	}
+	return out
+}
+
+// nodeNames adds the names of the layout nodes under a, at most
+// maxDiagramDepth levels down.
+func nodeNames(a *DiagramAtom, out map[string]bool, depth int) {
+	if a == nil || depth >= maxDiagramDepth {
+		return
+	}
+	for _, k := range a.Kids {
+		if k.Kind == AtomLayoutNode {
+			out[k.Name] = true
+		}
+		nodeNames(k, out, depth+1)
+	}
+}
+
+// lengthOf returns the length a width or height constraint of a linear
+// layout gives, in EMU: its factor of the font size it refers to, read in
+// millimetres (see [engine.fontLengths]); the font-sized length of a layout
+// node it holds for an unbounded one; else its factor of the side.
+func (e *engine) lengthOf(c DiagramConstraint, cons []DiagramConstraint, fl fontLayout, side int64) int64 {
+	if v, _, ok := e.fontLength(c, cons); ok {
+		return trunc(v)
+	}
+	if v, ok := fl.unbounded[c.ForName]; ok && c.Unbounded {
+		return trunc(v)
+	}
 	return trunc(float64(side) * c.Factor)
+}
+
+// alignOffset returns how far a set of kids that leaves room of a linear
+// layout's length moves along the direction, for its horzAlign or
+// vertAlign (21.4.7.49 ST_ParameterId): half the room for mid or ctr, all
+// of it for b or r, none for t, l or no parameter.
+func alignOffset(align string, room int64) int64 {
+	if room <= 0 {
+		return 0
+	}
+	switch align {
+	case "mid", "ctr":
+		return room / 2
+	case "b", "r":
+		return room
+	}
+	return 0
+}
+
+// crossOffset returns where a kid that leaves room across a linear
+// layout's direction sits, for its nodeVertAlign or nodeHorzAlign: at the
+// start for t or l, at the end for b or r, in the middle otherwise.
+func crossOffset(align string, room int64) int64 {
+	switch align {
+	case "t", "l":
+		return 0
+	case "b", "r":
+		return room
+	}
+	return room / 2
+}
+
+// dropEmptyGroupsBut returns kids without its group shapes that hold none,
+// those keep names aside: their length still spaces the layout.
+func dropEmptyGroupsBut(kids []*DiagramShape, keep map[string]bool) []*DiagramShape {
+	out := kids[:0]
+	for _, k := range kids {
+		if k.Group && len(k.Kids) == 0 && !keep[k.Name] {
+			continue
+		}
+		out = append(out, k)
+	}
+	return out
 }
 
 // pyramid stacks the kids as a pyramid's levels (21.4.2.1 pyra), each

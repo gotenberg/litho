@@ -3,6 +3,7 @@ package ooxml
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -349,19 +350,58 @@ func TestDiagramTextSpacing(t *testing.T) {
 
 // TestDiagramLinearSizesFromTheFont lays out a column whose node height is
 // a factor of the primary font size its constraint starts at (21.4.2.8
-// constr refType primFontSz): the node is that many points tall, not the
-// factor of the column's height, and an equality of no value sets no
-// height of its own.
+// constr refType primFontSz), read in millimetres: the nodes are that tall
+// while they fit the column, and when they do not, the size falls by the
+// share that makes them fit, the nodes' text taking it. An equality of no
+// value and an lte bound set no height of their own.
 func TestDiagramLinearSizesFromTheFont(t *testing.T) {
-	layout := `<dgm:alg type="lin"><dgm:param type="linDir" val="fromT"/></dgm:alg><dgm:shape/><dgm:constrLst>` +
-		`<dgm:constr type="primFontSz" for="des" forName="node" val="20"/>` +
-		`<dgm:constr type="h" for="des" forName="node" refType="primFontSz" refFor="des" refForName="node" fact="1.5"/>` +
-		`<dgm:constr type="h" for="des" forName="node" op="equ"/></dgm:constrLst>` + nodeList("rect", "")
-	d := ParseDiagram(mustParse(t, diagramData("a", "b")), mustParse(t, diagramLayout(layout)), nil, nil)
-	root := d.LayOut(1270000, 1270000, nil)
-	for _, k := range root.Kids {
-		if k.Name == "node" && k.H != 30*12700 {
-			t.Errorf("node %d EMU tall, want 30 points (%d)", k.H, 30*12700)
+	for _, c := range []struct {
+		size        string
+		h           int64
+		wantSize    float64
+		description string
+	}{
+		{"10", 540000, 10, "15 mm a node, two fit the column"},
+		{"20", 635000, 20 * 1270000.0 / 2160000, "30 mm a node do not fit: the size falls"},
+	} {
+		layout := `<dgm:alg type="lin"><dgm:param type="linDir" val="fromT"/></dgm:alg><dgm:shape/><dgm:constrLst>` +
+			`<dgm:constr type="primFontSz" for="des" forName="node" val="` + c.size + `"/>` +
+			`<dgm:constr type="h" for="des" forName="node" refType="primFontSz" refFor="des" refForName="node" fact="1.5"/>` +
+			`<dgm:constr type="h" for="des" forName="node" op="equ"/>` +
+			`<dgm:constr type="h" for="des" forName="node" refType="h" op="lte" fact="0.1"/></dgm:constrLst>` + nodeList("rect", "")
+		d := ParseDiagram(mustParse(t, diagramData("a", "b")), mustParse(t, diagramLayout(layout)), nil, nil)
+		root := d.LayOut(1270000, 1270000, nil)
+		for _, k := range root.Kids {
+			if k.Name != "node" {
+				continue
+			}
+			if k.H < c.h-1 || k.H > c.h || math.Abs(k.FontSize-c.wantSize) > 1e-9 {
+				t.Errorf("%s: node %d EMU tall at %v points, want %d at %v", c.description, k.H, k.FontSize, c.h, c.wantSize)
+			}
+		}
+	}
+}
+
+// TestDiagramLinearAlignment lays out a row and a column whose definitions
+// state where their kids sit (21.4.2.3 alg lin: nodeVertAlign across a
+// row, vertAlign along a column), and a column that states nothing, whose
+// kids start at its top.
+func TestDiagramLinearAlignment(t *testing.T) {
+	cons := `<dgm:constrLst><dgm:constr type="h" for="ch" forName="node" refType="h" fact="0.25"/><dgm:constr type="w" for="ch" forName="node" refType="w" fact="0.25"/></dgm:constrLst>`
+	for _, c := range []struct {
+		params string
+		want   []string
+	}{
+		{`<dgm:param type="nodeVertAlign" val="t"/>`, []string{"node rect 0,0 100x100", "node rect 100,0 100x100"}},
+		{`<dgm:param type="nodeVertAlign" val="b"/>`, []string{"node rect 0,300 100x100", "node rect 100,300 100x100"}},
+		{`<dgm:param type="linDir" val="fromT"/><dgm:param type="vertAlign" val="mid"/>`, []string{"node rect 150,100 100x100", "node rect 150,200 100x100"}},
+		{`<dgm:param type="linDir" val="fromT"/>`, []string{"node rect 150,0 100x100", "node rect 150,100 100x100"}},
+	} {
+		layout := `<dgm:alg type="lin">` + c.params + `</dgm:alg><dgm:shape/>` + cons + nodeList("rect", "")
+		d := ParseDiagram(mustParse(t, diagramData("a", "b")), mustParse(t, diagramLayout(layout)), nil, nil)
+		got := boxes(d.LayOut(400, 400, nil))[1:]
+		if strings.Join(got, "; ") != strings.Join(c.want, "; ") {
+			t.Errorf("%s: boxes %q, want %q", c.params, got, c.want)
 		}
 	}
 }

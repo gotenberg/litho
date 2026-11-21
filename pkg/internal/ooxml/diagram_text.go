@@ -344,6 +344,13 @@ func (z *sizer) spec(s *DiagramShape) *textSize {
 		}
 	}
 	starts(cons, 0)
+	defer func() {
+		// A linear layout that sized shapes from this size bounded it by
+		// its room (engine.fontLengths).
+		if c, ok := z.e.fontCaps[fontKey(t.kind, s.Name)]; ok && t.hasStart {
+			t.start = min(t.start, c)
+		}
+	}()
 	depth := 1
 	for a := s.parent; a != nil && depth < maxDiagramDepth; a, depth = a.parent, depth+1 {
 		ac, ar := z.own(a.atom, a.pt)

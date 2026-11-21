@@ -186,8 +186,9 @@ type DiagramConstraint struct {
 	RefFor, RefForName, RefType string
 	RefPtType, Op               string
 	Factor, Value               float64
-	// HasValue reports a val the constraint states.
-	HasValue bool
+	// HasValue reports a val the constraint states; Unbounded a val of
+	// INF, a length without limit.
+	HasValue, Unbounded bool
 }
 
 // DiagramRule is a rule of a layout node (ECMA-376 Part 1, 21.4.2.24
@@ -413,8 +414,9 @@ func (d *Diagram) parseAtom(el *Element, parent, node *DiagramAtom, n *int, dept
 				}
 				_, hasVal := c.Attr("val")
 				add(&DiagramAtom{Kind: AtomConstraint, Parent: a, Node: a.Node, Constraint: DiagramConstraint{
-					HasValue: hasVal && numeric.Finite(parseDouble(attrOr(c, "val"), math.NaN())),
-					For:      tokenOr(c, "for", "none"), ForName: attrOr(c, "forName"), PtType: tokenOr(c, "ptType", "none"),
+					HasValue:  hasVal && numeric.Finite(parseDouble(attrOr(c, "val"), math.NaN())),
+					Unbounded: strings.EqualFold(strings.TrimSpace(attrOr(c, "val")), "INF"),
+					For:       tokenOr(c, "for", "none"), ForName: attrOr(c, "forName"), PtType: tokenOr(c, "ptType", "none"),
 					Type: tokenOr(c, "type", "none"), RefFor: tokenOr(c, "refFor", "none"), RefForName: attrOr(c, "refForName"),
 					RefType: tokenOr(c, "refType", "none"), RefPtType: tokenOr(c, "refPtType", "none"),
 					Factor: parseDouble(attrOr(c, "fact"), 1), Value: parseDouble(attrOr(c, "val"), 0),

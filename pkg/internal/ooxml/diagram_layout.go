@@ -138,6 +138,10 @@ type engine struct {
 	children map[[2]string]bool
 	shapes   int
 	steps    int
+	// fontCaps bounds the size a font size constraint starts a layout node
+	// at, by constraint type and node name, where the shapes a linear
+	// layout sizes from that size leave it no more room.
+	fontCaps map[string]float64
 	root     *DiagramShape
 	rootAtom *DiagramAtom
 }
@@ -179,7 +183,7 @@ type walker struct {
 func (d *Diagram) LayOut(w, h int64, fit DiagramTextFit) *DiagramShape {
 	rootPt := d.root()
 	root := &DiagramShape{Group: true, W: w, H: h}
-	e := &engine{d: d, presShp: map[*DiagramPoint]*DiagramShape{}, shpPres: map[*DiagramShape]*DiagramPoint{}, ptIndex: map[*DiagramPoint]int{}, tmpls: map[*DiagramAtom]*shapeTemplate{}, children: map[[2]string]bool{}, root: root, rootAtom: d.Layout}
+	e := &engine{d: d, presShp: map[*DiagramPoint]*DiagramShape{}, shpPres: map[*DiagramShape]*DiagramPoint{}, ptIndex: map[*DiagramPoint]int{}, tmpls: map[*DiagramAtom]*shapeTemplate{}, children: map[[2]string]bool{}, fontCaps: map[string]float64{}, root: root, rootAtom: d.Layout}
 	for _, c := range d.Connections {
 		e.children[[2]string{c.Src, c.Dest}] = true
 	}
