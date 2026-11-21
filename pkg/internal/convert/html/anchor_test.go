@@ -493,3 +493,35 @@ func TestAnchor_DefaultAnchorInItsContainingBlock(t *testing.T) {
 		`<div class=rel><div class=a id=z></div><div class="p g" id=p1></div></div>`,
 		map[string]string{"1:g": "50,80+30x20"})
 }
+
+// TestAnchor_InlineBoxes holds anchors and inline boxes (CSS Anchor
+// Positioning 1, 2 and 2.2): an anchor inside a relatively positioned
+// inline box, the containing block of the box positioned from it, is
+// laid out before that box, so it is an acceptable anchor element, inside
+// a block split out of the inline box too (CSS 2.1, 9.2.1.1); and the
+// anchor box of an inline box split around a block holds that block,
+// with the anonymous block box that wraps it, as wide as the line.
+//
+// # Corpus evidence
+//
+//   - wpt: css/css-anchor-position/anchor-position-inline-005, -006,
+//     -007, -008 and position-visibility-anchors-visible-inline-cb draw
+//     their references in Chromium of gotenberg/gotenberg:9.4.1.
+func TestAnchor_InlineBoxes(t *testing.T) {
+	t.Parallel()
+	checkAnchored(t, `
+		.line { width: 300px; font-size: 0; line-height: 0 }
+		.ib { display: inline-block; height: 10px; width: 50px }
+		.rel { position: relative }
+		#a { anchor-name: --a; width: 40px }
+		#p1 { left: anchor(--a left); top: anchor(--a bottom) }
+		#d { anchor-name: --d; width: 20px; height: 10px; margin-left: 100px }
+		#p2 { left: anchor(--d left); top: anchor(--d bottom) }
+		#b { anchor-name: --b }
+		#p3 { position-anchor: --b; top: anchor(top); left: anchor(left); width: anchor-size(width); height: anchor-size(height) }`,
+		`<div class=line><span class=rel><span class=ib></span><span class=ib id=a></span><span class="p g" id=p1></span></span></div>
+		<div class=line><span class=rel><div><div id=d></div></div><span class="p m" id=p2></span></span></div>
+		<div class=line style="margin-top: 50px"><span id=b><div style="width: 50px; height: 30px"></div></span></div>
+		<div class="p k" id=p3></div>`,
+		map[string]string{"1:g": "50,10+30x20", "1:m": "100,20+30x20", "1:k": "0,70+300x30"})
+}

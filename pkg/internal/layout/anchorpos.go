@@ -148,10 +148,32 @@ func acceptableAnchor(a, p *box, name string) bool {
 	pcb := cbGenerator(p)
 	for x, n := a, 0; x != nil && n <= maxTreeDepth; n++ {
 		g := cbGenerator(x)
+		if pcb != nil && pcb.kind == kindInline && !x.abs && inInline(x, pcb) && (g == nil || strictlyIn(pcb, g)) {
+			// An inline box is no block container, so its in-flow content
+			// takes its containing block outside it; that content is laid
+			// out with the inline, before what the inline holds.
+			g = pcb
+		}
 		if g == pcb && (!x.abs || x.seq < p.seq) {
 			return true
 		}
 		x = g
+	}
+	return false
+}
+
+// inInline reports whether d lies inside the inline box a, d excluded: in
+// one of its pieces, or in a block split out of it (CSS 2.1, 9.2.1.1).
+func inInline(d, a *box) bool {
+	for x, n := d, 0; x != nil && n <= maxTreeDepth; n++ {
+		if x != d && (x == a || x.kind == kindInline && a.node != nil && x.node == a.node) {
+			return true
+		}
+		if x.host != nil {
+			x = x.host
+		} else {
+			x = x.parent
+		}
 	}
 	return false
 }
@@ -294,10 +316,22 @@ func (r edges) union(o edges) edges {
 }
 
 // boxRect returns the border box of a in flow coordinates: the bounding
-// box of its fragments for an inline box, which its lines hold.
+// box of its pieces ([boxPieces]).
 func boxRect(a *box) edges {
+	ps := boxPieces(a)
+	r := ps[0]
+	for _, p := range ps[1:] {
+		r = r.union(p)
+	}
+	return r
+}
+
+// boxPieces returns the border box of a in flow coordinates, or for an
+// inline box the border boxes of its fragments, which its lines hold, and
+// of the blocks split out of it, never empty.
+func boxPieces(a *box) []edges {
 	if a.kind != kindInline {
-		return edges{a.x, a.y, a.x + a.borderW(), a.y + a.borderH()}
+		return []edges{{a.x, a.y, a.x + a.borderW(), a.y + a.borderH()}}
 	}
 	host := a.parent
 	for host != nil && host.kind == kindInline {
@@ -306,8 +340,7 @@ func boxRect(a *box) edges {
 	for host != nil && host.anon && host.parent != nil {
 		host = host.parent
 	}
-	r := edges{a.anchorX, a.anchorY, a.anchorX, a.anchorY}
-	found := false
+	var out []edges
 	piece := func(b *box) bool { return b == a || b.kind == kindInline && a.node != nil && b.node == a.node }
 	var scan func(h *box, depth int)
 	scan = func(h *box, depth int) {
@@ -316,18 +349,19 @@ func boxRect(a *box) edges {
 		}
 		for _, l := range h.lines {
 			for _, f := range l.frags {
-				if !piece(f.box) {
-					continue
-				}
-				fr := edges{l.x + f.x0, l.y + f.top, l.x + f.x1, l.y + f.bottom}
-				if !found {
-					r, found = fr, true
-				} else {
-					r = r.union(fr)
+				if piece(f.box) {
+					out = append(out, edges{l.x + f.x0, l.y + f.top, l.x + f.x1, l.y + f.bottom})
 				}
 			}
 		}
 		for _, k := range h.kids {
+			if splitOut(k, piece) {
+				// A block split out of the inline box is part of it, with
+				// the anonymous block box that wraps it (CSS 2.1,
+				// 9.2.1.1), as wide as the block container's content.
+				out = append(out, edges{h.contentX(), k.y, h.contentX() + h.w, k.y + k.borderH()})
+				continue
+			}
 			if k.anon && k.kind == kindBlock || k.kind == kindInline {
 				scan(k, depth+1)
 			}
@@ -336,7 +370,21 @@ func boxRect(a *box) edges {
 	if host != nil {
 		scan(host, 0)
 	}
-	return r
+	if len(out) == 0 {
+		out = append(out, edges{a.anchorX, a.anchorY, a.anchorX, a.anchorY})
+	}
+	return out
+}
+
+// splitOut reports a block-level box k split out of an inline box that
+// piece reports a piece of, or out of an inline inside one.
+func splitOut(k *box, piece func(*box) bool) bool {
+	for x, n := k.host, 0; x != nil && x.kind == kindInline && n <= maxTreeDepth; x, n = x.parent, n+1 {
+		if piece(x) {
+			return true
+		}
+	}
+	return false
 }
 
 // anchorRect returns the anchor box of a for the absolutely positioned
