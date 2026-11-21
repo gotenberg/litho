@@ -720,10 +720,10 @@ func (e *engine) layoutPlan(b *box, plan *anchorPlan) {
 	c := plan.imcb
 	ranges := [2][2]float64{{c.x0, c.x1}, {c.y0, c.y1}}
 	if plan.ax == alignAnchorCenter && plan.def != nil {
-		ranges[0] = centred(c.x0, c.x1, (plan.defR.x0+plan.defR.x1)/2)
+		ranges[0] = centred(c.x0, c.x1, float64((plan.defR.x0+plan.defR.x1)/2))
 	}
 	if plan.ay == alignAnchorCenter && plan.def != nil {
-		ranges[1] = centred(c.y0, c.y1, (plan.defR.y0+plan.defR.y1)/2)
+		ranges[1] = centred(c.y0, c.y1, float64((plan.defR.y0+plan.defR.y1)/2))
 	}
 	for i := range ranges {
 		if math.IsInf(ranges[i][1], 1) {
@@ -745,9 +745,9 @@ func (e *engine) layoutPlan(b *box, plan *anchorPlan) {
 		e.noPaginate++
 		e.layoutAbsIn(b, lay)
 		e.noPaginate--
-		st.Top = css.Pts(max(lay.h-b.marginH(), 0) / 2)
+		st.Top = css.Pts(float64(max(lay.h-b.marginH(), 0) / 2))
 		if lay.h < b.marginH() {
-			st.Top = css.Pts((lay.h - b.marginH()) / 2)
+			st.Top = css.Pts(float64((lay.h - b.marginH()) / 2))
 		}
 	}
 	b.st, b.orig = &st, nil
@@ -762,7 +762,7 @@ func (e *engine) layoutPlan(b *box, plan *anchorPlan) {
 		}
 	}
 	if plan.ax == alignCenter || plan.ax == alignAnchorCenter {
-		b.shift((lay.w-b.marginW())/2, 0)
+		b.shift(float64((lay.w-b.marginW())/2), 0)
 	}
 	if plan.ax != alignNormal {
 		if dx := intoRange(b.x-b.m[css.Left], b.marginW(), ranges[0][0], ranges[0][1], plan.orig.x0, plan.orig.x1); dx != 0 {
