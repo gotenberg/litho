@@ -138,8 +138,8 @@ func TestConvert_BlankPagesPastTheLimit(t *testing.T) {
 // TestConvert_PageOffsets locks the offset of a page number or count
 // field: added to the number each page shows, after the sheet's first page
 // number and after the pages that hold nothing are left out, and summed
-// in 64 bits, so that an offset at the 32-bit bound shows the same digits
-// where int is 32 bits.
+// in 32-bit two's complement as Excel prints it, the same digits where
+// int is 32 or 64 bits.
 func TestConvert_PageOffsets(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -151,7 +151,7 @@ func TestConvert_PageOffsets(t *testing.T) {
 		{"every page", 4, 0, 10, -1, []string{"P: 11 / 3 first", "P: 12 / 3", "P: 13 / 3 last", "P: 14 / 3 far"}},
 		{"from page 5, blank pages left out", 3, 5, 1, 1, []string{"P: 6 / 4 first", "P: 7 / 4 last", "P: 8 / 4 far"}},
 		{"below zero", 4, 0, -2, 0, []string{"P: -1 / 4 first", "P: 0 / 4", "P: 1 / 4 last", "P: 2 / 4 far"}},
-		{"past 32 bits", 3, 5, math.MaxInt32, math.MinInt32, []string{"P: 2147483652 / -2147483645 first", "P: 2147483653 / -2147483645 last", "P: 2147483654 / -2147483645 far"}},
+		{"wrapped in 32 bits", 3, 5, math.MaxInt32, math.MinInt32, []string{"P: -2147483644 / -2147483645 first", "P: -2147483643 / -2147483645 last", "P: -2147483642 / -2147483645 far"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

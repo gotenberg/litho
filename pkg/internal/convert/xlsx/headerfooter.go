@@ -234,47 +234,48 @@ func (p *hfParser) field(f sheet.Field) {
 	p.parts[p.part] = append(p.parts[p.part], sheet.Span{Field: f, Font: &font})
 }
 
-// maxPageOffset bounds the number a &P+n or &N+n code adds to or takes
-// from the page number or count: 2^29, a larger one saturating at it.
-// Anti-DoS guard, not spec-mandated: Excel holds 255 characters a text,
-// room for a number of any size, and a real offset continues a numbering
-// by a few hundred pages. The field adds it in 64 bits.
-const maxPageOffset = 1 << 29
-
 // counted adds the field f, the page number or the page count, whose code
 // letter is s[i], with the offset a sign and digits after it give, and
 // returns the index of the last byte read. Office reads a sign and digits
 // after &N (MS-OI29500, 2.1.619, pagetotal = "&N" 0*1(("-" / "+")
-// *DIGIT)), and Excel after &P too: the number ends at the first byte
-// that is no digit, a space included. A sign no digit follows stays text.
+// *DIGIT)), and Excel after &P too, as Excel prints them: the number ends
+// at the first byte that is no digit, a space included; a sign no digit
+// follows is read as an offset of 0; the digits, however many, add up in
+// 32-bit two's complement ([sheet.Wrap32]), as the sum with the page
+// number does, which bounds the offset whatever the text holds.
 //
 // # Corpus evidence
 //
 //   - litho/xlsx headers_footers_codes: "&P/&N &P+1" in a footer prints
 //     "1/3 2" and "2/3 3" on the two pages of its sheet in Excel's print,
 //     where LibreOffice's import prints "1/3 1+1".
+//   - probe, xlsx: Excel for the web prints "&P+ 1", "&P-" and "&P+" on
+//     page 1 as "1 1", "1" and "1", the sign read and no offset; "&N+ 1"
+//     of two pages as "2 1".
+//   - probe, xlsx: "&P+2147483647" prints -2147483648 on page 1 and
+//     "&P+99999999999999999999" 1661992960, the digits and the sum
+//     wrapped in 32 bits.
+//   - probe, xlsx: where the digits end the header text, Excel for the web
+//     prints the number times ten plus the offset ("&R&P-0" as 10 and 20,
+//     "&R&N+1" of two pages as 21), and the plain sum wherever anything
+//     follows ("&L&N+1|" as 3). Microsoft documents &P+number as the page
+//     number plus the number, with no word of its place, so the sum is
+//     kept at the end of the text too.
 func (p *hfParser) counted(f sheet.Field, s string, i int) int {
 	p.field(f)
 	if i+1 >= len(s) || (s[i+1] != '+' && s[i+1] != '-') {
 		return i
 	}
+	n := int64(0)
 	j := i + 2
 	for j < len(s) && s[j] >= '0' && s[j] <= '9' {
+		n = int64(sheet.Wrap32(n*10 + int64(s[j]-'0')))
 		j++
 	}
-	if j == i+2 {
-		return i
-	}
-	n, err := intconv.Atoi(s[i+2 : j])
-	if err != nil {
-		// Digits alone fail only past 64 bits.
-		n = maxPageOffset
-	}
-	n = min(n, maxPageOffset)
 	if s[i+1] == '-' {
 		n = -n
 	}
-	p.parts[p.part][len(p.parts[p.part])-1].Offset = n
+	p.parts[p.part][len(p.parts[p.part])-1].Offset = sheet.Wrap32(n)
 	return j - 1
 }
 

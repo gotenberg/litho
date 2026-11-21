@@ -3,6 +3,7 @@ package xlsx
 import (
 	"bytes"
 	"context"
+	"math"
 	"testing"
 	"unicode/utf8"
 
@@ -119,7 +120,7 @@ func FuzzParseHeaderFooter(f *testing.F) {
 				if sp.Field == sheet.FieldNone && sp.Text == "" {
 					t.Fatal("an empty text span")
 				}
-				if sp.Offset != 0 && (sp.Field != sheet.FieldPage && sp.Field != sheet.FieldPages || sp.Offset < -maxPageOffset || sp.Offset > maxPageOffset) {
+				if sp.Offset != 0 && (sp.Field != sheet.FieldPage && sp.Field != sheet.FieldPages || sp.Offset < math.MinInt32 || sp.Offset > math.MaxInt32) {
 					t.Fatalf("span %+v: an offset on another field or past its bound", sp)
 				}
 			}

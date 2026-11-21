@@ -698,8 +698,8 @@ type Span struct {
 	// Field, when not FieldNone, is what the span shows.
 	Field Field
 	// Offset, for FieldPage and FieldPages, is added to the number the
-	// field shows on each page (a workbook's &P+n, &P-n, &N+n and &N-n);
-	// a reader bounds it.
+	// field shows on each page (a workbook's &P+n, &P-n, &N+n and &N-n),
+	// within the 32-bit range.
 	Offset int
 	// Font, when not nil, overrides the header font (HeaderFooter.Font)
 	// for the span.

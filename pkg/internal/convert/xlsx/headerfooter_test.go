@@ -100,13 +100,16 @@ func TestParseHeaderFooter(t *testing.T) {
 			"no digit after the sign", "&P +1&P+ 1&N-",
 			[3][]span{1: {
 				with(b, func(s *span) { s.field = sheet.FieldPage }), with(b, func(s *span) { s.text = " +1" }),
-				with(b, func(s *span) { s.field = sheet.FieldPage }), with(b, func(s *span) { s.text = "+ 1" }),
-				with(b, func(s *span) { s.field = sheet.FieldPages }), with(b, func(s *span) { s.text = "-" }),
+				with(b, func(s *span) { s.field = sheet.FieldPage }), with(b, func(s *span) { s.text = " 1" }),
+				with(b, func(s *span) { s.field = sheet.FieldPages }),
 			}},
 		},
 		{
-			"a bounded offset", "&P+99999999999999999999999&N-1000000000",
-			[3][]span{1: {with(b, func(s *span) { s.field, s.offset = sheet.FieldPage, maxPageOffset }), with(b, func(s *span) { s.field, s.offset = sheet.FieldPages, -maxPageOffset })}},
+			"offsets wrapped in 32 bits", "&P+99999999999999999999999&N-1000000000&P+2147483648x",
+			[3][]span{1: {
+				with(b, func(s *span) { s.field, s.offset = sheet.FieldPage, -159383553 }), with(b, func(s *span) { s.field, s.offset = sheet.FieldPages, -1000000000 }),
+				with(b, func(s *span) { s.field, s.offset = sheet.FieldPage, math.MinInt32 }), with(b, func(s *span) { s.text = "x" }),
+			}},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

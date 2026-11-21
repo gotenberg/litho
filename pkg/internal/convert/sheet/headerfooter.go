@@ -34,14 +34,15 @@ type hfFields struct {
 }
 
 // spanText returns what a span shows on a page. A page number or count
-// is moved by the span's offset when the page is drawn, the sum taken in
-// 64 bits so that it cannot wrap where int is 32 bits.
+// is moved by the span's offset when the page is drawn, the sum wrapped in
+// 32-bit two's complement as Excel prints it ([Wrap32]), the same digits
+// where int is 32 or 64 bits.
 func (b *builder) spanText(s Span, f hfFields) string {
 	switch s.Field {
 	case FieldPage:
-		return strconv.FormatInt(int64(f.page)+int64(s.Offset), 10)
+		return strconv.Itoa(Wrap32(int64(f.page) + int64(s.Offset)))
 	case FieldPages:
-		return strconv.FormatInt(int64(f.pages)+int64(s.Offset), 10)
+		return strconv.Itoa(Wrap32(int64(f.pages) + int64(s.Offset)))
 	case FieldSheet:
 		return f.sheet
 	case FieldTitle:
@@ -62,6 +63,16 @@ func (b *builder) spanText(s Span, f hfFields) string {
 	case FieldNone:
 	}
 	return s.Text
+}
+
+// Wrap32 returns v wrapped to 32-bit two's complement: the low 32 bits of
+// v read as a signed number. Excel adds a header's page offset this way.
+func Wrap32(v int64) int {
+	v &= 1<<32 - 1
+	if v >= 1<<31 {
+		v -= 1 << 32
+	}
+	return int(v) // fits int: within the 32-bit range
 }
 
 // partNode returns the block of one header or footer part, nil when it
