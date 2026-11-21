@@ -118,6 +118,7 @@ func TestAnchorFunctionsParse(t *testing.T) {
 		{"left: anchor(--a left,)", false},
 		{"left: anchor(--a left, 1px, 2px)", false},
 		{"left: anchor(--a left, 3)", false},
+		{"left: anchor(--a left, 0)", true},
 		{"width: anchor(--a left)", false},
 		{"margin-left: anchor(--a left)", false},
 		{"top: anchor-size(--a height)", true},

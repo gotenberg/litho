@@ -787,11 +787,16 @@ func (p *calcParser) anchorFn(t *token, size bool, depth int) (*calcNode, calcTy
 	}
 	n := &calcNode{op: opAnchor, anchor: f}
 	if fallback != nil {
-		fb, ty, ok := p.sum(fallback, depth+1)
-		if !ok || ty != typeLength {
-			return nil, calcType{}, false
+		if f := significant(fallback); len(f) == 1 && f[0].typ == tNumber && f[0].num == 0 {
+			// A unitless zero is a <length> (CSS Values 4, 6.1).
+			n.kids = []*calcNode{{op: opLen, unit: uPt}}
+		} else {
+			fb, ty, ok := p.sum(fallback, depth+1)
+			if !ok || ty != typeLength {
+				return nil, calcType{}, false
+			}
+			n.kids = []*calcNode{fb}
 		}
-		n.kids = []*calcNode{fb}
 	}
 	if !p.count() {
 		return nil, calcType{}, false
