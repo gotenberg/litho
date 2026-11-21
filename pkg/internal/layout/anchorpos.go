@@ -763,10 +763,43 @@ func (s *anchorScope) substitute(st *css.Style) *css.Style {
 // icbAxes returns the axes of the initial containing block and of a page
 // area: the principal writing mode's ([Options.Principal]).
 func (e *engine) icbAxes() flowAxes {
-	if e.opts.Principal != nil {
-		return flowAxesOf(e.opts.Principal)
+	st := e.opts.Principal
+	if st == nil {
+		st = e.rootBox.stOrNil()
 	}
-	return flowAxesOf(e.rootBox.stOrNil())
+	return e.axesIn(st, e.turn)
+}
+
+// boxAxes returns the axes of the box c in the coordinates it lays its
+// content out in: the anonymous block of an orthogonal flow is that
+// flow's horizontal layout itself.
+func (e *engine) boxAxes(c *box) flowAxes {
+	if c.anon && c.parent != nil && c.parent.ortho {
+		return flowAxesOf(c.st)
+	}
+	return e.axesIn(c.st, e.frameOf(c))
+}
+
+// axesIn returns the axes of the style st in the coordinates of a turned
+// flow of the writing mode frame, which the layout lays out horizontally
+// before it turns it onto the page ([engine.turnedStyle]): the page's
+// horizontal axis is the flow's vertical one and the reverse, the page's
+// left the flow's bottom in vertical-rl, a quarter turn clockwise, and
+// the page's top the flow's right in sideways-lr, a quarter turn
+// counter-clockwise ([turnSides]). A style of the flow's own writing mode
+// so has a horizontal flow's axes there.
+func (e *engine) axesIn(st *css.Style, frame css.WritingMode) flowAxes {
+	p := flowAxesOf(st)
+	if !e.opts.BrowserRules || frame == css.HorizontalTB {
+		return p
+	}
+	// xRev reports the page's x axis running against the flow's y axis,
+	// yRev the page's y axis against the flow's x axis.
+	xRev, yRev := frame != css.VerticalLR && frame != css.SidewaysLR, frame == css.SidewaysLR
+	if p.blockX {
+		return flowAxes{blockX: false, blockLow: p.blockLow != xRev, inlineL: p.inlineL != yRev}
+	}
+	return flowAxes{blockX: true, blockLow: p.blockLow != yRev, inlineL: p.inlineL != xRev}
 }
 
 // stOrNil returns the style of b, nil for no box.

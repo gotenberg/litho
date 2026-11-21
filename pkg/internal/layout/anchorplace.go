@@ -204,10 +204,10 @@ func (e *engine) scrollableCB(cb absCB) absCB {
 // positioned box b in its containing block cb.
 func (e *engine) planAnchored(b *box, st *css.Style, cb absCB) *anchorPlan {
 	a := st.AnchorPositioning()
-	self := flowAxesOf(st)
+	self := e.axesIn(st, e.frameOf(b))
 	cbAxes := e.icbAxes()
 	if cb.box != nil {
-		cbAxes = flowAxesOf(cb.box.st)
+		cbAxes = e.boxAxes(cb.box)
 	}
 	s := &anchorScope{e: e, b: b, cb: cb, cbAxes: cbAxes, self: self, page: -1, rects: map[*box]edges{}}
 	s.def = e.defaultAnchor(b, st, 0)
@@ -402,7 +402,7 @@ func (e *engine) positionOptions(b *box, base *css.Style, cb absCB) []tryEntry {
 	out[0] = tryEntry{st: base}
 	cbAxes := e.icbAxes()
 	if cb.box != nil {
-		cbAxes = flowAxesOf(cb.box.st)
+		cbAxes = e.boxAxes(cb.box)
 	}
 	for i, o := range a.Fallbacks {
 		var t css.TryStyle

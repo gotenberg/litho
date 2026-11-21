@@ -599,3 +599,47 @@ func TestAnchor_TransformedFragments(t *testing.T) {
 		<div class="p g" id=p1></div></div>`,
 		map[string]string{"1:g": "22,20+32x50"})
 }
+
+// TestAnchor_VerticalRoot holds anchor positioning in a document of a
+// vertical writing mode, which the layout lays out horizontally on turned
+// pages: position-area's logical keywords and the start, end, self-start
+// and self-end sides read the writing modes as the page shows them (CSS
+// Anchor Positioning 1, 3.1.2 and 3.2), and flip-block mirrors the block
+// axis, horizontal on the page (5.4.2).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints these
+//     boxes, in vertical-rl and vertical-lr, and so does its screen; the
+//     lime box of vertical-lr shows 10px wide, the fuchsia one over the
+//     rest of it.
+func TestAnchor_VerticalRoot(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		mode string
+		want map[string]string
+	}{
+		{"vertical-rl", map[string]string{"1:g": "280,180+30x20", "1:m": "320,180+30x20", "1:r": "320,140+30x20", "1:y": "320,120+30x20", "1:k": "120,150+50x20"}},
+		{"vertical-lr", map[string]string{"1:g": "230,180+30x20", "1:m": "220,180+30x20", "1:r": "190,140+30x20", "1:y": "260,120+30x20", "1:k": "60,150+50x20"}},
+	} {
+		doc := convertDoc(t, `<style>@page { size: 600px 400px; margin: 0 }
+			html { writing-mode: `+c.mode+` } html, body { margin: 0 }
+			.v { position: relative; width: 500px; height: 300px; margin: 20px; font: 16px/1 sans-serif }
+			#a { anchor-name: --a; position: absolute; top: 100px; left: 200px; width: 40px; height: 60px }
+			#n { anchor-name: --n; position: absolute; top: 120px; left: 0; width: 40px; height: 40px }
+			.p { position: absolute; width: 30px; height: 20px; position-anchor: --a }
+			#p1 { position-area: block-start center; background: red }
+			#p2 { position-area: inline-end span-block-start; background: lime }
+			#p3 { left: anchor(start); top: anchor(end); background: fuchsia }
+			#p4 { writing-mode: horizontal-tb; left: anchor(self-end); top: anchor(self-start); background: yellow }
+			#p5 { position-anchor: --n; position-area: block-start; position-try-fallbacks: flip-block; width: 50px; background: aqua }</style>
+			<div class=v><div id=a></div><div id=n></div><div class=p id=p1></div><div class=p id=p2></div><div class=p id=p3></div>
+			<div class=p id=p4></div><div class=p id=p5></div></div>`, Options{PreferCSSPageSize: true})
+		got := pxBoxes(doc)
+		for k, w := range c.want {
+			if g := got[0][k[2:]]; g != w {
+				t.Errorf("%s, %s: %q, want %q", c.mode, k, g, w)
+			}
+		}
+	}
+}
