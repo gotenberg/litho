@@ -273,6 +273,14 @@ Chromium prints a `backdrop-filter` without filtering the backdrop, where its sc
 | `anchor-positioning`          | 2     | none    | `anchor-name` on inline terms and blocks; `position-anchor`; `anchor()` and `anchor-size()` in insets and sizes; `position-area` with its default alignments; `anchor-center`; `position-try` with `most-width`; a box declared after the page break that follows its anchor to the second page |
 | `anchor-positioning-vertical` | 1     | none    | A `vertical-rl` root (Noto Sans CJK JP); `position-area` with `inline-end`, `center`, `span-block-end`; `anchor(start)` and `anchor(end)` in insets; `position-try-fallbacks: flip-block` on a term at the block-end edge                                                                       |
 
+## Positioned boxes in a vertical flow
+
+`vertical-sidebar-positioned` is a two-page A4 landscape report in horizontal text, each page holding a `writing-mode: vertical-rl` sidebar in Japanese whose four corners carry badges positioned from the sidebar's sides, with a note of the first sidebar fixed at the bottom left of the page area, which prints on both pages.
+
+| Source                        | Pages | Options | Exercises                                                                                                                                                                                                     |
+| ----------------------------- | ----- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vertical-sidebar-positioned` | 2     | none    | A relatively positioned `vertical-rl` float (Noto Sans CJK JP) as the containing block of absolutely positioned boxes by `top`, `right`, `bottom` and `left`; a `position: fixed` box inside it; a page break |
+
 ## Expected text
 
 Eight sources name `expectedText: "expected-text.txt"` in their `options.json`: Chromium writes their text wrong in its PDF, so their text score reads the file beside them, the page's text in reading order written from the source, and not Chromium's (see [Expected text](../../../FEATURES.md#expected-text)). Each file holds what the page prints: the headings, the paragraphs and the table cells in document order, the numbers of ordered list items (`1.`, `2.`), and no disc bullet, which both engines draw as a shape; the characters as the source holds them, joiners, non-joiners, zero width spaces and variation selectors included. Neither the key nor the file changes the reference. What Chromium's PDF holds, read by PDF.js:

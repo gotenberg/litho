@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>縦書きの欄</title>
+<style>
+  @page { size: A4 landscape; margin: 15mm; }
+  body { margin: 0; font: 14px/1.8 sans-serif; color: #222; }
+  h1 { font-size: 24px; margin: 0 0 12px; }
+  .main { margin-right: 260px; }
+  .main p { margin: 0 0 10px; }
+  /* A vertical sidebar beside the text, its corners marked by badges. */
+  .side {
+    writing-mode: vertical-rl; position: relative; float: right;
+    width: 220px; height: 420px; padding: 18px; background: #f3f6fa; border: 2px solid #9cc3e6;
+    font-size: 15px; line-height: 1.9;
+  }
+  .side h2 { font-size: 18px; margin: 0 0 0 10px; color: #0b4f8a; }
+  .side p { margin: 0 0 0 8px; }
+  .badge {
+    position: absolute; writing-mode: horizontal-tb; width: 34px; height: 22px;
+    font: bold 12px/22px sans-serif; text-align: center; color: #fff; background: #0b4f8a;
+  }
+  .tl { top: 6px; left: 6px; }
+  .tr { top: 6px; right: 6px; background: #c0392b; }
+  .bl { bottom: 6px; left: 6px; background: #27ae60; }
+  .br { bottom: 6px; right: 6px; background: #8e44ad; }
+  /* A note of the sidebar placed from the page: a fixed box, whose
+     containing block is the page area, at its bottom left on every page. */
+  .note {
+    position: fixed; writing-mode: horizontal-tb; left: 0; bottom: 0; width: 300px; padding: 6px 10px;
+    font-size: 12px; background: #fff7d6; border-left: 4px solid #e0a800;
+  }
+  .break { break-before: page; }
+</style>
+</head>
+<body>
+<section>
+<h1>縦書きの欄を持つ頁</h1>
+<aside class="side">
+<h2>欄の見出し</h2>
+<p>この欄は縦に書かれ、行は右から左へ進む。</p>
+<p>四隅の印は欄の角に置かれる。</p>
+<p>印の位置は欄の左右上下から測る。</p>
+<span class="badge tl">左上</span><span class="badge tr">右上</span><span class="badge bl">左下</span><span class="badge br">右下</span>
+<div class="note">注：この注は頁の左下に置かれ、欄ではなく頁から位置を測る。</div>
+</aside>
+<div class="main">
+<p>本文は横に書かれ、左から右へ読む。欄は本文の右に浮かび、本文はその左を流れる。</p>
+<p>縦書きの欄の中に置かれた絶対位置の箱は、欄の縁から測られる。上と左は欄の上と左の縁、下と右は欄の下と右の縁である。</p>
+<p>欄の外に包含ブロックを持つ箱は、その包含ブロックの中に置かれる。ここでは頁の領域がそれである。</p>
+</div>
+</section>
+<section class="break">
+<h1>二頁目の欄</h1>
+<aside class="side">
+<h2>続きの欄</h2>
+<p>二頁目にも同じ欄がある。</p>
+<p>印は同じ角に置かれる。</p>
+<span class="badge tl">左上</span><span class="badge tr">右上</span><span class="badge bl">左下</span><span class="badge br">右下</span>
+</aside>
+<div class="main">
+<p>二頁目の本文。欄は一頁目と同じく右に浮かぶ。</p>
+</div>
+</section>
+</body>
+</html>
