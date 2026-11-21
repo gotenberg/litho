@@ -279,6 +279,13 @@ const (
 	pContainerName
 	pColorScheme
 	pWillChange
+	pAnchorName
+	pAnchorScope
+	pPositionAnchor
+	pPositionArea
+	pPositionTryFallbacks
+	pPositionTryOrder
+	pPositionVisibility
 	numProps
 )
 
@@ -1146,6 +1153,10 @@ func init() {
 	}
 	props[pColorScheme] = colorSchemeProp()
 	props[pWillChange] = willChangeProp()
+	for id, def := range anchorProps() {
+		props[id] = def
+	}
+	anchorLengths()
 	longhandByName = map[string]propID{}
 	for i := range props {
 		longhandByName[props[i].name] = propID(i)

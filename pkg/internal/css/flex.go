@@ -77,6 +77,10 @@ func parseAlign(v []token, set alignSet, justify bool) (BoxAlign, bool) {
 			return BoxBaseline, !justify
 		case w == "stretch" && set != alignContent:
 			return BoxStretch, true
+		case w == "anchor-center" && set == alignSelf:
+			// CSS Anchor Positioning 1, 4.2: a value of align-self and
+			// justify-self alone.
+			return BoxAnchorCenter, true
 		}
 	}
 	if len(words) == 2 && (words[0] == "first" || words[0] == "last") && words[1] == "baseline" {

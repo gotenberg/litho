@@ -60,6 +60,7 @@ func FuzzParseDeclarations(f *testing.F) {
 	f.Add("columns: 12em 3; column-rule: thin dotted red; column-span: all; column-fill: balance-all; column-height: 2em; column-wrap: wrap; break-before: column; break-inside: avoid-column; overflow: auto")
 	f.Add("display: inline flex; flex: 2 1 10%; flex-flow: column wrap-reverse; place-content: safe center space-evenly; align-self: last baseline; gap: 1px 2%; order: -2; min-width: auto")
 	f.Add("width: round(up, mod(-7px, 3em), 1vi); height: calc(sin(30deg) * hypot(3cap, 4rex) / 1px * 1px); margin: abs(10% - 2svh) clamp(1px, 50%, 2lh); z-index: calc(7 / 2); rotate: atan2(1, -1)")
+	f.Add("top: calc(anchor(--a bottom, 10%) + max(anchor(50%), 1em)); width: anchor-size(--a self-inline, anchor-size(height)); position-try: most-width --r flip-block, span-top left; position-visibility: anchor-valid no-overflow")
 	f.Fuzz(func(t *testing.T, src string) {
 		ParseDeclarations(src, ParseOptions{BaseURL: "https://e.com/"})
 		Hint("color", src)
@@ -106,6 +107,16 @@ const fuzzAnimationCSS = `@keyframes k { from { opacity: 0; --c: red; transform:
 #b { animation: k 2s linear(0, .3 20% 40%, 1) -1s infinite alternate both, "s t" .5s cubic-bezier(.1, 3, .9, -2) 3; animation-timeline: auto, --s; animation-composition: add }
 #c { animation: k calc(1s / 3) -9e9s 2.5 reverse backwards paused; animation-range: entry 10% exit; transition: all 1s allow-discrete, color .2s }`
 
+// fuzzAnchorDoc and fuzzAnchorCSS seed the anchor positioning properties:
+// an anchor() nested in calc(), one in a custom property, two boxes each
+// anchored to the other, and a @position-try rule.
+const fuzzAnchorDoc = `<div id=a><p id=b>x</p><p id=c>y</p></div>`
+
+const fuzzAnchorCSS = `@position-try --r { inset-block-start: anchor(--c end, 1px); margin: anchor-size(height); position-area: span-all self-end }
+#a { --t: anchor(--b top); anchor-name: --a; anchor-scope: all }
+#b { position: absolute; anchor-name: --b; top: var(--t); left: calc(anchor(--c right) * 2 - anchor(--a 25%)); position-try: most-height --r flip-start, flip-x }
+#c { position: fixed; anchor-name: --c; position-anchor: --b; top: anchor(--b bottom); width: anchor-size(--b width, 10%); justify-self: anchor-center }`
+
 // FuzzCompute splits its input at the first NUL byte into an HTML
 // document and a stylesheet, and computes the styles.
 func FuzzCompute(f *testing.F) {
@@ -114,6 +125,8 @@ func FuzzCompute(f *testing.F) {
 	f.Add([]byte("<p style='--a: var(--a); width: var(--a)'>x\x00p { color: var(--b, red) }"))
 	f.Add([]byte("<span id=a>x</span>\x00#a { position: absolute; z-index: 2; transform: scale(2) translateX(1em); transform-origin: 1px 2px 3px }"))
 	f.Add([]byte("<p id=a>x</p>\x00#a { width: min(100%, round(10em, 3vi)); margin: mod(5%, 3%) calc(1px / 0); font-size: clamp(1rem, 2cap, 3ric) }"))
+	f.Add([]byte(fuzzAnchorDoc + "\x00" + fuzzAnchorCSS))
+	f.Add([]byte(fuzzAnchorDoc + "\x00" + fuzzAnchorCSS[:len(fuzzAnchorCSS)/2]))
 	f.Add([]byte(fuzzAnimationDoc + "\x00" + fuzzAnimationCSS))
 	f.Add([]byte(fuzzAnimationDoc + "\x00" + fuzzAnimationCSS[:len(fuzzAnimationCSS)/2]))
 	f.Fuzz(func(t *testing.T, data []byte) {

@@ -82,6 +82,9 @@ type Resolver struct {
 	// keyframes holds the @keyframes rules whose media conditions match,
 	// the last of each name.
 	keyframes keyframesAt
+	// positionTries holds the @position-try rules whose media conditions
+	// match, the last of each name in the highest layer.
+	positionTries map[string]*positionTryRule
 }
 
 type resolvedRule struct {
@@ -176,6 +179,7 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 	var counterRules []*counterStyleRule
 	var counterPos []int
 	kfPos := map[string]int{}
+	tryPos := map[string]int{}
 	type layeredValues struct {
 		v   FontFeatureValues
 		pos int
@@ -242,6 +246,20 @@ func NewResolver(media Media, sheets []Sheet) *Resolver {
 				if prev, ok := kfPos[k.name]; !ok || pos >= prev {
 					kfPos[k.name] = pos
 					r.keyframes[k.name] = k
+				}
+			}
+		}
+		for _, p := range sh.Sheet.positionTries {
+			if p.cond.matches(media, cache) {
+				if r.positionTries == nil {
+					r.positionTries = map[string]*positionTryRule{}
+				}
+				// They cascade as @keyframes rules do (CSS Anchor
+				// Positioning 1, 5.3).
+				pos := lay.of(si, sh.Origin, p.layer)
+				if prev, ok := tryPos[p.name]; !ok || pos >= prev {
+					tryPos[p.name] = pos
+					r.positionTries[p.name] = p
 				}
 			}
 		}
@@ -1193,7 +1211,7 @@ func (cs *computeState) cascade(cands []cand, parentStyle *Style, parentVars map
 	if only == nil && cs.animates(winners[pAnimationName], parentStyle) {
 		vars = cs.animate(&winners, &imp, pend, cands, parentStyle, parentVars, vars, isRoot)
 	}
-	st := cs.computeStyle(&winners, parentStyle, isRoot)
+	st := cs.computeStyle(&winners, &imp, vars, parentStyle, isRoot)
 	if reuse {
 		cs.remember(key, cands, st)
 	}
@@ -1326,9 +1344,10 @@ func (cs *computeState) match(n *html.Node, r *selIndex) []cand {
 // value take the parent's, the others their initial value. It returns the
 // style of the tree equal to the result when there is one, so elements
 // styled alike share one [Style].
-func (cs *computeState) computeStyle(winners *[numProps]any, parent *Style, isRoot bool) *Style {
+func (cs *computeState) computeStyle(winners *[numProps]any, imp *[numProps]bool, vars map[string][]token, parent *Style, isRoot bool) *Style {
 	st := &cs.scratch
 	cs.computeInto(st, winners, parent, isRoot)
+	cs.attachTries(st, winners, imp, vars, parent, isRoot)
 	shared, adopted := cs.styles.shareCopy(st)
 	if adopted {
 		// A refusal sticks and cancels the conversion, which the

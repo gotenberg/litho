@@ -53,6 +53,8 @@ type Stylesheet struct {
 	counterStyles []*counterStyleRule
 	// keyframes are the @keyframes rules, in order.
 	keyframes []*keyframesRule
+	// positionTries are the @position-try rules, in order.
+	positionTries []*positionTryRule
 	// layers are the paths of the cascade layers the sheet names, in the
 	// order they first appear (CSS Cascade 5, 6.4), each rule holding an
 	// index into it or unlayered.
@@ -198,7 +200,7 @@ var ignoredAtRules = map[string]bool{
 // the feature blocks of @font-feature-values are read inside those.
 var readAtRules = []string{
 	"import", "namespace", "media", "supports", "layer", "container", "page", "counter-style", "font-face",
-	"keyframes", "-webkit-keyframes", "font-palette-values", "font-feature-values",
+	"keyframes", "-webkit-keyframes", "font-palette-values", "font-feature-values", "position-try",
 }
 
 // readsAtRule reports whether litho reads the at-rule of the lowercased
@@ -310,6 +312,14 @@ func (sp *sheetParser) rule(ctx context.Context, it item, base string, cond *med
 			if r, ok := parseKeyframesRule(it.prelude, it.block, c); ok && sp.count() {
 				r.cond, r.layer = cond, sp.layer
 				sp.sheet.keyframes = append(sp.sheet.keyframes, r)
+			}
+		case "position-try":
+			if !it.hasBlock {
+				return
+			}
+			if r, ok := parsePositionTryRule(it.prelude, it.block, c); ok && sp.count() {
+				r.cond, r.layer = cond, sp.layer
+				sp.sheet.positionTries = append(sp.sheet.positionTries, r)
 			}
 		case "font-palette-values":
 			if !it.hasBlock || !sp.count() {

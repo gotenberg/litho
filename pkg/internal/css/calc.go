@@ -50,6 +50,9 @@ const (
 	// opSize is the size keyword of calc-size(), the used size of its
 	// basis (CSS Sizing 4, 7.1).
 	opSize
+	// opAnchor is an anchor() or anchor-size() function, its fallback the
+	// one child when it has one (CSS Anchor Positioning 1, 3.2 and 4.1).
+	opAnchor
 )
 
 // roundStrategy is a <rounding-strategy> of round() (CSS Values 4, 10.3).
@@ -75,6 +78,8 @@ type calcNode struct {
 	strategy roundStrategy
 	v        float64
 	kids     []*calcNode
+	// anchor is the function of an opAnchor node, nil otherwise.
+	anchor *AnchorFn
 }
 
 // calcType is the type of a calculation (CSS Values 4, 10.9): the power
@@ -197,8 +202,11 @@ type calcParser struct {
 	pctAngle bool
 	// size accepts the size keyword, in the calculation of a
 	// calc-size() whose basis is not any (CSS Sizing 4, 7).
-	size  bool
-	nodes int
+	size bool
+	// anchor accepts anchor() and anchorSize anchor-size(), in the
+	// properties that take them (CSS Anchor Positioning 1, 3.2 and 4.1).
+	anchor, anchorSize bool
+	nodes              int
 }
 
 // isCalc reports whether t is a math function (CSS Values 4, 10): calc(),
@@ -482,6 +490,12 @@ func (p *calcParser) value(c *calcCursor, depth int) (*calcNode, calcType, bool)
 		if isCalc(t) {
 			return p.fn(t, depth+1)
 		}
+		switch {
+		case p.anchor && eqFold(t.value, "anchor"):
+			return p.anchorFn(t, false, depth+1)
+		case p.anchorSize && eqFold(t.value, "anchor-size"):
+			return p.anchorFn(t, true, depth+1)
+		}
 	case tIdent:
 		// CSS Values 4, 10.7: the numeric constants, then the channel
 		// keywords of a relative colour (CSS Color 5, 4.1).
@@ -560,6 +574,13 @@ func (n *calcNode) eval(s *calcScope) float64 {
 		return n.v / 100 * s.basis
 	case opSize:
 		return s.size
+	case opAnchor:
+		// An anchor function the layout engine has not resolved stands
+		// for its fallback, or for nothing.
+		if len(n.kids) == 0 {
+			return math.NaN()
+		}
+		return n.kids[0].eval(s)
 	case opVar:
 		if s.vars == nil {
 			return 0
@@ -745,7 +766,7 @@ func (n *calcNode) relative() bool {
 		return false
 	case opLen:
 		return n.unit != uPt
-	case opPct, opVar, opSize:
+	case opPct, opVar, opSize, opAnchor:
 		return true
 	}
 	for _, k := range n.kids {
@@ -774,7 +795,7 @@ func (n *calcNode) hasPct() bool {
 // percentage basis, not on the percentages alone.
 func (n *calcNode) pctFunction() bool {
 	switch n.op { //nolint:exhaustive // the other operators are functions
-	case opNum, opVar, opLen, opPct, opSize:
+	case opNum, opVar, opLen, opPct, opSize, opAnchor:
 		return false
 	case opSum, opNeg, opProduct, opInvert:
 		for _, k := range n.kids {
@@ -810,7 +831,7 @@ func (n *calcNode) linear(vars *channelVars) (l length, ok bool) {
 		return l, true
 	case opPct:
 		return length{pct: n.v, hasPct: true}, true
-	case opSize:
+	case opSize, opAnchor:
 		return length{}, false
 	case opSum:
 		for _, k := range n.kids {

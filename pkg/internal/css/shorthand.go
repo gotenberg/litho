@@ -136,6 +136,7 @@ func initShorthands() {
 		"margin":       boxShorthand([4]propID{pMarginTop, pMarginRight, pMarginBottom, pMarginLeft}),
 		"padding":      boxShorthand([4]propID{pPaddingTop, pPaddingRight, pPaddingBottom, pPaddingLeft}),
 		"inset":        boxShorthand([4]propID{pTop, pRight, pBottom, pLeft}),
+		"position-try": positionTryShorthand(),
 		"border-width": boxShorthand([4]propID{pBorderTopWidth, pBorderRightWidth, pBorderBottomWidth, pBorderLeftWidth}),
 		"border-style": boxShorthand([4]propID{pBorderTopStyle, pBorderRightStyle, pBorderBottomStyle, pBorderLeftStyle}),
 		"border-color": boxShorthand([4]propID{pBorderTopColor, pBorderRightColor, pBorderBottomColor, pBorderLeftColor}),

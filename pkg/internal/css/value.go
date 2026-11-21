@@ -251,7 +251,7 @@ func clampLen(v float64) float64 {
 // Calc only knows its sign once resolved, so the layout engine clamps it
 // at used-value time.
 func (l length) dim(c lenCtx, nonNeg bool) Dimension {
-	if l.expr != nil && l.hasPct {
+	if l.expr != nil && (l.hasPct || l.expr.anchored()) {
 		return l.exprDim(c, nonNeg)
 	}
 	if l.hasPct && !l.hasLen {

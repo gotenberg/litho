@@ -1103,6 +1103,10 @@ type Style struct {
 	// initial. The cascade applies the animations: the other fields hold
 	// their animated values.
 	Animation *Animations
+	// Anchor holds the anchor positioning longhands (CSS Anchor
+	// Positioning 1), nil while every one is initial; read it with
+	// [Style.AnchorPositioning].
+	Anchor *AnchorPos
 
 	// Margin takes Auto, Points or Percent a side; Padding takes Points or
 	// Percent. Both are indexed by [Side].
@@ -1748,6 +1752,10 @@ const (
 	BoxSpaceBetween
 	BoxSpaceAround
 	BoxSpaceEvenly
+	// BoxAnchorCenter centres an absolutely positioned box on its default
+	// anchor box (CSS Anchor Positioning 1, 4.2); elsewhere it is
+	// BoxCenter.
+	BoxAnchorCenter
 )
 
 // BoxSafe is the bit of the safe overflow position: an alignment that
