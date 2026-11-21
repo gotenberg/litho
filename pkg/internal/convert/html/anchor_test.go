@@ -399,15 +399,18 @@ func TestAnchor_GridAreaShiftsInPaddingBox(t *testing.T) {
 // Positioning 1, 4.2; CSS Box Alignment 3, 4.4): the box is sized in its
 // inset-modified containing block and centred on the anchor; one larger
 // than the room centred there shifts back into its containing block by
-// default, and safe aligns it at the start of that room instead, the
-// start of the initial containing block taken from the principal writing
-// mode, a body's direction (CSS Writing Modes 3, 8).
+// default, and safe keeps it from passing the start edge of its
+// inset-modified containing block alone, as Chromium draws it, the start
+// of the initial containing block taken from the principal writing mode,
+// a body's direction (CSS Writing Modes 3, 8).
 //
 // # Corpus evidence
 //
 //   - wpt: css/css-anchor-position/anchor-center-safe and
 //     anchor-center-safe-rtl draw their references in Chromium of
 //     gotenberg/gotenberg:9.4.1.
+//   - probe, html: that Chromium draws the 100px box of safe anchor-center
+//     centred on its anchor, past its containing block's right edge.
 func TestAnchor_CenterOverflow(t *testing.T) {
 	t.Parallel()
 	style := `
@@ -420,7 +423,7 @@ func TestAnchor_CenterOverflow(t *testing.T) {
 	checkAnchored(t, style,
 		`<div class=c><div class=a id=a></div><div class=a id=b></div><div class="p r" id=p1></div>
 		<div class="p g" id=p2></div><div class="p k" id=p3><span></span><span></span></div></div>`,
-		map[string]string{"1:r": "660,80+100x20", "1:g": "600,110+100x20", "1:k": "600,180+100x10"})
+		map[string]string{"1:r": "630,80+100x20", "1:g": "600,110+100x20", "1:k": "600,180+100x10"})
 	checkAnchored(t, `body { direction: rtl }
 		#f { position: fixed; anchor-name: --f; right: 0; top: 0 }
 		#q { position: fixed; position-anchor: --f; top: anchor(bottom); right: 0; justify-self: safe anchor-center; width: 100px }`,
@@ -694,4 +697,35 @@ func TestAnchor_VerticalSinglePage(t *testing.T) {
 	if n[0] != a[0]+a[2] || n[1] != a[1]+20 {
 		t.Errorf("note at %v, anchor at %v: want the note against the anchor's right side, centred on it", n, a)
 	}
+}
+
+// TestAnchor_OverflowPositions holds the overflow positions of an
+// absolutely positioned box's self-alignment (CSS Box Alignment 3, 4.4
+// and 4.4.1.2), normal included, which align-self and justify-self take
+// after one (<overflow-position>? [ normal | <self-position> ], 6.1 and
+// 6.2): by default a fixed box its position-area cannot hold shifts
+// within the document's scrollable area, so one past the page's bottom
+// but not the root's stays; safe keeps it inside its containing block as
+// it is, the page; unsafe never shifts a box, where the default shifts it
+// back into a positioned containing block.
+//
+// # Corpus evidence
+//
+//   - wpt: css/css-anchor-position/position-area-overflow-icb-006 (safe
+//     normal) and -008 (unsafe normal), ltr and rtl, which Chromium of
+//     gotenberg/gotenberg:9.4.1 fails: it parses neither value.
+func TestAnchor_OverflowPositions(t *testing.T) {
+	t.Parallel()
+	checkAnchored(t, `html { height: 1000px }
+		#a { anchor-name: --a; left: 100px; top: 300px }
+		#p1 { position: fixed; position-anchor: --a; position-area: bottom; height: 100px }
+		#p2 { position: fixed; position-anchor: --a; position-area: bottom; height: 100px; align-self: safe normal }`,
+		`<div class=a id=a></div><div class="p r" id=p1></div><div class="p g" id=p2></div>`,
+		map[string]string{"1:r": "105,340+30x100", "1:g": "105,300+30x100"})
+	checkAnchored(t, `
+		#b { anchor-name: --b; left: 300px; top: 200px }
+		#p3 { position-anchor: --b; position-area: bottom; height: 100px }
+		#p4 { position-anchor: --b; position-area: bottom; height: 100px; place-self: unsafe normal }`,
+		`<div class=c><div class=a id=b></div><div class="p m" id=p3></div><div class="p k" id=p4></div></div>`,
+		map[string]string{"1:m": "405,240+30x100", "1:k": "405,280+30x100"})
 }

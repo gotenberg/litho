@@ -1730,7 +1730,10 @@ const (
 // BoxAlign is a value of justify-content, align-content, align-items or
 // align-self (CSS Box Alignment 3, 4): a keyword, with the safe overflow
 // position as the [BoxSafe] bit. unsafe and no overflow position compute
-// alike: the alignment is honoured whatever overflows.
+// alike, the alignment honoured whatever overflows, but in align-self and
+// justify-self, where an absolutely positioned box's default overflow
+// alignment differs from unsafe (4.4.1.2): there unsafe is the
+// [BoxUnsafe] bit.
 type BoxAlign uint8
 
 // The alignment keywords. first baseline computes to BoxBaseline.
@@ -1763,8 +1766,17 @@ const (
 // Alignment 3, 4.4).
 const BoxSafe BoxAlign = 0x80
 
-// Keyword returns a with the overflow position bit cleared.
-func (a BoxAlign) Keyword() BoxAlign { return a &^ BoxSafe }
+// BoxUnsafe is the bit of the unsafe overflow position of align-self and
+// justify-self: the box keeps its alignment whatever overflows, where an
+// absolutely positioned box would otherwise shift (CSS Box Alignment 3,
+// 4.4 and 4.4.1.2).
+const BoxUnsafe BoxAlign = 0x40
+
+// Keyword returns a with the overflow position bits cleared.
+func (a BoxAlign) Keyword() BoxAlign { return a &^ (BoxSafe | BoxUnsafe) }
+
+// Unsafe reports the unsafe overflow position of a self-alignment value.
+func (a BoxAlign) Unsafe() bool { return a&BoxUnsafe != 0 }
 
 // Safe reports the safe overflow position.
 func (a BoxAlign) Safe() bool { return a&BoxSafe != 0 }

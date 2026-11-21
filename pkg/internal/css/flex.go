@@ -98,13 +98,14 @@ func parseAlign(v []token, set alignSet, justify bool) (BoxAlign, bool) {
 		}
 	}
 	// [ <overflow-position>? <position> ].
-	safe := false
+	safe, unsafe := false, false
 	pos := words[0]
 	if len(words) == 2 {
 		switch words[0] {
 		case "safe":
 			safe = true
 		case "unsafe":
+			unsafe = true
 		default:
 			return 0, false
 		}
@@ -115,6 +116,12 @@ func parseAlign(v []token, set alignSet, justify bool) (BoxAlign, bool) {
 		positions = contentPositions
 	}
 	a, ok := positions[pos]
+	if !ok && pos == "normal" && set == alignSelf && len(words) == 2 {
+		// align-self and justify-self take <overflow-position>? [ normal |
+		// <self-position> ] (CSS Box Alignment 3, 6.1 and 6.2, as
+		// @webref/css gives them); align-items does not.
+		a, ok = BoxNormal, true
+	}
 	if !ok && pos == "anchor-center" && set == alignSelf && len(words) == 2 {
 		// CSS Anchor Positioning 1, 4.2 adds anchor-center to align-self
 		// and justify-self alone; Chromium parses it as a <self-position>,
@@ -132,6 +139,9 @@ func parseAlign(v []token, set alignSet, justify bool) (BoxAlign, bool) {
 	}
 	if safe {
 		a |= BoxSafe
+	}
+	if unsafe && set == alignSelf {
+		a |= BoxUnsafe
 	}
 	return a, true
 }

@@ -879,6 +879,8 @@ func parseJustify(v []token, self bool) (BoxAlign, bool) {
 				return a, true
 			case words[0] == "safe":
 				return a | BoxSafe, true
+			case words[0] == "unsafe" && self:
+				return a | BoxUnsafe, true
 			case words[0] == "unsafe":
 				return a, true
 			}

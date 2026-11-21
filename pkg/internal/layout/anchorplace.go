@@ -37,12 +37,16 @@ type anchorPlan struct {
 	// imcb is the inset-modified containing block.
 	imcb   edges
 	ax, ay alignKind
-	// safe reports, for the horizontal then the vertical axis, a safe
-	// self-alignment, and startLow an axis whose start is its low edge in
-	// the containing block's writing mode.
-	safe, startLow [2]bool
-	def            *box
-	defR           edges
+	// over is, for the horizontal then the vertical axis, the overflow
+	// position of the self-alignment, and startLow reports an axis whose
+	// start is its low edge in the containing block's writing mode.
+	over     [2]overflowPos
+	startLow [2]bool
+	// limit is the containing block before any scrollable area grows it,
+	// which a safe alignment keeps the box inside.
+	limit edges
+	def   *box
+	defR  edges
 	// refsDefault reports a box that references its default anchor
 	// (position-visibility: anchor-valid); missing one whose anchor
 	// function found no anchor.
@@ -182,7 +186,7 @@ func selfAlign(a css.BoxAlign, horizontal bool, cb, self flowAxes, hasDefault bo
 			return alignAnchorCenter
 		}
 		return alignCenter
-	case css.BoxNormal, css.BoxAuto, css.BoxSpaceBetween, css.BoxSpaceAround, css.BoxSpaceEvenly, css.BoxSafe:
+	case css.BoxNormal, css.BoxAuto, css.BoxSpaceBetween, css.BoxSpaceAround, css.BoxSpaceEvenly, css.BoxSafe, css.BoxUnsafe:
 	}
 	return alignNormal
 }
@@ -313,9 +317,9 @@ func (e *engine) planAnchored(b *box, st *css.Style, cb absCB) *anchorPlan {
 		} else {
 			plan.ay = k
 		}
-		plan.safe[i], plan.startLow[i] = al.Safe(), cbAxes.startLow(i == 0)
+		plan.over[i], plan.startLow[i] = overflowOf(al), cbAxes.startLow(i == 0)
 	}
-	plan.st, plan.cb = sub, cb
+	plan.st, plan.cb, plan.limit = sub, cb, plan.orig
 	plan.imcb = e.insetModified(b, sub, cb)
 	plan.negative = plan.imcb.x1 < plan.imcb.x0-eps || plan.imcb.y1 < plan.imcb.y0-eps
 	if s.def != nil && cb.page && !s.def.fixed && e.rootBox != nil {
@@ -537,7 +541,7 @@ func flipAxis(t *css.TryStyle, horizontal bool, cb flowAxes) {
 // mirrorAlign returns the self-alignment a takes when its axis is
 // mirrored: the start and end positions swap.
 func mirrorAlign(a css.BoxAlign) css.BoxAlign {
-	safe := a & css.BoxSafe
+	safe := a & (css.BoxSafe | css.BoxUnsafe)
 	k := a.Keyword()
 	switch k {
 	case css.BoxStart:
@@ -557,7 +561,7 @@ func mirrorAlign(a css.BoxAlign) css.BoxAlign {
 	case css.BoxRight:
 		k = css.BoxLeft
 	case css.BoxNormal, css.BoxAuto, css.BoxStretch, css.BoxBaseline, css.BoxLastBaseline, css.BoxCenter,
-		css.BoxSpaceBetween, css.BoxSpaceAround, css.BoxSpaceEvenly, css.BoxAnchorCenter, css.BoxSafe:
+		css.BoxSpaceBetween, css.BoxSpaceAround, css.BoxSpaceEvenly, css.BoxAnchorCenter, css.BoxSafe, css.BoxUnsafe:
 	}
 	return k | safe
 }
@@ -655,9 +659,9 @@ func transpose(t *css.TryStyle) {
 func leftRightLess(a css.BoxAlign) css.BoxAlign {
 	switch a.Keyword() { //nolint:exhaustive // only left and right have no align-self form
 	case css.BoxLeft:
-		return css.BoxStart | a&css.BoxSafe
+		return css.BoxStart | a&(css.BoxSafe|css.BoxUnsafe)
 	case css.BoxRight:
-		return css.BoxEnd | a&css.BoxSafe
+		return css.BoxEnd | a&(css.BoxSafe|css.BoxUnsafe)
 	}
 	return a
 }
@@ -760,7 +764,7 @@ func selfAligned(st *css.Style) bool {
 		case css.BoxNormal, css.BoxAuto, css.BoxStretch, css.BoxSpaceBetween, css.BoxSpaceAround, css.BoxSpaceEvenly:
 			return false
 		case css.BoxStart, css.BoxEnd, css.BoxCenter, css.BoxFlexStart, css.BoxFlexEnd, css.BoxSelfStart, css.BoxSelfEnd,
-			css.BoxLeft, css.BoxRight, css.BoxBaseline, css.BoxLastBaseline, css.BoxAnchorCenter, css.BoxSafe:
+			css.BoxLeft, css.BoxRight, css.BoxBaseline, css.BoxLastBaseline, css.BoxAnchorCenter, css.BoxSafe, css.BoxUnsafe:
 		}
 		return true
 	}
@@ -817,10 +821,7 @@ func (e *engine) layoutPlan(b *box, plan *anchorPlan) {
 	// horizontal moves.
 	if plan.ay != alignNormal {
 		y := b.y - b.m[css.Top]
-		dy := intoRange(y, b.marginH(), ranges[1][0], ranges[1][1], plan.orig.y0, plan.orig.y1)
-		if plan.safe[1] {
-			dy = safeShift(y, b.marginH(), ranges[1], plan.startLow[1])
-		}
+		dy := plan.shift(1, y, b.marginH(), ranges[1], [2]float64{c.y0, c.y1})
 		if dy != 0 {
 			st.Top = css.Pts(y + dy - lay.y)
 			st.Bottom = css.Dimension{Kind: css.Auto}
@@ -832,29 +833,93 @@ func (e *engine) layoutPlan(b *box, plan *anchorPlan) {
 	}
 	if plan.ax != alignNormal {
 		x := b.x - b.m[css.Left]
-		dx := intoRange(x, b.marginW(), ranges[0][0], ranges[0][1], plan.orig.x0, plan.orig.x1)
-		if plan.safe[0] {
-			dx = safeShift(x, b.marginW(), ranges[0], plan.startLow[0])
-		}
+		dx := plan.shift(0, x, b.marginW(), ranges[0], [2]float64{c.x0, c.x1})
 		if dx != 0 {
 			b.shift(dx, 0)
 		}
 	}
 }
 
-// safeShift returns how far a margin box at p of size n moves under a
-// safe self-alignment in the range r: a box larger than its range is
-// aligned at the range's start, as flow-start aligns it (CSS Box Alignment
-// 3, 4.4), and one it holds stays. The explicit overflow position takes
-// the place of the default overflow alignment.
-func safeShift(p, n float64, r [2]float64, startLow bool) float64 {
-	if n <= r[1]-r[0]+eps {
+// overflowPos is the overflow position of a self-alignment value (CSS
+// Box Alignment 3, 4.4): none, safe, or unsafe; safe anchor-center apart,
+// which the pinned @webref/css grammar does not hold and Chromium parses.
+type overflowPos uint8
+
+const (
+	overflowDefault overflowPos = iota
+	overflowSafe
+	overflowUnsafe
+	overflowSafeAnchorCenter
+)
+
+// overflowOf returns the overflow position of the self-alignment a.
+func overflowOf(a css.BoxAlign) overflowPos {
+	switch {
+	case a.Safe() && a.Keyword() == css.BoxAnchorCenter:
+		return overflowSafeAnchorCenter
+	case a.Safe():
+		return overflowSafe
+	case a.Unsafe():
+		return overflowUnsafe
+	}
+	return overflowDefault
+}
+
+// shift returns how far the margin box at p of size n, aligned in the
+// range r of the inset-modified containing block whose span in that axis
+// is imcb, moves in axis i (0 horizontal) by the overflow position of its
+// self-alignment (CSS Box Alignment 3, 4.4 and 4.4.1.2):
+//
+//   - none: the default overflow alignment, into the containing block
+//     before position-area, grown by the scrollable area ([intoRange]);
+//   - unsafe: none, the alignment honoured whatever overflows;
+//   - safe: into the overflow limit rectangle without the scrollable
+//     area, the containing block as it is, and at its start when the box
+//     is larger, the rule 4.4.1.2 gives an absolutely positioned box;
+//   - safe anchor-center: Chromium's rule, which no clause states: the
+//     box is kept from passing the inset-modified containing block's
+//     start edge, and may pass its end.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 draws a 100px
+//     box of safe anchor-center on an anchor 20px from its containing
+//     block's right edge centred on the anchor, past that edge; of
+//     anchor-center shifted back inside it; of unsafe anchor-center
+//     centred.
+//   - wpt: css/css-anchor-position/anchor-center-safe and -rtl: a box of
+//     safe anchor-center that would pass the start edge stands on it.
+func (p *anchorPlan) shift(i int, pos, n float64, r, imcb [2]float64) float64 {
+	o := [2]float64{p.orig.x0, p.orig.x1}
+	l := [2]float64{p.limit.x0, p.limit.x1}
+	if i == 1 {
+		o, l = [2]float64{p.orig.y0, p.orig.y1}, [2]float64{p.limit.y0, p.limit.y1}
+	}
+	switch p.over[i] {
+	case overflowUnsafe:
 		return 0
+	case overflowSafeAnchorCenter:
+		if p.startLow[i] && pos < imcb[0] {
+			return imcb[0] - pos
+		}
+		if !p.startLow[i] && pos+n > imcb[1] {
+			return imcb[1] - (pos + n)
+		}
+		return 0
+	case overflowSafe:
+		if pos >= r[0]-eps && pos+n <= r[1]+eps {
+			return 0
+		}
+		if n > l[1]-l[0]+eps {
+			if p.startLow[i] {
+				return l[0] - pos
+			}
+			return l[1] - n - pos
+		}
+		return intoRange(pos, n, r[0], r[1], l[0], l[1])
+	case overflowDefault:
 	}
-	if startLow {
-		return r[0] - p
-	}
-	return r[1] - n - p
+	return intoRange(pos, n, r[0], r[1], o[0], o[1])
 }
 
 // alignedInsets returns the insets that put a box aligned k in its range:

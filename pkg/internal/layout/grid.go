@@ -517,7 +517,8 @@ func inFlowAlign(a css.BoxAlign) css.BoxAlign {
 	if a.Keyword() == css.BoxAnchorCenter {
 		return css.BoxCenter | a&css.BoxSafe
 	}
-	return a
+	// unsafe aligns an in-flow box as no overflow position does.
+	return a &^ css.BoxUnsafe
 }
 
 // alignSelfOf returns the used align-self of the item k of the grid
