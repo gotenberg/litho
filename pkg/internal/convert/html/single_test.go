@@ -2,6 +2,7 @@ package html
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -253,5 +254,46 @@ func TestConvert_SinglePageLaysOutOnce(t *testing.T) {
 		if layouts != tc.layouts {
 			t.Errorf("%s: %d layouts, want %d", tc.body, layouts, tc.layouts)
 		}
+	}
+}
+
+// TestConvert_SinglePagePlacesFixedBoxesOnThePage holds the containing
+// block of a fixed box on a single page: the page area of the trimmed
+// page (CSS 2.1, 10.1, item 3), whatever the paper's height. A fixed
+// footer sits at the bottom of a short page and of a tall one, a box of
+// top 0 and bottom 0 spans the page area, and none of them makes the page
+// taller: the page is the flow's.
+func TestConvert_SinglePagePlacesFixedBoxesOnThePage(t *testing.T) {
+	t.Parallel()
+	o := Options{SinglePage: true, MarginTop: 10, MarginBottom: 10}
+	baseline := func(doc *typeset.Document, word string) float64 {
+		t.Helper()
+		for _, r := range pageTexts(doc.Pages[0]) {
+			if strings.Contains(r.text, word) {
+				return r.y
+			}
+		}
+		t.Fatalf("no %q on the page: %q", word, pageText(doc.Pages[0]))
+		return 0
+	}
+	for _, tc := range []struct {
+		name string
+		flow float64
+	}{{"short page", 100}, {"tall page", 2000}} {
+		src := fmt.Sprintf(`<body style="margin:0"><div style="height:%vpt"></div><div style="position:fixed;bottom:0;height:20pt;font-size:10pt;line-height:20pt">footline</div>`, tc.flow)
+		doc := conv(t, src, o)
+		if h := doc.Pages[0].Height; !near6(h, tc.flow+20) {
+			t.Errorf("%s: page %v tall, want the flow's %v: a fixed box takes no room", tc.name, h, tc.flow+20)
+		}
+		if y := baseline(doc, "footline"); y < tc.flow-10 || y > tc.flow+10 {
+			t.Errorf("%s: the footer's baseline at %v, want it in the last 20 points of the page area, %v to %v", tc.name, y, tc.flow-10, tc.flow+10)
+		}
+	}
+	side := conv(t, `<body style="margin:0"><div style="height:300pt"></div><div style="position:fixed;top:0;bottom:0;display:flex;flex-direction:column;justify-content:space-between;font-size:10pt;line-height:20pt"><span>sidetop</span><span>sidebottom</span></div>`, o)
+	if h := side.Pages[0].Height; !near6(h, 320) {
+		t.Errorf("page %v tall with a sidebar, want 320", h)
+	}
+	if top, bottom := baseline(side, "sidetop"), baseline(side, "sidebottom"); top > 30 || bottom < 290 || bottom > 310 {
+		t.Errorf("the sidebar's lines at %v and %v, want the first in its top 20 points and the last in the bottom 20 of the 300 point page area", top, bottom)
 	}
 }

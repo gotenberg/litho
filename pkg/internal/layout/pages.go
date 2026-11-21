@@ -322,6 +322,50 @@ func (e *engine) fittedHeight(rb *box, d *ditem) float64 {
 	return min(max(clamp(bottom)+notes, 1), areaH)
 }
 
+// fitFixed lays the fixed boxes of a first page fitted to its content
+// ([Options.FitFirstPage]) out again in the page area that page is
+// trimmed to, and reports whether it did, the display list d then
+// painted before the move. In paged media the containing block of a fixed
+// box is the page area (CSS 2.1, 10.1, item 3; CSS Positioned Layout 3,
+// 3.1.1: the box repeats on every page, in each page's area), and the
+// trimmed page has one, the height of its content; a fixed box takes no
+// room on it ([engine.fittedHeight] skips them), so laying them out again
+// moves no other box and leaves that height as it is. The flow is not laid
+// out again: the fixed boxes alone, and the content positioned inside
+// them. The cost is one more paint of the document, its display list built
+// again, on a first page that holds a fixed box and whose content is not
+// as tall as the initial containing block.
+func (e *engine) fitFixed(rb *box, d *ditem) bool {
+	if !e.opts.FitFirstPage || e.err != nil {
+		return false
+	}
+	var fixed []*box
+	stack := []*box{rb}
+	for len(stack) > 0 {
+		b := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if b.abs && b.fixed && b.laidOut && b.cbBox == nil {
+			fixed = append(fixed, b)
+			continue
+		}
+		for i := len(b.kids) - 1; i >= 0; i-- {
+			stack = append(stack, b.kids[i])
+		}
+	}
+	if len(fixed) == 0 {
+		return false
+	}
+	h := e.fittedHeight(rb, d)
+	if h == e.icbHeight() {
+		return false
+	}
+	e.fixedH = h
+	for _, b := range fixed {
+		e.layoutPositionedBox(b)
+	}
+	return e.err == nil
+}
+
 // assembledBox returns the page box page k is assembled with: its own,
 // the first trimmed to its content under [Options.FitFirstPage], fitH
 // being that content's height.

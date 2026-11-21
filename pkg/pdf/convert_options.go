@@ -769,8 +769,13 @@ func WithFirstPageNumber(n int) HTMLOption {
 //
 // The initial containing block, the viewport units and the media features
 // measure the page area of the paper as the pages have it (CSS 2.1, 10.1;
-// CSS Paged Media 3, 3.1): a root of height 100%, a box positioned at its
-// bottom or a block 100vh tall makes the page as tall as the paper.
+// CSS Paged Media 3, 3.1): a root of height 100%, a box absolutely
+// positioned at its bottom or a block 100vh tall makes the page as tall as
+// the paper. A fixed box is placed in the page area of the single page
+// itself, the containing block of a fixed box in paged media (CSS 2.1,
+// 10.1, item 3): a footer at bottom 0 sits at the bottom of the page,
+// short or tall, over the content where the document leaves it no room,
+// and a fixed box never makes the page taller.
 //
 // # DOCX and ODT
 //

@@ -89,7 +89,8 @@ type Options struct {
 	// trimmed to its content plus the top and bottom margins. The page
 	// keeps the paper's width in its orientation. The initial containing
 	// block, the viewport units and the media features measure the page
-	// area of the paged print. No page break ends the page, and the page
+	// area of the paged print; a fixed box is placed in the page area of
+	// the trimmed page. No page break ends the page, and the page
 	// takes the first page's box. The page may pass the 14,400 points of ISO
 	// 32000-1, Annex C.2, up to FittedLimit: content laid out past it is
 	// left out, with a warning.

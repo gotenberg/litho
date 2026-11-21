@@ -209,7 +209,12 @@ func (e *engine) containerOf(b *box) absCB {
 	}
 	a := holderOf(b)
 	if a == nil {
-		return absCB{w: e.pageW, h: e.icbHeight(), page: b.st.Position == css.Fixed}
+		fixed := b.st.Position == css.Fixed
+		h := e.icbHeight()
+		if fixed && e.fixedH > 0 {
+			h = e.fixedH
+		}
+		return absCB{w: e.pageW, h: h, page: fixed}
 	}
 	if a.kind == kindInline {
 		return inlineCB(a)
