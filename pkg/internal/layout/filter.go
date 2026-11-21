@@ -361,7 +361,7 @@ func hiddenTagged(frags []typeset.Fragment, depth int) []typeset.Fragment {
 		case *typeset.Text:
 			if v.Parent != nil {
 				c := *v
-				c.Invisible, c.Stroke = true, 0
+				c.Invisible, c.Stroke, c.Outline = true, 0, nil
 				out = append(out, &c)
 			}
 		case *typeset.Image:

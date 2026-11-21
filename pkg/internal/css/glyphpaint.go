@@ -40,6 +40,16 @@ func (p paintColor) resolve(st *Style) Color {
 	return p.c
 }
 
+// NewGlyphPaint returns the glyph paint of text stroked width points wide
+// in stroke and filled with fill, the stroke painted first when first is
+// set: the computed values of a style that states each colour.
+func NewGlyphPaint(width float64, stroke, fill Color, first bool) *GlyphPaint {
+	return &GlyphPaint{
+		StrokeWidth: width, StrokeFirst: first,
+		stroke: paintColor{c: stroke, set: true}, fill: paintColor{c: fill, set: true},
+	}
+}
+
 // initial reports a GlyphPaint every longhand of which is initial.
 func (t *GlyphPaint) initial() bool {
 	return t.StrokeWidth == 0 && !t.StrokeFirst && !t.stroke.set && !t.fill.set

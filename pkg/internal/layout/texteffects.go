@@ -138,7 +138,7 @@ func (p *painter) textPaint(it *lineItem, l *lineBox, page int, c *typeset.Text,
 	}
 	hidden := tp.NoFill || len(tp.Gradient) >= 2
 	if hidden {
-		c.Invisible, c.Stroke = true, 0
+		c.Invisible, c.Stroke, c.Outline = true, 0, nil
 		p.emit(it.box, true, c, top, bottom, page)
 	} else if c.Color.A > 0 {
 		p.emit(it.box, true, c, top, bottom, page)

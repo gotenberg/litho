@@ -27,11 +27,26 @@ func (p *painter) textShadows(it *lineItem, l *lineBox, page int) {
 		c := *it.text
 		c.Origin.X = l.x + it.text.Origin.X + p.dx + ds.x
 		c.Origin.Y = l.y + it.text.Origin.Y + p.dy + ds.y
+		hollow := c.Color.A <= 0
 		c.Color = col
 		c.Parent = nil
+		if pen, _ := textStroke(it.box.st); pen != nil {
+			// The shadow is cast by the glyphs as they paint, their
+			// stroke included.
+			sp := *pen
+			sp.Color = col
+			c.Outline = &sp
+			if c.Stroke > 0 {
+				c.Outline = nil
+			}
+		}
+		hollow = hollow && c.Outline != nil
 		top, bottom := l.y+it.baseline-it.ascent+ds.y, l.y+it.baseline+it.descent+ds.y
-		if blur := max(clamp(sh.Blur), 0); blur > 0 && p.blurredTextShadow(it, l, page, ds, blur, &c, top, bottom) {
+		if blur := max(clamp(sh.Blur), 0); blur > 0 && p.blurredTextShadow(it, l, page, ds, blur, &c, hollow, top, bottom) {
 			continue
+		}
+		if hollow {
+			c.Color.A = 0
 		}
 		p.textDecorations(it, l, page, css.Underline|css.Overline, ds)
 		p.emit(it.box, true, &c, top, bottom, page)
@@ -60,7 +75,7 @@ func (p *painter) textShadows(it *lineItem, l *lineBox, page int) {
 //     through a luminosity soft mask of the blurred glyphs at 300 pixels
 //     an inch, then the run again at the shadow's offset under /ca 0; a
 //     sharp one as a coloured copy of the run.
-func (p *painter) blurredTextShadow(it *lineItem, l *lineBox, page int, ds *decoShadow, blur float64, c *typeset.Text, top, bottom float64) bool {
+func (p *painter) blurredTextShadow(it *lineItem, l *lineBox, page int, ds *decoShadow, blur float64, c *typeset.Text, hollow bool, top, bottom float64) bool {
 	ops, _, _ := p.runOutlines(it, l, "shadows")
 	if len(ops) == 0 {
 		return false
@@ -74,6 +89,16 @@ func (p *painter) blurredTextShadow(it *lineItem, l *lineBox, page int, ds *deco
 		moved[i] = op
 	}
 	paths := []effect.Path{{Ops: moved}}
+	if c.Outline != nil {
+		// A stroked run casts the shadow of its stroke too, and a
+		// hollow one of its stroke alone.
+		stroke := effect.Path{Ops: moved, Width: c.Outline.Width}
+		if hollow {
+			paths[0] = stroke
+		} else {
+			paths = append(paths, stroke)
+		}
+	}
 	var decos, sharp []typeset.Fragment
 	p.capture = &decos
 	p.textDecorations(it, l, page, css.Underline|css.Overline|css.LineThrough, ds)
@@ -111,7 +136,7 @@ func (p *painter) blurredTextShadow(it *lineItem, l *lineBox, page int, ds *deco
 	for _, f := range sharp {
 		p.emit(it.box, true, f, top, bottom, page)
 	}
-	c.Invisible, c.Stroke = true, 0
+	c.Invisible, c.Stroke, c.Outline = true, 0, nil
 	p.emit(it.box, true, c, top, bottom, page)
 	return true
 }

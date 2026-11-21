@@ -1776,7 +1776,7 @@ func (p *painter) text(it *lineItem, l *lineBox, page int) {
 		p.e.mirrorRun(&c, it.box)
 	}
 	top, bottom := l.y+it.baseline-it.ascent, l.y+it.baseline+it.descent
-	if !p.textPaint(it, l, page, &c, top, bottom) && c.Color.A > 0 {
+	if !p.textPaint(it, l, page, &c, top, bottom) && !p.strokeText(it, l, page, &c, top, bottom) && c.Color.A > 0 {
 		p.emit(it.box, true, &c, top, bottom, page)
 	}
 	p.emphasisMarks(it, l, page)

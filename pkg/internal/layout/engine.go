@@ -500,9 +500,11 @@ func (e *engine) familyLang(lang string) string {
 	return lang
 }
 
-// textStyle returns the text stack's style for st in language lang.
+// textStyle returns the text stack's style for st in language lang, its
+// glyphs filled in st's -webkit-text-fill-color, which is its color unless
+// it says otherwise (Compatibility Standard, 3.4.6.1).
 func (e *engine) textStyle(st *css.Style, lang string) text.Style {
-	c, _ := colorOf(st.Color)
+	c, _ := colorOf(st.TextFill())
 	spacing := func(d css.Dimension) float64 {
 		if d.Kind != css.Points {
 			return 0
