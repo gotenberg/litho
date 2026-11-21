@@ -451,3 +451,30 @@ func turnedText(frags []typeset.Fragment, s string, turned bool) (bool, bool) {
 	}
 	return false, false
 }
+
+// TestBands_SpanTheWidthOfAVerticalSinglePage locks the bands of a single
+// page of a vertical root, which grows sideways to its content: a header
+// and a footer run across the page's width, not the paper's (CSS Page 3,
+// 5.3: the boxes of the top and bottom margins span the page box).
+func TestBands_SpanTheWidthOfAVerticalSinglePage(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"vertical-rl", "vertical-lr"} {
+		o := bandOptions(
+			Band{HTML: `<p>HR</p>`, CSS: `p { margin: 0; text-align: right }`},
+			Band{Footer: true, HTML: `<p>FR</p>`, CSS: `p { margin: 0; text-align: right }`},
+		)
+		o.SinglePage = true
+		doc := convertDoc(t, `<html style="writing-mode:`+mode+`"><body style="margin:0"><div style="width:100pt"></div>`, o)
+		pg := doc.Pages[0]
+		if !approx(pg.Width, 160, 0.01) {
+			t.Fatalf("%s: page %v wide, want 160, the content and the side margins", mode, pg.Width)
+		}
+		// Right-aligned, each band's text ends at the right edge of the
+		// page area, 30 points inside the page's right edge.
+		for _, s := range []string{"HR", "FR"} {
+			if r := find(t, pg, s); r.x < pg.Width-60 || r.x > pg.Width-30 {
+				t.Errorf("%s: %s at x %v, want right-aligned before %v", mode, s, r.x, pg.Width-30)
+			}
+		}
+	}
+}

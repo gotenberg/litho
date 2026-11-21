@@ -268,8 +268,10 @@ func (p *prepared) marginContent(ctx context.Context, info layout.PageInfo, page
 	pb := p.setup.layoutBox(p.pageBox(info))
 	if p.setup.fitted > 0 && info.Height > 0 {
 		// A single page is trimmed to its content: the bottom margin's
-		// boxes sit at the bottom of the trimmed page.
-		pb.Height = info.Height
+		// boxes sit at the bottom of the trimmed page, and on the page of
+		// a vertical root, which grows sideways, the boxes of the top and
+		// bottom margins run across its width.
+		pb.Width, pb.Height = info.Width, info.Height
 	}
 	var boxes []*marginBox
 	for which := range css.NumMarginBoxes {

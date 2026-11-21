@@ -292,11 +292,11 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 		e.paintFrame(pg, pb)
 		var paper map[typeset.Fragment]bool
 		info := e.infoOf(k)
-		info.Height = pb.Height
+		info.Width, info.Height = pb.Width, pb.Height
 		if e.turn != css.HorizontalTB {
 			// The page-margin content is laid out on the paper, whose
-			// height is the turned box's width.
-			info.Height = pb.Width
+			// width and height are the turned box's height and width.
+			info.Width, info.Height = pb.Height, pb.Width
 		}
 		if e.opts.MarginContent != nil {
 			mc := e.opts.MarginContent(info, n)

@@ -516,6 +516,10 @@ type PageInfo struct {
 	// that content placed from the bottom edge sits on the trimmed page;
 	// 0 for [Options.PageFor], which sizes the box.
 	Height float64
+	// Width is the width in points of that page box, set and left as
+	// Height is: the page of a vertical root turned back onto the paper,
+	// whose single page grows sideways to its content.
+	Width float64
 }
 
 // sameInfo reports whether a and b name a page alike.
