@@ -33,12 +33,17 @@ type AnchorPos struct {
 	Order TryOrder
 	// Visibility is position-visibility (5.5).
 	Visibility PositionVisibility
+	// Base holds the element's own accepted @position-try properties, its
+	// fallback base styles, when the style holds a position option a
+	// layout chose in their place ([ComputeOptions.PositionOption]); nil
+	// when it holds its own.
+	Base *TryStyle
 }
 
 // initial reports anchor positioning longhands that are all initial.
 func (a *AnchorPos) initial() bool {
 	return len(a.Names) == 0 && !a.ScopeAll && len(a.ScopeNames) == 0 && a.Default == PositionAnchor{} &&
-		a.Area.None() && len(a.Fallbacks) == 0 && a.Order == TryNormal && a.Visibility == 0
+		a.Area.None() && len(a.Fallbacks) == 0 && a.Order == TryNormal && a.Visibility == 0 && a.Base == nil
 }
 
 // PositionAnchorKind is the kind of a position-anchor value (CSS Anchor
@@ -229,6 +234,32 @@ func (s *Style) WithTry(t *TryStyle) *Style {
 	a.Default, a.Area = t.Default, t.Area
 	c.Anchor = &a
 	return &c
+}
+
+// FallbackBase returns the style with its fallback base styles: the
+// receiver when it holds its own accepted @position-try properties, else
+// a copy holding [AnchorPos.Base] in place of the position option it
+// took. The receiver is not modified.
+func (s *Style) FallbackBase() *Style {
+	if s.Anchor == nil || s.Anchor.Base == nil {
+		return s
+	}
+	c := s.WithTry(s.Anchor.Base)
+	c.Anchor.Base = nil
+	return c
+}
+
+// withOption returns st holding the position option t, which a layout
+// chose for the element, in place of its accepted @position-try
+// properties, in the position fallback origin: the computed values the
+// element's descendants inherit (CSS Anchor Positioning 1, 5.4: the
+// option is applied by interleaving, so it changes computed values). The
+// style keeps its own in [AnchorPos.Base] for the next layout's options.
+func withOption(st *Style, t *TryStyle) *Style {
+	base := st.TryBase()
+	c := st.WithTry(t)
+	c.Anchor.Base = &base
+	return c
 }
 
 // anchorProps returns the longhands of CSS Anchor Positioning 1.

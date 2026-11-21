@@ -13,13 +13,14 @@ import (
 )
 
 // maxContainerLayouts bounds the layouts of a document whose styles read
-// the size of its containers for size queries: 4. Anti-DoS guard, not
-// spec-mandated: each layout after the first styles the document with the
-// container sizes the one before measured, so a document converges in two
-// layouts when no container's size depends on a query, and in one more
-// for each level of containers whose size a query of an enclosing
-// container changes; past the bound the last sizes measured answer, with
-// a warning.
+// what a layout measures, the size of its containers for size queries or
+// the position option an element took: 4. Anti-DoS guard, not
+// spec-mandated: each layout after the first styles the document with
+// what the one before measured, so a document converges in two layouts
+// when no container's size depends on a query and no option on the
+// styles its descendants inherit, and in one more for each level of
+// containers whose size a query of an enclosing container changes; past
+// the bound what the last layout measured answers, with a warning.
 const maxContainerLayouts = 4
 
 // maxContainers bounds the containers for size queries a document
@@ -73,7 +74,18 @@ func (p *prepared) measured(res *layout.Result) containerSizes {
 // document: a container's size depends on its ancestors and, under size
 // or inline-size containment, not on its content, so one pass answers
 // every container at one level of nesting at once.
+//
+// So for the position options of anchored boxes, when a style inherits an
+// accepted @position-try property from an element that has some (CSS
+// Anchor Positioning 1, 5.4): the option is applied by interleaving, so
+// the element's computed values hold it and its descendants inherit
+// them, which needs the option chosen before their styles are computed.
+// The next pass cascades each such element with the option the last
+// layout chose and lays it out keeping that option while it fits, its
+// last successful one (5.4.1.1); the passes end when a layout chooses the
+// options its styles hold.
 func prepareAndLayOut(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts, setup printSetup, lay layoutFunc, adjust func(*prepared)) (*prepared, *layout.Result, error) {
+	var choices map[int]int
 	for pass := 1; ; pass++ {
 		p, err := prepareDoc(ctx, doc, o, fonts, setup)
 		if err != nil {
@@ -82,24 +94,30 @@ func prepareAndLayOut(ctx context.Context, doc *dom.Node, o Options, fonts *text
 		if adjust != nil {
 			adjust(p)
 		}
+		if choices != nil {
+			// The layout keeps the options the cascade's styles hold
+			// while they fit (CSS Anchor Positioning 1, 5.4.1.1).
+			p.layout.PositionChoices = choices
+		}
 		res, err := layOut(ctx, lay, p)
 		if err != nil {
 			return nil, nil, err
 		}
-		if !p.layout.MeasureContainers {
-			return p, res, nil
+		sizes := setup.containers
+		if p.layout.MeasureContainers {
+			sizes = p.measured(res)
 		}
-		sizes := p.measured(res)
-		if sizes.equal(setup.containers) {
+		options := p.chosen(res)
+		if sizes.equal(setup.containers) && options.equal(setup.options) {
 			return p, res, nil
 		}
 		if pass >= maxContainerLayouts {
 			p.warnings = append(p.warnings, typeset.Warning{
 				Code: warn.LimitReached, Effect: warn.Approximated,
-				Message: fmt.Sprintf("container queries were answered with the container sizes of layout %d: the sizes still changed after %d layouts", pass-1, maxContainerLayouts),
+				Message: fmt.Sprintf("container queries and position options were answered with what layout %d measured: it still changed after %d layouts", pass-1, maxContainerLayouts),
 			})
 			return p, res, nil
 		}
-		setup.containers = sizes
+		setup.containers, setup.options, choices = sizes, options, res.PositionChoices
 	}
 }

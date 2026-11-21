@@ -349,3 +349,21 @@ func TestAnchor_CenterOutsideAbsolutePositioning(t *testing.T) {
 		`<div class=f><div class=r id=r></div></div><div class=gr><div class=g></div></div>`,
 		map[string]string{"1:r": "0,40+30x20", "1:g": "85,100+30x20"})
 }
+
+// TestAnchor_FallbackStylesInherit holds the position option a box takes
+// as its computed values (CSS Anchor Positioning 1, 5.4: the option is
+// applied by interleaving, so it changes computed values): a child that
+// inherits an accepted @position-try property takes the option's value,
+// and a box that keeps its base styles hands down its own.
+func TestAnchor_FallbackStylesInherit(t *testing.T) {
+	t.Parallel()
+	checkAnchored(t, `
+		#a { anchor-name: --a; left: 550px; top: 250px }
+		#p1 { position-anchor: --a; position-area: right center; position-try-fallbacks: --f; height: auto }
+		#p2 { position-anchor: --a; position-area: bottom center; position-try-fallbacks: --f; height: 10px; top: 0 }
+		@position-try --f { position-area: left center; height: 40px }
+		#p1 > div, #p2 > div { height: inherit }`,
+		`<div class=c><div class=a id=a></div><div class=p id=p1><div class=g></div></div>
+		<div class=p id=p2><div class=m></div></div></div>`,
+		map[string]string{"1:g": "620,290+30x40", "1:m": "655,330+30x10"})
+}

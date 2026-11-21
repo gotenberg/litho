@@ -348,7 +348,7 @@ func prepareDoc(ctx context.Context, doc *dom.Node, o Options, fonts *text.Fonts
 			res.formulas.BrowserRules = true
 		}
 	}
-	computeOpts := css.ComputeOptions{Hints: rootHints(scan), Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts, scan.math), ContainerSize: setup.containers.size}
+	computeOpts := css.ComputeOptions{Hints: rootHints(scan), Lang: scan.lang, BaseURL: scan.resourceBase, FontUnits: fontUnits(ctx, fonts, scan.math), ContainerSize: setup.containers.size, PositionOption: setup.options.option}
 	if o.AnimationsAtEnd {
 		computeOpts.AnimationTime = css.AnimationsAtEnd
 	}

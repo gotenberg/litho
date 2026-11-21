@@ -359,6 +359,9 @@ func fitsPlan(b *box, plan *anchorPlan) bool {
 type tryEntry struct {
 	st    *css.Style
 	entry int
+	// try is the entry's accepted @position-try properties, nil for the
+	// base styles.
+	try *css.TryStyle
 }
 
 // positionOptions returns the position options list of a box whose
@@ -390,7 +393,7 @@ func (e *engine) positionOptions(b *box, base *css.Style, cb absCB) []tryEntry {
 		for _, tt := range o.Tactics {
 			applyTactic(&t, tt, cbAxes)
 		}
-		out = append(out, tryEntry{st: base.WithTry(&t), entry: i + 1})
+		out = append(out, tryEntry{st: base.WithTry(&t), entry: i + 1, try: &t})
 	}
 	if a.Order == css.TryNormal || len(out) < 2 {
 		return out
@@ -643,7 +646,9 @@ func leftRightLess(a css.BoxAlign) css.BoxAlign {
 func (e *engine) layoutAnchored(b *box, cb absCB) {
 	base, ok := e.anchorBase[b]
 	if !ok {
-		base = b.st
+		// A style that holds the option an earlier layout chose tries
+		// its options from its own base styles.
+		base = b.st.FallbackBase()
 		if e.anchorBase == nil {
 			e.anchorBase = map[*box]*css.Style{}
 		}
@@ -658,6 +663,7 @@ func (e *engine) layoutAnchored(b *box, cb absCB) {
 	}
 	var chosen *anchorPlan
 	entry := 0
+	var try *css.TryStyle
 	if len(options) > 1 {
 		seen := e.seenPage
 		e.noPaginate++
@@ -675,7 +681,7 @@ func (e *engine) layoutAnchored(b *box, cb absCB) {
 				break
 			}
 			if fitsPlan(b, plan) {
-				chosen, entry = plan, o.entry
+				chosen, entry, try = plan, o.entry, o.try
 				break
 			}
 		}
@@ -686,7 +692,7 @@ func (e *engine) layoutAnchored(b *box, cb absCB) {
 		st := base
 		if kept {
 			// No option fits: the box keeps the one it had.
-			st, entry = options[0].st, last
+			st, entry, try = options[0].st, last, options[0].try
 		}
 		chosen = e.planAnchored(b, st, cb)
 	}
@@ -694,6 +700,12 @@ func (e *engine) layoutAnchored(b *box, cb absCB) {
 		e.choices = map[int]int{}
 	}
 	e.choices[b.seq] = entry
+	if try != nil && b.node != nil {
+		if e.options == nil {
+			e.options = map[*Node]PositionOption{}
+		}
+		e.options[b.node] = PositionOption{Entry: entry, Try: try}
+	}
 	e.layoutPlan(b, chosen)
 	e.holdStyle(b.st)
 	if chosen.page >= 0 {

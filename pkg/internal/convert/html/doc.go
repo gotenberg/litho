@@ -164,6 +164,13 @@
 // out at, the first fragment's, as Chromium prints it. A document that
 // reads no container's size is laid out once.
 //
+// An absolutely positioned box with position options holds the option
+// its layout chose as its computed values (CSS Anchor Positioning 1, 5.4),
+// which its descendants inherit: when a style inherits an accepted
+// @position-try property from such a box, the document is styled and laid
+// out again with the options the layout before chose, each box keeping
+// its option while it fits, under the same bound of 4 layouts.
+//
 // position: note(name) turns an element into a note, as WeasyPrint draws
 // notes: its ::note-call stays in the flow, numbered by the note counter,
 // and the element, between its ::note-marker and its ::note-callback,

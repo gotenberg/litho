@@ -535,6 +535,13 @@ type PageFrame struct {
 	Style *css.Style
 }
 
+// PositionOption is the entry of position-try-fallbacks an anchored box
+// took: its index, from 1, and its accepted @position-try properties.
+type PositionOption struct {
+	Entry int
+	Try   *css.TryStyle
+}
+
 // Result is what [Layout] produced.
 type Result struct {
 	// Pages holds at least one page.
@@ -564,6 +571,12 @@ type Result struct {
 	// box in, which a tree prepared again from the same document keeps.
 	// nil when no box tried one.
 	PositionChoices map[int]int
+	// PositionOptions maps the node of each anchored box that took an
+	// entry of its position-try-fallbacks to that entry, which the
+	// element's computed values hold once a converter cascades it again
+	// ([css.ComputeOptions.PositionOption]); nil when every such box kept
+	// its base styles.
+	PositionOptions map[*Node]PositionOption
 	// Extents maps every non-empty Node.ID of a block-level, inline-block
 	// or replaced box that landed on a page to its border box less its
 	// padding, the box that holds its content and borders, on the page

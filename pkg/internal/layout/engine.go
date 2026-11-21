@@ -186,6 +186,9 @@ type engine struct {
 	// choices holds the position option each anchored box took, by its
 	// generation order ([Result.PositionChoices]).
 	choices map[int]int
+	// options holds the position option each anchored box that took an
+	// entry of its fallbacks took, by its node ([Result.PositionOptions]).
+	options map[*Node]PositionOption
 	// fitH is the height of the content of the first page under
 	// [Options.FitFirstPage], set as the pages are assembled: the page
 	// box the footnote area's links and anchors are placed on is the one

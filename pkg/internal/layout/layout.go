@@ -96,7 +96,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 			opts.Paginated(infos)
 		}
 	}
-	res := &Result{Structure: e.root, ContentWidth: e.overflowRight(rb), PositionChoices: e.choices}
+	res := &Result{Structure: e.root, ContentWidth: e.overflowRight(rb), PositionChoices: e.choices, PositionOptions: e.options}
 	if e.turn != css.HorizontalTB {
 		// A turned flow overflows along the paper's height, which no
 		// shrink to fit the paper's width answers.

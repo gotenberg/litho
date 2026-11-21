@@ -395,6 +395,13 @@ type ComputeOptions struct {
 	// makes every size feature unknown and every container query unit
 	// the small viewport's.
 	ContainerSize func(n *html.Node) (width, height float64, ok bool)
+	// PositionOption returns the position option a layout chose for the
+	// element n, an absolutely positioned box with position options, nil
+	// for its fallback base styles or none chosen. The element's computed
+	// values then hold the option's accepted @position-try properties,
+	// which its descendants inherit (CSS Anchor Positioning 1, 5.4). nil
+	// chooses none.
+	PositionOption func(n *html.Node) *TryStyle
 	// maxSteps lowers the step budget below maxComputeSteps, for tests;
 	// zero keeps it.
 	maxSteps int
@@ -418,7 +425,16 @@ type Computed struct {
 	re *restyler
 	// queried reports a style that read the size of a size container.
 	queried bool
+	// inheritsTry reports a style that inherits an accepted @position-try
+	// property from a box with position options.
+	inheritsTry bool
 }
+
+// InheritsPositionOptions reports whether a computed style inherits, by
+// the inherit keyword, an accepted @position-try property of an element
+// with position options: a style that the position option a layout
+// chooses for that element changes ([ComputeOptions.PositionOption]).
+func (c *Computed) InheritsPositionOptions() bool { return c.inheritsTry }
 
 // QueriesContainers reports whether a computed style depends on the size
 // of a container for size queries: a size feature of an @container rule
@@ -714,6 +730,10 @@ type computeState struct {
 	// inPseudo reports a cascade of a pseudo-element of node, whose
 	// container queries start at node itself.
 	inPseudo bool
+	// inheritsTry reports a style that inherits an accepted
+	// @position-try property from an element with position options
+	// ([Computed.InheritsPositionOptions]).
+	inheritsTry bool
 	// containerUnits reports a cascade with a container query unit or a
 	// var() value among its declarations, whose lengths resolve against
 	// the element's containers.
@@ -892,7 +912,7 @@ func (r *Resolver) Compute(ctx context.Context, root *html.Node, opts ComputeOpt
 	// The styles a restyle computes inherit from styles the caller
 	// gives, which no shared table holds: none is reused.
 	cs.reuse = reuseCache{}
-	c := &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result(), table: cs.styles, queried: cs.queried}
+	c := &Computed{styles: cs.out, pseudo: cs.pseudo, warns: cs.warns.result(), table: cs.styles, queried: cs.queried, inheritsTry: cs.inheritsTry}
 	if cs.letterCands != nil || cs.lineCands != nil {
 		c.re = &restyler{cs: cs, letters: cs.letterCands, lines: cs.lineCands}
 	}
@@ -920,6 +940,11 @@ func (cs *computeState) element(n, parent *html.Node) {
 	st, vars := cs.cascade(cands, parentStyle, parentVars, parent == nil, nil)
 	cs.noContents = false
 	cs.cands = cands[:0]
+	if st.Anchor != nil && len(st.Anchor.Fallbacks) > 0 && cs.opts.PositionOption != nil {
+		if t := cs.opts.PositionOption(n); t != nil {
+			st = cs.adopt(withOption(st, t))
+		}
+	}
 	cs.out[n] = st
 	cs.vars[n] = vars
 	if st.SizeContainer() {
@@ -1399,6 +1424,9 @@ func (cs *computeState) computeInto(st *Style, winners *[numProps]any, parent *S
 			case w == wideInherit, w == wideUnset && def.inherited:
 				def.copyFrom(st, parent)
 				v = nil
+				if acceptedTry[id] && parent.Anchor != nil && len(parent.Anchor.Fallbacks) > 0 {
+					cs.inheritsTry = true
+				}
 			default:
 				v = def.initial
 				if v == nil {

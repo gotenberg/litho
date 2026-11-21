@@ -129,6 +129,10 @@ type builder struct {
 	// containers maps the node of each container for size queries to its
 	// element, for the sizes the layout measures; nil for none.
 	containers map[*layout.Node]*dom.Node
+	// anchored maps the node of each element with position options whose
+	// chosen option a cascade reads to its element ([builder.positioned]);
+	// nil for none.
+	anchored map[*layout.Node]*dom.Node
 }
 
 // container records node, the box of the element n, when n is a container
@@ -364,6 +368,7 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 	node := &layout.Node{Kind: layout.Element, Style: st}
 	b.semantics(node, n)
 	b.container(node, n)
+	b.positioned(node, n)
 	if err := b.content(ctx, node, n, st, v, depth+1); err != nil {
 		return nil, err
 	}

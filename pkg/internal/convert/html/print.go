@@ -40,6 +40,10 @@ type printSetup struct {
 	// last layout measured, which the cascade's size queries and
 	// container query units read; nil before a layout measured any.
 	containers containerSizes
+	// options are the position options the last layout chose, which the
+	// cascade's elements with position options hold; nil before a layout
+	// chose any a style inherits from.
+	options positionOptions
 	// fitted is the largest side of a single page, sized from its content
 	// ([Options.FittedLimit]), 0 for a paged document, whose page sides
 	// stay within [maxPageSide].

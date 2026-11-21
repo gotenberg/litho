@@ -1,7 +1,10 @@
 package css
 
 import (
+	"context"
 	"testing"
+
+	"golang.org/x/net/html"
 )
 
 // TestAnchorLonghandsParse holds the value grammars of CSS Anchor
@@ -265,5 +268,54 @@ func TestAnchorSupports(t *testing.T) {
 		@supports (width: anchor(--a left)) { #a { order: 2 } }`)
 	if got := s.of("a").Order; got != 1 {
 		t.Errorf("order %d, want 1", got)
+	}
+}
+
+// TestPositionOptionComputes holds a position option a layout chose as
+// the element's computed values (CSS Anchor Positioning 1, 5.4: applied
+// by interleaving): a child inheriting an accepted @position-try property
+// takes the option's value, the element keeps its own as its fallback
+// base styles, and a style that inherits one from a box with position
+// options is reported, so that a converter knows an option changes
+// styles.
+func TestPositionOptionComputes(t *testing.T) {
+	t.Parallel()
+	doc := `<div id=p><div id=k></div></div><div id=q><div id=j></div></div>`
+	sheet := `@position-try --f { height: 9px; top: 1px }
+		#p, #q { position: absolute; height: 5px; position-try-fallbacks: --f }
+		#k { height: inherit } #j { color: inherit }`
+	root := parseHTML(t, doc)
+	r := NewResolver(a4, []Sheet{{Sheet: HTMLUserAgent(), Origin: UserAgent}, {Sheet: mustParse(t, sheet), Origin: Author}})
+	plain, err := r.Compute(context.Background(), root, ComputeOptions{Hints: HTMLHints})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plain.InheritsPositionOptions() {
+		t.Error("height: inherit under a box with position options is not reported")
+	}
+	p := byID(root, "p")
+	try := plain.Style(p).AnchorPositioning().Fallbacks[0].Try
+	c, err := r.Compute(context.Background(), root, ComputeOptions{Hints: HTMLHints, PositionOption: func(n *html.Node) *TryStyle {
+		if n == p {
+			return try
+		}
+		return nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Style(byID(root, "k")).Height; got != Pts(9*Pt) {
+		t.Errorf("child height %+v, want the option's 9px", got)
+	}
+	if got := c.Style(p).FallbackBase(); got.Height != Pts(5*Pt) || got.Top.Kind != Auto || got.Anchor.Base != nil {
+		t.Errorf("fallback base %+v %+v, want the element's own 5px and auto", got.Height, got.Top)
+	}
+	if got := c.Style(byID(root, "j")).Height; got.Kind != Auto {
+		t.Errorf("unchosen box's child height %+v", got)
+	}
+	other := compute(t, doc, `#p { position: absolute; position-anchor: --a; position-area: top } #k { height: inherit }
+		#q { position: absolute; position-try-fallbacks: flip-start } #j { color: inherit }`)
+	if other.c.InheritsPositionOptions() {
+		t.Error("no style inherits an accepted property from a box with position options: reported anyway")
 	}
 }
