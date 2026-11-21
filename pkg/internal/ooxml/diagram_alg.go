@@ -920,9 +920,20 @@ func (e *engine) textAlg(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrai
 	}
 	start := intParam(a, "stBulletLvl", 2) - 1
 	bullets := false
+	spacing := [2][2]int64{
+		{spacingParam(a, "lnSpPar", 90), spacingParam(a, "lnSpAfParP", 35)},
+		{spacingParam(a, "lnSpCh", 90), spacingParam(a, "lnSpAfChP", 15)},
+	}
 	for i := range s.Paragraphs {
 		p := &s.Paragraphs[i]
 		p.Level -= base
+		sp := spacing[min(max(p.Level, 0), 1)]
+		if p.PPr.Child(NSA, "lnSpc") == nil && p.Source.Child(NSA, "pPr").Child(NSA, "lnSpc") == nil {
+			p.LineSpacing = sp[0]
+		}
+		if p.PPr.Child(NSA, "spcAft") == nil && p.Source.Child(NSA, "pPr").Child(NSA, "spcAft") == nil {
+			p.SpaceAfter = sp[1]
+		}
 		if int64(p.Level) >= start {
 			if _, ok := p.PPr.Attr("marL"); !ok {
 				p.MarL, p.HasMarL = 285750*(int64(p.Level)-start+1), true
@@ -943,6 +954,37 @@ func (e *engine) textAlg(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrai
 			s.Paragraphs[i].Align = "ctr"
 		}
 	}
+}
+
+// maxSpacingPercent caps a spacing parameter of the text algorithm at
+// the largest percentage a DrawingML spacing holds (20.1.10.44
+// ST_TextSpacingPercentOrPercentString, 13200%).
+const maxSpacingPercent = 13200
+
+// spacingParam returns a line spacing parameter of the text algorithm
+// (21.4.7.49 ST_ParameterId: lnSpPar "line spacing of the parent", lnSpCh
+// "line spacing of the children", lnSpAfParP "line spacing after the
+// parent", lnSpAfChP "line spacing after children"), a percentage of the
+// font size, in thousandths of a per cent; def when absent, not a number
+// or negative. The standard gives no default: the defaults are the
+// spacings PowerPoint saves for a text algorithm that states none.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx, poi/pptx: the 19 PowerPoint drawings of 12
+//     layout definitions whose tx algorithms state no spacing save every
+//     paragraph of their 98 laid out texts at a:lnSpc 90%, the parent
+//     paragraphs with a:spcAft 35% and the child paragraphs (n862510_2,
+//     bnc862510_5) with 15%; orgChart1 nodes whose text was formatted by
+//     hand (n819614) keep their own.
+func spacingParam(a *DiagramAtom, typ string, def float64) int64 {
+	v := def
+	if p, ok := a.Params[typ]; ok {
+		if f := parseDouble(p, -1); f >= 0 {
+			v = min(f, maxSpacingPercent)
+		}
+	}
+	return int64(math.Round(v * 1000))
 }
 
 // customText reports a text shape whose first data point's text was

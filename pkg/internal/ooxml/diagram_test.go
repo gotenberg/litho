@@ -312,3 +312,29 @@ func TestParseDiagramReadsNoNonFiniteNumber(t *testing.T) {
 		}
 	}
 }
+
+// TestDiagramTextSpacing states the paragraph spacing of laid out text:
+// the text algorithm's lnSpPar, lnSpCh, lnSpAfParP and lnSpAfChP (21.4.7.49
+// ST_ParameterId), 90%, 90%, 35% and 15% when it states none, and a
+// paragraph's own spacing kept.
+func TestDiagramTextSpacing(t *testing.T) {
+	for _, c := range []struct {
+		name, alg, ppr string
+		want           [2]int64
+	}{
+		{"defaults", `<dgm:alg type="tx"/>`, ``, [2]int64{90000, 35000}},
+		{"parameters", `<dgm:alg type="tx"><dgm:param type="lnSpPar" val="100"/><dgm:param type="lnSpAfParP" val="20"/></dgm:alg>`, ``, [2]int64{100000, 20000}},
+		{"a negative parameter takes the default", `<dgm:alg type="tx"><dgm:param type="lnSpPar" val="-3"/></dgm:alg>`, ``, [2]int64{90000, 35000}},
+		{"the paragraph's own", `<dgm:alg type="tx"/>`, `<a:pPr><a:lnSpc><a:spcPct val="100000"/></a:lnSpc><a:spcAft><a:spcPts val="0"/></a:spcAft></a:pPr>`, [2]int64{0, 0}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			data := strings.Replace(diagramData("a"), `<a:p><a:r>`, `<a:p>`+c.ppr+`<a:r>`, 1)
+			layout := `<dgm:alg type="lin"/><dgm:shape/><dgm:forEach axis="ch" ptType="node"><dgm:layoutNode name="node">` + c.alg + `<dgm:shape type="rect"/></dgm:layoutNode></dgm:forEach>`
+			d := ParseDiagram(mustParse(t, data), mustParse(t, diagramLayout(layout)), nil, nil)
+			p := d.LayOut(600, 300).Kids[1].Paragraphs[0]
+			if got := [2]int64{p.LineSpacing, p.SpaceAfter}; got != c.want {
+				t.Errorf("spacing %v, want %v", got, c.want)
+			}
+		})
+	}
+}

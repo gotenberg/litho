@@ -103,7 +103,8 @@ func pPrWith(e *Element, name, v string) *Element {
 // TextBody returns the shape's text as a txBody in the namespace space:
 // its data's body properties with the anchor, insets and autofit the text
 // algorithm set, its data's list style, and its paragraphs with the level,
-// margin, indent, alignment and bullet the algorithm set; nil for no text.
+// margin, indent, alignment, spacing and bullet the algorithm set; nil for
+// no text.
 func (s *DiagramShape) TextBody(space string) *Element {
 	if len(s.Paragraphs) == 0 {
 		return nil
@@ -143,6 +144,18 @@ func (s *DiagramShape) TextBody(space string) *Element {
 		}
 		if p.Align != "" {
 			ppr.Attrs = withAttrSet(ppr.Attrs, "algn", p.Align)
+		}
+		// 21.1.2.2.7 pPr: lnSpc and spcAft come first among its children,
+		// before the bullet properties.
+		var spacing []*Element
+		if p.LineSpacing > 0 {
+			spacing = append(spacing, newA("lnSpc", nil, newA("spcPct", []string{"val", strconv.FormatInt(p.LineSpacing, 10)})))
+		}
+		if p.SpaceAfter > 0 {
+			spacing = append(spacing, newA("spcAft", nil, newA("spcPct", []string{"val", strconv.FormatInt(p.SpaceAfter, 10)})))
+		}
+		if len(spacing) > 0 {
+			ppr.Children = append(spacing, ppr.Children...)
 		}
 		if p.Bullet {
 			var kids []*Element

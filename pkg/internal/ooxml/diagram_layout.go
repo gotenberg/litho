@@ -75,6 +75,11 @@ type DiagramParagraph struct {
 	HasMarL, HasIndent bool
 	Align              string
 	Bullet             bool
+	// LineSpacing and SpaceAfter are the line spacing and the space after
+	// the paragraph in thousandths of a per cent of the font size (a:spcPct
+	// val), the text algorithm's lnSpPar, lnSpCh, lnSpAfParP and
+	// lnSpAfChP; 0 leaves the paragraph's own.
+	LineSpacing, SpaceAfter int64
 }
 
 // Preset returns the preset geometry the shape draws, "" for none.
