@@ -564,8 +564,14 @@ func (s *frameSet) layOutDoc(ctx context.Context, o Options, fd *frameDoc, data 
 	if len(out.Pages) == 0 {
 		return nil, out.Warnings, nil
 	}
+	// What lies past the viewport is never shown: it leaves the page, and
+	// the elements it alone held leave the structure, so a frame holds what
+	// its box shows.
 	pg := out.Pages[0]
-	return &layout.Embedded{Content: pg.Content, Links: pg.Links, Structure: out.Structure}, out.Warnings, nil
+	pg.Content, _ = cullFrags(pg.Content, typeset.Identity, area{0, 0, w, h}, 0)
+	view := &typeset.Document{Pages: []*typeset.Page{pg}, Structure: out.Structure}
+	typeset.PruneStructure(view)
+	return &layout.Embedded{Content: pg.Content, Links: pg.Links, Structure: view.Structure}, out.Warnings, nil
 }
 
 // frameOptions returns the options a frame's document fd is converted

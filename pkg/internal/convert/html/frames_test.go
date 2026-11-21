@@ -13,6 +13,7 @@ import (
 
 	dom "golang.org/x/net/html"
 
+	"github.com/gotenberg/litho/pkg/internal/layout"
 	"github.com/gotenberg/litho/pkg/internal/typeset"
 	"github.com/gotenberg/litho/pkg/internal/warn"
 )
@@ -104,6 +105,24 @@ func TestFrame_CutAtItsViewportAndResolvedAgainstItsURL(t *testing.T) {
 	}
 	for _, w := range doc.Warnings {
 		t.Errorf("warning %v", w)
+	}
+	// The paragraph and the picture past the viewport leave the structure
+	// with their content.
+	var kids []string
+	var find func(e *typeset.StructElem)
+	find = func(e *typeset.StructElem) {
+		if e.Role == frameRole {
+			for _, k := range e.Kids {
+				kids = append(kids, k.Role)
+			}
+		}
+		for _, k := range e.Kids {
+			find(k)
+		}
+	}
+	find(doc.Structure)
+	if strings.Join(kids, ",") != "P,P" {
+		t.Errorf("the frame holds %v, want the two paragraphs it shows", kids)
 	}
 }
 
@@ -382,5 +401,28 @@ func TestFrame_ObjectAndEmbed(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A frame's document holds what its viewport shows, not what lies past
+// it, which would stay in memory until the conversion ends.
+func TestFrame_HoldsWhatItsViewportShows(t *testing.T) {
+	o, err := Options{}.withDefaults()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := newFrameSet(testFonts(t), layout.Layout)
+	fd := &frameDoc{url: srcdocURL, base: documentURL, res: newResources(nil), depth: 1}
+	data := `<style>body{margin:0}p{margin:0;height:100px}</style><p>Firsttext</p><p>Secondtext</p><p>Lasttext</p>`
+	out, _, err := s.layOutDoc(t.Context(), o, fd, data, 150, 120)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := pageText(&typeset.Page{Content: out.Content})
+	if !strings.Contains(got, "Firsttext") || !strings.Contains(got, "Secondtext") || strings.Contains(got, "Lasttext") {
+		t.Errorf("text %q, want the first two paragraphs alone", got)
+	}
+	if n := len(out.Structure.Kids); n != 2 {
+		t.Errorf("%d elements, want 2", n)
 	}
 }
