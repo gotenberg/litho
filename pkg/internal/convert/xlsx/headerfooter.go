@@ -275,13 +275,22 @@ func (p *hfParser) newPart(i int) {
 }
 
 // fontName applies a &"name,style" code: the style's words bold, italic
-// and their German and Hungarian names, as LibreOffice reads them.
+// and their German and Hungarian names, as LibreOffice reads them. The
+// name "-" is the Normal font's face; "+" is the theme's heading font, as
+// Excel names it (Microsoft, "Formatting and VBA codes for headers and
+// footers": &"+" prints in the Heading font of the current theme), the
+// Normal font's face when the theme names none.
 func (p *hfParser) fontName(spec string) {
 	name, style, hasStyle := strings.Cut(spec, ",")
 	name = strings.TrimSpace(name)
 	switch {
 	case name == "-":
 		p.font.Families = copyFont(p.base).Families
+	case name == "+":
+		p.font.Families = copyFont(p.base).Families
+		if p.theme != nil && p.theme.Major.Latin != "" {
+			p.font.Families = []string{p.theme.Major.Latin}
+		}
 	case name != "":
 		p.font.Families = []string{name}
 	}

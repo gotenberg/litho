@@ -29,7 +29,7 @@ type span struct {
 func TestParseHeaderFooter(t *testing.T) {
 	t.Parallel()
 	base := sheet.Font{Families: []string{"Calibri"}, Size: 11}
-	theme := &ooxml.Theme{Colors: map[string]css.Color{"accent1": rgb(0x4472C4)}}
+	theme := &ooxml.Theme{Colors: map[string]css.Color{"accent1": rgb(0x4472C4)}, Major: ooxml.FontScheme{Latin: "Cambria"}}
 	b := span{family: "Calibri", size: 11}
 	with := func(s span, f func(*span)) span { f(&s); return s }
 	for _, tc := range []struct {
@@ -72,6 +72,14 @@ func TestParseHeaderFooter(t *testing.T) {
 			[3][]span{1: {with(b, func(s *span) { s.text, s.size = "45ab", 123 }), with(b, func(s *span) { s.text, s.size = " 9", 8 })}},
 		},
 		{"dropped codes", "&Gx&O&Hy&\"Ar", [3][]span{1: {with(b, func(s *span) { s.text = "xy" })}}},
+		{
+			"theme fonts", `&"+,Bold"A&"Arial"B&"-"C`,
+			[3][]span{1: {
+				with(b, func(s *span) { s.text, s.family, s.bold = "A", "Cambria", true }),
+				with(b, func(s *span) { s.text, s.family, s.bold = "B", "Arial", true }),
+				with(b, func(s *span) { s.text, s.bold = "C", true }),
+			}},
+		},
 		{"an unknown code drops its whole character", "&éa&€b&K€0000c", [3][]span{1: {with(b, func(s *span) { s.text = "ab€0000c" })}}},
 		{
 			"page offsets", "&P+1 of &N&P+1&N&P+12abc&p+3&N-2",
