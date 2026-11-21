@@ -1330,10 +1330,23 @@ func holdsInside(h, m *box) bool {
 // In columns a scroll container is monolithic (CSS Fragmentation 3, 4.1,
 // as Chromium fragments it): its content is laid out without breaks, and
 // it moves to the next column when it straddles a cut, overflowing one it
-// is taller than.
+// is taller than. Under the browser rules the root of an orthogonal flow
+// is monolithic in pages and columns alike, as Chromium fragments it: its
+// content is laid out off the cuts across the axis they cut (CSS Writing
+// Modes 4, 7.3; CSS Fragmentation 3, 4.1), and the root moves to the next
+// page or column whole.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium 156 (gotenberg/gotenberg:9.4.1) prints a
+//     vertical-rl, vertical-lr or sideways-rl block 204 pixels tall whose
+//     top lies 100 pixels above the end of a page at the top of the next
+//     page, uncut, and moves one that straddles the end of a column of a
+//     balanced two-column container to the next column.
 func (e *engine) layoutContextIn(b *box, cb cblock, top float64) float64 {
-	b.monoCol = e.cols != nil && b.parent != nil && (b.st.Overflow != css.OverflowVisible && !b.st.ClipOnly() || b.st.ScrollContainer()) && !isMulticol(b)
-	if !b.monoCol {
+	whole := b.ortho && e.opts.BrowserRules && b.parent != nil
+	b.monoCol = e.cols != nil && b.parent != nil && (b.st.Overflow != css.OverflowVisible && !b.st.ClipOnly() || b.st.ScrollContainer() || whole) && !isMulticol(b)
+	if !b.monoCol && !whole {
 		e.layoutOwnContext(b, cb)
 		return top
 	}

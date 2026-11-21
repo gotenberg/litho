@@ -49,6 +49,12 @@ func (e *engine) wrapOrtho(b *box) {
 	b.ortho = true
 }
 
+// turner reports the anonymous block of an orthogonal flow root
+// ([engine.wrapOrtho]): the box whose transform turns the flow's
+// horizontal layout onto the frame of the root. It is a device of the
+// layout, not a box CSS knows: it holds no positioned descendant.
+func (b *box) turner() bool { return b.anon && b.parent != nil && b.parent.ortho }
+
 // orthoFormatter lays out the content of the root of an orthogonal flow:
 // the anonymous block holding it is laid out horizontally, as wide as the
 // root's content box is tall, then turned a quarter turn into the root's

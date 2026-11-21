@@ -181,6 +181,9 @@ type painter struct {
 	effectPixels effect.Page
 	// crops caches the parts of raster images border images cut out.
 	crops map[cropKey]*typeset.ImageSource
+	// inTurn counts the units of turned flows being painted
+	// ([painter.turnedUnit]).
+	inTurn int
 	// strip is the inline box fragment being painted, laid on the strip
 	// of all its fragments for its border image; nil for none.
 	strip *imageStrip
@@ -790,6 +793,16 @@ func (p *painter) unit(b *box, own bool) {
 		push(&ditem{group: true, page: pageMono, y0: b.y + p.dy + b.colPin()})
 		own = own && b.isStackingContext()
 	}
+	if y0, y1, ok := p.turnedUnit(b); ok {
+		g := &ditem{group: true, page: pageTurned}
+		push(g)
+		mono := p.mono
+		p.inTurn++
+		defer func() {
+			p.inTurn--
+			atExtent(g, y0, y1, mono, 0)
+		}()
+	}
 	if b.fixed {
 		savedMono := p.mono
 		p.mono = -1
@@ -964,6 +977,55 @@ func (p *painter) unit(b *box, own bool) {
 	}
 	for _, c := range pos {
 		p.lifted(c)
+	}
+}
+
+// turnedUnit reports a box b that paints a unit of a turned flow, and
+// returns the flow extent the unit has in the engine's frame, the frame
+// the page and column cuts read: the turner of an orthogonal flow entered
+// from the engine's frame, whose content is laid out off the cuts in
+// turned coordinates (CSS Writing Modes 4, 7.3: its root is monolithic in
+// the page's fragmentation). Every fragment the unit paints takes that
+// extent ([atExtent]), so it lands on the page or in the column the unit's
+// place on the page is in, not where its turned coordinates would put it.
+func (p *painter) turnedUnit(b *box) (float64, float64, bool) {
+	if !b.turner() || p.inTurn > 0 {
+		return 0, 0, false
+	}
+	r := p.borderRect(b)
+	m, _, ok := transformOf(b, r)
+	if !ok {
+		return 0, 0, false
+	}
+	r = boundsOf(m, r)
+	return r.Y, r.Y + r.Height, true
+}
+
+// pageTurned is the page of the group of a unit of a turned flow, whose
+// leaves carry the unit's extent ([painter.turnedUnit]); the group itself
+// goes to the pages its leaves do.
+const pageTurned = -3
+
+// atExtent gives the leaves of the display item it, a unit of a turned
+// flow ([painter.turnedUnit]), the flow extent y0 to y1 of the unit and
+// the page mono, when not negative, or else the column or the page that
+// extent is in; a fixed box's group keeps its own, as does a unit inside
+// it, which has its own extent. depth bounds the groups walked.
+func atExtent(it *ditem, y0, y1 float64, mono, depth int) {
+	for _, k := range it.kids {
+		switch {
+		case !k.group:
+			k.y0, k.y1, k.page = y0, y1, mono
+			if mono < 0 {
+				k.page = pageMono
+			}
+		case k.fixedGroup() || k.page == pageTurned || depth >= maxGroupDepth:
+		default:
+			if k.page == pageMono {
+				k.y0 = y0
+			}
+			atExtent(k, y0, y1, mono, depth+1)
+		}
 	}
 }
 
