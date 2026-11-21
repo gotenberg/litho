@@ -112,6 +112,23 @@ func TestParseHeaderFooter(t *testing.T) {
 				with(b, func(s *span) { s.text, s.color = "d", tint(rgb(0x4472C4), -1) }),
 			}},
 		},
+		{
+			"superscript then subscript", "x&Xa&Yb&Yc&Xd",
+			[3][]span{1: {
+				with(b, func(s *span) { s.text = "x" }), with(b, func(s *span) { s.text, s.script = "a", sheet.Superscript }),
+				with(b, func(s *span) { s.text, s.script = "b", sheet.Subscript }), with(b, func(s *span) { s.text = "c" }),
+				with(b, func(s *span) { s.text, s.script = "d", sheet.Superscript }),
+			}},
+		},
+		{
+			"lower case and unknown codes", "&l&p&C&bb&b&Q|&O|&H|&J&R&&&&",
+			[3][]span{
+				{with(b, func(s *span) { s.field = sheet.FieldPage })},
+				{with(b, func(s *span) { s.text, s.bold = "b", true }), with(b, func(s *span) { s.text = "|||" })},
+				{with(b, func(s *span) { s.text = "&&" })},
+			},
+		},
+		{"an unclosed font name", `&Lab&"Arial cd&Cef`, [3][]span{{with(b, func(s *span) { s.text = "ab" })}}},
 		{"an unknown code drops its whole character", "&éa&€b&K€0000c", [3][]span{1: {with(b, func(s *span) { s.text = "ab€0000c" })}}},
 		{
 			"page offsets", "&P+1 of &N&P+1&N&P+12abc&p+3&N-2",

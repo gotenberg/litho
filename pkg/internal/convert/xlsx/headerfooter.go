@@ -104,6 +104,14 @@ type hfParser struct {
 // after an ampersand, are dropped with their character, as Office reads
 // an unknown code (MS-OI29500, 2.1.619, emptytoken). Every span carries
 // the font it draws with; picture reports a picture code read.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: Excel for the web prints "&p/&n &a" as "1/2 Probe", the
+//     codes read in any case, "&bbold&b" in bold, "&Q|&O|&H|&é|&J" as
+//     "||||" and "&&&&" as "&&".
+//   - probe, xlsx: "&Lab&"Arial cd&Cef" prints "ab" alone: an unclosed
+//     font name takes the rest of the text with it.
 func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) (parts [3][]sheet.Span, picture bool) {
 	p := &hfParser{base: base, theme: theme, font: copyFont(base), part: 1}
 	if utf8.RuneCountInString(s) > maxHeaderRunes {
@@ -419,7 +427,14 @@ func toggle(u, kind sheet.Underline) sheet.Underline {
 }
 
 // toggleScript switches the script s to kind, or to the baseline when it
-// is kind already.
+// is kind already: a subscript code while superscript is on switches to
+// subscript, as Excel prints it, where MS-OI29500, 2.1.619 applies the
+// first of the two.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: "x&Xa&Yb&Yc&Xd" prints a raised, b lowered, c on the
+//     baseline and d raised, each script at 7.32 points under Calibri 11.
 func toggleScript(s, kind sheet.Script) sheet.Script {
 	if s == kind {
 		return sheet.Baseline
