@@ -575,13 +575,18 @@ func WithHTTPClient(client *http.Client) HTMLOption {
 // not load, and writes nothing.
 //
 // A resource is a stylesheet a link element names, an @import, a picture (an
-// img, a video's poster, a CSS image, an image of an SVG drawing), and the
-// file of a font when none of its @font-face rule's sources loads. It does not
-// load when its bytes never arrive whole: a URL the options refuse or give no
-// way to read ([WithResources], [WithHTTPClient]), a file that does not exist
-// or does not read, a request that fails, an answer outside 2xx, a stylesheet
-// served as another type than text/css, a data: URL that does not decode, a
-// resource past the caps of [WithResources] on what a conversion reads. Those
+// img, a video's poster, a CSS image, an image of an SVG drawing), the
+// document of a frame (an iframe, a frame, an object or an embed that names
+// an HTML document), and the file of a font when none of its @font-face
+// rule's sources loads. An object whose document does not load fails the
+// conversion too: its fallback content shows only when this option is false.
+//
+// A resource does not load when its bytes never arrive whole: a URL the
+// options refuse or give no way to read ([WithResources], [WithHTTPClient]),
+// a file that does not exist or does not read, a request that fails, an
+// answer outside 2xx, a stylesheet served as another type than text/css, a
+// data: URL that does not decode, a resource past the caps of
+// [WithResources] on what a conversion reads. Those
 // are the resources [models.WarningResourceRefused],
 // [models.WarningResourceNoNetwork], [models.WarningResourceHTTPStatus] and
 // [models.WarningResourceFailed] report, the fonts of
