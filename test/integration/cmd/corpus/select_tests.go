@@ -244,7 +244,8 @@ var wptDirs = []string{
 	"css/css-counter-styles", "css/css-values", "css/css-variables", "css/selectors", "css/css-color",
 	"css/css-images", "css/css-display", "css/css-pseudo", "css/css-masking", "css/compositing",
 	"css/css-logical", "css/css-box", "css/css-animations", "css/css-transitions", "css/css-shapes",
-	"css/filter-effects", "css/css-conditional", "css/css-anchor-position",
+	"css/filter-effects", "css/css-conditional", "css/css-anchor-position", "css/motion", "css/fill-stroke",
+	"compat", "html/rendering/widgets",
 	"mathml/presentation-markup/direction", "mathml/presentation-markup/fractions",
 	"mathml/presentation-markup/menclose", "mathml/presentation-markup/mpadded", "mathml/presentation-markup/mrow",
 	"mathml/presentation-markup/operators", "mathml/presentation-markup/radicals",
@@ -266,6 +267,11 @@ var wptDirs = []string{
 //     its script tests (388 files) and the standing exclusions are left
 //     out, about as many as css-display or css-color; its cap of 120 keeps
 //     every one, as the modules of that size do.
+//   - wpt: css/motion holds 77 candidates at the pin outside its animation
+//     and parsing directories, css/fill-stroke 1, the -webkit-text-* tests
+//     of compat 6 and the field-sizing tests of html/rendering/widgets 1,
+//     the others running a script; a cap of 200 keeps every one. litho
+//     draws 73 of the motion tests like their reference.
 var wptAreaCap = map[string]int{
 	"css/CSS2": 24, "css/css-backgrounds": 80, "css/css-text": 120, "css/css-lists": 40, "css/css-page": 40,
 	"css/css-break": 40, "css/css-flexbox": 200, "css/css-align": 20, "css/css-grid": 200, "css/css-multicol": 80,
@@ -278,12 +284,14 @@ var wptAreaCap = map[string]int{
 	"css/css-masking": 120, "css/compositing": 60, "css/css-logical": 40, "css/css-box": 40,
 	"css/css-animations": 40, "css/css-transitions": 40, "css/css-shapes": 200,
 	"css/filter-effects": 400, "css/css-conditional": 200, "css/css-anchor-position": 120, "mathml": 100,
+	"css/motion": 200, "css/fill-stroke": 200, "compat": 200, "html/rendering": 200,
 }
 
-func compileAll(flags string, patterns ...string) []*regexp.Regexp {
+// compileAll compiles patterns, each matched without regard to case.
+func compileAll(patterns ...string) []*regexp.Regexp {
 	out := make([]*regexp.Regexp, len(patterns))
 	for i, p := range patterns {
-		out[i] = regexp.MustCompile(flags + p)
+		out[i] = regexp.MustCompile("(?i)" + p)
 	}
 	return out
 }
@@ -300,13 +308,16 @@ var (
 // chapter's probe requires and the chapter's own rules forbid.
 var wptFirstLine = regexp.MustCompile(`(?i):first-line\b`)
 
+// wptControls finds a form control, which the field-sizing area requires.
+var wptControls = compileAll(`<input\b`, `<button\b`, `<select\b`, `<textarea\b`)
+
 // wptForbidden keeps a test out: scripts, SVG, MathML, form controls,
 // embedded documents and media, @font-face, data: and javascript: URLs, a
 // reftest-wait class, vertical writing and event handlers.
-var wptForbidden = append(compileAll("(?i)",
+var wptForbidden = append(append(compileAll(
 	`<script\b`, `<svg\b`, `<iframe\b`, `<object\b`, `<embed\b`, `<canvas\b`, `<video\b`, `<audio\b`,
-	`<input\b`, `<button\b`, `<select\b`, `<textarea\b`, `<frameset\b`, `\bdata:`, `\bjavascript:`,
-	`\.svg\b`, `reftest-wait`, `\bon[a-z]+\s*=`), wptMath, wptFontFace, wptVertical, wptSideways)
+	`<frameset\b`, `\bdata:`, `\bjavascript:`,
+	`\.svg\b`, `reftest-wait`, `\bon[a-z]+\s*=`), wptControls...), wptMath, wptFontFace, wptVertical, wptSideways)
 
 // wptTransform3D finds a 3D transform: a perspective, a 3D rendering
 // context, a back face, or a 3D transform function (CSS Transforms 2).
@@ -316,7 +327,7 @@ var wptTransform3D = regexp.MustCompile(`(?i)perspective|preserve-3d|backface-vi
 // wptFlexForbidden are what the flexbox and alignment areas leave out on top
 // of wptForbidden: features the converter does not lay out in a flex
 // container.
-var wptFlexForbidden = compileAll("(?i)",
+var wptFlexForbidden = compileAll(
 	`display\s*:\s*(inline-)?grid`, `\bgrid-`, `\bcolumns?(-count|-width)?\s*:`, `\b(min|max|fit)-content\b`,
 	`\baspect-ratio\b`, `visibility\s*:\s*collapse`, `display\s*:\s*contents`, `\bcontain(-intrinsic-[a-z-]+)?\s*:`,
 	`\bsticky\b`, `\bzoom\s*:`, `-webkit-box\b`, `writing-mode`, `\banchor`, `<details\b`, `<fieldset\b`,
@@ -326,7 +337,7 @@ var wptFlexForbidden = compileAll("(?i)",
 // mode, overflow, text decoration and sizing areas to what those areas add.
 // A writing mode other than horizontal-tb is checked by
 // wptOtherWritingMode, which needs a lookahead the regexp package lacks.
-var wptLayoutForbidden = compileAll("(?i)",
+var wptLayoutForbidden = compileAll(
 	`\bsubgrid\b`, `\bmasonry\b`, `\baspect-ratio\b`, `display\s*:\s*contents`, `\bcontain(-intrinsic-[a-z-]+)?\s*:`,
 	`\bsticky\b`, `\bzoom\s*:`, `text-orientation`, `text-combine-upright`, `\banchor`, `<details\b`, `<fieldset\b`,
 	`flex-wrap\s*:\s*balance`, `flex-line-count`)
@@ -371,6 +382,10 @@ type wptAreaRules struct {
 // other resources do, and the converter loads them.
 var wptFontFaceRules = wptAreaRules{lift: []*regexp.Regexp{wptFontFace}}
 
+// wptAreas holds each area's rules. compat, a directory of tests of many
+// legacy features, keeps those of the -webkit-text-* properties, and
+// html/rendering those of field-sizing, which need the form controls
+// every other area forbids.
 var wptAreas = map[string]wptAreaRules{
 	"css/css-flexbox":            {forbidden: wptFlexForbidden},
 	"css/css-align":              {forbidden: wptFlexForbidden, required: regexp.MustCompile(`(?i)display\s*:\s*(inline-)?flex\b`)},
@@ -410,6 +425,10 @@ var wptAreas = map[string]wptAreaRules{
 	"css/css-shapes":             {forbidden: wptLayoutForbidden, writingMode: true},
 	"css/filter-effects":         wptFontFaceRules,
 	"css/css-conditional":        wptFontFaceRules,
+	"css/motion":                 wptFontFaceRules,
+	"css/fill-stroke":            wptFontFaceRules,
+	"compat":                     {lift: wptFontFaceRules.lift, required: regexp.MustCompile(`(?i)-webkit-text-(fill-color|stroke)`)},
+	"html/rendering":             {lift: wptControls, required: regexp.MustCompile(`(?i)field-sizing`)},
 }
 
 // wptMathRules are the rules of the MathML areas: a test may hold MathML,
@@ -767,9 +786,13 @@ func wptMathFont(root, u string) (string, bool) {
 }
 
 // wptArea returns the area of a test: css/CSS2/<chapter>, css/<module>,
-// or mathml/presentation-markup/<directory> or mathml/relations/<directory>.
+// mathml/presentation-markup/<directory> or mathml/relations/<directory>,
+// html/<directory>, or compat for a test directly under compat.
 func wptArea(id string) string {
 	parts := strings.Split(id, "/")
+	if len(parts) <= 2 && parts[0] == "compat" {
+		return parts[0]
+	}
 	if parts[0] == "mathml" || parts[1] == "CSS2" {
 		return strings.Join(parts[:3], "/")
 	}

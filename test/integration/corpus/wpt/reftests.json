@@ -1,5 +1,77 @@
 [
   {
+    "id": "compat/webkit-text-fill-color-property-001a.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "compat/webkit-text-fill-color-property-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "compat/webkit-text-fill-color-property-001b.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "compat/webkit-text-fill-color-property-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "compat/webkit-text-fill-color-property-001c.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "compat/webkit-text-fill-color-property-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "compat/webkit-text-fill-color-property-001d.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "compat/webkit-text-fill-color-property-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "compat/webkit-text-fill-color-property-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "compat/webkit-text-fill-color-property-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "compat/webkit-text-fill-color-property-006.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "compat/webkit-text-fill-color-property-006-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/CSS2/abspos/abspos-containing-block-initial-004a.xht",
     "print": false,
     "refs": [
@@ -64490,6 +64562,19 @@
     ]
   },
   {
+    "id": "css/fill-stroke/paint-order-001.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 5],
+        "path": "css/fill-stroke/reference/paint-order-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/filter-effects/backdrop-filter-3d-transform-perspective.html",
     "print": false,
     "refs": [
@@ -66216,6 +66301,955 @@
     "resources": []
   },
   {
+    "id": "css/motion/offset-distance-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-distance-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-distance-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-distance-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-distance-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-distance-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-distance-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-distance-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-distance-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-distance-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-distance-006.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-distance-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-distance-007.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-distance-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-distance-008.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-distance-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-distance-009.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-distance-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-coord-box-001.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 100, 0, 450],
+        "path": "css/motion/offset-path-coord-box-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-coord-box-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-coord-box-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-coord-box-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-coord-box-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-coord-box-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-coord-box-004-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-001.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 10],
+        "path": "css/motion/offset-path-ray-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-002.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 10],
+        "path": "css/motion/offset-path-ray-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-004.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-006.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-007.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-007-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-008.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-008-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-009.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-009-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-010.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 10],
+        "path": "css/motion/offset-path-ray-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-011.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-011-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-012.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-012-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-013.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-013-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-014.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-014-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-015.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-015-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-016.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-016-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-017.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-017-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-018.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-018-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-019.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-019-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-020.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-007-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-021.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-007-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-022.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-022-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-contain-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-contain-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-contain-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-contain-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-contain-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-contain-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-contain-004.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 20, 0, 10],
+        "path": "css/motion/offset-path-ray-contain-004-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-contain-005.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-contain-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-ray-sides-fourth-quadrant.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-ray-sides-fourth-quadrant-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-circle-001.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 150, 0, 300],
+        "path": "css/motion/offset-path-shape-circle-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-circle-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-shape-circle-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-circle-003.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 170, 0, 550],
+        "path": "css/motion/offset-path-shape-circle-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-circle-004.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 300, 0, 500],
+        "path": "css/motion/offset-path-shape-circle-004-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-circle-005.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 100, 0, 500],
+        "path": "css/motion/offset-path-shape-circle-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-circle-006.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 100, 0, 500],
+        "path": "css/motion/offset-path-shape-circle-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-circle-007.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 170, 0, 550],
+        "path": "css/motion/offset-path-shape-circle-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-circle-008.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 150, 0, 300],
+        "path": "css/motion/offset-path-shape-circle-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-ellipse-001.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 100, 0, 400],
+        "path": "css/motion/offset-path-shape-ellipse-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-ellipse-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-shape-ellipse-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-ellipse-003.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 150, 0, 530],
+        "path": "css/motion/offset-path-shape-ellipse-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-ellipse-004.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 250, 0, 500],
+        "path": "css/motion/offset-path-shape-ellipse-004-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-ellipse-005.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 100, 0, 500],
+        "path": "css/motion/offset-path-shape-ellipse-005-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-ellipse-006.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 150, 0, 530],
+        "path": "css/motion/offset-path-shape-ellipse-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-ellipse-007.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 100, 0, 401],
+        "path": "css/motion/offset-path-shape-ellipse-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-inset-001.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 80, 0, 230],
+        "path": "css/motion/offset-path-shape-inset-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-inset-002.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 170, 0, 500],
+        "path": "css/motion/offset-path-shape-inset-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-polygon-001.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 20, 0, 100],
+        "path": "css/motion/offset-path-shape-polygon-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-polygon-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-shape-polygon-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-polygon-003.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 20, 0, 56],
+        "path": "css/motion/offset-path-shape-polygon-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-rect-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-shape-rect-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-rect-002.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 160, 0, 520],
+        "path": "css/motion/offset-path-shape-rect-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-rect-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-shape-rect-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-shape-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-shape-shape-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-shape-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-shape-shape-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-shape-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-shape-shape-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-xywh-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-shape-xywh-001-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-xywh-002.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 140, 0, 500],
+        "path": "css/motion/offset-path-shape-xywh-002-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-shape-xywh-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-shape-xywh-003-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-string-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-string-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-string-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-string-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-string-003.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-string-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-path-url-011.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-path-url-011-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-rotate-001.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-rotate-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-rotate-002.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "css/motion/offset-rotate-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "css/motion/offset-rotate-003.html",
+    "print": false,
+    "refs": [
+      {
+        "fuzzy": [0, 1, 0, 57],
+        "path": "css/motion/offset-rotate-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
     "id": "css/selectors/child-indexed-no-parent.html",
     "print": false,
     "refs": [
@@ -67530,6 +68564,18 @@
     "refs": [
       {
         "path": "css/selectors/visited-nested-ref.html",
+        "rel": "match",
+        "resources": []
+      }
+    ],
+    "resources": []
+  },
+  {
+    "id": "html/rendering/widgets/field-sizing-placeholder-stretch.html",
+    "print": false,
+    "refs": [
+      {
+        "path": "html/rendering/widgets/field-sizing-placeholder-stretch-ref.html",
         "rel": "match",
         "resources": []
       }
