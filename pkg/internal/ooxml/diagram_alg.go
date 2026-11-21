@@ -911,6 +911,20 @@ func (e *engine) fontLength(c DiagramConstraint, cons []DiagramConstraint) (floa
 	return float64(float64(c.Factor*start) * 36000), key, true
 }
 
+// startLength returns the length a width or height constraint that refers
+// to a font size gives at the size it starts at, as [engine.fontLength]
+// does, without sizing the shape again at the size its text settles at.
+func (e *engine) startLength(c DiagramConstraint, cons []DiagramConstraint) (float64, bool) {
+	if c.RefType != primFontSz && c.RefType != secFontSz {
+		return 0, false
+	}
+	start := e.fontStart(cons, c.RefType, c.RefForName)
+	if start <= 0 {
+		return 0, false
+	}
+	return float64(float64(c.Factor*start) * 36000), true
+}
+
 // fontLayout is what the font-sized lengths of a linear layout are: the
 // kids whose length along the direction comes from a font size, which keep
 // their room even when they draw nothing, and the lengths of the kids that

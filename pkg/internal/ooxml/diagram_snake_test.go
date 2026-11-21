@@ -125,3 +125,22 @@ func TestDiagramSnakeSpacing(t *testing.T) {
 		t.Errorf("boxes\n got %q\nwant %q", got, want)
 	}
 }
+
+// TestDiagramSnakeSizesFromTheStart lays out a snake whose node height is a
+// factor of its font size: the node is sized from the size the font starts
+// at, whatever size the text settles at.
+func TestDiagramSnakeSizesFromTheStart(t *testing.T) {
+	layout := `<dgm:alg type="snake"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="primFontSz" for="ch" forName="node" val="40"/>` +
+		`<dgm:constr type="w" for="ch" forName="node" refType="w"/>` +
+		`<dgm:constr type="h" for="ch" forName="node" refType="primFontSz" refFor="ch" refForName="node" fact="1.5"/></dgm:constrLst>` +
+		`<dgm:forEach name="each" axis="ch" ptType="node"><dgm:layoutNode name="node"><dgm:alg type="tx"/><dgm:shape type="rect"/>` + noMargins +
+		`<dgm:ruleLst><dgm:rule type="primFontSz" val="5"/></dgm:ruleLst></dgm:layoutNode></dgm:forEach>`
+	d := ParseDiagram(mustParse(t, diagramData("abcdefghijkl")), mustParse(t, diagramLayout(layout)), nil, nil)
+	// 60 mm tall at 40 points; twelve characters at half an em fit the 100
+	// point width at 16 points, which leaves the node as it is.
+	k := d.LayOut(100*12700, 3000000, charFit).Kids[1]
+	if k.FontSize != 16 || k.H != 2160000 {
+		t.Errorf("node %d EMU tall at %v points, want 2160000 at 16", k.H, k.FontSize)
+	}
+}

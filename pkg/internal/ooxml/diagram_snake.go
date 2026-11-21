@@ -348,10 +348,18 @@ func (e *engine) step() bool {
 // snakeLength returns the length a constraint of a snake sets, in EMU: its
 // factor of the length it refers to (the snake's own box for no
 // refForName), its value in millimetres when it refers to none, its factor
-// of a font size read in millimetres (see [engine.fontLength]); false when
-// what it refers to is not resolved yet.
+// of the size a font starts at read in millimetres (see
+// [engine.startLength]); false when what it refers to is not resolved yet.
+// Office sizes a snake's node from the size the font starts at and scales
+// it with the others, whatever size the text then settles at.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: three default nodes 1.2 of their font size tall: Office
+//     lays them out two a row, 105.3 points tall, 1.2 of 65 mm scaled by
+//     the 0.476 that fits the widths, and sets the text at 43.27 points.
 func (e *engine) snakeLength(c DiagramConstraint, cons []DiagramConstraint, props map[string]map[string]float64) (float64, bool) {
-	if v, _, ok := e.fontLength(c, cons); ok {
+	if v, ok := e.startLength(c, cons); ok {
 		return v, true
 	}
 	if c.RefType == "none" {
