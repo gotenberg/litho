@@ -142,7 +142,7 @@ const (
 // text.
 func newDeco(origin *box, st *css.Style) deco {
 	size := min(max(clamp(st.FontSize), 0), maxFontSize)
-	d := deco{origin: origin, size: size, lines: st.TextDecoration, color: st.TextDecorationColor, style: st.TextDecorationStyle, thick: autoThickness, under: st.TextUnderlinePosition}
+	d := deco{origin: origin, size: size, lines: st.TextDecoration, color: st.DecorationColor(), style: st.TextDecorationStyle, thick: autoThickness, under: st.TextUnderlinePosition}
 	switch t := st.TextDecorationThickness; t.Kind {
 	case css.Points, css.Percent, css.Calc:
 		d.thick = max(resolve(t, size), 0)

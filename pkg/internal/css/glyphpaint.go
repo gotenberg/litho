@@ -218,3 +218,29 @@ func parsePaintOrder(v []token, _ *declCtx) (any, bool) {
 	// markers alone: fill, then stroke, follow it.
 	return false, true
 }
+
+// DecorationColor returns the colour the element's decoration lines are
+// painted in: its text-decoration-color, where the currentcolor keyword
+// takes the stroke colour of text stroked in a colour of its own that is
+// not transparent, else the fill colour of its text. CSS Text Decoration
+// 3, 2.3 resolves currentcolor to color; Chromium paints the lines so on
+// screen and in print alike, and litho follows it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 underlines bold
+//     green text in its red stroke colour, in its orange
+//     -webkit-text-fill-color without a stroke, in red with both, and in
+//     green under a stroke of currentcolor; a text-decoration-color of
+//     blue stays blue under a stroke; screenshot and PDF agree.
+func (s *Style) DecorationColor() Color {
+	if s.currentColor&slotTextDecoration == 0 || s.slotValue(slotTextDecoration).expr != nil {
+		return s.TextDecorationColor
+	}
+	if g := s.GlyphPaint; g != nil && g.StrokeWidth > 0 && g.stroke.set {
+		if c := g.stroke.resolve(s); c.A > 0 {
+			return c
+		}
+	}
+	return s.TextFill()
+}

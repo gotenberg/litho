@@ -109,3 +109,30 @@ func TestFieldSizing_Computes(t *testing.T) {
 		t.Errorf("field-sizing: auto %v, want the declaration dropped", got)
 	}
 }
+
+// TestDecorationColor_FollowsTextPaint holds currentcolor decoration
+// lines to the stroke colour of stroked text, else to the fill colour,
+// and an explicit decoration colour to itself, as Chromium paints them.
+func TestDecorationColor_FollowsTextPaint(t *testing.T) {
+	t.Parallel()
+	red, blue, lime := Color{R: 1, A: 1}, Color{B: 1, A: 1}, Color{G: 1, A: 1}
+	orange := Color{R: 1, G: 165.0 / 255, A: 1}
+	tests := []struct {
+		decls string
+		want  Color
+	}{
+		{"", blue},
+		{"-webkit-text-stroke: 2px red", red},
+		{"-webkit-text-stroke: 2px red; text-decoration-color: lime", lime},
+		{"-webkit-text-fill-color: orange", orange},
+		{"-webkit-text-fill-color: orange; -webkit-text-stroke: 2px red", red},
+		{"-webkit-text-fill-color: orange; -webkit-text-stroke: 2px currentcolor", orange},
+		{"-webkit-text-fill-color: orange; -webkit-text-stroke: 0 red", orange},
+		{"-webkit-text-fill-color: orange; -webkit-text-stroke: 2px transparent", orange},
+	}
+	for _, tt := range tests {
+		if got := styleOf(t, tt.decls).DecorationColor(); got != tt.want {
+			t.Errorf("%q: decoration colour %+v, want %+v", tt.decls, got, tt.want)
+		}
+	}
+}
