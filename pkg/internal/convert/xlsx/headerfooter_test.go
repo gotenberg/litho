@@ -235,33 +235,14 @@ func TestRead_HeaderFooterPictures(t *testing.T) {
 	}
 }
 
-func TestDynamicHeights(t *testing.T) {
-	tests := []struct {
-		name    string
-		header  [3][]sheet.Span
-		top     float64
-		grow    bool
-		spacing float64
-	}{
-		// sc/databar.xlsx: 17.1 points of room (603 hundredths of a
-		// millimetre) less a 10-point line (353) leave 2.5 millimetres.
-		{"one line", [3][]sheet.Span{1: {{Text: "x"}}}, 17.1, true, 250 * 72 / 2540.0},
-		{"a larger font", [3][]sheet.Span{0: {{Text: "x", Font: &sheet.Font{Size: 14}}}}, 17.1, true, (603 - 494) * 72 / 2540.0},
-		{"two lines", [3][]sheet.Span{1: {{Text: "a\nb"}}}, 17.1, false, 0},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			sh := &sheet.Sheet{}
-			sh.Page.HeaderTop = 56.7
-			sh.Page.Margin[css.Top] = 56.7 + tt.top
-			sh.HeaderFooter.Odd.Header = tt.header
-			dynamicHeights(sh, 10)
-			if sh.HeaderFooter.GrowHeader != tt.grow || math.Abs(sh.HeaderFooter.HeaderSpacing-tt.spacing) > 0.01 {
-				t.Errorf("grow %v spacing %.3f, want %v %.3f", sh.HeaderFooter.GrowHeader, sh.HeaderFooter.HeaderSpacing, tt.grow, tt.spacing)
-			}
-			if sh.HeaderFooter.GrowFooter {
-				t.Errorf("a footer without content grows")
-			}
-		})
+// TestRead_HeaderKeepsTheMargins checks that a header and a footer, tall
+// or not, leave the page margins as they are: no dynamic height.
+func TestRead_HeaderKeepsTheMargins(t *testing.T) {
+	t.Parallel()
+	doc, _ := readBytes(t, oneSheet(t, `<sheetData/><pageMargins left="0.7" right="0.7" top="1" bottom="1" header="0.3" footer="0.3"/>`+
+		`<headerFooter><oddHeader>&amp;C&amp;123Big</oddHeader><oddFooter>&amp;CPage &amp;P</oddFooter></headerFooter>`))
+	hf := doc.Sheets[0].HeaderFooter
+	if hf.GrowHeader || hf.GrowFooter || hf.HeaderSpacing != 0 || hf.FooterSpacing != 0 {
+		t.Errorf("header grows %v %v by %v %v, want the margins kept", hf.GrowHeader, hf.GrowFooter, hf.HeaderSpacing, hf.FooterSpacing)
 	}
 }

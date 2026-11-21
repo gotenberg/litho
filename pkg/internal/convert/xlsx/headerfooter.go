@@ -1,12 +1,10 @@
 package xlsx
 
 import (
-	"math"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/convert/sheet"
-	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/intconv"
 	"github.com/gotenberg/litho/pkg/internal/ooxml"
 	"github.com/gotenberg/litho/pkg/internal/warn"
@@ -30,13 +28,21 @@ const maxHeaderRunes = 4096
 // differentFirst give the even and first pages their own texts even when
 // those are empty, which then print nothing; scaleWithDoc is not read.
 // A picture a text places (&G) is not drawn: the header of a printed
-// sheet that holds one is reported.
+// sheet that holds one is reported. However tall the text, the cells keep
+// the page margins, as Excel prints them: the header and footer heights
+// LibreOffice's import makes dynamic (PageSettingsConverter) are not
+// given.
 //
 // # Corpus evidence
 //
 //   - probe, xlsx: a sheet with differentFirst, an odd header and footer
 //     and a first header alone prints, in LibreOffice 26.8.2.2, its first
 //     page with the first header and no footer.
+//   - litho/xlsx headers_footers_offsets: a header at 123 points under a
+//     1-inch top margin and a 0.3-inch header margin; Excel prints the
+//     first cell's text from y 75.12, as under the 11-point header of
+//     headers_footers_codes, and 48 rows on the page, the rows the
+//     margins hold.
 func (r *reader) headerFooter(e *ooxml.Element, printed bool) sheet.HeaderFooter {
 	base := r.normal().Font
 	pictures := false
@@ -448,85 +454,4 @@ func toggleScript(s, kind sheet.Script) sheet.Script {
 		return sheet.Baseline
 	}
 	return kind
-}
-
-// dynamicHeights gives the header and the footer of sh the dynamic
-// heights LibreOffice's import gives them
-// (PageSettingsConverter::convertHeaderFooterData): the space between the
-// header and the cells is the room its margin leaves, less the height of
-// its text as the import estimates it, each line as tall as its largest
-// font size, base for a line without one; a header that leaves no space
-// keeps a fixed height. The footer alike. base, the Normal font's size,
-// is positive, as every font record's is ([reader.fontProps]).
-//
-// # Corpus evidence
-//
-//   - libreoffice/xlsx: sc/databar.xlsx, a top margin of 1.025 inches and a header
-//     margin of 0.7875 holding "&C&A" in Arial 10, prints its cells 1.14
-//     points lower than the margin: the header's 11.17-point line and its
-//     7.09-point spacing need more than the margin's 17.10 points.
-func dynamicHeights(sh *sheet.Sheet, base float64) {
-	hf := &sh.HeaderFooter
-	variants := []sheet.Margins{hf.Odd}
-	if hf.DifferentOddEven {
-		variants = append(variants, hf.Even)
-	}
-	if hf.DifferentFirst {
-		variants = append(variants, hf.First)
-	}
-	estimate := func(footer bool) (float64, bool) {
-		h, any := 0.0, false
-		for _, m := range variants {
-			parts := m.Header
-			if footer {
-				parts = m.Footer
-			}
-			for _, part := range parts {
-				if len(part) > 0 {
-					any = true
-				}
-				h = max(h, textEstimate(part, base))
-			}
-		}
-		return h, any
-	}
-	mm := func(pt float64) float64 { return math.Round(pt * 2540 / 72) }
-	if h, ok := estimate(false); ok {
-		dist := mm(sh.Page.Margin[css.Top]-sh.Page.HeaderTop) - mm(h)
-		hf.GrowHeader, hf.HeaderSpacing = dist >= 0, hmmPt(max(dist, 0))
-	}
-	if h, ok := estimate(true); ok {
-		dist := mm(sh.Page.Margin[css.Bottom]-sh.Page.FooterBottom) - mm(h)
-		hf.GrowFooter, hf.FooterSpacing = dist >= 0, hmmPt(max(dist, 0))
-	}
-}
-
-// textEstimate returns the height LibreOffice's header parser gives a
-// part: the sum of its lines, each the largest font size on it, base for
-// one without text (HeaderFooterParser::getCurrHeight).
-func textEstimate(part []sheet.Span, base float64) float64 {
-	total, line := 0.0, 0.0
-	for _, s := range part {
-		size := base
-		if s.Font != nil && s.Font.Size > 0 {
-			size = s.Font.Size
-		}
-		segs := strings.Split(s.Text, "\n")
-		for i, seg := range segs {
-			if i > 0 {
-				if line == 0 {
-					line = base
-				}
-				total += line
-				line = 0
-			}
-			if seg != "" || s.Field != sheet.FieldNone && s.Field != sheet.FieldRestart {
-				line = max(line, size)
-			}
-		}
-	}
-	if line == 0 {
-		line = base
-	}
-	return total + line
 }
