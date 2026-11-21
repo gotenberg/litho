@@ -265,3 +265,19 @@ func TestDiagramTextSizeLeavesUnresolvedBoxes(t *testing.T) {
 		t.Errorf("size %v autofit %v insets %v %v: the sizing changed a box it cannot resolve", n.FontSize, n.Autofit, n.Insets, n.Inset)
 	}
 }
+
+// TestDiagramTextSizeMarginOfAMargin states a margin that refers to
+// another margin of its node (bMarg refType tMarg): it is that margin,
+// the factor of the size the other one is.
+func TestDiagramTextSizeMarginOfAMargin(t *testing.T) {
+	tied := `<dgm:constrLst><dgm:constr type="primFontSz" for="ch" forName="node" op="equ" val="20"/></dgm:constrLst>`
+	node := `<dgm:constrLst><dgm:constr type="tMarg" refType="primFontSz" fact="0.5"/><dgm:constr type="bMarg" refType="tMarg"/>` +
+		`<dgm:constr type="lMarg"/><dgm:constr type="rMarg"/></dgm:constrLst>`
+	layout := `<dgm:alg type="lin"/><dgm:shape/>` + tied +
+		`<dgm:forEach name="each" axis="ch" ptType="node"><dgm:layoutNode name="node"><dgm:alg type="tx"/><dgm:shape type="rect"/>` + node + `</dgm:layoutNode></dgm:forEach>`
+	d := ParseDiagram(mustParse(t, diagramData("a")), mustParse(t, diagramLayout(layout)), nil, nil)
+	n := d.LayOut(3*914400, 2*914400, charFit).Kids[1]
+	if want := [4]int64{0, 127000, 0, 127000}; n.Insets != want {
+		t.Errorf("insets %v, want %v", n.Insets, want)
+	}
+}
