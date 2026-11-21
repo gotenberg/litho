@@ -74,11 +74,11 @@ var skipped = map[atom.Atom]bool{
 }
 
 // unsupported are the elements whose content is not drawn, with a
-// warning: frames and framesets, and audio. An iframe, and an object or
-// an embed of an HTML document, draw their document ([builder.frame]). A video draws its poster ([builder.video]). Immutable lookup
+// warning: audio. An iframe, a frame, and an object or an embed of an
+// HTML document draw their document ([builder.frame]). A video draws its poster ([builder.video]). Immutable lookup
 // table.
 var unsupported = map[atom.Atom]bool{
-	atom.Audio: true, atom.Frame: true, atom.Frameset: true,
+	atom.Audio: true,
 }
 
 // builder turns the styled DOM into the layout's content tree. It lives
@@ -359,6 +359,13 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 		case atom.Video:
 			return b.video(ctx, n, st), nil
 		case atom.Iframe:
+			return b.frame(n, st), nil
+		case atom.Frame:
+			if p := n.Parent; p == nil || p.DataAtom != atom.Frameset || p.Namespace != "" {
+				// A frame outside a frameset has no child navigable to
+				// show (HTML Standard, 15.6).
+				return nil, nil
+			}
 			return b.frame(n, st), nil
 		case atom.Input, atom.Select, atom.Textarea:
 			return b.control(n, st), nil

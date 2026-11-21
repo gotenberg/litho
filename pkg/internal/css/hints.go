@@ -2,6 +2,8 @@ package css
 
 import (
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -52,6 +54,17 @@ func HTMLHints(n *html.Node) []Declaration {
 	}
 	var h hints
 	switch n.Data {
+	case "frameset":
+		h.frameset(n)
+	case "frame":
+		if p := n.Parent; p != nil && isHTML(p, "frameset") {
+			// A frame fills its cell of the frameset's grid (HTML
+			// Standard, 15.6, step 7); one outside a frameset shows
+			// nothing.
+			h.add("width", "100%")
+			h.add("height", "100%")
+			h.add("background-color", "white")
+		}
 	case "body":
 		h.color(n, "bgcolor", "background-color")
 		h.color(n, "text", "color")
@@ -611,6 +624,125 @@ func nonNegativeInt(s string) (int, bool) {
 		i++
 	}
 	return min(n, maxHintInt), i > start
+}
+
+// frameset lays the frameset element n out as the HTML Standard, 15.6
+// draws it: a box as large as the viewport, or as its cell in an enclosing
+// frameset, cut into a grid by its cols and rows lists of dimensions, the
+// frames and framesets it holds filling the cells in order, with borders
+// between the cells. The grid is CSS Grid's: an absolute dimension is a
+// track of that many pixels, a percentage one of that share of the
+// frameset's size less its borders, as Blink shares it
+// (blink::LayoutFrameSet), and a relative one a flexible track of its
+// weight, a weight of zero being one. A border is as wide as the border
+// attribute, 6 pixels without one as in Blink, gray (#d0d0d0, Blink's
+// fill of a frame border); none where the frameset's frameborder
+// attribute says no.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints a
+//     frameset of cols="40%,60%" over the page area of A4, its two frames
+//     285 and 429 pixels wide either side of a 6 pixel border filled with
+//     #d0d0d0, edged in #aaaaaa and black.
+func (h *hints) frameset(n *html.Node) {
+	border := 6
+	if v, ok := attr(n, "border"); ok {
+		if px, ok := nonNegativeInt(v); ok {
+			border = px
+		}
+	}
+	if v, ok := attr(n, "frameborder"); ok && !framesetBorder(v) {
+		border = 0
+	}
+	h.add("display", "grid")
+	if p := n.Parent; p == nil || !isHTML(p, "frameset") {
+		h.add("height", "100vh")
+	}
+	for _, track := range []struct{ attr, prop string }{{"cols", "grid-template-columns"}, {"rows", "grid-template-rows"}} {
+		v, _ := attr(n, track.attr)
+		h.add(track.prop, frameTracks(v))
+	}
+	if border > 0 {
+		h.add("gap", fmt.Sprintf("%dpx", border))
+		h.add("background-color", "#d0d0d0")
+	}
+}
+
+// framesetBorder reports a frameborder value of a frameset that keeps its
+// borders: one that starts with 1, y or Y (HTML Standard, 15.6, step 8).
+func framesetBorder(v string) bool {
+	return v != "" && (v[0] == '1' || v[0] == 'y' || v[0] == 'Y')
+}
+
+// maxFrameTracks caps the dimensions of a frameset's cols or rows list:
+// 64. Anti-DoS guard, not spec-mandated: each is a grid track and a frame
+// a page lays out, and a frameset cuts its page in a few.
+const maxFrameTracks = 64
+
+// frameTracks returns the grid tracks of a frameset's cols or rows
+// attribute v, parsed with the rules for parsing a list of dimensions
+// (HTML Standard, 2.3.4.6), border pixels apart: one flexible track for
+// an empty list. An absolute dimension is a track of that many pixels and
+// a relative one a flexible track of its weight, a weight of zero being
+// one (15.6, step 2). A percentage is a share of the frameset's size less
+// its borders, as Blink shares it (blink::LayoutFrameSet): a flexible
+// track of the percentage's weight when no relative dimension takes the
+// space left, which the percentages then share as Blink does; else a
+// percentage of the whole size, borders included.
+func frameTracks(v string) string {
+	if strings.TrimSpace(v) == "" {
+		return "1fr"
+	}
+	parts := strings.Split(v, ",")
+	if strings.TrimSpace(parts[len(parts)-1]) == "" {
+		parts = parts[:len(parts)-1]
+	}
+	parts = parts[:min(len(parts), maxFrameTracks)]
+	type dimension struct {
+		num  float64
+		unit byte
+	}
+	dims := make([]dimension, 0, len(parts))
+	relative := false
+	for _, p := range parts {
+		p = strings.Trim(p, "\t\n\f\r ")
+		i := 0
+		for i < len(p) && (p[i] >= '0' && p[i] <= '9' || p[i] == '.') {
+			i++
+		}
+		num, err := strconv.ParseFloat(p[:i], 64)
+		if err != nil || math.IsInf(num, 0) {
+			num = 0
+		}
+		d := dimension{num: min(num, maxHintInt)}
+		if unit := strings.TrimLeft(p[i:], " "); unit != "" && (unit[0] == '%' || unit[0] == '*') {
+			d.unit = unit[0]
+		}
+		if d.unit == '*' {
+			relative = true
+			if d.num == 0 {
+				d.num = 1
+			}
+		}
+		dims = append(dims, d)
+	}
+	tracks := make([]string, 0, len(dims))
+	for _, d := range dims {
+		n := strconv.FormatFloat(d.num, 'f', -1, 64)
+		switch {
+		case d.unit == '*', d.unit == '%' && !relative:
+			tracks = append(tracks, n+"fr")
+		case d.unit == '%':
+			tracks = append(tracks, n+"%")
+		default:
+			tracks = append(tracks, strconv.FormatFloat(math.Trunc(d.num), 'f', -1, 64)+"px")
+		}
+	}
+	if len(tracks) == 0 {
+		return "1fr"
+	}
+	return strings.Join(tracks, " ")
 }
 
 // frameBorderless reports an iframe whose frameborder attribute, parsed

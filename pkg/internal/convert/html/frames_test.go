@@ -467,3 +467,33 @@ func TestUnwrapViewport(t *testing.T) {
 		})
 	}
 }
+
+// A frameset prints its frames side by side in the page area (HTML
+// Standard, 15.6); a frame outside a frameset prints nothing, and the
+// parser drops one in a body.
+func TestFrame_Frameset(t *testing.T) {
+	fsys := frameDocs(map[string]string{"left.html": "<p>Lefttext</p>", "right.html": "<p>Righttext</p>"})
+	doc := convertDoc(t, `<!doctype html><html><frameset cols="40%,60%"><frame src="left.html"><frame src="right.html" srcdoc="<p>Srcdoctext"></frameset></html>`, Options{Resources: fsys})
+	if len(doc.Pages) != 1 {
+		t.Fatalf("%d pages, want 1", len(doc.Pages))
+	}
+	var left, right placed
+	for _, r := range pageTexts(doc.Pages[0]) {
+		switch {
+		case strings.Contains(r.text, "Lefttext"):
+			left = r
+		case strings.Contains(r.text, "Righttext"):
+			right = r
+		}
+	}
+	if left.text == "" || right.text == "" || !approx(left.y, right.y, 0.01) || right.x <= left.x+100 {
+		t.Errorf("left %+v, right %+v: want them side by side", left, right)
+	}
+	if got := docText(doc); strings.Contains(got, "Srcdoctext") {
+		t.Errorf("text %q: a frame's srcdoc counts", got)
+	}
+	doc = convertDoc(t, `<!doctype html><p>Outertext</p><frame src="left.html">`, Options{Resources: fsys})
+	if got := docText(doc); strings.Contains(got, "Lefttext") {
+		t.Errorf("text %q: a frame in a body counts", got)
+	}
+}

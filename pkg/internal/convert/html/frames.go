@@ -178,11 +178,13 @@ type frameRequest struct {
 	depth             int
 }
 
-// frame builds the replaced box of an iframe element n styled st (HTML
-// Standard, 4.8.5 and 15.4.1): a box of no natural size, 300 by 150 CSS
-// pixels unless styled (CSS 2.1, 10.3.2 and 10.6.2), whose content is the
-// document of its srcdoc attribute, else of the URL its src attribute
-// names, laid out at the box's content size and clipped to it.
+// frame builds the replaced box of an iframe or a frame element n styled
+// st (HTML Standard, 4.8.5 and 15.4.1): a box of no natural size, 300 by
+// 150 CSS pixels unless styled (CSS 2.1, 10.3.2 and 10.6.2), whose
+// content is the document of an iframe's srcdoc attribute, else of the
+// URL its src attribute names, laid out at the box's content size and
+// clipped to it. A frame fills its cell of its frameset's grid
+// (css.HTMLHints).
 //
 // The document is read through the conversion's resources, under their
 // bounds, as a stylesheet or a picture is; parsed, styled and laid out as
@@ -333,16 +335,17 @@ func (b *builder) newFrameRequest(n *dom.Node) *frameRequest {
 }
 
 // frameRequest returns what the frame element n asks for: the document
-// of its srcdoc attribute, else of its src one (HTML Standard, 4.8.5);
-// nil for none, a src that is empty, about:blank or a javascript: URL,
-// whose document is empty, or a conversion that loads no frames.
+// of an iframe's srcdoc attribute, else of its src one (HTML Standard,
+// 4.8.5; a frame element has no srcdoc); nil for none, a src that is
+// empty, about:blank or a javascript: URL, whose document is empty, or a
+// conversion that loads no frames.
 func (b *builder) frameRequest(n *dom.Node) *frameRequest {
 	if b.frames == nil {
 		b.warnOnce(warn.ContentUnsupported, warn.Omitted, "iframe", "the content of <iframe> is not drawn in a header or a footer")
 		return nil
 	}
 	req := b.newFrameRequest(n)
-	if doc, ok := attr(n, "srcdoc"); ok {
+	if doc, ok := attr(n, "srcdoc"); ok && n.DataAtom == atom.Iframe {
 		req.srcdoc, req.doc, req.shown = true, doc, "a srcdoc"
 		return req
 	}

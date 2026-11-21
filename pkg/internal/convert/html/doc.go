@@ -251,9 +251,13 @@
 //     documents that frame it, and the documents the frames lay out are
 //     held together to the input cap; past these, or when the document
 //     does not load or is not HTML, the box shows nothing, with a warning.
-//   - <frame>, <frameset> and <audio> are left out with a warning; an
-//     <object> of anything else and <canvas> draw their fallback content,
-//     and an <embed> of anything else is left out with a warning. A
+//   - A <frameset> is a grid as large as the page area, cut by its cols
+//     and rows, whose <frame> children draw their documents as an iframe
+//     does, without a border of their own, between the frameset's gray
+//     borders (HTML Standard, 15.6).
+//   - <audio> is left out with a warning; an <object> of anything else
+//     and <canvas> draw their fallback content, and an <embed> of
+//     anything else is left out with a warning. A
 //     <video> is a replaced box
 //     showing its poster, sized by it, or 300 by 150 CSS pixels showing
 //     nothing without one; its frames and controls are not drawn.

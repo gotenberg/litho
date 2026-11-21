@@ -323,3 +323,34 @@ func TestAuthor_RefusesInternalValues(t *testing.T) {
 		}
 	}
 }
+
+// A frameset is a grid of its cols and rows lists (HTML Standard, 15.6),
+// gray borders apart, as tall as the viewport; its frames fill their
+// cells.
+func TestHTMLHints_Frameset(t *testing.T) {
+	t.Parallel()
+	tests := []struct{ in, want string }{
+		{"", "1fr"},
+		{"40%,60%", "40fr 60fr"},
+		{"100, *, 2*", "100px 1fr 2fr"},
+		{"25%, *", "25% 1fr"},
+		{"0*,abc,7.9", "1fr 0px 7px"},
+		{"10%,", "10fr"},
+	}
+	for _, tt := range tests {
+		if got := frameTracks(tt.in); got != tt.want {
+			t.Errorf("frameTracks(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+	c := compute(t, `<html><frameset id=fs cols="40%,60%" rows="*"><frame id=f1 src=a><frameset id=inner frameborder=no><frame src=b></frameset></frameset></html>`, ``)
+	fs, inner, f1 := c.of("fs"), c.of("inner"), c.of("f1")
+	if fs.Display != Grid || fs.ColumnGap != pts(4.5) || !colorEq(fs.BackgroundColor, rgb(0xd0, 0xd0, 0xd0)) || fs.Height.Kind == Auto {
+		t.Errorf("frameset = display %v, gap %v, background %v, height %+v", fs.Display, fs.ColumnGap, fs.BackgroundColor, fs.Height)
+	}
+	if inner.Display != Grid || inner.ColumnGap.Value != 0 || inner.Height.Kind != Auto {
+		t.Errorf("inner frameset = display %v, gap %v, height %+v", inner.Display, inner.ColumnGap, inner.Height)
+	}
+	if f1.Width != pct(1) || f1.Height != pct(1) {
+		t.Errorf("frame = %+v by %+v", f1.Width, f1.Height)
+	}
+}
