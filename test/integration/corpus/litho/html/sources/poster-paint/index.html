@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Summer Night Market</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 15mm;
+      }
+      body {
+        margin: 0;
+        font-family: "Liberation Sans", sans-serif;
+        color: #1d2b3a;
+      }
+      .hero {
+        height: 330px;
+        background: url(hills.png) center / cover;
+        padding: 24px 28px;
+        box-sizing: border-box;
+      }
+      .hero h1 {
+        margin: 0;
+        font-size: 72px;
+        line-height: 1;
+        color: #fff6d8;
+        -webkit-text-stroke: 4px #1d2b3a;
+        paint-order: stroke fill;
+      }
+      .hero .hollow {
+        margin: 6px 0 0;
+        font: bold 54px "Liberation Serif", serif;
+        -webkit-text-fill-color: transparent;
+        -webkit-text-stroke: 2px #fff6d8;
+      }
+      .hero .date {
+        margin: 18px 0 0;
+        font-size: 26px;
+        font-weight: bold;
+        color: #ffd166;
+        -webkit-text-stroke: 1px #7a3e00;
+        text-decoration: underline 3px;
+        text-underline-offset: 6px;
+      }
+      .row {
+        display: flex;
+        gap: 28px;
+        margin-top: 26px;
+      }
+      .dial {
+        position: relative;
+        width: 300px;
+        height: 300px;
+        flex: none;
+        border-radius: 50%;
+        background: radial-gradient(circle, #fff 0 55%, #e8eef5 56%);
+        border: 3px solid #1d2b3a;
+        box-sizing: border-box;
+      }
+      .dial span {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 64px;
+        height: 22px;
+        font-size: 13px;
+        line-height: 22px;
+        text-align: center;
+        border-radius: 11px;
+        background: #1d2b3a;
+        color: #fff;
+        offset-path: circle(120px at 147px 147px);
+        offset-rotate: 0deg;
+      }
+      .dial span:nth-child(1) { offset-distance: 75%; }
+      .dial span:nth-child(2) { offset-distance: 87.5%; }
+      .dial span:nth-child(3) { offset-distance: 0%; }
+      .dial span:nth-child(4) { offset-distance: 12.5%; }
+      .dial span:nth-child(5) { offset-distance: 25%; }
+      .dial span:nth-child(6) { offset-distance: 37.5%; }
+      .dial span:nth-child(7) { offset-distance: 50%; }
+      .dial span:nth-child(8) { offset-distance: 62.5%; }
+      .dial .hand {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #e4572e;
+        offset-path: ray(60deg closest-side at 147px 147px);
+        offset-distance: 70%;
+      }
+      form {
+        flex: 1;
+        font-size: 15px;
+      }
+      form h2 {
+        margin: 0 0 12px;
+        font-size: 22px;
+      }
+      form p {
+        margin: 0 0 12px;
+      }
+      label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 4px;
+      }
+      input,
+      textarea {
+        field-sizing: content;
+        font: inherit;
+        color: #1d2b3a;
+        border: 1px solid #1d2b3a;
+        border-radius: 3px;
+        padding: 3px 6px;
+        background: #fff;
+        min-width: 4em;
+        max-width: 300px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="hero">
+      <h1>Night Market</h1>
+      <p class="hollow">by the river</p>
+      <p class="date">Saturday, 18 July, from 7 pm</p>
+    </div>
+    <div class="row">
+      <div class="dial" aria-label="Opening hours">
+        <span>7 pm</span>
+        <span>8 pm</span>
+        <span>9 pm</span>
+        <span>10 pm</span>
+        <span>11 pm</span>
+        <span>midnight</span>
+        <span>1 am</span>
+        <span>2 am</span>
+        <i class="hand"></i>
+      </div>
+      <form>
+        <h2>Stall request</h2>
+        <p><label for="name">Name</label><input id="name" value="Ada Okafor" /></p>
+        <p><label for="goods">Goods</label><input id="goods" value="Hand-thrown bowls and plates" /></p>
+        <p>
+          <label for="notes">Notes</label><textarea id="notes">Needs one table near the water.
+Arrives at 5 pm.</textarea>
+        </p>
+      </form>
+    </div>
+  </body>
+</html>
