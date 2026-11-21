@@ -184,11 +184,21 @@ func TestWithSinglePage_TallPageUnderTheProfiles(t *testing.T) {
 		unit    float64
 		apply   func(context.Context, *Writer) (*models.RemediationReport, error)
 	}{
-		{"PDF/A-1b", "1.4", 1, func(ctx context.Context, w *Writer) (*models.RemediationReport, error) { return w.RemediatePDFA(ctx, models.PDFA1b) }},
-		{"PDF/A-2b", "1.7", 2, func(ctx context.Context, w *Writer) (*models.RemediationReport, error) { return w.RemediatePDFA(ctx, models.PDFA2b) }},
-		{"PDF/A-3b", "1.7", 2, func(ctx context.Context, w *Writer) (*models.RemediationReport, error) { return w.RemediatePDFA(ctx, models.PDFA3b) }},
-		{"PDF/A-4", "2.0", 1, func(ctx context.Context, w *Writer) (*models.RemediationReport, error) { return w.RemediatePDFA(ctx, models.PDFA4) }},
-		{"PDF/UA-1", "1.7", 1, func(ctx context.Context, w *Writer) (*models.RemediationReport, error) { return w.RemediatePDFUA(ctx, models.PDFUA1) }},
+		{"PDF/A-1b", "1.4", 1, func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
+			return w.RemediatePDFA(ctx, models.PDFA1b)
+		}},
+		{"PDF/A-2b", "1.7", 2, func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
+			return w.RemediatePDFA(ctx, models.PDFA2b)
+		}},
+		{"PDF/A-3b", "1.7", 2, func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
+			return w.RemediatePDFA(ctx, models.PDFA3b)
+		}},
+		{"PDF/A-4", "2.0", 1, func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
+			return w.RemediatePDFA(ctx, models.PDFA4)
+		}},
+		{"PDF/UA-1", "1.7", 1, func(ctx context.Context, w *Writer) (*models.RemediationReport, error) {
+			return w.RemediatePDFUA(ctx, models.PDFUA1)
+		}},
 	} {
 		var base, out bytes.Buffer
 		if _, err := FromHTML(strings.NewReader(src), fonts, WithSinglePage(true), WithConvertVersion(tc.version)).WriteTo(ctx, &base); err != nil {
