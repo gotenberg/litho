@@ -281,11 +281,14 @@ func (r *compositeRun) lay(place bool) {
 		w, h := s.W, s.H
 		var x, y int64
 		if p, ok := props[k.Name]; ok {
+			// A length is cut to the box before it places the kid; the far
+			// edges that bound a font size take it whole.
+			rw, rh := w, h
 			if v, ok := p["w"]; ok {
-				w = v
+				w, rw = min(v, s.W), v
 			}
 			if v, ok := p["h"]; ok {
-				h = v
+				h, rh = min(v, s.H), v
 			}
 			if v, ok := p["l"]; ok {
 				x = v
@@ -331,8 +334,8 @@ func (r *compositeRun) lay(place bool) {
 					y += v
 				}
 			}
-			r.right = max(r.right, float64(x+w))
-			r.bottom = max(r.bottom, float64(y+h))
+			r.right = max(r.right, float64(x+max(w, rw)))
+			r.bottom = max(r.bottom, float64(y+max(h, rh)))
 			// The box a kid takes is what a later kid's constraints refer
 			// to, its edges the constraints left unstated included.
 			for prop, v := range map[string]int64{"l": x, "t": y, "w": w, "h": h, "r": x + w, "b": y + h, "ctrX": x + w/2, "ctrY": y + h/2} {
@@ -340,7 +343,6 @@ func (r *compositeRun) lay(place bool) {
 					p[prop] = v
 				}
 			}
-			w, h = min(w, s.W), min(h, s.H)
 			x += xOff
 			w = min(w, s.W-x)
 			h = min(h, s.H-y)

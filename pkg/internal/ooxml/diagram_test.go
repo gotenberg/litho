@@ -537,3 +537,17 @@ func TestDiagramCompositeRefersToPlacedBox(t *testing.T) {
 		t.Errorf("boxes\n got %q\nwant %q", got, want)
 	}
 }
+
+// TestDiagramCompositeCutsBeforePlacing places a composite kid taller than
+// the composite by its centre: its height is cut to the composite's first,
+// as pyramid1's level of 500 mm is.
+func TestDiagramCompositeCutsBeforePlacing(t *testing.T) {
+	layout := `<dgm:alg type="composite"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="w" for="ch" forName="pict" refType="w"/><dgm:constr type="h" for="ch" forName="pict" val="500"/>` +
+		`<dgm:constr type="ctrY" for="ch" forName="pict" val="1"/></dgm:constrLst>` +
+		`<dgm:layoutNode name="pict"><dgm:shape type="rect"/></dgm:layoutNode>`
+	d := ParseDiagram(mustParse(t, withPresNames(diagramData("a"), 1, "pict")), mustParse(t, diagramLayout(layout)), nil, nil)
+	if got, want := boxes(d.LayOut(100000, 100000, nil))[1], "pict rect 0,-14000 100000x100000"; got != want {
+		t.Errorf("box %q, want %q", got, want)
+	}
+}
