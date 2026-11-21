@@ -583,3 +583,26 @@ func TestDiagramShapesFollowTheSettledSize(t *testing.T) {
 		t.Errorf("text at %v points, kids %d and %d EMU tall, want 16, 460800 and 702720", pict.FontSize, pict.H, label.H)
 	}
 }
+
+// TestDiagramShapesKeepTheFirstSizeWhenTextFalls lays out a composite
+// whose kids follow the size its first text settles at, where that leaves
+// the second text less room than it had: the second text would settle
+// lower, so the first layout stands.
+func TestDiagramShapesKeepTheFirstSizeWhenTextFalls(t *testing.T) {
+	layout := `<dgm:alg type="composite"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="primFontSz" for="ch" forName="pict" val="40"/><dgm:constr type="primFontSz" for="ch" forName="label" val="20"/>` +
+		`<dgm:constr type="w" for="ch" forName="pict" refType="w"/><dgm:constr type="w" for="ch" forName="label" refType="w"/>` +
+		`<dgm:constr type="h" for="ch" forName="pict" refType="primFontSz" refFor="ch" refForName="pict" fact="0.8"/>` +
+		`<dgm:constr type="h" for="ch" forName="label" refType="primFontSz" refFor="ch" refForName="pict" fact="0.2"/>` +
+		`<dgm:constr type="t" for="ch" forName="pict"/><dgm:constr type="t" for="ch" forName="label" refType="h" refFor="ch" refForName="pict"/></dgm:constrLst>` +
+		`<dgm:layoutNode name="pict"><dgm:alg type="tx"/><dgm:shape type="rect"/>` + noMargins + `<dgm:ruleLst><dgm:rule type="primFontSz" val="5"/></dgm:ruleLst></dgm:layoutNode>` +
+		`<dgm:layoutNode name="label"><dgm:alg type="tx"/><dgm:shape type="rect"/>` + noMargins + `<dgm:ruleLst><dgm:rule type="primFontSz" val="5"/></dgm:ruleLst></dgm:layoutNode>`
+	d := ParseDiagram(mustParse(t, withPresNames(diagramData("abcdefghijkl"), 1, "pict", "label")), mustParse(t, diagramLayout(layout)), nil, nil)
+	// Both texts settle at 16 points in kids sized at 40. Kids sized at 16
+	// leave the label 9.1 points, where its text would fall to 7.
+	root := d.LayOut(100*12700, 3000000, charFit)
+	pict, label := root.Kids[1], root.Kids[2]
+	if pict.H != 1152000 || label.H != 288000 || label.FontSize != 16 {
+		t.Errorf("kids %d and %d EMU tall, the label at %v points, want 1152000, 288000 and 16", pict.H, label.H, label.FontSize)
+	}
+}

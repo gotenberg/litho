@@ -191,13 +191,15 @@ type walker struct {
 func (d *Diagram) LayOut(w, h int64, fit DiagramTextFit) *DiagramShape {
 	// Shapes sized from a font size take the size the text is set at: when
 	// the text settles under the size the shapes were sized at, the layout
-	// runs again from that size.
+	// runs again from that size, and is kept when every text of the
+	// diagram holds the size it had in the shapes that follow. Text that
+	// settles lower does not fit shapes that follow it, so the first
+	// layout stands.
 	caps := map[string]float64{}
-	var root *DiagramShape
-	for range maxFontLayouts {
-		var found map[string]float64
-		var used map[string]float64
-		root, found, used = d.layOut(w, h, fit, caps)
+	first, found, used := d.layOut(w, h, fit, caps)
+	settled := found
+	root := first
+	for i := 1; i < maxFontLayouts; i++ {
 		again := false
 		for _, key := range sortedKeys(used) {
 			if v, ok := found[key]; ok && v > 0 && v < used[key] {
@@ -206,17 +208,38 @@ func (d *Diagram) LayOut(w, h int64, fit DiagramTextFit) *DiagramShape {
 			}
 		}
 		if !again {
-			break
+			return root
+		}
+		root, found, used = d.layOut(w, h, fit, caps)
+		if !holds(settled, found) {
+			return first
+		}
+	}
+	for _, key := range sortedKeys(used) {
+		if v, ok := found[key]; ok && v > 0 && v < used[key] {
+			return first
 		}
 	}
 	return root
 }
 
+// holds reports whether the text of a later layout settled at no size
+// under the one the first layout set it at: shapes that follow a size
+// leave every text of the diagram the room it had.
+func holds(first, later map[string]float64) bool {
+	for _, key := range sortedKeys(first) {
+		if v, ok := later[key]; ok && v < first[key] {
+			return false
+		}
+	}
+	return true
+}
+
 // maxFontLayouts caps the layouts of one diagram. Anti-DoS guard, not
 // spec-mandated: a layout runs again only when text settles under the
-// size its shapes were sized at, and the shapes it sizes from that size
-// hold the text again; two layouts settle the diagrams PowerPoint offers,
-// a third covers a size a bound moves once more.
+// size its shapes were sized at; two layouts settle the diagrams
+// PowerPoint offers whose text holds in the shapes that follow it, a
+// third covers a size a bound moves once more.
 const maxFontLayouts = 3
 
 // layOut runs one layout of the diagram with the font sizes caps bounds,
