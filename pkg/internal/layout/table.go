@@ -865,11 +865,23 @@ func (e *engine) layoutTableOnce(t *box, cb cblock, y float64) {
 	if nr > 0 {
 		r0 := td.rows[0].box
 		td.baseline = firstRowBaseline(td) - t.y
-		if hasBase[0] {
+		if hasBase[0] && lineBaselined(td, 0) {
 			td.baseline = r0.y + base[0] - t.y
 		}
 	}
 	e.reach(t.y + t.borderH())
+}
+
+// lineBaselined reports a row r of td holding a cell aligned on the
+// baseline of a line box or a row of its own, not one the bottom of its
+// content stands for.
+func lineBaselined(td *tableData, r int) bool {
+	for _, c := range td.cells {
+		if cd := c.cell; cd.row == r && cd.hasBase && !cd.synthBase && vaKind(c.st) == css.Baseline {
+			return true
+		}
+	}
+	return false
 }
 
 // firstRowBaseline returns the baseline of the first row of td when no
@@ -963,10 +975,41 @@ func (e *engine) layoutCell(td *tableData, c *box, cbw, fixedH float64) {
 	}
 	c.h = h
 	cd.natH = c.borderH()
-	cd.base, cd.hasBase = 0, false
+	cd.base, cd.hasBase, cd.synthBase = 0, false, false
 	if by, ok := firstBaseline(c); ok {
 		cd.base, cd.hasBase = by-c.y, true
+	} else if inFlowContent(c) {
+		// A cell without a line box or a row has the bottom of its
+		// content edge for baseline (CSS 2.1, 17.5.3).
+		cd.base, cd.hasBase, cd.synthBase = end-c.y, true, true
 	}
+}
+
+// inFlowContent reports a box c holding a block-level box in its flow,
+// neither absolutely positioned nor floated, an anonymous one counting by
+// what it holds: an inline that makes no line box is collapsed white
+// space. An empty cell takes no part in its row's baseline alignment, as
+// Chromium aligns it.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 aligns a cell
+//     holding a 40px block on the bottom of a 100px block in the next
+//     cell, and a row of an empty cell of 50px bottom padding beside
+//     that 40px cell is 50px tall.
+//   - wpt: css/css-tables/table-cell-baseline-static-position, a cell
+//     holding white space and an absolutely positioned box, which takes
+//     no part.
+func inFlowContent(c *box) bool {
+	for _, k := range c.kids {
+		if k.abs || k.float != css.FloatNone || k.kind == kindText || k.kind == kindInline || k.kind == kindBreak {
+			continue
+		}
+		if !k.anon || inFlowContent(k) {
+			return true
+		}
+	}
+	return false
 }
 
 // tableHeight returns the content height the table box t asks for, a

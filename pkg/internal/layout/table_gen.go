@@ -153,11 +153,13 @@ type cellData struct {
 	min, max float64
 	measured bool
 	// natH is the border box height of the content, base the baseline
-	// offset from the border box top, at the tentative layout. A cell
-	// without a line box has no baseline: it takes no part in its row's
-	// and aligns at the top, as browsers do.
-	natH, base float64
-	hasBase    bool
+	// offset from the border box top, at the tentative layout. An empty
+	// cell has no baseline: it takes no part in its row's and aligns at
+	// the top, as browsers do. synthBase reports a baseline that is the
+	// bottom of the content, a cell's without a line box, which gives no
+	// table its baseline.
+	natH, base         float64
+	hasBase, synthBase bool
 	// alignH is the border box height of the content alone, without the
 	// minimum the cell's height property sets: what vertical-align
 	// places in the rows the cell spans.
