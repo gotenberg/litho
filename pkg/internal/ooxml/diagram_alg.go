@@ -904,7 +904,11 @@ func (e *engine) fontLength(c DiagramConstraint, cons []DiagramConstraint) (floa
 	if start <= 0 {
 		return 0, "", false
 	}
-	return float64(float64(c.Factor*start) * 36000), fontKey(c.RefType, c.RefForName), true
+	key := fontKey(c.RefType, c.RefForName)
+	if old, ok := e.fontUsed[key]; !ok || start < old {
+		e.fontUsed[key] = start
+	}
+	return float64(float64(c.Factor*start) * 36000), key, true
 }
 
 // fontLayout is what the font-sized lengths of a linear layout are: the

@@ -1,6 +1,7 @@
 package ooxml
 
 import (
+	"maps"
 	"math"
 	"sort"
 	"strings"
@@ -141,6 +142,9 @@ type engine struct {
 	// at, by constraint type and node name, where the shapes a linear
 	// layout sizes from that size leave it no more room.
 	fontCaps map[string]float64
+	// fontUsed is the size, by font size key, the lengths a layout sized
+	// from a font size were sized at.
+	fontUsed map[string]float64
 	// lists caches the constraints and rules of a layout node for a point.
 	lists    map[nodePoint]nodeLists
 	root     *DiagramShape
@@ -182,21 +186,56 @@ type walker struct {
 // constraints and rules give it (see [DiagramTextFit]); fit measures it,
 // and a nil fit holds every text at its starting size.
 func (d *Diagram) LayOut(w, h int64, fit DiagramTextFit) *DiagramShape {
+	// Shapes sized from a font size take the size the text is set at: when
+	// the text settles under the size the shapes were sized at, the layout
+	// runs again from that size.
+	caps := map[string]float64{}
+	var root *DiagramShape
+	for range maxFontLayouts {
+		var found map[string]float64
+		var used map[string]float64
+		root, found, used = d.layOut(w, h, fit, caps)
+		again := false
+		for _, key := range sortedKeys(used) {
+			if v, ok := found[key]; ok && v > 0 && v < used[key] {
+				caps[key] = v
+				again = true
+			}
+		}
+		if !again {
+			break
+		}
+	}
+	return root
+}
+
+// maxFontLayouts caps the layouts of one diagram. Anti-DoS guard, not
+// spec-mandated: a layout runs again only when text settles under the
+// size its shapes were sized at, and the shapes it sizes from that size
+// hold the text again; two layouts settle the diagrams PowerPoint offers,
+// a third covers a size a bound moves once more.
+const maxFontLayouts = 3
+
+// layOut runs one layout of the diagram with the font sizes caps bounds,
+// and returns its group, the size the text of each font size key settled
+// at and the size the shapes sized from each key were sized at.
+func (d *Diagram) layOut(w, h int64, fit DiagramTextFit, caps map[string]float64) (*DiagramShape, map[string]float64, map[string]float64) {
 	rootPt := d.root()
 	root := &DiagramShape{Group: true, W: w, H: h}
-	e := &engine{d: d, presShp: map[*DiagramPoint]*DiagramShape{}, shpPres: map[*DiagramShape]*DiagramPoint{}, ptIndex: map[*DiagramPoint]int{}, tmpls: map[*DiagramAtom]*shapeTemplate{}, children: map[[2]string]bool{}, fontCaps: map[string]float64{}, lists: map[nodePoint]nodeLists{}, root: root, rootAtom: d.Layout}
+	e := &engine{d: d, presShp: map[*DiagramPoint]*DiagramShape{}, shpPres: map[*DiagramShape]*DiagramPoint{}, ptIndex: map[*DiagramPoint]int{}, tmpls: map[*DiagramAtom]*shapeTemplate{}, children: map[[2]string]bool{}, fontCaps: maps.Clone(caps), fontUsed: map[string]float64{}, lists: map[nodePoint]nodeLists{}, root: root, rootAtom: d.Layout}
 	for _, c := range d.Connections {
 		e.children[[2]string{c.Src, c.Dest}] = true
 	}
 	for i, p := range d.Points {
 		e.ptIndex[p] = i
 	}
+	var found map[string]float64
 	if d.Layout != nil && rootPt != nil {
 		c := &walker{e: e, m: modeCreate, cur: rootPt, parent: root}
 		c.visit(d.Layout)
 		l := &walker{e: e, m: modeLayout, cur: rootPt}
 		l.visit(d.Layout)
-		e.sizeText(fit)
+		found = e.sizeText(fit)
 		sortByZOrder(root, 0)
 		removeEmptyGroups(root, 0)
 		shareLines(root, 0)
@@ -205,7 +244,7 @@ func (d *Diagram) LayOut(w, h int64, fit DiagramTextFit) *DiagramShape {
 		bg := &DiagramShape{Name: "background", W: w, H: h, tmpl: &shapeTemplate{preset: "rect"}, FillSpPr: d.Background, LineSpPr: d.Whole}
 		root.Kids = append([]*DiagramShape{bg}, root.Kids...)
 	}
-	return root
+	return root, found, e.fontUsed
 }
 
 // fillOrLine reports an element holding a DrawingML fill or line.

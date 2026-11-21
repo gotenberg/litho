@@ -190,12 +190,12 @@ type nodeLists struct {
 //     gives.
 //   - libreoffice/pptx: n819614's 56 orgChart1 nodes, formatted by hand
 //     (custT) at 7 points, are saved at 7 points.
-func (e *engine) sizeText(fit DiagramTextFit) {
+func (e *engine) sizeText(fit DiagramTextFit) map[string]float64 {
 	z := &sizer{e: e, fit: fit, members: map[*DiagramShape][]member{}}
 	var texts []*DiagramShape
 	collectTexts(e.root, 0, &texts)
 	if len(texts) == 0 {
-		return
+		return nil
 	}
 	for i, s := range texts {
 		depth := 1
@@ -215,6 +215,19 @@ func (e *engine) sizeText(fit DiagramTextFit) {
 	}
 	z.tie()
 	z.solve()
+	// The size each font size key settled at: the smallest of the text
+	// shapes of its kind and name.
+	found := map[string]float64{}
+	for _, t := range z.sizes {
+		if t.size <= 0 || t.fixed || t.unresolved {
+			continue
+		}
+		key := fontKey(t.kind, t.s.Name)
+		if v, ok := found[key]; !ok || t.size < v {
+			found[key] = t.size
+		}
+	}
+	return found
 }
 
 // step counts one step of the sizing against the layout's steps and

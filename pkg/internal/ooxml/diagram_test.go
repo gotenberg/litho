@@ -551,3 +551,35 @@ func TestDiagramCompositeCutsBeforePlacing(t *testing.T) {
 		t.Errorf("box %q, want %q", got, want)
 	}
 }
+
+// TestDiagramShapesFollowTheSettledSize lays out a composite whose kids are
+// sized from a font size that the text then settles under: the layout runs
+// again and the kids take the size the text settled at, as hList1's parTx
+// and desTx are as tall as Office's text makes them.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: hList1 in a 480 by 400 point frame, room for 69.9
+//     points: Office sets the text at 51.19 points, the desTx 176.4 points
+//     tall, 1.22 of 51.19 mm, and the parTx at its bound, 0.4 of its width.
+//   - libreoffice/pptx: smartart-dir's hList1, its text at 31.01 points in
+//     Office's page, with a parTx 70.56 and a desTx 107.28 points tall, 0.8
+//     and 1.22 of 31.01 mm.
+func TestDiagramShapesFollowTheSettledSize(t *testing.T) {
+	layout := `<dgm:alg type="composite"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="primFontSz" for="ch" forName="pict" val="40"/>` +
+		`<dgm:constr type="w" for="ch" forName="pict" refType="w"/><dgm:constr type="w" for="ch" forName="label" refType="w"/>` +
+		`<dgm:constr type="h" for="ch" forName="pict" refType="primFontSz" refFor="ch" refForName="pict" fact="0.8"/>` +
+		`<dgm:constr type="h" for="ch" forName="label" refType="primFontSz" refFor="ch" refForName="pict" fact="1.22"/>` +
+		`<dgm:constr type="t" for="ch" forName="pict"/><dgm:constr type="t" for="ch" forName="label" refType="h" refFor="ch" refForName="pict"/></dgm:constrLst>` +
+		`<dgm:layoutNode name="pict"><dgm:alg type="tx"/><dgm:shape type="rect"/>` + noMargins + `<dgm:ruleLst><dgm:rule type="primFontSz" val="5"/></dgm:ruleLst></dgm:layoutNode>` +
+		`<dgm:layoutNode name="label"><dgm:shape type="ellipse"/></dgm:layoutNode>`
+	d := ParseDiagram(mustParse(t, withPresNames(diagramData("abcdefghijkl"), 1, "pict", "label")), mustParse(t, diagramLayout(layout)), nil, nil)
+	// Twelve characters at half an em fit 100 points at 16 points: the kids
+	// are then 0.8 and 1.22 of 16 mm tall.
+	root := d.LayOut(100*12700, 3000000, charFit)
+	pict, label := root.Kids[1], root.Kids[2]
+	if pict.FontSize != 16 || pict.H != 460800 || label.H != 702720 {
+		t.Errorf("text at %v points, kids %d and %d EMU tall, want 16, 460800 and 702720", pict.FontSize, pict.H, label.H)
+	}
+}
