@@ -352,9 +352,10 @@ func (r *compositeRun) apply(c DiagramConstraint, props layoutProps) {
 }
 
 // applyConstraint applies one constraint to the layout properties: its
-// reference property times its factor, the right or bottom edge inferred
-// from the left or top edge and the length, else its value in millimetres
-// (points for a font size reference).
+// reference property times its factor, an edge, centre or length inferred
+// from the others the reference states (see [edge]), else its value in
+// millimetres (points for a font size reference); a reference to an edge
+// or length not known sets nothing.
 func applyConstraint(c DiagramConstraint, props layoutProps) {
 	if c.ForName == "" {
 		return
@@ -367,24 +368,77 @@ func applyConstraint(c DiagramConstraint, props layoutProps) {
 		props.set(c.ForName, c.Type, trunc(float64(v)*c.Factor))
 		return
 	}
-	// A far edge no constraint states is the near edge plus the length
-	// (21.4.7.21 ST_ConstraintType r "right", b "bottom").
-	for _, e := range [][3]string{{"r", "l", "w"}, {"b", "t", "h"}} {
-		if c.RefType != e[0] {
-			continue
-		}
-		near, okN := ref[e[1]]
-		length, okL := ref[e[2]]
-		if okN && okL {
-			props.set(c.ForName, c.Type, trunc(float64(near+length)*c.Factor))
-			return
-		}
+	if v, ok := edge(ref, c.RefType); ok {
+		props.set(c.ForName, c.Type, trunc(float64(v)*c.Factor))
+		return
+	}
+	if geometric[c.RefType] {
+		// A length or edge it refers to that is not known sets nothing.
+		return
 	}
 	unit := 36000.0
 	if c.RefType == "primFontSz" || c.RefType == "secFontSz" {
 		unit = 12700
 	}
 	props.set(c.ForName, c.Type, trunc(c.Value*unit))
+}
+
+// geometric lists the constraint types that are an edge, a centre or a
+// length of a box (21.4.7.21 ST_ConstraintType).
+var geometric = map[string]bool{"l": true, "t": true, "r": true, "b": true, "w": true, "h": true, "ctrX": true, "ctrY": true}
+
+// edge returns an edge, centre or length of a box that its constraints do
+// not state but the others they state make: the right edge is the left
+// one plus the width, or the centre plus half of it, and so on across and
+// down (21.4.7.21 ST_ConstraintType l, r, ctrX, w; t, b, ctrY, h).
+func edge(p map[string]int64, typ string) (int64, bool) {
+	axes := [2][4]string{{"l", "r", "ctrX", "w"}, {"t", "b", "ctrY", "h"}}
+	for _, ax := range axes {
+		near, far, ctr, length := ax[0], ax[1], ax[2], ax[3]
+		n, okN := p[near]
+		f, okF := p[far]
+		c, okC := p[ctr]
+		w, okW := p[length]
+		switch typ {
+		case near:
+			switch {
+			case okF && okW:
+				return f - w, true
+			case okC && okW:
+				return c - w/2, true
+			case okC && okF:
+				return 2*c - f, true
+			}
+		case far:
+			switch {
+			case okN && okW:
+				return n + w, true
+			case okC && okW:
+				return c + w/2, true
+			case okC && okN:
+				return 2*c - n, true
+			}
+		case ctr:
+			switch {
+			case okN && okW:
+				return n + w/2, true
+			case okF && okW:
+				return f - w/2, true
+			case okN && okF:
+				return (n + f) / 2, true
+			}
+		case length:
+			switch {
+			case okN && okF:
+				return f - n, true
+			case okC && okN:
+				return 2 * (c - n), true
+			case okC && okF:
+				return 2 * (f - c), true
+			}
+		}
+	}
+	return 0, false
 }
 
 // connAlg turns a connector shape into the arrow its parameters name

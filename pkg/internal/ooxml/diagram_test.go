@@ -481,3 +481,25 @@ func TestDiagramCompositeOwnBound(t *testing.T) {
 		}
 	}
 }
+
+// TestDiagramCompositeInferredEdges lays out composite kids whose edges
+// refer to edges another kid's constraints do not state but make: the
+// right edge of a kid placed by its centre and width, the left edge of one
+// placed by its right edge and width (21.4.7.21 ST_ConstraintType), as
+// vProcess5 places its arrows and its texts.
+func TestDiagramCompositeInferredEdges(t *testing.T) {
+	layout := `<dgm:alg type="composite"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="w" for="ch" forName="pict" refType="w" fact="0.5"/><dgm:constr type="h" for="ch" forName="pict" refType="h" fact="0.5"/>` +
+		`<dgm:constr type="ctrX" for="ch" forName="pict" refType="w" fact="0.5"/><dgm:constr type="t" for="ch" forName="pict"/>` +
+		`<dgm:constr type="w" for="ch" forName="label" refType="w" fact="0.25"/><dgm:constr type="h" for="ch" forName="label" refType="h" fact="0.5"/>` +
+		`<dgm:constr type="r" for="ch" forName="label" refType="r" refFor="ch" refForName="pict"/><dgm:constr type="t" for="ch" forName="label" refType="h" fact="0.5"/>` +
+		`<dgm:constr type="r" for="ch" forName="mark" refType="l" refFor="ch" refForName="label"/><dgm:constr type="w" for="ch" forName="mark" refType="w" fact="0.1"/>` +
+		`<dgm:constr type="h" for="ch" forName="mark" refType="h" fact="0.5"/><dgm:constr type="t" for="ch" forName="mark" refType="h" fact="0.5"/></dgm:constrLst>` +
+		`<dgm:layoutNode name="pict"><dgm:shape type="rect"/></dgm:layoutNode><dgm:layoutNode name="label"><dgm:shape type="ellipse"/></dgm:layoutNode><dgm:layoutNode name="mark"><dgm:shape type="rect"/></dgm:layoutNode>`
+	d := ParseDiagram(mustParse(t, withPresNames(diagramData("a"), 1, "pict", "label", "mark")), mustParse(t, diagramLayout(layout)), nil, nil)
+	got := boxes(d.LayOut(1000, 1000, nil))[1:]
+	want := []string{"pict rect 250,0 500x500", "label ellipse 500,500 250x500", "mark rect 400,500 100x500"}
+	if strings.Join(got, "; ") != strings.Join(want, "; ") {
+		t.Errorf("boxes\n got %q\nwant %q", got, want)
+	}
+}
