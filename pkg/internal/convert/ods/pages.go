@@ -385,6 +385,9 @@ func (r *reader) spans(el *odf.Element) []sheet.Span {
 			case "sheet-name":
 				add(sheet.Span{Field: sheet.FieldSheet, Font: f})
 			case "page-number":
+				// Calc reads no text:page-adjust nor text:select-page
+				// (TestRead_PageNumberAdjust): the field shows the page's
+				// own number.
 				add(sheet.Span{Field: sheet.FieldPage, Font: f})
 			case "page-count":
 				add(sheet.Span{Field: sheet.FieldPages, Font: f})

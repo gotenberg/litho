@@ -580,6 +580,34 @@ func TestRead_HeaderOfManySpaces(t *testing.T) {
 	}
 }
 
+// TestRead_PageNumberAdjust locks that a header's page number field shows
+// the page's own number whatever text:page-adjust and text:select-page
+// ask (ODF 1.3 Part 3, 7.3.4): Calc's header field holds no offset.
+//
+// # Corpus evidence
+//
+//   - probe, ods: a flat ODS of three pages from page 5 whose header holds
+//     page numbers adjusted by 1, -1 and 10 and selecting the next and the
+//     previous page, converted by Gotenberg 9.4.1, prints "P=5 A=5 B=5 C=5
+//     N=5 V=5 T=3" on its first page, the page's number in every field.
+func TestRead_PageNumberAdjust(t *testing.T) {
+	f := flat{
+		auto:   `<style:style style:name="ta1" style:family="table" style:master-page-name="Adjusted"/>`,
+		master: `<style:master-page style:name="Adjusted"><style:header><text:p><text:page-number text:page-adjust="1">2</text:page-number><text:page-number text:page-adjust="-1" text:select-page="previous">0</text:page-number><text:page-number text:select-page="next">2</text:page-number></text:p></style:header></style:master-page>`,
+		body:   `<table:table table:name="S" table:style-name="ta1"/>`,
+	}
+	doc, _ := read(t, f.bytes())
+	spans := doc.Sheets[0].HeaderFooter.Odd.Header[1]
+	if len(spans) != 3 {
+		t.Fatalf("spans %+v, want three page numbers", spans)
+	}
+	for _, s := range spans {
+		if s.Field != sheet.FieldPage || s.Offset != 0 {
+			t.Errorf("span %+v, want the page number with no offset", s)
+		}
+	}
+}
+
 // TestRead_HeaderTextCap locks the bound on a header part's text: spaces
 // past [maxPartText] bytes are left out.
 func TestRead_HeaderTextCap(t *testing.T) {
