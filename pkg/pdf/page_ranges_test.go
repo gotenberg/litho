@@ -2,8 +2,10 @@ package pdf
 
 import (
 	"errors"
+	"fmt"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -29,10 +31,15 @@ func TestParsePageRanges(t *testing.T) {
 		{"", 5, nil, true},
 		{"abc", 5, nil, true},
 		{"1,,2", 5, nil, true},
-		// The result keeps order and duplicates: the page operations treat it
-		// as a set, Split honors both.
+		// The result keeps the order of the specification and lists each
+		// page once, where the specification first names it.
 		{"3,1", 5, []int{3, 1}, false},
-		{"1,1", 5, []int{1, 1}, false},
+		{"1,1", 5, []int{1}, false},
+		{"3,1-4", 5, []int{3, 1, 2, 4}, false},
+		{"2-4,1-", 5, []int{2, 3, 4, 1, 5}, false},
+		{"4-,odd", 5, []int{4, 5, 1, 3}, false},
+		{"even,odd,last", 5, []int{2, 4, 1, 3, 5}, false},
+		{"1-,1-,1-", 5, []int{1, 2, 3, 4, 5}, false},
 		// Open ranges run to the last page or from the first.
 		{"2-", 5, []int{2, 3, 4, 5}, false},
 		{"5-", 5, []int{5}, false},
@@ -54,11 +61,13 @@ func TestParsePageRanges(t *testing.T) {
 		{"2-,!4", 5, []int{2, 3, 5}, false},
 		{"-2,!1", 5, []int{2}, false},
 		{"1-2,!3", 5, []int{1, 2}, false},
-		{"1,1,!2", 5, []int{1, 1}, false},
+		{"1,1,!2", 5, []int{1}, false},
+		{"1-,!2-4,1-", 5, []int{1, 5}, false},
+		{"!odd,!odd,1-", 5, []int{2, 4}, false},
 		// Keywords are ordinary parts.
 		{"odd,!1", 5, []int{3, 5}, false},
 		{"1-3,last", 5, []int{1, 2, 3, 5}, false},
-		{"odd,last", 5, []int{1, 3, 5, 5}, false},
+		{"odd,last", 5, []int{1, 3, 5}, false},
 		{"even,1", 5, []int{2, 4, 1}, false},
 		// Malformed parts.
 		{"-", 5, nil, true},
@@ -208,5 +217,128 @@ func TestParsePageRanges_LegitimateSpecStaysCheap(t *testing.T) {
 	}
 	if alloc > maxBytes {
 		t.Errorf("ParsePageRanges(\"1-5\", 5) allocated %d bytes, want under %d", alloc, maxBytes)
+	}
+}
+
+// TestParsePageRanges_RejectsABadLaterPartWithoutExpanding pins that every
+// part is validated before any is expanded: the parts ahead of an invalid one
+// cost nothing.
+func TestParsePageRanges_RejectsABadLaterPartWithoutExpanding(t *testing.T) {
+	// Expanding the parts ahead allocates hundreds of MiB, validating them
+	// one record each.
+	const maxBytes = 4 << 20
+
+	for _, last := range []string{"0-9223372036854775807", "9223372036854775808", "abc", "5001", "!0"} {
+		spec := strings.Repeat("1-,", 10_000) + last
+		alloc, got, err := parsePageRangesAlloc(t, spec, 5_000)
+		if !errors.Is(err, ErrInvalidPageRange) {
+			t.Fatalf("ParsePageRanges(10000 x \"1-\" + %q, 5000) = %d pages, %v, want ErrInvalidPageRange", last, len(got), err)
+		}
+		if alloc > maxBytes {
+			t.Errorf("ParsePageRanges(10000 x \"1-\" + %q, 5000) allocated %d bytes, want under %d", last, alloc, maxBytes)
+		}
+	}
+}
+
+// TestParsePageRanges_RepeatedPartsStayBounded pins that the result holds
+// each page once and that its cost does not grow with the number of parts
+// times the page count.
+func TestParsePageRanges_RepeatedPartsStayBounded(t *testing.T) {
+	const (
+		pageCount = 5_000
+		// Expanding every part allocates hundreds of MiB.
+		maxBytes = 4 << 20
+	)
+
+	var shifted strings.Builder
+	for i := 1; i <= pageCount; i++ {
+		fmt.Fprintf(&shifted, "%d-,", i)
+	}
+	specs := map[string]string{
+		"10000 x 1-":   strings.TrimSuffix(strings.Repeat("1-,", 10_000), ","),
+		"10000 x odd":  strings.TrimSuffix(strings.Repeat("odd,even,", 5_000), ","),
+		"10000 x !1-2": strings.Repeat("!1-2,", 10_000) + "1-",
+		"1- to 5000-":  strings.TrimSuffix(shifted.String(), ","),
+	}
+	for name, spec := range specs {
+		t.Run(name, func(t *testing.T) {
+			alloc, got, err := parsePageRangesAlloc(t, spec, pageCount)
+			if err != nil {
+				t.Fatalf("ParsePageRanges(%s, %d) err = %v, want nil", name, pageCount, err)
+			}
+			if len(got) > pageCount {
+				t.Fatalf("ParsePageRanges(%s, %d) = %d pages, want at most %d", name, pageCount, len(got), pageCount)
+			}
+			seen := make(map[int]bool, len(got))
+			for _, p := range got {
+				if seen[p] {
+					t.Fatalf("ParsePageRanges(%s, %d) lists page %d twice", name, pageCount, p)
+				}
+				seen[p] = true
+			}
+			if alloc > maxBytes {
+				t.Errorf("ParsePageRanges(%s, %d) allocated %d bytes, want under %d", name, pageCount, alloc, maxBytes)
+			}
+		})
+	}
+}
+
+// TestValidatePageRanges_AgreesWithParsePageRanges pins that a valid
+// specification passes and that a malformed or out-of-range one fails with
+// the error ParsePageRanges returns, while a specification that only selects
+// no page passes.
+func TestValidatePageRanges_AgreesWithParsePageRanges(t *testing.T) {
+	valid := []struct {
+		spec      string
+		pageCount int
+	}{
+		{"1", 5}, {"1-3,5", 5}, {" 1 - 3 , 5 ", 5}, {"EVEN", 6}, {"odd,!1", 5},
+		{"last", 5}, {"3-", 5}, {"-3", 5}, {"1,1", 5}, {"!2,3,1", 5},
+		// Valid parts selecting no page.
+		{"1-3,!1-3", 5}, {"even", 1}, {"!1", 1},
+	}
+	for _, tt := range valid {
+		err := ValidatePageRanges(tt.spec, tt.pageCount)
+		if err != nil {
+			t.Errorf("ValidatePageRanges(%q, %d) = %v, want nil", tt.spec, tt.pageCount, err)
+		}
+	}
+
+	invalid := []struct {
+		spec      string
+		pageCount int
+	}{
+		{"", 5}, {" ", 5}, {"0", 5}, {"6", 5}, {"3-1", 5}, {"1,,2", 5}, {"!", 5},
+		{"-", 5}, {"1-last", 5}, {"abc", 5}, {"!0", 5}, {"last", 0},
+		{"0-9223372036854775807", 5}, {"9223372036854775808", 5},
+		{strings.Repeat("1-,", 10_000) + "5001", 5_000},
+	}
+	for _, tt := range invalid {
+		err := ValidatePageRanges(tt.spec, tt.pageCount)
+		if !errors.Is(err, ErrInvalidPageRange) {
+			t.Errorf("ValidatePageRanges(%.40q, %d) = %v, want ErrInvalidPageRange", tt.spec, tt.pageCount, err)
+			continue
+		}
+		_, parseErr := ParsePageRanges(tt.spec, tt.pageCount)
+		if parseErr == nil || parseErr.Error() != err.Error() {
+			t.Errorf("ValidatePageRanges(%.40q, %d) = %v, want the ParsePageRanges error %v", tt.spec, tt.pageCount, err, parseErr)
+		}
+	}
+}
+
+// TestValidatePageRanges_ExpandsNothing pins that validating a long
+// specification costs no page set: its allocations do not grow with
+// pageCount.
+func TestValidatePageRanges_ExpandsNothing(t *testing.T) {
+	spec := strings.TrimSuffix(strings.Repeat("1-,!2-,", 10_000), ",")
+
+	allocs := testing.AllocsPerRun(5, func() {
+		err := ValidatePageRanges(spec, 1<<30)
+		if err != nil {
+			t.Fatalf("ValidatePageRanges = %v, want nil", err)
+		}
+	})
+	if allocs > 0 {
+		t.Errorf("ValidatePageRanges allocated %v times per run, want 0", allocs)
 	}
 }

@@ -31,13 +31,14 @@ import (
 // around the dash is ignored.
 //
 // The result lists the pages of the included parts in the order the
-// specification lists them, and keeps duplicates: "3,1" returns [3, 1] and
-// "1,1" returns [1, 1]. A specification without an included part starts from
-// every page, 1 to pageCount. The pages of every excluded part are then
-// removed, wherever the exclusion appears in the list: "!2,3,1" returns
-// [3, 1]. Excluding a page the inclusions do not name changes nothing. The
-// page operations of [Writer] treat a page list as a set, while [Split]
-// honors the order and the repeats.
+// specification lists them, each page once, at the position where the
+// specification first names it: "3,1" returns [3, 1], "1,1" returns [1] and
+// "3,1-4" returns [3, 1, 2, 4]. A specification without an included part
+// starts from every page, 1 to pageCount. The pages of every excluded part
+// are then removed, wherever the exclusion appears in the list: "!2,3,1"
+// returns [3, 1]. Excluding a page the inclusions do not name changes
+// nothing. The result holds at most pageCount pages, however long the
+// specification.
 //
 // A specification that selects no page is an error, never an empty slice:
 // [Writer.RotatePages] and the stamps treat an empty page list as every page,
@@ -50,65 +51,47 @@ import (
 //
 // Every failure wraps [ErrInvalidPageRange]: an empty or malformed
 // specification or part, a range whose start exceeds its end, a page outside
-// [1, pageCount] in an included or an excluded part, or an empty selection. A
-// range is bounded against pageCount before it is expanded, so a huge range
-// costs nothing to reject.
+// [1, pageCount] in an included or an excluded part, or an empty selection.
+// Every part is validated before any is expanded, so a malformed or
+// out-of-range part costs nothing to reject, wherever it appears. Expanding
+// visits each page a bounded number of times, so the cost grows with the
+// length of the specification plus pageCount, not with their product.
 //
 // ParsePageRanges is safe for concurrent use.
 func ParsePageRanges(spec string, pageCount int) ([]int, error) {
-	spec = strings.TrimSpace(spec)
-	if spec == "" {
-		return nil, fmt.Errorf("%w: empty specification", ErrInvalidPageRange)
+	var parts []pagePart
+	err := scanPageRanges(spec, pageCount, func(part pagePart) {
+		parts = append(parts, part)
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	var (
-		included    []int
-		hasIncluded bool
-		excluded    []bool
-	)
-	for part := range strings.SplitSeq(spec, ",") {
-		part = strings.TrimSpace(part)
-		exclude := strings.HasPrefix(part, "!")
-		if exclude {
-			part = strings.TrimSpace(part[1:])
-		}
-		if part == "" {
-			return nil, fmt.Errorf("%w: empty part in %q", ErrInvalidPageRange, spec)
-		}
-
-		first, last, step, err := parsePagePart(part, pageCount)
-		if err != nil {
-			return nil, err
-		}
-
-		if !exclude {
+	excluded := newPageSet(pageCount)
+	hasIncluded := false
+	for _, part := range parts {
+		if part.exclude {
+			excluded.add(part, nil)
+		} else {
 			hasIncluded = true
-			for i := first; i <= last; i += step {
-				included = append(included, i)
-			}
-			continue
-		}
-		if excluded == nil {
-			excluded = make([]bool, pageCount+1)
-		}
-		for i := first; i <= last; i += step {
-			excluded[i] = true
 		}
 	}
 
+	selected := newPageSet(pageCount)
+	for p := 1; p <= pageCount; p++ {
+		if excluded.has(p) {
+			selected.mark(p)
+		}
+	}
+
+	var pages []int
+	collect := func(p int) { pages = append(pages, p) }
 	if !hasIncluded {
-		for i := 1; i <= pageCount; i++ {
-			included = append(included, i)
-		}
+		selected.add(pagePart{first: 1, last: pageCount, step: 1}, collect)
 	}
-
-	pages := included
-	if excluded != nil {
-		pages = included[:0]
-		for _, p := range included {
-			if !excluded[p] {
-				pages = append(pages, p)
-			}
+	for _, part := range parts {
+		if !part.exclude {
+			selected.add(part, collect)
 		}
 	}
 
@@ -116,6 +99,129 @@ func ParsePageRanges(spec string, pageCount int) ([]int, error) {
 		return nil, fmt.Errorf("%w: %q selects no pages in a %d-page document", ErrInvalidPageRange, spec, pageCount)
 	}
 	return pages, nil
+}
+
+// ValidatePageRanges reports whether spec is a valid page range
+// specification for a document of pageCount pages, without expanding it: it
+// returns the error [ParsePageRanges] returns for a malformed or out-of-range
+// part, at a cost that grows with the length of spec alone. A specification
+// whose parts are valid but select no page, such as "1-3,!1-3", passes:
+// telling it takes the pages, which [ParsePageRanges] resolves.
+//
+// ValidatePageRanges is safe for concurrent use.
+func ValidatePageRanges(spec string, pageCount int) error {
+	return scanPageRanges(spec, pageCount, nil)
+}
+
+// scanPageRanges validates every part of spec against pageCount, calling
+// visit, when not nil, with each one in order. It expands no part.
+func scanPageRanges(spec string, pageCount int, visit func(pagePart)) error {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return fmt.Errorf("%w: empty specification", ErrInvalidPageRange)
+	}
+
+	for text := range strings.SplitSeq(spec, ",") {
+		text = strings.TrimSpace(text)
+		exclude := strings.HasPrefix(text, "!")
+		if exclude {
+			text = strings.TrimSpace(text[1:])
+		}
+		if text == "" {
+			return fmt.Errorf("%w: empty part in %q", ErrInvalidPageRange, spec)
+		}
+
+		first, last, step, err := parsePagePart(text, pageCount)
+		if err != nil {
+			return err
+		}
+		if visit != nil {
+			visit(pagePart{first: first, last: last, step: step, exclude: exclude})
+		}
+	}
+
+	return nil
+}
+
+// pagePart is one validated part of a page range specification: the pages
+// first, first+step, ..., up to last, included or excluded.
+type pagePart struct {
+	first, last, step int
+	exclude           bool
+}
+
+// pageSet is a set of the pages 1 to pageCount that enumerates the pages of
+// a part it does not hold yet without walking the ones it does. next[p] leads
+// to the first page at or after p that the set does not hold, path
+// compression keeping each walk short; the step-2 keywords, "odd" and
+// "even", walk their pages directly, at most once each.
+type pageSet struct {
+	held      []bool
+	next      []int
+	odd, even bool
+}
+
+func newPageSet(pageCount int) *pageSet {
+	s := &pageSet{
+		held: make([]bool, pageCount+2),
+		next: make([]int, pageCount+2),
+	}
+	for p := range s.next {
+		s.next[p] = p
+	}
+	return s
+}
+
+func (s *pageSet) has(p int) bool {
+	return s.held[p]
+}
+
+// mark adds page p to the set.
+func (s *pageSet) mark(p int) {
+	s.held[p] = true
+	s.next[p] = p + 1
+}
+
+// free returns the first page at or after p that the set does not hold.
+func (s *pageSet) free(p int) int {
+	root := p
+	for s.next[root] != root {
+		root = s.next[root]
+	}
+	for s.next[p] != root {
+		s.next[p], p = root, s.next[p]
+	}
+	return root
+}
+
+// add adds the pages of part to the set, calling visit, when not nil, with
+// each page the set did not hold yet, in ascending order.
+func (s *pageSet) add(part pagePart, visit func(int)) {
+	if part.step != 1 {
+		seen := &s.even
+		if part.first%2 == 1 {
+			seen = &s.odd
+		}
+		if *seen {
+			return
+		}
+		*seen = true
+		for p := part.first; p <= part.last; p += part.step {
+			if !s.held[p] {
+				s.mark(p)
+				if visit != nil {
+					visit(p)
+				}
+			}
+		}
+		return
+	}
+	for p := s.free(part.first); p <= part.last; p = s.free(p + 1) {
+		s.mark(p)
+		if visit != nil {
+			visit(p)
+		}
+	}
 }
 
 // parsePagePart parses one part of a page range specification, its "!"
