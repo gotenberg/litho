@@ -85,6 +85,16 @@ func TestParseHeaderFooter(t *testing.T) {
 				with(b, func(s *span) { s.text, s.family, s.bold = "C", "Corbel", true }),
 			}},
 		},
+		{
+			"style words", `&"Arial,bold"A&"Arial, Bold  ITALIC "B&"Arial,Fett"C&"Arial,Italic Bold"D&"Arial,italic"E`,
+			[3][]span{1: {
+				with(b, func(s *span) { s.text, s.family, s.bold = "A", "Arial", true }),
+				with(b, func(s *span) { s.text, s.family, s.bold, s.italic = "B", "Arial", true, true }),
+				with(b, func(s *span) { s.text, s.family = "C", "Arial" }),
+				with(b, func(s *span) { s.text, s.family = "D", "Arial" }),
+				with(b, func(s *span) { s.text, s.family, s.italic = "E", "Arial", true }),
+			}},
+		},
 		{"an unknown code drops its whole character", "&éa&€b&K€0000c", [3][]span{1: {with(b, func(s *span) { s.text = "ab€0000c" })}}},
 		{
 			"page offsets", "&P+1 of &N&P+1&N&P+12abc&p+3&N-2",

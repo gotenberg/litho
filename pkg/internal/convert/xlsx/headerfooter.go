@@ -307,8 +307,10 @@ func (p *hfParser) newPart(i int) {
 	}
 }
 
-// fontName applies a &"name,style" code: the style's words bold, italic
-// and their German and Hungarian names, as LibreOffice reads them. The
+// fontName applies a &"name,style" code. The style is Bold, Italic or
+// Bold Italic in any case, as Excel reads it; any other style, a
+// localized name or the words in another order among them, is regular.
+// The
 // names "-" and "+" are the theme's body and heading fonts, as Excel
 // names them (Microsoft, "Formatting and VBA codes for headers and
 // footers"), the Normal font's face when the theme names none.
@@ -319,6 +321,11 @@ func (p *hfParser) newPart(i int) {
 //     Normal font named Arial with the minor scheme, Excel for the web
 //     prints "&"-,Regular"" in Calibri, "&"+,Regular"" in Cambria and
 //     "&"+,Bold"" in Cambria Bold.
+//   - probe, xlsx: Excel for the web prints the styles Fett, Gras,
+//     Nonsense, Bold Oblique and Italic Bold of Arial in Arial regular.
+//   - poi/xlsx: spreadsheet/47737.xlsx, "&"Arial,bold"", prints in Arial
+//     Bold; litho/xlsx headers_footers_codes prints "Bold Italic" of
+//     Calibri in Calibri Bold Italic.
 func (p *hfParser) fontName(spec string) {
 	name, style, hasStyle := strings.Cut(spec, ",")
 	name = strings.TrimSpace(name)
@@ -339,14 +346,15 @@ func (p *hfParser) fontName(spec string) {
 	if !hasStyle {
 		return
 	}
-	p.font.Bold, p.font.Italic = false, false
-	for w := range strings.FieldsSeq(strings.ToLower(style)) {
-		switch w {
-		case "bold", "fett", "demibold", "halbfett", "black", "heavy", "félkövér":
-			p.font.Bold = true
-		case "italic", "kursiv", "oblique", "schräg", "dőlt":
-			p.font.Italic = true
-		}
+	switch strings.Join(strings.Fields(strings.ToLower(style)), " ") {
+	case "bold":
+		p.font.Bold, p.font.Italic = true, false
+	case "italic":
+		p.font.Bold, p.font.Italic = false, true
+	case "bold italic":
+		p.font.Bold, p.font.Italic = true, true
+	default:
+		p.font.Bold, p.font.Italic = false, false
 	}
 }
 
