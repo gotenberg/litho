@@ -239,7 +239,8 @@
 //     (100vw without one, calc() not read).
 //   - <input>, <button>, <select> and <textarea> draw as inline blocks
 //     holding the text they show, without their widgets, with a warning.
-//   - <iframe> draws the document of its srcdoc, else of its src: a
+//   - <iframe> draws the document of its srcdoc, else of its src, and an
+//     <object> or an <embed> of an HTML document draws that document: a
 //     replaced box, 300 by 150 CSS pixels unless sized, in which the
 //     document is read as a resource, styled and laid out for the same
 //     media on a viewport the size of the box's content box, in one
@@ -250,8 +251,9 @@
 //     documents that frame it, and a frame's document is held to the
 //     input cap; past these, or when the document does not load or is not
 //     HTML, the box shows nothing, with a warning.
-//   - <frame>, <frameset>, <embed> and <audio> are left out with a
-//     warning; <object> and <canvas> draw their fallback content. A
+//   - <frame>, <frameset> and <audio> are left out with a warning; an
+//     <object> of anything else and <canvas> draw their fallback content,
+//     and an <embed> of anything else is left out with a warning. A
 //     <video> is a replaced box
 //     showing its poster, sized by it, or 300 by 150 CSS pixels showing
 //     nothing without one; its frames and controls are not drawn.

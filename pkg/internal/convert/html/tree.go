@@ -74,11 +74,11 @@ var skipped = map[atom.Atom]bool{
 }
 
 // unsupported are the elements whose content is not drawn, with a
-// warning: embedded documents other than an iframe's ([builder.frame])
-// and audio. A video draws its poster ([builder.video]). Immutable lookup
+// warning: frames and framesets, and audio. An iframe, and an object or
+// an embed of an HTML document, draw their document ([builder.frame]). A video draws its poster ([builder.video]). Immutable lookup
 // table.
 var unsupported = map[atom.Atom]bool{
-	atom.Embed: true, atom.Audio: true, atom.Frame: true, atom.Frameset: true,
+	atom.Audio: true, atom.Frame: true, atom.Frameset: true,
 }
 
 // builder turns the styled DOM into the layout's content tree. It lives
@@ -365,8 +365,17 @@ func (b *builder) styled(ctx context.Context, n *dom.Node, parent *css.Style, de
 		case atom.Button:
 			b.warnOnce(warn.FormWidgetOmitted, warn.Approximated, "form", "form controls are drawn as their text, without their widgets")
 		case atom.Object:
+			if doc := b.embeddedDocument(ctx, n, st, "data"); doc != nil {
+				return doc, nil
+			}
 			b.warnOnce(warn.ContentUnsupported, warn.Approximated, n.Data, "the content of <object> is not drawn; its fallback content is")
 			return b.children(ctx, n, parent, depth)
+		case atom.Embed:
+			if doc := b.embeddedDocument(ctx, n, st, "src"); doc != nil {
+				return doc, nil
+			}
+			b.warnOnce(warn.ContentUnsupported, warn.Omitted, n.Data, "the content of <embed> is not drawn")
+			return nil, nil
 		case atom.Canvas:
 			// Without scripts a canvas shows its fallback content (HTML
 			// Standard, 4.12.5).

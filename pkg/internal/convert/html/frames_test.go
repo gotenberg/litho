@@ -351,3 +351,36 @@ func TestFrame_Margins(t *testing.T) {
 		t.Errorf("text moved %v points by marginwidth 30, want 16.5", wide-plain)
 	}
 }
+
+// An object or an embed of an HTML document shows it as an iframe does;
+// of anything else, or of a document that does not load, an object shows
+// its fallback content and an embed nothing.
+func TestFrame_ObjectAndEmbed(t *testing.T) {
+	fsys := frameDocs(map[string]string{"c.html": "<p>Childtext</p>", "c.svg": "<p>Svgtext</p>", "c": "<p>Plaintext</p>"})
+	tests := []struct {
+		name, src, want string
+		absent          []string
+	}{
+		{"object", `<object data="c.html">Fallbacktext</object>`, "Childtext", []string{"Fallbacktext"}},
+		{"object of an HTML type", `<object data="c" type="text/html">Fallbacktext</object>`, "Plaintext", []string{"Fallbacktext"}},
+		{"object of another type", `<object data="c.html" type="image/png">Fallbacktext</object>`, "Fallbacktext", []string{"Childtext"}},
+		{"object of a picture's name", `<object data="c.svg">Fallbacktext</object>`, "Fallbacktext", []string{"Svgtext"}},
+		{"object missing", `<object data="missing.html">Fallbacktext</object>`, "Fallbacktext", nil},
+		{"embed", `<embed src="c.html"><p>Outertext</p>`, "Childtext", nil},
+		{"embed of another type", `<embed src="c.html" type="image/svg+xml"><p>Outertext</p>`, "Outertext", []string{"Childtext"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := convertDoc(t, `<!doctype html><body>`+tt.src, Options{Resources: fsys})
+			got := docText(doc)
+			if !strings.Contains(got, tt.want) {
+				t.Errorf("text %q, want %q", got, tt.want)
+			}
+			for _, a := range tt.absent {
+				if strings.Contains(got, a) {
+					t.Errorf("text %q holds %q", got, a)
+				}
+			}
+		})
+	}
+}

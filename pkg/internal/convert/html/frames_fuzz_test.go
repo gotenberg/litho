@@ -21,8 +21,8 @@ import (
 // bounds, with a valid document.
 func FuzzFrames(f *testing.F) {
 	valid := `<!doctype html><style>@page{size:A6}body{background:red}</style><p>x</p><iframe src="f.html" width=50% height=-1></iframe>` +
-		`<iframe srcdoc="<iframe src=f.html#a style='transform:rotate(9deg)'></iframe>"></iframe>` +
-		`<iframe src="data:text/html,<p>d"></iframe><iframe frameborder=0 marginwidth=9 src=f.html></iframe>`
+		`<iframe srcdoc="<iframe src=f.html#a style='transform:rotate(9deg)'></iframe>"></iframe><object data=f.html></object>` +
+		`<embed src=f.html type=text/html><iframe src="data:text/html,<p>d"></iframe><iframe frameborder=0 marginwidth=9 src=f.html></iframe>`
 	f.Add([]byte(valid))
 	f.Add([]byte(valid[:len(valid)/2]))
 	f.Add([]byte("<iframe srcdoc=\"\xff\xfe\"></iframe>"))

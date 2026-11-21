@@ -257,6 +257,69 @@ func (b *builder) frameNode(n *dom.Node, st *css.Style, req *frameRequest) []*la
 	return []*layout.Node{node}
 }
 
+// embeddedDocument builds the replaced box of an object or an embed
+// element n styled st whose resource is an HTML document (HTML Standard,
+// 4.8.6 and 4.8.7: either makes a child navigable for it, shown as an
+// iframe's document is, without the iframe's border): the URL of its
+// attribute key, data or src, whose type attribute, when present, names
+// HTML, and whose resource loads and reads as an HTML document
+// ([htmlDocument]). It returns nil for any other, which the caller
+// draws as before: an object's fallback content, or nothing for an embed.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints an object
+//     of data="c.html", with or without type="text/html", and an embed
+//     of src="c.html" as a frame of c.html without a border, 300 by 150
+//     pixels unless sized, the document's body background filling the
+//     box, the object's fallback content not shown.
+func (b *builder) embeddedDocument(ctx context.Context, n *dom.Node, st *css.Style, key string) []*layout.Node {
+	if b.frames == nil {
+		return nil
+	}
+	src, _ := attr(n, key)
+	src = strings.Trim(src, "\t\n\f\r ")
+	if src == "" {
+		return nil
+	}
+	u := resolveRef(b.scan.resourceBase, src)
+	if u == "" {
+		return nil
+	}
+	if typ, ok := attr(n, "type"); ok {
+		mt, _, _ := strings.Cut(strings.ToLower(strings.TrimSpace(typ)), ";")
+		if mt != "text/html" && mt != "application/xhtml+xml" {
+			return nil
+		}
+	} else if !htmlName(u) {
+		return nil
+	}
+	req := b.newFrameRequest(n)
+	req.u, req.shown = u, displayURL(src)
+	if b.frames.source(ctx, req).err != nil {
+		return nil
+	}
+	return b.frameNode(n, st, req)
+}
+
+// htmlName reports a URL whose path names an HTML document by its
+// extension, or names none ([htmlDocument]); a data: URL is judged by its
+// bytes.
+func htmlName(u string) bool {
+	if len(u) >= 5 && strings.EqualFold(u[:5], "data:") {
+		return true
+	}
+	p := u
+	if pu, err := url.Parse(u); err == nil {
+		p = pu.Path
+	}
+	switch strings.ToLower(path.Ext(p)) {
+	case "", ".html", ".htm", ".xhtml", ".xht":
+		return true
+	}
+	return false
+}
+
 // newFrameRequest returns the request of the frame element n, its
 // document not chosen yet.
 func (b *builder) newFrameRequest(n *dom.Node) *frameRequest {
@@ -451,16 +514,7 @@ func htmlDocument(u string, f fetched) bool {
 	default:
 		return false
 	}
-	p := u
-	if pu, err := url.Parse(u); err == nil {
-		p = pu.Path
-	}
-	switch strings.ToLower(path.Ext(p)) {
-	case "", ".html", ".htm", ".xhtml", ".xht":
-	default:
-		return false
-	}
-	if isSVG(u, f.data) {
+	if !htmlName(u) || isSVG(u, f.data) {
 		return false
 	}
 	_, _, err := imagefile.DecodeConfig(f.data)
