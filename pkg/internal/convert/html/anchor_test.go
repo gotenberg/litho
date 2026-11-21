@@ -427,3 +427,20 @@ func TestAnchor_CenterOverflow(t *testing.T) {
 		`<div class=a id=f></div><div class="p g" id=q></div>`,
 		map[string]string{"1:g": "700,40+100x20"})
 }
+
+// TestAbsoluteSelfAlignment holds the self-alignment of an absolutely
+// positioned box whose two insets of an axis are set (CSS Position 3,
+// 4.3): the box is aligned in its inset-modified containing block as
+// justify-self and align-self say, where CSS 2.1 would put it at the left
+// or top inset; normal keeps CSS 2.1's placement.
+func TestAbsoluteSelfAlignment(t *testing.T) {
+	t.Parallel()
+	checkAnchored(t, `
+		#p1 { inset: 0; justify-self: end; align-self: end }
+		#p2 { inset: 10px; justify-self: center; align-self: start }
+		#p3 { inset: 0; justify-self: normal }
+		#p4 { left: 0; right: 0; top: 0; justify-self: end; align-self: end }`,
+		`<div class=c><div class="p r" id=p1></div><div class="p g" id=p2></div><div class="p m" id=p3></div>
+		<div class="p k" id=p4></div></div>`,
+		map[string]string{"1:r": "670,320+30x20", "1:g": "385,50+30x20", "1:m": "100,40+30x20", "1:k": "670,40+30x20"})
+}

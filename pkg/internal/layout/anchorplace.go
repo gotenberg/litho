@@ -732,6 +732,27 @@ func (e *engine) layoutAnchored(b *box, cb absCB) {
 	}
 }
 
+// selfAligned reports an absolutely positioned box styled st that its
+// self-alignment places in its inset-modified containing block (CSS
+// Position 3, 4.3): an axis whose two insets are set and whose
+// justify-self or align-self is a position, which the rules of CSS 2.1
+// do not apply. normal, auto and stretch align as CSS 2.1 does, and an
+// axis with an auto inset is aligned by its static position.
+func selfAligned(st *css.Style) bool {
+	positional := func(a css.BoxAlign) bool {
+		switch a.Keyword() {
+		case css.BoxNormal, css.BoxAuto, css.BoxStretch, css.BoxSpaceBetween, css.BoxSpaceAround, css.BoxSpaceEvenly:
+			return false
+		case css.BoxStart, css.BoxEnd, css.BoxCenter, css.BoxFlexStart, css.BoxFlexEnd, css.BoxSelfStart, css.BoxSelfEnd,
+			css.BoxLeft, css.BoxRight, css.BoxBaseline, css.BoxLastBaseline, css.BoxAnchorCenter, css.BoxSafe:
+		}
+		return true
+	}
+	set := func(d css.Dimension) bool { return d.Kind != css.Auto }
+	return positional(st.JustifySelf) && set(st.Left) && set(st.Right) ||
+		positional(st.AlignSelf) && set(st.Top) && set(st.Bottom)
+}
+
 // layoutPlan lays b out by plan: by the rules of CSS 2.1 in an axis
 // aligned normally, else in the range of the inset-modified containing
 // block its alignment gives it, shifted into the containing block before

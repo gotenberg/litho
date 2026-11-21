@@ -421,6 +421,10 @@ func (e *engine) layoutAbs(b *box) {
 		e.layoutAnchored(b, cb)
 		return
 	}
+	if selfAligned(b.st) {
+		e.layoutPlan(b, e.planAnchored(b, b.st, cb))
+		return
+	}
 	e.layoutAbsIn(b, cb)
 }
 
