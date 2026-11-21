@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Anchor positioning</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  body { margin: 0; font: 13px/1.5 sans-serif; color: #222; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 18px 0 6px; }
+  .lede { color: #555; margin: 0 0 14px; }
+  .page { position: relative; }
+  .text { width: 62%; }
+  p { margin: 0 0 9px; }
+  .term { anchor-name: var(--name); font-weight: bold; color: #0b4f8a; border-bottom: 2px solid #9cc3e6; }
+  .note {
+    position: absolute; position-anchor: var(--name);
+    top: anchor(top); left: calc(62% + 18px); right: 0;
+    margin: 0; padding: 4px 8px; font-size: 11px; line-height: 1.4;
+    background: #eef5fb; border-left: 3px solid #0b4f8a;
+  }
+  .note b { color: #0b4f8a; }
+  figure { margin: 14px 0 10px; }
+  figcaption { font-size: 11px; color: #555; margin-top: 6px; }
+  .chart { position: relative; display: flex; align-items: flex-end; gap: 22px; height: 170px; padding: 28px 20px 0; border-bottom: 1px solid #888; background: #fafafa; width: 62%; box-sizing: border-box; }
+  .bar { width: 46px; background: #7aa7d6; }
+  .bar.hi { background: #e0762c; anchor-name: --peak; }
+  .bar.lo { anchor-name: --dip; }
+  .bar.mid { anchor-name: --mid; }
+  .callout {
+    position: absolute; margin: 4px; padding: 2px 6px; font-size: 11px; white-space: nowrap;
+    background: #fff4e5; border: 1px solid #e0762c; border-radius: 3px;
+  }
+  .c-peak { position-anchor: --peak; position-area: top; }
+  .c-dip { position-anchor: --dip; position-area: right center; position-try-fallbacks: flip-inline; }
+  .c-mid { position-anchor: --mid; position-area: center; color: #fff; background: none; border: none; font-weight: bold; }
+  .band { position: absolute; position-anchor: --mid; left: anchor(left); width: anchor-size(width); top: anchor(top, 0px); height: 6px; background: #0b4f8a; }
+  .side { position: absolute; position-anchor: --peak; position-area: right span-bottom; position-try: most-width flip-inline; margin: 0 8px; width: 120px; font-size: 11px; background: #f3f3f3; padding: 4px 6px; border-radius: 3px; }
+  .badge { position: absolute; position-anchor: --figure2; position-area: top span-left; margin: 0 0 6px; padding: 2px 8px; font-size: 11px; background: #0b4f8a; color: #fff; border-radius: 9px; }
+  .box2 { anchor-name: --figure2; width: 62%; height: 120px; margin: 30px 0 30px; background: repeating-linear-gradient(90deg, #dde9f5 0 40px, #c7dbef 40px 80px); border: 1px solid #9cc3e6; box-sizing: border-box; }
+  .pin { position: absolute; position-anchor: --figure2; justify-self: anchor-center; top: anchor(bottom); margin-top: 6px; width: 160px; text-align: center; font-size: 11px; color: #555; }
+  .break { break-before: page; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Quarterly field report</h1>
+  <p class="lede">Measurements from the three northern stations, with notes beside the terms they explain.</p>
+  <div class="text">
+    <p>The stations log the <span class="term" style="--name: --t1">dew point</span> every ten minutes and send a daily summary. Over the quarter the readings stayed within the usual band, with one cold spell in the second month that pulled the averages down for a week.</p>
+    <p>Each summary also carries the <span class="term" style="--name: --t2">wind run</span>, the distance the air travelled past the mast in a day. It rose steadily through the quarter as the season turned, and the eastern station, on the ridge, logged the largest figures by a wide margin.</p>
+    <p>Rain gauges were checked by hand twice in the quarter. The second check found the western gauge partly blocked by leaves, so its readings for the last three weeks are marked as <span class="term" style="--name: --t3">provisional</span> until the station is serviced.</p>
+  </div>
+  <aside class="note" style="--name: --t1"><b>Dew point:</b> the temperature at which the air would be saturated; it tracks moisture, not warmth.</aside>
+  <aside class="note" style="--name: --t2"><b>Wind run:</b> the daily sum of wind speed over time, in kilometres.</aside>
+  <aside class="note" style="--name: --t3"><b>Provisional:</b> kept in the totals but flagged until a second reading confirms it.</aside>
+
+  <h2>Monthly rainfall</h2>
+  <figure>
+    <div class="chart">
+      <div class="bar" style="height: 70px"></div>
+      <div class="bar mid" style="height: 95px"></div>
+      <div class="bar hi" style="height: 140px"></div>
+      <div class="bar lo" style="height: 35px"></div>
+      <div class="bar" style="height: 80px"></div>
+    </div>
+    <figcaption>Rainfall by month at the three stations, in millimetres.</figcaption>
+  </figure>
+  <span class="callout c-peak">Peak: 140 mm</span>
+  <span class="callout c-dip">Lowest: 35 mm</span>
+  <span class="callout c-mid">95</span>
+  <div class="band"></div>
+  <div class="side">The wettest month followed the cold spell by two weeks.</div>
+</div>
+
+<div class="page break">
+  <h2>Station layout</h2>
+  <div class="text">
+    <p>The second figure shows the ridge station's layout: the mast at the centre, the gauges in a row along the fence, and the shelter at the far end. The badge above the figure and the caption below it are placed from the figure itself.</p>
+  </div>
+  <div class="box2"></div>
+  <div class="text">
+    <p>The fence line was moved in the spring, which shifted the gauges by a metre; the <span class="term" style="--name: --t4">offset</span> is applied to every reading taken after the move.</p>
+  </div>
+  <aside class="note" style="--name: --t4"><b>Offset:</b> a fixed correction of 0.4 mm a day, from the side-by-side test.</aside>
+</div>
+<span class="badge">Figure 2</span>
+<div class="pin">Ridge station, plan view</div>
+</body>
+</html>

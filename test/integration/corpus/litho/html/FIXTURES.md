@@ -248,6 +248,14 @@ Chromium prints a `backdrop-filter` without filtering the backdrop, where its sc
 | `container-queries` | 1     | none    | `container-type`, `container-name` and the `container` shorthand; size queries in both syntaxes with `and`; named containers; the `cq*` units; a style query; nesting         |
 | `color-scheme`      | 1     | none    | `<meta name=color-scheme content=dark>`; the dark canvas and text; `light-dark()`; `LinkText`, `ButtonFace`, `ButtonText`, `ButtonBorder`, `Field`, `FieldText`; a light part |
 
+## Anchor positioning
+
+`anchor-positioning` is a two-page report whose margin notes sit beside the terms they explain and whose chart labels sit on the bars they name, placed by CSS Anchor Positioning, which Chromium prints applied: the page is its own reference.
+
+| Source               | Pages | Options | Exercises                                                                                                                                                                                                                                                                                       |
+| -------------------- | ----- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `anchor-positioning` | 2     | none    | `anchor-name` on inline terms and blocks; `position-anchor`; `anchor()` and `anchor-size()` in insets and sizes; `position-area` with its default alignments; `anchor-center`; `position-try` with `most-width`; a box declared after the page break that follows its anchor to the second page |
+
 ## Expected text
 
 Seven sources name `expectedText: "expected-text.txt"` in their `options.json`: Chromium writes their text wrong in its PDF, so their text score reads the file beside them, the page's text in reading order written from the source, and not Chromium's (see [Expected text](../../../FEATURES.md#expected-text)). Each file holds what the page prints: the headings, the paragraphs and the table cells in document order, the numbers of ordered list items (`1.`, `2.`), and no disc bullet, which both engines draw as a shape; the characters as the source holds them, joiners, non-joiners, zero width spaces and variation selectors included. Neither the key nor the file changes the reference. What Chromium's PDF holds, read by PDF.js:
