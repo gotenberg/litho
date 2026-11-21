@@ -87,7 +87,8 @@ type Options struct {
 	// scale and the shrink to fit of a document wider than its area, in
 	// one column as tall as a single page may be, and the first page is
 	// trimmed to its content plus the top and bottom margins. The page
-	// keeps the paper's width in its orientation. The initial containing
+	// keeps the paper's width in its orientation; in a vertical writing
+	// mode it keeps the paper's height and grows sideways. The initial containing
 	// block, the viewport units and the media features measure the page
 	// area of the paged print; a fixed box is placed in the page area of
 	// the trimmed page. No page break ends the page, and the page

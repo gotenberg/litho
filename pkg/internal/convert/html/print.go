@@ -149,7 +149,9 @@ type placement struct {
 // (blink::TargetPageBorderBoxLogicalRect,
 // blink::PageBoxDefaultSizeWithSourceOrientation). A single page's sheet
 // is as tall as the page it is trimmed to, drawn at that scale, and as
-// wide as the paper in its orientation without preferCSSPageSize. A sheet
+// wide as the paper in its orientation without preferCSSPageSize, or, in
+// a vertical writing mode, where the page grows sideways, as wide as the
+// page. A sheet
 // side is at most the PDF page limit.
 func (p *prepared) placement(lp *typeset.Page) placement {
 	f := p.setup.factor
@@ -160,6 +162,10 @@ func (p *prepared) placement(lp *typeset.Page) placement {
 		tw, th = p.o.PageWidth, p.o.PageHeight
 		if single {
 			th = sh
+			if verticalRoot(p.root) {
+				// The page grows sideways: its width is its content's.
+				tw = sw
+			}
 		} else if !nearly(sw, sh) && (tw > th) != (sw > sh) {
 			tw, th = th, tw
 		}

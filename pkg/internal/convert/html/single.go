@@ -103,6 +103,24 @@ func unpaged(b css.Break) css.Break {
 	return b
 }
 
+// verticalRoot reports a document whose principal writing mode is
+// vertical: the root's, or, as CSS Writing Modes 4, 8 asks of an HTML
+// document, its body's, the first element child of the root. The layout
+// lays such a single page out growing sideways, as tall as the paper.
+func verticalRoot(root *layout.Node) bool {
+	if root == nil || root.Style == nil {
+		return false
+	}
+	wm := root.Style.WritingMode
+	for _, k := range root.Children {
+		if k != nil && k.Kind == layout.Element && k.Style != nil {
+			wm = k.Style.WritingMode
+			break
+		}
+	}
+	return wm.Vertical()
+}
+
 // singleViewport returns the height, in points of the layout, of the
 // initial containing block of a single page: the page area of its first
 // page in the paged print of the same paper, scale and @page rules, which

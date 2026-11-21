@@ -27,25 +27,58 @@ func principalMode(root *Node, opts Options) css.WritingMode {
 	return wm
 }
 
-// turnedOptions returns opts for a document of the vertical principal
-// writing mode wm: its flow is laid out as a horizontal one on pages
-// turned a quarter turn, whose width is the height of the paper and
-// whose margins are the paper's turned with them, and each page is
+// turnedOptions returns opts for a document of the vertical writing mode
+// wm, its principal writing mode: its flow is laid out as a horizontal one
+// on pages turned a quarter turn, whose width is the height of the paper
+// and whose margins are the paper's turned with them, and each page is
 // turned back onto the paper once laid out ([engine.turnPage]). The
 // initial containing block is the turned page area: the viewport height
 // is the paper's width.
+//
+// A single page ([Options.FitFirstPage] with [Options.ViewportHeight], the
+// height of the paper's page area, set) grows along the block axis, which
+// a vertical writing mode makes horizontal (CSS Writing Modes 4, 3.1 and
+// 8: the principal writing mode decides the page progression, right to
+// left in vertical-rl, left to right in vertical-lr): the page keeps the
+// paper's height, along which its lines run and wrap, and is as wide as
+// its content. The turned page box is as wide as the paper is tall and as
+// long as the box the converter gave for a single page, and the layout
+// trims its first page to the content along that length, which is the
+// paper's width once turned back. The initial containing block is the
+// paper's page area turned: its height is the width of the paper's area.
 func turnedOptions(opts Options, wm css.WritingMode) Options {
-	opts.Page = turnBox(opts.Page, wm)
+	single := opts.FitFirstPage && opts.ViewportHeight > 0
+	turn := func(pb PageBox) PageBox { return turnBox(pb, wm) }
+	if single {
+		// The converter's box is as tall as a single page may be, its
+		// page area the paper's ViewportHeight tall: the paper is that
+		// area and the box's own top and bottom margins.
+		paperH := float64(opts.ViewportHeight+opts.Page.Margin[css.Top]) + opts.Page.Margin[css.Bottom]
+		turn = func(pb PageBox) PageBox {
+			sheet := pb.Height
+			pb.Height = paperH
+			t := turnBox(pb, wm)
+			t.Height = sheet
+			return t
+		}
+		paper := opts.Page
+		paper.Height = paperH
+		w, _ := areaOf(paper)
+		opts.ViewportHeight = w
+	}
+	opts.Page = turn(opts.Page)
 	if at := opts.PageAt; at != nil {
-		opts.PageAt = func(i int) PageBox { return turnBox(at(i), wm) }
+		opts.PageAt = func(i int) PageBox { return turn(at(i)) }
 	}
 	if pf := opts.PageFor; pf != nil {
-		opts.PageFor = func(info PageInfo) PageBox { return turnBox(pf(info), wm) }
+		opts.PageFor = func(info PageInfo) PageBox { return turn(pf(info)) }
 	}
-	// The viewport height and a first page fitted to its content measure
-	// the paper's height, along which a turned flow sets its lines: the
-	// initial containing block is the turned page area.
-	opts.ViewportHeight, opts.FitFirstPage = 0, false
+	if !single {
+		// The viewport height and a first page fitted to its content
+		// measure the paper's height, along which a turned flow sets its
+		// lines: the initial containing block is the turned page area.
+		opts.ViewportHeight, opts.FitFirstPage = 0, false
+	}
 	return opts
 }
 

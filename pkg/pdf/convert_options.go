@@ -757,6 +757,14 @@ func WithFirstPageNumber(n int) HTMLOption {
 // single-page print can leave the end of such a document out, since it
 // takes the height from a screen wider than the page area.
 //
+// A document whose root, or body, is in a vertical writing mode grows
+// along its block axis, which is horizontal (CSS Writing Modes 4, 3.1 and
+// 8): the page keeps the paper's height, along which its lines run and
+// wrap, and is as wide as its content plus the left and right margins,
+// read right to left in vertical-rl and left to right in vertical-lr as
+// its pages would follow one another. The page size limit then bounds the
+// width.
+//
 // No page break of the source ends the page: a forced break, to any page,
 // breaks nothing, and a box that avoids a page break has none to avoid
 // (CSS Fragmentation 3, 3.1). A column break inside a multi-column

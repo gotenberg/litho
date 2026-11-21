@@ -297,3 +297,28 @@ func TestConvert_SinglePagePlacesFixedBoxesOnThePage(t *testing.T) {
 		t.Errorf("the sidebar's lines at %v and %v, want the first in its top 20 points and the last in the bottom 20 of the 300 point page area", top, bottom)
 	}
 }
+
+// TestConvert_SinglePageGrowsSidewaysInAVerticalMode holds the single
+// page of a document whose principal writing mode is vertical: its block
+// axis is horizontal, so the page keeps the paper's height, along which
+// its lines run, and is as wide as its content, within the bound, which
+// bounds the width as it bounds a horizontal page's height (CSS Writing
+// Modes 4, 3.1 and 8).
+func TestConvert_SinglePageGrowsSidewaysInAVerticalMode(t *testing.T) {
+	t.Parallel()
+	o := Options{SinglePage: true, MarginTop: 10, MarginRight: 20, MarginBottom: 10, MarginLeft: 20}
+	for _, mode := range []string{"vertical-rl", "vertical-lr"} {
+		short := conv(t, `<html style="writing-mode:`+mode+`"><body style="margin:0"><div style="width:50pt"></div>`, o)
+		if pg := short.Pages[0]; !near6(pg.Width, 90) || !near6(pg.Height, DefaultPageHeight) {
+			t.Errorf("%s: short page %vx%v, want 90 wide, the content and the side margins, and the paper's %v tall", mode, pg.Width, pg.Height, DefaultPageHeight)
+		}
+		long := conv(t, `<html style="writing-mode:`+mode+`"><body style="margin:0"><div style="width:3000pt"></div><p>theend</p>`, o)
+		if pg := long.Pages[0]; pg.Width <= 3040 || !near6(pg.Height, DefaultPageHeight) || !strings.Contains(pageText(pg), "theend") {
+			t.Errorf("%s: long page %vx%v, want wider than 3040, the paper's height and the last line", mode, pg.Width, pg.Height)
+		}
+		cut := conv(t, `<html style="writing-mode:`+mode+`"><body style="margin:0"><div style="width:20000pt"></div><p>theend</p>`, Options{SinglePage: true, FittedLimit: 15000})
+		if pg := cut.Pages[0]; len(cut.Pages) != 1 || !near6(pg.Width, 15000) || strings.Contains(pageText(pg), "theend") || !singleCutWarned(cut) {
+			t.Errorf("%s: page %vx%v past the bound, cut warned %v; want 15000 wide, cut and warned", mode, pg.Width, pg.Height, singleCutWarned(cut))
+		}
+	}
+}
