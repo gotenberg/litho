@@ -19,7 +19,14 @@ func FirstPageOnly(res *layout.Result) *typeset.Warning {
 		return nil
 	}
 	res.Pages = res.Pages[:1]
-	return &typeset.Warning{
+	w := SinglePageCut()
+	return &w
+}
+
+// SinglePageCut returns the warning of a single page whose content passes
+// [MaxPageSide]: what lies past it is left out.
+func SinglePageCut() typeset.Warning {
+	return typeset.Warning{
 		Code:    warn.LimitReached,
 		Effect:  warn.Omitted,
 		Message: fmt.Sprintf("the content past %d points, the tallest page a PDF may have, is left out of the single page", MaxPageSide),

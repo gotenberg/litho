@@ -89,7 +89,8 @@ type Options struct {
 	// then as tall as that height plus the top and bottom margins, and in
 	// Landscape as wide as that width plus the left and right margins;
 	// the document is printed on it as usual, forced breaks cutting, and
-	// only the first page is written.
+	// only the first page is written. A paper side stops at 14,400
+	// points: content measured past it is left out, with a warning.
 	SinglePage bool
 	// OmitBackgrounds drops the background colours and images of the html
 	// and body elements, which paint the canvas (CSS 2.1, 14.2), and keeps

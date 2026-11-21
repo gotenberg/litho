@@ -5,6 +5,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestWithSinglePage_KeepsItsHTMLCallers holds the callers of the option
@@ -81,6 +83,32 @@ func TestWithSinglePage_TextDocumentsOnOnePage(t *testing.T) {
 		}
 		if pg.Height >= pg.Width*1.414 {
 			t.Errorf("%s: page %vx%v, want shorter than its paper", name, pg.Width, pg.Height)
+		}
+	}
+}
+
+// TestWithSinglePage_ReportsTheCut holds the report of a single page whose
+// content passes 14,400 points, the tallest page ISO 32000-1, Annex C.2
+// allows: an HTML and a Markdown source report the content left out, as a
+// text document does.
+func TestWithSinglePage_ReportsTheCut(t *testing.T) {
+	t.Parallel()
+	fonts := WithConvertFontDirs(convertFontDir(t))
+	ctx := context.Background()
+	for name, c := range map[string]*Conversion{
+		"HTML":     FromHTML(strings.NewReader(`<div style="height:20000pt"></div><p>end</p>`), fonts, WithSinglePage(true)),
+		"Markdown": FromMarkdown(strings.NewReader(strings.Repeat("line\n\n", 1200)), fonts, WithSinglePage(true)),
+	} {
+		report, err := c.WriteTo(ctx, &bytes.Buffer{})
+		if err != nil {
+			t.Fatalf("%s: WriteTo: %v", name, err)
+		}
+		cut := false
+		for _, w := range report.Warnings {
+			cut = cut || w.Code == models.WarningLimitReached && w.Effect == models.EffectOmitted
+		}
+		if !cut {
+			t.Errorf("%s: no warning of the content left out: %+v", name, report.Warnings)
 		}
 	}
 }

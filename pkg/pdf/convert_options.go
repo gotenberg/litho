@@ -721,7 +721,7 @@ func WithFirstPageNumber(n int) HTMLOption {
 // whole document in one column with no page break, as a screen shows it.
 // false, the default, writes the pages the source lays out on. The page is
 // at most 14,400 points tall, the largest page ISO 32000-1, Annex C.2
-// allows: the content past it is left out, and a text document reports a
+// allows: the content past it is left out, and the conversion reports a
 // warning. With [WithPageRanges] the conversion fails with
 // [ErrInvalidConvertOptions]: one page has no range to select.
 //

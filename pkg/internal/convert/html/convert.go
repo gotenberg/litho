@@ -15,6 +15,7 @@ import (
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding"
 
+	"github.com/gotenberg/litho/pkg/internal/convert/office"
 	"github.com/gotenberg/litho/pkg/internal/css"
 	"github.com/gotenberg/litho/pkg/internal/formula"
 	"github.com/gotenberg/litho/pkg/internal/layout"
@@ -131,6 +132,12 @@ func convertChecked(ctx context.Context, src io.Reader, fonts *text.Fonts, o Opt
 	out, err := p.assemble(res)
 	if err != nil {
 		return nil, err
+	}
+	if p.o.SinglePage && p.o.PageHeight >= maxPageSide && len(res.Pages) > 1 {
+		// The paper reached the tallest page a PDF may have before it held
+		// the content measured (ISO 32000-1, Annex C.2): what flowed past
+		// it is left out with the first page, as a text document's is.
+		out.Warnings = append(out.Warnings, office.SinglePageCut())
 	}
 	// A required resource that failed late in the layout ended ctx: the
 	// pages are not charged, so nothing is held for a document never
