@@ -195,6 +195,25 @@ func TestConvert_HeaderFooter(t *testing.T) {
 	}
 }
 
+// TestConvert_HeaderRestart locks a part started over: the text after a
+// FieldRestart span is laid out from the part's origin, over the text
+// before it, on the same baseline.
+func TestConvert_HeaderRestart(t *testing.T) {
+	sh := &Sheet{Name: "S", Page: a4(), Rows: []Row{{Index: 0, Cells: []Cell{textCell(0, "cell", nil)}}}}
+	sh.Page.HeaderTop = 20
+	sh.HeaderFooter.Odd.Header[0] = []Span{{Text: "first"}, {Field: FieldRestart}, {Text: "again"}}
+	out := convert(t, newDoc(sh), office.Options{})
+	at := map[string][2]float64{}
+	for _, r := range runs(out.Pages[0]) {
+		at[r.text] = [2]float64{r.x, r.y}
+	}
+	first, okF := at["first"]
+	again, okA := at["again"]
+	if !okF || !okA || !near(first[0], again[0], 0.01) || !near(first[1], again[1], 0.01) {
+		t.Errorf("first at %v, again at %v, want the same origin", first, again)
+	}
+}
+
 // TestConvert_Drawings locks a picture's placement by its anchors, over
 // the cells, and the chart hook's warning.
 func TestConvert_Drawings(t *testing.T) {

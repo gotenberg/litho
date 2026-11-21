@@ -68,6 +68,14 @@ func TestParseHeaderFooter(t *testing.T) {
 			}},
 		},
 		{"a part resets the font", "&B&LA&RB", [3][]span{{with(b, func(s *span) { s.text = "A" })}, nil, {with(b, func(s *span) { s.text = "B" })}}},
+		{
+			"a repeated part starts over", "&L&BA&CB&LC&L&RD&R",
+			[3][]span{
+				{with(b, func(s *span) { s.text, s.bold = "A", true }), with(b, func(s *span) { s.field = sheet.FieldRestart }), with(b, func(s *span) { s.text = "C" }), with(b, func(s *span) { s.field = sheet.FieldRestart })},
+				{with(b, func(s *span) { s.text = "B" })},
+				{with(b, func(s *span) { s.text = "D" }), with(b, func(s *span) { s.field = sheet.FieldRestart })},
+			},
+		},
 		{"a line break stays", "a\nb&c&", [3][]span{1: {with(b, func(s *span) { s.text = "a\nb" })}}},
 		{
 			"sizes held between 1 and 409 points", "&12345a&0b&0123c&8 9",

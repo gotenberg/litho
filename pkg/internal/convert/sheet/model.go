@@ -730,6 +730,10 @@ const (
 	FieldDate
 	// FieldTime is the print time.
 	FieldTime
+	// FieldRestart shows nothing: the spans after it are laid out as a
+	// block of their own at the part's place, drawn over the part's
+	// earlier text, as Excel prints a section code its text repeats.
+	FieldRestart
 )
 
 // Drawing is a picture or a chart placed on a sheet (ECMA-376 Part 1,

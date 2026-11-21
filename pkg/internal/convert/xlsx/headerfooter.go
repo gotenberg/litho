@@ -77,6 +77,8 @@ type hfParser struct {
 	part  int
 	parts [3][]sheet.Span
 	buf   strings.Builder
+	// opened marks the parts a code started.
+	opened [3]bool
 	// picture reports a picture code (&G) read.
 	picture bool
 }
@@ -291,7 +293,10 @@ func (p *hfParser) counted(f sheet.Field, s string, i int) int {
 
 // newPart starts the part i, its font reset to the base font: no face,
 // size or colour carries from one part into the next, as Excel prints
-// them.
+// them. A part's code that comes again, after text a code of that part
+// opened, starts the part over (sheet.FieldRestart), its font reset too: Excel draws the
+// text after it from the part's origin, over the text before it, where
+// MS-OI29500, 2.1.619 concatenates the two.
 //
 // # Corpus evidence
 //
@@ -299,11 +304,19 @@ func (p *hfParser) counted(f sheet.Field, s string, i int) int {
 //     Excel prints "&C&"Times New Roman,Italic"Centre" in Times New Roman
 //     Italic at 11 points and "&R&K0070C0Right" in Calibri 11, the Normal
 //     font: words 12.2 and 11.0 points tall where "Left" is 15.7.
+//   - probe, xlsx: "&L&B&I&UBoldItalicUnder&CCentre&RRight&LLeftAgain"
+//     prints Centre, Right and LeftAgain in Calibri regular, LeftAgain
+//     from x 51.36 on the baseline of BoldItalicUnder, over it.
 func (p *hfParser) newPart(i int) {
 	p.flush()
-	if i != p.part {
+	again := p.opened[i] && len(p.parts[i]) > 0
+	p.opened[i] = true
+	if i != p.part || again {
 		p.part = i
 		p.font = copyFont(p.base)
+	}
+	if again {
+		p.field(sheet.FieldRestart)
 	}
 }
 
@@ -484,7 +497,7 @@ func textEstimate(part []sheet.Span, base float64) float64 {
 				total += line
 				line = 0
 			}
-			if seg != "" || s.Field != sheet.FieldNone {
+			if seg != "" || s.Field != sheet.FieldNone && s.Field != sheet.FieldRestart {
 				line = max(line, size)
 			}
 		}

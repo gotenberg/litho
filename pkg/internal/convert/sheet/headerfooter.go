@@ -60,7 +60,7 @@ func (b *builder) spanText(s Span, f hfFields) string {
 	case FieldFile, FieldPath:
 		b.warn(warn.PageSetupUnsupported, warn.Omitted, "the file name and path fields of headers and footers show nothing: the conversion has no file name")
 		return ""
-	case FieldNone:
+	case FieldNone, FieldRestart:
 	}
 	return s.Text
 }
@@ -154,23 +154,20 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 	root.Height = css.Pts(height)
 	tree := &layout.Node{Kind: layout.Element, Style: root}
 	place := func(parts [3][]Span, top float64, fromBottom bool, minH float64) {
-		aligns := [3]css.TextAlign{css.AlignLeft, css.AlignCenter, css.AlignRight}
-		var nodes [3]*layout.Node
-		any := false
-		for i := range parts {
-			nodes[i] = b.partNode(parts[i], f, aligns[i], hf.Font)
-			any = any || nodes[i] != nil
+		var nodes []*layout.Node
+		for _, bl := range partBlocks(parts) {
+			if n := b.partNode(bl.spans, f, bl.align, hf.Font); n != nil {
+				nodes = append(nodes, n)
+			}
 		}
-		if !any {
+		if len(nodes) == 0 {
 			return
 		}
 		h := 0.0
-		heights := [3]float64{}
+		heights := make([]float64, len(nodes))
 		for i, n := range nodes {
-			if n != nil {
-				heights[i] = b.measureBlock(n, areaW)
-				h = max(h, heights[i])
-			}
+			heights[i] = b.measureBlock(n, areaW)
+			h = max(h, heights[i])
 		}
 		h = max(h, minH)
 		y := top
@@ -178,9 +175,6 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 			y = height - top - h
 		}
 		for i, n := range nodes {
-			if n == nil {
-				continue
-			}
 			box := b.style()
 			box.Position = css.Absolute
 			box.Left = css.Pts(left)
@@ -214,6 +208,32 @@ func (b *builder) margins(p *pagePlan, first bool, number, total int, width, hei
 		Opacity:   1,
 		Content:   frags,
 	}}
+}
+
+// hfBlock is a run of a header or footer part's spans laid out as one
+// block, with its part's alignment.
+type hfBlock struct {
+	spans []Span
+	align css.TextAlign
+}
+
+// partBlocks returns the blocks of the left, centre and right parts, in
+// that order: each part cut at its FieldRestart spans, every block of a
+// part laid out at the part's place, the later over the earlier.
+func partBlocks(parts [3][]Span) []hfBlock {
+	aligns := [3]css.TextAlign{css.AlignLeft, css.AlignCenter, css.AlignRight}
+	var out []hfBlock
+	for i, part := range parts {
+		start := 0
+		for k, sp := range part {
+			if sp.Field == FieldRestart {
+				out = append(out, hfBlock{part[start:k], aligns[i]})
+				start = k + 1
+			}
+		}
+		out = append(out, hfBlock{part[start:], aligns[i]})
+	}
+	return out
 }
 
 // headerShown reports a sheet whose pages show a header, footer when
@@ -298,14 +318,13 @@ func (b *builder) growMargins(sp *sheetPlan) {
 	}
 	tallest := func(footer bool) float64 {
 		h := 0.0
-		aligns := [3]css.TextAlign{css.AlignLeft, css.AlignCenter, css.AlignRight}
 		for _, m := range variants {
 			parts := m.Header
 			if footer {
 				parts = m.Footer
 			}
-			for i := range parts {
-				if n := b.partNode(parts[i], f, aligns[i], hf.Font); n != nil {
+			for _, bl := range partBlocks(parts) {
+				if n := b.partNode(bl.spans, f, bl.align, hf.Font); n != nil {
 					h = max(h, b.measureBlock(n, areaW))
 				}
 			}
