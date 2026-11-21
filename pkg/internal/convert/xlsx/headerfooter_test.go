@@ -31,7 +31,7 @@ type span struct {
 func TestParseHeaderFooter(t *testing.T) {
 	t.Parallel()
 	base := sheet.Font{Families: []string{"Calibri"}, Size: 11}
-	theme := &ooxml.Theme{Colors: map[string]css.Color{"accent1": rgb(0x4472C4)}, Major: ooxml.FontScheme{Latin: "Cambria"}}
+	theme := &ooxml.Theme{Colors: map[string]css.Color{"accent1": rgb(0x4472C4)}, Major: ooxml.FontScheme{Latin: "Cambria"}, Minor: ooxml.FontScheme{Latin: "Corbel"}}
 	b := span{family: "Calibri", size: 11}
 	with := func(s span, f func(*span)) span { f(&s); return s }
 	for _, tc := range []struct {
@@ -49,7 +49,7 @@ func TestParseHeaderFooter(t *testing.T) {
 			},
 		},
 		{
-			"font codes", `&"Arial,Bold Italic"&14A&"-,Regular"&BB&I&U&SC&E&XD&KFF0000E&K04-050F&&`,
+			"font codes", `&"Arial,Bold Italic"&14A&"Calibri,Regular"&BB&I&U&SC&E&XD&KFF0000E&K04-050F&&`,
 			[3][]span{1: {
 				with(b, func(s *span) { s.text, s.family, s.size, s.bold, s.italic = "A", "Arial", 14, true, true }),
 				with(b, func(s *span) { s.text, s.size, s.bold = "B", 14, true }),
@@ -82,7 +82,7 @@ func TestParseHeaderFooter(t *testing.T) {
 			[3][]span{1: {
 				with(b, func(s *span) { s.text, s.family, s.bold = "A", "Cambria", true }),
 				with(b, func(s *span) { s.text, s.family, s.bold = "B", "Arial", true }),
-				with(b, func(s *span) { s.text, s.bold = "C", true }),
+				with(b, func(s *span) { s.text, s.family, s.bold = "C", "Corbel", true }),
 			}},
 		},
 		{"an unknown code drops its whole character", "&éa&€b&K€0000c", [3][]span{1: {with(b, func(s *span) { s.text = "ab€0000c" })}}},

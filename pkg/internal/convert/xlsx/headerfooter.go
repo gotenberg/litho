@@ -93,9 +93,9 @@ type hfParser struct {
 // prints it ([hfParser.counted]); &B, &I, &U, &E, &S,
 // &X and &Y toggle bold, italic, single and double underline, strike,
 // superscript and subscript; &"font,style" sets the face and its bold or
-// italic style ("-" is the Normal font's face), &nn the size in points,
-// every digit read and the size held between minHeaderSize and
-// maxHeaderSize,
+// italic style ("-" and "+" the theme's body and heading faces), &nn
+// the size in points, every digit read and the size held between
+// minHeaderSize and maxHeaderSize,
 // &Krrggbb or &Kttsnnn the colour (a theme index with a tint percent);
 // && is an ampersand and a line break stays in the text. Other codes,
 // &G (a picture), &O and &H (outline and shadow) and any other character
@@ -309,16 +309,25 @@ func (p *hfParser) newPart(i int) {
 
 // fontName applies a &"name,style" code: the style's words bold, italic
 // and their German and Hungarian names, as LibreOffice reads them. The
-// name "-" is the Normal font's face; "+" is the theme's heading font, as
-// Excel names it (Microsoft, "Formatting and VBA codes for headers and
-// footers": &"+" prints in the Heading font of the current theme), the
-// Normal font's face when the theme names none.
+// names "-" and "+" are the theme's body and heading fonts, as Excel
+// names them (Microsoft, "Formatting and VBA codes for headers and
+// footers"), the Normal font's face when the theme names none.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: under a theme of Calibri body and Cambria headings, a
+//     Normal font named Arial with the minor scheme, Excel for the web
+//     prints "&"-,Regular"" in Calibri, "&"+,Regular"" in Cambria and
+//     "&"+,Bold"" in Cambria Bold.
 func (p *hfParser) fontName(spec string) {
 	name, style, hasStyle := strings.Cut(spec, ",")
 	name = strings.TrimSpace(name)
 	switch {
 	case name == "-":
 		p.font.Families = copyFont(p.base).Families
+		if p.theme != nil && p.theme.Minor.Latin != "" {
+			p.font.Families = []string{p.theme.Minor.Latin}
+		}
 	case name == "+":
 		p.font.Families = copyFont(p.base).Families
 		if p.theme != nil && p.theme.Major.Latin != "" {
