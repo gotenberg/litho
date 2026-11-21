@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 // runOracles runs veraPDF, poppler and pdfcpu on the staged files of the
@@ -152,7 +154,7 @@ func (f *targetsFeature) judgeWithPoppler(ctx context.Context, staging string, s
 	var jobs []popplerJob
 	for _, r := range staged {
 		for p := 1; p <= r.pages; p++ {
-			jobs = append(jobs, popplerJob{PDF: r.file, Page: p, PNG: popplerPNGRoot(r.file, p)})
+			jobs = append(jobs, popplerJob{PDF: r.file, Page: p, PNG: popplerPNGRoot(r.file, p), DPI: popplerDPI(ctx, filepath.Join(staging, r.file), p)})
 		}
 	}
 	if len(jobs) == 0 {
@@ -187,6 +189,25 @@ func (f *targetsFeature) judgeWithPoppler(ctx context.Context, staging string, s
 			}
 		}
 	})
+}
+
+// popplerDPI returns the resolution poppler draws page of the file at path
+// at so that its drawing is litho's: 72 dpi times the page's /UserUnit. A
+// PDF/A-2 or PDF/A-3 remediation writes a page past 14,400 units in larger
+// units (ISO 32000-1, 7.7.3.3, Table 30), which litho's renderer draws at its
+// true size and pdftoppm ignores, drawing it 1/UserUnit as large: the oracle
+// is to judge the drawing, not that known gap of poppler's.
+func popplerDPI(ctx context.Context, path string, page int) float64 {
+	r, err := pdf.OpenFile(ctx, path)
+	if err != nil {
+		return 72
+	}
+	defer r.Close()
+	pg, err := r.Page(ctx, page)
+	if err != nil || pg.UserUnit <= 0 {
+		return 72
+	}
+	return 72 * pg.UserUnit
 }
 
 // popplerPNGRoot is the PNG path, without its extension, poppler draws page

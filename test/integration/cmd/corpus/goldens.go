@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -369,6 +370,8 @@ type popplerJob struct {
 	PDF  string
 	Page int
 	PNG  string
+	// DPI is the resolution pdftoppm draws the page at, 72 when zero.
+	DPI float64
 }
 
 // popplerBatchTimeout caps the one container that renders a corpus run's
@@ -378,9 +381,9 @@ type popplerJob struct {
 // pages.
 const popplerBatchTimeout = 30 * time.Minute
 
-// popplerRenderScript renders every line of jobs.tsv, PDF, page and PNG root
-// separated by tabs, with the settings [renderPDFs] draws the render goldens
-// with: 72 dpi, the crop box, anti-aliased text and vectors, annotations
+// popplerRenderScript renders every line of jobs.tsv, PDF, page, PNG root and
+// resolution separated by tabs, with the settings [renderPDFs] draws the
+// render goldens with: 72 dpi unless the job says otherwise, the crop box, anti-aliased text and vectors, annotations
 // drawn. Keep the two in step. A page pdftoppm cannot render leaves no PNG
 // and its message in the root plus ".err"; 120 seconds bound one page, as
 // renderTimeout does there.
@@ -388,12 +391,12 @@ const popplerRenderScript = `#!/bin/bash
 set -eu
 pdftoppm -v > /rr/poppler-version.txt 2>&1 || true
 render() {
-  if ! timeout 120 pdftoppm -r 72 -cropbox -aa yes -aaVector yes -f "$2" -l "$2" -singlefile -png "/rr/$1" "/rr/$3" 2> "/rr/$3.err"; then
+  if ! timeout 120 pdftoppm -r "$4" -cropbox -aa yes -aaVector yes -f "$2" -l "$2" -singlefile -png "/rr/$1" "/rr/$3" 2> "/rr/$3.err"; then
     rm -f "/rr/$3.png"
   fi
 }
 export -f render
-parallel --colsep '\t' -j "$(nproc)" render {1} {2} {3} :::: /rr/jobs.tsv
+parallel --colsep '\t' -j "$(nproc)" render {1} {2} {3} {4} :::: /rr/jobs.tsv
 `
 
 // errPopplerUnavailable reports that the corpus image's poppler could not
@@ -419,7 +422,11 @@ func renderWithPoppler(ctx context.Context, dir string, jobs []popplerJob) (stri
 	}
 	var list strings.Builder
 	for _, j := range jobs {
-		fmt.Fprintf(&list, "%s\t%d\t%s\n", j.PDF, j.Page, j.PNG)
+		dpi := j.DPI
+		if dpi <= 0 {
+			dpi = 72
+		}
+		fmt.Fprintf(&list, "%s\t%d\t%s\t%s\n", j.PDF, j.Page, j.PNG, strconv.FormatFloat(dpi, 'f', -1, 64))
 	}
 	if err := os.WriteFile(filepath.Join(dir, "jobs.tsv"), []byte(list.String()), 0o600); err != nil {
 		return "", fmt.Errorf("write poppler jobs: %w", err)
