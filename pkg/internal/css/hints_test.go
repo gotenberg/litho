@@ -133,6 +133,19 @@ func TestHTMLHints_Attributes(t *testing.T) {
 	}
 }
 
+// An iframe of frameborder zero or not an integer loses its border (HTML
+// Standard, 15.4.3); any other integer keeps it.
+func TestHTMLHints_FrameBorder(t *testing.T) {
+	t.Parallel()
+	c := compute(t, `<iframe id=zero frameborder=0></iframe><iframe id=word frameborder=no></iframe><iframe id=zeros frameborder=" -00x"></iframe>
+<iframe id=one frameborder=1></iframe><iframe id=minus frameborder=-1></iframe><iframe id=none></iframe>`, ``)
+	for id, want := range map[string]float64{"zero": 0, "word": 0, "zeros": 0, "one": 1.5, "minus": 1.5, "none": 1.5} {
+		if got := c.of(id).Border[Top].Width; got != want {
+			t.Errorf("#%s: border width %v, want %v", id, got, want)
+		}
+	}
+}
+
 func TestLegacyColor_HTMLRules(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

@@ -33,6 +33,7 @@ import (
 //   - font: color, face, size (the legacy 1 to 7 and relative +n/-n
 //     scale).
 //   - img, object and embed: hspace, vspace, border.
+//   - iframe: frameborder, zero or not an integer, removes the border.
 //   - hr: color, noshade, size.
 //   - br: clear. ol, ul and li: type. li: value, as counter-set of the
 //     list-item counter.
@@ -188,6 +189,9 @@ func HTMLHints(n *html.Node) []Declaration {
 		h.dimension(n, "height", "height", false)
 		if n.Data != "video" && n.Data != "canvas" {
 			h.replacedAlign(n)
+		}
+		if n.Data == "iframe" && frameBorderless(n) {
+			h.add("border-width", "0")
 		}
 		if n.Data == "img" || n.Data == "object" || n.Data == "embed" {
 			h.pixels(n, "hspace", "margin-left", "margin-right")
@@ -607,6 +611,36 @@ func nonNegativeInt(s string) (int, bool) {
 		i++
 	}
 	return min(n, maxHintInt), i > start
+}
+
+// frameBorderless reports an iframe whose frameborder attribute, parsed
+// with the rules for parsing integers (HTML Standard, 2.3.4.1), is zero or
+// an error: the presentational hints set its border widths to zero (HTML
+// Standard, 15.4.3).
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints an iframe
+//     of frameborder="0" without its inset border, its document's text 8
+//     pixels in from the box's edge.
+func frameBorderless(n *html.Node) bool {
+	v, ok := attr(n, "frameborder")
+	if !ok {
+		return false
+	}
+	i := 0
+	for i < len(v) && isASCIIWS(v[i]) {
+		i++
+	}
+	if i < len(v) && (v[i] == '-' || v[i] == '+') {
+		i++
+	}
+	start, zero := i, true
+	for i < len(v) && v[i] >= '0' && v[i] <= '9' {
+		zero = zero && v[i] == '0'
+		i++
+	}
+	return i == start || zero
 }
 
 // parseDimensionValue implements the rules for parsing dimension values
