@@ -100,6 +100,7 @@ func checkModel(t *testing.T, doc *sheet.Document) {
 func FuzzParseHeaderFooter(f *testing.F) {
 	f.Add(`&L&"Arial,Bold"&14Page &P of &N&C&A&R&KFF0000&D &T&Z&F&&`)
 	f.Add(`&"Ar`)
+	f.Add(`&RPage &P+1 of &N-1&P+12abc&P+1&14x&P+99999999999999999999999&N-`)
 	base := sheet.Font{Families: []string{"Calibri"}, Size: 11}
 	f.Fuzz(func(t *testing.T, s string) {
 		for _, part := range parseHeaderFooter(s, base, nil) {
@@ -109,6 +110,9 @@ func FuzzParseHeaderFooter(f *testing.F) {
 				}
 				if sp.Field == sheet.FieldNone && sp.Text == "" {
 					t.Fatal("an empty text span")
+				}
+				if sp.Offset != 0 && (sp.Field != sheet.FieldPage && sp.Field != sheet.FieldPages || sp.Offset < -maxPageOffset || sp.Offset > maxPageOffset) {
+					t.Fatalf("span %+v: an offset on another field or past its bound", sp)
 				}
 			}
 		}

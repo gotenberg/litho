@@ -14,6 +14,7 @@ import (
 type span struct {
 	text         string
 	field        sheet.Field
+	offset       int
 	family       string
 	size         float64
 	bold, italic bool
@@ -67,6 +68,31 @@ func TestParseHeaderFooter(t *testing.T) {
 		{"a part resets the font", "&B&LA&RB", [3][]span{{with(b, func(s *span) { s.text = "A" })}, nil, {with(b, func(s *span) { s.text = "B" })}}},
 		{"a line break stays", "a\nb&12345c&", [3][]span{1: {with(b, func(s *span) { s.text = "a\nbc" })}}},
 		{"dropped codes", "&Gx&O&Hy&\"Ar", [3][]span{1: {with(b, func(s *span) { s.text = "xy" })}}},
+		{
+			"page offsets", "&P+1 of &N&P+1&N&P+12abc&p+3&N-2",
+			[3][]span{1: {
+				with(b, func(s *span) { s.field, s.offset = sheet.FieldPage, 1 }), with(b, func(s *span) { s.text = " of " }), with(b, func(s *span) { s.field = sheet.FieldPages }),
+				with(b, func(s *span) { s.field, s.offset = sheet.FieldPage, 1 }), with(b, func(s *span) { s.field = sheet.FieldPages }),
+				with(b, func(s *span) { s.field, s.offset = sheet.FieldPage, 12 }), with(b, func(s *span) { s.text = "abc" }),
+				with(b, func(s *span) { s.field, s.offset = sheet.FieldPage, 3 }), with(b, func(s *span) { s.field, s.offset = sheet.FieldPages, -2 }),
+			}},
+		},
+		{
+			"an offset before a size", "&P+1&14x",
+			[3][]span{1: {with(b, func(s *span) { s.field, s.offset = sheet.FieldPage, 1 }), with(b, func(s *span) { s.text, s.size = "x", 14 })}},
+		},
+		{
+			"no digit after the sign", "&P +1&P+ 1&N-",
+			[3][]span{1: {
+				with(b, func(s *span) { s.field = sheet.FieldPage }), with(b, func(s *span) { s.text = " +1" }),
+				with(b, func(s *span) { s.field = sheet.FieldPage }), with(b, func(s *span) { s.text = "+ 1" }),
+				with(b, func(s *span) { s.field = sheet.FieldPages }), with(b, func(s *span) { s.text = "-" }),
+			}},
+		},
+		{
+			"a bounded offset", "&P+99999999999999999999999&N-1000000000",
+			[3][]span{1: {with(b, func(s *span) { s.field, s.offset = sheet.FieldPage, maxPageOffset }), with(b, func(s *span) { s.field, s.offset = sheet.FieldPages, -maxPageOffset })}},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -78,7 +104,7 @@ func TestParseHeaderFooter(t *testing.T) {
 				for i, s := range got[part] {
 					w := tc.want[part][i]
 					f := s.Font
-					if f == nil || s.Text != w.text || s.Field != w.field || f.Families[0] != w.family || f.Size != w.size || f.Bold != w.bold ||
+					if f == nil || s.Text != w.text || s.Field != w.field || s.Offset != w.offset || f.Families[0] != w.family || f.Size != w.size || f.Bold != w.bold ||
 						f.Italic != w.italic || f.Underline != w.under || f.Strike != w.strike || f.Script != w.script || !near(f.Color, w.color) {
 						t.Errorf("part %d span %d = %+v font %+v, want %+v", part, i, s, f, w)
 					}

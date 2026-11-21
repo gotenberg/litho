@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -129,6 +130,42 @@ func TestConvert_BlankPagesPastTheLimit(t *testing.T) {
 			}
 			if len(out.Outline) != 1 || out.Outline[0].Dest.Page != 1 {
 				t.Errorf("outline %+v, want S on page 1", out.Outline)
+			}
+		})
+	}
+}
+
+// TestConvert_PageOffsets locks the offset of a page number or count
+// field: added to the number each page shows, after the sheet's first page
+// number and after the pages that hold nothing are left out, and summed
+// in 64 bits, so that an offset at the 32-bit bound shows the same digits
+// where int is 32 bits.
+func TestConvert_PageOffsets(t *testing.T) {
+	tests := []struct {
+		name              string
+		maxPages          int
+		firstPage         int
+		pageOff, countOff int
+		want              []string
+	}{
+		{"every page", 4, 0, 10, -1, []string{"P: 11 / 3 first", "P: 12 / 3", "P: 13 / 3 last", "P: 14 / 3 far"}},
+		{"from page 5, blank pages left out", 3, 5, 1, 1, []string{"P: 6 / 4 first", "P: 7 / 4 last", "P: 8 / 4 far"}},
+		{"below zero", 4, 0, -2, 0, []string{"P: -1 / 4 first", "P: 0 / 4", "P: 1 / 4 last", "P: 2 / 4 far"}},
+		{"past 32 bits", 3, 5, math.MaxInt32, math.MinInt32, []string{"P: 2147483652 / -2147483645 first", "P: 2147483653 / -2147483645 last", "P: 2147483654 / -2147483645 far"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := islandBook(true)
+			sh := doc.Sheets[0]
+			sh.Page.FirstPageNumber = tt.firstPage
+			sh.HeaderFooter.Odd.Header[1][1].Offset = tt.pageOff
+			sh.HeaderFooter.Odd.Header[1][3].Offset = tt.countOff
+			out, err := Convert(context.Background(), doc, pinnedFonts(t), office.Options{MaxPages: tt.maxPages})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := pageTexts(out); !slices.Equal(got, tt.want) {
+				t.Errorf("pages %q, want %q", got, tt.want)
 			}
 		})
 	}

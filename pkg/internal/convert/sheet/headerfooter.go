@@ -33,13 +33,15 @@ type hfFields struct {
 	sheet       string
 }
 
-// spanText returns what a span shows on a page.
+// spanText returns what a span shows on a page. A page number or count
+// is moved by the span's offset when the page is drawn, the sum taken in
+// 64 bits so that it cannot wrap where int is 32 bits.
 func (b *builder) spanText(s Span, f hfFields) string {
 	switch s.Field {
 	case FieldPage:
-		return strconv.Itoa(f.page)
+		return strconv.FormatInt(int64(f.page)+int64(s.Offset), 10)
 	case FieldPages:
-		return strconv.Itoa(f.pages)
+		return strconv.FormatInt(int64(f.pages)+int64(s.Offset), 10)
 	case FieldSheet:
 		return f.sheet
 	case FieldTitle:

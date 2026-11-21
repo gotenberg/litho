@@ -58,11 +58,14 @@ type hfParser struct {
 
 // parseHeaderFooter parses a header or footer text (ECMA-376 Part 1,
 // 18.3.1.46, the formatting codes) into its left, centre and right
-// parts, as LibreOffice's import reads it: &L, &C and &R start a part
+// parts, as LibreOffice's import reads it where Excel prints the same:
+// &L, &C and &R start a part
 // (the centre one when the text starts with none), each part starting
 // from base, the Normal style's font; &P, &N, &A, &F, &Z, &D and &T are
 // the page, the page count, the sheet, the file name, the file path, the
-// date and the time (&Z&F reads as the path alone); &B, &I, &U, &E, &S,
+// date and the time (&Z&F reads as the path alone), a page number or
+// count followed by a sign and digits moved by that number as Excel
+// prints it ([hfParser.counted]); &B, &I, &U, &E, &S,
 // &X and &Y toggle bold, italic, single and double underline, strike,
 // superscript and subscript; &"font,style" sets the face and its bold or
 // italic style ("-" is the Normal font's face), &nn the size in points,
@@ -100,9 +103,9 @@ func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) [3][]sheet
 		case 'R':
 			p.newPart(2)
 		case 'P':
-			p.field(sheet.FieldPage)
+			i = p.counted(sheet.FieldPage, s, i)
 		case 'N':
-			p.field(sheet.FieldPages)
+			i = p.counted(sheet.FieldPages, s, i)
 		case 'A':
 			p.field(sheet.FieldSheet)
 		case 'F':
@@ -191,6 +194,50 @@ func (p *hfParser) field(f sheet.Field) {
 	p.flush()
 	font := copyFont(p.font)
 	p.parts[p.part] = append(p.parts[p.part], sheet.Span{Field: f, Font: &font})
+}
+
+// maxPageOffset bounds the number a &P+n or &N+n code adds to or takes
+// from the page number or count: 2^29, a larger one saturating at it.
+// Anti-DoS guard, not spec-mandated: Excel holds 255 characters a text,
+// room for a number of any size, and a real offset continues a numbering
+// by a few hundred pages. The field adds it in 64 bits.
+const maxPageOffset = 1 << 29
+
+// counted adds the field f, the page number or the page count, whose code
+// letter is s[i], with the offset a sign and digits after it give, and
+// returns the index of the last byte read. Office reads a sign and digits
+// after &N (MS-OI29500, 2.1.619, pagetotal = "&N" 0*1(("-" / "+")
+// *DIGIT)), and Excel after &P too: the number ends at the first byte
+// that is no digit, a space included. A sign no digit follows stays text.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx headers_footers_codes: "&P/&N &P+1" in a footer prints
+//     "1/3 2" and "2/3 3" on the two pages of its sheet in Excel's print,
+//     where LibreOffice's import prints "1/3 1+1".
+func (p *hfParser) counted(f sheet.Field, s string, i int) int {
+	p.field(f)
+	if i+1 >= len(s) || (s[i+1] != '+' && s[i+1] != '-') {
+		return i
+	}
+	j := i + 2
+	for j < len(s) && s[j] >= '0' && s[j] <= '9' {
+		j++
+	}
+	if j == i+2 {
+		return i
+	}
+	n, err := intconv.Atoi(s[i+2 : j])
+	if err != nil {
+		// Digits alone fail only past 64 bits.
+		n = maxPageOffset
+	}
+	n = min(n, maxPageOffset)
+	if s[i+1] == '-' {
+		n = -n
+	}
+	p.parts[p.part][len(p.parts[p.part])-1].Offset = n
+	return j - 1
 }
 
 // newPart starts the part i, its font reset to the base font.
