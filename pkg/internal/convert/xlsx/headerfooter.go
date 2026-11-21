@@ -13,7 +13,15 @@ import (
 )
 
 // maxHeaderRunes caps the characters of one header or footer text.
-// Anti-DoS guard, not spec-mandated: Excel holds 255 characters a text.
+// Anti-DoS guard, not spec-mandated: ECMA-376 sets no length, and Excel,
+// which holds 255 characters a text (MS-OI29500, 2.1.619), refuses a
+// workbook whose header is longer, so no Excel page holds one; litho
+// prints such a text whole, as the standard reads it, up to the guard.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: a header of 303 characters makes Excel for the web
+//     refuse the workbook as corrupt (XLSCorruptFile).
 const maxHeaderRunes = 4096
 
 // headerFooter reads a headerFooter element (ECMA-376 Part 1, 18.3.1.46):
