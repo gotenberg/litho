@@ -579,3 +579,23 @@ func TestAnchor_FixedBoxShiftsInScrollableArea(t *testing.T) {
 			map[string]string{"1:g": c.want})
 	}
 }
+
+// TestAnchor_TransformedFragments holds the anchor box of a transformed
+// anchor the columns cut (CSS Anchor Positioning 1, 2: the bounding box of
+// its fragments, transforms applied): each fragment is transformed about
+// its own border box, as Chromium draws a fragmented transformed box.
+//
+// # Corpus evidence
+//
+//   - wpt: css/css-anchor-position/transform-006 draws its reference in
+//     Chromium of gotenberg/gotenberg:9.4.1.
+func TestAnchor_TransformedFragments(t *testing.T) {
+	t.Parallel()
+	checkAnchored(t, `
+		.mc { columns: 5; column-gap: 20px; column-fill: auto; height: 40px; width: 100px; margin-top: 25px }
+		#t { height: 20px; transform: scale(2); anchor-name: --t }
+		#p1 { position-anchor: --t; position-area: center; width: anchor-size(width); height: anchor-size(height) }`,
+		`<div style="position: relative; display: flow-root; width: 100px; height: 100px"><div class=mc><div style="height: 70px"></div><div id=t></div></div>
+		<div class="p g" id=p1></div></div>`,
+		map[string]string{"1:g": "22,20+32x50"})
+}
