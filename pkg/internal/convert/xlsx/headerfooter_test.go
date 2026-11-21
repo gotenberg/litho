@@ -66,7 +66,11 @@ func TestParseHeaderFooter(t *testing.T) {
 			}},
 		},
 		{"a part resets the font", "&B&LA&RB", [3][]span{{with(b, func(s *span) { s.text = "A" })}, nil, {with(b, func(s *span) { s.text = "B" })}}},
-		{"a line break stays", "a\nb&12345c&", [3][]span{1: {with(b, func(s *span) { s.text = "a\nbc" })}}},
+		{"a line break stays", "a\nb&c&", [3][]span{1: {with(b, func(s *span) { s.text = "a\nb" })}}},
+		{
+			"a size of three digits at most", "&12345a&0b&8 9",
+			[3][]span{1: {with(b, func(s *span) { s.text, s.size = "45ab", 123 }), with(b, func(s *span) { s.text, s.size = " 9", 8 })}},
+		},
 		{"dropped codes", "&Gx&O&Hy&\"Ar", [3][]span{1: {with(b, func(s *span) { s.text = "xy" })}}},
 		{
 			"page offsets", "&P+1 of &N&P+1&N&P+12abc&p+3&N-2",

@@ -46,6 +46,10 @@ func (r *reader) headerFooter(e *ooxml.Element) sheet.HeaderFooter {
 	return hf
 }
 
+// maxSizeDigits is how many digits a font size code reads (MS-OI29500,
+// 2.1.619, the formatting codes of evenHeader: fontsize = "&" 1*3DIGIT).
+const maxSizeDigits = 3
+
 // hfParser is the state of one header or footer text's parsing.
 type hfParser struct {
 	base  sheet.Font
@@ -69,6 +73,7 @@ type hfParser struct {
 // &X and &Y toggle bold, italic, single and double underline, strike,
 // superscript and subscript; &"font,style" sets the face and its bold or
 // italic style ("-" is the Normal font's face), &nn the size in points,
+// one to three digits,
 // &Krrggbb or &Kttsnnn the colour (a theme index with a tint percent);
 // && is an ampersand and a line break stays in the text. Other codes,
 // &G (a picture), &O and &H (outline and shadow), are dropped. Every
@@ -157,11 +162,12 @@ func parseHeaderFooter(s string, base sheet.Font, theme *ooxml.Theme) [3][]sheet
 			i += end + 1
 		default:
 			if code >= '0' && code <= '9' {
+				// A digit past the size's maxSizeDigits is text.
 				j := i
-				for j < len(s) && s[j] >= '0' && s[j] <= '9' {
+				for j < len(s) && j-i < maxSizeDigits && s[j] >= '0' && s[j] <= '9' {
 					j++
 				}
-				if n, err := intconv.Atoi(s[i:j]); err == nil && j-i <= 4 && n > 0 && n <= maxFontSize {
+				if n, err := intconv.Atoi(s[i:j]); err == nil && n > 0 && n <= maxFontSize {
 					p.flush()
 					p.font.Size = float64(n)
 				}

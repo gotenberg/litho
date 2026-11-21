@@ -101,6 +101,7 @@ func FuzzParseHeaderFooter(f *testing.F) {
 	f.Add(`&L&"Arial,Bold"&14Page &P of &N&C&A&R&KFF0000&D &T&Z&F&&`)
 	f.Add(`&"Ar`)
 	f.Add(`&RPage &P+1 of &N-1&P+12abc&P+1&14x&P+99999999999999999999999&N-`)
+	f.Add(`&12345a&0b&8 9`)
 	base := sheet.Font{Families: []string{"Calibri"}, Size: 11}
 	f.Fuzz(func(t *testing.T, s string) {
 		for _, part := range parseHeaderFooter(s, base, nil) {
