@@ -996,6 +996,20 @@ const (
 	RightPage
 )
 
+// FieldSizing is the field-sizing property (CSS Form Control Styling 1,
+// 7.1).
+type FieldSizing uint8
+
+// The field-sizing values.
+const (
+	// FieldFixed gives a form control its default size, the one its
+	// cols, rows or size attribute asks.
+	FieldFixed FieldSizing = iota
+	// FieldContent sizes a form control to fit its content, or its
+	// placeholder when it has none.
+	FieldContent
+)
+
 // BreakInside is the break-inside value (CSS Fragmentation 3, 3.2).
 type BreakInside uint8
 
@@ -1076,6 +1090,16 @@ type Style struct {
 	// TransformBox is the reference box of the transform and its origin
 	// (CSS Transforms 1, 8).
 	TransformBox TransformBox
+	// MotionPath holds the offset longhands (CSS Motion Path 1), nil
+	// while every one is initial. Shared and never mutated.
+	MotionPath *MotionPath
+	// GlyphPaint holds the text stroke and fill colour longhands and
+	// paint-order, nil while every one is initial; read it with
+	// [Style.TextStroke] and [Style.TextFill]. Shared and never mutated.
+	GlyphPaint *GlyphPaint
+	// FieldSizing sizes a form control by its content or by its default
+	// size (CSS Form Control Styling 1, 7.1).
+	FieldSizing FieldSizing
 	// OuterInline reports a box whose display was inline-level before CSS
 	// 2.1, 9.7 blockified it: an absolutely positioned box's static
 	// position is then where its inline box would have sat on the line

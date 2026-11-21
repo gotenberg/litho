@@ -187,8 +187,13 @@ func initShorthands() {
 			longhands: []propID{pTextDecoration, pTextDecorationStyle, pTextDecorationColor, pTextDecorationThickness},
 			expand:    expandTextDecoration,
 		},
-		"white-space": {longhands: []propID{pWhiteSpace, pTextWrapMode}, expand: expandWhiteSpace},
-		"text-wrap":   {longhands: []propID{pTextWrapMode, pTextWrapStyle}, expand: expandTextWrap},
+		"white-space":         {longhands: []propID{pWhiteSpace, pTextWrapMode}, expand: expandWhiteSpace},
+		"text-wrap":           {longhands: []propID{pTextWrapMode, pTextWrapStyle}, expand: expandTextWrap},
+		"-webkit-text-stroke": {longhands: []propID{pTextStrokeWidth, pTextStrokeColor}, expand: expandTextStroke},
+		"offset": {
+			longhands: []propID{pOffsetPosition, pOffsetPath, pOffsetDistance, pOffsetRotate, pOffsetAnchor},
+			expand:    expandOffset,
+		},
 		"text-emphasis": {
 			longhands: []propID{pTextEmphasisStyle, pTextEmphasisColor},
 			expand:    expandTextEmphasis,

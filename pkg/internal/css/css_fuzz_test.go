@@ -61,6 +61,8 @@ func FuzzParseDeclarations(f *testing.F) {
 	f.Add("display: inline flex; flex: 2 1 10%; flex-flow: column wrap-reverse; place-content: safe center space-evenly; align-self: last baseline; gap: 1px 2%; order: -2; min-width: auto")
 	f.Add("width: round(up, mod(-7px, 3em), 1vi); height: calc(sin(30deg) * hypot(3cap, 4rex) / 1px * 1px); margin: abs(10% - 2svh) clamp(1px, 50%, 2lh); z-index: calc(7 / 2); rotate: atan2(1, -1)")
 	f.Add("top: calc(anchor(--a bottom, 10%) + max(anchor(50%), 1em)); width: anchor-size(--a self-inline, anchor-size(height)); position-try: most-width --r flip-block, span-top left; position-visibility: anchor-valid no-overflow")
+	f.Add("-webkit-text-stroke: 1e30px red; -webkit-text-fill-color: color-mix(in srgb, currentcolor, red); paint-order: markers stroke fill")
+	f.Add("offset: 10px 20% ray(1turn sides contain at right 5px top) calc(0 / 0 * 1%) reverse 1e30deg / left 1e30px; offset-path: path(evenodd, 'M 0 0 L 1e30 NaN') view-box")
 	f.Fuzz(func(t *testing.T, src string) {
 		ParseDeclarations(src, ParseOptions{BaseURL: "https://e.com/"})
 		Hint("color", src)
@@ -124,6 +126,7 @@ func FuzzCompute(f *testing.F) {
 	f.Add([]byte(selectorDoc + "\x00" + fuzzSheet))
 	f.Add([]byte("<p style='--a: var(--a); width: var(--a)'>x\x00p { color: var(--b, red) }"))
 	f.Add([]byte("<span id=a>x</span>\x00#a { position: absolute; z-index: 2; transform: scale(2) translateX(1em); transform-origin: 1px 2px 3px }"))
+	f.Add([]byte("<p id=a>x<b>y</b></p>\x00#a { -webkit-text-stroke: thick; paint-order: stroke; offset: auto inset(1px round 2px) margin-box 50% } b { offset-distance: calc(1px * sign(-0)); -webkit-text-stroke-color: currentcolor; field-sizing: content }"))
 	f.Add([]byte("<p id=a>x</p>\x00#a { width: min(100%, round(10em, 3vi)); margin: mod(5%, 3%) calc(1px / 0); font-size: clamp(1rem, 2cap, 3ric) }"))
 	f.Add([]byte(fuzzAnchorDoc + "\x00" + fuzzAnchorCSS))
 	f.Add([]byte(fuzzAnchorDoc + "\x00" + fuzzAnchorCSS[:len(fuzzAnchorCSS)/2]))

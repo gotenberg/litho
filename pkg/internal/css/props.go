@@ -286,6 +286,16 @@ const (
 	pPositionTryFallbacks
 	pPositionTryOrder
 	pPositionVisibility
+	pTextStrokeWidth
+	pTextStrokeColor
+	pTextFillColor
+	pPaintOrder
+	pOffsetPath
+	pOffsetDistance
+	pOffsetRotate
+	pOffsetAnchor
+	pOffsetPosition
+	pFieldSizing
 	numProps
 )
 
@@ -1156,6 +1166,16 @@ func init() {
 	for id, def := range anchorProps() {
 		props[id] = def
 	}
+	for id, def := range glyphPaintProps() {
+		props[id] = def
+	}
+	for id, def := range motionProps() {
+		props[id] = def
+	}
+	// field-sizing: fixed | content (CSS Form Control Styling 1, 7.1).
+	props[pFieldSizing] = enumProp("field-sizing", false, func(s *Style) *FieldSizing { return &s.FieldSizing }, map[string]FieldSizing{
+		"fixed": FieldFixed, "content": FieldContent,
+	})
 	anchorLengths()
 	longhandByName = map[string]propID{}
 	for i := range props {
