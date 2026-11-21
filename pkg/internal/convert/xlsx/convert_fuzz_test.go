@@ -105,6 +105,7 @@ func FuzzParseHeaderFooter(f *testing.F) {
 	f.Add(`&RPage &P+1 of &N-1&P+12abc&P+1&14x&P+99999999999999999999999&N-`)
 	f.Add(`&12345a&0b&8 9`)
 	f.Add(`&éa&€b&K€0000c`)
+	f.Add(`&L&BA&CB&LC&L&R&P-0&N+1&K12+150x&"Arial,Bold Italic"y&999999z`)
 	base := sheet.Font{Families: []string{"Calibri"}, Size: 11}
 	f.Fuzz(func(t *testing.T, s string) {
 		valid := utf8.ValidString(s)
