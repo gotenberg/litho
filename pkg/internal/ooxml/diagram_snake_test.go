@@ -42,9 +42,10 @@ func TestDiagramSnake(t *testing.T) {
 			want: []string{"background rect 0,0 1000x1000", "node rect 0,190 476x285", "node rect 523,190 476x285", "node rect 0,523 476x285", "node rect 523,523 476x285"},
 		},
 		{
-			name:  "a short last row sits in the middle",
-			texts: []string{"a", "b", "c"},
-			w:     2100, h: 1300,
+			name:   "a short last row sits in the middle under off ctr",
+			texts:  []string{"a", "b", "c"},
+			params: `<dgm:param type="off" val="ctr"/>`,
+			w:      2100, h: 1300,
 			want: []string{"background rect 0,0 2100x1300", "node rect 0,0 1000x600", "node rect 1100,0 1000x600", "node rect 550,700 1000x600"},
 		},
 		{
@@ -56,9 +57,15 @@ func TestDiagramSnake(t *testing.T) {
 		{
 			name:   "grDir tR starts at the right",
 			texts:  []string{"a", "b", "c"},
-			params: `<dgm:param type="grDir" val="tR"/>`,
+			params: `<dgm:param type="grDir" val="tR"/><dgm:param type="off" val="ctr"/>`,
 			w:      2100, h: 1300,
 			want: []string{"background rect 0,0 2100x1300", "node rect 1100,0 1000x600", "node rect 0,0 1000x600", "node rect 550,700 1000x600"},
+		},
+		{
+			name:  "a short last row starts the row with no off",
+			texts: []string{"a", "b", "c"},
+			w:     2100, h: 1300,
+			want: []string{"background rect 0,0 2100x1300", "node rect 0,0 1000x600", "node rect 1100,0 1000x600", "node rect 0,700 1000x600"},
 		},
 		{
 			name:   "contDir revDir runs the second row back",
@@ -68,11 +75,11 @@ func TestDiagramSnake(t *testing.T) {
 			want: []string{"background rect 0,0 2100x1300", "node rect 0,0 1000x600", "node rect 1100,0 1000x600", "node rect 1100,700 1000x600", "node rect 0,700 1000x600"},
 		},
 		{
-			name:   "flowDir col fills a column first",
+			name:   "flowDir col fills a column first, the nodes of a column touching",
 			texts:  []string{"a", "b", "c", "d"},
 			params: `<dgm:param type="flowDir" val="col"/>`,
 			w:      2100, h: 1300,
-			want: []string{"background rect 0,0 2100x1300", "node rect 0,0 1000x600", "node rect 0,700 1000x600", "node rect 1100,0 1000x600", "node rect 1100,700 1000x600"},
+			want: []string{"background rect 0,0 2100x1300", "node rect 0,50 1000x600", "node rect 0,650 1000x600", "node rect 1100,50 1000x600", "node rect 1100,650 1000x600"},
 		},
 		{
 			name:   "bkpt fixed takes bkPtFixedVal a row",

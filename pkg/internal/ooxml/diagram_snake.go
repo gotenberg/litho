@@ -46,18 +46,19 @@ type snakeGrid struct {
 //     lines and of nodes a line as equal as it can, fixed takes
 //     bkPtFixedVal nodes a line.
 //   - The block of lines sits in the middle of the box unless horzAlign or
-//     vertAlign says otherwise, and a short last line in the middle of the
-//     block (off ctr, 21.4.7.47 "no offset"; off "off" shifts by an amount
-//     the standard does not give and is laid out as ctr).
+//     vertAlign says otherwise. A short last line sits in the middle of the
+//     block under off ctr (21.4.7.47 "no offset"), at the start of the
+//     block under off "off" or no off at all: Office shifts it by nothing.
 //   - grDir names the corner the first node takes (21.4.7.35), flowDir
 //     whether a line is a row or a column (21.4.7.30), contDir whether the
 //     next line runs the same way or back (21.4.7.22).
 //
-// The standard gives no default for the parameters: they are those of its
-// own example (grDir tL, flowDir row, contDir sameDir, off ctr) with bkpt
-// endCnv. It says nothing of the scaling, the count a line, the gaps or
-// the alignment: those are read from PowerPoint's drawings and Office's
-// pages, as the evidence below measures.
+// The standard gives no default for the parameters; Office lays a snake
+// that states none out as grDir tL, flowDir row, contDir sameDir and bkpt
+// endCnv, the short line at the start. It says nothing of the scaling, the
+// count a line, the gaps or the alignment: those are read from
+// PowerPoint's drawings and Office's pages, as the evidence below
+// measures.
 //
 // # Corpus evidence
 //
@@ -87,7 +88,18 @@ type snakeGrid struct {
 //     document) two a row, 27.4 apart, centred in the frame.
 //   - libreoffice/pptx: bnc870233_2's two one-node frames are saved with
 //     the node at the bottom of the frame, not in the middle; a frame
-//     taller than the node by 2.4 and 12.5 points.
+//     taller than the node by 2.4 and 12.5 points. Office's page of one
+//     node in a frame 182 points taller (probe, pptx) has it in the middle.
+//   - probe, pptx: Office lays five default nodes out three a row, 246.1
+//     points wide, with no snake parameter and with off "off" alike, the
+//     last two at the start of the row; with off ctr, bkpt bal, and bkpt
+//     fixed at three a row, the last two in the middle.
+//   - probe, pptx: with flowDir col, five nodes two a column, 246.1 wide,
+//     touching down a column (the transition sets a width only) and 24.6
+//     apart across, the fifth in the middle of the third column.
+//   - probe, pptx: seven nodes with grDir bR and contDir revDir, four a
+//     row, the first at the bottom right, the second row running left to
+//     right, its three nodes in the middle under off ctr.
 func (e *engine) snake(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 	if len(s.Kids) == 0 || s.W <= 0 || s.H <= 0 {
 		return
@@ -160,6 +172,7 @@ func (e *engine) snake(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint
 		revAlong, revAcross = revY, revX
 	}
 	back := param(a, "contDir", "sameDir") == "revDir"
+	centre := param(a, "off", "") == "ctr"
 	// place maps a cell's offsets along and across the block to the box.
 	place := func(k *DiagramShape, pa, px, wa, wx float64) {
 		if revAlong {
@@ -192,7 +205,10 @@ func (e *engine) snake(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint
 		if back && line%2 == 1 {
 			pos = count - 1 - pos
 		}
-		pa := float64(float64(pos)*(cA+gap)) + float64((blockAlong-lineLen(count))/2)
+		pa := float64(float64(pos) * (cA + gap))
+		if centre {
+			pa += float64((blockAlong - lineLen(count)) / 2)
+		}
 		px := float64(float64(line) * (cX + lineSp))
 		sz := sizes[i]
 		wa, wx := float64(sz[0]*sc), float64(sz[1]*sc)
@@ -299,17 +315,15 @@ func (e *engine) snakeGrid(a *DiagramAtom, s *DiagramShape, cons []DiagramConstr
 		sizes[i] = [2]float64{w, h}
 		g.cw, g.ch = max(g.cw, w), max(g.ch, h)
 	}
-	// The transition's length along the line, else its other length: a
-	// definition that flows in columns may size it by its width alone.
-	along, other := "w", "h"
+	// The transition's length along the line: a definition that sizes it
+	// by its width alone sets no gap down a column.
+	along := "w"
 	if !cols {
-		along, other = "h", "w"
+		along = "h"
 	}
-	for _, prop := range []string{along, other} {
-		for _, name := range sortedKeys(trans) {
-			if v, ok := props[name][prop]; ok && g.gap == 0 {
-				g.gap = v
-			}
+	for _, name := range sortedKeys(trans) {
+		if v, ok := props[name][along]; ok && g.gap == 0 {
+			g.gap = v
 		}
 	}
 	if g.gap == 0 {
