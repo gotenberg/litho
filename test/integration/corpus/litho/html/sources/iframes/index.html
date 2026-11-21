@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Embedded frames</title>
+<style>
+body { font-family: "Liberation Sans", sans-serif; font-size: 10pt; }
+.notice { display: block; width: 480px; height: 64px; border: 1px solid #b08800; }
+.report { display: block; width: 560px; height: 250px; }
+.card { width: 340px; margin: 36px 70px; padding: 12px; background: #e9ecef; transform: rotate(-4deg); }
+.card iframe { display: block; width: 312px; height: 110px; border: 2px solid #264653; }
+</style>
+</head>
+<body>
+<h1>Embedded frames FRAME-MARKER</h1>
+<p>A notice its srcdoc attribute holds, on its own yellow background:</p>
+<div><iframe class="notice" title="Notice" srcdoc="&lt;!doctype html&gt;&lt;html lang=&quot;en&quot;&gt;&lt;style&gt;body { margin: 8px; font: 10pt &quot;Liberation Sans&quot;, sans-serif; background: #fff8c5; } p { margin: 0 0 4px; }&lt;/style&gt;&lt;p&gt;&lt;strong&gt;Notice:&lt;/strong&gt; the office closes on the 24th of December.&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://example.com/opening-hours&quot;&gt;Opening hours&lt;/a&gt; are posted at the entrance.&lt;/p&gt;"></iframe></div>
+<p>A sibling report, taller than its frame and cut at the frame's bottom edge; its own media query reads the frame's width:</p>
+<div><iframe class="report" title="Quarterly report" src="report.html"></iframe></div>
+<p>A frame inside a rotated card, its document in a dark colour scheme:</p>
+<div class="card"><iframe title="Card" src="card.html"></iframe></div>
+<p>The text after the frames.</p>
+</body>
+</html>
