@@ -4,6 +4,7 @@
   "footer": "footer.html",
   "marginTop": 0.6,
   "marginBottom": 0.6,
+  "reference_of": "single-page-header-twin",
   "bands": [
     { "edge": "header", "html": "band-header.html", "css": "band.css" },
     { "edge": "footer", "html": "band-footer.html", "css": "band.css" }
