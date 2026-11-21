@@ -713,6 +713,7 @@ func transformOf(b *box, r typeset.Rect) (typeset.Matrix, bool, bool) {
 	if !b.transformed() {
 		return typeset.Identity, false, true
 	}
+	border := r
 	if b.st.TransformBox == css.TransformContentBox {
 		r.X += b.bd[css.Left] + b.pd[css.Left]
 		r.Y += b.bd[css.Top] + b.pd[css.Top]
@@ -722,7 +723,15 @@ func transformOf(b *box, r typeset.Rect) (typeset.Matrix, bool, bool) {
 	ox := r.X + resolve(b.st.TransformOrigin[0], r.Width)
 	oy := r.Y + resolve(b.st.TransformOrigin[1], r.Height)
 	m := typeset.Matrix{A: 1, D: 1, E: ox, F: oy}
-	for _, l := range b.st.TransformLists() {
+	for i, l := range b.st.TransformLists() {
+		if i == 3 {
+			// The offset transform of a motion path applies after the
+			// individual transform properties, before transform (CSS
+			// Transforms 2, 6).
+			if mm, ok := motionOf(b, border, typeset.Point{X: ox, Y: oy}); ok {
+				m = mul(m, mm)
+			}
+		}
 		for _, f := range l {
 			m = mul(m, funcMatrix(f, r))
 		}

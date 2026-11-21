@@ -806,6 +806,9 @@ func (p *painter) unit(b *box, own bool) {
 		id := typeset.Identity
 		push(&ditem{group: true, page: b.anchorPage, fx: &groupFx{opacity: 1, transform: &id}})
 	}
+	if mp := b.st.Motion(); mp != nil && mp.Path.Kind == css.OffsetURL && b.transformed() {
+		p.e.warnOnce(warn.ContentUnsupported, warn.Approximated, "offset-path: url() is not resolved: the box moves as on path(\"m 0 0\")", b.y)
+	}
 	m, has, visible := transformOf(b, p.borderRect(b))
 	if !visible {
 		return

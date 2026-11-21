@@ -392,10 +392,11 @@ func parseRotate(l []token) (tfSpec, bool) {
 	}}, true
 }
 
-// HasTransform reports whether st transforms its box: a transform list or
-// an individual transform property other than none (CSS Transforms 2, 6).
+// HasTransform reports whether st transforms its box: a transform list, an
+// individual transform property or an offset-path other than none (CSS
+// Transforms 2, 6; CSS Motion Path 1, 2.1).
 func (st *Style) HasTransform() bool {
-	return len(st.Transform) > 0 || len(st.Translate) > 0 || len(st.Rotate) > 0 || len(st.Scale) > 0
+	return len(st.Transform) > 0 || len(st.Translate) > 0 || len(st.Rotate) > 0 || len(st.Scale) > 0 || st.HasOffsetPath()
 }
 
 // TransformLists returns the transform functions of st in the order they
