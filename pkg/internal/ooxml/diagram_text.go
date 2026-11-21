@@ -295,6 +295,7 @@ func (z *sizer) spec(s *DiagramShape) *textSize {
 			t.kind = secFontSz
 		}
 	}
+	sameAs := map[int]sideRef{}
 	insets := func(cons []DiagramConstraint, depth int) {
 		for _, c := range cons {
 			i, ok := marginSide[c.Type]
@@ -303,6 +304,13 @@ func (z *sizer) spec(s *DiagramShape) *textSize {
 			}
 			if (c.RefType == primFontSz || c.RefType == secFontSz) && numeric.Finite(c.Factor) && c.Factor >= 0 {
 				t.insets[i], t.hasInset[i] = c.Factor, true
+				continue
+			}
+			if j, ok := marginSide[c.RefType]; ok && depth == 0 && (c.RefFor == "none" || c.RefFor == "self") && numeric.Finite(c.Factor) && c.Factor >= 0 {
+				// A margin that refers to another of the node's margins is
+				// that factor of it, once that one is read.
+				sameAs[i] = sideRef{j, c.Factor}
+				t.stated[i] = true
 				continue
 			}
 			t.stated[i] = true
@@ -368,12 +376,23 @@ func (z *sizer) spec(s *DiagramShape) *textSize {
 			}
 		}
 	}
+	for i, r := range sameAs {
+		if t.hasInset[r.side] {
+			t.insets[i], t.hasInset[i] = float64(t.insets[r.side]*r.factor), true
+		}
+	}
 	for i := range t.insets {
 		if !t.hasInset[i] && !t.stated[i] && !s.Inset[i] {
 			t.insets[i], t.hasInset[i] = defaultInsetFactor, true
 		}
 	}
 	return t
+}
+
+// sideRef is a margin set as a factor of another side's margin.
+type sideRef struct {
+	side   int
+	factor float64
 }
 
 // defaultInsetFactor is the inset of a side no margin constraint sets, a
