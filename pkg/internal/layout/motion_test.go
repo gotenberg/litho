@@ -74,6 +74,7 @@ func TestMotion_Path(t *testing.T) {
 		{"ray at", css.MotionPath{Path: css.OffsetPath{Kind: css.OffsetRay, Ray: &css.Ray{Angle: rad(180), Size: css.RayFarthestCorner, AtSet: true, At: [2]css.Dimension{css.Pts(px(30)), css.Pts(px(40))}}}, Distance: css.Pts(px(10))}, 30, 50, 90},
 		{"box", css.MotionPath{Path: css.OffsetPath{Kind: css.OffsetBox}, Distance: css.Dimension{Kind: css.Percent, Value: 0.5}}, 280, 180, 90},
 		{"circle", css.MotionPath{Path: css.OffsetPath{Kind: css.OffsetShape, Shape: &css.Shape{Kind: css.ShapeCircle, Radius: [2]css.ShapeRadius{{Side: css.RadiusLength, Length: css.Pts(px(50))}}, Center: [2]css.Dimension{{Kind: css.Percent, Value: 0.5}, {Kind: css.Percent, Value: 0.5}}}}, Distance: css.Dimension{Kind: css.Percent, Value: 0.25}}, 140, 140, 180},
+		{"circle on the starting position", css.MotionPath{Path: css.OffsetPath{Kind: css.OffsetShape, Shape: &css.Shape{Kind: css.ShapeCircle, Radius: [2]css.ShapeRadius{{Side: css.RadiusLength, Length: css.Pts(px(30))}}}}, Position: css.OffsetAuto}, 30, 0, 90},
 	} {
 		m := tt.m
 		x, y, mat := movedBox(t, &m)

@@ -92,6 +92,11 @@ type Shape struct {
 	// horizontal and vertical offsets from the reference box's top left.
 	Radius [2]ShapeRadius
 	Center [2]Dimension
+	// CenterSet reports a circle or an ellipse whose value names its
+	// centre with at: one that does not is centred on the offset starting
+	// position of an offset-path that has one (CSS Motion Path 1, 2.1),
+	// else on the box's centre.
+	CenterSet bool
 	// EvenOdd is the fill rule of a polygon or a path: even-odd when set,
 	// nonzero otherwise.
 	EvenOdd bool
@@ -126,6 +131,7 @@ type shapeSpec struct {
 	rh, rv  [4]length
 	radius  [2]radiusArg
 	center  [2]length
+	at      bool
 	evenOdd bool
 	points  [][2]length
 	round   length
@@ -312,7 +318,7 @@ func parseEllipse(args []token, circle bool) (*shapeSpec, bool) {
 			if !ok {
 				return nil, false
 			}
-			s.center = p
+			s.center, s.at = p, true
 			args = args[:i]
 			break
 		}
@@ -410,7 +416,7 @@ func parsePathShape(args []token) (*shapeSpec, bool) {
 
 // compute returns the computed shape of s.
 func (s *shapeSpec) compute(lc lenCtx) *Shape {
-	out := &Shape{Kind: s.kind, EvenOdd: s.evenOdd, Path: s.path}
+	out := &Shape{Kind: s.kind, EvenOdd: s.evenOdd, Path: s.path, CenterSet: s.at}
 	for i := range 4 {
 		out.Inset[i] = s.inset[i].dim(lc, false)
 		out.Radii[i] = Radius{H: s.rh[i].dim(lc, true), V: s.rv[i].dim(lc, true)}

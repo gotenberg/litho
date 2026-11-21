@@ -30,13 +30,13 @@ func motionOf(b *box, r typeset.Rect, o typeset.Point) (typeset.Matrix, bool) {
 	if m == nil || m.Path.Kind == css.OffsetNone {
 		return typeset.Identity, false
 	}
-	frame := motionFrame(b, r)
+	frame, radii := motionFrame(b, r)
 	var p typeset.Point
 	var dir float64
 	if m.Path.Kind == css.OffsetRay {
 		p, dir = rayPoint(m, r, frame)
 	} else {
-		ops, closed := offsetOps(m, r, frame)
+		ops, closed := offsetOps(m, r, frame, radii)
 		p, dir = pathPoint(ops, closed, m.Distance)
 	}
 	angle := m.Rotate.Angle
@@ -59,9 +59,9 @@ func motionOf(b *box, r typeset.Rect, o typeset.Point) (typeset.Matrix, bool) {
 }
 
 // motionFrame returns the rectangle an offset path other than path() is
-// laid in, in the frame of r: the <coord-box> of the box whose containing
-// block holds b (CSS Motion Path 1, 2.1), or the top-most box's border
-// box for the initial containing block.
+// laid in, in the frame of r, and its border radii: the <coord-box> of the
+// box whose containing block holds b (CSS Motion Path 1, 2.1), or the
+// top-most box's border box for the initial containing block.
 //
 // # Corpus evidence
 //
@@ -69,7 +69,7 @@ func motionOf(b *box, r typeset.Rect, o typeset.Point) (typeset.Matrix, bool) {
 //     circle(), inset() and a <coord-box> alone in the border box of the
 //     element whose content box holds the moving box, by default, on
 //     screen and in print.
-func motionFrame(b *box, r typeset.Rect) typeset.Rect {
+func motionFrame(b *box, r typeset.Rect) (typeset.Rect, [4][2]float64) {
 	a := cbGenerator(b)
 	if a == nil {
 		a = b
@@ -77,22 +77,23 @@ func motionFrame(b *box, r typeset.Rect) typeset.Rect {
 			a = a.parent
 		}
 	}
-	f := typeset.Rect{X: r.X + a.x - b.x, Y: r.Y + a.y - b.y, Width: a.borderW(), Height: a.borderH()}
-	var in [4]float64
+	// r holds b's own relative offset, which moves b and not the box
+	// whose containing block holds it.
+	ox, oy := offset(b)
+	f := typeset.Rect{X: r.X - ox + a.x - b.x, Y: r.Y - oy + a.y - b.y, Width: a.borderW(), Height: a.borderH()}
+	radii := radiiOf(a, f.Width, f.Height)
 	switch b.st.Motion().Path.Box {
 	case css.GeoPadding:
-		in = a.bd
+		return insetRect(f, radii, a.bd)
 	case css.GeoContent:
+		var in [4]float64
 		for i := range in {
 			in[i] = a.bd[i] + a.pd[i]
 		}
+		return insetRect(f, radii, in)
 	case css.GeoBorder, css.GeoMargin:
 	}
-	f.X += in[css.Left]
-	f.Y += in[css.Top]
-	f.Width = max(f.Width-in[css.Left]-in[css.Right], 0)
-	f.Height = max(f.Height-in[css.Top]-in[css.Bottom], 0)
-	return f
+	return f, radii
 }
 
 // offsetOps returns the path of an offset-path that is a shape or a box,
@@ -101,7 +102,8 @@ func motionFrame(b *box, r typeset.Rect) typeset.Rect {
 // when its last command closes it; another basic shape in the frame f as
 // a clip-path lays it, closed, a circle or an ellipse from its rightmost
 // point round as SVG 2, 10.4 and 10.5 draw one; a box alone as its
-// rectangle from the top-left corner.
+// rectangle rounded by radii, inset(0 round radii), from the top-left
+// corner.
 //
 // # Corpus evidence
 //
@@ -110,11 +112,11 @@ func motionFrame(b *box, r typeset.Rect) typeset.Rect {
 //     own border box's top left, at 0%; at 25% of circle() at the circle's
 //     bottom, turned a half turn; at 30% of inset() along its top edge;
 //     at 40% of border-box down its right edge, turned a quarter turn.
-func offsetOps(m *css.MotionPath, r, f typeset.Rect) ([]typeset.PathOp, bool) {
+func offsetOps(m *css.MotionPath, r, f typeset.Rect, radii [4][2]float64) ([]typeset.PathOp, bool) {
 	s := m.Path.Shape
 	switch {
 	case m.Path.Kind == css.OffsetBox:
-		return rectOps(f), true
+		return roundedRect(f, radii), true
 	case m.Path.Kind == css.OffsetURL || s == nil:
 		// A reference litho does not resolve is path("m 0 0") (2.1).
 		return []typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{{X: r.X, Y: r.Y}}}}, false
@@ -129,9 +131,17 @@ func offsetOps(m *css.MotionPath, r, f typeset.Rect) ([]typeset.PathOp, bool) {
 		}
 		return ops, len(ops) > 0 && ops[len(ops)-1].Kind == typeset.ClosePath
 	case s.Kind == css.ShapeCircle || s.Kind == css.ShapeEllipse:
+		if !s.CenterSet && m.Position != css.OffsetNormal {
+			c := *s
+			start := offsetStart(m, r, f)
+			c.Center = [2]css.Dimension{css.Pts(start.X - f.X), css.Pts(start.Y - f.Y)}
+			s = &c
+		}
 		p, ok := shapePath(s, f)
 		if !ok {
-			return nil, true
+			// A circle of no radius is its centre.
+			c := typeset.Point{X: f.X + resolve(s.Center[0], f.Width), Y: f.Y + resolve(s.Center[1], f.Height)}
+			return []typeset.PathOp{{Kind: typeset.MoveTo, P: [3]typeset.Point{c}}}, true
 		}
 		x0, y0, x1, y1 := opsBounds(p.Ops)
 		return ellipseOps((x0+x1)/2, (y0+y1)/2, (x1-x0)/2, (y1-y0)/2), true
@@ -295,14 +305,9 @@ func pathPoint(ops []typeset.PathOp, closed bool, d css.Dimension) (typeset.Poin
 // side of r when it contains the box, a percentage being of that length.
 func rayPoint(m *css.MotionPath, r, f typeset.Rect) (typeset.Point, float64) {
 	ray := m.Path.Ray
-	start := typeset.Point{X: f.X + f.Width/2, Y: f.Y + f.Height/2}
-	switch {
-	case ray.AtSet:
+	start := offsetStart(m, r, f)
+	if ray.AtSet {
 		start = typeset.Point{X: f.X + resolve(ray.At[0], f.Width), Y: f.Y + resolve(ray.At[1], f.Height)}
-	case m.Position == css.OffsetAt:
-		start = typeset.Point{X: f.X + resolve(m.Start[0], f.Width), Y: f.Y + resolve(m.Start[1], f.Height)}
-	case m.Position == css.OffsetAuto:
-		start = typeset.Point{X: r.X, Y: r.Y}
 	}
 	sin, cos := detmath.Sincos(clamp(ray.Angle))
 	length := raySize(ray, start, sin, -cos, f)
@@ -314,6 +319,21 @@ func rayPoint(m *css.MotionPath, r, f typeset.Rect) (typeset.Point, float64) {
 		d = min(max(d, 0), length)
 	}
 	return typeset.Point{X: start.X + float64(d*sin), Y: start.Y - float64(d*cos)}, clamp(ray.Angle) - math.Pi/2
+}
+
+// offsetStart returns the offset starting position of m (CSS Motion Path
+// 1, 2.3): a <position> in the frame f, the top-left corner of the border
+// box r under auto, the frame's centre under normal, where a ray or a
+// shape without a position of its own starts as at center.
+func offsetStart(m *css.MotionPath, r, f typeset.Rect) typeset.Point {
+	switch m.Position {
+	case css.OffsetAt:
+		return typeset.Point{X: f.X + resolve(m.Start[0], f.Width), Y: f.Y + resolve(m.Start[1], f.Height)}
+	case css.OffsetAuto:
+		return typeset.Point{X: r.X, Y: r.Y}
+	case css.OffsetNormal:
+	}
+	return typeset.Point{X: f.X + float64(f.Width/2), Y: f.Y + float64(f.Height/2)}
 }
 
 // raySize returns the length of a ray from s along (dx, dy) that its
