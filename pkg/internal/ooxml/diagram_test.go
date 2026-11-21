@@ -338,3 +338,22 @@ func TestDiagramTextSpacing(t *testing.T) {
 		})
 	}
 }
+
+// TestDiagramLinearSizesFromTheFont lays out a column whose node height is
+// a factor of the primary font size its constraint starts at (21.4.2.8
+// constr refType primFontSz): the node is that many points tall, not the
+// factor of the column's height, and an equality of no value sets no
+// height of its own.
+func TestDiagramLinearSizesFromTheFont(t *testing.T) {
+	layout := `<dgm:alg type="lin"><dgm:param type="linDir" val="fromT"/></dgm:alg><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="primFontSz" for="des" forName="node" val="20"/>` +
+		`<dgm:constr type="h" for="des" forName="node" refType="primFontSz" refFor="des" refForName="node" fact="1.5"/>` +
+		`<dgm:constr type="h" for="des" forName="node" op="equ"/></dgm:constrLst>` + nodeList("rect", "")
+	d := ParseDiagram(mustParse(t, diagramData("a", "b")), mustParse(t, diagramLayout(layout)), nil, nil)
+	root := d.LayOut(1270000, 1270000, nil)
+	for _, k := range root.Kids {
+		if k.Name == "node" && k.H != 30*12700 {
+			t.Errorf("node %d EMU tall, want 30 points (%d)", k.H, 30*12700)
+		}
+	}
+}

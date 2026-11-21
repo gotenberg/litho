@@ -486,11 +486,15 @@ func linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint, rules []s
 		if props[c.ForName] == nil {
 			props[c.ForName] = map[string]int64{}
 		}
+		if c.Op == "equ" && c.RefType == "none" && !c.HasValue {
+			// An equality states no length: it ties the lengths others set.
+			continue
+		}
 		if c.Type == "w" {
-			props.set(c.ForName, "w", min(trunc(float64(s.W)*c.Factor), s.W))
+			props.set(c.ForName, "w", min(fontSized(c, cons, s.W), s.W))
 		}
 		if c.Type == "h" {
-			props.set(c.ForName, "h", min(trunc(float64(s.H)*c.Factor), s.H))
+			props.set(c.ForName, "h", min(fontSized(c, cons, s.H), s.H))
 		}
 		if c.ForName == "sp" || c.ForName == "space" || c.ForName == "sibTrans" {
 			if c.Type == "w" {
@@ -631,6 +635,33 @@ func linear(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint, rules []s
 			s.Kids[i], s.Kids[j] = s.Kids[j], s.Kids[i]
 		}
 	}
+}
+
+// fontSized returns the length a width or height constraint of a linear
+// layout gives: its factor of the font size it refers to (21.4.2.8 constr
+// refType primFontSz or secFontSz), in points of the value the
+// constraint starting that size states, as PowerPoint sizes such shapes
+// from their text; else its factor of the side, the parent's length. An
+// equality of no value sets no length of its own (21.4.7.10
+// ST_BoolOperator equ): it ties the lengths other constraints set.
+//
+// # Corpus evidence
+//
+//   - libreoffice/pptx: smartart-linear-rule's hProcess3 parTx, whose height
+//     a constraint makes the primary font size, prints at 50.5 points in
+//     PowerPoint's reference; laid out as tall as its 286-point column, its
+//     text took 65 points and ran past the slide's edge.
+//   - openxmlsdk/pptx: O12_templates/EmpOrienPres_TP10220212 passes the diff
+//     with its linear shapes sized from the font, layout 0.7473 to 0.7526.
+func fontSized(c DiagramConstraint, cons []DiagramConstraint, side int64) int64 {
+	if c.RefType == primFontSz || c.RefType == secFontSz {
+		for _, f := range cons {
+			if f.Type == c.RefType && f.ForName == c.RefForName && f.HasValue && f.RefType == "none" && f.Value > 0 {
+				return trunc(float64(c.Factor*min(f.Value, maxDiagramFontSize)) * 12700)
+			}
+		}
+	}
+	return trunc(float64(side) * c.Factor)
 }
 
 // pyramid stacks the kids as a pyramid's levels (21.4.2.1 pyra), each
