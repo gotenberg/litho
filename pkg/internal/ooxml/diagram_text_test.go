@@ -281,3 +281,43 @@ func TestDiagramTextSizeMarginOfAMargin(t *testing.T) {
 		t.Errorf("insets %v, want %v", n.Insets, want)
 	}
 }
+
+// TestDiagramTextSizeByLevel lays out a node whose shape holds its child's
+// paragraph as well as its own: the child is set at 0.795 of the parent's
+// size, or at the secondary size a constraint gives the shape.
+func TestDiagramTextSizeByLevel(t *testing.T) {
+	data := diagramData("abc")
+	data = strings.Replace(data, `</dgm:ptLst>`, `<dgm:pt modelId="k0"><dgm:prSet/><dgm:spPr/><dgm:t><a:bodyPr/><a:p><a:r><a:t>de</a:t></a:r></a:p></dgm:t></dgm:pt>`+
+		`<dgm:pt modelId="kt" type="parTrans" cxnId="kx"/><dgm:pt modelId="ks" type="sibTrans" cxnId="kx"/></dgm:ptLst>`, 1)
+	data = strings.Replace(data, `</dgm:cxnLst>`, `<dgm:cxn modelId="kx" srcId="n0" destId="k0" srcOrd="0" destOrd="0" parTransId="kt" sibTransId="ks"/>`+
+		`<dgm:cxn modelId="ko" type="presOf" srcId="k0" destId="pn0" srcOrd="0" destOrd="1"/></dgm:cxnLst>`, 1)
+	for _, c := range []struct {
+		cons      string
+		wantChild string
+	}{
+		{``, "3180"},
+		{`<dgm:constr type="secFontSz" for="ch" forName="node" val="30"/>`, "3000"},
+	} {
+		layout := `<dgm:alg type="lin"/><dgm:shape/><dgm:constrLst><dgm:constr type="primFontSz" for="ch" forName="node" val="40"/>` + c.cons + `</dgm:constrLst>` +
+			`<dgm:forEach name="each" axis="ch" ptType="node"><dgm:layoutNode name="node"><dgm:alg type="tx"/><dgm:shape type="rect"/>` + noMargins + `</dgm:layoutNode></dgm:forEach>`
+		d := ParseDiagram(mustParse(t, data), mustParse(t, diagramLayout(layout)), nil, nil)
+		root := d.LayOut(3*914400, 2*914400, charFit)
+		var node *DiagramShape
+		for _, k := range root.Kids {
+			if k.Name == "node" {
+				node = k
+			}
+		}
+		if node == nil {
+			t.Fatal("no node")
+		}
+		var sizes []string
+		for _, p := range node.TextBody(NSA).childrenOf(NSA, "p") {
+			sz, _ := p.Child(NSA, "r").Child(NSA, "rPr").Attr("sz")
+			sizes = append(sizes, sz)
+		}
+		if strings.Join(sizes, " ") != "4000 "+c.wantChild {
+			t.Errorf("%s: run sizes %v, want 4000 and %s", c.cons, sizes, c.wantChild)
+		}
+	}
+}

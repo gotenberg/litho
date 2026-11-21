@@ -63,6 +63,10 @@ type textSize struct {
 	// constraint value and a rule that gives them.
 	start, floor       float64
 	hasStart, hasFloor bool
+	// secStart is the secondary size a constraint sets the shape's child
+	// paragraphs at, in points, when hasSecStart.
+	secStart    float64
+	hasSecStart bool
 	// fixed marks text formatted by hand (prSet custT): it keeps its own
 	// sizes.
 	fixed bool
@@ -374,8 +378,14 @@ func (z *sizer) spec(s *DiagramShape) *textSize {
 	floors(rules, 0)
 	starts := func(cons []DiagramConstraint, depth int) {
 		for _, c := range cons {
-			if c.Type == t.kind && !t.hasStart && c.HasValue && c.RefType == "none" && names(c.For, c.ForName, s, depth) && c.Value > 0 {
+			if !c.HasValue || c.RefType != "none" || !names(c.For, c.ForName, s, depth) || !(c.Value > 0) {
+				continue
+			}
+			switch {
+			case c.Type == t.kind && !t.hasStart:
 				t.start, t.hasStart = min(c.Value, maxDiagramFontSize), true
+			case c.Type == secFontSz && t.kind == primFontSz && !t.hasSecStart:
+				t.secStart, t.hasSecStart = min(c.Value, maxDiagramFontSize), true
 			}
 		}
 	}
@@ -669,7 +679,44 @@ func (z *sizer) set(t *textSize, pt float64) {
 	t.size = pt
 	t.s.FontSize = pt
 	t.s.Autofit = false
+	t.s.ChildFontSize = 0
+	if t.kind == primFontSz && hasLevels(t.s) {
+		t.s.ChildFontSize = float64(pt * childFontShare)
+		if t.hasSecStart {
+			t.s.ChildFontSize = t.secStart
+		}
+	}
 	z.insets(t, pt)
+}
+
+// childFontShare is the share of a shape's primary size its child
+// paragraphs are set at when no constraint gives the shape a secondary
+// size. The standard gives none; it is the share Office sets them at.
+//
+// # Corpus evidence
+//
+//   - probe, pptx: four default nodes, three with child paragraphs: Office
+//     sets the parents at 31.73 points and the children at 25.225 and
+//     25.25, 0.795 of them; with a secFontSz constraint of 40, the children
+//     at 40.39 and the parents at their floor, 5.04.
+//   - openxmlsdk/pptx: Office's pages of CompanyHndbk_TP10167124 (vList4,
+//     nine diagrams) and MatrixDiagram_TP10174328 (matrix2) set the
+//     children at 22.3 points under parents at 28.1, 0.794, with no
+//     secondary constraint.
+const childFontShare = 0.795
+
+// hasLevels reports a shape whose text holds paragraphs under its
+// shallowest level as well as at it.
+func hasLevels(s *DiagramShape) bool {
+	top, deeper := false, false
+	for _, p := range s.Paragraphs {
+		if p.Level <= 0 {
+			top = true
+		} else {
+			deeper = true
+		}
+	}
+	return top && deeper
 }
 
 // setFixed gives the insets of text formatted by hand the factors of its

@@ -46,8 +46,11 @@ type DiagramShape struct {
 	// top, right, bottom; Inset[i] reports which are set.
 	Insets [4]int64
 	Inset  [4]bool
-	// FontSize is the size in points a run without one takes, 0 for none.
-	FontSize float64
+	// FontSize is the size in points a run without one takes, 0 for none;
+	// ChildFontSize the size a run without one takes in a paragraph under
+	// the shallowest level, 0 for FontSize.
+	FontSize      float64
+	ChildFontSize float64
 	// Autofit shrinks the text to the box; Anchor is its vertical anchor
 	// ("t", "ctr", "b", "" when the text algorithm did not run); TextRot
 	// the text's rotation in degrees relative to the shape.

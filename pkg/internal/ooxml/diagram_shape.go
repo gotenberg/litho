@@ -182,8 +182,11 @@ func (s *DiagramShape) TextBody(space string) *Element {
 			if k.Space != NSA || (k.Local != "r" && k.Local != "br" && k.Local != "fld") {
 				continue
 			}
-			if s.FontSize > 0 {
-				k = sizedRun(k, s.FontSize)
+			if size := s.FontSize; size > 0 {
+				if p.Level > 0 && s.ChildFontSize > 0 {
+					size = s.ChildFontSize
+				}
+				k = sizedRun(k, size)
 			}
 			out.Children = append(out.Children, k)
 		}
