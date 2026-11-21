@@ -150,6 +150,10 @@ func (lp layoutProps) get(name, prop string) (int64, bool) {
 //     1.22 of the primary size tall in a 182.5-point composite: they fit up
 //     to 31.87 points, and Office prints both texts at 31 points, the
 //     boxes 177.5 points tall in all.
+//   - libreoffice/pptx: smartart-tdf134221's venn2 stands its two smaller
+//     circles on the bottom of the largest, centred on it, which no
+//     constraint places but the default top left; PowerPoint's drawing
+//     saves them at 63.5 and 127.1 points down, where the rule puts them.
 func (e *engine) composite(a *DiagramAtom, s *DiagramShape, cons []DiagramConstraint) {
 	run := &compositeRun{e: e, a: a, s: s, cons: cons, keys: map[string]bool{}}
 	// A bound (lte) met at one size and not at the next makes the far edges
@@ -329,6 +333,13 @@ func (r *compositeRun) lay(place bool) {
 			}
 			r.right = max(r.right, float64(x+w))
 			r.bottom = max(r.bottom, float64(y+h))
+			// The box a kid takes is what a later kid's constraints refer
+			// to, its edges the constraints left unstated included.
+			for prop, v := range map[string]int64{"l": x, "t": y, "w": w, "h": h, "r": x + w, "b": y + h, "ctrX": x + w/2, "ctrY": y + h/2} {
+				if _, ok := p[prop]; !ok {
+					p[prop] = v
+				}
+			}
 			w, h = min(w, s.W), min(h, s.H)
 			x += xOff
 			w = min(w, s.W-x)

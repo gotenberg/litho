@@ -518,3 +518,22 @@ func TestDiagramCompositeOffsets(t *testing.T) {
 		t.Errorf("box %q, want %q", got, want)
 	}
 }
+
+// TestDiagramCompositeRefersToPlacedBox lays out a composite kid whose
+// bottom and centre refer to those of a kid placed at the top left by
+// default, which its constraints do not state, as venn2 stands its
+// smaller circles on the largest.
+func TestDiagramCompositeRefersToPlacedBox(t *testing.T) {
+	layout := `<dgm:alg type="composite"/><dgm:shape/><dgm:constrLst>` +
+		`<dgm:constr type="w" for="ch" forName="pict" refType="w"/><dgm:constr type="h" for="ch" forName="pict" refType="h"/>` +
+		`<dgm:constr type="w" for="ch" forName="label" refType="w" fact="0.5"/><dgm:constr type="h" for="ch" forName="label" refType="h" fact="0.5"/>` +
+		`<dgm:constr type="b" for="ch" forName="label" refType="b" refFor="ch" refForName="pict"/>` +
+		`<dgm:constr type="ctrX" for="ch" forName="label" refType="ctrX" refFor="ch" refForName="pict"/></dgm:constrLst>` +
+		`<dgm:layoutNode name="pict"><dgm:shape type="rect"/></dgm:layoutNode><dgm:layoutNode name="label"><dgm:shape type="ellipse"/></dgm:layoutNode>`
+	d := ParseDiagram(mustParse(t, withPresNames(diagramData("a"), 1, "pict", "label")), mustParse(t, diagramLayout(layout)), nil, nil)
+	got := boxes(d.LayOut(1000, 1000, nil))[1:]
+	want := []string{"pict rect 0,0 1000x1000", "label ellipse 250,500 500x500"}
+	if strings.Join(got, "; ") != strings.Join(want, "; ") {
+		t.Errorf("boxes\n got %q\nwant %q", got, want)
+	}
+}
