@@ -177,6 +177,11 @@ type engine struct {
 	backdropPage      int
 	backdropGround    func(page int) []typeset.Fragment
 	backdropCount     map[int]int
+	// fitH is the height of the content of the first page under
+	// [Options.FitFirstPage], set as the pages are assembled: the page
+	// box the footnote area's links and anchors are placed on is the one
+	// trimmed to it ([engine.assembledBox]).
+	fitH float64
 }
 
 // charge charges the conversion's budget n bytes for what, failing the

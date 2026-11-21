@@ -466,7 +466,7 @@ func (e *engine) noteAnchors(out map[string]typeset.Dest, n int) {
 		if area == nil || k >= n {
 			continue
 		}
-		pb := e.box(k)
+		pb := e.assembledBox(k, e.fitH)
 		top := e.areaOrigin(k, pb)
 		var walk func(b *box, depth int)
 		walk = func(b *box, depth int) {
@@ -503,7 +503,7 @@ func (e *engine) noteLinks(res *Result, used map[*typeset.StructElem]bool) {
 		if k >= len(res.Pages) {
 			break
 		}
-		pb := e.box(k)
+		pb := e.assembledBox(k, e.fitH)
 		top := e.areaOrigin(k, pb)
 		for _, pl := range f.links[k] {
 			r := pl.rect

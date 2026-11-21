@@ -269,6 +269,7 @@ func (e *engine) assemble(d *ditem, canvas, rb *box, used map[*typeset.StructEle
 	if e.opts.FitFirstPage {
 		fitH = e.fittedHeight(rb, d)
 	}
+	e.fitH = fitH
 	if e.backdrops {
 		e.backdropGround = e.groundOf(canvas, rb, fitH)
 		defer func() { e.backdropGround = nil }()

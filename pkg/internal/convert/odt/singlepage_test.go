@@ -174,3 +174,26 @@ func TestSinglePage_TooTallIsCutWithAWarning(t *testing.T) {
 		t.Errorf("no warning of the content left out: %+v", one.Warnings)
 	}
 }
+
+// TestSinglePage_FootnoteLinksOnThePage holds the links of a footnote on a
+// single page: the footnote area is drawn under the body of the page
+// trimmed to its content, and its link regions and the destinations into
+// it are placed on that page, not on the untrimmed one, whose bottom lies
+// far under it.
+func TestSinglePage_FootnoteLinksOnThePage(t *testing.T) {
+	t.Parallel()
+	body := `<text:p>Call<text:note text:id="ftn1" text:note-class="footnote"><text:note-citation>1</text:note-citation><text:note-body><text:p>Note text</text:p></text:note-body></text:note> here.</text:p>`
+	one, _ := singlePages(t, doc{body: body}, office.Options{})
+	pg := one.Pages[0]
+	if len(pg.Links) < 2 {
+		t.Fatalf("%d links, want the call's and the footnote's", len(pg.Links))
+	}
+	for _, l := range pg.Links {
+		if l.Rect.Y < 0 || l.Rect.Y+l.Rect.Height > pg.Height {
+			t.Errorf("link at %+v off a page %v tall", l.Rect, pg.Height)
+		}
+		if l.Dest != nil && (l.Dest.Y < 0 || l.Dest.Y > pg.Height) {
+			t.Errorf("destination %+v off a page %v tall", *l.Dest, pg.Height)
+		}
+	}
+}
