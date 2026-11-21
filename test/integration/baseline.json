@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-11-21T19:52:18Z",
+  "captured_at": "2026-11-21T21:04:44Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -78762,12 +78762,12 @@
               "text_f1": 1
             },
             "headers_footers_codes": {
-              "layout": 0.9025,
+              "layout": 0.9042,
               "link_recall": 1,
               "outline_recall": 1,
               "pages": 1,
               "strict": 1,
-              "text_f1": 0.9871
+              "text_f1": 0.9923
             },
             "headers_footers_first_odd_even": {
               "layout": 0.9456,
@@ -79725,7 +79725,7 @@
           "score_tolerance": 0.02
         },
         "robustness": {
-          "matched": 216,
+          "matched": 217,
           "mismatched": 2,
           "skipped": 0,
           "metrics": {
@@ -79777,6 +79777,7 @@
             "header_footer_images": "pass",
             "headers_footers_codes": "pass",
             "headers_footers_first_odd_even": "pass",
+            "headers_footers_offsets": "pass",
             "hidden_rows_cols_print": "pass",
             "hostile-bad-indexes": "pass",
             "hostile-bad-refs": "pass",
@@ -79954,31 +79955,31 @@
           }
         },
         "targets": {
-          "matched": 167,
+          "matched": 168,
           "mismatched": 3,
           "skipped": 0,
           "metrics": {
             "convert_error": 0,
             "oracle_targets": 456,
-            "pass_a1a": 170,
-            "pass_a1b": 170,
-            "pass_a2a": 170,
-            "pass_a2a+ua1": 167,
-            "pass_a2b": 170,
-            "pass_a2u": 170,
-            "pass_a3a": 170,
-            "pass_a3b": 170,
-            "pass_a3u": 170,
-            "pass_a4": 170,
-            "pass_a4+ua2": 167,
-            "pass_a4e": 170,
-            "pass_ua1": 167,
-            "pass_ua2": 167,
-            "pass_v1.4": 170,
-            "pass_v1.5": 170,
-            "pass_v1.6": 170,
-            "pass_v1.7": 170,
-            "pass_v2.0": 170,
+            "pass_a1a": 171,
+            "pass_a1b": 171,
+            "pass_a2a": 171,
+            "pass_a2a+ua1": 168,
+            "pass_a2b": 171,
+            "pass_a2u": 171,
+            "pass_a3a": 171,
+            "pass_a3b": 171,
+            "pass_a3u": 171,
+            "pass_a4": 171,
+            "pass_a4+ua2": 168,
+            "pass_a4e": 171,
+            "pass_ua1": 168,
+            "pass_ua2": 168,
+            "pass_v1.4": 171,
+            "pass_v1.5": 171,
+            "pass_v1.6": 171,
+            "pass_v1.7": 171,
+            "pass_v2.0": 171,
             "pdfcpu_unavailable": 0,
             "poppler_unavailable": 0,
             "renderer_disagrees": 0,
@@ -80892,6 +80893,27 @@
               "v2.0": 1
             },
             "headers_footers_first_odd_even": {
+              "a1a": 1,
+              "a1b": 1,
+              "a2a": 1,
+              "a2a+ua1": 1,
+              "a2b": 1,
+              "a2u": 1,
+              "a3a": 1,
+              "a3b": 1,
+              "a3u": 1,
+              "a4": 1,
+              "a4+ua2": 1,
+              "a4e": 1,
+              "ua1": 1,
+              "ua2": 1,
+              "v1.4": 1,
+              "v1.5": 1,
+              "v1.6": 1,
+              "v1.7": 1,
+              "v2.0": 1
+            },
+            "headers_footers_offsets": {
               "a1a": 1,
               "a1b": 1,
               "a2a": 1,
@@ -113081,7 +113103,7 @@
           "skipped": 26,
           "metrics": {
             "convert_error": 1,
-            "pages_equal": 150,
+            "pages_equal": 149,
             "reference_fonts_missing": 26
           },
           "scores": {
@@ -113869,14 +113891,7 @@
               "strict": 1,
               "text_f1": 1
             },
-            "spreadsheet/58896.xlsx": {
-              "layout": 0.2826,
-              "link_recall": 1,
-              "outline_recall": 1,
-              "pages": 1,
-              "strict": 0.4537,
-              "text_f1": 0.8143
-            },
+            "spreadsheet/58896.xlsx": {},
             "spreadsheet/59021.xlsx": {
               "layout": 0.5926,
               "link_recall": 1,
