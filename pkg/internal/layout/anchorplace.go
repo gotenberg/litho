@@ -318,6 +318,22 @@ func (e *engine) planAnchored(b *box, st *css.Style, cb absCB) *anchorPlan {
 	plan.st, plan.cb = sub, cb
 	plan.imcb = e.insetModified(b, sub, cb)
 	plan.negative = plan.imcb.x1 < plan.imcb.x0-eps || plan.imcb.y1 < plan.imcb.y0-eps
+	if s.def != nil && cb.page && !s.def.fixed && e.rootBox != nil {
+		// A fixed box whose default anchor scrolls with the document
+		// shifts within the document's scrollable overflow area, the
+		// viewport or the root's box where that is larger (CSS
+		// Box Alignment 3, 4.4.1.2: its overflow limit rectangle).
+		rb := e.rootBox
+		w := rb.x + rb.borderW() + max(rb.m[css.Right], 0) - cb.x
+		if e.rtlRoot {
+			plan.orig.x0 = min(plan.orig.x0, plan.orig.x1-w)
+		} else {
+			plan.orig.x1 = max(plan.orig.x1, cb.x+w)
+		}
+		// A fixed box's coordinates are those of the page its anchor
+		// starts on.
+		plan.orig.y1 = max(plan.orig.y1, rb.y+rb.borderH()+max(rb.m[css.Bottom], 0)-e.pageTop(max(s.page, 0)))
+	}
 	if s.def != nil && cb.box == nil && !cb.page && !cb.anchored {
 		// The scrollable containing block of the root grows with what
 		// overflows its end edges, the box itself included: a box never

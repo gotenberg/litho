@@ -549,3 +549,33 @@ func TestAnchor_ColumnsOfTheContainingBlock(t *testing.T) {
 		<div class="p y" id=p4></div></div>`,
 		map[string]string{"1:y": "50,5+80x30"})
 }
+
+// TestAnchor_FixedBoxShiftsInScrollableArea holds the overflow limit of a
+// fixed box whose default anchor scrolls with the document (CSS Box
+// Alignment 3, 4.4.1.2): the document's scrollable overflow area, not the
+// viewport, so a box that overflows the page but not the root stays
+// where its position-area puts it, and one that overflows the root too
+// shifts back inside it. A paged document scrolls nowhere: the page the
+// anchor is on stands for the viewport.
+//
+// # Corpus evidence
+//
+//   - wpt: css/css-anchor-position/position-area-overflow-icb-004-ltr and
+//     -rtl draw their references in Chromium of gotenberg/gotenberg:9.4.1,
+//     and so does -003, where the root is no larger than the viewport;
+//     -006, whose place-self: safe normal Chromium does not parse, a
+//     value only the editor's draft of CSS Box Alignment 3 holds, it
+//     draws as -004.
+func TestAnchor_FixedBoxShiftsInScrollableArea(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ root, height, want string }{
+		{"1000px", "100px", "105,340+30x100"},
+		{"450px", "200px", "105,250+30x200"},
+	} {
+		checkAnchored(t, `html { height: `+c.root+` }
+			#a { anchor-name: --a; left: 100px; top: 300px }
+			#p1 { position: fixed; position-anchor: --a; position-area: bottom; height: `+c.height+` }`,
+			`<div class=a id=a></div><div class="p g" id=p1></div>`,
+			map[string]string{"1:g": c.want})
+	}
+}
