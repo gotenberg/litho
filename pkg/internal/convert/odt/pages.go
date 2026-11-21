@@ -62,9 +62,12 @@ type pageFlow struct {
 	// footer, which are what is being measured.
 	building int
 	// height is the height of a single page, 0 until its content is laid
-	// out: the page is then [office.Options.FittedPageLimit] tall and
-	// trimmed.
+	// out: the page is then [office.MaxPageSide] tall and trimmed, or
+	// [office.Options.FittedPageLimit] tall once tall is set.
 	height float64
+	// tall lays a single page out past [office.MaxPageSide], once the
+	// content was found to pass it.
+	tall bool
 }
 
 // hfGeom is a header's or footer's placement on its page.
@@ -216,8 +219,9 @@ func (f *pageFlow) singleParts() (head, foot *pageGeom, number int) {
 
 // singleBox returns the page box of a single page, recording the page as
 // pageFor does: the header's page with the footer's bottom margin,
-// [office.Options.FittedPageLimit] tall, the page the layout trims to its content, or
-// the height its content measured once it is known.
+// [office.MaxPageSide] tall, or [office.Options.FittedPageLimit] once
+// [pageFlow.tall] is set, the page the layout trims to its content, or the
+// height its content measured once it is known.
 func (f *pageFlow) singleBox(index int) layout.PageBox {
 	if len(f.instances) == 0 {
 		f.start("", 0)
@@ -225,7 +229,10 @@ func (f *pageFlow) singleBox(index int) layout.PageBox {
 	head, foot, number := f.singleParts()
 	box := head.box
 	box.Margin[css.Bottom] = foot.box.Margin[css.Bottom]
-	box.Height = f.opts.FittedPageLimit()
+	box.Height = office.MaxPageSide
+	if f.tall {
+		box.Height = f.opts.FittedPageLimit()
+	}
 	if f.height > 0 {
 		box.Height = f.height
 	}

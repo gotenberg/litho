@@ -126,6 +126,18 @@ func (d *document) convert() (*typeset.Document, error) {
 	if d.err != nil {
 		return nil, d.err
 	}
+	if single && len(res.Pages) > 1 && fittedLimit > office.MaxPageSide {
+		// The content passes 14,400 points: it is laid out again on the
+		// tallest single page. A shorter document keeps the page it was
+		// laid out on.
+		pg.tall = true
+		if res, err = lay(); err != nil {
+			return nil, err
+		}
+		if d.err != nil {
+			return nil, d.err
+		}
+	}
 	if single && len(res.Pages) == 1 && d.placeOnSinglePage(res) {
 		// The drawings positioned from the page's middle or bottom moved
 		// to the single page's: the document lays out again on a page that

@@ -126,6 +126,18 @@ func Convert(ctx context.Context, src io.Reader, fonts *text.Fonts, opts office.
 	if b.err != nil {
 		return nil, b.err
 	}
+	if b.single && len(res.Pages) > 1 && fittedLimit > office.MaxPageSide {
+		// The content passes 14,400 points: it is laid out again on the
+		// tallest single page. A shorter document keeps the page it was
+		// laid out on.
+		b.pages.tall = true
+		if res, err = lay(); err != nil {
+			return nil, err
+		}
+		if b.err != nil {
+			return nil, b.err
+		}
+	}
 	// A table of contents is numbered from where the headings landed,
 	// then laid out again until the numbers settle.
 	for pass := 1; pass < maxIndexPasses && len(b.tocs) > 0 && b.updateTOCs(res); pass++ {
