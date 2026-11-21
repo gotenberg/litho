@@ -412,6 +412,18 @@ func (e *engine) layoutAbs(b *box) {
 		e.noPaginate++
 		defer func() { e.noPaginate-- }()
 	}
+	if e.anchoredBox(b) {
+		e.layoutAnchored(b, cb)
+		return
+	}
+	e.layoutAbsIn(b, cb)
+}
+
+// layoutAbsIn lays out the absolutely positioned box b, its static
+// position set, in its containing block cb by its style: its edges, its
+// width and horizontal margins, then its height and content where they
+// land (CSS 2.1, 10.3.7, 10.3.8, 10.6.4 and 10.6.5).
+func (e *engine) layoutAbsIn(b *box, cb absCB) {
 	resolveEdges(b, cb.w)
 	ccb := cblock{x: cb.x, w: cb.w, h: cb.h, hDefinite: true}
 	if r, _ := prefRatio(b); hasSizing(b.sizeSrc()) || r > 0 {

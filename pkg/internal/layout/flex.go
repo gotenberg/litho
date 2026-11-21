@@ -443,7 +443,7 @@ func usedAlign(st, c *css.Style) css.BoxAlign {
 	if a.Keyword() == css.BoxNormal || a.Keyword() == css.BoxAuto {
 		return css.BoxStretch
 	}
-	return a
+	return inFlowAlign(a)
 }
 
 // layoutFlex lays out the flex container b's content in its content box

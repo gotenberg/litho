@@ -865,6 +865,19 @@ func (n *calcNode) substituteAnchors(f func(AnchorFn) (float64, bool), depth int
 	return &c, true
 }
 
+// UsesDefaultAnchor reports whether d holds an anchor function that names
+// no anchor, which takes the default anchor.
+func (d Dimension) UsesDefaultAnchor() bool {
+	return d.expr != nil && d.expr.namesDefault()
+}
+
+func (n *calcNode) namesDefault() bool {
+	if n.op == opAnchor && n.anchor.Name == "" {
+		return true
+	}
+	return slices.ContainsFunc(n.kids, (*calcNode).namesDefault)
+}
+
 // MapAnchors returns d with each anchor function replaced by what f makes
 // of it, its fallback kept: a try tactic's change of the sides and sizes
 // the functions name (CSS Anchor Positioning 1, 5.4.2).

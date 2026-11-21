@@ -93,7 +93,7 @@ func layout(ctx context.Context, root *Node, fonts *text.Fonts, opts Options) (*
 			opts.Paginated(infos)
 		}
 	}
-	res := &Result{Structure: e.root, ContentWidth: e.overflowRight(rb)}
+	res := &Result{Structure: e.root, ContentWidth: e.overflowRight(rb), PositionChoices: e.choices}
 	if e.turn != css.HorizontalTB {
 		// A turned flow overflows along the paper's height, which no
 		// shrink to fit the paper's width answers.
@@ -506,7 +506,11 @@ func (e *engine) repeat(it *ditem, depth, n int, used map[*typeset.StructElem]bo
 		return
 	}
 	leaves := countLeaves(it)
-	for p := range n {
+	from := 0
+	if it.fx != nil {
+		from = int(it.fx.from)
+	}
+	for p := from; p < n; p++ {
 		if e.pageFrags[p]+leaves > maxPageFragments {
 			e.warnOnce(warn.LimitReached, warn.Omitted, fmt.Sprintf("a page of more than %d fragments was cut short", maxPageFragments), e.pageTop(p))
 			continue
@@ -515,10 +519,10 @@ func (e *engine) repeat(it *ditem, depth, n int, used map[*typeset.StructElem]bo
 		e.pushBackdropLevel(backdropLevel{move: typeset.Matrix{A: 1, D: 1, F: e.pageTop(p)}})
 		saved := e.backdropPage
 		e.backdropPage = p
-		frags := e.flatten(it, depth+1, p > 0)
+		frags := e.flatten(it, depth+1, p > from)
 		e.backdropPage = saved
 		e.popBackdropLevel()
-		if p == 0 {
+		if p == from {
 			for _, f := range frags {
 				markTree(f, used)
 			}

@@ -112,7 +112,11 @@ func convertChecked(ctx context.Context, src io.Reader, fonts *text.Fonts, o Opt
 		// styles too, since the viewport the media queries and the
 		// viewport units measure changed (blink::LocalFrameView::
 		// ForceLayoutForPagination).
-		if p, res, err = prepareAndLayOut(ctx, doc, o, fonts, s, lay, nil); err != nil {
+		// An anchored box keeps the position option it took (CSS Anchor
+		// Positioning 1, 5.4.1.1), as Chromium's second layout does.
+		choices := res.PositionChoices
+		keep := func(p *prepared) { p.layout.PositionChoices = choices }
+		if p, res, err = prepareAndLayOut(ctx, doc, o, fonts, s, lay, keep); err != nil {
 			return nil, err
 		}
 	}

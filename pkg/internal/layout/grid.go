@@ -507,6 +507,16 @@ func justifySelf(k, c *css.Style) css.BoxAlign {
 	if a.Keyword() == css.BoxAuto {
 		a = c.JustifyItems
 	}
+	return inFlowAlign(a)
+}
+
+// inFlowAlign returns the alignment a box that is not absolutely
+// positioned takes for a: anchor-center is center there (CSS Anchor
+// Positioning 1, 4.2).
+func inFlowAlign(a css.BoxAlign) css.BoxAlign {
+	if a == css.BoxAnchorCenter {
+		return css.BoxCenter
+	}
 	return a
 }
 
@@ -517,7 +527,7 @@ func alignSelfOf(k, c *css.Style) css.BoxAlign {
 	if a.Keyword() == css.BoxAuto {
 		a = c.AlignItems
 	}
-	return a
+	return inFlowAlign(a)
 }
 
 // stretches reports an alignment a that stretches an auto-sized box of

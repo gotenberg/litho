@@ -376,7 +376,7 @@ func (b *builder) pseudo(ctx context.Context, n *dom.Node, which css.PseudoEleme
 		return nil
 	}
 	v := b.applyCounters(nil, ps)
-	node := &layout.Node{Kind: layout.Element, Style: ps, ListValue: v}
+	node := &layout.Node{Kind: layout.Element, Style: ps, ListValue: v, Generated: true}
 	node.Children = b.generate(ctx, n, ps)
 	b.counters.leave(b.counters.pushed)
 	return node

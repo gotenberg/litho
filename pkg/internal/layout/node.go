@@ -214,6 +214,10 @@ type Node struct {
 	// is (HTML Standard, 15.3.13), FieldsetNone for none. See
 	// [FieldsetPart].
 	Fieldset FieldsetPart
+	// Generated reports the box of a ::before or ::after pseudo-element,
+	// whose originating element is the node it is a child of: its implicit
+	// anchor element (CSS Anchor Positioning 1, 2.3.1).
+	Generated bool
 }
 
 // FieldsetPart is the part a node plays in the boxes of a fieldset
@@ -346,6 +350,12 @@ type Options struct {
 	// the named strings and running elements of a page (CSS GCPM 3, 2).
 	// Layout calls it once, from its own goroutine.
 	Placed func(anchors map[string]typeset.Dest)
+	// PositionChoices holds, for the anchored boxes of an earlier layout
+	// of the same tree, the position option each took ([Result]
+	// PositionChoices): the last successful position option, which a box
+	// keeps while it fits (CSS Anchor Positioning 1, 5.4.1.1). nil for a
+	// first layout.
+	PositionChoices map[int]int
 	// PageGroups tracks the page groups of [PageInfo.Groups], which
 	// [Options.PageFor] and [Options.MarginContent] then receive; off,
 	// every page belongs to none.
@@ -548,6 +558,12 @@ type Result struct {
 	// least zero and exceeds the area's width when content overflows its
 	// page, which a converter shrinks to fit as browsers print.
 	ContentWidth float64
+	// PositionChoices holds the position option each anchored box took,
+	// 0 for its base styles and i for the i-th entry of its
+	// position-try-fallbacks, keyed by the order the layout generated its
+	// box in, which a tree prepared again from the same document keeps.
+	// nil when no box tried one.
+	PositionChoices map[int]int
 	// Extents maps every non-empty Node.ID of a block-level, inline-block
 	// or replaced box that landed on a page to its border box less its
 	// padding, the box that holds its content and borders, on the page

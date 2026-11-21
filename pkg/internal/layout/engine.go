@@ -177,6 +177,15 @@ type engine struct {
 	backdropPage      int
 	backdropGround    func(page int) []typeset.Fragment
 	backdropCount     map[int]int
+	// anchors indexes the anchors of the layout, nil until a box anchored
+	// to one is laid out; anchorBase holds the style each such box was
+	// generated with, which its position options start from
+	// (anchorpos.go).
+	anchorIdx  *anchorIndex
+	anchorBase map[*box]*css.Style
+	// choices holds the position option each anchored box took, by its
+	// generation order ([Result.PositionChoices]).
+	choices map[int]int
 	// fitH is the height of the content of the first page under
 	// [Options.FitFirstPage], set as the pages are assembled: the page
 	// box the footnote area's links and anchors are placed on is the one

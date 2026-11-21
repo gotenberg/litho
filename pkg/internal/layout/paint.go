@@ -90,7 +90,9 @@ type groupFx struct {
 	flow bool
 	// fixed reports the group of a fixed box: its content is in the
 	// coordinates of the first page and paints on every page (CSS 2.1,
-	// 9.6.1).
+	// 9.6.1), from the page from on: a fixed box anchored to the flow is
+	// drawn from its anchor's page ([engine.anchorRect]), at most
+	// maxFixedFrom.
 	fixed bool
 	// shift reports the group of a relatively positioned box in columns:
 	// transform is its offset, which moves each of its fragments after
@@ -99,7 +101,16 @@ type groupFx struct {
 	// root reports the innermost group of an element that forms a
 	// Backdrop Root (Filter Effects 2, 3).
 	root bool
+	from uint16
 }
+
+// maxFixedFrom bounds the page a fixed box anchored to the flow is drawn
+// from, which [groupFx] holds in 16 bits to stay in its size class. A
+// box anchored past it is drawn from that page on, the pages before it
+// keeping it too. Size guard, not spec-mandated: it lies past the default
+// page cap of a conversion, and a document of that many pages anchoring a
+// fixed box so far is not one real pages make.
+const maxFixedFrom = math.MaxUint16
 
 // openClip is a clip group open in the painter, for an overflow: hidden
 // box.
@@ -783,7 +794,7 @@ func (p *painter) unit(b *box, own bool) {
 		savedMono := p.mono
 		p.mono = -1
 		defer func() { p.mono = savedMono }()
-		push(&ditem{group: true, fx: &groupFx{opacity: 1, fixed: true}})
+		push(&ditem{group: true, fx: &groupFx{opacity: 1, fixed: true, from: uint16(min(max(b.anchorPage, 0), maxFixedFrom))}})
 	}
 	if b.pageAnchored {
 		// A page-anchored box paints on its page alone, unclipped by the
