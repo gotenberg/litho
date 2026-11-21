@@ -352,7 +352,7 @@ func TestDiagramTextSpacing(t *testing.T) {
 // a factor of the primary font size its constraint starts at (21.4.2.8
 // constr refType primFontSz), read in millimetres: the nodes are that tall
 // while they fit the column, and when they do not, the size falls by the
-// share that makes them fit, the nodes' text taking it. An equality of no
+// share that makes them fit, to a whole point, the nodes' text taking it. An equality of no
 // value and an lte bound set no height of their own.
 func TestDiagramLinearSizesFromTheFont(t *testing.T) {
 	for _, c := range []struct {
@@ -362,7 +362,7 @@ func TestDiagramLinearSizesFromTheFont(t *testing.T) {
 		description string
 	}{
 		{"10", 540000, 10, "15 mm a node, two fit the column"},
-		{"20", 635000, 20 * 1270000.0 / 2160000, "30 mm a node do not fit: the size falls"},
+		{"20", 594000, 11, "30 mm a node do not fit: the size falls to the whole point under the share that fits, 11.76"},
 	} {
 		layout := `<dgm:alg type="lin"><dgm:param type="linDir" val="fromT"/></dgm:alg><dgm:shape/><dgm:constrLst>` +
 			`<dgm:constr type="primFontSz" for="des" forName="node" val="` + c.size + `"/>` +

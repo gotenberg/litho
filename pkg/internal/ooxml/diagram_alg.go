@@ -814,17 +814,33 @@ func (e *engine) fontLengths(s *DiagramShape, cons []DiagramConstraint, along, a
 		scale = min(scale, (float64(alongRoom)-fixed)/font)
 	}
 	if scale < 1 {
-		for key := range keys {
-			typ, name, _ := strings.Cut(key, "\x00")
-			if v := e.fontStart(cons, typ, name); v > 0 {
-				e.fontCaps[key] = float64(v * scale)
-			}
+		for _, key := range sortedKeys(keys) {
+			e.capFont(key, cons, scale)
 		}
 		for n, v := range out.unbounded {
 			out.unbounded[n] = float64(v * scale)
 		}
 	}
 	return out
+}
+
+// capFont bounds the size a font size constraint starts a layout node at
+// by the share f of its present start that the shapes sized from it leave
+// room for, in whole points: every size PowerPoint saves in its drawings
+// is a whole point (see [engine.sizeText]), and the size search starts
+// from this bound. The bound never rises and never falls under
+// minDiagramFontSize.
+func (e *engine) capFont(key string, cons []DiagramConstraint, f float64) {
+	typ, name, _ := strings.Cut(key, "\x00")
+	v := e.fontStart(cons, typ, name)
+	if v <= 0 {
+		return
+	}
+	c := max(math.Floor(float64(v*f)), minDiagramFontSize)
+	if old, ok := e.fontCaps[key]; ok {
+		c = min(c, old)
+	}
+	e.fontCaps[key] = c
 }
 
 // nodeNames adds the names of the layout nodes under a, at most
