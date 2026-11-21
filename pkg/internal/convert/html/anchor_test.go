@@ -458,3 +458,23 @@ func TestAnchor_FieldsetPseudoElement(t *testing.T) {
 		`<fieldset></fieldset>`,
 		map[string]string{"1:g": "220,70+10x10"})
 }
+
+// TestAnchor_VisibleThroughEscapedClip holds position-visibility:
+// anchors-visible (CSS Anchor Positioning 1, 5.5) for an anchor inside an
+// absolutely positioned box that escapes a box clipping its overflow:
+// that box clips nothing of it (CSS Overflow 3, 3), so the anchor is
+// visible and the box shows; an anchor the clip does reach hides it.
+func TestAnchor_VisibleThroughEscapedClip(t *testing.T) {
+	t.Parallel()
+	checkAnchored(t, `
+		.clip { overflow: hidden; height: 10px }
+		.esc { position: absolute; top: 50px; left: 0; width: 100px; height: 100px }
+		.in { position: relative; top: 50px }
+		#a1 { anchor-name: --a1; height: 10px } #a2 { anchor-name: --a2; height: 10px }
+		#p1 { position-anchor: --a1; left: anchor(left); top: anchor(bottom) }
+		#p2 { position-anchor: --a2; left: anchor(left); top: anchor(bottom) }`,
+		`<div class=clip><div class=esc><div id=a1></div></div></div>
+		<div class=clip><div class=in><div id=a2></div></div></div>
+		<div class="p g" id=p1></div><div class="p r" id=p2></div>`,
+		map[string]string{"1:g": "0,60+30x20", "1:r": ""})
+}

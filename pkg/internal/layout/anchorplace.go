@@ -885,12 +885,41 @@ func intoRange(p, n, lo, hi, o0, o1 float64) float64 {
 // clippedAnchor reports whether the anchor a of p is clipped by
 // intervening boxes (CSS Anchor Positioning 1, 5.5): a box between a and
 // p's containing block clips its overflow and leaves nothing of a's
-// border box inside.
+// border box inside. A box clips an absolutely positioned descendant
+// only when it holds that descendant's containing block (CSS Overflow 3,
+// 3): the boxes between an absolutely positioned box on the way and its
+// containing block clip nothing of it. The anchor is where the relative
+// offsets put it.
 func (e *engine) clippedAnchor(a, p *box) bool {
 	pcb := cbGenerator(p)
 	r := boxRect(a)
+	// above is the containing block the boxes on the way must reach before
+	// one clips, set while the way runs inside an absolutely positioned
+	// box's escape.
+	var above *box
+	escaping := a.abs
+	if escaping {
+		above = a.cbBox
+	}
+	prev := a
 	for x, n := a.parent, 0; x != nil && x != pcb && n <= maxTreeDepth; x, n = x.parent, n+1 {
-		if x.kind == kindInline || x.anon || x.st.Overflow != css.OverflowHidden {
+		// The anchor moves with the relative offsets below the clipping
+		// box, which moves with those above it.
+		dx, dy := ownOffset(prev)
+		r = edges{r.x0 + dx, r.y0 + dy, r.x1 + dx, r.y1 + dy}
+		prev = x
+		if escaping && x == above {
+			escaping = false
+		}
+		clips := !escaping
+		switch {
+		case x.abs && !escaping:
+			escaping, above = true, x.cbBox
+		case x.abs && above != nil && (x.cbBox == nil || strictlyIn(above, x.cbBox)):
+			// A box escaping further up takes the way with it.
+			above = x.cbBox
+		}
+		if !clips || x.kind == kindInline || x.anon || x.st.Overflow != css.OverflowHidden {
 			continue
 		}
 		cx0, cy0 := x.x+x.bd[css.Left], x.y+x.bd[css.Top]
