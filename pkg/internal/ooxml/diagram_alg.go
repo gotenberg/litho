@@ -878,6 +878,7 @@ func (e *engine) textAlg(a *DiagramAtom, s *DiagramShape, cons []DiagramConstrai
 	if len(s.Paragraphs) == 0 {
 		return
 	}
+	s.text = true
 	s.FontSize = fontSize
 	s.Autofit = !e.customText(s)
 	// The rotation of a cycle's kid grows with its stAng, which a

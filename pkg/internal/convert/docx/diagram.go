@@ -60,7 +60,7 @@ func (d *document) diagram(s *story, data *ooxml.Element, st *css.Style, w, h fl
 	count := 0
 	if drawing := d.diagramDrawing(s, dg); drawing != nil {
 		d.diagramTree(drawing.Child(nsDSP, "spTree"), st, n, &count, depth)
-	} else if root := dg.LayOut(emuOf(w), emuOf(h)); root != nil {
+	} else if root := dg.LayOut(emuOf(w), emuOf(h), d.diagramTextFits()); root != nil {
 		d.diagramLaidOut(root, st, n, 0, 0, &count, depth)
 	}
 	if len(n.Children) == 0 {
@@ -69,6 +69,61 @@ func (d *document) diagram(s *story, data *ooxml.Element, st *css.Style, w, h fl
 	}
 	n.Alt = office.ShownText(n.Children)
 	return n
+}
+
+// The ids of the two blocks a diagram text is measured in.
+const (
+	measureFlow  = "\x00diagram-flow"
+	measureWords = "\x00diagram-words"
+)
+
+// diagramTextFits returns the measurement a laid out diagram sizes its
+// text with: a shape's text fits when, laid out as [document.drawingText]
+// draws it in the shape's box less its insets, its lines are no taller
+// than the box and its widest word no wider, so that no word breaks
+// across lines.
+func (d *document) diagramTextFits() ooxml.DiagramTextFit {
+	return func(ds *ooxml.DiagramShape) bool {
+		sp := ds.Element(nsDSP, ds.Preset(), false)
+		body := sp.Child(nsDSP, "txBody")
+		if body == nil {
+			return true
+		}
+		in := bodyInsets(body.Child(ooxml.NSA, "bodyPr"))
+		w := float64(ds.W)/12700 - in[css.Left] - in[css.Right]
+		h := float64(ds.H)/12700 - in[css.Top] - in[css.Bottom]
+		if !(w > 0) || !(h > 0) {
+			return false
+		}
+		face := d.themeFace(attrOr(sp.Child(nsDSP, "style").Child(ooxml.NSA, "fontRef"), "idx"))
+		paras := func() []*layout.Node {
+			var out []*layout.Node
+			for _, p := range body.Kids() {
+				if p.Is(ooxml.NSA, "p") {
+					out = append(out, d.drawingPara(p, face, css.Color{A: 1}, 1))
+				}
+			}
+			return out
+		}
+		flow := &layout.Node{Kind: layout.Element, Style: d.blockStyle(), ID: measureFlow, Children: paras()}
+		flow.Style.Width = css.Pts(w)
+		words := &layout.Node{Kind: layout.Element, Style: d.blockStyle(), ID: measureWords, Children: paras()}
+		words.Style.Width = css.Dimension{Kind: css.MinContent}
+		res, err := layout.Layout(d.ctx, wrap(d.blockStyle(), flow, words), d.fonts, layout.Options{
+			Page:     layout.PageBox{Width: measureSide, Height: measureSide},
+			Lang:     d.lang(),
+			MaxPages: maxSubLayoutPages,
+		})
+		if err != nil {
+			// Text that does not lay out is drawn at the size the sizing
+			// starts at: nothing measures it smaller.
+			d.stop(err)
+			return true
+		}
+		f, okF := res.Extents[measureFlow]
+		m, okW := res.Extents[measureWords]
+		return okF && okW && f.Height <= h+1e-6 && m.Width <= w+1e-6
+	}
 }
 
 // emuOf returns pt points in EMU (20.1.2.1: 12700 to the point).

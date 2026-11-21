@@ -1,6 +1,7 @@
 package ooxml
 
 import (
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -161,8 +162,10 @@ type DiagramAtom struct {
 	Rot       float64
 	ZOrderOff int
 
-	// A constraint (21.4.2.6) or a rule's forName.
+	// A constraint (21.4.2.6), or a rule's forName.
 	Constraint DiagramConstraint
+	// Rule is a rule (21.4.2.24).
+	Rule DiagramRule
 
 	// A for-each's or an if's iteration attributes, a for-each's ref.
 	Iter IteratorAttr
@@ -183,6 +186,22 @@ type DiagramConstraint struct {
 	RefFor, RefForName, RefType string
 	RefPtType, Op               string
 	Factor, Value               float64
+	// HasValue reports a val the constraint states.
+	HasValue bool
+}
+
+// DiagramRule is a rule of a layout node (ECMA-376 Part 1, 21.4.2.24
+// rule): "a rule to be specified which changes the value of an existing
+// constraint" when the text no longer fits. For, ForName and PtType name
+// the nodes it applies to, Type the constraint it changes. Value is the
+// limit the rule moves the constraint to (val), Factor a factor of it
+// (fact), Max the most a rule may raise it to (max); each is NaN when the
+// rule does not state it, the schema's default. Unbounded marks a val of
+// INF: the constraint may grow without limit.
+type DiagramRule struct {
+	For, ForName, PtType, Type string
+	Value, Factor, Max         float64
+	Unbounded                  bool
 }
 
 // IteratorAttr is the iteration of a for-each or an if (21.4.7.4 the
@@ -392,8 +411,10 @@ func (d *Diagram) parseAtom(el *Element, parent, node *DiagramAtom, n *int, dept
 				if !c.Is(NSDgm, "constr") {
 					continue
 				}
+				_, hasVal := c.Attr("val")
 				add(&DiagramAtom{Kind: AtomConstraint, Parent: a, Node: a.Node, Constraint: DiagramConstraint{
-					For: tokenOr(c, "for", "none"), ForName: attrOr(c, "forName"), PtType: tokenOr(c, "ptType", "none"),
+					HasValue: hasVal && numeric.Finite(parseDouble(attrOr(c, "val"), math.NaN())),
+					For:      tokenOr(c, "for", "none"), ForName: attrOr(c, "forName"), PtType: tokenOr(c, "ptType", "none"),
 					Type: tokenOr(c, "type", "none"), RefFor: tokenOr(c, "refFor", "none"), RefForName: attrOr(c, "refForName"),
 					RefType: tokenOr(c, "refType", "none"), RefPtType: tokenOr(c, "refPtType", "none"),
 					Factor: parseDouble(attrOr(c, "fact"), 1), Value: parseDouble(attrOr(c, "val"), 0),
@@ -403,12 +424,24 @@ func (d *Diagram) parseAtom(el *Element, parent, node *DiagramAtom, n *int, dept
 		case "ruleLst":
 			for _, r := range k.Kids() {
 				if r.Is(NSDgm, "rule") {
-					add(&DiagramAtom{Kind: AtomRule, Parent: a, Node: a.Node, Constraint: DiagramConstraint{ForName: attrOr(r, "forName")}})
+					add(&DiagramAtom{Kind: AtomRule, Parent: a, Node: a.Node, Constraint: DiagramConstraint{ForName: attrOr(r, "forName")}, Rule: parseRule(r)})
 				}
 			}
 		}
 	}
 	return a
+}
+
+// parseRule reads a rule (21.4.2.24): its for (self by default), forName,
+// ptType (all) and type (none), and its val, fact and max, NaN when absent
+// or not a finite number (the schema's default), a val of INF unbounded.
+func parseRule(r *Element) DiagramRule {
+	v := strings.TrimSpace(attrOr(r, "val"))
+	return DiagramRule{
+		For: tokenOr(r, "for", "self"), ForName: attrOr(r, "forName"), PtType: tokenOr(r, "ptType", "all"), Type: tokenOr(r, "type", "none"),
+		Value: parseDouble(v, math.NaN()), Factor: parseDouble(attrOr(r, "fact"), math.NaN()), Max: parseDouble(attrOr(r, "max"), math.NaN()),
+		Unbounded: strings.EqualFold(v, "INF"),
+	}
 }
 
 // parseIterator reads the iteration attributes of a for-each or an if,

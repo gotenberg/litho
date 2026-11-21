@@ -99,7 +99,9 @@ func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, dept
 			r.warn(warn.ContentUnsupported, warn.Omitted, "a SmartArt diagram without a saved drawing or a layout definition is left out")
 			return nil, nil
 		}
-		root := d.LayOut(emu(s.Box.Width), emu(s.Box.Height))
+		root := d.LayOut(emu(s.Box.Width), emu(s.Box.Height), func(ds *ooxml.DiagramShape) bool {
+			return r.diagramTextFits(inner, ds)
+		})
 		for _, k := range root.Kids {
 			if k.Name == "background" && k.FillSpPr == d.Background {
 				continue
@@ -113,6 +115,28 @@ func (r *reader) diagram(c *shapeCtx, data *ooxml.Element, s *slides.Shape, dept
 		return nil, nil
 	}
 	return s, nil
+}
+
+// diagramTextFits reports whether the text of a laid out shape fits it,
+// measured as the slide builder draws it (slides.TextFits). Measuring
+// counts nothing against the reader's caps: the shape is read again to be
+// drawn.
+func (r *reader) diagramTextFits(c *shapeCtx, ds *ooxml.DiagramShape) bool {
+	runes := r.runes
+	defer func() { r.runes = runes }()
+	s := r.diagramShape(c, ds, ds.Preset(), 0, 0)
+	if s == nil {
+		return true
+	}
+	if s.Kind == slides.KindGroup {
+		// A text turned against its shape is the group's last kid.
+		for _, k := range s.Kids {
+			if k.Text != nil {
+				s = k
+			}
+		}
+	}
+	return s.Text == nil || slides.TextFits(r.ctx, r.fonts, s)
 }
 
 // fitAgain makes the shrinking text bodies of shapes laid out from a

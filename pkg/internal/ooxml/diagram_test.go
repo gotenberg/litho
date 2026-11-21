@@ -126,7 +126,7 @@ func TestDiagramLayOut(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			d := ParseDiagram(mustParse(t, diagramData(c.texts...)), mustParse(t, diagramLayout(c.layout)), nil, nil)
-			got := boxes(d.LayOut(c.w, c.h))
+			got := boxes(d.LayOut(c.w, c.h, nil))
 			if strings.Join(got, "; ") != strings.Join(c.want, "; ") {
 				t.Errorf("boxes\n got %q\nwant %q", got, c.want)
 			}
@@ -170,7 +170,7 @@ func TestDiagramText(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			layout := `<dgm:alg type="lin"/><dgm:shape/><dgm:forEach axis="ch" ptType="node"><dgm:layoutNode name="node">` + c.alg + `<dgm:shape type="rect"/></dgm:layoutNode></dgm:forEach>`
 			d := ParseDiagram(mustParse(t, diagramData("a")), mustParse(t, diagramLayout(layout)), nil, nil)
-			root := d.LayOut(600, 300)
+			root := d.LayOut(600, 300, nil)
 			if len(root.Kids) != 2 {
 				t.Fatalf("kids %q", boxes(root))
 			}
@@ -184,7 +184,7 @@ func TestDiagramStyleAndColors(t *testing.T) {
 	colors := `<dgm:colorsDef ` + dgmNS + `><dgm:styleLbl name="node1"><dgm:fillClrLst meth="repeat"><a:schemeClr val="accent1"/><a:schemeClr val="accent2"/></dgm:fillClrLst><dgm:txFillClrLst><a:schemeClr val="dk1"/></dgm:txFillClrLst></dgm:styleLbl></dgm:colorsDef>`
 	layout := `<dgm:alg type="lin"/><dgm:shape/>` + nodeList("rect", "")
 	d := ParseDiagram(mustParse(t, diagramData("a", "b", "c")), mustParse(t, diagramLayout(layout)), mustParse(t, style), mustParse(t, colors))
-	root := d.LayOut(900, 300)
+	root := d.LayOut(900, 300, nil)
 	want := []string{"accent1", "accent2", "accent1"}
 	for i, k := range root.Kids[1:] {
 		if k.Style.Fill == nil || attrOr(k.Style.Fill, "idx") != "1" || attrOr(k.Style.Line, "idx") != "2" {
@@ -215,7 +215,7 @@ func TestDiagramTextRotationOfAHugeStartAngle(t *testing.T) {
 		nodeList("ellipse", "")
 	d := ParseDiagram(mustParse(t, diagramData(texts...)), mustParse(t, diagramLayout(layout)), nil, nil)
 	done := make(chan *DiagramShape, 1)
-	go func() { done <- d.LayOut(1200, 1200) }()
+	go func() { done <- d.LayOut(1200, 1200, nil) }()
 	select {
 	case root := <-done:
 		n := 0
@@ -246,7 +246,7 @@ func TestDiagramTextUprightInATurnedShape(t *testing.T) {
 	}{{"90", -90}, {"-90", -270}, {"180", -180}, {"0", 0}} {
 		layout := `<dgm:alg type="lin"/><dgm:shape/>` + strings.Replace(nodeList("rect", ""), `<dgm:shape type="rect"/>`, `<dgm:shape type="rect" rot="`+tc.rot+`"/>`, 1)
 		d := ParseDiagram(mustParse(t, diagramData("a", "b")), mustParse(t, diagramLayout(layout)), nil, nil)
-		root := d.LayOut(1200000, 600000)
+		root := d.LayOut(1200000, 600000, nil)
 		n := 0
 		for _, k := range root.Kids {
 			if k.Name != "node" {
@@ -331,7 +331,7 @@ func TestDiagramTextSpacing(t *testing.T) {
 			data := strings.Replace(diagramData("a"), `<a:p><a:r>`, `<a:p>`+c.ppr+`<a:r>`, 1)
 			layout := `<dgm:alg type="lin"/><dgm:shape/><dgm:forEach axis="ch" ptType="node"><dgm:layoutNode name="node">` + c.alg + `<dgm:shape type="rect"/></dgm:layoutNode></dgm:forEach>`
 			d := ParseDiagram(mustParse(t, data), mustParse(t, diagramLayout(layout)), nil, nil)
-			p := d.LayOut(600, 300).Kids[1].Paragraphs[0]
+			p := d.LayOut(600, 300, nil).Kids[1].Paragraphs[0]
 			if got := [2]int64{p.LineSpacing, p.SpaceAfter}; got != c.want {
 				t.Errorf("spacing %v, want %v", got, c.want)
 			}

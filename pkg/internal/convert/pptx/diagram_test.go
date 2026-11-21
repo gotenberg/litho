@@ -91,7 +91,7 @@ func TestDiagram(t *testing.T) {
 				if k.Fill.Kind != slides.FillSolid || !nearColor(k.Fill.Color, want.fill) || k.Line.Width != 2 || k.Line.Color != white {
 					t.Errorf("ellipse %d fill %+v line %+v", i, k.Fill, k.Line)
 				}
-				if k.Text == nil || plain(k.Text) != want.text || k.Text.Anchor != slides.AnchorMiddle || k.Text.Autofit != slides.AutofitShrink || k.Text.ShrinkGroup != 1 ||
+				if k.Text == nil || plain(k.Text) != want.text || k.Text.Anchor != slides.AnchorMiddle || k.Text.Autofit != slides.AutofitNone || k.Text.Paragraphs[0].Runs[0].Style.Size != 65 ||
 					k.Text.Paragraphs[0].Align != css.AlignCenter || k.Text.Paragraphs[0].Runs[0].Style.Color != white {
 					t.Errorf("ellipse %d text %+v", i, k.Text)
 				}
@@ -154,4 +154,28 @@ func TestDiagram(t *testing.T) {
 func nearColor(a, b css.Color) bool {
 	d := func(x, y float64) bool { return x-y < 1e-3 && y-x < 1e-3 }
 	return d(a.R, b.R) && d(a.G, b.G) && d(a.B, b.B) && d(a.A, b.A)
+}
+
+// TestDiagramTextSizedByTheSlideText lays out two tied ellipses, one
+// holding a word too wide for 65 points, with a rule that lets the size
+// fall to 5 points: measured as the slide draws its text, both ellipses
+// take one smaller whole size, at which the wide word fits its box.
+func TestDiagramTextSizedByTheSlideText(t *testing.T) {
+	deck := diagramDeck("")
+	deck.parts["ppt/diagrams/data1.xml"] = strings.Replace(deck.parts["ppt/diagrams/data1.xml"], `<a:t>b</a:t>`, `<a:t>abcdefghij</a:t>`, 1)
+	deck.parts["ppt/diagrams/layout1.xml"] = strings.Replace(deck.parts["ppt/diagrams/layout1.xml"], `<dgm:shape type="ellipse"/>`,
+		`<dgm:shape type="ellipse"/><dgm:ruleLst><dgm:rule type="primFontSz" val="5"/></dgm:ruleLst>`, 1)
+	doc, _ := readDeck(t, deck)
+	g := shapeNamed(doc.Slides[0].Shapes, "Diagram 1")
+	if g == nil || len(g.Kids) != 3 {
+		t.Fatalf("diagram %+v", g)
+	}
+	a, b := g.Kids[1].Text, g.Kids[2].Text
+	if a == nil || b == nil {
+		t.Fatal("an ellipse lost its text")
+	}
+	sa, sb := a.Paragraphs[0].Runs[0].Style.Size, b.Paragraphs[0].Runs[0].Style.Size
+	if sa != sb || sa >= 65 || sa < 5 || sa != float64(int(sa)) {
+		t.Errorf("sizes %v and %v, want one whole size under 65", sa, sb)
+	}
 }

@@ -482,6 +482,13 @@ func keepLines(frags []typeset.Fragment, m typeset.Matrix, top, bottom float64) 
 // naturalWidth returns the width of the body's longest line laid out
 // without wrapping at the scaling f, its paragraph's margins included.
 func (b *builder) naturalWidth(body *TextBody, f fit) float64 {
+	return b.contentWidth(body, f, false)
+}
+
+// contentWidth returns the body's widest paragraph at the scaling f, its
+// margins included: laid out without wrapping, or, when words is set, as
+// wide as its widest word (a paragraph's min-content width).
+func (b *builder) contentWidth(body *TextBody, f fit, words bool) float64 {
 	best := 0.0
 	for i := range body.Paragraphs {
 		if i >= maxParagraphs {
@@ -511,7 +518,11 @@ func (b *builder) naturalWidth(body *TextBody, f fit) float64 {
 			continue
 		}
 		ml := max(p.MarginLeft, 0) + max(p.Indent, 0) + max(p.MarginRight, 0)
-		if w := sp.MaxContent() + ml; w > best && !math.IsInf(w, 0) {
+		content := sp.MaxContent()
+		if words {
+			content = sp.MinContent()
+		}
+		if w := content + ml; w > best && !math.IsInf(w, 0) {
 			best = w
 		}
 	}

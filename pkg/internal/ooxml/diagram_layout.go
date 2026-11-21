@@ -59,6 +59,13 @@ type DiagramShape struct {
 	zorder, zoff int
 	ar           float64
 	vcount       int64
+	// atom is the layout node the shape lays out, parent the shape of the
+	// enclosing layout node, pt the presentation point; nil for none.
+	atom   *DiagramAtom
+	parent *DiagramShape
+	pt     *DiagramPoint
+	// text marks a shape the text algorithm laid out.
+	text bool
 }
 
 // DiagramParagraph is one paragraph of a layout shape's text: a source
@@ -165,7 +172,11 @@ type walker struct {
 // group: its first kid the background rectangle when the data model
 // gives the background a fill or a line, then the layout's shapes. nil
 // when the diagram has no layout or no document point.
-func (d *Diagram) LayOut(w, h int64) *DiagramShape {
+//
+// The text of each shape takes the size its layout definition's font size
+// constraints and rules give it (see [DiagramTextFit]); fit measures it,
+// and a nil fit holds every text at its starting size.
+func (d *Diagram) LayOut(w, h int64, fit DiagramTextFit) *DiagramShape {
 	rootPt := d.root()
 	root := &DiagramShape{Group: true, W: w, H: h}
 	e := &engine{d: d, presShp: map[*DiagramPoint]*DiagramShape{}, shpPres: map[*DiagramShape]*DiagramPoint{}, ptIndex: map[*DiagramPoint]int{}, tmpls: map[*DiagramAtom]*shapeTemplate{}, children: map[[2]string]bool{}, root: root, rootAtom: d.Layout}
@@ -180,6 +191,7 @@ func (d *Diagram) LayOut(w, h int64) *DiagramShape {
 		c.visit(d.Layout)
 		l := &walker{e: e, m: modeLayout, cur: rootPt}
 		l.visit(d.Layout)
+		e.sizeText(fit)
 		sortByZOrder(root, 0)
 		removeEmptyGroups(root, 0)
 		shareLines(root, 0)
@@ -347,6 +359,7 @@ func (w *walker) layoutNode(a *DiagramAtom) {
 		s := w.e.root
 		w.e.setupShape(a, s, p, w.idx)
 		s.Name = a.Name
+		s.atom, s.pt = a, p
 		w.e.bind(p, s)
 	} else {
 		t := &walker{e: w.e, m: modeTemplate, cur: p, depth: w.depth}
@@ -354,6 +367,7 @@ func (w *walker) layoutNode(a *DiagramAtom) {
 		if s := t.tmpl; s != nil {
 			w.e.setupShape(a, s, p, w.idx)
 			s.Name = a.Name
+			s.atom, s.parent, s.pt = a, parent, p
 			parent.Kids = append(parent.Kids, s)
 			parent = s
 			w.e.bind(p, s)

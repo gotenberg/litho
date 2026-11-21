@@ -110,10 +110,13 @@ func (s *DiagramShape) TextBody(space string) *Element {
 		return nil
 	}
 	body := &Element{Space: NSA, Local: "bodyPr"}
+	// Text the sizing gave a size is set at it, as PowerPoint saves the
+	// text it sizes: with noAutofit.
+	sized := !s.Autofit && s.FontSize > 0 && s.text
 	if s.BodyPr != nil {
 		body.Attrs = append([]xml.Attr(nil), s.BodyPr.Attrs...)
 		for _, k := range s.BodyPr.Kids() {
-			if s.Autofit && (k.Local == "normAutofit" || k.Local == "spAutoFit" || k.Local == "noAutofit") {
+			if (s.Autofit || sized) && (k.Local == "normAutofit" || k.Local == "spAutoFit" || k.Local == "noAutofit") {
 				continue
 			}
 			body.Children = append(body.Children, k)
@@ -127,8 +130,11 @@ func (s *DiagramShape) TextBody(space string) *Element {
 			body.Attrs = withAttrSet(body.Attrs, name, strconv.FormatInt(s.Insets[i], 10))
 		}
 	}
-	if s.Autofit {
+	switch {
+	case s.Autofit:
 		body.Children = append(body.Children, newA("normAutofit", nil))
+	case sized:
+		body.Children = append(body.Children, newA("noAutofit", nil))
 	}
 	tb := &Element{Space: space, Local: "txBody", Children: []*Element{body}}
 	if s.ListStyle != nil {

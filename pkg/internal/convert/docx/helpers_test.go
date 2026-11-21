@@ -49,6 +49,7 @@ var relTypes = map[string]string{
 	"word/charts/chart1.xml":     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart",
 	"word/diagrams/data1.xml":    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData",
 	"word/diagrams/drawing1.xml": "http://schemas.microsoft.com/office/2007/relationships/diagramDrawing",
+	"word/diagrams/layout1.xml":  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramLayout",
 }
 
 // pkgFiles returns the files of a DOCX package with body as the content of
