@@ -99,8 +99,8 @@ func TestParseHeaderFooter(t *testing.T) {
 			"theme colours past their bounds", "&K12+000a&K04+150b&K04-101c&K04-100d",
 			[3][]span{1: {
 				with(b, func(s *span) { s.text, s.color = "a", rgb(0x954F72) }),
-				with(b, func(s *span) { s.text, s.color = "b", tint(rgb(0x4472C4), 0) }),
-				with(b, func(s *span) { s.text, s.color = "c", tint(rgb(0x4472C4), 0) }),
+				with(b, func(s *span) { s.text, s.color = "b", rgb(0x4472C4) }),
+				with(b, func(s *span) { s.text, s.color = "c", rgb(0x4472C4) }),
 				with(b, func(s *span) { s.text, s.color = "d", tint(rgb(0x4472C4), -1) }),
 			}},
 		},

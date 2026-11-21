@@ -360,15 +360,17 @@ func (p *hfParser) fontName(spec string) {
 
 // color applies a &K code's six characters: RRGGBB, or TTSNNN, a theme
 // colour index with a signed tint percent. As Excel prints them, an index
-// past the last colour takes the last, and a tint past 100 percent either
-// way is no tint.
+// past the last colour takes the last, and a tint of 0 or past 100
+// percent either way leaves the colour as the theme states it.
 //
 // # Corpus evidence
 //
 //   - probe, xlsx: under the Office theme, Excel for the web prints
 //     "&K00+000" white (lt1), "&K11+000" and "&K12+000" 954F72 (folHlink),
-//     "&K04+150" and "&K04-150" as "&K04+000" (accent1) and "&K04-050"
+//     "&K04+150" and "&K04-150" 4472C4 (accent1 untinted) and "&K04-050"
 //     203764.
+//   - litho/xlsx headers_footers_codes: "&K04+000" prints 4472C4, the
+//     theme's accent1 exactly.
 func (p *hfParser) color(code string) {
 	if code[2] == '+' || code[2] == '-' {
 		idx, err1 := intconv.Atoi(code[:2])
@@ -381,7 +383,12 @@ func (p *hfParser) color(code string) {
 			pct = 0
 		}
 		if c, ok := p.theme.Color(themeColorNames[idx]); ok {
-			p.font.Color = tint(c, float64(pct)/100)
+			p.font.Color = c
+			if pct != 0 {
+				// A tint of 0 keeps the colour as stated: the round trip
+				// through Windows' HLS levels would move a channel.
+				p.font.Color = tint(c, float64(pct)/100)
+			}
 		}
 		return
 	}
