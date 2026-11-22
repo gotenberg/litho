@@ -110,3 +110,28 @@ func TestRender_OfficeBubbleSizeLabels(t *testing.T) {
 		t.Errorf("label at x %.2f, want right of the bubble's edge %.2f", x, bubble.X+bubble.Width)
 	}
 }
+
+// TestValueText_OfficeGeneralElevenCharacters holds a General data label
+// value to eleven characters under OfficeRules.
+func TestValueText_OfficeGeneralElevenCharacters(t *testing.T) {
+	office := &renderer{c: &Chart{Rules: OfficeRules}}
+	lo := &renderer{c: &Chart{}}
+	for _, tc := range []struct {
+		v          float64
+		code, want string
+	}{
+		{1189.6790093003899, "", "1189.679009"},
+		{573.65446810428102, "General", "573.6544681"},
+		{1594.36831022005, "", "1594.36831"},
+		{-246.235253149996, "", "-246.235253"},
+		{1000, "", "1000"},
+		{1189.6790093003899, "0.0", "1189.7"},
+	} {
+		if got := office.valueText(tc.code, tc.v); got != tc.want {
+			t.Errorf("Office %v in %q: %q, want %q", tc.v, tc.code, got, tc.want)
+		}
+	}
+	if got := lo.valueText("", 1189.6790093003899); got != "1189.67900930039" {
+		t.Errorf("LibreOffice: %q, want every digit", got)
+	}
+}

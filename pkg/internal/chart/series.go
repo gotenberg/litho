@@ -374,12 +374,12 @@ func (rd *renderer) labelText(g *Group, s *Series, j int, v float64, lb Labels, 
 		if f == "" {
 			f = rd.data(s.Values).Format
 		}
-		parts = append(parts, formatLabel(f, v, rd.c.Locale))
+		parts = append(parts, rd.valueText(f, v))
 	}
 	if lb.ShowSize && g.Kind == Bubble {
 		sz := rd.data(s.Sizes)
 		if z, ok := sz.number(j); ok {
-			parts = append(parts, formatLabel(sz.Format, z, rd.c.Locale))
+			parts = append(parts, rd.valueText(sz.Format, z))
 		}
 	}
 	if lb.ShowPercent && !math.IsNaN(pct) && (g.Kind == Pie || g.Kind == Doughnut || g.Grouping == PercentStacked) {
@@ -439,7 +439,7 @@ func (rd *renderer) customLabel(g *Group, s *Series, j int, v float64, lb Labels
 				if code == "" {
 					code = rd.data(s.Values).Format
 				}
-				b.WriteString(formatLabel(code, v, rd.c.Locale))
+				b.WriteString(rd.valueText(code, v))
 			}
 		case FieldPercent:
 			if !math.IsNaN(pct) && (g.Kind == Pie || g.Kind == Doughnut || g.Grouping == PercentStacked) {
