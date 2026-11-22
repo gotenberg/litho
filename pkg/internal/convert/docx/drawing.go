@@ -134,9 +134,41 @@ func (d *document) drawing(s *story, c *ooxml.Element, st *css.Style, sink *inli
 		}
 		if !inline {
 			d.anchor(k, n, wpt, hpt, sink)
+			sink.add(n)
+			continue
+		}
+		if href := d.drawingLink(s, k.Child(ooxml.NSWP, "docPr")); href != "" {
+			sink.openLink(href)
+			sink.add(n)
+			sink.closeLink()
+			continue
 		}
 		sink.add(n)
 	}
+}
+
+// drawingLink returns the target of the hyperlink an inline drawing's
+// wp:docPr carries (20.4.2.5 docPr; 20.1.2.2.23 hlinkClick, its r:id
+// naming an external relationship), "" for none.
+//
+// # Corpus evidence
+//
+//   - libreoffice/docx: ooxmlimport/image-hyperlink.docx: Word writes a
+//     link annotation over an inline picture whose docPr holds an
+//     a:hlinkClick.
+func (d *document) drawingLink(s *story, pr *ooxml.Element) string {
+	h := pr.Child(ooxml.NSA, "hlinkClick")
+	if h == nil {
+		return ""
+	}
+	id, ok := h.AttrNS(ooxml.NSR, "id")
+	if !ok {
+		return ""
+	}
+	if rel, ok := d.pkg.RelationshipByID(d.ctx, s.part, id); ok && rel.External {
+		return rel.Target
+	}
+	return ""
 }
 
 // relativeSize returns the size of the anchored drawing k whose extent is

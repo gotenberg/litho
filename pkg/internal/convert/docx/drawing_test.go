@@ -664,3 +664,19 @@ func TestPicture_LinkPlaceholder(t *testing.T) {
 		t.Errorf("missing embedded picture framed: %+v", st.Border)
 	}
 }
+
+// TestDrawings_LinkedPicture makes an inline picture whose wp:docPr holds
+// an a:hlinkClick a link to the relationship's target (20.1.2.2.23).
+func TestDrawings_LinkedPicture(t *testing.T) {
+	t.Parallel()
+	body := `<w:p><w:r><w:drawing><wp:inline><wp:extent cx="1270000" cy="635000"/><wp:docPr id="1" name="p"><a:hlinkClick r:id="rIdlink"/></wp:docPr>` +
+		graphic("") + `</wp:inline></w:drawing></w:r></w:p>`
+	b := build(t, body, map[string]string{"word/media/a.png": pngData(t, 40, 20)})
+	links := find(b.root, func(n *layout.Node) bool { return n.Href != "" })
+	if len(links) != 1 || links[0].Href != "https://example.com/" {
+		t.Fatalf("%d links, want one to https://example.com/", len(links))
+	}
+	if pics := find(links[0], func(n *layout.Node) bool { return n.Kind == layout.Replaced }); len(pics) != 1 {
+		t.Errorf("the link holds %d pictures, want the picture", len(pics))
+	}
+}
