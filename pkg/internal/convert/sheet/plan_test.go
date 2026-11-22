@@ -561,3 +561,41 @@ func TestConvert_ExcelCentredPage(t *testing.T) {
 		t.Errorf("centred %.3f points below the margin, want %.3f", got, want)
 	}
 }
+
+// TestPlan_ExcelFitWidth locks the zoom Excel fits a sheet one page wide
+// at: the page's width less the grid line's room over the columns' and
+// the print titles' beside them, the first page's too.
+func TestPlan_ExcelFitWidth(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		titles bool
+		want   float64
+	}{
+		// 499.04 points over 625: 79%.
+		{"columns alone", false, 79},
+		// Column A's 125 points again: 499.04 over 750, 66%, where the
+		// titles counted on the later pages alone would leave 79.
+		{"print titles", true, 66},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sh := &Sheet{Name: "S", DefaultColumnWidth: 50, Columns: []Column{{First: 0, Last: 0, Width: 125}}}
+			for r := range 3 {
+				var cells []Cell
+				for c := range 11 {
+					cells = append(cells, textCell(c, "x", nil))
+				}
+				sh.Rows = append(sh.Rows, Row{Index: r, Cells: cells})
+			}
+			doc := excelDoc(sh)
+			sh.Page = PageSetup{Width: 572, Height: 800, Margin: [4]float64{36, 36, 36, 36}, FitWidth: 1}
+			if tc.titles {
+				sh.Page.RepeatColumns = &Range{FirstColumn: 0, LastColumn: 0, LastRow: maxRows - 1}
+			}
+			b := newBuilder(context.Background(), doc, pinnedFonts(t), office.Options{})
+			sp := b.planOf(t, 0, sh)
+			if got := math.Round(sp.zoom * 100); got != tc.want {
+				t.Errorf("zoom %v%%, want %v%%", got, tc.want)
+			}
+		})
+	}
+}

@@ -90,6 +90,8 @@ type sheetPlan struct {
 	capped bool
 	// single reports a page sized to the sheet's content.
 	single bool
+	// fitting reports a layout zoomFor tries.
+	fitting bool
 	// first is the first page of the first print range, printed or not:
 	// what a book without a printed page shows; firstRows the first row
 	// band layoutPages cut, kept or not.
@@ -207,6 +209,14 @@ func (sp *sheetPlan) layoutPages(ctx context.Context, a Range, zoom int) ([]band
 	}
 	size := 0.0
 	colFound := false
+	if g.doc.ExcelRules && sp.fitting && repC != nil {
+		// Excel fits the print titles beside every page's columns, the
+		// first page's too ([sheetPlan.zoomFor]).
+		for i := repC.first; i <= repC.last; i++ {
+			pageW -= g.layoutColWidth(i)
+		}
+		colFound = true
+	}
 	for c := a.FirstColumn; c <= a.LastColumn; c++ {
 		if (c-a.FirstColumn)%rowsPerCheck == 0 {
 			if err := ctx.Err(); err != nil {
@@ -568,7 +578,19 @@ func (sp *sheetPlan) lastHolding(ctx context.Context, a Range, rows, cols []band
 // across and down it asks for, found as Calc finds it
 // (ScPrintFunc::CalcZoom): a bisection over whole percents, then for a
 // sheet fitted to a width alone 2% less when that saves a page down.
-// ctx's error stops it.
+// Under Excel's rules the width fitted holds the print titles beside the
+// columns of every page, the first one's too. ctx's error stops it.
+//
+// # Corpus evidence
+//
+//   - probe, xlsx: sheets of A4 landscape fitted one page wide, columns A
+//     to O of 7,478 printer pixels in 6,168 of room (the grid line's 8
+//     out), print in Excel for the web at 82% (0.825), at 71% with A as
+//     print titles (over 8,606: A's 1,128 counted again), 82% with a print
+//     title row, 77% with a picture to the edge of column P (7,908, P's
+//     430 in the range: 0.780) and 68% with both (9,036).
+//   - litho/xlsx: real_budget, print titles A and 3 and charts to the edge
+//     of P, prints at about 68%.
 func (sp *sheetPlan) zoomFor(ctx context.Context, a Range) (int, error) {
 	ps := &sp.g.sh.Page
 	if sp.single {
@@ -590,6 +612,8 @@ func (sp *sheetPlan) zoomFor(ctx context.Context, a Range) (int, error) {
 		nH = 0
 	}
 	var err error
+	sp.fitting = true
+	defer func() { sp.fitting = false }()
 	fits := func(z int) (bool, int) {
 		cols, rows, _, lerr := sp.layoutPages(ctx, a, z)
 		if lerr != nil {
