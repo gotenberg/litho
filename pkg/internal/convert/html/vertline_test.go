@@ -306,3 +306,23 @@ func TestVertical_FixedBoxesIgnoreRelativeOffsetsAround(t *testing.T) {
 		}
 	}
 }
+
+// TestVertical_OrthogonalPercentageOfTheInitialContainingBlock locks the
+// inline size of an orthogonal flow root given as a percentage of a
+// containing block of no definite size: a percentage of the initial
+// containing block, the fallback of CSS Writing Modes 4, 7.3.1.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints a
+//     horizontal block of width 50% and a 35 px border in a vertical-lr
+//     root on a Letter page 478 px wide: half the page's 816 px, border
+//     aside.
+func TestVertical_OrthogonalPercentageOfTheInitialContainingBlock(t *testing.T) {
+	t.Parallel()
+	doc := convertDoc(t, `<style>@page { size: 400px 300px; margin: 0 } html { writing-mode: vertical-lr } body { margin: 0; font: 20px/20px "Test Serif" }
+		.h { writing-mode: horizontal-tb; width: 50%; border: 5px solid lime }</style><div><div class=h>aaaa</div></div>`, Options{PreferCSSPageSize: true})
+	if got := pxBoxes(doc)[0]["g"]; got != "0,0+210x30" {
+		t.Errorf("horizontal box %q, want 0,0+210x30", got)
+	}
+}

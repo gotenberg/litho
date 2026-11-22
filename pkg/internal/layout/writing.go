@@ -120,8 +120,9 @@ func innerTurner(b *box) *box {
 // sideways-lr, where it reads bottom to top, lines stacking left to
 // right. The content is monolithic: it does not break across pages.
 //
-// The inline size is the root's height when definite, else its table
-// row's, else the content's fit-content width in the space
+// The inline size is the root's height when definite, a percentage
+// resolving against the initial containing block when the containing
+// block's is not, else its table row's, else the content's fit-content width in the space
 // [engine.orthoAvailable] gives (CSS Writing Modes 4, 7.3.1).
 type orthoFormatter struct{}
 
@@ -212,6 +213,15 @@ func (e *engine) orthoInline(b *box, cb cblock) float64 {
 	}
 	if h, ok := specHeight(b, b.st.Height, cblock{}); ok {
 		return h
+	}
+	if p := b.parent; b.st.Height.HasPercent() && p != nil && !p.flexItem && !p.gridItem && p.tpart == partNone {
+		// A percentage of a block container of no definite size resolves
+		// against the initial containing block, the fallback CSS Writing
+		// Modes 4, 7.3.1 gives the available space. A flex or grid item
+		// and a table cell size it in a later pass.
+		if h, ok := specHeight(b, b.st.Height, cblock{h: e.areaH(0), hDefinite: true}); ok {
+			return h
+		}
 	}
 	if b.tpart == partCell && b.parent != nil {
 		if h, ok := specHeight(b.parent, b.parent.st.Height, cblock{}); ok {
