@@ -152,6 +152,8 @@ type engine struct {
 	lists    map[nodePoint]nodeLists
 	root     *DiagramShape
 	rootAtom *DiagramAtom
+	// kidsByName holds [engine.presKids], nil until it is first read.
+	kidsByName map[string][]*DiagramPoint
 }
 
 // walker is one walk of the layout definition: the current presentation
@@ -162,8 +164,11 @@ type walker struct {
 	cur       *DiagramPoint
 	idx, step int
 	cnt       int
-	look      look
-	depth     int
+	// iterCur is the point the innermost for-each iterates over, the one
+	// idx counts the children of.
+	iterCur *DiagramPoint
+	look    look
+	depth   int
 	// modeCreate
 	parent *DiagramShape
 	// modeTemplate
@@ -370,28 +375,76 @@ func (w *walker) forEach(a *DiagramAtom) {
 	if a.Iter.Cnt != -1 {
 		cnt = min(n, a.Iter.Cnt)
 	}
-	oldIdx, oldStep, oldCnt := w.idx, w.step, w.cnt
+	oldIdx, oldStep, oldCnt, oldIter := w.idx, w.step, w.cnt, w.iterCur
 	step := a.Iter.Step
-	w.step, w.cnt = step, cnt
+	w.step, w.cnt, w.iterCur = step, cnt, w.cur
 	for w.idx = 0; w.idx < cnt && step > 0; w.idx += step {
 		w.kids(a)
 	}
-	w.idx, w.step, w.cnt = oldIdx, oldStep, oldCnt
+	w.idx, w.step, w.cnt, w.iterCur = oldIdx, oldStep, oldCnt, oldIter
 }
 
 // childPoint returns the presentation point a layout node lays out at
-// the walk's position: the idx-th of its name, when it is a child of the
-// current point; nil otherwise.
+// the walk's position: the idx-th of its name when it is a child of the
+// current point, as LibreOffice picks it; outside a for-each over the
+// current point, where idx counts another point's children, the current
+// point's first child of its name (21.4.3.2 cxn presParOf) when the
+// idx-th is none; nil otherwise.
+//
+// # Corpus evidence
+//
+//   - openxmlsdk/pptx: SmartArt_OrgChart1 prints the assistant of Temp,
+//     the only child of its parent, under Temp, the hierChild5 that holds
+//     it standing first among Temp's children but not first of its name
+//     in the data model.
 func (w *walker) childPoint(a *DiagramAtom) *DiagramPoint {
+	if w.cur == nil {
+		return nil
+	}
 	list := w.e.d.presNames[a.Name]
-	if w.idx < 0 || w.idx >= len(list) || w.cur == nil {
-		return nil
+	if w.idx >= 0 && w.idx < len(list) && w.e.children[[2]string{w.cur.ModelID, list[w.idx].ModelID}] {
+		return list[w.idx]
 	}
-	p := list[w.idx]
-	if !w.e.children[[2]string{w.cur.ModelID, p.ModelID}] {
-		return nil
+	if w.iterCur != w.cur {
+		if kids := w.e.presKids()[w.cur.ModelID+"\x00"+a.Name]; len(kids) > 0 {
+			return kids[0]
+		}
 	}
-	return p
+	return nil
+}
+
+// presKids returns, by parent model id and layout node name, the
+// presentation points a presParOf connection gives each presentation
+// point, by their order among the parent's.
+func (e *engine) presKids() map[string][]*DiagramPoint {
+	if e.kidsByName != nil {
+		return e.kidsByName
+	}
+	e.kidsByName = map[string][]*DiagramPoint{}
+	type ordered struct {
+		p   *DiagramPoint
+		ord int
+	}
+	byKey := map[string][]ordered{}
+	for _, c := range e.d.Connections {
+		if c.Type != "presParOf" {
+			continue
+		}
+		p := e.d.byID[c.Dest]
+		if p == nil || p.PresName == "" {
+			continue
+		}
+		key := c.Src + "\x00" + p.PresName
+		byKey[key] = append(byKey[key], ordered{p, c.SrcOrd})
+	}
+	for _, key := range sortedKeys(byKey) {
+		list := byKey[key]
+		sort.SliceStable(list, func(i, j int) bool { return list[i].ord < list[j].ord })
+		for _, o := range list {
+			e.kidsByName[key] = append(e.kidsByName[key], o.p)
+		}
+	}
+	return e.kidsByName
 }
 
 // layoutNode handles a layout node for the walk's mode.
