@@ -840,8 +840,12 @@ func (p *painter) unit(b *box, own bool) {
 		push(&ditem{group: true, page: b.anchorPage, fx: &groupFx{opacity: 1, transform: &id}})
 	}
 	m, has, visible := transformOf(b, p.borderRect(b))
+	hidePlane := false
 	if !visible {
-		return
+		if !planeHidden(b, p.borderRect(b)) {
+			return
+		}
+		has, hidePlane = false, true
 	}
 	op := 1.0
 	if b.parent != nil && b.st.Opacity < 1 {
@@ -956,6 +960,10 @@ func (p *painter) unit(b *box, own bool) {
 	var neg, zero, pos []*box
 	if own {
 		neg, zero, pos = p.stack(layers)
+	}
+	if hidePlane {
+		p.planeParticipants(b, neg, zero, pos)
+		return
 	}
 	if b == p.canvas || b.parent == nil {
 		// The root's background, or the one it takes from its first
@@ -1567,6 +1575,36 @@ func symbolPath(st *css.Style, r typeset.Rect) *typeset.Path {
 		return &typeset.Path{Ops: circleOps(r.X+float64(r.Width/2), r.Y+float64(r.Height/2), (r.Width-sw)/2), Stroke: &typeset.Stroke{Color: col, Width: sw}}
 	}
 	return &typeset.Path{Ops: circleOps(r.X+float64(r.Width/2), r.Y+float64(r.Height/2), r.Width/2), Fill: &typeset.Fill{Color: col}}
+}
+
+// planeParticipants paints what a box b whose plane projects to no area
+// still holds ([planeHidden]): its stacking layers neg, zero and pos, and
+// the transformed atomic inlines of its lines, each drawn by its own
+// matrix in b's 3D rendering context. Nothing else of b, which lies in its
+// plane, is drawn.
+func (p *painter) planeParticipants(b *box, neg, zero, pos []*box) {
+	for _, l := range [][]*box{neg, zero, pos} {
+		for _, c := range l {
+			p.lifted(c)
+		}
+	}
+	for _, l := range b.lines {
+		page := p.e.pageOf(l.y + eps)
+		for _, it := range l.items {
+			if it.atomic == nil || !it.atomic.transformed() || it.box == nil {
+				continue
+			}
+			ox, oy := inlineOffset(it.box.parent)
+			p.dx += ox
+			p.dy += oy
+			saved := p.mono
+			p.mono = page
+			p.context(it.atomic)
+			p.mono = saved
+			p.dx -= ox
+			p.dy -= oy
+		}
+	}
 }
 
 // line paints one line box: the backgrounds and borders of its inline

@@ -299,6 +299,10 @@ const (
 	pAppearance
 	pAccentColor
 	pResize
+	pPerspective
+	pPerspectiveOrigin
+	pTransformStyle
+	pBackfaceVisibility
 	numProps
 )
 
@@ -1173,6 +1177,9 @@ func init() {
 		props[id] = def
 	}
 	for id, def := range motionProps() {
+		props[id] = def
+	}
+	for id, def := range space3DProps() {
 		props[id] = def
 	}
 	// field-sizing: fixed | content (CSS Form Control Styling 1, 7.1).

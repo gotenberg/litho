@@ -46,8 +46,17 @@ func TestTransform_Parse(t *testing.T) {
 		{"transform: skew(0, 0.5turn)", []TransformFunc{{Kind: TransformSkew, V: [6]float64{0, rad(180)}}}},
 		{"transform: matrix(1, 0, 0, 1, 4, 8)", []TransformFunc{{Kind: TransformMatrix, V: [6]float64{1, 0, 0, 1, 3, 6}}}},
 		{"transform: rotate(90)", nil},
-		{"transform: translate3d(1px, 1px, 1px)", nil},
+		{"transform: translate3d(1px, 50%, 2px)", []TransformFunc{{Kind: TransformTranslate, X: pts(0.75), Y: pct(0.5), V: [6]float64{1.5}}}},
+		{"transform: translateZ(4px)", []TransformFunc{{Kind: TransformTranslate, X: pts(0), Y: pts(0), V: [6]float64{3}}}},
+		{"transform: translate3d(1px, 1px, 50%)", nil},
+		{"transform: rotateZ(90deg)", []TransformFunc{{Kind: TransformRotate, V: [6]float64{rad(90)}}}},
+		{"transform: scale3d(2, 3, 1)", []TransformFunc{{Kind: TransformScale, V: [6]float64{2, 3}}}},
+		{"transform: perspective(4px)", []TransformFunc{{Kind: TransformPerspective, V: [6]float64{3}}}},
+		{"transform: perspective(0)", []TransformFunc{{Kind: TransformPerspective, V: [6]float64{0.75}}}},
+		{"transform: perspective(none)", []TransformFunc{{Kind: TransformScale, V: [6]float64{1, 1}}}},
+		{"transform: perspective(-1px)", nil},
 		{"transform: scale(1, 2, 3)", nil},
+		{"transform: matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)", nil},
 		{"transform: matrix(1, 0, 0, 1)", nil},
 		{"transform: rotate(1deg) bogus", nil},
 	}
@@ -75,7 +84,6 @@ func TestIndividualTransforms_Parse(t *testing.T) {
 	// CSS Transforms 2, 5: translate, rotate and scale hold one function
 	// each, none by default.
 	rad := func(deg float64) float64 { return deg * math.Pi / 180 }
-	c := math.Cos(rad(60))
 	tests := []struct {
 		decls string
 		get   func(*Style) []TransformFunc
@@ -83,19 +91,20 @@ func TestIndividualTransforms_Parse(t *testing.T) {
 	}{
 		{"", func(s *Style) []TransformFunc { return s.Translate }, nil},
 		{"translate: 4px", func(s *Style) []TransformFunc { return s.Translate }, []TransformFunc{{Kind: TransformTranslate, X: pts(3), Y: pts(0)}}},
-		{"translate: 4px 50% 8px", func(s *Style) []TransformFunc { return s.Translate }, []TransformFunc{{Kind: TransformTranslate, X: pts(3), Y: pct(0.5)}}},
+		{"translate: 4px 50% 8px", func(s *Style) []TransformFunc { return s.Translate }, []TransformFunc{{Kind: TransformTranslate, X: pts(3), Y: pct(0.5), V: [6]float64{6}}}},
 		{"translate: 4px 1px 50%", func(s *Style) []TransformFunc { return s.Translate }, nil},
 		{"translate: 1px; translate: none", func(s *Style) []TransformFunc { return s.Translate }, nil},
 		{"rotate: 90deg", func(s *Style) []TransformFunc { return s.Rotate }, []TransformFunc{{Kind: TransformRotate, V: [6]float64{rad(90)}}}},
 		{"rotate: z 90deg", func(s *Style) []TransformFunc { return s.Rotate }, []TransformFunc{{Kind: TransformRotate, V: [6]float64{rad(90)}}}},
 		{"rotate: 90deg 0 0 -2", func(s *Style) []TransformFunc { return s.Rotate }, []TransformFunc{{Kind: TransformRotate, V: [6]float64{rad(-90)}}}},
-		{"rotate: x 60deg", func(s *Style) []TransformFunc { return s.Rotate }, []TransformFunc{{Kind: TransformMatrix, V: [6]float64{1, 0, 0, c}}}},
-		{"rotate: 60deg y", func(s *Style) []TransformFunc { return s.Rotate }, []TransformFunc{{Kind: TransformMatrix, V: [6]float64{c, 0, 0, 1}}}},
+		{"rotate: x 60deg", func(s *Style) []TransformFunc { return s.Rotate }, []TransformFunc{{Kind: TransformMatrix3D}}},
+		{"rotate: 60deg y", func(s *Style) []TransformFunc { return s.Rotate }, []TransformFunc{{Kind: TransformMatrix3D}}},
 		{"rotate: 90", func(s *Style) []TransformFunc { return s.Rotate }, nil},
 		{"rotate: w 90deg", func(s *Style) []TransformFunc { return s.Rotate }, nil},
 		{"scale: 2", func(s *Style) []TransformFunc { return s.Scale }, []TransformFunc{{Kind: TransformScale, V: [6]float64{2, 2}}}},
 		{"scale: 2 50%", func(s *Style) []TransformFunc { return s.Scale }, []TransformFunc{{Kind: TransformScale, V: [6]float64{2, 0.5}}}},
-		{"scale: 2 3 0", func(s *Style) []TransformFunc { return s.Scale }, []TransformFunc{{Kind: TransformScale, V: [6]float64{0, 0}}}},
+		{"scale: 2 3 0", func(s *Style) []TransformFunc { return s.Scale }, []TransformFunc{{Kind: TransformMatrix3D}}},
+		{"scale: 2 3 1", func(s *Style) []TransformFunc { return s.Scale }, []TransformFunc{{Kind: TransformScale, V: [6]float64{2, 3}}}},
 		{"scale: 1 2 3 4", func(s *Style) []TransformFunc { return s.Scale }, nil},
 	}
 	for _, tt := range tests {

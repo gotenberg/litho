@@ -143,6 +143,9 @@ func equalStyle(a, b *Style) bool {
 	if a.TransformBox != b.TransformBox {
 		return false
 	}
+	if a.Space3D != b.Space3D {
+		return false
+	}
 	if a.MotionPath != b.MotionPath {
 		return false
 	}
@@ -899,6 +902,7 @@ func hashStyle(h uint64, x *Style) uint64 {
 		h = hashTransformFunc(h, &x.Scale[i1])
 	}
 	h = mix(h, uint64(x.TransformBox))
+	h = mixBool(h, x.Space3D != nil)
 	h = mixBool(h, x.MotionPath != nil)
 	h = mixBool(h, x.GlyphPaint != nil)
 	h = mix(h, uint64(x.FieldSizing))
@@ -1448,6 +1452,9 @@ func equalTransformFunc(a, b *TransformFunc) bool {
 			return false
 		}
 	}
+	if a.M != b.M {
+		return false
+	}
 	return true
 }
 
@@ -1459,6 +1466,7 @@ func hashTransformFunc(h uint64, x *TransformFunc) uint64 {
 	for i1 := range x.V {
 		h = mix(h, math.Float64bits(x.V[i1]))
 	}
+	h = mixBool(h, x.M != nil)
 	return h
 }
 

@@ -547,7 +547,7 @@ func (b *box) isStackingContext() bool {
 	if !b.layered() {
 		return false
 	}
-	return (b.st.Position != css.Static || b.isItem()) && !b.st.ZIndex.Auto || b.st.Position == css.Fixed || b.st.Opacity < 1 || b.transformed() || b.composited() ||
+	return (b.st.Position != css.Static || b.isItem()) && !b.st.ZIndex.Auto || b.st.Position == css.Fixed || b.st.Opacity < 1 || b.transformed() || holds3D(b) || b.composited() ||
 		b.st.WillChange&css.WillStack != 0
 }
 

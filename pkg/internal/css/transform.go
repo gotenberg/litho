@@ -3,7 +3,6 @@ package css
 import (
 	"math"
 
-	"github.com/gotenberg/litho/pkg/internal/detmath"
 	"github.com/gotenberg/litho/pkg/internal/numeric"
 )
 
@@ -39,12 +38,36 @@ func zIndexProp() propDef {
 type tfSpec struct {
 	kind TransformKind
 	x, y length
+	// z is the z offset of a translation, or the distance of a
+	// perspective(), when hasZ is set.
+	z    length
+	hasZ bool
 	v    [6]float64
+	m    *[16]float64
 }
 
-// transformProp defines transform: none or a list of 2D transform
-// functions (CSS Transforms 1, 5 and 13). A 3D function makes the value
-// invalid.
+// computed returns the computed transform function of f.
+func (f tfSpec) computed(s *styler) TransformFunc {
+	out := TransformFunc{Kind: f.kind, V: f.v, M: f.m}
+	switch f.kind { //nolint:exhaustive // the other functions hold numbers alone
+	case TransformTranslate:
+		out.X, out.Y = f.x.dim(s.lc, false), f.y.dim(s.lc, false)
+		if f.hasZ {
+			if z := f.z.dim(s.lc, false); z.Kind == Points {
+				out.V[0] = z.Value
+			}
+		}
+	case TransformPerspective:
+		out.V[0] = minPerspective
+		if d := f.z.dim(s.lc, true); d.Kind == Points {
+			out.V[0] = max(d.Value, minPerspective)
+		}
+	}
+	return out
+}
+
+// transformProp defines transform: none or a list of transform
+// functions (CSS Transforms 1, 5 and 13; CSS Transforms 2, 12).
 func transformProp() propDef {
 	return propDef{
 		name:  "transform",
@@ -60,10 +83,7 @@ func transformProp() propDef {
 			}
 			out := make([]TransformFunc, len(specs))
 			for i, f := range specs {
-				out[i] = TransformFunc{Kind: f.kind, V: f.v}
-				if f.kind == TransformTranslate {
-					out[i].X, out[i].Y = f.x.dim(s.lc, false), f.y.dim(s.lc, false)
-				}
+				out[i] = f.computed(s)
 			}
 			st.Transform = out
 		},
@@ -91,7 +111,8 @@ func parseTransform(v []token, _ *declCtx) (any, bool) {
 	return out, true
 }
 
-// transformFunc parses one 2D transform function (CSS Transforms 1, 13).
+// transformFunc parses one transform function (CSS Transforms 1, 13; CSS
+// Transforms 2, 12).
 func transformFunc(t token) (tfSpec, bool) {
 	if t.typ != tFunction {
 		return tfSpec{}, false
@@ -186,7 +207,7 @@ func transformFunc(t token) (tfSpec, bool) {
 		ay, ok := oneArg(n, func() (float64, bool) { return ang(0) })
 		return tfSpec{kind: TransformSkew, v: [6]float64{0, ay}}, ok
 	}
-	return tfSpec{}, false
+	return transformFunc3D(lower(t.value), args)
 }
 
 // oneArg returns parse's value when a function has exactly one argument.
@@ -261,20 +282,14 @@ func individualProp(name string, parse func([]token) (tfSpec, bool), f func(*Sty
 				*f(st) = nil
 				return
 			}
-			sp := specs[0]
-			tf := TransformFunc{Kind: sp.kind, V: sp.v}
-			if sp.kind == TransformTranslate {
-				tf.X, tf.Y = sp.x.dim(s.lc, false), sp.y.dim(s.lc, false)
-			}
-			*f(st) = []TransformFunc{tf}
+			*f(st) = []TransformFunc{specs[0].computed(s)}
 		},
 		copyFrom: field(f),
 	}
 }
 
 // translateProp defines translate: none | <length-percentage>
-// [<length-percentage> <length>?]? (CSS Transforms 2, 5.1). The z offset
-// moves nothing a flat page shows, and is read and dropped.
+// [<length-percentage> <length>?]? (CSS Transforms 2, 5.1).
 func translateProp() propDef {
 	return individualProp("translate", func(l []token) (tfSpec, bool) {
 		if len(l) > 3 {
@@ -285,17 +300,18 @@ func translateProp() propDef {
 		if ok && len(l) > 1 {
 			y, ok = parseLength(l[1], allowPct)
 		}
+		sp := tfSpec{kind: TransformTranslate, x: x, y: y}
 		if ok && len(l) > 2 {
-			_, ok = parseLength(l[2], 0)
+			sp.z, ok = parseLength(l[2], 0)
+			sp.hasZ = true
 		}
-		return tfSpec{kind: TransformTranslate, x: x, y: y}, ok
+		return sp, ok
 	}, func(s *Style) *[]TransformFunc { return &s.Translate })
 }
 
 // scaleProp defines scale: none | [<number> | <percentage>]{1,3} (CSS
-// Transforms 2, 5.3): one factor scales both axes. The z factor scales
-// nothing a flat page shows but a zero one, which makes the matrix not
-// invertible and the box not rendered (CSS Transforms 1, 6).
+// Transforms 2, 5.3): one factor scales both axes; a third scales z, as
+// scale3d() does.
 func scaleProp() propDef {
 	return individualProp("scale", func(l []token) (tfSpec, bool) {
 		if len(l) > 3 {
@@ -312,18 +328,15 @@ func scaleProp() propDef {
 		if len(l) == 1 {
 			v[1] = v[0]
 		}
-		if len(l) == 3 && v[2] == 0 {
-			v[0], v[1] = 0, 0
+		if len(l) == 3 {
+			return scale3DSpec(v[0], v[1], v[2]), true
 		}
 		return tfSpec{kind: TransformScale, v: [6]float64{v[0], v[1]}}, true
 	}, func(s *Style) *[]TransformFunc { return &s.Scale })
 }
 
 // rotateProp defines rotate: none | <angle> | [x | y | z | <number>{3}]
-// && <angle> (CSS Transforms 2, 5.2). A rotation about the z axis is a 2D
-// rotation; one about another axis shows on the page as its orthographic
-// projection, the 2D part of the 3D rotation matrix (CSS Transforms 2,
-// 13.1, rotate3d()), as a box without perspective flattens it.
+// && <angle> (CSS Transforms 2, 5.2), rotate3d() about its axis.
 func rotateProp() propDef {
 	return individualProp("rotate", parseRotate, func(s *Style) *[]TransformFunc { return &s.Rotate })
 }
@@ -376,20 +389,7 @@ func parseRotate(l []token) (tfSpec, bool) {
 	default:
 		return tfSpec{}, false
 	}
-	n := math.Sqrt(float64(x*x) + float64(y*y) + float64(z*z))
-	if !numeric.Finite(n) || n == 0 {
-		// A zero axis rotates about nothing: the identity.
-		return tfSpec{kind: TransformScale, v: [6]float64{1, 1}}, true
-	}
-	x, y, z = x/n, y/n, z/n
-	if x == 0 && y == 0 {
-		return tfSpec{kind: TransformRotate, v: [6]float64{a * z}}, true
-	}
-	c, s := detmath.Cos(a), detmath.Sin(a)
-	return tfSpec{kind: TransformMatrix, v: [6]float64{
-		c + float64(x*x*(1-c)), float64(y*x*(1-c)) + float64(z*s),
-		float64(x*y*(1-c)) - float64(z*s), c + float64(y*y*(1-c)),
-	}}, true
+	return rotate3DSpec(x, y, z, a), true
 }
 
 // HasTransform reports whether st transforms its box: a transform list, an

@@ -182,8 +182,8 @@ func identityOf(f TransformFunc) TransformFunc {
 // and 2, 12): none against a list is the list's identity functions, and
 // two lists whose functions match kind for kind, the shorter padded with
 // identities, interpolate function by function. Lists that differ in a
-// function's kind interpolate as decomposed matrices, which litho does
-// not do.
+// function's kind, or that hold a matrix or a perspective, interpolate as
+// decomposed matrices, which litho does not do.
 func lerpTransforms(a, b []TransformFunc, p float64) ([]TransformFunc, interpResult) {
 	n := max(len(a), len(b))
 	out := make([]TransformFunc, n)
@@ -199,7 +199,7 @@ func lerpTransforms(a, b []TransformFunc, p float64) ([]TransformFunc, interpRes
 			y = b[i]
 			x = identityOf(y)
 		}
-		if x.Kind != y.Kind || x.Kind == TransformMatrix {
+		if x.Kind != y.Kind || x.Kind == TransformMatrix || x.Kind == TransformMatrix3D || x.Kind == TransformPerspective {
 			return nil, uninterpolated
 		}
 		f := TransformFunc{Kind: x.Kind}

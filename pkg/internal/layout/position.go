@@ -317,7 +317,7 @@ func holderOf(b *box) *box {
 		// Filter Effects 2, 2.1), and so do layout and paint containment
 		// (CSS Contain 2, 3.2 and 3.5) and a will-change that names a
 		// property that would (CSS Will Change 1, 3).
-		holds := a.st.HasTransform() && a.kind == kindBlock || filterHolds(a) || willHold(a, fixed) || containHolds(a)
+		holds := a.st.HasTransform() && a.kind == kindBlock || holds3D(a) || filterHolds(a) || willHold(a, fixed) || containHolds(a)
 		if !fixed && a.st.Position != css.Static {
 			holds = true
 		}
@@ -800,6 +800,9 @@ func transformOf(b *box, r typeset.Rect) (typeset.Matrix, bool, bool) {
 		r.Width = max(r.Width-hEdges(b), 0)
 		r.Height = max(r.Height-vEdges(b), 0)
 	}
+	if needs3D(b) {
+		return transform3DOf(b, border)
+	}
 	ox := r.X + resolve(b.st.TransformOrigin[0], r.Width)
 	oy := r.Y + resolve(b.st.TransformOrigin[1], r.Height)
 	m := typeset.Matrix{A: 1, D: 1, E: ox, F: oy}
@@ -835,7 +838,7 @@ func funcMatrix(f css.TransformFunc, r typeset.Rect) typeset.Matrix {
 	for i := range v {
 		v[i] = clamp(v[i])
 	}
-	switch f.Kind {
+	switch f.Kind { //nolint:exhaustive // the 3D functions go through funcMatrix4
 	case css.TransformMatrix:
 		return typeset.Matrix{A: v[0], B: v[1], C: v[2], D: v[3], E: v[4], F: v[5]}
 	case css.TransformTranslate:

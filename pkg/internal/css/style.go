@@ -164,12 +164,13 @@ type ZIndex struct {
 // TransformKind says what a [TransformFunc] is (CSS Transforms 1, 13).
 type TransformKind uint8
 
-// The 2D transform functions.
+// The transform functions.
 const (
 	// TransformMatrix is matrix(a, b, c, d, e, f): V holds a to f, e and f
 	// in points.
 	TransformMatrix TransformKind = iota
-	// TransformTranslate is translate(X, Y), translateX and translateY.
+	// TransformTranslate is translate(X, Y), translateX, translateY,
+	// translate3d and translateZ: V[0] holds the z offset in points.
 	TransformTranslate
 	// TransformScale is scale(V[0], V[1]), scaleX and scaleY.
 	TransformScale
@@ -178,6 +179,13 @@ const (
 	TransformRotate
 	// TransformSkew is skew(V[0], V[1]), skewX and skewY, in radians.
 	TransformSkew
+	// TransformMatrix3D is a 3D function held as the 4x4 matrix M (CSS
+	// Transforms 2, 12): matrix3d, scale3d, scaleZ, rotate3d, rotateX and
+	// rotateY.
+	TransformMatrix3D
+	// TransformPerspective is perspective(V[0]), V[0] the distance in
+	// points, at least 1px (CSS Transforms 2, 12).
+	TransformPerspective
 )
 
 // TransformFunc is one function of a transform list (CSS Transforms 1, 13).
@@ -188,6 +196,10 @@ type TransformFunc struct {
 	X, Y Dimension
 	// V holds the numbers of the other functions.
 	V [6]float64
+	// M is the matrix of a TransformMatrix3D, row by row for column
+	// vectors, its translation in points; nil for the other kinds.
+	// Shared and never mutated.
+	M *[16]float64
 }
 
 // TransformBox is the transform-box property of a CSS box (CSS Transforms
@@ -1078,8 +1090,8 @@ type Style struct {
 	Mask Mask
 	// ZIndex is the stack level of a positioned box (CSS 2.1, 9.9.1).
 	ZIndex ZIndex
-	// Transform is the 2D transform list, nil for none (CSS Transforms 1,
-	// 5); TransformOrigin holds its horizontal then vertical origin, each
+	// Transform is the transform list, nil for none (CSS Transforms 1,
+	// 5; CSS Transforms 2, 12); TransformOrigin holds its horizontal then vertical origin, each
 	// Points or Percent of the border box (CSS Transforms 1, 6).
 	Transform       []TransformFunc
 	TransformOrigin [2]Dimension
@@ -1090,6 +1102,9 @@ type Style struct {
 	// TransformBox is the reference box of the transform and its origin
 	// (CSS Transforms 1, 8).
 	TransformBox TransformBox
+	// Space3D holds the 3D rendering longhands (CSS Transforms 2), nil
+	// while every one is initial. Shared and never mutated.
+	Space3D *Space3D
 	// MotionPath holds the offset longhands (CSS Motion Path 1), nil
 	// while every one is initial. Shared and never mutated.
 	MotionPath *MotionPath

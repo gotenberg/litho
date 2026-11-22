@@ -324,7 +324,7 @@ var discreteAnimation = func() [numProps]bool {
 		pMaskRepeat, pMaskOrigin, pMaskClip, pMaskComposite, pMaskType, pBaselineSource, pTextBoxTrim,
 		pTextBoxEdge, pPrintColorAdjust, pFontOpticalSizing, pMarginTrim, pColorScheme, pAnchorName, pAnchorScope,
 		pPositionAnchor, pPositionArea, pPositionTryFallbacks, pPositionTryOrder, pPositionVisibility,
-		pTextStrokeWidth, pPaintOrder, pFieldSizing, pAppearance, pResize,
+		pTextStrokeWidth, pPaintOrder, pFieldSizing, pAppearance, pResize, pTransformStyle, pBackfaceVisibility,
 	} {
 		on[id] = true
 	}

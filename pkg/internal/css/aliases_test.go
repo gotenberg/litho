@@ -99,6 +99,10 @@ func TestLegacyAliases_ParseAsTheirProperty(t *testing.T) {
 	for _, tc := range []struct{ alias, target, value string }{
 		{"-webkit-transform", "transform", "translate(3px, 4px) rotate(5deg)"},
 		{"-webkit-transform-origin", "transform-origin", "10% 20px"},
+		{"-webkit-perspective", "perspective", "10px"},
+		{"-webkit-perspective-origin", "perspective-origin", "10% 20px"},
+		{"-webkit-transform-style", "transform-style", "preserve-3d"},
+		{"-webkit-backface-visibility", "backface-visibility", "hidden"},
 		{"-webkit-box-shadow", "box-shadow", "2px 3px 4px red, inset 1px 1px blue"},
 		{"-webkit-box-sizing", "box-sizing", "border-box"},
 		{"-webkit-border-radius", "border-radius", "1px 2px 3px 4px / 5px"},
@@ -125,18 +129,14 @@ func TestLegacyAliases_ParseAsTheirProperty(t *testing.T) {
 	}
 }
 
-// TestLegacyAliases_WarnAsTheirProperty checks that an alias of a property
-// litho does not support warns as that property does, that an alias of a
+// TestLegacyAliases_SilentAsTheirProperty checks that an alias of a
 // silent property is silent, and that an unknown vendor-prefixed name
 // stays silent.
-func TestLegacyAliases_WarnAsTheirProperty(t *testing.T) {
+func TestLegacyAliases_SilentAsTheirProperty(t *testing.T) {
 	t.Parallel()
 	c := compute(t, `<body><div id=t></div></body>`,
-		`#t { -webkit-perspective: 10px; -webkit-transition: opacity 1s; -webkit-unknown-thing: 1 }`)
+		`#t { -webkit-transition: opacity 1s; -webkit-unknown-thing: 1 }`)
 	ws := c.c.Warnings()
-	if !hasWarning(ws, warn.CSSUnsupported, `"-webkit-perspective"`) {
-		t.Errorf("no warning for -webkit-perspective: %v", ws)
-	}
 	if hasWarning(ws, warn.CSSUnsupported, "transition") || hasWarning(ws, warn.CSSUnsupported, "unknown-thing") {
 		t.Errorf("unexpected warning: %v", ws)
 	}

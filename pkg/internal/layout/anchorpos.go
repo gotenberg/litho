@@ -445,6 +445,17 @@ func (e *engine) mappedRect(a, pcb *box, r edges) edges {
 			ps[i] = f(p)
 		}
 	}
+	// acc holds the transforms and offsets met since the pieces were last
+	// mapped: the bounding box is taken once, of their product, as a
+	// transform chain maps a rectangle whole.
+	acc := typeset.Identity
+	flush := func() {
+		if acc != typeset.Identity {
+			m := acc
+			each(func(p edges) edges { return mapRect(m, p) })
+			acc = typeset.Identity
+		}
+	}
 	for x, n := a, 0; x != nil && x != pcb && n <= maxTreeDepth; x, n = x.parent, n+1 {
 		c := x.parent
 		inColumns := c != nil && c.mc != nil
@@ -454,6 +465,7 @@ func (e *engine) mappedRect(a, pcb *box, r edges) edges {
 			// A box the columns cut is transformed fragment by fragment,
 			// each about its own border box (CSS Fragmentation 3, 5.5),
 			// as Chromium draws it.
+			flush()
 			each(move)
 			ps = columnPieces(c, x, ps, func(p edges) edges {
 				f := typeset.Rect{X: x.x + dx, Y: p.y0, Width: x.borderW(), Height: p.y1 - p.y0}
@@ -466,14 +478,16 @@ func (e *engine) mappedRect(a, pcb *box, r edges) edges {
 		}
 		if x.transformed() {
 			if m, _, ok := transformOf(x, typeset.Rect{X: x.x, Y: x.y, Width: x.borderW(), Height: x.borderH()}); ok {
-				each(func(p edges) edges { return mapRect(m, p) })
+				acc = mul(m, acc)
 			}
 		}
-		each(move)
+		acc = mul(typeset.Matrix{A: 1, D: 1, E: dx, F: dy}, acc)
 		if inColumns {
+			flush()
 			ps = columnPieces(c, x, ps, nil)
 		}
 	}
+	flush()
 	out := ps[0]
 	for _, p := range ps[1:] {
 		out = out.union(p)
