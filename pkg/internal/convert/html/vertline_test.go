@@ -343,3 +343,57 @@ func TestVerticalLine_CombinedRunOnTheAscentAndDescent(t *testing.T) {
 		wantOrigins(t, mode, gs, "年 4,24.08", "1 4,41", "2 12,41", "月 4,56.08", "3 7.547,73", "日 4,88.08")
 	}
 }
+
+// TestVerticalTable_RootsAnOrthogonalFlow locks a table whose writing
+// mode is orthogonal to its flow: it roots an orthogonal flow as a block
+// container does (CSS Writing Modes 4, 7.3), its rows stacking along the
+// block axis and its columns along the inline axis of its own writing
+// mode (CSS Tables 3, 3.1), spans, border-spacing and captions read in
+// it; a horizontal table in a vertical root likewise. The structure keeps
+// Table, TR and TD in source order.
+//
+// # Corpus evidence
+//
+//   - probe, html: Chromium of gotenberg/gotenberg:9.4.1 prints each cell
+//     where the table below has it, to the pixel at 96 dpi.
+func TestVerticalTable_RootsAnOrthogonalFlow(t *testing.T) {
+	t.Parallel()
+	const grid = `<tr><td style="background: red">a</td><td style="background: lime">b</td></tr><tr><td style="background: fuchsia">c</td><td style="background: yellow">d</td></tr>`
+	for _, c := range []struct {
+		name, css, body string
+		want            map[string]string
+	}{
+		{"vertical-rl", `table { writing-mode: vertical-rl; margin: 20px 0 0 100px; border-spacing: 4px 2px }`, `<table>` + grid + `</table>`,
+			map[string]string{"r": "134,24+30x20", "g": "134,48+30x20", "m": "102,24+30x20", "y": "102,48+30x20"}},
+		{"vertical-lr", `table { writing-mode: vertical-lr; margin: 20px 0 0 100px; border-spacing: 4px 2px }`, `<table>` + grid + `</table>`,
+			map[string]string{"r": "102,24+30x20", "g": "102,48+30x20", "m": "134,24+30x20", "y": "134,48+30x20"}},
+		{"percentage width", `div { width: 400px } table { writing-mode: vertical-rl; width: 50%; margin: 20px 0 0 50px; border-spacing: 0 }`, `<div><table>` + grid + `</table></div>`,
+			map[string]string{"r": "150,20+100x20", "m": "50,20+100x20"}},
+		{"caption at the block start", `table { writing-mode: vertical-rl; margin: 20px 0 0 100px; border-spacing: 3px } caption { background: aqua; height: 15px; width: 12px }`, `<table><caption></caption>` + grid + `</table>`,
+			map[string]string{"k": "169,20+12x15", "r": "136,23+30x20"}},
+		{"horizontal table in a vertical root", `html { writing-mode: vertical-rl } table { writing-mode: horizontal-tb; margin: 20px 30px 0 0; border-spacing: 4px 2px }`, `<table>` + grid + `</table>`,
+			map[string]string{"r": "502,22+30x20", "g": "536,22+30x20", "m": "502,44+30x20", "y": "536,44+30x20"}},
+	} {
+		doc := convertDoc(t, `<style>@page { size: 600px 400px; margin: 0 } html, body { margin: 0 } td { padding: 0; width: 30px; height: 20px; font: 10px/1 'Test Serif' } `+c.css+`</style>`+c.body, Options{PreferCSSPageSize: true})
+		got := pxBoxes(doc)[0]
+		for k, w := range c.want {
+			if got[k] != w {
+				t.Errorf("%s, cell %s: %q, want %q", c.name, k, got[k], w)
+			}
+		}
+		var roles []string
+		var walk func(e *typeset.StructElem)
+		walk = func(e *typeset.StructElem) {
+			if e.Role == "Table" || e.Role == "TR" || e.Role == "TD" {
+				roles = append(roles, e.Role)
+			}
+			for _, k := range e.Kids {
+				walk(k)
+			}
+		}
+		walk(doc.Structure)
+		if got := strings.Join(roles, " "); got != "Table TR TD TD TR TD TD" {
+			t.Errorf("%s: structure %q", c.name, got)
+		}
+	}
+}

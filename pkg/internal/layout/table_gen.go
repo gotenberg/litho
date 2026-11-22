@@ -378,6 +378,9 @@ func (e *engine) anonPart(parent *box, st *css.Style, p tablePart) *box {
 // genTable generates the boxes of a table element n of style st: a
 // wrapper box holding the captions and the table box (CSS 2.1, 17.4).
 func (e *engine) genTable(n *Node, st *css.Style, ctx genCtx, float css.Float) *box {
+	if e.orthoTable(st, ctx) {
+		return e.genOrthoTable(n, st, ctx, float)
+	}
 	w := e.newBox(n, e.shareStyle(wrapperStyle(st)), kindBlock, ctx)
 	w.tpart = partWrapper
 	w.float = float
@@ -401,6 +404,63 @@ func (e *engine) genTable(n *Node, st *css.Style, ctx genCtx, float css.Float) *
 	}
 	e.buildTable(w, t, raw)
 	return w
+}
+
+// orthoTable reports a table of style st whose writing mode is
+// orthogonal to the flow ctx generates it in, under the browser rules: a
+// vertical table in a horizontal flow, or a horizontal one in a vertical
+// flow.
+func (e *engine) orthoTable(st *css.Style, ctx genCtx) bool {
+	if !e.opts.BrowserRules {
+		return false
+	}
+	if ctx.vertical {
+		return st.WritingMode == css.HorizontalTB
+	}
+	return st.WritingMode.Vertical()
+}
+
+// genOrthoTable generates a table of node n whose writing mode is
+// orthogonal to its flow ([engine.orthoTable]) as the root of an
+// orthogonal flow (CSS Writing Modes 4, 7.3, which any block container
+// roots, a table wrapper box being one, CSS Tables 3, 2.1): a block box
+// in the flow, taking the wrapper's place, margins, float and position,
+// whose content is the table laid out in its own writing mode and turned
+// onto the page as a vertical block's content is (wrapOrtho). The table
+// then lays its rows along the block axis and its columns along the
+// inline axis of its writing mode (CSS Tables 3, 3.1) as a horizontal
+// table does along its own.
+func (e *engine) genOrthoTable(n *Node, st *css.Style, ctx genCtx, float css.Float) *box {
+	ost := wrapperStyle(st)
+	ost.Display = css.FlowRoot
+	if float == css.FloatNone && st.Display == css.InlineTable {
+		ost.Display = css.InlineBlock
+	}
+	ist := *st
+	ist.Display = css.Table
+	ist.Margin = [4]css.Dimension{css.Pts(0), css.Pts(0), css.Pts(0), css.Pts(0)}
+	ist.Float, ist.Clear, ist.Position = css.FloatNone, css.ClearNone, css.Static
+	ist.Top, ist.Right, ist.Bottom, ist.Left = css.Dimension{}, css.Dimension{}, css.Dimension{}, css.Dimension{}
+	ist.ZIndex = css.ZIndex{Auto: true}
+	ist.Transform = nil
+	if st.Width.Kind != css.Auto && !ctx.vertical {
+		// A vertical table's width is the root's block size: the root takes it,
+		// resolved against the root's containing block, and the table
+		// fills the root (orthoFormatter).
+		ost.Width = st.Width
+		ist.Width = css.Dimension{Kind: css.Percent, Value: 1}
+	}
+	o := e.newBox(n, e.shareStyle(ost), kindBlock, ctx)
+	o.id = ""
+	o.float = float
+	o.inline = float == css.FloatNone && st.Display == css.InlineTable
+	ictx := ctx
+	ictx.vertical, ictx.frame = st.WritingMode.Vertical(), st.WritingMode
+	w := e.genTable(n, &ist, ictx, css.FloatNone)
+	w.parent = o
+	o.kids = []*box{w}
+	e.wrapOrtho(o)
+	return o
 }
 
 // genPart generates an internal table box or a caption of node n.
