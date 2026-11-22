@@ -133,6 +133,7 @@ func (b *pageBuilder) display(u *unit) (display, bool) {
 	}
 	st := u.st
 	d := display{font: resolveFont(st.Font, b.doc.Default.Font), hAlign: st.Align.Horizontal, padding: b.padding(st)}
+	d.font.excel = b.doc.ExcelRules
 	if c.Value.Kind == Number && b.g.sh.HideZeros && c.Value.Number == 0 {
 		return display{}, false
 	}
@@ -437,6 +438,12 @@ func (b *pageBuilder) textNode(rg *region, u *unit) (*layout.Node, float64, floa
 			pitch = b.excelPitch(lineH)
 		}
 		shift = b.excelShift(st.Align.Vertical, f, lineH, pitch, padBottom)
+		if len(d.runs) == 0 {
+			// A cell whose own font is a script moves its line: a text node
+			// takes no vertical-align of the block it fills.
+			_, up := f.scriptShape()
+			shift -= float64(f.size * up)
+		}
 		if shift > 0 {
 			// The box moved down runs past the row's bottom, where the
 			// cell's clip cuts it.
@@ -604,6 +611,12 @@ func (b *pageBuilder) paragraph(d *display, f font, lineH float64, align css.Tex
 		rs.LineHeight = st.LineHeight
 		if !b.doc.ExcelRules && r.Font != nil {
 			rs.LineHeight = css.Dimension{Kind: css.Number, Value: b.runLine(rf, d.wrap) / math.Max(rf.size, 0.01)}
+		}
+		if b.doc.ExcelRules && (rf.script != Baseline || !d.wrap) {
+			// Excel sets a run of another size or a script on the
+			// baseline the cell's alignment gives its line, without
+			// growing the line.
+			rs.LineHeight = css.Dimension{Kind: css.Number}
 		}
 		tn := &layout.Node{Kind: layout.Text, Style: rs, Text: r.Text}
 		office.SymbolNode(tn, b.fonts, b.symbolRule(), b.symbols)

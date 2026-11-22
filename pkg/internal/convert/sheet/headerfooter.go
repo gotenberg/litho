@@ -120,6 +120,7 @@ func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign, def Fo
 		return nil
 	}
 	base := resolveFont(def, Font{Families: []string{headerFamily}, Size: headerSize})
+	base.excel = b.doc.ExcelRules
 	st := b.style()
 	base.apply(st)
 	st.TextAlign = align
@@ -141,6 +142,7 @@ func (b *builder) partNode(spans []Span, f hfFields, align css.TextAlign, def Fo
 		fnt := base
 		if s.Font != nil {
 			fnt = resolveFont(*s.Font, Font{Families: base.families, Size: base.size})
+			fnt.excel = base.excel
 		}
 		fnt.apply(rs)
 		rs.Display = css.Inline

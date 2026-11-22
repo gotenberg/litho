@@ -628,3 +628,40 @@ func TestConvert_ExcelScaledRows(t *testing.T) {
 		t.Errorf("first baseline %.3f from the top, want %.3f", got, want)
 	}
 }
+
+// TestConvert_ExcelScripts locks Excel's superscript and subscript: set at
+// two thirds of the size, a superscript raised half the size and a
+// subscript lowered a fifth from the line's baseline, a cell font of a
+// script and a run alike, the line's baseline where the cell's alignment
+// puts it whatever the runs' sizes.
+func TestConvert_ExcelScripts(t *testing.T) {
+	sup := &Style{Font: Font{Families: []string{"Carlito"}, Size: 11, Script: Superscript}}
+	sub := &Style{Font: Font{Families: []string{"Carlito"}, Size: 11, Script: Subscript}}
+	big := &Font{Families: []string{"Carlito"}, Size: 28}
+	small := &Font{Families: []string{"Carlito"}, Size: 11, Script: Subscript}
+	rich := Cell{Column: 0, Value: Value{Kind: Text, Text: "H2O big"}, Runs: []Run{{Text: "H"}, {Text: "2", Font: small}, {Text: "O "}, {Text: "big", Font: big}}}
+	sh := &Sheet{Name: "S", Rows: []Row{
+		{Index: 0, Cells: []Cell{textCell(0, "plain", nil), textCell(1, "raised", sup), textCell(2, "lowered", sub)}},
+		{Index: 1, Cells: []Cell{rich}},
+	}}
+	sh.DefaultColumnWidth = 40
+	pg := convert(t, excelDoc(sh), office.Options{}).Pages[0]
+	baseline := func(s string) float64 { return pg.Height - find(t, pg, s).y }
+	plain := baseline("plain")
+	if got := plain - baseline("raised"); !near(got, 5.5, 0.01) {
+		t.Errorf("superscript cell raised %.3f, want half of 11 points", got)
+	}
+	if got := baseline("lowered") - plain; !near(got, 2.2, 0.01) {
+		t.Errorf("subscript cell lowered %.3f, want a fifth of 11 points", got)
+	}
+	if r := find(t, pg, "raised"); !near(r.size, 11*2.0/3, 0.01) {
+		t.Errorf("superscript at %.3f points, want two thirds of 11", r.size)
+	}
+	line := baseline("H")
+	if !near(line, plain+14.52, 0.01) {
+		t.Errorf("a line holding a 28-point run and a subscript has its baseline %.3f, want the row's %.3f", line, plain+14.52)
+	}
+	if got := baseline("2") - line; !near(got, 2.2, 0.01) {
+		t.Errorf("subscript run lowered %.3f, want 2.2", got)
+	}
+}

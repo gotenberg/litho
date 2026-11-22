@@ -65,6 +65,7 @@ type paraKey struct {
 	strike   bool
 	color    css.Color
 	script   Script
+	excel    bool
 	lineH    float64
 	align    css.TextAlign
 	wrap     bool
@@ -137,7 +138,7 @@ func (b *pageBuilder) newInnerStyle(k innerKey) *css.Style {
 func (b *pageBuilder) paraStyle(f font, lineH float64, align css.TextAlign, wrap bool, t paraTurn) *css.Style {
 	k := paraKey{
 		n: len(f.families), size: f.size, bold: f.bold, italic: f.italic, under: f.under, strike: f.strike,
-		color: f.color, script: f.script, lineH: lineH, align: align, wrap: wrap, turn: t,
+		color: f.color, script: f.script, excel: f.excel, lineH: lineH, align: align, wrap: wrap, turn: t,
 	}
 	if len(f.families) > 0 {
 		k.families = &f.families[0]
@@ -152,7 +153,13 @@ func (b *pageBuilder) paraStyle(f font, lineH float64, align css.TextAlign, wrap
 			st.TextAlign = css.AlignJustify
 			st.TextAlignLast = css.AlignJustify
 		}
-		st.LineHeight = css.Dimension{Kind: css.Number, Value: lineH / math.Max(f.size, 0.01)}
+		size := f.size
+		if f.excel {
+			// The line is the script's own, at the size it is set in.
+			scale, _ := f.scriptShape()
+			size *= scale
+		}
+		st.LineHeight = css.Dimension{Kind: css.Number, Value: lineH / math.Max(size, 0.01)}
 		st.WhiteSpace = css.Pre
 		if wrap {
 			st.WhiteSpace = css.PreWrap

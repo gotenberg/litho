@@ -31,6 +31,9 @@ type font struct {
 	strike   bool
 	color    css.Color
 	script   Script
+	// excel sets a superscript or subscript as Excel does
+	// ([font.scriptShape]).
+	excel bool
 }
 
 // zeroFont reports a font that names nothing, which takes the default.
@@ -96,6 +99,35 @@ func overlay(base font, r *Font) font {
 // position of SvxEscapementItem, DFLT_ESC_PROP and DFLT_ESC_AUTO).
 const scriptScale = 0.58
 
+// scriptShape returns how f draws a superscript or subscript: the share
+// of its size it is set at and the share of its size its baseline moves
+// up, negative for down. Under Excel's rules a script is set at two
+// thirds of the size, a superscript raised half the size and a subscript
+// lowered a fifth; Calc's are [scriptScale] and a third either way.
+// ECMA-376 Part 1, 18.4.14 vertAlign names the position and leaves the
+// size and the shift to the application.
+//
+// # Corpus evidence
+//
+//   - litho/xlsx: fonts prints a cell font of Calibri 11.04 superscript at
+//     7.32 points (61 printer pixels of 92) raised 5.5 points, and of
+//     subscript lowered 2.18; rich_text prints the runs of "H2O" and "mc2"
+//     at 7.32 points, lowered 2.16 and raised 5.52 points; headers_footers_codes
+//     and probe, xlsx, header scripts alike.
+func (f font) scriptShape() (scale, shift float64) {
+	switch {
+	case f.script == Baseline:
+		return 1, 0
+	case f.excel && f.script == Superscript:
+		return 2.0 / 3, 0.5
+	case f.excel:
+		return 2.0 / 3, -0.2
+	case f.script == Superscript:
+		return scriptScale, 0.33
+	}
+	return scriptScale, -0.33
+}
+
 // fontconfigAliases are the family names fontconfig reads as its generic
 // families (fontconfig's 45-latin.conf and 49-sansserif.conf), which a
 // book may name and LibreOffice resolves through fontconfig.
@@ -155,14 +187,10 @@ func (f font) apply(st *css.Style) {
 		st.TextDecoration |= css.LineThrough
 	}
 	st.TextDecorationColor = f.color
-	switch f.script {
-	case Superscript:
-		st.FontSize = f.size * scriptScale
-		st.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(f.size * 0.33)}
-	case Subscript:
-		st.FontSize = f.size * scriptScale
-		st.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(-f.size * 0.33)}
-	case Baseline:
+	if f.script != Baseline {
+		scale, shift := f.scriptShape()
+		st.FontSize = f.size * scale
+		st.VerticalAlign = css.VerticalAlign{Kind: css.AlignLength, Length: css.Pts(f.size * shift)}
 	}
 }
 
@@ -185,10 +213,8 @@ func (f font) textStyle(lang string, fallback text.Fallback) text.Style {
 	if f.bold {
 		w = 700
 	}
-	size := f.size
-	if f.script != Baseline {
-		size *= scriptScale
-	}
+	scale, _ := f.scriptShape()
+	size := f.size * scale
 	ts := text.Style{
 		Families: text.BrowserFamilies(f.cssFamilies(), ""),
 		Weight:   w,
@@ -238,6 +264,7 @@ type fontID struct {
 	bold     bool
 	italic   bool
 	script   bool
+	excel    bool
 }
 
 // maxMeasureCache caps the cached widths. Anti-DoS guard, not
@@ -250,7 +277,7 @@ func newMeasurer(ctx context.Context, fonts *text.Fonts, lang string) *measurer 
 
 // key returns f.key(), written once for each font.
 func (m *measurer) key(f font) string {
-	id := fontID{n: len(f.families), size: f.size, bold: f.bold, italic: f.italic, script: f.script != Baseline}
+	id := fontID{n: len(f.families), size: f.size, bold: f.bold, italic: f.italic, script: f.script != Baseline, excel: f.excel}
 	if len(f.families) > 0 {
 		id.families = &f.families[0]
 	}
@@ -278,6 +305,9 @@ func (f font) key() string {
 	}
 	if f.script != Baseline {
 		b.WriteString("|s")
+		if f.excel {
+			b.WriteString("x")
+		}
 	}
 	return b.String()
 }
